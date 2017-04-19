@@ -71,15 +71,21 @@ Definition is_program_component C (prog_comps : list Component.id) :=
 Definition is_context_component C (prog_comps : list Component.id) :=
   ~ (In C prog_comps).
 
+Definition maps_match_on {T : Type} split (map map' : M.t T) :=
+  forall C Cmap,
+    PLTT.is_program_component C split ->
+    (M.MapsTo C Cmap map <-> M.MapsTo C Cmap map').
+
 Reserved Notation "G |-PLTT s1 '=>[' t ']' s2" (at level 40).
 
 Inductive step (G : global_env)
   : partial_state -> trace -> partial_state -> Prop :=
 | Program_Epsilon:
-    forall C s ps mem mem' wmem wmem' cmem cmem' regs regs' pc pc',
+    forall E C s ps mem mem' wmem wmem' cmem cmem' regs regs' pc pc',
       M.MapsTo C cmem wmem ->
       M.MapsTo C cmem' wmem' ->
-      let G' := LTT.mkGlobalEnv (get_interfaces G) (get_entrypoints G) in
+      maps_match_on (get_split G) E (get_entrypoints G) ->
+      let G' := LTT.mkGlobalEnv (get_interfaces G) E in
       LTT.step G' (C,s,wmem,regs,pc) E0 (C,s,wmem',regs',pc') ->
       M.MapsTo C cmem mem ->
       M.MapsTo C cmem' mem' ->
@@ -161,5 +167,109 @@ Inductive step (G : global_env)
       G |-PLTT (CC (C,d,mem)) =>[t] (PC (C',d',mem,regs,pc'))
 
 where "G |-PLTT s1 '=>[' t ']' s2" := (step G s1 t s2).
+
+Lemma update_related_memories :
+  forall split mem1 mem1' mem2 mem2' C addr val,
+    maps_match_on split mem1 mem2 ->
+    mem1' = Memory.set mem1 C addr val ->
+    mem2' = Memory.set mem2 C addr val ->
+    maps_match_on split mem1' mem2'.
+Proof.
+  intros split mem1 mem1' mem2 mem2' C addr val.
+  intros Hmems_match Hmem1' Hmem2'.
+  unfold PLTT.maps_match_on.
+  intros C0 C0mem HC0_origin.
+  split.
+  - intro HC0map.
+    rewrite Hmem2'.
+    rewrite Hmem1' in HC0map.
+    unfold Memory.set.
+    unfold Memory.set in HC0map.
+    destruct (C0 =? C) eqn:HeqC0C.
+    + apply beq_nat_true in HeqC0C. subst.
+      destruct (M.find (elt:=list nat) C mem2) eqn:Hfind.
+      * apply M.find_2 in Hfind. apply Hmems_match in Hfind.
+        ** rewrite (M.find_1 Hfind) in HC0map.
+           apply M.find_2.
+           apply M.find_1 in HC0map.
+           rewrite <- HC0map.
+           rewrite F.add_eq_o, F.add_eq_o;
+             reflexivity.
+        ** assumption.
+      * apply Hmems_match.
+        ** assumption.
+        ** assert (M.find (elt:=list nat) C mem1 = None).
+           { destruct (M.find (elt:=list nat) C mem1) eqn:Hfind'.
+             *** exfalso.
+                 apply F.not_find_in_iff in Hfind. apply Hfind.
+                 exists l. apply Hmems_match.
+                 **** assumption.
+                 **** apply M.find_2. assumption.
+             *** reflexivity. }
+           rewrite H in HC0map. assumption.
+    + apply beq_nat_false in HeqC0C.
+      destruct (M.find (elt:=list nat) C mem2) eqn:Hfind.
+      * apply M.add_2.
+        ** unfold not. intro. apply HeqC0C. symmetry. apply H.
+        ** apply Hmems_match.
+           *** assumption.
+           *** destruct (M.find (elt:=list nat) C mem1) eqn:Hfind'.
+               **** eapply M.add_3.
+                    ***** intro. apply HeqC0C. symmetry. apply H.
+                    ***** apply HC0map.
+               **** assumption.
+      * apply Hmems_match.
+        ** assumption.
+        ** destruct (M.find (elt:=list nat) C mem1) eqn:Hfind'.
+           *** eapply M.add_3.
+               **** intro. apply HeqC0C. symmetry. apply H.
+               **** apply HC0map.
+           *** assumption.
+  - intro HC0map.
+    rewrite Hmem1'.
+    rewrite Hmem2' in HC0map.
+    unfold Memory.set.
+    unfold Memory.set in HC0map.
+    destruct (C0 =? C) eqn:HeqC0C.
+    + apply beq_nat_true in HeqC0C. subst.
+      destruct (M.find (elt:=list nat) C mem1) eqn:Hfind.
+      * apply M.find_2 in Hfind. apply Hmems_match in Hfind.
+        ** rewrite (M.find_1 Hfind) in HC0map.
+           apply M.find_2.
+           apply M.find_1 in HC0map.
+           rewrite <- HC0map.
+           rewrite F.add_eq_o, F.add_eq_o;
+             reflexivity.
+        ** assumption.
+      * apply Hmems_match.
+        ** assumption.
+        ** assert (M.find (elt:=list nat) C mem2 = None).
+           { destruct (M.find (elt:=list nat) C mem2) eqn:Hfind'.
+             *** exfalso.
+                 apply F.not_find_in_iff in Hfind. apply Hfind.
+                 exists l. apply Hmems_match.
+                 **** assumption.
+                 **** apply M.find_2. assumption.
+             *** reflexivity. }
+           rewrite H in HC0map. assumption.
+    + apply beq_nat_false in HeqC0C.
+      destruct (M.find (elt:=list nat) C mem1) eqn:Hfind.
+      * apply M.add_2.
+        ** unfold not. intro. apply HeqC0C. symmetry. apply H.
+        ** apply Hmems_match.
+           *** assumption.
+           *** destruct (M.find (elt:=list nat) C mem2) eqn:Hfind'.
+               **** eapply M.add_3.
+                    ***** intro. apply HeqC0C. symmetry. apply H.
+                    ***** apply HC0map.
+               **** assumption.
+      * apply Hmems_match.
+        ** assumption.
+        ** destruct (M.find (elt:=list nat) C mem2) eqn:Hfind'.
+           *** eapply M.add_3.
+               **** intro. apply HeqC0C. symmetry. apply H.
+               **** apply HC0map.
+           *** assumption.
+Qed.
 
 End PLTT.

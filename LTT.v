@@ -126,18 +126,20 @@ Qed.
 
 Lemma epsilon_step_weakening:
   forall Is E C d1 mem mem' cmem cmem' regs regs' pc pc',
+    let G := mkGlobalEnv Is E in
     M.MapsTo C cmem  mem ->
     M.MapsTo C cmem' mem' ->
-    (mkGlobalEnv Is E) |-LTT (C,d1,mem,regs,pc) =>[E0] (C,d1,mem',regs',pc') ->
+    G |-LTT (C,d1,mem,regs,pc) =>[E0] (C,d1,mem',regs',pc') ->
   forall E' d2 wmem,
+    let G' := mkGlobalEnv Is E' in
     M.MapsTo C cmem wmem ->
     exists wmem',
       M.MapsTo C cmem' wmem' ->
-      (mkGlobalEnv Is E') |-LTT (C,d2,wmem,regs,pc) =>[E0] (C,d2,wmem',regs',pc').
+      G' |-LTT (C,d2,wmem,regs,pc) =>[E0] (C,d2,wmem',regs',pc').
 Proof.
   intros Is E C d1 mem mem' cmem cmem' regs regs' pc pc'.
-  intros HCmem HCmem' Hstep.
-  intros E' d2 wmem HCwmem.
+  intros G HCmem HCmem' Hstep.
+  intros E' d2 wmem G' HCwmem.
   inversion Hstep; subst.
   - exists wmem. intro HCwmem'.
     apply Nop;
