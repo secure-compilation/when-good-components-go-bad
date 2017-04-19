@@ -14,15 +14,12 @@ Definition state : Type :=
 Record global_env := mkGlobalEnv {
   get_interfaces : Program.interface;
   get_entrypoints : EntryPoint.data;
-}.
-
-Record global_env_wf (G : global_env) := mkGlobalEnvWF {
   entrypoints_exist :
     forall CI C,
-      In CI (get_interfaces G) ->
+      In CI get_interfaces ->
       Component.name CI = C ->
-      M.In C (get_entrypoints G) /\
-      exists addrs, M.MapsTo C addrs (get_entrypoints G);
+      M.In C get_entrypoints /\
+      exists addrs, M.MapsTo C addrs get_entrypoints;
 }.
 
 Definition eval_binop (e : binop) (a b : nat) : nat :=
@@ -125,21 +122,21 @@ Proof.
 Qed.
 
 Lemma epsilon_step_weakening:
-  forall Is E C d1 mem mem' cmem cmem' regs regs' pc pc',
-    let G := mkGlobalEnv Is E in
+  forall Is E EWF C d1 mem mem' cmem cmem' regs regs' pc pc',
+    let G := mkGlobalEnv Is E EWF in
     M.MapsTo C cmem  mem ->
     M.MapsTo C cmem' mem' ->
     G |-LTT (C,d1,mem,regs,pc) =>[E0] (C,d1,mem',regs',pc') ->
-  forall E' d2 wmem,
-    let G' := mkGlobalEnv Is E' in
+  forall E' E'WF d2 wmem,
+    let G' := mkGlobalEnv Is E' E'WF in
     M.MapsTo C cmem wmem ->
     exists wmem',
       M.MapsTo C cmem' wmem' ->
       G' |-LTT (C,d2,wmem,regs,pc) =>[E0] (C,d2,wmem',regs',pc').
 Proof.
-  intros Is E C d1 mem mem' cmem cmem' regs regs' pc pc'.
+  intros Is E EWF C d1 mem mem' cmem cmem' regs regs' pc pc'.
   intros G HCmem HCmem' Hstep.
-  intros E' d2 wmem G' HCwmem.
+  intros E' E'WF d2 wmem G' HCwmem.
   inversion Hstep; subst.
   - exists wmem. intro HCwmem'.
     apply Nop;

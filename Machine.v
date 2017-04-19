@@ -169,7 +169,7 @@ Definition call_is_public_and_exists
            (C : Component.id) (P : Procedure.id) :=
   forall CI,
     find (fun C' => C =? Component.name C') Is = Some CI ->
-    C < Component.export CI.
+    P < Component.export CI.
 
 Definition call_is_in_imports
            (Is : Program.interface)

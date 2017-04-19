@@ -50,20 +50,17 @@ Qed.
 Record global_env := mkGlobalEnv {
   get_interfaces : Program.interface;
   get_entrypoints : EntryPoint.data;
-  get_split : list Component.id
-}.
-
-Record global_env_wf (G : global_env) := mkGlobalEnvWF {
+  get_split : list Component.id;
   entrypoints_exist :
     forall CI C,
-      In CI (get_interfaces G) ->
+      In CI get_interfaces ->
       Component.name CI = C ->
-      M.In C (get_entrypoints G) /\
-      exists addrs, M.MapsTo C addrs (get_entrypoints G);
+      M.In C get_entrypoints /\
+      exists addrs, M.MapsTo C addrs get_entrypoints;
   split_wellformed :
     forall C,
-      In C (get_split G) ->
-      exists CI, In CI (get_interfaces G) /\ Component.name CI = C
+      In C get_split ->
+      exists CI, In CI get_interfaces /\ Component.name CI = C
 }.
 
 Definition is_program_component C (prog_comps : list Component.id) :=
@@ -81,11 +78,13 @@ Reserved Notation "G |-PLTT s1 '=>[' t ']' s2" (at level 40).
 Inductive step (G : global_env)
   : partial_state -> trace -> partial_state -> Prop :=
 | Program_Epsilon:
-    forall E C s ps mem mem' wmem wmem' cmem cmem' regs regs' pc pc',
+    forall E EWF C s ps
+           mem mem' wmem wmem' cmem cmem'
+           regs regs' pc pc',
       M.MapsTo C cmem wmem ->
       M.MapsTo C cmem' wmem' ->
       maps_match_on (get_split G) E (get_entrypoints G) ->
-      let G' := LTT.mkGlobalEnv (get_interfaces G) E in
+      let G' := LTT.mkGlobalEnv (get_interfaces G) E EWF in
       LTT.step G' (C,s,wmem,regs,pc) E0 (C,s,wmem',regs',pc') ->
       M.MapsTo C cmem mem ->
       M.MapsTo C cmem' mem' ->
