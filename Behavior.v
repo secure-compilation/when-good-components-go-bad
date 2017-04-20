@@ -1,6 +1,6 @@
 (* from CompCert Behaviors.v *)
 
-Require Import Traces.
+Require Import Events.
 Require Import Smallstep.
 Set Implicit Arguments.
 

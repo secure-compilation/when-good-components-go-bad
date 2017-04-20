@@ -1,7 +1,7 @@
 (* from CompCert Smallstep.v *)
 
 Require Import Common.
-Require Import Traces.
+Require Import Events.
 
 Set Implicit Arguments.
 Section CLOSURES.

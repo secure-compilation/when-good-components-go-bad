@@ -1,6 +1,6 @@
 Require Import Common.
 Require Import Machine.
-Require Import Traces.
+Require Import Events.
 Require Import LTT.
 
 Module PLTT.

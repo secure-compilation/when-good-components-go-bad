@@ -1,6 +1,7 @@
 -arg "-w -parsing"
 -R . RobustImp
 
+Smallstep.v
 Behavior.v
 Events.v
 Common.v
