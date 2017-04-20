@@ -111,6 +111,7 @@ Inductive step (G : global_env)
 
 where "G |-LTT s1 '=>[' t ']' s2" := (step G s1 t s2).
 
+(* probably useless *)
 Lemma epsilon_step_preserves_component_and_stack:
   forall G C d mem regs pc C' d' mem' regs' pc',
     G |-LTT (C,d,mem,regs,pc) =>[E0] (C',d',mem',regs',pc') ->
@@ -121,6 +122,7 @@ Proof.
     split; trivial.
 Qed.
 
+(* probably useless *)
 Lemma epsilon_step_weakening:
   forall Is E EWF C d1 mem mem' cmem cmem' regs regs' pc pc',
     let G := mkGlobalEnv Is E EWF in
@@ -216,44 +218,36 @@ Theorem LTT_determinism :
     s1 = s2.
 Proof.
   intros G s t s1 s2 E1 E2.
-  inversion E1 as [ ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? ? Hexec |
-                    ? ? ? ? ? ? ? ? Hexec ];
-    subst;
-      inversion E2 as [ ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? ? Hexec' |
-                        ? ? ? ? ? ? ? ? Hexec' ];
-    subst;
-    (* same step *)
+  inversion E1; subst; inversion E2; subst;
+    (* trivial cases *)
     try reflexivity;
-    (* different instructions *)
-    try (unfold executing in Hexec, Hexec';
-         rewrite Hexec in Hexec'; inversion Hexec'; subst; trivial).
+    (* contradiction: different instructions at the same address *)
+    try (match goal with
+         | Hexec : executing _ ?COMP ?MEM ?PC,
+           Hexec' : executing _ ?COMP ?MEM ?PC |- _ =>
+           unfold executing in Hexec, Hexec';
+           rewrite Hexec in Hexec';
+           inversion Hexec'; subst; auto
+         end);
+    (* contradiction: different values in the same register *)
+    try (match goal with
+         | Hreg_neq : Register.get _ _ <> 0,
+           Hreg_eq : Register.get _ _ = 0 |- _ =>
+           exfalso; apply Hreg_neq; apply Hreg_eq
+         end).
   (* load from the same memory address *)
-  - rewrite <- H0 in H1. inversion H1. subst. trivial.
-  (* conditional jumps take different branches *) 
-  - exfalso. apply H. apply H0.
-  - exfalso. apply H0. apply H.
+  - match goal with
+    | Hmemget1 : Some _ = Memory.get mem _ _,
+      Hmemget2 : Some _ = Memory.get mem _ _ |- _ =>
+      rewrite <- Hmemget1 in Hmemget2;
+        inversion Hmemget2; subst; auto
+    end.
   (* return exactly to same component and address *)
-  - inversion H. subst. trivial.
+  - match goal with
+    | Hstack : (C', pc') :: d' = (_, _) :: _
+      |- _ =>
+      inversion Hstack; subst; auto
+    end.
 Qed.
 
 End LTT.
