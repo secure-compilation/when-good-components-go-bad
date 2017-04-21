@@ -1,6 +1,7 @@
 Require Import Common.
 Require Import Machine.
 Require Import Events.
+Require Import Smallstep.
 
 Module LTT.
 
@@ -250,4 +251,28 @@ Proof.
     end.
 Qed.
 
+
+
+(* Example of semantics *)
+Definition initial_state : LTT.state -> Prop := fun s => True.
+
+Definition final_state : LTT.state -> Prop := fun s => True.
+
+Lemma valid_emptyenv : forall CI C,
+    In CI [] ->
+    Component.name CI = C ->
+    M.In C (@M.empty (list Memory.address)) /\
+    exists addrs, M.MapsTo C addrs (@M.empty (list Memory.address)).
+Proof.
+  intros. exfalso. auto.
+Qed.
+
+Definition emptygenv := mkGlobalEnv []
+                                    (@M.empty (list Memory.address))
+                                    valid_emptyenv.
+
+Definition sem := Semantics_gen step
+                                initial_state
+                                final_state
+                                emptygenv. (* need a way to create a G *)
 End LTT.

@@ -52,3 +52,30 @@ Notation " 'Forever_silent' L " := (forever_silent (step L) (globalenv L)) (at l
 Notation " 'Forever_reactive' L " := (forever_reactive (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Nostep' L " := (nostep (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Open Scope smallstep_scope.
+
+
+(* removed return value and order (measure) *)
+Record fsim_properties (L1 L2: semantics)
+       (match_states: state L1 -> state L2 -> Prop) : Prop := {
+    fsim_match_initial_states:
+      forall s1, initial_state L1 s1 ->
+      exists s2, initial_state L2 s2 /\ match_states s1 s2;
+    fsim_match_final_states:
+      forall s1 s2,
+      match_states s1 s2 -> final_state L1 s1 -> final_state L2 s2;
+    fsim_simulation:
+      forall s1 t s1', Step L1 s1 t s1' ->
+      forall s2, match_states s1 s2 ->
+      exists s2',
+         (Step L2 s2 t s2') /\ match_states s1' s2';
+  }.
+
+Arguments fsim_properties: clear implicits.
+
+Inductive forward_simulation (L1 L2: semantics) : Prop :=
+  Forward_simulation (match_states: state L1 -> state L2 -> Prop)
+                     (props: fsim_properties L1 L2 match_states).
+
+Arguments Forward_simulation {L1 L2} match_states props.
+
+
