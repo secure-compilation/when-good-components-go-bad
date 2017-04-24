@@ -96,15 +96,20 @@ Qed.
 Theorem final_states_match:
   forall s (split : list Component.id),
     LTT.final_state s ->
-    exists ps, PLTT.final_state ps.
+    exists ps, PLTT.final_state ps /\ match_states split s ps.
 Proof.
   intros s split Hfinal_s.
   destruct s as [[[[C d] mem] regs] pc] eqn:Hstate_s.
   destruct Hfinal_s as [empty_stack executing_halt].
-  destruct (Util.mem 0 split) eqn:Hcontrol;
-    [ exists (PLTT.PC (C, [], mem, regs, pc))
-    | exists (PLTT.CC (C, [], mem))
-    ]; split; auto.
+  destruct (Util.mem C split) eqn:Hcontrol.
+  - exists (PLTT.PC (C, [], mem, regs, pc)). split.
+    + split; auto.
+    + subst. apply program_control; auto.
+      * apply Util.in_iff_mem_true. auto.
+  - exists (PLTT.CC (C, [], mem)). split.
+    + split; auto.
+    + subst. apply context_control; auto.
+      * apply Util.not_in_iff_mem_false. auto.
 Qed.
 
 Theorem option_simulation:
