@@ -29,6 +29,16 @@ Module Register.
     | R_SP   => 6
     end.
 
+  Definition empty :=
+    M.add (to_nat R_PC)   0 (
+    M.add (to_nat R_ONE)  0 (
+    M.add (to_nat R_COM)  0 (
+    M.add (to_nat R_AUX1) 0 (
+    M.add (to_nat R_AUX2) 0 (
+    M.add (to_nat R_RA)   0 (
+    M.add (to_nat R_SP)   0 (
+    M.empty nat))))))).
+
   Definition get (r : reg) (regs : data) : nat :=
     match M.find (to_nat r) regs with
     | Some val => val
@@ -38,6 +48,37 @@ Module Register.
 
   Definition set (r : reg) (val : nat) (regs : data) : data :=
     M.add (to_nat r) val regs.
+
+  Lemma empty_memory_wf:
+    forall r, exists val, M.MapsTo (to_nat r) val empty.
+  Proof.
+    intro r.
+    eexists. unfold empty.
+    induction r;
+      [
+      | apply M.add_2; simpl; auto
+      | apply M.add_2; simpl; auto;
+        apply M.add_2; auto
+      | apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; auto
+      | apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; auto
+      | apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; auto
+      | apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; simpl; auto;
+        apply M.add_2; auto ];
+      apply M.add_1; auto.
+  Qed.
 End Register.
 
 Module Memory.
@@ -73,27 +114,6 @@ Module Memory.
       M.add C (local_update a val cmem) mem
     | None => mem
     end.
-
-  Definition of_component C mem : option (list nat) := M.find C mem.
-
-  Definition inject C cmem (mem : data) := M.add C cmem mem.
-
-  Definition filter (pc : list Component.id) (mem : data) :=
-    P.filter (fun C _ => existsb (fun C' => C =? C') pc) mem.
-
-  Definition singleton C cmem : data :=
-    M.add C cmem (M.empty (list Memory.address)).
-
-  Lemma get_works_locally :
-    forall mem cmem C i,
-      of_component C mem = Some cmem ->
-      get mem C i = get (singleton C cmem) C i.
-  Proof.
-    intros.
-    unfold singleton, get.
-    unfold of_component in H.
-    rewrite H. rewrite F.add_eq_o; reflexivity.
-  Qed.
 End Memory.
  
 Inductive binop := Add | Minus | Mul | Eq | Leq.
@@ -118,7 +138,7 @@ Inductive instr :=
 | Halt   : instr.
 
 Module EncDec.
-  (* we assume to have a decoder for our instruction. Later we could try
+  (* we assume to have a decoder for our instructions. Later we could try
      to think of a simple representation for instructions and implement
      it for real *)
 
@@ -138,17 +158,7 @@ Module EntryPoint.
     | None => 0
     end.
 
-  Definition mem C (E : data) : bool := M.mem C E.
-
-  Definition of_component C E : option (list Memory.address) :=
-    M.find C E.
-
-  Definition singleton C E : data := M.add C E (M.empty _).
-
-  Definition filter (pc : list Component.id) (E : data) :=
-    P.filter (fun C _ => existsb (fun C' => C =? C') pc) E.
-
-  Lemma get_works_locally :
+  Lemma get_on_compatible_entrypoints :
     forall E E' C P addrs,
       M.MapsTo C addrs E ->
       M.MapsTo C addrs E' ->
@@ -163,6 +173,11 @@ Module EntryPoint.
     reflexivity.
   Qed.
 End EntryPoint.
+
+Definition program : Type :=
+  Program.interface * Memory.data * EntryPoint.data.
+
+(* auxiliary definitions *)
 
 Definition call_is_public_and_exists
            (Is : Program.interface)

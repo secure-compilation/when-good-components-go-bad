@@ -10,9 +10,9 @@ Include AbstractMachine.
 Definition stack := list (Component.id * option Memory.address).
 
 Definition program_state : Type :=
-  (Component.id * stack * Memory.data * Register.data * Memory.address).
+  Component.id * stack * Memory.data * Register.data * Memory.address.
 Definition context_state : Type :=
-  (Component.id * stack * Memory.data).
+  Component.id * stack * Memory.data.
 
 Inductive partial_state : Type :=
   | PC : program_state -> partial_state
@@ -43,7 +43,7 @@ Lemma push_by_context_preserves_partial_stack :
     to_partial_stack ((C,i)::s) pc = (C,None) :: ps.
 Proof.
   intros s ps pc C i Hprogturn Hpstack.
-  simpl. apply Util.not_in_implies_mem_false in Hprogturn.
+  simpl. apply Util.not_in_iff_mem_false in Hprogturn.
   rewrite Hprogturn. rewrite Hpstack. reflexivity.
 Qed.
 
@@ -55,6 +55,7 @@ Record global_env := mkGlobalEnv {
     forall CI C,
       In CI get_interfaces ->
       Component.name CI = C ->
+      In C get_split ->
       M.In C get_entrypoints /\
       exists addrs, M.MapsTo C addrs get_entrypoints;
   split_wellformed :
@@ -62,6 +63,31 @@ Record global_env := mkGlobalEnv {
       In C get_split ->
       exists CI, In CI get_interfaces /\ Component.name CI = C
 }.
+
+Definition initial_state_for (p : program) split : partial_state :=
+  match p with (Is, mem, E) =>
+    if Util.mem 0 split then
+      PC (0, [], mem, Register.empty, EntryPoint.get 0 0 E)
+    else
+      CC (0, [], mem)
+  end.
+
+Definition initial_state G (s : partial_state) : Prop :=
+  match s with
+  | PC (C, d, mem, regs, pc) =>
+    C = 0 /\ d = [] /\ regs = Register.empty /\
+    pc = EntryPoint.get 0 0 (get_entrypoints G)
+  | CC (C, d, mem) =>
+    C = 0 /\ d = []
+  end.
+
+Definition final_state (s : partial_state) : Prop :=
+  match s with
+  | PC (C, d, mem, regs, pc) =>
+    d = [] /\ executing Halt C mem pc
+  | CC (C, d, mem) =>
+    d = []
+  end.
 
 Definition is_program_component C (prog_comps : list Component.id) :=
   In C prog_comps.
@@ -167,6 +193,78 @@ Inductive step (G : global_env)
 
 where "G |-PLTT s1 '=>[' t ']' s2" := (step G s1 t s2).
 
+Lemma maps_match_on_reflexive :
+  forall T split (map : M.t T),
+  maps_match_on split map map.
+Proof.
+  split; intros; auto.
+Qed.
+
+Lemma maps_match_on_symmetric :
+  forall T split (map1 map2 : M.t T),
+  maps_match_on split map1 map2 ->
+  maps_match_on split map2 map1.
+Proof.
+  intros ? split map1 map2 Hmaps_match.
+  split; intro; apply Hmaps_match; auto.
+Qed.
+
+Hint Resolve maps_match_on_reflexive.
+Hint Resolve maps_match_on_symmetric.
+
+Lemma update_related_memories_generic :
+  forall split mem1 mem2 C Cmem C' addr val,
+    maps_match_on split mem1 mem2 ->
+    is_program_component C split ->
+    M.MapsTo C Cmem (Memory.set mem1 C' addr val) ->
+    M.MapsTo C Cmem (Memory.set mem2 C' addr val).
+Proof.
+  intros split mem1 mem2 C Cmem C' addr val.
+  intros Hmems_match HCorigin HCmem.
+  unfold Memory.set.
+  unfold Memory.set in HCmem.
+  destruct (C =? C') eqn:HeqCC'.
+    + apply beq_nat_true in HeqCC'. subst.
+      destruct (M.find (elt:=list nat) C' mem2) eqn:Hfind.
+      * apply M.find_2 in Hfind. apply Hmems_match in Hfind.
+        ** rewrite (M.find_1 Hfind) in HCmem.
+           apply M.find_2.
+           apply M.find_1 in HCmem.
+           rewrite <- HCmem.
+           rewrite F.add_eq_o, F.add_eq_o;
+             reflexivity.
+        ** assumption.
+      * apply Hmems_match.
+        ** assumption.
+        ** assert (M.find (elt:=list nat) C' mem1 = None).
+           { destruct (M.find (elt:=list nat) C' mem1) eqn:Hfind'.
+             *** exfalso.
+                 apply F.not_find_in_iff in Hfind. apply Hfind.
+                 exists l. apply Hmems_match.
+                 **** assumption.
+                 **** apply M.find_2. assumption.
+             *** reflexivity. }
+           rewrite H in HCmem. assumption.
+    + apply beq_nat_false in HeqCC'.
+      destruct (M.find (elt:=list nat) C' mem2) eqn:Hfind.
+      * apply M.add_2.
+        ** unfold not. intro. apply HeqCC'. symmetry. apply H.
+        ** apply Hmems_match.
+           *** assumption.
+           *** destruct (M.find (elt:=list nat) C' mem1) eqn:Hfind'.
+               **** eapply M.add_3.
+                    ***** intro. apply HeqCC'. symmetry. apply H.
+                    ***** apply HCmem.
+               **** assumption.
+      * apply Hmems_match.
+        ** assumption.
+        ** destruct (M.find (elt:=list nat) C' mem1) eqn:Hfind'.
+           *** eapply M.add_3.
+               **** intro. apply HeqCC'. symmetry. apply H.
+               **** apply HCmem.
+           *** assumption.
+Qed.
+
 Lemma update_related_memories :
   forall split mem1 mem1' mem2 mem2' C addr val,
     maps_match_on split mem1 mem2 ->
@@ -178,97 +276,18 @@ Proof.
   intros Hmems_match Hmem1' Hmem2'.
   unfold PLTT.maps_match_on.
   intros C0 C0mem HC0_origin.
-  split.
-  - intro HC0map.
-    rewrite Hmem2'.
-    rewrite Hmem1' in HC0map.
-    unfold Memory.set.
-    unfold Memory.set in HC0map.
-    destruct (C0 =? C) eqn:HeqC0C.
-    + apply beq_nat_true in HeqC0C. subst.
-      destruct (M.find (elt:=list nat) C mem2) eqn:Hfind.
-      * apply M.find_2 in Hfind. apply Hmems_match in Hfind.
-        ** rewrite (M.find_1 Hfind) in HC0map.
-           apply M.find_2.
-           apply M.find_1 in HC0map.
-           rewrite <- HC0map.
-           rewrite F.add_eq_o, F.add_eq_o;
-             reflexivity.
-        ** assumption.
-      * apply Hmems_match.
-        ** assumption.
-        ** assert (M.find (elt:=list nat) C mem1 = None).
-           { destruct (M.find (elt:=list nat) C mem1) eqn:Hfind'.
-             *** exfalso.
-                 apply F.not_find_in_iff in Hfind. apply Hfind.
-                 exists l. apply Hmems_match.
-                 **** assumption.
-                 **** apply M.find_2. assumption.
-             *** reflexivity. }
-           rewrite H in HC0map. assumption.
-    + apply beq_nat_false in HeqC0C.
-      destruct (M.find (elt:=list nat) C mem2) eqn:Hfind.
-      * apply M.add_2.
-        ** unfold not. intro. apply HeqC0C. symmetry. apply H.
-        ** apply Hmems_match.
-           *** assumption.
-           *** destruct (M.find (elt:=list nat) C mem1) eqn:Hfind'.
-               **** eapply M.add_3.
-                    ***** intro. apply HeqC0C. symmetry. apply H.
-                    ***** apply HC0map.
-               **** assumption.
-      * apply Hmems_match.
-        ** assumption.
-        ** destruct (M.find (elt:=list nat) C mem1) eqn:Hfind'.
-           *** eapply M.add_3.
-               **** intro. apply HeqC0C. symmetry. apply H.
-               **** apply HC0map.
-           *** assumption.
-  - intro HC0map.
-    rewrite Hmem1'.
-    rewrite Hmem2' in HC0map.
-    unfold Memory.set.
-    unfold Memory.set in HC0map.
-    destruct (C0 =? C) eqn:HeqC0C.
-    + apply beq_nat_true in HeqC0C. subst.
-      destruct (M.find (elt:=list nat) C mem1) eqn:Hfind.
-      * apply M.find_2 in Hfind. apply Hmems_match in Hfind.
-        ** rewrite (M.find_1 Hfind) in HC0map.
-           apply M.find_2.
-           apply M.find_1 in HC0map.
-           rewrite <- HC0map.
-           rewrite F.add_eq_o, F.add_eq_o;
-             reflexivity.
-        ** assumption.
-      * apply Hmems_match.
-        ** assumption.
-        ** assert (M.find (elt:=list nat) C mem2 = None).
-           { destruct (M.find (elt:=list nat) C mem2) eqn:Hfind'.
-             *** exfalso.
-                 apply F.not_find_in_iff in Hfind. apply Hfind.
-                 exists l. apply Hmems_match.
-                 **** assumption.
-                 **** apply M.find_2. assumption.
-             *** reflexivity. }
-           rewrite H in HC0map. assumption.
-    + apply beq_nat_false in HeqC0C.
-      destruct (M.find (elt:=list nat) C mem1) eqn:Hfind.
-      * apply M.add_2.
-        ** unfold not. intro. apply HeqC0C. symmetry. apply H.
-        ** apply Hmems_match.
-           *** assumption.
-           *** destruct (M.find (elt:=list nat) C mem2) eqn:Hfind'.
-               **** eapply M.add_3.
-                    ***** intro. apply HeqC0C. symmetry. apply H.
-                    ***** apply HC0map.
-               **** assumption.
-      * apply Hmems_match.
-        ** assumption.
-        ** destruct (M.find (elt:=list nat) C mem2) eqn:Hfind'.
-           *** eapply M.add_3.
-               **** intro. apply HeqC0C. symmetry. apply H.
-               **** apply HC0map.
-           *** assumption.
+  split;
+    intro HC0map;
+    [ rewrite Hmem2';
+      rewrite Hmem1' in HC0map;
+      apply update_related_memories_generic with
+          (split:=split) (mem1:=mem1) (mem2:=mem2)
+    | rewrite Hmem1';
+      rewrite Hmem2' in HC0map;
+      apply update_related_memories_generic with
+          (split:=split) (mem1:=mem2) (mem2:=mem1)
+    ];
+    auto.
 Qed.
 
 End PLTT.

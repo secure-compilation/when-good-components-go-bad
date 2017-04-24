@@ -43,28 +43,94 @@ Definition split_wf (Is : list Component.interface) (split : list Component.id) 
     In C split ->
     exists CI, In CI Is /\ Component.name CI = C.
 
+(* if entrypoints are well-formed, then they remain
+   well-formed even if we consider only the ones relative to the
+   components in the split *)
+Theorem entrypoints_exist_wrt_split:
+  forall (G : LTT.global_env) split
+         (splitWF : split_wf (LTT.get_interfaces G) split),
+  forall CI C,
+    In CI (LTT.get_interfaces G) ->
+    Component.name CI = C ->
+    In C split ->
+    M.In C (LTT.get_entrypoints G) /\
+    exists addrs, M.MapsTo C addrs (LTT.get_entrypoints G).
+Proof.
+  intros G split splitWF.
+  intros CI C HCI_in_I HCI_name_is_C HC_in_split.
+  apply (LTT.entrypoints_exist G) with CI; assumption.
+Qed.
+
+Theorem initial_states_match:
+  forall Is E EWF split splitWF s,
+    let G := LTT.mkGlobalEnv Is E EWF in
+    LTT.initial_state G s ->
+    exists ps,
+      let EWF' := entrypoints_exist_wrt_split G split splitWF in
+      let G' := PLTT.mkGlobalEnv Is E split EWF' splitWF in
+      PLTT.initial_state G' ps /\ match_states split s ps.
+Proof.
+  intros Is E EWF split splitWF s G.
+  intros Hinit_s.
+  destruct s as [[[[C d] mem] regs] pc] eqn:Hstate_s.
+  destruct Hinit_s as [C_is_0 [empty_stack [empty_regs main_proc]]].
+  destruct (Util.mem 0 split) eqn:Hcontrol.
+  - exists (PLTT.PC (0, [], mem, regs, EntryPoint.get 0 0 E)).
+    intro G'. split.
+    + unfold PLTT.initial_state.
+      split; auto.
+    + rewrite C_is_0, empty_stack, empty_regs, main_proc. simpl.
+      apply program_control; try auto.
+      * unfold PLTT.is_program_component.
+        apply Util.in_iff_mem_true. auto.
+  - exists (PLTT.CC (0, [], mem)).
+    intro G'. split.
+    + unfold PLTT.initial_state.
+      split; auto.
+    + rewrite C_is_0, empty_stack, empty_regs, main_proc. simpl.
+      apply context_control; try auto.
+      * unfold PLTT.is_context_component.
+        apply Util.not_in_iff_mem_false. auto.
+Qed.
+
+Theorem final_states_match:
+  forall s (split : list Component.id),
+    LTT.final_state s ->
+    exists ps, PLTT.final_state ps.
+Proof.
+  intros s split Hfinal_s.
+  destruct s as [[[[C d] mem] regs] pc] eqn:Hstate_s.
+  destruct Hfinal_s as [empty_stack executing_halt].
+  destruct (Util.mem 0 split) eqn:Hcontrol;
+    [ exists (PLTT.PC (C, [], mem, regs, pc))
+    | exists (PLTT.CC (C, [], mem))
+    ]; split; auto.
+Qed.
+
 Theorem option_simulation:
-  forall I E EWF split s s' ps t,
+  forall I E s s' ps t split,
+  (* well-formedness requirements *)
+  forall EWF,
   forall (splitWF : split_wf I split),
   forall (memWF : memory_wf I s),
-    let G := LTT.mkGlobalEnv I E EWF in
-
     (* Simulation premises *)
+    let G := LTT.mkGlobalEnv I E EWF in
     (LTT.step G s t s' /\ match_states split s ps) ->
 
     (* Simulation argument *)
     (t = E0 /\ match_states split s' ps) \/
     (exists ps',
-        let G' := PLTT.mkGlobalEnv I E split EWF splitWF in
+        let EWF' := entrypoints_exist_wrt_split G split splitWF in
+        let G' := PLTT.mkGlobalEnv I E split EWF' splitWF in
         PLTT.step G' ps t ps' /\ match_states split s' ps').
 Proof.
-  intros I E EWF split s s' ps t.
-  intros splitWF memWF G [Hstep Hmatch_states].
+  intros I E s s' ps t split.
+  intros EWF splitWF memWF G [Hstep Hmatch_states].
 
   (* case analysis on who has control and on the execution *)
   inversion Hmatch_states as
-      [ C d pd mem pmem regs pc Hcontrol Hpstack Hmem |
-        C d pd mem pmem regs pc Hcontrol Hpstack Hmem ]; subst;
+      [ C d pd mem pmem regs pc Hcontrol Hpstack Hmem
+      | C d pd mem pmem regs pc Hcontrol Hpstack Hmem ]; subst;
     inversion Hstep; subst;
 
     (* try to extract the current component memory *)
@@ -78,21 +144,16 @@ Proof.
 
     (* prove program epsilon steps *)
     try (right; eexists; split;
-      [ eapply PLTT.Program_Epsilon;
-        [ apply HCmem
-        | apply HCmem
-        | simpl; unfold PLTT.maps_match_on;
-          split; intro; eassumption
-        | apply Hstep
-        | apply Hmem; auto
-        | apply HCmem
-        ]
-      | apply program_control;
-        [ assumption
-        | reflexivity
-        | unfold PLTT.maps_match_on;
-          intros; split; intro; assumption
-        ]]).
+         [ eapply PLTT.Program_Epsilon;
+           [ apply HCmem
+           | apply HCmem
+           | eauto
+           | apply Hstep
+           | apply Hmem; auto
+           | apply HCmem
+           ]
+         | auto
+        ]).
 
   (* program store *)
   - right.
@@ -103,26 +164,27 @@ Proof.
                      regs, pc+1)).
     split.
     (* step *)
-    + eapply PLTT.Program_Epsilon with
-        (s:=d) (cmem:=Cmem)
-        (cmem':=Memory.local_update
+    + remember (Memory.local_update
                   (Register.get r1 regs)
                   (Register.get r2 regs) Cmem)
-        (wmem':=M.add C (Memory.local_update
-                           (Register.get r1 regs)
-                           (Register.get r2 regs) Cmem)
-                      mem).
+        as updated_Cmem.
+      eapply PLTT.Program_Epsilon with
+        (s:=d) (cmem:=Cmem)
+        (cmem':=updated_Cmem)
+        (wmem':=M.add C updated_Cmem mem).
       * apply HCmem.
       * apply M.add_1. reflexivity.
       * unfold PLTT.maps_match_on.
         intros. split; intro; eassumption.
       * unfold Memory.set in Hstep.
         rewrite (M.find_1 HCmem) in Hstep.
+        rewrite Hequpdated_Cmem.
         apply Hstep.
       * apply Hmem; assumption.
       * unfold Memory.set.
         apply Hmem in HCmem.
         rewrite (M.find_1 HCmem).
+        rewrite Hequpdated_Cmem.
         apply M.add_1.
         ** reflexivity.
         ** assumption.
@@ -145,11 +207,11 @@ Proof.
         as [C'I [C'I_in_I C'I_name_is_C']].
       destruct (EWF C'I C' C'I_in_I C'I_name_is_C')
         as [C'_in_E' [addrs C'_mapsto_E']].
-      rewrite EntryPoint.get_works_locally with
+      rewrite EntryPoint.get_on_compatible_entrypoints with
         (E':=E) (addrs:=addrs).
       apply program_control; eauto.
       * simpl.
-        apply Util.in_implies_mem_true in Hcontrol.
+        apply Util.in_iff_mem_true in Hcontrol.
         rewrite Hcontrol.
         reflexivity.
       * eauto.
@@ -159,7 +221,7 @@ Proof.
     (* external call - states match *)
     + apply context_control; auto.
       * simpl.
-        apply Util.in_implies_mem_true in Hcontrol.
+        apply Util.in_iff_mem_true in Hcontrol.
         rewrite Hcontrol.
         reflexivity.
 
@@ -171,14 +233,14 @@ Proof.
     (* internal return - step *)
     + apply PLTT.Program_Internal_Return; auto.
       * simpl.
-        apply Util.in_implies_mem_true in HC'origin.
+        apply Util.in_iff_mem_true in HC'origin.
         rewrite HC'origin. reflexivity.
     (* internal return - states match *)
     + eauto.
     (* external return - step *)
     + apply PLTT.Program_External_Return; auto.
       * simpl.
-        apply Util.not_in_implies_mem_false in HC'origin.
+        apply Util.not_in_iff_mem_false in HC'origin.
         rewrite HC'origin. reflexivity.
     (* external return - states match *)
     + eauto.
@@ -201,11 +263,11 @@ Proof.
            rewrite HCfind in HC'map.
            assumption.
     + intro HC'map.
-      assert (HneqC1C': C <> C').
+      assert (HneqCC': C <> C').
       { intro HeqCC'. apply Hcontrol.
         rewrite <- HeqCC' in HC'origin. apply HC'origin. }
       unfold Memory.set.
-      destruct (M.find (elt:=list nat) C mem) eqn:HC1find.
+      destruct (M.find (elt:=list nat) C mem) eqn:HCfind.
       * assert (HC'mem: PLTT.M.MapsTo C' C'mem mem).
         { apply Hmem; assumption. }
         eapply M.add_2; assumption.
@@ -224,7 +286,7 @@ Proof.
         as [CI [CI_in_I CI_name_is_C']].
       destruct (EWF CI C' CI_in_I CI_name_is_C')
         as [C'_in_E' [addrs C'_mapsto_E']].
-      rewrite EntryPoint.get_works_locally with
+      rewrite EntryPoint.get_on_compatible_entrypoints with
         (E':=E) (addrs:=addrs).
       apply program_control; eauto.
       * eauto.
@@ -242,7 +304,7 @@ Proof.
       eexists; split.
     (* external return - step*)
     + apply PLTT.Context_External_Return; auto.
-      * simpl. apply Util.in_implies_mem_true in HC'origin.
+      * simpl. apply Util.in_iff_mem_true in HC'origin.
         rewrite HC'origin.
         reflexivity.
     (* external return - states match *)

@@ -10,7 +10,7 @@ Import AbstractMachine.
 Definition stack:= list (Component.id * Memory.address).
 
 Definition state : Type := 
-  (Component.id * stack * Memory.data * Register.data * Memory.address).
+  Component.id * stack * Memory.data * Register.data * Memory.address.
 
 Record global_env := mkGlobalEnv {
   get_interfaces : Program.interface;
@@ -22,6 +22,22 @@ Record global_env := mkGlobalEnv {
       M.In C get_entrypoints /\
       exists addrs, M.MapsTo C addrs get_entrypoints;
 }.
+
+Definition initial_state_for (p : program) : state :=
+  match p with (Is, mem, E) =>
+    (0, [], mem, Register.empty, EntryPoint.get 0 0 E)
+  end.
+
+Definition initial_state G (s : state) : Prop :=
+  match s with (C, d, mem, regs, pc) =>
+    C = 0 /\ d = [] /\ regs = Register.empty /\
+    pc = EntryPoint.get 0 0 (get_entrypoints G)
+  end.
+
+Definition final_state (s : state) : Prop :=
+  match s with (C, d, mem, regs, pc) =>
+    d = [] /\ executing Halt C mem pc
+  end.
 
 Definition eval_binop (e : binop) (a b : nat) : nat :=
   match e with
@@ -251,7 +267,7 @@ Proof.
     end.
 Qed.
 
-
+Module SimpleExample.
 
 (* Example of semantics *)
 Definition initial_state : LTT.state -> Prop := fun s => True.
@@ -275,4 +291,6 @@ Definition sem := Semantics_gen step
                                 initial_state
                                 final_state
                                 emptygenv. (* need a way to create a G *)
+End SimpleExample.
+
 End LTT.
