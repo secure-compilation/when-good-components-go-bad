@@ -155,6 +155,10 @@ Inductive step (G : global_env)
       let t := [ERet C (Register.get Register.R_COM regs) C'] in
       G |-PLTT (PC (C,d,mem,regs,pc)) =>[t] (CC (C',d',mem))
 
+| Context_Epsilon:
+    forall mem C d,
+      G |-PLTT (CC (C,d,mem)) =>[E0] (CC (C,d,mem))
+
 | Context_Internal_Call:
     forall mem C d d' C' P call_arg,
       C' <> C ->

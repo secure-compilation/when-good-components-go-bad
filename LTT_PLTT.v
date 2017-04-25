@@ -61,6 +61,8 @@ Proof.
   apply (LTT.entrypoints_exist G) with CI; assumption.
 Qed.
 
+Section SIMULATION.
+
 Theorem initial_states_match:
   forall Is E EWF split splitWF s,
     let G := LTT.mkGlobalEnv Is E EWF in
@@ -112,25 +114,37 @@ Proof.
       * apply Util.not_in_iff_mem_false. auto.
 Qed.
 
-Theorem option_simulation:
-  forall I E s s' ps t split,
+Theorem final_states_match':
+  forall s ps (split : list Component.id),
+    LTT.final_state s ->
+    match_states split s ps ->
+    PLTT.final_state ps.
+Proof.
+  intros s ps split Hs_final Hmatch_states.
+  destruct s as [[[[C d] mem] regs] pc] eqn:Hstate_s.
+  destruct Hs_final as [empty_stack executing_halt].
+  unfold PLTT.final_state.
+  inversion Hmatch_states; subst; auto.
+Qed.
+
+Theorem lockstep_simulation:
+  forall I E s s' t split,
   (* well-formedness requirements *)
   forall EWF,
   forall (splitWF : split_wf I split),
   forall (memWF : memory_wf I s),
-    (* Simulation premises *)
+    (* simulation *)
     let G := LTT.mkGlobalEnv I E EWF in
-    (LTT.step G s t s' /\ match_states split s ps) ->
-
-    (* Simulation argument *)
-    (t = E0 /\ match_states split s' ps) \/
+    LTT.step G s t s' ->
+    forall ps,
+      match_states split s ps ->
     (exists ps',
         let EWF' := entrypoints_exist_wrt_split G split splitWF in
         let G' := PLTT.mkGlobalEnv I E split EWF' splitWF in
         PLTT.step G' ps t ps' /\ match_states split s' ps').
 Proof.
-  intros I E s s' ps t split.
-  intros EWF splitWF memWF G [Hstep Hmatch_states].
+  intros I E s s' t split.
+  intros EWF splitWF memWF G Hstep ps Hmatch_states.
 
   (* case analysis on who has control and on the execution *)
   inversion Hmatch_states as
@@ -142,13 +156,14 @@ Proof.
     try (destruct (splitWF C Hcontrol) as [CI [C_in_I CI_name]];
          destruct (memWF CI C C_in_I CI_name) as [Cmem HCmem]);
 
-    (* prove context epsilon steps by staying still *)
-    try (left; split;
-         [ | apply context_control ];
-         auto);
+    (* context epsilon steps (except store) *)
+    try (eexists; split;
+         [ apply PLTT.Context_Epsilon
+         | apply context_control; auto
+         ]);
 
-    (* prove program epsilon steps *)
-    try (right; eexists; split;
+    (* program epsilon steps (except store) *)
+    try (eexists; split;
          [ eapply PLTT.Program_Epsilon;
            [ apply HCmem
            | apply HCmem
@@ -161,8 +176,7 @@ Proof.
         ]).
 
   (* program store *)
-  - right.
-    exists (PLTT.PC (C, PLTT.to_partial_stack d split,
+  - exists (PLTT.PC (C, PLTT.to_partial_stack d split,
                      Memory.set pmem C
                                 (Register.get r1 regs)
                                 (Register.get r2 regs),
@@ -202,8 +216,7 @@ Proof.
           auto.
 
   (* program is calling *)
-  - right.
-    destruct (in_dec Nat.eq_dec C' split) as [ HC'origin | ? ];
+  - destruct (in_dec Nat.eq_dec C' split) as [ HC'origin | ? ];
       eexists; split.
     (* internal call - step *)
     + apply PLTT.Program_Internal_Call; auto.
@@ -231,8 +244,7 @@ Proof.
         reflexivity.
 
   (* program is returning *)
-  - right.
-    destruct (in_dec Nat.eq_dec C' split)
+  - destruct (in_dec Nat.eq_dec C' split)
       as [ HC'origin | HC'origin ];
       eexists; split.
     (* internal return - step *)
@@ -279,8 +291,7 @@ Proof.
       * apply Hmem; auto.
 
   (* context call is calling *) 
-  - right.
-    destruct (in_dec Nat.eq_dec C' split) as [ HC'origin | ? ];
+  - destruct (in_dec Nat.eq_dec C' split) as [ HC'origin | ? ];
       eexists; split.
     (* external call - step *)
     + apply PLTT.Context_External_Call;
@@ -304,8 +315,7 @@ Proof.
     + eauto.
 
   (* context is returning *)
-  - right.
-    destruct (in_dec Nat.eq_dec C' split) as [HC'origin | ?];
+  - destruct (in_dec Nat.eq_dec C' split) as [HC'origin | ?];
       eexists; split.
     (* external return - step*)
     + apply PLTT.Context_External_Return; auto.
@@ -320,5 +330,7 @@ Proof.
     (* internal return - states match *)
     + eauto.
 Qed.
+
+End SIMULATION.
 
 End LTT_TO_PLTT.
