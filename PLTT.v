@@ -2,6 +2,7 @@ Require Import Common.
 Require Import Machine.
 Require Import Events.
 Require Import LTT.
+Require Import Smallstep.
 
 Module PLTT.
 
@@ -294,4 +295,10 @@ Proof.
     auto.
 Qed.
 
+Section SEMANTICS.
+  Variable G : global_env.
+
+  Definition semantics :=
+    Semantics_gen step (initial_state G) final_state G.
+End SEMANTICS.
 End PLTT.

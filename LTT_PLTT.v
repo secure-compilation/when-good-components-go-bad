@@ -3,6 +3,7 @@ Require Import Events.
 Require Import Machine.
 Require Import LTT.
 Require Import PLTT.
+Require Import Smallstep.
 
 Module LTT_TO_PLTT.
 
@@ -30,46 +31,38 @@ Inductive match_states (split : list Component.id)
 
 Hint Constructors match_states.
 
-Definition memory_wf (Is : list Component.interface) (s : LTT.state) :=
-  match s with
-  | (C,d,mem,regs,pc) =>
-    forall CI C,
-      In CI Is -> Component.name CI = C ->
-      exists Cmem, M.MapsTo C Cmem mem
-  end.
-
-Definition split_wf (Is : list Component.interface) (split : list Component.id) :=
-  forall C,
-    In C split ->
-    exists CI, In CI Is /\ Component.name CI = C.
-
-(* if entrypoints are well-formed, then they remain
-   well-formed even if we consider only the ones relative to the
-   components in the split *)
-Theorem entrypoints_exist_wrt_split:
-  forall (G : LTT.global_env) split
-         (splitWF : split_wf (LTT.get_interfaces G) split),
-  forall CI C,
-    In CI (LTT.get_interfaces G) ->
-    Component.name CI = C ->
-    In C split ->
-    M.In C (LTT.get_entrypoints G) /\
-    exists addrs, M.MapsTo C addrs (LTT.get_entrypoints G).
-Proof.
-  intros G split splitWF.
-  intros CI C HCI_in_I HCI_name_is_C HC_in_split.
-  apply (LTT.entrypoints_exist G) with CI; assumption.
-Qed.
-
 Section SIMULATION.
   Variable G : LTT.global_env.
   Variable split : list Component.id.
-  Hypothesis splitWF : split_wf (LTT.get_interfaces G) split.
+
+  (* the chosen split is valid w.r.t. the interfaces declared
+     in the global environment *)
+  Hypothesis splitWF:
+    forall C,
+      In C split ->
+    exists CI,
+      In CI (LTT.get_interfaces G) /\ Component.name CI = C.
+
+  (* if entrypoints are well-formed, then they remain
+     well-formed even if we consider only the ones relative to the
+     components in the split *)
+  Lemma entrypoints_exist_wrt_split:
+    forall CI C,
+      In CI (LTT.get_interfaces G) ->
+      Component.name CI = C ->
+      In C split ->
+      M.In C (LTT.get_entrypoints G) /\
+      exists addrs, M.MapsTo C addrs (LTT.get_entrypoints G).
+  Proof.
+    intros CI C.
+    intros HCI_in_I HCI_name_is_C HC_in_split.
+    apply (LTT.entrypoints_exist G) with CI; assumption.
+  Qed.
 
   Definition G' := PLTT.mkGlobalEnv
                      (LTT.get_interfaces G)
                      (LTT.get_entrypoints G) split
-                     (entrypoints_exist_wrt_split G split splitWF)
+                     entrypoints_exist_wrt_split
                      splitWF.
 
   Lemma initial_states_match:
@@ -105,11 +98,11 @@ Section SIMULATION.
 
   Lemma final_states_match:
     forall s ps,
-      LTT.final_state s ->
       match_states split s ps ->
+      LTT.final_state s ->
       PLTT.final_state ps.
   Proof.
-    intros s ps Hs_final Hmatch_states.
+    intros s ps Hmatch_states Hs_final.
     destruct s
       as [[[[C d] mem] regs] pc] eqn:Hstate_s.
     destruct Hs_final
@@ -120,7 +113,6 @@ Section SIMULATION.
 
   Lemma lockstep_simulation:
     forall s t s',
-    forall (memWF : memory_wf (LTT.get_interfaces G) s),
       LTT.step G s t s' ->
       forall ps,
         match_states split s ps ->
@@ -128,7 +120,11 @@ Section SIMULATION.
         PLTT.step G' ps t ps' /\ match_states split s' ps'.
   Proof.
     intros s t s'.
-    intros memWF Hstep ps Hmatch_states.
+    intros Hstep ps Hmatch_states.
+
+    (* extract the currently executing component memory *)
+    destruct (LTT.step_implies_memory_existence G s t s' Hstep)
+      as [Cmem HCmem].
 
     (* useful facts about the global environment *)
     pose (LTT.get_entrypoints G) as E.
@@ -148,9 +144,11 @@ Section SIMULATION.
         | C d pd mem pmem regs pc Hcontrol Hpstack Hmem ]; subst;
       inversion Hstep; subst;
 
-        (* try to extract the current component memory *)
-        try (destruct (splitWF C Hcontrol) as [CI [C_in_I CI_name]];
-             destruct (memWF CI C C_in_I CI_name) as [Cmem HCmem]);
+        (* try to extract the current component interface *)
+        try (destruct (splitWF C Hcontrol)
+              as [CI [C_in_I CI_name]]);
+        (* simplify assumptions about memory *)
+        simpl in HCmem;
 
         (* context epsilon steps (except store) *)
         try (eexists; split;
@@ -326,6 +324,15 @@ Section SIMULATION.
       (* internal return - states match *)
       + eauto.
   Qed.
-End SIMULATION.
 
+  Theorem forward_simulation_between_LTT_and_PLTT:
+    forward_simulation (LTT.semantics G) (PLTT.semantics G').
+  Proof.
+    apply Forward_simulation with (match_states split).
+    constructor.
+    - apply initial_states_match.
+    - apply final_states_match.
+    - apply lockstep_simulation.
+  Qed.
+End SIMULATION.
 End LTT_TO_PLTT.

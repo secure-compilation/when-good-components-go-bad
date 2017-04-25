@@ -147,6 +147,7 @@ Module EncDec.
 
   Theorem decode_encode : forall i, decode (encode i) = Some i.
   Proof. Admitted.
+  Theorem decode_nothing : decode None = None. Proof. Admitted.
 End EncDec.
 
 Module EntryPoint.
@@ -195,5 +196,4 @@ Definition call_is_in_imports
 
 Definition executing i C mem pc :=
   EncDec.decode (Memory.get mem C pc) = Some i.
-
 End AbstractMachine.

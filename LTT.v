@@ -128,6 +128,35 @@ Inductive step (G : global_env)
 
 where "G |-LTT s1 '=>[' t ']' s2" := (step G s1 t s2).
 
+Definition mem_of (s : state) : Memory.data :=
+  match s with (_,_,mem,_,_) => mem end.
+
+Definition comp_of (s : state) : Component.id :=
+  match s with (C,_,_,_,_) => C end.
+
+Lemma step_implies_memory_existence:
+  forall G s t s',
+    G |-LTT s =>[t] s' ->
+  exists Cmem, M.MapsTo (comp_of s) Cmem (mem_of s).
+Proof.
+  intros G s t s'.
+  intros Hstep.
+  destruct s
+    as [[[[C d] mem] regs] pc] eqn:Hstate_s.
+  inversion Hstep; subst;
+    match goal with
+    | Hexec : executing ?INSTR C mem ?PC |- _ =>
+      unfold executing, Memory.get in Hexec;
+        destruct (M.find (elt:=list nat) C mem)
+          as [Cmem | ] eqn:HCmem;
+        [ exists Cmem; simpl;
+          apply (M.find_2 HCmem)
+        | rewrite EncDec.decode_nothing in Hexec;
+          inversion Hexec
+        ]
+    end.
+Qed.
+
 (* probably useless *)
 Lemma epsilon_step_preserves_component_and_stack:
   forall G C d mem regs pc C' d' mem' regs' pc',
@@ -267,30 +296,10 @@ Proof.
     end.
 Qed.
 
-Module SimpleExample.
+Section SEMANTICS.
+  Variable G : global_env.
 
-(* Example of semantics *)
-Definition initial_state : LTT.state -> Prop := fun s => True.
-
-Definition final_state : LTT.state -> Prop := fun s => True.
-
-Lemma valid_emptyenv : forall CI C,
-    In CI [] ->
-    Component.name CI = C ->
-    M.In C (@M.empty (list Memory.address)) /\
-    exists addrs, M.MapsTo C addrs (@M.empty (list Memory.address)).
-Proof.
-  intros. exfalso. auto.
-Qed.
-
-Definition emptygenv := mkGlobalEnv []
-                                    (@M.empty (list Memory.address))
-                                    valid_emptyenv.
-
-Definition sem := Semantics_gen step
-                                initial_state
-                                final_state
-                                emptygenv. (* need a way to create a G *)
-End SimpleExample.
-
+  Definition semantics :=
+    Semantics_gen step (initial_state G) final_state G.
+End SEMANTICS.
 End LTT.
