@@ -32,46 +32,37 @@ Inductive match_states (split : list Component.id)
 Hint Constructors match_states.
 
 Section SIMULATION.
-  Variable G : LTT.global_env.
+  Variable p : LTT.program.
+  Variable pp : PLTT.program.
   Variable split : list Component.id.
 
-  (* the chosen split is valid w.r.t. the interfaces declared
-     in the global environment *)
-  Hypothesis splitWF:
+  (* the split is well-formed w.r.t. to the program interface *)
+  Hypothesis splitWF :
     forall C,
       In C split ->
     exists CI,
-      In CI (LTT.get_interfaces G) /\ Component.name CI = C.
+      In CI (LTT.prog_interface p) /\ Component.name CI = C.
 
-  (* if entrypoints are well-formed, then they remain
-     well-formed even if we consider only the ones relative to the
-     components in the split *)
-  Lemma entrypoints_exist_wrt_split:
-    forall CI C,
-      In CI (LTT.get_interfaces G) ->
-      Component.name CI = C ->
-      In C split ->
-      M.In C (LTT.get_entrypoints G) /\
-      exists addrs, M.MapsTo C addrs (LTT.get_entrypoints G).
-  Proof.
-    intros CI C.
-    intros HCI_in_I HCI_name_is_C HC_in_split.
-    apply (LTT.entrypoints_exist G) with CI; assumption.
-  Qed.
+  (* the partial program is obtained by "splitting" the original
+     program w.r.t. to split *)
+  Hypothesis p_transfto_pp :
+    pp = PLTT.apply_split p split splitWF.
 
-  Definition G' := PLTT.mkGlobalEnv
-                     (LTT.get_interfaces G)
-                     (LTT.get_entrypoints G) split
-                     entrypoints_exist_wrt_split
-                     splitWF.
+  (* build the global environments *)
+  Let G := LTT.mkGlobalEnv (LTT.prog_interface p)
+                           (LTT.prog_entrypoints p).
+  Let G' := PLTT.mkGlobalEnv (LTT.prog_interface p)
+                             (LTT.prog_entrypoints p)
+                             split.
 
   Lemma initial_states_match:
     forall s,
-      LTT.initial_state G s ->
+      LTT.initial_state p s ->
     exists ps,
-      PLTT.initial_state G' ps /\ match_states split s ps.
+      PLTT.initial_state pp ps /\ match_states split s ps.
   Proof.
     intros s Hs_init.
+    rewrite p_transfto_pp.
     destruct s
       as [[[[C d] mem] regs] pc] eqn:Hstate_s.
     destruct Hs_init
@@ -126,14 +117,13 @@ Section SIMULATION.
     destruct (LTT.step_implies_memory_existence G s t s' Hstep)
       as [Cmem HCmem].
 
-    (* useful facts about the global environment *)
-    pose (LTT.get_entrypoints G) as E.
-    pose (LTT.entrypoints_exist G) as EWF.
+    (* useful facts *)
+    pose (LTT.prog_entrypoints p) as E.
+    pose (LTT.prog_entrypoints_wf p) as EWF.
     assert (HG_unfolded:
               G = {|
                 LTT.get_interfaces := LTT.get_interfaces G;
-                LTT.get_entrypoints := LTT.get_entrypoints G;
-                LTT.entrypoints_exist := LTT.entrypoints_exist G
+                LTT.get_entrypoints := LTT.get_entrypoints G
               |}). {
       destruct G. simpl. auto.
     } rewrite HG_unfolded in Hstep.
@@ -167,7 +157,7 @@ Section SIMULATION.
                | apply HCmem
                ]
              | auto
-             ]).
+            ]).
 
     (* program store *)
     - exists (PLTT.PC (C, PLTT.to_partial_stack d split,
@@ -326,13 +316,18 @@ Section SIMULATION.
   Qed.
 
   Theorem forward_simulation_between_LTT_and_PLTT:
-    forward_simulation (LTT.semantics G) (PLTT.semantics G').
+    forward_simulation (LTT.semantics p) (PLTT.semantics pp).
   Proof.
     apply Forward_simulation with (match_states split).
     constructor.
     - apply initial_states_match.
     - apply final_states_match.
-    - apply lockstep_simulation.
+    - assert (HG: globalenv (LTT.semantics p) = G). auto.
+      assert (HG': globalenv (PLTT.semantics pp) = G').
+      { simpl.
+        rewrite p_transfto_pp. auto. }
+      rewrite HG, HG'.
+      apply lockstep_simulation.
   Qed.
 End SIMULATION.
 End LTT_TO_PLTT.

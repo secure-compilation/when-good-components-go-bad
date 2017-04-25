@@ -8,6 +8,24 @@ Module PLTT.
 
 Include AbstractMachine.
 
+Record program := {
+  prog_interface : Program.interface;
+  prog_memory : Memory.data;
+  prog_entrypoints : EntryPoint.data;
+  prog_split : list Component.id;
+  prog_entrypoints_wf :
+    forall CI C,
+      In CI prog_interface ->
+      Component.name CI = C ->
+      In C prog_split ->
+      M.In C prog_entrypoints /\
+      exists addrs, M.MapsTo C addrs prog_entrypoints;
+  prog_split_wf :
+    forall C,
+      In C prog_split ->
+      exists CI, In CI prog_interface /\ Component.name CI = C
+}.
+
 Definition stack := list (Component.id * option Memory.address).
 
 Definition program_state : Type :=
@@ -52,32 +70,24 @@ Record global_env := mkGlobalEnv {
   get_interfaces : Program.interface;
   get_entrypoints : EntryPoint.data;
   get_split : list Component.id;
-  entrypoints_exist :
-    forall CI C,
-      In CI get_interfaces ->
-      Component.name CI = C ->
-      In C get_split ->
-      M.In C get_entrypoints /\
-      exists addrs, M.MapsTo C addrs get_entrypoints;
-  split_wellformed :
-    forall C,
-      In C get_split ->
-      exists CI, In CI get_interfaces /\ Component.name CI = C
 }.
 
-Definition initial_state_for (p : program) split : partial_state :=
-  match p with (Is, mem, E) =>
-    if Util.mem 0 split then
-      PC (0, [], mem, Register.empty, EntryPoint.get 0 0 E)
-    else
-      CC (0, [], mem)
-  end.
+Definition initial_state_for
+           (p : program)
+           (split : list Component.id) : partial_state :=
+  let mem := prog_memory p in
+  let E := prog_entrypoints p in
+  let split := prog_split p in
+  if Util.mem 0 split then
+    PC (0, [], mem, Register.empty, EntryPoint.get 0 0 E)
+  else
+    CC (0, [], mem).
 
-Definition initial_state G (s : partial_state) : Prop :=
+Definition initial_state p (s : partial_state) : Prop :=
   match s with
   | PC (C, d, mem, regs, pc) =>
     C = 0 /\ d = [] /\ regs = Register.empty /\
-    pc = EntryPoint.get 0 0 (get_entrypoints G)
+    pc = EntryPoint.get 0 0 (prog_entrypoints p)
   | CC (C, d, mem) =>
     C = 0 /\ d = []
   end.
@@ -105,13 +115,13 @@ Reserved Notation "G |-PLTT s1 '=>[' t ']' s2" (at level 40).
 Inductive step (G : global_env)
   : partial_state -> trace -> partial_state -> Prop :=
 | Program_Epsilon:
-    forall E EWF C s ps
+    forall E C s ps
            mem mem' wmem wmem' cmem cmem'
            regs regs' pc pc',
       M.MapsTo C cmem wmem ->
       M.MapsTo C cmem' wmem' ->
       maps_match_on (get_split G) E (get_entrypoints G) ->
-      let G' := LTT.mkGlobalEnv (get_interfaces G) E EWF in
+      let G' := LTT.mkGlobalEnv (get_interfaces G) E in
       LTT.step G' (C,s,wmem,regs,pc) E0 (C,s,wmem',regs',pc') ->
       M.MapsTo C cmem mem ->
       M.MapsTo C cmem' mem' ->
@@ -296,9 +306,40 @@ Proof.
 Qed.
 
 Section SEMANTICS.
-  Variable G : global_env.
+  Variable p : program.
 
   Definition semantics :=
-    Semantics_gen step (initial_state G) final_state G.
+    @Semantics_gen partial_state global_env
+                   step
+                   (initial_state p)
+                   final_state
+                   (mkGlobalEnv (prog_interface p)
+                                (prog_entrypoints p)
+                                (prog_split p)).
 End SEMANTICS.
+
+(* if entrypoints are well-formed, then they remain
+   well-formed even if we consider only the ones relative
+   to the components in the split *)
+Lemma entrypoints_exist_wrt_split split :
+  forall p CI C,
+    In CI (LTT.prog_interface p) ->
+    Component.name CI = C ->
+    In C split ->
+    M.In C (LTT.prog_entrypoints p) /\
+  exists addrs, M.MapsTo C addrs (LTT.prog_entrypoints p).
+Proof.
+  intros p CI C.
+  intros HCI_in_I HCI_name_is_C HC_in_split.
+  apply (LTT.prog_entrypoints_wf p) with CI; assumption.
+Qed.
+
+Definition apply_split (p : LTT.program) split splitWF :=
+  {| prog_interface := LTT.prog_interface p;
+     prog_memory := LTT.prog_memory p;
+     prog_entrypoints := LTT.prog_entrypoints p;
+     prog_split := split;
+     prog_entrypoints_wf :=
+       entrypoints_exist_wrt_split split p;
+     prog_split_wf := splitWF |}.
 End PLTT.

@@ -175,9 +175,6 @@ Module EntryPoint.
   Qed.
 End EntryPoint.
 
-Definition program : Type :=
-  Program.interface * Memory.data * EntryPoint.data.
-
 (* auxiliary definitions *)
 
 Definition call_is_public_and_exists

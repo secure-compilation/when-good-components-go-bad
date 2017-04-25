@@ -7,6 +7,18 @@ Module LTT.
 
 Import AbstractMachine.
 
+Record program := {
+  prog_interface : Program.interface;
+  prog_memory : Memory.data;
+  prog_entrypoints : EntryPoint.data;
+  prog_entrypoints_wf :
+    forall CI C,
+      In CI prog_interface ->
+      Component.name CI = C ->
+      M.In C prog_entrypoints /\
+      exists addrs, M.MapsTo C addrs prog_entrypoints
+}.
+
 Definition stack:= list (Component.id * Memory.address).
 
 Definition state : Type := 
@@ -15,23 +27,17 @@ Definition state : Type :=
 Record global_env := mkGlobalEnv {
   get_interfaces : Program.interface;
   get_entrypoints : EntryPoint.data;
-  entrypoints_exist :
-    forall CI C,
-      In CI get_interfaces ->
-      Component.name CI = C ->
-      M.In C get_entrypoints /\
-      exists addrs, M.MapsTo C addrs get_entrypoints;
 }.
 
 Definition initial_state_for (p : program) : state :=
-  match p with (Is, mem, E) =>
-    (0, [], mem, Register.empty, EntryPoint.get 0 0 E)
-  end.
+  let mem := prog_memory p in
+  let E := prog_entrypoints p in
+  (0, [], mem, Register.empty, EntryPoint.get 0 0 E).
 
-Definition initial_state G (s : state) : Prop :=
+Definition initial_state p (s : state) : Prop :=
   match s with (C, d, mem, regs, pc) =>
     C = 0 /\ d = [] /\ regs = Register.empty /\
-    pc = EntryPoint.get 0 0 (get_entrypoints G)
+    pc = EntryPoint.get 0 0 (prog_entrypoints p)
   end.
 
 Definition final_state (s : state) : Prop :=
@@ -170,21 +176,21 @@ Qed.
 
 (* probably useless *)
 Lemma epsilon_step_weakening:
-  forall Is E EWF C d1 mem mem' cmem cmem' regs regs' pc pc',
-    let G := mkGlobalEnv Is E EWF in
+  forall Is E C d1 mem mem' cmem cmem' regs regs' pc pc',
+    let G := mkGlobalEnv Is E in
     M.MapsTo C cmem  mem ->
     M.MapsTo C cmem' mem' ->
     G |-LTT (C,d1,mem,regs,pc) =>[E0] (C,d1,mem',regs',pc') ->
-  forall E' E'WF d2 wmem,
-    let G' := mkGlobalEnv Is E' E'WF in
+  forall E' d2 wmem,
+    let G' := mkGlobalEnv Is E' in
     M.MapsTo C cmem wmem ->
     exists wmem',
       M.MapsTo C cmem' wmem' ->
       G' |-LTT (C,d2,wmem,regs,pc) =>[E0] (C,d2,wmem',regs',pc').
 Proof.
-  intros Is E EWF C d1 mem mem' cmem cmem' regs regs' pc pc'.
+  intros Is E C d1 mem mem' cmem cmem' regs regs' pc pc'.
   intros G HCmem HCmem' Hstep.
-  intros E' E'WF d2 wmem G' HCwmem.
+  intros E' d2 wmem G' HCwmem.
   inversion Hstep; subst.
   - exists wmem. intro HCwmem'.
     apply Nop;
@@ -297,9 +303,14 @@ Proof.
 Qed.
 
 Section SEMANTICS.
-  Variable G : global_env.
+  Variable p : program.
 
   Definition semantics :=
-    Semantics_gen step (initial_state G) final_state G.
+    @Semantics_gen state global_env
+                   step
+                   (initial_state p)
+                   final_state
+                   (mkGlobalEnv (prog_interface p)
+                                (prog_entrypoints p)).
 End SEMANTICS.
 End LTT.
