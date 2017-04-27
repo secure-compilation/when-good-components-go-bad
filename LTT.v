@@ -25,8 +25,8 @@ Definition state : Type :=
   Component.id * stack * Memory.data * Register.data * Memory.address.
 
 Record global_env := mkGlobalEnv {
-  get_interfaces : Program.interface;
-  get_entrypoints : EntryPoint.data;
+  genv_interfaces : Program.interface;
+  genv_entrypoints : EntryPoint.data;
 }.
 
 Definition initial_state_for (p : program) : state :=
@@ -116,12 +116,12 @@ Inductive step (G : global_env)
 
 | Call: forall mem C pc regs d d' C' P,
     executing (Call C' P) C mem pc ->
-    call_is_public_and_exists (get_interfaces G) C' P ->
-    call_is_in_imports (get_interfaces G) C C' P ->
+    call_is_public_and_exists (genv_interfaces G) C' P ->
+    call_is_in_imports (genv_interfaces G) C C' P ->
     C' <> C ->
     d' = (C,pc+1) :: d ->
     let t := [ECall C P (Register.get Register.R_COM regs) C'] in
-    let E := get_entrypoints G in
+    let E := genv_entrypoints G in
     G |-LTT (C,d,mem,regs,pc) =>[t]
             (C',d',mem,regs,EntryPoint.get C' P E)
 

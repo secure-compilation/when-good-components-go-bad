@@ -69,7 +69,7 @@ Section SIMULATION.
       as [C_is_0 [empty_stack [empty_regs main_proc]]].
     destruct (Util.mem 0 split) eqn:Hcontrol.
     - exists (PLTT.PC (0, [], mem, regs,
-                       EntryPoint.get 0 0 (LTT.get_entrypoints G))).
+                       EntryPoint.get 0 0 (LTT.genv_entrypoints G))).
       split.
       + unfold PLTT.initial_state.
         split; auto.
@@ -122,8 +122,8 @@ Section SIMULATION.
     pose (LTT.prog_entrypoints_wf p) as EWF.
     assert (HG_unfolded:
               G = {|
-                LTT.get_interfaces := LTT.get_interfaces G;
-                LTT.get_entrypoints := LTT.get_entrypoints G
+                LTT.genv_interfaces := LTT.genv_interfaces G;
+                LTT.genv_entrypoints := LTT.genv_entrypoints G
               |}). {
       destruct G. simpl. auto.
     } rewrite HG_unfolded in Hstep.
@@ -322,11 +322,7 @@ Section SIMULATION.
     constructor.
     - apply initial_states_match.
     - apply final_states_match.
-    - assert (HG: globalenv (LTT.semantics p) = G). auto.
-      assert (HG': globalenv (PLTT.semantics pp) = G').
-      { simpl.
-        rewrite p_transfto_pp. auto. }
-      rewrite HG, HG'.
+    - rewrite p_transfto_pp.
       apply lockstep_simulation.
   Qed.
 End SIMULATION.
