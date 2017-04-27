@@ -1,6 +1,7 @@
 -arg "-w -parsing"
 -R . RobustImp
 
+Coqlib.v
 Smallstep.v
 Behavior.v
 Events.v

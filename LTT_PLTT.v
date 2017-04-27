@@ -4,32 +4,13 @@ Require Import Machine.
 Require Import LTT.
 Require Import PLTT.
 Require Import Smallstep.
+Require Import Behavior.
+
+Require Import Coq.Logic.Classical.
 
 Module LTT_TO_PLTT.
 
 Include AbstractMachine.
-
-Inductive match_states (split : list Component.id)
-  : LTT.state -> PLTT.partial_state -> Prop :=
-| program_control:
-    forall C s ps mem pmem regs pc,
-      PLTT.is_program_component C split ->
-      ps = PLTT.to_partial_stack s split ->
-      PLTT.maps_match_on split mem pmem ->
-      match_states split
-                   (C, s, mem, regs, pc)
-                   (PLTT.PC (C, ps, pmem, regs, pc))
-
-| context_control:
-    forall C s ps mem pmem regs pc,
-      PLTT.is_context_component C split ->
-      ps = PLTT.to_partial_stack s split ->
-      PLTT.maps_match_on split mem pmem ->
-      match_states split
-                   (C, s, mem, regs, pc)
-                   (PLTT.CC (C, ps, pmem)).
-
-Hint Constructors match_states.
 
 Section SIMULATION.
   Variable p : LTT.program.
@@ -55,6 +36,39 @@ Section SIMULATION.
                              (LTT.prog_entrypoints p)
                              split.
 
+  Inductive match_states (split : list Component.id)
+    : LTT.state -> PLTT.partial_state -> Prop :=
+  | program_control:
+      forall C s ps mem pmem regs pc,
+        PLTT.is_program_component C split ->
+        ps = PLTT.to_partial_stack s split ->
+        PLTT.maps_match_on split mem pmem ->
+        match_states split
+                     (C, s, mem, regs, pc)
+                     (PLTT.PC (C, ps, pmem, regs, pc))
+
+  | context_control:
+      forall C s ps mem pmem regs pc,
+        PLTT.is_context_component C split ->
+        ps = PLTT.to_partial_stack s split ->
+        PLTT.maps_match_on split mem pmem ->
+        match_states split
+                     (C, s, mem, regs, pc)
+                     (PLTT.CC (C, ps, pmem) PLTT.Normal)
+
+  | context_went_wrong:
+      forall C s ps mem pmem regs pc,
+        PLTT.is_context_component C split ->
+        ps = PLTT.to_partial_stack s split ->
+        PLTT.maps_match_on split mem pmem ->
+        (forall s' t, ~ LTT.step G (C,s,mem,regs,pc) t s') ->
+        ~ LTT.final_state (C,s,mem,regs,pc) ->
+        match_states split
+                     (C, s, mem, regs, pc)
+                     (PLTT.CC (C, ps, pmem) PLTT.WentWrong).
+
+  Hint Constructors match_states.
+
   Lemma initial_states_match:
     forall s,
       LTT.initial_state p s ->
@@ -69,7 +83,7 @@ Section SIMULATION.
       as [C_is_0 [empty_stack [empty_regs main_proc]]].
     destruct (Util.mem 0 split) eqn:Hcontrol.
     - exists (PLTT.PC (0, [], mem, regs,
-                       EntryPoint.get 0 0 (LTT.get_entrypoints G))).
+                       EntryPoint.get 0 0 (LTT.genv_entrypoints G))).
       split.
       + unfold PLTT.initial_state.
         split; auto.
@@ -77,7 +91,7 @@ Section SIMULATION.
         apply program_control; try auto.
         * unfold PLTT.is_program_component.
           apply Util.in_iff_mem_true. auto.
-    - exists (PLTT.CC (0, [], mem)).
+    - exists (PLTT.CC (0, [], mem) PLTT.Normal).
       split.
       + unfold PLTT.initial_state.
         split; auto.
@@ -96,10 +110,10 @@ Section SIMULATION.
     intros s ps Hmatch_states Hs_final.
     destruct s
       as [[[[C d] mem] regs] pc] eqn:Hstate_s.
-    destruct Hs_final
-      as [empty_stack executing_halt].
-    unfold PLTT.final_state.
-    inversion Hmatch_states; subst; auto.
+    unfold LTT.final_state in Hs_final.
+    inversion Hmatch_states; subst;
+      unfold PLTT.final_state; auto.
+    - exfalso. apply H9. auto.
   Qed.
 
   Lemma lockstep_simulation:
@@ -122,8 +136,8 @@ Section SIMULATION.
     pose (LTT.prog_entrypoints_wf p) as EWF.
     assert (HG_unfolded:
               G = {|
-                LTT.get_interfaces := LTT.get_interfaces G;
-                LTT.get_entrypoints := LTT.get_entrypoints G
+                LTT.genv_interfaces := LTT.genv_interfaces G;
+                LTT.genv_entrypoints := LTT.genv_entrypoints G
               |}). {
       destruct G. simpl. auto.
     } rewrite HG_unfolded in Hstep.
@@ -131,7 +145,10 @@ Section SIMULATION.
     (* case analysis on who has control and on the execution *)
     inversion Hmatch_states as
         [ C d pd mem pmem regs pc Hcontrol Hpstack Hmem
-        | C d pd mem pmem regs pc Hcontrol Hpstack Hmem ]; subst;
+        | C d pd mem pmem regs pc Hcontrol Hpstack Hmem
+        | C d pd mem pmem regs pc Hcontrol Hpstack Hmem
+            Hno_step Hnot_final];
+      subst;
       inversion Hstep; subst;
 
         (* try to extract the current component interface *)
@@ -157,7 +174,10 @@ Section SIMULATION.
                | apply HCmem
                ]
              | auto
-            ]).
+            ]);
+
+        (* the context goes wrong *)
+        try (exfalso; eapply Hno_step; eauto).
 
     (* program store *)
     - exists (PLTT.PC (C, PLTT.to_partial_stack d split,
@@ -318,16 +338,603 @@ Section SIMULATION.
   Theorem forward_simulation_between_LTT_and_PLTT:
     forward_simulation (LTT.semantics p) (PLTT.semantics pp).
   Proof.
-    apply Forward_simulation with (match_states split).
-    constructor.
+    apply forward_simulation_step with (match_states split).
     - apply initial_states_match.
     - apply final_states_match.
-    - assert (HG: globalenv (LTT.semantics p) = G). auto.
-      assert (HG': globalenv (PLTT.semantics pp) = G').
-      { simpl.
-        rewrite p_transfto_pp. auto. }
-      rewrite HG, HG'.
+    - rewrite p_transfto_pp.
       apply lockstep_simulation.
+  Defined.
+
+  Corollary not_wrong_behavior_preservation:
+    forall beh,
+      not_wrong beh ->
+      program_behaves (LTT.semantics p) beh ->
+      program_behaves (PLTT.semantics pp) beh.
+  Proof.
+    intros beh Hnotwrong Hprogbeh.
+    eapply forward_simulation_same_safe_behavior; eauto.
+    apply forward_simulation_between_LTT_and_PLTT.
   Qed.
+
+  (* We can prove something stronger, that is, PLTT 
+     preserves exactly all behaviors. *)
+
+  (* IDEA:
+     when LTT goes wrong we might be in two cases:
+     - the program is executing, which means that PLTT
+       must be stuck as well
+     - the context is executing, which means that the
+       last step of our simulation must go into a 
+       WentWrong state
+     by proving this two lemmas, we should be able to
+     show that the trace produced when going wrong
+     is exactly the same we observed in LTT.
+   *)
+
+  Lemma nonfinal_preservation_for_program:
+    forall s pstate,
+      match_states split s (PLTT.PC pstate) ->
+      ~ LTT.final_state s ->
+      ~ PLTT.final_state (PLTT.PC pstate).
+  Proof.
+    intros s pstate Hmatch_states Hnot_final.
+    unfold not, PLTT.final_state.
+    destruct pstate. destruct p0. destruct p0. destruct p0.
+    intro Hhalt.
+    apply Hnot_final. unfold LTT.final_state.
+    destruct s. destruct p0. destruct p0. destruct p0.
+    inversion Hmatch_states; subst. auto.
+  Qed.
+
+  Lemma nostep_preservation_for_program:
+    forall s pstate,
+      match_states split s (PLTT.PC pstate) ->
+      (forall t s', ~ LTT.step G s t s') -> 
+      (forall t ps', ~ PLTT.step G' (PLTT.PC pstate) t ps'). 
+  Proof.
+    intros s pstate Hmatch_states Hnostep.
+    intros t ps'. unfold not. intro contra.
+    inversion Hmatch_states. subst.
+    inversion contra; subst.
+    (* epsilon step *)
+    - apply H3 in H12; eauto.
+      destruct (LTT.epsilon_step_weakening
+                 (PLTT.genv_interfaces G')
+                 E
+                 C s wmem wmem' cmem cmem'
+                 regs regs' pc pc' H6 H7 H11
+                 (PLTT.genv_entrypoints G')
+                 s0 mem H12);
+        eapply Hnostep; eauto.
+    (* Internal call *)
+    - eapply Hnostep.
+      eapply LTT.Call; eauto.
+    (* Internal return *)
+    - destruct s0.
+      + inversion H11. (* empty stack (contra) *)
+      + inversion H11.
+        destruct p0. subst.
+        unfold PLTT.to_partial_stack in H11. simpl in H11.
+        inversion H11. destruct (Util.mem i split).
+        * inversion H2. subst.
+          eapply Hnostep. eapply LTT.Return; eauto.
+        * inversion H2.
+    (* External call (contradiction) *)
+    - eapply Hnostep.
+      eapply LTT.Call; eauto.
+    (* External return (contradiction) *)
+    - destruct s0.
+      + inversion H10. (* empty stack (contra) *)
+      + inversion H10.
+        destruct p0. subst.
+        unfold PLTT.to_partial_stack in H10. simpl in H10.
+        inversion H10. destruct (Util.mem i split).
+        * inversion H1. inversion H2.
+        * inversion H1. inversion H2. subst.
+          eapply Hnostep. eapply LTT.Return; eauto.
+  Qed.
+
+  Definition sim_index {L1 L2 : semantics}
+             (FS : forward_simulation L1 L2) :=
+    match FS with
+    | Forward_simulation index _ _ _ => index
+    end.
+
+  Definition sim_order {L1 L2 : semantics}
+             (FS : forward_simulation L1 L2) :=
+    match FS
+          return (sim_index FS) -> (sim_index FS) -> Prop
+    with
+    | Forward_simulation _ order _ _ => order
+    end.
+
+  Definition sim_rel {L1 L2 : semantics}
+             (FS : forward_simulation L1 L2) :=
+    match FS
+          return sim_index FS -> state L1 -> state L2 -> Prop
+    with
+    | Forward_simulation _ _ rel _ => rel
+    end.
+
+  Definition sim_props {L1 L2 : semantics}
+             (FS : forward_simulation L1 L2) :=
+    match FS
+          return fsim_properties
+                   L1 L2
+                   (sim_index FS) (sim_order FS)
+                   (sim_rel FS)
+    with
+    | Forward_simulation _ _ _ props => props
+    end.
+
+  Definition s_match_states :=
+    sim_rel forward_simulation_between_LTT_and_PLTT.
+
+  Definition s_props :=
+    sim_props forward_simulation_between_LTT_and_PLTT.
+
+  Lemma generic_match_implies_specific_match:
+    forall i s pstate,
+      s_match_states i s (PLTT.PC pstate) ->
+      SIMULATION.match_states split s (PLTT.PC pstate).
+  Proof.
+    intros i s pstate Hmatch_states.
+    destruct Hmatch_states; auto.
+  Qed.
+
+  Lemma goes_wrong_preservation:
+    forall i s ps t s',
+      Star (LTT.semantics p) s t s' ->
+      Nostep (LTT.semantics p) s' ->
+      ~final_state (LTT.semantics p) s' ->
+      s_match_states i s ps ->
+    exists ps',
+      Star (PLTT.semantics pp) ps t ps' /\
+      Nostep (PLTT.semantics pp) ps' /\
+      ~final_state (PLTT.semantics pp) ps'.
+  Proof.
+    intros i s ps t s'.
+    intros HLTT_star HLTT_nostep HLTT_nofinal.
+    intros Hs_match_states.
+    destruct (simulation_star
+                s_props HLTT_star i ps Hs_match_states)
+      as [i' [ps' [HPLTT_star Hs_match_states']]].
+    destruct ps' as [pstate | cstate exec_state].
+    (* the program got stuck *)
+    - exists (PLTT.PC pstate). split; auto. split.
+      (* we cannot step anymore *)
+      + simpl. unfold nostep.
+        rewrite p_transfto_pp.
+        unfold PLTT.apply_split. simpl.
+        eapply nostep_preservation_for_program;
+          eauto.
+        apply (generic_match_implies_specific_match i');
+          auto.
+      (* we are not in a final state *)
+      + apply nonfinal_preservation_for_program with s';
+          eauto.
+        apply (generic_match_implies_specific_match i');
+          auto.
+    (* the context got stuck *)
+    - exists (PLTT.CC cstate PLTT.WentWrong).
+      split.
+      * destruct exec_state.
+        ** apply star_right with
+               t (PLTT.CC cstate PLTT.Normal) E0.
+           *** apply HPLTT_star.
+           *** destruct cstate. destruct p0.
+               apply PLTT.Context_GoesWrong.
+           *** symmetry. apply E0_right.
+        ** auto.
+      * split.
+        (* WentWrong doesn't step *)
+        ** unfold nostep. intros.
+           unfold not. intro contra. inversion contra.
+        (* WentWrong is not final *)
+        ** unfold not. intro.
+           enough (Hnot_final:
+                     ~ PLTT.final_state
+                       (PLTT.CC cstate PLTT.WentWrong)).
+           apply Hnot_final; auto.
+           unfold not, PLTT.final_state.
+           destruct cstate. destruct p0.
+           intro contra. inversion contra.
+  Qed.
+
+  Theorem state_goes_wrong_preservation:
+    forall i s ps t,
+      s_match_states i s ps ->
+      state_behaves (LTT.semantics p) s (Goes_wrong t) ->
+      state_behaves (PLTT.semantics pp) ps (Goes_wrong t).
+  Proof.
+    intros i s ps t Hmatch_states Hstatebeh.
+    inversion Hstatebeh.
+    destruct (goes_wrong_preservation
+                i s ps t s' H0 H1 H2 Hmatch_states)
+      as [ps' [Hps_star [Hps_nostep Hps_notfinal]]].
+    eapply state_goes_wrong; eauto.
+  Qed.
+
+  Theorem wrong_behavior_preservation:
+    forall t,
+      program_behaves (LTT.semantics p) (Goes_wrong t) ->
+      program_behaves (PLTT.semantics pp) (Goes_wrong t).
+  Proof.
+    intros t Hprogbeh.
+    inversion Hprogbeh as [ s beh Hs_init Hstatebeh
+                          | Hnot_init ].
+    (* goes wrong with non-empty trace *)
+    - (* initial states *)
+      destruct (fsim_match_initial_states s_props s Hs_init)
+        as [i [ps [Hps_init Hmatch_states]]].
+      (* simulation *)
+      eapply program_runs; eauto.
+      apply state_goes_wrong_preservation with i s; auto.
+    (* goes intially wrong *)
+    - assert (Hgoingwrong_state:
+                exists ps,
+                  ps = (PLTT.CC (0%nat, [],
+                                 @M.empty (list nat))
+                                PLTT.WentWrong) /\
+                  Nostep (PLTT.semantics pp) ps /\
+                  PLTT.initial_state pp ps /\
+                  ~PLTT.final_state ps). {
+        exists (PLTT.CC (0%nat, [], @M.empty (list nat))
+                        PLTT.WentWrong).
+        split; auto.
+        split.
+        - unfold nostep. intros.
+          unfold not. intro contra. inversion contra.
+        - unfold PLTT.initial_state. split; auto.
+          unfold PLTT.final_state.
+          unfold not. intro contra. inversion contra.
+      }
+      destruct Hgoingwrong_state
+        as [ps [Hps_state [Hps_nostep
+                             [Hps_init Hps_notfinal]]]].
+      apply program_runs with ps; eauto. subst.
+      apply state_goes_wrong with
+          (PLTT.CC (0%nat, [], M.empty (list nat))
+                   PLTT.WentWrong).
+      apply star_refl; auto.
+      unfold nostep. intros t ps' contra.
+      inversion contra.
+      unfold not. intro contra.
+      apply Hps_notfinal. auto.
+  Qed.
+
+  Corollary strong_behavior_preservation:
+    forall beh,
+      program_behaves (LTT.semantics p) beh ->
+      program_behaves (PLTT.semantics pp) beh.
+  Proof.
+    intros beh Hprogbeh.
+    destruct beh.
+    - eapply forward_simulation_same_safe_behavior; eauto.
+      apply forward_simulation_between_LTT_and_PLTT.
+      simpl. reflexivity.
+    - eapply forward_simulation_same_safe_behavior; eauto.
+      apply forward_simulation_between_LTT_and_PLTT.
+      simpl. reflexivity.
+    - eapply forward_simulation_same_safe_behavior; eauto.
+      apply forward_simulation_between_LTT_and_PLTT.
+      simpl. reflexivity.
+    - destruct forward_simulation_between_LTT_and_PLTT.
+      apply wrong_behavior_preservation; auto.
+  Qed.
+
+  (* OLD ATTEMPTS (the last one is interesting because
+     is generic and doesn't rely on the specific instance
+     of forward simulation that we built)
+  
+  (* 1st ATTEMPT (with SECTION à la CompCert) *)
+
+  Section FORWARD_SIMULATION.
+    Context index order match_states
+            (S: fsim_properties
+                  (LTT.semantics p) (PLTT.semantics pp)
+                  index order match_states).
+
+    Lemma generic_match_implies_specific_match:
+      forall i s pstate,
+        match_states i s (PLTT.PC pstate) ->
+        SIMULATION.match_states split s (PLTT.PC pstate).
+    Proof.
+      intros i s pstate Hmatch_states.
+    Admitted.
+
+    Lemma goes_wrong_preservation:
+      forall i s ps t s',
+        Star (LTT.semantics p) s t s' ->
+        Nostep (LTT.semantics p) s' ->
+        ~final_state (LTT.semantics p) s' ->
+        match_states i s ps ->
+      exists ps',
+        Star (PLTT.semantics pp) ps t ps' /\
+        Nostep (PLTT.semantics pp) ps' /\
+        ~final_state (PLTT.semantics pp) ps'.
+    Proof.
+      intros i s ps t s'.
+      intros HLTT_star HLTT_nostep HLTT_nofinal.
+      intros Hmatch_states.
+      destruct (simulation_star
+                  S HLTT_star i ps Hmatch_states)
+        as [i' [ps' [HPLTT_star Hmatch_states']]].
+      destruct ps' as [pstate | cstate exec_state].
+      (* the program got stuck *)
+      - exists (PLTT.PC pstate). split; auto. split.
+        (* we cannot step anymore *)
+        + simpl. unfold nostep.
+          rewrite p_transfto_pp.
+          unfold PLTT.apply_split. simpl.
+          eapply nostep_preservation_for_program;
+            eauto.
+          apply (generic_match_implies_specific_match i');
+            auto.
+        (* we are not in a final state *)
+        + apply nonfinal_preservation_for_program with s';
+            eauto.
+          apply (generic_match_implies_specific_match i');
+            auto.
+      (* the context got stuck *)
+      - exists (PLTT.CC cstate PLTT.WentWrong).
+        split.
+        * destruct exec_state.
+          ** apply star_right with
+                 t (PLTT.CC cstate PLTT.Normal) E0.
+             *** apply HPLTT_star.
+             *** destruct cstate. destruct p0.
+                 apply PLTT.Context_GoesWrong.
+             *** symmetry. apply E0_right.
+          ** auto.
+        * split.
+          (* WentWrong doesn't step *)
+          ** unfold nostep. intros.
+             unfold not. intro contra. inversion contra.
+          (* WentWrong is not final *)
+          ** unfold not. intro.
+             enough (Hnot_final:
+                       ~ PLTT.final_state
+                         (PLTT.CC cstate PLTT.WentWrong)).
+             apply Hnot_final; auto.
+             unfold not, PLTT.final_state.
+             destruct cstate. destruct p0.
+             intro contra. inversion contra.
+    Qed.
+
+    Theorem state_goes_wrong_preservation:
+      forall i s ps t,
+        match_states i s ps ->
+        state_behaves (LTT.semantics p) s (Goes_wrong t) ->
+        state_behaves (PLTT.semantics pp) ps (Goes_wrong t).
+    Proof.
+      intros i s ps t Hmatch_states Hstatebeh.
+      inversion Hstatebeh.
+      destruct (goes_wrong_preservation
+             i s ps t s' H0 H1 H2 Hmatch_states)
+        as [ps' [Hps_star [Hps_nostep Hps_notfinal]]].
+      eapply state_goes_wrong; eauto.
+    Qed.
+
+    Theorem wrong_behavior_preservation:
+      forall t,
+        program_behaves (LTT.semantics p) (Goes_wrong t) ->
+        program_behaves (PLTT.semantics pp) (Goes_wrong t).
+    Proof.
+      intros t Hprogbeh.
+      inversion Hprogbeh as [ s beh Hs_init Hstatebeh
+                            | Hnot_init ].
+      (* goes wrong with non-empty trace *)
+      - (* initial states *)
+        destruct (fsim_match_initial_states S s Hs_init)
+          as [i [ps [Hps_init Hmatch_states]]].
+        (* simulation *)
+        eapply program_runs; eauto.
+        apply state_goes_wrong_preservation with i s; auto.
+      (* goes intially wrong *)
+      - assert (Hgoingwrong_state:
+          exists ps,
+            ps = (PLTT.CC (0%nat, [],
+                           @M.empty (list nat))
+                          PLTT.WentWrong) /\
+            Nostep (PLTT.semantics pp) ps /\
+            PLTT.initial_state pp ps /\
+            ~PLTT.final_state ps). {
+          exists (PLTT.CC (0%nat, [], @M.empty (list nat))
+                          PLTT.WentWrong).
+          split; auto.
+          split.
+          - unfold nostep. intros.
+            unfold not. intro contra. inversion contra.
+          - unfold PLTT.initial_state. split; auto.
+            unfold PLTT.final_state.
+            unfold not. intro contra. inversion contra.
+        }
+        destruct Hgoingwrong_state
+          as [ps [Hps_state [Hps_nostep
+                               [Hps_init Hps_notfinal]]]].
+        apply program_runs with ps; eauto. subst.
+        apply state_goes_wrong with
+            (PLTT.CC (0%nat, [], M.empty (list nat))
+                     PLTT.WentWrong).
+        apply star_refl; auto.
+        unfold nostep. intros t ps' contra.
+        inversion contra.
+        unfold not. intro contra.
+        apply Hps_notfinal. auto.
+    Qed.
+  End FORWARD_SIMULATION.
+
+  Corollary strong_behavior_preservation:
+    forall beh,
+      program_behaves (LTT.semantics p) beh ->
+      program_behaves (PLTT.semantics pp) beh.
+  Proof.
+    intros beh Hprogbeh.
+    destruct beh.
+    - eapply forward_simulation_same_safe_behavior; eauto.
+      apply forward_simulation_between_LTT_and_PLTT.
+      simpl. reflexivity.
+    - eapply forward_simulation_same_safe_behavior; eauto.
+      apply forward_simulation_between_LTT_and_PLTT.
+      simpl. reflexivity.
+    - eapply forward_simulation_same_safe_behavior; eauto.
+      apply forward_simulation_between_LTT_and_PLTT.
+      simpl. reflexivity.
+    - destruct forward_simulation_between_LTT_and_PLTT.
+      apply wrong_behavior_preservation with
+          index order match_states0; auto.
+  Qed.
+
+  (* STUCK! We cannot prove the two lemmas about
+     generic nostep and nonfinal preservation! *)
+
+  (* 2nd ATTEMPT *)
+  (* Let's try with a stronger notion of simulation *)
+
+  Record fsim_properties'
+         (L1 L2: semantics) (index: Type)
+         (order: index -> index -> Prop)
+         (match_states: index -> state L1 -> state L2 -> Prop)
+    : Prop := {
+      fsim_order_wf': well_founded order;
+      fsim_match_initial_states':
+        forall s1, initial_state L1 s1 ->
+        exists i, exists s2,
+            initial_state L2 s2 /\ match_states i s1 s2;
+      fsim_match_final_states':
+        forall i s1 s2,
+          match_states i s1 s2 ->
+          final_state L1 s1 -> final_state L2 s2;
+      fsim_simulation':
+        forall s1 t s1', Step L1 s1 t s1' ->
+        forall i s2, match_states i s1 s2 ->
+        exists i', exists s2',
+          (Plus L2 s2 t s2' \/
+           (Star L2 s2 t s2' /\ order i' i)) /\
+          match_states i' s1' s2';
+      fsim_match_stuck_states:
+        forall i s1 s2,
+          match_states i s1 s2 ->
+          Nostep L1 s1 ->
+          Nostep L2 s2;
+      fsim_match_nonfinal_states:
+        forall i s1 s2,
+          match_states i s1 s2 ->
+          ~ (final_state L1 s1) ->
+          ~ (final_state L2 s2)
+  }.
+
+  Arguments fsim_properties': clear implicits.
+
+  Inductive forward_simulation' (L1 L2: semantics) : Prop :=
+    Forward_simulation' (index: Type)
+                       (order: index -> index -> Prop)
+                       (match_states: index -> state L1 -> state L2 -> Prop)
+                       (props: fsim_properties' L1 L2 index order match_states).
+
+  Arguments Forward_simulation' {L1 L2 index} order match_states props.
+  
+  Lemma stronger_forward_LTT_PLTT:
+    forward_simulation' (LTT.semantics p) (PLTT.semantics pp).
+  Proof.
+    destruct forward_simulation_between_LTT_and_PLTT.
+    destruct props.
+    econstructor.
+    constructor; eauto.
+    (* stuck states *)
+    - admit.
+    (* non final states *)
+    - admit.
+  Admitted.
+
+  Require Import Coqlib.
+  Require Import Classical.
+
+  Section FORWARD_SIMULATION_2.
+    Context index order match_states
+            (S': fsim_properties'
+                   (LTT.semantics p) (PLTT.semantics pp)
+                   index order match_states).
+
+    Let S := {|
+              fsim_order_wf :=
+                fsim_order_wf' _ _ _ _ _ S';
+              fsim_match_initial_states :=
+                fsim_match_initial_states' _ _ _ _ _ S';
+              fsim_match_final_states :=
+                fsim_match_final_states' _ _ _ _ _ S';
+              fsim_simulation :=
+                fsim_simulation' _ _ _ _ _ S' |}.
+
+    Lemma forward_simulation_state_behaves:
+      forall i s1 s2 beh,
+        match_states i s1 s2 ->
+        state_behaves (LTT.semantics p) s1 beh ->
+        state_behaves (PLTT.semantics pp) s2 beh.
+    Proof.
+      intros. inv H0.
+      - (* termination *)
+        exploit simulation_star; eauto. intros [i' [s2' [A B]]].
+        econstructor; eauto. eapply fsim_match_final_states; eauto.
+      - (* silent divergence *)
+        exploit simulation_star; eauto. intros [i' [s2' [A B]]].
+        econstructor; eauto. eapply simulation_forever_silent; eauto.
+      - (* reactive divergence *)
+        econstructor. eapply simulation_forever_reactive; eauto.
+      - (* going wrong *)
+        exploit simulation_star; eauto. intros [i' [s2' [A B]]].
+        econstructor; eauto.
+        + apply (fsim_match_stuck_states _ _ _ _ _ S')
+            with i' s'; eauto.
+        + apply (fsim_match_nonfinal_states _ _ _ _ _ S')
+            with i' s'; eauto.
+    Qed.
+
+    Theorem behavior_preservation:
+      forall beh,
+        program_behaves (LTT.semantics p) beh ->
+        program_behaves (PLTT.semantics pp) beh.
+    Proof.
+      destruct stronger_forward_LTT_PLTT as [init ? ?].
+      intros. inversion H.
+      - (* initial state defined *)
+        exploit (fsim_match_initial_states S); eauto.
+        intros [i [s' [INIT MATCH]]].
+        + econstructor; eauto.
+          eapply forward_simulation_state_behaves; eauto.
+      - (* initial state undefined *)
+        assert (Hgoingwrong_state:
+                  exists ps,
+                    ps = (PLTT.CC (0%nat, [],
+                                   @M.empty (list nat))
+                                  PLTT.WentWrong) /\
+                    Nostep (PLTT.semantics pp) ps /\
+                    PLTT.initial_state pp ps /\
+                    ~PLTT.final_state ps). {
+          exists (PLTT.CC (0%nat, [], @M.empty (list nat))
+                          PLTT.WentWrong).
+          split; auto.
+          split.
+          - unfold nostep. intros.
+            unfold not. intro contra. inversion contra.
+          - unfold PLTT.initial_state. split; auto.
+            unfold PLTT.final_state.
+            unfold not. intro contra. inversion contra.
+        }
+        destruct Hgoingwrong_state
+          as [ps [Hps_state [Hps_nostep [Hps_init Hps_notfinal]]]].
+        apply program_runs with ps; eauto.
+        subst.
+        apply state_goes_wrong
+          with (PLTT.CC (0%nat, [], M.empty (list nat))
+                        PLTT.WentWrong).
+        apply star_refl. auto.
+        unfold not. intro contra. apply Hps_notfinal.
+        auto.
+    Qed.
+  End FORWARD_SIMULATION_2.
+  (* Stuck! Even here we have problems with the same lemmas! *)
+*)
 End SIMULATION.
 End LTT_TO_PLTT.

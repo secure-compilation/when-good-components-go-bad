@@ -25,8 +25,8 @@ Definition state : Type :=
   Component.id * stack * Memory.data * Register.data * Memory.address.
 
 Record global_env := mkGlobalEnv {
-  get_interfaces : Program.interface;
-  get_entrypoints : EntryPoint.data;
+  genv_interfaces : Program.interface;
+  genv_entrypoints : EntryPoint.data;
 }.
 
 Definition initial_state_for (p : program) : state :=
@@ -36,13 +36,15 @@ Definition initial_state_for (p : program) : state :=
 
 Definition initial_state p (s : state) : Prop :=
   match s with (C, d, mem, regs, pc) =>
-    C = 0 /\ d = [] /\ regs = Register.empty /\
+    C = 0 /\ d = [] /\
+    (*mem = (prog_memory p) /\*)
+    regs = Register.empty /\
     pc = EntryPoint.get 0 0 (prog_entrypoints p)
   end.
 
 Definition final_state (s : state) : Prop :=
   match s with (C, d, mem, regs, pc) =>
-    d = [] /\ executing Halt C mem pc
+    executing Halt C mem pc
   end.
 
 Definition eval_binop (e : binop) (a b : nat) : nat :=
@@ -116,12 +118,12 @@ Inductive step (G : global_env)
 
 | Call: forall mem C pc regs d d' C' P,
     executing (Call C' P) C mem pc ->
-    call_is_public_and_exists (get_interfaces G) C' P ->
-    call_is_in_imports (get_interfaces G) C C' P ->
+    call_is_public_and_exists (genv_interfaces G) C' P ->
+    call_is_in_imports (genv_interfaces G) C C' P ->
     C' <> C ->
     d' = (C,pc+1) :: d ->
     let t := [ECall C P (Register.get Register.R_COM regs) C'] in
-    let E := get_entrypoints G in
+    let E := genv_entrypoints G in
     G |-LTT (C,d,mem,regs,pc) =>[t]
             (C',d',mem,regs,EntryPoint.get C' P E)
 
@@ -163,18 +165,18 @@ Proof.
     end.
 Qed.
 
-(* probably useless *)
-Lemma epsilon_step_preserves_component_and_stack:
-  forall G C d mem regs pc C' d' mem' regs' pc',
-    G |-LTT (C,d,mem,regs,pc) =>[E0] (C',d',mem',regs',pc') ->
-    C' = C /\ d' = d.
+Lemma MapsTo_extraction:
+  forall C cmem val (mem : M.t (list nat)),
+    M.MapsTo C cmem (M.add C val mem) ->
+    cmem = val.
 Proof.
-  intros G C d mem regs pc C' d' mem' regs' pc' Hstep.
-  inversion Hstep; subst;
-    split; trivial.
+  intros.
+  apply F.add_mapsto_iff in H.
+  destruct H.
+  - destruct H. symmetry. auto.
+  - exfalso. destruct H. destruct H. auto.
 Qed.
 
-(* probably useless *)
 Lemma epsilon_step_weakening:
   forall Is E C d1 mem mem' cmem cmem' regs regs' pc pc',
     let G := mkGlobalEnv Is E in
@@ -184,83 +186,69 @@ Lemma epsilon_step_weakening:
   forall E' d2 wmem,
     let G' := mkGlobalEnv Is E' in
     M.MapsTo C cmem wmem ->
-    exists wmem',
-      M.MapsTo C cmem' wmem' ->
-      G' |-LTT (C,d2,wmem,regs,pc) =>[E0] (C,d2,wmem',regs',pc').
+    (G' |-LTT (C,d2,wmem,regs,pc) =>[E0] (C,d2,wmem,regs',pc'))
+    \/
+    (forall wmem',
+     wmem' = M.add C cmem' wmem ->
+     G' |-LTT (C,d2,wmem,regs,pc) =>[E0] (C,d2,wmem',regs',pc')).
 Proof.
   intros Is E C d1 mem mem' cmem cmem' regs regs' pc pc'.
   intros G HCmem HCmem' Hstep.
   intros E' d2 wmem G' HCwmem.
   inversion Hstep; subst.
-  - exists wmem. intro HCwmem'.
-    apply Nop;
-      assumption.
-  - exists wmem. intro HCwmem'.
-    apply Const with r cval;
-      try reflexivity;
-      try assumption.
-  - exists wmem. intro HCwmem'.
-    apply Mov with r1 r2;
-      try reflexivity;
-      try assumption.
-  - exists wmem. intro HCwmem'.
-    eapply BinOp;
-      try reflexivity;
-      try assumption.
-  - exists wmem. intro HCwmem'.
-    eapply Load;
-      try reflexivity.
-    + assert (Hexec': executing (AbstractMachine.Load r1 r2) C wmem pc). {
+  - left. apply Nop; auto.
+  - left. apply Const with r cval; auto.
+  - left. apply Mov with r1 r2; auto.
+  - left. eapply BinOp; eauto.
+  - left. eapply Load; try reflexivity.
+    + assert (Hexec':
+        executing (AbstractMachine.Load r1 r2) C wmem pc). {
         unfold executing. unfold executing in H5.
         unfold Memory.get. unfold Memory.get in H5.
         rewrite (M.find_1 HCwmem).
         rewrite (M.find_1 HCmem') in H5.
         apply H5.
-      }
-      apply Hexec'.
+      } apply Hexec'.
     + assert (cmem = cmem'). {
         apply (F.MapsTo_fun HCmem HCmem').
       }
       unfold Memory.get. unfold Memory.get in H9.
-      rewrite (M.find_1 HCwmem').
+      rewrite (M.find_1 HCwmem), H.
       rewrite (M.find_1 HCmem') in H9.
       apply H9.
   - remember (Register.get r1 regs') as r1val.
     remember (Register.get r2 regs') as r2val.
-    exists (Memory.set wmem C r1val r2val). intro HCwmem'.
-    apply Store with r1 r2 r1val r2val;
-      try reflexivity;
-      try assumption.
-  - exists wmem. intro HCwmem'.
-    eapply Jal;
-      try reflexivity;
-      try assumption.
-  - exists wmem. intro HCwmem'.
-    eapply Jump;
-      try reflexivity;
-      try assumption.
-  - exists wmem. intro HCwmem'.
-    eapply BnzNZ.
-    + assert (executing (AbstractMachine.Bnz r offset) C wmem pc). {
+    right. intros wmem' HCwmem'.
+    apply Store with r1 r2 r1val r2val; auto.
+    unfold Memory.set in HCmem'.
+    rewrite (M.find_1 HCmem) in HCmem'.
+    apply MapsTo_extraction in HCmem'.
+    unfold Memory.set.
+    rewrite (M.find_1 HCwmem).
+    rewrite HCmem' in HCwmem'.
+    auto.
+  - left. eapply Jal; eauto.
+  - left. eapply Jump; eauto.
+  - left. eapply BnzNZ.
+    + assert (executing
+                (AbstractMachine.Bnz r offset) C wmem pc). {
         unfold executing. unfold executing in H1.
         unfold Memory.get. unfold Memory.get in H1.
         rewrite (M.find_1 HCwmem).
         rewrite (M.find_1 HCmem') in H1.
         apply H1.
-      }
-      apply H.
-    + assumption.
-  - exists wmem. intro HCwmem'.
-    eapply BnzZ.
-    + assert (executing (AbstractMachine.Bnz r offset) C wmem pc). {
+      } eauto.
+    + auto.
+  - left. eapply BnzZ.
+    + assert (executing
+                (AbstractMachine.Bnz r offset) C wmem pc). {
         unfold executing. unfold executing in H1.
         unfold Memory.get. unfold Memory.get in H1.
         rewrite (M.find_1 HCwmem).
         rewrite (M.find_1 HCmem') in H1.
         apply H1.
-      }
-      apply H.
-    + assumption.
+      } eauto.
+    + auto.
 Qed.
 
 Theorem LTT_determinism :
