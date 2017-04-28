@@ -33,9 +33,13 @@ Definition program_state : Type :=
 Definition context_state : Type :=
   Component.id * stack * Memory.data.
 
+Inductive exec_state : Type :=
+| Normal
+| WentWrong.
+
 Inductive partial_state : Type :=
-  | PC : program_state -> partial_state
-  | CC : context_state -> partial_state.
+| PC : program_state -> partial_state
+| CC : context_state -> exec_state -> partial_state.
 
 Definition to_partial_frame pc frame : Component.id * option Memory.address :=
   match frame with (C,i) =>
@@ -81,23 +85,23 @@ Definition initial_state_for
   if Util.mem 0 split then
     PC (0, [], mem, Register.empty, EntryPoint.get 0 0 E)
   else
-    CC (0, [], mem).
+    CC (0, [], mem) Normal.
 
 Definition initial_state p (s : partial_state) : Prop :=
   match s with
   | PC (C, d, mem, regs, pc) =>
     C = 0 /\ d = [] /\ regs = Register.empty /\
     pc = EntryPoint.get 0 0 (prog_entrypoints p)
-  | CC (C, d, mem) =>
-    C = 0 /\ d = []
+  | CC (C, d, mem) state =>
+    C = 0 /\ d = [] /\ state = Normal
   end.
 
 Definition final_state (s : partial_state) : Prop :=
   match s with
   | PC (C, d, mem, regs, pc) =>
-    d = [] /\ executing Halt C mem pc
-  | CC (C, d, mem) =>
-    d = []
+    executing Halt C mem pc
+  | CC (C, d, mem) state =>
+    state = Normal
   end.
 
 Definition is_program_component C (prog_comps : list Component.id) :=
@@ -156,7 +160,7 @@ Inductive step (G : global_env)
       is_context_component C' (genv_split G) ->
       d' = (C,Some (pc+1)) :: d ->
       let t := [ECall C P (Register.get Register.R_COM regs) C'] in
-      G |-PLTT (PC (C,d,mem,regs,pc)) =>[t] (CC (C',d',mem))
+      G |-PLTT (PC (C,d,mem,regs,pc)) =>[t] (CC (C',d',mem) Normal)
 
 | Program_External_Return:
     forall mem C C' pc d d' regs,
@@ -164,11 +168,15 @@ Inductive step (G : global_env)
       d = (C',None) :: d' ->
       is_context_component C' (genv_split G) ->
       let t := [ERet C (Register.get Register.R_COM regs) C'] in
-      G |-PLTT (PC (C,d,mem,regs,pc)) =>[t] (CC (C',d',mem))
+      G |-PLTT (PC (C,d,mem,regs,pc)) =>[t] (CC (C',d',mem) Normal)
 
 | Context_Epsilon:
     forall mem C d,
-      G |-PLTT (CC (C,d,mem)) =>[E0] (CC (C,d,mem))
+      G |-PLTT (CC (C,d,mem) Normal) =>[E0] (CC (C,d,mem) Normal)
+
+| Context_GoesWrong:
+    forall mem C d,
+      G |-PLTT (CC (C,d,mem) Normal) =>[E0] (CC (C,d,mem) WentWrong)
 
 | Context_Internal_Call:
     forall mem C d d' C' P call_arg,
@@ -178,7 +186,7 @@ Inductive step (G : global_env)
       is_context_component C' (genv_split G) ->
       d' = (C,None) :: d ->
       let t := [ECall C P call_arg C'] in
-      G |-PLTT (CC (C,d,mem)) =>[t] (CC (C',d',mem))
+      G |-PLTT (CC (C,d,mem) Normal) =>[t] (CC (C',d',mem) Normal)
 
 | Context_Internal_Return:
     forall mem C C' d d' return_val,
@@ -186,7 +194,7 @@ Inductive step (G : global_env)
       is_context_component C' (genv_split G) ->
       d = (C',None) :: d' ->
       let t := [ERet C return_val C'] in
-      G |-PLTT (CC (C,d,mem)) =>[t] (CC (C',d',mem))
+      G |-PLTT (CC (C,d,mem) Normal) =>[t] (CC (C',d',mem) Normal)
 
 | Context_External_Call:
     forall mem C regs d d' C' P,
@@ -196,7 +204,7 @@ Inductive step (G : global_env)
       is_program_component C' (genv_split G) ->
       d' = (C,None) :: d ->
       let t := [ECall C P (Register.get Register.R_COM regs) C'] in
-      G |-PLTT (CC (C,d,mem)) =>[t]
+      G |-PLTT (CC (C,d,mem) Normal) =>[t]
                (PC (C',d',mem,regs,EntryPoint.get C' P (genv_entrypoints G)))
 
 | Context_External_Return:
@@ -204,7 +212,7 @@ Inductive step (G : global_env)
       d = (C',Some pc') :: d' ->
       is_program_component C' (genv_split G) ->
       let t := [ERet C (Register.get Register.R_COM regs) C'] in
-      G |-PLTT (CC (C,d,mem)) =>[t] (PC (C',d',mem,regs,pc'))
+      G |-PLTT (CC (C,d,mem) Normal) =>[t] (PC (C',d',mem,regs,pc'))
 
 where "G |-PLTT s1 '=>[' t ']' s2" := (step G s1 t s2).
 

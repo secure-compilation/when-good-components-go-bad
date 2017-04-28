@@ -36,13 +36,15 @@ Definition initial_state_for (p : program) : state :=
 
 Definition initial_state p (s : state) : Prop :=
   match s with (C, d, mem, regs, pc) =>
-    C = 0 /\ d = [] /\ regs = Register.empty /\
+    C = 0 /\ d = [] /\
+    (*mem = (prog_memory p) /\*)
+    regs = Register.empty /\
     pc = EntryPoint.get 0 0 (prog_entrypoints p)
   end.
 
 Definition final_state (s : state) : Prop :=
   match s with (C, d, mem, regs, pc) =>
-    d = [] /\ executing Halt C mem pc
+    executing Halt C mem pc
   end.
 
 Definition eval_binop (e : binop) (a b : nat) : nat :=
