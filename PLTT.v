@@ -93,7 +93,7 @@ Definition initial_state p (s : partial_state) : Prop :=
     C = 0 /\ d = [] /\ regs = Register.empty /\
     pc = EntryPoint.get 0 0 (prog_entrypoints p)
   | CC (C, d, mem) state =>
-    C = 0 /\ d = [] /\ state = Normal
+    C = 0 /\ d = []
   end.
 
 Definition final_state (s : partial_state) : Prop :=
