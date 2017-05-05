@@ -97,7 +97,7 @@ Proof.
   auto.
 Qed.
 
-Definition compartimentalized_robust_compilation:
+Definition robust_compilation_for_unsafe_languages:
   forall (c:T.pp) (P:S.pp) (beh:program_behavior),
     S.fully_defined P ->
     program_behaves (T.sem (T.link c (compile P))) beh ->
