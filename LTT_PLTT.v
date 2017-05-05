@@ -88,7 +88,7 @@ Section SIMULATION.
       + unfold PLTT.initial_state.
         split; auto.
       + rewrite C_is_0, empty_stack, empty_regs, main_proc. simpl.
-        apply program_control; try auto.
+        apply program_control; auto.
         * unfold PLTT.is_program_component.
           apply Util.in_iff_mem_true. auto.
     - exists (PLTT.CC (0, [], mem) PLTT.Normal).
@@ -96,7 +96,7 @@ Section SIMULATION.
       + unfold PLTT.initial_state.
         split; auto.
       + rewrite C_is_0, empty_stack, empty_regs, main_proc. simpl.
-        apply context_control; try auto.
+        apply context_control; auto.
         * unfold PLTT.is_context_component.
           apply Util.not_in_iff_mem_false. auto.
   Qed.
@@ -379,10 +379,10 @@ Section SIMULATION.
   Proof.
     intros s pstate Hmatch_states Hnot_final.
     unfold not, PLTT.final_state.
-    destruct pstate. destruct p0. destruct p0. destruct p0.
+    destruct pstate as [[[[C d] mem] regs] pc].
+    destruct s as [[[[C' d'] mem'] regs'] pc'].
     intro Hhalt.
     apply Hnot_final. unfold LTT.final_state.
-    destruct s. destruct p0. destruct p0. destruct p0.
     inversion Hmatch_states; subst. auto.
   Qed.
 
@@ -395,43 +395,42 @@ Section SIMULATION.
     intros s pstate Hmatch_states Hnostep.
     intros t ps'. unfold not. intro contra.
     inversion Hmatch_states. subst.
-    inversion contra; subst.
-    (* epsilon step *)
-    - apply H3 in H12; eauto.
-      destruct (LTT.epsilon_step_weakening
-                 (PLTT.genv_interfaces G')
-                 E
-                 C s wmem wmem' cmem cmem'
-                 regs regs' pc pc' H6 H7 H11
-                 (PLTT.genv_entrypoints G')
-                 s0 mem H12);
-        eapply Hnostep; eauto.
-    (* Internal call *)
-    - eapply Hnostep.
-      eapply LTT.Call; eauto.
-    (* Internal return *)
-    - destruct s0.
-      + inversion H11. (* empty stack (contra) *)
-      + inversion H11.
-        destruct p0. subst.
-        unfold PLTT.to_partial_stack in H11. simpl in H11.
-        inversion H11. destruct (Util.mem i split).
-        * inversion H2. subst.
-          eapply Hnostep. eapply LTT.Return; eauto.
-        * inversion H2.
-    (* External call (contradiction) *)
-    - eapply Hnostep.
-      eapply LTT.Call; eauto.
-    (* External return (contradiction) *)
-    - destruct s0.
-      + inversion H10. (* empty stack (contra) *)
-      + inversion H10.
-        destruct p0. subst.
-        unfold PLTT.to_partial_stack in H10. simpl in H10.
-        inversion H10. destruct (Util.mem i split).
-        * inversion H1. inversion H2.
-        * inversion H1. inversion H2. subst.
-          eapply Hnostep. eapply LTT.Return; eauto.
+    inversion contra; subst;
+      (* epsilon steps *)
+      try (match goal with
+             Hmaps_match : PLTT.maps_match_on split ?MEM ?PMEM,
+             HCwmem : PLTT.M.MapsTo ?C ?CMEM ?WMEM,
+             HCwmem' : PLTT.M.MapsTo ?C ?CMEM' ?WMEM',
+             HLTTstep : LTT.step ?ENV1 ?S E0 ?S',
+             HCpmem : PLTT.M.MapsTo ?C ?CMEM ?PMEM,
+             Hcontra : PLTT.step ?ENV2 ?PS E0 ?PS'
+             |- _ => apply Hmaps_match in HCpmem; eauto;
+                     destruct (LTT.epsilon_step_weakening
+                                 (PLTT.genv_interfaces G') E
+                                 C s wmem wmem' cmem cmem'
+                                 regs regs' pc pc' HCwmem HCwmem' HLTTstep
+                                 (PLTT.genv_entrypoints G')
+                                 s0 mem HCpmem);
+                     eapply Hnostep; eauto
+           end);
+      (* Calls *)
+      try (match goal with
+             Hcontra : PLTT.executing (PLTT.Call ?C2 ?P) ?C ?MEM ?PC
+             |- _ => eapply Hnostep; eapply LTT.Call; eauto
+           end);
+      (* Returns *)
+      try (match goal with
+             Hpartial_stack : PLTT.to_partial_stack ?STACK split = ?PSTACK,
+             Hcontra : PLTT.executing PLTT.Return ?C ?MEM ?PC
+             |- _ => destruct s0; inversion Hpartial_stack;
+                     destruct p0; subst;
+                     unfold PLTT.to_partial_stack in Hpartial_stack;
+                     simpl in Hpartial_stack;
+                     inversion Hpartial_stack;
+                     destruct (Util.mem i split);
+                     inversion H1; inversion H2; subst;
+                     eapply Hnostep; eapply LTT.Return; eauto
+           end).
   Qed.
 
   Definition sim_index {L1 L2 : semantics}
@@ -518,14 +517,19 @@ Section SIMULATION.
     (* the context got stuck *)
     - exists (PLTT.CC cstate PLTT.WentWrong).
       split.
+      (* we prove that there exists a star execution *)
       * destruct exec_state.
+        (* the execution is in a normal state, hence we make
+           an ulterior step to go in a WentWrong state *)
         ** apply star_right with
                t (PLTT.CC cstate PLTT.Normal) E0.
            *** apply HPLTT_star.
            *** destruct cstate. destruct p0.
                apply PLTT.Context_GoesWrong.
            *** symmetry. apply E0_right.
+        (* the execution is already in a WentWrong state*)
         ** auto.
+      (* we prove that we cannot step and the state is not final *)
       * split.
         (* WentWrong doesn't step *)
         ** unfold nostep. intros.
@@ -537,7 +541,7 @@ Section SIMULATION.
                        (PLTT.CC cstate PLTT.WentWrong)).
            apply Hnot_final; auto.
            unfold not, PLTT.final_state.
-           destruct cstate. destruct p0.
+           destruct cstate as [[C d] mem].
            intro contra. inversion contra.
   Qed.
 
@@ -563,7 +567,7 @@ Section SIMULATION.
     intros t Hprogbeh.
     inversion Hprogbeh as [ s beh Hs_init Hstatebeh
                           | Hnot_init ].
-    (* goes wrong with non-empty trace *)
+    (* goes wrong when an initial state exists *)
     - (* initial states *)
       destruct (fsim_match_initial_states s_props s Hs_init)
         as [i [ps [Hps_init Hmatch_states]]].

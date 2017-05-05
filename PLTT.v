@@ -167,8 +167,8 @@ Inductive step (G : global_env)
     forall mem C C' pc d d' regs,
       executing Return C mem pc ->
       C' <> C ->
-      d = (C',None) :: d' ->
       is_context_component C' (genv_split G) ->
+      d = (C',None) :: d' ->
       let t := [ERet C (Register.get Register.R_COM regs) C'] in
       G |-PLTT (PC (C,d,mem,regs,pc)) =>[t] (CC (C',d',mem) Normal)
 
