@@ -1,8 +1,9 @@
-Require Import Classical.
-Require Import ClassicalEpsilon.
-Require Import Coqlib.
-Require Import Events.
-Require Import Smallstep.
+Require Import Common.Coqlib.
+Require Import Common.Events.
+Require Import Common.Smallstep.
+
+Require Import Coq.Logic.Classical.
+Require Import Coq.Logic.ClassicalEpsilon.
 
 Set Implicit Arguments.
 
