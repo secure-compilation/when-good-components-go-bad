@@ -4,16 +4,16 @@ Require Import Common.Events.
 Require Import Common.Smallstep.
 Require Import Common.Behavior.
 Require Import Intermediate.Machine.
-Require Import Intermediate.CPS.
-Require Import Intermediate.PPS.
+Require Import Intermediate.CS.
+Require Import Intermediate.PS.
 
 Require Import Coq.Logic.Classical.
 
 Import IntermediateMachine.
 
-Section CPS_PPS_SIMULATION.
-  Variable p : CPS.program.
-  Variable pp : PPS.program.
+Section CS_PS_SIMULATION.
+  Variable p : CS.program.
+  Variable pp : PS.program.
   Variable split : list Component.id.
 
   (* the split is well-formed w.r.t. to the program interface *)
@@ -21,58 +21,58 @@ Section CPS_PPS_SIMULATION.
     forall C,
       In C split ->
     exists CI,
-      In CI (CPS.prog_interface p) /\ Component.name CI = C.
+      In CI (CS.prog_interface p) /\ Component.name CI = C.
 
   (* the partial program is obtained by "splitting" the original
      program w.r.t. to split *)
   Hypothesis p_transfto_pp :
-    pp = PPS.apply_split p split splitWF.
+    pp = PS.apply_split p split splitWF.
 
   (* build the global environments *)
-  Let G := CPS.mkGlobalEnv (CPS.prog_interface p)
-                           (CPS.prog_entrypoints p).
-  Let G' := PPS.mkGlobalEnv (CPS.prog_interface p)
-                             (CPS.prog_entrypoints p)
+  Let G := CS.mkGlobalEnv (CS.prog_interface p)
+                           (CS.prog_entrypoints p).
+  Let G' := PS.mkGlobalEnv (CS.prog_interface p)
+                             (CS.prog_entrypoints p)
                              split.
 
   Inductive match_states (split : list Component.id)
-    : CPS.state -> PPS.partial_state -> Prop :=
+    : CS.state -> PS.partial_state -> Prop :=
   | program_control:
       forall C s ps mem pmem regs pc,
-        PPS.is_program_component C split ->
-        ps = PPS.to_partial_stack s split ->
-        PPS.maps_match_on split mem pmem ->
+        PS.is_program_component C split ->
+        ps = PS.to_partial_stack s split ->
+        PS.maps_match_on split mem pmem ->
         match_states split
                      (C, s, mem, regs, pc)
-                     (PPS.PC (C, ps, pmem, regs, pc))
+                     (PS.PC (C, ps, pmem, regs, pc))
 
   | context_control:
       forall C s ps mem pmem regs pc,
-        PPS.is_context_component C split ->
-        ps = PPS.to_partial_stack s split ->
-        PPS.maps_match_on split mem pmem ->
+        PS.is_context_component C split ->
+        ps = PS.to_partial_stack s split ->
+        PS.maps_match_on split mem pmem ->
         match_states split
                      (C, s, mem, regs, pc)
-                     (PPS.CC (C, ps, pmem) PPS.Normal)
+                     (PS.CC (C, ps, pmem) PS.Normal)
 
   | context_went_wrong:
       forall C s ps mem pmem regs pc,
-        PPS.is_context_component C split ->
-        ps = PPS.to_partial_stack s split ->
-        PPS.maps_match_on split mem pmem ->
-        (forall s' t, ~ CPS.step G (C,s,mem,regs,pc) t s') ->
-        ~ CPS.final_state (C,s,mem,regs,pc) ->
+        PS.is_context_component C split ->
+        ps = PS.to_partial_stack s split ->
+        PS.maps_match_on split mem pmem ->
+        (forall s' t, ~ CS.step G (C,s,mem,regs,pc) t s') ->
+        ~ CS.final_state (C,s,mem,regs,pc) ->
         match_states split
                      (C, s, mem, regs, pc)
-                     (PPS.CC (C, ps, pmem) PPS.WentWrong).
+                     (PS.CC (C, ps, pmem) PS.WentWrong).
 
   Hint Constructors match_states.
 
   Lemma initial_states_match:
     forall s,
-      CPS.initial_state p s ->
+      CS.initial_state p s ->
     exists ps,
-      PPS.initial_state pp ps /\ match_states split s ps.
+      PS.initial_state pp ps /\ match_states split s ps.
   Proof.
     intros s Hs_init.
     rewrite p_transfto_pp.
@@ -81,62 +81,62 @@ Section CPS_PPS_SIMULATION.
     destruct Hs_init
       as [C_is_0 [empty_stack [empty_regs main_proc]]].
     destruct (Util.mem 0 split) eqn:Hcontrol.
-    - exists (PPS.PC (0, [], mem, regs,
-                       EntryPoint.get 0 0 (CPS.genv_entrypoints G))).
+    - exists (PS.PC (0, [], mem, regs,
+                       EntryPoint.get 0 0 (CS.genv_entrypoints G))).
       split.
-      + unfold PPS.initial_state.
+      + unfold PS.initial_state.
         split; auto.
       + rewrite C_is_0, empty_stack, empty_regs, main_proc. simpl.
         apply program_control; auto.
-        * unfold PPS.is_program_component.
+        * unfold PS.is_program_component.
           apply Util.in_iff_mem_true. auto.
-    - exists (PPS.CC (0, [], mem) PPS.Normal).
+    - exists (PS.CC (0, [], mem) PS.Normal).
       split.
-      + unfold PPS.initial_state.
+      + unfold PS.initial_state.
         split; auto.
       + rewrite C_is_0, empty_stack, empty_regs, main_proc. simpl.
         apply context_control; auto.
-        * unfold PPS.is_context_component.
+        * unfold PS.is_context_component.
           apply Util.not_in_iff_mem_false. auto.
   Qed.
 
   Lemma final_states_match:
     forall s ps,
       match_states split s ps ->
-      CPS.final_state s ->
-      PPS.final_state ps.
+      CS.final_state s ->
+      PS.final_state ps.
   Proof.
     intros s ps Hmatch_states Hs_final.
     destruct s
       as [[[[C d] mem] regs] pc] eqn:Hstate_s.
-    unfold CPS.final_state in Hs_final.
+    unfold CS.final_state in Hs_final.
     inversion Hmatch_states; subst;
-      unfold PPS.final_state; auto.
+      unfold PS.final_state; auto.
     - exfalso. apply H9. auto.
   Qed.
 
   Lemma lockstep_simulation:
     forall s t s',
-      CPS.step G s t s' ->
+      CS.step G s t s' ->
       forall ps,
         match_states split s ps ->
       exists ps',
-        PPS.step G' ps t ps' /\ match_states split s' ps'.
+        PS.step G' ps t ps' /\ match_states split s' ps'.
   Proof.
     intros s t s'.
     intros Hstep ps Hmatch_states.
 
     (* extract the currently executing component memory *)
-    destruct (CPS.step_implies_memory_existence G s t s' Hstep)
+    destruct (CS.step_implies_memory_existence G s t s' Hstep)
       as [Cmem HCmem].
 
     (* useful facts *)
-    pose (CPS.prog_entrypoints p) as E.
-    pose (CPS.prog_entrypoints_wf p) as EWF.
+    pose (CS.prog_entrypoints p) as E.
+    pose (CS.prog_entrypoints_wf p) as EWF.
     assert (HG_unfolded:
               G = {|
-                CPS.genv_interfaces := CPS.genv_interfaces G;
-                CPS.genv_entrypoints := CPS.genv_entrypoints G
+                CS.genv_interfaces := CS.genv_interfaces G;
+                CS.genv_entrypoints := CS.genv_entrypoints G
               |}). {
       destruct G. simpl. auto.
     } rewrite HG_unfolded in Hstep.
@@ -157,72 +157,79 @@ Section CPS_PPS_SIMULATION.
         simpl in HCmem;
 
         (* context epsilon steps (except store) *)
-        try (eexists; split;
-             [ apply PPS.Context_Epsilon
-             | apply context_control; auto
-             ]);
+        try (match goal with
+             | HC: PS.is_context_component C split |- _ =>
+               eexists; split;
+               [ apply PS.Context_Epsilon
+               | apply context_control; auto]
+             end);
 
         (* program epsilon steps (except store) *)
-        try (eexists; split;
-             [ eapply PPS.Program_Epsilon;
-               [ apply HCmem
-               | apply HCmem
-               | eauto
-               | apply Hstep
-               | apply Hmem; auto
-               | apply HCmem
-               ]
-             | auto
-            ]);
+        try (match goal with
+             | HC: PS.is_program_component C split |- _ =>
+               eexists; split;
+               [ eapply PS.Program_Epsilon;
+                 [ apply HCmem
+                 | apply HCmem
+                 | eauto
+                 | apply Hstep
+                 | apply Hmem; auto
+                 | apply HCmem
+                 ]
+               | auto]
+             end);
 
         (* the context goes wrong *)
         try (exfalso; eapply Hno_step; eauto).
 
     (* program store *)
-    - exists (PPS.PC (C, PPS.to_partial_stack d split,
-                       Memory.set pmem C
-                                  (Register.get r1 regs)
-                                  (Register.get r2 regs),
-                       regs, pc+1)).
-      split.
-      (* step *)
-      + remember (Memory.local_update
-                    (Register.get r1 regs)
-                    (Register.get r2 regs) Cmem)
-          as updated_Cmem.
-        eapply PPS.Program_Epsilon with
-            (s:=d) (cmem:=Cmem)
-            (cmem':=updated_Cmem)
-            (wmem':=M.add C updated_Cmem mem).
-        * apply HCmem.
-        * apply M.add_1. reflexivity.
-        * unfold PPS.maps_match_on.
-          intros. split; intro; eassumption.
-        * unfold Memory.set in Hstep.
-          rewrite (M.find_1 HCmem) in Hstep.
-          rewrite Hequpdated_Cmem.
-          apply Hstep.
-        * apply Hmem; assumption.
-        * unfold Memory.set.
-          apply Hmem in HCmem.
-          rewrite (M.find_1 HCmem).
-          rewrite Hequpdated_Cmem.
-          apply M.add_1.
-          ** reflexivity.
-          ** assumption.
+    - destruct (Memory.set pmem C
+                           (Register.get r1 regs)
+                           (Register.get r2 regs))
+        as [pmem'|] eqn:Hmemset.
+      + exists (PS.PC (C, PS.to_partial_stack d split,pmem',regs, pc+1)).
+        split.
+        (* step *)
+        * remember (Memory.local_update
+                      (Register.get r1 regs)
+                      (Register.get r2 regs) Cmem)
+            as updated_Cmem.
+          eapply PS.Program_Epsilon with
+              (s:=d) (cmem:=Cmem)
+              (cmem':=updated_Cmem)
+              (wmem':=M.add C updated_Cmem mem).
+          ** apply HCmem.
+          ** apply M.add_1. reflexivity.
+          ** unfold PS.maps_match_on.
+             intros. split; intro; eassumption.
+          ** unfold Memory.set in Hstep.
+             unfold Memory.set in H9.
+             rewrite (M.find_1 HCmem) in H9.
+             inversion H9.
+             rewrite H0 in Hstep.
+             rewrite Hequpdated_Cmem.
+             apply Hstep.
+          ** apply Hmem; assumption.
+          ** unfold Memory.set in H9, Hmemset.
+             apply Hmem in HCmem. apply M.find_1 in HCmem.
+             rewrite HCmem in Hmemset. inversion Hmemset. subst.
+             apply M.add_1; auto. auto.
       (* states match *)
-      + apply program_control; auto.
-        * apply PPS.update_related_memories with
-              (C:=C) (mem1:=mem) (mem2:=pmem)
-              (addr:=Register.get r1 regs)
-              (val:=Register.get r2 regs);
-            auto.
+        * apply program_control; auto.
+          ** apply PS.update_related_memories with
+                 (C:=C) (mem1:=mem) (mem2:=pmem)
+                 (addr:=Register.get r1 regs)
+                 (val:=Register.get r2 regs);
+               auto.
+      + unfold Memory.set in Hmemset.
+        apply Hmem in HCmem. apply M.find_1 in HCmem. rewrite HCmem in Hmemset.
+        inversion Hmemset. auto.
 
     (* program is calling *)
     - destruct (in_dec Nat.eq_dec C' split) as [ HC'origin | ? ];
         eexists; split.
       (* internal call - step *)
-      + apply PPS.Program_Internal_Call; auto.
+      + apply PS.Program_Internal_Call; auto.
       (* internal call - states match *)
       + destruct (splitWF C' HC'origin)
           as [C'I [C'I_in_I C'I_name_is_C']].
@@ -238,7 +245,7 @@ Section CPS_PPS_SIMULATION.
         * eauto.
         * auto.
       (* external call - step *)
-      + apply PPS.Program_External_Call; auto.
+      + apply PS.Program_External_Call; auto.
       (* external call - states match *)
       + apply context_control; auto.
         * simpl.
@@ -251,55 +258,49 @@ Section CPS_PPS_SIMULATION.
         as [ HC'origin | HC'origin ];
         eexists; split.
       (* internal return - step *)
-      + apply PPS.Program_Internal_Return; auto.
+      + apply PS.Program_Internal_Return; auto.
         * simpl.
           apply Util.in_iff_mem_true in HC'origin.
           rewrite HC'origin. reflexivity.
       (* internal return - states match *)
       + eauto.
       (* external return - step *)
-      + apply PPS.Program_External_Return; auto.
+      + apply PS.Program_External_Return; auto.
         * simpl.
           apply Util.not_in_iff_mem_false in HC'origin.
           rewrite HC'origin. reflexivity.
       (* external return - states match *)
       + eauto.
 
-    (* context store - states match *)
-    - unfold PPS.maps_match_on.
+    (* context store *)
+    - unfold PS.maps_match_on.
       intros C' C'mem HC'origin.
       split.
-      + intro HC'map.
+      + intros HC'map.
         apply Hmem; auto.
-        * destruct (M.find (elt:=list nat) C mem) eqn:HCfind.
-          ** unfold Memory.set in HC'map.
-             rewrite HCfind in HC'map.
-             apply M.add_3 in HC'map; auto.
-             *** unfold not. intros HeqCC'.
-                 apply Hcontrol.
-                 rewrite <- HeqCC' in HC'origin.
-                 apply HC'origin.
-          ** unfold Memory.set in HC'map.
-             rewrite HCfind in HC'map.
-             assumption.
-      + intro HC'map.
-        assert (HneqCC': C <> C').
-        { intro HeqCC'. apply Hcontrol.
-          rewrite <- HeqCC' in HC'origin. apply HC'origin. }
-        unfold Memory.set.
+        unfold Memory.set in H9.
         destruct (M.find (elt:=list nat) C mem) eqn:HCfind.
-        * assert (HC'mem: M.MapsTo C' C'mem mem).
-          { apply Hmem; assumption. }
-          eapply M.add_2; assumption.
-        * apply Hmem; auto.
+        * inversion H9. subst.
+          apply M.add_3 in HC'map. auto.
+          unfold not. intro contra. subst. apply Hcontrol. auto.
+        * inversion H9.
+      + intro HC'map.
+        unfold Memory.set in H9.
+        destruct (M.find (elt:=list nat) C mem) eqn:HCfind.
+        * inversion H9. subst.
+          apply M.add_2.
+          unfold not. intro contra. subst. apply Hcontrol. auto.
+          apply Hmem in HC'map. auto.
+          auto.
+        * inversion H9.
 
     (* context call is calling *)
     - destruct (in_dec Nat.eq_dec C' split) as [ HC'origin | ? ];
         eexists; split.
       (* external call - step *)
-      + apply PPS.Context_External_Call;
+      + apply PS.Context_External_Call;
           try assumption.
-        * apply PPS.push_by_context_preserves_partial_stack; eauto.
+        * apply PS.push_by_context_preserves_partial_stack; eauto.
       (* external call - states match *)
       + destruct (splitWF C' HC'origin)
           as [CI [CI_in_I CI_name_is_C']].
@@ -311,9 +312,9 @@ Section CPS_PPS_SIMULATION.
         * eauto.
         * assumption.
       (* internal call - step *)
-      + apply PPS.Context_Internal_Call;
+      + apply PS.Context_Internal_Call;
           try assumption.
-        * apply PPS.push_by_context_preserves_partial_stack; eauto.
+        * apply PS.push_by_context_preserves_partial_stack; eauto.
       (* internal call - states match *)
       + eauto.
 
@@ -321,21 +322,21 @@ Section CPS_PPS_SIMULATION.
     - destruct (in_dec Nat.eq_dec C' split) as [HC'origin | ?];
         eexists; split.
       (* external return - step*)
-      + apply PPS.Context_External_Return; auto.
+      + apply PS.Context_External_Return; auto.
         * simpl. apply Util.in_iff_mem_true in HC'origin.
           rewrite HC'origin.
           reflexivity.
       (* external return - states match *)
       + eauto.
       (* internal return - step *)
-      + apply PPS.Context_Internal_Return; auto.
-        * apply PPS.push_by_context_preserves_partial_stack; auto.
+      + apply PS.Context_Internal_Return; auto.
+        * apply PS.push_by_context_preserves_partial_stack; auto.
       (* internal return - states match *)
       + eauto.
   Qed.
 
-  Theorem forward_simulation_between_CPS_and_PPS:
-    forward_simulation (CPS.semantics p) (PPS.semantics pp).
+  Theorem forward_simulation_between_CS_and_PS:
+    forward_simulation (CS.semantics p) (PS.semantics pp).
   Proof.
     apply forward_simulation_step with (match_states split).
     - apply initial_states_match.
@@ -344,41 +345,41 @@ Section CPS_PPS_SIMULATION.
       apply lockstep_simulation.
   Defined.
 
-  (* We can prove something stronger, that is, PPS 
+  (* We can prove something stronger, that is, PS 
      preserves exactly all behaviors. *)
 
   (* IDEA:
-     when CPS goes wrong we might be in two cases:
-     - the program is executing, which means that PPS
+     when CS goes wrong we might be in two cases:
+     - the program is executing, which means that PS
        must be stuck as well
      - the context is executing, which means that the
        last step of our simulation must go into a 
        WentWrong state
      by proving this two lemmas, we should be able to
      show that the trace produced when going wrong
-     is exactly the same we observed in CPS.
+     is exactly the same we observed in CS.
    *)
 
   Lemma nonfinal_preservation_for_program:
     forall s pstate,
-      match_states split s (PPS.PC pstate) ->
-      ~ CPS.final_state s ->
-      ~ PPS.final_state (PPS.PC pstate).
+      match_states split s (PS.PC pstate) ->
+      ~ CS.final_state s ->
+      ~ PS.final_state (PS.PC pstate).
   Proof.
     intros s pstate Hmatch_states Hnot_final.
-    unfold not, PPS.final_state.
+    unfold not, PS.final_state.
     destruct pstate as [[[[C d] mem] regs] pc].
     destruct s as [[[[C' d'] mem'] regs'] pc'].
     intro Hhalt.
-    apply Hnot_final. unfold CPS.final_state.
+    apply Hnot_final. unfold CS.final_state.
     inversion Hmatch_states; subst. auto.
   Qed.
 
   Lemma nostep_preservation_for_program:
     forall s pstate,
-      match_states split s (PPS.PC pstate) ->
-      (forall t s', ~ CPS.step G s t s') -> 
-      (forall t ps', ~ PPS.step G' (PPS.PC pstate) t ps'). 
+      match_states split s (PS.PC pstate) ->
+      (forall t s', ~ CS.step G s t s') -> 
+      (forall t ps', ~ PS.step G' (PS.PC pstate) t ps'). 
   Proof.
     intros s pstate Hmatch_states Hnostep.
     intros t ps'. unfold not. intro contra.
@@ -386,38 +387,38 @@ Section CPS_PPS_SIMULATION.
     inversion contra; subst;
       (* epsilon steps *)
       try (match goal with
-             Hmaps_match : PPS.maps_match_on split ?MEM ?PMEM,
+             Hmaps_match : PS.maps_match_on split ?MEM ?PMEM,
              HCwmem : M.MapsTo ?C ?CMEM ?WMEM,
              HCwmem' : M.MapsTo ?C ?CMEM' ?WMEM',
-             HCPSstep : CPS.step ?ENV1 ?S E0 ?S',
+             HCSstep : CS.step ?ENV1 ?S E0 ?S',
              HCpmem : M.MapsTo ?C ?CMEM ?PMEM,
-             Hcontra : PPS.step ?ENV2 ?PS E0 ?PS'
+             Hcontra : PS.step ?ENV2 ?PS E0 ?PS'
              |- _ => apply Hmaps_match in HCpmem; eauto;
-                     destruct (CPS.epsilon_step_weakening
-                                 (PPS.genv_interfaces G') E
+                     destruct (CS.epsilon_step_weakening
+                                 (PS.genv_interfaces G') E
                                  C s wmem wmem' cmem cmem'
-                                 regs regs' pc pc' HCwmem HCwmem' HCPSstep
-                                 (PPS.genv_entrypoints G')
+                                 regs regs' pc pc' HCwmem HCwmem' HCSstep
+                                 (PS.genv_entrypoints G')
                                  s0 mem HCpmem);
                      eapply Hnostep; eauto
            end);
       (* Calls *)
       try (match goal with
              Hcontra : executing (Call ?C2 ?P) ?C ?MEM ?PC
-             |- _ => eapply Hnostep; eapply CPS.Call; eauto
+             |- _ => eapply Hnostep; eapply CS.Call; eauto
            end);
       (* Returns *)
       try (match goal with
-             Hpartial_stack : PPS.to_partial_stack ?STACK split = ?PSTACK,
+             Hpartial_stack : PS.to_partial_stack ?STACK split = ?PSTACK,
              Hcontra : executing Return ?C ?MEM ?PC
              |- _ => destruct s0; inversion Hpartial_stack;
                      destruct p0; subst;
-                     unfold PPS.to_partial_stack in Hpartial_stack;
+                     unfold PS.to_partial_stack in Hpartial_stack;
                      simpl in Hpartial_stack;
                      inversion Hpartial_stack;
                      destruct (Util.mem i split);
                      inversion H1; inversion H2; subst;
-                     eapply Hnostep; eapply CPS.Return; eauto
+                     eapply Hnostep; eapply CS.Return; eauto
            end).
   Qed.
 
@@ -455,15 +456,15 @@ Section CPS_PPS_SIMULATION.
     end.
 
   Definition s_match_states :=
-    sim_rel forward_simulation_between_CPS_and_PPS.
+    sim_rel forward_simulation_between_CS_and_PS.
 
   Definition s_props :=
-    sim_props forward_simulation_between_CPS_and_PPS.
+    sim_props forward_simulation_between_CS_and_PS.
 
   Lemma generic_match_implies_specific_match:
     forall i s pstate,
-      s_match_states i s (PPS.PC pstate) ->
-      CPS_PPS_SIMULATION.match_states split s (PPS.PC pstate).
+      s_match_states i s (PS.PC pstate) ->
+      CS_PS_SIMULATION.match_states split s (PS.PC pstate).
   Proof.
     intros i s pstate Hmatch_states.
     destruct Hmatch_states; auto.
@@ -471,28 +472,28 @@ Section CPS_PPS_SIMULATION.
 
   Lemma goes_wrong_preservation:
     forall i s ps t s',
-      Star (CPS.semantics p) s t s' ->
-      Nostep (CPS.semantics p) s' ->
-      ~final_state (CPS.semantics p) s' ->
+      Star (CS.semantics p) s t s' ->
+      Nostep (CS.semantics p) s' ->
+      ~final_state (CS.semantics p) s' ->
       s_match_states i s ps ->
     exists ps',
-      Star (PPS.semantics pp) ps t ps' /\
-      Nostep (PPS.semantics pp) ps' /\
-      ~final_state (PPS.semantics pp) ps'.
+      Star (PS.semantics pp) ps t ps' /\
+      Nostep (PS.semantics pp) ps' /\
+      ~final_state (PS.semantics pp) ps'.
   Proof.
     intros i s ps t s'.
-    intros HCPS_star HCPS_nostep HCPS_nofinal.
+    intros HCS_star HCS_nostep HCS_nofinal.
     intros Hs_match_states.
     destruct (simulation_star
-                s_props HCPS_star i ps Hs_match_states)
-      as [i' [ps' [HPPS_star Hs_match_states']]].
+                s_props HCS_star i ps Hs_match_states)
+      as [i' [ps' [HPS_star Hs_match_states']]].
     destruct ps' as [pstate | cstate exec_state].
     (* the program got stuck *)
-    - exists (PPS.PC pstate). split; auto. split.
+    - exists (PS.PC pstate). split; auto. split.
       (* we cannot step anymore *)
       + simpl. unfold nostep.
         rewrite p_transfto_pp.
-        unfold PPS.apply_split. simpl.
+        unfold PS.apply_split. simpl.
         eapply nostep_preservation_for_program;
           eauto.
         apply (generic_match_implies_specific_match i');
@@ -503,17 +504,17 @@ Section CPS_PPS_SIMULATION.
         apply (generic_match_implies_specific_match i');
           auto.
     (* the context got stuck *)
-    - exists (PPS.CC cstate PPS.WentWrong).
+    - exists (PS.CC cstate PS.WentWrong).
       split.
       (* we prove that there exists a star execution *)
       * destruct exec_state.
         (* the execution is in a normal state, hence we make
            an ulterior step to go in a WentWrong state *)
         ** apply star_right with
-               t (PPS.CC cstate PPS.Normal) E0.
-           *** apply HPPS_star.
+               t (PS.CC cstate PS.Normal) E0.
+           *** apply HPS_star.
            *** destruct cstate. destruct p0.
-               apply PPS.Context_GoesWrong.
+               apply PS.Context_GoesWrong.
            *** symmetry. apply E0_right.
         (* the execution is already in a WentWrong state*)
         ** auto.
@@ -525,10 +526,10 @@ Section CPS_PPS_SIMULATION.
         (* WentWrong is not final *)
         ** unfold not. intro.
            enough (Hnot_final:
-                     ~ PPS.final_state
-                       (PPS.CC cstate PPS.WentWrong)).
+                     ~ PS.final_state
+                       (PS.CC cstate PS.WentWrong)).
            apply Hnot_final; auto.
-           unfold not, PPS.final_state.
+           unfold not, PS.final_state.
            destruct cstate as [[C d] mem].
            intro contra. inversion contra.
   Qed.
@@ -536,8 +537,8 @@ Section CPS_PPS_SIMULATION.
   Theorem state_goes_wrong_preservation:
     forall i s ps t,
       s_match_states i s ps ->
-      state_behaves (CPS.semantics p) s (Goes_wrong t) ->
-      state_behaves (PPS.semantics pp) ps (Goes_wrong t).
+      state_behaves (CS.semantics p) s (Goes_wrong t) ->
+      state_behaves (PS.semantics pp) ps (Goes_wrong t).
   Proof.
     intros i s ps t Hmatch_states Hstatebeh.
     inversion Hstatebeh.
@@ -549,8 +550,8 @@ Section CPS_PPS_SIMULATION.
 
   Theorem wrong_behavior_preservation:
     forall t,
-      program_behaves (CPS.semantics p) (Goes_wrong t) ->
-      program_behaves (PPS.semantics pp) (Goes_wrong t).
+      program_behaves (CS.semantics p) (Goes_wrong t) ->
+      program_behaves (PS.semantics pp) (Goes_wrong t).
   Proof.
     intros t Hprogbeh.
     inversion Hprogbeh as [ s beh Hs_init Hstatebeh
@@ -565,20 +566,20 @@ Section CPS_PPS_SIMULATION.
     (* goes intially wrong *)
     - assert (Hgoingwrong_state:
                 exists ps,
-                  ps = (PPS.CC (0%nat, [],
+                  ps = (PS.CC (0%nat, [],
                                  @M.empty (list nat))
-                                PPS.WentWrong) /\
-                  Nostep (PPS.semantics pp) ps /\
-                  PPS.initial_state pp ps /\
-                  ~PPS.final_state ps). {
-        exists (PPS.CC (0%nat, [], @M.empty (list nat))
-                        PPS.WentWrong).
+                                PS.WentWrong) /\
+                  Nostep (PS.semantics pp) ps /\
+                  PS.initial_state pp ps /\
+                  ~PS.final_state ps). {
+        exists (PS.CC (0%nat, [], @M.empty (list nat))
+                        PS.WentWrong).
         split; auto.
         split.
         - unfold nostep. intros.
           unfold not. intro contra. inversion contra.
-        - unfold PPS.initial_state. split; auto.
-          unfold PPS.final_state.
+        - unfold PS.initial_state. split; auto.
+          unfold PS.final_state.
           unfold not. intro contra. inversion contra.
       }
       destruct Hgoingwrong_state
@@ -586,8 +587,8 @@ Section CPS_PPS_SIMULATION.
                              [Hps_init Hps_notfinal]]]].
       apply program_runs with ps; eauto. subst.
       apply state_goes_wrong with
-          (PPS.CC (0%nat, [], M.empty (list nat))
-                   PPS.WentWrong).
+          (PS.CC (0%nat, [], M.empty (list nat))
+                   PS.WentWrong).
       apply star_refl; auto.
       unfold nostep. intros t ps' contra.
       inversion contra.
@@ -597,21 +598,21 @@ Section CPS_PPS_SIMULATION.
 
   Corollary strong_behavior_preservation:
     forall beh,
-      program_behaves (CPS.semantics p) beh ->
-      program_behaves (PPS.semantics pp) beh.
+      program_behaves (CS.semantics p) beh ->
+      program_behaves (PS.semantics pp) beh.
   Proof.
     intros beh Hprogbeh.
     destruct beh.
     - eapply forward_simulation_same_safe_behavior; eauto.
-      apply forward_simulation_between_CPS_and_PPS.
+      apply forward_simulation_between_CS_and_PS.
       simpl. reflexivity.
     - eapply forward_simulation_same_safe_behavior; eauto.
-      apply forward_simulation_between_CPS_and_PPS.
+      apply forward_simulation_between_CS_and_PS.
       simpl. reflexivity.
     - eapply forward_simulation_same_safe_behavior; eauto.
-      apply forward_simulation_between_CPS_and_PPS.
+      apply forward_simulation_between_CS_and_PS.
       simpl. reflexivity.
-    - destruct forward_simulation_between_CPS_and_PPS.
+    - destruct forward_simulation_between_CS_and_PS.
       apply wrong_behavior_preservation; auto.
   Qed.
 
@@ -765,4 +766,4 @@ Section CPS_PPS_SIMULATION.
   End FORWARD_SIMULATION_2.
   (* Stuck! Even here we have problems with the same lemmas! *)
 *)
-End CPS_PPS_SIMULATION.
+End CS_PS_SIMULATION.

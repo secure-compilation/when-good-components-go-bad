@@ -111,9 +111,8 @@ Module Memory.
 
   Definition set mem C a val :=
     match M.find C mem with
-    | Some cmem =>
-      M.add C (local_update a val cmem) mem
-    | None => mem
+    | Some cmem => Some (M.add C (local_update a val cmem) mem)
+    | None => None
     end.
 End Memory.
  

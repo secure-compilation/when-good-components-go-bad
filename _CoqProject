@@ -9,6 +9,6 @@ Common/Behavior.v
 Common/Events.v
 
 Intermediate/Machine.v
-Intermediate/CPS.v
-Intermediate/PPS.v
-Intermediate/CPS_PPS.v
+Intermediate/CS.v
+Intermediate/PS.v
+Intermediate/CS_PS.v
