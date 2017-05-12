@@ -1,11 +1,12 @@
-Require Import Common.
+Require Import Common.Definitions.
+Require Import Common.Util.
 
 Require Import Coq.FSets.FMapAVL.
 Require Import Coq.FSets.FMapFacts.
 Require Import Coq.Structures.OrdersEx.
 Require Import Coq.Structures.OrdersAlt.
 
-Module AbstractMachine.
+Module IntermediateMachine.
 
 Module backNat_as_OT := Backport_OT Nat_as_OT.
 Module M := FMapAVL.Make backNat_as_OT.
@@ -110,9 +111,8 @@ Module Memory.
 
   Definition set mem C a val :=
     match M.find C mem with
-    | Some cmem =>
-      M.add C (local_update a val cmem) mem
-    | None => mem
+    | Some cmem => Some (M.add C (local_update a val cmem) mem)
+    | None => None
     end.
 End Memory.
  
@@ -193,4 +193,4 @@ Definition call_is_in_imports
 
 Definition executing i C mem pc :=
   EncDec.decode (Memory.get mem C pc) = Some i.
-End AbstractMachine.
+End IntermediateMachine.

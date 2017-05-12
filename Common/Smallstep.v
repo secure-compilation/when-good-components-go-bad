@@ -1,7 +1,8 @@
-Require Import Relations.
-Require Import Wellfounded.
-Require Import Coqlib.
-Require Import Events.
+Require Import Common.Coqlib.
+Require Import Common.Events.
+
+Require Import Coq.Relations.Relations.
+Require Import Coq.Wellfounded.Wellfounded.
 
 Set Implicit Arguments.
 

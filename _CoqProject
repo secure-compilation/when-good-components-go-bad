@@ -1,12 +1,14 @@
 -arg "-w -parsing"
 -R . RobustImp
 
-Coqlib.v
-Smallstep.v
-Behavior.v
-Events.v
-Common.v
-Machine.v
-LTT.v
-PLTT.v
-LTT_PLTT.v
+Common/Util.v
+Common/Definitions.v
+Common/Coqlib.v
+Common/Smallstep.v
+Common/Behavior.v
+Common/Events.v
+
+Intermediate/Machine.v
+Intermediate/CS.v
+Intermediate/PS.v
+Intermediate/CS_PS.v
