@@ -1,14 +1,25 @@
 -arg "-w -parsing"
 -R . RobustImp
 
-Common/Util.v
 Common/Definitions.v
-Common/Coqlib.v
-Common/Smallstep.v
+Common/Util.v
 Common/Behavior.v
+Common/Smallstep.v
 Common/Events.v
+Common/Linking.v
+Common/Values.v
+Common/Maps.v
+Common/Memory.v
+
+Lib/Coqlib.v
+
+Source/GlobalEnv.v
+Source/Language.v
+Source/CS.v
+
+S2I/Compiler.v
 
 Intermediate/Machine.v
+Intermediate/GlobalEnv.v
 Intermediate/CS.v
 Intermediate/PS.v
-Intermediate/CS_PS.v

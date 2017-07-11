@@ -1,15 +1,9 @@
 Require Import Common.Definitions.
-Require Import Common.Coqlib.
+Require Import Lib.Coqlib.
 
 Inductive event :=
-  | ECall : Component.id -> Procedure.id -> nat -> Component.id -> event
-  | ERet : Component.id -> nat -> Component.id -> event.
-
-Definition turn_event (e:event) :=
-  match e with
-    | ECall C _ _ _ => C
-    | ERet C _ _ => C
-  end.
+| ECall : Component.id -> Procedure.id -> nat -> Component.id -> event
+| ERet : Component.id -> nat -> Component.id -> event.
 
 Definition trace := list event.
 

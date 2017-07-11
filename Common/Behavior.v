@@ -1,6 +1,6 @@
-Require Import Common.Coqlib.
 Require Import Common.Events.
 Require Import Common.Smallstep.
+Require Import Lib.Coqlib.
 
 Require Import Coq.Logic.Classical.
 Require Import Coq.Logic.ClassicalEpsilon.
