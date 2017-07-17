@@ -61,6 +61,12 @@ Module I <: Lang.
 
   (* linking of two partial programs, returns a complete program *)
   Variable link: program -> program -> program.
+
+  Definition fully_defined (prg:program) :=
+    forall (ctx:program) (beh:program_behavior),
+      program_behaves (sem (link ctx prg)) beh ->
+      turn beh (get_interface prg) ->
+      not_wrong beh.
 End I.
 
 (* Source *)
@@ -95,6 +101,7 @@ Module Compiler (L1 L2: Lang).
 
   Variable compile : L1.program -> L2.program.
 
+  (* probably a corollary of partial compiler correctness *)
   Hypothesis compiler_correctness :
     forall beh (p:L1.program),
       program_behaves (L2.sem (compile p)) beh ->
@@ -118,6 +125,7 @@ Module SI := Compiler S I.
    semantics by partializing a complete target program.
  *)
 
+
 Definition robust_compilation_static_compromise :=
   forall (c:I.program) (P:S.program) (beh:program_behavior),
     SI.vsplit P c ->
@@ -126,23 +134,40 @@ Definition robust_compilation_static_compromise :=
     exists C, program_behaves (S.sem (S.link C P)) beh.
 
 
+Definition robust_compilation_static_compromise_corollary :=
+  forall (Q P:S.program) (beh:program_behavior),
+    complete (S.get_interface Q ++ S.get_interface P) ->
+    S.fully_defined P ->
+    program_behaves (T.sem (IT.compile (SI.compile (S.link Q P)))) beh ->
+    exists C, program_behaves (S.sem (S.link C P)) beh.
+
+Corollary robust_compilation_corrolary :
+  robust_compilation_static_compromise ->
+  robust_compilation_static_compromise_corollary.
+Proof.
+  intros RC Q P b H1 H2 H3. specialize (RC (SI.compile Q) P b).
+Admitted.
+
+
 (* Extra ingredients needed for the proof. *)
 
 Hypothesis SIpcompiler_correctness :
   forall beh (p:S.program) (psi:interface),
+    S.fully_defined p ->
     program_behaves (I.psem (SI.compile p) psi) beh ->
     program_behaves (S.psem p psi) beh.
 
-(* Takes a complete program and produces a partial one *)
+(* Takes a complete program and produces a partial one -- CH: potentially drop *)
 Variable Tpartialize: T.program -> interface -> T.program.
 
 Hypothesis Tdecomposition:
-  forall beh (c:I.program) (p:I.program),
+  forall beh (c p:I.program),
     program_behaves (T.sem (IT.compile (I.link c p))) beh ->
     program_behaves (T.psem (Tpartialize (IT.compile (I.link c p)) (I.get_interface c)) (I.get_interface c)) beh.
 
-Hypothesis special_pcompiler_correctness:
-  forall beh (c:I.program) (p:I.program),
+Hypothesis ITspecial_pcompiler_correctness:
+  forall beh (c p:I.program),
+    I.fully_defined p ->
     program_behaves (T.psem (Tpartialize (IT.compile (I.link c p)) (I.get_interface c)) (I.get_interface c)) beh
     ->
     program_behaves (I.psem p (I.get_interface c)) beh.
@@ -152,11 +177,11 @@ Proof.
   unfold robust_compilation_static_compromise.
   intros c P b Hsplit HFD H.
   apply Tdecomposition in H.
-  apply special_pcompiler_correctness in H.
+  apply ITspecial_pcompiler_correctness in H.
   apply SIpcompiler_correctness in H.
   apply S.definability in H.
-  auto.
-Qed.
+  auto. assumption. admit. (* probably corollary of SI[p?]compiler *)
+Admitted.
 
 
 
@@ -183,5 +208,5 @@ Proof.
   auto.
   unfold SI.vsplit in Hsplit.
   rewrite SI.compiler_interfaces in Hsplit.
-  auto.
-Qed.
+  auto. admit.
+Admitted.
