@@ -55,7 +55,7 @@ Definition propagate {A B} (f: A -> option B) (op:option A) : option B :=
   | None => None
   end.
 
-Definition behaves (o: option semantics) b :=
+Definition behaves (o: option semantics) b : Prop :=
   match o with
   | Some p => program_behaves p b
   | None => False
@@ -70,7 +70,9 @@ Definition behaves (o: option semantics) b :=
 Module Type Lang.
   (* Type of programs, complete or partial *)
   Axiom program : Type.
-  Axiom get_interface: program -> interface.
+  Axiom get_interface: program -> interface. (* CH: TODO replace with has_interface relation between well-formed programs
+                                                         and their corresponding interfaces; has_interface is a
+                                                         (not necessarily computable) partial function *)
   (* checks if a program has a complete interface *)
   Axiom complete: program -> Prop.
   (* checks if two programs linked together form a complete program *)
@@ -119,7 +121,7 @@ Module I <: Lang.
     forall beh (c p:I.program),
       behaves (osem (I.link c p)) beh
       ->
-      behaves (opsem (I.get_interface c) (Some p)) beh.
+      behaves (opsem (I.get_interface c) (Some p)) beh. (* CH: Some not needed *)
 
   Definition fully_defined (psi:interface) (p:program) :=
     forall (beh:program_behavior) (c:program),
@@ -324,7 +326,7 @@ Module MPC <: IT.
   Definition opartialize psi (op: option T.program) := propagate (partialize psi) op.
 
   (* TODO prove assuming simulation *)
-  Axiom decomposition:
+  Axiom partialize_decomposition:
     forall beh (p:T.program) psi,
       behaves (T.osem (Some p)) beh
       ->
@@ -342,7 +344,7 @@ Module MPC <: IT.
   Proof.
     intros b c p IFD ip H.
     destruct ip.
-    apply decomposition.
+    apply partialize_decomposition.
     assumption.
     simpl in H.
     auto.
