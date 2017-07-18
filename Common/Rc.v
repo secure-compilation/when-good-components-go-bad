@@ -17,7 +17,8 @@ Require Import Coq.Lists.List.
 Variable id : Type.
 Definition interface := list id.
 (* complete program has a complete interface *)
-Variable complete : interface -> Prop.
+Variable icomplete : interface -> Prop.
+Definition icomplete2 (i1 i2:interface) := icomplete (i1++i2).
 Variable turn : program_behavior -> interface -> Prop.
 
 
@@ -32,12 +33,17 @@ Module Type Lang.
 
   Parameter get_interface: program -> interface.
 
+  (* checks if a program has a complete interface *)
+  Parameter complete: program -> Prop.
+  (* checks if two programs linked together form a complete program *)
+  Parameter complete2: program -> program -> Prop.
+
   (* complete semantics: takes a complete program *)
   Parameter sem: program -> semantics.
 
   (* partial semantics: takes a program and a matching interface.
      The interface of the program together with the matching interface
-     is complete.*)
+     is complete. *)
   Parameter psem: program -> interface -> semantics.
 End Lang.
 
@@ -48,6 +54,8 @@ End Lang.
 Module T <: Lang.
   Variable program : Type.
   Variable get_interface: program -> interface.
+  Definition complete (p:program) := icomplete (get_interface p).
+  Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
   Variable sem: program -> semantics.
   Variable psem: program -> interface -> semantics.
 End T.
@@ -56,14 +64,17 @@ End T.
 Module I <: Lang.
   Variable program : Type.
   Variable get_interface: program -> interface.
+  Definition complete (p:program) := icomplete (get_interface p).
+  Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
   Variable sem: program -> semantics.
   Variable psem: program -> interface -> semantics.
 
   (* linking of two partial programs, returns a complete program *)
   Variable link: program -> program -> program.
-
+  
   Definition fully_defined (prg:program) :=
     forall (ctx:program) (beh:program_behavior),
+      complete2 ctx prg ->
       program_behaves (sem (link ctx prg)) beh ->
       turn beh (get_interface prg) ->
       not_wrong beh.
@@ -73,32 +84,32 @@ End I.
 Module S <: Lang.
   Variable program : Type.
   Variable get_interface: program -> interface.
+  Definition complete (p:program) := icomplete (get_interface p).
+  Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
+  Variable link: program -> program -> program.
   Variable sem: program -> semantics.
   Variable psem: program -> interface -> semantics.
 
-  Variable link: program -> program -> program.
-
   Definition fully_defined (prg:program) :=
     forall (ctx:program) (beh:program_behavior),
+      complete2 ctx prg ->
       program_behaves (sem (link ctx prg)) beh ->
       turn beh (get_interface prg) ->
       not_wrong beh.
         
   Hypothesis definability :
     forall beh (prg:program) psi,
+      icomplete2 (get_interface prg) psi ->
       program_behaves (psem prg psi) beh ->
       exists (ctx:program),
         program_behaves (sem (link ctx prg)) beh.
 End S.
 
 
+
 (* This module takes a high language L1 and a low one L2 and produces
    a compiler from L1 to L2 and some properties *)
 Module Compiler (L1 L2: Lang).
-  (* checks if two programs linked together form a complete program *)
-  Definition vsplit (p1: L1.program) (p2: L2.program) :=
-    complete ((L2.get_interface p2)++(L1.get_interface p1)).
-
   Variable compile : L1.program -> L2.program.
 
   (* probably a corollary of partial compiler correctness *)
@@ -128,7 +139,7 @@ Module SI := Compiler S I.
 
 Definition robust_compilation_static_compromise :=
   forall (c:I.program) (P:S.program) (beh:program_behavior),
-    SI.vsplit P c ->
+    icomplete2 (S.get_interface P) (I.get_interface c) ->
     S.fully_defined P ->
     program_behaves (T.sem (IT.compile (I.link c (SI.compile P)))) beh ->
     exists C, program_behaves (S.sem (S.link C P)) beh.
@@ -136,17 +147,28 @@ Definition robust_compilation_static_compromise :=
 
 Definition robust_compilation_static_compromise_corollary :=
   forall (Q P:S.program) (beh:program_behavior),
-    complete (S.get_interface Q ++ S.get_interface P) ->
+    S.complete2 P Q ->
     S.fully_defined P ->
     program_behaves (T.sem (IT.compile (SI.compile (S.link Q P)))) beh ->
     exists C, program_behaves (S.sem (S.link C P)) beh.
+
+(* This is too syntactic, it should be stated in terms of equivalent behaviors *)
+Hypothesis Sseparate_compilation:
+  forall (P Q: S.program),
+    SI.compile (S.link P Q) = I.link (SI.compile P) (SI.compile Q).
 
 Corollary robust_compilation_corrolary :
   robust_compilation_static_compromise ->
   robust_compilation_static_compromise_corollary.
 Proof.
   intros RC Q P b H1 H2 H3. specialize (RC (SI.compile Q) P b).
-Admitted.
+  apply RC.
+  rewrite <- SI.compiler_interfaces with (p1:=Q).
+  auto.
+  auto.
+  rewrite Sseparate_compilation in H3.
+  auto.
+Qed.
 
 
 (* Extra ingredients needed for the proof. *)
@@ -172,6 +194,31 @@ Hypothesis ITspecial_pcompiler_correctness:
     ->
     program_behaves (I.psem p (I.get_interface c)) beh.
 
+Hypothesis Idecomposition:
+  forall beh (c p:I.program),
+    program_behaves (I.sem (I.link c p)) beh ->
+    program_behaves (I.psem p (I.get_interface c)) beh.
+
+(* Lemma FD_preservation: *)
+(*   forall (P:S.program), *)
+(*     S.fully_defined P -> I.fully_defined (SI.compile P). *)
+(* Proof. *)
+(*   unfold I.fully_defined. *)
+(*   unfold S.fully_defined. *)
+(*   intros P FD c b Hcomplete H1 Hturn.  *)
+(*   apply Idecomposition in H1. *)
+(*   apply SIpcompiler_correctness in H1. *)
+(*   destruct (S.definability b P (I.get_interface c) H1) as [c2 H]. *)
+(*   unfold I.complete2 in Hcomplete. *)
+(*   rewrite <- SI.compiler_interfaces in Hcomplete. *)
+(*   unfold S.complete2 in FD. *)
+(*   apply (FD c2 b Hcomplete). *)
+(*   unfold S.fully_defined in FD. *)
+(*   specialize (FD (compile )) *)
+(*   rewrite <- Sseparate_compilation in H1. *)
+(*   apply SI.compiler_correctness in H1. *)
+(*   apply (FD c). *)
+  
 Theorem proof_rc_static : robust_compilation_static_compromise.
 Proof.
   unfold robust_compilation_static_compromise.
@@ -181,32 +228,4 @@ Proof.
   apply SIpcompiler_correctness in H.
   apply S.definability in H.
   auto. assumption. admit. (* probably corollary of SI[p?]compiler *)
-Admitted.
-
-
-
-
-(* Alternative proof which should be broken but is not because
-definitions too approximate *)
-
-Hypothesis Idecomposition:
-  forall beh (ctx:I.program) (prg:I.program),
-    complete ((I.get_interface ctx)++(I.get_interface prg)) ->
-    program_behaves (I.sem (I.link ctx prg)) beh ->
-    program_behaves (I.psem prg (I.get_interface ctx)) beh.
-
-(* this proof doesn't assume T.decomposition but it is weaker 
-   and has problems with UB in CI *)
-Theorem bad_proof_rc_static : robust_compilation_static_compromise.
-Proof.
-  unfold robust_compilation_static_compromise.
-  intros c P b Hsplit HFD H.
-  apply IT.compiler_correctness in H. 
-  apply Idecomposition in H.
-  apply SIpcompiler_correctness with (psi:=I.get_interface c) in H. 
-  apply S.definability in H.
-  auto.
-  unfold SI.vsplit in Hsplit.
-  rewrite SI.compiler_interfaces in Hsplit.
-  auto. admit.
 Admitted.
