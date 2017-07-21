@@ -98,31 +98,6 @@ End Lang.
 (* Every language is a subtype of Lang and implements its signature *)
 (* Note: nothing is really implemented, we just give type signatures *)
 
-(* Target *)
-Module T <: Lang.
-  Axiom program : Type.
-  Axiom get_interface: program -> interface.
-  Definition complete (p:program) := icomplete (get_interface p).
-  Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
-  Axiom sem: program -> option semantics.
-  Axiom psem: interface -> program -> option semantics.
-  Definition osem (op: option program) := propagate sem op.
-  Definition opsem i (op: option program) := propagate (psem i) op.
-
-  (* takes a complete program and produces a partial one
-   This is an important ingredient for the simulation relation.
-   For MP the relation corresponds with this function actually.
-   For SFI the relation contains additional elements.
-   *)
-  Axiom partialize: interface -> T.program -> option T.program.
-  Axiom partialize_post:
-    forall (p:T.program) psi,
-    exists pp, 
-      (T.get_interface p) = (T.get_interface pp)++psi ->
-      partialize psi p = Some pp.
-  Definition opartialize psi (op: option program) := propagate (partialize psi) op.
-End T.
-
 (* Intermediate *)
 Module I <: Lang.
   Axiom program : Type.
@@ -184,25 +159,16 @@ Module S <: Lang.
         behaves (osem (link c p)) beh /\ get_interface c = psi.
 End S.
 
-
-(* This module takes a high language L1 and a low one L2 and produces
-   a compiler from L1 to L2 and some properties.
-   This is common between the backends, MP SFI, and the SI compiler.
- *)
-Module Compiler (L1 L2: Lang).
-  Axiom compile : L1.program -> L2.program.
-  Axiom compile_complete :
-    forall p1 p2,
-      L1.complete p1 -> compile p1 = p2 -> L2.complete p2.
-  
-  Axiom compiler_interfaces:
-    forall (p1:L1.program),
-      L1.get_interface p1 = L2.get_interface (compile p1).
-End Compiler.
-
 (* Source to Intermediate *)
 Module SI.
-  Include Compiler S I.
+  Axiom compile : S.program -> I.program.
+  Axiom compile_complete :
+    forall p1 p2,
+      S.complete p1 -> compile p1 = p2 -> I.complete p2.
+  
+  Axiom compiler_interfaces:
+    forall (p1:S.program),
+      S.get_interface p1 = I.get_interface (compile p1).
 
   (* exact cc preserves also UB *)
   Axiom compiler_correctness :
@@ -267,43 +233,103 @@ Module SI.
   Qed.
 End SI.
 
-(* Both backend MP and SFI need to implement this interface *)
+
+
+(* Micro-policies target language *)
+Module MP <: Lang.
+  Axiom program : Type.
+  Axiom get_interface: program -> interface.
+  Definition complete (p:program) := icomplete (get_interface p).
+  Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
+  Axiom sem: program -> option semantics.
+  Axiom psem: interface -> program -> option semantics.
+  Definition osem (op: option program) := propagate sem op.
+  Definition opsem i (op: option program) := propagate (psem i) op.
+End MP.
+
+(* Software Fault Isolation target language *)
+Module SFI <: Lang.
+  Axiom program : Type.
+  Axiom get_interface: program -> interface.
+  Definition complete (p:program) := icomplete (get_interface p).
+  Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
+  Axiom sem: program -> option semantics.
+  Axiom psem: interface -> program -> option semantics.
+  Definition osem (op: option program) := propagate sem op.
+  Definition opsem i (op: option program) := propagate (psem i) op.
+End SFI.
+
+
+(* Interface expected by a compiler from Intermediate to Target
+   Both backend MP and SFI need to implement this interface *)
 Module Type IT.
+  Declare Module T : Lang.
+  
   (* TODO IT.compile must be a refinement compiler *)
   Axiom compile : I.program -> T.program.
   
+  (* takes a complete program and produces a partial one
+   This is an important ingredient for the simulation relation.
+   For MP the relation corresponds with this function actually.
+   For SFI the relation contains additional elements.
+   *)
+  Axiom partialize: interface -> T.program -> option T.program.
+  Axiom partialize_post:
+    forall (p:T.program) psi,
+    exists pp, 
+      (T.get_interface p) = (T.get_interface pp)++psi ->
+      partialize psi p = Some pp.
+  Definition opartialize psi (op: option T.program) := propagate (partialize psi) op.
+
   (* 
-     We now got for RC between S and T.
      The following properties are special because they depend on
      compiling the complete intermediate program.
    *)
   Axiom special_decomposition :
     forall beh (c p:I.program),
       I.fully_defined (I.get_interface c) p ->
-      let ip := map IT.compile (I.link c p) in
+      let ip := map compile (I.link c p) in
       behaves (T.osem ip) beh
       ->
-      behaves (T.opsem (I.get_interface c) (T.opartialize (I.get_interface c) ip)) beh.
+      behaves (T.opsem (I.get_interface c) (opartialize (I.get_interface c) ip)) beh.
 
   Axiom special_compiler_correctness:
     forall beh (c p:I.program),
       I.fully_defined (I.get_interface c) p ->
       let ip := I.link c p in
-      let tp := T.opartialize (I.get_interface c) (map compile ip) in
+      let tp := opartialize (I.get_interface c) (map compile ip) in
       behaves (T.opsem (I.get_interface c) tp) beh ->
       behaves (I.opsem (I.get_interface c) (Some p))  beh.
 End IT.
 
-(* Micro-policies backend *)
-Module MP <: IT.
-  Include Compiler I T.
+(* Micro-policies compiler *)
+Module MPC <: IT.
+  Module T := MP.
+  
+  Axiom compile : I.program -> T.program.
+  Axiom compile_complete :
+    forall p1 p2,
+      I.complete p1 -> compile p1 = p2 -> T.complete p2.
+  
+  Axiom compiler_interfaces:
+    forall (p1:I.program),
+      I.get_interface p1 = T.get_interface (compile p1).
 
+  Axiom partialize: interface -> T.program -> option T.program.
+  Axiom partialize_post:
+    forall (p:T.program) psi,
+    exists pp,
+      (T.get_interface p) = (T.get_interface pp)++psi ->
+      partialize psi p = Some pp.
+  Definition opartialize psi (op: option T.program) := propagate (partialize psi) op.
+
+  (* TODO prove assuming simulation *)
   Axiom decomposition:
     forall beh (p:T.program) psi,
       behaves (T.osem (Some p)) beh
       ->
-      behaves (T.opsem psi (T.opartialize psi (Some p))) beh.
-
+      behaves (T.opsem psi (opartialize psi (Some p))) beh.
+  
   (* we can prove special decomposition using the more general
      decomposition *)
   Definition special_decomposition :
@@ -312,12 +338,12 @@ Module MP <: IT.
       let ip := map compile (I.link c p) in
       behaves (T.osem ip) beh
       ->
-      behaves (T.opsem (I.get_interface c) (T.opartialize (I.get_interface c) ip)) beh.
+      behaves (T.opsem (I.get_interface c) (opartialize (I.get_interface c) ip)) beh.
   Proof.
     intros b c p IFD ip H.
     destruct ip.
-    apply MP.decomposition.
-    assumption.  
+    apply decomposition.
+    assumption.
     simpl in H.
     auto.
   Qed.
@@ -326,39 +352,56 @@ Module MP <: IT.
     forall beh (c p:I.program),
       I.fully_defined (I.get_interface c) p ->
       let ip := I.link c p in
-      let tp := T.opartialize (I.get_interface c) (map compile ip) in
+      let tp := opartialize (I.get_interface c) (map compile ip) in
       behaves (T.opsem (I.get_interface c) tp) beh ->
       behaves (I.opsem (I.get_interface c) (Some p))  beh.
-End MP.
+End MPC.
 
-(* Software Fault Isolation backend *)
-Module SFI <: IT.
-  Include Compiler I T.
+(* Software Fault Isolation compiler *)
+Module SFIC <: IT.
+  Module T := SFI.
+  
+  Axiom compile : I.program -> T.program.
+  Axiom compile_complete :
+    forall p1 p2,
+      I.complete p1 -> compile p1 = p2 -> T.complete p2.
+  
+  Axiom compiler_interfaces:
+    forall (p1:I.program),
+      I.get_interface p1 = T.get_interface (compile p1).
+
+  Axiom partialize: interface -> T.program -> option T.program.
+  Axiom partialize_post:
+    forall (p:T.program) psi,
+    exists pp,
+      (T.get_interface p) = (T.get_interface pp)++psi ->
+      partialize psi p = Some pp.
+  Definition opartialize psi (op: option T.program) := propagate (partialize psi) op.
 
   (* there is no generic decomposition, we need to prove
-     special_decomposition *)
+      special_decomposition *)
   Axiom special_decomposition :
     forall beh (c p:I.program),
       I.fully_defined (I.get_interface c) p ->
       let ip := map compile (I.link c p) in
       behaves (T.osem ip) beh
       ->
-      behaves (T.opsem (I.get_interface c) (T.opartialize (I.get_interface c) ip)) beh.
+      behaves (T.opsem (I.get_interface c) (opartialize (I.get_interface c) ip)) beh.
 
   Axiom special_compiler_correctness:
     forall beh (c p:I.program),
       I.fully_defined (I.get_interface c) p ->
       let ip := I.link c p in
-      let tp := T.opartialize (I.get_interface c) (map compile ip) in
+      let tp := opartialize (I.get_interface c) (map compile ip) in
       behaves (T.opsem (I.get_interface c) tp) beh ->
       behaves (I.opsem (I.get_interface c) (Some p))  beh.
-End SFI.
+End SFIC.
 
 
 
 
-(* The proof in modular wrt the backend *)
-Module Main (IT: IT).
+(* The proof is modular wrt the backend *)
+Module Main (IT : IT).
   (* 
    This property is different from the one we started from: there is
    no concept of linking at the low level.
@@ -372,7 +415,7 @@ Module Main (IT: IT).
     forall (c:I.program) (P:S.program) (beh:program_behavior),
       icomplete2 (I.get_interface c) (S.get_interface P) ->
       S.fully_defined (I.get_interface c) P ->
-      behaves (T.osem (map IT.compile (I.link c (SI.compile P)))) beh
+      behaves (IT.T.osem (map IT.compile (I.link c (SI.compile P)))) beh
       ->
       exists C, 
         behaves (S.osem (S.link C P)) beh /\ S.complete2 C P.
@@ -402,7 +445,7 @@ Module Main (IT: IT).
       S.complete2 Q P ->
       S.fully_defined (S.get_interface Q) P ->
       let compile := compose IT.compile SI.compile in
-      behaves (T.osem (map compile (S.link Q P))) beh ->
+      behaves (IT.T.osem (map compile (S.link Q P))) beh ->
       exists C, behaves (S.osem (S.link C P)) beh /\ S.complete2 C P.
 
   Corollary robust_compilation_corrolary :
