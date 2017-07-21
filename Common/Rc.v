@@ -225,6 +225,7 @@ Qed.
  *)
 Axiom Tspecial_decomposition:
   forall beh (c p:I.program),
+    I.fully_defined (I.get_interface c) p ->
     let ip := map IT.compile (I.link c p) in
     behaves (T.sem ip) beh
     ->
@@ -290,6 +291,8 @@ Proof.
   rewrite <- Hinterfaces in Hcomplete.
   exists C.
   auto.
+  apply FD_preservation.
+  assumption.
   apply FD_preservation.
   assumption.
 Qed.
