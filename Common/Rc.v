@@ -45,11 +45,17 @@ Proof.
   destruct x; auto.
 Qed.
 
+Definition propagate {A B} (f: A -> option B) (op:option A) : option B :=
+  match op with
+  | Some p => f p
+  | None => None
+  end.
+
 Definition behaves (o: option semantics) b :=
-    match o with
-    | Some p => program_behaves p b
-    | None => False
-    end.
+  match o with
+  | Some p => program_behaves p b
+  | None => False
+  end.
 
 
 (* 
@@ -67,7 +73,7 @@ Module Type Lang.
   Axiom complete2: program -> program -> Prop.
 
   (* complete semantics: takes a complete program *)
-  Axiom sem: option program -> option semantics.
+  Axiom sem: program -> option semantics.
   (* Axiom sem_complete: *)
   (*   forall (p:program), *)
   (*     complete p -> exists s, sem (Some p) = Some s. *)
@@ -75,10 +81,13 @@ Module Type Lang.
   (* partial semantics: takes a program and a matching interface.
      The interface of the program together with the matching interface
      is complete. *)
-  Axiom psem: option program -> interface -> option semantics.
+  Axiom psem: interface -> program -> option semantics.
   (* Axiom psem_complete: *)
   (*   forall psi (p:program), *)
   (*     icomplete2 psi (get_interface p) -> exists s, psem (Some p) psi = Some s. *)
+  Definition osem (op: option program) := propagate sem op.
+  Definition opsem i (op: option program) := propagate (psem i) op.
+
   (* Axiom idefinability: forall (i:interface), exists (p:program), get_interface p = i. *)
 End Lang.
 
@@ -91,19 +100,23 @@ Module T <: Lang.
   Axiom get_interface: program -> interface.
   Definition complete (p:program) := icomplete (get_interface p).
   Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
-  Axiom sem: option program -> option semantics.
-  Axiom psem: option program -> interface -> option semantics.
+  Axiom sem: program -> option semantics.
+  Axiom psem: interface -> program -> option semantics.
+  Definition osem (op: option program) := propagate sem op.
+  Definition opsem i (op: option program) := propagate (psem i) op.
 
   (* takes a complete program and produces a partial one
    This is an important ingredient for the simulation relation.
    For MP the relation corresponds with this function actually.
    For SFI the relation contains additional elements.
    *)
-  Axiom partialize: interface -> T.program -> T.program.
-  (* Axiom partialize_post: *)
-  (*   forall (p pp:T.program) psi, *)
-  (*   partialize psi p = pp -> *)
-  (*   (T.get_interface p) = (T.get_interface pp)++psi. *)
+  Axiom partialize: interface -> T.program -> option T.program.
+  Axiom partialize_post:
+    forall (p:T.program) psi,
+      exists pp, 
+        (T.get_interface p) = (T.get_interface pp)++psi ->
+        partialize psi p = Some pp.
+  Definition opartialize psi (op: option program) := propagate (partialize psi) op.
 End T.
 
 (* Intermediate *)
@@ -112,8 +125,10 @@ Module I <: Lang.
   Axiom get_interface: program -> interface.
   Definition complete (p:program) := icomplete (get_interface p).
   Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
-  Axiom sem: option program -> option semantics.
-  Axiom psem: option program -> interface -> option semantics.
+  Axiom sem: program -> option semantics.
+  Axiom psem: interface -> program -> option semantics.
+  Definition osem (op: option program) := propagate sem op.
+  Definition opsem i (op: option program) := propagate (psem i) op.
 
   (* linking of two partial programs, returns a complete program *)
   Axiom link: program -> program -> option program.
@@ -123,15 +138,15 @@ Module I <: Lang.
 
   Axiom decomposition:
     forall beh (c p:I.program),
-      behaves (I.sem (I.link c p)) beh
+      behaves (osem (I.link c p)) beh
       ->
-      behaves (I.psem (Some p) (I.get_interface c)) beh.
+      behaves (opsem (I.get_interface c) (Some p)) beh.
 
   Definition fully_defined (psi:interface) (p:program) :=
     forall (beh:program_behavior) (c:program),
       get_interface c = psi ->
       complete2 c p ->
-      behaves (sem (link c p)) beh ->
+      behaves (osem (link c p)) beh ->
       (turn beh (get_interface p) ->
       not_wrong beh).
 End I.
@@ -142,8 +157,10 @@ Module S <: Lang.
   Axiom get_interface: program -> interface.
   Definition complete (p:program) := icomplete (get_interface p).
   Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
-  Axiom sem: option program -> option semantics.
-  Axiom psem: option program -> interface -> option semantics.
+  Axiom sem: program -> option semantics.
+  Axiom psem: interface -> program -> option semantics.
+  Definition osem (op: option program) := propagate sem op.
+  Definition opsem i (op: option program) := propagate (psem i) op.
 
   Axiom link: program -> program -> option program.
 
@@ -151,16 +168,16 @@ Module S <: Lang.
     forall (beh:program_behavior) (c:program),
       get_interface c = psi ->
       complete2 c p ->
-      behaves (sem (link c p)) beh ->
+      behaves (osem (link c p)) beh ->
       (turn beh (get_interface p) ->
       not_wrong beh).
 
   Axiom definability:
     forall (beh:program_behavior) (psi:interface) (p:program),
       icomplete2 psi (get_interface p) ->
-      behaves (psem (Some p) psi) beh ->
+      behaves (psem psi p) beh ->
       exists (c:program),
-        behaves (sem (link c p)) beh /\ get_interface c = psi.
+        behaves (osem (link c p)) beh /\ get_interface c = psi.
 End S.
 
 
@@ -185,8 +202,8 @@ Module SI := Compiler S I.
 (* exact cc preserves also UB *)
 Axiom SIcompiler_correctness :
   forall beh (p:S.program) (psi:interface),
-    behaves (I.psem (Some (SI.compile p)) psi) beh ->
-    behaves (S.psem (Some p) psi) beh.
+    behaves (I.psem psi (SI.compile p)) beh ->
+    behaves (S.psem psi p) beh.
 
 
 (* Warm-up: RC between S and I *)
@@ -194,10 +211,10 @@ Definition SIrc:
   forall (c:I.program) (P:S.program) (beh:program_behavior),
     icomplete2 (I.get_interface c) (S.get_interface P) ->
     S.fully_defined (I.get_interface c) P ->
-    behaves (I.sem (I.link c (SI.compile P))) beh
+    behaves (I.osem (I.link c (SI.compile P))) beh
     ->
     exists C,
-      behaves (S.sem (S.link C P)) beh /\ S.complete2 C P.
+      behaves (S.osem (S.link C P)) beh /\ S.complete2 C P.
 Proof.
   intros c P b Hcomplete SFD H.
   apply I.decomposition in H.
@@ -217,27 +234,51 @@ Proof.
 Qed.
 
 
-
 (* 
    We now got for RC between S and T.
    The following properties are special because they depend on
    compiling the complete intermediate program.
  *)
-Axiom Tspecial_decomposition:
+Definition Tspecial_decomposition :=
   forall beh (c p:I.program),
     I.fully_defined (I.get_interface c) p ->
     let ip := map IT.compile (I.link c p) in
-    behaves (T.sem ip) beh
+    behaves (T.osem ip) beh
     ->
-    behaves (T.psem (map (T.partialize (I.get_interface c)) ip) (I.get_interface c)) beh.
+    behaves (T.opsem (I.get_interface c) (T.opartialize (I.get_interface c) ip)) beh.
+
+Module MP.
+  Include T.
+
+  Axiom decomposition:
+    forall beh (p:T.program) psi,
+      behaves (T.osem (Some p)) beh
+      ->
+      behaves (T.opsem psi (T.opartialize psi (Some p))) beh.
+
+  (* we can prove special decomposition using the more general
+     decomposition *)
+  Definition special_decomposition : Tspecial_decomposition.
+  Proof.
+    intros b c p IFD ip H.
+    destruct ip.
+    apply MP.decomposition.
+    assumption.  
+    simpl in H.
+    auto.
+  Qed.
+End MP.
+
+
+
 
 Axiom ITspecial_compiler_correctness:
   forall beh (c p:I.program),
     I.fully_defined (I.get_interface c) p ->
     let ip := I.link c p in
-    let tp := map (T.partialize (I.get_interface c)) (map IT.compile ip) in
-    behaves (T.psem tp (I.get_interface c)) beh ->
-    behaves (I.psem (Some p) (I.get_interface c)) beh.
+    let tp := T.opartialize (I.get_interface c) (map IT.compile ip) in
+    behaves (T.opsem (I.get_interface c) tp) beh ->
+    behaves (I.opsem (I.get_interface c) (Some p))  beh.
 
 (* This is proved using SIrc. *)
 Definition FD_preservation:
@@ -275,15 +316,15 @@ Definition robust_compilation_static_compromise :=
   forall (c:I.program) (P:S.program) (beh:program_behavior),
     icomplete2 (I.get_interface c) (S.get_interface P) ->
     S.fully_defined (I.get_interface c) P ->
-    behaves (T.sem (map IT.compile (I.link c (SI.compile P)))) beh
+    behaves (T.osem (map IT.compile (I.link c (SI.compile P)))) beh
     ->
     exists C, 
-      behaves (S.sem (S.link C P)) beh /\ S.complete2 C P.
+      behaves (S.osem (S.link C P)) beh /\ S.complete2 C P.
 
 Theorem proof_rc_static : robust_compilation_static_compromise.
 Proof.
   intros c P b Hcomplete SFD H.
-  apply (Tspecial_decomposition b c (SI.compile P)) in H.
+  apply (MP.special_decomposition b c (SI.compile P)) in H.
   apply ITspecial_compiler_correctness in H.
   destruct (S.definability b (I.get_interface c) P Hcomplete) as [C [H1 Hinterfaces]].
   apply (SIcompiler_correctness b P (I.get_interface c)) in H.
@@ -305,8 +346,8 @@ Definition robust_compilation_static_compromise_corollary :=
     S.complete2 Q P ->
     S.fully_defined (S.get_interface Q) P ->
     let compile := compose IT.compile SI.compile in
-    behaves (T.sem (map compile (S.link Q P))) beh ->
-    exists C, behaves (S.sem (S.link C P)) beh /\ S.complete2 C P.
+    behaves (T.osem (map compile (S.link Q P))) beh ->
+    exists C, behaves (S.osem (S.link C P)) beh /\ S.complete2 C P.
 
 (* TODO This is too syntactic, it should be stated in terms of equivalent behaviors *)
 Axiom Sseparate_compilation:
