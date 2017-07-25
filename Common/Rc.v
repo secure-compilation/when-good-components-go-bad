@@ -450,8 +450,8 @@ Module Main (IT : IT).
       S.fully_defined (I.get_interface c) P ->
       program_behaves (IT.T.sem (IT.compile (I.link c (SI.compile P)))) beh
       ->
-      exists C, 
-        program_behaves (S.sem (S.link C P)) beh /\ S.complete2 C P.
+      exists C, S.fully_defined (S.get_interface P) C /\ S.complete2 C P /\
+        program_behaves (S.sem (S.link C P)) beh.
 
   Theorem proof_rc_static : robust_compilation_static_compromise.
   Proof.
@@ -485,7 +485,7 @@ Module Main (IT : IT).
       S.fully_defined (S.get_interface Q) P ->
       let compile := compose IT.compile SI.compile in
       program_behaves (IT.T.sem (compile (S.link Q P))) beh ->
-      exists C, program_behaves (S.sem (S.link C P)) beh /\ S.complete2 C P.
+      exists C, S.fully_defined (S.get_interface P) C /\ S.complete2 C P /\ program_behaves (S.sem (S.link C P)) beh.
 
   Corollary robust_compilation_corrolary :
     robust_compilation_static_compromise ->
