@@ -80,7 +80,6 @@ Module Type Lang.
      is complete. *)
   Parameter psem: interface -> program -> semantics.
 
-  (* Axiom idefinability: forall (i:interface), exists (p:program), get_interface p = i. *)
 End Lang.
 
 (* Every language is a subtype of Lang and implements its signature *)
@@ -94,8 +93,7 @@ Module I <: Lang.
   Definition complete (p:program) :=
     valid p /\ icomplete (get_interface p).
   Definition complete2 (p1 p2:program) :=
-    valid p1 /\
-    valid p2 /\
+    valid p1 /\ valid p2 /\
     icomplete2 (get_interface p1) (get_interface p2).
     
   Axiom sem: program -> semantics.
@@ -105,20 +103,19 @@ Module I <: Lang.
      complete case, we could generalize by asking that p1 and p2 are
      compatible *)
   Axiom link: program -> program -> program.
-  Axiom link_spec:
-    forall (p1 p2:program),
-      valid p1 /\ valid p2 /\ complete2 p1 p2 ->
-      exists (p:program),
-        (get_interface p1) ++ (get_interface p2) = (get_interface p) /\
-        valid p /\ complete p.
+  (* Axiom link_spec: *)
+  (*   forall (p1 p2:program), *)
+  (*     complete2 p1 p2 -> *)
+  (*     exists (p:program), *)
+  (*       (get_interface p1) ++ (get_interface p2) = (get_interface p) /\ *)
+  (*       valid p /\ complete p. *)
 
   (* only for the safe case *)
   (* TODO has p to be FD? *)
   Axiom decomposition:
-    forall beh (c p:I.program),
+    forall beh (c p:program),
       complete2 c p ->
       program_behaves (sem (link c p)) beh ->
-      not_wrong beh ->
       program_behaves (psem (get_interface c) p) beh.
   
   Definition fully_defined (psi:interface) (p:program) :=
@@ -140,12 +137,11 @@ Module S <: Lang.
   Definition complete (p:program) :=
     valid p /\ icomplete (get_interface p).
   Definition complete2 (p1 p2:program) :=
-    valid p1 /\
-    valid p2 /\
+    valid p1 /\ valid p2 /\
     icomplete2 (get_interface p1) (get_interface p2).
   Axiom sem: program -> semantics.
   Axiom psem: interface -> program -> semantics.
-
+  
   Axiom link: program -> program -> program.
 
   Definition fully_defined (psi:interface) (p:program) :=
@@ -158,16 +154,21 @@ Module S <: Lang.
       (turn beh (get_interface p) ->
        not_wrong beh).
 
-  (* TODO can beh be UB? *)
-  (* TODO if P is FD then we can argue that beh is not wrong *)
   Axiom definability:
     forall (beh:program_behavior) (psi:interface) (p:program),
-      valid p ->
-      icomplete2 psi (get_interface p) ->
+      fully_defined psi p ->
       program_behaves (psem psi p) beh ->
-      (* not_wrong beh -> *)
       exists (c:program),
-        program_behaves (sem (link c p)) beh /\ valid c /\ get_interface c = psi.
+        get_interface c = psi /\
+        fully_defined (get_interface p) c /\
+        program_behaves (sem (link c p)) beh.
+
+  (* TODO also works for UB *)
+  Axiom decomposition:
+    forall beh (c p:program),
+      complete2 c p ->
+      program_behaves (sem (link c p)) beh ->
+      program_behaves (psem (get_interface c) p) beh.
 End S.
 
 (* Source to Intermediate *)
@@ -184,13 +185,12 @@ Module SI.
       S.valid p ->
       I.valid (compile p) /\ S.get_interface p = I.get_interface (compile p).
 
-  (* TODO does it preserve also UB? *)
+  (* TODO it also preserves UB *)
   Axiom compiler_correctness :
-    forall beh (p:S.program) (psi:interface),
-      S.valid p ->
-      icomplete2 psi (S.get_interface p) ->
-      program_behaves (I.psem psi (SI.compile p)) beh ->
-      program_behaves (S.psem psi p) beh.
+    forall beh (P:S.program) (psi:interface),
+      S.fully_defined psi P ->
+      program_behaves (I.psem psi (SI.compile P)) beh <->
+      program_behaves (S.psem psi P) beh.
 
   (* TODO This is too syntactic, it should be stated in terms of 
      equivalent behaviors *)
@@ -206,28 +206,27 @@ Module SI.
       S.fully_defined (I.get_interface c) P ->
       I.valid c ->
       program_behaves (I.sem (I.link c (SI.compile P))) beh ->
-      not_wrong beh ->
       exists C,
         program_behaves (S.sem (S.link C P)) beh /\ S.complete2 C P.
   Proof.
-    intros c P b [HvalP [Hcomplete H1]] Hvalc H Hsafe.
-    destruct (compile_spec P HvalP) as [H2 Hcompint].
+    intros c P b PFD Hvalc H.
+    assert (PFD2 := PFD).
+    destruct PFD2 as [HvalP [Hcomplete H1]].
+    destruct (compile_spec P HvalP) as [HvalPcom Hcompint].
     apply I.decomposition in H.
-    apply (SI.compiler_correctness b P (I.get_interface c)) in H.
-    destruct (S.definability b (I.get_interface c) P HvalP Hcomplete H) as [C [Hb [HvalC Hif]]].
-    auto.
+    apply (compiler_correctness b P (I.get_interface c) PFD) in H.
+    destruct (S.definability b (I.get_interface c) P PFD H) as [C [Hif [CFD H2]]].
     exists C.
     split; auto.
     unfold S.complete2.
     rewrite <- Hif in Hcomplete.
     repeat split; auto.
+    destruct CFD as [HvalC _].
     all: auto.
     repeat split;auto.
     rewrite <- Hcompint.
     auto.
   Qed.
-
-  (* Require Import Coq.Logic.Classical. *)
 
   (* This is proved using RC. *)
   Definition FD_preservation:
@@ -235,23 +234,28 @@ Module SI.
       S.fully_defined psi P ->
       I.fully_defined psi (SI.compile P).
   Proof.
-    intros psi P SFD.
-    (* assert (SFD2 := SFD). *)
+    intros psi P PFD.
+    assert (PFD2 := PFD).
+    destruct PFD2 as [HvalP [Hcomplete H1]].
     unfold I.fully_defined.
-    intros p Hcomplete b c Hvalc Hif Hbeh.
-    rewrite <- Hif in SFD.
-    destruct (SI.RC c P b SFD Hvalc) as [C [H3 H4]].
-    (* destruct (classic (turn b (S.get_interface p))). *)
-    (* destruct (classic (not_wrong b )). *)
-    (* destruct SFD as [Hvalp [H88 HFD]]. *)
-    (* destruct (compile_spec p Hvalp) as [Hvalcomp Hint2]. *)
-    (* rewrite <- Hint2. *)
-    (* destruct SFD as [Hvalp [H88 HFD]]. *)
-    (* destruct (compile_spec p Hvalp) as [Hvalcomp Hint]. *)
-    (* apply not_all_ex_not in H0 as [b1 NW]. *)
-    (* destruct (compile_spec p Hvalp) as [Hvalcomp Hint]. *)
-    (* destruct (unique_interfaces (I.get_interface c) (S.get_interface C) (S.get_interface p)). *)
-  Admitted.
+    intros HvalPcom Hif b c Hvalc Hifc H.
+    apply I.decomposition in H.
+    apply compiler_correctness in H.
+    apply S.definability in H as [C [HCif [CFD H2]]].
+    apply (compile_spec P) in HvalP as [_ Hifcom].
+    rewrite <- Hifcom.
+    apply (H1 b C).
+    destruct CFD as [HvalC _].
+    auto.
+    rewrite Hifc in HCif. auto.
+    auto.
+    rewrite <- Hifc in PFD. auto.
+    rewrite <- Hifc in PFD. auto.
+    unfold I.complete2.
+    split; auto.
+    split; auto.
+    rewrite <- Hifc in Hif. auto.
+Qed.
 End SI.
 
 
@@ -285,14 +289,14 @@ Module Type IT.
   Declare Module T : Lang.
   
   (* TODO
-     compcert defined the compiler as:
+     compcert defines the compiler as:
      - a function transf_c_program (p: Csyntax.program) : res Asm.program
      - a relation match_prog: Csyntax.program -> Asm.program -> Prop
      and proves their equivalence in transf_c_program_match.
  *)
-  (* TODO IT.compile must be a refinement compiler *)
+  (* TODO is IT.compile a refinement compiler? *)
   Parameter compile : I.program -> T.program.
-  Axiom compile_spec:
+  Parameter compile_spec:
     forall (p:I.program),
       I.valid p -> T.valid (compile p) /\
                    I.get_interface p = T.get_interface (compile p).
@@ -366,8 +370,7 @@ Module MPC <: IT.
   (* TODO prove assuming simulation *)
   Axiom partialize_decomposition:
     forall beh (p:T.program) psi,
-      program_behaves (T.sem p) beh
-      ->
+      program_behaves (T.sem p) beh ->
       program_behaves (T.psem psi (partialize psi p)) beh.
   
   (* we can prove special decomposition using the more general
@@ -450,26 +453,27 @@ Module Main (IT : IT).
       S.fully_defined (I.get_interface c) P ->
       program_behaves (IT.T.sem (IT.compile (I.link c (SI.compile P)))) beh
       ->
-      exists C, S.fully_defined (S.get_interface P) C /\ S.complete2 C P /\
+      exists C,
+        S.get_interface C = I.get_interface c /\
+        S.fully_defined (S.get_interface P) C /\ 
         program_behaves (S.sem (S.link C P)) beh.
 
   Theorem proof_rc_static : robust_compilation_static_compromise.
   Proof.
-    intros c P b Hcomplete SFD H.
+    intros c P b Hcomplete PFD H.
     apply (IT.special_decomposition b c (SI.compile P)) in H.
     apply IT.special_compiler_correctness in H.
-    destruct SFD as [HvalP [_ HFD]].
-    destruct (S.definability b (I.get_interface c) P HvalP Hcomplete) as [C [H1 [HvalC Hif]]].
+    assert (PFD2 := PFD).
+    destruct PFD2 as [HvalP [_ HFD]].
+    destruct (S.definability b (I.get_interface c) P PFD) as [C [Hif [CFD H2]]].
     apply (SI.compiler_correctness b P (I.get_interface c)) in H.
-    assumption.
     assumption.
     assumption.
     rewrite <- Hif in Hcomplete.
     exists C.
     split.
     auto.
-    unfold S.complete2.
-    auto.
+    split; auto.
     apply SI.FD_preservation.
     assumption.
     apply SI.FD_preservation.
@@ -485,7 +489,10 @@ Module Main (IT : IT).
       S.fully_defined (S.get_interface Q) P ->
       let compile := compose IT.compile SI.compile in
       program_behaves (IT.T.sem (compile (S.link Q P))) beh ->
-      exists C, S.fully_defined (S.get_interface P) C /\ S.complete2 C P /\ program_behaves (S.sem (S.link C P)) beh.
+      exists C,
+        S.get_interface C = S.get_interface Q /\
+        S.fully_defined (S.get_interface P) C /\ 
+        program_behaves (S.sem (S.link C P)) beh.
 
   Corollary robust_compilation_corrolary :
     robust_compilation_static_compromise ->
