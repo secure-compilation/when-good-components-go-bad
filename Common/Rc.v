@@ -28,11 +28,8 @@ Axiom turn : program_behavior -> interface -> Prop.
 Axiom icomplete : interface -> Prop.
 (* check if the union of two interfaces is complete *)
 Definition icomplete2 (i1 i2:interface) := icomplete (i1++i2).
+(* check if a interface is contained in another *)
 Definition contained {A} (i1 i2: list A) := exists i3, i1++i3=i2.
-(* TODO check this *)
-Axiom unique_interfaces :
-  forall (i1 i2 i3:interface),
-    icomplete2 i1 i3 -> icomplete2 i2 i3 -> i1=i2.
 
 
 
@@ -48,41 +45,35 @@ Module Type Lang.
      well-formed programs and their corresponding interfaces; itis
      a (not necessarily computable) partial function *)
   Parameter valid : program -> Prop.
+  (* returns the interface of a program *)
   Parameter get_interface: program -> interface.
-  (* Parameter get_interface_spec: *)
-  (*   forall p, valid p -> exists i, get_interface p = Some i. *)
-  
   (* checks if a program has a complete interface *)
   Parameter complete: program -> Prop.
-  (* Parameter complete_spec: *)
-  (*   forall p, valid p -> exists i, get_interface p = Some i /\ complete p = icomplete i. *)
   
-  (* checks if two programs linked together form a complete program *)
+  (* checks if two programs are valid and their interfaces are
+     complete when merged. *)
   Parameter complete2: program -> program -> Prop.
 
-  (* Parameter state: Type. *)
-  (* Parameter genvtype: Type. *)
-  (* Parameter step : genvtype -> state -> trace -> state -> Prop. *)
-  (* Parameter initial_state : program -> state -> Prop. *)
-  (* Parameter final_state: state -> Prop. *)
-  (* Parameter globalenv: program -> genvtype. *)
+  (* CompCert defines the semantics of a program as an object providing the following:  
+   state: Type.
+   genvtype: Type.
+   step : genvtype -> state -> trace -> state -> Prop.
+   initial_state : program -> state -> Prop.
+   final_state: state -> Prop.
+   globalenv: program -> genvtype.
 
-  (* Definition sem (p: program) : semantics := *)
-  (*   let ge := globalenv p in *)
-  (*   Semantics_gen step (initial_state p) final_state ge. *)
+   any program has a semantics, if the program is ill-formed it
+   still has a behavior. e.g. a program without any initial state
+   satisfies program_goes_initially_wrong
+   *)
   
-  (* complete semantics: takes a complete program *)
+  (* produces a complete semantics from a complete program *)
   Parameter sem: program -> semantics.
-  (* any program has a semantics, if the program is ill-formed it
-     still has a behavior. e.g. a program without any initial state
-     satisfies program_goes_initially_wrong *)
   
-  (* partial semantics: takes a program and a matching interface.
-     The interface of the program together with the matching interface
-     is complete. *)
-  (* TODO we should had a check that interface and program are
-     complete the post-condition is not clear with the compcert use of
-     semantics *)
+  (* produces a partial semantics from a complete program and an
+     interface that is contained in it. The components of this interface
+     will be ignored. *)
+  (* TODO we should check that program is complete and interface is contained *)
   Parameter psem: interface -> program -> semantics.
 
 End Lang.
@@ -185,6 +176,7 @@ Module SI.
      - a relation match_prog: Csyntax.program -> Asm.program -> Prop
      and proves their equivalence in transf_c_program_match.
  *)
+  (* compiles partial programs *)
   Axiom compile : S.program -> I.program.
   Axiom compile_spec:
     forall (p:S.program),
@@ -199,14 +191,6 @@ Module SI.
       S.fully_defined psi P ->
       program_behaves (I.psem psi (SI.compile P)) beh <->
       program_behaves (S.psem psi P) beh.
-
-  (* TODO This is too syntactic, it should be stated in terms of 
-     equivalent behaviors *)
-  (* Only needed for RC variant *)
-  Axiom separate_compilation:
-    forall (P Q: S.program),
-      S.complete2 Q P ->
-      SI.compile (S.link Q P) = I.link (SI.compile Q) (SI.compile P).
 
   (* RC between S and I *)
   Definition RC:
@@ -307,18 +291,21 @@ Module Type IT.
      - a function transf_c_program (p: Csyntax.program) : res Asm.program
      - a relation match_prog: Csyntax.program -> Asm.program -> Prop
      and proves their equivalence in transf_c_program_match.
- *)
+   *)
   (* TODO is IT.compile a refinement compiler? *)
+  (* Note that this compiler only works on complete programs as
+     opposed to the SI.compile that works on partial programs *)
   Parameter compile : I.program -> T.program.
   Parameter compile_spec:
     forall (p:I.program),
-      I.valid p -> T.valid (compile p) /\
+      I.complete p -> T.valid (compile p) /\
                    I.get_interface p = T.get_interface (compile p).
   
-  (* takes a complete program and produces a partial one
-   This is an important ingredient for the simulation relation.
-   For MP the relation corresponds with this function actually.
-   For SFI the relation contains additional elements.
+  (* takes a complete program and an interface. The components of the
+     interface will be erased from memory.
+     This is an important ingredient for the simulation relation.
+     For MP the relation corresponds with this function actually.
+     For SFI the relation contains additional elements.
    *)
   Parameter partialize: interface -> T.program -> T.program.
   Parameter partialize_spec:
@@ -336,17 +323,15 @@ Module Type IT.
       I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := compile (I.link c p) in
-      program_behaves (T.sem ip) beh
-      ->
-      program_behaves (T.psem (I.get_interface c) (partialize (I.get_interface c) ip)) beh.
+      program_behaves (T.sem ip) beh ->
+      program_behaves (T.psem (I.get_interface c) ip) beh.
 
   Parameter special_compiler_correctness:
     forall beh (c p:I.program),
       I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := I.link c p in
-      let tp := partialize (I.get_interface c) (compile ip) in
-      program_behaves (T.psem (I.get_interface c) tp) beh ->
+      program_behaves (T.psem (I.get_interface c) (compile ip)) beh ->
       program_behaves (I.psem (I.get_interface c) p)  beh.
 End IT.
 
@@ -357,7 +342,7 @@ Module MPC <: IT.
   Axiom compile : I.program -> T.program.
   Axiom compile_spec:
     forall (p:I.program),
-      I.valid p -> T.valid (compile p) /\
+      I.complete p -> T.valid (compile p) /\
                    I.get_interface p = T.get_interface (compile p).
 
   Axiom partialize: interface -> T.program -> T.program.
@@ -384,12 +369,12 @@ Module MPC <: IT.
   (*   intros p psi cs ps Hsem Hpsem Hfs b H1. *)
     
   (* TODO prove assuming simulation *)
-  Axiom partialize_decomposition:
+  Axiom decomposition:
     forall beh psi (p:T.program),
       T.valid p ->
       contained psi (T.get_interface p) ->
       program_behaves (T.sem p) beh ->
-      program_behaves (T.psem psi (partialize psi p)) beh.
+      program_behaves (T.psem psi p) beh.
   
   (* we can prove special decomposition using the more general
      decomposition *)
@@ -397,15 +382,16 @@ Module MPC <: IT.
     forall beh (c p:I.program),
       I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
-      let tp := compile (I.link c p) in
-      program_behaves (T.sem tp) beh
-      ->
-      program_behaves (T.psem (I.get_interface c) (partialize (I.get_interface c) tp)) beh.
+      let ip := compile (I.link c p) in
+      program_behaves (T.sem ip) beh ->
+      program_behaves (T.psem (I.get_interface c) ip) beh.
   Proof.
     intros b c p Hcomp pFD tp H.
     destruct (I.link_spec c p (I.link c p) Hcomp) as [Hif [Hvalip Hcompip]].
-    destruct (compile_spec (I.link c p) Hvalip) as [HvalPcom Hcompint].
-    apply partialize_decomposition.
+    destruct (compile_spec (I.link c p)) as [HvalPcom Hcompint].
+    unfold I.complete.
+    split; auto.
+    apply decomposition.
     assumption.
     unfold contained.
     exists (I.get_interface p).
@@ -419,8 +405,7 @@ Module MPC <: IT.
       I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := I.link c p in
-      let tp := partialize (I.get_interface c) (compile ip) in
-      program_behaves (T.psem (I.get_interface c) tp) beh ->
+      program_behaves (T.psem (I.get_interface c) (compile ip)) beh ->
       program_behaves (I.psem (I.get_interface c) p)  beh.
 End MPC.
 
@@ -431,7 +416,7 @@ Module SFIC <: IT.
   Axiom compile : I.program -> T.program.
   Axiom compile_spec:
     forall (p:I.program),
-      I.valid p -> T.valid (compile p) /\
+      I.complete p -> T.valid (compile p) /\
                    I.get_interface p = T.get_interface (compile p).
 
   Axiom partialize: interface -> T.program -> T.program.
@@ -443,22 +428,20 @@ Module SFIC <: IT.
 
   (* there is no generic decomposition, we need to prove
       special_decomposition *)
-  Axiom special_decomposition :
+  Parameter special_decomposition :
     forall beh (c p:I.program),
       I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := compile (I.link c p) in
-      program_behaves (T.sem ip) beh
-      ->
-      program_behaves (T.psem (I.get_interface c) (partialize (I.get_interface c) ip)) beh.
+      program_behaves (T.sem ip) beh ->
+      program_behaves (T.psem (I.get_interface c) ip) beh.
 
   Axiom special_compiler_correctness:
     forall beh (c p:I.program),
       I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := I.link c p in
-      let tp := partialize (I.get_interface c) (compile ip) in
-      program_behaves (T.psem (I.get_interface c) tp) beh ->
+      program_behaves (T.psem (I.get_interface c) (compile ip)) beh ->
       program_behaves (I.psem (I.get_interface c) p)  beh.
 End SFIC.
 
@@ -534,8 +517,7 @@ Module Main (IT : IT).
     forall (Q P:S.program) (beh:program_behavior),
       S.complete2 Q P ->
       S.fully_defined (S.get_interface Q) P ->
-      let compile := compose IT.compile SI.compile in
-      program_behaves (IT.T.sem (compile (S.link Q P))) beh ->
+      program_behaves (IT.T.sem (IT.compile (I.link (SI.compile Q) (SI.compile P)))) beh ->
       exists C,
         S.valid C ->
         S.get_interface C = S.get_interface Q /\
@@ -546,7 +528,7 @@ Module Main (IT : IT).
     robust_compilation_static_compromise ->
     robust_compilation_static_compromise_corollary.
   Proof.
-    intros RC Q P b Hcompl SFD H2 H3.
+    intros RC Q P b Hcompl SFD H2.
     specialize (RC (SI.compile Q) P b).
     assert (SFD2 := SFD).
     assert (Hcompl2 := Hcompl).
@@ -554,9 +536,7 @@ Module Main (IT : IT).
     destruct (SI.compile_spec Q).
     auto.
     rewrite <- H0 in RC.
-    rewrite <- SI.separate_compilation in RC.
-    apply (RC H HvalP Hicompl SFD H3).
-    assumption.
+    apply (RC H HvalP Hicompl SFD H2).
   Qed.
 
 End Main.
