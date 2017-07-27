@@ -35,6 +35,7 @@ Axiom unique_interfaces :
     icomplete2 i1 i3 -> icomplete2 i2 i3 -> i1=i2.
 
 
+
 (* 
    The languages.
  *)
@@ -43,9 +44,9 @@ Axiom unique_interfaces :
 Module Type Lang.
   (* Type of programs, complete or partial *)
   Parameter program : Type.
-  (* relation between well-formed programs and their corresponding
-     interfaces; has_interface is a (not necessarily computable) 
-     partial function *)
+  (* validity of program wrt to its interface, it's a relation between
+     well-formed programs and their corresponding interfaces; itis
+     a (not necessarily computable) partial function *)
   Parameter valid : program -> Prop.
   Parameter get_interface: program -> interface.
   (* Parameter get_interface_spec: *)
@@ -72,12 +73,16 @@ Module Type Lang.
   
   (* complete semantics: takes a complete program *)
   Parameter sem: program -> semantics.
-  (* any program has a semantics, if the program is ill-formed it still has a behavior.
-     e.g. a program without any initial state satisfies program_goes_initially_wrong *)
+  (* any program has a semantics, if the program is ill-formed it
+     still has a behavior. e.g. a program without any initial state
+     satisfies program_goes_initially_wrong *)
   
   (* partial semantics: takes a program and a matching interface.
      The interface of the program together with the matching interface
      is complete. *)
+  (* TODO we should had a check that interface and program are
+     complete the post-condition is not clear with the compcert use of
+     semantics *)
   Parameter psem: interface -> program -> semantics.
 
 End Lang.
@@ -103,14 +108,12 @@ Module I <: Lang.
      complete case, we could generalize by asking that p1 and p2 are
      compatible *)
   Axiom link: program -> program -> program.
-  (* Axiom link_spec: *)
-  (*   forall (p1 p2:program), *)
-  (*     complete2 p1 p2 -> *)
-  (*     exists (p:program), *)
-  (*       (get_interface p1) ++ (get_interface p2) = (get_interface p) /\ *)
-  (*       valid p /\ complete p. *)
+  Axiom link_spec:
+    forall (p1 p2 p:program),
+      complete2 p1 p2 ->
+      (get_interface p1) ++ (get_interface p2) = (get_interface p) /\
+      complete (link p1 p2).
 
-  (* only for the safe case *)
   (* TODO has p to be FD? *)
   Axiom decomposition:
     forall beh (c p:program),
@@ -145,8 +148,8 @@ Module S <: Lang.
   Axiom link: program -> program -> program.
 
   Definition fully_defined (psi:interface) (p:program) :=
-    valid p /\
-    icomplete2 psi (get_interface p) /\
+    valid p ->
+    icomplete2 psi (get_interface p) ->
     forall (beh:program_behavior) (c:program),
       valid c ->
       get_interface c = psi ->
@@ -156,9 +159,12 @@ Module S <: Lang.
 
   Axiom definability:
     forall (beh:program_behavior) (psi:interface) (p:program),
+      valid p ->
+      icomplete2 psi (get_interface p) ->
       fully_defined psi p ->
       program_behaves (psem psi p) beh ->
       exists (c:program),
+        valid c /\
         get_interface c = psi /\
         fully_defined (get_interface p) c /\
         program_behaves (sem (link c p)) beh.
@@ -188,6 +194,8 @@ Module SI.
   (* TODO it also preserves UB *)
   Axiom compiler_correctness :
     forall beh (P:S.program) (psi:interface),
+      S.valid P ->
+      icomplete2 psi (S.get_interface P) ->
       S.fully_defined psi P ->
       program_behaves (I.psem psi (SI.compile P)) beh <->
       program_behaves (S.psem psi P) beh.
@@ -203,26 +211,28 @@ Module SI.
   (* RC between S and I *)
   Definition RC:
     forall (c:I.program) (P:S.program) (beh:program_behavior),
-      S.fully_defined (I.get_interface c) P ->
+      S.valid P ->
       I.valid c ->
+      icomplete2 (I.get_interface c) (S.get_interface P) ->
+      S.fully_defined (I.get_interface c) P ->
       program_behaves (I.sem (I.link c (SI.compile P))) beh ->
       exists C,
         program_behaves (S.sem (S.link C P)) beh /\ S.complete2 C P.
   Proof.
-    intros c P b PFD Hvalc H.
+    intros c P b HvalP Hvalc Hcompl PFD H.
     assert (PFD2 := PFD).
-    destruct PFD2 as [HvalP [Hcomplete H1]].
+    specialize (PFD2 HvalP Hcompl).
     destruct (compile_spec P HvalP) as [HvalPcom Hcompint].
     apply I.decomposition in H.
-    apply (compiler_correctness b P (I.get_interface c) PFD) in H.
-    destruct (S.definability b (I.get_interface c) P PFD H) as [C [Hif [CFD H2]]].
+    apply (compiler_correctness b P (I.get_interface c) HvalP Hcompl PFD) in H.
+    destruct (S.definability b (I.get_interface c) P HvalP Hcompl PFD H) as [C [HvalC [Hif [CFD H2]]]].
     exists C.
     split; auto.
     unfold S.complete2.
-    rewrite <- Hif in Hcomplete.
     repeat split; auto.
-    destruct CFD as [HvalC _].
-    all: auto.
+    rewrite <- Hif in Hcompl.
+    repeat split; auto.
+    unfold I.complete2.
     repeat split;auto.
     rewrite <- Hcompint.
     auto.
@@ -231,30 +241,34 @@ Module SI.
   (* This is proved using RC. *)
   Definition FD_preservation:
     forall (psi:interface) (P:S.program),
+      S.valid P ->
+      icomplete2 psi (S.get_interface P) ->
       S.fully_defined psi P ->
       I.fully_defined psi (SI.compile P).
   Proof.
-    intros psi P PFD.
+    intros psi P HvalP Hicompl PFD.
     assert (PFD2 := PFD).
-    destruct PFD2 as [HvalP [Hcomplete H1]].
     unfold I.fully_defined.
-    intros HvalPcom Hif b c Hvalc Hifc H.
+    intros HvalPcom Hifcomp b c Hvalc Hifc H.
     apply I.decomposition in H.
     apply compiler_correctness in H.
-    apply S.definability in H as [C [HCif [CFD H2]]].
-    apply (compile_spec P) in HvalP as [_ Hifcom].
+    apply S.definability in H as [C [HvalC [Cif [CFD H2]]]].
+    assert (HvalP2 := HvalP).
+    apply (compile_spec P) in HvalP2 as [_ Hifcom].
     rewrite <- Hifcom.
-    apply (H1 b C).
-    destruct CFD as [HvalC _].
+    rewrite Hifc in Cif.
+    specialize (PFD2 HvalP Hicompl b C HvalC Cif H2).
     auto.
-    rewrite Hifc in HCif. auto.
     auto.
-    rewrite <- Hifc in PFD. auto.
-    rewrite <- Hifc in PFD. auto.
+    rewrite Hifc. auto.
+    rewrite Hifc. auto.
+    auto.
+    rewrite Hifc. auto.
+    rewrite Hifc. auto.
     unfold I.complete2.
     split; auto.
     split; auto.
-    rewrite <- Hifc in Hif. auto.
+    rewrite <- Hifc in Hifcomp. auto.
 Qed.
 End SI.
 
@@ -319,6 +333,7 @@ Module Type IT.
    *)
   Parameter special_decomposition :
     forall beh (c p:I.program),
+      I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := compile (I.link c p) in
       program_behaves (T.sem ip) beh
@@ -327,6 +342,7 @@ Module Type IT.
 
   Parameter special_compiler_correctness:
     forall beh (c p:I.program),
+      I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := I.link c p in
       let tp := partialize (I.get_interface c) (compile ip) in
@@ -369,7 +385,9 @@ Module MPC <: IT.
     
   (* TODO prove assuming simulation *)
   Axiom partialize_decomposition:
-    forall beh (p:T.program) psi,
+    forall beh psi (p:T.program),
+      T.valid p ->
+      contained psi (T.get_interface p) ->
       program_behaves (T.sem p) beh ->
       program_behaves (T.psem psi (partialize psi p)) beh.
   
@@ -377,19 +395,28 @@ Module MPC <: IT.
      decomposition *)
   Definition special_decomposition :
     forall beh (c p:I.program),
+      I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
-      let ip := compile (I.link c p) in
-      program_behaves (T.sem ip) beh
+      let tp := compile (I.link c p) in
+      program_behaves (T.sem tp) beh
       ->
-      program_behaves (T.psem (I.get_interface c) (partialize (I.get_interface c) ip)) beh.
+      program_behaves (T.psem (I.get_interface c) (partialize (I.get_interface c) tp)) beh.
   Proof.
-    intros b c p IFD ip H.
+    intros b c p Hcomp pFD tp H.
+    destruct (I.link_spec c p (I.link c p) Hcomp) as [Hif [Hvalip Hcompip]].
+    destruct (compile_spec (I.link c p) Hvalip) as [HvalPcom Hcompint].
     apply partialize_decomposition.
+    assumption.
+    unfold contained.
+    exists (I.get_interface p).
+    rewrite Hcompint in Hif.
+    assumption.
     assumption.
   Qed.
 
   Axiom special_compiler_correctness:
     forall beh (c p:I.program),
+      I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := I.link c p in
       let tp := partialize (I.get_interface c) (compile ip) in
@@ -418,6 +445,7 @@ Module SFIC <: IT.
       special_decomposition *)
   Axiom special_decomposition :
     forall beh (c p:I.program),
+      I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := compile (I.link c p) in
       program_behaves (T.sem ip) beh
@@ -426,6 +454,7 @@ Module SFIC <: IT.
 
   Axiom special_compiler_correctness:
     forall beh (c p:I.program),
+      I.complete2 c p ->
       I.fully_defined (I.get_interface c) p ->
       let ip := I.link c p in
       let tp := partialize (I.get_interface c) (compile ip) in
@@ -449,34 +478,52 @@ Module Main (IT : IT).
 
   Definition robust_compilation_static_compromise :=
     forall (c:I.program) (P:S.program) (beh:program_behavior),
+      I.valid c ->
+      S.valid P ->
       icomplete2 (I.get_interface c) (S.get_interface P) ->
       S.fully_defined (I.get_interface c) P ->
       program_behaves (IT.T.sem (IT.compile (I.link c (SI.compile P)))) beh
       ->
       exists C,
+        S.valid C ->
         S.get_interface C = I.get_interface c /\
         S.fully_defined (S.get_interface P) C /\ 
         program_behaves (S.sem (S.link C P)) beh.
 
   Theorem proof_rc_static : robust_compilation_static_compromise.
   Proof.
-    intros c P b Hcomplete PFD H.
+    intros c P b Hvalc HvalP Hicompl PFD H.
+    assert (PFD2 := PFD).
+    destruct (SI.compile_spec P HvalP) as [HvalPcom Hifcom].
     apply (IT.special_decomposition b c (SI.compile P)) in H.
     apply IT.special_compiler_correctness in H.
-    assert (PFD2 := PFD).
-    destruct PFD2 as [HvalP [_ HFD]].
-    destruct (S.definability b (I.get_interface c) P PFD) as [C [Hif [CFD H2]]].
+    destruct (S.definability b (I.get_interface c) P HvalP Hicompl PFD) as [C [HvalC [Cif [CFDs H2]]]].
     apply (SI.compiler_correctness b P (I.get_interface c)) in H.
     assumption.
     assumption.
-    rewrite <- Hif in Hcomplete.
+    auto.
+    auto.
     exists C.
     split.
     auto.
     split; auto.
+    unfold I.complete2.
+    split; auto.
+    split; auto.
+    rewrite <- Hifcom.
+    auto.
     apply SI.FD_preservation.
     assumption.
+    assumption.
+    assumption.
+    unfold I.complete2.
+    split; auto.
+    split; auto.
+    rewrite <- Hifcom.
+    auto.
     apply SI.FD_preservation.
+    assumption.
+    assumption.
     assumption.
   Qed.
 
@@ -490,6 +537,7 @@ Module Main (IT : IT).
       let compile := compose IT.compile SI.compile in
       program_behaves (IT.T.sem (compile (S.link Q P))) beh ->
       exists C,
+        S.valid C ->
         S.get_interface C = S.get_interface Q /\
         S.fully_defined (S.get_interface P) C /\ 
         program_behaves (S.sem (S.link C P)) beh.
@@ -501,15 +549,14 @@ Module Main (IT : IT).
     intros RC Q P b Hcompl SFD H2 H3.
     specialize (RC (SI.compile Q) P b).
     assert (SFD2 := SFD).
-    destruct SFD2 as [HvalP [_ HFD]].
     assert (Hcompl2 := Hcompl).
-    destruct Hcompl2 as [HvalQ [_ Hicompl]].
+    destruct Hcompl2 as [HvalQ [HvalP Hicompl]].
     destruct (SI.compile_spec Q).
     auto.
     rewrite <- H0 in RC.
     rewrite <- SI.separate_compilation in RC.
-    apply (RC Hicompl SFD H3).
-    apply Hcompl.
+    apply (RC H HvalP Hicompl SFD H3).
+    assumption.
   Qed.
 
 End Main.
