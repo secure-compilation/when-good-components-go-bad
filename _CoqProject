@@ -9,7 +9,7 @@ Common/Maps.v
 Common/Memory.v
 
 CompCert/Coqlib.v
-CompCert/Behavior.v
+CompCert/Behaviors.v
 CompCert/Smallstep.v
 CompCert/Events.v
 
@@ -26,3 +26,5 @@ Intermediate/Machine.v
 Intermediate/GlobalEnv.v
 Intermediate/CS.v
 Intermediate/PS.v
+
+Common/Rc.v
