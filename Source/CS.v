@@ -6,6 +6,7 @@ Require Import Common.Memory.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
+Require Import Lib.Monads.
 
 Inductive cont : Type :=
 | Kstop
@@ -121,75 +122,69 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 
 (* functional kstep *)
 
+Import MonadNotations.
+
 Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
   let '(C, s, mem, k, e) := st in
   match e with
   (* pushing a new continuation *)
   | E_binop b_op e1 e2 =>
-    Some (E0, (C, s, mem, Kbinop1 b_op e2 k, e1))
+    ret (E0, (C, s, mem, Kbinop1 b_op e2 k, e1))
   | E_seq e1 e2 =>
-    Some (E0, (C, s, mem, Kseq e2 k, e1))
+    ret (E0, (C, s, mem, Kseq e2 k, e1))
   | E_if e1 e2 e3 =>
-    Some (E0, (C, s, mem, Kif e2 e3 k, e1))
+    ret (E0, (C, s, mem, Kif e2 e3 k, e1))
   | E_local =>
-    match NMap.find C (genv_buffers G) with
-    | Some b => Some (E0, (C, s, mem, k, E_val (Ptr (C,b,0))))
-    | None => None
-    end
+    'b <- NMap.find C (genv_buffers G);
+    ret (E0, (C, s, mem, k, E_val (Ptr (C,b,0))))
   | E_alloc e =>
-    Some (E0, (C, s, mem, Kalloc k, e))
+    ret (E0, (C, s, mem, Kalloc k, e))
   | E_deref e =>
-    Some (E0, (C, s, mem, Kderef k, e))
+    ret (E0, (C, s, mem, Kderef k, e))
   | E_assign e1 e2 =>
-    Some (E0, (C, s, mem, Kassign1 e1 k, e2))
+    ret (E0, (C, s, mem, Kassign1 e1 k, e2))
   | E_call C' P e =>
     if (imported_procedure_b (genv_interface G) C C' P) || (C =? C') then
-      Some (E0, (C, s, mem, Kcall C' P k, e))
+      ret (E0, (C, s, mem, Kcall C' P k, e))
     else
       None
   (* evaluating current continuation *)
   | E_val v =>
     match k with
     | Kbinop1 b_op e2 k' =>
-      Some (E0, (C, s, mem, Kbinop2 b_op v k', e2))
+      ret (E0, (C, s, mem, Kbinop2 b_op v k', e2))
     | Kbinop2 b_op v1 k' =>
-      Some (E0, (C, s, mem, k', E_val (eval_binop b_op v1 v)))
+      ret (E0, (C, s, mem, k', E_val (eval_binop b_op v1 v)))
     | Kseq e2 k' =>
-      Some (E0, (C, s, mem, k', e2))
+      ret (E0, (C, s, mem, k', e2))
     | Kif e2 e3 k' =>
       match v with
-      | Int 0 => Some (E0, (C, s, mem, k', e3))
-      | Int i => Some (E0, (C, s, mem, k', e2))
+      | Int 0 => ret (E0, (C, s, mem, k', e3))
+      | Int i => ret (E0, (C, s, mem, k', e2))
       | _ => None
       end
     | Kalloc k' =>
       match v with
       | Int size =>
-        match Memory.alloc mem C size with
-        | Some (mem',ptr) => Some (E0, (C, s, mem', k', E_val (Ptr ptr)))
-        | None => None
-        end
+        '(mem',ptr) <- Memory.alloc mem C size;
+        ret (E0, (C, s, mem', k', E_val (Ptr ptr)))
       | _ => None
       end
     | Kderef k' =>
       match v with
       | Ptr (C',b',o') =>
-        match Memory.load mem (C',b',o') with
-        | Some v => Some (E0, (C, s, mem, k', E_val v))
-        | None => None
-        end
+        'v <- Memory.load mem (C',b',o');
+        ret (E0, (C, s, mem, k', E_val v))
       | _ => None
       end
     | Kassign1 e1 k' =>
-      Some (E0, (C, s, mem, Kassign2 v k', e1))
+      ret (E0, (C, s, mem, Kassign2 v k', e1))
     | Kassign2 v' k' =>
       match v with
       | Ptr (C',b',o') =>
         if C =? C' then
-          match Memory.store mem (C',b',o') v' with
-          | Some mem' => Some (E0, (C, s, mem', k', E_val v'))
-          | None => None
-          end
+          'mem' <- Memory.store mem (C',b',o') v';
+          ret (E0, (C, s, mem', k', E_val v'))
         else
           None
       | _ => None
@@ -198,50 +193,26 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v with
       | Int i =>
         (* retrieve the procedure code *)
-        match NMap.find C' (genv_procedures G) with
-        | Some C'_procs =>
-          match NMap.find P C'_procs with
-          | Some P_expr =>
-            (* save the old call argument *)
-            match NMap.find C (genv_buffers G) with
-            | Some b =>
-              match Memory.load mem (C,b,0) with
-              | Some old_call_arg =>
-                (* place the call argument in the target memory *)
-                match NMap.find C' (genv_buffers G) with
-                | Some b' =>
-                  match Memory.store mem (C',b',0) (Int i) with
-                  | Some mem' =>
-                    let t := [ECall C P i C'] in
-                    Some (t, (C', (C, old_call_arg, k') :: s, mem', Kstop, P_expr))
-                  | None => None
-                  end
-                | None => None
-                end
-              | None => None
-              end
-            | None => None
-            end
-          | None => None
-          end
-        | None => None
-        end
+        'C'_procs <- NMap.find C' (genv_procedures G);
+        'P_expr <- NMap.find P C'_procs;
+        (* save the old call argument *)
+        'b <- NMap.find C (genv_buffers G);
+        'old_call_arg <- Memory.load mem (C,b,0);
+        (* place the call argument in the target memory *)
+        'b' <- NMap.find C' (genv_buffers G);
+        'mem' <- Memory.store mem (C',b',0) (Int i);
+        let t := [ECall C P i C'] in
+        ret (t, (C', (C, old_call_arg, k') :: s, mem', Kstop, P_expr))
       | _ => None
       end
     | Kstop =>
       match v, s with
       | Int i, (C',old_call_arg,k') :: s' =>
         (* restore the old call argument *)
-        match NMap.find C' (genv_buffers G) with
-        | Some b =>
-          match Memory.store mem (C',b,0) old_call_arg with
-          | Some mem' =>
-            let t := [ERet C i C'] in
-            Some (t, (C', s', mem', k', E_val (Int i)))
-          | None => None
-          end
-        | None => None
-        end
+        'b <- NMap.find C' (genv_buffers G);
+        'mem' <- Memory.store mem (C',b,0) old_call_arg;
+        let t := [ERet C i C'] in
+        ret (t, (C', s', mem', k', E_val (Int i)))
       | _, _ => None
       end
     end
