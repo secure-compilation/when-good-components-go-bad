@@ -37,22 +37,29 @@ Definition contained {A} (i1 i2: list A) := exists i3, i1++i3=i2.
    The languages.
  *)
 
+(* CH: In the end, moving valid into the program type (using a sigma
+       type) might still be an option if it simplifies things and if
+       no code that uses a program depends on the validity proof *)
+
 (* Signature of basic things expected in a language *)
 Module Type Lang.
   (* Type of programs, complete or partial *)
   Parameter program : Type.
   (* validity of program wrt to its interface, it's a relation between
-     well-formed programs and their corresponding interfaces; itis
+     well-formed programs and their contained interfaces; it is
      a (not necessarily computable) partial function *)
   Parameter valid : program -> Prop.
   (* returns the interface of a program *)
   Parameter get_interface: program -> interface.
+
+  (* The following 2 definitions are really always the same *)
   (* checks if a program has a complete interface *)
-  Parameter complete: program -> Prop.
-  
-  (* checks if two programs are valid and their interfaces are
-     complete when merged. *)
-  Parameter complete2: program -> program -> Prop.
+  Definition complete (p:program) :=
+    valid p /\ icomplete (get_interface p).
+  (* checks if two programs are valid and their interfaces are *)
+  Definition complete2 (p1 p2:program) :=
+    valid p1 /\ valid p2 /\
+    icomplete2 (get_interface p1) (get_interface p2).
 
   (* CompCert defines the semantics of a program as an object providing the following:  
    state: Type.
@@ -111,7 +118,9 @@ Module I <: Lang.
       complete2 c p ->
       program_behaves (sem (link c p)) beh ->
       program_behaves (psem (get_interface c) p) beh.
-  
+
+  (* CH: TODO: I find the `valid` and `icomplete2` **preconditions** disturbing;
+               this makes invalid or incomplete programs fully_defined *)
   Definition fully_defined (psi:interface) (p:program) :=
     valid p ->
     icomplete2 psi (get_interface p) ->
@@ -183,7 +192,7 @@ Module SI.
       S.valid p ->
       I.valid (compile p) /\ S.get_interface p = I.get_interface (compile p).
 
-  (* TODO it also preserves UB *)
+  (* TODO it also preserves UB; CH: needed for preserving FD *)
   Axiom compiler_correctness :
     forall beh (P:S.program) (psi:interface),
       S.valid P ->
@@ -263,8 +272,8 @@ Module MP <: Lang.
   Axiom program : Type.
   Axiom valid: program -> Prop.
   Axiom get_interface: program -> interface.
-  Definition complete (p:program) := icomplete (get_interface p).
-  Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
+  Definition complete (p:program) := valid p /\ icomplete (get_interface p).
+  Definition complete2 (p1 p2:program) := valid p1 /\ valid p2 /\ icomplete2 (get_interface p1) (get_interface p2).
   Axiom sem: program -> semantics.
   Axiom psem: interface -> program -> semantics.
 End MP.
@@ -274,14 +283,14 @@ Module SFI <: Lang.
   Axiom program : Type.
   Axiom valid: program -> Prop.
   Axiom get_interface: program -> interface.
-  Definition complete (p:program) := icomplete (get_interface p).
-  Definition complete2 (p1 p2:program) := icomplete2 (get_interface p1) (get_interface p2).
+  Definition complete (p:program) := valid p /\ icomplete (get_interface p).
+  Definition complete2 (p1 p2:program) := valid p1 /\ valid p2 /\ icomplete2 (get_interface p1) (get_interface p2).
   Axiom sem: program -> semantics.
   Axiom psem: interface -> program -> semantics.
 End SFI.
 
 
-(* Interface expected by a compiler from Intermediate to Target
+(* Interface expected for a compiler from Intermediate to Target
    Both backend MP and SFI need to implement this interface *)
 Module Type IT.
   Declare Module T : Lang.
@@ -292,7 +301,7 @@ Module Type IT.
      - a relation match_prog: Csyntax.program -> Asm.program -> Prop
      and proves their equivalence in transf_c_program_match.
    *)
-  (* TODO is IT.compile a refinement compiler? *)
+  (* TODO is IT.compile a refinement compiler? CH: No undef refinement *)
   (* Note that this compiler only works on complete programs as
      opposed to the SI.compile that works on partial programs *)
   Parameter compile : I.program -> T.program.
@@ -511,9 +520,9 @@ Module Main (IT : IT).
   Qed.
 
 
-  (* This definition is weaker than the above but has the advantage of
-   not mentioning the intermediate language *)
-  Definition robust_compilation_static_compromise_corollary :=
+  (* This property is strictly weaker than the above, but has the
+     advantage of not mentioning the intermediate language *)
+  Definition robust_compilation_static_compromise_weaker :=
     forall (Q P:S.program) (beh:program_behavior),
       S.complete2 Q P ->
       S.fully_defined (S.get_interface Q) P ->
@@ -526,7 +535,7 @@ Module Main (IT : IT).
 
   Corollary robust_compilation_corrolary :
     robust_compilation_static_compromise ->
-    robust_compilation_static_compromise_corollary.
+    robust_compilation_static_compromise_weaker.
   Proof.
     intros RC Q P b Hcompl SFD H2.
     specialize (RC (SI.compile Q) P b).
