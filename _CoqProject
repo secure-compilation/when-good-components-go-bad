@@ -12,6 +12,7 @@ Common/Maps.v
 Common/Memory.v
 
 Lib/Coqlib.v
+Lib/Tactics.v
 
 Source/GlobalEnv.v
 Source/Language.v
