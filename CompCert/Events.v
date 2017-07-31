@@ -1,5 +1,5 @@
 Require Import Common.Definitions.
-Require Import Lib.Coqlib.
+Require Import CompCert.Coqlib.
 
 Inductive event :=
 | ECall : Component.id -> Procedure.id -> nat -> Component.id -> event

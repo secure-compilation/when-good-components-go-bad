@@ -1,7 +1,7 @@
 Require Import Common.Definitions.
 Require Import Common.Util.
-Require Import Common.Events.
-Require Import Common.Smallstep.
+Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
 Require Import Common.Memory.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.

@@ -53,3 +53,36 @@ Definition imported_procedure_b
   | Some CI => negb ((count_occ procs_eqdec (Component.import CI) (C',P)) =? 0)
   | None => false
   end.
+
+Lemma imported_procedure_iff :
+  forall Is C C' P,
+    imported_procedure Is C C' P <-> imported_procedure_b Is C C' P = true.
+Proof.
+  intros Is C C' P.
+  split.
+  - intros Himport.
+    destruct Himport as [CI [HCI Himport]].
+    unfold Program.has_component in HCI.
+    unfold Component.is_importing in Himport.
+    unfold imported_procedure_b.
+    apply NMap.find_1 in HCI. rewrite HCI.
+    rewrite count_occ_In in Himport.
+    inversion Himport.
+    + rewrite <- H0. simpl. auto.
+    + rewrite <- H. simpl. auto.
+  - intros Himport.
+    unfold imported_procedure.
+    unfold imported_procedure_b in Himport.
+    destruct (NMap.find (elt:=Component.interface) C Is) eqn:Hfind;
+      try discriminate.
+    exists i.
+    unfold Program.has_component, Component.is_importing.
+    split.
+    + apply (NMap.find_2 Hfind).
+    + rewrite count_occ_In.
+      destruct (count_occ procs_eqdec (Component.import i) (C', P) =? 0) eqn:Hcount;
+        try discriminate.
+      rewrite beq_nat_false_iff in Hcount.
+      apply Nat.neq_0_lt_0 in Hcount.
+      unfold gt. eauto.
+Qed.

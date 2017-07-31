@@ -3,15 +3,16 @@
 
 Common/Definitions.v
 Common/Util.v
-Common/Behavior.v
-Common/Smallstep.v
-Common/Events.v
 Common/Linking.v
 Common/Values.v
 Common/Maps.v
 Common/Memory.v
 
-Lib/Coqlib.v
+CompCert/Coqlib.v
+CompCert/Behavior.v
+CompCert/Smallstep.v
+CompCert/Events.v
+
 Lib/Tactics.v
 
 Source/GlobalEnv.v

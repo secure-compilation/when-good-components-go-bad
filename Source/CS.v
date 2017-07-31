@@ -1,6 +1,6 @@
 Require Import Common.Definitions.
 Require Import Common.Util.
-Require Import Common.Events.
+Require Import CompCert.Events.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Source.Language.
@@ -248,11 +248,6 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
   | _ => None
   end.
 
-Ltac rewrite_equalities :=
-  match goal with 
-  | H: (_ =? _) = true |- _ => apply beq_nat_true_iff in H; rewrite H
-  end.
-
 Ltac unfold_state :=
   match goal with
   | H: state |- _ =>
@@ -269,43 +264,21 @@ Theorem eval_kstep_complete:
     kstep G st t st' -> eval_kstep G st =  Some (t, st').
 Proof.
   intros G st t st' Hkstep.
-  inversion Hkstep; subst; simpl; auto.
+  inversion Hkstep; subst; simpl; auto;
+    try (unfold Memory.store, Memory.load, Memory.alloc in *;
+         repeat simplify_nat_equalities;
+         repeat simplify_option;
+         reflexivity).
   (* if expressions *)
-  - apply beq_nat_false_iff in H.
-    destruct i eqn:Hi; auto.
-    + inversion H.
-  (* local buffers *)
-  - rewrite H. auto.
-  (* memory allocs *)
-  - rewrite H. auto.
-  (* memory loads *)
-  - unfold Memory.store, Memory.load, Memory.alloc in *.
-    repeat simplify_options.
-    reflexivity.
-  (* memory stores *)
-  - unfold Memory.store, Memory.load, Memory.alloc in *.
-    rewrite <- beq_nat_refl.
-    repeat simplify_options.
-    reflexivity.
+  - destruct i eqn:Hi;
+      try contradiction; auto.
   (* calls/returns *)
-  - destruct H.
-    + destruct H as [CI [HCI Himport]].
-      unfold Program.has_component in HCI.
-      unfold Component.is_importing in Himport.
-      unfold imported_procedure_b.
-      apply NMap.find_1 in HCI. rewrite HCI.
-      rewrite count_occ_In in Himport.
-      inversion Himport.
-      * rewrite <- H0. simpl. auto.
-      * rewrite <- H. simpl. auto.
-    + rewrite H. rewrite <- beq_nat_refl.
+  - destruct H; subst.
+    + unfold orb.
+      destruct (imported_procedure_iff (genv_interface G) C C' P) as [H1 H2];
+        rewrite H1; auto.
+    + simplify_nat_equalities.
       rewrite orb_true_r. auto.
-  - unfold Memory.store, Memory.load, Memory.alloc in *.
-    repeat simplify_options.
-    reflexivity.
-  - unfold Memory.store, Memory.load, Memory.alloc in *.
-    repeat simplify_options.
-    reflexivity.
 Qed.
 
 Theorem eval_kstep_sound:
@@ -318,32 +291,19 @@ Proof.
   | H: eval_kstep _ _ = Some _ |- kstep _ (_, _, _, _, ?E) _ (_, _, _, _, _) =>
     destruct E; simpl in H;
       try discriminate;
-      try (repeat simplify_options;
+      try (repeat simplify_option;
            econstructor; eauto;
            repeat rewrite_memory_operations;
-           repeat rewrite_equalities;
+           repeat simplify_nat_equalities;
            reflexivity)
   end.
-  - repeat simplify_options.
+  (* procedure call *)
+  - repeat simplify_option.
     rewrite orb_true_iff in Heqb.
     rewrite beq_nat_true_iff in Heqb.
     econstructor.
-    destruct Heqb.
-    + left.
-      unfold imported_procedure.
-      unfold Program.has_component, Component.is_importing.
-      unfold imported_procedure_b in *.
-      destruct (NMap.find (elt:=Component.interface) C (genv_interface G)) eqn:Hi;
-        inversion H; try discriminate.
-      exists i1. split.
-      * apply (NMap.find_2 Hi).
-      * destruct (count_occ procs_eqdec (Component.import i1) (i, i0) =? 0) eqn:Hcount;
-           inversion H; try discriminate.
-         apply count_occ_In with procs_eqdec.
-         rewrite beq_nat_false_iff in Hcount.
-         apply Nat.neq_0_lt_0 in Hcount.
-         unfold gt. auto.
-    + right. auto.
+    destruct Heqb; auto.
+    left. apply imported_procedure_iff; auto.
 Qed.
 
 Theorem eval_kstep_correct:

@@ -1,5 +1,5 @@
-Require Import Common.Events.
-Require Import Lib.Coqlib.
+Require Import CompCert.Events.
+Require Import CompCert.Coqlib.
 
 Require Import Coq.Relations.Relations.
 Require Import Coq.Wellfounded.Wellfounded.
