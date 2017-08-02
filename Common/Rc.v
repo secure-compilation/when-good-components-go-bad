@@ -451,7 +451,7 @@ Module SFIC <: IT.
   Axiom decomposition_simulation:
     forall psi c p,
       I.complete2 c p ->
-      I.fully_defined (I.get_interface c) p ->
+      I.fully_defined (I.get_interface c) p -> (* CH: do we really need this? *)
       let ip := compile (I.link c p) in
       forward_simulation (T.sem ip) (T.psem psi ip).
 
@@ -460,7 +460,7 @@ Module SFIC <: IT.
   Definition special_decomposition :
     forall beh (c p:I.program),
       I.complete2 c p ->
-      I.fully_defined (I.get_interface c) p ->
+      I.fully_defined (I.get_interface c) p -> (* CH: do we really need this? *)
       let ip := compile (I.link c p) in
       program_behaves (T.sem ip) beh ->
       program_behaves (T.psem (I.get_interface c) ip) beh.
