@@ -19,7 +19,9 @@ Lib/Monads.v
 Source/GlobalEnv.v
 Source/Language.v
 Source/CS.v
+Source/Examples.v
 
+S2I/CompMonad.v
 S2I/Compiler.v
 
 Intermediate/Machine.v

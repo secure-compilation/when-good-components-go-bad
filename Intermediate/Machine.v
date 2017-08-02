@@ -3,8 +3,6 @@ Require Import Common.Util.
 Require Export Common.Values.
 Require Export Common.Linking.
 
-Module Intermediate.
-
 Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP.
 
@@ -40,6 +38,10 @@ Inductive instr :=
 | Return : instr
 (* termination *)
 | Halt : instr.
+
+Definition code := list instr.
+
+Module Intermediate.
 
 Module Register.
   Definition t : Type := list value.
@@ -109,13 +111,12 @@ End EntryPoint.
 
 (* programs *)
 
-Definition code := list instr.
-
 Record program := {
   prog_interface : Program.interface;
   prog_procedures : NMap.t (NMap.t code);
   prog_buffers : NMap.t (list (Block.id * nat));
 
+  (*
   (* interface soundness *)
   prog_interface_soundness:
     sound_interface prog_interface;
@@ -125,6 +126,7 @@ Record program := {
   (* buffers soundness w.r.t. the interface *)
   prog_buffers_soundness:
     forall C, NMap.In C prog_buffers <-> NMap.In C prog_interface
+  *)
 }.
 
 Definition closed_program (p : program) :=

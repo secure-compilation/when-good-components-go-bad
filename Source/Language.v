@@ -1,6 +1,5 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
-Require Import Common.Memory.
 
 Inductive expr : Type :=
 | E_val : value -> expr
@@ -14,8 +13,10 @@ Inductive expr : Type :=
 | E_call : Component.id -> Procedure.id -> expr -> expr
 | E_exit : expr.
 
-Record program : Type := mkProg {
-  prog_interface : Program.interface;
-  prog_procedures : NMap.t (NMap.t expr);
-  prog_buffers : NMap.t nat
-}.
+Module Source.
+  Record program : Type := mkProg {
+    prog_interface : Program.interface;
+    prog_procedures : NMap.t (NMap.t expr);
+    prog_buffers : NMap.t nat
+  }.
+End Source.

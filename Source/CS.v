@@ -8,6 +8,8 @@ Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
 Require Import Lib.Monads.
 
+Import Source.
+
 Inductive cont : Type :=
 | Kstop
 | Kbinop1 (op: binop) (re: expr) (k: cont)
@@ -123,6 +125,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 (* functional kstep *)
 
 Import MonadNotations.
+Open Scope monad_scope.
 
 Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
   let '(C, s, mem, k, e) := st in
@@ -135,7 +138,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
   | E_if e1 e2 e3 =>
     ret (E0, (C, s, mem, Kif e2 e3 k, e1))
   | E_local =>
-    'b <- NMap.find C (genv_buffers G);
+    do b <- NMap.find C (genv_buffers G);
     ret (E0, (C, s, mem, k, E_val (Ptr (C,b,0))))
   | E_alloc e =>
     ret (E0, (C, s, mem, Kalloc k, e))
@@ -166,14 +169,14 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kalloc k' =>
       match v with
       | Int size =>
-        '(mem',ptr) <- Memory.alloc mem C size;
+        do (mem',ptr) <- Memory.alloc mem C size;
         ret (E0, (C, s, mem', k', E_val (Ptr ptr)))
       | _ => None
       end
     | Kderef k' =>
       match v with
       | Ptr (C',b',o') =>
-        'v <- Memory.load mem (C',b',o');
+        do v <- Memory.load mem (C',b',o');
         ret (E0, (C, s, mem, k', E_val v))
       | _ => None
       end
@@ -183,7 +186,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v with
       | Ptr (C',b',o') =>
         if C =? C' then
-          'mem' <- Memory.store mem (C',b',o') v';
+          do mem' <- Memory.store mem (C',b',o') v';
           ret (E0, (C, s, mem', k', E_val v'))
         else
           None
@@ -193,14 +196,14 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v with
       | Int i =>
         (* retrieve the procedure code *)
-        'C'_procs <- NMap.find C' (genv_procedures G);
-        'P_expr <- NMap.find P C'_procs;
+        do C'_procs <- NMap.find C' (genv_procedures G);
+        do P_expr <- NMap.find P C'_procs;
         (* save the old call argument *)
-        'b <- NMap.find C (genv_buffers G);
-        'old_call_arg <- Memory.load mem (C,b,0);
+        do b <- NMap.find C (genv_buffers G);
+        do old_call_arg <- Memory.load mem (C,b,0);
         (* place the call argument in the target memory *)
-        'b' <- NMap.find C' (genv_buffers G);
-        'mem' <- Memory.store mem (C',b',0) (Int i);
+        do b' <- NMap.find C' (genv_buffers G);
+        do mem' <- Memory.store mem (C',b',0) (Int i);
         let t := [ECall C P i C'] in
         ret (t, (C', (C, old_call_arg, k') :: s, mem', Kstop, P_expr))
       | _ => None
@@ -209,8 +212,8 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v, s with
       | Int i, (C',old_call_arg,k') :: s' =>
         (* restore the old call argument *)
-        'b <- NMap.find C' (genv_buffers G);
-        'mem' <- Memory.store mem (C',b,0) old_call_arg;
+        do b <- NMap.find C' (genv_buffers G);
+        do mem' <- Memory.store mem (C',b,0) old_call_arg;
         let t := [ERet C i C'] in
         ret (t, (C', s', mem', k', E_val (Int i)))
       | _, _ => None
@@ -218,6 +221,48 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     end
   | _ => None
   end.
+
+Fixpoint alloc_buffers
+         (bufs: list (Component.id * nat))
+         (m: Memory.t) (addrs: NMap.t Block.id)
+  : option (Memory.t * NMap.t Block.id) :=
+  match bufs with
+  | [] => ret (m, addrs)
+  | (C,size)::bufs' =>
+    do (m',ptr) <- Memory.alloc m C size;
+    let addrs' := NMap.add C (Pointer.block ptr) addrs in
+    alloc_buffers bufs' m' addrs'
+  end.
+
+Definition init (p: program)
+           (mainC: Component.id)
+           (mainP: Procedure.id)
+  : option (global_env * state) :=
+  do procs <- NMap.find mainC (prog_procedures p);
+  do main <- NMap.find mainP procs;
+  let pbufs := NMap.elements (prog_buffers p) in
+  let init_mem := Memory.empty (map fst pbufs) in
+  do (mem, bufs) <- alloc_buffers pbufs init_mem (@NMap.empty Block.id);
+  let G := {| genv_interface := prog_interface p;
+              genv_procedures := prog_procedures p;
+              genv_buffers := bufs |} in
+  ret (G, (mainC, [], mem, Kstop, main)).
+
+Fixpoint execN (n: nat) (G: global_env) (st: state) : option state :=
+  match n with
+  | 0 => None
+  | S n' =>
+    do (_, st') <- eval_kstep G st;
+    execN n' G st'
+  end.
+
+Definition run (p: program) (input: value) (fuel: nat) : option state :=
+  do (G, st) <- init p 1 0;
+  execN fuel G st.
+
+Close Scope monad_scope.
+
+(* Semantics Properties *)
 
 Ltac unfold_state :=
   match goal with

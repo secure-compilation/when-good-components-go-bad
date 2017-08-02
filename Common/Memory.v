@@ -4,6 +4,7 @@ Require Import Common.Values.
 Module Type AbstractComponentMemory.
   Parameter t : Type.
 
+  Parameter empty : t.
   Parameter alloc : t -> nat -> t * Block.id.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
@@ -30,6 +31,9 @@ Module ComponentMemory : AbstractComponentMemory.
     nextblock : Block.id;
   }.
   Definition t := mem.
+
+  Definition empty := {| content := @NMap.empty block;
+                         nextblock := 0 |}.
 
   Definition alloc m (size : nat) : mem * Block.id :=
     let fresh_block := nextblock m in
@@ -102,6 +106,12 @@ End ComponentMemory.
 
 Module Memory.
   Definition t := NMap.t ComponentMemory.t.
+
+  Fixpoint empty (cs: list Component.id) :=
+    match cs with
+    | [] => @NMap.empty (ComponentMemory.t)
+    | c::cs' => NMap.add c ComponentMemory.empty (empty cs')
+    end.
 
   Definition alloc (mem : t) (C : Component.id) (size : nat) : option (t * Pointer.t) :=
     match NMap.find C mem with
