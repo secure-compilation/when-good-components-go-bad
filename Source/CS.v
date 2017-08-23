@@ -1,14 +1,16 @@
 Require Import Common.Definitions.
 Require Import Common.Util.
-Require Import CompCert.Events.
 Require Import Common.Values.
 Require Import Common.Memory.
+Require Import CompCert.Events.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
 Require Import Lib.Monads.
 
 Import Source.
+
+Module CS.
 
 Inductive cont : Type :=
 | Kstop
@@ -222,6 +224,8 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
   | _ => None
   end.
 
+Hint Unfold eval_kstep.
+
 Fixpoint alloc_buffers
          (bufs: list (Component.id * nat))
          (m: Memory.t) (addrs: NMap.t Block.id)
@@ -252,8 +256,10 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option state :=
   match n with
   | 0 => None
   | S n' =>
-    do (_, st') <- eval_kstep G st;
-    execN n' G st'
+    match eval_kstep G st with
+    | None => Some st
+    | Some (_, st') => execN n' G st'
+    end
   end.
 
 Definition run (p: program) (input: value) (fuel: nat) : option state :=
@@ -342,3 +348,5 @@ Proof.
   inversion Hkstep2.
   reflexivity.
 Qed.
+
+End CS.

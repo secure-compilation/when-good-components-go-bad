@@ -19,7 +19,7 @@ Fixpoint find_label (c : code) (l : label) : option nat :=
   let fix aux c o :=
       match c with
       | [] => None
-      | Label l' :: c' =>
+      | ILabel l' :: c' =>
         if l =? l' then
           Some o
         else
@@ -58,3 +58,9 @@ Definition find_label_in_component G (pc : Pointer.t) (l : label) : option Point
     in search (NMap.elements C_procs)
   | None => None
   end.
+
+(* TODO implemenent initialization *)
+Definition init_env (p: program) : global_env :=
+  {| genv_interface := prog_interface p;
+     genv_procedures := @NMap.empty (NMap.t code);
+     genv_entrypoints := @NMap.empty (NMap.t Block.id) |}.

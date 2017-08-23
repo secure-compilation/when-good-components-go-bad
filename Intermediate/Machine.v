@@ -19,25 +19,25 @@ Definition imm_to_val (im : imvalue) : value :=
   end.
 
 Inductive instr :=
-| Nop : instr
-| Label : label -> instr
+| INop : instr
+| ILabel : label -> instr
 (* register operations *)
-| Const : imvalue -> register -> instr
-| Mov : register -> register -> instr
-| BinOp : binop -> register -> register -> register -> instr
+| IConst : imvalue -> register -> instr
+| IMov : register -> register -> instr
+| IBinOp : binop -> register -> register -> register -> instr
 (* memory operations *)
-| Load : register -> register -> instr
-| Store : register -> register -> instr
-| Alloc : register -> register -> instr
+| ILoad : register -> register -> instr
+| IStore : register -> register -> instr
+| IAlloc : register -> register -> instr
 (* conditional and unconditional jumps *)
-| Bnz : register -> label -> instr
-| Jump : register -> instr
-| Jal : label -> instr
+| IBnz : register -> label -> instr
+| IJump : register -> instr
+| IJal : label -> instr
 (* components interaction *)
-| Call : Component.id -> Procedure.id -> instr
-| Return : instr
+| ICall : Component.id -> Procedure.id -> instr
+| IReturn : instr
 (* termination *)
-| Halt : instr.
+| IHalt : instr.
 
 Definition code := list instr.
 

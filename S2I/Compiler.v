@@ -62,7 +62,7 @@ Notation run := (Comp.run comp_env).
 Definition fresh_label : COMP label :=
   do cenv <- get;
   let l := next_label cenv in
-  do _ <- modify (with_next_label (S l));
+  do! modify (with_next_label (S l));
   ret l.
 
 Definition get_local_buffer : COMP Pointer.t :=
@@ -87,46 +87,46 @@ Definition find_proc_label C P : COMP label :=
 (* code generation *)
 
 Definition push (r: register) : code :=
-  [Store R_SP r;
-   BinOp Add R_SP R_ONE R_SP].
+  [IStore R_SP r;
+   IBinOp Add R_SP R_ONE R_SP].
 
 Definition pop (r: register) : code :=
-  [BinOp Minus R_SP R_ONE R_SP;
-   Load R_SP r].
+  [IBinOp Minus R_SP R_ONE R_SP;
+   ILoad R_SP r].
 
 Definition load_arg (buf: Pointer.t) (r: register) : code :=
-  [Const (IPtr buf) r;
-   Load r r].
+  [IConst (IPtr buf) r;
+   ILoad r r].
 
 Definition store_arg (buf: Pointer.t) (r r': register) : code :=
-  [Const (IPtr buf) r';
-   Store r' r].
+  [IConst (IPtr buf) r';
+   IStore r' r].
 
 Definition store_stack_frame_pointer (buf: Pointer.t) (r: register) : code :=
-  [Const (IPtr buf) r;
-   Store r R_SP].
+  [IConst (IPtr buf) r;
+   IStore r R_SP].
 
 Definition restore_stack_frame_pointer (buf: Pointer.t) : code :=
-  [Const (IPtr buf) R_SP;
-   Load R_SP R_SP].
+  [IConst (IPtr buf) R_SP;
+   ILoad R_SP R_SP].
 
 Definition store_environment (buf: Pointer.t) : code :=
   store_stack_frame_pointer buf R_AUX1.
 
 Definition restore_environment (buf: Pointer.t) : code :=
-  Const (IInt 1) R_ONE ::
+  IConst (IInt 1) R_ONE ::
   restore_stack_frame_pointer buf.
 
 Fixpoint compile_expr (e: expr) : COMP code :=
   match e with
   | E_val (Int i) =>
-    ret [Const (IInt i) R_COM]
+    ret [IConst (IInt i) R_COM]
   | E_val (Ptr p) =>
-    ret [Const (IPtr p) R_COM]
+    ret [IConst (IPtr p) R_COM]
   | E_val Undef => fail (* we don't compile undef *)
   | E_local =>
     do local_buf_ptr <- get_local_buffer;
-    ret [Const (IPtr local_buf_ptr) R_COM]
+    ret [IConst (IPtr local_buf_ptr) R_COM]
   | E_binop bop e1 e2 =>
     do c1 <- compile_expr e1;
     do c2 <- compile_expr e2;
@@ -134,7 +134,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
          push R_COM ++
          c2 ++
          pop R_AUX1 ++
-         BinOp bop R_AUX1 R_COM R_COM :: nil)
+         IBinOp bop R_AUX1 R_COM R_COM :: nil)
   | E_seq e1 e2 =>
     do c1 <- compile_expr e1;
     do c2 <- compile_expr e2;
@@ -146,20 +146,20 @@ Fixpoint compile_expr (e: expr) : COMP code :=
     do lconseq <- fresh_label;
     do lend <- fresh_label;
     ret (c1 ++
-         [Bnz R_COM lconseq] ++
+         [IBnz R_COM lconseq] ++
          c3 ++
-         [Bnz R_ONE lend;
-          Label lconseq] ++
+         [IBnz R_ONE lend;
+          ILabel lconseq] ++
          c2 ++
-         Label lend :: nil)
+         ILabel lend :: nil)
   | E_alloc e =>
     do c <- compile_expr e;
     ret (c ++
-         Alloc R_COM R_COM :: nil)
+         IAlloc R_COM R_COM :: nil)
   | E_deref e =>
     do c <- compile_expr e;
     ret (c ++
-         Load R_COM R_COM :: nil)
+         ILoad R_COM R_COM :: nil)
   | E_assign e1 e2 =>
     do c1 <- compile_expr e1;
     do c2 <- compile_expr e2;
@@ -167,7 +167,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
          push R_COM ++
          c2 ++
          pop R_AUX1 ++
-         Store R_COM R_AUX1 :: nil)
+         IStore R_COM R_AUX1 :: nil)
   | E_call C' P' e =>
     do cenv <- get;
     let C := current_component cenv in
@@ -179,7 +179,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
            push R_AUX2 ++
            load_arg local_buf_ptr R_AUX1 ++
            push R_AUX1 ++
-           [Jal target_label] ++
+           [IJal target_label] ++
            pop R_AUX1 ++
            store_arg local_buf_ptr R_AUX1 R_AUX2 ++
            pop R_AUX2)
@@ -190,18 +190,18 @@ Fixpoint compile_expr (e: expr) : COMP code :=
            load_arg local_buf_ptr R_AUX1 ++
            push R_AUX1 ++
            store_environment temp_buf_ptr ++
-           [Call C' P'] ++
+           [ICall C' P'] ++
            restore_environment temp_buf_ptr ++
            pop R_AUX1 ++
            store_arg local_buf_ptr R_AUX1 R_AUX2 ++
            pop R_AUX2)
-  | E_exit => ret [Halt]
+  | E_exit => ret [IHalt]
   end.
 
 Definition compile_proc
            (C: Component.id) (P: Procedure.id) (e: expr)
   : COMP code :=
-  do _ <- modify (with_current_component C);
+  do! modify (with_current_component C);
   do proc_label <- find_proc_label C P;
   do local_buf_ptr <- get_local_buffer;
   do lmain <- fresh_label;
@@ -209,27 +209,27 @@ Definition compile_proc
   do proc_code <- compile_expr e;
   (* TODO compute stack size *)
   let stack_frame_size := 100 in
-  ret ([Const (IInt 1) R_ONE;
-        Const (IInt 1) R_AUX2;
-        Const (IInt stack_frame_size) R_SP;
-       Alloc R_SP R_SP;
-       Bnz R_ONE lmain;
-       Label proc_label;
-       Const (IInt 0) R_AUX2;
-       Mov R_SP R_AUX1;
-       Const (IInt stack_frame_size) R_SP;
-       Alloc R_SP R_SP] ++
+  ret ([IConst (IInt 1) R_ONE;
+        IConst (IInt 1) R_AUX2;
+        IConst (IInt stack_frame_size) R_SP;
+       IAlloc R_SP R_SP;
+       IBnz R_ONE lmain;
+       ILabel proc_label;
+       IConst (IInt 0) R_AUX2;
+       IMov R_SP R_AUX1;
+       IConst (IInt stack_frame_size) R_SP;
+       IAlloc R_SP R_SP] ++
        push R_AUX1 ++
-       [Label lmain] ++
+       [ILabel lmain] ++
        push R_RA ++
        store_arg local_buf_ptr R_COM R_AUX1 ++
        proc_code ++
        pop R_RA ++
-       [Bnz R_AUX2 lreturn] ++
+       [IBnz R_AUX2 lreturn] ++
        pop R_SP ++
-       [Jump R_RA;
-        Label lreturn;
-        Return]).
+       [IJump R_RA;
+        ILabel lreturn;
+        IReturn]).
 
 Fixpoint gen_component_procedures_labels
          (C: Component.id) (procs: list (Procedure.id * expr))
@@ -238,7 +238,7 @@ Fixpoint gen_component_procedures_labels
   | [] => ret tt
   | (P, _) :: procs' =>
     do freshl <- fresh_label;
-    do _ <- modify (with_new_proc_label C P freshl);
+    do! modify (with_new_proc_label C P freshl);
     gen_component_procedures_labels C procs'
   end.
 
@@ -249,7 +249,7 @@ Fixpoint gen_all_procedures_labels
   match procs with
   | [] => ret tt
   | (C, Cprocs) :: procs' =>
-    do _ <- gen_component_procedures_labels C (NMap.elements Cprocs);
+    do! gen_component_procedures_labels C (NMap.elements Cprocs);
     gen_all_procedures_labels procs'
   end.
 
@@ -262,7 +262,7 @@ Fixpoint add_temporary_buffers
       | (C,size) :: bs' =>
         let Cbufs := [(0,size); (1,1)] in
         let acc' := NMap.add C Cbufs acc in
-        do _ <- modify (with_component_buffers C (map fst Cbufs));
+        do! modify (with_component_buffers C (map fst Cbufs));
         instrument acc' bs'
       end
   in instrument (NMap.empty (list (Block.id * nat))) bufs.
@@ -305,7 +305,7 @@ Definition compile_program
   let procs := NMap.elements (Source.prog_procedures p) in
   let bufs := NMap.elements (Source.prog_buffers p) in
   run init_env (
-    do _ <- gen_all_procedures_labels procs;
+    do! gen_all_procedures_labels procs;
     do bufs' <- add_temporary_buffers bufs;
     do code <- compile_components procs;
     ret {| Intermediate.prog_interface := Source.prog_interface p;

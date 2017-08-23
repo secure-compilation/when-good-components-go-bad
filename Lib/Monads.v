@@ -175,6 +175,10 @@ Notation "'do' X <- A ; B" := (bind A (fun X:_ => B))
   (at level 200, X ident, A at level 100, B at level 200)
   : monad_scope.
 
+Notation "'do!' A ; B" := (bind A (fun _ => B))
+  (at level 200, A at level 100, B at level 200)
+  : monad_scope.
+
 Notation "'do' ( X , Y ) <- A ; B" :=
   (bind A (fun x:_ => let '(X,Y) := x in B))
   (at level 200, X ident, A at level 100, B at level 200)

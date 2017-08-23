@@ -28,5 +28,6 @@ Intermediate/Machine.v
 Intermediate/GlobalEnv.v
 Intermediate/CS.v
 Intermediate/PS.v
+Intermediate/Decomposition.v
 
 Common/Rc.v
