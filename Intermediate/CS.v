@@ -24,8 +24,8 @@ Definition initial_state
   (* the global protected stack is empty *)
   gps = [] /\
   (* the program counter is pointing to the start of the main procedure *)
-  EntryPoint.get mainC mainP (genv_entrypoints G) = Some (Pointer.block pc) /\
   Pointer.component pc = mainC /\
+  EntryPoint.get mainC mainP (genv_entrypoints G) = Some (Pointer.block pc) /\
   Pointer.offset pc = 0.
 
 Definition final_state (G: global_env) (s: state) (r: int) : Prop :=

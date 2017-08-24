@@ -23,7 +23,7 @@ Definition factorial : program := {|
                               Component.export := [1] |})];
   prog_buffers := NMapExtra.of_list [(1, 1); (2, 1)];
   prog_procedures := NMapExtra.of_list [
-    (1, NMapExtra.of_list [(0, E_call 2 0 (E_val (Int 5)))]);
+    (1, NMapExtra.of_list [(0, E_seq (E_call 2 0 (E_val (Int 6))) E_exit)]);
     (2, NMapExtra.of_list [(0,
       E_if (E_binop Leq (E_deref E_local) (E_val (Int 1)))
         (E_val (Int 1))
@@ -45,6 +45,7 @@ Eval vm_compute in
 Definition example :=
   (* warning (Int 1) is not considered at the moment *)
   match run factorial (Int 1) 1000 with
+  | Some (_, _, _, _, E_exit) => Some 0
   | Some (_, _, _, _, E_val (Int n)) => Some n
   | _ => None
   end.

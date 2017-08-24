@@ -10,8 +10,6 @@ Require Import Lib.Monads.
 
 Import Source.
 
-Module CS.
-
 Inductive cont : Type :=
 | Kstop
 | Kbinop1 (op: binop) (re: expr) (k: cont)
@@ -23,6 +21,8 @@ Inductive cont : Type :=
 | Kassign1 (e: expr) (k: cont)
 | Kassign2 (v: value) (k: cont)
 | Kcall (C: Component.id) (P: Procedure.id) (k: cont).
+
+Module CS.
 
 Definition stack : Type := list (Component.id * value * cont).
 Definition state : Type := Component.id * stack * Memory.t * cont * expr.
@@ -113,14 +113,14 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     (* place the call argument in the target memory *)
     NMap.find C' (genv_buffers G) = Some b' ->
     Memory.store mem (C',b',0) (Int v) = Some mem' ->
-    let t := [ECall C P v C'] in
+    let t := if C =? C' then E0 else [ECall C P v C'] in
     kstep G (C, s, mem, Kcall C' P k, E_val (Int v))
           t (C', (C, old_call_arg, k) :: s, mem', Kstop, P_expr)
 | KS_CallRet : forall C s mem mem' k v C' old_call_arg b,
     (* restore the old call argument *)
     NMap.find C' (genv_buffers G) = Some b ->
     Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
-    let t := [ERet C v C'] in
+    let t := if C =? C' then E0 else [ERet C v C'] in
     kstep G (C, (C', old_call_arg, k) :: s, mem, Kstop, E_val (Int v))
           t (C', s, mem', k, E_val (Int v)).
 
@@ -206,7 +206,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
         (* place the call argument in the target memory *)
         do b' <- NMap.find C' (genv_buffers G);
         do mem' <- Memory.store mem (C',b',0) (Int i);
-        let t := [ECall C P i C'] in
+        let t := if C =? C' then E0 else [ECall C P i C'] in
         ret (t, (C', (C, old_call_arg, k') :: s, mem', Kstop, P_expr))
       | _ => None
       end
@@ -216,7 +216,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
         (* restore the old call argument *)
         do b <- NMap.find C' (genv_buffers G);
         do mem' <- Memory.store mem (C',b,0) old_call_arg;
-        let t := [ERet C i C'] in
+        let t := if C =? C' then E0 else [ERet C i C'] in
         ret (t, (C', s', mem', k', E_val (Int i)))
       | _, _ => None
       end
@@ -283,7 +283,7 @@ Ltac unfold_state :=
 
 Theorem eval_kstep_complete:
   forall G st t st',
-    kstep G st t st' -> eval_kstep G st =  Some (t, st').
+    kstep G st t st' -> eval_kstep G st = Some (t, st').
 Proof.
   intros G st t st' Hkstep.
   inversion Hkstep; subst; simpl; auto;
