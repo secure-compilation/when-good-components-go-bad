@@ -184,4 +184,9 @@ Notation "'do' ( X , Y ) <- A ; B" :=
   (at level 200, X ident, A at level 100, B at level 200)
   : monad_scope.
 
+Notation "'do' ( X , Y , Z ) <- A ; B" :=
+  (bind A (fun x:_ => let '(X,Y,Z) := x in B))
+  (at level 200, X ident, A at level 100, B at level 200, Z at level 200)
+  : monad_scope.
+
 End MonadNotations.

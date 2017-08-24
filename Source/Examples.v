@@ -58,5 +58,6 @@ let rec nat2int = function
 match example with
 | None -> print_string "error\n"
 | Some n -> print_int (nat2int n); print_newline ();;
-*)
+
 Extraction "/tmp/fact.ml" example.
+*)

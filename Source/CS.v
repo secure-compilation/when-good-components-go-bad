@@ -305,7 +305,7 @@ Qed.
 
 Theorem eval_kstep_sound:
   forall G st t st',
-    eval_kstep G st =  Some (t, st') -> kstep G st t st'.
+    eval_kstep G st = Some (t, st') -> kstep G st t st'.
 Proof.
   intros.
   repeat unfold_state.
@@ -330,14 +330,14 @@ Qed.
 
 Theorem eval_kstep_correct:
   forall G st t st',
-    eval_kstep G st =  Some (t, st') <-> kstep G st t st'.
+    eval_kstep G st = Some (t, st') <-> kstep G st t st'.
 Proof.
   split.
   apply eval_kstep_sound.
   apply eval_kstep_complete.
 Qed.
 
-Theorem kstep_deterministic:
+Corollary kstep_deterministic:
   forall G st t st1 st2,
     kstep G st t st1 -> kstep G st t st2 -> st1 = st2.
 Proof.

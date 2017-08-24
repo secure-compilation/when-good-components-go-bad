@@ -208,7 +208,7 @@ Definition compile_proc
   do lreturn <- fresh_label;
   do proc_code <- compile_expr e;
   (* TODO compute stack size *)
-  let stack_frame_size := 100 in
+  let stack_frame_size := 10 in
   ret ([IConst (IInt 1) R_ONE;
         IConst (IInt 1) R_AUX2;
         IConst (IInt stack_frame_size) R_SP;
@@ -311,14 +311,3 @@ Definition compile_program
     ret {| Intermediate.prog_interface := Source.prog_interface p;
            Intermediate.prog_procedures := NMapExtra.of_list code;
            Intermediate.prog_buffers := bufs' |}).
-
-(*
-Require Import Source.Examples.
-
-Eval compute in run init_env
-                    (compile_expr (E_binop Add
-                                           (E_val (Int 41))
-                                           (E_val (Int 1)))).
-
-Eval compute in compile_program factorial.
-*)
