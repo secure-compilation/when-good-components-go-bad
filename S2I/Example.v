@@ -15,20 +15,6 @@ Definition compile_and_run (p: Source.program) :=
   do compiled_p <- compile_program p;
   CS.run compiled_p (Int 3) 1000.
 
-Definition compiled_fact :=
-  match compile_program factorial with
-  | Some p =>
-    Some (map (fun '(C,procs) => (C, NMap.elements procs))
-              (NMap.elements (Intermediate.prog_procedures p)))
-  | None => None
-  end.
-
-Definition init_compiled_fact :=
-  match compile_program factorial with
-  | Some p => CS.init p 1 0
-  | None => None
-  end.
-
 Definition run_compiled_fact := compile_and_run factorial.
 
 (* extraction to Ocaml *)
@@ -56,4 +42,4 @@ Extract Inductive list => "list" [ "[]" "(::)" ].
 
 Extract Inductive option => "option" [ "Some" "None" ].
 
-Extraction "/tmp/compile_fact.ml" compiled_fact run_compiled_fact init_compiled_fact.
+Extraction "/tmp/run_compiled_fact.ml" run_compiled_fact.

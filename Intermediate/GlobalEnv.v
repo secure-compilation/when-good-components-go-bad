@@ -1,5 +1,7 @@
 Require Import Common.Definitions.
+Require Import Common.Memory.
 Require Import Intermediate.Machine.
+Require Import Lib.Monads.
 
 Import Intermediate.
 
@@ -59,8 +61,8 @@ Definition find_label_in_component G (pc : Pointer.t) (l : label) : option Point
   | None => None
   end.
 
-(* TODO implemenent initialization *)
-Definition init_env (p: program) : global_env :=
+Definition init_genv (p: program) : global_env :=
+  let '(m, E, ps) := init_all p in
   {| genv_interface := prog_interface p;
-     genv_procedures := @NMap.empty (NMap.t code);
-     genv_entrypoints := @NMap.empty (NMap.t Block.id) |}.
+     genv_procedures := ps;
+     genv_entrypoints := E |}.

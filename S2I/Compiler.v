@@ -310,4 +310,5 @@ Definition compile_program
     do code <- compile_components procs;
     ret {| Intermediate.prog_interface := Source.prog_interface p;
            Intermediate.prog_procedures := NMapExtra.of_list code;
-           Intermediate.prog_buffers := bufs' |}).
+           Intermediate.prog_buffers := bufs';
+           Intermediate.prog_main := Source.prog_main p |}).

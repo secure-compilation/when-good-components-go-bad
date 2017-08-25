@@ -3,6 +3,7 @@ Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
@@ -16,11 +17,43 @@ Definition stack : Type := list (Component.id * option (value * CS.cont)).
 Definition program_state : Type := Component.id * stack * Memory.t * CS.cont * expr.
 Definition context_state : Type := Component.id * stack * Memory.t.
 
-Inductive exec_state : Type := Normal | WentWrong | Halted.
-
 Inductive state : Type :=
 | PC : program_state -> state
-| CC : context_state -> exec_state -> state.
+| CC : context_state -> exec_state -> state
+with exec_state : Type := Normal | WentWrong.
+
+Definition initial_state
+           (G: global_env)
+           (mainC: Component.id) (mainP: Procedure.id)
+           (st: state) : Prop :=
+  match st with
+  | PC (C, s, mem, k, e) =>
+    (* the executing component is the main one *)
+    C = mainC /\
+    (* the stack is empty *)
+    s = [] /\
+    (* the expression under evaluation is the main procedure *)
+    (exists main_procs,
+        NMap.find mainC (genv_procedures G) = Some main_procs /\
+        NMap.find mainP main_procs = Some e) /\
+    (* the continuation is stop *)
+    k = Kstop
+  | CC (C, s, mem) execst =>
+    (* the executing component is the main one *)
+    C = mainC /\
+    (* the stack is empty *)
+    s = [] /\
+    (* the execution didn't go wrong *)
+    execst = Normal
+  end.
+
+Definition final_state (G: global_env) (st: state) (r: nat) : Prop :=
+  match st with
+  | PC (C, s, mem, k, e) =>
+    e = E_exit /\ k = Kstop
+  | CC (C, s, mem) execst =>
+    execst = Normal
+  end.
 
 (* The split between program and context is represented by the domain of the
    procedures map. *)
@@ -88,10 +121,6 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     forall s mem C,
       kstep G (CC (C,s,mem) Normal) E0 (CC (C,s,mem) WentWrong)
 
-| Context_Halt:
-    forall s mem C,
-      kstep G (CC (C,s,mem) Normal) E0 (CC (C,s,mem) Halted)
-
 | Context_Internal_Call:
     forall s s' mem C C' P call_arg,
       C' <> C ->
@@ -134,5 +163,26 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
       let t := [ERet C v C']in
       kstep G (CC (C, (C', Some (old_call_arg, k)) :: s, mem) Normal)
             t (PC (C', s, mem', k, E_val (Int v))).
+
+Definition partialize (p: program) (ctx: Program.interface) : program :=
+  {| prog_interface := prog_interface p;
+     prog_procedures :=
+       NMapExtra.filter (fun C _ => negb (NMap.mem C ctx)) (prog_procedures p);
+     prog_buffers :=
+       NMapExtra.filter (fun C _ => negb (NMap.mem C ctx)) (prog_buffers p);
+     prog_main := prog_main p |}.
+
+Section Semantics.
+  Variable p: program.
+  Variable context_interface : Program.interface.
+
+  Definition partial_program := partialize p context_interface.
+  Let G := init_genv partial_program.
+
+  Definition sem :=
+    @Semantics_gen state global_env kstep
+                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
+                   (final_state G) G.
+End Semantics.
 
 End PS.

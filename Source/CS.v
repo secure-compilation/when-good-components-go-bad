@@ -3,6 +3,7 @@ Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
@@ -26,6 +27,26 @@ Module CS.
 
 Definition stack : Type := list (Component.id * value * cont).
 Definition state : Type := Component.id * stack * Memory.t * cont * expr.
+
+Definition initial_state
+           (G: global_env)
+           (mainC: Component.id) (mainP: Procedure.id)
+           (st: state) : Prop :=
+  let '(C, s, mem, k, e) := st in
+  (* the executing component is the main one *)
+  C = mainC /\
+  (* the stack is empty *)
+  s = [] /\
+  (* the expression under evaluation is the main procedure *)
+  (exists main_procs,
+      NMap.find mainC (genv_procedures G) = Some main_procs /\
+      NMap.find mainP main_procs = Some e) /\
+  (* the continuation is stop *)
+  k = Kstop.
+
+Definition final_state (G: global_env) (st: state) (r: nat) : Prop :=
+  let '(C, s, mem, k, e) := st in
+  e = E_exit /\ k = Kstop.
 
 Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_Binop1 : forall C s mem k op e1 e2,
@@ -123,6 +144,16 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     let t := if C =? C' then E0 else [ERet C v C'] in
     kstep G (C, (C', old_call_arg, k) :: s, mem, Kstop, E_val (Int v))
           t (C', s, mem', k, E_val (Int v)).
+
+Section Semantics.
+  Variable p: program.
+
+  Definition sem :=
+    let G := init_genv p in
+    @Semantics_gen state global_env kstep
+                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
+                   (final_state G) G.
+End Semantics.
 
 (* functional kstep *)
 
@@ -226,31 +257,14 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
 
 Hint Unfold eval_kstep.
 
-Fixpoint alloc_buffers
-         (bufs: list (Component.id * nat))
-         (m: Memory.t) (addrs: NMap.t Block.id)
-  : option (Memory.t * NMap.t Block.id) :=
-  match bufs with
-  | [] => ret (m, addrs)
-  | (C,size)::bufs' =>
-    do (m',ptr) <- Memory.alloc m C size;
-    let addrs' := NMap.add C (Pointer.block ptr) addrs in
-    alloc_buffers bufs' m' addrs'
-  end.
-
-Definition init (p: program)
-           (mainC: Component.id)
-           (mainP: Procedure.id)
-  : option (global_env * state) :=
-  do procs <- NMap.find mainC (prog_procedures p);
-  do main <- NMap.find mainP procs;
-  let pbufs := NMap.elements (prog_buffers p) in
-  let init_mem := Memory.empty (map fst pbufs) in
-  do (mem, bufs) <- alloc_buffers pbufs init_mem (@NMap.empty Block.id);
+Definition init (p: program) : option (global_env * state) :=
+  do procs <- NMap.find (fst (prog_main p)) (prog_procedures p);
+  do main <- NMap.find (snd (prog_main p)) procs;
+  let '(bufs, mem) := init_all p in
   let G := {| genv_interface := prog_interface p;
               genv_procedures := prog_procedures p;
               genv_buffers := bufs |} in
-  ret (G, (mainC, [], mem, Kstop, main)).
+  ret (G, (fst (prog_main p), [], mem, Kstop, main)).
 
 Fixpoint execN (n: nat) (G: global_env) (st: state) : option state :=
   match n with
@@ -263,7 +277,7 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option state :=
   end.
 
 Definition run (p: program) (input: value) (fuel: nat) : option state :=
-  do (G, st) <- init p 1 0;
+  do (G, st) <- init p;
   execN fuel G st.
 
 Close Scope monad_scope.

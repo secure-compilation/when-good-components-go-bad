@@ -23,6 +23,8 @@ Source/Examples.v
 
 S2I/CompMonad.v
 S2I/Compiler.v
+S2I/Correctness.v
+S2I/Example.v
 
 Intermediate/Machine.v
 Intermediate/GlobalEnv.v

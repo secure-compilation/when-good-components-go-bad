@@ -28,7 +28,7 @@ Definition initial_state
   EntryPoint.get mainC mainP (genv_entrypoints G) = Some (Pointer.block pc) /\
   Pointer.offset pc = 0.
 
-Definition final_state (G: global_env) (s: state) (r: int) : Prop :=
+Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
   let '(gsp, mem, regs, pc) := s in
   executing G pc IHalt.
 
@@ -121,19 +121,6 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     Register.get R_COM regs = Int rcomval ->
     let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
     step G (gps, mem, regs, pc) t (gps', mem, Register.invalidate regs, pc').
-
-(* TODO use init instead of init_env *)
-Section Semantics.
-  Variable p: program.
-  Variable mainC: Component.id.
-  Variable mainP: Procedure.id.
-
-  Definition sem :=
-    let G := init_env p in
-    @Semantics_gen state global_env step
-                   (initial_state G mainC mainP)
-                   (final_state G) G.
-End Semantics.
 
 Import MonadNotations.
 Open Scope monad_scope.
@@ -241,61 +228,27 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
   | IHalt => None
   end.
 
-Fixpoint init_mem m bufs :=
-  match bufs with
-  | [] => m
-  | (C, Cbufs) :: bufs' =>
-    let m' := NMap.add C (ComponentMemory.prealloc Cbufs) m in
-    init_mem m' bufs'
-  end.
+Section Semantics.
+  Variable p: program.
 
-Fixpoint init_comp_procs m E ps C Cprocs
-  : option (Memory.t * EntryPoint.t * NMap.t (NMap.t code)) :=
-  match Cprocs with
-  | [] => Some (m, E, ps)
-  | (P, bytecode) :: Cprocs' =>
-    do Cmem <- NMap.find C m;
-    let '(Cmem', b) := ComponentMemory.reserve_block Cmem in
-    let m' := NMap.add C Cmem' m in
-    let Centrypoints :=
-        match NMap.find C E with
-        | None => NMap.empty Block.id
-        | Some old_Centrypoints => old_Centrypoints
-        end in
-    let Centrypoints' := NMap.add P b Centrypoints in
-    let E' := NMap.add C Centrypoints' E in
-    let Cps :=
-        match NMap.find C ps with
-        | None => NMap.empty code
-        | Some oldCps => oldCps
-        end in
-    let Cps' := NMap.add b bytecode Cps in
-    let ps' := NMap.add C Cps' ps in
-    init_comp_procs m' E' ps' C Cprocs'
-  end.
+  Let G := init_genv p.
 
-Definition init_all (p: program) :=
-  let fix init_all_procs m E ps procs :=
-      match procs with
-      | [] => Some (m, E, ps)
-      | (C, Cprocs) :: procs' =>
-        do (m', E', ps') <- init_comp_procs m E ps C (NMap.elements Cprocs);
-        init_all_procs m' E' ps' procs'
-      end
-  in
-  let m := init_mem (Memory.empty []) (NMap.elements (prog_buffers p)) in
-  init_all_procs m (NMap.empty (NMap.t Block.id)) (NMap.empty (NMap.t code))
-                 (NMap.elements (prog_procedures p)).
+  Definition sem :=
+    @Semantics_gen state global_env step
+                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
+                   (final_state G) G.
+End Semantics.
 
-Definition init
-           (p: program) (mainC: Component.id) (mainP: Procedure.id)
-  : option (global_env * state) :=
-  do (mem, entrypoints, procs) <- init_all p;
+Import MonadNotations.
+Open Scope monad_scope.
+
+Definition init_genv_and_state (p: program) : option (global_env * state) :=
+  let '(mem, E, ps) := init_all p in
   let G := {| genv_interface := prog_interface p;
-              genv_procedures := procs;
-              genv_entrypoints := entrypoints |} in
-  do b <- EntryPoint.get mainC mainP entrypoints;
-  ret (G, ([], mem, Register.init, (mainC, b, 0))).
+              genv_procedures := ps;
+              genv_entrypoints := E |} in
+  do b <- EntryPoint.get (fst (prog_main p)) (snd (prog_main p)) (genv_entrypoints G);
+  ret (G, ([], mem, Register.init, (fst (prog_main p), b, 0))).
 
 Fixpoint execN (n: nat) (G: global_env) (st: state) : option nat :=
   match n with
@@ -313,7 +266,7 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option nat :=
   end.
 
 Definition run (p: program) (input: value) (fuel: nat) : option nat :=
-  do (G, st) <- init p 1 0;
+  do (G, st) <- init_genv_and_state p;
   execN fuel G st.
 
 Close Scope monad_scope.

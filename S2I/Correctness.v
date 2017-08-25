@@ -1,6 +1,11 @@
 Require Import Common.Definitions.
+Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
+Require Import CompCert.Behaviors.
 Require Import Source.Language.
+Require Source.CS.
 Require Import Intermediate.Machine.
+Require Intermediate.CS.
 Require Import S2I.Compiler.
 
 (*
@@ -73,3 +78,42 @@ Once we have the above things, we can package them in forward_simulation object
 defined by CompCert. Determinacy and receptiveness will then allow us to turn the
 forward simulation into a backward one.
 *)
+
+Module S.
+  Import Source.CS.
+  Module CS := CS.
+End S.
+
+Module I.
+  Import Intermediate.CS.
+  Module CS := CS.
+End I.
+
+Section Correctness.
+  Variable p: Source.program.
+  Variable tp: Intermediate.program.
+
+  Hypothesis wellformed_input: Source.well_formed_program p = true.
+  Hypothesis successful_compilation: compile_program p = Some tp.
+
+  (* TODO prove receptivness and determinarcy *)
+  Hypothesis receptivness: receptive (S.CS.sem p).
+  Hypothesis determinacy: determinate (I.CS.sem tp).
+
+  Theorem well_formedness_preservation:
+    Intermediate.well_formed_program tp = true.
+  Proof.
+  Admitted.
+
+  Theorem I_simulates_S:
+    forward_simulation (S.CS.sem p) (I.CS.sem tp).
+  Proof.
+  Admitted.
+
+  Corollary correct_compilation:
+    backward_simulation (S.CS.sem p) (I.CS.sem tp).
+  Proof.
+    apply forward_to_backward_simulation; auto.
+    apply I_simulates_S.
+  Qed.
+End Correctness.

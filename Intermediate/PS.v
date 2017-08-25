@@ -20,11 +20,10 @@ Definition stack := list PartialPointer.t.
 Definition program_state : Type := stack * Memory.t * Register.t * Pointer.t.
 Definition context_state : Type := stack * Memory.t * Component.id.
 
-Inductive exec_state : Type := Normal | WentWrong | Halted.
-
 Inductive state : Type :=
 | PC : program_state -> state
-| CC : context_state -> exec_state -> state.
+| CC : context_state -> exec_state -> state
+with exec_state : Type := Normal | WentWrong.
 
 Definition initial_state
            (G: global_env)
@@ -47,10 +46,10 @@ Definition initial_state
     C = mainC
   end.
 
-Definition final_state (G: global_env) (s: state) (r: int) : Prop :=
+Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
   match s with
   | PC (gps, mem, regs, pc) => executing G pc IHalt
-  | CC (pgps, mem, C) execst => execst = Halted
+  | CC (pgps, mem, C) execst => execst = Normal
   end.
 
 Definition to_partial_frame pc frame : PartialPointer.t :=
@@ -158,10 +157,6 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     forall pgps mem C,
       step G (CC (pgps,mem,C) Normal) E0 (CC (pgps,mem,C) WentWrong)
 
-| Context_Halt:
-    forall pgps mem C,
-      step G (CC (pgps,mem,C) Normal) E0 (CC (pgps,mem,C) Halted)
-
 | Context_Internal_Call:
     forall pgps pgps' mem C C' P call_arg,
       C' <> C ->
@@ -200,28 +195,38 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
       let t := [ERet C val C'] in
       step G (CC (pgps,mem,C) Normal) t (PC (pgps',mem,regs, (C',b,o))).
 
-Definition partialize (p: program) (split: list Component.id) : program :=
+Definition partialize (p: program) (ctx: Program.interface) : program :=
   {| prog_interface := prog_interface p;
      prog_procedures :=
-       NMapExtra.filter
-         (fun C _ => negb (count_occ eq_nat_dec split C =? 0))
-         (prog_procedures p);
+       NMapExtra.filter (fun C _ => negb (NMap.mem C ctx)) (prog_procedures p);
      prog_buffers :=
-       NMapExtra.filter
-         (fun C _ => negb (count_occ eq_nat_dec split C =? 0))
-         (prog_buffers p) |}.
+       NMapExtra.filter (fun C _ => negb (NMap.mem C ctx)) (prog_buffers p);
+     prog_main := prog_main p |}.
 
-(* TODO use a specialized init *)
 Section Semantics.
   Variable p: program.
-  Variable mainC: Component.id.
-  Variable mainP: Procedure.id.
+  Variable context_interface : Program.interface.
+
+  Definition partial_program := partialize p context_interface.
+  Let G := init_genv partial_program.
 
   Definition sem :=
-    let G := init_env p in
     @Semantics_gen state global_env step
-                   (initial_state G mainC mainP)
+                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
                    (final_state G) G.
 End Semantics.
+
+Definition maps_match_on {T : Type} split (map map' : NMap.t T) :=
+  forall C Cmap,
+    In C split ->
+    (NMap.MapsTo C Cmap map <-> NMap.MapsTo C Cmap map').
+
+Lemma maps_match_on_reflexive:
+  forall T split (mem: NMap.t T),
+    maps_match_on split mem mem.
+Proof.
+  unfold maps_match_on. intros.
+  split; auto.
+Qed.
 
 End PS.

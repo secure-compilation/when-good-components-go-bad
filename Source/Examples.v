@@ -23,13 +23,17 @@ Definition factorial : program := {|
                               Component.export := [1] |})];
   prog_buffers := NMapExtra.of_list [(1, 1); (2, 1)];
   prog_procedures := NMapExtra.of_list [
-    (1, NMapExtra.of_list [(0, E_seq (E_call 2 0 (E_val (Int 6))) E_exit)]);
+    (* NOTE the version with E_exit is the right one, but unfortunately it is difficult
+            to debug with extraction. Hence, the second version without E_exit *)
+    (*(1, NMapExtra.of_list [(0, E_seq (E_call 2 0 (E_val (Int 6))) E_exit)]);*)
+    (1, NMapExtra.of_list [(0, E_call 2 0 (E_val (Int 6)))]);
     (2, NMapExtra.of_list [(0,
       E_if (E_binop Leq (E_deref E_local) (E_val (Int 1)))
         (E_val (Int 1))
         (E_binop Mul
                  (E_deref E_local)
-                 (E_call 2 0 (E_binop Minus (E_deref E_local) (E_val (Int 1))))))])]
+                 (E_call 2 0 (E_binop Minus (E_deref E_local) (E_val (Int 1))))))])];
+  prog_main := (1, 0)
 |}.
 
 (* this is super slow!!! it seems that maps are a problem *)
@@ -42,7 +46,7 @@ Eval vm_compute in
   end.
 *)
 
-Definition example :=
+Definition run_fact :=
   (* warning (Int 1) is not considered at the moment *)
   match run factorial (Int 1) 1000 with
   | Some (_, _, _, _, E_exit) => Some 0
@@ -56,9 +60,22 @@ let rec nat2int = function
   | O -> 0
   | S n -> 1 + nat2int n;;
 
-match example with
+match run_fact with
 | None -> print_string "error\n"
 | Some n -> print_int (nat2int n); print_newline ();;
-
-Extraction "/tmp/fact.ml" example.
 *)
+
+Extraction Language Ocaml.
+
+Extract Inductive unit => "unit" [ "()" ].
+
+Extract Inductive bool => "bool" [ "true" "false" ].
+Extract Inductive sumbool => "bool" ["true" "false"].
+
+Extract Inductive prod => "(*)"  [ "(,)" ].
+
+Extract Inductive list => "list" [ "[]" "(::)" ].
+
+Extract Inductive option => "option" [ "Some" "None" ].
+
+Extraction "/tmp/run_fact.ml" run_fact.

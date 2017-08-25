@@ -2,6 +2,8 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Export Common.Values.
 Require Export Common.Linking.
+Require Import Common.Memory.
+Require Import Lib.Monads.
 
 Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP.
@@ -115,7 +117,7 @@ Record program := {
   prog_interface : Program.interface;
   prog_procedures : NMap.t (NMap.t code);
   prog_buffers : NMap.t (list (Block.id * nat));
-
+  prog_main : Component.id * Procedure.id
   (*
   (* interface soundness *)
   prog_interface_soundness:
@@ -129,7 +131,168 @@ Record program := {
   *)
 }.
 
-Definition closed_program (p : program) :=
+Definition closed_program (p: program) :=
   closed_interface (prog_interface p).
+
+Definition required_local_buffers (p: program) : bool :=
+  let check_for_comp C :=
+      match NMap.find C (prog_buffers p) with
+      | Some bufs => 0 <? length bufs
+      | None => false
+      end
+  in
+  let fix check_components comps :=
+      match comps with
+      | [] => true
+      | (C, _) :: comps' =>
+        andb (check_for_comp C) (check_components comps')
+      end
+  in
+  check_components (NMap.elements (prog_procedures p)).
+
+Definition valid_main (p: program) : bool :=
+  match NMap.find (fst (prog_main p)) (prog_procedures p) with
+  | Some procs => NMap.mem (snd (prog_main p)) procs
+  | None => false
+  end.
+
+(* TODO check for interface soundness, allowed calls, allowed pointers *)
+Definition well_formed_program (p: program) : bool:=
+  (*(only_allowed_calls p) &&*)
+  (required_local_buffers p) &&
+  (valid_main p).
+
+(* TODO is this definition OK? *)
+Definition program_link (p1 p2: program) main : program :=
+  {| prog_interface := NMapExtra.update (prog_interface p1) (prog_interface p2);
+     prog_procedures := NMapExtra.update (prog_procedures p1) (prog_procedures p2);
+     prog_buffers := NMapExtra.update (prog_buffers p1) (prog_buffers p2);
+     prog_main := main |}.
+
+Import MonadNotations.
+Open Scope monad_scope.
+
+(*
+Fixpoint init_mem m bufs :=
+  match bufs with
+  | [] => m
+  | (C, Cbufs) :: bufs' =>
+    let m' := NMap.add C (ComponentMemory.prealloc Cbufs) m in
+    init_mem m' bufs'
+  end.
+
+Fixpoint init_comp_procs m E ps C Cprocs
+  : option (Memory.t * EntryPoint.t * NMap.t (NMap.t code)) :=
+  match Cprocs with
+  | [] => Some (m, E, ps)
+  | (P, bytecode) :: Cprocs' =>
+    do Cmem <- NMap.find C m;
+    let '(Cmem', b) := ComponentMemory.reserve_block Cmem in
+    let m' := NMap.add C Cmem' m in
+    let Centrypoints :=
+        match NMap.find C E with
+        | None => NMap.empty Block.id
+        | Some old_Centrypoints => old_Centrypoints
+        end in
+    let Centrypoints' := NMap.add P b Centrypoints in
+    let E' := NMap.add C Centrypoints' E in
+    let Cps :=
+        match NMap.find C ps with
+        | None => NMap.empty code
+        | Some oldCps => oldCps
+        end in
+    let Cps' := NMap.add b bytecode Cps in
+    let ps' := NMap.add C Cps' ps in
+    init_comp_procs m' E' ps' C Cprocs'
+  end.
+
+Definition init_all (p: program) :=
+  let fix init_all_procs m E ps procs :=
+      match procs with
+      | [] => Some (m, E, ps)
+      | (C, Cprocs) :: procs' =>
+        do (m', E', ps') <- init_comp_procs m E ps C (NMap.elements Cprocs);
+        init_all_procs m' E' ps' procs'
+      end
+  in
+  let m := init_mem (Memory.empty []) (NMap.elements (prog_buffers p)) in
+  init_all_procs m (NMap.empty (NMap.t Block.id)) (NMap.empty (NMap.t code))
+                 (NMap.elements (prog_procedures p)).
+
+Definition init
+           (p: program) (mainC: Component.id) (mainP: Procedure.id)
+  : option (global_env * Memory.t) :=
+  do (mem, entrypoints, procs) <- init_all p;
+  let G := {| genv_interface := prog_interface p;
+              genv_procedures := procs;
+              genv_entrypoints := entrypoints |} in
+  ret (G, mem).
+
+Definition init_genv
+           (p: program) (mainC: Component.id) (mainP: Procedure.id)
+  : option global_env :=
+  do (G, mem) <- init p mainC mainP;
+  ret G.
+
+Definition init_genv_and_state
+           (p: program) (mainC: Component.id) (mainP: Procedure.id)
+  : option (global_env * state) :=
+  do (G, mem) <- init p mainC mainP;
+  do b <- EntryPoint.get mainC mainP (genv_entrypoints G);
+  ret (G, ([], mem, Register.init, (mainC, b, 0))).
+*)
+
+Fixpoint init_component m E ps C Cprocs bufs
+  : Memory.t * EntryPoint.t * NMap.t (NMap.t code) :=
+  match Cprocs with
+  | [] => (m, E, ps)
+  | (P, bytecode) :: Cprocs' =>
+    let Cmem :=
+        match NMap.find C m with
+        | Some Cmem => Cmem
+        | None =>
+          match NMap.find C bufs with
+          | Some Cbufs => ComponentMemory.prealloc Cbufs
+          (* the following should never happen, since every
+             component has at least one buffer *)
+          | None => ComponentMemory.empty
+          end
+        end in
+    let '(Cmem', b) := ComponentMemory.reserve_block Cmem in
+    let m' := NMap.add C Cmem' m in
+    let Centrypoints :=
+        match NMap.find C E with
+        | None => NMap.empty Block.id
+        | Some old_Centrypoints => old_Centrypoints
+        end in
+    let Centrypoints' := NMap.add P b Centrypoints in
+    let E' := NMap.add C Centrypoints' E in
+    let Cps :=
+        match NMap.find C ps with
+        | None => NMap.empty code
+        | Some oldCps => oldCps
+        end in
+    let Cps' := NMap.add b bytecode Cps in
+    let ps' := NMap.add C Cps' ps in
+    init_component m' E' ps' C Cprocs' bufs
+  end.
+
+Definition init_all (p: program)
+  : Memory.t * EntryPoint.t * NMap.t (NMap.t code) :=
+  let fix init_all_procs m E ps procs :=
+      match procs with
+      | [] => (m, E, ps)
+      | (C, Cprocs) :: procs' =>
+        let '(m', E', ps') := init_component m E ps C
+                                             (NMap.elements Cprocs)
+                                             (prog_buffers p) in
+        init_all_procs m' E' ps' procs'
+      end
+  in
+  init_all_procs (Memory.empty [])
+                 (NMap.empty (NMap.t Block.id)) (NMap.empty (NMap.t code))
+                 (NMap.elements (prog_procedures p)).
+
+Close Scope monad_scope.
 
 End Intermediate.
