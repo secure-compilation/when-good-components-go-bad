@@ -25,7 +25,8 @@ End Component.
 
 Module Program.
   Definition interface := NMap.t Component.interface.
-  Definition has_component Is C (CI : Component.interface) := NMap.MapsTo C CI Is.
+  Definition has_component (Is:interface) (C:Component.id) (CI : Component.interface) := NMap.MapsTo C CI Is.
+  Definition has_component_id (Is:interface) (C:Component.id) := NMap.In C Is.
 End Program.
 
 Definition exported_procedure

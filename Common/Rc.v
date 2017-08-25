@@ -294,9 +294,13 @@ Module Type IT.
      - a relation match_prog: Csyntax.program -> Asm.program -> Prop
      and proves their equivalence in transf_c_program_match.
    *)
-  (* TODO is IT.compile a refinement compiler? CH: No undef refinement *)
-  (* Note that this compiler only works on complete programs as
-     opposed to the SI.compile that works on partial programs *)
+  (* Note that 
+     - this compiler only works on complete programs as
+       opposed to SI.compile that works on partial programs 
+     - undefined programs, such as a context linked with a FD program,
+       will have a defined behavior once compiled.
+       TODO do we provide any guarantee in that case?
+   *)
   Parameter compile : I.program -> T.program.
   Parameter compile_spec:
     forall (p:I.program),
@@ -306,6 +310,9 @@ Module Type IT.
   (* 
      The following properties are special because they depend on
      compiling the complete intermediate program.
+     Note:
+     - the compiled program doesn't have any UB so we don't need to
+       preserve it.
    *)
   Parameter special_decomposition :
     forall beh (c p:I.program),
