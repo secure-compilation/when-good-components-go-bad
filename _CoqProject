@@ -33,3 +33,6 @@ Intermediate/PS.v
 Intermediate/Decomposition.v
 
 Common/Rc.v
+
+TargetSFI/Machine.v
+TargetSFI/CS.v
