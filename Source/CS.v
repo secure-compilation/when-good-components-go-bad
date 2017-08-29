@@ -41,12 +41,14 @@ Definition initial_state
   (exists main_procs,
       NMap.find mainC (genv_procedures G) = Some main_procs /\
       NMap.find mainP main_procs = Some e) /\
+  (* each component has its own memory *)
+  (forall C, NMap.In C (genv_interface G) -> NMap.In C mem) /\
   (* the continuation is stop *)
   k = Kstop.
 
 Definition final_state (G: global_env) (st: state) (r: nat) : Prop :=
   let '(C, s, mem, k, e) := st in
-  e = E_exit /\ k = Kstop.
+  e = E_exit.
 
 Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_Binop1 : forall C s mem k op e1 e2,
@@ -144,16 +146,6 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     let t := if C =? C' then E0 else [ERet C v C'] in
     kstep G (C, (C', old_call_arg, k) :: s, mem, Kstop, E_val (Int v))
           t (C', s, mem', k, E_val (Int v)).
-
-Section Semantics.
-  Variable p: program.
-
-  Definition sem :=
-    let G := init_genv p in
-    @Semantics_gen state global_env kstep
-                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
-                   (final_state G) G.
-End Semantics.
 
 (* functional kstep *)
 
@@ -363,4 +355,49 @@ Proof.
   reflexivity.
 Qed.
 
+Section Semantics.
+  Variable p: program.
+
+  Let G := init_genv p.
+
+  Definition sem :=
+    @Semantics_gen state global_env kstep
+                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
+                   (final_state G) G.
+
+  Lemma receptiveness_step:
+    forall s t1 s1 t2,
+      kstep G s t1 s1 -> match_traces t1 t2 ->
+      exists s2, kstep G s t2 s2.
+  Proof.
+    intros s t1 s1 t2.
+    intros Hkstep Hmatch_traces.
+    inversion Hkstep; subst;
+      inversion Hmatch_traces; subst;
+        try (eexists; eauto).
+    - rewrite <- H6 in Hkstep. eapply Hkstep.
+    - rewrite <- H6 in Hkstep. eapply Hkstep.
+    - rewrite <- H6 in Hkstep. eapply Hkstep.
+    - rewrite <- H2 in Hkstep. eapply Hkstep.
+    - rewrite <- H2 in Hkstep. eapply Hkstep.
+    - rewrite <- H2 in Hkstep. eapply Hkstep.
+  Qed.
+
+  Lemma singleton_traces:
+    single_events sem.
+  Proof.
+    unfold single_events.
+    intros s t s' Hstep.
+    inversion Hstep; subst t0; simpl; auto;
+      try (destruct (C =? C'); subst; simpl; auto).
+  Qed.
+
+  Theorem receptiveness:
+    receptive sem.
+  Proof.
+    constructor.
+    - apply receptiveness_step.
+    - apply singleton_traces.
+  Qed.
+End Semantics.
 End CS.

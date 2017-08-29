@@ -23,74 +23,63 @@ Module Source.
     prog_main : Component.id * Procedure.id
   }.
 
-  Definition only_allowed_calls (p: program) : bool :=
-    let fix check_expr cur_comp e :=
-        match e with
-        | E_val _ => true
-        | E_local => true
-        | E_binop _ e1 e2 =>
-          andb (check_expr cur_comp e1) (check_expr cur_comp e2)
-        | E_seq e1 e2 =>
-          andb (check_expr cur_comp e1) (check_expr cur_comp e2)
-        | E_if e1 e2 e3 =>
-          andb (andb (check_expr cur_comp e1) (check_expr cur_comp e2))
-               (check_expr cur_comp e3)
-        | E_alloc e =>
-          check_expr cur_comp e
-        | E_deref e =>
-          check_expr cur_comp e
-        | E_assign e1 e2 =>
-          andb (check_expr cur_comp e1) (check_expr cur_comp e2)
-        | E_call C' P' e =>
-          andb (orb (imported_procedure_b (prog_interface p) cur_comp C' P')
-                    (cur_comp =? C'))
-               (check_expr cur_comp e)
-        | E_exit => true
-        end
-    in
-    let fix check_procedures cur_comp procs :=
-        match procs with
-        | [] => true
-        | (_, e) :: procs' =>
-          andb (check_expr cur_comp e) (check_procedures cur_comp procs')
-        end
-    in
-    let fix check_components comps :=
-        match comps with
-        | [] => true
-        | (C, Cprocs) :: comps' =>
-          andb (check_procedures C (NMap.elements Cprocs))
-               (check_components comps')
-        end
-    in check_components (NMap.elements (prog_procedures p)).
-
-  Definition required_local_buffers (p: program) : bool :=
-    let check_for_comp C :=
-        match NMap.find C (prog_buffers p) with
-        | Some size => 0 <? size
-        | None => false
-        end
-    in
-    let fix check_components comps :=
-        match comps with
-        | [] => true
-        | (C, _) :: comps' =>
-          andb (check_for_comp C) (check_components comps')
-        end
-    in
-    check_components (NMap.elements (prog_procedures p)).
-
-  Definition valid_main (p: program) : bool :=
-    match NMap.find (fst (prog_main p)) (prog_procedures p) with
-    | Some procs => NMap.mem (snd (prog_main p)) procs
-    | None => false
+  (* An expression is well-formed when:
+     1) calls outside the component are allowed by the interface
+     2) calls inside the component are targeting existing procedures
+     3) the undef value is not present
+     4) pointers are not present (no pointers forging) *)
+  Fixpoint well_formed_expr (p: program) (cur_comp: Component.id) (e: expr) : Prop :=
+    match e with
+    | E_val val => exists i, val = Int i
+    | E_local => True
+    | E_exit => True
+    | E_binop op e1 e2 =>
+      well_formed_expr p cur_comp e1 /\ well_formed_expr p cur_comp e2
+    | E_seq e1 e2 =>
+      well_formed_expr p cur_comp e1 /\ well_formed_expr p cur_comp e2
+    | E_if e1 e2 e3 =>
+      well_formed_expr p cur_comp e1 /\ well_formed_expr p cur_comp e2 /\
+      well_formed_expr p cur_comp e3
+    | E_alloc e' => well_formed_expr p cur_comp e'
+    | E_deref e' => well_formed_expr p cur_comp e'
+    | E_assign e1 e2 =>
+      well_formed_expr p cur_comp e1 /\ well_formed_expr p cur_comp e2
+    | E_call C' P' e' =>
+      well_formed_expr p cur_comp e' /\
+      (imported_procedure (prog_interface p) cur_comp C' P' \/
+       (cur_comp = C' /\
+        exists C'procs, NMap.MapsTo C' C'procs (prog_procedures p) /\
+                   NMap.In P' C'procs))
     end.
 
-  (* TODO check for interface soundness *)
-  Definition well_formed_program (p: program) : bool:=
-    (only_allowed_calls p) &&
-    (required_local_buffers p) &&
-    (valid_main p).
+  (* Each component must have its own buffer of size at least one *)
+  Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
+    exists size, NMap.find C (prog_buffers p) = Some size /\
+            size > 0.
+
+  Record well_formed_program (p: program) := {
+    wfprog_interface_soundness:
+      sound_interface (prog_interface p);
+    wfprog_buffers_existence:
+      forall C, NMap.In C (prog_interface p) -> has_required_local_buffers p C;
+    wfprog_exported_procedures_existence:
+      forall C CI,
+        NMap.MapsTo C CI (prog_interface p) ->
+      forall P,
+        Component.is_exporting CI P ->
+      exists Cprocs Pexpr,
+        NMap.MapsTo C Cprocs (prog_procedures p) /\
+        NMap.MapsTo P Pexpr Cprocs;
+    wfprog_main_existence:
+      exists procs,
+        NMap.MapsTo (fst (prog_main p)) procs (prog_procedures p) /\
+        NMap.In (snd (prog_main p)) procs;
+    wfprog_well_formed_procedures:
+      forall C Cprocs P Pexpr,
+        NMap.MapsTo C Cprocs (prog_procedures p) ->
+        NMap.MapsTo P Pexpr Cprocs ->
+        well_formed_expr p C Pexpr
+  }.
 
   Fixpoint alloc_buffers
            (bufs: list (Component.id * nat))

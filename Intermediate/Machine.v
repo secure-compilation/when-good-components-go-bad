@@ -118,56 +118,54 @@ Record program := {
   prog_procedures : NMap.t (NMap.t code);
   prog_buffers : NMap.t (list (Block.id * nat));
   prog_main : Component.id * Procedure.id
-  (*
-  (* interface soundness *)
-  prog_interface_soundness:
-    sound_interface prog_interface;
+}.
 
-  (* procedure soundness: TODO *)
+(* Well-Formedness *)
 
-  (* buffers soundness w.r.t. the interface *)
-  prog_buffers_soundness:
-    forall C, NMap.In C prog_buffers <-> NMap.In C prog_interface
-  *)
+(* Each component must have at least two buffers of size at least one *)
+Definition required_local_buffers (p: program) (C: Component.id) : Prop :=
+  exists b1 b2 bufs,
+    NMap.find C (prog_buffers p) = Some (b1 :: b2 :: bufs) /\
+    snd b1 > 0 /\ snd b2 > 0.
+
+(* TODO static checks on code (calls, pointers, etc) *)
+Record well_formed_program (p: program) := {
+  wfprog_interface_soundness:
+    sound_interface (prog_interface p);
+  wfprog_buffers_existence:
+    forall C, NMap.In C (prog_interface p) -> required_local_buffers p C;
+  wfprog_exported_procedures_existence:
+    forall C CI,
+      NMap.MapsTo C CI (prog_interface p) ->
+    forall P,
+      Component.is_exporting CI P ->
+    exists Cprocs Pcode,
+      NMap.MapsTo C Cprocs (prog_procedures p) /\
+      NMap.MapsTo P Pcode Cprocs;
+  wfprog_main_existence:
+    exists procs,
+      NMap.MapsTo (fst (prog_main p)) procs (prog_procedures p) /\
+      NMap.In (snd (prog_main p)) procs
 }.
 
 Definition closed_program (p: program) :=
   closed_interface (prog_interface p).
 
-Definition required_local_buffers (p: program) : bool :=
-  let check_for_comp C :=
-      match NMap.find C (prog_buffers p) with
-      | Some bufs => 0 <? length bufs
-      | None => false
-      end
-  in
-  let fix check_components comps :=
-      match comps with
-      | [] => true
-      | (C, _) :: comps' =>
-        andb (check_for_comp C) (check_components comps')
-      end
-  in
-  check_components (NMap.elements (prog_procedures p)).
-
-Definition valid_main (p: program) : bool :=
-  match NMap.find (fst (prog_main p)) (prog_procedures p) with
-  | Some procs => NMap.mem (snd (prog_main p)) procs
-  | None => false
-  end.
-
-(* TODO check for interface soundness, allowed calls, allowed pointers *)
-Definition well_formed_program (p: program) : bool:=
-  (*(only_allowed_calls p) &&*)
-  (required_local_buffers p) &&
-  (valid_main p).
-
-(* TODO is this definition OK? *)
-Definition program_link (p1 p2: program) main : program :=
+(* TODO is this definition OK? (i.e. look at main) *)
+Definition program_link (p1 p2: program) mainC mainP : program :=
   {| prog_interface := NMapExtra.update (prog_interface p1) (prog_interface p2);
      prog_procedures := NMapExtra.update (prog_procedures p1) (prog_procedures p2);
      prog_buffers := NMapExtra.update (prog_buffers p1) (prog_buffers p2);
-     prog_main := main |}.
+     prog_main := (mainC, mainP) |}.
+
+(* TODO probably need to add that main is valid as precondition *)
+Lemma linked_program_well_formedness mainC mainP:
+  forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    well_formed_program (program_link p1 p2 mainC mainP).
+Proof.
+Admitted.
 
 Import MonadNotations.
 Open Scope monad_scope.

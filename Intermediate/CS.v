@@ -24,9 +24,11 @@ Definition initial_state
   (* the global protected stack is empty *)
   gps = [] /\
   (* the program counter is pointing to the start of the main procedure *)
-  Pointer.component pc = mainC /\
-  EntryPoint.get mainC mainP (genv_entrypoints G) = Some (Pointer.block pc) /\
-  Pointer.offset pc = 0.
+  (Pointer.component pc = mainC /\
+   EntryPoint.get mainC mainP (genv_entrypoints G) = Some (Pointer.block pc) /\
+   Pointer.offset pc = 0) /\
+  (* each component has its own memory *)
+  (forall C, NMap.In C (genv_interface G) -> NMap.In C mem).
 
 Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
   let '(gsp, mem, regs, pc) := s in
@@ -227,17 +229,6 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
     end
   | IHalt => None
   end.
-
-Section Semantics.
-  Variable p: program.
-
-  Let G := init_genv p.
-
-  Definition sem :=
-    @Semantics_gen state global_env step
-                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
-                   (final_state G) G.
-End Semantics.
 
 Import MonadNotations.
 Open Scope monad_scope.
@@ -459,4 +450,98 @@ Proof.
   reflexivity.
 Qed.
 
+Section Semantics.
+  Variable p: program.
+
+  Let G := init_genv p.
+
+  Definition sem :=
+    @Semantics_gen state global_env step
+                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
+                   (final_state G) G.
+
+  Lemma determinate_step:
+    forall s t1 s1 t2 s2,
+      step G s t1 s1 ->
+      step G s t2 s2 -> match_traces t1 t2 /\ (t1 = t2 -> s1 = s2).
+  Proof.
+    intros s t1 s1 t2 s2 Hstep1 Hstep2.
+  (*
+    inversion Hstep1; subst;
+      inversion Hstep2; subst;
+        try (split; [ apply match_traces_E0 | intro; reflexivity ]);
+        try (split; [ apply match_traces_E0
+                    | intro;
+                      match goal with
+                      | Hexec1: executing ?G ?PC ?INSTR1,
+                        Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
+                        destruct H as [C_procs [P_code [HC_procs [HP_code Hinstr]]]];
+                        destruct H6 as [C_procs' [P_code' [HC_procs' [HP_code' Hinstr']]]];
+                        rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
+                        rewrite HP_code in HP_code'; inversion HP_code'; subst;
+                        rewrite Hinstr in Hinstr'; discriminate Hinstr'
+                      end ]).
+    *)
+  Admitted.
+
+  Lemma singleton_traces:
+    single_events sem.
+  Proof.
+    unfold single_events.
+    intros s t s' Hstep.
+    inversion Hstep; simpl; auto.
+  Qed.
+
+  Lemma determinate_initial_states:
+    forall s1 s2,
+      initial_state G (fst (prog_main p)) (snd (prog_main p)) s1 ->
+      initial_state G (fst (prog_main p)) (snd (prog_main p)) s2 ->
+      s1 = s2.
+  Proof.
+  Admitted.
+
+  Lemma final_states_stuckness:
+    forall s r,
+      final_state G s r ->
+      nostep step G s.
+  Proof.
+    intros s r Hs_final.
+    unfold nostep.
+    unfold_state.
+    unfold final_state in Hs_final.
+    intros t s'. unfold not. intro Hstep.
+    inversion Hstep; subst;
+    try (match goal with
+         | Hexec1: executing ?G ?PC ?INSTR1,
+           Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
+           destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code Hinstr]]]];
+           destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' Hinstr']]]];
+           rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
+           rewrite HP_code in HP_code'; inversion HP_code'; subst;
+           rewrite Hinstr in Hinstr'; inversion Hinstr'
+         end).
+  Qed.
+
+  (* TODO think about final state result r *)
+  Lemma final_states_uniqueness:
+    forall s r1 r2,
+      final_state G s r1 ->
+      final_state G s r2 -> r1 = r2.
+  Proof.
+    unfold final_state.
+    intros s r1 r2 Hs_final1 Hs_final2.
+    unfold_state.
+  Admitted.
+
+  Lemma determinacy:
+    determinate sem.
+  Proof.
+    constructor.
+    - apply determinate_step.
+    - apply singleton_traces.
+    - apply determinate_initial_states.
+    - apply final_states_stuckness.
+    - apply final_states_uniqueness.
+  Qed.
+End Semantics.
 End CS.

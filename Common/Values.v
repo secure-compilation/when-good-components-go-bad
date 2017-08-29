@@ -42,6 +42,38 @@ Module Pointer.
     end.
 
   Definition inc (ptr : t) : t := add ptr 1.
+
+  Lemma add_preserves_component:
+    forall p n, component (add p n) = component p.
+  Proof.
+    intros p n.
+    destruct p as [[C b] o].
+    reflexivity.
+  Qed.
+
+  Lemma add_preserves_block:
+    forall p n, block (add p n) = block p.
+  Proof.
+    intros p n.
+    destruct p as [[C b] o].
+    reflexivity.
+  Qed.
+
+  Lemma inc_preserves_component:
+    forall p, component (inc p) = component p.
+  Proof.
+    intros p.
+    destruct p as [[C b] o].
+    reflexivity.
+  Qed.
+
+  Lemma inc_preserves_block:
+    forall p, block (inc p) = block p.
+  Proof.
+    intros p.
+    destruct p as [[C b] o].
+    reflexivity.
+  Qed.
 End Pointer.
 
 Inductive value : Type :=

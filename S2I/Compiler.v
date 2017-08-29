@@ -212,21 +212,21 @@ Definition compile_proc
   ret ([IConst (IInt 1) R_ONE;
         IConst (IInt 1) R_AUX2;
         IConst (IInt stack_frame_size) R_SP;
-       IAlloc R_SP R_SP;
-       IBnz R_ONE lmain;
-       ILabel proc_label;
-       IConst (IInt 0) R_AUX2;
-       IMov R_SP R_AUX1;
-       IConst (IInt stack_frame_size) R_SP;
-       IAlloc R_SP R_SP] ++
-       push R_AUX1 ++
+        IAlloc R_SP R_SP;
+        IBnz R_ONE lmain;
+        ILabel proc_label;
+        IConst (IInt 0) R_AUX2;
+        IMov R_SP R_AUX1;
+        IConst (IInt stack_frame_size) R_SP;
+        IAlloc R_SP R_SP] ++
+        push R_AUX1 ++
        [ILabel lmain] ++
-       push R_RA ++
-       store_arg local_buf_ptr R_COM R_AUX1 ++
-       proc_code ++
-       pop R_RA ++
+        push R_RA ++
+        store_arg local_buf_ptr R_COM R_AUX1 ++
+        proc_code ++
+        pop R_RA ++
        [IBnz R_AUX2 lreturn] ++
-       pop R_SP ++
+        pop R_SP ++
        [IJump R_RA;
         ILabel lreturn;
         IReturn]).

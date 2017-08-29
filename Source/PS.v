@@ -62,12 +62,22 @@ Definition is_context_component G C := ~ is_program_component G C.
 
 Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | Program_Epsilon:
-    forall C s s' mem mem' cmem cmem' wmem wmem' k k' e e',
-      NMap.MapsTo C cmem wmem ->
-      NMap.MapsTo C cmem' wmem' ->
-      CS.kstep G (C,s',wmem,k,e) E0 (C,s',wmem',k',e') ->
-      NMap.MapsTo C cmem mem ->
-      NMap.MapsTo C cmem' mem' ->
+    forall G' C s mem mem' Cmem' wmem wmem' k k' e e',
+      (* G' has the same interface as G, but it can contain more
+         information regarding procedures and entrypoints *)
+      genv_extension G' G ->
+      (* wmem contains mem *)
+      (forall C' C'mem, NMap.MapsTo C' C'mem mem -> NMap.MapsTo C' C'mem wmem) ->
+      (* wmem has the context components memories *)
+      (forall C, is_context_component G C -> NMap.In C wmem) ->
+      (* the complete semantics steps silently with the extended versions of
+         memory and global environment
+         NOTE that the stack (gps) is not related to the partial one (pgps) *)
+      (exists s', CS.kstep G (C,s',wmem,k,e) E0 (C,s',wmem',k',e')) ->
+      (* mem' is mem with the updated version of the current
+         executing component's memory *)
+      NMap.MapsTo C Cmem' wmem' ->
+      NMap.Equal mem' (NMap.add C Cmem' mem) ->
       kstep G (PC (C,s,mem,k,e)) E0 (PC (C,s,mem',k',e'))
 
 | Program_Internal_Call:

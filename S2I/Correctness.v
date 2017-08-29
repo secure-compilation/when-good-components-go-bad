@@ -29,7 +29,7 @@ more steps ending in a state s2' which is related to s1'.
                        related_states
 
 With the above simulation diagram, we have to take into account the
-infinite stuttering problem: s1 takes infinitely silent steps, whereas
+infinite stuttering problem: s1 takes infinitely many silent steps, whereas
 s2 stays still forever (the source program diverges, but the
 intermediate one doesn't). In all those cases in which s2 takes zero
 steps, we have to invent a strictly decreasing measure on terms.
@@ -77,6 +77,8 @@ TODO define and prove these lemmas
 Once we have the above things, we can package them in forward_simulation object
 defined by CompCert. Determinacy and receptiveness will then allow us to turn the
 forward simulation into a backward one.
+
+TODO prove determinacy and receptiveness
 *)
 
 Module S.
@@ -90,30 +92,32 @@ Module I.
 End I.
 
 Section Correctness.
-  Variable p: Source.program.
-  Variable tp: Intermediate.program.
 
-  Hypothesis wellformed_input: Source.well_formed_program p = true.
-  Hypothesis successful_compilation: compile_program p = Some tp.
+Variable p: Source.program.
+Variable tp: Intermediate.program.
 
-  (* TODO prove receptivness and determinarcy *)
-  Hypothesis receptivness: receptive (S.CS.sem p).
-  Hypothesis determinacy: determinate (I.CS.sem tp).
+Hypothesis wellformed_input:
+  Source.well_formed_program p.
 
-  Theorem well_formedness_preservation:
-    Intermediate.well_formed_program tp = true.
-  Proof.
-  Admitted.
+Hypothesis successful_compilation:
+  compile_program p = Some tp.
 
-  Theorem I_simulates_S:
-    forward_simulation (S.CS.sem p) (I.CS.sem tp).
-  Proof.
-  Admitted.
+Theorem well_formedness_preservation:
+  Intermediate.well_formed_program tp.
+Proof.
+Admitted.
 
-  Corollary correct_compilation:
-    backward_simulation (S.CS.sem p) (I.CS.sem tp).
-  Proof.
-    apply forward_to_backward_simulation; auto.
-    apply I_simulates_S.
-  Qed.
+Theorem I_simulates_S:
+  forward_simulation (S.CS.sem p) (I.CS.sem tp).
+Proof.
+Admitted.
+
+Corollary correct_compilation:
+  backward_simulation (S.CS.sem p) (I.CS.sem tp).
+Proof.
+  apply forward_to_backward_simulation.
+  - apply I_simulates_S.
+  - apply S.CS.receptiveness.
+  - apply I.CS.determinacy.
+Qed.
 End Correctness.
