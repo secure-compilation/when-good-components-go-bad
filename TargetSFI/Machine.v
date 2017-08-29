@@ -1,26 +1,30 @@
 Require Import ZArith.
 
 Require Import Common.Definitions.
+Require Import Common.Util.
 
 
 (******************************************
  * Instruction Set Definition
  *******************************************)
 
-(* Register File *)
-Inductive register : Set :=
-  R_ONE : register
-| R_COM : register
-| R_AUX1 : register
-| R_AUX2 : register
-| R_RA : register
-| R_SP : register
-| R_SP_SFI : register
-| R_AND_CODE : register
-| R_AND_DATA : register
-| R_OR_DATA : register. (* TODO add all SFI registers *)
+(* Registers *)
+Definition register := nat.
+
+Definition R_ONE: register := 1.
+Definition R_COM : register := 2.
+Definition R_AUX1 : register := 3.
+Definition R_AUX2 : register := 4.
+Definition R_RA : register := 5.
+Definition R_SP : register := 6. 
+Definition R_SP_SFI : register := 7. 
+Definition R_AND_CODE : register := 8.
+Definition R_AND_DATA : register := 9.
+Definition R_OR_DATA : register := 10. (* TODO add all SFI registers *)
 
 Definition value := Z.
+
+Definition ZERO_VALUE : value := Z.of_nat 0.
 
 Definition is_zero_value (v:value) : Prop := (v = Z.of_nat 0).
 
@@ -88,6 +92,13 @@ Module SFI.
       | r :: l' => (is_zero_value r)/\ is_zero l'
       end.
 
+    Definition set_register (reg : register) (val : value) (gen_regs  : t) : t :=
+      Util.Lists.update gen_regs reg val.
+
+
+    Definition get_register (reg : register) (gen_regs : t) : value :=
+      nth reg gen_regs (Z.of_nat 0).
+
   End RegisterFile.
 
   Record program :=
@@ -97,5 +108,11 @@ Module SFI.
       mem : Memory;
       prog_interface : Program.interface
     }.
+
+  Definition executing (mem : Memory) (pc : address) ( i : instr) : Prop :=
+    match (mem pc) with
+    | Data _ => False
+    | Instruction i' => i = i'
+    end.
 
 End SFI.
