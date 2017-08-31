@@ -2,6 +2,7 @@ Require Import ZArith.
 
 Require Import Common.Definitions.
 Require Import Common.Util.
+Require Import Common.Maps.
 
 
 (******************************************
@@ -32,8 +33,18 @@ Definition immediate := Z.
 
 Definition address := nat.
 
-Inductive binop : Type :=
+Inductive binop : Set :=
   Plus | ShiftLeft. (* TODO add all *)
+
+Open Scope Z_scope.
+
+Definition executing_binop (operation : binop) (op1 : value) (op2 : value) : value :=
+  match operation with
+  | Plus => op1 + op2
+  | _ => ZERO_VALUE (* TODO finish this *)
+  end.
+
+Close Scope Z_scope.
 
 Inductive instr :=
 | INop : instr
@@ -78,7 +89,7 @@ Definition C := address -> nat.
 (* E is a partial map from addresses to procedure names.*)
 Definition E := address -> Procedure.id.
 
-Definition Memory := nat -> word.
+Definition memory := nat -> word.
 
 Module SFI.
 
@@ -100,19 +111,36 @@ Module SFI.
       nth reg gen_regs (Z.of_nat 0).
 
   End RegisterFile.
+  
+  Module Memory.
 
+    Definition t := NMap.t word.
+
+    Definition get_word (mem : t) (ptr : address) : option word :=
+      NMap.find ptr mem.
+
+    Definition get_value (mem : t) (ptr : address) : value :=
+      match get_word mem ptr with
+      | Some (Data val) => val
+      | _ => ZERO_VALUE (* might need to deal with an istruction here*)
+      end.
+
+    Definition to_address (ptr:value) : address :=
+      (* todo *) 0.
+  End Memory.
+  
   Record program :=
     {
       cn : CN;
       e : E;
-      mem : Memory;
+      mem : Memory.t;
       prog_interface : Program.interface
     }.
 
-  Definition executing (mem : Memory) (pc : address) ( i : instr) : Prop :=
-    match (mem pc) with
-    | Data _ => False
-    | Instruction i' => i = i'
+  Definition executing (mem : Memory.t) (pc : address) ( i : instr) : Prop :=
+    match (Memory.get_word mem pc) with
+    | Some (Instruction i') => i = i'
+    |  _ => False
     end.
 
 End SFI.
