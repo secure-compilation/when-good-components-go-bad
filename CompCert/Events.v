@@ -3,7 +3,8 @@ Require Import CompCert.Coqlib.
 
 Inductive event :=
 | ECall : Component.id -> Procedure.id -> nat -> Component.id -> event
-| ERet : Component.id -> nat -> Component.id -> event.
+| ERet : Component.id -> nat -> Component.id -> event
+| ELoad: Component.id -> nat -> Component.id -> event.
 
 Definition trace := list event.
 
@@ -200,4 +201,7 @@ Inductive match_traces: trace -> trace -> Prop :=
                    (ECall C P arg C' :: nil)
   | match_traces_ret: forall C retval C',
       match_traces (ERet C retval C' :: nil)
-                   (ERet C retval C' :: nil).
+                   (ERet C retval C' :: nil)
+  | match_traces_vload: forall C res C',
+      match_traces (ELoad C res C' :: nil)
+                   (ELoad C res C' :: nil).

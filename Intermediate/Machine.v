@@ -50,12 +50,12 @@ Module Register.
 
   Definition to_nat (r : register) : nat :=
     match r with
-    | R_ONE  => 1
-    | R_COM  => 2
-    | R_AUX1 => 3
-    | R_AUX2 => 4
-    | R_RA   => 5
-    | R_SP   => 6
+    | R_ONE  => 0
+    | R_COM  => 1
+    | R_AUX1 => 2
+    | R_AUX2 => 3
+    | R_RA   => 4
+    | R_SP   => 5
     end.
 
   Definition init := repeat Undef 7.
@@ -71,7 +71,7 @@ Module Register.
     Util.Lists.update regs (to_nat r) val.
 
   Definition invalidate (regs : t) : t :=
-    [Undef; Undef; get R_COM regs; Undef; Undef; get R_RA regs; Undef].
+    [Undef; get R_COM regs; Undef; Undef; get R_RA regs; Undef].
 
   Lemma init_registers_wf:
     forall r, exists val, get r init = val.
@@ -104,11 +104,6 @@ Module EntryPoint.
     rewrite HEeqE'.
     reflexivity.
   Qed.
-
-  Definition mergeable (e1 e2 : t) : Prop := NMapExtra.Disjoint e1 e2.
-  
-  Definition merge (e1 e2 : t) (mergeable_prf : mergeable e1 e2) : t :=
-    NMapExtra.update e1 e2.
 End EntryPoint.
 
 (* programs *)
@@ -120,20 +115,63 @@ Record program := {
   prog_main : Component.id * Procedure.id
 }.
 
-(* Well-Formedness *)
+(* well-formedness of programs *)
 
-(* Each component must have at least two buffers of size at least one *)
-Definition required_local_buffers (p: program) (C: Component.id) : Prop :=
+Definition well_formed_instruction
+           (p: program) (C: Component.id) (P: Procedure.id) (i: instr) : Prop :=
+  match i with
+  | IBnz r l =>
+    (* the branch refers to a label inside the current procedure C.P *)
+    exists Cprocs Pcode, NMap.MapsTo C Cprocs (prog_procedures p) /\
+                    NMap.MapsTo P Pcode Cprocs /\
+                    In (ILabel l) Pcode
+  | IJal l =>
+    (* the jump refers to a label inside the current component C *)
+    exists Cprocs P' P'code, NMap.MapsTo C Cprocs (prog_procedures p) /\
+                        NMap.MapsTo P' P'code Cprocs /\
+                        In (ILabel l) P'code
+  | ICall C' P' =>
+    (* a call is well-formed only if one of the following holds:
+       1) it targets the current component and the procedure exists
+       2) it targets another component and the interface is allowing it to happen *)
+    (C' = C /\ exists Cprocs, NMap.MapsTo C Cprocs (prog_procedures p) /\
+                        NMap.In P' Cprocs) \/
+    imported_procedure (prog_interface p) C C' P'
+  | IConst (IPtr ptr) r =>
+    (* static pointers refers to static buffers *)
+    exists bufs, NMap.MapsTo (Pointer.component ptr) bufs (prog_buffers p) /\
+            In (Pointer.block ptr) (map fst bufs)
+  (* the other instruction are well-formed by construction *)
+  | IConst (IInt i) r => True
+  | ILabel l => True
+  | INop => True
+  | IMov r1 r2 => True
+  | IBinOp bop r1 r2 r3 => True
+  | ILoad r1 r2 => True
+  | IStore r1 r2 => True
+  | IAlloc r1 r2 => True
+  | IJump r => True
+  | IReturn => True
+  | IHalt => True
+  end.
+
+(* Component C has at least two buffers of size at least one:
+   the first one is for passing the call argument, whereas the second one is used
+   as a temporary store when passing controls between components *)
+Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
   exists b1 b2 bufs,
     NMap.find C (prog_buffers p) = Some (b1 :: b2 :: bufs) /\
     snd b1 > 0 /\ snd b2 > 0.
 
-(* TODO static checks on code (calls, pointers, etc) *)
 Record well_formed_program (p: program) := {
+  (* the interface is sound (but maybe not closed) *)
   wfprog_interface_soundness:
     sound_interface (prog_interface p);
+  (* each declared components has the required static buffers *)
   wfprog_buffers_existence:
-    forall C, NMap.In C (prog_interface p) -> required_local_buffers p C;
+    forall C, NMap.In C (prog_interface p) ->
+         has_required_local_buffers p C;
+  (* each exported procedures actually exists *)
   wfprog_exported_procedures_existence:
     forall C CI,
       NMap.MapsTo C CI (prog_interface p) ->
@@ -142,27 +180,57 @@ Record well_formed_program (p: program) := {
     exists Cprocs Pcode,
       NMap.MapsTo C Cprocs (prog_procedures p) /\
       NMap.MapsTo P Pcode Cprocs;
+  (* each instruction of each procedure is well-formed *)
+  wfprog_well_formed_instructions:
+    forall C Cprocs,
+      NMap.MapsTo C Cprocs (prog_procedures p) ->
+    forall P Pcode,
+      NMap.MapsTo P Pcode Cprocs ->
+    forall i, In i Pcode -> well_formed_instruction p C P i;
+  (* if the main component exists, then the main procedure must exist as well *)
   wfprog_main_existence:
-    exists procs,
-      NMap.MapsTo (fst (prog_main p)) procs (prog_procedures p) /\
-      NMap.In (snd (prog_main p)) procs
+    forall main_procs,
+      NMap.MapsTo (fst (prog_main p)) main_procs (prog_procedures p) ->
+      NMap.In (snd (prog_main p)) main_procs
 }.
 
-Definition closed_program (p: program) :=
-  closed_interface (prog_interface p).
+(* a closed program is a program with a closed interface and an existing main
+   procedure *)
+Record closed_program (p: program) := {
+  (* the interface must be closed (and consequently sound) *)
+  cprog_closed_interface:
+    closed_interface (prog_interface p);
+  (* the main procedure must exist *)
+  cprog_main_existence:
+    exists procs,
+      NMap.MapsTo (fst (prog_main p)) procs (prog_procedures p) /\
+      NMap.In (snd (prog_main p)) procs;
+}.
 
-(* TODO is this definition OK? (i.e. look at main) *)
+Definition prog_eq (p1 p2: program) : Prop :=
+  NMap.Equal (prog_interface p1) (prog_interface p2) /\
+  NMap.Equal (prog_procedures p1) (prog_procedures p2) /\
+  NMap.Equal (prog_buffers p1) (prog_buffers p2) /\
+  prog_main p1 = prog_main p2.
+
+Definition linkable_programs (p1 p2: program) : Prop :=
+  (* both programs are well-formed *)
+  well_formed_program p1 /\ well_formed_program p2 /\
+  (* their interfaces are disjoint *)
+  NMapExtra.Disjoint (prog_interface p1) (prog_interface p2) /\
+  (* the union of their interfaces is sound *)
+  sound_interface (NMapExtra.update (prog_interface p1) (prog_interface p2)).
+
 Definition program_link (p1 p2: program) mainC mainP : program :=
   {| prog_interface := NMapExtra.update (prog_interface p1) (prog_interface p2);
      prog_procedures := NMapExtra.update (prog_procedures p1) (prog_procedures p2);
      prog_buffers := NMapExtra.update (prog_buffers p1) (prog_buffers p2);
      prog_main := (mainC, mainP) |}.
 
-(* TODO probably need to add that main is valid as precondition *)
-Lemma linked_program_well_formedness mainC mainP:
-  forall p1 p2,
-    well_formed_program p1 ->
-    well_formed_program p2 ->
+(* TODO to prove, it should be true *)
+Theorem linking_well_formedness:
+  forall p1 p2 mainC mainP,
+    linkable_programs p1 p2 ->
     well_formed_program (program_link p1 p2 mainC mainP).
 Proof.
 Admitted.

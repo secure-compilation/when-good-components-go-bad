@@ -92,18 +92,25 @@ Module I.
 End I.
 
 Section Correctness.
-
 Variable p: Source.program.
 Variable tp: Intermediate.program.
 
-Hypothesis wellformed_input:
+Hypothesis input_program_well_formedness:
   Source.well_formed_program p.
+
+Hypothesis input_program_closedness:
+  Source.closed_program p.
 
 Hypothesis successful_compilation:
   compile_program p = Some tp.
 
 Theorem well_formedness_preservation:
   Intermediate.well_formed_program tp.
+Proof.
+Admitted.
+
+Theorem closedness_preservation:
+  Intermediate.closed_program tp.
 Proof.
 Admitted.
 

@@ -16,103 +16,313 @@ Section Decomposition.
   Variable mainC: Component.id.
   Variable mainP: Procedure.id.
 
-  (* p and c are valid programs *)
-  Hypothesis pWF: well_formed_program p.
-  Hypothesis cWF: well_formed_program c.
+  (* p and c can be linked *)
+  Hypothesis linkability:
+    linkable_programs p c.
 
-  (* linking p and c results in a valid closed program *)
-  (* (we assume to have a valid main procedure from which to start execution) *)
-  (* partializing still return a partial program *)
-  Hypothesis pcWF:
-    well_formed_program (program_link p c mainC mainP).
-  Hypothesis pcClosed:
+  (* linking p and c results in a closed program *)
+  (* (it should also be a well-formed program, but this should follow from
+      the fact that p and c are linkable) *)
+  Hypothesis linked_program_closedness:
     closed_program (program_link p c mainC mainP).
-  Hypothesis partialWF:
-    well_formed_program (PS.partial_program p mainC mainP (prog_interface c)).
 
   Let split := map fst (NMap.elements (prog_interface p)).
   Let G := init_genv (program_link p c mainC mainP).
-  Let G' := init_genv (PS.partial_program p mainC mainP (prog_interface c)).
+  Let G' := init_genv (PS.partialize (program_link p c mainC mainP) (prog_interface c)).
 
   Lemma G_is_well_formed:
     well_formed_global_env G.
   Proof.
-    apply (init_genv_preserves_well_formedness
-             (program_link p c mainC mainP));
-      auto.
+    apply (init_genv_preserves_well_formedness (program_link p c mainC mainP)).
+    - apply linking_well_formedness; auto.
   Qed.
 
   Lemma G'_is_well_formed:
     well_formed_global_env G'.
   Proof.
     apply (init_genv_preserves_well_formedness
-             (PS.partial_program p mainC mainP (prog_interface c)));
-      auto.
-  Qed.
+          (PS.partialize (program_link p c mainC mainP) (prog_interface c))); auto.
+    - destruct linkability; auto.
+      unfold PS.partialize, program_link. simpl.
+      (* TODO to prove *)
+      (* it would be easy to prove if we had some lemmas about maps update combined
+         with the map diff and filter operations *)
+  Admitted.
 
   Inductive related_states : CS.state -> PS.state -> Prop :=
   | ProgramControl:
       forall gps pgps mem pmem regs pc,
-        PS.is_program_component G (Pointer.component pc) ->
+        (* the program has control *)
+        PS.is_program_component G' (Pointer.component pc) ->
+        (* the partial stack is in sync *)
         pgps = PS.to_partial_stack gps split ->
-        NMap.In (Pointer.component pc) mem ->
-        PS.maps_match_on split mem pmem ->
+        (* mem contains exactly all components memories *)
+        (forall C, NMap.In C (prog_interface (program_link p c mainC mainP)) <->
+              NMap.In C mem) ->
+        (* pmem contains exactly all program components memories of mem *)
+        (forall C, PS.is_program_component G' C ->
+              (forall Cmem, NMap.MapsTo C Cmem mem <-> NMap.MapsTo C Cmem pmem)) ->
+        (* registers and the program counter are equal *)
         related_states (gps, mem, regs, pc)
                        (PS.PC (pgps, pmem, regs, pc))
+
   | ContextControl_Normal:
       forall gps pgps mem pmem regs pc,
-        PS.is_context_component G (Pointer.component pc) ->
+        (* the context has control *)
+        PS.is_context_component (prog_interface c) (Pointer.component pc) ->
+        (* the partial stack is in sync *)
         pgps = PS.to_partial_stack gps split ->
-        NMap.In (Pointer.component pc) mem ->
-        PS.maps_match_on split mem pmem ->
+        (* mem contains exactly all components memories *)
+        (forall C, NMap.In C (prog_interface (program_link p c mainC mainP)) <->
+              NMap.In C mem) ->
+        (* pmem contains exactly all program components memories of mem *)
+        (forall C, PS.is_program_component G' C ->
+              (forall Cmem, NMap.MapsTo C Cmem mem <-> NMap.MapsTo C Cmem pmem)) ->
+        (* registers and the program counter are equal *)
         related_states (gps, mem, regs, pc)
                        (PS.CC (pgps, pmem, Pointer.component pc) PS.Normal)
+
   | ContextControl_WentWrong:
       forall gps pgps mem pmem regs pc,
-        PS.is_context_component G (Pointer.component pc) ->
+        (* the context has control *)
+        PS.is_context_component (prog_interface c) (Pointer.component pc) ->
+        (* the partial stack is in sync *)
         pgps = PS.to_partial_stack gps split ->
-        NMap.In (Pointer.component pc) mem ->
-        PS.maps_match_on split mem pmem ->
+        (* mem contains exactly all components memories *)
+        (forall C, NMap.In C (prog_interface (program_link p c mainC mainP)) <->
+              NMap.In C mem) ->
+        (* pmem contains exactly all program components memories of mem *)
+        (forall C, PS.is_program_component G' C ->
+              (forall Cmem, NMap.MapsTo C Cmem mem <-> NMap.MapsTo C Cmem pmem)) ->
+        (* the current state doesn't step and it's not final (i.e. it's stuck) *)
         (forall s' t, ~ CS.step G (gps,mem,regs,pc) t s') ->
         ~ (forall r, CS.final_state G (gps,mem,regs,pc) r) ->
+        (* registers and the program counter are equal *)
         related_states (gps, mem, regs, pc)
                        (PS.CC (pgps, pmem, Pointer.component pc) PS.WentWrong).
 
   Lemma initial_states_match:
     forall s1,
-      CS.initial_state G mainC mainP s1 ->
+      CS.initial_state (program_link p c mainC mainP) G s1 ->
     exists s2,
-      PS.initial_state G' mainC mainP s2 /\ related_states s1 s2.
+      PS.initial_state (PS.partialize (program_link p c mainC mainP) (prog_interface c))
+                       G' (prog_interface c) s2
+      /\ related_states s1 s2.
   Proof.
     intros s1 Hs1_init.
     CS.unfold_state.
-    destruct Hs1_init as [Hempty_stack [[Hpc_comp [Hpc_block Hpc_offset]] Hmem]].
-    destruct (NMapExtra.F.In_dec (genv_entrypoints G) mainC) as [Hprg|Hctx].
-    - exists (PS.PC (PS.to_partial_stack s split, mem, regs, pc)).
+    destruct Hs1_init
+      as [Hempty_stack [Hmem1 [Hmem2 [Hregs [Hpc_comp [Hpc_block Hpc_offset]]]]]].
+    destruct (NMapExtra.F.In_dec (prog_interface p) mainC) as [Hprg|Hctx].
+    (* program has control case *)
+    - exists (PS.PC (PS.to_partial_stack s split,
+                NMapExtra.filter (fun C _ => NMap.mem C (prog_interface p)) mem,
+                regs, pc)).
       split.
       + unfold PS.initial_state.
-        subst. repeat split; eauto.
-        unfold G, G'.
-        * admit. (* TODO prove that entrypoints are the same in both G and G' *)
-        * admit. (* TODO prove that program components have a memory *)
-      + apply ProgramControl; auto.
-        * unfold PS.is_program_component.
-          subst mainC. auto.
-        * apply Hmem. rewrite Hpc_comp.
-          apply wfgenv_entrypoints_soundness; auto.
-          apply G_is_well_formed.
-        * apply PS.maps_match_on_reflexive.
-    - exists (PS.CC (PS.to_partial_stack s split, mem, Pointer.component pc) PS.Normal).
+        split.
+        * subst. auto.
+        * split.
+          ** intro C. split.
+             *** intro HCprog.
+                 unfold PS.is_program_component in HCprog.
+                 unfold G', init_genv in HCprog.
+                 destruct (init_all (PS.partialize (program_link p c mainC mainP)
+                                                   (prog_interface c))).
+                 destruct p0. simpl in HCprog.
+                 apply NMapExtra.diff_in_iff in HCprog. destruct HCprog.
+                 apply NMapExtra.update_in_iff in H. destruct H.
+                 **** specialize (Hmem1 C).
+                      assert (HCinPC: NMap.In C (prog_interface
+                                                  (program_link p c mainC mainP))). {
+                        unfold program_link. simpl.
+                        apply NMapExtra.update_in_iff. left. auto.
+                      } apply Hmem1 in HCinPC.
+                      destruct HCinPC.
+                      exists x.
+                      apply NMapExtra.filter_iff.
+                      ***** unfold Morphisms.Proper, Morphisms.respectful.
+                            intros. subst. reflexivity.
+                      ***** split.
+                      ****** auto.
+                      ****** apply NMapExtra.F.mem_in_iff. auto.
+                 **** contradiction.
+             *** intro.
+                 destruct H.
+                 apply NMapExtra.filter_iff in H.
+                 **** destruct H. apply NMapExtra.F.mem_in_iff in H0.
+                      unfold PS.is_program_component, G', init_genv.
+                      destruct (init_all (PS.partialize (program_link p c mainC mainP)
+                                                        (prog_interface c))).
+                      destruct p0. simpl.
+                      apply NMapExtra.diff_in_iff. split.
+                      ***** apply NMapExtra.update_in_iff. left. auto.
+                      ***** destruct linkability as [? [? []]].
+                      unfold NMapExtra.Disjoint in H3.
+                      specialize (H3 C). intro.
+                      apply H3. split. auto. auto.
+                 **** unfold Morphisms.Proper, Morphisms.respectful.
+                      intros. subst. reflexivity.
+          ** split.
+             *** (* TODO prove that memory gets initialized in the same way *) admit.
+             *** split.
+                 **** subst. reflexivity.
+                 **** split.
+                      ***** unfold PS.is_program_component.
+                      simpl in Hpc_comp. subst.
+                      unfold G', init_genv.
+                      destruct (init_all
+                                  (PS.partialize (program_link p c (Pointer.component pc)
+                                                               mainP)
+                                                 (prog_interface c))).
+                      destruct p0. simpl.
+                      apply NMapExtra.diff_in_iff. split.
+                      ****** apply NMapExtra.update_in_iff. left. auto.
+                      ****** unfold linkable_programs in linkability.
+                      destruct linkability as [? [? [Hdisjoint ?]]].
+                      unfold NMapExtra.Disjoint in Hdisjoint.
+                      specialize (Hdisjoint (Pointer.component pc)).
+                      intro. apply Hdisjoint. split; auto.
+                      ***** split.
+                      ****** rewrite Hpc_comp. simpl. reflexivity.
+                      ****** simpl in *. split.
+                      ******* unfold G', init_genv.
+                        (* TODO prove that entrypoints are the same in G and G' *)
+                        admit.
+                      ******* auto.
+      + apply ProgramControl.
+        * simpl in *. rewrite Hpc_comp.
+          unfold PS.is_program_component. unfold G', init_genv.
+          destruct (init_all (PS.partialize (program_link p c mainC mainP)
+                                            (prog_interface c))).
+          destruct p0. simpl.
+          apply NMapExtra.diff_in_iff. split.
+          ** apply NMapExtra.update_in_iff. left. auto.
+          ** destruct linkability as [? [? []]].
+             unfold NMapExtra.Disjoint in H1.
+             specialize (H1 mainC). intro.
+             apply H1. split. auto. auto.
+        * subst. reflexivity.
+        * intro C. simpl. split.
+          ** intro. apply Hmem1. unfold G, init_genv.
+             destruct (init_all (program_link p c mainC mainP)). destruct p0. simpl.
+             auto.
+          ** intro.
+             unfold G, init_genv in Hmem1.
+             destruct (init_all (program_link p c mainC mainP)). destruct p0. simpl in *.
+             apply Hmem1. auto.
+        * intros C HCprog Cmem. split.
+          ** intro. apply NMapExtra.filter_iff.
+             *** unfold Morphisms.Proper, Morphisms.respectful.
+                 intros. subst. reflexivity.
+             *** split. auto.
+                 unfold PS.is_program_component in HCprog.
+                 unfold G', init_genv in HCprog.
+                 destruct (init_all (PS.partialize (program_link p c mainC mainP)
+                                                   (prog_interface c))).
+                 destruct p0. simpl in HCprog.
+                 apply NMapExtra.diff_in_iff in HCprog. destruct HCprog.
+                 apply NMapExtra.update_in_iff in H0. destruct H0.
+                 **** apply NMapExtra.F.mem_in_iff. auto.
+                 **** contradiction.
+          ** intro.
+             unfold PS.is_program_component in HCprog.
+             unfold G', init_genv in HCprog.
+             destruct (init_all (PS.partialize (program_link p c mainC mainP)
+                                               (prog_interface c))).
+             destruct p0. simpl in HCprog.
+             apply NMapExtra.diff_in_iff in HCprog. destruct HCprog.
+             apply NMapExtra.update_in_iff in H0. destruct H0.
+             *** apply NMapExtra.filter_iff in H.
+                 **** destruct H. auto.
+                 **** unfold Morphisms.Proper, Morphisms.respectful.
+                      intros. subst. reflexivity.
+             *** contradiction.
+
+    (* context has control case *)
+    - exists (PS.CC (PS.to_partial_stack s split,
+                NMapExtra.filter (fun C _ => NMap.mem C (prog_interface p)) mem,
+                mainC) PS.Normal).
       split.
       + unfold PS.initial_state.
-        subst. repeat split. auto.
-        * admit. (* TODO prove that program components have a memory *)
-      + apply ContextControl_Normal; auto.
-        * unfold PS.is_context_component, PS.is_program_component.
-          subst mainC. auto.
-        * (* TODO prove that p's main component is in the interface *)
+        split.
+        * subst. reflexivity.
+        * split.
+          ** intro C. split.
+             *** intro HCinprog.
+                 unfold PS.is_program_component in HCinprog.
+                 unfold G', init_genv in HCinprog.
+                 destruct (init_all (PS.partialize (program_link p c mainC mainP)
+                                                   (prog_interface c))).
+                 destruct p0. simpl in HCinprog.
+                 apply NMapExtra.diff_in_iff in HCinprog.
+                 destruct HCinprog as [H1 H2].
+                 specialize (Hmem1 C).
+                 unfold program_link in Hmem1. simpl in Hmem1.
+                 assert (H1' := H1).
+                 apply Hmem1 in H1. destruct H1.
+                 exists x. apply NMapExtra.filter_iff.
+                 **** unfold Morphisms.Proper, Morphisms.respectful.
+                      intros. subst. reflexivity.
+                 **** split.
+                      ***** apply H.
+                      ***** apply NMapExtra.F.mem_in_iff. 
+                      apply NMapExtra.update_in_iff in H1'.
+                      destruct H1'; try contradiction.
+                      auto.
+             *** intro HCinmem.
+                 unfold PS.is_program_component, G', init_genv.
+                 destruct (init_all (PS.partialize (program_link p c mainC mainP)
+                                                   (prog_interface c))).
+                 destruct p0. simpl.
+                 apply NMapExtra.diff_in_iff. split.
+                 **** destruct HCinmem. apply NMapExtra.filter_iff in H.
+                      ***** destruct H. apply NMapExtra.F.mem_in_iff in H0.
+                      apply NMapExtra.update_in_iff. left. auto.
+                      ***** unfold Morphisms.Proper, Morphisms.respectful.
+                      intros. subst. reflexivity.
+                 (* disjointness of interfaces *)
+                 **** destruct linkability as [? [? []]].
+                      unfold NMapExtra.Disjoint in H1.
+                      specialize (H1 C). intro.
+                      apply H1. split.
+                      ***** destruct HCinmem. apply NMapExtra.filter_iff in H4.
+                      destruct H4. apply NMapExtra.F.mem_in_iff in H5. auto.
+                      ****** unfold Morphisms.Proper, Morphisms.respectful.
+                      intros. subst. reflexivity.
+                      ***** auto.
+          ** split.
+             *** (* TODO prove that memory gets initialized in the same way *) admit.
+             *** split.
+                 **** (* TODO prove that the executing component belongs to the context *)
+                   admit.
+                 **** split.
+                      ***** simpl in *. auto. 
+                      ***** reflexivity.
+      + replace mainC with (Pointer.component pc). apply ContextControl_Normal.
+        * simpl in Hpc_comp. rewrite Hpc_comp.
           admit.
-        * apply PS.maps_match_on_reflexive.
+        * subst. reflexivity.
+        * intro C. split; intro; apply (Hmem1 C); auto.
+        * intros. split.
+          ** intro.
+             apply NMapExtra.filter_iff.
+             *** unfold Morphisms.Proper, Morphisms.respectful.
+                 intros. subst. reflexivity.
+             *** split. auto.
+                 apply NMapExtra.F.mem_in_iff.
+                 unfold PS.is_program_component in H.
+                 unfold G', init_genv in H.
+                 destruct (init_all (PS.partialize (program_link p c mainC mainP)
+                                                   (prog_interface c))).
+                 destruct p0. simpl in H.
+                 apply NMapExtra.diff_in_iff in H. destruct H.
+                 apply NMapExtra.update_in_iff in H. destruct H; try contradiction.
+                 auto.
+          ** intro. apply NMapExtra.filter_iff in H0.
+             *** destruct H0. auto.
+             *** unfold Morphisms.Proper, Morphisms.respectful.
+                 intros. subst. reflexivity.
   Admitted.
 
   Lemma final_states_match:
@@ -123,59 +333,6 @@ Section Decomposition.
     intros s1 s2 r Hs1s2_rel Hs1_final.
     CS.unfold_state.
     destruct Hs1_final as [procs [proc [Hprocs [Hproc Hinstr]]]].
-    unfold PS.final_state.
-    inversion Hs1s2_rel; subst.
-    - unfold executing. eexists. eexists. eauto.
-      repeat split; eauto.
-      + unfold G, G'.
-        (* TODO prove that if G has a procedure, then G' has it as well *)
-        admit.
-    - reflexivity.
-    - exfalso.
-      apply H9. intro. unfold CS.final_state.
-      unfold executing. eexists. eexists. eauto.
-  Admitted.
-
-  Lemma split_agrees_with_global_env:
-    forall C, PS.is_program_component G C -> In C split.
-  Proof.
-    intros C Hprog.
-    unfold PS.is_program_component, split in *.
-
-    assert (Hprogcomp := Hprog).
-    apply (wfgenv_entrypoints_soundness G G_is_well_formed) in Hprog.
-    unfold G in Hprog. unfold init_genv in Hprog.
-    destruct (init_all (program_link p c mainC mainP)).
-    simpl in Hprog. destruct p0. simpl in Hprog.
-    apply NMapExtra.update_in_iff in Hprog.
-    destruct Hprog.
-    - assert (H' := H).
-      apply NMapExtra.F.elements_in_iff in H'.
-      destruct H' as [CI Hin].
-      change C with (fst (C, CI)).
-      apply (in_map fst (NMap.elements (prog_interface p))).
-      (* TODO prove that InA => In *)
-      admit.
-    - admit. (* contradiction, the component belongs to the program *)
-  Admitted.
-
-  Lemma genv_extension_after_partialize_1:
-    forall C CI,
-      NMap.MapsTo C CI (genv_interface G') -> NMap.MapsTo C CI (genv_interface G).
-  Proof.
-  Admitted.
-
-  Lemma genv_extension_after_partialize_2:
-    forall C Cprocs,
-      NMap.MapsTo C Cprocs (genv_procedures G') -> NMap.MapsTo C Cprocs (genv_procedures G).
-  Proof.
-  Admitted.
-
-  Lemma genv_extension_after_partialize_3:
-    forall C Centrypoints,
-      NMap.MapsTo C Centrypoints (genv_entrypoints G') ->
-      NMap.MapsTo C Centrypoints (genv_entrypoints G).
-  Proof.
   Admitted.
 
   Lemma lockstep_simulation:
@@ -184,9 +341,10 @@ Section Decomposition.
     forall s2,
       related_states s1 s2 ->
     exists s2',
-      PS.step G' s2 t s2' /\ related_states s1' s2'.
+      PS.step (prog_interface c) G' s2 t s2' /\ related_states s1' s2'.
   Proof.
     intros s1 t s1' Hstep s2 Hs1s2_rel.
+(*
     inversion Hs1s2_rel; subst;
       inversion Hstep; subst;
 
@@ -400,11 +558,12 @@ Section Decomposition.
     - exfalso. eapply H3. eauto.
     - exfalso. eapply H3. eauto.
     - exfalso. eapply H3. eauto.
+ *)
   Admitted.
 
   Theorem PS_simulates_CS:
     forward_simulation (CS.sem (program_link p c mainC mainP))
-                       (PS.sem p mainC mainP (prog_interface c)).
+                       (PS.sem (program_link p c mainC mainP) (prog_interface c)).
   Proof.
     apply forward_simulation_step with related_states.
     - apply initial_states_match.
@@ -416,7 +575,7 @@ Section Decomposition.
     forall beh1,
       program_behaves (CS.sem (program_link p c mainC mainP)) beh1 ->
     exists beh2,
-      program_behaves (PS.sem p mainC mainP (prog_interface c)) beh2 /\
+      program_behaves (PS.sem (program_link p c mainC mainP) (prog_interface c)) beh2 /\
       behavior_improves beh1 beh2.
   Proof.
     intros.
@@ -425,9 +584,8 @@ Section Decomposition.
   Qed.
 
   Corollary PS_behaves_as_CS:
-    forall beh,
-      program_behaves (CS.sem (program_link p c mainC mainP)) beh ->
-      program_behaves (PS.sem p mainC mainP (prog_interface c)) beh.
+    forall beh, program_behaves (CS.sem (program_link p c mainC mainP)) beh ->
+           program_behaves (PS.sem (program_link p c mainC mainP) (prog_interface c)) beh.
   Proof.
   Admitted.
 End Decomposition.

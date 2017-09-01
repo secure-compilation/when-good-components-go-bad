@@ -16,22 +16,26 @@ Definition stack : Type := list Pointer.t.
 
 Definition state : Type := stack * Memory.t * Register.t * Pointer.t.
 
-Definition initial_state
-           (G: global_env)
-           (mainC: Component.id) (mainP: Procedure.id)
-           (s: state) : Prop :=
+Definition initial_state (p: program) (G: global_env) (s: state) : Prop :=
   let '(gps, mem, regs, pc) := s in
   (* the global protected stack is empty *)
   gps = [] /\
+  (* mem exaclty contains all components memories and it comes from the init routine *)
+  (forall C, NMap.In C (prog_interface p) <-> NMap.In C mem) /\
+  (let '(m, _, _) := init_all p in mem = m) /\
+  (* the origin register (R_AUX2) is set to 1 (meaning external call) *)
+  (* the R_ONE register is set to 1 *)
+  (* the other registers are set to undef *)
+  regs = [Int 1; Undef; Undef; Undef; Int 1; Undef; Undef] /\
   (* the program counter is pointing to the start of the main procedure *)
-  (Pointer.component pc = mainC /\
-   EntryPoint.get mainC mainP (genv_entrypoints G) = Some (Pointer.block pc) /\
-   Pointer.offset pc = 0) /\
-  (* each component has its own memory *)
-  (forall C, NMap.In C (genv_interface G) -> NMap.In C mem).
+  Pointer.component pc = fst (prog_main p) /\
+  EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
+                 (genv_entrypoints G) = Some (Pointer.block pc) /\
+  Pointer.offset pc = 0.
 
 Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
   let '(gsp, mem, regs, pc) := s in
+  Register.get R_COM regs = Int r /\
   executing G pc IHalt.
 
 Inductive step (G : global_env) : state -> trace -> state -> Prop :=
@@ -65,7 +69,10 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     Register.get r1 regs = Ptr ptr ->
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
-    step G (gps, mem, regs, pc) E0 (gps, mem, regs', Pointer.inc pc)
+    (* TODO fix the read value in the event *)
+    let t := if (Pointer.component ptr) =? (Pointer.component pc) then E0
+             else [ELoad (Pointer.component pc) 0 (Pointer.component ptr)] in
+    step G (gps, mem, regs, pc) t (gps, mem, regs', Pointer.inc pc)
 
 | Store: forall gps mem regs pc ptr r1 r2 mem',
     executing G pc (IStore r1 r2) ->
@@ -112,6 +119,7 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     gps' = Pointer.inc pc :: gps ->
     EntryPoint.get C' P (genv_entrypoints G) = Some b ->
     let pc' := (C', b, 0) in
+    (* TODO fix the read value in the event *)
     Register.get R_COM regs = Int rcomval ->
     let t := [ECall (Pointer.component pc) P rcomval C'] in
     step G (gps, mem, regs, pc) t (gps', mem, Register.invalidate regs, pc')
@@ -120,6 +128,7 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     executing G pc IReturn ->
     gps = pc' :: gps' ->
     Pointer.component pc <> Pointer.component pc' ->
+    (* TODO fix the read value in the event *)
     Register.get R_COM regs = Int rcomval ->
     let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
     step G (gps, mem, regs, pc) t (gps', mem, Register.invalidate regs, pc').
@@ -155,7 +164,9 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
     | Ptr ptr =>
       do v <- Memory.load mem ptr;
       let regs' := Register.set r2 v regs in
-      ret (E0, (gps, mem, regs', Pointer.inc pc))
+      let t := if (Pointer.component ptr) =? (Pointer.component pc) then E0
+               else [ELoad (Pointer.component pc) 0 (Pointer.component ptr)] in
+      ret (t, (gps, mem, regs', Pointer.inc pc))
     | _ => None
     end
   | IStore r1 r2 =>
@@ -453,36 +464,60 @@ Qed.
 Section Semantics.
   Variable p: program.
 
+  Hypothesis valid_program:
+    well_formed_program p.
+
+  Hypothesis complete_program:
+    closed_program p.
+
   Let G := init_genv p.
 
   Definition sem :=
-    @Semantics_gen state global_env step
-                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
-                   (final_state G) G.
+    @Semantics_gen state global_env step (initial_state p G) (final_state G) G.
 
   Lemma determinate_step:
     forall s t1 s1 t2 s2,
       step G s t1 s1 ->
-      step G s t2 s2 -> match_traces t1 t2 /\ (t1 = t2 -> s1 = s2).
+      step G s t2 s2 ->
+      match_traces t1 t2 /\ (t1 = t2 -> s1 = s2).
   Proof.
     intros s t1 s1 t2 s2 Hstep1 Hstep2.
-  (*
     inversion Hstep1; subst;
       inversion Hstep2; subst;
         try (split; [ apply match_traces_E0 | intro; reflexivity ]);
-        try (split; [ apply match_traces_E0
-                    | intro;
-                      match goal with
-                      | Hexec1: executing ?G ?PC ?INSTR1,
-                        Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
-                        destruct H as [C_procs [P_code [HC_procs [HP_code Hinstr]]]];
-                        destruct H6 as [C_procs' [P_code' [HC_procs' [HP_code' Hinstr']]]];
-                        rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
-                        rewrite HP_code in HP_code'; inversion HP_code'; subst;
-                        rewrite Hinstr in Hinstr'; discriminate Hinstr'
-                      end ]).
-    *)
-  Admitted.
+        match goal with
+        | Hexec1: executing ?G ?PC ?INSTR1,
+          Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
+          destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code Hinstr]]]];
+          destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' Hinstr']]]];
+          rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
+          rewrite HP_code in HP_code'; inversion HP_code'; subst;
+          rewrite Hinstr in Hinstr'; inversion Hinstr'; subst
+        end;
+        try (exfalso; discriminate Hinstr');
+        try (match goal with
+             | |- match_traces ?T ?T /\ ?REST =>
+               split; [ constructor
+                      | intro; apply (step_deterministic G (gps, mem, regs, pc) T); auto ]
+             end).
+    (* load *)
+    - rewrite H0 in H9. inversion H9. subst.
+      rewrite H1 in H10. inversion H10. subst.
+      destruct (Pointer.component ptr0 =? Pointer.component pc);
+        subst t t0; split; constructor; auto.
+    (* call *)
+    - rewrite H3 in H14. inversion H14. subst.
+      rewrite H4 in H15. inversion H15. subst.
+      split.
+      + constructor.
+      + intro. reflexivity.
+    (* return *)
+    - rewrite H2 in H11. inversion H11. subst.
+      inversion H9. subst.
+      split.
+      + constructor.
+      + intro. reflexivity.
+  Qed.
 
   Lemma singleton_traces:
     single_events sem.
@@ -490,15 +525,39 @@ Section Semantics.
     unfold single_events.
     intros s t s' Hstep.
     inversion Hstep; simpl; auto.
+    destruct (Pointer.component ptr =? Pointer.component pc); subst; auto.
   Qed.
 
   Lemma determinate_initial_states:
     forall s1 s2,
-      initial_state G (fst (prog_main p)) (snd (prog_main p)) s1 ->
-      initial_state G (fst (prog_main p)) (snd (prog_main p)) s2 ->
+      initial_state p G s1 -> initial_state p G s2 ->
       s1 = s2.
   Proof.
-  Admitted.
+    unfold initial_state.
+    intros s1 s2 Hs1_init Hs2_init.
+    repeat unfold_state.
+    destruct Hs1_init
+      as [Hstack [Hmem1 [Hmem2 [Hregs [Hpc_comp [Hpc_block Hpc_offset]]]]]].
+    destruct Hs2_init
+      as [Hstack' [Hmem1' [Hmem2' [Hregs' [Hpc_comp' [Hpc_block' Hpc_offset']]]]]].
+    subst.
+    rewrite <- Hpc_comp in Hpc_comp'.
+    rewrite Hpc_block in Hpc_block'.
+    rewrite <- Hpc_offset in Hpc_offset'.
+    (* program counter component *)
+    unfold Pointer.component in Hpc_comp'.
+    destruct pc. destruct p0.
+    destruct pc0. destruct p0.
+    subst.
+    (* program counter block *)
+    inversion Hpc_block'. subst.
+    (* program counter offset *)
+    unfold Pointer.offset in Hpc_offset'.
+    subst.
+    (* memory *)
+    destruct (init_all p). destruct p0.
+    subst. reflexivity.
+  Qed.
 
   Lemma final_states_stuckness:
     forall s r,
@@ -509,6 +568,7 @@ Section Semantics.
     unfold nostep.
     unfold_state.
     unfold final_state in Hs_final.
+    destruct Hs_final as [Hres Hexec].
     intros t s'. unfold not. intro Hstep.
     inversion Hstep; subst;
     try (match goal with
@@ -522,7 +582,6 @@ Section Semantics.
          end).
   Qed.
 
-  (* TODO think about final state result r *)
   Lemma final_states_uniqueness:
     forall s r1 r2,
       final_state G s r1 ->
@@ -531,7 +590,12 @@ Section Semantics.
     unfold final_state.
     intros s r1 r2 Hs_final1 Hs_final2.
     unfold_state.
-  Admitted.
+    destruct Hs_final1 as [Hres1 Hexec1].
+    destruct Hs_final2 as [Hres2 Hexec2].
+    rewrite Hres1 in Hres2.
+    inversion Hres2.
+    auto.
+  Qed.
 
   Lemma determinacy:
     determinate sem.

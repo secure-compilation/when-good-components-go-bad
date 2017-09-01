@@ -12,23 +12,16 @@ Record global_env := mkGlobalEnv {
 }.
 
 Record well_formed_global_env (G: global_env) := {
+  (* the interface is sound (but maybe not closed) *)
   wfgenv_interface_soundness:
     sound_interface (genv_interface G);
+  (* the entrypoints and the interface are in sync *)
   wfgenv_entrypoints_soundness:
-    forall C, NMap.In C (genv_entrypoints G) -> NMap.In C (genv_interface G);
+    forall C, NMap.In C (genv_entrypoints G) <-> NMap.In C (genv_interface G);
+  (* the procedures and the interface are in sync *)
   wfgenv_procedures_soundness:
-    forall C, NMap.In C (genv_procedures G) -> NMap.In C (genv_interface G)
+    forall C, NMap.In C (genv_procedures G) <-> NMap.In C (genv_interface G)
 }.
-
-(* G contains G', moreover they share the same interface *)
-Definition genv_extension (G G': global_env) : Prop :=
-  NMap.Equal (genv_interface G) (genv_interface G') /\
-  forall C, (forall Cprocs,
-           NMap.MapsTo C Cprocs (genv_procedures G') ->
-           NMap.MapsTo C Cprocs (genv_procedures G)) /\
-       (forall Centrypoints,
-           NMap.MapsTo C Centrypoints (genv_entrypoints G') ->
-           NMap.MapsTo C Centrypoints (genv_entrypoints G)).
 
 Definition executing G (pc : Pointer.t) (i : instr) : Prop :=
   exists C_procs P_code,
@@ -86,6 +79,7 @@ Definition init_genv (p: program) : global_env :=
      genv_procedures := ps;
      genv_entrypoints := E |}.
 
+(* TODO prove the lemma, it is reasonably true *)
 Lemma init_genv_preserves_well_formedness:
   forall p, well_formed_program p ->
        well_formed_global_env (init_genv p).

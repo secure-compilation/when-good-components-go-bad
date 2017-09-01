@@ -28,25 +28,23 @@ Module CS.
 Definition stack : Type := list (Component.id * value * cont).
 Definition state : Type := Component.id * stack * Memory.t * cont * expr.
 
-Definition initial_state
-           (G: global_env)
-           (mainC: Component.id) (mainP: Procedure.id)
-           (st: state) : Prop :=
+Definition initial_state (p: program) (st: state) : Prop :=
   let '(C, s, mem, k, e) := st in
   (* the executing component is the main one *)
-  C = mainC /\
+  C = fst (prog_main p) /\
   (* the stack is empty *)
   s = [] /\
+  (* mem exaclty contains all components memories and it comes from the init routine *)
+  (forall C, NMap.In C (prog_interface p) <-> NMap.In C mem) /\
+  (let '(_, m) := init_all p in mem = m) /\
   (* the expression under evaluation is the main procedure *)
   (exists main_procs,
-      NMap.find mainC (genv_procedures G) = Some main_procs /\
-      NMap.find mainP main_procs = Some e) /\
-  (* each component has its own memory *)
-  (forall C, NMap.In C (genv_interface G) -> NMap.In C mem) /\
+      NMap.find (fst (prog_main p)) (prog_procedures p) = Some main_procs /\
+      NMap.find (snd (prog_main p)) main_procs = Some e) /\
   (* the continuation is stop *)
   k = Kstop.
 
-Definition final_state (G: global_env) (st: state) (r: nat) : Prop :=
+Definition final_state (st: state) (r: nat) : Prop :=
   let '(C, s, mem, k, e) := st in
   e = E_exit.
 
@@ -104,7 +102,8 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
           t (C, s, mem, Kderef k, e)
 | KS_DerefEval : forall C s mem k C' b' o' v,
     Memory.load mem (C',b',o') = Some v ->
-    let t := E0 in
+    (* TODO fix the read value in the event *)
+    let t := if C =? C' then E0 else [ELoad C 0 C'] in
     kstep G (C, s, mem, Kderef k, E_val (Ptr (C',b',o')))
           t (C, s, mem, k, E_val v)
 | KS_Assign1 : forall C s mem k e1 e2,
@@ -202,7 +201,8 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v with
       | Ptr (C',b',o') =>
         do v <- Memory.load mem (C',b',o');
-        ret (E0, (C, s, mem, k', E_val v))
+        let t := if C =? C' then E0 else [ELoad C 0 C'] in
+        ret (t, (C, s, mem, k', E_val v))
       | _ => None
       end
     | Kassign1 e1 k' =>
@@ -358,12 +358,16 @@ Qed.
 Section Semantics.
   Variable p: program.
 
+  Hypothesis valid_program:
+    well_formed_program p.
+
+  Hypothesis complete_program:
+    closed_program p.
+
   Let G := init_genv p.
 
   Definition sem :=
-    @Semantics_gen state global_env kstep
-                   (initial_state G (fst (prog_main p)) (snd (prog_main p)))
-                   (final_state G) G.
+    @Semantics_gen state global_env kstep (initial_state p) final_state G.
 
   Lemma receptiveness_step:
     forall s t1 s1 t2,
@@ -373,14 +377,35 @@ Section Semantics.
     intros s t1 s1 t2.
     intros Hkstep Hmatch_traces.
     inversion Hkstep; subst;
-      inversion Hmatch_traces; subst;
-        try (eexists; eauto).
-    - rewrite <- H6 in Hkstep. eapply Hkstep.
-    - rewrite <- H6 in Hkstep. eapply Hkstep.
-    - rewrite <- H6 in Hkstep. eapply Hkstep.
-    - rewrite <- H2 in Hkstep. eapply Hkstep.
-    - rewrite <- H2 in Hkstep. eapply Hkstep.
-    - rewrite <- H2 in Hkstep. eapply Hkstep.
+      inversion Hmatch_traces; subst.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - destruct (C =? C'); subst t; try inversion H1; eexists; apply Hkstep.
+    - destruct (C =? C'); subst t; try inversion H1; eexists; apply Hkstep.
+    - destruct (C =? C'); subst t; try inversion H1; eexists; apply Hkstep.
+    - destruct (C =? C'); subst t; try inversion H1; eexists; apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. apply Hkstep.
+    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
   Qed.
 
   Lemma singleton_traces:
