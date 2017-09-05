@@ -9,7 +9,7 @@ Require Import Common.Maps.
  * Instruction Set Definition
  *******************************************)
 
-(* Registers *)
+(* Register Type *)
 Definition register := nat.
 
 Definition R_ONE: register := 1.
@@ -18,33 +18,54 @@ Definition R_AUX1 : register := 3.
 Definition R_AUX2 : register := 4.
 Definition R_RA : register := 5.
 Definition R_SP : register := 6. 
-Definition R_SP_SFI : register := 7. 
-Definition R_AND_CODE : register := 8.
-Definition R_AND_DATA : register := 9.
-Definition R_OR_DATA : register := 10. (* TODO add all SFI registers *)
+
+Definition IS_NOT_SFI_REGISTER (reg:nat) := reg < 26.
+Definition IS_SFI_REGISTER (reg:nat) := reg > 25.
+
+Definition  IS_SFI_SP_REGISTER (reg:nat) := reg = 26.
+
+Definition R_SFI_SP: register := 26.
+Definition R_AND_CODE_MASK : register := 27.
+Definition R_AND_DATA_MASK : register := 28.
+Definition R_OR_CODE_MASK : register := 29.
+Definition R_OR_DATA_MASK : register := 30.
+Definition R_T : register := 31.
+Definition R_D : register := 32.
+
 
 Definition value := Z.
 
-Definition ZERO_VALUE : value := Z.of_nat 0.
+Definition ZERO_VALUE : value := Z0.
 
-Definition is_zero_value (v:value) : Prop := (v = Z.of_nat 0).
+Definition is_zero_value (v:value) : Prop := (v = Z0).
 
 Definition immediate := Z.
 
-Definition address := nat.
+Definition address := N.
 
 Inductive binop : Set :=
-  Plus | ShiftLeft. (* TODO add all *)
+  Addition
+| Subtraction
+| Multiplication
+| Equality
+| Leq
+| BitwiseAnd
+| BitwiseOr
+| ShiftLeft. 
 
 Open Scope Z_scope.
 
 Definition executing_binop (operation : binop) (op1 : value) (op2 : value) : value :=
   match operation with
-  | Plus => op1 + op2
-  | _ => ZERO_VALUE (* TODO finish this *)
+    Addition => op1 + op2
+  | Subtraction => op1 - op2
+  | Multiplication => op1 * op2
+  | Equality => if Zeq_bool op1 op2 then 1 else 0
+  | Leq => if Zle_bool op1 op2 then 1 else 0
+  | BitwiseAnd => Z.land op1 op2
+  | BitwiseOr => Z.lor op1 op2
+  | ShiftLeft => Z.shiftl op1 op2
   end.
-
-Close Scope Z_scope.
 
 Inductive instr :=
 | INop : instr
@@ -62,14 +83,14 @@ Inductive instr :=
 (* termination *)
 | IHalt : instr.
 
+Inductive word := 
+| Data : value -> word
+| Instruction : instr -> word.
+
+
 (******************************************
  * Program Definition
  *******************************************)
-
-Inductive word := 
-| Data : Z -> word
-| Instruction : instr -> word.
-
 
 Module SFIComponent.
   
@@ -82,9 +103,20 @@ identifier used in the labeled transitions from the intermediate
 language semantics. *)
 Definition CN := SFIComponent.id -> Component.id.
 
+(* Maximum number of components *)
+Definition COMP_SIZE:N := 3.
+
+(* Number of bits used for offset within slot *)
+Definition OFFSET_SIZE:N := 12.
+
 (* Let C be a map address -> component numerical identifier.
 For SFI, C is just the value stored at bits S+1 to S+N. *)
-Definition C := address -> nat. 
+Definition C := address -> N.
+
+Definition COMPONENT_MASK : N := 2^COMP_SIZE - 1. 
+
+Definition C_SFI  (addr : address) : N :=
+   N.land (N.shiftl addr OFFSET_SIZE) COMPONENT_MASK.
 
 (* E is a partial map from addresses to procedure names.*)
 Definition E := address -> Procedure.id.
@@ -95,38 +127,49 @@ Module SFI.
 
   Module RegisterFile.
 
-    Definition t : Set := list value.
+    Definition pc : Set := address.
+    
+    Definition general_registers : Set := list value.
 
-    Fixpoint is_zero (gen_regs:t)  : Prop :=
+    Fixpoint is_zero (gen_regs:general_registers)  : Prop :=
       match gen_regs with
       | [] => True
       | r :: l' => (is_zero_value r)/\ is_zero l'
       end.
 
-    Definition set_register (reg : register) (val : value) (gen_regs  : t) : t :=
+    Definition set_register (reg : register) (val : value)
+               (gen_regs  : general_registers) : general_registers :=
       Util.Lists.update gen_regs reg val.
 
 
-    Definition get_register (reg : register) (gen_regs : t) : value :=
+    Definition get_register (reg : register) (gen_regs : general_registers) : value :=
       nth reg gen_regs (Z.of_nat 0).
 
   End RegisterFile.
   
   Module Memory.
 
-    Definition t := NMap.t word.
+    Definition t := BinNatMap.t word.
 
     Definition get_word (mem : t) (ptr : address) : option word :=
-      NMap.find ptr mem.
+      BinNatMap.find ptr mem.
 
     Definition get_value (mem : t) (ptr : address) : value :=
       match get_word mem ptr with
       | Some (Data val) => val
-      | _ => ZERO_VALUE (* might need to deal with an istruction here*)
+      | _ => ZERO_VALUE (* might need to deal with an instruction here*) 
       end.
 
+    Definition set_value (mem : t) (ptr : address) (val : value) : t :=
+      BinNatMap.add ptr (Data val) mem.
+
     Definition to_address (ptr:value) : address :=
-      (* todo *) 0.
+      (* negatives are converted to zero *)
+      Z.to_N ptr.
+
+    Definition is_same_component (addr1: address) (addr2: address) : Prop :=
+      (C_SFI addr1) = (C_SFI addr2).
+    
   End Memory.
   
   Record program :=
@@ -144,3 +187,5 @@ Module SFI.
     end.
 
 End SFI.
+
+Close Scope Z_scope.
