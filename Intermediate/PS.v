@@ -29,8 +29,9 @@ Definition is_program_component G C := NMap.In C (genv_interface G).
 Definition is_context_component (ctx: Program.interface) C := NMap.In C ctx.
 
 Definition initial_state
-           (p: program) (G: global_env) (ctx: Program.interface)
+           (p: program) (ctx: Program.interface)
            (s: state) : Prop :=
+  let G := init_genv p in
   match s with
   | PC (gps, mem, regs, pc) =>
     (* the global protected stack is empty *)
@@ -303,7 +304,7 @@ Section Semantics.
 
   Definition sem :=
     @Semantics_gen state global_env (step ctx)
-                   (initial_state (partialize p ctx) G ctx)
+                   (initial_state (partialize p ctx) ctx)
                    (final_state G) G.
 End Semantics.
 End PS.
