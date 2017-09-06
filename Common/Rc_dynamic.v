@@ -25,27 +25,23 @@ Require Import Intermediate.PS.
 
 (* Component id *)
 Definition interface := Program.interface.
+
 (* check if the last event of a behavior belongs to an agent,
    represented by the interface of its components *)
-
 Definition turn_trace (t:trace) (i:interface) : Prop :=
-  match t with
-  | nil => True (* TODO THIS DEPENDS ON THE INTIAL STATE *)
-  | e::t' => (match e with
-             | ECall Cid Pid n Cid' => Program.has_component_id i Cid'
-             | ERet Cid n Cid' => Program.has_component_id i Cid'
-             end)
-  end.
+  forall e, exists t', t = e::t' /\
+             (match e with
+              | ECall Cid Pid n Cid' => Program.has_component_id i Cid'
+              | ERet Cid n Cid' => Program.has_component_id i Cid'
+              end).
+  
 
 (* For now turn is defined only for finite traces. *)
 Definition turn (b:program_behavior) (i:interface) : Prop :=
-  match b with
-  | Terminates t n => turn_trace t i
-  | Diverges t => turn_trace t i
-  | Goes_wrong t => turn_trace t i
-  (* | Reacts: traceinf -> program_behavior *)
-  | _ => True
-  end.
+  exists t, turn_trace t i /\
+            ((exists n, b = Terminates t n) \/
+            (b = Diverges t) \/
+            (b = Goes_wrong t)).
              
   
 (* check if an interface is complete *)
@@ -56,15 +52,6 @@ Definition icomplete2 (i1 i2:interface) := icomplete (NMapExtra.update i1 i2).
 Definition contained (i1 i: interface) :=
   exists i2, NMap.Equal (NMapExtra.update i1 i2) i.
 
-(* Definition contained (i1 i2: interface) := *)
-(* forall C CI, *)
-(*     NMap.MapsTo C CI i1 -> NMap.MapsTo C CI i2. *)
-
-Definition update_contained :
-  forall i i1 i2,
-    NMapExtra.update i1 i2 = i -> contained i1 i.
-Proof.
-Admitted.
 
 Definition behavior_improves_p (behs beht:program_behavior) (psi:interface) :=
   (behs = beht \/ (exists t, behs = Goes_wrong t /\
@@ -152,7 +139,6 @@ Module I <: Lang.
       NMap.Equal (NMapExtra.update (get_interface p1) (get_interface p2)) (get_interface p) /\
       complete (link p1 p2).
 
-  (* TODO has p to be FD? *)
   Axiom decomposition:
     forall beh (c p:program),
       complete2 c p ->
@@ -203,43 +189,65 @@ Module SI.
   Axiom compile_spec:
     forall (p:S.program),
       S.valid p ->
-      I.valid (compile p) /\ S.get_interface p = I.get_interface (compile p).
+      I.valid (compile p) /\
+      NMap.Equal (S.get_interface p) (I.get_interface (compile p)).
 
+  Axiom Sreceptive:
+    forall P, receptive (S.sem P).
+  Axiom Ideterminate:
+    forall p, determinate (I.sem p).
+  
+  Axiom complete_forward_simulation :
+    forall P,
+      S.complete P ->
+      forward_simulation (S.sem P) (I.sem (compile P)).
 
-  (* TODO it also preserves UB; CH: needed for preserving FD *)
-  Axiom compiler_correctness :
-    forall beh (P:S.program) (psi:interface),
+  Definition complete_backward_simulation:
+    forall P,
+      S.complete P ->
+      backward_simulation (S.sem P) (I.sem (compile P)).
+  Proof.
+    intros. apply forward_to_backward_simulation.
+    apply complete_forward_simulation.
+    auto. auto.
+    apply Sreceptive. apply Ideterminate.
+  Qed.
+  
+  Theorem complete_compiler_correctness:
+    forall P behi,
+      S.complete P ->
+      program_behaves (I.sem (compile P)) behi ->
+      exists behs, program_behaves (S.sem P) behs /\ behavior_improves behs behi.
+  Proof.
+    intros. eapply backward_simulation_behavior_improves; eauto.
+    apply complete_backward_simulation; auto.
+  Qed.
+
+  (* TODO this should be provable from backward_simulation_complete *)
+  Axiom partial_backward_simulation:
+    forall P psi,
       S.valid P ->
       icomplete2 psi (S.get_interface P) ->
-      program_behaves (I.psem psi (compile P)) beh ->
-      program_behaves (S.psem psi P) beh.
-  (* TODO improves *)
-  
-  (* Proof. *)
-  (*   intros b P psi HvalP Hicompl FDP Ipsem. *)
-  (*   apply backward_simulation_behavior_improves with (L1:=(S.psem psi P))in Ipsem. *)
-  (*   destruct Ipsem as [b2 [Spsem Himprove]]. *)
-  (*   destruct Himprove. *)
-  (*   rewrite H in Spsem. *)
-  (*   eassumption. *)
-  (*   destruct H as [t [wrong prefix]]. *)
-    
-  (*   apply  with ). *)
-  (*   apply forward_simulation_behavior_improves with (L2:=(I.psem psi (compile P))). *)
-  (*   destruct Ipsem as [b2 [Spsem Himprove]]. *)
-  (*   destruct Himprove. *)
-  (*   rewrite <- H in Spsem. *)
-  (*   assumption. *)
-  (*   destruct H as [t [wrong prefix]]. *)
-  (*   apply compiler_correctness_simulation. *)
+      backward_simulation (S.psem psi P) (I.psem psi (compile P)).
 
-  (*   apply compiler_correctness_simulation. *)
-  (*   assumption. *)
-  (*   assumption. *)
-  (*   assumption. *)
-  (*   apply (psem_spec (I.get_interface c) (compile ip)). *)
-  (*   assumption. *)
-  (* Qed. *)
+
+  Axiom backward_simulation_behavior_improves_p:
+    forall psi p1 p2,
+      backward_simulation (S.psem psi p1) (I.psem psi p2) ->
+    forall beh2, program_behaves (I.psem psi p2) beh2 ->
+    exists beh1, program_behaves (S.psem psi p1) beh1 /\ behavior_improves_p beh1 beh2 (S.get_interface p1).
+
+  Theorem partial_compiler_correctness:
+    forall P psi behi,
+      S.valid P ->
+      icomplete2 psi (S.get_interface P) ->
+      program_behaves (I.psem psi (compile P)) behi ->
+      exists behs, program_behaves (S.psem psi P) behs /\ behavior_improves_p behs behi (S.get_interface P).
+  Proof.
+    intros. eapply backward_simulation_behavior_improves_p; eauto.
+    apply partial_backward_simulation; auto.
+  Qed.
+
 End SI.
 
 
