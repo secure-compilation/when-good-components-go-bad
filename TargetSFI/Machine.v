@@ -22,7 +22,11 @@ Definition R_SP : register := 6.
 Definition IS_NOT_SFI_REGISTER (reg:nat) := reg < 26.
 Definition IS_SFI_REGISTER (reg:nat) := reg > 25.
 
+Definition is_not_sfi_reg_bool (reg:nat) := reg <? 26.
+
 Definition  IS_SFI_SP_REGISTER (reg:nat) := reg = 26.
+
+Definition is_sfi_sp_register_bool (reg:nat) := reg =? 26.
 
 Definition R_SFI_SP: register := 26.
 Definition R_AND_CODE_MASK : register := 27.
@@ -94,7 +98,7 @@ Inductive word :=
 
 Module SFIComponent.
   
-  Definition id := nat.
+  Definition id := N.
   
 End SFIComponent.
 
@@ -111,11 +115,11 @@ Definition OFFSET_SIZE:N := 12.
 
 (* Let C be a map address -> component numerical identifier.
 For SFI, C is just the value stored at bits S+1 to S+N. *)
-Definition C := address -> N.
+Definition C := address ->  SFIComponent.id.
 
 Definition COMPONENT_MASK : N := 2^COMP_SIZE - 1. 
 
-Definition C_SFI  (addr : address) : N :=
+Definition C_SFI  (addr : address) : SFIComponent.id :=
    N.land (N.shiftl addr OFFSET_SIZE) COMPONENT_MASK.
 
 (* E is a partial map from addresses to procedure names.*)
@@ -169,6 +173,13 @@ Module SFI.
 
     Definition is_same_component (addr1: address) (addr2: address) : Prop :=
       (C_SFI addr1) = (C_SFI addr2).
+
+    Open Scope N_scope.
+    
+    Definition is_same_component_bool (addr1: address) (addr2: address) :=
+      (C_SFI addr1) =? (C_SFI addr2).
+
+    Close Scope N_scope.
     
   End Memory.
   
