@@ -121,7 +121,7 @@ Module CS.
       let val := Memory.get_value mem ptr in
       ~Memory.is_same_component ptr pc ->
       RegisterFile.set_register reg_dst val gen_regs = gen_regs' ->
-      let cn := snd G in
+      let '(_,cn,_) := G in
       let cpc := cn pc in
       let cptr := cn ptr in
       (* TODO Fix this when the rest changes from nat to Z *)
@@ -161,7 +161,7 @@ Module CS.
       executing mem pc (IJump reg) ->
       let pc' := Memory.to_address (RegisterFile.get_register reg gen_regs) in
       ~Memory.is_same_component pc pc'->
-      let cn := snd (fst G) in
+      let '(_,cn,_) := G in
       let cpc := cn pc in
       let cpc' := cn pc' in
       (* TODO Fix this when the rest changes from nat to Z *)
@@ -184,10 +184,10 @@ Module CS.
       RegisterFile.set_register R_RA (Z.of_N (pc+1)) gen_regs = gen_regs'->
       let pc' := addr in
       ~Memory.is_same_component pc pc'->
-      let cn := snd G in
+      let '(_,cn,e) := G in
       let cpc := cn pc in
       let cpc' := cn pc' in
-      let p := (snd G) pc' in
+      let p := e pc' in
       (* TODO Fix this when the rest changes from nat to Z *)
       let rcomval := Z.to_nat (RegisterFile.get_register R_COM gen_regs) in 
       let t := (ECall cpc p rcomval cpc')::nil in
@@ -234,7 +234,7 @@ Module CS.
         let c_sfi_pc: SFIComponent.id := C_SFI pc in
         let same_comp: bool := c_sfi_pc =? c_sfi_ptr in
         let t: trace := if same_comp then E0
-                 else let cn: CN := snd G in
+                 else let '(_,cn,_) := G in
                       let cpc: Component.id := cn pc in
                       let cptr: Component.id := cn ptr in
                       (* TODO Fix this when the rest changes from nat to Z *)
@@ -257,7 +257,7 @@ Module CS.
         let pc' := Memory.to_address (RegisterFile.get_register reg gen_regs) in
         let t := if Memory.is_same_component_bool pc pc' then E0
                  else
-                   let cn := snd (fst G) in
+                   let '(_,cn,_) := G in
                    let cpc := cn pc in
                    let cpc' := cn pc' in
                    (* TODO Fix this when the rest changes from nat to Z *)
@@ -270,10 +270,9 @@ Module CS.
         let pc': address := addr in
         let t: trace := if Memory.is_same_component_bool pc pc' then E0
                  else
-                   let cn : CN := snd G in
+                   let '(_,cn,e) := G in
                    let cpc : Component.id := cn pc in
                    let cpc' : Component.id := cn pc' in
-                   let e : E := snd G in
                    let p : Procedure.id := e pc' in
                    (* TODO Fix this when the rest changes from nat to Z *)
                    let rcomval : nat := Z.to_nat (RegisterFile.get_register R_COM gen_regs) in
@@ -284,6 +283,13 @@ Module CS.
     | Some (Data val) => None
     | None => None
     end.
+
+
+
+  Definition run (p: program) (input: value) (fuel: nat) : option nat :=
+    do (G, st) <- init_genv_and_state p;
+      execN fuel G st.
+  
   Close Scope N_scope.
   Close Scope monad_scope.
 
