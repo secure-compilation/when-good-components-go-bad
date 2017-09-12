@@ -107,7 +107,44 @@ Module ComponentMemory : AbstractComponentMemory.
   Proof.
     intros m m' n b Halloc b' i Hb'.
     unfold alloc in Halloc. inversion Halloc. subst.
-  Admitted.
+    unfold load. simpl.
+    erewrite NMapExtra.F.add_neq_o; auto.
+  Qed.
+
+Ltac inv H := (inversion H; subst; clear H).
+
+  Lemma load_after_update_same:
+    forall b o v b',
+      block_update b o v = Some b' ->
+      nth_error b' o = Some v.
+  Proof.
+    induction b; intros; inv H.
+    destruct o.
+    + inv H1; auto.  
+    + destruct (block_update b o v) eqn:?; inv H1.
+      simpl. 
+      eapply IHb; eauto.
+  Qed.
+
+  Lemma load_after_update_other:
+    forall b o v o' b',
+      block_update b o v = Some b' ->
+      o <> o' ->
+      nth_error b' o' = nth_error b o'.
+  Proof.
+    induction b; intros; inv H.
+    destruct o.
+    + inv H2. 
+      destruct o'. 
+      - intuition.
+      - auto.
+    + destruct (block_update b o v) eqn:?.
+      - inv H2. 
+        destruct o'. 
+        * auto.
+        * simpl. eauto.
+      - inv H2. 
+  Qed.
 
   Lemma load_after_store:
     forall m m' b i v,
@@ -117,8 +154,55 @@ Module ComponentMemory : AbstractComponentMemory.
       load m' b' i' = Some v.
   Proof.
     intros m m' b i v Hstore b' i'.
-    destruct (b =? b') eqn:Hbeqb'.
-  Admitted.
+    destruct (NMapFacts.eq_dec b b').
+    + destruct (Z.eq_dec i i').
+      - subst. right.
+         unfold load.  unfold store in Hstore. 
+         destruct (NMap.find (elt:=block) b' (content m)) eqn:?; [| inv Hstore]. 
+         destruct i'; [| |inv Hstore].  
+         * destruct (block_update b (Z.to_nat 0) v) eqn: E; inv Hstore. 
+           simpl. (* can't stop from unfolding nth_error...argh *)
+           rewrite NMapExtra.F.add_eq_o; auto.
+           apply load_after_update_same in E. apply E. 
+         * destruct (block_update b (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
+           simpl. 
+           rewrite NMapExtra.F.add_eq_o; auto.
+           eapply load_after_update_same; eauto.  
+      - left. subst b'. intuition.
+        unfold load.  unfold store in Hstore.
+        destruct (NMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
+        destruct i; [| | inv Hstore]. 
+        * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
+          simpl. 
+          rewrite NMapExtra.F.add_eq_o; auto.
+          destruct i'. 
+          ** intuition.
+          ** erewrite load_after_update_other; eauto. 
+             rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
+          ** auto.
+        * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
+          simpl.
+          rewrite NMapExtra.F.add_eq_o; auto.
+          destruct i'. 
+          ** erewrite load_after_update_other; eauto. 
+             rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
+          ** erewrite load_after_update_other; eauto. 
+             simpl. 
+             intro. apply Pos2Nat.inj_iff in H.             
+             subst.  intuition.
+          ** auto.
+    +  left. intuition.
+       unfold load. unfold store in Hstore. 
+       destruct (NMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
+       destruct i; [| | inv Hstore]. 
+       * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
+         simpl. 
+         rewrite NMapExtra.F.add_neq_o; auto.
+       * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
+         simpl.
+         rewrite NMapExtra.F.add_neq_o; auto.
+Qed.
+
 End ComponentMemory.
 
 Module Memory.
