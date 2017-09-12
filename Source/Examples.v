@@ -49,7 +49,7 @@ Eval vm_compute in
 Definition run_fact :=
   (* warning (Int 1) is not considered at the moment *)
   match run factorial (Int 1) 1000 with
-  | Some (_, _, _, _, E_exit) => Some 0
+  | Some (_, _, _, _, E_exit) => Some 0%Z
   | Some (_, _, _, _, E_val (Int n)) => Some n
   | _ => None
   end.

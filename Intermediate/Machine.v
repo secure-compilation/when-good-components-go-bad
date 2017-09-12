@@ -11,7 +11,7 @@ Inductive register : Type :=
 Definition label := nat.
 
 Inductive imvalue : Type :=
-| IInt : nat -> imvalue
+| IInt : Z -> imvalue
 | IPtr : Pointer.t -> imvalue.
 
 Definition imm_to_val (im : imvalue) : value :=

@@ -74,7 +74,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     kstep G (C, s, mem, k, E_if e1 e2 e3)
           t (C, s, mem, Kif e2 e3 k, e1)
 | KS_IfTrue : forall C s mem k e2 e3 i,
-    i <> 0 ->
+    i <> 0%Z ->
     let t := E0 in
     kstep G (C, s, mem, Kif e2 e3 k, E_val (Int i))
           t (C, s, mem, k, e2)
@@ -86,13 +86,14 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     NMap.find C (genv_buffers G) = Some b ->
     let t := E0 in
     kstep G (C, s, mem, k, E_local)
-          t (C, s, mem, k, E_val (Ptr (C,b,0)))
+          t (C, s, mem, k, E_val (Ptr (C,b,0%Z)))
 | KS_Alloc1 : forall C s mem k e,
     let t := E0 in
     kstep G (C, s, mem, k, E_alloc e)
           t (C, s, mem, Kalloc k, e)
 | KS_AllocEval : forall C s mem mem' k size ptr,
-    Memory.alloc mem C size = Some (mem', ptr) ->
+    (size >= 0)%Z ->
+    Memory.alloc mem C (Z.to_nat size) = Some (mem', ptr) ->
     let t := E0 in
     kstep G (C, s, mem, Kalloc k, E_val (Int size))
           t (C, s, mem', k, E_val (Ptr ptr))
@@ -131,17 +132,17 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     NMap.find P C'_procs = Some P_expr ->
     (* save the old call argument *)
     NMap.find C (genv_buffers G) = Some b ->
-    Memory.load mem (C,b,0) = Some old_call_arg ->
+    Memory.load mem (C,b,0%Z) = Some old_call_arg ->
     (* place the call argument in the target memory *)
     NMap.find C' (genv_buffers G) = Some b' ->
-    Memory.store mem (C',b',0) (Int v) = Some mem' ->
+    Memory.store mem (C',b',0%Z) (Int v) = Some mem' ->
     let t := if C =? C' then E0 else [ECall C P v C'] in
     kstep G (C, s, mem, Kcall C' P k, E_val (Int v))
           t (C', (C, old_call_arg, k) :: s, mem', Kstop, P_expr)
 | KS_CallRet : forall C s mem mem' k v C' old_call_arg b,
     (* restore the old call argument *)
     NMap.find C' (genv_buffers G) = Some b ->
-    Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
+    Memory.store mem (C', b, 0%Z) old_call_arg = Some mem' ->
     let t := if C =? C' then E0 else [ERet C v C'] in
     kstep G (C, (C', old_call_arg, k) :: s, mem, Kstop, E_val (Int v))
           t (C', s, mem', k, E_val (Int v)).
@@ -163,7 +164,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     ret (E0, (C, s, mem, Kif e2 e3 k, e1))
   | E_local =>
     do b <- NMap.find C (genv_buffers G);
-    ret (E0, (C, s, mem, k, E_val (Ptr (C,b,0))))
+    ret (E0, (C, s, mem, k, E_val (Ptr (C,b,0%Z))))
   | E_alloc e =>
     ret (E0, (C, s, mem, Kalloc k, e))
   | E_deref e =>
@@ -193,8 +194,11 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kalloc k' =>
       match v with
       | Int size =>
-        do (mem',ptr) <- Memory.alloc mem C size;
-        ret (E0, (C, s, mem', k', E_val (Ptr ptr)))
+        if (size >=? 0)%Z then
+          do (mem',ptr) <- Memory.alloc mem C (Z.to_nat size);
+          ret (E0, (C, s, mem', k', E_val (Ptr ptr)))
+        else
+          None
       | _ => None
       end
     | Kderef k' =>
@@ -225,10 +229,10 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
         do P_expr <- NMap.find P C'_procs;
         (* save the old call argument *)
         do b <- NMap.find C (genv_buffers G);
-        do old_call_arg <- Memory.load mem (C,b,0);
+        do old_call_arg <- Memory.load mem (C,b,0%Z);
         (* place the call argument in the target memory *)
         do b' <- NMap.find C' (genv_buffers G);
-        do mem' <- Memory.store mem (C',b',0) (Int i);
+        do mem' <- Memory.store mem (C',b',0%Z) (Int i);
         let t := if C =? C' then E0 else [ECall C P i C'] in
         ret (t, (C', (C, old_call_arg, k') :: s, mem', Kstop, P_expr))
       | _ => None
@@ -238,7 +242,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       | Int i, (C',old_call_arg,k') :: s' =>
         (* restore the old call argument *)
         do b <- NMap.find C' (genv_buffers G);
-        do mem' <- Memory.store mem (C',b,0) old_call_arg;
+        do mem' <- Memory.store mem (C',b,0%Z) old_call_arg;
         let t := if C =? C' then E0 else [ERet C i C'] in
         ret (t, (C', s', mem', k', E_val (Int i)))
       | _, _ => None
@@ -300,6 +304,9 @@ Proof.
   (* if expressions *)
   - destruct i eqn:Hi;
       try contradiction; auto.
+  - assert (Hsize: (size >=? 0)%Z = true). { destruct size; auto. }
+    rewrite Hsize.
+    rewrite H0. reflexivity.
   (* calls/returns *)
   - destruct H; subst.
     + unfold orb.
@@ -325,6 +332,34 @@ Proof.
            repeat simplify_nat_equalities;
            reflexivity)
   end.
+  - repeat simplify_option.
+    + econstructor. eauto.
+      repeat rewrite_memory_operations.
+      reflexivity.
+    + econstructor.
+    + econstructor.
+    + econstructor.
+    + econstructor.
+    + econstructor.
+      pose proof (Zgt_pos_0 p). omega.
+    + econstructor.
+      pose proof (Zlt_neg_0 p). omega.
+    + econstructor.
+      destruct z; auto.
+      * omega.
+      * pose proof (Zgt_pos_0 p). omega.
+      * unfold Z.geb in Heqb. simpl in Heqb. discriminate.
+      * auto.
+    + econstructor; eauto.
+      rewrite_memory_operations.
+      eauto.
+    + econstructor.
+    + econstructor; eauto.
+      simplify_nat_equalities; reflexivity.
+      rewrite_memory_operations. simplify_option. inversion Heqo0. subst. reflexivity.
+    + econstructor; eauto.
+      rewrite_memory_operations. auto.
+      rewrite_memory_operations. simplify_option. inversion Heqo4. subst. reflexivity.
   (* procedure call *)
   - repeat simplify_option.
     rewrite orb_true_iff in Heqb.

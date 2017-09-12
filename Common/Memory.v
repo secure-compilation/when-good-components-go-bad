@@ -62,7 +62,11 @@ Module ComponentMemory : AbstractComponentMemory.
 
   Definition load m b i : option value :=
     match NMap.find b (content m) with
-    | Some chunk => nth_error chunk i
+    | Some chunk =>
+      match i with
+      | Z.neg _ => None
+      | _ => nth_error chunk (Z.to_nat i)
+      end
     | None => None
     end.
 
@@ -83,11 +87,14 @@ Module ComponentMemory : AbstractComponentMemory.
   Definition store m b i v : option mem :=
     match NMap.find b (content m) with
     | Some chunk =>
-      match block_update chunk i v with
-      | Some chunk' =>
-        Some {| content := NMap.add b chunk' (content m);
-                nextblock := nextblock m |}
-      | _ => None
+      match i with
+      | Z.neg _ => None
+      | _ => match block_update chunk (Z.to_nat i) v with
+            | Some chunk' =>
+              Some {| content := NMap.add b chunk' (content m);
+                      nextblock := nextblock m |}
+            | _ => None
+            end
       end
     | None => None
     end.
@@ -111,14 +118,6 @@ Module ComponentMemory : AbstractComponentMemory.
   Proof.
     intros m m' b i v Hstore b' i'.
     destruct (b =? b') eqn:Hbeqb'.
-    - destruct (i =? i') eqn:Hieqi'.
-      + right. admit.
-      + left. split.
-        * right. admit.
-        * admit.
-    - left. split.
-      + left. admit.
-      + admit.
   Admitted.
 End ComponentMemory.
 
@@ -135,7 +134,7 @@ Module Memory.
     match NMap.find C mem with
     | Some memC =>
       let '(memC', b) := ComponentMemory.alloc memC size in
-      Some (NMap.add C memC' mem, (C, b, 0))
+      Some (NMap.add C memC' mem, (C, b, 0%Z))
     | None => None
     end.
 

@@ -2,9 +2,9 @@ Require Import Common.Definitions.
 Require Import CompCert.Coqlib.
 
 Inductive event :=
-| ECall : Component.id -> Procedure.id -> nat -> Component.id -> event
-| ERet : Component.id -> nat -> Component.id -> event
-| ELoad: Component.id -> nat -> Component.id -> event.
+| ECall : Component.id -> Procedure.id -> Z -> Component.id -> event
+| ERet : Component.id -> Z -> Component.id -> event
+| ELoad: Component.id -> Z -> Component.id -> event.
 
 Definition trace := list event.
 

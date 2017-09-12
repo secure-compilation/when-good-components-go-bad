@@ -31,11 +31,11 @@ Definition initial_state (p: program) (G: global_env) (s: state) : Prop :=
   Pointer.component pc = fst (prog_main p) /\
   EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
                  (genv_entrypoints G) = Some (Pointer.block pc) /\
-  Pointer.offset pc = 0.
+  Pointer.offset pc = 0%Z.
 
 Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
   let '(gsp, mem, regs, pc) := s in
-  Register.get R_COM regs = Int r /\
+  Register.get R_COM regs = Int (Z.of_nat r) /\
   executing G pc IHalt.
 
 Inductive step (G : global_env) : state -> trace -> state -> Prop :=
@@ -96,7 +96,7 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
 | BnzNZ: forall gps mem regs pc pc' r l val,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int val ->
-    val <> 0 ->
+    val <> 0%Z ->
     find_label_in_procedure G pc l = Some pc' ->
     step G (gps, mem, regs, pc) E0 (gps, mem, regs, pc')
 
@@ -108,7 +108,8 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
 | Alloc: forall gps mem mem' regs regs' pc rsize rptr size ptr,
     executing G pc (IAlloc rptr rsize) ->
     Register.get rsize regs = Int size ->
-    Memory.alloc mem (Pointer.component pc) size = Some (mem', ptr) ->
+    (size >= 0)%Z ->
+    Memory.alloc mem (Pointer.component pc) (Z.to_nat size) = Some (mem', ptr) ->
     Register.set rptr (Ptr ptr) regs = regs' ->
     step G (gps, mem, regs, pc) E0 (gps, mem', regs', Pointer.inc pc)
 
@@ -118,7 +119,7 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     imported_procedure (genv_interface G) (Pointer.component pc) C' P ->
     gps' = Pointer.inc pc :: gps ->
     EntryPoint.get C' P (genv_entrypoints G) = Some b ->
-    let pc' := (C', b, 0) in
+    let pc' := (C', b, 0%Z) in
     (* TODO fix the read value in the event *)
     Register.get R_COM regs = Int rcomval ->
     let t := [ECall (Pointer.component pc) P rcomval C'] in
@@ -141,105 +142,111 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
   (* fetch the next instruction to execute *)
   do C_procs <- NMap.find (Pointer.component pc) (genv_procedures G);
   do P_code <- NMap.find (Pointer.block pc) C_procs;
-  do instr <- nth_error P_code (Pointer.offset pc);
-  (* decode and execute the instruction *)
-  match instr with
-  | ILabel l =>
-    ret (E0, (gps, mem, regs, Pointer.inc pc))
-  | INop =>
-    ret (E0, (gps, mem, regs, Pointer.inc pc))
-  | IConst v r =>
-    let regs' := Register.set r (imm_to_val v) regs in
-    ret (E0, (gps, mem, regs', Pointer.inc pc))
-  | IMov r1 r2 =>
-    let regs' := Register.set r2 (Register.get r1 regs) regs in
-    ret (E0, (gps, mem, regs', Pointer.inc pc))
-  | IBinOp op r1 r2 r3 =>
-    let regs' := Register.set
-                   r3 (eval_binop op (Register.get r1 regs) (Register.get r2 regs))
-                   regs in
-    ret (E0, (gps, mem, regs', Pointer.inc pc))
-  | ILoad r1 r2 =>
-    match Register.get r1 regs with
-    | Ptr ptr =>
-      do v <- Memory.load mem ptr;
-      let regs' := Register.set r2 v regs in
-      let t := if (Pointer.component ptr) =? (Pointer.component pc) then E0
-               else [ELoad (Pointer.component pc) 0 (Pointer.component ptr)] in
-      ret (t, (gps, mem, regs', Pointer.inc pc))
-    | _ => None
-    end
-  | IStore r1 r2 =>
-    match Register.get r1 regs with
-    | Ptr ptr =>
-      if Pointer.component ptr =? Pointer.component pc then
-        do mem' <- Memory.store mem ptr (Register.get r2 regs);
-        ret (E0, (gps, mem', regs, Pointer.inc pc))
-      else
-        None
-    | _ => None
-    end
-  | IJal l =>
-    do pc' <- find_label_in_component G pc l;
-    let regs' :=  Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-    ret (E0, (gps, mem, regs', pc'))
-  | IJump r =>
-    match Register.get r regs with
-    | Ptr pc' =>
-      if Pointer.component pc' =? Pointer.component pc then
-        ret (E0, (gps, mem, regs, pc'))
-      else
-        None
-    | _ => None
-    end
-  | IBnz r l =>
-    match Register.get r regs with
-    | Int 0 =>
+  if (Pointer.offset pc <? 0)%Z then
+    None
+  else
+    do instr <- nth_error P_code (Z.to_nat (Pointer.offset pc));
+    (* decode and execute the instruction *)
+    match instr with
+    | ILabel l =>
       ret (E0, (gps, mem, regs, Pointer.inc pc))
-    | Int val =>
-      do pc' <- find_label_in_procedure G pc l;
-      ret (E0, (gps, mem, regs, pc'))
-    | _ => None
-    end
-  | IAlloc rptr rsize =>
-    match Register.get rsize regs with
-    | Int size =>
-    do (mem', ptr) <- Memory.alloc mem (Pointer.component pc) size;
-      let regs' := Register.set rptr (Ptr ptr) regs in
-      ret (E0, (gps, mem', regs', Pointer.inc pc))
-    | _ => None
-    end
-  | ICall C' P =>
-    if negb (Pointer.component pc =? C') then
-      if imported_procedure_b (genv_interface G) (Pointer.component pc) C' P then
-        do b <- EntryPoint.get C' P (genv_entrypoints G);
-        match Register.get R_COM regs with
-        | Int rcomval =>
-          let pc' := (C', b, 0) in
-          let t := [ECall (Pointer.component pc) P rcomval C'] in
-          ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc'))
-        | _ => None
-        end
+    | INop =>
+      ret (E0, (gps, mem, regs, Pointer.inc pc))
+    | IConst v r =>
+      let regs' := Register.set r (imm_to_val v) regs in
+      ret (E0, (gps, mem, regs', Pointer.inc pc))
+    | IMov r1 r2 =>
+      let regs' := Register.set r2 (Register.get r1 regs) regs in
+      ret (E0, (gps, mem, regs', Pointer.inc pc))
+    | IBinOp op r1 r2 r3 =>
+      let regs' := Register.set
+                     r3 (eval_binop op (Register.get r1 regs) (Register.get r2 regs))
+                     regs in
+      ret (E0, (gps, mem, regs', Pointer.inc pc))
+    | ILoad r1 r2 =>
+      match Register.get r1 regs with
+      | Ptr ptr =>
+        do v <- Memory.load mem ptr;
+        let regs' := Register.set r2 v regs in
+        let t := if (Pointer.component ptr) =? (Pointer.component pc) then E0
+                 else [ELoad (Pointer.component pc) 0 (Pointer.component ptr)] in
+        ret (t, (gps, mem, regs', Pointer.inc pc))
+      | _ => None
+      end
+    | IStore r1 r2 =>
+      match Register.get r1 regs with
+      | Ptr ptr =>
+        if Pointer.component ptr =? Pointer.component pc then
+          do mem' <- Memory.store mem ptr (Register.get r2 regs);
+          ret (E0, (gps, mem', regs, Pointer.inc pc))
+        else
+          None
+      | _ => None
+      end
+    | IJal l =>
+      do pc' <- find_label_in_component G pc l;
+      let regs' :=  Register.set R_RA (Ptr (Pointer.inc pc)) regs in
+      ret (E0, (gps, mem, regs', pc'))
+    | IJump r =>
+      match Register.get r regs with
+      | Ptr pc' =>
+        if Pointer.component pc' =? Pointer.component pc then
+          ret (E0, (gps, mem, regs, pc'))
+        else
+          None
+      | _ => None
+      end
+    | IBnz r l =>
+      match Register.get r regs with
+      | Int 0 =>
+        ret (E0, (gps, mem, regs, Pointer.inc pc))
+      | Int val =>
+        do pc' <- find_label_in_procedure G pc l;
+        ret (E0, (gps, mem, regs, pc'))
+      | _ => None
+      end
+    | IAlloc rptr rsize =>
+      match Register.get rsize regs with
+      | Int size =>
+        if (size <? 0)%Z then
+          None
+        else
+          do (mem', ptr) <- Memory.alloc mem (Pointer.component pc) (Z.to_nat size);
+          let regs' := Register.set rptr (Ptr ptr) regs in
+          ret (E0, (gps, mem', regs', Pointer.inc pc))
+      | _ => None
+      end
+    | ICall C' P =>
+      if negb (Pointer.component pc =? C') then
+        if imported_procedure_b (genv_interface G) (Pointer.component pc) C' P then
+          do b <- EntryPoint.get C' P (genv_entrypoints G);
+          match Register.get R_COM regs with
+          | Int rcomval =>
+            let pc' := (C', b, 0%Z) in
+            let t := [ECall (Pointer.component pc) P rcomval C'] in
+            ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc'))
+          | _ => None
+          end
+        else
+          None
       else
         None
-    else
-      None
-  | IReturn =>
-    match gps with
-    | pc' :: gps' =>
-      if negb (Pointer.component pc =? Pointer.component pc') then
-        match Register.get R_COM regs with
-        | Int rcomval =>
-          let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
-          ret (t, (gps', mem, Register.invalidate regs, pc'))
-        | _ => None
-        end
-      else
-        None
-    | _ => None
-    end
-  | IHalt => None
-  end.
+    | IReturn =>
+      match gps with
+      | pc' :: gps' =>
+        if negb (Pointer.component pc =? Pointer.component pc') then
+          match Register.get R_COM regs with
+          | Int rcomval =>
+            let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
+            ret (t, (gps', mem, Register.invalidate regs, pc'))
+          | _ => None
+          end
+        else
+          None
+      | _ => None
+      end
+    | IHalt => None
+    end.
 
 Import MonadNotations.
 Open Scope monad_scope.
@@ -250,9 +257,9 @@ Definition init_genv_and_state (p: program) : option (global_env * state) :=
               genv_procedures := ps;
               genv_entrypoints := E |} in
   do b <- EntryPoint.get (fst (prog_main p)) (snd (prog_main p)) (genv_entrypoints G);
-  ret (G, ([], mem, Register.init, (fst (prog_main p), b, 0))).
+  ret (G, ([], mem, Register.init, (fst (prog_main p), b, 0%Z))).
 
-Fixpoint execN (n: nat) (G: global_env) (st: state) : option nat :=
+Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
   match n with
   | 0 => None
   | S n' =>
@@ -267,7 +274,7 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option nat :=
     end
   end.
 
-Definition run (p: program) (input: value) (fuel: nat) : option nat :=
+Definition run (p: program) (input: value) (fuel: nat) : option Z :=
   do (G, st) <- init_genv_and_state p;
   execN fuel G st.
 
@@ -279,22 +286,42 @@ Theorem eval_step_complete:
 Proof.
   intros G st t st' Hstep.
   inversion Hstep; subst;
-    destruct H as [procs [P_code [Hprocs [HP_code Hinstr]]]];
+    destruct H as [procs [P_code [Hprocs [HP_code [? Hinstr]]]]];
     simpl; unfold code in *; rewrite Hprocs, HP_code, Hinstr;
-      try reflexivity.
-  - rewrite H0, H1. reflexivity.
+    destruct (Pointer.offset pc) eqn:Hpc;
+    try reflexivity; try (exfalso; pose proof (Zlt_neg_0 p); omega).
+  - simpl. rewrite H0, H1. reflexivity.
+  - simpl. rewrite H0, H1. reflexivity.
   - rewrite H0, H1, H2.
     rewrite <- beq_nat_refl. reflexivity.
+  - simpl. rewrite H0, H1, H2. rewrite <- beq_nat_refl. reflexivity.
   - rewrite H0. reflexivity.
+  - simpl. rewrite H0. reflexivity.
   - rewrite H0, H1.
     rewrite <- beq_nat_refl. reflexivity.
+  - simpl. rewrite H0, H1. rewrite <- beq_nat_refl. reflexivity.
   - rewrite H0, H2.
     destruct val.
     + contradiction.
     + reflexivity.
+    + simpl. reflexivity.
+  - simpl. rewrite H0, H2. destruct val.
+    + contradiction.
+    + reflexivity.
+    + reflexivity.
   - rewrite H0. reflexivity.
-  - rewrite H0, H1. reflexivity.
-  - rewrite H3, H4.
+  - simpl. rewrite H0. reflexivity.
+  - simpl. rewrite H0, H2.
+    destruct size; simpl.
+    + reflexivity.
+    + reflexivity.
+    + contradiction.
+  - simpl. rewrite H0, H2.
+    destruct size; simpl.
+    + reflexivity.
+    + reflexivity.
+    + contradiction.
+  - simpl. rewrite H3, H4.
     destruct (Pointer.component pc =? C') eqn:Hpc_eq_C'.
     + apply beq_nat_true_iff in Hpc_eq_C'.
       rewrite <- Hpc_eq_C' in H0.
@@ -303,10 +330,21 @@ Proof.
       destruct (imported_procedure_iff (genv_interface G) (Pointer.component pc) C' P)
         as [H' H''].
       rewrite H'; auto.
-  - rewrite H2.
+  - apply beq_nat_false_iff in H0. rewrite H0. simpl.
+    destruct (imported_procedure_iff (genv_interface G) (Pointer.component pc) C' P)
+      as [H' H''].
+    rewrite H'; auto.
+    rewrite H3, H4. reflexivity.
+  - simpl. rewrite H2.
     destruct (Pointer.component pc =? Pointer.component pc') eqn:Hpc_eq_pc'.
     + apply beq_nat_true_iff in Hpc_eq_pc'.
-      rewrite <- Hpc_eq_pc' in H1.
+      rewrite Hpc_eq_pc' in H1.
+      contradiction.
+    + simpl. reflexivity.
+  - simpl. rewrite H2.
+    destruct (Pointer.component pc =? Pointer.component pc') eqn:Hpc_eq_pc'.
+    + apply beq_nat_true_iff in Hpc_eq_pc'.
+      rewrite Hpc_eq_pc' in H1.
       contradiction.
     + simpl. reflexivity.
 Qed.
@@ -331,109 +369,162 @@ Proof.
     as [C_procs | ?] eqn:HC_procs.
   - destruct (NMap.find (Pointer.block pc0) C_procs)
       as [P_code | ?] eqn:HP_code.
-    + destruct (nth_error P_code (Pointer.offset pc0))
-        as [instr | ?] eqn:Hinstr.
-      (* case analysis on the fetched instruction *)
-      * simpl in Heval_step. unfold code in *.
-        rewrite HC_procs, HP_code, Hinstr in Heval_step.
-        destruct instr; inversion Heval_step; subst; clear Heval_step.
-        ** apply Nop. unfold executing. eexists. eexists. eauto.
-        ** eapply Label. unfold executing. eexists. eexists. eauto.
-        ** eapply Const. unfold executing. eexists. eexists. eauto.
-           reflexivity.
-        ** eapply Mov. unfold executing. eexists. eexists. eauto.
-           reflexivity.
-        ** eapply BinOp. unfold executing. eexists. eexists. eauto.
-           reflexivity.
-        ** destruct (Register.get r regs0) eqn:Hreg.
-           *** discriminate.
-           *** destruct (Memory.load mem0 t0) eqn:Hmem.
-               **** inversion H0. subst.
-                    eapply Load. unfold executing. eexists. eexists. eauto.
-                    apply Hreg. apply Hmem. reflexivity.
-               **** discriminate.
-           *** discriminate.
-        ** destruct (Register.get r regs0) eqn:Hreg.
-           *** discriminate.
-           *** destruct (Pointer.component t0 =? Pointer.component pc0) eqn:Hcompcheck.
-               **** destruct (Memory.store mem0 t0 (Register.get r0 regs0)) eqn:Hmem.
-                    ***** inversion H0. subst.
+    + destruct ((Pointer.offset pc0 >=? 0)%Z) eqn:Hpc.
+      * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
+          as [instr | ?] eqn:Hinstr.
+        (* case analysis on the fetched instruction *)
+        ** assert ((Pointer.offset pc0 <? 0)%Z = false). {
+             destruct (Pointer.offset pc0); auto.
+           }
+           assert ((Pointer.offset pc0 >= 0)%Z). {
+             destruct (Pointer.offset pc0); discriminate.
+           }
+           simpl in Heval_step. unfold code in *.
+           rewrite HC_procs, HP_code, Hinstr in Heval_step.
+           destruct instr; inversion Heval_step; subst; clear Heval_step;
+             try (match goal with
+                  | Hpcfalse: (Pointer.offset ?PC <? 0)%Z = false,
+                    Heq: (if (Pointer.offset ?PC <? 0)%Z then None else Some _) = Some _
+                    |- _ => rewrite Hpcfalse in Heq; inversion Heq; subst; clear Heq Hpcfalse
+                  end).
+           *** apply Nop. unfold executing. eexists. eexists. eauto.
+           *** eapply Label. unfold executing. eexists. eexists. eauto.
+           *** eapply Const. unfold executing. eexists. eexists. eauto.
+               reflexivity.
+           *** eapply Mov. unfold executing. eexists. eexists. eauto.
+               reflexivity.
+           *** eapply BinOp. unfold executing. eexists. eexists. eauto.
+               reflexivity.
+           *** destruct (Register.get r regs0) eqn:Hreg.
+               **** rewrite H in H2. discriminate.
+               **** destruct (Memory.load mem0 t0) eqn:Hmem.
+                    ***** rewrite H in H2. inversion H2. subst.
+                          eapply Load. unfold executing. eexists. eexists. eauto.
+                          apply Hreg. apply Hmem. reflexivity.
+                    ***** rewrite H in H2. discriminate.
+               **** rewrite H in H2. discriminate.
+           *** destruct (Register.get r regs0) eqn:Hreg.
+               **** rewrite H in H2. discriminate.
+               **** destruct (Pointer.component t0 =? Pointer.component pc0)
+                             eqn:Hcompcheck.
+                    ***** rewrite H in H2.
+                    destruct (Memory.store mem0 t0 (Register.get r0 regs0)) eqn:Hmem.
+                    ****** inversion H2. subst.
                     eapply Store. unfold executing. eexists. eexists. eauto.
                     apply Hreg. apply beq_nat_true_iff. apply Hcompcheck.
                     apply Hmem.
+                    ****** discriminate.
+                    ***** rewrite H in H2. discriminate.
+               **** rewrite H in H2. discriminate.
+           *** rewrite H in H2.
+               destruct (Register.get r0 regs0) eqn:Hreg.
+               **** destruct ((z <? 0)%Z) eqn:Hzpos.
                     ***** discriminate.
-               **** discriminate.
-           *** discriminate.
-        ** destruct (Register.get r0 regs0) eqn:Hreg.
-           *** destruct (Memory.alloc mem0 (Pointer.component pc0) n) eqn:Hmem.
-               **** destruct p. inversion H0. subst.
+                    ***** destruct (Memory.alloc mem0 (Pointer.component pc0) (Z.to_nat z))
+                          eqn:Hmem.
+                    ****** destruct p. inversion H2. subst.
                     eapply Alloc. unfold executing. eexists. eexists. eauto.
-                    apply Hreg. apply Hmem. reflexivity.
+                    apply Hreg.
+                    apply Z.ltb_ge in Hzpos. apply Z.ge_le_iff in Hzpos. auto.
+                    apply Hmem.
+                    reflexivity.
+                    ****** discriminate.
                **** discriminate.
-           *** discriminate.
-           *** discriminate.
-        ** destruct (Register.get r regs0) eqn:Hreg.
-           *** destruct n eqn:Hn.
-               **** inversion H0. subst.
+               **** discriminate.
+           *** rewrite H in H2. 
+               destruct (Register.get r regs0) eqn:Hreg.
+               **** destruct z eqn:Hn.
+                    ***** inversion H2. subst.
                     eapply BnzZ. unfold executing. eexists. eexists. eauto.
                     apply Hreg.
-               **** destruct (find_label_in_procedure G pc0 l) eqn:Hlabel.
-                    ***** inversion H0. subst.
-                          eapply BnzNZ. unfold executing. eexists. eexists. eauto.
-                          apply Hreg. auto. auto.
-                    ***** discriminate.
-           *** discriminate.
-           *** discriminate.
-        ** destruct (Register.get r regs0) eqn:Hreg.
-           *** discriminate.
-           *** destruct (Pointer.component t0 =? Pointer.component pc0) eqn:Hcompcheck.
-               **** inversion H0. subst.
+                    ***** destruct (find_label_in_procedure G pc0 l) eqn:Hlabel.
+                    ****** inversion H2. subst.
+                    eapply BnzNZ. unfold executing. eexists. eexists. eauto.
+                    apply Hreg. auto. auto.
+                    pose proof (Zgt_pos_0 p). omega. auto.
+                    ****** discriminate.
+                    ***** destruct (find_label_in_procedure G pc0 l) eqn:Hlabel.
+                    ****** inversion H2. subst.
+                    eapply BnzNZ. unfold executing. eexists. eexists. eauto.
+                    apply Hreg. auto. auto.
+                    pose proof (Zlt_neg_0 p). omega. auto.
+                    ****** discriminate.
+               **** discriminate. 
+               **** discriminate.
+           *** rewrite H in H2.
+               destruct (Register.get r regs0) eqn:Hreg.
+               **** discriminate.
+               **** destruct (Pointer.component t0 =? Pointer.component pc0)
+                             eqn:Hcompcheck.
+                    ***** inversion H2. subst.
                     eapply Jump. unfold executing. eexists. eexists. eauto.
                     apply Hreg. apply beq_nat_true_iff. auto.
-               **** discriminate.
-           *** discriminate.
-        ** destruct (find_label_in_component G pc0 l) eqn:Hlabel.
-           *** inversion H0. subst.
-               eapply Jal. unfold executing. eexists. eexists. eauto.
-               auto. reflexivity.
-           *** discriminate.
-        ** destruct (Pointer.component pc0 =? i) eqn:Hcomp.
-           *** simpl in H0. discriminate.
-           *** simpl in H0.
-               destruct (imported_procedure_b (genv_interface G)
-                                              (Pointer.component pc0) i i0) eqn:Himport.
-               **** destruct (EntryPoint.get i i0 (genv_entrypoints G)) eqn:Hentrypoint.
-                    ***** destruct (Register.get R_COM regs0) eqn:Hreg.
-                          ****** inversion H0. subst.
-                                 eapply Call. unfold executing. eexists. eexists. eauto.
-                                 apply beq_nat_false_iff. auto.
-                                 apply imported_procedure_iff. auto.
-                                 reflexivity.
-                                 auto. auto.
-                          ****** discriminate.
-                          ****** discriminate.
                     ***** discriminate.
                **** discriminate.
-        ** destruct s0.
-           *** discriminate.
-           *** destruct (Pointer.component pc0 =? Pointer.component t0) eqn:Hcomp.
+           *** rewrite H in H2.
+               destruct (find_label_in_component G pc0 l) eqn:Hlabel.
+               **** inversion H2. subst.
+                    eapply Jal. unfold executing. eexists. eexists. eauto.
+                    auto. reflexivity.
+               **** discriminate.
+           *** rewrite H in H2.
+               destruct (Pointer.component pc0 =? i) eqn:Hcomp.
                **** simpl in H0. discriminate.
                **** simpl in H0.
+                    destruct (imported_procedure_b (genv_interface G)
+                                                   (Pointer.component pc0) i i0)
+                             eqn:Himport.
+                    ***** destruct (EntryPoint.get i i0 (genv_entrypoints G))
+                          eqn:Hentrypoint.
+                    ****** destruct (Register.get R_COM regs0) eqn:Hreg.
+                    ******* simpl in H2. inversion H2. subst.
+                    eapply Call. unfold executing. eexists. eexists. eauto.
+                    apply beq_nat_false_iff. auto.
+                    apply imported_procedure_iff. auto.
+                    reflexivity.
+                    auto. auto.
+                    ******* discriminate.
+                    ******* discriminate.
+                    ****** discriminate.
+                    ***** discriminate.
+           *** rewrite H in H2.
+               destruct s0.
+               **** discriminate.
+               **** destruct (Pointer.component pc0 =? Pointer.component t0) eqn:Hcomp.
+                    ***** simpl in H2. discriminate.
+                    ***** simpl in H2.
                     destruct (Register.get R_COM regs0) eqn:Hreg.
-                    ***** inversion H0. subst.
-                          eapply Return. unfold executing. eexists. eexists. eauto.
-                          reflexivity.
-                          apply beq_nat_false_iff. auto.
-                          auto.
-                    ***** discriminate.
-                    ***** discriminate.
-      * simpl in Heval_step. unfold code in *.
-        rewrite HC_procs, HP_code, Hinstr in Heval_step.
-        discriminate.
+                    ****** inversion H2. subst.
+                    eapply Return. unfold executing. eexists. eexists. eauto.
+                    reflexivity.
+                    apply beq_nat_false_iff. auto.
+                    auto.
+                    ****** discriminate.
+                    ****** discriminate.
+           *** rewrite H in H2. discriminate.
+        ** simpl in Heval_step. unfold code in *.
+           rewrite HC_procs, HP_code, Hinstr in Heval_step.
+           destruct ((Pointer.offset pc0 <? 0)%Z); discriminate.
+      * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
+          as [instr | ?] eqn:Hinstr.
+        ** simpl in Heval_step.
+           unfold code in *.
+           rewrite HC_procs, HP_code, Hinstr in Heval_step.
+           destruct ((Pointer.offset pc0 <? 0)%Z) eqn:Hpc'. 
+           *** discriminate.
+           *** exfalso. unfold Z.geb in Hpc.
+               destruct (Pointer.offset pc0).
+               **** simpl in *. discriminate.
+               **** simpl in *. discriminate.
+               **** simpl in *. pose proof (Zlt_neg_0 p). apply Z.ltb_lt in H.
+                    rewrite Hpc' in H. discriminate.
+        ** simpl in Heval_step.
+           unfold code in *.
+           rewrite HC_procs, HP_code, Hinstr in Heval_step.
+           destruct ((Pointer.offset pc0 <? 0)%Z); discriminate.
     + simpl in Heval_step.
       unfold code in *.
-      rewrite HC_procs, HP_code in Heval_step.
-      discriminate.
+      rewrite HC_procs, HP_code in Heval_step. discriminate.
   - simpl in Heval_step.
     unfold code in *.
     rewrite HC_procs in Heval_step.
@@ -488,8 +579,8 @@ Section Semantics.
         match goal with
         | Hexec1: executing ?G ?PC ?INSTR1,
           Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
-          destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code Hinstr]]]];
-          destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' Hinstr']]]];
+          destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code [? Hinstr]]]]];
+          destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' [? Hinstr']]]]];
           rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
           rewrite HP_code in HP_code'; inversion HP_code'; subst;
           rewrite Hinstr in Hinstr'; inversion Hinstr'; subst
@@ -574,8 +665,8 @@ Section Semantics.
     try (match goal with
          | Hexec1: executing ?G ?PC ?INSTR1,
            Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
-           destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code Hinstr]]]];
-           destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' Hinstr']]]];
+           destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code [? Hinstr]]]]];
+           destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' [? Hinstr']]]]];
            rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
            rewrite HP_code in HP_code'; inversion HP_code'; subst;
            rewrite Hinstr in Hinstr'; inversion Hinstr'
@@ -594,7 +685,7 @@ Section Semantics.
     destruct Hs_final2 as [Hres2 Hexec2].
     rewrite Hres1 in Hres2.
     inversion Hres2.
-    auto.
+    omega.
   Qed.
 
   Lemma determinacy:

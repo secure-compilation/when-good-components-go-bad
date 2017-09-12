@@ -3,7 +3,7 @@ Require Import Common.Util.
 
 Module Block.
   Definition id := nat.
-  Definition offset := nat.
+  Definition offset := Z.
 End Block.
 
 Module Pointer.
@@ -21,25 +21,21 @@ Module Pointer.
   Definition eq (p1 p2 : t) : bool :=
     let '(C1, b1, o1) := p1 in
     let '(C2, b2, o2) := p2 in
-    (C1 =? C2) && (b1 =? b2) && (o1 =? o2).
+    (C1 =? C2) && (b1 =? b2) && (o1 =? o2)%Z.
 
   Definition leq (p1 p2 : t) : option bool :=
     let '(C1, b1, o1) := p1 in
     let '(C2, b2, o2) := p2 in
     if (C1 =? C2) && (b1 =? b2) then
-      Some (o1 <=? o2)
+      Some (o1 <=? o2)%Z
     else
       None.
 
-  Definition add (ptr : t) (offset : nat) : t :=
-    let '(C, b, o) := ptr in (C, b, o+offset).
+  Definition add (ptr : t) (offset : Z) : t :=
+    let '(C, b, o) := ptr in (C, b, (o+offset)%Z).
 
-  Definition sub (ptr : t) (offset : nat) : option t :=
-    let '(C, b, o) := ptr in
-    match Util.Nat.safe_sub o offset with
-    | Some o' => Some (C, b, o')
-    | None => None
-    end.
+  Definition sub (ptr : t) (offset : Z) : t :=
+    let '(C, b, o) := ptr in (C, b, (o-offset)%Z).
 
   Definition inc (ptr : t) : t := add ptr 1.
 
@@ -77,7 +73,7 @@ Module Pointer.
 End Pointer.
 
 Inductive value : Type :=
-| Int : nat -> value
+| Int : Z -> value
 | Ptr : Pointer.t -> value
 | Undef : value.
 
@@ -89,8 +85,8 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
   | Add,   Int n1, Int n2 => Int (n1 + n2)
   | Minus, Int n1, Int n2 => Int (n1 - n2)
   | Mul,   Int n1, Int n2 => Int (n1 * n2)
-  | Eq,    Int n1, Int n2 => Int (Util.Nat.of_bool (n1  =? n2))
-  | Leq,   Int n1, Int n2 => Int (Util.Nat.of_bool (n1 <=? n2))
+  | Eq,    Int n1, Int n2 => Int (Util.Z.of_bool (n1  =? n2)%Z)
+  | Leq,   Int n1, Int n2 => Int (Util.Z.of_bool (n1 <=? n2)%Z)
   (* pointer arithmetic *)
   | Add,   Ptr p,  Int n  => Ptr (Pointer.add p n)
   | Add,   Int n,  Ptr p  => Ptr (Pointer.add p n)
@@ -100,13 +96,10 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
                                Int (o1 - o2)
                              else
                                Undef
-  | Minus, Ptr p,  Int n  => match Pointer.sub p n with
-                             | Some p' => Ptr p'
-                             | None    => Undef
-                             end
-  | Eq,    Ptr p1, Ptr p2 => Int (Util.Nat.of_bool (Pointer.eq p1 p2))
+  | Minus, Ptr p,  Int n  => Ptr (Pointer.sub p n)
+  | Eq,    Ptr p1, Ptr p2 => Int (Util.Z.of_bool (Pointer.eq p1 p2))
   | Leq,   Ptr p1, Ptr p2 => match Pointer.leq p1 p2 with
-                             | Some res => Int (Util.Nat.of_bool res)
+                             | Some res => Int (Util.Z.of_bool res)
                              | None     => Undef
                              end
   (* undefined operations *)

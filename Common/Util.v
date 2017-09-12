@@ -14,6 +14,11 @@ Module Util.
       if b then 1 else 0.
   End Nat.
 
+  Module Z.
+    Definition of_bool (b : bool) : Z :=
+      if b then 1 else 0.
+  End Z.
+
   Module Lists.
     Fixpoint update {A : Type} (l : list A) (n : nat) (val : A) {struct l} : list A :=
       match l with

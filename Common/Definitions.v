@@ -3,6 +3,7 @@ Require Export Common.Maps.
 Require Export Coq.Bool.Bool.
 Require Export Coq.Lists.List.
 Require Export Coq.Arith.Arith.
+Require Export Coq.ZArith.ZArith.
 
 Export ListNotations.
 Open Scope list_scope.

@@ -127,10 +127,10 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       NMap.find P C'_procs = Some P_expr ->
       (* save the old call argument *)
       NMap.find C (genv_buffers G) = Some b ->
-      Memory.load mem (C,b,0) = Some old_call_arg ->
+      Memory.load mem (C,b,0%Z) = Some old_call_arg ->
       (* place the call argument in the target memory *)
       NMap.find C' (genv_buffers G) = Some b' ->
-      Memory.store mem (C',b',0) (Int v) = Some mem' ->
+      Memory.store mem (C',b',0%Z) (Int v) = Some mem' ->
       let t := if C =? C' then E0 else [ECall C P v C'] in
       kstep ctx G
             (PC (C, s, mem, Kcall C' P k, E_val (Int v))) t
@@ -141,7 +141,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       is_program_component G C' ->
       (* restore the old call argument *)
       NMap.find C' (genv_buffers G) = Some b ->
-      Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
+      Memory.store mem (C', b, 0%Z) old_call_arg = Some mem' ->
       let t := if C =? C' then E0 else [ERet C v C'] in
       kstep ctx G
             (PC (C, (C', Some (old_call_arg, k)) :: s, mem, Kstop, E_val (Int v))) t
@@ -152,7 +152,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       is_context_component ctx C' ->
       (* save the old call argument *)
       NMap.find C (genv_buffers G) = Some b ->
-      Memory.load mem (C,b,0) = Some old_call_arg ->
+      Memory.load mem (C,b,0%Z) = Some old_call_arg ->
       let t := [ECall C P v C'] in
       kstep ctx G
             (PC (C, s, mem, Kcall C' P k, E_val (Int v))) t
@@ -220,7 +220,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       NMap.find P C'_procs = Some P_expr ->
       (* place the call argument in the target memory *)
       NMap.find C' (genv_buffers G) = Some b' ->
-      Memory.store mem (C',b',0) (Int val) = Some mem' ->
+      Memory.store mem (C',b',0%Z) (Int val) = Some mem' ->
       let t := [ECall C P val C'] in
       kstep ctx G (CC (C,s,mem) Normal) t (PC (C',s',mem,Kstop,P_expr))
 
@@ -229,7 +229,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       is_program_component G C' ->
       (* restore the old call argument *)
       NMap.find C' (genv_buffers G) = Some b ->
-      Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
+      Memory.store mem (C', b, 0%Z) old_call_arg = Some mem' ->
       let t := [ERet C v C'] in
       kstep ctx G
             (CC (C, (C', Some (old_call_arg, k)) :: s, mem) Normal) t

@@ -106,9 +106,10 @@ Section Decomposition.
       CS.initial_state (program_link p c mainC mainP) G s1 ->
     exists s2,
       PS.initial_state (PS.partialize (program_link p c mainC mainP) (prog_interface c))
-                       G' (prog_interface c) s2
+                       (prog_interface c) s2
       /\ related_states s1 s2.
   Proof.
+    (*
     intros s1 Hs1_init.
     CS.unfold_state.
     destruct Hs1_init
@@ -323,6 +324,7 @@ Section Decomposition.
              *** destruct H0. auto.
              *** unfold Morphisms.Proper, Morphisms.respectful.
                  intros. subst. reflexivity.
+     *)
   Admitted.
 
   Lemma final_states_match:

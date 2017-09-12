@@ -48,7 +48,7 @@ Definition initial_state
     Pointer.component pc = fst (prog_main p) /\
     EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
                    (genv_entrypoints G) = Some (Pointer.block pc) /\
-    Pointer.offset pc = 0
+    Pointer.offset pc = 0%Z
   | CC (pgps, mem, C) execst =>
     (* the global protected stack is empty *)
     pgps = [] /\
@@ -66,7 +66,7 @@ Definition initial_state
 Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
   match s with
   | PC (gps, mem, regs, pc) =>
-    Register.get R_COM regs = Int r /\
+    Register.get R_COM regs = Int (Z.of_nat r) /\
     executing G pc IHalt
   | CC (pgps, mem, C) execst =>
     execst = Normal
@@ -175,7 +175,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       pgps' = (C, Some (b, o)) :: pgps ->
       EntryPoint.get C' P (genv_entrypoints G) = Some b ->
       Register.get R_COM regs = Int val ->
-      let pc' := (C', b, 0) in
+      let pc' := (C', b, 0%Z) in
       let t := [ECall C P val C'] in
       step ctx G (PC (pgps,mem,regs,pc)) t (PC (pgps',mem,Register.invalidate regs,pc'))
 
@@ -266,7 +266,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       EntryPoint.get C' P (genv_entrypoints G) = Some b ->
       Register.get R_COM regs = Int val ->
       let t := [ECall C P val C'] in
-      let pc' := (C', b, 0) in
+      let pc' := (C', b, 0%Z) in
       step ctx G (CC (pgps,mem,C) Normal) t (PC (pgps',mem,regs,pc'))
 
 | Context_External_Return:

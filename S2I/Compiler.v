@@ -70,14 +70,14 @@ Definition get_local_buffer : COMP Pointer.t :=
   let C := current_component cenv in
   do blocks <- lift (NMap.find C (local_buffers cenv));
   do b <- lift (nth_error blocks 0);
-  ret (C, b, 0).
+  ret (C, b, 0%Z).
 
 Definition get_temp_buffer : COMP Pointer.t:=
   do cenv <- get;
   let C := current_component cenv in
   do blocks <- lift (NMap.find C (local_buffers cenv));
   do b <- lift (nth_error blocks (length blocks - 1));
-  ret (C, b, 0).
+  ret (C, b, 0%Z).
 
 Definition find_proc_label C P : COMP label :=
   do cenv <- get;
@@ -208,7 +208,7 @@ Definition compile_proc
   do lreturn <- fresh_label;
   do proc_code <- compile_expr e;
   (* TODO compute stack size *)
-  let stack_frame_size := 10 in
+  let stack_frame_size := 10%Z in
   ret ([IConst (IInt 1) R_ONE;
         IConst (IInt 1) R_AUX2;
         IConst (IInt stack_frame_size) R_SP;
