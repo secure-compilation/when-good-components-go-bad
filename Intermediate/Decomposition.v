@@ -26,7 +26,7 @@ Section Decomposition.
   Hypothesis linked_program_closedness:
     closed_program (program_link p c mainC mainP).
 
-  Let split := map fst (NMap.elements (prog_interface p)).
+  Let split := map fst (ZMap.elements (prog_interface p)).
   Let G := init_genv (program_link p c mainC mainP).
   Let G' := init_genv (PS.partialize (program_link p c mainC mainP) (prog_interface c)).
 
@@ -57,11 +57,11 @@ Section Decomposition.
         (* the partial stack is in sync *)
         pgps = PS.to_partial_stack gps split ->
         (* mem contains exactly all components memories *)
-        (forall C, NMap.In C (prog_interface (program_link p c mainC mainP)) <->
-              NMap.In C mem) ->
+        (forall C, ZMap.In C (prog_interface (program_link p c mainC mainP)) <->
+              ZMap.In C mem) ->
         (* pmem contains exactly all program components memories of mem *)
         (forall C, PS.is_program_component G' C ->
-              (forall Cmem, NMap.MapsTo C Cmem mem <-> NMap.MapsTo C Cmem pmem)) ->
+              (forall Cmem, ZMap.MapsTo C Cmem mem <-> ZMap.MapsTo C Cmem pmem)) ->
         (* registers and the program counter are equal *)
         related_states (gps, mem, regs, pc)
                        (PS.PC (pgps, pmem, regs, pc))
@@ -73,11 +73,11 @@ Section Decomposition.
         (* the partial stack is in sync *)
         pgps = PS.to_partial_stack gps split ->
         (* mem contains exactly all components memories *)
-        (forall C, NMap.In C (prog_interface (program_link p c mainC mainP)) <->
-              NMap.In C mem) ->
+        (forall C, ZMap.In C (prog_interface (program_link p c mainC mainP)) <->
+              ZMap.In C mem) ->
         (* pmem contains exactly all program components memories of mem *)
         (forall C, PS.is_program_component G' C ->
-              (forall Cmem, NMap.MapsTo C Cmem mem <-> NMap.MapsTo C Cmem pmem)) ->
+              (forall Cmem, ZMap.MapsTo C Cmem mem <-> ZMap.MapsTo C Cmem pmem)) ->
         (* registers and the program counter are equal *)
         related_states (gps, mem, regs, pc)
                        (PS.CC (pgps, pmem, Pointer.component pc) PS.Normal)
@@ -89,11 +89,11 @@ Section Decomposition.
         (* the partial stack is in sync *)
         pgps = PS.to_partial_stack gps split ->
         (* mem contains exactly all components memories *)
-        (forall C, NMap.In C (prog_interface (program_link p c mainC mainP)) <->
-              NMap.In C mem) ->
+        (forall C, ZMap.In C (prog_interface (program_link p c mainC mainP)) <->
+              ZMap.In C mem) ->
         (* pmem contains exactly all program components memories of mem *)
         (forall C, PS.is_program_component G' C ->
-              (forall Cmem, NMap.MapsTo C Cmem mem <-> NMap.MapsTo C Cmem pmem)) ->
+              (forall Cmem, ZMap.MapsTo C Cmem mem <-> ZMap.MapsTo C Cmem pmem)) ->
         (* the current state doesn't step and it's not final (i.e. it's stuck) *)
         (forall s' t, ~ CS.step G (gps,mem,regs,pc) t s') ->
         ~ (forall r, CS.final_state G (gps,mem,regs,pc) r) ->
@@ -114,10 +114,10 @@ Section Decomposition.
     CS.unfold_state.
     destruct Hs1_init
       as [Hempty_stack [Hmem1 [Hmem2 [Hregs [Hpc_comp [Hpc_block Hpc_offset]]]]]].
-    destruct (NMapExtra.F.In_dec (prog_interface p) mainC) as [Hprg|Hctx].
+    destruct (ZMapExtra.F.In_dec (prog_interface p) mainC) as [Hprg|Hctx].
     (* program has control case *)
     - exists (PS.PC (PS.to_partial_stack s split,
-                NMapExtra.filter (fun C _ => NMap.mem C (prog_interface p)) mem,
+                ZMapExtra.filter (fun C _ => ZMap.mem C (prog_interface p)) mem,
                 regs, pc)).
       split.
       + unfold PS.initial_state.
@@ -131,35 +131,35 @@ Section Decomposition.
                  destruct (init_all (PS.partialize (program_link p c mainC mainP)
                                                    (prog_interface c))).
                  destruct p0. simpl in HCprog.
-                 apply NMapExtra.diff_in_iff in HCprog. destruct HCprog.
-                 apply NMapExtra.update_in_iff in H. destruct H.
+                 apply ZMapExtra.diff_in_iff in HCprog. destruct HCprog.
+                 apply ZMapExtra.update_in_iff in H. destruct H.
                  **** specialize (Hmem1 C).
-                      assert (HCinPC: NMap.In C (prog_interface
+                      assert (HCinPC: ZMap.In C (prog_interface
                                                   (program_link p c mainC mainP))). {
                         unfold program_link. simpl.
-                        apply NMapExtra.update_in_iff. left. auto.
+                        apply ZMapExtra.update_in_iff. left. auto.
                       } apply Hmem1 in HCinPC.
                       destruct HCinPC.
                       exists x.
-                      apply NMapExtra.filter_iff.
+                      apply ZMapExtra.filter_iff.
                       ***** unfold Morphisms.Proper, Morphisms.respectful.
                             intros. subst. reflexivity.
                       ***** split.
                       ****** auto.
-                      ****** apply NMapExtra.F.mem_in_iff. auto.
+                      ****** apply ZMapExtra.F.mem_in_iff. auto.
                  **** contradiction.
              *** intro.
                  destruct H.
-                 apply NMapExtra.filter_iff in H.
-                 **** destruct H. apply NMapExtra.F.mem_in_iff in H0.
+                 apply ZMapExtra.filter_iff in H.
+                 **** destruct H. apply ZMapExtra.F.mem_in_iff in H0.
                       unfold PS.is_program_component, G', init_genv.
                       destruct (init_all (PS.partialize (program_link p c mainC mainP)
                                                         (prog_interface c))).
                       destruct p0. simpl.
-                      apply NMapExtra.diff_in_iff. split.
-                      ***** apply NMapExtra.update_in_iff. left. auto.
+                      apply ZMapExtra.diff_in_iff. split.
+                      ***** apply ZMapExtra.update_in_iff. left. auto.
                       ***** destruct linkability as [? [? []]].
-                      unfold NMapExtra.Disjoint in H3.
+                      unfold ZMapExtra.Disjoint in H3.
                       specialize (H3 C). intro.
                       apply H3. split. auto. auto.
                  **** unfold Morphisms.Proper, Morphisms.respectful.
@@ -177,11 +177,11 @@ Section Decomposition.
                                                                mainP)
                                                  (prog_interface c))).
                       destruct p0. simpl.
-                      apply NMapExtra.diff_in_iff. split.
-                      ****** apply NMapExtra.update_in_iff. left. auto.
+                      apply ZMapExtra.diff_in_iff. split.
+                      ****** apply ZMapExtra.update_in_iff. left. auto.
                       ****** unfold linkable_programs in linkability.
                       destruct linkability as [? [? [Hdisjoint ?]]].
-                      unfold NMapExtra.Disjoint in Hdisjoint.
+                      unfold ZMapExtra.Disjoint in Hdisjoint.
                       specialize (Hdisjoint (Pointer.component pc)).
                       intro. apply Hdisjoint. split; auto.
                       ***** split.
@@ -197,10 +197,10 @@ Section Decomposition.
           destruct (init_all (PS.partialize (program_link p c mainC mainP)
                                             (prog_interface c))).
           destruct p0. simpl.
-          apply NMapExtra.diff_in_iff. split.
-          ** apply NMapExtra.update_in_iff. left. auto.
+          apply ZMapExtra.diff_in_iff. split.
+          ** apply ZMapExtra.update_in_iff. left. auto.
           ** destruct linkability as [? [? []]].
-             unfold NMapExtra.Disjoint in H1.
+             unfold ZMapExtra.Disjoint in H1.
              specialize (H1 mainC). intro.
              apply H1. split. auto. auto.
         * subst. reflexivity.
@@ -213,7 +213,7 @@ Section Decomposition.
              destruct (init_all (program_link p c mainC mainP)). destruct p0. simpl in *.
              apply Hmem1. auto.
         * intros C HCprog Cmem. split.
-          ** intro. apply NMapExtra.filter_iff.
+          ** intro. apply ZMapExtra.filter_iff.
              *** unfold Morphisms.Proper, Morphisms.respectful.
                  intros. subst. reflexivity.
              *** split. auto.
@@ -222,9 +222,9 @@ Section Decomposition.
                  destruct (init_all (PS.partialize (program_link p c mainC mainP)
                                                    (prog_interface c))).
                  destruct p0. simpl in HCprog.
-                 apply NMapExtra.diff_in_iff in HCprog. destruct HCprog.
-                 apply NMapExtra.update_in_iff in H0. destruct H0.
-                 **** apply NMapExtra.F.mem_in_iff. auto.
+                 apply ZMapExtra.diff_in_iff in HCprog. destruct HCprog.
+                 apply ZMapExtra.update_in_iff in H0. destruct H0.
+                 **** apply ZMapExtra.F.mem_in_iff. auto.
                  **** contradiction.
           ** intro.
              unfold PS.is_program_component in HCprog.
@@ -232,9 +232,9 @@ Section Decomposition.
              destruct (init_all (PS.partialize (program_link p c mainC mainP)
                                                (prog_interface c))).
              destruct p0. simpl in HCprog.
-             apply NMapExtra.diff_in_iff in HCprog. destruct HCprog.
-             apply NMapExtra.update_in_iff in H0. destruct H0.
-             *** apply NMapExtra.filter_iff in H.
+             apply ZMapExtra.diff_in_iff in HCprog. destruct HCprog.
+             apply ZMapExtra.update_in_iff in H0. destruct H0.
+             *** apply ZMapExtra.filter_iff in H.
                  **** destruct H. auto.
                  **** unfold Morphisms.Proper, Morphisms.respectful.
                       intros. subst. reflexivity.
@@ -242,7 +242,7 @@ Section Decomposition.
 
     (* context has control case *)
     - exists (PS.CC (PS.to_partial_stack s split,
-                NMapExtra.filter (fun C _ => NMap.mem C (prog_interface p)) mem,
+                ZMapExtra.filter (fun C _ => ZMap.mem C (prog_interface p)) mem,
                 mainC) PS.Normal).
       split.
       + unfold PS.initial_state.
@@ -256,19 +256,19 @@ Section Decomposition.
                  destruct (init_all (PS.partialize (program_link p c mainC mainP)
                                                    (prog_interface c))).
                  destruct p0. simpl in HCinprog.
-                 apply NMapExtra.diff_in_iff in HCinprog.
+                 apply ZMapExtra.diff_in_iff in HCinprog.
                  destruct HCinprog as [H1 H2].
                  specialize (Hmem1 C).
                  unfold program_link in Hmem1. simpl in Hmem1.
                  assert (H1' := H1).
                  apply Hmem1 in H1. destruct H1.
-                 exists x. apply NMapExtra.filter_iff.
+                 exists x. apply ZMapExtra.filter_iff.
                  **** unfold Morphisms.Proper, Morphisms.respectful.
                       intros. subst. reflexivity.
                  **** split.
                       ***** apply H.
-                      ***** apply NMapExtra.F.mem_in_iff. 
-                      apply NMapExtra.update_in_iff in H1'.
+                      ***** apply ZMapExtra.F.mem_in_iff. 
+                      apply ZMapExtra.update_in_iff in H1'.
                       destruct H1'; try contradiction.
                       auto.
              *** intro HCinmem.
@@ -276,19 +276,19 @@ Section Decomposition.
                  destruct (init_all (PS.partialize (program_link p c mainC mainP)
                                                    (prog_interface c))).
                  destruct p0. simpl.
-                 apply NMapExtra.diff_in_iff. split.
-                 **** destruct HCinmem. apply NMapExtra.filter_iff in H.
-                      ***** destruct H. apply NMapExtra.F.mem_in_iff in H0.
-                      apply NMapExtra.update_in_iff. left. auto.
+                 apply ZMapExtra.diff_in_iff. split.
+                 **** destruct HCinmem. apply ZMapExtra.filter_iff in H.
+                      ***** destruct H. apply ZMapExtra.F.mem_in_iff in H0.
+                      apply ZMapExtra.update_in_iff. left. auto.
                       ***** unfold Morphisms.Proper, Morphisms.respectful.
                       intros. subst. reflexivity.
                  (* disjointness of interfaces *)
                  **** destruct linkability as [? [? []]].
-                      unfold NMapExtra.Disjoint in H1.
+                      unfold ZMapExtra.Disjoint in H1.
                       specialize (H1 C). intro.
                       apply H1. split.
-                      ***** destruct HCinmem. apply NMapExtra.filter_iff in H4.
-                      destruct H4. apply NMapExtra.F.mem_in_iff in H5. auto.
+                      ***** destruct HCinmem. apply ZMapExtra.filter_iff in H4.
+                      destruct H4. apply ZMapExtra.F.mem_in_iff in H5. auto.
                       ****** unfold Morphisms.Proper, Morphisms.respectful.
                       intros. subst. reflexivity.
                       ***** auto.
@@ -307,20 +307,20 @@ Section Decomposition.
         * intro C. split; intro; apply (Hmem1 C); auto.
         * intros. split.
           ** intro.
-             apply NMapExtra.filter_iff.
+             apply ZMapExtra.filter_iff.
              *** unfold Morphisms.Proper, Morphisms.respectful.
                  intros. subst. reflexivity.
              *** split. auto.
-                 apply NMapExtra.F.mem_in_iff.
+                 apply ZMapExtra.F.mem_in_iff.
                  unfold PS.is_program_component in H.
                  unfold G', init_genv in H.
                  destruct (init_all (PS.partialize (program_link p c mainC mainP)
                                                    (prog_interface c))).
                  destruct p0. simpl in H.
-                 apply NMapExtra.diff_in_iff in H. destruct H.
-                 apply NMapExtra.update_in_iff in H. destruct H; try contradiction.
+                 apply ZMapExtra.diff_in_iff in H. destruct H.
+                 apply ZMapExtra.update_in_iff in H. destruct H; try contradiction.
                  auto.
-          ** intro. apply NMapExtra.filter_iff in H0.
+          ** intro. apply ZMapExtra.filter_iff in H0.
              *** destruct H0. auto.
              *** unfold Morphisms.Proper, Morphisms.respectful.
                  intros. subst. reflexivity.
@@ -368,7 +368,7 @@ Section Decomposition.
     - admit.
 
     (* the program has control and produces an event *)
-    - destruct (NMapExtra.F.In_dec (genv_entrypoints G) C') as [Htarget|Htarget].
+    - destruct (ZMapExtra.F.In_dec (genv_entrypoints G) C') as [Htarget|Htarget].
       (* internal call *)
       + eexists. split.
         * eapply PS.Program_Internal_Call; eauto.
@@ -395,7 +395,7 @@ Section Decomposition.
           ** admit.
           ** admit.
           ** auto.
-    - destruct (NMapExtra.F.In_dec (genv_entrypoints G) (Pointer.component pc'))
+    - destruct (ZMapExtra.F.In_dec (genv_entrypoints G) (Pointer.component pc'))
                  as [Htarget|Htarget].
       (* internal return *)
       + eexists. split.
@@ -533,12 +533,12 @@ Section Decomposition.
         * admit. (* TODO investigate more here *)
 
     (* the context has control and produces an event *)
-    - destruct (NMapExtra.F.In_dec (genv_entrypoints G) C') as [Htarget|Htarget].
+    - destruct (ZMapExtra.F.In_dec (genv_entrypoints G) C') as [Htarget|Htarget].
       (* internal call *)
       + admit.
       (* external call *)
       + admit.
-    - destruct (NMapExtra.F.In_dec (genv_entrypoints G) (Pointer.component pc))
+    - destruct (ZMapExtra.F.In_dec (genv_entrypoints G) (Pointer.component pc))
         as [Htarget|Htarget].
       (* internal return *)
       + admit.

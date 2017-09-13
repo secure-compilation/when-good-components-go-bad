@@ -4,7 +4,7 @@ Require Import Common.Memory.
 Require Import Coq.Arith.Arith.
 
 Ltac inv H :=
-  inversion H; clear H; subst.
+  inversion H; subst; clear H.
 
 Ltac simplify_option :=
   match goal with
