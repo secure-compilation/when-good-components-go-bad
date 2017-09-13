@@ -24,20 +24,21 @@ Require Import Intermediate.PS.
  *)
 
 (* Component id *)
+Definition partition := list Component.id.
 Definition interface := Program.interface.
 
 (* check if the last event of a behavior belongs to an agent,
    represented by the interface of its components *)
-Definition turn_trace (t:trace) (i:interface) : Prop :=
+Definition turn_trace (t:trace) (par:partition) : Prop :=
   forall e, exists t', t = e::t' /\
              (match e with
-              | ECall Cid Pid n Cid' => Program.has_component_id i Cid'
-              | ERet Cid n Cid' => Program.has_component_id i Cid'
+              | ECall Cid Pid n Cid' => In Cid' par
+              | ERet Cid n Cid' => In Cid' par
               end).
   
 
 (* For now turn is defined only for finite traces. *)
-Definition turn (b:program_behavior) (i:interface) : Prop :=
+Definition turn (b:program_behavior) (i:partition) : Prop :=
   exists t, turn_trace t i /\
             ((exists n, b = Terminates t n) \/
             (b = Diverges t) \/
@@ -53,10 +54,10 @@ Definition contained (i1 i: interface) :=
   exists i2, NMap.Equal (NMapExtra.update i1 i2) i.
 
 
-Definition behavior_improves_p (behs beht:program_behavior) (psi:interface) :=
+Definition behavior_improves_p (behs beht:program_behavior) (par:partition) :=
   (behs = beht \/ (exists t, behs = Goes_wrong t /\
                              behavior_prefix t beht /\
-                             turn behs psi)).
+                             turn behs par)).
 
 (* 
    The languages.
@@ -87,12 +88,14 @@ Module Type Lang.
     icomplete2 (get_interface p1) (get_interface p2).
 
   (* CompCert defines the semantics of a program as an object providing the following:  
-   state: Type.
-   genvtype: Type.
-   step : genvtype -> state -> trace -> state -> Prop.
-   initial_state : program -> state -> Prop.
-   final_state: state -> Prop.
-   globalenv: program -> genvtype.
+Record semantics : Type := Semantics_gen {
+  state: Type;
+  genvtype: Type;
+  step : genvtype -> state -> trace -> state -> Prop;
+  initial_state: state -> Prop;
+  final_state: state -> int -> Prop;
+  globalenv: genvtype;
+}.
 
    any program has a semantics, if the program is ill-formed it
    still has a behavior. e.g. a program without any initial state
@@ -107,6 +110,60 @@ Module Type Lang.
      will be ignored. *)
   (* TODO we should check that program is complete and interface is contained *)
   Parameter psem: interface -> program -> semantics.
+
+  (* Parameter val : Type. *)
+  (* Record CoreSemantics {G C M : Type} : Type := *)
+  (* { initial_core : G -> val -> list val -> option C *)
+  (* ; at_external : C -> option (external_function * signature * list val) *)
+  (* ; after_external : val -> C -> option C *)
+  (* ; halted : C -> val *)
+  (* ; corestep : G -> C -> M -> C -> M -> Prop *)
+  (* (* plus lemmas *) *)
+  (* }. *)
+  
+  (* Parameter csem: semantics. *)
+  (* Parameter pstate : Type. *)
+  (* Parameter penv : Type. *)
+  (* Parameter turn_state : pstate -> Component.id. *)
+  (* Parameter psi: interface. *)
+  (* Parameter partialize: interface -> (state csem) -> pstate. *)
+  (* Parameter lift: interface -> pstate -> (state csem). *)
+  (* (* TODO lemma between lift and partialize *) *)
+  (* Parameter lift_env: penv -> (genvtype csem). *)
+  (* (* Parameter stack_push: pstate -> Component.id -> pstate. *) *)
+  (* Parameter is_program_component : penv -> Component.id -> Prop. *)
+  (* Parameter is_context_component : penv -> Component.id -> Prop. *)
+
+  (* Definition initial_state (ps:pstate) := initial_state csem (lift psi ps). *)
+  (* Definition final_state (ps:pstate) := final_state csem (lift psi ps). *)
+  (* Inductive pstep: penv -> pstate -> trace -> pstate -> Prop := *)
+  (* (* TODO the event can't be read *) *)
+  (* | program_all: forall g ps ps', *)
+  (*     is_program_component g (turn_state ps) -> *)
+  (*     (step csem) (lift_env g) (lift psi ps) E0 (lift psi ps') -> *)
+  (*     pstep g ps E0 ps' *)
+  (* | context_epsilon: forall g ps, *)
+  (*     is_context_component g (turn_state ps) -> *)
+  (*     Program.has_component_id psi (turn_state ps) -> *)
+  (*     pstep g ps E0 ps *)
+  (* | Context_Internal_Call: *)
+  (*     forall pgps pgps' mem C C' P call_arg, *)
+  (*       let C = turn_state(ps) in *)
+  (*       let C' = turn_state(ps') in *)
+  (*       C' <> C -> *)
+  (*       imported_procedure (genv_interface G) C C' P -> *)
+  (*       is_context_component G C -> *)
+  (*       is_context_component G C' -> *)
+  (*       pgps' = (C, None) :: pgps -> *)
+  (*       let t := [ECall C P call_arg C'] in *)
+  (*       step G (CC (pgps,mem,C)) t (CC (pgps',mem,C')). *)
+
+  (*     step G (PC (pgps,mem,regs,pc)) E0 (PC (pgps,mem',regs',pc')) *)
+             
+  (* Definition psem (psi:interface) (p:program) := *)
+  (*   Semantics_gen (step csem) (initial_state csem) (final_state csem) (globalenv csem). *)
+
+
 End Lang.
 
 (* Every language is a subtype of Lang and implements its signature *)
@@ -114,6 +171,8 @@ End Lang.
 
 (* Intermediate *)
 Module I <: Lang.
+  Axiom state: Type.
+  Axiom initial_state: state -> Prop.
   Definition program := Intermediate.program.
   Definition get_interface := Intermediate.prog_interface.
   Axiom valid: program -> Prop.
@@ -151,6 +210,8 @@ End I.
 
 (* Source *)
 Module S <: Lang.
+  Axiom state: Type.
+  Axiom initial_state: state -> Prop.
   Axiom program : Type.
   Axiom valid: program -> Prop.
   Axiom get_interface: program -> interface.
@@ -223,12 +284,31 @@ Module SI.
     apply complete_backward_simulation; auto.
   Qed.
 
+
+  Variable partial_match_states: state  -> state L2 -> Prop.
+  
+  Hypothesis partial_match_initial_states:
+    forall s1, initial_state L1 s1 ->
+               exists s2, initial_state L2 s2 /\ match_states s1 s2.
+  
+  Hypothesis partial_match_final_states:
+    forall s1 s2 r,
+      match_states s1 s2 ->
+      final_state L1 s1 r ->
+      final_state L2 s2 r.
+
+
   (* TODO this should be provable from backward_simulation_complete *)
-  Axiom partial_backward_simulation:
+  (* TODO this should backward *)
+  Definition partial_forward_simulation:
     forall P psi,
       S.valid P ->
       icomplete2 psi (S.get_interface P) ->
-      backward_simulation (S.psem psi P) (I.psem psi (compile P)).
+      forward_simulation (S.psem psi P) (I.psem psi (compile P)).
+  Proof.
+    intros P psi ValP icomp.
+    eapply forward_simulation_plus.
+
 
 
   Axiom backward_simulation_behavior_improves_p:
