@@ -73,10 +73,7 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     Register.get r1 regs = Ptr ptr ->
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
-    (* TODO fix the read value in the event *)
-    let t := if Pointer.component ptr =? Pointer.component pc then E0
-             else [ELoad (Pointer.component pc) 0 (Pointer.component ptr)] in
-    step G (gps, mem, regs, pc) t (gps, mem, regs', Pointer.inc pc)
+    step G (gps, mem, regs, pc) E0 (gps, mem, regs', Pointer.inc pc)
 
 | Store: forall gps mem regs pc ptr r1 r2 mem',
     executing G pc (IStore r1 r2) ->
@@ -172,9 +169,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
       | Ptr ptr =>
         do v <- Memory.load mem ptr;
         let regs' := Register.set r2 v regs in
-        let t := if Pointer.component ptr =? Pointer.component pc then E0
-                 else [ELoad (Pointer.component pc) 0 (Pointer.component ptr)] in
-        ret (t, (gps, mem, regs', Pointer.inc pc))
+        ret (E0, (gps, mem, regs', Pointer.inc pc))
       | _ => None
       end
     | IStore r1 r2 =>
@@ -593,11 +588,6 @@ Section Semantics.
                split; [ constructor
                       | intro; apply (step_deterministic G (gps, mem, regs, pc) T); auto ]
              end).
-    (* load *)
-    - rewrite H0 in H9. inversion H9. subst.
-      rewrite H1 in H10. inversion H10. subst.
-      destruct (Pointer.component ptr0 =? Pointer.component pc);
-        subst t t0; split; constructor; auto.
     (* call *)
     - rewrite H3 in H14. inversion H14. subst.
       rewrite H4 in H15. inversion H15. subst.
@@ -618,7 +608,6 @@ Section Semantics.
     unfold single_events.
     intros s t s' Hstep.
     inversion Hstep; simpl; auto.
-    destruct (Pointer.component ptr =? Pointer.component pc); subst; auto.
   Qed.
 
   Lemma determinate_initial_states:

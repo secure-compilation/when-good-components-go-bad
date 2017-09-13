@@ -107,7 +107,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_DerefEval : forall C s mem k C' b' o' v,
     Memory.load mem (C',b',o') = Some v ->
     (* TODO fix the read value in the event *)
-    let t := if C =? C' then E0 else [ELoad C 0 C'] in
+    let t := E0 in
     kstep G (C, s, mem, Kderef k, E_val (Ptr (C',b',o')))
           t (C, s, mem, k, E_val v)
 | KS_Assign1 : forall C s mem k e1 e2,
@@ -208,7 +208,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v with
       | Ptr (C',b',o') =>
         do v <- Memory.load mem (C',b',o');
-        let t := if C =? C' then E0 else [ELoad C 0 C'] in
+        let t := E0 in
         ret (t, (C, s, mem, k', E_val v))
       | _ => None
       end
@@ -428,32 +428,11 @@ Section Semantics.
     intros s t1 s1 t2.
     intros Hkstep Hmatch_traces.
     inversion Hkstep; subst;
-      inversion Hmatch_traces; subst.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - destruct (C =? C'); subst t; try inversion H1; eexists; apply Hkstep.
-    - destruct (C =? C'); subst t; try inversion H1; eexists; apply Hkstep.
-    - destruct (C =? C'); subst t; try inversion H1; eexists; apply Hkstep.
-    - destruct (C =? C'); subst t; try inversion H1; eexists; apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
-    - eexists. apply Hkstep.
+      inversion Hmatch_traces; subst;
+    try (eexists; apply Hkstep).
     - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
-    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
-    - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H2 in Hkstep. apply Hkstep.

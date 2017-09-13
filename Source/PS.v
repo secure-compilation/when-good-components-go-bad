@@ -116,27 +116,6 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 
       kstep ctx G (PC (C,s,mem,k,e)) E0 (PC (C,s,mem',k',e'))
 
-| Program_External_Load_In_Program:
-    forall C s mem k ptr v,
-      Pointer.component ptr <> C ->
-      is_program_component G (Pointer.component ptr) ->
-      Memory.load mem ptr = Some v ->
-      (* TODO fix the read value in the event *)
-      let t := [ELoad C 0 (Pointer.component ptr)] in
-      kstep ctx G
-            (PC (C, s, mem, Kderef k, E_val (Ptr ptr))) t
-            (PC (C, s, mem, k, E_val v))
-
-| Program_External_Load_In_Context:
-    forall C s mem k ptr v,
-      Pointer.component ptr <> C ->
-      is_context_component ctx (Pointer.component ptr) ->
-      (* TODO fix the read value in the event *)
-      let t := [ELoad C 0 (Pointer.component ptr)] in
-      kstep ctx G
-            (PC (C, s, mem, Kderef k, E_val (Ptr ptr))) t
-            (PC (C, s, mem, k, E_val v))
-
 | Program_Internal_Call:
     forall C s mem mem' k C' P v C'_procs P_expr b b' old_call_arg,
       is_program_component G C' ->
@@ -191,23 +170,6 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 | Context_GoesWrong:
     forall s mem C,
       kstep ctx G (CC (C,s,mem) Normal) E0 (CC (C,s,mem) WentWrong)
-
-| Context_External_Load_In_Context:
-    forall s mem C ptr,
-      Pointer.component ptr <> C ->
-      is_context_component ctx (Pointer.component ptr) ->
-      (* TODO fix the read value in the event *)
-      let t := [ELoad C 0 (Pointer.component ptr)] in
-      kstep ctx G (CC (C,s,mem) Normal) t (CC (C, s, mem) Normal)
-
-| Context_External_Load_In_Program:
-    forall s mem C ptr v,
-      Pointer.component ptr <> C ->
-      is_program_component G (Pointer.component ptr) ->
-      Memory.load mem ptr = Some v ->
-      (* TODO fix the read value in the event *)
-      let t := [ELoad C 0 (Pointer.component ptr)] in
-      kstep ctx G (CC (C, s, mem) Normal) t (CC (C, s, mem) Normal)
 
 | Context_Internal_Call:
     forall s s' mem C C' P call_arg,

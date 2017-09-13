@@ -30,8 +30,58 @@ Definition is_context_component (ctx: Program.interface) C := ZMap.In C ctx.
 
 Module IC := Intermediate.CS.CS.
 
-Axiom partialize_state: Program.interface -> IC.state -> state. 
-Axiom partialize_stack: Program.interface -> IC.stack -> stack -> Prop.
+(* stack partialization *)
+
+Definition to_partial_frame pc frame : PartialPointer.t :=
+  let '(C, b, o) := frame in
+  if Util.Lists.mem C pc then
+    (C, Some (b, o))
+  else
+    (C, None).
+
+Definition to_partial_stack (s : CS.stack) (pc : list Component.id) :=
+  map (to_partial_frame pc) s.
+
+Lemma push_by_prog_preserves_partial_stack:
+  forall s ps pc C b o,
+    Util.Lists.mem C pc = true ->
+    to_partial_stack s pc = ps ->
+    to_partial_stack ((C,b,o)::s) pc = (C,Some (b,o)) :: ps.
+Proof.
+  intros s ps pc C b o Hprogturn H.
+  simpl. rewrite Hprogturn. rewrite H. reflexivity.
+Qed.
+
+Lemma push_by_context_preserves_partial_stack:
+  forall s ps pc C b o,
+    ~ (In C pc) ->
+    to_partial_stack s pc = ps ->
+    to_partial_stack ((C,b,o)::s) pc = (C,None) :: ps.
+Proof.
+  intros s ps pc C b o Hprogturn Hpstack.
+  simpl. apply Util.Lists.not_in_iff_mem_false in Hprogturn.
+  rewrite Hprogturn. rewrite Hpstack. reflexivity.
+Qed.
+
+Definition is_partial_stack (ctx: Program.interface) (s: IC.stack) (ps: stack) : Prop :=
+  ps = to_partial_stack s (map fst (ZMap.elements ctx)).
+
+(* state partialization *)
+
+(* Possible problem:
+   what about went_wrong states? when the context has control, how do we map them? *)
+Definition partialize_state (ctx: Program.interface) (s: IC.state) : state :=
+  let '(gps, mem, regs, pc) := s in
+  if ZMap.mem (Pointer.component pc) ctx then
+    CC (Pointer.component pc,
+        to_partial_stack gps (map fst (ZMap.elements ctx)),
+        ZMapExtra.filter (fun k _ => negb (ZMap.mem k ctx)) mem) Normal
+  else
+    PC (to_partial_stack gps (map fst (ZMap.elements ctx)),
+        ZMapExtra.filter (fun k _ => negb (ZMap.mem k ctx)) mem,
+        regs, pc).
+
+(* predicates over states *)
 
 Inductive initial_state2 (p: program) (ctx: Program.interface): state -> Prop :=
 | initial_state_intro: forall ps cs,
@@ -89,37 +139,6 @@ Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
     execst = Normal
   end.
 
-Definition to_partial_frame pc frame : PartialPointer.t :=
-  let '(C, b, o) := frame in
-  if Util.Lists.mem C pc then
-    (C, Some (b, o))
-  else
-    (C, None).
-
-Definition to_partial_stack (s : CS.stack) (pc : list Component.id) :=
-  map (to_partial_frame pc) s.
-
-Lemma push_by_prog_preserves_partial_stack:
-  forall s ps pc C b o,
-    Util.Lists.mem C pc = true ->
-    to_partial_stack s pc = ps ->
-    to_partial_stack ((C,b,o)::s) pc = (C,Some (b,o)) :: ps.
-Proof.
-  intros s ps pc C b o Hprogturn H.
-  simpl. rewrite Hprogturn. rewrite H. reflexivity.
-Qed.
-
-Lemma push_by_context_preserves_partial_stack:
-  forall s ps pc C b o,
-    ~ (In C pc) ->
-    to_partial_stack s pc = ps ->
-    to_partial_stack ((C,b,o)::s) pc = (C,None) :: ps.
-Proof.
-  intros s ps pc C b o Hprogturn Hpstack.
-  simpl. apply Util.Lists.not_in_iff_mem_false in Hprogturn.
-  rewrite Hprogturn. rewrite Hpstack. reflexivity.
-Qed.
-
 Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> state -> Prop :=
 | Program_Epsilon:
     forall G' pgps (mem mem' wmem wmem' : Memory.t) Cmem'
@@ -158,29 +177,6 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       ZMap.Equal mem' (ZMap.add (Pointer.component pc') Cmem' mem) ->
 
       step ctx G (PC (pgps,mem,regs,pc)) E0 (PC (pgps,mem',regs',pc'))
-
-| Program_External_Load_In_Program:
-    forall pgps mem regs regs' pc r1 r2 ptr v,
-      executing G pc (ILoad r1 r2) ->
-      Register.get r1 regs = Ptr ptr ->
-      Pointer.component ptr <> Pointer.component pc ->
-      is_program_component G (Pointer.component ptr) ->
-      Memory.load mem ptr = Some v ->
-      Register.set r2 v regs = regs' ->
-      (* TODO fix the read value in the event *)
-      let t := [ELoad (Pointer.component pc) 0 (Pointer.component ptr)] in
-      step ctx G (PC (pgps, mem, regs, pc)) t (PC (pgps, mem, regs', Pointer.inc pc))
-
-| Program_External_Load_In_Context:
-    forall pgps mem regs regs' pc r1 r2 ptr v,
-      executing G pc (ILoad r1 r2) ->
-      Register.get r1 regs = Ptr ptr ->
-      Pointer.component ptr <> Pointer.component pc ->
-      is_context_component ctx (Pointer.component ptr) ->
-      Register.set r2 v regs = regs' ->
-      (* TODO fix the read value in the event *)
-      let t := [ELoad (Pointer.component pc) 0 (Pointer.component ptr)] in
-      step ctx G (PC (pgps, mem, regs, pc)) t (PC (pgps, mem, regs', Pointer.inc pc))
 
 | Program_Internal_Call:
     forall pgps pgps' mem regs b o pc C' P val,
@@ -256,23 +252,6 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       pgps = (C', None) :: pgps' ->
       let t := [ERet C return_val C'] in
       step ctx G (CC (C,pgps,mem) Normal) t (CC (C',pgps',mem) Normal)
-
-| Context_External_Load_In_Context:
-    forall pgps mem C ptr,
-      Pointer.component ptr <> C ->
-      is_context_component ctx (Pointer.component ptr) ->
-      (* TODO fix the read value in the event *)
-      let t := [ELoad C 0 (Pointer.component ptr)] in
-      step ctx G (CC (C, pgps, mem) Normal) t (CC (C, pgps, mem) Normal)
-
-| Context_External_Load_In_Program:
-    forall pgps mem C ptr v,
-      Pointer.component ptr <> C ->
-      is_program_component G (Pointer.component ptr) ->
-      Memory.load mem ptr = Some v ->
-      (* TODO fix the read value in the event *)
-      let t := [ELoad C 0 (Pointer.component ptr)] in
-      step ctx G (CC (C, pgps, mem) Normal) t (CC (C, pgps, mem) Normal)
 
 | Context_External_Call:
     forall pgps pgps' mem regs C C' P b val,
