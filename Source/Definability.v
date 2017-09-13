@@ -22,7 +22,7 @@ Section Definability.
     forall beh,
       program_behaves (PS.sem p ictx) beh ->
     exists ctx,
-      NMap.Equal (prog_interface ctx) ictx /\
+      ZMap.Equal (prog_interface ctx) ictx /\
       program_behaves (CS.sem (program_link p ctx mainC mainP)) beh.
   Proof.
   Admitted.

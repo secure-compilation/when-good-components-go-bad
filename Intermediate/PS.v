@@ -25,8 +25,8 @@ Inductive state : Type :=
 | CC : context_state -> exec_state -> state
 with exec_state : Type := Normal | WentWrong.
 
-Definition is_program_component G C := NMap.In C (genv_interface G).
-Definition is_context_component (ctx: Program.interface) C := NMap.In C ctx.
+Definition is_program_component G C := ZMap.In C (genv_interface G).
+Definition is_context_component (ctx: Program.interface) C := ZMap.In C ctx.
 
 Module IC := Intermediate.CS.CS.
 
@@ -59,7 +59,7 @@ Definition initial_state
     (* the global protected stack is empty *)
     gps = [] /\
     (* mem exaclty contains all components memories and it comes from the init routine *)
-    (forall C, is_program_component G C <-> NMap.In C mem) /\
+    (forall C, is_program_component G C <-> ZMap.In C mem) /\
     (let '(m, _, _) := init_all p in mem = m) /\
     (* the origin register (R_AUX2) is set to 1 (meaning external call) *)
     (* the R_ONE register is set to 1 *)
@@ -70,12 +70,12 @@ Definition initial_state
     Pointer.component pc = fst (prog_main p) /\
     EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
                    (genv_entrypoints G) = Some (Pointer.block pc) /\
-    Pointer.offset pc = 0%Z
+    Pointer.offset pc = 0
   | CC (C, pgps, mem) execst =>
     (* the global protected stack is empty *)
     pgps = [] /\
     (* mem exaclty contains all program components memories *)
-    (forall C, is_program_component G C <-> NMap.In C mem) /\
+    (forall C, is_program_component G C <-> ZMap.In C mem) /\
     (let '(m, _, _) := init_all p in mem = m) /\
     (* the executing component is the main one *)
     is_context_component ctx C /\
@@ -132,25 +132,25 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
 
       (* G' is an extension of G w.r.t. ctx *)
       (* 1) the interface is G plus ctx *)
-      NMap.Equal (genv_interface G') (NMapExtra.update (genv_interface G) ctx) ->
+      ZMap.Equal (genv_interface G') (ZMapExtra.update (genv_interface G) ctx) ->
       (* 2) the procedures are the same of G plus some new ones for ctx *)
-      (forall C Cprocs, NMap.MapsTo C Cprocs (genv_procedures G') <->
-                   (NMap.MapsTo C Cprocs (genv_procedures G) \/
-                    (NMap.In C ctx /\ ~ NMap.In C (genv_procedures G)))) ->
+      (forall C Cprocs, ZMap.MapsTo C Cprocs (genv_procedures G') <->
+                   (ZMap.MapsTo C Cprocs (genv_procedures G) \/
+                    (ZMap.In C ctx /\ ~ ZMap.In C (genv_procedures G)))) ->
       (* 3) the entrypoints are the same of G plus some new ones for ctx *)
-      (forall C Centrypoints, NMap.MapsTo C Centrypoints (genv_entrypoints G') <->
-                         (NMap.MapsTo C Centrypoints (genv_entrypoints G) \/
-                          (NMap.In C ctx /\ ~ NMap.In C (genv_entrypoints G)))) ->
+      (forall C Centrypoints, ZMap.MapsTo C Centrypoints (genv_entrypoints G') <->
+                         (ZMap.MapsTo C Centrypoints (genv_entrypoints G) \/
+                          (ZMap.In C ctx /\ ~ ZMap.In C (genv_entrypoints G)))) ->
 
       (* wmem is an extension of mem w.r.t. ctx *)
       (* 1) wmem contains mem *)
-      (forall C Cmem, NMap.MapsTo C Cmem mem -> NMap.MapsTo C Cmem wmem) ->
+      (forall C Cmem, ZMap.MapsTo C Cmem mem -> ZMap.MapsTo C Cmem wmem) ->
       (* 2) wmem has the context components memories *)
-      (forall C, is_context_component ctx C -> NMap.In C wmem) ->
+      (forall C, is_context_component ctx C -> ZMap.In C wmem) ->
       (* 3) wmem extends mem exactly w.r.t. ctx *)
-      (forall C Cmem, NMap.MapsTo C Cmem wmem <->
-                 (NMap.MapsTo C Cmem mem \/
-                  (is_context_component ctx C /\ ~ NMap.In C mem))) ->
+      (forall C Cmem, ZMap.MapsTo C Cmem wmem <->
+                 (ZMap.MapsTo C Cmem mem \/
+                  (is_context_component ctx C /\ ~ ZMap.In C mem))) ->
 
       (* the complete semantics steps silently with the extended versions of
          memory and global environment
@@ -159,8 +159,8 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
 
       (* mem' is mem with the updated version of the current
          executing component's memory *)
-      NMap.MapsTo (Pointer.component pc') Cmem' wmem' ->
-      NMap.Equal mem' (NMap.add (Pointer.component pc') Cmem' mem) ->
+      ZMap.MapsTo (Pointer.component pc') Cmem' wmem' ->
+      ZMap.Equal mem' (ZMap.add (Pointer.component pc') Cmem' mem) ->
 
       step ctx G (PC (pgps,mem,regs,pc)) E0 (PC (pgps,mem',regs',pc'))
 
@@ -197,7 +197,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       pgps' = (C, Some (b, o)) :: pgps ->
       EntryPoint.get C' P (genv_entrypoints G) = Some b ->
       Register.get R_COM regs = Int val ->
-      let pc' := (C', b, 0%Z) in
+      let pc' := (C', b, 0) in
       let t := [ECall C P val C'] in
       step ctx G (PC (pgps,mem,regs,pc)) t (PC (pgps',mem,Register.invalidate regs,pc'))
 
@@ -288,7 +288,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       EntryPoint.get C' P (genv_entrypoints G) = Some b ->
       Register.get R_COM regs = Int val ->
       let t := [ECall C P val C'] in
-      let pc' := (C', b, 0%Z) in
+      let pc' := (C', b, 0) in
       step ctx G (CC (C,pgps,mem) Normal) t (PC (pgps',mem,regs,pc'))
 
 | Context_External_Return:
@@ -301,11 +301,11 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
 
 Definition partialize (p: program) (ctx: Program.interface) : program :=
   {| prog_interface :=
-       NMapExtra.diff (prog_interface p) ctx;
+       ZMapExtra.diff (prog_interface p) ctx;
      prog_procedures :=
-       NMapExtra.filter (fun k _ => negb (NMap.mem k ctx)) (prog_procedures p);
+       ZMapExtra.filter (fun k _ => negb (ZMap.mem k ctx)) (prog_procedures p);
      prog_buffers :=
-       NMapExtra.filter (fun k _ => negb (NMap.mem k ctx)) (prog_buffers p);
+       ZMapExtra.filter (fun k _ => negb (ZMap.mem k ctx)) (prog_buffers p);
      prog_main := prog_main p |}.
 
 Section Semantics.
@@ -322,7 +322,7 @@ Section Semantics.
 
   (* the context is part of p *)
   Hypothesis valid_context:
-    forall C CI, NMap.MapsTo C CI ctx -> NMap.MapsTo C CI (prog_interface p).
+    forall C CI, ZMap.MapsTo C CI ctx -> ZMap.MapsTo C CI (prog_interface p).
 
   Definition sem :=
     @Semantics_gen state global_env (step ctx)

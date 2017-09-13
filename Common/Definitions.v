@@ -8,12 +8,15 @@ Require Export Coq.ZArith.ZArith.
 Export ListNotations.
 Open Scope list_scope.
 
+Close Scope nat.
+Open Scope Z_scope.
+
 Module Procedure.
-  Definition id := nat.
+  Definition id := Z.
 End Procedure.
 
 Module Component.
-  Definition id := nat.
+  Definition id := Z.
 
   Record interface := mkCompInterface {
     export : list Procedure.id;
@@ -25,9 +28,10 @@ Module Component.
 End Component.
 
 Module Program.
-  Definition interface := NMap.t Component.interface.
-  Definition has_component (Is:interface) (C:Component.id) (CI : Component.interface) := NMap.MapsTo C CI Is.
-  Definition has_component_id (Is:interface) (C:Component.id) := NMap.In C Is.
+  Definition interface := ZMap.t Component.interface.
+  Definition has_component (Is:interface) (C:Component.id) (CI : Component.interface) :=
+    ZMap.MapsTo C CI Is.
+  Definition has_component_id (Is:interface) (C:Component.id) := ZMap.In C Is.
 End Program.
 
 Definition exported_procedure
@@ -51,8 +55,8 @@ Qed.
 Definition imported_procedure_b
            (Is : Program.interface)
            (C C': Component.id) (P : Procedure.id) : bool :=
-  match NMap.find C Is with
-  | Some CI => negb ((count_occ procs_eqdec (Component.import CI) (C',P)) =? 0)
+  match ZMap.find C Is with
+  | Some CI => negb ((count_occ procs_eqdec (Component.import CI) (C',P)) =? 0)%nat
   | None => false
   end.
 
@@ -67,7 +71,7 @@ Proof.
     unfold Program.has_component in HCI.
     unfold Component.is_importing in Himport.
     unfold imported_procedure_b.
-    apply NMap.find_1 in HCI. rewrite HCI.
+    apply ZMap.find_1 in HCI. rewrite HCI.
     rewrite count_occ_In in Himport.
     inversion Himport.
     + rewrite <- H0. simpl. auto.
@@ -75,14 +79,14 @@ Proof.
   - intros Himport.
     unfold imported_procedure.
     unfold imported_procedure_b in Himport.
-    destruct (NMap.find (elt:=Component.interface) C Is) eqn:Hfind;
+    destruct (ZMap.find (elt:=Component.interface) C Is) eqn:Hfind;
       try discriminate.
     exists i.
     unfold Program.has_component, Component.is_importing.
     split.
-    + apply (NMap.find_2 Hfind).
+    + apply (ZMap.find_2 Hfind).
     + rewrite count_occ_In.
-      destruct (count_occ procs_eqdec (Component.import i) (C', P) =? 0) eqn:Hcount;
+      destruct (count_occ procs_eqdec (Component.import i) (C', P) =? 0)%nat eqn:Hcount;
         try discriminate.
       rewrite beq_nat_false_iff in Hcount.
       apply Nat.neq_0_lt_0 in Hcount.

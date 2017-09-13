@@ -2,7 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 
 Module Block.
-  Definition id := nat.
+  Definition id := Z.
   Definition offset := Z.
 End Block.
 
@@ -21,21 +21,21 @@ Module Pointer.
   Definition eq (p1 p2 : t) : bool :=
     let '(C1, b1, o1) := p1 in
     let '(C2, b2, o2) := p2 in
-    (C1 =? C2) && (b1 =? b2) && (o1 =? o2)%Z.
+    (C1 =? C2) && (b1 =? b2) && (o1 =? o2).
 
   Definition leq (p1 p2 : t) : option bool :=
     let '(C1, b1, o1) := p1 in
     let '(C2, b2, o2) := p2 in
     if (C1 =? C2) && (b1 =? b2) then
-      Some (o1 <=? o2)%Z
+      Some (o1 <=? o2)
     else
       None.
 
   Definition add (ptr : t) (offset : Z) : t :=
-    let '(C, b, o) := ptr in (C, b, (o+offset)%Z).
+    let '(C, b, o) := ptr in (C, b, o+offset).
 
   Definition sub (ptr : t) (offset : Z) : t :=
-    let '(C, b, o) := ptr in (C, b, (o-offset)%Z).
+    let '(C, b, o) := ptr in (C, b, o-offset).
 
   Definition inc (ptr : t) : t := add ptr 1.
 
@@ -85,8 +85,8 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
   | Add,   Int n1, Int n2 => Int (n1 + n2)
   | Minus, Int n1, Int n2 => Int (n1 - n2)
   | Mul,   Int n1, Int n2 => Int (n1 * n2)
-  | Eq,    Int n1, Int n2 => Int (Util.Z.of_bool (n1  =? n2)%Z)
-  | Leq,   Int n1, Int n2 => Int (Util.Z.of_bool (n1 <=? n2)%Z)
+  | Eq,    Int n1, Int n2 => Int (Util.Z.of_bool (n1  =? n2))
+  | Leq,   Int n1, Int n2 => Int (Util.Z.of_bool (n1 <=? n2))
   (* pointer arithmetic *)
   | Add,   Ptr p,  Int n  => Ptr (Pointer.add p n)
   | Add,   Int n,  Ptr p  => Ptr (Pointer.add p n)

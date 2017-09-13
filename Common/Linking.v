@@ -34,11 +34,11 @@ Proof.
   unfold Program.has_component in H1, H1'.
   enough (HsameCI: CI' = CI'').
   - subst. auto.
-  - apply NMapExtra.F.MapsTo_fun with iface C'; auto.
+  - apply ZMapFacts.MapsTo_fun with iface C'; auto.
 Qed.
 
 Definition mergeable_interfaces (i1 i2 : Program.interface) : Prop :=
-  NMapExtra.Disjoint i1 i2.
+  ZMapExtra.Disjoint i1 i2.
 
 Definition interface_merge (i1 i2 : Program.interface) (prf: mergeable_interfaces i1 i2) :=
-  NMapExtra.update i1 i2.
+  ZMapExtra.update i1 i2.

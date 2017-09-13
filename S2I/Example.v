@@ -24,6 +24,16 @@ let rec nat2int = function
   | O -> 0
   | S n -> 1 + nat2int n;;
 
+let rec z2int' = function
+  | XH -> 1
+  | XI p -> 2 * z2int' p + 1
+  | XO p -> 2 * z2int' p
+
+let z2int = function
+  | Z0 -> 0
+  | Zpos p -> z2int' p
+  | Zneg p -> - z2int' p;;
+
 match run_compiled_fact with
 | None -> print_string "error\n"
 | Some n -> print_int (nat2int n); print_newline ();;

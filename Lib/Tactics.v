@@ -4,7 +4,7 @@ Require Import Common.Memory.
 Require Import Coq.Arith.Arith.
 
 Ltac inv H :=
-  inversion H; clear H; subst.
+  inversion H; subst; clear H.
 
 Ltac simplify_option :=
   match goal with
@@ -34,8 +34,8 @@ Ltac simplify_nat_equalities :=
 Ltac rewrite_memory_operations :=
   unfold Memory.alloc, Memory.load, Memory.store;
   match goal with
-  | H: NMap.find (elt:=ComponentMemory.t) _ _ = Some _ |- _ => rewrite H
-  | H: NMap.find (elt:=ComponentMemory.t) _ _ = None |- _ => rewrite H
+  | H: ZMap.find (elt:=ComponentMemory.t) _ _ = Some _ |- _ => rewrite H
+  | H: ZMap.find (elt:=ComponentMemory.t) _ _ = None |- _ => rewrite H
   | H: ComponentMemory.store _ _ _ _ = Some _ |- _ => rewrite H
   | H: ComponentMemory.store _ _ _ _ = None |- _ => rewrite H
   | H: ComponentMemory.load _ _ _ = Some _ |- _ => rewrite H
@@ -44,6 +44,6 @@ Ltac rewrite_memory_operations :=
 
 Ltac rewrite_map_operations :=
   match goal with
-  | H: NMap.find _ _ _ = Some _ |- _ => rewrite H
-  | H: NMap.find _ _ _ = None |- _ => rewrite H
+  | H: ZMap.find _ _ _ = Some _ |- _ => rewrite H
+  | H: ZMap.find _ _ _ = None |- _ => rewrite H
   end.

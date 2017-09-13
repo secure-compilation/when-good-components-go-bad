@@ -15,19 +15,21 @@ Import CS.
 
 (* naive factorial *)
 
+Open Scope Z_scope.
+
 Definition factorial : program := {|
   prog_interface :=
-    NMapExtra.of_list [(1, {| Component.import := [(2, 0)];
+    ZMapExtra.of_list [(1, {| Component.import := [(2, 0)];
                               Component.export := [1] |});
                        (2, {| Component.import := [];
                               Component.export := [1] |})];
-  prog_buffers := NMapExtra.of_list [(1, 1); (2, 1)];
-  prog_procedures := NMapExtra.of_list [
+  prog_buffers := ZMapExtra.of_list [(1, 1%nat); (2, 1%nat)];
+  prog_procedures := ZMapExtra.of_list [
     (* NOTE the version with E_exit is the right one, but unfortunately it is difficult
             to debug with extraction. Hence, the second version without E_exit *)
     (*(1, NMapExtra.of_list [(0, E_seq (E_call 2 0 (E_val (Int 6))) E_exit)]);*)
-    (1, NMapExtra.of_list [(0, E_call 2 0 (E_val (Int 6)))]);
-    (2, NMapExtra.of_list [(0,
+    (1, ZMapExtra.of_list [(0, E_call 2 0 (E_val (Int 6)))]);
+    (2, ZMapExtra.of_list [(0,
       E_if (E_binop Leq (E_deref E_local) (E_val (Int 1)))
         (E_val (Int 1))
         (E_binop Mul
@@ -49,7 +51,7 @@ Eval vm_compute in
 Definition run_fact :=
   (* warning (Int 1) is not considered at the moment *)
   match run factorial (Int 1) 1000 with
-  | Some (_, _, _, _, E_exit) => Some 0%Z
+  | Some (_, _, _, _, E_exit) => Some 0
   | Some (_, _, _, _, E_val (Int n)) => Some n
   | _ => None
   end.
