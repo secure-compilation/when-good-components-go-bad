@@ -18,7 +18,7 @@ End PartialPointer.
 Definition stack := list PartialPointer.t.
 
 Definition program_state : Type := stack * Memory.t * Register.t * Pointer.t.
-Definition context_state : Type := stack * Memory.t * Component.id.
+Definition context_state : Type := Component.id * stack * Memory.t.
 
 Inductive state : Type :=
 | PC : program_state -> state
@@ -27,6 +27,28 @@ with exec_state : Type := Normal | WentWrong.
 
 Definition is_program_component G C := NMap.In C (genv_interface G).
 Definition is_context_component (ctx: Program.interface) C := NMap.In C ctx.
+
+Module IC := Intermediate.CS.CS.
+
+Axiom partialize_state: Program.interface -> IC.state -> state. 
+Axiom partialize_stack: Program.interface -> IC.stack -> stack -> Prop.
+
+Inductive initial_state2 (p: program) (ctx: Program.interface): state -> Prop :=
+| initial_state_intro: forall ps cs,
+    IC.initial_state p cs /\
+    ps = partialize_state ctx cs ->
+    initial_state2 p ctx ps.
+
+Inductive final_state2 (ctx: Program.interface) (ps: state) (r: int) : Prop :=
+| final_state_program: forall cs,
+    IC.final_state2 cs r ->
+    ps = partialize_state ctx cs ->
+    final_state2 ctx ps r
+| final_state_context:
+    forall pgps mem C,
+      ps =  CC (pgps, mem, C) Normal ->
+      final_state2 ctx ps r.
+
 
 Definition initial_state
            (p: program) (ctx: Program.interface)
@@ -49,7 +71,7 @@ Definition initial_state
     EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
                    (genv_entrypoints G) = Some (Pointer.block pc) /\
     Pointer.offset pc = 0%Z
-  | CC (pgps, mem, C) execst =>
+  | CC (C, pgps, mem) execst =>
     (* the global protected stack is empty *)
     pgps = [] /\
     (* mem exaclty contains all program components memories *)
@@ -201,7 +223,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       Register.get R_COM regs = Int val ->
       (* TODO fix the read value in the event *)
       let t := [ECall C P val C'] in
-      step ctx G (PC (pgps,mem,regs,pc)) t (CC (pgps',mem,C') Normal)
+      step ctx G (PC (pgps,mem,regs,pc)) t (CC (C',pgps',mem) Normal)
 
 | Program_External_Return:
     forall pgps pgps' mem regs pc C' val,
@@ -213,7 +235,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       Register.get R_COM regs = Int val ->
       (* TODO fix the read value in the event *)
       let t := [ERet C val C'] in
-      step ctx G (PC (pgps,mem,regs,pc)) t (CC (pgps',mem,C') Normal)
+      step ctx G (PC (pgps,mem,regs,pc)) t (CC (C',pgps',mem) Normal)
 
 | Context_Epsilon:
     forall pgps mem C,
@@ -230,7 +252,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       is_context_component ctx C' ->
       pgps' = (C, None) :: pgps ->
       let t := [ECall C P call_arg C'] in
-      step ctx G (CC (pgps,mem,C) Normal) t (CC (pgps',mem,C') Normal)
+      step ctx G (CC (C,pgps,mem) Normal) t (CC (C',pgps',mem) Normal)
 
 | Context_Internal_Return:
     forall pgps pgps' mem C C' return_val,
@@ -238,7 +260,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       is_context_component ctx C' ->
       pgps = (C', None) :: pgps' ->
       let t := [ERet C return_val C'] in
-      step ctx G (CC (pgps,mem,C) Normal) t (CC (pgps',mem,C') Normal)
+      step ctx G (CC (C,pgps,mem) Normal) t (CC (C',pgps',mem) Normal)
 
 | Context_External_Load_In_Context:
     forall pgps mem C ptr,
@@ -246,7 +268,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       is_context_component ctx (Pointer.component ptr) ->
       (* TODO fix the read value in the event *)
       let t := [ELoad C 0 (Pointer.component ptr)] in
-      step ctx G (CC (pgps, mem, C) Normal) t (CC (pgps, mem, C) Normal)
+      step ctx G (CC (C, pgps, mem) Normal) t (CC (C, pgps, mem) Normal)
 
 | Context_External_Load_In_Program:
     forall pgps mem C ptr v,
@@ -255,7 +277,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       Memory.load mem ptr = Some v ->
       (* TODO fix the read value in the event *)
       let t := [ELoad C 0 (Pointer.component ptr)] in
-      step ctx G (CC (pgps, mem, C) Normal) t (CC (pgps, mem, C) Normal)
+      step ctx G (CC (C, pgps, mem) Normal) t (CC (C, pgps, mem) Normal)
 
 | Context_External_Call:
     forall pgps pgps' mem regs C C' P b val,
@@ -267,7 +289,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       Register.get R_COM regs = Int val ->
       let t := [ECall C P val C'] in
       let pc' := (C', b, 0%Z) in
-      step ctx G (CC (pgps,mem,C) Normal) t (PC (pgps',mem,regs,pc'))
+      step ctx G (CC (C,pgps,mem) Normal) t (PC (pgps',mem,regs,pc'))
 
 | Context_External_Return:
     forall pgps pgps' mem regs C C' b o val,
@@ -275,7 +297,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
       is_program_component G C' ->
       Register.get R_COM regs = Int val ->
       let t := [ERet C val C'] in
-      step ctx G (CC (pgps,mem,C) Normal) t (PC (pgps',mem,regs, (C',b,o))).
+      step ctx G (CC (C,pgps,mem) Normal) t (PC (pgps',mem,regs, (C',b,o))).
 
 Definition partialize (p: program) (ctx: Program.interface) : program :=
   {| prog_interface :=

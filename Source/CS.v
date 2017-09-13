@@ -44,6 +44,9 @@ Definition initial_state (p: program) (st: state) : Prop :=
   (* the continuation is stop *)
   k = Kstop.
 
+(* TODO these are here to make work Cbs.match_final_states that has a problem with int/nat *)
+Axiom final_state2: state -> int -> Prop.
+
 Definition final_state (st: state) (r: nat) : Prop :=
   let '(C, s, mem, k, e) := st in
   e = E_exit.

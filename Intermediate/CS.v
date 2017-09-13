@@ -16,7 +16,8 @@ Definition stack : Type := list Pointer.t.
 
 Definition state : Type := stack * Memory.t * Register.t * Pointer.t.
 
-Definition initial_state (p: program) (G: global_env) (s: state) : Prop :=
+Definition initial_state (p: program) (s: state) : Prop :=
+  let G := init_genv p in
   let '(gps, mem, regs, pc) := s in
   (* the global protected stack is empty *)
   gps = [] /\
@@ -32,6 +33,9 @@ Definition initial_state (p: program) (G: global_env) (s: state) : Prop :=
   EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
                  (genv_entrypoints G) = Some (Pointer.block pc) /\
   Pointer.offset pc = 0%Z.
+
+(* TODO these are here to make work Cbs.match_final_states that has a problem with int/nat *)
+Axiom final_state2: state -> int -> Prop.
 
 Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
   let '(gsp, mem, regs, pc) := s in
@@ -564,7 +568,7 @@ Section Semantics.
   Let G := init_genv p.
 
   Definition sem :=
-    @Semantics_gen state global_env step (initial_state p G) (final_state G) G.
+    @Semantics_gen state global_env step (initial_state p) (final_state G) G.
 
   Lemma determinate_step:
     forall s t1 s1 t2 s2,
@@ -621,7 +625,7 @@ Section Semantics.
 
   Lemma determinate_initial_states:
     forall s1 s2,
-      initial_state p G s1 -> initial_state p G s2 ->
+      initial_state p s1 -> initial_state p s2 ->
       s1 = s2.
   Proof.
     unfold initial_state.

@@ -80,7 +80,7 @@ Section Decomposition.
               (forall Cmem, NMap.MapsTo C Cmem mem <-> NMap.MapsTo C Cmem pmem)) ->
         (* registers and the program counter are equal *)
         related_states (gps, mem, regs, pc)
-                       (PS.CC (pgps, pmem, Pointer.component pc) PS.Normal)
+                       (PS.CC (Pointer.component pc, pgps, pmem) PS.Normal)
 
   | ContextControl_WentWrong:
       forall gps pgps mem pmem regs pc,
@@ -99,11 +99,11 @@ Section Decomposition.
         ~ (forall r, CS.final_state G (gps,mem,regs,pc) r) ->
         (* registers and the program counter are equal *)
         related_states (gps, mem, regs, pc)
-                       (PS.CC (pgps, pmem, Pointer.component pc) PS.WentWrong).
+                       (PS.CC (Pointer.component pc, pgps, pmem) PS.WentWrong).
 
   Lemma initial_states_match:
     forall s1,
-      CS.initial_state (program_link p c mainC mainP) G s1 ->
+      CS.initial_state (program_link p c mainC mainP) s1 ->
     exists s2,
       PS.initial_state (PS.partialize (program_link p c mainC mainP) (prog_interface c))
                        (prog_interface c) s2
@@ -241,9 +241,9 @@ Section Decomposition.
              *** contradiction.
 
     (* context has control case *)
-    - exists (PS.CC (PS.to_partial_stack s split,
-                NMapExtra.filter (fun C _ => NMap.mem C (prog_interface p)) mem,
-                mainC) PS.Normal).
+    - exists (PS.CC (mainC,
+                     PS.to_partial_stack s split,
+                     NMapExtra.filter (fun C _ => NMap.mem C (prog_interface p)) mem) PS.Normal).
       split.
       + unfold PS.initial_state.
         split.

@@ -22,6 +22,24 @@ Inductive state : Type :=
 | CC : context_state -> exec_state -> state
 with exec_state : Type := Normal | WentWrong.
 
+Module SC := Source.CS.CS.
+
+Axiom partialize_state: Program.interface -> SC.state -> state. 
+Axiom partialize_stack: Program.interface -> SC.stack -> stack -> Prop.
+
+Inductive initial_state2 (p: program) (ctx: Program.interface): state -> Prop :=
+| initial_state_intro: forall ps cs,
+    SC.initial_state p cs /\
+    ps = partialize_state ctx cs ->
+    initial_state2 p ctx ps.
+
+Inductive final_state2 (ctx: Program.interface) (s: state) (r: int) : Prop :=
+| final_state_intro: forall cs,
+    SC.final_state2 cs r ->
+    s = partialize_state ctx cs ->
+    final_state2 ctx s r.
+
+
 Definition initial_state (p: program) (st: state) : Prop :=
   match st with
   | PC (C, s, mem, k, e) =>
