@@ -21,13 +21,13 @@ Definition initial_state (p: program) (s: state) : Prop :=
   let '(gps, mem, regs, pc) := s in
   (* the global protected stack is empty *)
   gps = [] /\
-  (* mem exaclty contains all components memories and it comes from the init routine *)
+  (* mem exactly contains all components memories and it comes from the init routine *)
   (forall C, ZMap.In C (prog_interface p) <-> ZMap.In C mem) /\
   (let '(m, _, _) := init_all p in mem = m) /\
   (* the origin register (R_AUX2) is set to 1 (meaning external call) *)
   (* the R_ONE register is set to 1 *)
   (* the other registers are set to undef *)
-  regs = [Int 1; Undef; Undef; Undef; Int 1; Undef; Undef] /\
+  regs = [Int 1; Undef; Undef; Undef; Int 1; Undef] /\
   (* the program counter is pointing to the start of the main procedure *)
   Pointer.component pc = fst (prog_main p) /\
   EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
