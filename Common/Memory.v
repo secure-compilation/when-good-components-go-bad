@@ -108,7 +108,7 @@ Module ComponentMemory : AbstractComponentMemory.
     intros m m' n b Halloc b' i Hb'.
     unfold alloc in Halloc. inversion Halloc. subst.
     unfold load. simpl.
-    erewrite NMapExtra.F.add_neq_o; auto.
+    erewrite NMapFacts.add_neq_o; auto.
   Qed.
 
 Ltac inv H := (inversion H; subst; clear H).
@@ -162,11 +162,11 @@ Ltac inv H := (inversion H; subst; clear H).
          destruct i'; [| |inv Hstore].  
          * destruct (block_update b (Z.to_nat 0) v) eqn: E; inv Hstore. 
            simpl. (* can't stop from unfolding nth_error...argh *)
-           rewrite NMapExtra.F.add_eq_o; auto.
+           rewrite NMapFacts.add_eq_o; auto.
            apply load_after_update_same in E. apply E. 
          * destruct (block_update b (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
            simpl. 
-           rewrite NMapExtra.F.add_eq_o; auto.
+           rewrite NMapFacts.add_eq_o; auto.
            eapply load_after_update_same; eauto.  
       - left. subst b'. intuition.
         unfold load.  unfold store in Hstore.
@@ -174,7 +174,7 @@ Ltac inv H := (inversion H; subst; clear H).
         destruct i; [| | inv Hstore]. 
         * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
           simpl. 
-          rewrite NMapExtra.F.add_eq_o; auto.
+          rewrite NMapFacts.add_eq_o; auto.
           destruct i'. 
           ** intuition.
           ** erewrite load_after_update_other; eauto. 
@@ -182,7 +182,7 @@ Ltac inv H := (inversion H; subst; clear H).
           ** auto.
         * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
           simpl.
-          rewrite NMapExtra.F.add_eq_o; auto.
+          rewrite NMapFacts.add_eq_o; auto.
           destruct i'. 
           ** erewrite load_after_update_other; eauto. 
              rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
@@ -197,10 +197,10 @@ Ltac inv H := (inversion H; subst; clear H).
        destruct i; [| | inv Hstore]. 
        * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
          simpl. 
-         rewrite NMapExtra.F.add_neq_o; auto.
+         rewrite NMapFacts.add_neq_o; auto.
        * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
          simpl.
-         rewrite NMapExtra.F.add_neq_o; auto.
+         rewrite NMapFacts.add_neq_o; auto.
 Qed.
 
 End ComponentMemory.

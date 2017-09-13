@@ -167,11 +167,11 @@ Record well_formed_program (p: program) := {
   (* the interface is sound (but maybe not closed) *)
   wfprog_interface_soundness:
     sound_interface (prog_interface p);
-  (* each declared components has the required static buffers *)
+  (* each declared component has the required static buffers *)
   wfprog_buffers_existence:
     forall C, NMap.In C (prog_interface p) ->
          has_required_local_buffers p C;
-  (* each exported procedures actually exists *)
+  (* each exported procedure actually exists *)
   wfprog_exported_procedures_existence:
     forall C CI,
       NMap.MapsTo C CI (prog_interface p) ->
@@ -218,6 +218,18 @@ Definition linkable_programs (p1 p2: program) : Prop :=
   well_formed_program p1 /\ well_formed_program p2 /\
   (* their interfaces are disjoint *)
   NMapExtra.Disjoint (prog_interface p1) (prog_interface p2) /\
+  (*  the sets of components having buffers are disjoint *)
+  NMapExtra.Disjoint (prog_buffers p1) (prog_buffers p2) /\
+  (* ^ APT added 
+     Need something like this in order to prove linking_well_formedness, 
+     for example the buffers_existence clause.  Interface disjointness is not enough.
+     For suppose C is in interface of p1 (hence not in interface of p2) but has buffers defined in p2
+     (about which we know nothing).  Since p2 wins over p1 when combining buffers, we have to show
+     that these p2 buffers are the required ones, which we don't know. *)
+  (* the sets of components having procedures are disjoint *)
+  NMapExtra.Disjoint (prog_procedures p1) (prog_procedures p2) /\
+  (* ^ APT added 
+     For similar reasons, needed to prove exported_procedures_existence. *)  
   (* the union of their interfaces is sound *)
   sound_interface (NMapExtra.update (prog_interface p1) (prog_interface p2)).
 
@@ -227,13 +239,121 @@ Definition program_link (p1 p2: program) mainC mainP : program :=
      prog_buffers := NMapExtra.update (prog_buffers p1) (prog_buffers p2);
      prog_main := (mainC, mainP) |}.
 
-(* TODO to prove, it should be true *)
+Ltac inv H := (inversion H; subst; clear H).
+
+(* TODO: Figure out what to do about the last clause. *)
 Theorem linking_well_formedness:
   forall p1 p2 mainC mainP,
     linkable_programs p1 p2 ->
     well_formed_program (program_link p1 p2 mainC mainP).
 Proof.
-Admitted.
+  intros. destruct H as (WF1 & WF2 & IDISJ & BDISJ & PDISJ & SND). 
+  constructor. 
+  + auto. 
+  + simpl. 
+    intros. 
+    rewrite NMapExtra.update_in_iff in H.
+    inv H. 
+    - destruct WF1. pose proof (wfprog_buffers_existence0 C H0).
+      clear - H BDISJ. unfold has_required_local_buffers in *. simpl. 
+      destruct H as (b1 & b2 & bufs & FND & B1 & B2).
+      exists b1, b2, bufs. 
+      intuition.
+      rewrite <- NMapFacts.find_mapsto_iff in FND|-*.  
+      rewrite NMapExtra.update_mapsto_iff.  
+      right.
+      intuition.
+      eapply BDISJ. 
+      split; [| apply H].
+      rewrite NMapFacts.find_mapsto_iff in FND.  
+      rewrite NMapFacts.in_find_iff.
+      rewrite FND. discriminate.
+    - destruct WF2. pose proof (wfprog_buffers_existence0 C H0).
+      clear - H BDISJ. unfold has_required_local_buffers in *. simpl. 
+      destruct H as (b1 & b2 & bufs & FND & B1 & B2).
+      exists b1, b2, bufs. 
+      intuition.
+      rewrite <- NMapFacts.find_mapsto_iff in FND|-*.  
+      rewrite NMapExtra.update_mapsto_iff.  
+      left.
+      intuition.
+  + simpl. intros. 
+    rewrite NMapExtra.update_mapsto_iff in H. 
+    inv H.
+    - destruct WF2. 
+      edestruct wfprog_exported_procedures_existence0 as [cprocs [pcode [Q1 Q2]]]; eauto.
+      exists cprocs, pcode. intuition.
+      rewrite  NMapExtra.update_mapsto_iff. intuition.
+    - inv H1. destruct WF1. 
+      edestruct wfprog_exported_procedures_existence0 as [cprocs [pcode [Q1 Q2]]]; eauto.
+      exists cprocs, pcode. intuition.
+      rewrite NMapExtra.update_mapsto_iff. right. intuition.
+      eapply PDISJ. split; eauto.
+      rewrite NMapFacts.find_mapsto_iff in Q1.
+      rewrite NMapFacts.in_find_iff. rewrite Q1. discriminate.
+  + simpl. intros.
+    rewrite NMapExtra.update_mapsto_iff in H. 
+    inv H. 
+    - destruct WF2.
+      pose proof (wfprog_well_formed_instructions0 _ _ H2 _ _ H0 _ H1).
+      destruct i; auto. 
+      * simpl in H |-*.  destruct i; auto. 
+        destruct H as [bufs [Q1 Q2]].
+        exists bufs; intuition. 
+        rewrite NMapExtra.update_mapsto_iff. left; auto.
+      * simpl in H |-*. 
+        destruct H as [cprocs [pcode Q]].
+        exists cprocs, pcode. intuition.
+        rewrite NMapExtra.update_mapsto_iff. left; auto.
+      * simpl in H|-*.
+        destruct H as [cprocs [P' [PC Q]]].
+        exists cprocs, P', PC; intuition.
+        rewrite NMapExtra.update_mapsto_iff. left; auto.
+      * simpl in H|-*.
+        destruct H. 
+        ** left. intuition.
+           destruct H4 as [cp Q].
+           exists cp; intuition.
+           rewrite NMapExtra.update_mapsto_iff. left; auto.
+        ** right. unfold imported_procedure in *.
+           destruct H as [CI Q].
+           exists CI; intuition.
+           unfold Program.has_component in *. 
+           rewrite NMapExtra.update_mapsto_iff. left; auto.
+    - inv H2. destruct WF1. 
+      pose proof (wfprog_well_formed_instructions0 _ _ H _ _ H0 _ H1).
+      destruct i; auto. 
+      * simpl in H2 |-*.  destruct i; auto. 
+        destruct H2 as [bufs [Q1 Q2]].
+        exists bufs; intuition. 
+        rewrite NMapExtra.update_mapsto_iff. right; intuition. 
+        eapply BDISJ; split; eauto.
+        apply NMapFacts.find_mapsto_iff in Q1.
+        apply NMapFacts.in_find_iff.  rewrite Q1; discriminate.
+      * simpl in H2 |-*. 
+        destruct H2 as [cprocs [pcode Q]].
+        exists cprocs, pcode. intuition.
+        rewrite NMapExtra.update_mapsto_iff. right; intuition.
+      * simpl in H2 |-*.
+        destruct H2 as [cprocs [P' [PC Q]]].
+        exists cprocs, P', PC; intuition.
+        rewrite NMapExtra.update_mapsto_iff. right; intuition.
+      * simpl in H2 |-*.
+        destruct H2. 
+        ** left. intuition.
+           destruct H5 as [cp Q].
+           exists cp; intuition.
+           rewrite NMapExtra.update_mapsto_iff. right; intuition. 
+        ** right. unfold imported_procedure in *.
+           destruct H2 as [CI Q].
+           exists CI; intuition.
+           unfold Program.has_component in *. 
+           rewrite NMapExtra.update_mapsto_iff. right; intuition. 
+           eapply IDISJ; split; eauto.
+           apply NMapFacts.find_mapsto_iff in H2. 
+           rewrite NMapFacts.in_find_iff. rewrite H2. discriminate.
+  + Admitted. (* This obviously isn't true for arbitrary (mainC,mainP) ! *)
+
 
 Import MonadNotations.
 Open Scope monad_scope.

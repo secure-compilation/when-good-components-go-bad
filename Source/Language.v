@@ -61,11 +61,11 @@ Module Source.
     (* the interface is sound (but maybe not closed) *)
     wfprog_interface_soundness:
       sound_interface (prog_interface p);
-    (* each declared components has the required static buffers *)
+    (* each declared component has the required static buffers *)
     wfprog_buffers_existence:
       forall C, NMap.In C (prog_interface p) ->
            has_required_local_buffers p C;
-    (* each exported procedures actually exists *)
+    (* each exported procedure actually exists *)
     wfprog_exported_procedures_existence:
       forall C CI,
         NMap.MapsTo C CI (prog_interface p) ->
