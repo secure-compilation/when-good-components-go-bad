@@ -33,17 +33,10 @@ Module Cbs.
 
   (* TODO this goes with r both nat or int, where is the type checking??!! *)
   Axiom match_final_states:
-    forall s1 s2 (r:nat),
+    forall s1 s2 r,
       match_states s1 s2 ->
       final_state (IC.sem tprog) s1 r ->
       final_state (SC.sem prog) s2 r.
-  (* TODO this should be defined like above, pulling definitions from the
-     semantics but now there is a problem with nat and int *)
-  (* Axiom match_final_states: *)
-  (*   forall s1 s2 (r:int), *)
-  (*     match_states s1 s2 -> *)
-  (*     IC.final_state2 s1 r -> *)
-  (*     SC.final_state2 s2 r. *)
 
   Axiom simulation:
     forall s1 t s1', Step (IC.sem tprog) s1 t s1' ->
@@ -51,20 +44,20 @@ Module Cbs.
                       exists s2', Step (SC.sem prog) s2 t s2' /\ match_states s1' s2'.
 
 
-  Axiom transl_program_correct:
+  Theorem transl_program_correct:
     forward_simulation (IC.sem tprog) (SC.sem prog).
-  (* TODO this works with match_final_states defined more general *)
-  (* Proof. *)
-  (*   eapply forward_simulation_step.  *)
-  (*   eexact match_initial_states. *)
-  (*   eexact match_final_states. *)
-  (*   eexact simulation. *)
-  (* Qed. *)
+  Proof.
+    eapply forward_simulation_step.
+    eexact match_initial_states.
+    eexact match_final_states.
+    eexact simulation.
+  Qed.
 End Cbs.
 
 Module Pbs.
 
 Variable psi: Program.interface.
+(* TODO more general definition pulled from the semantics *)
 (* Definition SPstate := state (SP.sem prog psi). *)
 (* Definition IPstate := state (IP.sem tprog psi). *)
 (* Definition ICinitial_state := initial_state (IC.sem tprog). *)
@@ -78,20 +71,14 @@ while the other doesn't?! *)
 (*   forall cs, SC.initial_state p cs -> *)
 (*              SPpartialize_state ctx cs ps. *)
 
+(* TODO recheck this definition *)
 Inductive match_states: IP.state -> SP.state -> Prop :=
-| match_states_program:
+| match_states_intro:
     forall ics scs ips sps,
       Cbs.match_states ics scs ->
       sps = SP.partialize_state psi scs ->
       ips = IP.partialize_state psi ics ->
-      match_states ips sps
-| match_states_context:
-    forall (C:Component.id) (m:Memory.t) ic_stack sc_stack ip_stack sp_stack,
-      Cbs.match_stacks ic_stack sc_stack ->
-      IP.partialize_stack psi ic_stack ip_stack ->
-      SP.partialize_stack psi sc_stack sp_stack ->
-      match_states (IP.CC (C, ip_stack, m) IP.Normal)
-                   (SP.CC (C, sp_stack, m) SP.Normal).
+      match_states ips sps.
 
 (* TODO we should use the match_states inside the simulation to make the proof more general, but compcert's simulations have a match_states with index, not sure how to make that work *)
 Lemma transl_initial_states:

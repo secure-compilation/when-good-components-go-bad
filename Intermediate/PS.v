@@ -40,15 +40,10 @@ Inductive initial_state2 (p: program) (ctx: Program.interface): state -> Prop :=
     initial_state2 p ctx ps.
 
 Inductive final_state2 (ctx: Program.interface) (ps: state) (r: int) : Prop :=
-| final_state_program: forall cs,
+| final_state_intro: forall cs,
     IC.final_state2 cs r ->
     ps = partialize_state ctx cs ->
-    final_state2 ctx ps r
-| final_state_context:
-    forall pgps mem C,
-      ps =  CC (pgps, mem, C) Normal ->
-      final_state2 ctx ps r.
-
+    final_state2 ctx ps r.
 
 Definition initial_state
            (p: program) (ctx: Program.interface)

@@ -33,12 +33,12 @@ Inductive initial_state2 (p: program) (ctx: Program.interface): state -> Prop :=
     ps = partialize_state ctx cs ->
     initial_state2 p ctx ps.
 
-Inductive final_state2 (ctx: Program.interface) (s: state) (r: int) : Prop :=
-| final_state_intro: forall cs,
-    SC.final_state2 cs r ->
-    s = partialize_state ctx cs ->
-    final_state2 ctx s r.
-
+Inductive final_state2 (ctx: Program.interface) (ps: state) (r: int) : Prop :=
+| final_state_intro:
+    forall cs,
+      SC.final_state2 cs r ->
+      ps = partialize_state ctx cs ->
+      final_state2 ctx ps r.
 
 Definition initial_state (p: program) (st: state) : Prop :=
   match st with
