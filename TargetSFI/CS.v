@@ -52,6 +52,7 @@ Module CS.
   Open Scope N_scope.
   
   Inductive step (G : global_env) : state -> trace -> state -> Prop :=
+    
   | Nop : forall mem pc gen_regs,
       executing mem pc INop ->
       step G (mem,pc,gen_regs) E0 (mem,pc + 1,gen_regs)
@@ -115,18 +116,19 @@ Module CS.
       Memory.is_same_component ptr pc ->
       RegisterFile.set_register reg_dst val gen_regs = gen_regs' ->
       step G (mem,pc,gen_regs) E0 (mem,pc+1,gen_regs')
-  | LoadExtern : forall mem pc gen_regs gen_regs' reg_src reg_dst,
-      executing mem pc (ILoad reg_src reg_dst) ->
-      let ptr := Memory.to_address (RegisterFile.get_register reg_src gen_regs) in
-      let val := Memory.get_value mem ptr in
-      ~Memory.is_same_component ptr pc ->
-      RegisterFile.set_register reg_dst val gen_regs = gen_regs' ->
-      let '(_,cn,_) := G in
-      let cpc := cn pc in
-      let cptr := cn ptr in
-      (* TODO Fix this when the rest changes from nat to Z *)
-      let t := (ELoad cpc (Z.to_nat val) cptr)::nil in
-      step G (mem,pc,gen_regs) t (mem,pc+1,gen_regs')           
+  (* POSTPONED *)         
+  (* | LoadExtern : forall mem pc gen_regs gen_regs' reg_src reg_dst, *)
+  (*     executing mem pc (ILoad reg_src reg_dst) -> *)
+  (*     let ptr := Memory.to_address (RegisterFile.get_register reg_src gen_regs) in *)
+  (*     let val := Memory.get_value mem ptr in *)
+  (*     ~Memory.is_same_component ptr pc -> *)
+  (*     RegisterFile.set_register reg_dst val gen_regs = gen_regs' -> *)
+  (*     let '(_,cn,_) := G in *)
+  (*     let cpc := cn pc in *)
+  (*     let cptr := cn ptr in *)
+  (*     let t := (ELoad cpc (Z.to_nat val) cptr)::nil in *)
+  (*     step G (mem,pc,gen_regs) t (mem,pc+1,gen_regs')            *)
+
   (* | IStore : register -> register -> instr *)
   (* mem[pc] = i *)
   (* decode i = Store *r₁ ← r₂ *)
@@ -160,15 +162,14 @@ Module CS.
   | Return: forall mem pc gen_regs reg,
       executing mem pc (IJump reg) ->
       let pc' := Memory.to_address (RegisterFile.get_register reg gen_regs) in
-      ~Memory.is_same_component pc pc'->
-      let '(_,cn,_) := G in
+      let cn := snd (fst G) in
       let cpc := cn pc in
       let cpc' := cn pc' in
-      (* TODO Fix this when the rest changes from nat to Z *)
-      let rcomval :=  Z.to_nat (RegisterFile.get_register R_COM gen_regs) in 
-      let t := (ERet cpc rcomval cpc')::nil in
+      let rcomval :=  RegisterFile.get_register R_COM gen_regs in
+      let t:trace := [ERet cpc rcomval cpc'] in
+      ~Memory.is_same_component pc pc'->
       step G (mem,pc,gen_regs) t (mem,pc',gen_regs)
-  | Jump: forall mem pc gen_regs reg,
+   | Jump: forall mem pc gen_regs reg,
       executing mem pc (IJump reg) ->
       let pc' := Memory.to_address (RegisterFile.get_register reg gen_regs) in
       Memory.is_same_component pc pc'->
@@ -179,18 +180,20 @@ Module CS.
       RegisterFile.set_register R_RA (Z.of_N (pc+1)) gen_regs = gen_regs'->
       let pc' := addr in
       step G (mem,pc,gen_regs) E0 (mem,pc',gen_regs')
-  | Call: forall mem pc gen_regs gen_regs' addr,
+  | Call: forall mem pc gen_regs
+                 (gen_regs': RegisterFile.general_registers)
+                 (addr:address),
       executing mem pc (IJal addr) ->
       RegisterFile.set_register R_RA (Z.of_N (pc+1)) gen_regs = gen_regs'->
       let pc' := addr in
-      ~Memory.is_same_component pc pc'->
-      let '(_,cn,e) := G in
+      let cn := snd (fst G) in
       let cpc := cn pc in
       let cpc' := cn pc' in
+      let e := snd G in
       let p := e pc' in
-      (* TODO Fix this when the rest changes from nat to Z *)
-      let rcomval := Z.to_nat (RegisterFile.get_register R_COM gen_regs) in 
-      let t := (ECall cpc p rcomval cpc')::nil in
+      let rcomval := RegisterFile.get_register R_COM gen_regs in
+      let t := [ECall cpc p rcomval cpc'] in
+       ~Memory.is_same_component pc pc'->
       step G (mem,pc,gen_regs) t (mem,pc',gen_regs').   
   Close Scope N_scope.
 
@@ -199,7 +202,7 @@ Module CS.
   Open Scope monad_scope.
   Open Scope N_scope.
 
-  Set Typeclasses Debug.
+  (* Set Typeclasses Debug. *)
   
   Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
     let '(mem,pc,gen_regs) := s in
@@ -233,13 +236,13 @@ Module CS.
         let c_sfi_ptr: SFIComponent.id := C_SFI ptr in
         let c_sfi_pc: SFIComponent.id := C_SFI pc in
         let same_comp: bool := c_sfi_pc =? c_sfi_ptr in
-        let t: trace := if same_comp then E0
-                 else let '(_,cn,_) := G in
-                      let cpc: Component.id := cn pc in
-                      let cptr: Component.id := cn ptr in
-                      (* TODO Fix this when the rest changes from nat to Z *)
-                      let val_nat: nat := (Z.to_nat val) in
-                      [ELoad cpc val_nat cptr] in
+        let t := E0 in 
+        (* POSTPONED *)
+        (* let t: trace := if same_comp then E0 *)
+        (*          else let '(_,cn,_) := G in *)
+        (*               let cpc: Component.id := cn pc in *)
+        (*               let cptr: Component.id := cn ptr in *)
+        (*               [ELoad cpc val     cptr] in *)
         ret (t, (mem,pc+1,gen_regs'))
       | IStore reg_src reg_dst =>
         let ptr_val: value := RegisterFile.get_register reg_dst gen_regs in 
@@ -260,8 +263,7 @@ Module CS.
                    let '(_,cn,_) := G in
                    let cpc := cn pc in
                    let cpc' := cn pc' in
-                   (* TODO Fix this when the rest changes from nat to Z *)
-                   let rcomval :=  Z.to_nat (RegisterFile.get_register R_COM gen_regs) in
+                   let rcomval :=  RegisterFile.get_register R_COM gen_regs in
                    (ERet cpc rcomval cpc')::nil in
         ret (t, (mem,pc',gen_regs))
       | IJal addr =>
@@ -274,8 +276,7 @@ Module CS.
                    let cpc : Component.id := cn pc in
                    let cpc' : Component.id := cn pc' in
                    let p : Procedure.id := e pc' in
-                   (* TODO Fix this when the rest changes from nat to Z *)
-                   let rcomval : nat := Z.to_nat (RegisterFile.get_register R_COM gen_regs) in
+                   let rcomval := RegisterFile.get_register R_COM gen_regs in
                    [ECall cpc p rcomval cpc'] in
         ret (t, (mem,pc',gen_regs'))
       | IHalt => None
@@ -286,9 +287,9 @@ Module CS.
 
 
 
-  Definition run (p: program) (input: value) (fuel: nat) : option nat :=
-    do (G, st) <- init_genv_and_state p;
-      execN fuel G st.
+  (* Definition run (p: program) (input: value) (fuel: nat) : option nat := *)
+  (*   do (G, st) <- init_genv_and_state p; *)
+  (*     execN fuel G st. *)
   
   Close Scope N_scope.
   Close Scope monad_scope.

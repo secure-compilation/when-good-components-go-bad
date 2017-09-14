@@ -5,12 +5,15 @@ Require Import Common.Util.
 Require Import Common.Maps.
 
 
+
 (******************************************
  * Instruction Set Definition
  *******************************************)
 
 (* Register Type *)
-Definition register := nat.
+Definition register := N.
+
+Open Scope N_scope.
 
 Definition R_ONE: register := 1.
 Definition R_COM : register := 2.
@@ -19,14 +22,14 @@ Definition R_AUX2 : register := 4.
 Definition R_RA : register := 5.
 Definition R_SP : register := 6. 
 
-Definition IS_NOT_SFI_REGISTER (reg:nat) := reg < 26.
-Definition IS_SFI_REGISTER (reg:nat) := reg > 25.
+Definition IS_NOT_SFI_REGISTER (reg:N) := reg < 26.
+Definition IS_SFI_REGISTER (reg:N) := reg > 25.
 
-Definition is_not_sfi_reg_bool (reg:nat) := reg <? 26.
+Definition is_not_sfi_reg_bool (reg:N) := reg <? 26.
 
-Definition  IS_SFI_SP_REGISTER (reg:nat) := reg = 26.
+Definition  IS_SFI_SP_REGISTER (reg:N) := reg = 26.
 
-Definition is_sfi_sp_register_bool (reg:nat) := reg =? 26.
+Definition is_sfi_sp_register_bool (reg:N) := reg =? 26.
 
 Definition R_SFI_SP: register := 26.
 Definition R_AND_CODE_MASK : register := 27.
@@ -36,6 +39,7 @@ Definition R_OR_DATA_MASK : register := 30.
 Definition R_T : register := 31.
 Definition R_D : register := 32.
 
+Close Scope N_scope.
 
 Definition value := Z.
 
@@ -125,7 +129,7 @@ Definition C_SFI  (addr : address) : SFIComponent.id :=
 (* E is a partial map from addresses to procedure names.*)
 Definition E := address -> Procedure.id.
 
-Definition memory := nat -> word.
+Definition memory := N -> word.
 
 Module SFI.
 
@@ -143,11 +147,13 @@ Module SFI.
 
     Definition set_register (reg : register) (val : value)
                (gen_regs  : general_registers) : general_registers :=
-      Util.Lists.update gen_regs reg val.
+      (* TODO fix this *)
+      Util.Lists.update gen_regs (N.to_nat reg) val.
 
 
     Definition get_register (reg : register) (gen_regs : general_registers) : value :=
-      nth reg gen_regs (Z.of_nat 0).
+      (* TODO fix this *)
+      nth (N.to_nat reg) gen_regs Z0.
 
   End RegisterFile.
   
