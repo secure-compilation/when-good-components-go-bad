@@ -8,7 +8,7 @@ Require Import Lib.Monads.
 Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP.
 
-Definition label := Z.
+Definition label := positive.
 
 Inductive imvalue : Type :=
 | IInt : Z -> imvalue
@@ -82,23 +82,23 @@ Module Register.
 End Register.
 
 Module EntryPoint.
-  Definition t := ZMap.t (ZMap.t Block.id).
+  Definition t := PMap.t (PMap.t Block.id).
 
   Definition get C P E : option Block.id :=
-    match ZMap.find C E with
-    | Some addrs => ZMap.find P addrs
+    match PMap.find C E with
+    | Some addrs => PMap.find P addrs
     | None => None
     end.
 
   Lemma get_on_compatible_entrypoints :
     forall E E' C P addrs,
-      ZMap.MapsTo C addrs E ->
-      ZMap.MapsTo C addrs E' ->
+      PMap.MapsTo C addrs E ->
+      PMap.MapsTo C addrs E' ->
       get C P E = get C P E'.
   Proof.
     intros E E' C P addrs HEaddrs HE'addrs.
     unfold get.
-    rewrite ZMapFacts.find_mapsto_iff in HEaddrs, HE'addrs.
+    rewrite PMapFacts.find_mapsto_iff in HEaddrs, HE'addrs.
     rewrite <- HEaddrs in HE'addrs.
     inversion HE'addrs as [HEeqE'].
     rewrite HEeqE'.
@@ -110,8 +110,8 @@ End EntryPoint.
 
 Record program := {
   prog_interface : Program.interface;
-  prog_procedures : ZMap.t (ZMap.t code);
-  prog_buffers : ZMap.t (list (Block.id * nat));
+  prog_procedures : PMap.t (PMap.t code);
+  prog_buffers : PMap.t (list (Block.id * nat));
   prog_main : Component.id * Procedure.id
 }.
 
@@ -122,24 +122,21 @@ Definition well_formed_instruction
   match i with
   | IBnz r l =>
     (* the branch refers to a label inside the current procedure C.P *)
-    exists Cprocs Pcode, ZMap.MapsTo C Cprocs (prog_procedures p) /\
-                    ZMap.MapsTo P Pcode Cprocs /\
+    exists Cprocs Pcode, PMap.MapsTo C Cprocs (prog_procedures p) /\
+                    PMap.MapsTo P Pcode Cprocs /\
                     In (ILabel l) Pcode
   | IJal l =>
     (* the jump refers to a label inside the current component C *)
-    exists Cprocs P' P'code, ZMap.MapsTo C Cprocs (prog_procedures p) /\
-                        ZMap.MapsTo P' P'code Cprocs /\
+    exists Cprocs P' P'code, PMap.MapsTo C Cprocs (prog_procedures p) /\
+                        PMap.MapsTo P' P'code Cprocs /\
                         In (ILabel l) P'code
   | ICall C' P' =>
-    (* a call is well-formed only if one of the following holds:
-       1) it targets the current component and the procedure exists
-       2) it targets another component and the interface is allowing it to happen *)
-    (C' = C /\ exists Cprocs, ZMap.MapsTo C Cprocs (prog_procedures p) /\
-                        ZMap.In P' Cprocs) \/
-    imported_procedure (prog_interface p) C C' P'
+    (* a call is well-formed only if it targets another component and the
+       interface is allowing it to happen *)
+    C <> C' /\ imported_procedure (prog_interface p) C C' P'
   | IConst (IPtr ptr) r =>
     (* static pointers refers to static buffers *)
-    exists bufs, ZMap.MapsTo (Pointer.component ptr) bufs (prog_buffers p) /\
+    exists bufs, PMap.MapsTo (Pointer.component ptr) bufs (prog_buffers p) /\
             In (Pointer.block ptr) (map fst bufs)
   (* the other instruction are well-formed by construction *)
   | IConst (IInt i) r => True
@@ -160,7 +157,7 @@ Definition well_formed_instruction
    as a temporary store when passing controls between components *)
 Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
   exists b1 b2 bufs,
-    ZMap.find C (prog_buffers p) = Some (b1 :: b2 :: bufs) /\
+    PMap.find C (prog_buffers p) = Some (b1 :: b2 :: bufs) /\
     (snd b1 > 0)%nat /\ (snd b2 > 0)%nat.
 
 Record well_formed_program (p: program) := {
@@ -169,29 +166,29 @@ Record well_formed_program (p: program) := {
     sound_interface (prog_interface p);
   (* each declared component has the required static buffers *)
   wfprog_buffers_existence:
-    forall C, ZMap.In C (prog_interface p) ->
+    forall C, PMap.In C (prog_interface p) ->
          has_required_local_buffers p C;
   (* each exported procedure actually exists *)
   wfprog_exported_procedures_existence:
     forall C CI,
-      ZMap.MapsTo C CI (prog_interface p) ->
+      PMap.MapsTo C CI (prog_interface p) ->
     forall P,
       Component.is_exporting CI P ->
     exists Cprocs Pcode,
-      ZMap.MapsTo C Cprocs (prog_procedures p) /\
-      ZMap.MapsTo P Pcode Cprocs;
+      PMap.MapsTo C Cprocs (prog_procedures p) /\
+      PMap.MapsTo P Pcode Cprocs;
   (* each instruction of each procedure is well-formed *)
   wfprog_well_formed_instructions:
     forall C Cprocs,
-      ZMap.MapsTo C Cprocs (prog_procedures p) ->
+      PMap.MapsTo C Cprocs (prog_procedures p) ->
     forall P Pcode,
-      ZMap.MapsTo P Pcode Cprocs ->
+      PMap.MapsTo P Pcode Cprocs ->
     forall i, In i Pcode -> well_formed_instruction p C P i;
   (* if the main component exists, then the main procedure must exist as well *)
   wfprog_main_existence:
     forall main_procs,
-      ZMap.MapsTo (fst (prog_main p)) main_procs (prog_procedures p) ->
-      ZMap.In (snd (prog_main p)) main_procs
+      PMap.MapsTo (fst (prog_main p)) main_procs (prog_procedures p) ->
+      PMap.In (snd (prog_main p)) main_procs
 }.
 
 (* a closed program is a program with a closed interface and an existing main
@@ -203,23 +200,23 @@ Record closed_program (p: program) := {
   (* the main procedure must exist *)
   cprog_main_existence:
     exists procs,
-      ZMap.MapsTo (fst (prog_main p)) procs (prog_procedures p) /\
-      ZMap.In (snd (prog_main p)) procs;
+      PMap.MapsTo (fst (prog_main p)) procs (prog_procedures p) /\
+      PMap.In (snd (prog_main p)) procs;
 }.
 
 Definition prog_eq (p1 p2: program) : Prop :=
-  ZMap.Equal (prog_interface p1) (prog_interface p2) /\
-  ZMap.Equal (prog_procedures p1) (prog_procedures p2) /\
-  ZMap.Equal (prog_buffers p1) (prog_buffers p2) /\
+  PMap.Equal (prog_interface p1) (prog_interface p2) /\
+  PMap.Equal (prog_procedures p1) (prog_procedures p2) /\
+  PMap.Equal (prog_buffers p1) (prog_buffers p2) /\
   prog_main p1 = prog_main p2.
 
 Definition linkable_programs (p1 p2: program) : Prop :=
   (* both programs are well-formed *)
   well_formed_program p1 /\ well_formed_program p2 /\
   (* their interfaces are disjoint *)
-  ZMapExtra.Disjoint (prog_interface p1) (prog_interface p2) /\
+  PMapExtra.Disjoint (prog_interface p1) (prog_interface p2) /\
   (*  the sets of components having buffers are disjoint *)
-  ZMapExtra.Disjoint (prog_buffers p1) (prog_buffers p2) /\
+  PMapExtra.Disjoint (prog_buffers p1) (prog_buffers p2) /\
   (* ^ APT added 
      Need something like this in order to prove linking_well_formedness, 
      for example the buffers_existence clause.  Interface disjointness is not enough.
@@ -227,16 +224,16 @@ Definition linkable_programs (p1 p2: program) : Prop :=
      (about which we know nothing).  Since p2 wins over p1 when combining buffers, we have to show
      that these p2 buffers are the required ones, which we don't know. *)
   (* the sets of components having procedures are disjoint *)
-  ZMapExtra.Disjoint (prog_procedures p1) (prog_procedures p2) /\
+  PMapExtra.Disjoint (prog_procedures p1) (prog_procedures p2) /\
   (* ^ APT added 
      For similar reasons, needed to prove exported_procedures_existence. *)  
   (* the union of their interfaces is sound *)
-  sound_interface (ZMapExtra.update (prog_interface p1) (prog_interface p2)).
+  sound_interface (PMapExtra.update (prog_interface p1) (prog_interface p2)).
 
 Definition program_link (p1 p2: program) mainC mainP : program :=
-  {| prog_interface := ZMapExtra.update (prog_interface p1) (prog_interface p2);
-     prog_procedures := ZMapExtra.update (prog_procedures p1) (prog_procedures p2);
-     prog_buffers := ZMapExtra.update (prog_buffers p1) (prog_buffers p2);
+  {| prog_interface := PMapExtra.update (prog_interface p1) (prog_interface p2);
+     prog_procedures := PMapExtra.update (prog_procedures p1) (prog_procedures p2);
+     prog_buffers := PMapExtra.update (prog_buffers p1) (prog_buffers p2);
      prog_main := (mainC, mainP) |}.
 
 Ltac inv H := (inversion H; subst; clear H).
@@ -252,47 +249,47 @@ Proof.
   + auto. 
   + simpl. 
     intros. 
-    rewrite ZMapExtra.update_in_iff in H.
+    rewrite PMapExtra.update_in_iff in H.
     inv H. 
     - destruct WF1. pose proof (wfprog_buffers_existence0 C H0).
       clear - H BDISJ. unfold has_required_local_buffers in *. simpl. 
       destruct H as (b1 & b2 & bufs & FND & B1 & B2).
       exists b1, b2, bufs. 
       intuition.
-      rewrite <- ZMapFacts.find_mapsto_iff in FND|-*.  
-      rewrite ZMapExtra.update_mapsto_iff.  
+      rewrite <- PMapFacts.find_mapsto_iff in FND|-*.  
+      rewrite PMapExtra.update_mapsto_iff.  
       right.
       intuition.
       eapply BDISJ. 
       split; [| apply H].
-      rewrite ZMapFacts.find_mapsto_iff in FND.  
-      rewrite ZMapFacts.in_find_iff.
+      rewrite PMapFacts.find_mapsto_iff in FND.  
+      rewrite PMapFacts.in_find_iff.
       rewrite FND. discriminate.
     - destruct WF2. pose proof (wfprog_buffers_existence0 C H0).
       clear - H BDISJ. unfold has_required_local_buffers in *. simpl. 
       destruct H as (b1 & b2 & bufs & FND & B1 & B2).
       exists b1, b2, bufs. 
       intuition.
-      rewrite <- ZMapFacts.find_mapsto_iff in FND|-*.  
-      rewrite ZMapExtra.update_mapsto_iff.  
+      rewrite <- PMapFacts.find_mapsto_iff in FND|-*.  
+      rewrite PMapExtra.update_mapsto_iff.  
       left.
       intuition.
   + simpl. intros. 
-    rewrite ZMapExtra.update_mapsto_iff in H. 
+    rewrite PMapExtra.update_mapsto_iff in H. 
     inv H.
     - destruct WF2. 
       edestruct wfprog_exported_procedures_existence0 as [cprocs [pcode [Q1 Q2]]]; eauto.
       exists cprocs, pcode. intuition.
-      rewrite  ZMapExtra.update_mapsto_iff. intuition.
+      rewrite  PMapExtra.update_mapsto_iff. intuition.
     - inv H1. destruct WF1. 
       edestruct wfprog_exported_procedures_existence0 as [cprocs [pcode [Q1 Q2]]]; eauto.
       exists cprocs, pcode. intuition.
-      rewrite ZMapExtra.update_mapsto_iff. right. intuition.
+      rewrite PMapExtra.update_mapsto_iff. right. intuition.
       eapply PDISJ. split; eauto.
-      rewrite ZMapFacts.find_mapsto_iff in Q1.
-      rewrite ZMapFacts.in_find_iff. rewrite Q1. discriminate.
+      rewrite PMapFacts.find_mapsto_iff in Q1.
+      rewrite PMapFacts.in_find_iff. rewrite Q1. discriminate.
   + simpl. intros.
-    rewrite ZMapExtra.update_mapsto_iff in H. 
+    rewrite PMapExtra.update_mapsto_iff in H. 
     inv H. 
     - destruct WF2.
       pose proof (wfprog_well_formed_instructions0 _ _ H2 _ _ H0 _ H1).
@@ -300,60 +297,53 @@ Proof.
       * simpl in H |-*.  destruct i; auto. 
         destruct H as [bufs [Q1 Q2]].
         exists bufs; intuition. 
-        rewrite ZMapExtra.update_mapsto_iff. left; auto.
+        rewrite PMapExtra.update_mapsto_iff. left; auto.
       * simpl in H |-*. 
         destruct H as [cprocs [pcode Q]].
         exists cprocs, pcode. intuition.
-        rewrite ZMapExtra.update_mapsto_iff. left; auto.
+        rewrite PMapExtra.update_mapsto_iff. left; auto.
       * simpl in H|-*.
         destruct H as [cprocs [P' [PC Q]]].
         exists cprocs, P', PC; intuition.
-        rewrite ZMapExtra.update_mapsto_iff. left; auto.
+        rewrite PMapExtra.update_mapsto_iff. left; auto.
       * simpl in H|-*.
         destruct H. 
-        ** left. intuition.
-           destruct H4 as [cp Q].
-           exists cp; intuition.
-           rewrite ZMapExtra.update_mapsto_iff. left; auto.
-        ** right. unfold imported_procedure in *.
-           destruct H as [CI Q].
-           exists CI; intuition.
-           unfold Program.has_component in *. 
-           rewrite ZMapExtra.update_mapsto_iff. left; auto.
+        intuition.
+        unfold imported_procedure in *.
+        destruct H3 as [CI Q].
+        exists CI; intuition.
+        unfold Program.has_component in *. 
+        rewrite PMapExtra.update_mapsto_iff. left; auto.
     - inv H2. destruct WF1. 
       pose proof (wfprog_well_formed_instructions0 _ _ H _ _ H0 _ H1).
       destruct i; auto. 
       * simpl in H2 |-*.  destruct i; auto. 
         destruct H2 as [bufs [Q1 Q2]].
         exists bufs; intuition. 
-        rewrite ZMapExtra.update_mapsto_iff. right; intuition. 
+        rewrite PMapExtra.update_mapsto_iff. right; intuition. 
         eapply BDISJ; split; eauto.
-        apply ZMapFacts.find_mapsto_iff in Q1.
-        apply ZMapFacts.in_find_iff.  rewrite Q1; discriminate.
+        apply PMapFacts.find_mapsto_iff in Q1.
+        apply PMapFacts.in_find_iff.  rewrite Q1; discriminate.
       * simpl in H2 |-*. 
         destruct H2 as [cprocs [pcode Q]].
         exists cprocs, pcode. intuition.
-        rewrite ZMapExtra.update_mapsto_iff. right; intuition.
+        rewrite PMapExtra.update_mapsto_iff. right; intuition.
       * simpl in H2 |-*.
         destruct H2 as [cprocs [P' [PC Q]]].
         exists cprocs, P', PC; intuition.
-        rewrite ZMapExtra.update_mapsto_iff. right; intuition.
+        rewrite PMapExtra.update_mapsto_iff. right; intuition.
       * simpl in H2 |-*.
         destruct H2. 
-        ** left. intuition.
-           destruct H5 as [cp Q].
-           exists cp; intuition.
-           rewrite ZMapExtra.update_mapsto_iff. right; intuition. 
-        ** right. unfold imported_procedure in *.
-           destruct H2 as [CI Q].
-           exists CI; intuition.
-           unfold Program.has_component in *. 
-           rewrite ZMapExtra.update_mapsto_iff. right; intuition. 
-           eapply IDISJ; split; eauto.
-           apply ZMapFacts.find_mapsto_iff in H2. 
-           rewrite ZMapFacts.in_find_iff. rewrite H2. discriminate.
+        split. auto.
+        unfold imported_procedure in *.
+        destruct H4 as [CI Q].
+        exists CI; intuition.
+        unfold Program.has_component in *. 
+        rewrite PMapExtra.update_mapsto_iff. right; intuition. 
+        eapply IDISJ; split; eauto.
+        apply PMapFacts.find_mapsto_iff in H4. 
+        rewrite PMapFacts.in_find_iff. rewrite H4. discriminate.
   + Admitted. (* This obviously isn't true for arbitrary (mainC,mainP) ! *)
-
 
 Import MonadNotations.
 Open Scope monad_scope.
@@ -429,15 +419,15 @@ Definition init_genv_and_state
 *)
 
 Fixpoint init_component m E ps C Cprocs bufs
-  : Memory.t * EntryPoint.t * ZMap.t (ZMap.t code) :=
+  : Memory.t * EntryPoint.t * PMap.t (PMap.t code) :=
   match Cprocs with
   | [] => (m, E, ps)
   | (P, bytecode) :: Cprocs' =>
     let Cmem :=
-        match ZMap.find C m with
+        match PMap.find C m with
         | Some Cmem => Cmem
         | None =>
-          match ZMap.find C bufs with
+          match PMap.find C bufs with
           | Some Cbufs => ComponentMemory.prealloc Cbufs
           (* the following should never happen, since every
              component has at least one buffer *)
@@ -445,39 +435,39 @@ Fixpoint init_component m E ps C Cprocs bufs
           end
         end in
     let '(Cmem', b) := ComponentMemory.reserve_block Cmem in
-    let m' := ZMap.add C Cmem' m in
+    let m' := PMap.add C Cmem' m in
     let Centrypoints :=
-        match ZMap.find C E with
-        | None => ZMap.empty Block.id
+        match PMap.find C E with
+        | None => PMap.empty Block.id
         | Some old_Centrypoints => old_Centrypoints
         end in
-    let Centrypoints' := ZMap.add P b Centrypoints in
-    let E' := ZMap.add C Centrypoints' E in
+    let Centrypoints' := PMap.add P b Centrypoints in
+    let E' := PMap.add C Centrypoints' E in
     let Cps :=
-        match ZMap.find C ps with
-        | None => ZMap.empty code
+        match PMap.find C ps with
+        | None => PMap.empty code
         | Some oldCps => oldCps
         end in
-    let Cps' := ZMap.add b bytecode Cps in
-    let ps' := ZMap.add C Cps' ps in
+    let Cps' := PMap.add b bytecode Cps in
+    let ps' := PMap.add C Cps' ps in
     init_component m' E' ps' C Cprocs' bufs
   end.
 
 Definition init_all (p: program)
-  : Memory.t * EntryPoint.t * ZMap.t (ZMap.t code) :=
+  : Memory.t * EntryPoint.t * PMap.t (PMap.t code) :=
   let fix init_all_procs m E ps procs :=
       match procs with
       | [] => (m, E, ps)
       | (C, Cprocs) :: procs' =>
         let '(m', E', ps') := init_component m E ps C
-                                             (ZMap.elements Cprocs)
+                                             (PMap.elements Cprocs)
                                              (prog_buffers p) in
         init_all_procs m' E' ps' procs'
       end
   in
   init_all_procs (Memory.empty [])
-                 (ZMap.empty (ZMap.t Block.id)) (ZMap.empty (ZMap.t code))
-                 (ZMap.elements (prog_procedures p)).
+                 (PMap.empty (PMap.t Block.id)) (PMap.empty (PMap.t code))
+                 (PMap.elements (prog_procedures p)).
 
 Close Scope monad_scope.
 

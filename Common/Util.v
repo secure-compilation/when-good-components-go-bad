@@ -19,7 +19,7 @@ Module Util.
     Fixpoint mem x xs :=
       match xs with
       | [] => false
-      | x' :: xs' => if x =? x' then true else mem x xs'
+      | x' :: xs' => if Pos.eqb x x' then true else mem x xs'
       end.
 
     Lemma not_in_iff_mem_false :
@@ -32,13 +32,13 @@ Module Util.
         + simpl.
           apply not_in_cons in Hxs. destruct Hxs.
           unfold not in H.
-          destruct (x =? a) eqn:Heq_xa.
-          * exfalso. apply Z.eqb_eq in Heq_xa.
+          destruct (Pos.eqb x a) eqn:Heq_xa.
+          * exfalso. apply Pos.eqb_eq in Heq_xa.
             apply H. apply Heq_xa.
           * apply IHxs. apply H0.
       - intro Hxs. induction xs.
         + auto.
-        + destruct (x =? a) eqn:Heq_xa.
+        + destruct (Pos.eqb x a) eqn:Heq_xa.
           * apply not_in_cons.
             split;
               unfold mem in Hxs; rewrite Heq_xa in Hxs;
@@ -46,7 +46,7 @@ Module Util.
           * apply not_in_cons. split.
             ** intro Heq_xa_true.
                rewrite Heq_xa_true in Heq_xa. simpl in Heq_xa.
-               apply Z.eqb_neq in Heq_xa. auto.
+               apply Pos.eqb_neq in Heq_xa. auto.
             ** apply IHxs.
                unfold mem in Hxs. rewrite Heq_xa in Hxs.
                auto.
@@ -61,18 +61,18 @@ Module Util.
         induction xs.
         + auto.
         + simpl.
-          destruct (x =? a) eqn:Heq_xa.
+          destruct (Pos.eqb x a) eqn:Heq_xa.
           * reflexivity.
           * apply IHxs. apply in_inv in Hxs. destruct Hxs.
-            ** exfalso. rewrite Z.eqb_neq in Heq_xa.
+            ** exfalso. rewrite Pos.eqb_neq in Heq_xa.
                apply Heq_xa. symmetry. auto.
             ** auto.
       - intro Hxs.
         induction xs.
         + discriminate Hxs.
         + simpl.
-          destruct (x =? a) eqn:Heq_xa.
-          * left. symmetry. apply Z.eqb_eq in Heq_xa. auto.
+          destruct (Pos.eqb x a) eqn:Heq_xa.
+          * left. symmetry. apply Pos.eqb_eq in Heq_xa. auto.
           * right. apply IHxs.
             unfold mem in Hxs.
             rewrite Heq_xa in Hxs. auto.

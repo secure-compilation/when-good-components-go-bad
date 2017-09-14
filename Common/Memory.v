@@ -29,7 +29,7 @@ Module ComponentMemory : AbstractComponentMemory.
   Definition block := list value.
 
   Record mem := mkMem {
-    content : ZMap.t block;
+    content : PMap.t block;
     nextblock : Block.id;
   }.
   Definition t := mem.
@@ -40,28 +40,28 @@ Module ComponentMemory : AbstractComponentMemory.
         | [] => m
         | (b, size) :: bs' =>
           let chunk := repeat Undef size in
-          let m' := {| content := ZMap.add b chunk (content m);
-                       nextblock := Z.max (1+b) (nextblock m) |} in
+          let m' := {| content := PMap.add b chunk (content m);
+                       nextblock := Pos.max (1+b) (nextblock m) |} in
           prepare m' bs'
         end
-    in prepare {| content := @ZMap.empty block;
-                  nextblock := 0 |} bufs.
+    in prepare {| content := @PMap.empty block;
+                  nextblock := 1%positive |} bufs.
 
   Definition empty := prealloc [].
 
   Definition reserve_block (m: t) : t * Block.id :=
-    ({| content := content m; nextblock := 1 + nextblock m |},
+    ({| content := content m; nextblock := (1 + nextblock m)%positive |},
      nextblock m).
 
   Definition alloc m (size : nat) : mem * Block.id :=
     let fresh_block := nextblock m in
     let chunk := repeat Undef size in
-    ({| content := ZMap.add fresh_block chunk (content m);
-        nextblock := 1 + nextblock m |},
+    ({| content := PMap.add fresh_block chunk (content m);
+        nextblock := (1 + nextblock m)%positive |},
      fresh_block).
 
   Definition load m b i : option value :=
-    match ZMap.find b (content m) with
+    match PMap.find b (content m) with
     | Some chunk =>
       match i with
       | Z.neg _ => None
@@ -85,13 +85,13 @@ Module ComponentMemory : AbstractComponentMemory.
     end.
   
   Definition store m b i v : option mem :=
-    match ZMap.find b (content m) with
+    match PMap.find b (content m) with
     | Some chunk =>
       match i with
       | Z.neg _ => None
       | _ => match block_update chunk (Z.to_nat i) v with
             | Some chunk' =>
-              Some {| content := ZMap.add b chunk' (content m);
+              Some {| content := PMap.add b chunk' (content m);
                       nextblock := nextblock m |}
             | _ => None
             end
@@ -108,7 +108,7 @@ Module ComponentMemory : AbstractComponentMemory.
     intros m m' n b Halloc b' i Hb'.
     unfold alloc in Halloc. inversion Halloc. subst.
     unfold load. simpl.
-    erewrite ZMapFacts.add_neq_o; auto.
+    erewrite PMapFacts.add_neq_o; auto.
   Qed.
 
   Ltac inv H := (inversion H; subst; clear H).
@@ -154,27 +154,27 @@ Module ComponentMemory : AbstractComponentMemory.
       load m' b' i' = Some v.
   Proof.
     intros m m' b i v Hstore b' i'.
-    destruct (ZMapFacts.eq_dec b b').
+    destruct (PMapFacts.eq_dec b b').
     + destruct (Z.eq_dec i i').
       - subst. right.
          unfold load.  unfold store in Hstore. 
-         destruct (ZMap.find (elt:=block) b' (content m)) eqn:?; [| inv Hstore]. 
+         destruct (PMap.find (elt:=block) b' (content m)) eqn:?; [| inv Hstore]. 
          destruct i'; [| |inv Hstore].  
          * destruct (block_update b (Z.to_nat 0) v) eqn: E; inv Hstore. 
            simpl. (* can't stop from unfolding nth_error...argh *)
-           rewrite ZMapFacts.add_eq_o; auto.
+           rewrite PMapFacts.add_eq_o; auto.
            apply load_after_update_same in E. apply E. 
          * destruct (block_update b (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
            simpl. 
-           rewrite ZMapFacts.add_eq_o; auto.
+           rewrite PMapFacts.add_eq_o; auto.
            eapply load_after_update_same; eauto.  
       - left. subst b'. intuition.
         unfold load.  unfold store in Hstore.
-        destruct (ZMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
+        destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
         destruct i; [| | inv Hstore]. 
         * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
           simpl. 
-          rewrite ZMapFacts.add_eq_o; auto.
+          rewrite PMapFacts.add_eq_o; auto.
           destruct i'. 
           ** intuition.
           ** erewrite load_after_update_other; eauto. 
@@ -182,7 +182,7 @@ Module ComponentMemory : AbstractComponentMemory.
           ** auto.
         * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
           simpl.
-          rewrite ZMapFacts.add_eq_o; auto.
+          rewrite PMapFacts.add_eq_o; auto.
           destruct i'. 
           ** erewrite load_after_update_other; eauto. 
              rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
@@ -193,48 +193,48 @@ Module ComponentMemory : AbstractComponentMemory.
           ** auto.
     +  left. intuition.
        unfold load. unfold store in Hstore. 
-       destruct (ZMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
+       destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
        destruct i; [| | inv Hstore]. 
        * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
          simpl. 
-         rewrite ZMapFacts.add_neq_o; auto.
+         rewrite PMapFacts.add_neq_o; auto.
        * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
          simpl.
-         rewrite ZMapFacts.add_neq_o; auto.
+         rewrite PMapFacts.add_neq_o; auto.
 Qed.
 
 End ComponentMemory.
 
 Module Memory.
-  Definition t := ZMap.t ComponentMemory.t.
+  Definition t := PMap.t ComponentMemory.t.
 
   Fixpoint empty (cs: list Component.id) :=
     match cs with
-    | [] => @ZMap.empty (ComponentMemory.t)
-    | c::cs' => ZMap.add c ComponentMemory.empty (empty cs')
+    | [] => @PMap.empty (ComponentMemory.t)
+    | c::cs' => PMap.add c ComponentMemory.empty (empty cs')
     end.
 
   Definition alloc (mem : t) (C : Component.id) (size : nat) : option (t * Pointer.t) :=
-    match ZMap.find C mem with
+    match PMap.find C mem with
     | Some memC =>
       let '(memC', b) := ComponentMemory.alloc memC size in
-      Some (ZMap.add C memC' mem, (C, b, 0))
+      Some (PMap.add C memC' mem, (C, b, 0))
     | None => None
     end.
 
   Definition load (mem : t) (ptr : Pointer.t) : option value :=
     let '(C, b, o) := ptr in
-    match ZMap.find C mem with
+    match PMap.find C mem with
     | Some memC => ComponentMemory.load memC b o
     | None => None
     end.
 
   Definition store (mem :t) (ptr : Pointer.t) (v : value) : option t :=
     let '(C, b, o) := ptr in
-    match ZMap.find C mem with
+    match PMap.find C mem with
     | Some memC =>
       match ComponentMemory.store memC b o v with
-      | Some memC' => Some (ZMap.add C memC' mem)
+      | Some memC' => Some (PMap.add C memC' mem)
       | None => None
       end
     | None => None
