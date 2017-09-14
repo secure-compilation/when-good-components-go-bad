@@ -11,8 +11,8 @@ Open Scope monad_scope.
 Record comp_env : Type := {
   next_label: label;
   current_component : Component.id;
-  local_buffers : ZMap.t (list Block.id);
-  procs_labels : ZMap.t (ZMap.t label)
+  local_buffers : PMap.t (list Block.id);
+  procs_labels : PMap.t (PMap.t label)
 }.
 
 (* easy environments updates *)
@@ -32,7 +32,7 @@ Definition with_current_component C env :=
 Definition with_component_buffers C bufs env :=
   {| next_label := next_label env;
      current_component := current_component env;
-     local_buffers := ZMap.add C bufs (local_buffers env);
+     local_buffers := PMap.add C bufs (local_buffers env);
      procs_labels := procs_labels env |}.
 
 Definition with_new_proc_label C P l env :=
@@ -41,11 +41,11 @@ Definition with_new_proc_label C P l env :=
      local_buffers := local_buffers env;
      procs_labels :=
        let proc_labels' :=
-           match ZMap.find C (procs_labels env) with
-           | None => ZMap.add P l (@ZMap.empty label)
-           | Some labels => ZMap.add P l labels
+           match PMap.find C (procs_labels env) with
+           | None => PMap.add P l (@PMap.empty label)
+           | Some labels => PMap.add P l labels
            end
-       in ZMap.add C proc_labels' (procs_labels env) |}.
+       in PMap.add C proc_labels' (procs_labels env) |}.
 
 (* simplify notations *)
 
@@ -62,27 +62,27 @@ Notation run := (Comp.run comp_env).
 Definition fresh_label : COMP label :=
   do cenv <- get;
   let l := next_label cenv in
-  do! modify (with_next_label (1+l));
+  do! modify (with_next_label (1+l)%positive);
   ret l.
 
 Definition get_local_buffer : COMP Pointer.t :=
   do cenv <- get;
   let C := current_component cenv in
-  do blocks <- lift (ZMap.find C (local_buffers cenv));
+  do blocks <- lift (PMap.find C (local_buffers cenv));
   do b <- lift (nth_error blocks 0);
   ret (C, b, 0).
 
 Definition get_temp_buffer : COMP Pointer.t:=
   do cenv <- get;
   let C := current_component cenv in
-  do blocks <- lift (ZMap.find C (local_buffers cenv));
+  do blocks <- lift (PMap.find C (local_buffers cenv));
   do b <- lift (nth_error blocks (length blocks - 1));
   ret (C, b, 0).
 
 Definition find_proc_label C P : COMP label :=
   do cenv <- get;
-  do P_labels <- lift (ZMap.find C (procs_labels cenv));
-  lift (ZMap.find P P_labels).
+  do P_labels <- lift (PMap.find C (procs_labels cenv));
+  lift (PMap.find P P_labels).
 
 (* code generation *)
 
@@ -173,7 +173,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
     let C := current_component cenv in
     do local_buf_ptr <- get_local_buffer;
     do call_arg_code <- compile_expr e;
-    if C' =? C then
+    if Pos.eqb C' C then
       do target_label <- find_proc_label C' P';
       ret (call_arg_code ++
            push R_AUX2 ++
@@ -244,28 +244,28 @@ Fixpoint gen_component_procedures_labels
 
 (* think about labels collision when linking partial programs *)
 Fixpoint gen_all_procedures_labels
-         (procs: list (Component.id * ZMap.t expr))
+         (procs: list (Component.id * PMap.t expr))
   : COMP unit :=
   match procs with
   | [] => ret tt
   | (C, Cprocs) :: procs' =>
-    do! gen_component_procedures_labels C (ZMap.elements Cprocs);
+    do! gen_component_procedures_labels C (PMap.elements Cprocs);
     gen_all_procedures_labels procs'
   end.
 
 Fixpoint add_temporary_buffers
          (bufs: list (Component.id * nat))
-  : COMP (ZMap.t (list (Block.id * nat))) :=
+  : COMP (PMap.t (list (Block.id * nat))) :=
   let fix instrument acc bs :=
       match bs with
       | [] => ret acc
       | (C,size) :: bs' =>
-        let Cbufs := [(0,size%nat); (1,1%nat)] in
-        let acc' := ZMap.add C Cbufs acc in
+        let Cbufs := [(1%positive,size%nat); (2%positive,1%nat)] in
+        let acc' := PMap.add C Cbufs acc in
         do! modify (with_component_buffers C (map fst Cbufs));
         instrument acc' bs'
       end
-  in instrument (ZMap.empty (list (Block.id * nat))) bufs.
+  in instrument (PMap.empty (list (Block.id * nat))) bufs.
 
 Fixpoint compile_procedures
          (C: Component.id)
@@ -282,33 +282,33 @@ Fixpoint compile_procedures
   in compile [] procs.
 
 Fixpoint compile_components
-         (comps: list (Component.id * ZMap.t expr))
-  : COMP (list (Component.id * ZMap.t code)) :=
+         (comps: list (Component.id * PMap.t expr))
+  : COMP (list (Component.id * PMap.t code)) :=
   let fix compile acc cs :=
       match cs with
       | [] => ret acc
       | (C,procs) :: cs' =>
-        do procs_code <- compile_procedures C (ZMap.elements procs);
-        let acc' := (C, ZMapExtra.of_list procs_code) :: acc in
+        do procs_code <- compile_procedures C (PMap.elements procs);
+        let acc' := (C, PMapExtra.of_list procs_code) :: acc in
         compile acc' cs'
       end
   in compile [] comps.
 
 Definition init_env : comp_env :=
-  {| next_label := 0;
-     current_component := 0;
-     local_buffers := @ZMap.empty (list Block.id);
-     procs_labels := @ZMap.empty (ZMap.t label) |}.
+  {| next_label := 1%positive;
+     current_component := 1%positive;
+     local_buffers := @PMap.empty (list Block.id);
+     procs_labels := @PMap.empty (PMap.t label) |}.
 
 Definition compile_program
            (p: Source.program) : option Intermediate.program :=
-  let procs := ZMap.elements (Source.prog_procedures p) in
-  let bufs := ZMap.elements (Source.prog_buffers p) in
+  let procs := PMap.elements (Source.prog_procedures p) in
+  let bufs := PMap.elements (Source.prog_buffers p) in
   run init_env (
     do! gen_all_procedures_labels procs;
     do bufs' <- add_temporary_buffers bufs;
     do code <- compile_components procs;
     ret {| Intermediate.prog_interface := Source.prog_interface p;
-           Intermediate.prog_procedures := ZMapExtra.of_list code;
+           Intermediate.prog_procedures := PMapExtra.of_list code;
            Intermediate.prog_buffers := bufs';
            Intermediate.prog_main := Source.prog_main p |}).

@@ -48,12 +48,12 @@ Definition initial_state (p: program) (st: state) : Prop :=
     (* the stack is empty *)
     s = [] /\
     (* mem exaclty contains all components memories and it comes from the init routine *)
-    (forall C, ZMap.In C (prog_interface p) <-> ZMap.In C mem) /\
+    (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
     (let '(_, m) := init_all p in mem = m) /\
     (* the expression under evaluation is the main procedure *)
     (exists main_procs,
-        ZMap.find (fst (prog_main p)) (prog_procedures p) = Some main_procs /\
-        ZMap.find (snd (prog_main p)) main_procs = Some e) /\
+        PMap.find (fst (prog_main p)) (prog_procedures p) = Some main_procs /\
+        PMap.find (snd (prog_main p)) main_procs = Some e) /\
     (* the continuation is stop *)
     k = Kstop
   | CC (C, s, mem) execst =>
@@ -62,7 +62,7 @@ Definition initial_state (p: program) (st: state) : Prop :=
     (* the stack is empty *)
     s = [] /\
     (* mem exaclty contains all components memories and it comes from the init routine *)
-    (forall C, ZMap.In C (prog_interface p) <-> ZMap.In C mem) /\
+    (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
     (let '(_, m) := init_all p in mem = m) /\
     (* the execution didn't go wrong *)
     execst = Normal
@@ -76,33 +76,33 @@ Definition final_state (st: state) (r: nat) : Prop :=
     execst = Normal
   end.
 
-Definition is_program_component G C := ZMap.In C (genv_interface G).
-Definition is_context_component (ctx: Program.interface) C := ZMap.In C ctx.
+Definition is_program_component G C := PMap.In C (genv_interface G).
+Definition is_context_component (ctx: Program.interface) C := PMap.In C ctx.
 
 Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> state -> Prop :=
 | Program_Epsilon:
     forall G' C s mem mem' Cmem' wmem wmem' k k' e e',
       (* G' is an extension of G w.r.t. ctx *)
       (* 1) the interface is G plus ctx *)
-      ZMap.Equal (genv_interface G') (ZMapExtra.update (genv_interface G) ctx) ->
+      PMap.Equal (genv_interface G') (PMapExtra.update (genv_interface G) ctx) ->
       (* 2) the procedures are the same of G plus some new ones for ctx *)
-      (forall C Cprocs, ZMap.MapsTo C Cprocs (genv_procedures G') <->
-                   (ZMap.MapsTo C Cprocs (genv_procedures G) \/
-                    (ZMap.In C ctx /\ ~ ZMap.In C (genv_procedures G)))) ->
+      (forall C Cprocs, PMap.MapsTo C Cprocs (genv_procedures G') <->
+                   (PMap.MapsTo C Cprocs (genv_procedures G) \/
+                    (PMap.In C ctx /\ ~ PMap.In C (genv_procedures G)))) ->
       (* 3) the buffers are the same of G plus some new ones for ctx *)
-      (forall C Cbufs, ZMap.MapsTo C Cbufs (genv_buffers G') <->
-                  (ZMap.MapsTo C Cbufs (genv_buffers G) \/
-                   (ZMap.In C ctx /\ ~ ZMap.In C (genv_buffers G)))) ->
+      (forall C Cbufs, PMap.MapsTo C Cbufs (genv_buffers G') <->
+                  (PMap.MapsTo C Cbufs (genv_buffers G) \/
+                   (PMap.In C ctx /\ ~ PMap.In C (genv_buffers G)))) ->
 
       (* wmem is an extension of mem w.r.t. ctx *)
       (* 1) wmem contains mem *)
-      (forall C Cmem, ZMap.MapsTo C Cmem mem -> ZMap.MapsTo C Cmem wmem) ->
+      (forall C Cmem, PMap.MapsTo C Cmem mem -> PMap.MapsTo C Cmem wmem) ->
       (* 2) wmem has the context components memories *)
-      (forall C, is_context_component ctx C -> ZMap.In C wmem) ->
+      (forall C, is_context_component ctx C -> PMap.In C wmem) ->
       (* 3) wmem extends mem exactly w.r.t. ctx *)
-      (forall C Cmem, ZMap.MapsTo C Cmem wmem <->
-                 (ZMap.MapsTo C Cmem mem \/
-                  (is_context_component ctx C /\ ~ ZMap.In C mem))) ->
+      (forall C Cmem, PMap.MapsTo C Cmem wmem <->
+                 (PMap.MapsTo C Cmem mem \/
+                  (is_context_component ctx C /\ ~ PMap.In C mem))) ->
 
       (* the complete semantics steps silently with the extended versions of
          memory and global environment
@@ -111,8 +111,8 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 
       (* mem' is mem with the updated version of the current
          executing component's memory *)
-      ZMap.MapsTo C Cmem' wmem' ->
-      ZMap.Equal mem' (ZMap.add C Cmem' mem) ->
+      PMap.MapsTo C Cmem' wmem' ->
+      PMap.Equal mem' (PMap.add C Cmem' mem) ->
 
       kstep ctx G (PC (C,s,mem,k,e)) E0 (PC (C,s,mem',k',e'))
 
@@ -120,15 +120,15 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
     forall C s mem mem' k C' P v C'_procs P_expr b b' old_call_arg,
       is_program_component G C' ->
       (* retrieve the procedure code *)
-      ZMap.find C' (genv_procedures G) = Some C'_procs ->
-      ZMap.find P C'_procs = Some P_expr ->
+      PMap.find C' (genv_procedures G) = Some C'_procs ->
+      PMap.find P C'_procs = Some P_expr ->
       (* save the old call argument *)
-      ZMap.find C (genv_buffers G) = Some b ->
+      PMap.find C (genv_buffers G) = Some b ->
       Memory.load mem (C,b,0) = Some old_call_arg ->
       (* place the call argument in the target memory *)
-      ZMap.find C' (genv_buffers G) = Some b' ->
+      PMap.find C' (genv_buffers G) = Some b' ->
       Memory.store mem (C',b',0) (Int v) = Some mem' ->
-      let t := if C =? C' then E0 else [ECall C P v C'] in
+      let t := if Pos.eqb C C' then E0 else [ECall C P v C'] in
       kstep ctx G
             (PC (C, s, mem, Kcall C' P k, E_val (Int v))) t
             (PC (C', (C, Some (old_call_arg, k)) :: s, mem', Kstop, P_expr))
@@ -137,9 +137,9 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
     forall C s mem mem' k v C' old_call_arg b,
       is_program_component G C' ->
       (* restore the old call argument *)
-      ZMap.find C' (genv_buffers G) = Some b ->
+      PMap.find C' (genv_buffers G) = Some b ->
       Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
-      let t := if C =? C' then E0 else [ERet C v C'] in
+      let t := if Pos.eqb C C' then E0 else [ERet C v C'] in
       kstep ctx G
             (PC (C, (C', Some (old_call_arg, k)) :: s, mem, Kstop, E_val (Int v))) t
             (PC (C', s, mem', k, E_val (Int v)))
@@ -148,7 +148,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
     forall C s mem k C' P v b old_call_arg,
       is_context_component ctx C' ->
       (* save the old call argument *)
-      ZMap.find C (genv_buffers G) = Some b ->
+      PMap.find C (genv_buffers G) = Some b ->
       Memory.load mem (C,b,0) = Some old_call_arg ->
       let t := [ECall C P v C'] in
       kstep ctx G
@@ -196,10 +196,10 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       is_program_component G C' ->
       s' = (C, None) :: s ->
       (* retrieve the procedure code *)
-      ZMap.find C' (genv_procedures G) = Some C'_procs ->
-      ZMap.find P C'_procs = Some P_expr ->
+      PMap.find C' (genv_procedures G) = Some C'_procs ->
+      PMap.find P C'_procs = Some P_expr ->
       (* place the call argument in the target memory *)
-      ZMap.find C' (genv_buffers G) = Some b' ->
+      PMap.find C' (genv_buffers G) = Some b' ->
       Memory.store mem (C',b',0) (Int val) = Some mem' ->
       let t := [ECall C P val C'] in
       kstep ctx G (CC (C,s,mem) Normal) t (PC (C',s',mem,Kstop,P_expr))
@@ -208,7 +208,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
     forall C s mem mem' k v C' old_call_arg b,
       is_program_component G C' ->
       (* restore the old call argument *)
-      ZMap.find C' (genv_buffers G) = Some b ->
+      PMap.find C' (genv_buffers G) = Some b ->
       Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
       let t := [ERet C v C'] in
       kstep ctx G
@@ -217,11 +217,11 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 
 Definition partialize (p: program) (ctx: Program.interface) : program :=
   {| prog_interface :=
-       ZMapExtra.diff (prog_interface p) ctx;
+       PMapExtra.diff (prog_interface p) ctx;
      prog_procedures :=
-       ZMapExtra.filter (fun C _ => negb (ZMap.mem C ctx)) (prog_procedures p);
+       PMapExtra.filter (fun C _ => negb (PMap.mem C ctx)) (prog_procedures p);
      prog_buffers :=
-       ZMapExtra.filter (fun C _ => negb (ZMap.mem C ctx)) (prog_buffers p);
+       PMapExtra.filter (fun C _ => negb (PMap.mem C ctx)) (prog_buffers p);
      prog_main := prog_main p |}.
 
 Section Semantics.
@@ -238,7 +238,7 @@ Section Semantics.
 
   (* the context is part of p *)
   Hypothesis valid_context:
-    forall C CI, ZMap.MapsTo C CI ctx -> ZMap.MapsTo C CI (prog_interface p).
+    forall C CI, PMap.MapsTo C CI ctx -> PMap.MapsTo C CI (prog_interface p).
 
   Definition sem :=
     @Semantics_gen state global_env (kstep ctx)

@@ -2,7 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 
 Module Block.
-  Definition id := Z.
+  Definition id := positive.
   Definition offset := Z.
 End Block.
 
@@ -21,12 +21,12 @@ Module Pointer.
   Definition eq (p1 p2 : t) : bool :=
     let '(C1, b1, o1) := p1 in
     let '(C2, b2, o2) := p2 in
-    (C1 =? C2) && (b1 =? b2) && (o1 =? o2).
+    (Pos.eqb C1 C2) && (Pos.eqb b1 b2) && (Z.eqb o1 o2).
 
   Definition leq (p1 p2 : t) : option bool :=
     let '(C1, b1, o1) := p1 in
     let '(C2, b2, o2) := p2 in
-    if (C1 =? C2) && (b1 =? b2) then
+    if (Pos.eqb C1 C2) && (Pos.eqb b1 b2) then
       Some (o1 <=? o2)
     else
       None.
@@ -92,7 +92,7 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
   | Add,   Int n,  Ptr p  => Ptr (Pointer.add p n)
   | Minus, Ptr p1, Ptr p2 => let '(C1, b1, o1) := p1 in
                              let '(C2, b2, o2) := p2 in
-                             if (C1 =? C2) && (b1 =? b2) then
+                             if (Pos.eqb C1 C2) && (Pos.eqb b1 b2) then
                                Int (o1 - o2)
                              else
                                Undef

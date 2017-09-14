@@ -7,7 +7,7 @@ Import Intermediate.
 
 Record global_env := mkGlobalEnv {
   genv_interface: Program.interface;
-  genv_procedures: ZMap.t (ZMap.t code);
+  genv_procedures: PMap.t (PMap.t code);
   genv_entrypoints: EntryPoint.t;
 }.
 
@@ -17,16 +17,16 @@ Record well_formed_global_env (G: global_env) := {
     sound_interface (genv_interface G);
   (* the entrypoints and the interface are in sync *)
   wfgenv_entrypoints_soundness:
-    forall C, ZMap.In C (genv_entrypoints G) <-> ZMap.In C (genv_interface G);
+    forall C, PMap.In C (genv_entrypoints G) <-> PMap.In C (genv_interface G);
   (* the procedures and the interface are in sync *)
   wfgenv_procedures_soundness:
-    forall C, ZMap.In C (genv_procedures G) <-> ZMap.In C (genv_interface G)
+    forall C, PMap.In C (genv_procedures G) <-> PMap.In C (genv_interface G)
 }.
 
 Definition executing G (pc : Pointer.t) (i : instr) : Prop :=
   exists C_procs P_code,
-    ZMap.find (Pointer.component pc) (genv_procedures G) = Some C_procs /\
-    ZMap.find (Pointer.block pc) C_procs = Some P_code /\
+    PMap.find (Pointer.component pc) (genv_procedures G) = Some C_procs /\
+    PMap.find (Pointer.block pc) C_procs = Some P_code /\
     Pointer.offset pc >= 0 /\
     nth_error P_code (Z.to_nat (Pointer.offset pc)) = Some i.
 
@@ -35,7 +35,7 @@ Fixpoint find_label (c : code) (l : label) : option Z :=
       match c with
       | [] => None
       | ILabel l' :: c' =>
-        if l =? l' then
+        if Pos.eqb l l' then
           Some o
         else
           aux c' (1+o)
@@ -45,9 +45,9 @@ Fixpoint find_label (c : code) (l : label) : option Z :=
   in aux c 0.
 
 Definition find_label_in_procedure G (pc : Pointer.t) (l : label) : option Pointer.t :=
-  match ZMap.find (Pointer.component pc) (genv_procedures G) with
+  match PMap.find (Pointer.component pc) (genv_procedures G) with
   | Some C_procs =>
-    match ZMap.find (Pointer.block pc) C_procs with
+    match PMap.find (Pointer.block pc) C_procs with
     | Some P_code =>
       match find_label P_code l with
       | Some offset => Some (Pointer.component pc, Pointer.block pc, offset)
@@ -59,7 +59,7 @@ Definition find_label_in_procedure G (pc : Pointer.t) (l : label) : option Point
   end.
 
 Definition find_label_in_component G (pc : Pointer.t) (l : label) : option Pointer.t :=
-  match ZMap.find (Pointer.component pc) (genv_procedures G) with
+  match PMap.find (Pointer.component pc) (genv_procedures G) with
   | Some C_procs =>
     let fix search ps :=
         match ps with
@@ -70,7 +70,7 @@ Definition find_label_in_component G (pc : Pointer.t) (l : label) : option Point
           | Some ptr => Some ptr
           end
         end
-    in search (ZMap.elements C_procs)
+    in search (PMap.elements C_procs)
   | None => None
   end.
 

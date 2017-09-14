@@ -35,12 +35,12 @@ Definition initial_state (p: program) (st: state) : Prop :=
   (* the stack is empty *)
   s = [] /\
   (* mem exaclty contains all components memories and it comes from the init routine *)
-  (forall C, ZMap.In C (prog_interface p) <-> ZMap.In C mem) /\
+  (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
   (let '(_, m) := init_all p in mem = m) /\
   (* the expression under evaluation is the main procedure *)
   (exists main_procs,
-      ZMap.find (fst (prog_main p)) (prog_procedures p) = Some main_procs /\
-      ZMap.find (snd (prog_main p)) main_procs = Some e) /\
+      PMap.find (fst (prog_main p)) (prog_procedures p) = Some main_procs /\
+      PMap.find (snd (prog_main p)) main_procs = Some e) /\
   (* the continuation is stop *)
   k = Kstop.
 
@@ -86,7 +86,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     kstep G (C, s, mem, Kif e2 e3 k, E_val (Int 0))
           t (C, s, mem, k, e3)
 | KS_LocalBuffer : forall C s mem k b,
-    ZMap.find C (genv_buffers G) = Some b ->
+    PMap.find C (genv_buffers G) = Some b ->
     let t := E0 in
     kstep G (C, s, mem, k, E_local)
           t (C, s, mem, k, E_val (Ptr (C,b,0)))
@@ -131,22 +131,22 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
           t (C, s, mem, Kcall C' P k, e)
 | KS_Call2 : forall C s mem mem' k C' P v C'_procs P_expr b b' old_call_arg,
     (* retrieve the procedure code *)
-    ZMap.find C' (genv_procedures G) = Some C'_procs ->
-    ZMap.find P C'_procs = Some P_expr ->
+    PMap.find C' (genv_procedures G) = Some C'_procs ->
+    PMap.find P C'_procs = Some P_expr ->
     (* save the old call argument *)
-    ZMap.find C (genv_buffers G) = Some b ->
+    PMap.find C (genv_buffers G) = Some b ->
     Memory.load mem (C,b,0) = Some old_call_arg ->
     (* place the call argument in the target memory *)
-    ZMap.find C' (genv_buffers G) = Some b' ->
+    PMap.find C' (genv_buffers G) = Some b' ->
     Memory.store mem (C',b',0) (Int v) = Some mem' ->
-    let t := if C =? C' then E0 else [ECall C P v C'] in
+    let t := if Pos.eqb C C' then E0 else [ECall C P v C'] in
     kstep G (C, s, mem, Kcall C' P k, E_val (Int v))
           t (C', (C, old_call_arg, k) :: s, mem', Kstop, P_expr)
 | KS_CallRet : forall C s mem mem' k v C' old_call_arg b,
     (* restore the old call argument *)
-    ZMap.find C' (genv_buffers G) = Some b ->
+    PMap.find C' (genv_buffers G) = Some b ->
     Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
-    let t := if C =? C' then E0 else [ERet C v C'] in
+    let t := if Pos.eqb C C' then E0 else [ERet C v C'] in
     kstep G (C, (C', old_call_arg, k) :: s, mem, Kstop, E_val (Int v))
           t (C', s, mem', k, E_val (Int v)).
 
@@ -166,7 +166,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
   | E_if e1 e2 e3 =>
     ret (E0, (C, s, mem, Kif e2 e3 k, e1))
   | E_local =>
-    do b <- ZMap.find C (genv_buffers G);
+    do b <- PMap.find C (genv_buffers G);
     ret (E0, (C, s, mem, k, E_val (Ptr (C,b,0))))
   | E_alloc e =>
     ret (E0, (C, s, mem, Kalloc k, e))
@@ -175,7 +175,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
   | E_assign e1 e2 =>
     ret (E0, (C, s, mem, Kassign1 e1 k, e2))
   | E_call C' P e =>
-    if (imported_procedure_b (genv_interface G) C C' P) || (C =? C') then
+    if (imported_procedure_b (genv_interface G) C C' P) || (Pos.eqb C C') then
       ret (E0, (C, s, mem, Kcall C' P k, e))
     else
       None
@@ -217,7 +217,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kassign2 v' k' =>
       match v with
       | Ptr (C',b',o') =>
-        if C =? C' then
+        if Pos.eqb C C' then
           do mem' <- Memory.store mem (C',b',o') v';
           ret (E0, (C, s, mem', k', E_val v'))
         else
@@ -228,15 +228,15 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v with
       | Int i =>
         (* retrieve the procedure code *)
-        do C'_procs <- ZMap.find C' (genv_procedures G);
-        do P_expr <- ZMap.find P C'_procs;
+        do C'_procs <- PMap.find C' (genv_procedures G);
+        do P_expr <- PMap.find P C'_procs;
         (* save the old call argument *)
-        do b <- ZMap.find C (genv_buffers G);
+        do b <- PMap.find C (genv_buffers G);
         do old_call_arg <- Memory.load mem (C,b,0);
         (* place the call argument in the target memory *)
-        do b' <- ZMap.find C' (genv_buffers G);
+        do b' <- PMap.find C' (genv_buffers G);
         do mem' <- Memory.store mem (C',b',0) (Int i);
-        let t := if C =? C' then E0 else [ECall C P i C'] in
+        let t := if Pos.eqb C C' then E0 else [ECall C P i C'] in
         ret (t, (C', (C, old_call_arg, k') :: s, mem', Kstop, P_expr))
       | _ => None
       end
@@ -244,9 +244,9 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v, s with
       | Int i, (C',old_call_arg,k') :: s' =>
         (* restore the old call argument *)
-        do b <- ZMap.find C' (genv_buffers G);
+        do b <- PMap.find C' (genv_buffers G);
         do mem' <- Memory.store mem (C',b,0) old_call_arg;
-        let t := if C =? C' then E0 else [ERet C i C'] in
+        let t := if Pos.eqb C C' then E0 else [ERet C i C'] in
         ret (t, (C', s', mem', k', E_val (Int i)))
       | _, _ => None
       end
@@ -257,8 +257,8 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
 Hint Unfold eval_kstep.
 
 Definition init (p: program) : option (global_env * state) :=
-  do procs <- ZMap.find (fst (prog_main p)) (prog_procedures p);
-  do main <- ZMap.find (snd (prog_main p)) procs;
+  do procs <- PMap.find (fst (prog_main p)) (prog_procedures p);
+  do main <- PMap.find (snd (prog_main p)) procs;
   let '(bufs, mem) := init_all p in
   let G := {| genv_interface := prog_interface p;
               genv_procedures := prog_procedures p;
@@ -310,7 +310,7 @@ Proof.
   - assert (Hsize: (size >=? 0) = true). { destruct size; auto. }
     rewrite Hsize.
     rewrite H0. reflexivity.
-  - rewrite Z.eqb_refl.
+  - rewrite Pos.eqb_refl.
     repeat simplify_option.
     + unfold Memory.store in *. rewrite Heqo0, Heqo in H0. inversion H0.
       reflexivity.
@@ -320,7 +320,7 @@ Proof.
     + unfold orb.
       destruct (imported_procedure_iff (genv_interface G) C C' P) as [H1 H2];
         rewrite H1; auto.
-    + rewrite Z.eqb_refl.
+    + rewrite Pos.eqb_refl.
       rewrite orb_true_r.
       reflexivity.
 Qed.
@@ -366,7 +366,7 @@ Proof.
       eauto.
     + econstructor.
     + econstructor; eauto.
-      * rewrite <- Z.eqb_eq. auto.
+      * rewrite <- Pos.eqb_eq. auto.
       * unfold Memory.store.
         rewrite Heqo1. rewrite Heqo0.
         reflexivity.
@@ -379,7 +379,7 @@ Proof.
   (* procedure call *)
   - repeat simplify_option.
     rewrite orb_true_iff in Heqb.
-    rewrite Z.eqb_eq in Heqb.
+    rewrite Pos.eqb_eq in Heqb.
     econstructor.
     destruct Heqb; auto.
     left. apply imported_procedure_iff; auto.
@@ -444,7 +444,7 @@ Section Semantics.
     unfold single_events.
     intros s t s' Hstep.
     inversion Hstep; subst t0; simpl; auto;
-      try (destruct (C =? C'); subst; simpl; auto).
+      try (destruct (Pos.eqb C C'); subst; simpl; auto).
   Qed.
 
   Theorem receptiveness:
