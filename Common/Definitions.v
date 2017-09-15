@@ -98,3 +98,9 @@ Proof.
       apply Nat.neq_0_lt_0 in Hcount.
       unfold gt. eauto.
 Qed.
+
+Class HasTurn A := {
+  turn_of : A -> Program.interface -> Prop
+}.
+
+Inductive exec_state : Type := Normal | WentWrong.

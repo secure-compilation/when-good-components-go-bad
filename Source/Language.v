@@ -23,6 +23,9 @@ Module Source.
     prog_main : Component.id * Procedure.id
   }.
 
+  Definition single_component (p: program) : Prop :=
+    PMap.cardinal (prog_interface p) = 1%nat.
+
   (* An expression is well-formed when:
      1) calls outside the component are allowed by the interface
      2) calls inside the component are targeting existing procedures

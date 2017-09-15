@@ -7,6 +7,7 @@ Require Source.CS.
 Require Import Intermediate.Machine.
 Require Intermediate.CS.
 Require Import S2I.Compiler.
+Require Import S2I.Definitions.
 
 (*
 Taking inspiration from DSSS17 Leroy's lectures:
@@ -80,16 +81,6 @@ forward simulation into a backward one.
 
 TODO prove determinacy and receptiveness
 *)
-
-Module S.
-  Import Source.CS.
-  Module CS := CS.
-End S.
-
-Module I.
-  Import Intermediate.CS.
-  Module CS := CS.
-End I.
 
 Section Correctness.
 Variable p: Source.program.

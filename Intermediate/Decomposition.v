@@ -11,6 +11,7 @@ Require Import Intermediate.PS.
 
 Import Intermediate.
 
+(*
 Section Decomposition.
   Variables p c: program.
   Variable mainC: Component.id.
@@ -53,7 +54,7 @@ Section Decomposition.
   | ProgramControl:
       forall gps pgps mem pmem regs pc,
         (* the program has control *)
-        PS.is_program_component G' (Pointer.component pc) ->
+        PS.is_program_component (gps, mem, regs, pc) (prog_interface c) ->
         (* the partial stack is in sync *)
         pgps = PS.to_partial_stack gps split ->
         (* mem contains exactly all components memories *)
@@ -330,7 +331,9 @@ Section Decomposition.
   Lemma final_states_match:
     forall s1 s2 r,
       related_states s1 s2 ->
-      CS.final_state G s1 r -> PS.final_state G' s2 r.
+      CS.final_state G s1 r ->
+      PS.final_state (PS.partialize (program_link p c mainC mainP) (prog_interface c))
+                     (prog_interface c) s2 r.
   Proof.
     intros s1 s2 r Hs1s2_rel Hs1_final.
     CS.unfold_state.
@@ -591,3 +594,4 @@ Section Decomposition.
   Proof.
   Admitted.
 End Decomposition.
+*)

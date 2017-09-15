@@ -16,6 +16,12 @@ Definition stack : Type := list Pointer.t.
 
 Definition state : Type := stack * Memory.t * Register.t * Pointer.t.
 
+Instance state_turn : HasTurn state := {
+  turn_of s iface :=
+    let '(_, _, _, pc) := s in
+    PMap.In (Pointer.component pc) iface
+}.
+
 Definition initial_state (p: program) (s: state) : Prop :=
   let G := init_genv p in
   let '(gps, mem, regs, pc) := s in
@@ -33,9 +39,6 @@ Definition initial_state (p: program) (s: state) : Prop :=
   EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
                  (genv_entrypoints G) = Some (Pointer.block pc) /\
   Pointer.offset pc = 0.
-
-(* TODO these are here to make work Cbs.match_final_states that has a problem with int/nat *)
-Axiom final_state2: state -> int -> Prop.
 
 Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
   let '(gsp, mem, regs, pc) := s in

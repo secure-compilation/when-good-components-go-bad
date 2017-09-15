@@ -19,106 +19,137 @@ Definition context_state : Type := Component.id * stack * Memory.t.
 
 Inductive state : Type :=
 | PC : program_state -> state
-| CC : context_state -> exec_state -> state
-with exec_state : Type := Normal | WentWrong.
+| CC : context_state -> exec_state -> state.
+
+(* TODO not sure if this Program.interface should be list Component.id *)
+
+Instance state_turn : HasTurn state := {
+  turn_of s iface :=
+    match s with
+    | PC (C, _, _, _, _) => PMap.In C iface
+    | CC (C, _, _) _ => PMap.In C iface
+    end
+}.
 
 Module SC := Source.CS.CS.
 
-Axiom partialize_state: Program.interface -> SC.state -> state. 
-Axiom partialize_stack: Program.interface -> SC.stack -> stack -> Prop.
+Definition is_context_component (ps: state) ctx := turn_of ps ctx.
+Definition is_program_component (ps: state) ctx := ~ is_context_component ps ctx.
 
-Inductive initial_state2 (p: program) (ctx: Program.interface): state -> Prop :=
-| initial_state_intro: forall ps cs,
-    SC.initial_state p cs /\
-    ps = partialize_state ctx cs ->
-    initial_state2 p ctx ps.
+(* stack partialization *)
 
-Inductive final_state2 (ctx: Program.interface) (ps: state) (r: int) : Prop :=
-| final_state_intro:
-    forall cs,
-      SC.final_state2 cs r ->
-      ps = partialize_state ctx cs ->
-      final_state2 ctx ps r.
+Definition to_partial_frame pc frame : Component.id * option (value * CS.cont) :=
+  let '(C, v, k) := frame in
+  if Util.Lists.mem C pc then
+    (C, Some (v, k))
+  else
+    (C, None).
 
-Definition initial_state (p: program) (st: state) : Prop :=
-  match st with
-  | PC (C, s, mem, k, e) =>
-    (* the executing component is the main one *)
-    C = fst (prog_main p) /\
-    (* the stack is empty *)
-    s = [] /\
-    (* mem exaclty contains all components memories and it comes from the init routine *)
-    (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
-    (let '(_, m) := init_all p in mem = m) /\
-    (* the expression under evaluation is the main procedure *)
-    (exists main_procs,
-        PMap.find (fst (prog_main p)) (prog_procedures p) = Some main_procs /\
-        PMap.find (snd (prog_main p)) main_procs = Some e) /\
-    (* the continuation is stop *)
-    k = Kstop
-  | CC (C, s, mem) execst =>
-    (* the executing component is the main one *)
-    C = fst (prog_main p) /\
-    (* the stack is empty *)
-    s = [] /\
-    (* mem exaclty contains all components memories and it comes from the init routine *)
-    (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
-    (let '(_, m) := init_all p in mem = m) /\
-    (* the execution didn't go wrong *)
-    execst = Normal
-  end.
+Definition to_partial_stack (s : CS.stack) (pc : list Component.id) :=
+  map (to_partial_frame pc) s.
 
-Definition final_state (st: state) (r: nat) : Prop :=
-  match st with
-  | PC (C, s, mem, k, e) =>
-    e = E_exit
-  | CC (C, s, mem) execst =>
-    execst = Normal
-  end.
+Lemma push_by_prog_preserves_partial_stack:
+  forall s ps pc C v k,
+    Util.Lists.mem C pc = true ->
+    to_partial_stack s pc = ps ->
+    to_partial_stack ((C,v,k)::s) pc = (C,Some (v,k)) :: ps.
+Proof.
+  intros s ps pc C v k Hprogturn H.
+  simpl. rewrite Hprogturn. rewrite H. reflexivity.
+Qed.
 
-Definition is_program_component G C := PMap.In C (genv_interface G).
-Definition is_context_component (ctx: Program.interface) C := PMap.In C ctx.
+Lemma push_by_context_preserves_partial_stack:
+  forall s ps pc C v k,
+    ~ (In C pc) ->
+    to_partial_stack s pc = ps ->
+    to_partial_stack ((C,v,k)::s) pc = (C,None) :: ps.
+Proof.
+  intros s ps pc C v k Hprogturn Hpstack.
+  simpl. apply Util.Lists.not_in_iff_mem_false in Hprogturn.
+  rewrite Hprogturn. rewrite Hpstack. reflexivity.
+Qed.
+
+Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
+| ProgramControl:
+    forall C gps mem pmem k e,
+      let ps := PC (C, to_partial_stack gps (map fst (PMap.elements ctx)),
+                    pmem, k, e) in
+      is_program_component ps ctx ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      partial_state ctx (C, gps, mem, k, e) ps
+
+| ContextControl_Normal:
+    forall C gps mem pmem k e,
+      let ps := CC (C, to_partial_stack gps (map fst (PMap.elements ctx)), pmem) Normal in
+      is_context_component ps ctx ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      (*(exists s' t, CS.kstep (init_genv p) (C,gps,mem,k,e) t s') ->*)
+      partial_state ctx (C, gps, mem, k, e) ps
+| ContextControl_WentWrong:
+    forall C gps mem pmem k e,
+      let ps := CC (C, to_partial_stack gps (map fst (PMap.elements ctx)), pmem)
+                   WentWrong in
+      is_context_component ps ctx ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      (*(forall s' t, ~ CS.kstep (init_genv p) (C,gps,mem,k,e) t s') ->*)
+      partial_state ctx (C, gps, mem, k, e) ps.
+
+Theorem partial_state_preserves_turn_of:
+  forall psi cs ps,
+    partial_state psi cs ps -> (turn_of ps psi <-> turn_of cs psi).
+Proof.
+  intros psi cs ps Hpartial.
+  split.
+  - intro Hturn.
+    unfold turn_of, state_turn in Hturn.
+    unfold turn_of, SC.state_turn.
+    SC.unfold_state.
+    destruct ps.
+    + repeat destruct p.
+      inversion Hpartial; subst; auto.
+    + destruct c. destruct p.
+      inversion Hpartial; subst; auto.
+  - intro Hturn.
+    unfold turn_of, state_turn.
+    unfold turn_of, SC.state_turn in Hturn.
+    SC.unfold_state.
+    destruct ps.
+    + repeat destruct p.
+      inversion Hpartial; subst; auto.
+    + destruct c. destruct p.
+      inversion Hpartial; subst; auto.
+Qed.
+
+Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
+| initial_state_intro: forall cs ps,
+    partial_state ctx cs ps ->
+    SC.initial_state p cs ->
+    initial_state p ctx ps.
+
+Inductive final_state (p: program) (ctx: Program.interface) : state -> int -> Prop :=
+| final_state_intro: forall cs ps r,
+    ~ turn_of ps ctx ->
+    partial_state ctx cs ps ->
+    SC.final_state cs r ->
+    final_state p ctx ps r
+| final_state_context: forall ps r,
+    turn_of ps ctx ->
+    final_state p ctx ps r.
+
+(* small-step semantics *)
 
 Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> state -> Prop :=
 | Program_Epsilon:
-    forall G' C s mem mem' Cmem' wmem wmem' k k' e e',
-      (* G' is an extension of G w.r.t. ctx *)
-      (* 1) the interface is G plus ctx *)
-      PMap.Equal (genv_interface G') (PMapExtra.update (genv_interface G) ctx) ->
-      (* 2) the procedures are the same of G plus some new ones for ctx *)
-      (forall C Cprocs, PMap.MapsTo C Cprocs (genv_procedures G') <->
-                   (PMap.MapsTo C Cprocs (genv_procedures G) \/
-                    (PMap.In C ctx /\ ~ PMap.In C (genv_procedures G)))) ->
-      (* 3) the buffers are the same of G plus some new ones for ctx *)
-      (forall C Cbufs, PMap.MapsTo C Cbufs (genv_buffers G') <->
-                  (PMap.MapsTo C Cbufs (genv_buffers G) \/
-                   (PMap.In C ctx /\ ~ PMap.In C (genv_buffers G)))) ->
-
-      (* wmem is an extension of mem w.r.t. ctx *)
-      (* 1) wmem contains mem *)
-      (forall C Cmem, PMap.MapsTo C Cmem mem -> PMap.MapsTo C Cmem wmem) ->
-      (* 2) wmem has the context components memories *)
-      (forall C, is_context_component ctx C -> PMap.In C wmem) ->
-      (* 3) wmem extends mem exactly w.r.t. ctx *)
-      (forall C Cmem, PMap.MapsTo C Cmem wmem <->
-                 (PMap.MapsTo C Cmem mem \/
-                  (is_context_component ctx C /\ ~ PMap.In C mem))) ->
-
-      (* the complete semantics steps silently with the extended versions of
-         memory and global environment
-         NOTE that the stack (s) is not related to the partial one (ps) *)
-      (exists ps, CS.kstep G' (C,ps,wmem,k,e) E0 (C,ps,wmem',k',e')) ->
-
-      (* mem' is mem with the updated version of the current
-         executing component's memory *)
-      PMap.MapsTo C Cmem' wmem' ->
-      PMap.Equal mem' (PMap.add C Cmem' mem) ->
-
-      kstep ctx G (PC (C,s,mem,k,e)) E0 (PC (C,s,mem',k',e'))
+    forall cs cs' ps ps',
+      partial_state ctx cs (PC ps) ->
+      CS.kstep G cs E0 cs' ->
+      partial_state ctx cs' (PC ps') ->
+      kstep ctx G (PC ps) E0 (PC ps')
 
 | Program_Internal_Call:
     forall C s mem mem' k C' P v C'_procs P_expr b b' old_call_arg,
-      is_program_component G C' ->
+      is_program_component
+        (PC (C', (C, Some (old_call_arg, k)) :: s, mem', Kstop, P_expr)) ctx ->
       (* retrieve the procedure code *)
       PMap.find C' (genv_procedures G) = Some C'_procs ->
       PMap.find P C'_procs = Some P_expr ->
@@ -135,7 +166,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 
 | Program_Internal_Return:
     forall C s mem mem' k v C' old_call_arg b,
-      is_program_component G C' ->
+      is_program_component (PC (C', s, mem', k, E_val (Int v))) ctx ->
       (* restore the old call argument *)
       PMap.find C' (genv_buffers G) = Some b ->
       Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
@@ -146,7 +177,8 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 
 | Program_External_Call:
     forall C s mem k C' P v b old_call_arg,
-      is_context_component ctx C' ->
+      is_context_component
+        (CC (C', (C, Some (old_call_arg,k)) :: s, mem) Normal) ctx ->
       (* save the old call argument *)
       PMap.find C (genv_buffers G) = Some b ->
       Memory.load mem (C,b,0) = Some old_call_arg ->
@@ -157,7 +189,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 
 | Program_External_Return:
     forall C s mem k v C' old_call_arg,
-      is_context_component ctx C' ->
+      is_context_component (CC (C', s, mem) Normal) ctx ->
       let t := [ERet C v C'] in
       kstep ctx G
             (PC (C, (C', Some (old_call_arg, k)) :: s, mem, Kstop, E_val (Int v))) t
@@ -174,8 +206,8 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 | Context_Internal_Call:
     forall s s' mem C C' P call_arg,
       C' <> C ->
-      imported_procedure (genv_interface G) C C' P ->
-      is_context_component ctx C' ->
+      imported_procedure ctx C C' P ->
+      is_context_component (CC (C',s',mem) Normal) ctx ->
       s' = (C, None) :: s ->
       let t := [ECall C P call_arg C'] in
       kstep ctx G (CC (C,s,mem) Normal) t (CC (C',s',mem) Normal)
@@ -183,7 +215,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 | Context_Internal_Return:
     forall s s' mem C C' return_val,
       C' <> C ->
-      is_context_component ctx C' ->
+      is_context_component (CC (C',s',mem) Normal) ctx ->
       s = (C', None) :: s' ->
       let t := [ERet C return_val C'] in
       kstep ctx G (CC (C,s,mem) Normal) t (CC (C',s',mem) Normal)
@@ -191,9 +223,8 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 | Context_External_Call:
     forall s s' mem mem' C C' P C'_procs P_expr b' val,
       C' <> C ->
-      exported_procedure (genv_interface G) C' P ->
-      imported_procedure (genv_interface G) C C' P ->
-      is_program_component G C' ->
+      imported_procedure ctx C C' P ->
+      is_program_component (PC (C',s',mem,Kstop,P_expr)) ctx ->
       s' = (C, None) :: s ->
       (* retrieve the procedure code *)
       PMap.find C' (genv_procedures G) = Some C'_procs ->
@@ -206,7 +237,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
 
 | Context_External_Return:
     forall C s mem mem' k v C' old_call_arg b,
-      is_program_component G C' ->
+      is_program_component (PC (C', s, mem', k, E_val (Int v))) ctx ->
       (* restore the old call argument *)
       PMap.find C' (genv_buffers G) = Some b ->
       Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
@@ -215,6 +246,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
             (CC (C, (C', Some (old_call_arg, k)) :: s, mem) Normal) t
             (PC (C', s, mem', k, E_val (Int v))).
 
+(*
 Definition partialize (p: program) (ctx: Program.interface) : program :=
   {| prog_interface :=
        PMapExtra.diff (prog_interface p) ctx;
@@ -223,12 +255,13 @@ Definition partialize (p: program) (ctx: Program.interface) : program :=
      prog_buffers :=
        PMapExtra.filter (fun C _ => negb (PMap.mem C ctx)) (prog_buffers p);
      prog_main := prog_main p |}.
+*)
 
 Section Semantics.
   Variable p: program.
   Variable ctx: Program.interface.
 
-  Let G := init_genv (partialize p ctx).
+  Let G := init_genv p.
 
   Hypothesis valid_program:
     well_formed_program p.
@@ -242,6 +275,7 @@ Section Semantics.
 
   Definition sem :=
     @Semantics_gen state global_env (kstep ctx)
-                   (initial_state (partialize p ctx)) final_state G.
+                   (initial_state p ctx)
+                   (final_state p ctx) G.
 End Semantics.
 End PS.

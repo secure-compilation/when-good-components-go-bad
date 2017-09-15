@@ -23,10 +23,12 @@ Source/PS.v
 Source/Definability.v
 Source/Examples.v
 
+S2I/Definitions.v
 S2I/CompMonad.v
 S2I/Compiler.v
 S2I/Correctness.v
 S2I/Example.v
+S2I/PartialForward.v
 
 Intermediate/Machine.v
 Intermediate/GlobalEnv.v

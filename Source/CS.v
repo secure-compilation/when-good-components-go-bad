@@ -28,6 +28,12 @@ Module CS.
 Definition stack : Type := list (Component.id * value * cont).
 Definition state : Type := Component.id * stack * Memory.t * cont * expr.
 
+Instance state_turn : HasTurn state := {
+  turn_of s iface :=
+    let '(C, _, _, _, _) := s in
+    PMap.In C iface
+}.
+
 Definition initial_state (p: program) (st: state) : Prop :=
   let '(C, s, mem, k, e) := st in
   (* the executing component is the main one *)
@@ -43,9 +49,6 @@ Definition initial_state (p: program) (st: state) : Prop :=
       PMap.find (snd (prog_main p)) main_procs = Some e) /\
   (* the continuation is stop *)
   k = Kstop.
-
-(* TODO these are here to make work Cbs.match_final_states that has a problem with int/nat *)
-Axiom final_state2: state -> int -> Prop.
 
 Definition final_state (st: state) (r: nat) : Prop :=
   let '(C, s, mem, k, e) := st in
