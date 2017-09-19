@@ -38,3 +38,6 @@ Common/Rc.v
 
 TargetSFI/Machine.v
 TargetSFI/CS.v
+
+TargetMP/Monitor.v
+TargetMP/Machine.v
