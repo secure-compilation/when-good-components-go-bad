@@ -109,10 +109,10 @@ Section PartialForward.
       initial_state (I.CS.sem tprog) s2 /\ match_states i s1 s2.
 
   Hypothesis match_final_states:
-    forall i s1 s2 r,
+    forall i s1 s2,
       match_states i s1 s2 ->
-      final_state (S.CS.sem prog) s1 r ->
-      final_state (I.CS.sem tprog) s2 r.
+      final_state (S.CS.sem prog) s1 ->
+      final_state (I.CS.sem tprog) s2.
 
   Hypothesis wp_simulation:
     forall s1 t s1',
@@ -190,10 +190,10 @@ Section PartialForward.
   Admitted.
 
   Lemma transl_final_states:
-    forall i (sps:S.PS.state) (ips:I.PS.state) (r:int),
+    forall i (sps:S.PS.state) (ips:I.PS.state),
       match_states_p i sps ips ->
-      S.PS.final_state prog ctx sps r ->
-      I.PS.final_state tprog ctx ips r.
+      S.PS.final_state prog ctx sps ->
+      I.PS.final_state tprog ctx ips.
   Proof.
   Admitted.
 

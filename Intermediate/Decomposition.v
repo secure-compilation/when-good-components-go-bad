@@ -69,12 +69,12 @@ Section Decomposition.
   Qed.
 
   Lemma match_final_states:
-    forall ics ips r,
+    forall ics ips,
       I.PS.partial_state ctx ics ips ->
-      I.CS.final_state G ics r ->
-      I.PS.final_state prog ctx ips r.
+      I.CS.final_state G ics ->
+      I.PS.final_state prog ctx ips.
   Proof.
-    intros ics ips r Hpartial Hics_final.
+    intros ics ips Hpartial Hics_final.
     I.CS.unfold_state.
     (* case analysis on who has control *)
     destruct (PMap.mem (Pointer.component pc) ctx) eqn:Htarget.

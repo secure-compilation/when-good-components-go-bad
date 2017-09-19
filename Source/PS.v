@@ -114,15 +114,15 @@ Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
     SC.initial_state p scs ->
     initial_state p ctx sps.
 
-Inductive final_state (p: program) (ctx: Program.interface) : state -> int -> Prop :=
-| final_state_intro: forall scs sps r,
+Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
+| final_state_intro: forall scs sps,
     ~ turn_of sps ctx ->
     partial_state ctx scs sps ->
-    SC.final_state scs r ->
-    final_state p ctx sps r
-| final_state_context: forall sps r,
+    SC.final_state scs->
+    final_state p ctx sps
+| final_state_context: forall sps,
     turn_of sps ctx ->
-    final_state p ctx sps r.
+    final_state p ctx sps.
 
 (* small-step semantics *)
 

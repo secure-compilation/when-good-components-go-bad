@@ -32,21 +32,16 @@ Definition initial_state (p: program) (s: state) : Prop :=
   (* mem exactly contains all components memories and it comes from the init routine *)
   (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
   (let '(m, _, _) := init_all p in mem = m) /\
-
-  (* the origin register (R_AUX2) is set to 1 (meaning external call) *)
-  (* the R_ONE register is set to 1 *)
-  (* the other registers are set to undef *)
-  regs = [Int 1; Undef; Undef; Undef; Int 1; Undef] /\
-
+  (* the registers are set to undef *)
+  regs = [Undef; Undef; Undef; Undef; Undef; Undef] /\
   (* the program counter is pointing to the start of the main procedure *)
   Pointer.component pc = fst (prog_main p) /\
   EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
                  (genv_entrypoints G) = Some (Pointer.block pc) /\
   Pointer.offset pc = 0.
 
-Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
+Definition final_state (G: global_env) (s: state) : Prop :=
   let '(gsp, mem, regs, pc) := s in
-  Register.get R_COM regs = Int (Z.of_nat r) /\
   executing G pc IHalt.
 
 Inductive step (G : global_env) : state -> trace -> state -> Prop :=
@@ -648,15 +643,14 @@ Section Semantics.
   Qed.
 
   Lemma final_states_stuckness:
-    forall s r,
-      final_state G s r ->
+    forall s,
+      final_state G s ->
       nostep step G s.
   Proof.
-    intros s r Hs_final.
+    intros s Hs_final.
     unfold nostep.
     unfold_state.
     unfold final_state in Hs_final.
-    destruct Hs_final as [Hres Hexec].
     intros t s'. unfold not. intro Hstep.
     inversion Hstep; subst;
     try (match goal with
@@ -670,21 +664,6 @@ Section Semantics.
          end).
   Qed.
 
-  Lemma final_states_uniqueness:
-    forall s r1 r2,
-      final_state G s r1 ->
-      final_state G s r2 -> r1 = r2.
-  Proof.
-    unfold final_state.
-    intros s r1 r2 Hs_final1 Hs_final2.
-    unfold_state.
-    destruct Hs_final1 as [Hres1 Hexec1].
-    destruct Hs_final2 as [Hres2 Hexec2].
-    rewrite Hres1 in Hres2.
-    inversion Hres2.
-    omega.
-  Qed.
-
   Lemma determinacy:
     determinate sem.
   Proof.
@@ -693,7 +672,6 @@ Section Semantics.
     - apply singleton_traces.
     - apply determinate_initial_states.
     - apply final_states_stuckness.
-    - apply final_states_uniqueness.
   Qed.
 End Semantics.
 End CS.

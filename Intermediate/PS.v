@@ -117,15 +117,15 @@ Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
     IC.initial_state p ics ->
     initial_state p ctx ips.
 
-Inductive final_state (p: program) (ctx: Program.interface) : state -> int -> Prop :=
-| final_state_program: forall ics ips r,
+Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
+| final_state_program: forall ics ips,
     ~ turn_of ips ctx ->
     partial_state ctx ics ips ->
-    IC.final_state (init_genv p) ics r ->
-    final_state p ctx ips r
-| final_state_context: forall ips r,
+    IC.final_state (init_genv p) ics ->
+    final_state p ctx ips
+| final_state_context: forall ips,
     turn_of ips ctx ->
-    final_state p ctx ips r.
+    final_state p ctx ips.
 
 Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> state -> Prop :=
 | Program_Epsilon:

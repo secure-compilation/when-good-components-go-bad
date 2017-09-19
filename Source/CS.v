@@ -40,7 +40,7 @@ Definition initial_state (p: program) (st: state) : Prop :=
   C = fst (prog_main p) /\
   (* the stack is empty *)
   s = [] /\
-  (* mem exaclty contains all components memories and it comes from the init routine *)
+  (* mem exactly contains all components memories and it comes from the init routine *)
   (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
   (let '(_, m) := init_all p in mem = m) /\
   (* the expression under evaluation is the main procedure *)
@@ -50,9 +50,9 @@ Definition initial_state (p: program) (st: state) : Prop :=
   (* the continuation is stop *)
   k = Kstop.
 
-Definition final_state (st: state) (r: nat) : Prop :=
+Definition final_state (st: state) : Prop :=
   let '(C, s, mem, k, e) := st in
-  e = E_exit.
+  e = E_exit \/ (exists v, e = E_val v /\ k = Kstop /\ s = []).
 
 Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_Binop1 : forall C s mem k op e1 e2,

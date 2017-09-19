@@ -8,7 +8,7 @@ Require Import Coq.Logic.ClassicalEpsilon.
 Set Implicit Arguments.
 
 Inductive program_behavior: Type :=
-  | Terminates: trace -> int -> program_behavior
+  | Terminates: trace -> program_behavior
   | Diverges: trace -> program_behavior
   | Reacts: traceinf -> program_behavior
   | Goes_wrong: trace -> program_behavior.
@@ -17,7 +17,7 @@ Inductive program_behavior: Type :=
 
 Definition not_wrong (beh: program_behavior) : Prop :=
   match beh with
-  | Terminates _ _ => True
+  | Terminates _ => True
   | Diverges _ => True
   | Reacts _ => True
   | Goes_wrong _ => False
@@ -25,7 +25,7 @@ Definition not_wrong (beh: program_behavior) : Prop :=
 
 Definition behavior_app (t: trace) (beh: program_behavior): program_behavior :=
   match beh with
-  | Terminates t1 r => Terminates (t ** t1) r
+  | Terminates t1 => Terminates (t ** t1)
   | Diverges t1 => Diverges (t ** t1)
   | Reacts T => Reacts (t *** T)
   | Goes_wrong t1 => Goes_wrong (t ** t1)
@@ -91,10 +91,10 @@ Section PROGRAM_BEHAVIORS.
 Variable L: semantics.
 
 Inductive state_behaves (s: state L): program_behavior -> Prop :=
-  | state_terminates: forall t s' r,
+  | state_terminates: forall t s',
       Star L s t s' ->
-      final_state L s' r ->
-      state_behaves s (Terminates t r)
+      final_state L s' ->
+      state_behaves s (Terminates t)
   | state_diverges: forall t s',
       Star L s t s' -> Forever_silent L s' ->
       state_behaves s (Diverges t)
@@ -104,7 +104,7 @@ Inductive state_behaves (s: state L): program_behavior -> Prop :=
   | state_goes_wrong: forall t s',
       Star L s t s' ->
       Nostep L s' ->
-      (forall r, ~final_state L s' r) ->
+      ~final_state L s' ->
       state_behaves s (Goes_wrong t).
 
 Inductive program_behaves: program_behavior -> Prop :=
@@ -213,9 +213,9 @@ Proof.
   destruct (not_all_ex_not _ _ H) as [s1 A]; clear H.
   destruct (not_all_ex_not _ _ A) as [t1 B]; clear A.
   destruct (imply_to_and _ _ B) as [C D]; clear B.
-  destruct (classic (exists r, final_state L s1 r)) as [[r FINAL] | NOTFINAL].
+  destruct (classic (final_state L s1)) as [FINAL | NOTFINAL].
 (* 2.1 Normal termination *)
-  exists (Terminates t1 r); econstructor; eauto.
+  exists (Terminates t1); econstructor; eauto.
 (* 2.2 Going wrong *)
   exists (Goes_wrong t1); econstructor; eauto. red. intros.
   generalize (not_ex_all_not _ _ D s'); intros.
@@ -251,7 +251,7 @@ Proof.
   intros. inv H0.
 - (* termination *)
   exploit simulation_star; eauto. intros [i' [s2' [A B]]].
-  exists (Terminates t r); split.
+  exists (Terminates t); split.
   econstructor; eauto. eapply fsim_match_final_states; eauto.
   apply behavior_improves_refl.
 - (* silent divergence *)
@@ -316,7 +316,7 @@ Context L1 L2 index order match_states (S: bsim_properties L1 L2 index order mat
 
 Definition safe_along_behavior (s: state L1) (b: program_behavior) : Prop :=
   forall t1 s' b2, Star L1 s t1 s' -> b = behavior_app t1 b2 ->
-     (exists r, final_state L1 s' r)
+     final_state L1 s'
   \/ (exists t2, exists s'', Step L1 s' t2 s'').
 
 Remark safe_along_safe:
@@ -342,7 +342,7 @@ Remark not_safe_along_behavior:
      behavior_prefix t b
   /\ Star L1 s t s'
   /\ Nostep L1 s'
-  /\ (forall r, ~(final_state L1 s' r)).
+  /\ ~(final_state L1 s').
 Proof.
   intros.
   destruct (not_all_ex_not _ _ H) as [t1 A]; clear H.
@@ -355,7 +355,7 @@ Proof.
   split. exists b2; auto.
   split. auto.
   split. red; intros; red; intros. elim Q. exists t; exists s'0; auto.
-  intros; red; intros. elim P. exists r; auto.
+  intros; red; intros. elim P. auto. 
 Qed.
 
 Lemma backward_simulation_star:
@@ -412,7 +412,7 @@ Proof.
   exists beh2; split; [idtac|apply behavior_improves_refl].
   inv H0.
 + (* termination *)
-  assert (Terminates t r = behavior_app t (Terminates E0 r)).
+  assert (Terminates t = behavior_app t (Terminates E0)).
     simpl. rewrite E0_right; auto.
   rewrite H0 in H1.
   exploit backward_simulation_star; eauto.
@@ -438,8 +438,8 @@ Proof.
   exploit backward_simulation_star; eauto.
   intros [i' [s1' [A B]]].
   exploit (bsim_progress S); eauto. eapply safe_along_safe. eapply star_safe_along; eauto.
-  intros [[r FIN] | [t' [s2' STEP2]]].
-  elim (H4 _ FIN).
+  intros [FIN | [t' [s2' STEP2]]].
+  elim (H4 FIN).
   elim (H3 _ _ STEP2).
 
 - (* 2. Not safe along *)
