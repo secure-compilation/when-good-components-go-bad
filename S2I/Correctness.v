@@ -106,64 +106,22 @@ Hypothesis successful_compilation:
   compile_program p = Some tp.
 
 
-(* Some issues. 
+(* APT: Some issues to think about.
 
-+ Some outstanding questions about calling sequence.
-+ Redesigning compilation to use a more minimal monad and add in the necessary uniqueness facts into the
-  monad type.
 + What about refactoring Source semantics to use an expression reduction function wherever possible?
   Can't see what the continuation-based approach is buying except for divergence case.
 
-- Handling monad. (It should be simplified in any case to only track genuine state changes+error.)
-- Monad should also perhaps carry extension fact.
-- Maybe need a relational spec?  (cf rtlgen)
-- Will need to figure out how to carry fact about max stack size
-
-- Defining how memory changes:
-  + extra buffer for linkage
-  + extra dynamic buffer for stack
-- Defining stack relationship:
-  + source frames can be either local or remote target frames.
++ Maybe need a relational spec?  (cf compcert/rtlgen)
++ Will need to figure out how to carry fact about max stack size
 
 Each subexpression of source corresponds to a contiguous sequence of machine code, which
 executes from top to bottom or (for exit) immediately halts.
 
-
 *)
 
 
-(* Relating states 
+(* APT: Following are some very vague thoughts.
 
-s  = [old-C,old-call-arg,old-k]
-
-(C,s,mem,k,e)
-
-~
-
-gps  = [pointer]  -- return address into previous component.
-
-gps * mem * regs * pc 
-
----------------
-
-relate_code e k pc
-
-evaluating (e,k) is equivalent to executing at pc up to... a halt(?)
-
-
-hugs
-  Inductive relate_states: sstate -> istate -> Prop :=
-  | rs_intro :  forall C s smem k e gps imem regs pc,
-      C = Pointer.component pc ->
-      relate_stacks s gps ->
-      relate_mems smem imem ->
-      relate_code e k (... pc) -> 
-      relate_state (C,s,smem,k,e) (gps,imem,regs,pc)
-.
-
-
-(* does it make sense to parameterize this by past memories and register sets?? *)
-(*  ?? doesn't make sense -- when are regs,mem captured?? *)
 Inductive relate_stacks (mem:Memory.t) : Component.id -> S.stack -> I.stack -> Pointer.t -> Pointer.t -> Prop :=
   | rs_empty : forall sp0, relate_stacks mem nil nil sp0 sp0
   | rs_diff_comp: 
@@ -188,26 +146,6 @@ Inductive relate_stacks (mem:Memory.t) : Component.id -> S.stack -> I.stack -> P
       XXX where are arg and k ??? 
       relate_stacks imem ((C0,arg,k)::s) gps spb (spb+2)
 .
-
-(* What does code generated from an expression do?  
-
-Inductive tr_expr (G: Intermediate.GlobalEnv.global_env) :
-       Pointer.t -> nat -> expr -> Prop :=
-  | tr_expr run ->       
-       codeseq_at G pc0 n = c ->
-       c = translation of e -> 
-       .... -> 
-       tr_expr G pc0 n e
-  | tr_expr_halt: 
-       code_at G pc0 = Some IHalt-> 
-       tr_expr G pc0 1 Eexit 
-
-Either it: 
-  - executes from start to end, obeying stack expectations and producing aa suitable value in RA
-  - (if Eexit): it halts immediately
-
-
-*)
 
 
 (* Some basic definitions. *)
@@ -487,9 +425,8 @@ Proof.
       inv H1. 
 
   simpl in H. 
-
 *)
-    
+
 Theorem well_formedness_preservation:
   Intermediate.well_formed_program tp.
 Proof.

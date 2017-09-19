@@ -1,3 +1,58 @@
+(* Modified calling conventions, implementing the following scheme:
+
+N.B.  In this scheme (probably in the old one too), there is no need to
+preserve any register except R_COM across inter-component ICall's.
+In particular, there is no need to preserve R_RA.
+
+Main ideas:
+
+1. Instead of using a flag to remember whether procedure was called
+   internally or externlly, we simply Jal to the internal entry point from
+   the external one.  This simplifies the code, although it does result
+   in one needless but harmless push/pop for external calls.
+2. We use a single static buffer per component to store both the
+   current proc arg (when executing in the component) and the saved sp
+   (when executing in a different component).
+
+In the following:
+- We write B_C for the (sole) static buffer (of size 1) associated with component C
+- Each procedure has an external entry point (accessed by ICall) and an internal entry label.
+
+Internal caller (within same component):
+  push R_RA
+  Jal to callee internal label
+  pop into R_RA
+
+External caller (between components):
+  push R_RA
+  push contents of B_C (caller's arg)
+  store R_SP into B_C
+  ICall C' P'
+  set R_ONE = 1
+  set R_SP to contents of B_C
+  pop caller's arg into B_C
+  pop into R_RA
+
+Code at external entry point:
+  set R_ONE = 1
+  IJal internal_entry_label
+  IReturn
+
+Code at internal entry label:
+  save R_SP to R_AUX1
+  allocate stack frame for this procedure, pointed to by R_SP
+  push R_AUX1 (old R_SP) [for an external call this is random garbage, but harmless]
+  push contents of B_C [for an internal call, this is caller's arg; for an external call, this is SP at point when callee component last called externally]
+  store R_COM into B_C
+  ...body of function...
+  pop into B_C
+  pop into R_SP [for an external call this is pointless, but harmless]
+  [if we did stack frame deallocation, it would happen here]
+  IJump R_RA
+
+*)
+
+
 Require Import Common.Definitions.
 Require Import Source.Language.
 Require Import Intermediate.Machine.
@@ -50,30 +105,14 @@ Definition load_arg (buf: Pointer.t) (r: register) : code :=
   [IConst (IPtr buf) r;
    ILoad r r].
 
-Definition store_arg (buf: Pointer.t) (r r': register) : code :=
-  [IConst (IPtr buf) r';
-   IStore r' r].
-
-Definition store_stack_frame_pointer (buf: Pointer.t) (r: register) : code :=
-  [IConst (IPtr buf) r;
-   IStore r R_SP].
-
-Definition restore_stack_frame_pointer (buf: Pointer.t) : code :=
-  [IConst (IPtr buf) R_SP;
-   ILoad R_SP R_SP].
-
-Definition store_environment (buf: Pointer.t) : code :=
-  store_stack_frame_pointer buf R_AUX1.
-
-Definition restore_environment (buf: Pointer.t) : code :=
-  IConst (IInt 1) R_ONE ::
-  restore_stack_frame_pointer buf.
+Definition store_arg (buf: Pointer.t) (r rtemp: register) : code :=
+  [IConst (IPtr buf) rtemp;
+   IStore rtemp r].
 
 Section WithComponent.
 
 Variable C: Component.id. (* the current component *)  
 Variable local_buf_ptr : Pointer.t. (* pointer to the local buffer for current component *)
-Variable temp_buf_ptr : Pointer.t.  (* pointer to the temp buffer for current component. *)
 Variable P_labels : PMap.t label.  (* map from procedure id's to start labels for current component *)
 
 Definition find_proc_label P : COMP label :=
@@ -134,24 +173,22 @@ Fixpoint compile_expr (e: expr) : COMP code :=
     if Pos.eqb C' C then
       do target_label <- find_proc_label P';
       ret (call_arg_code ++
-           push R_AUX2 ++
-           load_arg local_buf_ptr R_AUX1 ++
-           push R_AUX1 ++
+           push R_RA ++
            [IJal target_label] ++
-           pop R_AUX1 ++
-           store_arg local_buf_ptr R_AUX1 R_AUX2 ++
-           pop R_AUX2)
+           pop R_RA)
     else
       ret (call_arg_code ++
-           push R_AUX2 ++
+           push R_RA ++
            load_arg local_buf_ptr R_AUX1 ++
            push R_AUX1 ++
-           store_environment temp_buf_ptr ++
+           store_arg local_buf_ptr R_SP R_AUX2 ++
            [ICall C' P'] ++
-           restore_environment temp_buf_ptr ++
+           [IConst (IInt 1) R_ONE] ++
+           load_arg local_buf_ptr R_SP ++
            pop R_AUX1 ++
            store_arg local_buf_ptr R_AUX1 R_AUX2 ++
-           pop R_AUX2)
+           pop R_RA
+           )
   | E_exit => ret [IHalt]
   end.
 
@@ -165,26 +202,22 @@ Definition compile_proc (P: Procedure.id) (e: expr)
   (* TODO compute stack size *)
   let stack_frame_size := 10 in
   ret ([IConst (IInt 1) R_ONE;
-        IConst (IInt 1) R_AUX2;
-        IConst (IInt stack_frame_size) R_SP;
-        IAlloc R_SP R_SP;
-        IBnz R_ONE lmain;
+        IJal proc_label;
+        IReturn;
         ILabel proc_label;
-        IConst (IInt 0) R_AUX2;
         IMov R_SP R_AUX1;
         IConst (IInt stack_frame_size) R_SP;
         IAlloc R_SP R_SP] ++
         push R_AUX1 ++
-       [ILabel lmain] ++
-        push R_RA ++
-        store_arg local_buf_ptr R_COM R_AUX1 ++
+        load_arg local_buf_ptr R_AUX1 ++
+        push R_AUX1 ++
+        store_arg local_buf_ptr R_COM R_AUX2 ++
         proc_code ++
-        pop R_RA ++
-       [IBnz R_AUX2 lreturn] ++
+        pop R_AUX1 ++
+        store_arg local_buf_ptr R_AUX1 R_AUX2 ++
         pop R_SP ++
-       [IJump R_RA;
-        ILabel lreturn;
-        IReturn]).
+        (* morally could do deallocation of stack frame here *)
+        [IJump R_RA]).
 
 Definition compile_procedures
          (procs: list (Procedure.id * expr))
@@ -226,14 +259,14 @@ Definition gen_all_procedures_labels
       end
   in gen (@PMap.empty (PMap.t label)) procs.
 
-Definition add_temporary_buffers
+Definition gen_buffers
          (bufs: list (Component.id * nat))
   : PMap.t (list (Block.id * nat)) :=
   let fix instrument acc bs :=
       match bs with
       | [] => acc
       | (C,size) :: bs' =>
-        let Cbufs := [(1%positive,size%nat); (2%positive,1%nat)] in
+        let Cbufs := [(1%positive,size%nat)] in
         let acc' := PMap.add C Cbufs acc in
         instrument acc' bs'
       end
@@ -250,9 +283,8 @@ Definition compile_components
       | (C,procs) :: cs' =>
         do blocks <- lift (PMap.find C local_buffers);
         do local_buf <- lift (nth_error blocks 0);
-        do tmp_buf <- lift (nth_error blocks (length blocks - 1));
         do P_labels <- lift (PMap.find C procs_labels);
-        do procs_code <- compile_procedures C (C,fst local_buf,0%Z) (C,fst tmp_buf,0%Z) P_labels (PMap.elements procs);
+        do procs_code <- compile_procedures C (C,fst local_buf,0%Z)  P_labels (PMap.elements procs);
         let acc' := (C, PMapExtra.of_list procs_code) :: acc in
         compile acc' cs'
       end
@@ -261,12 +293,16 @@ Definition compile_components
 Definition init_env : comp_env :=
   {| next_label := 1%positive; |}.
 
-
 (* In intermediate program, main will be a tiny wrapper routine (in the same component) 
    that simply calls the  (translation of the) original main and then halts. *)
 
 (* A fresh procedure id can be calculated by, e.g., taking the max of all procedure id's and adding 1 *)
-Axiom generate_fresh_procedure_id : forall (procs: PMap.t (PMap.t code)), Procedure.id. 
+
+Definition generate_fresh_procedure_id (procs: PMap.t (PMap.t code)) : Procedure.id :=
+  Pos.succ (PMap.fold (fun id _ m => Pos.max id m) procs xH).
+
+Lemma generate_fresh_procedure_id_fresh : forall procs, PMap.mem (generate_fresh_procedure_id procs) procs = false.
+Admitted.
 
 Definition wrap_main (procs_labels: PMap.t (PMap.t label)) (p: Intermediate.program) : COMP Intermediate.program :=
   let '(C,P) := p.(Intermediate.prog_main) in
@@ -282,14 +318,13 @@ Definition wrap_main (procs_labels: PMap.t (PMap.t label)) (p: Intermediate.prog
       {| Intermediate.prog_interface := PMap.add C iface' p.(Intermediate.prog_interface);
          Intermediate.prog_procedures := PMap.add C procs' p.(Intermediate.prog_procedures);
          Intermediate.prog_buffers := p.(Intermediate.prog_buffers);
-         Intermediate.prog_main := (C,P') |}
-.
+         Intermediate.prog_main := (C,P') |}.
 
 Definition compile_program
            (p: Source.program) : option Intermediate.program :=
   let comps := PMap.elements (Source.prog_procedures p) in
   let bufs := PMap.elements (Source.prog_buffers p) in
-  let local_buffers := add_temporary_buffers bufs in  
+  let local_buffers := gen_buffers bufs in
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;
     do code <- compile_components local_buffers procs_labels comps;
