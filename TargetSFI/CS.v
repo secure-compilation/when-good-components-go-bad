@@ -319,7 +319,7 @@ Module CS.
        end
      end.
 
-   Definition run (p: SFI.program) (input: value) (fuel: nat) : option value :=
+   Definition run (p: SFI.program) (fuel: nat) : option value :=
      let (G, st) := (init_genv_and_state p) in
       (* TODO do something about the input *)
        execN fuel G st.
