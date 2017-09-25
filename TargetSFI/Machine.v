@@ -41,6 +41,8 @@ Definition R_D : register := 32.
 
 Close Scope N_scope.
 
+Definition NO_REGISTERS : nat := 33.
+
 Definition value := Z.
 
 Definition ZERO_VALUE : value := Z0.
@@ -123,8 +125,9 @@ Definition C := address ->  SFIComponent.id.
 
 Definition COMPONENT_MASK : N := 2^COMP_SIZE - 1. 
 
-Definition C_SFI  (addr : address) : SFIComponent.id :=
-   N.land (N.shiftl addr OFFSET_SIZE) COMPONENT_MASK.
+(* Definition C_SFI  (addr : address) : SFIComponent.id := *)
+Definition C_SFI : C := (fun addr =>
+                           N.land (N.shiftl addr OFFSET_SIZE) COMPONENT_MASK).
 
 (* E is a partial map from addresses to procedure names.*)
 Definition E := address -> Procedure.id.
@@ -144,6 +147,8 @@ Module SFI.
       | [] => True
       | r :: l' => (is_zero_value r)/\ is_zero l'
       end.
+
+    Definition zero : general_registers := repeat Z0 NO_REGISTERS.
 
     Definition set_register (reg : register) (val : value)
                (gen_regs  : general_registers) : general_registers :=

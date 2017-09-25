@@ -202,9 +202,7 @@ Module CS.
   Open Scope monad_scope.
   Open Scope N_scope.
 
-  (* Set Typeclasses Debug. *)
-  
-  Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
+   Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
     let '(mem,pc,gen_regs) := s in
     match Memory.get_word mem pc with
     | Some (Instruction instr) =>
@@ -285,11 +283,46 @@ Module CS.
     | None => None
     end.
 
+   Import MonadNotations.
+   Open Scope monad_scope.
+   Set Typeclasses Debug.
+
+   Check C_SFI.
+   
+   (* Global Env: (C,CN,E) *)
+   (* State : Memory.t * RegisterFile.pc * RegisterFile.general_registers. *)
+    (*  Record program := *)
+    (* { *)
+    (*   cn : CN; *)
+    (*   e : E; *)
+    (*   mem : Memory.t; *)
+    (*   prog_interface : Program.interface *)
+   (* }. *)
+   (* Definition init_genv_and_state (p : SFI.program) : global_env * state := *)
+   (*   let gcn : CN := (SFI.cn p) in *)
+   (*   let ge : E := (SFI.e p) in  *)
+   (*   let G := (C_SFI, gcn, ge) in *)
+   (*   let smem : SFI.Memory.t := (SFI.mem p) in *)
+   (*   let st0 : state := (smem, N0, SFI.RegisterFile.zero) in *)
+   (*   ret (pair G st0). *)
 
 
-  (* Definition run (p: program) (input: value) (fuel: nat) : option nat := *)
-  (*   do (G, st) <- init_genv_and_state p; *)
-  (*     execN fuel G st. *)
+   (* Fixpoint execN (n: nat) (G: global_env) (st: state) : option value := *)
+   (*   match n with *)
+   (*   | O => None *)
+   (*   | S n' => *)
+   (*     match eval_step G st with *)
+   (*     | None => *)
+   (*       let '(_, _, regs) := st in *)
+   (*       Some (RegisterFile.get_register R_COM regs) *)
+   (*     | Some (_, st') => execN n' G st' *)
+   (*     end *)
+   (*   end. *)
+
+   (* Definition run (p: SFI.program) (input: value) (fuel: nat) : option value := *)
+   (*   let (G, st) := (init_genv_and_state p) in *)
+   (*    (* TODO do something about the input *) *)
+   (*     execN fuel G st. *)
   
   Close Scope N_scope.
   Close Scope monad_scope.
