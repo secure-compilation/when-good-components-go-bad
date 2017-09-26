@@ -1,12 +1,14 @@
 Require Import ZArith.
 Require Import List.
 
+From QuickChick Require Import QuickChick Tactics.
+Import QcDefaultNotation. Open Scope qc_scope.
+
+Require Import Coq.Classes.EquivDec.
+
 Require Import CompCert.Events.
-
 Require Import Lib.Monads.
-
 Require Import Common.Definitions.
-
 Require Import TargetSFI.Machine.
 
 Module CS.
@@ -283,48 +285,78 @@ Module CS.
     | None => None
     end.
 
-   Import MonadNotations.
-   Open Scope monad_scope.
-   Set Typeclasses Debug.
+   (* NOT NEEDED NOW *)
+   (* Import MonadNotations. *)
+   (* Open Scope monad_scope. *)
+   (* Set Typeclasses Debug. *)
 
-   Check C_SFI.
+   (* Check C_SFI. *)
    
-   (* Global Env: (C,CN,E) *)
-   (* State : Memory.t * RegisterFile.pc * RegisterFile.general_registers. *)
-    (*  Record program := *)
-    (* { *)
-    (*   cn : CN; *)
-    (*   e : E; *)
-    (*   mem : Memory.t; *)
-    (*   prog_interface : Program.interface *)
-   (* }. *)
-   Definition init_genv_and_state (p : SFI.program) : global_env * state :=
-     let gcn : CN := (SFI.cn p) in
-     let ge : E := (SFI.e p) in
-     let G := (C_SFI, gcn, ge) in
-     let smem : SFI.Memory.t := (SFI.mem p) in
-     let st0 : state := (smem, N0, SFI.RegisterFile.zero) in
-     (G, st0).
+   (* (* Global Env: (C,CN,E) *) *)
+   (* (* State : Memory.t * RegisterFile.pc * RegisterFile.general_registers. *) *)
+   (*  (*  Record program := *) *)
+   (*  (* { *) *)
+   (*  (*   cn : CN; *) *)
+   (*  (*   e : E; *) *)
+   (*  (*   mem : Memory.t; *) *)
+   (*  (*   prog_interface : Program.interface *) *)
+   (* (* }. *) *)
+   (* Definition init_genv_and_state (p : SFI.program) : global_env * state := *)
+   (*   let gcn : CN := (SFI.cn p) in *)
+   (*   let ge : E := (SFI.e p) in *)
+   (*   let G := (C_SFI, gcn, ge) in *)
+   (*   let smem : SFI.Memory.t := (SFI.mem p) in *)
+   (*   let st0 : state := (smem, N0, SFI.RegisterFile.zero) in *)
+   (*   (G, st0). *)
 
 
-   Fixpoint execN (n: nat) (G: global_env) (st: state) : option value :=
-     match n with
-     | O => None
-     | S n' =>
-       match eval_step G st with
-       | None =>
-         let '(_, _, regs) := st in
-         Some (RegisterFile.get_register R_COM regs)
-       | Some (_, st') => execN n' G st'
-       end
-     end.
+   (* Fixpoint execN (n: nat) (G: global_env) (st: state) : option value := *)
+   (*   match n with *)
+   (*   | O => None *)
+   (*   | S n' => *)
+   (*     match eval_step G st with *)
+   (*     | None => *)
+   (*       let '(_, _, regs) := st in *)
+   (*       Some (RegisterFile.get_register R_COM regs) *)
+   (*     | Some (_, st') => execN n' G st' *)
+   (*     end *)
+   (*   end. *)
 
-   Definition run (p: SFI.program) (fuel: nat) : option value :=
-     let (G, st) := (init_genv_and_state p) in
-      (* TODO do something about the input *)
-       execN fuel G st.
+   (* Definition run (p: SFI.program) (fuel: nat) : option value := *)
+   (*   let (G, st) := (init_genv_and_state p) in *)
+   (*    (* TODO do something about the input *) *)
+   (*     execN fuel G st. *)
   
   Close Scope N_scope.
-  Close Scope monad_scope.
 
+
+  (* Conjecture eval_step_complete : forall G st t st', *)
+  (*     step G st t st' -> eval_step G st = Some (t, st'). *)
+
+  (* Check eval_step_complete. *)
+
+  (* Check C. *)
+
+  (* (* Definition C := address ->  SFIComponent.id. *) *)
+  
+  (* Instance dec_C (c1 c2 : C) : Dec (c1=c2). *)
+  (* Proof. *)
+  (*   apply Build_Dec. unfold ssrbool.decidable. decide equality. *)
+  
+  (* (* Global Env: (C,CN,E) *) *)
+  (* Instance dec_global_env (g1 g2 : global_env) : Dec (g1 = g2). *)
+  (* Proof. *)
+  (*   apply Build_Dec. unfold ssrbool.decidable. *)
+  (*   destruct g1 as [p1 e1]. destruct g2 as [p2 e2]. *)
+  (*   apply prod_eqdec. *)
+  (*   decide equality. *)
+  
+  (* Instance dec_state (st1 st2 : state) : Dec (st1 = st2). *)
+  (* Proof. Admitted. *)
+  
+  (* Instance dec_eval_step_complete (G : global_env) (st : state) *)
+  (*          (t : trace) (st' : state) : Dec (eval_step_complete G st t st'). *)
+  (* Proof. Amitted. *)
+
+         Close Scope monad_scope.
 End CS.
