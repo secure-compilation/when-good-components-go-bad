@@ -17,7 +17,7 @@ Module CS.
   Import SFI.Memory.
   
   (* Global Env: (CN,E) *)
-  Definition global_env : Set := C * CN * E.
+  Definition global_env : Set := CN * E.
 
   (* Machine State:
 
