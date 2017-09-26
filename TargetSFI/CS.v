@@ -1,10 +1,10 @@
 Require Import ZArith.
 Require Import List.
 
-From QuickChick Require Import QuickChick Tactics.
-Import QcDefaultNotation. Open Scope qc_scope.
+(* From QuickChick Require Import QuickChick Tactics. *)
+(* Import QcDefaultNotation. Open Scope qc_scope. *)
 
-Require Import Coq.Classes.EquivDec.
+(* Require Import Coq.Classes.EquivDec. *)
 
 Require Import CompCert.Events.
 Require Import Lib.Monads.
@@ -16,10 +16,10 @@ Module CS.
   Import SFI.
   Import SFI.Memory.
   
-  (* Global Env: (C,CN,E) *)
+  (* Global Env: (CN,E) *)
   Definition global_env : Set := C * CN * E.
 
-(* Machine State:
+  (* Machine State:
 
   (mem, sp, pc, reg) where 
   - mem is a total function from addresses to words
@@ -333,30 +333,9 @@ Module CS.
   (* Conjecture eval_step_complete : forall G st t st', *)
   (*     step G st t st' -> eval_step G st = Some (t, st'). *)
 
-  (* Check eval_step_complete. *)
-
-  (* Check C. *)
-
-  (* (* Definition C := address ->  SFIComponent.id. *) *)
-  
-  (* Instance dec_C (c1 c2 : C) : Dec (c1=c2). *)
-  (* Proof. *)
-  (*   apply Build_Dec. unfold ssrbool.decidable. decide equality. *)
-  
-  (* (* Global Env: (C,CN,E) *) *)
-  (* Instance dec_global_env (g1 g2 : global_env) : Dec (g1 = g2). *)
-  (* Proof. *)
-  (*   apply Build_Dec. unfold ssrbool.decidable. *)
-  (*   destruct g1 as [p1 e1]. destruct g2 as [p2 e2]. *)
-  (*   apply prod_eqdec. *)
-  (*   decide equality. *)
-  
-  (* Instance dec_state (st1 st2 : state) : Dec (st1 = st2). *)
-  (* Proof. Admitted. *)
-  
   (* Instance dec_eval_step_complete (G : global_env) (st : state) *)
   (*          (t : trace) (st' : state) : Dec (eval_step_complete G st t st'). *)
   (* Proof. Amitted. *)
 
-         Close Scope monad_scope.
+  Close Scope monad_scope.
 End CS.

@@ -4,8 +4,6 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Maps.
 
-
-
 (******************************************
  * Instruction Set Definition
  *******************************************)
