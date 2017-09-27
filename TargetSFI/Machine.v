@@ -4,6 +4,18 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Maps.
 
+Require Import QuickChick.QuickChick.
+Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
+
+Require Export ExtLib.Structures.Monads.
+Export MonadNotation.
+Open Scope monad_scope.
+
+Require Import Coq.Strings.String.
+Local Open Scope string.
+
+From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
+
 (******************************************
  * Basic Risc Machine Definition
  *******************************************)
@@ -16,11 +28,10 @@ Module RiscMachine.
   Definition address := N.
 
 
-  
   Module Register.
     
-    Definition t := N.
     Open Scope N_scope.
+    Definition t := N.
     Definition R_ONE: t := 1.
     Definition R_COM : t := 2.
     Definition R_AUX1 : t := 3.
@@ -36,7 +47,7 @@ Module RiscMachine.
     Definition R_T : t := 31.
     Definition R_D : t := 32.
     Close Scope N_scope.
-
+    
     Definition NO_REGISTERS : nat := 33.
 
     
@@ -77,17 +88,17 @@ Module RiscMachine.
 
   Module ISA.
     
-    Inductive binop :=
-    | Addition
-    | Subtraction
-    | Multiplication
-    | Equality
-    | Leq
-    | BitwiseAnd
-    | BitwiseOr
-    | ShiftLeft. 
+    Inductive binop : Type :=
+    | Addition : binop
+    | Subtraction : binop
+    | Multiplication : binop
+    | Equality : binop
+    | Leq : binop
+    | BitwiseOr : binop
+    | BitwiseAnd : binop
+    | ShiftLeft : binop. 
   
-    Inductive instr :=
+    Inductive instr : Set :=
     | INop : instr
     (* register operations *)
     | IConst : value -> Register.t -> instr
@@ -130,24 +141,22 @@ Module RiscMachine.
     Definition to_address (ptr:value) : address :=
       (* negatives are converted to zero *)
       Z.to_N ptr.
-    Close Scope N_scope.
     
   End Memory.
 
-  (* Open Scope Z_scope. *)
-  (* Definition executing_binop (operation : ISA.binop) (op1 : value) (op2 : value) : value := *)
-  (* match operation with *)
-  (* | Addition => op1 + op2 *)
-  (* | Subtraction => op1 - op2 *)
-  (* | Multiplication => op1 * op2 *)
-  (* | Equality => if Zeq_bool op1 op2 then 1 else 0 *)
-  (* | Leq => if Zle_bool op1 op2 then 1 else 0 *)
-  (* | BitwiseAnd => Z.land op1 op2 *)
-  (* | BitwiseOr => Z.lor op1 op2 *)
-  (* | ShiftLeft => Z.shiftl op1 op2 *)
-  (* end. *)
-  (* Close Scope Z_scope. *)
 
+  Definition executing_binop (op : ISA.binop)
+             (op1 : value) (op2 : value) : value :=
+    match op with
+    | ISA.Addition => op1 + op2
+    | ISA.Subtraction => op1 - op2
+    | ISA.Multiplication => op1 * op2
+    | ISA.Equality => if Zeq_bool op1 op2 then 1 else 0
+    | ISA.Leq => if Zle_bool op1 op2 then 1 else 0
+    | ISA.BitwiseAnd => Z.land op1 op2
+    | ISA.BitwiseOr => Z.lor op1 op2
+    | ISA.ShiftLeft => Z.shiftl op1 op2
+  end.
   
   Definition executing (mem : Memory.t) (pc : address) ( i : ISA.instr) : Prop :=
     match (Memory.get_word mem pc) with
@@ -155,42 +164,75 @@ Module RiscMachine.
     |  _ => False
     end.
 
+
+  Definition inc_pc (a : pc) : pc := N.add a 1.
+
   
 End RiscMachine.
 
 
+Close Scope Z_scope.
+
 (******************************************
  * Program Definition
  *******************************************)
-
 Module SFIComponent.
-  
-  Definition id := N.
-  
-End SFIComponent.
 
+  Definition id := N.
+
+    (* Maximum number of components *)
+  Definition COMP_MAX:N := 3.
+
+End SFIComponent.
 
 Module Env.
 
-  (* CN is a map from component numerical identifier to component
-     identifier used in the labeled transitions from the intermediate
-     language semantics. *)
-  Definition CN := SFIComponent.id -> Component.id.
+  (* list of dimension COMP_MAX + 1 *)
+  Definition CN := list Component.id.
 
   (* E is a partial map from addresses to procedure names.*)
-  Definition E := list (RiscMachine.address, Procedure.id).
+  Definition E := list (RiscMachine.address*Procedure.id).
 
+  Definition t := CN * E.
+
+  Definition get_component_name_from_id (id : SFIComponent.id)
+             (G : t): option Component.id :=
+    let id_nat := N.to_nat id in 
+    match id_nat with
+    | O => None
+    | S _ => 
+      let fix aux id_nat l :=
+          match (id_nat,l) with
+          | (S id'', x::ls) => aux id'' ls
+          | (O, x::_) => Some x
+          | ( _, []) => None
+          end in aux id_nat (fst G)
+    end.
+
+  Definition get_procedure (addr : RiscMachine.address)
+             (G : Env.t) : option Procedure.id :=
+    let fix aux addr l :=
+        match l with
+        | [] => None
+        | (addr',p)::ls => if (N.eqb addr addr') then Some p
+                           else aux addr ls
+        end in aux addr (snd G).
+
+  Close Scope monad_scope.
+
+  Definition eq_dec_env_t:
+    forall g1 g2 : t,  {g1 = g2} + {g1 <> g2}.
+  Proof.
+    repeat decide equality. Defined.
 End Env.
 
-Module SFI.
 
-  (* Maximum number of components *)
-  Definition COMP_MAX:N := 3.
+Module SFI.
 
   (* Number of bits used for offset within slot *)
   Definition OFFSET_SIZE:N := 12.
 
-  Definition COMPONENT_MASK : N := 2^COMP_SIZE - 1. 
+  Definition COMPONENT_MASK : N := 2^SFIComponent.COMP_MAX - 1. 
 
   Definition C_SFI (addr : RiscMachine.address) : SFIComponent.id  := 
     N.land (N.shiftl addr OFFSET_SIZE) COMPONENT_MASK.
@@ -205,11 +247,25 @@ Module SFI.
     }.
 
 
-  (* Definition is_same_component (addr1: address) (addr2: address) : Prop := *)
-  (*   (C_SFI addr1) = (C_SFI addr2). *)
+  Definition is_same_component (addr1: RiscMachine.address)
+             (addr2: RiscMachine.address) : Prop :=
+    (C_SFI addr1) = (C_SFI addr2).
 
   
-  (* Definition is_same_component_bool (addr1: address) (addr2: address) := *)
-  (*       (C_SFI addr1) =? (C_SFI addr2). *)
+  Definition is_same_component_bool (addr1: RiscMachine.address)
+             (addr2: RiscMachine.address) :=
+    N.eqb (C_SFI addr1) (C_SFI addr2).
 
 End SFI.
+
+Module MachineState.
+
+  Definition t := RiscMachine.Memory.t * RiscMachine.pc * RiscMachine.RegisterFile.t.
+
+  (* Instance dec_t (s1 s2 : t) : Dec (s1 = s2). *)
+  (* Proof. *)
+  (*   apply Build_Dec. unfold ssrbool.decidable. *)
+  
+End MachineState.
+
+
