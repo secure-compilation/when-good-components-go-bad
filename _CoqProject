@@ -36,7 +36,9 @@ Intermediate/Decomposition.v
 
 Common/Rc.v
 
+TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
+TargetSFI/MachineGen.v
 TargetSFI/CS.v
 
 TargetMP/Monitor.v

@@ -3,16 +3,10 @@ Require Import ZArith.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Maps.
+Require Import SFIUtil.
 
 Require Import QuickChick.QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
-
-Require Export ExtLib.Structures.Monads.
-Export MonadNotation.
-Open Scope monad_scope.
-
-Require Import Coq.Strings.String.
-Local Open Scope string.
 
 From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
 
@@ -49,7 +43,6 @@ Module RiscMachine.
     Close Scope N_scope.
     
     Definition NO_REGISTERS : nat := 33.
-
     
     (* Definition IS_NOT_SFI_REGISTER (reg:N) := reg < 26. *)
     (* Definition IS_SFI_REGISTER (reg:N) := reg > 25. *)
@@ -71,17 +64,15 @@ Module RiscMachine.
       | r :: l' => (r = Z0 )/\ is_zero l'
       end.
 
-    Definition zero : t := repeat Z0 Register.NO_REGISTERS.
+    Definition reset_all : t := repeat Z0 Register.NO_REGISTERS.
 
     Definition set_register (reg : Register.t) (val : value)
                (gen_regs  : t) : t :=
-      (* TODO fix this *)
       Util.Lists.update gen_regs (N.to_nat reg) val.
 
 
-    Definition get_register (reg : Register.t) (gen_regs : t) : value :=
-      (* TODO fix this *)
-      nth (N.to_nat reg) gen_regs Z0.
+    Definition get_register (reg : Register.t) (gen_regs : t) : option value :=
+      ListUtil.get (N.to_nat reg) gen_regs.
 
   End RegisterFile.
 
@@ -129,10 +120,10 @@ Module RiscMachine.
     Definition get_word (mem : t) (ptr : address) : option word :=
       BinNatMap.find ptr mem.
 
-    Definition get_value (mem : t) (ptr : address) : value :=
+    Definition get_value (mem : t) (ptr : address) : option value :=
       match get_word mem ptr with
-      | Some (Data val) => val
-      | _ => Z0 (* might need to deal with an instruction here*) 
+      | Some (Data val) => Some val
+      | _ => None (* might need to deal with an instruction here*) 
       end.
 
     Definition set_value (mem : t) (ptr : address) (val : value) : t :=
@@ -197,33 +188,17 @@ Module Env.
 
   Definition get_component_name_from_id (id : SFIComponent.id)
              (G : t): option Component.id :=
-    let id_nat := N.to_nat id in 
-    match id_nat with
-    | O => None
-    | S _ => 
-      let fix aux id_nat l :=
-          match (id_nat,l) with
-          | (S id'', x::ls) => aux id'' ls
-          | (O, x::_) => Some x
-          | ( _, []) => None
-          end in aux id_nat (fst G)
-    end.
+    ListUtil.get (N.to_nat id) (fst G).
 
   Definition get_procedure (addr : RiscMachine.address)
              (G : Env.t) : option Procedure.id :=
-    let fix aux addr l :=
-        match l with
-        | [] => None
-        | (addr',p)::ls => if (N.eqb addr addr') then Some p
-                           else aux addr ls
-        end in aux addr (snd G).
-
-  Close Scope monad_scope.
+    ListUtil.get_by_key (N.eqb) addr (snd G).
 
   Definition eq_dec_env_t:
     forall g1 g2 : t,  {g1 = g2} + {g1 <> g2}.
   Proof.
     repeat decide equality. Defined.
+  
 End Env.
 
 
@@ -262,10 +237,6 @@ Module MachineState.
 
   Definition t := RiscMachine.Memory.t * RiscMachine.pc * RiscMachine.RegisterFile.t.
 
-  (* Instance dec_t (s1 s2 : t) : Dec (s1 = s2). *)
-  (* Proof. *)
-  (*   apply Build_Dec. unfold ssrbool.decidable. *)
-  
 End MachineState.
 
 
