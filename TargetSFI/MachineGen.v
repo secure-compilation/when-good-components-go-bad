@@ -1,4 +1,6 @@
 Require Import ZArith.
+Require Import Coq.Lists.List.
+Require Import Coq.Strings.String.
 
 Require Import Common.Definitions.
 Require Import Common.Util.
@@ -6,19 +8,18 @@ Require Import Common.Maps.
 
 Require Import TargetSFI.Machine.
 
-Require Import Env.
-
 Require Import QuickChick.QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 
 Require Export ExtLib.Structures.Monads.
 Export MonadNotation.
 Open Scope monad_scope.
-
-Require Import Coq.Strings.String.
 Local Open Scope string.
 
 Require Import CompCert.Events.
+
+Import Env.
+Import SFIComponent.
 
 Definition show_pos (p : positive) := show_nat (Pos.to_nat p).
 
@@ -75,3 +76,34 @@ Instance show_state : Show MachineState.t :=
   |}.
 
 (* TODO Arbitrary *)
+(* Generates a list of COMP_MAX+1 distinct elements *)
+(* TODO Use UPenn MetaLibrary *)
+Open Scope nat_scope.
+Open Scope list_scope.
+
+Theorem decComponentId: forall x y : Component.id, {x = y} + {x <> y}.
+Proof. decide equality. Defined.
+
+Definition cut_list (l : list Component.id) : list Component.id :=
+  let fix gen_seq len :=
+      match len with
+      | O => [ (Pos.of_nat 1) ]
+      | S len' => (gen_seq len') ++ [ Pos.of_nat (len+1) ]
+      end
+  in
+  let len:nat := (N.to_nat COMP_MAX) + 1 in
+  let l' : (list Component.id) := (List.nodup decComponentId l) in 
+  if ( len <=? (List.length l') )
+  then (List.firstn len l') 
+  else (gen_seq len).
+
+
+Instance genCN : Gen Env.CN :=
+  {
+    arbitrary :=
+      let len:nat := (N.to_nat COMP_MAX) + 1 in
+      liftGen cut_list (liftGen (map Pos.of_nat) (vectorOf (2*len) (choose (0,3*len))))
+  }.
+Close Scope nat_scope.
+
+(* Sample arbitrary. *)

@@ -1,9 +1,13 @@
-Require Import ZArith.
-Require Import List.
+Require Import Coq.ZArith.ZArith.
+Require Import Coq.Lists.List.
+Require Import Coq.Init.Logic.
 
 Require Import CompCert.Events.
 Require Import Common.Definitions.
 Require Import TargetSFI.Machine.
+
+Require Import TargetSFI.MachineGen.
+Require Import QuickChick.Decidability.
 
 Require Export Lib.Monads.
 Export MonadNotations.
@@ -27,16 +31,16 @@ Module CS.
   Definition ret_trace (G : Env.t) (pc pc' : RiscMachine.pc)
              (gen_regs : RiscMachine.RegisterFile.t) : option trace :=
     do rcomval <-  RegisterFile.get_register Register.R_COM gen_regs;
-    do cpc <-  get_component_name_from_id (SFI.C_SFI pc) G;
-    do cpc' <- get_component_name_from_id (SFI.C_SFI pc') G;
+    do cpc <-  Env.get_component_name_from_id (SFI.C_SFI pc) G;
+    do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
     Some [ERet cpc rcomval cpc'].
 
   Definition call_trace (G : Env.t) (pc pc' : RiscMachine.pc)
              (gen_regs : RiscMachine.RegisterFile.t) : option trace :=
     do rcomval <- RegisterFile.get_register  Register.R_COM gen_regs;
-    do cpc <-  get_component_name_from_id (SFI.C_SFI pc) G;
-    do cpc' <- get_component_name_from_id (SFI.C_SFI pc') G;
-    do p <- get_procedure pc' G;
+    do cpc <-  Env.get_component_name_from_id (SFI.C_SFI pc) G;
+    do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
+    do p <- Env.get_procedure pc' G;
     Some [ECall cpc p rcomval cpc'].
   
   Inductive step (G : Env.t) :
@@ -190,14 +194,14 @@ Module CS.
     | None => None
     end.
 
+  Conjecture eval_step_complete :
+    forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
+      (step G st t st') -> (eval_step G st = Some (t, st')).
 
-  Conjecture eval_step_complete : forall G st t st',
-      step G st t st' -> eval_step G st = Some (t, st').
-
-  (* Instance dec_eval_step_complete (G : global_env) (st : state) *)
-  (*          (t : trace) (st' : state) : Dec (eval_step_complete G st t st'). *)
-  (* Proof. Amitted. *)
-
+  Conjecture eval_step_sound:
+    forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
+      eval_step G st = Some (t, st') -> step G st t st'.
+  
   Close Scope monad_scope.
 
 

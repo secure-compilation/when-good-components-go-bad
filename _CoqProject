@@ -40,6 +40,7 @@ TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
 TargetSFI/MachineGen.v
 TargetSFI/CS.v
+TargetSFI/CSTest.v
 
 TargetMP/Monitor.v
 TargetMP/Machine.v

@@ -1,4 +1,5 @@
-Require Import ZArith.
+Require Import Coq.ZArith.ZArith.
+Require Import Coq.Structures.Equalities.
 
 Require Import Common.Definitions.
 Require Import Common.Util.
@@ -176,7 +177,7 @@ Module SFIComponent.
 
 End SFIComponent.
 
-Module Env.
+Module Env  <: UsualDecidableType.
 
   (* list of dimension COMP_MAX + 1 *)
   Definition CN := list Component.id.
@@ -194,10 +195,12 @@ Module Env.
              (G : Env.t) : option Procedure.id :=
     ListUtil.get_by_key (N.eqb) addr (snd G).
 
-  Definition eq_dec_env_t:
+  Definition eq_dec:
     forall g1 g2 : t,  {g1 = g2} + {g1 <> g2}.
   Proof.
     repeat decide equality. Defined.
+
+  Include HasUsualEq <+ UsualIsEq.
   
 End Env.
 
