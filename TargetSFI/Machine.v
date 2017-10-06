@@ -127,12 +127,30 @@ Module RiscMachine.
       | _ => None (* might need to deal with an instruction here*) 
       end.
 
+    
     Definition set_value (mem : t) (ptr : address) (val : value) : t :=
       BinNatMap.add ptr (Data val) mem.
+
+    Definition set_instr (mem : t) (ptr : address) (i : ISA.instr) : t :=
+      BinNatMap.add ptr (Instruction i) mem.
+
 
     Definition to_address (ptr:value) : address :=
       (* negatives are converted to zero *)
       Z.to_N ptr.
+
+    Definition empty : t := BinNatMap.empty word.
+
+    Definition get_used_addresses (mem : t) :=
+      BinNatMap.fold (fun key elt acc => key::acc) mem nil.
+
+    Definition filter_used_addresses (mem : t) (filter : address -> bool) :=
+      BinNatMap.fold (fun key elt acc =>
+                        if (filter key)
+                        then key::acc
+                        else acc)
+                     mem nil.
+      
     
   End Memory.
 
@@ -172,9 +190,6 @@ Module SFIComponent.
 
   Definition id := N.
 
-    (* Maximum number of components *)
-  Definition COMP_MAX:N := 3.
-
 End SFIComponent.
 
 Module Env  <: UsualDecidableType.
@@ -210,11 +225,16 @@ Module SFI.
   (* Number of bits used for offset within slot *)
   Definition OFFSET_SIZE:N := 12.
 
-  Definition COMPONENT_MASK : N := 2^SFIComponent.COMP_MAX - 1. 
+  Definition CID_SIZE:N := 2.
+  
+  Definition COMPONENT_MASK : N := 2^CID_SIZE - 1.
+
+  (* Maximum number of components *)
+  Definition COMP_MAX:N := 2^CID_SIZE.
+
 
   Definition C_SFI (addr : RiscMachine.address) : SFIComponent.id  := 
     N.land (N.shiftl addr OFFSET_SIZE) COMPONENT_MASK.
-
 
   Record program :=
     {
@@ -224,7 +244,12 @@ Module SFI.
       prog_interface : Program.interface
     }.
 
-
+  Open Scope N_scope.
+  Definition get_max_offset : N := 2^OFFSET_SIZE-1.
+  Definition address_of (cid : SFIComponent.id) (bid off: N) : RiscMachine.address :=
+    bid * 2^(CID_SIZE+OFFSET_SIZE)+cid*2^OFFSET_SIZE+off.
+  Close Scope N_scope.
+  
   Definition is_same_component (addr1: RiscMachine.address)
              (addr2: RiscMachine.address) : Prop :=
     (C_SFI addr1) = (C_SFI addr2).
@@ -234,11 +259,20 @@ Module SFI.
              (addr2: RiscMachine.address) :=
     N.eqb (C_SFI addr1) (C_SFI addr2).
 
+  Definition is_code_address  (addr : RiscMachine.address) : bool :=
+    (* TODO *) true.
+
 End SFI.
 
 Module MachineState.
 
   Definition t := RiscMachine.Memory.t * RiscMachine.pc * RiscMachine.RegisterFile.t.
+
+  Definition getMemory (st : t) : RiscMachine.Memory.t := fst (fst st).
+
+  Definition getPC (st : t) : RiscMachine.pc := snd (fst st).
+
+  Definition getRegs (st : t) :  RiscMachine.RegisterFile.t := snd st.
 
 End MachineState.
 
