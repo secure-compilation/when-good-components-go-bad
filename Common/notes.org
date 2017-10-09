@@ -1,0 +1,132 @@
+CompCert's definitions:
+CCFR: P ⇓ₛ b => P↓ ⇓ₜ b ‌\/ b=b';UB P↓ ⇓ₜ b';b''       Compile Correctness Forward Refined bad for security 
+CCBR: P↓ ⇓ₜ b => P ⇓ₛ b \/ P ⇓ₛ pref(b);UB            Compile Correctness Forward Refined better for security, no extra b 
+CCBD: P↓ ⇓ₜ b => P ⇓ₛ b \/ (P ⇓ₛ pref(b);UB /\ ∃P'. P' ⇓ₛ b)  Compile Correctness Backward and Defined better for security
+
+We can extract the extra condition as definability:
+DEF: P ⇓ₜ b => ∃P'. P'⇓ₛ b
+
+In principle there is no need to talk about compilation, definability
+can be seen as a property of the behaviors that we chose to link the
+two semantics. It is true for every program.
+We can weaken it and prove it only for compiled programs, probably
+useful is Nora's backend. In that case only compiled programs can be
+backmapped. Def without CC means that ↓ can compile a program P like
+it was another program P'. The compiler in general will never produce
+something that is not expressable in the source, independently of what
+program you start with.
+
+Some simple implications:
+CCBR + DEF => CCBD
+CCB => Def
+
+
+Partial Definability
+PDEF: PP ⇓ₜ b  => ∃PP'. PP'⇓ₛ b
+PDEF on all components implies DEF on whole programs: WP ⇓ₜ b  =>? ∃WP'. WP'⇓ₛ b
+WP ⇓ₜ b => ⋈(p₁,...,pₙ) ⇓ₜ b 
+       =>DEC ∀pᵢ. pᵢ ⇓pt b 
+       =>PDef ∀pᵢ. ∃Pᵢ'. Pᵢ' ⇓ps b 
+       =>COMP ⋈(P₁',...,Pₙ') ⇓ₛ b 
+       => WP'⇓ₛ b
+TODO: If there is UB in b (e.g. if we are at intermediate instead of
+target) then we need to use DECR and recheck the proof
+
+
+If we want to have UB in a language then we need to add refinement to its decomposition.
+If the context does UB then the partial context refines it.
+DECR: ∀C. C[P] ⇓ b => P ⇓{C} b' /\ (b'=b ‌\/ b=pref(b');UB(C))       (note that P can do UB, there is no refinement for P)
+
+Simmetrically we defined composition with a refinement:
+COMPR: C ⇓{P} b /\ P ⇓{C} b => C[P] ⇓ b
+TODO CHECK ALL UB CASES
+
+
+Definability on the same level (the old definability):
+DEFS: P ⇓{C} b => ∃C. C[P] ⇓ b      (on the Same level. P can do UB and C cannot)
+
+
+Satisfaction WP ⇓b => b∈π
+e.g. π = { b | a ∉b }
+     this is definable only if WP is defined, and so are other properties (liveness etc).
+
+e.g. if we use a approximate static analysis which tells us that WP
+     doesn't UB at least for 3 steps, we can prove the following:
+     π = { b | pref(b,3)=abc }
+     this property is preserved by CCBR (CompCert)
+the only properties that can be defined over a whole program with UB are
+those that assumes that program doesn't UB before a certain length.
+This is a very weird property to write and explain, it is very hard to sell dynamic compromise...
+
+
+Partial Satisfaction
+P ⇓{C} b => b∈πₚ
+e.g. π = { b | ∀t ∈ filter(b,P), t ∈ π' }
+     this is definable only if P is defined, and so are all other properties (liveness etc).
+
+the only properties that can be defined over a partial program with UB
+are those that assumes that the program doesn't UB before a certain
+length, starting from some of its entrypoints.
+e.g. if we use a approximate static analysis which tells us that P
+     doesn't UB at least for 3 steps in proc D, we can prove the following:
+     seq(b,P) = { t | ∃t∈P a∉P D C≠P,  (t is a trace and a is an action, D is a procedure of P)
+                      t;a ∈ pref(b) \/                  //P starts
+                      C Call P.D;t;a ∈ subst(b) ‌\/      //C calls P
+                      C Retn P.D;t;a ∈ subst(b) }       //C returns to P
+     π = { b | ∀t ∈ seq(b,P), pref(t, 3) ∈ π' }
+     this property is preserved by PCCBR, even if after the first 3 actions P produces UB.
+
+
+Preservation of partial satisfaction:
+PCCBR: P↓ ⇓ₜ{C} b => P ⇓ₛ{C} b \/ P ⇓ₛ{C} pref(b);UB(P)                   Partial Compile Correctness Backward and Refined
+PCCBD: P↓ ⇓ₜ{C} b => P ⇓ₛ{C} b \/ (P ⇓ₛ{C} pref(b);UB(P) /\ ∃P'. P' ⇓ₛ{C} b)  Partial Compile Correctness Backward and Defined
+
+
+Catalin's example:
+Applying DEF and CCBR to the whole program is not enough to prevent a
+bad behavior.
+It is possible to have a bad behavior at the target if we use only
+CCBR, as a result of a refinement:
+⋈(Ctrusted, Cuntrusted)↓ ⇓ₜ b_bad =>CCBR
+let P=⋈(Ctrusted, Cuntrusted) in P ⇓ₛ b \/ P ⇓ₛ pref(b);UB(Cuntrusted)
+And that behavior can be picked up by definability.
+⋈(Ctrusted, Cuntrusted)↓ ⇓ₜ b_bad ⇒ ∃P'. P' ⇓ₛ b_bad
+The intuition is that an UB in any component makes the others lose
+guarantees, even if they are f.d.
+
+We need to apply a finer notion, PCCBR.
+The intuition is that because we have correct compilation the
+behaviors at target cannot be bad, so the example doesn't apply.
+P FD and robustly satisfies π: ∀C. C[P] ⇓b => b ∈ π
+b_bad ∉ π
+C↓[P↓] ⇓ₜ b_bad
+=>DEC P↓ ⇓ₜ{C} b_bad
+=>PCCBR P ⇓ₛ{C} b_bad   (because P is verified we can do only one case)
+=>DEFS ∃C'. C'[P] ⇓ₛ b_bad
+This is a contradiction because P robustly satisfies π.
+
+The same holds from intermediate with UB
+C↓[P↓] ⇓ᵢ b_bad
+=>DECR P↓ ⇓ᵢ{C} b' /\ (b'=b_bad ‌\/ b_bad=pref(b');UB(C))
+=>PCCBR P ⇓ₛ{C} b' (because P is verified we can do only one case)
+=>DEFS ∃C'. C'[P] ⇓ₛ b'
+This should be a contradiction because if b_bad is not in π, the same
+should hold for any of its refinements.
+
+
+What if P is not verified?
+C↓[P↓] ⇓ᵢ b_bad
+=>DECR P↓ ⇓ᵢ{C} b' /\ (b'=b_bad ‌\/ b_bad=pref(b');UB(C))
+=>PCCBR P ⇓ₛ{C} b'' /\ (b''=b' \/ b''=pref(b');UB(P))
+=>DEFS ∃C'. C'[P] ⇓ₛ ??
+Is this a contradiction? What is the connection between b_bad and b''?
+
+
+What if P is not verified and we use PCCBD?
+C↓[P↓] ⇓ᵢ b_bad
+=>DECR P↓ ⇓ᵢ{C} b' /\ (b'=b_bad ‌\/ b_bad=pref(b');UB(C))
+=>PCCBD P ⇓ₛ{C} b' \/ (P ⇓ₛ{C} pref(b');UB(P) /\ ∃P'. P' ⇓ₛ{C} b)
+left=>DEFS ∃C'. C'[P] ⇓ₛ b'??
+right=>DEFS ∃C'. C'[P] ⇓ₛ b'??
+
+Is this a contradiction? What is the connection between b_bad and b''?
