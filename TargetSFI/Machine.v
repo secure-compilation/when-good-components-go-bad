@@ -54,6 +54,8 @@ Module RiscMachine.
   End Register.
 
   Definition pc : Set := address.
+
+  Definition PC0 : pc := N0.
   
   Module RegisterFile.
     
@@ -105,6 +107,11 @@ Module RiscMachine.
     | IJal : address -> instr
     (* termination *)
     | IHalt : instr.
+
+    Theorem instr_eq_dec:
+      forall i1 i2 : instr,  {i1 = i2} + {i1 <> i2}.
+    Proof.
+      repeat decide equality. Defined.
     
   End ISA.
 
@@ -262,6 +269,11 @@ Module SFI.
   Definition is_code_address  (addr : RiscMachine.address) : bool :=
     (* TODO *) true.
 
+
+  Definition is_data_address  (addr : RiscMachine.address) : bool :=
+    negb (is_code_address addr).
+
+
 End SFI.
 
 Module MachineState.
@@ -273,6 +285,9 @@ Module MachineState.
   Definition getPC (st : t) : RiscMachine.pc := snd (fst st).
 
   Definition getRegs (st : t) :  RiscMachine.RegisterFile.t := snd st.
+
+  Definition empty : t := (RiscMachine.Memory.empty, RiscMachine.PC0,
+                           RiscMachine.RegisterFile.reset_all).
 
 End MachineState.
 

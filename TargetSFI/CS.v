@@ -1,12 +1,14 @@
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Lists.List.
 Require Import Coq.Init.Logic.
+Require Import Coq.Structures.Equalities.
+
+From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
 
 Require Import CompCert.Events.
 Require Import Common.Definitions.
 Require Import TargetSFI.Machine.
 
-Require Import TargetSFI.MachineGen.
 Require Import QuickChick.Decidability.
 
 Require Export Lib.Monads.
@@ -27,6 +29,7 @@ Module CS.
 
   Import MonadNotations.
   Open Scope monad_scope.
+
   
   Definition ret_trace (G : Env.t) (pc pc' : RiscMachine.pc)
              (gen_regs : RiscMachine.RegisterFile.t) : option trace :=
@@ -35,6 +38,7 @@ Module CS.
     do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
     Some [ERet cpc rcomval cpc'].
 
+  
   Definition call_trace (G : Env.t) (pc pc' : RiscMachine.pc)
              (gen_regs : RiscMachine.RegisterFile.t) : option trace :=
     do rcomval <- RegisterFile.get_register  Register.R_COM gen_regs;
@@ -42,6 +46,7 @@ Module CS.
     do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
     do p <- Env.get_procedure pc' G;
     Some [ECall cpc p rcomval cpc'].
+
   
   Inductive step (G : Env.t) :
     MachineState.t -> trace-> MachineState.t -> Prop :=
@@ -127,7 +132,7 @@ Module CS.
       ~SFI.is_same_component pc pc'->
       step G (mem,pc,gen_regs) t (mem,pc',gen_regs').
 
-
+  
   Definition eval_step (G : Env.t) (s : MachineState.t)
     : option (trace * MachineState.t) :=
     
@@ -194,10 +199,12 @@ Module CS.
     | None => None
     end.
 
+  
   Conjecture eval_step_complete :
     forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
       (step G st t st') -> (eval_step G st = Some (t, st')).
 
+  
   Conjecture eval_step_sound:
     forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
       eval_step G st = Some (t, st') -> step G st t st'.

@@ -1,29 +1,39 @@
-Set Implicit Arguments.
 
-Require Import ZArith.
-Require Import Coq.Lists.List.
+Require Import Coq.Arith.Arith.
+Require Import Coq.ZArith.ZArith.
+Require Import Coq.omega.Omega.
+Require Coq.Bool.Bool.
+Require Import Coq.Lists.List. Import ListNotations.
+Require Import List ZArith.
+
+From QuickChick Require Import QuickChick.
+Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
+Import GenLow GenHigh.
+(* Suppress some annoying warnings: *)
+Set Warnings "-extraction-opaque-accessed,-extraction".
+
+Require Export ExtLib.Structures.Monads.
+Export MonadNotation.
+Open Scope monad_scope.
+
 Require Import Coq.Strings.String.
-Require Import Notations.
+Local Open Scope string.
 
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Maps.
 
 Require Import TargetSFI.Machine.
-
-Require Import QuickChick.QuickChick.
-Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
-
-Require Export ExtLib.Structures.Monads.
-Export MonadNotation.
-Open Scope monad_scope.
-Local Open Scope string.
+Require Import TargetSFI.CS.
 
 Require Import CompCert.Events.
 
 Import Env.
 Import SFIComponent.
+Import RiscMachine.
+Import CS.
 
+Open Scope string_scope.
 Definition show_pos (p : positive) := show_nat (Pos.to_nat p).
 
 Definition show_N ( n : N ) := show_nat (N.to_nat n).
@@ -75,7 +85,7 @@ Instance show_state : Show MachineState.t :=
                      ++ "registers: " ++ (show gen_regs)
                      (* TODO print memory *)                     
   |}.
-
+Close Scope string_scope.
 
 (* TODO Use UPenn MetaLibrary *)
 
@@ -160,7 +170,7 @@ Definition genAddresses (frecv_code : nat) (frecv_data : nat) :
 Definition genAddressesForCid (frecv_code : nat) (frecv_data : nat) cid :
   G (list RiscMachine.address) :=
   let how_many : nat := plus frecv_code frecv_data in
-  (* generate a 1ist of 10 addresses with generated block id and offset and given cid *)
+  (* generate a 1ist of how_many addresses with generated block id and offset and given cid *)
   liftGen
     (List.map (fun '(bid,off) => SFI.address_of cid bid off))
     (genBlockOffsetPairs frecv_code frecv_data).
@@ -195,10 +205,18 @@ Instance genE : Gen Env.E :=
 (*******************************
  * Env Generator
  *******************************)
-Instance genEnv : Gen Env.t :=
+
+Definition genEnv : G Env.t := liftGen2 pair arbitrary arbitrary.
+
+Instance genEnvInst : Gen Env.t :=
   {
-    arbitrary := liftGen2 pair arbitrary arbitrary
+    arbitrary := genEnv
   }.
+
+(*******************************
+ * MachineState Generator
+ *******************************)
+Import RiscMachine.ISA.
 
 Instance genReg : Gen RiscMachine.Register.t :=
   {
@@ -216,12 +234,6 @@ Instance genReg : Gen RiscMachine.Register.t :=
                          ; RiscMachine.Register.R_T
                          ; RiscMachine.Register.R_D ]
   }.
-
-
-(*******************************
- * MachineState Generator
- *******************************)
-Import RiscMachine.ISA.
 
 Instance genValue : Gen RiscMachine.value :=
   {
@@ -290,8 +302,10 @@ Definition genInstr (addresses : list RiscMachine.address) : G instr :=
           ; (returnGen IHalt)
         ].
                          
-Definition genMemForAddresses (addresses : list RiscMachine.address) : G RiscMachine.Memory.t :=
-  let how_many : nat := List.length addresses in
+Definition genMemForAddresses (g : Env.t)
+           (addresses : list RiscMachine.address) : G RiscMachine.Memory.t :=
+  let env_addresses := List.map fst (snd g) in (* add env addresses to the memory *)
+  let how_many : nat := List.length (addresses++env_addresses) in
   liftGen (fun (lst : list (RiscMachine.address*(RiscMachine.value*RiscMachine.ISA.instr))) =>
              List.fold_left
                        (fun mem '(address, (val, i)) =>
@@ -310,20 +324,158 @@ Definition genMemForAddresses (addresses : list RiscMachine.address) : G RiscMac
                     (liftGen2 pair
                               (vectorOf how_many arbitrary)
                               (vectorOf how_many (genInstr addresses)))).
-  (* returnGen RiscMachine.Memory.empty. *)
-  
 
 Open Scope nat_scope.
-Instance genMem : Gen RiscMachine.Memory.t :=
-  {
-    arbitrary := 
-      let frecv_code := 50 in
-      let frecv_data := 50 in
-      let how_many : nat := frecv_code + frecv_data in
-      bindGen (genAddresses frecv_code frecv_data) genMemForAddresses
-  }.
+Definition genMem (g : Env.t) : G RiscMachine.Memory.t :=
+  let frecv_code := 50 in
+  let frecv_data := 50 in
+  let how_many : nat := frecv_code + frecv_data in
+  bindGen (genAddresses frecv_code frecv_data) (genMemForAddresses g).
 Close Scope nat_scope.
-                    
+
+Definition genPCFromMem (mem : RiscMachine.Memory.t) : G RiscMachine.pc :=
+  (* pc is a random code address *)
+  elements N0 (RiscMachine.Memory.filter_used_addresses mem SFI.is_code_address).
+
+Definition genRegsAddress (mem : RiscMachine.Memory.t)
+           (rptr : RiscMachine.Register.t) (code : bool) : G RiscMachine.RegisterFile.t :=
+  let genVal : G RiscMachine.value := arbitrary in
+  let rptr_nat := N.to_nat rptr in
+  liftGen3 (fun l1 l2 l3 => l1 ++ l2 ++ l3)
+           (vectorOf (rptr_nat - 1) genVal)
+           (vectorOf 1 (if code
+           then
+             elements Z0 (List.map
+                            Z.of_N
+                            (RiscMachine.Memory.filter_used_addresses mem SFI.is_code_address))
+           else
+             elements Z0 (List.map
+                            Z.of_N 
+                            (RiscMachine.Memory.filter_used_addresses mem SFI.is_data_address))))
+           (vectorOf (RiscMachine.Register.NO_REGISTERS - rptr_nat) genVal). 
+
+Definition genRegsFromMemPC (mem : RiscMachine.Memory.t) (pc : RiscMachine.pc)
+  : G RiscMachine.RegisterFile.t :=
+  (* the register values are random with some care for the cases when I need valid addresses *)
+  match RiscMachine.Memory.get_word mem pc with
+  | Some (RiscMachine.Instruction (ILoad rptr rs)) => genRegsAddress mem rptr false
+  | Some (RiscMachine.Instruction (IStore rptr rd)) => genRegsAddress mem rptr false
+  | Some (RiscMachine.Instruction (IJump rt)) => genRegsAddress mem rt true
+  | _ => vectorOf RiscMachine.Register.NO_REGISTERS arbitrary
+  end.
+
+
+Definition genStateForEnv (g : Env.t) : G MachineState.t :=
+  (*  (RiscMachine.Memory.t * RiscMachine.pc) * RiscMachine.RegisterFile.t. *)
+  let memGen := (genMem g) in
+  let pcGen := 
+      bindGen memGen (fun mem => genPCFromMem mem) in
+  let regsGen := 
+      bindGen (liftGen2 pair memGen pcGen)
+              (fun '(mem,pc) => genRegsFromMemPC mem pc) in
+  (liftGen2 pair
+            (liftGen2 pair memGen pcGen)
+            regsGen).
+  
+
+Definition genTrace (g : Env.t) (st : MachineState.t): G trace :=
+  let mem :=  MachineState.getMemory st in
+  let pc := MachineState.getPC st in
+  let regs := MachineState.getRegs st in
+  match RiscMachine.Memory.get_word mem pc with
+  | Some (RiscMachine.Instruction (IJump rt)) => (* possible ret event *)
+    match RegisterFile.get_register rt regs with
+    | Some addr =>
+      let pc' := Memory.to_address addr in
+      if (SFI.is_same_component_bool pc pc') 
+      then returnGen E0
+      else
+        match (ret_trace g pc pc' regs) with
+        | Some t => returnGen t
+        | _ => returnGen E0 (* TODO this is actually error *)
+        end
+    | None => (* TODO this is actually error *) returnGen E0
+    end
+  | Some (RiscMachine.Instruction (IJal imm)) => (* possible call event *)
+      if (SFI.is_same_component_bool pc imm)
+      then returnGen E0
+      else
+        match (call_trace g pc imm regs) with
+        | Some t => returnGen t
+        | _ => returnGen E0 (* TODO this is actually error *)
+        end
+  | _ => returnGen E0
+  end.
+
+
+Definition update_mem (mem : Memory.t) (instr : ISA.instr) (regs : RegisterFile.t) : Memory.t :=
+  match instr with
+  | IStore reg_src reg_dst =>
+    match RegisterFile.get_register reg_src regs with
+    | Some addr => let ptr :=  Memory.to_address addr in
+      match  RegisterFile.get_register reg_src regs with
+      | Some val => Memory.set_value mem ptr val
+      | _ => mem (* TODO this is actually error *)
+      end
+    | _ => mem  (* TODO this is actually error *)
+    end
+  | _ => mem
+  end.
+
+Open Scope Z_scope.
+Definition update_pc (mem : Memory.t) (instr : ISA.instr) (pc : RiscMachine.pc)
+           (regs : RegisterFile.t) : RiscMachine.pc :=
+  match instr with
+  | IJump rt =>
+    match RegisterFile.get_register rt regs with
+    | Some addr => Memory.to_address addr 
+    | _ => pc  (* TODO this is actually error *)
+    end
+  | IJal imm => imm
+  | IBnz reg offset =>
+    match RegisterFile.get_register reg regs with
+    | Some flag =>
+      if (Z.eqb flag Z0) then pc
+      else Memory.to_address ((Z.of_N pc) + offset)
+    | _ => pc
+    end
+  | _ => pc
+  end.
+Close Scope Z_scope.
+
+
+Definition update_regs (mem : Memory.t) (instr : ISA.instr)  (pc : RiscMachine.pc)
+           (regs : RegisterFile.t) : RegisterFile.t :=
+  match instr with
+  | IConst val reg =>  RegisterFile.set_register reg val regs
+  | ILoad rptr rd =>
+    match RegisterFile.get_register rptr regs with
+    | Some addr =>
+      let ptr :=  Memory.to_address addr in
+      match Memory.get_value mem ptr with
+      | Some val => RegisterFile.set_register rd val regs
+      | _ => regs
+      end
+    | _ => regs  (* TODO this is actually error *)
+    end
+  (* TODO Finish here *)
+  | _ => regs
+  end.
+
+
+
+Definition genNextState (g : Env.t) (st : MachineState.t) (t : trace) : G MachineState.t :=
+  let mem :=  MachineState.getMemory st in
+  let pc := MachineState.getPC st in
+  let regs := MachineState.getRegs st in
+  match RiscMachine.Memory.get_word mem pc with
+  | Some (Instruction instr) =>
+    returnGen ( (update_mem mem instr regs,
+                 update_pc mem instr pc regs), update_regs mem instr pc regs)
+  | _ => returnGen ( (mem,pc), regs)  (* TODO this is actually error *)
+  end.
+           
+  
 (*
 Sample arbitrary.
 Check arbitrary.
