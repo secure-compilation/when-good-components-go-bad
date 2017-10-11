@@ -1,3 +1,5 @@
+* Original
+
 CompCert's definitions:
 CCFR: P ⇓ₛ b => P↓ ⇓ₜ b ‌\/ b=b';UB P↓ ⇓ₜ b';b''       Compile Correctness Forward Refined bad for security 
 CCBR: P↓ ⇓ₜ b => P ⇓ₛ b \/ P ⇓ₛ pref(b);UB            Compile Correctness Forward Refined better for security, no extra b 
@@ -130,3 +132,255 @@ left=>DEFS ∃C'. C'[P] ⇓ₛ b'??
 right=>DEFS ∃C'. C'[P] ⇓ₛ b'??
 
 Is this a contradiction? What is the connection between b_bad and b''?
+
+* Recap
+** Compiler Correctness
+Compiler Correctness is generally stated in terms of simulations. CompCert, for
+instance, defines it as a backward simulation with refinement. The refinement
+part is important because it permits to model several peculiarities of the C
+language, e.g. the presence of undefined behaviors at the source language.
+
+CCR (Compiler Correctness with Refinement):
+  ∀ b. P↓ ⇓ b => P ⇓ b
+               ∨ P ⇓ GoingWrong(prefix(b))
+
+By looking carefully at what this definitions says, we can notice that at the
+low level we are guaranteed to observe either the same source level behavior of
+the original program or a prefix of a source level trace terminated with
+undefined behavior. Basically, the second case tells us that we cannot rely on
+what happen after an undefined behavior, i.e. the refinement that takes place at
+the low level is arbitrary.
+
+** Compiler Correctness with definability
+A possible way to limit the damage caused by undefined behaviors could be to say
+something more about the refinement. The idea is to constrain it to what is
+possible at the source level.
+
+CCR':
+  ∀ b. P↓ ⇓ b => P ⇓ b
+               ∨ (P ⇓ GoingWrong(prefix(b)) ∧ ∃ P'. P' ⇓ b)
+
+With this new definition we are limiting the possible refinements so that they
+must be reproducible at the source level by an arbitrary program. This property,
+however, could be unsatisfactory depending on how expressive the behaviors are.
+For instance, we conjecture that CompCert already satisfies it, because its
+events are too coarse and we should always be able to exhibit a legal high-level
+program that produces them.
+
+** Robust Satisfaction and its preservation after compilation
+An interesting scenario that we can use to validate our definitions is the one in
+which we mix verified and unverified/untrusted components. Here we want to see
+to what extent our verified components maintain their desired behaviors.
+
+First of all, we must introduce the notions of linking and separate compilation.
+
+TODO define better
+
+Linking:
+  Given components C and P, their linking is represented as ⋈(C, P)
+Separate Compilation:
+  ⋈(C1, C2)↓ ⇓ b <=> ⋈(C1↓, C2↓) ⇓ b
+
+Then we can define πₚ as a set of traces whose events are only produced by P
+(the intuition being that we only talk about the events produced by P, because
+the other components are untrusted). Thus, we define what it means to robustly
+satisfy such a property πₚ for a program P at a certain level.
+
+RS (Robust Satisfaction):
+  ∀ C b. ⋈(C, P) ⇓ b => b ∈ πₚ
+Notes:
+  – this definition is fine for all levels (i.e. P and C are arbitrary programs
+    at the level of choice, which can be source or target or whatever language
+    in the middle)
+
+An additional definition that we need is the one which allows us to deal with
+verified programs that can never exhibit undefined behaviors.
+
+FD (Fully Definedness):
+  ∀ C b. ¬ (⋈(C, P) ⇓ GoingWrong(b))
+
+Robust Satisfaction is defined independently of the existence of a compiler
+between different languages. In our case, however, we are interested in
+preserving it after we have done a compilation pass on our program.  
+
+PRS (Preservation of Robust Satisfaction for fully defined programs):
+  Given P fully defined, we have
+  (∀ C b. ⋈(C, P) ⇓ b => b ∈ πₚ) => (∀ c b. ⋈(c, P↓) ⇓ b => b ∈ πₚ)
+Notes:
+  – compiler correctness is not implied by this definition
+  – this definition works only for P fully defined
+
+PRS' (Preservation of Robust Satisfaction for unsafe programs):
+  Given P that exhibits at least one undefined behavior (¬FD(P)), we have
+  (∀ C b. ⋈(C, P) ⇓ b => b ∈ πₚ) => (∀ c b. ⋈(c, P↓) ⇓ b => ∃ prefix(b) ∈ πₚ)
+Notes:
+  – compiler correctness is not implied by this definition
+  – this definition works for programs P that can exhibit undefined behavior
+
+Now that we have the main ingredients for talking about security, we can see
+that CCR and CCR' are not enough to allow this kind of preservation:
+
+  Consider TC and UC as, respectively, trusted and untrusted source level components.
+
+  TC is verified, meaning that it is fully defined, FD(TC), and it robusty
+  satisfies a property πₜ.
+
+  UC is not verified, thus it could exhibit undefined behavior at any point
+  during its execution.
+
+  Claim:
+    CCR' doesn't guarantee PRS
+  Proof:
+    Let's suppose to have observed b_bad ∉ π at the low level after having
+    compiled down TC and UC.
+      ⋈(TC↓, UC↓) ⇓ b_bad
+    by Separate Compilation
+      ⋈(TC, UC)↓ ⇓ b_bad
+    by CCR', two cases
+      1) ⋈(TC, UC) ⇓ b_bad
+         by Robust Satisfaction
+           ⋈(TC, UC) ⇓ b_bad => b_bad ∈ πₜ
+         but we know that b_bad ∉ πₜ, hence this case cannot happen.
+      2) ⋈(TC, UC) ⇓ GoingWrong(prefix(b_bad)) ∧ ∃ P'. P' ⇓ b_bad
+         Firstly, notice that the undefined behavior could have only happend
+         because of UC, since FD(TC).
+         We have two cases, either prefix(b_bad) is in πₜ or it is not.
+         – prefix(b_bad) ∉ πₜ
+           Then we have a contradiction as in (1).
+         – prefix(b_bad) ∈ πₜ
+           prefix(b_bad) doesn't contain bad actions, they happened after the
+           undefined behavior. Moreover, the existence of P' doesn't tell us
+           anything, since P' is just an arbitrary source level program that
+           doesn't have to satisfy πₜ.
+           We have been able to observe a bad trace at the low level, hence we
+           don't have the preservation of robust satisfaction.
+
+** Robust Execution
+What we would like to have is something finer-grained that, ideally, replaces
+only those components which cause problems.
+
+RE (Robust Execution):
+  ∀ ρ={p₁,...,pₙ}. ⋈(ρ) ⇓ b => ∀ pᵢ. ∃ Pᵢ. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b
+Notes:
+  – ρ is a low level program
+  – compiler correctness seems to be not required
+  – NEW_RC_DC can be obtained by instantiating ρ with both compiled (P) and
+    arbitrary (C) components and then looking just at the backmapping of C
+  – this property is more general, since it works for arbitrary low level
+    components. My intuition is that our environment of execution guarantees the
+    backmapping argument for every component, no matter where it comes from
+    (e.g. compiled or hand-written).
+
+Lemma:
+  RE => NEW_RC_DC
+Proof:
+  Given an arbitrary low level component c and a source level component P, we
+  want to show that
+    c[P↓] ⇓ b  ⇒  ∃C. C fully defined ∧ C↓[P↓] ⇓ b
+  That is, we observed c[P↓] ⇓ b and we need to exhibit a source level component
+  C such that
+    C fully defined ∧ C↓[P↓] ⇓ b
+  by RE instantiated with c and P↓, we can pick the case in which we backmap c
+    ∃ C. FD(C) ∧ C↓[P↓] ⇓ b
+
+** Preservation of Robust Satisfaction by means of CCR and RE
+Main Theorem:
+  CCR ∧ RE => PRS
+Notes:
+  – if we prove that our compiler is correct (CCR) and that our execution
+    environment is robust (RE), then it means that robust satisfaction is
+    preserved no matter what other components do (e.g. undefined behavior).
+  – each time a component exhibit an undefined behavior we replace it with a
+    fully defined one
+  – we don't backmap components which do not cause undefined behavior
+  – the proof is for two components, I suspect that for multiple components we
+    obtain something similar to Prop₁
+Proof:
+  Given a fully defined source level component P and a property πₚ, we want to show PRS:
+  We know that RS holds at the source level
+    ∀ C b. ⋈(C, P) ⇓ b => b ∈ πₚ
+  Given arbitrary c and b such that ⋈(c, P↓) ⇓ b, we have to show that b ∈ πₚ
+  by RE instantiated with c and P↓, we can pick the case in which we backmap c
+    ∃ C. FD(C) ∧ ⋈(C↓, P↓) ⇓ b
+  by Separate Compilation
+    ⋈(C, P)↓ ⇓ b
+  by CCR, two cases
+    1) ⋈(C, P) ⇓ b
+       Then by RS at the source we have b ∈ πₚ, which is what we wanted to show.
+    2) ⋈(C, P) ⇓ GoingWrong(prefix(b))
+       Notice that the undefined behavior must be caused by P, since C is fully
+       defined by construction. We reached a contradiction, since P is fully
+       defined by assumption. Hence, this case cannot happen. 
+
+Main Theorem':
+  CCR ∧ RE => PRS'
+Proof:
+  Given a source level component P and a property πₚ, we want to show PRS':
+  We know that RS holds at the source level
+    ∀ C b. ⋈(C, P) ⇓ b => b ∈ πₚ
+  Given arbitrary c and b such that ⋈(c, P↓) ⇓ b, we have to show that ∃ prefix(b) ∈ πₚ
+  by RE instantiated with c and P↓, we can pick the case in which we backmap c
+    ∃ C. FD(C) ∧ ⋈(C↓, P↓) ⇓ b
+  by Separate Compilation
+    ⋈(C, P)↓ ⇓ b
+  by CCR, two cases
+    1) ⋈(C, P) ⇓ b
+       Then by RS at the source we have b ∈ πₚ, which is what we wanted to show.
+    2) ⋈(C, P) ⇓ GoingWrong(prefix(b))
+       Notice that the undefined behavior must be caused by P, since C is fully
+       defined by construction.
+       We know that RS holds for P, hence the trace prefix(b) that we observe at
+       the source level must be in πₚ. But this is also what we wanted to prove,
+       hence we are done.
+
+** Mutual Distrust
+In the previous section we limited ourselves to a scenario with two components.
+An interesting case is the one with more than two mutually distrustful source
+level components. There are several characterization of it, the iterative one
+being the most promising.
+
+** Our Instance
+Proving RE in our context requires different ingredients:
+  1) Partial Semantics
+  1) Decomposition:
+     A whole program can be simulated by the very same program without some
+     components in the partial semantics.
+  2) Composition:
+     Two compatible partial programs that have the same behavior in
+     the partial semantics can be simulated in the complete semantics by a whole
+     program obtained by merging them.
+  3) Component Definability:
+     Given a behavior observed at the low level, we can exhibit a fully defined
+     source component which exactly reproduces it.
+  4) Forward Compiler Correctness for partial programs:
+     The compiler preserves the program semantics when we are in the partial
+     semantics.
+
+Decomposition and Composition are simulations which should be provable.
+
+Compiler Correctness for partial programs should follow from CCR.
+
+Definability is definitely the most difficult one. For finite traces we should
+be able to prove it, but for the infinite ones we have no clue about how to
+proceed. A possibility could be to give guarantees on all the finite traces that
+are prefix of an infinite behavior.
+
+*** Proof
+We want to show that
+  ∀ ρ={p₁,...,pₙ}. ⋈(ρ) ⇓ b => ∀ pᵢ. ∃ Pᵢ. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b
+That is, we have ρ such that ⋈(ρ) ⇓ b and we want to show
+  ∀ pᵢ. ∃ Pᵢ. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b
+We show the above fact for an arbitrary pᵢ ∈ ρ.
+by Decomposition
+  pᵢ ⇓{p\pᵢ} b
+by Definability
+  ∃ Pᵢ. FD(Pᵢ) ∧ Pᵢ ⇓{ρ\pᵢ} b
+by Forward Compiler Correctness for partial programs
+  Pᵢ↓ ⇓{ρ\pᵢ} b
+by Decomposition
+  ⋈(p\pᵢ) ⇓{pᵢ} b
+by Composition
+  ⋈(p\pᵢ ∪ Pᵢ↓) ⇓ b
+we have that
+  ∃ Pᵢ FD(Pᵢ) ∧ ⋈(p\pᵢ ∪ Pᵢ↓) ⇓ b
+which is what we wanted to show.
