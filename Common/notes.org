@@ -1,12 +1,91 @@
-* Original
+* Behaviors and events
+Events and traces:
+U      universe of events
+Σ ⊆ U  our language events
+Σ*     finite traces
+Σω     infinite traces
+t      is a trace
 
-CompCert's definitions:
-CCFR: P ⇓ₛ b => P↓ ⇓ₜ b ‌\/ b=b';UB P↓ ⇓ₜ b';b''       Compile Correctness Forward Refined bad for security 
-CCBR: P↓ ⇓ₜ b => P ⇓ₛ b \/ P ⇓ₛ pref(b);UB            Compile Correctness Forward Refined better for security, no extra b 
-CCBD: P↓ ⇓ₜ b => P ⇓ₛ b \/ (P ⇓ₛ pref(b);UB /\ ∃P'. P' ⇓ₛ b)  Compile Correctness Backward and Defined better for security
+Behaviors:
+db := term(t) | div(t)
+b := defined | ub(t)
 
-We can extract the extra condition as definability:
-DEF: P ⇓ₜ b => ∃P'. P'⇓ₛ b
+** Whole Program
+DEF   = { db(t) | ∃P. P⇓db(t) }                    Defined programs behaviors
+UNDEF = { ub(t') | ∃ db(t) ∈ DEF /\ t' ∈ pref(t) } Undefined program behaviors
+                                                   it is a prefix closure
+
+refDef(ub(t)) = { db(t;t₂) | db(t;t₂) ∈ DEF }
+refSig(ub(t)) = { db(t;t₂) | t₂ ∈ Σ*ω }
+refUni(ub(t)) = { db(t;t₂) | t₂ ∈ U*ω }     CompCert's guarantee
+these are postfix closures
+
+∀π ⊆ DEF ∪ UNDEF. π' is closed wrt refDef(π) => π∪π' ∈ DEF ∪ UNDEF
+∀π ⊆ DEF ∪ UNDEF. π' is closed wrt refSig(π) => π∪π' ∉ DEF ∪ UNDEF
+∀π ⊆ DEF ∪ UNDEF. π' is closed wrt refUni(π) => π∪π' ∉ DEF ∪ UNDEF
+
+Note that refDef produces refinements that respect any property that
+is valid for the semantics ⇓, for example for our instance protected
+call stack and memory protection are still valid in the refinements.
+
+*** Example of undefined property
+e.g. we have showed that our program never calls the procedure Error, this is property π₁
+     additionally we used an approximate static analysis which tells us that our program
+     doesn't UB at least for 3 steps, this is π₂
+     The global property that we can guarantee is
+     π = { b(t) | pref(t,3) ∈π₁ } which is closed wrt refDef(π₁ ∪ π₂)
+     this property is preserved by CCBR (CompCert)
+
+*** Examples of bad traces
+- in levels below our language with events Σ we might have extra events
+  that are not in Σ. Any trace with such events should be prevented by
+  the property.
+  e.g. Call Ret ... EraseHDD
+  If the system guarantees that we guarantee properties closed wrt to
+  refSig then this trace is prevented.
+- in levels below our language with events Σ we might not have the same
+  abstractions reflected on the valid sequences of events.
+  e.g. in C calls follow a stack discipline, in ASM they don't so we
+       could observe a trace  C₁ Call C₂ ; C₁ Call C₂ which is not valid 
+       at the source.
+  If the system guarantees that we guarantee properties closed wrt to
+  refDef then this trace is prevented.
+
+** Linked Program Cₛ
+each element in Σ is tagged with a component Cᵢ∈Cₛ
+filter(t,Cᵢ) = List.filter(fun (e,Pⱼ) -> Pᵢ=Pⱼ, t)
+
+Πᵢ: trace -> Prop
+πᵢ: behavior -> Prop
+TODO define π and Π with filter
+TODO π for a linked program as a composition of many πᵢ
+
+the only properties that can be defined over a partial program with UB
+are those that assumes that the program doesn't UB before a certain
+length, starting from some of its entrypoints.
+
+* Satisfaction and its preservation for whole programs
+  P satisfies a property π iff
+  P ⇓ b => b ∈ π
+* Compiler Correctness
+Compiler Correctness is generally stated in terms of simulations. CompCert, for
+instance, defines it as a backward simulation with refinement. The refinement
+part is important because it permits to model several peculiarities of the C
+language, e.g. the presence of undefined behaviors at the source language.
+
+CCR (Compiler Correctness with Refinement):
+  ∀ b. P↓ ⇓ b => P ⇓ b
+               ∨ P ⇓ GoingWrong(prefix(b))
+
+By looking carefully at what this definitions says, we can notice that at the
+low level we are guaranteed to observe either the same source level behavior of
+the original program or a prefix of a source level trace terminated with
+undefined behavior. Basically, the second case tells us that we cannot rely on
+what happen after an undefined behavior, i.e. the refinement that takes place at
+the low level is arbitrary.
+
+** Vertical definability:
+VDEF: P ⇓ₜ b => ∃P'. P'⇓ₛ b
 
 In principle there is no need to talk about compilation, definability
 can be seen as a property of the behaviors that we chose to link the
@@ -19,72 +98,60 @@ something that is not expressable in the source, independently of what
 program you start with.
 
 Some simple implications:
-CCBR + DEF => CCBD
-CCB => Def
+CCR + DEF => CCRD
+** Compiler Correctness with definability
+A possible way to limit the damage caused by undefined behaviors could be to say
+something more about the refinement. The idea is to constrain it to what is
+possible at the source level.
 
+CCRD:
+  ∀ b. P↓ ⇓ b => P ⇓ b
+               ∨ (P ⇓ GoingWrong(prefix(b)) ∧ ∃ P'. P' ⇓ b)
 
-Partial Definability
-PDEF: PP ⇓ₜ b  => ∃PP'. PP'⇓ₛ b
-PDEF on all components implies DEF on whole programs: WP ⇓ₜ b  =>? ∃WP'. WP'⇓ₛ b
-WP ⇓ₜ b => ⋈(p₁,...,pₙ) ⇓ₜ b 
-       =>DEC ∀pᵢ. pᵢ ⇓pt b 
-       =>PDef ∀pᵢ. ∃Pᵢ'. Pᵢ' ⇓ps b 
-       =>COMP ⋈(P₁',...,Pₙ') ⇓ₛ b 
-       => WP'⇓ₛ b
-TODO: If there is UB in b (e.g. if we are at intermediate instead of
-target) then we need to use DECR and recheck the proof
+With this new definition we are limiting the possible refinements so that they
+must be reproducible at the source level by an arbitrary program. This property,
+however, could be unsatisfactory depending on how expressive the behaviors are.
+For instance, we conjecture that CompCert already satisfies it, because its
+events are too coarse and we should always be able to exhibit a legal high-level
+program that produces them.
 
+TODO mention Satisfaction for complete programs ?
+** Catalin's example Guglielmo
+Now that we have the main ingredients for talking about security, we can see
+why CCR and CCRD are not enough to allow this kind of preservation:
 
-If we want to have UB in a language then we need to add refinement to its decomposition.
-If the context does UB then the partial context refines it.
-DECR: ∀C. C[P] ⇓ b => P ⇓{C} b' /\ (b'=b ‌\/ b=pref(b');UB(C))       (note that P can do UB, there is no refinement for P)
+  Consider TC and UC as, respectively, trusted and untrusted source level components.
 
-Simmetrically we defined composition with a refinement:
-COMPR: C ⇓{P} b /\ P ⇓{C} b => C[P] ⇓ b
-TODO CHECK ALL UB CASES
+  TC is verified, meaning that it is fully defined, FD(TC), and it robusty
+  satisfies a property Πₜ.
 
+  UC is not verified, thus it could exhibit undefined behavior at any point
+  during its execution.
 
-Definability on the same level (the old definability):
-DEFS: P ⇓{C} b => ∃C. C[P] ⇓ b      (on the Same level. P can do UB and C cannot)
-
-
-Satisfaction WP ⇓b => b∈π
-e.g. π = { b | a ∉b }
-     this is definable only if WP is defined, and so are other properties (liveness etc).
-
-e.g. if we use a approximate static analysis which tells us that WP
-     doesn't UB at least for 3 steps, we can prove the following:
-     π = { b | pref(b,3)=abc }
-     this property is preserved by CCBR (CompCert)
-the only properties that can be defined over a whole program with UB are
-those that assumes that program doesn't UB before a certain length.
-This is a very weird property to write and explain, it is very hard to sell dynamic compromise...
-
-
-Partial Satisfaction
-P ⇓{C} b => b∈πₚ
-e.g. π = { b | ∀t ∈ filter(b,P), t ∈ π' }
-     this is definable only if P is defined, and so are all other properties (liveness etc).
-
-the only properties that can be defined over a partial program with UB
-are those that assumes that the program doesn't UB before a certain
-length, starting from some of its entrypoints.
-e.g. if we use a approximate static analysis which tells us that P
-     doesn't UB at least for 3 steps in proc D, we can prove the following:
-     seq(b,P) = { t | ∃t∈P a∉P D C≠P,  (t is a trace and a is an action, D is a procedure of P)
-                      t;a ∈ pref(b) \/                  //P starts
-                      C Call P.D;t;a ∈ subst(b) ‌\/      //C calls P
-                      C Retn P.D;t;a ∈ subst(b) }       //C returns to P
-     π = { b | ∀t ∈ seq(b,P), pref(t, 3) ∈ π' }
-     this property is preserved by PCCBR, even if after the first 3 actions P produces UB.
-
-
-Preservation of partial satisfaction:
-PCCBR: P↓ ⇓ₜ{C} b => P ⇓ₛ{C} b \/ P ⇓ₛ{C} pref(b);UB(P)                   Partial Compile Correctness Backward and Refined
-PCCBD: P↓ ⇓ₜ{C} b => P ⇓ₛ{C} b \/ (P ⇓ₛ{C} pref(b);UB(P) /\ ∃P'. P' ⇓ₛ{C} b)  Partial Compile Correctness Backward and Defined
-
-
-Catalin's example:
+  Claim:
+    CCRD doesn't guarantee PRS
+  Proof:
+    Let's suppose to have observed ¬Πₜ(filter(trace(b_bad),P)) at the low level after having
+    compiled down TC and UC.
+      ⋈(TC↓, UC↓) ⇓ b_bad
+    by Separate Compilation
+      ⋈(TC, UC)↓ ⇓ b_bad
+    by CCRD, two cases
+      1) ⋈(TC, UC) ⇓ b_bad
+         by Robust Satisfaction
+           ⋈(TC, UC) ⇓ b_bad => Πₜ(filter(trace(b_bad), P))
+         but we know that ¬Πₜ(filter(trace(b_bad), P)), hence this case cannot happen.
+      2) ∃ pref ∈ prefixes(trace(b_bad)). ⋈(TC, UC) ⇓ GoingWrong(pref) ∧ ∃ P'. P' ⇓ b_bad
+         Firstly, notice that the undefined behavior could have only happend
+         because of UC, since FD(TC).
+         by Robust Satisfaction
+           ⋈(TC, UC) ⇓ GoingWrong(pref, C) =>
+             Πₜ(filter(trace(GoingWrong(pref, C)), P) => Πₜ(filter(pref, P))
+         therefore, it must be the case that Πₜ(filter(pref, P)) and the bad things
+         characterizing b_bad happen after the undefined behavior at the source level.
+         we have been able to observe a bad behavior of P at the low level, even
+         if P was verified!
+** Catalin's example Marco
 Applying DEF and CCBR to the whole program is not enough to prevent a
 bad behavior.
 It is possible to have a bad behavior at the target if we use only
@@ -99,8 +166,8 @@ guarantees, even if they are f.d.
 We need to apply a finer notion, PCCBR.
 The intuition is that because we have correct compilation the
 behaviors at target cannot be bad, so the example doesn't apply.
-P FD and robustly satisfies π: ∀C. C[P] ⇓b => b ∈ π
-b_bad ∉ π
+P FD and robustly satisfies π: ∀C. C[P] ⇓b => b ∈ π(P)
+b_bad ∉ π(P)
 C↓[P↓] ⇓ₜ b_bad
 =>DEC P↓ ⇓ₜ{C} b_bad
 =>PCCBR P ⇓ₛ{C} b_bad   (because P is verified we can do only one case)
@@ -114,6 +181,16 @@ C↓[P↓] ⇓ᵢ b_bad
 =>DEFS ∃C'. C'[P] ⇓ₛ b'
 This should be a contradiction because if b_bad is not in π, the same
 should hold for any of its refinements.
+
+
+
+P unverified
+C↓[P↓] ⇓ₜ b_bad
+=>DEC P↓ ⇓ₜ{C} b_bad
+=>PCCBR P ⇓ₛ{C} b_bad \/ P ⇓ₛ{C} pref(b_bad);UB(P) 
+=>DEFS ∃C'. C'[P] ⇓ₛ pref(b_bad);UB(P)
+we can guarantee up to the pref(b_bad).
+
 
 
 What if P is not verified?
@@ -133,41 +210,7 @@ right=>DEFS ∃C'. C'[P] ⇓ₛ b'??
 
 Is this a contradiction? What is the connection between b_bad and b''?
 
-* Recap
-** Compiler Correctness
-Compiler Correctness is generally stated in terms of simulations. CompCert, for
-instance, defines it as a backward simulation with refinement. The refinement
-part is important because it permits to model several peculiarities of the C
-language, e.g. the presence of undefined behaviors at the source language.
-
-CCR (Compiler Correctness with Refinement):
-  ∀ b. P↓ ⇓ b => P ⇓ b
-               ∨ P ⇓ GoingWrong(prefix(b))
-
-By looking carefully at what this definitions says, we can notice that at the
-low level we are guaranteed to observe either the same source level behavior of
-the original program or a prefix of a source level trace terminated with
-undefined behavior. Basically, the second case tells us that we cannot rely on
-what happen after an undefined behavior, i.e. the refinement that takes place at
-the low level is arbitrary.
-
-** Compiler Correctness with definability
-A possible way to limit the damage caused by undefined behaviors could be to say
-something more about the refinement. The idea is to constrain it to what is
-possible at the source level.
-
-CCR':
-  ∀ b. P↓ ⇓ b => P ⇓ b
-               ∨ (P ⇓ GoingWrong(prefix(b)) ∧ ∃ P'. P' ⇓ b)
-
-With this new definition we are limiting the possible refinements so that they
-must be reproducible at the source level by an arbitrary program. This property,
-however, could be unsatisfactory depending on how expressive the behaviors are.
-For instance, we conjecture that CompCert already satisfies it, because its
-events are too coarse and we should always be able to exhibit a legal high-level
-program that produces them.
-
-** Robust Satisfaction and its preservation after compilation
+* Robust Satisfaction and its preservation for linked programs
 An interesting scenario that we can use to validate our definitions is the one in
 which we mix verified and unverified/untrusted components. Here we want to see
 to what extent our verified components maintain their desired behaviors.
@@ -187,6 +230,11 @@ We can see it also as the set πₚ of traces for which such predicate holds.
 
 Πₚ : t -> Prop
 πₚ := { t | Πₚ(filter(t, P)) }
+
+RS Robust Satisfaction
+  ∀C. C[P]⇓b => b∈π
+TODO if π is refSig closed then this definition is enough, if we want
+  to be more explicit use the one below
 
 RS (Robust Satisfaction with Undefined Behavior):
   ∀ C b. (⋈(C, P) ⇓ b => Πₚ(filter(trace(b), P)) ∨
@@ -212,46 +260,68 @@ between different languages. In our case, however, we are interested in
 preserving it after we have done a compilation pass on our program.  
 
 PRS (Preservation of Robust Satisfaction):
+  (∀C b. C[P]⇓b => b∈π) => (∀c b. c[P↓]⇓b => b∈π)
+TODO if π is refSig closed then this definition is enough, if we want
+  to be more explicit use the one below
+
+PRS (Preservation of Robust Satisfaction):
   (∀ C b. (⋈(C, P) ⇓ b => Πₚ(filter(trace(b), P))) ∨
           (⋈(C, P) ⇓ GoingWrong(t, P) => ∀ ref. Πₚ(filter(t;ref, P)))) =>
   (∀ c b. ⋈(c, P↓) ⇓ b => Πₚ(filter(trace(b), P)))
 
-Now that we have the main ingredients for talking about security, we can see
-why CCR and CCR' are not enough to allow this kind of preservation:
+* Robust Compilation
+Starting from CCR and CCRD we can obtain the equivalent for a component using the partial semantics.
+PCCR: P↓ ⇓ₜ{C} b => P ⇓ₛ{C} b \/ P ⇓ₛ{C} pref(b);UB(P)                   Partial Compile Correctness Backward and Refined
+PCCRD: P↓ ⇓ₜ{C} b => P ⇓ₛ{C} b \/ (P ⇓ₛ{C} pref(b);UB(P) /\ ∃P'. P' ⇓ₛ{C} b)  Partial Compile Correctness Backward and Defined
 
-  Consider TC and UC as, respectively, trusted and untrusted source level components.
+We can go back to complete semantics obtaining the following
+RC4:  ∀c FD. c[P↓] ⇓ᵢ b => ∃C. C[P] ⇓ₛ b \/ C[P] ⇓ₛ pref(b);UB(P)
+RC4D: ∀c FD. c[P↓] ⇓ₜ b => ∃C. C[P] ⇓ₛ b \/ (C[P] ⇓ₛ pref(b);UB(P) /\ ∃P'. C[P'] ⇓ₛ b)
 
-  TC is verified, meaning that it is fully defined, FD(TC), and it robusty
-  satisfies a property Πₜ.
+TODO should C be defined or fully defined?
 
-  UC is not verified, thus it could exhibit undefined behavior at any point
-  during its execution.
+** proof that RC4 (plus other stuff) satisfies PRS
+Closed wrt FD context
+HR: ∀C. C[P]⇓b => ∃C' FD. C'[P]⇓b' /\ filter(b)=filter(b')
+this implies? the following which is more intuitive but less usable in the proof
+    ∀C. C[P]⇓b /\ b∈π => ∃C' FD. C'[P]⇓b' /\ b'≥b /\ b'∈π
 
-  Claim:
-    CCR' doesn't guarantee PRS
-  Proof:
-    Let's suppose to have observed ¬Πₜ(filter(trace(b_bad),P)) at the low level after having
-    compiled down TC and UC.
-      ⋈(TC↓, UC↓) ⇓ b_bad
-    by Separate Compilation
-      ⋈(TC, UC)↓ ⇓ b_bad
-    by CCR', two cases
-      1) ⋈(TC, UC) ⇓ b_bad
-         by Robust Satisfaction
-           ⋈(TC, UC) ⇓ b_bad => Πₜ(filter(trace(b_bad), P))
-         but we know that ¬Πₜ(filter(trace(b_bad), P)), hence this case cannot happen.
-      2) ∃ pref ∈ prefixes(trace(b_bad)). ⋈(TC, UC) ⇓ GoingWrong(pref) ∧ ∃ P'. P' ⇓ b_bad
-         Firstly, notice that the undefined behavior could have only happend
-         because of UC, since FD(TC).
-         by Robust Satisfaction
-           ⋈(TC, UC) ⇓ GoingWrong(pref, C) =>
-             Πₜ(filter(trace(GoingWrong(pref, C)), P) => Πₜ(filter(pref, P))
-         therefore, it must be the case that Πₜ(filter(pref, P)) and the bad things
-         characterizing b_bad happen after the undefined behavior at the source level.
-         we have been able to observe a bad behavior of P at the low level, even
-         if P was verified!
+Explode UB / Suffix closed
+SCL: π is refSig closed or ∀ ub(t,P) ∈π => refSig(ub(t,P)) ∈π
+DEF is more precise than SCL, do we need it? In SCL π contains more stuff, even stuff that our semantics cannot generate, even if this is not nice, it doesn't bother the proof of preservation.
 
-** Robust Execution
+Proof that RC4+HR+SCL implies PRS.
+Assume h1: (∀b C. C[P]⇓b => b∈π) 
+       h2:  ∀b c. c[P↓]⇓b
+- C FD, P FD
+h2 =>RC4
+∃C. C[P] ⇓ₛ b =>h1
+b∈π
+- C FD, P not FD
+h2 =>RC4
+∃C. C[P] ⇓ₛ pref(b);UB(P) =>h1
+pref(b);UB(P) ∈π =>SCL
+b∈π
+- C not FD, P FD
+h2 =>HR
+∃c' FD. c'[P↓]⇓b' /\ filter(b)=filter(b') =>RC4
+∃C. C[P] ⇓ₛ b' /\ filter(b)=filter(b') =>h1
+b'∈π /\ filter(b)=filter(b') =>
+b∈π
+- C not FD, P not FD
+h2 =>HR
+∃c' FD. c'[P↓]⇓b' /\ filter(b)=filter(b') =>RC4
+∃C. C[P] ⇓ₛ pref(b');UB(P) /\ filter(b)=filter(b') =>h1
+pref(b');UB(P)∈π /\ filter(b)=filter(b') =>SCL
+b'∈π /\ filter(b)=filter(b') =>
+b ∈π
+
+TODO understand relation between DEF and EUB
+think about them in WP case too
+TODO how do we prove this stuff?
+HR looks like a DEC and DEF at the same level
+TODO MD: ∀Cᵢ∈Cₛ.RC4(Cᵢ)
+* Robust Execution
 What we would like to have is something finer-grained that, ideally, replaces
 only those components which cause problems.
 
@@ -278,6 +348,11 @@ Proof:
     C fully defined ∧ C↓[P↓] ⇓ b
   by RE instantiated with c and P↓, we can pick the case in which we backmap c
     ∃ C. FD(C) ∧ C↓[P↓] ⇓ b
+
+Lemma:
+  CCR ∧ RE => RC4
+Proof:
+  should follow from multiple applications of RE and then CCR
 
 ** Preservation of Robust Satisfaction by means of CCR and RE
 Main Theorem:
@@ -311,34 +386,6 @@ Proof:
        we can destruct trace(b) as trace(b)=pref;t
        then we can instantiate ref with t and obtain Πₚ(filter(pref;t), P)
        this means Πₚ(filter(trace(b), P)), our goal
-
-** Mutual Distrust
-An interesting case is the one with more than two mutually distrustful source
-level components. There are several characterization of it, the iterative one
-being the most promising.
-
-*** Attempt without iteration
-The intuition is that each component behaves as the other components were fully defined
-
-DEF(P, b):
-∀ c₁ ... cₙ.
-⋈(P↓, c₁, .., cₙ) ⇓ b => ∃ C₁ ... Cₙ. ∀ Cᵢ. Cᵢ is defined for b ∧
-                         (⋈(P, C₁ ... Cₙ) ⇓ b ∨ ⋈(P, C₁ ... Cₙ) ⇓ GoingWrong(prefix(b), P))
-
-Lemma:
-  CCR ∧ RE => DEF
-Proof:
-  should follow from multiple applications of RE and then CCR
-
-MD:
-P = {P₁, ..., Pₙ}
-⋈(P)↓ ⇓ b => ∀ Pᵢ. DEF(Pᵢ, (P\Pᵢ)↓, b)
-
-Theorem:
-  MD => Iterative Mutual Distrust
-Proof:
-TODO
-
 ** Our Instance
 Proving RE in our context requires different ingredients:
   1) Partial Semantics
@@ -384,3 +431,41 @@ by Composition
 we have that
   ∃ Pᵢ FD(Pᵢ) ∧ ⋈(p\pᵢ ∪ Pᵢ↓) ⇓ b
 which is what we wanted to show.
+* Mutual Distrust
+An interesting case is the one with more than two mutually distrustful source
+level components. There are several characterization of it, the iterative one
+being the most promising.
+
+MD:
+P = {P₁, ..., Pₙ}
+⋈(P)↓ ⇓ b => ∀ Pᵢ. RC4(Pᵢ, (P\Pᵢ)↓, b)
+
+Theorem:
+  MD => Iterative Mutual Distrust
+Proof:
+TODO
+
+* Bits and pieces
+** Partial Definability
+PDEF: PP ⇓ₜ b  => ∃PP'. PP'⇓ₛ b
+PDEF on all components implies DEF on whole programs: WP ⇓ₜ b  =>? ∃WP'. WP'⇓ₛ b
+WP ⇓ₜ b => ⋈(p₁,...,pₙ) ⇓ₜ b 
+       =>DEC ∀pᵢ. pᵢ ⇓pt b 
+       =>PDef ∀pᵢ. ∃Pᵢ'. Pᵢ' ⇓ps b 
+       =>COMP ⋈(P₁',...,Pₙ') ⇓ₛ b 
+       => WP'⇓ₛ b
+TODO: If there is UB in b (e.g. if we are at intermediate instead of
+target) then we need to use DECR and recheck the proof
+
+** De/composition with refinement
+If we want to have UB in a language then we need to add refinement to its decomposition.
+If the context does UB then the partial context refines it.
+DECR: ∀C. C[P] ⇓ b => P ⇓{C} b' /\ (b'=b ‌\/ b=pref(b');UB(C))       (note that P can do UB, there is no refinement for P)
+
+Simmetrically we defined composition with a refinement:
+COMPR: C ⇓{P} b /\ P ⇓{C} b => C[P] ⇓ b \/ C[P] ⇓ pref(b);UB
+TODO CHECK ALL UB CASES
+
+Definability on the same level (the old definability):
+DEFS: P ⇓{C} b => ∃C. C[P] ⇓ b      (on the Same level. P can do UB and C cannot)
+
