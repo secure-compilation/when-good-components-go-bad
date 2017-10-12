@@ -28,6 +28,13 @@ Note that refDef produces refinements that respect any property that
 is valid for the semantics ⇓, for example for our instance protected
 call stack and memory protection are still valid in the refinements.
 
+A system where properties π containing ub are closed wrt to refDef
+allows the programmer to reason in terms of source level programs,
+ignoring the rest of the compilation chain.
+
+SCL: A property π is suffix closed or refDef closed iff
+     ∀ ub(t,P) ∈π => refDef(ub(t,P)) ∈π
+
 *** Example of undefined property
 e.g. we have showed that our program never calls the procedure Error, this is property π₁
      additionally we used an approximate static analysis which tells us that our program
@@ -271,24 +278,36 @@ PRS (Preservation of Robust Satisfaction):
 
 * Robust Compilation
 Starting from CCR and CCRD we can obtain the equivalent for a component using the partial semantics.
-PCCR: P↓ ⇓ₜ{C} b => P ⇓ₛ{C} b \/ P ⇓ₛ{C} pref(b);UB(P)                   Partial Compile Correctness Backward and Refined
-PCCRD: P↓ ⇓ₜ{C} b => P ⇓ₛ{C} b \/ (P ⇓ₛ{C} pref(b);UB(P) /\ ∃P'. P' ⇓ₛ{C} b)  Partial Compile Correctness Backward and Defined
+PCCR: P↓ ⇓ᵢ{C} b => P ⇓ₛ{C} db \/ P ⇓ₛ{C} ub(pref(b),P)                   Partial Compile Correctness Backward and Refined
+PCCRD: P↓ ⇓ᵢ{C} b => P ⇓ₛ{C} db \/ (P ⇓ₛ{C} ub(pref(b),P) /\ ∃P'. P' ⇓ₛ{C} db)  Partial Compile Correctness Backward and Defined
 
 We can go back to complete semantics obtaining the following
-RC4:  ∀c FD. c[P↓] ⇓ᵢ b => ∃C. C[P] ⇓ₛ b \/ C[P] ⇓ₛ pref(b);UB(P)
-RC4D: ∀c FD. c[P↓] ⇓ₜ b => ∃C. C[P] ⇓ₛ b \/ (C[P] ⇓ₛ pref(b);UB(P) /\ ∃P'. C[P'] ⇓ₛ b)
+RC4:  ∀c FD. c[P↓] ⇓ᵢ db => ∃C. C[P] ⇓ₛ db \/ C[P] ⇓ₛ ub(pref(b),P)
+RC4D: ∀c FD. c[P↓] ⇓ᵢ db => ∃C. C[P] ⇓ₛ db \/ (C[P] ⇓ₛ ub(pref(b),P) /\ ∃P'. C[P'] ⇓ₛ db)
 
 TODO should C be defined or fully defined?
+TODO how do we prove PCCR? we only have CCR
+** proof of RC4 for our instance
+∀c FD. c[P↓] ⇓ᵢ db =>DEC
+P↓ ⇓ₜ{C} db =>PCCR 
+P ⇓ₛ{C} b' /\ (b'=db \/ b'=ub(pref(db),P) =>DEF in both cases
+∃C. C[P] ⇓ₛ b' /\ (b'=db \/ b'=ub(pref(db),P)
 
 ** proof that RC4 (plus other stuff) satisfies PRS
+First we need this Lemma to apply RC4 when the context is not defined.
+
 Closed wrt FD context
 HR: ∀C. C[P]⇓b => ∃C' FD. C'[P]⇓b' /\ filter(b)=filter(b')
 this implies? the following which is more intuitive but less usable in the proof
     ∀C. C[P]⇓b /\ b∈π => ∃C' FD. C'[P]⇓b' /\ b'≥b /\ b'∈π
 
-Explode UB / Suffix closed
-SCL: π is refSig closed or ∀ ub(t,P) ∈π => refSig(ub(t,P)) ∈π
-DEF is more precise than SCL, do we need it? In SCL π contains more stuff, even stuff that our semantics cannot generate, even if this is not nice, it doesn't bother the proof of preservation.
+TODO Proof
+looks like a DECR and DEF at the same level
+I could use DECR but I'd like to have a b' which is not longer that b,
+ideally I can make a C' that instead of doing ub, as soon as it is
+called terminates. This leads to the same filtering for b.
+
+
 
 Proof that RC4+HR+SCL implies PRS.
 Assume h1: (∀b C. C[P]⇓b => b∈π) 
@@ -316,11 +335,6 @@ pref(b');UB(P)∈π /\ filter(b)=filter(b') =>SCL
 b'∈π /\ filter(b)=filter(b') =>
 b ∈π
 
-TODO understand relation between DEF and EUB
-think about them in WP case too
-TODO how do we prove this stuff?
-HR looks like a DEC and DEF at the same level
-TODO MD: ∀Cᵢ∈Cₛ.RC4(Cᵢ)
 * Robust Execution
 What we would like to have is something finer-grained that, ideally, replaces
 only those components which cause problems.
@@ -439,6 +453,8 @@ being the most promising.
 MD:
 P = {P₁, ..., Pₙ}
 ⋈(P)↓ ⇓ b => ∀ Pᵢ. RC4(Pᵢ, (P\Pᵢ)↓, b)
+TODO MS I don't think this can be written like this, RC4 requires a FD
+context and this is not the case.
 
 Theorem:
   MD => Iterative Mutual Distrust
