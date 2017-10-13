@@ -1,12 +1,16 @@
 * Behaviors and events
-Events and traces:
-U      universe of events
-Σ ⊆ U  our language events
-Σ*     finite traces
-Σω     infinite traces
-t      is a trace
+** Events and traces
+Let's assume that there is a hierarchy of expressiveness on our
+languages, such that the each language is less expressive than the
+language it is compiled to. We define for each language a set of
+events Σ, where for our instance Σₛ ⊆ Σᵢ ⊆ Σₜ.
+We also use the notation t for a trace of events (finite or infinite).
 
-Behaviors:
+** Behaviors
+behaviors are constructors over traces that we split in defined
+and undefined. Note here is left implicit that div is the only one
+that can have an infinite trace.
+
 db := term(t) | div(t)
 b := defined | ub(t)
 
@@ -59,17 +63,47 @@ e.g. we have showed that our program never calls the procedure Error, this is pr
   refDef then this trace is prevented.
 
 ** Linked Program Cₛ
-each element in Σ is tagged with a component Cᵢ∈Cₛ
-filter(t,Cᵢ) = List.filter(fun (e,Pⱼ) -> Pᵢ=Pⱼ, t)
+*** properties for a component
+ψ = n interfaces
+Pᵢ ∈ { components compatible with interface i }
+Ps ∈ { sets of components compatible with ψ }
+DEF(Pᵢ)  = { db(t) | ∃Ps={P₁ ... Pᵢ₋₁, Pᵢ₊₁ ... Pₙ}. ⋈(Ps ∪ {Pᵢ}) ⇓ db(t) }
+DEF(Ps) = ⋂ { DEF(Pᵢ)  | Pᵢ ∈ Pₛ }
+DEF     = ⋃ { DEF(Ps) | ∃ Ps } = { db | ∃Ps. db ∈ DEF(Ps) } 
+UNDEF(Pᵢ) = { ub(t₁,Pᵢ) | ∃ db(t) ∈ DEF(Pᵢ) /\ 
+                     t=t₁at₂ /\ a∈Pᵢ } Undefined program behaviors
+                                      it is a prefix closure
+UNDEF(Ps) = ⋂ { UNDEF(Pᵢ) | Pᵢ∈Ps}
+UNDEF = ⋃ { UNDEF(Ps) | ∃Ps }
 
-Πᵢ: trace -> Prop
-πᵢ: behavior -> Prop
-TODO define π and Π with filter
-TODO π for a linked program as a composition of many πᵢ
+refDef(ub(t,Pᵢ)) = { db(t;t₂) | db(t;t₂) ∈ DEF }
 
-the only properties that can be defined over a partial program with UB
-are those that assumes that the program doesn't UB before a certain
-length, starting from some of its entrypoints.
+SCL: A property πᵢ is suffix closed or refDef closed iff
+     ∀ ub(t,Pᵢ) ∈πᵢ => refDef(ub(t,Pᵢ)) ∈πᵢ
+Corollary: if πᵢ is SCL => πᵢ ∈ DEF ∪ UNDEF(Pᵢ)
+if Pᵢ is defined then πᵢ ∈ DEF(Pᵢ)
+if Pᵢ is undefined then πᵢ ∈ DEF ∪ UNDEF(Pᵢ)
+
+*** Properties for a linked program
+π = ⋂ πᵢ
+π ∈ DEF ∪ UNDEF
+if Ps is defined then π ∈ DEF(Ps)
+if Pᵢ is undefined then πᵢ ∈ DEF ∪ UNDEF(Pᵢ)
+
+*** Properties over traces
+We now define properties Πᵢ over the traces of a component.
+Each element in t is tagged with a component Pᵢ
+filter(t,Pᵢ) = List.filter(fun (e,Pⱼ) -> Pᵢ=Pⱼ, t)
+
+We can define the πᵢ from our Πᵢ
+πᵢ = { b(t) | filter(t,Pᵢ) ∈ Πᵢ }
+
+Note: the only properties that can be defined over a partial program
+with UB are those that assumes that the program doesn't UB before a
+certain length, starting from some of its entrypoints.
+
+*** Catalin's example
+TODO
 
 * Satisfaction and its preservation for whole programs
   P satisfies a property π iff
@@ -287,6 +321,47 @@ RC4D: ∀c FD. c[P↓] ⇓ᵢ db => ∃C. C[P] ⇓ₛ db \/ (C[P] ⇓ₛ ub(pref
 
 TODO should C be defined or fully defined?
 TODO how do we prove PCCR? we only have CCR
+** proof RC4 implies CCR
+
+Proof.
+n-DEC for all Pᵢ↓
+PCCRD for all Pᵢ↓
+n-COMP to obtain the shortest prefix of all ub(pref(b),Pᵢ)
+
+
+C↓P↓ ⇓b => CP ⇓b ‌\/ CP ⇓ub(pref(b),C) \/ CP ⇓ub(pref(b),p) 
+
+
+
+RC4(P, cs, db) = ∃Cs. ⋈(Cs,P) ⇓ₛ db \/ ⋈(Cs,P) ⇓ₛ ub(pref(db),P)
+H1: ∀Pᵢ. RC4(Pᵢ, (P\Pᵢ)↓, db)
+H2: ∀ b. P↓ ⇓ db
+GOAL: P ⇓ db ∨ P ⇓ ub(prefix(db),Pᵢ)
+
+
+H2=⋈(P₁,...,Pₙ)↓ ⇓ₜ db =>SC
+⋈(P₁↓,...,Pₙ↓) ⇓ₜ db =>H1
+∃Csᵢ.
+(1) ⋈(Csᵢ,Pᵢ) ⇓ₛ db ‌\/
+(2) ⋈(Csᵢ,Pᵢ) ⇓ₛ ub(pref(db),Pᵢ)
+
+⋈(Csᵢ, Pᵢ)↓ ⇓ db'
+
+Suppose ↓ is wrong, then either:
+1) ⋈(Csᵢ, Pᵢ) ⇓ db
+   db'  ≠ db
+2) ⋈(Csᵢ, Pᵢ) ⇓ ub(t, Pᵢ)
+   ¬∃ prefix(db') = t
+
+(∀Pᵢ. ∃Csᵢ. ⋈(Csᵢ,Pᵢ) ⇓ₛ db 
+
+
+
+Separate Compilation
+SC: ⋈(P₁,...,Pₙ)↓ ⇓b => ⋈(P₁↓,...,Pₙ↓) ⇓b
+in our case seems by definition because compiling a whole program consists in concatenating the compilation of its components: ⋈(P₁,...,Pₙ)↓ = ⋈(P₁↓,...,Pₙ↓).
+However in general this might not be true, it looks provable semantically if we show that we can do a n-way-decomposition to n partial Pᵢ and then a n-way-composition to get back to P.
+
 ** proof of RC4 for our instance
 ∀c FD. c[P↓] ⇓ᵢ db =>DEC
 P↓ ⇓ₜ{C} db =>PCCR 
@@ -296,7 +371,7 @@ P ⇓ₛ{C} b' /\ (b'=db \/ b'=ub(pref(db),P) =>DEF in both cases
 ** proof that RC4 (plus other stuff) satisfies PRS
 First we need this Lemma to apply RC4 when the context is not defined.
 
-Closed wrt FD context
+Closed wrt FD context (not needed from the target)
 HR: ∀C. C[P]⇓b => ∃C' FD. C'[P]⇓b' /\ filter(b)=filter(b')
 this implies? the following which is more intuitive but less usable in the proof
     ∀C. C[P]⇓b /\ b∈π => ∃C' FD. C'[P]⇓b' /\ b'≥b /\ b'∈π
@@ -307,6 +382,13 @@ I could use DECR but I'd like to have a b' which is not longer that b,
 ideally I can make a C' that instead of doing ub, as soon as it is
 called terminates. This leads to the same filtering for b.
 
+
+
+TODO the following proof is valid with different choiches of π. Our
+instance can preserve π that are suffix closed wrt refDef, however if
+we start with π that are suffix closed wrt to refSig the proof still
+holds. The proof holds also for closed wrt to refUni, that would be
+the properties preserved by compcert
 
 
 Proof that RC4+HR+SCL implies PRS.
@@ -450,11 +532,11 @@ An interesting case is the one with more than two mutually distrustful source
 level components. There are several characterization of it, the iterative one
 being the most promising.
 
+RC4(P, cs, db) = ∃Cs. ⋈(Cs,P) ⇓ₛ db \/ ⋈(Cs,P) ⇓ₛ ub(pref(db),P)
+
 MD:
 P = {P₁, ..., Pₙ}
 ⋈(P)↓ ⇓ b => ∀ Pᵢ. RC4(Pᵢ, (P\Pᵢ)↓, b)
-TODO MS I don't think this can be written like this, RC4 requires a FD
-context and this is not the case.
 
 Theorem:
   MD => Iterative Mutual Distrust
