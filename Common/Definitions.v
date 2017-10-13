@@ -14,6 +14,9 @@ Open Scope Z_scope.
 
 Module Procedure.
   Definition id := positive.
+
+  Definition eqb (id1 id2 : id) := Pos.eqb id1 id2.
+    
 End Procedure.
 
 Module Component.
@@ -26,6 +29,8 @@ Module Component.
 
   Definition is_importing CI C P : Prop := In (C,P) (import CI).
   Definition is_exporting CI P : Prop := In P (export CI).
+
+  Definition eqb (id1 id2 : id) := Pos.eqb id1 id2.
 End Component.
 
 Module Program.

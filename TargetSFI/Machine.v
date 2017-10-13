@@ -1,5 +1,6 @@
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Structures.Equalities.
+Require Import Coq.Lists.List.
 
 Require Import Common.Definitions.
 Require Import Common.Util.
@@ -51,13 +52,16 @@ Module RiscMachine.
     (* Definition  IS_SFI_SP_REGISTER (reg:N) := reg = 26.     *)
     (* Definition is_sfi_sp_register_bool (reg:N) := reg =? 26. *)
 
+    Definition eqb_reg (r1 r2 : t) : bool :=
+      N.eqb r1 r2.
+
   End Register.
 
   Definition pc : Set := address.
 
   Definition PC0 : pc := N0.
   
-  Module RegisterFile.
+  Module RegisterFile <: UsualDecidableType.
     
     Definition t : Set := list value.
 
@@ -73,9 +77,53 @@ Module RiscMachine.
                (gen_regs  : t) : t :=
       Util.Lists.update gen_regs (N.to_nat reg) val.
 
-
     Definition get_register (reg : Register.t) (gen_regs : t) : option value :=
       ListUtil.get (N.to_nat reg) gen_regs.
+
+    Fixpoint eqb (regs1 regs2 : t) : bool :=
+      match (regs1,regs2) with
+      | ([],[]) => true
+      | (v1::regs1',v2::regs2') => (Z.eqb v1 v2) && (eqb regs1' regs2')
+      | _ => false
+      end.
+
+  
+    Lemma eqb_eq: forall (regs1 regs2 : t),
+        (eqb regs1 regs2) = true <-> regs1 = regs2.
+    Proof.
+      split.
+      - intro H. generalize dependent regs2. induction regs1.
+        + intros. destruct regs2.
+          * reflexivity.
+          * inversion H.
+        + intros. destruct regs2.
+          * inversion H.
+          * inversion H. apply andb_true_iff in H1.
+            destruct H1 as [Hh Ht].
+            apply IHregs1 in Ht.
+            rewrite Ht.
+            rewrite Z.eqb_eq in Hh. 
+            
+    Theorem eq_dec: forall regs1 regs2 : t, {regs1 = regs2} + {regs1 <> regs2}.
+    Proof.
+      apply List.list_eq_dec. apply Z.eq_dec.
+      (* induction regs1. *)
+      (* - destruct regs2. *)
+      (*   + auto. *)
+      (*   + right. intro H. inversion H. *)
+      (* - destruct regs2. *)
+      (*   + right. intro H. inversion H. *)
+      (*   + destruct (Z.eqb a v) eqn:Hh. *)
+      (*     * rewrite Z.eqb_eq in Hh. rewrite Hh. *)
+      (*       destruct IHregs1 with (regs2:=regs2). *)
+      (*       left. apply f_equal. apply e. *)
+      (*       right. intro H. apply n. inversion H. reflexivity. *)
+      (*     * right. intro H. inversion H. rewrite <- Z.eqb_eq in H1. *)
+      (*       rewrite Hh in H1. inversion H1. *)
+    Defined.
+
+
+    Include HasUsualEq <+ UsualIsEq.
 
   End RegisterFile.
 
@@ -90,7 +138,7 @@ Module RiscMachine.
     | Leq : binop
     | BitwiseOr : binop
     | BitwiseAnd : binop
-    | ShiftLeft : binop. 
+    | ShiftLeft : binop.
   
     Inductive instr : Set :=
     | INop : instr
@@ -107,6 +155,47 @@ Module RiscMachine.
     | IJal : address -> instr
     (* termination *)
     | IHalt : instr.
+
+    Definition eqb_op (op1 op2 : binop) :=
+      match (op1,op2) with
+        | (Addition,Addition) => true
+        | (Subtraction,Subtraction) => true
+        | (Multiplication,Multiplication) => true
+        | (Equality,Equality) => true
+        | (Leq,Leq) => true
+        | (BitwiseOr,BitwiseOr) => true
+        | (BitwiseAnd,BitwiseAnd) => true
+        | (ShiftLeft,ShiftLeft) => true
+        | _ => false
+      end.
+
+    Definition eqb_instr (i1 i2 : instr) : bool :=
+      match (i1,i2) with
+      | (INop,INop) => true
+      | (IConst v1 r1, IConst v2 r2) => (Z.eqb v1 v2)
+                                          && (Register.eqb_reg r1 r2)
+      | (IMov r11 r12, IMov r21 r22) =>
+        (Register.eqb_reg r11 r22)
+          && (Register.eqb_reg r21 r22)
+      | (IBinOp op1 r11 r12 r13, IBinOp op2 r21 r22 r23) =>
+        (eqb_op op1 op2)
+          && (Register.eqb_reg r11 r21)
+          && (Register.eqb_reg r12 r22)
+          && (Register.eqb_reg r13 r23)
+      | (ILoad r11 r12, IMov r21 r22) =>
+        (Register.eqb_reg r11 r21)
+          && (Register.eqb_reg r12 r22)
+      | (IStore r11 r12, IMov r21 r22) =>
+        (Register.eqb_reg r11 r21)
+          && (Register.eqb_reg r21 r22)
+      | (IBnz r1 imm1, IBnz r2 imm2) =>
+        (Register.eqb_reg r1 r2)
+          && (Z.eqb imm1 imm2)
+      | (IJump r1, IJump r2) => (Register.eqb_reg r1 r2)
+      | (IJal a1, IJal a2) => (N.eqb a1 a2)
+      | (IHalt, IHalt) => true
+      | _ => false
+      end.
 
     Theorem instr_eq_dec:
       forall i1 i2 : instr,  {i1 = i2} + {i1 <> i2}.
@@ -158,7 +247,15 @@ Module RiscMachine.
                         else acc)
                      mem nil.
       
-    
+    Definition equal (m1 m2 : t) : bool :=
+      let aux w1 w2 :=
+          match (w1,w2) with
+          | (Data v1, Data v2) => Z.eqb v1 v2
+          | (Instruction i1, Instruction i2) => ISA.eqb_instr i1 i2
+          | _ => false
+          end in
+      BinNatMap.equal aux m1 m2.
+               
   End Memory.
 
 
@@ -216,7 +313,7 @@ Module Env  <: UsualDecidableType.
   Definition get_procedure (addr : RiscMachine.address)
              (G : Env.t) : option Procedure.id :=
     ListUtil.get_by_key (N.eqb) addr (snd G).
-
+  
   Definition eq_dec:
     forall g1 g2 : t,  {g1 = g2} + {g1 <> g2}.
   Proof.
@@ -235,6 +332,9 @@ Module SFI.
   Definition CID_SIZE:N := 2.
   
   Definition COMPONENT_MASK : N := 2^CID_SIZE - 1.
+
+  Definition CODE_DATA_BIT_MASK : N :=  N.shiftl 1 (OFFSET_SIZE + CID_SIZE).
+  
 
   (* Maximum number of components *)
   Definition COMP_MAX:N := 2^CID_SIZE.
@@ -265,9 +365,11 @@ Module SFI.
   Definition is_same_component_bool (addr1: RiscMachine.address)
              (addr2: RiscMachine.address) :=
     N.eqb (C_SFI addr1) (C_SFI addr2).
+  
+
 
   Definition is_code_address  (addr : RiscMachine.address) : bool :=
-    (* TODO *) true.
+    N.eqb (N.land addr CODE_DATA_BIT_MASK) N0.
 
 
   Definition is_data_address  (addr : RiscMachine.address) : bool :=

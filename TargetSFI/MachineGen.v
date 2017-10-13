@@ -96,6 +96,25 @@ Close Scope string_scope.
 Theorem decComponentId: forall x y : Component.id, {x = y} + {x <> y}.
 Proof. decide equality. Defined.
 
+Theorem decRegisterFile: forall regs1 regs2 : RiscMachine.RegisterFile.t,
+    {regs1 = regs2} + {regs1 <> regs2}.
+Proof.
+  apply List.list_eq_dec. apply Z.eq_dec.
+  (* induction regs1. *)
+  (* - destruct regs2. *)
+  (*   + auto. *)
+  (*   + right. intro H. inversion H. *)
+  (* - destruct regs2. *)
+  (*   + right. intro H. inversion H. *)
+  (*   + destruct (Z.eqb a v) eqn:Hh. *)
+  (*     * rewrite Z.eqb_eq in Hh. rewrite Hh. *)
+  (*       destruct IHregs1 with (regs2:=regs2). *)
+  (*       left. apply f_equal. apply e. *)
+  (*       right. intro H. apply n. inversion H. reflexivity. *)
+  (*     * right. intro H. inversion H. rewrite <- Z.eqb_eq in H1. *)
+  (*       rewrite Hh in H1. inversion H1. *)
+Defined.
+      
 Definition cut_list (l : list Component.id) : list Component.id :=
   let fix gen_seq len :=
       match len with
@@ -443,7 +462,7 @@ Definition update_pc (mem : Memory.t) (instr : ISA.instr) (pc : RiscMachine.pc)
   end.
 Close Scope Z_scope.
 
-
+Open Scope Z_scope.
 Definition update_regs (mem : Memory.t) (instr : ISA.instr)  (pc : RiscMachine.pc)
            (regs : RegisterFile.t) : RegisterFile.t :=
   match instr with
@@ -458,9 +477,22 @@ Definition update_regs (mem : Memory.t) (instr : ISA.instr)  (pc : RiscMachine.p
       end
     | _ => regs  (* TODO this is actually error *)
     end
-  (* TODO Finish here *)
+  | IMov rs rd =>
+    match (RegisterFile.get_register rs regs) with
+    | Some v => RegisterFile.set_register rd v regs
+    | _ => regs
+    end
+  | IBinOp op r1 r2 rd =>
+    match (RegisterFile.get_register r1 regs,
+           RegisterFile.get_register r2 regs) with
+    | (Some v1, Some v2) => RegisterFile.set_register
+                             rd (RiscMachine.executing_binop op v1 v2) regs
+    | _ => regs
+    end
+  | IJal imm => RegisterFile.set_register RiscMachine.Register.R_RA ((Z.of_N pc)+1) regs
   | _ => regs
   end.
+Close Scope Z_scope.
 
 
 
