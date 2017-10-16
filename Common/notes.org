@@ -538,11 +538,6 @@ MD:
 P = {P₁, ..., Pₙ}
 ⋈(P)↓ ⇓ b => ∀ Pᵢ. RC4(Pᵢ, (P\Pᵢ)↓, b)
 
-Theorem:
-  MD => Iterative Mutual Distrust
-Proof:
-TODO
-
 * Bits and pieces
 ** Partial Definability
 PDEF: PP ⇓ₜ b  => ∃PP'. PP'⇓ₛ b
@@ -567,3 +562,88 @@ TODO CHECK ALL UB CASES
 Definability on the same level (the old definability):
 DEFS: P ⇓{C} b => ∃C. C[P] ⇓ b      (on the Same level. P can do UB and C cannot)
 
+** Preservation of Robust Satisfaction by means of CCR and RE
+Main Theorem:
+  CCR ∧ RE => PRS
+Notes:
+  if we prove that our compiler is correct (CCR) and that our execution
+  environment is robust (RE), then it means that robust satisfaction is
+  preserved no matter what other components do (e.g. undefined behavior)
+Proof:
+  Given a source level component P and a property Πₚ, we want to show PRS:
+  We know that RS holds at the source level
+    ∀ C b. (⋈(C, P) ⇓ b => Πₚ(filter(trace(b), P))) ∨
+           (⋈(C, P) ⇓ GoingWrong(t, P) => ∀ ref. Πₚ(filter(t;ref, P))).
+  Given arbitrary c (sets of low level components) and b such that ⋈(c, P↓) ⇓ b,
+  we have to show that Πₚ(filter(b, P))
+
+  by RE instantiated with cᵢ ∈ c and P↓, we can pick the case in which we backmap cᵢ
+    ∃ Cᵢ. FD(Cᵢ) ∧ ⋈(c\cᵢ, Cᵢ↓, P↓) ⇓ b
+  we can do this last thing repeatedly for all the cᵢ ∈ c, until we have all Cᵢ such
+  that ∀ i. FD(Cᵢ) ∧ ⋈(C₁↓, ..., Cₙ↓, P↓) ⇓ b
+  For brevity, C = {C₁, ..., Cₙ}
+  by Separate Compilation
+    ⋈(C, P)↓ ⇓ b
+  by CCR, three cases
+    1) ⋈(C, P) ⇓ b
+       by RS at the source we have Πₚ(filter(trace(b), P)), our goal
+    2) ∃ pref ∈ prefixes(trace(b)). ⋈(C, P) ⇓ GoingWrong(pref, C)
+       This cannot happen, since ∀ i. FD(Cᵢ)
+    3) ∃ pref ∈ prefixes(trace(b)). ⋈(C, P) ⇓ GoingWrong(pref, P)
+       by RS at the source we have ∀ ref. Πₚ(filter(pref;ref, P))
+       we can destruct trace(b) as trace(b)=pref;t
+       then we can instantiate ref with t and obtain Πₚ(filter(pref;t), P)
+       this means Πₚ(filter(trace(b), P)), our goal
+** Our Instance
+Proving RE in our context requires different ingredients:
+  1) Partial Semantics
+  1) Decomposition:
+     A whole program can be simulated by the very same program without some
+     components in the partial semantics.
+  2) Composition:
+     Two compatible partial programs that have the same behavior in
+     the partial semantics can be simulated in the complete semantics by a whole
+     program obtained by merging them.
+  3) Component Definability:
+     Given a behavior observed at the low level, we can exhibit a fully defined
+     source component which exactly reproduces it.
+  4) Forward Compiler Correctness for partial programs:
+     The compiler preserves the program semantics when we are in the partial
+     semantics.
+
+Decomposition and Composition are simulations which should be provable.
+
+Compiler Correctness for partial programs should follow from CCR.
+
+Definability is definitely the most difficult one. For finite traces we should
+be able to prove it, but for the infinite ones we have no clue about how to
+proceed. A possibility could be to give guarantees on all the finite traces that
+are prefix of an infinite behavior.
+
+*** Proof
+We want to show that
+  ∀ ρ={p₁,...,pₙ}. ⋈(ρ) ⇓ b => ∀ pᵢ. ∃ Pᵢ. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b
+That is, we have ρ such that ⋈(ρ) ⇓ b and we want to show
+  ∀ pᵢ. ∃ Pᵢ. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b
+We show the above fact for an arbitrary pᵢ ∈ ρ.
+by Decomposition
+  pᵢ ⇓{p\pᵢ} b
+by Definability
+  ∃ Pᵢ. FD(Pᵢ) ∧ Pᵢ ⇓{ρ\pᵢ} b
+by Forward Compiler Correctness for partial programs
+  Pᵢ↓ ⇓{ρ\pᵢ} b
+by Decomposition
+  ⋈(p\pᵢ) ⇓{pᵢ} b
+by Composition
+  ⋈(p\pᵢ ∪ Pᵢ↓) ⇓ b
+we have that
+  ∃ Pᵢ FD(Pᵢ) ∧ ⋈(p\pᵢ ∪ Pᵢ↓) ⇓ b
+which is what we wanted to show.
+* Robust Execution with Undefined Behavior at target
+RE (Robust Execution):
+  ∀ ρ={p₁,...,pₙ}.
+    (⋈(ρ) ⇓ b =>
+      ∀ pᵢ. ∃ Pᵢ. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b) ∨
+    (⋈(ρ) ⇓ GoingWrong(t, pᵢ) =>
+      (∀ pⱼ s.t. j ≠ i. ∃ Pⱼ. FD(Pⱼ) ∧ ⋈(ρ\pⱼ ∪ Pⱼ↓) ⇓ GoingWrong(t, pᵢ)) ∧
+      (∃ Pᵢ b'. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b' ∧ trace(b') = t)
