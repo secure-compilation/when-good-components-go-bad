@@ -50,87 +50,97 @@ Module CS.
   
   Inductive step (G : Env.t) :
     MachineState.t -> trace-> MachineState.t -> Prop :=
-  | Nop : forall mem pc gen_regs,
+  | Nop : forall mem mem' pc gen_regs,
       executing mem pc INop ->
-      step G (mem,pc,gen_regs) E0 (mem, inc_pc pc,gen_regs)
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) E0 (mem', inc_pc pc,gen_regs)
            
-  | Const : forall mem pc gen_regs gen_regs' val reg,
+  | Const : forall mem mem' pc gen_regs gen_regs' val reg,
       executing mem pc (IConst val reg) ->
       RegisterFile.set_register reg val gen_regs = gen_regs' ->
-      step G (mem,pc,gen_regs) E0 (mem, inc_pc pc,gen_regs)
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) E0 (mem', inc_pc pc,gen_regs')
 
-  | Mov : forall mem pc gen_regs gen_regs' reg_src reg_dst val,
+  | Mov : forall mem mem' pc gen_regs gen_regs' reg_src reg_dst val,
       executing mem pc (IMov reg_src reg_dst) ->
       Some val = RegisterFile.get_register reg_src gen_regs ->
       RegisterFile.set_register reg_dst val gen_regs = gen_regs' ->
-      step G (mem,pc,gen_regs) E0 (mem, inc_pc pc,gen_regs')
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) E0 (mem', inc_pc pc,gen_regs')
 
-  | BinOp : forall mem pc gen_regs gen_regs' op reg_src1 reg_src2 reg_dst val1 val2,
+  | BinOp : forall mem mem' pc gen_regs gen_regs' op reg_src1 reg_src2 reg_dst val1 val2,
       executing mem pc (IBinOp op reg_src1 reg_src2 reg_dst) ->
       Some val1 = RegisterFile.get_register reg_src1 gen_regs ->
       Some val2 = RegisterFile.get_register reg_src2 gen_regs ->
       let result := executing_binop op val1 val2 in
       RegisterFile.set_register reg_dst result gen_regs = gen_regs' ->
-      step G (mem,pc,gen_regs) E0 (mem,inc_pc pc,gen_regs')
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) E0 (mem',inc_pc pc,gen_regs')
 
-  | Load : forall mem pc gen_regs gen_regs' reg_src reg_dst addr val,
-      executing mem pc (ILoad reg_src reg_dst) ->
-      Some addr = RegisterFile.get_register reg_src gen_regs ->
-      let ptr := Memory.to_address (addr) in
-      Some val = Memory.get_value mem ptr ->
-      RegisterFile.set_register reg_dst val gen_regs = gen_regs' ->
-      step G (mem,pc,gen_regs) E0 (mem,inc_pc pc,gen_regs')
+  | Load : forall mem mem' pc gen_regs gen_regs' rptr rd ptr val,
+      executing mem pc (ILoad rptr rd) ->
+      Some ptr = RegisterFile.get_register rptr gen_regs ->
+      let addr := Memory.to_address (ptr) in
+      Some val = Memory.get_value mem addr ->
+      RegisterFile.set_register rd val gen_regs = gen_regs' ->
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) E0 (mem',inc_pc pc,gen_regs')
            
-  | Store: forall mem mem' pc gen_regs reg_dst reg_src ptr val,
-      executing mem pc (IStore reg_src reg_dst) ->
-      Some ptr = RegisterFile.get_register reg_dst gen_regs ->
-      Some val = RegisterFile.get_register reg_src gen_regs ->
-      Memory.set_value mem (Memory.to_address ptr) val = mem' ->
+  | Store: forall mem mem' pc gen_regs rptr rs ptr val,
+      executing mem pc (IStore rptr rs) ->
+      Some ptr = RegisterFile.get_register rptr gen_regs ->
+      Some val = RegisterFile.get_register rs gen_regs ->
+      Memory.Equal (Memory.set_value mem (Memory.to_address ptr) val) mem' ->
       step G (mem,pc,gen_regs) E0 (mem',inc_pc pc,gen_regs)
 
-  | BnzNZ: forall mem pc gen_regs reg offset val,
+  | BnzNZ: forall mem mem' pc gen_regs reg offset val,
       executing mem pc (IBnz reg offset) ->
       Some val = RegisterFile.get_register reg gen_regs ->
       val <> Z0 ->
       let pc' := Z.to_N( Z.add (Z.of_N pc) offset ) in
-      step G (mem,pc,gen_regs) E0 (mem,pc',gen_regs)
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) E0 (mem',pc',gen_regs)
            
-  | IBnzZ: forall mem pc gen_regs reg offset val,
+  | BnzZ: forall mem mem' pc gen_regs reg offset,
       executing mem pc (IBnz reg offset) ->
-      Some val = RegisterFile.get_register reg gen_regs ->
-      val = Z0 ->
-      step G (mem,pc,gen_regs) E0 (mem,inc_pc pc,gen_regs)
+      Some Z0 = RegisterFile.get_register reg gen_regs ->
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) E0 (mem',inc_pc pc,gen_regs)
            
-  | Return: forall mem pc gen_regs reg t addr,
+  | Return: forall mem mem' pc gen_regs reg t addr,
       executing mem pc (IJump reg) ->
       Some addr = RegisterFile.get_register reg gen_regs ->
       let pc' := Memory.to_address addr in
       Some t = ret_trace G pc pc' gen_regs ->
       ~SFI.is_same_component pc pc'->
-      step G (mem,pc,gen_regs) t (mem,pc',gen_regs)
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) t (mem',pc',gen_regs)
 
-  | Jump: forall mem pc gen_regs reg addr,
+  | Jump: forall mem mem' pc gen_regs reg addr,
       executing mem pc (IJump reg) ->
       Some addr = RegisterFile.get_register reg gen_regs ->
       let pc' := Memory.to_address addr in
       SFI.is_same_component pc pc'->
-      step G (mem,pc,gen_regs) E0 (mem,pc',gen_regs)
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) E0 (mem',pc',gen_regs)
            
-  | Jal: forall mem pc gen_regs gen_regs' addr,      
+  | Jal: forall mem mem' pc gen_regs gen_regs' addr,      
       executing mem pc (IJal addr) ->
       let ra := Z.of_N (inc_pc pc) in
       RegisterFile.set_register Register.R_RA ra gen_regs = gen_regs'->
       let pc' := addr in
-      step G (mem,pc,gen_regs) E0 (mem,pc',gen_regs')
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) E0 (mem',pc',gen_regs')
            
-  | Call: forall mem pc gen_regs gen_regs' addr t,
+  | Call: forall mem mem' pc gen_regs gen_regs' addr t,
       executing mem pc (IJal addr) ->
       let ra := Z.of_N (inc_pc pc) in
       RegisterFile.set_register Register.R_RA ra gen_regs = gen_regs'->
       let pc' := addr in
       Some t = call_trace G pc pc' gen_regs ->
       ~SFI.is_same_component pc pc'->
-      step G (mem,pc,gen_regs) t (mem,pc',gen_regs').
+      Memory.Equal mem mem' -> 
+      step G (mem,pc,gen_regs) t (mem',pc',gen_regs').
 
   
   Definition eval_step (G : Env.t) (s : MachineState.t)
@@ -154,17 +164,17 @@ Module CS.
         let result : value := RiscMachine.executing_binop op val1 val2 in
         let gen_regs':= RegisterFile.set_register reg_dst result gen_regs in
         Some (E0, (mem,inc_pc pc,gen_regs'))
-      | ILoad reg_src reg_dst =>
-        do addr <- RegisterFile.get_register reg_src gen_regs;
-        let ptr := Memory.to_address addr in
-        do val <- Memory.get_value mem ptr;
-        let gen_regs' := RegisterFile.set_register reg_dst val gen_regs in
+      | ILoad rptr rd =>
+        do ptr <- RegisterFile.get_register rptr gen_regs;
+        let addr := Memory.to_address ptr in
+        do val <- Memory.get_value mem addr;
+        let gen_regs' := RegisterFile.set_register rd val gen_regs in
         Some (E0, (mem,inc_pc pc,gen_regs'))
-      | IStore reg_src reg_dst =>
-        do ptr_val <- RegisterFile.get_register reg_dst gen_regs;
-        let ptr := Memory.to_address ptr_val in
-        do val <- RegisterFile.get_register reg_src gen_regs;
-        let mem': Memory.t := Memory.set_value mem ptr val  in
+      | IStore rptr rs =>
+        do ptr <- RegisterFile.get_register rptr gen_regs;
+        let addr := Memory.to_address ptr in
+        do val <- RegisterFile.get_register rs gen_regs;
+        let mem': Memory.t := Memory.set_value mem addr val  in
         Some (E0, (mem',inc_pc pc,gen_regs))
       | IBnz reg offset =>
         do val <- RegisterFile.get_register reg gen_regs;
@@ -198,8 +208,7 @@ Module CS.
     | Some (Data val) => None
     | None => None
     end.
-
-  
+    
   Conjecture eval_step_complete :
     forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
       (step G st t st') -> (eval_step G st = Some (t, st')).

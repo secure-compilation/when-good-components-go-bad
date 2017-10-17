@@ -1,6 +1,7 @@
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Structures.Equalities.
 Require Import Coq.Lists.List.
+Require Import Coq.FSets.FMapAVL.
 
 Require Import Common.Definitions.
 Require Import Common.Util.
@@ -11,6 +12,8 @@ Require Import QuickChick.QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 
 From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
+
+Import BinNatMapExtra.
 
 (******************************************
  * Basic Risc Machine Definition
@@ -52,9 +55,19 @@ Module RiscMachine.
     (* Definition  IS_SFI_SP_REGISTER (reg:N) := reg = 26.     *)
     (* Definition is_sfi_sp_register_bool (reg:N) := reg =? 26. *)
 
-    Definition eqb_reg (r1 r2 : t) : bool :=
+    Definition eqb (r1 r2 : t) : bool :=
       N.eqb r1 r2.
 
+    Theorem eqb_eq:
+      forall r1 r2 : t, eqb r1 r2 = true <-> r1 = r2.
+    Proof.
+      intros r1 r2. apply N.eqb_eq.
+    Qed.
+
+    Theorem eqb_refl:
+      forall r : t, eqb r r = true.
+    Proof. apply N.eqb_refl. Qed.
+    
   End Register.
 
   Definition pc : Set := address.
@@ -87,7 +100,19 @@ Module RiscMachine.
       | _ => false
       end.
 
-  
+
+    Lemma eqb_refl:
+      forall regs, eqb regs regs = true.
+    Proof.
+      intros.
+      induction regs.
+      - reflexivity.
+      - simpl.
+        rewrite Z.eqb_refl. rewrite IHregs.
+        reflexivity.
+    Qed.
+    
+    
     Lemma eqb_eq: forall (regs1 regs2 : t),
         (eqb regs1 regs2) = true <-> regs1 = regs2.
     Proof.
@@ -102,8 +127,19 @@ Module RiscMachine.
             destruct H1 as [Hh Ht].
             apply IHregs1 in Ht.
             rewrite Ht.
-            rewrite Z.eqb_eq in Hh. 
-            
+            apply Z.eqb_eq in Hh. 
+            rewrite Hh. reflexivity.
+      - intro H. rewrite H. apply eqb_refl.
+    Defined.
+
+
+    Lemma neqb_neq: forall (regs1 regs2 : t),
+        (eqb regs1 regs2) = false -> regs1 <> regs2.
+    Proof.
+      intros. intro H1. apply eqb_eq in H1. rewrite H1 in H. inversion H.
+    Qed.
+                                                             
+        
     Theorem eq_dec: forall regs1 regs2 : t, {regs1 = regs2} + {regs1 <> regs2}.
     Proof.
       apply List.list_eq_dec. apply Z.eq_dec.
@@ -169,34 +205,104 @@ Module RiscMachine.
         | _ => false
       end.
 
+    Theorem  eqb_refl_op:
+      forall op : binop,  eqb_op op op = true.
+    Proof.
+      intro op. unfold eqb_op. destruct op; reflexivity.
+    Qed.
+
+    Theorem eqb_eq_bop:
+      forall op1 op2: binop, eqb_op op1 op2 = true <-> op1 = op2.
+    Proof.
+      split.
+      - unfold eqb_op.
+        destruct op1; destruct op2; intro H;
+          try (reflexivity); try (inversion H).
+      - intro H. rewrite H. apply eqb_refl_op.
+    Qed.
+        
     Definition eqb_instr (i1 i2 : instr) : bool :=
       match (i1,i2) with
       | (INop,INop) => true
       | (IConst v1 r1, IConst v2 r2) => (Z.eqb v1 v2)
-                                          && (Register.eqb_reg r1 r2)
+                                          && (Register.eqb r1 r2)
       | (IMov r11 r12, IMov r21 r22) =>
-        (Register.eqb_reg r11 r22)
-          && (Register.eqb_reg r21 r22)
+        (Register.eqb r11 r21)
+          && (Register.eqb r12 r22)
       | (IBinOp op1 r11 r12 r13, IBinOp op2 r21 r22 r23) =>
         (eqb_op op1 op2)
-          && (Register.eqb_reg r11 r21)
-          && (Register.eqb_reg r12 r22)
-          && (Register.eqb_reg r13 r23)
-      | (ILoad r11 r12, IMov r21 r22) =>
-        (Register.eqb_reg r11 r21)
-          && (Register.eqb_reg r12 r22)
-      | (IStore r11 r12, IMov r21 r22) =>
-        (Register.eqb_reg r11 r21)
-          && (Register.eqb_reg r21 r22)
+          && (Register.eqb r11 r21)
+          && (Register.eqb r12 r22)
+          && (Register.eqb r13 r23)
+      | (ILoad r11 r12, ILoad r21 r22) =>
+        (Register.eqb r11 r21)
+          && (Register.eqb r12 r22)
+      | (IStore r11 r12, IStore r21 r22) =>
+        (Register.eqb r11 r21)
+          && (Register.eqb r12 r22)
       | (IBnz r1 imm1, IBnz r2 imm2) =>
-        (Register.eqb_reg r1 r2)
+        (Register.eqb r1 r2)
           && (Z.eqb imm1 imm2)
-      | (IJump r1, IJump r2) => (Register.eqb_reg r1 r2)
+      | (IJump r1, IJump r2) => (Register.eqb r1 r2)
       | (IJal a1, IJal a2) => (N.eqb a1 a2)
       | (IHalt, IHalt) => true
       | _ => false
       end.
 
+    Theorem eqb_refl_instr:
+      forall i : instr, eqb_instr i i = true.
+    Proof.
+      intro i. unfold eqb_instr.
+      destruct i;
+        try (reflexivity);
+        try (apply N.eqb_refl);
+        try (apply  andb_true_iff; split; apply Register.eqb_refl).
+      - apply  andb_true_iff. split.
+        + apply Z.eqb_refl.
+        + apply Register.eqb_refl. 
+      - repeat (apply  andb_true_iff; split);
+          try (apply Register.eqb_refl).
+        apply eqb_refl_op.
+      - apply  andb_true_iff. split.
+        + apply Register.eqb_refl.
+        + apply Z.eqb_refl.
+    Qed.
+        
+    Theorem eqb_eq_instr:
+      forall i1 i2 : instr, eqb_instr i1 i2= true <-> i1 = i2.
+    Proof.
+      intros i1 i2. split.
+      - unfold eqb_instr.
+        destruct i1; destruct i2; intro H;
+          try (reflexivity); try (inversion H);
+            (* 2 register instructions *)
+            try ( apply andb_true_iff in H; destruct H as [H' H''];
+                  apply Register.eqb_eq in H'; rewrite H';
+                  apply Register.eqb_eq in H''; rewrite H''; reflexivity);
+            (* Const *)
+            try ( apply andb_true_iff in H; destruct H as [H' H''];
+                  apply Z.eqb_eq in H'; rewrite H';
+                  apply Register.eqb_eq in H''; rewrite H''; reflexivity).
+        (* BinOp *)
+        + clear H1. apply andb_true_iff in H. destruct H as [H H1].
+          apply andb_true_iff in H. destruct H as [H H2].
+          apply andb_true_iff in H. destruct H as [H3 H4].
+          apply eqb_eq_bop in H3. rewrite H3.
+          apply Register.eqb_eq in H2. rewrite H2.
+          apply Register.eqb_eq in H1. rewrite H1.
+          apply Register.eqb_eq in H4. rewrite H4.
+          reflexivity.
+        (* Bnz *)
+        + clear H1. apply andb_true_iff in H. destruct H as [H1 H2].
+          apply Z.eqb_eq in H2. rewrite H2.
+          apply Register.eqb_eq in H1; rewrite H1; reflexivity.
+        (* Jump *)
+        + apply Register.eqb_eq in H1; rewrite H1; reflexivity.
+        + apply N.eqb_eq in H. rewrite H. reflexivity.
+      - intro H. rewrite H. apply eqb_refl_instr.
+        Qed.
+            
+          
     Theorem instr_eq_dec:
       forall i1 i2 : instr,  {i1 = i2} + {i1 <> i2}.
     Proof.
@@ -209,7 +315,39 @@ Module RiscMachine.
   | Data : value -> word
   | Instruction : ISA.instr -> word.
 
-  
+  Definition eqb_word (w1 w2 : word) : bool :=
+    match (w1,w2) with
+    | (Data v1, Data v2) => Z.eqb v1 v2
+    | (Instruction i1, Instruction i2) => ISA.eqb_instr i1 i2
+    | _ => false
+    end.
+
+  Theorem eqb_refl_word:
+    forall w : word, eqb_word w w = true.
+  Proof.
+    intro w. unfold eqb_word. destruct w.
+    - apply Z.eqb_refl.
+    - apply  ISA.eqb_refl_instr.
+  Qed.
+
+  Theorem eq_word_trans:
+    forall (w1 w2 w3 : word), w1=w2 -> w2=w3 -> w1=w3.
+  Proof.
+    intros. destruct w1, w2, w3; inversion H; inversion H0; reflexivity.
+  Qed.
+    
+  Theorem eqb_eq_word: forall (e e' : word),
+      eqb_word e e' = true <-> e = e'.
+  Proof.
+    split.
+    - unfold eqb_word. destruct e; destruct e'.
+      + intro H. apply Z.eqb_eq in H. rewrite H. reflexivity.
+      + intro H. inversion H.
+      + intro H. inversion H.
+      + intro H. apply ISA.eqb_eq_instr in H. rewrite H. reflexivity.
+    - intro H. rewrite H. apply eqb_refl_word.
+  Qed.
+        
   Module Memory.
 
     Definition t := BinNatMap.t word.
@@ -247,15 +385,85 @@ Module RiscMachine.
                         else acc)
                      mem nil.
       
-    Definition equal (m1 m2 : t) : bool :=
-      let aux w1 w2 :=
-          match (w1,w2) with
-          | (Data v1, Data v2) => Z.eqb v1 v2
-          | (Instruction i1, Instruction i2) => ISA.eqb_instr i1 i2
-          | _ => false
-          end in
-      BinNatMap.equal aux m1 m2.
-               
+    Definition eqb (m1 m2 : t) : bool :=
+      BinNatMap.equal eqb_word m1 m2.
+
+    Definition Equal (m1 m2 : t) : Prop :=
+      BinNatMap.Equal m1 m2.
+
+    Theorem Equal_sym:
+      forall (m1 m2 : t), Equal m1 m2 -> Equal m2 m1.
+    Proof.
+      intros m1 m2. apply (BinNatMapFacts.Equal_sym). 
+    Qed.
+
+    Theorem Equal_trans:
+      forall (m1 m2 m3 : t),
+        Equal m1 m2 -> Equal m2 m3 -> Equal m1 m3.
+    Proof.
+      unfold Equal.
+      apply (BinNatMapFacts.Equal_trans).
+    Qed.
+
+    Theorem Equal_refl:
+      forall (m : t), Equal m m.
+    Proof.
+      intro m. apply (BinNatMapFacts.Equal_refl). 
+    Qed.
+      
+    Theorem eqb_refl:
+      forall (m : t), eqb m m = true.
+    Proof.
+      unfold eqb. intros.
+      apply BinNatMap.equal_1.
+      apply BinNatMapFacts.Equal_Equivb.
+      - apply eqb_eq_word.
+      - apply BinNatMapFacts.Equal_refl.
+    Qed.
+        
+    Lemma eqb_Equal: forall (m1 m2 : t),
+        (eqb m1 m2) = true <->  BinNatMap.Equal m1 m2.
+    Proof.
+      split.
+      - unfold eqb. intro H.
+        apply BinNatMap.equal_2 in H.
+        apply BinNatMapFacts.Equal_Equivb in H.
+        + apply H.
+        + apply eqb_eq_word.
+      - intro H. unfold eqb.
+        apply  BinNatMap.equal_1.
+        apply BinNatMapFacts.Equal_Equivb.
+        apply eqb_eq_word.
+        apply H.
+    Qed.
+
+    Theorem get_word_Equal:
+      forall (m1 m2 : t) (ptr : address),
+        Equal m1 m2 -> (get_word m1 ptr) = (get_word m2 ptr).
+    Proof.
+      intros. unfold Equal in H. 
+      unfold BinNatMap.Equal in H.
+      unfold get_word. 
+      apply H.
+    Qed.
+
+    Theorem get_value_Equal:
+      forall (m1 m2 : t) (ptr : address),
+        Equal m1 m2 -> (get_value m1 ptr) = (get_value m2 ptr).
+    Proof.
+      intros. unfold get_value. apply get_word_Equal with (m1:=m1) (m2:=m2) (ptr:=ptr) in H.
+      rewrite H. reflexivity.
+    Qed.
+
+    Theorem  set_value_Equal:
+      forall (m1 m2 : t) (ptr : address) (val : value),
+        Equal m1 m2 -> Equal (set_value m1 ptr val) (set_value m2 ptr val).
+    Proof.
+      intros. unfold set_value.
+      apply BinNatMapFacts.add_m.
+      reflexivity. reflexivity. unfold Equal in H. apply H.
+    Qed. 
+      
   End Memory.
 
 
@@ -278,6 +486,16 @@ Module RiscMachine.
     |  _ => False
     end.
 
+  Theorem executing_equal:
+    forall (m1 m2 : Memory.t) (pc : address) ( i : ISA.instr),
+      BinNatMap.Equal m1 m2 -> executing m1 pc i -> executing m2 pc i.
+  Proof.
+    unfold executing. unfold Memory.get_word. 
+    simpl. intros.
+    unfold BinNatMap.Equal in H. 
+    rewrite H in H0. apply H0. 
+  Qed.
+  
 
   Definition inc_pc (a : pc) : pc := N.add a 1.
 
@@ -360,13 +578,10 @@ Module SFI.
   Definition is_same_component (addr1: RiscMachine.address)
              (addr2: RiscMachine.address) : Prop :=
     (C_SFI addr1) = (C_SFI addr2).
-
   
   Definition is_same_component_bool (addr1: RiscMachine.address)
              (addr2: RiscMachine.address) :=
     N.eqb (C_SFI addr1) (C_SFI addr2).
-  
-
 
   Definition is_code_address  (addr : RiscMachine.address) : bool :=
     N.eqb (N.land addr CODE_DATA_BIT_MASK) N0.
@@ -391,6 +606,12 @@ Module MachineState.
   Definition empty : t := (RiscMachine.Memory.empty, RiscMachine.PC0,
                            RiscMachine.RegisterFile.reset_all).
 
+  Definition eq (st1 st2 : t) : Prop :=
+    let '(mem1,pc1,gen_regs1) := st1 in
+    let '(mem2,pc2,gen_regs2) := st2 in
+    (BinNatMap.Equal mem1 mem2) /\ (pc1 = pc2) /\
+    (gen_regs1 = gen_regs2).
+     
 End MachineState.
 
 
