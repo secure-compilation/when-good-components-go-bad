@@ -12,16 +12,17 @@ and undefined. Note here is left implicit that div is the only one
 that can have an infinite trace.
 
 db := term(t) | div(t)
-b := defined | ub(t)
+b := db | ub(t)
 
 ** Whole Program
 DEF   = { db(t) | ∃P. P⇓db(t) }                    Defined programs behaviors
 UNDEF = { ub(t') | ∃ db(t) ∈ DEF /\ t' ∈ pref(t) } Undefined program behaviors
                                                    it is a prefix closure
+TODO: we assume a program can always ub
 
 refDef(ub(t)) = { db(t;t₂) | db(t;t₂) ∈ DEF }
 refSig(ub(t)) = { db(t;t₂) | t₂ ∈ Σ*ω }
-refUni(ub(t)) = { db(t;t₂) | t₂ ∈ U*ω }     CompCert's guarantee
+refUni(ub(t)) = { db(t;t₂) | t₂ ∈ U*ω }     CompCert
 these are postfix closures
 
 ∀π ⊆ DEF ∪ UNDEF. π' is closed wrt refDef(π) => π∪π' ∈ DEF ∪ UNDEF
@@ -262,30 +263,25 @@ Linking:
   Given components C and P, their linking is represented as ⋈(C, P)
 TODO define better
 
-Separate Compilation:
-  ⋈(C1, C2)↓ ⇓ b <=> ⋈(C1↓, C2↓) ⇓ b
-TODO define better
-
-A property Πₚ is predicate on sequences of events (a trace).
-We can see it also as the set πₚ of traces for which such predicate holds.
-
-Πₚ : t -> Prop
-πₚ := { t | Πₚ(filter(t, P)) }
+Separate Compilation
+SC: ⋈(P₁,...,Pₙ)↓ ⇓b => ⋈(P₁↓,...,Pₙ↓) ⇓b
+in our instance this seems to hold by definition because compiling a
+whole program consists in concatenating the compilation of its
+components: ⋈(P₁,...,Pₙ)↓ = ⋈(P₁↓,...,Pₙ↓).
+However in general this might not be true, it looks provable
+semantically if we show that we can do a n-way-decomposition to n
+partial Pᵢ and then a n-way-composition to get back to P.
+TODO recheck this
 
 RS Robust Satisfaction
   ∀C. C[P]⇓b => b∈π
-TODO if π is refSig closed then this definition is enough, if we want
-  to be more explicit use the one below
-
-RS (Robust Satisfaction with Undefined Behavior):
-  ∀ C b. (⋈(C, P) ⇓ b => Πₚ(filter(trace(b), P)) ∨
-         (⋈(C, P) ⇓ GoingWrong(t, P) => ∀ ref. Πₚ(filter(t;ref, P)))
 
 An additional definition that we need is the one which allows us to deal with
 verified programs that can never exhibit undefined behaviors.
 
 FD (Fully Definedness):
   ∀ C b. ¬ (⋈(C, P) ⇓ GoingWrong(b))
+TODO in many cases we might need only definedness for a specific behavior b
 
 Corollary: if P can exhibit undefined behavior at any point, ∀ t. Πₜ(t)
 Proof:
@@ -302,65 +298,21 @@ preserving it after we have done a compilation pass on our program.
 
 PRS (Preservation of Robust Satisfaction):
   (∀C b. C[P]⇓b => b∈π) => (∀c b. c[P↓]⇓b => b∈π)
-TODO if π is refSig closed then this definition is enough, if we want
-  to be more explicit use the one below
-
-PRS (Preservation of Robust Satisfaction):
-  (∀ C b. (⋈(C, P) ⇓ b => Πₚ(filter(trace(b), P))) ∨
-          (⋈(C, P) ⇓ GoingWrong(t, P) => ∀ ref. Πₚ(filter(t;ref, P)))) =>
-  (∀ c b. ⋈(c, P↓) ⇓ b => Πₚ(filter(trace(b), P)))
 
 * Robust Compilation
-Starting from CCR and CCRD we can obtain the equivalent for a component using the partial semantics.
-PCCR: P↓ ⇓ᵢ{C} b => P ⇓ₛ{C} db \/ P ⇓ₛ{C} ub(pref(b),P)                   Partial Compile Correctness Backward and Refined
-PCCRD: P↓ ⇓ᵢ{C} b => P ⇓ₛ{C} db \/ (P ⇓ₛ{C} ub(pref(b),P) /\ ∃P'. P' ⇓ₛ{C} db)  Partial Compile Correctness Backward and Defined
+Starting from CCR and CCRD we can obtain the equivalent for a
+component using the partial semantics.
+
+Partial Compiler Correctness Backward and Refined
+PCCR: P↓ ⇓ᵢ{C} b => P ⇓ₛ{C} db \/ P ⇓ₛ{C} ub(pref(b),P)
+Partial Compilee Correctness Backward and Defined
+PCCRD: P↓ ⇓ᵢ{C} b => P ⇓ₛ{C} db \/ (P ⇓ₛ{C} ub(pref(b),P) /\ ∃P'. P' ⇓ₛ{C} db)  
 
 We can go back to complete semantics obtaining the following
 RC4:  ∀c FD. c[P↓] ⇓ᵢ db => ∃C. C[P] ⇓ₛ db \/ C[P] ⇓ₛ ub(pref(b),P)
 RC4D: ∀c FD. c[P↓] ⇓ᵢ db => ∃C. C[P] ⇓ₛ db \/ (C[P] ⇓ₛ ub(pref(b),P) /\ ∃P'. C[P'] ⇓ₛ db)
 
 TODO should C be defined or fully defined?
-TODO how do we prove PCCR? we only have CCR
-** proof RC4 implies CCR
-
-Proof.
-n-DEC for all Pᵢ↓
-PCCRD for all Pᵢ↓
-n-COMP to obtain the shortest prefix of all ub(pref(b),Pᵢ)
-
-
-C↓P↓ ⇓b => CP ⇓b ‌\/ CP ⇓ub(pref(b),C) \/ CP ⇓ub(pref(b),p) 
-
-
-
-RC4(P, cs, db) = ∃Cs. ⋈(Cs,P) ⇓ₛ db \/ ⋈(Cs,P) ⇓ₛ ub(pref(db),P)
-H1: ∀Pᵢ. RC4(Pᵢ, (P\Pᵢ)↓, db)
-H2: ∀ b. P↓ ⇓ db
-GOAL: P ⇓ db ∨ P ⇓ ub(prefix(db),Pᵢ)
-
-
-H2=⋈(P₁,...,Pₙ)↓ ⇓ₜ db =>SC
-⋈(P₁↓,...,Pₙ↓) ⇓ₜ db =>H1
-∃Csᵢ.
-(1) ⋈(Csᵢ,Pᵢ) ⇓ₛ db ‌\/
-(2) ⋈(Csᵢ,Pᵢ) ⇓ₛ ub(pref(db),Pᵢ)
-
-⋈(Csᵢ, Pᵢ)↓ ⇓ db'
-
-Suppose ↓ is wrong, then either:
-1) ⋈(Csᵢ, Pᵢ) ⇓ db
-   db'  ≠ db
-2) ⋈(Csᵢ, Pᵢ) ⇓ ub(t, Pᵢ)
-   ¬∃ prefix(db') = t
-
-(∀Pᵢ. ∃Csᵢ. ⋈(Csᵢ,Pᵢ) ⇓ₛ db 
-
-
-
-Separate Compilation
-SC: ⋈(P₁,...,Pₙ)↓ ⇓b => ⋈(P₁↓,...,Pₙ↓) ⇓b
-in our case seems by definition because compiling a whole program consists in concatenating the compilation of its components: ⋈(P₁,...,Pₙ)↓ = ⋈(P₁↓,...,Pₙ↓).
-However in general this might not be true, it looks provable semantically if we show that we can do a n-way-decomposition to n partial Pᵢ and then a n-way-composition to get back to P.
 
 ** proof of RC4 for our instance
 ∀c FD. c[P↓] ⇓ᵢ db =>DEC
@@ -416,6 +368,40 @@ h2 =>HR
 pref(b');UB(P)∈π /\ filter(b)=filter(b') =>SCL
 b'∈π /\ filter(b)=filter(b') =>
 b ∈π
+
+** proof RC4 implies CCR - TODO
+
+Proof.
+n-DEC for all Pᵢ↓
+PCCRD for all Pᵢ↓
+n-COMP to obtain the shortest prefix of all ub(pref(b),Pᵢ)
+
+
+C↓P↓ ⇓b => CP ⇓b ‌\/ CP ⇓ub(pref(b),C) \/ CP ⇓ub(pref(b),p) 
+
+
+
+RC4(P, cs, db) = ∃Cs. ⋈(Cs,P) ⇓ₛ db \/ ⋈(Cs,P) ⇓ₛ ub(pref(db),P)
+H1: ∀Pᵢ. RC4(Pᵢ, (P\Pᵢ)↓, db)
+H2: ∀ b. P↓ ⇓ db
+GOAL: P ⇓ db ∨ P ⇓ ub(prefix(db),Pᵢ)
+
+
+H2=⋈(P₁,...,Pₙ)↓ ⇓ₜ db =>SC
+⋈(P₁↓,...,Pₙ↓) ⇓ₜ db =>H1
+∃Csᵢ.
+(1) ⋈(Csᵢ,Pᵢ) ⇓ₛ db ‌\/
+(2) ⋈(Csᵢ,Pᵢ) ⇓ₛ ub(pref(db),Pᵢ)
+
+⋈(Csᵢ, Pᵢ)↓ ⇓ db'
+
+Suppose ↓ is wrong, then either:
+1) ⋈(Csᵢ, Pᵢ) ⇓ db
+   db'  ≠ db
+2) ⋈(Csᵢ, Pᵢ) ⇓ ub(t, Pᵢ)
+   ¬∃ prefix(db') = t
+
+(∀Pᵢ. ∃Csᵢ. ⋈(Csᵢ,Pᵢ) ⇓ₛ db 
 
 * Robust Execution
 What we would like to have is something finer-grained that, ideally, replaces
