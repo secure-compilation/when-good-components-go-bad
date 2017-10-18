@@ -432,6 +432,251 @@ Proof.
         { (* mem <> mem' *)  right_inv; try (mem_contra Hmem); exec_contra H. }
 
       * (* Store *)
+        destruct t0.
+        { (* empty trace *)
+          destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
+          { (* pc' = pc+1 *)
+            rewrite N.eqb_eq in Hpc. rewrite Hpc.
+            destruct (RegisterFile.get_register rptr gen_regs) eqn:Hptr.  
+            { (* RegisterFile.get_register rd gen_regs = Some ptr *)
+              rename v into ptr.
+              destruct (RegisterFile.get_register rs gen_regs) eqn:Hval.
+              { (*RegisterFile.get_register rs gen_regs = Some val *)
+                rename v into val.                  
+                destruct (RegisterFile.eqb gen_regs gen_regs') eqn:Hregs.
+                { (* gen_regs = gen_regs' *)
+                  apply RegisterFile.eqb_eq in Hregs. subst gen_regs'.
+                  destruct (Memory.eqb
+                              (Memory.set_value mem (Memory.to_address ptr) val)
+                              mem') eqn:Hmem1.
+                  { (*(Memory.set_value mem (Memory.to_address ptr) val)=mem'*)                
+                    left.
+                    apply Store with (rptr:=rptr) (rs:=rs) (ptr:=ptr) (val:=val).
+                    unfold executing. rewrite H. auto.
+                    symmetry. assumption. symmetry. assumption.  
+                    apply Memory.eqb_Equal. assumption. 
+                  }
+                  { (*(Memory.set_value mem (Memory.to_address ptr) val)<>mem' *)
+                    right_inv; try (exec_contra H).
+                    subst.
+                    rewrite <- H5 in Hptr. inversion Hptr. subst. 
+                    rewrite Hval in H6. inversion H6. subst. 
+                    apply Memory.eqb_Equal in H7.
+                    rewrite Hmem1 in H7. inversion H7. 
+                  }
+                }
+                { (* gen_regs <> gen_regs' *)
+                  right_inv; try (exec_contra H).
+                  rewrite RegisterFile.eqb_refl in Hregs. inversion Hregs. 
+                }
+              }                
+              { (*RegisterFile.get_register rs gen_regs = Some val *)
+                right_inv; try(exec_contra H). subst.
+                rewrite <- H7 in Hval. inversion Hval.  
+              }
+            }
+            { (* RegisterFile.get_register rd gen_regs = None *)
+              right_inv; try(exec_contra H). subst.
+              rewrite Hptr in H6. inversion H6. 
+            }
+          }
+          { (* pc' <> pc+1 *)  inc_pc_contra H Hpc. }
+        }
+        { (* non empty trace *) right_inv; exec_contra H. }
+
+      * (* Bnz *)
+        destruct (Memory.eqb mem mem') eqn:Hmem.
+        { (* mem = mem' *)
+          apply Memory.eqb_Equal in Hmem.
+          destruct t0.
+          { (* empty trace *)
+            destruct (RegisterFile.eqb gen_regs gen_regs') eqn:Hregs.
+            { (* gen_regs = gen_regs' *)
+              apply RegisterFile.eqb_eq in Hregs. subst gen_regs'.
+              destruct (RegisterFile.get_register r gen_regs) eqn:Hval.
+              rename v into val.
+              { (*  (RegisterFile.get_register r gen_regs) = Some val *)
+                destruct (Z.eqb val Z0) eqn:Hzero.
+                { (* r = 0 *)
+                  destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
+                  { (* pc' = pc+1 *)
+                    rewrite N.eqb_eq in Hpc. rewrite Hpc.
+                    left. apply BnzZ with (reg:=r) (offset:=im).
+                    unfold executing. rewrite H. reflexivity.
+                    apply Z.eqb_eq in Hzero. subst val. symmetry. assumption.
+                    assumption. 
+                  }
+                  {
+                    (* pc' <> pc+1 *)
+                    inc_pc_contra H Hpc. subst. 
+                    rewrite <- H6 in Hval. inversion Hval. subst val0.
+                    apply Z.eqb_eq in Hzero. apply H7. apply Hzero. 
+                  }
+                }
+                { (* r <> 0 *)
+                  destruct (N.eqb pc' (Z.to_N( Z.add (Z.of_N pc) im )) ) eqn:Hpc.
+                  { (* pc' = pc + offset *)
+                     left. rewrite N.eqb_eq in Hpc. rewrite Hpc. 
+                    apply BnzNZ with (offset:=im) (G:=g)
+                                           (mem:=mem) (mem':=mem')
+                                           (pc:=pc) (gen_regs:=gen_regs)
+                                           (reg:=r) (val:=val).
+                    unfold executing. rewrite H. reflexivity.
+                    symmetry. assumption.
+                    intro Hzero'. subst val. inversion Hzero.
+                    assumption. 
+                  }
+                  {  (* pc' <> pc + offset *)
+                    inc_pc_contra H Hpc; subst. subst pc'0.
+                    rewrite N.eqb_refl in Hpc. inversion Hpc.
+                    rewrite <- H6 in Hval. inversion Hval.
+                    subst val. inversion Hzero. 
+                  }
+                }                
+              }
+              { (* RegisterFile.get_register r gen_regs = None *)
+                right_inv; try(exec_contra H); subst;
+                rewrite Hval in H6; inversion H6. 
+              }
+            }
+            {  (* gen_regs <> gen_regs' *)
+              right_inv; try (exec_contra H);
+              rewrite RegisterFile.eqb_refl in Hregs; inversion Hregs. 
+            }
+          }
+          { (* non empty trace *) right_inv; exec_contra H. }
+        }
+        { (* mem <> mem' *)  right_inv; try (mem_contra Hmem); exec_contra H. }
+
+      * (* IJump *)
+        destruct (Memory.eqb mem mem') eqn:Hmem.
+        { (* mem = mem' *)
+          apply Memory.eqb_Equal in Hmem.
+          destruct (RegisterFile.eqb gen_regs gen_regs') eqn:Hregs.
+          { (* gen_regs = gen_regs' *)
+            apply RegisterFile.eqb_eq in Hregs. subst gen_regs'.
+            destruct (RegisterFile.get_register r gen_regs) eqn:Hr.
+            { (* RegisterFile.get_register reg gen_regs = Some val *)
+              rename v into cptr.
+              destruct (N.eqb pc' (Memory.to_address cptr)) eqn:Hpc.
+              apply N.eqb_eq in Hpc. subst pc'. 
+              { (* pc' = [r] *)
+                  destruct(SFI.is_same_component_bool pc (Memory.to_address cptr)) eqn:Hsfi.
+                  { (* SFI.is_same_component pc pc' *)
+                    destruct t0.
+                    { (* empty *) (* this is a Jump *)
+                      left. apply Jump with (G:=g) (mem:=mem) (mem':=mem')
+                                            (pc:=pc) (gen_regs:=gen_regs)
+                                            (reg:=r) (addr:=cptr).
+                      unfold executing. rewrite H. auto.
+                      symmetry. assumption.
+                      unfold SFI.is_same_component_bool in Hsfi.
+                      unfold SFI.is_same_component. rewrite N.eqb_eq in Hsfi. apply Hsfi.
+                      assumption. 
+                    }
+                    { (* not empty *) (* contradiction *)
+                      right_inv; exec_contra H. subst.
+                      apply H9. unfold SFI.is_same_component_bool in Hsfi.
+                      subst pc'. unfold SFI.is_same_component.
+                      rewrite <- H7 in Hr. inversion Hr. subst addr.
+                      apply N.eqb_eq in Hsfi. apply Hsfi. 
+                    }
+                  }
+                  { (* ~SFI.is_same_component pc pc' *)
+                    destruct t0 as [|e xt].
+                    { (* empty *) (* contradiction *)
+                      right_inv; exec_contra H; subst;
+                      unfold ret_trace in H8;
+                      destruct (RegisterFile.get_register Register.R_COM gen_regs).
+                      destruct (get_component_name_from_id (SFI.C_SFI pc) g).
+                      destruct (get_component_name_from_id (SFI.C_SFI pc') g).
+                      inversion H8. inversion H8. inversion H8. inversion H8. 
+                      subst pc'. rewrite <- H6 in Hr. inversion Hr. subst addr.
+                      unfold SFI.is_same_component_bool in Hsfi.
+                      unfold SFI.is_same_component in H7.
+                      rewrite H7 in Hsfi. rewrite N.eqb_refl in Hsfi. inversion Hsfi.
+
+                      subst pc'. rewrite <- H6 in Hr. inversion Hr. subst addr.
+                      unfold SFI.is_same_component_bool in Hsfi.
+                      unfold SFI.is_same_component in H7.
+                      rewrite H7 in Hsfi. rewrite N.eqb_refl in Hsfi. inversion Hsfi.
+
+                      
+                    }
+                    { (* not empty *) (* this should be a return *)
+                      destruct xt.
+                      { (* trace [e] *)
+                        destruct e.
+                        { (* ECall *)
+                          right; intro contra; inversion contra; subst.
+                          unfold ret_trace in H8;
+                            destruct (RegisterFile.get_register Register.R_COM gen_regs).
+                          destruct (get_component_name_from_id (SFI.C_SFI pc) g).
+                          destruct (get_component_name_from_id (SFI.C_SFI pc') g).
+                          inversion H8. inversion H8. inversion H8. inversion H8.
+                          exec_contra H. 
+                        }
+                        { (* ERet *)
+                          destruct (RegisterFile.get_register Register.R_COM gen_regs) eqn:Hrcom.
+                          destruct (get_component_name_from_id (SFI.C_SFI pc) g) eqn:Hc.
+                          destruct (get_component_name_from_id (SFI.C_SFI (Memory.to_address cptr)) g) eqn:Hc'.
+                          destruct (Pos.eqb i i1) eqn:Haux. rewrite Pos.eqb_eq in Haux. subst i1.
+                          destruct (Pos.eqb i0 i2) eqn:Haux. rewrite Pos.eqb_eq in Haux. subst i2.
+                          destruct (Z.eqb z v) eqn:Haux. rewrite Z.eqb_eq in Haux. subst z.
+                          
+                          left. apply Return with (reg:=r).
+                          unfold executing. rewrite H. auto.
+                          symmetry. assumption.
+                          unfold ret_trace.
+                          rewrite Hrcom. rewrite Hc. rewrite Hc'. simpl. reflexivity.
+                          intro H7.  unfold SFI.is_same_component_bool in Hsfi.
+                          unfold SFI.is_same_component in H7.
+                          rewrite H7 in Hsfi. rewrite N.eqb_refl in Hsfi. inversion Hsfi.
+                          assumption.
+
+                          right; intro contra; inversion contra; exec_contra H;
+                            subst; subst pc'.                          
+                          (* rcom does not match *)
+                          rewrite Hr in H7. inversion H7; subst. clear H7. 
+                          unfold ret_trace in H8. 
+                          rewrite Hrcom in H8. rewrite Hc in H8. rewrite Hc' in H8. simpl in H8.
+                          inversion H8.  rewrite H1 in Haux. rewrite Z.eqb_refl in Haux. inversion Haux.
+                          (* c' does not match *)
+                          right; intro contra; inversion contra; exec_contra H;
+                            subst; subst pc'.
+                          rewrite Hr in H7. inversion H7; subst. clear H7. 
+                          unfold ret_trace in H8. 
+                          rewrite Hrcom in H8. rewrite Hc in H8. rewrite Hc' in H8. simpl in H8.
+                          inversion H8.  rewrite H2 in Haux. rewrite Pos.eqb_refl in Haux. inversion Haux.
+                          
+                          (* c does not match *)
+                          right; intro contra; inversion contra; exec_contra H;
+                            subst; subst pc'.
+                          rewrite Hr in H7. inversion H7; subst. clear H7. 
+                          unfold ret_trace in H8. 
+                          rewrite Hrcom in H8. rewrite Hc in H8. rewrite Hc' in H8. simpl in H8.
+                          inversion H8.  rewrite H1 in Haux. rewrite Pos.eqb_refl in Haux. inversion Haux.
+                          (* Hc' failed *)
+                          (* TODO Add well definedness environment properties such as *)
+                          (* get_component_name_from_id (SFI.C_SFI (Memory.to_address cptr)) g <> None *)
+        (*                 } *)
+        (*               } *)
+        (*               { (* trace [e;e';...] *) *)
+        (*               } *)
+        (*             } *)
+        (*           } *)
+        (*       } *)
+        (*       { (* pc' <> [r] *) *)
+        (*       } *)
+        (*     } *)
+        (*     { (* RegisterFile.get_register reg gen_regs = None *) *)
+        (*     } *)
+        (*   } *)
+        (*   { (* gen_regs <> gen_regs' *) *)
+        (*   } *)
+        (* }             *)
+        (* { (* mem <> mem' *)  right_inv; try (mem_contra Hmem); exec_contra H. } *)
+
         
       Admitted.
 
@@ -458,24 +703,12 @@ Definition trace_checker (t1 t2 : trace) : Checker :=
       | _ => false
       end in checker (aux t1 t2).
 
-Definition eqb_regs (regs1 regs2 : RegisterFile.t) : bool :=
-    let fix aux l1 l2 :=
-      match (l1,l2) with
-      | (nil,nil) => true
-      | (r1::l1',r2::l2') => if (Z.eqb r1 r2)
-                             then aux l1' l2'
-                             else false
-      | _ => false
-      end in (aux regs1 regs2).
-
-Definition eqb_mem (mem1 mem2 : Memory.t) : bool :=
-  Memory.equal mem1 mem2.
 
 Definition state_checker (s1 s2: MachineState.t) : Checker :=
   checker (
       (N.eqb (MachineState.getPC s1) (MachineState.getPC s2))
-        && (eqb_regs (MachineState.getRegs s1) (MachineState.getRegs s2))
-        && (eqb_mem (MachineState.getMemory s1) (MachineState.getMemory s2))
+        && (RegisterFile.eqb (MachineState.getRegs s1) (MachineState.getRegs s2))
+        && (Memory.eqb (MachineState.getMemory s1) (MachineState.getMemory s2))
     ).
 
 Definition eval_step_complete_exec : Checker :=

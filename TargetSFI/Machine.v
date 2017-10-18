@@ -26,7 +26,13 @@ Module RiscMachine.
 
   Definition address := N.
 
+  Definition pc : Set := address.
 
+  Definition PC0 : pc := N0.
+
+  (******************************************
+   * Register Type Definition
+   *******************************************)
   Module Register.
     
     Open Scope N_scope.
@@ -70,10 +76,11 @@ Module RiscMachine.
     
   End Register.
 
-  Definition pc : Set := address.
 
-  Definition PC0 : pc := N0.
-  
+  (******************************************************
+   * Register File Definition 
+   * General Registers (does not contain program counter)
+   ******************************************************)
   Module RegisterFile <: UsualDecidableType.
     
     Definition t : Set := list value.
@@ -93,13 +100,15 @@ Module RiscMachine.
     Definition get_register (reg : Register.t) (gen_regs : t) : option value :=
       ListUtil.get (N.to_nat reg) gen_regs.
 
+    Definition well_defined (regs : t) : Prop :=
+      List.length regs = Register.NO_REGISTERS.
+
     Fixpoint eqb (regs1 regs2 : t) : bool :=
       match (regs1,regs2) with
       | ([],[]) => true
       | (v1::regs1',v2::regs2') => (Z.eqb v1 v2) && (eqb regs1' regs2')
       | _ => false
       end.
-
 
     Lemma eqb_refl:
       forall regs, eqb regs regs = true.
@@ -164,6 +173,9 @@ Module RiscMachine.
   End RegisterFile.
 
 
+  (******************************************************
+   * ISA Definitions: Instructions and binary operations
+   ******************************************************)
   Module ISA.
     
     Inductive binop : Type :=
@@ -348,6 +360,9 @@ Module RiscMachine.
     - intro H. rewrite H. apply eqb_refl_word.
   Qed.
         
+  (******************************************************
+   * Memory Definitions
+   ******************************************************)
   Module Memory.
 
     Definition t := BinNatMap.t word.
@@ -466,7 +481,6 @@ Module RiscMachine.
       
   End Memory.
 
-
   Definition executing_binop (op : ISA.binop)
              (op1 : value) (op2 : value) : value :=
     match op with
@@ -498,15 +512,13 @@ Module RiscMachine.
   
 
   Definition inc_pc (a : pc) : pc := N.add a 1.
-
   
 End RiscMachine.
-
 
 Close Scope Z_scope.
 
 (******************************************
- * Program Definition
+ * SFIComponent Definition
  *******************************************)
 Module SFIComponent.
 
@@ -514,34 +526,9 @@ Module SFIComponent.
 
 End SFIComponent.
 
-Module Env  <: UsualDecidableType.
-
-  (* list of dimension COMP_MAX + 1 *)
-  Definition CN := list Component.id.
-
-  (* E is a partial map from addresses to procedure names.*)
-  Definition E := list (RiscMachine.address*Procedure.id).
-
-  Definition t := CN * E.
-
-  Definition get_component_name_from_id (id : SFIComponent.id)
-             (G : t): option Component.id :=
-    ListUtil.get (N.to_nat id) (fst G).
-
-  Definition get_procedure (addr : RiscMachine.address)
-             (G : Env.t) : option Procedure.id :=
-    ListUtil.get_by_key (N.eqb) addr (snd G).
-  
-  Definition eq_dec:
-    forall g1 g2 : t,  {g1 = g2} + {g1 <> g2}.
-  Proof.
-    repeat decide equality. Defined.
-
-  Include HasUsualEq <+ UsualIsEq.
-  
-End Env.
-
-
+(******************************************************
+ * SFI specific definitions
+ ******************************************************)
 Module SFI.
 
   (* Number of bits used for offset within slot *)
@@ -552,22 +539,12 @@ Module SFI.
   Definition COMPONENT_MASK : N := 2^CID_SIZE - 1.
 
   Definition CODE_DATA_BIT_MASK : N :=  N.shiftl 1 (OFFSET_SIZE + CID_SIZE).
-  
 
-  (* Maximum number of components *)
+  (* Maximum number of components, including the zero (special) component *)
   Definition COMP_MAX:N := 2^CID_SIZE.
-
 
   Definition C_SFI (addr : RiscMachine.address) : SFIComponent.id  := 
     N.land (N.shiftl addr OFFSET_SIZE) COMPONENT_MASK.
-
-  Record program :=
-    {
-      cn : Env.CN;
-      e : Env.E;
-      mem : RiscMachine.Memory.t;
-      prog_interface : Program.interface
-    }.
 
   Open Scope N_scope.
   Definition get_max_offset : N := 2^OFFSET_SIZE-1.
@@ -590,9 +567,46 @@ Module SFI.
   Definition is_data_address  (addr : RiscMachine.address) : bool :=
     negb (is_code_address addr).
 
-
 End SFI.
 
+(******************************************************
+ * Environment Definitions
+ ******************************************************)
+Module Env  <: UsualDecidableType.
+
+  (* list of dimension COMP_MAX*)
+  Definition CN := list Component.id.
+
+  (* E is a partial map from addresses to procedure names.*)
+  Definition E := list (RiscMachine.address*Procedure.id).
+
+  Definition t := CN * E.
+
+  Definition get_component_name_from_id (id : SFIComponent.id)
+             (G : t): option Component.id :=
+    ListUtil.get (N.to_nat id) (fst G).
+
+  Definition get_procedure (addr : RiscMachine.address)
+             (G : Env.t) : option Procedure.id :=
+    ListUtil.get_by_key (N.eqb) addr (snd G).
+  
+  Definition eq_dec:
+    forall g1 g2 : t,  {g1 = g2} + {g1 <> g2}.
+  Proof.
+    repeat decide equality. Defined.
+
+  Definition wel_defined (g : t) : Prop  :=
+    let cn := (fst g) in
+    (List.length cn = N.to_nat SFI.COMP_MAX) /\ (List.NoDup cn).
+  
+  Include HasUsualEq <+ UsualIsEq.
+  
+End Env.
+
+
+(******************************************************
+ * Machine State Definitions
+ ******************************************************)
 Module MachineState.
 
   Definition t := RiscMachine.Memory.t * RiscMachine.pc * RiscMachine.RegisterFile.t.
@@ -614,4 +628,14 @@ Module MachineState.
      
 End MachineState.
 
+(******************************************************
+ * Program Definitions
+ ******************************************************)
+Record sfi_program :=
+  {
+    cn : Env.CN;
+    e : Env.E;
+    mem : RiscMachine.Memory.t;
+    prog_interface : Program.interface
+  }.
 
