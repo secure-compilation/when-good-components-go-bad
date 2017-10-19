@@ -37,6 +37,7 @@ Module RiscMachine.
     
     Open Scope N_scope.
     Definition t := N.
+
     Definition R_ONE: t := 1.
     Definition R_COM : t := 2.
     Definition R_AUX1 : t := 3.
@@ -50,7 +51,7 @@ Module RiscMachine.
     Definition R_OR_CODE_MASK : t := 29.
     Definition R_OR_DATA_MASK : t := 30.
     Definition R_T : t := 31.
-    Definition R_D : t := 32.
+    Definition R_D : t := 32.    
     Close Scope N_scope.
     
     Definition NO_REGISTERS : nat := 33.
@@ -82,6 +83,8 @@ Module RiscMachine.
    * General Registers (does not contain program counter)
    ******************************************************)
   Module RegisterFile <: UsualDecidableType.
+
+    Parameter p : nat -> (list value).
     
     Definition t : Set := list value.
 
@@ -595,9 +598,11 @@ Module Env  <: UsualDecidableType.
   Proof.
     repeat decide equality. Defined.
 
-  Definition wel_defined (g : t) : Prop  :=
+  Definition well_defined (g : t) (addresses :list RiscMachine.address) : Prop  :=
     let cn := (fst g) in
-    (List.length cn = N.to_nat SFI.COMP_MAX) /\ (List.NoDup cn).
+    let env_addresses := List.map fst (snd g) in
+    (List.length cn = N.to_nat SFI.COMP_MAX) /\ (List.NoDup cn)
+    /\ (List.incl addresses env_addresses).
   
   Include HasUsualEq <+ UsualIsEq.
   
