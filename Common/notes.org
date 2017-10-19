@@ -39,6 +39,16 @@ ignoring the rest of the compilation chain.
 
 SCL: A property π is suffix closed or refDef closed iff
      ∀ ub(t,P) ∈π => refDef(ub(t,P)) ∈π
+
+What about an equivalence?
+π~π' <=> (∀db. db ∈ π <=> db ∈ π')
+∀π ⊆ DEF ∪ UNDEF. ∃π' ⊆ DEF. ∀ ub ∈ π. refDef(ub) ⊆ π' /\ π ~ π'
+
+TODO: 
+The other option is to change the definition of satisfaction so that π
+is only defined over DEF and if a semantics produces an ub the match
+it correctly inside π.
+
      
 *** Examples of bad traces
 - in levels below our language with events Σ we might have extra events
@@ -69,9 +79,9 @@ e.g. we have showed that our program never calls the procedure Error, this is pr
 Pᵢ ∈ { components compatible with interface i }
 Ps ∈ { sets of components compatible with ψ }
 
-DEF(Pᵢ)  = { db(t) | ∃Ps={P₁ ... Pᵢ₋₁, Pᵢ₊₁ ... Pₙ}. ⋈(Ps ∪ {Pᵢ}) ⇓ db(t) }
+DEF(Pᵢ)  = { db | ∃Ps={P₁ ... Pᵢ₋₁, Pᵢ₊₁ ... Pₙ}. ⋈(Ps ∪ {Pᵢ}) ⇓ db }
 DEF(Ps) = ⋂ { DEF(Pᵢ)  | Pᵢ ∈ Pₛ }
-DEF     = ⋃ { DEF(Ps) | ∃ Ps } = { db | ∃Ps. db ∈ DEF(Ps) } 
+DEF     = ⋃ { DEF(Ps) | ∃ Ps } = { db | ∃Ps. db ∈ DEF(Ps) }
 UNDEF(Pᵢ) = { ub(t₁,Pᵢ) | ∃ db(t) ∈ DEF(Pᵢ) /\ t=t₁at₂ /\ a∈Pᵢ }
 UNDEF(Ps) = ⋂ { UNDEF(Pᵢ) | Pᵢ∈Ps}
 UNDEF = ⋃ { UNDEF(Ps) | ∃Ps }
@@ -102,6 +112,8 @@ We can define the πᵢ from our Πᵢ
 Note: the only properties that can be defined over a partial program
 with UB are those that assumes that the program doesn't UB before a
 certain length, starting from some of its entrypoints.
+
+πᵢ = { ub(t) | |filter(t,Pᵢ)|>10 }
 
 *** Properties for sets of component
 We now define properties Π over the traces of a set of components.
@@ -223,8 +235,7 @@ Note that P and C are sets of components.
 
 * Robust Compilation
 
-RC:  ∀c defined. c[P↓] ⇓ₜ db => ∃C. C[P] ⇓ₛ db \/ C[P] ⇓ₛ ub(pref(db),P)
-RCD: ∀c defined. c[P↓] ⇓ₜ db => ∃C. C[P] ⇓ₛ db \/ (C[P] ⇓ₛ ub(pref(db),P) /\ ∃P'. C[P'] ⇓ₛ db)
+RC: ∀c defined. c[P↓] ⇓ₜ db => ∃C. C[P] ⇓ₛ db \/ C[P] ⇓ₛ ub(pref(db),P)
 
 ** why this definition
 Starting from CCR and CCRD we can obtain the equivalent for a
@@ -241,45 +252,23 @@ RCD: ∀c FD. c[P↓] ⇓ᵢ db => ∃C. C[P] ⇓ₛ db \/ (C[P] ⇓ₛ ub(pref(
 
 TODO should C be defined or fully defined?
 
-** proof of RC4 for our instance from T to S
+** proof of RC for our instance from T to S
 ∀c. c[P↓] ⇓ₜ db =>DEC
 P↓ ⇓ₜ{C} db =>PCCR 
 P ⇓ₛ{C} b' /\ (b'=db \/ b'=ub(pref(db),P) =>DEF in both cases
 ∃C. C[P] ⇓ₛ b' /\ (b'=db \/ b'=ub(pref(db),P)
 
-** proof of RC4 for our instance from I to S
+** proof of RC for our instance from I to S
    it can be proved with the huge assumption that c is defined, this
    however doesn't influence preservation of properties.
 
    TODO: RC_IT + RC_SI => RC_ST
 
-** proof that RC4 (plus other stuff) satisfies PRS
-First we need this Lemma to apply RC4 when the context is not defined.
-
-This is necessary for the refinements of C
-HR: ∀C. C[P]⇓b(t) => ∃C' defined. C'[P]⇓db(t)
-    ∀C. C[P]⇓b(t) /\ b∈π => ∃C' defined. C'[P]⇓db(t) /\ db∈π
-    ∀C. C[P]⇓b => ∃C' defined. C'[P]⇓b' /\ filter(b)=filter(b')
-    ∀C. C[P]⇓b /\ b∈π => ∃C' FD. C'[P]⇓b' /\ b'≥b /\ b'∈π
-
-This is necessary for the refinements of P
-SCL: A property π is suffix closed or refDef closed iff
-     ∀ ub(t,P) ∈π => refDef(ub(t,P)) ∈π
-
-TODO: does SCL imply HR?
-
-TODO HR Proof
-looks like a DECR and DEF at the same level
-I could use DECR but I'd like to have a b' which is not longer that b,
-ideally I can make a C' that instead of doing ub, as soon as it is
-called terminates. This leads to the same filtering for b.
-TODO if you have RC_SI and RC_IT it looks like you get HR, is it
-related to compositionality?
-
+** proof that RC (plus other stuff) satisfies PRS
 TODO the following proof is valid for open or closed π, we just need
 the extra definability for the closed case.
 
-*** RC implies PRS from S to T
+*** RC implies PRS from S to T for πᵢ
 Preservation of RS
 (∀b C. C[P] ⇓ₛ b => b∈πₚ) =>
 (∀b c. c[P↓] ⇓ₜ b => b∈πₚ)
@@ -291,7 +280,7 @@ note that:
 - the proof works also if P↓ does ub, even if at the target it doesn't.
 
 Assume h1: (∀b C. C[P] ⇓ₛ b => b∈π)
-       h2:  ∀b c. c[P↓] ⇓ₜ db
+       h2:  ∀b c. c[P↓] ⇓ₜ b
 - c no ub, P↓ no ub, P no ref
 - c no ub, P↓ ub, P no ref
 h2 =>RC4
@@ -305,10 +294,9 @@ ub(pref(b),P) ∈π =>SCL
 b∈π
 
 *** RC implies PRS from S to I
-Preservation of RS given by RC
+Preservation of RS given by RC and Presevation of Closed properties
 (∀b C. C[P] ⇓ₛ b => b∈πₚ) =>
 (∀b c defined. c[P↓] ⇓ᵢ b => b∈πₚ)
-
 
 PRS:
 (∀b C. C[P] ⇓ₛ b => b∈πₚ) =>
@@ -321,52 +309,56 @@ Preservation of RC
 
 Satisfaction of closed properties
 (∀b c defined. c[P↓] ⇓ᵢ b => b∈πₚ) => (∀b c. c[P↓] ⇓ᵢ b => b∈πₚ)
-TODO check
+
+In general this is not true, for example if ub(t,C) ∉ πₚ the premise
+is true but not the conclusion.
+However if we apply some filtering or transformation in π it can be
+satisfied:
+- fix 1
+π(b) = { b(t) | Π(t) }
+
+- fix 2
+πₚ(b) = { b(t) | filter(t,P) ∈ Π}
 
 
-Proof 2
-HR: ∀C. C[P]⇓b(t) => ∃C' defined. C'[P]⇓db(t)
+TODO
+
+*** HR notes
+HR is necessary for the refinements of C and it's the reason it makes
+sense to do DECR.
+
+HR: ∀C. C[P]⇓b(t) => ∃C' defined. C'[P]⇓b'(t) /\ b'≠ub(t,C')     (most general)
+    ∀C. C[P]⇓ub(t,C) => ∃C' defined. C'[P]⇓term(t,C')            (most specific)
+
+Other versions:
+    ∀C. C[P]⇓b(t) /\ b∈π => ∃C' defined. C'[P]⇓b(t) /\ db∈π
+    ∀C. C[P]⇓b => ∃C' defined. C'[P]⇓b' /\ filter(b)=filter(b')
+    ∀C. C[P]⇓b /\ b∈π => ∃C' FD. C'[P]⇓b' /\ b'≥b /\ b'∈π
+
+TODO HR Proof
+looks like a DECR and DEF at the same level
+I could use DECR but I'd like to have a b' which is not longer that b,
+ideally I can make a C' that instead of doing ub, as soon as it is
+called terminates. This leads to the same filtering for b.
+TODO if you have RC_SI and RC_IT it looks like you get HR, is it
+related to compositionality?
 
 
-HR implies SCP
-h1: (∀b c defined. c[P↓] ⇓ᵢ b => b∈πₚ) => 
-h2: ∀b c. c[P↓] ⇓ᵢ b 
+SCL is necessary for the refinements of P
+SCL: A property π is suffix closed or refDef closed iff
+     ∀ ub(t,P) ∈π => refDef(ub(t,P)) ∈π
 
-h2: ∀b c. c[P↓] ⇓ᵢ b(t) =>HR
-∃C' defined. C'[P]⇓db(t) =>h1
-db(t) ∈ πₚ => ??
-b(t) ∈ πₚ
+TODO: does SCL imply HR ??
 
+** VDEF and RC
+   RCD: ∀c defined. c[P↓] ⇓ₜ db => ∃C. C[P] ⇓ₛ db \/ (C[P] ⇓ₛ ub(pref(db),P) /\ ∃P'. C[P'] ⇓ₛ db)
+   
+   is this necessary to restrict refinements to DEF?
+   It looks like it could be obtained from two rounds of RC.
 
+** proof RC implies CCR - TODO
 
-
-Assume h1: (∀b C. C[P] ⇓ₛ b => b∈π)
-       h2:  ∀b c. c[P↓] ⇓ᵢ b
-
-
-- c ub, P↓ no ub, C no ub, P ub
-h2 =>HR
-∃c' defined. c'[P↓]⇓db /\ db(t)=b(t) =>RC4
-∃C. C[P] ⇓ₛ ub(pref(db),P)) /\ db(t)=b(t) =>h1
-ub(pref(db),P))∈π /\ db(t)=b(t) =>SCL
-b(t)∈π
-
-
-- c no ub, P↓ ub, C no ub, P no ub
-h2 =>HR
-∃c' FD. c'[P↓]⇓b' /\ filter(b)=filter(b') =>RC4
-∃C. C[P] ⇓ₛ b' /\ filter(b)=filter(b') =>h1
-b'∈π /\ filter(b)=filter(b') =>
-b∈π
-- C not FD, P not FD
-h2 =>HR
-∃c' FD. c'[P↓]⇓b' /\ filter(b)=filter(b') =>RC4
-∃C. C[P] ⇓ₛ pref(b');UB(P) /\ filter(b)=filter(b') =>h1
-pref(b');UB(P)∈π /\ filter(b)=filter(b') =>SCL
-b'∈π /\ filter(b)=filter(b') =>
-b ∈π
-
-** proof RC4 implies CCR - TODO
+THIS SEEMS TO NEED RC FOR ALL SUBSETS
 
 Proof.
 n-DEC for all Pᵢ↓
@@ -737,3 +729,102 @@ RE (Robust Execution):
     (⋈(ρ) ⇓ GoingWrong(t, pᵢ) =>
       (∀ pⱼ s.t. j ≠ i. ∃ Pⱼ. FD(Pⱼ) ∧ ⋈(ρ\pⱼ ∪ Pⱼ↓) ⇓ GoingWrong(t, pᵢ)) ∧
       (∃ Pᵢ b'. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b' ∧ trace(b') = t)
+* again
+Proof and definition become more detailed, which means clearer but also harder to read.
+The π contains only DEF and it's much clearer.
+
+** Robust Satisfaction:
+  P robustly satisfies π ⊆ DEF
+  ∀P b C. C[P]⇓b => ∃t.
+  (b=db(t) => db(t) ∈ π) /\
+  (b=ub(t,C) => ∃db(t') ∈ π /\ t≤t') /\
+  (b=ub(t,P) => ∀t'. t≤t' /\ db(t') ∈ π)
+
+  Note that satisfaction for whole programs is an instance with an
+  empty C and the second match doesn't occur.
+
+** Preservation of RS:
+  RS_L1(P) => RS_L2(P↓)
+** RC+HR => PRS_SI
+
+Assume
+  HR: ∀C. C[P]⇓b(t) => ∃C' defined. C'[P]⇓b'(t) /\ b'≠ub(t,C')
+
+Assume h1 
+  ∀P tₛ C. C[P]⇓ₛ b(tₛ) =>
+  (b(tₛ)=db(t) => db(tₛ) ∈ π) /\
+  (b(tₛ)=ub(tₛ,C) => ∃db(tₛ') ∈ π /\ tₛ≤tₛ') /\
+  (b(tₛ)=ub(tₛ,P) => ∀tₛ'. tₛ≤tₛ' /\ db(tₛ') ∈ π)
+
+Assume h2
+  ∀P tᵢ c. c[P↓]⇓ᵢb(tᵢ)
+
+Goal
+  (b(tᵢ)=db(tᵢ) => db(tᵢ) ∈ π) /\
+  (b(tᵢ)=ub(tᵢ,c) => ∃db(tᵢ') ∈ π /\ tᵢ≤tᵢ') /\
+  (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
+
+
+i) c no ub, P↓ no ub, P ref/no ref
+h2: c[P↓]⇓ᵢdb(tᵢ) =>RC4
+∃C. C[P] ⇓ₛ b(tᵢ)
+1) C[P] ⇓ₛ db(tᵢ)
+by RS db(tᵢ) ∈ π
+2) C[P] ⇓ₛ ub(prefix(tᵢ), P)
+To show
+    (b(tᵢ)=ub(tᵢ,P↓) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
+by RS ∀tᵢ'. prefix(tᵢ)≤tᵢ' /\ db(tᵢ') ∈ π
+
+ii) c no ub, P↓ ub, P ref/no ref
+h2: c[P↓]⇓ᵢub(tᵢ,P) =>RC4
+∃C.
+1) C[P] ⇓ₛ ub(tᵢ,P)
+To show:
+  (b=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
+by RS: ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π
+2) C[P] ⇓ₛ ub(prefix(tᵢ), P)
+To show:
+  (b=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
+by RS ub(prefix(tᵢ),P) => ∀ tᵢ'. prefix(tᵢ)≤tᵢ' /\ db(tᵢ') ∈ π
+
+iii) c ub, P↓ no ub, P ref/no ref
+h2: c[P↓]⇓ᵢub(tᵢ,C) =>HR
+∃b' c' defined. c'[P↓]⇓ᵢb'(tᵢ) /\ b'≠ub(tᵢ,c') =>RC4
+by i) or ii)
+
+** RC => PRS_IT
+   is a special case of the previous proof
+** RC_SI + RC_IT => RC_ST
+   interesting?
+** PSR_SI + PSR_IT => PSR_ST
+Assume PRS_SI
+  (∀P tₛ C. C[P]⇓ₛ b(tₛ) =>
+   (b(tₛ)=db(t) => db(tₛ) ∈ π) /\
+   (b(tₛ)=ub(tₛ,C) => ∃db(tₛ') ∈ π /\ tₛ≤tₛ') /\
+   (b(tₛ)=ub(tₛ,P) => ∀tₛ'. tₛ≤tₛ' /\ db(tₛ') ∈ π)) =>
+  (∀P tᵢ C. C[P↓]⇓ᵢ b(tᵢ) =>
+   (b(tᵢ)=db(t) => db(tᵢ) ∈ π) /\
+   (b(tᵢ)=ub(tᵢ,C) => ∃db(tᵢ') ∈ π /\ tᵢ≤tᵢ') /\
+   (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π))
+
+Assume PRS_IT
+  (∀P tᵢ C. C[P]⇓ᵢ b(tᵢ) =>
+   (b(tᵢ)=db(t) => db(tᵢ) ∈ π) /\
+   (b(tᵢ)=ub(tᵢ,C) => ∃db(tᵢ') ∈ π /\ tᵢ≤tᵢ') /\
+   (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)) =>
+  (∀P tₜ C. C[P↓]⇓ₜ b(tₜ) =>
+   (b(tₜ)=db(t) => db(tₜ) ∈ π) /\
+   (b(tₜ)=ub(tₜ,C) => ∃db(tₜ') ∈ π /\ tₜ≤tₜ') /\
+   (b(tₜ)=ub(tₜ,P) => ∀tₜ'. tₜ≤tₜ' /\ db(tₜ') ∈ π))
+
+Assume
+  (∀P tₛ C. C[P]⇓ₛ b(tₛ) =>
+   (b(tₛ)=db(t) => db(tₛ) ∈ π) /\
+   (b(tₛ)=ub(tₛ,C) => ∃db(tₛ') ∈ π /\ tₛ≤tₛ') /\
+   (b(tₛ)=ub(tₛ,P) => ∀tₛ'. tₛ≤tₛ' /\ db(tₛ') ∈ π))
+
+To show
+  (∀P tₜ C. C[P↓↓]⇓ₜ b(tₜ) =>
+   (b(tₜ)=db(t) => db(tₜ) ∈ π) /\
+   (b(tₜ)=ub(tₜ,C) => ∃db(tₜ') ∈ π /\ tₜ≤tₜ') /\
+   (b(tₜ)=ub(tₜ,P) => ∀tₜ'. tₜ≤tₜ' /\ db(tₜ') ∈ π))
