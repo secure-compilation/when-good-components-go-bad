@@ -140,12 +140,6 @@ Ltac exec_contra H :=
     unfold executing in H1; rewrite H in H1; inversion H1
   end.
 
-(* Ltac mem_contra Hmem := *)
-(*   match goal with *)
-(*   | [ H1 : Memory.Equal _ _ |- _ ] => *)
-(*     apply Memory.eqb_Equal in H1; rewrite Hmem in H1; inversion H1 *)
-(*   end. *)
-
 Ltac unify_options := repeat
   match goal with
   | H1 : Some ?x = ?o , H2 : Some ?y = ?o |- _ =>
@@ -905,6 +899,6 @@ What do I need to generate?
  *)
 (* I need the Prop to be decidable. *)
 
-QuickChick eval_step_complete_exec. 
+(* QuickChick eval_step_complete_exec.  *)
                                    
   

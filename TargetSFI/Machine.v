@@ -103,9 +103,6 @@ Module RiscMachine.
     Definition get_register (reg : Register.t) (gen_regs : t) : option value :=
       ListUtil.get (N.to_nat reg) gen_regs.
 
-    Definition well_defined (regs : t) : Prop :=
-      List.length regs = Register.NO_REGISTERS.
-
     Fixpoint eqb (regs1 regs2 : t) : bool :=
       match (regs1,regs2) with
       | ([],[]) => true
@@ -438,7 +435,14 @@ Module RiscMachine.
       - apply eqb_eq_word.
       - apply BinNatMapFacts.Equal_refl.
     Qed.
-        
+
+    Lemma eqb_eq: forall (m1 m2 : t),
+        (eqb m1 m2) = true <-> m1 = m2.
+    Proof.
+      split.
+      - intro H. (* apply BinaNatMapFacts.eqb_eq in H.  *)
+    Admitted.
+    
     Lemma eqb_Equal: forall (m1 m2 : t),
         (eqb m1 m2) = true <->  BinNatMap.Equal m1 m2.
     Proof.
@@ -598,12 +602,6 @@ Module Env  <: UsualDecidableType.
   Proof.
     repeat decide equality. Defined.
 
-  Definition well_defined (g : t) (addresses :list RiscMachine.address) : Prop  :=
-    let cn := (fst g) in
-    let env_addresses := List.map fst (snd g) in
-    (List.length cn = N.to_nat SFI.COMP_MAX) /\ (List.NoDup cn)
-    /\ (List.incl addresses env_addresses).
-  
   Include HasUsualEq <+ UsualIsEq.
   
 End Env.

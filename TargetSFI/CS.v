@@ -70,8 +70,6 @@ Module CS.
 
   | BinOp : forall mem mem' pc gen_regs gen_regs' op reg_src1 reg_src2 reg_dst val1 val2,
       executing mem pc (IBinOp op reg_src1 reg_src2 reg_dst) ->
-      (* RegisterFile.well_defined gen_regs -> *)
-      (* RegisterFile.well_defined gen_regs' -> *)
       Some val1 = RegisterFile.get_register reg_src1 gen_regs ->
       Some val2 = RegisterFile.get_register reg_src2 gen_regs ->
       let result := executing_binop op val1 val2 in
@@ -81,8 +79,6 @@ Module CS.
 
   | Load : forall mem mem' pc gen_regs gen_regs' rptr rd ptr val,
       executing mem pc (ILoad rptr rd) ->
-      (* RegisterFile.well_defined gen_regs -> *)
-      (* RegisterFile.well_defined gen_regs' -> *)
       Some ptr = RegisterFile.get_register rptr gen_regs ->
       let addr := Memory.to_address (ptr) in
       Some val = Memory.get_value mem addr ->
@@ -92,7 +88,6 @@ Module CS.
            
   | Store: forall mem mem' pc gen_regs rptr rs ptr val,
       executing mem pc (IStore rptr rs) ->
-      (* RegisterFile.well_defined gen_regs ->       *)
       Some ptr = RegisterFile.get_register rptr gen_regs ->
       Some val = RegisterFile.get_register rs gen_regs ->
       Memory.Equal (Memory.set_value mem (Memory.to_address ptr) val) mem' ->
@@ -100,7 +95,6 @@ Module CS.
 
   | BnzNZ: forall mem mem' pc gen_regs reg offset val,
       executing mem pc (IBnz reg offset) ->
-      (* RegisterFile.well_defined gen_regs ->       *)
       Some val = RegisterFile.get_register reg gen_regs ->
       val <> Z0 ->
       let pc' := Z.to_N( Z.add (Z.of_N pc) offset ) in
@@ -109,16 +103,12 @@ Module CS.
            
   | BnzZ: forall mem mem' pc gen_regs reg offset,
       executing mem pc (IBnz reg offset) ->
-      (* RegisterFile.well_defined gen_regs ->       *)
       Some Z0 = RegisterFile.get_register reg gen_regs ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) E0 (mem',inc_pc pc,gen_regs)
            
   | Return: forall mem mem' pc gen_regs reg t addr,
       executing mem pc (IJump reg) ->
-      (* RegisterFile.well_defined gen_regs ->       *)
-      (* Env.well_defined G nil -> *)
-      (* RegisterFile.well_defined gen_regs -> *)
       Some addr = RegisterFile.get_register reg gen_regs ->
       let pc' := Memory.to_address addr in
       Some t = ret_trace G pc pc' gen_regs ->
@@ -128,7 +118,6 @@ Module CS.
 
   | Jump: forall mem mem' pc gen_regs reg addr,
       executing mem pc (IJump reg) ->
-      (* RegisterFile.well_defined gen_regs -> *)
       Some addr = RegisterFile.get_register reg gen_regs ->
       let pc' := Memory.to_address addr in
       SFI.is_same_component pc pc'->
@@ -138,7 +127,6 @@ Module CS.
   | Jal: forall mem mem' pc gen_regs gen_regs' addr,      
       executing mem pc (IJal addr) ->
       let ra := Z.of_N (inc_pc pc) in
-      (* RegisterFile.well_defined gen_regs -> *)
       RegisterFile.set_register Register.R_RA ra gen_regs = gen_regs'->
       let pc' := addr in
       SFI.is_same_component pc pc'->
@@ -148,8 +136,6 @@ Module CS.
   | Call: forall mem mem' pc gen_regs gen_regs' addr t,
       executing mem pc (IJal addr) ->
       let ra := Z.of_N (inc_pc pc) in
-      (* Env.well_defined G [addr] -> *)
-      (* RegisterFile.well_defined gen_regs -> *)
       RegisterFile.set_register Register.R_RA ra gen_regs = gen_regs'->
       let pc' := addr in
       Some t = call_trace G pc pc' gen_regs ->
