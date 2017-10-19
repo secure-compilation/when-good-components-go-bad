@@ -8,9 +8,6 @@ Require Import Common.Util.
 Require Import Common.Maps.
 Require Import SFIUtil.
 
-Require Import QuickChick.QuickChick.
-Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
-
 From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
 
 Import BinNatMapExtra.

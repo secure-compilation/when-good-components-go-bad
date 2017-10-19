@@ -9,8 +9,6 @@ Require Import CompCert.Events.
 Require Import Common.Definitions.
 Require Import TargetSFI.Machine.
 
-Require Import QuickChick.Decidability.
-
 Require Export Lib.Monads.
 Export MonadNotations.
 Open Scope monad_scope.
