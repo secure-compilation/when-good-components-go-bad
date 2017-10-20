@@ -73,6 +73,16 @@ e.g. we have showed that our program never calls the procedure Error, this is pr
      π = { b(t) | pref(t,3) ∈π₁ } which is closed wrt refDef(π₁ ∪ π₂)
      this property is preserved by CCBR (CompCert)
 
+other examples could include conditional properties of the form:
+- unless the program receives a "potentially unsafe" input it does not
+  have undefined behavior, we could use formal verification to prove
+  that *some* (but not all) of the inputs are safe
+
+other examples could make use of the interfaces:
+- If I know by looking at the allowed calls that from `main` to `bad`
+  there is are only certain paths of calls, then we can conclude that
+  `bad` can only happen if one of these paths is taken
+
 ** Linked Program Cₛ
 *** Properties for a component
 ψ = n interfaces
@@ -182,7 +192,7 @@ something that is not expressable in the source, independently of what
 program you start with.
 
 Some simple implications:
-CCR + DEF => CCRD
+CCR + (V?)DEF => CCRD
 *** Compiler Correctness with definability
 A possible way to limit the damage caused by undefined behaviors could be to say
 something more about the refinement. The idea is to constrain it to what is
@@ -200,6 +210,7 @@ events are too coarse and we should always be able to exhibit a legal high-level
 program that produces them.
 
 Thm: CCRD => Preservation of satisfaction
+[CH: Don't really see this. What about the 2nd branch of the or above?]
 
 * Robust Satisfaction and its preservation for linked programs
 First of all, we must introduce the notions of linking and separate compilation.
@@ -219,10 +230,8 @@ partial Pᵢ and then a n-way-composition to get back to P.
 TODO recheck this
 
 RS Robust Satisfaction
+P robustly satisfies property π iff
   ∀C. C[P]⇓b => b∈π
-
-An additional definition that we need is the one which allows us to deal with
-verified programs that can never exhibit undefined behaviors.
 
 Robust Satisfaction is defined independently of the existence of a compiler
 between different languages. In our case, however, we are interested in
@@ -233,7 +242,11 @@ PRS (Preservation of Robust Satisfaction):
 
 Note that P and C are sets of components.
 
-* Robust Compilation
+An additional definition that we need is the one which allows us to deal with
+verified programs that can never exhibit undefined behaviors.
+[CH: This remark seems completely out of context. Need for what?]
+
+* Robust Compilation (OLD_RC_DC)
 
 RC: ∀c defined. c[P↓] ⇓ₜ db => ∃C. C[P] ⇓ₛ db \/ C[P] ⇓ₛ ub(pref(db),P)
 
@@ -392,7 +405,7 @@ Suppose ↓ is wrong, then either:
 
 (∀Pᵢ. ∃Csᵢ. ⋈(Csᵢ,Pᵢ) ⇓ₛ db 
 
-* Robust Execution
+* Robust Execution (variant of NEW_RC_DC)
 What we would like to have is something finer-grained that, ideally, replaces
 only those components which cause problems.
 
@@ -408,6 +421,14 @@ Notes:
     backmapping argument for every component, no matter where it comes from
     (e.g. compiled or hand-written).
 
+[CH: not sure about the "more general" part, NEW_RC_DC was stated for
+     arbitrary programs and contexts, which is already more general
+     than the sets of components model.]
+[CH: also, I don't see the fact that this property is n-ary as a plus,
+     on the contrary, it seems like a pain]
+[CH: finally, could it be that NEW_RC_DC => RE direction also holds?
+     I simply take pᵢ to be c and ρ\pᵢ to be P.]
+
 Lemma:
   RE => NEW_RC_DC
 Proof:
@@ -420,12 +441,21 @@ Proof:
   by RE instantiated with c and P↓, we can pick the case in which we backmap c
     ∃ C. FD(C) ∧ C↓[P↓] ⇓ b
 
+  [CH: In the NEW_RC_DC instance for components I would expect both c
+       and P to be *sets* of components. ]
+
 Lemma:
   CCR ∧ RE => RC4
 Proof:
   should follow from multiple applications of RE and then CCR
 
 ** Preservation of Robust Satisfaction by means of CCR and RE
+
+[CH: Isn't this just a consequence of:
+  (0) RE => NEW_RC_DC
+  (1) NEW_RC_DC + CCR => OLD_RC_DC (super simple)
+  (2) OLD_RC_DC => PRS (super simple too, counterpositive) ]
+
 Main Theorem:
   CCR ∧ RE => PRS
 Notes:
@@ -502,7 +532,7 @@ by Composition
 we have that
   ∃ Pᵢ FD(Pᵢ) ∧ ⋈(p\pᵢ ∪ Pᵢ↓) ⇓ b
   which is what we wanted to show.
-* Mutual Distrust for πᵢ
+* Mutual Distrust for πᵢ (broken variant of RC_DC+MD?)
 An interesting case is the one with more than two mutually distrustful source
 level components. There are several characterization of it, the iterative one
 being the most promising.
@@ -513,7 +543,9 @@ MD:
 P = {P₁, ..., Pₙ}
 ⋈(P)↓ ⇓ b => ∀ Pᵢ. RC4(Pᵢ, (P\Pᵢ)↓, b)
 
-* Mutual Distrust for π
+[CH: I don't see any iteration here, RC4 is not recursive!?]
+
+* Mutual Distrust for π (related to less iterative variants RC_DC+MD' and RC_DC+MD''?)
 
 RC4(Ps, cs, db) = ∃Cs. ⋈(Cs,Ps) ⇓ₛ db \/ ∃Pᵢ. ⋈(Cs,Ps) ⇓ₛ ub(pref(db),Pᵢ)
 
