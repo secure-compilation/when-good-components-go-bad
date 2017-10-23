@@ -428,54 +428,163 @@ CCRD:
 Def: Whole program Satisfaction
 WP satisfies π iff
 ∀t. WP ⇓ b =>
-  (b=db => db ∈ π) /\
-  (b=ub(t) => ∀t'. t'≥t /\ ∃WP'. WP' ⇓ db(t') => db(t') ∈ π)
+  (b=db => db ∈ π) ∧
+  (b=ub(t) => ∀t'. t'≥t ∧ ∃WP'. WP' ⇓ db(t') => db(t') ∈ π)
 
 Def: Preservation of WS
 ∀WP π. WP satisfies π => WP↓ satisfies π
 
-Th: CCRD <=> PWS
+Conjecture: CCDR <=> PWS
+
+Th: CCR+VDEF => PWS
 Proof
 =>
 Assume
   h1: WP↓ ⇓ᵢ b
-  h2: CCRD
+  h2: CCR+VDEF
   h3: WP satisfies π
-To show 
+To show
   WP↓ satisfies π
 
-  h1 =>CCRD
-  i) P ⇓ₛ b ∨
-    =>h3
-    ia) (b=db => db ∈ π) /\
-      by h1 WP↓ ⇓ᵢ db, to show db ∈ π, OK
+  by h1, case analysis on b
+  – b = db(t) for some t
+    by CCR
+    1) WP ⇓ₛ db(t)
+      to show db(t) ∈ π
+      by h3, db ∈ π
+    2) WP ⇓ₛ ub(prefix(t))
+      to show db(t) ∈ π
+      by h3, ∀t'. t'≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      instantiate t' with t, then
+        t≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t) => db(t) ∈ π
+      by VDEF on WP↓ and db(t), we have ∃ WP'. WP' ⇓ₛ db(t)
+      but then db(t) ∈ π
+  – b = ub(t) for some t
+    by CCR
+    1) WP ⇓ₛ ub(t)
+      to show ∀t'. t'≥t ∧ ∃wp'. wp' ⇓ᵢ db(t') => db(t') ∈ π
+      by h3, ∀t'. t'≥t ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      by VDEF on wp' and db(t'), we have t'≥t ∧ ∃ WP'. WP' ⇓ₛ db(t')
+      but then db(t') ∈ π
+    2) WP ⇓ₛ ub(prefix(t))
+      to show ∀t'. t'≥t ∧ ∃wp'. wp' ⇓ᵢ db(t') => db(t') ∈ π
+      by h3, ∀t'. t'≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      by VDEF on wp' and db(t'), we have t'≥t (because t'≥prefix(t)) ∧ ∃ WP'. WP' ⇓ₛ db(t')
+      but then db(t') ∈ π
 
-    ib) (b=ub(t) => ∀t'. t'≥t /\ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π)
-      by h1 WP↓ ⇓ᵢ ub(t), to show ∀t'. t'≥t /\ ∃wp'. wp' ⇓ᵢ db(t') => db(t') ∈ π)
-      Given t' t'≥t /\ ∃wp'. wp' ⇓ᵢ db(t'), to show db(t') ∈ π
-      by VDEF on wp' and db(t'), ∃ WP'. WP' ⇓ₛ db(t')
-      then db(t') ∈ π
+Th: PWS => CCR+VDEF
+Proof
+=>
+Assume
+  h1: WP satisfies π => WP↓ satisfies π
+To show
+  CCR ∧ VDEF
 
-  ii) (P ⇓ₛ ub(prefix(b)) ∧ ∃ P'. P' ⇓ₛ b)
+1) CCR
+   IDEA π must not contain a miscompiled behavior
 
+   For any given program P, we can build a property π as
+     π = { db(t) | ∃ t. P ⇓ₛ db(t) } ∪
+         { db(t) | ∃ P' t t'. t≥t' ∧ P ⇓ₛ ub(t') ∧ P' ⇓ₛ db(t) }
+
+   Notice that P satisfies π (TODO need more details here)
+
+   Now suppose that the compiler is incorrect, then there exists a program P
+   for which at least one of its behaviors is not preserved.
+   Pick such program P and bad behavior bbad, then build π with the method above.
+
+   In particular we need a bbad such that it cannot be produced by the original
+   program (TODO think more, need some details here)
+     P↓ ⇓ᵢ bbad(t) ∧ ¬ P ⇓ₛ db(t) ∧ ¬ P ⇓ₛ ub(t)
+
+   Intuition:
+     by construction, bbad ∉ π (because it cannot be produced by P at the source)
+     but by h1 and π satisfaction, we know that bbad ∈ π
+     we assumed the compiler to be incorrect, but we arrived at a contradiction.
+     therefore, the compiler must be correct.
+
+   Since bbad is bad, ¬ P ⇓ₛ ub(t) ∧ ¬ P ⇓ db(t)
+   Case analysis on bbad
+   – bbad = db(t) for some t
+     by h1, db(t) ∈ π (contra)
+   – bbad = ub(t) for some t
+     by h1, ∀ t'. t'≥t ∧ ∃ P'. P' ⇓ᵢ db(t') => db(t') ∈ π
+     pick t'=t, then db(t) ∈ π
+     but we know that db(t) ∉ π (contra)
+
+2) VDEF
+   to show ∀ p b. P↓ ⇓ᵢ b => ∃ P'. P ⇓ₛ b
+
+   IDEA π must contain only source-level defined behavior
+        db(t) ∈ π => ∃ P. P ⇓ₛ db(t)
+
+   For any given program P, we can build a property π as
+     π = { db(t) | ∃ t. P ⇓ₛ db(t) } ∪
+         { db(t) | ∃ P' t t'. t≥t' ∧ P ⇓ₛ ub(t') ∧ P' ⇓ₛ db(t) }
+
+   Notice that P satisfies π (TODO need more details here)
+
+   Given P↓ ⇓ᵢ b, we show ∃ P'. P ⇓ₛ b
+   Case analysis on b
+   – b = db(t) for some t
+     by h1, db(t) ∈ π
+     therefore, by construction of π, either P ⇓ₛ db(t) or ∃ P'. P ⇓ₛ db(t)
+   – b = ub(t) for some t
+     by h1, ∀ t'. t'≥t ∧ ∃ P'. P' ⇓ᵢ db(t') => db(t') ∈ π
+     pick t'=t, then either exists P' such that P' ⇓ᵢ db(t) or it doesn't exist.
+     1) P' exists
+        but then db(t) ∈ π, which proves our goal as in the previous case
+     2) P' doesn't exist
+        this case should be impossible. The intuition is that since we have
+        observed ub(t) with P↓, there must exist a program P' such that it does
+        the very same trace t and then it either terminates or diverges silently
+        instead of having undefined behavior. (TODO need more details here)
 
 Def: Robust Satisfaction 123
 P robustly satisfies π iff
 ∀C t. C[P] ⇓ b =>
-  (b=db => db ∈ π) /\
-  (b=ub(t,P) => ∀t'. t'≥t /\ ∃WP. WP ⇓ db(t') => db(t') ∈ π)
-  (b=ub(t,C) => ∀t'. t'≥t /\ ∃C'. C'[P] ⇓ db(t') => db(t') ∈ π)
+  (b=db => db ∈ π) ∧
+  (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π) ∧
+  (b=ub(t,C) => ∀t'. t'≥t ∧ ∃C'. C'[P] ⇓ db(t') => db(t') ∈ π)
 
 Def: Robust Satisfaction 12
-∀C t. C[P] ⇓ b /\ b≠ub(t,C) =>
-  (b=db => db ∈ π) /\
-  (b=ub(t,P) => ∀t'. t'≥t /\ ∃WP. WP ⇓ db(t') => db(t') ∈ π)
+∀C t. C[P] ⇓ b ∧ b≠ub(t,C) =>
+  (b=db => db ∈ π) ∧
+  (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π)
+
 
 Th: RS12 <=> RS123
-TODO
+Proof
+– => part
+  We want to show that
+   ∀C t. C[P] ⇓ b =>
+     (b=db => db ∈ π) ∧
+     (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π) ∧
+     (b=ub(t,C) => ∀t'. t'≥t ∧ ∃C'. C'[P] ⇓ db(t') => db(t') ∈ π)
+  Pick C such that C[P] ⇓ b.
+  Case analysis on b:
+  1) b=db(t) ∨ b=ub(t,P)
+    Since b≠ub(t,C), we can directly apply RS12.
+  2) b=ub(t,C)
+    We cannot apply RS12, since we have an undefined behavior because of C.
+    The first two cases trivially holds, therefore we focus just on the third
+    case. We want to show that ∀t'. t'≥t ∧ ∃C'. C'[P] ⇓ db(t') => db(t') ∈ π
+    That is, given C' and t' such that t'≥t ∧ C'[P] ⇓ db(t'), we show db(t') ∈ π
+    Since C'[P] ⇓ db(t'), we can apply RS12 and obtain db(t') ∈ π, our goal.
+– <= part
+  This is the trivial part, since we just have to map one-to-one our facts.
+  We want to show that:
+  ∀C t. C[P] ⇓ b ∧ b≠ub(t,C) =>
+    (b=db => db ∈ π) ∧
+    (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π)
+  Pick C such that C[P] ⇓ b ∧ b≠ub(t,C)
+  Now, either b=db(t) or b=ub(t,P).
+  In both cases we can apply RS123 and show that
+    (b=db => db ∈ π) ∧
+    (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π)
 
 Def: Robust Compilation
-RC: ∀c t. c[P↓] ⇓ᵢ b(t) /\ b(t)≠ub(t,C) => ∃C. C[P] ⇓ₛ b(t) \/ C[P] ⇓ₛ ub(pref(t),P)
+RC: ∀c t. c[P↓] ⇓ᵢ b(t) ∧ b(t)≠ub(t,C) => ∃C. C[P] ⇓ₛ b(t) ∨ C[P] ⇓ₛ ub(pref(t),P)
 
 Def: Preservation of Robust Satisfaction
 ∀P π. P robustly satisfies π => P↓ robustly satisfies π
