@@ -421,6 +421,12 @@ can produce.
 When a semantics produces an ub we need to expand it and check that
 all its possible continuations are in π.
 
+CCR:
+   ∀ b. P↓ ⇓ᵢ b => P ⇓ₛ b ∨ P ⇓ₛ ub(prefix(b))
+
+VDEF:
+   ∀ p b. p ⇓ᵢ b => ∃ P. P ⇓ₛ b
+
 CCRD:
    ∀ b. P↓ ⇓ᵢ b => P ⇓ₛ b
                 ∨ (P ⇓ₛ ub(prefix(b)) ∧ ∃ P'. P' ⇓ₛ b)
@@ -435,6 +441,103 @@ Def: Preservation of WS
 ∀WP π. WP satisfies π => WP↓ satisfies π
 
 Conjecture: CCDR <=> PWS
+
+Th: CCRD => PWS
+Proof
+=>
+Assume
+  h1: WP↓ ⇓ᵢ b
+  h2: CCRD
+  h3: WP satisfies π
+To show
+  WP↓ satisfies π
+
+  by h1, case analysis on b
+
+  (* common case *)
+  – b = db(t) for some t
+    by CCRD
+    1) WP ⇓ₛ db(t)
+      to show db(t) ∈ π
+      by h3, db ∈ π
+    2) WP ⇓ₛ ub(prefix(t)) ∧ ∃ P'. P' ⇓ₛ db(t)
+      to show db(t) ∈ π
+      by h3, ∀t'. t'≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      instantiate t' with t, then
+        t≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t) => db(t) ∈ π
+      but we know that ∃ P'. P' ⇓ₛ db(t), therefore db(t) ∈ π
+
+  (* additional intermediate case *)
+  – b = ub(t) for some t
+    by CCRD
+    1) WP ⇓ₛ ub(t)
+      to show ∀t'. t'≥t ∧ ∃wp'. wp' ⇓ᵢ db(t') => db(t') ∈ π
+      by h3, ∀t'. t'≥t ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      STUCK
+    2) WP ⇓ₛ ub(prefix(t)) ∧ ∃ P'. P' ⇓ₛ ub(t)
+      to show ∀t'. t'≥t ∧ ∃wp'. wp' ⇓ᵢ db(t') => db(t') ∈ π
+      by h3, ∀t'. t'≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      STUCK
+
+Th: PWS => CCRD
+Proof
+=>
+  Assume
+    h1: WP satisfies π => WP↓ satisfies π
+    h2: WP↓ ⇓ᵢ b
+  To show
+    WP ⇓ₛ b ∨ (WP ⇓ₛ ub(prefix(b)) ∧ ∃ P'. P' ⇓ₛ b)
+
+  We build a property π such that WP satisfies it:
+    π = { db(t) | ∃ t. WP ⇓ₛ db(t) } ∪
+        { db(t) | ∃ t t' P'. t≥t' ∧ WP ⇓ₛ ub(t') ∧ P' ⇓ₛ db(t) }
+  We can see that WP satisfies π:
+  – WP ⇓ₛ db(t) => db(t)
+    by first construction set
+  – WP ⇓ₛ ub(t) => ∀t'. t'≥t ∧ ∃WP'. WP' ⇓ db(t') => db(t') ∈ π
+    by second construction set
+
+  Since WP satisfies π, by PWS we have that WP↓ satisfies π.
+
+  by case analysis on the behavior of the compiled program
+
+  (* common case *)
+  – b = db(t) for some t
+    by satisfaction of π at the target, we have db(t) ∈ π
+    by construction of π, either 1) or 2) holds
+    1) WP ⇓ₛ db(t)
+       the first disjunct is true, done
+    2) ∃ t' P'. t≥t' ∧ WP ⇓ₛ ub(t') ∧ P' ⇓ₛ db(t)
+       the second disjunct is true, since for some t' prefix of t
+         WP ⇓ₛ ub(t'=prefix(t)) ∧ ∃ P'. P' ⇓ₛ db(t)
+
+  (* additional intermediate case *)
+  – b = ub(t) for some t
+    by satisfaction of π at the intermediate, we have
+      ∀t'. t'≥t ∧ ∃P'. P' ⇓ᵢ db(t') => db(t') ∈ π
+    consider all such traces t' for which db(t') ∈ π
+    by construction of π, either 1) or 2) holds
+    1) WP ⇓ₛ db(t')
+       WP ⇓ₛ ub(t') and WP↓ ⇓ᵢ ub(prefix(t'))
+       weird case, the source behavior is more defined than the intermediate one
+       STUCK this shouldn't probably happen
+    2) ∃ t'' P'. t'≥t'' ∧ WP ⇓ₛ ub(t'') ∧ P' ⇓ₛ db(t')
+       we have to consider the relation between t and t''
+       we know that t and t'' are prefixes of t', therefore they share a common
+       prefix. Three cases:
+       — t ≤ t'', t is a prefix of t''
+         WP ⇓ₛ ub(t'') and WP↓ ⇓ᵢ ub(prefix(t''))
+         weird case, the source behavior is more defined than the intermediate one
+         STUCK this shouldn't probably happen
+       – t = t'', same prefix
+         WP ⇓ₛ ub(t) and WP↓ ⇓ᵢ ub(t)
+         pick the first disjunct, done
+       – t ≥ t'', t'' is a prefix of t
+         WP ⇓ₛ ub(prefix(t)) and WP↓ ⇓ᵢ ub(t)
+         moreover ∃ P'. P' ⇓ₛ db(t')
+         pick the second disjunct, the first conjunct is satisfied
+         we must show the second conjunct, ∃ P'. P' ⇓ₛ ub(t)
+         STUCK we don't have enough information to prove this fact
 
 Th: CCR+VDEF => PWS
 Proof
@@ -472,6 +575,8 @@ To show
       by VDEF on wp' and db(t'), we have t'≥t (because t'≥prefix(t)) ∧ ∃ WP'. WP' ⇓ₛ db(t')
       but then db(t') ∈ π
 
+Alternative attempt with CCR+VDEF, still half broken
+
 Th: PWS => CCR+VDEF
 Proof
 =>
@@ -481,7 +586,9 @@ To show
   CCR ∧ VDEF
 
 1) CCR
-   IDEA π must not contain a miscompiled behavior
+   IDEA if the compiler is incorrect, there must exist a program for which at
+        least behavior is not preserved. We start from this program and
+        behavior and build a property π that doesn't include such miscompilation.
 
    For any given program P, we can build a property π as
      π = { db(t) | ∃ t. P ⇓ₛ db(t) } ∪
@@ -513,10 +620,18 @@ To show
      but we know that db(t) ∉ π (contra)
 
 2) VDEF
-   to show ∀ p b. P↓ ⇓ᵢ b => ∃ P'. P ⇓ₛ b
+   to show ∀ p b. p ⇓ᵢ b => ∃ P'. P ⇓ₛ b
+
+   NOTE: Not sure if we can prove VDEF from PWS.
+         VDEF starts with an arbitrary low level program, but PWS only talks
+         about compiled programs.
+
+   — Proof sketch for compiled programs
 
    IDEA π must contain only source-level defined behavior
         db(t) ∈ π => ∃ P. P ⇓ₛ db(t)
+        if π is preserved, it means we can oberve only source-level behaviors
+        at all levels
 
    For any given program P, we can build a property π as
      π = { db(t) | ∃ t. P ⇓ₛ db(t) } ∪
@@ -524,11 +639,11 @@ To show
 
    Notice that P satisfies π (TODO need more details here)
 
-   Given P↓ ⇓ᵢ b, we show ∃ P'. P ⇓ₛ b
+   We show that given P↓ ⇓ᵢ b, there exists P' such that P' ⇓ₛ b
    Case analysis on b
    – b = db(t) for some t
      by h1, db(t) ∈ π
-     therefore, by construction of π, either P ⇓ₛ db(t) or ∃ P'. P ⇓ₛ db(t)
+     therefore, by construction of π, either P ⇓ₛ db(t) or ∃ P'. P' ⇓ₛ db(t)
    – b = ub(t) for some t
      by h1, ∀ t'. t'≥t ∧ ∃ P'. P' ⇓ᵢ db(t') => db(t') ∈ π
      pick t'=t, then either exists P' such that P' ⇓ᵢ db(t) or it doesn't exist.
@@ -539,6 +654,7 @@ To show
         observed ub(t) with P↓, there must exist a program P' such that it does
         the very same trace t and then it either terminates or diverges silently
         instead of having undefined behavior. (TODO need more details here)
+
 
 Def: Robust Satisfaction 123
 P robustly satisfies π iff
