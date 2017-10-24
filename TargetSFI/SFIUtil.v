@@ -1,3 +1,6 @@
+(**************************************************
+ * Author: Ana Nora Evans (ananevans@virginia.edu)
+ **************************************************)
 Require Import List.
 
 Require Import Coq.Structures.Equalities.

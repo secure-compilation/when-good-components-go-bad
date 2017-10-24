@@ -1,3 +1,6 @@
+(**************************************************
+ * Author: Ana Nora Evans (ananevans@virginia.edu)
+ **************************************************)
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Structures.Equalities.
 Require Import Coq.Lists.List.
@@ -23,6 +26,7 @@ Module RiscMachine.
 
   Definition address := N.
 
+  (* program counter register type *)
   Definition pc : Set := address.
 
   Definition PC0 : pc := N0.
@@ -81,8 +85,8 @@ Module RiscMachine.
    ******************************************************)
   Module RegisterFile <: UsualDecidableType.
 
-    Parameter p : nat -> (list value).
-    
+    (* Use the constants in the Register Module as indices in the list,
+       to get the value of the register *)
     Definition t : Set := list value.
 
     Fixpoint is_zero (gen_regs:t)  : Prop :=
@@ -319,7 +323,7 @@ Module RiscMachine.
     
   End ISA.
 
-  
+  (* Type of a memory location *)
   Inductive word := 
   | Data : value -> word
   | Instruction : ISA.instr -> word.
@@ -362,6 +366,7 @@ Module RiscMachine.
    ******************************************************)
   Module Memory.
 
+    (* key: address, value: word at that address (data or code) *)
     Definition t := BinNatMap.t word.
 
     Definition get_word (mem : t) (ptr : address) : option word :=
@@ -385,8 +390,10 @@ Module RiscMachine.
       (* negatives are converted to zero *)
       Z.to_N ptr.
 
+    (* returns an empty memory *)
     Definition empty : t := BinNatMap.empty word.
 
+    (* returns all addresses that have been assigned a value *)
     Definition get_used_addresses (mem : t) :=
       BinNatMap.fold (fun key elt acc => key::acc) mem nil.
 
@@ -432,13 +439,6 @@ Module RiscMachine.
       - apply eqb_eq_word.
       - apply BinNatMapFacts.Equal_refl.
     Qed.
-
-    Lemma eqb_eq: forall (m1 m2 : t),
-        (eqb m1 m2) = true <-> m1 = m2.
-    Proof.
-      split.
-      - intro H. (* apply BinaNatMapFacts.eqb_eq in H.  *)
-    Admitted.
     
     Lemma eqb_Equal: forall (m1 m2 : t),
         (eqb m1 m2) = true <->  BinNatMap.Equal m1 m2.
@@ -485,7 +485,8 @@ Module RiscMachine.
       
   End Memory.
 
-  Definition executing_binop (op : ISA.binop)
+  (* evaluates the given binary operation *)
+  Definition eval_binop (op : ISA.binop)
              (op1 : value) (op2 : value) : value :=
     match op with
     | ISA.Addition => op1 + op2
@@ -516,6 +517,8 @@ Module RiscMachine.
   
 
   Definition inc_pc (a : pc) : pc := N.add a 1.
+
+  Definition to_value (v : N) : value := Z.of_N v.
   
 End RiscMachine.
 
@@ -536,24 +539,31 @@ End SFIComponent.
 Module SFI.
 
   (* Number of bits used for offset within slot *)
-  Definition OFFSET_SIZE:N := 12.
+  Definition OFFSET_BITS_NO : N := 12.
 
-  Definition CID_SIZE:N := 2.
+  (* Number of bits used for component *)
+  Definition COMP_BITS_NO : N := 2.
+
+
+  (* Definition COMPONENT_MASK : N := 2^CID_SIZE - 1. *)
+
+  Definition CODE_DATA_BIT_MASK : N :=  N.shiftl 1 (OFFSET_BITS_NO + COMP_BITS_NO).
+
+  (* Slot dimension *)
+  Definition SLOT_SIZE : N := 2^OFFSET_BITS_NO.
   
-  Definition COMPONENT_MASK : N := 2^CID_SIZE - 1.
-
-  Definition CODE_DATA_BIT_MASK : N :=  N.shiftl 1 (OFFSET_SIZE + CID_SIZE).
-
   (* Maximum number of components, including the zero (special) component *)
-  Definition COMP_MAX:N := 2^CID_SIZE.
+  Definition COMP_MAX:N := 2^COMP_BITS_NO.
 
   Definition C_SFI (addr : RiscMachine.address) : SFIComponent.id  := 
-    N.land (N.shiftl addr OFFSET_SIZE) COMPONENT_MASK.
+    N.land (N.shiftl addr OFFSET_BITS_NO) (2^COMP_BITS_NO - 1).
 
   Open Scope N_scope.
-  Definition get_max_offset : N := 2^OFFSET_SIZE-1.
+  
+  (* Definition get_max_offset : N := 2^OFFSET_SIZE-1. *)
+
   Definition address_of (cid : SFIComponent.id) (bid off: N) : RiscMachine.address :=
-    bid * 2^(CID_SIZE+OFFSET_SIZE)+cid*2^OFFSET_SIZE+off.
+    bid * 2^(COMP_BITS_NO+OFFSET_BITS_NO)+cid*2^OFFSET_BITS_NO+off.
   Close Scope N_scope.
   
   Definition is_same_component (addr1: RiscMachine.address)
@@ -567,9 +577,28 @@ Module SFI.
   Definition is_code_address  (addr : RiscMachine.address) : bool :=
     N.eqb (N.land addr CODE_DATA_BIT_MASK) N0.
 
-
   Definition is_data_address  (addr : RiscMachine.address) : bool :=
     negb (is_code_address addr).
+
+  Definition or_data_mask (cid : SFIComponent.id) : N :=
+    (N.shiftl (N.lor (N.shiftl 1%N COMP_BITS_NO) cid) OFFSET_BITS_NO).
+
+  Definition or_code_mask (cid : SFIComponent.id) : N :=
+    (N.shiftl cid OFFSET_BITS_NO).
+
+  Module Allocator.
+  
+    Definition allocator_data_slot := 1%N.
+
+    (* 3 5 .. (2*N+1) *)
+    Definition allocate_slots (n : nat) : (list N) :=
+      List.map N.of_nat (List.filter Nat.odd (List.seq 3 (2*n+1))).
+
+    Definition initial_allocator_value (n:nat) : RiscMachine.value :=
+      Z.of_nat (n+1).
+
+  End Allocator.
+  
 
 End SFI.
 
@@ -579,6 +608,8 @@ End SFI.
 Module Env  <: UsualDecidableType.
 
   (* list of dimension COMP_MAX*)
+  (* use the SFI component id as index to retrieve the intermediate
+     level component id *)
   Definition CN := list Component.id.
 
   (* E is a partial map from addresses to procedure names.*)
@@ -586,14 +617,22 @@ Module Env  <: UsualDecidableType.
 
   Definition t := CN * E.
 
+  Open Scope N_scope.
+  Definition index2SFIid (i : nat) : SFIComponent.id :=
+    (N.of_nat i) + 1.
+
+  Definition SFIid2index (id : SFIComponent.id) : nat :=
+    N.to_nat (id-1).
+  Close Scope N_scope.
+  
   Definition get_component_name_from_id (id : SFIComponent.id)
              (G : t): option Component.id :=
-    ListUtil.get (N.to_nat id) (fst G).
+    ListUtil.get (SFIid2index id) (fst G).
 
   Definition get_procedure (addr : RiscMachine.address)
              (G : Env.t) : option Procedure.id :=
     ListUtil.get_by_key (N.eqb) addr (snd G).
-  
+
   Definition eq_dec:
     forall g1 g2 : t,  {g1 = g2} + {g1 <> g2}.
   Proof.

@@ -1,3 +1,6 @@
+(**************************************************
+ * Author: Ana Nora Evans (ananevans@virginia.edu)
+ **************************************************)
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Lists.List.
 Require Import Coq.Init.Logic.
@@ -70,7 +73,7 @@ Module CS.
       executing mem pc (IBinOp op reg_src1 reg_src2 reg_dst) ->
       Some val1 = RegisterFile.get_register reg_src1 gen_regs ->
       Some val2 = RegisterFile.get_register reg_src2 gen_regs ->
-      let result := executing_binop op val1 val2 in
+      let result := eval_binop op val1 val2 in
       RegisterFile.set_register reg_dst result gen_regs = gen_regs' ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) E0 (mem',inc_pc pc,gen_regs')
@@ -160,7 +163,7 @@ Module CS.
       | ISA.IBinOp op reg_src1 reg_src2 reg_dst =>
         do val1 <- RegisterFile.get_register reg_src1 gen_regs;
         do val2 <- RegisterFile.get_register reg_src2 gen_regs;
-        let result : value := RiscMachine.executing_binop op val1 val2 in
+        let result : value := RiscMachine.eval_binop op val1 val2 in
         let gen_regs':= RegisterFile.set_register reg_dst result gen_regs in
         Some (E0, (mem,inc_pc pc,gen_regs'))
       | ILoad rptr rd =>

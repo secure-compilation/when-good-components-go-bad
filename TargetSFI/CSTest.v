@@ -18,6 +18,9 @@ Import GenLow GenHigh.
 Set Warnings "-extraction-opaque-accessed,-extraction".
 
 Require Import CompCert.Events.
+(**************************************************
+ * Author: Ana Nora Evans (ananevans@virginia.edu)
+ **************************************************)
 Require Import Common.Definitions.
 
 Import CS.
@@ -400,7 +403,7 @@ Proof.
                 destruct (RegisterFile.get_register rs2 gen_regs) eqn:Hval2. rename v into v2.
                 { (* RegisterFile.get_register rs2 gen_regs = Some v2 *)
                   destruct (RegisterFile.eqb
-                            (RegisterFile.set_register rd (executing_binop op v1 v2) gen_regs)
+                            (RegisterFile.set_register rd (eval_binop op v1 v2) gen_regs)
                             gen_regs') eqn:Hregs.
                   { (* regs[rd<-v1 binop v2]=regs'*)                
                     left.

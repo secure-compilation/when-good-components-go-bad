@@ -42,5 +42,9 @@ TargetSFI/MachineGen.v
 TargetSFI/CS.v
 TargetSFI/CSTest.v
 
+I2SFI/AbstractMachine.v
+I2SFI/CompMonad.v
+I2SFI/Compiler.v
+
 TargetMP/Monitor.v
 TargetMP/Machine.v

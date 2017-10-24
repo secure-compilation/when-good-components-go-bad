@@ -1,3 +1,6 @@
+(**************************************************
+ * Author: Ana Nora Evans (ananevans@virginia.edu)
+ **************************************************)
 
 Require Import Coq.Arith.Arith.
 Require Import Coq.ZArith.ZArith.
@@ -158,7 +161,7 @@ Definition genBlockIds (frecv_code : nat) (frecv_data : nat) : G (list N) :=
   vectorOf how_many (odd_even_frecv_gen frecv_code frecv_data).
 
 Definition genOffset : G N :=
-  liftGen N.of_nat (choose (O,N.to_nat SFI.get_max_offset)).
+  liftGen N.of_nat (choose (O,N.to_nat (SFI.SLOT_SIZE - 1))).
 
 Definition genBlockOffsetPairs (frecv_code : nat) (frecv_data : nat) : G (list (N*N)) :=
   let how_many : nat := plus frecv_code frecv_data in
@@ -486,7 +489,7 @@ Definition update_regs (mem : Memory.t) (instr : ISA.instr)  (pc : RiscMachine.p
     match (RegisterFile.get_register r1 regs,
            RegisterFile.get_register r2 regs) with
     | (Some v1, Some v2) => RegisterFile.set_register
-                             rd (RiscMachine.executing_binop op v1 v2) regs
+                             rd (RiscMachine.eval_binop op v1 v2) regs
     | _ => regs
     end
   | IJal imm => RegisterFile.set_register RiscMachine.Register.R_RA ((Z.of_N pc)+1) regs
