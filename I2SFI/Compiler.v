@@ -19,8 +19,11 @@ Record compiler_env : Type :=
   {
     current_component : Component.id;
     next_label : Intermediate.Machine.label;
+    (* Compoent.id -> Procedure.id -> label for call translation *)
+    exported_procedures_labels : (PMap.t (PMap.t  AbstractMachine.label));
+    (* intermediate compoent id to sfi compoent id *)
     cid2SFIid : PMap.t N;
-    (* intermediate component id -> block is -> sfi slot id *)
+    (* intermediate component id -> block id -> sfi slot id *)
     (* this is especially needed for static buffers *)
     block_id2slot : PMap.t (PMap.t N)
   }.
@@ -42,6 +45,7 @@ Definition with_current_component (cid : Component.id)
     current_component := cid;
     next_label := next_label env;
     cid2SFIid := cid2SFIid env;
+    exported_procedures_labels := exported_procedures_labels env;
     block_id2slot :=  block_id2slot env
   |}.
 
@@ -51,17 +55,9 @@ Definition env_add_blocks (cid : Component.id) (blocks : PMap.t N)
     current_component := current_component env;
     next_label := next_label env;
     cid2SFIid := cid2SFIid env;
+    exported_procedures_labels := exported_procedures_labels env;
     block_id2slot :=  PMap.add cid blocks (block_id2slot env)
   |}.
-
-Definition with_fresh_label (lbl :  Intermediate.Machine.label)
-           (env : compiler_env) :  compiler_env :=
-   {|
-    current_component := current_component env;
-    block_id2slot :=  block_id2slot env;
-    cid2SFIid := cid2SFIid env;
-    next_label := (lbl + 1)%positive
-   |}.
 
 Definition with_cid2SFIid (m : PMap.t N)
           (env : compiler_env) :  compiler_env :=
@@ -69,9 +65,18 @@ Definition with_cid2SFIid (m : PMap.t N)
     current_component := current_component env;
     next_label := next_label env;
     block_id2slot := block_id2slot env;
+    exported_procedures_labels := exported_procedures_labels env;
     cid2SFIid := m
   |}.
 
+Definition with_next_label (env : compiler_env) :  compiler_env :=
+   {|
+    current_component := current_component env;
+    block_id2slot :=  block_id2slot env;
+    cid2SFIid := cid2SFIid env;
+    exported_procedures_labels := exported_procedures_labels env;
+    next_label := ((next_label env) + 1)%positive
+   |}.
 
 Definition gen_push_sfi (cid : Component.id) : AbstractMachine.code :=
   [
@@ -95,6 +100,29 @@ Definition gen_push_sfi (cid : Component.id) : AbstractMachine.code :=
 (* # increment stack pointer *)
 (*   Const r₁ <- 1 *)
 (*   Binop r_SFI_sp <- r_SFI_sp + r₁  *)
+
+Definition gen_pop_sfi (rd : RiscMachine.Register.t) : COMP(AbstractMachine.code) :=
+  do cenv <- get;
+    let lbl := ((current_component cenv),(next_label cenv)) in
+    do! modify (with_next_label);
+      ret
+        [
+          AbstractMachine.ILabel lbl
+          ; AbstractMachine.IConst 1%Z rd (*   Const r₁ <- 1 *)
+          ; AbstractMachine.IBinOp (RiscMachine.ISA.Subtraction)
+                                    RiscMachine.Register.R_SFI_SP
+                                    rd RiscMachine.Register.R_SFI_SP
+          (*   Binop r_SFI_sp <- r_SFI_sp - r₁  *)
+          ; AbstractMachine.IConst
+              (RiscMachine.to_value (SFI.OFFSET_BITS_NO + SFI.COMP_BITS_NO + 1%N))
+              rd (*   Const r₁ <- N+S+1 *)
+          ; AbstractMachine.IBinOp (RiscMachine.ISA.ShiftLeft) RiscMachine.Register.R_SFI_SP
+                                   rd rd (*   Binop r₁ <- r_SFI_sp SL r₁ *)
+          ;  AbstractMachine.IBinOp (RiscMachine.ISA.BitwiseOr) rd
+                                    RiscMachine.Register.R_OR_DATA_MASK rd
+                                    (*   Binop r₁ <- r₁ |  r_or_data_mask(cid) *)
+          ; AbstractMachine.ILoad rd rd (*   Load *r₁ -> ra *)
+        ].
 
 
 Definition gen_set_sfi_registers (cid : SFIComponent.id) : AbstractMachine.code :=
@@ -145,9 +173,21 @@ Definition compile_IStore (rp : Intermediate.Machine.register)
                              (RiscMachine.Register.R_D)
       ; AbstractMachine.IStore (RiscMachine.Register.R_D) (map_register rs)
     ].
-  (* Binop r_d <- r_p & r_and_data_mask  *)
-  (* Binop r_d <- r_d | r_or_data_mask(cid) *)
-  (* Store *r_d <- r_s *)
+(* Binop r_d <- r_p & r_and_data_mask  *)
+(* Binop r_d <- r_d | r_or_data_mask(cid) *)
+(* Store *r_d <- r_s *)
+
+Definition compile_IJump (rt : Intermediate.Machine.register)
+  : COMP (AbstractMachine.code) :=
+  ret [
+      AbstractMachine.IBinOp (RiscMachine.ISA.BitwiseAnd)
+                             (map_register rt) (RiscMachine.Register.R_AND_CODE_MASK)
+                             (RiscMachine.Register.R_T)
+      ; AbstractMachine.IBinOp (RiscMachine.ISA.BitwiseOr)
+                             (RiscMachine.Register.R_T) (RiscMachine.Register.R_OR_CODE_MASK)
+                             (RiscMachine.Register.R_T)
+      ; AbstractMachine.IStore (RiscMachine.Register.R_T) (map_register rt)
+    ].
 
 (* TODO: Either use R_ONE or get rid of it *)
 Definition compile_IAlloc (rp : Intermediate.Machine.register)
@@ -212,8 +252,30 @@ Definition compile_IAlloc (rp : Intermediate.Machine.register)
       (*   Load *r₂ -> r₂ *)
       ;  AbstractMachine.ILoad  RiscMachine.Register.R_AUX2  RiscMachine.Register.R_AUX2
                                
-  ]. 
+    ].
 
+Definition compile_IReturn : COMP (AbstractMachine.code) :=
+  do res <- gen_pop_sfi RiscMachine.Register.R_RA;
+    ret (res ++ [AbstractMachine.IJump RiscMachine.Register.R_RA]).
+
+Definition compile_ICall (cid' : Component.id) (pid : Procedure.id)
+  : COMP (AbstractMachine.code) :=
+  do cenv <- get;
+    do cid <- lift (PMap.find (current_component cenv) (cid2SFIid cenv));
+    let data_mask := RiscMachine.to_value (SFI.or_data_mask cid) in
+    let code_mask := RiscMachine.to_value (SFI.or_code_mask cid) in
+    do c'_exported_procs <- lift (PMap.find cid' (exported_procedures_labels cenv));
+      do c'lbl <- lift (PMap.find pid c'_exported_procs);
+      let lbl :=  ((current_component cenv),(next_label cenv)) in
+      do! modify (with_next_label);
+    ret [
+      AbstractMachine.IJal c'lbl
+      ; AbstractMachine.ILabel lbl (* use this to force the next 4 intruction uninterrupted *)
+      ; AbstractMachine.IConst data_mask RiscMachine.Register.R_OR_DATA_MASK
+      ; AbstractMachine.IConst code_mask RiscMachine.Register.R_OR_CODE_MASK
+      ; AbstractMachine.IConst data_mask RiscMachine.Register.R_D
+      ; AbstractMachine.IConst code_mask RiscMachine.Register.R_T
+    ].
 
 Definition compile_instruction 
            (i : Intermediate.Machine.instr)
@@ -235,7 +297,11 @@ Definition compile_instruction
   | Intermediate.Machine.IStore rp rs => (compile_IStore rp rs)
   | Intermediate.Machine.IAlloc rp rs => (compile_IAlloc rp rs)
   | Intermediate.Machine.IBnz r lbl => ret [AbstractMachine.IBnz (map_register r) (cid,lbl)]
-  | _ => ret [AbstractMachine.INop]
+  | Intermediate.Machine.IJump rt => (compile_IJump rt)
+  | Intermediate.Machine.IJal lbl => ret [AbstractMachine.IJal (cid,lbl)]
+  | Intermediate.Machine.ICall c p => (compile_ICall c p)
+  | Intermediate.Machine.IReturn => (compile_IReturn)
+  | Intermediate.Machine.IHalt => ret [AbstractMachine.IHalt]
   end.
 
 
@@ -259,22 +325,26 @@ Definition compile_procedure
   do cenv <- get;
     let cid := (current_component cenv) in
     do comp_interface <- lift (PMap.find cid interface);
-    let proc_label := next_label cenv in
-    let exported_procs := Component.export comp_interface in
-    let is_exported := List.existsb (Pos.eqb pid) exported_procs in
-    do acode <- compile_instructions code;     
-      if is_exported then
-        do sfiId <- lift (PMap.find cid (cid2SFIid cenv));
-          ret (
-              [AbstractMachine.IHalt; AbstractMachine.ILabel (cid,proc_label)]
-                ++ (gen_push_sfi cid)
-                ++ (gen_set_sfi_registers sfiId)
-                ++ acode )
-      else
-        ret acode
+      let exported_procs := Component.export comp_interface in
+      let is_exported := List.existsb (Pos.eqb pid) exported_procs in
+      do acode <- compile_instructions code;     
+        if is_exported then
+            do cprocs <- lift (PMap.find cid (exported_procedures_labels cenv));
+            do proc_label <- lift (PMap.find pid cprocs);
+            do sfiId <- lift (PMap.find cid (cid2SFIid cenv));
+            ret (
+                [AbstractMachine.IHalt; AbstractMachine.ILabel proc_label]
+                  ++ (gen_push_sfi cid)
+                  ++ (gen_set_sfi_registers sfiId)
+                  ++ acode )
+        else
+          ret acode
 .
 
-Definition max_label (procs : list (Procedure.id * Intermediate.Machine.code))
+
+(************* Labels **************************************)
+
+Definition max_code_component_label (procs : list (Procedure.id * Intermediate.Machine.code))
   : Intermediate.Machine.label :=
   List.fold_left
     Pos.max
@@ -294,13 +364,35 @@ Definition max_label (procs : list (Procedure.id * Intermediate.Machine.code))
                     (List.flat_map snd procs)))
     1%positive.
 
+Definition component_exported_procs_labels (cid : Component.id)
+           (pi : Program.interface) (procs : list (Procedure.id * Intermediate.Machine.code))
+  : (PMap.t AbstractMachine.label) :=
+  match PMap.find cid pi with
+  | None => PMap.empty AbstractMachine.label
+  | Some comp_interface =>
+    let exp_procs := Component.export comp_interface in
+    let start_lbl := ((max_code_component_label procs) + 1)%positive in
+    let new_labels := List.map Pos.of_nat (List.seq (Pos.to_nat start_lbl)
+                                                    (List.length exp_procs)) in 
+    PMapExtra.of_list (List.combine exp_procs
+      (List.combine (List.repeat cid (List.length exp_procs)) new_labels))
+  end.
+
+Definition exported_procs_labels (procs : PMap.t (PMap.t Intermediate.Machine.code))
+           (pi : Program.interface) : PMap.t (PMap.t AbstractMachine.label) :=
+  PMap.fold (fun cid procs_map acc =>
+               PMap.add cid (component_exported_procs_labels cid pi
+                                                             (PMap.elements procs_map)) acc)
+            procs (PMap.empty (PMap.t AbstractMachine.label)).
+
+(**************************** END labels *********************************************)
+ 
 Fixpoint compile_procedures (procs : list (Procedure.id * Intermediate.Machine.code))
          (interface : Program.interface)
   : COMP (list (Procedure.id * AbstractMachine.code)) :=
   match procs with
     | [] => ret []
     | (pid,code) :: xs =>
-      do! modify (with_fresh_label (max_label procs));
       do compiled_proc <- compile_procedure pid code interface;
         do res <- compile_procedures xs interface;
         ret ((pid, compiled_proc)::res)
@@ -345,24 +437,39 @@ Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * nat)
       end
   end.
 
-Definition init_env : compiler_env :=
+Definition init_env (i_cid2SFIid : PMap.t N)
+           (i_exported_procedures_labels : (PMap.t (PMap.t  AbstractMachine.label)))
+           (i_next_label : positive)
+  : compiler_env :=
   {| current_component := 1%positive;
      next_label := 1%positive;
      block_id2slot := PMap.empty (PMap.t N);
-     cid2SFIid := PMap.empty N
+     exported_procedures_labels := i_exported_procedures_labels;
+     cid2SFIid := i_cid2SFIid
   |}.
 
 Definition compile_abstract_program (ip : Intermediate.program) :
   option (abstract_program) :=
     (* cn maps sfi component id to intermediate component id *)
-    let cn := gen_cn (Intermediate.prog_interface ip) in
-    run init_env (
-          (* cid2SFIid maps intermediate component id to sfi id *)
-          let cid2SFIid := List.fold_left
-                             (fun acc '(cid,i)  =>
-                                PMap.add cid (Env.index2SFIid i) acc)
-                             (List.combine cn (List.seq 0 ((List.length cn) - 1)))
-                             (PMap.empty SFIComponent.id) in
+  let cn := gen_cn (Intermediate.prog_interface ip) in
+   (* cid2SFIid maps intermediate component id to sfi id *)
+  let cid2SFIid := List.fold_left
+                     (fun acc '(cid,i)  =>
+                        PMap.add cid (Env.index2SFIid i) acc)
+                     (List.combine cn (List.seq 0 ((List.length cn) - 1)))
+                     (PMap.empty SFIComponent.id) in
+  let procs_labels := exported_procs_labels (Intermediate.prog_procedures ip)
+                                            (Intermediate.prog_interface ip) in
+  let max_label := List.fold_left
+                     Pos.max
+                     (List.flat_map
+                        (fun m => List.map (fun '(_,(_,l)) => l) (PMap.elements m))
+                        (List.map snd (PMap.elements procs_labels)))
+                     1%positive in
+  
+  run (init_env cid2SFIid procs_labels (max_label+1)%positive)
+        (
+         
           do! modify (with_cid2SFIid cid2SFIid);
           do mem <- allocate_buffers
              (PMap.elements (Intermediate.prog_buffers ip))
@@ -385,7 +492,7 @@ Definition compile_program (ip : Intermediate.program) :
   option (sfi_program) := None.
 (* layout code in memory *)
 (* replace labels with addresses *)
-              (* generate code for component 0
+(* generate code for component 0
        push address of halt on sfi stack
        call main === changes mem *)
 (* generate E *)
