@@ -43,6 +43,3 @@ TargetSFI/CS.v
 I2SFI/AbstractMachine.v
 I2SFI/CompMonad.v
 I2SFI/Compiler.v
-
-TargetMP/Monitor.v
-TargetMP/Machine.v

@@ -1,0 +1,9 @@
+-arg "-w -parsing"
+-R . MicroPolicies
+
+lib/utils.v
+
+common/types.v
+
+symbolic/symbolic.v
+symbolic/exec.v
