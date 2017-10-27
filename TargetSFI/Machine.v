@@ -544,7 +544,6 @@ Module SFI.
   (* Number of bits used for component *)
   Definition COMP_BITS_NO : N := 2.
 
-
   (* Definition COMPONENT_MASK : N := 2^CID_SIZE - 1. *)
 
   Definition CODE_DATA_BIT_MASK : N :=  N.shiftl 1 (OFFSET_BITS_NO + COMP_BITS_NO).
@@ -558,6 +557,16 @@ Module SFI.
   Definition C_SFI (addr : RiscMachine.address) : SFIComponent.id  := 
     N.land (N.shiftl addr OFFSET_BITS_NO) (2^COMP_BITS_NO - 1).
 
+  Definition ADDRESS_ALLIGN_BITS_NO : N := 4.
+
+  Definition BASIC_BLOCK_SIZE : N := 16.
+
+  Definition MONITOR_COMPONENT_ID : N := 0.
+  
+  Definition AND_DATA_MASK : N := 0. (* TODO *)
+
+  Definition AND_CODE_MASK : N := 0. (* TODO *)
+  
   Open Scope N_scope.
   
   (* Definition get_max_offset : N := 2^OFFSET_SIZE-1. *)
@@ -586,19 +595,23 @@ Module SFI.
   Definition or_code_mask (cid : SFIComponent.id) : N :=
     (N.shiftl cid OFFSET_BITS_NO).
 
+  
   Module Allocator.
   
     Definition allocator_data_slot := 1%N.
 
     (* 3 5 .. (2*N+1) *)
-    Definition allocate_slots (n : nat) : (list N) :=
+    Definition allocate_data_slots (n : nat) : (list N) :=
       List.map N.of_nat (List.filter Nat.odd (List.seq 3 (2*n+1))).
 
     Definition initial_allocator_value (n:nat) : RiscMachine.value :=
       Z.of_nat (n+1).
 
   End Allocator.
-  
+
+  Definition allocate_code_slots (n : nat) : (list N) :=
+    (List.map (fun n => ((N.of_nat n) * 2)%N)
+              (List.seq 0 (n-1))).
 
 End SFI.
 
