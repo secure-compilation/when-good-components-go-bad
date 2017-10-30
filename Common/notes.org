@@ -73,6 +73,16 @@ e.g. we have showed that our program never calls the procedure Error, this is pr
      π = { b(t) | pref(t,3) ∈π₁ } which is closed wrt refDef(π₁ ∪ π₂)
      this property is preserved by CCBR (CompCert)
 
+other examples could include conditional properties of the form:
+- unless the program receives a "potentially unsafe" input it does not
+  have undefined behavior, we could use formal verification to prove
+  that *some* (but not all) of the inputs are safe
+
+other examples could make use of the interfaces:
+- If I know by looking at the allowed calls that from `main` to `bad`
+  there is are only certain paths of calls, then we can conclude that
+  `bad` can only happen if one of these paths is taken
+
 ** Linked Program Cₛ
 *** Properties for a component
 ψ = n interfaces
@@ -81,10 +91,13 @@ Ps ∈ { sets of components compatible with ψ }
 
 DEF(Pᵢ)  = { db | ∃Ps={P₁ ... Pᵢ₋₁, Pᵢ₊₁ ... Pₙ}. ⋈(Ps ∪ {Pᵢ}) ⇓ db }
 DEF(Ps) = ⋂ { DEF(Pᵢ)  | Pᵢ ∈ Pₛ }
-DEF     = ⋃ { DEF(Ps) | ∃ Ps } = { db | ∃Ps. db ∈ DEF(Ps) }
+DEF     = ⋃ { DEF(Ps) | ∃ Ps } = { db | ∃Ps. db ∈ DEF(Ps) } = { db | ∃Ps. Ps ⇓ db }
+
 UNDEF(Pᵢ) = { ub(t₁,Pᵢ) | ∃ db(t) ∈ DEF(Pᵢ) /\ t=t₁at₂ /\ a∈Pᵢ }
 UNDEF(Ps) = ⋂ { UNDEF(Pᵢ) | Pᵢ∈Ps}
 UNDEF = ⋃ { UNDEF(Ps) | ∃Ps }
+
+π ⊆ DEF
 
 refDef(ub(t,Pᵢ)) = { db(t;t₂) | db(t;t₂) ∈ DEF }
 
@@ -182,7 +195,7 @@ something that is not expressable in the source, independently of what
 program you start with.
 
 Some simple implications:
-CCR + DEF => CCRD
+CCR + VDEF => CCRD
 *** Compiler Correctness with definability
 A possible way to limit the damage caused by undefined behaviors could be to say
 something more about the refinement. The idea is to constrain it to what is
@@ -200,6 +213,13 @@ events are too coarse and we should always be able to exhibit a legal high-level
 program that produces them.
 
 Thm: CCRD => Preservation of satisfaction
+[CH: Don't really see this. What about the 2nd branch of the or above?]
+[MS: the idea is that the property should contain ub(prefix(db)) and
+definability makes sure that only defined continuations are allowed.
+But we should work the proof in more detail and try an example with
+the death input.]
+
+TODO try out example with death input
 
 * Robust Satisfaction and its preservation for linked programs
 First of all, we must introduce the notions of linking and separate compilation.
@@ -219,10 +239,8 @@ partial Pᵢ and then a n-way-composition to get back to P.
 TODO recheck this
 
 RS Robust Satisfaction
+P robustly satisfies property π iff
   ∀C. C[P]⇓b => b∈π
-
-An additional definition that we need is the one which allows us to deal with
-verified programs that can never exhibit undefined behaviors.
 
 Robust Satisfaction is defined independently of the existence of a compiler
 between different languages. In our case, however, we are interested in
@@ -233,9 +251,10 @@ PRS (Preservation of Robust Satisfaction):
 
 Note that P and C are sets of components.
 
-* Robust Compilation
+* Robust Compilation (OLD_RC_DC)
 
-RC: ∀c defined. c[P↓] ⇓ₜ db => ∃C. C[P] ⇓ₛ db \/ C[P] ⇓ₛ ub(pref(db),P)
+RC: ∀c defined. c[P↓] ⇓ᵢ b => ∃C. C[P] ⇓ₛ b \/ C[P] ⇓ₛ ub(pref(b),P)
+RC: ∀c. c[P↓] ⇓ₜ db => ∃C. C[P] ⇓ₛ db \/ C[P] ⇓ₛ ub(pref(db),P)
 
 ** why this definition
 Starting from CCR and CCRD we can obtain the equivalent for a
@@ -253,14 +272,15 @@ RCD: ∀c FD. c[P↓] ⇓ᵢ db => ∃C. C[P] ⇓ₛ db \/ (C[P] ⇓ₛ ub(pref(
 TODO should C be defined or fully defined?
 
 ** proof of RC for our instance from T to S
-∀c. c[P↓] ⇓ₜ db =>DEC
+∀c. c[P↓] ⇓ₜ db =>DEC  (no need for refinements)
 P↓ ⇓ₜ{C} db =>PCCR 
 P ⇓ₛ{C} b' /\ (b'=db \/ b'=ub(pref(db),P) =>DEF in both cases
 ∃C. C[P] ⇓ₛ b' /\ (b'=db \/ b'=ub(pref(db),P)
 
 ** proof of RC for our instance from I to S
-   it can be proved with the huge assumption that c is defined, this
-   however doesn't influence preservation of properties.
+   same as above but with DECR, it can be proved with the huge
+   assumption that c is defined, this however doesn't influence
+   preservation of properties.
 
    TODO: RC_IT + RC_SI => RC_ST
 
@@ -320,7 +340,8 @@ satisfied:
 - fix 2
 πₚ(b) = { b(t) | filter(t,P) ∈ Π}
 
-
+- fix 3
+  use an alternative notion of property π(b)
 TODO
 
 *** HR notes
@@ -391,8 +412,407 @@ Suppose ↓ is wrong, then either:
    ¬∃ prefix(db') = t
 
 (∀Pᵢ. ∃Csᵢ. ⋈(Csᵢ,Pᵢ) ⇓ₛ db 
+* removing ub from properties
+** changing satisfaction
+A property π is a set of defined behaviors, π ⊆ DEF, where DEF
+contains all the possible defined behaviors that a set of interfaces
+can produce.
 
-* Robust Execution
+When a semantics produces an ub we need to expand it and check that
+all its possible continuations are in π.
+
+CCR:
+   ∀ b. P↓ ⇓ᵢ b => P ⇓ₛ b ∨ P ⇓ₛ ub(prefix(b))
+
+VDEF:
+   ∀ p b. p ⇓ᵢ b => ∃ P. P ⇓ₛ b
+
+CCRD:
+   ∀ b. P↓ ⇓ᵢ b => P ⇓ₛ b
+                ∨ (P ⇓ₛ ub(prefix(b)) ∧ ∃ P'. P' ⇓ₛ b)
+
+Def: Whole program Satisfaction
+WP satisfies π iff
+∀t. WP ⇓ b =>
+  (b=db => db ∈ π) ∧
+  (b=ub(t) => ∀t'. t'≥t ∧ ∃WP'. WP' ⇓ db(t') => db(t') ∈ π)
+
+Def: Preservation of WS
+∀WP π. WP satisfies π => WP↓ satisfies π
+
+Conjecture: CCDR <=> PWS
+
+Th: CCRD => PWS
+Proof
+=>
+Assume
+  h1: WP↓ ⇓ᵢ b
+  h2: CCRD
+  h3: WP satisfies π
+To show
+  WP↓ satisfies π
+
+  by h1, case analysis on b
+
+  (* common case *)
+  – b = db(t) for some t
+    by CCRD
+    1) WP ⇓ₛ db(t)
+      to show db(t) ∈ π
+      by h3, db ∈ π
+    2) WP ⇓ₛ ub(prefix(t)) ∧ ∃ P'. P' ⇓ₛ db(t)
+      to show db(t) ∈ π
+      by h3, ∀t'. t'≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      instantiate t' with t, then
+        t≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t) => db(t) ∈ π
+      but we know that ∃ P'. P' ⇓ₛ db(t), therefore db(t) ∈ π
+
+  (* additional intermediate case *)
+  – b = ub(t) for some t
+    by CCRD
+    1) WP ⇓ₛ ub(t)
+      to show ∀t'. t'≥t ∧ ∃wp'. wp' ⇓ᵢ db(t') => db(t') ∈ π
+      by h3, ∀t'. t'≥t ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      STUCK
+    2) WP ⇓ₛ ub(prefix(t)) ∧ ∃ P'. P' ⇓ₛ ub(t)
+      to show ∀t'. t'≥t ∧ ∃wp'. wp' ⇓ᵢ db(t') => db(t') ∈ π
+      by h3, ∀t'. t'≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      STUCK
+
+Th: PWS => CCRD
+Proof
+=>
+  Assume
+    h1: WP satisfies π => WP↓ satisfies π
+    h2: WP↓ ⇓ᵢ b
+  To show
+    WP ⇓ₛ b ∨ (WP ⇓ₛ ub(prefix(b)) ∧ ∃ P'. P' ⇓ₛ b)
+
+  We build a property π such that WP satisfies it:
+    π = { db(t) | ∃ t. WP ⇓ₛ db(t) } ∪
+        { db(t) | ∃ t t' P'. t≥t' ∧ WP ⇓ₛ ub(t') ∧ P' ⇓ₛ db(t) }
+  We can see that WP satisfies π:
+  – WP ⇓ₛ db(t) => db(t)
+    by first construction set
+  – WP ⇓ₛ ub(t) => ∀t'. t'≥t ∧ ∃WP'. WP' ⇓ db(t') => db(t') ∈ π
+    by second construction set
+
+  Since WP satisfies π, by PWS we have that WP↓ satisfies π.
+
+  by case analysis on the behavior of the compiled program
+
+  (* common case *)
+  – b = db(t) for some t
+    by satisfaction of π at the target, we have db(t) ∈ π
+    by construction of π, either 1) or 2) holds
+    1) WP ⇓ₛ db(t)
+       the first disjunct is true, done
+    2) ∃ t' P'. t≥t' ∧ WP ⇓ₛ ub(t') ∧ P' ⇓ₛ db(t)
+       the second disjunct is true, since for some t' prefix of t
+         WP ⇓ₛ ub(t'=prefix(t)) ∧ ∃ P'. P' ⇓ₛ db(t)
+
+  (* additional intermediate case *)
+  – b = ub(t) for some t
+    by satisfaction of π at the intermediate, we have
+      ∀t'. t'≥t ∧ ∃P'. P' ⇓ᵢ db(t') => db(t') ∈ π
+    consider all such traces t' for which db(t') ∈ π
+    by construction of π, either 1) or 2) holds
+    1) WP ⇓ₛ db(t')
+       WP ⇓ₛ ub(t') and WP↓ ⇓ᵢ ub(prefix(t'))
+       weird case, the source behavior is more defined than the intermediate one
+       STUCK this shouldn't probably happen
+    2) ∃ t'' P'. t'≥t'' ∧ WP ⇓ₛ ub(t'') ∧ P' ⇓ₛ db(t')
+       we have to consider the relation between t and t''
+       we know that t and t'' are prefixes of t', therefore they share a common
+       prefix. Three cases:
+       — t ≤ t'', t is a prefix of t''
+         WP ⇓ₛ ub(t'') and WP↓ ⇓ᵢ ub(prefix(t''))
+         weird case, the source behavior is more defined than the intermediate one
+         STUCK this shouldn't probably happen
+       – t = t'', same prefix
+         WP ⇓ₛ ub(t) and WP↓ ⇓ᵢ ub(t)
+         pick the first disjunct, done
+       – t ≥ t'', t'' is a prefix of t
+         WP ⇓ₛ ub(prefix(t)) and WP↓ ⇓ᵢ ub(t)
+         moreover ∃ P'. P' ⇓ₛ db(t')
+         pick the second disjunct, the first conjunct is satisfied
+         we must show the second conjunct, ∃ P'. P' ⇓ₛ ub(t)
+         STUCK we don't have enough information to prove this fact
+
+Th: CCR+VDEF => PWS
+Proof
+=>
+Assume
+  h1: WP↓ ⇓ᵢ b
+  h2: CCR+VDEF
+  h3: WP satisfies π
+To show
+  WP↓ satisfies π
+
+  by h1, case analysis on b
+  – b = db(t) for some t
+    by CCR
+    1) WP ⇓ₛ db(t)
+      to show db(t) ∈ π
+      by h3, db ∈ π
+    2) WP ⇓ₛ ub(prefix(t))
+      to show db(t) ∈ π
+      by h3, ∀t'. t'≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      instantiate t' with t, then
+        t≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t) => db(t) ∈ π
+      by VDEF on WP↓ and db(t), we have ∃ WP'. WP' ⇓ₛ db(t)
+      but then db(t) ∈ π
+  – b = ub(t) for some t
+    by CCR
+    1) WP ⇓ₛ ub(t)
+      to show ∀t'. t'≥t ∧ ∃wp'. wp' ⇓ᵢ db(t') => db(t') ∈ π
+      by h3, ∀t'. t'≥t ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      by VDEF on wp' and db(t'), we have t'≥t ∧ ∃ WP'. WP' ⇓ₛ db(t')
+      but then db(t') ∈ π
+    2) WP ⇓ₛ ub(prefix(t))
+      to show ∀t'. t'≥t ∧ ∃wp'. wp' ⇓ᵢ db(t') => db(t') ∈ π
+      by h3, ∀t'. t'≥prefix(t) ∧ ∃WP'. WP' ⇓ₛ db(t') => db(t') ∈ π
+      by VDEF on wp' and db(t'), we have t'≥t (because t'≥prefix(t)) ∧ ∃ WP'. WP' ⇓ₛ db(t')
+      but then db(t') ∈ π
+
+Alternative attempt with CCR+VDEF, still half broken
+
+Th: PWS => CCR+VDEF
+Proof
+=>
+Assume
+  h1: WP satisfies π => WP↓ satisfies π
+To show
+  CCR ∧ VDEF
+
+1) CCR
+   IDEA if the compiler is incorrect, there must exist a program for which at
+        least behavior is not preserved. We start from this program and
+        behavior and build a property π that doesn't include such miscompilation.
+
+   For any given program P, we can build a property π as
+     π = { db(t) | ∃ t. P ⇓ₛ db(t) } ∪
+         { db(t) | ∃ P' t t'. t≥t' ∧ P ⇓ₛ ub(t') ∧ P' ⇓ₛ db(t) }
+
+   Notice that P satisfies π (TODO need more details here)
+
+   Now suppose that the compiler is incorrect, then there exists a program P
+   for which at least one of its behaviors is not preserved.
+   Pick such program P and bad behavior bbad, then build π with the method above.
+
+   In particular we need a bbad such that it cannot be produced by the original
+   program (TODO think more, need some details here)
+     P↓ ⇓ᵢ bbad(t) ∧ ¬ P ⇓ₛ db(t) ∧ ¬ P ⇓ₛ ub(t)
+
+   Intuition:
+     by construction, bbad ∉ π (because it cannot be produced by P at the source)
+     but by h1 and π satisfaction, we know that bbad ∈ π
+     we assumed the compiler to be incorrect, but we arrived at a contradiction.
+     therefore, the compiler must be correct.
+
+   Since bbad is bad, ¬ P ⇓ₛ ub(t) ∧ ¬ P ⇓ db(t)
+   Case analysis on bbad
+   – bbad = db(t) for some t
+     by h1, db(t) ∈ π (contra)
+   – bbad = ub(t) for some t
+     by h1, ∀ t'. t'≥t ∧ ∃ P'. P' ⇓ᵢ db(t') => db(t') ∈ π
+     pick t'=t, then db(t) ∈ π
+     but we know that db(t) ∉ π (contra)
+
+2) VDEF
+   to show ∀ p b. p ⇓ᵢ b => ∃ P'. P ⇓ₛ b
+
+   NOTE: Not sure if we can prove VDEF from PWS.
+         VDEF starts with an arbitrary low level program, but PWS only talks
+         about compiled programs.
+
+   — Proof sketch for compiled programs
+
+   IDEA π must contain only source-level defined behavior
+        db(t) ∈ π => ∃ P. P ⇓ₛ db(t)
+        if π is preserved, it means we can oberve only source-level behaviors
+        at all levels
+
+   For any given program P, we can build a property π as
+     π = { db(t) | ∃ t. P ⇓ₛ db(t) } ∪
+         { db(t) | ∃ P' t t'. t≥t' ∧ P ⇓ₛ ub(t') ∧ P' ⇓ₛ db(t) }
+
+   Notice that P satisfies π (TODO need more details here)
+
+   We show that given P↓ ⇓ᵢ b, there exists P' such that P' ⇓ₛ b
+   Case analysis on b
+   – b = db(t) for some t
+     by h1, db(t) ∈ π
+     therefore, by construction of π, either P ⇓ₛ db(t) or ∃ P'. P' ⇓ₛ db(t)
+   – b = ub(t) for some t
+     by h1, ∀ t'. t'≥t ∧ ∃ P'. P' ⇓ᵢ db(t') => db(t') ∈ π
+     pick t'=t, then either exists P' such that P' ⇓ᵢ db(t) or it doesn't exist.
+     1) P' exists
+        but then db(t) ∈ π, which proves our goal as in the previous case
+     2) P' doesn't exist
+        this case should be impossible. The intuition is that since we have
+        observed ub(t) with P↓, there must exist a program P' such that it does
+        the very same trace t and then it either terminates or diverges silently
+        instead of having undefined behavior. (TODO need more details here)
+
+
+Def: Robust Satisfaction 123
+P robustly satisfies π iff
+∀C t. C[P] ⇓ b =>
+  (b=db => db ∈ π) ∧
+  (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π) ∧
+  (b=ub(t,C) => ∀t'. t'≥t ∧ ∃C'. C'[P] ⇓ db(t') => db(t') ∈ π)
+
+Def: Robust Satisfaction 12
+∀C t. C[P] ⇓ b ∧ b≠ub(t,C) =>
+  (b=db => db ∈ π) ∧
+  (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π)
+
+
+Th: RS12 <=> RS123
+Proof
+– => part
+  We want to show that
+   ∀C t. C[P] ⇓ b =>
+     (b=db => db ∈ π) ∧
+     (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π) ∧
+     (b=ub(t,C) => ∀t'. t'≥t ∧ ∃C'. C'[P] ⇓ db(t') => db(t') ∈ π)
+  Pick C such that C[P] ⇓ b.
+  Case analysis on b:
+  1) b=db(t) ∨ b=ub(t,P)
+    Since b≠ub(t,C), we can directly apply RS12.
+  2) b=ub(t,C)
+    We cannot apply RS12, since we have an undefined behavior because of C.
+    The first two cases trivially holds, therefore we focus just on the third
+    case. We want to show that ∀t'. t'≥t ∧ ∃C'. C'[P] ⇓ db(t') => db(t') ∈ π
+    That is, given C' and t' such that t'≥t ∧ C'[P] ⇓ db(t'), we show db(t') ∈ π
+    Since C'[P] ⇓ db(t'), we can apply RS12 and obtain db(t') ∈ π, our goal.
+– <= part
+  This is the trivial part, since we just have to map one-to-one our facts.
+  We want to show that:
+  ∀C t. C[P] ⇓ b ∧ b≠ub(t,C) =>
+    (b=db => db ∈ π) ∧
+    (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π)
+  Pick C such that C[P] ⇓ b ∧ b≠ub(t,C)
+  Now, either b=db(t) or b=ub(t,P).
+  In both cases we can apply RS123 and show that
+    (b=db => db ∈ π) ∧
+    (b=ub(t,P) => ∀t'. t'≥t ∧ ∃WP. WP ⇓ db(t') => db(t') ∈ π)
+
+Def: Robust Compilation
+RC: ∀c t. c[P↓] ⇓ᵢ b(t) ∧ b(t)≠ub(t,C) => ∃C. C[P] ⇓ₛ b(t) ∨ C[P] ⇓ₛ ub(pref(t),P)
+
+Def: Preservation of Robust Satisfaction
+∀P π. P robustly satisfies π => P↓ robustly satisfies π
+
+Th: RC <=> PRS
+TODO
+
+** changing notion of robust satisfaction
+Proof and definition become more detailed, which means clearer but also harder to read.
+The π contains only DEF and it's much clearer.
+
+*** Robust Satisfaction:
+   P robustly satisfies π ⊆ DEF
+   ∀P t C. C[P]⇓b(t) =>
+   (b=db(t) => db(t) ∈ π) /\
+   (b=ub(t,Pᵢ) => ∀t'. t≤t' /\ ∃P'. C[P'] ⇓ db(t') /\ db(t') ∈ π
+   (b=ub(t,C) => ∀t'. t≤t' /\ ∃P'. C[P'] ⇓ db(t') /\ db(t') ∈ π
+
+   (b=ub(t,C) => ∃db. db(t) ∈ π) /\
+   (b=ub(t,C) => ∃db. db(t') ∈ π /\ t≤t') /\
+   (b=ub(t,C) => ∀db. db(t') ∈ π /\ t≤t') /\
+
+   Note that satisfaction for whole programs is an instance with an
+   empty C and the second match doesn't occur.
+
+*** Preservation of RS:
+    RS_L1(P) => RS_L2(P↓)
+*** RC+HR => PRS_SI
+
+Assume
+  HR: ∀C. C[P]⇓b(t) => ∃C' defined. C'[P]⇓b'(t) /\ b'≠ub(t,C')
+
+Assume h1 
+  ∀P tₛ C. C[P]⇓ₛ b(tₛ) =>
+  (b(tₛ)=db(t) => db(tₛ) ∈ π) /\
+  (b(tₛ)=ub(tₛ,C) => ∃db(tₛ') ∈ π /\ tₛ≤tₛ') /\
+  (b(tₛ)=ub(tₛ,P) => ∀tₛ'. tₛ≤tₛ' /\ db(tₛ') ∈ π)
+
+Assume h2
+  ∀P tᵢ c. c[P↓]⇓ᵢb(tᵢ)
+
+Goal
+  (b(tᵢ)=db(tᵢ) => db(tᵢ) ∈ π) /\
+  (b(tᵢ)=ub(tᵢ,c) => ∃db(tᵢ') ∈ π /\ tᵢ≤tᵢ') /\
+  (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
+
+
+i) c no ub, P↓ no ub, P ref/no ref
+h2: c[P↓]⇓ᵢdb(tᵢ) =>RC4
+∃C. C[P] ⇓ₛ b(tᵢ)
+1) C[P] ⇓ₛ db(tᵢ)
+by RS db(tᵢ) ∈ π
+2) C[P] ⇓ₛ ub(prefix(tᵢ), P)
+To show
+    (b(tᵢ)=ub(tᵢ,P↓) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
+by RS ∀tᵢ'. prefix(tᵢ)≤tᵢ' /\ db(tᵢ') ∈ π
+
+ii) c no ub, P↓ ub, P ref/no ref
+h2: c[P↓]⇓ᵢub(tᵢ,P) =>RC4
+∃C.
+1) C[P] ⇓ₛ ub(tᵢ,P)
+To show:
+  (b=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
+by RS: ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π
+2) C[P] ⇓ₛ ub(prefix(tᵢ), P)
+To show:
+  (b=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
+by RS ub(prefix(tᵢ),P) => ∀ tᵢ'. prefix(tᵢ)≤tᵢ' /\ db(tᵢ') ∈ π
+
+iii) c ub, P↓ no ub, P ref/no ref
+h2: c[P↓]⇓ᵢub(tᵢ,C) =>HR
+∃b' c' defined. c'[P↓]⇓ᵢb'(tᵢ) /\ b'≠ub(tᵢ,c') =>RC4
+by i) or ii)
+
+*** RC => PRS_IT
+    is a special case of the previous proof
+*** RC_SI + RC_IT => RC_ST
+    interesting?
+*** PSR_SI + PSR_IT => PSR_ST
+Assume PRS_SI
+  (∀P tₛ C. C[P]⇓ₛ b(tₛ) =>
+   (b(tₛ)=db(t) => db(tₛ) ∈ π) /\
+   (b(tₛ)=ub(tₛ,C) => ∃db(tₛ') ∈ π /\ tₛ≤tₛ') /\
+   (b(tₛ)=ub(tₛ,P) => ∀tₛ'. tₛ≤tₛ' /\ db(tₛ') ∈ π)) =>
+  (∀P tᵢ C. C[P↓]⇓ᵢ b(tᵢ) =>
+   (b(tᵢ)=db(t) => db(tᵢ) ∈ π) /\
+   (b(tᵢ)=ub(tᵢ,C) => ∃db(tᵢ') ∈ π /\ tᵢ≤tᵢ') /\
+   (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π))
+
+Assume PRS_IT
+  (∀P tᵢ C. C[P]⇓ᵢ b(tᵢ) =>
+   (b(tᵢ)=db(t) => db(tᵢ) ∈ π) /\
+   (b(tᵢ)=ub(tᵢ,C) => ∃db(tᵢ') ∈ π /\ tᵢ≤tᵢ') /\
+   (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)) =>
+  (∀P tₜ C. C[P↓]⇓ₜ b(tₜ) =>
+   (b(tₜ)=db(t) => db(tₜ) ∈ π) /\
+   (b(tₜ)=ub(tₜ,C) => ∃db(tₜ') ∈ π /\ tₜ≤tₜ') /\
+   (b(tₜ)=ub(tₜ,P) => ∀tₜ'. tₜ≤tₜ' /\ db(tₜ') ∈ π))
+
+Assume
+  (∀P tₛ C. C[P]⇓ₛ b(tₛ) =>
+   (b(tₛ)=db(t) => db(tₛ) ∈ π) /\
+   (b(tₛ)=ub(tₛ,C) => ∃db(tₛ') ∈ π /\ tₛ≤tₛ') /\
+   (b(tₛ)=ub(tₛ,P) => ∀tₛ'. tₛ≤tₛ' /\ db(tₛ') ∈ π))
+
+To show
+  (∀P tₜ C. C[P↓↓]⇓ₜ b(tₜ) =>
+   (b(tₜ)=db(t) => db(tₜ) ∈ π) /\
+   (b(tₜ)=ub(tₜ,C) => ∃db(tₜ') ∈ π /\ tₜ≤tₜ') /\
+   (b(tₜ)=ub(tₜ,P) => ∀tₜ'. tₜ≤tₜ' /\ db(tₜ') ∈ π))
+
+* Robust Execution (variant of NEW_RC_DC)
 What we would like to have is something finer-grained that, ideally, replaces
 only those components which cause problems.
 
@@ -408,6 +828,14 @@ Notes:
     backmapping argument for every component, no matter where it comes from
     (e.g. compiled or hand-written).
 
+[CH: not sure about the "more general" part, NEW_RC_DC was stated for
+     arbitrary programs and contexts, which is already more general
+     than the sets of components model.]
+[CH: also, I don't see the fact that this property is n-ary as a plus,
+     on the contrary, it seems like a pain]
+[CH: finally, could it be that NEW_RC_DC => RE direction also holds?
+     I simply take pᵢ to be c and ρ\pᵢ to be P.]
+
 Lemma:
   RE => NEW_RC_DC
 Proof:
@@ -420,12 +848,21 @@ Proof:
   by RE instantiated with c and P↓, we can pick the case in which we backmap c
     ∃ C. FD(C) ∧ C↓[P↓] ⇓ b
 
+  [CH: In the NEW_RC_DC instance for components I would expect both c
+       and P to be *sets* of components. ]
+
 Lemma:
   CCR ∧ RE => RC4
 Proof:
   should follow from multiple applications of RE and then CCR
 
 ** Preservation of Robust Satisfaction by means of CCR and RE
+
+[CH: Isn't this just a consequence of:
+  (0) RE => NEW_RC_DC
+  (1) NEW_RC_DC + CCR => OLD_RC_DC (super simple)
+  (2) OLD_RC_DC => PRS (super simple too, counterpositive) ]
+
 Main Theorem:
   CCR ∧ RE => PRS
 Notes:
@@ -502,7 +939,15 @@ by Composition
 we have that
   ∃ Pᵢ FD(Pᵢ) ∧ ⋈(p\pᵢ ∪ Pᵢ↓) ⇓ b
   which is what we wanted to show.
-* Mutual Distrust for πᵢ
+** Robust Execution with Undefined Behavior at target
+RE (Robust Execution):
+  ∀ ρ={p₁,...,pₙ}.
+    (⋈(ρ) ⇓ b =>
+      ∀ pᵢ. ∃ Pᵢ. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b) ∨
+    (⋈(ρ) ⇓ GoingWrong(t, pᵢ) =>
+      (∀ pⱼ s.t. j ≠ i. ∃ Pⱼ. FD(Pⱼ) ∧ ⋈(ρ\pⱼ ∪ Pⱼ↓) ⇓ GoingWrong(t, pᵢ)) ∧
+      (∃ Pᵢ b'. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b' ∧ trace(b') = t)
+* Mutual Distrust for πᵢ (broken variant of RC_DC+MD?)
 An interesting case is the one with more than two mutually distrustful source
 level components. There are several characterization of it, the iterative one
 being the most promising.
@@ -513,7 +958,9 @@ MD:
 P = {P₁, ..., Pₙ}
 ⋈(P)↓ ⇓ b => ∀ Pᵢ. RC4(Pᵢ, (P\Pᵢ)↓, b)
 
-* Mutual Distrust for π
+[CH: I don't see any iteration here, RC4 is not recursive!?]
+
+* Mutual Distrust for π (related to less iterative variants RC_DC+MD' and RC_DC+MD''?)
 
 RC4(Ps, cs, db) = ∃Cs. ⋈(Cs,Ps) ⇓ₛ db \/ ∃Pᵢ. ⋈(Cs,Ps) ⇓ₛ ub(pref(db),Pᵢ)
 
@@ -522,17 +969,6 @@ P = {P₁, ..., Pₙ}   Ps ∈ subsets(P)
 ⋈(P)↓ ⇓ b => ∀ Ps. RC4(Ps, (P\Ps)↓, b)
   
 * Bits and pieces
-** Partial Definability
-PDEF: PP ⇓ₜ b  => ∃PP'. PP'⇓ₛ b
-PDEF on all components implies DEF on whole programs: WP ⇓ₜ b  =>? ∃WP'. WP'⇓ₛ b
-WP ⇓ₜ b => ⋈(p₁,...,pₙ) ⇓ₜ b 
-       =>DEC ∀pᵢ. pᵢ ⇓pt b 
-       =>PDef ∀pᵢ. ∃Pᵢ'. Pᵢ' ⇓ps b 
-       =>COMP ⋈(P₁',...,Pₙ') ⇓ₛ b 
-       => WP'⇓ₛ b
-TODO: If there is UB in b (e.g. if we are at intermediate instead of
-target) then we need to use DECR and recheck the proof
-
 ** De/composition with refinement
 If we want to have UB in a language then we need to add refinement to its decomposition.
 If the context does UB then the partial context refines it.
@@ -544,6 +980,16 @@ TODO CHECK ALL UB CASES
 
 Definability on the same level (the old definability):
 DEFS: P ⇓{C} b => ∃C. C[P] ⇓ b      (on the Same level. P can do UB and C cannot)
+** Partial Definability
+PDEF: PP ⇓ₜ b  => ∃PP'. PP'⇓ₛ b
+PDEF on all components implies DEF on whole programs: WP ⇓ₜ b  =>? ∃WP'. WP'⇓ₛ b
+WP ⇓ₜ b => ⋈(p₁,...,pₙ) ⇓ₜ b 
+       =>DEC ∀pᵢ. pᵢ ⇓pt b 
+       =>PDef ∀pᵢ. ∃Pᵢ'. Pᵢ' ⇓ps b 
+       =>COMP ⋈(P₁',...,Pₙ') ⇓ₛ b 
+       => WP'⇓ₛ b
+TODO: If there is UB in b (e.g. if we are at intermediate instead of
+target) then we need to use DECR and recheck the proof
 
 ** Preservation of Robust Satisfaction by means of CCR and RE
 Main Theorem:
@@ -720,111 +1166,99 @@ Is this a contradiction? What is the connection between b_bad and b''?
 FD (Fully Definedness):
   ∀ C b. ¬ (⋈(C, P) ⇓ GoingWrong(b))
 TODO in many cases we might need only definedness for a specific behavior b
+** another variant
 
-* Robust Execution with Undefined Behavior at target
-RE (Robust Execution):
-  ∀ ρ={p₁,...,pₙ}.
-    (⋈(ρ) ⇓ b =>
-      ∀ pᵢ. ∃ Pᵢ. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b) ∨
-    (⋈(ρ) ⇓ GoingWrong(t, pᵢ) =>
-      (∀ pⱼ s.t. j ≠ i. ∃ Pⱼ. FD(Pⱼ) ∧ ⋈(ρ\pⱼ ∪ Pⱼ↓) ⇓ GoingWrong(t, pᵢ)) ∧
-      (∃ Pᵢ b'. FD(Pᵢ) ∧ ⋈(ρ\pᵢ ∪ Pᵢ↓) ⇓ b' ∧ trace(b') = t)
-* again
-Proof and definition become more detailed, which means clearer but also harder to read.
-The π contains only DEF and it's much clearer.
+   Π ⊆ { db(t) | ∃ C. C[P] ⇓ db(t) } ∪ { db(t) | ∃ C. C[P] ⇓ ub(t,P) }
 
-** Robust Satisfaction:
-  P robustly satisfies π ⊆ DEF
-  ∀P b C. C[P]⇓b => ∃t.
-  (b=db(t) => db(t) ∈ π) /\
-  (b=ub(t,C) => ∃db(t') ∈ π /\ t≤t') /\
-  (b=ub(t,P) => ∀t'. t≤t' /\ db(t') ∈ π)
+   πₚ = Π ∪ { db(t) | ∃C t'. C[P] ⇓ ub(t',P) /\ t'≤t /\ ∃P'. C[P'] ⇓ db(t) /\ ∃ db(t') ∈ Π) }
+// (∃ t'. C[P] ⇓ ub(t',C) /\ t'≤t /\ ∃ db(t) ∈ Π) \/
 
-  Note that satisfaction for whole programs is an instance with an
-  empty C and the second match doesn't occur.
+   P is FD => πₚ = Π
 
-** Preservation of RS:
-  RS_L1(P) => RS_L2(P↓)
-** RC+HR => PRS_SI
 
-Assume
-  HR: ∀C. C[P]⇓b(t) => ∃C' defined. C'[P]⇓b'(t) /\ b'≠ub(t,C')
+   Π ⊆ { db(t)   | ∃ C. C[P] ⇓ db(t) } ∪
+       { ub(t,P) | ∃ C. C[P] ⇓ ub(t,P) }
 
-Assume h1 
-  ∀P tₛ C. C[P]⇓ₛ b(tₛ) =>
-  (b(tₛ)=db(t) => db(tₛ) ∈ π) /\
-  (b(tₛ)=ub(tₛ,C) => ∃db(tₛ') ∈ π /\ tₛ≤tₛ') /\
-  (b(tₛ)=ub(tₛ,P) => ∀tₛ'. tₛ≤tₛ' /\ db(tₛ') ∈ π)
+   πₚ = Π
+      ∪ { ub(t',C) | ∃ t t'. t >= t' /\ db(t) ∈ Π }
+      ∪ { db(t)    | ∃ t t'. t >= t' ‌/\ ub(t',P) ∈ Π }.
 
-Assume h2
-  ∀P tᵢ c. c[P↓]⇓ᵢb(tᵢ)
+   P has UB with ε => { ε } ∈ Π /\ πₚ = { db(t) | ∃ C. ∃ P'. P' ⇓ db(t) }
 
-Goal
+   Robust Satisfaction:
+     ∀P t C. C[P]⇓b(t) =>
+       (b=db(t) => db(t) ∈ πₚ) /\
+       (b=ub(t,_) => ∃ db(t) ∈ πₚ)
+* complete proof for our instance and our targets
+  we can use RC from c[P↓] to C[P] to obtain PRS_SI.
+  if we use CC from (c[P↓])↓ to c[P↓] we get only PS_IT which in
+  principle is not enough to preserve our properties.
+  however below there is a proof that CC provides PRS_IT.
+  maybe it works because we start from the target, we should try to
+  prove PRS_SI from CC_SI, if it works then there is something very
+  broken.
+  TODO check where the proof should break
+
+
+  To Show:
+  PRS_IT:
+  (∀P tᵢ c. c[P↓]⇓ᵢ b(tᵢ) =>
   (b(tᵢ)=db(tᵢ) => db(tᵢ) ∈ π) /\
-  (b(tᵢ)=ub(tᵢ,c) => ∃db(tᵢ') ∈ π /\ tᵢ≤tᵢ') /\
-  (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
+  (b(tᵢ)=ub(tᵢ,C) => ∃db(t,t') ∈ π) /\           TODO I CHANGED THIS CASE!
+  (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π))
+  =>
+  (∀P tₜ c. (c[P↓])↓ ⇓ₜ db(tₜ) => db(tₜ) ∈ π)
+
+  Assume CC (WP=c[P↓]):
+  ∀ b. (c[P↓])↓ ⇓ₜ db(tₜ) => c[P↓] ⇓ᵢ db(tₜ) ∨ c[P↓] ⇓ᵢ ub(prefix(tₜ))
+
+  Assume h1:
+  (∀P tᵢ c. c[P↓]⇓ᵢ b(tᵢ) =>
+  (b(tᵢ)=db(tᵢ) => db(tᵢ) ∈ π) /\
+  (b(tᵢ)=ub(tᵢ,C) => ∃db(tᵢ) ∈ π) /\
+  (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π))
+
+  Assume h2:
+  ∀P tₜ c. (c[P↓])↓ ⇓ₜ db(tₜ)
+
+  Proof:
+  h2 =>CC
+  i) c[P↓] ⇓ᵢ db(tₜ) ∨
+  ii) c[P↓] ⇓ᵢ ub(prefix(tₜ))
+
+  i) => h1
+     db(tₜ) ∈ π OK
+
+  ii.a) c[P↓] ⇓ᵢ ub(prefix(tₜ),P) =>h1
+         ∀tᵢ'. prefix(tₜ)≤tᵢ' /\ db(tᵢ') ∈ π => specialize tᵢ'=tₜ
+         db(tₜ) ∈ π OK
+
+  ii.b) c[P↓] ⇓ᵢ ub(prefix(tₜ),C) =>h1
+        ∃db(prefix(tₜ),t') ∈ π =>
+        ∃c'. c'[P↓] ⇓ᵢ db(prefix(tₜ),t')
+        db(tₜ)
+        TODO how do we know that is the correct db? we could stenghten PRS with ∀db(t). db(t)∈π.
 
 
-i) c no ub, P↓ no ub, P ref/no ref
-h2: c[P↓]⇓ᵢdb(tᵢ) =>RC4
-∃C. C[P] ⇓ₛ b(tᵢ)
-1) C[P] ⇓ₛ db(tᵢ)
-by RS db(tᵢ) ∈ π
-2) C[P] ⇓ₛ ub(prefix(tᵢ), P)
-To show
-    (b(tᵢ)=ub(tᵢ,P↓) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
-by RS ∀tᵢ'. prefix(tᵢ)≤tᵢ' /\ db(tᵢ') ∈ π
+        Imagine a bad trace at the target db(t₁t₂) where t₁ respects
+        πₚ and t₂ breaks it, we know that db(t₁t₂) ∉π. It is mapped by
+        CC to a trace ub(t₁,C) which corresponds to a db(t₁) in πₚ.
+        This doesn't seem to help, the only way to have t₁t₂ in π is
+        to have them in a defined behavior db(t₁t₂), the only way to
+        backmap a defined behavior is to do it precisely.
 
-ii) c no ub, P↓ ub, P ref/no ref
-h2: c[P↓]⇓ᵢub(tᵢ,P) =>RC4
-∃C.
-1) C[P] ⇓ₛ ub(tᵢ,P)
-To show:
-  (b=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
-by RS: ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π
-2) C[P] ⇓ₛ ub(prefix(tᵢ), P)
-To show:
-  (b=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)
-by RS ub(prefix(tᵢ),P) => ∀ tᵢ'. prefix(tᵢ)≤tᵢ' /\ db(tᵢ') ∈ π
+        TODO is CC with components a special case of RC?
+* catalin's example to separate RC_DC with RC_SC
+  Cₜ is a component that never 'blows_up' unless it has 'ask'ed the user and got back 'yes'. 
+     it is semi-trusted, it has undefined behavior only if returned a 'bad' input after calling Cᵤ.P
+  Cᵤ is untrusted and can return a bad input to Cₜ
 
-iii) c ub, P↓ no ub, P ref/no ref
-h2: c[P↓]⇓ᵢub(tᵢ,C) =>HR
-∃b' c' defined. c'[P↓]⇓ᵢb'(tᵢ) /\ b'≠ub(tᵢ,c') =>RC4
-by i) or ii)
+  the property that we want to preserve is that an event blow_up can
+  only happen if it follows a yes or an bad input.
 
-** RC => PRS_IT
-   is a special case of the previous proof
-** RC_SI + RC_IT => RC_ST
-   interesting?
-** PSR_SI + PSR_IT => PSR_ST
-Assume PRS_SI
-  (∀P tₛ C. C[P]⇓ₛ b(tₛ) =>
-   (b(tₛ)=db(t) => db(tₛ) ∈ π) /\
-   (b(tₛ)=ub(tₛ,C) => ∃db(tₛ') ∈ π /\ tₛ≤tₛ') /\
-   (b(tₛ)=ub(tₛ,P) => ∀tₛ'. tₛ≤tₛ' /\ db(tₛ') ∈ π)) =>
-  (∀P tᵢ C. C[P↓]⇓ᵢ b(tᵢ) =>
-   (b(tᵢ)=db(t) => db(tᵢ) ∈ π) /\
-   (b(tᵢ)=ub(tᵢ,C) => ∃db(tᵢ') ∈ π /\ tᵢ≤tᵢ') /\
-   (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π))
+  π = { b(t) | t=t₁:blow_up:t₂ => [Cₜ Call ask :: Ret yes] ∈ t₁ ‌\/
+                                  [Cₜ Call Cᵤ.P :: Ret bad] ∈ t₁ }
 
-Assume PRS_IT
-  (∀P tᵢ C. C[P]⇓ᵢ b(tᵢ) =>
-   (b(tᵢ)=db(t) => db(tᵢ) ∈ π) /\
-   (b(tᵢ)=ub(tᵢ,C) => ∃db(tᵢ') ∈ π /\ tᵢ≤tᵢ') /\
-   (b(tᵢ)=ub(tᵢ,P) => ∀tᵢ'. tᵢ≤tᵢ' /\ db(tᵢ') ∈ π)) =>
-  (∀P tₜ C. C[P↓]⇓ₜ b(tₜ) =>
-   (b(tₜ)=db(t) => db(tₜ) ∈ π) /\
-   (b(tₜ)=ub(tₜ,C) => ∃db(tₜ') ∈ π /\ tₜ≤tₜ') /\
-   (b(tₜ)=ub(tₜ,P) => ∀tₜ'. tₜ≤tₜ' /\ db(tₜ') ∈ π))
+  old_rc_dc seems to save this example
 
-Assume
-  (∀P tₛ C. C[P]⇓ₛ b(tₛ) =>
-   (b(tₛ)=db(t) => db(tₛ) ∈ π) /\
-   (b(tₛ)=ub(tₛ,C) => ∃db(tₛ') ∈ π /\ tₛ≤tₛ') /\
-   (b(tₛ)=ub(tₛ,P) => ∀tₛ'. tₛ≤tₛ' /\ db(tₛ') ∈ π))
-
-To show
-  (∀P tₜ C. C[P↓↓]⇓ₜ b(tₜ) =>
-   (b(tₜ)=db(t) => db(tₜ) ∈ π) /\
-   (b(tₜ)=ub(tₜ,C) => ∃db(tₜ') ∈ π /\ tₜ≤tₜ') /\
-   (b(tₜ)=ub(tₜ,P) => ∀tₜ'. tₜ≤tₜ' /\ db(tₜ') ∈ π))
+  TODO finish writing
