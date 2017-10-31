@@ -1,51 +1,57 @@
-(* This is a copy of the file in S2I. 
-If I don't make any changes it should be moved in  Lib. *)
 
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Export Lib.Monads.
+Require Import Coq.Strings.String.
 
 Require Import FunctionalExtensionality.
 
 (* the compilation monad *)
 
+Inductive Either (A:Type) : Type :=
+| Right : A -> Either A
+| Left : string -> Either A.
+  
+
 Module Comp.
   Section Def.
     Variable env: Type.
 
-    Definition t (res: Type) := env -> option (res * env).
+    Definition t (res: Type) := env -> Either (res * env).
 
-    Definition ret A (x:A) := fun (s:env) => Some (x, s).
+    Definition ret (A:Type) (x:A) : (t A)
+      := fun (s:env) => Right (A*env) (x,s).
 
     Definition bind A B (s: t A) (f: A -> t B) :=
       fun x => match s x with
-            | Some (x',s') => (f x') s'
-            | None => None
+            | Right _ (x',s') => (f x') s'
+            | Left _ s => Left (B*env) s
             end.
 
     Definition get : t env :=
-      fun s => Some (s, s).
+      fun s => Right (env*env)  (s, s).
 
     Definition put (s: env) : t unit :=
-      fun _ => Some (tt, s).
+      fun _ => Right (unit*env) (tt, s).
 
     Definition modify (f: env -> env) : t unit :=
-      fun s => Some (tt, f s).
+      fun s => Right (unit*env) (tt, f s).
 
     Definition lift {A} (x: option A) : t A :=
       fun s => match x with
-            | None => None
-            | Some v => Some (v, s)
+            | None  => Left (A*env) "None"
+            | Some v => Right (A*env)  (v, s)
             end.
+    
+    Definition fail {A} (msg : string) : t A :=
+      fun _ => Left (A*env) msg.
 
-    Definition fail {A} : t A :=
-      fun _ => None.
-
-    Definition run {A} (s: env) (m: t A) : option A :=
+    Definition run {A} (s: env) (m: t A) : Either A :=
       match m s with
-      | None => None
-      | Some (v,s') => Some v
+      | Left _ msg => Left A msg
+      | Right _ (v,s') => Right A v
       end.
+      
   End Def.
 End Comp.
 

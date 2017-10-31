@@ -375,9 +375,15 @@ Module RiscMachine.
     Definition get_value (mem : t) (ptr : address) : option value :=
       match get_word mem ptr with
       | Some (Data val) => Some val
-      | _ => None (* might need to deal with an instruction here*) 
+      | _ => None
       end.
 
+    Definition get_instr (mem : t) (ptr : address) : option RiscMachine.ISA.instr :=
+      match get_word mem ptr with
+      | Some (Instruction val) => Some val
+      | _ => None
+      end.
+    
     
     Definition set_value (mem : t) (ptr : address) (val : value) : t :=
       BinNatMap.add ptr (Data val) mem.
@@ -555,24 +561,48 @@ Module SFI.
   Definition COMP_MAX:N := 2^COMP_BITS_NO.
 
   Definition C_SFI (addr : RiscMachine.address) : SFIComponent.id  := 
-    N.land (N.shiftl addr OFFSET_BITS_NO) (2^COMP_BITS_NO - 1).
+    N.land (N.shiftr addr OFFSET_BITS_NO) (2^COMP_BITS_NO - 1).
 
   Definition ADDRESS_ALLIGN_BITS_NO : N := 4.
 
   Definition BASIC_BLOCK_SIZE : N := 16.
 
   Definition MONITOR_COMPONENT_ID : N := 0.
-  
-  Definition AND_DATA_MASK : N := 0. (* TODO *)
 
-  Definition AND_CODE_MASK : N := 0. (* TODO *)
+  Definition BLOCK_BITS_NO : N := 9.
   
+  Definition AND_DATA_MASK : N :=
+    N.lor
+      (N.shiftl (2^BLOCK_BITS_NO -1) (OFFSET_BITS_NO+COMP_BITS_NO+1))
+      (2^OFFSET_BITS_NO - 1).
+
+  Definition AND_CODE_MASK : N :=
+    N.lor
+      (N.shiftl (2^BLOCK_BITS_NO-1) (OFFSET_BITS_NO+COMP_BITS_NO+1))
+      (N.shiftl (2^(OFFSET_BITS_NO-ADDRESS_ALLIGN_BITS_NO) - 1) ADDRESS_ALLIGN_BITS_NO).
+
   Open Scope N_scope.
   
   (* Definition get_max_offset : N := 2^OFFSET_SIZE-1. *)
 
+  (* Definition code_address_of (cid : SFIComponent.id) (bid off: N) : RiscMachine.address := *)
+  (*   N.lor *)
+  (*     (N.shiftl bid (COMP_BITS_NO+OFFSET_BITS_NO+1)) *)
+  (*     (N.lor *)
+  (*        (N.shiftl cid OFFSET_BITS_NO) *)
+  (*        off).               *)
+
+  (* Definition data_address_of (cid : SFIComponent.id) (bid off: N) : RiscMachine.address := *)
+  (*   N.lor (code_address_of cid bid off) CODE_DATA_BIT_MASK. *)
+
+  
   Definition address_of (cid : SFIComponent.id) (bid off: N) : RiscMachine.address :=
-    bid * 2^(COMP_BITS_NO+OFFSET_BITS_NO)+cid*2^OFFSET_BITS_NO+off.
+    N.lor
+      (N.shiftl bid (COMP_BITS_NO+OFFSET_BITS_NO))
+      (N.lor
+         (N.shiftl cid OFFSET_BITS_NO)
+         off).
+  
   Close Scope N_scope.
   
   Definition is_same_component (addr1: RiscMachine.address)
@@ -600,18 +630,19 @@ Module SFI.
   
     Definition allocator_data_slot := 1%N.
 
-    (* 3 5 .. (2*N+1) *)
+    (* will allocate starting with 3, odd numbers *)
+    (* 1 is reserved for dynamic memory allocation data *)
     Definition allocate_data_slots (n : nat) : (list N) :=
-      List.map N.of_nat (List.filter Nat.odd (List.seq 3 (2*n+1))).
+      (List.map (fun nn => (2 *(N.of_nat nn)  + 1)%N) (List.seq 1 n)).
 
+    Definition allocate_code_slots (n : nat) : (list N) :=
+      (List.map (fun n => ((N.of_nat n) * 2)%N)
+                (List.seq 0 n)).
+    
     Definition initial_allocator_value (n:nat) : RiscMachine.value :=
       Z.of_nat (n+1).
 
   End Allocator.
-
-  Definition allocate_code_slots (n : nat) : (list N) :=
-    (List.map (fun n => ((N.of_nat n) * 2)%N)
-              (List.seq 0 (n-1))).
 
 End SFI.
 

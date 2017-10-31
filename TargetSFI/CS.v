@@ -189,32 +189,56 @@ Module CS.
         if SFI.is_same_component_bool pc pc' then
           Some (E0, (mem,pc',gen_regs))
         else
-          let ot := ret_trace G pc pc' gen_regs in
-          match ot with
-          | None => None
-          | Some t => ret (t, (mem,pc',gen_regs))
-          end
+          if (N.eqb (SFI.C_SFI pc') SFI.MONITOR_COMPONENT_ID)
+          then
+            Some (E0, (mem,pc',gen_regs))
+          else
+            let ot := ret_trace G pc pc' gen_regs in
+            match ot with
+            | None => None
+            | Some t => ret (t, (mem,pc',gen_regs))
+            end
       | IJal addr =>
         let ra := Z.of_N (pc+1) in
         let gen_regs' := RegisterFile.set_register Register.R_RA ra gen_regs in
         let pc' := addr in
         if SFI.is_same_component_bool pc pc' then Some (E0, (mem,pc',gen_regs'))
         else
-          let ot := call_trace G pc pc' gen_regs in
-          match ot with
-          | None => None
-          | Some t => Some (t, (mem,pc',gen_regs'))
-          end
+          if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
+          then
+            Some (E0, (mem,pc',gen_regs'))
+          else
+            let ot := call_trace G pc pc' gen_regs in
+            match ot with
+            | None => None
+            | Some t => Some (t, (mem,pc',gen_regs'))
+            end
       | IHalt => None
       end
     | Some (Data val) => None
     | None => None
     end.
+
+
+  Fixpoint eval_steps (n : nat) (G : Env.t) (s : MachineState.t)
+    : option (trace * MachineState.t) :=
+    match n with
+    | O => ret (E0,s)
+    | S n' => do (t',s') <- eval_step G s;
+               do (t'',s'') <- eval_steps n' G s';
+               ret (t'++t'',s'')
+    end.
+
+  Fixpoint eval_program (fuel : nat) (p : sfi_program) (regs : RegisterFile.t)
+    : option (trace * MachineState.t) :=
+    let st0 := ((TargetSFI.Machine.mem p), RiscMachine.PC0, regs) in
+    let g := ((TargetSFI.Machine.cn p),(TargetSFI.Machine.e p)) in
+    eval_steps fuel g st0.
     
   Conjecture eval_step_complete :
     forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
       (step G st t st') -> (eval_step G st = Some (t, st')).
-
+  
   
   Conjecture eval_step_sound:
     forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),

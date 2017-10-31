@@ -139,7 +139,7 @@ Fixpoint allocate_procedure_slots (procs : PMap.t (PMap.t Intermediate.Machine.c
   PMap.mapi (fun cid proc_map =>               
                let pids := (List.map fst (PMap.elements proc_map)) in
                 PMapExtra.of_list
-                  (List.combine pids (SFI.allocate_code_slots (List.length pids)))
+                  (List.combine pids (SFI.Allocator.allocate_code_slots (List.length pids)))
             ) procs.
 
 Definition init_env (i_cid2SFIid : PMap.t N) (i_procId2slot : PMap.t (PMap.t N))
@@ -182,7 +182,7 @@ Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * nat)
                      mem
                      (SFI.address_of sfi_cid (SFI.Allocator.allocator_data_slot) 0%N)
                      (SFI.Allocator.initial_allocator_value (List.length lst)))
-          |_ => fail
+          |_ => fail "allocate_buffers"
           end
       end in
   (* components without static buffers *)
@@ -280,10 +280,10 @@ Definition compile_IConst
     let cid : Component.id := Pointer.component p in
     let bid : Block.id := Pointer.block p in
     let offset := Pointer.offset p in    
-    if (Z.ltb offset 0%Z) then fail
+    if (Z.ltb offset 0%Z) then fail "compile_IConst negative offset for pointer"
     else
       if (Z.leb (Z.of_N SFI.SLOT_SIZE) offset)
-      then fail
+      then fail "compile_IConst offset too large"
       else
         do cenv <- get;
         do sfiId <- get_sfiId (current_component cenv);      
@@ -503,26 +503,35 @@ use crt to go over list
 *)
 Definition layout_procedure (pid : Procedure.id) (code : AbstractMachine.code)
   : COMP ( AbstractMachine.lcode) :=
-  ret (snd
-         (List.fold_left
-            (fun '(prev_label,code_lst) i =>
-               match i with
-               | AbstractMachine.ILabel lbl =>
-                 match prev_label with
-                 | None =>
-                   (* padd code_lst up to a multiple of SFI.BASIC_BLOCK_SIZE *)
-                   let r := N.modulo (N.of_nat (List.length code_lst)) SFI.BASIC_BLOCK_SIZE in
-                   let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r) SFI.BASIC_BLOCK_SIZE in
-                   let new_code_lst := code_lst
-                                         ++ (List.repeat
-                                               (None,AbstractMachine.INop)
-                                               (N.to_nat p)) in
-                   (Some [lbl] ,new_code_lst)
-                 | Some llst => (Some (llst ++ [lbl]),code_lst)
+  do cenv <- get;
+    do cprocs <- lift (PMap.find
+                        (current_component cenv)
+                        (exported_procedures_labels cenv));
+    ret (snd
+           (List.fold_left
+              (fun '(prev_label,code_lst) i =>
+                 match i with
+                 | AbstractMachine.ILabel lbl =>
+                   match prev_label with
+                   | None =>
+                     match PMap.find pid cprocs with
+                     | None => 
+                       (* padd code_lst up to a multiple of SFI.BASIC_BLOCK_SIZE *)
+                       let r := N.modulo (N.of_nat (List.length code_lst)) SFI.BASIC_BLOCK_SIZE in
+                       let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r) SFI.BASIC_BLOCK_SIZE in
+                       let new_code_lst := code_lst
+                                             ++ (List.repeat
+                                                   (None,AbstractMachine.INop)
+                                                   (N.to_nat p)) in
+                       (Some [lbl] ,new_code_lst)
+                     | _ => (Some [lbl],code_lst)
+                             (* no allign if the procedure is exported *)
+                     end
+                   | Some llst => (Some (llst ++ [lbl]),code_lst)
+                   end
+                 | _ => (None,code_lst++[(prev_label,i)])
                  end
-               | _ => (None,code_lst++[(prev_label,i)])
-               end
-            ) (code ++ [AbstractMachine.IHalt]) (None,[]))).
+              ) (code ++ [AbstractMachine.IHalt]) (None,[]))).
 
 (* acode: cid -> pid -> list of instr (labeled individually) *)
 Definition layout_code (acode : PMap.t (PMap.t AbstractMachine.code))
@@ -577,18 +586,17 @@ Definition get_E (lcode : PMap.t (PMap.t AbstractMachine.lcode)) : COMP (Env.E) 
       | [] => ret acc
       | (pid,lbl) :: xs =>        
         match PMap.find cid lcode with
-        | None => fail
+        | None => fail "get_E did not find component in lcode"
         | Some procs_lmap =>
           match PMap.find pid procs_lmap with
-          | None => fail
+          | None => fail "get_E did not find procedure in lcode"
           | Some listing =>
             let i := index_of lbl listing in
             if (ltb i (List.length listing))
             then
               do address <- get_SFI_code_address cid pid i;
                 (fold_procs cid xs ((address,pid)::acc))
-            else fail
-                   (* the label exported by this procedure is not                                           found in the listing *)
+            else fail "get_E the label exported by this procedure is not found in the listing"
           end
         end
       end in
@@ -657,7 +665,7 @@ Definition get_address (cid : Component.id)
   do pmap <- lift (PMap.find cid l2a);
     do pl <- lift (PMap.find pid pmap);
     match (List.find (fun '(l,a) => AbstractMachine.label_eqb l lbl) pl) with
-    | None => fail
+    | None => fail "get_address"
     | Some (_,a) => ret a
     end.
 
@@ -670,7 +678,7 @@ Definition  get_address_by_label
               (List.flat_map (fun pmap => List.map snd (PMap.elements pmap))
                           (List.map snd (PMap.elements l2a)) (* list of PMap *))
   in match (List.find (fun '(l,a) => AbstractMachine.label_eqb l lbl) ll) with
-     | None => fail
+     | None => fail "get_address_by_label"
      | Some (_,a) => ret a
      end.
 
@@ -751,8 +759,11 @@ Definition generate_instruction
       ret (RiscMachine.Memory.set_instr
              mem0 address 
              (RiscMachine.ISA.IJal new_address))
+  | AbstractMachine.IHalt => ret (RiscMachine.Memory.set_instr
+                                  mem0 address 
+                                  RiscMachine.ISA.IHalt)
     
-  | _ => fail
+  | _ => fail "generate_instruction"
   end.
 
 Definition generate_procedure_code
@@ -797,15 +808,16 @@ Definition generate_code_memory
           aux xs res
       end in aux (PMap.elements labeled_code) mem0.
 
-Definition compile_program (ip : Intermediate.program) :
-  option (sfi_program) :=
+Definition compile_program (ip : Intermediate.program) :=
+  (* : Either (sfi_program) :=  *)
+  (* : Either RiscMachine.Memory.t := *)
     (* cn maps sfi component id to intermediate component id *)
   let cn := gen_cn (Intermediate.prog_interface ip) in
    (* cid2SFIid maps intermediate component id to sfi id *)
   let cid2SFIid := List.fold_left
                      (fun acc '(cid,i)  =>
                         PMap.add cid (Env.index2SFIid i) acc)
-                     (List.combine cn (List.seq 0 ((List.length cn) - 1)))
+                     (List.combine cn (List.seq 0 (List.length cn)))
                      (PMap.empty SFIComponent.id) in
   let procs_labels := exported_procs_labels (Intermediate.prog_procedures ip)
                                             (Intermediate.prog_interface ip) in
@@ -827,7 +839,7 @@ Definition compile_program (ip : Intermediate.program) :
             do acode <- compile_components
                (PMap.elements (Intermediate.prog_procedures ip) )
                (Intermediate.prog_interface ip);
-                     
+            
             do labeled_code  <- layout_code (PMapExtra.of_list acode);
 
             do e <- get_E labeled_code;
@@ -837,13 +849,11 @@ Definition compile_program (ip : Intermediate.program) :
             do mem0 <- generate_comp0_memory (Intermediate.prog_main ip) data_mem l2a;
 
             do mem <- generate_code_memory labeled_code l2a mem0;
-
-            let  mem := mem0 in
             
             ret {| TargetSFI.Machine.cn := cn;
                    TargetSFI.Machine.e := e;
                    TargetSFI.Machine.mem := mem;
-                   TargetSFI.Machine.prog_interface := Intermediate.prog_interface ip;  
+                   TargetSFI.Machine.prog_interface := Intermediate.prog_interface ip;
                 |}
             
     ).

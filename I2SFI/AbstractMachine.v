@@ -10,21 +10,22 @@ Require Import TargetSFI.Machine.
 
 Definition label :Set := Component.id*N.
 
-Definition register := RiscMachine.Register.t.
+(*Definition register := RiscMachine.Register.t.*)
 
 Inductive ainstr :=
 | INop : ainstr
 | ILabel : label -> ainstr
 (* register operations *)
-| IConst : RiscMachine.value -> register -> ainstr
-| IMov : register -> register -> ainstr
-| IBinOp : RiscMachine.ISA.binop -> register -> register -> register -> ainstr
+| IConst : RiscMachine.value -> RiscMachine.Register.t -> ainstr
+| IMov : RiscMachine.Register.t -> RiscMachine.Register.t -> ainstr
+| IBinOp : RiscMachine.ISA.binop -> RiscMachine.Register.t ->
+           RiscMachine.Register.t -> RiscMachine.Register.t -> ainstr
 (* memory operations *)
-| ILoad : register -> register -> ainstr
-| IStore : register -> register -> ainstr
+| ILoad : RiscMachine.Register.t -> RiscMachine.Register.t -> ainstr
+| IStore : RiscMachine.Register.t -> RiscMachine.Register.t -> ainstr
 (* conditional and unconditional jumps *)
-| IBnz : register -> label -> ainstr
-| IJump : register -> ainstr
+| IBnz : RiscMachine.Register.t -> label -> ainstr
+| IJump : RiscMachine.Register.t -> ainstr
 | IJal : label -> ainstr
 (* termination *)
 | IHalt : ainstr.
