@@ -271,42 +271,5 @@ Module CS.
   (* Set Typeclasses Debug. *)
 
   (* Check C_SFI. *)
-  
-  (* (* Global Env: (C,CN,E) *) *)
-  (* (* State : Memory.t * RegisterFile.pc * RegisterFile.general_registers. *) *)
-  (*  (*  Record program := *) *)
-  (*  (* { *) *)
-  (*  (*   cn : CN; *) *)
-  (*  (*   e : E; *) *)
-  (*  (*   mem : Memory.t; *) *)
-  (*  (*   prog_interface : Program.interface *) *)
-  (* (* }. *) *)
-  (* Definition init_genv_and_state (p : SFI.program) : global_env * state := *)
-  (*   let gcn : CN := (SFI.cn p) in *)
-  (*   let ge : E := (SFI.e p) in *)
-  (*   let G := (C_SFI, gcn, ge) in *)
-  (*   let smem : SFI.Memory.t := (SFI.mem p) in *)
-  (*   let st0 : state := (smem, N0, SFI.RegisterFile.zero) in *)
-  (*   (G, st0). *)
-
-
-  (* Fixpoint execN (n: nat) (G: global_env) (st: state) : option value := *)
-  (*   match n with *)
-  (*   | O => None *)
-  (*   | S n' => *)
-  (*     match eval_step G st with *)
-  (*     | None => *)
-  (*       let '(_, _, regs) := st in *)
-  (*       Some (RegisterFile.get_register R_COM regs) *)
-  (*     | Some (_, st') => execN n' G st' *)
-  (*     end *)
-  (*   end. *)
-
-  (* Definition run (p: SFI.program) (fuel: nat) : option value := *)
-  (*   let (G, st) := (init_genv_and_state p) in *)
-  (*    (* TODO do something about the input *) *)
-  (*     execN fuel G st. *)
-  
-
-  
+    
 End CS.
