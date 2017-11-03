@@ -68,24 +68,8 @@ Definition vinputs (vop : vopcode) : seq tag_kind :=
   | SERVICE => [::]
   end.
 
-Definition outputs (op : opcode) : option tag_kind :=
-  match op with
-  | NOP     => None
-  | CONST   => Some R
-  | MOV     => Some R
-  | BINOP _ => Some R
-  | LOAD    => Some R
-  | STORE   => Some M
-  | JUMP    => None
-  | BNZ     => None
-  | JAL     => Some R
-  (* the other opcodes are not used by the symbolic machine *)
-  | JUMPEPC => None
-  | ADDRULE => None
-  | GETTAG  => Some R
-  | PUTTAG  => None
-  | HALT    => None
-  end.
+(* TL TODO: that's smallest change, but eventually, do some cleanup *)
+Definition outputs (op : opcode) : seq tag_kind := inputs op.
 
 Section WithTagTypes.
 
@@ -125,14 +109,16 @@ Lemma ivec_eq_inv op op' tpc tpc' ti ti' ts ts'
       Tagged (hseq tag_type \o vinputs) ts = existT _ op' ts'].
 Proof. inversion p. by constructor. Qed.
 
-Definition type_of_result (o : option tag_kind) :=
-  odflt [eqType of unit] (option_map tag_type o).
+(* TL TODO: remove this? *)
+(* Definition type_of_result (s : seq tag_kind) := *)
+(*   hseq tag_type s. *)
 
 Record ovec (op : opcode) : Type := OVec {
   trpc : tag_type P;
-  tr   : type_of_result (outputs op)
+  tr   : hseq tag_type (outputs op);
 }.
 
+(* TL TODO: more homogeneous with ivec? (with regard to SERVICES) *)
 Definition vovec (vop : vopcode) : Type :=
   match vop with
   | OP op => ovec op
@@ -142,6 +128,7 @@ Definition vovec (vop : vopcode) : Type :=
 End WithTagTypes.
 
 Arguments IVec {_} _ _ _ _.
+Arguments OVec {_} _ _.
 
 Open Scope bool_scope.
 
@@ -205,33 +192,52 @@ Definition next_state (st : state) (iv : ivec ttypes)
   do! ov <- transfer iv;
     k ov.
 
-Definition next_state_reg_and_pc (st : state) (iv : @ivec ttypes)
-  (r : reg mt) (x : word) (pc' : word) : option state :=
+(* TL TODO: do I want it to be dependent? *)
+Inductive update := RegUpdt : reg mt -> word -> update.
+
+
+Definition next_state_do_update (st : state) (tk : tag_kind)
+           (tag : tag_type ttypes tk)
+           (updt : update) : option state :=
+  match tk return tag_type _ tk -> option state with
+  | R => match updt with
+        | RegUpdt r x => fun t => do! regs' <- updm (regs st) r x@t;
+                                  Some (State (mem st) regs' (pc st) (internal st))
+        end
+  | _ => fun _ => None
+  end tag.
+
+
+Fixpoint next_state_do_updates (st : state) (tks : seq tag_kind)
+         (tags : hseq (tag_type ttypes) tks)
+         (updts : seq update) : option state :=
+  match tks return hseq (tag_type _) tks -> option state with
+    | [:: ] => fun _ => Some st
+    | [:: tk & tks' ] => fun tags =>
+                          do! updt <- ohead updts;
+                          do! st' <- next_state_do_update st (hshead tags) updt;
+                          next_state_do_updates st' (hsbehead tags) (behead updts)
+  end tags.
+
+
+Definition next_state_updates_and_pc (st : state) (iv : @ivec ttypes)
+           (updts : seq update) (pc' : word) : option state :=
   next_state st (
     match op iv as o return vovec _ o -> option state with
-    | OP op => fun ov =>
-      match outputs op as o return (type_of_result _ o -> option state) with
-        | Some R => fun tr' =>
-            do! regs' <- updm (regs st) r x@tr';
-            Some (State (mem st) regs' pc'@(trpc ov) (internal st))
-        | _ => fun _ => None
-      end (tr ov)
+    | OP op => fun ov => do! st' <- next_state_do_updates st (tr ov) updts;
+                         Some (State (mem st) (regs st) pc'@(trpc ov) (internal st))
+
     | SERVICE => fun _ => None
     end
   ).
 
-Definition next_state_reg (st : state) (mvec : @ivec ttypes) r x : option state :=
-  next_state_reg_and_pc st mvec r x (vala (pc st)).+1.
 
-Definition next_state_pc (st : state) (iv : @ivec ttypes)
-  (x : word) : option state :=
-  next_state st (
-    match op iv as o return vovec _ o -> option state with
-    | OP op => fun ov =>
-                 Some (State (mem st) (regs st) x@(trpc ov) (internal st))
-    | SERVICE => fun _ => None
-    end
-  ).
+Definition next_state_updates (st : state) (iv : @ivec ttypes) (updts : seq update) : option state :=
+  next_state_updates_and_pc st iv updts (vala (pc st)).+1.
+
+Definition next_state_pc (st : state) (iv : @ivec ttypes) (x : word) : option state :=
+  next_state_updates_and_pc st iv [:: ] x.
+
 
 Inductive step (st st' : state) : Prop :=
 | step_nop : forall mem reg pc tpc i ti extra
@@ -246,7 +252,9 @@ Inductive step (st st' : state) : Prop :=
     (INST : decode_instr i = Some (Const n r))
     (OLD  : reg r = Some old@told),
     let mvec := IVec CONST tpc ti [hseq told] in forall
-    (NEXT : next_state_reg st mvec r (swcast n) = Some st'),   step st st'
+    (NEXT : next_state_updates st mvec [:: RegUpdt r (swcast n)] = Some st'),   step st st'
+.
+
 | step_mov : forall mem reg pc tpc i ti r1 w1 t1 r2 old told extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
