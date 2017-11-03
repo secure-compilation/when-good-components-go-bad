@@ -74,6 +74,27 @@ Definition find_label_in_component G (pc : Pointer.t) (l : label) : option Point
   | None => None
   end.
 
+Lemma find_label_in_component_1:
+  forall G pc pc' l,
+    find_label_in_component G pc l = Some pc' ->
+    Pointer.component pc = Pointer.component pc'.
+Proof.
+Admitted.
+
+Lemma find_label_in_procedure_1:
+  forall G pc pc' l,
+    find_label_in_procedure G pc l = Some pc' ->
+    Pointer.component pc = Pointer.component pc'.
+Proof.
+Admitted.
+
+Lemma find_label_in_procedure_2:
+  forall G pc pc' l,
+    find_label_in_procedure G pc l = Some pc' ->
+    Pointer.block pc = Pointer.block pc'.
+Proof.
+Admitted.
+
 Definition init_genv (p: program) : global_env :=
   let '(m, E, ps) := init_all p in
   {| genv_interface := prog_interface p;

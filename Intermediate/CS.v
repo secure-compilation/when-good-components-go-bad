@@ -25,15 +25,19 @@ Instance state_turn : HasTurn state := {
 Definition initial_state (p: program) (s: state) : Prop :=
   let G := init_genv p in
   let '(gps, mem, regs, pc) := s in
+
   (* the global protected stack is empty *)
   gps = [] /\
+
   (* mem exactly contains all components memories and it comes from the init routine *)
   (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
   (let '(m, _, _) := init_all p in mem = m) /\
+
   (* the origin register (R_AUX2) is set to 1 (meaning external call) *)
   (* the R_ONE register is set to 1 *)
   (* the other registers are set to undef *)
   regs = [Int 1; Undef; Undef; Undef; Int 1; Undef] /\
+
   (* the program counter is pointing to the start of the main procedure *)
   Pointer.component pc = fst (prog_main p) /\
   EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
@@ -124,7 +128,6 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     gps' = Pointer.inc pc :: gps ->
     EntryPoint.get C' P (genv_entrypoints G) = Some b ->
     let pc' := (C', b, 0) in
-    (* TODO fix the read value in the event *)
     Register.get R_COM regs = Int rcomval ->
     let t := [ECall (Pointer.component pc) P rcomval C'] in
     step G (gps, mem, regs, pc) t (gps', mem, Register.invalidate regs, pc')
@@ -133,7 +136,6 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     executing G pc IReturn ->
     gps = pc' :: gps' ->
     Pointer.component pc <> Pointer.component pc' ->
-    (* TODO fix the read value in the event *)
     Register.get R_COM regs = Int rcomval ->
     let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
     step G (gps, mem, regs, pc) t (gps', mem, Register.invalidate regs, pc').
@@ -368,12 +370,12 @@ Proof.
   intros G st t st' Heval_step.
   repeat unfold_state.
   destruct (PMap.find (Pointer.component pc0) (genv_procedures G))
-    as [C_procs | ?] eqn:HC_procs.
+    as [C_procs | ] eqn:HC_procs.
   - destruct (PMap.find (Pointer.block pc0) C_procs)
-      as [P_code | ?] eqn:HP_code.
+      as [P_code | ] eqn:HP_code.
     + destruct (Pointer.offset pc0 >=? 0) eqn:Hpc.
       * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
-          as [instr | ?] eqn:Hinstr.
+          as [instr | ] eqn:Hinstr.
         (* case analysis on the fetched instruction *)
         ** assert (Pointer.offset pc0 <? 0 = false). {
              destruct (Pointer.offset pc0); auto.
@@ -507,7 +509,7 @@ Proof.
            rewrite HC_procs, HP_code, Hinstr in Heval_step.
            destruct (Pointer.offset pc0 <? 0); discriminate.
       * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
-          as [instr | ?] eqn:Hinstr.
+          as [instr | ] eqn:Hinstr.
         ** simpl in Heval_step.
            unfold code in *.
            rewrite HC_procs, HP_code, Hinstr in Heval_step.
