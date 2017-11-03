@@ -146,13 +146,15 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
      (* states transition *)
      sps = PC (C, s, mem, k, e) ->
      sps' = PC (C', s', mem', k', e') ->
-     t = (if Pos.eqb C C' then E0 else [ECall C P v C']) ->
+     t = [ECall C P v C'] ->
 
      (* conditions *)
      e = E_val (Int v) ->
      k = Kcall C' P kont ->
      is_program_component sps ctx ->
      is_program_component sps' ctx ->
+     C' <> C ->
+     imported_procedure (genv_interface G) C C' P ->
      PMap.find C' (genv_procedures G) = Some C'_procs ->
      PMap.find P C'_procs = Some P_expr ->
      PMap.find C (genv_buffers G) = Some b ->
@@ -172,7 +174,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       (* states transition *)
       sps = PC (C, s, mem, k, e) ->
       sps' = PC (C', s', mem', k', e') ->
-      t = (if Pos.eqb C C' then E0 else [ERet C v C']) ->
+      t = [ERet C v C'] ->
 
       (* conditions *)
       e = E_val (Int v) ->
@@ -180,6 +182,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       s = (C', Some (old_call_arg, kont)) :: srest ->
       is_program_component sps ctx ->
       is_program_component sps' ctx ->
+      C' <> C ->
       PMap.find C' (genv_buffers G) = Some b ->
       Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
 
@@ -202,6 +205,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       k = Kcall C' P kont ->
       is_program_component sps ctx ->
       is_context_component sps' ctx ->
+     imported_procedure (genv_interface G) C C' P ->
       PMap.find C (genv_buffers G) = Some b ->
       Memory.load mem (C, b, 0) = Some old_call_arg ->
 

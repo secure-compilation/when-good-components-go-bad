@@ -46,6 +46,13 @@ Section Decomposition.
     (* case analysis on who has control *)
   Admitted.
 
+  Ltac simplify_turn :=
+    unfold S.PS.is_program_component, S.PS.is_context_component in *;
+    unfold I.PS.is_program_component, I.PS.is_context_component in *;
+    unfold turn_of, S.PS.state_turn, I.PS.state_turn in *;
+    simpl in *;
+    auto.
+
   Lemma lockstep_simulation:
     forall ics t ics',
       I.CS.step G ics t ics' ->
@@ -57,13 +64,223 @@ Section Decomposition.
     intros ics t ics' Hstep ips Hpartial.
 
     (* case analysis on who has control *)
-    inversion Hpartial; subst.
+    inversion Hpartial; subst;
+    inversion Hstep; subst.
 
     (** program has control **)
-    - admit.
+
+    (* epsilon steps *)
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+      + econstructor; auto.
+        ** simplify_turn.
+           unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+      + econstructor; auto.
+        ** simplify_turn.
+           unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+      + econstructor; auto.
+        ** simplify_turn.
+           unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+      + econstructor; auto.
+        ** simplify_turn.
+           unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+      + econstructor; auto.
+        ** simplify_turn.
+           unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+      + econstructor; auto.
+        ** simplify_turn.
+           unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+          ** admit.
+      + econstructor; auto.
+        ** simplify_turn.
+           unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+        ** admit.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn. erewrite <- find_label_in_component_1; eauto.
+      + econstructor; auto.
+        ** simplify_turn. erewrite <- find_label_in_component_1; eauto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn. rewrite H9. eauto.
+      + econstructor; auto.
+        ** simplify_turn. rewrite H9. eauto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn. erewrite <- find_label_in_procedure_1; eauto.
+      + econstructor; auto.
+        ** simplify_turn. erewrite <- find_label_in_procedure_1; eauto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+      + econstructor; auto.
+        ** simplify_turn.
+           unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+
+    - eexists. split.
+      + econstructor; auto.
+        * apply Hstep.
+        * econstructor; auto.
+        * econstructor; eauto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+          ** admit.
+      + econstructor; auto.
+          ** simplify_turn.
+             unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+          ** admit.
+
+    (* call *)
+    - (* case analysis on the target *)
+      admit.
+
+    (* return *)
+    - (* case analysis on the target *)
+      admit.
 
     (** context has control **)
-    - admit.
+
+    (* epsilon steps *)
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
+        * admit.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * erewrite find_label_in_component_1; eauto.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * rewrite H9; eauto.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * erewrite find_label_in_procedure_1; eauto.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
+
+    - eexists. split.
+      + eapply I.PS.Context_Epsilon; auto.
+      + eapply I.PS.ContextControl_Normal; eauto.
+        * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
+        * admit.
+
+    (* call *)
+    - (* case analysis on the target *)
+      admit.
+
+    (* return *)
+    - (* case analysis on the target *)
+      admit.
   Admitted.
 
   Theorem decomposition:

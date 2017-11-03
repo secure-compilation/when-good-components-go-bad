@@ -85,6 +85,11 @@ Section PartialForward.
       match_states i (C, s, mem1, Kcall C' P k, E_val (Int v)) (gps, mem2, regs, pc) ->
       GlobalEnv.executing (GlobalEnv.init_genv tprog) pc (ICall C' P).
 
+  Hypothesis match_call_argument:
+    forall i gps mem1 regs pc C s mem2 k v C' P,
+      match_states i (C, s, mem1, Kcall C' P k, E_val (Int v)) (gps, mem2, regs, pc) ->
+      Intermediate.Register.get R_COM regs = Int v.
+
   (* match_states is used to build the forward simulation *)
 
   Hypothesis match_initial_states:
@@ -119,6 +124,16 @@ Section PartialForward.
 
   Let SG : Source.GlobalEnv.global_env := Source.GlobalEnv.init_genv prog.
   Let IG : Intermediate.GlobalEnv.global_env := Intermediate.GlobalEnv.init_genv tprog.
+
+  Hypothesis match_procedure_entrypoint:
+    forall C C_procs P P_expr,
+      PMap.find C (genv_procedures SG) = Some C_procs ->
+      PMap.find P C_procs = Some P_expr ->
+    exists b,
+      Intermediate.EntryPoint.get C P (Intermediate.GlobalEnv.genv_entrypoints IG) = Some b.
+
+  Hypothesis global_environments_same_interface:
+    Intermediate.GlobalEnv.genv_interface IG = Source.GlobalEnv.genv_interface SG.
 
   (* we prove a forward simulation for partial programs *)
   (* we start by defining the relation between partial states *)
@@ -297,38 +312,37 @@ Section PartialForward.
              *** inversion H2; subst. inversion H6; subst.
 
     (* internal call *)
-    - admit.
-    (* inversion Hmatch
+    - inversion Hmatch
         as [ i' scs1 ics ? ips Hwmatch
              Hscs1_partial Hics_partial |]; subst; try discriminate.
-      inversion Hscs1_partial; subst. inversion H0; subst.
-      inversion Hics_partial; subst. inversion H3; subst.
+      inversion Hscs1_partial; subst; try discriminate. inversion H0; subst.
+      inversion Hics_partial; subst; try discriminate. inversion H3; subst.
+      (* show the existence of the entrypoint for the called procedure *)
+      destruct (match_procedure_entrypoint C' C'_procs P P_expr H8 H9)
+        as [entrypoint Hentrypoint].
       eexists.
-
-      (* TODO show the existence of the entrypoint for the called procedure *)
-
-      (*exists (I.PS.PC (, pmem0, Intermediate.Register.invalidate regs, )*)
-      (* TODO provide explicit resulting state *)
-      eexists.
+      exists (I.PS.PC ((Pointer.component pc,
+                   Some (Pointer.block pc, Pointer.offset (Pointer.inc pc))) ::
+                  I.PS.to_partial_stack gps0 (map fst (PMap.elements ctx)),
+                  pmem0, Intermediate.Register.invalidate regs, (C', entrypoint, 0))).
       split.
       + left. econstructor.
-        * eapply I.PS.Program_Internal_Call.
-          ** reflexivity.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
+        * eapply I.PS.Program_Internal_Call; auto.
+          ** eapply match_calls. eauto.
+          ** simplify_turn.
+          ** erewrite match_executing_component; eassumption.
+          ** erewrite match_executing_component.
+             simpl. subst IG.
+             rewrite global_environments_same_interface.
+             eassumption. eauto.
+          ** eapply match_call_argument. eauto.
+          ** apply Hentrypoint.
         * econstructor.
-        * admit.
-      + admit.
-    *)
+        * erewrite match_executing_component. reflexivity.
+          eauto.
+      + (* STUCK, have to prove that the next complete states are related *)
+        (*eapply match_states_program.*)
+        admit.
 
     (* internal return *)
     - inversion Hmatch
@@ -355,21 +369,30 @@ Section PartialForward.
     - inversion Hmatch
         as [ i' scs1 ics ? ips Hwmatch
              Hscs1_partial Hics_partial |]; subst; try discriminate.
-      eexists. eexists. split.
+      inversion Hscs1_partial; subst; try discriminate. inversion H0; subst.
+      inversion Hics_partial; subst; try discriminate. inversion H3; subst.
+      eexists.
+      exists (I.PS.CC (C',
+                  (Pointer.component pc,
+                   Some (Pointer.block pc, Pointer.offset (Pointer.inc pc))) ::
+                  I.PS.to_partial_stack gps0 (map fst (PMap.elements ctx)),
+                  pmem0) Normal).
+      split.
       + left. econstructor.
-        * eapply I.PS.Program_External_Call.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
+        * eapply I.PS.Program_External_Call; auto.
+          ** eapply match_calls. eauto.
+          ** simplify_turn.
+          ** erewrite match_executing_component.
+             simpl. subst IG.
+             rewrite global_environments_same_interface.
+             eassumption. eauto.
+          ** eapply match_call_argument. eauto.
+        * econstructor.
+        * erewrite match_executing_component. reflexivity.
+          eauto.
+      + eapply match_states_context; auto.
         * admit.
         * admit.
-      + admit.
 
     (* external return *)
     - inversion Hmatch
@@ -425,19 +448,22 @@ Section PartialForward.
           ** admit.
         * econstructor.
         * reflexivity.
-      + admit.
+      + econstructor; auto.
+        * admit.
 
     (* external calls/returns depend on the match_states relation *)
 
     (* external call *)
     - inversion Hmatch; subst. inversion H; subst.
+      destruct (match_procedure_entrypoint C' C'_procs P P_expr H5 H6)
+        as [entrypoint Hentrypoint].
       eexists. eexists. split.
       + left. econstructor.
         * eapply I.PS.Context_External_Call; auto.
           ** simplify_turn. apply H3.
           ** apply H4.
-          ** admit.
-          ** admit.
+          ** eapply match_call_argument. eauto. admit.
+          ** subst IG. simpl. eassumption.
         * econstructor.
         * reflexivity.
       + econstructor.
@@ -451,7 +477,7 @@ Section PartialForward.
       + left. econstructor.
         * eapply I.PS.Context_External_Return; auto.
           ** simplify_turn. apply H3.
-          ** admit.
+          ** eapply match_call_argument. eauto. admit.
           ** admit.
         * econstructor.
         * reflexivity.
