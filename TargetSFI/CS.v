@@ -11,6 +11,8 @@ From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
 Require Import CompCert.Events.
 Require Import Common.Definitions.
 Require Import TargetSFI.Machine.
+Require Import TargetSFI.StateMonad.
+Require Import TargetSFI.EitherMonad.
 
 Require Export Lib.Monads.
 Export MonadNotations.
@@ -33,20 +35,20 @@ Module CS.
 
   
   Definition ret_trace (G : Env.t) (pc pc' : RiscMachine.pc)
-             (gen_regs : RiscMachine.RegisterFile.t) : option trace :=
-    do rcomval <-  RegisterFile.get_register Register.R_COM gen_regs;
-    do cpc <-  Env.get_component_name_from_id (SFI.C_SFI pc) G;
-    do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
-    Some [ERet cpc rcomval cpc'].
+             (gen_regs : RiscMachine.RegisterFile.t) :option trace :=
+    do rcomval <- RegisterFile.get_register Register.R_COM gen_regs;
+      do cpc <- Env.get_component_name_from_id (SFI.C_SFI pc) G;
+      do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
+      Some [ERet cpc rcomval cpc'].
 
   
   Definition call_trace (G : Env.t) (pc pc' : RiscMachine.pc)
              (gen_regs : RiscMachine.RegisterFile.t) : option trace :=
-    do rcomval <- RegisterFile.get_register  Register.R_COM gen_regs;
-    do cpc <-  Env.get_component_name_from_id (SFI.C_SFI pc) G;
-    do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
-    do p <- Env.get_procedure pc' G;
-    Some [ECall cpc p rcomval cpc'].
+    do rcomval <- RegisterFile.get_register Register.R_COM gen_regs;
+      do cpc <- Env.get_component_name_from_id (SFI.C_SFI pc) G;
+      do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
+      do p <- Env.get_procedure pc' G;
+      Some [ECall cpc p rcomval cpc'].
 
   
   Inductive step (G : Env.t) :
@@ -144,105 +146,150 @@ Module CS.
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) t (mem',pc',gen_regs').
 
+  Open Scope string_scope.
+  Section FunctionalRepresentation.
+
+    Variable state_records : Type.
+
+    Variable update_state_records : MachineState.t
+                                     -> trace
+                                     -> MachineState.t
+                                     -> state_records
+                                     -> state_records.
+
+    Notation STATE := (StateMonad.t state_records).
+    Notation lift := (StateMonad.lift state_records).
+    Notation get := (StateMonad.get state_records).
+    Notation put := (StateMonad.put state_records).
+    Notation modify := (StateMonad.modify state_records).
+    Notation fail := (StateMonad.fail state_records).
+    Notation run := (StateMonad.run state_records).
+    
+    Definition eval_step_with_state (G : Env.t) (s : MachineState.t)
+      : STATE (trace * MachineState.t) :=
+      
+      let '(mem,pc,gen_regs) := s in
+      match Memory.get_word mem pc with
+      | Some (Instruction instr) =>
+        match instr with
+        | INop => ret (Right (E0, (mem,inc_pc pc,gen_regs)))
+        | IConst val reg =>
+          let gen_regs' :=  RegisterFile.set_register reg val gen_regs in
+          ret (E0, (mem,inc_pc pc,gen_regs'))
+        | IMov reg_src reg_dst =>
+          do val <- lift (RegisterFile.get_register reg_src gen_regs)
+                                    "Unknown register";
+            let gen_regs' := RegisterFile.set_register reg_dst val gen_regs in
+            ret (E0, (mem,inc_pc pc,gen_regs'))
+        | ISA.IBinOp op reg_src1 reg_src2 reg_dst =>
+          do val1 <- lift (RegisterFile.get_register reg_src1 gen_regs)
+             "Unknown register";
+            do val2 <- lift (RegisterFile.get_register reg_src2 gen_regs)
+               "Unknown register";
+            let result : value := RiscMachine.eval_binop op val1 val2 in
+            let gen_regs':= RegisterFile.set_register reg_dst result gen_regs in
+            ret (E0, (mem,inc_pc pc,gen_regs'))
+        | ILoad rptr rd =>
+          do ptr <- lift (RegisterFile.get_register rptr gen_regs) "Unknown register";
+            let addr := Memory.to_address ptr in
+            do val <- lift (Memory.get_value mem addr) "Uninitialized mem";
+              let gen_regs' := RegisterFile.set_register rd val gen_regs in
+              ret (E0, (mem,inc_pc pc,gen_regs'))
+        | IStore rptr rs =>
+          do ptr <- lift (RegisterFile.get_register rptr gen_regs) "Unknown register";
+            let addr := Memory.to_address ptr in
+            do val <- lift (RegisterFile.get_register rs gen_regs) "Unknown register";
+              let mem': Memory.t := Memory.set_value mem addr val  in
+              ret (E0, (mem',inc_pc pc,gen_regs))
+        | IBnz reg offset =>
+          do val <- lift (RegisterFile.get_register reg gen_regs) "Unknown register";
+            let pc': address :=  if Z.eqb val Z0 then inc_pc pc
+                                 else N.add pc (Z.to_N offset) in
+            ret  (E0, (mem,pc',gen_regs))
+        | IJump reg =>
+          do addr <- lift (RegisterFile.get_register reg gen_regs) "Unknown register";
+            let pc' := Memory.to_address addr in
+            if SFI.is_same_component_bool pc pc' then
+              ret (E0, (mem,pc',gen_regs))
+            else
+              if (N.eqb (SFI.C_SFI pc') SFI.MONITOR_COMPONENT_ID)
+              then
+                ret (E0, (mem,pc',gen_regs))
+              else              
+                match  RegisterFile.get_register Register.R_COM gen_regs with
+                | None => fail "R_COM not found"
+                | Some rcomval =>
+                  match Env.get_component_name_from_id (SFI.C_SFI pc) G with
+                  | None => fail "No intermediate component id"
+                  (* TODO figure out how to add the id to the string *)
+                  | Some cpc =>        
+                    match Env.get_component_name_from_id (SFI.C_SFI pc') G with
+                    | None => fail "No intermediate component id"
+                    | Some cpc' =>
+                      ret ([ERet cpc rcomval cpc'], (mem,pc',gen_regs))
+                    end
+                  end
+                end
+        | IJal addr =>
+          let ra := Z.of_N (pc+1) in
+          let gen_regs' := RegisterFile.set_register Register.R_RA ra gen_regs in
+          let pc' := addr in
+          if SFI.is_same_component_bool pc pc' then ret (E0, (mem,pc',gen_regs'))
+          else
+            if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
+            then
+              ret (E0, (mem,pc',gen_regs')) 
+            else
+              let ot := call_trace G pc pc' gen_regs in
+              match ot with
+              | None => fail "Call trace error"
+              | Some t => ret (t, (mem,pc',gen_regs'))
+              end
+        | IHalt => fail "Halted" (* Not really an error *)
+        end
+      | Some (Data val) => fail "Pc in data memory"
+      | None => fail "Pc address not initialized"
+      end.
+
+    Close Scope string_scope.
+
+    Fixpoint eval_steps_with_state (n : nat) (G : Env.t) (s : MachineState.t)
+      : STATE (trace * MachineState.t) :=
+      match n with
+      | O => ret (E0,s)
+      | S n' => do (t',s') <- eval_step_with_state G s;
+                 do! modify (update_state_records s t' s');
+                 do (t'',s'') <- eval_steps_with_state n' G s';
+                 ret (t'++t'',s'')
+      end.
+
+    Fixpoint eval_program_with_state (fuel : nat) (p : sfi_program) (regs : RegisterFile.t)
+      : STATE (trace * MachineState.t) :=
+      let st0 := ((TargetSFI.Machine.mem p), RiscMachine.PC0, regs) in
+      let g := ((TargetSFI.Machine.cn p),(TargetSFI.Machine.e p)) in
+      eval_steps_with_state fuel g st0.
+
+  End FunctionalRepresentation.
+
+  Definition update_empty_records (_ : MachineState.t) (_ : trace)
+             (_ : MachineState.t) (_ : unit) : unit := tt.
   
   Definition eval_step (G : Env.t) (s : MachineState.t)
-    : option (trace * MachineState.t) :=
-    
-    let '(mem,pc,gen_regs) := s in
-    match Memory.get_word mem pc with
-    | Some (Instruction instr) =>
-      match instr with
-      | INop => Some (E0, (mem,inc_pc pc,gen_regs))
-      | IConst val reg =>
-        let gen_regs' :=  RegisterFile.set_register reg val gen_regs in
-        Some (E0, (mem,inc_pc pc,gen_regs'))
-      | IMov reg_src reg_dst =>
-        do val <- RegisterFile.get_register reg_src gen_regs;
-        let gen_regs' := RegisterFile.set_register reg_dst val gen_regs in
-        Some (E0, (mem,inc_pc pc,gen_regs'))
-      | ISA.IBinOp op reg_src1 reg_src2 reg_dst =>
-        do val1 <- RegisterFile.get_register reg_src1 gen_regs;
-        do val2 <- RegisterFile.get_register reg_src2 gen_regs;
-        let result : value := RiscMachine.eval_binop op val1 val2 in
-        let gen_regs':= RegisterFile.set_register reg_dst result gen_regs in
-        Some (E0, (mem,inc_pc pc,gen_regs'))
-      | ILoad rptr rd =>
-        do ptr <- RegisterFile.get_register rptr gen_regs;
-        let addr := Memory.to_address ptr in
-        do val <- Memory.get_value mem addr;
-        let gen_regs' := RegisterFile.set_register rd val gen_regs in
-        Some (E0, (mem,inc_pc pc,gen_regs'))
-      | IStore rptr rs =>
-        do ptr <- RegisterFile.get_register rptr gen_regs;
-        let addr := Memory.to_address ptr in
-        do val <- RegisterFile.get_register rs gen_regs;
-        let mem': Memory.t := Memory.set_value mem addr val  in
-        Some (E0, (mem',inc_pc pc,gen_regs))
-      | IBnz reg offset =>
-        do val <- RegisterFile.get_register reg gen_regs;
-        let pc': address :=  if Z.eqb val Z0 then inc_pc pc
-                             else N.add pc (Z.to_N offset) in
-        Some (E0, (mem,pc',gen_regs))
-      | IJump reg =>
-        do addr <- RegisterFile.get_register reg gen_regs;
-        let pc' := Memory.to_address addr in
-        if SFI.is_same_component_bool pc pc' then
-          Some (E0, (mem,pc',gen_regs))
-        else
-          if (N.eqb (SFI.C_SFI pc') SFI.MONITOR_COMPONENT_ID)
-          then
-            Some (E0, (mem,pc',gen_regs))
-          else
-            let ot := ret_trace G pc pc' gen_regs in
-            match ot with
-            | None => None
-            | Some t => ret (t, (mem,pc',gen_regs))
-            end
-      | IJal addr =>
-        let ra := Z.of_N (pc+1) in
-        let gen_regs' := RegisterFile.set_register Register.R_RA ra gen_regs in
-        let pc' := addr in
-        if SFI.is_same_component_bool pc pc' then Some (E0, (mem,pc',gen_regs'))
-        else
-          if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
-          then
-            Some (E0, (mem,pc',gen_regs'))
-          else
-            let ot := call_trace G pc pc' gen_regs in
-            match ot with
-            | None => None
-            | Some t => Some (t, (mem,pc',gen_regs'))
-            end
-      | IHalt => None
-      end
-    | Some (Data val) => None
-    | None => None
-    end.
+    : @Either (trace * MachineState.t) :=
+    fst ((eval_step_with_state unit G s) tt).
 
-
-  Fixpoint eval_steps (n : nat) (G : Env.t) (s : MachineState.t)
-    : option (trace * MachineState.t) :=
-    match n with
-    | O => ret (E0,s)
-    | S n' => do (t',s') <- eval_step G s;
-               do (t'',s'') <- eval_steps n' G s';
-               ret (t'++t'',s'')
-    end.
-
-  Fixpoint eval_program (fuel : nat) (p : sfi_program) (regs : RegisterFile.t)
-    : option (trace * MachineState.t) :=
-    let st0 := ((TargetSFI.Machine.mem p), RiscMachine.PC0, regs) in
-    let g := ((TargetSFI.Machine.cn p),(TargetSFI.Machine.e p)) in
-    eval_steps fuel g st0.
-    
+  Definition eval_program (fuel : nat) (p : sfi_program) (regs : RegisterFile.t)
+      : @Either (trace * MachineState.t) :=
+     fst ((eval_program_with_state unit update_empty_records fuel p regs) tt).
+   
   Conjecture eval_step_complete :
     forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
-      (step G st t st') -> (eval_step G st = Some (t, st')).
+      (step G st t st') -> (eval_step G st = Right (t, st')).
   
   
   Conjecture eval_step_sound:
     forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
-      eval_step G st = Some (t, st') -> step G st t st'.
+      eval_step G st = Right (t, st') -> step G st t st'.
   
   Close Scope monad_scope.
 

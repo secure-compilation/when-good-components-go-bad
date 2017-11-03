@@ -7,7 +7,7 @@ Require Import Coq.Lists.List.
 Require Import CompCert.Events.
 
 Require Import I2SFI.Compiler.
-Require Import I2SFI.CompMonad.
+Require Import TargetSFI.EitherMonad.
 Require Import TargetSFI.Machine.
 Require Import TargetSFI.CS.
 Require Import Intermediate.Machine.
@@ -48,7 +48,7 @@ Open Scope monad_scope.
 (*   ). *)
 
 Definition test (instrs : Intermediate.Machine.code) 
-  : Either (trace*MachineState.t) :=
+  : @Either (trace*MachineState.t) :=
   (* : Either sfi_program := *)
   (* : Either RiscMachine.Memory.t := *)
   let COMP1_ID : positive := 1%positive in
@@ -70,19 +70,20 @@ Definition test (instrs : Intermediate.Machine.code)
         Intermediate.prog_main := (COMP1_ID,PROC1_ID)
       |} in
   match compile_program program with
-  | Left msg => Left (trace * MachineState.t)  msg
+  | Left msg => Left msg
   | Right p =>
-    match CS.eval_program (100%nat) p RiscMachine.RegisterFile.reset_all with
-    | None => Left (trace * MachineState.t) "Execution failed"
-    | Some res => Right (trace * MachineState.t) res
-    end
+    CS.eval_program (100%nat) p RiscMachine.RegisterFile.reset_all
+    (* match CS.eval_program (100%nat) p RiscMachine.RegisterFile.reset_all with *)
+    (* | None => Left "Execution failed" *)
+    (* | Some res => Right res *)
+    (* end *)
   end.
 
 Example test_INop :
   exists (pc : RiscMachine.address)
     (mem : RiscMachine.Memory.t) 
     (gen_regs : RiscMachine.RegisterFile.t),
-  test [Intermediate.Machine.INop] = Right (trace*MachineState.t) (E0,(mem,pc,gen_regs)).
+  test [Intermediate.Machine.INop] = Right (E0,(mem,pc,gen_regs)).
 Proof.  
   compute. eauto. Qed.
 (* Compute (test [Intermediate.Machine.INop]). *)
@@ -92,7 +93,7 @@ Example test_IConst :
     (mem : RiscMachine.Memory.t) 
     (gen_regs : RiscMachine.RegisterFile.t),
     test [Intermediate.Machine.IConst (IInt 5%Z) R_AUX1] =
-    Right (trace*MachineState.t) (E0,(mem,pc,gen_regs)) /\
+    Right (E0,(mem,pc,gen_regs)) /\
     (RiscMachine.RegisterFile.get_register RiscMachine.Register.R_AUX1 gen_regs = Some 5%Z)
 .
 Proof.  
@@ -108,7 +109,7 @@ Example test_IMov :
     ->
     test [Intermediate.Machine.IConst (IInt 5%Z) R_AUX1 
           ;Intermediate.Machine.IMov R_AUX1 R_AUX2] =
-    Right (trace*MachineState.t) (E0,(mem,pc,gen_regs)).
+    Right (E0,(mem,pc,gen_regs)).
    
 Proof.  
   compute. eauto. Qed.
@@ -127,7 +128,7 @@ Example test_IStore :
     test  [Intermediate.Machine.IConst (IPtr (1%positive,1%positive,0%Z) ) R_AUX1 
            ; Intermediate.Machine.IConst (IInt 5%Z) R_AUX2 
            ; Intermediate.Machine.IStore R_AUX1 R_AUX2]  =
-    Right (trace*MachineState.t) (E0,(mem,pc,gen_regs)).   
+    Right (E0,(mem,pc,gen_regs)).   
 Proof.  
   compute. eauto. Qed.
 (* Compute (test [Intermediate.Machine.IConst (IPtr (1%positive,1%positive,0%Z) ) R_AUX1 *)
@@ -149,7 +150,7 @@ Example test_ILoad :
                ; Intermediate.Machine.IMov R_AUX1 R_AUX2
                ; Intermediate.Machine.ILoad R_AUX2 R_AUX1
         ]  =
-    Right (trace*MachineState.t) (E0,(mem,pc,gen_regs)).   
+    Right (E0,(mem,pc,gen_regs)).   
 Proof.  
   compute. eauto. Qed.
 (* Compute (test [Intermediate.Machine.IConst (IPtr (1%positive,1%positive,0%Z) ) R_AUX1 *)
@@ -173,7 +174,7 @@ Example test_IBnz :
                ; Intermediate.Machine.ILoad R_AUX2 R_AUX1
                ; Intermediate.Machine.IConst (IInt 0%Z) R_AUX1
                ; Intermediate.Machine.IBnz R_AUX1 7%positive]  =
-    Right (trace*MachineState.t) (E0,(mem,pc,gen_regs)).   
+    Right (E0,(mem,pc,gen_regs)).   
 Proof.  
   compute. eauto. Qed.
 (* Compute (test [Intermediate.Machine.ILabel 7%positive *)

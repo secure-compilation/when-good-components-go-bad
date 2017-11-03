@@ -38,10 +38,12 @@ Intermediate/Decomposition.v
 
 Common/Rc.v
 
+TargetSFI/EitherMonad.v
+TargetSFI/StateMonad.v
 TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
 TargetSFI/CS.v
 
+
 I2SFI/AbstractMachine.v
-I2SFI/CompMonad.v
 I2SFI/Compiler.v

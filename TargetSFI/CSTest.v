@@ -10,6 +10,7 @@ Require Import Coq.FSets.FMapFacts.
 Require Import Coq.Init.Logic.
 
 Require Import Program.
+Require Import EitherMonad.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -872,9 +873,9 @@ Definition eval_step_complete_exec : Checker :=
             if (step g st t st')?
             then
               match (eval_step g st) with
-              | Some (t1,st1) =>
+              | EitherMonad.Right (t1,st1) =>
                 conjoin [ (trace_checker t1 t); (state_checker st' st1) ]
-              | None =>
+              | _ =>
                 checker false
               end
             else checker true (* at some point I want to have some incorrect cases to test *)

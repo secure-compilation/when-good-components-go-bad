@@ -9,7 +9,8 @@ Require Import Common.Maps.
 Require Import Common.Definitions.
 Require Import Intermediate.Machine.
 Require Import TargetSFI.Machine.
-Require Import I2SFI.CompMonad.
+Require Import TargetSFI.EitherMonad.
+Require Import TargetSFI.StateMonad.
 Require Import I2SFI.AbstractMachine.
 
 Import MonadNotations.
@@ -32,13 +33,15 @@ Record compiler_env : Type :=
     (* cid -> pid -> slot *)
     procId2slot : (PMap.t (PMap.t N))
   }.
-Notation COMP := (Comp.t compiler_env).
-Notation get := (Comp.get compiler_env).
-Notation put := (Comp.put compiler_env).
-Notation modify := (Comp.modify compiler_env).
-Notation lift := (Comp.lift compiler_env).
-Notation fail := (Comp.fail compiler_env).
-Notation run := (Comp.run compiler_env).
+
+Notation COMP := (StateMonad.t compiler_env).
+Notation get := (StateMonad.get compiler_env).
+Notation put := (StateMonad.put compiler_env).
+Notation modify := (StateMonad.modify compiler_env).
+Notation "'lift' x" := (StateMonad.lift compiler_env x Coq.Strings.String.EmptyString)
+                         (at level 200).
+Notation fail := (StateMonad.fail compiler_env).
+Notation run := (StateMonad.run compiler_env).
 
 
 Definition with_current_component (cid : Component.id)
