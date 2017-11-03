@@ -103,4 +103,4 @@ Class HasTurn A := {
   turn_of : A -> Program.interface -> Prop
 }.
 
-Inductive exec_state : Type := Normal | WentWrong.
+Inductive exec_state : Type := Normal. (*| WentWrong.*)
