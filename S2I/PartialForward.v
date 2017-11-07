@@ -31,6 +31,10 @@ Section PartialForward.
   Hypothesis successful_compilation:
     compile_program prog = Some tprog.
 
+  (* reasonable assumption, the context interface is preserved during compilation *)
+  Hypothesis target_context_validity:
+    forall C CI, PMap.MapsTo C CI ctx -> PMap.MapsTo C CI (Intermediate.prog_interface tprog).
+
   (* we assume to have a forward simulation proved for whole programs
      in the complete semantics (I.CS simulates S.CS) *)
 
@@ -40,6 +44,12 @@ Section PartialForward.
     forall C Cmem Cmem',
       PMap.MapsTo C Cmem mem1 /\ PMap.MapsTo C Cmem' mem2 ->
       match_comp_mems Cmem Cmem'.
+
+  (* TODO rethink about match_stacks
+     it's not a one to one mapping with holes. At the source we keep track of same
+     component calls with the global protected stack, while at the intermediate we
+     compile them down to jal/jump and we use a local stack.
+   *)
 
   Variable match_stack_frames: Component.id * value * cont -> Pointer.t -> Prop.
 
@@ -198,7 +208,12 @@ Section PartialForward.
     exists scs2',
       S.CS.kstep SG scs2 E0 scs2' /\
       S.PS.partial_state ctx scs2' (S.PS.PC sps').
-  Proof. Admitted.
+  Proof.
+    intros scs1 scs2 sps.
+    intros Hscs1_partial Hscs2_partial.
+    intros scs1' sps'.
+    intros Hsc_step Hscs1'_partial.
+  Admitted.
 
   Theorem decomp_star_E0:
     forall ics ics' ips,
@@ -214,7 +229,8 @@ Section PartialForward.
     - intro. exists ips. split.
       constructor. auto.
     - intros.
-      destruct (lockstep_simulation tprog ctx s1 t1 s2 H ips H2) as [ips1 []].
+      destruct (lockstep_simulation tprog ctx target_context_validity s1 t1 s2 H ips H2)
+        as [ips1 []].
       specialize (IHstar H0 ips1 H4).
       destruct IHstar as [ips' []].
       exists ips'. split.
@@ -236,7 +252,8 @@ Section PartialForward.
     inversion H; subst.
     symmetry in H3.
     destruct (Eapp_E0_inv t1 t2 H3); subst.
-    destruct (lockstep_simulation tprog ctx ics E0 s2 H1 ips H0) as [ips1 []].
+    destruct (lockstep_simulation tprog ctx target_context_validity ics E0 s2 H1 ips H0)
+      as [ips1 []].
     destruct (decomp_star_E0 s2 ics' ips1 H2 H5) as [ips' []].
     exists ips'. split.
     - econstructor; eauto.
@@ -340,15 +357,19 @@ Section PartialForward.
         * econstructor.
         * erewrite match_executing_component. reflexivity.
           eauto.
-      + (* STUCK, have to prove that the next complete states are related *)
-        (*eapply match_states_program.*)
-        admit.
+      + econstructor.
+        * admit.
+        * admit.
+        * admit.
+       (* STUCK, have to prove that the next complete states are related *)
 
     (* internal return *)
     - inversion Hmatch
         as [ i' scs1 ics ? ips Hwmatch
              Hscs1_partial Hics_partial |]; subst; try discriminate.
-      eexists. eexists. split.
+      eexists.
+      (* TODO don't use existential exists *)
+      eexists. split.
       + left. econstructor.
         * eapply I.PS.Program_Internal_Return.
           ** admit.
@@ -391,27 +412,42 @@ Section PartialForward.
         * erewrite match_executing_component. reflexivity.
           eauto.
       + eapply match_states_context; auto.
-        * admit.
-        * admit.
+        * constructor.
+          ** (* should be provable *) admit.
+          ** (* shoule be provable *) admit.
+        * (* provable, technical *) admit.
 
     (* external return *)
     - inversion Hmatch
         as [ i' scs1 ics ? ips Hwmatch
              Hscs1_partial Hics_partial |]; subst; try discriminate.
-      eexists. eexists. split.
-      + left. econstructor.
-        * eapply I.PS.Program_External_Return.
+
+      inversion Hics_partial; subst; try discriminate.
+      inversion H0; subst.
+      inversion Hscs1_partial; subst; try discriminate.
+      inversion H3; subst.
+      apply match_related_stacks in Hwmatch.
+      inversion Hwmatch; subst.
+      + (* contra *)
+        simpl in *. discriminate.
+      + simpl in *.
+        inversion H9; subst.
+        eexists. eexists. split.
+        * left. econstructor.
+          ** eapply I.PS.Program_External_Return.
+             *** eauto.
+             *** eauto.
+             *** reflexivity.
+             *** admit.
+             *** simplify_turn.
+             *** simplify_turn. eassumption.
+             *** admit.
+             *** admit.
+          ** econstructor.
+          ** admit.
+        * econstructor; eauto.
           ** admit.
           ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-          ** admit.
-        * econstructor.
-        * admit.
-      + admit.
 
     (** context has control **)
 
@@ -440,6 +476,7 @@ Section PartialForward.
 
     (* internal return *)
     - inversion Hmatch; subst. inversion H; subst.
+      inversion H1; subst.
       eexists. eexists. split.
       + left. econstructor.
         * eapply I.PS.Context_Internal_Return; auto.
@@ -449,7 +486,7 @@ Section PartialForward.
         * econstructor.
         * reflexivity.
       + econstructor; auto.
-        * admit.
+        * eassumption.
 
     (* external calls/returns depend on the match_states relation *)
 
@@ -470,6 +507,7 @@ Section PartialForward.
         * admit.
         * admit.
         * admit.
+        (* STUCK, have to prove that the next complete states are related *)
 
     (* external return *)
     - inversion Hmatch; subst. inversion H; subst.
@@ -485,6 +523,7 @@ Section PartialForward.
         * admit.
         * admit.
         * admit.
+        (* STUCK, have to prove that the next complete states are related *)
   Admitted.
 
   (* I simulates S, L1=I.PS.sem L2=S.PS.sem *)

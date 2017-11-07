@@ -38,33 +38,33 @@ Definition is_program_component (ps: state) ctx := ~ is_context_component ps ctx
 
 (* stack partialization *)
 
-Definition to_partial_frame pc frame : Component.id * option (value * CS.cont) :=
+Definition to_partial_frame ctx frame : Component.id * option (value * CS.cont) :=
   let '(C, v, k) := frame in
-  if Util.Lists.mem C pc then
-    (C, Some (v, k))
+  if Util.Lists.mem C ctx then
+    (C, None)
   else
-    (C, None).
+    (C, Some (v, k)).
 
 Definition to_partial_stack (s : CS.stack) (pc : list Component.id) :=
   map (to_partial_frame pc) s.
 
-Lemma push_by_prog_preserves_partial_stack:
-  forall s ps pc C v k,
-    Util.Lists.mem C pc = true ->
-    to_partial_stack s pc = ps ->
-    to_partial_stack ((C,v,k)::s) pc = (C,Some (v,k)) :: ps.
+Lemma push_by_context_preserves_partial_stack:
+  forall s ps ctx C v k,
+    Util.Lists.mem C ctx = true ->
+    to_partial_stack s ctx = ps ->
+    to_partial_stack ((C,v,k)::s) ctx = (C,None) :: ps.
 Proof.
-  intros s ps pc C v k Hprogturn H.
+  intros s ctx pc C v k Hprogturn H.
   simpl. rewrite Hprogturn. rewrite H. reflexivity.
 Qed.
 
-Lemma push_by_context_preserves_partial_stack:
-  forall s ps pc C v k,
-    ~ (In C pc) ->
-    to_partial_stack s pc = ps ->
-    to_partial_stack ((C,v,k)::s) pc = (C,None) :: ps.
+Lemma push_by_prog_preserves_partial_stack:
+  forall s ps ctx C v k,
+    ~ (In C ctx) ->
+    to_partial_stack s ctx = ps ->
+    to_partial_stack ((C,v,k)::s) ctx = (C,Some (v,k)) :: ps.
 Proof.
-  intros s ps pc C v k Hprogturn Hpstack.
+  intros s ps ctx C v k Hprogturn Hpstack.
   simpl. apply Util.Lists.not_in_iff_mem_false in Hprogturn.
   rewrite Hprogturn. rewrite Hpstack. reflexivity.
 Qed.

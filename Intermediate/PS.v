@@ -39,33 +39,33 @@ Module IC := Intermediate.CS.CS.
 
 (* stack partialization *)
 
-Definition to_partial_frame pc frame : PartialPointer.t :=
+Definition to_partial_frame ctx frame : PartialPointer.t :=
   let '(C, b, o) := frame in
-  if Util.Lists.mem C pc then
-    (C, Some (b, o))
+  if Util.Lists.mem C ctx then
+    (C, None)
   else
-    (C, None).
+    (C, Some (b, o)).
 
 Definition to_partial_stack (s : CS.stack) (pc : list Component.id) :=
   map (to_partial_frame pc) s.
 
-Lemma push_by_prog_preserves_partial_stack:
-  forall s ps pc C b o,
-    Util.Lists.mem C pc = true ->
-    to_partial_stack s pc = ps ->
-    to_partial_stack ((C,b,o)::s) pc = (C,Some (b,o)) :: ps.
+Lemma push_by_context_preserves_partial_stack:
+  forall s ps ctx C b o,
+    Util.Lists.mem C ctx = true ->
+    to_partial_stack s ctx = ps ->
+    to_partial_stack ((C,b,o)::s) ctx = (C,None) :: ps.
 Proof.
-  intros s ps pc C b o Hprogturn H.
+  intros s ps ctx C b o Hprogturn H.
   simpl. rewrite Hprogturn. rewrite H. reflexivity.
 Qed.
 
-Lemma push_by_context_preserves_partial_stack:
-  forall s ps pc C b o,
-    ~ (In C pc) ->
-    to_partial_stack s pc = ps ->
-    to_partial_stack ((C,b,o)::s) pc = (C,None) :: ps.
+Lemma push_by_prog_preserves_partial_stack:
+  forall s ps ctx C b o,
+    ~ (In C ctx) ->
+    to_partial_stack s ctx = ps ->
+    to_partial_stack ((C,b,o)::s) ctx = (C,Some (b,o)) :: ps.
 Proof.
-  intros s ps pc C b o Hprogturn Hpstack.
+  intros s ps ctx C b o Hprogturn Hpstack.
   simpl. apply Util.Lists.not_in_iff_mem_false in Hprogturn.
   rewrite Hprogturn. rewrite Hpstack. reflexivity.
 Qed.
@@ -169,7 +169,7 @@ Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> sta
     forall ips t ips' pgps pgps' mem regs regs' pc C' b o val,
       (* states transition *)
       ips = PC (pgps, mem, regs, pc) ->
-      ips' = PC (pgps', mem, regs', (Pointer.component pc, b, o)) ->
+      ips' = PC (pgps', mem, regs', (C', b, o)) ->
       t = [ERet (Pointer.component pc) val C'] ->
 
       (* conditions *)
