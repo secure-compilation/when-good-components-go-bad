@@ -39,6 +39,8 @@ Import CS.
 Open Scope string_scope.
 Definition show_pos (p : positive) := show_nat (Pos.to_nat p).
 
+Definition show_value (v : RiscMachine.value) := show_int v.
+
 Definition show_N ( n : N ) := show_nat (N.to_nat n).
 
 Instance show_Component_id : Show Component.id :=
@@ -46,11 +48,21 @@ Instance show_Component_id : Show Component.id :=
     show := show_pos
   |}.
 
-Instance show_CN : Show Env.CN := showList.
-
-Instance show_addr : Show  RiscMachine.address :=
+Instance show_sfi_id : Show SFIComponent.id :=
   {|
     show := show_N
+  |}.
+
+Instance show_CN : Show Env.CN := showList.
+
+Definition show_addr (addr : RiscMachine.address) :=
+  let '(c,s,o) := SFI.convert_address addr in
+  "(c=" ++ (show_N c) ++ ", s=" ++ (show s)
+        ++ ", o=" ++ (show o) ++ ")".
+
+Instance show_addr_i : Show  RiscMachine.address :=
+  {|
+    show := show_addr
   |}.
 
 Instance show_Addr_Proc : Show (RiscMachine.address * Procedure.id) := showPair.
@@ -78,18 +90,100 @@ Instance show_event : Show event :=
               end
   |}.
 
+
+
+Definition show_op_f (op : RiscMachine.ISA.binop) :=
+  match op with 
+  | RiscMachine.ISA.Addition => "+"
+  | RiscMachine.ISA.Subtraction => "-"
+  | RiscMachine.ISA.Multiplication => "*"
+  | RiscMachine.ISA.Equality => "="
+  | RiscMachine.ISA.Leq => "<="
+  | RiscMachine.ISA.BitwiseOr => "|"
+  | RiscMachine.ISA.BitwiseAnd => "&"
+  | RiscMachine.ISA.ShiftLeft => "<<"
+  end.
+
+Instance show_op : Show RiscMachine.ISA.binop :=
+  {|
+    show := show_op_f
+  |}.
+
+Instance show_reg : Show RiscMachine.Register.t :=
+  {|
+    show := fun r =>
+              if (N.eqb r RiscMachine.Register.R_ONE)
+              then "R_ONE"
+              else
+                if (N.eqb r Register.R_COM) then "R_COM"
+                else if (N.eqb r Register.R_AUX1) then "R_AUX1"
+                     else if (N.eqb r Register.R_AND_CODE_MASK) then "R_AND_CODE_MASK"
+                          else if (N.eqb r Register.R_AND_DATA_MASK) then "R_AND_DATA_MASK"
+                               else if (N.eqb r Register.R_OR_CODE_MASK) then "R_OR_CODE_MASK"
+                                    else if (N.eqb r Register.R_OR_DATA_MASK) then "R_OR_DATA_MASK"
+                                         else if (N.eqb r Register.R_AUX2) then "R_AUX2"
+                                              else if (N.eqb r Register.R_RA) then "RA"
+                                                   else if (N.eqb r Register.R_SP) then "SP"
+                                                        else if (N.eqb r Register.R_SFI_SP) then "SFI_SP"
+                                                             else if (N.eqb r Register.R_T) then "R_T"
+                                                                  else if (N.eqb r Register.R_D) then "R_D"
+                                                                       else (show_N r)
+  |}.
+
+Instance show_instr : Show RiscMachine.ISA.instr :=
+  {|
+    show := fun i =>
+              match i with
+              | ISA.INop => "Nop"                         
+              (* register operations *)
+              | ISA.IConst v r => ("Const " ++ (show v) ++ " " ++ (show r))%string
+              | ISA.IMov r1 r2  => ("Mov " ++ (show r1) ++ " " ++ (show r2))%string
+              | ISA.IBinOp op r1 r2 r3 => ("BinOP " ++ (show op) ++ " "
+                                                   ++ (show r1) ++ " "
+                                                   ++ (show r2) ++ " "
+                                                   ++ (show r3))%string
+              (* memory operations *)
+              | ISA.ILoad r1 r2 => ("Load " ++ (show r1) ++ " " ++ (show r2))%string
+              | ISA.IStore r1 r2 => ("Store " ++ (show r1) ++ " " ++ (show r2))%string
+              (* conditional and unconditional jumps *)
+              | ISA.IBnz r imm => ("BnZ " ++ (show r) ++ " " ++ (show imm))%string
+              | ISA.IJump r => ("Jump " ++ (show r))%string
+              | ISA.IJal addr=> ("Jal " ++ (show addr))%string
+              (* termination *)
+              | ISA.IHalt => "Halt"
+              end
+  |}.
+
+Definition newline := String "010" ""%string.
+
+
 Instance show_trace : Show trace := showList.
+
+Definition show_mem (mem : RiscMachine.Memory.t) : string :=
+  List.fold_left (fun acc '(a,val) =>
+                    match val with
+                    | RiscMachine.Data v => acc++((show_addr a) ++ ":" ++ (show_value v) ++ newline)%string
+                    | RiscMachine.Instruction i => acc++((show_addr a) ++ ":" ++ (show i) ++ newline)%string
+                    end
+                 ) (BinNatMap.elements mem) ""%string.
+     
+
+Instance show_mem_i : Show RiscMachine.Memory.t :=
+  {|
+    show := show_mem
+  |}.
+
 
 Instance show_state : Show MachineState.t :=
   {|
     show := fun (st : MachineState.t) =>
               let '(mem,pc,gen_regs) := st in
-              "PC: " ++ (show pc) ++ " "
-                     ++ "registers: " ++ (show gen_regs)
-                     (* TODO print memory *)                     
+              "PC: " ++ (show pc) ++ "\n"
+                     ++ "registers: " ++ (show gen_regs) ++ "\n"
+                     ++ "memory: \n" ++ (show mem) 
   |}.
-Close Scope string_scope.
 
+Close Scope string_scope.
 (* TODO Use UPenn MetaLibrary *)
 
 (*******************************

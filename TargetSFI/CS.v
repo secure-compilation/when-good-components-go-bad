@@ -204,7 +204,7 @@ Module CS.
         | IBnz reg offset =>
           do val <- lift (RegisterFile.get_register reg gen_regs) "Unknown register";
             let pc': address :=  if Z.eqb val Z0 then inc_pc pc
-                                 else N.add pc (Z.to_N offset) in
+                                 else (Z.to_N (Z.add (Z.of_N pc) offset)) in
             ret  (E0, (mem,pc',gen_regs))
         | IJump reg =>
           do addr <- lift (RegisterFile.get_register reg gen_regs) "Unknown register";
@@ -245,7 +245,8 @@ Module CS.
               | None => fail "Call trace error"
               | Some t => ret (t, (mem,pc',gen_regs'))
               end
-        | IHalt => fail "Halted" (* Not really an error *)
+        | IHalt => ret (E0,(mem,pc,gen_regs))
+          (* fail "Halted" (* Not really an error *) *)
         end
       | Some (Data val) => fail "Pc in data memory"
       | None => fail "Pc address not initialized"

@@ -903,6 +903,6 @@ What do I need to generate?
  *)
 (* I need the Prop to be decidable. *)
 
-(* QuickChick eval_step_complete_exec.  *)
+QuickChick eval_step_complete_exec.
                                    
   

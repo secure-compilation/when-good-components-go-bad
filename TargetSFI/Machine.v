@@ -564,6 +564,12 @@ Module SFI.
   Definition C_SFI (addr : RiscMachine.address) : SFIComponent.id  := 
     N.land (N.shiftr addr OFFSET_BITS_NO) (2^COMP_BITS_NO - 1).
 
+  Definition SLOT_SFI (addr : RiscMachine.address) : N :=
+    N.shiftr addr (OFFSET_BITS_NO+COMP_BITS_NO).
+
+  Definition OFFSET_SFI (addr: RiscMachine.address) : N :=
+    N.land addr (2^OFFSET_BITS_NO-1).
+
   Definition ADDRESS_ALLIGN_BITS_NO : N := 4.
 
   Definition BASIC_BLOCK_SIZE : N := 16.
@@ -603,6 +609,9 @@ Module SFI.
       (N.lor
          (N.shiftl cid OFFSET_BITS_NO)
          off).
+
+  Definition convert_address (addr : RiscMachine.address) : SFIComponent.id * N * N :=
+    ((C_SFI addr), (SLOT_SFI addr), (OFFSET_SFI addr)).
   
   Close Scope N_scope.
   

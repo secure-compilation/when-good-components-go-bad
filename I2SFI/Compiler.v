@@ -215,51 +215,60 @@ Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * nat)
 
 (******************************** Instruction translation **************************)
 
-Definition gen_push_sfi (cid : Component.id) : AbstractMachine.code :=
+Definition sfi_top_address (rd : RiscMachine.Register.t) (cid : SFIComponent.id) : AbstractMachine.code :=
   [
-    AbstractMachine.IConst (RiscMachine.to_value (SFI.OFFSET_BITS_NO + SFI.COMP_BITS_NO + 1%N))
-                           RiscMachine.Register.R_AUX1
-    ; AbstractMachine.IBinOp (RiscMachine.ISA.ShiftLeft) RiscMachine.Register.R_AUX1
-                             RiscMachine.Register.R_SFI_SP RiscMachine.Register.R_AUX1
-    ; AbstractMachine.IBinOp (RiscMachine.ISA.BitwiseOr) RiscMachine.Register.R_AUX1
-                             RiscMachine.Register.R_OR_DATA_MASK RiscMachine.Register.R_AUX1
-    ; AbstractMachine.IStore RiscMachine.Register.R_AUX1 RiscMachine.Register.R_RA
-    ; AbstractMachine.IConst (1%Z) RiscMachine.Register.R_AUX1
-    ; AbstractMachine.IBinOp (RiscMachine.ISA.Addition) RiscMachine.Register.R_SFI_SP
-                             RiscMachine.Register.R_AUX1 RiscMachine.Register.R_SFI_SP
-  ]. 
-(* # form address (s=2*r_SFI_sp+1,c,o=0) in r₁ *)
-(*   Const r₁ <- N+S+1 *)
-(*   Binop r₁ <- r₁ SL r_SFI_sp  *)
-(*   Binop r₁ <- r₁ | r_or_data_mask *)
-(* # Store ra at the top of the stack *)
-(*   Store *r₁ <- ra *)
-(* # increment stack pointer *)
-(*   Const r₁ <- 1 *)
-(*   Binop r_SFI_sp <- r_SFI_sp + r₁  *)
+    AbstractMachine.IConst (RiscMachine.to_value (SFI.or_data_mask SFI.MONITOR_COMPONENT_ID))
+                           RiscMachine.Register.R_OR_DATA_MASK
+    ; AbstractMachine.IConst (RiscMachine.to_value (SFI.OFFSET_BITS_NO + SFI.COMP_BITS_NO + 1%N))
+                             rd                           
+    ; AbstractMachine.IBinOp (RiscMachine.ISA.ShiftLeft) 
+                             RiscMachine.Register.R_SFI_SP
+                             rd
+                             rd                             
+    ; AbstractMachine.IBinOp (RiscMachine.ISA.BitwiseOr)
+                             rd
+                             RiscMachine.Register.R_OR_DATA_MASK
+                             rd
+    ; AbstractMachine.IConst (RiscMachine.to_value cid)
+                           RiscMachine.Register.R_OR_DATA_MASK
+  ].
+
+
+Definition gen_push_sfi (cid : SFIComponent.id) : AbstractMachine.code :=
+     (
+        (sfi_top_address RiscMachine.Register.R_AUX1 cid)
+          ++
+          [   
+            AbstractMachine.IStore RiscMachine.Register.R_AUX1 RiscMachine.Register.R_RA
+            ; AbstractMachine.IConst 1%Z RiscMachine.Register.R_AUX1
+            ; AbstractMachine.IBinOp (RiscMachine.ISA.Addition)
+                                     RiscMachine.Register.R_SFI_SP
+                                     RiscMachine.Register.R_AUX1
+                                     RiscMachine.Register.R_SFI_SP
+          ]
+      ).
 
 Definition gen_pop_sfi (rd : RiscMachine.Register.t) : COMP(AbstractMachine.code) :=
   do cenv <- get;
+    do cid <- get_sfiId (current_component cenv);
     let lbl := ((current_component cenv),(next_label cenv)) in
     do! modify (with_next_label);
       ret
-        [
-          AbstractMachine.ILabel lbl
-          ; AbstractMachine.IConst 1%Z rd (*   Const r₁ <- 1 *)
-          ; AbstractMachine.IBinOp (RiscMachine.ISA.Subtraction)
-                                    RiscMachine.Register.R_SFI_SP
-                                    rd RiscMachine.Register.R_SFI_SP
-          (*   Binop r_SFI_sp <- r_SFI_sp - r₁  *)
-          ; AbstractMachine.IConst
-              (RiscMachine.to_value (SFI.OFFSET_BITS_NO + SFI.COMP_BITS_NO + 1%N))
-              rd (*   Const r₁ <- N+S+1 *)
-          ; AbstractMachine.IBinOp (RiscMachine.ISA.ShiftLeft) RiscMachine.Register.R_SFI_SP
-                                   rd rd (*   Binop r₁ <- r_SFI_sp SL r₁ *)
-          ;  AbstractMachine.IBinOp (RiscMachine.ISA.BitwiseOr) rd
-                                    RiscMachine.Register.R_OR_DATA_MASK rd
-                                    (*   Binop r₁ <- r₁ |  r_or_data_mask(cid) *)
-          ; AbstractMachine.ILoad rd rd (*   Load *r₁ -> ra *)
-        ].
+        ( [
+            AbstractMachine.ILabel lbl
+            ; AbstractMachine.IConst 1%Z RiscMachine.Register.R_RA 
+            ; AbstractMachine.IBinOp (RiscMachine.ISA.Subtraction)
+                                     RiscMachine.Register.R_SFI_SP
+                                     RiscMachine.Register.R_RA
+                                     RiscMachine.Register.R_SFI_SP
+          ]
+            ++ (sfi_top_address rd cid)
+            ++ 
+            [
+              AbstractMachine.ILoad RiscMachine.Register.R_RA
+                                      RiscMachine.Register.R_RA
+            ]
+        ).
 
 
 Definition gen_set_sfi_registers (cid : SFIComponent.id) : AbstractMachine.code :=
@@ -466,7 +475,7 @@ Definition compile_procedure
             do sfiId <- get_sfiId cid;
             ret (
                 [AbstractMachine.IHalt; AbstractMachine.ILabel proc_label]
-                  ++ (gen_push_sfi cid) 
+                  ++ (gen_push_sfi sfiId) 
                   ++ (gen_set_sfi_registers sfiId)
                   ++ acode )
         else
