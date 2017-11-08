@@ -138,27 +138,28 @@ Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
   if PMapFacts.In_dec ctx C then CC (C, pgps, pmem) Normal
   else PC (C, pgps, pmem, k, e).
 
-Lemma partialize_partial_state ctx scs : partial_state ctx scs (partialize ctx scs).
-Proof.
-  destruct scs as [[[[C gps] mem] k] e]. simpl.
-  destruct (PMapFacts.In_dec ctx C) as [H|H].
-  - eapply ContextControl_Normal; eauto. reflexivity.
-  - eapply ProgramControl; eauto. reflexivity.
-Qed.
-
 Lemma partial_state_partialize ctx scs sps :
-  partial_state ctx scs sps ->
-  state_eq sps (partialize ctx scs).
+  partial_state ctx scs sps <-> state_eq sps (partialize ctx scs).
 Proof.
-  intros H.
-  destruct H as [C gps pgps mem pmem k e ? ? Hcomp Hmem ?
-                |C gps pgps mem pmem k e ? ? Hcomp Hmem];
-  subst scs sps pgps;
-  unfold is_program_component, is_context_component in Hcomp;
-  simpl in *;
-  destruct (PMapFacts.In_dec ctx C) as [?|?]; try easy.
-  - now apply PCE.
-  - now apply CCE.
+  split.
+  - intros H.
+    destruct H as [C gps pgps mem pmem k e ? ? Hcomp Hmem ?
+                  |C gps pgps mem pmem k e ? ? Hcomp Hmem];
+    subst scs sps pgps;
+    unfold is_program_component, is_context_component in Hcomp;
+    simpl in *;
+    destruct (PMapFacts.In_dec ctx C) as [?|?]; try easy.
+    + now apply PCE.
+    + now apply CCE.
+  - intros H.
+    inversion H as [C gps mem1 mem2 k e Hmem Hsps Hpart
+                   |C gps mem1 mem2 Hmem Hsps Hpart]; subst sps; clear H;
+    destruct scs as [[[[C' gps'] mem'] k'] e']; simpl in Hpart;
+    destruct (PMapFacts.In_dec ctx C') as [Hin|Hnin]; try easy.
+    + inversion Hpart; subst C' gps mem2 k' e'.
+      now econstructor; eauto.
+    + inversion Hpart; subst C' gps mem2.
+      now econstructor; eauto.
 Qed.
 
 Theorem partial_state_preserves_turn_of:
