@@ -21,6 +21,16 @@ Inductive state : Type :=
 | PC : program_state -> state
 | CC : context_state -> exec_state -> state.
 
+(** Equality on partial states uses extensional equality on maps, and Leibniz
+    equality on other components. *)
+Inductive state_eq : state -> state -> Prop :=
+| PCE C stk mem1 mem2 k e :
+  PMap.Equal mem1 mem2 ->
+  state_eq (PC (C, stk, mem1, k, e)) (PC (C, stk, mem2, k, e))
+| CCE C stk mem1 mem2 :
+  PMap.Equal mem1 mem2 ->
+  state_eq (CC (C, stk, mem1) Normal) (CC (C, stk, mem2) Normal).
+
 (* TODO not sure if this Program.interface should be list Component.id *)
 
 Instance state_turn : HasTurn state := {
@@ -69,8 +79,8 @@ Proof.
   rewrite Hprogturn. rewrite Hpstack. reflexivity.
 Qed.
 
-Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
-| ProgramControl: forall scs sps C gps pgps mem pmem k e,
+Inductive partial_state (ctx: Program.interface) (scs: CS.state) (sps: PS.state) : Prop :=
+| ProgramControl: forall C gps pgps mem pmem k e,
     (* related states *)
     scs = (C, gps, mem, k, e) ->
     sps = PC (C, pgps, pmem, k, e) ->
@@ -86,7 +96,7 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
 
     partial_state ctx scs sps
 
-| ContextControl_Normal: forall scs sps C gps pgps mem pmem k e,
+| ContextControl_Normal: forall C gps pgps mem pmem k e,
     (* related states *)
     scs = (C, gps, mem, k, e) ->
     sps = CC (C, pgps, pmem) Normal ->
@@ -101,6 +111,36 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     pgps = to_partial_stack gps (map fst (PMap.elements ctx)) ->
 
     partial_state ctx scs sps.
+
+Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
+  let '(C, gps, mem, k, e) := scs in
+  let pgps := to_partial_stack gps (map fst (PMap.elements ctx)) in
+  let pmem := PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem in
+  if PMapFacts.In_dec ctx C then CC (C, pgps, pmem) Normal
+  else PC (C, pgps, pmem, k, e).
+
+Lemma partialize_partial_state ctx scs : partial_state ctx scs (partialize ctx scs).
+Proof.
+  destruct scs as [[[[C gps] mem] k] e]. simpl.
+  destruct (PMapFacts.In_dec ctx C) as [H|H].
+  - eapply ContextControl_Normal; eauto. reflexivity.
+  - eapply ProgramControl; eauto. reflexivity.
+Qed.
+
+Lemma partial_state_partialize ctx scs sps :
+  partial_state ctx scs sps ->
+  state_eq sps (partialize ctx scs).
+Proof.
+  intros H.
+  destruct H as [C gps pgps mem pmem k e ? ? Hcomp Hmem ?
+                |C gps pgps mem pmem k e ? ? Hcomp Hmem];
+  subst scs sps pgps;
+  unfold is_program_component, is_context_component in Hcomp;
+  simpl in *;
+  destruct (PMapFacts.In_dec ctx C) as [?|?]; try easy.
+  - now apply PCE.
+  - now apply CCE.
+Qed.
 
 Theorem partial_state_preserves_turn_of:
   forall psi cs ps,
@@ -199,7 +239,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       sps = PC (C, s, mem, k, e) ->
       sps' = CC (C', s', mem) Normal ->
       t = [ECall C P v C'] ->
-    
+
       (* conditions *)
       e = E_val (Int v) ->
       k = Kcall C' P kont ->
