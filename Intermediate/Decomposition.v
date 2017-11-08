@@ -12,13 +12,6 @@ Require Import S2I.Definitions.
 
 Import Intermediate.
 
-Ltac simplify_turn :=
-  unfold S.PS.is_program_component, S.PS.is_context_component in *;
-  unfold I.PS.is_program_component, I.PS.is_context_component in *;
-  unfold turn_of, S.PS.state_turn, I.PS.state_turn in *;
-  simpl in *;
-  auto.
-
 Section Decomposition.
   Variable prog: Intermediate.program.
   Variable ctx: Program.interface.
@@ -175,6 +168,207 @@ Section Decomposition.
     exists CI'. split; auto.
   Qed.
 
+  Lemma change_program_memory:
+    forall mem C CI,
+      ~ PMap.In C ctx ->
+      PMap.Equal
+        (PMap.add C CI (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem))
+        (PMapExtra.filter (elt:=ComponentMemory.t)
+                          (fun k _ => negb (PMap.mem (elt:=Component.interface) k ctx)) (PMap.add C CI mem)).
+  Proof.
+    intros mem C CI Hnot_in_ctx.
+    unfold PMap.Equal.
+    intros C'.
+    rewrite PMapFacts.add_o.
+    destruct (PMapFacts.eq_dec C C') eqn:HCeqC'.
+    - subst. symmetry.
+      apply PMap.find_1.
+      apply PMapExtra.filter_iff.
+      + unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+      + split.
+        * apply PMap.add_1; auto.
+        * apply PMapFacts.not_mem_in_iff in Hnot_in_ctx.
+          rewrite Hnot_in_ctx. reflexivity.
+    - destruct (PMap.find C' (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem)) eqn:Hfind.
+      + symmetry.
+        apply PMap.find_2 in Hfind.
+        apply PMapExtra.filter_iff in Hfind.
+        * destruct Hfind as [Hmapsto Hcond].
+          apply PMap.find_1.
+          apply PMapExtra.filter_iff.
+          ** unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+          ** split.
+             *** apply PMap.add_2; auto.
+             *** auto.
+        * unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+      + symmetry.
+        apply PMapFacts.not_find_in_iff.
+        apply PMapFacts.not_find_in_iff in Hfind.
+        unfold not. intro contra.
+        apply Hfind.
+        destruct contra.
+        exists x.
+        apply PMapExtra.filter_iff in H.
+        * apply PMapExtra.filter_iff.
+          ** unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+          ** destruct H.
+             split.
+             *** eapply PMap.add_3; eauto.
+             *** auto.
+        * unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+  Qed.
+
+  Lemma alloc_in_program_memory:
+    forall mem pmem mem' pmem' C size ptr1 ptr2,
+      ~ PMap.In C ctx ->
+      Memory.alloc mem C size = Some (mem', ptr1) ->
+      Memory.alloc pmem C size = Some (pmem', ptr2) ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      PMap.Equal pmem' (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem').
+  Proof. Admitted.
+
+  Lemma alloc_in_context_memory:
+    forall mem pmem mem' C size ptr1,
+      PMap.In C ctx ->
+      Memory.alloc mem C size = Some (mem', ptr1) ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem').
+  Proof. Admitted.
+
+  Lemma store_in_program_memory:
+    forall mem pmem mem' pmem' ptr v,
+      ~ PMap.In (Pointer.component ptr) ctx ->
+      Memory.store mem ptr v = Some mem' ->
+      Memory.store pmem ptr v = Some pmem' ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      PMap.Equal pmem' (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem').
+  Proof. Admitted.
+    (*
+    intros.
+    unfold Memory.store in *.
+    destruct ptr; destruct p.
+    destruct (PMap.find i pmem)
+             eqn:Hmem_find1; try discriminate.
+    destruct (ComponentMemory.store t i0 o v)
+             eqn:Hmem_store1; try discriminate.
+    inversion H1; subst.
+    destruct (PMap.find i mem)
+             eqn:Hmem_find2; try discriminate.
+    destruct (ComponentMemory.store t1 i0 o v)
+             eqn:Hmem_store2; try discriminate.
+    inversion H1; subst.
+    assert (t = t1). {
+      specialize (H2 i). rewrite H2 in Hmem_find1.
+      apply PMapFacts.find_mapsto_iff in Hmem_find1.
+      apply PMapExtra.filter_iff in Hmem_find1.
+      destruct Hmem_find1.
+      apply PMap.find_1 in H3. rewrite H3 in Hmem_find2.
+      inversion Hmem_find2. reflexivity.
+      (* morphisms stuff *)
+      unfold Morphisms.Proper, Morphisms.respectful.
+      intros. subst. reflexivity.
+    }
+    subst.
+    rewrite Hmem_store2 in Hmem_store1. inversion Hmem_store1.
+    subst. rewrite H2. simpl in *.
+    eapply change_program_memory. simpl in *. subst. auto.
+  Qed.
+*)
+
+  Lemma store_in_context_memory:
+    forall mem pmem mem' ptr v,
+      PMap.In (Pointer.component ptr) ctx ->
+      Memory.store mem ptr v = Some mem' ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem').
+  Proof. Admitted.
+
+  Lemma failing_store_in_program_memory:
+    forall mem pmem mem' ptr v,
+      ~ PMap.In (Pointer.component ptr) ctx ->
+      Memory.store mem ptr v = Some mem' ->
+      Memory.store pmem ptr v = None ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      False.
+  Proof.
+    intros.
+    unfold Memory.store in *.
+    destruct ptr as [[]].
+    destruct (PMap.find i mem) eqn:Hmem_find; try discriminate.
+    destruct (PMap.find i pmem) eqn:Hpmem_find; try discriminate.
+    - specialize (H2 i).
+      rewrite Hpmem_find in H2.
+      destruct (ComponentMemory.store t i0 o v) eqn:Hmem_store; try discriminate.
+      inversion H0. subst.
+      symmetry in H2.
+      apply PMap.find_2 in H2.
+      apply PMapExtra.filter_iff in H2.
+      destruct H2 as [Hmapsto Hcond].
+      apply PMapFacts.find_mapsto_iff in Hmapsto.
+      rewrite Hmapsto in Hmem_find.
+      inversion Hmem_find. subst.
+      rewrite Hmem_store in H1. discriminate.
+      (* morpshisms stuff *)
+      unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+    - specialize (H2 i).
+      rewrite Hpmem_find in H2.
+      symmetry in H2. apply PMapFacts.not_find_in_iff in H2.
+      apply H2. eexists.
+      eapply PMapExtra.filter_iff.
+      + (* morpshisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+      + split.
+        * apply PMap.find_2 in Hmem_find.
+          eauto.
+        * simpl in *.
+          apply PMapFacts.not_mem_in_iff in H.
+          unfold negb. rewrite H. reflexivity.
+  Qed.
+
+  Lemma failing_alloc_in_program_memory:
+    forall mem pmem mem' C size ptr1,
+      ~ PMap.In C ctx ->
+      Memory.alloc mem C size = Some (mem', ptr1) ->
+      Memory.alloc pmem C size = None ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      False.
+  Proof.
+    intros.
+    unfold Memory.alloc in *.
+    destruct (PMap.find C mem) eqn:Hmem_find; try discriminate.
+    destruct (PMap.find C pmem) eqn:Hpmem_find; try discriminate.
+    - specialize (H2 C).
+      rewrite Hpmem_find in H2.
+      destruct (ComponentMemory.alloc t size) eqn:Hmem_alloc; try discriminate.
+      inversion H0. subst.
+      symmetry in H2.
+      apply PMap.find_2 in H2.
+      apply PMapExtra.filter_iff in H2.
+      destruct H2 as [Hmapsto Hcond].
+      apply PMapFacts.find_mapsto_iff in Hmapsto.
+      rewrite Hmapsto in Hmem_find.
+      inversion Hmem_find. subst.
+      rewrite Hmem_alloc in H1. discriminate.
+      (* morpshisms stuff *)
+      unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+    - specialize (H2 C).
+      rewrite Hpmem_find in H2.
+      symmetry in H2. apply PMapFacts.not_find_in_iff in H2.
+      apply H2. eexists.
+      eapply PMapExtra.filter_iff.
+      + (* morpshisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+      + split.
+        * apply PMap.find_2 in Hmem_find.
+          eauto.
+        * simpl in *.
+          apply PMapFacts.not_mem_in_iff in H.
+          unfold negb. rewrite H. reflexivity.
+  Qed.
+
+  (* NOTE We also need to prove lemmas about labels. They are simple and reasonable.
+          It should just be a matter of proving things about searching in lists *)
+
   Lemma lockstep_simulation:
     forall ics t ics',
       I.CS.step G ics t ics' ->
@@ -261,7 +455,7 @@ Section Decomposition.
 
     - destruct (Memory.store pmem ptr (Register.get r2 regs)) as [pmem'|] eqn:Hpmem'.
       + exists (I.PS.PC (I.PS.to_partial_stack gps (map fst (PMap.elements ctx)),
-                    pmem', regs, Pointer.inc pc)).
+                         pmem', regs, Pointer.inc pc)).
         split.
         * econstructor; auto.
           ** apply Hstep.
@@ -269,70 +463,16 @@ Section Decomposition.
           ** econstructor; eauto.
              *** simplify_turn.
                  unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
-             *** unfold Memory.store in *.
-                 destruct ptr; destruct p.
-                 destruct (PMap.find i pmem)
-                          eqn:Hmem_find1; try discriminate.
-                 destruct (ComponentMemory.store t i0 o (Register.get r2 regs))
-                          eqn:Hmem_store1; try discriminate.
-                 inversion Hpmem'; subst.
-                 destruct (PMap.find i mem)
-                   eqn:Hmem_find2; try discriminate.
-                 destruct (ComponentMemory.store t1 i0 o (Register.get r2 regs))
-                   eqn:Hmem_store2; try discriminate.
-                 inversion H10; subst.
-                 assert (t = t1). {
-                   specialize (H2 i). rewrite H2 in Hmem_find1.
-                   apply PMapFacts.find_mapsto_iff in Hmem_find1.
-                   apply PMapExtra.filter_iff in Hmem_find1.
-                   destruct Hmem_find1.
-                   apply PMap.find_1 in H. rewrite H in Hmem_find2.
-                   inversion Hmem_find2. reflexivity.
-                   (* morphisms stuff *)
-                   unfold Morphisms.Proper, Morphisms.respectful.
-                   intros. subst. reflexivity.
-                 }
-                 subst.
-                 rewrite Hmem_store2 in Hmem_store1. inversion Hmem_store1.
-                 subst.
-                 rewrite H2.
-
-                 unfold PMap.Equal. intro.
-                 rewrite PMapFacts.add_o.
-                 destruct (PMapFacts.eq_dec i y).
-                 **** subst. admit.
-                 **** admit.
+             *** simplify_turn. rewrite <- H9 in H1.
+                 eapply store_in_program_memory; eauto.
         * econstructor; eauto.
           ** simplify_turn.
              unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
-          ** admit.
+          ** simplify_turn. rewrite <- H9 in H1.
+             eapply store_in_program_memory; eauto.
       + (* contra *)
-        unfold Memory.store in *.
-        destruct ptr; destruct p.
-        destruct (PMap.find i mem)
-                 eqn:Hmem_find2; try discriminate.
-        destruct (ComponentMemory.store t i0 o (Register.get r2 regs))
-                 eqn:Hmem_store1; try discriminate.
-        inversion H10; subst.
-        destruct (PMap.find i pmem)
-                 eqn:Hmem_find1; try discriminate.
-        * destruct (ComponentMemory.store t1 i0 o (Register.get r2 regs))
-                 eqn:Hmem_store2; try discriminate.
-          assert (t = t1). {
-            specialize (H2 i). rewrite H2 in Hmem_find1.
-            apply PMapFacts.find_mapsto_iff in Hmem_find1.
-            apply PMapExtra.filter_iff in Hmem_find1.
-            destruct Hmem_find1.
-            apply PMap.find_1 in H. rewrite H in Hmem_find2.
-            inversion Hmem_find2. reflexivity.
-            (* morphisms stuff *)
-            unfold Morphisms.Proper, Morphisms.respectful.
-            intros. subst. reflexivity.
-          }
-          subst.
-          rewrite Hmem_store2 in Hmem_store1. inversion Hmem_store1.
-        * (* contra *)
-          admit.
+        simplify_turn. rewrite <- H9 in H1.
+        exfalso. eapply failing_store_in_program_memory; eauto.
 
     - eexists. split.
       + econstructor; auto.
@@ -372,18 +512,26 @@ Section Decomposition.
         ** simplify_turn.
            unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
 
-    - eexists. split.
-      + econstructor; auto.
-        * apply Hstep.
+    - destruct (Memory.alloc pmem (Pointer.component pc) (Z.to_nat size)) as [[pmem']|] eqn:Hpmem'.
+      + exists (I.PS.PC (I.PS.to_partial_stack gps (map fst (PMap.elements ctx)),
+                         pmem', Register.set rptr (Ptr ptr) regs, Pointer.inc pc)).
+        split.
         * econstructor; auto.
-        * econstructor; eauto.
+          ** apply Hstep.
+          ** econstructor; auto.
+          ** econstructor; eauto.
+             *** simplify_turn.
+                 unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
+             *** simplify_turn.
+                 eapply alloc_in_program_memory; eauto.
+        * econstructor; auto.
           ** simplify_turn.
              unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
-          ** (* should be provable *) admit.
-      + econstructor; auto.
-        ** simplify_turn.
-           unfold Pointer.inc, Pointer.add. destruct pc. destruct p. auto.
-        ** (* should be provable *) admit.
+          ** simplify_turn.
+             eapply alloc_in_program_memory; eauto.
+      + (* contra *)
+        simplify_turn.
+        exfalso. eapply failing_alloc_in_program_memory; eauto.
 
     (* call *)
     (* case analysis on the target *)
@@ -482,7 +630,8 @@ Section Decomposition.
       + eapply I.PS.Context_Epsilon; auto.
       + eapply I.PS.ContextControl_Normal; eauto.
         * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
-        * (* should be provable *) admit.
+        * simplify_turn. rewrite <- H9 in H1.
+          eapply store_in_context_memory; eauto.
 
     - eexists. split.
       + eapply I.PS.Context_Epsilon; auto.
@@ -508,7 +657,8 @@ Section Decomposition.
       + eapply I.PS.Context_Epsilon; auto.
       + eapply I.PS.ContextControl_Normal; eauto.
         * unfold Pointer.inc, Pointer.add. destruct pc. destruct p. reflexivity.
-        * (* should be provable *) admit.
+        * simplify_turn.
+          eapply alloc_in_context_memory; eauto.
 
     (* call *)
     (* case analysis on the target *)
@@ -598,7 +748,7 @@ Section Decomposition.
           ** eauto.
       (* external return *)
       + exists (I.PS.PC (I.PS.to_partial_stack gps' (map fst (PMap.elements ctx)),
-                    pmem, Register.invalidate regs, pc')).
+                         pmem, Register.invalidate regs, pc')).
         split.
         * eapply I.PS.Context_External_Return.
           ** eauto.
@@ -623,7 +773,7 @@ Section Decomposition.
              apply PMapFacts.not_mem_in_iff. auto.
           ** eauto.
           ** auto.
-  Admitted.
+  Qed.
 
   Theorem decomposition:
     forward_simulation (I.CS.sem prog) (I.PS.sem prog ctx).

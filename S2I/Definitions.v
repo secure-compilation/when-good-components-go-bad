@@ -1,3 +1,4 @@
+Require Import Common.Definitions.
 Require Import Source.CS.
 Require Import Source.PS.
 Require Import Intermediate.CS.
@@ -18,3 +19,10 @@ Module I.
   Module CS := CS.
   Module PS := PS.
 End I.
+
+Ltac simplify_turn :=
+  unfold S.PS.is_program_component, S.PS.is_context_component in *;
+  unfold I.PS.is_program_component, I.PS.is_context_component in *;
+  unfold turn_of, S.PS.state_turn, I.PS.state_turn in *;
+  simpl in *;
+  auto.

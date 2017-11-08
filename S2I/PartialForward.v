@@ -260,13 +260,6 @@ Section PartialForward.
     - auto.
   Qed.
 
-  Ltac simplify_turn :=
-    unfold S.PS.is_program_component, S.PS.is_context_component in *;
-    unfold I.PS.is_program_component, I.PS.is_context_component in *;
-    unfold turn_of, S.PS.state_turn, I.PS.state_turn in *;
-    simpl in *;
-    auto.
-
   Theorem transl_step_correct:
     forall s1 t s1',
       S.PS.kstep ctx SG s1 t s1' ->
