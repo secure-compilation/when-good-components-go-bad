@@ -1,3 +1,5 @@
+Require Import Coq.Classes.Morphisms.
+
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -21,6 +23,12 @@ Inductive state : Type :=
 | PC : program_state -> state
 | CC : context_state -> exec_state -> state.
 
+Definition component_of_state (scs: state) : Component.id :=
+  match scs with
+  | PC (C, _, _, _, _) => C
+  | CC (C, _, _) _     => C
+  end.
+
 (** Equality on partial states uses extensional equality on maps, and Leibniz
     equality on other components. *)
 Inductive state_eq : state -> state -> Prop :=
@@ -31,14 +39,25 @@ Inductive state_eq : state -> state -> Prop :=
   PMap.Equal mem1 mem2 ->
   state_eq (CC (C, stk, mem1) Normal) (CC (C, stk, mem2) Normal).
 
+Instance state_eq_Equivalence : Equivalence state_eq.
+Proof.
+  constructor.
+  - intros [[[[[? ?] ?] ?] ?] | [[? ?] ?] []]; constructor;
+    reflexivity.
+  - intros sps1 sps2 H. now destruct H; constructor; symmetry.
+  - intros sps1 sps2 sps3 H1 H2.
+    destruct H1; inversion H2; subst; constructor; etransitivity; eassumption.
+Qed.
+
+Instance component_of_state_Proper : Proper (state_eq ==> eq) component_of_state.
+Proof.
+  intros sps1 sps2 H. now destruct H.
+Qed.
+
 (* TODO not sure if this Program.interface should be list Component.id *)
 
 Instance state_turn : HasTurn state := {
-  turn_of s iface :=
-    match s with
-    | PC (C, _, _, _, _) => PMap.In C iface
-    | CC (C, _, _) _ => PMap.In C iface
-    end
+  turn_of s iface := PMap.In (component_of_state s) iface
 }.
 
 Module SC := Source.CS.CS.
@@ -146,7 +165,12 @@ Theorem partial_state_preserves_turn_of:
   forall psi cs ps,
     partial_state psi cs ps -> (turn_of ps psi <-> turn_of cs psi).
 Proof.
-Admitted.
+  intros psi scs sps H. simpl.
+  apply partial_state_partialize in H.
+  destruct scs as [[[[C gps] mem] k] e].
+  rewrite H. simpl.
+  now destruct (PMapFacts.In_dec _ _).
+Qed.
 
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | initial_state_intro: forall scs sps,
