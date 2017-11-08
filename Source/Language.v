@@ -30,7 +30,13 @@ Module Source.
      1) calls outside the component are allowed by the interface
      2) calls inside the component are targeting existing procedures
      3) the undef value is not present
-     4) pointers are not present (no pointers forging) *)
+     4) pointers are not present (no pointer forging) *)
+  (* AAA: I find the term "well-formed" a bit misleading, because this notion is
+     not preserved by evaluation: if the result of an expression is a pointer,
+     that result is ill-formed.  We could consider refactoring it as the
+     conjunction of two predicates: surface_syntax, asserting that pointers and
+     undef do not occur in expressions, and well_formed, asserting that the
+     expression respects the interface.  *)
   Fixpoint well_formed_expr (p: program) (cur_comp: Component.id) (e: expr) : Prop :=
     match e with
     | E_val val => exists i, val = Int i
