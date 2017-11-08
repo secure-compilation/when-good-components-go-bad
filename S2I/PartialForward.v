@@ -82,7 +82,7 @@ Section PartialForward.
   Hypothesis match_related_stacks:
     forall i gps mem1 regs pc C s mem2 k e,
       match_states i (C, s, mem2, k, e) (gps, mem1, regs, pc) ->
-      match_stacks s gps.   
+      match_stacks s gps.
 
   Hypothesis match_memories:
     forall i gps mem1 regs pc C s mem2 k e,
@@ -179,7 +179,7 @@ Section PartialForward.
         match_stacks_p s1 s2 ->
         match_mems mem1 mem2 ->
         match_states_p i sps ips.
- 
+
   (* now we prove the forward simulation between partial semantics *)
 
   Lemma transl_initial_states:
@@ -271,7 +271,7 @@ Section PartialForward.
   Proof.
     intros s1 t s1' Hstep i s2 Hmatch.
     inversion Hstep
-      as [ ? ? ? scs2 scs2' sps sps'
+      as [ scs2 scs2' sps sps'
            ? ? ? Hsource_step
            Hscs2_partial Hscs2'_partial
          | ?|?|?|?|?|?|?|?|?]; subst.
@@ -299,7 +299,7 @@ Section PartialForward.
           ** econstructor; eauto.
           ** (* contra *)
              inversion Hmatch'; subst.
-             *** simplify_turn. 
+             *** simplify_turn.
                  apply match_executing_component in Hwmatch'.
                  destruct sps'. destruct p. destruct p. destruct p.
                  inversion H1; subst. inversion H5; subst.

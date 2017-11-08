@@ -190,9 +190,9 @@ Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
 
 (* small-step semantics *)
 
-Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> state -> Prop :=
+Inductive kstep (ctx: Program.interface) (G: global_env) (sps: state) (t: trace) (sps': state) : Prop :=
 | Program_Epsilon:
-    forall sps t sps' scs scs' ps ps',
+    forall scs scs' ps ps',
       (* state transition *)
       sps = PC ps ->
       sps' = PC ps' ->
@@ -203,10 +203,10 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       partial_state ctx scs sps ->
       partial_state ctx scs' sps' ->
 
-      kstep ctx G sps E0 sps'
+      kstep ctx G sps t sps'
 
 | Program_Internal_Call:
-   forall sps t sps' C s s' mem mem' k k' kont e e' C' P v C'_procs P_expr b b' old_call_arg,
+   forall C s s' mem mem' k k' kont e e' C' P v C'_procs P_expr b b' old_call_arg,
      (* state transition *)
      sps = PC (C, s, mem, k, e) ->
      sps' = PC (C', s', mem', k', e') ->
@@ -234,7 +234,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
      kstep ctx G sps t sps'
 
 | Program_Internal_Return:
-    forall sps t sps' C s s' srest mem mem' k k' kont e e' v C' old_call_arg b,
+    forall C s s' srest mem mem' k k' kont e e' v C' old_call_arg b,
       (* state transition *)
       sps = PC (C, s, mem, k, e) ->
       sps' = PC (C', s', mem', k', e') ->
@@ -258,7 +258,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       kstep ctx G sps t sps'
 
 | Program_External_Call:
-    forall sps t sps' C s s' mem k kont e C' P v b old_call_arg,
+    forall C s s' mem k kont e C' P v b old_call_arg,
       (* state transition *)
       sps = PC (C, s, mem, k, e) ->
       sps' = CC (C', s', mem) Normal ->
@@ -279,7 +279,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       kstep ctx G sps t sps'
 
 | Program_External_Return:
-    forall sps t sps' C s s' srest mem k e v C',
+    forall C s s' srest mem k e v C',
       (* state transition *)
       sps = PC (C, s, mem, k, e) ->
       sps' = CC (C', s', mem) Normal ->
@@ -298,7 +298,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       kstep ctx G sps t sps'
 
 | Context_Epsilon:
-    forall sps t sps' s mem C,
+    forall s mem C,
       (* state transition *)
       sps = CC (C, s, mem) Normal ->
       sps' = CC (C, s, mem) Normal ->
@@ -311,7 +311,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       kstep ctx G sps t sps'
 
 | Context_Internal_Call:
-    forall sps t sps' s s' mem C C' P call_arg,
+    forall s s' mem C C' P call_arg,
       (* state transition *)
       sps = CC (C, s, mem) Normal ->
       sps' = CC (C', s', mem) Normal ->
@@ -329,7 +329,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       kstep ctx G sps t sps'
 
 | Context_Internal_Return:
-    forall sps t sps' s s' srest mem C C' return_val,
+    forall s s' srest mem C C' return_val,
       (* state transition *)
       sps = CC (C, s, mem) Normal ->
       sps' = CC (C', s', mem) Normal ->
@@ -347,7 +347,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       kstep ctx G sps t sps'
 
 | Context_External_Call:
-    forall sps t sps' s s' mem mem' k' e' C C' P C'_procs P_expr b' val,
+    forall s s' mem mem' k' e' C C' P C'_procs P_expr b' val,
       (* state transition *)
       sps = CC (C, s, mem) Normal ->
       sps' = PC (C', s', mem', k', e') ->
@@ -370,7 +370,7 @@ Inductive kstep (ctx: Program.interface) (G: global_env) : state -> trace -> sta
       kstep ctx G sps t sps'
 
 | Context_External_Return:
-    forall sps t sps' C s s' srest mem mem' kont k' e' v C' old_call_arg b,
+    forall C s s' srest mem mem' kont k' e' v C' old_call_arg b,
       (* state transition *)
       sps =  CC (C, s, mem) Normal ->
       sps' = PC (C', s', mem', k', e') ->
