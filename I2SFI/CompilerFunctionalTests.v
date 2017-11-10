@@ -17,40 +17,8 @@ Require Import Common.Maps.
 Import MonadNotations.
 Open Scope monad_scope.
 
-
-(* Compute ( *)
-(*     let COMP1_ID : positive := 1%positive in *)
-(*     let PROC1_ID : positive := 1%positive in *)
-(*     let BLOCK1_ID : positive := 1%positive in *)
-(*     let component1_interface : Component.interface := *)
-(*         (Component.mkCompInterface [PROC1_ID] []) in *)
-(*     let program_interface : Program.interface := *)
-(*         PMap.add COMP1_ID component1_interface (PMap.empty Component.interface) in *)
-(*      let buffers := PMap.add COMP1_ID [(BLOCK1_ID,10%nat)] (PMap.empty (list (Block.id * nat))) in *)
-(*      let proc1_code := (PMap.add PROC1_ID [] (PMap.empty Intermediate.Machine.code) ) in *)
-(*      let procs := PMap.add COMP1_ID proc1_code *)
-(*                            (PMap.empty (PMap.t Intermediate.Machine.code)) in *)
-(*      let program : Intermediate.program := {| *)
-(*            Intermediate.prog_interface := program_interface; *)
-(*            Intermediate.prog_procedures := procs; *)
-(*            Intermediate.prog_buffers := buffers; *)
-(*            Intermediate.prog_main := (COMP1_ID,PROC1_ID) *)
-(*          |} in *)
-    
-(*     let cn := gen_cn program_interface in *)
-(*     let cid2SFIid := List.fold_left *)
-(*        (fun acc '(cid,i)  => *)
-(*           PMap.add cid (Env.index2SFIid i) acc) *)
-(*        (List.combine cn (List.seq 0 (List.length cn))) *)
-(*        (PMap.empty SFIComponent.id) in *)
-(*     let procs_labels := exported_procs_labels procs program_interface in *)
-(*     (PMap.elements cid2SFIid) *)
-(*   ). *)
-
 Definition test (instrs : Intermediate.Machine.code) 
   : @Either (trace*MachineState.t) :=
-  (* : Either sfi_program := *)
-  (* : Either RiscMachine.Memory.t := *)
   let COMP1_ID : positive := 1%positive in
   let PROC1_ID : positive := 1%positive in
   let BLOCK1_ID : positive := 1%positive in
@@ -73,10 +41,6 @@ Definition test (instrs : Intermediate.Machine.code)
   | Left msg => Left msg
   | Right p =>
     CS.eval_program (100%nat) p RiscMachine.RegisterFile.reset_all
-    (* match CS.eval_program (100%nat) p RiscMachine.RegisterFile.reset_all with *)
-    (* | None => Left "Execution failed" *)
-    (* | Some res => Right res *)
-    (* end *)
   end.
 
 Example test_INop :
@@ -86,7 +50,6 @@ Example test_INop :
   test [Intermediate.Machine.INop] = Right (E0,(mem,pc,gen_regs)).
 Proof.  
   compute. eauto. Qed.
-(* Compute (test [Intermediate.Machine.INop]). *)
 
 Example test_IConst :
   exists (pc : RiscMachine.address)
@@ -98,7 +61,6 @@ Example test_IConst :
 .
 Proof.  
   compute. eauto. Qed.
-(* Compute (test [Intermediate.Machine.IConst (IInt 5%Z) R_AUX1 ]). *)
 
 Example test_IMov :
   exists (pc : RiscMachine.address)
@@ -113,8 +75,6 @@ Example test_IMov :
    
 Proof.  
   compute. eauto. Qed.
-(* Compute (test [Intermediate.Machine.IConst (IInt 5%Z) R_AUX1 *)
-(*                ;Intermediate.Machine.IMov R_AUX1 R_AUX2]). *)
 
 Example test_IStore :
   exists (pc : RiscMachine.address)
@@ -131,9 +91,6 @@ Example test_IStore :
     Right (E0,(mem,pc,gen_regs)).   
 Proof.  
   compute. eauto. Qed.
-(* Compute (test [Intermediate.Machine.IConst (IPtr (1%positive,1%positive,0%Z) ) R_AUX1 *)
-(*                ; Intermediate.Machine.IConst (IInt 5%Z) R_AUX2 *)
-(*                ; Intermediate.Machine.IStore R_AUX1 R_AUX2]). *)
 
 Example test_ILoad :
   exists (pc : RiscMachine.address)
@@ -153,12 +110,6 @@ Example test_ILoad :
     Right (E0,(mem,pc,gen_regs)).   
 Proof.  
   compute. eauto. Qed.
-(* Compute (test [Intermediate.Machine.IConst (IPtr (1%positive,1%positive,0%Z) ) R_AUX1 *)
-(*                ; Intermediate.Machine.IConst (IInt 5%Z) R_AUX2 *)
-(*                ; Intermediate.Machine.IStore R_AUX1 R_AUX2 *)
-(*                ; Intermediate.Machine.IMov R_AUX1 R_AUX2 *)
-(*                ; Intermediate.Machine.ILoad R_AUX2 R_AUX1 *)
-(*         ]). *)
 
 Example test_IBnz :
   exists (pc : RiscMachine.address)
@@ -177,14 +128,6 @@ Example test_IBnz :
     Right (E0,(mem,pc,gen_regs)).   
 Proof.  
   compute. eauto. Qed.
-(* Compute (test [Intermediate.Machine.ILabel 7%positive *)
-(*                ;Intermediate.Machine.IConst (IPtr (1%positive,1%positive,0%Z) ) R_AUX1 *)
-(*                ; Intermediate.Machine.IConst (IInt 5%Z) R_AUX2 *)
-(*                ; Intermediate.Machine.IStore R_AUX1 R_AUX2 *)
-(*                ; Intermediate.Machine.IMov R_AUX1 R_AUX2 *)
-(*                ; Intermediate.Machine.ILoad R_AUX2 R_AUX1 *)
-(*                ; Intermediate.Machine.IConst (IInt 0%Z) R_AUX1 *)
-(*                ;Intermediate.Machine.IBnz R_AUX1 7%positive]). *)
 
 Example test_IAlloc_Initial_Value :
   exists (pc : RiscMachine.address)
@@ -231,5 +174,3 @@ Example test_IAlloc1 :
 Proof.  
   compute. eauto. Qed.
 
-
-                                    

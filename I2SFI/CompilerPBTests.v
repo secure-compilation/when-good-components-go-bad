@@ -202,7 +202,7 @@ Definition gen_program_interface (cids : list Component.id) : G Program.interfac
 
 Definition gen_buffers (cids : list Component.id) : G (PMap.t (list (Block.id * nat))) :=
   let gen_n_buffers : G (list (Block.id * nat)) :=
-      do! n <- arbitrary; 
+      do! n <- choose (1%nat,5%nat); 
         let ids := pos_list n in
         do! sizes <- vectorOf n (choose (1%nat, N.to_nat (SFI.SLOT_SIZE-1)%N));
           returnGen (List.combine ids sizes) in
@@ -314,7 +314,11 @@ Section CodeGeneration.
           returnGen (ICall cid' pid')
       end
     end.
-                                                            
+
+  Definition genIJal : G instr :=
+    do! l <- choose_pos (1%positive,20%positive);
+      returnGen (IJal l).
+  
   Definition genIBnz (first_label : positive) (lbl : positive) : G instr :=
     do! r <- arbitrary;
       if (Pos.ltb first_label (lbl+3))%positive
@@ -328,18 +332,23 @@ Section CodeGeneration.
   Definition genILabel (lbl : positive) : G instr :=
     returnGen (ILabel lbl).
 
+
+  Definition delared_labels_in_proc (proc : code) :=
+     List.map (fun i =>
+                 match i with
+                 | ILabel l => l
+                 | _ => 1%positive (* this is not happening *)
+                 end
+              )
+              (List.filter (fun i => match i with
+                                  | ILabel _ => true
+                                  | _ => false
+                                  end ) proc ).
+  
+  
   Definition gen_procedure (next_label : positive) : G code :=
     let get_missing_labels proc :=
-        let decl := List.map (fun i =>
-                                match i with
-                                | ILabel l => l
-                                | _ => 1%positive (* this is not happening *)
-                                end
-                             )
-                             (List.filter (fun i => match i with
-                                                 | ILabel _ => true
-                                                 | _ => false
-                                                 end ) proc ) in
+        let decl := delared_labels_in_proc proc in
         let uses :=  List.map (fun i =>
                                 match i with
                                 | IBnz _ l => l
@@ -365,8 +374,8 @@ Section CodeGeneration.
           ; (4%nat, gen2Reg ILoad)
           ; (4%nat, gen2Reg IStore)
           ; (4%nat, genIBnz first_label next_label)
-          ; (4%nat, genIJump)
-          (* ; (4%nat, genIJal) *)
+          ; (2%nat, genIJump)
+          ; (2%nat, genIJal)
           ; (4%nat, genICall)
           ; (4%nat, gen2Reg IAlloc)
           ; (1%nat, (returnGen IHalt))
@@ -414,8 +423,36 @@ Definition gen_procs (pi : Program.interface) (buffers : PMap.t (list (Block.id 
              (fun acc pid =>
                 do! proc <- gen_procedure pi cid ((max_label acc) + 1)%positive;
                 returnGen (PMap.add pid proc acc)
-             ) (Component.export comp_interface) (PMap.empty code));       
-       returnGen (PMap.add cid proc_map acc)
+             ) (Component.export comp_interface) (PMap.empty code));
+         (* check add labels as needed for IJal *)
+         let all_decl_labels := List.fold_left
+                                  (fun acc elt => (acc ++ elt)%list )
+                                  (List.map (fun p => delared_labels_in_proc (snd p)) (PMap.elements proc_map))
+                                  (@nil positive) in
+         let uses := List.fold_left
+                       (fun acc elt => (acc ++ elt)%list )
+                       (List.map (fun p => 
+                                    List.map (fun i =>
+                                                match i with
+                                                | IJal l => l
+                                                | _ => 1%positive (* this is not happening *)
+                                                end
+                                             )
+                                             (List.filter (fun i => match i with
+                                                                 | IJal _  => true
+                                                                 | _ => false
+                                                                 end ) (snd p) )) (PMap.elements proc_map))
+                       (@nil positive) in
+         let lbls := List.nodup label_eq_dec
+                                (List.filter (fun l => Nat.eqb 0%nat (List.count_occ label_eq_dec all_decl_labels l))
+                                             uses) in
+         (* TODO do something smarter *)
+         match PMap.elements proc_map with
+         | nil => returnGen (PMap.add cid proc_map acc)
+         | (pid,code)::_ => returnGen (PMap.add cid
+                                               (PMap.add pid ((List.map (fun l => ILabel l) lbls)++code)%list proc_map) 
+                                               acc)
+         end        
     ) (PMap.elements pi)
     (PMap.empty (PMap.t code))
 .
