@@ -650,7 +650,7 @@ Module SFI.
                 (List.seq 0 n)).
     
     Definition initial_allocator_value (n:nat) : RiscMachine.value :=
-      Z.of_nat (n+1).
+      Z.of_nat n.
 
   End Allocator.
 

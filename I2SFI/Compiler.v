@@ -350,50 +350,49 @@ Definition compile_IAlloc (rp : Intermediate.Machine.register)
     (* # save register r₂ at location (s=1,c,o=1) *)
     (*   Const r₁ <- Address of (s=1,cid,o=1)  *)
       AbstractMachine.IConst (RiscMachine.to_value (SFI.address_of cid 1%N 1%N))
-                             RiscMachine.Register.R_AUX1
+                             r1
       (*   Store *r₁ <- r₂ *)
-      ; AbstractMachine.IStore RiscMachine.Register.R_AUX1 RiscMachine.Register.R_AUX2
+      ; AbstractMachine.IStore r1 r2
       (*   Const r₂ <- Address of (s=1,cid,o=0)  *)
       ; AbstractMachine.IConst (RiscMachine.to_value (SFI.address_of cid 1%N 0%N))
-                             RiscMachine.Register.R_AUX2
+                             r2
       (*   Load *r₂ -> r₁ *)
-      ; AbstractMachine.ILoad  RiscMachine.Register.R_AUX2  RiscMachine.Register.R_AUX1
+      ; AbstractMachine.ILoad r2  r1
                              
       (*   Const r₂ <- 1 *)
-      ; AbstractMachine.IConst (1%Z) RiscMachine.Register.R_AUX2
+      ; AbstractMachine.IConst (1%Z) r2
 
       (*   Binop r₁ <- r₁ + r₂ *)
-      ; AbstractMachine.IBinOp (RiscMachine.ISA.Addition) RiscMachine.Register.R_AUX1
-                               RiscMachine.Register.R_AUX2 RiscMachine.Register.R_AUX1
+      ; AbstractMachine.IBinOp (RiscMachine.ISA.Addition) r1  r2  r1
                              
       (*   Const r₂ <- Address of (s=1,cid,o=0)  *)
       ; AbstractMachine.IConst (RiscMachine.to_value (SFI.address_of cid 1%N 0%N))
-                             RiscMachine.Register.R_AUX2
+                             r2
       (*   Store *r₂ <- r₁ *)
-      ; AbstractMachine.IStore RiscMachine.Register.R_AUX2 RiscMachine.Register.R_AUX1
+      ; AbstractMachine.IStore r2  r1
     
-      (*   Const r₂ <- 1 *)
-      ; AbstractMachine.IConst (1%Z) RiscMachine.Register.R_AUX2
+      (* (*   Const r₂ <- 1 *) *)
+      (* ; AbstractMachine.IConst (1%Z) r2 *)
 
-      (*   Binop r₁ <- r₁ - r₂ *)
-      ;  AbstractMachine.IBinOp (RiscMachine.ISA.Subtraction) RiscMachine.Register.R_AUX1
-                               RiscMachine.Register.R_AUX2 RiscMachine.Register.R_AUX1
+      (* (*   Binop r₁ <- r₁ - r₂ *) *)
+      (* ;  AbstractMachine.IBinOp (RiscMachine.ISA.Subtraction) r1  r2  r1 *)
+                              
       (* # calculate address (s=2*k+1,c,o=0) in r₁ *)      
       (*   Const r₂ <- N+S+1 *)
       ; AbstractMachine.IConst (RiscMachine.to_value (SFI.OFFSET_BITS_NO + SFI.COMP_BITS_NO + 1%N))
-                           RiscMachine.Register.R_AUX2
+                           r2
       (*   Binop r₁ <- r₁ << r₂ # k shift left (N+S+1) *)
-      ; AbstractMachine.IBinOp (RiscMachine.ISA.ShiftLeft) RiscMachine.Register.R_AUX1
-                             RiscMachine.Register.R_AUX2 RiscMachine.Register.R_AUX1
+      ; AbstractMachine.IBinOp (RiscMachine.ISA.ShiftLeft) r1  r2  r1
+                             
       (*   Binop r₁ <- r₁ |  r_or_data_mask  *)
-      ;  AbstractMachine.IBinOp (RiscMachine.ISA.BitwiseOr) RiscMachine.Register.R_AUX1
-                             RiscMachine.Register.R_OR_DATA_MASK RiscMachine.Register.R_AUX1
+      ;  AbstractMachine.IBinOp (RiscMachine.ISA.BitwiseOr) r1
+                             RiscMachine.Register.R_OR_DATA_MASK r1
       (* # restore r₂ *)
       (*   Const r₂ <- Address of (s=1,cid,o=1)  *)
       ; AbstractMachine.IConst (RiscMachine.to_value (SFI.address_of cid 1%N 1%N))
-                               RiscMachine.Register.R_AUX1
+                               r2
       (*   Load *r₂ -> r₂ *)
-      ;  AbstractMachine.ILoad  RiscMachine.Register.R_AUX2  RiscMachine.Register.R_AUX2
+      ;  AbstractMachine.ILoad  r2  r2
                                
     ].
 
@@ -719,10 +718,16 @@ Definition generate_comp0_memory (main : Component.id * Procedure.id)
   let mem3 := RiscMachine.Memory.set_instr
                 mem2
                 (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 3)
-                (RiscMachine.ISA.IJal main_address) in
-  ret (RiscMachine.Memory.set_instr
+                (RiscMachine.ISA.IConst
+                   1%Z
+                   RiscMachine.Register.R_ONE) in
+  let mem4 := RiscMachine.Memory.set_instr
                 mem3
                 (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 4)
+                (RiscMachine.ISA.IJal main_address) in
+  ret (RiscMachine.Memory.set_instr
+                mem4
+                (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 5)
                 (RiscMachine.ISA.IHalt)).
 
 

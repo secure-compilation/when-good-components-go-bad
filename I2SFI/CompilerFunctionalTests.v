@@ -186,5 +186,50 @@ Proof.
 (*                ; Intermediate.Machine.IConst (IInt 0%Z) R_AUX1 *)
 (*                ;Intermediate.Machine.IBnz R_AUX1 7%positive]). *)
 
+Example test_IAlloc_Initial_Value :
+  exists (pc : RiscMachine.address)
+    (mem : RiscMachine.Memory.t) 
+    (gen_regs : RiscMachine.RegisterFile.t),
+    test [
+        Intermediate.Machine.INop
+      ] =
+    Right (E0,(mem,pc,gen_regs)) /\
+    (*  expect cid=1 slot=1 offset=0 has value 1 *)    
+    ((RiscMachine.Memory.get_value mem (SFI.address_of 1%N 1%N 0%N))
+     = Some 1).
+Proof.  
+  compute. eauto. Qed.
+
+
+Example test_Alloc :
+  exists (pc : RiscMachine.address)
+    (mem : RiscMachine.Memory.t) 
+    (gen_regs : RiscMachine.RegisterFile.t),
+    test [
+        Intermediate.Machine.IAlloc R_AUX1 R_AUX2
+      ] =
+    Right (E0,(mem,pc,gen_regs))
+    /\ ((RiscMachine.Memory.get_value mem (SFI.address_of 1%N 1%N 0%N))
+     = Some 2) 
+.
+Proof.  
+  compute. eauto. Qed.
+
+
+Example test_IAlloc1 :
+  exists (pc : RiscMachine.address)
+    (mem : RiscMachine.Memory.t) 
+    (gen_regs : RiscMachine.RegisterFile.t),
+    test [
+        Intermediate.Machine.IAlloc R_AUX1 R_AUX2
+        ; Intermediate.Machine.IConst (IInt 5%Z) R_AUX2
+        ; Intermediate.Machine.IStore R_AUX1 R_AUX2
+         ] =
+    Right (E0,(mem,pc,gen_regs)) 
+    /\ ((RiscMachine.Memory.get_value mem (SFI.address_of 1%N 5%N 0%N)) = Some 5%Z)
+.
+Proof.  
+  compute. eauto. Qed.
+
 
                                     
