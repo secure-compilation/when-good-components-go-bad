@@ -35,16 +35,18 @@ Section Definability.
         ECall C1    P2    3 C2
         ECall C2    mainP 4 mainC
 
-      we would produce the context
+      we would produce the context *)
 
-        C1 {
+  (**   C1 {
           P1() {
             if (local[1] == 0) {
               local[1]++;
               C2.P2(1);
+              C1.P1(0);
             } else if (local[1] == 1) {
               local[1]++;
               C2.P2(3);
+              C1.P1(0);
             } else {
               exit();
             }
@@ -59,14 +61,19 @@ Section Definability.
             } else if (local[1] == 1) {
               local[1]++;
               mainC.mainP(4);
+              C2.P2(0);
             } else {
               exit();
             }
           }
-        }
+        } *)
 
-     To build a context in this way, we traverse the trace of events while
-     keeping track of the following data:
+   (** Notice that each branch that performs call performs a recursive call at
+       the end.  This is needed to trigger multiple events from a single
+       function.
+
+       To build a context as above, we traverse the trace of events while
+       keeping track of the following data:
 
    *)
 
@@ -186,14 +193,17 @@ Section Definability.
   (** After we apply update_state to all the events in the trace,
       linearize_instructions converts the representation of each procedure into
       the chain of if statements depicted above. *)
-  Definition linearize_instructions (instrs: list (Z * expr)) : expr :=
+  Definition linearize_instructions
+    (C: Component.id)
+    (P: Procedure.id)
+    (instrs: list (Z * expr)) : expr :=
     let one := E_val (Int 1%Z) in
     let count := E_binop Add E_local one in
     let add_instruction p e :=
         let '(pos, instr) := p in
         E_if (E_binop Eq count (E_val (Int pos)))
              (E_seq (E_assign count (E_binop Add (E_deref count) one))
-                    instr)
+                    (E_seq instr (E_call C P one)))
              e in
     fold_right add_instruction E_exit instrs.
 
@@ -201,9 +211,9 @@ Section Definability.
   Definition build_context (t: trace) :=
     let 'State cur_proc callers procs :=
         fold_left update_state t initial_state in
-    PMap.map (fun p =>
-                let '(count, comp_procs) := p in
-                PMap.map linearize_instructions comp_procs) procs.
+    PMap.mapi (fun C p =>
+                 let '(count, comp_procs) := p in
+                 PMap.mapi (linearize_instructions C) comp_procs) procs.
 
   Theorem context_definability:
     forall t beh,
