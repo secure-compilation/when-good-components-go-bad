@@ -7,3 +7,4 @@ TargetSFI/MachineFunctionalTests.v
 
 I2SFI/CompilerPBTests.v
 I2SFI/CompilerFunctionalTests.v
+I2SFI/CompilerIntegrationTests.v
