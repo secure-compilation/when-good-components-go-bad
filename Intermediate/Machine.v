@@ -89,21 +89,6 @@ Module EntryPoint.
     | Some addrs => PMap.find P addrs
     | None => None
     end.
-
-  Lemma get_on_compatible_entrypoints :
-    forall E E' C P addrs,
-      PMap.MapsTo C addrs E ->
-      PMap.MapsTo C addrs E' ->
-      get C P E = get C P E'.
-  Proof.
-    intros E E' C P addrs HEaddrs HE'addrs.
-    unfold get.
-    rewrite PMapFacts.find_mapsto_iff in HEaddrs, HE'addrs.
-    rewrite <- HEaddrs in HE'addrs.
-    inversion HE'addrs as [HEeqE'].
-    rewrite HEeqE'.
-    reflexivity.
-  Qed.
 End EntryPoint.
 
 (* programs *)
@@ -212,6 +197,8 @@ Definition prog_eq (p1 p2: program) : Prop :=
   PMap.Equal (prog_procedures p1) (prog_procedures p2) /\
   PMap.Equal (prog_buffers p1) (prog_buffers p2) /\
   prog_main p1 = prog_main p2.
+
+(* TODO prove that prog_eq is an equivalence relation *)
 
 Definition linkable_programs (p1 p2: program) : Prop :=
   (* both programs are well-formed *)
@@ -348,79 +335,6 @@ Proof.
         rewrite PMapFacts.in_find_iff. rewrite H4. discriminate.
   + Admitted. (* This obviously isn't true for arbitrary (mainC,mainP) ! *)
 
-Import MonadNotations.
-Open Scope monad_scope.
-
-(*
-Fixpoint init_mem m bufs :=
-  match bufs with
-  | [] => m
-  | (C, Cbufs) :: bufs' =>
-    let m' := NMap.add C (ComponentMemory.prealloc Cbufs) m in
-    init_mem m' bufs'
-  end.
-
-Fixpoint init_comp_procs m E ps C Cprocs
-  : option (Memory.t * EntryPoint.t * NMap.t (NMap.t code)) :=
-  match Cprocs with
-  | [] => Some (m, E, ps)
-  | (P, bytecode) :: Cprocs' =>
-    do Cmem <- NMap.find C m;
-    let '(Cmem', b) := ComponentMemory.reserve_block Cmem in
-    let m' := NMap.add C Cmem' m in
-    let Centrypoints :=
-        match NMap.find C E with
-        | None => NMap.empty Block.id
-        | Some old_Centrypoints => old_Centrypoints
-        end in
-    let Centrypoints' := NMap.add P b Centrypoints in
-    let E' := NMap.add C Centrypoints' E in
-    let Cps :=
-        match NMap.find C ps with
-        | None => NMap.empty code
-        | Some oldCps => oldCps
-        end in
-    let Cps' := NMap.add b bytecode Cps in
-    let ps' := NMap.add C Cps' ps in
-    init_comp_procs m' E' ps' C Cprocs'
-  end.
-
-Definition init_all (p: program) :=
-  let fix init_all_procs m E ps procs :=
-      match procs with
-      | [] => Some (m, E, ps)
-      | (C, Cprocs) :: procs' =>
-        do (m', E', ps') <- init_comp_procs m E ps C (NMap.elements Cprocs);
-        init_all_procs m' E' ps' procs'
-      end
-  in
-  let m := init_mem (Memory.empty []) (NMap.elements (prog_buffers p)) in
-  init_all_procs m (NMap.empty (NMap.t Block.id)) (NMap.empty (NMap.t code))
-                 (NMap.elements (prog_procedures p)).
-
-Definition init
-           (p: program) (mainC: Component.id) (mainP: Procedure.id)
-  : option (global_env * Memory.t) :=
-  do (mem, entrypoints, procs) <- init_all p;
-  let G := {| genv_interface := prog_interface p;
-              genv_procedures := procs;
-              genv_entrypoints := entrypoints |} in
-  ret (G, mem).
-
-Definition init_genv
-           (p: program) (mainC: Component.id) (mainP: Procedure.id)
-  : option global_env :=
-  do (G, mem) <- init p mainC mainP;
-  ret G.
-
-Definition init_genv_and_state
-           (p: program) (mainC: Component.id) (mainP: Procedure.id)
-  : option (global_env * state) :=
-  do (G, mem) <- init p mainC mainP;
-  do b <- EntryPoint.get mainC mainP (genv_entrypoints G);
-  ret (G, ([], mem, Register.init, (mainC, b, 0))).
-*)
-
 Fixpoint init_component m E ps C Cprocs bufs
   : Memory.t * EntryPoint.t * PMap.t (PMap.t code) :=
   match Cprocs with
@@ -471,7 +385,5 @@ Definition init_all (p: program)
   init_all_procs (Memory.empty [])
                  (PMap.empty (PMap.t Block.id)) (PMap.empty (PMap.t code))
                  (PMap.elements (prog_procedures p)).
-
-Close Scope monad_scope.
 
 End Intermediate.

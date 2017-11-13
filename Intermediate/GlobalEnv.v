@@ -58,52 +58,96 @@ Definition find_label_in_procedure G (pc : Pointer.t) (l : label) : option Point
   | None => None
   end.
 
+Fixpoint find_label_in_component_helper
+         G (procs: list (Block.id * code))
+         (pc: Pointer.t) (l: label) : option Pointer.t :=
+  match procs with
+  | [] => None
+  | (p_block,p_code) :: procs' =>
+    match find_label_in_procedure G (Pointer.component pc, p_block, 0) l with
+    | None => find_label_in_component_helper G procs' pc l
+    | Some ptr => Some ptr
+    end
+  end.
+
 Definition find_label_in_component G (pc : Pointer.t) (l : label) : option Pointer.t :=
   match PMap.find (Pointer.component pc) (genv_procedures G) with
   | Some C_procs =>
-    let fix search ps :=
-        match ps with
-        | [] => None
-        | (p_block,p_code) :: ps' =>
-          match find_label_in_procedure G (Pointer.component pc, p_block, 0) l with
-          | None => search ps'
-          | Some ptr => Some ptr
-          end
-        end
-    in search (PMap.elements C_procs)
+    find_label_in_component_helper G
+                                   (PMap.elements C_procs)
+                                   pc l
   | None => None
   end.
 
-Lemma find_label_in_component_1:
+Lemma find_label_in_procedure_guarantees:
   forall G pc pc' l,
-    find_label_in_component G pc l = Some pc' ->
-    Pointer.component pc = Pointer.component pc'.
+    find_label_in_procedure G pc l = Some pc' ->
+    Pointer.component pc = Pointer.component pc' /\
+    Pointer.block pc = Pointer.block pc'.
 Proof.
-Admitted.
+  intros G pc pc' l Hfind.
+  unfold find_label_in_procedure in Hfind.
+  destruct (PMap.find (Pointer.component pc)
+                      (genv_procedures G)) as [procs|];
+    try discriminate.
+  destruct (PMap.find (Pointer.block pc) procs) as [code|];
+    try discriminate.
+  destruct (find_label code l) as [offset|];
+    try discriminate.
+  destruct pc'. destruct p.
+  inversion Hfind. subst.
+  split; reflexivity.
+Qed.
 
 Lemma find_label_in_procedure_1:
   forall G pc pc' l,
     find_label_in_procedure G pc l = Some pc' ->
     Pointer.component pc = Pointer.component pc'.
 Proof.
-Admitted.
+  eapply find_label_in_procedure_guarantees.
+Qed.
 
 Lemma find_label_in_procedure_2:
   forall G pc pc' l,
     find_label_in_procedure G pc l = Some pc' ->
     Pointer.block pc = Pointer.block pc'.
 Proof.
-Admitted.
+  eapply find_label_in_procedure_guarantees.
+Qed.
+
+Lemma find_label_in_component_helper_guarantees:
+  forall G procs pc pc' l,
+    find_label_in_component_helper G procs pc l = Some pc' ->
+    Pointer.component pc = Pointer.component pc'.
+Proof.
+  intros G procs pc pc' l Hfind.
+  induction procs.
+  - discriminate.
+  - simpl in *.
+    destruct a.
+    destruct (find_label_in_procedure
+                G (Pointer.component pc, i, 0) l)
+             eqn:Hfind'.
+    + apply find_label_in_procedure_1 in Hfind'.
+      simpl in *. inversion Hfind. subst. auto.
+    + apply IHprocs; auto.
+Qed.
+
+Lemma find_label_in_component_1:
+  forall G pc pc' l,
+    find_label_in_component G pc l = Some pc' ->
+    Pointer.component pc = Pointer.component pc'.
+Proof.
+  intros G pc pc' l Hfind.
+  unfold find_label_in_component in Hfind.
+  destruct (PMap.find (Pointer.component pc)
+                      (genv_procedures G)) as [procs|];
+    try discriminate.
+  eapply find_label_in_component_helper_guarantees in Hfind; auto.
+Qed.
 
 Definition init_genv (p: program) : global_env :=
   let '(m, E, ps) := init_all p in
   {| genv_interface := prog_interface p;
      genv_procedures := ps;
      genv_entrypoints := E |}.
-
-(* TODO prove the lemma, it is reasonably true *)
-Lemma init_genv_preserves_well_formedness:
-  forall p, well_formed_program p ->
-       well_formed_global_env (init_genv p).
-Proof.
-Admitted.

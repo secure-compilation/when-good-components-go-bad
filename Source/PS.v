@@ -10,6 +10,8 @@ Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
 
+Require Import Coq.Setoids.Setoid.
+
 Module PS.
 
 Import Source.
@@ -23,47 +25,83 @@ Inductive state : Type :=
 | PC : program_state -> state
 | CC : context_state -> exec_state -> state.
 
-Definition component_of_state (scs: state) : Component.id :=
-  match scs with
+Ltac unfold_state :=
+  match goal with
+  | H: state |- _ =>
+    let C := fresh "C" in
+    let pgps := fresh "pgps" in
+    let pmem := fresh "pmem" in
+    let k := fresh "k" in
+    let e := fresh "e" in
+    destruct H as [[[[[C pgps] pmem] k] e] | [[C pgps] pmem] []]
+  end.
+
+Inductive state_eq: state -> state -> Prop :=
+| program_states_eq: forall C1 pgps1 pmem1 k1 e1 C2 pgps2 pmem2 k2 e2,
+    C1 = C2 ->
+    pgps1 = pgps2 ->
+    PMap.Equal pmem1 pmem2 ->
+    k1 = k2 ->
+    e1 = e2 ->
+    state_eq (PC (C1, pgps1, pmem1, k1, e1)) (PC (C2, pgps2, pmem2, k2, e2))
+| context_state_eq: forall C1 pgps1 pmem1 C2 pgps2 pmem2,
+    C1 = C2 ->
+    pgps1 = pgps2 ->
+    PMap.Equal pmem1 pmem2 ->
+    state_eq (CC (C1, pgps1, pmem1) Normal) (CC (C2, pgps2, pmem2) Normal).
+
+Lemma state_eq_refl:
+  forall s,
+    state_eq s s.
+Proof.
+  intros; unfold_state; constructor; reflexivity.
+Qed.
+
+Lemma state_eq_sym:
+  forall s1 s2,
+    state_eq s1 s2 -> state_eq s2 s1.
+Proof.
+  intros s1 s2 H.
+  inversion H; subst;
+    constructor;
+    try reflexivity;
+    try symmetry; assumption.
+Qed.
+
+Lemma state_eq_trans:
+  forall s1 s2 s3,
+    state_eq s1 s2 -> state_eq s2 s3 -> state_eq s1 s3.
+Proof.
+  intros s1 s2 s3 H1 H2.
+  inversion H1; subst; inversion H2; subst;
+    constructor;
+    try reflexivity;
+    try etransitivity; eauto.
+Qed.
+
+Add Parametric Relation: (state) (state_eq)
+    reflexivity proved by (state_eq_refl)
+    symmetry proved by (state_eq_sym)
+    transitivity proved by (state_eq_trans)
+      as state_eq_rel.
+
+Definition component_of_state (sps: state) : Component.id :=
+  match sps with
   | PC (C, _, _, _, _) => C
   | CC (C, _, _) _     => C
   end.
-
-(** Equality on partial states uses extensional equality on maps, and Leibniz
-    equality on other components. *)
-Inductive state_eq : state -> state -> Prop :=
-| PCE C stk mem1 mem2 k e :
-  PMap.Equal mem1 mem2 ->
-  state_eq (PC (C, stk, mem1, k, e)) (PC (C, stk, mem2, k, e))
-| CCE C stk mem1 mem2 :
-  PMap.Equal mem1 mem2 ->
-  state_eq (CC (C, stk, mem1) Normal) (CC (C, stk, mem2) Normal).
-
-Instance state_eq_Equivalence : Equivalence state_eq.
-Proof.
-  constructor.
-  - intros [[[[[? ?] ?] ?] ?] | [[? ?] ?] []]; constructor;
-    reflexivity.
-  - intros sps1 sps2 H. now destruct H; constructor; symmetry.
-  - intros sps1 sps2 sps3 H1 H2.
-    destruct H1; inversion H2; subst; constructor; etransitivity; eassumption.
-Qed.
-
-Instance component_of_state_Proper : Proper (state_eq ==> eq) component_of_state.
-Proof.
-  intros sps1 sps2 H. now destruct H.
-Qed.
-
-(* TODO not sure if this Program.interface should be list Component.id *)
 
 Instance state_turn : HasTurn state := {
   turn_of s iface := PMap.In (component_of_state s) iface
 }.
 
-Module SC := Source.CS.CS.
-
 Definition is_context_component (ps: state) ctx := turn_of ps ctx.
 Definition is_program_component (ps: state) ctx := ~ is_context_component ps ctx.
+
+Ltac simplify_turn :=
+  unfold PS.is_program_component, PS.is_context_component in *;
+  unfold turn_of, PS.state_turn in *;
+  simpl in *.
 
 (* stack partialization *)
 
@@ -77,6 +115,7 @@ Definition to_partial_frame ctx frame : Component.id * option (value * CS.cont) 
 Definition to_partial_stack (s : CS.stack) (pc : list Component.id) :=
   map (to_partial_frame pc) s.
 
+(* might be useful in the future
 Lemma push_by_context_preserves_partial_stack:
   forall s ps ctx C v k,
     Util.Lists.mem C ctx = true ->
@@ -97,15 +136,12 @@ Proof.
   simpl. apply Util.Lists.not_in_iff_mem_false in Hprogturn.
   rewrite Hprogturn. rewrite Hpstack. reflexivity.
 Qed.
+*)
 
-Inductive partial_state (ctx: Program.interface) (scs: CS.state) (sps: PS.state) : Prop :=
+Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
 | ProgramControl: forall C gps pgps mem pmem k e,
-    (* related states *)
-    scs = (C, gps, mem, k, e) ->
-    sps = PC (C, pgps, pmem, k, e) ->
-
     (* program has control *)
-    is_program_component sps ctx ->
+    is_program_component (PC (C, pgps, pmem, k, e)) ctx ->
 
     (* we forget about context memories *)
     PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
@@ -113,15 +149,11 @@ Inductive partial_state (ctx: Program.interface) (scs: CS.state) (sps: PS.state)
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (map fst (PMap.elements ctx)) ->
 
-    partial_state ctx scs sps
+    partial_state ctx (C, gps, mem, k, e) (PC (C, pgps, pmem, k, e))
 
 | ContextControl_Normal: forall C gps pgps mem pmem k e,
-    (* related states *)
-    scs = (C, gps, mem, k, e) ->
-    sps = CC (C, pgps, pmem) Normal ->
-
     (* context has control *)
-    is_context_component sps ctx ->
+    is_context_component (CC (C, pgps, pmem) Normal) ctx ->
 
     (* we forget about context memories *)
     PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
@@ -129,7 +161,7 @@ Inductive partial_state (ctx: Program.interface) (scs: CS.state) (sps: PS.state)
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (map fst (PMap.elements ctx)) ->
 
-    partial_state ctx scs sps.
+    partial_state ctx (C, gps, mem, k, e) (CC (C, pgps, pmem) Normal).
 
 Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
   let '(C, gps, mem, k, e) := scs in
@@ -141,6 +173,7 @@ Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
 Lemma partial_state_partialize ctx scs sps :
   partial_state ctx scs sps <-> state_eq sps (partialize ctx scs).
 Proof.
+  (*
   split.
   - intros H.
     destruct H as [C gps pgps mem pmem k e ? ? Hcomp Hmem ?
@@ -161,235 +194,51 @@ Proof.
     + inversion Hpart; subst C' gps mem2.
       now econstructor; eauto.
 Qed.
+   *)
+Admitted.
 
 Theorem partial_state_preserves_turn_of:
   forall psi cs ps,
     partial_state psi cs ps -> (turn_of ps psi <-> turn_of cs psi).
 Proof.
+  (*
   intros psi scs sps H. simpl.
   apply partial_state_partialize in H.
   destruct scs as [[[[C gps] mem] k] e].
   rewrite H. simpl.
   now destruct (PMapFacts.In_dec _ _).
 Qed.
+   *)
+Admitted.
+
+(* transition system *)
 
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | initial_state_intro: forall scs sps,
     partial_state ctx scs sps ->
-    SC.initial_state p scs ->
+    CS.initial_state p scs ->
     initial_state p ctx sps.
 
 Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | final_state_intro: forall scs sps,
     ~ turn_of sps ctx ->
     partial_state ctx scs sps ->
-    SC.final_state scs->
+    CS.final_state scs->
     final_state p ctx sps
 | final_state_context: forall sps,
     turn_of sps ctx ->
     final_state p ctx sps.
 
-(* small-step semantics *)
-
-Inductive kstep (ctx: Program.interface) (G: global_env) (sps: state) (t: trace) (sps': state) : Prop :=
-| Program_Epsilon:
-    forall scs scs' ps ps',
-      (* state transition *)
-      sps = PC ps ->
-      sps' = PC ps' ->
-      t = E0 ->
-
-      (* conditions *)
-      CS.kstep G scs E0 scs' ->
+Inductive kstep (ctx: Program.interface) (G: global_env)
+  : state -> trace -> state -> Prop :=
+| partial_step:
+    forall sps t sps' scs scs',
+      CS.kstep G scs t scs' ->
       partial_state ctx scs sps ->
       partial_state ctx scs' sps' ->
-
-      kstep ctx G sps t sps'
-
-| Program_Internal_Call:
-   forall C s s' mem mem' k k' kont e e' C' P v C'_procs P_expr b b' old_call_arg,
-     (* state transition *)
-     sps = PC (C, s, mem, k, e) ->
-     sps' = PC (C', s', mem', k', e') ->
-     t = [ECall C P v C'] ->
-
-     (* conditions *)
-     e = E_val (Int v) ->
-     k = Kcall C' P kont ->
-     is_program_component sps ctx ->
-     is_program_component sps' ctx ->
-     C' <> C ->
-     imported_procedure (genv_interface G) C C' P ->
-     PMap.find C' (genv_procedures G) = Some C'_procs ->
-     PMap.find P C'_procs = Some P_expr ->
-     PMap.find C (genv_buffers G) = Some b ->
-     Memory.load mem (C, b, 0) = Some old_call_arg ->
-     PMap.find C' (genv_buffers G) = Some b' ->
-
-     (* updates *)
-     s' = (C, Some (old_call_arg, kont)) :: s ->
-     Memory.store mem (C', b', 0) (Int v) = Some mem' ->
-     k' = Kstop ->
-     e' = P_expr ->
-
-     kstep ctx G sps t sps'
-
-| Program_Internal_Return:
-    forall C s s' srest mem mem' k k' kont e e' v C' old_call_arg b,
-      (* state transition *)
-      sps = PC (C, s, mem, k, e) ->
-      sps' = PC (C', s', mem', k', e') ->
-      t = [ERet C v C'] ->
-
-      (* conditions *)
-      e = E_val (Int v) ->
-      k = Kstop ->
-      s = (C', Some (old_call_arg, kont)) :: srest ->
-      is_program_component sps ctx ->
-      is_program_component sps' ctx ->
-      C' <> C ->
-      PMap.find C' (genv_buffers G) = Some b ->
-      Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
-
-      (* updates *)
-      s' = srest ->
-      k' = kont ->
-      e' = E_val (Int v) ->
-
-      kstep ctx G sps t sps'
-
-| Program_External_Call:
-    forall C s s' mem k kont e C' P v b old_call_arg,
-      (* state transition *)
-      sps = PC (C, s, mem, k, e) ->
-      sps' = CC (C', s', mem) Normal ->
-      t = [ECall C P v C'] ->
-
-      (* conditions *)
-      e = E_val (Int v) ->
-      k = Kcall C' P kont ->
-      is_program_component sps ctx ->
-      is_context_component sps' ctx ->
-     imported_procedure (genv_interface G) C C' P ->
-      PMap.find C (genv_buffers G) = Some b ->
-      Memory.load mem (C, b, 0) = Some old_call_arg ->
-
-      (* updates *)
-      s' = (C, Some (old_call_arg,kont)) :: s ->
-
-      kstep ctx G sps t sps'
-
-| Program_External_Return:
-    forall C s s' srest mem k e v C',
-      (* state transition *)
-      sps = PC (C, s, mem, k, e) ->
-      sps' = CC (C', s', mem) Normal ->
-      t = [ERet C v C'] ->
-
-      (* conditions *)
-      e = E_val (Int v) ->
-      k = Kstop ->
-      s = (C', None) :: srest ->
-      is_program_component sps ctx ->
-      is_context_component sps' ctx ->
-
-      (* updates *)
-      s' = srest ->
-
-      kstep ctx G sps t sps'
-
-| Context_Epsilon:
-    forall s mem C,
-      (* state transition *)
-      sps = CC (C, s, mem) Normal ->
-      sps' = CC (C, s, mem) Normal ->
-      t = E0 ->
-
-      (* conditions *)
-      is_context_component sps ctx ->
-      is_context_component sps' ctx ->
-
-      kstep ctx G sps t sps'
-
-| Context_Internal_Call:
-    forall s s' mem C C' P call_arg,
-      (* state transition *)
-      sps = CC (C, s, mem) Normal ->
-      sps' = CC (C', s', mem) Normal ->
-      t = [ECall C P call_arg C'] ->
-
-      (* conditions *)
-      is_context_component sps ctx ->
-      is_context_component sps' ctx ->
-      C' <> C ->
-      imported_procedure ctx C C' P ->
-
-      (* updates *)
-      s' = (C, None) :: s ->
-
-      kstep ctx G sps t sps'
-
-| Context_Internal_Return:
-    forall s s' srest mem C C' return_val,
-      (* state transition *)
-      sps = CC (C, s, mem) Normal ->
-      sps' = CC (C', s', mem) Normal ->
-      t = [ERet C return_val C'] ->
-
-      (* conditions *)
-      is_context_component sps ctx ->
-      is_context_component sps' ctx ->
-      s = (C', None) :: srest ->
-      C' <> C ->
-
-      (* updates *)
-      s' = srest ->
-
-      kstep ctx G sps t sps'
-
-| Context_External_Call:
-    forall s s' mem mem' k' e' C C' P C'_procs P_expr b' val,
-      (* state transition *)
-      sps = CC (C, s, mem) Normal ->
-      sps' = PC (C', s', mem', k', e') ->
-      t = [ECall C P val C'] ->
-
-      (* conditions *)
-      is_context_component sps ctx ->
-      is_program_component sps' ctx ->
-      imported_procedure ctx C C' P ->
-      PMap.find C' (genv_procedures G) = Some C'_procs ->
-      PMap.find P C'_procs = Some P_expr ->
-      PMap.find C' (genv_buffers G) = Some b' ->
-
-      (* updates *)
-      s' = (C, None) :: s ->
-      Memory.store mem (C', b', 0) (Int val) = Some mem' ->
-      k' = Kstop ->
-      e' = P_expr ->
-
-      kstep ctx G sps t sps'
-
-| Context_External_Return:
-    forall C s s' srest mem mem' kont k' e' v C' old_call_arg b,
-      (* state transition *)
-      sps =  CC (C, s, mem) Normal ->
-      sps' = PC (C', s', mem', k', e') ->
-      t = [ERet C v C'] ->
-
-      (* conditions *)
-      is_context_component sps ctx ->
-      is_program_component sps' ctx ->
-      s = (C', Some (old_call_arg, kont)) :: srest ->
-      PMap.find C' (genv_buffers G) = Some b ->
-
-      (* updates *)
-      s' = srest ->
-      Memory.store mem (C', b, 0) old_call_arg = Some mem' ->
-      k' = kont ->
-      e' = E_val (Int v) ->
-
       kstep ctx G sps t sps'.
+
+(* partial semantics *)
 
 Section Semantics.
   Variable p: program.

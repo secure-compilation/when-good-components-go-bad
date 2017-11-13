@@ -9,6 +9,8 @@ Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
 Require Import Lib.Monads.
 
+Require Import Coq.Setoids.Setoid.
+
 Import Source.
 
 Inductive cont : Type :=
@@ -26,7 +28,65 @@ Inductive cont : Type :=
 Module CS.
 
 Definition stack : Type := list (Component.id * value * cont).
+
 Definition state : Type := Component.id * stack * Memory.t * cont * expr.
+
+Ltac unfold_state :=
+  match goal with
+  | H: state |- _ =>
+    let C := fresh "C" in
+    let s := fresh "s" in
+    let mem := fresh "mem" in
+    let k := fresh "k" in
+    let e := fresh "e" in
+    destruct H as [[[[C s] mem] k] e]
+  end.
+
+Inductive state_eq : state -> state -> Prop :=
+| state_eq_intro: forall C1 s1 mem1 k1 e1 C2 s2 mem2 k2 e2,
+    C1 = C2 ->
+    s1 = s2 ->
+    PMap.Equal mem1 mem2 ->
+    k1 = k2 ->
+    e1 = e2 ->
+    state_eq (C1, s1, mem1, k1, e1) (C2, s2, mem2, k2, e2).
+
+Lemma state_eq_refl:
+  forall s,
+    state_eq s s.
+Proof.
+  intros s.
+  unfold_state.
+  constructor; reflexivity.
+Qed.
+
+Lemma state_eq_sym:
+  forall s1 s2,
+    state_eq s1 s2 -> state_eq s2 s1.
+Proof.
+  intros s1 s2 H.
+  inversion H; subst.
+  constructor;
+    try reflexivity;
+    try symmetry; assumption.
+Qed.
+
+Lemma state_eq_trans:
+  forall s1 s2 s3,
+    state_eq s1 s2 -> state_eq s2 s3 -> state_eq s1 s3.
+Proof.
+  intros s1 s2 s3 H1 H2.
+  inversion H1; subst; inversion H2; subst;
+    constructor;
+    try reflexivity;
+    try etransitivity; eauto.
+Qed.
+
+Add Parametric Relation: (state) (state_eq)
+    reflexivity proved by (state_eq_refl)
+    symmetry proved by (state_eq_sym)
+    transitivity proved by (state_eq_trans)
+      as state_eq_rel.
 
 Instance state_turn : HasTurn state := {
   turn_of s iface :=
@@ -34,19 +94,26 @@ Instance state_turn : HasTurn state := {
     PMap.In C iface
 }.
 
+(* transition system *)
+
 Definition initial_state (p: program) (st: state) : Prop :=
   let '(C, s, mem, k, e) := st in
+
   (* the executing component is the main one *)
   C = fst (prog_main p) /\
+
   (* the stack is empty *)
   s = [] /\
+
   (* mem exactly contains all components memories and it comes from the init routine *)
   (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
   (let '(_, m) := init_all p in mem = m) /\
+
   (* the expression under evaluation is the main procedure *)
   (exists main_procs,
       PMap.find (fst (prog_main p)) (prog_procedures p) = Some main_procs /\
       PMap.find (snd (prog_main p)) main_procs = Some e) /\
+
   (* the continuation is stop *)
   k = Kstop.
 
@@ -108,8 +175,8 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     kstep G (C, s, mem, k, E_deref e)
           t (C, s, mem, Kderef k, e)
 | KS_DerefEval : forall C s mem k C' b' o' v,
+    C = C' ->
     Memory.load mem (C',b',o') = Some v ->
-    (* TODO fix the read value in the event *)
     let t := E0 in
     kstep G (C, s, mem, Kderef k, E_val (Ptr (C',b',o')))
           t (C, s, mem, k, E_val v)
@@ -210,9 +277,11 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kderef k' =>
       match v with
       | Ptr (C',b',o') =>
-        do v <- Memory.load mem (C',b',o');
-        let t := E0 in
-        ret (t, (C, s, mem, k', E_val v))
+        if Pos.eqb C C' then
+          do v <- Memory.load mem (C',b',o');
+          ret (E0, (C, s, mem, k', E_val v))
+        else
+          None
       | _ => None
       end
     | Kassign1 e1 k' =>
@@ -288,17 +357,6 @@ Close Scope monad_scope.
 
 (* Semantics Properties *)
 
-Ltac unfold_state :=
-  match goal with
-  | H: state |- _ =>
-    let C := fresh "C" in
-    let s := fresh "s" in
-    let mem := fresh "mem" in
-    let k := fresh "k" in
-    let e := fresh "e" in
-    destruct H as [[[[C s] mem] k] e]
-  end.
-
 Theorem eval_kstep_complete:
   forall G st t st',
     kstep G st t st' -> eval_kstep G st = Some (t, st').
@@ -315,6 +373,11 @@ Proof.
   - assert (Hsize: (size >=? 0) = true). { destruct size; auto. }
     rewrite Hsize.
     rewrite H0. reflexivity.
+  - rewrite Pos.eqb_refl.
+    repeat simplify_option.
+    + unfold Memory.load in *. rewrite Heqo0, H1 in H0. inversion H0.
+      reflexivity.
+    + unfold Memory.load in *. rewrite Heqo in H0. discriminate.
   - rewrite Pos.eqb_refl.
     repeat simplify_option.
     + unfold Memory.store in *. rewrite Heqo0, Heqo in H0. inversion H0.
@@ -366,9 +429,10 @@ Proof.
       * unfold Z.geb in Heqb. simpl in Heqb. discriminate.
       * auto.
     + econstructor; eauto.
-      unfold Memory.load.
-      rewrite Heqo1.
-      eauto.
+      * apply Pos.eqb_eq; auto.
+      * unfold Memory.load.
+        rewrite Heqo1.
+        eauto.
     + econstructor.
     + econstructor; eauto.
       * rewrite <- Pos.eqb_eq. auto.
