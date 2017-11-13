@@ -8,28 +8,32 @@ Require Import Common.Definitions.
 Require Import Intermediate.Machine.
 Require Import TargetSFI.Machine.
 
-Definition label :Set := Component.id*positive.
+Definition label :Set := Component.id*N.
 
-Definition register := RiscMachine.Register.t.
+(*Definition register := RiscMachine.Register.t.*)
 
 Inductive ainstr :=
 | INop : ainstr
 | ILabel : label -> ainstr
 (* register operations *)
-| IConst : RiscMachine.value -> register -> ainstr
-| IMov : register -> register -> ainstr
-| IBinOp : RiscMachine.ISA.binop -> register -> register -> register -> ainstr
+| IConst : RiscMachine.value -> RiscMachine.Register.t -> ainstr
+| IMov : RiscMachine.Register.t -> RiscMachine.Register.t -> ainstr
+| IBinOp : RiscMachine.ISA.binop -> RiscMachine.Register.t ->
+           RiscMachine.Register.t -> RiscMachine.Register.t -> ainstr
 (* memory operations *)
-| ILoad : register -> register -> ainstr
-| IStore : register -> register -> ainstr
+| ILoad : RiscMachine.Register.t -> RiscMachine.Register.t -> ainstr
+| IStore : RiscMachine.Register.t -> RiscMachine.Register.t -> ainstr
 (* conditional and unconditional jumps *)
-| IBnz : register -> label -> ainstr
-| IJump : register -> ainstr
+| IBnz : RiscMachine.Register.t -> label -> ainstr
+| IJump : RiscMachine.Register.t -> ainstr
 | IJal : label -> ainstr
 (* termination *)
 | IHalt : ainstr.
 
 Definition code := list ainstr.
+
+Definition lcode : Set := list ((option (list AbstractMachine.label)) *
+                                AbstractMachine.ainstr).
 
 Definition map_register (reg : Intermediate.Machine.register) : RiscMachine.Register.t :=
   match reg with
@@ -50,11 +54,7 @@ Definition map_binop (op : Common.Values.binop) : RiscMachine.ISA.binop :=
   | Leq => RiscMachine.ISA.Leq
   end.
 
-Record abstract_program :=
-  {
-    cn : Env.CN;
-    data_mem : RiscMachine.Memory.t;
-    prog_code : PMap.t (PMap.t code);
-    prog_interface : Program.interface;
-    prog_main : Component.id * Procedure.id
-  }.
+Definition label_eqb (l1 l2 : label) :=
+  let '(c1,i1) := l1 in
+  let '(c2,i2) := l2 in
+  (Pos.eqb c1 c2) && (N.eqb i1 i2).

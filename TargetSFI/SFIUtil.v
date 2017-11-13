@@ -14,7 +14,7 @@ Module ListUtil.
     match (pos,l) with
     | (O, x::_) => Some x
     | (_,nil) => None
-    | (pos',_::ls) => get pos' ls
+    | (S pos',_::ls) => get pos' ls
     end.
 
   (* TODO: I would like to avoid passing eqb *)

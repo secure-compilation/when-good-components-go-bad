@@ -16,7 +16,7 @@ Module Procedure.
   Definition id := positive.
 
   Definition eqb (id1 id2 : id) := Pos.eqb id1 id2.
-    
+
 End Procedure.
 
 Module Component.
@@ -98,3 +98,10 @@ Proof.
       apply Nat.neq_0_lt_0 in Hcount.
       unfold gt. eauto.
 Qed.
+
+Class HasTurn A := {
+  turn_of : A -> Program.interface -> Prop
+}.
+
+(* AAA: Are we still going to use this? If not, we should remove it. *)
+Inductive exec_state : Type := Normal. (*| WentWrong.*)

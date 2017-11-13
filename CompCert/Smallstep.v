@@ -408,7 +408,7 @@ Record semantics : Type := Semantics_gen {
   genvtype: Type;
   step : genvtype -> state -> trace -> state -> Prop;
   initial_state: state -> Prop;
-  final_state: state -> int -> Prop;
+  final_state: state (* -> int *) -> Prop;
   globalenv: genvtype;
 }.
 
@@ -433,8 +433,8 @@ Record fsim_properties (L1 L2: semantics) (index: Type)
       forall s1, initial_state L1 s1 ->
       exists i, exists s2, initial_state L2 s2 /\ match_states i s1 s2;
     fsim_match_final_states:
-      forall i s1 s2 r,
-      match_states i s1 s2 -> final_state L1 s1 r -> final_state L2 s2 r;
+      forall i s1 s2 (* r *),
+      match_states i s1 s2 -> final_state L1 s1 (* r *) -> final_state L2 s2 (* r *);
     fsim_simulation:
       forall s1 t s1', Step L1 s1 t s1' ->
       forall i s2, match_states i s1 s2 ->
@@ -486,10 +486,10 @@ Hypothesis match_initial_states:
   exists s2, initial_state L2 s2 /\ match_states s1 s2.
 
 Hypothesis match_final_states:
-  forall s1 s2 r,
+  forall s1 s2 (* r *),
   match_states s1 s2 ->
-  final_state L1 s1 r ->
-  final_state L2 s2 r.
+  final_state L1 s1 (* r *) ->
+  final_state L2 s2 (* r *).
 
 (** Simulation when one transition in the first program
     corresponds to zero, one or several transitions in the second program.
@@ -751,10 +751,10 @@ Record determinate (L: semantics) : Prop :=
       single_events L;
     sd_initial_determ: forall s1 s2,
       initial_state L s1 -> initial_state L s2 -> s1 = s2;
-    sd_final_nostep: forall s r,
-      final_state L s r -> Nostep L s;
-    sd_final_determ: forall s r1 r2,
-      final_state L s r1 -> final_state L s r2 -> r1 = r2
+    sd_final_nostep: forall s (* r *),
+      final_state L s (* r *)  -> Nostep L s;
+(*     sd_final_determ: forall s r1 r2,
+      final_state L s r1 -> final_state L s r2 -> r1 = r2  *)
   }.
 
 Section DETERMINACY.
@@ -804,7 +804,8 @@ End DETERMINACY.
 Definition safe (L: semantics) (s: state L) : Prop :=
   forall s',
   Star L s E0 s' ->
-  (exists r, final_state L s' r)
+  (* (exists r, final_state L s' r) *)
+  final_state L s'
   \/ (exists t, exists s'', Step L s' t s'').
 
 Lemma star_safe:
@@ -826,13 +827,14 @@ Record bsim_properties (L1 L2: semantics) (index: Type)
       forall s1 s2, initial_state L1 s1 -> initial_state L2 s2 ->
       exists i, exists s1', initial_state L1 s1' /\ match_states i s1' s2;
     bsim_match_final_states:
-      forall i s1 s2 r,
-      match_states i s1 s2 -> safe L1 s1 -> final_state L2 s2 r ->
-      exists s1', Star L1 s1 E0 s1' /\ final_state L1 s1' r;
+      forall i s1 s2 (* r *),
+      match_states i s1 s2 -> safe L1 s1 -> final_state L2 s2 (* r *) ->
+      exists s1', Star L1 s1 E0 s1' /\ final_state L1 s1' (* r *);
     bsim_progress:
       forall i s1 s2,
       match_states i s1 s2 -> safe L1 s1 ->
-      (exists r, final_state L2 s2 r) \/
+      (* (exists r, final_state L2 s2 r  ) \/ *)
+      final_state L2 s2 \/ 
       (exists t, exists s2', Step L2 s2 t s2');
     bsim_simulation:
       forall s2 t s2', Step L2 s2 t s2' ->
@@ -888,13 +890,14 @@ Hypothesis match_initial_states:
   exists s1', initial_state L1 s1' /\ match_states s1' s2.
 
 Hypothesis match_final_states:
-  forall s1 s2 r,
-  match_states s1 s2 -> final_state L2 s2 r -> final_state L1 s1 r.
+  forall s1 s2 (* r  *),
+  match_states s1 s2 -> final_state L2 s2 (* r *) -> final_state L1 s1 (* r *).
 
 Hypothesis progress:
   forall s1 s2,
   match_states s1 s2 -> safe L1 s1 ->
-  (exists r, final_state L2 s2 r) \/
+  (* (exists r, final_state L2 s2 r) \/ *)
+  final_state L2 s2 \/
   (exists t, exists s2', Step L2 s2 t s2').
 
 Section BACKWARD_SIMULATION_PLUS.
@@ -1110,7 +1113,7 @@ Proof.
   exploit (bsim_match_initial_states props); eauto. intros [i1 [s1' [INIT1' M1]]].
   exists (i1, i2); exists s1'; intuition auto. eapply bb_match_at; eauto.
 - (* match final states *)
-  intros i s1 s3 r MS SAFE FIN. inv MS.
+  intros i s1 s3 (* r *) MS SAFE FIN. inv MS.
   exploit (bsim_match_final_states props'); eauto.
     eapply star_safe; eauto. eapply bsim_safe; eauto.
   intros [s2' [A B]].
@@ -1137,10 +1140,10 @@ Hypothesis L2_determinate: determinate L2.
 (** Exploiting forward simulation *)
 
 Inductive f2b_transitions: state L1 -> state L2 -> Prop :=
-  | f2b_trans_final: forall s1 s2 s1' r,
+  | f2b_trans_final: forall s1 s2 s1' (* r *),
       Star L1 s1 E0 s1' ->
-      final_state L1 s1' r ->
-      final_state L2 s2 r ->
+      final_state L1 s1' (* r *) ->
+      final_state L2 s2 (* r *) ->
       f2b_transitions s1 s2
   | f2b_trans_step: forall s1 s2 s1' t s1'' s2' i' i'',
       Star L1 s1 E0 s1' ->
@@ -1156,7 +1159,7 @@ Proof.
   intros i0; pattern i0. apply well_founded_ind with (R := order).
   eapply fsim_order_wf; eauto.
   intros i REC s1 s2 MATCH SAFE.
-  destruct (SAFE s1) as [[r FINAL] | [t [s1' STEP1]]]. apply star_refl.
+  destruct (SAFE s1) as [FINAL | [t [s1' STEP1]]]. apply star_refl.
 - (* final state reached *)
   eapply f2b_trans_final; eauto.
   apply star_refl.
@@ -1401,7 +1404,7 @@ Proof.
 - (* final states *)
   intros. inv H.
   exploit f2b_progress; eauto. intros TRANS; inv TRANS.
-  assert (r0 = r) by (eapply (sd_final_determ L2_determinate); eauto). subst r0.
+  (* assert (r0 = r) by (eapply (sd_final_determ L2_determinate); eauto). subst r0. *)
   exists s1'; auto.
   inv H4. exploit (sd_final_nostep L2_determinate); eauto. contradiction.
   inv H5. congruence. exploit (sd_final_nostep L2_determinate); eauto. contradiction.
@@ -1409,7 +1412,7 @@ Proof.
 - (* progress *)
   intros. inv H.
   exploit f2b_progress; eauto. intros TRANS; inv TRANS.
-  left; exists r; auto.
+  left; (* exists r; *) auto.
   inv H3. right; econstructor; econstructor; eauto.
   inv H4. congruence. right; econstructor; econstructor; eauto.
   inv H1. right; econstructor; econstructor; eauto.

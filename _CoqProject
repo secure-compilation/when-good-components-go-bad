@@ -23,10 +23,12 @@ Source/PS.v
 Source/Definability.v
 Source/Examples.v
 
+S2I/Definitions.v
 S2I/CompMonad.v
 S2I/Compiler.v
 S2I/Correctness.v
 S2I/Example.v
+S2I/PartialForward.v
 
 Intermediate/Machine.v
 Intermediate/GlobalEnv.v
@@ -36,10 +38,12 @@ Intermediate/Decomposition.v
 
 Common/Rc.v
 
+TargetSFI/EitherMonad.v
+TargetSFI/StateMonad.v
 TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
 TargetSFI/CS.v
 
+
 I2SFI/AbstractMachine.v
-I2SFI/CompMonad.v
 I2SFI/Compiler.v

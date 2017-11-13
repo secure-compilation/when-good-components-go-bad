@@ -115,6 +115,9 @@ Record program := {
   prog_main : Component.id * Procedure.id
 }.
 
+Definition single_component (p: program) : Prop :=
+  PMap.cardinal (prog_interface p) = 1%nat.
+
 (* well-formedness of programs *)
 
 Definition well_formed_instruction

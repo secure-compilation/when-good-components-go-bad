@@ -22,271 +22,301 @@ Definition context_state : Type := Component.id * stack * Memory.t.
 
 Inductive state : Type :=
 | PC : program_state -> state
-| CC : context_state -> exec_state -> state
-with exec_state : Type := Normal | WentWrong.
+| CC : context_state -> exec_state -> state.
 
-Definition is_program_component G C := PMap.In C (genv_interface G).
-Definition is_context_component (ctx: Program.interface) C := PMap.In C ctx.
+Instance state_turn : HasTurn state := {
+  turn_of s iface :=
+    match s with
+    | PC (_, _, _, pc) => PMap.In (Pointer.component pc) iface
+    | CC (C, _, _) _ => PMap.In C iface
+    end
+}.
+
+Definition is_context_component (ps: state) ctx := turn_of ps ctx.
+Definition is_program_component (ps: state) ctx := ~ is_context_component ps ctx.
 
 Module IC := Intermediate.CS.CS.
 
 (* stack partialization *)
 
-Definition to_partial_frame pc frame : PartialPointer.t :=
+Definition to_partial_frame ctx frame : PartialPointer.t :=
   let '(C, b, o) := frame in
-  if Util.Lists.mem C pc then
-    (C, Some (b, o))
+  if Util.Lists.mem C ctx then
+    (C, None)
   else
-    (C, None).
+    (C, Some (b, o)).
 
 Definition to_partial_stack (s : CS.stack) (pc : list Component.id) :=
   map (to_partial_frame pc) s.
 
-Lemma push_by_prog_preserves_partial_stack:
-  forall s ps pc C b o,
-    Util.Lists.mem C pc = true ->
-    to_partial_stack s pc = ps ->
-    to_partial_stack ((C,b,o)::s) pc = (C,Some (b,o)) :: ps.
+Lemma push_by_context_preserves_partial_stack:
+  forall s ps ctx C b o,
+    Util.Lists.mem C ctx = true ->
+    to_partial_stack s ctx = ps ->
+    to_partial_stack ((C,b,o)::s) ctx = (C,None) :: ps.
 Proof.
-  intros s ps pc C b o Hprogturn H.
+  intros s ps ctx C b o Hprogturn H.
   simpl. rewrite Hprogturn. rewrite H. reflexivity.
 Qed.
 
-Lemma push_by_context_preserves_partial_stack:
-  forall s ps pc C b o,
-    ~ (In C pc) ->
-    to_partial_stack s pc = ps ->
-    to_partial_stack ((C,b,o)::s) pc = (C,None) :: ps.
+Lemma push_by_prog_preserves_partial_stack:
+  forall s ps ctx C b o,
+    ~ (In C ctx) ->
+    to_partial_stack s ctx = ps ->
+    to_partial_stack ((C,b,o)::s) ctx = (C,Some (b,o)) :: ps.
 Proof.
-  intros s ps pc C b o Hprogturn Hpstack.
+  intros s ps ctx C b o Hprogturn Hpstack.
   simpl. apply Util.Lists.not_in_iff_mem_false in Hprogturn.
   rewrite Hprogturn. rewrite Hpstack. reflexivity.
 Qed.
 
-Definition is_partial_stack (ctx: Program.interface) (s: IC.stack) (ps: stack) : Prop :=
-  ps = to_partial_stack s (map fst (PMap.elements ctx)).
-
-(* state partialization *)
-
-(* Possible problem:
-   what about went_wrong states? when the context has control, how do we map them? *)
-Definition partialize_state (ctx: Program.interface) (s: IC.state) : state :=
-  let '(gps, mem, regs, pc) := s in
-  if PMap.mem (Pointer.component pc) ctx then
-    CC (Pointer.component pc,
-        to_partial_stack gps (map fst (PMap.elements ctx)),
-        PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) Normal
-  else
-    PC (to_partial_stack gps (map fst (PMap.elements ctx)),
-        PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem,
-        regs, pc).
-
 (* predicates over states *)
 
-Inductive initial_state2 (p: program) (ctx: Program.interface): state -> Prop :=
-| initial_state_intro: forall ps cs,
-    IC.initial_state p cs /\
-    ps = partialize_state ctx cs ->
-    initial_state2 p ctx ps.
+Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
+| ProgramControl: forall ics ips gps pgps mem pmem regs pc,
+    (* related states *)
+    ics = (gps, mem, regs, pc) ->
+    ips = PC (pgps, pmem, regs, pc) ->
 
-Inductive final_state2 (ctx: Program.interface) (ps: state) (r: int) : Prop :=
-| final_state_intro: forall cs,
-    IC.final_state2 cs r ->
-    ps = partialize_state ctx cs ->
-    final_state2 ctx ps r.
+    (* program has control *)
+    is_program_component ips ctx ->
 
-Definition initial_state
-           (p: program) (ctx: Program.interface)
-           (s: state) : Prop :=
-  let G := init_genv p in
-  match s with
-  | PC (gps, mem, regs, pc) =>
-    (* the global protected stack is empty *)
-    gps = [] /\
-    (* mem exaclty contains all components memories and it comes from the init routine *)
-    (forall C, is_program_component G C <-> PMap.In C mem) /\
-    (let '(m, _, _) := init_all p in mem = m) /\
-    (* the origin register (R_AUX2) is set to 1 (meaning external call) *)
-    (* the R_ONE register is set to 1 *)
-    (* the other registers are set to undef *)
-    regs = [Int 1; Undef; Undef; Undef; Int 1; Undef; Undef] /\
-    (* the program counter is pointing to the start of the main procedure *)
-    is_program_component G (Pointer.component pc) /\
-    Pointer.component pc = fst (prog_main p) /\
-    EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
-                   (genv_entrypoints G) = Some (Pointer.block pc) /\
-    Pointer.offset pc = 0
-  | CC (C, pgps, mem) execst =>
-    (* the global protected stack is empty *)
-    pgps = [] /\
-    (* mem exaclty contains all program components memories *)
-    (forall C, is_program_component G C <-> PMap.In C mem) /\
-    (let '(m, _, _) := init_all p in mem = m) /\
-    (* the executing component is the main one *)
-    is_context_component ctx C /\
-    C = fst (prog_main p) /\
-    (* the execution didn't go wrong *)
-    execst = Normal
-  end.
+    (* we forget about context memories *)
+    PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
 
-(* maybe check whether mem is sound and pc & C are in the program or the context *)
-Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
-  match s with
-  | PC (gps, mem, regs, pc) =>
-    Register.get R_COM regs = Int (Z.of_nat r) /\
-    executing G pc IHalt
-  | CC (pgps, mem, C) execst =>
-    execst = Normal
-  end.
+    (* we put holes in place of context information in the stack *)
+    pgps = to_partial_stack gps (map fst (PMap.elements ctx)) ->
+
+    partial_state ctx ics ips
+
+| ContextControl_Normal: forall ics ips gps pgps mem pmem regs pc,
+    (* related states *)
+    ics = (gps, mem, regs, pc) ->
+    ips = CC (Pointer.component pc, pgps, pmem) Normal ->
+
+    (* context has control *)
+    is_context_component ips ctx ->
+
+    (* we forget about context memories *)
+    PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+
+    (* we put holes in place of context information in the stack *)
+    pgps = to_partial_stack gps (map fst (PMap.elements ctx)) ->
+
+    partial_state ctx ics ips.
+
+Lemma partial_state_preserves_turn_of:
+  forall psi cs ps,
+    partial_state psi cs ps -> (turn_of ps psi <-> turn_of cs psi).
+Proof.
+Admitted.
+
+Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
+| initial_state_intro: forall ics ips,
+    partial_state ctx ics ips ->
+    IC.initial_state p ics ->
+    initial_state p ctx ips.
+
+Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
+| final_state_program: forall ics ips,
+    ~ turn_of ips ctx ->
+    partial_state ctx ics ips ->
+    IC.final_state (init_genv p) ics ->
+    final_state p ctx ips
+| final_state_context: forall ips,
+    turn_of ips ctx ->
+    final_state p ctx ips.
 
 Inductive step (ctx: Program.interface) (G : global_env) : state -> trace -> state -> Prop :=
 | Program_Epsilon:
-    forall G' pgps (mem mem' wmem wmem' : Memory.t) Cmem'
-      (regs regs' : Register.t) (pc pc' : Pointer.t),
+    forall ips t ips' ics ics' ps ps',
+      (* states transition *)
+      ips = PC ps ->
+      ips' = PC ps' ->
+      t = E0 ->
 
-      (* G' is an extension of G w.r.t. ctx *)
-      (* 1) the interface is G plus ctx *)
-      PMap.Equal (genv_interface G') (PMapExtra.update (genv_interface G) ctx) ->
-      (* 2) the procedures are the same of G plus some new ones for ctx *)
-      (forall C Cprocs, PMap.MapsTo C Cprocs (genv_procedures G') <->
-                   (PMap.MapsTo C Cprocs (genv_procedures G) \/
-                    (PMap.In C ctx /\ ~ PMap.In C (genv_procedures G)))) ->
-      (* 3) the entrypoints are the same of G plus some new ones for ctx *)
-      (forall C Centrypoints, PMap.MapsTo C Centrypoints (genv_entrypoints G') <->
-                         (PMap.MapsTo C Centrypoints (genv_entrypoints G) \/
-                          (PMap.In C ctx /\ ~ PMap.In C (genv_entrypoints G)))) ->
+      (* conditions *)
+      CS.step G ics E0 ics' ->
+      partial_state ctx ics ips ->
+      partial_state ctx ics' ips' ->
 
-      (* wmem is an extension of mem w.r.t. ctx *)
-      (* 1) wmem contains mem *)
-      (forall C Cmem, PMap.MapsTo C Cmem mem -> PMap.MapsTo C Cmem wmem) ->
-      (* 2) wmem has the context components memories *)
-      (forall C, is_context_component ctx C -> PMap.In C wmem) ->
-      (* 3) wmem extends mem exactly w.r.t. ctx *)
-      (forall C Cmem, PMap.MapsTo C Cmem wmem <->
-                 (PMap.MapsTo C Cmem mem \/
-                  (is_context_component ctx C /\ ~ PMap.In C mem))) ->
-
-      (* the complete semantics steps silently with the extended versions of
-         memory and global environment
-         NOTE that the stack (gps) is not related to the partial one (pgps) *)
-      (exists gps, CS.step G' (gps,wmem,regs,pc) E0 (gps,wmem',regs',pc')) ->
-
-      (* mem' is mem with the updated version of the current
-         executing component's memory *)
-      PMap.MapsTo (Pointer.component pc') Cmem' wmem' ->
-      PMap.Equal mem' (PMap.add (Pointer.component pc') Cmem' mem) ->
-
-      step ctx G (PC (pgps,mem,regs,pc)) E0 (PC (pgps,mem',regs',pc'))
+      step ctx G ips t ips'
 
 | Program_Internal_Call:
-    forall pgps pgps' mem regs b o pc C' P val,
+    forall ips t ips' pgps pgps' mem regs regs' b pc C' P val,
+      (* states transition *)
+      ips = PC (pgps, mem, regs, pc) ->
+      ips' = PC (pgps', mem, regs', (C', b, 0)) ->
+      t = [ECall (Pointer.component pc) P val C'] ->
+
+      (* conditions *)
       executing G pc (ICall C' P) ->
-      let C := Pointer.component pc in
-      C' <> C ->
-      imported_procedure (genv_interface G) C C' P ->
-      is_program_component G C' ->
-      pgps' = (C, Some (b, o)) :: pgps ->
-      EntryPoint.get C' P (genv_entrypoints G) = Some b ->
+      is_program_component ips ctx ->
+      is_program_component ips' ctx ->
+      C' <> Pointer.component pc ->
+      imported_procedure (genv_interface G) (Pointer.component pc) C' P ->
       Register.get R_COM regs = Int val ->
-      let pc' := (C', b, 0) in
-      let t := [ECall C P val C'] in
-      step ctx G (PC (pgps,mem,regs,pc)) t (PC (pgps',mem,Register.invalidate regs,pc'))
+      EntryPoint.get C' P (genv_entrypoints G) = Some b ->
+
+      (* updates *)
+      pgps' = (Pointer.component pc, Some (Pointer.block pc,
+                                           Pointer.offset (Pointer.inc pc))) :: pgps ->
+      regs' = Register.invalidate regs ->
+
+      step ctx G ips t ips'
 
 | Program_Internal_Return:
-    forall pgps pgps' mem regs pc pc' C' b o val,
-      let C := Pointer.component pc in
+    forall ips t ips' pgps pgps' mem regs regs' pc C' b o val,
+      (* states transition *)
+      ips = PC (pgps, mem, regs, pc) ->
+      ips' = PC (pgps', mem, regs', (C', b, o)) ->
+      t = [ERet (Pointer.component pc) val C'] ->
+
+      (* conditions *)
       executing G pc IReturn ->
-      pgps = (C', Some (b,o)) :: pgps' ->
-      C' <> C ->
-      is_program_component G C' ->
+      is_program_component ips ctx ->
+      is_program_component ips' ctx ->
+      C' <> Pointer.component pc ->
       Register.get R_COM regs = Int val ->
-      let t := [ERet C val C'] in
-      step ctx G (PC (pgps,mem,regs,pc)) t (PC (pgps',mem,Register.invalidate regs,pc'))
+
+      (* updates *)
+      pgps = (C', Some (b, o)) :: pgps' ->
+      regs' = Register.invalidate regs ->
+
+      step ctx G ips t ips'
 
 | Program_External_Call:
-    forall pgps pgps' mem regs pc C' b o P val,
-      let C := Pointer.component pc in
+    forall ips t ips' pgps pgps' mem regs pc C' P val,
+      (* states transition *)
+      ips = PC (pgps, mem, regs, pc) ->
+      ips' = CC (C', pgps', mem) Normal ->
+      t = [ECall (Pointer.component pc) P val C'] ->
+
+      (* conditions *)
       executing G pc (ICall C' P) ->
-      C' <> C ->
-      imported_procedure (genv_interface G) C C' P ->
-      is_context_component ctx C' ->
-      pgps' = (C, Some (b,o)) :: pgps ->
+      is_program_component ips ctx ->
+      is_context_component ips' ctx ->
+      imported_procedure (genv_interface G) (Pointer.component pc) C' P ->
       Register.get R_COM regs = Int val ->
-      (* TODO fix the read value in the event *)
-      let t := [ECall C P val C'] in
-      step ctx G (PC (pgps,mem,regs,pc)) t (CC (C',pgps',mem) Normal)
+
+      (* updates *)
+      pgps' = (Pointer.component pc, Some (Pointer.block pc,
+                                           Pointer.offset (Pointer.inc pc))) :: pgps ->
+
+      step ctx G ips t ips'
 
 | Program_External_Return:
-    forall pgps pgps' mem regs pc C' val,
-      let C := Pointer.component pc in
+    forall ips t ips' pgps pgps' mem regs pc C' val,
+      (* states transition *)
+      ips = PC (pgps, mem, regs, pc) ->
+      ips' = CC (C', pgps', mem) Normal ->
+      t = [ERet (Pointer.component pc) val C'] ->
+
+      (* conditions *)
       executing G pc IReturn ->
-      C' <> C ->
-      is_context_component ctx C' ->
-      pgps = (C', None) :: pgps' ->
+      is_program_component ips ctx ->
+      is_context_component ips' ctx ->
+
+      (* extra information *)
       Register.get R_COM regs = Int val ->
-      (* TODO fix the read value in the event *)
-      let t := [ERet C val C'] in
-      step ctx G (PC (pgps,mem,regs,pc)) t (CC (C',pgps',mem) Normal)
 
+      (* updates *)
+      pgps = (C', None) :: pgps' ->
+
+      step ctx G ips t ips'
+
+(* does this rule create problems? e.g. w.r.t. the anti-stuttering measure *)
 | Context_Epsilon:
-    forall pgps mem C,
-      step ctx G (CC (pgps,mem,C) Normal) E0 (CC (pgps,mem,C) Normal)
+    forall ips t ips' pgps mem C,
+      (* states transition *)
+      ips = CC (C, pgps, mem) Normal ->
+      ips' = CC (C, pgps, mem) Normal ->
+      t = E0 ->
 
-| Context_GoesWrong:
-    forall pgps mem C,
-      step ctx G (CC (pgps,mem,C) Normal) E0 (CC (pgps,mem,C) WentWrong)
+      (* conditions *)
+      is_context_component ips ctx ->
+      is_context_component ips' ctx ->
+
+      step ctx G ips t ips'
 
 | Context_Internal_Call:
-    forall pgps pgps' mem C C' P call_arg,
+    forall ips t ips' pgps pgps' mem C C' P call_arg,
+      (* states transition *)
+      ips = CC (C, pgps, mem) Normal ->
+      ips' = CC (C', pgps', mem) Normal ->
+      t = [ECall C P call_arg C'] ->
+
+      (* conditions *)
+      is_context_component ips ctx ->
+      is_context_component ips' ctx ->
       C' <> C ->
       imported_procedure ctx C C' P ->
-      is_context_component ctx C' ->
+
+      (* updates *)
       pgps' = (C, None) :: pgps ->
-      let t := [ECall C P call_arg C'] in
-      step ctx G (CC (C,pgps,mem) Normal) t (CC (C',pgps',mem) Normal)
+
+      step ctx G ips t ips'
 
 | Context_Internal_Return:
-    forall pgps pgps' mem C C' return_val,
+    forall ips t ips' pgps pgps' mem C C' return_val,
+      (* states transition *)
+      ips = CC (C, pgps, mem) Normal ->
+      ips' = CC (C', pgps', mem) Normal ->
+      t = [ERet C return_val C'] ->
+
+      (* conditions *)
+      is_context_component ips ctx ->
+      is_context_component ips' ctx ->
       C' <> C ->
-      is_context_component ctx C' ->
+
+      (* updates *)
       pgps = (C', None) :: pgps' ->
-      let t := [ERet C return_val C'] in
-      step ctx G (CC (C,pgps,mem) Normal) t (CC (C',pgps',mem) Normal)
+
+      step ctx G ips t ips'
 
 | Context_External_Call:
-    forall pgps pgps' mem regs C C' P b val,
-      C' <> C ->
+    forall ips t ips' pgps pgps' mem regs pc' C C' P b val,
+      (* states transition *)
+      ips = CC (C, pgps, mem) Normal ->
+      ips' = PC (pgps', mem, regs, pc') ->
+      t = [ECall C P val C'] ->
+
+      (* conditions *)
+      is_context_component ips ctx ->
+      is_program_component ips' ctx ->
       imported_procedure ctx C C' P ->
-      is_program_component G C' ->
-      pgps' = (C, None) :: pgps ->
-      EntryPoint.get C' P (genv_entrypoints G) = Some b ->
       Register.get R_COM regs = Int val ->
-      let t := [ECall C P val C'] in
-      let pc' := (C', b, 0) in
-      step ctx G (CC (C,pgps,mem) Normal) t (PC (pgps',mem,regs,pc'))
+      EntryPoint.get C' P (genv_entrypoints G) = Some b ->
+
+      (* updates *)
+      pgps' = (C, None) :: pgps ->
+      pc' = (C', b, 0) ->
+
+      step ctx G ips t ips'
 
 | Context_External_Return:
-    forall pgps pgps' mem regs C C' b o val,
-      pgps = (C', Some (b,o)) :: pgps' ->
-      is_program_component G C' ->
-      Register.get R_COM regs = Int val ->
-      let t := [ERet C val C'] in
-      step ctx G (CC (C,pgps,mem) Normal) t (PC (pgps',mem,regs, (C',b,o))).
+    forall ips t ips' pgps pgps' mem regs pc' C C' b o val,
+      (* states transition *)
+      ips = CC (C, pgps, mem) Normal ->
+      ips' = PC (pgps', mem, regs, pc') ->
+      t = [ERet C val C'] ->
 
-Definition partialize (p: program) (ctx: Program.interface) : program :=
-  {| prog_interface :=
-       PMapExtra.diff (prog_interface p) ctx;
-     prog_procedures :=
-       PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) (prog_procedures p);
-     prog_buffers :=
-       PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) (prog_buffers p);
-     prog_main := prog_main p |}.
+      (* conditions *)
+      is_context_component ips ctx ->
+      is_program_component ips' ctx ->
+      Register.get R_COM regs = Int val ->
+
+      (* updates *)
+      pgps = (C', Some (b, o)) :: pgps' ->
+      pc' = (C', b, o) ->
+
+      step ctx G ips t ips'.
 
 Section Semantics.
   Variable p: program.
   Variable ctx: Program.interface.
 
-  Let G := init_genv (partialize p ctx).
+  Let G := init_genv p.
 
   Hypothesis valid_program:
     well_formed_program p.
@@ -300,7 +330,7 @@ Section Semantics.
 
   Definition sem :=
     @Semantics_gen state global_env (step ctx)
-                   (initial_state (partialize p ctx) ctx)
-                   (final_state G) G.
+                   (initial_state p ctx)
+                   (final_state p ctx) G.
 End Semantics.
 End PS.

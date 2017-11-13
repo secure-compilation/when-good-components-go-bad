@@ -16,30 +16,32 @@ Definition stack : Type := list Pointer.t.
 
 Definition state : Type := stack * Memory.t * Register.t * Pointer.t.
 
+Instance state_turn : HasTurn state := {
+  turn_of s iface :=
+    let '(_, _, _, pc) := s in
+    PMap.In (Pointer.component pc) iface
+}.
+
 Definition initial_state (p: program) (s: state) : Prop :=
   let G := init_genv p in
   let '(gps, mem, regs, pc) := s in
+
   (* the global protected stack is empty *)
   gps = [] /\
+
   (* mem exactly contains all components memories and it comes from the init routine *)
   (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
   (let '(m, _, _) := init_all p in mem = m) /\
-  (* the origin register (R_AUX2) is set to 1 (meaning external call) *)
-  (* the R_ONE register is set to 1 *)
-  (* the other registers are set to undef *)
-  regs = [Int 1; Undef; Undef; Undef; Int 1; Undef] /\
+  (* the registers are set to undef *)
+  regs = [Undef; Undef; Undef; Undef; Undef; Undef] /\
   (* the program counter is pointing to the start of the main procedure *)
   Pointer.component pc = fst (prog_main p) /\
   EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
                  (genv_entrypoints G) = Some (Pointer.block pc) /\
   Pointer.offset pc = 0.
 
-(* TODO these are here to make work Cbs.match_final_states that has a problem with int/nat *)
-Axiom final_state2: state -> int -> Prop.
-
-Definition final_state (G: global_env) (s: state) (r: nat) : Prop :=
+Definition final_state (G: global_env) (s: state) : Prop :=
   let '(gsp, mem, regs, pc) := s in
-  Register.get R_COM regs = Int (Z.of_nat r) /\
   executing G pc IHalt.
 
 Inductive step (G : global_env) : state -> trace -> state -> Prop :=
@@ -121,7 +123,6 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     gps' = Pointer.inc pc :: gps ->
     EntryPoint.get C' P (genv_entrypoints G) = Some b ->
     let pc' := (C', b, 0) in
-    (* TODO fix the read value in the event *)
     Register.get R_COM regs = Int rcomval ->
     let t := [ECall (Pointer.component pc) P rcomval C'] in
     step G (gps, mem, regs, pc) t (gps', mem, Register.invalidate regs, pc')
@@ -130,7 +131,6 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     executing G pc IReturn ->
     gps = pc' :: gps' ->
     Pointer.component pc <> Pointer.component pc' ->
-    (* TODO fix the read value in the event *)
     Register.get R_COM regs = Int rcomval ->
     let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
     step G (gps, mem, regs, pc) t (gps', mem, Register.invalidate regs, pc').
@@ -365,12 +365,12 @@ Proof.
   intros G st t st' Heval_step.
   repeat unfold_state.
   destruct (PMap.find (Pointer.component pc0) (genv_procedures G))
-    as [C_procs | ?] eqn:HC_procs.
+    as [C_procs | ] eqn:HC_procs.
   - destruct (PMap.find (Pointer.block pc0) C_procs)
-      as [P_code | ?] eqn:HP_code.
+      as [P_code | ] eqn:HP_code.
     + destruct (Pointer.offset pc0 >=? 0) eqn:Hpc.
       * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
-          as [instr | ?] eqn:Hinstr.
+          as [instr | ] eqn:Hinstr.
         (* case analysis on the fetched instruction *)
         ** assert (Pointer.offset pc0 <? 0 = false). {
              destruct (Pointer.offset pc0); auto.
@@ -504,7 +504,7 @@ Proof.
            rewrite HC_procs, HP_code, Hinstr in Heval_step.
            destruct (Pointer.offset pc0 <? 0); discriminate.
       * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
-          as [instr | ?] eqn:Hinstr.
+          as [instr | ] eqn:Hinstr.
         ** simpl in Heval_step.
            unfold code in *.
            rewrite HC_procs, HP_code, Hinstr in Heval_step.
@@ -643,15 +643,14 @@ Section Semantics.
   Qed.
 
   Lemma final_states_stuckness:
-    forall s r,
-      final_state G s r ->
+    forall s,
+      final_state G s ->
       nostep step G s.
   Proof.
-    intros s r Hs_final.
+    intros s Hs_final.
     unfold nostep.
     unfold_state.
     unfold final_state in Hs_final.
-    destruct Hs_final as [Hres Hexec].
     intros t s'. unfold not. intro Hstep.
     inversion Hstep; subst;
     try (match goal with
@@ -665,21 +664,6 @@ Section Semantics.
          end).
   Qed.
 
-  Lemma final_states_uniqueness:
-    forall s r1 r2,
-      final_state G s r1 ->
-      final_state G s r2 -> r1 = r2.
-  Proof.
-    unfold final_state.
-    intros s r1 r2 Hs_final1 Hs_final2.
-    unfold_state.
-    destruct Hs_final1 as [Hres1 Hexec1].
-    destruct Hs_final2 as [Hres2 Hexec2].
-    rewrite Hres1 in Hres2.
-    inversion Hres2.
-    omega.
-  Qed.
-
   Lemma determinacy:
     determinate sem.
   Proof.
@@ -688,7 +672,6 @@ Section Semantics.
     - apply singleton_traces.
     - apply determinate_initial_states.
     - apply final_states_stuckness.
-    - apply final_states_uniqueness.
   Qed.
 End Semantics.
 End CS.
