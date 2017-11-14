@@ -2,11 +2,11 @@
 -R . RobustImp
 
 Common/Definitions.v
-Common/Util.v
-Common/Linking.v
 Common/Values.v
 Common/Maps.v
+Common/Util.v
 Common/Memory.v
+Common/Linking.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
@@ -16,19 +16,27 @@ CompCert/Events.v
 Lib/Tactics.v
 Lib/Monads.v
 
-Source/GlobalEnv.v
+Extraction/Definitions.v
+
 Source/Language.v
+Source/GlobalEnv.v
 Source/CS.v
 Source/PS.v
 Source/Definability.v
-Source/Examples.v
+Source/Examples/Helper.v
+Source/Examples/Identity.v
+Source/Examples/Increment.v
+Source/Examples/Factorial.v
 
 S2I/Definitions.v
 S2I/CompMonad.v
 S2I/Compiler.v
 S2I/Correctness.v
-S2I/Example.v
 S2I/PartialForward.v
+S2I/Examples/Helper.v
+S2I/Examples/Identity.v
+S2I/Examples/Increment.v
+S2I/Examples/Factorial.v
 
 Intermediate/Machine.v
 Intermediate/GlobalEnv.v
@@ -43,7 +51,6 @@ TargetSFI/StateMonad.v
 TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
 TargetSFI/CS.v
-
 
 I2SFI/AbstractMachine.v
 I2SFI/Compiler.v

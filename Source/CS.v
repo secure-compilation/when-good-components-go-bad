@@ -259,14 +259,16 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
 
 Hint Unfold eval_kstep.
 
-Definition init (p: program) : option (global_env * state) :=
+Definition init (p: program) (input: value) : option (global_env * state) :=
   do procs <- PMap.find (fst (prog_main p)) (prog_procedures p);
   do main <- PMap.find (snd (prog_main p)) procs;
   let '(bufs, mem) := init_all p in
   let G := {| genv_interface := prog_interface p;
               genv_procedures := prog_procedures p;
               genv_buffers := bufs |} in
-  ret (G, (fst (prog_main p), [], mem, Kstop, main)).
+  do local_buf <- PMap.find (fst (prog_main p)) bufs;
+  do mem' <- Memory.store mem (fst (prog_main p), local_buf, 0) input;
+  ret (G, (fst (prog_main p), [], mem', Kstop, main)).
 
 Fixpoint execN (n: nat) (G: global_env) (st: state) : option state :=
   match n with
@@ -279,7 +281,7 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option state :=
   end.
 
 Definition run (p: program) (input: value) (fuel: nat) : option state :=
-  do (G, st) <- init p;
+  do (G, st) <- init p input;
   execN fuel G st.
 
 Close Scope monad_scope.

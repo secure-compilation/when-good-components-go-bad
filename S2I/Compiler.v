@@ -192,7 +192,6 @@ Fixpoint compile_expr (e: expr) : COMP code :=
   | E_exit => ret [IHalt]
   end.
 
-
 Definition compile_proc (P: Procedure.id) (e: expr)
   : COMP code :=
   do proc_label <- find_proc_label P;
@@ -200,7 +199,7 @@ Definition compile_proc (P: Procedure.id) (e: expr)
   do lreturn <- fresh_label;
   do proc_code <- compile_expr e;
   (* TODO compute stack size *)
-  let stack_frame_size := 10 in
+  let stack_frame_size := 20 in
   ret ([IConst (IInt 1) R_ONE;
         IJal proc_label;
         IReturn;
@@ -313,7 +312,7 @@ Definition wrap_main (procs_labels: PMap.t (PMap.t label)) (p: Intermediate.prog
   let P' := generate_fresh_procedure_id (p.(Intermediate.prog_procedures)) in
   let iface' :=  {| Component.export := P'::iface.(Component.export);
                     Component.import := iface.(Component.import) |} in
-  let procs' := PMap.add P' [IJal lab ; IHalt] procs in
+  let procs' := PMap.add P' [IConst (IInt 1) R_ONE; IJal lab ; IHalt] procs in
   ret 
       {| Intermediate.prog_interface := PMap.add C iface' p.(Intermediate.prog_interface);
          Intermediate.prog_procedures := PMap.add C procs' p.(Intermediate.prog_procedures);

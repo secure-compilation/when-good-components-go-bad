@@ -250,13 +250,14 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
 Import MonadNotations.
 Open Scope monad_scope.
 
-Definition init_genv_and_state (p: program) : option (global_env * state) :=
+Definition init_genv_and_state (p: program) (input: value) : option (global_env * state) :=
   let '(mem, E, ps) := init_all p in
   let G := {| genv_interface := prog_interface p;
               genv_procedures := ps;
               genv_entrypoints := E |} in
   do b <- EntryPoint.get (fst (prog_main p)) (snd (prog_main p)) (genv_entrypoints G);
-  ret (G, ([], mem, Register.init, (fst (prog_main p), b, 0))).
+  let regs := Register.set R_COM input Register.init in
+  ret (G, ([], mem, regs, (fst (prog_main p), b, 0))).
 
 Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
   match n with
@@ -274,7 +275,7 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
   end.
 
 Definition run (p: program) (input: value) (fuel: nat) : option Z :=
-  do (G, st) <- init_genv_and_state p;
+  do (G, st) <- init_genv_and_state p input;
   execN fuel G st.
 
 Close Scope monad_scope.

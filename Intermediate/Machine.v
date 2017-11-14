@@ -71,7 +71,7 @@ Module Register.
     Util.Lists.update regs (to_nat r) val.
 
   Definition invalidate (regs : t) : t :=
-    [Undef; get R_COM regs; Undef; Undef; get R_RA regs; Undef].
+    [Undef; get R_COM regs; Undef; Undef; Undef; Undef].
 
   Lemma init_registers_wf:
     forall r, exists val, get r init = val.
