@@ -466,8 +466,7 @@ Definition gen_main (pi : Program.interface) : G (Component.id * Procedure.id) :
     end.
   
 
-  (* TODO implement this *)
-  Definition genIntermediateProgram : G Intermediate.program :=
+Definition genIntermediateProgram : G Intermediate.program :=
     do! n <- choose (1%nat, (N.to_nat (SFI.COMP_MAX-1)%N));
       let cids : list Component.id := pos_list n in
   
@@ -514,7 +513,9 @@ Conjecture correct_data_compartmentalized:
       (SFI.is_data_address (RiscMachine.Memory.to_address ptr)) = true
     ).
 
-    
+
+Definition FUEL := 5000%nat.
+
 (************************************************
  * No writes outside its own memory, 
  * except for push sfi.
@@ -557,7 +558,7 @@ Definition eval_store_program (p : sfi_program)
   ((CS.eval_program_with_state     
      store_log
      update_store_log
-     (100%nat)
+     FUEL
      p
      (RiscMachine.RegisterFile.reset_all)) nil).
   
@@ -632,7 +633,7 @@ Definition eval_jump_program (p : sfi_program)
   ((CS.eval_program_with_state     
      jump_log
      update_jump_log
-     (100%nat)
+     FUEL
      p
      (RiscMachine.RegisterFile.reset_all)) nil).
   
@@ -739,7 +740,7 @@ Definition eval_cs_program (p : sfi_program)
   ((CS.eval_program_with_state     
      cs_log
      update_cs_log
-     (100%nat)
+     FUEL
      p
      (RiscMachine.RegisterFile.reset_all)) nil).
   
