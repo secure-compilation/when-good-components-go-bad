@@ -192,8 +192,13 @@ Definition next_state (st : state) (iv : ivec ttypes)
   do! ov <- transfer iv;
     k ov.
 
-(* TL TODO: do I want it to be dependent? *)
-Inductive update := RegUpdt : reg mt -> word -> update.
+(* TL TODO: do I want it to be dependent? / part of ivec? *)
+Inductive update :=
+  | RegWrite : reg mt -> word -> update
+  | RegRead  : reg mt -> update
+  | MemWrite : word -> word -> update
+  | MemRead : word -> update
+.
 
 
 Definition next_state_do_update (st : state) (tk : tag_kind)
@@ -201,10 +206,22 @@ Definition next_state_do_update (st : state) (tk : tag_kind)
            (updt : update) : option state :=
   match tk return tag_type _ tk -> option state with
   | R => match updt with
-        | RegUpdt r x => fun t => do! regs' <- updm (regs st) r x@t;
-                                  Some (State (mem st) regs' (pc st) (internal st))
+        | RegWrite r x => fun t => do! regs' <- updm (regs st) r x@t;
+                               Some (State (mem st) regs' (pc st) (internal st))
+        | RegRead r => fun t => do! a <- regs st r;
+                            do! regs' <- updm (regs st) r (vala a)@t;
+                            Some (State (mem st) regs' (pc st) (internal st))
+        | _ => fun _ => None
         end
-  | _ => fun _ => None
+  | M => match updt with
+        | MemWrite w1 w2 => fun t => do! mem' <- updm (mem st) w1 w2@t;
+                                 Some (State mem' (regs st) (pc st) (internal st))
+        | MemRead w => fun t => do! a <- mem st w;
+                            do! mem' <- updm (mem st) w (vala a)@t;
+                            Some (State mem' (regs st) (pc st) (internal st))
+        | _ => fun _ => None
+        end
+  | P => fun _ => None
   end tag.
 
 
@@ -235,8 +252,9 @@ Definition next_state_updates_and_pc (st : state) (iv : @ivec ttypes)
 Definition next_state_updates (st : state) (iv : @ivec ttypes) (updts : seq update) : option state :=
   next_state_updates_and_pc st iv updts (vala (pc st)).+1.
 
-Definition next_state_pc (st : state) (iv : @ivec ttypes) (x : word) : option state :=
-  next_state_updates_and_pc st iv [:: ] x.
+(* TL TODO: no need for this, almost always an update? *)
+(* Definition next_state_pc (st : state) (iv : @ivec ttypes) (x : word) : option state := *)
+(*   next_state_updates_and_pc st iv [:: ] x. *)
 
 
 Inductive step (st st' : state) : Prop :=
@@ -245,16 +263,14 @@ Inductive step (st st' : state) : Prop :=
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Nop _)),
     let mvec := IVec NOP tpc ti [hseq] in forall
-    (NEXT : next_state_pc st mvec (pc.+1) = Some st'),    step st st'
+    (NEXT : next_state_updates st mvec [:: ] = Some st'),    step st st'
 | step_const : forall mem reg pc tpc i ti n r old (told : tag_type ttypes R) extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Const n r))
     (OLD  : reg r = Some old@told),
     let mvec := IVec CONST tpc ti [hseq told] in forall
-    (NEXT : next_state_updates st mvec [:: RegUpdt r (swcast n)] = Some st'),   step st st'
-.
-
+    (NEXT : next_state_updates st mvec [:: RegWrite r (swcast n)] = Some st'),   step st st'
 | step_mov : forall mem reg pc tpc i ti r1 w1 t1 r2 old told extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
@@ -262,7 +278,7 @@ Inductive step (st st' : state) : Prop :=
     (R1W  : reg r1 = Some w1@t1)
     (OLD  : reg r2 = Some old@told),
     let mvec := IVec MOV tpc ti [hseq t1; told] in forall
-    (NEXT : next_state_reg st mvec r2 w1 = Some st'),   step st st'
+    (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegWrite r2 w1 ] = Some st'),   step st st'
 | step_binop : forall mem reg pc tpc i ti op r1 r2 r3 w1 w2 t1 t2 old told extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
@@ -271,7 +287,7 @@ Inductive step (st st' : state) : Prop :=
     (R2W  : reg r2 = Some w2@t2)
     (OLD  : reg r3 = Some old@told),
     let mvec := IVec (BINOP op) tpc ti [hseq t1; t2; told] in forall
-    (NEXT : next_state_reg st mvec r3 (binop_denote op w1 w2) = Some st'),
+    (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegRead r2 ; RegWrite r3 (binop_denote op w1 w2) ] = Some st'),
       step st st'
 | step_load : forall mem reg pc tpc i ti r1 r2 w1 w2 t1 t2 old told extra
     (ST   : st = State mem reg pc@tpc extra)
@@ -281,7 +297,7 @@ Inductive step (st st' : state) : Prop :=
     (MEM1 : mem w1 = Some w2@t2)
     (OLD  : reg r2 = Some old@told),
     let mvec := IVec LOAD tpc ti [hseq t1; t2; told] in forall
-    (NEXT : next_state_reg st mvec r2 w2 = Some st'),    step st st'
+    (NEXT : next_state_updates st mvec [:: RegRead r1 ; MemRead w1 ; RegWrite r2 w2 ] = Some st'),    step st st'
 | step_store : forall mem reg pc i r1 r2 w1 w2 tpc ti t1 t2 old told extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
@@ -290,17 +306,14 @@ Inductive step (st st' : state) : Prop :=
     (R2W  : reg r2 = Some w2@t2)
     (OLD  : mem w1 = Some old@told),
     let mvec := IVec STORE tpc ti [hseq t1; t2; told] in forall
-    (NEXT : @next_state st mvec (fun ov =>
-                 do! mem' <- updm mem w1 w2@(tr ov);
-                 Some (State mem' reg (pc.+1)@(trpc ov) extra)) = Some st'),
-              step st st'
+    (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegRead r2 ; MemWrite w1 w2 ] = Some st'),    step st st'
 | step_jump : forall mem reg pc i r w tpc ti t1 extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Jump r))
     (RW   : reg r = Some w@t1),
     let mvec := IVec JUMP tpc ti [hseq t1] in forall
-    (NEXT : next_state_pc st mvec w = Some st'),    step st st'
+    (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] w = Some st'),    step st st'
 | step_bnz : forall mem reg pc i r n w tpc ti t1 extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
@@ -309,7 +322,7 @@ Inductive step (st st' : state) : Prop :=
      let mvec := IVec BNZ tpc ti [hseq t1] in
      let pc' := pc + (if w == 0%w
                       then 1%w else swcast n) in forall
-    (NEXT : next_state_pc st mvec pc' = Some st'),     step st st'
+    (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] pc' = Some st'),     step st st'
 | step_jal : forall mem reg pc i r w tpc ti t1 old told extra
     (ST : st = State mem reg pc@tpc extra)
     (PC : mem pc = Some i@ti)
@@ -317,7 +330,7 @@ Inductive step (st st' : state) : Prop :=
     (RW : reg r = Some w@t1)
     (OLD : reg ra = Some old@told),
      let mvec := IVec JAL tpc ti [hseq t1; told] in forall
-    (NEXT : next_state_reg_and_pc st mvec ra (pc.+1) w = Some st'), step st st'
+    (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ; RegWrite ra (pc.+1) ] w = Some st'), step st st'
 | step_syscall : forall mem reg pc sc tpc extra
     (ST : st = State mem reg pc@tpc extra)
     (PC : mem pc = None)
@@ -363,4 +376,4 @@ Arguments Symbolic.State {_ _} _ _ _ _.
 Arguments Symbolic.syscall mt {_}.
 Arguments Symbolic.syscall_table mt {_}.
 Arguments Symbolic.IVec {tty} op _ _ _.
-Arguments Symbolic.OVec {tty op} _ _.
+Arguments Symbolic.OVec {tty} op _ _.
