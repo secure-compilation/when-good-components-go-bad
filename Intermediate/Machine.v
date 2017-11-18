@@ -96,7 +96,7 @@ End EntryPoint.
 Record program := {
   prog_interface : Program.interface;
   prog_procedures : PMap.t (PMap.t code);
-  prog_buffers : PMap.t (list (Block.id * nat));
+  prog_buffers : PMap.t (list (Block.id * (nat + list value)));
   prog_main : Component.id * Procedure.id
 }.
 
@@ -143,19 +143,22 @@ Definition well_formed_instruction
 (* Component C has at least two buffers of size at least one:
    the first one is for passing the call argument, whereas the second one is used
    as a temporary store when passing controls between components *)
+(* TODO rethink about this
 Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
+  True.
   exists b1 b2 bufs,
     PMap.find C (prog_buffers p) = Some (b1 :: b2 :: bufs) /\
-    (snd b1 > 0)%nat /\ (snd b2 > 0)%nat.
+    (snd b1 > 0)%nat /\ (snd b2 > 0)%nat.*)
 
 Record well_formed_program (p: program) := {
   (* the interface is sound (but maybe not closed) *)
   wfprog_interface_soundness:
     sound_interface (prog_interface p);
   (* each declared component has the required static buffers *)
+  (*
   wfprog_buffers_existence:
     forall C, PMap.In C (prog_interface p) ->
-         has_required_local_buffers p C;
+         has_required_local_buffers p C;*)
   (* each exported procedure actually exists *)
   wfprog_exported_procedures_existence:
     forall C CI,
@@ -229,6 +232,7 @@ Definition program_link (p1 p2: program) mainC mainP : program :=
 Ltac inv H := (inversion H; subst; clear H).
 
 (* TODO: Figure out what to do about the last clause. *)
+(*
 Theorem linking_well_formedness:
   forall p1 p2 mainC mainP,
     linkable_programs p1 p2 ->
@@ -334,6 +338,7 @@ Proof.
         apply PMapFacts.find_mapsto_iff in H4. 
         rewrite PMapFacts.in_find_iff. rewrite H4. discriminate.
   + Admitted. (* This obviously isn't true for arbitrary (mainC,mainP) ! *)
+*)
 
 Fixpoint init_component m E ps C Cprocs bufs
   : Memory.t * EntryPoint.t * PMap.t (PMap.t code) :=

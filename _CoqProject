@@ -26,6 +26,8 @@ Source/Definability.v
 Source/Examples/Helper.v
 Source/Examples/Identity.v
 Source/Examples/Increment.v
+Source/Examples/DefaultInitBuffer.v
+Source/Examples/NestedCalls.v
 Source/Examples/Factorial.v
 
 S2I/Definitions.v
@@ -36,6 +38,8 @@ S2I/PartialForward.v
 S2I/Examples/Helper.v
 S2I/Examples/Identity.v
 S2I/Examples/Increment.v
+S2I/Examples/DefaultInitBuffer.v
+S2I/Examples/NestedCalls.v
 S2I/Examples/Factorial.v
 
 Intermediate/Machine.v

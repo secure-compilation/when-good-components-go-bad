@@ -19,7 +19,7 @@ Module Source.
   Record program : Type := mkProg {
     prog_interface : Program.interface;
     prog_procedures : PMap.t (PMap.t expr);
-    prog_buffers : PMap.t nat;
+    prog_buffers : PMap.t (nat + list value);
     prog_main : Component.id * Procedure.id
   }.
 
@@ -63,8 +63,10 @@ Module Source.
 
   (* Component C has a buffer of size at least one *)
   Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
-    exists size, PMap.find C (prog_buffers p) = Some size /\
-            (size > 0)%nat.
+    (exists size, PMap.find C (prog_buffers p) = Some (inl size) /\
+                  (size > 0)%nat) \/
+    (exists values, PMap.find C (prog_buffers p) = Some (inr values) /\
+                  (length values > 0)%nat).
 
   Record well_formed_program (p: program) := {
     (* the interface is sound (but maybe not closed) *)
@@ -123,19 +125,38 @@ Module Source.
        prog_buffers := PMapExtra.update (prog_buffers p1) (prog_buffers p2);
        prog_main := (mainC, mainP) |}.
 
+  Fixpoint initialize_buffer
+           (cmem: ComponentMemory.t) (b: Block.id) (values: list value) i
+    : ComponentMemory.t :=
+    match values with
+    | [] => cmem
+    | v :: values' =>
+      match ComponentMemory.store cmem b i v with
+      | Some cmem' => initialize_buffer cmem' b values' (1+i)
+      | None => cmem (* bad case that shouldn't happen, just return cmem *)
+      end
+    end.
+
   Fixpoint alloc_buffers
-           (bufs: list (Component.id * nat))
+           (bufs: list (Component.id * (nat + list value)))
            (m: Memory.t) (addrs: PMap.t Block.id)
     : Memory.t * PMap.t Block.id :=
     match bufs with
     | [] => (m, addrs)
-    | (C,size)::bufs' =>
+    | (C, init) :: bufs' =>
       let memC := match PMap.find C m with
                   | Some memC => memC
                   | None => ComponentMemory.empty
                   end in
-      let '(memC', b) := ComponentMemory.alloc memC size in
-      alloc_buffers bufs' (PMap.add C memC' m) (PMap.add C b addrs)
+      match init with
+      | inl size =>
+        let '(memC', b) := ComponentMemory.alloc memC size in
+        alloc_buffers bufs' (PMap.add C memC' m) (PMap.add C b addrs)
+      | inr values =>
+        let '(memC', b) := ComponentMemory.alloc memC (length values) in
+        let memC'' := initialize_buffer memC' b values 0 in
+        alloc_buffers bufs' (PMap.add C memC'' m) (PMap.add C b addrs)
+      end
     end.
 
   Definition init_all (p: program) : PMap.t Block.id * Memory.t :=

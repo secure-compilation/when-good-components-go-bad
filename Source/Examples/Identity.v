@@ -12,7 +12,7 @@ Definition identity : program := {|
   prog_interface :=
     PMapExtra.of_list [(1, {| Component.import := [];
                               Component.export := [1] |})];
-  prog_buffers := PMapExtra.of_list [(1, 1%nat)];
+  prog_buffers := PMapExtra.of_list [(1, inl 1%nat)];
   prog_procedures := PMapExtra.of_list [
     (1, PMapExtra.of_list [
       (1, E_deref E_local)])];

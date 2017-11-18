@@ -4,7 +4,7 @@ Require Import Common.Values.
 Module Type AbstractComponentMemory.
   Parameter t : Type.
 
-  Parameter prealloc : list (Block.id * nat) -> t.
+  Parameter prealloc : list (Block.id * (nat + list value)) -> t.
   Parameter empty : t.
   Parameter reserve_block : t -> t * Block.id.
   Parameter alloc : t -> nat -> t * Block.id.
@@ -34,12 +34,16 @@ Module ComponentMemory : AbstractComponentMemory.
   }.
   Definition t := mem.
 
-  Definition prealloc (bufs: list (Block.id * nat)) : t :=
+  Definition prealloc (bufs: list (Block.id * (nat + list value))) : t :=
     let fix prepare m bs :=
         match bs with
         | [] => m
-        | (b, size) :: bs' =>
+        | (b, inl size) :: bs' =>
           let chunk := repeat Undef size in
+          let m' := {| content := PMap.add b chunk (content m);
+                       nextblock := Pos.max (1+b) (nextblock m) |} in
+          prepare m' bs'
+        | (b, inr chunk) :: bs' =>
           let m' := {| content := PMap.add b chunk (content m);
                        nextblock := Pos.max (1+b) (nextblock m) |} in
           prepare m' bs'
