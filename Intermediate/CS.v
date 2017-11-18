@@ -8,6 +8,8 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Lib.Monads.
 
+Require Import Coq.Setoids.Setoid.
+
 Module CS.
 
 Import Intermediate.
@@ -16,11 +18,68 @@ Definition stack : Type := list Pointer.t.
 
 Definition state : Type := stack * Memory.t * Register.t * Pointer.t.
 
+Ltac unfold_state :=
+  match goal with
+  | H: state |- _ =>
+    let s := fresh "s" in
+    let mem := fresh "mem" in
+    let regs := fresh "regs" in
+    let pc := fresh "pc" in
+    destruct H as [[[s mem] regs] pc]
+  end.
+
+Inductive state_eq : state -> state -> Prop :=
+| state_eq_intro: forall gps1 mem1 regs1 pc1 gps2 mem2 regs2 pc2,
+    gps1 = gps2 ->
+    PMap.Equal mem1 mem2 ->
+    regs1 = regs2 ->
+    pc1 = pc2 ->
+    state_eq (gps1, mem1, regs1, pc1) (gps2, mem2, regs2, pc2).
+
+Lemma state_eq_refl:
+  forall s,
+    state_eq s s.
+Proof.
+  intros s.
+  unfold_state.
+  constructor; reflexivity.
+Qed.
+
+Lemma state_eq_sym:
+  forall s1 s2,
+    state_eq s1 s2 -> state_eq s2 s1.
+Proof.
+  intros s1 s2 H.
+  inversion H; subst.
+  constructor;
+    try reflexivity;
+    try symmetry; assumption.
+Qed.
+
+Lemma state_eq_trans:
+  forall s1 s2 s3,
+    state_eq s1 s2 -> state_eq s2 s3 -> state_eq s1 s3.
+Proof.
+  intros s1 s2 s3 H1 H2.
+  inversion H1; subst; inversion H2; subst;
+    constructor;
+    try reflexivity;
+    try etransitivity; eauto.
+Qed.
+
+Add Parametric Relation: (state) (state_eq)
+    reflexivity proved by (state_eq_refl)
+    symmetry proved by (state_eq_sym)
+    transitivity proved by (state_eq_trans)
+      as state_eq_rel.
+
 Instance state_turn : HasTurn state := {
   turn_of s iface :=
     let '(_, _, _, pc) := s in
     PMap.In (Pointer.component pc) iface
 }.
+
+(* transition system *)
 
 Definition initial_state (p: program) (s: state) : Prop :=
   let G := init_genv p in
@@ -32,8 +91,10 @@ Definition initial_state (p: program) (s: state) : Prop :=
   (* mem exactly contains all components memories and it comes from the init routine *)
   (forall C, PMap.In C (prog_interface p) <-> PMap.In C mem) /\
   (let '(m, _, _) := init_all p in mem = m) /\
+
   (* the registers are set to undef *)
   regs = [Undef; Undef; Undef; Undef; Undef; Undef] /\
+
   (* the program counter is pointing to the start of the main procedure *)
   Pointer.component pc = fst (prog_main p) /\
   EntryPoint.get (fst (prog_main p)) (snd (prog_main p))
@@ -43,6 +104,8 @@ Definition initial_state (p: program) (s: state) : Prop :=
 Definition final_state (G: global_env) (s: state) : Prop :=
   let '(gsp, mem, regs, pc) := s in
   executing G pc IHalt.
+
+(* relational specification *)
 
 Inductive step (G : global_env) : state -> trace -> state -> Prop :=
 | Nop: forall gps mem regs pc,
@@ -73,6 +136,7 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
 | Load: forall gps mem regs regs' pc r1 r2 ptr v,
     executing G pc (ILoad r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
+    Pointer.component ptr = Pointer.component pc ->
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
     step G (gps, mem, regs, pc) E0 (gps, mem, regs', Pointer.inc pc)
@@ -135,6 +199,106 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
     step G (gps, mem, regs, pc) t (gps', mem, Register.invalidate regs, pc').
 
+Lemma equal_states_step:
+  forall G ics1 t ics1' ics2,
+    state_eq ics1 ics2 ->
+    step G ics1 t ics1' ->
+  exists ics2',
+    step G ics2 t ics2' /\ state_eq ics1' ics2'.
+Proof.
+  intros G ics1 t ics1' ics2.
+  intros Heq Hstep.
+  repeat CS.unfold_state.
+  inversion Hstep; subst;
+  inversion Heq; subst.
+
+  - eexists. split.
+    + eapply Nop; auto.
+    + econstructor; auto.
+
+  - eexists. split.
+    + eapply Label; eauto.
+    + econstructor; eauto.
+
+  - eexists. split.
+    + eapply Const; eauto.
+    + econstructor; eauto.
+
+  - eexists. split.
+    + eapply Mov; eauto.
+    + econstructor; eauto.
+
+  - eexists. split.
+    + eapply BinOp; eauto.
+    + econstructor; eauto.
+
+  - eexists. split.
+    + eapply Load; eauto.
+      unfold Memory.load in * .
+      destruct ptr. destruct p.
+      rewrite H12 in H11.
+      destruct (PMap.find (elt:=ComponentMemory.t) i mem);
+        try discriminate.
+      eauto.
+    + econstructor; eauto.
+
+  - unfold Memory.store in * .
+    destruct ptr. destruct p.
+    rewrite H12 in H11.
+    destruct (PMap.find (elt:=ComponentMemory.t) i mem) eqn:Hfind;
+      try discriminate.
+    destruct (ComponentMemory.store t i0 o (Register.get r2 regs)) eqn:Hstore;
+      try discriminate.
+    inversion H11. subst.
+    eexists. split.
+    + eapply Store; eauto.
+      unfold Memory.store in *.
+      rewrite Hfind, Hstore. eauto.
+    + econstructor; eauto.
+      rewrite H12. reflexivity.
+
+  - eexists. split.
+    + eapply Jal; eauto.
+    + econstructor; eauto.
+
+  - eexists. split.
+    + eapply Jump; eauto.
+    + econstructor; eauto.
+
+   - eexists. split.
+    + eapply BnzNZ; eauto.
+    + econstructor; eauto.
+
+   - eexists. split.
+    + eapply BnzZ; eauto.
+    + econstructor; eauto.
+
+   - unfold Memory.alloc in * .
+     destruct pc. destruct p.
+     rewrite H12 in H11. simpl in *.
+     destruct (PMap.find (elt:=ComponentMemory.t) i mem) eqn:Hfind;
+       try discriminate.
+     destruct (ComponentMemory.alloc t (Z.to_nat size)) eqn:Halloc;
+       try discriminate.
+     inversion H11. subst.
+     eexists. split.
+     + eapply Alloc; eauto.
+       unfold Memory.alloc in *.
+       simpl. rewrite Hfind, Halloc. eauto.
+     + econstructor; eauto.
+       rewrite H12. reflexivity.
+
+   - eexists. split.
+    + eapply Call; eauto.
+    + econstructor; eauto.
+
+   - eexists. split.
+    + eapply Return; eauto.
+    + econstructor; eauto.
+Qed.
+
+(* executable specification *)
+
 Import MonadNotations.
 Open Scope monad_scope.
 
@@ -167,9 +331,12 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
     | ILoad r1 r2 =>
       match Register.get r1 regs with
       | Ptr ptr =>
-        do v <- Memory.load mem ptr;
-        let regs' := Register.set r2 v regs in
-        ret (E0, (gps, mem, regs', Pointer.inc pc))
+        if Pos.eqb (Pointer.component ptr) (Pointer.component pc) then
+          do v <- Memory.load mem ptr;
+          let regs' := Register.set r2 v regs in
+          ret (E0, (gps, mem, regs', Pointer.inc pc))
+        else
+          None
       | _ => None
       end
     | IStore r1 r2 =>
@@ -247,16 +414,14 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
     | IHalt => None
     end.
 
-Import MonadNotations.
-Open Scope monad_scope.
-
-Definition init_genv_and_state (p: program) : option (global_env * state) :=
+Definition init_genv_and_state (p: program) (input: value) : option (global_env * state) :=
   let '(mem, E, ps) := init_all p in
   let G := {| genv_interface := prog_interface p;
               genv_procedures := ps;
               genv_entrypoints := E |} in
   do b <- EntryPoint.get (fst (prog_main p)) (snd (prog_main p)) (genv_entrypoints G);
-  ret (G, ([], mem, Register.init, (fst (prog_main p), b, 0))).
+  let regs := Register.set R_COM input Register.init in
+  ret (G, ([], mem, regs, (fst (prog_main p), b, 0))).
 
 Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
   match n with
@@ -274,10 +439,12 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
   end.
 
 Definition run (p: program) (input: value) (fuel: nat) : option Z :=
-  do (G, st) <- init_genv_and_state p;
+  do (G, st) <- init_genv_and_state p input;
   execN fuel G st.
 
 Close Scope monad_scope.
+
+(* equivalance between relational and executable specification *)
 
 Theorem eval_step_complete:
   forall G st t st',
@@ -289,16 +456,23 @@ Proof.
     simpl; unfold code in *; rewrite Hprocs, HP_code, Hinstr;
     destruct (Pointer.offset pc) eqn:Hpc;
     try reflexivity; try (exfalso; pose proof (Zlt_neg_0 p); omega).
-  - simpl. rewrite H0, H1. reflexivity.
-  - simpl. rewrite H0, H1. reflexivity.
+  - simpl. rewrite H0, H1.
+    destruct pc. destruct p. simpl.
+    rewrite Pos.eqb_refl. rewrite H2. reflexivity.
+  - rewrite H0, H1, H2. rewrite Pos.eqb_refl.
+    apply Z.ge_le_iff in H.
+    apply Z.ltb_ge in H.
+    rewrite H. reflexivity.
+  - rewrite Z.ltb_irrefl, H0, H1, H2, Pos.eqb_refl.
+    simpl. reflexivity.
   - rewrite H0, H1, H2.
     rewrite Pos.eqb_refl. reflexivity.
-  - simpl. rewrite H0, H1, H2. rewrite Pos.eqb_refl. reflexivity.
-  - rewrite H0. reflexivity.
+  - simpl. rewrite H0. reflexivity.
   - simpl. rewrite H0. reflexivity.
   - rewrite H0, H1.
     rewrite Pos.eqb_refl. reflexivity.
-  - simpl. rewrite H0, H1. rewrite Pos.eqb_refl. reflexivity.
+  - rewrite H0, H1.
+    rewrite Pos.eqb_refl. reflexivity.
   - rewrite H0, H2.
     destruct val.
     + contradiction.
@@ -348,16 +522,6 @@ Proof.
     + simpl. reflexivity.
 Qed.
 
-Ltac unfold_state :=
-  match goal with
-  | H: state |- _ =>
-    let s := fresh "s" in
-    let mem := fresh "mem" in
-    let regs := fresh "regs" in
-    let pc := fresh "pc" in
-    destruct H as [[[s mem] regs] pc]
-  end.
-
 Theorem eval_step_sound:
   forall G st t st',
     eval_step G st =  Some (t, st') -> step G st t st'.
@@ -397,10 +561,20 @@ Proof.
            *** destruct (Register.get r regs0) eqn:Hreg.
                **** rewrite H in H2. discriminate.
                **** destruct (Memory.load mem0 t0) eqn:Hmem.
-                    ***** rewrite H in H2. inversion H2. subst.
-                          eapply Load. unfold executing. eexists. eexists. eauto.
-                          apply Hreg. apply Hmem. reflexivity.
-                    ***** rewrite H in H2. discriminate.
+                    ***** rewrite H in H2.
+                          destruct (Pos.eqb (Pointer.component t0)
+                                            (Pointer.component pc0))%positive
+                                   eqn:Hsame_comp.
+                          ****** inversion H2. subst.
+                                 eapply Load. unfold executing. eexists. eexists. eauto.
+                                 apply Hreg. apply Pos.eqb_eq. auto.
+                                 apply Hmem. reflexivity.
+                          ****** discriminate.
+                    ***** rewrite H in H2.
+                          destruct (Pos.eqb (Pointer.component t0)
+                                            (Pointer.component pc0))%positive
+                                   eqn:Hsame_comp;
+                            discriminate.
                **** rewrite H in H2. discriminate.
            *** destruct (Register.get r regs0) eqn:Hreg.
                **** rewrite H in H2. discriminate.
@@ -537,6 +711,8 @@ Proof.
   apply eval_step_sound.
   apply eval_step_complete.
 Qed.
+
+(* complete semantics and some properties *)
 
 Corollary step_deterministic:
   forall G st t st1 st2,

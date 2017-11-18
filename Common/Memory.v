@@ -239,4 +239,344 @@ Module Memory.
       end
     | None => None
     end.
+
+  Lemma program_changes_are_preserved:
+    forall ctx mem C CI,
+      ~ PMap.In C ctx ->
+      PMap.Equal
+        (PMap.add C CI (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem))
+        (PMapExtra.filter (elt:=ComponentMemory.t)
+                          (fun k _ => negb (PMap.mem (elt:=Component.interface) k ctx)) (PMap.add C CI mem)).
+  Proof.
+    intros ctx mem C CI Hnot_in_ctx.
+    unfold PMap.Equal.
+    intros C'.
+    rewrite PMapFacts.add_o.
+    destruct (PMapFacts.eq_dec C C') eqn:HCeqC'.
+    - subst. symmetry.
+      apply PMap.find_1.
+      apply PMapExtra.filter_iff.
+      + unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+      + split.
+        * apply PMap.add_1; auto.
+        * apply PMapFacts.not_mem_in_iff in Hnot_in_ctx.
+          rewrite Hnot_in_ctx. reflexivity.
+    - destruct (PMap.find C' (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem)) eqn:Hfind.
+      + symmetry.
+        apply PMap.find_2 in Hfind.
+        apply PMapExtra.filter_iff in Hfind.
+        * destruct Hfind as [Hmapsto Hcond].
+          apply PMap.find_1.
+          apply PMapExtra.filter_iff.
+          ** unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+          ** split.
+             *** apply PMap.add_2; auto.
+             *** auto.
+        * unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+      + symmetry.
+        apply PMapFacts.not_find_in_iff.
+        apply PMapFacts.not_find_in_iff in Hfind.
+        unfold not. intro contra.
+        apply Hfind.
+        destruct contra.
+        exists x.
+        apply PMapExtra.filter_iff in H.
+        * apply PMapExtra.filter_iff.
+          ** unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+          ** destruct H.
+             split.
+             *** eapply PMap.add_3; eauto.
+             *** auto.
+        * unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+  Qed.
+
+  Lemma program_allocation_is_preserved:
+    forall (ctx: PMap.t Component.interface) mem pmem mem' pmem' C size ptr1 ptr2,
+      ~ PMap.In C ctx ->
+      Memory.alloc mem C size = Some (mem', ptr1) ->
+      Memory.alloc pmem C size = Some (pmem', ptr2) ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      PMap.Equal pmem' (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem').
+  Proof.
+    intros ctx mem pmem mem' pmem' C size ptr1 ptr2.
+    intros Hnot_in_ctx Halloc1 Halloc2 Hequal.
+    unfold Memory.alloc in *.
+    destruct (PMap.find C mem)
+             eqn:Hmem_find1; try discriminate.
+    destruct (ComponentMemory.alloc t0 size)
+             eqn:Hmem_alloc1; try discriminate.
+    inversion Halloc1; subst.
+    destruct (PMap.find C pmem)
+             eqn:Hmem_find2; try discriminate.
+    destruct (ComponentMemory.alloc t2 size)
+             eqn:Hmem_alloc2; try discriminate.
+    inversion Halloc2; subst.
+    rewrite Hequal.
+    assert (t1 = t3). {
+      specialize (Hequal C). rewrite Hequal in Hmem_find2.
+      apply PMapFacts.find_mapsto_iff in Hmem_find2.
+      apply PMapExtra.filter_iff in Hmem_find2.
+      destruct Hmem_find2.
+      apply PMap.find_1 in H. rewrite H in Hmem_find1.
+      inversion Hmem_find1. subst.
+      rewrite Hmem_alloc1 in Hmem_alloc2.
+      inversion  Hmem_alloc2. subst.
+      reflexivity.
+      (* morphisms stuff *)
+      unfold Morphisms.Proper, Morphisms.respectful.
+      intros. subst. reflexivity.
+    }
+    subst.
+    eapply program_changes_are_preserved; auto.
+  Qed.
+
+  Lemma context_changes_are_filtered:
+    forall (ctx: PMap.t Component.interface) mem C Cmem,
+      PMap.In C ctx ->
+      PMap.Equal (PMapExtra.filter (fun k (_ : ComponentMemory.t) => negb (PMap.mem k ctx)) (PMap.add C Cmem mem))
+                 (PMapExtra.filter (fun k (_ : ComponentMemory.t) => negb (PMap.mem k ctx)) mem).
+  Proof.
+    intros ctx mem C Cmem Hin_ctx.
+    apply PMapFacts.mem_in_iff in Hin_ctx.
+    intros C'.
+    destruct (PMap.find C' (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx))
+                                             (PMap.add C Cmem mem)))
+             eqn:Hfind1;
+    destruct (PMap.find C' (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx))
+                                             mem))
+             eqn:Hfind2.
+    - apply PMap.find_2 in Hfind1.
+      apply PMap.find_2 in Hfind2.
+      apply PMapExtra.filter_iff in Hfind1.
+      apply PMapExtra.filter_iff in Hfind2.
+      destruct Hfind1 as [Hmapsto1 Hcond1].
+      destruct Hfind2 as [Hmapsto2 Hcond2].
+      destruct (Pos.eqb C C') eqn:HCeqC'.
+      + apply Pos.eqb_eq in HCeqC'. subst.
+        rewrite Hin_ctx in *. discriminate.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst.
+        apply PMapFacts.add_neq_mapsto_iff in Hmapsto1.
+        * rewrite (PMapFacts.MapsTo_fun Hmapsto1 Hmapsto2).
+          reflexivity.
+        * apply Pos.eqb_neq; auto.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - exfalso.
+      apply PMapFacts.not_find_in_iff in Hfind2.
+      apply PMapFacts.find_mapsto_iff in Hfind1.
+      apply PMapExtra.filter_iff in Hfind1.
+      destruct Hfind1.
+      + assert (C <> C'). {
+          destruct (Pos.eqb C C') eqn:HCeqC'.
+          - apply Pos.eqb_eq in HCeqC'. subst.
+            rewrite Hin_ctx in H0. discriminate.
+          - apply Pos.eqb_neq; auto.
+        }
+        apply PMapFacts.add_mapsto_iff in H.
+        destruct H.
+        * destruct H; subst.
+          rewrite Hin_ctx in H0. discriminate.
+        * destruct H; subst.
+          apply Hfind2. eexists.
+          apply PMapExtra.filter_iff.
+          ** (* morphisms stuff *)
+            unfold Morphisms.Proper, Morphisms.respectful.
+            intros. subst. reflexivity.
+          ** split; eauto.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - exfalso.
+      apply PMapFacts.not_find_in_iff in Hfind1.
+      apply PMapFacts.find_mapsto_iff in Hfind2.
+      apply PMapExtra.filter_iff in Hfind2.
+      destruct Hfind2.
+      + assert (C <> C'). {
+          destruct (Pos.eqb C C') eqn:HCeqC'.
+          - apply Pos.eqb_eq in HCeqC'. subst.
+            rewrite Hin_ctx in H0. discriminate.
+          - apply Pos.eqb_neq; auto.
+        }
+        apply Hfind1. eexists.
+        apply PMapExtra.filter_iff.
+        * (* morphisms stuff *)
+          unfold Morphisms.Proper, Morphisms.respectful.
+          intros. subst. reflexivity.
+        * split; eauto.
+          apply PMapFacts.add_neq_mapsto_iff; eauto.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - reflexivity.
+  Qed.
+
+  Lemma context_allocation_is_filtered:
+    forall (ctx: PMap.t Component.interface) mem pmem mem' C size ptr1,
+      PMap.In C ctx ->
+      Memory.alloc mem C size = Some (mem', ptr1) ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem').
+  Proof.
+    intros ctx mem pmem mem' C size ptr1.
+    intros Hin_ctx Halloc Hequal.
+    unfold Memory.alloc in *.
+    destruct (PMap.find C mem)
+             eqn:Hmem_find; try discriminate.
+    destruct (ComponentMemory.alloc t0 size)
+             eqn:Hmem_alloc; try discriminate.
+    inversion Halloc; subst.
+    rewrite Hequal. rewrite context_changes_are_filtered; auto.
+    apply PMapFacts.Equal_refl.
+  Qed.
+
+  Lemma program_store_is_preserved:
+    forall (ctx: PMap.t Component.interface) mem pmem mem' pmem' ptr v,
+      ~ PMap.In (Pointer.component ptr) ctx ->
+      Memory.store mem ptr v = Some mem' ->
+      Memory.store pmem ptr v = Some pmem' ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      PMap.Equal pmem' (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem').
+  Proof.
+    intros ctx mem pmem mem' pmem' ptr v.
+    intros Hnot_in_ctx Hstore1 Hstore2 Hequal.
+    unfold Memory.store in *. destruct ptr. destruct p.
+    destruct (PMap.find i mem)
+             eqn:Hmem_find1; try discriminate.
+    destruct (ComponentMemory.store t0 i0 o v)
+             eqn:Hmem_store1; try discriminate.
+    inversion Hmem_store1; subst.
+    destruct (PMap.find i pmem)
+             eqn:Hmem_find2; try discriminate.
+    destruct (ComponentMemory.store t2 i0 o v)
+             eqn:Hmem_store2; try discriminate.
+    inversion Hmem_store2; subst.
+    assert (t0 = t2). {
+      specialize (Hequal i). rewrite Hequal in Hmem_find2.
+      apply PMapFacts.find_mapsto_iff in Hmem_find2.
+      apply PMapExtra.filter_iff in Hmem_find2.
+      destruct Hmem_find2.
+      apply PMap.find_1 in H. rewrite H in Hmem_find1.
+      inversion Hmem_find1. subst.
+      rewrite Hmem_store1 in Hmem_store2.
+      inversion  Hmem_store2. subst.
+      reflexivity.
+      (* morphisms stuff *)
+      unfold Morphisms.Proper, Morphisms.respectful.
+      intros. subst. reflexivity.
+    }
+    subst. rewrite H0 in H1.
+    inversion H1. subst.
+    inversion Hstore1; subst. inversion Hstore2; subst.
+    rewrite Hequal.
+    eapply program_changes_are_preserved; auto.
+  Qed.
+
+  Lemma context_store_is_filtered:
+    forall (ctx: PMap.t Component.interface) mem pmem mem' ptr v,
+      PMap.In (Pointer.component ptr) ctx ->
+      Memory.store mem ptr v = Some mem' ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem').
+  Proof.
+    intros ctx mem pmem mem' ptr v.
+    intros Hin_ctx Hstore Hequal.
+    unfold Memory.store in *.
+    destruct ptr. destruct p.
+    destruct (PMap.find i mem)
+             eqn:Hmem_find; try discriminate.
+    destruct (ComponentMemory.store t0 i0 o v)
+             eqn:Hmem_store; try discriminate.
+    inversion Hstore; subst.
+    rewrite Hequal. rewrite context_changes_are_filtered; auto.
+    apply PMapFacts.Equal_refl.
+  Qed.
+
+  Lemma impossible_program_store_failure:
+    forall (ctx: PMap.t Component.interface) mem pmem mem' ptr v,
+      ~ PMap.In (Pointer.component ptr) ctx ->
+      Memory.store mem ptr v = Some mem' ->
+      Memory.store pmem ptr v = None ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      False.
+  Proof.
+    intros.
+    unfold Memory.store in *.
+    destruct ptr as [[]].
+    destruct (PMap.find i mem) eqn:Hmem_find; try discriminate.
+    destruct (PMap.find i pmem) eqn:Hpmem_find; try discriminate.
+    - specialize (H2 i).
+      rewrite Hpmem_find in H2.
+      destruct (ComponentMemory.store t0 i0 o v) eqn:Hmem_store; try discriminate.
+      inversion H0. subst.
+      symmetry in H2.
+      apply PMap.find_2 in H2.
+      apply PMapExtra.filter_iff in H2.
+      destruct H2 as [Hmapsto Hcond].
+      apply PMapFacts.find_mapsto_iff in Hmapsto.
+      rewrite Hmapsto in Hmem_find.
+      inversion Hmem_find. subst.
+      rewrite Hmem_store in H1. discriminate.
+      (* morpshisms stuff *)
+      unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+    - specialize (H2 i).
+      rewrite Hpmem_find in H2.
+      symmetry in H2. apply PMapFacts.not_find_in_iff in H2.
+      apply H2. eexists.
+      eapply PMapExtra.filter_iff.
+      + (* morpshisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+      + split.
+        * apply PMap.find_2 in Hmem_find.
+          eauto.
+        * simpl in *.
+          apply PMapFacts.not_mem_in_iff in H.
+          unfold negb. rewrite H. reflexivity.
+  Qed.
+
+  Lemma impossible_program_allocation_failure:
+    forall (ctx: PMap.t Component.interface) mem pmem mem' C size ptr1,
+      ~ PMap.In C ctx ->
+      Memory.alloc mem C size = Some (mem', ptr1) ->
+      Memory.alloc pmem C size = None ->
+      PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+      False.
+  Proof.
+    intros.
+    unfold Memory.alloc in *.
+    destruct (PMap.find C mem) eqn:Hmem_find; try discriminate.
+    destruct (PMap.find C pmem) eqn:Hpmem_find; try discriminate.
+    - specialize (H2 C).
+      rewrite Hpmem_find in H2.
+      destruct (ComponentMemory.alloc t0 size) eqn:Hmem_alloc; try discriminate.
+      inversion H0. subst.
+      symmetry in H2.
+      apply PMap.find_2 in H2.
+      apply PMapExtra.filter_iff in H2.
+      destruct H2 as [Hmapsto Hcond].
+      apply PMapFacts.find_mapsto_iff in Hmapsto.
+      rewrite Hmapsto in Hmem_find.
+      inversion Hmem_find. subst.
+      rewrite Hmem_alloc in H1. discriminate.
+      (* morpshisms stuff *)
+      unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+    - specialize (H2 C).
+      rewrite Hpmem_find in H2.
+      symmetry in H2. apply PMapFacts.not_find_in_iff in H2.
+      apply H2. eexists.
+      eapply PMapExtra.filter_iff.
+      + (* morpshisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful. intros. subst. auto.
+      + split.
+        * apply PMap.find_2 in Hmem_find.
+          eauto.
+        * simpl in *.
+          apply PMapFacts.not_mem_in_iff in H.
+          unfold negb. rewrite H. reflexivity.
+  Qed.
 End Memory.
