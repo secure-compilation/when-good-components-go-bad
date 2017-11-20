@@ -252,10 +252,6 @@ Definition next_state_updates_and_pc (st : state) (iv : @ivec ttypes)
 Definition next_state_updates (st : state) (iv : @ivec ttypes) (updts : seq update) : option state :=
   next_state_updates_and_pc st iv updts (vala (pc st)).+1.
 
-(* TL TODO: no need for this, almost always an update? *)
-(* Definition next_state_pc (st : state) (iv : @ivec ttypes) (x : word) : option state := *)
-(*   next_state_updates_and_pc st iv [:: ] x. *)
-
 
 Inductive step (st st' : state) : Prop :=
 | step_nop : forall mem reg pc tpc i ti extra
