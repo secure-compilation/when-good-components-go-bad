@@ -102,6 +102,3 @@ Qed.
 Class HasTurn A := {
   turn_of : A -> Program.interface -> Prop
 }.
-
-(* AAA: Are we still going to use this? If not, we should remove it. *)
-Inductive exec_state : Type := Normal. (*| WentWrong.*)

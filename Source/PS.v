@@ -19,9 +19,9 @@ Definition context_state : Type := Component.id * stack * Memory.t.
 
 Inductive state : Type :=
 | PC : program_state -> state
-| CC : context_state -> exec_state -> state.
+| CC : context_state -> state.
 
-Ltac unfold_state :=
+Ltac unfold_states :=
   match goal with
   | H: state |- _ =>
     let C := fresh "C" in
@@ -29,7 +29,7 @@ Ltac unfold_state :=
     let pmem := fresh "pmem" in
     let k := fresh "k" in
     let e := fresh "e" in
-    destruct H as [[[[[C pgps] pmem] k] e] | [[C pgps] pmem] []]
+    destruct H as [[[[[C pgps] pmem] k] e] | [[C pgps] pmem]]
   end.
 
 Inductive state_eq: state -> state -> Prop :=
@@ -44,13 +44,13 @@ Inductive state_eq: state -> state -> Prop :=
     C1 = C2 ->
     pgps1 = pgps2 ->
     PMap.Equal pmem1 pmem2 ->
-    state_eq (CC (C1, pgps1, pmem1) Normal) (CC (C2, pgps2, pmem2) Normal).
+    state_eq (CC (C1, pgps1, pmem1)) (CC (C2, pgps2, pmem2)).
 
 Lemma state_eq_refl:
   forall s,
     state_eq s s.
 Proof.
-  intros; unfold_state; constructor; reflexivity.
+  intros; unfold_states; constructor; reflexivity.
 Qed.
 
 Lemma state_eq_sym:
@@ -84,7 +84,7 @@ Add Parametric Relation: (state) (state_eq)
 Definition component_of_state (sps: state) : Component.id :=
   match sps with
   | PC (C, _, _, _, _) => C
-  | CC (C, _, _) _     => C
+  | CC (C, _, _)       => C
   end.
 
 Instance state_turn : HasTurn state := {
@@ -147,9 +147,9 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
 
     partial_state ctx (C, gps, mem, k, e) (PC (C, pgps, pmem, k, e))
 
-| ContextControl_Normal: forall C gps pgps mem pmem k e,
+| ContextControl: forall C gps pgps mem pmem k e,
     (* context has control *)
-    is_context_component (CC (C, pgps, pmem) Normal) ctx ->
+    is_context_component (CC (C, pgps, pmem)) ctx ->
 
     (* we forget about context memories *)
     PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
@@ -157,13 +157,13 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (map fst (PMap.elements ctx)) ->
 
-    partial_state ctx (C, gps, mem, k, e) (CC (C, pgps, pmem) Normal).
+    partial_state ctx (C, gps, mem, k, e) (CC (C, pgps, pmem)).
 
 Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
   let '(C, gps, mem, k, e) := scs in
   let pgps := to_partial_stack gps (map fst (PMap.elements ctx)) in
   let pmem := PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem in
-  if PMapFacts.In_dec ctx C then CC (C, pgps, pmem) Normal
+  if PMapFacts.In_dec ctx C then CC (C, pgps, pmem)
   else PC (C, pgps, pmem, k, e).
 
 Lemma partial_state_partialize ctx scs sps :

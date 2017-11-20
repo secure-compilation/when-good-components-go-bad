@@ -583,4 +583,85 @@ Module Memory.
           apply PMapFacts.not_mem_in_iff in H.
           unfold negb. rewrite H. reflexivity.
   Qed.
+
+  Lemma filter_identity:
+    forall (mem: Memory.t),
+      PMap.Equal (PMapExtra.filter (fun _ _ => true) mem) mem.
+  Proof.
+    intros mem C.
+    destruct (PMap.find C (PMapExtra.filter (fun _ _ => true) mem)) eqn:Hfind.
+    - apply PMap.find_2 in Hfind.
+      apply PMapExtra.filter_iff in Hfind.
+      + destruct Hfind as [Hfound []].
+        apply PMap.find_1 in Hfound.
+        rewrite Hfound. reflexivity.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - apply PMapFacts.not_find_in_iff in Hfind.
+      symmetry. apply PMapFacts.not_find_in_iff.
+      intro contra. apply Hfind.
+      destruct contra as [Cmem contra].
+      eexists. apply PMapExtra.filter_iff.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+      + split; eauto.
+  Qed.
+
+  Theorem equivalence_under_filter:
+    forall (mem1 mem2: t) f,
+      PMap.Equal mem1 mem2 ->
+      PMap.Equal (PMapExtra.filter f mem1) (PMapExtra.filter f mem2).
+  Proof.
+    intros mem1 mem2 f Heq C.
+    destruct (PMap.find C (PMapExtra.filter f mem1)) eqn:Hfind1;
+    destruct (PMap.find C (PMapExtra.filter f mem2)) eqn:Hfind2.
+    - apply PMap.find_2 in Hfind1.
+      apply PMap.find_2 in Hfind2.
+      apply PMapExtra.filter_iff in Hfind1.
+      apply PMapExtra.filter_iff in Hfind2.
+      destruct Hfind1 as [Hmapsto1 Hcond1].
+      destruct Hfind2 as [Hmapsto2 Hcond2].
+      rewrite Heq in Hmapsto1.
+      erewrite (PMapFacts.MapsTo_fun Hmapsto1 Hmapsto2).
+      reflexivity.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - apply PMap.find_2 in Hfind1.
+      apply PMapFacts.not_find_in_iff in Hfind2.
+      apply PMapExtra.filter_iff in Hfind1.
+      destruct Hfind1 as [Hmapsto1 Hcond1].
+      exfalso.
+      apply Hfind2.
+      eexists. apply PMapExtra.filter_iff.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+      + rewrite Heq in Hmapsto1.
+        split; eauto.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - apply PMap.find_2 in Hfind2.
+      apply PMapFacts.not_find_in_iff in Hfind1.
+      apply PMapExtra.filter_iff in Hfind2.
+      destruct Hfind2 as [Hmapsto2 Hcond2].
+      exfalso.
+      apply Hfind1.
+      eexists. apply PMapExtra.filter_iff.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+      + rewrite <- Heq in Hmapsto2.
+        split; eauto.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - reflexivity.
+  Qed.
 End Memory.

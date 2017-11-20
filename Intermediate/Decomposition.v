@@ -9,7 +9,6 @@ Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
 Require Import Intermediate.PS.
 
-Import GlobalEnv.
 Import Intermediate.
 
 Section Decomposition.
@@ -58,7 +57,7 @@ Section Decomposition.
       PS.initial_state prog ctx ips /\ PS.partial_state ctx ics ips.
   Proof.
     intros ics Hics_init.
-    CS.unfold_state.
+    CS.unfold_states.
     (* case analysis on who has control, then build the partial state *)
     destruct (PMap.mem (Pointer.component pc) ctx) eqn:Htarget;
       exists (PS.partialize (s, mem, regs, pc) ctx);
@@ -66,12 +65,12 @@ Section Decomposition.
     (* context has control *)
     - split.
       + econstructor.
-        * eapply PS.ContextControl_Normal; eauto.
+        * eapply PS.ContextControl; eauto.
           ** PS.simplify_turn.
              apply PMapFacts.mem_in_iff. auto.
           ** apply PMapFacts.Equal_refl.
         * eauto.
-      + eapply PS.ContextControl_Normal; eauto.
+      + eapply PS.ContextControl; eauto.
         ** PS.simplify_turn.
            apply PMapFacts.mem_in_iff. auto.
         ** apply PMapFacts.Equal_refl.
@@ -96,7 +95,7 @@ Section Decomposition.
       PS.final_state prog ctx ips.
   Proof.
     intros ics ips Hpartial Hics_final.
-    CS.unfold_state.
+    CS.unfold_states.
     (* case analysis on who has control *)
     destruct (PMap.mem (Pointer.component pc) ctx) eqn:Htarget.
     (* context has control *)
@@ -128,7 +127,12 @@ Section Decomposition.
 
     (* case analysis on who has control and the executed step *)
     inversion Hpartial; subst;
-    inversion Hstep; subst.
+    inversion Hstep; subst;
+      match goal with
+      | Heq1: CS.state_eq _ _,
+        Heq2: CS.state_eq _ _ |- _ =>
+        inversion Heq1; subst; inversion Heq2; subst
+      end.
 
     (** program has control **)
 
@@ -141,9 +145,21 @@ Section Decomposition.
         * econstructor; eauto.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
     - eexists. split.
       + econstructor; auto.
@@ -152,9 +168,21 @@ Section Decomposition.
         * econstructor; eauto.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
     - eexists. split.
       + econstructor; auto.
@@ -163,9 +191,21 @@ Section Decomposition.
         * econstructor; eauto.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
     - eexists. split.
       + econstructor; auto.
@@ -174,9 +214,21 @@ Section Decomposition.
         * econstructor; eauto.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
     - eexists. split.
       + econstructor; auto.
@@ -185,9 +237,21 @@ Section Decomposition.
         * econstructor; eauto.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
     - eexists. split.
       + econstructor; auto.
@@ -196,13 +260,25 @@ Section Decomposition.
         * econstructor; eauto.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
-    - destruct (Memory.store pmem ptr (Register.get r2 regs)) as [pmem'|] eqn:Hpmem'.
+    - destruct (Memory.store pmem ptr (Register.get r2 regs0)) as [pmem'|] eqn:Hpmem'.
       + PS.simplify_turn. apply PMapFacts.not_mem_in_iff in H.
-        exists (PS.partialize (gps, mem', regs, Pointer.inc pc) ctx).
+        exists (PS.partialize (gps0, mem', regs0, Pointer.inc pc0) ctx).
         simpl. rewrite Pointer.inc_preserves_component, H.
         split.
         * econstructor; auto.
@@ -213,15 +289,20 @@ Section Decomposition.
              *** PS.simplify_turn.
                  rewrite Pointer.inc_preserves_component.
                  apply PMapFacts.not_mem_in_iff; auto.
-             *** reflexivity.
+             *** apply Memory.equivalence_under_filter.
+                 rewrite H13. reflexivity.
         * econstructor; auto.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component.
              apply PMapFacts.not_mem_in_iff; auto.
-          ** reflexivity.
+          ** apply Memory.equivalence_under_filter.
+             rewrite H13. reflexivity.
       + (* contra *)
-        PS.simplify_turn. rewrite <- H9 in H.
-        exfalso. eapply Memory.impossible_program_store_failure; eauto.
+        PS.simplify_turn. rewrite <- H4 in H.
+        exfalso.
+        eapply Memory.impossible_program_store_failure; eauto.
+        rewrite H0. apply Memory.equivalence_under_filter.
+        assumption.
 
     - eexists. split.
       + econstructor; auto.
@@ -230,9 +311,21 @@ Section Decomposition.
         * econstructor; eauto.
           ** PS.simplify_turn.
              erewrite <- find_label_in_component_1; eauto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
            erewrite <- find_label_in_component_1; eauto.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
     - eexists. split.
       + econstructor; auto.
@@ -240,10 +333,28 @@ Section Decomposition.
         * econstructor; auto.
         * econstructor; eauto.
           ** PS.simplify_turn.
-             rewrite H9. auto.
+             match goal with
+             | Hsame_comp: Pointer.component _ = Pointer.component _ |- _ =>
+               rewrite Hsame_comp; assumption
+             end.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
-           rewrite H9. auto.
+           match goal with
+           | Hsame_comp: Pointer.component _ = Pointer.component _ |- _ =>
+             rewrite Hsame_comp; assumption
+           end.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
     - eexists. split.
       + econstructor; auto.
@@ -252,9 +363,21 @@ Section Decomposition.
         * econstructor; eauto.
           ** PS.simplify_turn.
              erewrite <- find_label_in_procedure_1; eauto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
            erewrite <- find_label_in_procedure_1; eauto.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
     - eexists. split.
       + econstructor; auto.
@@ -263,15 +386,26 @@ Section Decomposition.
         * econstructor; eauto.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       + econstructor; auto.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
+        ** match goal with
+           | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+             PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+             eapply Memory.equivalence_under_filter;
+             symmetry; apply Hmem_eq
+           end.
 
-    - destruct (Memory.alloc pmem (Pointer.component pc) (Z.to_nat size))
+    - destruct (Memory.alloc pmem (Pointer.component pc0) (Z.to_nat size))
         as [[pmem']|] eqn:Hpmem'.
       + PS.simplify_turn. apply PMapFacts.not_mem_in_iff in H.
-        exists (PS.partialize (gps, mem', Register.set rptr (Ptr ptr) regs, Pointer.inc pc)
-                              ctx).
+        exists (PS.partialize (gps0, mem', Register.set rptr (Ptr ptr) regs0, Pointer.inc pc0) ctx).
         simpl. rewrite Pointer.inc_preserves_component, H.
         split.
         * econstructor; auto.
@@ -282,15 +416,23 @@ Section Decomposition.
              *** PS.simplify_turn.
                  rewrite Pointer.inc_preserves_component.
                  apply PMapFacts.not_mem_in_iff in H; auto.
-             *** reflexivity.
+             *** apply Memory.equivalence_under_filter.
+                 symmetry. assumption.
         * econstructor; eauto.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component.
              apply PMapFacts.not_mem_in_iff in H; auto.
-          ** reflexivity.
+          ** apply Memory.equivalence_under_filter.
+             symmetry. assumption.
       + (* contra *)
         PS.simplify_turn.
-        exfalso. eapply Memory.impossible_program_allocation_failure; eauto.
+        exfalso.
+        eapply Memory.impossible_program_allocation_failure; eauto.
+        match goal with
+        | Hfilter: PMap.Equal ?PMEM (PMapExtra.filter _ _) |-
+          PMap.Equal ?PMEM (PMapExtra.filter _ _) =>
+          rewrite Hfilter; apply Memory.equivalence_under_filter; assumption
+        end.
 
     (* call *)
     (* case analysis on the target *)
@@ -300,13 +442,24 @@ Section Decomposition.
         * econstructor; auto.
           ** apply Hstep.
           ** eapply PS.ProgramControl; auto.
-          ** eapply PS.ContextControl_Normal; auto.
+          ** eapply PS.ContextControl; auto.
              *** PS.simplify_turn.
                  apply PMapFacts.mem_in_iff. auto.
-             *** eauto.
-        * eapply PS.ContextControl_Normal; auto.
+             *** match goal with
+                 | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+                   PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+                   eapply Memory.equivalence_under_filter;
+                   symmetry; apply Hmem_eq
+                 end.
+        * eapply PS.ContextControl; auto.
           ** PS.simplify_turn.
              apply PMapFacts.mem_in_iff. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       (* internal call *)
       + eexists. split.
         * econstructor; auto.
@@ -315,10 +468,21 @@ Section Decomposition.
           ** eapply PS.ProgramControl; auto.
              *** PS.simplify_turn.
                  apply PMapFacts.not_mem_in_iff. auto.
-             *** eauto.
+             *** match goal with
+                 | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+                   PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+                   eapply Memory.equivalence_under_filter;
+                   symmetry; apply Hmem_eq
+                 end.
         * eapply PS.ProgramControl; auto.
           ** PS.simplify_turn.
              apply PMapFacts.not_mem_in_iff. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
 
     (* return *)
     (* case analysis on the target *)
@@ -328,13 +492,24 @@ Section Decomposition.
         * econstructor; auto.
           ** apply Hstep.
           ** eapply PS.ProgramControl; auto.
-          ** eapply PS.ContextControl_Normal; auto.
+          ** eapply PS.ContextControl; auto.
              *** PS.simplify_turn.
                  apply PMapFacts.mem_in_iff. auto.
-             *** eauto.
-        * eapply PS.ContextControl_Normal; auto.
+             *** match goal with
+                 | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+                   PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+                   eapply Memory.equivalence_under_filter;
+                   symmetry; apply Hmem_eq
+                 end.
+        * eapply PS.ContextControl; auto.
           ** PS.simplify_turn.
              apply PMapFacts.mem_in_iff. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       (* internal return *)
       + eexists. split.
         * econstructor; auto.
@@ -343,10 +518,21 @@ Section Decomposition.
           ** eapply PS.ProgramControl; auto.
              *** PS.simplify_turn.
                  apply PMapFacts.not_mem_in_iff. auto.
-             *** eauto.
+             *** match goal with
+                 | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+                   PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+                   eapply Memory.equivalence_under_filter;
+                   symmetry; apply Hmem_eq
+                 end.
         * eapply PS.ProgramControl; auto.
           ** PS.simplify_turn.
              apply PMapFacts.not_mem_in_iff. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
 
     (** context has control **)
 
@@ -355,15 +541,15 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
@@ -371,15 +557,15 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
@@ -387,15 +573,15 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
@@ -403,15 +589,15 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
@@ -419,15 +605,15 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
@@ -435,15 +621,15 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
@@ -451,15 +637,15 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
@@ -467,15 +653,15 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              erewrite <- find_label_in_component_1; eauto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            erewrite <- find_label_in_component_1; eauto.
@@ -483,47 +669,47 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
-             rewrite H9. auto.
-      + eapply PS.ContextControl_Normal;
+             rewrite H4. auto.
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
-           rewrite H9. auto.
+           rewrite H4. auto.
 
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              erewrite <- find_label_in_procedure_1; eauto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            erewrite <- find_label_in_procedure_1; eauto.
-           
+
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
@@ -531,15 +717,15 @@ Section Decomposition.
     - eexists. split.
       + econstructor; auto.
         * apply Hstep.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn. auto.
           ** auto.
-        * eapply PS.ContextControl_Normal;
+        * eapply PS.ContextControl;
             try reflexivity.
           ** PS.simplify_turn.
              rewrite Pointer.inc_preserves_component. auto.
-      + eapply PS.ContextControl_Normal;
+      + eapply PS.ContextControl;
           try reflexivity.
         ** PS.simplify_turn.
            rewrite Pointer.inc_preserves_component. auto.
@@ -551,26 +737,48 @@ Section Decomposition.
       + eexists. split.
         * econstructor; auto.
           ** apply Hstep.
-          ** eapply PS.ContextControl_Normal; auto.
-          ** eapply PS.ContextControl_Normal; auto.
+          ** eapply PS.ContextControl; auto.
+          ** eapply PS.ContextControl; auto.
              *** PS.simplify_turn.
                  apply PMapFacts.mem_in_iff. auto.
-             *** eauto.
-        * eapply PS.ContextControl_Normal; auto.
+             *** match goal with
+                 | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+                   PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+                   eapply Memory.equivalence_under_filter;
+                   symmetry; apply Hmem_eq
+                 end.
+        * eapply PS.ContextControl; auto.
           ** PS.simplify_turn.
              apply PMapFacts.mem_in_iff. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       (* external call *)
       + eexists. split.
         * econstructor; auto.
           ** apply Hstep.
-          ** eapply PS.ContextControl_Normal; auto.
+          ** eapply PS.ContextControl; auto.
           ** eapply PS.ProgramControl; auto.
              *** PS.simplify_turn.
                  apply PMapFacts.not_mem_in_iff. auto.
-             *** eauto.
+             *** match goal with
+                 | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+                   PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+                   eapply Memory.equivalence_under_filter;
+                   symmetry; apply Hmem_eq
+                 end.
         * eapply PS.ProgramControl; auto.
           ** PS.simplify_turn.
              apply PMapFacts.not_mem_in_iff. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
 
     (* return *)
     (* case analysis on the target *)
@@ -579,26 +787,48 @@ Section Decomposition.
       + eexists. split.
         * econstructor; auto.
           ** apply Hstep.
-          ** eapply PS.ContextControl_Normal; auto.
-          ** eapply PS.ContextControl_Normal; auto.
+          ** eapply PS.ContextControl; auto.
+          ** eapply PS.ContextControl; auto.
              *** PS.simplify_turn.
                  apply PMapFacts.mem_in_iff. auto.
-             *** eauto.
-        * eapply PS.ContextControl_Normal; auto.
+             *** match goal with
+                 | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+                   PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+                   eapply Memory.equivalence_under_filter;
+                   symmetry; apply Hmem_eq
+                 end.
+        * eapply PS.ContextControl; auto.
           ** PS.simplify_turn.
              apply PMapFacts.mem_in_iff. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
       (* external return *)
       + eexists. split.
         * econstructor; auto.
           ** apply Hstep.
-          ** eapply PS.ContextControl_Normal; auto.
+          ** eapply PS.ContextControl; auto.
           ** eapply PS.ProgramControl; auto.
              *** PS.simplify_turn.
                  apply PMapFacts.not_mem_in_iff. auto.
-             *** eauto.
+             *** match goal with
+                 | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+                   PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+                   eapply Memory.equivalence_under_filter;
+                   symmetry; apply Hmem_eq
+                 end.
         * eapply PS.ProgramControl; auto.
           ** PS.simplify_turn.
              apply PMapFacts.not_mem_in_iff. auto.
+          ** match goal with
+             | Hmem_eq: PMap.Equal ?MEM1 ?MEM0 |-
+               PMap.Equal _ (PMapExtra.filter _ ?MEM1) =>
+               eapply Memory.equivalence_under_filter;
+               symmetry; apply Hmem_eq
+             end.
   Qed.
 
   Theorem decomposition:

@@ -163,7 +163,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     kstep G (C, s, mem, k, E_alloc e)
           t (C, s, mem, Kalloc k, e)
 | KS_AllocEval : forall C s mem mem' k size ptr,
-    (size >= 0) ->
+    size > 0 ->
     Memory.alloc mem C (Z.to_nat size) = Some (mem', ptr) ->
     let t := E0 in
     kstep G (C, s, mem, Kalloc k, E_val (Int size))
@@ -265,7 +265,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kalloc k' =>
       match v with
       | Int size =>
-        if (size >=? 0) then
+        if (size >? 0) then
           do (mem',ptr) <- Memory.alloc mem C (Z.to_nat size);
           ret (E0, (C, s, mem', k', E_val (Ptr ptr)))
         else
@@ -368,7 +368,9 @@ Proof.
   (* if expressions *)
   - destruct i eqn:Hi;
       try contradiction; auto.
-  - assert (Hsize: (size >=? 0) = true). { destruct size; auto. }
+  - assert (Hsize: (size >? 0) = true). {
+      destruct size; try inversion H; auto.
+    }
     rewrite Hsize.
     rewrite H0. reflexivity.
   - rewrite Pos.eqb_refl.
@@ -421,10 +423,10 @@ Proof.
     + econstructor.
       pose proof (Zlt_neg_0 p). omega.
     + econstructor.
-      destruct z; auto.
-      * omega.
-      * pose proof (Zgt_pos_0 p). omega.
-      * unfold Z.geb in Heqb. simpl in Heqb. discriminate.
+      destruct z.
+      * apply Z.gtb_lt in Heqb. inversion Heqb.
+      * apply Zgt_is_gt_bool. auto.
+      * apply Z.gtb_lt in Heqb. inversion Heqb.
       * auto.
     + econstructor; eauto.
       * apply Pos.eqb_eq; auto.

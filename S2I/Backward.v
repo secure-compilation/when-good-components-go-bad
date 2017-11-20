@@ -4,6 +4,7 @@
  * a backward simulation for complete semantics. 
  *)
 
+(*
 Require Import Common.Definitions.
 Require Import Common.Memory.
 Require Import CompCert.Events.
@@ -451,3 +452,4 @@ Proof.
   - apply transl_step_correct.
 Qed.
 End Pbs.
+*)

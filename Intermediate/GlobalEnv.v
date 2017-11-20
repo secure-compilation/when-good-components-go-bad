@@ -23,6 +23,12 @@ Record well_formed_global_env (G: global_env) := {
     forall C, PMap.In C (genv_procedures G) <-> PMap.In C (genv_interface G)
 }.
 
+Definition init_genv (p: program) : global_env :=
+  let '(m, E, ps) := init_all p in
+  {| genv_interface := prog_interface p;
+     genv_procedures := ps;
+     genv_entrypoints := E |}.
+
 Definition executing G (pc : Pointer.t) (i : instr) : Prop :=
   exists C_procs P_code,
     PMap.find (Pointer.component pc) (genv_procedures G) = Some C_procs /\
@@ -145,9 +151,3 @@ Proof.
     try discriminate.
   eapply find_label_in_component_helper_guarantees in Hfind; auto.
 Qed.
-
-Definition init_genv (p: program) : global_env :=
-  let '(m, E, ps) := init_all p in
-  {| genv_interface := prog_interface p;
-     genv_procedures := ps;
-     genv_entrypoints := E |}.
