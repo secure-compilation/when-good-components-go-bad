@@ -9,8 +9,6 @@ Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
 Require Import Lib.Monads.
 
-Require Import Coq.Setoids.Setoid.
-
 Import Source.
 
 Inductive cont : Type :=

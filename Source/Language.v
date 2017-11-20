@@ -23,6 +23,50 @@ Module Source.
     prog_main : Component.id * Procedure.id
   }.
 
+  Inductive prog_eq : program -> program -> Prop :=
+  | prog_eq_intro: forall iface1 procs1 bufs1 iface2 procs2 bufs2 main1 main2,
+      PMap.Equal iface1 iface2 ->
+      PMap.Equal procs1 procs2 ->
+      PMap.Equal bufs1 bufs2 ->
+      main1 = main2 ->
+      prog_eq (mkProg iface1 procs1 bufs1 main1) (mkProg iface2 procs2 bufs2 main2).
+
+  Lemma prog_eq_refl:
+    forall p,
+      prog_eq p p.
+  Proof.
+    intros p.
+    destruct p; constructor; reflexivity.
+  Qed.
+
+  Lemma prog_eq_sym:
+    forall p1 p2,
+      prog_eq p1 p2 -> prog_eq p2 p1.
+  Proof.
+    intros p1 p2 H.
+    inversion H; subst.
+    constructor;
+      try reflexivity;
+      try symmetry; assumption.
+  Qed.
+
+  Lemma prog_eq_trans:
+    forall p1 p2 p3,
+      prog_eq p1 p2 -> prog_eq p2 p3 -> prog_eq p1 p3.
+  Proof.
+    intros p1 p2 p3 H1 H2.
+    inversion H1; subst; inversion H2; subst;
+      constructor;
+      try reflexivity;
+      try etransitivity; eauto.
+  Qed.
+
+  Add Parametric Relation: (program) (prog_eq)
+      reflexivity proved by (prog_eq_refl)
+      symmetry proved by (prog_eq_sym)
+      transitivity proved by (prog_eq_trans)
+        as prog_eq_rel.
+
   Definition single_component (p: program) : Prop :=
     PMap.cardinal (prog_interface p) = 1%nat.
 

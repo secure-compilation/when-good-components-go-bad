@@ -7,8 +7,6 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
 
-Require Import Coq.Setoids.Setoid.
-
 Module PS.
 
 Import Intermediate.

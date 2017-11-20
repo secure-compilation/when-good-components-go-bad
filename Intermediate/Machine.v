@@ -93,12 +93,56 @@ End EntryPoint.
 
 (* programs *)
 
-Record program := {
+Record program := mkProg {
   prog_interface : Program.interface;
   prog_procedures : PMap.t (PMap.t code);
   prog_buffers : PMap.t (list (Block.id * (nat + list value)));
   prog_main : Component.id * Procedure.id
 }.
+
+Inductive prog_eq : program -> program -> Prop :=
+| prog_eq_intro: forall iface1 procs1 bufs1 iface2 procs2 bufs2 main1 main2,
+    PMap.Equal iface1 iface2 ->
+    PMap.Equal procs1 procs2 ->
+    PMap.Equal bufs1 bufs2 ->
+    main1 = main2 ->
+    prog_eq (mkProg iface1 procs1 bufs1 main1) (mkProg iface2 procs2 bufs2 main2).
+
+Lemma prog_eq_refl:
+  forall p,
+    prog_eq p p.
+Proof.
+  intros p.
+  destruct p; constructor; reflexivity.
+Qed.
+
+Lemma prog_eq_sym:
+  forall p1 p2,
+    prog_eq p1 p2 -> prog_eq p2 p1.
+Proof.
+  intros p1 p2 H.
+  inversion H; subst.
+  constructor;
+    try reflexivity;
+    try symmetry; assumption.
+Qed.
+
+Lemma prog_eq_trans:
+  forall p1 p2 p3,
+    prog_eq p1 p2 -> prog_eq p2 p3 -> prog_eq p1 p3.
+Proof.
+  intros p1 p2 p3 H1 H2.
+  inversion H1; subst; inversion H2; subst;
+    constructor;
+    try reflexivity;
+    try etransitivity; eauto.
+Qed.
+
+Add Parametric Relation: (program) (prog_eq)
+    reflexivity proved by (prog_eq_refl)
+    symmetry proved by (prog_eq_sym)
+    transitivity proved by (prog_eq_trans)
+      as prog_eq_rel.
 
 Definition single_component (p: program) : Prop :=
   PMap.cardinal (prog_interface p) = 1%nat.
@@ -140,25 +184,10 @@ Definition well_formed_instruction
   | IHalt => True
   end.
 
-(* Component C has at least two buffers of size at least one:
-   the first one is for passing the call argument, whereas the second one is used
-   as a temporary store when passing controls between components *)
-(* TODO rethink about this
-Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
-  True.
-  exists b1 b2 bufs,
-    PMap.find C (prog_buffers p) = Some (b1 :: b2 :: bufs) /\
-    (snd b1 > 0)%nat /\ (snd b2 > 0)%nat.*)
-
 Record well_formed_program (p: program) := {
   (* the interface is sound (but maybe not closed) *)
   wfprog_interface_soundness:
     sound_interface (prog_interface p);
-  (* each declared component has the required static buffers *)
-  (*
-  wfprog_buffers_existence:
-    forall C, PMap.In C (prog_interface p) ->
-         has_required_local_buffers p C;*)
   (* each exported procedure actually exists *)
   wfprog_exported_procedures_existence:
     forall C CI,
@@ -195,14 +224,6 @@ Record closed_program (p: program) := {
       PMap.In (snd (prog_main p)) procs;
 }.
 
-Definition prog_eq (p1 p2: program) : Prop :=
-  PMap.Equal (prog_interface p1) (prog_interface p2) /\
-  PMap.Equal (prog_procedures p1) (prog_procedures p2) /\
-  PMap.Equal (prog_buffers p1) (prog_buffers p2) /\
-  prog_main p1 = prog_main p2.
-
-(* TODO prove that prog_eq is an equivalence relation *)
-
 Definition linkable_programs (p1 p2: program) : Prop :=
   (* both programs are well-formed *)
   well_formed_program p1 /\ well_formed_program p2 /\
@@ -229,10 +250,10 @@ Definition program_link (p1 p2: program) mainC mainP : program :=
      prog_buffers := PMapExtra.update (prog_buffers p1) (prog_buffers p2);
      prog_main := (mainC, mainP) |}.
 
+(*
 Ltac inv H := (inversion H; subst; clear H).
 
 (* TODO: Figure out what to do about the last clause. *)
-(*
 Theorem linking_well_formedness:
   forall p1 p2 mainC mainP,
     linkable_programs p1 p2 ->

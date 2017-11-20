@@ -8,8 +8,6 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Lib.Monads.
 
-Require Import Coq.Setoids.Setoid.
-
 Module CS.
 
 Import Intermediate.
