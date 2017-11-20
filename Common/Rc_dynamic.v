@@ -171,7 +171,9 @@ Module SI.
     forall p, determinate (I.sem p).
 
   (* In compcert there are two simulation: *)
-  (*   - forward: is just a simulation, it is forward or backward depending on the order of the arguments *)
+  (* - forward: is just a simulation, it is forward or backward
+     depending on the order of the arguments, the second argument
+     simulates the first *)
   (*   - backward: add the condition that the first argument must be a safe program *)
 
   Axiom complete_forward_simulation :
@@ -470,7 +472,7 @@ Qed.
 
   (* This property is strictly weaker than the above, but has the
      advantage of not mentioning the intermediate language *)
-  Definition robust_compilation_static_compromise_weaker :=
+  Definition robust_compilation_dynamic_compromise_weaker :=
     forall (Q P:S.program) (beht:program_behavior),
       S.complete2 Q P ->
       program_behaves (IT.T.sem (IT.compile (I.link (SI.compile Q) (SI.compile P)))) beht ->
