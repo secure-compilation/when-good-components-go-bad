@@ -165,7 +165,7 @@ Definition init_env (i_cid2SFIid : PMap.t N) (i_procId2slot : PMap.t (PMap.t N))
  * Returns: memory with data slot 1 reserved for allocator and the static buffers 
  *          preallocated
  *)
-Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * nat)))))
+Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * (nat + list value))))))
   : COMP (RiscMachine.Memory.t) :=
   (* components with static buffers *)
   let allocate_buffers1 buffs := 
@@ -174,13 +174,22 @@ Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * nat)
       | (cid,lst) :: xs =>
         do mem <- allocate_buffers xs;
           do sfi_cid <- get_sfiId cid;
-          match List.find (fun '(_,size) => Nat.ltb (N.to_nat SFI.SLOT_SIZE) size) lst with
+          match List.find (fun '(_,size) =>
+                             match size with
+                             | inl nsz => 
+                               Nat.ltb (N.to_nat SFI.SLOT_SIZE) nsz
+                             | inr lst =>
+                               Nat.ltb (N.to_nat SFI.SLOT_SIZE) (List.length lst)
+                             end
+                          ) lst
+          with
           | None => 
             let blocks := PMapExtra.of_list
                             (List.combine (fst (List.split lst))
                                           (SFI.Allocator.allocate_data_slots
                                              (List.length lst))) in
-            do! modify (env_add_blocks cid blocks); 
+            do! modify (env_add_blocks cid blocks);
+
               ret (RiscMachine.Memory.set_value
                      mem
                      (SFI.address_of sfi_cid (SFI.Allocator.allocator_data_slot) 0%N)
@@ -212,6 +221,73 @@ Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * nat)
                      (List.map fst (PMap.elements cid2SFIid))
        ) mem1.
     
+
+Fixpoint init_buffers
+         (mem : RiscMachine.Memory.t)
+         (buffs :  (list (Component.id * (list (Block.id * (nat + list value))))))
+  : COMP (RiscMachine.Memory.t) :=
+
+  let fix init_buffer mem sfi_cid slotid vals  : COMP (RiscMachine.Memory.t) := 
+      match vals with
+      | nil => ret mem
+      | (off,imval)::xs =>
+        match imval with
+        | Int n =>
+          init_buffer 
+            (RiscMachine.Memory.set_value
+               mem
+               (SFI.address_of sfi_cid slotid (N.of_nat off)) n )
+            sfi_cid slotid xs
+        | Ptr p =>
+          let cid : Component.id := Pointer.component p in
+          let bid : Block.id := Pointer.block p in
+          let offset := Pointer.offset p in    
+          if (Z.ltb offset 0%Z)
+          then fail "init_buffers negative offset for pointer"
+          else
+            if (Z.leb (Z.of_N SFI.SLOT_SIZE) offset)
+            then
+              fail "init_buffers offset too large"
+            else
+              do cenv <- get;
+              do psfiId <- get_sfiId cid;
+              do cmap <- lift (PMap.find cid (buffer2slot cenv));
+              do pslotid <- lift (PMap.find bid cmap);
+              let address := (SFI.address_of psfiId pslotid (Z.to_N offset)) in
+              init_buffer 
+                (RiscMachine.Memory.set_value
+                   mem
+                   (SFI.address_of sfi_cid slotid (N.of_nat off))
+                   (RiscMachine.to_value address) )
+                sfi_cid slotid xs
+        | _ => init_buffer mem sfi_cid slotid xs
+        end
+      end in
+                
+  let fix init_buffers_comp mem cid (lst : (list (Block.id * (nat + list value))))  : COMP (RiscMachine.Memory.t) :=
+      match lst with
+      | nil => ret mem
+      | (bid,elt)::xs =>
+        match elt with
+        | inl _ => ret mem
+        | inr vals =>
+          do cenv <- get;
+            do sfi_cid <- get_sfiId cid;
+            do cmap <- lift (PMap.find cid (buffer2slot cenv));
+            do slotid <- lift (PMap.find bid cmap);
+            do mem' <- init_buffer mem sfi_cid slotid
+               (List.combine (List.seq 0 (List.length vals)) vals);
+            init_buffers_comp mem' cid xs
+        end
+      end in
+  
+  match buffs with
+  | [] => ret mem
+  | (cid,lst) :: xs =>
+      do mem' <- init_buffers_comp mem cid lst;
+         init_buffers mem' xs
+  end.
+
 
 (******************************** Instruction translation **************************)
 
@@ -850,8 +926,11 @@ Definition compile_program (ip : Intermediate.program) :=
   run (init_env cid2SFIid procId2slot procs_labels (max_label+1)%N)
         (
          
-          do data_mem <- allocate_buffers
+          do data_mem' <- allocate_buffers
              (PMap.elements (Intermediate.prog_buffers ip));
+
+            do data_mem <- init_buffers data_mem'
+               (PMap.elements (Intermediate.prog_buffers ip));
             
             do acode <- compile_components
                (PMap.elements (Intermediate.prog_procedures ip) )
