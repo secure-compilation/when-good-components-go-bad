@@ -127,13 +127,32 @@ Instance show_instr : Show Intermediate.Machine.instr :=
          end
   |}.
 
+Instance show_value : Show Common.Values.value :=
+  {|
+    show := fun val =>
+              match val with
+              | Int i => (show i)
+              | Ptr p => (show p)
+              | Undef => "Undef"
+              end
+  |}.
+
+Instance show_buffers : Show (Block.id * (nat + list value)) :=
+  {|
+    show := fun p =>
+              match p with
+              | (bid, inl n) => (show bid) ++ "[" ++ (show n) ++"]"
+              | (bid, inr lst) => (show bid) ++ ":" ++ (show lst)
+              end             
+  |}.
+
 Instance show_intermediate_program : Show Intermediate.program :=
   {|
     show := fun ip =>
               ("Interface: ") ++ newline
                 ++ (show (Intermediate.prog_interface ip))
                 ++ ("Buffers: ") ++ newline
-                ++ (show (Intermediate.prog_buffers ip))
+                ++ (show_map (Intermediate.prog_buffers ip))
                 ++ ("Code: ") ++ newline
                 ++ (show (Intermediate.prog_procedures ip))
                 ++ ("Main: ") ++ newline
@@ -200,14 +219,59 @@ Definition gen_program_interface (cids : list Component.id) : G Program.interfac
                )
             ).
 
-Definition gen_buffers (cids : list Component.id) : G (PMap.t (list (Block.id * nat))) :=
+Definition gen_value (buffers : list (Component.id*(list (Block.id * nat)))) : G value :=
+  freq [ (3%nat, (do! i <- arbitrary; returnGen (Int i)))
+         ; (1%nat, (match buffers with
+                  | nil => (do! i <- arbitrary; returnGen (Int i))
+                  | p::xs =>
+                    let (cid,blocks) := p in 
+                      do! p' <- elements p xs;
+                        let (cid',blocks') := p' in 
+                        (match blocks' with
+                         | nil => (do! i <- arbitrary; returnGen (Int i))
+                         | b::xs' =>
+                           let (bid,s) := b in
+                           do! b' <- elements (bid,s) xs';
+                             let (bid',s') := b' in
+                             do! off <- choose (0%nat, (s'-1)%nat);
+                               returnGen (Ptr (cid',bid',Z.of_nat off))
+                         end)
+                  end
+                 )
+           )
+       ].
+                 
+
+Definition gen_sum bsize (buffers : list (Component.id * list (Block.id * nat)))
+  : G ( nat+ list value) :=
+  freq [ (3%nat, returnGen (inl bsize))
+         ; (1%nat,
+             (do! vals <- vectorOf bsize (gen_value buffers);
+                returnGen (inr vals)))
+       ].
+
+Definition gen_buffers (cids : list Component.id) : G (PMap.t (list (Block.id * (nat + list value)))) :=
   let gen_n_buffers : G (list (Block.id * nat)) :=
       do! n <- choose (1%nat,5%nat); 
         let ids := pos_list n in
         do! sizes <- vectorOf n (choose (1%nat, N.to_nat (SFI.SLOT_SIZE-1)%N));
-          returnGen (List.combine ids sizes) in
+           returnGen (List.combine ids sizes) in
   do! buffers <- (vectorOf (List.length cids) gen_n_buffers);
-    returnGen (PMapExtra.of_list (List.combine cids buffers)).
+    let comp_buffers := (List.combine cids buffers) in
+    do! init_buffers <- sequenceGen
+      (List.map
+         (fun '(cid,bl_lst) =>
+            do! bvals <- sequenceGen 
+              (List.map (fun '(bid,bsize) =>
+                          gen_sum bsize comp_buffers
+                        )
+                        bl_lst
+              );
+              returnGen (List.combine (List.map fst bl_lst) bvals)
+         )
+         comp_buffers
+      );
+    returnGen (PMapExtra.of_list (List.combine cids init_buffers)).
 
 Section CodeGeneration.
 
@@ -405,7 +469,9 @@ Section CodeGeneration.
 
 End CodeGeneration.
 
-Definition gen_procs (pi : Program.interface) (buffers : PMap.t (list (Block.id * nat))) : G (PMap.t (PMap.t code)) :=
+Definition gen_procs (pi : Program.interface)
+           (buffers : PMap.t (list (Block.id * (nat+list value))))
+  : G (PMap.t (PMap.t code)) :=
   let max_label (procs : PMap.t code) :=
       PMap.fold (fun _ proc acc =>
                    (List.fold_left (fun acc' i =>

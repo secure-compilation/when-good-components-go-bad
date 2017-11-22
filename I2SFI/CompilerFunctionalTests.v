@@ -26,7 +26,7 @@ Definition test (instrs : Intermediate.Machine.code)
       (Component.mkCompInterface [PROC1_ID] []) in
   let program_interface : Program.interface :=
       PMap.add COMP1_ID component1_interface (PMap.empty Component.interface) in
-  let buffers := PMap.add COMP1_ID [(BLOCK1_ID,10%nat)] (PMap.empty (list (Block.id * nat))) in
+  let buffers := PMap.add COMP1_ID [(BLOCK1_ID,(inl 10%nat))] (PMap.empty (list (Block.id * (nat + list value)))) in
   let proc1_code := (PMap.add PROC1_ID (instrs++[Intermediate.Machine.IReturn])
                               (PMap.empty Intermediate.Machine.code) ) in
   let procs := PMap.add COMP1_ID proc1_code

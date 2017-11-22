@@ -35,7 +35,7 @@ Definition increment : Source.program := {|
                               Component.export := [1] |});
                        (2, {| Component.import := [];
                               Component.export := [1] |})];
-  Source.prog_buffers := PMapExtra.of_list [(1, 1%nat); (2, 1%nat)];
+  Source.prog_buffers := PMapExtra.of_list [(1, (inl 1%nat)); (2, (inl 1%nat))];
   Source.prog_procedures := PMapExtra.of_list [
     (* NOTE the version with E_exit is the right one, but unfortunately it is difficult
             to debug with extraction. Hence, the second version without E_exit *)

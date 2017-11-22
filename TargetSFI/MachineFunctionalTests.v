@@ -70,9 +70,11 @@ Proof. unfold CODE_DATA_BIT_MASK. unfold OFFSET_BITS_NO. unfold COMP_BITS_NO.
 Example test_AND_DATA_MASK :
   SFI.AND_DATA_MASK = hex2N "FF8FFF".
 Proof.
-  unfold AND_DATA_MASK. unfold OFFSET_BITS_NO.
-  unfold COMP_BITS_NO. unfold BLOCK_BITS_NO.
-  reflexivity. Qed.
+  compute. eauto. Qed.
+  
+  (* unfold AND_DATA_MASK. unfold OFFSET_BITS_NO. *)
+  (* unfold COMP_BITS_NO. unfold BLOCK_BITS_NO. *)
+  (* reflexivity. Qed. *)
 
 Example test_AND_CODE_MASK :
   SFI.AND_CODE_MASK = hex2N "FF8FF0".
