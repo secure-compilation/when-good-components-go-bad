@@ -115,7 +115,8 @@ Module CS.
       Some addr = RegisterFile.get_register reg gen_regs ->
       let pc' := Memory.to_address addr in
       Some t = ret_trace G pc pc' gen_regs ->
-      ~SFI.is_same_component pc pc'->
+      ~SFI.is_same_component pc pc' ->
+      ~SFI.is_same_component pc' SFI.MONITOR_COMPONENT_ID ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) t (mem',pc',gen_regs)
 
@@ -123,7 +124,7 @@ Module CS.
       executing mem pc (IJump reg) ->
       Some addr = RegisterFile.get_register reg gen_regs ->
       let pc' := Memory.to_address addr in
-      SFI.is_same_component pc pc'->
+      (SFI.is_same_component pc pc') \/ (SFI.is_same_component pc' SFI.MONITOR_COMPONENT_ID) ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) E0 (mem',pc',gen_regs)
            
@@ -132,7 +133,7 @@ Module CS.
       let ra := Z.of_N (inc_pc pc) in
       RegisterFile.set_register Register.R_RA ra gen_regs = gen_regs'->
       let pc' := addr in
-      SFI.is_same_component pc pc'->
+      (SFI.is_same_component pc pc') \/ (SFI.is_same_component pc SFI.MONITOR_COMPONENT_ID) ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) E0 (mem',pc',gen_regs')
            
@@ -143,6 +144,7 @@ Module CS.
       let pc' := addr in
       Some t = call_trace G pc pc' gen_regs ->
       ~SFI.is_same_component pc pc'->
+       ~SFI.is_same_component pc SFI.MONITOR_COMPONENT_ID ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) t (mem',pc',gen_regs').
 

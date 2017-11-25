@@ -148,7 +148,7 @@ Instance show_instr : Show RiscMachine.ISA.instr :=
               (* conditional and unconditional jumps *)
               | ISA.IBnz r imm => ("BnZ " ++ (show r) ++ " " ++ (show imm))%string
               | ISA.IJump r => ("Jump " ++ (show r))%string
-              | ISA.IJal addr=> ("Jal " ++ (show addr))%string
+              | ISA.IJal addr=> ("Jal " ++ (show_addr addr))%string
               (* termination *)
               | ISA.IHalt => "Halt"
               end
@@ -178,9 +178,9 @@ Instance show_state : Show MachineState.t :=
   {|
     show := fun (st : MachineState.t) =>
               let '(mem,pc,gen_regs) := st in
-              "PC: " ++ (show pc) ++ "\n"
-                     ++ "registers: " ++ (show gen_regs) ++ "\n"
-                     ++ "memory: \n" ++ (show mem) 
+              "PC: " ++ (show_addr pc) ++ newline
+                     ++ "registers: " ++ (show gen_regs) ++ newline
+                     ++ "memory: " ++ newline ++ (show mem) 
   |}.
 
 Close Scope string_scope.

@@ -611,7 +611,8 @@ Proof.
                       unfold executing. rewrite H. auto.
                       symmetry. assumption.
                       unfold SFI.is_same_component_bool in Hsfi.
-                      unfold SFI.is_same_component. rewrite N.eqb_eq in Hsfi. apply Hsfi.
+                      unfold SFI.is_same_component. rewrite N.eqb_eq in Hsfi.
+                      left. apply Hsfi.
                       assumption. 
                     }
                     { (* not empty *) (* contradiction *)
@@ -620,64 +621,99 @@ Proof.
                     }
                   }
                   { (* ~SFI.is_same_component pc pc' *)
-                    destruct t0 as [|e xt].
-                    { (* empty *) (* contradiction *)
-                      right_inv; exec_contra H; subst.
-                      unfold_ret_trace. subst pc'. unify_options. sfi_contra. 
-                    }
-                    { (* not empty *) (* this should be a return *)
-                      destruct xt.
-                      { (* trace [e] *)
-                        destruct e.
-                        { (* ECall *)
-                          right; intro contra; inversion contra; subst.
-                          unfold_ret_trace. exec_contra H. 
-                        }
-                        { (* ERet *)
-                          rename i into c. rename z into rcom. rename i0 into c'. 
-                          destruct (RegisterFile.get_register Register.R_COM gen_regs) eqn:Hrcom.
-                          rename v into rcom1.
-                          destruct (get_component_name_from_id (SFI.C_SFI pc) g) eqn:Hc.
-                          rename i into c1.
-                          destruct (get_component_name_from_id (SFI.C_SFI (Memory.to_address cptr)) g) eqn:Hc'.
-                          rename i into c1'.
-                          destruct (Pos.eqb c c1) eqn:Haux. rewrite Pos.eqb_eq in Haux. subst c1.
-                          destruct (Pos.eqb c' c1') eqn:Haux. rewrite Pos.eqb_eq in Haux. subst c1'.
-                          destruct (Z.eqb rcom rcom1) eqn:Haux. rewrite Z.eqb_eq in Haux. subst rcom1.
-                          
-                          left. apply Return with (reg:=r).
-                          unfold executing. rewrite H. auto.
-                          symmetry. assumption.
-                          unfold ret_trace.
-                          rewrite Hrcom. rewrite Hc. rewrite Hc'. simpl. reflexivity.
-
-                          intro. sfi_contra. 
-                          assumption.
-
-                          (* rcom does not match *)
-                          ret_com_contra Z.eqb_refl H. 
-                         
-                          (* c' does not match *)
-                          ret_comp_contra pc' H. 
-                          
-                          (* c does not match *)
-                          ret_comp_contra pc' H.
-                          
-                          (* Hc' failed *)
-                          ret_env_contra pc' H.
-
-                          (* Hc failed *)
-                          ret_env_contra pc' H.
-                          (* Hrcom failed *)
-                          ret_env_contra pc' H.                          
-                        }
+                    destruct (SFI.is_same_component_bool
+                                (Memory.to_address cptr)
+                                SFI.MONITOR_COMPONENT_ID)
+                             eqn:Hsfi_zero.
+                    {
+                      destruct t0.
+                      { (* empty *) (* return to component zero *)
+                        left. apply Jump with (G:=g) (mem:=mem) (mem':=mem')
+                                            (pc:=pc) (gen_regs:=gen_regs)
+                                            (reg:=r) (addr:=cptr).
+                        unfold executing. rewrite H. auto.
+                        symmetry. assumption.
+                        unfold SFI.is_same_component_bool in Hsfi_zero.
+                        unfold SFI.is_same_component. rewrite N.eqb_eq in Hsfi_zero.
+                        right. assumption. auto.
                       }
-                      { (* trace [e;e';...] *)
-                        right. intro contra.
-                        inversion contra; clear contra; 
-                          subst; exec_contra H; subst pc'; subst.
-                        simplify_equality.
-                        unfold_ret_trace. 
+                      {
+                        (* not empty *) (* contradiction *)
+                        right_inv; exec_contra H. subst. subst pc'. unify_options.
+                        sfi_contra.
+                      }
+                    }
+                    {                    
+                      destruct t0 as [|e xt].
+                      { (* empty *) (* contradiction *)
+                        right_inv; exec_contra H; subst.
+                        unfold_ret_trace. subst pc'.
+                        destruct H7. 
+                        unify_options.
+                        sfi_contra.
+                        unify_options. sfi_contra.
+                      }
+                      { (* not empty *) (* this should be a return *)
+                        destruct xt.
+                        { (* trace [e] *)
+                          destruct e.
+                          { (* ECall *)
+                            right; intro contra; inversion contra; subst.
+                            unfold_ret_trace. exec_contra H. 
+                          }
+                          { (* ERet *)
+                            rename i into c. rename z into rcom. rename i0 into c'. 
+                            destruct (RegisterFile.get_register Register.R_COM gen_regs)
+                                     eqn:Hrcom.
+                            rename v into rcom1.
+                            destruct (get_component_name_from_id (SFI.C_SFI pc) g) eqn:Hc.
+                            rename i into c1.
+                            destruct (get_component_name_from_id
+                                        (SFI.C_SFI
+                                           (Memory.to_address cptr)) g) eqn:Hc'.
+                            rename i into c1'.
+                            destruct (Pos.eqb c c1) eqn:Haux.
+                            rewrite Pos.eqb_eq in Haux. subst c1.
+                            destruct (Pos.eqb c' c1') eqn:Haux.
+                            rewrite Pos.eqb_eq in Haux. subst c1'.
+                            destruct (Z.eqb rcom rcom1) eqn:Haux.
+                            rewrite Z.eqb_eq in Haux. subst rcom1.
+                          
+                            left. apply Return with (reg:=r).
+                            unfold executing. rewrite H. auto.
+                            symmetry. assumption.
+                            unfold ret_trace.
+                            rewrite Hrcom. rewrite Hc. rewrite Hc'. simpl. reflexivity.
+
+                            intro. sfi_contra.
+                            intro. sfi_contra.
+                            assumption.
+
+                            (* rcom does not match *)
+                            ret_com_contra Z.eqb_refl H. 
+                         
+                            (* c' does not match *)
+                            ret_comp_contra pc' H. 
+                          
+                            (* c does not match *)
+                            ret_comp_contra pc' H.
+                          
+                            (* Hc' failed *)
+                            ret_env_contra pc' H.
+
+                            (* Hc failed *)
+                            ret_env_contra pc' H.
+                            (* Hrcom failed *)
+                            ret_env_contra pc' H.                          
+                          }
+                        }                                              
+                        { (* trace [e;e';...] *)
+                          right. intro contra.
+                          inversion contra; clear contra; 
+                            subst; exec_contra H; subst pc'; subst.
+                          simplify_equality.
+                          unfold_ret_trace. 
+                        }
                       }
                     }
                   }
@@ -714,14 +750,15 @@ Proof.
             apply N.eqb_eq in Hpc. subst addr. 
             { (* pc' = addr *)
               destruct(SFI.is_same_component_bool pc pc') eqn:Hsfi.
-              { (* SFI.is_same_component pc pc' *)
+              { (* SFI.is_same_component pc pc' *)                
                 destruct t0.
                 { (* empty *) (* this is a Jal *)
                   left. apply Jal. 
                   unfold executing. rewrite H. auto.
                   apply RegisterFile.eqb_eq in Hregs. apply Hregs.
                   unfold  SFI.is_same_component_bool in Hsfi.
-                  unfold  SFI.is_same_component. apply N.eqb_eq in Hsfi. apply Hsfi.
+                  unfold  SFI.is_same_component. apply N.eqb_eq in Hsfi.
+                  left. apply Hsfi.
                   assumption.
                 }
                 { (* not empty *) (* contradiction *)
@@ -730,77 +767,23 @@ Proof.
                 }
               }
               { (* ~SFI.is_same_component pc pc' *)
-                destruct t0 as [|e xt].
-                { (* empty *) (* contradiction *)
-                  right_inv; exec_contra H; subst.
 
-                  subst pc'0. subst pc'1. subst ra. simplify_equality. sfi_contra. 
-                  
-                  unfold_call_trace. 
-                }
-                { (* not empty *) (* this should be a return *)
-                  destruct xt.
-                  { (* trace [e] *)
-                    destruct e.
-                    { (* ECall *)
-                      
-                      rename i into c. rename i0 into p.
-                      rename z into rcom. rename i1 into c'. 
-                      destruct (RegisterFile.get_register Register.R_COM gen_regs) eqn:Hrcom.
-                      rename v into rcom1.
-                      destruct (get_component_name_from_id (SFI.C_SFI pc) g) eqn:Hc.
-                      rename i into c1.
-                      destruct (get_component_name_from_id (SFI.C_SFI pc') g) eqn:Hc'.
-                      rename i into c1'.
-                      destruct (get_procedure pc' g) eqn:Hp.
-                      rename i into p1.
-                      
-                      destruct (Pos.eqb c c1) eqn:Haux. rewrite Pos.eqb_eq in Haux. subst c1.
-                      destruct (Pos.eqb c' c1') eqn:Haux. rewrite Pos.eqb_eq in Haux. subst c1'.
-                      destruct (Pos.eqb p p1) eqn:Haux. rewrite Pos.eqb_eq in Haux. subst p1.
-                      destruct (Z.eqb rcom rcom1) eqn:Haux. rewrite Z.eqb_eq in Haux. subst rcom1.
-                          
-                      left. apply Call.
-                      unfold executing. rewrite H. auto.
-                      apply RegisterFile.eqb_eq in Hregs. apply Hregs. 
-                      unfold call_trace.
-                      rewrite Hrcom. rewrite Hc. rewrite Hc'. rewrite Hp. simpl. reflexivity.
-
-                      intro. sfi_contra. 
-                      assumption.
-
-                      (* rcom does not match *)
-                      right; intro contra; inversion contra; exec_contra H;
-                      subst pc'0; subst pc'1; subst ra; 
-                        subst; unify_options.
-                      unfold_call_trace. subst; simplify_equality;
-                                           unify_options.
-                      match goal with
-                      | H': (?z =? ?z) = false |- False =>
-                        rewrite Z.eqb_refl in H'; inversion H'
-                      end.
-
-                      (* p des not match *)
-                      call_ids_contra H pc'0 pc'1 ra.                         
-                      (* c' does not match *)
-                      call_ids_contra H pc'0 pc'1 ra.                           
-                      (* c does not match *)
-                      call_ids_contra H pc'0 pc'1 ra.
-                      (* Hp failed *)
-                      call_env_contra H pc'0 pc'1 ra.
-                      (* Hc' failed *)
-                      call_env_contra H pc'0 pc'1 ra.
-                      (* Hc failed *)
-                      call_env_contra H pc'0 pc'1 ra.             
-                      (* Hrcom failed *)
-                      call_env_contra H pc'0 pc'1 ra.
-                    }
-                    { (* ERet *)
-                      right; intro contra; inversion contra; exec_contra H;
-                        subst pc'0; subst;
-                        unify_options; simplify_equality. 
-                      unfold_call_trace.
-                    }
+                destruct (SFI.is_same_component_bool
+                                pc
+                                SFI.MONITOR_COMPONENT_ID)
+                         eqn:Hsfi_zero.
+                {
+                  destruct t0 as [|e xt].
+                  {  (* empty *) (* IJal from comp zero *)
+                    left. apply Jal. 
+                     unfold executing. rewrite H. auto.
+                     apply RegisterFile.eqb_eq in Hregs. apply Hregs.
+                     unfold  SFI.is_same_component_bool in Hsfi_zero.
+                     unfold  SFI.is_same_component.
+                     right.  
+                     apply N.eqb_eq in Hsfi_zero.              
+                     assumption.
+                     assumption. 
                   }
                   { (* trace [e;e';...] *)
                     right. intro contra.
@@ -808,19 +791,107 @@ Proof.
                       subst; exec_contra H;
                         subst pc'0; subst pc'1; subst ra; subst;
                           simplify_equality.
-                        unfold_call_trace. 
+                        sfi_contra.
+                  }
+                }
+                {                                                         
+                  destruct t0 as [|e xt].                  
+                  { (* empty *) (* IJal contradiction *)
+                    right_inv; exec_contra H; subst.
+
+                    subst pc'0. subst pc'1. subst ra. simplify_equality.
+
+                    destruct H8.
+                    
+                    sfi_contra. sfi_contra. 
+
+                    unfold_call_trace.
+                    
+                  }
+                  { (* not empty *) (* this should be a return *)
+                    destruct xt.
+                    { (* trace [e] *)
+                      destruct e.
+                      { (* ECall *)
+                        
+                        rename i into c. rename i0 into p.
+                        rename z into rcom. rename i1 into c'. 
+                        destruct (RegisterFile.get_register Register.R_COM gen_regs) eqn:Hrcom.
+                        rename v into rcom1.
+                        destruct (get_component_name_from_id (SFI.C_SFI pc) g) eqn:Hc.
+                        rename i into c1.
+                        destruct (get_component_name_from_id (SFI.C_SFI pc') g) eqn:Hc'.
+                        rename i into c1'.
+                        destruct (get_procedure pc' g) eqn:Hp.
+                        rename i into p1.
+                        
+                        destruct (Pos.eqb c c1) eqn:Haux. rewrite Pos.eqb_eq in Haux. subst c1.
+                        destruct (Pos.eqb c' c1') eqn:Haux. rewrite Pos.eqb_eq in Haux. subst c1'.
+                        destruct (Pos.eqb p p1) eqn:Haux. rewrite Pos.eqb_eq in Haux. subst p1.
+                        destruct (Z.eqb rcom rcom1) eqn:Haux. rewrite Z.eqb_eq in Haux. subst rcom1.
+                        
+                        left. apply Call.
+                        unfold executing. rewrite H. auto.
+                        apply RegisterFile.eqb_eq in Hregs. apply Hregs. 
+                        unfold call_trace.
+                        rewrite Hrcom. rewrite Hc. rewrite Hc'. rewrite Hp. simpl. reflexivity.
+
+                        intro. sfi_contra. intro. sfi_contra. 
+                        assumption.
+
+                        (* rcom does not match *)
+                        right; intro contra; inversion contra; exec_contra H;
+                          subst pc'0; subst pc'1; subst ra; 
+                            subst; unify_options.
+                        unfold_call_trace. subst; simplify_equality;
+                                             unify_options.
+                        match goal with
+                        | H': (?z =? ?z) = false |- False =>
+                          rewrite Z.eqb_refl in H'; inversion H'
+                        end.
+
+                        (* p des not match *)
+                        call_ids_contra H pc'0 pc'1 ra.                         
+                        (* c' does not match *)
+                        call_ids_contra H pc'0 pc'1 ra.                           
+                        (* c does not match *)
+                        call_ids_contra H pc'0 pc'1 ra.
+                        (* Hp failed *)
+                        call_env_contra H pc'0 pc'1 ra.
+                        (* Hc' failed *)
+                        call_env_contra H pc'0 pc'1 ra.
+                        (* Hc failed *)
+                        call_env_contra H pc'0 pc'1 ra.             
+                        (* Hrcom failed *)
+                        call_env_contra H pc'0 pc'1 ra.
+                      }
+                      { (* ERet *)
+                        right; intro contra; inversion contra; exec_contra H;
+                          subst pc'0; subst;
+                            unify_options; simplify_equality. 
+                        unfold_call_trace.
                       }
                     }
+                    { (* trace [e;e';...] *)
+                      right. intro contra.
+                      inversion contra; clear contra; 
+                        subst; exec_contra H;
+                          subst pc'0; subst pc'1; subst ra; subst;
+                            simplify_equality.
+                      unfold_call_trace. 
+                    }
                   }
-              }
-              { (* pc' <> [r] *)
-                right; intro contra;
-                  inversion contra; clear contra; subst; exec_contra H;
-                    subst pc'0; subst pc'1; subst ra; subst;
-                      simplify_equality; unify_options;
-                        rewrite N.eqb_refl in Hpc; inversion Hpc.                
+                }
               }
             }
+            { (* pc' <> [r] *)
+              right; intro contra;
+                inversion contra; clear contra; subst; exec_contra H;
+                  subst pc'0; subst pc'1; subst ra; subst;
+                    simplify_equality; unify_options;
+                      rewrite N.eqb_refl in Hpc; inversion Hpc.                
+            }
+          }
 
           { (* gen_regs' not okay *)
             right_inv; try (exec_contra H);
