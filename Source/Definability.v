@@ -208,12 +208,18 @@ Section Definability.
     fold_right add_instruction E_exit instrs.
 
   (** Combine all of the above steps to convert a trace into a context. *)
-  Definition build_context (t: trace) :=
+  Definition build_context (t: trace) : program :=
     let 'State cur_proc callers procs :=
         fold_left update_state t initial_state in
-    PMap.mapi (fun C p =>
-                 let '(count, comp_procs) := p in
-                 PMap.mapi (linearize_instructions C) comp_procs) procs.
+    let comp_code :=
+        PMap.mapi (fun C p =>
+                     let '(count, comp_procs) := p in
+                     PMap.mapi (linearize_instructions C) comp_procs) procs in
+    let comp_mem  := PMap.map (fun _ => inr [Int 0; Int 0]) ictx in
+    {| prog_interface  := ictx;
+       prog_procedures := comp_code;
+       prog_buffers    := comp_mem;
+       prog_main       := (mainC, mainP) |}.
 
   Theorem context_definability:
     forall t beh,
