@@ -13,20 +13,234 @@ Require Import Intermediate.Decomposition.
 
 Import Intermediate.
 
+(*
+  P and C are two partial programs whose linking results in a whole program.
+  We want to show that P and C do the same terminating behavior in the partial semantics
+  iff their linking produces the very same behavior in the complete semantics.
+
+    prog_behaves P[C] (Terminates t) <-> prog_behaves P (Terminates t) /\
+                                         prog_behaves C (Terminates t)
+
+  One direction is what we call decomposition (see Decomposition.v), that is, we can
+  decompose the execution of a whole program (P[C]) in the complete semantics, in two
+  executions of two partial programs (P and C) in the partial semantics.
+
+  The other direction is what we prove here and it guarantess that linking two partial
+  programs producing the same terminating trace in the partial semantics,
+  results in a whole-program producing such terminating trace in the complete semantics.
+
+  NOTE: in general we would like to have this property for all possible behaviors.
+        the terminating case with the exact trace is the simplest case, thus we focus on
+        it as a starting point.
+
+  The proof of this theorem relies on the following facts:
+  - executing a whole-program in the complete semantics is equivalent to executing it
+    in the partial semantics (see PS2CS section + Decomposition.v)
+  - context-program simulation in partial semantics
+    the context simulates the program in the partial semantics (see ProgCtxSim section).
+  - context determinism with same trace in partial semantics
+    when the context executes, the partial semantics is deterministic once we fix a given
+    trace (e.g. s ->(t) s' /\ s ->(t) s'' => s' = s'')
+    note that, in general, the context is non-deterministic (there can be multiple events
+    starting from the same state)
+  - star & mt_star equivalence
+    a sequence of steps in the partial semantics can be split into a sequence of sequences
+    of steps where the turn doesn't change (either program or the context executes for the
+    whole sequence) and such single turn sequences are interleaved by single steps that
+    change control (e.g. a call from the program to the context)
+  - three-way simulation
+    if two mergeable states (i.e. one complements the other) do the same step in the
+    partial semantics, then their merge does the very same step in the partial semantics
+    and the resulting state is equivalent to the merge of the resulting state in which
+    the original steps were finishing in
+
+  More formally, given the following facts
+    initial_state s1 /\ initial_state s2 /\
+    star s1 t s1' /\ star s2 t s2' /\
+    final_state s1' /\ final_state s2'
+  we want to prove that
+    initial_state (merge s1 s2) /\
+    star (merge s1 s2) t (merge s1' s2') /\
+    final_state (merge s1' s2')
+
+  The proof can be divided into four parts:
+  1) showing that s1 and s2 are indeed mergeable
+  2) proving that merging initial states produces an initial state
+  3) proving that merging states of two stars with the same trace, produces a star with
+     such trace
+  4) proving that merging final states produces a final state
+
+  Comments on each part:
+
+  (1) consists in showing that
+    - one of the two states is controlled by the program, the other by the context
+    - th executing component of the context state is the executing component in the
+      program state (the component tag in the program counter)
+    - stacks are one the complement of the other (should be trivial because the states
+      are intial, therefore the stacks are empty)
+    - memories are disjoint
+
+  (2) and (4) should be provable by showing that the unpartialization of the merge is an
+  initial or, respectively, a final state in the complete semantics. This is a rather
+  technical proof in which we have to show that the merge of two mergeable states can be
+  unpartialized to a complete state. Then, it is a matter of showing that the information
+  which made the original states being initial or final, are actually preserved by the
+  merge and, therefore, make the initial of final state predicates hold even after the
+  merge.
+
+  (3) is harder and it's what we will concentrate on in these notes.
+
+  In order to prove (3), we need to introduce some definitions:
+  + st_star s t s'
+    it's a sequence of 0 or more steps in which there are no changes of turn.
+    the program or, respectively, the context has always control.
+  + mt_star s t s'
+    it's a concatenation of st_star
+    either we have a single st_star, in which case the sequence might also be empty, or
+    we have more than one st_star interleaved by single steps where the turn changes
+    effectively happen.
+    examples:
+    * st_star (program or context)
+    * st_star (program) -> control change step -> st_star (context) -> ....
+  See Coq code later in the files for more details.
+
+  We also need to prove some facts about these new definitions.
+  We need at least the following facts:
+  + equivalence beetween star sequences and mt_star sequences
+  + a st_star doesn't contain turn changes by construction, hence the trace obtained
+    from the concatenation of its single steps cannot contain events that make those
+    turn changes happen
+
+  Finally, we need to prove a simulation that allows us to move from two steps in the
+  partial semantics to just one step done from the merge of the original stepping states.
+  This is what we call a three-way simulation.
+
+  Three-Way Simulation:
+    forall s1 s2,                       exists s1 s2,
+      s1 mergeable with s2 /\             s1' mergeable with s2' /\
+      step s1 t s1' /\ step s2 t s2' =>   step (merge s1 s2) t (merge s1' s2')
+
+  Three-Way st_star Simulation:
+    st_star s1 t s1' /\ st_star s2 t s2' => star (merge s1 s2) t (mege s1' s2')
+  Proof.
+    we work on the equivalent st_star sequences
+      st_star s1 t s1'
+      st_star s2 t s2'
+    by hypothesis, s1 is executing the program, whereas s2 is executing the context
+    by induction on the first st_star, we prove that
+      star (merge s1 s2) t (merge s1' s2')
+    * base case, trivial
+        st_star s1 E0 s1
+      we prove
+        star (merge s1 s2) E0 (merge s1 s2)
+    * step case
+        step s1 t1 s1'' /\ st_star s1'' t2 s1' /\ t = t1 ** t2
+      by context simulation, we can simulate the step and the rest of the star
+        step s2 t1 s2'' /\ st_star s2'' t2 s2''' /\ t = t1 ** t2
+      by three-way simulation, we can simulate the two steps
+        step (merge s1 s2) t1 (merge s1'' s2'')
+      by IH, we can simulate the rest of the stars
+        star (merge s1'' s2'') t2 (merge s1' s2''')
+      recall that we know
+        st_star s2 t s2''' /\ st_star s2 t s2'
+      since a st_star implies a star
+        star s2 t s2''' /\ star s2 t s2'
+      by determinism of context with same trace in the partial semantics
+        s2''' = s2'
+      therefore, we finally have
+        step (merge s1 s2) t1 (merge s1'' s2'')
+        star (merge s1'' s2'') t2 (merge s1' s2')
+      which can be merged into the star we wanted to show
+        star (merge s1 s2) (t1 ** t2) (merge s1' s2')
+
+  *** Proof sketch for (3) ***
+  We are given two sequences of steps producing the same trace t.
+    star s1 t s1'
+    star s2 t s2'
+  Previously, we showed that s1 is mergeable with s2.
+  We want to show that
+    star (merge s1 s2) t (merge s1' s2')
+
+  The two stars are equivalent to two multi-turn segmented stars:
+    mt_star s1 t s1'
+    mt_star s2 t s2'
+
+  We do this in order to simulate segments one by one by using the right simulation.
+  The context simulates the program, therefore, each time we have a change of turn, we
+  have to invert the roles to continue the simulation.
+
+  Now, we do an induction on the mt_star in which the program has control.
+  Suppose, without loss of generality, that such state is s1, then we have two cases.
+
+  - base case
+      st_star s1 t s1'
+      mt_star s2 t s2'
+    by inversion on the second mt_star
+    + st_star s2 t s2'
+      we prove the star by Three-Way st_star Simulation
+
+    + st_star s2 t1 s2'' /\ step s2'' t2 s2''' /\ mt_star s2''' t3 s2'
+      t = t1 ** t2 ** t3
+      we know that t is a trace obtained from a sequence of steps without changes of turn.
+      This means that t cannot contain t2, this case cannot happen.
+
+  - step case
+      st_star s1 t1 s1'' /\ step s1'' t2 s1''' /\ mt_star s1''' t3 s1'
+      t = t1 ** t2 ** t3
+      mt_star s2 t s2'
+    by inversion on the second mt_star
+    + st_star s2 t s2'
+      we know that t is a trace obtained from a sequence of steps without changes of turn.
+      This means that t cannot contain t2, this case cannot happen.
+    + st_star s2 t1' s2'' /\ step s2'' t2' s2''' /\ mt_star s2''' t3' s2'
+      t = t1' ** t2' ** t3'
+      We first show that t1=t1' /\ t2=t2' /\ t3=t3'
+      First, notice that the following holds
+        t1 ** t2 ** t3 = t1' ** t2' ** t3'
+      Case analysis on t1 and t1':
+      * t1 < t1'
+        this cannot happen, because it would mean that t2 appears in t1'.
+        But t1' cannot contain changes of turn
+      * t1 = t1'
+        But then t2 = t2', since our semantics is single event (at most an event is
+        produced during a step) and, consequently, t3 = t3'
+      * t1 > t1'
+        this cannot happen, because it would mean that t2' appears in t1.
+        But t1 cannot contain changes of turn
+
+      We established the following
+        st_star s1 t1 s1'' /\ step s1'' t2 s1''' /\ mt_star s1''' t3 s1'
+        st_star s2 t1 s2'' /\ step s2'' t2 s2''' /\ mt_star s2''' t3 s2'
+        t = t1 ** t2 ** t3
+      by Three-Way st_star Simulation
+        star (merge s1 s2) t1 (merge s1'' s2'')
+      by Three-Way Simulation
+        step (merge s1'' s2'') t2 (merge s1''' s2''')
+      by IH
+        star (merge s1''' s2''') t3 (merge s1' s2')
+      by transitivity and the following facts
+        star (merge s1 s2) t1 (merge s1'' s2'')
+        step (merge s1'' s2'') t2 (merge s1''' s2''')
+        star (merge s1''' s2''') t3 (merge s1' s2')
+      we obtain
+        star (merge s1 s2) (t1 ** t2 ** t3) (merge s1' s2')
+      which is what we wanted to show.
+*)
+
 Section PS2CS.
   Variable prog: program.
 
   Hypothesis prog_is_closed:
     closed_program prog.
 
-  Let ctx := PMap.empty Component.interface.
+  Let empty_ctx := PMap.empty Component.interface.
   Let G := init_genv prog.
 
   Lemma match_initial_states:
     forall ips,
-      PS.initial_state prog ctx ips ->
+      PS.initial_state prog empty_ctx ips ->
     exists ics,
-      CS.initial_state prog ics /\ PS.partial_state ctx ics ips.
+      CS.initial_state prog ics /\ PS.partial_state empty_ctx ics ips.
   Proof.
     intros ips Hips_init.
     inversion Hips_init; subst.
@@ -35,8 +249,8 @@ Section PS2CS.
 
   Lemma match_final_states:
     forall ips ics,
-      PS.partial_state ctx ics ips ->
-      PS.final_state prog ctx ips ->
+      PS.partial_state empty_ctx ics ips ->
+      PS.final_state prog empty_ctx ips ->
       CS.final_state G ics.
   Proof.
     intros ips ics Hics_partial Hips_final.
@@ -61,11 +275,11 @@ Section PS2CS.
 
   Lemma lockstep_simulation:
     forall ips t ips',
-      PS.step ctx G ips t ips' ->
+      PS.step empty_ctx G ips t ips' ->
     forall ics,
-      PS.partial_state ctx ics ips ->
+      PS.partial_state empty_ctx ics ips ->
     exists ics',
-      CS.step G ics t ics' /\ PS.partial_state ctx ics' ips'.
+      CS.step G ics t ics' /\ PS.partial_state empty_ctx ics' ips'.
   Proof.
     intros ips t ips' Hstep ics Hics_partial.
 
@@ -93,11 +307,11 @@ Section PS2CS.
 
   Lemma star_simulation:
     forall ips t ips',
-      Star (PS.sem prog ctx) ips t ips' ->
+      Star (PS.sem prog empty_ctx) ips t ips' ->
     forall ics,
-      PS.partial_state ctx ics ips ->
+      PS.partial_state empty_ctx ics ips ->
     exists ics',
-      Star (CS.sem prog) ics t ics' /\ PS.partial_state ctx ics' ips'.
+      Star (CS.sem prog) ics t ics' /\ PS.partial_state empty_ctx ics' ips'.
   Proof.
     intros ips t ips' Hstar.
     induction Hstar; subst.
@@ -113,7 +327,7 @@ Section PS2CS.
   Qed.
 
   Theorem CS_simulates_PS:
-    forward_simulation (PS.sem prog ctx) (CS.sem prog).
+    forward_simulation (PS.sem prog empty_ctx) (CS.sem prog).
   Proof.
     eapply forward_simulation_step.
     - apply match_initial_states.
@@ -121,18 +335,9 @@ Section PS2CS.
     - apply lockstep_simulation.
   Qed.
 
-  Lemma context_validity:
-    forall C CI,
-      PMap.MapsTo C CI ctx -> PMap.MapsTo C CI (prog_interface prog).
-  Proof.
-    intros.
-    apply PMapFacts.empty_mapsto_iff in H.
-    contradiction.
-  Qed.
-
   Corollary partial_semantics_implies_complete_semantics:
     forall beh,
-      program_behaves (PS.sem prog ctx) beh ->
+      program_behaves (PS.sem prog empty_ctx) beh ->
       program_behaves (CS.sem prog) beh.
   Proof.
     intros.
@@ -155,7 +360,7 @@ Section PS2CS.
         * eauto.
         * unfold nostep in *. intros.
           unfold not. intro.
-          destruct (Decomposition.lockstep_simulation prog ctx x t0 s'0 H10 s' H9)
+          destruct (Decomposition.lockstep_simulation prog empty_ctx x t0 s'0 H10 s' H9)
             as [s'' []].
           eapply H7. econstructor; eauto.
         * unfold not. intros.
@@ -168,24 +373,13 @@ Section PS2CS.
     - (* program went wrong immediately *)
       eapply program_goes_initially_wrong.
       intros. unfold not. intro.
-      specialize (H2 (PS.partialize s ctx)).
+      specialize (H2 (PS.partialize s empty_ctx)).
       apply H2. econstructor.
       + apply PS.partialize_correct.
         reflexivity.
       + auto.
   Qed.
 End PS2CS.
-
-(*** experimental ***)
-
-(*
-   IDEA:
-   - the context simulates the program, we change our point view on the simulation
-     whenever the control changes
-   - a star in the partial semantics is splitted into a mt_star, that is,
-     a sequence of st_star (a star in which the turn remains the same) connected by
-     single steps that change control
-*)
 
 Inductive same_turn: PS.state -> PS.state -> Prop :=
 | same_turn_program: forall prog_st prog_st',
@@ -276,8 +470,8 @@ Proof.
 Qed.
 
 (* We want to prove that a star is either a sequence of steps without change of control,
-   or it can be decomposed in a star without change of control + a step with the change of control +
-   another star doing the remaining trace *)
+   or it can be decomposed in a star without change of control + a step with the change
+   of control + another star doing the remaining trace *)
 (* how can we prove this? *)
 (* classically? *)
 Lemma change_of_turn_in_star:
@@ -462,6 +656,8 @@ Section Simulation.
 End Simulation.
 End ProgCtxSim.
 
+(* Three-way simulation *)
+
 Module MultiSem.
 Section MultiSemantics.
   Variable prog1 prog2: program.
@@ -642,7 +838,7 @@ Section MultiSemantics.
           ** (* contra, executing component is outside of prog *)
              admit.
           ** (* program is in the first state *) admit.
-          ** (* prgroam is in the second state *) admit.
+          ** (* program is in the second state *) admit.
           ** (* contra, executing component is in both prog1 and prog2 *)
              exfalso. eapply disjointness. split; eauto.
              admit.
@@ -659,7 +855,7 @@ Section MultiSemantics.
           ** (* contra, executing component is outside of prog *)
              admit.
           ** (* program is in the first state *) admit.
-          ** (* prgroam is in the second state *) admit.
+          ** (* program is in the second state *) admit.
           ** (* contra, executing component is in both prog1 and prog2 *)
              exfalso. eapply disjointness. split; eauto.
              admit.
@@ -687,6 +883,8 @@ Section MultiSemantics.
   Qed.
 End MultiSemantics.
 End MultiSem.
+
+(* Putting all together *)
 
 Section PartialComposition.
   Variable prog1 prog2: program.
@@ -834,15 +1032,16 @@ Section PartialComposition.
 
     eapply forward_simulation_same_safe_behavior.
     + apply MultiSem.merged_prog_simulates_multisem; auto.
-    + eapply program_runs with (s:=(s,s0)).
-      * constructor; auto.
-        (* the states are mergeable *)
+    + assert (Hmergeable:
+                PS.mergeable_states (prog_interface prog2) (prog_interface prog1) s s0). {
         admit.
+      }
+      eapply program_runs with (s:=(s,s0)).
+      * constructor; auto.
       * eapply state_terminates with (s':=(s',s'0)); auto.
-        ** apply threeway_multisem_star.
-           *** (* the states are mergeable *) admit.
-           *** (* star in a bigger environment *) admit.
-           *** (* star in a bigger environment *) admit.
+        ** apply threeway_multisem_star; auto.
+           *** simpl in *. (* star in a bigger environment *) admit.
+           *** simpl in *. (* star in a bigger environment *) admit.
         ** simpl. constructor; auto.
     + simpl. constructor.
   Admitted.
@@ -886,11 +1085,15 @@ Section PartialComposition.
     inversion Hprog1_beh; subst. inversion H0; subst.
     inversion Hprog2_beh; subst. inversion H4; subst.
 
+    assert (Hmergeable:
+              PS.mergeable_states (prog_interface prog2) (prog_interface prog1) s s0). {
+      admit.
+    }
     eapply program_runs with (s:=PS.merge_partial_states s s0).
     - admit.
     - eapply state_terminates with (s':=PS.merge_partial_states s' s'0); auto.
-      + apply threeway_simulation_star.
-        * admit.
+      + simpl in *.
+        apply threeway_simulation_star; auto.
         * (* star in a bigger environment *) admit.
         * (* star in a bigger environment *) admit.
       + admit.
@@ -924,174 +1127,3 @@ Section Composition.
     apply partial_programs_composition; auto.
   Qed.
 End Composition.
-
-(*
-(* old stuff and thougths *)
-
-  (* not sure if this is useful, but it makes sense *)
-  Lemma step_after_merge_generic:
-    forall ips1 ips2,
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      (* the program is ips1 *)
-      (forall t ips1',
-         PS.step (prog_interface prog2) G ips1 t ips1' ->
-       exists ips2',
-         PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1' ips2' /\
-         PS.step (prog_interface prog1) G ips2 t ips2' /\
-         PS.step empty_ctx G (PS.merge_partial_states ips1 ips2) t
-                             (PS.merge_partial_states ips1' ips2')) \/
-      (* the program is ips2 *)
-      (forall t ips2',
-         PS.step (prog_interface prog1) G ips2 t ips2' ->
-       exists ips1',
-         PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1' ips2' /\
-         PS.step (prog_interface prog2) G ips1 t ips1' /\
-         PS.step empty_ctx G (PS.merge_partial_states ips1 ips2) t
-                             (PS.merge_partial_states ips1' ips2')).
-  Proof.
-  Admitted.
-
-  Lemma step_after_merge:
-    forall ips1 ips2 t ips1' ips2',
-      PS.step (prog_interface prog2) G ips1 t ips1' ->
-      PS.step (prog_interface prog1) G ips2 t ips2' ->
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      PS.step empty_ctx G (PS.merge_partial_states ips1 ips2) t
-                          (PS.merge_partial_states ips1' ips2') /\
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1' ips2'.
-  Proof.
-  Admitted.
-
-  Lemma decompose_visible_trace:
-    forall L s s' a t,
-      single_events L ->
-      Star L s (a::t) s' ->
-    exists s1 s2,
-      Star L s E0 s1 /\
-      Step L s1 [a] s2 /\
-      Star L s2 t s'.
-  Proof.
-  Admitted.
-
-  Lemma simulate_upto_visible_event:
-    forall ips1 ips2 a t ips1' ips2',
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      Star (PS.sem prog1 (prog_interface prog2)) ips1 (a::t) ips1' ->
-      Star (PS.sem prog2 (prog_interface prog1)) ips2 (a::t) ips2' ->
-    exists ips1'' ips2'',
-      (*Star (PS.sem prog1 (prog_interface prog2)) ips1 [a] ips1'' /\
-      Star (PS.sem prog2 (prog_interface prog1)) ips2 [a] ips2'' /\*)
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1'' ips2'' /\
-      Star (PS.sem prog empty_ctx) (PS.merge_partial_states ips1 ips2) [a]
-                                   (PS.merge_partial_states ips1'' ips2'') /\
-      Star (PS.sem prog1 (prog_interface prog2)) ips1'' t ips1' /\
-      Star (PS.sem prog2 (prog_interface prog1)) ips2'' t ips2'.
-  Proof.
-  Admitted.
-
-  (* merged states star given two partial star *)
-  Lemma star_after_merge:
-    forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      Star (PS.sem prog1 (prog_interface prog2)) ips1 t ips1' ->
-      Star (PS.sem prog2 (prog_interface prog1)) ips2 t ips2' ->
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1' ips2' /\
-      Star (PS.sem prog empty_ctx) (PS.merge_partial_states ips1 ips2) t
-                                   (PS.merge_partial_states ips1' ips2').
-  Proof.
-    intros ips1 ips2 t ips1' ips2'.
-    intros Hmergeable Hstar1 Hstar2.
-
-    inversion Hmergeable; subst.
-
-    (* program has control in ips1 *)
-    - induction Hstar1; subst.
-      (* epsilon trace *)
-      + admit.
-      (* non-empty trace *)
-      + admit.
-
-    (* program has control in ips2 *)
-    - admit.
-
-  Admitted.
-
-  (*
-  Lemma sketch:
-    forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      Star (PS.sem prog1 (prog_interface prog2)) ips1 t ips1' ->
-      Star (PS.sem prog2 (prog_interface prog1)) ips2 t ips2' ->
-      Star multisem (ips1, ips2) t (ips1', ips2').
-  Proof.
-    intros ips1 ips2 t ips1' ips2'.
-    intros Hmergeable Hstar1 Hstar2.
-    inversion Hmergeable; subst.
-    - induction Hstar1; subst.
-      + inversion Hstar2; subst.
-        * constructor.
-        * admit.
-      + inversion Hstar2; subst.
-        * symmetry in H6. apply Eapp_E0_inv in H6. destruct H6. subst.
-          exists s2.
-          exists (PS.CC (Pointer.component pc, pgps2, pmem2)).
-          apply star_step
-           with (t1:=E0) (t2:=E0)
-                (s2:=(s2, PS.CC (Pointer.component pc, pgps2, pmem2))).
-          ** unfold step. simpl. unfold G.
-             apply mstep.
-             *** unfold step in H1. simpl in *.
-                 (* this is our hypothesis, but with a bigger environment *) admit.
-             *** inversion H1; subst. simpl in *.
-                 apply PS.partial_step with ics ics'.
-                 **** (* this is our hypothesis, but with a bigger environment *) admit.
-                 **** do 2 CS.unfold_states.
-                      (* this should be true because of partialization *) admit.
-                 **** (* this should be true because of partialization *) admit.
-          ** econstructor.
-          ** reflexivity.
-        * (* we show that t1 = t0 because our semantics has single events,
-             then we use the inductive hypothesis *)
-          inversion H1; subst.
-          apply CS.singleton_traces in H7.
-          inversion H4; subst.
-          apply CS.singleton_traces in H10.
-          admit.
-    (* - symmetric to the first case *)
-  Admitted.
-       *)
-
-    (* since we truncate to prefixes, the following cases might not be needed *)
-
-    (*
-    (* silent divergence *)
-    - inversion H0; subst.
-      inversion H2; subst.
-      eapply forward_simulation_same_safe_behavior.
-      + apply prog_simulates_prog1_and_prog2.
-      + eapply program_runs with (s:=(s,s0)).
-        * constructor; auto.
-        * eapply state_diverges with (s':=(s',s'0)).
-          ** (* multisem simulates prog1 and prog2 *) admit.
-          ** econstructor; eauto.
-             *** admit.
-             *** admit.
-      + simpl. constructor.
-
-    (* reactive divergence *)
-    - inversion H0; subst.
-      inversion H2; subst.
-      eapply forward_simulation_same_safe_behavior.
-      + apply prog_simulates_prog1_and_prog2.
-      + eapply program_runs with (s:=(s,s0)).
-        * constructor; auto.
-        * eapply state_reacts.
-          ** (* multisem simulates prog1 and prog2 *) admit.
-      + simpl. constructor.
-
-    (* going wrong *)
-    - (* manually prove it *) admit.
-      *)
-  Admitted.
-
-*)
