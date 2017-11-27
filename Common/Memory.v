@@ -11,6 +11,17 @@ Module Type AbstractComponentMemory.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
 
+  (* AAA: We need to add some missing lemmas here:
+
+     - The specifications of prealloc, empty, reserve_block.
+
+     - The fact that alloc does not overwrite the contents of existing blocks
+       (cf. the comment before [ComponentMemory.t]).
+
+     - Something about the length of the allocated blocks of alloc
+
+  *)
+
   Axiom load_after_alloc:
     forall m m' n b,
       alloc m n = (m',b) ->
@@ -23,10 +34,38 @@ Module Type AbstractComponentMemory.
     forall b' i',
       ((b' <> b \/ i' <> i) /\ load m' b' i' = load m b' i') \/
       load m' b' i' = Some v.
+
+  Axiom store_after_load:
+    forall m b i v v',
+      load m b i = Some v ->
+      exists m',
+        store m b i v' = Some m'.
+
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
   Definition block := list value.
+
+  (* AAA: The representation of component memories is problematic, because there
+     is nothing that guarantees that [nextblock] is undefined in [content].
+     Without this, there is no way of proving the following fact:
+
+     forall m b i v n m',
+       load m b i = Some v ->
+       alloc m n = Some m' ->
+       load m' b i = Some v
+
+     There are two solutions:
+
+     1- Remove the [nextblock] field and change the definition of [alloc] so
+        that it allocates the new block under the successor of the greatest
+        [positive] in the domain of the memory.
+
+     2- Add the folliwing field to mem:
+
+        forall b, nextblock <= b -> PMap.find b content = None
+
+   *)
 
   Record mem := mkMem {
     content : PMap.t block;
@@ -75,7 +114,7 @@ Module ComponentMemory : AbstractComponentMemory.
     end.
 
   Fixpoint block_update data offset val : option block :=
-    match data with 
+    match data with
     | [] => None (* store out of bounds *)
     | val' :: rest =>
       match offset with
@@ -87,7 +126,7 @@ Module ComponentMemory : AbstractComponentMemory.
         end
       end
     end.
-  
+
   Definition store m b i v : option mem :=
     match PMap.find b (content m) with
     | Some chunk =>
@@ -124,9 +163,9 @@ Module ComponentMemory : AbstractComponentMemory.
   Proof.
     induction b; intros; inv H.
     destruct o.
-    + inv H1; auto.  
+    + inv H1; auto.
     + destruct (block_update b o v) eqn:?; inv H1.
-      simpl. 
+      simpl.
       eapply IHb; eauto.
   Qed.
 
@@ -138,16 +177,16 @@ Module ComponentMemory : AbstractComponentMemory.
   Proof.
     induction b; intros; inv H.
     destruct o.
-    + inv H2. 
-      destruct o'. 
+    + inv H2.
+      destruct o'.
       - intuition.
       - auto.
     + destruct (block_update b o v) eqn:?.
-      - inv H2. 
-        destruct o'. 
+      - inv H2.
+        destruct o'.
         * auto.
         * simpl. eauto.
-      - inv H2. 
+      - inv H2.
   Qed.
 
   Lemma load_after_store:
@@ -161,51 +200,59 @@ Module ComponentMemory : AbstractComponentMemory.
     destruct (PMapFacts.eq_dec b b').
     + destruct (Z.eq_dec i i').
       - subst. right.
-         unfold load.  unfold store in Hstore. 
-         destruct (PMap.find (elt:=block) b' (content m)) eqn:?; [| inv Hstore]. 
-         destruct i'; [| |inv Hstore].  
-         * destruct (block_update b (Z.to_nat 0) v) eqn: E; inv Hstore. 
+         unfold load.  unfold store in Hstore.
+         destruct (PMap.find (elt:=block) b' (content m)) eqn:?; [| inv Hstore].
+         destruct i'; [| |inv Hstore].
+         * destruct (block_update b (Z.to_nat 0) v) eqn: E; inv Hstore.
            simpl. (* can't stop from unfolding nth_error...argh *)
            rewrite PMapFacts.add_eq_o; auto.
-           apply load_after_update_same in E. apply E. 
-         * destruct (block_update b (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
-           simpl. 
+           apply load_after_update_same in E. apply E.
+         * destruct (block_update b (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore.
+           simpl.
            rewrite PMapFacts.add_eq_o; auto.
-           eapply load_after_update_same; eauto.  
+           eapply load_after_update_same; eauto.
       - left. subst b'. intuition.
         unfold load.  unfold store in Hstore.
-        destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
-        destruct i; [| | inv Hstore]. 
-        * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
-          simpl. 
-          rewrite PMapFacts.add_eq_o; auto.
-          destruct i'. 
-          ** intuition.
-          ** erewrite load_after_update_other; eauto. 
-             rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
-          ** auto.
-        * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
+        destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore].
+        destruct i; [| | inv Hstore].
+        * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore.
           simpl.
           rewrite PMapFacts.add_eq_o; auto.
-          destruct i'. 
-          ** erewrite load_after_update_other; eauto. 
+          destruct i'.
+          ** intuition.
+          ** erewrite load_after_update_other; eauto.
              rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
-          ** erewrite load_after_update_other; eauto. 
-             simpl. 
-             intro. apply Pos2Nat.inj_iff in H.             
+          ** auto.
+        * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore.
+          simpl.
+          rewrite PMapFacts.add_eq_o; auto.
+          destruct i'.
+          ** erewrite load_after_update_other; eauto.
+             rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
+          ** erewrite load_after_update_other; eauto.
+             simpl.
+             intro. apply Pos2Nat.inj_iff in H.
              subst.  intuition.
           ** auto.
     +  left. intuition.
-       unfold load. unfold store in Hstore. 
-       destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
-       destruct i; [| | inv Hstore]. 
-       * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
-         simpl. 
-         rewrite PMapFacts.add_neq_o; auto.
-       * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
+       unfold load. unfold store in Hstore.
+       destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore].
+       destruct i; [| | inv Hstore].
+       * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore.
          simpl.
          rewrite PMapFacts.add_neq_o; auto.
-Qed.
+       * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore.
+         simpl.
+         rewrite PMapFacts.add_neq_o; auto.
+  Qed.
+
+  (** AAA: TODO *)
+  Lemma store_after_load:
+    forall m b i v v',
+      load m b i = Some v ->
+      exists m',
+        store m b i v' = Some m'.
+  Proof. Admitted.
 
 End ComponentMemory.
 
