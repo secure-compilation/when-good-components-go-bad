@@ -855,6 +855,70 @@ Proof.
     apply IHHstar; auto.
 Qed.
 
+Theorem context_same_trace_determinism:
+  forall ctx G ips ctx_state t ctx_state',
+    state_eq (CC ctx_state) ips ->
+    step ctx G ips t (CC ctx_state') ->
+  forall ctx_state'',
+    step ctx G ips t (CC ctx_state'') ->
+    state_eq (CC ctx_state') (CC ctx_state'').
+Proof.
+  intros ctx G ips ctx_state t ctx_state' Heq Hstep1 ctx_state'' Hstep2.
+  inversion Heq; subst.
+  inversion Hstep1; subst; inversion Hstep2; subst.
+  inversion H0; subst; inversion H1; subst.
+  inversion H4; subst; inversion H5; subst.
+
+  inversion H; subst.
+  + inversion H9; subst; inversion H18; subst.
+    inversion H3; subst.
+    * inversion H19; subst; inversion H21; subst.
+      PS.simplify_turn.
+      constructor.
+      ** do 2 rewrite Pointer.inc_preserves_component.
+         symmetry. assumption.
+      ** assumption.
+      ** rewrite <- H2 in H11.
+         rewrite <- H2 in H15.
+
+         rewrite <- H29 in H28.
+         pose proof (Memory.equivalence_under_filter
+                       mem mem0 (fun k _ => negb (PMap.mem k ctx)) H28).
+         rewrite H22 in H11. rewrite <- H11 in H8.
+
+         rewrite <- H34 in H33.
+         pose proof (Memory.equivalence_under_filter
+                       mem1 mem2 (fun k _ => negb (PMap.mem k ctx)) H33).
+         rewrite H23 in H15. rewrite <- H13 in H15.
+
+         rewrite H8, H15.
+         reflexivity.
+    * (* contra *) admit.
+    * (* contra *) admit.
+    * (* contra *) admit.
+    * (* contra *) admit.
+    * (* contra *) admit.
+    * (* contra *) admit.
+    * (* contra *) admit.
+    * (* contra *) admit.
+    * (* contra *) admit.
+    * (* contra *) admit.
+    * (* contra *) admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+  + admit.
+Admitted.
+
 (* partial semantics *)
 
 Section Semantics.

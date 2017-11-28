@@ -23,10 +23,15 @@ Import Intermediate.
 
   One direction is what we call decomposition (see Decomposition.v), that is, we can
   decompose the execution of a whole program (P[C]) in the complete semantics, in two
-  executions of two partial programs (P and C) in the partial semantics.
+  executions of two partial programs (P and C) in the partial semantics. Note that
+  currently our decomposition proof doens't cover the case of undefined behavior.
+  At the intermediate level, this is not a problem since we are assuming to deal only
+  with defined behaviors. If we were to prove the complete preservation of behaviors,
+  we would have to introduce some changes that allow the context to go wrong in the
+  partial semantics.
 
-  The other direction is what we prove here and it guarantess that linking two partial
-  programs producing the same terminating trace in the partial semantics,
+  The other direction is what we want to prove here and it guarantess that linking two
+  partial programs producing the same terminating trace in the partial semantics,
   results in a whole-program producing such terminating trace in the complete semantics.
 
   NOTE: in general we would like to have this property for all possible behaviors.
@@ -43,6 +48,7 @@ Import Intermediate.
     trace (e.g. s ->(t) s' /\ s ->(t) s'' => s' = s'')
     note that, in general, the context is non-deterministic (there can be multiple events
     starting from the same state)
+    See context_same_trace_determinism in Intermediate/PS.v for more details.
   - star & mt_star equivalence
     a sequence of steps in the partial semantics can be split into a sequence of sequences
     of steps where the turn doesn't change (either program or the context executes for the
@@ -102,7 +108,7 @@ Import Intermediate.
     examples:
     * st_star (program or context)
     * st_star (program) -> control change step -> st_star (context) -> ....
-  See Coq code later in the files for more details.
+  See Coq code later in the file for more details.
 
   We also need to prove some facts about these new definitions.
   We need at least the following facts:
@@ -112,11 +118,11 @@ Import Intermediate.
     turn changes happen
 
   Finally, we need to prove a simulation that allows us to move from two steps in the
-  partial semantics to just one step done from the merge of the original stepping states.
+  partial semantics to just one step made by the merge of the original stepping states.
   This is what we call a three-way simulation.
 
   Three-Way Simulation:
-    forall s1 s2,                       exists s1 s2,
+    forall s1 s2,
       s1 mergeable with s2 /\             s1' mergeable with s2' /\
       step s1 t s1' /\ step s2 t s2' =>   step (merge s1 s2) t (merge s1' s2')
 
@@ -126,7 +132,8 @@ Import Intermediate.
     we work on the equivalent st_star sequences
       st_star s1 t s1'
       st_star s2 t s2'
-    by hypothesis, s1 is executing the program, whereas s2 is executing the context
+    by mergeability, without loss of generality
+      s1 is executing the program, whereas s2 is executing the context
     by induction on the first st_star, we prove that
       star (merge s1 s2) t (merge s1' s2')
     * base case, trivial
@@ -556,12 +563,32 @@ Proof.
   - apply star_if_mt_star.
 Qed.
 
-(*** Internal simulation, context simulates program ***)
+(*
+  Program-Context Simulation
+
+  At any moment, we have two states which are mergeable; one of them has the program in
+  control, while the other has the context.
+  The argument is that the context always simulates the program, therefore, whenever the
+  program state makes a step, the context state is able to make a step with the same
+  event.
+
+  To formalize this fact, we define two ad-hoc semantics and then prove a forward
+  simulation between the two. One semantics represents the program, wheres the other
+  represents the context.
+
+  The program semantics is defined such that all those states in which the program has
+  control are initial and final states, and a state steps only if the the state in which
+  it finishes is still controlled by the program.
+  The same is true for the context semantics, but with the roles swapped.
+*)
 
 Module ProgramSem.
 Section Semantics.
   Variable prog: program.
   Variable ctx: Program.interface.
+
+  Hypothesis valid_context:
+    forall C CI, PMap.MapsTo C CI ctx -> PMap.MapsTo C CI (prog_interface prog).
 
   Inductive initial_state : PS.state -> Prop :=
   | initial_state_intro: forall ips,
@@ -571,16 +598,17 @@ Section Semantics.
   Inductive final_state : PS.state -> Prop :=
   | final_state_nostep: forall ips,
       PS.is_program_component ips ctx ->
-      Nostep (PS.sem prog ctx) ips ->
-      final_state ips
-  | final_state_step_into_context: forall ips t ips',
-      PS.is_program_component ips ctx ->
-      PS.is_context_component ips' ctx ->
-      Step (PS.sem prog ctx) ips t ips' ->
       final_state ips.
 
+  Inductive step (G: global_env): PS.state -> trace -> PS.state -> Prop :=
+  | program_step: forall ips t ips',
+      PS.is_program_component ips ctx ->
+      PS.is_program_component ips' ctx ->
+      PS.step ctx G ips t ips' ->
+      step G ips t ips'.
+
   Definition sem :=
-    @Semantics_gen PS.state global_env (PS.step ctx)
+    @Semantics_gen PS.state global_env step
                    initial_state final_state (init_genv prog).
 End Semantics.
 End ProgramSem.
@@ -589,6 +617,9 @@ Module ContextSem.
 Section Semantics.
   Variable prog: program.
   Variable ctx: Program.interface.
+
+  Hypothesis valid_context:
+    forall C CI, PMap.MapsTo C CI ctx -> PMap.MapsTo C CI (prog_interface prog).
 
   Inductive initial_state : PS.state -> Prop :=
   | initial_state_intro: forall ips,
@@ -600,53 +631,74 @@ Section Semantics.
       PS.is_context_component ips ctx ->
       final_state ips.
 
+  Inductive step (G: global_env): PS.state -> trace -> PS.state -> Prop :=
+  | program_step: forall ips t ips',
+      PS.is_context_component ips ctx ->
+      PS.is_context_component ips' ctx ->
+      PS.step ctx G ips t ips' ->
+      step G ips t ips'.
+
   Definition sem :=
-    @Semantics_gen PS.state global_env (PS.step ctx)
+    @Semantics_gen PS.state global_env step
                    initial_state final_state (init_genv prog).
 End Semantics.
 End ContextSem.
 
 Module ProgCtxSim.
 Section Simulation.
-  Variable prog1 prog2: program.
+  Variables p c: program.
+  Variables p_ctx c_ctx: Program.interface.
 
   Hypothesis same_main:
-    prog_main prog1 = prog_main prog2.
+    prog_main p = prog_main c.
 
-  Hypothesis disjointness:
-    PMapExtra.Disjoint (prog_interface prog1) (prog_interface prog2).
+  Hypothesis same_interface:
+    PMap.Equal (prog_interface p) (prog_interface c).
+
+  Hypothesis contexts_disjointness:
+    PMapExtra.Disjoint p_ctx c_ctx.
+
+  Hypothesis contexts_union:
+    PMap.Equal (prog_interface p) (PMapExtra.update p_ctx c_ctx).
+
+  Let prog := program_link (partialize_program p p_ctx)
+                           (partialize_program c c_ctx)
+                           (fst (prog_main p)) (snd (prog_main p)).
+  Let empty_ctx := PMap.empty Component.interface.
+  Let G1 := init_genv p.
+  Let G2 := init_genv c.
+  Let G := init_genv prog.
 
   Lemma match_initial_states:
     forall ips1,
-      ProgramSem.initial_state (prog_interface prog2) ips1 ->
+      ProgramSem.initial_state p_ctx ips1 ->
     exists ips2,
-      ContextSem.initial_state (prog_interface prog1) ips2 /\
-      PS.mergeable_states (prog_interface prog1) (prog_interface prog2) ips1 ips2.
+      ContextSem.initial_state c_ctx ips2 /\
+      PS.mergeable_states p_ctx c_ctx ips1 ips2.
   Proof.
   Admitted.
 
   Lemma match_final_states:
     forall ips1 ips2,
-      PS.mergeable_states (prog_interface prog1) (prog_interface prog2) ips1 ips2 ->
-      ProgramSem.final_state prog1 (prog_interface prog2) ips1 ->
-      ContextSem.final_state (prog_interface prog1) ips2.
+      PS.mergeable_states p_ctx c_ctx ips1 ips2 ->
+      ProgramSem.final_state p_ctx ips1 ->
+      ContextSem.final_state c_ctx ips2.
   Proof.
   Admitted.
 
   Lemma lockstep_simulation:
     forall ips1 t ips1',
-      Step (ProgramSem.sem prog1 (prog_interface prog2)) ips1 t ips1' ->
+      Step (ProgramSem.sem p p_ctx) ips1 t ips1' ->
     forall ips2,
-      PS.mergeable_states (prog_interface prog1) (prog_interface prog2) ips1 ips2 ->
+      PS.mergeable_states p_ctx c_ctx ips1 ips2 ->
     exists ips2',
-      Step (ContextSem.sem prog2 (prog_interface prog1)) ips2 t ips2' /\
-      PS.mergeable_states (prog_interface prog1) (prog_interface prog2) ips1' ips2'.
+      Step (ContextSem.sem c c_ctx) ips2 t ips2' /\
+      PS.mergeable_states p_ctx c_ctx ips1' ips2'.
   Proof.
   Admitted.
 
   Theorem context_simulates_program:
-    forward_simulation (ProgramSem.sem prog1 (prog_interface prog2))
-                       (ContextSem.sem prog2 (prog_interface prog1)).
+    forward_simulation (ProgramSem.sem p p_ctx) (ContextSem.sem c c_ctx).
   Proof.
     eapply forward_simulation_step.
     - apply match_initial_states.
@@ -656,57 +708,73 @@ Section Simulation.
 End Simulation.
 End ProgCtxSim.
 
-(* Three-way simulation *)
+(*
+  Three-way Simulation
+
+  The main intuition is that whenever two mergeable states make the same step, then
+  the state resulting from their merge makes the same step as well.
+*)
 
 Module MultiSem.
 Section MultiSemantics.
-  Variable prog1 prog2: program.
+  Variables p c: program.
+  Variables p_ctx c_ctx: Program.interface.
 
   Hypothesis same_main:
-    prog_main prog1 = prog_main prog2.
+    prog_main p = prog_main c.
 
-  Hypothesis disjointness:
-    PMapExtra.Disjoint (prog_interface prog1) (prog_interface prog2).
+  Hypothesis same_interface:
+    PMap.Equal (prog_interface p) (prog_interface c).
 
-  Let prog := program_link prog1 prog2 (fst (prog_main prog1)) (snd (prog_main prog1)).
+  Hypothesis contexts_disjointness:
+    PMapExtra.Disjoint p_ctx c_ctx.
+
+  Hypothesis contexts_union:
+    PMap.Equal (prog_interface p) (PMapExtra.update p_ctx c_ctx).
+
+  Let prog := program_link (partialize_program p p_ctx)
+                           (partialize_program c c_ctx)
+                           (fst (prog_main p)) (snd (prog_main p)).
   Let empty_ctx := PMap.empty Component.interface.
+  Let G1 := init_genv p.
+  Let G2 := init_genv c.
   Let G := init_genv prog.
 
-  Definition mstate : Type := PS.state * PS.state.
+  Definition state : Type := PS.state * PS.state.
 
-  Inductive minitial_state : mstate -> Prop :=
+  Inductive initial_state : state -> Prop :=
   | initial_state_intro: forall ips1 ips2,
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      PS.initial_state prog1 (prog_interface prog2) ips1 ->
-      PS.initial_state prog2 (prog_interface prog1) ips2 ->
-      minitial_state (ips1, ips2).
+      PS.mergeable_states p_ctx c_ctx ips1 ips2 ->
+      PS.initial_state p p_ctx ips1 ->
+      PS.initial_state c c_ctx ips2 ->
+      initial_state (ips1, ips2).
 
-  Inductive mfinal_state : mstate -> Prop :=
+  Inductive final_state : state -> Prop :=
   | final_state_intro: forall ips1 ips2,
-      PS.final_state prog1 (prog_interface prog2) ips1 ->
-      PS.final_state prog2 (prog_interface prog1) ips2 ->
-      mfinal_state (ips1, ips2).
+      PS.final_state p p_ctx ips1 ->
+      PS.final_state c c_ctx ips2 ->
+      final_state (ips1, ips2).
 
-  Inductive mstep (G: global_env)
-    : mstate -> trace -> mstate -> Prop :=
+  Inductive step (G: global_env)
+    : state -> trace -> state -> Prop :=
   | multi_step: forall ips1 t ips1' ips2 ips2',
-      PS.step (prog_interface prog2) G ips1 t ips1' ->
-      PS.step (prog_interface prog1) G ips2 t ips2' ->
-      mstep G (ips1, ips2) t (ips1', ips2').
+      PS.step p_ctx G1 ips1 t ips1' ->
+      PS.step c_ctx G2 ips2 t ips2' ->
+      step G (ips1, ips2) t (ips1', ips2').
 
   Definition msem :=
-    @Semantics_gen mstate global_env
-                   mstep minitial_state
-                   mfinal_state G.
+    @Semantics_gen state global_env
+                   step initial_state
+                   final_state G.
 
-  Inductive multi_match : mstate -> PS.state -> Prop :=
+  Inductive multi_match : state -> PS.state -> Prop :=
   | multi_match_intro: forall ips1 ips2,
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
+      PS.mergeable_states p_ctx c_ctx ips1 ips2 ->
       multi_match (ips1, ips2) (PS.merge_partial_states ips1 ips2).
 
   Lemma multi_match_initial_states:
     forall ms,
-      minitial_state ms ->
+      initial_state ms ->
     exists ips,
       PS.initial_state prog empty_ctx ips /\ multi_match ms ips.
   Proof.
@@ -769,7 +837,7 @@ Section MultiSemantics.
   Lemma multi_match_final_states:
     forall ms ips,
       multi_match ms ips ->
-      mfinal_state ms ->
+      final_state ms ->
       PS.final_state prog empty_ctx ips.
   Proof.
     intros ms ips Hmmatch Hms_final.
@@ -814,7 +882,7 @@ Section MultiSemantics.
 
   Lemma lockstep_simulation:
     forall ms t ms',
-      mstep G ms t ms' ->
+      step G ms t ms' ->
     forall ips,
       multi_match ms ips ->
     exists ips',
@@ -839,8 +907,7 @@ Section MultiSemantics.
              admit.
           ** (* program is in the first state *) admit.
           ** (* program is in the second state *) admit.
-          ** (* contra, executing component is in both prog1 and prog2 *)
-             exfalso. eapply disjointness. split; eauto.
+          ** (* contra, executing component is in both p and c *)
              admit.
         * simpl. constructor; simpl.
           ** PS.simplify_turn.
@@ -856,8 +923,7 @@ Section MultiSemantics.
              admit.
           ** (* program is in the first state *) admit.
           ** (* program is in the second state *) admit.
-          ** (* contra, executing component is in both prog1 and prog2 *)
-             exfalso. eapply disjointness. split; eauto.
+          ** (* contra, executing component is in both p and c *)
              admit.
 
       + (* symmetric the previous case *)
@@ -884,30 +950,50 @@ Section MultiSemantics.
 End MultiSemantics.
 End MultiSem.
 
-(* Putting all together *)
+(*
+  Putting all together in the partial semantics
+
+  Two partial programs doing the same behavior can be merged into another partial
+  program that does such behavior.
+  NOTE: here we are starting with the assumption that the program resulting from
+        the merge is a whole-program. In our case it suffices, but in general it would
+        be nice to prove a more general theorem which composes two partial program into
+        another possibly "strictly partial program".
+*)
 
 Section PartialComposition.
-  Variable prog1 prog2: program.
+  Variables p c: program.
+  Variables p_ctx c_ctx: Program.interface.
 
   Hypothesis same_main:
-    prog_main prog1 = prog_main prog2.
+    prog_main p = prog_main c.
 
-  Hypothesis disjointness:
-    PMapExtra.Disjoint (prog_interface prog1) (prog_interface prog2).
+  Hypothesis same_interface:
+    PMap.Equal (prog_interface p) (prog_interface c).
 
-  Let prog := program_link prog1 prog2 (fst (prog_main prog1)) (snd (prog_main prog1)).
+  Hypothesis contexts_disjointness:
+    PMapExtra.Disjoint p_ctx c_ctx.
+
+  Hypothesis contexts_union:
+    PMap.Equal (prog_interface p) (PMapExtra.update p_ctx c_ctx).
+
+  Let prog := program_link (partialize_program p p_ctx)
+                           (partialize_program c c_ctx)
+                           (fst (prog_main p)) (snd (prog_main p)).
   Let empty_ctx := PMap.empty Component.interface.
+  Let G1 := init_genv p.
+  Let G2 := init_genv c.
   Let G := init_genv prog.
 
   (* with multisem *)
 
   Lemma threeway_multisem_st_star_simulation:
     forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      st_star G (prog_interface prog2) ips1 t ips1' ->
-      st_star G (prog_interface prog1) ips2 t ips2' ->
-      star (MultiSem.mstep prog1 prog2) G (ips1, ips2) t (ips1', ips2') /\
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1' ips2'.
+      PS.mergeable_states p_ctx c_ctx ips1 ips2 ->
+      st_star G1 p_ctx ips1 t ips1' ->
+      st_star G2 c_ctx ips2 t ips2' ->
+      star (MultiSem.step p c p_ctx c_ctx) G (ips1, ips2) t (ips1', ips2') /\
+      PS.mergeable_states p_ctx c_ctx ips1' ips2'.
   Proof.
     intros ips1 ips2 t ips1' ips2'.
     intros Hmergeable Hst_star1 Hst_star2.
@@ -937,11 +1023,11 @@ Section PartialComposition.
 
   Theorem threeway_multisem_mt_star_simulation:
     forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      mt_star G (prog_interface prog2) ips1 t ips1' ->
-      mt_star G (prog_interface prog1) ips2 t ips2' ->
-      star (MultiSem.mstep prog1 prog2) G (ips1, ips2) t (ips1', ips2') /\
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1' ips2'.
+      PS.mergeable_states p_ctx c_ctx ips1 ips2 ->
+      mt_star G1 p_ctx ips1 t ips1' ->
+      mt_star G2 c_ctx ips2 t ips2' ->
+      star (MultiSem.step p c p_ctx c_ctx) G (ips1, ips2) t (ips1', ips2') /\
+      PS.mergeable_states p_ctx c_ctx ips1' ips2'.
   Proof.
     intros ips1 ips2 t ips1' ips2'.
     intros Hmergeable Hmt_star1 Hmt_star2.
@@ -1007,10 +1093,10 @@ Section PartialComposition.
 
   Corollary threeway_multisem_star:
     forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      star (PS.step (prog_interface prog2)) G ips1 t ips1' ->
-      star (PS.step (prog_interface prog1)) G ips2 t ips2' ->
-      star (MultiSem.mstep prog1 prog2) G (ips1, ips2) t (ips1', ips2').
+      PS.mergeable_states p_ctx c_ctx ips1 ips2 ->
+      star (PS.step p_ctx) G1 ips1 t ips1' ->
+      star (PS.step c_ctx) G2 ips2 t ips2' ->
+      star (MultiSem.step p c p_ctx c_ctx) G (ips1, ips2) t (ips1', ips2').
   Proof.
     intros ips1 ips2 t ips1' ips2'.
     intros Hmergeable Hstar1 Hstar2.
@@ -1022,8 +1108,8 @@ Section PartialComposition.
 
   Corollary partial_programs_composition:
     forall t,
-      program_behaves (PS.sem prog1 (prog_interface prog2)) (Terminates t) ->
-      program_behaves (PS.sem prog2 (prog_interface prog1)) (Terminates t) ->
+      program_behaves (PS.sem p p_ctx) (Terminates t) ->
+      program_behaves (PS.sem c c_ctx) (Terminates t) ->
       program_behaves (PS.sem prog empty_ctx) (Terminates t).
   Proof.
     intros t Hprog1_beh Hprog2_beh.
@@ -1032,16 +1118,13 @@ Section PartialComposition.
 
     eapply forward_simulation_same_safe_behavior.
     + apply MultiSem.merged_prog_simulates_multisem; auto.
-    + assert (Hmergeable:
-                PS.mergeable_states (prog_interface prog2) (prog_interface prog1) s s0). {
+    + assert (Hmergeable: PS.mergeable_states p_ctx c_ctx s s0). {
         admit.
       }
       eapply program_runs with (s:=(s,s0)).
       * constructor; auto.
       * eapply state_terminates with (s':=(s',s'0)); auto.
         ** apply threeway_multisem_star; auto.
-           *** simpl in *. (* star in a bigger environment *) admit.
-           *** simpl in *. (* star in a bigger environment *) admit.
         ** simpl. constructor; auto.
     + simpl. constructor.
   Admitted.
@@ -1050,9 +1133,9 @@ Section PartialComposition.
 
   Theorem threeway_mt_star_simulation:
     forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      mt_star G (prog_interface prog2) ips1 t ips1' ->
-      mt_star G (prog_interface prog1) ips2 t ips2' ->
+      PS.mergeable_states p_ctx c_ctx ips1 ips2 ->
+      mt_star G1 p_ctx ips1 t ips1' ->
+      mt_star G2 c_ctx ips2 t ips2' ->
       mt_star G empty_ctx (PS.merge_partial_states ips1 ips2) t
                           (PS.merge_partial_states ips1' ips2').
   Proof.
@@ -1060,9 +1143,9 @@ Section PartialComposition.
 
   Theorem threeway_simulation_star:
     forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface prog2) (prog_interface prog1) ips1 ips2 ->
-      star (PS.step (prog_interface prog2)) G ips1 t ips1' ->
-      star (PS.step (prog_interface prog1)) G ips2 t ips2' ->
+      PS.mergeable_states p_ctx c_ctx ips1 ips2 ->
+      star (PS.step p_ctx) G1 ips1 t ips1' ->
+      star (PS.step c_ctx) G2 ips2 t ips2' ->
       star (PS.step empty_ctx) G (PS.merge_partial_states ips1 ips2) t
                                  (PS.merge_partial_states ips1' ips2').
   Proof.
@@ -1077,16 +1160,15 @@ Section PartialComposition.
 
   Corollary partial_programs_composition':
     forall t,
-      program_behaves (PS.sem prog1 (prog_interface prog2)) (Terminates t) ->
-      program_behaves (PS.sem prog2 (prog_interface prog1)) (Terminates t) ->
+      program_behaves (PS.sem p p_ctx) (Terminates t) ->
+      program_behaves (PS.sem c c_ctx) (Terminates t) ->
       program_behaves (PS.sem prog empty_ctx) (Terminates t).
   Proof.
     intros t Hprog1_beh Hprog2_beh.
     inversion Hprog1_beh; subst. inversion H0; subst.
     inversion Hprog2_beh; subst. inversion H4; subst.
 
-    assert (Hmergeable:
-              PS.mergeable_states (prog_interface prog2) (prog_interface prog1) s s0). {
+    assert (Hmergeable: PS.mergeable_states p_ctx c_ctx s s0). {
       admit.
     }
     eapply program_runs with (s:=PS.merge_partial_states s s0).
@@ -1094,35 +1176,70 @@ Section PartialComposition.
     - eapply state_terminates with (s':=PS.merge_partial_states s' s'0); auto.
       + simpl in *.
         apply threeway_simulation_star; auto.
-        * (* star in a bigger environment *) admit.
-        * (* star in a bigger environment *) admit.
       + admit.
   Admitted.
 End PartialComposition.
 
-Section Composition.
-  Variable p c: program.
+(*
+  Composition Theorem
 
-  Let mainC := fst (prog_main p).
-  Let mainP := snd (prog_main p).
+  From partial semantics to complete semantics
+  This is the final theorem which is actually needed for our proof plan.
+*)
+
+Section Composition.
+  Variables p c: program.
+  Variables p_ctx c_ctx: Program.interface.
 
   Hypothesis same_main:
     prog_main p = prog_main c.
 
-  Hypothesis disjointness:
-    PMapExtra.Disjoint (prog_interface p) (prog_interface c).
+  Hypothesis same_interface:
+    PMap.Equal (prog_interface p) (prog_interface c).
 
-  Hypothesis closedness:
-    closed_program (program_link p c mainC mainP).
+  Hypothesis contexts_disjointness:
+    PMapExtra.Disjoint p_ctx c_ctx.
+
+  Hypothesis contexts_union:
+    PMap.Equal (prog_interface p) (PMapExtra.update p_ctx c_ctx).
+
+  Lemma complementing_maps:
+    forall (iface p_ctx c_ctx: Program.interface),
+      PMapExtra.Disjoint p_ctx c_ctx ->
+      PMap.Equal iface (PMapExtra.update p_ctx c_ctx) ->
+      PMap.Equal p_ctx (PMapExtra.diff iface c_ctx) /\
+      PMap.Equal c_ctx (PMapExtra.diff iface p_ctx).
+  Proof.
+  Admitted.
+
+  (* facts about contexts *)
+
+  Lemma p_context_validity:
+    PMap.Equal p_ctx (PMapExtra.diff (prog_interface c) c_ctx).
+  Proof.
+    apply complementing_maps with (p_ctx:=p_ctx) (c_ctx:=c_ctx); auto.
+    - rewrite <- same_interface. auto.
+  Qed.
+
+  Lemma c_context_validity:
+    PMap.Equal c_ctx (PMapExtra.diff (prog_interface p) p_ctx).
+  Proof.
+    apply complementing_maps with (p_ctx:=p_ctx) (c_ctx:=c_ctx); auto.
+  Qed.
+
+  (* the composition result *)
+
+  Let prog := program_link (partialize_program p p_ctx)
+                           (partialize_program c c_ctx)
+                           (fst (prog_main p)) (snd (prog_main p)).
 
   Theorem composition_for_termination:
     forall t,
-      program_behaves (PS.sem p (prog_interface c)) (Terminates t) ->
-      program_behaves (PS.sem c (prog_interface p)) (Terminates t) ->
-      program_behaves (CS.sem (program_link p c mainC mainP)) (Terminates t).
+      program_behaves (PS.sem p p_ctx) (Terminates t) ->
+      program_behaves (PS.sem c c_ctx) (Terminates t) ->
+      program_behaves (CS.sem prog) (Terminates t).
   Proof.
     intros t Hbeh1 Hbeh2.
-    destruct closedness.
     eapply partial_semantics_implies_complete_semantics; auto.
     apply partial_programs_composition; auto.
   Qed.
