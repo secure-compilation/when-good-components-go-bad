@@ -72,101 +72,15 @@ Section Definability.
           }
         } *)
 
-   (** Notice that each branch that performs call performs a recursive call at
-       the end.  This is needed to trigger multiple events from a single
-       function.
+  (** If a component has multiple procedures, they can share the same
+      code. Notice that each branch that performs call performs a recursive call
+      at the end.  This is needed to trigger multiple events from a single
+      function.
 
-       To build a context as above, we traverse the trace of events while
-       keeping track of the following data:
+      The first ingredient needed to perform this translation is a switch
+      statement that runs code based on the value of the first local variable.
 
    *)
-
-  Inductive state := State {
-    (* Some P if the program is currently executing a context procedure P;
-       otherwise None. *)
-    cur_comp : option (Component.id * nat);
-
-    (* Call stack with calling procedures. *)
-    callers  : list (Component.id * nat)
-
-  }.
-
-  (** We start building the context from the following state.  Initially, the
-      current procedure is set to mainC, there are no callers, and every
-      procedure has no code.  Note that the actual current procedure takes into
-      account whether mainC belongs to the context or not. *)
-  Definition initial_state : state :=
-    match PMap.find mainC ictx with
-    | Some _ => State (Some (mainC, O)) []
-    | None   => State None              []
-    end.
-
-  (** Given the current event and the call stack, compute the next value of
-      cur_proc. *)
-  Definition next_comp
-    (e: event)
-    (callers: list (Component.id * nat))
-    : option (Component.id * nat) :=
-    match e with
-    | ECall _ next_proc _ next_comp =>
-      match PMap.find next_comp ictx with
-      | Some _ => Some (next_comp, O)
-      | None   => None
-      end
-    | ERet _ _ next_comp =>
-      match PMap.find next_comp ictx, callers with
-      | Some _, (C, n) :: callers' => Some (C, S n)
-      | Some _, []                 => (* Should never happen *) None
-      | None  , _                  => None
-      end
-    end.
-
-  (** Compute the next value of callers. *)
-  Definition next_callers
-    (e: event)
-    (cur_proc: option (Component.id * nat))
-    (callers: list (Component.id * nat))
-    : list (Component.id * nat) :=
-    match e with
-    | ECall _ _ _ _ =>
-      match cur_proc with
-      | Some cur_proc => cur_proc :: callers
-      | None          => callers
-      end
-    | ERet _ _ next_comp =>
-      match PMap.find next_comp ictx with
-      | Some _ => tail callers
-      | None   => callers
-      end
-    end.
-
-  Definition correct_event (e: event) (ps: state) :=
-    match e with
-    | ECall _ _ _ _ => True
-    | ERet  _ _ next_comp =>
-      match PMap.find next_comp ictx, (callers ps) with
-      | Some _, (C, _) :: callers' => next_comp = C
-      | Some _, []                 => False
-      | None  , _                  => True
-      end
-    end.
-
-  (** Update the state of the context building procedure with an event. *)
-  Definition update_state (ps: state) (e: event) : state :=
-    {| cur_comp := next_comp e (callers ps);
-       callers  := next_callers e (cur_comp ps) (callers ps) |}.
-
-  (** Given an event e, compute the expression needed to produce that event.
-      Note that calls are compiled to two call expressions: one that produces
-      the call event proper, and another one that performs a recursive call to
-      continue executing the rest of the instructions in this procedure. *)
-  Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event) : expr :=
-    match e with
-    | ECall _ next_proc arg next_comp =>
-      E_seq (E_call next_comp next_proc (E_val (Int arg)))
-            (E_call C P (E_val (Int 0)))
-    | ERet  _ ret_val _ => E_val (Int ret_val)
-    end.
 
   Definition switch_clause n e_then e_else :=
     let one := E_val (Int 1%Z) in
@@ -264,38 +178,126 @@ Section Definability.
     reflexivity.
   Qed.
 
+  (** We use [switch] to define the following function [expr_of_trace], which
+      converts a sequence of events to an expression that produces that sequence
+      of events when run from the appropriate component.  We assume that all
+      events were produced from the same component.  The [C] and [P] arguments
+      are only needed to generate the recursive calls depicted above. *)
+
+  Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event) : expr :=
+    match e with
+    | ECall _ P' arg C' =>
+      E_seq (E_call C' P' (E_val (Int arg)))
+            (E_call C  P  (E_val (Int 0)))
+    | ERet  _ ret_val _ => E_val (Int ret_val)
+    end.
+
+  Definition expr_of_trace (C: Component.id) (P: Procedure.id) (t: trace) : expr :=
+    switch (map (expr_of_event C P) t) E_exit.
+
+  (** To compile a complete trace mixing events from different components, we
+      split it into individual traces for each context component and apply
+      [expr_of_trace] to each one of them. *)
+
+  Definition cur_comp_of_event (e: event) : Component.id :=
+    match e with
+    | ECall C _ _ _ => C
+    | ERet  C _ _   => C
+    end.
+
+  Definition context_of_trace (t: trace) : program :=
+    let procedure_of_trace C P :=
+        expr_of_trace C P (filter (fun e => Pos.eqb C (cur_comp_of_event e)) t) in
+    {| prog_interface  :=
+         ictx;
+       prog_procedures :=
+         PMap.mapi (fun C C_interface =>
+                      fold_right (fun P C_procs =>
+                                    PMap.add P (procedure_of_trace C P) C_procs)
+                                 (PMap.empty _)
+                                 (Component.export C_interface))
+                   ictx;
+       prog_buffers    := PMap.map (fun _ => inr [Int 0; Int 0]) ictx;
+       prog_main       := (mainC, mainP) |}.
+
+
   (*
 
-  (** After we apply update_state to all the events in the trace,
-      linearize_instructions converts the representation of each procedure into
-      the chain of if statements depicted above. *)
-  Definition linearize_instructions
-    (C: Component.id)
-    (P: Procedure.id)
-    (instrs: list event) : expr :=
-    let one := E_val (Int 1%Z) in
-    let count := E_binop Add E_local one in
-    let add_instruction p exp :=
-        let '(pos, e) := p in
-        E_if (E_binop Eq count (E_val (Int pos)))
-             (E_seq (E_assign count (E_binop Add (E_deref count) one))
-                    (expr_of_event C P e))
-             exp in
-    fold_right add_instruction E_exit instrs.
+  Inductive state := State {
+    (* Some P if the program is currently executing a context procedure P;
+       otherwise None. *)
+    cur_comp : option (Component.id * nat);
 
-  (** Combine all of the above steps to convert a trace into a context. *)
-  Definition build_context (t: trace) : program :=
-    let 'State cur_proc callers procs :=
-        fold_left update_state t initial_state in
-    let comp_code :=
-        PMap.mapi (fun C p =>
-                     let '(count, comp_procs) := p in
-                     PMap.mapi (linearize_instructions C) comp_procs) procs in
-    let comp_mem  := PMap.map (fun _ => inr [Int 0; Int 0]) ictx in
-    {| prog_interface  := ictx;
-       prog_procedures := comp_code;
-       prog_buffers    := comp_mem;
-       prog_main       := (mainC, mainP) |}.
+    (* Call stack with calling procedures. *)
+    callers  : list (Component.id * nat)
+
+  }.
+
+  (** We start building the context from the following state.  Initially, the
+      current procedure is set to mainC, there are no callers, and every
+      procedure has no code.  Note that the actual current procedure takes into
+      account whether mainC belongs to the context or not. *)
+  Definition initial_state : state :=
+    match PMap.find mainC ictx with
+    | Some _ => State (Some (mainC, O)) []
+    | None   => State None              []
+    end.
+
+  (** Given the current event and the call stack, compute the next value of
+      cur_proc. *)
+  Definition next_comp
+    (e: event)
+    (callers: list (Component.id * nat))
+    : option (Component.id * nat) :=
+    match e with
+    | ECall _ next_proc _ next_comp =>
+      match PMap.find next_comp ictx with
+      | Some _ => Some (next_comp, O)
+      | None   => None
+      end
+    | ERet _ _ next_comp =>
+      match PMap.find next_comp ictx, callers with
+      | Some _, (C, n) :: callers' => Some (C, S n)
+      | Some _, []                 => (* Should never happen *) None
+      | None  , _                  => None
+      end
+    end.
+
+  (** Compute the next value of callers. *)
+  Definition next_callers
+    (e: event)
+    (cur_proc: option (Component.id * nat))
+    (callers: list (Component.id * nat))
+    : list (Component.id * nat) :=
+    match e with
+    | ECall _ _ _ _ =>
+      match cur_proc with
+      | Some cur_proc => cur_proc :: callers
+      | None          => callers
+      end
+    | ERet _ _ next_comp =>
+      match PMap.find next_comp ictx with
+      | Some _ => tail callers
+      | None   => callers
+      end
+    end.
+
+  Definition correct_event (e: event) (ps: state) :=
+    match e with
+    | ECall _ _ _ _ => True
+    | ERet  _ _ next_comp =>
+      match PMap.find next_comp ictx, (callers ps) with
+      | Some _, (C, _) :: callers' => next_comp = C
+      | Some _, []                 => False
+      | None  , _                  => True
+      end
+    end.
+
+  (** Update the state of the context building procedure with an event. *)
+  Definition update_state (ps: state) (e: event) : state :=
+    {| cur_comp := next_comp e (callers ps);
+       callers  := next_callers e (cur_comp ps) (callers ps) |}.
+
 
   Definition represent_cur_comp (g: global_env) (ps: state) (s: PS.state) : Prop :=
     match cur_proc ps, s with
