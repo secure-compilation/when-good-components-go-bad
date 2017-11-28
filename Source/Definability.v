@@ -19,27 +19,27 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Section Definability.
-  Variable p: program.
-  Variable ictx: Program.interface.
+  Variable intf: Program.interface.
   Variable mainC: Component.id.
   Variable mainP: Procedure.id.
 
   (** The definability proof takes an execution trace as its input and builds a
-      source context that can produce that trace when linked with the
-      appropriate program.  Roughly speaking, it does so by keeping one counter
-      for each context component, and using that counter to track how many calls
-      or returns have been executed by that component.
+      source program that can produce that trace.  Roughly speaking, it does so
+      by keeping one counter for each component, and using that counter to track
+      how many calls or returns have been executed by that component.
 
-      To see how this works, suppose that we have a context with two procedures
-      P1 and P2, which live in components C1 and C2.  Given the trace
+      To see how this works, suppose that we have an interface with two
+      procedures P1 and P2, which live in components C1 and C2.  Given the trace
+      *)
 
-        ECall mainC P1    0 C1
+
+  (**   ECall mainC P1    0 C1
         ECall C1    P2    1 C2
         ERet  C2          2 C1
         ECall C1    P2    3 C2
-        ECall C2    mainP 4 mainC
+        ECall C2    mainP 4 mainC *)
 
-      we would produce the context *)
+  (** we would produce the program *)
 
   (**   C1 {
           P1() {
@@ -196,7 +196,7 @@ Section Definability.
     switch (map (expr_of_event C P) t) E_exit.
 
   (** To compile a complete trace mixing events from different components, we
-      split it into individual traces for each context component and apply
+      split it into individual traces for each component and apply
       [expr_of_trace] to each one of them.  We also initialize the memory of
       each component to hold 0 at the second local variable. *)
 
@@ -206,22 +206,21 @@ Section Definability.
     | ERet  C _ _   => C
     end.
 
-  Definition context_of_trace (t: trace) : program :=
+  Definition program_of_trace (t: trace) : program :=
     let procedure_of_trace C P :=
         expr_of_trace C P (filter (fun e => Pos.eqb C (cur_comp_of_event e)) t) in
-    {| prog_interface  :=
-         ictx;
+    {| prog_interface  := intf;
        prog_procedures :=
          PMap.mapi (fun C C_interface =>
                       fold_right (fun P C_procs =>
                                     PMap.add P (procedure_of_trace C P) C_procs)
                                  (PMap.empty _)
                                  (Component.export C_interface))
-                   ictx;
-       prog_buffers    := PMap.map (fun _ => inr [Int 0; Int 0]) ictx;
+                   intf;
+       prog_buffers    := PMap.map (fun _ => inr [Int 0; Int 0]) intf;
        prog_main       := (mainC, mainP) |}.
 
-  (** To prove that [context_of_trace] is correct, we need to describe how the
+  (** To prove that [program_of_trace] is correct, we need to describe how the
       state of the program evolves as it emits events from the translated trace.
       One of the difficulties is the stack.  If a call to a component [C]
       performs [n] calls to other components before returning, the code
@@ -231,82 +230,64 @@ Section Definability.
       following data structure.  *)
 
   Inductive stack_state := StackState {
-    (* The current running component.  When set to [Some (C, n)], it means that
-       the context component [C] is running, and that during this execution it
-       has called into [n] other components.  (Because of the recursive calls,
-       this means that the top of the stack has [n] frames corresponding to
-       calls from [C] into itself.)  When set to [None], it means that the
-       program is currently executing.  Since the execution for the program is
-       nondeterministic in the statement of definability, we don't have to
-       track its stack frames. *)
-    cur_comp : option (Component.id * nat);
+    (* The current running component.  When set to [(C, n)], it means that the
+       component [C] is running, and that during this execution it has called
+       into [n] other components.  (Because of the recursive calls, this means
+       that the top of the stack has [n] frames corresponding to calls from [C]
+       into itself.)  *)
+    cur_comp : Component.id * nat;
 
-    (* Other context components further down the stack. *)
+    (* Other running components further down the stack. *)
     callers  : list (Component.id * nat)
 
   }.
 
-  (** We start building the context from the following state.  Initially, the
-      current procedure is set to mainC, there are no callers, and every
-      procedure has no code.  Note that the actual current procedure takes into
-      account whether mainC belongs to the context or not. *)
-  Definition initial_state : stack_state :=
-    match PMap.find mainC ictx with
-    | Some _ => StackState (Some (mainC, O)) []
-    | None   => StackState None              []
-    end.
+  (** The program necessarily starts executing from the [mainC] component, with
+      an empty stack. *)
+  Definition initial_state : stack_state := StackState (mainC, O) [].
 
   (** Given the current event and the call stack, compute the next value of
       cur_proc. *)
   Definition next_comp
     (e: event)
     (callers: list (Component.id * nat))
-    : option (Component.id * nat) :=
+    : Component.id * nat :=
     match e with
-    | ECall _ next_proc _ next_comp =>
-      match PMap.find next_comp ictx with
-      | Some _ => Some (next_comp, O)
-      | None   => None
-      end
-    | ERet _ _ next_comp =>
-      match PMap.find next_comp ictx, callers with
-      | Some _, (C, n) :: callers' => Some (C, S n)
-      | Some _, []                 => (* Should never happen *) None
-      | None  , _                  => None
+    | ECall _ P' _ C' => (C', O)
+    | ERet _ _ C'_ =>
+      match callers with
+      | (C', n) :: callers' =>
+        (* When run on a trace produced by a program, [C'] and [C'_] should be equal. *)
+        (C', S n)
+      | [] =>
+        (* This case should never happen, as a program cannot return from a
+           component when the stack is empty *)
+        (C'_, O)
       end
     end.
 
   (** Compute the next value of callers. *)
   Definition next_callers
     (e: event)
-    (cur_proc: option (Component.id * nat))
+    (cur_proc: Component.id * nat)
     (callers: list (Component.id * nat))
     : list (Component.id * nat) :=
     match e with
-    | ECall _ _ _ _ =>
-      match cur_proc with
-      | Some cur_proc => cur_proc :: callers
-      | None          => callers
-      end
-    | ERet _ _ next_comp =>
-      match PMap.find next_comp ictx with
-      | Some _ => tail callers
-      | None   => callers
-      end
+    | ECall _ _ _ _ => cur_proc :: callers
+    | ERet _ _ _ => tail callers
     end.
 
   Definition correct_event (e: event) (ps: stack_state) :=
     match e with
     | ECall _ _ _ _ => True
-    | ERet  _ _ next_comp =>
-      match PMap.find next_comp ictx, (callers ps) with
-      | Some _, (C, _) :: callers' => next_comp = C
-      | Some _, []                 => False
-      | None  , _                  => True
+    | ERet  _ _ C1 =>
+      match callers ps with
+      | (C2, _) :: callers' => C1 = C2
+      | []                  => False
       end
     end.
 
-  (** Update the state of the context building procedure with an event. *)
+  (** Update the stack state with an event. *)
   Definition update_state (ps: stack_state) (e: event) : stack_state :=
     {| cur_comp := next_comp e (callers ps);
        callers  := next_callers e (cur_comp ps) (callers ps) |}.
