@@ -273,6 +273,10 @@ Module Memory.
     | None => None
     end.
 
+  (* AAA: Destructing the pointer in the definitions of [load] and [store] is
+     not a good idea, because it causes Coq to unfold any expression of the forms
+     [load mem (C, b, o)] and [store mem (C, b, o) v]. *)
+
   Definition load (mem : t) (ptr : Pointer.t) : option value :=
     let '(C, b, o) := ptr in
     match PMap.find C mem with
@@ -290,6 +294,22 @@ Module Memory.
       end
     | None => None
     end.
+
+  Lemma load_after_store_eq mem ptr v mem' :
+    store mem  ptr v = Some mem' ->
+    load  mem' ptr   = Some v.
+  Proof. Admitted.
+
+  Lemma load_after_store_neq mem ptr v mem' ptr' :
+    ptr <> ptr' ->
+    store mem  ptr  v = Some mem' ->
+    load  mem' ptr'   = load mem ptr'.
+  Proof. Admitted.
+
+  Lemma store_after_load mem ptr v v' :
+    load mem ptr = Some v ->
+    exists mem', store mem ptr v' = Some mem'.
+  Proof. Admitted.
 
   Lemma program_changes_are_preserved:
     forall ctx mem C CI,

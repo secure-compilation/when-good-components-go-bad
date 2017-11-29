@@ -2,6 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
+Require Import Common.Linking.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -20,6 +21,7 @@ Unset Printing Implicit Defensive.
 
 Section Definability.
   Variable intf: Program.interface.
+  Variable closed_intf: closed_interface intf.
   Variable mainC: Component.id.
   Variable mainP: Procedure.id.
 
@@ -90,7 +92,10 @@ Section Definability.
          e_else.
 
   Ltac take_step :=
-    eapply (@star_step _ _ _ _ _ E0 _ E0 _ E0); trivial; [econstructor|].
+    match goal with
+    | |- @star _ _ _ _ _ ?t _ =>
+      eapply (@star_step _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
+    end.
 
   Lemma switch_clause_spec p' C stk mem b n n' e_then e_else :
     PMap.find C (genv_buffers (globalenv (CS.sem p'))) = Some b ->
@@ -206,17 +211,60 @@ Section Definability.
     | ERet  C _ _   => C
     end.
 
+  Definition comp_subtrace (C: Component.id) (t: trace) :=
+    filter (fun e => Pos.eqb C (cur_comp_of_event e)) t.
+
+  (* AAA: Another lemma that wouldn't have to be proved using ssreflect... *)
+
+  Lemma filter_app {T} (P : T -> bool) (l1 l2 : list T) :
+    filter P (l1 ++ l2) = filter P l1 ++ filter P l2.
+  Proof.
+    induction l1 as [|x l1 IH]; simpl; trivial.
+    now rewrite IH; destruct (P x).
+  Qed.
+
+  Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace) :
+    comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
+  Proof. apply filter_app. Qed.
+
+  Definition procedure_of_trace C P t :=
+    expr_of_trace C P (comp_subtrace C t).
+
+  Definition procedures_of_trace (t: trace) : PMap.t (PMap.t expr) :=
+    PMap.mapi (fun C C_interface =>
+                 fold_right (fun P C_procs =>
+                               PMap.add P (procedure_of_trace C P t) C_procs)
+                            (PMap.empty _)
+                            (Component.export C_interface))
+              intf.
+
+  Lemma find_procedures_of_trace (t: trace) C P :
+    exported_procedure intf C P ->
+    exists C_procs,
+      PMap.find C (procedures_of_trace t) = Some C_procs /\
+      PMap.find P C_procs = Some (procedure_of_trace C P t).
+  Proof.
+    intros [CI [C_CI CI_P]].
+    exists (fold_right (fun P C_procs =>
+                               PMap.add P (procedure_of_trace C P t) C_procs)
+                            (PMap.empty _)
+                            (Component.export CI)).
+    unfold procedures_of_trace. rewrite PMapFacts.mapi_o; try now intros ? ? ? ->.
+    apply PMap.find_1 in C_CI. rewrite C_CI. simpl.
+    split; trivial.
+    unfold Component.is_exporting in CI_P.
+    revert CI_P. generalize (Component.export CI). intros Ps.
+    induction Ps as [|P' Ps IH]; simpl; try easy.
+    rewrite PMapFacts.add_o.
+    intros HP.
+    destruct (PMapFacts.eq_dec P' P) as [->|ne]; trivial.
+    destruct HP as [|P_in_Ps]; try easy.
+    now apply IH.
+  Qed.
+
   Definition program_of_trace (t: trace) : program :=
-    let procedure_of_trace C P :=
-        expr_of_trace C P (filter (fun e => Pos.eqb C (cur_comp_of_event e)) t) in
     {| prog_interface  := intf;
-       prog_procedures :=
-         PMap.mapi (fun C C_interface =>
-                      fold_right (fun P C_procs =>
-                                    PMap.add P (procedure_of_trace C P) C_procs)
-                                 (PMap.empty _)
-                                 (Component.export C_interface))
-                   intf;
+       prog_procedures := procedures_of_trace t;
        prog_buffers    := PMap.map (fun _ => inr [Int 0; Int 0]) intf;
        prog_main       := (mainC, mainP) |}.
 
@@ -230,135 +278,294 @@ Section Definability.
       following data structure.  *)
 
   Inductive stack_state := StackState {
-    (* The current running component.  When set to [(C, n)], it means that the
-       component [C] is running, and that during this execution it has called
-       into [n] other components.  (Because of the recursive calls, this means
-       that the top of the stack has [n] frames corresponding to calls from [C]
-       into itself.)  *)
-    cur_comp : Component.id * nat;
+    (* The current running component.  *)
+    cur_comp : Component.id;
 
     (* Other running components further down the stack. *)
-    callers  : list (Component.id * nat)
+    callers  : list Component.id
 
   }.
 
-  (** The program necessarily starts executing from the [mainC] component, with
-      an empty stack. *)
-  Definition initial_state : stack_state := StackState (mainC, O) [].
-
-  (** Given the current event and the call stack, compute the next value of
-      cur_proc. *)
-  Definition next_comp
-    (e: event)
-    (callers: list (Component.id * nat))
-    : Component.id * nat :=
-    match e with
-    | ECall _ P' _ C' => (C', O)
-    | ERet _ _ C'_ =>
-      match callers with
-      | (C', n) :: callers' =>
-        (* When run on a trace produced by a program, [C'] and [C'_] should be equal. *)
-        (C', S n)
-      | [] =>
-        (* This case should never happen, as a program cannot return from a
-           component when the stack is empty *)
-        (C'_, O)
+  Fixpoint well_bracketed_trace (s: stack_state) (t: trace) : Prop :=
+    match t with
+    | [] => True
+    | e :: t' =>
+      cur_comp s = cur_comp_of_event e /\
+      match e with
+      | ECall C _ _ C' =>
+        well_bracketed_trace (StackState C' (C :: callers s)) t'
+      | ERet C _ C' =>
+        head (callers s) = Some C' /\
+        well_bracketed_trace (StackState C' (tail (callers s))) t'
       end
     end.
 
-  (** Compute the next value of callers. *)
-  Definition next_callers
-    (e: event)
-    (cur_proc: Component.id * nat)
-    (callers: list (Component.id * nat))
-    : list (Component.id * nat) :=
+  Fixpoint All {T} (P : T -> Prop) (l : list T) : Prop :=
+    match l with
+    | [] => True
+    | x :: l' => P x /\ All P l'
+    end.
+
+  Definition well_formed_event (e: event) : Prop :=
     match e with
-    | ECall _ _ _ _ => cur_proc :: callers
-    | ERet _ _ _ => tail callers
+    | ECall C P _ C' => C <> C' /\ imported_procedure intf C C' P
+    | ERet  C _   C' => C <> C'
     end.
 
-  Definition correct_event (e: event) (ps: stack_state) :=
-    match e with
-    | ECall _ _ _ _ => True
-    | ERet  _ _ C1 =>
-      match callers ps with
-      | (C2, _) :: callers' => C1 = C2
-      | []                  => False
-      end
+  Definition well_formed_trace (t: trace) : Prop :=
+    well_bracketed_trace (StackState mainC []) t /\
+    All well_formed_event t.
+
+  Fixpoint well_formed_callers (callers: list Component.id) (stk: CS.stack) : Prop :=
+    match callers with
+    | [] => True
+    | C :: callers' =>
+      exists v P top bot,
+      stk = (C, v, Kseq (E_call C P (E_val (Int 0))) Kstop) :: top ++ bot /\
+      exported_procedure intf C P /\
+      All (fun '(C', _, k) => C' = C /\ k = Kstop) top /\
+      well_formed_callers callers' bot
     end.
 
-  (** Update the stack state with an event. *)
-  Definition update_state (ps: stack_state) (e: event) : stack_state :=
-    {| cur_comp := next_comp e (callers ps);
-       callers  := next_callers e (cur_comp ps) (callers ps) |}.
+  Definition well_formed_stack (s: stack_state) (stk: CS.stack) : Prop :=
+    exists top bot,
+      stk = top ++ bot /\
+      All (fun '(C', _, k) => C' = cur_comp s /\ k = Kstop) top /\
+      well_formed_callers (callers s) bot.
 
-  (* Representation predicates; not ready yet.
+  Arguments Memory.load  : simpl nomatch.
+  Arguments Memory.store : simpl nomatch.
 
-  Definition represent_cur_comp (g: global_env) (ps: stack_state) (s: PS.state) : Prop :=
-    match cur_proc ps, s with
-    | Some (cur_comp, P), PS.PC (C, _, _, k, exp) =>
-      C = cur_comp /\
-      k = Kstop    /\
-      exists C_procs,
-        PMap.find C (genv_procedures g) = Some C_procs /\
-        PMap.find P C_procs             = Some exp
-    | None              , PS.CC _               => True
-    | _                 , _                     => False
-    end.
+  Section WithTrace.
 
-  Definition represent_mem (g: global_env) (ps: state) (s: PS.state) : Prop :=
-    match s with
-    | PS.PC (_, _, mem, _, _)
-    | PS.CC (_, _, mem) =>
-      forall C : Component.id,
-        match PMap.find C (procs ps), PMap.find C (genv_buffers g), PMap.find C mem with
-        | Some (n_ps, _), Some b, Some C_mem =>
-          match ComponentMemory.load C_mem b 1 with
-          | Some n_s => n_s = Int n_ps
-          | None     => False
-          end
-        | None, _, None => True
-        | _, _, _ => False
-        end
-    end.
+    Variable t : trace.
 
-  Definition represent_state (g: global_env) (prefix suffix: trace) (s: PS.state) : Prop :=
-    let ps := fold_left update_state prefix initial_state in
-    represent_cur_comp g ps s /\
-    represent_mem g ps s.
+    Local Definition p    := program_of_trace t.
+    Local Definition init := init_all p.
 
-  Lemma preservation g prefix e suffix s :
-    represent_state g prefix (e :: suffix) s ->
-    exists s',
-      step (PS.sem (build_context (prefix ++ e :: suffix)) (prog_interface p)) g s [e] s' /\
-      represent_state g (prefix ++ [e]) suffix s'.
-  Proof.
-    unfold represent_state.
-    intros [Hcur_comp Hmem].
-    destruct s as [[[[[C stack] mem] k] exp]|].
-    - (* s = PC (C, stack, mem, k, exp).  Note that, because of the switched
-         roles, this means that s is running the generated context program *)
-      unfold represent_cur_comp in Hcur_comp.
-      destruct (cur_proc (fold_left update_state prefix initial_state)) as [[C' P]|] eqn:Ecur_proc; try easy.
-      destruct Hcur_comp as (? & ? & C_procs & H1 & H2).
-      subst C' k.
+    Local Definition component_buffer C b :=
+      PMap.find C (genv_buffers (init_genv p)) = Some b.
 
+    Lemma exported_procedure_has_block C P :
+      exported_procedure intf C P ->
+      exists b, component_buffer C b.
+    Proof. Admitted.
 
+    Local Definition counter_value C prefix :=
+      Z.of_nat (length (comp_subtrace C prefix)).
 
-  Lemma context_definability_partial :
-    forall s t s',
-      Smallstep.initial_state (PS.sem p ictx) s ->
-      Star (PS.sem p ictx) s t s' ->
-      exists sctx sctx',
-      Star (PS.sem (build_context t) (prog_interface p)) sctx t sctx'.
-  Proof.
-    simpl.
-    intros s t s' Hinit.
-    destruct Hinit as [scs sps scs_sps init_scs].
+    Lemma counter_value_app C prefix1 prefix2 :
+      counter_value C (prefix1 ++ prefix2)
+      = counter_value C prefix1 + counter_value C prefix2.
+    Proof.
+      unfold counter_value.
+      now rewrite comp_subtrace_app, app_length, Nat2Z.inj_add.
+    Qed.
 
+    Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
+      forall C b,
+        component_buffer C b ->
+        Memory.load mem (C, b, 1) = Some (Int (counter_value C prefix)) /\
+        exists v, Memory.load mem (C, b, 0) = Some v.
 
+    Lemma well_formed_memory_store_arg prefix mem C b v :
+      component_buffer C b ->
+      well_formed_memory prefix mem ->
+      exists mem',
+        Memory.store mem (C, b, 0) v = Some mem' /\
+        well_formed_memory prefix mem'.
+    Proof.
+      intros C_b wf_mem.
+      destruct (wf_mem _ _ C_b) as [_ [v' Hv']].
+      destruct (Memory.store_after_load _ _ _ v Hv') as [mem' Hmem'].
+      exists mem'. split; trivial.
+      intros C' b' C'_b'.
+      destruct (wf_mem _ _ C'_b') as [C'_local [v'' Hv'']].
+      assert (neq : (C, b, 0) <> (C', b', 1)) by congruence.
+      rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem'). clear neq.
+      rewrite C'_local. split; trivial.
+      destruct (Pos.eqb_spec C' C) as [?|C_neq_C'].
+      - subst C'.
+        assert (b' = b) by (unfold component_buffer in *; congruence).
+        subst b'. clear C'_b'.
+        exists v.
+        now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem').
+      - exists v''.
+        assert (neq : (C, b, 0) <> (C', b', 0)) by congruence.
+        now rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
+    Qed.
 
+    Lemma counter_value_snoc prefix C e :
+      counter_value C (prefix ++ [e])
+      = counter_value C prefix
+        + if Pos.eqb C (cur_comp_of_event e) then 1 else 0.
+    Proof.
+      unfold counter_value, comp_subtrace.
+      rewrite filter_app, app_length. simpl.
+      rewrite Nat2Z.inj_add.
+      now destruct (Pos.eqb _ _).
+    Qed.
 
+    Lemma well_formed_memory_store_counter prefix mem C b e :
+      component_buffer C b ->
+      well_formed_memory prefix mem ->
+      C = cur_comp_of_event e ->
+      exists mem',
+        Memory.store mem (C, b, 1) (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
+        well_formed_memory (prefix ++ [e]) mem'.
+    Proof.
+      intros C_b wf_mem HC.
+      destruct (wf_mem _ _ C_b) as [C_local [v Hv]].
+      destruct (Memory.store_after_load
+                  _ _ _ (Int (counter_value C (prefix ++ [e])))
+                  C_local) as [mem' Hmem'].
+      exists mem'. split; trivial.
+      intros C' b' C'_b'.
+      destruct (wf_mem _ _ C'_b') as [C'_local [v' Hv']].
+      assert (neq : (C, b, 1) <> (C', b', 0)) by congruence.
+      rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem'). clear neq.
+      split; eauto.
+      rewrite counter_value_snoc, <- HC, Pos.eqb_refl in *.
+      destruct (Pos.eqb_spec C' C) as [?|C_neq_C'].
+      - subst C'.
+        assert (b' = b) by (unfold component_buffer in *; congruence).
+        subst b'. clear C'_b'.
+        now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem').
+      - assert (neq : (C, b, 1) <> (C', b', 1)) by congruence.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
+        now rewrite Z.add_0_r.
+    Qed.
+
+    Definition well_formed_state
+               (s: stack_state) (prefix suffix: trace) (cs: CS.state) : Prop :=
+      let '(C, stk, mem, k, exp) := cs in
+      well_bracketed_trace s suffix /\
+      All well_formed_event suffix /\
+      C = cur_comp s /\
+      well_formed_stack s stk /\
+      well_formed_memory prefix mem /\
+      k = Kstop /\
+      exists P,
+        exported_procedure intf C P /\
+        exp = expr_of_trace C P (comp_subtrace C t).
+
+    Lemma simulation_gen s prefix suffix cs :
+      t = prefix ++ suffix ->
+      well_formed_state s prefix suffix cs ->
+      exists cs', Star (CS.sem p) cs suffix cs'.
+    Proof.
+      assert (Eintf : genv_interface (init_genv p) = intf).
+      { unfold init_genv. now destruct (init_all p). }
+      assert (Eprocs : genv_procedures (init_genv p) = prog_procedures p).
+      { unfold init_genv. now destruct (init_all p). }
+      revert s prefix cs.
+      induction suffix as [|e suffix IH].
+      - intros s prefix cs _ _. exists cs. apply star_refl.
+      - intros [C callers] prefix [[[[C_ stk] mem] k] exp] Et. simpl.
+        intros ([wf_C wb_suffix] & [wf_e wf_suffix] & ? & wf_stk & wf_mem & ? &
+                P & P_exp & ?).
+        subst C_ k exp.
+        destruct (exported_procedure_has_block P_exp) as [b C_b].
+        destruct (wf_mem _ _ C_b) as [C_local _].
+        destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
+        assert (Star1 : Star (CS.sem p)
+                             (C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t)) E0
+                             (C, stk, mem', Kstop, expr_of_event C P e)).
+        { unfold expr_of_trace. rewrite Et, comp_subtrace_app. simpl.
+          rewrite <- wf_C, Pos.eqb_refl, map_app. simpl.
+          assert (H := @switch_spec p _ stk mem _
+                                    (map (expr_of_event C P) (comp_subtrace C prefix))
+                                    (expr_of_event C P e)
+                                    (map (expr_of_event C P) (comp_subtrace C suffix))
+                                    E_exit C_b).
+          rewrite map_length in H. specialize (H C_local).
+          destruct H as [mem'' [Hmem'' Hstar]].
+          enough (H : mem'' = mem') by (subst mem''; easy).
+          rewrite counter_value_snoc, <- wf_C, Pos.eqb_refl in Hmem'.
+          rewrite <- Nat.add_1_r, Nat2Z.inj_add in Hmem''. simpl in Hmem''.
+          unfold counter_value in *. congruence. }
+        assert (Star2 : exists s' cs',
+                   Star (CS.sem p) (C, stk, mem', Kstop, expr_of_event C P e) [e] cs' /\
+                   well_formed_state s' (prefix ++ [e]) suffix cs').
+        { clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
+          destruct e as [C_ P' arg C'|C_ ret_val C'];
+          simpl in wf_C, wf_e, wb_suffix; subst C_.
+          - destruct wf_e as [C_ne_C' Himport].
+            exists (StackState C' (C :: callers)).
+            destruct (exported_procedure_has_block (closed_intf Himport)) as [b' C'_b'].
+            destruct (well_formed_memory_store_arg (Int arg) C'_b' wf_mem) as [mem' [Hmem' wf_mem']].
+            destruct (wf_mem _ _ C_b) as [_ [v Hv]].
+            exists (C', (C, v, Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem',
+                    Kstop, procedure_of_trace C' P' t).
+            split.
+            + take_step. take_step. { simpl. rewrite Eintf. auto. }
+              apply star_one. simpl.
+              apply CS.eval_kstep_sound. simpl.
+              rewrite Eprocs. simpl.
+              destruct (find_procedures_of_trace t (closed_intf Himport)) as (procs & Hprocs & HP').
+              rewrite Hprocs, HP', C_b.
+              unfold Component.id, PMap.key, Block.id in *. rewrite Hv.
+              generalize C'_b'. unfold component_buffer, Block.id. intros ->.
+              rewrite Hmem'.
+              apply Pos.eqb_neq in C_ne_C'.
+              now rewrite C_ne_C'.
+            + do 4 (split; trivial).
+              { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
+                eexists []; eexists; simpl; split; eauto.
+                split; trivial.
+                eexists v, P, top, bot.
+                do 3 (split; trivial). }
+              do 2 (split; trivial).
+              exists P'; split; trivial.
+              apply (closed_intf Himport).
+          - rename wf_e into C_ne_C'.
+            destruct wb_suffix as [HC' wb_suffix].
+            destruct callers as [|C'_ callers]; try easy.
+            simpl in HC', wb_suffix. assert (C'_ = C') by congruence. subst C'_. clear HC'.
+            simpl. exists (StackState C' callers).
+            destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
+            revert mem wf_mem.
+            induction top as [|[[C_ saved] k_] top IHtop].
+            + clear Htop. rename bot into bot'.
+              destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
+              subst bot'. simpl.
+              destruct (exported_procedure_has_block P'_exp) as [b' C'_b'].
+              intros mem wf_mem.
+              destruct (well_formed_memory_store_arg saved   C'_b' wf_mem)  as [mem'  [Hmem' wf_mem']].
+              destruct (well_formed_memory_store_arg (Int 0) C'_b' wf_mem') as [mem'' [Hmem'' wf_mem'']].
+              exists (C', (C', saved, Kstop) :: top ++ bot, mem'', Kstop, procedure_of_trace C' P' t).
+              split.
+              * eapply star_step.
+                -- now eapply CS.KS_CallRet; eauto.
+                -- take_step. take_step; eauto.
+                   apply star_one. apply CS.eval_kstep_sound.
+                   simpl. rewrite C'_b'.
+                   rewrite Eprocs. simpl.
+                   destruct (find_procedures_of_trace t P'_exp) as (procs & Hprocs & HP').
+                   rewrite Hprocs, HP'.
+                   unfold Component.id, PMap.key, Block.id in *.
+                   now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem'), Hmem'', Pos.eqb_refl.
+                -- apply Pos.eqb_neq in C_ne_C'. now rewrite C_ne_C'.
+              * do 4 (split; trivial).
+                { exists ((C', saved, Kstop) :: top), bot. simpl. eauto. }
+                do 2 (split; trivial).
+                exists P'. split; trivial.
+            + intros mem wf_mem.
+              simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
+              specialize (IHtop Htop).
+              destruct (well_formed_memory_store_arg saved C_b wf_mem) as [mem' [Hmem' wf_mem']].
+              admit. }
+        destruct Star2 as (s' & cs' & Star2 & wf_cs').
+        specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
+        specialize (IH Et wf_cs'). destruct IH as [cs'' Star3].
+        exists cs''.
+        eapply (star_trans Star1); simpl; eauto.
+        eapply (star_trans Star2); simpl; eauto.
+    Admitted.
+
+  End WithTrace.
+
+(*
   Theorem context_definability:
     forall t beh,
       program_behaves (PS.sem p ictx) (behavior_app t beh) ->
