@@ -24,6 +24,7 @@ Section Definability.
   Variable closed_intf: closed_interface intf.
   Variable mainC: Component.id.
   Variable mainP: Procedure.id.
+  Variable main_export : exported_procedure intf mainC mainP.
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
@@ -240,18 +241,13 @@ Section Definability.
 
   Lemma find_procedures_of_trace (t: trace) C P :
     exported_procedure intf C P ->
-    exists C_procs,
-      PMap.find C (procedures_of_trace t) = Some C_procs /\
-      PMap.find P C_procs = Some (procedure_of_trace C P t).
+    find_procedure (procedures_of_trace t) C P
+    = Some (procedure_of_trace C P t).
   Proof.
     intros [CI [C_CI CI_P]].
-    exists (fold_right (fun P C_procs =>
-                               PMap.add P (procedure_of_trace C P t) C_procs)
-                            (PMap.empty _)
-                            (Component.export CI)).
-    unfold procedures_of_trace. rewrite PMapFacts.mapi_o; try now intros ? ? ? ->.
+    unfold find_procedure, procedures_of_trace.
+    rewrite PMapFacts.mapi_o; try now intros ? ? ? ->.
     apply PMap.find_1 in C_CI. rewrite C_CI. simpl.
-    split; trivial.
     unfold Component.is_exporting in CI_P.
     revert CI_P. generalize (Component.export CI). intros Ps.
     induction Ps as [|P' Ps IH]; simpl; try easy.
@@ -504,8 +500,7 @@ Section Definability.
               apply star_one. simpl.
               apply CS.eval_kstep_sound. simpl.
               rewrite Eprocs. simpl.
-              destruct (find_procedures_of_trace t (closed_intf Himport)) as (procs & Hprocs & HP').
-              rewrite Hprocs, HP', C_b.
+              rewrite (find_procedures_of_trace t (closed_intf Himport)), C_b.
               unfold Component.id, PMap.key, Block.id in *. rewrite Hv.
               generalize C'_b'. unfold component_buffer, Block.id. intros ->.
               rewrite Hmem'.
@@ -543,8 +538,7 @@ Section Definability.
                    apply star_one. apply CS.eval_kstep_sound.
                    simpl. rewrite C'_b'.
                    rewrite Eprocs. simpl.
-                   destruct (find_procedures_of_trace t P'_exp) as (procs & Hprocs & HP').
-                   rewrite Hprocs, HP'.
+                   rewrite (find_procedures_of_trace t P'_exp).
                    unfold Component.id, PMap.key, Block.id in *.
                    now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem'), Hmem'', Pos.eqb_refl.
                 -- apply Pos.eqb_neq in C_ne_C'. now rewrite C_ne_C'.

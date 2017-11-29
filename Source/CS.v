@@ -197,10 +197,9 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     let t := E0 in
     kstep G (C, s, mem, k, E_call C' P e)
           t (C, s, mem, Kcall C' P k, e)
-| KS_Call2 : forall C s mem mem' k C' P v C'_procs P_expr b b' old_call_arg,
+| KS_Call2 : forall C s mem mem' k C' P v P_expr b b' old_call_arg,
     (* retrieve the procedure code *)
-    PMap.find C' (genv_procedures G) = Some C'_procs ->
-    PMap.find P C'_procs = Some P_expr ->
+    find_procedure (genv_procedures G) C' P = Some P_expr ->
     (* save the old call argument *)
     PMap.find C (genv_buffers G) = Some b ->
     Memory.load mem (C,b,0) = Some old_call_arg ->
@@ -298,8 +297,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v with
       | Int i =>
         (* retrieve the procedure code *)
-        do C'_procs <- PMap.find C' (genv_procedures G);
-        do P_expr <- PMap.find P C'_procs;
+        do P_expr <- find_procedure (genv_procedures G) C' P;
         (* save the old call argument *)
         do b <- PMap.find C (genv_buffers G);
         do old_call_arg <- Memory.load mem (C,b,0);
@@ -327,8 +325,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
 Hint Unfold eval_kstep.
 
 Definition init (p: program) (input: value) : option (global_env * state) :=
-  do procs <- PMap.find (fst (prog_main p)) (prog_procedures p);
-  do main <- PMap.find (snd (prog_main p)) procs;
+  do main <- find_procedure (prog_procedures p) (fst (prog_main p)) (snd (prog_main p));
   let '(bufs, mem) := init_all p in
   let G := {| genv_interface := prog_interface p;
               genv_procedures := prog_procedures p;
@@ -441,9 +438,9 @@ Proof.
         reflexivity.
     + econstructor; eauto.
       * unfold Memory.load.
-        rewrite Heqo6. auto.
+        rewrite Heqo5. auto.
       * unfold Memory.store.
-        rewrite Heqo5, Heqo4.
+        rewrite Heqo4, Heqo3.
         auto.
   (* procedure call *)
   - repeat simplify_option.
@@ -499,9 +496,9 @@ Section Semantics.
     inversion Hkstep; subst;
       inversion Hmatch_traces; subst;
     try (eexists; apply Hkstep).
-    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
-    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
-    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H5 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H5 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H5 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H2 in Hkstep. apply Hkstep.

@@ -112,6 +112,15 @@ Module Source.
     (exists values, PMap.find C (prog_buffers p) = Some (inr values) /\
                   (length values > 0)%nat).
 
+  (** Lookup definition of procedure [C.P] in the map [procs]. *)
+  Definition find_procedure
+             (procs: PMap.t (PMap.t expr))
+             (C: Component.id) (P: Procedure.id) : option expr :=
+    match PMap.find C procs with
+    | Some C_procs => PMap.find P C_procs
+    | None         => None
+    end.
+
   Record well_formed_program (p: program) := {
     (* the interface is sound (but maybe not closed) *)
     wfprog_interface_soundness:
@@ -120,20 +129,14 @@ Module Source.
     wfprog_buffers_existence:
       forall C, PMap.In C (prog_interface p) ->
            has_required_local_buffers p C;
-    (* each exported procedure actually exists *)
+    (* each exported procedure is actually defined *)
     wfprog_exported_procedures_existence:
-      forall C CI,
-        PMap.MapsTo C CI (prog_interface p) ->
-      forall P,
-        Component.is_exporting CI P ->
-      exists Cprocs,
-        PMap.MapsTo C Cprocs (prog_procedures p) /\
-        PMap.In P Cprocs;
+      forall C P, exported_procedure (prog_interface p) C P ->
+      exists Pexpr, find_procedure (prog_procedures p) C P = Some Pexpr;
     (* each instruction of each procedure is well-formed *)
     wfprog_well_formed_procedures:
-      forall C Cprocs P Pexpr,
-        PMap.MapsTo C Cprocs (prog_procedures p) ->
-        PMap.MapsTo P Pexpr Cprocs ->
+      forall C P Pexpr,
+        find_procedure (prog_procedures p) C P = Some Pexpr ->
         well_formed_expr p C Pexpr;
     (* if the main component exists, then the main procedure must exist as well *)
     wfprog_main_existence:
