@@ -7,6 +7,7 @@ Common/Maps.v
 Common/Util.v
 Common/Memory.v
 Common/Linking.v
+Common/Blame.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
@@ -34,7 +35,6 @@ S2I/Definitions.v
 S2I/CompMonad.v
 S2I/Compiler.v
 S2I/Correctness.v
-S2I/PartialForward.v
 S2I/Examples/Helper.v
 S2I/Examples/Identity.v
 S2I/Examples/Increment.v
@@ -49,7 +49,7 @@ Intermediate/PS.v
 Intermediate/Decomposition.v
 Intermediate/Composition.v
 
-Common/Rc.v
+RSC_DC_MD.v
 
 TargetSFI/EitherMonad.v
 TargetSFI/StateMonad.v

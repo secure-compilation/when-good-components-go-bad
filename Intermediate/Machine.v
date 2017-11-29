@@ -421,4 +421,13 @@ Definition init_all (p: program)
                  (PMap.empty (PMap.t Block.id)) (PMap.empty (PMap.t code))
                  (PMap.elements (prog_procedures p)).
 
+Theorem init_all_memory_guarantees:
+  forall p (mem: Memory.t),
+  let '(mem, _, _) := init_all p in
+  forall C,
+    PMap.In C (prog_interface p) <->
+    PMap.In C mem.
+Proof.
+Admitted.
+
 End Intermediate.
