@@ -443,11 +443,11 @@ Section Definability.
       k = Kstop /\
       exists P,
         exported_procedure intf C P /\
-        exp = expr_of_trace C P (comp_subtrace C t).
+        exp = procedure_of_trace C P t.
 
     (* AAA: We could probably refine this result and require that [cs'] be a final state. *)
 
-    Lemma simulation_gen s prefix suffix cs :
+    Lemma definability_gen s prefix suffix cs :
       t = prefix ++ suffix ->
       well_formed_state s prefix suffix cs ->
       exists cs', Star (CS.sem p) cs suffix cs'.
@@ -566,22 +566,27 @@ Section Definability.
         eapply (star_trans Star2); simpl; eauto.
     Qed.
 
+    Lemma definability cs :
+      well_formed_trace t ->
+      initial_state (CS.sem p) cs ->
+      exists cs', Star (CS.sem p) cs t cs'.
+    Proof.
+      intros wf_t init_cs.
+      enough (H : well_formed_state (StackState mainC []) [] t cs).
+      { apply (@definability_gen _ [] t _ eq_refl H). }
+      destruct cs as [[[[C stk] mem] k] e].
+      destruct wf_t as [wb_t wf_t_events].
+      destruct init_cs as (? & ? & wf_bufs & Emem & Emain & ?).
+      subst C stk k. simpl in Emain.
+      rewrite find_procedures_of_trace in Emain; trivial.
+      assert (e = procedure_of_trace mainC mainP t) by congruence. subst e. clear Emain.
+      do 4 (split; trivial).
+      { exists [], []. repeat (split; trivial). }
+      split.
+      { admit. }
+      split; trivial. eauto.
+    Admitted.
 
-  End WithTrace.
+End WithTrace.
 
-(*
-  Theorem context_definability:
-    forall t beh,
-      program_behaves (PS.sem p ictx) (behavior_app t beh) ->
-    exists ctx,
-      PMap.Equal (prog_interface ctx) ictx /\
-      program_behaves (CS.sem (program_link p ctx mainC mainP)) (Terminates t).
-  Proof.
-    intros t beh Hbeh.
-    remember (behavior_app t beh) as beh' eqn:E.
-    destruct Hbeh as [s beh' s_is_init s_beh|].
-    - (* Program has a valid initial state. *)
-      subst beh'.
-
-   *)
 End Definability.

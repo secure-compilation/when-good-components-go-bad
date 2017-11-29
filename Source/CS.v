@@ -108,9 +108,7 @@ Definition initial_state (p: program) (st: state) : Prop :=
   (let '(_, m) := init_all p in mem = m) /\
 
   (* the expression under evaluation is the main procedure *)
-  (exists main_procs,
-      PMap.find (fst (prog_main p)) (prog_procedures p) = Some main_procs /\
-      PMap.find (snd (prog_main p)) main_procs = Some e) /\
+  find_procedure (prog_procedures p) (fst (prog_main p)) (snd (prog_main p)) = Some e /\
 
   (* the continuation is stop *)
   k = Kstop.
