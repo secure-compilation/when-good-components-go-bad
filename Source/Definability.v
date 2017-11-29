@@ -449,6 +449,8 @@ Section Definability.
         exported_procedure intf C P /\
         exp = expr_of_trace C P (comp_subtrace C t).
 
+    (* AAA: We could probably refine this result and require that [cs'] be a final state. *)
+
     Lemma simulation_gen s prefix suffix cs :
       t = prefix ++ suffix ->
       well_formed_state s prefix suffix cs ->
@@ -554,14 +556,22 @@ Section Definability.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
               specialize (IHtop Htop).
               destruct (well_formed_memory_store_arg saved C_b wf_mem) as [mem' [Hmem' wf_mem']].
-              admit. }
+              simpl.
+              specialize (IHtop _ wf_mem'). destruct IHtop as [cs' [StarRet wf_cs']].
+              exists cs'. split; trivial.
+              eapply star_step; try eassumption.
+              * apply CS.eval_kstep_sound. simpl.
+                rewrite C_b. unfold Component.id, PMap.key, Block.id in *.
+                rewrite Hmem', Pos.eqb_refl. eauto.
+              * reflexivity. }
         destruct Star2 as (s' & cs' & Star2 & wf_cs').
         specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
         specialize (IH Et wf_cs'). destruct IH as [cs'' Star3].
         exists cs''.
         eapply (star_trans Star1); simpl; eauto.
         eapply (star_trans Star2); simpl; eauto.
-    Admitted.
+    Qed.
+
 
   End WithTrace.
 
