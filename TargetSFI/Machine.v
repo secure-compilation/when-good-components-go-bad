@@ -376,7 +376,7 @@ Module RiscMachine.
     Definition get_value (mem : t) (ptr : address) : option value :=
       match get_word mem ptr with
       | Some (Data val) => Some val
-      | _ => None
+      | _ => Some Z0
       end.
 
     Definition get_instr (mem : t) (ptr : address) : option RiscMachine.ISA.instr :=

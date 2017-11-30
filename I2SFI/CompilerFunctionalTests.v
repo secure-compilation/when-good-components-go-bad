@@ -173,4 +173,3 @@ Example test_IAlloc1 :
 .
 Proof.  
   compute. eauto. Qed.
-
