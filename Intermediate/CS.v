@@ -98,6 +98,43 @@ Definition final_state (G: global_env) (s: state) : Prop :=
   let '(gsp, mem, regs, pc) := s in
   executing G pc IHalt.
 
+Lemma same_program_initial_state:
+  forall p1 p2,
+    prog_eq p1 p2 ->
+  forall ics,
+    initial_state p1 ics ->
+    initial_state p2 ics.
+Proof.
+  intros p1 p2 Heq ics Hics_init.
+  inversion Heq; subst.
+  inversion Hics_init; subst.
+  simpl in *.
+  constructor;
+    try reflexivity;
+    try assumption.
+  - rewrite H3.
+    (* init_all with equal programs *)
+    admit.
+  - simpl.
+    rewrite <- H6.
+    (* init_genv with equal programs *)
+    admit.
+Admitted.
+
+Lemma same_genv_final_state:
+  forall G1 G2,
+    genv_eq G1 G2 ->
+  forall ics,
+    final_state G1 ics ->
+    final_state G2 ics.
+Proof.
+  intros G1 G2 Heq ics Hics_final.
+  inversion Heq; subst.
+  unfold final_state in *.
+  simpl in *.
+  (* executing in the same environment *)
+Admitted.
+
 (* relational specification *)
 
 Inductive step (G : global_env) : state -> trace -> state -> Prop :=
@@ -340,6 +377,82 @@ Proof.
     + constructor; try reflexivity.
       rewrite <- H0, <- H1, H15, H16. reflexivity.
 Qed.
+
+Lemma equal_genvs_step:
+  forall G1 G2 ics t ics',
+    genv_eq G1 G2 ->
+    step G1 ics t ics' ->
+    step G2 ics t ics'.
+Proof.
+  intros G1 G2 ics t ics' Heq Hstep.
+  inversion Heq; subst.
+  inversion Hstep; subst;
+    match goal with
+    | Heq1: state_eq _ _,
+      Heq2: state_eq _ _ |- _ =>
+      inversion Heq1; subst; inversion Heq2; subst
+    end.
+
+  - eapply Nop;
+      try reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+
+  - eapply Label;
+      try reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+
+  - eapply Const;
+      try reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+
+  - eapply Mov;
+      try reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+
+  - eapply BinOp;
+      try reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+Admitted.
 
 (* executable specification *)
 

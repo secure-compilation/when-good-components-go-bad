@@ -224,6 +224,7 @@ Record closed_program (p: program) := {
       PMap.In (snd (prog_main p)) procs;
 }.
 
+(* TOOD add something about main, e.g. they specify the same main *)
 Definition linkable_programs (p1 p2: program) : Prop :=
   (* both programs are well-formed *)
   well_formed_program p1 /\ well_formed_program p2 /\
@@ -259,15 +260,14 @@ Definition partialize_program (p: program) (ctx: Program.interface) : program :=
        PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) (prog_buffers p);
      prog_main := prog_main p |}.
 
-(*
 Ltac inv H := (inversion H; subst; clear H).
 
-(* TODO: Figure out what to do about the last clause. *)
 Theorem linking_well_formedness:
   forall p1 p2 mainC mainP,
     linkable_programs p1 p2 ->
     well_formed_program (program_link p1 p2 mainC mainP).
 Proof.
+  (*
   intros. destruct H as (WF1 & WF2 & IDISJ & BDISJ & PDISJ & SND).
   constructor.
   + auto.
@@ -369,6 +369,7 @@ Proof.
         rewrite PMapFacts.in_find_iff. rewrite H4. discriminate.
   + Admitted. (* This obviously isn't true for arbitrary (mainC,mainP) ! *)
 *)
+Admitted.
 
 Fixpoint init_component m E ps C Cprocs bufs
   : Memory.t * EntryPoint.t * PMap.t (PMap.t code) :=
@@ -421,6 +422,17 @@ Definition init_all (p: program)
                  (PMap.empty (PMap.t Block.id)) (PMap.empty (PMap.t code))
                  (PMap.elements (prog_procedures p)).
 
+Theorem init_all_with_same_program:
+  forall prog1 prog2,
+  let '(m1, e1, p1) := init_all prog1 in
+  let '(m2, e2, p2) := init_all prog2 in
+  prog_eq prog1 prog2 ->
+  PMap.Equal m1 m2 /\ PMap.Equal e1 e2 /\ PMap.Equal p1 p2.
+Proof.
+Admitted.
+
+(* the initialization procedure prepares memory for exactly each component of
+   the program *)
 Theorem init_all_memory_guarantees:
   forall p (mem: Memory.t),
   let '(mem, _, _) := init_all p in

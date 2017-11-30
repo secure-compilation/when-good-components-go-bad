@@ -690,16 +690,19 @@ Unset Implicit Arguments.
 (* transition system *)
 
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
-| initial_state_intro: forall ics ips,
+| initial_state_intro: forall p' ics ips,
+    linkable_programs p p' ->
     partial_state ctx ics ips ->
-    CS.initial_state p ics ->
+    CS.initial_state (program_link p p' (fst (prog_main p)) (snd (prog_main p))) ics ->
     initial_state p ctx ips.
 
 Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
-| final_state_program: forall ics ips,
+| final_state_program: forall p' ics ips,
+    linkable_programs p p' ->
     ~ turn_of ips ctx ->
     partial_state ctx ics ips ->
-    CS.final_state (init_genv p) ics ->
+    CS.final_state
+      (init_genv (program_link p p' (fst (prog_main p)) (snd (prog_main p)))) ics ->
     final_state p ctx ips
 | final_state_context: forall ips,
     turn_of ips ctx ->
@@ -708,8 +711,9 @@ Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
 Inductive step (ctx: Program.interface) (G: global_env)
   : state -> trace -> state -> Prop :=
 | partial_step:
-    forall ips t ips' ics ics',
-      CS.step G ics t ics' ->
+    forall p' ips t ips' ics ics',
+      PMap.Equal (prog_interface p') ctx ->
+      CS.step (extend_genv G (init_genv p')) ics t ics' ->
       partial_state ctx ics ips ->
       partial_state ctx ics' ips' ->
       step ctx G ips t ips'.
@@ -723,7 +727,8 @@ Theorem equal_states_step:
 Proof.
   intros ctx G ips1 t ips1' ips2 ips2' Hstep Heq1 Heq2.
   inversion Hstep; subst.
-  apply partial_step with (ics:=ics) (ics':=ics').
+  apply partial_step with (ics:=ics) (ics':=ics') (p':=p').
+  + assumption.
   + assumption.
   + apply PS.partialize_correct.
     rewrite <- Heq1.
@@ -745,19 +750,20 @@ Proof.
   intros ctx G ips1 t ips1' ips2 Heq Hstep.
   inversion Hstep; subst.
   exists ips1'. split.
-  - apply partial_step with (ics:=ics) (ics':=ics').
+  - apply partial_step with (ics:=ics) (ics':=ics') (p':=p').
+    + assumption.
     + assumption.
     + do 2 CS.unfold_states.
       inversion Heq; subst.
-      * inversion H0; subst.
-        constructor.
-        ** PS.simplify_turn. auto.
-        ** rewrite <- H3. assumption.
-        ** reflexivity.
-      * inversion H0; subst.
+      * inversion H1; subst.
         constructor.
         ** PS.simplify_turn. auto.
         ** rewrite <- H4. assumption.
+        ** reflexivity.
+      * inversion H1; subst.
+        constructor.
+        ** PS.simplify_turn. auto.
+        ** rewrite <- H5. assumption.
         ** reflexivity.
     + auto.
   - reflexivity.
@@ -770,11 +776,11 @@ Theorem context_epsilon_step_is_silent:
 Proof.
   intros ctx G ips ips' Hstep.
   inversion Hstep; subst.
-  inversion H0; subst; PS.simplify_turn.
   inversion H1; subst; PS.simplify_turn.
+  inversion H2; subst; PS.simplify_turn.
   - (* contra *)
     assert (Pointer.component pc = Pointer.component pc0) as Hsame_comp. {
-      inversion H; subst;
+      inversion H0; subst;
         match goal with
         | Heq1: CS.state_eq _ _,
           Heq2: CS.state_eq _ _ |- _ =>
@@ -789,7 +795,7 @@ Proof.
     contradiction.
   - constructor.
     + assert (Pointer.component pc = Pointer.component pc0) as Hsame_comp. {
-        inversion H; subst;
+        inversion H0; subst;
           match goal with
           | Heq1: CS.state_eq _ _,
             Heq2: CS.state_eq _ _ |- _ =>
@@ -801,13 +807,13 @@ Proof.
         + erewrite find_label_in_procedure_1; eauto.
       }
       apply Hsame_comp.
-    + inversion H; subst;
+    + inversion H0; subst;
         match goal with
         | Heq1: CS.state_eq _ _,
           Heq2: CS.state_eq _ _ |- _ =>
           inversion Heq1; subst; inversion Heq2; subst
         end; reflexivity.
-    + inversion H; subst;
+    + inversion H0; subst;
         match goal with
         | Heq1: CS.state_eq _ _,
           Heq2: CS.state_eq _ _ |- _ =>
@@ -823,18 +829,18 @@ Proof.
           rewrite Heq1, Heq2;
           reflexivity
         end.
-      * rewrite H5.
+      * rewrite H6.
         erewrite Memory.context_store_is_filtered with (ptr:=ptr) (mem':=mem').
         ** apply Memory.equivalence_under_filter. symmetry. assumption.
-        ** rewrite H9. assumption.
+        ** rewrite H10. assumption.
         ** eassumption.
-        ** rewrite H4. apply Memory.equivalence_under_filter. assumption.
-      * rewrite H5.
+        ** rewrite H5. apply Memory.equivalence_under_filter. assumption.
+      * rewrite H6.
         erewrite Memory.context_allocation_is_filtered with (mem':=mem').
         ** apply Memory.equivalence_under_filter. symmetry. assumption.
         ** eassumption.
         ** rewrite Pointer.inc_preserves_component. eassumption.
-        ** rewrite H4. apply Memory.equivalence_under_filter. assumption.
+        ** rewrite H5. apply Memory.equivalence_under_filter. assumption.
 Qed.
 
 Corollary context_epsilon_star_is_silent:
@@ -855,6 +861,7 @@ Proof.
     apply IHHstar; auto.
 Qed.
 
+(* this should hold even for program steps *)
 Theorem context_same_trace_determinism:
   forall ctx G ips ctx_state t ctx_state',
     state_eq (CC ctx_state) ips ->
@@ -866,44 +873,44 @@ Proof.
   intros ctx G ips ctx_state t ctx_state' Heq Hstep1 ctx_state'' Hstep2.
   inversion Heq; subst.
   inversion Hstep1; subst; inversion Hstep2; subst.
-  inversion H0; subst; inversion H1; subst.
-  inversion H4; subst; inversion H5; subst.
+  inversion H1; subst; inversion H3; subst.
+  inversion H6; subst; inversion H7; subst.
 
-  inversion H; subst.
-  + inversion H9; subst; inversion H18; subst.
-    inversion H3; subst.
-    * inversion H19; subst; inversion H21; subst.
+  inversion H0; subst.
+  + inversion H11; subst; inversion H20; subst.
+    inversion H5; subst.
+    * inversion H21; subst; inversion H23; subst.
       PS.simplify_turn.
       constructor.
       ** do 2 rewrite Pointer.inc_preserves_component.
          symmetry. assumption.
       ** assumption.
-      ** rewrite <- H2 in H11.
-         rewrite <- H2 in H15.
+      ** rewrite <- H2 in H13.
+         rewrite <- H2 in H17.
 
-         rewrite <- H29 in H28.
+         rewrite <- H31 in H30.
          pose proof (Memory.equivalence_under_filter
-                       mem mem0 (fun k _ => negb (PMap.mem k ctx)) H28).
-         rewrite H22 in H11. rewrite <- H11 in H8.
+                       mem mem0 (fun k _ => negb (PMap.mem k ctx)) H30).
+         rewrite H24 in H13. rewrite <- H13 in H10.
 
-         rewrite <- H34 in H33.
+         rewrite <- H36 in H35.
          pose proof (Memory.equivalence_under_filter
-                       mem1 mem2 (fun k _ => negb (PMap.mem k ctx)) H33).
-         rewrite H23 in H15. rewrite <- H13 in H15.
+                       mem1 mem2 (fun k _ => negb (PMap.mem k ctx)) H35).
+         rewrite H25 in H17. rewrite <- H15 in H17.
 
-         rewrite H8, H15.
+         rewrite H10, H17.
          reflexivity.
-    * (* contra *) admit.
-    * (* contra *) admit.
-    * (* contra *) admit.
-    * (* contra *) admit.
-    * (* contra *) admit.
-    * (* contra *) admit.
-    * (* contra *) admit.
-    * (* contra *) admit.
-    * (* contra *) admit.
-    * (* contra *) admit.
-    * (* contra *) admit.
+    * admit.
+    * admit.
+    * admit.
+    * admit.
+    * admit.
+    * admit.
+    * admit.
+    * admit.
+    * admit.
+    * admit.
+    * admit.
   + admit.
   + admit.
   + admit.
@@ -930,12 +937,8 @@ Section Semantics.
   Hypothesis valid_program:
     well_formed_program p.
 
-  Hypothesis complete_program:
-    closed_program p.
-
-  (* the context is part of p *)
-  Hypothesis valid_context:
-    forall C CI, PMap.MapsTo C CI ctx -> PMap.MapsTo C CI (prog_interface p).
+  Hypothesis merged_interface_is_closed:
+    closed_interface (PMapExtra.update (prog_interface p) ctx).
 
   Definition sem :=
     @Semantics_gen state global_env (step ctx)
