@@ -137,10 +137,17 @@ Section Definability.
   Qed.
 
   Definition switch_add_expr e res :=
-    (pred (fst res), switch_clause (Z.of_nat (fst res)) e (snd res)).
+    (pred (fst res), switch_clause (Z.of_nat (pred (fst res))) e (snd res)).
 
   Definition switch (es: list expr) (e_else: expr) : expr :=
-    snd (fold_right switch_add_expr (pred (length es), e_else) es).
+    snd (fold_right switch_add_expr (length es, e_else) es).
+
+  Lemma fst_switch n (e_else: expr) (es : list expr) :
+    fst (fold_right switch_add_expr (n, e_else) es) = (n - length es)%nat.
+  Proof.
+    induction es as [|e' es IH]; try now rewrite Nat.sub_0_r.
+    simpl. now rewrite IH, Nat.sub_succ_r.
+  Qed.
 
   Lemma switch_spec_else p' C stk mem b n es e_else :
     PMap.find C (genv_buffers (globalenv (CS.sem p'))) = Some b ->
@@ -149,7 +156,28 @@ Section Definability.
     Star (CS.sem p')
          (C, stk, mem, Kstop, switch es e_else) E0
          (C, stk, mem, Kstop, e_else).
-  Proof. Admitted.
+  Proof.
+    intros C_b C_local es_n. unfold switch.
+    enough (forall m,
+               m <= n -> length es <= m ->
+               Star (CS.sem p')
+                    (C, stk, mem, Kstop, snd (fold_right switch_add_expr (m, e_else) es))
+                    E0
+                    (C, stk, mem, Kstop, e_else))%nat.
+    { apply (H (length es)); trivial. }
+    clear es_n. intros m m_le_n es_le_n.
+    induction es as [|e es IH]; try apply star_refl.
+    unfold switch. simpl. simpl in es_le_n. rewrite fst_switch, <- Nat.sub_succ_r. simpl.
+    do 5 take_step; [now eauto|].
+    do 3 take_step; eauto.
+    do 2 take_step.
+    eapply (@star_step _ _ _ _ _ E0); try now (simpl; reflexivity).
+    { apply CS.eval_kstep_sound. simpl.
+      destruct (Z.eqb_spec (Z.of_nat n) (Z.of_nat (m - S (length es)))) as [n_eq_0|?]; simpl.
+      - zify. omega.
+      - reflexivity. }
+    apply IH. omega.
+  Qed.
 
   Lemma switch_spec p' C stk mem b es e es' e_else :
     PMap.find C (genv_buffers (globalenv (CS.sem p'))) = Some b ->
@@ -166,14 +194,11 @@ Section Definability.
                 switch (es ++ e :: es') e_else =
                 switch es (switch_clause (Z.of_nat (length es)) e e_else')).
     { unfold switch. rewrite fold_right_app, app_length. simpl.
-      assert (Efst : fst (fold_right switch_add_expr (pred (length es + S (length es'))%nat, e_else) es')
-                     = length es).
-      { rewrite Nat.add_comm.
-        generalize (length es). simpl.
-        induction es' as [|e' es' IH]; try easy. simpl.
-        intros n. now rewrite <- Nat.add_succ_r, IH. }
-      exists (snd (fold_right switch_add_expr (pred (length es + S (length es'))%nat, e_else) es')).
-      repeat f_equal. rewrite surjective_pairing at 1. simpl. rewrite Efst. f_equal. }
+      exists (snd (fold_right switch_add_expr ((length es + S (length es'))%nat, e_else) es')).
+      repeat f_equal. rewrite surjective_pairing at 1. simpl.
+      rewrite fst_switch, Nat.add_succ_r.
+      assert (H : (S (length es + length es') - length es' = S (length es))%nat) by omega.
+      rewrite H. reflexivity. }
     destruct Eswitch as [e_else' ->]. clear e_else. rename e_else' into e_else.
     assert (Hcont := switch_clause_spec stk (Z.of_nat (length es)) e e_else Eb Hload).
     rewrite Z.eqb_refl in Hcont.
