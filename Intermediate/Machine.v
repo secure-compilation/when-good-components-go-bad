@@ -89,6 +89,18 @@ Module EntryPoint.
     | Some addrs => PMap.find P addrs
     | None => None
     end.
+
+  Lemma get_from_same_entrypoints:
+    forall E1 E2 C P,
+      PMap.Equal E1 E2 ->
+      get C P E1 = get C P E2.
+  Proof.
+    intros E1 E2 C P Heq.
+    unfold get.
+    rewrite Heq.
+    destruct (PMap.find C E2);
+      reflexivity.
+  Qed.
 End EntryPoint.
 
 (* programs *)

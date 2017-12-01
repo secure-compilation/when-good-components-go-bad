@@ -93,7 +93,14 @@ Lemma execution_in_same_environment:
     executing G1 pc i ->
     executing G2 pc i.
 Proof.
-Admitted.
+  intros G1 G2 pc i Heq Hexec.
+  destruct Hexec as [procs [P_code [Hprocs [HP_code [? Hinstr]]]]].
+  inversion Heq; subst. simpl in *.
+  rewrite H1 in Hprocs.
+  unfold executing.
+  eexists. eexists.
+  repeat split; eauto.
+Qed.
 
 Lemma init_genv_with_same_program:
   forall p1 p2,
@@ -106,7 +113,16 @@ Proof.
   destruct (init_all p1) as [[]].
   destruct (init_all p2) as [[]].
   destruct (H Heq) as [? []].
-  constructor.
+  inversion Heq; subst. simpl in *.
+  constructor; assumption.
+Qed.
+
+Lemma init_genv_with_linking:
+  forall p c,
+    linkable_programs p c ->
+    genv_eq (init_genv (program_link p c (fst (prog_main p)) (snd (prog_main p))))
+            (extend_genv (init_genv p) (init_genv c)).
+Proof.
 Admitted.
 
 Fixpoint find_label (c : code) (l : label) : option Z :=
@@ -177,6 +193,20 @@ Proof.
   inversion Hfind. subst.
   split; reflexivity.
 Qed.
+
+Lemma find_label_in_component_with_same_genv:
+  forall G1 G2 pc l,
+    genv_eq G1 G2 ->
+    find_label_in_component G1 pc l = find_label_in_component G2 pc l.
+Proof.
+Admitted.
+
+Lemma find_label_in_procedure_with_same_genv:
+  forall G1 G2 pc l,
+    genv_eq G1 G2 ->
+    find_label_in_procedure G1 pc l = find_label_in_procedure G2 pc l.
+Proof.
+Admitted.
 
 Lemma find_label_in_procedure_1:
   forall G pc pc' l,

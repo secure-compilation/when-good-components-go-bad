@@ -106,6 +106,7 @@ Lemma same_program_initial_state:
     initial_state p2 ics.
 Proof.
   intros p1 p2 Heq ics Hics_init.
+  pose proof (init_all_with_same_program p1 p2) as Hsame_init.
   inversion Heq; subst.
   inversion Hics_init; subst.
   simpl in *.
@@ -132,8 +133,9 @@ Proof.
   inversion Heq; subst.
   unfold final_state in *.
   simpl in *.
-  (* executing in the same environment *)
-Admitted.
+  CS.unfold_states.
+  eapply execution_in_same_environment; eassumption.
+Qed.
 
 (* relational specification *)
 
@@ -452,7 +454,142 @@ Proof.
           PMap.Equal ?MEM0 ?MEM1 =>
           rewrite Heq_mem1; apply Heq_mem2
         end.
-Admitted.
+
+  - eapply Load with (ptr:=ptr) (mem:=mem).
+    + constructor.
+      * reflexivity.
+      * assumption.
+      * reflexivity.
+      * reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + assumption.
+    + assumption.
+    + eassumption.
+    + reflexivity.
+    + constructor;
+        try reflexivity;
+        try assumption.
+
+  - eapply Store with (ptr:=ptr) (mem:=mem) (mem':=mem').
+    + constructor.
+      * reflexivity.
+      * assumption.
+      * reflexivity.
+      * reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + assumption.
+    + assumption.
+    + assumption.
+    + constructor.
+      * reflexivity.
+      * assumption.
+      * reflexivity.
+      * reflexivity.
+
+  - eapply Jal;
+      try reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + erewrite find_label_in_component_with_same_genv; eauto.
+      * constructor; symmetry; eauto.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+
+  - eapply Jump with (pc':=pc');
+      try reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + assumption.
+    + assumption.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+
+  - eapply BnzNZ;
+      try reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + eassumption.
+    + assumption.
+    + erewrite find_label_in_procedure_with_same_genv; eauto.
+      * constructor; symmetry; eauto.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+
+  - eapply BnzZ;
+      try reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + eassumption.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+
+  - eapply Alloc with (ptr:=ptr) (mem:=mem) (mem':=mem').
+    + constructor.
+      * reflexivity.
+      * assumption.
+      * reflexivity.
+      * reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + eassumption.
+    + assumption.
+    + assumption.
+    + reflexivity.
+    + constructor;
+        try reflexivity.
+      * assumption.
+
+  - eapply Call.
+    + reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + assumption.
+    + eapply imported_procedure_with_same_interface; eauto.
+    + erewrite <- H6.
+      eapply EntryPoint.get_from_same_entrypoints; eauto.
+      simpl. symmetry. eauto.
+    + assumption.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+
+  - eapply Return.
+    + reflexivity.
+    + eapply execution_in_same_environment; eauto.
+    + assumption.
+    + assumption.
+    + constructor;
+        try reflexivity.
+      * match goal with
+        | Heq_mem1: PMap.Equal ?MEM1 ?MEM,
+          Heq_mem2: PMap.Equal ?MEM0 ?MEM |-
+          PMap.Equal ?MEM0 ?MEM1 =>
+          rewrite Heq_mem1; apply Heq_mem2
+        end.
+Qed.
 
 (* executable specification *)
 

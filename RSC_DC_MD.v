@@ -9,6 +9,7 @@ Require Import Source.CS.
 Require Import Source.PS.
 Require Import Intermediate.Machine.
 Require Import Intermediate.PS.
+Require Import Intermediate.Decomposition.
 Require Import S2I.Compiler.
 Require Import S2I.Definitions.
 
@@ -20,11 +21,11 @@ Section RSC_DC_MD.
   Hypothesis successfull_compilation:
     compile_program p = Some p_compiled.
 
-  Hypothesis linkability_1:
-    Intermediate.prog_main p_compiled = Intermediate.prog_main Ct.
+  Hypothesis linkability:
+    Intermediate.linkable_programs p_compiled Ct.
 
-  Hypothesis linkability_2:
-    PMapExtra.Disjoint (Source.prog_interface p) (Intermediate.prog_interface Ct).
+  Hypothesis main_preservation:
+    Intermediate.prog_main p_compiled = Source.prog_main p.
 
   Definition same_interface (p1 p2: Source.program) : Prop :=
     PMap.Equal (Source.prog_interface p1) (Source.prog_interface p2).
@@ -44,5 +45,13 @@ Section RSC_DC_MD.
         (beh = Goes_wrong t' /\ behavior_prefix t' (Terminates t) /\
          undef_in mainC t' (Source.prog_interface p)).
   Proof.
+    intros t Hbeh.
+    subst pCt mainC mainP.
+    rewrite <- main_preservation in Hbeh.
+    destruct (decomposition_with_refinement p_compiled Ct linkability (Terminates t) Hbeh)
+      as [beh' [Hbeh' Hbeh_improves]].
+    inversion Hbeh_improves; subst.
+    - (* use definability, go down, compose, go up *) admit.
+    - destruct H as [? []]. discriminate.
   Admitted.
 End RSC_DC_MD.
