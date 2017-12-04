@@ -57,5 +57,7 @@ TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
 TargetSFI/CS.v
 
+I2SFI/CompEitherMonad.v
+I2SFI/CompStateMonad.v
 I2SFI/AbstractMachine.v
 I2SFI/Compiler.v

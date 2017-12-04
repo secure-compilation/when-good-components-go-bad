@@ -12,9 +12,11 @@ Require Import Common.Definitions.
 
 Require Import I2SFI.Compiler.
 Require Import TargetSFI.Machine.
-Require Import TargetSFI.CS.
 Require Import TargetSFI.EitherMonad.
 Require Import TargetSFI.StateMonad.
+Require Import TargetSFI.CS.
+Require Import CompEitherMonad.
+Require Import CompStateMonad.
 Require Import TargetSFI.MachineGen.
 
 Require Import Intermediate.Machine.
@@ -53,6 +55,60 @@ Instance show_component_interface : Show Component.interface :=
                 ++ (show (Component.export ci)) ++ newline
                 ++ "Import:"
                 ++ (show (Component.import ci)) ++ newline
+  |}.
+
+
+Instance show_ainstr : Show AbstractMachine.ainstr :=
+  {| show :=
+       fun i =>
+         match i with
+         | AbstractMachine.INop => "INop"
+         | AbstractMachine.ILabel lbl => "ILabel " ++ (show lbl)
+         | AbstractMachine.IConst v r => "IConst " ++ (show v) ++ " " ++ (show r)
+         | AbstractMachine.IMov r1 r2 => "IMov " ++ (show r1) ++ " " ++ (show r2)
+         | AbstractMachine.IBinOp op r1 r2 r3 => "IBinop " ++ (show op)
+                                          ++ " " ++ (show r1)
+                                          ++ " " ++ (show r2)
+                                          ++ " " ++ (show r3)
+         | AbstractMachine.ILoad r1 r2 => "ILoad " ++ (show r1) ++ " " ++ (show r2)
+         | AbstractMachine.IStore r1 r2 => "IStore " ++ (show r1) ++ " " ++ (show r2)
+         | AbstractMachine.IBnz r l => "IBnz " ++ (show r) ++ " " ++ (show l)
+         | AbstractMachine.IJump r => "IJump " ++ (show r)
+         | AbstractMachine.IJal l => "IJal " ++ (show l) 
+         | AbstractMachine.IHalt => "IHalt"
+         end
+  |}.
+
+Instance show_linstr : Show (option (list AbstractMachine.label) * AbstractMachine.ainstr) :=
+  {|
+    show :=
+      fun '(ol,i) =>
+        (show ol) ++ ":" ++ (show i)
+  |}.
+
+Definition show_lcode ( lcode : PMap.t (PMap.t AbstractMachine.lcode)) :=
+  PMap.fold
+    (fun cid (pmap:PMap.t AbstractMachine.lcode) (acc1:string) =>
+       PMap.fold
+         (fun pid (lst:AbstractMachine.lcode) acc2 =>
+            List.fold_left
+               (fun acc3 elt => acc3 ++ (show elt)  ++ newline)            
+               lst (acc2 ++ "pid=" ++ (show pid) ++ newline)%string
+         ) pmap (acc1 ++ "cid=" ++ (show cid) ++ newline)%string
+    ) lcode EmptyString.
+
+Instance show_compiler_error : Show CompilerError :=
+  {|
+    show :=
+      fun err =>
+        match err with
+        | NoInfo => EmptyString
+        | DuplicatedLabels lcode => show_lcode lcode
+        | ExportedProcsLabelsC _ _ => "ExportedProcsLabelsC TODO"
+        | ExportedProcsLabelsP _ _ _ => "ExportedProcsLabelsP TODO"
+        | PosArg p => show p
+        | TwoPosArg p1 p2 => "(" ++ (show p1) ++ "," ++ (show p2) ++ ")"
+        end                                   
   |}.
 
 Instance show_program_interface : Show Program.interface :=
@@ -594,8 +650,8 @@ Conjecture correct_data_compartmentalized:
     (t : CompCert.Events.trace) 
     (ptr sfi_sp_val: RiscMachine.value ),
 
-    TargetSFI.EitherMonad.Right sfi_p = compile_program ip /\
-    TargetSFI.EitherMonad.Right (t, (mem,pc,gen_regs)) = (CS.eval_program n sfi_p RiscMachine.RegisterFile.reset_all) /\
+    CompEitherMonad.Right sfi_p = compile_program ip /\
+    EitherMonad.Right (t, (mem,pc,gen_regs)) = (CS.eval_program n sfi_p RiscMachine.RegisterFile.reset_all) /\
     RiscMachine.Memory.get_word mem pc = Some (RiscMachine.Instruction (RiscMachine.ISA.IStore rp rs)) ->
     (* Write at the top of SFI stack (from a pc that is in the list of push sfi ??) *)
     (
@@ -717,9 +773,9 @@ Definition store_correct : Checker :=
   forAll genIntermediateProgram
   ( fun ip =>
       match compile_program ip with
-      | TargetSFI.EitherMonad.Left msg =>
-        whenFail ("Compilation error: " ++ msg) false
-      | TargetSFI.EitherMonad.Right p =>
+      | CompEitherMonad.Left msg err =>
+        whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
+      | CompEitherMonad.Right p =>
         let '(res,log) := eval_store_program p in
         match res with
         | TargetSFI.EitherMonad.Left msg => whenFail msg (store_checker log 0%nat)
@@ -862,9 +918,9 @@ Definition jump_correct : Checker :=
   forAll genIntermediateProgram
          ( fun ip =>
              match compile_program ip with
-             | TargetSFI.EitherMonad.Left msg =>
-               whenFail ("Compilation error: " ++ msg) false
-             | TargetSFI.EitherMonad.Right p =>
+             | CompEitherMonad.Left msg err =>
+               whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
+             | CompEitherMonad.Right p =>
                let (res,log) := eval_jump_program p in
                match res with
                | TargetSFI.EitherMonad.Left msg => whenFail msg (jump_checker log 0%nat)
@@ -1016,12 +1072,9 @@ Definition cs_correct : Checker :=
   forAll genIntermediateProgram
          ( fun ip =>
              match compile_program ip with
-             | TargetSFI.EitherMonad.Left msg =>
-               whenFail ("Compilation error: "
-                           ++ msg
-                           ++ newline
-                           ++ (show ip) ) false
-             | TargetSFI.EitherMonad.Right p =>
+             | CompEitherMonad.Left msg err =>
+               whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
+             | CompEitherMonad.Right p =>
                let (res,log) := eval_cs_program p in
                match res with
                | TargetSFI.EitherMonad.Left msg => whenFail msg (cs_checker log 0%nat)
@@ -1034,242 +1087,6 @@ Definition cs_correct : Checker :=
 
 (****************** QUICK CHECKS ***************************)
 Extract Constant Test.defNumTests => "20".
-
-(* Definition test5 *)
-(*   : @Either (sfi_program) := *)
-(*   (* : @Either (trace*MachineState.t) := *) *)
-(*   let component1_interface : Component.interface := *)
-(*       (Component.mkCompInterface [1%positive *)
-(*                                   ; 2%positive *)
-(*                                   ; 3%positive *)
-(*                                   ; 4%positive *)
-(*                                  ] [(2%positive, 3%positive)]) in *)
-(*   let component2_interface : Component.interface := *)
-(*       (Component.mkCompInterface [1%positive *)
-(*                                   ; 2%positive *)
-(*                                   ; 3%positive *)
-(*                                   ; 4%positive *)
-(*                                   ; 5%positive *)
-(*                                  ] [ *)
-(*                                    (1%positive, 3%positive) *)
-(*                                    ; (1%positive, 2%positive) *)
-(*                                    ; (3%positive, 1%positive) *)
-(*                                  ] *)
-(*       ) in *)
-(*     let component3_interface : Component.interface := *)
-(*       (Component.mkCompInterface [1%positive *)
-(*                                  ] [ *)
-(*                                    (1%positive, 3%positive) *)
-(*                                    ; (2%positive, 3%positive) *)
-(*                                    ; (2%positive, 5%positive) *)
-(*                                    ; (2%positive, 4%positive) *)
-(*                                  ] *)
-(*       ) in *)
-  
-(*     let program_interface : Program.interface := *)
-(*         PMap.add 3%positive component3_interface ( *)
-(*                    PMap.add 2%positive component2_interface ( *)
-(*                               PMap.add 1%positive *)
-(*                                        component1_interface *)
-(*                                        (PMap.empty Component.interface))) in *)
-(*   let buffers := *)
-(*       PMap.add 1%positive [(1%positive, (inl 3258%nat)) *)
-(*                          ; (2%positive,(inl 1689%nat)) *)
-(*                          ; (3%positive,(inl 1074%nat)) *)
-(*                          ; (4%positive,(inl 946%nat)) *)
-(*                          ; (5%positive,(inl 110%nat)) *)
-(*                         ] *)
-(*                (PMap.empty (list (Block.id * (nat + list value)))) in *)
-
-(*   let proc1 := *)
-(*       PMap.add *)
-(*          4%positive *)
-(*          [ IBinOp Common.Values.Eq R_AUX2 R_AUX2 R_AUX1 *)
-(*            ; IBinOp Common.Values.Leq R_AUX2 R_SP R_AUX2 *)
-(*            ; ICall 2%positive 3%positive *)
-(*            ; ILabel 10%positive *)
-(*            ; ILoad R_RA R_AUX1 *)
-(*            ; IJal 3%positive *)
-(*            ; IAlloc R_SP R_COM *)
-(*            ; IJal 19%positive *)
-(*            ; IJump R_SP *)
-(*            ; IJump R_SP *)
-(*            ; IReturn *)
-(*          ]  *)
-(*          (PMap.add *)
-(*             3%positive *)
-(*             [IJump R_AUX1 *)
-(*              ; IStore R_COM R_AUX1 *)
-(*              ; IBinOp Common.Values.Eq R_COM R_AUX1 R_AUX2 *)
-(*              ; ILabel 4%positive *)
-(*              ; IStore R_AUX2 R_SP *)
-(*              ; IBnz R_SP 4%positive *)
-(*              ; ILabel 5%positive *)
-(*              ; IBnz R_AUX1 9%positive *)
-(*              ; IMov R_AUX1 R_COM *)
-(*              ; IBinOp Common.Values.Minus R_AUX1 R_ONE R_AUX1 *)
-(*              ; ILabel 9%positive *)
-(*              ; IReturn *)
-(*             ] *)
-(*             (PMap.add *)
-(*                2%positive *)
-(*                [ILoad R_AUX1 R_COM *)
-(*                 ; IJal 20%positive *)
-(*                 ; IBinOp Common.Values.Minus R_ONE R_ONE R_COM *)
-(*                 ; ICall 2%positive 3%positive *)
-(*                 ; ILabel 2%positive *)
-(*                 ; ILabel 3%positive *)
-(*                 ; IJal 6%positive *)
-(*                 ; IJump R_AUX1 *)
-(*                 ; IBinOp Common.Values.Leq R_SP R_SP R_ONE *)
-(*                 ; ICall 2%positive 3%positive *)
-(*                 ; IReturn] *)
-(*                (PMap.add *)
-(*                   1%positive *)
-(*                   [ *)
-(*                     ILabel 17%positive *)
-(*                     ; ILabel 20%positive *)
-(*                     ; ILabel 6%positive *)
-(*                     ; ILabel 19%positive *)
-(*                     ; ILoad R_SP R_AUX1 *)
-(*                     ; IAlloc R_ONE R_COM *)
-(*                     ; IMov R_SP R_ONE *)
-(*                     ; ICall 2%positive 3%positive *)
-(*                     ; ILoad R_AUX1 R_ONE *)
-(*                     ; ILoad R_RA R_AUX1 *)
-(*                     ; ILoad R_ONE R_AUX2 *)
-(*                     ; IJal 17%positive *)
-(*                     ; IJump R_SP *)
-(*                     ; ICall 2%positive 3%positive *)
-(*                     ; IReturn *)
-(*                   ] *)
-(*                   (PMap.empty Intermediate.Machine.code)))) in *)
-(*   let proc2 := *)
-(*       PMap.add *)
-(*         5%positive *)
-(*         [ *)
-(*           ICall 3%positive 1%positive *)
-(*           ; ICall 1%positive 2%positive *)
-(*           ; ILabel 9%positive *)
-(*           ; ILoad R_ONE R_COM *)
-(*           ; IJal 20%positive *)
-(*           ; ICall 1%positive 3%positive *)
-(*           ; IJump R_AUX2 *)
-(*           ; IBinOp Common.Values.Mul R_AUX2 R_SP R_AUX2 *)
-(*           ; IBinOp Common.Values.Eq R_AUX2 R_ONE R_COM *)
-(*           ; ICall 3%positive 1%positive *)
-(*           ; IReturn *)
-(*         ] *)
-(*         ( PMap.add *)
-(*          4%positive *)
-(*          [ *)
-(*            IMov R_SP R_COM *)
-(*            ; ICall 3%positive 1%positive *)
-(*            ; IJal 4%positive *)
-(*            ; IBnz R_AUX1 8%positive *)
-(*            ; ILabel 8%positive *)
-(*            ; IJump R_AUX1 *)
-(*            ; ICall 1%positive 3%positive *)
-(*            ; IConst (IInt 4%Z) R_COM *)
-(*            ; IJal 15%positive *)
-(*            ; ILoad R_SP R_AUX2 *)
-(*            ; IReturn *)
-(*          ]  *)
-(*          (PMap.add *)
-(*             3%positive *)
-(*             [ *)
-(*               ICall 3%positive 1%positive *)
-(*               ; IJal 3%positive *)
-(*               ; ILoad R_AUX1 R_SP *)
-(*               ; IBnz R_COM 7%positive *)
-(*               ; ICall 3%positive 1%positive *)
-(*               ; ILabel 5%positive *)
-(*               ; ILoad R_ONE R_SP *)
-(*               ; ILoad R_AUX2 R_COM *)
-(*               ; IMov R_RA R_SP *)
-(*               ; IMov R_RA R_AUX2 *)
-(*               ; ILabel 7%positive *)
-(*               ; IReturn *)
-(*             ] *)
-(*             (PMap.add *)
-(*                2%positive *)
-(*                [ *)
-(*                  IStore R_SP R_COM *)
-(*                  ; IConst (IInt 3%Z) R_AUX2 *)
-(*                  ; IJal 5%positive *)
-(*                  ; IJump R_AUX2 *)
-(*                  ; IConst (IInt 1%Z) R_AUX2 *)
-(*                  ; ILoad R_AUX2 R_SP *)
-(*                  ; ICall 3%positive 1%positive *)
-(*                  ; IJal 2%positive *)
-(*                  ; ILoad R_SP R_ONE *)
-(*                  ; ICall 1%positive 2%positive *)
-(*                  ; IReturn] *)
-(*                (PMap.add *)
-(*                   1%positive *)
-(*                   [ *)
-(*                     ILabel 15%positive *)
-(*                     ; ILabel 20%positive *)
-(*                     ; ICall 1%positive 2%positive *)
-(*                     ; ICall 3%positive 1%positive *)
-(*                     ; IConst (IInt (-3)%Z) R_ONE *)
-(*                     ; ICall 3%positive 1%positive *)
-(*                     ; ILabel 2%positive *)
-(*                     ; IBnz R_COM 4%positive *)
-(*                     ; IBinOp Common.Values.Eq R_AUX1 R_ONE R_ONE *)
-(*                     ; ILabel 3%positive *)
-(*                     ; IMov R_AUX1 R_AUX2 *)
-(*                     ; INop *)
-(*                     ; ILabel 4%positive *)
-(*                     ; IReturn *)
-(*                   ] *)
-(*                   (PMap.empty Intermediate.Machine.code))))) in *)
-(*   let proc3 := PMap.add *)
-(*                   1%positive *)
-(*                   [ *)
-(*                     IJump R_SP *)
-(*                     ; IConst (IInt 3%Z) R_AUX1 *)
-(*                     ; IMov R_SP R_AUX1 *)
-(*                     ; IJump R_AUX2 *)
-(*                     ; IJump R_SP *)
-(*                     ; IAlloc R_COM R_COM *)
-(*                     ; ICall 2%positive 4%positive *)
-(*                     ; IBnz R_AUX1 4%positive *)
-(*                     ; ICall 2%positive 3%positive *)
-(*                     ; IBinOp Common.Values.Leq R_ONE R_AUX2 R_AUX2 *)
-(*                     ; ILabel 4%positive *)
-(*                     ; IReturn *)
-(*                   ] *)
-(*                   (PMap.empty Intermediate.Machine.code) in *)
-    
-(*   let procs := *)
-(*       PMap.add 1%positive proc1 *)
-(*                ( PMap.add 2%positive proc2 *)
-(*                           (PMap.add 3%positive proc3 *)
-(*                                     (PMap.empty (PMap.t Intermediate.Machine.code)))) in *)
-(*   let program : Intermediate.program := {| *)
-(*         Intermediate.prog_interface := program_interface; *)
-(*         Intermediate.prog_procedures := procs; *)
-(*         Intermediate.prog_buffers := buffers; *)
-(*         Intermediate.prog_main := (2%positive,5%positive) *)
-(*       |} in *)
-(*   compile_program program. *)
-(*   (* match compile_program program with *) *)
-(*   (* | TargetSFI.EitherMonad.Left msg => Left msg *) *)
-(*   (* | TargetSFI.EitherMonad.Right p => *) *)
-(*   (*   CS.eval_program (100%nat) p RiscMachine.RegisterFile.reset_all *) *)
-(*   (* end. *) *)
-
-(* QuickChick *)
-(*   ( let x :=  test5 in *)
-(*     match x with *)
-(*     | TargetSFI.EitherMonad.Left msg => whenFail ("Compilation failed:" *)
-(*                                                    ++ msg) *)
-(*                                                 (checker false) *)
-(*     | TargetSFI.EitherMonad.Right tp => *)
-(*       whenFail (show (mem tp) ++ "Env: " ++ (show (e tp))) (checker false) *)
-(*     end ). *)
-
 
 QuickChick store_correct.
 QuickChick jump_correct.
