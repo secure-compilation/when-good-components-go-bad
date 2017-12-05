@@ -87,7 +87,7 @@ Notation run := (Comp.run comp_env).
 Definition fresh_label : COMP label :=
   do cenv <- get;
   let l := next_label cenv in
-  do! modify (with_next_label (1+l)%positive);
+  do! modify (with_next_label (1 + l));
   ret l.
 
 (* code generation *)
@@ -110,12 +110,12 @@ Definition store_arg (buf: Pointer.t) (r rtemp: register) : code :=
 
 Section WithComponent.
 
-Variable C: Component.id. (* the current component *)  
+Variable C: Component.id. (* the current component *)
 Variable local_buf_ptr : Pointer.t. (* pointer to the local buffer for current component *)
-Variable P_labels : PMap.t label.  (* map from procedure id's to start labels for current component *)
+Variable P_labels : NMap label.  (* map from procedure id's to start labels for current component *)
 
 Definition find_proc_label P : COMP label :=
-  lift (PMap.find P P_labels).
+  lift (getm P_labels P).
 
 Fixpoint compile_expr (e: expr) : COMP code :=
   match e with
@@ -169,7 +169,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
          IStore R_COM R_AUX1 :: nil)
   | E_call C' P' e =>
     do call_arg_code <- compile_expr e;
-    if Pos.eqb C' C then
+    if Component.eqb C' C then
       do target_label <- find_proc_label P';
       ret (call_arg_code ++
            push R_RA ++
@@ -198,7 +198,7 @@ Definition compile_proc (P: Procedure.id) (e: expr)
   do lreturn <- fresh_label;
   do proc_code <- compile_expr e;
   (* TODO compute stack size *)
-  let stack_frame_size := 20 in
+  let stack_frame_size := 20%Z in
   ret ([IConst (IInt 1) R_ONE;
         IJal proc_label;
         IReturn;
@@ -234,101 +234,105 @@ End WithComponent.
 
 Definition gen_component_procedures_labels
          (procs: list (Procedure.id * expr))
-  : COMP (PMap.t label) :=
-  let fix gen acc procs := 
+  : COMP (NMap label) :=
+  let fix gen acc procs :=
       match procs with
-      | [] => ret acc 
+      | [] => ret acc
       | (P, _) :: procs' =>
         do freshl <- fresh_label;
-        gen (PMap.add P freshl acc) procs'
+        gen (setm acc P freshl) procs'
       end
-  in gen (@PMap.empty label) procs.
+  in gen emptym procs.
 
-(* think about labels collision when linking partial programs *)
 Definition gen_all_procedures_labels
-         (procs: list (Component.id * PMap.t expr))
-  : COMP (PMap.t (PMap.t label)) :=
-  let fix gen acc procs := 
+         (procs: list (Component.id * NMap expr))
+  : COMP (NMap (NMap label)) :=
+  let fix gen acc procs :=
       match procs with
-      | [] => ret acc 
+      | [] => ret acc
       | (C, Cprocs) :: procs' =>
-        do map <- gen_component_procedures_labels (PMap.elements Cprocs);
-        gen (PMap.add C map acc) procs'
+        do map <- gen_component_procedures_labels (elementsm Cprocs);
+        gen (setm acc C map) procs'
       end
-  in gen (@PMap.empty (PMap.t label)) procs.
+  in gen emptym procs.
 
 Definition gen_buffers
          (bufs: list (Component.id * (nat + list value)))
-  : PMap.t (list (Block.id * (nat + list value))) :=
+  : NMap (list (Block.id * (nat + list value))) :=
   let fix instrument acc bs :=
       match bs with
       | [] => acc
       | (C, init_info) :: bs' =>
-        let Cbufs := [(1%positive, init_info)] in
-        let acc' := PMap.add C Cbufs acc in
+        let Cbufs := [(1, init_info)] in
+        let acc' := setm acc C Cbufs in
         instrument acc' bs'
       end
-  in instrument (PMap.empty (list (Block.id * (nat + list value)))) bufs.
+  in instrument emptym bufs.
 
 Definition compile_components
-         (local_buffers : PMap.t (list (Block.id * (nat + list value))))
-         (procs_labels : PMap.t (PMap.t label))
-         (comps: list (Component.id * PMap.t expr))
-  : COMP (list (Component.id * PMap.t code)) :=
+         (local_buffers : NMap (list (Block.id * (nat + list value))))
+         (procs_labels : NMap (NMap label))
+         (comps: list (Component.id * NMap expr))
+  : COMP (list (Component.id * NMap code)) :=
   let fix compile acc cs :=
       match cs with
       | [] => ret acc
       | (C,procs) :: cs' =>
-        do blocks <- lift (PMap.find C local_buffers);
+        do blocks <- lift (getm local_buffers C);
         do local_buf <- lift (nth_error blocks 0);
-        do P_labels <- lift (PMap.find C procs_labels);
-        do procs_code <- compile_procedures C (C,fst local_buf,0%Z)  P_labels (PMap.elements procs);
-        let acc' := (C, PMapExtra.of_list procs_code) :: acc in
+        do P_labels <- lift (getm procs_labels C);
+        do procs_code <- compile_procedures C (C, fst local_buf, 0%Z) P_labels
+                                            (elementsm procs);
+        let acc' := (C, mkfmap procs_code) :: acc in
         compile acc' cs'
       end
   in compile [] comps.
 
 Definition init_env : comp_env :=
-  {| next_label := 1%positive; |}.
+  {| next_label := 1; |}.
 
-(* In intermediate program, main will be a tiny wrapper routine (in the same component) 
+(* In intermediate program, main will be a tiny wrapper routine (in the same component)
    that simply calls the  (translation of the) original main and then halts. *)
 
 (* A fresh procedure id can be calculated by, e.g., taking the max of all procedure id's and adding 1 *)
 
-Definition generate_fresh_procedure_id (procs: PMap.t (PMap.t code)) : Procedure.id :=
-  Pos.succ (PMap.fold (fun id _ m => Pos.max id m) procs xH).
+Definition generate_fresh_procedure_id (procs: NMap (NMap code)) : Procedure.id :=
+  let max_id ps := fold_left (fun id P => Nat.max id (fst P)) (elementsm ps) 0 in
+  Nat.succ (fold_left (fun id C => Nat.max id (max_id (snd C))) (elementsm procs) 0).
 
-Lemma generate_fresh_procedure_id_fresh : forall procs, PMap.mem (generate_fresh_procedure_id procs) procs = false.
+Lemma generate_fresh_procedure_id_fresh:
+  forall procs,
+    generate_fresh_procedure_id procs \in domm procs = false.
+Proof.
 Admitted.
 
-Definition wrap_main (procs_labels: PMap.t (PMap.t label)) (p: Intermediate.program) : COMP Intermediate.program :=
-  let '(C,P) := p.(Intermediate.prog_main) in
-  do iface <- lift (PMap.find C p.(Intermediate.prog_interface));
-  do procs <- lift (PMap.find C p.(Intermediate.prog_procedures));     
-  do P_labels <- lift (PMap.find C procs_labels); 
-  do lab <- lift (PMap.find P P_labels);
+Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program) : COMP Intermediate.program :=
+  do (C, P) <- lift (p.(Intermediate.prog_main));
+  do iface <- lift (getm p.(Intermediate.prog_interface) C);
+  do procs <- lift (getm p.(Intermediate.prog_procedures) C);
+  do P_labels <- lift (getm procs_labels C);
+  do lab <- lift (getm P_labels P);
   let P' := generate_fresh_procedure_id (p.(Intermediate.prog_procedures)) in
-  let iface' :=  {| Component.export := P'::iface.(Component.export);
+  let iface' :=  {| Component.export := fsetU (fset1 P') iface.(Component.export);
                     Component.import := iface.(Component.import) |} in
-  let procs' := PMap.add P' [IConst (IInt 1) R_ONE; IJal lab ; IHalt] procs in
-  ret 
-      {| Intermediate.prog_interface := PMap.add C iface' p.(Intermediate.prog_interface);
-         Intermediate.prog_procedures := PMap.add C procs' p.(Intermediate.prog_procedures);
+  let procs' := setm procs P' [IConst (IInt 1) R_ONE; IJal lab ; IHalt] in
+  ret {| Intermediate.prog_interface := setm p.(Intermediate.prog_interface) C iface';
+         Intermediate.prog_procedures := setm p.(Intermediate.prog_procedures) C procs';
          Intermediate.prog_buffers := p.(Intermediate.prog_buffers);
-         Intermediate.prog_main := (C,P') |}.
+         Intermediate.prog_main := Some (C, P') |}.
 
 Definition compile_program
            (p: Source.program) : option Intermediate.program :=
-  let comps := PMap.elements (Source.prog_procedures p) in
-  let bufs := PMap.elements (Source.prog_buffers p) in
+  let comps := elementsm (Source.prog_procedures p) in
+  let bufs := elementsm (Source.prog_buffers p) in
   let local_buffers := gen_buffers bufs in
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;
     do code <- compile_components local_buffers procs_labels comps;
-    let p := 
+    do main <- lift (Source.prog_main p);
+    let p :=
         {| Intermediate.prog_interface := Source.prog_interface p;
-           Intermediate.prog_procedures := PMapExtra.of_list code;
+           Intermediate.prog_procedures := mkfmap code;
            Intermediate.prog_buffers := local_buffers;
-           Intermediate.prog_main := Source.prog_main p |} in
+           Intermediate.prog_main := Some main |} in
    wrap_main procs_labels p).

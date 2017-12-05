@@ -30,8 +30,8 @@ Definition undef_in
   | None =>
     (* the trace is empty
        the main component is the only one that we can blame *)
-    PMap.In mainComp iface
+    mainComp \in (domm iface)
   | Some e =>
     (* the last event gives us the component to blame *)
-    PMap.In (who_is_in_control_after e) iface
+    (who_is_in_control_after e) \in (domm iface)
   end.

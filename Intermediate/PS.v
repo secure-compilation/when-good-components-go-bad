@@ -1,6 +1,7 @@
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Memory.
+Require Import Common.Linking.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import Intermediate.Machine.
@@ -8,8 +9,12 @@ Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
 
 Require Import Coq.Program.Equality.
-Require Import Coq.Setoids.Setoid.
-Require Import Coq.Classes.Morphisms.
+
+From mathcomp Require Import ssreflect ssrfun ssrbool.
+
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
 
 Module PS.
 
@@ -28,17 +33,6 @@ Inductive state : Type :=
 | PC : program_state -> state
 | CC : context_state -> state.
 
-Ltac unfold_states :=
-  match goal with
-  | H: state |- _ =>
-    let pgps := fresh "pgps" in
-    let pmem := fresh "pmem" in
-    let regs := fresh "regs" in
-    let pc := fresh "pc" in
-    let comp := fresh "C" in
-    destruct H as [[[[pgps pmem] regs] pc] | [[comp pgps] pmem]]
-  end.
-
 Ltac unfold_state st :=
   match goal with
     |- _ => let pgps := fresh "pgps" in
@@ -49,64 +43,21 @@ Ltac unfold_state st :=
             destruct st as [[[[pgps pmem] regs] pc] | [[comp pgps] pmem]]
   end.
 
-Inductive state_eq: state -> state -> Prop :=
-| program_states_eq: forall pgps1 pmem1 regs1 pc1 pgps2 pmem2 regs2 pc2,
-    pgps1 = pgps2 ->
-    PMap.Equal pmem1 pmem2 ->
-    regs1 = regs2 ->
-    pc1 = pc2 ->
-    state_eq (PC (pgps1, pmem1, regs1, pc1)) (PC (pgps2, pmem2, regs2, pc2))
-| context_state_eq: forall C1 pgps1 pmem1 C2 pgps2 pmem2,
-    C1 = C2 ->
-    pgps1 = pgps2 ->
-    PMap.Equal pmem1 pmem2 ->
-    state_eq (CC (C1, pgps1, pmem1)) (CC (C2, pgps2, pmem2)).
-
-Lemma state_eq_refl:
-  forall s,
-    state_eq s s.
-Proof.
-  intros; unfold_states; constructor; reflexivity.
-Qed.
-
-Lemma state_eq_sym:
-  forall s1 s2,
-    state_eq s1 s2 -> state_eq s2 s1.
-Proof.
-  intros s1 s2 H.
-  inversion H; subst;
-    constructor;
-    try reflexivity;
-    try symmetry; assumption.
-Qed.
-
-Lemma state_eq_trans:
-  forall s1 s2 s3,
-    state_eq s1 s2 -> state_eq s2 s3 -> state_eq s1 s3.
-Proof.
-  intros s1 s2 s3 H1 H2.
-  inversion H1; subst; inversion H2; subst;
-    constructor;
-    try reflexivity;
-    try etransitivity; eauto.
-Qed.
-
-Add Parametric Relation: (state) (state_eq)
-    reflexivity proved by (state_eq_refl)
-    symmetry proved by (state_eq_sym)
-    transitivity proved by (state_eq_trans)
-      as state_eq_rel.
+Ltac unfold_states :=
+  repeat (match goal with
+          | st: state |- _ => unfold_state st
+          end).
 
 Instance state_turn : HasTurn state := {
   turn_of s iface :=
     match s with
-    | PC (_, _, _, pc) => PMap.In (Pointer.component pc) iface
-    | CC (C, _, _) => PMap.In C iface
+    | PC (_, _, _, pc) => Pointer.component pc \in domm iface
+    | CC (C, _, _) => C \in domm iface
     end
 }.
 
 Definition is_context_component (ps: state) ctx := turn_of ps ctx.
-Definition is_program_component (ps: state) ctx := ~ is_context_component ps ctx.
+Definition is_program_component (ps: state) ctx := negb (is_context_component ps ctx).
 
 Ltac simplify_turn :=
   unfold PS.is_program_component, PS.is_context_component in *;
@@ -115,79 +66,48 @@ Ltac simplify_turn :=
 
 (* stack partialization *)
 
-Definition to_partial_frame ctx frame : PartialPointer.t :=
-  let '(C, b, o) := frame in
-  if Util.Lists.mem C ctx then
-    (C, None)
+Definition to_partial_frame (ctx: {fset Component.id}) frame : PartialPointer.t :=
+  if Pointer.component frame \in ctx then
+    (Pointer.component frame, None)
   else
-    (C, Some (b, o)).
+    (Pointer.component frame, Some (Pointer.block frame, Pointer.offset frame)).
 
-Definition to_partial_stack (s : CS.stack) (ctx: list Component.id) :=
+Definition to_partial_stack (s : CS.stack) (ctx: {fset Component.id}) :=
   map (to_partial_frame ctx) s.
 
 Lemma ptr_within_partial_frame_1 (ctx: Program.interface):
   forall ptr,
-    PMap.In (Pointer.component ptr) ctx ->
-    to_partial_frame (map fst (PMap.elements ctx)) ptr = (Pointer.component ptr, None).
+    Pointer.component ptr \in domm ctx = true ->
+    to_partial_frame (domm ctx) ptr = (Pointer.component ptr, None).
 Proof.
   intros ptr Hin_ctx.
   unfold to_partial_frame, Pointer.inc, Pointer.add.
-  destruct ptr as [[C b] o].
-  simpl in *. simplify_turn.
-  destruct (Util.Lists.mem C (map fst (PMap.elements ctx))) eqn:Hin.
-  *** reflexivity.
-  *** exfalso. (* contra *)
-      apply Util.Lists.not_in_iff_mem_false in Hin.
-      apply Hin.
-      unfold PMap.In, PMap.Raw.In0 in Hin_ctx.
-      destruct Hin_ctx as [CI HCI].
-      apply PMapFacts.elements_mapsto_iff in HCI.
-      apply SetoidList.InA_altdef in HCI.
-      apply Exists_exists in HCI.
-      destruct HCI as [[] []].
-      apply in_map_iff. exists (k,i). simpl. split.
-      **** inversion H0. inversion H1. auto.
-      **** auto.
+  destruct ptr as [[C b] o]. simpl in *.
+  rewrite Hin_ctx. reflexivity.
 Qed.
 
 Lemma ptr_within_partial_frame_2 (ctx: Program.interface):
   forall ptr,
-    ~ PMap.In (Pointer.component ptr) ctx ->
-    to_partial_frame (map fst (PMap.elements ctx)) ptr
+    Pointer.component ptr \in domm ctx = false ->
+    to_partial_frame (domm ctx) ptr
     = (Pointer.component ptr, Some (Pointer.block ptr, Pointer.offset ptr)).
 Proof.
   intros ptr Hnot_in_ctx.
   unfold to_partial_frame, Pointer.inc, Pointer.add.
-  destruct ptr as [[C b] o].
-  simpl in *. simplify_turn.
-  destruct (Util.Lists.mem C (map fst (PMap.elements ctx))) eqn:Hin.
-  *** exfalso. (* contra *)
-      apply Util.Lists.in_iff_mem_true in Hin.
-      apply Hnot_in_ctx. unfold PMap.In, PMap.Raw.In0.
-      apply in_map_iff in Hin. destruct Hin as [[] []].
-      simpl in *. subst.
-      eexists.
-      apply PMapFacts.elements_mapsto_iff.
-      apply SetoidList.In_InA.
-      **** econstructor.
-           ***** constructor; reflexivity.
-           ***** constructor; destruct x; destruct y; inversion H; auto.
-           ***** constructor; destruct x; destruct y; destruct z;
-             inversion H; inversion H1; simpl in *; subst; auto.
-      **** apply H0.
-  *** reflexivity.
+  destruct ptr as [[C b] o]. simpl in *.
+  rewrite Hnot_in_ctx. reflexivity.
 Qed.
 
 Lemma to_partial_frame_with_empty_context:
   forall C b o,
-    to_partial_frame [] (C, b, o) = (C, Some (b, o)).
+    to_partial_frame fset0 (C, b, o) = (C, Some (b, o)).
 Proof.
   intros. reflexivity.
 Qed.
 
 Lemma to_partial_stack_with_empty_context:
   forall gps1 gps2,
-    to_partial_stack gps1 [] = to_partial_stack gps2 [] ->
+    to_partial_stack gps1 fset0 = to_partial_stack gps2 fset0 ->
     gps1 = gps2.
 Proof.
   intros.
@@ -202,10 +122,8 @@ Proof.
     + simpl in *.
       inversion H; subst.
       destruct a as [[]]. destruct a0 as [[]].
-      do 2 rewrite to_partial_frame_with_empty_context in H1.
-      inversion H1. subst.
-      rewrite (IHgps1 gps2 H2).
-      reflexivity.
+      simpl in *. subst.
+      rewrite (IHgps1 gps2); auto.
 Qed.
 
 Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
@@ -214,10 +132,10 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     is_program_component (PC (pgps, pmem, regs, pc)) ctx ->
 
     (* we forget about context memories *)
-    PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+    pmem = filterm (fun k _ => negb (k \in domm ctx)) mem ->
 
     (* we put holes in place of context information in the stack *)
-    pgps = to_partial_stack gps (map fst (PMap.elements ctx)) ->
+    pgps = to_partial_stack gps (domm ctx) ->
 
     partial_state ctx (gps, mem, regs, pc) (PC (pgps, pmem, regs, pc))
 
@@ -226,261 +144,55 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     is_context_component (CC (Pointer.component pc, pgps, pmem)) ctx ->
 
     (* we forget about context memories *)
-    PMap.Equal pmem (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem) ->
+    pmem = filterm (fun k _ => negb (k \in domm ctx)) mem ->
 
     (* we put holes in place of context information in the stack *)
-    pgps = to_partial_stack gps (map fst (PMap.elements ctx)) ->
+    pgps = to_partial_stack gps (domm ctx) ->
 
     partial_state ctx (gps, mem, regs, pc) (CC (Pointer.component pc, pgps, pmem)).
 
 Definition partialize (ics: CS.state) (ctx: Program.interface) : PS.state :=
   let '(gps, mem, regs, pc) := ics in
-  if PMap.mem (Pointer.component pc) ctx then
+  if Pointer.component pc \in domm ctx then
     CC (Pointer.component pc,
-        to_partial_stack gps (map fst (PMap.elements ctx)),
-        PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem)
+        to_partial_stack gps (domm ctx),
+        filterm (fun k _ => negb (k \in domm ctx)) mem)
   else
-    PC (to_partial_stack gps (map fst (PMap.elements ctx)),
-        PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) mem,
+    PC (to_partial_stack gps (domm ctx),
+        filterm (fun k _ => negb (k \in domm ctx)) mem,
         regs, pc).
 
 Lemma partialize_correct:
   forall ics ips ctx,
-    state_eq (partialize ics ctx) ips <-> partial_state ctx ics ips.
+    partialize ics ctx = ips <-> partial_state ctx ics ips.
 Proof.
   intros ics ips ctx.
   split.
-  - intro H.
-    CS.unfold_states.
-    inversion H; subst;
-      destruct (PMap.mem (Pointer.component pc) ctx) eqn:Hcontrol; subst;
-        try discriminate.
-    + inversion H0; subst.
-      eapply ProgramControl; eauto.
-      * simplify_turn.
-        apply PMapFacts.not_mem_in_iff. eauto.
-      * symmetry. assumption.
-    + inversion H0; subst.
-      eapply ContextControl; eauto.
-      * simplify_turn.
-        apply PMapFacts.mem_in_iff. eauto.
-      * symmetry. assumption.
+  - intros Hpartialize.
+    CS.unfold_states. simpl in *.
+    destruct (Pointer.component pc \in domm ctx) eqn:Hcontrol;
+      rewrite Hcontrol in Hpartialize; rewrite <- Hpartialize.
+    + constructor; try reflexivity.
+      * PS.simplify_turn. assumption.
+    + constructor; try reflexivity.
+      * PS.simplify_turn. rewrite Hcontrol. reflexivity.
   - intros Hpartial_state.
-    unfold partialize.
-    inversion Hpartial_state; subst; simplify_turn;
-      [ apply PMapFacts.not_mem_in_iff in H
-      | apply PMapFacts.mem_in_iff in H ];
-      rewrite H; simpl;
-        econstructor; eauto; symmetry; auto.
+    inversion Hpartial_state; subst; PS.simplify_turn.
+    + destruct (Pointer.component pc \in domm ctx) eqn:Hcontrol.
+      * rewrite Hcontrol in H. discriminate.
+      * rewrite Hcontrol.
+        reflexivity.
+    + rewrite H.
+      reflexivity.
 Qed.
 
-Set Implicit Arguments.
-
-Add Morphism (partialize)
-    with signature
-      (@CS.state_eq) ==> (@PMap.Equal Component.interface) ==> (state_eq)
-      as partialize_eq.
+Lemma partialized_state_is_partial:
+  forall ips ctx,
+    partial_state ctx ips (partialize ips ctx).
 Proof.
-  intros ics1 ics2 Hics_eq ctx1 ctx2 Hctx_eq.
-  inversion Hics_eq; subst.
-  simpl.
-  rewrite Hctx_eq.
-  destruct (PMap.mem (elt:=Component.interface) (Pointer.component pc2) ctx2).
-  - constructor.
-    + reflexivity.
-    + induction gps2.
-      * reflexivity.
-      * simpl.
-        destruct (PMap.mem (Pointer.component a) ctx1) eqn:Hwhere.
-        ** apply PMapFacts.mem_in_iff in Hwhere.
-           rewrite ptr_within_partial_frame_1; auto.
-           rewrite Hctx_eq in Hwhere.
-           rewrite ptr_within_partial_frame_1; auto.
-           inversion Hics_eq; subst.
-           assert (CS.state_eq (gps2, mem1, regs2, pc2) (gps2, mem2, regs2, pc2)). {
-             constructor; try reflexivity; try assumption.
-           }
-           rewrite IHgps2; auto.
-        ** apply PMapFacts.not_mem_in_iff in Hwhere.
-           rewrite ptr_within_partial_frame_2; auto.
-           rewrite Hctx_eq in Hwhere.
-           rewrite ptr_within_partial_frame_2; auto.
-           inversion Hics_eq; subst.
-           assert (CS.state_eq (gps2, mem1, regs2, pc2) (gps2, mem2, regs2, pc2)). {
-             constructor; try reflexivity; try assumption.
-           }
-           rewrite IHgps2; auto.
-    + intros C.
-      destruct (PMap.find C (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx1)) mem1))
-               eqn:Hfind1;
-      destruct (PMap.find C (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx2)) mem2))
-               eqn:Hfind2.
-      * apply PMap.find_2 in Hfind1.
-        apply PMap.find_2 in Hfind2.
-        apply PMapExtra.filter_iff in Hfind1.
-        apply PMapExtra.filter_iff in Hfind2.
-        destruct Hfind1 as [Hmapsto1 Hcond1].
-        destruct Hfind2 as [Hmapsto2 Hcond2].
-        rewrite H0 in Hmapsto1.
-        erewrite (PMapFacts.MapsTo_fun Hmapsto1 Hmapsto2).
-        reflexivity.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-      * apply PMap.find_2 in Hfind1.
-        apply PMapFacts.not_find_in_iff in Hfind2.
-        apply PMapExtra.filter_iff in Hfind1.
-        destruct Hfind1 as [Hmapsto1 Hcond1].
-        exfalso.
-        apply Hfind2.
-        eexists. apply PMapExtra.filter_iff.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-        ** rewrite H0 in Hmapsto1.
-           split; eauto.
-           destruct (PMap.mem (elt:=Component.interface) C ctx1) eqn:Hwhere;
-             try discriminate.
-           apply PMapFacts.not_mem_in_iff in Hwhere. rewrite Hctx_eq in Hwhere.
-           destruct (PMap.mem (elt:=Component.interface) C ctx2) eqn:Hwhere';
-             try discriminate.
-           *** apply PMapFacts.mem_in_iff in Hwhere'. contradiction.
-           *** auto.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-      * apply PMap.find_2 in Hfind2.
-        apply PMapFacts.not_find_in_iff in Hfind1.
-        apply PMapExtra.filter_iff in Hfind2.
-        destruct Hfind2 as [Hmapsto2 Hcond2].
-        exfalso.
-        apply Hfind1.
-        eexists. apply PMapExtra.filter_iff.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-        ** rewrite <- H0 in Hmapsto2.
-           split; eauto.
-           destruct (PMap.mem (elt:=Component.interface) C ctx2) eqn:Hwhere;
-             try discriminate.
-           apply PMapFacts.not_mem_in_iff in Hwhere. rewrite <- Hctx_eq in Hwhere.
-           destruct (PMap.mem (elt:=Component.interface) C ctx1) eqn:Hwhere';
-             try discriminate.
-           *** apply PMapFacts.mem_in_iff in Hwhere'. contradiction.
-           *** auto.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-      * reflexivity.
-  - constructor.
-    + induction gps2.
-      * reflexivity.
-      * simpl.
-        destruct (PMap.mem (Pointer.component a) ctx1) eqn:Hwhere.
-        ** apply PMapFacts.mem_in_iff in Hwhere.
-           rewrite ptr_within_partial_frame_1; auto.
-           rewrite Hctx_eq in Hwhere.
-           rewrite ptr_within_partial_frame_1; auto.
-           inversion Hics_eq; subst.
-           assert (CS.state_eq (gps2, mem1, regs2, pc2) (gps2, mem2, regs2, pc2)). {
-             constructor; try reflexivity; try assumption.
-           }
-           rewrite IHgps2; auto.
-        ** apply PMapFacts.not_mem_in_iff in Hwhere.
-           rewrite ptr_within_partial_frame_2; auto.
-           rewrite Hctx_eq in Hwhere.
-           rewrite ptr_within_partial_frame_2; auto.
-           inversion Hics_eq; subst.
-           assert (CS.state_eq (gps2, mem1, regs2, pc2) (gps2, mem2, regs2, pc2)). {
-             constructor; try reflexivity; try assumption.
-           }
-           rewrite IHgps2; auto.
-    + intros C.
-      destruct (PMap.find C (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx1)) mem1))
-               eqn:Hfind1;
-      destruct (PMap.find C (PMapExtra.filter (fun k _ => negb (PMap.mem k ctx2)) mem2))
-               eqn:Hfind2.
-      * apply PMap.find_2 in Hfind1.
-        apply PMap.find_2 in Hfind2.
-        apply PMapExtra.filter_iff in Hfind1.
-        apply PMapExtra.filter_iff in Hfind2.
-        destruct Hfind1 as [Hmapsto1 Hcond1].
-        destruct Hfind2 as [Hmapsto2 Hcond2].
-        rewrite H0 in Hmapsto1.
-        erewrite (PMapFacts.MapsTo_fun Hmapsto1 Hmapsto2).
-        reflexivity.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-      * apply PMap.find_2 in Hfind1.
-        apply PMapFacts.not_find_in_iff in Hfind2.
-        apply PMapExtra.filter_iff in Hfind1.
-        destruct Hfind1 as [Hmapsto1 Hcond1].
-        exfalso.
-        apply Hfind2.
-        eexists. apply PMapExtra.filter_iff.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-        ** rewrite H0 in Hmapsto1.
-           split; eauto.
-           destruct (PMap.mem (elt:=Component.interface) C ctx1) eqn:Hwhere;
-             try discriminate.
-           apply PMapFacts.not_mem_in_iff in Hwhere. rewrite Hctx_eq in Hwhere.
-           destruct (PMap.mem (elt:=Component.interface) C ctx2) eqn:Hwhere';
-             try discriminate.
-           *** apply PMapFacts.mem_in_iff in Hwhere'. contradiction.
-           *** auto.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-      * apply PMap.find_2 in Hfind2.
-        apply PMapFacts.not_find_in_iff in Hfind1.
-        apply PMapExtra.filter_iff in Hfind2.
-        destruct Hfind2 as [Hmapsto2 Hcond2].
-        exfalso.
-        apply Hfind1.
-        eexists. apply PMapExtra.filter_iff.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-        ** rewrite <- H0 in Hmapsto2.
-           split; eauto.
-           destruct (PMap.mem (elt:=Component.interface) C ctx2) eqn:Hwhere;
-             try discriminate.
-           apply PMapFacts.not_mem_in_iff in Hwhere. rewrite <- Hctx_eq in Hwhere.
-           destruct (PMap.mem (elt:=Component.interface) C ctx1) eqn:Hwhere';
-             try discriminate.
-           *** apply PMapFacts.mem_in_iff in Hwhere'. contradiction.
-           *** auto.
-        ** (* morphisms stuff *)
-          unfold Morphisms.Proper, Morphisms.respectful.
-          intros. subst. reflexivity.
-      * reflexivity.
-    + reflexivity.
-    + reflexivity.
-Qed.
-
-Unset Implicit Arguments.
-
-Lemma equal_states_partialize:
-  forall ctx ics1 ics2 ips,
-    CS.state_eq ics1 ics2 ->
-    partial_state ctx ics1 ips ->
-    partial_state ctx ics2 ips.
-Proof.
-  intros ctx ics1 ics2 ips.
-  intros Hics_eq Hics1_partial.
+  intros ips ctx.
   apply partialize_correct.
-  apply partialize_correct in Hics1_partial.
-  rewrite <- Hics1_partial.
-  symmetry. f_equiv; auto.
+  reflexivity.
 Qed.
 
 (* unpartializing partial states without holes *)
@@ -489,7 +201,7 @@ Definition unpartialize_stack_frame (frame: PartialPointer.t): Pointer.t :=
   match frame with
   | (C, None) =>
     (* bad case that shouldn't happen, just return first state *)
-    (C, 1%positive, 0)
+    (C, 1, 0%Z)
   | (C, Some (b, o)) => (C, b, o)
   end.
 
@@ -502,7 +214,7 @@ Definition unpartialize (ips: state): CS.state :=
     (unpartialize_stack pgps, mem, regs, pc)
   | CC _ =>
     (* bad case that shouldn't happen, return bogus state *)
-    ([], PMap.empty ComponentMemory.t, [], (1%positive, 1%positive, 0))
+    ([], emptym, emptym, (0, 0, 0%Z))
   end.
 
 Inductive stack_without_holes: stack -> Prop :=
@@ -514,7 +226,7 @@ Inductive stack_without_holes: stack -> Prop :=
 
 Lemma to_partial_stack_with_empty_context_has_no_holes:
   forall gps,
-    stack_without_holes (to_partial_stack gps []).
+    stack_without_holes (to_partial_stack gps fset0).
 Proof.
   intros gps.
   induction gps.
@@ -528,7 +240,7 @@ Qed.
 Lemma to_partial_stack_unpartialize_identity:
   forall pgps,
     stack_without_holes pgps ->
-    to_partial_stack (unpartialize_stack pgps) [] = pgps.
+    to_partial_stack (unpartialize_stack pgps) fset0 = pgps.
 Proof.
   intros pgps Hnoholes.
   induction Hnoholes; subst.
@@ -538,7 +250,7 @@ Qed.
 
 Lemma unpartializing_complete_stack_frame:
   forall frame,
-    unpartialize_stack_frame (to_partial_frame [] frame) = frame.
+    unpartialize_stack_frame (to_partial_frame fset0 frame) = frame.
 Proof.
   intros frame.
   destruct frame as [[C b] o].
@@ -547,26 +259,26 @@ Qed.
 
 Lemma unpartializing_complete_stack:
   forall stack,
-    unpartialize_stack (to_partial_stack stack []) = stack.
+    unpartialize_stack (to_partial_stack stack fset0) = stack.
 Proof.
   intros stack.
   induction stack; simpl.
   - reflexivity.
-  - rewrite unpartializing_complete_stack_frame.
-    rewrite IHstack.
+  - rewrite IHstack.
+    destruct a as [[]].
     reflexivity.
 Qed.
 
 Theorem unpartializing_complete_states:
   forall ics,
-    CS.state_eq (unpartialize (partialize ics (PMap.empty Component.interface))) ics.
+    unpartialize (partialize ics emptym) = ics.
 Proof.
   intros ics.
   CS.unfold_states. simpl.
-  constructor;
-    try reflexivity.
-  - apply unpartializing_complete_stack.
-  - apply Memory.filter_identity.
+  rewrite mem_domm. simpl.
+  rewrite domm0.
+  rewrite unpartializing_complete_stack.
+  rewrite filterm_identity. reflexivity.
 Qed.
 
 (* merging partial states *)
@@ -588,7 +300,7 @@ Inductive mergeable_stacks : stack -> stack -> Prop :=
     mergeable_stacks (frame1 :: pgps1) (frame2 :: pgps2).
 
 Definition mergeable_memories (mem1 mem2: Memory.t): Prop :=
-  PMapExtra.Disjoint mem1 mem2.
+  fdisjoint (domm mem1) (domm mem2).
 
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_first: forall pgps1 pmem1 regs pc C pgps2 pmem2,
@@ -638,7 +350,7 @@ Proof.
 Qed.
 
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
-  PMapExtra.update mem1 mem2.
+  unionm mem1 mem2.
 
 Definition merge_partial_states (ips1 ips2: state) : state :=
   match ips1 with
@@ -660,216 +372,108 @@ Definition merge_partial_states (ips1 ips2: state) : state :=
     end
   end.
 
-Set Implicit Arguments.
-
-Add Morphism (merge_partial_states)
-    with signature
-      state_eq ==> state_eq ==> state_eq
-      as merge_partial_states_eq.
-Proof.
-  intros ips1 ips2 Heq1 ips1' ips2' Heq2.
-  inversion Heq1; subst; inversion Heq2; subst; simpl.
-  - constructor;
-      try reflexivity.
-    + assumption.
-  - constructor;
-      try reflexivity.
-    + rewrite H0, H2.
-      reflexivity.
-  - constructor;
-      try reflexivity.
-    + rewrite H0, H1.
-      reflexivity.
-  - constructor;
-      try reflexivity.
-    + assumption.
-Qed.
-
-Unset Implicit Arguments.
-
 (* transition system *)
 
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | initial_state_intro: forall p' ics ips,
+    prog_interface p' = ctx ->
     linkable_programs p p' ->
     partial_state ctx ics ips ->
-    CS.initial_state (program_link p p' (fst (prog_main p)) (snd (prog_main p))) ics ->
+    CS.initial_state (program_link p p') ics ->
     initial_state p ctx ips.
 
 Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | final_state_program: forall p' ics ips,
+    prog_interface p' = ctx ->
     linkable_programs p p' ->
     ~ turn_of ips ctx ->
     partial_state ctx ics ips ->
     CS.final_state
-      (init_genv (program_link p p' (fst (prog_main p)) (snd (prog_main p)))) ics ->
+      (prepare_global_env (program_link p p')) ics ->
     final_state p ctx ips
 | final_state_context: forall ips,
     turn_of ips ctx ->
     final_state p ctx ips.
 
-Inductive step (ctx: Program.interface) (G: global_env)
-  : state -> trace -> state -> Prop :=
+Inductive step (p: program) (ctx: Program.interface)
+  : global_env -> state -> trace -> state -> Prop :=
 | partial_step:
     forall p' ips t ips' ics ics',
-      PMap.Equal (prog_interface p') ctx ->
-      CS.step (extend_genv G (init_genv p')) ics t ics' ->
+      prog_interface p' = ctx ->
+      linkable_programs p p' ->
+      CS.step (prepare_global_env (program_link p p')) ics t ics' ->
       partial_state ctx ics ips ->
       partial_state ctx ics' ips' ->
-      step ctx G ips t ips'.
-
-Theorem equal_states_step:
-  forall ctx G ips1 t ips1' ips2 ips2',
-    step ctx G ips1 t ips1' ->
-    state_eq ips1 ips2 ->
-    state_eq ips1' ips2' ->
-    step ctx G ips2 t ips2'.
-Proof.
-  intros ctx G ips1 t ips1' ips2 ips2' Hstep Heq1 Heq2.
-  inversion Hstep; subst.
-  apply partial_step with (ics:=ics) (ics':=ics') (p':=p').
-  + assumption.
-  + assumption.
-  + apply PS.partialize_correct.
-    rewrite <- Heq1.
-    apply PS.partialize_correct.
-    assumption.
-  + apply PS.partialize_correct.
-    rewrite <- Heq2.
-    apply PS.partialize_correct.
-    assumption.
-Qed.
-
-Theorem equal_states_step_2:
-  forall ctx G ips1 t ips1' ips2,
-    state_eq ips1 ips2 ->
-    step ctx G ips1 t ips1' ->
-  exists ips2',
-    step ctx G ips2 t ips2' /\ state_eq ips1' ips2'.
-Proof.
-  intros ctx G ips1 t ips1' ips2 Heq Hstep.
-  inversion Hstep; subst.
-  exists ips1'. split.
-  - apply partial_step with (ics:=ics) (ics':=ics') (p':=p').
-    + assumption.
-    + assumption.
-    + do 2 CS.unfold_states.
-      inversion Heq; subst.
-      * inversion H1; subst.
-        constructor.
-        ** PS.simplify_turn. auto.
-        ** rewrite <- H4. assumption.
-        ** reflexivity.
-      * inversion H1; subst.
-        constructor.
-        ** PS.simplify_turn. auto.
-        ** rewrite <- H5. assumption.
-        ** reflexivity.
-    + auto.
-  - reflexivity.
-Qed.
+      step p ctx (prepare_global_env p) ips t ips'.
 
 Theorem context_epsilon_step_is_silent:
-  forall ctx G ips ips',
-    step ctx G (CC ips) E0 ips' ->
-    state_eq (CC ips) ips'.
+  forall p ctx G ips ips',
+    step p ctx G (CC ips) E0 ips' ->
+    ips' = CC ips.
 Proof.
-  intros ctx G ips ips' Hstep.
+  intros p ctx G ips ips' Hstep.
   inversion Hstep; subst.
-  inversion H1; subst; PS.simplify_turn.
-  inversion H2; subst; PS.simplify_turn.
+  match goal with
+  | Hpartial1: partial_state _ _ _,
+    Hpartial2: partial_state _ _ _ |- _ =>
+    inversion Hpartial2; subst; PS.simplify_turn;
+    inversion Hpartial1; subst; PS.simplify_turn
+  end.
   - (* contra *)
     assert (Pointer.component pc = Pointer.component pc0) as Hsame_comp. {
-      inversion H0; subst;
-        match goal with
-        | Heq1: CS.state_eq _ _,
-          Heq2: CS.state_eq _ _ |- _ =>
-          inversion Heq1; subst; inversion Heq2; subst
-        end;
+      inversion H1; subst;
         try (rewrite Pointer.inc_preserves_component; reflexivity);
         try (symmetry; assumption).
       + erewrite find_label_in_component_1; eauto.
       + erewrite find_label_in_procedure_1; eauto.
     }
-    rewrite Hsame_comp in *.
-    contradiction.
-  - constructor.
-    + assert (Pointer.component pc = Pointer.component pc0) as Hsame_comp. {
-        inversion H0; subst;
-          match goal with
-          | Heq1: CS.state_eq _ _,
-            Heq2: CS.state_eq _ _ |- _ =>
-            inversion Heq1; subst; inversion Heq2; subst
-          end;
-          try (rewrite Pointer.inc_preserves_component; reflexivity);
-          try (symmetry; assumption).
-        + erewrite find_label_in_component_1; eauto.
-        + erewrite find_label_in_procedure_1; eauto.
-      }
-      apply Hsame_comp.
-    + inversion H0; subst;
-        match goal with
-        | Heq1: CS.state_eq _ _,
-          Heq2: CS.state_eq _ _ |- _ =>
-          inversion Heq1; subst; inversion Heq2; subst
-        end; reflexivity.
-    + inversion H0; subst;
-        match goal with
-        | Heq1: CS.state_eq _ _,
-          Heq2: CS.state_eq _ _ |- _ =>
-          inversion Heq1; subst; inversion Heq2; subst
-        end;
-        try match goal with
-        | Hfilter1: PMap.Equal ?PMEM1 (PMapExtra.filter _ ?MEM1),
-          Hfilter2: PMap.Equal ?PMEM2 (PMapExtra.filter _ ?MEM2),
-          Heq1: PMap.Equal ?MEM1 ?MEM3,
-          Heq2: PMap.Equal ?MEM2 ?MEM3 |- _ =>
-          rewrite Hfilter1, Hfilter2;
-          apply Memory.equivalence_under_filter;
-          rewrite Heq1, Heq2;
-          reflexivity
-        end.
-      * rewrite H6.
-        erewrite Memory.context_store_is_filtered with (ptr:=ptr) (mem':=mem').
-        ** apply Memory.equivalence_under_filter. symmetry. assumption.
-        ** rewrite H10. assumption.
-        ** eassumption.
-        ** rewrite H5. apply Memory.equivalence_under_filter. assumption.
-      * rewrite H6.
-        erewrite Memory.context_allocation_is_filtered with (mem':=mem').
-        ** apply Memory.equivalence_under_filter. symmetry. assumption.
-        ** eassumption.
-        ** rewrite Pointer.inc_preserves_component. eassumption.
-        ** rewrite H5. apply Memory.equivalence_under_filter. assumption.
-Qed.
+    rewrite Hsame_comp in H4.
+    rewrite H4 in H.
+    discriminate.
+  - inversion H1; subst;
+      try (rewrite Pointer.inc_preserves_component; reflexivity);
+      try (symmetry; assumption).
+    + rewrite Pointer.inc_preserves_component.
+      unfold Memory.store in *.
+      destruct (mem (Pointer.component ptr)) eqn:Hfind;
+        try discriminate.
+      destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr)
+                                      (Register.get r2 regs0)) eqn:Hstore;
+        try discriminate.
+      inversion H16; subst.
+      enough (filterm (fun k _ => k \notin domm (prog_interface p'))
+                      (setm mem (Pointer.component ptr) t0) =
+              filterm (fun k _ => k \notin domm (prog_interface p')) mem) as Hfilter.
+      * rewrite Hfilter.
+        simpl. reflexivity.
+      * apply eq_fmap.
+        intros C.
+        do 2 rewrite (filtermE _ _ C). unfold obind, oapp.
+        rewrite setmE.
+        admit.
+Admitted.
 
 Corollary context_epsilon_star_is_silent:
-  forall ctx G ips ctx_state ips',
-    state_eq ips (CC ctx_state) ->
-    star (step ctx) G ips E0 ips' ->
-    state_eq ips ips'.
+  forall p ctx G ctx_state ips',
+    star (step p ctx) G (CC ctx_state) E0 ips' ->
+    ips' = CC ctx_state.
 Proof.
-  intros ctx G ips ctx_state ips' Heq_ctx Hstar.
+  intros p ctx G ctx_state ips' Hstar.
   dependent induction Hstar; subst.
   - reflexivity.
-  - symmetry in H0. apply Eapp_E0_inv in H0. destruct H0. subst.
-    rewrite Heq_ctx.
-    destruct (equal_states_step_2 ctx G s1 E0 s2 (CC ctx_state) Heq_ctx H)
-      as [s2' []].
-    apply context_epsilon_step_is_silent in H0.
-    rewrite <- H0 in H1. rewrite <- H1.
+  - apply Eapp_E0_inv in x. destruct x. subst.
+    apply context_epsilon_step_is_silent in H. subst.
     apply IHHstar; auto.
 Qed.
 
-(* this should hold even for program steps *)
-Theorem context_same_trace_determinism:
-  forall ctx G ips ctx_state t ctx_state',
-    state_eq (CC ctx_state) ips ->
-    step ctx G ips t (CC ctx_state') ->
-  forall ctx_state'',
-    step ctx G ips t (CC ctx_state'') ->
-    state_eq (CC ctx_state') (CC ctx_state'').
+Theorem state_determinism:
+  forall p ctx G ips t ips',
+    step p ctx G ips t ips' ->
+  forall ips'',
+    step p ctx G ips t ips'' ->
+    ips' = ips''.
 Proof.
+  (*
   intros ctx G ips ctx_state t ctx_state' Heq Hstep1 ctx_state'' Hstep2.
   inversion Heq; subst.
   inversion Hstep1; subst; inversion Hstep2; subst.
@@ -924,6 +528,7 @@ Proof.
   + admit.
   + admit.
   + admit.
+   *)
 Admitted.
 
 (* partial semantics *)
@@ -932,17 +537,18 @@ Section Semantics.
   Variable p: program.
   Variable ctx: Program.interface.
 
-  Let G := init_genv p.
-
   Hypothesis valid_program:
     well_formed_program p.
 
+  Hypothesis disjoint_interfaces:
+    fdisjoint (domm (prog_interface p)) (domm ctx).
+
   Hypothesis merged_interface_is_closed:
-    closed_interface (PMapExtra.update (prog_interface p) ctx).
+    closed_interface (unionm (prog_interface p) ctx).
 
   Definition sem :=
-    @Semantics_gen state global_env (step ctx)
+    @Semantics_gen state global_env (step p ctx)
                    (initial_state p ctx)
-                   (final_state p ctx) G.
+                   (final_state p ctx) (prepare_global_env p).
 End Semantics.
 End PS.

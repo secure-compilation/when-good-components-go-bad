@@ -30,20 +30,3 @@ Ltac simplify_nat_equalities :=
       | H: (_ =? _) = true |- _ =>
         apply beq_nat_true_iff in H; rewrite H
       end.
-
-Ltac rewrite_memory_operations :=
-  unfold Memory.alloc, Memory.load, Memory.store;
-  match goal with
-  | H: ZMap.find (elt:=ComponentMemory.t) _ _ = Some _ |- _ => rewrite H
-  | H: ZMap.find (elt:=ComponentMemory.t) _ _ = None |- _ => rewrite H
-  | H: ComponentMemory.store _ _ _ _ = Some _ |- _ => rewrite H
-  | H: ComponentMemory.store _ _ _ _ = None |- _ => rewrite H
-  | H: ComponentMemory.load _ _ _ = Some _ |- _ => rewrite H
-  | H: ComponentMemory.load _ _ _ = None |- _ => rewrite H
-  end.
-
-Ltac rewrite_map_operations :=
-  match goal with
-  | H: ZMap.find _ _ _ = Some _ |- _ => rewrite H
-  | H: ZMap.find _ _ _ = None |- _ => rewrite H
-  end.

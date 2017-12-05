@@ -6,20 +6,18 @@ Import Source.
 
 (* a program that returns the given argument *)
 
-Open Scope positive_scope.
-
 Definition identity : program := {|
   prog_interface :=
-    PMapExtra.of_list [(1, {| Component.import := [];
-                              Component.export := [1] |})];
-  prog_buffers := PMapExtra.of_list [(1, inl 1%nat)];
-  prog_procedures := PMapExtra.of_list [
-    (1, PMapExtra.of_list [
-      (1, E_deref E_local)])];
-  prog_main := (1, 1)
+    mkfmap [(1, {| Component.import := fset [];
+                   Component.export := fset [1] |})];
+  prog_buffers :=
+    mkfmap [(1, inl 1)];
+  prog_procedures :=
+    mkfmap [(1, mkfmap [(1, E_val (Int 42))])];
+  prog_main := Some (1, 1)
 |}.
 
-Definition fuel := 1000%nat.
-Definition to_run := run identity (Int 42) fuel.
+Definition fuel := 1000.
+Definition to_run := run identity fuel.
 
 Extraction "/tmp/run_identity.ml" to_run.

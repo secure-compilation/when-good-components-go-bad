@@ -1,43 +1,25 @@
 Require Import Common.Definitions.
 
+From mathcomp Require Import ssreflect ssrfun ssrbool.
+
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
+Lemma filterm_identity (T: ordType) (S: Type):
+  forall (m: {fmap T -> S}),
+    filterm (fun _ _ => true) m = m.
+Proof.
+  intros m.
+  apply eq_fmap. intros k.
+  rewrite filtermE.
+  unfold obind, oapp.
+  destruct (m k); auto.
+Qed.
+
 Module Util.
   Module Z.
     Definition of_bool (b : bool) : Z :=
-      if b then 1 else 0.
+      if b then 1%Z else 0%Z.
   End Z.
-
-  Module Lists.
-    Fixpoint update {A : Type} (l : list A) (n : nat) (val : A) {struct l} : list A :=
-      match l with
-      | [] => []
-      | x :: xs => match n with
-                  | O => val :: xs
-                  | S n' => x :: update xs n' val
-                  end
-      end.
-
-    Fixpoint mem x xs :=
-      match xs with
-      | [] => false
-      | x' :: xs' => if Pos.eqb x x' then true else mem x xs'
-      end.
-
-    Lemma in_iff_mem_true :
-      forall x xs,
-        In x xs <-> mem x xs = true.
-    Proof.
-      intros x xs. induction xs as [|x' xs IH]; simpl; try easy.
-      rewrite IH, Pos.eqb_sym.
-      now destruct (Pos.eqb_spec x' x) as [E|NE]; tauto.
-    Qed.
-
-    Lemma not_in_iff_mem_false :
-      forall x xs,
-        ~ (In x xs) <-> mem x xs = false.
-    Proof.
-      intros x xs.
-      now rewrite in_iff_mem_true, not_true_iff_false.
-    Qed.
-
-  End Lists.
 End Util.

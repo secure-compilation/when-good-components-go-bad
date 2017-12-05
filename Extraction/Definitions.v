@@ -1,4 +1,6 @@
 Require Import Common.Definitions.
+Require Import Common.Values.
+Require Export Extraction.
 
 (* NOTE: add the following two lines at the start of the extracted file:
 #load "nums.cma";;

@@ -8,7 +8,7 @@ Require Import Lib.Monads.
 Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP.
 
-Definition label := positive.
+Definition label := nat.
 
 Inductive imvalue : Type :=
 | IInt : Z -> imvalue
@@ -46,7 +46,7 @@ Definition code := list instr.
 Module Intermediate.
 
 Module Register.
-  Definition t : Type := list value.
+  Definition t : Type := NMap value.
 
   Definition to_nat (r : register) : nat :=
     match r with
@@ -58,20 +58,31 @@ Module Register.
     | R_SP   => 5
     end.
 
-  Definition init := repeat Undef 7.
+  Definition init :=
+    mkfmap [(to_nat R_ONE, Undef);
+            (to_nat R_COM, Undef);
+            (to_nat R_AUX1, Undef);
+            (to_nat R_AUX2, Undef);
+            (to_nat R_RA, Undef);
+            (to_nat R_SP, Undef)].
 
   Definition get (r : register) (regs : t) : value :=
-    match nth_error regs (to_nat r) with
+    match getm regs (to_nat r) with
     | Some val => val
     (* this should never happen (i.e. regs should be well-formed) *)
     | None => Undef
     end.
 
   Definition set (r : register) (val : value) (regs : t) : t :=
-    Util.Lists.update regs (to_nat r) val.
+    setm regs (to_nat r) val.
 
   Definition invalidate (regs : t) : t :=
-    [Undef; get R_COM regs; Undef; Undef; Undef; Undef].
+    mkfmap [(to_nat R_ONE, Undef);
+            (to_nat R_COM, get R_COM regs);
+            (to_nat R_AUX1, Undef);
+            (to_nat R_AUX2, Undef);
+            (to_nat R_RA, Undef);
+            (to_nat R_SP, Undef)].
 
   Lemma init_registers_wf:
     forall r, exists val, get r init = val.
@@ -82,82 +93,23 @@ Module Register.
 End Register.
 
 Module EntryPoint.
-  Definition t := PMap.t (PMap.t Block.id).
+  Definition t := NMap (NMap Block.id).
 
-  Definition get C P E : option Block.id :=
-    match PMap.find C E with
-    | Some addrs => PMap.find P addrs
+  Definition get (C: Component.id) (P: Procedure.id) (E: t) : option Block.id :=
+    match getm E C with
+    | Some addrs => getm addrs P
     | None => None
     end.
-
-  Lemma get_from_same_entrypoints:
-    forall E1 E2 C P,
-      PMap.Equal E1 E2 ->
-      get C P E1 = get C P E2.
-  Proof.
-    intros E1 E2 C P Heq.
-    unfold get.
-    rewrite Heq.
-    destruct (PMap.find C E2);
-      reflexivity.
-  Qed.
 End EntryPoint.
 
 (* programs *)
 
 Record program := mkProg {
   prog_interface : Program.interface;
-  prog_procedures : PMap.t (PMap.t code);
-  prog_buffers : PMap.t (list (Block.id * (nat + list value)));
-  prog_main : Component.id * Procedure.id
+  prog_procedures : NMap (NMap code);
+  prog_buffers : NMap (list (Block.id * (nat + list value)));
+  prog_main : option (Component.id * Procedure.id)
 }.
-
-Inductive prog_eq : program -> program -> Prop :=
-| prog_eq_intro: forall iface1 procs1 bufs1 iface2 procs2 bufs2 main1 main2,
-    PMap.Equal iface1 iface2 ->
-    PMap.Equal procs1 procs2 ->
-    PMap.Equal bufs1 bufs2 ->
-    main1 = main2 ->
-    prog_eq (mkProg iface1 procs1 bufs1 main1) (mkProg iface2 procs2 bufs2 main2).
-
-Lemma prog_eq_refl:
-  forall p,
-    prog_eq p p.
-Proof.
-  intros p.
-  destruct p; constructor; reflexivity.
-Qed.
-
-Lemma prog_eq_sym:
-  forall p1 p2,
-    prog_eq p1 p2 -> prog_eq p2 p1.
-Proof.
-  intros p1 p2 H.
-  inversion H; subst.
-  constructor;
-    try reflexivity;
-    try symmetry; assumption.
-Qed.
-
-Lemma prog_eq_trans:
-  forall p1 p2 p3,
-    prog_eq p1 p2 -> prog_eq p2 p3 -> prog_eq p1 p3.
-Proof.
-  intros p1 p2 p3 H1 H2.
-  inversion H1; subst; inversion H2; subst;
-    constructor;
-    try reflexivity;
-    try etransitivity; eauto.
-Qed.
-
-Add Parametric Relation: (program) (prog_eq)
-    reflexivity proved by (prog_eq_refl)
-    symmetry proved by (prog_eq_sym)
-    transitivity proved by (prog_eq_trans)
-      as prog_eq_rel.
-
-Definition single_component (p: program) : Prop :=
-  PMap.cardinal (prog_interface p) = 1%nat.
 
 (* well-formedness of programs *)
 
@@ -166,22 +118,25 @@ Definition well_formed_instruction
   match i with
   | IBnz r l =>
     (* the branch refers to a label inside the current procedure C.P *)
-    exists Cprocs Pcode, PMap.MapsTo C Cprocs (prog_procedures p) /\
-                    PMap.MapsTo P Pcode Cprocs /\
-                    In (ILabel l) Pcode
+    exists Cprocs Pcode,
+      getm (prog_procedures p) C = Some Cprocs /\
+      getm Cprocs P = Some Pcode /\
+      In (ILabel l) Pcode
   | IJal l =>
     (* the jump refers to a label inside the current component C *)
-    exists Cprocs P' P'code, PMap.MapsTo C Cprocs (prog_procedures p) /\
-                        PMap.MapsTo P' P'code Cprocs /\
-                        In (ILabel l) P'code
+    exists Cprocs P' P'code,
+      getm (prog_procedures p) C = Some Cprocs /\
+      getm Cprocs P' = Some P'code /\
+      In (ILabel l) P'code
   | ICall C' P' =>
     (* a call is well-formed only if it targets another component and the
        interface is allowing it to happen *)
     C <> C' /\ imported_procedure (prog_interface p) C C' P'
   | IConst (IPtr ptr) r =>
     (* static pointers refers to static buffers *)
-    exists bufs, PMap.MapsTo (Pointer.component ptr) bufs (prog_buffers p) /\
-            In (Pointer.block ptr) (map fst bufs)
+    exists bufs,
+      getm (prog_buffers p) (Pointer.component ptr) = Some bufs /\
+      In (Pointer.block ptr) (map fst bufs)
   (* the other instruction are well-formed by construction *)
   | IConst (IInt i) r => True
   | ILabel l => True
@@ -200,27 +155,34 @@ Record well_formed_program (p: program) := {
   (* the interface is sound (but maybe not closed) *)
   wfprog_interface_soundness:
     sound_interface (prog_interface p);
+  (* there are procedures only for the declared components *)
+  wfprog_well_formed_procedures:
+    fsubset (domm (prog_procedures p)) (domm (prog_interface p));
   (* each exported procedure actually exists *)
   wfprog_exported_procedures_existence:
     forall C CI,
-      PMap.MapsTo C CI (prog_interface p) ->
+      getm (prog_interface p) C = Some CI ->
     forall P,
       Component.is_exporting CI P ->
     exists Cprocs Pcode,
-      PMap.MapsTo C Cprocs (prog_procedures p) /\
-      PMap.MapsTo P Pcode Cprocs;
+      getm (prog_procedures p) C = Some Cprocs /\
+      getm Cprocs P = Some Pcode;
   (* each instruction of each procedure is well-formed *)
   wfprog_well_formed_instructions:
     forall C Cprocs,
-      PMap.MapsTo C Cprocs (prog_procedures p) ->
+      getm (prog_procedures p) C = Some Cprocs ->
     forall P Pcode,
-      PMap.MapsTo P Pcode Cprocs ->
+      getm Cprocs P = Some Pcode ->
     forall i, In i Pcode -> well_formed_instruction p C P i;
+  (* there are buffers only for the declared components *)
+  wfprog_well_formed_buffers:
+    fsubset (domm (prog_buffers p)) (domm (prog_interface p));
   (* if the main component exists, then the main procedure must exist as well *)
   wfprog_main_existence:
-    forall main_procs,
-      PMap.MapsTo (fst (prog_main p)) main_procs (prog_procedures p) ->
-      PMap.In (snd (prog_main p)) main_procs
+    forall mainC mainP,
+      prog_main p = Some (mainC, mainP) ->
+    exists main_procs,
+      getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
 }.
 
 (* a closed program is a program with a closed interface and an existing main
@@ -231,227 +193,341 @@ Record closed_program (p: program) := {
     closed_interface (prog_interface p);
   (* the main procedure must exist *)
   cprog_main_existence:
-    exists procs,
-      PMap.MapsTo (fst (prog_main p)) procs (prog_procedures p) /\
-      PMap.In (snd (prog_main p)) procs;
+    exists mainC mainP main_procs,
+      prog_main p = Some (mainC, mainP) /\
+      getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
 }.
 
-(* TOOD add something about main, e.g. they specify the same main *)
-Definition linkable_programs (p1 p2: program) : Prop :=
-  (* both programs are well-formed *)
-  well_formed_program p1 /\ well_formed_program p2 /\
-  (* their interfaces are disjoint *)
-  PMapExtra.Disjoint (prog_interface p1) (prog_interface p2) /\
-  (*  the sets of components having buffers are disjoint *)
-  PMapExtra.Disjoint (prog_buffers p1) (prog_buffers p2) /\
-  (* ^ APT added
-     Need something like this in order to prove linking_well_formedness,
-     for example the buffers_existence clause.  Interface disjointness is not enough.
-     For suppose C is in interface of p1 (hence not in interface of p2) but has buffers defined in p2
-     (about which we know nothing).  Since p2 wins over p1 when combining buffers, we have to show
-     that these p2 buffers are the required ones, which we don't know. *)
-  (* the sets of components having procedures are disjoint *)
-  PMapExtra.Disjoint (prog_procedures p1) (prog_procedures p2) /\
-  (* ^ APT added
-     For similar reasons, needed to prove exported_procedures_existence. *)
-  (* the union of their interfaces is sound *)
-  sound_interface (PMapExtra.update (prog_interface p1) (prog_interface p2)).
+Inductive linkable_programs: program -> program -> Prop :=
+| linkable_programs_intro:
+   forall prog1 prog2,
+     well_formed_program prog1 ->
+     well_formed_program prog2 ->
+     sound_interface (unionm (prog_interface prog1) (prog_interface prog2)) ->
+     fdisjoint (domm (prog_interface prog1)) (domm (prog_interface prog2)) ->
+     fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)) ->
+     fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)) ->
+     linkable_mains (prog_main prog1) (prog_main prog2) ->
+     linkable_programs prog1 prog2.
 
-Definition program_link (p1 p2: program) mainC mainP : program :=
-  {| prog_interface := PMapExtra.update (prog_interface p1) (prog_interface p2);
-     prog_procedures := PMapExtra.update (prog_procedures p1) (prog_procedures p2);
-     prog_buffers := PMapExtra.update (prog_buffers p1) (prog_buffers p2);
-     prog_main := (mainC, mainP) |}.
+Definition program_link (p1 p2: program): program :=
+  {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
+     prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);
+     prog_buffers := unionm (prog_buffers p1) (prog_buffers p2);
+     prog_main := main_link (prog_main p1) (prog_main p2) |}.
 
 Definition partialize_program (p: program) (ctx: Program.interface) : program :=
   {| prog_interface :=
-       PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) (prog_interface p);
+       filterm (fun k _ => negb (k \in domm ctx)) (prog_interface p);
      prog_procedures :=
-       PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) (prog_procedures p);
+       filterm (fun k _ => negb (k \in domm ctx)) (prog_procedures p);
      prog_buffers :=
-       PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) (prog_buffers p);
+       filterm (fun k _ => negb (k \in domm ctx)) (prog_buffers p);
      prog_main := prog_main p |}.
 
-Ltac inv H := (inversion H; subst; clear H).
+Definition empty_prog := {| prog_interface := emptym;
+                            prog_procedures := emptym;
+                            prog_buffers := emptym;
+                            prog_main := None |}.
+
+Theorem empty_interface_implies_empty_program:
+  forall p,
+    well_formed_program p ->
+    prog_interface p = emptym ->
+    p = empty_prog.
+Proof.
+  intros p Hwf Hempty_iface.
+  remember p as prog.
+  destruct p.
+  rewrite Heqprog in *. simpl in *.
+  rewrite Hempty_iface.
+  enough (prog_procedures0 = emptym) as Hempty_procs.
+  enough (prog_buffers0 = emptym) as Hempty_bufs.
+  enough (prog_main0 = None) as Hempty_main.
+  rewrite Hempty_procs, Hempty_bufs, Hempty_main.
+  reflexivity.
+  (* show that there is no main *)
+  - rewrite <- Heqprog in Hwf.
+    pose proof (wfprog_main_existence prog Hwf) as Hmain_existence.
+    destruct (prog_main prog) as [[mainC mainP]|] eqn:Hmain.
+    + destruct (Hmain_existence mainC mainP) as [main_procs []].
+      reflexivity.
+      rewrite Heqprog in H. simpl in *.
+      rewrite Hempty_procs in H.
+      inversion H.
+    + rewrite Heqprog in Hmain. simpl in *.
+      assumption.
+  (* show that there are no buffers *)
+  - rewrite <- Heqprog in Hwf.
+    pose proof (wfprog_well_formed_buffers prog Hwf) as Hbufs_wf.
+    rewrite Heqprog in Hbufs_wf. rewrite Hempty_iface in Hbufs_wf. simpl in *.
+    rewrite domm0 in Hbufs_wf.
+    rewrite fsubset0 in Hbufs_wf.
+    (* not able to use eq_domm0 *)
+    pose proof eq_domm0 as Hempty.
+    admit.
+  (* show that there are no procedures *)
+  - rewrite <- Heqprog in Hwf.
+    pose proof (wfprog_well_formed_procedures prog Hwf) as Hprocs_wf.
+    rewrite Heqprog in Hprocs_wf. rewrite Hempty_iface in Hprocs_wf. simpl in *.
+    rewrite domm0 in Hprocs_wf.
+    rewrite fsubset0 in Hprocs_wf.
+    (* not able to use eq_domm0 *)
+    pose proof eq_domm0 as Hempty.
+    admit.
+Admitted.
+
+Lemma empty_prog_is_well_formed:
+  well_formed_program empty_prog.
+Proof.
+  constructor; simpl.
+  - unfold sound_interface.
+    intros. inversion H0.
+  - repeat rewrite domm0. apply fsubsetxx.
+  - intros. inversion H.
+  - intros. inversion H.
+  - repeat rewrite domm0. apply fsubsetxx.
+  - intros. discriminate.
+Qed.
+
+Theorem empty_prog_linkability:
+  forall p,
+    well_formed_program p ->
+    linkable_programs p empty_prog.
+Proof.
+  intros p Hwf.
+  constructor.
+  - assumption.
+  - apply empty_prog_is_well_formed.
+  - simpl. rewrite unionm0.
+    apply (wfprog_interface_soundness p Hwf).
+  - simpl. rewrite domm0. apply fdisjoints0.
+  - simpl. rewrite domm0. apply fdisjoints0.
+  - simpl. rewrite domm0. apply fdisjoints0.
+  - simpl. unfold linkable_mains.
+    destruct (prog_main p); auto.
+Qed.
+
+Theorem linking_empty_program:
+  forall p,
+    program_link p empty_prog = p.
+Proof.
+  intros p.
+  destruct p. unfold program_link. simpl.
+  repeat rewrite unionm0.
+  rewrite main_link_with_empty_main.
+  reflexivity.
+Qed.
+
+Theorem linkable_sym:
+  forall p c,
+    linkable_programs p c -> linkable_programs c p.
+Proof.
+  intros p c Hlinkable.
+  inversion Hlinkable; subst.
+  constructor;
+    try assumption.
+  - rewrite unionmC; auto.
+    unfold fdisjoint. rewrite fsetIC. auto.
+  - unfold fdisjoint. rewrite fsetIC. auto.
+  - unfold fdisjoint. rewrite fsetIC. auto.
+  - unfold fdisjoint. rewrite fsetIC. auto.
+  - apply linkable_mains_sym; auto.
+Qed.
 
 Theorem linking_well_formedness:
-  forall p1 p2 mainC mainP,
+  forall p1 p2,
     linkable_programs p1 p2 ->
-    well_formed_program (program_link p1 p2 mainC mainP).
+    well_formed_program (program_link p1 p2).
 Proof.
-  (*
-  intros. destruct H as (WF1 & WF2 & IDISJ & BDISJ & PDISJ & SND).
+  intros p1 p2 Hlinkability.
+  inversion Hlinkability; subst.
   constructor.
-  + auto.
-  + simpl.
-    intros.
-    rewrite PMapExtra.update_in_iff in H.
-    inv H.
-    - destruct WF1. pose proof (wfprog_buffers_existence0 C H0).
-      clear - H BDISJ. unfold has_required_local_buffers in *. simpl.
-      destruct H as (b1 & b2 & bufs & FND & B1 & B2).
-      exists b1, b2, bufs.
-      intuition.
-      rewrite <- PMapFacts.find_mapsto_iff in FND|-*.
-      rewrite PMapExtra.update_mapsto_iff.
-      right.
-      intuition.
-      eapply BDISJ.
-      split; [| apply H].
-      rewrite PMapFacts.find_mapsto_iff in FND.
-      rewrite PMapFacts.in_find_iff.
-      rewrite FND. discriminate.
-    - destruct WF2. pose proof (wfprog_buffers_existence0 C H0).
-      clear - H BDISJ. unfold has_required_local_buffers in *. simpl.
-      destruct H as (b1 & b2 & bufs & FND & B1 & B2).
-      exists b1, b2, bufs.
-      intuition.
-      rewrite <- PMapFacts.find_mapsto_iff in FND|-*.
-      rewrite PMapExtra.update_mapsto_iff.
-      left.
-      intuition.
-  + simpl. intros.
-    rewrite PMapExtra.update_mapsto_iff in H.
-    inv H.
-    - destruct WF2.
-      edestruct wfprog_exported_procedures_existence0 as [cprocs [pcode [Q1 Q2]]]; eauto.
-      exists cprocs, pcode. intuition.
-      rewrite  PMapExtra.update_mapsto_iff. intuition.
-    - inv H1. destruct WF1.
-      edestruct wfprog_exported_procedures_existence0 as [cprocs [pcode [Q1 Q2]]]; eauto.
-      exists cprocs, pcode. intuition.
-      rewrite PMapExtra.update_mapsto_iff. right. intuition.
-      eapply PDISJ. split; eauto.
-      rewrite PMapFacts.find_mapsto_iff in Q1.
-      rewrite PMapFacts.in_find_iff. rewrite Q1. discriminate.
-  + simpl. intros.
-    rewrite PMapExtra.update_mapsto_iff in H.
-    inv H.
-    - destruct WF2.
-      pose proof (wfprog_well_formed_instructions0 _ _ H2 _ _ H0 _ H1).
-      destruct i; auto.
-      * simpl in H |-*.  destruct i; auto.
-        destruct H as [bufs [Q1 Q2]].
-        exists bufs; intuition.
-        rewrite PMapExtra.update_mapsto_iff. left; auto.
-      * simpl in H |-*.
-        destruct H as [cprocs [pcode Q]].
-        exists cprocs, pcode. intuition.
-        rewrite PMapExtra.update_mapsto_iff. left; auto.
-      * simpl in H|-*.
-        destruct H as [cprocs [P' [PC Q]]].
-        exists cprocs, P', PC; intuition.
-        rewrite PMapExtra.update_mapsto_iff. left; auto.
-      * simpl in H|-*.
-        destruct H.
-        intuition.
-        unfold imported_procedure in *.
-        destruct H3 as [CI Q].
-        exists CI; intuition.
-        unfold Program.has_component in *.
-        rewrite PMapExtra.update_mapsto_iff. left; auto.
-    - inv H2. destruct WF1.
-      pose proof (wfprog_well_formed_instructions0 _ _ H _ _ H0 _ H1).
-      destruct i; auto.
-      * simpl in H2 |-*.  destruct i; auto.
-        destruct H2 as [bufs [Q1 Q2]].
-        exists bufs; intuition.
-        rewrite PMapExtra.update_mapsto_iff. right; intuition.
-        eapply BDISJ; split; eauto.
-        apply PMapFacts.find_mapsto_iff in Q1.
-        apply PMapFacts.in_find_iff.  rewrite Q1; discriminate.
-      * simpl in H2 |-*.
-        destruct H2 as [cprocs [pcode Q]].
-        exists cprocs, pcode. intuition.
-        rewrite PMapExtra.update_mapsto_iff. right; intuition.
-      * simpl in H2 |-*.
-        destruct H2 as [cprocs [P' [PC Q]]].
-        exists cprocs, P', PC; intuition.
-        rewrite PMapExtra.update_mapsto_iff. right; intuition.
-      * simpl in H2 |-*.
-        destruct H2.
-        split. auto.
-        unfold imported_procedure in *.
-        destruct H4 as [CI Q].
-        exists CI; intuition.
-        unfold Program.has_component in *.
-        rewrite PMapExtra.update_mapsto_iff. right; intuition.
-        eapply IDISJ; split; eauto.
-        apply PMapFacts.find_mapsto_iff in H4.
-        rewrite PMapFacts.in_find_iff. rewrite H4. discriminate.
-  + Admitted. (* This obviously isn't true for arbitrary (mainC,mainP) ! *)
-*)
+  - simpl. assumption.
+  - simpl.
+    repeat rewrite domm_union.
+    apply fsetUSS.
+    + apply (wfprog_well_formed_procedures p1 H).
+    + apply (wfprog_well_formed_procedures p2 H0).
+  - intros.
+    simpl in *.
+    rewrite unionmE in *.
+    destruct ((prog_interface p1) C) eqn:Hwhere; simpl in *.
+    + inversion H6; subst.
+      destruct (wfprog_exported_procedures_existence p1 H C CI Hwhere P H7)
+        as [Cprocs [Pcode [Hproc Hcode]]].
+      rewrite Hproc. simpl.
+      exists Cprocs. exists Pcode.
+      split; auto.
+    + enough ((prog_procedures p1) C = None) as Hno_p1.
+      * rewrite Hno_p1. simpl.
+        destruct (wfprog_exported_procedures_existence p2 H0 C CI H6 P H7)
+          as [Cprocs [Pcode [Hproc Hcode]]].
+        exists Cprocs. exists Pcode.
+        split; auto.
+      * destruct ((prog_procedures p1) C) eqn:Hin_p1.
+        ** destruct (wfprog_exported_procedures_existence p2 H0 C CI H6 P H7)
+             as [Cprocs [Pcode [Hproc Hcode]]].
+           unfold fdisjoint in H3.
+           admit.
+        ** reflexivity.
+  - intros.
+    unfold well_formed_instruction.
+    destruct i; auto.
+    + destruct i; auto.
+      simpl in *.
+      rewrite unionmE in *.
+    + admit.
+    + admit.
+    + admit.
+    + admit.
+  - simpl.
+    repeat rewrite domm_union.
+    apply fsetUSS.
+    + apply (wfprog_well_formed_buffers p1 H).
+    + apply (wfprog_well_formed_buffers p2 H0).
+  - intros. simpl in *.
+    pose proof (wfprog_main_existence p1 H mainC mainP) as Hmain1.
+    pose proof (wfprog_main_existence p2 H0 mainC mainP) as Hmain2.
+    destruct (prog_main p1) as [[]|] eqn:Hmain_p1;
+    destruct (prog_main p2) as [[]|] eqn:Hmain_p2.
+    + simpl in *.
+      inversion H6; subst.
+      destruct (Hmain1 eq_refl) as [main_procs []].
+      exists main_procs.
+      split.
+      * rewrite unionmE.
+        rewrite H7. reflexivity.
+      * assumption.
+    + simpl in *.
+      inversion H6; subst.
+      destruct (Hmain1 eq_refl) as [main_procs []].
+      exists main_procs.
+      split.
+      * rewrite unionmE.
+        rewrite H7. reflexivity.
+      * assumption.
+    + inversion H6; subst.
+      destruct (Hmain2 eq_refl) as [main_procs []].
+      exists main_procs.
+      split.
+      * rewrite unionmE.
+        admit.
+      * assumption.
+    + simpl in *. discriminate.
 Admitted.
 
-Fixpoint init_component m E ps C Cprocs bufs
-  : Memory.t * EntryPoint.t * PMap.t (PMap.t code) :=
-  match Cprocs with
-  | [] => (m, E, ps)
-  | (P, bytecode) :: Cprocs' =>
-    let Cmem :=
-        match PMap.find C m with
-        | Some Cmem => Cmem
-        | None =>
-          match PMap.find C bufs with
-          | Some Cbufs => ComponentMemory.prealloc Cbufs
-          (* the following should never happen, since every
-             component has at least one buffer *)
-          | None => ComponentMemory.empty
-          end
-        end in
-    let '(Cmem', b) := ComponentMemory.reserve_block Cmem in
-    let m' := PMap.add C Cmem' m in
-    let Centrypoints :=
-        match PMap.find C E with
-        | None => PMap.empty Block.id
-        | Some old_Centrypoints => old_Centrypoints
-        end in
-    let Centrypoints' := PMap.add P b Centrypoints in
-    let E' := PMap.add C Centrypoints' E in
-    let Cps :=
-        match PMap.find C ps with
-        | None => PMap.empty code
-        | Some oldCps => oldCps
-        end in
-    let Cps' := PMap.add b bytecode Cps in
-    let ps' := PMap.add C Cps' ps in
-    init_component m' E' ps' C Cprocs' bufs
+Fixpoint alloc_static_buffers p mem comps :=
+  match comps with
+  | [] => mem
+  | C :: comps' =>
+    match getm (prog_buffers p) C with
+    | Some Cbufs =>
+      (* the component has static buffers *)
+      let mem' := setm mem C (ComponentMemory.prealloc Cbufs) in
+      alloc_static_buffers p mem' comps'
+    | None =>
+      (* the component doesn't have static buffers *)
+      (* we have to create its memory anyway *)
+      let mem' := setm mem C (ComponentMemory.prealloc []) in
+      alloc_static_buffers p mem comps'
+    end
   end.
 
-Definition init_all (p: program)
-  : Memory.t * EntryPoint.t * PMap.t (PMap.t code) :=
-  let fix init_all_procs m E ps procs :=
-      match procs with
-      | [] => (m, E, ps)
-      | (C, Cprocs) :: procs' =>
-        let '(m', E', ps') := init_component m E ps C
-                                             (PMap.elements Cprocs)
-                                             (prog_buffers p) in
-        init_all_procs m' E' ps' procs'
-      end
-  in
-  init_all_procs (Memory.empty [])
-                 (PMap.empty (PMap.t Block.id)) (PMap.empty (PMap.t code))
-                 (PMap.elements (prog_procedures p)).
+Definition prepare_initial_memory (p: program) : Memory.t :=
+  alloc_static_buffers p emptym (domm (prog_interface p)).
 
-Theorem init_all_with_same_program:
-  forall prog1 prog2,
-  let '(m1, e1, p1) := init_all prog1 in
-  let '(m2, e2, p2) := init_all prog2 in
-  prog_eq prog1 prog2 ->
-  PMap.Equal m1 m2 /\ PMap.Equal e1 e2 /\ PMap.Equal p1 p2.
+Fixpoint reserve_component_blocks p C Cmem Cprocs Centrypoints procs_code
+  : ComponentMemory.t * NMap code * NMap Block.id :=
+  match procs_code with
+  | [] => (Cmem, Cprocs, Centrypoints)
+  | (P, Pcode) :: procs_code' =>
+    let (Cmem', b) := ComponentMemory.reserve_block Cmem in
+    let Cprocs' := setm Cprocs b Pcode in
+    (* if P is exported, add an external entrypoint *)
+    match getm (prog_interface p) C with
+    | Some Ciface =>
+      if P \in Component.export Ciface then
+        let Centrypoints' := setm Centrypoints P b in
+        reserve_component_blocks p C Cmem' Cprocs' Centrypoints' procs_code'
+      else
+        reserve_component_blocks p C Cmem' Cprocs' Centrypoints procs_code'
+    | None =>
+      (* this case shouldn't happen for well formed p *)
+      reserve_component_blocks p C Cmem' Cprocs' Centrypoints procs_code'
+    end
+  end.
+
+Fixpoint reserve_procedures_blocks p mem procs entrypoints comps_code
+  : Memory.t * NMap (NMap code) * EntryPoint.t :=
+  match comps_code with
+  | [] => (mem, procs, entrypoints)
+  | (C, Cprocs) :: comps_code' =>
+    match getm mem C with
+    | Some Cmem =>
+      let '(Cmem', Cprocs, Centrypoints) :=
+          reserve_component_blocks p C Cmem emptym emptym (elementsm Cprocs) in
+      let mem' := setm mem C Cmem' in
+      let procs' := setm procs C Cprocs in
+      let entrypoints' := setm entrypoints C Centrypoints in
+      reserve_procedures_blocks p mem' procs' entrypoints' comps_code'
+    | None =>
+      (* this shouldn't happen if memory was initialized before the call *)
+      (* we just skip initialization for this component *)
+      reserve_procedures_blocks p mem procs entrypoints comps_code'
+    end
+  end.
+
+Definition prepare_procedures (p: program) (mem: Memory.t)
+  : Memory.t * NMap (NMap code) * EntryPoint.t :=
+  reserve_procedures_blocks p mem emptym emptym (elementsm (prog_procedures p)).
+
+(* initialization of the empty program *)
+
+Theorem prepare_initial_memory_empty_program:
+  prepare_initial_memory empty_prog = emptym.
 Proof.
+  unfold prepare_initial_memory.
+  simpl. rewrite domm0.
+  reflexivity.
+Qed.
+
+Theorem prepare_procedures_empty_program:
+  prepare_procedures empty_prog emptym = (emptym, emptym, emptym).
+Proof.
+  unfold prepare_procedures.
+  reflexivity.
+Qed.
+
+(* initialization of a linked program *)
+
+Lemma alloc_static_buffers_after_linking:
+  forall p c,
+    linkable_programs p c ->
+    let pc := program_link p c in
+    alloc_static_buffers pc emptym (domm (prog_interface pc)) =
+    unionm (alloc_static_buffers p emptym (domm (prog_interface p)))
+           (alloc_static_buffers c emptym (domm (prog_interface c))).
+Proof.
+  intros p c Hlinkable Hpc.
+  subst Hpc. simpl.
+  apply eq_fmap. intros k.
+  rewrite unionmE.
+  destruct (isSome ((alloc_static_buffers p emptym (domm (prog_interface p))) k))
+           eqn:Hin.
+  - admit.
+  - admit.
 Admitted.
 
-(* the initialization procedure prepares memory for exactly each component of
-   the program *)
-Theorem init_all_memory_guarantees:
-  forall p (mem: Memory.t),
-  let '(mem, _, _) := init_all p in
-  forall C,
-    PMap.In C (prog_interface p) <->
-    PMap.In C mem.
+Theorem prepare_initial_memory_after_linking:
+  forall p c,
+    linkable_programs p c ->
+    prepare_initial_memory (program_link p c) =
+    unionm (prepare_initial_memory p) (prepare_initial_memory c).
 Proof.
-Admitted.
+  intros p c Hlinkable.
+  unfold prepare_initial_memory.
+  apply alloc_static_buffers_after_linking; auto.
+Qed.
 
 End Intermediate.

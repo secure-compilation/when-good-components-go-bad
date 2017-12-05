@@ -6,38 +6,41 @@ Require Export Coq.Arith.Arith.
 Require Export Coq.ZArith.ZArith.
 Require Export Coq.Numbers.BinNums.
 
+From mathcomp Require Import ssreflect ssrfun ssrbool.
+
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 Export ListNotations.
 Open Scope list_scope.
 
-Close Scope nat.
-Open Scope Z_scope.
-
 Module Procedure.
-  Definition id := positive.
+  Definition id := nat.
 
-  Definition eqb (id1 id2 : id) := Pos.eqb id1 id2.
-
+  Definition eqb (id1 id2 : id) := Nat.eqb id1 id2.
 End Procedure.
 
 Module Component.
-  Definition id := positive.
+  Definition id := nat.
 
   Record interface := mkCompInterface {
-    export : list Procedure.id;
-    import : list (Component.id * Procedure.id)
+    export: {fset Procedure.id};
+    import: {fset Component.id * Procedure.id}
   }.
 
-  Definition is_importing CI C P : Prop := In (C,P) (import CI).
-  Definition is_exporting CI P : Prop := In P (export CI).
+  Definition is_importing CI C P : Prop := (C,P) \in import CI.
+  Definition is_exporting CI P : Prop := P \in export CI.
 
-  Definition eqb (id1 id2 : id) := Pos.eqb id1 id2.
+  Definition eqb (id1 id2 : id) := Nat.eqb id1 id2.
 End Component.
 
 Module Program.
-  Definition interface := PMap.t Component.interface.
-  Definition has_component (Is:interface) (C:Component.id) (CI : Component.interface) :=
-    PMap.MapsTo C CI Is.
-  Definition has_component_id (Is:interface) (C:Component.id) := PMap.In C Is.
+  Definition interface := NMap Component.interface.
+  Definition has_component (Is: interface) (C: Component.id) (CI: Component.interface) :=
+    getm Is C = Some CI.
+  Definition has_component_id (Is: interface) (C: Component.id) :=
+    C \in domm Is.
 End Program.
 
 Definition exported_procedure
@@ -52,17 +55,11 @@ Definition imported_procedure
   exists CI,
     Program.has_component Is C CI /\ Component.is_importing CI C' P.
 
-Lemma procs_eqdec (CP : Component.id * Procedure.id) (CP' : Component.id * Procedure.id) :
-  {CP=CP'} + {CP<>CP'}.
-Proof.
-  repeat decide equality.
-Qed.
-
 Definition imported_procedure_b
            (Is : Program.interface)
            (C C': Component.id) (P : Procedure.id) : bool :=
-  match PMap.find C Is with
-  | Some CI => negb ((count_occ procs_eqdec (Component.import CI) (C',P)) =? 0)%nat
+  match getm Is C with
+  | Some CI => (C', P) \in Component.import CI
   | None => false
   end.
 
@@ -77,53 +74,18 @@ Proof.
     unfold Program.has_component in HCI.
     unfold Component.is_importing in Himport.
     unfold imported_procedure_b.
-    apply PMap.find_1 in HCI. rewrite HCI.
-    rewrite count_occ_In in Himport.
-    inversion Himport.
-    + rewrite <- H0. simpl. auto.
-    + rewrite <- H. simpl. auto.
+    rewrite HCI Himport.
+    reflexivity.
   - intros Himport.
     unfold imported_procedure.
     unfold imported_procedure_b in Himport.
-    destruct (PMap.find (elt:=Component.interface) C Is) eqn:Hfind;
+    destruct (Is C) eqn:Hfind;
       try discriminate.
-    exists i.
+    eexists.
     unfold Program.has_component, Component.is_importing.
-    split.
-    + apply (PMap.find_2 Hfind).
-    + rewrite count_occ_In.
-      destruct (count_occ procs_eqdec (Component.import i) (C', P) =? 0)%nat eqn:Hcount;
-        try discriminate.
-      rewrite beq_nat_false_iff in Hcount.
-      apply Nat.neq_0_lt_0 in Hcount.
-      unfold gt. eauto.
-Qed.
-
-Lemma has_component_with_same_interface:
-  forall iface1 iface2 C CI,
-    PMap.Equal iface1 iface2 ->
-    Program.has_component iface1 C CI ->
-    Program.has_component iface2 C CI.
-Proof.
-  intros iface1 iface2 C CI Heq Hhas_comp.
-  unfold Program.has_component.
-  rewrite <- Heq. assumption.
-Qed.
-
-Lemma imported_procedure_with_same_interface:
-  forall iface1 iface2 C C' P,
-    PMap.Equal iface1 iface2 ->
-    imported_procedure iface1 C C' P ->
-    imported_procedure iface2 C C' P.
-Proof.
-  intros iface1 iface2 C C' P Heq Himport.
-  unfold imported_procedure in *.
-  destruct Himport as [CI [Hhas_comp His_importing]].
-  exists CI. split.
-  - eapply has_component_with_same_interface; eauto.
-  - assumption.
+    split; eassumption.
 Qed.
 
 Class HasTurn A := {
-  turn_of : A -> Program.interface -> Prop
+  turn_of : A -> Program.interface -> bool
 }.

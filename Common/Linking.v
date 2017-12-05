@@ -25,11 +25,39 @@ Proof.
   unfold Program.has_component in HCI', HCI''.
   enough (HsameCI: CI' = CI'').
   - subst. auto.
-  - apply PMapFacts.MapsTo_fun with iface C'; auto.
+  - rewrite HCI'' in HCI'. inversion HCI'. reflexivity.
 Qed.
 
-Definition mergeable_interfaces (i1 i2 : Program.interface) : Prop :=
-  PMapExtra.Disjoint i1 i2.
+Definition linkable_mains (main1 main2: option (Component.id * Procedure.id)) : Prop :=
+  match main1, main2 with
+  | None, None => True
+  | Some _, None => True
+  | None, Some _ => True
+  | Some m1, Some m2 => m1 = m2
+  end.
 
-Definition interface_merge (i1 i2 : Program.interface) (prf: mergeable_interfaces i1 i2) :=
-  PMapExtra.update i1 i2.
+Lemma linkable_mains_sym:
+  forall m1 m2,
+    linkable_mains m1 m2 -> linkable_mains m2 m1.
+Proof.
+  intros m1 m2 Hlinkable.
+  destruct m1; destruct m2; simpl in *; auto.
+Qed.
+
+(* we assume that the provided mains are linkable *)
+Definition main_link (main1 main2: option (Component.id * Procedure.id))
+  : option (Component.id * Procedure.id) :=
+  match main1, main2 with
+  | None, None => None
+  | Some _, None => main1
+  | None, Some _ => main2
+  | Some _, Some _ => main1
+  end.
+
+Lemma main_link_with_empty_main:
+  forall main,
+    main_link main None = main.
+Proof.
+  intros main.
+  destruct main; reflexivity.
+Qed.

@@ -1,14 +1,3 @@
-Require Import Common.Definitions.
-Require Import CompCert.Events.
-Require Import CompCert.Smallstep.
-Require Import CompCert.Behaviors.
-Require Import Source.Language.
-Require Import Source.CS.
-Require Import Intermediate.Machine.
-Require Import Intermediate.CS.
-Require Import S2I.Compiler.
-Require Import S2I.Definitions.
-
 (*
 Taking inspiration from DSSS17 Leroy's lectures:
 https://github.com/DeepSpec/dsss17/blob/master/compiler/Compiler.v
@@ -78,33 +67,7 @@ TODO define and prove these lemmas
 Once we have the above things, we can package them in forward_simulation object
 defined by CompCert. Determinacy and receptiveness will then allow us to turn the
 forward simulation into a backward one.
-
-TODO prove determinacy and receptiveness
 *)
-
-Module S.
-  Import Source.CS.
-  Module CS := CS.
-End S.
-
-Module I.
-  Import Intermediate.CS.
-  Module CS := CS.
-End I.
-
-Section Correctness.
-Variable p: Source.program.
-Variable tp: Intermediate.program.
-
-Hypothesis input_program_well_formedness:
-  Source.well_formed_program p.
-
-Hypothesis input_program_closedness:
-  Source.closed_program p.
-
-Hypothesis successful_compilation:
-  compile_program p = Some tp.
-
 
 (* APT: Some issues to think about.
 
@@ -124,26 +87,26 @@ executes from top to bottom or (for exit) immediately halts.
 
 Inductive relate_stacks (mem:Memory.t) : Component.id -> S.stack -> I.stack -> Pointer.t -> Pointer.t -> Prop :=
   | rs_empty : forall sp0, relate_stacks mem nil nil sp0 sp0
-  | rs_diff_comp: 
+  | rs_diff_comp:
       relate_stacks C0 imem0 regs0 s0 gps spb0 sp0 ->
       ((s0 = [] /\ C <> Main) \/ (exists C0, s0 = (C0,_,_)::_ /\ C <> C0)) ->
       imem at sp0 contains an RA which is in sync with k0 and s (or whatever) ->
       imem at sp0+1 contains arg ->
-      imem at spb contains sp0 -> 
-      imem at spb+1 contains arg  (* which was in locaxl buf ptr for C0 *) -> 
+      imem at spb contains sp0 ->
+      imem at spb+1 contains arg  (* which was in locaxl buf ptr for C0 *) ->
       imem at (local buf ptr for C0) contains regs0(R_COM) -> maybe the current arg is just a parameter?
-      relate_stacks C imem ((C,arg,k)::s) ra??::gps spb (spb+??) ->  
+      relate_stacks C imem ((C,arg,k)::s) ra??::gps spb (spb+??) ->
 
-  | rs_same_comp : forall C0 arg0 k0 s gps spb0 sp0 -> 
+  | rs_same_comp : forall C0 arg0 k0 s gps spb0 sp0 ->
       relate_stacks mem s0 gps spb0 sp0 ->
-      ((s0 = [] /\ C == Main) \/ (s0 = (C,_,_)::_) -> 
-      imem at sp0 contains an RA which is in sync with k0 and s ?? -> 
+      ((s0 = [] /\ C == Main) \/ (s0 = (C,_,_)::_) ->
+      imem at sp0 contains an RA which is in sync with k0 and s ?? ->
       -or ??? -- imem at sp0 contains regs0(RA) ->  ???
       (* (imem at spb contains a block of appropriate stack_frame_sizep) -> *)
-      imem at spb contains sp0 -> 
-      imem at spb+1 contains arg  (* which was in local buf ptr for C0 *) -> 
+      imem at spb contains sp0 ->
+      imem at spb+1 contains arg  (* which was in local buf ptr for C0 *) ->
       imem at (local buf ptr for C0) contains regs0(R_COM) -> maybe the current arg is just a parameter?
-      XXX where are arg and k ??? 
+      XXX where are arg and k ???
       relate_stacks imem ((C0,arg,k)::s) gps spb (spb+2)
 .
 
@@ -159,7 +122,7 @@ Import MonadNotations.
 Open Scope monad_scope.
 
 
-Definition code_at (G: Intermediate.GlobalEnv.global_env) (pc: Pointer.t) : option instr := 
+Definition code_at (G: Intermediate.GlobalEnv.global_env) (pc: Pointer.t) : option instr :=
   do C_procs <- PMap.find (Pointer.component pc) (Intermediate.GlobalEnv.genv_procedures G);
   do P_code <- PMap.find (Pointer.block pc) C_procs;
   if Pointer.offset pc <? 0 then
@@ -198,24 +161,24 @@ Inductive expr_codeseq_at (G: Intermediate.GlobalEnv.global_env) : Pointer.t -> 
 
 Inductive compile_cont (G: Intermediate.GlobalEnv.global_env) : cont -> Pointer.t -> Prop :=
   | ccont_binop1 : forall b e k C pc pc',
-      expr_codeseq_at G pc C e -> 
-      pc' = Pointer.add pc (Z.of_nat (length C + 1)) -> 
-      compile_cont G k pc' ->                                              
+      expr_codeseq_at G pc C e ->
+      pc' = Pointer.add pc (Z.of_nat (length C + 1)) ->
+      compile_cont G k pc' ->
       compile_cont G (Kbinop1 b e k) pc
   | ccont_binop2 : forall b v k pc pc',
-      pc' = Pointer.add pc 2%Z -> 
-      compile_cont G k pc' ->                                              
+      pc' = Pointer.add pc 2%Z ->
+      compile_cont G k pc' ->
       compile_cont G (Kbinop2 b v k) pc
   | ccont_seq : forall e k C pc pc',
-      expr_codeseq_at G pc C e -> 
-      pc' = Pointer.add pc (Z.of_nat (length C)) -> 
+      expr_codeseq_at G pc C e ->
+      pc' = Pointer.add pc (Z.of_nat (length C)) ->
       compile_cont G (Kseq e k) pc.
 (*  | ccont_if :
-      codeseq_at G pc [IBnz R_COM l1] ->  
-      codeseq_at G 
-      pc' = Pointer.add pc (Z.of_nat (length Ct + length Cf + 4)) -> 
+      codeseq_at G pc [IBnz R_COM l1] ->
+      codeseq_at G
+      pc' = Pointer.add pc (Z.of_nat (length Ct + length Cf + 4)) ->
       compile_cont G (Kif et ef) pc.
-  
+
 | Kseq (e: expr) (k: cont)
 | Kif (e1: expr) (e2: expr) (k: cont)
 | Kalloc (k: cont)
@@ -228,12 +191,12 @@ Inductive compile_cont (G: Intermediate.GlobalEnv.global_env) : cont -> Pointer.
 
 Inductive match_config (SG: Source.GlobalEnv.global_env) (IG: Intermediate.GlobalEnv.global_env): S.CS.state -> I.CS.state -> Prop :=
   | match_config_intro: forall comp C s mem k e gps regs pc,
-      expr_codeseq_at IG pc C e -> 
-      compile_cont IG k (Pointer.add pc (Z.of_nat (length C))) -> 
+      expr_codeseq_at IG pc C e ->
+      compile_cont IG k (Pointer.add pc (Z.of_nat (length C))) ->
       (* some matching condintion on SG IG *)
       match_config SG IG (comp, s, mem, k, e) (gps, mem, regs, pc).
 
-Ltac inv H := (inversion H; subst; clear H). 
+Ltac inv H := (inversion H; subst; clear H).
 
 About CompMonad.Comp.bind.
 
@@ -254,7 +217,7 @@ Ltac monadInv1 H :=
   match type of H with
   | (Some _ = Some _) =>
       inversion H; clear H; try subst
-  | (None = Some _) => 
+  | (None = Some _) =>
       discriminate
   | (CompMonad.Comp.bind ?F ?G = OK ?X) =>
       let x := fresh "x" in (
@@ -284,21 +247,21 @@ Ltac monadInv1 H :=
 Ltac monadInv H :=
   monadInv1 H ||
   match type of H with
-  | (?F _ _ _ _ _ _ _ _ = OK _) => 
+  | (?F _ _ _ _ _ _ _ _ = OK _) =>
       ((progress simpl in H) || unfold F in H); monadInv1 H
-  | (?F _ _ _ _ _ _ _ = OK _) => 
+  | (?F _ _ _ _ _ _ _ = OK _) =>
       ((progress simpl in H) || unfold F in H); monadInv1 H
-  | (?F _ _ _ _ _ _ = OK _) => 
+  | (?F _ _ _ _ _ _ = OK _) =>
       ((progress simpl in H) || unfold F in H); monadInv1 H
-  | (?F _ _ _ _ _ = OK _) => 
+  | (?F _ _ _ _ _ = OK _) =>
       ((progress simpl in H) || unfold F in H); monadInv1 H
-  | (?F _ _ _ _ = OK _) => 
+  | (?F _ _ _ _ = OK _) =>
       ((progress simpl in H) || unfold F in H); monadInv1 H
-  | (?F _ _ _ = OK _) => 
+  | (?F _ _ _ = OK _) =>
       ((progress simpl in H) || unfold F in H); monadInv1 H
-  | (?F _ _ = OK _) => 
+  | (?F _ _ = OK _) =>
       ((progress simpl in H) || unfold F in H); monadInv1 H
-  | (?F _ = OK _) => 
+  | (?F _ = OK _) =>
       ((progress simpl in H) || unfold F in H); monadInv1 H
   end.
  *)
@@ -306,21 +269,21 @@ Ltac monadInv H :=
 Lemma simulation_step:
   forall SG IG sstate1 sstate2 istate1 t,
   S.CS.kstep SG sstate1 t sstate2 ->
-  match_config SG IG sstate1 istate1 -> 
+  match_config SG IG sstate1 istate1 ->
   exists istate2,
       star (I.CS.sem tp).(step) IG istate1 t istate2
 (*       (plus (transition C) machstate1 machstate2
        \/ (star (transition C) machstate1 machstate2 /\ measure impstate2 < measure impstate1)) *)
    /\ match_config SG IG sstate2 istate2.
 Proof.
-  intros until t; intros KSTEP MATCH. 
+  intros until t; intros KSTEP MATCH.
   inversion KSTEP; clear KSTEP; subst; inversion MATCH; clear MATCH; subst; simpl in *.
 
   - (* binop1 *)
     econstructor; split.
-    apply star_refl. 
-    econstructor. 
-    inv H5. simpl in H. unfold run in H. 
+    apply star_refl.
+    econstructor.
+    inv H5. simpl in H. unfold run in H.
     destruct (        CompMonad.Comp.bind Compiler.comp_env code (list instr) (compile_expr e1)
           (fun c1 : code =>
            CompMonad.Comp.bind Compiler.comp_env code (list instr) (compile_expr e2)
@@ -330,8 +293,8 @@ Proof.
                  IStore R_SP R_COM
                  :: IBinOp Add R_SP R_ONE R_SP
                     :: c2 ++ [IBinOp Minus R_SP R_ONE R_SP; ILoad R_SP R_AUX1; IBinOp op R_AUX1 R_COM R_COM])))
-          comp_env) eqn:X; [|inv H]. 
-    destruct p0; inv H. 
+          comp_env) eqn:X; [|inv H].
+    destruct p0; inv H.
 
     destruct (CompMonad.Comp.bind Compiler.comp_env code (list instr) (compile_expr e1)
            (fun c1 : code =>
@@ -342,7 +305,7 @@ Proof.
                   IStore R_SP R_COM
                   :: IBinOp Add R_SP R_ONE R_SP
                      :: c2 ++ [IBinOp Minus R_SP R_ONE R_SP; ILoad R_SP R_AUX1; IBinOp op R_AUX1 R_COM R_COM])))
-           comp_env) eqn:?; inv X. 
+           comp_env) eqn:?; inv X.
     destruct (CompMonad.Comp.bind Compiler.comp_env code (list instr) (compile_expr e1)
             (fun c1 : code =>
              CompMonad.Comp.bind Compiler.comp_env code (list instr) (compile_expr e2)
@@ -352,7 +315,7 @@ Proof.
                    IStore R_SP R_COM
                    :: IBinOp Add R_SP R_ONE R_SP
                    :: c2 ++ [IBinOp Minus R_SP R_ONE R_SP; ILoad R_SP R_AUX1; IBinOp op R_AUX1 R_COM R_COM])))
-            comp_env) eqn: X; inv Heqo. 
+            comp_env) eqn: X; inv Heqo.
     destruct (CompMonad.Comp.bind Compiler.comp_env code (list instr) (compile_expr e1)
            (fun c1 : code =>
             CompMonad.Comp.bind Compiler.comp_env code (list instr) (compile_expr e2)
@@ -362,7 +325,7 @@ Proof.
                   IStore R_SP R_COM
                   :: IBinOp Add R_SP R_ONE R_SP
                      :: c2 ++ [IBinOp Minus R_SP R_ONE R_SP; ILoad R_SP R_AUX1; IBinOp op R_AUX1 R_COM R_COM])))
-           comp_env) eqn:?; inv X. 
+           comp_env) eqn:?; inv X.
  CompMonad.Comp.bind Compiler.comp_env code (list instr) (compile_expr e1)
            (fun c1 : code =>
             CompMonad.Comp.bind Compiler.comp_env code (list instr) (compile_expr e2)
@@ -391,7 +354,7 @@ Fixpoint stack_usage (e:expr) : nat :=
   | E_call C P e0 => max (stack_usage e0) 2   (* subject to change? *)
   | E_exit => 0
   end.
-                         
+
 (* In reality, may want to prove this simultaneously with correctness... *)
 
 Import Intermediate.
@@ -399,51 +362,30 @@ Import Intermediate.
 Lemma stack_usage_correct:
   forall (e:expr) C G pc (m:nat) st mem regs sp sp' pc' st' mem' regs' t,
   run init_env (compile_expr e) = Some C  ->  (* temporary -- nonsense? *)
-  codeseq_at G pc C -> 
-  stack_usage e = m -> 
-  Register.get R_SP regs = Ptr sp ->  
+  codeseq_at G pc C ->
+  stack_usage e = m ->
+  Register.get R_SP regs = Ptr sp ->
   plus (I.CS.sem tp).(step) G (st,mem,regs,pc) t (st',mem',regs',pc') ->
   Pointer.leq pc pc' = Some true ->
-  Pointer.leq pc' (Pointer.add pc (Z.of_nat (length C))) = Some true ->   
-  Register.get R_SP regs' = Ptr sp' -> 
+  Pointer.leq pc' (Pointer.add pc (Z.of_nat (length C))) = Some true ->
+  Register.get R_SP regs' = Ptr sp' ->
   Pointer.leq sp sp' = Some true /\ Pointer.leq sp' (Pointer.add sp (Z.of_nat m)) = Some true.
 Proof.
   unfold run.
   induction e; intros.
-  - destruct v; simpl in H; inv H. 
+  - destruct v; simpl in H; inv H.
     + simpl in H5.
-      inv H3. 
-      inv H1. 
+      inv H3.
+      inv H1.
       * (* one step *)
-        rewrite <- I.CS.eval_step_correct in H.  simpl in H. 
-        inv H0.  rewrite H1 in H. rewrite H3 in H. 
+        rewrite <- I.CS.eval_step_correct in H.  simpl in H.
+        inv H0.  rewrite H1 in H. rewrite H3 in H.
         assert (Pointer.offset pc <? 0 = false). admit.
-        rewrite H0 in H. 
+        rewrite H0 in H.
         inv H0. inv H10.
         destruct H0 as [CC [P1 [P2 [P3 P4]]]].
-        rewrite P1 in H.  inv H.  rewrite H1 in P2.  inv P2. 
-      inv H1. 
+        rewrite P1 in H.  inv H.  rewrite H1 in P2.  inv P2.
+      inv H1.
 
-  simpl in H. 
+  simpl in H.
 *)
-
-Theorem well_formedness_preservation:
-  Intermediate.well_formed_program tp.
-Proof.
-Admitted.
-
-Theorem closedness_preservation:
-  Intermediate.closed_program tp.
-Proof.
-Admitted.
-
-Theorem I_simulates_S:
-  forward_simulation (S.CS.sem p) (I.CS.sem tp).
-Proof.
-Admitted.
-
-Theorem correct_compilation:
-  backward_simulation (S.CS.sem p) (I.CS.sem tp).
-Proof.
-Admitted.
-End Correctness.

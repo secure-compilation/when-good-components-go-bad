@@ -18,57 +18,10 @@ Inductive expr : Type :=
 Module Source.
   Record program : Type := mkProg {
     prog_interface : Program.interface;
-    prog_procedures : PMap.t (PMap.t expr);
-    prog_buffers : PMap.t (nat + list value);
-    prog_main : Component.id * Procedure.id
+    prog_procedures : NMap (NMap expr);
+    prog_buffers : NMap (nat + list value);
+    prog_main : option (Component.id * Procedure.id)
   }.
-
-  Inductive prog_eq : program -> program -> Prop :=
-  | prog_eq_intro: forall iface1 procs1 bufs1 iface2 procs2 bufs2 main1 main2,
-      PMap.Equal iface1 iface2 ->
-      PMap.Equal procs1 procs2 ->
-      PMap.Equal bufs1 bufs2 ->
-      main1 = main2 ->
-      prog_eq (mkProg iface1 procs1 bufs1 main1) (mkProg iface2 procs2 bufs2 main2).
-
-  Lemma prog_eq_refl:
-    forall p,
-      prog_eq p p.
-  Proof.
-    intros p.
-    destruct p; constructor; reflexivity.
-  Qed.
-
-  Lemma prog_eq_sym:
-    forall p1 p2,
-      prog_eq p1 p2 -> prog_eq p2 p1.
-  Proof.
-    intros p1 p2 H.
-    inversion H; subst.
-    constructor;
-      try reflexivity;
-      try symmetry; assumption.
-  Qed.
-
-  Lemma prog_eq_trans:
-    forall p1 p2 p3,
-      prog_eq p1 p2 -> prog_eq p2 p3 -> prog_eq p1 p3.
-  Proof.
-    intros p1 p2 p3 H1 H2.
-    inversion H1; subst; inversion H2; subst;
-      constructor;
-      try reflexivity;
-      try etransitivity; eauto.
-  Qed.
-
-  Add Parametric Relation: (program) (prog_eq)
-      reflexivity proved by (prog_eq_refl)
-      symmetry proved by (prog_eq_sym)
-      transitivity proved by (prog_eq_trans)
-        as prog_eq_rel.
-
-  Definition single_component (p: program) : Prop :=
-    PMap.cardinal (prog_interface p) = 1%nat.
 
   (* An expression is well-formed when:
      1) calls outside the component are allowed by the interface
@@ -101,23 +54,23 @@ Module Source.
       well_formed_expr p cur_comp e' /\
       (imported_procedure (prog_interface p) cur_comp C' P' \/
        (cur_comp = C' /\
-        exists C'procs, PMap.MapsTo C' C'procs (prog_procedures p) /\
-                   PMap.In P' C'procs))
+        exists C'procs, getm (prog_procedures p) C' = Some C'procs  /\
+                        P' \in domm C'procs))
     end.
 
   (* Component C has a buffer of size at least one *)
   Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
-    (exists size, PMap.find C (prog_buffers p) = Some (inl size) /\
+    (exists size, getm (prog_buffers p) C = Some (inl size) /\
                   (size > 0)%nat) \/
-    (exists values, PMap.find C (prog_buffers p) = Some (inr values) /\
+    (exists values, getm (prog_buffers p) C = Some (inr values) /\
                   (length values > 0)%nat).
 
   (** Lookup definition of procedure [C.P] in the map [procs]. *)
   Definition find_procedure
-             (procs: PMap.t (PMap.t expr))
+             (procs: NMap (NMap expr))
              (C: Component.id) (P: Procedure.id) : option expr :=
-    match PMap.find C procs with
-    | Some C_procs => PMap.find P C_procs
+    match getm procs C with
+    | Some C_procs => getm C_procs P
     | None         => None
     end.
 
@@ -127,8 +80,8 @@ Module Source.
       sound_interface (prog_interface p);
     (* each declared component has the required static buffers *)
     wfprog_buffers_existence:
-      forall C, PMap.In C (prog_interface p) ->
-           has_required_local_buffers p C;
+      forall C, C \in domm (prog_interface p) ->
+                has_required_local_buffers p C;
     (* each exported procedure is actually defined *)
     wfprog_exported_procedures_existence:
       forall C P, exported_procedure (prog_interface p) C P ->
@@ -140,9 +93,9 @@ Module Source.
         well_formed_expr p C Pexpr;
     (* if the main component exists, then the main procedure must exist as well *)
     wfprog_main_existence:
-      forall main_procs,
-        PMap.MapsTo (fst (prog_main p)) main_procs (prog_procedures p) ->
-        PMap.In (snd (prog_main p)) main_procs
+      forall mainC mainP main_procs,
+        prog_main p = Some (mainC, mainP) ->
+        getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
   }.
 
   (* a closed program is a program with a closed interface and an existing main
@@ -153,62 +106,62 @@ Module Source.
       closed_interface (prog_interface p);
     (* the main procedure must exist *)
     cprog_main_existence:
-      exists procs,
-        PMap.MapsTo (fst (prog_main p)) procs (prog_procedures p) /\
-        PMap.In (snd (prog_main p)) procs;
+      exists mainC mainP main_procs,
+        prog_main p = Some (mainC, mainP) /\
+        getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
   }.
 
-  Definition linkable_programs (p1 p2: program) : Prop :=
-    (* both programs are well-formed *)
-    well_formed_program p1 /\ well_formed_program p2 /\
-    (* their interfaces are disjoint *)
-    PMapExtra.Disjoint (prog_interface p1) (prog_interface p2) /\
-    (* the union of their interfaces is sound *)
-    sound_interface (PMapExtra.update (prog_interface p1) (prog_interface p2)).
+  Inductive linkable_programs: program -> program -> Prop :=
+  | linkable_programs_intro:
+      forall prog1 prog2,
+        well_formed_program prog1 ->
+        well_formed_program prog2 ->
+        sound_interface (unionm (prog_interface prog1) (prog_interface prog2)) ->
+        fdisjoint (domm (prog_interface prog1)) (domm (prog_interface prog2)) ->
+        fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)) ->
+        fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)) ->
+        linkable_mains (prog_main prog1) (prog_main prog2) ->
+        linkable_programs prog1 prog2.
 
-  Definition program_link (p1 p2: program) mainC mainP : program :=
-    {| prog_interface := PMapExtra.update (prog_interface p1) (prog_interface p2);
-       prog_procedures := PMapExtra.update (prog_procedures p1) (prog_procedures p2);
-       prog_buffers := PMapExtra.update (prog_buffers p1) (prog_buffers p2);
-       prog_main := (mainC, mainP) |}.
+  Definition program_link (p1 p2: program) : program :=
+    {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
+       prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);
+       prog_buffers := unionm (prog_buffers p1) (prog_buffers p2);
+       prog_main := main_link (prog_main p1) (prog_main p2) |}.
 
   Fixpoint initialize_buffer
-           (cmem: ComponentMemory.t) (b: Block.id) (values: list value) i
+           (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)
     : ComponentMemory.t :=
-    match values with
-    | [] => cmem
-    | v :: values' =>
-      match ComponentMemory.store cmem b i v with
-      | Some cmem' => initialize_buffer cmem' b values' (1+i)
-      | None => cmem (* bad case that shouldn't happen, just return cmem *)
-      end
-    end.
+    let fix init m vs i :=
+        match vs with
+        | [] => m
+        | v :: vs' =>
+          match ComponentMemory.store m b i v with
+          | Some m' =>
+            init m' vs' (1+i)%Z
+          | None =>
+            (* bad case that shouldn't happen, just return memory *)
+            init m vs' (1+i)%Z
+          end
+        end
+    in init Cmem values 0%Z.
 
-  Fixpoint alloc_buffers
-           (bufs: list (Component.id * (nat + list value)))
-           (m: Memory.t) (addrs: PMap.t Block.id)
-    : Memory.t * PMap.t Block.id :=
-    match bufs with
-    | [] => (m, addrs)
-    | (C, init) :: bufs' =>
-      let memC := match PMap.find C m with
-                  | Some memC => memC
-                  | None => ComponentMemory.empty
-                  end in
-      match init with
-      | inl size =>
-        let '(memC', b) := ComponentMemory.alloc memC size in
-        alloc_buffers bufs' (PMap.add C memC' m) (PMap.add C b addrs)
-      | inr values =>
-        let '(memC', b) := ComponentMemory.alloc memC (length values) in
-        let memC'' := initialize_buffer memC' b values 0 in
-        alloc_buffers bufs' (PMap.add C memC'' m) (PMap.add C b addrs)
-      end
-    end.
-
-  Definition init_all (p: program) : PMap.t Block.id * Memory.t :=
-    let pbufs := PMap.elements (prog_buffers p) in
-    let init_mem := Memory.empty (map fst pbufs) in
-    let '(mem, bufs) := alloc_buffers pbufs init_mem (@PMap.empty Block.id) in
-    (bufs, mem).
+  Definition prepare_buffers (p: program) : Memory.t * NMap Block.id :=
+    let fix alloc mem addrs bufs :=
+        match bufs with
+        | [] => (mem, addrs)
+        | (C, init) :: bufs' =>
+          match init with
+          | inl size =>
+            let '(Cmem', b) := ComponentMemory.alloc ComponentMemory.empty size in
+            alloc (setm mem C Cmem') (setm addrs C b) bufs'
+          | inr values =>
+            let '(Cmem', b) := ComponentMemory.alloc ComponentMemory.empty
+                                                     (length values) in
+            let Cmem'' := initialize_buffer Cmem' b values in
+            alloc (setm mem C Cmem'') (setm addrs C b) bufs'
+          end
+        end
+    in
+    alloc emptym emptym (elementsm (prog_buffers p)).
 End Source.
