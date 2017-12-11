@@ -4,12 +4,23 @@ Require Import Common.Values.
 Module Type AbstractComponentMemory.
   Parameter t : Type.
 
-  Parameter prealloc : list (Block.id * nat) -> t.
+  Parameter prealloc : list (Block.id * (nat + list value)) -> t.
   Parameter empty : t.
   Parameter reserve_block : t -> t * Block.id.
   Parameter alloc : t -> nat -> t * Block.id.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
+
+  (* AAA: We need to add some missing lemmas here:
+
+     - The specifications of prealloc, empty, reserve_block.
+
+     - The fact that alloc does not overwrite the contents of existing blocks
+       (cf. the comment before [ComponentMemory.t]).
+
+     - Something about the length of the allocated blocks of alloc
+
+  *)
 
   Axiom load_after_alloc:
     forall m m' n b,
@@ -23,10 +34,38 @@ Module Type AbstractComponentMemory.
     forall b' i',
       ((b' <> b \/ i' <> i) /\ load m' b' i' = load m b' i') \/
       load m' b' i' = Some v.
+
+  Axiom store_after_load:
+    forall m b i v v',
+      load m b i = Some v ->
+      exists m',
+        store m b i v' = Some m'.
+
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
   Definition block := list value.
+
+  (* AAA: The representation of component memories is problematic, because there
+     is nothing that guarantees that [nextblock] is undefined in [content].
+     Without this, there is no way of proving the following fact:
+
+     forall m b i v n m',
+       load m b i = Some v ->
+       alloc m n = Some m' ->
+       load m' b i = Some v
+
+     There are two solutions:
+
+     1- Remove the [nextblock] field and change the definition of [alloc] so
+        that it allocates the new block under the successor of the greatest
+        [positive] in the domain of the memory.
+
+     2- Add the folliwing field to mem:
+
+        forall b, nextblock <= b -> PMap.find b content = None
+
+   *)
 
   Record mem := mkMem {
     content : PMap.t block;
@@ -34,12 +73,16 @@ Module ComponentMemory : AbstractComponentMemory.
   }.
   Definition t := mem.
 
-  Definition prealloc (bufs: list (Block.id * nat)) : t :=
+  Definition prealloc (bufs: list (Block.id * (nat + list value))) : t :=
     let fix prepare m bs :=
         match bs with
         | [] => m
-        | (b, size) :: bs' =>
+        | (b, inl size) :: bs' =>
           let chunk := repeat Undef size in
+          let m' := {| content := PMap.add b chunk (content m);
+                       nextblock := Pos.max (1+b) (nextblock m) |} in
+          prepare m' bs'
+        | (b, inr chunk) :: bs' =>
           let m' := {| content := PMap.add b chunk (content m);
                        nextblock := Pos.max (1+b) (nextblock m) |} in
           prepare m' bs'
@@ -71,7 +114,7 @@ Module ComponentMemory : AbstractComponentMemory.
     end.
 
   Fixpoint block_update data offset val : option block :=
-    match data with 
+    match data with
     | [] => None (* store out of bounds *)
     | val' :: rest =>
       match offset with
@@ -83,7 +126,7 @@ Module ComponentMemory : AbstractComponentMemory.
         end
       end
     end.
-  
+
   Definition store m b i v : option mem :=
     match PMap.find b (content m) with
     | Some chunk =>
@@ -120,9 +163,9 @@ Module ComponentMemory : AbstractComponentMemory.
   Proof.
     induction b; intros; inv H.
     destruct o.
-    + inv H1; auto.  
+    + inv H1; auto.
     + destruct (block_update b o v) eqn:?; inv H1.
-      simpl. 
+      simpl.
       eapply IHb; eauto.
   Qed.
 
@@ -134,16 +177,16 @@ Module ComponentMemory : AbstractComponentMemory.
   Proof.
     induction b; intros; inv H.
     destruct o.
-    + inv H2. 
-      destruct o'. 
+    + inv H2.
+      destruct o'.
       - intuition.
       - auto.
     + destruct (block_update b o v) eqn:?.
-      - inv H2. 
-        destruct o'. 
+      - inv H2.
+        destruct o'.
         * auto.
         * simpl. eauto.
-      - inv H2. 
+      - inv H2.
   Qed.
 
   Lemma load_after_store:
@@ -157,51 +200,59 @@ Module ComponentMemory : AbstractComponentMemory.
     destruct (PMapFacts.eq_dec b b').
     + destruct (Z.eq_dec i i').
       - subst. right.
-         unfold load.  unfold store in Hstore. 
-         destruct (PMap.find (elt:=block) b' (content m)) eqn:?; [| inv Hstore]. 
-         destruct i'; [| |inv Hstore].  
-         * destruct (block_update b (Z.to_nat 0) v) eqn: E; inv Hstore. 
+         unfold load.  unfold store in Hstore.
+         destruct (PMap.find (elt:=block) b' (content m)) eqn:?; [| inv Hstore].
+         destruct i'; [| |inv Hstore].
+         * destruct (block_update b (Z.to_nat 0) v) eqn: E; inv Hstore.
            simpl. (* can't stop from unfolding nth_error...argh *)
            rewrite PMapFacts.add_eq_o; auto.
-           apply load_after_update_same in E. apply E. 
-         * destruct (block_update b (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
-           simpl. 
+           apply load_after_update_same in E. apply E.
+         * destruct (block_update b (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore.
+           simpl.
            rewrite PMapFacts.add_eq_o; auto.
-           eapply load_after_update_same; eauto.  
+           eapply load_after_update_same; eauto.
       - left. subst b'. intuition.
         unfold load.  unfold store in Hstore.
-        destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
-        destruct i; [| | inv Hstore]. 
-        * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
-          simpl. 
-          rewrite PMapFacts.add_eq_o; auto.
-          destruct i'. 
-          ** intuition.
-          ** erewrite load_after_update_other; eauto. 
-             rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
-          ** auto.
-        * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
+        destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore].
+        destruct i; [| | inv Hstore].
+        * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore.
           simpl.
           rewrite PMapFacts.add_eq_o; auto.
-          destruct i'. 
-          ** erewrite load_after_update_other; eauto. 
+          destruct i'.
+          ** intuition.
+          ** erewrite load_after_update_other; eauto.
              rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
-          ** erewrite load_after_update_other; eauto. 
-             simpl. 
-             intro. apply Pos2Nat.inj_iff in H.             
+          ** auto.
+        * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore.
+          simpl.
+          rewrite PMapFacts.add_eq_o; auto.
+          destruct i'.
+          ** erewrite load_after_update_other; eauto.
+             rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
+          ** erewrite load_after_update_other; eauto.
+             simpl.
+             intro. apply Pos2Nat.inj_iff in H.
              subst.  intuition.
           ** auto.
     +  left. intuition.
-       unfold load. unfold store in Hstore. 
-       destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore]. 
-       destruct i; [| | inv Hstore]. 
-       * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore. 
-         simpl. 
-         rewrite PMapFacts.add_neq_o; auto.
-       * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore. 
+       unfold load. unfold store in Hstore.
+       destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore].
+       destruct i; [| | inv Hstore].
+       * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore.
          simpl.
          rewrite PMapFacts.add_neq_o; auto.
-Qed.
+       * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore.
+         simpl.
+         rewrite PMapFacts.add_neq_o; auto.
+  Qed.
+
+  (** AAA: TODO *)
+  Lemma store_after_load:
+    forall m b i v v',
+      load m b i = Some v ->
+      exists m',
+        store m b i v' = Some m'.
+  Proof. Admitted.
 
 End ComponentMemory.
 
@@ -222,6 +273,10 @@ Module Memory.
     | None => None
     end.
 
+  (* AAA: Destructing the pointer in the definitions of [load] and [store] is
+     not a good idea, because it causes Coq to unfold any expression of the forms
+     [load mem (C, b, o)] and [store mem (C, b, o) v]. *)
+
   Definition load (mem : t) (ptr : Pointer.t) : option value :=
     let '(C, b, o) := ptr in
     match PMap.find C mem with
@@ -239,6 +294,22 @@ Module Memory.
       end
     | None => None
     end.
+
+  Lemma load_after_store_eq mem ptr v mem' :
+    store mem  ptr v = Some mem' ->
+    load  mem' ptr   = Some v.
+  Proof. Admitted.
+
+  Lemma load_after_store_neq mem ptr v mem' ptr' :
+    ptr <> ptr' ->
+    store mem  ptr  v = Some mem' ->
+    load  mem' ptr'   = load mem ptr'.
+  Proof. Admitted.
+
+  Lemma store_after_load mem ptr v v' :
+    load mem ptr = Some v ->
+    exists mem', store mem ptr v' = Some mem'.
+  Proof. Admitted.
 
   Lemma program_changes_are_preserved:
     forall ctx mem C CI,
@@ -578,5 +649,86 @@ Module Memory.
         * simpl in *.
           apply PMapFacts.not_mem_in_iff in H.
           unfold negb. rewrite H. reflexivity.
+  Qed.
+
+  Lemma filter_identity:
+    forall (mem: Memory.t),
+      PMap.Equal (PMapExtra.filter (fun _ _ => true) mem) mem.
+  Proof.
+    intros mem C.
+    destruct (PMap.find C (PMapExtra.filter (fun _ _ => true) mem)) eqn:Hfind.
+    - apply PMap.find_2 in Hfind.
+      apply PMapExtra.filter_iff in Hfind.
+      + destruct Hfind as [Hfound []].
+        apply PMap.find_1 in Hfound.
+        rewrite Hfound. reflexivity.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - apply PMapFacts.not_find_in_iff in Hfind.
+      symmetry. apply PMapFacts.not_find_in_iff.
+      intro contra. apply Hfind.
+      destruct contra as [Cmem contra].
+      eexists. apply PMapExtra.filter_iff.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+      + split; eauto.
+  Qed.
+
+  Theorem equivalence_under_filter:
+    forall (mem1 mem2: t) f,
+      PMap.Equal mem1 mem2 ->
+      PMap.Equal (PMapExtra.filter f mem1) (PMapExtra.filter f mem2).
+  Proof.
+    intros mem1 mem2 f Heq C.
+    destruct (PMap.find C (PMapExtra.filter f mem1)) eqn:Hfind1;
+    destruct (PMap.find C (PMapExtra.filter f mem2)) eqn:Hfind2.
+    - apply PMap.find_2 in Hfind1.
+      apply PMap.find_2 in Hfind2.
+      apply PMapExtra.filter_iff in Hfind1.
+      apply PMapExtra.filter_iff in Hfind2.
+      destruct Hfind1 as [Hmapsto1 Hcond1].
+      destruct Hfind2 as [Hmapsto2 Hcond2].
+      rewrite Heq in Hmapsto1.
+      erewrite (PMapFacts.MapsTo_fun Hmapsto1 Hmapsto2).
+      reflexivity.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - apply PMap.find_2 in Hfind1.
+      apply PMapFacts.not_find_in_iff in Hfind2.
+      apply PMapExtra.filter_iff in Hfind1.
+      destruct Hfind1 as [Hmapsto1 Hcond1].
+      exfalso.
+      apply Hfind2.
+      eexists. apply PMapExtra.filter_iff.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+      + rewrite Heq in Hmapsto1.
+        split; eauto.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - apply PMap.find_2 in Hfind2.
+      apply PMapFacts.not_find_in_iff in Hfind1.
+      apply PMapExtra.filter_iff in Hfind2.
+      destruct Hfind2 as [Hmapsto2 Hcond2].
+      exfalso.
+      apply Hfind1.
+      eexists. apply PMapExtra.filter_iff.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+      + rewrite <- Heq in Hmapsto2.
+        split; eauto.
+      + (* morphisms stuff *)
+        unfold Morphisms.Proper, Morphisms.respectful.
+        intros. subst. reflexivity.
+    - reflexivity.
   Qed.
 End Memory.

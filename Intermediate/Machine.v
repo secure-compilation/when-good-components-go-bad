@@ -89,16 +89,72 @@ Module EntryPoint.
     | Some addrs => PMap.find P addrs
     | None => None
     end.
+
+  Lemma get_from_same_entrypoints:
+    forall E1 E2 C P,
+      PMap.Equal E1 E2 ->
+      get C P E1 = get C P E2.
+  Proof.
+    intros E1 E2 C P Heq.
+    unfold get.
+    rewrite Heq.
+    destruct (PMap.find C E2);
+      reflexivity.
+  Qed.
 End EntryPoint.
 
 (* programs *)
 
-Record program := {
+Record program := mkProg {
   prog_interface : Program.interface;
   prog_procedures : PMap.t (PMap.t code);
-  prog_buffers : PMap.t (list (Block.id * nat));
+  prog_buffers : PMap.t (list (Block.id * (nat + list value)));
   prog_main : Component.id * Procedure.id
 }.
+
+Inductive prog_eq : program -> program -> Prop :=
+| prog_eq_intro: forall iface1 procs1 bufs1 iface2 procs2 bufs2 main1 main2,
+    PMap.Equal iface1 iface2 ->
+    PMap.Equal procs1 procs2 ->
+    PMap.Equal bufs1 bufs2 ->
+    main1 = main2 ->
+    prog_eq (mkProg iface1 procs1 bufs1 main1) (mkProg iface2 procs2 bufs2 main2).
+
+Lemma prog_eq_refl:
+  forall p,
+    prog_eq p p.
+Proof.
+  intros p.
+  destruct p; constructor; reflexivity.
+Qed.
+
+Lemma prog_eq_sym:
+  forall p1 p2,
+    prog_eq p1 p2 -> prog_eq p2 p1.
+Proof.
+  intros p1 p2 H.
+  inversion H; subst.
+  constructor;
+    try reflexivity;
+    try symmetry; assumption.
+Qed.
+
+Lemma prog_eq_trans:
+  forall p1 p2 p3,
+    prog_eq p1 p2 -> prog_eq p2 p3 -> prog_eq p1 p3.
+Proof.
+  intros p1 p2 p3 H1 H2.
+  inversion H1; subst; inversion H2; subst;
+    constructor;
+    try reflexivity;
+    try etransitivity; eauto.
+Qed.
+
+Add Parametric Relation: (program) (prog_eq)
+    reflexivity proved by (prog_eq_refl)
+    symmetry proved by (prog_eq_sym)
+    transitivity proved by (prog_eq_trans)
+      as prog_eq_rel.
 
 Definition single_component (p: program) : Prop :=
   PMap.cardinal (prog_interface p) = 1%nat.
@@ -140,22 +196,10 @@ Definition well_formed_instruction
   | IHalt => True
   end.
 
-(* Component C has at least two buffers of size at least one:
-   the first one is for passing the call argument, whereas the second one is used
-   as a temporary store when passing controls between components *)
-Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
-  exists b1 b2 bufs,
-    PMap.find C (prog_buffers p) = Some (b1 :: b2 :: bufs) /\
-    (snd b1 > 0)%nat /\ (snd b2 > 0)%nat.
-
 Record well_formed_program (p: program) := {
   (* the interface is sound (but maybe not closed) *)
   wfprog_interface_soundness:
     sound_interface (prog_interface p);
-  (* each declared component has the required static buffers *)
-  wfprog_buffers_existence:
-    forall C, PMap.In C (prog_interface p) ->
-         has_required_local_buffers p C;
   (* each exported procedure actually exists *)
   wfprog_exported_procedures_existence:
     forall C CI,
@@ -192,14 +236,7 @@ Record closed_program (p: program) := {
       PMap.In (snd (prog_main p)) procs;
 }.
 
-Definition prog_eq (p1 p2: program) : Prop :=
-  PMap.Equal (prog_interface p1) (prog_interface p2) /\
-  PMap.Equal (prog_procedures p1) (prog_procedures p2) /\
-  PMap.Equal (prog_buffers p1) (prog_buffers p2) /\
-  prog_main p1 = prog_main p2.
-
-(* TODO prove that prog_eq is an equivalence relation *)
-
+(* TOOD add something about main, e.g. they specify the same main *)
 Definition linkable_programs (p1 p2: program) : Prop :=
   (* both programs are well-formed *)
   well_formed_program p1 /\ well_formed_program p2 /\
@@ -207,16 +244,16 @@ Definition linkable_programs (p1 p2: program) : Prop :=
   PMapExtra.Disjoint (prog_interface p1) (prog_interface p2) /\
   (*  the sets of components having buffers are disjoint *)
   PMapExtra.Disjoint (prog_buffers p1) (prog_buffers p2) /\
-  (* ^ APT added 
-     Need something like this in order to prove linking_well_formedness, 
+  (* ^ APT added
+     Need something like this in order to prove linking_well_formedness,
      for example the buffers_existence clause.  Interface disjointness is not enough.
      For suppose C is in interface of p1 (hence not in interface of p2) but has buffers defined in p2
      (about which we know nothing).  Since p2 wins over p1 when combining buffers, we have to show
      that these p2 buffers are the required ones, which we don't know. *)
   (* the sets of components having procedures are disjoint *)
   PMapExtra.Disjoint (prog_procedures p1) (prog_procedures p2) /\
-  (* ^ APT added 
-     For similar reasons, needed to prove exported_procedures_existence. *)  
+  (* ^ APT added
+     For similar reasons, needed to prove exported_procedures_existence. *)
   (* the union of their interfaces is sound *)
   sound_interface (PMapExtra.update (prog_interface p1) (prog_interface p2)).
 
@@ -226,52 +263,61 @@ Definition program_link (p1 p2: program) mainC mainP : program :=
      prog_buffers := PMapExtra.update (prog_buffers p1) (prog_buffers p2);
      prog_main := (mainC, mainP) |}.
 
+Definition partialize_program (p: program) (ctx: Program.interface) : program :=
+  {| prog_interface :=
+       PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) (prog_interface p);
+     prog_procedures :=
+       PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) (prog_procedures p);
+     prog_buffers :=
+       PMapExtra.filter (fun k _ => negb (PMap.mem k ctx)) (prog_buffers p);
+     prog_main := prog_main p |}.
+
 Ltac inv H := (inversion H; subst; clear H).
 
-(* TODO: Figure out what to do about the last clause. *)
 Theorem linking_well_formedness:
   forall p1 p2 mainC mainP,
     linkable_programs p1 p2 ->
     well_formed_program (program_link p1 p2 mainC mainP).
 Proof.
-  intros. destruct H as (WF1 & WF2 & IDISJ & BDISJ & PDISJ & SND). 
-  constructor. 
-  + auto. 
-  + simpl. 
-    intros. 
+  (*
+  intros. destruct H as (WF1 & WF2 & IDISJ & BDISJ & PDISJ & SND).
+  constructor.
+  + auto.
+  + simpl.
+    intros.
     rewrite PMapExtra.update_in_iff in H.
-    inv H. 
+    inv H.
     - destruct WF1. pose proof (wfprog_buffers_existence0 C H0).
-      clear - H BDISJ. unfold has_required_local_buffers in *. simpl. 
+      clear - H BDISJ. unfold has_required_local_buffers in *. simpl.
       destruct H as (b1 & b2 & bufs & FND & B1 & B2).
-      exists b1, b2, bufs. 
+      exists b1, b2, bufs.
       intuition.
-      rewrite <- PMapFacts.find_mapsto_iff in FND|-*.  
-      rewrite PMapExtra.update_mapsto_iff.  
+      rewrite <- PMapFacts.find_mapsto_iff in FND|-*.
+      rewrite PMapExtra.update_mapsto_iff.
       right.
       intuition.
-      eapply BDISJ. 
+      eapply BDISJ.
       split; [| apply H].
-      rewrite PMapFacts.find_mapsto_iff in FND.  
+      rewrite PMapFacts.find_mapsto_iff in FND.
       rewrite PMapFacts.in_find_iff.
       rewrite FND. discriminate.
     - destruct WF2. pose proof (wfprog_buffers_existence0 C H0).
-      clear - H BDISJ. unfold has_required_local_buffers in *. simpl. 
+      clear - H BDISJ. unfold has_required_local_buffers in *. simpl.
       destruct H as (b1 & b2 & bufs & FND & B1 & B2).
-      exists b1, b2, bufs. 
+      exists b1, b2, bufs.
       intuition.
-      rewrite <- PMapFacts.find_mapsto_iff in FND|-*.  
-      rewrite PMapExtra.update_mapsto_iff.  
+      rewrite <- PMapFacts.find_mapsto_iff in FND|-*.
+      rewrite PMapExtra.update_mapsto_iff.
       left.
       intuition.
-  + simpl. intros. 
-    rewrite PMapExtra.update_mapsto_iff in H. 
+  + simpl. intros.
+    rewrite PMapExtra.update_mapsto_iff in H.
     inv H.
-    - destruct WF2. 
+    - destruct WF2.
       edestruct wfprog_exported_procedures_existence0 as [cprocs [pcode [Q1 Q2]]]; eauto.
       exists cprocs, pcode. intuition.
       rewrite  PMapExtra.update_mapsto_iff. intuition.
-    - inv H1. destruct WF1. 
+    - inv H1. destruct WF1.
       edestruct wfprog_exported_procedures_existence0 as [cprocs [pcode [Q1 Q2]]]; eauto.
       exists cprocs, pcode. intuition.
       rewrite PMapExtra.update_mapsto_iff. right. intuition.
@@ -279,16 +325,16 @@ Proof.
       rewrite PMapFacts.find_mapsto_iff in Q1.
       rewrite PMapFacts.in_find_iff. rewrite Q1. discriminate.
   + simpl. intros.
-    rewrite PMapExtra.update_mapsto_iff in H. 
-    inv H. 
+    rewrite PMapExtra.update_mapsto_iff in H.
+    inv H.
     - destruct WF2.
       pose proof (wfprog_well_formed_instructions0 _ _ H2 _ _ H0 _ H1).
-      destruct i; auto. 
-      * simpl in H |-*.  destruct i; auto. 
+      destruct i; auto.
+      * simpl in H |-*.  destruct i; auto.
         destruct H as [bufs [Q1 Q2]].
-        exists bufs; intuition. 
+        exists bufs; intuition.
         rewrite PMapExtra.update_mapsto_iff. left; auto.
-      * simpl in H |-*. 
+      * simpl in H |-*.
         destruct H as [cprocs [pcode Q]].
         exists cprocs, pcode. intuition.
         rewrite PMapExtra.update_mapsto_iff. left; auto.
@@ -297,24 +343,24 @@ Proof.
         exists cprocs, P', PC; intuition.
         rewrite PMapExtra.update_mapsto_iff. left; auto.
       * simpl in H|-*.
-        destruct H. 
+        destruct H.
         intuition.
         unfold imported_procedure in *.
         destruct H3 as [CI Q].
         exists CI; intuition.
-        unfold Program.has_component in *. 
+        unfold Program.has_component in *.
         rewrite PMapExtra.update_mapsto_iff. left; auto.
-    - inv H2. destruct WF1. 
+    - inv H2. destruct WF1.
       pose proof (wfprog_well_formed_instructions0 _ _ H _ _ H0 _ H1).
-      destruct i; auto. 
-      * simpl in H2 |-*.  destruct i; auto. 
+      destruct i; auto.
+      * simpl in H2 |-*.  destruct i; auto.
         destruct H2 as [bufs [Q1 Q2]].
-        exists bufs; intuition. 
-        rewrite PMapExtra.update_mapsto_iff. right; intuition. 
+        exists bufs; intuition.
+        rewrite PMapExtra.update_mapsto_iff. right; intuition.
         eapply BDISJ; split; eauto.
         apply PMapFacts.find_mapsto_iff in Q1.
         apply PMapFacts.in_find_iff.  rewrite Q1; discriminate.
-      * simpl in H2 |-*. 
+      * simpl in H2 |-*.
         destruct H2 as [cprocs [pcode Q]].
         exists cprocs, pcode. intuition.
         rewrite PMapExtra.update_mapsto_iff. right; intuition.
@@ -323,17 +369,19 @@ Proof.
         exists cprocs, P', PC; intuition.
         rewrite PMapExtra.update_mapsto_iff. right; intuition.
       * simpl in H2 |-*.
-        destruct H2. 
+        destruct H2.
         split. auto.
         unfold imported_procedure in *.
         destruct H4 as [CI Q].
         exists CI; intuition.
-        unfold Program.has_component in *. 
-        rewrite PMapExtra.update_mapsto_iff. right; intuition. 
+        unfold Program.has_component in *.
+        rewrite PMapExtra.update_mapsto_iff. right; intuition.
         eapply IDISJ; split; eauto.
-        apply PMapFacts.find_mapsto_iff in H4. 
+        apply PMapFacts.find_mapsto_iff in H4.
         rewrite PMapFacts.in_find_iff. rewrite H4. discriminate.
   + Admitted. (* This obviously isn't true for arbitrary (mainC,mainP) ! *)
+*)
+Admitted.
 
 Fixpoint init_component m E ps C Cprocs bufs
   : Memory.t * EntryPoint.t * PMap.t (PMap.t code) :=
@@ -385,5 +433,25 @@ Definition init_all (p: program)
   init_all_procs (Memory.empty [])
                  (PMap.empty (PMap.t Block.id)) (PMap.empty (PMap.t code))
                  (PMap.elements (prog_procedures p)).
+
+Theorem init_all_with_same_program:
+  forall prog1 prog2,
+  let '(m1, e1, p1) := init_all prog1 in
+  let '(m2, e2, p2) := init_all prog2 in
+  prog_eq prog1 prog2 ->
+  PMap.Equal m1 m2 /\ PMap.Equal e1 e2 /\ PMap.Equal p1 p2.
+Proof.
+Admitted.
+
+(* the initialization procedure prepares memory for exactly each component of
+   the program *)
+Theorem init_all_memory_guarantees:
+  forall p (mem: Memory.t),
+  let '(mem, _, _) := init_all p in
+  forall C,
+    PMap.In C (prog_interface p) <->
+    PMap.In C mem.
+Proof.
+Admitted.
 
 End Intermediate.

@@ -442,12 +442,8 @@ Theorem I_simulates_S:
 Proof.
 Admitted.
 
-Corollary correct_compilation:
+Theorem correct_compilation:
   backward_simulation (S.CS.sem p) (I.CS.sem tp).
 Proof.
-  apply forward_to_backward_simulation.
-  - apply I_simulates_S.
-  - apply S.CS.receptiveness.
-  - apply I.CS.determinacy.
-Qed.
+Admitted.
 End Correctness.

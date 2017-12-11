@@ -7,6 +7,7 @@ Common/Maps.v
 Common/Util.v
 Common/Memory.v
 Common/Linking.v
+Common/Blame.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
@@ -26,16 +27,19 @@ Source/Definability.v
 Source/Examples/Helper.v
 Source/Examples/Identity.v
 Source/Examples/Increment.v
+Source/Examples/DefaultInitBuffer.v
+Source/Examples/NestedCalls.v
 Source/Examples/Factorial.v
 
 S2I/Definitions.v
 S2I/CompMonad.v
 S2I/Compiler.v
 S2I/Correctness.v
-S2I/PartialForward.v
 S2I/Examples/Helper.v
 S2I/Examples/Identity.v
 S2I/Examples/Increment.v
+S2I/Examples/DefaultInitBuffer.v
+S2I/Examples/NestedCalls.v
 S2I/Examples/Factorial.v
 
 Intermediate/Machine.v
@@ -45,7 +49,7 @@ Intermediate/PS.v
 Intermediate/Decomposition.v
 Intermediate/Composition.v
 
-Common/Rc.v
+RSC_DC_MD.v
 
 TargetSFI/EitherMonad.v
 TargetSFI/StateMonad.v
@@ -53,5 +57,7 @@ TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
 TargetSFI/CS.v
 
+I2SFI/CompEitherMonad.v
+I2SFI/CompStateMonad.v
 I2SFI/AbstractMachine.v
 I2SFI/Compiler.v

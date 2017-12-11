@@ -52,7 +52,6 @@ Code at internal entry label:
 
 *)
 
-
 Require Import Common.Definitions.
 Require Import Source.Language.
 Require Import Intermediate.Machine.
@@ -241,7 +240,7 @@ Definition gen_component_procedures_labels
       | [] => ret acc 
       | (P, _) :: procs' =>
         do freshl <- fresh_label;
-          gen (PMap.add P freshl acc) procs'
+        gen (PMap.add P freshl acc) procs'
       end
   in gen (@PMap.empty label) procs.
 
@@ -254,25 +253,25 @@ Definition gen_all_procedures_labels
       | [] => ret acc 
       | (C, Cprocs) :: procs' =>
         do map <- gen_component_procedures_labels (PMap.elements Cprocs);
-          gen (PMap.add C map acc) procs'
+        gen (PMap.add C map acc) procs'
       end
   in gen (@PMap.empty (PMap.t label)) procs.
 
 Definition gen_buffers
-         (bufs: list (Component.id * nat))
-  : PMap.t (list (Block.id * nat)) :=
+         (bufs: list (Component.id * (nat + list value)))
+  : PMap.t (list (Block.id * (nat + list value))) :=
   let fix instrument acc bs :=
       match bs with
       | [] => acc
-      | (C,size) :: bs' =>
-        let Cbufs := [(1%positive,size%nat)] in
+      | (C, init_info) :: bs' =>
+        let Cbufs := [(1%positive, init_info)] in
         let acc' := PMap.add C Cbufs acc in
         instrument acc' bs'
       end
-  in instrument (PMap.empty (list (Block.id * nat))) bufs.
+  in instrument (PMap.empty (list (Block.id * (nat + list value)))) bufs.
 
 Definition compile_components
-         (local_buffers : PMap.t (list (Block.id * nat)))
+         (local_buffers : PMap.t (list (Block.id * (nat + list value))))
          (procs_labels : PMap.t (PMap.t label))
          (comps: list (Component.id * PMap.t expr))
   : COMP (list (Component.id * PMap.t code)) :=

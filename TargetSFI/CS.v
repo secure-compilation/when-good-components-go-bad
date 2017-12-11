@@ -115,7 +115,8 @@ Module CS.
       Some addr = RegisterFile.get_register reg gen_regs ->
       let pc' := Memory.to_address addr in
       Some t = ret_trace G pc pc' gen_regs ->
-      ~SFI.is_same_component pc pc'->
+      ~SFI.is_same_component pc pc' ->
+      ~SFI.is_same_component pc' SFI.MONITOR_COMPONENT_ID ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) t (mem',pc',gen_regs)
 
@@ -123,7 +124,7 @@ Module CS.
       executing mem pc (IJump reg) ->
       Some addr = RegisterFile.get_register reg gen_regs ->
       let pc' := Memory.to_address addr in
-      SFI.is_same_component pc pc'->
+      (SFI.is_same_component pc pc') \/ (SFI.is_same_component pc' SFI.MONITOR_COMPONENT_ID) ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) E0 (mem',pc',gen_regs)
            
@@ -132,7 +133,7 @@ Module CS.
       let ra := Z.of_N (inc_pc pc) in
       RegisterFile.set_register Register.R_RA ra gen_regs = gen_regs'->
       let pc' := addr in
-      SFI.is_same_component pc pc'->
+      (SFI.is_same_component pc pc') \/ (SFI.is_same_component pc SFI.MONITOR_COMPONENT_ID) ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) E0 (mem',pc',gen_regs')
            
@@ -143,6 +144,7 @@ Module CS.
       let pc' := addr in
       Some t = call_trace G pc pc' gen_regs ->
       ~SFI.is_same_component pc pc'->
+       ~SFI.is_same_component pc SFI.MONITOR_COMPONENT_ID ->
       Memory.Equal mem mem' -> 
       step G (mem,pc,gen_regs) t (mem',pc',gen_regs').
 
@@ -255,20 +257,34 @@ Module CS.
     Close Scope string_scope.
 
     Fixpoint eval_steps_with_state (n : nat) (G : Env.t) (s : MachineState.t)
-      : STATE (trace * MachineState.t) :=
+      : STATE (trace * MachineState.t * nat) :=
       match n with
-      | O => ret (E0,s)
+      | O => ret (E0,s,0%nat)
       | S n' => do (t',s') <- eval_step_with_state G s;
                  do! modify (update_state_records s t' s');
-                 do (t'',s'') <- eval_steps_with_state n' G s';
-                 ret (t'++t'',s'')
+
+                 (* check if a Halt was executed *)
+                  let '(mem,pc,gen_regs) := s in
+                  match Memory.get_word mem pc with
+                  | Some (Instruction instr) =>
+                    match instr with
+                    | IHalt => ret (t',s',n')                   
+                    | _ =>  
+                      do (t'',s'',n'') <- eval_steps_with_state n' G s';
+                        ret (t'++t'',s'',n'')
+                    end
+                  | _ => fail "eval_steps_with_state: Impossible branch"                            
+                  end
       end.
 
     Fixpoint eval_program_with_state (fuel : nat) (p : sfi_program) (regs : RegisterFile.t)
-      : STATE (trace * MachineState.t) :=
+      : STATE (trace * MachineState.t * nat) :=
       let st0 := ((TargetSFI.Machine.mem p), RiscMachine.PC0, regs) in
       let g := ((TargetSFI.Machine.cn p),(TargetSFI.Machine.e p)) in
-      eval_steps_with_state fuel g st0.
+      do res <- eval_steps_with_state fuel g st0;
+        let '((t,s),n) := res in
+        ret (t,s,(fuel-n)%nat)
+    .
 
   End FunctionalRepresentation.
 
@@ -281,7 +297,8 @@ Module CS.
 
   Definition eval_program (fuel : nat) (p : sfi_program) (regs : RegisterFile.t)
       : @Either (trace * MachineState.t) :=
-     fst ((eval_program_with_state unit update_empty_records fuel p regs) tt).
+    do res <- fst ((eval_program_with_state unit update_empty_records fuel p regs) tt);
+      ret (fst res).
    
   Conjecture eval_step_complete :
     forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),

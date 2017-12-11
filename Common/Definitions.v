@@ -99,9 +99,31 @@ Proof.
       unfold gt. eauto.
 Qed.
 
+Lemma has_component_with_same_interface:
+  forall iface1 iface2 C CI,
+    PMap.Equal iface1 iface2 ->
+    Program.has_component iface1 C CI ->
+    Program.has_component iface2 C CI.
+Proof.
+  intros iface1 iface2 C CI Heq Hhas_comp.
+  unfold Program.has_component.
+  rewrite <- Heq. assumption.
+Qed.
+
+Lemma imported_procedure_with_same_interface:
+  forall iface1 iface2 C C' P,
+    PMap.Equal iface1 iface2 ->
+    imported_procedure iface1 C C' P ->
+    imported_procedure iface2 C C' P.
+Proof.
+  intros iface1 iface2 C C' P Heq Himport.
+  unfold imported_procedure in *.
+  destruct Himport as [CI [Hhas_comp His_importing]].
+  exists CI. split.
+  - eapply has_component_with_same_interface; eauto.
+  - assumption.
+Qed.
+
 Class HasTurn A := {
   turn_of : A -> Program.interface -> Prop
 }.
-
-(* AAA: Are we still going to use this? If not, we should remove it. *)
-Inductive exec_state : Type := Normal. (*| WentWrong.*)

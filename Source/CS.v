@@ -9,8 +9,6 @@ Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
 Require Import Lib.Monads.
 
-Require Import Coq.Setoids.Setoid.
-
 Import Source.
 
 Inductive cont : Type :=
@@ -110,9 +108,7 @@ Definition initial_state (p: program) (st: state) : Prop :=
   (let '(_, m) := init_all p in mem = m) /\
 
   (* the expression under evaluation is the main procedure *)
-  (exists main_procs,
-      PMap.find (fst (prog_main p)) (prog_procedures p) = Some main_procs /\
-      PMap.find (snd (prog_main p)) main_procs = Some e) /\
+  find_procedure (prog_procedures p) (fst (prog_main p)) (snd (prog_main p)) = Some e /\
 
   (* the continuation is stop *)
   k = Kstop.
@@ -165,7 +161,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     kstep G (C, s, mem, k, E_alloc e)
           t (C, s, mem, Kalloc k, e)
 | KS_AllocEval : forall C s mem mem' k size ptr,
-    (size >= 0) ->
+    size > 0 ->
     Memory.alloc mem C (Z.to_nat size) = Some (mem', ptr) ->
     let t := E0 in
     kstep G (C, s, mem, Kalloc k, E_val (Int size))
@@ -199,10 +195,9 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     let t := E0 in
     kstep G (C, s, mem, k, E_call C' P e)
           t (C, s, mem, Kcall C' P k, e)
-| KS_Call2 : forall C s mem mem' k C' P v C'_procs P_expr b b' old_call_arg,
+| KS_Call2 : forall C s mem mem' k C' P v P_expr b b' old_call_arg,
     (* retrieve the procedure code *)
-    PMap.find C' (genv_procedures G) = Some C'_procs ->
-    PMap.find P C'_procs = Some P_expr ->
+    find_procedure (genv_procedures G) C' P = Some P_expr ->
     (* save the old call argument *)
     PMap.find C (genv_buffers G) = Some b ->
     Memory.load mem (C,b,0) = Some old_call_arg ->
@@ -267,7 +262,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kalloc k' =>
       match v with
       | Int size =>
-        if (size >=? 0) then
+        if (size >? 0) then
           do (mem',ptr) <- Memory.alloc mem C (Z.to_nat size);
           ret (E0, (C, s, mem', k', E_val (Ptr ptr)))
         else
@@ -300,8 +295,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v with
       | Int i =>
         (* retrieve the procedure code *)
-        do C'_procs <- PMap.find C' (genv_procedures G);
-        do P_expr <- PMap.find P C'_procs;
+        do P_expr <- find_procedure (genv_procedures G) C' P;
         (* save the old call argument *)
         do b <- PMap.find C (genv_buffers G);
         do old_call_arg <- Memory.load mem (C,b,0);
@@ -329,8 +323,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
 Hint Unfold eval_kstep.
 
 Definition init (p: program) (input: value) : option (global_env * state) :=
-  do procs <- PMap.find (fst (prog_main p)) (prog_procedures p);
-  do main <- PMap.find (snd (prog_main p)) procs;
+  do main <- find_procedure (prog_procedures p) (fst (prog_main p)) (snd (prog_main p));
   let '(bufs, mem) := init_all p in
   let G := {| genv_interface := prog_interface p;
               genv_procedures := prog_procedures p;
@@ -370,7 +363,9 @@ Proof.
   (* if expressions *)
   - destruct i eqn:Hi;
       try contradiction; auto.
-  - assert (Hsize: (size >=? 0) = true). { destruct size; auto. }
+  - assert (Hsize: (size >? 0) = true). {
+      destruct size; try inversion H; auto.
+    }
     rewrite Hsize.
     rewrite H0. reflexivity.
   - rewrite Pos.eqb_refl.
@@ -423,10 +418,10 @@ Proof.
     + econstructor.
       pose proof (Zlt_neg_0 p). omega.
     + econstructor.
-      destruct z; auto.
-      * omega.
-      * pose proof (Zgt_pos_0 p). omega.
-      * unfold Z.geb in Heqb. simpl in Heqb. discriminate.
+      destruct z.
+      * apply Z.gtb_lt in Heqb. inversion Heqb.
+      * apply Zgt_is_gt_bool. auto.
+      * apply Z.gtb_lt in Heqb. inversion Heqb.
       * auto.
     + econstructor; eauto.
       * apply Pos.eqb_eq; auto.
@@ -441,9 +436,9 @@ Proof.
         reflexivity.
     + econstructor; eauto.
       * unfold Memory.load.
-        rewrite Heqo6. auto.
+        rewrite Heqo5. auto.
       * unfold Memory.store.
-        rewrite Heqo5, Heqo4.
+        rewrite Heqo4, Heqo3.
         auto.
   (* procedure call *)
   - repeat simplify_option.
@@ -499,9 +494,9 @@ Section Semantics.
     inversion Hkstep; subst;
       inversion Hmatch_traces; subst;
     try (eexists; apply Hkstep).
-    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
-    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
-    - eexists. rewrite <- H6 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H5 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H5 in Hkstep. apply Hkstep.
+    - eexists. rewrite <- H5 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
     - eexists. rewrite <- H2 in Hkstep. apply Hkstep.
