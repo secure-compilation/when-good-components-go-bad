@@ -16,6 +16,12 @@ Require Import Coq.Structures.OrdersAlt.
 Set Implicit Arguments.
 Set Contextual Implicit.
 
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
+Require Import CoqUtils.ord.
+
 Module N_as_OT := Backport_OT N_as_OT.
 Module BinNatMap := FMapAVL.Make(N_as_OT).
 Module BinNatMapExtra := WProperties_fun N_as_OT BinNatMap.
@@ -25,7 +31,13 @@ Module backPositive_as_OT := Backport_OT Positive_as_OT.
 Module PMap := FMapAVL.Make backPositive_as_OT.
 Module PMapExtra := WProperties_fun Positive_as_OT PMap.
 Module PMapFacts := PMapExtra.F.
-  
+
+
+Module backNat_as_OT := Backport_OT Nat_as_OT.
+Module NatMap := FMapAVL.Make backNat_as_OT.
+Module NatMapExtra := WProperties_fun backNat_as_OT NatMap.
+Module NatMapFacts := NatMapExtra.F.
+
 Module ListUtil.
 
   Fixpoint get {A:Type} (pos:nat) (l : list A) : option A :=

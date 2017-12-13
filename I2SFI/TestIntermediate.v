@@ -201,17 +201,6 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
     end
 .
 
-(* Definition init_genv_and_state (p: Intermediate.program) *)
-(*            (input: value) : option (global_env * CS.state) := *)
-(*   let '(mem, E, ps) := Intermediate.init_all p in *)
-(*   let G := {| genv_interface := Intermediate.prog_interface p; *)
-(*               genv_procedures := ps; *)
-(*               genv_entrypoints := E |} in *)
-(*   do b <- Intermediate.EntryPoint.get (fst (Intermediate.prog_main p)) *)
-(*      (snd (Intermediate.prog_main p)) (genv_entrypoints G); *)
-(*   let regs := Intermediate.Register.set R_COM input Intermediate.Register.init in *)
-(*   ret (G, ([], mem, regs, (fst (Intermediate.prog_main p), b, 0))). *)
-
 Fixpoint execN (n: nat) (G: global_env) (tr:trace) (st: CS.state) : execution_state :=
   match n with
   | O => OutOfFuel (tr,st)
@@ -223,6 +212,11 @@ Fixpoint execN (n: nat) (G: global_env) (tr:trace) (st: CS.state) : execution_st
     | Running (ntr,nst) => execN n' G (tr++ntr) nst
     end
   end.
+
+Definition runp (n : nat) (p : Intermediate.program) : execution_state :=
+  let G := prepare_global_env p in
+  let st := CS.initial_machine_state p in
+  execN n G nil st.
 
 
 Close Scope monad_scope.
