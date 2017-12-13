@@ -49,26 +49,13 @@ Theorem decRegisterFile: forall regs1 regs2 : RiscMachine.RegisterFile.t,
     {regs1 = regs2} + {regs1 <> regs2}.
 Proof.
   apply List.list_eq_dec. apply Z.eq_dec.
-  (* induction regs1. *)
-  (* - destruct regs2. *)
-  (*   + auto. *)
-  (*   + right. intro H. inversion H. *)
-  (* - destruct regs2. *)
-  (*   + right. intro H. inversion H. *)
-  (*   + destruct (Z.eqb a v) eqn:Hh. *)
-  (*     * rewrite Z.eqb_eq in Hh. rewrite Hh. *)
-  (*       destruct IHregs1 with (regs2:=regs2). *)
-  (*       left. apply f_equal. apply e. *)
-  (*       right. intro H. apply n. inversion H. reflexivity. *)
-  (*     * right. intro H. inversion H. rewrite <- Z.eqb_eq in H1. *)
-  (*       rewrite Hh in H1. inversion H1. *)
 Defined.
       
 Definition cut_list (l : list Component.id) : list Component.id :=
   let fix gen_seq len :=
       match len with
-      | O => [ (Pos.of_nat 1) ]
-      | S len' => List.app (gen_seq len') [ Pos.of_nat (len+1) ]
+      | O => [ 1%nat ]
+      | S len' => List.app (gen_seq len') [ (len+1) ]
       end
   in
   let len:nat := (N.to_nat SFI.COMP_MAX) in
@@ -77,15 +64,13 @@ Definition cut_list (l : list Component.id) : list Component.id :=
   then (List.firstn len l') 
   else (gen_seq len).
 
-Open Scope nat_scope.
 Instance genCN : Gen Env.CN :=
   {
     arbitrary :=
       let len := N.to_nat SFI.COMP_MAX in
       let double := len * 2 in
-      liftGen cut_list (liftGen (map Pos.of_nat) (vectorOf double arbitrary ))
+      liftGen cut_list (vectorOf double arbitrary )
   }.
-Close Scope nat_scope.
 
 
 (*******************************
@@ -94,13 +79,12 @@ Close Scope nat_scope.
 Definition genSFIComponentId : G SFIComponent.id :=
   liftGen N.of_nat (choose (O,N.to_nat SFI.COMP_MAX)).
 
-Open Scope N_scope.
 Definition odd_even_frecv_gen (even_freq : nat) (odd_freq : nat) : G N :=
   freq [
-      (even_freq, liftGen (fun x => 2*(N.of_nat x)) arbitrary);
-        (odd_freq, liftGen (fun x => 2*(N.of_nat x)+1) arbitrary)
+      (even_freq, liftGen (fun x => (2*(N.of_nat x))%N) arbitrary);
+        (odd_freq, liftGen (fun x => (2*(N.of_nat x)+1)%N) arbitrary)
     ].
-Close Scope N_scope.
+
 
 Definition genBlockIds (frecv_code : nat) (frecv_data : nat) : G (list N) :=
   let how_many : nat := plus frecv_code frecv_data in
@@ -147,15 +131,12 @@ Definition genAddressesForCid (frecv_code : nat) (frecv_data : nat) cid :
 (*******************************
  * Env.E Generator
  *******************************)
-
-Open Scope nat_scope.
 Definition genEForCid cid : G Env.E :=
   liftGen (fun '(l1,l2) => List.combine l1 l2)
           (liftGen2 pair
                     (genAddressesForCid 10 0 cid)
                     (* Procedure.id *)
-                    (liftGen (List.map Pos.of_nat) (vectorOf 10 (choose (0,100))))).
-Close Scope nat_scope.
+                    (vectorOf 10 (choose (1,100)))).
 
 Definition foldE (ll : list Env.E) : Env.E :=
   List.fold_left (fun l1 l2 => List.app l1 l2) ll nil.

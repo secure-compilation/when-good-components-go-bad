@@ -8,9 +8,9 @@ Require Import Coq.Strings.String.
 Require Import CompCert.Events.
 
 Require Import Source.Language.
-Require Import Source.Examples.Factorial.
-Require Import Source.Examples.Identity.
-Require Import Source.Examples.Increment.
+(* Require Import Source.Examples.Factorial. *)
+(* Require Import Source.Examples.Identity. *)
+(* Require Import Source.Examples.Increment. *)
 Require Import S2I.Compiler.
 Require Import I2SFI.Compiler.
 Require Import TargetSFI.EitherMonad.
@@ -36,26 +36,26 @@ Import GenLow GenHigh.
 
 Definition newline := String "010" ""%string.
 
-Open Scope positive_scope.
+Open Scope nat_scope.
 Definition increment : Source.program := {|
   Source.prog_interface :=
-    PMapExtra.of_list [(1, {| Component.import := [(2, 1)];
-                              Component.export := [1] |});
-                       (2, {| Component.import := [];
-                              Component.export := [1] |})];
-  Source.prog_buffers := PMapExtra.of_list [(1, (inl 1%nat)); (2, (inl 1%nat))];
-  Source.prog_procedures := PMapExtra.of_list [
+   mkfmap [(1, {| Component.import := fset1 (2, 1);
+                              Component.export := (fset1 1) |});
+                       (2, {| Component.import := fset0;
+                              Component.export := fset1 1 |})];
+  Source.prog_buffers := mkfmap [(1, (inl 1%nat)); (2, (inl 1%nat))];
+  Source.prog_procedures := mkfmap [
     (* NOTE the version with E_exit is the right one, but unfortunately it is difficult
             to debug with extraction. Hence, the second version without E_exit *)
     (*(1, NMapExtra.of_list [(0, E_seq (E_call 2 0 (E_val (Int 6))) E_exit)]);*)
-    (1, PMapExtra.of_list [(1, E_call 2 1 (E_val (Int 6)))]);
-    (2, PMapExtra.of_list [(1,     
+    (1, mkfmap [(1, E_call 2 1 (E_val (Int 6)))]);
+    (2, mkfmap [(1,     
         (E_binop Add
                  (E_deref E_local)
                  (E_val (Int 1))))])];
-  Source.prog_main := (1, 1)
+  Source.prog_main := Some (1, 1)
 |}.
-Close Scope positive_scope.
+Close Scope nat_scope.
 
 Definition test (sp : Source.program) : @CompEither sfi_program :=
   match S2I.Compiler.compile_program sp with
@@ -109,8 +109,8 @@ Definition procs_labels_increment : Checker :=
              List.fold_left
                 N.max
                 (List.flat_map
-                   (fun m => List.map (fun '(_,(_,l)) => l) (PMap.elements m))
-                   (List.map snd (PMap.elements procs_labels)))
+                   (fun m => List.map (fun '(_,(_,l)) => l) (elementsm m))
+                   (List.map snd (elementsm procs_labels)))
                 1%N 
            )
        end

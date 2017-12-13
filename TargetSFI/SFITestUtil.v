@@ -8,6 +8,7 @@ Require Import Common.Definitions.
 
 Require Import TargetSFI.Machine.
 Require Import TargetSFI.EitherMonad.
+Require Import TargetSFI.SFIUtil.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -60,7 +61,7 @@ Definition show_N ( n : N ) := show_nat (N.to_nat n).
 
 Instance show_Component_id : Show Component.id :=
   {|
-    show := show_pos
+    show := show
   |}.
 
 Instance show_sfi_id : Show SFIComponent.id :=
@@ -195,12 +196,13 @@ Definition newline := String "010" ""%string.
 Instance show_trace : Show CompCert.Events.trace := showList.
 
 Definition show_mem (mem : RiscMachine.Memory.t) : string :=
-  List.fold_left (fun acc '(a,val) =>
-                    match val with
-                    | RiscMachine.Data v => acc++((show_addr a) ++ ":" ++ (show_value v) ++ newline)%string
-                    | RiscMachine.Instruction i => acc++((show_addr a) ++ ":" ++ (show i) ++ newline)%string
-                    end
-                 ) (BinNatMap.elements mem) ""%string.
+  List.fold_left
+    (fun acc '(a,val) =>
+       match val with
+       | RiscMachine.Data v => acc++((show_addr a) ++ ":" ++ (show_value v) ++ newline)%string
+       | RiscMachine.Instruction i => acc++((show_addr a) ++ ":" ++ (show i) ++ newline)%string
+       end
+    ) (BinNatMap.elements mem) ""%string.
      
 
 Instance show_mem_i : Show RiscMachine.Memory.t :=

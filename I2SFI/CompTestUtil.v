@@ -14,12 +14,16 @@ Require Import I2SFI.CompEitherMonad.
 Require Import TargetSFI.EitherMonad.
 Require Import TargetSFI.SFITestUtil.
 
+Require Import CoqUtils.ord.
+
+From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
+
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 
 Definition newline := String "010" ""%string.
 
-Definition show_map { A :Type} `{_ : Show A} (m : (PMap.t A)) : string :=
+Definition show_map { A :Type} `{_ : Show A} (m : (NMap A)) : string :=
   List.fold_left
     (fun acc '(key,elt) =>
        acc ++ (show key) ++ ":" ++ newline
@@ -27,14 +31,21 @@ Definition show_map { A :Type} `{_ : Show A} (m : (PMap.t A)) : string :=
     (elementsm m)
     Coq.Strings.String.EmptyString.
 
-Instance show_map_i  { A :Type} `{_ : Show A} : Show (PMap.t A) :=
+Instance show_map_i  { A :Type} `{_ : Show A} : Show (NMap A) :=
   {| show := show_map |}.
+
+
+Instance show_fset {A : ordType} `{_ : Show A} : Show ({fset A}) :=
+  {|
+    show :=
+      fun s => show (val s)
+  |}.
 
 Instance show_component_interface : Show Component.interface :=
   {|
     show := fun ci =>
-              ("Export: ") 
-                ++ (show (Component.export ci)) ++ newline
+              ("Export: ")
+                ++ (show (Component.export ci)) ++ newline 
                 ++ "Import:"
                 ++ (show (Component.import ci)) ++ newline
   |}.
@@ -68,11 +79,11 @@ Instance show_linstr : Show (option (list AbstractMachine.label) * AbstractMachi
         (show ol) ++ ":" ++ (show i)
   |}.
 
-Definition show_lcode ( lcode : PMap.t (PMap.t AbstractMachine.lcode)) :=
-  fold
-    (fun cid (pmap:PMap.t AbstractMachine.lcode) (acc1:string) =>
-       fold
-         (fun pid (lst:AbstractMachine.lcode) acc2 =>
+Definition show_lcode ( lcode : NMap (NMap AbstractMachine.lcode)) :=
+  List.fold_left 
+    (fun acc1 '(cid, pmap) =>
+       List.fold_left
+         (fun acc2 '(pid, lst) =>
             List.fold_left
                (fun acc3 elt => acc3 ++ (show elt)  ++ newline)            
                lst (acc2 ++ "pid=" ++ (show pid) ++ newline)%string

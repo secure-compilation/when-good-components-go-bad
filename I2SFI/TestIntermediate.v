@@ -74,12 +74,12 @@ Definition fail {A} (msg : string) (err : ExecutionError) :=
 Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
   let '(gps, mem, regs, pc) := s in
   (* fetch the next instruction to execute *)
-  do C_procs <- lift (PMap.find (Pointer.component pc) (genv_procedures G))
+  do C_procs <- lift (getm (genv_procedures G) (Pointer.component pc) )
         "Missing component"%string (MissingComponentId (Pointer.component pc));
-    match (PMap.find (Pointer.block pc) C_procs) with
+    match (getm C_procs (Pointer.block pc)) with
     | None => fail "Missing block"%string (MissingBlock pc)
     | Some P_code => 
-      if Pointer.offset pc <? 0 then
+      if ((Pointer.offset pc) <? 0)%Z then
         fail "Negative offset"%string (NegativePointerOffset pc)
       else
         match nth_error P_code (Z.to_nat (Pointer.offset pc)) with
@@ -106,7 +106,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
           | ILoad r1 r2 =>
             match Intermediate.Register.get r1 regs with
             | Ptr ptr =>
-              if Pos.eqb (Pointer.component ptr) (Pointer.component pc) then
+              if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
                 do v <- lift (Memory.load mem ptr) "Memory load error" (MemoryError ptr);
                   let regs' := Intermediate.Register.set r2 v regs in
                   ret (E0, (gps, mem, regs', Pointer.inc pc))
@@ -117,7 +117,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
           | IStore r1 r2 =>
             match Intermediate.Register.get r1 regs with
             | Ptr ptr =>
-              if Pos.eqb (Pointer.component ptr) (Pointer.component pc) then
+              if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
                 do mem' <- lift (Memory.store mem ptr (Intermediate.Register.get r2 regs))
                 "Memory store error"%string (MemoryError ptr);
                   ret (E0, (gps, mem', regs, Pointer.inc pc))
@@ -133,7 +133,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
           | IJump r =>
             match Intermediate.Register.get r regs with
             | Ptr pc' =>
-              if Pos.eqb (Pointer.component pc') (Pointer.component pc) then
+              if Component.eqb (Pointer.component pc') (Pointer.component pc) then
                 ret (E0, (gps, mem, regs, pc'))
               else
                 fail "Jump outside component"%string JumpOutsideComponent
@@ -152,7 +152,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
           | IAlloc rptr rsize =>
             match Intermediate.Register.get rsize regs with
             | Int size =>
-              if size <=? 0 then
+              if (size <=? 0)%Z then
                 fail  "Negative block size"%string AllocNegativeBlockSize
               else
                 do (mem', ptr) <- lift (Memory.alloc mem (Pointer.component pc) (Z.to_nat size))
@@ -162,13 +162,13 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
             | _ => fail  "Alloc::Not int"%string NotIntInReg
             end
           | ICall C' P =>
-            if negb (Pos.eqb (Pointer.component pc) C') then
+            if negb (Component.eqb (Pointer.component pc) C') then
               if imported_procedure_b (genv_interface G) (Pointer.component pc) C' P then
                 do b <- lift (Intermediate.EntryPoint.get C' P (genv_entrypoints G))
                     "Call::Incorrect environment"%string InvalidEnv;
                   match Intermediate.Register.get R_COM regs with
                   | Int rcomval =>
-                    let pc' := (C', b, 0) in
+                    let pc' := (C', b, 0%Z) in
                     let tr := [ECall (Pointer.component pc) P rcomval C'] in
                     let res : t := (tr, (Pointer.inc pc :: gps,
                                          mem,
@@ -184,7 +184,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
           | IReturn =>
             match gps with
             | pc' :: gps' =>
-              if negb (Pos.eqb (Pointer.component pc) (Pointer.component pc')) then
+              if negb (Component.eqb (Pointer.component pc) (Pointer.component pc')) then
                 match Intermediate.Register.get R_COM regs with
                 | Int rcomval =>
                   let tr := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
@@ -201,16 +201,16 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
     end
 .
 
-Definition init_genv_and_state (p: Intermediate.program)
-           (input: value) : option (global_env * CS.state) :=
-  let '(mem, E, ps) := Intermediate.init_all p in
-  let G := {| genv_interface := Intermediate.prog_interface p;
-              genv_procedures := ps;
-              genv_entrypoints := E |} in
-  do b <- Intermediate.EntryPoint.get (fst (Intermediate.prog_main p))
-     (snd (Intermediate.prog_main p)) (genv_entrypoints G);
-  let regs := Intermediate.Register.set R_COM input Intermediate.Register.init in
-  ret (G, ([], mem, regs, (fst (Intermediate.prog_main p), b, 0))).
+(* Definition init_genv_and_state (p: Intermediate.program) *)
+(*            (input: value) : option (global_env * CS.state) := *)
+(*   let '(mem, E, ps) := Intermediate.init_all p in *)
+(*   let G := {| genv_interface := Intermediate.prog_interface p; *)
+(*               genv_procedures := ps; *)
+(*               genv_entrypoints := E |} in *)
+(*   do b <- Intermediate.EntryPoint.get (fst (Intermediate.prog_main p)) *)
+(*      (snd (Intermediate.prog_main p)) (genv_entrypoints G); *)
+(*   let regs := Intermediate.Register.set R_COM input Intermediate.Register.init in *)
+(*   ret (G, ([], mem, regs, (fst (Intermediate.prog_main p), b, 0))). *)
 
 Fixpoint execN (n: nat) (G: global_env) (tr:trace) (st: CS.state) : execution_state :=
   match n with
@@ -224,10 +224,5 @@ Fixpoint execN (n: nat) (G: global_env) (tr:trace) (st: CS.state) : execution_st
     end
   end.
 
-Definition runp (p: Intermediate.program) (input: value) (fuel: nat) : execution_state :=
-  match init_genv_and_state p input with
-  | None => Wrong "Init failed" NoInfo
-  | Some (G, st) =>  execN fuel G E0 st
-  end.
 
 Close Scope monad_scope.

@@ -9,6 +9,8 @@ Require Import Coq.FSets.FMapInterface.
 Require Import Coq.FSets.FMapFacts.
 Require Import Coq.Init.Logic.
 
+Require Import TargetSFI.SFIUtil.
+
 Require Import Program.
 Require Import EitherMonad.
 Require Import SFITestUtil.
@@ -185,7 +187,11 @@ Ltac mem_contra :=
 
 Ltac zero_contra :=
   match goal with
-  | H1 : ?v = 0, H2: ?v <> 0 |- False =>
+  | H1 : ?v = 0%nat, H2: ?v <> 0%nat |- False =>
+    apply H2; apply H1
+  | H1 : ?v = 0%Z, H2: ?v <> 0%Z |- False =>
+    apply H2; apply H1
+  | H1 : ?v = 0%N, H2: ?v <> 0%N |- False =>
     apply H2; apply H1
   end.
 
@@ -242,7 +248,11 @@ Ltac ret_com_contra f H :=
   subst; unify_options;
   unfold_ret_trace; subst; simplify_equality;
   match goal with
-  | H': (?z =? ?z) = false |- False =>
+  | H': (?z =? ?z)%Z = false |- False =>
+    rewrite f in H'; inversion H'
+  | H': (?z =? ?z)%N = false |- False =>
+    rewrite f in H'; inversion H'
+  | H': (?z =? ?z)%nat = false |- False =>
     rewrite f in H'; inversion H'
   end.
 
@@ -253,6 +263,9 @@ Ltac ret_comp_contra pc' H :=
   match goal with
   | H': (?z =? ?z)%positive = false |- False =>
     rewrite Pos.eqb_refl in H'; inversion H'
+  | H': (?z =? ?z)%nat = false |- False =>
+    rewrite Nat.eqb_refl in H'; inversion H'
+
   end.
 
 Ltac call_ids_contra H pc'0 pc'1 ra:=
@@ -263,6 +276,8 @@ Ltac call_ids_contra H pc'0 pc'1 ra:=
   match goal with
   | H': (?z =? ?z)%positive = false |- False =>
     rewrite Pos.eqb_refl in H'; inversion H'
+  | H': (?z =? ?z)%nat = false |- False =>
+    rewrite Nat.eqb_refl in H'; inversion H'
   end.
 
 
@@ -673,10 +688,10 @@ Proof.
                                         (SFI.C_SFI
                                            (Memory.to_address cptr)) g) eqn:Hc'.
                             rename i into c1'.
-                            destruct (Pos.eqb c c1) eqn:Haux.
-                            rewrite Pos.eqb_eq in Haux. subst c1.
-                            destruct (Pos.eqb c' c1') eqn:Haux.
-                            rewrite Pos.eqb_eq in Haux. subst c1'.
+                            destruct (Nat.eqb c c1) eqn:Haux.
+                            rewrite Nat.eqb_eq in Haux. subst c1.
+                            destruct (Nat.eqb c' c1') eqn:Haux.
+                            rewrite Nat.eqb_eq in Haux. subst c1'.
                             destruct (Z.eqb rcom rcom1) eqn:Haux.
                             rewrite Z.eqb_eq in Haux. subst rcom1.
                           
@@ -826,9 +841,9 @@ Proof.
                         destruct (get_procedure pc' g) eqn:Hp.
                         rename i into p1.
                         
-                        destruct (Pos.eqb c c1) eqn:Haux. rewrite Pos.eqb_eq in Haux. subst c1.
-                        destruct (Pos.eqb c' c1') eqn:Haux. rewrite Pos.eqb_eq in Haux. subst c1'.
-                        destruct (Pos.eqb p p1) eqn:Haux. rewrite Pos.eqb_eq in Haux. subst p1.
+                        destruct (Nat.eqb c c1) eqn:Haux. rewrite Nat.eqb_eq in Haux. subst c1.
+                        destruct (Nat.eqb c' c1') eqn:Haux. rewrite Nat.eqb_eq in Haux. subst c1'.
+                        destruct (Nat.eqb p p1) eqn:Haux. rewrite Nat.eqb_eq in Haux. subst p1.
                         destruct (Z.eqb rcom rcom1) eqn:Haux. rewrite Z.eqb_eq in Haux. subst rcom1.
                         
                         left. apply Call.
@@ -847,7 +862,7 @@ Proof.
                         unfold_call_trace. subst; simplify_equality;
                                              unify_options.
                         match goal with
-                        | H': (?z =? ?z) = false |- False =>
+                        | H': (?z =? ?z)%Z = false |- False =>
                           rewrite Z.eqb_refl in H'; inversion H'
                         end.
 

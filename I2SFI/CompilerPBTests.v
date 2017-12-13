@@ -31,6 +31,15 @@ Import GenLow GenHigh.
 (* Suppress some annoying warnings: *)
 Set Warnings "-extraction-opaque-accessed,-extraction".
 
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+
+Require Import CoqUtils.ord.
+
+
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 Module DoNotation.
 Import ssrfun.
 Notation "'do!' X <- A ; B" :=
@@ -42,6 +51,12 @@ Import DoNotation.
 
 Theorem label_eq_dec:
   forall l1 l2 : Intermediate.Machine.label,  {l1 = l2} + {l1 <> l2}.
+Proof.
+  repeat decide equality.
+Defined.
+
+Theorem procs_eqdec:
+  forall p1 p2 : (Component.id*Procedure.id), {p1 = p2} + {p1 <> p2}.
 Proof.
   repeat decide equality.
 Defined.
@@ -109,19 +124,19 @@ Definition get_freq (t : test_type) (i:instr_type) : nat :=
   | Halt => 1%nat
   end.
 
-Definition choose_pos ( p : positive * positive) :=
-  let Z_to_pos z := (* TODO figure out the proper function to call here *)
-      match z with
-      | Z0 => 1%positive
-      | Zpos p => p
-      | Zneg p => p
-      end in
-  let (lo,hi) := p in 
-  do! p' <- choose (Zpos lo, Zpos hi);
-    returnGen (Z_to_pos p').
+(* Definition choose_pos ( p : positive * positive) := *)
+(*   let Z_to_pos z := (* TODO figure out the proper function to call here *) *)
+(*       match z with *)
+(*       | Z0 => 1%positive *)
+(*       | Zpos p => p *)
+(*       | Zneg p => p *)
+(*       end in *)
+(*   let (lo,hi) := p in  *)
+(*   do! p' <- choose (Zpos lo, Zpos hi); *)
+(*     returnGen (Z_to_pos p'). *)
 
-Definition pos_list (l : nat) : list positive :=
-  List.map Pos.of_nat (List.seq 1 l).
+(* Definition pos_list (l : nat) : list positive := *)
+(*   List.map Pos.of_nat (List.seq 1 l). *)
 
 Definition gen_pair_list {A B : Type} (ga : G (list A)) (gb : G (list B)) : G (list (A*B)) :=
   liftGen (fun '(la,lb) => List.combine la lb) 
@@ -134,9 +149,17 @@ Definition gen_sublist {A : Type} ( default : A ) ( all : list A ) : G (list A) 
     do! n <- (choose (1%nat,(List.length all)));
       (vectorOf n (elements default all))
   end.
-    
+
+Definition list2fset {A:ordType} (l : list A) : {fset A} :=
+  let fix app  l  :=
+      match l with
+      | nil => fset0
+      | x::xs => fsetU (fset1 x) (app xs)
+      end in
+  app l.
+
 Definition gen_program_interface (cids : list Component.id) : G Program.interface :=
-  let proc_ids := do! n <- choose(1%nat,MAX_PROC_PER_COMP); returnGen (pos_list n) in
+  let proc_ids := do! n <- choose(1%nat,MAX_PROC_PER_COMP); returnGen (List.seq 1 n) in
   do! exported_procs <- (vectorOf (List.length cids) proc_ids);
   let all_procs := List.flat_map
                      (fun '(cid,lp) => List.map (fun pid => (cid,pid)) lp)
@@ -144,17 +167,19 @@ Definition gen_program_interface (cids : list Component.id) : G Program.interfac
   do! imported_procs <-  
     sequenceGen (
       List.map (fun cid =>
-                  do! import_procs <- (gen_sublist (1%positive,1%positive) all_procs);
+                  do! import_procs <- (gen_sublist (1%nat,1%nat) all_procs);
                     returnGen (List.filter (fun '(cid',_) =>
-                                              negb (Pos.eqb cid cid'))
+                                              negb (Component.eqb cid cid'))
                                            (List.nodup procs_eqdec import_procs))  
                ) cids);
-  returnGen (PMapExtra.of_list
+  returnGen (mkfmap
                (List.combine
                   cids 
                   (List.map
                      (fun '(e,i) => (Component.mkCompInterface e i))
-                     (List.combine exported_procs imported_procs)
+                     (List.combine (List.map list2fset exported_procs)
+                                   (List.map list2fset imported_procs)
+                     )
                   )
                )
             ).
@@ -192,10 +217,10 @@ Definition gen_sum bsize (buffers : list (Component.id * list (Block.id * nat)))
        ].
 
 Definition gen_buffers (cids : list Component.id)
-  : G (PMap.t (list (Block.id * (nat + list value)))) :=
+  : G (NMap (list (Block.id * (nat + list value)))) :=
   let gen_n_buffers : G (list (Block.id * nat)) :=
       do! n <- choose (1%nat,MAX_NO_BUFFERS_PER_COMP); 
-        let ids := pos_list n in
+        let ids := List.seq 1 n in
         do! sizes <- vectorOf n (choose (1%nat, MAX_BUFFER_SIZE));
            returnGen (List.combine ids sizes) in
   do! buffers <- (vectorOf (List.length cids) gen_n_buffers);
@@ -213,7 +238,7 @@ Definition gen_buffers (cids : list Component.id)
          )
          comp_buffers
       );
-    returnGen (PMapExtra.of_list (List.combine cids init_buffers)).
+    returnGen (mkfmap (List.combine cids init_buffers)).
 
   
   Instance genOp : Gen Common.Values.binop :=
@@ -242,11 +267,11 @@ Definition gen_buffers (cids : list Component.id)
  
   Definition genPtrImVal
              (pi : Program.interface)
-              (buffers : PMap.t (list (Block.id * (nat+list value))))
+              (buffers : NMap (list (Block.id * (nat+list value))))
              (cid : Component.id)
     : G (option Intermediate.Machine.imvalue) :=
     let  genPointer (id : Component.id) :=
-         match PMap.find id buffers with
+         match getm buffers id with
          | None => returnGen None
          | Some lst =>
            match lst with 
@@ -267,7 +292,7 @@ Definition gen_buffers (cids : list Component.id)
     backtrack [
         ( 4%nat, (genPointer cid) )
         ; ( 1%nat,
-            (do! id <- (elements (1%positive) (List.map fst (PMap.elements pi)));
+            (do! id <- (elements (1%nat) (List.map fst (elementsm pi)));
                (genPointer id)))
       ].
 
@@ -277,7 +302,7 @@ Definition gen_buffers (cids : list Component.id)
   
 
   Definition genImVal (pi : Program.interface)
-             (buffers : PMap.t (list (Block.id * (nat+list value))))
+             (buffers : NMap (list (Block.id * (nat+list value))))
              (cid : Component.id)  : G imvalue :=
     let genImValAux : G Intermediate.Machine.imvalue :=    
         do! res <- genPtrImVal pi buffers cid;
@@ -291,7 +316,7 @@ Definition gen_buffers (cids : list Component.id)
 
   Definition genIConst
              (pi : Program.interface)
-             (buffers : PMap.t (list (Block.id * (nat+list value))))
+             (buffers : NMap (list (Block.id * (nat+list value))))
              (cid : Component.id) : G instr :=
     do! v <- genImVal pi buffers cid;
       do! r <- arbitrary;
@@ -317,10 +342,10 @@ Definition gen_buffers (cids : list Component.id)
   Definition genICall (pi : Program.interface)
              (cid : Component.id)
              (pid : Procedure.id) : G instr :=
-    match PMap.find cid pi with
+    match getm pi cid with
     | None => returnGen INop (* This should not happen *)
     | Some comp_interface =>
-      let imports := (Component.import comp_interface) in
+      let imports := (val (Component.import comp_interface)) in
       match imports with
       | nil => returnGen INop (* no imports; can't generate ICall *)
       | (cid1,pid1)::xs =>
@@ -331,20 +356,20 @@ Definition gen_buffers (cids : list Component.id)
     end.
 
   Definition genIJal : G instr :=
-    do! l <- choose_pos (1%positive,20%positive);
+    do! l <- choose (1%nat,20%nat);
       returnGen (IJal l).
   
-  Definition genIBnz (first_label : positive) (lbl : positive) : G instr :=
+  Definition genIBnz (first_label : nat) (lbl : nat) : G instr :=
     do! r <- arbitrary;
-      if (Pos.ltb first_label (lbl+3))%positive
+      if (Nat.ltb first_label (lbl+3))%nat
       then
-        do! target <- choose_pos (first_label,(lbl+3)%positive);
+        do! target <- choose (first_label,(lbl+3)%nat);
           returnGen (IBnz r target)
       else
-        do! target <- choose_pos (lbl,(lbl+3)%positive);
+        do! target <- choose (lbl,(lbl+3)%nat);
           returnGen (IBnz r target).
       
-  Definition genILabel (lbl : positive) : G instr :=
+  Definition genILabel (lbl : nat) : G instr :=
     returnGen (ILabel lbl).
 
 
@@ -352,7 +377,7 @@ Definition gen_buffers (cids : list Component.id)
      List.map (fun i =>
                  match i with
                  | ILabel l => l
-                 | _ => 1%positive (* this is not happening *)
+                 | _ => 1%nat (* this is not happening *)
                  end
               )
               (List.filter (fun i => match i with
@@ -364,16 +389,16 @@ Definition gen_buffers (cids : list Component.id)
   Definition gen_procedure
              (t : test_type)
              (pi : Program.interface)
-             (buffers : PMap.t (list (Block.id * (nat+list value))))
+             (buffers : NMap (list (Block.id * (nat+list value))))
              (cid : Component.id)
              (pid : Procedure.id)
-             (next_label : positive) : G code :=
+             (next_label : nat) : G code :=
     let get_missing_labels proc :=
         let decl := delared_labels_in_proc proc in
         let uses :=  List.map (fun i =>
                                 match i with
                                 | IBnz _ l => l
-                                | _ => 1%positive (* this is not happening *)
+                                | _ => 1%nat (* this is not happening *)
                                 end
                              )
                              (List.filter (fun i => match i with
@@ -396,7 +421,7 @@ Definition gen_buffers (cids : list Component.id)
             gen_proc_with_labels new_proc xs
         end in
     
-    let gen_instr  (first_label : positive)  (next_label : positive) :=
+    let gen_instr  (first_label : nat)  (next_label : nat) :=
       freq [
           ( (get_freq t Nop) ,(returnGen INop))
           ; ( (get_freq t Const), genIConst pi buffers cid)
@@ -425,7 +450,7 @@ Definition gen_buffers (cids : list Component.id)
       | S len' =>
         do! i <- gen_instr first_lbl lbl;
           match i with
-          | ILabel _ => gen_proc_rec (proc ++ [i])%list len' first_lbl (lbl+1)%positive
+          | ILabel _ => gen_proc_rec (proc ++ [i])%list len' first_lbl (lbl+1)%nat
           | IReturn | IHalt =>
                       do! p <- gen_proc_with_labels proc (get_missing_labels proc);
                         returnGen (p ++ [i])%list
@@ -441,39 +466,40 @@ Definition gen_buffers (cids : list Component.id)
 
   Definition gen_procs (t : test_type)
              (pi : Program.interface)
-           (buffers : PMap.t (list (Block.id * (nat+list value))))
-  : G (PMap.t (PMap.t code)) :=
-  let max_label (procs : PMap.t code) :=
-      PMap.fold (fun _ proc acc =>
-                   (List.fold_left (fun acc' i =>
-                                match i with
-                                | ILabel l => if (Pos.ltb acc' l) then l else acc'
-                                | _ => acc'
-                                end
-                             ) proc acc)
-                ) procs 1%positive
+           (buffers : NMap (list (Block.id * (nat+list value))))
+  : G (NMap (NMap code)) :=
+  let max_label (procs : NMap code) :=
+      List.fold_left
+        (fun acc '(_,proc)  =>
+           (List.fold_left (fun acc' i =>
+                              match i with
+                              | ILabel l => if (Nat.ltb acc' l) then l else acc'
+                              | _ => acc'
+                              end
+                           ) proc acc)
+        ) (elementsm procs) 1%nat
   in
   foldGen
     (fun acc '(cid,comp_interface) =>
        do! proc_map <- (
            foldGen
              (fun acc pid =>
-                do! proc <- gen_procedure t  pi buffers cid pid ((max_label acc) + 1)%positive;
-                returnGen (PMap.add pid proc acc)
-             ) (Component.export comp_interface) (PMap.empty code));
+                do! proc <- gen_procedure t  pi buffers cid pid ((max_label acc) + 1)%nat;
+                returnGen (setm acc pid proc)
+             ) (Component.export comp_interface) (emptym));
          (* check add labels as needed for IJal *)
          let all_decl_labels := List.fold_left
                                   (fun acc elt => (acc ++ elt)%list )
                                   (List.map (fun p => delared_labels_in_proc (snd p))
-                                            (PMap.elements proc_map))
-                                  (@nil positive) in
+                                            (elementsm proc_map))
+                                  (@nil nat) in
          let uses := List.fold_left
                        (fun acc elt => (acc ++ elt)%list )
                        (List.map (fun p => 
                                     List.map (fun i =>
                                                 match i with
                                                 | IJal l => l
-                                                | _ => 1%positive (* this is not happening *)
+                                                | _ => 1%nat (* this is not happening *)
                                                 end
                                              )
                                              (List.filter (fun i => match i with
@@ -481,8 +507,8 @@ Definition gen_buffers (cids : list Component.id)
                                                                  | _ => false
                                                                  end )
                                                           (snd p) ))
-                                 (PMap.elements proc_map))
-                       (@nil positive) in
+                                 (elementsm proc_map))
+                       (@nil nat) in
          let lbls := List.nodup label_eq_dec
                                 (List.filter (fun l =>
                                                 Nat.eqb 0%nat
@@ -495,37 +521,38 @@ Definition gen_buffers (cids : list Component.id)
                                              uses
                                 ) in
          (* TODO do something smarter *)
-         match PMap.elements proc_map with
-         | nil => returnGen (PMap.add cid proc_map acc)
-         | (pid,code)::_ => returnGen (PMap.add cid
-                                               (PMap.add
-                                                  pid
-                                                  (
-                                                    (
-                                                      List.map
-                                                        (fun l => ILabel l)
-                                                        lbls
-                                                    )++code
-                                                  )%list
-                                                  proc_map) 
-                                               acc)
+         match elementsm proc_map with
+         | nil => returnGen (setm acc cid proc_map)
+         | (pid,code)::_ => returnGen (setm acc cid
+                                           (setm
+                                              proc_map
+                                              pid
+                                              (
+                                                (
+                                                  List.map
+                                                    (fun l => ILabel l)
+                                                    lbls
+                                                )++code
+                                              )%list
+                                           ) 
+                                     )
          end        
-    ) (PMap.elements pi)
-    (PMap.empty (PMap.t code))
+    ) (elementsm pi)
+    (emptym )
 .
 
 Definition gen_main (pi : Program.interface) : G (Component.id * Procedure.id) :=
-  do! cid <- elements 1%positive (List.map fst (PMap.elements pi));
-    match PMap.find cid pi with
-    | None => returnGen (cid,1%positive)
-    | Some cint => do! pid <- elements 1%positive (Component.export cint);
+  do! cid <- elements 1%nat (List.map fst (elementsm pi));
+    match getm pi cid with
+    | None => returnGen (cid,1%nat)
+    | Some cint => do! pid <- elements 1%nat (Component.export cint);
                    returnGen (cid,pid)
     end.
   
 
 Definition genIntermediateProgram (t : test_type) : G Intermediate.program :=
     do! n <- choose (1%nat, (N.to_nat (SFI.COMP_MAX-1)%N));
-      let cids : list Component.id := pos_list n in
+      let cids : list Component.id := List.seq 1 n in
   
   do! program_interface <- (gen_program_interface cids);
   do! buffers <- (gen_buffers cids);
