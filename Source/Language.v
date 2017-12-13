@@ -78,19 +78,25 @@ Module Source.
     (* the interface is sound (but maybe not closed) *)
     wfprog_interface_soundness:
       sound_interface (prog_interface p);
-    (* each declared component has the required static buffers *)
-    wfprog_buffers_existence:
-      forall C, C \in domm (prog_interface p) ->
-                has_required_local_buffers p C;
+    (* there are procedures only for the declared components *)
+    wfprog_well_formed_procedures_1:
+      fsubset (domm (prog_procedures p)) (domm (prog_interface p));
     (* each exported procedure is actually defined *)
     wfprog_exported_procedures_existence:
       forall C P, exported_procedure (prog_interface p) C P ->
       exists Pexpr, find_procedure (prog_procedures p) C P = Some Pexpr;
     (* each instruction of each procedure is well-formed *)
-    wfprog_well_formed_procedures:
+    wfprog_well_formed_procedures_2:
       forall C P Pexpr,
         find_procedure (prog_procedures p) C P = Some Pexpr ->
         well_formed_expr p C Pexpr;
+    (* there are buffers only for the declared components *)
+    (*wfprog_well_formed_buffers:
+      fsubset (domm (prog_buffers p)) (domm (prog_interface p));*)
+    (* each declared component has the required static buffers *)
+    wfprog_buffers_existence:
+      forall C, C \in domm (prog_interface p) ->
+                has_required_local_buffers p C;
     (* if the main component exists, then the main procedure must exist as well *)
     wfprog_main_existence:
       forall mainC mainP main_procs,

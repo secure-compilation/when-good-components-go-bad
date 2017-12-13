@@ -38,7 +38,9 @@ Import Intermediate.
   At the intermediate level, this is not a problem since we are assuming to deal only
   with defined behaviors. If we were to prove the complete preservation of behaviors,
   we would have to introduce some changes that allow the context to go wrong in the
-  partial semantics.
+  partial semantics. Actually, we preserve undefined behavior when it is caused by the
+  concrete program that we keep in the partial semantics (however, we still haven't
+  formally proved this result in Coq).
 
   The other direction is what we want to prove here and it guarantess that linking two
   partial programs producing the same terminating trace in the partial semantics,
@@ -58,7 +60,7 @@ Import Intermediate.
     trace (e.g. s ->(t) s' /\ s ->(t) s'' => s' = s'')
     note that, in general, the context is non-deterministic (there can be multiple events
     starting from the same state)
-    See context_same_trace_determinism in Intermediate/PS.v for more details.
+    See state_determinism in Intermediate/PS.v for more details.
   - star & mt_star equivalence
     a sequence of steps in the partial semantics can be split into a sequence of sequences
     of steps where the turn doesn't change (either program or the context executes for the
@@ -80,9 +82,9 @@ Import Intermediate.
     final_state (merge s1' s2')
 
   The proof can be divided into four parts:
-  1) showing that s1 and s2 are indeed mergeable
+  1) proving that s1 and s2 are indeed mergeable
   2) proving that merging initial states produces an initial state
-  3) proving that merging states of two stars with the same trace, produces a star with
+  3) proving that merging states two stars with the same trace, produces a star with
      such trace
   4) proving that merging final states produces a final state
 
@@ -94,7 +96,7 @@ Import Intermediate.
       program state (the component tag in the program counter)
     - stacks are one the complement of the other (should be trivial because the states
       are intial, therefore the stacks are empty)
-    - memories are disjoint
+    - memories are disjoint (the init procedure should give this fact)
 
   (2) and (4) should be provable by showing that the unpartialization of the merge is an
   initial or, respectively, a final state in the complete semantics. This is a rather
@@ -442,7 +444,6 @@ Inductive st_star (p: program) (ctx: Program.interface) (G: global_env)
     PS.step p ctx G ips t1 ips' ->
     same_turn ips ips' ->
     st_star p ctx G ips' t2 ips'' ->
-    same_turn ips' ips'' -> (* TODO remove? *)
     t = t1 ** t2 ->
     st_star p ctx G ips t ips''.
 
@@ -557,14 +558,12 @@ Proof.
         ** eassumption.
         ** constructor.
         ** eassumption.
-        ** eapply st_star_same_turn; eassumption.
         ** reflexivity.
       * eapply mt_star_control_change.
         ** eapply st_star_step.
            *** eassumption.
            *** constructor.
            *** apply Hfirst_st_star.
-           *** eapply st_star_same_turn; eassumption.
            *** reflexivity.
         ** apply Hstep.
         ** assumption.
@@ -1017,7 +1016,7 @@ Section PartialComposition.
           admit.
         }
         destruct (ProgCtxSim.st_star_simulation
-                    (linkable_sym p c linkability) Hst_star2 Hmergeable')
+                    (linkable_sym linkability) Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
         admit.
 

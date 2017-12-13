@@ -5,6 +5,14 @@ Require Export Common.Linking.
 Require Import Common.Memory.
 Require Import Lib.Monads.
 
+From mathcomp Require Import ssreflect ssrfun ssrbool.
+
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
+Set Bullet Behavior "Strict Subproofs".
+
 Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP.
 
@@ -239,16 +247,18 @@ Proof.
   intros p Hwf Hempty_iface.
   remember p as prog.
   destruct p.
-  rewrite Heqprog in *. simpl in *.
+  rewrite Heqprog.
+  rewrite Heqprog in Hwf, Hempty_iface.
+  simpl in *.
   rewrite Hempty_iface.
   enough (prog_procedures0 = emptym) as Hempty_procs.
   enough (prog_buffers0 = emptym) as Hempty_bufs.
   enough (prog_main0 = None) as Hempty_main.
-  rewrite Hempty_procs, Hempty_bufs, Hempty_main.
+  rewrite Hempty_procs Hempty_bufs Hempty_main.
   reflexivity.
   (* show that there is no main *)
   - rewrite <- Heqprog in Hwf.
-    pose proof (wfprog_main_existence prog Hwf) as Hmain_existence.
+    pose proof (wfprog_main_existence Hwf) as Hmain_existence.
     destruct (prog_main prog) as [[mainC mainP]|] eqn:Hmain.
     + destruct (Hmain_existence mainC mainP) as [main_procs []].
       reflexivity.
@@ -259,7 +269,7 @@ Proof.
       assumption.
   (* show that there are no buffers *)
   - rewrite <- Heqprog in Hwf.
-    pose proof (wfprog_well_formed_buffers prog Hwf) as Hbufs_wf.
+    pose proof (wfprog_well_formed_buffers Hwf) as Hbufs_wf.
     rewrite Heqprog in Hbufs_wf. rewrite Hempty_iface in Hbufs_wf. simpl in *.
     rewrite domm0 in Hbufs_wf.
     rewrite fsubset0 in Hbufs_wf.
@@ -268,7 +278,7 @@ Proof.
     admit.
   (* show that there are no procedures *)
   - rewrite <- Heqprog in Hwf.
-    pose proof (wfprog_well_formed_procedures prog Hwf) as Hprocs_wf.
+    pose proof (wfprog_well_formed_procedures Hwf) as Hprocs_wf.
     rewrite Heqprog in Hprocs_wf. rewrite Hempty_iface in Hprocs_wf. simpl in *.
     rewrite domm0 in Hprocs_wf.
     rewrite fsubset0 in Hprocs_wf.
@@ -300,7 +310,7 @@ Proof.
   - assumption.
   - apply empty_prog_is_well_formed.
   - simpl. rewrite unionm0.
-    apply (wfprog_interface_soundness p Hwf).
+    apply (wfprog_interface_soundness Hwf).
   - simpl. rewrite domm0. apply fdisjoints0.
   - simpl. rewrite domm0. apply fdisjoints0.
   - simpl. rewrite domm0. apply fdisjoints0.
@@ -347,26 +357,29 @@ Proof.
   - simpl.
     repeat rewrite domm_union.
     apply fsetUSS.
-    + apply (wfprog_well_formed_procedures p1 H).
-    + apply (wfprog_well_formed_procedures p2 H0).
+    + apply (wfprog_well_formed_procedures H).
+    + apply (wfprog_well_formed_procedures H0).
   - intros.
     simpl in *.
-    rewrite unionmE in *.
+    rewrite unionmE.
+    rewrite unionmE in H6.
     destruct ((prog_interface p1) C) eqn:Hwhere; simpl in *.
-    + inversion H6; subst.
-      destruct (wfprog_exported_procedures_existence p1 H C CI Hwhere P H7)
+    + rewrite Hwhere in H6.
+      inversion H6; subst.
+      destruct (wfprog_exported_procedures_existence H Hwhere H7)
         as [Cprocs [Pcode [Hproc Hcode]]].
       rewrite Hproc. simpl.
       exists Cprocs. exists Pcode.
       split; auto.
     + enough ((prog_procedures p1) C = None) as Hno_p1.
-      * rewrite Hno_p1. simpl.
-        destruct (wfprog_exported_procedures_existence p2 H0 C CI H6 P H7)
+      * rewrite Hno_p1. rewrite Hwhere in H6. simpl in *.
+        destruct (wfprog_exported_procedures_existence H0 H6 H7)
           as [Cprocs [Pcode [Hproc Hcode]]].
         exists Cprocs. exists Pcode.
         split; auto.
       * destruct ((prog_procedures p1) C) eqn:Hin_p1.
-        ** destruct (wfprog_exported_procedures_existence p2 H0 C CI H6 P H7)
+        ** rewrite Hwhere in H6. simpl in H6.
+           destruct (wfprog_exported_procedures_existence H0 H6 H7)
              as [Cprocs [Pcode [Hproc Hcode]]].
            unfold fdisjoint in H3.
            admit.
@@ -376,24 +389,25 @@ Proof.
     destruct i; auto.
     + destruct i; auto.
       simpl in *.
-      rewrite unionmE in *.
-    + admit.
+      rewrite unionmE.
+      rewrite unionmE in H6.
+      admit.
     + admit.
     + admit.
     + admit.
   - simpl.
     repeat rewrite domm_union.
     apply fsetUSS.
-    + apply (wfprog_well_formed_buffers p1 H).
-    + apply (wfprog_well_formed_buffers p2 H0).
+    + apply (wfprog_well_formed_buffers H).
+    + apply (wfprog_well_formed_buffers H0).
   - intros. simpl in *.
-    pose proof (wfprog_main_existence p1 H mainC mainP) as Hmain1.
-    pose proof (wfprog_main_existence p2 H0 mainC mainP) as Hmain2.
+    pose proof (wfprog_main_existence H) as Hmain1.
+    pose proof (wfprog_main_existence H0) as Hmain2.
     destruct (prog_main p1) as [[]|] eqn:Hmain_p1;
     destruct (prog_main p2) as [[]|] eqn:Hmain_p2.
     + simpl in *.
       inversion H6; subst.
-      destruct (Hmain1 eq_refl) as [main_procs []].
+      destruct (Hmain1 mainC mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.
@@ -401,14 +415,14 @@ Proof.
       * assumption.
     + simpl in *.
       inversion H6; subst.
-      destruct (Hmain1 eq_refl) as [main_procs []].
+      destruct (Hmain1 mainC mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.
         rewrite H7. reflexivity.
       * assumption.
     + inversion H6; subst.
-      destruct (Hmain2 eq_refl) as [main_procs []].
+      destruct (Hmain2 mainC mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.

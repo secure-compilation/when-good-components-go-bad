@@ -71,23 +71,65 @@ Definition to_partial_frame (ctx: {fset Component.id}) frame : Component.id * op
     (C, Some (v, k)).
 
 Fixpoint to_partial_stack_helper
-         (ctx: {fset Component.id}) (s: CS.stack) (last_frame_comp: Component.id)
+         (ctx: {fset Component.id}) (s: CS.stack) last_frame (Cincontrol: Component.id)
   : PS.stack :=
   match s with
   | [] => []
-  | (C, v, k) :: s' =>
-    if (Component.eqb C last_frame_comp) && (C \in ctx) then
-      to_partial_stack_helper ctx s' last_frame_comp
+  | (C, v, k) :: nil =>
+    let '(C', v', k') := last_frame in
+    if C \in ctx then
+      if Component.eqb C C' then
+        if Component.eqb C Cincontrol then
+          nil
+        else
+          to_partial_frame ctx last_frame :: nil
+      else
+        if Component.eqb C Cincontrol then
+          to_partial_frame ctx last_frame :: nil
+        else
+          to_partial_frame ctx last_frame ::
+          to_partial_frame ctx (C, v, k)  :: nil
     else
-      to_partial_frame ctx (C, v, k) :: to_partial_stack_helper ctx s' C
+      to_partial_frame ctx last_frame ::
+      to_partial_frame ctx (C, v, k)  :: nil
+  | (C, v, k) :: s' =>
+    let '(C', v', k') := last_frame in
+    if (C \in ctx) && (Component.eqb C C') then
+      to_partial_stack_helper ctx s' (C, v, k) Cincontrol
+    else
+      to_partial_frame ctx last_frame ::
+      to_partial_stack_helper ctx s' (C, v, k) Cincontrol
   end.
 
-Definition to_partial_stack (s: CS.stack) (ctx: {fset Component.id}) :=
+Definition to_partial_stack
+          (s: CS.stack) (ctx: {fset Component.id}) (Cincontrol: Component.id) :=
   match rev s with
   | [] => []
-  | (C1, v1, k1) :: s'_rev =>
-    rev (to_partial_frame ctx (C1, v1, k1) :: to_partial_stack_helper ctx s'_rev C1)
+  | first_frame :: s'_rev =>
+    rev (to_partial_stack_helper ctx s'_rev first_frame Cincontrol)
   end.
+
+Lemma partial_stack_push:
+  forall ctx gps1 gps2 C,
+    to_partial_stack gps1 ctx C = to_partial_stack gps2 ctx C ->
+  forall C1 v1 k1 v2 k2 C2,
+    C1 \in ctx ->
+    to_partial_stack ((C1, v1, k1) :: gps1) ctx C2 =
+    to_partial_stack ((C1, v2, k2) :: gps2) ctx C2.
+Proof.
+  intros ctx C gps1 gps2 Hsame_stacks.
+  intros C1 v1 k1 v2 k2 Hin_ctx C2.
+  unfold to_partial_stack.
+Admitted.
+
+Lemma partial_stack_pop:
+  forall ctx frame1 gps1 frame2 gps2 C,
+    to_partial_stack (frame1 :: gps1) ctx C =
+    to_partial_stack (frame2 :: gps2) ctx C ->
+  forall C',
+    to_partial_stack gps1 ctx C' = to_partial_stack gps2 ctx C'.
+Proof.
+Admitted.
 
 Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
 | ProgramControl: forall C gps pgps mem pmem k e,
@@ -98,7 +140,7 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     pmem = filterm (fun k _ => negb (k \in domm ctx)) mem ->
 
     (* we put holes in place of context information in the stack *)
-    pgps = to_partial_stack gps (domm ctx) ->
+    pgps = to_partial_stack gps (domm ctx) C ->
 
     partial_state ctx (C, gps, mem, k, e) (PC (C, pgps, pmem, k, e))
 
@@ -110,13 +152,13 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     pmem = filterm (fun k _ => negb (k \in domm ctx)) mem ->
 
     (* we put holes in place of context information in the stack *)
-    pgps = to_partial_stack gps (domm ctx) ->
+    pgps = to_partial_stack gps (domm ctx) C ->
 
     partial_state ctx (C, gps, mem, k, e) (CC (C, pgps, pmem)).
 
 Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
   let '(C, gps, mem, k, e) := scs in
-  let pgps := to_partial_stack gps (domm ctx) in
+  let pgps := to_partial_stack gps (domm ctx) C in
   let pmem := filterm (fun k _ => negb (k \in domm ctx)) mem in
   if C \in domm ctx then CC (C, pgps, pmem)
   else PC (C, pgps, pmem, k, e).
@@ -204,7 +246,7 @@ Proof.
     inversion Hkstep1; subst; inversion Hkstep2; subst;
     inversion Hpartial_sps1'; subst; inversion Hpartial_sps2'; subst; PS.simplify_turn;
       try (match goal with
-           | Hstack: to_partial_stack ?GPS1 _ = to_partial_stack ?GPS2 _,
+           | Hstack: to_partial_stack ?GPS1 _ _ = to_partial_stack ?GPS2 _ _,
              Hmem: filterm ?PRED ?MEM1 = filterm ?PRED ?MEM2 |- _ =>
              rewrite Hstack Hmem
            end);
@@ -326,19 +368,6 @@ Proof.
       admit.
 Admitted.
 
-Lemma partial_stack_push_by_context:
-  forall ctx gps1 gps2,
-    to_partial_stack gps1 ctx = to_partial_stack gps2 ctx ->
-  forall C v1 k1 v2 k2,
-    C \in ctx ->
-    to_partial_stack ((C, v1, k1) :: gps1) ctx = to_partial_stack ((C, v2, k2) :: gps2) ctx.
-Proof.
-  intros ctx gps1 gps2 Hsame_stacks.
-  intros C v1 k1 v2 k2 Hin_ctx.
-  unfold to_partial_stack in *.
-  simpl.
-Admitted.
-
 Lemma state_determinism_context:
   forall p ctx G sps t sps',
     is_context_component sps ctx ->
@@ -385,14 +414,21 @@ Proof.
         rewrite unionmE in H21.
         destruct (isSome ((prog_procedures p) C')) eqn:Hwhere;
           try discriminate.
-        *** destruct ((prog_procedures p) C') eqn:Hwhat;
+        *** rewrite Hwhere in H10, H21.
+            destruct ((prog_procedures p) C') eqn:Hwhat;
               try discriminate.
             rewrite H10 in H21. inversion H21; subst.
             (* same stack *)
-            erewrite partial_stack_push_by_context;
+            erewrite partial_stack_push;
               try reflexivity;
-              try assumption.
-        *** (* C' cannot be a procedure of both p1 and p2 *) admit.
+              try eassumption.
+        *** rewrite Hwhere in H10, H21.
+            (* C' is not in p1's interface,
+               C' is not in p1's procedures by well-formedness of p1 (from linkability),
+               contradiction *)
+            inversion Hlink1; subst.
+            pose proof (wfprog_well_formed_procedures_1 p1 H1) as Hp1_wfprocs.
+            admit.
       * match goal with
         | Hin: context[domm (prog_interface p1)],
           Hnotin: context[domm (prog_interface p1)] |- _ =>
@@ -408,12 +444,40 @@ Proof.
         rewrite (context_store_gets_filtered (domm (prog_interface p1)) H25).
         rewrite H5. simpl.
         (* same stack *)
-        erewrite partial_stack_push_by_context;
+        erewrite partial_stack_push;
           try reflexivity;
-          try assumption.
+          try eassumption.
 
     (* internal & external return *)
     + inversion Hkstep2; subst.
+      inversion Hpartial_sps1'; subst;
+      inversion Hpartial_sps2'; subst; PS.simplify_turn.
+      * (* same memory *)
+        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H12).
+        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H16).
+        rewrite H5. simpl.
+        (* same stack *)
+        (*erewrite partial_stack_pop*)
+        admit.
+      * match goal with
+        | Hin: context[domm (prog_interface p1)],
+          Hnotin: context[domm (prog_interface p1)] |- _ =>
+          rewrite Hin in Hnotin; discriminate
+        end.
+      * match goal with
+        | Hin: context[domm (prog_interface p1)],
+          Hnotin: context[domm (prog_interface p1)] |- _ =>
+          rewrite Hin in Hnotin; discriminate
+        end.
+      * (* same memory *)
+        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H12).
+        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H16).
+        rewrite H5. simpl.
+        (* same stack *)
+        (*erewrite partial_stack_pop;
+          try reflexivity;
+          try eassumption.*)
+        admit.
 Admitted.
 
 Theorem state_determinism:
