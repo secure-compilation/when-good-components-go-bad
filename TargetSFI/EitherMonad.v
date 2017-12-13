@@ -2,12 +2,28 @@ Require Export Lib.Monads.
 Require Import Coq.Strings.String.
 
 Require Import FunctionalExtensionality.
+Require Import TargetSFI.Machine.
 
 Set Implicit Arguments.
-                  
+
+Inductive ExecutionError :=
+| RegisterNotFound : MachineState.t -> RiscMachine.Register.t -> ExecutionError
+| NoInfo : ExecutionError
+| UninitializedMemory : MachineState.t -> RiscMachine.address -> ExecutionError
+| CodeMemoryException : MachineState.t -> RiscMachine.address
+                        -> RiscMachine.ISA.instr  -> ExecutionError
+| DataMemoryException : MachineState.t -> RiscMachine.address
+                        -> RiscMachine.value  -> ExecutionError
+| MissingComponentId : MachineState.t -> SFIComponent.id -> Env.CN -> ExecutionError
+| CallEventError : MachineState.t -> SFIComponent.id -> SFIComponent.id
+                   -> Env.CN -> Env.E -> ExecutionError
+| RetEventError : MachineState.t -> SFIComponent.id -> SFIComponent.id
+                   -> Env.CN -> ExecutionError
+.
+
 Inductive Either {A:Type} : Type :=
-| Right : A -> Either
-| Left : string -> Either.
+| Right : A  -> Either
+| Left : string -> ExecutionError -> Either.
 
 Instance either_monad : Monad (@Either)
   := {
@@ -17,17 +33,9 @@ Instance either_monad : Monad (@Either)
       bind := fun {A B:Type} (x : @Either A) (f : A -> @Either B) => 
         match x with
         | Right y => f y
-        | Left m => Left m
+        | Left m err => Left m err
         end
     }.
-
-
-(* Definition lift {A} (x: option A) (msg : string) : (@Either A) := *)
-(*   match x with *)
-(*   | None => Left msg *)
-(*   | Some x' => Right x' *)
-(*   end. *)
-           
 
 Lemma either_monad_left_id:
   forall A B (a: A) (f: A -> @Either B),

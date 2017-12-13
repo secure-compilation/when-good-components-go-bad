@@ -3,7 +3,7 @@ Require Export Lib.Monads.
 Require Import Coq.Strings.String.
 
 Require Import FunctionalExtensionality.
-Require Import EitherMonad.
+Require Import TargetSFI.EitherMonad.
 
 Module StateMonad.
   Section Def.
@@ -17,7 +17,7 @@ Module StateMonad.
     Definition bind A B (s: t A) (f: A -> t B) :=
       fun x => match s x with
             | (Right x',s') => (f x') s'
-            | (Left msg, s') => (Left msg, s')
+            | (Left msg err, s') => (Left msg err, s')
             end.
 
     Definition get : t st :=
@@ -29,18 +29,18 @@ Module StateMonad.
     Definition modify (f: st -> st) : t unit :=
       fun s => (Right tt, f s).
 
-    Definition lift {A} (x: option A) (msg : string) : t A :=
+    Definition lift {A} (x: option A) (msg : string) (err : ExecutionError): t A :=
       fun s => match x with
-            | None  => (Left msg, s)
+            | None  => (Left msg err, s)
             | Some v => (Right v, s)
             end.
     
-    Definition fail {A} (msg : string) : t A :=
-      fun s => (Left msg, s).
+    Definition fail {A} (msg : string) (err : ExecutionError) : t A :=
+      fun s => (Left msg err, s).
 
     Definition run {A} (s: st) (m: t A) : Either :=
       match m s with
-      | (Left msg,_) => Left msg
+      | (Left msg err,_) => Left msg err
       | (Right v,s') => Right v
       end.
       

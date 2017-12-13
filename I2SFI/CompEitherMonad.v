@@ -1,21 +1,26 @@
-Require Export Lib.Monads.
 Require Import Coq.Strings.String.
+Require Import Coq.NArith.BinNat.
 
 Require Import FunctionalExtensionality.
-Require Import AbstractMachine.
+
+Require Import Common.Definitions.
 Require Import Common.Maps.
-Require Import Coq.NArith.BinNat.
+
+Require Export Lib.Monads.
+
+Require Import AbstractMachine.
+Require Import SFIUtil.
 
 Set Implicit Arguments.
 
 Inductive CompilerError : Type :=
 | NoInfo : CompilerError
-| DuplicatedLabels :  (PMap.t (PMap.t AbstractMachine.lcode)) -> CompilerError
-| ExportedProcsLabelsC : positive ->  (PMap.t (PMap.t  AbstractMachine.label)) -> CompilerError
-| ExportedProcsLabelsP : positive -> positive ->
-                         (PMap.t (PMap.t  AbstractMachine.label)) -> CompilerError
-| PosArg : positive -> CompilerError
-| TwoPosArg : positive -> positive -> CompilerError
+| DuplicatedLabels :  (NMap (NMap AbstractMachine.lcode)) -> CompilerError
+| ExportedProcsLabelsC : Component.id ->  (NMap (NMap  AbstractMachine.label)) -> CompilerError
+| ExportedProcsLabelsP : Component.id -> Procedure.id ->
+                         (NMap (NMap  AbstractMachine.label)) -> CompilerError
+| PosArg : nat -> CompilerError
+| TwoPosArg : nat -> nat -> CompilerError
 .
 
 Inductive CompEither {A:Type} : Type :=

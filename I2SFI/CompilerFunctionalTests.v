@@ -41,7 +41,7 @@ Definition test (instrs : Intermediate.Machine.code)
         Intermediate.prog_main := (COMP1_ID,PROC1_ID)
       |} in
   match compile_program program with
-  | CompEitherMonad.Left msg err => EitherMonad.Left msg 
+  | CompEitherMonad.Left msg err => EitherMonad.Left msg EitherMonad.NoInfo
   | CompEitherMonad.Right p =>
     CS.eval_program (100%nat) p RiscMachine.RegisterFile.reset_all
   end.

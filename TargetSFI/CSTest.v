@@ -11,6 +11,7 @@ Require Import Coq.Init.Logic.
 
 Require Import Program.
 Require Import EitherMonad.
+Require Import SFITestUtil.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.

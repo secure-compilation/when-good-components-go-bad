@@ -2,6 +2,8 @@
 Require Export Lib.Monads.
 Require Import Coq.Strings.String.
 
+Require Import SFIUtil.
+
 Require Import FunctionalExtensionality.
 Require Import CompEitherMonad.
 

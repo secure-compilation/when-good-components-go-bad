@@ -20,7 +20,7 @@ Require Import Intermediate.Machine.
 Require Import Common.Definitions.
 Require Import Common.Maps.
 
-Require Import I2SFI.CompilerPBTests.
+Require Import I2SFI.CompTestUtil.
 Require Import I2SFI.AbstractMachine.
 Require Import I2SFI.CompEitherMonad.
 Require Import I2SFI.CompStateMonad.
@@ -85,7 +85,11 @@ Definition integration_pbt (sp : Source.program) : Checker :=
                           ) false
                | CompEitherMonad.Right p =>
                  match CS.eval_program (5000%nat) p (RiscMachine.RegisterFile.reset_all) with
-                 | TargetSFI.EitherMonad.Left msg => whenFail msg false
+                 | TargetSFI.EitherMonad.Left msg err => whenFail
+                                                          (msg ++ (show err)
+                                                               ++ newline
+                                                               ++ (show ip) )
+                                                          false
                  | TargetSFI.EitherMonad.Right (t,(mem,_,regs)) => checker true
                  end
                end
@@ -120,7 +124,7 @@ Definition procs_labels_increment : Checker :=
 
 Extract Constant Test.defNumTests => "1".
 QuickChick (procs_labels_increment).
-QuickChick (integration_pbt identity).
-QuickChick (integration_pbt increment).
-QuickChick (integration_pbt factorial).
-QuickChick (integration_pbt Source.Examples.Increment.increment).
+(* QuickChick (integration_pbt identity). *)
+(* QuickChick (integration_pbt increment). *)
+(* QuickChick (integration_pbt factorial). *)
+(* QuickChick (integration_pbt Source.Examples.Increment.increment). *)

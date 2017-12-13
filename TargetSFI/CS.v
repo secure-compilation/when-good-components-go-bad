@@ -166,11 +166,16 @@ Module CS.
     Notation modify := (StateMonad.modify state_records).
     Notation fail := (StateMonad.fail state_records).
     Notation run := (StateMonad.run state_records).
+
+    Definition DEBUG := false.
     
     Definition eval_step_with_state (G : Env.t) (s : MachineState.t)
       : STATE (trace * MachineState.t) :=
       
       let '(mem,pc,gen_regs) := s in
+      let get_reg r := 
+          (lift (RegisterFile.get_register r gen_regs)
+               "Unknown register" (RegisterNotFound s r)) in
       match Memory.get_word mem pc with
       | Some (Instruction instr) =>
         match instr with
@@ -179,37 +184,58 @@ Module CS.
           let gen_regs' :=  RegisterFile.set_register reg val gen_regs in
           ret (E0, (mem,inc_pc pc,gen_regs'))
         | IMov reg_src reg_dst =>
-          do val <- lift (RegisterFile.get_register reg_src gen_regs)
-                                    "Unknown register";
+          do val <- get_reg reg_src;
             let gen_regs' := RegisterFile.set_register reg_dst val gen_regs in
             ret (E0, (mem,inc_pc pc,gen_regs'))
         | ISA.IBinOp op reg_src1 reg_src2 reg_dst =>
-          do val1 <- lift (RegisterFile.get_register reg_src1 gen_regs)
-             "Unknown register";
-            do val2 <- lift (RegisterFile.get_register reg_src2 gen_regs)
-               "Unknown register";
+          do val1 <- get_reg reg_src1;
+            do val2 <- get_reg reg_src2;
             let result : value := RiscMachine.eval_binop op val1 val2 in
             let gen_regs':= RegisterFile.set_register reg_dst result gen_regs in
             ret (E0, (mem,inc_pc pc,gen_regs'))
         | ILoad rptr rd =>
-          do ptr <- lift (RegisterFile.get_register rptr gen_regs) "Unknown register";
-            let addr := Memory.to_address ptr in
-            do val <- lift (Memory.get_value mem addr) "Uninitialized mem";
+          do ptr <- get_reg rptr;
+            if (DEBUG)
+            then
+              let addr := Memory.to_address ptr in
+              do word <- lift (Memory.get_word mem addr)
+                 "Uninitialized mem(ILoad) " (UninitializedMemory s addr);
+                match word with
+                | Data val =>
+                  let gen_regs' := RegisterFile.set_register rd val gen_regs in
+                  ret (E0, (mem,inc_pc pc,gen_regs'))
+                | Instruction i => (fail "ILoad from code memory " (CodeMemoryException s addr i))
+                end
+            else
+              let addr := Memory.to_address ptr in
+              let val :=
+                  match Memory.get_word mem addr with
+                  | None => Z0
+                  | Some word =>
+                    match word with 
+                    | Data val => val
+                    | _ => Z0
+                    end
+                  end in
               let gen_regs' := RegisterFile.set_register rd val gen_regs in
               ret (E0, (mem,inc_pc pc,gen_regs'))
         | IStore rptr rs =>
-          do ptr <- lift (RegisterFile.get_register rptr gen_regs) "Unknown register";
+          do ptr <-get_reg rptr;
             let addr := Memory.to_address ptr in
-            do val <- lift (RegisterFile.get_register rs gen_regs) "Unknown register";
+            if (SFI.is_code_address addr)
+            then
+              fail "IStore in code memory" (CodeMemoryException s addr instr)
+            else
+              do val <- get_reg rs;
               let mem': Memory.t := Memory.set_value mem addr val  in
               ret (E0, (mem',inc_pc pc,gen_regs))
         | IBnz reg offset =>
-          do val <- lift (RegisterFile.get_register reg gen_regs) "Unknown register";
+          do val <- get_reg reg;
             let pc': address :=  if Z.eqb val Z0 then inc_pc pc
                                  else (Z.to_N (Z.add (Z.of_N pc) offset)) in
             ret  (E0, (mem,pc',gen_regs))
         | IJump reg =>
-          do addr <- lift (RegisterFile.get_register reg gen_regs) "Unknown register";
+          do addr <- get_reg reg;
             let pc' := Memory.to_address addr in
             if SFI.is_same_component_bool pc pc' then
               ret (E0, (mem,pc',gen_regs))
@@ -217,21 +243,15 @@ Module CS.
               if (N.eqb (SFI.C_SFI pc') SFI.MONITOR_COMPONENT_ID)
               then
                 ret (E0, (mem,pc',gen_regs))
-              else              
-                match  RegisterFile.get_register Register.R_COM gen_regs with
-                | None => fail "R_COM not found"
-                | Some rcomval =>
-                  match Env.get_component_name_from_id (SFI.C_SFI pc) G with
-                  | None => fail "No intermediate component id"
-                  (* TODO figure out how to add the id to the string *)
-                  | Some cpc =>        
-                    match Env.get_component_name_from_id (SFI.C_SFI pc') G with
-                    | None => fail "No intermediate component id"
-                    | Some cpc' =>
-                      ret ([ERet cpc rcomval cpc'], (mem,pc',gen_regs))
-                    end
-                  end
-                end
+              else
+                do rcomval <- get_reg Register.R_COM;
+                do cpc <- lift (Env.get_component_name_from_id (SFI.C_SFI pc) G)
+                   "No intermediate component id" 
+                   (MissingComponentId s  (SFI.C_SFI pc) (fst G));
+                do cpc' <- lift (Env.get_component_name_from_id (SFI.C_SFI pc') G)
+                   "No intermediate component id" 
+                   (MissingComponentId s  (SFI.C_SFI pc') (fst G));
+                ret ([ERet cpc rcomval cpc'], (mem,pc',gen_regs))
         | IJal addr =>
           let ra := Z.of_N (pc+1) in
           let gen_regs' := RegisterFile.set_register Register.R_RA ra gen_regs in
@@ -245,13 +265,23 @@ Module CS.
               let ot := call_trace G pc pc' gen_regs in
               match ot with
               | None => fail "Call trace error"
+                            (CallEventError s (SFI.C_SFI pc) (SFI.C_SFI pc')
+                                            (fst G) (snd G))
               | Some t => ret (t, (mem,pc',gen_regs'))
               end
         | IHalt => ret (E0,(mem,pc,gen_regs))
-          (* fail "Halted" (* Not really an error *) *)
         end
-      | Some (Data val) => fail "Pc in data memory"
-      | None => fail "Pc address not initialized"
+      | Some (Data val) => fail "Pc in data memory" (DataMemoryException s pc val)
+      | None =>
+        if (DEBUG)
+        then 
+          fail "Pc address not initialized" (UninitializedMemory s pc)
+        else
+          if (SFI.last_address_in_slot pc) 
+          then            
+            ret (E0, (Memory.set_instr mem pc IHalt,pc,gen_regs)) (* IHalt *)
+          else ret (E0, (mem,inc_pc pc,gen_regs)) (* INop *)
+            
       end.
 
     Close Scope string_scope.
@@ -262,7 +292,6 @@ Module CS.
       | O => ret (E0,s,0%nat)
       | S n' => do (t',s') <- eval_step_with_state G s;
                  do! modify (update_state_records s t' s');
-
                  (* check if a Halt was executed *)
                   let '(mem,pc,gen_regs) := s in
                   match Memory.get_word mem pc with
@@ -273,7 +302,13 @@ Module CS.
                       do (t'',s'',n'') <- eval_steps_with_state n' G s';
                         ret (t'++t'',s'',n'')
                     end
-                  | _ => fail "eval_steps_with_state: Impossible branch"                            
+                  | _ =>
+                    if (DEBUG)
+                    then 
+                      fail "eval_steps_with_state: Impossible branch" NoInfo
+                    else
+                      do (t'',s'',n'') <- eval_steps_with_state n' G s';
+                      ret (t'++t'',s'',n'')
                   end
       end.
 
@@ -311,30 +346,4 @@ Module CS.
   
   Close Scope monad_scope.
 
-
-  (* Unused code for now *)
-(* Let P₁=(CN,E,mem,ψ) be a complete compartmentalized program.
-  Let S₁=(mem,reg,pc) be a complete state. 
-  The predicate initial(P₁,S₁) is true iff 
-  1. mem is the same map 
-  2. registers are all set to 0 (including sp)
-  3. pc is set to 0
- *)
-  (* Definition initial_state (progr : program) (st : state) : Prop := *)
-  (*   let '(mem,pc,gen_regs) := st in *)
-  (*   (SFI.mem progr) = mem /\ *)
-  (*   pc = Z.to_N 0 /\ *)
-  (*   RegisterFile.is_zero gen_regs. *)
-
-  (* Definition final_state (st : state) (r : value) : Prop := *)
-  (*   let '(mem,pc,gen_regs) := st in *)
-  (*   executing mem pc IHalt. *)
-
-    (* NOT NEEDED NOW *)
-  (* Import MonadNotations. *)
-  (* Open Scope monad_scope. *)
-  (* Set Typeclasses Debug. *)
-
-  (* Check C_SFI. *)
-    
 End CS.

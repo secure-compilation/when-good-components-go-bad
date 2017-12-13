@@ -24,7 +24,7 @@ Definition show_map { A :Type} `{_ : Show A} (m : (PMap.t A)) : string :=
     (fun acc '(key,elt) =>
        acc ++ (show key) ++ ":" ++ newline
            ++ (show elt) ++ newline)
-    (PMap.elements m)
+    (elementsm m)
     Coq.Strings.String.EmptyString.
 
 Instance show_map_i  { A :Type} `{_ : Show A} : Show (PMap.t A) :=
@@ -69,15 +69,15 @@ Instance show_linstr : Show (option (list AbstractMachine.label) * AbstractMachi
   |}.
 
 Definition show_lcode ( lcode : PMap.t (PMap.t AbstractMachine.lcode)) :=
-  PMap.fold
+  fold
     (fun cid (pmap:PMap.t AbstractMachine.lcode) (acc1:string) =>
-       PMap.fold
+       fold
          (fun pid (lst:AbstractMachine.lcode) acc2 =>
             List.fold_left
                (fun acc3 elt => acc3 ++ (show elt)  ++ newline)            
                lst (acc2 ++ "pid=" ++ (show pid) ++ newline)%string
-         ) pmap (acc1 ++ "cid=" ++ (show cid) ++ newline)%string
-    ) lcode EmptyString.
+         ) (elementsm pmap) (acc1 ++ "cid=" ++ (show cid) ++ newline)%string
+    ) (elementsm lcode) EmptyString.
 
 Instance show_compiler_error : Show CompilerError :=
   {|
@@ -197,4 +197,3 @@ Instance show_intermediate_program : Show Intermediate.program :=
                 ++ (show (Intermediate.prog_main ip))
                          
   |}.
-

@@ -17,9 +17,13 @@ Require Import TargetSFI.StateMonad.
 Require Import TargetSFI.CS.
 Require Import CompEitherMonad.
 Require Import CompStateMonad.
-Require Import TargetSFI.MachineGen.
+Require Import TestIntermediate.
 
 Require Import Intermediate.Machine.
+Require Import Intermediate.CS.
+
+Require Import CompTestUtil.
+Require Import TargetSFI.SFITestUtil.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -35,195 +39,75 @@ Notation "'do!' X <- A ; B" :=
 End DoNotation.
 Import DoNotation.
 
-Definition newline := String "010" ""%string.
-
-Definition show_map { A :Type} `{_ : Show A} (m : (PMap.t A)) : string :=
-  List.fold_left
-    (fun acc '(key,elt) =>
-       acc ++ (show key) ++ ":" ++ newline
-           ++ (show elt) ++ newline)
-    (PMap.elements m)
-    Coq.Strings.String.EmptyString.
-
-Instance show_map_i  { A :Type} `{_ : Show A} : Show (PMap.t A) :=
-  {| show := show_map |}.
-
-Instance show_component_interface : Show Component.interface :=
-  {|
-    show := fun ci =>
-              ("Export: ") 
-                ++ (show (Component.export ci)) ++ newline
-                ++ "Import:"
-                ++ (show (Component.import ci)) ++ newline
-  |}.
-
-
-Instance show_ainstr : Show AbstractMachine.ainstr :=
-  {| show :=
-       fun i =>
-         match i with
-         | AbstractMachine.INop => "INop"
-         | AbstractMachine.ILabel lbl => "ILabel " ++ (show lbl)
-         | AbstractMachine.IConst v r => "IConst " ++ (show v) ++ " " ++ (show r)
-         | AbstractMachine.IMov r1 r2 => "IMov " ++ (show r1) ++ " " ++ (show r2)
-         | AbstractMachine.IBinOp op r1 r2 r3 => "IBinop " ++ (show op)
-                                          ++ " " ++ (show r1)
-                                          ++ " " ++ (show r2)
-                                          ++ " " ++ (show r3)
-         | AbstractMachine.ILoad r1 r2 => "ILoad " ++ (show r1) ++ " " ++ (show r2)
-         | AbstractMachine.IStore r1 r2 => "IStore " ++ (show r1) ++ " " ++ (show r2)
-         | AbstractMachine.IBnz r l => "IBnz " ++ (show r) ++ " " ++ (show l)
-         | AbstractMachine.IJump r => "IJump " ++ (show r)
-         | AbstractMachine.IJal l => "IJal " ++ (show l) 
-         | AbstractMachine.IHalt => "IHalt"
-         end
-  |}.
-
-Instance show_linstr : Show (option (list AbstractMachine.label) * AbstractMachine.ainstr) :=
-  {|
-    show :=
-      fun '(ol,i) =>
-        (show ol) ++ ":" ++ (show i)
-  |}.
-
-Definition show_lcode ( lcode : PMap.t (PMap.t AbstractMachine.lcode)) :=
-  PMap.fold
-    (fun cid (pmap:PMap.t AbstractMachine.lcode) (acc1:string) =>
-       PMap.fold
-         (fun pid (lst:AbstractMachine.lcode) acc2 =>
-            List.fold_left
-               (fun acc3 elt => acc3 ++ (show elt)  ++ newline)            
-               lst (acc2 ++ "pid=" ++ (show pid) ++ newline)%string
-         ) pmap (acc1 ++ "cid=" ++ (show cid) ++ newline)%string
-    ) lcode EmptyString.
-
-Instance show_compiler_error : Show CompilerError :=
-  {|
-    show :=
-      fun err =>
-        match err with
-        | NoInfo => EmptyString
-        | DuplicatedLabels lcode => show_lcode lcode
-        | ExportedProcsLabelsC _ _ => "ExportedProcsLabelsC TODO"
-        | ExportedProcsLabelsP _ _ _ => "ExportedProcsLabelsP TODO"
-        | PosArg p => show p
-        | TwoPosArg p1 p2 => "(" ++ (show p1) ++ "," ++ (show p2) ++ ")"
-        end                                   
-  |}.
-
-Instance show_program_interface : Show Program.interface :=
-  {| show := fun pi => show_map pi |}.
-
-Instance show_ptr : Show Pointer.t :=
-  {| show :=
-       fun p => "( cid=" ++ (show (Pointer.component p))
-                      ++ ",bid=" ++ (show (Pointer.block p))
-                      ++ ",off=" ++ (show (Pointer.offset p))
-                      ++ ")"
-  |}.
-
-Instance show_immv : Show imvalue :=
-  {|
-    show :=
-      fun iv =>
-        match iv with
-        | IInt n => "IInt " ++ (show n)
-        | IPtr p => "IPtr " ++ (show p)
-        end
-  |}.
-
-Instance show_register : Show register :=
-  {|
-    show :=
-      fun r =>
-        match r with
-        | R_ONE => "R_ONE"
-        | R_COM => "R_COM"
-        | R_AUX1 => "R_AUX1"
-        | R_AUX2 => "R_AUX2"
-        | R_RA => "R_RA"
-        | R_SP => "R_SP"
-        end
-  |}.
-
-Instance show_binop : Show Common.Values.binop :=
-  {|
-    show :=
-      fun op =>
-        match op with
-        | Common.Values.Add => "+"
-        | Common.Values.Minus => "-"
-        | Common.Values.Mul => "*"
-        | Common.Values.Eq => "="
-        | Common.Values.Leq => "<="
-        end
-  |}.
-
-Instance show_instr : Show Intermediate.Machine.instr :=
-  {| show :=
-       fun i =>
-         match i with
-           | INop => "INop"
-           | ILabel lbl => "ILabel " ++ (show lbl)
-           | IConst v r => "IConst " ++ (show v) ++ " " ++ (show r)
-           | IMov r1 r2 => "IMov " ++ (show r1) ++ " " ++ (show r2)
-           | IBinOp op r1 r2 r3 => "IBinop " ++ (show op)
-                                            ++ " " ++ (show r1)
-                                            ++ " " ++ (show r2)
-                                            ++ " " ++ (show r3)
-           | ILoad r1 r2 => "ILoad " ++ (show r1) ++ " " ++ (show r2)
-           | IStore r1 r2 => "IStore " ++ (show r1) ++ " " ++ (show r2)
-           | IAlloc r1 r2 => "IAlloc " ++ (show r1) ++ " " ++ (show r2)
-           | IBnz r l => "IBnz " ++ (show r) ++ " " ++ (show l)
-           | IJump r => "IJump " ++ (show r)
-           | IJal l => "IJal " ++ (show l) 
-           | ICall cid pid => "ICall " ++ (show cid) ++ " " ++ (show pid)
-           | IReturn => "IReturn"
-           | IHalt => "IHalt"
-         end
-  |}.
-
-Instance show_value : Show Common.Values.value :=
-  {|
-    show := fun val =>
-              match val with
-              | Int i => (show i)
-              | Ptr p => (show p)
-              | Undef => "Undef"
-              end
-  |}.
-
-Instance show_buffers : Show (Block.id * (nat + list value)) :=
-  {|
-    show := fun p =>
-              match p with
-              | (bid, inl n) => (show bid) ++ "[" ++ (show n) ++"]"
-              | (bid, inr lst) => (show bid) ++ ":" ++ (show lst)
-              end             
-  |}.
-
-Instance show_intermediate_program : Show Intermediate.program :=
-  {|
-    show := fun ip =>
-              ("Interface: ") ++ newline
-                ++ (show (Intermediate.prog_interface ip))
-                ++ ("Buffers: ") ++ newline
-                ++ (show_map (Intermediate.prog_buffers ip))
-                ++ ("Code: ") ++ newline
-                ++ (show (Intermediate.prog_procedures ip))
-                ++ ("Main: ") ++ newline
-                ++ (show (Intermediate.prog_main ip))
-                         
-  |}.
 
 Theorem label_eq_dec:
-      forall l1 l2 : Intermediate.Machine.label,  {l1 = l2} + {l1 <> l2}.
-    Proof.
-      repeat decide equality. Defined.
+  forall l1 l2 : Intermediate.Machine.label,  {l1 = l2} + {l1 <> l2}.
+Proof.
+  repeat decide equality.
+Defined.
 
 (***************************************************************************
  * Intermediate program generation
  ***************************************************************************)
+
+Definition MAX_PROC_PER_COMP := 10%nat.
+
+Definition MAX_NO_BUFFERS_PER_COMP := 10%nat.
+
+Definition MAX_BUFFER_SIZE := 10%nat.
+
+Definition MAX_PROC_LENGTH := 100%nat.
+    
+Inductive test_type : Type :=
+| TStore : test_type
+| TJump : test_type
+| TStack : test_type.
+
+Inductive instr_type :=
+| Nop : instr_type
+| Label : instr_type
+| Const : instr_type
+| Mov : instr_type
+| BinOp : instr_type
+| Load : instr_type
+| Store : instr_type
+| Alloc : instr_type
+| Bnz : instr_type
+| Jump : instr_type
+| Jal : instr_type
+| Call : instr_type
+| Return : instr_type
+| Halt : instr_type.
+
+Definition get_freq (t : test_type) (i:instr_type) : nat :=
+  match i with
+  | Nop => 1%nat
+  | Label => 4%nat
+  | Const => 4%nat
+  | Mov => 2%nat
+  | BinOp => 6%nat
+  | Load => 4%nat
+  | Store =>
+      match t with
+      | TStore => 20%nat
+      | _ => 4
+      end
+  | Alloc => 4%nat
+  | Bnz => 1%nat (* could generate infinite loops *)
+  | Jump =>
+      match t with
+      | TJump => 20%nat
+      | _ => 1%nat
+      end
+  | Jal => 1%nat
+  | Call =>
+      match t with
+      | TStack => 30%nat
+      | _ => 4%nat
+      end
+  | Return => 2%nat
+  | Halt => 1%nat
+  end.
 
 Definition choose_pos ( p : positive * positive) :=
   let Z_to_pos z := (* TODO figure out the proper function to call here *)
@@ -252,7 +136,7 @@ Definition gen_sublist {A : Type} ( default : A ) ( all : list A ) : G (list A) 
   end.
     
 Definition gen_program_interface (cids : list Component.id) : G Program.interface :=
-  let proc_ids := do! n <- choose(1%nat,5%nat); returnGen (pos_list n) in
+  let proc_ids := do! n <- choose(1%nat,MAX_PROC_PER_COMP); returnGen (pos_list n) in
   do! exported_procs <- (vectorOf (List.length cids) proc_ids);
   let all_procs := List.flat_map
                      (fun '(cid,lp) => List.map (fun pid => (cid,pid)) lp)
@@ -310,10 +194,9 @@ Definition gen_sum bsize (buffers : list (Component.id * list (Block.id * nat)))
 Definition gen_buffers (cids : list Component.id)
   : G (PMap.t (list (Block.id * (nat + list value)))) :=
   let gen_n_buffers : G (list (Block.id * nat)) :=
-      do! n <- choose (1%nat,5%nat); 
+      do! n <- choose (1%nat,MAX_NO_BUFFERS_PER_COMP); 
         let ids := pos_list n in
-        do! sizes <- vectorOf n (choose (1%nat, N.to_nat (10)%N));
-        (* do! sizes <- vectorOf n (choose (1%nat, N.to_nat (SFI.SLOT_SIZE-1)%N)); *)
+        do! sizes <- vectorOf n (choose (1%nat, MAX_BUFFER_SIZE));
            returnGen (List.combine ids sizes) in
   do! buffers <- (vectorOf (List.length cids) gen_n_buffers);
     let comp_buffers := (List.combine cids buffers) in
@@ -479,6 +362,7 @@ Definition gen_buffers (cids : list Component.id)
 
 
   Definition gen_procedure
+             (t : test_type)
              (pi : Program.interface)
              (buffers : PMap.t (list (Block.id * (nat+list value))))
              (cid : Component.id)
@@ -500,47 +384,63 @@ Definition gen_buffers (cids : list Component.id)
                    (List.filter (fun l => Nat.eqb 0%nat (List.count_occ label_eq_dec decl l))
                                 uses)
     in
-        
+
+    let fix gen_proc_with_labels proc missing_labels :=
+        match missing_labels with
+        | nil => returnGen proc
+        | lbl::xs =>          
+          do! pos <- choose (0%nat,((List.length missing_labels)-1)%nat);
+            let new_proc := ((List.firstn pos proc)
+                              ++ [ILabel lbl]
+                              ++ (List.skipn pos proc))%list in
+            gen_proc_with_labels new_proc xs
+        end in
+    
     let gen_instr  (first_label : positive)  (next_label : positive) :=
       freq [
-          (1%nat,(returnGen INop))
-          ; (4%nat, genIConst pi buffers cid)
-          ; (4%nat, genILabel next_label) 
-          ; (4%nat, gen2Reg IMov)
-          ; (7%nat, genIBinOp)
-          ; (6%nat, gen2Reg ILoad)
-          ; (4%nat, gen2Reg IStore)
-          ; (4%nat, genIBnz first_label next_label)
-          ; (8%nat, genIJump)
-          ; (8%nat, genIJal)
-          ; (6%nat, genICall pi cid pid)
-          ; (4%nat, gen2Reg IAlloc)
-          ; (1%nat, (returnGen IHalt))
-          ; (1%nat, (returnGen IReturn))
+          ( (get_freq t Nop) ,(returnGen INop))
+          ; ( (get_freq t Const), genIConst pi buffers cid)
+          ; ( (get_freq t Label) , genILabel next_label) 
+          ; ( (get_freq t Mov), gen2Reg IMov)
+          ; ( (get_freq t BinOp), genIBinOp)
+          ; ( (get_freq t Load) , gen2Reg ILoad)
+          ; ( (get_freq t Store), gen2Reg IStore)
+          ; ( (get_freq t Bnz), genIBnz first_label next_label)
+          ; ( (get_freq t Jump), genIJump)
+          ; ( (get_freq t Jal), genIJal)
+          ; ( (get_freq t Call), genICall pi cid pid)
+          ; ( (get_freq t Alloc), gen2Reg IAlloc)
+          ; ( (get_freq t Halt), (returnGen IHalt))
+          ; ( (get_freq t Return), (returnGen IReturn))
         ] in
-  let fix aux proc len first_lbl lbl :=
+  let fix gen_proc_rec proc len first_lbl lbl :=
       match len with
-      | O => 
-        returnGen (proc
-                     (* generate missing labels *) 
-                     ++ (List.map (fun l => ILabel l) (get_missing_labels proc))
-                     ++ [IReturn])%list
+      | O =>
+        do! p <- gen_proc_with_labels proc (get_missing_labels proc);
+          returnGen (p ++ [IReturn])%list
+        (* returnGen (proc *)
+        (*              (* generate missing labels *)  *)
+        (*              ++ (List.map (fun l => ILabel l) (get_missing_labels proc)) *)
+        (*              ++ [IReturn])%list *)
       | S len' =>
         do! i <- gen_instr first_lbl lbl;
           match i with
-          | ILabel _ => aux (proc ++ [i])%list len' first_lbl (lbl+1)%positive
+          | ILabel _ => gen_proc_rec (proc ++ [i])%list len' first_lbl (lbl+1)%positive
           | IReturn | IHalt =>
-                      returnGen (proc
-                                   (* generate missing labels *) 
-                                   ++ (List.map (fun l => ILabel l) (get_missing_labels proc))
-                                   ++ [i])%list
-          | _ => aux (proc ++ [i])%list len' first_lbl lbl
+                      do! p <- gen_proc_with_labels proc (get_missing_labels proc);
+                        returnGen (p ++ [i])%list
+                      (* returnGen (proc *)
+                      (*              (* generate missing labels *)  *)
+                      (*              ++ (List.map (fun l => ILabel l) (get_missing_labels proc)) *)
+                      (*              ++ [i])%list *)
+          | _ => gen_proc_rec (proc ++ [i])%list len' first_lbl lbl
           end
       end in
-  aux [] 10%nat next_label next_label.
+  gen_proc_rec [] MAX_PROC_LENGTH next_label next_label.
     
 
-Definition gen_procs (pi : Program.interface)
+  Definition gen_procs (t : test_type)
+             (pi : Program.interface)
            (buffers : PMap.t (list (Block.id * (nat+list value))))
   : G (PMap.t (PMap.t code)) :=
   let max_label (procs : PMap.t code) :=
@@ -558,7 +458,7 @@ Definition gen_procs (pi : Program.interface)
        do! proc_map <- (
            foldGen
              (fun acc pid =>
-                do! proc <- gen_procedure pi buffers cid pid ((max_label acc) + 1)%positive;
+                do! proc <- gen_procedure t  pi buffers cid pid ((max_label acc) + 1)%positive;
                 returnGen (PMap.add pid proc acc)
              ) (Component.export comp_interface) (PMap.empty code));
          (* check add labels as needed for IJal *)
@@ -623,13 +523,13 @@ Definition gen_main (pi : Program.interface) : G (Component.id * Procedure.id) :
     end.
   
 
-Definition genIntermediateProgram : G Intermediate.program :=
+Definition genIntermediateProgram (t : test_type) : G Intermediate.program :=
     do! n <- choose (1%nat, (N.to_nat (SFI.COMP_MAX-1)%N));
       let cids : list Component.id := pos_list n in
   
   do! program_interface <- (gen_program_interface cids);
   do! buffers <- (gen_buffers cids);
-  do! procs <- gen_procs program_interface buffers;
+  do! procs <- gen_procs t program_interface buffers;
   do! main <- gen_main program_interface;
   returnGen {|
         Intermediate.prog_interface := program_interface;
@@ -651,8 +551,10 @@ Conjecture correct_data_compartmentalized:
     (ptr sfi_sp_val: RiscMachine.value ),
 
     CompEitherMonad.Right sfi_p = compile_program ip /\
-    EitherMonad.Right (t, (mem,pc,gen_regs)) = (CS.eval_program n sfi_p RiscMachine.RegisterFile.reset_all) /\
-    RiscMachine.Memory.get_word mem pc = Some (RiscMachine.Instruction (RiscMachine.ISA.IStore rp rs)) ->
+    EitherMonad.Right (t, (mem,pc,gen_regs)) =
+    (CS.eval_program n sfi_p RiscMachine.RegisterFile.reset_all) /\
+    RiscMachine.Memory.get_word mem pc =
+    Some (RiscMachine.Instruction (RiscMachine.ISA.IStore rp rs)) ->
     (* Write at the top of SFI stack (from a pc that is in the list of push sfi ??) *)
     (
       rp = RiscMachine.Register.R_AUX1 /\
@@ -673,6 +575,40 @@ Conjecture correct_data_compartmentalized:
 
 Definition FUEL := 500%nat.
 
+Instance show_ip_exec_state : Show (@execution_state (Events.trace*(CS.state))) :=
+  {|
+    show := fun es =>
+              match es with
+              | Running _ => "Running"
+              | OutOfFuel _ => "OutOfFuel"
+              | Halted => "Halted"
+              | Wrong msg err  =>
+                "Wrong "
+                  ++ match err with
+                     | MissingComponentId _ => "MissingComponentId" 
+                     | NegativePointerOffset _ => "NegativePointerOffset"
+                     | LoadOutsideComponent => "LoadOutsideComponent"
+                     | LoadNotAddressInReg => "LoadNotAddressInReg"
+                     | StoreOutsideComponent => "StoreOutsideComponent"
+                     | StoreNotAddressInReg => "StoreNotAddressInReg"
+                     | JumpOutsideComponent => "JumpOutsideComponent"
+                     | JumpNotAddressInReg => "JumpNotAddressInReg"
+                     | MissingJalLabel => "MissingJalLabel"
+                     | MissingLabel => "MissingLabel"
+                     | MissingBlock _ => "MissingBlock"
+                     | OffsetTooBig _ => "OffsetTooBig"
+                     | MemoryError _ => "MemoryError"
+                     | NotIntInReg => "MemoryError"
+                     | AllocNegativeBlockSize => "AllocNegativeBlockSize"
+                     | InvalidEnv => "InvalidEnv(" ++ msg ++")"
+                     | NoInfo => msg
+                     end
+              end
+  |}.
+
+Definition run_intermediate_program (ip : Intermediate.program) :=
+  runp ip (Int Z0) FUEL.
+
 (************************************************
  * No writes outside its own memory, 
  * except for push sfi.
@@ -680,11 +616,17 @@ Definition FUEL := 500%nat.
 
 Definition store_log_entry := RiscMachine.pc * RiscMachine.address * RiscMachine.value.
 
-Definition store_log := list store_log_entry.
+Definition store_log := (list store_log_entry) * (list RiscMachine.address).
 
 Definition update_store_log (st : MachineState.t) (t : CompCert.Events.trace)
            (st' : MachineState.t) (log : store_log) :=
   let '(mem,pc,regs) := st in
+  let '(st_log,addr_log) := log in
+  let nlog :=
+      if (Nat.eqb (List.count_occ N.eq_dec addr_log pc) 0%nat)
+      then (addr_log ++ [pc])%list
+      else addr_log
+  in
   match RiscMachine.Memory.get_word mem pc with
   | Some (RiscMachine.Instruction instr) =>
     match instr with
@@ -693,14 +635,14 @@ Definition update_store_log (st : MachineState.t) (t : CompCert.Events.trace)
       | Some ptr =>
         let addr := RiscMachine.Memory.to_address ptr in
         match RiscMachine.RegisterFile.get_register RiscMachine.Register.R_SFI_SP regs with
-        | Some sp => (log ++ [(pc,addr,sp)])%list
-        | _ => log
+        | Some sp => ((st_log ++ [(pc,addr,sp)])%list,nlog)
+        | _ => (st_log,nlog)
         end
-      | _ => log
+      | _ => (st_log,nlog)
       end
-    | _ => log
+    | _ => (st_log,nlog)
     end
-  | _ => log
+  | _ => (st_log,nlog)
   end.
             
 Definition show_log_entry (entry : store_log_entry) : string :=
@@ -710,6 +652,43 @@ Definition show_log_entry (entry : store_log_entry) : string :=
           ++ (show_addr addr)
           ++ " sfi sp: " ++ (show sfi_sp).
 
+
+(* 1. number of instr exec, 
+   2. number of internal writes, 
+   3. number of push sfi, 
+   4. result of intermediate program
+   5. number of static instructions executed
+*)
+Definition store_stat := nat * nat * nat * (@execution_state (CompCert.Events.trace*CS.state)) * nat.
+
+Instance show_store_stat : Show store_stat :=
+  {|
+    show :=
+      fun ss =>
+        let '(steps, i, e, es, si) := ss in
+         "Steps: "
+           ++ (show  steps)
+           ++ " Internal: "
+           ++ (show i )
+           ++ " Push SFI: "
+           ++ (show e)
+           ++ " Intermediate Execution: "
+           ++ (show es)
+           ++ " Static instructions: "
+           ++ (show si)
+  |}.
+             
+Definition store_stats (log : store_log) (steps : nat)
+           (es : (@execution_state (CompCert.Events.trace*CS.state))) : store_stat :=
+  let '(l1,l2) := log in
+  let i := (List.length (List.filter (fun '(pc,addr,sfi_sp) =>
+                                        (SFI.is_same_component_bool pc addr)
+                                     ) l1
+                        )
+           ) in
+  ( steps, i, ((List.length l1) - i)%nat, es, List.length l2).
+
+
 Definition eval_store_program (p : sfi_program)
   : (@Either (CompCert.Events.trace*MachineState.t*nat) * store_log ) :=
   ((CS.eval_program_with_state     
@@ -717,37 +696,14 @@ Definition eval_store_program (p : sfi_program)
      update_store_log
      FUEL
      p
-     (RiscMachine.RegisterFile.reset_all)) nil).
+     (RiscMachine.RegisterFile.reset_all)) (nil,nil)).
 
-
-(* number of instr exec, number of internal writes, number 0f push sfi *)
-Definition store_stat := nat * nat * nat.
-
-Instance show_store_stat : Show store_stat :=
-  {|
-    show :=
-      fun ss =>
-        let '(steps, i, e) := ss in
-         "Steps: "
-           ++ (show  steps)
-           ++ " Internal: "
-           ++ (show i )
-           ++ " Push SFI: "
-           ++ (show e)
-  |}.
-             
-Definition store_stats (log : store_log) (steps : nat) : store_stat :=
-  let i := (List.length (List.filter (fun '(pc,addr,sfi_sp) =>
-                                        (SFI.is_same_component_bool pc addr)
-                                     ) log
-                        )
-           ) in
-  ((steps,i), ((List.length log) - i)%nat).
-
-Definition store_checker (log : store_log) (steps : nat) : Checker :=
+Definition store_checker (log : store_log) (steps : nat)
+           (es : (@execution_state (CompCert.Events.trace*CS.state))): Checker :=
+  let (l1,l2) := log in
   collect
-    (store_stats log steps)
-    match log with
+    (store_stats log steps es)
+    match l1 with
     | nil => checker tt
     | _ =>
       conjoin (List.map (fun '(pc,addr,sfi_sp) =>
@@ -766,22 +722,29 @@ Definition store_checker (log : store_log) (steps : nat) : Checker :=
                                whenFail ("Failed at: "
                                            ++ (show_log_entry (pc,addr,sfi_sp)) )%string
                                         false
-                        ) log)
+                        ) l1)
     end.
 
 Definition store_correct : Checker :=
-  forAll genIntermediateProgram
+  forAll (genIntermediateProgram TStore)
   ( fun ip =>
       match compile_program ip with
       | CompEitherMonad.Left msg err =>
         whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
       | CompEitherMonad.Right p =>
         let '(res,log) := eval_store_program p in
-        match res with
-        | TargetSFI.EitherMonad.Left msg => whenFail msg (store_checker log 0%nat)
-        | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) => 
-          (whenFail ("memory of failed program: " ++ (show_mem  mem))%string
-                    (store_checker log steps) (* check the log even if the program fails *))
+        let es := run_intermediate_program ip in
+        match es with
+        | Wrong msg InvalidEnv => whenFail ((show es) ++ (show ip))%string false
+        | _ =>
+          match res with
+          | TargetSFI.EitherMonad.Left msg err => whenFail
+                                                   (msg ++ (show err))
+                                                   (store_checker log 0%nat es)
+          | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) => 
+            (whenFail ("memory of failed program: " ++ (show_mem  mem))%string
+                      (store_checker log steps es))
+          end
         end
       end
   ).
@@ -790,13 +753,35 @@ Definition store_correct : Checker :=
  * Jumps
  ************************************************)
 
-Definition jump_log_entry := RiscMachine.pc * RiscMachine.address * CompCert.Events.trace.
+Inductive jump_type :=
+| Indirect : RiscMachine.Register.t -> jump_type
+| Direct : jump_type
+.
 
-Definition jump_log := list (@Either jump_log_entry).
+Instance show_jump_type : Show jump_type :=
+  {|
+    show :=
+      fun t =>
+        match t with
+        | Indirect r => "Jmp " ++ (show r)
+        | Direct => "Jal"
+        end
+  |}.
+
+Definition jump_log_entry := RiscMachine.pc * RiscMachine.address
+                             * jump_type * CompCert.Events.trace.
+
+Definition jump_log := (list jump_log_entry) * (list RiscMachine.address).
 
 Definition update_jump_log (st : MachineState.t) (t : CompCert.Events.trace)
            (st' : MachineState.t) (log : jump_log) :=
   let '(mem,pc,regs) := st in
+  let '(j_log,addr_log) := log in
+  let nlog :=
+      if (Nat.eqb (List.count_occ N.eq_dec addr_log pc) 0%nat)
+      then (addr_log ++ [pc])%list
+      else addr_log
+  in
   match RiscMachine.Memory.get_word mem pc with
   | Some (RiscMachine.Instruction instr) =>
     match instr with
@@ -804,27 +789,26 @@ Definition update_jump_log (st : MachineState.t) (t : CompCert.Events.trace)
       if (N.eqb r RiscMachine.Register.R_RA) || (N.eqb r RiscMachine.Register.R_T)
       then
         match RiscMachine.RegisterFile.get_register r regs with
-        | Some ptr => (log ++ [TargetSFI.EitherMonad.Right
-                                (pc, RiscMachine.Memory.to_address ptr,t)])%list
-        | _ => log
+        | Some ptr => ((j_log ++ [(pc, RiscMachine.Memory.to_address ptr,Indirect r,t)])%list,nlog)
+        | _ => (j_log,nlog)
         end
-      else
-        (log ++ [TargetSFI.EitherMonad.Left
-                   ("Illegal target register: " ++ (show_N r))%string])%list
-    | RiscMachine.ISA.IJal addr => (log ++ [TargetSFI.EitherMonad.Right (pc,addr,t)])%list
-    | _ => log
+      else (j_log,nlog)
+    | RiscMachine.ISA.IJal addr => ((j_log ++ [(pc,addr,Direct,t)])%list,nlog)
+    | _ => (j_log,nlog)
     end
-  | Some (RiscMachine.Data _) => (log ++
-                                     [TargetSFI.EitherMonad.Left
-                                        ("Data found at address: " ++ (show pc))%string])%list
-  | _ => log
+  | _ => (j_log,nlog)
   end.
             
 Definition show_jump_log_entry (entry : jump_log_entry) : string :=
-  let '(pc,addr,t) := entry in
+  let '(pc,addr,type,t) := entry in
    "pc: " ++ (show pc)
           ++ " ptr: "
           ++ (show addr)
+          ++ " type: "
+          ++ ( match type with
+               | Indirect r => "Jmp " ++ (show r)
+               | Direct => "Jal"
+               end)
           ++ " trace: " ++ (show t).
 
 Definition eval_jump_program (p : sfi_program)
@@ -834,98 +818,124 @@ Definition eval_jump_program (p : sfi_program)
      update_jump_log
      FUEL
      p
-     (RiscMachine.RegisterFile.reset_all)) nil).
+     (RiscMachine.RegisterFile.reset_all)) (nil,nil)).
 
-(* number of instr exec, number of internal jump, number of cross component jumps *)
-Definition jump_stat := nat * nat * nat.
+(* 1. number of instr exec, 
+   2. number of internal jumps, 
+   3. number of cross component jumps 
+   4. result of intermediate program
+   5. number of static instructions executed
+*)
+Definition jump_stat := nat * nat * nat * (@execution_state (CompCert.Events.trace*CS.state)) * nat.
 
 Instance show_jump_stat : Show jump_stat :=
   {|
     show :=
       fun ss =>
-        let '(steps, i, e) := ss in
+        let '(steps, i, e, es,si) := ss in
          "Steps: "
            ++ (show  steps)
            ++ " Internal: "
            ++ (show i )
            ++ " Cross Component: "
            ++ (show e)
+           ++ " Intermediate Execution: "
+           ++ (show es)
+           ++ " Static instructions: "
+           ++ (show si)
   |}.
 
-Definition jump_stats (log : jump_log) (steps : nat) : jump_stat :=
+Definition jump_stats (log : jump_log) (steps : nat)
+           (es : (@execution_state (CompCert.Events.trace*CS.state))) : jump_stat :=
+  let '(l1,l2) := log in
   let i := (List.length
               (List.filter
-                 (fun elt =>
-                    match elt with
-                    | TargetSFI.EitherMonad.Left msg => false
-                    | TargetSFI.EitherMonad.Right (pc,addr,t) =>
-                      (SFI.is_same_component_bool pc addr)
-                      || (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
-                      || (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
-                    end
-                 ) log
+                 (fun '(pc,addr,type,t) =>                  
+                    (SFI.is_same_component_bool pc addr)
+                    || (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
+                    || (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID) 
+                 ) l1
               )
            ) in
   let e := (List.length
               (List.filter
-                 (fun elt =>
-                    match elt with
-                    | TargetSFI.EitherMonad.Left msg => false
-                    | TargetSFI.EitherMonad.Right (pc,addr,t) =>
-                      negb (
-                          (SFI.is_same_component_bool pc addr)
-                          || (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
-                          || (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
-                        )
-                    end
-                 ) log
+                 (fun  '(pc,addr,type,t) =>
+                    negb (
+                        (SFI.is_same_component_bool pc addr)
+                        || (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
+                        || (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
+                      )
+                 ) l1
               )
            ) in
-  ((steps,i), e).
+  ((steps,i), e,es,List.length l2).
 
-Definition jump_checker (log : jump_log) (steps : nat) : Checker :=
+Definition jump_checker (log : jump_log) (steps : nat)
+           (es : (@execution_state (CompCert.Events.trace*CS.state))) : Checker :=
+  let (l1,l2) := log in
    collect
-     (jump_stats log steps)
-      match log with
+     (jump_stats log steps es)
+      match l1 with
       | nil => checker tt
       | _ =>
-        conjoin (List.map (fun elt =>
-                             match elt with
-                             | TargetSFI.EitherMonad.Left msg => whenFail msg false
-                             | TargetSFI.EitherMonad.Right (pc,addr,t) =>
-                               if (SFI.is_same_component_bool pc addr)
-                                  || (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
-                                  || (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
-                               then
-                                 match t with
-                                 | nil => checker true
-                                 | _ => whenFail ("Unexpectected event at log entry:"
-                                                   ++ (show_jump_log_entry (pc,addr,t)))
-                                                false
-                                 end
-                               else
-                                 match t with
-                                 | _::_ => checker true
-                                 | nill => whenFail ("Unexpectected empty event at log entry:"
-                                                      ++ (show_jump_log_entry (pc,addr,t)))
-                                                   false
-                                 end
-                             end
-                          ) log)
+        conjoin (
+            List.map
+              (fun '(pc,addr,type,t) =>
+                 if (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
+                 then checker true
+                 else
+                   if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
+                   then checker true
+                   else
+                     if (SFI.is_same_component_bool pc addr)                      
+                     then
+                       match t with
+                       | nil =>  whenFail ("Register R_T expected in internal jumps "
+                                            ++ (show type))
+                                         (match type with
+                                          | Indirect r => RiscMachine.Register.eqb
+                                                           RiscMachine.Register.R_T r
+                                          | Direct => true
+                                          end)     
+                       | _ => whenFail ("Unexpectected event at log entry:"
+                                         ++ (show_jump_log_entry (pc,addr,type,t)))
+                                      false
+                       end
+                     else
+                         match t with
+                         | _::_ =>  whenFail ("Register R_A expected in internal jumps "
+                                               ++ (show type))
+                                            (match type with
+                                             | Indirect r => RiscMachine.Register.eqb
+                                                              RiscMachine.Register.R_RA r
+                                             | Direct => true
+                                             end)
+                         | nill => whenFail ("Unexpectected empty event at log entry:"
+                                              ++ (show_jump_log_entry (pc,addr,type,t)))
+                                           false
+                         end
+              ) l1)
       end. (* TODO check the event too *)
 
 Definition jump_correct : Checker :=
-  forAll genIntermediateProgram
+  forAll (genIntermediateProgram TJump)
          ( fun ip =>
              match compile_program ip with
              | CompEitherMonad.Left msg err =>
                whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
              | CompEitherMonad.Right p =>
                let (res,log) := eval_jump_program p in
-               match res with
-               | TargetSFI.EitherMonad.Left msg => whenFail msg (jump_checker log 0%nat)
-               | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) => 
-                 jump_checker log steps
+               let es := run_intermediate_program ip in
+               match es with
+               | Wrong msg InvalidEnv => whenFail ((show es) ++ (show ip))%string false
+               | _ =>
+                 match res with
+                 | TargetSFI.EitherMonad.Left msg err => whenFail
+                                                          (msg ++ (show err))
+                                                          (jump_checker log 0%nat es)
+                 | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) => 
+                   jump_checker log steps es
+                 end
                end
              end
          ).
@@ -943,14 +953,21 @@ Definition show_op op :=
   | Pop => "Pop"
   end.
 
-Definition cs_log_entry := RiscMachine.pc * RiscMachine.address
+Definition cs_log_entry := RiscMachine.pc
+                           * RiscMachine.address
                            * stack_op * RiscMachine.ISA.instr.
 
-Definition cs_log := list (@Either cs_log_entry).
+Definition cs_log := (list cs_log_entry) * (list RiscMachine.address).
 
 Definition update_cs_log (st : MachineState.t) (t : CompCert.Events.trace)
            (st' : MachineState.t) (log : cs_log) :=
   let '(mem,pc,regs) := st in
+  let '(cs_log,addr_log) := log in
+  let nlog :=
+      if (Nat.eqb (List.count_occ N.eq_dec addr_log pc) 0%nat)
+      then (addr_log ++ [pc])%list
+      else addr_log
+  in
   match RiscMachine.Memory.get_word mem pc with
   | Some (RiscMachine.Instruction instr) =>
     match instr with
@@ -958,38 +975,27 @@ Definition update_cs_log (st : MachineState.t) (t : CompCert.Events.trace)
         match RiscMachine.RegisterFile.get_register r regs with
         | Some ptr => let addr := RiscMachine.Memory.to_address ptr in
                      if SFI.is_same_component_bool pc addr
-                     then (* intra-component jump *)
-                       if (N.eqb r RiscMachine.Register.R_T)
-                       then log
-                       else
-                         (log ++ [TargetSFI.EitherMonad.Left
-                                    ("Illegal target register: " ++ (show_N r))%string])%list  
+                     then (cs_log,nlog)
                      else (* cross-component return *)
-                       if (N.eqb r RiscMachine.Register.R_RA)
-                       then
-                         (log ++ [TargetSFI.EitherMonad.Right (pc, addr, Pop, instr)])%list
-                       else
-                         (log ++ [TargetSFI.EitherMonad.Left
-                                    ("Illegal target register: " ++ (show_N r))%string])%list
-        | _ => (log ++ [TargetSFI.EitherMonad.Left ("Can't find R_RA in general registers "
-                                                     ++ (show regs))%string])%list
+                         ((cs_log ++ [(pc, addr, Pop, instr)])%list,nlog)
+        | _ => (cs_log,nlog)
         end
+          
     | RiscMachine.ISA.IJal addr =>
       if SFI.is_same_component_bool pc addr
-      then log
+      then (cs_log,nlog)
       else
         let '(mem',pc',regs') := st' in
         match RiscMachine.RegisterFile.get_register RiscMachine.Register.R_RA regs' with
-        | Some addr => (log ++ [TargetSFI.EitherMonad.Right
-                                 (pc, RiscMachine.Memory.to_address addr,Push, instr)])%list
-        | _ => (log ++ [TargetSFI.EitherMonad.Left ("Can't find R_RA in general registers "
-                                                     ++ (show regs'))%string])%list
+        | Some addr => ((cs_log
+                          ++
+                          [(pc, RiscMachine.Memory.to_address addr,Push, instr)])%list
+                       ,nlog)
+        | _ => (cs_log,nlog)
         end
-    | _ => log
+    | _ => (cs_log,nlog)
     end
-  | Some (RiscMachine.Data _) => (log ++ [TargetSFI.EitherMonad.Left
-                                           ("Data found at address: " ++ (show pc))%string])%list
-  | _ => log
+  | _ => (cs_log,nlog)
   end.
             
 Definition show_cs_log_entry (entry : cs_log_entry) : string :=
@@ -1007,80 +1013,99 @@ Definition eval_cs_program (p : sfi_program)
      update_cs_log
      FUEL
      p
-     (RiscMachine.RegisterFile.reset_all)) nil).
+     (RiscMachine.RegisterFile.reset_all)) (nil,nil)).
 
-(* number of instr exec, number of internal jump, number of cross component jumps *)
-Definition cs_stat := nat * nat .
+(* 1. number of instr exec, 
+   2. number of internal jump, 
+   3. number of cross component jumps 
+   4. result of intermediate program
+   5. number of static instructions executed
+*)
+Definition cs_stat := nat * nat  * (@execution_state (CompCert.Events.trace*CS.state)) * nat.
 
 Instance show_cs_stat : Show cs_stat :=
   {|
     show :=
       fun ss =>
-        let '(steps, op) := ss in
+        let '(steps, op, es, si) := ss in
          "Steps: "
            ++ (show  steps)
            ++ " Operations no: "
            ++ (show op )
+           ++ " Intermediate Execution: "
+           ++ (show es)
+           ++ " Intermediate Execution: "
+           ++ (show es)
+           ++ " Static instructions: "
+           ++ (show si)
   |}.
 
-Definition cs_stats (log : cs_log) (steps : nat) : cs_stat :=
-  (steps, (List.length log)).
+Definition cs_stats (log : cs_log) (steps : nat)
+           (es : (@execution_state (CompCert.Events.trace*CS.state))) : cs_stat :=
+  let '(l1,l2) := log in
+  (steps, (List.length l1), es, List.length l2).
   
-Definition cs_checker (log : cs_log)  (steps : nat) : Checker :=
+Definition cs_checker (log : cs_log)  (steps : nat)
+           (es : (@execution_state (CompCert.Events.trace*CS.state))) : Checker :=
+  let (l1,l2) := log in
   let fix aux l s :=
       match l with
       | nil => checker true
-      | elt::xs =>
-        match elt with
-        | TargetSFI.EitherMonad.Left msg => whenFail msg false
-        | TargetSFI.EitherMonad.Right (pc,addr,op,instr) =>
-          match op with
-          | Push => aux xs (addr::s)
-          | Pop =>
-            match s with
-            | nil => whenFail ("Attemting to pop from empty stack at address" ++ (show pc))%string false
-            | a::s' => if (N.eqb a addr)
-                      then aux xs s'
-                      else whenFail ("Attemting address on the stack: "
-                                       ++ (show_addr a)
-                                       ++ " address in register: "
-                                       ++ (show_addr addr)
-                                       ++ "at pc: "
-                                       ++ (show_addr pc)
-                                       ++ " instr: "
-                                       ++ (show instr)
-                                    )%string
-                                    false
-            end
-          end
+      |  (pc,addr,op,instr)::xs =>
+         match op with
+         | Push => aux xs (addr::s)
+         | Pop =>
+           match s with
+           | nil => whenFail ("Attemting to pop from empty stack at address"
+                               ++ (show pc))%string false
+           | a::s' => if (N.eqb a addr)
+                     then aux xs s'
+                     else whenFail ("Attemting address on the stack: "
+                                      ++ (show_addr a)
+                                      ++ " address in register: "
+                                      ++ (show_addr addr)
+                                      ++ "at pc: "
+                                      ++ (show_addr pc)
+                                      ++ " instr: "
+                                      ++ (show instr)
+                                   )%string
+                                   false
+           end         
         end
       end
   in
 
   collect
-    (cs_stats log steps)
+    (cs_stats log steps es)
     match steps with
     | O => checker false
     | _ => 
-      match log with
+      match l1 with
       | nil => checker tt
-      | _ => aux log []
+      | _ => aux l1 []
       end
     end.
 
 Definition cs_correct : Checker :=
-  forAll genIntermediateProgram
+  forAll (genIntermediateProgram TStack)
          ( fun ip =>
              match compile_program ip with
              | CompEitherMonad.Left msg err =>
                whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
              | CompEitherMonad.Right p =>
                let (res,log) := eval_cs_program p in
-               match res with
-               | TargetSFI.EitherMonad.Left msg => whenFail msg (cs_checker log 0%nat)
-               | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) =>
-                 (whenFail ("memory of failed program: " ++ (show_mem  mem))%string
-                        (cs_checker log steps) (* check the log even if the program fails *))
+               let es := run_intermediate_program ip in
+                match es with
+                | Wrong msg InvalidEnv => whenFail ((show es) ++ (show ip))%string false
+                | _ =>
+                  match res with
+                  | TargetSFI.EitherMonad.Left msg err => whenFail
+                                                           (msg ++ (show err))
+                                                           (cs_checker log 0%nat es)
+                  | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) =>
+                    (whenFail ("memory of failed program: " ++ (show_mem  mem))%string
+                              (cs_checker log steps es))
+                  end
                end
              end
          ).

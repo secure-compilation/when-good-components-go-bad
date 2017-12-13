@@ -14,53 +14,11 @@ Require Import Common.Maps.
 Require Import TargetSFI.SFIUtil.
 Require Import TargetSFI.Machine.
 
+Require Import TargetSFI.SFITestUtil.
 From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
 
 Import BinNatMapExtra.
 Import SFI.
-
-
-Open Scope char_scope.
-
-Definition hexDigitToNat (c : ascii) : option N :=
-  match c with
-    | "0" => Some 0%N
-    | "1" => Some 1%N
-    | "2" => Some 2%N
-    | "3" => Some 3%N
-    | "4" => Some 4%N
-    | "5" => Some 5%N
-    | "6" => Some 6%N
-    | "7" => Some 7%N
-    | "8" => Some 8%N
-    | "9" => Some 9%N
-    | "a" | "A" => Some 10%N
-    | "b" | "B" => Some 11%N
-    | "c" | "C" => Some 12%N
-    | "d" | "D" => Some 13%N
-    | "e" | "E" => Some 14%N
-    | "f" | "F" => Some 15%N
-    | _ => None
-  end.
-
-Open Scope string_scope.
-
-Definition hex2N (s : string) : N :=
-  let fix aux (s : string) (acc : N) : option N :=
-  match s with
-    | "" => Some acc
-    | String c s' =>
-      match hexDigitToNat c with
-        | Some n => aux s' (16 * acc + n)%N
-        | None => None
-      end
-  end in
-  match aux s 0%N with
-  | None => 0%N
-  | Some n => n
-  end.
-  
-Close Scope string_scope.
 
 Example test_CODE_DATA_BIT_MASK :
   SFI.CODE_DATA_BIT_MASK = hex2N "4000".

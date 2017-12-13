@@ -4,17 +4,16 @@
 Require Import Coq.ZArith.ZArith.
 Require Import Coq.Structures.Equalities.
 Require Import Coq.Lists.List.
-Require Import Coq.FSets.FMapAVL.
 
 Require Import Common.Definitions.
-Require Import Common.Util.
 Require Import Common.Maps.
 Require Import SFIUtil.
-Require Import StateMonad.
 
-From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
+From mathcomp.ssreflect Require Import ssreflect ssrfun ssrbool eqtype.
 
-Import BinNatMapExtra.
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
 
 (******************************************
  * Basic Risc Machine Definition
@@ -58,12 +57,6 @@ Module RiscMachine.
     
     Definition NO_REGISTERS : nat := 33.
     
-    (* Definition IS_NOT_SFI_REGISTER (reg:N) := reg < 26. *)
-    (* Definition IS_SFI_REGISTER (reg:N) := reg > 25. *)
-    (* Definition is_not_sfi_reg_bool (reg:N) := reg <? 26.     *)
-    (* Definition  IS_SFI_SP_REGISTER (reg:N) := reg = 26.     *)
-    (* Definition is_sfi_sp_register_bool (reg:N) := reg =? 26. *)
-
     Definition eqb (r1 r2 : t) : bool :=
       N.eqb r1 r2.
 
@@ -98,9 +91,24 @@ Module RiscMachine.
 
     Definition reset_all : t := repeat Z0 Register.NO_REGISTERS.
 
+    Definition update {A} (l : list A) (pos : nat) (x:A) (def:A) : list A :=
+      let fix up_aux l pos x :=
+          match pos with
+          | O => match l with
+                | nil => [x]
+                | _::xs => x::xs
+                end
+          | S pos' =>
+            match l with
+            | nil => def :: (up_aux l pos' x)
+            | x'::xs => x' :: (up_aux xs pos' x)
+            end
+          end in
+      up_aux l pos x.
+    
     Definition set_register (reg : Register.t) (val : value)
                (gen_regs  : t) : t :=
-      Util.Lists.update gen_regs (N.to_nat reg) val.
+      update gen_regs (N.to_nat reg) val Z0.
 
     Definition get_register (reg : Register.t) (gen_regs : t) : option value :=
       ListUtil.get (N.to_nat reg) gen_regs.
@@ -154,19 +162,6 @@ Module RiscMachine.
     Theorem eq_dec: forall regs1 regs2 : t, {regs1 = regs2} + {regs1 <> regs2}.
     Proof.
       apply List.list_eq_dec. apply Z.eq_dec.
-      (* induction regs1. *)
-      (* - destruct regs2. *)
-      (*   + auto. *)
-      (*   + right. intro H. inversion H. *)
-      (* - destruct regs2. *)
-      (*   + right. intro H. inversion H. *)
-      (*   + destruct (Z.eqb a v) eqn:Hh. *)
-      (*     * rewrite Z.eqb_eq in Hh. rewrite Hh. *)
-      (*       destruct IHregs1 with (regs2:=regs2). *)
-      (*       left. apply f_equal. apply e. *)
-      (*       right. intro H. apply n. inversion H. reflexivity. *)
-      (*     * right. intro H. inversion H. rewrite <- Z.eqb_eq in H1. *)
-      (*       rewrite Hh in H1. inversion H1. *)
     Defined.
 
 
@@ -496,11 +491,11 @@ Module RiscMachine.
   Definition eval_binop (op : ISA.binop)
              (op1 : value) (op2 : value) : value :=
     match op with
-    | ISA.Addition => op1 + op2
-    | ISA.Subtraction => op1 - op2
-    | ISA.Multiplication => op1 * op2
-    | ISA.Equality => if Zeq_bool op1 op2 then 1 else 0
-    | ISA.Leq => if Zle_bool op1 op2 then 1 else 0
+    | ISA.Addition => (op1 + op2)%Z
+    | ISA.Subtraction => (op1 - op2)%Z
+    | ISA.Multiplication => (op1 * op2)%Z
+    | ISA.Equality => if Zeq_bool op1 op2 then 1%Z else 0%Z
+    | ISA.Leq => if Zle_bool op1 op2 then 1%Z else 0%Z
     | ISA.BitwiseAnd => Z.land op1 op2
     | ISA.BitwiseOr => Z.lor op1 op2
     | ISA.ShiftLeft => Z.shiftl op1 op2
@@ -589,19 +584,9 @@ Module SFI.
       (N.shiftl (2^(OFFSET_BITS_NO-ADDRESS_ALLIGN_BITS_NO) - 1) ADDRESS_ALLIGN_BITS_NO).
 
   Open Scope N_scope.
-  
-  (* Definition get_max_offset : N := 2^OFFSET_SIZE-1. *)
 
-  (* Definition code_address_of (cid : SFIComponent.id) (bid off: N) : RiscMachine.address := *)
-  (*   N.lor *)
-  (*     (N.shiftl bid (COMP_BITS_NO+OFFSET_BITS_NO+1)) *)
-  (*     (N.lor *)
-  (*        (N.shiftl cid OFFSET_BITS_NO) *)
-  (*        off).               *)
-
-  (* Definition data_address_of (cid : SFIComponent.id) (bid off: N) : RiscMachine.address := *)
-  (*   N.lor (code_address_of cid bid off) CODE_DATA_BIT_MASK. *)
-
+  Definition last_address_in_slot (addr : RiscMachine.address) : bool :=
+    N.eqb (OFFSET_SFI addr) (2^OFFSET_BITS_NO - 1).
   
   Definition address_of (cid : SFIComponent.id) (bid off: N) : RiscMachine.address :=
     N.lor
@@ -669,7 +654,7 @@ Module Env  <: UsualDecidableType.
   (* E is a partial map from addresses to procedure names.*)
   Definition E := list (RiscMachine.address*Procedure.id).
 
-  Definition t := CN * E.
+  Definition t := (CN * E)%type.
 
   Open Scope N_scope.
   Definition index2SFIid (i : nat) : SFIComponent.id :=
@@ -702,7 +687,7 @@ End Env.
  ******************************************************)
 Module MachineState.
 
-  Definition t := RiscMachine.Memory.t * RiscMachine.pc * RiscMachine.RegisterFile.t.
+  Definition t := (RiscMachine.Memory.t * RiscMachine.pc * RiscMachine.RegisterFile.t)%type.
 
   Definition getMemory (st : t) : RiscMachine.Memory.t := fst (fst st).
 
