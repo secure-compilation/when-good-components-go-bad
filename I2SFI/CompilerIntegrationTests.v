@@ -96,34 +96,34 @@ Definition integration_pbt (sp : Source.program) : Checker :=
              end
          ).
 
-Definition procs_labels_increment : Checker :=
-  forAll
-    ( 
-       match S2I.Compiler.compile_program increment with
-       | None =>
-         returnGen 0%N
-       | Some ip =>
-         returnGen (
-             let procs_labels := exported_procs_labels (Intermediate.prog_procedures ip)
-                                              (Intermediate.prog_interface ip) in
-             List.fold_left
-                N.max
-                (List.flat_map
-                   (fun m => List.map (fun '(_,(_,l)) => l) (elementsm m))
-                   (List.map snd (elementsm procs_labels)))
-                1%N 
-           )
-       end
-    )
-    ( fun x =>
-        checker
-          (
-              N.eqb 3 x
-          )
-    ).
+(* Definition procs_labels_increment : Checker := *)
+(*   forAll *)
+(*     (  *)
+(*        match S2I.Compiler.compile_program increment with *)
+(*        | None => *)
+(*          returnGen 0%N *)
+(*        | Some ip => *)
+(*          returnGen ( *)
+(*              let procs_labels := exported_procs_labels (Intermediate.prog_procedures ip) *)
+(*                                               (Intermediate.prog_interface ip) in *)
+(*              List.fold_left *)
+(*                 N.max *)
+(*                 (List.flat_map *)
+(*                    (fun m => List.map (fun '(_,(_,l)) => l) (elementsm m)) *)
+(*                    (List.map snd (elementsm procs_labels))) *)
+(*                 1%N  *)
+(*            ) *)
+(*        end *)
+(*     ) *)
+(*     ( fun x => *)
+(*         checker *)
+(*           ( *)
+(*               N.eqb 3 x *)
+(*           ) *)
+(*     ). *)
 
 Extract Constant Test.defNumTests => "1".
-QuickChick (procs_labels_increment).
+(* QuickChick (procs_labels_increment). *)
 (* QuickChick (integration_pbt identity). *)
 (* QuickChick (integration_pbt increment). *)
 (* QuickChick (integration_pbt factorial). *)

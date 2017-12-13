@@ -103,7 +103,7 @@ Definition get_freq (t : test_type) (i:instr_type) : nat :=
   | Store =>
       match t with
       | TStore => 20%nat
-      | _ => 4
+      | _ => 4%nat
       end
   | Alloc => 4%nat
   | Bnz => 1%nat (* could generate infinite loops *)

@@ -9,6 +9,7 @@ Require Import Common.Maps.
 Require Import Common.Definitions.
 Require Import Intermediate.Machine.
 Require Import TargetSFI.Machine.
+Require Import TargetSFI.SFIUtil.
 Require Import CompEitherMonad.
 Require Import CompStateMonad.
 Require Import I2SFI.AbstractMachine.
@@ -17,27 +18,38 @@ Require Import TargetSFI.SFIUtil.
 
 Require Import Coq.Strings.String.
 
+Require Import CoqUtils.ord.
+
+From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
+
 Import MonadNotations.
 Open Scope monad_scope.
 
 Definition newline := String "010" ""%string.
 
+Definition Component_id := positive.
+Definition Procedure_id := positive.
+Definition Block_id := positive.
+
+Definition prog_int := PMap.t ((list Procedure_id) *
+                               (list (Component_id * Procedure_id))).
+
 (******* Compiler Environment ************)
 
 Record compiler_env : Type := 
   {
-    current_component : Component.id;
+    current_component : Component_id;
     next_label : N;
     (* Compoent.id -> Procedure.id -> label for call translation *)
     (* used in procedure generation and ICall translation *)
-    exported_procedures_labels : (NMap (NMap  AbstractMachine.label));
+    exported_procedures_labels : (PMap.t (PMap.t  AbstractMachine.label));
     (* intermediate compoent id to sfi compoent id *)
-    cid2SFIid : NMap SFIComponent.id;
+    cid2SFIid : PMap.t SFIComponent.id;
     (* intermediate component id -> block id -> sfi slot id *)
     (* this is especially needed for static buffers *)
-    buffer2slot : NMap (NMap N);
+    buffer2slot : PMap.t (PMap.t N);
     (* cid -> pid -> slot *)
-    procId2slot : (NMap (NMap N))
+    procId2slot : (PMap.t (PMap.t N))
   }.
 
 Notation COMP := (CompStateMonad.t compiler_env).
@@ -49,7 +61,7 @@ Notation fail := (CompStateMonad.fail compiler_env).
 Notation run := (CompStateMonad.run compiler_env).
 
 
-Definition with_current_component (cid : Component.id)
+Definition with_current_component (cid : Component_id)
            (env : compiler_env) :  compiler_env :=
   {|
     current_component := cid;
@@ -60,7 +72,8 @@ Definition with_current_component (cid : Component.id)
     buffer2slot :=  buffer2slot env
   |}.
 
-Definition env_add_blocks (cid : Component.id) (blocks : NMap N)
+Definition env_add_blocks (cid : Component_id)
+           (blocks : PMap.t N)
            (env : compiler_env) :  compiler_env :=
   {|
     current_component := current_component env;
@@ -68,7 +81,7 @@ Definition env_add_blocks (cid : Component.id) (blocks : NMap N)
     cid2SFIid := cid2SFIid env;
     exported_procedures_labels := exported_procedures_labels env;
     procId2slot := procId2slot env;
-    buffer2slot := setm (buffer2slot env) cid blocks 
+    buffer2slot := PMap.add cid blocks (buffer2slot env)
   |}.
 
 Definition with_next_label (env : compiler_env) :  compiler_env :=
@@ -82,14 +95,14 @@ Definition with_next_label (env : compiler_env) :  compiler_env :=
    |}.
 
 (* Helper functions *)
-Definition get_proc_label (cid : Component.id) (pid : Procedure.id)
+Definition get_proc_label (cid : Component_id) (pid : Procedure_id)
   : COMP (AbstractMachine.label) :=
   do env <- get;
-    match (getm (exported_procedures_labels env) cid) with
+    match (PMap.find cid (exported_procedures_labels env)) with
     | None => fail "Can not find compoent in exported_procedures_labels"
                   (ExportedProcsLabelsC cid (exported_procedures_labels env))
     | Some cprocs =>
-      match (getm cprocs pid) with
+      match (PMap.find pid cprocs) with
       | None => fail "Can not find procedure for component in exported_procedures_labels"
                     (ExportedProcsLabelsP cid pid (exported_procedures_labels env))
       | Some res => ret res
@@ -97,38 +110,39 @@ Definition get_proc_label (cid : Component.id) (pid : Procedure.id)
     end.
 
 
-Definition get_sfiId (cid : Component.id) : COMP (SFIComponent.id) :=
+Definition get_sfiId (cid : Component_id) : COMP (SFIComponent.id) :=
   do env <- get;
-    (lift (getm (cid2SFIid env) cid)
+    (lift (PMap.find cid (cid2SFIid env))
           "Missing component id in cid2SFIid"%string
           (CompEitherMonad.PosArg cid)
     ).
 
-Definition get_SFI_code_address (cid : Component.id) (pid : Procedure.id)
+Definition get_SFI_code_address (cid : Component_id)
+           (pid : Procedure_id)
            (offset : nat) : COMP (RiscMachine.address) :=
   do cenv <- get;
     do sfiId <- get_sfiId cid;      
-    do cmap <- (lift (getm (procId2slot cenv) cid)
+    do cmap <- (lift (PMap.find cid (procId2slot cenv))
        "Missing component id in procId2slot"%string
           (CompEitherMonad.PosArg cid));
-    do slotid <- (lift (getm cmap pid)
+    do slotid <- (lift (PMap.find pid cmap)
        "Missing componentprocedure id in procId2slot"%string
        (CompEitherMonad.TwoPosArg cid pid));
     ret (SFI.address_of sfiId slotid (N.of_nat offset)). 
 
-Definition get_data_slotid (cid : Component.id) (bid : Block.id)
+Definition get_data_slotid (cid : Component_id) (bid : Block_id)
   : COMP (N) :=
   do cenv <- get;
-  do cmap <- lift (getm (buffer2slot cenv) cid)
+  do cmap <- lift (PMap.find cid (buffer2slot cenv))
      "Missing component id in buffer2slot"%string
      (CompEitherMonad.PosArg cid);
-    lift (getm cmap bid)
+    lift (PMap.find bid cmap)
          "Missing block id in buffer2slot"%string
          (CompEitherMonad.TwoPosArg cid bid).
       
 
-Definition get_SFI_data_address (cid : Component.id)
-           (bid : Block.id)
+Definition get_SFI_data_address (cid : Component_id)
+           (bid : Block_id)
            (offset :  Block.offset)
   : COMP (RiscMachine.address) :=
   do cenv <- get;
@@ -140,11 +154,11 @@ Definition get_SFI_data_address (cid : Component.id)
 (****************** Initial compiler environment *******************)
 
 (***** cn : list of Component.id needed in RiscMachine.progra, *)
-Definition gen_cn (pi : Program.interface) : list Component.id :=
-  List.map (fun '(key,_) => key) (elementsm pi).
+Definition gen_cn (pi : prog_int) : list Component_id :=
+  List.map (fun '(key,_) => key) (PMap.elements pi).
 
-Definition exported_procs_labels (procs : NMap (NMap Intermediate.Machine.code))
-           (pi : Program.interface) : NMap (NMap AbstractMachine.label) :=
+Definition exported_procs_labels (procs : PMap.t (PMap.t Intermediate.Machine.code))
+           (pi : prog_int) : PMap.t (PMap.t AbstractMachine.label) :=
   let max_code_component_label procs :=
       N.pos ( List.fold_left
                 Pos.max
@@ -158,49 +172,49 @@ Definition exported_procs_labels (procs : NMap (NMap Intermediate.Machine.code))
                 )                
                 1%positive) in
   
-  let component_exported_procs_labels cid pi procs : (NMap AbstractMachine.label) :=
-      match getm pi cid with
-      | None => emptym
-      | Some comp_interface =>
-        let exp_procs := Component.export comp_interface in
+  let component_exported_procs_labels cid pi procs : (PMap.t AbstractMachine.label) :=
+      match PMap.find cid pi with
+      | None => PMap.empty AbstractMachine.label
+      | Some (exp_procs,_) =>
         let start_lbl := ((max_code_component_label procs) + 1)%N in
         let new_labels := List.map N.of_nat (List.seq (N.to_nat start_lbl)
                                                       (List.length exp_procs)) in 
-        mkfmap (List.combine exp_procs
-                                        (List.combine
-                                           (List.repeat cid (List.length exp_procs))
-                                           new_labels))
+        PMapExtra.of_list (List.combine exp_procs
+                             (List.combine
+                                (List.repeat cid (List.length exp_procs))
+                                new_labels))
       end in
-  List.fold_left (fun acc '(cid,procs_map) =>
-          setm acc
+  PMap.fold (fun cid procs_map acc =>
+          PMap.add 
                cid
                (
                  component_exported_procs_labels
                    cid
                    pi
-                   (elementsm procs_map)
-               )              
+                   (PMap.elements procs_map)
+               )
+               acc
             )
-            (elementsm procs) (emptym).
+            (procs) (PMap.empty (PMap.t AbstractMachine.label)).
 
-Fixpoint allocate_procedure_slots (procs : NMap (NMap Intermediate.Machine.code))
-  : NMap (NMap N) :=
-  mkfmap (
+Fixpoint allocate_procedure_slots (procs : PMap.t (PMap.t Intermediate.Machine.code))
+  : PMap.t (PMap.t N) :=
+  PMapExtra.of_list (
       List.map (fun '(cid,proc_map) =>               
-                  let pids := (List.map fst (elementsm proc_map)) in
+                  let pids := (List.map fst (PMap.elements proc_map)) in
                   (cid,
-                   mkfmap
+                   PMapExtra.of_list
                      (List.combine pids
                                    (SFI.Allocator.allocate_code_slots (List.length pids))))
-               ) (elementsm procs)).
+               ) (PMap.elements procs)).
 
-Definition init_env (i_cid2SFIid : NMap N) (i_procId2slot : NMap (NMap N))
-           (i_exported_procedures_labels : (NMap (NMap  AbstractMachine.label)))
+Definition init_env (i_cid2SFIid : PMap.t N) (i_procId2slot : PMap.t (PMap.t N))
+           (i_exported_procedures_labels : (PMap.t (PMap.t  AbstractMachine.label)))
            (i_next_label : N)
   : compiler_env :=
-  {| current_component := 1%nat;
+  {| current_component := 1%positive;
      next_label := i_next_label;
-     buffer2slot := emptym;
+     buffer2slot := PMap.empty (PMap.t N);
      procId2slot := i_procId2slot;
      exported_procedures_labels := i_exported_procedures_labels;
      cid2SFIid := i_cid2SFIid
@@ -214,7 +228,7 @@ Definition init_env (i_cid2SFIid : NMap N) (i_procId2slot : NMap (NMap N))
  * Returns: memory with data slot 1 reserved for allocator and the static buffers 
  *          preallocated
  *)
-Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * (nat + list value))))))
+Fixpoint allocate_buffers (buffs :  (list (Component_id * (list (Block_id * (nat + list value))))))
   : COMP (RiscMachine.Memory.t) :=
   (* components with static buffers *)
   let allocate_buffers1 buffs := 
@@ -233,7 +247,7 @@ Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * (nat
                           ) lst
           with
           | None => 
-            let blocks := mkfmap
+            let blocks := PMapExtra.of_list
                             (List.combine (fst (List.split lst))
                                           (SFI.Allocator.allocate_data_slots
                                              (List.length lst))) in
@@ -265,14 +279,14 @@ Fixpoint allocate_buffers (buffs :  (list (Component.id * (list (Block.id * (nat
      do cenv <- get;
      allocator_init
        (
-         List.filter (fun id => (negb (List.existsb (Nat.eqb id) (List.map fst buffs))))
-                     (List.map fst (elementsm (cid2SFIid cenv)))
+         List.filter (fun id => (negb (List.existsb (Pos.eqb id) (List.map fst buffs))))
+                     (List.map fst (PMap.elements (cid2SFIid cenv)))
        ) mem1.
     
 
 Fixpoint init_buffers
          (mem : RiscMachine.Memory.t)
-         (buffs :  (list (Component.id * (list (Block.id * (nat + list value))))))
+         (buffs :  (list (Component_id * (list (Block_id * (nat + list value))))))
   : COMP (RiscMachine.Memory.t) :=
 
   let fix init_buffer mem sfi_cid slotid vals  : COMP (RiscMachine.Memory.t) := 
@@ -287,8 +301,8 @@ Fixpoint init_buffers
                (SFI.address_of sfi_cid slotid (N.of_nat off)) n )
             sfi_cid slotid xs
         | Ptr p =>
-          let cid : Component.id := Pointer.component p in
-          let bid : Block.id := Pointer.block p in
+          let cid : Component_id := Pos.of_nat (Pointer.component p) in
+          let bid : Block_id := Pos.of_nat (Pointer.block p) in
           let offset := Pointer.offset p in    
           if (Z.ltb offset 0%Z)
           then fail "init_buffers negative offset for pointer" (TwoPosArg cid bid)
@@ -308,7 +322,7 @@ Fixpoint init_buffers
         end
       end in
                 
-  let fix init_buffers_comp mem cid (lst : (list (Block.id * (nat + list value))))
+  let fix init_buffers_comp mem cid (lst : (list (Block_id * (nat + list value))))
       : COMP (RiscMachine.Memory.t) :=
       match lst with
       | nil => ret mem
@@ -412,8 +426,8 @@ Definition compile_IConst
   match imval with
   | Intermediate.Machine.IInt n => ret [AbstractMachine.IConst n reg']
   | Intermediate.Machine.IPtr p =>
-    let cid : Component.id := Pointer.component p in
-    let bid : Block.id := Pointer.block p in
+    let cid : Component_id := Pos.of_nat (Pointer.component p) in
+    let bid : Block_id := Pos.of_nat (Pointer.block p) in
     let offset := Pointer.offset p in    
     if (Z.ltb offset 0%Z)
     then fail "compile_IConst negative offset for pointer " (TwoPosArg cid bid)
@@ -545,7 +559,7 @@ Definition compile_IReturn : COMP (AbstractMachine.code) :=
            ++ [
                AbstractMachine.IJump RiscMachine.Register.R_RA]).
 
-Definition compile_ICall (cid1 : Component.id) (pid : Procedure.id)
+Definition compile_ICall (cid1 : Component_id) (pid : Procedure_id)
   : COMP (AbstractMachine.code) :=
   do cenv <- get;
     do cid <- get_sfiId (current_component cenv);
@@ -590,7 +604,7 @@ Fixpoint compile_instructions (ilist : Intermediate.Machine.code)
                                                                       (cid,N.of_nat lbl)]
         | Intermediate.Machine.IJump rt => (compile_IJump rt)
         | Intermediate.Machine.IJal lbl => ret [AbstractMachine.IJal (cid,N.of_nat lbl)]
-        | Intermediate.Machine.ICall c p => (compile_ICall c p)
+        | Intermediate.Machine.ICall c p => (compile_ICall (Pos.of_nat c) (Pos.of_nat p))
         | Intermediate.Machine.IReturn => (compile_IReturn)
         | Intermediate.Machine.IHalt => ret [AbstractMachine.IHalt]
         end in
@@ -604,17 +618,17 @@ Fixpoint compile_instructions (ilist : Intermediate.Machine.code)
 
 (* Needs in environment: current_component and all the other fields initialized properly. *) 
 Definition compile_procedure 
-           (pid : Procedure.id)
+           (pid : Procedure_id)
            (code : Intermediate.Machine.code)
-           (interface : Program.interface) 
+           (interface :prog_int) 
   : COMP (AbstractMachine.code) :=
   (* if the procedure is exported then must add the sfi stuff*)
   do cenv <- get;
     let cid := (current_component cenv) in
-    do comp_interface <- lift (getm interface cid)
+    do comp_interface <- lift (PMap.find cid interface)
        "Can't find interface for component " (PosArg cid);
-      let exported_procs := Component.export comp_interface in
-      let is_exported := List.existsb (Procedure.eqb pid) exported_procs in
+      let exported_procs := fst comp_interface in
+      let is_exported := List.existsb (Pos.eqb pid) exported_procs in
       do acode <- compile_instructions code; 
         if is_exported then          
             do proc_label <- get_proc_label cid pid;
@@ -627,12 +641,12 @@ Definition compile_procedure
         else
           ret acode.
 
-Definition check_component_labels (cid : Component.id)
-           (procs : list (Procedure.id * AbstractMachine.code))
-  : COMP(list (Procedure.id * AbstractMachine.code)) :=
+Definition check_component_labels (cid : Component_id)
+           (procs : list (Procedure_id * AbstractMachine.code))
+  : COMP(list (Procedure_id * AbstractMachine.code)) :=
   (* no duplication in labels *)
   (* exported proc label in offset 1 *)
-  let check_label_duplication (cid:Component.id) procs :=
+  let check_label_duplication (cid:Component_id) procs :=
       let all_labels :=
           (List.fold_left
              (fun acc linstr =>
@@ -670,9 +684,9 @@ Definition check_component_labels (cid : Component.id)
   check_component cid procs.
 
 
-Fixpoint compile_components (components : list (Component.id * NMap Intermediate.Machine.code))
-         (interface : Program.interface)
-  : COMP (list (Component.id * NMap AbstractMachine.code)) :=
+Fixpoint compile_components (components : list (Component_id * PMap.t Intermediate.Machine.code))
+         (interface : prog_int)
+  : COMP (list (Component_id * PMap.t AbstractMachine.code)) :=
 
   let fix compile_procedures procs interface :=
       match procs with
@@ -687,10 +701,10 @@ Fixpoint compile_components (components : list (Component.id * NMap Intermediate
   | [] => ret []
   | (cid,procs)::xs =>
     do! modify (with_current_component cid);
-      do procs <- compile_procedures (elementsm procs) interface;
+      do procs <- compile_procedures (PMap.elements procs) interface;
       do x <- check_component_labels cid procs;
       do res <- compile_components xs interface;
-      ret ((cid, mkfmap procs)::res)
+      ret ((cid, PMapExtra.of_list procs)::res)
   end.
 
 (*************** Code Alligment and ILabel Removal  *******************)
@@ -703,8 +717,8 @@ use crt to go over list
   if not padd with INop until address okay and do the above
 *)
 Definition layout_procedure
-           (cid : Component.id)
-           (pid : Procedure.id)
+           (cid : Component_id)
+           (pid : Procedure_id)
            (plbl : AbstractMachine.label)
            (code : AbstractMachine.code)
   : ( AbstractMachine.lcode) :=
@@ -760,8 +774,8 @@ Definition layout_procedure
          ) lcode1 nil.
 
 
-Definition check_label_duplication (cid:Component.id)
-           (procs : NMap AbstractMachine.lcode) :=
+Definition check_label_duplication (cid:Component_id)
+           (procs : PMap.t AbstractMachine.lcode) :=
   let all_labels :=
       (List.fold_left
          (fun acc '(pid,lcode) =>
@@ -772,13 +786,13 @@ Definition check_label_duplication (cid:Component.id)
                  | (None,_) => acc'
                  end)
               lcode acc
-         ) (elementsm procs) []) in
+         ) (PMap.elements procs) []) in
   Nat.eqb (List.length all_labels)
           (List.length (List.nodup label_eq_dec all_labels)).
          
 
-Definition check_labeled_code ( labeled_code : (NMap (NMap AbstractMachine.lcode)))
-  : COMP( (NMap (NMap AbstractMachine.lcode)) ) :=
+Definition check_labeled_code ( labeled_code : (PMap.t (PMap.t AbstractMachine.lcode)))
+  : COMP( (PMap.t (PMap.t AbstractMachine.lcode)) ) :=
   let check_procedure cid pid lcode :=
       do l <- get_proc_label cid pid;        
         match lcode with
@@ -797,7 +811,7 @@ Definition check_labeled_code ( labeled_code : (NMap (NMap AbstractMachine.lcode
       match comps with
       | nil => ret  labeled_code
       | (cid,comp)::xs =>
-        do x <- check_component cid (elementsm comp);
+        do x <- check_component cid (PMap.elements comp);
           if (check_label_duplication cid comp)
           then
             check_progr xs
@@ -805,37 +819,37 @@ Definition check_labeled_code ( labeled_code : (NMap (NMap AbstractMachine.lcode
             fail " check_labeled_code::label duplication in component "
                  (DuplicatedLabels labeled_code)
       end in
-  check_progr (elementsm labeled_code).
+  check_progr (PMap.elements labeled_code).
 
 
 (* acode: cid -> pid -> list of instr (labeled individually) *)
-Definition layout_code (acode : NMap (NMap AbstractMachine.code))
+Definition layout_code (acode : PMap.t (PMap.t AbstractMachine.code))
            (* association list of (cid,label) -> (pid, offset of label) *)
   : (* new code with ILabel removed and INop introduced such that the 
        contraints are satisfied for jump targets *)
-    COMP (NMap (NMap AbstractMachine.lcode)) :=
+    COMP (PMap.t (PMap.t AbstractMachine.lcode)) :=
   
-  let fix layout_procedures cid  lst : COMP (NMap AbstractMachine.lcode) :=
+  let fix layout_procedures cid  lst : COMP (PMap.t AbstractMachine.lcode) :=
         match lst with
-        | [] => ret (emptym)
+        | [] => ret (PMap.empty AbstractMachine.lcode)
         | (pid,code)::xs =>
           do res_map <- layout_procedures cid xs;
               do plbl <- (get_proc_label cid pid);
             let acode := layout_procedure cid pid plbl code in
-            ret (setm res_map pid acode)
+            ret (PMap.add pid acode res_map)
         end
   in
-  let fix aux lst : COMP (NMap (NMap AbstractMachine.lcode)) :=
+  let fix aux lst : COMP (PMap.t (PMap.t AbstractMachine.lcode)) :=
       match lst with
-      | [] => ret (emptym)
+      | [] => ret (PMap.empty (PMap.t AbstractMachine.lcode))
       | (cid,procs_map)::xs =>
         do cenv <- get;
           do res_map <- aux xs;
-          do proc_res <- layout_procedures cid (elementsm procs_map); 
-          ret (setm res_map cid proc_res)
+          do proc_res <- layout_procedures cid (PMap.elements procs_map); 
+          ret (PMap.add cid proc_res res_map)
       end
   in
-  do lcode <- aux (elementsm acode);
+  do lcode <- aux (PMap.elements acode);
     check_labeled_code lcode.
 
 
@@ -857,45 +871,45 @@ Definition index_of (lbl : AbstractMachine.label) (listing : AbstractMachine.lco
                     else (index,found)) listing (0%nat,false)).
   
   
-Definition get_E (lcode : NMap (NMap AbstractMachine.lcode)) : COMP (Env.E) :=
+Definition get_E (lcode : PMap.t (PMap.t AbstractMachine.lcode)) : COMP (Env.E) :=
   
   let fix fold_procs cid procs_lst acc :=
       do cenv <- get;
       match procs_lst with
       | [] => ret acc
       | (pid,lbl) :: xs =>        
-        match getm lcode cid with
+        match PMap.find cid lcode with
         | None => fail "get_E did not find component in lcode" (PosArg cid)
         | Some procs_lmap =>
-          match getm procs_lmap pid with
+          match PMap.find pid procs_lmap with
           | None => fail "get_E did not find procedure in lcode" (TwoPosArg cid pid)
           | Some listing =>
             let i := index_of lbl listing in
             if (ltb i (List.length listing))
             then
               do address <- get_SFI_code_address cid pid i;
-                (fold_procs cid xs ((address,pid)::acc))
+                (fold_procs cid xs ((address,(Pos.to_nat pid))::acc))
             else fail "get_E the label exported by this procedure is not found in the listing"
                       (TwoPosArg cid pid)
           end
         end
       end in
         
-  let fix fold_comp (clist : list (Component.id*(NMap label)))
+  let fix fold_comp (clist : list (Component_id*(PMap.t label)))
           (acc : Env.E)  : COMP (Env.E) :=      
       match clist with
       | [] => ret acc
       | (cid,pmap)::xs =>
-        do res <- fold_procs cid (elementsm pmap) [];
+        do res <- fold_procs cid (PMap.elements pmap) [];
           fold_comp xs (acc++res)
       end in
   do cenv <- get;
-  fold_comp (elementsm (exported_procedures_labels cenv)) [].
+  fold_comp (PMap.elements (exported_procedures_labels cenv)) [].
 
 (**************************** label 2 address ****************************)
 
-Definition label2address (lc : NMap (NMap AbstractMachine.lcode))
-  : COMP (NMap (NMap (list (AbstractMachine.label * RiscMachine.address)))) :=
+Definition label2address (lc : PMap.t (PMap.t AbstractMachine.lcode))
+  : COMP (PMap.t (PMap.t (list (AbstractMachine.label * RiscMachine.address)))) :=
 
   let fix fold_instr cid pid list_instr
           (acc : list (AbstractMachine.label * RiscMachine.address)) :=
@@ -910,7 +924,7 @@ Definition label2address (lc : NMap (NMap AbstractMachine.lcode))
       end in
   
   let fix fold_procs cid procs_lst
-          (acc : (NMap (list (AbstractMachine.label * RiscMachine.address)))) :=
+          (acc : (PMap.t (list (AbstractMachine.label * RiscMachine.address)))) :=
       do cenv <- get;
       match procs_lst with
       | [] => ret acc
@@ -920,34 +934,32 @@ Definition label2address (lc : NMap (NMap AbstractMachine.lcode))
                (List.seq 0%nat (List.length proc_lcode))
                proc_lcode )
            [];
-          fold_procs cid xs (setm acc pid res)
+          fold_procs cid xs (PMap.add pid res acc)
       end in
         
-  let fix fold_comp (clist : list (Component.id*(NMap AbstractMachine.lcode)))
-          (acc : (NMap (NMap (list (AbstractMachine.label * RiscMachine.address))))) :=      
+  let fix fold_comp (clist : list (Component_id*(PMap.t AbstractMachine.lcode)))
+          (acc : (PMap.t (PMap.t (list (AbstractMachine.label * RiscMachine.address))))) :=      
       match clist with
       | [] => ret acc
       | (cid,pmap)::xs =>
-        do res <- fold_procs cid (elementsm pmap)
-           emptym;
-           (* (PMap.empty (list (AbstractMachine.label * RiscMachine.address))); *)
-          fold_comp xs (setm acc cid res)
+        do res <- fold_procs cid (PMap.elements pmap)
+           (PMap.empty (list (AbstractMachine.label * RiscMachine.address)));
+          fold_comp xs (PMap.add cid res acc)
       end in
   
-  fold_comp (elementsm lc)
-            emptym.
-              (* (PMap.empty (PMap.t (list (AbstractMachine.label * RiscMachine.address)))). *)
+  fold_comp (PMap.elements lc)
+              (PMap.empty (PMap.t (list (AbstractMachine.label * RiscMachine.address)))).
 
 
 (*************************** Monitor component ****************************************)
 
-Definition get_address (cid : Component.id)
-           (pid : Procedure.id)
+Definition get_address (cid : Component_id)
+           (pid : Procedure_id)
            (lbl : AbstractMachine.label)
-           (l2a :  (NMap (NMap (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a :  (PMap.t (PMap.t (list (AbstractMachine.label * RiscMachine.address)))))
   : COMP (RiscMachine.address) :=
-  do pmap <- lift (getm l2a cid) "get_address:No cid" (PosArg cid);
-    do pl <- lift (getm pmap pid) "get_address:No pid" (TwoPosArg cid pid);
+  do pmap <- lift (PMap.find cid l2a) "get_address:No cid" (PosArg cid);
+    do pl <- lift (PMap.find pid pmap) "get_address:No pid" (TwoPosArg cid pid);
     match (List.find (fun '(l,a) => AbstractMachine.label_eqb l lbl) pl) with
     | None => fail "get_address:Address not found" NoInfo
     | Some (_,a) => ret a
@@ -955,20 +967,20 @@ Definition get_address (cid : Component.id)
 
 Definition  get_address_by_label
             (lbl : AbstractMachine.label)
-            (l2a :  (NMap (NMap (list (AbstractMachine.label * RiscMachine.address)))))
+            (l2a :  (PMap.t (PMap.t (list (AbstractMachine.label * RiscMachine.address)))))
   : COMP (RiscMachine.address) :=
 
   let ll := List.concat 
-              (List.flat_map (fun pmap => List.map snd (elementsm pmap))
-                          (List.map snd (elementsm l2a)) (* list of PMap *))
+              (List.flat_map (fun pmap => List.map snd (PMap.elements pmap))
+                          (List.map snd (PMap.elements l2a)) (* list of PMap *))
   in match (List.find (fun '(l,a) => AbstractMachine.label_eqb l lbl) ll) with
      | None => fail "get_address_by_label" NoInfo
      | Some (_,a) => ret a
      end.
 
-Definition generate_comp0_memory (mcid : Component.id) (mpid : Procedure.id)
+Definition generate_comp0_memory (mcid : Component_id) (mpid : Procedure_id)
            (mem : RiscMachine.Memory.t)
-           (l2a :  (NMap (NMap (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a :  (PMap.t (PMap.t (list (AbstractMachine.label * RiscMachine.address)))))
 : COMP (RiscMachine.Memory.t) :=
   do main_label <- get_proc_label mcid mpid;
   do main_address <- get_address mcid mpid main_label l2a;
@@ -1007,10 +1019,10 @@ Definition generate_comp0_memory (mcid : Component.id) (mpid : Procedure.id)
 (*************************** Code Memory *******************************)
 
 Definition generate_instruction
-           (cid : Component.id)
-           (pid : Procedure.id)
+           (cid : Component_id)
+           (pid : Procedure_id)
            (li :(option (list AbstractMachine.label)) * AbstractMachine.ainstr)
-           (l2a : (NMap (NMap (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a : (PMap.t (PMap.t (list (AbstractMachine.label * RiscMachine.address)))))
            (offset : nat)
            (mem0 : RiscMachine.Memory.t) : COMP (RiscMachine.Memory.t) :=
   do address <-  get_SFI_code_address cid pid offset;
@@ -1057,10 +1069,10 @@ Definition generate_instruction
   end.
 
 Definition generate_procedure_code
-           (cid : Component.id)
-           (pid : Procedure.id)
+           (cid : Component_id)
+           (pid : Procedure_id)
            (linstrs : lcode)
-           (l2a : (NMap (NMap (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a : (PMap.t (PMap.t (list (AbstractMachine.label * RiscMachine.address)))))
            (mem0 : RiscMachine.Memory.t) : COMP (RiscMachine.Memory.t) :=
     let fix aux lst acc :=
         let '(index,mem) := acc in
@@ -1074,21 +1086,21 @@ Definition generate_procedure_code
       ret (snd res).
         
 Definition generate_component_code
-           (cid : Component.id)
-           (pmap : NMap lcode)
-           (l2a : (NMap (NMap (list (AbstractMachine.label * RiscMachine.address)))))
+           (cid : Component_id)
+           (pmap : PMap.t lcode)
+           (l2a : (PMap.t (PMap.t (list (AbstractMachine.label * RiscMachine.address)))))
            (mem0 : RiscMachine.Memory.t) : COMP (RiscMachine.Memory.t) :=
-  let fix aux (lst : list (Procedure.id * lcode)) acc :=
+  let fix aux (lst : list (Procedure_id * lcode)) acc :=
       match lst with
       | [] => ret acc
       | (pid,linstrs)::xs =>
         do res <- generate_procedure_code cid pid linstrs l2a acc;
           aux xs res
-      end in aux (elementsm pmap) mem0.
+      end in aux (PMap.elements pmap) mem0.
 
 Definition generate_code_memory
-           ( labeled_code : (NMap (NMap lcode)))
-           (l2a :  (NMap (NMap (list (AbstractMachine.label * RiscMachine.address)))))
+           ( labeled_code : (PMap.t (PMap.t lcode)))
+           (l2a :  (PMap.t (PMap.t (list (AbstractMachine.label * RiscMachine.address)))))
            (mem0 : RiscMachine.Memory.t) : COMP (RiscMachine.Memory.t) :=
   let fix aux lst acc  :=
       match lst with
@@ -1096,42 +1108,82 @@ Definition generate_code_memory
       | (cid,pmap) :: xs =>
         do res <- generate_component_code cid pmap l2a acc;
           aux xs res
-      end in aux (elementsm labeled_code) mem0.
-      
-      
+      end in aux (PMap.elements labeled_code) mem0.
+
+Definition convert_prog_interface (pi : Program.interface) : prog_int :=
+  List.fold_left
+    (fun acc '(cid,cint) =>
+       PMap.add (Pos.of_nat cid)
+                ((List.map Pos.of_nat (val (Component.export cint))),
+                 (List.map (fun '(c,p)=>(Pos.of_nat c,Pos.of_nat p)) (val (Component.import cint))))
+                acc
+    )
+    (elementsm pi) (PMap.empty  ((list Procedure_id) *
+                                 (list (Component_id * Procedure_id)))).
+
+Definition convert_prog_buffers (buffers :  NMap (list (Block.id * (nat + list value))))
+  : list (Component_id * (list (Block_id *  (nat + list value)))) :=
+  List.fold_left
+    (fun acc '(cid,l) =>
+       (
+         (Pos.of_nat cid, List.map (fun '(bid,s) => (Pos.of_nat bid,s)) l)
+       )::acc
+    )
+    (elementsm buffers)
+    nil. 
+
+Definition convert_prog_procs (procs :  NMap (NMap Machine.code)) : PMap.t (PMap.t Machine.code) :=
+  List.fold_left
+    (fun acc1 '(cid,pmap) =>
+       PMap.add (Pos.of_nat cid)
+                (
+                  List.fold_left
+                    (fun acc2 '(pid,c) =>
+                       PMap.add (Pos.of_nat pid) c acc2
+                    )
+                    (elementsm pmap)
+                    (PMap.empty Machine.code)
+                )
+                acc1
+    )
+    (elementsm procs)
+    (PMap.empty (PMap.t Machine.code)).
+
 Definition compile_program (ip : Intermediate.program) :=
-  let cn := gen_cn (Intermediate.prog_interface ip) in
+
+  let cip := convert_prog_interface (Intermediate.prog_interface ip) in
+  let buffs := convert_prog_buffers (Intermediate.prog_buffers ip) in
+  let pr_progs := convert_prog_procs (Intermediate.prog_procedures ip) in
+  
+  let cn := gen_cn cip in
   let cid2SFIid := List.fold_left
                      (fun acc '(cid,i)  =>
-                        setm acc cid (Env.index2SFIid i))
+                        PMap.add cid (Env.index2SFIid i) acc)
                      (List.combine cn (List.seq 0 (List.length cn)))
-                     (emptym) in
-  let procs_labels := exported_procs_labels (Intermediate.prog_procedures ip)
-                                            (Intermediate.prog_interface ip) in
+                     (PMap.empty N) in
+  let procs_labels := exported_procs_labels pr_progs cip in
   let max_label := List.fold_left
                      N.max
                      (List.flat_map
-                        (fun m => List.map (fun '(_,(_,l)) => l) (elementsm m))
-                        (List.map snd (elementsm procs_labels)))
+                        (fun m => List.map (fun '(_,(_,l)) => l) (PMap.elements m))
+                        (List.map snd (PMap.elements procs_labels)))
                      1%N in
   
-  let procId2slot := allocate_procedure_slots (Intermediate.prog_procedures ip) in
+  let procId2slot := allocate_procedure_slots pr_progs in
 
   
   run (init_env cid2SFIid procId2slot procs_labels (max_label+1)%N)
         (
          
-          do data_mem' <- allocate_buffers
-             (elementsm (Intermediate.prog_buffers ip));
+          do data_mem' <- allocate_buffers buffs;
 
-            do data_mem <- init_buffers data_mem'
-               (elementsm (Intermediate.prog_buffers ip));
+            do data_mem <- init_buffers data_mem' buffs;
             
             do acode <- compile_components
-               (elementsm (Intermediate.prog_procedures ip) )
-               (Intermediate.prog_interface ip);
+               (PMap.elements pr_progs)
+               cip;
             
-            do labeled_code  <- layout_code (mkfmap acode);
+            do labeled_code  <- layout_code (PMapExtra.of_list acode);
 
             do e <- get_E labeled_code;
 
@@ -1141,11 +1193,12 @@ Definition compile_program (ip : Intermediate.program) :=
             | None => fail "Missing main" NoInfo
             | Some (cid,pid) =>
             
-              do mem0 <- generate_comp0_memory cid pid data_mem l2a;
+              do mem0 <- generate_comp0_memory (Pos.of_nat cid)
+                 (Pos.of_nat pid) data_mem l2a;
 
                 do mem <- generate_code_memory labeled_code l2a mem0;
             
-                ret {| TargetSFI.Machine.cn := cn;
+                ret {| TargetSFI.Machine.cn := (List.map Pos.to_nat cn);
                        TargetSFI.Machine.e := e;
                        TargetSFI.Machine.mem := mem;
                        TargetSFI.Machine.prog_interface := Intermediate.prog_interface ip;

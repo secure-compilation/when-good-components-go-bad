@@ -13,6 +13,7 @@ Require Import I2SFI.CompEitherMonad.
 
 Require Import TargetSFI.EitherMonad.
 Require Import TargetSFI.SFITestUtil.
+Require Import TargetSFI.SFIUtil.
 
 Require Import CoqUtils.ord.
 
@@ -23,15 +24,22 @@ Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 
 Definition newline := String "010" ""%string.
 
-Definition show_map { A :Type} `{_ : Show A} (m : (NMap A)) : string :=
+Instance show_pos : Show positive :=
+  {|
+    show := fun p => show (Pos.to_nat p)
+  |}.
+
+
+Definition show_map { A :Type} `{_ : Show A} (m : (PMap.t A)) : string :=
   List.fold_left
     (fun acc '(key,elt) =>
        acc ++ (show key) ++ ":" ++ newline
            ++ (show elt) ++ newline)
-    (elementsm m)
+    (PMap.elements m)
     Coq.Strings.String.EmptyString.
 
-Instance show_map_i  { A :Type} `{_ : Show A} : Show (NMap A) :=
+
+Instance show_map_i  { A :Type} `{_ : Show A} : Show (PMap.t A) :=
   {| show := show_map |}.
 
 
@@ -49,6 +57,7 @@ Instance show_component_interface : Show Component.interface :=
                 ++ "Import:"
                 ++ (show (Component.import ci)) ++ newline
   |}.
+
 
 
 Instance show_ainstr : Show AbstractMachine.ainstr :=
@@ -79,7 +88,7 @@ Instance show_linstr : Show (option (list AbstractMachine.label) * AbstractMachi
         (show ol) ++ ":" ++ (show i)
   |}.
 
-Definition show_lcode ( lcode : NMap (NMap AbstractMachine.lcode)) :=
+Definition show_lcode ( lcode : PMap.t (PMap.t AbstractMachine.lcode)) :=
   List.fold_left 
     (fun acc1 '(cid, pmap) =>
        List.fold_left
@@ -87,8 +96,8 @@ Definition show_lcode ( lcode : NMap (NMap AbstractMachine.lcode)) :=
             List.fold_left
                (fun acc3 elt => acc3 ++ (show elt)  ++ newline)            
                lst (acc2 ++ "pid=" ++ (show pid) ++ newline)%string
-         ) (elementsm pmap) (acc1 ++ "cid=" ++ (show cid) ++ newline)%string
-    ) (elementsm lcode) EmptyString.
+         ) (PMap.elements pmap) (acc1 ++ "cid=" ++ (show cid) ++ newline)%string
+    ) (PMap.elements lcode) EmptyString.
 
 Instance show_compiler_error : Show CompilerError :=
   {|
@@ -104,8 +113,20 @@ Instance show_compiler_error : Show CompilerError :=
         end                                   
   |}.
 
+Definition show_nmap { A :Type} `{_ : Show A} (m : (NMap A)) : string :=
+  List.fold_left
+    (fun acc '(key,elt) =>
+       acc ++ (show key) ++ ":" ++ newline
+           ++ (show elt) ++ newline)
+    (elementsm m)
+    Coq.Strings.String.EmptyString.
+
+Instance show_map_ni  { A :Type} `{_ : Show A} : Show (NMap A) :=
+  {| show := show_nmap |}.
+
+
 Instance show_program_interface : Show Program.interface :=
-  {| show := fun pi => show_map pi |}.
+  {| show := fun pi => show_nmap pi |}.
 
 Instance show_ptr : Show Pointer.t :=
   {| show :=
@@ -201,7 +222,7 @@ Instance show_intermediate_program : Show Intermediate.program :=
               ("Interface: ") ++ newline
                 ++ (show (Intermediate.prog_interface ip))
                 ++ ("Buffers: ") ++ newline
-                ++ (show_map (Intermediate.prog_buffers ip))
+                ++ (show_nmap (Intermediate.prog_buffers ip))
                 ++ ("Code: ") ++ newline
                 ++ (show (Intermediate.prog_procedures ip))
                 ++ ("Main: ") ++ newline

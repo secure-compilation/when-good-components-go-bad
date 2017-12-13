@@ -15,12 +15,12 @@ Set Implicit Arguments.
 
 Inductive CompilerError : Type :=
 | NoInfo : CompilerError
-| DuplicatedLabels :  (NMap (NMap AbstractMachine.lcode)) -> CompilerError
-| ExportedProcsLabelsC : Component.id ->  (NMap (NMap  AbstractMachine.label)) -> CompilerError
-| ExportedProcsLabelsP : Component.id -> Procedure.id ->
-                         (NMap (NMap  AbstractMachine.label)) -> CompilerError
-| PosArg : nat -> CompilerError
-| TwoPosArg : nat -> nat -> CompilerError
+| DuplicatedLabels :  (PMap.t (PMap.t AbstractMachine.lcode)) -> CompilerError
+| ExportedProcsLabelsC : positive ->  (PMap.t (PMap.t  AbstractMachine.label)) -> CompilerError
+| ExportedProcsLabelsP : positive -> positive ->
+                         (PMap.t (PMap.t AbstractMachine.label)) -> CompilerError
+| PosArg : positive -> CompilerError
+| TwoPosArg : positive -> positive -> CompilerError
 .
 
 Inductive CompEither {A:Type} : Type :=

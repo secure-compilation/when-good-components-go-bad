@@ -13,6 +13,7 @@ Require Import TargetSFI.Machine.
 Require Import CompEitherMonad.
 Require Import CompStateMonad.
 Require Import TargetSFI.CS.
+Require Import TargetSFI.SFIUtil.
 Require Import Intermediate.Machine.
 Require Import Common.Definitions.
 Require Import Common.Maps.
@@ -176,17 +177,17 @@ Proof.
   compute. eauto. Qed.
 
 Example test_layout_procedure :
-  layout_procedure 1%nat 1%nat (1%nat,8%N)
+  layout_procedure 1%positive 1%positive (1%positive,8%N)
                    [
                      AbstractMachine.IHalt
-                     ; AbstractMachine.ILabel (1%nat,8%N)
+                     ; AbstractMachine.ILabel (1%positive,8%N)
                      ; AbstractMachine.IJump RiscMachine.Register.R_SP
                      ; AbstractMachine.IJump RiscMachine.Register.R_SP
                    ]
   =
   [
     (None, AbstractMachine.IHalt)
-    ; ( Some [(1%nat,8%N)], AbstractMachine.IJump RiscMachine.Register.R_SP)
+    ; ( Some [(1%positive,8%N)], AbstractMachine.IJump RiscMachine.Register.R_SP)
     ; ( None, AbstractMachine.IJump RiscMachine.Register.R_SP)
   ].
 Proof.
@@ -194,20 +195,20 @@ Proof.
 
 
 Example test_layout_procedure1 :
-  layout_procedure 1%nat 1%nat (1%nat,8%N)
+  layout_procedure 1%positive 1%positive (1%positive,8%N)
                    [
                      AbstractMachine.IHalt
-                     ; AbstractMachine.ILabel (1%nat,8%N)
+                     ; AbstractMachine.ILabel (1%positive,8%N)
                      ; AbstractMachine.IJump RiscMachine.Register.R_SP
                      ; AbstractMachine.IJump RiscMachine.Register.R_SP
-                     ; AbstractMachine.ILabel (1%nat,4%N)
+                     ; AbstractMachine.ILabel (1%positive,4%N)
                      ; AbstractMachine.IJump RiscMachine.Register.R_AUX1
                      ; AbstractMachine.IJump RiscMachine.Register.R_AUX2
                    ]
   =
   [
     (None, AbstractMachine.IHalt)
-    ; ( Some [(1%nat,8%N)], AbstractMachine.IJump RiscMachine.Register.R_SP)
+    ; ( Some [(1%positive,8%N)], AbstractMachine.IJump RiscMachine.Register.R_SP)
     ; ( None, AbstractMachine.IJump RiscMachine.Register.R_SP)
     ; ( None, AbstractMachine.INop)
     ; ( None, AbstractMachine.INop)
@@ -222,7 +223,7 @@ Example test_layout_procedure1 :
     ; ( None, AbstractMachine.INop)
     ; ( None, AbstractMachine.INop)
     ; ( None, AbstractMachine.INop)
-    ; ( Some [(1%nat,4%N)], AbstractMachine.IJump RiscMachine.Register.R_AUX1)
+    ; ( Some [(1%positive,4%N)], AbstractMachine.IJump RiscMachine.Register.R_AUX1)
     ; ( None, AbstractMachine.IJump RiscMachine.Register.R_AUX2)
   ].
 Proof.
@@ -230,36 +231,43 @@ Proof.
  
 
 Example test_layout_procedure_no_padding :
-  layout_procedure 1%nat 1%nat (1%nat,8%N)
+  layout_procedure 1%positive 1%positive (1%positive,8%N)
                    ( [
                      AbstractMachine.IHalt
-                     ; AbstractMachine.ILabel (1%nat,8%N)
+                     ; AbstractMachine.ILabel (1%positive,8%N)
                    ]
                    ++ ( List.repeat (AbstractMachine.IJump RiscMachine.Register.R_SP)
                                     ((N.to_nat SFI.BASIC_BLOCK_SIZE) - 1) )
                    ++  [
-                     AbstractMachine.ILabel (1%nat,4%N)
+                     AbstractMachine.ILabel (1%positive,4%N)
                      ; AbstractMachine.IJump RiscMachine.Register.R_AUX1
                      ; AbstractMachine.IJump RiscMachine.Register.R_AUX2
                    ] )
   = [
     (None, AbstractMachine.IHalt)
-    ; ( Some [(1%nat,8%N)], AbstractMachine.IJump RiscMachine.Register.R_SP)
+    ; ( Some [(1%positive,8%N)], AbstractMachine.IJump RiscMachine.Register.R_SP)
   ]
       ++ ( List.repeat
                  ((None, AbstractMachine.IJump RiscMachine.Register.R_SP))
                   ((N.to_nat SFI.BASIC_BLOCK_SIZE) - 2) )
-      ++ [ ( Some [(1%nat,4%N)], AbstractMachine.IJump RiscMachine.Register.R_AUX1)
+      ++ [ ( Some [(1%positive,4%N)], AbstractMachine.IJump RiscMachine.Register.R_AUX1)
            ; ( None, AbstractMachine.IJump RiscMachine.Register.R_AUX2)].
 Proof.
   compute. eauto. Qed.
 
-(* TODO fix compilation errors if needed *)
+Definition list2fset {A:ordType} (l : list A) : {fset A} :=
+  let fix app  l  :=
+      match l with
+      | nil => fset0
+      | x::xs => fsetU (fset1 x) (app xs)
+      end in
+  app l.
+
 (* Example exported_procs_labels_test : *)
 (*   PMap.equal (PMap.equal label_eqb) *)
 (*     ( exported_procs_labels *)
-(*         (PMap.add 1%nat *)
-(*                   (PMap.add 2%nat *)
+(*         (PMap.add 1%positive *)
+(*                   (PMap.add 2%positive *)
 (*                             [ *)
 (*                               Intermediate.Machine.IConst (IInt 1%Z) R_ONE *)
 (*                               ; Intermediate.Machine.IJal 1%nat *)
@@ -298,17 +306,17 @@ Proof.
 (*                             ] *)
 (*                             (PMap.empty Intermediate.Machine.code)) *)
 (*                   ) (PMap.empty  (PMap.t Intermediate.Machine.code))) *)
-(*       (PMap.add 1%nat *)
-(*                (Component.mkCompInterface [1%nat;2%nat] []) *)
+(*       (PMap.add 1%positive *)
+(*                (Component.mkCompInterface (list2fset [1%nat;2%nat]) fset0) *)
 (*                (PMap.empty Component.interface)) *)
                   
 (*     ) *)
 (*     ( *)
-(*       (PMap.add 1%nat *)
-(*                 (PMap.add 2%nat *)
-(*                           (1%nat,3%N) *)
-(*                  (PMap.add 1%nat *)
-(*                            (1%nat,2%N) *)
+(*       (PMap.add 1%positive *)
+(*                 (PMap.add 2%positive *)
+(*                           (1%positive,3%N) *)
+(*                  (PMap.add 1%positive *)
+(*                            (1%positive,2%N) *)
 (*                            (PMap.empty AbstractMachine.label)) *)
 (*                  ) (PMap.empty  (PMap.t AbstractMachine.label))) *)
 (*     ) = true. *)
@@ -319,7 +327,7 @@ Proof.
 (*   PMap.equal *)
 (*     (PMap.equal label_eqb) *)
 (*     ( exported_procs_labels *)
-(*         (PMap.add 2%positive                   *)
+(*         (PMap.add 2%positive *)
 (*                   (PMap.add 1%positive *)
 (*                             [ *)
 (*                               Intermediate.Machine.IConst (IInt 1%Z) R_ONE *)
@@ -356,7 +364,7 @@ Proof.
 (*                   (PMap.add 1%positive *)
 (*                             (Component.mkCompInterface [1%positive;3%positive] *)
 (*                                                        [(2%positive,1%positive)]) *)
-(*                             (PMap.empty Component.interface)))                   *)
+(*                             (PMap.empty Component.interface))) *)
 (*     ) *)
 (*     ( *)
 (*       PMap.add 2%positive *)

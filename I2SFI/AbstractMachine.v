@@ -8,7 +8,7 @@ Require Import Common.Definitions.
 Require Import Intermediate.Machine.
 Require Import TargetSFI.Machine.
 
-Definition label :Set := Component.id*N.
+Definition label :Set := positive*N.
 
 (*Definition register := RiscMachine.Register.t.*)
 
@@ -57,7 +57,7 @@ Definition map_binop (op : Common.Values.binop) : RiscMachine.ISA.binop :=
 Definition label_eqb (l1 l2 : label) :=
   let '(c1,i1) := l1 in
   let '(c2,i2) := l2 in
-  (Component.eqb c1 c2) && (N.eqb i1 i2).
+  (Pos.eqb c1 c2) && (N.eqb i1 i2).
 
 Definition label_eq_dec:
   forall l1 l2 : label,  {l1 = l2} + {l1 <> l2}.
