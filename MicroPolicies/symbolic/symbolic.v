@@ -99,26 +99,24 @@ Record ivec : Type := IVec {
   op  : vopcode;
   tpc : tag_type P;
   ti  : instr_tag op;
-  ts  : hseq tag_type (vinputs op)
+  ts  : hseq tag_type (vinputs op);
+  tni : option (tag_type M) (* TL TODO: chose to make it an aption because of services *)
 }.
 
-Lemma ivec_eq_inv op op' tpc tpc' ti ti' ts ts'
-                  (p : @IVec op tpc ti ts = @IVec op' tpc' ti' ts') :
+Definition k_ivec : Type := option (tag_type M) -> ivec.
+
+Lemma ivec_eq_inv op op' tpc tpc' ti ti' ts ts' tni tni'
+                  (p : @IVec op tpc ti ts tni = @IVec op' tpc' ti' ts' tni') :
   [/\ op = op', tpc = tpc',
       Tagged instr_tag ti = Tagged instr_tag ti' &
       Tagged (hseq tag_type \o vinputs) ts = existT _ op' ts'].
 Proof. inversion p. by constructor. Qed.
-
-(* TL TODO: remove this? *)
-(* Definition type_of_result (s : seq tag_kind) := *)
-(*   hseq tag_type s. *)
 
 Record ovec (op : opcode) : Type := OVec {
   trpc : tag_type P;
   tr   : hseq tag_type (outputs op);
 }.
 
-(* TL TODO: more homogeneous with ivec? (with regard to SERVICES) *)
 Definition vovec (vop : vopcode) : Type :=
   match vop with
   | OP op => ovec op
@@ -182,7 +180,7 @@ Definition syscall_table := {fmap mword mt -> syscall}.
 Variable table : syscall_table.
 
 Definition run_syscall (sc : syscall) (st : state) : option state :=
-  match transfer (IVec SERVICE (taga (pc st)) (entry_tag sc) [hseq]) with
+  match transfer (IVec SERVICE (taga (pc st)) (entry_tag sc) [hseq] None) with
   | Some _ => sem sc st
   | None => None
   end.
@@ -192,7 +190,7 @@ Definition next_state (st : state) (iv : ivec ttypes)
   do! ov <- transfer iv;
     k ov.
 
-(* TL TODO: do I want it to be dependent? / part of ivec? *)
+(* TL TODO: do we want it to be dependent? / part of ivec? *)
 Inductive update :=
   | RegWrite : reg mt -> word -> update
   | RegRead  : reg mt -> update
@@ -237,8 +235,10 @@ Fixpoint next_state_do_updates (st : state) (tks : seq tag_kind)
   end tags.
 
 
-Definition next_state_updates_and_pc (st : state) (iv : @ivec ttypes)
+Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
            (updts : seq update) (pc' : word) : option state :=
+  do! ni <- mem st pc';
+  let iv := kiv (Some (taga ni)) in
   next_state st (
     match op iv as o return vovec _ o -> option state with
     | OP op => fun ov => do! st' <- next_state_do_updates st (tr ov) updts;
@@ -249,7 +249,7 @@ Definition next_state_updates_and_pc (st : state) (iv : @ivec ttypes)
   ).
 
 
-Definition next_state_updates (st : state) (iv : @ivec ttypes) (updts : seq update) : option state :=
+Definition next_state_updates (st : state) (iv : k_ivec ttypes) (updts : seq update) : option state :=
   next_state_updates_and_pc st iv updts (vala (pc st)).+1.
 
 

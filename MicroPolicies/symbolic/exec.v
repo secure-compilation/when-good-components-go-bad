@@ -146,14 +146,14 @@ Proof.
   apply (iffP eqP); by move => /stepP.
 Qed.
 
-Definition build_ivec st : option (ivec ttypes)  :=
+Definition build_k_ivec st : option (k_ivec ttypes)  :=
   match mem st (pcv st) with
     | Some i =>
       match decode_instr (vala i) with
         | Some op =>
           let part := @IVec ttypes (opcode_of op) (pct st) (taga i) in
           match op return (hseq (tag_type ttypes) (inputs (opcode_of op)) ->
-                           ivec ttypes) -> option (ivec ttypes) with
+                           k_ivec ttypes) -> option (k_ivec ttypes) with
             | Nop => fun part => Some (part [hseq])
             | Const n r => fun part =>
                 do! old <- regs st r;
