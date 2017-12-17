@@ -5,6 +5,9 @@ TargetSFI/MachineGen.v
 TargetSFI/CSTest.v
 TargetSFI/MachineFunctionalTests.v
 
+I2SFI/CompTestUtil.v
+I2SFI/Shrinkers.v
+I2SFI/TestIntermediate.v
 I2SFI/CompilerPBTests.v
 I2SFI/CompilerFunctionalTests.v
 I2SFI/CompilerIntegrationTests.v

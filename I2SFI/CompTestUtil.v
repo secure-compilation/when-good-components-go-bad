@@ -7,9 +7,11 @@ Require Import Common.Definitions.
 Require Import Common.Values.
 
 Require Import Intermediate.Machine.
+Require Import Intermediate.CS.
 
 Require Import I2SFI.AbstractMachine.
 Require Import I2SFI.CompEitherMonad.
+Require Import I2SFI.TestIntermediate.
 
 Require Import TargetSFI.EitherMonad.
 Require Import TargetSFI.SFITestUtil.
@@ -229,3 +231,44 @@ Instance show_intermediate_program : Show Intermediate.program :=
                 ++ (show (Intermediate.prog_main ip))
                          
   |}.
+
+Instance show_ip_exec_state : Show (@execution_state (Events.trace*(CS.state))) :=
+  {|
+    show := fun es =>
+              match es with
+              | Running _ => "Running"
+              | OutOfFuel _ => "OutOfFuel"
+              | Halted => "Halted"
+              | Wrong msg err  =>
+                "Wrong "
+                  ++ match err with
+                     | TestIntermediate.MissingComponentId cid => "MissingComponentId "
+                                                                 ++ (show cid)
+                     | NegativePointerOffset _ => "NegativePointerOffset"
+                     | LoadOutsideComponent => "LoadOutsideComponent"
+                     | LoadNotAddressInReg => "LoadNotAddressInReg"
+                     | StoreOutsideComponent => "StoreOutsideComponent"
+                     | StoreNotAddressInReg => "StoreNotAddressInReg"
+                     | JumpOutsideComponent => "JumpOutsideComponent"
+                     | JumpNotAddressInReg => "JumpNotAddressInReg"
+                     | MissingJalLabel => "MissingJalLabel"
+                     | MissingLabel => "MissingLabel"
+                     | MissingBlock _ => "MissingBlock"
+                     | OffsetTooBig _ => "OffsetTooBig"
+                     | MemoryError _ => "MemoryError"
+                     | NotIntInReg => "MemoryError"
+                     | AllocNegativeBlockSize => "AllocNegativeBlockSize"
+                     | InvalidEnv => "InvalidEnv(" ++ msg ++")"
+                     | TestIntermediate.NoInfo => msg
+                     end
+              end
+  |}.
+
+
+Definition list2fset {A:ordType} (l : list A) : {fset A} :=
+  let fix app  l  :=
+      match l with
+      | nil => fset0
+      | x::xs => fsetU (fset1 x) (app xs)
+      end in
+  app l.

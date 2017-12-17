@@ -25,6 +25,7 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
 
 Require Import CompTestUtil.
+Require Import I2SFI.Shrinkers.
 Require Import TargetSFI.SFITestUtil.
 
 From QuickChick Require Import QuickChick.
@@ -141,14 +142,6 @@ Definition gen_sublist {A : Type} ( default : A ) ( all : list A ) : G (list A) 
     do! n <- (choose (1%nat,(List.length all)));
       (vectorOf n (elements default all))
   end.
-
-Definition list2fset {A:ordType} (l : list A) : {fset A} :=
-  let fix app  l  :=
-      match l with
-      | nil => fset0
-      | x::xs => fsetU (fset1 x) (app xs)
-      end in
-  app l.
 
 Definition prog_int := PMap.t ((list positive) * (list (positive*positive))).
 
@@ -590,7 +583,31 @@ Definition convert_buffers (buffs : PMap.t  (list (positive * (nat+list value)))
     (fun cid b acc => setm acc (Pos.to_nat cid)
                         (List.map (fun '(id,s)=>(Pos.to_nat id,s)) b))
     buffs emptym.
-           
+
+(* TODO Check with Arthur and G. *) 
+Definition fix_main (all : PMap.t (PMap.t Intermediate.Machine.code))
+           (cid : Component_id) (pid : Procedure_id) :=
+  match PMap.find cid all with
+  | None => all
+  | Some pmap =>
+    match PMap.find pid pmap with
+    | None => all
+    | Some l =>
+      PMap.add cid
+               ( PMap.add
+                   pid
+                   ( List.map
+                       (fun i => match i with
+                              | IReturn => IHalt
+                              | _ => i
+                              end
+                       ) l
+                   )
+                   pmap
+               )
+               all
+    end
+  end.
 
 Definition genIntermediateProgram (t : test_type) : G Intermediate.program :=
   
@@ -603,10 +620,11 @@ Definition genIntermediateProgram (t : test_type) : G Intermediate.program :=
       do! procs <- gen_procedures t pi buffers;      
       do! main <- gen_main pi;
       let (mc,mp) := main in
+      let fixed_procs := fix_main procs mc mp in
       
   returnGen {|
         Intermediate.prog_interface := convert_program_interface pi;
-        Intermediate.prog_procedures := convert_procedures procs;
+        Intermediate.prog_procedures := convert_procedures fixed_procs;
         Intermediate.prog_buffers := convert_buffers buffers;
         Intermediate.prog_main := Some (Pos.to_nat mc,Pos.to_nat mp)
       |}.
@@ -647,37 +665,6 @@ Conjecture correct_data_compartmentalized:
 
 
 Definition FUEL := 100%nat.
-
-Instance show_ip_exec_state : Show (@execution_state (Events.trace*(CS.state))) :=
-  {|
-    show := fun es =>
-              match es with
-              | Running _ => "Running"
-              | OutOfFuel _ => "OutOfFuel"
-              | Halted => "Halted"
-              | Wrong msg err  =>
-                "Wrong "
-                  ++ match err with
-                     | MissingComponentId _ => "MissingComponentId" 
-                     | NegativePointerOffset _ => "NegativePointerOffset"
-                     | LoadOutsideComponent => "LoadOutsideComponent"
-                     | LoadNotAddressInReg => "LoadNotAddressInReg"
-                     | StoreOutsideComponent => "StoreOutsideComponent"
-                     | StoreNotAddressInReg => "StoreNotAddressInReg"
-                     | JumpOutsideComponent => "JumpOutsideComponent"
-                     | JumpNotAddressInReg => "JumpNotAddressInReg"
-                     | MissingJalLabel => "MissingJalLabel"
-                     | MissingLabel => "MissingLabel"
-                     | MissingBlock _ => "MissingBlock"
-                     | OffsetTooBig _ => "OffsetTooBig"
-                     | MemoryError _ => "MemoryError"
-                     | NotIntInReg => "MemoryError"
-                     | AllocNegativeBlockSize => "AllocNegativeBlockSize"
-                     | InvalidEnv => "InvalidEnv(" ++ msg ++")"
-                     | NoInfo => msg
-                     end
-              end
-  |}.
 
 Definition run_intermediate_program (ip : Intermediate.program) :=
   runp FUEL ip.
@@ -800,7 +787,7 @@ Definition store_checker (log : store_log) (steps : nat)
     end.
 
 Definition store_correct : Checker :=
-  forAll (genIntermediateProgram TStore)
+  forAllShrink (genIntermediateProgram TStore) shrink
   ( fun ip =>
       match compile_program ip with
       | CompEitherMonad.Left msg err =>
@@ -809,7 +796,16 @@ Definition store_correct : Checker :=
         let '(res,log) := eval_store_program p in
         let es := run_intermediate_program ip in
         match es with
-        | Wrong msg InvalidEnv => whenFail ((show es) ++ (show ip))%string false
+        | Wrong msg InvalidEnv
+        | Wrong msg (NegativePointerOffset _)
+        | Wrong msg MissingJalLabel
+        | Wrong msg MissingLabel
+        | Wrong msg (MissingBlock _)
+        | Wrong msg (OffsetTooBig _)
+        | Wrong msg (MemoryError _)
+        | Wrong msg AllocNegativeBlockSize
+        | Wrong msg NoInfo
+        | Wrong msg (MissingComponentId _) => whenFail ((show es) ++ (show ip))%string false     
         | _ =>
           match res with
           | TargetSFI.EitherMonad.Left msg err => whenFail
@@ -993,7 +989,7 @@ Definition jump_checker (log : jump_log) (steps : nat)
       end. (* TODO check the event too *)
 
 Definition jump_correct : Checker :=
-  forAll (genIntermediateProgram TJump)
+  forAllShrink (genIntermediateProgram TJump) shrink
          ( fun ip =>
              match compile_program ip with
              | CompEitherMonad.Left msg err =>
@@ -1163,7 +1159,7 @@ Definition cs_checker (log : cs_log)  (steps : nat)
     end.
 
 Definition cs_correct : Checker :=
-  forAll (genIntermediateProgram TStack)
+  forAllShrink (genIntermediateProgram TStack) shrink
          ( fun ip =>
              match compile_program ip with
              | CompEitherMonad.Left msg err =>
@@ -1187,7 +1183,7 @@ Definition cs_correct : Checker :=
          ).
 
 (****************** QUICK CHECKS ***************************)
-Extract Constant Test.defNumTests => "1".
+Extract Constant Test.defNumTests => "20".
 
 QuickChick store_correct.
 QuickChick jump_correct.

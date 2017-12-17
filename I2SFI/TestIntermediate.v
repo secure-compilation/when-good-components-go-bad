@@ -20,7 +20,7 @@ Import MonadNotations.
 Open Scope monad_scope.
 
 Inductive ExecutionError :=
-| MissingComponentId : Component.id -> ExecutionError
+| MissingComponentId : Pointer.t -> ExecutionError
 | NegativePointerOffset : Pointer.t -> ExecutionError
 | LoadOutsideComponent : ExecutionError
 | LoadNotAddressInReg : ExecutionError
@@ -75,7 +75,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
   let '(gps, mem, regs, pc) := s in
   (* fetch the next instruction to execute *)
   do C_procs <- lift (getm (genv_procedures G) (Pointer.component pc) )
-        "Missing component"%string (MissingComponentId (Pointer.component pc));
+        "Missing component"%string (MissingComponentId pc);
     match (getm C_procs (Pointer.block pc)) with
     | None => fail "Missing block"%string (MissingBlock pc)
     | Some P_code => 
