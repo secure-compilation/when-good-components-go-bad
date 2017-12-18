@@ -444,7 +444,7 @@ Fixpoint alloc_static_buffers p mem comps :=
       (* the component doesn't have static buffers *)
       (* we have to create its memory anyway *)
       let mem' := setm mem C (ComponentMemory.prealloc []) in
-      alloc_static_buffers p mem comps'
+      alloc_static_buffers p mem' comps'
     end
   end.
 
