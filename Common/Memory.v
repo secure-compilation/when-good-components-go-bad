@@ -11,17 +11,6 @@ Module Type AbstractComponentMemory.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
 
-  (* AAA: We need to add some missing lemmas here:
-
-     - The specifications of prealloc, empty, reserve_block.
-
-     - The fact that alloc does not overwrite the contents of existing blocks
-       (cf. the comment before [ComponentMemory.t]).
-
-     - Something about the length of the allocated blocks of alloc
-
-  *)
-
   Axiom load_after_alloc:
     forall m m' n b,
       alloc m n = (m',b) ->
@@ -45,27 +34,6 @@ End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
   Definition block := list value.
-
-  (* AAA: The representation of component memories is problematic, because there
-     is nothing that guarantees that [nextblock] is undefined in [content].
-     Without this, there is no way of proving the following fact:
-
-     forall m b i v n m',
-       load m b i = Some v ->
-       alloc m n = Some m' ->
-       load m' b i = Some v
-
-     There are two solutions:
-
-     1- Remove the [nextblock] field and change the definition of [alloc] so
-        that it allocates the new block under the successor of the greatest
-        [positive] in the domain of the memory.
-
-     2- Add the folliwing field to mem:
-
-        forall b, nextblock <= b -> PMap.find b content = None
-
-   *)
 
   Implicit Types (b : Block.id).
 
@@ -280,10 +248,6 @@ Module Memory.
       Some (setm mem C memC', (C, b, 0%Z))
     | None => None
     end.
-
-  (* AAA: Destructing the pointer in the definitions of [load] and [store] is
-     not a good idea, because it causes Coq to unfold any expression of the forms
-     [load mem (C, b, o)] and [store mem (C, b, o) v]. *)
 
   Definition load (mem: t) (ptr: Pointer.t) : option value :=
     match getm mem (Pointer.component ptr) with

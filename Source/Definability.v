@@ -241,8 +241,6 @@ Section Definability.
   Definition comp_subtrace (C: Component.id) (t: trace) :=
     filter (fun e => Component.eqb C (cur_comp_of_event e)) t.
 
-  (* AAA: Another lemma that wouldn't have to be proved using ssreflect... *)
-
   Lemma filter_app {T} (P : T -> bool) (l1 l2 : list T) :
     filter P (l1 ++ l2) = filter P l1 ++ filter P l2.
   Proof.

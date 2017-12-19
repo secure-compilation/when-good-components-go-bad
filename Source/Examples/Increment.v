@@ -4,7 +4,7 @@ Require Import Source.Examples.Helper.
 
 Import Source.
 
-(* a program that returns the given argument incremented by 1 *)
+(* a program that calls the increment function *)
 
 Definition increment : program := {|
   prog_interface :=
@@ -13,7 +13,8 @@ Definition increment : program := {|
   prog_buffers :=
     mkfmap [(1, inl 1)];
   prog_procedures :=
-    mkfmap [(1, mkfmap [(1, E_binop Add (E_val (Int 42)) (E_val (Int 1)))])];
+    mkfmap [(1, mkfmap [(1, E_call 1 2 (E_val (Int 42)));
+                        (2, E_binop Add (E_deref E_local) (E_val (Int 1)))])];
   prog_main := Some (1, 1)
 |}.
 

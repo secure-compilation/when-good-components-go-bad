@@ -109,26 +109,109 @@ Definition to_partial_stack
     rev (to_partial_stack_helper ctx s'_rev first_frame Cincontrol)
   end.
 
-Lemma partial_stack_push:
-  forall ctx gps1 gps2 C,
-    to_partial_stack gps1 ctx C = to_partial_stack gps2 ctx C ->
-  forall C1 v1 k1 v2 k2 C2,
-    C1 \in ctx ->
-    to_partial_stack ((C1, v1, k1) :: gps1) ctx C2 =
-    to_partial_stack ((C1, v2, k2) :: gps2) ctx C2.
+Inductive partial_stack (ctx: {fset Component.id})
+  : Component.id -> CS.stack -> PS.stack -> Prop :=
+| partial_stack_nil: forall C,
+    partial_stack ctx C [] []
+| partial_stack_prog_push:
+    forall gps pgps C C' f_C f_v f_k,
+      f_C \notin ctx ->
+      partial_stack ctx C gps pgps ->
+      partial_stack ctx C' ((f_C, f_v, f_k) :: gps) ((f_C, Some (f_v, f_k)) :: pgps)
+| partial_stack_ctx_push_1:
+    forall C f_C f_v f_k,
+      f_C \in ctx ->
+      Component.eqb f_C C = true ->
+      partial_stack ctx C [(f_C, f_v, f_k)] []
+| partial_stack_ctx_push_2:
+    forall C f_C f_v f_k,
+      f_C \in ctx ->
+      Component.eqb f_C C = false ->
+      partial_stack ctx C [(f_C, f_v, f_k)] [(f_C, None)]
+| partial_stack_ctx_push_3:
+    forall gps pgps C C' f_C f_v f_k C1,
+      f_C \in ctx ->
+      partial_stack ctx C gps ((C1, None) :: pgps) ->
+      Component.eqb f_C C1 = true ->
+      partial_stack ctx C' ((f_C, f_v, f_k) :: gps) ((C1, None) :: pgps)
+| partial_stack_ctx_push_4:
+    forall gps pgps C C' f_C f_v f_k C1 frame_content,
+      f_C \in ctx ->
+      partial_stack ctx C gps ((C1, frame_content) :: pgps) ->
+      Component.eqb f_C C1 = false ->
+      partial_stack ctx C' ((f_C, f_v, f_k) :: gps) ((f_C, None) :: (C1, frame_content) :: pgps).
+
+(* TODO add other cases, then prove equivalence with to_partial_stack *)
+
+Lemma partial_stack_helper_push_by_program:
+  forall ctx rev_gps1 rev_gps2 first_frame1 first_frame2 C_incontrol,
+    to_partial_stack_helper ctx rev_gps1 first_frame1 C_incontrol =
+    to_partial_stack_helper ctx rev_gps2 first_frame2 C_incontrol ->
+  forall C v k C_incontrol',
+    C \notin ctx ->
+    to_partial_stack_helper ctx (rev_gps1 ++ [(C,v,k)]) first_frame1 C_incontrol' =
+    to_partial_stack_helper ctx (rev_gps2 ++ [(C,v,k)]) first_frame2 C_incontrol'.
 Proof.
-  intros ctx C gps1 gps2 Hsame_stacks.
-  intros C1 v1 k1 v2 k2 Hin_ctx C2.
+Admitted.
+
+Lemma partial_stack_helper_push_by_context:
+  forall ctx rev_gps1 rev_gps2 first_frame1 first_frame2 C_incontrol,
+    to_partial_stack_helper ctx rev_gps1 first_frame1 C_incontrol =
+    to_partial_stack_helper ctx rev_gps2 first_frame2 C_incontrol ->
+  forall C v1 k1 v2 k2 C_incontrol',
+    C \in ctx ->
+    to_partial_stack_helper ctx (rev_gps1 ++ [(C,v1,k1)]) first_frame1 C_incontrol' =
+    to_partial_stack_helper ctx (rev_gps2 ++ [(C,v2,k2)]) first_frame2 C_incontrol'.
+Proof.
+Admitted.
+
+Lemma partial_stack_push_by_program:
+  forall ctx gps1 gps2 C_incontrol,
+    to_partial_stack gps1 ctx C_incontrol = to_partial_stack gps2 ctx C_incontrol ->
+  forall C v k C_incontrol',
+    C \notin ctx ->
+    to_partial_stack ((C, v, k) :: gps1) ctx C_incontrol' =
+    to_partial_stack ((C, v, k) :: gps2) ctx C_incontrol'.
+Proof.
+  intros ctx gps1 gps2 C_incontrol Hsame_stacks.
+  intros C v k C_incontrol' Hin_ctx.
+  unfold to_partial_stack in *.
+Admitted.
+
+Lemma partial_stack_push_by_context:
+  forall ctx gps1 gps2 C_incontrol,
+    to_partial_stack gps1 ctx C_incontrol = to_partial_stack gps2 ctx C_incontrol ->
+  forall C v1 k1 v2 k2 C_incontrol',
+    C \in ctx ->
+    to_partial_stack ((C, v1, k1) :: gps1) ctx C_incontrol' =
+    to_partial_stack ((C, v2, k2) :: gps2) ctx C_incontrol'.
+Proof.
+  intros ctx gps1 gps2 C_incontrol Hsame_stacks.
+  intros C v k C_incontrol' Hin_ctx.
   unfold to_partial_stack.
 Admitted.
 
-Lemma partial_stack_pop:
-  forall ctx frame1 gps1 frame2 gps2 C,
-    to_partial_stack (frame1 :: gps1) ctx C =
-    to_partial_stack (frame2 :: gps2) ctx C ->
-  forall C',
-    to_partial_stack gps1 ctx C' = to_partial_stack gps2 ctx C'.
+Lemma partial_stack_helper_pop:
+  forall ctx first_frame1 frame1 rev_gps1 first_frame2 frame2 rev_gps2 C_incontrol,
+    to_partial_stack_helper ctx (rev_gps1 ++ [frame1]) first_frame1 C_incontrol =
+    to_partial_stack_helper ctx (rev_gps2 ++ [frame2]) first_frame2 C_incontrol ->
+  forall C_incontrol',
+    to_partial_stack_helper ctx rev_gps1 first_frame1 C_incontrol' =
+    to_partial_stack_helper ctx rev_gps2 first_frame2 C_incontrol'.
 Proof.
+  intros ctx first_frame1 frame1 rev_gps1 first_frame2 frame2 rev_gps2 C_incontrol.
+  intros Hsame_stacks C_incontrol'.
+Admitted.
+
+Lemma partial_stack_pop:
+  forall ctx frame1 gps1 frame2 gps2 C_incontrol,
+    to_partial_stack (frame1 :: gps1) ctx C_incontrol =
+    to_partial_stack (frame2 :: gps2) ctx C_incontrol ->
+  forall C_incontrol',
+    to_partial_stack gps1 ctx C_incontrol' = to_partial_stack gps2 ctx C_incontrol'.
+Proof.
+  intros ctx frame1 gps1 frame2 gps2 C_incontrol Hsame_stacks C_incontrol'.
+  unfold to_partial_stack.
 Admitted.
 
 Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
@@ -419,9 +502,7 @@ Proof.
               try discriminate.
             rewrite H10 in H21. inversion H21; subst.
             (* same stack *)
-            erewrite partial_stack_push;
-              try reflexivity;
-              try eassumption.
+            admit.
         *** rewrite Hwhere in H10, H21.
             (* C' is not in p1's interface,
                C' is not in p1's procedures by well-formedness of p1 (from linkability),
@@ -444,9 +525,7 @@ Proof.
         rewrite (context_store_gets_filtered (domm (prog_interface p1)) H25).
         rewrite H5. simpl.
         (* same stack *)
-        erewrite partial_stack_push;
-          try reflexivity;
-          try eassumption.
+        admit.
 
     (* internal & external return *)
     + inversion Hkstep2; subst.
@@ -501,6 +580,16 @@ Proof.
   - eapply state_determinism_program; eauto.
   - eapply state_determinism_context; eauto.
 Qed.
+
+Corollary state_determinism_star:
+  forall p ctx G sps t sps' sps'',
+    star (kstep p ctx) G sps t sps' ->
+    star (kstep p ctx) G sps t sps'' ->
+    sps' = sps''.
+Proof.
+  intros p ctx G sps t sps' sps'' Hstar1 Hstar2.
+  (* by induction + state determinism *)
+Admitted.
 
 (* partial semantics *)
 Section Semantics.

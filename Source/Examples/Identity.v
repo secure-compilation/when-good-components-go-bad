@@ -4,7 +4,7 @@ Require Import Source.Examples.Helper.
 
 Import Source.
 
-(* a program that returns the given argument *)
+(* a program that calls the identity function *)
 
 Definition identity : program := {|
   prog_interface :=
@@ -13,7 +13,8 @@ Definition identity : program := {|
   prog_buffers :=
     mkfmap [(1, inl 1)];
   prog_procedures :=
-    mkfmap [(1, mkfmap [(1, E_val (Int 42))])];
+    mkfmap [(1, mkfmap [(1, E_call 1 2 (E_val (Int 42)));
+                        (2, E_deref E_local)])];
   prog_main := Some (1, 1)
 |}.
 

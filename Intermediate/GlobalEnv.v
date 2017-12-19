@@ -11,18 +11,6 @@ Record global_env := mkGlobalEnv {
   genv_entrypoints: EntryPoint.t;
 }.
 
-Record well_formed_global_env (G: global_env) := {
-  (* the interface is sound (but maybe not closed) *)
-  wfgenv_interface_soundness:
-    sound_interface (genv_interface G);
-  (* the entrypoints and the interface are in sync *)
-  wfgenv_entrypoints_soundness:
-    domm (genv_entrypoints G) = domm (genv_interface G);
-  (* the procedures and the interface are in sync *)
-  wfgenv_procedures_soundness:
-    domm (genv_procedures G) = domm (genv_procedures G);
-}.
-
 Definition executing G (pc : Pointer.t) (i : instr) : Prop :=
   exists C_procs P_code,
     getm (genv_procedures G) (Pointer.component pc) = Some C_procs /\

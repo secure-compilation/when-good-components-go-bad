@@ -1,15 +1,11 @@
-(* Modified calling conventions, implementing the following scheme:
-
-N.B.  In this scheme (probably in the old one too), there is no need to
-preserve any register except R_COM across inter-component ICall's.
-In particular, there is no need to preserve R_RA.
+(*
+The calling conventions adepted is described as follows:
 
 Main ideas:
 
-1. Instead of using a flag to remember whether procedure was called
-   internally or externlly, we simply Jal to the internal entry point from
-   the external one.  This simplifies the code, although it does result
-   in one needless but harmless push/pop for external calls.
+1. The external entry point has jal to the internal entrypoint.
+   This simplifies the code, although it does result in one needless but
+   harmless push/pop for external calls.
 2. We use a single static buffer per component to store both the
    current proc arg (when executing in the component) and the saved sp
    (when executing in a different component).
@@ -49,7 +45,6 @@ Code at internal entry label:
   pop into R_SP [for an external call this is pointless, but harmless]
   [if we did stack frame deallocation, it would happen here]
   IJump R_RA
-
 *)
 
 Require Import Common.Definitions.
@@ -64,7 +59,6 @@ Open Scope monad_scope.
 
 Record comp_env : Type := {
   next_label: label;
-  (* facts about this? *)
 }.
 
 (* easy environments updates *)
@@ -197,7 +191,6 @@ Definition compile_proc (P: Procedure.id) (e: expr)
   do lmain <- fresh_label;
   do lreturn <- fresh_label;
   do proc_code <- compile_expr e;
-  (* TODO compute stack size *)
   let stack_frame_size := 20%Z in
   ret ([IConst (IInt 1) R_ONE;
         IJal proc_label;
@@ -214,7 +207,6 @@ Definition compile_proc (P: Procedure.id) (e: expr)
         pop R_AUX1 ++
         store_arg local_buf_ptr R_AUX1 R_AUX2 ++
         pop R_SP ++
-        (* morally could do deallocation of stack frame here *)
         [IJump R_RA]).
 
 Definition compile_procedures
@@ -307,19 +299,22 @@ Proof.
 Admitted.
 
 Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program) : COMP Intermediate.program :=
-  do (C, P) <- lift (p.(Intermediate.prog_main));
-  do iface <- lift (getm p.(Intermediate.prog_interface) C);
-  do procs <- lift (getm p.(Intermediate.prog_procedures) C);
-  do P_labels <- lift (getm procs_labels C);
-  do lab <- lift (getm P_labels P);
-  let P' := generate_fresh_procedure_id (p.(Intermediate.prog_procedures)) in
-  let iface' :=  {| Component.export := fsetU (fset1 P') iface.(Component.export);
-                    Component.import := iface.(Component.import) |} in
-  let procs' := setm procs P' [IConst (IInt 1) R_ONE; IJal lab ; IHalt] in
-  ret {| Intermediate.prog_interface := setm p.(Intermediate.prog_interface) C iface';
-         Intermediate.prog_procedures := setm p.(Intermediate.prog_procedures) C procs';
-         Intermediate.prog_buffers := p.(Intermediate.prog_buffers);
-         Intermediate.prog_main := Some (C, P') |}.
+  match p.(Intermediate.prog_main) with
+  | Some (C, P) =>
+    do iface <- lift (getm p.(Intermediate.prog_interface) C);
+    do procs <- lift (getm p.(Intermediate.prog_procedures) C);
+    do P_labels <- lift (getm procs_labels C);
+    do lab <- lift (getm P_labels P);
+    let P' := generate_fresh_procedure_id (p.(Intermediate.prog_procedures)) in
+    let iface' :=  {| Component.export := fsetU (fset1 P') iface.(Component.export);
+                      Component.import := iface.(Component.import) |} in
+    let procs' := setm procs P' [IConst (IInt 1) R_ONE; IJal lab ; IHalt] in
+    ret {| Intermediate.prog_interface := setm p.(Intermediate.prog_interface) C iface';
+           Intermediate.prog_procedures := setm p.(Intermediate.prog_procedures) C procs';
+           Intermediate.prog_buffers := p.(Intermediate.prog_buffers);
+           Intermediate.prog_main := Some (C, P') |}
+  | None => ret p
+  end.
 
 Definition compile_program
            (p: Source.program) : option Intermediate.program :=
@@ -329,10 +324,9 @@ Definition compile_program
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;
     do code <- compile_components local_buffers procs_labels comps;
-    do main <- lift (Source.prog_main p);
     let p :=
         {| Intermediate.prog_interface := Source.prog_interface p;
            Intermediate.prog_procedures := mkfmap code;
            Intermediate.prog_buffers := local_buffers;
-           Intermediate.prog_main := Some main |} in
+           Intermediate.prog_main := Source.prog_main p |} in
    wrap_main procs_labels p).

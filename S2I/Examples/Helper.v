@@ -6,7 +6,7 @@ Require Import Intermediate.GlobalEnv.
 Require Import S2I.Compiler.
 Require Export Extraction.Definitions.
 
-Definition compile_and_run (p: Source.program) (input: value) (fuel: nat) :=
+Definition compile_and_run (p: Source.program) (fuel: nat) :=
   match compile_program p with
   | None => print_error ocaml_int_0
   | Some compiled_p =>

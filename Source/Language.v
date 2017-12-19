@@ -28,12 +28,6 @@ Module Source.
      2) calls inside the component are targeting existing procedures
      3) the undef value is not present
      4) pointers are not present (no pointer forging) *)
-  (* AAA: I find the term "well-formed" a bit misleading, because this notion is
-     not preserved by evaluation: if the result of an expression is a pointer,
-     that result is ill-formed.  We could consider refactoring it as the
-     conjunction of two predicates: surface_syntax, asserting that pointers and
-     undef do not occur in expressions, and well_formed, asserting that the
-     expression respects the interface.  *)
   Fixpoint well_formed_expr (p: program) (cur_comp: Component.id) (e: expr) : Prop :=
     match e with
     | E_val val => exists i, val = Int i
@@ -90,9 +84,6 @@ Module Source.
       forall C P Pexpr,
         find_procedure (prog_procedures p) C P = Some Pexpr ->
         well_formed_expr p C Pexpr;
-    (* there are buffers only for the declared components *)
-    (*wfprog_well_formed_buffers:
-      fsubset (domm (prog_buffers p)) (domm (prog_interface p));*)
     (* each declared component has the required static buffers *)
     wfprog_buffers_existence:
       forall C, C \in domm (prog_interface p) ->
@@ -134,6 +125,29 @@ Module Source.
        prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);
        prog_buffers := unionm (prog_buffers p1) (prog_buffers p2);
        prog_main := main_link (prog_main p1) (prog_main p2) |}.
+
+  Theorem linkable_sym:
+    forall p c,
+      linkable_programs p c -> linkable_programs c p.
+  Proof.
+    intros p c Hlinkable.
+    inversion Hlinkable; subst.
+    constructor;
+      try assumption.
+    - rewrite unionmC; auto.
+      unfold fdisjoint. rewrite fsetIC. auto.
+    - unfold fdisjoint. rewrite fsetIC. auto.
+    - unfold fdisjoint. rewrite fsetIC. auto.
+    - unfold fdisjoint. rewrite fsetIC. auto.
+    - apply linkable_mains_sym; auto.
+  Qed.
+
+  Theorem linking_well_formedness:
+    forall p1 p2,
+      linkable_programs p1 p2 ->
+      well_formed_program (program_link p1 p2).
+  Proof.
+  Admitted.
 
   Fixpoint initialize_buffer
            (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)

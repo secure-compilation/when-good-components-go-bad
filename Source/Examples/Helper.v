@@ -8,7 +8,6 @@ Require Export Extraction.Definitions.
 
 Import Source.
 
-(* run the given prorgam by putting input in the main procedure's buffer *)
 Definition run (p: program) (fuel: nat) :=
   let G := prepare_global_env p in
   let st := CS.initial_machine_state p in

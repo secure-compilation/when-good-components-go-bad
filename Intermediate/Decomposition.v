@@ -525,6 +525,17 @@ Section Decomposition.
     apply decomposition.
   Qed.
 
+  Corollary decomposition_with_safe_behavior:
+    forall beh,
+      program_behaves (CS.sem (program_link p c)) beh ->
+      not_wrong beh ->
+      program_behaves (PS.sem p (prog_interface c)) beh.
+  Proof.
+    intros beh.
+    eapply forward_simulation_same_safe_behavior; eauto.
+    apply decomposition.
+  Qed.
+
   Variable mainC: Component.id.
   Variable mainP: Procedure.id.
 

@@ -113,10 +113,10 @@ End EntryPoint.
 (* programs *)
 
 Record program := mkProg {
-  prog_interface : Program.interface;
-  prog_procedures : NMap (NMap code);
-  prog_buffers : NMap (list (Block.id * (nat + list value)));
-  prog_main : option (Component.id * Procedure.id)
+  prog_interface: Program.interface;
+  prog_procedures: NMap (NMap code);
+  prog_buffers: NMap (list (Block.id * (nat + list value)));
+  prog_main: option (Component.id * Procedure.id)
 }.
 
 (* well-formedness of programs *)

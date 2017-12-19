@@ -518,20 +518,6 @@ Qed.
 (* We want to prove that a star is either a sequence of steps without change of control,
    or it can be decomposed in a star without change of control + a step with the change
    of control + another star doing the remaining trace *)
-(* is this enough to prove the equivalence? *)
-(* how can we prove this? classically? *)
-Lemma change_of_turn_in_star:
-  forall p ctx G ips t ips',
-    star (PS.step p ctx) G ips t ips' ->
-  st_star p ctx G ips t ips' \/
-  (exists ips'' ips''' t1 t2 t3,
-     st_star p ctx G ips t1 ips'' /\
-     PS.step p ctx G ips'' t2 ips''' /\
-     ~ same_turn ips'' ips''' /\
-     star (PS.step p ctx) G ips''' t3 ips' /\
-     t = t1 ** t2 ** t3).
-Proof.
-Admitted.
 
 Theorem mt_star_if_star:
   forall p ctx G ips t ips',
@@ -550,26 +536,7 @@ Proof.
   - PS.unfold_state s1; PS.unfold_state s2.
 
     (* PC to PC *)
-    + destruct (change_of_turn_in_star Hstar)
-        as [ | [s2' [s2'' [t2' [t2'' [t2'''
-               [Hfirst_st_star [Hstep [Hdiff_turn [Hremaining_star Htrace]]]]]]]]]].
-      * apply mt_star_segment.
-        eapply st_star_step.
-        ** eassumption.
-        ** constructor.
-        ** eassumption.
-        ** reflexivity.
-      * eapply mt_star_control_change.
-        ** eapply st_star_step.
-           *** eassumption.
-           *** constructor.
-           *** apply Hfirst_st_star.
-           *** reflexivity.
-        ** apply Hstep.
-        ** assumption.
-        ** (* the inductive hypothesis is not enough *)
-           admit.
-        ** rewrite Htrace. apply app_assoc.
+    + admit.
 
     (* PC to CC *)
     + eapply mt_star_control_change.
@@ -712,7 +679,6 @@ Section Simulation.
   Proof.
   Admitted.
 
-  (* it might be that we just need this lemma and not the previous two *)
   Lemma lockstep_simulation:
     forall ips1 t ips1',
       Step (ProgramSem.sem p (prog_interface c)) ips1 t ips1' ->
