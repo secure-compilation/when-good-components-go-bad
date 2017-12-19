@@ -484,7 +484,7 @@ Qed.
 
   Corollary robust_compilation_corrolary :
     RC_DC ->
-    robust_compilation_static_compromise_weaker.
+    robust_compilation_dynamic_compromise_weaker.
   Proof.
     intros RC Q P b Hcompl H2.
     specialize (RC (SI.compile Q) P b).
