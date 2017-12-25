@@ -3,7 +3,6 @@
 
 lib/utils.v
 
-common/types.v
-
-symbolic/symbolic.v
+symbolic/types.v
+symbolic/machine.v
 symbolic/exec.v
