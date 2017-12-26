@@ -64,6 +64,8 @@ Defined.
  * Intermediate program generation
  ***************************************************************************)
 
+Definition DEBUG := false.
+
 Definition MAX_PROC_PER_COMP := 10%nat.
 
 Definition MAX_NO_BUFFERS_PER_COMP := 10%nat.
@@ -75,7 +77,8 @@ Definition MAX_PROC_LENGTH := 10%nat.
 Inductive test_type : Type :=
 | TStore : test_type
 | TJump : test_type
-| TStack : test_type.
+| TStack : test_type
+| TCompilerCorrect : test_type.
 
 Inductive instr_type :=
 | Nop : instr_type
@@ -169,8 +172,11 @@ Definition gen_program_interface (cids : list positive) : G prog_int :=
                )
             ).
 
-Definition gen_value (buffers : list (positive*(list (positive * nat))))
+Definition gen_value
+           (cid : positive)
+           (all_buffers : list (positive*(list (positive * nat))))
   : G value :=
+  let buffers := List.filter (fun '(cid',_) => Pos.eqb cid cid') all_buffers in
   freq [ (3%nat, (do! i <- arbitrary; returnGen (Int i)))
          ; (1%nat, (match buffers with
                   | nil => (do! i <- arbitrary; returnGen (Int i))
@@ -195,21 +201,23 @@ Definition gen_value (buffers : list (positive*(list (positive * nat))))
        ].
                  
 
-Definition gen_sum bsize (buffers : list (positive * list (positive * nat)))
+Definition gen_sum (cid : positive) (bsize : nat) (buffers : list (positive * list (positive * nat)))
   : G ( nat+ list value) :=
   freq [ (3%nat, returnGen (inl bsize))
          ; (1%nat,
-             (do! vals <- vectorOf bsize (gen_value buffers);
+             (do! vals <- vectorOf bsize (gen_value cid buffers);
                 returnGen (inr vals)))
        ].
 
 Definition gen_buffers (cids : list positive)
   : G (PMap.t (list (positive * (nat + list value)))) :=
+  
   let gen_n_buffers : G (list (positive * nat)) :=
       do! n <- choose (1%nat,MAX_NO_BUFFERS_PER_COMP); 
         let ids := pos_list n in
         do! sizes <- vectorOf n (choose (1%nat, MAX_BUFFER_SIZE));
-           returnGen (List.combine ids sizes) in
+          returnGen (List.combine ids sizes) in
+  
   do! buffers <- (vectorOf (List.length cids) gen_n_buffers);
     let comp_buffers := (List.combine cids buffers) in
     do! init_buffers <- sequenceGen
@@ -217,7 +225,7 @@ Definition gen_buffers (cids : list positive)
          (fun '(cid,bl_lst) =>
             do! bvals <- sequenceGen 
               (List.map (fun '(bid,bsize) =>
-                          gen_sum bsize comp_buffers
+                          gen_sum cid bsize comp_buffers
                         )
                         bl_lst
               );
@@ -226,7 +234,6 @@ Definition gen_buffers (cids : list positive)
          comp_buffers
       );
     returnGen (PMapExtra.of_list (List.combine cids init_buffers)).
-
   
   Instance genOp : Gen Common.Values.binop :=
     {
@@ -251,54 +258,75 @@ Definition gen_buffers (cids : list positive)
                      ]
     }.
 
- 
+
+  Definition genPointer (cid : positive)
+             (buffers : PMap.t (list (positive * (nat+list value)))) :=
+    let nat_cid := Pos.to_nat cid in
+    match PMap.find cid buffers with
+    | None => returnGen None
+    | Some lst =>
+      match lst with 
+      | nil => returnGen None
+      | b::xs =>
+        do! b' <- elements b xs;
+          let '(bid,bs) := b in
+          let nat_bid := Pos.to_nat bid in
+          match bs with
+          | inl sz =>
+            if Nat.eqb sz 0%nat
+            then returnGen None
+            else
+              if Nat.eqb sz 1%nat
+              then
+                returnGen
+                  (Some (Intermediate.Machine.IPtr
+                           ((nat_cid, nat_bid), 0%Z)))
+              else
+                let up := (sz-1)%nat in
+                do! offset <- choose (0%nat, up);
+                  returnGen (Some (Intermediate.Machine.IPtr
+                                     ((nat_cid, nat_bid), Z.of_nat offset)))
+          | inr lst =>
+            if (Nat.eqb (List.length lst) 1%nat)
+            then
+              returnGen (Some (Intermediate.Machine.IPtr
+                                 ((nat_cid, nat_bid), Z0) ))
+            else
+              do! offset <- choose (0%nat,((List.length lst) - 1)%nat);
+              returnGen (Some (Intermediate.Machine.IPtr
+                                 ((nat_cid, nat_bid), Z.of_nat offset)))
+          end
+      end
+    end.
+
+  
   Definition genPtrImVal
              (pi : prog_int)
              (buffers : PMap.t (list (positive * (nat+list value))))
              (cid : positive)
+             (sameComponent : bool)
     : G (option Intermediate.Machine.imvalue) :=
-    let  genPointer (id : positive) :=
-         match PMap.find id buffers with
-         | None => returnGen None
-         | Some lst =>
-           match lst with 
-           | nil => returnGen None
-           | b::xs =>
-             do! b' <- elements b xs;
-               let '(bid,bs) := b in
-               match bs with
-               | inl size =>
-                 do! offset <- choose (Z0,Z.of_nat size);
-                   returnGen (Some (Intermediate.Machine.IPtr
-                                      ((Pos.to_nat cid
-                                        , Pos.to_nat bid),
-                                       offset) ))
-               | inr lst =>
-                 do! offset <- choose (Z0,Z.of_nat (List.length lst));
-                   returnGen (Some (Intermediate.Machine.IPtr
-                                      ((Pos.to_nat cid
-                                        , Pos.to_nat bid),offset) ))
-               end
-           end
-         end in    
-    backtrack [
-        ( 4%nat, (genPointer cid) )
-        ; ( 1%nat,
-            (do! id <- (elements (1%positive) (List.map fst (PMap.elements pi)));
-               (genPointer id)))
-      ].
+    if sameComponent
+    then
+      genPointer cid buffers
+    else
+      backtrack [
+          ( 4%nat, (genPointer cid buffers) )
+          ; ( 1%nat,
+              (do! id <- (elements (1%positive) (List.map fst (PMap.elements pi)));
+                 (genPointer id buffers)))
+        ].
 
    
   Definition genIntImVal : G Intermediate.Machine.imvalue :=
     do! n<-arbitrary; returnGen (Intermediate.Machine.IInt n).
   
-
   Definition genImVal
              (pi : prog_int)
              (buffers : PMap.t (list (positive * (nat+list value))))
              (cid : positive)  : G imvalue :=
     let genImValAux : G Intermediate.Machine.imvalue :=    
-        do! res <- genPtrImVal pi buffers cid;
+        do! res <- genPtrImVal pi buffers cid false;
           match res with
           | None => genIntImVal
           | Some ptr => returnGen ptr
@@ -310,61 +338,103 @@ Definition gen_buffers (cids : list positive)
   Definition genIConst
              (pi : prog_int)
              (buffers : PMap.t (list (positive * (nat+list value))))
-             (cid : positive) : G instr :=
+             (cid : positive) : G (list instr) :=
     do! v <- genImVal pi buffers cid;
       do! r <- arbitrary;
-      returnGen (IConst v r).
+      returnGen ([IConst v r]).
 
-  Definition gen2Reg (it :  register -> register -> instr) : G instr :=
+  Definition gen2Reg (it :  register -> register -> instr) : G (list instr) :=
     do! r1 <- arbitrary;
       do! r2 <- arbitrary;
-      returnGen (it r1 r2).
+      returnGen ([it r1 r2]).
 
-  Definition genIBinOp : G instr :=
+  Definition genMemReg
+             (it :  register -> register -> instr)
+             (pi : prog_int)
+             (buffers : PMap.t (list (positive * (nat+list value))))
+             (cid : positive)
+    : G (list instr) :=
+    do! r1 <- arbitrary;
+      do! r2 <- arbitrary;
+      do! res <- genPtrImVal pi buffers cid true;
+      match res with
+      | None => returnGen [it r1 r2]
+      | Some ptr =>
+        returnGen [IConst ptr r1; it r1 r2]
+      end.
+
+  Definition genIAlloc : G (list instr) :=
+    do! r1 <- arbitrary;
+      do! r2 <- arbitrary;
+      do! v <- choose (0%nat,((N.to_nat SFI.SLOT_SIZE) - 1)%nat);
+      returnGen [IConst (IInt (Z.of_nat v)) r2; IAlloc r1 r2].
+
+  Definition genILoad
+             (pi : prog_int)
+             (buffers : PMap.t (list (positive * (nat+list value))))
+             (cid : positive)
+    : G (list instr) :=
+    genMemReg ILoad pi buffers cid.
+  
+  Definition genIStore
+             (t : test_type)
+             (pi : prog_int)
+             (buffers : PMap.t (list (positive * (nat+list value))))
+             (cid : positive)
+    : G (list instr) :=
+    match t with
+    | TStore => gen2Reg IStore
+    | _ => genMemReg IStore pi buffers cid
+    end.   
+    
+  Definition genIBinOp : G (list instr) :=
     do! op <- arbitrary;
       do! r1 <- arbitrary;
       do! r2 <- arbitrary;
       do! r3 <- arbitrary;
-      returnGen (IBinOp op r1 r2 r3).
+      returnGen ([IBinOp op r1 r2 r3]).
 
-
-  Definition genIJump : G instr :=
+  Definition genIJump : G (list instr) :=
     do! r <- arbitrary;
-      returnGen (IJump r).
+      returnGen ([IJump r]).
 
   Definition genICall
              (pi : prog_int)
              (cid : positive)
-             (pid : positive) : G instr :=
+             (pid : positive) : G (list instr) :=
     match PMap.find cid pi with
-    | None => returnGen INop (* This should not happen *)
+    | None => returnGen [INop] (* This should not happen *)
     | Some comp_interface =>
       let imports := (snd comp_interface) in
       match imports with
-      | nil => returnGen INop (* no imports; can't generate ICall *)
+      | nil => returnGen [INop] (* no imports; can't generate ICall *)
       | (cid1,pid1)::xs =>
         do! p <- elements (cid1,pid1) imports;
+          do! v <- arbitrary;
           let (cid',pid') := p in
-          returnGen (ICall (Pos.to_nat cid') (Pos.to_nat pid'))
+          let call_instr := ICall (Pos.to_nat cid') (Pos.to_nat pid') in
+          let const_instr := IConst (Intermediate.Machine.IInt v) R_COM in
+          returnGen ([const_instr;call_instr])
       end
     end.
 
-  Definition genIJal : G instr :=
+  Definition genIJal : G (list instr) :=
     do! l <- choose (1%nat,20%nat);
-      returnGen (IJal l).
+      returnGen ([IJal l]).
   
-  Definition genIBnz (first_label : nat) (lbl : nat) : G instr :=
+  Definition genIBnz (first_label : nat) (lbl : nat) : G (list instr) :=
     do! r <- arbitrary;
+      do! v <- arbitrary;
       if (Nat.ltb first_label (lbl+3))%nat
       then
         do! target <- choose (first_label,(lbl+3)%nat);
-          returnGen (IBnz r target)
+          returnGen ([IBnz r target])
       else
         do! target <- choose (lbl,(lbl+3)%nat);
-          returnGen (IBnz r target).
+          returnGen ([IConst (IInt v) r; IBnz r target]).
       
-  Definition genILabel (lbl : nat) : G instr :=
-    returnGen (ILabel lbl).
+  Definition genILabel (lbl : nat) : G (list instr) :=
+    returnGen ([ILabel lbl]).
 
 
   Definition delared_labels_in_proc (proc : Intermediate.Machine.code) :=
@@ -420,20 +490,20 @@ Definition gen_buffers (cids : list positive)
              (pid : positive)
     :=
     freq [
-        ( (get_freq t Nop) ,(returnGen INop))
+        ( (get_freq t Nop) ,(returnGen [INop]))
         ; ( (get_freq t Const), genIConst pi buffers cid)
         ; ( (get_freq t Label) , genILabel next_label) 
         ; ( (get_freq t Mov), gen2Reg IMov)
         ; ( (get_freq t BinOp), genIBinOp)
-        ; ( (get_freq t Load) , gen2Reg ILoad)
-        ; ( (get_freq t Store), gen2Reg IStore)
+        ; ( (get_freq t Load) , genILoad pi buffers cid)
+        ; ( (get_freq t Store), genIStore t pi buffers cid)
         ; ( (get_freq t Bnz), genIBnz first_label next_label)
         ; ( (get_freq t Jump), genIJump)
         ; ( (get_freq t Jal), genIJal)
         ; ( (get_freq t Call), genICall pi cid pid)
-        ; ( (get_freq t Alloc), gen2Reg IAlloc)
-        ; ( (get_freq t Halt), (returnGen IHalt))
-        ; ( (get_freq t Return), (returnGen IReturn))
+        ; ( (get_freq t Alloc), genIAlloc)
+        ; ( (get_freq t Halt), (returnGen [IHalt]))
+        ; ( (get_freq t Return), (returnGen [IReturn]))
       ].
   
   Definition gen_procedure
@@ -450,13 +520,13 @@ Definition gen_buffers (cids : list positive)
         do! p <- gen_proc_with_labels proc (get_missing_labels proc);
           returnGen (p ++ [IReturn])%list
       | S len' =>
-        do! i <- gen_instr first_lbl lbl t pi buffers cid pid;
-          match i with
-          | ILabel _ => gen_proc_rec (proc ++ [i])%list len' first_lbl (lbl+1)%nat
-          | IReturn | IHalt =>
+        do! il <- gen_instr first_lbl lbl t pi buffers cid pid;
+          match il with
+          | [ILabel _] => gen_proc_rec (proc ++ il)%list len' first_lbl (lbl+1)%nat
+          | [IReturn] | [IHalt] =>
                       do! p <- gen_proc_with_labels proc (get_missing_labels proc);
-                        returnGen (p ++ [i])%list
-          | _ => gen_proc_rec (proc ++ [i])%list len' first_lbl lbl
+                        returnGen (p ++ il)%list
+          | _ => gen_proc_rec (proc ++ il)%list len' first_lbl lbl
           end
       end in
   gen_proc_rec [] MAX_PROC_LENGTH next_label next_label.
@@ -678,7 +748,9 @@ Definition store_log_entry := (RiscMachine.pc * RiscMachine.address * RiscMachin
 
 Definition store_log := ((list store_log_entry) * (list RiscMachine.address))%type.
 
-Definition update_store_log (st : MachineState.t) (t : CompCert.Events.trace)
+Definition update_store_log
+           (G : Env.t)
+           (st : MachineState.t) (t : CompCert.Events.trace)
            (st' : MachineState.t) (log : store_log) :=
   let '(mem,pc,regs) := st in
   let '(st_log,addr_log) := log in
@@ -796,16 +868,21 @@ Definition store_correct : Checker :=
         let '(res,log) := eval_store_program p in
         let es := run_intermediate_program ip in
         match es with
-        | Wrong msg InvalidEnv
-        | Wrong msg (NegativePointerOffset _)
-        | Wrong msg MissingJalLabel
-        | Wrong msg MissingLabel
-        | Wrong msg (MissingBlock _)
-        | Wrong msg (OffsetTooBig _)
-        | Wrong msg (MemoryError _)
-        | Wrong msg AllocNegativeBlockSize
-        | Wrong msg NoInfo
-        | Wrong msg (MissingComponentId _) => whenFail ((show es) ++ (show ip))%string false     
+        | Wrong _ msg InvalidEnv
+        | Wrong _ msg (NegativePointerOffset _)
+        | Wrong _ msg MissingJalLabel
+        | Wrong _ msg MissingLabel
+        | Wrong _ msg (MissingBlock _)
+        | Wrong _ msg (OffsetTooBig _)
+        | Wrong _ msg (MemoryError _ _)
+        | Wrong _ msg AllocNegativeBlockSize
+        | Wrong _ msg NoInfo
+        | Wrong _ msg (MissingComponentId _) =>
+          if DEBUG
+          then 
+            whenFail ((show es) ++ (show ip))%string false
+          else
+            checker tt
         | _ =>
           match res with
           | TargetSFI.EitherMonad.Left msg err => whenFail
@@ -843,7 +920,9 @@ Definition jump_log_entry := (RiscMachine.pc * RiscMachine.address
 
 Definition jump_log := ((list jump_log_entry) * (list RiscMachine.address))%type.
 
-Definition update_jump_log (st : MachineState.t) (t : CompCert.Events.trace)
+Definition update_jump_log
+           (G : Env.t)
+           (st : MachineState.t) (t : CompCert.Events.trace)
            (st' : MachineState.t) (log : jump_log) :=
   let '(mem,pc,regs) := st in
   let '(j_log,addr_log) := log in
@@ -986,7 +1065,7 @@ Definition jump_checker (log : jump_log) (steps : nat)
                                            false
                          end
               ) l1)
-      end. (* TODO check the event too *)
+      end. 
 
 Definition jump_correct : Checker :=
   forAllShrink (genIntermediateProgram TJump) shrink
@@ -998,7 +1077,22 @@ Definition jump_correct : Checker :=
                let (res,log) := eval_jump_program p in
                let es := run_intermediate_program ip in
                match es with
-               | Wrong msg InvalidEnv => whenFail ((show es) ++ (show ip))%string false
+               | Wrong _ msg InvalidEnv
+               | Wrong _ msg (NegativePointerOffset _)
+               | Wrong _ msg MissingJalLabel
+               | Wrong _ msg MissingLabel
+               | Wrong _ msg (MissingBlock _)
+               | Wrong _ msg (OffsetTooBig _)
+               | Wrong _ msg (MemoryError _ _)
+               | Wrong _ msg (StoreMemoryError _ _)
+               | Wrong _ msg AllocNegativeBlockSize
+               | Wrong _ msg NoInfo
+               | Wrong _ msg (MissingComponentId _) =>
+                 if DEBUG
+                 then 
+                   whenFail ((show es) ++ (show ip))%string false
+                 else
+                   checker tt
                | _ =>
                  match res with
                  | TargetSFI.EitherMonad.Left msg err => whenFail
@@ -1030,7 +1124,9 @@ Definition cs_log_entry := (RiscMachine.pc
 
 Definition cs_log := ((list cs_log_entry) * (list RiscMachine.address))%type.
 
-Definition update_cs_log (st : MachineState.t) (t : CompCert.Events.trace)
+Definition update_cs_log
+           (G : Env.t)
+           (st : MachineState.t) (t : CompCert.Events.trace)
            (st' : MachineState.t) (log : cs_log) :=
   let '(mem,pc,regs) := st in
   let '(cs_log,addr_log) := log in
@@ -1168,7 +1264,22 @@ Definition cs_correct : Checker :=
                let (res,log) := eval_cs_program p in
                let es := run_intermediate_program ip in
                 match es with
-                | Wrong msg InvalidEnv => whenFail ((show es) ++ (show ip))%string false
+                | Wrong _ msg InvalidEnv
+                | Wrong _ msg (NegativePointerOffset _)
+                | Wrong _ msg MissingJalLabel
+                | Wrong _ msg MissingLabel
+                | Wrong _ msg (MissingBlock _)
+                | Wrong _ msg (OffsetTooBig _)
+                | Wrong _ msg (MemoryError _ _)
+                | Wrong _ msg (StoreMemoryError _ _)
+                | Wrong _ msg AllocNegativeBlockSize
+                | Wrong _ msg NoInfo
+                | Wrong _ msg (MissingComponentId _) =>
+                  if DEBUG
+                  then 
+                    whenFail ((show es) ++ (show ip))%string false
+                  else
+                    checker tt
                 | _ =>
                   match res with
                   | TargetSFI.EitherMonad.Left msg err => whenFail
@@ -1183,10 +1294,10 @@ Definition cs_correct : Checker :=
          ).
 
 (****************** QUICK CHECKS ***************************)
-Extract Constant Test.defNumTests => "20".
+Extract Constant Test.defNumTests => "10000". 
 
 QuickChick store_correct.
 QuickChick jump_correct.
 QuickChick cs_correct.
 
-(* TODO test compile correctness *)
+

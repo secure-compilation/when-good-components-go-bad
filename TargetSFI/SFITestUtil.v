@@ -225,17 +225,17 @@ Instance show_exec_error : Show ExecutionError :=
     show :=
       fun err =>
         match err with
-        | RegisterNotFound st reg => (show reg)
+        | RegisterNotFound st reg => "RegisterNotFound" ++ (show reg)
         | NoInfo => EmptyString
         | UninitializedMemory st addr =>
-          "PC=" ++ (show_addr (MachineState.getPC st))               
+          "UninitializedMemory PC=" ++ (show_addr (MachineState.getPC st))               
                 ++ " address=" ++ (show_addr addr) ++ newline
                 ++ " memory:" ++ newline
                 ++ (show_mem (MachineState.getMemory st))
                 ++ " registers:" ++ newline
                 ++ (show (MachineState.getRegs st))
         | CodeMemoryException st addr i =>
-          "PC=" ++ (show_addr (MachineState.getPC st))
+          "CodeMemoryException PC=" ++ (show_addr (MachineState.getPC st))
                 ++ " address in data memory=" ++ (show_addr addr)
                 ++ " contains instruction "
                 ++ (show i)
@@ -244,7 +244,7 @@ Instance show_exec_error : Show ExecutionError :=
                 ++ " registers:" ++ newline
                 ++ (show (MachineState.getRegs st))
         | DataMemoryException st addr val  =>
-          "PC=" ++ (show_addr (MachineState.getPC st))
+          "DataMemoryException PC=" ++ (show_addr (MachineState.getPC st))
                 ++ " address in code memory=" ++ (show_addr addr)
                 ++ " contains value "
                 ++ (show_value val)
@@ -253,7 +253,7 @@ Instance show_exec_error : Show ExecutionError :=
                 ++ " registers:" ++ newline
                 ++ (show (MachineState.getRegs st))
         | MissingComponentId st cid cn =>
-          "PC=" ++ (show_addr (MachineState.getPC st))
+          "MissingComponentId PC=" ++ (show_addr (MachineState.getPC st))
                 ++ " cid=" ++ (show cid)
                 ++ " CN=" ++ (show cn)
                 ++ " memory:" ++ newline
@@ -261,7 +261,7 @@ Instance show_exec_error : Show ExecutionError :=
                 ++ " registers:" ++ newline
                 ++ (show (MachineState.getRegs st))
         | CallEventError st cid cid' cn e =>
-          "PC=" ++ (show_addr (MachineState.getPC st))
+          "CallEventError PC=" ++ (show_addr (MachineState.getPC st))
                 ++ " cid=" ++ (show cid)
                 ++ " cid'=" ++ (show cid')
                 ++ " CN=" ++ (show cn)
@@ -271,7 +271,7 @@ Instance show_exec_error : Show ExecutionError :=
                 ++ " registers:" ++ newline
                 ++ (show (MachineState.getRegs st))
         | RetEventError st cid cid' cn =>
-          "PC=" ++ (show_addr (MachineState.getPC st))
+          "RetEventError PC=" ++ (show_addr (MachineState.getPC st))
                 ++ " cid=" ++ (show cid)
                 ++ " cid'=" ++ (show cid')
                 ++ " CN=" ++ (show cn)
@@ -279,6 +279,19 @@ Instance show_exec_error : Show ExecutionError :=
                 ++ (show_mem (MachineState.getMemory st))
                 ++ " registers:" ++ newline
                 ++ (show (MachineState.getRegs st))
+        | IllegalJalToZeroComponent st =>
+          "IllegalJalToZeroComponent PC=" ++ (show_addr (MachineState.getPC st))
+                ++ " memory:" ++ newline
+                ++ (show_mem (MachineState.getMemory st))
+                ++ " registers:" ++ newline
+                ++ (show (MachineState.getRegs st))
+        | IllegalJumpFromZeroComponent st =>
+          "IllegalJumpFromZeroComponent PC=" ++ (show_addr (MachineState.getPC st))
+                ++ " memory:" ++ newline
+                ++ (show_mem (MachineState.getMemory st))
+                ++ " registers:" ++ newline
+                ++ (show (MachineState.getRegs st))
+                
         end                 
   |}.
 

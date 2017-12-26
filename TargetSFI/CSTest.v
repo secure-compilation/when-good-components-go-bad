@@ -8,6 +8,7 @@ Require Import Coq.Logic.Decidable.
 Require Import Coq.FSets.FMapInterface.
 Require Import Coq.FSets.FMapFacts.
 Require Import Coq.Init.Logic.
+Require Import Coq.Strings.String.
 
 Require Import TargetSFI.SFIUtil.
 
@@ -968,28 +969,34 @@ Definition eval_step_complete_exec : Checker :=
             else checker true (* at some point I want to have some incorrect cases to test *)
          )))).
               
-                                                            
-
-(*
-What do I need to generate?
-- G - global environment 
-   (CN,E)
-   CN - list of Component.id
-   E - list of pairs (address,Procedure.id) where 
-       address is the target of a Jal instruction 
-       that is the compilation of a Call
-- st current state
-  mem
-    mem[pc] = Instr ...
-  pc address in mem 
-  registers list of integers
-   
-- t trace 
-
-- st' next state
- *)
-(* I need the Prop to be decidable. *)
+Definition eval_step_sound : Checker :=
+  forAll genEnv
+         (fun g =>
+            forAll (genStateForEnv g)
+                   (fun st =>
+                      match eval_step g st with
+                      | TargetSFI.EitherMonad.Left msg err =>
+                      (* TODO check this again *)
+                        whenFail ("eval_step failed" ++(show  err))%string 
+                                 (negb ((step g st E0 st)?))
+                      | TargetSFI.EitherMonad.Right (t,st') =>
+                        if (RiscMachine.is_executing (MachineState.getMemory st)
+                                                     (MachineState.getPC st)
+                                                     IHalt)
+                        then
+                          checker (negb ((step g st t st')?))
+                        else
+                          whenFail ("Original state: "
+                                      ++ newline
+                                      ++ (show st)
+                                      ++ "Next state: "
+                                      ++ newline
+                                      ++ (show st'))%string
+                                   ((step g st t st')?)
+                      end
+                   )
+         ).
 
 QuickChick eval_step_complete_exec.
-                                   
+QuickChick eval_step_sound.                                   
   

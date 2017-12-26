@@ -18,7 +18,9 @@ Inductive ExecutionError :=
 | CallEventError : MachineState.t -> SFIComponent.id -> SFIComponent.id
                    -> Env.CN -> Env.E -> ExecutionError
 | RetEventError : MachineState.t -> SFIComponent.id -> SFIComponent.id
-                   -> Env.CN -> ExecutionError
+                  -> Env.CN -> ExecutionError
+| IllegalJalToZeroComponent : MachineState.t -> ExecutionError
+| IllegalJumpFromZeroComponent : MachineState.t -> ExecutionError
 .
 
 Inductive Either {A:Type} : Type :=

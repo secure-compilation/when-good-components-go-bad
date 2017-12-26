@@ -32,7 +32,8 @@ Inductive ExecutionError :=
 | MissingLabel : ExecutionError
 | MissingBlock : Pointer.t -> ExecutionError
 | OffsetTooBig : Pointer.t -> ExecutionError
-| MemoryError : Pointer.t -> ExecutionError
+| MemoryError : Pointer.t -> Pointer.t -> ExecutionError
+| StoreMemoryError : Pointer.t -> Pointer.t -> ExecutionError
 | NotIntInReg : ExecutionError
 | AllocNegativeBlockSize : ExecutionError
 | InvalidEnv : ExecutionError
@@ -42,8 +43,8 @@ Inductive ExecutionError :=
 Inductive execution_state {A:Type} :=
 | Running : A -> execution_state
 | OutOfFuel : A -> execution_state
-| Halted : execution_state
-| Wrong : string -> ExecutionError -> execution_state.
+| Halted : trace -> execution_state
+| Wrong : trace -> string -> ExecutionError -> execution_state.
 
 Instance exec_monad : Monad (@execution_state)
   := {      
@@ -52,8 +53,8 @@ Instance exec_monad : Monad (@execution_state)
       bind := fun {A B:Type} (x : @execution_state A) (f : A -> @execution_state B) => 
                 match x with
                 | Running y => f y
-                | Wrong m err => Wrong m err
-                | Halted => Halted
+                | Wrong tr m err => Wrong tr m err
+                | Halted tr => Halted tr
                 | OutOfFuel y => f y
                 end
     }.
@@ -63,12 +64,12 @@ Definition t : Type :=  (trace*CS.state).
 
 Definition lift {A} (x: option A) (msg : string) (err : ExecutionError) :=
   match x with
-  | None  => (@Wrong A msg err)
+  | None  => (@Wrong A E0 msg err)
   | Some v => (@Running A v)
   end.
     
 Definition fail {A} (msg : string) (err : ExecutionError) :=
-  (@Wrong A msg err).
+  (@Wrong A E0 msg err).
 
 
 Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
@@ -107,11 +108,11 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
             match Intermediate.Register.get r1 regs with
             | Ptr ptr =>
               if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
-                do v <- lift (Memory.load mem ptr) "Memory load error" (MemoryError ptr);
+                do v <- lift (Memory.load mem ptr) "Memory load error" (MemoryError ptr pc);
                   let regs' := Intermediate.Register.set r2 v regs in
                   ret (E0, (gps, mem, regs', Pointer.inc pc))
               else
-                fail "Load outside component"%string LoadOutsideComponent 
+                fail "Load outside component"%string LoadOutsideComponent
             | _ => fail "Not a pointer value in address register"%string LoadNotAddressInReg
             end
           | IStore r1 r2 =>
@@ -119,7 +120,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
             | Ptr ptr =>
               if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
                 do mem' <- lift (Memory.store mem ptr (Intermediate.Register.get r2 regs))
-                "Memory store error"%string (MemoryError ptr);
+                "Memory store error"%string (StoreMemoryError ptr pc);
                   ret (E0, (gps, mem', regs, Pointer.inc pc))
               else
                 fail "Store outside component"%string StoreOutsideComponent
@@ -129,7 +130,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
             do pc' <- lift (find_label_in_component G pc l)
               "Missing Jal label"%string MissingJalLabel;
               let regs' :=  Intermediate.Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-              @Running t (E0, (gps, mem, regs', pc'))
+              ret (E0, (gps, mem, regs', pc'))
           | IJump r =>
             match Intermediate.Register.get r regs with
             | Ptr pc' =>
@@ -156,7 +157,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
                 fail  "Negative block size"%string AllocNegativeBlockSize
               else
                 do (mem', ptr) <- lift (Memory.alloc mem (Pointer.component pc) (Z.to_nat size))
-                   "Alloc failed"%string (MemoryError pc);
+                   "Alloc failed"%string (MemoryError pc pc);
                 let regs' := Intermediate.Register.set rptr (Ptr ptr) regs in
                 ret (E0, (gps, mem', regs', Pointer.inc pc))
             | _ => fail  "Alloc::Not int"%string NotIntInReg
@@ -175,7 +176,8 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
                                          Intermediate.Register.invalidate regs,
                                          pc')) in
                     ret res
-                  | _ => fail "Call::Missing register R_COM"%string NoInfo
+                  | Ptr _ => fail "Call::Ptr in register R_COM"%string NoInfo
+                  | Undef => fail "Call::Undef in register R_COM"%string NoInfo
                   end
               else
                 fail  "Call::procedure not imported"%string InvalidEnv
@@ -189,13 +191,14 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
                 | Int rcomval =>
                   let tr := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
                   ret (tr, (gps', mem, Intermediate.Register.invalidate regs, pc'))
-                | _ => fail  "Return::Missing register R_COM"%string InvalidEnv
+                | Ptr _ => fail "Return::Ptr in register R_COM"%string NoInfo
+                | Undef => fail "Return::Undef in register R_COM"%string NoInfo
                 end
               else
                 fail  "Return::same component"%string InvalidEnv
             | _ => fail "Empty Stack"%string InvalidEnv
             end
-          | IHalt =>  Halted
+          | IHalt =>  Halted E0
           end
         end
     end
@@ -206,9 +209,9 @@ Fixpoint execN (n: nat) (G: global_env) (tr:trace) (st: CS.state) : execution_st
   | O => OutOfFuel (tr,st)
   | S n' =>
     match eval_step G st with
-    | Halted => Halted
+    | Halted _ => Halted tr
     | OutOfFuel s => OutOfFuel s
-    | Wrong msg err => Wrong msg err
+    | Wrong _ msg err => Wrong tr msg err
     | Running (ntr,nst) => execN n' G (tr++ntr) nst
     end
   end.

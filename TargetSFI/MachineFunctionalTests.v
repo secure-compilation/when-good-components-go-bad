@@ -127,4 +127,4 @@ Proof.
   unfold RiscMachine.RegisterFile.get_register.
   unfold RiscMachine.Register.R_SFI_SP.
   unfold  RiscMachine.Register.NO_REGISTERS.
-  reflexivity. Qed. 
+  reflexivity. Qed.
