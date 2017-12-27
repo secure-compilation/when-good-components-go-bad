@@ -202,37 +202,37 @@ Inductive update :=
 Definition next_state_do_update (st : state) (tk : tag_kind)
            (tag : tag_type ttypes tk)
            (updt : update) : option state :=
-  match tk return tag_type _ tk -> option state with
-  | R => match updt with
-        | RegWrite r x => fun t => do! regs' <- updm (regs st) r x@t;
-                               Some (State (mem st) regs' (pc st) (internal st))
-        | RegRead r => fun t => do! a <- regs st r;
-                            do! regs' <- updm (regs st) r (vala a)@t;
-                            Some (State (mem st) regs' (pc st) (internal st))
-        | _ => fun _ => None
+  match tk, tag with
+  | R, t => match updt with
+        | RegWrite r x =>  do! regs' <- updm (regs st) r x@t;
+                          Some (State (mem st) regs' (pc st) (internal st))
+        | RegRead r => do! a <- regs st r;
+                      do! regs' <- updm (regs st) r (vala a)@t;
+                      Some (State (mem st) regs' (pc st) (internal st))
+        | _ => None
         end
-  | M => match updt with
-        | MemWrite w1 w2 => fun t => do! mem' <- updm (mem st) w1 w2@t;
-                                 Some (State mem' (regs st) (pc st) (internal st))
-        | MemRead w => fun t => do! a <- mem st w;
-                            do! mem' <- updm (mem st) w (vala a)@t;
-                            Some (State mem' (regs st) (pc st) (internal st))
-        | _ => fun _ => None
+  | M, t => match updt with
+        | MemWrite w1 w2 => do! mem' <- updm (mem st) w1 w2@t;
+                           Some (State mem' (regs st) (pc st) (internal st))
+        | MemRead w => do! a <- mem st w;
+                      do! mem' <- updm (mem st) w (vala a)@t;
+                      Some (State mem' (regs st) (pc st) (internal st))
+        | _ => None
         end
-  | P => fun _ => None
-  end tag.
+  | P, t => None
+  end.
 
 
 Fixpoint next_state_do_updates (st : state) (tks : seq tag_kind)
          (tags : hseq (tag_type ttypes) tks)
          (updts : seq update) : option state :=
-  match tks return hseq (tag_type _) tks -> option state with
-    | [:: ] => fun _ => Some st
-    | [:: tk & tks' ] => fun tags =>
-                          do! updt <- ohead updts;
-                          do! st' <- next_state_do_update st (hshead tags) updt;
-                          next_state_do_updates st' (hsbehead tags) (behead updts)
-  end tags.
+  match tks, tags with
+    | [:: ], _ => Some st
+    | [:: tk & tks' ], tags =>
+        do! updt <- ohead updts;
+        do! st' <- next_state_do_update st (hshead tags) updt;
+        next_state_do_updates st' (hsbehead tags) (behead updts)
+  end.
 
 
 Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)

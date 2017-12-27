@@ -1,7 +1,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
+From CoqUtils Require Import hseq.
 Require Import lib.utils symbolic.types symbolic.machine.
 
-Variable ccolor : eqType.
 
 (* TL TODO: this mechanism of value tag and location tag moy be generalized *)
 
@@ -44,6 +44,7 @@ Definition pc_tag_eqMixin := CanEqMixin nat_of_pc_tagK.
 Canonical pc_tag_eqType := EqType pc_tag pc_tag_eqMixin.
 End PCTagEq.
 
+Context (ccolor : eqType).
 
 Structure mem_tag : Type := MTag {
   vtag  : [eqType of value_tag];
@@ -74,3 +75,25 @@ Definition lrt_tags := {|
   mem_tag_type   := [eqType of mem_tag];
   entry_tag_type := [eqType of unit];
 |}.
+
+
+(** Tag propagation rules **)
+
+Definition transfer (iv : ivec lrt_tags) : option (vovec lrt_tags (op iv)) :=
+  match iv with
+  | IVec op tpc ti ts tni =>
+    match op, ts return option (vovec _ op) with
+    | NOP,     [hseq]            => None
+    | CONST,   [hseq td]         => None
+    | MOV,     [hseq ts; td]     => None
+    | BINOP _, [hseq tx; ty; td] => None
+    | LOAD,    [hseq tp; ts; td] => None
+    | STORE,   [hseq tp; ts; td] => None
+    | JUMP,    [hseq tp]         => None
+    | BNZ,     [hseq tx]         => None
+    | JAL,     [hseq tp; tra]    => None
+    (* Monitor stuff *)
+    | SERVICE, [hseq] => Some tt
+    | _      , _      => None
+    end
+  end.
