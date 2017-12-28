@@ -73,7 +73,7 @@ Definition outputs (op : opcode) : seq tag_kind := inputs op.
 
 Section WithTagTypes.
 
-Structure tag_types := {
+Record tag_types := {
   pc_tag_type : eqType;
   reg_tag_type : eqType;
   mem_tag_type : eqType;

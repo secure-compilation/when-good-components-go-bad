@@ -1,22 +1,25 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq.
+
 Require Import lib.utils symbolic.types symbolic.machine.
 
 
+(** Tags **)
+
 (* TL TODO: this mechanism of value tag and location tag moy be generalized *)
 
-Inductive value_tag : Type := Ret : nat -> value_tag | Any : value_tag.
+Inductive value_tag : Type := Ret : nat -> value_tag | Other : value_tag.
 
 Module Import ValueTagEq.
 Definition option_of_value_tag t :=
   match t with
-  | Any => None
+  | Other => None
   | Ret n => Some n
   end.
 
 Definition value_tag_of_option t :=
   match t with
-  | None => Any
+  | None => Other
   | Some n => Ret n
   end.
 
@@ -46,7 +49,7 @@ End PCTagEq.
 
 Context (ccolor : eqType).
 
-Structure mem_tag : Type := MTag {
+Record mem_tag : Type := MTag {
   vtag  : [eqType of value_tag];
   color : ccolor;
   entry : list ccolor;
@@ -79,21 +82,105 @@ Definition lrt_tags := {|
 
 (** Tag propagation rules **)
 
+Import DoNotation.
+
+
+Definition belong (c : ccolor) (m : tag_type lrt_tags M) : bool :=
+  match m with
+    | {| color := c'  |} => c == c'
+  end.
+
+Definition check_belong (c : ccolor) (m : tag_type lrt_tags M) : option unit :=
+  match belong c m with
+    | true => Some tt
+    | false => None
+  end.
+
+
+Definition check_ret (n : nat) (r : tag_type lrt_tags R) : option unit :=
+  match r with
+    | Ret n' => if n == n' then Some tt else None
+    | Other => None
+  end.
+
+Definition check_entry (c : ccolor) (m : tag_type lrt_tags M) : option unit :=
+  match m with
+    | {| entry := l |} => if mem_seq l c then Some tt else None
+  end.
+
+
+Definition switch_val (m : tag_type lrt_tags M)
+           (v : tag_type lrt_tags R) : (tag_type lrt_tags M * tag_type lrt_tags R) :=
+  match m with
+    | {| vtag := v' ; color := c ; entry := e |} => ({| vtag := v ; color := c ; entry := e |}, v')
+  end.
+
+(* TL TODO: without this, I get a type error *)
+Definition build_tpc (n : nat) : tag_type lrt_tags P := Level n.
+
+(* TL TODO: comments? cf org file *)
+Definition instr_rules (op : opcode)
+           (tpc : tag_type lrt_tags P)
+           (ti : tag_type lrt_tags M)
+           (ts : hseq (tag_type lrt_tags) (inputs op))
+           (tni : tag_type lrt_tags M) : option (ovec lrt_tags op) :=
+  let current := match ti with {| color := c |} => c end in
+  let level := match tpc with Level n => n end in
+  match op, ts return option (ovec _ op) with
+  | NOP,     [hseq]            => do! _ <- check_belong current tni;
+                                     Some (OVec NOP       tpc [hseq])
+
+  | CONST,   [hseq td]         => do! _ <- check_belong current tni;
+                                     Some (OVec CONST     tpc [hseq Other])
+
+  | MOV,     [hseq ts; td]     => do! _ <- check_belong current tni;
+                                     Some (OVec MOV       tpc [hseq Other; ts])
+
+  | BINOP b, [hseq tx; ty; td] => do! _ <- check_belong current tni;
+                                     Some (OVec (BINOP b) tpc [hseq tx; ty; Other])
+
+  | LOAD,    [hseq tp; ts; td] => do! _ <- check_belong current tni;
+                                     if belong current ts then
+                                       let (ts', td') := switch_val ts Other in
+                                       Some (OVec LOAD tpc [hseq tp; ts'; td'])
+                                     else
+                                       Some (OVec LOAD tpc [hseq tp; ts; Other])
+
+  | STORE,   [hseq tp; ts; td] => do! _ <- check_belong current tni;
+                                 do! _ <- check_belong current td;
+                                     let (td', _) := switch_val td ts in
+                                     Some (OVec STORE tpc [hseq tp; Other; td'])
+
+  | BNZ,     [hseq tx]         => do! _ <- check_belong current tni;
+                                     Some (OVec BNZ       tpc [hseq tx])
+
+  | JUMP,    [hseq tp]         => if belong current tni then
+                                   Some (OVec JUMP tpc [hseq tp])
+                                 else
+                                   (* TL TODO: should forbid return if level = 0 ?         *)
+                                   (*          I think it is already enforced by invariant *)
+                                   (*          (unique Ret n)                              *)
+                                   do! _ <- check_ret level.-1 tp;
+                                       Some (OVec JUMP (build_tpc level.-1) [hseq Other])
+
+  | JAL,     [hseq tp; tra]    => if belong current tni then
+                                   Some (OVec JAL tpc [hseq tp; tra])
+                                 else
+                                   do! _ <- check_entry current tni;
+                                       Some (OVec JAL (build_tpc level.+1) [hseq tp; Ret level])
+
+  | _,     _                   => None
+  end.
+
+
+
 Definition transfer (iv : ivec lrt_tags) : option (vovec lrt_tags (op iv)) :=
-  match iv with
-  | IVec op tpc ti ts tni =>
-    match op, ts return option (vovec _ op) with
-    | NOP,     [hseq]            => None
-    | CONST,   [hseq td]         => None
-    | MOV,     [hseq ts; td]     => None
-    | BINOP _, [hseq tx; ty; td] => None
-    | LOAD,    [hseq tp; ts; td] => None
-    | STORE,   [hseq tp; ts; td] => None
-    | JUMP,    [hseq tp]         => None
-    | BNZ,     [hseq tx]         => None
-    | JAL,     [hseq tp; tra]    => None
+  match iv with (* TL TODO: ask someone obout this dependent boilerplate *)
+  | IVec vop tpc ti ts tni =>
+    match vop, ts, ti, tni return option (vovec _ vop) with
+    | (OP op), ts, ti, Some tni => instr_rules op tpc ti ts tni
     (* Monitor stuff *)
-    | SERVICE, [hseq] => Some tt
-    | _      , _      => None
+    | SERVICE, [hseq], ti, None => Some tt
+    |       _,      _,  _,    _ => None
     end
   end.
