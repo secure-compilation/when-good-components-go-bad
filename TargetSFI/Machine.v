@@ -405,6 +405,9 @@ Module RiscMachine.
                         then key::acc
                         else acc)
                      mem nil.
+
+    Definition of_list (lst : list (RiscMachine.address * word)) : t :=
+      BinNatMapExtra.of_list lst.
       
     Definition eqb (m1 m2 : t) : bool :=
       BinNatMap.equal eqb_word m1 m2.
@@ -506,6 +509,13 @@ Module RiscMachine.
     | Some (Instruction i') => i = i'
     |  _ => False
     end.
+
+  Definition is_executing (mem : Memory.t) (pc : address) ( i : ISA.instr) : bool :=
+    match (Memory.get_word mem pc) with
+    | Some (Instruction i') => ISA.eqb_instr i i'
+    |  _ => false
+    end.
+
 
   Theorem executing_equal:
     forall (m1 m2 : Memory.t) (pc : address) ( i : ISA.instr),
@@ -703,6 +713,14 @@ Module MachineState.
     let '(mem2,pc2,gen_regs2) := st2 in
     (BinNatMap.Equal mem1 mem2) /\ (pc1 = pc2) /\
     (gen_regs1 = gen_regs2).
+
+  Definition eqb (st1 st2 : t) : bool :=
+    let '(mem1,pc1,gen_regs1) := st1 in
+    let '(mem2,pc2,gen_regs2) := st2 in
+    (RiscMachine.Memory.eqb mem1 mem2)
+    && (N.eqb pc1 pc2)
+    && (RiscMachine.RegisterFile.eqb gen_regs1 gen_regs2).
+
      
 End MachineState.
 

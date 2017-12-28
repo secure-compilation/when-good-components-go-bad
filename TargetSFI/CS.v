@@ -153,11 +153,13 @@ Module CS.
 
     Variable state_records : Type.
 
-    Variable update_state_records : MachineState.t
-                                     -> trace
-                                     -> MachineState.t
-                                     -> state_records
-                                     -> state_records.
+    Variable update_state_records :
+      Env.t
+      -> MachineState.t
+      -> trace
+      -> MachineState.t
+      -> state_records
+      -> state_records.
 
     Notation STATE := (StateMonad.t state_records).
     Notation lift := (StateMonad.lift state_records).
@@ -220,7 +222,7 @@ Module CS.
               let gen_regs' := RegisterFile.set_register rd val gen_regs in
               ret (E0, (mem,inc_pc pc,gen_regs'))
         | IStore rptr rs =>
-          do ptr <-get_reg rptr;
+          do ptr <- get_reg rptr;
             let addr := Memory.to_address ptr in
             if (SFI.is_code_address addr)
             then
@@ -240,14 +242,18 @@ Module CS.
             if SFI.is_same_component_bool pc pc' then
               ret (E0, (mem,pc',gen_regs))
             else
-              if (N.eqb (SFI.C_SFI pc') SFI.MONITOR_COMPONENT_ID)
-              then
-                ret (E0, (mem,pc',gen_regs))
-              else
-                do rcomval <- get_reg Register.R_COM;
-                do cpc <- lift (Env.get_component_name_from_id (SFI.C_SFI pc) G)
-                   "No intermediate component id" 
-                   (MissingComponentId s  (SFI.C_SFI pc) (fst G));
+              (* if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID) *)
+              (* then *)
+              (*   fail "Jump" (IllegalJumpFromZeroComponent s) *)
+              (* else *)
+                if (N.eqb (SFI.C_SFI pc') SFI.MONITOR_COMPONENT_ID)
+                then
+                  ret (E0, (mem,pc',gen_regs))
+                else
+                  do rcomval <- get_reg Register.R_COM;
+              do cpc <- lift (Env.get_component_name_from_id (SFI.C_SFI pc) G)
+                 "No intermediate component id" 
+                 (MissingComponentId s  (SFI.C_SFI pc) (fst G));
                 do cpc' <- lift (Env.get_component_name_from_id (SFI.C_SFI pc') G)
                    "No intermediate component id" 
                    (MissingComponentId s  (SFI.C_SFI pc') (fst G));
@@ -258,17 +264,21 @@ Module CS.
           let pc' := addr in
           if SFI.is_same_component_bool pc pc' then ret (E0, (mem,pc',gen_regs'))
           else
-            if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
-            then
-              ret (E0, (mem,pc',gen_regs')) 
-            else
-              let ot := call_trace G pc pc' gen_regs in
-              match ot with
-              | None => fail "Call trace error"
-                            (CallEventError s (SFI.C_SFI pc) (SFI.C_SFI pc')
-                                            (fst G) (snd G))
-              | Some t => ret (t, (mem,pc',gen_regs'))
-              end
+            (* if (N.eqb (SFI.C_SFI pc') SFI.MONITOR_COMPONENT_ID) *)
+            (* then *)
+            (*      fail "Jal" (IllegalJalToZeroComponent s) *)
+            (* else *)
+              if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
+              then
+                ret (E0, (mem,pc',gen_regs')) 
+              else
+                let ot := call_trace G pc pc' gen_regs in
+                match ot with
+                | None => fail "Call trace error"
+                              (CallEventError s (SFI.C_SFI pc) (SFI.C_SFI pc')
+                                              (fst G) (snd G))
+                | Some t => ret (t, (mem,pc',gen_regs'))
+                end
         | IHalt => ret (E0,(mem,pc,gen_regs))
         end
       | Some (Data val) => fail "Pc in data memory" (DataMemoryException s pc val)
@@ -291,7 +301,7 @@ Module CS.
       match n with
       | O => ret (E0,s,0%nat)
       | S n' => do (t',s') <- eval_step_with_state G s;
-                 do! modify (update_state_records s t' s');
+                 do! modify (update_state_records G s t' s');
                  (* check if a Halt was executed *)
                   let '(mem,pc,gen_regs) := s in
                   match Memory.get_word mem pc with
@@ -323,7 +333,7 @@ Module CS.
 
   End FunctionalRepresentation.
 
-  Definition update_empty_records (_ : MachineState.t) (_ : trace)
+  Definition update_empty_records (_ : Env.t) (_ : MachineState.t) (_ : trace)
              (_ : MachineState.t) (_ : unit) : unit := tt.
   
   Definition eval_step (G : Env.t) (s : MachineState.t)
@@ -334,7 +344,17 @@ Module CS.
       : @Either (trace * MachineState.t) :=
     do res <- fst ((eval_program_with_state unit update_empty_records fuel p regs) tt);
       ret (fst res).
-   
+
+  Definition initial_state (p : sfi_program) (s0 : MachineState.t) : bool :=
+    MachineState.eqb
+      ((TargetSFI.Machine.mem p), RiscMachine.PC0, RiscMachine.RegisterFile.reset_all)
+      s0
+  .
+
+  Definition final_state (G : Env.t) (s : MachineState.t) : bool :=
+    let '(mem,pc,regs) := s in
+    is_executing mem pc IHalt.
+  
   Conjecture eval_step_complete :
     forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
       (step G st t st') -> (eval_step G st = Right (t, st')).

@@ -238,28 +238,36 @@ Instance show_ip_exec_state : Show (@execution_state (Events.trace*(CS.state))) 
               match es with
               | Running _ => "Running"
               | OutOfFuel _ => "OutOfFuel"
-              | Halted => "Halted"
-              | Wrong msg err  =>
+              | Halted _ => "Halted"
+              | Wrong _ msg err  =>
                 "Wrong "
                   ++ match err with
                      | TestIntermediate.MissingComponentId cid => "MissingComponentId "
-                                                                 ++ (show cid)
-                     | NegativePointerOffset _ => "NegativePointerOffset"
-                     | LoadOutsideComponent => "LoadOutsideComponent"
-                     | LoadNotAddressInReg => "LoadNotAddressInReg"
-                     | StoreOutsideComponent => "StoreOutsideComponent"
-                     | StoreNotAddressInReg => "StoreNotAddressInReg"
-                     | JumpOutsideComponent => "JumpOutsideComponent"
-                     | JumpNotAddressInReg => "JumpNotAddressInReg"
-                     | MissingJalLabel => "MissingJalLabel"
-                     | MissingLabel => "MissingLabel"
-                     | MissingBlock _ => "MissingBlock"
-                     | OffsetTooBig _ => "OffsetTooBig"
-                     | MemoryError _ => "MemoryError"
-                     | NotIntInReg => "MemoryError"
-                     | AllocNegativeBlockSize => "AllocNegativeBlockSize"
-                     | InvalidEnv => "InvalidEnv(" ++ msg ++")"
-                     | TestIntermediate.NoInfo => msg
+                                                                 ++ (show cid) ++ newline
+                     | NegativePointerOffset _ => "NegativePointerOffset" ++ newline
+                     | LoadOutsideComponent => "LoadOutsideComponent" ++ newline
+                     | LoadNotAddressInReg => "LoadNotAddressInReg" ++ newline
+                     | StoreOutsideComponent => "StoreOutsideComponent" ++ newline
+                     | StoreNotAddressInReg => "StoreNotAddressInReg" ++ newline
+                     | JumpOutsideComponent => "JumpOutsideComponent" ++ newline
+                     | JumpNotAddressInReg => "JumpNotAddressInReg" ++ newline
+                     | MissingJalLabel => "MissingJalLabel" ++ newline
+                     | MissingLabel => "MissingLabel" ++ newline
+                     | MissingBlock a => "MissingBlock " ++ (show a) ++ newline
+                     | OffsetTooBig a => "OffsetTooBig " ++ (show a) ++ newline
+                     | MemoryError ptr pc => "MemoryError address:" ++ (show ptr)
+                                                                   ++ " pc: "
+                                                                   ++ (show pc)
+                                                                   ++ newline
+                     | StoreMemoryError ptr pc => "StoreMemoryError address:" ++ (show ptr)
+                                                                   ++ " pc: "
+                                                                   ++ (show pc)
+                                                                   ++ newline
+
+                     | NotIntInReg => "NotIntInReg" ++ newline
+                     | AllocNegativeBlockSize => "AllocNegativeBlockSize" ++ newline
+                     | InvalidEnv => "InvalidEnv(" ++ msg ++")" ++ newline
+                     | TestIntermediate.NoInfo => msg ++ newline
                      end
               end
   |}.

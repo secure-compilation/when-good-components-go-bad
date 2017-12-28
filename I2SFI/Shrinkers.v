@@ -211,11 +211,14 @@ Definition buildInterface (components : list Component.id)
         let newExport :=
             List.nodup
               Nat.eq_dec
-              ( List.map
+              (
+                List.map
                   nodeGetPid
                   (List.filter
-                     (fun n' => Component.eqb (nodeGetCid n') cid) cg)                 
-              ) in
+                     (fun n => Component.eqb (nodeGetCid n) cid)
+                     cg)
+              )
+        in
         let newImport := (* all the called procs by this component *)
             List.nodup proc_eq_dec
                        ( List.fold_left
@@ -238,50 +241,87 @@ Definition buildInterface (components : list Component.id)
 Definition buildProcedures (components : list Component.id)
            (cg : CallGraph)
            (ip : Intermediate.program) : NMap (NMap code) :=
-  List.fold_left
-    (fun acc '(p,_,callList) =>
-       let cid := fst p in
-       let pid := snd p in
-       match getm (Intermediate.prog_procedures ip) cid with
-       | None => acc
-       | Some pmap =>
-         let oldmap := (match getm acc cid with
-                        | None => emptym
-                        | Some x => x
-                        end) in
-         match getm pmap pid with
-         | None => acc
-         | Some lcode =>
-           let newcode := List.map
-                            ( fun i =>
-                                match i with
-                                | ICall c' p' =>
-                                  if (List.existsb (fun p => proc_eqb p (c',p') ) callList)
-                                  then i
-                                  else INop
-                                | _ => i
-                                end
-                            )
-                            lcode in
-           setm acc cid (setm oldmap pid newcode)
-         end
-       end
+  let all_procs :=
+      List.fold_left
+        (fun acc n => (nodeGetProcedure n)::acc) cg nil in
+  let all_code :=
+      List.fold_left
+        (fun acc '(p,_,callList) =>
+        let cid := fst p in
+        let pid := snd p in
+        match getm (Intermediate.prog_procedures ip) cid with
+        | None => acc
+        | Some pmap =>
+          let oldmap := (match getm acc cid with
+                         | None => emptym
+                         | Some x => x
+                         end) in
+          match getm pmap pid with
+          | None => acc
+          | Some lcode =>
+            let newcode := List.map
+                             ( fun i =>
+                                 match i with
+                                 | ICall c' p' =>
+                                   if (List.existsb (fun p => proc_eqb p (c',p') ) all_procs)
+                                   then i
+                                   else INop
+                                 | _ => i
+                                 end
+                             )
+                             lcode in
+            setm acc cid (setm oldmap pid newcode)
+          end
+        end
+     )
+     cg
+     emptym in
+
+  mapm
+    ( fun pmaps =>
+  
+  
+        let declared :=
+            List.fold_left
+              (fun acc '(pid,li) =>
+                 List.fold_left
+                   (fun acc' i =>
+                      match i with
+                      | ILabel l => l::acc'
+                      | _ => acc'
+                      end) li acc
+              ) (elementsm pmaps) nil
+        in
+        
+        mapm
+          (fun li =>
+             List.map
+               (fun i =>
+                  match i with
+                  | IJal l =>
+                    if (List.existsb (fun l' => Nat.eqb l' l) declared)
+                    then i
+                    else INop
+                  | IBnz _ l =>
+                    if (List.existsb (fun l' => Nat.eqb l' l) declared)
+                    then i
+                    else INop
+                  | _ => i
+                  end) li 
+          ) pmaps
     )
-    cg
-    emptym.
+    all_code
+.
 
 Definition buildBuffers (components : list Component.id)
            (cg : CallGraph)
            (ip : Intermediate.program) : NMap (list (Block.id * (nat + list value))) :=
   List.fold_left
     ( fun acc cid =>
-        if (List.existsb (Nat.eqb cid) components)
-        then 
-          match getm (Intermediate.prog_buffers ip) cid with
-          | None => acc
-          | Some x => setm acc cid x
-          end
-        else acc
+        match getm (Intermediate.prog_buffers ip) cid with
+        | None => acc
+        | Some x => setm acc cid x
+        end
     )
     components
     emptym.
@@ -292,7 +332,7 @@ Definition buildIntermediateProgram (cg : CallGraph)
   {|
     Intermediate.prog_interface := buildInterface components cg;
     Intermediate.prog_procedures := buildProcedures components cg ip;
-    Intermediate.prog_buffers := emptym;
+    Intermediate.prog_buffers := buildBuffers components cg ip;
     Intermediate.prog_main := (Intermediate.prog_main ip)
   |}.
 
@@ -430,30 +470,31 @@ Definition ip :=
       Intermediate.prog_main := Some (1,2)
     |} .
 
-Extract Constant Test.defNumTests => "1".
+(* Extract Constant Test.defNumTests => "1". *)
 
-Require Import CompEitherMonad.
-Require Import CompStateMonad.
-Require Import TestIntermediate.
-Require Import Coq.Strings.String.
-Require Import CompTestUtil.
-Definition test1: Checker :=
-  forAll    
-    ( 
-      let cg := buildCallGraph ip in
-      let newip := buildIntermediateProgram cg ip in      
-      returnGen newip
-    )
+(* Require Import CompEitherMonad. *)
+(* Require Import CompStateMonad. *)
+(* Require Import TestIntermediate. *)
+(* Require Import Coq.Strings.String. *)
+(* Require Import CompTestUtil. *)
+(* Definition test1: Checker := *)
+(*   forAll     *)
+(*     (  *)
+(*       let cg := buildCallGraph ip in *)
+(*       let newip := buildIntermediateProgram cg ip in       *)
+(*       returnGen newip *)
+(*     ) *)
 
-    (fun p =>       
-        let es := runp 20%nat  p in
-        match es with
-        | Wrong msg InvalidEnv => whenFail ((show es) ++ (show p))%string false
-        | _ => whenFail ("InvalidEnv NOT present:" ++ (show p) ++ (show es))%string false
-        end
-    ).
+(*     (fun p =>        *)
+(*         let es := runp 20%nat  p in *)
+(*         match es with *)
+(*         | Wrong msg InvalidEnv => whenFail ((show es) ++ (show p))%string false *)
+(*         | Wrong _ _ => whenFail ("InvalidEnv NOT present:" ++ (show p) ++ (show es))%string false *)
+(*         | _ => checker true *)
+(*         end *)
+(*     ). *)
 
-QuickChick test1.
+(* QuickChick test1. *)
   
 
  Close Scope nat_scope.
