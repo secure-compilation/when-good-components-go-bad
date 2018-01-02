@@ -1,7 +1,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq word fmap.
 
-Require Import lib.utils symbolic.types.
+Require Import MicroPolicies.Utils MicroPolicies.Types.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

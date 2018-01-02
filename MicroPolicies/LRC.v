@@ -1,7 +1,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq.
 
-Require Import lib.utils symbolic.types symbolic.machine.
+Require Import MicroPolicies.Utils MicroPolicies.Types MicroPolicies.Machine.
 
 
 (** Tags **)

@@ -1,6 +1,6 @@
-behaviours/events
-instruction set
-integration
+integration: fmap, coqutils or Common ?
+integration: behaviours/events
+integration: instruction set
 compiler
 tests
 licence

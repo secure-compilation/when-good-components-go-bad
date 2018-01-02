@@ -60,3 +60,9 @@ I2SFI/CompEitherMonad.v
 I2SFI/CompStateMonad.v
 I2SFI/AbstractMachine.v
 I2SFI/Compiler.v
+
+MicroPolicies/Utils.v
+MicroPolicies/Types.v
+MicroPolicies/Machine.v
+MicroPolicies/Exec.v
+MicroPolicies/LRC.v

@@ -2,7 +2,7 @@ From mathcomp Require Import
   ssreflect ssrfun ssrbool eqtype ssrnat seq choice fintype div ssrint ssralg intdiv.
 From CoqUtils Require Import ord word.
 
-Require Import lib.utils.
+Require Import MicroPolicies.Utils.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
