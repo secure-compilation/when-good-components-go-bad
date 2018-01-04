@@ -121,12 +121,12 @@ Definition correct_stats
   let '(l1,l2) := log in
   ( steps, List.length intermTrace, List.length l1, es, List.length l2).
 
-Definition eval_correct_program (p : sfi_program)
+Definition eval_correct_program (fuel : nat)  (p : sfi_program)
   : (@Either (CompCert.Events.trace*MachineState.t*nat) * correct_log ) :=
   ((CS.eval_program_with_state     
      correct_log
      update_correct_log
-     FUEL
+     fuel
      p
      (RiscMachine.RegisterFile.reset_all)) (nil,nil)).
 
@@ -167,15 +167,15 @@ Definition correct_checker
 .
 
 (* compare traces *)
-Definition compiler_correct : Checker :=
+Definition compiler_correct (fuel : nat) : Checker :=
   forAllShrink (genIntermediateProgram TCompilerCorrect) shrink
   ( fun ip =>
       match compile_program ip with
       | CompEitherMonad.Left msg err =>
         whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
       | CompEitherMonad.Right p =>
-        let '(target_res,log) := eval_correct_program p in
-        let interm_res := run_intermediate_program ip in
+        let '(target_res,log) := eval_correct_program fuel p in
+        let interm_res := runp fuel ip in
         match interm_res with
         | OutOfFuel _ => checker tt
         | _ =>
@@ -192,7 +192,7 @@ Definition compiler_correct : Checker :=
               (msg ++ (show err))
               (correct_checker log 0%nat interm_res interm_trace)
           | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) =>
-            if (Nat.eqb steps FUEL)
+            if (Nat.eqb steps fuel)
             then checker tt
             else
             (whenFail
@@ -213,4 +213,8 @@ Definition compiler_correct : Checker :=
 
 Extract Constant Test.defNumTests => "10000". 
 
-QuickChick compiler_correct.
+QuickChick (compiler_correct 100%nat).
+
+QuickChick (compiler_correct 1000%nat).
+
+QuickChick (compiler_correct 10000%nat).

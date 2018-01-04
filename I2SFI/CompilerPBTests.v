@@ -120,6 +120,7 @@ Definition get_freq (t : test_type) (i:instr_type) : nat :=
   | Call =>
       match t with
       | TStack => 30%nat
+      | TCompilerCorrect => 30%nat
       | _ => 4%nat
       end
   | Return => 2%nat
@@ -1296,8 +1297,8 @@ Definition cs_correct : Checker :=
 (****************** QUICK CHECKS ***************************)
 Extract Constant Test.defNumTests => "10000". 
 
-QuickChick store_correct.
-QuickChick jump_correct.
-QuickChick cs_correct.
+(* QuickChick store_correct. *)
+(* QuickChick jump_correct. *)
+(* QuickChick cs_correct. *)
 
 
