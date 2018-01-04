@@ -997,6 +997,6 @@ Definition eval_step_sound : Checker :=
                    )
          ).
 
-QuickChick eval_step_complete_exec.
-QuickChick eval_step_sound.                                   
+(* QuickChick eval_step_complete_exec. *)
+(* QuickChick eval_step_sound.                                    *)
   

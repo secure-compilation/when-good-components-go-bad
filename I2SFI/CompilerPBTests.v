@@ -73,11 +73,14 @@ Definition MAX_NO_BUFFERS_PER_COMP := 10%nat.
 Definition MAX_BUFFER_SIZE := 10%nat.
 
 Definition MAX_PROC_LENGTH := 10%nat.
-    
+
 Inductive test_type : Type :=
+| TInstrEqual : test_type
+| TInstrEqualUndef : test_type
 | TStore : test_type
 | TJump : test_type
 | TStack : test_type
+| TStackAllUndefElim : test_type
 | TCompilerCorrect : test_type.
 
 Inductive instr_type :=
@@ -96,7 +99,7 @@ Inductive instr_type :=
 | Return : instr_type
 | Halt : instr_type.
 
-Definition get_freq (t : test_type) (i:instr_type) : nat :=
+Definition get_freq_store i :=
   match i with
   | Nop => 1%nat
   | Label => 4%nat
@@ -104,28 +107,97 @@ Definition get_freq (t : test_type) (i:instr_type) : nat :=
   | Mov => 2%nat
   | BinOp => 6%nat
   | Load => 4%nat
-  | Store =>
-      match t with
-      | TStore => 20%nat
-      | _ => 4%nat
-      end
+  | Store => 0%nat
   | Alloc => 4%nat
   | Bnz => 1%nat (* could generate infinite loops *)
-  | Jump =>
-      match t with
-      | TJump => 20%nat
-      | _ => 1%nat
-      end
+  | Jump => 1%nat
   | Jal => 1%nat
-  | Call =>
-      match t with
-      | TStack => 30%nat
-      | TCompilerCorrect => 30%nat
-      | _ => 4%nat
-      end
+  | Call => 4%nat
   | Return => 2%nat
   | Halt => 1%nat
   end.
+
+Definition get_freq_jump i :=
+  match i with
+  | Nop => 1%nat
+  | Label => 4%nat
+  | Const => 4%nat
+  | Mov => 2%nat
+  | BinOp => 6%nat
+  | Load => 4%nat
+  | Store => 4%nat
+  | Alloc => 4%nat
+  | Bnz => 1%nat (* could generate infinite loops *)
+  | Jump => 20%nat
+  | Jal => 1%nat
+  | Call => 4%nat
+  | Return => 2%nat
+  | Halt => 1%nat
+  end.
+
+Definition get_freq_call i :=
+  match i with
+  | Nop => 1%nat
+  | Label => 4%nat
+  | Const => 4%nat
+  | Mov => 2%nat
+  | BinOp => 6%nat
+  | Load => 4%nat
+  | Store => 4%nat
+  | Alloc => 4%nat
+  | Bnz => 1%nat (* could generate infinite loops *)
+  | Jump => 1%nat
+  | Jal => 1%nat
+  | Call => 30%nat
+  | Return => 2%nat
+  | Halt => 1%nat
+  end.
+
+Definition get_freq (t : test_type) (i:instr_type) : nat :=
+  match t with
+  | TInstrEqual => 1%nat
+  | TInstrEqualUndef => 1%nat
+  | TStore => get_freq_store i
+  | TJump => get_freq_jump i
+  | TStack => get_freq_call i
+  | TCompilerCorrect => get_freq_call i
+  | TStackAllUndefElim => get_freq_call i
+  end.
+
+Definition jump_undef (t : test_type) : bool :=
+  match t with
+  | TInstrEqualUndef
+  | TJump => true
+  | _ => false
+  end.
+
+Definition bnz_undef (t : test_type) : bool :=
+  match t with
+  | TInstrEqualUndef
+  | TStack => true
+  | _ => false
+  end.
+
+Definition load_undef (t : test_type) : bool :=
+  match t with
+  | TInstrEqualUndef => true
+  | _ => false
+  end.
+
+Definition store_undef (t : test_type) : bool :=
+  match t with
+  | TInstrEqualUndef
+  | TStore => true
+  | _ => false
+  end.
+
+Definition alloc_undef (t : test_type) : bool :=
+  match t with
+  | TInstrEqualUndef => true
+  | _ => false
+  end.
+
+
 
 Definition choose_pos ( p : positive * positive) :=
   let (lo,hi) := p in
@@ -364,18 +436,26 @@ Definition gen_buffers (cids : list positive)
         returnGen [IConst ptr r1; it r1 r2]
       end.
 
-  Definition genIAlloc : G (list instr) :=
+  Definition genIAlloc (t : test_type) : G (list instr) :=    
     do! r1 <- arbitrary;
       do! r2 <- arbitrary;
-      do! v <- choose (0%nat,((N.to_nat SFI.SLOT_SIZE) - 1)%nat);
-      returnGen [IConst (IInt (Z.of_nat v)) r2; IAlloc r1 r2].
+      match (alloc_undef t) with
+      | true => returnGen [IAlloc r1 r2]
+      | _ =>
+        do! v <- choose (0%nat,((N.to_nat SFI.SLOT_SIZE) - 1)%nat);
+          returnGen [IConst (IInt (Z.of_nat v)) r2; IAlloc r1 r2]
+      end.
 
   Definition genILoad
+             (t : test_type)
              (pi : prog_int)
              (buffers : PMap.t (list (positive * (nat+list value))))
              (cid : positive)
     : G (list instr) :=
-    genMemReg ILoad pi buffers cid.
+    match (load_undef t) with
+    | true => gen2Reg ILoad
+    | _ => genMemReg ILoad pi buffers cid
+    end.
   
   Definition genIStore
              (t : test_type)
@@ -383,8 +463,8 @@ Definition gen_buffers (cids : list positive)
              (buffers : PMap.t (list (positive * (nat+list value))))
              (cid : positive)
     : G (list instr) :=
-    match t with
-    | TStore => gen2Reg IStore
+    match (store_undef t) with
+    | true => gen2Reg IStore
     | _ => genMemReg IStore pi buffers cid
     end.   
     
@@ -429,7 +509,7 @@ Definition gen_buffers (cids : list positive)
       if (Nat.ltb first_label (lbl+3))%nat
       then
         do! target <- choose (first_label,(lbl+3)%nat);
-          returnGen ([IBnz r target])
+          returnGen ([IConst (IInt v) r; IBnz r target])
       else
         do! target <- choose (lbl,(lbl+3)%nat);
           returnGen ([IConst (IInt v) r; IBnz r target]).
@@ -496,13 +576,13 @@ Definition gen_buffers (cids : list positive)
         ; ( (get_freq t Label) , genILabel next_label) 
         ; ( (get_freq t Mov), gen2Reg IMov)
         ; ( (get_freq t BinOp), genIBinOp)
-        ; ( (get_freq t Load) , genILoad pi buffers cid)
+        ; ( (get_freq t Load) , genILoad t pi buffers cid)
         ; ( (get_freq t Store), genIStore t pi buffers cid)
         ; ( (get_freq t Bnz), genIBnz first_label next_label)
         ; ( (get_freq t Jump), genIJump)
         ; ( (get_freq t Jal), genIJal)
         ; ( (get_freq t Call), genICall pi cid pid)
-        ; ( (get_freq t Alloc), genIAlloc)
+        ; ( (get_freq t Alloc), genIAlloc t)
         ; ( (get_freq t Halt), (returnGen [IHalt]))
         ; ( (get_freq t Return), (returnGen [IReturn]))
       ].
@@ -859,8 +939,8 @@ Definition store_checker (log : store_log) (steps : nat)
                         ) l1)
     end.
 
-Definition store_correct : Checker :=
-  forAllShrink (genIntermediateProgram TStore) shrink
+Definition store_correct  (t : test_type) : Checker :=
+  forAllShrink (genIntermediateProgram t) shrink
   ( fun ip =>
       match compile_program ip with
       | CompEitherMonad.Left msg err =>
@@ -1068,7 +1148,7 @@ Definition jump_checker (log : jump_log) (steps : nat)
               ) l1)
       end. 
 
-Definition jump_correct : Checker :=
+Definition jump_correct  (t : test_type) : Checker :=
   forAllShrink (genIntermediateProgram TJump) shrink
          ( fun ip =>
              match compile_program ip with
@@ -1255,8 +1335,8 @@ Definition cs_checker (log : cs_log)  (steps : nat)
       end
     end.
 
-Definition cs_correct : Checker :=
-  forAllShrink (genIntermediateProgram TStack) shrink
+Definition cs_correct (t : test_type) : Checker :=
+  forAllShrink (genIntermediateProgram t) shrink
          ( fun ip =>
              match compile_program ip with
              | CompEitherMonad.Left msg err =>
@@ -1297,8 +1377,8 @@ Definition cs_correct : Checker :=
 (****************** QUICK CHECKS ***************************)
 Extract Constant Test.defNumTests => "10000". 
 
-(* QuickChick store_correct. *)
-(* QuickChick jump_correct. *)
-(* QuickChick cs_correct. *)
+(* QuickChick store_correct TStore. *)
+(* QuickChick jump_correct TJump. *)
+(* QuickChick cs_correct TStack. *)
 
 
