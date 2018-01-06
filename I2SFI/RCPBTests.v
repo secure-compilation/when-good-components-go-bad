@@ -95,21 +95,20 @@ Definition correct_stat := (nat * nat * nat
                             * (@execution_state (CompCert.Events.trace*CS.state))
                             * nat)%type.
 
+(* dynamic instr, static instr, 
+   # of events in intermediate trace, 
+   # of events in target trace,
+   intermediate execution result *)
 Instance show_correct_stat : Show correct_stat :=
   {|
     show :=
       fun ss =>
         let '(steps, i, t, es, si) := ss in
-         "Steps: "
-           ++ (show  steps)
-           ++ " IntermediateTrace: "
-           ++ (show i )
-           ++ " TargetTrace: "
-           ++ (show t)
-           ++ " Intermediate Execution: "
-           ++ (show es)
-           ++ " Static instructions: "
-           ++ (show si)
+        (show  steps)
+          ++ "," ++ (show si)
+           ++ "," ++ (show i )
+           ++ "," ++ (show t)
+           ++ "," ++ (show es)
   |}.
 
 Definition correct_stats
@@ -179,39 +178,48 @@ Definition compiler_correct (fuel : nat) : Checker :=
         match interm_res with
         | OutOfFuel _ => checker tt
         | _ =>
-          let interm_trace := 
-              match interm_res with
-              | Wrong tr _ _ => tr
-              | OutOfFuel (tr,_) => tr
-              | Halted tr => tr
-              | Running (tr,_) => tr (* this should not happen *)
-              end in
-          match target_res with
-          | TargetSFI.EitherMonad.Left msg err =>
-            whenFail
-              (msg ++ (show err))
-              (correct_checker log 0%nat interm_res interm_trace)
-          | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) =>
-            if (Nat.eqb steps fuel)
-            then checker tt
+          match interm_res with
+          | Wrong _ msg InvalidEnv =>
+            if DEBUG
+            then 
+              whenFail ((show interm_res) ++ (show ip))%string false
             else
-            (whenFail
-               (
-                 "intermediate trace: "
-                   ++ (show interm_trace)
-                   ++ " target trace log:" ++ (show (fst log)) ++ newline
-                   ++ " target trace t:" ++ (show t) ++ newline
-                   ++ "intermediate program: :" ++ (show ip) ++ newline
-                   ++ "memory of failed program: " ++ (show_mem  mem)
-               )%string
-               (correct_checker log steps interm_res interm_trace))
+              checker tt
+          | _ => 
+            let interm_trace := 
+                match interm_res with              
+                | Wrong tr _ _ => tr
+                | OutOfFuel (tr,_) => tr
+                | Halted tr => tr
+                | Running (tr,_) => tr (* this should not happen *)
+                end in
+            match target_res with
+            | TargetSFI.EitherMonad.Left msg err =>
+              whenFail
+                (msg ++ (show err))
+                (correct_checker log 0%nat interm_res interm_trace)
+            | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) =>
+              if (Nat.eqb steps fuel)
+              then checker tt
+              else
+                (whenFail
+                   (
+                     "intermediate trace: "
+                       ++ (show interm_trace)
+                       ++ " target trace log:" ++ (show (fst log)) ++ newline
+                       ++ " target trace t:" ++ (show t) ++ newline
+                       ++ "intermediate program: :" ++ (show ip) ++ newline
+                       ++ "memory of failed program: " ++ (show_mem  mem)
+                   )%string
+                   (correct_checker log steps interm_res interm_trace))
+            end
           end
         end
       end
   ).
 
 
-Extract Constant Test.defNumTests => "10000". 
+Extract Constant Test.defNumTests => "10". 
 
 (* QuickChick (compiler_correct 100%nat). *)
 

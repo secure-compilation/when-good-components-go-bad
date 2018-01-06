@@ -26,6 +26,8 @@ Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 
 Definition newline := String "010" ""%string.
 
+Definition DEBUG := false.
+
 Instance show_pos : Show positive :=
   {|
     show := fun p => show (Pos.to_nat p)
@@ -236,38 +238,44 @@ Instance show_ip_exec_state : Show (@execution_state (Events.trace*(CS.state))) 
   {|
     show := fun es =>
               match es with
-              | Running _ => "Running"
-              | OutOfFuel _ => "OutOfFuel"
-              | Halted _ => "Halted"
+              | Running _ => "Running,,"
+              | OutOfFuel _ => "OutOfFuel,,"
+              | Halted _ => "Halted,,"
               | Wrong _ msg err  =>
-                "Wrong "
+                "Wrong,"
                   ++ match err with
-                     | TestIntermediate.MissingComponentId cid => "MissingComponentId "
-                                                                 ++ (show cid) ++ newline
-                     | NegativePointerOffset _ => "NegativePointerOffset" ++ newline
-                     | LoadOutsideComponent => "LoadOutsideComponent" ++ newline
-                     | LoadNotAddressInReg => "LoadNotAddressInReg" ++ newline
-                     | StoreOutsideComponent => "StoreOutsideComponent" ++ newline
-                     | StoreNotAddressInReg => "StoreNotAddressInReg" ++ newline
-                     | JumpOutsideComponent => "JumpOutsideComponent" ++ newline
-                     | JumpNotAddressInReg => "JumpNotAddressInReg" ++ newline
-                     | MissingJalLabel => "MissingJalLabel" ++ newline
-                     | MissingLabel => "MissingLabel" ++ newline
-                     | MissingBlock a => "MissingBlock " ++ (show a) ++ newline
-                     | OffsetTooBig a => "OffsetTooBig " ++ (show a) ++ newline
-                     | MemoryError ptr pc => "MemoryError address:" ++ (show ptr)
-                                                                   ++ " pc: "
-                                                                   ++ (show pc)
-                                                                   ++ newline
-                     | StoreMemoryError ptr pc => "StoreMemoryError address:" ++ (show ptr)
-                                                                   ++ " pc: "
-                                                                   ++ (show pc)
-                                                                   ++ newline
-
-                     | NotIntInReg => "NotIntInReg" ++ newline
-                     | AllocNegativeBlockSize => "AllocNegativeBlockSize" ++ newline
-                     | InvalidEnv => "InvalidEnv(" ++ msg ++")" ++ newline
-                     | TestIntermediate.NoInfo => msg ++ newline
+                     | TestIntermediate.MissingComponentId cid =>
+                       "MissingComponentId,"
+                         ++ ( if DEBUG then (show cid) else "")
+                     | NegativePointerOffset _ => "NegativePointerOffset," 
+                     | LoadOutsideComponent => "LoadOutsideComponent,"
+                     | LoadNotAddressInReg => "LoadNotAddressInReg,"
+                     | StoreOutsideComponent => "StoreOutsideComponent,"
+                     | StoreNotAddressInReg => "StoreNotAddressInReg,"
+                     | JumpOutsideComponent => "JumpOutsideComponent,"
+                     | JumpNotAddressInReg => "JumpNotAddressInReg,"
+                     | MissingJalLabel => "MissingJalLabel,"
+                     | MissingLabel => "MissingLabel,"
+                     | MissingBlock a => "MissingBlock,"
+                                          ++  (if DEBUG then (show a) else "")
+                     | OffsetTooBig a => "OffsetTooBig,"
+                                          ++  (if DEBUG then (show a) else "")                                          
+                     | MemoryError ptr pc => "MemoryError,"                                              
+                                              ++  (if DEBUG then
+                                                      (show ptr)
+                                                        ++ " pc: "
+                                                        ++ (show pc)
+                                                    else "")
+                     | StoreMemoryError ptr pc => "StoreMemoryError,"
+                                                   ++  ( if DEBUG then
+                                                           (show ptr)
+                                                             ++ " pc: "
+                                                             ++ (show pc)
+                                                         else "")
+                     | NotIntInReg => "NotIntInReg,"
+                     | AllocNegativeBlockSize => "AllocNegativeBlockSize,"
+                     | InvalidEnv => "InvalidEnv," ++ (if DEBUG then msg else "")
+                     | TestIntermediate.NoInfo => "NoInfo," ++  ( if DEBUG then msg else "")
                      end
               end
   |}.

@@ -264,7 +264,12 @@ Definition buildProcedures (components : list Component.id)
                                  match i with
                                  | ICall c' p' =>
                                    if (List.existsb (fun p => proc_eqb p (c',p') ) all_procs)
-                                   then i
+                                   then
+                                     if (List.existsb (fun p => proc_eqb p (c',p') ) callList)
+                                     then
+                                       i
+                                     else
+                                       INop
                                    else INop
                                  | _ => i
                                  end

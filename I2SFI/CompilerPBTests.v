@@ -64,8 +64,6 @@ Defined.
  * Intermediate program generation
  ***************************************************************************)
 
-Definition DEBUG := false.
-
 Definition MAX_PROC_PER_COMP := 10%nat.
 
 Definition MAX_NO_BUFFERS_PER_COMP := 10%nat.
@@ -475,9 +473,24 @@ Definition gen_buffers (cids : list positive)
       do! r3 <- arbitrary;
       returnGen ([IBinOp op r1 r2 r3]).
 
-  Definition genIJump : G (list instr) :=
-    do! r <- arbitrary;
-      returnGen ([IJump r]).
+  Definition genIJump
+             (t : test_type) : G (list instr) :=
+    match (jump_undef t) with
+    | true =>
+      do! r <- arbitrary;
+        returnGen ([IJump r])
+    | false =>
+      do! r <- arbitrary;
+        do! cid <- choose (1%nat, ((N.to_nat SFI.COMP_MAX) - 1)%nat);
+        do! pid <- choose (1%nat, MAX_PROC_PER_COMP);
+        do! offset <- choose (1%nat, (16%nat + MAX_PROC_LENGTH)%nat);
+        let v := SFI.address_of
+                   (N.of_nat cid)
+                   (2* (N.of_nat pid))%N
+                   (N.of_nat offset) in
+        (* TODO fix this *)
+        returnGen ([IConst (IInt  (Z.of_nat (N.to_nat v))) r; IJump R_RA])
+    end.
 
   Definition genICall
              (pi : prog_int)
@@ -503,7 +516,19 @@ Definition gen_buffers (cids : list positive)
     do! l <- choose (1%nat,20%nat);
       returnGen ([IJal l]).
   
-  Definition genIBnz (first_label : nat) (lbl : nat) : G (list instr) :=
+  Definition genIBnz (t : test_type)
+             (first_label : nat) (lbl : nat) : G (list instr) :=
+    match (bnz_undef t) with
+    | true =>
+      do! r <- arbitrary;
+        if (Nat.ltb first_label (lbl+3))%nat
+        then
+          do! target <- choose (first_label,(lbl+3)%nat);
+            returnGen ([IBnz r target])
+        else
+          do! target <- choose (lbl,(lbl+3)%nat);
+        returnGen ([IBnz r target])
+    | false => 
     do! r <- arbitrary;
       do! v <- arbitrary;
       if (Nat.ltb first_label (lbl+3))%nat
@@ -512,7 +537,8 @@ Definition gen_buffers (cids : list positive)
           returnGen ([IConst (IInt v) r; IBnz r target])
       else
         do! target <- choose (lbl,(lbl+3)%nat);
-          returnGen ([IConst (IInt v) r; IBnz r target]).
+      returnGen ([IConst (IInt v) r; IBnz r target])
+    end.
       
   Definition genILabel (lbl : nat) : G (list instr) :=
     returnGen ([ILabel lbl]).
@@ -578,8 +604,8 @@ Definition gen_buffers (cids : list positive)
         ; ( (get_freq t BinOp), genIBinOp)
         ; ( (get_freq t Load) , genILoad t pi buffers cid)
         ; ( (get_freq t Store), genIStore t pi buffers cid)
-        ; ( (get_freq t Bnz), genIBnz first_label next_label)
-        ; ( (get_freq t Jump), genIJump)
+        ; ( (get_freq t Bnz), genIBnz t first_label next_label)
+        ; ( (get_freq t Jump), genIJump t)
         ; ( (get_freq t Jal), genIJal)
         ; ( (get_freq t Call), genICall pi cid pid)
         ; ( (get_freq t Alloc), genIAlloc t)
@@ -875,21 +901,18 @@ Definition show_log_entry (entry : store_log_entry) : string :=
 Definition store_stat := (nat * nat * nat
                           * (@execution_state (CompCert.Events.trace*CS.state)) * nat)%type.
 
+(* dynamic instr, static instr, #of internal store instr executed, # of push sfi, intermediate execution result *)
 Instance show_store_stat : Show store_stat :=
   {|
     show :=
       fun ss =>
         let '(steps, i, e, es, si) := ss in
-         "Steps: "
-           ++ (show  steps)
-           ++ " Internal: "
-           ++ (show i )
-           ++ " Push SFI: "
-           ++ (show e)
-           ++ " Intermediate Execution: "
-           ++ (show es)
-           ++ " Static instructions: "
-           ++ (show si)
+        
+        (show  steps) (* dynamic instructions *)
+          ++ "," ++ (show si) (* static instructions *)
+           ++ "," ++ (show i ) (* internal stores *)
+           ++ "," ++ (show e) (* push SFI *)
+           ++ "," ++ (show es) (* intermediate execution result *)
   |}.
              
 Definition store_stats (log : store_log) (steps : nat)
@@ -949,16 +972,17 @@ Definition store_correct  (t : test_type) : Checker :=
         let '(res,log) := eval_store_program p in
         let es := run_intermediate_program ip in
         match es with
-        | Wrong _ msg InvalidEnv
-        | Wrong _ msg (NegativePointerOffset _)
-        | Wrong _ msg MissingJalLabel
-        | Wrong _ msg MissingLabel
-        | Wrong _ msg (MissingBlock _)
-        | Wrong _ msg (OffsetTooBig _)
-        | Wrong _ msg (MemoryError _ _)
-        | Wrong _ msg AllocNegativeBlockSize
-        | Wrong _ msg NoInfo
-        | Wrong _ msg (MissingComponentId _) =>
+        | Wrong _ msg InvalidEnv 
+        (* | Wrong _ msg (NegativePointerOffset _) *)
+        (* | Wrong _ msg MissingJalLabel *)
+        (* | Wrong _ msg MissingLabel *)
+        (* | Wrong _ msg (MissingBlock _) *)
+        (* | Wrong _ msg (OffsetTooBig _) *)
+        (* | Wrong _ msg (MemoryError _ _) *)
+        (* | Wrong _ msg AllocNegativeBlockSize *)
+        (* | Wrong _ msg NoInfo *)
+        (* | Wrong _ msg (MissingComponentId _) *)
+          =>
           if DEBUG
           then 
             whenFail ((show es) ++ (show ip))%string false
@@ -1059,21 +1083,20 @@ Definition eval_jump_program (p : sfi_program)
 Definition jump_stat := (nat * nat * nat
                          * (@execution_state (CompCert.Events.trace*CS.state)) * nat)%type.
 
+(* dynamic instr, static instr, 
+   # of internal jump instr executed, 
+   # of cross-component jumps, 
+   intermediate execution result *)
 Instance show_jump_stat : Show jump_stat :=
   {|
     show :=
       fun ss =>
         let '(steps, i, e, es,si) := ss in
-         "Steps: "
-           ++ (show  steps)
-           ++ " Internal: "
-           ++ (show i )
-           ++ " Cross Component: "
-           ++ (show e)
-           ++ " Intermediate Execution: "
-           ++ (show es)
-           ++ " Static instructions: "
-           ++ (show si)
+        (show  steps)
+           ++ "," ++ (show si)
+           ++ "," ++ (show i )
+           ++ "," ++ (show e)
+           ++ "," ++ (show es)
   |}.
 
 Definition jump_stats (log : jump_log) (steps : nat)
@@ -1159,16 +1182,17 @@ Definition jump_correct  (t : test_type) : Checker :=
                let es := run_intermediate_program ip in
                match es with
                | Wrong _ msg InvalidEnv
-               | Wrong _ msg (NegativePointerOffset _)
-               | Wrong _ msg MissingJalLabel
-               | Wrong _ msg MissingLabel
-               | Wrong _ msg (MissingBlock _)
-               | Wrong _ msg (OffsetTooBig _)
-               | Wrong _ msg (MemoryError _ _)
-               | Wrong _ msg (StoreMemoryError _ _)
-               | Wrong _ msg AllocNegativeBlockSize
-               | Wrong _ msg NoInfo
-               | Wrong _ msg (MissingComponentId _) =>
+               (* | Wrong _ msg (NegativePointerOffset _) *)
+               (* | Wrong _ msg MissingJalLabel *)
+               (* | Wrong _ msg MissingLabel *)
+               (* | Wrong _ msg (MissingBlock _) *)
+               (* | Wrong _ msg (OffsetTooBig _) *)
+               (* | Wrong _ msg (MemoryError _ _) *)
+               (* | Wrong _ msg (StoreMemoryError _ _) *)
+               (* | Wrong _ msg AllocNegativeBlockSize *)
+               (* | Wrong _ msg NoInfo *)
+               (* | Wrong _ msg (MissingComponentId _) *)
+                 =>
                  if DEBUG
                  then 
                    whenFail ((show es) ++ (show ip))%string false
@@ -1272,21 +1296,18 @@ Definition eval_cs_program (p : sfi_program)
 Definition cs_stat := (nat * nat
                        * (@execution_state (CompCert.Events.trace*CS.state)) * nat)%type.
 
+(* dynamic instr, static instr, 
+   # of operations, 
+   intermediate execution result *)
 Instance show_cs_stat : Show cs_stat :=
   {|
     show :=
       fun ss =>
         let '(steps, op, es, si) := ss in
-         "Steps: "
-           ++ (show  steps)
-           ++ " Operations no: "
-           ++ (show op )
-           ++ " Intermediate Execution: "
-           ++ (show es)
-           ++ " Intermediate Execution: "
-           ++ (show es)
-           ++ " Static instructions: "
-           ++ (show si)
+        (show  steps)
+          ++ "," ++ (show si)
+          ++ "," ++ (show op)
+          ++ "," ++ (show es)           
   |}.
 
 Definition cs_stats (log : cs_log) (steps : nat)
@@ -1346,16 +1367,17 @@ Definition cs_correct (t : test_type) : Checker :=
                let es := run_intermediate_program ip in
                 match es with
                 | Wrong _ msg InvalidEnv
-                | Wrong _ msg (NegativePointerOffset _)
-                | Wrong _ msg MissingJalLabel
-                | Wrong _ msg MissingLabel
-                | Wrong _ msg (MissingBlock _)
-                | Wrong _ msg (OffsetTooBig _)
-                | Wrong _ msg (MemoryError _ _)
-                | Wrong _ msg (StoreMemoryError _ _)
-                | Wrong _ msg AllocNegativeBlockSize
-                | Wrong _ msg NoInfo
-                | Wrong _ msg (MissingComponentId _) =>
+                (* | Wrong _ msg (NegativePointerOffset _) *)
+                (* | Wrong _ msg MissingJalLabel *)
+                (* | Wrong _ msg MissingLabel *)
+                (* | Wrong _ msg (MissingBlock _) *)
+                (* | Wrong _ msg (OffsetTooBig _) *)
+                (* | Wrong _ msg (MemoryError _ _) *)
+                (* | Wrong _ msg (StoreMemoryError _ _) *)
+                (* | Wrong _ msg AllocNegativeBlockSize *)
+                (* | Wrong _ msg NoInfo *)
+                (* | Wrong _ msg (MissingComponentId _) *)
+                  =>
                   if DEBUG
                   then 
                     whenFail ((show es) ++ (show ip))%string false
@@ -1375,10 +1397,19 @@ Definition cs_correct (t : test_type) : Checker :=
          ).
 
 (****************** QUICK CHECKS ***************************)
-Extract Constant Test.defNumTests => "10000". 
+Extract Constant Test.defNumTests => "10". 
 
-(* QuickChick store_correct TStore. *)
-(* QuickChick jump_correct TJump. *)
-(* QuickChick cs_correct TStack. *)
+(* QuickChick (store_correct TInstrEqualUndef). *)
+(* QuickChick (store_correct TInstrEqual). *)
+(* QuickChick (store_correct TStore). *)
+
+(* QuickChick (jump_correct TInstrEqualUndef). *)
+(* QuickChick (jump_correct TInstrEqual). *)
+(* QuickChick (jump_correct TJump). *)
+
+
+(* QuickChick (cs_correct TInstrEqualUndef). *)
+(* QuickChick (cs_correct TInstrEqual).  *)
+(* QuickChick (cs_correct TStack).  *)
 
 
