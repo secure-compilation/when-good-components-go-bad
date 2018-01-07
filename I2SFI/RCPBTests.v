@@ -166,8 +166,8 @@ Definition correct_checker
 .
 
 (* compare traces *)
-Definition compiler_correct (fuel : nat) : Checker :=
-  forAllShrink (genIntermediateProgram TCompilerCorrect) shrink
+Definition compiler_correct (t : test_type) (fuel : nat) : Checker :=
+  forAllShrink (genIntermediateProgram t) shrink
   ( fun ip =>
       match compile_program ip with
       | CompEitherMonad.Left msg err =>
@@ -219,7 +219,7 @@ Definition compiler_correct (fuel : nat) : Checker :=
   ).
 
 
-Extract Constant Test.defNumTests => "10". 
+(* Extract Constant Test.defNumTests => "10".  *)
 
 (* QuickChick (compiler_correct 100%nat). *)
 
