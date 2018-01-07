@@ -172,7 +172,8 @@ Definition jump_undef (t : test_type) : bool :=
 Definition bnz_undef (t : test_type) : bool :=
   match t with
   | TInstrEqualUndef
-  | TStack => true
+  (* | TStack *)
+    => true
   | _ => false
   end.
 
@@ -194,8 +195,6 @@ Definition alloc_undef (t : test_type) : bool :=
   | TInstrEqualUndef => true
   | _ => false
   end.
-
-
 
 Definition choose_pos ( p : positive * positive) :=
   let (lo,hi) := p in

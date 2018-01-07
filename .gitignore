@@ -1,2 +1,4 @@
 Makefile.coq
 MakefileTest.coq
+CoqMakefile.conf
+test_out
