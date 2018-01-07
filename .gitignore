@@ -2,3 +2,9 @@ Makefile.coq
 MakefileTest.coq
 CoqMakefile.conf
 test_out
+run_test
+*.cmi
+*.cmx
+*.o
+run_test.ml
+
