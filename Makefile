@@ -12,11 +12,10 @@ clean: Makefile.coq
 	rm -rf _build
 	rm -rf ._d
 
-ocaml:  
-	+make clean
-	+make all
+run_test.ml: all
+
+ocaml: run_test.ml ocaml/main.ml 
 	rm -f run_test.mli
-	cat ocaml/main.ml >> run_test.ml
 	ocamlopt -o run_test run_test.ml
 
 Makefile.coq: _CoqProject Makefile
@@ -28,4 +27,4 @@ Makefile: ;
 
 phony: ;
 
-.PHONY: all clean phony ocaml
+.PHONY: all clean phony ocaml run_test.ml

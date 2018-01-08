@@ -1,3 +1,4 @@
+open Run_test
 
 let run ct cf : unit =
   begin
