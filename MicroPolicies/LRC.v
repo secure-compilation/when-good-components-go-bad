@@ -72,7 +72,7 @@ End MemTagEq.
 
 Import Symbolic.
 
-Definition lrt_tags := {|
+Definition lrc_tags := {|
   pc_tag_type    := [eqType of pc_tag];
   reg_tag_type   := [eqType of value_tag];
   mem_tag_type   := [eqType of mem_tag];
@@ -85,45 +85,45 @@ Definition lrt_tags := {|
 Import DoNotation.
 
 
-Definition belong (c : ccolor) (m : tag_type lrt_tags M) : bool :=
+Definition belong (c : ccolor) (m : tag_type lrc_tags M) : bool :=
   match m with
     | {| color := c'  |} => c == c'
   end.
 
-Definition check_belong (c : ccolor) (m : tag_type lrt_tags M) : option unit :=
+Definition check_belong (c : ccolor) (m : tag_type lrc_tags M) : option unit :=
   match belong c m with
     | true => Some tt
     | false => None
   end.
 
 
-Definition check_ret (n : nat) (r : tag_type lrt_tags R) : option unit :=
+Definition check_ret (n : nat) (r : tag_type lrc_tags R) : option unit :=
   match r with
     | Ret n' => if n == n' then Some tt else None
     | Other => None
   end.
 
-Definition check_entry (c : ccolor) (m : tag_type lrt_tags M) : option unit :=
+Definition check_entry (c : ccolor) (m : tag_type lrc_tags M) : option unit :=
   match m with
     | {| entry := l |} => if mem_seq l c then Some tt else None
   end.
 
 
-Definition switch_val (m : tag_type lrt_tags M)
-           (v : tag_type lrt_tags R) : (tag_type lrt_tags M * tag_type lrt_tags R) :=
+Definition switch_val (m : tag_type lrc_tags M)
+           (v : tag_type lrc_tags R) : (tag_type lrc_tags M * tag_type lrc_tags R) :=
   match m with
     | {| vtag := v' ; color := c ; entry := e |} => ({| vtag := v ; color := c ; entry := e |}, v')
   end.
 
 (* TL TODO: without this, I get a type error *)
-Definition build_tpc (n : nat) : tag_type lrt_tags P := Level n.
+Definition build_tpc (n : nat) : tag_type lrc_tags P := Level n.
 
 (* TL TODO: comments? cf org file *)
 Definition instr_rules (op : opcode)
-           (tpc : tag_type lrt_tags P)
-           (ti : tag_type lrt_tags M)
-           (ts : hseq (tag_type lrt_tags) (inputs op))
-           (tni : tag_type lrt_tags M) : option (ovec lrt_tags op) :=
+           (tpc : tag_type lrc_tags P)
+           (ti : tag_type lrc_tags M)
+           (ts : hseq (tag_type lrc_tags) (inputs op))
+           (tni : tag_type lrc_tags M) : option (ovec lrc_tags op) :=
   let current := match ti with {| color := c |} => c end in
   let level := match tpc with Level n => n end in
   match op, ts return option (ovec _ op) with
@@ -174,7 +174,7 @@ Definition instr_rules (op : opcode)
 
 
 
-Definition transfer (iv : ivec lrt_tags) : option (vovec lrt_tags (op iv)) :=
+Definition transfer (iv : ivec lrc_tags) : option (vovec lrc_tags (op iv)) :=
   match iv with (* TL TODO: ask someone obout this dependent boilerplate *)
   | IVec vop tpc ti ts tni =>
     match vop, ts, ti, tni return option (vovec _ vop) with
