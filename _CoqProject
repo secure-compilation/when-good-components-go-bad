@@ -66,6 +66,3 @@ MicroPolicies/Types.v
 MicroPolicies/Symbolic.v
 MicroPolicies/Exec.v
 MicroPolicies/LRC.v
-MicroPolicies/Printing.v
-MicroPolicies/Int32.v
-MicroPolicies/Instance.v
