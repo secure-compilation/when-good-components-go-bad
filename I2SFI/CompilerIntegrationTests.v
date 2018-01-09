@@ -13,6 +13,7 @@ Require Import Source.Language.
 (* Require Import Source.Examples.Increment. *)
 Require Import S2I.Compiler.
 Require Import I2SFI.Compiler.
+Require Import I2SFI.CompilerFlags.
 Require Import TargetSFI.EitherMonad.
 Require Import TargetSFI.Machine.
 Require Import TargetSFI.CS.
@@ -60,7 +61,7 @@ Close Scope nat_scope.
 Definition test (sp : Source.program) : @CompEither sfi_program :=
   match S2I.Compiler.compile_program sp with
   | None => CompEitherMonad.Left "S2I compiler failed" NoInfo
-  | Some ip => compile_program ip
+  | Some ip => compile_program all_flags_off ip
   end.
 
 Instance show_sp : Show Source.program :=
@@ -74,7 +75,7 @@ Definition integration_pbt (sp : Source.program) : Checker :=
              match S2I.Compiler.compile_program sp with
              | None => whenFail "Source program does not compile" false
              | Some ip =>
-               match I2SFI.Compiler.compile_program ip with
+               match I2SFI.Compiler.compile_program all_flags_off ip with
                | CompEitherMonad.Left msg err =>
                  whenFail ("Compilation error: "
                              ++ msg

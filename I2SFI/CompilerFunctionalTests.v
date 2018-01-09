@@ -8,6 +8,7 @@ Require Import CompCert.Events.
 
 Require Import I2SFI.Compiler.
 Require Import I2SFI.AbstractMachine.
+Require Import I2SFI.CompilerFlags.
 Require Import TargetSFI.EitherMonad.
 Require Import TargetSFI.Machine.
 Require Import CompEitherMonad.
@@ -40,7 +41,7 @@ Definition test (instrs : Intermediate.Machine.code)
         Intermediate.prog_buffers := buffers;
         Intermediate.prog_main := Some (COMP1_ID,PROC1_ID)
       |} in
-  match compile_program program with
+  match compile_program all_flags_off program with
   | CompEitherMonad.Left msg err => EitherMonad.Left msg EitherMonad.NoInfo
   | CompEitherMonad.Right p =>
     CS.eval_program (100%nat) p RiscMachine.RegisterFile.reset_all
@@ -177,7 +178,7 @@ Proof.
   compute. eauto. Qed.
 
 Example test_layout_procedure :
-  layout_procedure 1%positive 1%positive (1%positive,8%N)
+  layout_procedure all_flags_off 1%positive 1%positive (1%positive,8%N)
                    [
                      AbstractMachine.IHalt
                      ; AbstractMachine.ILabel (1%positive,8%N)
@@ -195,7 +196,7 @@ Proof.
 
 
 Example test_layout_procedure1 :
-  layout_procedure 1%positive 1%positive (1%positive,8%N)
+  layout_procedure all_flags_off 1%positive 1%positive (1%positive,8%N)
                    [
                      AbstractMachine.IHalt
                      ; AbstractMachine.ILabel (1%positive,8%N)
@@ -231,7 +232,7 @@ Proof.
  
 
 Example test_layout_procedure_no_padding :
-  layout_procedure 1%positive 1%positive (1%positive,8%N)
+  layout_procedure all_flags_off 1%positive 1%positive (1%positive,8%N)
                    ( [
                      AbstractMachine.IHalt
                      ; AbstractMachine.ILabel (1%positive,8%N)

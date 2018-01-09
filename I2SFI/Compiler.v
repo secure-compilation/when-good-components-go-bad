@@ -13,6 +13,7 @@ Require Import TargetSFI.SFIUtil.
 Require Import CompEitherMonad.
 Require Import CompStateMonad.
 Require Import I2SFI.AbstractMachine.
+Require Import I2SFI.CompilerFlags.
 
 Require Import TargetSFI.SFIUtil.
 
@@ -49,7 +50,8 @@ Record compiler_env : Type :=
     (* this is especially needed for static buffers *)
     buffer2slot : PMap.t (PMap.t N);
     (* cid -> pid -> slot *)
-    procId2slot : (PMap.t (PMap.t N))
+    procId2slot : (PMap.t (PMap.t N));
+    flags : comp_flags
   }.
 
 Notation COMP := (CompStateMonad.t compiler_env).
@@ -69,7 +71,8 @@ Definition with_current_component (cid : Component_id)
     cid2SFIid := cid2SFIid env;
     exported_procedures_labels := exported_procedures_labels env;
     procId2slot := procId2slot env;
-    buffer2slot :=  buffer2slot env
+    buffer2slot :=  buffer2slot env;
+    flags := flags env 
   |}.
 
 Definition env_add_blocks (cid : Component_id)
@@ -81,6 +84,7 @@ Definition env_add_blocks (cid : Component_id)
     cid2SFIid := cid2SFIid env;
     exported_procedures_labels := exported_procedures_labels env;
     procId2slot := procId2slot env;
+    flags := flags env;
     buffer2slot := PMap.add cid blocks (buffer2slot env)
   |}.
 
@@ -91,6 +95,7 @@ Definition with_next_label (env : compiler_env) :  compiler_env :=
     cid2SFIid := cid2SFIid env;
     procId2slot := procId2slot env;
     exported_procedures_labels := exported_procedures_labels env;
+    flags := flags env;
     next_label := ((next_label env) + 1)%N
    |}.
 
@@ -208,7 +213,8 @@ Fixpoint allocate_procedure_slots (procs : PMap.t (PMap.t Intermediate.Machine.c
                                    (SFI.Allocator.allocate_code_slots (List.length pids))))
                ) (PMap.elements procs)).
 
-Definition init_env (i_cid2SFIid : PMap.t N) (i_procId2slot : PMap.t (PMap.t N))
+Definition init_env (i_flags : comp_flags)
+           (i_cid2SFIid : PMap.t N) (i_procId2slot : PMap.t (PMap.t N))
            (i_exported_procedures_labels : (PMap.t (PMap.t  AbstractMachine.label)))
            (i_next_label : N)
   : compiler_env :=
@@ -217,6 +223,7 @@ Definition init_env (i_cid2SFIid : PMap.t N) (i_procId2slot : PMap.t (PMap.t N))
      buffer2slot := PMap.empty (PMap.t N);
      procId2slot := i_procId2slot;
      exported_procedures_labels := i_exported_procedures_labels;
+     flags := i_flags;
      cid2SFIid := i_cid2SFIid
   |}.
 
@@ -391,32 +398,42 @@ Definition gen_pop_sfi : COMP(AbstractMachine.code) :=
     do! modify (with_next_label);
     let lbl := ((current_component cenv),(next_label cenv)) in
       ret
-        ( [
-            AbstractMachine.ILabel lbl
-            ; AbstractMachine.IConst 1%Z RiscMachine.Register.R_RA 
-            ; AbstractMachine.IBinOp (RiscMachine.ISA.Subtraction)
-                                     RiscMachine.Register.R_SFI_SP
-                                     RiscMachine.Register.R_RA
-                                     RiscMachine.Register.R_SFI_SP
-          ]
+        (
+          ( match ( pop_sfi_not_aligned (flags cenv)) with
+            | true => nil
+            | false =>
+              [ AbstractMachine.ILabel lbl ]
+            end )
+            ++ [
+              AbstractMachine.IConst 1%Z RiscMachine.Register.R_RA 
+              ; AbstractMachine.IBinOp (RiscMachine.ISA.Subtraction)
+                                       RiscMachine.Register.R_SFI_SP
+                                       RiscMachine.Register.R_RA
+                                       RiscMachine.Register.R_SFI_SP
+            ]
             ++ (sfi_top_address RiscMachine.Register.R_RA cid)
             ++ 
             [
               AbstractMachine.ILoad RiscMachine.Register.R_RA
-                                      RiscMachine.Register.R_RA
+                                    RiscMachine.Register.R_RA
             ]
         ).
 
 
-Definition gen_set_sfi_registers (cid : SFIComponent.id) : AbstractMachine.code :=
+Definition gen_set_sfi_registers (cid : SFIComponent.id) : COMP (AbstractMachine.code) :=
+  do cenv <- get;
   let data_mask := RiscMachine.to_value (SFI.or_data_mask cid) in
   let code_mask := RiscMachine.to_value (SFI.or_code_mask cid) in
-  [
-      AbstractMachine.IConst data_mask RiscMachine.Register.R_OR_DATA_MASK
-    ; AbstractMachine.IConst code_mask RiscMachine.Register.R_OR_CODE_MASK
-    ; AbstractMachine.IConst data_mask RiscMachine.Register.R_D
-    ; AbstractMachine.IConst code_mask RiscMachine.Register.R_T
-  ].
+    if (set_sfi_registers_missing (flags cenv))
+    then ret []
+    else
+      ret [
+          AbstractMachine.IConst data_mask RiscMachine.Register.R_OR_DATA_MASK
+          ; AbstractMachine.IConst code_mask RiscMachine.Register.R_OR_CODE_MASK
+          ; AbstractMachine.IConst data_mask RiscMachine.Register.R_D
+          ; AbstractMachine.IConst code_mask RiscMachine.Register.R_T
+        ]
+.
 
 Definition compile_IConst 
            (imval : Intermediate.Machine.imvalue)
@@ -442,37 +459,98 @@ Definition compile_IConst
 Definition compile_IStore (rp : Intermediate.Machine.register)
            (rs : Intermediate.Machine.register)
   : COMP (AbstractMachine.code) :=
-  ret [
-      AbstractMachine.IBinOp
-        (RiscMachine.ISA.BitwiseAnd)
-        (map_register rp)
-        (RiscMachine.Register.R_AND_DATA_MASK)
-        (RiscMachine.Register.R_D)
-      ; AbstractMachine.IBinOp
-          (RiscMachine.ISA.BitwiseOr)
-          (RiscMachine.Register.R_D)
-          (RiscMachine.Register.R_OR_DATA_MASK)
-          (RiscMachine.Register.R_D)
-      ; AbstractMachine.IStore
-          (RiscMachine.Register.R_D)
-          (map_register rs)
-    ].
+  do cenv <- get;
+    let cf := (flags cenv) in
+    if (store_instr_off cf)
+    then
+      ret [ AbstractMachine.IStore (map_register rp) (map_register rs) ]
+    else
+      if (store_instr1_off cf)
+      then
+        ret [
+            AbstractMachine.IBinOp
+              (RiscMachine.ISA.BitwiseOr)
+              (map_register rp)
+              (RiscMachine.Register.R_OR_DATA_MASK)
+              (RiscMachine.Register.R_D)
+            ; AbstractMachine.IStore
+                (RiscMachine.Register.R_D)
+                (map_register rs)
+          ]
+      else
+        if (store_instr2_off cf)
+        then
+            ret [
+                AbstractMachine.IBinOp
+                  (RiscMachine.ISA.BitwiseAnd)
+                  (map_register rp)
+                  (RiscMachine.Register.R_AND_DATA_MASK)
+                  (RiscMachine.Register.R_D)
+                ; AbstractMachine.IStore
+                    (RiscMachine.Register.R_D)
+                    (map_register rs)
+              ]
+        else
+          ret [
+              AbstractMachine.IBinOp
+                (RiscMachine.ISA.BitwiseAnd)
+                (map_register rp)
+                (RiscMachine.Register.R_AND_DATA_MASK)
+                (RiscMachine.Register.R_D)
+              ; AbstractMachine.IBinOp
+                  (RiscMachine.ISA.BitwiseOr)
+                  (RiscMachine.Register.R_D)
+                  (RiscMachine.Register.R_OR_DATA_MASK)
+                  (RiscMachine.Register.R_D)
+              ; AbstractMachine.IStore
+                  (RiscMachine.Register.R_D)
+                  (map_register rs)
+            ].
 
 Definition compile_IJump (rt : Intermediate.Machine.register)
   : COMP (AbstractMachine.code) :=
-  ret [
-      AbstractMachine.IBinOp
-        (RiscMachine.ISA.BitwiseAnd)
-        (map_register rt)
-        (RiscMachine.Register.R_AND_CODE_MASK)
-        (RiscMachine.Register.R_T)
-      ; AbstractMachine.IBinOp
-          (RiscMachine.ISA.BitwiseOr)
-          (RiscMachine.Register.R_T)
-          (RiscMachine.Register.R_OR_CODE_MASK)
-          (RiscMachine.Register.R_T)
-      ; AbstractMachine.IJump (RiscMachine.Register.R_T)
-    ].
+  do cenv <- get;
+    let cf := (flags cenv) in
+
+    if (jump_instr_off cf)
+    then
+      ret [ AbstractMachine.IJump (map_register rt) ]
+    else 
+      if (jump_instr1_off cf)
+      then
+        ret [
+            AbstractMachine.IBinOp
+                (RiscMachine.ISA.BitwiseOr)
+                (map_register rt)
+                (RiscMachine.Register.R_OR_CODE_MASK)
+                (RiscMachine.Register.R_T)
+            ; AbstractMachine.IJump (RiscMachine.Register.R_T)
+          ]
+      else
+        if (jump_instr2_off cf)
+        then
+          ret [
+              AbstractMachine.IBinOp
+                (RiscMachine.ISA.BitwiseAnd)
+                (map_register rt)
+                (RiscMachine.Register.R_AND_CODE_MASK)
+                (RiscMachine.Register.R_T)
+              ; AbstractMachine.IJump (RiscMachine.Register.R_T)
+            ]
+        else
+          ret [
+              AbstractMachine.IBinOp
+                (RiscMachine.ISA.BitwiseAnd)
+                (map_register rt)
+                (RiscMachine.Register.R_AND_CODE_MASK)
+                (RiscMachine.Register.R_T)
+              ; AbstractMachine.IBinOp
+                  (RiscMachine.ISA.BitwiseOr)
+                  (RiscMachine.Register.R_T)
+                  (RiscMachine.Register.R_OR_CODE_MASK)
+                  (RiscMachine.Register.R_T)
+              ; AbstractMachine.IJump (RiscMachine.Register.R_T)
+            ].
 
 Definition ireg_eqb (r1 : Intermediate.Machine.register)
            (r2 : Intermediate.Machine.register) : bool:=
@@ -555,9 +633,7 @@ Definition compile_IAlloc (rp : Intermediate.Machine.register)
 
 Definition compile_IReturn : COMP (AbstractMachine.code) :=
   do res <- gen_pop_sfi;
-    ret (res
-           ++ [
-               AbstractMachine.IJump RiscMachine.Register.R_RA]).
+    ret (res ++ [AbstractMachine.IJump RiscMachine.Register.R_RA]).
 
 Definition compile_ICall (cid1 : Component_id) (pid : Procedure_id)
   : COMP (AbstractMachine.code) :=
@@ -568,15 +644,16 @@ Definition compile_ICall (cid1 : Component_id) (pid : Procedure_id)
     do clbl <- get_proc_label cid1 pid;
       do! modify (with_next_label);
       let lbl :=  ((current_component cenv),(next_label cenv)) in
-        ret [
-            AbstractMachine.IJal clbl
-            ; AbstractMachine.ILabel lbl (* use this to force the next 4 intruction uninterrupted *)
-            ; AbstractMachine.IConst data_mask RiscMachine.Register.R_OR_DATA_MASK
-            ; AbstractMachine.IConst code_mask RiscMachine.Register.R_OR_CODE_MASK
-            ; AbstractMachine.IConst data_mask RiscMachine.Register.R_D
-            ; AbstractMachine.IConst code_mask RiscMachine.Register.R_T
-          ].
-
+      do sfi_regs_code <- (gen_set_sfi_registers cid);
+      ret (
+          [ AbstractMachine.IJal clbl ]
+            ++ ( if ( after_call_label_missing (flags cenv) )
+                 then []
+                 else [ AbstractMachine.ILabel lbl ]
+                        (* use this to force the next 4 intruction uninterrupted *)
+               )
+            ++ sfi_regs_code
+        ).
 
 Fixpoint compile_instructions (ilist : Intermediate.Machine.code)
   : COMP (AbstractMachine.code) :=
@@ -632,11 +709,15 @@ Definition compile_procedure
       do acode <- compile_instructions code; 
         if is_exported then          
             do proc_label <- get_proc_label cid pid;
-            do sfiId <- get_sfiId cid;
+              do sfiId <- get_sfiId cid;
+              do sfi_regs_code <- (gen_set_sfi_registers sfiId);
             ret (
-                [AbstractMachine.IHalt; AbstractMachine.ILabel proc_label]
+                (if push_sfi_halt_not_present (flags cenv)
+                 then []
+                 else [AbstractMachine.IHalt])
+                  ++ [AbstractMachine.ILabel proc_label] (* this label is not for allignment *)
                   ++ (gen_push_sfi sfiId) 
-                  ++ (gen_set_sfi_registers sfiId)
+                  ++ sfi_regs_code
                   ++ acode )
         else
           ret acode.
@@ -717,6 +798,7 @@ use crt to go over list
   if not padd with INop until address okay and do the above
 *)
 Definition layout_procedure
+           (cf : comp_flags)
            (cid : Component_id)
            (pid : Procedure_id)
            (plbl : AbstractMachine.label)
@@ -753,25 +835,28 @@ Definition layout_procedure
                end
             ) code (nil,nil)
         )) in
+  if ( targets_not_aligned cf )
+  then lcode1
+  else
   (* padding *)
-      List.fold_left
-         (fun acc elt =>       
-            match elt with
-            | (None, i) => acc ++ [elt]
-            | (Some ll, i) =>
-              match ll with
-              | nil => acc ++ [elt]
-              | lbl::nil =>
-                if (label_eqb lbl plbl)
-                then
-                  acc ++ [elt]
-                else
-                  padd acc elt
-              | _ =>  padd acc elt
-                
-              end
-            end
-         ) lcode1 nil.
+    List.fold_left
+      (fun acc elt =>       
+         match elt with
+         | (None, i) => acc ++ [elt]
+         | (Some ll, i) =>
+           match ll with
+           | nil => acc ++ [elt]
+           | lbl::nil =>
+             if (label_eqb lbl plbl)
+             then
+               acc ++ [elt]
+             else
+               padd acc elt
+           | _ =>  padd acc elt
+                       
+           end
+         end
+      ) lcode1 nil.
 
 
 Definition check_label_duplication (cid:Component_id)
@@ -823,7 +908,8 @@ Definition check_labeled_code ( labeled_code : (PMap.t (PMap.t AbstractMachine.l
 
 
 (* acode: cid -> pid -> list of instr (labeled individually) *)
-Definition layout_code (acode : PMap.t (PMap.t AbstractMachine.code))
+Definition layout_code (cf : comp_flags)
+           (acode : PMap.t (PMap.t AbstractMachine.code))
            (* association list of (cid,label) -> (pid, offset of label) *)
   : (* new code with ILabel removed and INop introduced such that the 
        contraints are satisfied for jump targets *)
@@ -835,7 +921,7 @@ Definition layout_code (acode : PMap.t (PMap.t AbstractMachine.code))
         | (pid,code)::xs =>
           do res_map <- layout_procedures cid xs;
               do plbl <- (get_proc_label cid pid);
-            let acode := layout_procedure cid pid plbl code in
+            let acode := layout_procedure cf cid pid plbl code in
             ret (PMap.add pid acode res_map)
         end
   in
@@ -1149,7 +1235,7 @@ Definition convert_prog_procs (procs :  NMap (NMap Machine.code)) : PMap.t (PMap
     (elementsm procs)
     (PMap.empty (PMap.t Machine.code)).
 
-Definition compile_program (ip : Intermediate.program) :=
+Definition compile_program (cf : comp_flags) (ip : Intermediate.program) :=
 
   let cip := convert_prog_interface (Intermediate.prog_interface ip) in
   let buffs := convert_prog_buffers (Intermediate.prog_buffers ip) in
@@ -1172,7 +1258,7 @@ Definition compile_program (ip : Intermediate.program) :=
   let procId2slot := allocate_procedure_slots pr_progs in
 
   
-  run (init_env cid2SFIid procId2slot procs_labels (max_label+1)%N)
+  run (init_env cf cid2SFIid procId2slot procs_labels (max_label+1)%N)
         (
          
           do data_mem' <- allocate_buffers buffs;
@@ -1183,7 +1269,7 @@ Definition compile_program (ip : Intermediate.program) :=
                (PMap.elements pr_progs)
                cip;
             
-            do labeled_code  <- layout_code (PMapExtra.of_list acode);
+            do labeled_code  <- layout_code cf (PMapExtra.of_list acode);
 
             do e <- get_E labeled_code;
 

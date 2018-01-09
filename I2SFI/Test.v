@@ -2,6 +2,7 @@ Require Import Coq.Strings.String.
 Require Import Coq.Bool.Bool.
 Require Import ZArith.
 
+Require Import I2SFI.CompilerFlags.
 Require Import CompilerPBTests.
 Require Import RCPBTests.
 
@@ -30,38 +31,38 @@ Definition run_test (ct : checker_type) (ig : instr_gen) :=
   | CStore =>
     match ig with
     | EqualUndefAllowed =>    
-      show (quickCheck (store_correct TInstrEqualUndef))
+      show (quickCheck (store_correct TInstrEqualUndef all_flags_off))
     | EqualNoUndef =>
-      show (quickCheck (store_correct TInstrEqual))
+      show (quickCheck (store_correct TInstrEqual all_flags_off))
     | TestSpecific =>
-      show (quickCheck (store_correct TStore))
+      show (quickCheck (store_correct TStore all_flags_off))
     end
   | CJump =>
     match ig with
     | EqualUndefAllowed =>    
-      show (quickCheck (jump_correct TInstrEqualUndef))
+      show (quickCheck (jump_correct TInstrEqualUndef all_flags_off))
     | EqualNoUndef =>
-      show (quickCheck (jump_correct TInstrEqual))
+      show (quickCheck (jump_correct TInstrEqual all_flags_off))
     | TestSpecific =>
-      show (quickCheck (jump_correct TJump))
+      show (quickCheck (jump_correct TJump all_flags_off))
     end
   | CStack =>
     match ig with
     | EqualUndefAllowed =>    
-      show (quickCheck (cs_correct TInstrEqualUndef))
+      show (quickCheck (cs_correct TInstrEqualUndef all_flags_off))
     | EqualNoUndef =>
-      show (quickCheck (cs_correct TInstrEqual))
+      show (quickCheck (cs_correct TInstrEqual all_flags_off))
     | TestSpecific =>
-      show (quickCheck (cs_correct TStack))
+      show (quickCheck (cs_correct TStack all_flags_off))
     end
   | CCompCorrect =>
     match ig with
     | EqualUndefAllowed =>    
-      show (quickCheck (compiler_correct TInstrEqualUndef FUEL))
+      show (quickCheck (compiler_correct TInstrEqualUndef FUEL all_flags_off))
     | EqualNoUndef =>
-      show (quickCheck (compiler_correct TInstrEqual FUEL))
+      show (quickCheck (compiler_correct TInstrEqual FUEL all_flags_off))
     | TestSpecific =>
-      show (quickCheck (compiler_correct TCompilerCorrect FUEL))
+      show (quickCheck (compiler_correct TCompilerCorrect FUEL all_flags_off))
     end
   end.
 

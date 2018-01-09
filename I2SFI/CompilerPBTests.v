@@ -12,6 +12,7 @@ Require Import Common.Definitions.
 Require Import Common.Maps.
 
 Require Import I2SFI.Compiler.
+Require Import I2SFI.CompilerFlags.
 Require Import TargetSFI.Machine.
 Require Import TargetSFI.EitherMonad.
 Require Import TargetSFI.StateMonad.
@@ -817,7 +818,7 @@ Conjecture correct_data_compartmentalized:
     (t : CompCert.Events.trace) 
     (ptr sfi_sp_val: RiscMachine.value ),
 
-    CompEitherMonad.Right sfi_p = compile_program ip /\
+    CompEitherMonad.Right sfi_p = compile_program all_flags_off ip /\
     EitherMonad.Right (t, (mem,pc,gen_regs)) =
     (CS.eval_program n sfi_p RiscMachine.RegisterFile.reset_all) /\
     RiscMachine.Memory.get_word mem pc =
@@ -961,10 +962,10 @@ Definition store_checker (log : store_log) (steps : nat)
                         ) l1)
     end.
 
-Definition store_correct  (t : test_type) : Checker :=
+Definition store_correct  (t : test_type) (cf :comp_flags) : Checker :=
   forAllShrink (genIntermediateProgram t) shrink
   ( fun ip =>
-      match compile_program ip with
+      match compile_program cf ip with
       | CompEitherMonad.Left msg err =>
         whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
       | CompEitherMonad.Right p =>
@@ -1170,10 +1171,10 @@ Definition jump_checker (log : jump_log) (steps : nat)
               ) l1)
       end. 
 
-Definition jump_correct  (t : test_type) : Checker :=
+Definition jump_correct  (t : test_type) (cf :comp_flags) : Checker :=
   forAllShrink (genIntermediateProgram TJump) shrink
          ( fun ip =>
-             match compile_program ip with
+             match compile_program cf ip with
              | CompEitherMonad.Left msg err =>
                whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
              | CompEitherMonad.Right p =>
@@ -1355,10 +1356,10 @@ Definition cs_checker (log : cs_log)  (steps : nat)
       end
     end.
 
-Definition cs_correct (t : test_type) : Checker :=
+Definition cs_correct (t : test_type) (cf : comp_flags) : Checker :=
   forAllShrink (genIntermediateProgram t) shrink
          ( fun ip =>
-             match compile_program ip with
+             match compile_program cf ip with
              | CompEitherMonad.Left msg err =>
                whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
              | CompEitherMonad.Right p =>
@@ -1396,7 +1397,7 @@ Definition cs_correct (t : test_type) : Checker :=
          ).
 
 (****************** QUICK CHECKS ***************************)
-Extract Constant Test.defNumTests => "10". 
+(* Extract Constant Test.defNumTests => "10".  *)
 
 (* QuickChick (store_correct TInstrEqualUndef). *)
 (* QuickChick (store_correct TInstrEqual). *)
