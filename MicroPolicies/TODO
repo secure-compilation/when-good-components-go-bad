@@ -1,12 +1,15 @@
+integration: behaviours/events
+question: are they mandatory for now (just seeking for an execution) ?
+          maybe we can leave that for later as we are primarily interested in execution ?
+          JUST IMPLEMENT THEM
 integration: fmap, coqutils or Common?
 integration: remove Utils.v and use the files in Lib?
-integration: behaviours/events
-integration: instruction set
 integration: modules interface for RC instance?
              but is it relevant? cf linking problems
 question: should I stick to Arthur's file organisation
           or progressivelly match the rest of the repo (CS.v, Machine.v, etc.)?
 question: how to actually instanciate properly the symbolic machine (cf mt parameter)
+
 compiler
 tests
 licence
