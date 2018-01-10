@@ -1,6 +1,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq.
 
+Require Import Common.Definitions.
 Require Import MicroPolicies.Utils MicroPolicies.Types MicroPolicies.Symbolic.
 
 
@@ -47,12 +48,10 @@ Definition pc_tag_eqMixin := CanEqMixin nat_of_pc_tagK.
 Canonical pc_tag_eqType := EqType pc_tag pc_tag_eqMixin.
 End PCTagEq.
 
-Context (ccolor : eqType).
-
 Record mem_tag : Type := MTag {
   vtag  : [eqType of value_tag];
-  color : ccolor;
-  entry : list ccolor;
+  color : Component.id;
+  entry : list Component.id;
 }.
 
 
@@ -85,12 +84,12 @@ Definition lrc_tags := {|
 Import DoNotation.
 
 
-Definition belong (c : ccolor) (m : tag_type lrc_tags M) : bool :=
+Definition belong (c : Component.id) (m : tag_type lrc_tags M) : bool :=
   match m with
     | {| color := c'  |} => c == c'
   end.
 
-Definition check_belong (c : ccolor) (m : tag_type lrc_tags M) : option unit :=
+Definition check_belong (c : Component.id) (m : tag_type lrc_tags M) : option unit :=
   match belong c m with
     | true => Some tt
     | false => None
@@ -103,7 +102,7 @@ Definition check_ret (n : nat) (r : tag_type lrc_tags R) : option unit :=
     | Other => None
   end.
 
-Definition check_entry (c : ccolor) (m : tag_type lrc_tags M) : option unit :=
+Definition check_entry (c : Component.id) (m : tag_type lrc_tags M) : option unit :=
   match m with
     | {| entry := l |} => if mem_seq l c then Some tt else None
   end.
