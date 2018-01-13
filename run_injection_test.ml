@@ -12738,13 +12738,6 @@ let load_undef = function
 | TInstrEqualUndef -> true
 | _ -> false
 
-(** val store_undef : test_type -> bool **)
-
-let store_undef = function
-| TInstrEqualUndef -> true
-| TStore -> true
-| _ -> false
-
 (** val alloc_undef : test_type -> bool **)
 
 let alloc_undef = function
@@ -12996,6 +12989,34 @@ let genIAlloc t1 =
              GenLow.returnGen ((IConst ((IInt (Z.of_nat v)), r2)) :: ((IAlloc
                (r1, r2)) :: [])))))
 
+(** val genIStoreAddress :
+    prog_int0 -> (int * (int, value list) sum) list PMap.t -> int -> instr
+    list GenLow.coq_G **)
+
+let genIStoreAddress _ _ _ =
+  GenLow.bindGen (arbitrary genRegs) (fun r1 ->
+    GenLow.bindGen (arbitrary genRegs) (fun r2 ->
+      GenLow.bindGen
+        (GenLow.choose chooseNat ((Pervasives.succ 0),
+          (sub (N.to_nat SFI.coq_COMP_MAX) (Pervasives.succ 0))))
+        (fun cid' ->
+        GenLow.bindGen (GenHigh.elements 0 (0 :: (cid' :: []))) (fun cid ->
+          GenLow.bindGen
+            (GenLow.choose chooseNat ((Pervasives.succ 0),
+              mAX_NO_BUFFERS_PER_COMP)) (fun bid ->
+            GenLow.bindGen
+              (GenLow.choose chooseNat ((Pervasives.succ 0), mAX_BUFFER_SIZE))
+              (fun offset' ->
+              GenLow.bindGen (GenHigh.elements 0 (0 :: (offset' :: [])))
+                (fun offset0 ->
+                let v =
+                  SFI.address_of (N.of_nat cid)
+                    (N.add (N.mul ((fun p->2*p) 1) (N.of_nat bid)) 1)
+                    (N.of_nat offset0)
+                in
+                GenLow.returnGen ((IConst ((IInt (Z.of_nat (N.to_nat v))),
+                  r1)) :: ((IStore (r1, r2)) :: [])))))))))
+
 (** val genILoad :
     test_type -> prog_int0 -> (int * (int, value list) sum) list PMap.t ->
     int -> instr list GenLow.coq_G **)
@@ -13010,9 +13031,10 @@ let genILoad t1 pi buffers cid =
     int -> instr list GenLow.coq_G **)
 
 let genIStore t1 pi buffers cid =
-  if store_undef t1
-  then gen2Reg (fun x x0 -> IStore (x, x0))
-  else genMemReg (fun x x0 -> IStore (x, x0)) pi buffers cid
+  match t1 with
+  | TStore -> genIStoreAddress pi buffers cid
+  | TStack -> genIStoreAddress pi buffers cid
+  | _ -> genMemReg (fun x x0 -> IStore (x, x0)) pi buffers cid
 
 (** val genIBinOp : instr list GenLow.coq_G **)
 

@@ -443,7 +443,32 @@ Definition gen_buffers (cids : list positive)
         do! v <- choose (0%nat,((N.to_nat SFI.SLOT_SIZE) - 1)%nat);
           returnGen [IConst (IInt (Z.of_nat v)) r2; IAlloc r1 r2]
       end.
+  
+  Definition genIStoreAddress
+             (pi : prog_int)
+             (buffers : PMap.t (list (positive * (nat+list value))))
+             (cid : positive)
+    : G (list instr) :=
+    do! r1 <- arbitrary;
+      do! r2 <- arbitrary;
 
+      (* 50% in component zero *)
+      do! cid' <- choose (1%nat, ((N.to_nat SFI.COMP_MAX) - 1)%nat);
+      do! cid <- elements 0%nat [0%nat;cid'];
+
+      (* (* valid slot id *) *)
+      do! bid <- choose (1%nat, MAX_NO_BUFFERS_PER_COMP);
+
+      do! offset' <- choose (1%nat, MAX_BUFFER_SIZE);
+      do! offset <- elements 0%nat [0%nat;offset'];
+
+      let v := SFI.address_of (N.of_nat cid)
+                              (2*(N.of_nat bid)+1)%N
+                              (N.of_nat offset) in
+      
+      returnGen [IConst (IInt (Z.of_nat (N.to_nat v))) r1; IStore r1 r2].
+
+  
   Definition genILoad
              (t : test_type)
              (pi : prog_int)
@@ -461,8 +486,11 @@ Definition gen_buffers (cids : list positive)
              (buffers : PMap.t (list (positive * (nat+list value))))
              (cid : positive)
     : G (list instr) :=
-    match (store_undef t) with
-    | true => gen2Reg IStore
+    match t with
+    | TStore
+    | TStack
+      => genIStoreAddress pi buffers cid
+        (* gen2Reg IStore *)
     | _ => genMemReg IStore pi buffers cid
     end.   
     
@@ -480,6 +508,7 @@ Definition gen_buffers (cids : list positive)
       do! r <- arbitrary;
         returnGen ([IJump r])
     | false =>
+      
       do! r <- arbitrary;
         do! cid <- choose (1%nat, ((N.to_nat SFI.COMP_MAX) - 1)%nat);
         do! pid <- choose (1%nat, MAX_PROC_PER_COMP);

@@ -952,6 +952,9 @@ Definition state_checker (s1 s2: MachineState.t) : Checker :=
         && (Memory.eqb (MachineState.getMemory s1) (MachineState.getMemory s2))
     ).
 
+(* Definition idealized : forall (g : Env) (st : State)... , step g st t st' -> .. *)
+(* stepFun g st t = st' *)
+
 Definition eval_step_complete_exec : Checker :=
   forAll genEnv (fun g =>
   forAll (genStateForEnv g) (fun st =>

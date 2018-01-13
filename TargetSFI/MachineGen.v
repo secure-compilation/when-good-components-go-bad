@@ -25,7 +25,6 @@ Require Import Common.Maps.
 Require Import TargetSFI.Machine.
 Require Import TargetSFI.CS.
 Require Import TargetSFI.EitherMonad.
-
 Require Import CompCert.Events.
 
 Import Env.

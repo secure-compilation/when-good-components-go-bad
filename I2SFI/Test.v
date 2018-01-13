@@ -12,18 +12,9 @@ Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 Require Import ExtrOcamlBasic.
 Require Import ExtrOcamlNatInt.
 
+Require Import TestsOptions.
+
 Extract Constant Test.defNumTests => "10000". 
-
-Inductive checker_type : Type :=
-| CStore : checker_type
-| CJump : checker_type
-| CStack : checker_type
-| CCompCorrect : checker_type.
-
-Inductive instr_gen : Type :=
-| EqualUndefAllowed : instr_gen
-| EqualNoUndef : instr_gen
-| TestSpecific : instr_gen.
                          
 
 Definition run_test (ct : checker_type) (ig : instr_gen) :=
