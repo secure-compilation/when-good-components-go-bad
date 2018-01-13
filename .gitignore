@@ -7,4 +7,4 @@ run_test
 *.cmx
 *.o
 run_test.ml
-
+store_test.ml
