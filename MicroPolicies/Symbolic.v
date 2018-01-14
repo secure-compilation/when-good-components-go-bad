@@ -2,6 +2,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq word fmap.
 
 Require Import MicroPolicies.Utils MicroPolicies.Types.
+Require Import MicroPolicies.Int32.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -132,8 +133,11 @@ Open Scope bool_scope.
 
 Section WithClasses.
 
-Context (mt : machine_types)
-        {ops : machine_ops mt}.
+Definition mt := concrete_int_32_mt.
+Instance ops : machine_ops mt := concrete_int_32_ops.
+
+(* Context (mt : machine_types) *)
+(*         {ops : machine_ops mt}. *)
 
 Class params := {
   ttypes :> tag_types;
@@ -344,13 +348,13 @@ Module Exports.
 
 Import Symbolic.
 
-Definition state_eqb mt p : rel (@state mt p) :=
+Definition state_eqb p : rel (@state p) :=
   [rel s1 s2 | [&& mem s1 == mem s2,
                    regs s1 == regs s2,
                    pc s1 == pc s2 &
                    internal s1 == internal s2 ] ].
 
-Lemma state_eqbP mt p : Equality.axiom (@state_eqb mt p).
+Lemma state_eqbP p : Equality.axiom (@state_eqb p).
 Proof.
   move => [? ? ? ?] [? ? ? ?].
   apply (iffP and4P); simpl.
@@ -358,8 +362,8 @@ Proof.
   - by move => [-> -> -> ->].
 Qed.
 
-Definition state_eqMixin mt p := EqMixin (@state_eqbP mt p).
-Canonical state_eqType mt p := Eval hnf in EqType _ (@state_eqMixin mt p).
+Definition state_eqMixin p := EqMixin (@state_eqbP p).
+Canonical state_eqType p := Eval hnf in EqType _ (@state_eqMixin p).
 
 Export TagKindEq.
 
@@ -367,9 +371,9 @@ End Exports.
 
 Export Exports.
 
-Arguments Symbolic.state mt {_}.
-Arguments Symbolic.State {_ _} _ _ _ _.
-Arguments Symbolic.syscall mt {_}.
-Arguments Symbolic.syscall_table mt {_}.
+Arguments Symbolic.state {_}.
+Arguments Symbolic.State {_} _ _ _ _.
+Arguments Symbolic.syscall {_}.
+Arguments Symbolic.syscall_table {_}.
 Arguments Symbolic.IVec {tty} op _ _ _.
 Arguments Symbolic.OVec {tty} op _ _.

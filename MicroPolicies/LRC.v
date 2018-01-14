@@ -183,3 +183,23 @@ Definition transfer (iv : ivec lrc_tags) : option (vovec lrc_tags (op iv)) :=
     |       _,      _,  _,    _ => None
     end
   end.
+
+(** Instance **)
+
+Global Instance sym_lrc : params := {
+  ttypes := lrc_tags;
+  transfer := transfer;
+  internal_state := [eqType of unit]
+}.
+
+
+(* TL TODO: do I need that?*)
+
+Notation state := (@Symbolic.state sym_lrc).
+
+Definition lrc_syscalls : syscall_table := emptym.
+
+Notation step  := (@Symbolic.step sym_lrc lrc_syscalls).
+
+Definition ratom := (atom (mword mt) value_tag).
+Definition matom := (atom (mword mt) mem_tag).

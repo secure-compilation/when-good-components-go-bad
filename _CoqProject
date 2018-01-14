@@ -63,6 +63,7 @@ I2SFI/Compiler.v
 
 MicroPolicies/Utils.v
 MicroPolicies/Types.v
+MicroPolicies/Int32.v
 MicroPolicies/Symbolic.v
 MicroPolicies/Exec.v
 MicroPolicies/LRC.v
