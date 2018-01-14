@@ -67,3 +67,6 @@ MicroPolicies/Int32.v
 MicroPolicies/Symbolic.v
 MicroPolicies/Exec.v
 MicroPolicies/LRC.v
+
+I2MP/Precompile.v
+I2MP/Encode.v
