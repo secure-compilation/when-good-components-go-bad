@@ -1,6 +1,6 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
-Require Export Extraction.
+(* Require Export Extraction. -- CH: not found or needed on my machine *)
 
 (* NOTE: add the following two lines at the start of the extracted file:
 #load "nums.cma";;

@@ -632,3 +632,55 @@ Section Definability.
     Admitted.
 End WithTrace.
 End Definability.
+
+Require Import Intermediate.CS.
+Require Import Intermediate.Machine.
+
+Definition stack_state_of (cs:CS.state) : stack_state :=
+  let '(gps, mem, regs, pc) := cs in
+  StackState (Pointer.component pc) (List.map Pointer.component gps).
+
+Lemma intermediate_well_bracketed_trace : forall p t cs cs',
+  Star (CS.sem p) cs t cs' ->
+  well_bracketed_trace (stack_state_of cs) t.
+Proof.
+  intros p0 t cs cs' H. induction H.
+  - compute. now trivial.
+  - destruct H; subst t; simpl in *;
+    try match goal with
+     | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+         rewrite Pointer.inc_preserves_component in H
+     | [ H : GlobalEnv.find_label_in_component
+               (GlobalEnv.prepare_global_env ?p0) ?pc ?l = Some ?pc' |- _] =>
+         apply GlobalEnv.find_label_in_component_1 in H; rewrite H
+     | [ H : GlobalEnv.find_label_in_procedure
+               (GlobalEnv.prepare_global_env ?p0) ?pc ?l = Some ?pc' |- _] =>
+         apply GlobalEnv.find_label_in_procedure_1 in H; rewrite H
+    end; trivial; try congruence; easy.
+Qed.
+
+Lemma intermediate_well_formed_trace : forall p mainC mainP t cs cs',
+  Star (CS.sem p) cs t cs' ->
+  CS.initial_state p cs ->
+  Intermediate.prog_main p = Some (mainC,mainP) ->
+  Intermediate.well_formed_program p ->
+  well_formed_trace (Intermediate.prog_interface p) mainC t.
+Proof.
+  intros p0 mainC mainP t cs cs' H H' H'' H'''.
+  unfold well_formed_trace. split.
+  - apply intermediate_well_bracketed_trace in H.
+    unfold CS.CS.initial_state, CS.CS.initial_machine_state in H'.
+    rewrite H'' in H'.
+    destruct ( Machine.Intermediate.prepare_procedures p0
+           (Machine.Intermediate.prepare_initial_memory p0)) as [[mem]].
+    destruct (Intermediate.wfprog_main_existence H''' H'') as [main_procs [H43 H44]].
+    destruct (Machine.Intermediate.EntryPoint.get mainC mainP t0).
+    now rewrite H' in H.
+    + rewrite H' in H. simpl in H. admit. (* should follow from well-formedness? *)
+  - clear H'' H'. induction H as [| cs t1 cs'' t2 cs''' t HStep HStar IH Ht]. easy. 
+    simpl in HStep. destruct HStep; try (subst t; easy).
+    subst t. simpl. split; try easy. split. easy.
+    unfold GlobalEnv.prepare_global_env in H1.
+    destruct (Intermediate.prepare_procedures p0
+                (Intermediate.prepare_initial_memory p0)) as [[]]. easy.
+Admitted.
