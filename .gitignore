@@ -7,4 +7,6 @@ run_test
 *.cmx
 *.o
 run_test.ml
-store_test.ml
+run_store_test.ml
+run_injction_test.ml
+bin/run_store_test

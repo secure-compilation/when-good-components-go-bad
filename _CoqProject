@@ -83,5 +83,3 @@ I2SFI/CompilerFunctionalTests.v
 I2SFI/CompilerIntegrationTests.v
 
 I2SFI/Test.v
-I2SFI/TestFaultInjection.v
-I2SFI/TestStore.v

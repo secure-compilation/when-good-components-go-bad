@@ -1,10 +1,12 @@
 #!/bin/bash
 
+#!/bin/bash
+
 mkdir -p ../test_out
 
-TESTS=(store jump stack correct)
+TESTS=(correct)
 FRECV=(undef def spec)
-FLAGS=(alloff)
+FLAGS=(jump jump1 jump2 push pop call targets alloff)
 
 for t in ${TESTS[*]};
 do

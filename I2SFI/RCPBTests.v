@@ -10,6 +10,7 @@ Require Import I2SFI.CompTestUtil.
 Require Import I2SFI.TestIntermediate.
 Require Import I2SFI.Compiler.
 Require Import I2SFI.CompilerFlags.
+Require Import I2SFI.TestsOptions.
 
 Require Import TargetSFI.Machine.
 Require Import TargetSFI.EitherMonad.
@@ -167,8 +168,8 @@ Definition correct_checker
 .
 
 (* compare traces *)
-Definition compiler_correct (t : test_type) (fuel : nat) (cf : comp_flags) : Checker :=
-  forAllShrink (genIntermediateProgram t) shrink
+Definition compiler_correct (t : instr_gen) (fuel : nat) (cf : comp_flags) : Checker :=
+  forAllShrink (genIntermediateProgram t CCompCorrect) shrink
   ( fun ip =>
       match compile_program cf ip with
       | CompEitherMonad.Left msg err =>
