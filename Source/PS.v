@@ -9,6 +9,8 @@ Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
 
+Require Import Coq.Program.Equality.
+
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
 Set Implicit Arguments.
@@ -70,6 +72,61 @@ Definition to_partial_frame (ctx: {fset Component.id}) frame : Component.id * op
   else
     (C, Some (v, k)).
 
+Fixpoint drop_last_frames_if_needed
+         (ctx: {fset Component.id}) (s: CS.stack) (Cincontrol: Component.id)
+  : CS.stack :=
+  match s with
+  | [] => []
+  | (C, v, k) :: s' =>
+    if (C \in ctx) && (Component.eqb C Cincontrol) then
+      drop_last_frames_if_needed ctx s' Cincontrol
+    else
+      s
+  end.
+
+Fixpoint to_partial_stack_helper
+         (ctx: {fset Component.id}) (s: CS.stack) last_frame
+  : PS.stack :=
+  match s with
+  | [] => [to_partial_frame ctx last_frame]
+  | (C, v, k) :: s' =>
+    let '(C', v', k') := last_frame in
+    if (C \in ctx) && (Component.eqb C C') then
+      to_partial_stack_helper ctx s' last_frame
+    else
+      to_partial_frame ctx last_frame ::
+      to_partial_stack_helper ctx s' (C, v, k)
+  end.
+
+Lemma to_partial_stack_helper_nonempty:
+  forall ctx gps frame,
+    ~ to_partial_stack_helper ctx gps frame = [].
+Proof.
+  intros ctx gps [[C v] k].
+  induction gps as [|[[C' v'] k'] gps']; subst; simpl.
+  - unfold not. intro. discriminate.
+  - destruct (C' \in ctx) eqn:HC'in_ctx;
+      rewrite HC'in_ctx; simpl.
+    + destruct (Component.eqb C' C) eqn:HC'eqC; auto.
+      destruct (C \in ctx) eqn:HCin_ctx;
+        rewrite HCin_ctx; simpl.
+      * unfold not. intro. discriminate.
+      * unfold not. intro. discriminate.
+    + destruct (C \in ctx) eqn:HCin_ctx;
+        rewrite HCin_ctx; simpl.
+      * unfold not. intro. discriminate.
+      * unfold not. intro. discriminate.
+Qed.
+
+Definition to_partial_stack
+          (s: CS.stack) (ctx: {fset Component.id}) (Cincontrol: Component.id) :=
+  match drop_last_frames_if_needed ctx s Cincontrol with
+  | [] => []
+  | last_frame :: s' =>
+    to_partial_stack_helper ctx s' last_frame
+  end.
+
+(*
 Fixpoint to_partial_stack_helper
          (ctx: {fset Component.id}) (s: CS.stack) last_frame (Cincontrol: Component.id)
   : PS.stack :=
@@ -140,77 +197,106 @@ Inductive partial_stack (ctx: {fset Component.id})
       partial_stack ctx C gps ((C1, frame_content) :: pgps) ->
       Component.eqb f_C C1 = false ->
       partial_stack ctx C' ((f_C, f_v, f_k) :: gps) ((f_C, None) :: (C1, frame_content) :: pgps).
-
 (* TODO add other cases, then prove equivalence with to_partial_stack *)
-
-Lemma partial_stack_helper_push_by_program:
-  forall ctx rev_gps1 rev_gps2 first_frame1 first_frame2 C_incontrol,
-    to_partial_stack_helper ctx rev_gps1 first_frame1 C_incontrol =
-    to_partial_stack_helper ctx rev_gps2 first_frame2 C_incontrol ->
-  forall C v k C_incontrol',
-    C \notin ctx ->
-    to_partial_stack_helper ctx (rev_gps1 ++ [(C,v,k)]) first_frame1 C_incontrol' =
-    to_partial_stack_helper ctx (rev_gps2 ++ [(C,v,k)]) first_frame2 C_incontrol'.
-Proof.
-Admitted.
-
-Lemma partial_stack_helper_push_by_context:
-  forall ctx rev_gps1 rev_gps2 first_frame1 first_frame2 C_incontrol,
-    to_partial_stack_helper ctx rev_gps1 first_frame1 C_incontrol =
-    to_partial_stack_helper ctx rev_gps2 first_frame2 C_incontrol ->
-  forall C v1 k1 v2 k2 C_incontrol',
-    C \in ctx ->
-    to_partial_stack_helper ctx (rev_gps1 ++ [(C,v1,k1)]) first_frame1 C_incontrol' =
-    to_partial_stack_helper ctx (rev_gps2 ++ [(C,v2,k2)]) first_frame2 C_incontrol'.
-Proof.
-Admitted.
+*)
 
 Lemma partial_stack_push_by_program:
   forall ctx gps1 gps2 C_incontrol,
+    C_incontrol \notin ctx ->
     to_partial_stack gps1 ctx C_incontrol = to_partial_stack gps2 ctx C_incontrol ->
-  forall C v k C_incontrol',
-    C \notin ctx ->
-    to_partial_stack ((C, v, k) :: gps1) ctx C_incontrol' =
-    to_partial_stack ((C, v, k) :: gps2) ctx C_incontrol'.
+  forall v k C_incontrol',
+    to_partial_stack ((C_incontrol, v, k) :: gps1) ctx C_incontrol' =
+    to_partial_stack ((C_incontrol, v, k) :: gps2) ctx C_incontrol'.
 Proof.
-  intros ctx gps1 gps2 C_incontrol Hsame_stacks.
-  intros C v k C_incontrol' Hin_ctx.
+  intros ctx gps1 gps2 C_incontrol Hprog Hsame_stacks.
+  intros v k C_incontrol'.
+
   unfold to_partial_stack in *.
+  unfold drop_last_frames_if_needed.
+  unfold negb in Hprog.
+  destruct (C_incontrol \in ctx) eqn:Hnot_in_ctx;
+    try discriminate.
+  rewrite Hnot_in_ctx. simpl in *.
+
+  induction gps1 as [|[[C' v'] k'] gps1']; subst; simpl in *.
+  - rewrite Hnot_in_ctx.
+    induction gps2 as [|[[C' v'] k'] gps2']; subst; simpl in *.
+    + rewrite Hnot_in_ctx.
+      reflexivity.
+    + repeat destruct p.
+      destruct (C' \in ctx) eqn:HC'_in_ctx;
+        rewrite HC'_in_ctx in Hsame_stacks.
+      * assert (Component.eqb C' C_incontrol = false) as HC'neqC. {
+          destruct (Component.eqb C' C_incontrol) eqn:H.
+          - unfold Component.eqb in H.
+            apply Nat.eqb_eq in H. subst.
+            rewrite Hnot_in_ctx in HC'_in_ctx.
+            discriminate.
+          - reflexivity.
+        }
+        destruct (Component.eqb C' C_incontrol) eqn:Hcontrol;
+          try rewrite Hcontrol in Hsame_stacks;
+          simpl in *.
+        ** rewrite HC'_in_ctx. simpl.
+           specialize (IHgps2' Hsame_stacks).
+           rewrite IHgps2'.
+           reflexivity.
+        ** rewrite HC'_in_ctx. simpl.
+           rewrite Hnot_in_ctx. rewrite Hsame_stacks.
+           reflexivity.
+      * rewrite HC'_in_ctx. simpl in *.
+        rewrite Hnot_in_ctx.
+        rewrite Hsame_stacks. reflexivity.
+  - rewrite Hnot_in_ctx.
+    induction gps2 as [|[[C'' v''] k''] gps2']; subst; simpl in *.
+    + assert (C' \in ctx) as HC'in_ctx. {
+        destruct (C' \in ctx) eqn:HC'_in_ctx; auto.
+        rewrite HC'_in_ctx in Hsame_stacks.
+        simpl in Hsame_stacks.
+        exfalso.
+        eapply to_partial_stack_helper_nonempty; eauto.
+      }
+      assert (Component.eqb C' C_incontrol) as HC'eqC_incontrol. {
+        destruct (Component.eqb C' C_incontrol) eqn:HC'eqC_incontrol; auto.
+        rewrite HC'in_ctx in Hsame_stacks.
+        simpl in Hsame_stacks.
+        exfalso.
+        eapply to_partial_stack_helper_nonempty; eauto.
+      }
+      assert (drop_last_frames_if_needed ctx gps1' C_incontrol = []) as Hempty_drop. {
+        destruct (drop_last_frames_if_needed ctx gps1' C_incontrol) eqn:Hempty_drop; auto.
+        rewrite HC'in_ctx HC'eqC_incontrol in Hsame_stacks.
+        simpl in Hsame_stacks.
+        exfalso.
+        eapply to_partial_stack_helper_nonempty; eauto.
+      }
+      rewrite HC'in_ctx HC'eqC_incontrol. simpl.
+      rewrite Hempty_drop in IHgps1'.
+      rewrite IHgps1'; auto.
+    + (* the hard case *) admit.
 Admitted.
 
 Lemma partial_stack_push_by_context:
   forall ctx gps1 gps2 C_incontrol,
+    C_incontrol \in ctx ->
     to_partial_stack gps1 ctx C_incontrol = to_partial_stack gps2 ctx C_incontrol ->
-  forall C v1 k1 v2 k2 C_incontrol',
-    C \in ctx ->
-    to_partial_stack ((C, v1, k1) :: gps1) ctx C_incontrol' =
-    to_partial_stack ((C, v2, k2) :: gps2) ctx C_incontrol'.
+  forall v1 k1 v2 k2 C_incontrol',
+    to_partial_stack ((C_incontrol, v1, k1) :: gps1) ctx C_incontrol' =
+    to_partial_stack ((C_incontrol, v2, k2) :: gps2) ctx C_incontrol'.
 Proof.
-  intros ctx gps1 gps2 C_incontrol Hsame_stacks.
-  intros C v k C_incontrol' Hin_ctx.
-  unfold to_partial_stack.
-Admitted.
-
-Lemma partial_stack_helper_pop:
-  forall ctx first_frame1 frame1 rev_gps1 first_frame2 frame2 rev_gps2 C_incontrol,
-    to_partial_stack_helper ctx (rev_gps1 ++ [frame1]) first_frame1 C_incontrol =
-    to_partial_stack_helper ctx (rev_gps2 ++ [frame2]) first_frame2 C_incontrol ->
-  forall C_incontrol',
-    to_partial_stack_helper ctx rev_gps1 first_frame1 C_incontrol' =
-    to_partial_stack_helper ctx rev_gps2 first_frame2 C_incontrol'.
-Proof.
-  intros ctx first_frame1 frame1 rev_gps1 first_frame2 frame2 rev_gps2 C_incontrol.
-  intros Hsame_stacks C_incontrol'.
+  intros ctx gps1 gps2 C_incontrol Hctx Hsame_stacks.
+  intros v1 k1 v2 k2 C_incontrol'.
+  (* this may be slightly harder than the previous one *)
 Admitted.
 
 Lemma partial_stack_pop:
-  forall ctx frame1 gps1 frame2 gps2 C_incontrol,
-    to_partial_stack (frame1 :: gps1) ctx C_incontrol =
-    to_partial_stack (frame2 :: gps2) ctx C_incontrol ->
+  forall ctx last_frame1 gps1 last_frame2 gps2 C_incontrol,
+    to_partial_stack (last_frame1 :: gps1) ctx C_incontrol =
+    to_partial_stack (last_frame2 :: gps2) ctx C_incontrol ->
   forall C_incontrol',
     to_partial_stack gps1 ctx C_incontrol' = to_partial_stack gps2 ctx C_incontrol'.
 Proof.
-  intros ctx frame1 gps1 frame2 gps2 C_incontrol Hsame_stacks C_incontrol'.
+  intros ctx last_frame1 gps1 last_frame2 gps2 C_incontrol Hsame_stacks C_incontrol'.
   unfold to_partial_stack.
 Admitted.
 
@@ -451,6 +537,21 @@ Proof.
       admit.
 Admitted.
 
+Lemma context_epsilon_star_is_silent:
+  forall p ctx G sps sps',
+    is_context_component sps ctx ->
+    star (kstep p ctx) G sps E0 sps' ->
+    sps = sps'.
+Proof.
+  intros p ctx G sps sps' Hcontrol Hstar.
+  dependent induction Hstar; subst.
+  - reflexivity.
+  - symmetry in H0. apply Eapp_E0_inv in H0.
+    destruct H0 as []. subst.
+    apply context_epsilon_step_is_silent in H; auto. subst.
+    apply IHHstar; auto.
+Qed.
+
 Lemma state_determinism_context:
   forall p ctx G sps t sps',
     is_context_component sps ctx ->
@@ -589,6 +690,34 @@ Corollary state_determinism_star:
 Proof.
   intros p ctx G sps t sps' sps'' Hstar1 Hstar2.
   (* by induction + state determinism *)
+  (* case analysis on who has control (in sps) *)
+  PS.unfold_state sps.
+
+  (*** program has control ***)
+  - induction Hstar1; subst.
+    + inversion Hstar2; subst.
+      * reflexivity.
+      * symmetry in H1. apply Eapp_E0_inv in H1.
+        destruct H1 as []. subst.
+        admit.
+    + inversion Hstar2; subst.
+      * symmetry in H2. apply Eapp_E0_inv in H2.
+        destruct H2 as []. subst.
+        admit.
+      * admit.
+
+  (*** context has control ***)
+  - induction Hstar1; subst.
+    + inversion Hstar2; subst.
+      * reflexivity.
+      * symmetry in H1. apply Eapp_E0_inv in H1.
+        destruct H1 as []. subst.
+        apply context_epsilon_step_is_silent in H; subst.
+        ** apply context_epsilon_star_is_silent in Hstar2; subst.
+           *** reflexivity.
+           *** admit.
+        ** admit.
+    + admit.
 Admitted.
 
 (* partial semantics *)
