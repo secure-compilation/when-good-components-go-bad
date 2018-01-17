@@ -56,6 +56,16 @@ Definition precompile_component (cenv : compiler_env) (c : Component.id) :=
   flatten (map (precompile_proc cenv c) procs).
 
 
-Definition precompile_code (cenv : compiler_env) :=
+Definition precompile_code (cenv : compiler_env) : seq (instr * mem_tag) :=
+  (* TL TODO: jump to main!!! *)
   let components : {fset Component.id} := domm (Intermediate.prog_procedures (program cenv)) in
   flatten (map (precompile_component cenv) components).
+
+Record prog :=
+  { interface : Program.interface ;
+    procedures : seq (instr * mem_tag) ;
+    buffers : NMap (list (Block.id * (nat + list value))) ;
+  }.
+
+Definition precompile (p : Intermediate.program) : prog.
+Admitted.
