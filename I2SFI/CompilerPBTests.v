@@ -18,6 +18,7 @@ Require Import TargetSFI.EitherMonad.
 Require Import TargetSFI.StateMonad.
 Require Import TargetSFI.CS.
 Require Import TargetSFI.SFIUtil.
+Require Import TargetSFI.SFITestUtil.
 Require Import CompEitherMonad.
 Require Import CompStateMonad.
 Require Import TestIntermediate.
@@ -28,7 +29,7 @@ Require Import Intermediate.CS.
 
 Require Import CompTestUtil.
 Require Import I2SFI.Shrinkers.
-Require Import TargetSFI.SFITestUtil.
+
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -418,7 +419,7 @@ Definition gen_buffers (cids : list positive)
         do! offset <- choose (1%nat, (16%nat + 2*MAX_PROC_LENGTH)%nat);
         let v := SFI.address_of
                    (N.of_nat cid1)
-                   (2* (N.of_nat pid))%N
+                   (2*((N.of_nat pid) - 1%N))%N
                    (N.of_nat offset) in
         returnGen ([IConst (IInt (Z.of_N v)) r])
     | _ =>
@@ -433,7 +434,7 @@ Definition gen_buffers (cids : list positive)
                   (2%nat, choose (((16%nat + 2*MAX_PROC_LENGTH)/2)%nat, (16%nat + 2*MAX_PROC_LENGTH)%nat))];
         let v := SFI.address_of
                    (Coq.Numbers.BinNums.Npos cid) (* here *)
-                   (2* (N.of_nat pid))%N
+                   (2*((N.of_nat pid)-1))%N
                    (N.of_nat offset) in
         returnGen ([IConst (IInt (Z.of_N v)) r])
     end.
@@ -1036,7 +1037,8 @@ Definition store_correct  (t : instr_gen) (cf :comp_flags) : Checker :=
           match res with
           | TargetSFI.EitherMonad.Left msg err =>
             match err with
-            | CodeMemoryException _ _ _ => checker false
+            | CodeMemoryException _ _ _ => whenFail "store_correct:Codememoryexception"
+                                                   (checker false)
             | _ => 
               whenFail
                 (msg ++ (show err))
@@ -1226,7 +1228,9 @@ Definition jump_checker (log : jump_log) (steps : nat)
         if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
         then
           entries_checker xsl1
-        else checker false
+        else
+          whenFail "jump_checker:"
+          (checker false)
       end. 
 
 Definition jump_correct  (t : instr_gen) (cf :comp_flags) : Checker :=
@@ -1268,7 +1272,9 @@ Definition jump_correct  (t : instr_gen) (cf :comp_flags) : Checker :=
                  | TargetSFI.EitherMonad.Left msg err =>
                    match err with
                    | DataMemoryException _ _ _
-                   | UninitializedMemory _ _ => checker false
+                   | UninitializedMemory _ _ =>
+                     whenFail "jump_correct:Datamemoryexception or Uninitializedmemory"
+                     (checker false)
                    | _ =>
                      whenFail
                        (msg ++ (show err))
@@ -1349,6 +1355,9 @@ Definition show_cs_log_entry (entry : cs_log_entry) : string :=
           ++ " stack op: " ++ (show_op t)
           ++ "instr " ++ (show instr). 
 
+Instance show_cs_log_entry_i : Show cs_log_entry :=
+  {| show := show_cs_log_entry |}.
+
 Definition eval_cs_program (p : sfi_program)
   : (@Either (CompCert.Events.trace*MachineState.t*nat) * cs_log) :=
   ((CS.eval_program_with_state     
@@ -1398,8 +1407,10 @@ Fixpoint cs_stack_mem_checker s mem : Checker :=
     | Some (RiscMachine.Data v) => 
       if (N.eqb addr (Z.to_N v))
       then cs_stack_mem_checker xs mem
-      else checker false
-    | _ => checker false
+      else whenFail ("cs_stack_mem_checker s=" ++ (show s))%string (checker false)
+    | _ => whenFail ("cs_stack_mem_checker stack_address="
+                      ++ (show_addr stack_address))%string
+                   (checker false)
     end
   end.
 
@@ -1438,7 +1449,7 @@ Definition cs_checker (log : cs_log)  (steps : nat)
   collect
     (cs_stats log steps es)
     match steps with
-    | O => checker false
+    | O => whenFail "Impossible, no instructions executed!" (checker false)
     | _ =>
       match l1 with
       | nil => checker tt
@@ -1467,7 +1478,9 @@ Definition cs_checker (log : cs_log)  (steps : nat)
                    end
                 ) l1 (Some []) in
           match ostack with
-          | None => checker false
+          | None => whenFail
+                     ( "Address didn't match: log=" ++ (show l1) )
+                     (checker false)
           | Some stack =>
             let sl := List.rev (List.seq 0%nat (List.length stack)) in
             conjoin
@@ -1481,8 +1494,16 @@ Definition cs_checker (log : cs_log)  (steps : nat)
                     | Some (RiscMachine.Data v) =>
                       if (N.eqb addr (Z.to_N v))
                       then checker true
-                      else checker false
-                    | _ => checker false
+                      else
+                        whenFail ("Address from leftoverstack doesn't match ="
+                                    ++ (show_addr addr) ++ "stack address:"
+                                    ++ (show_addr stack_address)
+                                 )%string
+                                 (checker false)
+                    | _ => whenFail ("Not valid data ar address: "
+                                    ++ (show_addr stack_address)
+                                   )%string
+                                   (checker false)
                     end
                  )
                  (List.combine stack sl)
@@ -1523,7 +1544,9 @@ Definition cs_correct (t : instr_gen) (cf : comp_flags) : Checker :=
                   | TargetSFI.EitherMonad.Left msg err
                     =>  match err with
                        | DataMemoryException _ _ _
-                       | UninitializedMemory _ _ => checker false
+                       | UninitializedMemory _ _ =>
+                         whenFail "DataMemoryException or UninitializedMemory error"
+                         (checker false)
                        | _ =>
                          whenFail
                            (msg ++ (show err))
