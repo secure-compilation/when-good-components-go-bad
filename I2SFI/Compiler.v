@@ -468,11 +468,12 @@ Definition compile_IStore (rp : Intermediate.Machine.register)
       if (store_instr1_off cf)
       then
         ret [
-            AbstractMachine.IBinOp
-              (RiscMachine.ISA.BitwiseOr)
-              (map_register rp)
-              (RiscMachine.Register.R_OR_DATA_MASK)
-              (RiscMachine.Register.R_D)
+            AbstractMachine.IMov (map_register rp) (RiscMachine.Register.R_D)
+            ; AbstractMachine.IBinOp
+                  (RiscMachine.ISA.BitwiseOr)
+                  (RiscMachine.Register.R_D)
+                  (RiscMachine.Register.R_OR_DATA_MASK)
+                  (RiscMachine.Register.R_D)
             ; AbstractMachine.IStore
                 (RiscMachine.Register.R_D)
                 (map_register rs)
@@ -519,7 +520,8 @@ Definition compile_IJump (rt : Intermediate.Machine.register)
       if (jump_instr1_off cf)
       then
         ret [
-            AbstractMachine.IBinOp
+            AbstractMachine.IMov (map_register rt) RiscMachine.Register.R_T
+            ; AbstractMachine.IBinOp
                 (RiscMachine.ISA.BitwiseOr)
                 (map_register rt)
                 (RiscMachine.Register.R_OR_CODE_MASK)
@@ -727,6 +729,7 @@ Definition check_component_labels (cid : Component_id)
   : COMP(list (Procedure_id * AbstractMachine.code)) :=
   (* no duplication in labels *)
   (* exported proc label in offset 1 *)
+  do cenv <- get; 
   let check_label_duplication (cid:Component_id) procs :=
       let all_labels :=
           (List.fold_left
@@ -747,12 +750,18 @@ Definition check_component_labels (cid : Component_id)
       then ret procs
       else fail " check_component_labels::label duplication in component" NoInfo
   in
-      
-  let check_procedure cid pid acode :=      
-      match acode with
-      | _::(AbstractMachine.ILabel _)::_ => ret procs
-      | _ => fail " check_component_labels::procedure label not found at offset" NoInfo
-      end in
+
+  (* here *)
+  let check_procedure cid pid acode :=
+      if push_sfi_halt_not_present (flags cenv)
+      then
+        ret procs
+      else
+        match acode with
+        | _::(AbstractMachine.ILabel _)::_ => ret procs
+        | _ => fail " check_component_labels::procedure label not found at offset" NoInfo
+        end
+  in
   
   let fix check_component cid procs :=
       match procs with
@@ -783,7 +792,7 @@ Fixpoint compile_components (components : list (Component_id * PMap.t Intermedia
   | (cid,procs)::xs =>
     do! modify (with_current_component cid);
       do procs <- compile_procedures (PMap.elements procs) interface;
-      do x <- check_component_labels cid procs;
+      (* do x <- check_component_labels cid procs; *)
       do res <- compile_components xs interface;
       ret ((cid, PMapExtra.of_list procs)::res)
   end.
@@ -936,9 +945,11 @@ Definition layout_code (cf : comp_flags)
       end
   in
   do lcode <- aux (PMap.elements acode);
-    check_labeled_code lcode.
-
-
+    (* this call basically halts the compilation with flag for missing halt guard *)
+    (* I don't know why, but this was a sanity check when I was debugging 
+       and it's not needed anymore *)
+    (* check_labeled_code lcode. *) 
+    ret lcode.
 
 
 (********************* Generate code memory and E **********************)
@@ -1235,7 +1246,8 @@ Definition convert_prog_procs (procs :  NMap (NMap Machine.code)) : PMap.t (PMap
     (elementsm procs)
     (PMap.empty (PMap.t Machine.code)).
 
-Definition compile_program (cf : comp_flags) (ip : Intermediate.program) :=
+Definition compile_program (cf : comp_flags) (ip : Intermediate.program)
+  : CompEither :=
 
   let cip := convert_prog_interface (Intermediate.prog_interface ip) in
   let buffs := convert_prog_buffers (Intermediate.prog_buffers ip) in
@@ -1259,36 +1271,41 @@ Definition compile_program (cf : comp_flags) (ip : Intermediate.program) :=
 
   
   run (init_env cf cid2SFIid procId2slot procs_labels (max_label+1)%N)
-        (
-         
-          do data_mem' <- allocate_buffers buffs;
+      (
+        
+        do data_mem' <- allocate_buffers buffs;
 
-            do data_mem <- init_buffers data_mem' buffs;
-            
-            do acode <- compile_components
-               (PMap.elements pr_progs)
-               cip;
-            
-            do labeled_code  <- layout_code cf (PMapExtra.of_list acode);
+          do data_mem <- init_buffers data_mem' buffs;
+          
+          do acode <- compile_components
+             (PMap.elements pr_progs)
+             cip;
+          
+          do labeled_code  <- layout_code cf (PMapExtra.of_list acode);
 
-            do e <- get_E labeled_code;
+          do e <- get_E labeled_code;
 
-            do l2a <- label2address labeled_code;
+          do l2a <- label2address labeled_code;
 
-            match  (Intermediate.prog_main ip) with
-            | None => fail "Missing main" NoInfo
-            | Some (cid,pid) =>
+          match  (Intermediate.prog_main ip) with
+          | None => fail "Missing main" NoInfo
+          | Some (cid,pid) =>
             
-              do mem0 <- generate_comp0_memory (Pos.of_nat cid)
-                 (Pos.of_nat pid) data_mem l2a;
+            do mem0 <- generate_comp0_memory (Pos.of_nat cid)
+               (Pos.of_nat pid) data_mem l2a;
 
-                do mem <- generate_code_memory labeled_code l2a mem0;
-            
-                ret {| TargetSFI.Machine.cn := (List.map Pos.to_nat cn);
-                       TargetSFI.Machine.e := e;
-                       TargetSFI.Machine.mem := mem;
-                       TargetSFI.Machine.prog_interface := Intermediate.prog_interface ip;
-                    |}
-            end
-            
-    ).
+              do mem <- generate_code_memory labeled_code l2a mem0;
+              
+              ret {| TargetSFI.Machine.cn := (List.map Pos.to_nat cn);
+                     TargetSFI.Machine.e := e;
+                     TargetSFI.Machine.mem := mem;
+                     TargetSFI.Machine.prog_interface := Intermediate.prog_interface ip;
+                  |}
+          end
+      (* ret {| TargetSFI.Machine.cn := nil; *)
+      (*        TargetSFI.Machine.e := nil; *)
+      (*        TargetSFI.Machine.mem := RiscMachine.Memory.empty; *)
+      (*        TargetSFI.Machine.prog_interface := Intermediate.prog_interface ip; *)
+      (*     |} *)
+      )
+.

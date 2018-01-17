@@ -1,8 +1,9 @@
 #/bin/bash
 
 
-TESTS=(store jump stack)
+#TESTS=(store jump stack)
 #FRECV=(undef def spec)
+TESTS=(undef def spec)
 FRECV=(alloff)
 
 echo "Generator: tests specific (jump to RA)"

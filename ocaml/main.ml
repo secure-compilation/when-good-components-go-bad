@@ -1,4 +1,5 @@
 open Run_test
+open Random
 
 let run ct ig cf : unit =
   begin
@@ -63,6 +64,7 @@ let get_gen arg : instr_gen = begin
 
              
 let main() = begin
+    Random.self_init ();
     run (get_checker Sys.argv.(1))
       (get_gen Sys.argv.(2))
       (get_flag Sys.argv.(3))

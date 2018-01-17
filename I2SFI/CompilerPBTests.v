@@ -74,15 +74,6 @@ Definition MAX_BUFFER_SIZE := 10%nat.
 
 Definition MAX_PROC_LENGTH := 50%nat.
 
-(* Inductive test_type : Type := *)
-(* | TInstrEqual : test_type *)
-(* | TInstrEqualUndef : test_type *)
-(* | TStore : test_type *)
-(* | TJump : test_type *)
-(* | TStack : test_type *)
-(* | TStackAllUndefElim : test_type *)
-(* | TCompilerCorrect : test_type. *)
-
 Inductive instr_type :=
 | Nop : instr_type
 | Label : instr_type
@@ -143,10 +134,10 @@ Definition get_freq_call i :=
   | Mov => 2%nat
   | BinOp => 6%nat
   | Load => 4%nat
-  | Store => 20%nat
+  | Store => 40%nat
   | Alloc => 4%nat
   | Bnz => 1%nat (* could generate infinite loops *)
-  | Jump => 10%nat
+  | Jump => 40%nat
   | Jal => 1%nat
   | Call => 40%nat
   | Return => 2%nat
@@ -165,40 +156,6 @@ Definition get_freq (t : instr_gen) (ct : checker_type) (i:instr_type) : nat :=
     | CCompCorrect => get_freq_call i
     end
   end.
-
-(* Definition jump_undef (t : test_type) : bool := *)
-(*   match t with *)
-(*   | TInstrEqualUndef *)
-(*   | TJump => true *)
-(*   | _ => false *)
-(*   end. *)
-
-(* Definition bnz_undef (t : test_type) : bool := *)
-(*   match t with *)
-(*   | TInstrEqualUndef *)
-(*   (* | TStack *) *)
-(*     => true *)
-(*   | _ => false *)
-(*   end. *)
-
-(* Definition load_undef (t : test_type) : bool := *)
-(*   match t with *)
-(*   | TInstrEqualUndef => true *)
-(*   | _ => false *)
-(*   end. *)
-
-(* Definition store_undef (t : test_type) : bool := *)
-(*   match t with *)
-(*   | TInstrEqualUndef *)
-(*   | TStore => true *)
-(*   | _ => false *)
-(*   end. *)
-
-(* Definition alloc_undef (t : test_type) : bool := *)
-(*   match t with *)
-(*   | TInstrEqualUndef => true *)
-(*   | _ => false *)
-(*   end. *)
 
 Definition choose_pos ( p : positive * positive) :=
   let (lo,hi) := p in
@@ -443,52 +400,84 @@ Definition gen_buffers (cids : list positive)
       match t with
       | EqualUndefAllowed => returnGen [IAlloc r1 r2]
       | _ =>
-        do! v <- choose (1%nat,((N.to_nat SFI.SLOT_SIZE) - 1)%nat);
+        do! v <- choose (1%nat,10%nat);
           returnGen [IConst (IInt (Z.of_nat v)) r2; IAlloc r1 r2]
       end.
 
   Definition genIConstCodeAddress
              (r : Intermediate.Machine.register)
+             (pi : prog_int)
+             (cid : positive)
+             (ct : checker_type)
     : G (list instr) :=
-    do! cid <- choose (1%nat, ((N.to_nat SFI.COMP_MAX) - 1)%nat);
-      do! pid <- choose (1%nat, MAX_PROC_PER_COMP);
-      do! offset <- choose (1%nat, (16%nat + MAX_PROC_LENGTH)%nat);
-      let v := SFI.address_of
-                 (N.of_nat cid)
-                 (2* (N.of_nat pid))%N
-                 (N.of_nat offset) in
-      (* TODO fix this *)
-      returnGen ([IConst (IInt  (Z.of_nat (N.to_nat v))) r]).
+    match ct with
+    | CJump =>
+      do! cid' <- choose (1%nat, ((N.to_nat SFI.COMP_MAX) - 1)%nat);
+        do! cid1 <- elements 0%nat [0%nat;cid'];
+        do! pid <- choose (1%nat, MAX_PROC_PER_COMP);
+        do! offset <- choose (1%nat, (16%nat + 2*MAX_PROC_LENGTH)%nat);
+        let v := SFI.address_of
+                   (N.of_nat cid1)
+                   (2* (N.of_nat pid))%N
+                   (N.of_nat offset) in
+        returnGen ([IConst (IInt (Z.of_N v)) r])
+    | _ =>
+      do! pid <-
+          ( match PMap.find cid pi with
+            | None => returnGen 1%nat
+            | Some (exp,_) => choose (0%nat,((List.length exp) - 1)%nat)                            
+            end);
+      do! offset <-
+        freq [ (4%nat, choose (0%nat, 15%nat));
+                  (2%nat, choose (16%nat,  ((16%nat + 2*MAX_PROC_LENGTH)/2)%nat));
+                  (2%nat, choose (((16%nat + 2*MAX_PROC_LENGTH)/2)%nat, (16%nat + 2*MAX_PROC_LENGTH)%nat))];
+        let v := SFI.address_of
+                   (Coq.Numbers.BinNums.Npos cid) (* here *)
+                   (2* (N.of_nat pid))%N
+                   (N.of_nat offset) in
+        returnGen ([IConst (IInt (Z.of_N v)) r])
+    end.
   
   Definition genIStoreAddress
              (pi : prog_int)
              (buffers : PMap.t (list (positive * (nat+list value))))
              (cid : positive)
+             (ct : checker_type)
     : G (list instr) :=
     do! r1 <- arbitrary;
       do! r2 <- arbitrary;
 
       (* 50% in component zero *)
       do! cid' <- choose (1%nat, ((N.to_nat SFI.COMP_MAX) - 1)%nat);
-      do! cid <- elements 0%nat [0%nat;cid'];
+      do! cid1 <- elements 0%nat [0%nat;cid'];
 
       (* (* valid slot id *) *)
-      do! bid <- 
-        (match PMap.find (Pos.of_nat cid) buffers with
-         | None => 
-           choose (1%nat, MAX_NO_BUFFERS_PER_COMP)
-         | Some lst => choose (1%nat,(List.length lst))
-         end);
+      do! bid <-
+        match ct with
+        | CStack =>
+          freq [ (1%nat,returnGen 0%nat);
+                   (1%nat, choose (1%nat,3%nat)) ]
+        | _ =>
+          (match PMap.find (Pos.of_nat cid1) buffers with
+           | None => 
+             choose (0%nat, (MAX_NO_BUFFERS_PER_COMP-1)%nat)
+           | Some lst => choose (1%nat,(List.length lst))
+           end)
+        end;
 
       do! offset' <- choose (1%nat, MAX_BUFFER_SIZE);
-      do! offset <- elements 0%nat [0%nat;offset'];
+      do! offset <-
+        match ct with
+        | CStack => returnGen 0%nat
+        | _ => elements 0%nat [0%nat;offset']
+        end;
 
-      let v := SFI.address_of (N.of_nat cid)
+      let v := SFI.address_of (N.of_nat cid1)
                               (2*(N.of_nat bid)+1)%N
                               (N.of_nat offset) in
-      do! li <- genIConstCodeAddress r2;
+      do! li <- genIConstCodeAddress r2 pi cid ct;
       
-      returnGen  (li ++ [IConst (IInt (Z.of_nat (N.to_nat v))) r1; IStore r1 r2])%list.
+      returnGen  (li ++ [IConst (IInt (Z.of_N v)) r1; IStore r1 r2])%list.
 
   
   Definition genILoad
@@ -517,7 +506,7 @@ Definition gen_buffers (cids : list positive)
       | CStore
       | CStack
       | CCompCorrect
-        => genIStoreAddress pi buffers cid
+        => genIStoreAddress pi buffers cid ct
       | _ => genMemReg IStore pi buffers cid
       end
     end.   
@@ -531,6 +520,8 @@ Definition gen_buffers (cids : list positive)
 
   Definition genIJump
              (t : instr_gen)
+             (pi : prog_int)
+             (cid : positive)
              (ct : checker_type)
     : G (list instr) :=
     match t with
@@ -539,7 +530,7 @@ Definition gen_buffers (cids : list positive)
         returnGen ([IJump r])
     | _ =>
       do! r <- arbitrary;
-        do! li <- genIConstCodeAddress r;
+        do! li <- genIConstCodeAddress r pi cid ct;
         returnGen (li ++ [IJump r])%list
     end.
 
@@ -657,7 +648,7 @@ Definition gen_buffers (cids : list positive)
         ; ( (get_freq t ct Load) , genILoad t pi buffers cid)
         ; ( (get_freq t ct Store), genIStore t ct pi buffers cid)
         ; ( (get_freq t ct Bnz), genIBnz t first_label next_label)
-        ; ( (get_freq t ct Jump), genIJump t ct)
+        ; ( (get_freq t ct Jump), genIJump t pi cid ct)
         ; ( (get_freq t ct Jal), genIJal)
         ; ( (get_freq t ct Call), genICall pi cid pid)
         ; ( (get_freq t ct Alloc), genIAlloc t)
@@ -894,11 +885,10 @@ Conjecture correct_data_compartmentalized:
       (SFI.is_data_address (RiscMachine.Memory.to_address ptr)) = true
     ).
 
-
 Definition FUEL := 100%nat.
 
 Definition run_intermediate_program (ip : Intermediate.program) :=
-  runp FUEL ip.
+  runp (FUEL)%nat ip.
 
 (************************************************
  * No writes outside its own memory, 
@@ -1044,9 +1034,14 @@ Definition store_correct  (t : instr_gen) (cf :comp_flags) : Checker :=
             checker tt
         | _ =>
           match res with
-          | TargetSFI.EitherMonad.Left msg err => whenFail
-                                                   (msg ++ (show err))
-                                                   (store_checker log 0%nat es)
+          | TargetSFI.EitherMonad.Left msg err =>
+            match err with
+            | CodeMemoryException _ _ _ => checker false
+            | _ => 
+              whenFail
+                (msg ++ (show err))
+                (store_checker log 0%nat es)
+            end
           | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) => 
             (whenFail ("memory of failed program: " ++ (show_mem  mem))%string
                       (store_checker log steps es))
@@ -1178,51 +1173,60 @@ Definition jump_stats (log : jump_log) (steps : nat)
            ) in
   ((steps,i), e,es,List.length l2).
 
+Definition entry_checker (entry : jump_log_entry) : Checker :=
+  let '(pc,addr,type,t) := entry in
+  if (SFI.is_same_component_bool pc addr)                      
+  then
+    match t with
+    | nil =>  whenFail ("Register R_T expected in internal jumps "
+                         ++ (show type))
+                      (match type with
+                       | Indirect r => RiscMachine.Register.eqb
+                                        RiscMachine.Register.R_T r
+                       | Direct => true
+                       end)     
+    | _ => whenFail ("Unexpectected event at log entry:"
+                      ++ (show_jump_log_entry (pc,addr,type,t)))
+                   false
+    end
+  else
+    match t with
+    | _::_ =>  whenFail ("Register R_A expected in internal jumps "
+                          ++ (show type))
+                       (match type with
+                        | Indirect r => RiscMachine.Register.eqb
+                                         RiscMachine.Register.R_RA r
+                        | Direct => true
+                        end)
+    | nill => whenFail ("Unexpectected empty event at log entry:"
+                         ++ (show_jump_log_entry (pc,addr,type,t)))
+                      false
+    end.
+    
+Fixpoint entries_checker (l : list jump_log_entry) : Checker :=
+  match l with
+  | nil => checker true
+  | (pc,addr,type,t)::nil =>   
+    if (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
+    then checker true
+    else entry_checker (pc,addr,type,t)
+  | e::xs => conjoin ([entry_checker e] ++ [entries_checker xs])%list
+  end.
+
 Definition jump_checker (log : jump_log) (steps : nat)
-           (es : (@execution_state (CompCert.Events.trace*CS.state))) : Checker :=
+           (es : (@execution_state (CompCert.Events.trace*CS.state)))
+           (intermTrace : CompCert.Events.trace)
+  : Checker :=
   let (l1,l2) := log in
    collect
      (jump_stats log steps es)
       match l1 with
       | nil => checker tt
-      | _ =>
-        conjoin (
-            List.map
-              (fun '(pc,addr,type,t) =>
-                 if (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
-                 then checker true
-                 else
-                   if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
-                   then checker true
-                   else
-                     if (SFI.is_same_component_bool pc addr)                      
-                     then
-                       match t with
-                       | nil =>  whenFail ("Register R_T expected in internal jumps "
-                                            ++ (show type))
-                                         (match type with
-                                          | Indirect r => RiscMachine.Register.eqb
-                                                           RiscMachine.Register.R_T r
-                                          | Direct => true
-                                          end)     
-                       | _ => whenFail ("Unexpectected event at log entry:"
-                                         ++ (show_jump_log_entry (pc,addr,type,t)))
-                                      false
-                       end
-                     else
-                         match t with
-                         | _::_ =>  whenFail ("Register R_A expected in internal jumps "
-                                               ++ (show type))
-                                            (match type with
-                                             | Indirect r => RiscMachine.Register.eqb
-                                                              RiscMachine.Register.R_RA r
-                                             | Direct => true
-                                             end)
-                         | nill => whenFail ("Unexpectected empty event at log entry:"
-                                              ++ (show_jump_log_entry (pc,addr,type,t)))
-                                           false
-                         end
-              ) l1)
+      | (pc,addr,type,t)::xsl1 =>
+        if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
+        then
+          entries_checker xsl1
+        else checker false
       end. 
 
 Definition jump_correct  (t : instr_gen) (cf :comp_flags) : Checker :=
@@ -1234,6 +1238,13 @@ Definition jump_correct  (t : instr_gen) (cf :comp_flags) : Checker :=
              | CompEitherMonad.Right p =>
                let (res,log) := eval_jump_program p in
                let es := run_intermediate_program ip in
+               let interm_trace := 
+                   match es with              
+                   | Wrong tr _ _ => tr
+                   | OutOfFuel (tr,_) => tr
+                   | Halted tr => tr
+                   | Running (tr,_) => tr (* this should not happen *)
+                   end in
                match es with
                | Wrong _ msg InvalidEnv
                (* | Wrong _ msg (NegativePointerOffset _) *)
@@ -1254,11 +1265,17 @@ Definition jump_correct  (t : instr_gen) (cf :comp_flags) : Checker :=
                    checker tt
                | _ =>
                  match res with
-                 | TargetSFI.EitherMonad.Left msg err => whenFail
-                                                          (msg ++ (show err))
-                                                          (jump_checker log 0%nat es)
+                 | TargetSFI.EitherMonad.Left msg err =>
+                   match err with
+                   | DataMemoryException _ _ _
+                   | UninitializedMemory _ _ => checker false
+                   | _ =>
+                     whenFail
+                       (msg ++ (show err))
+                       (jump_checker log 0%nat es interm_trace)
+                   end
                  | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) => 
-                   jump_checker log steps es
+                   jump_checker log steps es interm_trace
                  end
                end
              end
@@ -1361,62 +1378,126 @@ Instance show_cs_stat : Show cs_stat :=
         (show  steps)
           ++ "," ++ (show si)
           ++ "," ++ (show op)
-          ++ "," ++ (show es)           
+          ++ "," ++ (show es)
   |}.
 
 Definition cs_stats (log : cs_log) (steps : nat)
            (es : (@execution_state (CompCert.Events.trace*CS.state))) : cs_stat :=
   let '(l1,l2) := log in
   (steps, (List.length l1), es, List.length l2).
-  
-Definition cs_checker (log : cs_log)  (steps : nat)
-           (es : (@execution_state (CompCert.Events.trace*CS.state))) : Checker :=
-  let (l1,l2) := log in
-  let fix aux l s :=
-      match l with
-      | nil => checker true
-      |  (pc,addr,op,instr)::xs =>
-         match op with
-         | Push => aux xs (addr::s)
-         | Pop =>
-           match s with
-           | nil => whenFail ("Attemting to pop from empty stack at address"
-                               ++ (show pc))%string false
-           | a::s' => if (N.eqb a addr)
-                     then aux xs s'
-                     else whenFail ("Attemting address on the stack: "
-                                      ++ (show_addr a)
-                                      ++ " address in register: "
-                                      ++ (show_addr addr)
-                                      ++ "at pc: "
-                                      ++ (show_addr pc)
-                                      ++ " instr: "
-                                      ++ (show instr)
-                                   )%string
-                                   false
-           end         
-        end
-      end
-  in
 
+Fixpoint cs_stack_mem_checker s mem : Checker :=
+  match s with
+  | nil => checker true
+  | addr::xs =>
+    let stack_address := SFI.address_of SFI.MONITOR_COMPONENT_ID
+                                        (N.of_nat ((List.length s) - 1)%nat)
+                                        0%N
+    in
+    match RiscMachine.Memory.get_word mem stack_address with
+    | Some (RiscMachine.Data v) => 
+      if (N.eqb addr (Z.to_N v))
+      then cs_stack_mem_checker xs mem
+      else checker false
+    | _ => checker false
+    end
+  end.
+
+Fixpoint stack_step_checker (l : list cs_log_entry) s  mem :=
+  match l with
+  | nil => (* check s against memory *)
+    cs_stack_mem_checker s mem
+  | (pc,addr,op,instr)::xs => 
+    match op with
+    | Push => stack_step_checker xs (addr::s) mem
+    | Pop =>
+      match s with
+      | nil => whenFail ("Attemting to pop from empty stack at address"
+                          ++ (show pc))%string false
+      | a::s' => if (N.eqb a addr)
+                then stack_step_checker xs s' mem
+                else whenFail ("Attemting address on the stack: "
+                                 ++ (show_addr a)
+                                 ++ " address in register: "
+                                 ++ (show_addr addr)
+                                 ++ "at pc: "
+                                 ++ (show_addr pc)
+                                 ++ " instr: "
+                                 ++ (show instr)
+                              )%string
+                              false
+      end
+    end
+  end.
+
+Definition cs_checker (log : cs_log)  (steps : nat)
+           (es : (@execution_state (CompCert.Events.trace*CS.state)))
+           (mem : RiscMachine.Memory.t)
+  : Checker :=
+  let (l1,l2) := log in
   collect
     (cs_stats log steps es)
     match steps with
     | O => checker false
-    | _ => 
+    | _ =>
       match l1 with
       | nil => checker tt
-      | _ => aux l1 []
+      | _ =>
+        if DEBUG
+        then
+          stack_step_checker l1 [] mem
+        else
+          let ostack :=
+              List.fold_left
+                (fun acc '(pc,addr,op,instr) =>
+                   match acc with
+                   | None => None
+                   | Some s =>
+                     match op with
+                     | Push => Some (addr::s)
+                     | Pop =>
+                       match s with 
+                       | nil => None
+                       | a::s' =>
+                         if (N.eqb a addr)
+                         then Some s'
+                         else None
+                       end             
+                     end
+                   end
+                ) l1 (Some []) in
+          match ostack with
+          | None => checker false
+          | Some stack =>
+            let sl := List.rev (List.seq 0%nat (List.length stack)) in
+            conjoin
+              (List.map
+                 (fun '(addr,p) =>
+                    let stack_address := SFI.address_of SFI.MONITOR_COMPONENT_ID
+                                                        (2*(N.of_nat p)+1)%N
+                                                        0%N
+                    in
+                    match RiscMachine.Memory.get_word mem stack_address with
+                    | Some (RiscMachine.Data v) =>
+                      if (N.eqb addr (Z.to_N v))
+                      then checker true
+                      else checker false
+                    | _ => checker false
+                    end
+                 )
+                 (List.combine stack sl)
+              )
+          end
       end
     end.
 
 Definition cs_correct (t : instr_gen) (cf : comp_flags) : Checker :=
   forAllShrink (genIntermediateProgram t CStack) shrink
-         ( fun ip =>
+         ( fun ip => 
              match compile_program cf ip with
              | CompEitherMonad.Left msg err =>
                whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
-             | CompEitherMonad.Right p =>
+             | CompEitherMonad.Right p => 
                let (res,log) := eval_cs_program p in
                let es := run_intermediate_program ip in
                 match es with
@@ -1433,18 +1514,26 @@ Definition cs_correct (t : instr_gen) (cf : comp_flags) : Checker :=
                 (* | Wrong _ msg (MissingComponentId _) *)
                   =>
                   if DEBUG
-                  then 
+                  then
                     whenFail ((show es) ++ (show ip))%string false
                   else
                     checker tt
                 | _ =>
                   match res with
-                  | TargetSFI.EitherMonad.Left msg err => whenFail
-                                                           (msg ++ (show err))
-                                                           (cs_checker log 0%nat es)
+                  | TargetSFI.EitherMonad.Left msg err
+                    =>  match err with
+                       | DataMemoryException _ _ _
+                       | UninitializedMemory _ _ => checker false
+                       | _ =>
+                         whenFail
+                           (msg ++ (show err))
+                           (cs_checker log 0%nat es
+                                       (MachineState.getMemory (get_state err))
+                           )
+                       end
                   | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) =>
                     (whenFail ("memory of failed program: " ++ (show_mem  mem))%string
-                              (cs_checker log steps es))
+                              (cs_checker log steps es mem))
                   end
                end
              end

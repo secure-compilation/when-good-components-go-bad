@@ -2,8 +2,10 @@
 
 mkdir -p ../test_out
 
+export RAND_SEED=$RANDOM
+
 TESTS=(store)
-FRECV=(undef def spec)
+FRECV=(spec undef def)
 FLAGS=(store store1 store2 alloff)
 
 for t in ${TESTS[*]};

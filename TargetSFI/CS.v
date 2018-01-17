@@ -290,7 +290,12 @@ Module CS.
           if (SFI.last_address_in_slot pc) 
           then            
             ret (E0, (Memory.set_instr mem pc IHalt,pc,gen_regs)) (* IHalt *)
-          else ret (E0, (mem,inc_pc pc,gen_regs)) (* INop *)
+          else
+            if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
+            then
+              fail "Pc address not initialized" (UninitializedMemory s pc)
+            else
+              ret (E0, (mem,inc_pc pc,gen_regs)) (* INop *)
             
       end.
 

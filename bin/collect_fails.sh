@@ -2,25 +2,30 @@
 
 
 TESTS=(store jump stack)
-#FRECV=(undef def spec)
+FRECV=(undef def spec)
+#TESTS=(undef def spec)
 FAULT=(store store1 store2 jump jump1 jump2 call pop push targets)
+#FAULT=(store store1 store2)
 
-echo "Generator: tests specific (jump to RA)"
+echo "Generator: tests specific ()"
 
 for t in ${TESTS[*]};
 do
-    for f in ${FAULT[*]};
-    do 
-	for fn in `ls ${t}_${f}_* 2> /dev/null`;
+	for fr in ${FRECV[*]};
 	do
-		echo -n "$t $f "
-		grep "*** Failed" ${fn} 2> /dev/null | cut -d' ' -f4
-		grep Passed ${fn} > /dev/null
-		if [[ $? -eq 0 ]] 
-		then
-			echo "No failure found!" 
-		fi
-	done
-    done
+		for f in ${FAULT[*]};
+    		do 
+		for fn in `ls ${t}_${fr}_${f}* 2> /dev/null`;
+		do
+			echo -n "$t $fr $f "
+			grep "*** Failed" ${fn} 2> /dev/null | cut -d' ' -f4
+			grep Passed ${fn} > /dev/null
+			if [[ $? -eq 0 ]] 
+			then
+				echo "No failure found!" 
+			fi
+		done
+    	done
+done
 done 
 

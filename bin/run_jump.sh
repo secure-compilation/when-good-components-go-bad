@@ -4,9 +4,11 @@
 
 mkdir -p ../test_out
 
+export RAND_SEED=$RANDOM
+
 TESTS=(jump)
-FRECV=(undef def spec)
-FLAGS=(jump jump1 jump2)
+FRECV=(spec undef def)
+FLAGS=(jump jump1 jump2 alloff)
 
 for t in ${TESTS[*]};
 do

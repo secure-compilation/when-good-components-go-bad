@@ -4,9 +4,11 @@
 
 mkdir -p ../test_out
 
+export RAND_SEED=$RANDOM
+
 TESTS=(store jump stack correct)
 FRECV=(undef def spec)
-FLAGS=(store store1 store2 jump jump1 jump2 push pop call targets alloff)
+FLAGS=(store store1 store2 jump jump1 jump2 push pop call targets)
 
 for t in ${TESTS[*]};
 do

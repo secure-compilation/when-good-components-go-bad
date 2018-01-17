@@ -4,8 +4,10 @@
 
 mkdir -p ../test_out
 
+export RAND_SEED=$RANDOM
+
 TESTS=(stack)
-FRECV=(undef def spec)
+FRECV=(spec undef def)
 FLAGS=(push pop call targets alloff)
 
 for t in ${TESTS[*]};

@@ -4,6 +4,8 @@
 
 mkdir -p ../test_out
 
+export RAND_SEED=$RANDOM
+
 TESTS=(correct)
 FRECV=(undef def spec)
 FLAGS=(jump jump1 jump2 push pop call targets alloff)
