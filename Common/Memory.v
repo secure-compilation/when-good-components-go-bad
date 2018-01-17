@@ -1,15 +1,28 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
+From mathcomp Require Import ssreflect ssrbool ssrnat eqtype.
 
 Module Type AbstractComponentMemory.
   Parameter t : Type.
 
-  Parameter prealloc : list (Block.id * (nat + list value)) -> t.
+  Parameter prealloc : {fmap Block.id -> nat + list value} -> t.
   Parameter empty : t.
   Parameter reserve_block : t -> t * Block.id.
   Parameter alloc : t -> nat -> t * Block.id.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
+
+  Axiom load_prealloc:
+    forall bufs b i,
+      load (prealloc bufs) b i =
+      if (0 <=? i)%Z then
+        match bufs b with
+        | Some (inl size) =>
+          if (i <? Z.of_nat size)%Z then Some Undef else None
+        | Some (inr chunk) => nth_error chunk (Z.to_nat i)
+        | None => None
+        end
+      else None.
 
   Axiom load_after_alloc:
     forall m m' n b,
@@ -43,24 +56,16 @@ Module ComponentMemory : AbstractComponentMemory.
   }.
   Definition t := mem.
 
-  Definition prealloc (bufs: list (Block.id * (nat + list value))) : t :=
-    let fix prepare m bs :=
-        match bs with
-        | [] => m
-        | (b, inl size) :: bs' =>
-          let chunk := repeat Undef size in
-          let m' := {| content := setm (content m) b chunk;
-                       nextblock := Nat.max (1+b) (nextblock m) |} in
-          prepare m' bs'
-        | (b, inr chunk) :: bs' =>
-          let m' := {| content := setm (content m) b chunk;
-                       nextblock := Nat.max (1+b) (nextblock m) |} in
-          prepare m' bs'
-        end
-    in prepare {| content := emptym;
-                  nextblock := 1%nat |} bufs.
+  Definition prealloc (bufs: {fmap Block.id -> nat + list value}) : t :=
+    let init_block x := match x with
+                        | inl size => repeat Undef size
+                        | inr chunk => chunk
+                        end in
+    {| content := mapm init_block bufs;
+       nextblock := S (fold_left Nat.max (domm bufs) 0) |}.
 
-  Definition empty := prealloc [].
+  Definition empty :=
+    {| content := emptym; nextblock := 0 |}.
 
   Definition reserve_block (m: t) : t * Block.id :=
     ({| content := content m; nextblock := (1 + nextblock m)%nat |},
@@ -112,6 +117,19 @@ Module ComponentMemory : AbstractComponentMemory.
     | None => None
     end.
 
+  Lemma load_prealloc:
+    forall bufs b i,
+      load (prealloc bufs) b i =
+      if (0 <=? i)%Z then
+        match bufs b with
+        | Some (inl size) =>
+          if (i <? Z.of_nat size)%Z then Some Undef else None
+        | Some (inr chunk) => nth_error chunk (Z.to_nat i)
+        | None => None
+        end
+      else None.
+  Proof. Admitted.
+
   Lemma load_after_alloc:
     forall (m m' : mem) (n : nat) b,
       alloc m n = (m',b) ->
@@ -121,11 +139,9 @@ Module ComponentMemory : AbstractComponentMemory.
     intros m m' n b Halloc b' i Hb'.
     unfold alloc in Halloc. inversion Halloc. subst.
     unfold load. simpl.
-    (*
-    erewrite PMapFacts.add_neq_o; auto.
+    rewrite setmE.
+    now rewrite (introF (b' =P nextblock m :> nat) Hb').
   Qed.
-     *)
-  Admitted.
 
   Ltac inv H := (inversion H; subst; clear H).
 

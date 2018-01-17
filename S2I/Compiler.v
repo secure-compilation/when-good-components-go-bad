@@ -249,20 +249,12 @@ Definition gen_all_procedures_labels
   in gen emptym procs.
 
 Definition gen_buffers
-         (bufs: list (Component.id * (nat + list value)))
-  : NMap (list (Block.id * (nat + list value))) :=
-  let fix instrument acc bs :=
-      match bs with
-      | [] => acc
-      | (C, init_info) :: bs' =>
-        let Cbufs := [(1, init_info)] in
-        let acc' := setm acc C Cbufs in
-        instrument acc' bs'
-      end
-  in instrument emptym bufs.
+         (bufs: {fmap Component.id -> nat + list value})
+  : NMap {fmap Block.id -> nat + list value} :=
+  mapm (fun init_info => mkfmap [(0, init_info)]) bufs.
 
 Definition compile_components
-         (local_buffers : NMap (list (Block.id * (nat + list value))))
+         (local_buffers : NMap {fmap Block.id -> nat + list value})
          (procs_labels : NMap (NMap label))
          (comps: list (Component.id * NMap expr))
   : COMP (list (Component.id * NMap code)) :=
@@ -319,7 +311,7 @@ Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program)
 Definition compile_program
            (p: Source.program) : option Intermediate.program :=
   let comps := elementsm (Source.prog_procedures p) in
-  let bufs := elementsm (Source.prog_buffers p) in
+  let bufs := Source.prog_buffers p in
   let local_buffers := gen_buffers bufs in
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;

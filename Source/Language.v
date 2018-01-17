@@ -167,21 +167,8 @@ Module Source.
     in init Cmem values 0%Z.
 
   Definition prepare_buffers (p: program) : Memory.t * NMap Block.id :=
-    let fix alloc mem addrs bufs :=
-        match bufs with
-        | [] => (mem, addrs)
-        | (C, init) :: bufs' =>
-          match init with
-          | inl size =>
-            let '(Cmem', b) := ComponentMemory.alloc ComponentMemory.empty size in
-            alloc (setm mem C Cmem') (setm addrs C b) bufs'
-          | inr values =>
-            let '(Cmem', b) := ComponentMemory.alloc ComponentMemory.empty
-                                                     (length values) in
-            let Cmem'' := initialize_buffer Cmem' b values in
-            alloc (setm mem C Cmem'') (setm addrs C b) bufs'
-          end
-        end
-    in
-    alloc emptym emptym (elementsm (prog_buffers p)).
+    (mapm (fun initial_buffer =>
+             ComponentMemory.prealloc (mkfmap [(0, initial_buffer)]))
+          (prog_buffers p),
+     mapm (fun _ => 0) (prog_buffers p)).
 End Source.

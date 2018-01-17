@@ -20,6 +20,8 @@ Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
 Section Definability.
+  Local Open Scope fset_scope.
+
   Variable intf: Program.interface.
   Variable closed_intf: closed_interface intf.
   Variable mainC: Component.id.
@@ -256,13 +258,10 @@ Section Definability.
     expr_of_trace C P (comp_subtrace C t).
 
   Definition procedures_of_trace (t: trace) : NMap (NMap expr) :=
-    mkfmap (map (fun Ciface =>
-                   let '(C, C_interface) := Ciface in
-                   (C, fold_right (fun P C_procs =>
-                                     setm C_procs P (procedure_of_trace C P t))
-                                  emptym
-                                  (Component.export C_interface)))
-                     (elementsm intf)).
+    mapim (fun C Ciface =>
+             mkfmapf (fun P => procedure_of_trace C P t)
+                     (Component.export Ciface))
+          intf.
 
   Lemma find_procedures_of_trace (t: trace) C P :
     exported_procedure intf C P ->
@@ -271,20 +270,9 @@ Section Definability.
   Proof.
     intros [CI [C_CI CI_P]].
     unfold find_procedure, procedures_of_trace.
-    (*
-    rewrite PMapFacts.mapi_o; try now intros ? ? ? ->.
-    apply PMap.find_1 in C_CI. rewrite C_CI. simpl.
-    unfold Component.is_exporting in CI_P.
-    revert CI_P. generalize (Component.export CI). intros Ps.
-    induction Ps as [|P' Ps IH]; simpl; try easy.
-    rewrite PMapFacts.add_o.
-    intros HP.
-    destruct (PMapFacts.eq_dec P' P) as [->|ne]; trivial.
-    destruct HP as [|P_in_Ps]; try easy.
-    now apply IH.
+    rewrite mapimE, C_CI. simpl.
+    now rewrite mkfmapfE, CI_P.
   Qed.
-    *)
-  Admitted.
 
   Definition program_of_trace (t: trace) : program :=
     {| prog_interface  := intf;
@@ -453,14 +441,14 @@ Section Definability.
       - subst C'.
         assert (b' = b) by (unfold component_buffer in *; congruence).
         subst b'. clear C'_b'.
-        (*
-        now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem').
+        now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem'), Nat.eqb_refl.
       - assert (neq : (C, b, 1%Z) <> (C', b', 1%Z)) by congruence.
         rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
+        rewrite <- Nat.eqb_neq in C_neq_C'.
+        unfold Component.eqb.
+        rewrite C_neq_C'.
         now rewrite Z.add_0_r.
     Qed.
-         *)
-    Admitted.
 
     Definition well_formed_state
                (s: stack_state) (prefix suffix: trace) (cs: CS.state) : Prop :=
@@ -518,7 +506,7 @@ Section Definability.
         assert (Star2 : exists s' cs',
                    Star (CS.sem p) (C, stk, mem', Kstop, expr_of_event C P e) [e] cs' /\
                    well_formed_state s' (prefix ++ [e]) suffix cs').
-        { (*
+        {
           clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
           destruct e as [C_ P' arg C'|C_ ret_val C'];
           simpl in wf_C, wf_e, wb_suffix; subst C_.
@@ -530,16 +518,18 @@ Section Definability.
             exists (C', (C, v, Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem',
                     Kstop, procedure_of_trace C' P' t).
             split.
-            + take_step. take_step. { simpl. rewrite Eintf. auto. }
+            + take_step. take_step.
               apply star_one. simpl.
               apply CS.eval_kstep_sound. simpl.
-              rewrite Eprocs. simpl.
-              rewrite (find_procedures_of_trace t (closed_intf Himport)), C_b.
-              unfold Component.id, PMap.key, Block.id in *. rewrite Hv.
+              rewrite <- Nat.eqb_neq in C_ne_C'. unfold Component.eqb. rewrite C_ne_C'.
+              rewrite imported_procedure_iff in Himport. rewrite Himport.
+              rewrite <- imported_procedure_iff in Himport.
+              rewrite (find_procedures_of_trace t (closed_intf Himport)).
+              unfold component_buffer in C_b, C'_b'. simpl in C_b, C'_b'.
+              rewrite C_b. simpl in Hv.
+              unfold Component.id, Block.id in *. rewrite Hv.
               generalize C'_b'. unfold component_buffer, Block.id. intros ->.
-              rewrite Hmem'.
-              apply Pos.eqb_neq in C_ne_C'.
-              now rewrite C_ne_C'.
+              simpl in Hmem'. now rewrite Hmem'.
             + do 4 (split; trivial).
               { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
                 eexists []; eexists; simpl; split; eauto.
@@ -567,15 +557,15 @@ Section Definability.
               exists (C', (C', saved, Kstop) :: top ++ bot, mem'', Kstop, procedure_of_trace C' P' t).
               split.
               * eapply star_step.
-                -- now eapply CS.KS_CallRet; eauto.
+                -- now eapply CS.KS_ExternalReturn; eauto.
                 -- take_step. take_step; eauto.
                    apply star_one. apply CS.eval_kstep_sound.
-                   simpl. rewrite C'_b'.
-                   rewrite Eprocs. simpl.
-                   rewrite (find_procedures_of_trace t P'_exp).
-                   unfold Component.id, PMap.key, Block.id in *.
-                   now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem'), Hmem'', Pos.eqb_refl.
-                -- apply Pos.eqb_neq in C_ne_C'. now rewrite C_ne_C'.
+                   simpl. rewrite Nat.eqb_refl.
+                   rewrite (find_procedures_of_trace t P'_exp). simpl in *.
+                   unfold component_buffer, Component.id, Block.id in *. simpl in *.
+                   unfold component_buffer, Component.id, Block.id in *. simpl in *.
+                   now rewrite C'_b', (Memory.load_after_store_eq _ _ _ _ Hmem'), Hmem''.
+                -- now rewrite E0_right.
               * do 4 (split; trivial).
                 { exists ((C', saved, Kstop) :: top), bot. simpl. eauto. }
                 do 2 (split; trivial).
@@ -589,16 +579,17 @@ Section Definability.
               exists cs'. split; trivial.
               eapply star_step; try eassumption.
               * apply CS.eval_kstep_sound. simpl.
-                rewrite C_b. unfold Component.id, PMap.key, Block.id in *.
-                rewrite Hmem', Pos.eqb_refl. eauto.
-              * reflexivity. *) admit. }
+                unfold component_buffer in *. simpl in *.
+                rewrite C_b. unfold Component.id, Block.id in *.
+                rewrite Hmem', Nat.eqb_refl. eauto.
+              * reflexivity. }
         destruct Star2 as (s' & cs' & Star2 & wf_cs').
         specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
         specialize (IH Et wf_cs'). destruct IH as [cs'' Star3].
         exists cs''.
         eapply (star_trans Star1); simpl; eauto.
-        eapply (star_trans Star2); simpl; eauto.
-    Admitted.
+        now eapply (star_trans Star2); simpl; eauto.
+    Qed.
 
     Lemma definability cs :
       well_formed_trace t ->
@@ -610,26 +601,28 @@ Section Definability.
       { apply (@definability_gen _ [] t _ eq_refl H). }
       destruct cs as [[[[C stk] mem] k] e].
       destruct wf_t as [wb_t wf_t_events].
+      do 2 (split; trivial).
       unfold initial_state in init_cs. simpl in *.
       unfold CS.initial_state, CS.initial_machine_state in init_cs.
-      destruct (prog_main p) as [[mainC' mainP']|] eqn:Hmain;
-        try discriminate.
-      destruct (find_procedure (prog_procedures p) mainC' mainP') eqn:Hproc;
-        inversion init_cs; subst.
-      - do 3 (split; trivial).
-        admit.
-        split.
-        + { exists [], []. repeat (split; trivial). }
-        + split.
-          * split.
-            ** admit.
-            ** admit.
-          * split; trivial.
-            ** admit.
-      - (* bad case, should probably be ruled out by the fact that the program
-           is well-formed and closed *)
-        admit.
-    Admitted.
+      simpl in init_cs.
+      rewrite (find_procedures_of_trace _ main_export) in init_cs.
+      inversion init_cs; subst C stk mem k e; clear init_cs.
+      do 2 (split; trivial).
+      { exists [], []. now repeat (split; trivial). }
+      split.
+      { intros C b.
+        unfold component_buffer, CS.prepare_initial_memory, Memory.load.
+        simpl. repeat (rewrite mapmE; simpl).
+        destruct (intf C) as [Cint|] eqn:HCint; try easy. simpl.
+        intros H. inversion H; subst b; clear H.
+        rewrite ComponentMemory.load_prealloc. simpl.
+        split; trivial.
+        exists (Int 0).
+        now rewrite ComponentMemory.load_prealloc. }
+      split; trivial.
+      exists mainP.
+      now split; trivial.
+    Qed.
 End WithTrace.
 End Definability.
 
@@ -677,7 +670,7 @@ Proof.
     destruct (Machine.Intermediate.EntryPoint.get mainC mainP t0).
     now rewrite H' in H.
     + rewrite H' in H. simpl in H. admit. (* should follow from well-formedness? *)
-  - clear H'' H'. induction H as [| cs t1 cs'' t2 cs''' t HStep HStar IH Ht]. easy. 
+  - clear H'' H'. induction H as [| cs t1 cs'' t2 cs''' t HStep HStar IH Ht]. easy.
     simpl in HStep. destruct HStep; try (subst t; easy).
     subst t. simpl. split; try easy. split. easy.
     unfold GlobalEnv.prepare_global_env in H1.

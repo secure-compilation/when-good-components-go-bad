@@ -115,7 +115,7 @@ End EntryPoint.
 Record program := mkProg {
   prog_interface: Program.interface;
   prog_procedures: NMap (NMap code);
-  prog_buffers: NMap (list (Block.id * (nat + list value)));
+  prog_buffers: NMap {fmap Block.id -> nat + list value};
   prog_main: option (Component.id * Procedure.id)
 }.
 
@@ -443,7 +443,7 @@ Fixpoint alloc_static_buffers p mem comps :=
     | None =>
       (* the component doesn't have static buffers *)
       (* we have to create its memory anyway *)
-      let mem' := setm mem C (ComponentMemory.prealloc []) in
+      let mem' := setm mem C (ComponentMemory.prealloc emptym) in
       alloc_static_buffers p mem' comps'
     end
   end.
