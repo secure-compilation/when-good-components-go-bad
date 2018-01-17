@@ -126,84 +126,82 @@ Definition to_partial_stack
     to_partial_stack_helper ctx s' last_frame
   end.
 
-(*
-Fixpoint to_partial_stack_helper
-         (ctx: {fset Component.id}) (s: CS.stack) last_frame (Cincontrol: Component.id)
-  : PS.stack :=
-  match s with
-  | [] => []
-  | (C, v, k) :: nil =>
-    let '(C', v', k') := last_frame in
-    if C \in ctx then
-      if Component.eqb C C' then
-        if Component.eqb C Cincontrol then
-          nil
-        else
-          to_partial_frame ctx last_frame :: nil
-      else
-        if Component.eqb C Cincontrol then
-          to_partial_frame ctx last_frame :: nil
-        else
-          to_partial_frame ctx last_frame ::
-          to_partial_frame ctx (C, v, k)  :: nil
-    else
-      to_partial_frame ctx last_frame ::
-      to_partial_frame ctx (C, v, k)  :: nil
-  | (C, v, k) :: s' =>
-    let '(C', v', k') := last_frame in
-    if (C \in ctx) && (Component.eqb C C') then
-      to_partial_stack_helper ctx s' (C, v, k) Cincontrol
-    else
-      to_partial_frame ctx last_frame ::
-      to_partial_stack_helper ctx s' (C, v, k) Cincontrol
-  end.
+Example to_partial_stack_empty_context:
+  let in_s := [(1, Int 1, Kstop);
+               (0, Int 0, Kstop)] in
+  let out_s := [(1, Some (Int 1, Kstop));
+                (0, Some (Int 0, Kstop))] in
+  to_partial_stack in_s fset0 1 = out_s.
+Proof.
+  compute. reflexivity.
+Qed.
 
-Definition to_partial_stack
-          (s: CS.stack) (ctx: {fset Component.id}) (Cincontrol: Component.id) :=
-  match rev s with
-  | [] => []
-  | first_frame :: s'_rev =>
-    rev (to_partial_stack_helper ctx s'_rev first_frame Cincontrol)
-  end.
+Example to_partial_stack_context_internal_call_at_the_end:
+  let in_s := [(1, Int 2, Kstop); (1, Int 1, Kstop);
+               (0, Int 0, Kstop)] in
+  let out_s := [(1, None); (0, Some (Int 0, Kstop))] in
+  to_partial_stack in_s (fset1 1) 2 = out_s.
+Proof.
+  compute. reflexivity.
+Qed.
 
-Inductive partial_stack (ctx: {fset Component.id})
-  : Component.id -> CS.stack -> PS.stack -> Prop :=
-| partial_stack_nil: forall C,
-    partial_stack ctx C [] []
-| partial_stack_prog_push:
-    forall gps pgps C C' f_C f_v f_k,
-      f_C \notin ctx ->
-      partial_stack ctx C gps pgps ->
-      partial_stack ctx C' ((f_C, f_v, f_k) :: gps) ((f_C, Some (f_v, f_k)) :: pgps)
-| partial_stack_ctx_push_1:
-    forall C f_C f_v f_k,
-      f_C \in ctx ->
-      Component.eqb f_C C = true ->
-      partial_stack ctx C [(f_C, f_v, f_k)] []
-| partial_stack_ctx_push_2:
-    forall C f_C f_v f_k,
-      f_C \in ctx ->
-      Component.eqb f_C C = false ->
-      partial_stack ctx C [(f_C, f_v, f_k)] [(f_C, None)]
-| partial_stack_ctx_push_3:
-    forall gps pgps C C' f_C f_v f_k C1,
-      f_C \in ctx ->
-      partial_stack ctx C gps ((C1, None) :: pgps) ->
-      Component.eqb f_C C1 = true ->
-      partial_stack ctx C' ((f_C, f_v, f_k) :: gps) ((C1, None) :: pgps)
-| partial_stack_ctx_push_4:
-    forall gps pgps C C' f_C f_v f_k C1 frame_content,
-      f_C \in ctx ->
-      partial_stack ctx C gps ((C1, frame_content) :: pgps) ->
-      Component.eqb f_C C1 = false ->
-      partial_stack ctx C' ((f_C, f_v, f_k) :: gps) ((f_C, None) :: (C1, frame_content) :: pgps).
-(* TODO add other cases, then prove equivalence with to_partial_stack *)
-*)
+Example to_partial_stack_context_internal_call_at_the_beginning:
+  let in_s := [(1, Int 2, Kstop);
+               (0, Int 1, Kstop); (0, Int 0, Kstop)] in
+  let out_s := [(1, Some (Int 2, Kstop));
+                (0, None)] in
+  to_partial_stack in_s (fset1 0) 1 = out_s.
+Proof.
+  compute. reflexivity.
+Qed.
+
+Example to_partial_stack_context_internal_call_in_the_middle:
+  let in_s := [(2, Int 4, Kstop);
+               (1, Int 3, Kstop); (1, Int 2, Kstop); (1, Int 1, Kstop);
+               (0, Int 0, Kstop)] in
+  let out_s := [(2, Some (Int 4, Kstop));
+                (1, None); (0, Some (Int 0, Kstop))] in
+  to_partial_stack in_s (fset1 1) 1 = out_s.
+Proof.
+  compute. reflexivity.
+Qed.
+
+Example to_partial_stack_program_internal_calls:
+  let in_s := [(3, Int 7, Kstop); (3, Int 6, Kstop);
+               (1, Int 5, Kstop);
+               (2, Int 4, Kstop); (2, Int 3, Kstop);
+               (1, Int 2, Kstop);
+               (0, Int 1, Kstop); (0, Int 0, Kstop)] in
+  let out_s := [(3, Some (Int 7, Kstop)); (3, Some (Int 6, Kstop));
+                (1, None);
+                (2, Some (Int 4, Kstop)); (2, Some (Int 3, Kstop));
+                (1, None);
+                (0, Some (Int 1, Kstop)); (0, Some (Int 0, Kstop))] in
+  to_partial_stack in_s (fset1 1) 1 = out_s.
+Proof.
+  compute. reflexivity.
+Qed.
+
+Example to_partial_stack_context_internal_calls:
+  let in_s := [(0, Int 7, Kstop); (0, Int 6, Kstop);
+               (2, Int 5, Kstop);
+               (0, Int 4, Kstop); (0, Int 3, Kstop);
+               (1, Int 2, Kstop);
+               (0, Int 1, Kstop); (0, Int 0, Kstop)] in
+  let out_s := [(2, Some (Int 5, Kstop));
+                (0, None);
+                (1, Some (Int 2, Kstop));
+                (0, None)] in
+  to_partial_stack in_s (fset1 0) 0 = out_s.
+Proof.
+  compute. reflexivity.
+Qed.
 
 Lemma partial_stack_push_by_program:
   forall ctx gps1 gps2 C_incontrol,
     C_incontrol \notin ctx ->
-    to_partial_stack gps1 ctx C_incontrol = to_partial_stack gps2 ctx C_incontrol ->
+    to_partial_stack gps1 ctx C_incontrol =
+    to_partial_stack gps2 ctx C_incontrol ->
   forall v k C_incontrol',
     to_partial_stack ((C_incontrol, v, k) :: gps1) ctx C_incontrol' =
     to_partial_stack ((C_incontrol, v, k) :: gps2) ctx C_incontrol'.
@@ -273,21 +271,147 @@ Proof.
       rewrite HC'in_ctx HC'eqC_incontrol. simpl.
       rewrite Hempty_drop in IHgps1'.
       rewrite IHgps1'; auto.
-    + (* the hard case *) admit.
-Admitted.
+    + (* the hard case with lots of case analysis *)
+      destruct (C' \in ctx) eqn:HC'in_ctx.
+      * rewrite HC'in_ctx.
+        simpl.
+        rewrite HC'in_ctx in Hsame_stacks.
+        simpl in Hsame_stacks.
+        destruct (Component.eqb C' C_incontrol)
+                 eqn:HC'eqC_incontrol.
+        ** destruct (drop_last_frames_if_needed
+                       ctx gps1' C_incontrol) eqn:Hdrop_gps1'.
+           *** assert (C'' \in ctx) as HC''in_ctx.
+               { destruct (C'' \in ctx) eqn:HC''in_ctx; auto.
+                 rewrite HC''in_ctx in Hsame_stacks.
+                 simpl in Hsame_stacks.
+                 exfalso.
+                 symmetry in Hsame_stacks.
+                 eapply to_partial_stack_helper_nonempty.
+                 eauto.
+               }
+               assert (Component.eqb C'' C_incontrol) as
+                   HC''eqC_incontrol.
+               { rewrite HC''in_ctx in Hsame_stacks.
+                 destruct (Component.eqb C'' C_incontrol)
+                          eqn:HC''eqC_incontrol; auto.
+                 simpl in Hsame_stacks.
+                 exfalso.
+                 symmetry in Hsame_stacks.
+                 eapply to_partial_stack_helper_nonempty.
+                 eauto.
+               }
+               assert (drop_last_frames_if_needed
+                         ctx gps2' C_incontrol = [])
+                 as Hdrop_gps2'.
+               { rewrite HC''in_ctx in Hsame_stacks.
+                 rewrite HC''eqC_incontrol in Hsame_stacks.
+                 simpl in Hsame_stacks.
+                 destruct (drop_last_frames_if_needed
+                             ctx gps2' C_incontrol); auto.
+                 exfalso.
+                 symmetry in Hsame_stacks.
+                 eapply to_partial_stack_helper_nonempty.
+                 eauto.
+               }
+               rewrite HC''in_ctx HC''eqC_incontrol. simpl.
+               rewrite HC''in_ctx in IHgps1'.
+               rewrite HC''eqC_incontrol in IHgps1'.
+               rewrite Hdrop_gps2' in IHgps1'.
+               simpl in IHgps1'.
+               apply IHgps1'; auto.
+           *** destruct (C'' \in ctx) eqn:HC''in_ctx.
+               **** rewrite HC''in_ctx.
+                    rewrite HC''in_ctx in Hsame_stacks.
+                    destruct (Component.eqb C'' C_incontrol)
+                             eqn:HC''eqC_incontrol; simpl in *.
+                    ***** rewrite HC''in_ctx in IHgps1'.
+                          simpl in IHgps1'.
+                          apply IHgps1'.
+                          rewrite Hsame_stacks.
+                          reflexivity.
+                    ***** rewrite Hnot_in_ctx.
+                          rewrite Hnot_in_ctx in IHgps1'.
+                          rewrite HC''in_ctx in IHgps1'.
+                          simpl in IHgps1'.
+                          apply IHgps1'; auto.
+               **** rewrite HC''in_ctx.
+                    rewrite Hnot_in_ctx. simpl.
+                    rewrite HC''in_ctx in Hsame_stacks.
+                    simpl in Hsame_stacks.
+                    rewrite Hnot_in_ctx in IHgps1'.
+                    rewrite HC''in_ctx in IHgps1'.
+                    simpl in IHgps1'.
+                    apply IHgps1'; auto.
+        ** destruct (C'' \in ctx) eqn:HC''in_ctx.
+           *** rewrite HC''in_ctx.
+               rewrite HC''in_ctx in Hsame_stacks.
+               destruct (Component.eqb C'' C_incontrol)
+                        eqn:HC''eqC_incontrol; simpl in *.
+               **** destruct (drop_last_frames_if_needed
+                                ctx gps2') eqn:Hdrop_gps2'.
+                    ***** (* contra *)
+                      exfalso.
+                      eapply to_partial_stack_helper_nonempty.
+                      eauto.
+                    ***** rewrite HC''in_ctx in IHgps1'.
+                          simpl in IHgps1'.
+                          rewrite HC'in_ctx in IHgps2'.
+                          simpl in IHgps2'.
+                          apply IHgps2'; auto.
+               **** rewrite Hnot_in_ctx.
+                    rewrite Hsame_stacks. reflexivity.
+           *** rewrite Hnot_in_ctx.
+               rewrite HC''in_ctx. simpl.
+               rewrite HC''in_ctx in Hsame_stacks.
+               simpl in Hsame_stacks.
+               rewrite Hsame_stacks. reflexivity.
+      * rewrite Hnot_in_ctx.
+        rewrite HC'in_ctx. simpl.
+        rewrite HC'in_ctx in Hsame_stacks.
+        simpl in Hsame_stacks.
+        destruct (C'' \in ctx) eqn:HC''in_ctx.
+        ** rewrite HC''in_ctx.
+           rewrite HC''in_ctx in Hsame_stacks.
+           destruct (Component.eqb C'' C_incontrol)
+                    eqn:HC''eqC_incontrol; simpl in *.
+           *** rewrite Hsame_stacks.
+               destruct (drop_last_frames_if_needed
+                           ctx gps2') eqn:Hdrop_gps2'.
+               **** (* contra *)
+                    exfalso.
+                    eapply to_partial_stack_helper_nonempty.
+                    eauto.
+               **** rewrite <- Hsame_stacks.
+                    rewrite HC''in_ctx in IHgps1'.
+                    simpl in IHgps1'.
+                    rewrite HC'in_ctx in IHgps2'.
+                    simpl in IHgps2'.
+                    apply IHgps2'; auto.
+           *** rewrite Hsame_stacks. reflexivity.
+        ** rewrite HC''in_ctx.
+           rewrite HC''in_ctx in Hsame_stacks.
+           simpl in *.
+           rewrite Hsame_stacks. reflexivity.
+Qed.
 
-Lemma partial_stack_push_by_context:
-  forall ctx gps1 gps2 C_incontrol,
+Lemma partial_stack_ignores_change_by_context_with_control:
+  forall ctx gps C_incontrol,
     C_incontrol \in ctx ->
-    to_partial_stack gps1 ctx C_incontrol = to_partial_stack gps2 ctx C_incontrol ->
-  forall v1 k1 v2 k2 C_incontrol',
-    to_partial_stack ((C_incontrol, v1, k1) :: gps1) ctx C_incontrol' =
-    to_partial_stack ((C_incontrol, v2, k2) :: gps2) ctx C_incontrol'.
+  forall v k,
+    to_partial_stack ((C_incontrol, v, k) :: gps) ctx C_incontrol =
+    to_partial_stack gps ctx C_incontrol.
 Proof.
-  intros ctx gps1 gps2 C_incontrol Hctx Hsame_stacks.
-  intros v1 k1 v2 k2 C_incontrol'.
-  (* this may be slightly harder than the previous one *)
-Admitted.
+  intros ctx gps C_incontrol Hin_ctx v k.
+  unfold to_partial_stack.
+  destruct gps as [|[[C' v'] k'] gps'].
+  - simpl. rewrite Hin_ctx.
+    unfold Component.eqb. rewrite Nat.eqb_refl. simpl.
+    reflexivity.
+  - simpl. rewrite Hin_ctx.
+    unfold Component.eqb. rewrite Nat.eqb_refl. simpl.
+    reflexivity.
+Qed.
 
 Lemma partial_stack_pop:
   forall ctx last_frame1 gps1 last_frame2 gps2 C_incontrol,
@@ -447,18 +571,35 @@ Proof.
 
     (* inside the same component *)
     + (* show stack and memory are changing in the same way *)
+      assert (old_call_arg0 = old_call_arg)
+        as Hsame_old_call_arg.
+      { admit. }
+      subst.
+      erewrite partial_stack_push_by_program with (gps2:=gps0);
+        auto.
       admit.
     (* internal *)
-    + unfold to_partial_stack. simpl.
-      (* show stack and memory are changing in the same way *)
-      admit.
+    + (* show stack and memory are changing in the same way *)
+      assert (old_call_arg0 = old_call_arg)
+        as Hsame_old_call_arg. admit.
+      subst.
+      erewrite partial_stack_push_by_program with (gps2:=gps0);
+        auto.
+      { admit. }
     (* external *)
-    + admit.
+    + assert (old_call_arg0 = old_call_arg)
+        as Hsame_old_call_arg.
+      { admit. }
+      subst.
+      erewrite partial_stack_push_by_program with (gps2:=gps0);
+        auto.
+      admit.
 
     (* return *)
 
     (* inside the same component *)
     + (* show stack and memory are changing in the same way *)
+
       admit.
     (* internal *)
     + unfold to_partial_stack. simpl.
@@ -528,14 +669,12 @@ Proof.
 
     (* same component call *)
     + erewrite context_store_gets_filtered with (mem':=mem'); eauto.
-      (* work on stack partialization *)
-      admit.
+      rewrite partial_stack_ignores_change_by_context_with_control; auto.
 
     (* same component return *)
     + erewrite context_store_gets_filtered with (mem':=mem'); eauto.
-      (* work on stack partialization *)
-      admit.
-Admitted.
+      rewrite partial_stack_ignores_change_by_context_with_control; auto.
+Qed.
 
 Lemma context_epsilon_star_is_silent:
   forall p ctx G sps sps',
