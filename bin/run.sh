@@ -4,8 +4,8 @@ mkdir -p ../test_out
 
 export RAND_SEED=$RANDOM
 
-TESTS=(store jump stack correct)
-FRECV=(undef def spec)
+TESTS=(stack jump store)
+FRECV=(spec undef def)
 FLAGS=(alloff)
 
 for t in ${TESTS[*]};
