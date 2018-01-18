@@ -426,15 +426,30 @@ Definition gen_buffers (cids : list positive)
       do! pid <-
           ( match PMap.find cid pi with
             | None => returnGen 1%nat
-            | Some (exp,_) => choose (0%nat,((List.length exp) - 1)%nat)                            
+            | Some (exp,_) => choose (0%nat,((List.length exp) - 1)%nat)
             end);
       do! offset <-
-        freq [ (4%nat, choose (0%nat, 15%nat));
-                  (2%nat, choose (16%nat,  ((16%nat + 2*MAX_PROC_LENGTH)/2)%nat));
-                  (2%nat, choose (((16%nat + 2*MAX_PROC_LENGTH)/2)%nat, (16%nat + 2*MAX_PROC_LENGTH)%nat))];
+        freq [ (8%nat, choose (0%nat, 15%nat));
+                 (8%nat, elements (2*16+8)%nat
+                                  [ (2*16+8)%nat
+                                    ; (3*16+8)%nat
+                                    ; (4*16+8)%nat
+                                    ; (5*16+8)%nat
+                                    ; (6*16+8)%nat
+                                    ; (7*16+8)%nat
+                                    ; (8*16+8)%nat
+                                    ; (9*16+8)%nat
+                                    ; (10*16+8)%nat
+                                    ; (11*16+8)%nat
+                                    ; (12*16+8)%nat
+                                    ; (13*16+8)%nat
+                                    ; (14*16+8)%nat] ) ;
+                  (2%nat, choose (16%nat,  ((16%nat + 2*MAX_PROC_LENGTH))%nat));
+                  (2%nat, choose (((16%nat + 2*MAX_PROC_LENGTH))%nat,
+                                  (16%nat + 4*MAX_PROC_LENGTH)%nat))];
         let v := SFI.address_of
                    (Coq.Numbers.BinNums.Npos cid) (* here *)
-                   (2*((N.of_nat pid)-1))%N
+                   (2*(N.of_nat pid))%N
                    (N.of_nat offset) in
         returnGen ([IConst (IInt (Z.of_N v)) r])
     end.
