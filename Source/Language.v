@@ -3,6 +3,14 @@ Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Linking.
 
+From mathcomp Require Import ssreflect ssrfun ssrbool.
+
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
+Set Bullet Behavior "Strict Subproofs".
+
 Inductive expr : Type :=
 | E_val : value -> expr
 | E_local : expr
@@ -171,4 +179,24 @@ Module Source.
              ComponentMemory.prealloc (mkfmap [(0, initial_buffer)]))
           (prog_buffers p),
      mapm (fun _ => 0) (prog_buffers p)).
+
+  Lemma prepare_buffers_of_linked_programs:
+    forall p1 p2,
+      linkable_programs p1 p2 ->
+    forall C b,
+      (prepare_buffers (program_link p1 p2)).2 C = Some b ->
+      C \notin domm (prog_interface p2) ->
+      C \in domm (prog_interface p1) /\ (prepare_buffers p1).2 C = Some b.
+  Proof.
+  Admitted.
+
+  Lemma find_procedure_in_linked_programs:
+    forall p1 p2,
+      linkable_programs p1 p2 ->
+    forall C P P_expr,
+      find_procedure (unionm (prog_procedures p1) (prog_procedures p2)) C P = Some P_expr ->
+      C \notin domm (prog_interface p2) ->
+      C \in domm (prog_interface p1) /\ find_procedure (prog_procedures p1) C P = Some P_expr.
+  Proof.
+  Admitted.
 End Source.

@@ -308,9 +308,11 @@ Section Decomposition.
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
-          ** erewrite <- PS.context_allocation_gets_filtered; eauto.
+          ** PS.simplify_turn.
+             erewrite <- PS.context_allocation_in_partialized_memory; eauto.
       + eapply PS.ContextControl; eauto.
-        * erewrite <- PS.context_allocation_gets_filtered; eauto.
+        * PS.simplify_turn.
+          erewrite <- PS.context_allocation_in_partialized_memory; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
@@ -335,9 +337,11 @@ Section Decomposition.
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
-          ** erewrite <- PS.context_store_gets_filtered; eauto.
+          ** PS.simplify_turn.
+             erewrite <- PS.context_store_in_partialized_memory; eauto.
       + eapply PS.ContextControl; eauto.
-        * erewrite <- PS.context_store_gets_filtered; eauto.
+        * PS.simplify_turn.
+          erewrite <- PS.context_store_in_partialized_memory; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.

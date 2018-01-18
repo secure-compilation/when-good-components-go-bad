@@ -413,17 +413,6 @@ Proof.
     reflexivity.
 Qed.
 
-Lemma partial_stack_pop:
-  forall ctx last_frame1 gps1 last_frame2 gps2 C_incontrol,
-    to_partial_stack (last_frame1 :: gps1) ctx C_incontrol =
-    to_partial_stack (last_frame2 :: gps2) ctx C_incontrol ->
-  forall C_incontrol',
-    to_partial_stack gps1 ctx C_incontrol' = to_partial_stack gps2 ctx C_incontrol'.
-Proof.
-  intros ctx last_frame1 gps1 last_frame2 gps2 C_incontrol Hsame_stacks C_incontrol'.
-  unfold to_partial_stack.
-Admitted.
-
 Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
 | ProgramControl: forall C gps pgps mem pmem k e,
     (* program has control *)
@@ -516,6 +505,63 @@ Inductive kstep (p: program) (ctx: Program.interface)
       partial_state ctx scs' sps' ->
       kstep p ctx (prepare_global_env p) sps t sps'.
 
+Lemma program_allocation_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem1 mem2,
+    filterm (fun k _ => k \notin ctx) mem1 =
+    filterm (fun k _ => k \notin ctx) mem2 ->
+  forall C size mem1' mem2' ptr1 ptr2,
+    C \notin ctx ->
+    Memory.alloc mem1 C size = Some (mem1', ptr1) ->
+    Memory.alloc mem2 C size = Some (mem2', ptr2) ->
+    ptr1 = ptr2 /\
+    filterm (fun k _ => k \notin ctx) mem1' =
+    filterm (fun k _ => k \notin ctx) mem2'.
+Proof.
+Admitted.
+
+Lemma program_load_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem1 mem2,
+    filterm (fun k _ => k \notin ctx) mem1 =
+    filterm (fun k _ => k \notin ctx) mem2 ->
+  forall C b o v1 v2,
+    C \notin ctx ->
+    Memory.load mem1 (C, b, o) = Some v1 ->
+    Memory.load mem2 (C, b, o) = Some v2 ->
+    v1 = v2.
+Proof.
+Admitted.
+
+Lemma program_store_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem1 mem2,
+    filterm (fun k _ => k \notin ctx) mem1 =
+    filterm (fun k _ => k \notin ctx) mem2 ->
+  forall C b o v mem1' mem2',
+    C \notin ctx ->
+    Memory.store mem1 (C, b, o) v = Some mem1' ->
+    Memory.store mem2 (C, b, o) v = Some mem2' ->
+    filterm (fun k _ => k \notin ctx) mem1' =
+    filterm (fun k _ => k \notin ctx) mem2'.
+Proof.
+Admitted.
+
+Lemma context_allocation_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem C size mem' ptr,
+    C \in ctx ->
+    Memory.alloc mem C size = Some (mem', ptr) ->
+    filterm (fun k _ => k \notin ctx) mem' =
+    filterm (fun k _ => k \notin ctx) mem.
+Proof.
+Admitted.
+
+Lemma context_store_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem C b o v mem',
+    C \in ctx ->
+    Memory.store mem (C, b, o) v = Some mem' ->
+    filterm (fun k _ => k \notin ctx) mem' =
+    filterm (fun k _ => k \notin ctx) mem.
+Proof.
+Admitted.
+
 Lemma state_determinism_program:
   forall p ctx G sps t sps',
     is_program_component sps ctx ->
@@ -553,81 +599,151 @@ Proof.
 
     (* local *)
     + (* show that b and b0 are the same *)
-      admit.
+      destruct (prepare_buffers_of_linked_programs Hlink1 H10 H) as [? Hb].
+      rewrite <- Hiface2 in H.
+      destruct (prepare_buffers_of_linked_programs Hlink2 H6 H) as [? Hb'].
+      rewrite Hb in Hb'. inversion Hb'.
+      subst.
+      reflexivity.
 
     (* alloc *)
     + (* show that memory changes in the same way *)
-      admit.
+      destruct (program_allocation_in_partialized_memory H7 H H11 H12)
+        as [Hptr Hmem].
+      rewrite H8 Hptr Hmem.
+      reflexivity.
 
     (* deref *)
     + (* show that the loaded value is the same (v == v0) *)
-      admit.
+      rewrite (program_load_in_partialized_memory H7 H H11 H13).
+      reflexivity.
 
     (* assign *)
     + (* show that memory changes in the same way *)
-      admit.
+      rewrite H8.
+      rewrite (program_store_in_partialized_memory H7 H H11 H14).
+      reflexivity.
 
     (* call *)
 
     (* inside the same component *)
     + (* show stack and memory are changing in the same way *)
+      assert (b = b0).
+      { destruct (prepare_buffers_of_linked_programs Hlink1 H12 H) as [? Hb].
+        rewrite <- Hiface2 in H.
+        destruct (prepare_buffers_of_linked_programs Hlink2 H18 H) as [? Hb'].
+        rewrite Hb in Hb'. inversion Hb'.
+        subst.
+        reflexivity.
+      }
+      assert (b' = b'0).
+      { destruct (prepare_buffers_of_linked_programs Hlink1 H14 H) as [? Hb].
+        rewrite <- Hiface2 in H.
+        destruct (prepare_buffers_of_linked_programs Hlink2 H20 H) as [? Hb'].
+        rewrite Hb in Hb'. inversion Hb'.
+        subst.
+        reflexivity.
+      }
+      assert (P_expr = P_expr0). {
+        destruct (find_procedure_in_linked_programs Hlink1 H9 H)
+          as [HP_expr Hfind_proc].
+        rewrite <- Hiface2 in H.
+        destruct (find_procedure_in_linked_programs Hlink2 H17 H)
+          as [HP_expr' Hfind_proc'].
+        rewrite Hfind_proc in Hfind_proc'.
+        inversion Hfind_proc'. subst.
+        reflexivity.
+      }
+      subst.
       assert (old_call_arg0 = old_call_arg)
         as Hsame_old_call_arg.
-      { admit. }
-      subst.
+      { eapply program_load_in_partialized_memory
+          with (mem1:=mem0) (mem2:=mem); eauto. }
       erewrite partial_stack_push_by_program with (gps2:=gps0);
         auto.
-      admit.
+      rewrite (program_store_in_partialized_memory H7 H H15 H21).
+      subst.
+      reflexivity.
+
     (* internal *)
     + (* show stack and memory are changing in the same way *)
+      assert (b = b0).
+      { destruct (prepare_buffers_of_linked_programs Hlink1 H13 H) as [? Hb].
+        rewrite <- Hiface2 in H.
+        destruct (prepare_buffers_of_linked_programs Hlink2 H21 H) as [? Hb'].
+        rewrite Hb in Hb'. inversion Hb'.
+        subst.
+        reflexivity.
+      }
+      assert (b' = b'0).
+      { destruct (prepare_buffers_of_linked_programs Hlink1 H15 H12) as [? Hb].
+        rewrite <- Hiface2 in H12.
+        destruct (prepare_buffers_of_linked_programs Hlink2 H23 H12) as [? Hb'].
+        rewrite Hb in Hb'. inversion Hb'.
+        subst.
+        reflexivity.
+      }
+      assert (P_expr = P_expr0). {
+        destruct (find_procedure_in_linked_programs Hlink1 H10 H12)
+          as [HP_expr Hfind_proc].
+        rewrite <- Hiface2 in H12.
+        destruct (find_procedure_in_linked_programs Hlink2 H20 H12)
+          as [HP_expr' Hfind_proc'].
+        rewrite Hfind_proc in Hfind_proc'.
+        inversion Hfind_proc'. subst.
+        reflexivity.
+      }
+      subst.
       assert (old_call_arg0 = old_call_arg)
-        as Hsame_old_call_arg. admit.
-      subst.
-      erewrite partial_stack_push_by_program with (gps2:=gps0);
-        auto.
-      { admit. }
-    (* external *)
-    + assert (old_call_arg0 = old_call_arg)
         as Hsame_old_call_arg.
-      { admit. }
+      { eapply program_load_in_partialized_memory
+          with (C:=C) (mem1:=mem0) (mem2:=mem); eauto. }
       subst.
-      erewrite partial_stack_push_by_program with (gps2:=gps0);
-        auto.
-      admit.
+      rewrite (program_store_in_partialized_memory H7 H12 H16 H24).
+      erewrite partial_stack_push_by_program with (gps2:=gps0); auto.
+
+    (* external *)
+    + assert (b = b0).
+      { destruct (prepare_buffers_of_linked_programs Hlink1 H13 H) as [? Hb].
+        rewrite <- Hiface2 in H.
+        destruct (prepare_buffers_of_linked_programs Hlink2 H21 H) as [? Hb'].
+        rewrite Hb in Hb'. inversion Hb'.
+        subst.
+        reflexivity.
+      }
+      subst.
+      assert (old_call_arg0 = old_call_arg)
+        as Hsame_old_call_arg.
+      { eapply program_load_in_partialized_memory
+          with (C:=C) (mem1:=mem0) (mem2:=mem); eauto. }
+      subst.
+      erewrite partial_stack_push_by_program with (gps2:=gps0); auto.
+      rewrite (context_store_in_partialized_memory H12 H16).
+      rewrite (context_store_in_partialized_memory H12 H24).
+      rewrite H7.
+      reflexivity.
 
     (* return *)
 
     (* inside the same component *)
     + (* show stack and memory are changing in the same way *)
-
       admit.
+
     (* internal *)
     + unfold to_partial_stack. simpl.
       (* show stack and memory are changing in the same way *)
       admit.
+
     (* external *)
     + admit.
 
+  (* context has control (contra) *)
   - PS.simplify_turn.
     match goal with
     | Hin: context[domm (prog_interface p1)],
       Hnotin: context[domm (prog_interface p1)] |- _ =>
       rewrite Hin in Hnotin; discriminate
     end.
-Admitted.
-
-Lemma context_allocation_gets_filtered:
-  forall (ctx: {fset Component.id}) mem C size mem' ptr,
-    Memory.alloc mem C size = Some (mem', ptr) ->
-    filterm (fun k _ => k \notin ctx) mem' = filterm (fun k _ => k \notin ctx) mem.
-Proof.
-Admitted.
-
-Lemma context_store_gets_filtered:
-  forall (ctx: {fset Component.id}) mem C b o v mem',
-    Memory.store mem (C, b, o) v = Some mem' ->
-    filterm (fun k _ => k \notin ctx) mem' = filterm (fun k _ => k \notin ctx) mem.
-Proof.
 Admitted.
 
 Lemma context_epsilon_step_is_silent:
@@ -662,17 +778,17 @@ Proof.
       try reflexivity.
 
     (* alloc *)
-    + erewrite context_allocation_gets_filtered with (mem':=mem'); eauto.
+    + erewrite context_allocation_in_partialized_memory with (mem':=mem'); eauto.
 
     (* assign *)
-    + erewrite context_store_gets_filtered with (mem':=mem'); eauto.
+    + erewrite context_store_in_partialized_memory with (mem':=mem'); eauto.
 
     (* same component call *)
-    + erewrite context_store_gets_filtered with (mem':=mem'); eauto.
+    + erewrite context_store_in_partialized_memory with (mem':=mem'); eauto.
       rewrite partial_stack_ignores_change_by_context_with_control; auto.
 
     (* same component return *)
-    + erewrite context_store_gets_filtered with (mem':=mem'); eauto.
+    + erewrite context_store_in_partialized_memory with (mem':=mem'); eauto.
       rewrite partial_stack_ignores_change_by_context_with_control; auto.
 Qed.
 
@@ -728,9 +844,7 @@ Proof.
       inversion Hpartial_sps1'; subst;
       inversion Hpartial_sps2'; subst; PS.simplify_turn.
       * (* same memory *)
-        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H16).
-        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H25).
-        rewrite H5. simpl.
+        (* TODO *)
         (* same expression *)
         unfold find_procedure in H10, H21.
         rewrite unionmE in H10.
@@ -748,7 +862,7 @@ Proof.
                C' is not in p1's procedures by well-formedness of p1 (from linkability),
                contradiction *)
             inversion Hlink1; subst.
-            pose proof (wfprog_well_formed_procedures_1 p1 H1) as Hp1_wfprocs.
+            pose proof (wfprog_well_formed_procedures_1 H1) as Hp1_wfprocs.
             admit.
       * match goal with
         | Hin: context[domm (prog_interface p1)],
@@ -761,9 +875,7 @@ Proof.
           rewrite Hin in Hnotin; discriminate
         end.
       * (* same memory *)
-        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H16).
-        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H25).
-        rewrite H5. simpl.
+        (* TODO *)
         (* same stack *)
         admit.
 
@@ -772,9 +884,7 @@ Proof.
       inversion Hpartial_sps1'; subst;
       inversion Hpartial_sps2'; subst; PS.simplify_turn.
       * (* same memory *)
-        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H12).
-        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H16).
-        rewrite H5. simpl.
+        (* TODO *)
         (* same stack *)
         (*erewrite partial_stack_pop*)
         admit.
@@ -789,9 +899,7 @@ Proof.
           rewrite Hin in Hnotin; discriminate
         end.
       * (* same memory *)
-        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H12).
-        rewrite (context_store_gets_filtered (domm (prog_interface p1)) H16).
-        rewrite H5. simpl.
+        (* TODO *)
         (* same stack *)
         (*erewrite partial_stack_pop;
           try reflexivity;
