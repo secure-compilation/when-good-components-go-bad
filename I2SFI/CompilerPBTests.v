@@ -160,8 +160,28 @@ Definition get_freq (t : instr_gen) (ct : checker_type) (i:instr_type) : nat :=
 
 Definition choose_pos ( p : positive * positive) :=
   let (lo,hi) := p in
-  do! p <- choose (Pos.to_nat lo, Pos.to_nat hi);
-    returnGen (Pos.of_nat p).
+  do! p <- choose (Zpos lo, Zpos hi);
+    match Z.abs_N p with
+    | 0%N => returnGen 1%positive
+    | Npos p => returnGen p
+    end.
+
+Definition choose_N ( n : N * N ) := 
+  let (lo,hi) := n in
+  do! p <- choose (Z.of_N lo, Z.of_N hi);
+    returnGen (Z.abs_N p).
+
+Definition arbitrary_pos : G positive :=
+  do! z <- arbitrary;
+    let n := Z.abs_N z in
+    match n with
+    | N0 => returnGen 1%positive
+    | Npos p => returnGen p
+    end.
+
+Definition arbitrary_N : G N :=
+  do! z <- arbitrary;
+    returnGen (Z.abs_N z).
 
 Definition pos_list (l : nat) : list positive :=
   List.map Pos.of_nat (List.seq 1 l).
@@ -405,6 +425,33 @@ Definition gen_buffers (cids : list positive)
           returnGen [IConst (IInt (Z.of_nat v)) r2; IAlloc r1 r2]
       end.
 
+
+  Definition gen_code_address_offset : G N :=
+    freq [ (8%nat, choose_N (0%N, 15%N));
+             (8%nat, elems
+                     [ (2*16+8)%N
+                       ; (3*16+8)%N
+                       ; (4*16+8)%N
+                       ; (5*16+8)%N
+                       ; (6*16+8)%N
+                       ; (7*16+8)%N
+                       ; (8*16+8)%N
+                       ; (9*16+8)%N
+                       ; (10*16+8)%N
+                       ; (11*16+8)%N
+                       ; (12*16+8)%N
+                       ; (13*16+8)%N
+                       ; (14*16+8)%N] ) ;
+             ( 2%nat,
+               (
+                 do! k <- elems [1%N; 2%N; 3%N; 4%N; 5%N; 6%N; 7%N; 8%N; 9%N ];
+                   do! l <- elems [0%N; 1%N; 2%N; 3%N; 4%N; 5%N; 6%N; 7%N;
+                                    8%N; 9%N; 10%N; 11%N; 12%N; 13%N; 14%N; 15%N ];
+                   returnGen (16*k+l)%N                   
+               )
+             )
+         ].
+  
   Definition genIConstCodeAddress
              (r : Intermediate.Machine.register)
              (pi : prog_int)
@@ -413,14 +460,19 @@ Definition gen_buffers (cids : list positive)
     : G (list instr) :=
     match ct with
     | CJump =>
-      do! cid' <- choose (1%nat, ((N.to_nat SFI.COMP_MAX) - 1)%nat);
-        do! cid1 <- elements 0%nat [0%nat;cid'];
-        do! pid <- choose (1%nat, MAX_PROC_PER_COMP);
-        do! offset <- choose (1%nat, (16%nat + 2*MAX_PROC_LENGTH)%nat);
+      do! cid' <- choose_N (1%N, (SFI.COMP_MAX - 1)%N);
+        do! cid1 <- elems [0%N;cid'];
+        do! pid <- choose_N (1%N, (N.of_nat MAX_PROC_PER_COMP));
+        do! offset <- (
+            do! k <- elems [1%N; 2%N; 3%N ];
+              do! l <- elems [0%N; 1%N; 2%N; 3%N; 4%N; 5%N; 6%N; 7%N;
+                               8%N; 9%N; 10%N; 11%N; 12%N; 13%N; 14%N; 15%N ];
+              returnGen (16*k+l)%N                   
+          );
         let v := SFI.address_of
-                   (N.of_nat cid1)
-                   (2*((N.of_nat pid) - 1%N))%N
-                   (N.of_nat offset) in
+                   cid1
+                   (2*(pid - 1))%N
+                   offset in
         returnGen ([IConst (IInt (Z.of_N v)) r])
     | _ =>
       do! pid <-
@@ -428,30 +480,18 @@ Definition gen_buffers (cids : list positive)
             | None => returnGen 1%nat
             | Some (exp,_) => choose (0%nat,((List.length exp) - 1)%nat)
             end);
-      do! offset <-
-        freq [ (8%nat, choose (0%nat, 15%nat));
-                 (8%nat, elements (2*16+8)%nat
-                                  [ (2*16+8)%nat
-                                    ; (3*16+8)%nat
-                                    ; (4*16+8)%nat
-                                    ; (5*16+8)%nat
-                                    ; (6*16+8)%nat
-                                    ; (7*16+8)%nat
-                                    ; (8*16+8)%nat
-                                    ; (9*16+8)%nat
-                                    ; (10*16+8)%nat
-                                    ; (11*16+8)%nat
-                                    ; (12*16+8)%nat
-                                    ; (13*16+8)%nat
-                                    ; (14*16+8)%nat] ) ;
-                  (2%nat, choose (16%nat,  ((16%nat + 2*MAX_PROC_LENGTH))%nat));
-                  (2%nat, choose (((16%nat + 2*MAX_PROC_LENGTH))%nat,
-                                  (16%nat + 4*MAX_PROC_LENGTH)%nat))];
+      do! offset <-  gen_code_address_offset;
         let v := SFI.address_of
                    (Coq.Numbers.BinNums.Npos cid) (* here *)
                    (2*(N.of_nat pid))%N
-                   (N.of_nat offset) in
+                   offset in
         returnGen ([IConst (IInt (Z.of_N v)) r])
+    end.
+
+  Definition pos_of_N (n : N) :=
+    match n with
+    | N0 => 1%positive
+    | Npos p => p
     end.
   
   Definition genIStoreAddress
@@ -464,33 +504,33 @@ Definition gen_buffers (cids : list positive)
       do! r2 <- arbitrary;
 
       (* 50% in component zero *)
-      do! cid' <- choose (1%nat, ((N.to_nat SFI.COMP_MAX) - 1)%nat);
-      do! cid1 <- elements 0%nat [0%nat;cid'];
+      do! cid' <- choose_N (1%N, (SFI.COMP_MAX - 1)%N);
+      do! cid1 <- elems [0%N;cid'];
 
       (* (* valid slot id *) *)
       do! bid <-
         match ct with
         | CStack =>
-          freq [ (1%nat,returnGen 0%nat);
-                   (1%nat, choose (1%nat,3%nat)) ]
-        | _ =>
-          (match PMap.find (Pos.of_nat cid1) buffers with
+          freq [ (1%nat,returnGen 0%N);
+                   (1%nat, choose_N (1%N,3%N)) ]
+        | _ => 
+          (match PMap.find (pos_of_N cid') buffers with
            | None => 
-             choose (0%nat, (MAX_NO_BUFFERS_PER_COMP-1)%nat)
-           | Some lst => choose (1%nat,(List.length lst))
+             choose_N (0%N, ((N.of_nat MAX_NO_BUFFERS_PER_COMP)-1)%N)
+           | Some lst => choose_N (1%N, N.of_nat (List.length lst) )
            end)
         end;
 
-      do! offset' <- choose (1%nat, MAX_BUFFER_SIZE);
+      do! offset' <- choose_N (1%N, N.of_nat MAX_BUFFER_SIZE);
       do! offset <-
         match ct with
-        | CStack => returnGen 0%nat
-        | _ => elements 0%nat [0%nat;offset']
+        | CStack => returnGen 0%N
+        | _ => elems [0%N;offset']
         end;
 
-      let v := SFI.address_of (N.of_nat cid1)
-                              (2*(N.of_nat bid)+1)%N
-                              (N.of_nat offset) in
+      let v := SFI.address_of cid1
+                              (2*bid+1)%N
+                              offset in
       do! li <- genIConstCodeAddress r2 pi cid ct;
       
       returnGen  (li ++ [IConst (IInt (Z.of_N v)) r1; IStore r1 r2])%list.
