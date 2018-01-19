@@ -33,7 +33,7 @@ Definition linkable_mains (main1 main2: option (Component.id * Procedure.id)) : 
   | None, None => True
   | Some _, None => True
   | None, Some _ => True
-  | Some m1, Some m2 => m1 = m2
+  | Some m1, Some m2 => m1 = m2 (* CH: TODO: Shouldn't this always return False? *)
   end.
 
 Lemma linkable_mains_sym:

@@ -669,7 +669,7 @@ Proof.
     destruct (Intermediate.wfprog_main_existence H''' H'') as [main_procs [H43 H44]].
     destruct (Machine.Intermediate.EntryPoint.get mainC mainP t0).
     now rewrite H' in H.
-    + rewrite H' in H. simpl in H. admit. (* should follow from well-formedness? *)
+    + rewrite H' in H. simpl in H. admit. (* should be impossible from well-formedness? *)
   - clear H'' H'. induction H as [| cs t1 cs'' t2 cs''' t HStep HStar IH Ht]. easy.
     simpl in HStep. destruct HStep; try (subst t; easy).
     subst t. simpl. split; try easy. split. easy.

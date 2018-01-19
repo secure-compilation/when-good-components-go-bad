@@ -29,7 +29,8 @@ Unset Printing Implicit Defensive.
 
   (* This should be provable, although we may have to slightly change the compiler *)
   (* (e.g. procedure id & label generation should be local to the component *)
-  (* CH: worried by new changes to compiler *)
+  (* CH: TODO requires reverting some of Andrew's changes to compiler,
+              see Separate compilation in robust-imp-comments.org *)
   Hypothesis separate_compilation:
     forall p c p_comp c_comp,
       Source.linkable_programs p c ->
@@ -49,7 +50,7 @@ Unset Printing Implicit Defensive.
         pc_comp = ilink p_comp c_comp.
   (* CH: anyway, this is a very strong notion of separate compilation;
          wondering whether in the general case we could do away with something weaker
-         (anyway, just a thought for later): *)
+         (anyway, just a thought for later, current version is simpler): *)
   (* Hypothesis separate_compilation_weaker: *)
   (*   forall p c pc_comp p_comp c_comp, *)
   (*     Source.linkable_programs p c -> *)
@@ -70,19 +71,24 @@ Unset Printing Implicit Defensive.
          decomposition don't have to be reproved for contexts
          (although in the general case they probably can be reproved
           if things were not perfectly symmetric)?
-         -- not always, some uses seem spurious (composition applied in wrong order) *)
+         -- not always, some uses seem spurious
+            (composition applied in wrong order, TODO get rid of slink_sym) *)
 
-  (* CH: WARNING: These are FALSE as stated! main_link is not symmetric! *)
-  Hypothesis slink_sym: forall p c, slink p c = slink c p.
-  Hypothesis ilink_sym: forall p c, ilink p c = ilink c p.
+  Hypothesis slink_sym: forall p c,
+      Source.linkable_programs p c ->
+      slink p c = slink c p.
+  Hypothesis ilink_sym: forall p c,
+      Intermediate.linkable_programs p c ->
+      ilink p c = ilink c p.
 
   (* Definability *)
   (* CH: this should now be related to what Arthur proved:
-         - his proof is for complete programs, no linking;
-           might need to use source definability too?
-         - his current proof gives us at most the program_behaves conclusion,
-           not the conclusions about interfaces, linkability, and closedness *)
-  (* CH: might need to be further strengthened to ensure compilability? *)
+         - TODO his proof is for complete programs, no linking
+           + might need to use source decomposition too?
+           + just disjointness + partialization of things might be enough? (weaker than decomposition)
+         - TODO his current proof gives us at most the program_behaves conclusion,
+           not the conclusions about interfaces and closedness,
+           and linkability (maybe from previous point) *)
 
   Hypothesis definability_with_linking:
     forall p c t,
@@ -139,20 +145,6 @@ Section RSC_DC_MD.
   Hypothesis closedness:
     Intermediate.closed_program (ilink p_compiled Ct).
 
-  (* some useful functions on closed programs *)
-
-  Definition s_main_comp (p: Source.program): Component.id :=
-    match Source.prog_main p with
-    | Some (mainC, _) => mainC
-    | None => 0
-    end.
-
-  Definition i_main_comp (p: Intermediate.program): Component.id :=
-    match Intermediate.prog_main p with
-    | Some (mainC, _) => mainC
-    | None => 0
-    end.
-
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
@@ -161,27 +153,23 @@ Section RSC_DC_MD.
         (* CH: last premise naive, it should instead take trace prefixes *)
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
-      (* (* CH: add this? *) Source.linkable_programs p Cs /\ *)
-      (* (* CH: add this? *) Source.closed_program (slink p Cs) /\ *)
+      Source.linkable_programs p Cs /\
+      Source.closed_program (slink p Cs) /\
       program_behaves (S.CS.sem (Source.program_link p Cs)) beh /\
       exists t',
         (beh = Terminates t' /\ behavior_prefix t (Terminates t')) \/
           (* CH: last disjunct naive, should consider arbitrary behaviors *)
         (beh = Goes_wrong t' /\ behavior_prefix t' (Terminates t) /\
-         undef_in (s_main_comp (Source.program_link p Cs)) t' (Source.prog_interface p)).
+         undef_in (Source.main_comp (Source.program_link p Cs)) t' (Source.prog_interface p)).
   Proof.
     intros t Hbeh.
 
     (* intermediate decomposition (for p_compiled) *)
-    (* CH: a priori there could be trace refinement here ... *)
-    destruct (decomposition_with_refinement linkability Hbeh)
-      as [beh' [Hbeh' Hbeh_improves]].
-
-    (* CH: ... but not if the original behavior is a Terminates / not undefined
-           Q: why not use decomposition_with_safe_behavior as done below? 
-              it seems that decomposition_with_safe_behavior gives us fewer things though *)
-    inversion Hbeh_improves; subst;
-      try (destruct H as [? []]; discriminate).
+    assert (not_wrong (Terminates t)) as Hsafe_beh. { simpl. auto. }
+    pose proof decomposition_with_safe_behavior linkability Hbeh Hsafe_beh as HP_decomp.
+    (* CH: if we had undefined behavior we would use this *)
+    (* destruct (decomposition_with_refinement linkability Hbeh) *)
+    (*   as [beh' [Hbeh' Hbeh_improves]]. *)
     
     (* definability *)
     destruct (definability_with_linking linkability closedness Hbeh)
@@ -189,6 +177,8 @@ Section RSC_DC_MD.
 
     (* FCC *)
 
+    (* CH: When is a program compilable (compile_prog returns Some)?
+           - Source.well_formed_program probably enough, and we have it from P'_Cs_linkability *)
     (* CH: Might use separate_compilation' for proving the assert below,
            but we don't know that compile_program (slink P' Cs) = Some something anyway ?
            Definability needs to give us enough to obtain that the program can be properly compiled. *)
@@ -212,15 +202,12 @@ Section RSC_DC_MD.
       - apply Source.linking_well_formedness; auto.
     }
 
-    (* intermediate decomposition (for p_compiled) -- CH: again??? Hbeh' = HP_decomp *)
-    assert (not_wrong (Terminates t)) as Hsafe_beh. { simpl. auto. }
-    pose proof decomposition_with_safe_behavior linkability Hbeh Hsafe_beh as HP_decomp.
+    (* intermediate decomposition (for Cs_compiled) *)
     assert (Intermediate.linkable_programs Cs_compiled P'_compiled) as linkability'. {
       eapply compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto.
       apply Source.linkable_sym. auto.
     }
     rewrite ilink_sym in HP'_Cs_compiled_beh.
-    (* intermediate decomposition (for Cs_compiled) *)
     pose proof decomposition_with_safe_behavior linkability'
          HP'_Cs_compiled_beh Hsafe_beh as HCs_decomp.
 
@@ -245,28 +232,36 @@ Section RSC_DC_MD.
     assert (Intermediate.well_formed_program (ilink Cs_compiled p_compiled))
       as HpCs_compiled_well_formed by admit.
     (* CH: composition links Cs_compiled and p_compiled in the wrong order,
-           then symmetry is used at the source to swap them ... why? *)
+           then symmetry is used at the source to swap them ... TODO swap! *)
     pose proof composition_for_termination linkability'' HpCs_compiled_closed
          HpCs_compiled_well_formed HCs_decomp HP_decomp as HpCs_compiled_beh.
 
     (* BCC *)
+    assert (Source.closed_program (slink Cs p)) as Hclosed_Cs_p by admit. (* CH: this will go away *)
+    assert (Source.closed_program (slink p Cs)) as Hclosed_p_Cs by admit.
+    assert (Source.well_formed_program (slink Cs p)) as Hwf_Cs_p by admit. (* CH: this will go away *)
+    assert (Source.well_formed_program (slink p Cs)) as Hwf_p_Cs by admit.
+    assert (Source.linkable_programs Cs p) as Hlinkable_Cs_p by admit. (* CH: this will go away *)
+    assert (Source.linkable_programs p Cs) as Hlinkable_p_Cs by admit.
     assert (exists beh1,
                program_behaves (S.CS.sem (slink Cs p)) beh1 /\
                behavior_improves beh1 (Terminates t)) as HpCs_beh. {
       apply backward_simulation_behavior_improves
         with (L1:=S.CS.sem (slink Cs p)) in HpCs_compiled_beh; auto.
       - apply S_simulates_I.
-        + admit. (* Source.closed_program (slink Cs p) *)
-        + admit. (* Source.well_formed_program (slink Cs p) *)
-        + assert (Source.linkable_programs Cs p) by admit.
-          apply separate_compilation; try assumption.
+        + assumption.
+        + assumption.
+        + apply separate_compilation; try assumption.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
     exists Cs. exists pCs_beh.
+    split. assumption.
+    split. assumption.
+    split. assumption.
     repeat split; auto.
-    - erewrite slink_sym. assumption.
+    - erewrite slink_sym; assumption.
     - inversion HpCs_beh_imp.
-      + exists t. left. split. auto.
+      + exists t. left. split. by auto.
         exists (Terminates E0). simpl. rewrite E0_right. reflexivity.
       + destruct H as [t' [Hgoes_wrong Hprefix]].
         exists t'. right. repeat split; auto.
