@@ -11,6 +11,7 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.PS.
 Require Import Intermediate.Decomposition.
 Require Import Intermediate.Composition.
+Require Import Source.Decomposition.
 Require Import S2I.Compiler.
 Require Import S2I.Definitions.
 
@@ -67,13 +68,19 @@ Unset Printing Implicit Defensive.
       compile_program c = Some c_compiled ->
       Intermediate.linkable_programs p_compiled c_compiled.
 
-  (* CH: The following symmetry lemma seem needed so that
+  (* CH: The following symmetry lemmas seem needed so that lemmas like
          decomposition don't have to be reproved for contexts
          (although in the general case they probably can be reproved
          if things were not perfectly symmetric)? *)
   Hypothesis ilink_sym: forall p c,
       Intermediate.linkable_programs p c ->
       ilink p c = ilink c p.
+  Hypothesis slink_sym: forall p c,
+      Source.linkable_programs p c ->
+      slink p c = slink c p.
+  Hypothesis linkability_sym : forall Cs p,
+    Source.linkable_programs Cs p ->
+    Source.linkable_programs p Cs.
 
   (* Definability *)
   (* CH: this should now be related to what Arthur proved:
@@ -125,6 +132,13 @@ Unset Printing Implicit Defensive.
 
 (* CH: TODO: turn all admits in the code into assumed lemmas *)
 
+Hypothesis close_the_diagram : forall t t' p Cs,
+  program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Terminates t) ->
+  program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Goes_wrong t') ->
+  behavior_prefix t' (Terminates t) ->
+  undef_in (Source.main_comp (Source.program_link p Cs)) t'
+           (Source.prog_interface p).
+
 Section RSC_DC_MD.
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
@@ -162,7 +176,9 @@ Section RSC_DC_MD.
 
     (* intermediate decomposition (for p_compiled) *)
     assert (not_wrong (Terminates t)) as Hsafe_beh. { simpl. auto. }
-    pose proof decomposition_with_safe_behavior linkability Hbeh Hsafe_beh as HP_decomp.
+    pose proof Intermediate.Decomposition.decomposition_with_safe_behavior
+      linkability Hbeh Hsafe_beh as HP_decomp.
+
     (* CH: if we had undefined behavior we would use this *)
     (* destruct (decomposition_with_refinement linkability Hbeh) *)
     (*   as [beh' [Hbeh' Hbeh_improves]]. *)
@@ -204,8 +220,8 @@ Section RSC_DC_MD.
       apply Source.linkable_sym. auto.
     }
     rewrite <- ilink_sym in HP'_Cs_compiled_beh; [| assumption].
-    pose proof decomposition_with_safe_behavior linkability'
-         HP'_Cs_compiled_beh Hsafe_beh as HCs_decomp.
+    pose proof Intermediate.Decomposition.decomposition_with_safe_behavior
+         linkability' HP'_Cs_compiled_beh Hsafe_beh as HCs_decomp.
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
@@ -256,7 +272,21 @@ Section RSC_DC_MD.
         exists (Terminates E0). simpl. rewrite E0_right. reflexivity.
       + destruct H as [t' [Hgoes_wrong Hprefix]].
         exists t'. right. repeat split; auto.
-        (* blame UB -- Guglielmo working on proof *)
-        admit.
+       (* blame UB -- Guglielmo working on proof *)
+        eapply close_the_diagram.
+        - pose proof (compilation_preserves_interface p p_compiled
+                                         successfull_compilation) as HH.
+          assert(Source.prog_interface P' = Source.prog_interface p) as HHH
+              by congruence.
+          rewrite <- HHH.
+          eapply Source.Decomposition.decomposition_with_safe_behavior.
+          + apply linkability_sym; assumption.
+          + setoid_rewrite slink_sym. eassumption.
+          + apply linkability_sym; assumption.
+          + easy.
+        - apply Source.Decomposition.decomposition_with_refinement in HpCs_beh.
+          admit. (* CH: WARNING: WITH REFINEMENT! *)
+        - assumption.
+        - assumption.
   Admitted.
 End RSC_DC_MD.
