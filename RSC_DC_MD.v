@@ -77,7 +77,11 @@ Unset Printing Implicit Defensive.
   Hypothesis ilink_sym: forall p c, ilink p c = ilink c p.
 
   (* Definability *)
-  (* CH: this should now be related to what Arthur proved *)
+  (* CH: this should now be related to what Arthur proved:
+         - his proof is for complete programs, no linking;
+           might need to use source definability too?
+         - his current proof gives us at most the program_behaves conclusion,
+           not the conclusions about interfaces, linkability, and closedness *)
   (* CH: might need to be further strengthened to ensure compilability? *)
 
   Hypothesis definability_with_linking:
