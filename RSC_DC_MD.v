@@ -72,13 +72,9 @@ Unset Printing Implicit Defensive.
           if things were not perfectly symmetric)?
          -- not always, some uses seem spurious (composition applied in wrong order) *)
 
-  Hypothesis slink_sym:
-    forall p c,
-      slink p c = slink c p.
-
-  Hypothesis ilink_sym:
-    forall p c,
-      ilink p c = ilink c p.
+  (* CH: WARNING: These are FALSE as stated! main_link is not symmetric! *)
+  Hypothesis slink_sym: forall p c, slink p c = slink c p.
+  Hypothesis ilink_sym: forall p c, ilink p c = ilink c p.
 
   (* Definability *)
   (* CH: this should now be related to what Arthur proved *)
