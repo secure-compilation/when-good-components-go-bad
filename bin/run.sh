@@ -2,14 +2,14 @@
 
 mkdir -p ../test_out
 
-export RAND_SEED=$RANDOM
-
 TESTS=(stack jump store)
 FRECV=(spec undef def)
 FLAGS=(alloff)
 
 for i in `seq 1 600`;
 do
+    export RAND_SEED=$RANDOM
+    echo "Seed=$RAND_SEED"
     for t in ${TESTS[*]};
     do
 	for f in ${FRECV[*]};

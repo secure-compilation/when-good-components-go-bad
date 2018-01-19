@@ -12,6 +12,9 @@ FLAGS=(store store1 store2 jump jump1 jump2 push pop call targets)
 
 for i in `seq 1 600`;
 do
+    export RAND_SEED=$RANDOM
+    echo "Seed=$RAND_SEED"
+
     for f in ${FRECV[*]};
     do
         for fl in ${FLAGS[*]};

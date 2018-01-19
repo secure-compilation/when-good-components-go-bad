@@ -73,7 +73,7 @@ Definition MAX_NO_BUFFERS_PER_COMP := 10%nat.
 
 Definition MAX_BUFFER_SIZE := 10%nat.
 
-Definition MAX_PROC_LENGTH := 10%nat.
+Definition MAX_PROC_LENGTH := 50%nat.
 
 Inductive instr_type :=
 | Nop : instr_type

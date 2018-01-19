@@ -15,7 +15,7 @@ Require Import ExtrOcamlNatInt.
 Require Import TestsOptions.
 
 
-Extract Constant Test.defNumTests => "100".
+Extract Constant Test.defNumTests => "1000".
 Extract Constant newRandomSeed => "(Random.State.make [| int_of_string (Sys.getenv ""RAND_SEED"") |] )".
 
 Definition run_test (ct : checker_type) (ig : instr_gen) (f : flag) :=
