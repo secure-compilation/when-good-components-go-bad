@@ -73,7 +73,7 @@ Definition MAX_NO_BUFFERS_PER_COMP := 10%nat.
 
 Definition MAX_BUFFER_SIZE := 10%nat.
 
-Definition MAX_PROC_LENGTH := 50%nat.
+Definition MAX_PROC_LENGTH := 30%nat.
 
 Inductive instr_type :=
 | Nop : instr_type
@@ -1536,39 +1536,42 @@ Definition cs_checker (log : cs_log)  (steps : nat)
           | None => whenFail
                      ( "Address didn't match: log=" ++ (show l1) )
                      (checker false)
-          | Some stack =>
-            if Nat.eqb 0%nat (List.length stack)
-            then checker true
-            else
+          | Some stack =>           
               (* the last address may have not yet been written in memory *)
               (* I record the log entry at Jal *)
               (* the memory is updated at push_sfi *)
-              let sl := List.rev (List.seq 0%nat ((List.length stack)-1)) in
-              conjoin
-                (List.map
-                   (fun '(addr,p) =>
-                      let stack_address := SFI.address_of SFI.MONITOR_COMPONENT_ID
-                                                          (2*(N.of_nat p)+1)%N
-                                                          0%N
-                      in
-                      match RiscMachine.Memory.get_word mem stack_address with
-                      | Some (RiscMachine.Data v) =>
-                        if (N.eqb addr (Z.to_N v))
-                        then checker true
-                        else
-                          whenFail ("Address from leftoverstack doesn't match ="
-                                      ++ (show_addr addr) ++ "stack address:"
-                                      ++ (show_addr stack_address)
-                                   )%string
-                                   (checker false)
-                      | _ => whenFail ("Not valid data ar address: "
-                                         ++ (show_addr stack_address)
-                                      )%string
-                                      (checker false)
-                      end
-                   )
-                   (List.combine stack sl)
-                )
+              match stack with
+              | nil
+              | _::nil => checker true
+              | _::xs =>
+                let sl := List.rev (List.seq 0%nat (List.length xs)) in
+                conjoin
+                  (List.map
+                     (fun '(addr,p) =>
+                        let stack_address := SFI.address_of
+                                               SFI.MONITOR_COMPONENT_ID
+                                               (2*(N.of_nat p)+1)%N
+                                               0%N
+                        in
+                        match RiscMachine.Memory.get_word mem stack_address with
+                        | Some (RiscMachine.Data v) =>
+                          if (N.eqb addr (Z.to_N v))
+                          then checker true
+                          else
+                            whenFail ("Address from leftoverstack doesn't match ="
+                                        ++ (show_addr addr) ++ "stack address:"
+                                        ++ (show_addr stack_address)
+                                     )%string
+                                     (checker false)
+                        | _ => whenFail ("Not valid data ar address: "
+                                           ++ (show_addr stack_address)
+                                        )%string
+                                        (checker false)
+                        end
+                     )
+                     (List.combine xs sl)
+                  )
+              end
           end
       end
     end.
