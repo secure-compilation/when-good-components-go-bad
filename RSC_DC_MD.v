@@ -27,12 +27,6 @@ Unset Printing Implicit Defensive.
   (* CH: worried about all these unproved(?) assumptions
          on top of the 8 admits in the proof *)
 
-  Hypothesis compilation_preserves_interface:
-    forall p p_compiled,
-      (*Source.prog_main p = None -> this is needed because of the main wrapping *)
-      compile_program p = Some p_compiled ->
-      Intermediate.prog_interface p_compiled = Source.prog_interface p.
-
   (* This should be provable, although we may have to slightly change the compiler *)
   (* (e.g. procedure id & label generation should be local to the component *)
   (* CH: worried by new changes to compiler *)
