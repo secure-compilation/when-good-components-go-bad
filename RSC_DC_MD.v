@@ -43,6 +43,8 @@ Unset Printing Implicit Defensive.
       compile_program c = Some c_comp ->
       compile_program (slink p c) = Some (ilink p_comp c_comp).
   (* CH: because of the Somes might also want something of the following form: *)
+  (* CH: in general the use of options doesn't seem to make anything simpler,
+         but maybe that's inherited from CompCert? *)
   Hypothesis separate_compilation':
     forall p c pc_comp,
       Source.linkable_programs p c ->
@@ -51,6 +53,17 @@ Unset Printing Implicit Defensive.
         compile_program p = Some p_comp /\
         compile_program c = Some c_comp /\
         pc_comp = ilink p_comp c_comp.
+  (* CH: anyway, this is a very strong notion of separate compilation;
+         wondering whether in the general case we could do away with something weaker
+         (anyway, just a thought for later): *)
+  (* Hypothesis separate_compilation_weaker: *)
+  (*   forall p c pc_comp p_comp c_comp, *)
+  (*     Source.linkable_programs p c -> *)
+  (*     compile_program p = Some p_comp -> *)
+  (*     compile_program c = Some c_comp -> *)
+  (*     compile_program (slink p c) = Some pc_comp -> *)
+  (*     forall b, program_behaves (I.CS.sem pc_comp) b <-> *)
+  (*               program_behaves (I.CS.sem (ilink p_comp c_comp)) b. *)
 
   Hypothesis compilation_preserves_linkability:
     forall p p_compiled c c_compiled,
@@ -74,6 +87,8 @@ Unset Printing Implicit Defensive.
       ilink p c = ilink c p.
 
   (* Definability *)
+  (* CH: this should now be related to what Arthur proved *)
+  (* CH: might need to be further strengthened to ensure compilability? *)
 
   Hypothesis definability_with_linking:
     forall p c t,
@@ -229,7 +244,7 @@ Section RSC_DC_MD.
     rewrite <- Hprog_same_iface in HCs_decomp.
 
     assert (Intermediate.linkable_programs Cs_compiled p_compiled) as linkability''. {
-      admit.
+      admit. (* CH: should the interfaces tell us things about linkability? *)
     }
     assert (Intermediate.closed_program (ilink Cs_compiled p_compiled))
       as HpCs_compiled_closed by admit.
