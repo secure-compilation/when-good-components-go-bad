@@ -67,16 +67,10 @@ Unset Printing Implicit Defensive.
       compile_program c = Some c_compiled ->
       Intermediate.linkable_programs p_compiled c_compiled.
 
-  (* CH: The following symmetry lemmas seem needed so that lemmas like
+  (* CH: The following symmetry lemma seem needed so that
          decomposition don't have to be reproved for contexts
          (although in the general case they probably can be reproved
-          if things were not perfectly symmetric)?
-         -- not always, some uses seem spurious
-            (composition applied in wrong order, TODO get rid of slink_sym) *)
-
-  Hypothesis slink_sym: forall p c,
-      Source.linkable_programs p c ->
-      slink p c = slink c p.
+         if things were not perfectly symmetric)? *)
   Hypothesis ilink_sym: forall p c,
       Intermediate.linkable_programs p c ->
       ilink p c = ilink c p.
@@ -128,6 +122,8 @@ Unset Printing Implicit Defensive.
     - apply S.CS.receptiveness.
     - apply I.CS.determinacy.
   Qed.
+
+(* CH: TODO: turn all admits in the code into assumed lemmas *)
 
 Section RSC_DC_MD.
   Variable p: Source.program.
@@ -207,7 +203,7 @@ Section RSC_DC_MD.
       eapply compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto.
       apply Source.linkable_sym. auto.
     }
-    rewrite ilink_sym in HP'_Cs_compiled_beh.
+    rewrite <- ilink_sym in HP'_Cs_compiled_beh; [| assumption].
     pose proof decomposition_with_safe_behavior linkability'
          HP'_Cs_compiled_beh Hsafe_beh as HCs_decomp.
 
@@ -224,30 +220,26 @@ Section RSC_DC_MD.
     }
     rewrite <- Hprog_same_iface in HCs_decomp.
 
-    assert (Intermediate.linkable_programs Cs_compiled p_compiled) as linkability''. {
-      admit. (* CH: should the interfaces tell us things about linkability? *)
-    }
-    assert (Intermediate.closed_program (ilink Cs_compiled p_compiled))
+    assert (Intermediate.linkable_programs p_compiled Cs_compiled)
+      as linkability'' by admit.
+    assert (Intermediate.closed_program (ilink p_compiled Cs_compiled))
       as HpCs_compiled_closed by admit.
-    assert (Intermediate.well_formed_program (ilink Cs_compiled p_compiled))
+    assert (Intermediate.well_formed_program (ilink p_compiled Cs_compiled))
       as HpCs_compiled_well_formed by admit.
-    (* CH: composition links Cs_compiled and p_compiled in the wrong order,
-           then symmetry is used at the source to swap them ... TODO swap! *)
+
     pose proof composition_for_termination linkability'' HpCs_compiled_closed
-         HpCs_compiled_well_formed HCs_decomp HP_decomp as HpCs_compiled_beh.
+         HpCs_compiled_well_formed HP_decomp HCs_decomp as HpCs_compiled_beh.
+
+    assert (Source.closed_program (slink p Cs)) as Hclosed_p_Cs by admit.
+    assert (Source.well_formed_program (slink p Cs)) as Hwf_p_Cs by admit.
+    assert (Source.linkable_programs p Cs) as Hlinkable_p_Cs by admit.
 
     (* BCC *)
-    assert (Source.closed_program (slink Cs p)) as Hclosed_Cs_p by admit. (* CH: this will go away *)
-    assert (Source.closed_program (slink p Cs)) as Hclosed_p_Cs by admit.
-    assert (Source.well_formed_program (slink Cs p)) as Hwf_Cs_p by admit. (* CH: this will go away *)
-    assert (Source.well_formed_program (slink p Cs)) as Hwf_p_Cs by admit.
-    assert (Source.linkable_programs Cs p) as Hlinkable_Cs_p by admit. (* CH: this will go away *)
-    assert (Source.linkable_programs p Cs) as Hlinkable_p_Cs by admit.
     assert (exists beh1,
-               program_behaves (S.CS.sem (slink Cs p)) beh1 /\
+               program_behaves (S.CS.sem (slink p Cs)) beh1 /\
                behavior_improves beh1 (Terminates t)) as HpCs_beh. {
       apply backward_simulation_behavior_improves
-        with (L1:=S.CS.sem (slink Cs p)) in HpCs_compiled_beh; auto.
+        with (L1:=S.CS.sem (slink p Cs)) in HpCs_compiled_beh; auto.
       - apply S_simulates_I.
         + assumption.
         + assumption.
@@ -258,8 +250,7 @@ Section RSC_DC_MD.
     split. assumption.
     split. assumption.
     split. assumption.
-    repeat split; auto.
-    - erewrite slink_sym; assumption.
+    split. assumption.
     - inversion HpCs_beh_imp.
       + exists t. left. split. by auto.
         exists (Terminates E0). simpl. rewrite E0_right. reflexivity.
