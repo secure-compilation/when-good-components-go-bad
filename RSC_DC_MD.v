@@ -132,9 +132,10 @@ Unset Printing Implicit Defensive.
 
 (* CH: TODO: turn all admits in the code into assumed lemmas *)
 
-Hypothesis close_the_diagram : forall t t' p Cs,
+Hypothesis close_the_diagram : forall t t' b p Cs,
   program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Terminates t) ->
-  program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Goes_wrong t') ->
+  program_behaves (S.PS.sem Cs (Source.prog_interface p)) b ->
+  behavior_improves (Goes_wrong t') b ->
   behavior_prefix t' (Terminates t) ->
   undef_in (Source.main_comp (Source.program_link p Cs)) t'
            (Source.prog_interface p).
@@ -273,6 +274,10 @@ Section RSC_DC_MD.
       + destruct H as [t' [Hgoes_wrong Hprefix]].
         exists t'. right. repeat split; auto.
        (* blame UB -- Guglielmo working on proof *)
+        rewrite slink_sym in HpCs_beh.
+          apply Source.Decomposition.decomposition_with_refinement in HpCs_beh;
+            try assumption. (* CH: WARNING: WITH REFINEMENT! *)
+          destruct HpCs_beh as [b [H1 H2]]. subst pCs_beh.
         eapply close_the_diagram.
         - pose proof (compilation_preserves_interface p p_compiled
                                          successfull_compilation) as HH.
@@ -284,8 +289,7 @@ Section RSC_DC_MD.
           + setoid_rewrite slink_sym. eassumption.
           + apply linkability_sym; assumption.
           + easy.
-        - apply Source.Decomposition.decomposition_with_refinement in HpCs_beh.
-          admit. (* CH: WARNING: WITH REFINEMENT! *)
+        - eassumption.
         - assumption.
         - assumption.
   Admitted.
