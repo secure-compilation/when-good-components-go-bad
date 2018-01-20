@@ -132,10 +132,9 @@ Unset Printing Implicit Defensive.
 
 (* CH: TODO: turn all admits in the code into assumed lemmas *)
 
-Hypothesis close_the_diagram : forall t t' b p Cs,
+Hypothesis close_the_diagram : forall t t' p Cs,
   program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Terminates t) ->
-  program_behaves (S.PS.sem Cs (Source.prog_interface p)) b ->
-  behavior_improves (Goes_wrong t') b ->
+  program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Goes_wrong t') ->
   behavior_prefix t' (Terminates t) ->
   undef_in (Source.main_comp (Source.program_link p Cs)) t'
            (Source.prog_interface p).
@@ -274,23 +273,26 @@ Section RSC_DC_MD.
       + destruct H as [t' [Hgoes_wrong Hprefix]].
         exists t'. right. repeat split; auto.
        (* blame UB -- Guglielmo working on proof *)
-        rewrite slink_sym in HpCs_beh.
-          apply Source.Decomposition.decomposition_with_refinement in HpCs_beh;
-            try assumption. (* CH: WARNING: WITH REFINEMENT! *)
-          destruct HpCs_beh as [b [H1 H2]]. subst pCs_beh.
-        eapply close_the_diagram.
-        - pose proof (compilation_preserves_interface p p_compiled
-                                         successfull_compilation) as HH.
-          assert(Source.prog_interface P' = Source.prog_interface p) as HHH
-              by congruence.
-          rewrite <- HHH.
-          eapply Source.Decomposition.decomposition_with_safe_behavior.
-          + apply linkability_sym; assumption.
-          + setoid_rewrite slink_sym. eassumption.
-          + apply linkability_sym; assumption.
-          + easy.
-        - eassumption.
-        - assumption.
-        - assumption.
+        rewrite slink_sym in HpCs_beh; [| assumption].
+        apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
+          try assumption.
+        destruct HpCs_beh as [b [H1 [H2 | H2]]].
+        + subst pCs_beh. subst b.
+          eapply close_the_diagram.
+          - pose proof (compilation_preserves_interface p p_compiled
+                                           successfull_compilation) as HH.
+            assert(Source.prog_interface P' = Source.prog_interface p) as HHH
+                by congruence.
+            rewrite <- HHH.
+            eapply Source.Decomposition.decomposition_with_safe_behavior.
+            + apply linkability_sym; assumption.
+            + setoid_rewrite slink_sym. eassumption.
+            + apply linkability_sym; assumption.
+            + easy.
+          - assumption.
+          - assumption.
+        + destruct H2 as [t'' [H21 [H22 H23]]].
+          subst pCs_beh. injection H21; intro H21'. subst t''.
+          setoid_rewrite slink_sym; assumption.
   Admitted.
 End RSC_DC_MD.

@@ -431,6 +431,18 @@ Section Decomposition.
     apply decomposition.
   Qed.
 
+  Corollary decomposition_with_refinement_and_blame:
+    forall beh1,
+      program_behaves (CS.sem (program_link p c)) beh1 ->
+    exists beh2,
+      program_behaves (PS.sem p (prog_interface c)) beh2 /\
+      (beh1 = beh2 \/
+       exists t, beh1 = Goes_wrong t /\
+                 behavior_prefix t beh2 /\
+                 undef_in (main_comp (program_link p c)) t
+                          (prog_interface c)).
+  Admitted.
+
   Corollary decomposition_with_safe_behavior:
     forall beh,
       program_behaves (CS.sem (program_link p c)) beh ->
