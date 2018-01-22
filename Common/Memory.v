@@ -81,10 +81,8 @@ Module ComponentMemory : AbstractComponentMemory.
   Definition load m b i : option value :=
     match getm (content m) b with
     | Some chunk =>
-      match i with
-      | Z.neg _ => None
-      | _ => nth_error chunk (Z.to_nat i)
-      end
+      if (0 <=? i)%Z then nth_error chunk (Z.to_nat i)
+      else None
     | None => None
     end.
 
@@ -105,15 +103,14 @@ Module ComponentMemory : AbstractComponentMemory.
   Definition store m b i v : option mem :=
     match getm (content m) b with
     | Some chunk =>
-      match i with
-      | Z.neg _ => None
-      | _ => match block_update chunk (Z.to_nat i) v with
-            | Some chunk' =>
-              Some {| content := setm (content m) b chunk';
-                      nextblock := nextblock m |}
-            | _ => None
-            end
-      end
+      if (0 <=? i)%Z then
+        match block_update chunk (Z.to_nat i) v with
+        | Some chunk' =>
+          Some {| content := setm (content m) b chunk';
+                  nextblock := nextblock m |}
+        | _ => None
+        end
+      else None
     | None => None
     end.
 
@@ -128,7 +125,25 @@ Module ComponentMemory : AbstractComponentMemory.
         | None => None
         end
       else None.
-  Proof. Admitted.
+  Proof.
+    intros bufs b i. unfold load, prealloc. simpl.
+    rewrite mapmE. unfold Block.id in *.
+    destruct (Z.leb_spec0 0 i) as [i_pos|i_neg].
+    - simpl. destruct (bufs b) as [buf|]; trivial.
+      simpl. destruct buf as [size|chunk]; trivial.
+      destruct (Z.ltb_spec0 i (Z.of_nat size)) as [i_lt_size|i_ge_size].
+      + rewrite <- (Z2Nat.id _ i_pos) in i_lt_size.
+        rewrite <- Nat2Z.inj_lt in i_lt_size.
+        rewrite <- (repeat_length Undef size) in i_lt_size.
+        rewrite <- nth_error_Some in i_lt_size.
+        destruct (nth_error (repeat Undef size) (Z.to_nat i)) as [v|] eqn:get_i; try congruence.
+        apply nth_error_In in get_i.
+        apply repeat_spec in get_i.
+        now rewrite get_i.
+      + rewrite nth_error_None repeat_length Nat2Z.inj_le.
+        now rewrite Z2Nat.id // -Z.nlt_ge.
+    - simpl. now destruct (bufs b).
+  Qed.
 
   Lemma load_after_alloc:
     forall (m m' : mem) (n : nat) b,
