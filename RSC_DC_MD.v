@@ -241,14 +241,16 @@ Section RSC_DC_MD.
     assert (Intermediate.closed_program (ilink p_compiled Cs_compiled))
       as HpCs_compiled_closed by admit.
     assert (Intermediate.well_formed_program (ilink p_compiled Cs_compiled))
-      as HpCs_compiled_well_formed by admit.
+      as HpCs_compiled_well_formed
+      by (apply Intermediate.linking_well_formedness; assumption).
 
     pose proof composition_for_termination linkability'' HpCs_compiled_closed
          HpCs_compiled_well_formed HP_decomp HCs_decomp as HpCs_compiled_beh.
 
     assert (Source.closed_program (slink p Cs)) as Hclosed_p_Cs by admit.
-    assert (Source.well_formed_program (slink p Cs)) as Hwf_p_Cs by admit.
     assert (Source.linkable_programs p Cs) as Hlinkable_p_Cs by admit.
+    assert (Source.well_formed_program (slink p Cs)) as Hwf_p_Cs
+      by (apply Source.linking_well_formedness; assumption).
 
     (* BCC *)
     assert (exists beh1,
