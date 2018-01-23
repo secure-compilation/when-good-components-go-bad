@@ -2,7 +2,7 @@ Require Import Common.Definitions.
 (* TL TODO: Ariths Export is a pain *)
 
 From mathcomp Require Import ssreflect ssrfun eqtype seq ssrint.
-From CoqUtils Require Import fmap fset.
+From CoqUtils Require Import fmap fset word.
 
 Require Import Intermediate.Machine.
 Require Import MicroPolicies.Symbolic.
@@ -72,10 +72,11 @@ Definition encode_instr  (cenv : compiler_env)(x : Machine.instr * mem_tag) : ma
              | IHalt             => encode_instr (Halt mt)
              end ;
      taga := snd x |}.
-
-
-(* Definition encode_code (code : seq (Machine.instr * mem_tag)) : {fmap atom unit unit -> matom}. *)
 (*  fmap_of_seq s *)
+(*         invm m *)
+
+Definition encode_code (code : seq (Machine.instr * mem_tag)) : {fmap mword mt -> matom}.
+Proof. Admitted.
 
 (* Definition alloc_buffers  : seq matom. *)
 (* Admitted. *)

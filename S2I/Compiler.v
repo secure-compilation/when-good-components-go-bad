@@ -322,3 +322,18 @@ Definition compile_program
            Intermediate.prog_buffers := local_buffers;
            Intermediate.prog_main := Source.prog_main p |} in
    wrap_main procs_labels p).
+
+Lemma compilation_preserves_interface:
+    forall p p_compiled,
+      (*Source.prog_main p = None -> this is needed because of the main wrapping *)
+      compile_program p = Some p_compiled ->
+      Intermediate.prog_interface p_compiled = Source.prog_interface p.
+Proof.
+(* CH: Seemed trivial from the line above:
+       Intermediate.prog_interface := Source.prog_interface p; *)
+  intros p p_compiled H. unfold compile_program, run, wrap_main in H. simpl in H.
+(* CH: but less clear when looking at the details *)
+(* CH: after talking with Guglielmo there is a real problem with this
+       because of wrap_main; a solution would be to and also mark main as private
+       (see Interface change after compilation in robust-imp-comments.org) *)
+Admitted.

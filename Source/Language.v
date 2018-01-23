@@ -31,6 +31,13 @@ Module Source.
     prog_main : option (Component.id * Procedure.id)
   }.
 
+  (* useful function on closed programs *)
+  Definition main_comp (p: Source.program): Component.id :=
+    match prog_main p with
+    | Some (mainC, _) => mainC
+    | None => 0
+    end.
+
   (* An expression is well-formed when:
      1) calls outside the component are allowed by the interface
      2) calls inside the component are targeting existing procedures

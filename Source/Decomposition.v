@@ -431,6 +431,116 @@ Section Decomposition.
     apply decomposition.
   Qed.
 
+  Lemma ub_blaming:
+    forall t,
+      program_behaves (CS.sem (program_link p c))
+                      (Goes_wrong t) ->
+      undef_in (main_comp (program_link p c)) t
+               (prog_interface p) \/
+      undef_in (main_comp (program_link p c)) t
+               (prog_interface c).
+  Proof.
+    (* sketch:
+       consider the trace t
+       - if it's empty, look at the main component of
+         program_link p c. It is either a component of p
+         or a component of c because of linking.
+       - if it's non-empty, look at the last event.
+         an event is either a call or a return.
+         consider the component that is in control after
+         such event: by well-formedness (maybe the same used
+         in definability?) of the trace, it must be a component
+         present in the interface of program_link p c.
+         Therefore, it must be either a component of p or a
+         component of c.
+     *)
+  Admitted.
+
+  Lemma program_ub_preservation:
+    forall t,
+      program_behaves (CS.sem (program_link p c))
+                      (Goes_wrong t) ->
+      undef_in (main_comp (program_link p c)) t
+               (prog_interface p) ->
+      program_behaves (PS.sem p (prog_interface c))
+                      (Goes_wrong t).
+  Proof.
+    (* sketch:
+       there are two cases:
+       1) there is an initial state, but after zero or more
+          steps we reach a stuck state.
+          by the blame hypothesis, we know that such state
+          has the program p in control.
+          hence, we simulate in the partial semantics up to
+          that state and then we stop, since the stuckness
+          of p is preserved.
+       2) there is not an initial state
+          in this case, by definition, there cannot be an
+          intial state for the partial semantics.
+          therefore, we are stuck in the partial semantics
+          as well.
+     *)
+  Admitted.
+
+  Lemma ub_improvement:
+    forall t beh_imp,
+      program_behaves (PS.sem p (prog_interface c))
+                      (Goes_wrong t) ->
+      undef_in (main_comp (program_link p c)) t
+               (prog_interface p) ->
+      program_behaves (PS.sem p (prog_interface c))
+                      (behavior_app t beh_imp) ->
+      beh_imp = Goes_wrong E0.
+  Proof.
+    intros t beh_imp Hbeh1 Hbeh2.
+  Admitted.
+
+  Corollary decomposition_with_refinement_and_blame:
+    forall beh1,
+      program_behaves (CS.sem (program_link p c)) beh1 ->
+    exists beh2,
+      program_behaves (PS.sem p (prog_interface c)) beh2 /\
+      (beh1 = beh2 \/
+       exists t, beh1 = Goes_wrong t /\
+                 behavior_prefix t beh2 /\
+                 undef_in (main_comp (program_link p c)) t
+                          (prog_interface c)).
+  Proof.
+    intros beh1 Hbeh1.
+    assert (Hbeh1' := Hbeh1).
+    apply decomposition_with_refinement in Hbeh1'.
+    destruct Hbeh1' as [beh2 [Hbeh2 [Hsame | Hwrong]]]; subst.
+    - eexists. split.
+      + eassumption.
+      + left. reflexivity.
+    - destruct Hwrong as [t [Hbeh1_wrong Hbeh2_pref]]; subst.
+      eexists. split.
+      + eassumption.
+      + (* sketch:
+           p[c] does UB(t), therefore either we blame p or
+           we blame c.
+           - if we blame p, we prove the left disjunct by
+             showing that the undefined behavior is preserved
+           - if we blame c, we prove the right disjunct by
+             using our assumptions
+         *)
+        destruct (ub_blaming Hbeh1) as [Hblame | Hblame].
+        * left.
+          apply program_ub_preservation in Hbeh1; auto.
+          (* beh2 is an improvement of t, but we know that
+             p goes wrong with t (which is a prefix of beh2).
+             Moreover, p remains the same after partialization
+             (it's determinate).
+           *)
+          destruct Hbeh2_pref as [Hbeh_imp ?]; subst.
+          rewrite (ub_improvement Hbeh1 Hblame Hbeh2).
+          simpl. rewrite E0_right. reflexivity.
+        * right.
+          eexists. split.
+          ** reflexivity.
+          ** split; assumption.
+  Qed.
+
   Corollary decomposition_with_safe_behavior:
     forall beh,
       program_behaves (CS.sem (program_link p c)) beh ->

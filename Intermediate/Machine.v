@@ -119,6 +119,12 @@ Record program := mkProg {
   prog_main: option (Component.id * Procedure.id)
 }.
 
+Definition main_comp (p: Intermediate.program): Component.id :=
+  match prog_main p with
+  | Some (mainC, _) => mainC
+  | None => 0
+  end.
+
 (* well-formedness of programs *)
 
 Definition well_formed_instruction
@@ -214,8 +220,11 @@ Inductive linkable_programs: program -> program -> Prop :=
      sound_interface (unionm (prog_interface prog1) (prog_interface prog2)) ->
      fdisjoint (domm (prog_interface prog1)) (domm (prog_interface prog2)) ->
      fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)) ->
+       (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
      fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)) ->
+       (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
      linkable_mains (prog_main prog1) (prog_main prog2) ->
+       (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
      linkable_programs prog1 prog2.
 
 Definition program_link (p1 p2: program): program :=
