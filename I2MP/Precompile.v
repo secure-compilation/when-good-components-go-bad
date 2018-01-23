@@ -6,6 +6,7 @@ From CoqUtils Require Import fmap fset.
 
 Require Import Intermediate.Machine.
 Require Import MicroPolicies.LRC.
+Require Import Tmp.
 
 Require Import Lib.Monads.
 Import MonadNotations.
@@ -16,10 +17,12 @@ Record compiler_env :=
     make_label : Component.id -> Procedure.id -> label ;
   }.
 
+Notation code := (seq (instr * mem_tag)).
+
 (** Precompilation: translate call/ret, tag, linearize **)
 
 Definition precompile_callret (cenv : compiler_env)
-           (c : Component.id) (i : instr) : seq (instr * mem_tag) :=
+           (c : Component.id) (i : instr) : code :=
   let def_tag := {| vtag := Other ;
                     color := c ;
                     entry := [:: ]
@@ -44,28 +47,53 @@ Definition head_tag (cenv : compiler_env) (c : Component.id) (p : Procedure.id) 
 
 
 Definition precompile_proc (cenv : compiler_env)
-           (c : Component.id) (p : Procedure.id) : seq (instr * mem_tag) :=
+           (c : Component.id) (p : Procedure.id) : code :=
   let code := Option.default [:: ] (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
                                     getm map p)
   in (ILabel (make_label cenv c p), head_tag cenv c p) :: flatten (map (precompile_callret cenv c) code).
 
-Definition precompile_component (cenv : compiler_env) (c : Component.id) :=
+Definition precompile_component (cenv : compiler_env) (c : Component.id) : code :=
   let procs : {fset Procedure.id} := (* TODO: use explicit coercion? *)
       Option.default fset0 (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
                             Some (domm map)) in
   flatten (map (precompile_proc cenv c) procs).
 
 
-Definition precompile_code (cenv : compiler_env) : seq (instr * mem_tag) :=
+Definition precompile_code (cenv : compiler_env) : code :=
   (* TL TODO: jump to main!!! *)
   let components : {fset Component.id} := domm (Intermediate.prog_procedures (program cenv)) in
   flatten (map (precompile_component cenv) components).
 
+Notation bufs := (NMap (NMap (seq (value * mem_tag)))).
+
+Definition precompile_bufs (cenv : compiler_env) : bufs.
+Admitted.
+
 Record prog :=
   { interface : Program.interface ;
-    procedures : seq (instr * mem_tag) ;
-    buffers : NMap (list (Block.id * (nat + list value))) ;
+    procedures : code ;
+    buffers : bufs ;
   }.
 
-Definition precompile (p : Intermediate.program) : prog.
-Admitted.
+Definition max_label (p : Intermediate.program) : nat :=
+  let soup := (flatten (flatten (map codomm' (codomm' (Intermediate.prog_procedures p))))) in
+  let get_label i := match i with
+                    | ILabel l => Some l
+                    | _ => None
+                    end in
+  let labels := pmap get_label soup in foldl max 0 labels + 1.
+
+Definition max_proc_id (p : Intermediate.program) (* : *) (* nat *) :=
+  let componnent_max_proc_id (map : NMap Machine.code) : nat :=
+      foldl max 0 (domm map) in
+  let max_proc_ids := map componnent_max_proc_id (codomm' (Intermediate.prog_procedures p)) in
+  foldl max 0 max_proc_ids.
+
+Definition precompile (p : Intermediate.program) : prog :=
+  let lmax := max_label p in
+  let pmax := max_proc_id p in
+  let cenv := {| program := p ;
+                 make_label := (fun c p => lmax + c * pmax + p) |} in
+  {| interface  := Intermediate.prog_interface p ;
+     procedures := precompile_code cenv ;
+     buffers    := precompile_bufs cenv |}.
