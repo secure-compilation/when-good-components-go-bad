@@ -219,13 +219,27 @@ Inductive linkable_programs: program -> program -> Prop :=
      well_formed_program prog2 ->
      sound_interface (unionm (prog_interface prog1) (prog_interface prog2)) ->
      fdisjoint (domm (prog_interface prog1)) (domm (prog_interface prog2)) ->
-     fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)) ->
-       (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
      fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)) ->
        (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
      linkable_mains (prog_main prog1) (prog_main prog2) ->
        (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
      linkable_programs prog1 prog2.
+
+Theorem linkability_disjoint_procedures :
+  forall prog1 prog2,
+    linkable_programs prog1 prog2 ->
+    fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)).
+Proof.
+  (* RB: Not using everything here right now, clean up later. *)
+  intros
+    _ _
+    [prog1 prog2 Hwell_formed1 Hwell_formed2 Hsound_interface Hdisjoint_interface].
+  (*inversion Hdisjoint_interface.*)
+  inversion Hwell_formed1 as [_ Hwell_formed_procs1 _ _ _ _].
+  inversion Hwell_formed2 as [_ Hwell_formed_procs2 _ _ _ _].
+  (* RB: Possibly add lemma on sets to coq-utils. *)
+  admit.
+Admitted.
 
 Definition program_link (p1 p2: program): program :=
   {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
