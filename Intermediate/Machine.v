@@ -219,8 +219,6 @@ Inductive linkable_programs: program -> program -> Prop :=
      well_formed_program prog2 ->
      sound_interface (unionm (prog_interface prog1) (prog_interface prog2)) ->
      fdisjoint (domm (prog_interface prog1)) (domm (prog_interface prog2)) ->
-     linkable_mains (prog_main prog1) (prog_main prog2) ->
-       (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
      linkable_programs prog1 prog2.
 
 Theorem linkability_disjoint_procedures :
@@ -250,6 +248,30 @@ Proof.
     [prog1 prog2 Hwell_formed1 Hwell_formed2 Hsound_interface Hdisjoint_interface].
   inversion Hwell_formed1 as [_ _ _ _ Hwell_formed_buffers1 _].
   inversion Hwell_formed2 as [_ _ _ _ Hwell_formed_buffers2 _].
+  admit.
+Admitted.
+
+Theorem linkability_disjoint_mains :
+  forall prog1 prog2,
+    linkable_programs prog1 prog2 ->
+    linkable_mains (prog_main prog1) (prog_main prog2).
+Proof.
+  intros
+    _ _
+    [prog1 prog2 Hwell_formed1 Hwell_formed2 Hsound_interface Hdisjoint_interface].
+  inversion Hwell_formed1 as [_ _ _ _ _ Hmain_existence1].
+  inversion Hwell_formed2 as [_ _ _ _ _ Hmain_existence2].
+  (* All cases except one, which leads to contradiction, are trivial. *)
+  unfold linkable_mains.
+  destruct (prog_main prog1) as [(cid1, pid1) |];
+    destruct (prog_main prog2) as [(cid2, pid2) |];
+    try (apply I; fail).
+  (* The interesting case remains. *)
+  specialize (Hmain_existence1 cid1 pid1).
+  specialize (Hmain_existence2 cid2 pid2).
+  (* RB: Short story, there is a main in prog_procedures for each prog1 and
+     prog2, which are however disjoint, and main is unique (may need to
+     shuffle things a bit). *)
   admit.
 Admitted.
 
