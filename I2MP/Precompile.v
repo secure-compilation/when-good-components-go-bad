@@ -21,16 +21,18 @@ Notation code := (seq (instr * mem_tag)).
 
 (** Precompilation: translate call/ret, tag, linearize **)
 
+Definition def_tag (c : Component.id) : mem_tag :=
+  {| vtag := Other ;
+     color := c ;
+     entry := [:: ]
+  |}.
+
 Definition precompile_callret (cenv : compiler_env)
            (c : Component.id) (i : instr) : code :=
-  let def_tag := {| vtag := Other ;
-                    color := c ;
-                    entry := [:: ]
-                 |} in
   match i with
-  | ICall C P => [:: (IJal (make_label cenv C P), def_tag)]
-  | IReturn => [:: (IJump R_RA, def_tag)]
-  | _ => [:: (i, def_tag) ]
+  | ICall C P => [:: (IJal (make_label cenv C P), def_tag c)]
+  | IReturn => [:: (IJump R_RA, def_tag c)]
+  | _ => [:: (i, def_tag c) ]
   end.
 
 
@@ -66,8 +68,17 @@ Definition precompile_code (cenv : compiler_env) : code :=
 
 Notation bufs := (NMap (NMap (seq (value * mem_tag)))).
 
-Definition precompile_bufs (cenv : compiler_env) : bufs.
-Admitted.
+Definition precompile_buf (cenv : compiler_env) (c : Component.id) (b : Block.id) : seq (value * mem_tag) :=
+  Option.default [::] (do map <- getm (Intermediate.prog_buffers (program cenv)) c ;
+                       do block <- getm map b ;
+                       Some match block with
+                            | inl n => repeat (Undef, def_tag c) n
+                            | inr l => [seq (x, def_tag c) | x <- l]
+                            end
+                      ).
+
+Definition precompile_component_bufs (cenv : compiler_env) (c : Component.id) : bufs : :=
+
 
 Record prog :=
   { interface : Program.interface ;

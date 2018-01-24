@@ -186,6 +186,8 @@ Definition transfer (iv : ivec lrc_tags) : option (vovec lrc_tags (op iv)) :=
 
 (** Instance **)
 
+(* TL TODO: use local notation instead? *)
+(*          (for state and step)        *)
 Global Instance sym_lrc : params := {
   ttypes := lrc_tags;
   transfer := transfer;
@@ -203,3 +205,8 @@ Notation step  := (@Symbolic.step sym_lrc lrc_syscalls).
 
 Definition ratom := (atom (mword mt) value_tag).
 Definition matom := (atom (mword mt) mem_tag).
+
+
+
+
+(* TL TODO: if I want to export, notation inside a module to be exported, same for Int32 *)

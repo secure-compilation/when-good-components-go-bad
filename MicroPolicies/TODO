@@ -1,3 +1,6 @@
+
+Typecheck a call to step with all the parameters
+
 question: HOW TO RUN/TEST IT?
 question: WHAT ABOUT MEMORY ALLOCATION?
 
@@ -12,8 +15,17 @@ integration: modules interface for RC instance?
              but is it relevant? cf linking problems
 question: should I stick to Arthur's file organisation
           or progressivelly match the rest of the repo (CS.v, Machine.v, etc.)?
+          Arthur's answer: it hasn't been very much thought of anyway, it is a mess?
+          hard to give a clear answer
+          anyway it has been modified
 
 tests
 licence
 provenance/credits
 dependencies
+
+
+
+===
+integer representation (current not efficient, like not runnable)
+cf instruction encoding

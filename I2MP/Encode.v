@@ -85,8 +85,7 @@ Definition encode_code (eenv : encoder_env) (code : Precompile.code) : {fmap mwo
 Definition block_size (bufs : Precompile.bufs) (c : Component.id) (b : Block.id) : nat :=
   Option.default 0 (do m <- getm bufs c;
                     do b <- getm m b;
-                    let l : seq (value * mem_tag) := b (* TL TODO: how to coerce properly? *)
-                    in Some (length l)).
+                    Some (length b)).
 
 Definition encode (prog : Precompile.prog) :=
   (* Solve labels *)
