@@ -55,16 +55,20 @@ Definition precompile_proc (cenv : compiler_env)
   in (ILabel (make_label cenv c p), head_tag cenv c p) :: flatten (map (precompile_callret cenv c) code).
 
 Definition precompile_component (cenv : compiler_env) (c : Component.id) : code :=
-  let procs : {fset Procedure.id} := (* TODO: use explicit coercion? *)
+  let procs : seq Procedure.id :=
       Option.default fset0 (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
                             Some (domm map)) in
   flatten (map (precompile_proc cenv c) procs).
 
 
 Definition precompile_code (cenv : compiler_env) : code :=
-  (* TL TODO: jump to main!!! *)
-  let components : {fset Component.id} := domm (Intermediate.prog_procedures (program cenv)) in
-  flatten (map (precompile_component cenv) components).
+  let main :=
+      match Intermediate.prog_main (program cenv) with
+        | None => [::] (* TL TODO: is it a good default? *)
+        | Some (c, p) => [:: (IJal (make_label cenv c p), def_tag c)]
+      end in
+  let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
+  main ++ flatten (map (precompile_component cenv) components).
 
 Notation bufs := (NMap (NMap (seq (value * mem_tag)))).
 
@@ -77,8 +81,8 @@ Definition precompile_buf (cenv : compiler_env) (c : Component.id) (b : Block.id
                             end
                       ).
 
-Definition precompile_component_bufs (cenv : compiler_env) (c : Component.id) : bufs : :=
-
+Definition precompile_bufs (cenv : compiler_env) : bufs :=
+  mapim (fun c map => mapim (fun b _ => precompile_buf cenv c b) map) (Intermediate.prog_buffers (program cenv)).
 
 Record prog :=
   { interface : Program.interface ;
@@ -94,11 +98,11 @@ Definition max_label (p : Intermediate.program) : nat :=
                     end in
   let labels := pmap get_label soup in foldl max 0 labels + 1.
 
-Definition max_proc_id (p : Intermediate.program) (* : *) (* nat *) :=
+Definition max_proc_id (p : Intermediate.program) : nat :=
   let componnent_max_proc_id (map : NMap Machine.code) : nat :=
       foldl max 0 (domm map) in
   let max_proc_ids := map componnent_max_proc_id (codomm' (Intermediate.prog_procedures p)) in
-  foldl max 0 max_proc_ids.
+  foldl max 0 max_proc_ids + 1.
 
 Definition precompile (p : Intermediate.program) : prog :=
   let lmax := max_label p in
