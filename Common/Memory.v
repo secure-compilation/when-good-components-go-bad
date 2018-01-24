@@ -1,5 +1,6 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
+Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrbool ssrnat eqtype.
 
 Module Type AbstractComponentMemory.
@@ -34,8 +35,8 @@ Module Type AbstractComponentMemory.
     forall m m' b i v,
       store m b i v = Some m' ->
     forall b' i',
-      ((b' <> b \/ i' <> i) /\ load m' b' i' = load m b' i') \/
-      load m' b' i' = Some v.
+      load m' b' i' =
+      if (b', i') == (b, i) then Some v else load m b' i'.
 
   Axiom store_after_load:
     forall m b i v v',
@@ -160,6 +161,7 @@ Module ComponentMemory : AbstractComponentMemory.
 
   Ltac inv H := (inversion H; subst; clear H).
 
+  (* FIXME: Move to extra *)
   Lemma load_after_update_same:
     forall blk o v blk',
       block_update blk o v = Some blk' ->
@@ -197,69 +199,37 @@ Module ComponentMemory : AbstractComponentMemory.
     forall m m' b i v,
       store m b i v = Some m' ->
     forall b' i',
-      ((b' <> b \/ i' <> i) /\ load m' b' i' = load m b' i') \/
-      load m' b' i' = Some v.
+      load m' b' i' =
+      if (b', i') == (b, i) then Some v else load m b' i'.
   Proof.
-    intros m m' b i v Hstore b' i'.
-    (*
-    destruct (PMapFacts.eq_dec b b').
-    + destruct (Z.eq_dec i i').
-      - subst. right.
-         unfold load.  unfold store in Hstore.
-         destruct (PMap.find (elt:=block) b' (content m)) eqn:?; [| inv Hstore].
-         destruct i'; [| |inv Hstore].
-         * destruct (block_update b (Z.to_nat 0) v) eqn: E; inv Hstore.
-           simpl. (* can't stop from unfolding nth_error...argh *)
-           rewrite PMapFacts.add_eq_o; auto.
-           apply load_after_update_same in E. apply E.
-         * destruct (block_update b (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore.
-           simpl.
-           rewrite PMapFacts.add_eq_o; auto.
-           eapply load_after_update_same; eauto.
-      - left. subst b'. intuition.
-        unfold load.  unfold store in Hstore.
-        destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore].
-        destruct i; [| | inv Hstore].
-        * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore.
-          simpl.
-          rewrite PMapFacts.add_eq_o; auto.
-          destruct i'.
-          ** intuition.
-          ** erewrite load_after_update_other; eauto.
-             rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
-          ** auto.
-        * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore.
-          simpl.
-          rewrite PMapFacts.add_eq_o; auto.
-          destruct i'.
-          ** erewrite load_after_update_other; eauto.
-             rewrite Z2Nat.inj_pos. simpl. pose proof (Pos2Nat.is_pos p). omega.
-          ** erewrite load_after_update_other; eauto.
-             simpl.
-             intro. apply Pos2Nat.inj_iff in H.
-             subst.  intuition.
-          ** auto.
-    +  left. intuition.
-       unfold load. unfold store in Hstore.
-       destruct (PMap.find (elt:=block) b (content m)) eqn:?; [| inv Hstore].
-       destruct i; [| | inv Hstore].
-       * destruct (block_update b0 (Z.to_nat 0) v) eqn: E; inv Hstore.
-         simpl.
-         rewrite PMapFacts.add_neq_o; auto.
-       * destruct (block_update b0 (Z.to_nat (Z.pos p)) v) eqn: E; inv Hstore.
-         simpl.
-         rewrite PMapFacts.add_neq_o; auto.
+    move=> m m' b i v Hstore b' i'.
+    move: Hstore; rewrite /store /load.
+    case m_b: (content m b) => [chunk|] //=.
+    case: (Z.leb_spec0 0 i)=> [i_pos|//] /=.
+    case upd_chunk: (block_update chunk (Z.to_nat i) v) => [chunk'|] // [<- {m'}] /=.
+    rewrite setmE xpair_eqE; case: (b' =P b) => [-> {b'}|] //=.
+    case: (i' =P i) => [-> {i'}|i'_ne_i] /=.
+    - move/Z.leb_spec0: i_pos => ->; exact: load_after_update_same upd_chunk.
+    - rewrite m_b; case: (Z.leb_spec0 0 i')=> [i'_pos|] //=.
+      apply: load_after_update_other; eauto.
+      contradict i'_ne_i; symmetry; exact: Z2Nat.inj i'_ne_i.
   Qed.
-     *)
-  Admitted.
 
-  (** AAA: TODO *)
   Lemma store_after_load:
     forall m b i v v',
       load m b i = Some v ->
       exists m',
         store m b i v' = Some m'.
-  Proof. Admitted.
+  Proof.
+    move=> m b i v v'; rewrite /load /store.
+    case m_b: (content m b)=> [chunk|] //.
+    case: (Z.leb_spec0 0 i)=> [i_pos|] //= chunk_i.
+    suffices [? ->] :
+      exists chunk', block_update chunk (Z.to_nat i) v' = Some chunk' by eauto.
+    elim: {m_b i i_pos} chunk (Z.to_nat i) chunk_i => [|v'' chunk IH] [|i] //=.
+    - by eauto.
+    - by move=> /IH [chunk' ->]; eauto.
+  Qed.
 
 End ComponentMemory.
 
@@ -273,7 +243,7 @@ Module Memory.
     end.
 
   Definition alloc (mem : t) (C : Component.id) (size : nat) : option (t * Pointer.t) :=
-    match getm mem C with
+    match mem C with
     | Some memC =>
       let '(memC', b) := ComponentMemory.alloc memC size in
       Some (setm mem C memC', (C, b, 0%Z))
@@ -281,13 +251,13 @@ Module Memory.
     end.
 
   Definition load (mem: t) (ptr: Pointer.t) : option value :=
-    match getm mem (Pointer.component ptr) with
+    match mem (Pointer.component ptr) with
     | Some memC => ComponentMemory.load memC (Pointer.block ptr) (Pointer.offset ptr)
     | None => None
     end.
 
   Definition store (mem: t) (ptr: Pointer.t) (v: value) : option t :=
-    match getm mem (Pointer.component ptr) with
+    match mem (Pointer.component ptr) with
     | Some memC =>
       match ComponentMemory.store memC (Pointer.block ptr) (Pointer.offset ptr) v with
       | Some memC' => Some (setm mem (Pointer.component ptr) memC')
@@ -296,19 +266,38 @@ Module Memory.
     | None => None
     end.
 
+  Lemma load_after_store mem ptr v mem' ptr' :
+    store mem  ptr v = Some mem' ->
+    load mem' ptr' =
+    if ptr' == ptr then Some v else load mem ptr'.
+  Proof.
+    case: ptr ptr'=> [[c b] off] [[c' b'] off']; rewrite /store /load /=.
+    case mem_c: (mem c) => [bs|] //.
+    case bs_ptr: (ComponentMemory.store bs b off v) => [bs'|] //= [<- {mem'}].
+    rewrite !xpair_eqE setmE; case: (c' =P c) => [-> {c'}|] //=.
+    by rewrite (ComponentMemory.load_after_store _ _ _ _ _ bs_ptr) mem_c.
+  Qed.
+
   Lemma load_after_store_eq mem ptr v mem' :
     store mem  ptr v = Some mem' ->
     load  mem' ptr   = Some v.
-  Proof. Admitted.
+  Proof. by move=> /load_after_store ->; rewrite eqxx. Qed.
+
 
   Lemma load_after_store_neq mem ptr v mem' ptr' :
     ptr <> ptr' ->
     store mem  ptr  v = Some mem' ->
     load  mem' ptr'   = load mem ptr'.
-  Proof. Admitted.
+  Proof. by move=> /eqP/negbTE ne /load_after_store ->; rewrite eq_sym ne. Qed.
 
   Lemma store_after_load mem ptr v v' :
     load mem ptr = Some v ->
     exists mem', store mem ptr v' = Some mem'.
-  Proof. Admitted.
+  Proof.
+    case: ptr=> [[c b] off]; rewrite /load /store /=.
+    case mem_c: (mem c)=> [bs|] //=.
+    case/(ComponentMemory.store_after_load _ _ _ _ v')=> [bs' ->].
+    by eauto.
+  Qed.
+
 End Memory.

@@ -16,6 +16,7 @@ CompCert/Events.v
 
 Lib/Tactics.v
 Lib/Monads.v
+Lib/Extra.v
 
 Extraction/Definitions.v
 
