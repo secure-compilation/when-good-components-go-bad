@@ -3,7 +3,10 @@ Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Linking.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+From CoqUtils Require Import ord fset fmap.
+
+Local Open Scope fset_scope.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -23,6 +26,19 @@ Inductive expr : Type :=
 | E_call : Component.id -> Procedure.id -> expr -> expr
 | E_exit : expr.
 
+Fixpoint called_procedures (e : expr) : {fset Component.id * Procedure.id} :=
+  match e with
+  | E_binop _ e1 e2 => called_procedures e1 :|: called_procedures e2
+  | E_seq e1 e2 => called_procedures e1 :|: called_procedures e2
+  | E_if e1 e2 e3 => called_procedures e1 :|: called_procedures e2
+                     :|: called_procedures e3
+  | E_alloc e => called_procedures e
+  | E_deref e => called_procedures e
+  | E_assign e1 e2 => called_procedures e1 :|: called_procedures e2
+  | E_call C P e => (C, P) |: called_procedures e
+  | _ => fset0
+  end.
+
 Module Source.
   Record program : Type := mkProg {
     prog_interface : Program.interface;
@@ -38,34 +54,48 @@ Module Source.
     | None => 0
     end.
 
+  (** Lookup definition of procedure [C.P] in the map [procs]. *)
+  Definition find_procedure
+             (procs: NMap (NMap expr))
+             (C: Component.id) (P: Procedure.id) : option expr :=
+    match procs C with
+    | Some C_procs => C_procs P
+    | None         => None
+    end.
+
+  Definition valid_calls
+             (procs: NMap (NMap expr))
+             (intf: Program.interface)
+             (cur_comp: Component.id)
+             (calls: {fset Component.id * Procedure.id}) :=
+    forall C P, (C, P) \in calls ->
+      if C == cur_comp then find_procedure procs cur_comp P : Prop
+      else imported_procedure intf cur_comp C P.
+
+  Fixpoint values_are_integers (e: expr) : bool :=
+    match e with
+    | E_val (Int _)   => true
+    | E_val _         => false
+    | E_local         => true
+    | E_exit          => true
+    | E_binop _ e1 e2 => values_are_integers e1 && values_are_integers e2
+    | E_seq     e1 e2 => values_are_integers e1 && values_are_integers e2
+    | E_if   e1 e2 e3 => [&& values_are_integers e1, values_are_integers e2 &
+                             values_are_integers e3]
+    | E_alloc e       => values_are_integers e
+    | E_deref e       => values_are_integers e
+    | E_assign  e1 e2 => values_are_integers e1 && values_are_integers e2
+    | E_call   _ _ e  => values_are_integers e
+    end.
+
   (* An expression is well-formed when:
      1) calls outside the component are allowed by the interface
      2) calls inside the component are targeting existing procedures
      3) the undef value is not present
      4) pointers are not present (no pointer forging) *)
-  Fixpoint well_formed_expr (p: program) (cur_comp: Component.id) (e: expr) : Prop :=
-    match e with
-    | E_val val => exists i, val = Int i
-    | E_local => True
-    | E_exit => True
-    | E_binop op e1 e2 =>
-      well_formed_expr p cur_comp e1 /\ well_formed_expr p cur_comp e2
-    | E_seq e1 e2 =>
-      well_formed_expr p cur_comp e1 /\ well_formed_expr p cur_comp e2
-    | E_if e1 e2 e3 =>
-      well_formed_expr p cur_comp e1 /\ well_formed_expr p cur_comp e2 /\
-      well_formed_expr p cur_comp e3
-    | E_alloc e' => well_formed_expr p cur_comp e'
-    | E_deref e' => well_formed_expr p cur_comp e'
-    | E_assign e1 e2 =>
-      well_formed_expr p cur_comp e1 /\ well_formed_expr p cur_comp e2
-    | E_call C' P' e' =>
-      well_formed_expr p cur_comp e' /\
-      (imported_procedure (prog_interface p) cur_comp C' P' \/
-       (cur_comp = C' /\
-        exists C'procs, getm (prog_procedures p) C' = Some C'procs  /\
-                        P' \in domm C'procs))
-    end.
+  Definition well_formed_expr (p: program) (cur_comp: Component.id) (e: expr) : Prop :=
+    valid_calls (prog_procedures p) (prog_interface p) cur_comp (called_procedures e)
+    /\ values_are_integers e.
 
   (* Component C has a buffer of size at least one *)
   Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
@@ -73,15 +103,6 @@ Module Source.
                   (size > 0)%nat) \/
     (exists values, getm (prog_buffers p) C = Some (inr values) /\
                   (length values > 0)%nat).
-
-  (** Lookup definition of procedure [C.P] in the map [procs]. *)
-  Definition find_procedure
-             (procs: NMap (NMap expr))
-             (C: Component.id) (P: Procedure.id) : option expr :=
-    match getm procs C with
-    | Some C_procs => getm C_procs P
-    | None         => None
-    end.
 
   Record well_formed_program (p: program) := {
     (* the interface is sound (but maybe not closed) *)
@@ -93,7 +114,7 @@ Module Source.
     (* each exported procedure is actually defined *)
     wfprog_exported_procedures_existence:
       forall C P, exported_procedure (prog_interface p) C P ->
-      exists Pexpr, find_procedure (prog_procedures p) C P = Some Pexpr;
+      find_procedure (prog_procedures p) C P;
     (* each instruction of each procedure is well-formed *)
     wfprog_well_formed_procedures_2:
       forall C P Pexpr,
@@ -123,9 +144,8 @@ Module Source.
         getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
   }.
 
-  Inductive linkable_programs: program -> program -> Prop :=
+  Inductive linkable_programs prog1 prog2 : Prop :=
   | linkable_programs_intro:
-      forall prog1 prog2,
         well_formed_program prog1 ->
         well_formed_program prog2 ->
         sound_interface (unionm (prog_interface prog1) (prog_interface prog2)) ->
@@ -147,14 +167,78 @@ Module Source.
   Proof.
     intros p c Hlinkable.
     inversion Hlinkable; subst.
-    constructor;
-      try assumption.
+    constructor; try by trivial; rewrite fdisjointC.
     - rewrite unionmC; auto.
-      unfold fdisjoint. rewrite fsetIC. auto.
-    - unfold fdisjoint. rewrite fsetIC. auto.
-    - unfold fdisjoint. rewrite fsetIC. auto.
-    - unfold fdisjoint. rewrite fsetIC. auto.
+      by rewrite fdisjointC.
     - apply linkable_mains_sym; auto.
+  Qed.
+
+  Lemma linkable_programs_has_component p1 p2 :
+    linkable_programs p1 p2 ->
+    forall C CI,
+      Program.has_component (unionm (prog_interface p1) (prog_interface p2)) C CI
+      <-> Program.has_component (prog_interface p1) C CI
+          \/ Program.has_component (prog_interface p2) C CI.
+  Proof.
+    case=> wf1 wf2 sound_int dis_ints dis_procs dis_bufs mainsP C CI.
+    rewrite /Program.has_component !unionmE.
+    case if_p1_C: (prog_interface p1 C)=> [CI'|] //=.
+    - split; try tauto.
+      case=> [//|if_p2_C].
+      move/fdisjointP/(_ C): dis_ints.
+      rewrite !mem_domm if_p1_C => /(_ erefl).
+      by rewrite if_p2_C.
+    - split; try tauto.
+      by case.
+  Qed.
+
+  Lemma linkable_programs_find_procedure p1 p2 :
+    linkable_programs p1 p2 ->
+    forall C P Pexpr,
+      find_procedure (unionm (prog_procedures p1) (prog_procedures p2)) C P = Some Pexpr
+      <-> find_procedure (prog_procedures p1) C P = Some Pexpr
+          \/ find_procedure (prog_procedures p2) C P = Some Pexpr.
+  Proof.
+    move=> [_ _ _ _ dis _ _] C P Pexpr.
+    move/fdisjointP/(_ C)/implyP: dis.
+    rewrite /find_procedure unionmE !mem_domm.
+    case p1_C: (prog_procedures p1 C)=> [Cprocs|] //=.
+    - by case: (prog_procedures p2 C)=> // _; intuition congruence.
+    - by intuition congruence.
+  Qed.
+
+  Lemma linkable_programs_find_procedure_dom p1 p2 :
+    linkable_programs p1 p2 ->
+    forall C P,
+      find_procedure (unionm (prog_procedures p1) (prog_procedures p2)) C P
+      = find_procedure (prog_procedures p1) C P
+        || find_procedure (prog_procedures p2) C P :> bool.
+  Proof.
+    move=> [_ _ _ _ dis _ _] C P.
+    move/fdisjointP/(_ C)/implyP: dis.
+    rewrite /find_procedure unionmE !mem_domm.
+    case p1_C: (prog_procedures p1 C)=> [Cprocs|] //=.
+    by rewrite orbC; case: (prog_procedures p2 C)=> // _.
+  Qed.
+
+  Lemma link_imported_procedure p1 p2 :
+    linkable_programs p1 p2 ->
+    forall C C' P,
+      imported_procedure (unionm (prog_interface p1) (prog_interface p2)) C C' P
+      <-> imported_procedure (prog_interface p1) C C' P
+          \/ imported_procedure (prog_interface p2) C C' P.
+  Proof.
+    move=> linkable C C' P.
+    rewrite /imported_procedure /Program.has_component /Component.is_importing.
+    rewrite unionmE; split.
+    - case=> CI [].
+      case p1_C: (prog_interface p1 C)=> [CI'|] //=; by eauto.
+    - case => [[CI [get_CI in_CI]]|[CI [get_CI in_CI]]].
+        by rewrite get_CI /=; eauto.
+      case: linkable=> _ _ _ dis _ _ _.
+      move: dis; rewrite fdisjointC=> /fdisjointP/(_ C).
+      rewrite !mem_domm get_CI => /(_ erefl).
+      by case: (prog_interface p1 C)=> [|] //=; eauto.
   Qed.
 
   Theorem linking_well_formedness:
@@ -162,6 +246,35 @@ Module Source.
       linkable_programs p1 p2 ->
       well_formed_program (program_link p1 p2).
   Proof.
+    move=> p1 p2 linkable.
+    split; try by case: linkable.
+    - by case: linkable => *; rewrite !domm_union fsetUSS // wfprog_well_formed_procedures_1.
+    - move=> C P [CI []].
+      rewrite (linkable_programs_has_component linkable) /= => has_C_CI exp_CI_P.
+      rewrite linkable_programs_find_procedure_dom //; apply/orP.
+      case: linkable=> wf1 wf2 _ _ _ _ _.
+      by case: has_C_CI=> [H|H]; [left|right];
+      apply: wfprog_exported_procedures_existence=> //; exists CI; eauto.
+    - move=> C P Pexpr.
+      rewrite /= (linkable_programs_find_procedure linkable) => find.
+      have {find} wf: well_formed_expr p1 C Pexpr \/ well_formed_expr p2 C Pexpr.
+        case: find=> [H|H]; [left|right];
+        apply: wfprog_well_formed_procedures_2; by case: linkable; eauto.
+      split=> /=; last by case: wf=> [[]|[]].
+      without loss {linkable wf} [linkable [wf _]]:
+        p1 p2 / linkable_programs p1 p2 /\ well_formed_expr p1 C Pexpr.
+        case: wf=> wf; eauto; case: (linkable)=> _ _ _ dis1 dis2 _ _.
+        rewrite (unionmC dis1) (unionmC dis2); apply.
+        by split=> //; apply: linkable_sym.
+      move=> /= C' P' /wf {wf}; case: ifP => _.
+      + by rewrite linkable_programs_find_procedure_dom // => ->.
+      + by rewrite link_imported_procedure //; eauto.
+    - rewrite /has_required_local_buffers /= => C.
+      case: linkable=> /wfprog_buffers_existence wf1 /wfprog_buffers_existence wf2 _ _ _ dis _.
+      rewrite domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
+        by case/wf1=> [[? [->]]|[? [->]]] /=; eauto.
+      by case/wf2=> [[? [->]]|[? [->]]] /=; eauto.
+    - admit.
   Admitted.
 
   Fixpoint initialize_buffer
