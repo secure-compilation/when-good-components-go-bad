@@ -226,18 +226,18 @@ Theorem linkability_disjoint_procedures :
     linkable_programs prog1 prog2 ->
     fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)).
 Proof.
-  (* RB: Not using everything here right now, clean up later. *)
   intros
     _ _
-    [prog1 prog2 Hwell_formed1 Hwell_formed2 Hsound_interface Hdisjoint_interface].
-  (*inversion Hdisjoint_interface.*)
+    [prog1 prog2 Hwell_formed1 Hwell_formed2 _ Hdisjoint_interface].
   inversion Hwell_formed1 as [_ Hwell_formed_procs1 _ _ _ _].
   inversion Hwell_formed2 as [_ Hwell_formed_procs2 _ _ _ _].
-  (* RB: Possibly add lemma on sets to coq-utils. *)
-  admit.
-Admitted.
+  apply (fdisjoint_trans Hwell_formed_procs1) in Hdisjoint_interface.
+  rewrite fdisjointC in Hdisjoint_interface.
+  apply (fdisjoint_trans Hwell_formed_procs2) in Hdisjoint_interface.
+  rewrite fdisjointC.
+  apply Hdisjoint_interface.
+Qed.
 
-(* RB: Same as above. *)
 Theorem linkability_disjoint_buffers :
   forall prog1 prog2,
     linkable_programs prog1 prog2 ->
@@ -245,11 +245,15 @@ Theorem linkability_disjoint_buffers :
 Proof.
   intros
     _ _
-    [prog1 prog2 Hwell_formed1 Hwell_formed2 Hsound_interface Hdisjoint_interface].
+    [prog1 prog2 Hwell_formed1 Hwell_formed2 _ Hdisjoint_interface].
   inversion Hwell_formed1 as [_ _ _ _ Hwell_formed_buffers1 _].
   inversion Hwell_formed2 as [_ _ _ _ Hwell_formed_buffers2 _].
-  admit.
-Admitted.
+  apply (fdisjoint_trans Hwell_formed_buffers1) in Hdisjoint_interface.
+  rewrite fdisjointC in Hdisjoint_interface.
+  apply (fdisjoint_trans Hwell_formed_buffers2) in Hdisjoint_interface.
+  rewrite fdisjointC.
+  apply Hdisjoint_interface.
+Qed.
 
 Theorem linkability_disjoint_mains :
   forall prog1 prog2,
