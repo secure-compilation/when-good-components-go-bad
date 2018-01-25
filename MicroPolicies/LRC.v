@@ -2,7 +2,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq.
 
 Require Import Common.Definitions.
-Require Import MicroPolicies.Utils MicroPolicies.Types MicroPolicies.Symbolic.
+Require Import MicroPolicies.Utils MicroPolicies.Types MicroPolicies.Symbolic MicroPolicies.Exec.
 
 
 (** Tags **)
@@ -195,18 +195,14 @@ Global Instance sym_lrc : params := {
 }.
 
 
-(* TL TODO: do I need that?*)
+(* TL TODO: these notations inside a module? *)
 
 Notation state := (@Symbolic.state sym_lrc).
 
 Definition lrc_syscalls : syscall_table := emptym.
 
 Notation step  := (@Symbolic.step sym_lrc lrc_syscalls).
+Notation stepf  := (@stepf sym_lrc lrc_syscalls).
 
 Definition ratom := (atom (mword mt) value_tag).
 Definition matom := (atom (mword mt) mem_tag).
-
-
-
-
-(* TL TODO: if I want to export, notation inside a module to be exported, same for Int32 *)
