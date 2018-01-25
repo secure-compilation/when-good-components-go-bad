@@ -73,3 +73,4 @@ MicroPolicies/LRC.v
 I2MP/Tmp.v
 I2MP/Precompile.v
 I2MP/Encode.v
+I2MP/Test.v
