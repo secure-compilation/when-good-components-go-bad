@@ -61,6 +61,13 @@ Unset Printing Implicit Defensive.
   (*     forall b, program_behaves (I.CS.sem pc_comp) b <-> *)
   (*               program_behaves (I.CS.sem (ilink p_comp c_comp)) b. *)
 
+  Hypothesis compilation_preserves_well_formedness:
+    forall p p_compiled,
+      Source.well_formed_program p ->
+      compile_program p = Some p_compiled ->
+      Intermediate.well_formed_program p_compiled.
+
+  (* TODO: prove this from above + preserving interfaces *)
   Hypothesis compilation_preserves_linkability:
     forall p p_compiled c c_compiled,
       Source.linkable_programs p c ->
@@ -157,13 +164,6 @@ Hypothesis I_interface_preserves_closedness_r :
     Intermediate.prog_interface p2 = Intermediate.prog_interface p2' ->
     Intermediate.closed_program (ilink p1 p2').
 
-Hypothesis lift_linkability :
-  forall p1 p1c p2 p2c,
-    Intermediate.linkable_programs p1c p2c ->
-    compile_program p1 = Some p1c ->
-    compile_program p2 = Some p2c ->
-    Source.linkable_programs p1 p2.
-
 Section RSC_DC_MD.
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
@@ -174,8 +174,20 @@ Section RSC_DC_MD.
   Hypothesis successfull_compilation:
     compile_program p = Some p_compiled.
 
-  Hypothesis linkability:
-    Intermediate.linkable_programs p_compiled Ct.
+  Hypothesis well_formed_p : Source.well_formed_program p.
+  Hypothesis well_formed_Ct : Intermediate.well_formed_program Ct.
+  Hypothesis sound_interface_p_Ct : sound_interface (unionm (Source.prog_interface p) (Intermediate.prog_interface Ct)).
+  Hypothesis fdisjoint_p_Ct : fdisjoint (domm (Source.prog_interface p)) (domm (Intermediate.prog_interface Ct)).
+
+  Lemma linkability: Intermediate.linkable_programs p_compiled Ct.
+  Proof. constructor.
+         - eapply compilation_preserves_well_formedness; eassumption.
+         - assumption.
+         - apply compilation_preserves_interface in successfull_compilation.
+           rewrite successfull_compilation. assumption.
+         - apply compilation_preserves_interface in successfull_compilation.
+           rewrite successfull_compilation. assumption.
+  Qed.
 
   Hypothesis closedness:
     Intermediate.closed_program (ilink p_compiled Ct).
@@ -198,6 +210,7 @@ Section RSC_DC_MD.
          undef_in (Source.main_comp (Source.program_link p Cs)) t' (Source.prog_interface p)).
   Proof.
     intros t Hbeh.
+    pose proof linkability as linkability.
 
     (* intermediate decomposition (for p_compiled) *)
     assert (not_wrong (Terminates t)) as Hsafe_beh. { simpl. auto. }
@@ -289,11 +302,19 @@ Section RSC_DC_MD.
                    P'_Cs_closedness HP'_compiles successfull_compilation
                    Hprog_same_iface)).
     assert (Source.linkable_programs p Cs) as Hlinkable_p_Cs. {
-      assert (Source.linkable_programs p Cs) as linkability'''
-        by (apply (lift_linkability
-                     linkability'' successfull_compilation HCs_compiles)).
-      apply Source.linkable_programs_intro;
-        (inversion linkability'''; assumption).
+      destruct linkability'' as
+            [p_compiled Cs_compiled _ _ sound_interface_p_Cs fdisjoint_p_Cs].
+      constructor.
+      - assumption.
+      - now destruct P'_Cs_linkability.
+      - apply compilation_preserves_interface in HCs_compiles.
+        apply compilation_preserves_interface in successfull_compilation.
+        rewrite <- HCs_compiles. rewrite <- successfull_compilation.
+        assumption.
+      - apply compilation_preserves_interface in HCs_compiles.
+        apply compilation_preserves_interface in successfull_compilation.
+        rewrite <- HCs_compiles. rewrite <- successfull_compilation.
+        assumption.
     }
     assert (Source.well_formed_program (slink p Cs)) as Hwf_p_Cs
       by (apply Source.linking_well_formedness; assumption).

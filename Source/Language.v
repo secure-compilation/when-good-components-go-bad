@@ -94,7 +94,7 @@ Module Source.
     wfprog_exported_procedures_existence:
       forall C P, exported_procedure (prog_interface p) C P ->
       exists Pexpr, find_procedure (prog_procedures p) C P = Some Pexpr;
-    (* each instruction of each procedure is well-formed *)
+    (* expression of each procedure is well-formed *)
     wfprog_well_formed_procedures_2:
       forall C P Pexpr,
         find_procedure (prog_procedures p) C P = Some Pexpr ->
