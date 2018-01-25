@@ -89,18 +89,18 @@ Definition encode_code (eenv : encoder_env) (code : Precompile.code) : memory :=
   let f : nat -> mword mt := word.as_word in
   Tmp.mapk f (fmap_of_seq (map (encode_instr eenv) code)).
 
-Definition alloc_buffers (eenv : encoder_env) (bufs : Precompile.bufs) (* : memory. *) :=
-  mapm (fun map : NMap (value * mem_tag) => tt) bufs.
+Definition alloc_buffers (eenv : encoder_env) (bufs : Precompile.bufs) : memory.
+  (* mapm (fun map : NMap (value * mem_tag) => tt) bufs. *)
 
   (* mkfmap (map (fun p => (word.as_word (concretize_pointer eenv p), encode_memval eenv (get_val p))) all_pointers). *)
 
 Admitted.
 
-Definition block_size (bufs : Precompile.bufs) (c : Component.id) (b : Block.id) : nat :=
-  (* TL TODO: the fact that the size of the block is the lenght of the map is not obvious, it is a translation invariant... ; should take the max index *)
-  Option.default 0 (do m <- getm bufs c;
-                    do b <- getm m b;
-                    Some (length b)).
+(* Definition block_size (bufs : Precompile.bufs) (c : Component.id) (b : Block.id) : nat := *)
+(*   (* TL TODO: the fact that the size of the block is the lenght of the map is not obvious, it is a translation invariant... ; should take the max index *) *)
+(*   Option.default 0 (do m <- getm bufs c; *)
+(*                     do b <- getm m b; *)
+(*                     Some (length b)). *)
 
 Definition encode (prog : Precompile.prog) : {fmap mword mt -> matom}:=
   (* Solve labels *)
