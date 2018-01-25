@@ -373,10 +373,6 @@ Proof.
   - simpl. rewrite unionm0.
     apply (wfprog_interface_soundness Hwf).
   - simpl. rewrite domm0. apply fdisjoints0.
-  - simpl. rewrite domm0. apply fdisjoints0.
-  - simpl. rewrite domm0. apply fdisjoints0.
-  - simpl. unfold linkable_mains.
-    destruct (prog_main p); auto.
 Qed.
 
 Theorem linking_empty_program:
@@ -401,9 +397,6 @@ Proof.
   - rewrite unionmC; auto.
     unfold fdisjoint. rewrite fsetIC. auto.
   - unfold fdisjoint. rewrite fsetIC. auto.
-  - unfold fdisjoint. rewrite fsetIC. auto.
-  - unfold fdisjoint. rewrite fsetIC. auto.
-  - apply linkable_mains_sym; auto.
 Qed.
 
 Theorem linking_well_formedness:
@@ -423,24 +416,24 @@ Proof.
   - intros.
     simpl in *.
     rewrite unionmE.
-    rewrite unionmE in H6.
+    rewrite unionmE in H3.
     destruct ((prog_interface p1) C) eqn:Hwhere; simpl in *.
-    + rewrite Hwhere in H6.
-      inversion H6; subst.
-      destruct (wfprog_exported_procedures_existence H Hwhere H7)
+    + rewrite Hwhere in H3.
+      inversion H3; subst.
+      destruct (wfprog_exported_procedures_existence H Hwhere H4)
         as [Cprocs [Pcode [Hproc Hcode]]].
       rewrite Hproc. simpl.
       exists Cprocs. exists Pcode.
       split; auto.
     + enough ((prog_procedures p1) C = None) as Hno_p1.
-      * rewrite Hno_p1. rewrite Hwhere in H6. simpl in *.
-        destruct (wfprog_exported_procedures_existence H0 H6 H7)
+      * rewrite Hno_p1. rewrite Hwhere in H3. simpl in *.
+        destruct (wfprog_exported_procedures_existence H0 H3 H4)
           as [Cprocs [Pcode [Hproc Hcode]]].
         exists Cprocs. exists Pcode.
         split; auto.
       * destruct ((prog_procedures p1) C) eqn:Hin_p1.
-        ** rewrite Hwhere in H6. simpl in H6.
-           destruct (wfprog_exported_procedures_existence H0 H6 H7)
+        ** rewrite Hwhere in H3. simpl in H3.
+           destruct (wfprog_exported_procedures_existence H0 H3 H4)
              as [Cprocs [Pcode [Hproc Hcode]]].
            unfold fdisjoint in H3.
            admit.
@@ -451,7 +444,7 @@ Proof.
     + destruct i; auto.
       simpl in *.
       rewrite unionmE.
-      rewrite unionmE in H6.
+      rewrite unionmE in H3.
       admit.
     + admit.
     + admit.
@@ -467,22 +460,22 @@ Proof.
     destruct (prog_main p1) as [[]|] eqn:Hmain_p1;
     destruct (prog_main p2) as [[]|] eqn:Hmain_p2.
     + simpl in *.
-      inversion H6; subst.
+      inversion H3; subst.
       destruct (Hmain1 mainC mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.
-        rewrite H7. reflexivity.
+        rewrite H4. reflexivity.
       * assumption.
     + simpl in *.
-      inversion H6; subst.
+      inversion H3; subst.
       destruct (Hmain1 mainC mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.
-        rewrite H7. reflexivity.
+        rewrite H4. reflexivity.
       * assumption.
-    + inversion H6; subst.
+    + inversion H3; subst.
       destruct (Hmain2 mainC mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
