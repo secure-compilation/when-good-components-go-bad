@@ -130,10 +130,33 @@ Module Source.
         well_formed_program prog2 ->
         sound_interface (unionm (prog_interface prog1) (prog_interface prog2)) ->
         fdisjoint (domm (prog_interface prog1)) (domm (prog_interface prog2)) ->
+(* RB: Stubbing these out to confirm the structure of the high-level proof.
         fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)) ->
         fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)) ->
         linkable_mains (prog_main prog1) (prog_main prog2) ->
+*)
         linkable_programs prog1 prog2.
+
+  (* RB: TODO *)
+  Theorem linkability_disjoint_procedures :
+    forall prog1 prog2,
+      linkable_programs prog1 prog2 ->
+      fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)).
+  Admitted.
+
+  (* RB: TODO *)
+  Theorem linkability_disjoint_buffers :
+    forall prog1 prog2,
+      linkable_programs prog1 prog2 ->
+      fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)).
+  Admitted.
+
+  (* RB: TODO *)
+  Theorem linkability_disjoint_mains :
+    forall prog1 prog2,
+      linkable_programs prog1 prog2 ->
+      linkable_mains (prog_main prog1) (prog_main prog2).
+  Admitted.
 
   Definition program_link (p1 p2: program) : program :=
     {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
@@ -152,9 +175,11 @@ Module Source.
     - rewrite unionmC; auto.
       unfold fdisjoint. rewrite fsetIC. auto.
     - unfold fdisjoint. rewrite fsetIC. auto.
+(* RB: Associated to linkability stubbing.
     - unfold fdisjoint. rewrite fsetIC. auto.
     - unfold fdisjoint. rewrite fsetIC. auto.
     - apply linkable_mains_sym; auto.
+*)
   Qed.
 
   Theorem linking_well_formedness:
