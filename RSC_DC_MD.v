@@ -157,6 +157,13 @@ Hypothesis I_interface_preserves_closedness_r :
     Intermediate.prog_interface p2 = Intermediate.prog_interface p2' ->
     Intermediate.closed_program (ilink p1 p2').
 
+Hypothesis lift_linkability :
+  forall p1 p1c p2 p2c,
+    Intermediate.linkable_programs p1c p2c ->
+    compile_program p1 = Some p1c ->
+    compile_program p2 = Some p2c ->
+    Source.linkable_programs p1 p2.
+
 Section RSC_DC_MD.
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
@@ -255,7 +262,18 @@ Section RSC_DC_MD.
     rewrite <- Hprog_same_iface in HCs_decomp.
 
     assert (Intermediate.linkable_programs p_compiled Cs_compiled)
-      as linkability'' by admit.
+      as linkability''.
+    {
+      apply Intermediate.linkable_programs_intro.
+      - inversion linkability; assumption.
+      - inversion linkability'; assumption.
+      - rewrite Hprog_same_iface.
+        apply Intermediate.linkable_sym in linkability'.
+        inversion linkability'; assumption.
+      - rewrite Hprog_same_iface.
+        apply Intermediate.linkable_sym in linkability'.
+        inversion linkability'; assumption.
+    }
     assert (Intermediate.closed_program (ilink p_compiled Cs_compiled))
       as HpCs_compiled_closed
       by (apply (I_interface_preserves_closedness_r closedness Hctx_same_iface)).
@@ -270,7 +288,13 @@ Section RSC_DC_MD.
       by (apply (I_interface_preserves_S_closedness_l
                    P'_Cs_closedness HP'_compiles successfull_compilation
                    Hprog_same_iface)).
-    assert (Source.linkable_programs p Cs) as Hlinkable_p_Cs by admit.
+    assert (Source.linkable_programs p Cs) as Hlinkable_p_Cs. {
+      assert (Source.linkable_programs p Cs) as linkability'''
+        by (apply (lift_linkability
+                     linkability'' successfull_compilation HCs_compiles)).
+      apply Source.linkable_programs_intro;
+        (inversion linkability'''; assumption).
+    }
     assert (Source.well_formed_program (slink p Cs)) as Hwf_p_Cs
       by (apply Source.linking_well_formedness; assumption).
 
