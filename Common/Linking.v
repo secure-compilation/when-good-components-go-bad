@@ -1,6 +1,8 @@
 Require Import Common.Definitions.
 Require Import Common.Util.
 
+From mathcomp Require Import ssreflect ssrfun ssrbool.
+
 (* an imported procedure is either open (the interface is missing)
    or exported by the right component *)
 Definition sound_interface (interface : Program.interface) : Prop :=
@@ -29,12 +31,7 @@ Proof.
 Qed.
 
 Definition linkable_mains (main1 main2: option (Component.id * Procedure.id)) : Prop :=
-  match main1, main2 with
-  | None, None => True
-  | Some _, None => True
-  | None, Some _ => True
-  | Some m1, Some m2 => m1 = m2 (* CH: TODO: Shouldn't this always return False? *)
-  end.
+  ~~ (main1 && main2).
 
 Lemma linkable_mains_sym:
   forall m1 m2,
@@ -47,12 +44,7 @@ Qed.
 (* we assume that the provided mains are linkable *)
 Definition main_link (main1 main2: option (Component.id * Procedure.id))
   : option (Component.id * Procedure.id) :=
-  match main1, main2 with
-  | None, None => None
-  | Some _, None => main1
-  | None, Some _ => main2
-  | Some _, Some _ => main1
-  end.
+  if main1 then main1 else main2.
 
 Lemma main_link_with_empty_main:
   forall main,

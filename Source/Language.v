@@ -126,9 +126,9 @@ Module Source.
                 has_required_local_buffers p C;
     (* if the main component exists, then the main procedure must exist as well *)
     wfprog_main_existence:
-      forall mainC mainP main_procs,
+      forall mainC mainP,
         prog_main p = Some (mainC, mainP) ->
-        getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
+        find_procedure (prog_procedures p) mainC mainP
   }.
 
   (* a closed program is a program with a closed interface and an existing main
@@ -274,8 +274,13 @@ Module Source.
       rewrite domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
         by case/wf1=> [[? [->]]|[? [->]]] /=; eauto.
       by case/wf2=> [[? [->]]|[? [->]]] /=; eauto.
-    - admit.
-  Admitted.
+    - move=> mainC mainP; rewrite /= /main_link /=.
+      case: (linkable)=> wf1 wf2 _ _ _ _; rewrite /linkable_mains.
+      rewrite linkable_programs_find_procedure_dom //.
+      case Hp1: (prog_main p1)=> [main|] //=.
+        by move=> _ [?]; subst main; rewrite (wfprog_main_existence wf1).
+      by move=> ??; rewrite (wfprog_main_existence wf2) ?orbT.
+  Qed.
 
   Fixpoint initialize_buffer
            (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)
