@@ -70,19 +70,22 @@ Definition precompile_code (cenv : compiler_env) : code :=
   let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
   main ++ flatten (map (precompile_component cenv) components).
 
-Notation bufs := (NMap (NMap (NMap (value * mem_tag)))).
+Notation bufs := {fmap (nat * nat * nat) -> (value * mem_tag)}.
 
-Definition precompile_buf (cenv : compiler_env) (c : Component.id) (b : Block.id) : NMap (value * mem_tag) :=
-  let seq := Option.default [::] (do map <- getm (Intermediate.prog_buffers (program cenv)) c ;
-                                  do block <- getm map b ;
-                                  Some match block with
-                                       | inl n => repeat (Undef, def_tag c) n
-                                       | inr l => [seq (x, def_tag c) | x <- l]
-                                       end)
-  in fmap_of_seq seq.
+Definition precompile_buf (cenv : compiler_env) (c : Component.id) (b : Block.id) : seq (value * mem_tag) :=
+  Option.default [::] (do map <- getm (Intermediate.prog_buffers (program cenv)) c ;
+                       do block <- getm map b ;
+                       Some match block with
+                            | inl n => repeat (Undef, def_tag c) n
+                            | inr l => [seq (x, def_tag c) | x <- l]
+                            end).
 
 Definition precompile_bufs (cenv : compiler_env) : bufs :=
-  mapim (fun c map => mapim (fun b _ => precompile_buf cenv c b) map) (Intermediate.prog_buffers (program cenv)).
+  let bufs' : NMap (NMap (NMap (value * mem_tag))) :=
+      mapim (fun c map => mapim (fun b _ => fmap_of_seq (precompile_buf cenv c b)) map)
+            (Intermediate.prog_buffers (program cenv))
+  in Tmp.mapk (fun c => match c with (x, (y, z)) => (x, y, z) end)
+              (uncurrym (mapm (fun m : NMap (NMap (value * mem_tag)) => uncurrym m) bufs')).
 
 Record prog :=
   { procedures : code ;
