@@ -377,7 +377,9 @@ Definition merge_partial_states (ips1 ips2: state) : state :=
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | initial_state_intro: forall p' ics ips,
     prog_interface p' = ctx ->
-    linkable_programs p p' ->
+    well_formed_program p ->
+    well_formed_program p' ->
+    linkable (prog_interface p) (prog_interface p') ->
     partial_state ctx ics ips ->
     CS.initial_state (program_link p p') ics ->
     initial_state p ctx ips.
@@ -385,7 +387,9 @@ Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
 Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | final_state_program: forall p' ics ips,
     prog_interface p' = ctx ->
-    linkable_programs p p' ->
+    well_formed_program p ->
+    well_formed_program p' ->
+    linkable (prog_interface p) (prog_interface p') ->
     ~ turn_of ips ctx ->
     partial_state ctx ics ips ->
     CS.final_state
@@ -400,7 +404,9 @@ Inductive step (p: program) (ctx: Program.interface)
 | partial_step:
     forall p' ips t ips' ics ics',
       prog_interface p' = ctx ->
-      linkable_programs p p' ->
+      well_formed_program p ->
+      well_formed_program p' ->
+      linkable (prog_interface p) (prog_interface p') ->
       CS.step (prepare_global_env (program_link p p')) ics t ics' ->
       partial_state ctx ics ips ->
       partial_state ctx ics' ips' ->
@@ -421,16 +427,16 @@ Proof.
   end.
   - (* contra *)
     assert (Pointer.component pc = Pointer.component pc0) as Hsame_comp. {
-      inversion H1; subst;
+      inversion H3; subst;
         try (rewrite Pointer.inc_preserves_component; reflexivity);
         try (symmetry; assumption).
-      + erewrite find_label_in_component_1; eauto.
-      + erewrite find_label_in_procedure_1; eauto.
+      + erewrite find_label_in_component_1; now eauto.
+      + erewrite find_label_in_procedure_1; now eauto.
     }
-    rewrite Hsame_comp in H4.
-    rewrite H4 in H.
+    rewrite Hsame_comp in H6.
+    rewrite H6 in H.
     discriminate.
-  - inversion H1; subst;
+  - inversion H3; subst;
       try (rewrite Pointer.inc_preserves_component; reflexivity);
       try (symmetry; assumption).
     + rewrite Pointer.inc_preserves_component.
@@ -440,7 +446,7 @@ Proof.
       destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr)
                                       (Register.get r2 regs0)) eqn:Hstore;
         try discriminate.
-      inversion H16; subst.
+      inversion H18; subst.
       enough (filterm (fun k _ => k \notin domm (prog_interface p'))
                       (setm mem (Pointer.component ptr) t0) =
               filterm (fun k _ => k \notin domm (prog_interface p')) mem) as Hfilter.

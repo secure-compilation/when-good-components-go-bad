@@ -2,6 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Memory.
 Require Import Common.Blame.
+Require Import Common.Linking.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -21,8 +22,10 @@ Import Source.
 Section Decomposition.
   Variable p c: program.
 
-  Hypothesis linkability:
-    linkable_programs p c.
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Hypothesis closedness_after_linking:
     closed_program (program_link p c).
@@ -45,6 +48,8 @@ Section Decomposition.
       + eapply PS.initial_state_intro with (p':=c).
         * reflexivity.
         * assumption.
+        * assumption.
+        * assumption.
         * eapply PS.ContextControl; eauto.
           ** apply Hics_init.
       + eapply PS.ContextControl; eauto.
@@ -52,6 +57,8 @@ Section Decomposition.
     - split.
       + eapply PS.initial_state_intro with (p':=c).
         * reflexivity.
+        * assumption.
+        * assumption.
         * assumption.
         * eapply PS.ProgramControl; auto.
           ** PS.simplify_turn.
@@ -82,6 +89,8 @@ Section Decomposition.
     - inversion Hpartial; inversion H; subst.
       + eapply PS.final_state_program with (p':=c).
         * reflexivity.
+        * assumption.
+        * assumption.
         * assumption.
         * PS.simplify_turn. rewrite Htarget. auto.
         * eauto.

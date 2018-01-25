@@ -780,7 +780,9 @@ Qed.
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | initial_state_intro: forall p' scs sps,
     prog_interface p' = ctx ->
-    linkable_programs p p' ->
+    well_formed_program p ->
+    well_formed_program p' ->
+    linkable (prog_interface p) (prog_interface p') ->
     partial_state ctx scs sps ->
     CS.initial_state (program_link p p') scs ->
     initial_state p ctx sps.
@@ -788,7 +790,9 @@ Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
 Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | final_state_program: forall p' scs sps,
     prog_interface p' = ctx ->
-    linkable_programs p p' ->
+    well_formed_program p ->
+    well_formed_program p' ->
+    linkable (prog_interface p) (prog_interface p') ->
     ~ turn_of sps ctx ->
     partial_state ctx scs sps ->
     CS.final_state scs ->
@@ -802,7 +806,9 @@ Inductive kstep (p: program) (ctx: Program.interface)
 | partial_step:
     forall p' sps t sps' scs scs',
       prog_interface p' = ctx ->
-      linkable_programs p p' ->
+      well_formed_program p ->
+      well_formed_program p' ->
+      linkable (prog_interface p) (prog_interface p') ->
       CS.kstep (prepare_global_env (program_link p p')) scs t scs' ->
       partial_state ctx scs sps ->
       partial_state ctx scs' sps' ->
@@ -873,6 +879,8 @@ Lemma state_determinism_program:
     kstep p ctx G sps t sps'' ->
     sps' = sps''.
 Proof.
+Admitted.
+(* XXX
   intros p ctx G sps t sps' Hcontrol Hstep1 sps'' Hstep2.
 
   inversion Hstep1
@@ -1079,6 +1087,7 @@ Proof.
       rewrite Hin in Hnotin; discriminate
     end.
 Qed.
+*)
 
 Lemma context_epsilon_step_is_silent:
   forall p ctx G sps sps',
@@ -1086,6 +1095,8 @@ Lemma context_epsilon_step_is_silent:
     kstep p ctx G sps E0 sps' ->
     sps = sps'.
 Proof.
+Admitted.
+(* XXX
   intros p ctx G sps sps' Hcontrol Hkstep.
 
   inversion Hkstep
@@ -1125,6 +1136,7 @@ Proof.
     + erewrite context_store_in_partialized_memory with (mem':=mem'); eauto.
       rewrite partial_stack_ignores_change_by_context_with_control; auto.
 Qed.
+*)
 
 Lemma context_epsilon_star_is_silent:
   forall p ctx G sps sps',
@@ -1149,6 +1161,7 @@ Lemma state_determinism_context:
     kstep p ctx G sps t sps'' ->
     sps' = sps''.
 Proof.
+(* XXX
   intros p ctx G sps t sps' Hcontrol Hstep1 sps'' Hstep2.
 
   inversion Hstep1
@@ -1239,6 +1252,7 @@ Proof.
           try reflexivity;
           try eassumption.*)
         admit.
+*)
 Admitted.
 
 Theorem state_determinism:
@@ -1251,16 +1265,16 @@ Proof.
   intros p ctx G sps t sps' Hstep1 sps'' Hstep2.
 
   inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
+    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hwfp Hwfp1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
     subst.
   inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
+    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _ Hwfp2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
     subst.
 
   (* case analysis on who has control *)
   inversion Hpartial_sps1; subst.
-  - eapply state_determinism_program; eauto.
-  - eapply state_determinism_context; eauto.
+  - eapply state_determinism_program; now eauto.
+  - eapply state_determinism_context; now eauto.
 Qed.
 
 Corollary state_determinism_star:

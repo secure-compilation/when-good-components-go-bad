@@ -34,7 +34,9 @@ Unset Printing Implicit Defensive.
               see Separate compilation in robust-imp-comments.org *)
   Hypothesis separate_compilation:
     forall p c p_comp c_comp,
-      Source.linkable_programs p c ->
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
       compile_program p = Some p_comp ->
       compile_program c = Some c_comp ->
       compile_program (slink p c) = Some (ilink p_comp c_comp).
@@ -43,7 +45,9 @@ Unset Printing Implicit Defensive.
          but maybe that's inherited from CompCert? *)
   Hypothesis separate_compilation':
     forall p c pc_comp,
-      Source.linkable_programs p c ->
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
       compile_program (slink p c) = Some pc_comp ->
       exists p_comp c_comp,
         compile_program p = Some p_comp /\
@@ -67,27 +71,15 @@ Unset Printing Implicit Defensive.
       compile_program p = Some p_compiled ->
       Intermediate.well_formed_program p_compiled.
 
-  (* TODO: prove this from above + preserving interfaces *)
+  (* this should follow from preserving interfaces *)
   Hypothesis compilation_preserves_linkability:
     forall p p_compiled c c_compiled,
-      Source.linkable_programs p c ->
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
       compile_program p = Some p_compiled ->
       compile_program c = Some c_compiled ->
-      Intermediate.linkable_programs p_compiled c_compiled.
-
-  (* CH: The following symmetry lemmas seem needed so that lemmas like
-         decomposition don't have to be reproved for contexts
-         (although in the general case they probably can be reproved
-         if things were not perfectly symmetric)? *)
-  Hypothesis ilink_sym: forall p c,
-      Intermediate.linkable_programs p c ->
-      ilink p c = ilink c p.
-  Hypothesis slink_sym: forall p c,
-      Source.linkable_programs p c ->
-      slink p c = slink c p.
-  Hypothesis linkability_sym : forall Cs p,
-    Source.linkable_programs Cs p ->
-    Source.linkable_programs p Cs.
+      linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
 
   (* Definability *)
   (* CH: this should now be related to what Arthur proved:
@@ -100,14 +92,17 @@ Unset Printing Implicit Defensive.
 
   Hypothesis definability_with_linking:
     forall p c t,
-      Intermediate.linkable_programs p c ->
+      Intermediate.well_formed_program p ->
+      Intermediate.well_formed_program c ->
+      linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
       Intermediate.closed_program (ilink p c) ->
       program_behaves (I.CS.sem (ilink p c)) (Terminates t) ->
         (* CH: last premise naive, it should instead take trace prefixes *)
     exists p' c',
       Source.prog_interface p' = Intermediate.prog_interface p /\
       Source.prog_interface c' = Intermediate.prog_interface c /\
-      Source.linkable_programs p' c' /\
+      Source.well_formed_program p' /\
+      Source.well_formed_program c' /\
       Source.closed_program (slink p' c') /\
       program_behaves (S.CS.sem (slink p' c')) (Terminates t).
 
@@ -179,10 +174,8 @@ Section RSC_DC_MD.
   Hypothesis sound_interface_p_Ct : sound_interface (unionm (Source.prog_interface p) (Intermediate.prog_interface Ct)).
   Hypothesis fdisjoint_p_Ct : fdisjoint (domm (Source.prog_interface p)) (domm (Intermediate.prog_interface Ct)).
 
-  Lemma linkability: Intermediate.linkable_programs p_compiled Ct.
+  Lemma linkability: linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface Ct).
   Proof. constructor.
-         - eapply compilation_preserves_well_formedness; eassumption.
-         - assumption.
          - apply compilation_preserves_interface in successfull_compilation.
            rewrite successfull_compilation. assumption.
          - apply compilation_preserves_interface in successfull_compilation.
@@ -200,7 +193,8 @@ Section RSC_DC_MD.
         (* CH: last premise naive, it should instead take trace prefixes *)
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
-      Source.linkable_programs p Cs /\
+      Source.well_formed_program Cs /\
+      linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (slink p Cs) /\
       program_behaves (S.CS.sem (Source.program_link p Cs)) beh /\
       exists t',
