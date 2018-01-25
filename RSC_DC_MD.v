@@ -139,6 +139,24 @@ Hypothesis close_the_diagram : forall t t' p Cs,
   undef_in (Source.main_comp (Source.program_link p Cs)) t'
            (Source.prog_interface p).
 
+(* RB: I have pushed here a couple of details that maybe should be external:
+    - The symmetry in prog_interface.
+    - The lemma that if two intermediate interfaces coincide, the interfaces of
+      their corresponding sources do as well.  *)
+Hypothesis I_interface_preserves_S_closedness_l :
+  forall p1 p1' p1_c p1'_c p2,
+    Source.closed_program (slink p1 p2) ->
+    compile_program p1 = Some p1_c ->
+    compile_program p1' = Some p1'_c ->
+    Intermediate.prog_interface p1'_c = Intermediate.prog_interface p1_c ->
+    Source.closed_program (slink p1' p2).
+
+Hypothesis I_interface_preserves_closedness_r :
+  forall p1 p2 p2',
+    Intermediate.closed_program (ilink p1 p2) ->
+    Intermediate.prog_interface p2 = Intermediate.prog_interface p2' ->
+    Intermediate.closed_program (ilink p1 p2').
+
 Section RSC_DC_MD.
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
@@ -239,7 +257,8 @@ Section RSC_DC_MD.
     assert (Intermediate.linkable_programs p_compiled Cs_compiled)
       as linkability'' by admit.
     assert (Intermediate.closed_program (ilink p_compiled Cs_compiled))
-      as HpCs_compiled_closed by admit.
+      as HpCs_compiled_closed
+      by (apply (I_interface_preserves_closedness_r closedness Hctx_same_iface)).
     assert (Intermediate.well_formed_program (ilink p_compiled Cs_compiled))
       as HpCs_compiled_well_formed
       by (apply Intermediate.linking_well_formedness; assumption).
@@ -247,7 +266,10 @@ Section RSC_DC_MD.
     pose proof composition_for_termination linkability'' HpCs_compiled_closed
          HpCs_compiled_well_formed HP_decomp HCs_decomp as HpCs_compiled_beh.
 
-    assert (Source.closed_program (slink p Cs)) as Hclosed_p_Cs by admit.
+    assert (Source.closed_program (slink p Cs)) as Hclosed_p_Cs
+      by (apply (I_interface_preserves_S_closedness_l
+                   P'_Cs_closedness HP'_compiles successfull_compilation
+                   Hprog_same_iface)).
     assert (Source.linkable_programs p Cs) as Hlinkable_p_Cs by admit.
     assert (Source.well_formed_program (slink p Cs)) as Hwf_p_Cs
       by (apply Source.linking_well_formedness; assumption).
