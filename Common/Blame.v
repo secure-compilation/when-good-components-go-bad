@@ -35,3 +35,16 @@ Definition undef_in
     (* the last event gives us the component to blame *)
     (who_is_in_control_after e) \in (domm iface)
   end.
+
+Lemma no_last_event_implies_empty_trace:
+  forall t,
+    last_event t = None -> t = [].
+Proof.
+  intros t Hlast_event.
+  induction t as [|? t' IH].
+  - reflexivity.
+  - destruct t'; simpl in *.
+    + discriminate.
+    + specialize (IH Hlast_event).
+      discriminate.
+Qed.

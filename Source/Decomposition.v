@@ -454,6 +454,15 @@ Section Decomposition.
          Therefore, it must be either a component of p or a
          component of c.
      *)
+    intros t Hbeh.
+    destruct (last_event t) as [last_event |] eqn:Hlast_event.
+    - pose proof (who_is_in_control_after last_event) as comp_to_blame.
+      (* comp_to_blame is either in p or c due to trace well-formedness *)
+      admit.
+    - apply no_last_event_implies_empty_trace in Hlast_event.
+      rewrite Hlast_event.
+      unfold undef_in. simpl.
+      apply linked_programs_main_component_origin; auto.
   Admitted.
 
   Lemma program_ub_preservation:
@@ -480,6 +489,40 @@ Section Decomposition.
           therefore, we are stuck in the partial semantics
           as well.
      *)
+    intros t Hbeh Hblame.
+    inversion Hbeh as [ init_s beh Hinit Hstate_beh | ]; subst.
+    (* program reaches a stuck state after zero or many steps *)
+    - eapply program_runs.
+      + apply PS.initial_state_intro
+          with (p':=c) (scs:=init_s) (sps:=PS.partialize (prog_interface c) init_s).
+        * reflexivity.
+        * auto.
+        * CS.unfold_state init_s. simpl in *.
+          destruct (C \in domm (prog_interface c)) eqn:Hctx.
+          ** rewrite Hctx. constructor.
+             *** PS.simplify_turn. auto.
+             *** reflexivity.
+             *** reflexivity.
+          ** rewrite Hctx. constructor.
+             *** PS.simplify_turn.
+                 unfold negb. rewrite Hctx.
+                 auto.
+             *** reflexivity.
+             *** reflexivity.
+             *** auto.
+      + inversion Hstate_beh; subst.
+        econstructor.
+        * (* simulate star with decomposition *) admit.
+        * (* show preservation of stuckness *) admit.
+        * (* show preservation of non-final state *) admit.
+    (* program went wrong because it doesn't have an initial state *)
+    - apply program_goes_initially_wrong.
+      intros s.
+      unfold not. intro contra.
+      inversion contra; subst.
+      unfold CS.initial_state in H3. subst.
+      eapply H.
+      admit.
   Admitted.
 
   Lemma ub_improvement:

@@ -1244,26 +1244,21 @@ End PartialComposition.
 Section Composition.
   Variables p c: program.
 
-  Let prog := program_link p c.
-
   Hypothesis linkability:
     linkable_programs p c.
 
   Hypothesis prog_is_closed:
-    closed_program prog.
-
-  (* this should follow from linkability *)
-  Hypothesis prog_is_well_formed:
-    well_formed_program prog.
+    closed_program (program_link p c).
 
   Theorem composition_for_termination:
     forall t,
       program_behaves (PS.sem p (prog_interface c)) (Terminates t) ->
       program_behaves (PS.sem c (prog_interface p)) (Terminates t) ->
-      program_behaves (CS.sem prog) (Terminates t).
+      program_behaves (CS.sem (program_link p c)) (Terminates t).
   Proof.
     intros t Hbeh1 Hbeh2.
     eapply partial_semantics_implies_complete_semantics; auto.
-    apply partial_programs_composition; auto.
+    - apply linking_well_formedness; auto.
+    - apply partial_programs_composition; auto.
   Qed.
 End Composition.

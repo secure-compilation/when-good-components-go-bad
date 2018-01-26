@@ -282,6 +282,38 @@ Module Source.
       by move=> ??; rewrite (wfprog_main_existence wf2) ?orbT.
   Qed.
 
+  Lemma linked_programs_main_component_origin:
+    forall p1 p2,
+      linkable_programs p1 p2 ->
+      closed_program (program_link p1 p2) ->
+      main_comp (program_link p1 p2) \in domm (prog_interface p1) \/
+      main_comp (program_link p1 p2) \in domm (prog_interface p2).
+  Proof.
+    intros p1 p2.
+    intros Hlink Hclosed.
+    apply cprog_main_existence in Hclosed.
+    unfold main_comp.
+    destruct Hclosed as [mainC [mainP [main_procs [Hmain_C_P [Hprocs Hproc_P]]]]].
+    rewrite Hmain_C_P.
+    unfold program_link in Hprocs. simpl in *.
+    rewrite unionmE in Hprocs.
+    destruct ((prog_procedures p1) mainC) eqn:Hmain_in_p1.
+    + rewrite Hmain_in_p1 in Hprocs. simpl in *.
+      inversion Hprocs. subst.
+      left.
+      inversion Hlink.
+      apply wfprog_well_formed_procedures_1 in H.
+      (* subset stuff *)
+      admit.
+    + rewrite Hmain_in_p1 in Hprocs. simpl in *.
+      inversion Hprocs. subst.
+      right.
+      inversion Hlink.
+      apply wfprog_well_formed_procedures_1 in H1.
+      (* subset stuff *)
+      admit.
+  Admitted.
+
   Fixpoint initialize_buffer
            (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)
     : ComponentMemory.t :=
