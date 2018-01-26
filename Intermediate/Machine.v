@@ -440,25 +440,12 @@ Proof.
     + simpl in *. discriminate.
 Admitted.
 
-Fixpoint alloc_static_buffers p mem comps :=
-  match comps with
-  | [] => mem
-  | C :: comps' =>
-    match getm (prog_buffers p) C with
-    | Some Cbufs =>
-      (* the component has static buffers *)
-      let mem' := setm mem C (ComponentMemory.prealloc Cbufs) in
-      alloc_static_buffers p mem' comps'
-    | None =>
-      (* the component doesn't have static buffers *)
-      (* we have to create its memory anyway *)
-      let mem' := setm mem C (ComponentMemory.prealloc emptym) in
-      alloc_static_buffers p mem' comps'
-    end
-  end.
+Definition alloc_static_buffers p comps :=
+  mkfmapf (fun C =>
+    ComponentMemory.prealloc (odflt emptym (prog_buffers p C))) comps.
 
 Definition prepare_initial_memory (p: program) : Memory.t :=
-  alloc_static_buffers p emptym (domm (prog_interface p)).
+  alloc_static_buffers p (domm (prog_interface p)).
 
 Fixpoint reserve_component_blocks p C Cmem Cprocs Centrypoints procs_code
   : ComponentMemory.t * NMap code * NMap Block.id :=
@@ -528,15 +515,15 @@ Lemma alloc_static_buffers_after_linking:
   forall p c,
     linkable_programs p c ->
     let pc := program_link p c in
-    alloc_static_buffers pc emptym (domm (prog_interface pc)) =
-    unionm (alloc_static_buffers p emptym (domm (prog_interface p)))
-           (alloc_static_buffers c emptym (domm (prog_interface c))).
+    alloc_static_buffers pc (domm (prog_interface pc)) =
+    unionm (alloc_static_buffers p (domm (prog_interface p)))
+           (alloc_static_buffers c (domm (prog_interface c))).
 Proof.
   intros p c Hlinkable Hpc.
   subst Hpc. simpl.
   apply eq_fmap. intros k.
   rewrite unionmE.
-  destruct (isSome ((alloc_static_buffers p emptym (domm (prog_interface p))) k))
+  destruct (isSome ((alloc_static_buffers p (domm (prog_interface p))) k))
            eqn:Hin.
   - admit.
   - admit.

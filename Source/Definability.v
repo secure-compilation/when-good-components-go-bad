@@ -11,6 +11,8 @@ Require Import Source.GlobalEnv.
 Require Import Source.CS.
 Require Import Source.PS.
 
+From Coq Require Import ssreflect.
+
 Import ListNotations.
 
 Import Source.
@@ -129,7 +131,7 @@ Section Definability.
       repeat take_step; trivial; try eassumption.
       repeat take_step; trivial; try eassumption.
       { rewrite Z.eqb_refl. discriminate. }
-      { unfold Memory.store. simpl. rewrite EmemC. simpl. now rewrite Z.add_1_r, EmemC'. }
+      { unfold Memory.store. simpl. rewrite EmemC. simpl. now rewrite Z.add_1_r EmemC'. }
       apply star_refl.
     - unfold switch_clause.
       repeat take_step; trivial; try eassumption.
@@ -149,7 +151,7 @@ Section Definability.
     fst (fold_right switch_add_expr (n, e_else) es) = (n - length es)%nat.
   Proof.
     induction es as [|e' es IH]; try now rewrite Nat.sub_0_r.
-    simpl. now rewrite IH, Nat.sub_succ_r.
+    simpl. now rewrite IH Nat.sub_succ_r.
   Qed.
 
   Lemma switch_spec_else p' C stk mem b n es e_else :
@@ -170,7 +172,7 @@ Section Definability.
     { apply (H (length es)); trivial. }
     clear es_n. intros m m_le_n es_le_n.
     induction es as [|e es IH]; try apply star_refl.
-    unfold switch. simpl. simpl in es_le_n. rewrite fst_switch, <- Nat.sub_succ_r. simpl.
+    unfold switch. simpl. simpl in es_le_n. rewrite fst_switch -Nat.sub_succ_r. simpl.
     do 5 take_step; [now eauto|].
     do 3 take_step; eauto.
     do 2 take_step.
@@ -196,10 +198,10 @@ Section Definability.
               exists e_else',
                 switch (es ++ e :: es') e_else =
                 switch es (switch_clause (Z.of_nat (length es)) e e_else')).
-    { unfold switch. rewrite fold_right_app, app_length. simpl.
+    { unfold switch. rewrite fold_right_app app_length. simpl.
       exists (snd (fold_right switch_add_expr ((length es + S (length es'))%nat, e_else) es')).
-      repeat f_equal. rewrite surjective_pairing at 1. simpl.
-      rewrite fst_switch, Nat.add_succ_r.
+      repeat f_equal. rewrite -> surjective_pairing at 1. simpl.
+      rewrite fst_switch Nat.add_succ_r.
       assert (H : (S (length es + length es') - length es' = S (length es))%nat) by omega.
       rewrite H. reflexivity. }
     destruct Eswitch as [e_else' ->]. clear e_else. rename e_else' into e_else.
@@ -270,8 +272,8 @@ Section Definability.
   Proof.
     intros [CI [C_CI CI_P]].
     unfold find_procedure, procedures_of_trace.
-    rewrite mapimE, C_CI. simpl.
-    now rewrite mkfmapfE, CI_P.
+    rewrite mapimE C_CI. simpl.
+    now rewrite mkfmapfE CI_P.
   Qed.
 
   Definition program_of_trace (t: trace) : program :=
@@ -355,12 +357,16 @@ Section Definability.
     Local Definition init := prepare_buffers p.
 
     Local Definition component_buffer C b :=
-      getm (genv_buffers (prepare_global_env p)) C = Some b.
+      genv_buffers (prepare_global_env p) C = Some b.
 
     Lemma exported_procedure_has_block C P :
       exported_procedure intf C P ->
       exists b, component_buffer C b.
-    Proof. Admitted.
+    Proof.
+      case=> CI.
+      rewrite /Program.has_component /Component.is_exporting /component_buffer /=.
+      by case=> intf_C CI_P; rewrite !mapmE intf_C /=; eauto.
+    Qed.
 
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
@@ -370,7 +376,7 @@ Section Definability.
       = (counter_value C prefix1 + counter_value C prefix2) % Z.
     Proof.
       unfold counter_value.
-      now rewrite comp_subtrace_app, app_length, Nat2Z.inj_add.
+      now rewrite comp_subtrace_app app_length Nat2Z.inj_add.
     Qed.
 
     Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
@@ -412,7 +418,7 @@ Section Definability.
         + if Component.eqb C (cur_comp_of_event e) then 1 else 0) % Z.
     Proof.
       unfold counter_value, comp_subtrace.
-      rewrite filter_app, app_length. simpl.
+      rewrite filter_app app_length. simpl.
       rewrite Nat2Z.inj_add.
       now destruct (Component.eqb _ _).
     Qed.
@@ -436,12 +442,12 @@ Section Definability.
       assert (neq : (C, b, 1%Z) <> (C', b', 0%Z)) by congruence.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem'). clear neq.
       split; eauto.
-      rewrite counter_value_snoc, <- HC, Nat.eqb_refl in *.
+      rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *.
       destruct (Nat.eqb_spec C' C) as [?|C_neq_C'].
       - subst C'.
         assert (b' = b) by (unfold component_buffer in *; congruence).
         subst b'. clear C'_b'.
-        now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem'), Nat.eqb_refl.
+        now rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem'), Nat.eqb_refl.
       - assert (neq : (C, b, 1%Z) <> (C', b', 1%Z)) by congruence.
         rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
         rewrite <- Nat.eqb_neq in C_neq_C'.
@@ -487,7 +493,7 @@ Section Definability.
         assert (Star1 : Star (CS.sem p)
                              (C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t)) E0
                              (C, stk, mem', Kstop, expr_of_event C P e)).
-        { unfold expr_of_trace. rewrite Et, comp_subtrace_app. simpl.
+        { unfold expr_of_trace. rewrite Et comp_subtrace_app. simpl.
           rewrite <- wf_C, Nat.eqb_refl, map_app. simpl.
           assert (H := @switch_spec p _ stk mem _
                                     (map (expr_of_event C P) (comp_subtrace C prefix))
@@ -497,7 +503,7 @@ Section Definability.
           rewrite map_length in H. specialize (H C_local).
           destruct H as [mem'' [Hmem'' Hstar]].
           enough (H : mem'' = mem') by (subst mem''; easy).
-          rewrite counter_value_snoc, <- wf_C, Nat.eqb_refl in Hmem'.
+          rewrite -> counter_value_snoc, <- wf_C, Nat.eqb_refl in Hmem'.
           rewrite <- Nat.add_1_r, Nat2Z.inj_add in Hmem''. simpl in Hmem''.
           unfold counter_value in *.
           unfold Memory.store in *. simpl in *.
@@ -522,7 +528,7 @@ Section Definability.
               apply star_one. simpl.
               apply CS.eval_kstep_sound. simpl.
               rewrite <- Nat.eqb_neq in C_ne_C'. unfold Component.eqb. rewrite C_ne_C'.
-              rewrite imported_procedure_iff in Himport. rewrite Himport.
+              rewrite -> imported_procedure_iff in Himport. rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
               rewrite (find_procedures_of_trace t (closed_intf Himport)).
               unfold component_buffer in C_b, C'_b'. simpl in C_b, C'_b'.
@@ -560,11 +566,11 @@ Section Definability.
                 -- now eapply CS.KS_ExternalReturn; eauto.
                 -- take_step. take_step; eauto.
                    apply star_one. apply CS.eval_kstep_sound.
-                   simpl. rewrite Nat.eqb_refl.
+                   simpl. rewrite -> Nat.eqb_refl.
                    rewrite (find_procedures_of_trace t P'_exp). simpl in *.
                    unfold component_buffer, Component.id, Block.id in *. simpl in *.
                    unfold component_buffer, Component.id, Block.id in *. simpl in *.
-                   now rewrite C'_b', (Memory.load_after_store_eq _ _ _ _ Hmem'), Hmem''.
+                   now rewrite C'_b' (Memory.load_after_store_eq _ _ _ _ Hmem') Hmem''.
                 -- now rewrite E0_right.
               * do 4 (split; trivial).
                 { exists ((C', saved, Kstop) :: top), bot. simpl. eauto. }
@@ -581,7 +587,7 @@ Section Definability.
               * apply CS.eval_kstep_sound. simpl.
                 unfold component_buffer in *. simpl in *.
                 rewrite C_b. unfold Component.id, Block.id in *.
-                rewrite Hmem', Nat.eqb_refl. eauto.
+                rewrite -> Hmem', Nat.eqb_refl. eauto.
               * reflexivity. }
         destruct Star2 as (s' & cs' & Star2 & wf_cs').
         specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
