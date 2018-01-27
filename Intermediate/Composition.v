@@ -398,19 +398,17 @@ Section PS2CS.
         * eauto.
         * unfold nostep in *. intros.
           unfold not. intro.
-Admitted.
-(* XXX
-          rewrite <- (linking_empty_program prog) in H12.
-          destruct (Decomposition.lockstep_simulation H4 H12 H11)
+          rewrite <- (linking_empty_program prog) in H14.
+          destruct (Decomposition.lockstep_simulation H4 H5 H6 H14 H13)
             as [s'' []].
-          eapply H9. econstructor; eauto.
+          eapply H11. econstructor; eauto.
         * unfold not. intros.
-          apply H10. econstructor; eauto.
+          apply H12. econstructor; eauto.
           ** PS.simplify_turn. unfold not. intro.
              destruct s'. repeat destruct p.
-             rewrite mem_domm in H13. inversion H13.
+             rewrite mem_domm in H15. inversion H15.
              *** destruct c. destruct p.
-                 rewrite mem_domm in H13. inversion H13.
+                 rewrite mem_domm in H15. inversion H15.
           ** rewrite linking_empty_program. eauto.
     - (* program went wrong immediately *)
       eapply program_goes_initially_wrong.
@@ -419,7 +417,12 @@ Admitted.
       apply H2.
       apply PS.initial_state_intro with (p':=empty_prog) (ics:=s).
       + reflexivity.
-      + apply empty_prog_linkability; auto.
+      + assumption.
+      + apply empty_prog_is_well_formed.
+      + destruct prog_is_well_formed as [Hsound_interface _ _ _ _ _].
+        unfold linkable. simpl. split.
+        * rewrite unionm0. assumption.
+        * rewrite domm0. apply fdisjoints0.
       + apply PS.partialize_correct.
         reflexivity.
       + destruct prog.
@@ -428,7 +431,6 @@ Admitted.
         destruct prog_main0; simpl;
         assumption.
   Qed.
-*)
 End PS2CS.
 
 Inductive same_turn: PS.state -> PS.state -> Prop :=
@@ -786,9 +788,8 @@ Section MultiSemantics.
       + now apply empty_prog_is_well_formed.
       + simpl. apply linkable_emptym. now apply linkability.
       + inversion H0; subst. inversion H1; subst.
-        inversion H4; subst; inversion H8; subst; PS.simplify_turn.
+        inversion H6; subst; inversion H12; subst; PS.simplify_turn.
         * (* contra *)
-(* XXX
           now inversion H.
         * econstructor.
           ** PS.simplify_turn.
@@ -821,7 +822,6 @@ Section MultiSemantics.
         CS.unfold_state ics. CS.unfold_state ics0.
         * admit.
     - admit.
-*)
   Admitted.
 
   Lemma multi_match_final_states:
@@ -1198,19 +1198,24 @@ Section PartialComposition.
     + assert (Hmergeable:
                PS.mergeable_states (prog_interface c) (prog_interface p) s s0). {
         inversion H; subst; inversion H1; subst.
-        inversion H9; subst; inversion H13; subst;
-        inversion H10; subst; inversion H14; subst; simpl in *.
+        inversion H11; subst; inversion H17; subst;
+        inversion H12; subst; inversion H18; subst; simpl in *.
         - (* contra, pc is neither in (prog_interface c), nor in (prog_interface p) *)
           PS.simplify_turn.
           (* show and use the fact that the main has an entrypoint, therefore
              (Pointer.component pc) must be in either (prog_interface c) or (prog_interface p) *)
           (* here it's probably where we need well-formed programs *)
           admit.
-(* XXX
         - constructor; PS.simplify_turn;
             try assumption;
             try reflexivity.
           + inversion linkability.
+            (* RB: With the changes to [linkability], the case analysis on programs
+               does not follow naturally from its inversion. The admits on each
+               resulting proof obligation are replaced by a single admit. Note that
+               automatic hypothesis names have not been corrected as in the rest of
+               the proof following changes to the notion of linkability to be based
+               on interfaces, since they currently do not make sense.
             unfold linkable_mains in H21.
             destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
               try (rewrite H22 in H25; inversion H25; reflexivity).
@@ -1218,12 +1223,14 @@ Section PartialComposition.
             * admit.
             * admit.
             * admit.
+            *) admit.
           + admit.
           + unfold PS.mergeable_memories. admit.
         - constructor; PS.simplify_turn;
             try assumption;
             try reflexivity.
           + inversion linkability.
+            (* RB: Same as above.
             unfold linkable_mains in H21.
             destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
               try (rewrite H22 in H25; inversion H25; reflexivity).
@@ -1231,6 +1238,7 @@ Section PartialComposition.
             * admit.
             * admit.
             * admit.
+            *) admit.
           + admit.
           + unfold PS.mergeable_memories.
             (* show use the fact that the initial memory contains just the memories
@@ -1245,7 +1253,6 @@ Section PartialComposition.
         ** apply threeway_multisem_star; auto.
         ** simpl. constructor; auto.
     + simpl. constructor.
-*)
   Admitted.
 End PartialComposition.
 
