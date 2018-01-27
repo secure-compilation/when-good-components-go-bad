@@ -879,15 +879,13 @@ Lemma state_determinism_program:
     kstep p ctx G sps t sps'' ->
     sps' = sps''.
 Proof.
-Admitted.
-(* XXX
   intros p ctx G sps t sps' Hcontrol Hstep1 sps'' Hstep2.
 
   inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
+    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 _ _ Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
     subst.
   inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
+    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _ _ Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
     subst.
 
   (* case analysis on who has control *)
@@ -1087,7 +1085,6 @@ Admitted.
       rewrite Hin in Hnotin; discriminate
     end.
 Qed.
-*)
 
 Lemma context_epsilon_step_is_silent:
   forall p ctx G sps sps',
@@ -1095,12 +1092,10 @@ Lemma context_epsilon_step_is_silent:
     kstep p ctx G sps E0 sps' ->
     sps = sps'.
 Proof.
-Admitted.
-(* XXX
   intros p ctx G sps sps' Hcontrol Hkstep.
 
   inversion Hkstep
-    as [p' ? ? ? scs scs' Hiface Hlink Hcs_kstep Hpartial_sps Hpartial_sps'];
+    as [p' ? ? ? scs scs' Hiface Hlink _ _ Hcs_kstep Hpartial_sps Hpartial_sps'];
     subst.
 
   inversion Hpartial_sps; subst; PS.simplify_turn.
@@ -1136,7 +1131,6 @@ Admitted.
     + erewrite context_store_in_partialized_memory with (mem':=mem'); eauto.
       rewrite partial_stack_ignores_change_by_context_with_control; auto.
 Qed.
-*)
 
 Lemma context_epsilon_star_is_silent:
   forall p ctx G sps sps',
@@ -1161,14 +1155,13 @@ Lemma state_determinism_context:
     kstep p ctx G sps t sps'' ->
     sps' = sps''.
 Proof.
-(* XXX
   intros p ctx G sps t sps' Hcontrol Hstep1 sps'' Hstep2.
 
   inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
+    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hwfp Hwfp1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
     subst.
   inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
+    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _ Hwfp2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
     subst.
 
   (* case analysis on who has control *)
@@ -1209,7 +1202,8 @@ Proof.
                C' is not in p1's procedures by well-formedness of p1 (from linkability),
                contradiction *)
             inversion Hlink1; subst.
-            pose proof (wfprog_well_formed_procedures_1 H1) as Hp1_wfprocs.
+            (* TODO: RB: Check that the selected hypothesis is the right one. *)
+            pose proof (wfprog_well_formed_procedures_1 Hwfp1) as Hp1_wfprocs.
             admit.
       * match goal with
         | Hin: context[domm (prog_interface p1)],
@@ -1252,7 +1246,6 @@ Proof.
           try reflexivity;
           try eassumption.*)
         admit.
-*)
 Admitted.
 
 Theorem state_determinism:
