@@ -21,6 +21,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+  (* RB: Add shortcuts for program_interface. *)
   Let slink := Source.program_link.
   Let ilink := Intermediate.program_link.
 
@@ -80,6 +81,14 @@ Unset Printing Implicit Defensive.
       compile_program p = Some p_compiled ->
       compile_program c = Some c_compiled ->
       linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
+
+  (* RB: Restoring and correcting these. *)
+  Hypothesis ilink_sym: forall p c,
+      linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
+      ilink p c = ilink c p.
+  Hypothesis slink_sym: forall p c,
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      slink p c = slink c p.
 
   (* Definability *)
   (* CH: this should now be related to what Arthur proved:
@@ -208,16 +217,19 @@ Section RSC_DC_MD.
 
     (* intermediate decomposition (for p_compiled) *)
     assert (not_wrong (Terminates t)) as Hsafe_beh. { simpl. auto. }
+    pose proof
+      compilation_preserves_well_formedness well_formed_p successfull_compilation
+      as well_formed_p_compiled.
     pose proof Intermediate.Decomposition.decomposition_with_safe_behavior
-      linkability Hbeh Hsafe_beh as HP_decomp.
+      well_formed_p_compiled well_formed_Ct linkability Hbeh Hsafe_beh as HP_decomp.
 
     (* CH: if we had undefined behavior we would use this *)
     (* destruct (decomposition_with_refinement linkability Hbeh) *)
     (*   as [beh' [Hbeh' Hbeh_improves]]. *)
     
     (* definability *)
-    destruct (definability_with_linking linkability closedness Hbeh)
-      as [P' [Cs [Hsame_iface1 [Hsame_iface2 [P'_Cs_linkability [P'_Cs_closedness HP'_Cs_beh]]]]]].
+    destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability closedness Hbeh)
+      as [P' [Cs [Hsame_iface1 [Hsame_iface2 [well_formed_P' [well_formed_Cs [HP'Cs_closed HP'_Cs_beh]]]]]]].
 
     (* FCC *)
 
@@ -243,16 +255,33 @@ Section RSC_DC_MD.
         with (L2:=I.CS.sem (ilink P'_compiled Cs_compiled)) in HP'_Cs_beh;
         simpl; eauto.
       apply I_simulates_S; auto.
-      - apply Source.linking_well_formedness; auto.
+      - apply Source.linking_well_formedness.
+        rewrite <- Hsame_iface1 in linkability.
+        rewrite <- Hsame_iface2 in linkability.
+        apply linkability.
     }
 
     (* intermediate decomposition (for Cs_compiled) *)
-    assert (Intermediate.linkable_programs Cs_compiled P'_compiled) as linkability'. {
+    assert
+      (linkable
+         (Intermediate.prog_interface Cs_compiled)
+         (Intermediate.prog_interface P'_compiled))
+      as linkability'. {
       eapply compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto.
-      apply Source.linkable_sym. auto.
+      apply linkable_sym.
+      (* RB: If [linkability] is not used for anything else, refactor these
+         rewrites with the instance above, or craft a separate assumption. *)
+      rewrite <- Hsame_iface1 in linkability.
+      rewrite <- Hsame_iface2 in linkability.
+      apply linkability.
     }
     rewrite <- ilink_sym in HP'_Cs_compiled_beh; [| assumption].
+    pose proof compilation_preserves_well_formedness well_formed_P' HP'_compiles
+      as well_formed_P'_compiled.
+    pose proof compilation_preserves_well_formedness well_formed_Cs HCs_compiles
+      as well_formed_Cs_compiled.
     pose proof Intermediate.Decomposition.decomposition_with_safe_behavior
+         well_formed_Cs_compiled well_formed_P'_compiled
          linkability' HP'_Cs_compiled_beh Hsafe_beh as HCs_decomp.
 
     (* intermediate composition *)
@@ -268,18 +297,13 @@ Section RSC_DC_MD.
     }
     rewrite <- Hprog_same_iface in HCs_decomp.
 
-    assert (Intermediate.linkable_programs p_compiled Cs_compiled)
+    assert (linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface Cs_compiled))
       as linkability''.
     {
-      apply Intermediate.linkable_programs_intro.
-      - inversion linkability; assumption.
-      - inversion linkability'; assumption.
-      - rewrite Hprog_same_iface.
-        apply Intermediate.linkable_sym in linkability'.
-        inversion linkability'; assumption.
-      - rewrite Hprog_same_iface.
-        apply Intermediate.linkable_sym in linkability'.
-        inversion linkability'; assumption.
+      unfold linkable. split; try
+        rewrite Hprog_same_iface;
+        apply linkable_sym in linkability';
+        now inversion linkability'.
     }
     assert (Intermediate.closed_program (ilink p_compiled Cs_compiled))
       as HpCs_compiled_closed
@@ -288,27 +312,23 @@ Section RSC_DC_MD.
       as HpCs_compiled_well_formed
       by (apply Intermediate.linking_well_formedness; assumption).
 
-    pose proof composition_for_termination linkability'' HpCs_compiled_closed
+    pose proof composition_for_termination
+         well_formed_p_compiled well_formed_Cs_compiled
+         linkability'' HpCs_compiled_closed
          HpCs_compiled_well_formed HP_decomp HCs_decomp as HpCs_compiled_beh.
 
     assert (Source.closed_program (slink p Cs)) as Hclosed_p_Cs
       by (apply (I_interface_preserves_S_closedness_l
-                   P'_Cs_closedness HP'_compiles successfull_compilation
+                   HP'Cs_closed HP'_compiles successfull_compilation
                    Hprog_same_iface)).
-    assert (Source.linkable_programs p Cs) as Hlinkable_p_Cs. {
-      destruct linkability'' as
-            [p_compiled Cs_compiled _ _ sound_interface_p_Cs fdisjoint_p_Cs].
-      constructor.
-      - assumption.
-      - now destruct P'_Cs_linkability.
-      - apply compilation_preserves_interface in HCs_compiles.
-        apply compilation_preserves_interface in successfull_compilation.
-        rewrite <- HCs_compiles. rewrite <- successfull_compilation.
-        assumption.
-      - apply compilation_preserves_interface in HCs_compiles.
-        apply compilation_preserves_interface in successfull_compilation.
-        rewrite <- HCs_compiles. rewrite <- successfull_compilation.
-        assumption.
+    assert (linkable (Source.prog_interface p) (Source.prog_interface Cs))
+      as Hlinkable_p_Cs. {
+      inversion linkability'' as [sound_interface_p_Cs fdisjoint_p_Cs].
+        constructor;
+        (apply compilation_preserves_interface in HCs_compiles;
+        apply compilation_preserves_interface in successfull_compilation;
+        rewrite <- HCs_compiles; rewrite <- successfull_compilation;
+        assumption).
     }
     assert (Source.well_formed_program (slink p Cs)) as Hwf_p_Cs
       by (apply Source.linking_well_formedness; assumption).
@@ -330,13 +350,16 @@ Section RSC_DC_MD.
     split. assumption.
     split. assumption.
     split. assumption.
-    - inversion HpCs_beh_imp.
-      + exists t. left. split. by auto.
-        exists (Terminates E0). simpl. rewrite E0_right. reflexivity.
-      + destruct H as [t' [Hgoes_wrong Hprefix]].
-        exists t'. right. repeat split; auto.
-       (* blame UB -- Guglielmo working on proof *)
-        rewrite slink_sym in HpCs_beh; [| assumption].
+    - inversion HpCs_beh_imp as [pCs_beh_ok|].
+      + split.
+        * subst pCs_beh. assumption.
+        * exists t. left. split. by auto.
+          exists (Terminates E0). simpl. rewrite E0_right. reflexivity.
+      + destruct H as [t' [Hgoes_wrong Hprefix]]. split.
+        * subst pCs_beh. assumption.
+        * exists t'. right. repeat split; auto.
+        (* blame UB -- Guglielmo working on proof *)
+      + rewrite slink_sym in HpCs_beh; [| assumption].
         apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
           try assumption.
         destruct HpCs_beh as [b [H1 [H2 | H2]]].
@@ -348,9 +371,11 @@ Section RSC_DC_MD.
                 by congruence.
             rewrite <- HHH.
             eapply Source.Decomposition.decomposition_with_safe_behavior.
-            + apply linkability_sym; assumption.
+            + assumption.
+            + assumption.
+            + apply linkable_sym. rewrite HHH. assumption.
             + setoid_rewrite slink_sym. eassumption.
-            + apply linkability_sym; assumption.
+            + apply linkable_sym. rewrite HHH. assumption.
             + easy.
           - assumption.
           - assumption.
