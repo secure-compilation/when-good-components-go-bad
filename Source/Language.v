@@ -121,8 +121,10 @@ Module Source.
         find_procedure (prog_procedures p) C P = Some Pexpr ->
         well_formed_expr p C Pexpr;
     (* each declared component has the required static buffers *)
-    wfprog_buffers_existence:
-      forall C, C \in domm (prog_interface p) ->
+    wfprog_defined_buffers: domm (prog_interface p) = domm (prog_buffers p);
+    (* each component's buffer is well formed *)
+    wfprog_well_formed_buffers:
+      forall C, prog_interface p C ->
                 has_required_local_buffers p C;
     (* if the main component exists, then the main procedure must exist as well *)
     wfprog_main_existence:
@@ -141,7 +143,7 @@ Module Source.
     cprog_main_existence:
       exists mainC mainP main_procs,
         prog_main p = Some (mainC, mainP) /\
-        getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
+        prog_procedures p mainC = Some main_procs /\ mainP \in domm main_procs
   }.
 
 (*   Inductive linkable_programs: program -> program -> Prop := *)
@@ -158,31 +160,49 @@ Module Source.
 (* *) *)
 (*         linkable_programs prog1 prog2. *)
 
-  (* RB: TODO *)
-  Theorem linkability_disjoint_procedures :
+  Theorem linkable_disjoint_procedures :
     forall prog1 prog2,
       well_formed_program prog1 ->
       well_formed_program prog2 ->
       linkable (prog_interface prog1) (prog_interface prog2) ->
       fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)).
-  Admitted.
+  Proof.
+    move=> p1 p2 wf1 wf2 [sound_intf dis].
+    apply: (fdisjoint_trans (wfprog_well_formed_procedures_1 wf1)).
+    rewrite fdisjointC.
+    apply: (fdisjoint_trans (wfprog_well_formed_procedures_1 wf2)).
+    by rewrite fdisjointC.
+  Qed.
 
-  (* RB: TODO *)
-  Theorem linkability_disjoint_buffers :
+  Theorem linkable_disjoint_buffers :
     forall prog1 prog2,
       well_formed_program prog1 ->
       well_formed_program prog2 ->
       linkable (prog_interface prog1) (prog_interface prog2) ->
       fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)).
-  Admitted.
+  Proof.
+    move=> p1 p2 wf1 wf2 [].
+    by rewrite (wfprog_defined_buffers wf1) (wfprog_defined_buffers wf2).
+  Qed.
 
-  (* RB: TODO *)
-  Theorem linkability_disjoint_mains :
+  (* AAA: I think this does not follow from the definition of linkable, because
+     there is nothing in the interface that talks about main.  We might have to
+     add linkable_mains into the definition of linkable. *)
+  Theorem linkable_disjoint_mains :
     forall prog1 prog2,
       well_formed_program prog1 ->
       well_formed_program prog2 ->
       linkable (prog_interface prog1) (prog_interface prog2) ->
       linkable_mains (prog_main prog1) (prog_main prog2).
+  Proof.
+    move=> p1 p2 wf1 wf2 [sound dis]; rewrite /linkable_mains.
+    case p1_main: (prog_main p1)=> [[mainC mainP]|] //=.
+    move/(wfprog_main_existence wf1) in p1_main.
+    have {p1_main} p1_main: mainC \in domm (prog_procedures p1).
+      move: p1_main; rewrite mem_domm /find_procedure.
+      by case: (prog_procedures p1 mainC).
+    move/fsubsetP/(_ _ p1_main): (wfprog_well_formed_procedures_1 wf1)=> {p1_main} p1_main.
+    move/fdisjointP/(_ _ p1_main): dis.
   Admitted.
 
   Definition program_link (p1 p2: program) : program :=
@@ -198,9 +218,7 @@ Module Source.
       <-> Program.has_component (prog_interface p1) C CI
           \/ Program.has_component (prog_interface p2) C CI.
   Proof.
-  Admitted.
-  (* TODO XXX
-    case=> wf1 wf2 sound_int dis_ints dis_procs dis_bufs mainsP C CI.
+    case=> sound_int dis_ints C CI.
     rewrite /Program.has_component !unionmE.
     case if_p1_C: (prog_interface p1 C)=> [CI'|] //=.
     - split; try tauto.
@@ -211,109 +229,111 @@ Module Source.
     - split; try tauto.
       by case.
   Qed.
-  *)
 
   Lemma linkable_programs_find_procedure p1 p2 :
+    well_formed_program p1 ->
+    well_formed_program p2 ->
     linkable (prog_interface p1) (prog_interface p2) ->
     forall C P Pexpr,
       find_procedure (unionm (prog_procedures p1) (prog_procedures p2)) C P = Some Pexpr
       <-> find_procedure (prog_procedures p1) C P = Some Pexpr
           \/ find_procedure (prog_procedures p2) C P = Some Pexpr.
   Proof.
-  Admitted.
-  (* TODO XXX
-    move=> [_ _ _ _ dis _ _] C P Pexpr.
-    move/fdisjointP/(_ C)/implyP: dis.
+    move=> wf1 wf2 link C P Pexpr.
+    move/(linkable_disjoint_procedures wf1 wf2) in link.
+    move/fdisjointP/(_ C)/implyP: link.
     rewrite /find_procedure unionmE !mem_domm.
     case p1_C: (prog_procedures p1 C)=> [Cprocs|] //=.
     - by case: (prog_procedures p2 C)=> // _; intuition congruence.
     - by intuition congruence.
   Qed.
-  *)
 
   Lemma linkable_programs_find_procedure_dom p1 p2 :
+    well_formed_program p1 ->
+    well_formed_program p2 ->
     linkable (prog_interface p1) (prog_interface p2) ->
     forall C P,
       find_procedure (unionm (prog_procedures p1) (prog_procedures p2)) C P
       = find_procedure (prog_procedures p1) C P
         || find_procedure (prog_procedures p2) C P :> bool.
   Proof.
-  Admitted.
-  (* TODO XXX
-    move=> [_ _ _ _ dis _ _] C P.
-    move/fdisjointP/(_ C)/implyP: dis.
+    move=> wf1 wf2 link C P.
+    move/(linkable_disjoint_procedures wf1 wf2) in link.
+    move/fdisjointP/(_ C)/implyP: link.
     rewrite /find_procedure unionmE !mem_domm.
     case p1_C: (prog_procedures p1 C)=> [Cprocs|] //=.
     by rewrite orbC; case: (prog_procedures p2 C)=> // _.
   Qed.
-  *)
 
-  Lemma link_imported_procedure p1 p2 :
+  Lemma linkable_imported_procedure p1 p2 :
     linkable (prog_interface p1) (prog_interface p2) ->
     forall C C' P,
       imported_procedure (unionm (prog_interface p1) (prog_interface p2)) C C' P
       <-> imported_procedure (prog_interface p1) C C' P
           \/ imported_procedure (prog_interface p2) C C' P.
   Proof.
-    move=> linkable C C' P.
+    move=> link C C' P.
     rewrite /imported_procedure /Program.has_component /Component.is_importing.
     rewrite unionmE; split.
     - case=> CI [].
       case p1_C: (prog_interface p1 C)=> [CI'|] //=; by eauto.
     - case => [[CI [get_CI in_CI]]|[CI [get_CI in_CI]]].
         by rewrite get_CI /=; eauto.
-      (* TODO XXX
-      case: linkable=> _ _ _ dis _ _ _.
+      case: link=> _ dis.
       move: dis; rewrite fdisjointC=> /fdisjointP/(_ C).
       rewrite !mem_domm get_CI => /(_ erefl).
       by case: (prog_interface p1 C)=> [|] //=; eauto.
   Qed.
-  *)
-  Admitted.
 
   Theorem linking_well_formedness:
     forall p1 p2,
+      well_formed_program p1 ->
+      well_formed_program p2 ->
       linkable (prog_interface p1) (prog_interface p2) ->
       well_formed_program (program_link p1 p2).
   Proof.
-  Admitted.
-  (* TODO XXX
-    move=> p1 p2 linkable.
-    split; try by case: linkable.
-    - by case: linkable => *; rewrite !domm_union fsetUSS // wfprog_well_formed_procedures_1.
+    move=> p1 p2 wf1 wf2 link.
+    split; try by case: link.
+    - by case: link => *; rewrite !domm_union fsetUSS // wfprog_well_formed_procedures_1.
     - move=> C P [CI []].
-      rewrite (linkable_programs_has_component linkable) /= => has_C_CI exp_CI_P.
+      rewrite (linkable_programs_has_component link) /= => has_C_CI exp_CI_P.
       rewrite linkable_programs_find_procedure_dom //; apply/orP.
-      case: linkable=> wf1 wf2 _ _ _ _ _.
       by case: has_C_CI=> [H|H]; [left|right];
       apply: wfprog_exported_procedures_existence=> //; exists CI; eauto.
     - move=> C P Pexpr.
-      rewrite /= (linkable_programs_find_procedure linkable) => find.
+      rewrite /= (linkable_programs_find_procedure wf1 wf2 link) => find.
       have {find} wf: well_formed_expr p1 C Pexpr \/ well_formed_expr p2 C Pexpr.
         case: find=> [H|H]; [left|right];
-        apply: wfprog_well_formed_procedures_2; by case: linkable; eauto.
+        apply: wfprog_well_formed_procedures_2; by case: link; eauto.
       split=> /=; last by case: wf=> [[]|[]].
-      without loss {linkable wf} [linkable [wf _]]:
-        p1 p2 / linkable_programs p1 p2 /\ well_formed_expr p1 C Pexpr.
-        case: wf=> wf; eauto; case: (linkable)=> _ _ _ dis1 dis2 _ _.
-        rewrite (unionmC dis1) (unionmC dis2); apply.
+      without loss {link wf wf1 wf2} [link wf1 wf2 [wf _]]: p1 p2 /
+          [/\ linkable (prog_interface p1) (prog_interface p2),
+              well_formed_program p1,
+              well_formed_program p2 &
+              well_formed_expr p1 C Pexpr].
+        case: wf=> wf; first by apply; split=> //.
+        rewrite (unionmC (linkable_disjoint_procedures wf1 wf2 link)).
+        case: (link)=> _ dis_intf; rewrite (unionmC dis_intf); apply.
         by split=> //; apply: linkable_sym.
       move=> /= C' P' /wf {wf}; case: ifP => _.
       + by rewrite linkable_programs_find_procedure_dom // => ->.
-      + by rewrite link_imported_procedure //; eauto.
+      + by rewrite linkable_imported_procedure //; eauto.
+    - by rewrite /= !domm_union (wfprog_defined_buffers wf1) (wfprog_defined_buffers wf2).
     - rewrite /has_required_local_buffers /= => C.
-      case: linkable=> /wfprog_buffers_existence wf1 /wfprog_buffers_existence wf2 _ _ _ dis _.
-      rewrite domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
-        by case/wf1=> [[? [->]]|[? [->]]] /=; eauto.
-      by case/wf2=> [[? [->]]|[? [->]]] /=; eauto.
+      move: (linkable_disjoint_buffers wf1 wf2 link)=> dis_buf.
+      move/wfprog_well_formed_buffers in wf1.
+      move/wfprog_well_formed_buffers in wf2.
+      rewrite -mem_domm domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
+        by rewrite mem_domm; case/wf1=> [[? [->]]|[? [->]]] /=; eauto.
+      by rewrite mem_domm; case/wf2=> [[? [->]]|[? [->]]] /=; eauto.
     - move=> mainC mainP; rewrite /= /main_link /=.
-      case: (linkable)=> wf1 wf2 _ _ _ _; rewrite /linkable_mains.
+      move: (linkable_disjoint_mains wf1 wf2 link).
+      rewrite /linkable_mains.
       rewrite linkable_programs_find_procedure_dom //.
       case Hp1: (prog_main p1)=> [main|] //=.
         by move=> _ [?]; subst main; rewrite (wfprog_main_existence wf1).
       by move=> ??; rewrite (wfprog_main_existence wf2) ?orbT.
   Qed.
-  *)
 
   Lemma linked_programs_main_component_origin:
     forall p1 p2,
