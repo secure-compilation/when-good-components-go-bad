@@ -265,7 +265,7 @@ Section PS2CS.
     inversion Hips_init; subst.
     enough (p' = empty_prog) as Hempty_prog.
     subst. eexists. split; eauto.
-    - rewrite linking_empty_program in H2. assumption.
+    - rewrite linking_empty_program in H4. assumption.
     - apply empty_interface_implies_empty_program.
       + inversion H0; auto.
       + assumption.
@@ -282,10 +282,10 @@ Section PS2CS.
     (* program has control *)
     - inversion Hics_partial; subst;
         try (PS.simplify_turn; contradiction).
-      inversion H2; subst.
+      inversion H4; subst.
       PS.simplify_turn.
       enough (p' = empty_prog) as Hempty_prog. subst.
-      + rewrite linking_empty_program in H3.
+      + rewrite linking_empty_program in H5.
         assumption.
       + apply empty_interface_implies_empty_program.
         * inversion H0; auto.
@@ -317,21 +317,21 @@ Section PS2CS.
 
     inversion Hstep; subst.
 
-    inversion H2; subst; PS.simplify_turn;
+    inversion H4; subst; PS.simplify_turn;
       try contradiction.
 
     (* show stacks are equal *)
-    rewrite domm0 in H11.
-    apply PS.to_partial_stack_with_empty_context in H11. subst.
+    rewrite domm0 in H13.
+    apply PS.to_partial_stack_with_empty_context in H13. subst.
 
     (* show mem0 = mem *)
-    rewrite domm0 in H10. simpl in *.
-    do 2 rewrite filterm_identity in H10.
+    rewrite domm0 in H12. simpl in *.
+    do 2 rewrite filterm_identity in H12.
     subst.
 
     (* use the fact that p' is empty *)
     enough (p' = empty_prog) as Hempty_prog. subst.
-    - rewrite linking_empty_program in H1.
+    - rewrite linking_empty_program in H3.
       eexists. split; eauto.
     - apply empty_interface_implies_empty_program.
       + inversion H0; auto.
@@ -391,24 +391,24 @@ Section PS2CS.
       }
       subst.
       eapply program_runs.
-      + rewrite linking_empty_program in H6. eauto.
+      + rewrite linking_empty_program in H8. eauto.
       + inversion H2; subst.
-        destruct (star_simulation H8 H5) as [? []].
+        destruct (star_simulation H10 H7) as [? []].
         econstructor.
         * eauto.
         * unfold nostep in *. intros.
           unfold not. intro.
-          rewrite <- (linking_empty_program prog) in H12.
-          destruct (Decomposition.lockstep_simulation H4 H12 H11)
+          rewrite <- (linking_empty_program prog) in H14.
+          destruct (Decomposition.lockstep_simulation H4 H5 H6 H14 H13)
             as [s'' []].
-          eapply H9. econstructor; eauto.
+          eapply H11. econstructor; eauto.
         * unfold not. intros.
-          apply H10. econstructor; eauto.
+          apply H12. econstructor; eauto.
           ** PS.simplify_turn. unfold not. intro.
              destruct s'. repeat destruct p.
-             rewrite mem_domm in H13. inversion H13.
+             rewrite mem_domm in H15. inversion H15.
              *** destruct c. destruct p.
-                 rewrite mem_domm in H13. inversion H13.
+                 rewrite mem_domm in H15. inversion H15.
           ** rewrite linking_empty_program. eauto.
     - (* program went wrong immediately *)
       eapply program_goes_initially_wrong.
@@ -417,7 +417,12 @@ Section PS2CS.
       apply H2.
       apply PS.initial_state_intro with (p':=empty_prog) (ics:=s).
       + reflexivity.
-      + apply empty_prog_linkability; auto.
+      + assumption.
+      + apply empty_prog_is_well_formed.
+      + destruct prog_is_well_formed as [Hsound_interface _ _ _ _ _].
+        unfold linkable. simpl. split.
+        * rewrite unionm0. assumption.
+        * rewrite domm0. apply fdisjoints0.
       + apply PS.partialize_correct.
         reflexivity.
       + destruct prog.
@@ -659,8 +664,10 @@ Module ProgCtxSim.
 Section Simulation.
   Variables p c: program.
 
-  Hypothesis linkability:
-    linkable_programs p c.
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Lemma match_initial_states:
     forall ips1,
@@ -724,8 +731,10 @@ Module MultiSem.
 Section MultiSemantics.
   Variables p c: program.
 
-  Hypothesis linkability:
-    linkable_programs p c.
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Let prog := program_link p c.
 
@@ -775,12 +784,13 @@ Section MultiSemantics.
         with (ics:=PS.unpartialize (PS.merge_partial_states ips1 ips2))
              (p':=empty_prog).
       + reflexivity.
-      + apply empty_prog_linkability.
-        apply linking_well_formedness; auto.
+      + apply linking_well_formedness; now auto.
+      + now apply empty_prog_is_well_formed.
+      + simpl. apply linkable_emptym. now apply linkability.
       + inversion H0; subst. inversion H1; subst.
-        inversion H4; subst; inversion H8; subst; PS.simplify_turn.
+        inversion H6; subst; inversion H12; subst; PS.simplify_turn.
         * (* contra *)
-          inversion H.
+          now inversion H.
         * econstructor.
           ** PS.simplify_turn.
              rewrite mem_domm. auto.
@@ -829,12 +839,12 @@ Section MultiSemantics.
       inversion H4; subst; PS.simplify_turn.
     - reflexivity.
     - reflexivity.
-    - apply empty_prog_linkability.
-      inversion linkability; auto.
-      apply linking_well_formedness; auto.
-    - apply empty_prog_linkability.
-      inversion linkability; auto.
-      apply linking_well_formedness; auto.
+    - apply linking_well_formedness; now auto.
+    - apply linking_well_formedness; now auto.
+    - now apply empty_prog_is_well_formed.
+    - now apply empty_prog_is_well_formed.
+    - simpl. apply linkable_emptym. now apply linkability.
+    - simpl. apply linkable_emptym. now apply linkability.
     - rewrite mem_domm. auto.
     - rewrite mem_domm. auto.
     - constructor.
@@ -902,8 +912,9 @@ Section MultiSemantics.
                                           PS.merge_memories pmem1 pmem2, regs, pc)))
             (p':=empty_prog).
         * reflexivity.
-        * apply empty_prog_linkability.
-          apply linking_well_formedness; auto.
+        * apply linking_well_formedness; now auto.
+        * now apply empty_prog_is_well_formed.
+        * simpl. apply linkable_emptym. now apply linkability.
         * admit.
         * constructor.
           ** PS.simplify_turn.
@@ -943,8 +954,10 @@ End MultiSem.
 Section PartialComposition.
   Variables p c: program.
 
-  Hypothesis linkability:
-    linkable_programs p c.
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Let prog := program_link p c.
 
@@ -981,7 +994,7 @@ Section PartialComposition.
           (* mergeability is symmetric *)
           admit.
         }
-        destruct (ProgCtxSim.st_star_simulation
+        destruct (ProgCtxSim.st_star_simulation wf2 wf1
                     (linkable_sym linkability) Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
         admit.
@@ -1078,7 +1091,7 @@ Section PartialComposition.
 
           (* use the multisem simulation to show that the states after the step are still
              mergeable *)
-          destruct (MultiSem.lockstep_simulation linkability Hmultistep Hmultimatch)
+          destruct (MultiSem.lockstep_simulation wf1 wf2 linkability Hmultistep Hmultimatch)
             as [merged_state' [Hmiddle_step Hmergeable'']].
           inversion Hmergeable''; subst.
 
@@ -1133,7 +1146,7 @@ Section PartialComposition.
 
           (* use the multisem simulation to show that the states after the step are still
              mergeable *)
-          destruct (MultiSem.lockstep_simulation linkability Hmultistep Hmultimatch)
+          destruct (MultiSem.lockstep_simulation wf1 wf2 linkability Hmultistep Hmultimatch)
             as [merged_state' [Hmiddle_step Hmergeable'']].
           inversion Hmergeable''; subst.
 
@@ -1185,8 +1198,8 @@ Section PartialComposition.
     + assert (Hmergeable:
                PS.mergeable_states (prog_interface c) (prog_interface p) s s0). {
         inversion H; subst; inversion H1; subst.
-        inversion H9; subst; inversion H13; subst;
-        inversion H10; subst; inversion H14; subst; simpl in *.
+        inversion H11; subst; inversion H17; subst;
+        inversion H12; subst; inversion H18; subst; simpl in *.
         - (* contra, pc is neither in (prog_interface c), nor in (prog_interface p) *)
           PS.simplify_turn.
           (* show and use the fact that the main has an entrypoint, therefore
@@ -1197,6 +1210,12 @@ Section PartialComposition.
             try assumption;
             try reflexivity.
           + inversion linkability.
+            (* RB: With the changes to [linkability], the case analysis on programs
+               does not follow naturally from its inversion. The admits on each
+               resulting proof obligation are replaced by a single admit. Note that
+               automatic hypothesis names have not been corrected as in the rest of
+               the proof following changes to the notion of linkability to be based
+               on interfaces, since they currently do not make sense.
             unfold linkable_mains in H21.
             destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
               try (rewrite H22 in H25; inversion H25; reflexivity).
@@ -1204,12 +1223,14 @@ Section PartialComposition.
             * admit.
             * admit.
             * admit.
+            *) admit.
           + admit.
           + unfold PS.mergeable_memories. admit.
         - constructor; PS.simplify_turn;
             try assumption;
             try reflexivity.
           + inversion linkability.
+            (* RB: Same as above.
             unfold linkable_mains in H21.
             destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
               try (rewrite H22 in H25; inversion H25; reflexivity).
@@ -1217,6 +1238,7 @@ Section PartialComposition.
             * admit.
             * admit.
             * admit.
+            *) admit.
           + admit.
           + unfold PS.mergeable_memories.
             (* show use the fact that the initial memory contains just the memories
@@ -1244,8 +1266,12 @@ End PartialComposition.
 Section Composition.
   Variables p c: program.
 
-  Hypothesis linkability:
-    linkable_programs p c.
+  Let prog := program_link p c.
+
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Hypothesis prog_is_closed:
     closed_program (program_link p c).

@@ -825,7 +825,9 @@ Qed.
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | initial_state_intro: forall p' scs sps,
     prog_interface p' = ctx ->
-    linkable_programs p p' ->
+    well_formed_program p ->
+    well_formed_program p' ->
+    linkable (prog_interface p) (prog_interface p') ->
     partial_state ctx scs sps ->
     CS.initial_state (program_link p p') scs ->
     initial_state p ctx sps.
@@ -833,7 +835,9 @@ Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
 Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
 | final_state_program: forall p' scs sps,
     prog_interface p' = ctx ->
-    linkable_programs p p' ->
+    well_formed_program p ->
+    well_formed_program p' ->
+    linkable (prog_interface p) (prog_interface p') ->
     ~ turn_of sps ctx ->
     partial_state ctx scs sps ->
     CS.final_state scs ->
@@ -847,7 +851,9 @@ Inductive kstep (p: program) (ctx: Program.interface)
 | partial_step:
     forall p' sps t sps' scs scs',
       prog_interface p' = ctx ->
-      linkable_programs p p' ->
+      well_formed_program p ->
+      well_formed_program p' ->
+      linkable (prog_interface p) (prog_interface p') ->
       CS.kstep (prepare_global_env (program_link p p')) scs t scs' ->
       partial_state ctx scs sps ->
       partial_state ctx scs' sps' ->
@@ -921,10 +927,10 @@ Proof.
   intros p ctx G sps t sps' Hcontrol Hstep1 sps'' Hstep2.
 
   inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
+    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 _ _ Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
     subst.
   inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
+    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _ _ Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
     subst.
 
   (* case analysis on who has control *)
@@ -1132,7 +1138,7 @@ Proof.
   intros p ctx G sps sps' Hcontrol Hkstep.
 
   inversion Hkstep
-    as [p' ? ? ? scs scs' Hiface Hlink Hcs_kstep Hpartial_sps Hpartial_sps'];
+    as [p' ? ? ? scs scs' Hiface Hlink _ _ Hcs_kstep Hpartial_sps Hpartial_sps'];
     subst.
 
   inversion Hpartial_sps; subst; PS.simplify_turn.
@@ -1195,10 +1201,10 @@ Proof.
   intros p ctx G sps t sps' Hcontrol Hstep1 sps'' Hstep2.
 
   inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
+    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hwfp Hwfp1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
     subst.
   inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
+    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _ Hwfp2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
     subst.
 
   (* case analysis on who has control *)
@@ -1317,16 +1323,16 @@ Proof.
   intros p ctx G sps t sps' Hstep1 sps'' Hstep2.
 
   inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
+    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hwfp Hwfp1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
     subst.
   inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
+    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _ Hwfp2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
     subst.
 
   (* case analysis on who has control *)
   inversion Hpartial_sps1; subst.
-  - eapply state_determinism_program; eauto.
-  - eapply state_determinism_context; eauto.
+  - eapply state_determinism_program; now eauto.
+  - eapply state_determinism_context; now eauto.
 Qed.
 
 Corollary state_determinism_star:

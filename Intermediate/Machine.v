@@ -212,20 +212,64 @@ Record closed_program (p: program) := {
       getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
 }.
 
-Inductive linkable_programs: program -> program -> Prop :=
-| linkable_programs_intro:
-   forall prog1 prog2,
-     well_formed_program prog1 ->
-     well_formed_program prog2 ->
-     sound_interface (unionm (prog_interface prog1) (prog_interface prog2)) ->
-     fdisjoint (domm (prog_interface prog1)) (domm (prog_interface prog2)) ->
-     fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)) ->
-       (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
-     fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)) ->
-       (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
-     linkable_mains (prog_main prog1) (prog_main prog2) ->
-       (* CH: prev follows from well_formed_program and disjointness of interfaces, can we remove? *)
-     linkable_programs prog1 prog2.
+Theorem linkability_disjoint_procedures :
+  forall prog1 prog2,
+    well_formed_program prog1 ->
+    well_formed_program prog2 ->
+    linkable (prog_interface prog1) (prog_interface prog2) ->
+    fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)).
+Proof.
+  intros prog1 prog2 Hwell_formed1 Hwell_formed2
+    [_ Hdisjoint_interface].
+  inversion Hwell_formed1 as [_ Hwell_formed_procs1 _ _ _ _].
+  inversion Hwell_formed2 as [_ Hwell_formed_procs2 _ _ _ _].
+  apply (fdisjoint_trans Hwell_formed_procs1) in Hdisjoint_interface.
+  rewrite fdisjointC in Hdisjoint_interface.
+  apply (fdisjoint_trans Hwell_formed_procs2) in Hdisjoint_interface.
+  rewrite fdisjointC.
+  apply Hdisjoint_interface.
+Qed.
+
+Theorem linkability_disjoint_buffers :
+  forall prog1 prog2,
+    well_formed_program prog1 ->
+    well_formed_program prog2 ->
+    linkable (prog_interface prog1) (prog_interface prog2) ->
+    fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)).
+Proof.
+  intros prog1 prog2 Hwell_formed1 Hwell_formed2 [_ Hdisjoint_interface].
+  inversion Hwell_formed1 as [_ _ _ _ Hwell_formed_buffers1 _].
+  inversion Hwell_formed2 as [_ _ _ _ Hwell_formed_buffers2 _].
+  apply (fdisjoint_trans Hwell_formed_buffers1) in Hdisjoint_interface.
+  rewrite fdisjointC in Hdisjoint_interface.
+  apply (fdisjoint_trans Hwell_formed_buffers2) in Hdisjoint_interface.
+  rewrite fdisjointC.
+  apply Hdisjoint_interface.
+Qed.
+
+Theorem linkability_disjoint_mains :
+  forall prog1 prog2,
+    well_formed_program prog1 ->
+    well_formed_program prog2 ->
+    linkable (prog_interface prog1) (prog_interface prog2) ->
+    linkable_mains (prog_main prog1) (prog_main prog2).
+Proof.
+  intros prog1 prog2 Hwell_formed1 Hwell_formed2 [Hsound_interface Hdisjoint_interface].
+  inversion Hwell_formed1 as [_ _ _ _ _ Hmain_existence1].
+  inversion Hwell_formed2 as [_ _ _ _ _ Hmain_existence2].
+  (* All cases except one, which leads to contradiction, are trivial. *)
+  unfold linkable_mains.
+  destruct (prog_main prog1) as [(cid1, pid1) |];
+    destruct (prog_main prog2) as [(cid2, pid2) |];
+    try (apply I; fail).
+  (* The interesting case remains. *)
+  specialize (Hmain_existence1 cid1 pid1).
+  specialize (Hmain_existence2 cid2 pid2).
+  (* RB: Short story, there is a main in prog_procedures for each prog1 and
+     prog2, which are however disjoint, and main is unique (may need to
+     shuffle things a bit). *)
+  admit.
+Admitted.
 
 Definition program_link (p1 p2: program): program :=
   {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
@@ -309,24 +353,6 @@ Proof.
   - intros. discriminate.
 Qed.
 
-Theorem empty_prog_linkability:
-  forall p,
-    well_formed_program p ->
-    linkable_programs p empty_prog.
-Proof.
-  intros p Hwf.
-  constructor.
-  - assumption.
-  - apply empty_prog_is_well_formed.
-  - simpl. rewrite unionm0.
-    apply (wfprog_interface_soundness Hwf).
-  - simpl. rewrite domm0. apply fdisjoints0.
-  - simpl. rewrite domm0. apply fdisjoints0.
-  - simpl. rewrite domm0. apply fdisjoints0.
-  - simpl. unfold linkable_mains.
-    destruct (prog_main p); auto.
-Qed.
-
 Theorem linking_empty_program:
   forall p,
     program_link p empty_prog = p.
@@ -338,68 +364,54 @@ Proof.
   reflexivity.
 Qed.
 
-Theorem linkable_sym:
-  forall p c,
-    linkable_programs p c -> linkable_programs c p.
-Proof.
-  intros p c Hlinkable.
-  inversion Hlinkable; subst.
-  constructor;
-    try assumption.
-  - rewrite unionmC; auto.
-    unfold fdisjoint. rewrite fsetIC. auto.
-  - unfold fdisjoint. rewrite fsetIC. auto.
-  - unfold fdisjoint. rewrite fsetIC. auto.
-  - unfold fdisjoint. rewrite fsetIC. auto.
-  - apply linkable_mains_sym; auto.
-Qed.
-
 Theorem linking_well_formedness:
   forall p1 p2,
-    linkable_programs p1 p2 ->
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
     well_formed_program (program_link p1 p2).
 Proof.
-  intros p1 p2 Hlinkability.
+  intros p1 p2 Hwf1 Hwf2 Hlinkability.
   inversion Hlinkability; subst.
   constructor.
   - simpl. assumption.
   - simpl.
     repeat rewrite domm_union.
     apply fsetUSS.
-    + apply (wfprog_well_formed_procedures H).
-    + apply (wfprog_well_formed_procedures H0).
-  - intros.
+    + apply (wfprog_well_formed_procedures Hwf1).
+    + apply (wfprog_well_formed_procedures Hwf2).
+  - intros C CI H1 P H2.
     simpl in *.
     rewrite unionmE.
-    rewrite unionmE in H6.
+    rewrite unionmE in H1.
     destruct ((prog_interface p1) C) eqn:Hwhere; simpl in *.
-    + rewrite Hwhere in H6.
-      inversion H6; subst.
-      destruct (wfprog_exported_procedures_existence H Hwhere H7)
+    + rewrite Hwhere in H1.
+      inversion H1; subst.
+      destruct (wfprog_exported_procedures_existence Hwf1 Hwhere H2)
         as [Cprocs [Pcode [Hproc Hcode]]].
       rewrite Hproc. simpl.
       exists Cprocs. exists Pcode.
       split; auto.
     + enough ((prog_procedures p1) C = None) as Hno_p1.
-      * rewrite Hno_p1. rewrite Hwhere in H6. simpl in *.
-        destruct (wfprog_exported_procedures_existence H0 H6 H7)
+      * rewrite Hno_p1. rewrite Hwhere in H1. simpl in *.
+        destruct (wfprog_exported_procedures_existence Hwf2 H1 H2)
           as [Cprocs [Pcode [Hproc Hcode]]].
         exists Cprocs. exists Pcode.
         split; auto.
       * destruct ((prog_procedures p1) C) eqn:Hin_p1.
-        ** rewrite Hwhere in H6. simpl in H6.
-           destruct (wfprog_exported_procedures_existence H0 H6 H7)
+        ** rewrite Hwhere in H1. simpl in H1.
+           destruct (wfprog_exported_procedures_existence Hwf2 H1 H2)
              as [Cprocs [Pcode [Hproc Hcode]]].
-           unfold fdisjoint in H3.
+           unfold fdisjoint in H1.
            admit.
         ** reflexivity.
-  - intros.
+  - intros C Cprocs H1 P Pcode H2 i H3.
     unfold well_formed_instruction.
     destruct i; auto.
     + destruct i; auto.
       simpl in *.
       rewrite unionmE.
-      rewrite unionmE in H6.
+      rewrite unionmE in H1.
       admit.
     + admit.
     + admit.
@@ -407,30 +419,30 @@ Proof.
   - simpl.
     repeat rewrite domm_union.
     apply fsetUSS.
-    + apply (wfprog_well_formed_buffers H).
-    + apply (wfprog_well_formed_buffers H0).
+    + apply (wfprog_well_formed_buffers Hwf1).
+    + apply (wfprog_well_formed_buffers Hwf2).
   - intros. simpl in *.
-    pose proof (wfprog_main_existence H) as Hmain1.
-    pose proof (wfprog_main_existence H0) as Hmain2.
+    pose proof (wfprog_main_existence Hwf1) as Hmain1.
+    pose proof (wfprog_main_existence Hwf2) as Hmain2.
     destruct (prog_main p1) as [[]|] eqn:Hmain_p1;
     destruct (prog_main p2) as [[]|] eqn:Hmain_p2.
     + simpl in *.
-      inversion H6; subst.
+      inversion H1; subst.
       destruct (Hmain1 mainC mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.
-        rewrite H7. reflexivity.
+        rewrite H2. reflexivity.
       * assumption.
     + simpl in *.
-      inversion H6; subst.
+      inversion H1; subst.
       destruct (Hmain1 mainC mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.
-        rewrite H7. reflexivity.
+        rewrite H2. reflexivity.
       * assumption.
-    + inversion H6; subst.
+    + inversion H1; subst.
       destruct (Hmain2 mainC mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
@@ -513,13 +525,15 @@ Qed.
 
 Lemma alloc_static_buffers_after_linking:
   forall p c,
-    linkable_programs p c ->
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
     let pc := program_link p c in
     alloc_static_buffers pc (domm (prog_interface pc)) =
     unionm (alloc_static_buffers p (domm (prog_interface p)))
            (alloc_static_buffers c (domm (prog_interface c))).
 Proof.
-  intros p c Hlinkable Hpc.
+  intros p c Hwf1 Hwf2 Hlinkable Hpc.
   subst Hpc. simpl.
   apply eq_fmap. intros k.
   rewrite unionmE.
@@ -531,11 +545,13 @@ Admitted.
 
 Theorem prepare_initial_memory_after_linking:
   forall p c,
-    linkable_programs p c ->
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
     prepare_initial_memory (program_link p c) =
     unionm (prepare_initial_memory p) (prepare_initial_memory c).
 Proof.
-  intros p c Hlinkable.
+  intros p c Hwf1 Hwf2 Hlinkable.
   unfold prepare_initial_memory.
   apply alloc_static_buffers_after_linking; auto.
 Qed.
