@@ -100,20 +100,23 @@ Unset Printing Implicit Defensive.
            and linkability (maybe from previous point) *)
 
   Hypothesis definability_with_linking:
-    forall p c t,
+    forall p c t m,
       Intermediate.well_formed_program p ->
       Intermediate.well_formed_program c ->
       linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
       Intermediate.closed_program (ilink p c) ->
-      program_behaves (I.CS.sem (ilink p c)) (Terminates t) ->
-        (* CH: last premise naive, it should instead take trace prefixes *)
-    exists p' c',
+      program_behaves (I.CS.sem (ilink p c)) t ->
+      behavior_prefix m t ->
+        (* CH: last premise naive, it should instead take trace prefixes
+           RB: working on it *)
+    exists p' c' t',
       Source.prog_interface p' = Intermediate.prog_interface p /\
       Source.prog_interface c' = Intermediate.prog_interface c /\
       Source.well_formed_program p' /\
       Source.well_formed_program c' /\
       Source.closed_program (slink p' c') /\
-      program_behaves (S.CS.sem (slink p' c')) (Terminates t).
+      program_behaves (S.CS.sem (slink p' c')) t' /\
+      behavior_prefix m t'.
 
   (* FCC *)
   Hypothesis I_simulates_S:
@@ -197,9 +200,11 @@ Section RSC_DC_MD.
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
-    forall t,
+    forall t m,
       program_behaves (I.CS.sem (ilink p_compiled Ct)) (Terminates t) ->
-        (* CH: last premise naive, it should instead take trace prefixes *)
+      trace_prefix m t ->
+        (* CH: last premise naive, it should instead take trace prefixes
+           RB: working on it, still not arbitrary behaviors *)
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
@@ -207,7 +212,7 @@ Section RSC_DC_MD.
       Source.closed_program (slink p Cs) /\
       program_behaves (S.CS.sem (Source.program_link p Cs)) beh /\
       exists t',
-        (beh = Terminates t' /\ behavior_prefix t (Terminates t')) \/
+        (beh = Terminates t' /\ behavior_prefix m (Terminates t')) \/
           (* CH: last disjunct naive, should consider arbitrary behaviors *)
         (beh = Goes_wrong t' /\ behavior_prefix t' (Terminates t) /\
          undef_in (Source.main_comp (Source.program_link p Cs)) t' (Source.prog_interface p)).
