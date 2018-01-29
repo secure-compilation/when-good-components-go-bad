@@ -146,20 +146,6 @@ Module Source.
         prog_procedures p mainC = Some main_procs /\ mainP \in domm main_procs
   }.
 
-(*   Inductive linkable_programs: program -> program -> Prop := *)
-(*   | linkable_programs_intro: *)
-(*       forall prog1 prog2, *)
-(*         well_formed_program prog1 -> *)
-(*         well_formed_program prog2 -> *)
-(*         sound_interface (unionm (prog_interface prog1) (prog_interface prog2)) -> *)
-(*         fdisjoint (domm (prog_interface prog1)) (domm (prog_interface prog2)) -> *)
-(* (* RB: Stubbing these out to confirm the structure of the high-level proof. *)
-(*         fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)) -> *)
-(*         fdisjoint (domm (prog_buffers prog1)) (domm (prog_buffers prog2)) -> *)
-(*         linkable_mains (prog_main prog1) (prog_main prog2) -> *)
-(* *) *)
-(*         linkable_programs prog1 prog2. *)
-
   Theorem linkable_disjoint_procedures :
     forall prog1 prog2,
       well_formed_program prog1 ->
@@ -337,37 +323,24 @@ Module Source.
 
   Lemma linked_programs_main_component_origin:
     forall p1 p2,
+      well_formed_program p1 ->
+      well_formed_program p2 ->
       linkable (prog_interface p1) (prog_interface p2) ->
       closed_program (program_link p1 p2) ->
       main_comp (program_link p1 p2) \in domm (prog_interface p1) \/
       main_comp (program_link p1 p2) \in domm (prog_interface p2).
   Proof.
-  (* TODO XXX
-    intros p1 p2.
-    intros Hlink Hclosed.
-    apply cprog_main_existence in Hclosed.
-    unfold main_comp.
-    destruct Hclosed as [mainC [mainP [main_procs [Hmain_C_P [Hprocs Hproc_P]]]]].
-    rewrite Hmain_C_P.
-    unfold program_link in Hprocs. simpl in *.
-    rewrite unionmE in Hprocs.
-    destruct ((prog_procedures p1) mainC) eqn:Hmain_in_p1.
-    + rewrite Hmain_in_p1 in Hprocs. simpl in *.
-      inversion Hprocs. subst.
-      left.
-      inversion Hlink.
-      apply wfprog_well_formed_procedures_1 in H.
-      (* subset stuff *)
-      admit.
-    + rewrite Hmain_in_p1 in Hprocs. simpl in *.
-      inversion Hprocs. subst.
-      right.
-      inversion Hlink.
-      apply wfprog_well_formed_procedures_1 in H1.
-      (* subset stuff *)
-      admit.
-  *)
-  Admitted.
+    move=> p1 p2 wf1 wf2 [_ Hdis] Hclosed.
+    have [mainC [mainP [main_procs []]]] := cprog_main_existence Hclosed.
+    rewrite /program_link /main_comp /= unionmE => ->.
+    (*move/fdisjointP/(_ mainC)/implyP: Hdis.*)
+    have/fsubsetP/(_ mainC)/implyP := wfprog_well_formed_procedures_1 wf2.
+    have/fsubsetP/(_ mainC)/implyP := wfprog_well_formed_procedures_1 wf1.
+    rewrite !mem_domm.
+    case: (prog_procedures p1 mainC)=> [main_procs'|] //=; eauto.
+    case: (prog_procedures p2 mainC)=> [main_procs'|] //=; eauto.
+    by move=> _ _ [].
+  Qed.
 
   Fixpoint initialize_buffer
            (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)
@@ -394,21 +367,39 @@ Module Source.
 
   Lemma prepare_buffers_of_linked_programs:
     forall p1 p2,
+      well_formed_program p1 ->
+      well_formed_program p2 ->
       linkable (prog_interface p1) (prog_interface p2) ->
     forall C b,
       (prepare_buffers (program_link p1 p2)).2 C = Some b ->
       C \notin domm (prog_interface p2) ->
       C \in domm (prog_interface p1) /\ (prepare_buffers p1).2 C = Some b.
   Proof.
-  Admitted.
+    move=> p1 p2 wf1 wf2 Hlinkable C b.
+    rewrite /prepare_buffers /= !mapmE unionmE.
+    do 2![rewrite wfprog_defined_buffers //=].
+    rewrite !mem_domm.
+    by case: (prog_buffers p1 C) (prog_buffers p2 C)=> [b'|] //= [b'|].
+  Qed.
 
   Lemma find_procedure_in_linked_programs:
     forall p1 p2,
+      well_formed_program p1 ->
+      well_formed_program p2 ->
       linkable (prog_interface p1) (prog_interface p2) ->
     forall C P P_expr,
       find_procedure (unionm (prog_procedures p1) (prog_procedures p2)) C P = Some P_expr ->
       C \notin domm (prog_interface p2) ->
       C \in domm (prog_interface p1) /\ find_procedure (prog_procedures p1) C P = Some P_expr.
   Proof.
-  Admitted.
+    move=> p1 p2 wf1 wf2 Hlinkable C P P_expr.
+    rewrite linkable_programs_find_procedure // {2}/find_procedure.
+    have/fsubsetP/(_ C)/implyP := (wfprog_well_formed_procedures_1 wf2).
+    rewrite mem_domm.
+    case: (prog_procedures p2 C)=> [C_procs /= ->|] //= _.
+    case=> [C_P _|//]; split=> //.
+    move/fsubsetP: (wfprog_well_formed_procedures_1 wf1); apply.
+    move: C_P; rewrite /find_procedure mem_domm.
+    by case: (prog_procedures p1 C).
+  Qed.
 End Source.
