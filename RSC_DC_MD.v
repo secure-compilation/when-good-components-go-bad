@@ -202,7 +202,7 @@ Section RSC_DC_MD.
   Theorem RSC_DC_MD:
     forall t m,
       program_behaves (I.CS.sem (ilink p_compiled Ct)) (Terminates t) ->
-      trace_prefix m t ->
+      behavior_prefix m (Terminates t) ->
         (* CH: last premise naive, it should instead take trace prefixes
            RB: working on it, still not arbitrary behaviors *)
     exists Cs beh,
@@ -213,11 +213,12 @@ Section RSC_DC_MD.
       program_behaves (S.CS.sem (Source.program_link p Cs)) beh /\
       exists t',
         (beh = Terminates t' /\ behavior_prefix m (Terminates t')) \/
-          (* CH: last disjunct naive, should consider arbitrary behaviors *)
+          (* CH: last disjunct naive, should consider arbitrary behaviors
+             RB: moreover, get the trace prefix involved *)
         (beh = Goes_wrong t' /\ behavior_prefix t' (Terminates t) /\
          undef_in (Source.main_comp (Source.program_link p Cs)) t' (Source.prog_interface p)).
   Proof.
-    intros t Hbeh.
+    intros t m Hbeh Hprefix0.
     pose proof linkability as linkability.
 
     (* intermediate decomposition (for p_compiled) *)
@@ -233,8 +234,10 @@ Section RSC_DC_MD.
     (*   as [beh' [Hbeh' Hbeh_improves]]. *)
     
     (* definability *)
-    destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability closedness Hbeh)
-      as [P' [Cs [Hsame_iface1 [Hsame_iface2 [well_formed_P' [well_formed_Cs [HP'Cs_closed HP'_Cs_beh]]]]]]].
+    destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability closedness Hbeh Hprefix0)
+      as [P' [Cs [beh [Hsame_iface1 [Hsame_iface2 [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]].
+    (* RB: TODO: Now looking only at the case we had before. *)
+    destruct beh as [t1 | t1 | t1 | t1]; [| admit | admit | admit].
 
     (* FCC *)
 
@@ -259,6 +262,10 @@ Section RSC_DC_MD.
       apply forward_simulation_same_safe_behavior
         with (L2:=I.CS.sem (ilink P'_compiled Cs_compiled)) in HP'_Cs_beh;
         simpl; eauto.
+      (* RB: Here, the proof obligation on [program_behaves] cannot be directly
+         discharged from [HP'_Cs_beh], since all we know is that t and t' share
+         a common prefix, m. The assert is now too strong and common behavior
+         can be guaranteed up to m. *) (* admit. (New subgoal!) *)
       apply I_simulates_S; auto.
       - apply Source.linking_well_formedness.
         * assumption.
@@ -361,6 +368,7 @@ Section RSC_DC_MD.
       + split.
         * subst pCs_beh. assumption.
         * exists t. left. split. by auto.
+          (* RB: The proof breaks here as it tries to compare t with m. *)
           exists (Terminates E0). simpl. rewrite E0_right. reflexivity.
       + destruct H as [t' [Hgoes_wrong Hprefix]]. split.
         * subst pCs_beh. assumption.
@@ -385,7 +393,9 @@ Section RSC_DC_MD.
             + apply linkable_sym. rewrite HHH. assumption.
             + easy.
           - assumption.
-          - assumption.
+          - (* RB: Here, we want to relate t' with t1, not with t, though we know
+               they coincide up to m. Proof by assumption fails. *)
+            assumption.
         + destruct H2 as [t'' [H21 [H22 H23]]].
           subst pCs_beh. injection H21; intro H21'. subst t''.
           setoid_rewrite slink_sym; assumption.
