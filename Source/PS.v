@@ -859,6 +859,24 @@ Inductive kstep (p: program) (ctx: Program.interface)
       partial_state ctx scs' sps' ->
       kstep p ctx (prepare_global_env p) sps t sps'.
 
+Theorem initial_state_determinism:
+  forall p ctx s1 s2,
+    initial_state p ctx s1 ->
+    initial_state p ctx s2 ->
+    s1 = s2.
+Proof.
+  intros p ctx s1 s2 Hinit1 Hinit2.
+  inversion Hinit1; inversion Hinit2; subst.
+  unfold CS.initial_state in *. subst.
+  apply partialize_correct in H3.
+  apply partialize_correct in H10.
+  unfold CS.initial_machine_state in *.
+  (* same main component, same main expression *)
+  (* empty stack *)
+  (* stop continuation *)
+  (* same partialized initial memory *)
+Admitted.
+
 Lemma program_allocation_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
     filterm (fun k _ => k \notin ctx) mem1 =
@@ -1335,17 +1353,18 @@ Proof.
   - eapply state_determinism_context; now eauto.
 Qed.
 
-Corollary state_determinism_star:
-  forall p ctx G sps t sps' sps'',
-    star (kstep p ctx) G sps t sps' ->
-    is_context_component sps' ctx ->
-    star (kstep p ctx) G sps t sps'' ->
-    is_context_component sps'' ctx ->
-    sps' = sps''.
+Corollary state_determinism_starN:
+  forall p ctx G n sps t1 t2 sps' sps'',
+    starN (kstep p ctx) G n sps t1 sps' ->
+    starN (kstep p ctx) G n sps t2 sps'' ->
+    t1 = t2 /\ sps' = sps''.
 Proof.
-  intros p ctx G sps t sps' sps''.
-  intros Hstar1 Hctx1 Hstar2 Hctx2.
-  (* TODO *)
+  intros p ctx G n sps t1 t2 sps' sps''.
+  intros HstarN1 HstarN2.
+  induction HstarN1; subst.
+  - inversion HstarN2; subst.
+    repeat split.
+  - admit.
 Admitted.
 
 (* partial semantics *)
