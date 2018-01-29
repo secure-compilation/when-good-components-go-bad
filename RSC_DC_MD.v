@@ -256,9 +256,11 @@ Section RSC_DC_MD.
         simpl; eauto.
       apply I_simulates_S; auto.
       - apply Source.linking_well_formedness.
-        rewrite <- Hsame_iface1 in linkability.
-        rewrite <- Hsame_iface2 in linkability.
-        apply linkability.
+        * assumption.
+        * assumption.
+        * rewrite <- Hsame_iface1 in linkability.
+          rewrite <- Hsame_iface2 in linkability.
+          apply linkability.
     }
 
     (* intermediate decomposition (for Cs_compiled) *)
