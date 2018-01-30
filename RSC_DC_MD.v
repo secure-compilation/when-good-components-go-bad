@@ -215,7 +215,7 @@ Section RSC_DC_MD.
         (beh = Terminates t' /\ behavior_prefix m (Terminates t')) \/
           (* CH: last disjunct naive, should consider arbitrary behaviors
              RB: moreover, get the trace prefix involved *)
-        (beh = Goes_wrong t' /\ behavior_prefix t' (Terminates t) /\
+        (beh = Goes_wrong t' /\ trace_prefix t' m /\
          undef_in (Source.main_comp (Source.program_link p Cs)) t' (Source.prog_interface p)).
   Proof.
     intros t m Hbeh Hprefix0.
@@ -257,15 +257,11 @@ Section RSC_DC_MD.
     }
     destruct HP'_Cs_compiles
       as [P'_compiled [Cs_compiled [HP'_compiles [HCs_compiles HP'_Cs_compiles]]]].
-    assert (program_behaves (I.CS.sem (ilink P'_compiled Cs_compiled)) (Terminates t))
+    assert (exists t', program_behaves (I.CS.sem (ilink P'_compiled Cs_compiled)) (Terminates t') /\ behavior_prefix m (Terminates t'))
       as HP'_Cs_compiled_beh. {
       apply forward_simulation_same_safe_behavior
         with (L2:=I.CS.sem (ilink P'_compiled Cs_compiled)) in HP'_Cs_beh;
         simpl; eauto.
-      (* RB: Here, the proof obligation on [program_behaves] cannot be directly
-         discharged from [HP'_Cs_beh], since all we know is that t and t' share
-         a common prefix, m. The assert is now too strong and common behavior
-         can be guaranteed up to m. *) (* admit. (New subgoal!) *)
       apply I_simulates_S; auto.
       - apply Source.linking_well_formedness.
         * assumption.
@@ -274,6 +270,7 @@ Section RSC_DC_MD.
           rewrite <- Hsame_iface2 in linkability.
           apply linkability.
     }
+    destruct HP'_Cs_compiled_beh as [t2 [HP'_Cs_compiled_beh HP'_Cs_compiled_prefix]].
 
     (* intermediate decomposition (for Cs_compiled) *)
     assert
@@ -324,12 +321,15 @@ Section RSC_DC_MD.
       by (apply (I_interface_preserves_closedness_r closedness Hctx_same_iface)).
     assert (Intermediate.well_formed_program (ilink p_compiled Cs_compiled))
       as HpCs_compiled_well_formed
-      by (apply Intermediate.linking_well_formedness; assumption).
+        by (apply Intermediate.linking_well_formedness; assumption).
 
-    pose proof composition_for_termination
+    pose proof composition_for_termination_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkability'' HpCs_compiled_closed
-         HP_decomp HCs_decomp as HpCs_compiled_beh.
+         HP_decomp HCs_decomp
+         Hprefix0 HP'_Cs_compiled_prefix
+      as HpCs_compiled_beh.
+    destruct HpCs_compiled_beh as [t3 [HpCs_compiled_beh HpCs_compiled_prefix]].
 
     assert (Source.closed_program (slink p Cs)) as Hclosed_p_Cs
       by (apply (I_interface_preserves_S_closedness_l
