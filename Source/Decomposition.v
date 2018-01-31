@@ -428,6 +428,17 @@ Section Decomposition.
     - apply lockstep_simulation.
   Qed.
 
+  Corollary decomposition_with_safe_behavior:
+    forall beh,
+      program_behaves (CS.sem (program_link p c)) beh ->
+      not_wrong beh ->
+      program_behaves (PS.sem p (prog_interface c)) beh.
+  Proof.
+    intros beh.
+    eapply forward_simulation_same_safe_behavior; eauto.
+    apply decomposition.
+  Qed.
+
   Corollary decomposition_with_refinement:
     forall beh1,
       program_behaves (CS.sem (program_link p c)) beh1 ->
@@ -531,12 +542,50 @@ Section Decomposition.
       intros s.
       unfold not. intro contra.
       inversion contra; subst.
-      unfold CS.initial_state in H3. subst.
-      eapply H.
+      apply H with (s:=scs). simpl.
+      unfold CS.initial_state in *. subst.
+      unfold CS.initial_machine_state.
+      (* same main and main expr *)
+      (* empty stack *)
+      (* stop continuation *)
+      (* same initial memory memory because of same components *)
+  Admitted.
+
+  Lemma star_improvement:
+    forall p1 p2 s t t' s' s'',
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s' ->
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s (t ** t') s'' ->
+      (t' = E0 /\ s'' = s') \/
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s' t' s'' \/
+      (t' = E0 /\
+       star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s'' E0 s').
+  Proof.
+    intros p1 p2 s t t' s' s''.
+    intros Hstar1 Hstar2.
+    apply star_starN in Hstar1.
+    apply star_starN in Hstar2.
+    destruct Hstar1 as [n1 HstarN1].
+    destruct Hstar2 as [n2 HstarN2].
+    destruct (Nat.compare n1 n2) eqn:Hcmp.
+    - left.
+      (* same steps, hence same final state and trace *)
+      apply Nat.compare_eq in Hcmp. subst.
+      destruct (PS.state_determinism_starN HstarN1 HstarN2) as []. subst.
+      split.
+      + clear HstarN1. clear HstarN2.
+        induction t.
+        * simpl in *. subst. reflexivity.
+        * inversion H. apply IHt; auto.
+      + reflexivity.
+    - right. left.
+      (* less steps, split starN2 at s', then take the rest *)
+      admit.
+    - right. right.
+      (* more steps, split starN1 at s'', then take the rest *)
       admit.
   Admitted.
 
-  Lemma ub_improvement:
+  Lemma program_ub_doesnt_improve:
     forall t beh_imp,
       program_behaves (PS.sem p (prog_interface c))
                       (Goes_wrong t) ->
@@ -546,7 +595,76 @@ Section Decomposition.
                       (behavior_app t beh_imp) ->
       beh_imp = Goes_wrong E0.
   Proof.
-    intros t beh_imp Hbeh1 Hbeh2.
+    intros t beh_imp Hbeh1 Hblame Hbeh2.
+    inversion Hbeh1; subst.
+    (* program reaches a stuck state after zero or many steps *)
+    - inversion Hbeh2; subst.
+      + (* show that we start from the same state *)
+        assert (s = s0). {
+          apply PS.initial_state_determinism with p (prog_interface c); auto.
+        }
+        subst.
+        (* show that (Goes_wrong t) makes beh_imp empty *)
+        inversion H0; subst; inversion H2; subst;
+        destruct beh_imp; simpl in *; try discriminate;
+          inversion H3; subst.
+        * (* contra *)
+          (* s' cannot step, hence t1 is E0 and s'0 is s'
+             but s' is not a final state *)
+          destruct (star_improvement H4 H7) as [[]|[|[]]]; subst.
+          ** contradiction.
+          ** inversion H9; subst.
+             *** contradiction.
+             *** exfalso. eapply H5. eauto.
+          ** inversion H10; subst.
+             *** contradiction.
+             *** symmetry in H12.
+                 apply Eapp_E0_inv in H12. destruct H12; subst.
+                 admit.
+        * (* contra *)
+          (* s' cannot step, hence t1 is E0 and s'0 is s'
+             but s' is not forever silent *)
+          destruct (star_improvement H4 H7) as [[]|[|[]]]; subst.
+          ** inversion H8; subst.
+             exfalso. eapply H5. eauto.
+          ** inversion H9; subst.
+             *** inversion H8; subst.
+                 exfalso. eapply H5. eauto.
+             *** exfalso. eapply H5. eauto.
+          ** inversion H10; subst.
+             *** inversion H8; subst.
+                 exfalso. eapply H5. eauto.
+             *** symmetry in H12.
+                 apply Eapp_E0_inv in H12. destruct H12; subst.
+                 admit.
+        * (* contra *)
+          (* s' cannot step, hence t1 is E0 and s'0 is s'
+             but s' is not forever reactive *)
+          inversion H7; subst. inversion H9; subst.
+          ** contradiction.
+          ** exfalso. eapply H5. admit.
+        * (* s' cannot step, hence t1 is E0 and s'0 is s'
+             done *)
+          destruct (star_improvement H4 H7) as [[]|[|[]]]; subst.
+          ** reflexivity.
+          ** inversion H10; subst.
+             *** reflexivity.
+             *** exfalso. eapply H5. eauto.
+          ** inversion H11; subst; reflexivity.
+      + assert (t = E0).
+        { destruct t.
+          - reflexivity.
+          - destruct beh_imp; simpl in *;
+              discriminate.
+        } subst.
+        rewrite H1 behavior_app_E0.
+        reflexivity.
+    (* program went wrong because it doesn't have an initial state *)
+    - inversion Hbeh2; subst.
+      + exfalso.
+        eapply H0. eauto.
+      + rewrite H behavior_app_E0.
+        reflexivity.
   Admitted.
 
   Corollary decomposition_with_refinement_and_blame:
@@ -587,22 +705,11 @@ Section Decomposition.
              (it's determinate).
            *)
           destruct Hbeh2_pref as [Hbeh_imp ?]; subst.
-          rewrite (ub_improvement Hbeh1 Hblame Hbeh2).
+          rewrite (program_ub_doesnt_improve Hbeh1 Hblame Hbeh2).
           simpl. rewrite E0_right. reflexivity.
         * right.
           eexists. split.
           ** reflexivity.
           ** split; assumption.
-  Qed.
-
-  Corollary decomposition_with_safe_behavior:
-    forall beh,
-      program_behaves (CS.sem (program_link p c)) beh ->
-      not_wrong beh ->
-      program_behaves (PS.sem p (prog_interface c)) beh.
-  Proof.
-    intros beh.
-    eapply forward_simulation_same_safe_behavior; eauto.
-    apply decomposition.
   Qed.
 End Decomposition.

@@ -859,6 +859,24 @@ Inductive kstep (p: program) (ctx: Program.interface)
       partial_state ctx scs' sps' ->
       kstep p ctx (prepare_global_env p) sps t sps'.
 
+Theorem initial_state_determinism:
+  forall p ctx s1 s2,
+    initial_state p ctx s1 ->
+    initial_state p ctx s2 ->
+    s1 = s2.
+Proof.
+  intros p ctx s1 s2 Hinit1 Hinit2.
+  inversion Hinit1; inversion Hinit2; subst.
+  unfold CS.initial_state in *. subst.
+  apply partialize_correct in H3.
+  apply partialize_correct in H10.
+  unfold CS.initial_machine_state in *.
+  (* same main component, same main expression *)
+  (* empty stack *)
+  (* stop continuation *)
+  (* same partialized initial memory *)
+Admitted.
+
 Lemma program_allocation_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
     filterm (fun k _ => k \notin ctx) mem1 =
@@ -927,10 +945,10 @@ Proof.
   intros p ctx G sps t sps' Hcontrol Hstep1 sps'' Hstep2.
 
   inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 _ _ Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
+    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 wf wf1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
     subst.
   inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _ _ Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
+    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _  wf2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
     subst.
 
   (* case analysis on who has control *)
@@ -953,12 +971,10 @@ Proof.
 
     (* local *)
     + (* show that b and b0 are the same *)
-      destruct (prepare_buffers_of_linked_programs Hlink1 H10 H) as [? Hb].
-      rewrite <- Hiface2 in H.
-      destruct (prepare_buffers_of_linked_programs Hlink2 H6 H) as [? Hb'].
-      rewrite Hb in Hb'. inversion Hb'.
-      subst.
-      reflexivity.
+      suffices -> : b = b0 by [].
+      move: H6 H10; rewrite !mapmE /=.
+      case: getm=> [v1|] //= [<-].
+      by case: getm=> [v2|] //= [<-].
 
     (* alloc *)
     + (* show that memory changes in the same way *)
@@ -983,26 +999,19 @@ Proof.
     (* inside the same component *)
     + (* show stack and memory are changing in the same way *)
       assert (b = b0).
-      { destruct (prepare_buffers_of_linked_programs Hlink1 H12 H) as [? Hb].
-        rewrite <- Hiface2 in H.
-        destruct (prepare_buffers_of_linked_programs Hlink2 H18 H) as [? Hb'].
-        rewrite Hb in Hb'. inversion Hb'.
-        subst.
-        reflexivity.
-      }
+      { move: H12 H18; rewrite !mapmE /=.
+        case: getm=> [v1|] //= [<-].
+        by case: getm=> [v2|] //= [<-]. }
       assert (b' = b'0).
-      { destruct (prepare_buffers_of_linked_programs Hlink1 H14 H) as [? Hb].
-        rewrite <- Hiface2 in H.
-        destruct (prepare_buffers_of_linked_programs Hlink2 H20 H) as [? Hb'].
-        rewrite Hb in Hb'. inversion Hb'.
-        subst.
-        reflexivity.
+      { move: H14 H20; rewrite !mapmE /=.
+        case: getm=> [v1|] //= [<-].
+        by case: getm=> [v2|] //= [<-].
       }
       assert (P_expr = P_expr0). {
-        destruct (find_procedure_in_linked_programs Hlink1 H9 H)
+        destruct (find_procedure_in_linked_programs wf wf1 Hlink1 H9 H)
           as [HP_expr Hfind_proc].
         rewrite <- Hiface2 in H.
-        destruct (find_procedure_in_linked_programs Hlink2 H17 H)
+        destruct (find_procedure_in_linked_programs wf wf2 Hlink2 H17 H)
           as [HP_expr' Hfind_proc'].
         rewrite Hfind_proc in Hfind_proc'.
         inversion Hfind_proc'. subst.
@@ -1022,26 +1031,26 @@ Proof.
     (* internal *)
     + (* show stack and memory are changing in the same way *)
       assert (b = b0).
-      { destruct (prepare_buffers_of_linked_programs Hlink1 H13 H) as [? Hb].
+      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H13 H) as [? Hb].
         rewrite <- Hiface2 in H.
-        destruct (prepare_buffers_of_linked_programs Hlink2 H21 H) as [? Hb'].
+        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H21 H) as [? Hb'].
         rewrite Hb in Hb'. inversion Hb'.
         subst.
         reflexivity.
       }
       assert (b' = b'0).
-      { destruct (prepare_buffers_of_linked_programs Hlink1 H15 H12) as [? Hb].
+      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H15 H12) as [? Hb].
         rewrite <- Hiface2 in H12.
-        destruct (prepare_buffers_of_linked_programs Hlink2 H23 H12) as [? Hb'].
+        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H23 H12) as [? Hb'].
         rewrite Hb in Hb'. inversion Hb'.
         subst.
         reflexivity.
       }
       assert (P_expr = P_expr0). {
-        destruct (find_procedure_in_linked_programs Hlink1 H10 H12)
+        destruct (find_procedure_in_linked_programs wf wf1 Hlink1 H10 H12)
           as [HP_expr Hfind_proc].
         rewrite <- Hiface2 in H12.
-        destruct (find_procedure_in_linked_programs Hlink2 H20 H12)
+        destruct (find_procedure_in_linked_programs wf wf2 Hlink2 H20 H12)
           as [HP_expr' Hfind_proc'].
         rewrite Hfind_proc in Hfind_proc'.
         inversion Hfind_proc'. subst.
@@ -1058,9 +1067,9 @@ Proof.
 
     (* external *)
     + assert (b = b0).
-      { destruct (prepare_buffers_of_linked_programs Hlink1 H13 H) as [? Hb].
+      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H13 H) as [? Hb].
         rewrite <- Hiface2 in H.
-        destruct (prepare_buffers_of_linked_programs Hlink2 H21 H) as [? Hb'].
+        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H21 H) as [? Hb'].
         rewrite Hb in Hb'. inversion Hb'.
         subst.
         reflexivity.
@@ -1082,9 +1091,9 @@ Proof.
     (* inside the same component *)
     (* show stack and memory are changing in the same way *)
     + assert (b = b0).
-      { destruct (prepare_buffers_of_linked_programs Hlink1 H11 H) as [? Hb].
+      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H11 H) as [? Hb].
         rewrite <- Hiface2 in H.
-        destruct (prepare_buffers_of_linked_programs Hlink2 H9 H) as [? Hb'].
+        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H9 H) as [? Hb'].
         rewrite Hb in Hb'. inversion Hb'.
         subst.
         reflexivity.
@@ -1099,9 +1108,9 @@ Proof.
     (* internal *)
     + (* show stack and memory are changing in the same way *)
       assert (b = b0).
-      { destruct (prepare_buffers_of_linked_programs Hlink1 H11 H15) as [? Hb].
+      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H11 H15) as [? Hb].
         rewrite <- Hiface2 in H15.
-        destruct (prepare_buffers_of_linked_programs Hlink2 H13 H15) as [? Hb'].
+        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H13 H15) as [? Hb'].
         rewrite Hb in Hb'. inversion Hb'.
         subst.
         reflexivity.
@@ -1228,10 +1237,10 @@ Proof.
       inversion Hpartial_sps2'; subst; PS.simplify_turn.
       (* external call *)
       * assert (P_expr = P_expr0). {
-          destruct (find_procedure_in_linked_programs Hlink1 H10 H12)
+          destruct (find_procedure_in_linked_programs Hwfp Hwfp1 Hlink1 H10 H12)
             as [HP_expr Hfind_proc].
           rewrite <- Hiface2 in H12.
-          destruct (find_procedure_in_linked_programs Hlink2 H21 H12)
+          destruct (find_procedure_in_linked_programs Hwfp Hwfp2 Hlink2 H21 H12)
             as [HP_expr' Hfind_proc'].
           rewrite Hfind_proc in Hfind_proc'.
           inversion Hfind_proc'. subst.
@@ -1239,9 +1248,9 @@ Proof.
         }
         subst.
         assert (b' = b'0).
-        { destruct (prepare_buffers_of_linked_programs Hlink1 H15 H12) as [? Hb].
+        { destruct (prepare_buffers_of_linked_programs Hwfp Hwfp1 Hlink1 H15 H12) as [? Hb].
           rewrite <- Hiface2 in H12.
-          destruct (prepare_buffers_of_linked_programs Hlink2 H24 H12) as [? Hb'].
+          destruct (prepare_buffers_of_linked_programs Hwfp Hwfp2 Hlink2 H24 H12) as [? Hb'].
           rewrite Hb in Hb'. inversion Hb'.
           subst.
           reflexivity.
@@ -1283,9 +1292,9 @@ Proof.
         subst. rewrite Hstack.
         (* same memory *)
         assert (b = b0).
-        { destruct (prepare_buffers_of_linked_programs Hlink1 H11 H9) as [? Hb].
+        { destruct (prepare_buffers_of_linked_programs Hwfp Hwfp1 Hlink1 H11 H9) as [? Hb].
           rewrite <- Hiface2 in H9.
-          destruct (prepare_buffers_of_linked_programs Hlink2 H15 H9) as [? Hb'].
+          destruct (prepare_buffers_of_linked_programs Hwfp Hwfp2 Hlink2 H15 H9) as [? Hb'].
           rewrite Hb in Hb'. inversion Hb'.
           subst.
           reflexivity.
@@ -1335,17 +1344,18 @@ Proof.
   - eapply state_determinism_context; now eauto.
 Qed.
 
-Corollary state_determinism_star:
-  forall p ctx G sps t sps' sps'',
-    star (kstep p ctx) G sps t sps' ->
-    is_context_component sps' ctx ->
-    star (kstep p ctx) G sps t sps'' ->
-    is_context_component sps'' ctx ->
-    sps' = sps''.
+Corollary state_determinism_starN:
+  forall p ctx G n sps t1 t2 sps' sps'',
+    starN (kstep p ctx) G n sps t1 sps' ->
+    starN (kstep p ctx) G n sps t2 sps'' ->
+    t1 = t2 /\ sps' = sps''.
 Proof.
-  intros p ctx G sps t sps' sps''.
-  intros Hstar1 Hctx1 Hstar2 Hctx2.
-  (* TODO *)
+  intros p ctx G n sps t1 t2 sps' sps''.
+  intros HstarN1 HstarN2.
+  induction HstarN1; subst.
+  - inversion HstarN2; subst.
+    repeat split.
+  - admit.
 Admitted.
 
 (* partial semantics *)

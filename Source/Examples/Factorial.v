@@ -30,4 +30,4 @@ Definition factorial : program := {|
 Definition fuel := 1000.
 Definition to_run := run factorial fuel.
 
-Extraction "/tmp/run_fact.ml" to_run.
+Extraction "/tmp/run_source_factorial.ml" to_run.
