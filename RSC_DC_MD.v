@@ -100,23 +100,21 @@ Unset Printing Implicit Defensive.
            and linkability (maybe from previous point) *)
 
   Hypothesis definability_with_linking:
-    forall p c t m,
+    forall p c b m,
       Intermediate.well_formed_program p ->
       Intermediate.well_formed_program c ->
       linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
       Intermediate.closed_program (ilink p c) ->
-      program_behaves (I.CS.sem (ilink p c)) t ->
-      behavior_prefix m t ->
-        (* CH: last premise naive, it should instead take trace prefixes
-           RB: working on it *)
-    exists p' c' t',
+      program_behaves (I.CS.sem (ilink p c)) b ->
+      behavior_prefix m b ->
+    exists p' c' b',
       Source.prog_interface p' = Intermediate.prog_interface p /\
       Source.prog_interface c' = Intermediate.prog_interface c /\
       Source.well_formed_program p' /\
       Source.well_formed_program c' /\
       Source.closed_program (slink p' c') /\
-      program_behaves (S.CS.sem (slink p' c')) t' /\
-      behavior_prefix m t'.
+      program_behaves (S.CS.sem (slink p' c')) b' /\
+      behavior_prefix m b'.
 
   (* FCC *)
   Hypothesis I_simulates_S:
@@ -202,20 +200,26 @@ Lemma prefix_comp : forall t m1 m2 : trace,
     behavior_prefix m2 (Terminates t) ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Admitted.
+
 Lemma trans : forall (m1 m2 : trace) b,
     trace_prefix m1 m2 ->
     behavior_prefix m2 b ->
     behavior_prefix m1 b.
 Admitted.
 
+Lemma trans2 : forall t b m,
+  behavior_prefix t b ->
+  behavior_prefix m (Goes_wrong t) ->
+  behavior_prefix m b.
+Admitted.
+
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
-    forall t m,
-      program_behaves (I.CS.sem (ilink p_compiled Ct)) (Terminates t) ->
-      behavior_prefix m (Terminates t) ->
-        (* CH: last premise naive, it should instead take trace prefixes
-           RB: working on it, still not arbitrary behaviors *)
+    forall b m,
+      program_behaves (I.CS.sem (ilink p_compiled Ct)) b ->
+      behavior_prefix m b ->
+      not_wrong b -> (* CH: could try to remove this later *)
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
@@ -224,16 +228,13 @@ Admitted.
       program_behaves (S.CS.sem (Source.program_link p Cs)) beh /\
       exists t',
         behavior_prefix m beh \/
-          (* CH: last disjunct naive, should consider arbitrary behaviors
-             RB: moreover, get the trace prefix involved *)
         (beh = Goes_wrong t' /\ trace_prefix t' m /\
          undef_in (Source.main_comp (Source.program_link p Cs)) t' (Source.prog_interface p)).
   Proof.
-    intros t m Hbeh Hprefix0.
+    intros t m Hbeh Hprefix0 Hsafe_beh.
     pose proof linkability as linkability.
 
     (* intermediate decomposition (for p_compiled) *)
-    assert (not_wrong (Terminates t)) as Hsafe_beh. { simpl. auto. }
     pose proof
       compilation_preserves_well_formedness well_formed_p successfull_compilation
       as well_formed_p_compiled.
@@ -248,7 +249,7 @@ Admitted.
     destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability closedness Hbeh Hprefix0)
       as [P' [Cs [beh [Hsame_iface1 [Hsame_iface2 [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]].
     (* RB: TODO: Now looking only at the case we had before. *)
-    destruct beh as [t1 | t1 | t1 | t1]; [| admit | admit | admit].
+    (* destruct beh as [t1 | t1 | t1 | t1]; [| admit | admit | admit]. *)
 
     (* FCC *)
 
@@ -268,18 +269,22 @@ Admitted.
     }
     destruct HP'_Cs_compiles
       as [P'_compiled [Cs_compiled [HP'_compiles [HCs_compiles HP'_Cs_compiles]]]].
-    assert (exists t', program_behaves (I.CS.sem (ilink P'_compiled Cs_compiled)) (Terminates t') /\ behavior_prefix m (Terminates t'))
+    assert (exists b', program_behaves (I.CS.sem (ilink P'_compiled Cs_compiled)) b'
+                       /\ behavior_prefix m b')
       as HP'_Cs_compiled_beh. {
-      apply forward_simulation_same_safe_behavior
+      apply forward_simulation_behavior_improves
         with (L2:=I.CS.sem (ilink P'_compiled Cs_compiled)) in HP'_Cs_beh;
-        simpl; eauto.
-      apply I_simulates_S; auto.
-      - apply Source.linking_well_formedness.
+        simpl; eauto. 
+      - destruct HP'_Cs_beh as [b2 [H1 H2]]. exists b2. split. assumption.
+        destruct H2 as [|[t' [H21 H22]]]. subst. assumption. subst.
+        eapply trans2; eassumption.
+      - apply I_simulates_S; auto.
+        apply Source.linking_well_formedness.
         * assumption.
         * assumption.
         * rewrite <- Hsame_iface1 in linkability.
           rewrite <- Hsame_iface2 in linkability.
-          apply linkability.
+          now apply linkability.
     }
     destruct HP'_Cs_compiled_beh as [t2 [HP'_Cs_compiled_beh HP'_Cs_compiled_prefix]].
 
