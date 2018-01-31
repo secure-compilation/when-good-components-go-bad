@@ -26,13 +26,9 @@ Unset Printing Implicit Defensive.
   Let ilink := Intermediate.program_link.
 
   (* Some facts (provable and to prove) about linking and compilation *)
-  (* CH: worried about all these unproved(?) assumptions
-         on top of the 8 admits in the proof *)
 
   (* This should be provable, although we may have to slightly change the compiler *)
   (* (e.g. procedure id & label generation should be local to the component *)
-  (* CH: TODO requires reverting some of Andrew's changes to compiler,
-              see Separate compilation in robust-imp-comments.org *)
   Hypothesis separate_compilation:
     forall p c p_comp c_comp,
       Source.well_formed_program p ->
@@ -82,7 +78,6 @@ Unset Printing Implicit Defensive.
       compile_program c = Some c_compiled ->
       linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
 
-  (* RB: Restoring and correcting these. *)
   Hypothesis ilink_sym: forall p c,
       linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
       ilink p c = ilink c p.
@@ -142,13 +137,13 @@ Unset Printing Implicit Defensive.
     - apply I.CS.determinacy.
   Qed.
 
-(* CH: TODO: turn all admits in the code into assumed lemmas *)
+(* CH: TODO: turn all admits in the code into assumed lemmas -- one left!*)
 
-Hypothesis close_the_diagram : forall t t' p Cs,
-  program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Terminates t) ->
-  program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Goes_wrong t') ->
-  behavior_prefix t' (Terminates t) ->
-  undef_in (Source.main_comp (Source.program_link p Cs)) t'
+Hypothesis close_the_diagram : forall t b p Cs,
+  program_behaves (S.PS.sem Cs (Source.prog_interface p)) b ->
+  program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Goes_wrong t) ->
+  behavior_prefix t b ->
+  undef_in (Source.main_comp (Source.program_link p Cs)) t
            (Source.prog_interface p).
 
 (* RB: I have pushed here a couple of details that maybe should be external:
@@ -184,24 +179,16 @@ Section RSC_DC_MD.
   Hypothesis sound_interface_p_Ct : sound_interface (unionm (Source.prog_interface p) (Intermediate.prog_interface Ct)).
   Hypothesis fdisjoint_p_Ct : fdisjoint (domm (Source.prog_interface p)) (domm (Intermediate.prog_interface Ct)).
 
-  Lemma linkability: linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface Ct).
-  Proof. constructor.
-         - apply compilation_preserves_interface in successfull_compilation.
-           rewrite successfull_compilation. assumption.
-         - apply compilation_preserves_interface in successfull_compilation.
-           rewrite successfull_compilation. assumption.
-  Qed.
-
   Hypothesis closedness:
     Intermediate.closed_program (ilink p_compiled Ct).
 
-Lemma prefix_comp : forall t m1 m2 : trace,
-    behavior_prefix m1 (Terminates t) ->
-    behavior_prefix m2 (Terminates t) ->
+Lemma prefix_comp : forall m1 m2 b,
+    behavior_prefix m1 b ->
+    behavior_prefix m2 b ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Admitted.
 
-Lemma trans : forall (m1 m2 : trace) b,
+Lemma trans : forall m1 m2 b,
     trace_prefix m1 m2 ->
     behavior_prefix m2 b ->
     behavior_prefix m1 b.
@@ -247,13 +234,20 @@ Qed.
       linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (slink p Cs) /\
       program_behaves (S.CS.sem (Source.program_link p Cs)) beh /\
-      exists t',
-        behavior_prefix m beh \/
-        (beh = Goes_wrong t' /\ trace_prefix t' m /\
-         undef_in (Source.main_comp (Source.program_link p Cs)) t' (Source.prog_interface p)).
+      (behavior_prefix m beh \/
+      (exists t',
+        beh = Goes_wrong t' /\ trace_prefix t' m /\
+         undef_in (Source.main_comp (Source.program_link p Cs)) t' (Source.prog_interface p))).
   Proof.
     intros t m Hbeh Hprefix0 Hsafe_beh.
-    pose proof linkability as linkability.
+
+    assert(linkable (Intermediate.prog_interface p_compiled)
+                    (Intermediate.prog_interface Ct)) as linkability.
+         constructor.
+         - apply compilation_preserves_interface in successfull_compilation.
+           rewrite successfull_compilation. assumption.
+         - apply compilation_preserves_interface in successfull_compilation.
+           rewrite successfull_compilation. assumption.
 
     (* intermediate decomposition (for p_compiled) *)
     pose proof
@@ -269,8 +263,6 @@ Qed.
     (* definability *)
     destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability closedness Hbeh Hprefix0)
       as [P' [Cs [beh [Hsame_iface1 [Hsame_iface2 [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]].
-    (* RB: TODO: Now looking only at the case we had before. *)
-    (* destruct beh as [t1 | t1 | t1 | t1]; [| admit | admit | admit]. *)
 
     (* FCC *)
 
@@ -331,11 +323,6 @@ Qed.
     pose proof Intermediate.Decomposition.decomposition_with_refinement
          well_formed_Cs_compiled well_formed_P'_compiled
          linkability' HP'_Cs_compiled_beh as [beh2 [HCs_decomp HCs_beh_improves]].
-    (*!
-    pose proof Intermediate.Decomposition.decomposition_with_safe_behavior
-         well_formed_Cs_compiled well_formed_P'_compiled
-         linkability' HP'_Cs_compiled_beh Hsafe_beh as HCs_decomp.
-*)
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
@@ -372,7 +359,7 @@ Qed.
          HP_decomp HCs_decomp
          Hprefix0 Hpref_m_beh2
       as HpCs_compiled_beh.
-    destruct HpCs_compiled_beh as [t3 [HpCs_compiled_beh HpCs_compiled_prefix]].
+    destruct HpCs_compiled_beh as [b3 [HpCs_compiled_beh HpCs_compiled_prefix]].
 
     assert (Source.closed_program (slink p Cs)) as Hclosed_p_Cs
       by (apply (I_interface_preserves_S_closedness_l
@@ -393,7 +380,7 @@ Qed.
     (* BCC *)
     assert (exists beh1,
                program_behaves (S.CS.sem (slink p Cs)) beh1 /\
-               behavior_improves beh1 t3) as HpCs_beh. {
+               behavior_improves beh1 b3) as HpCs_beh. {
       apply backward_simulation_behavior_improves
         with (L1:=S.CS.sem (slink p Cs)) in HpCs_compiled_beh; auto.
       - apply S_simulates_I.
@@ -410,22 +397,26 @@ Qed.
     - inversion HpCs_beh_imp as [pCs_beh_ok|].
       + split.
         * subst pCs_beh. assumption.
-        * eexists t3. left. subst. assumption.
+        * left. subst. assumption.
       + destruct H as [t' [Hgoes_wrong Hprefix]].
         assert(trace_prefix m t' \/ trace_prefix t' m) as H by (eapply prefix_comp; eauto).
         destruct H as [H | H].
         - split.
           * subst pCs_beh. assumption.
-          * eexists t'. left. subst. eapply trans. apply H.
+          * left. subst. eapply trans. apply H.
             unfold behavior_prefix. exists (Goes_wrong []). simpl.
             setoid_rewrite <- app_nil_end. reflexivity.
         - split.
           * subst pCs_beh. assumption.
-          * exists t'. right. repeat split; auto.
+          * right. exists t'. repeat split; auto.
           (* blame UB -- Guglielmo working on proof *)
             rewrite slink_sym in HpCs_beh; [| assumption].
             apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
               try assumption.
+            setoid_rewrite slink_sym in HP'_Cs_beh; [|congruence].
+            eapply Source.Decomposition.decomposition_with_refinement in HP'_Cs_beh;
+              [| assumption | assumption | congruence].
+            destruct HP'_Cs_beh as [beh' [G1 G2]].
             destruct HpCs_beh as [b [H1 [H2 | H2]]].
             + subst pCs_beh. subst b.
               eapply close_the_diagram.
@@ -434,15 +425,10 @@ Qed.
                 assert(Source.prog_interface P' = Source.prog_interface p) as HHH
                     by congruence.
                 rewrite <- HHH.
-                eapply Source.Decomposition.decomposition_with_safe_behavior.
-                + assumption.
-                + assumption.
-                + apply linkable_sym. rewrite HHH. assumption.
-                + setoid_rewrite slink_sym. eassumption.
-                + apply linkable_sym. rewrite HHH. assumption.
-                + easy.
+                now apply G1.
               - assumption.
-              - eapply trans in H; eassumption.
+              - assert(behavior_prefix t' beh) as H0. eapply trans. now apply H. assumption.
+                eapply trans3. now eapply H0. assumption.
             + destruct H2 as [t'' [H21 [H22 H23]]].
               subst pCs_beh. injection H21; intro H21'. subst t''.
               setoid_rewrite slink_sym; assumption.
