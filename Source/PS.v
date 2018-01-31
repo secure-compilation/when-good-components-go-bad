@@ -859,6 +859,38 @@ Inductive kstep (p: program) (ctx: Program.interface)
       partial_state ctx scs' sps' ->
       kstep p ctx (prepare_global_env p) sps t sps'.
 
+(* partial semantics *)
+Section Semantics.
+  Variable p: program.
+  Variable ctx: Program.interface.
+
+  Hypothesis valid_program:
+    well_formed_program p.
+
+  Hypothesis disjoint_interfaces:
+    fdisjoint (domm (prog_interface p)) (domm ctx).
+
+  Hypothesis merged_interface_is_closed:
+    closed_interface (unionm (prog_interface p) ctx).
+
+  Definition sem :=
+    @Semantics_gen state global_env (kstep p ctx)
+                   (initial_state p ctx)
+                   (final_state p ctx) (prepare_global_env p).
+
+  Lemma singleton_traces:
+    single_events sem.
+  Proof.
+    unfold single_events.
+    intros s t s' Hstep.
+    inversion Hstep; simpl;
+      match goal with
+      | Hcs_step: CS.kstep _ _ _ _ |- _ =>
+        apply CS.singleton_traces in Hcs_step
+      end; auto.
+  Qed.
+End Semantics.
+
 Theorem initial_state_determinism:
   forall p ctx s1 s2,
     initial_state p ctx s1 ->
@@ -875,63 +907,6 @@ Proof.
   (* empty stack *)
   (* stop continuation *)
   (* same partialized initial memory *)
-Admitted.
-
-Lemma program_allocation_in_partialized_memory:
-  forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
-  forall C size mem1' mem2' ptr1 ptr2,
-    C \notin ctx ->
-    Memory.alloc mem1 C size = Some (mem1', ptr1) ->
-    Memory.alloc mem2 C size = Some (mem2', ptr2) ->
-    ptr1 = ptr2 /\
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
-Proof.
-Admitted.
-
-Lemma program_load_in_partialized_memory:
-  forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
-  forall C b o v1 v2,
-    C \notin ctx ->
-    Memory.load mem1 (C, b, o) = Some v1 ->
-    Memory.load mem2 (C, b, o) = Some v2 ->
-    v1 = v2.
-Proof.
-Admitted.
-
-Lemma program_store_in_partialized_memory:
-  forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
-  forall C b o v mem1' mem2',
-    C \notin ctx ->
-    Memory.store mem1 (C, b, o) v = Some mem1' ->
-    Memory.store mem2 (C, b, o) v = Some mem2' ->
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
-Proof.
-Admitted.
-
-Lemma context_allocation_in_partialized_memory:
-  forall (ctx: {fset Component.id}) mem C size mem' ptr,
-    C \in ctx ->
-    Memory.alloc mem C size = Some (mem', ptr) ->
-    filterm (fun k _ => k \notin ctx) mem' =
-    filterm (fun k _ => k \notin ctx) mem.
-Proof.
-Admitted.
-
-Lemma context_store_in_partialized_memory:
-  forall (ctx: {fset Component.id}) mem C b o v mem',
-    C \in ctx ->
-    Memory.store mem (C, b, o) v = Some mem' ->
-    filterm (fun k _ => k \notin ctx) mem' =
-    filterm (fun k _ => k \notin ctx) mem.
-Proof.
 Admitted.
 
 Lemma state_determinism_program:
@@ -1137,6 +1112,17 @@ Proof.
       rewrite Hin in Hnotin; discriminate
     end.
 Qed.
+
+(* we can prove something stronger when program is in control *)
+Lemma state_determinism_program':
+  forall p ctx G sps t1 t2 sps',
+    is_program_component sps ctx ->
+    kstep p ctx G sps t1 sps' ->
+  forall sps'',
+    kstep p ctx G sps t2 sps'' ->
+    t1 = t2 /\ sps' = sps''.
+Proof.
+Admitted.
 
 Lemma context_epsilon_step_is_silent:
   forall p ctx G sps sps',
@@ -1344,37 +1330,101 @@ Proof.
   - eapply state_determinism_context; now eauto.
 Qed.
 
-Corollary state_determinism_starN:
-  forall p ctx G n sps t1 t2 sps' sps'',
-    starN (kstep p ctx) G n sps t1 sps' ->
-    starN (kstep p ctx) G n sps t2 sps'' ->
-    t1 = t2 /\ sps' = sps''.
+Corollary starN_with_same_steps_and_prefix:
+  forall p ctx n sps t t' sps' sps'',
+    starN (kstep p ctx) (prepare_global_env p) n sps t sps' ->
+    starN (kstep p ctx) (prepare_global_env p) n sps (t ** t') sps'' ->
+    t' = E0 /\ sps' = sps''.
 Proof.
-  intros p ctx G n sps t1 t2 sps' sps''.
+  intros p ctx n sps t t' sps' sps''.
   intros HstarN1 HstarN2.
-  induction HstarN1; subst.
-  - inversion HstarN2; subst.
+  dependent induction n.
+  - inversion HstarN1; inversion HstarN2;
+      subst; simpl in *; subst.
     repeat split.
-  - admit.
+  - inversion HstarN1; inversion HstarN2; subst.
+    enough (t2 = t5). enough (t1 = t4). subst.
+    pose proof (state_determinism H0 H7). subst.
+    rewrite <- (E0_right t5) in H8.
+    pose proof (IHn s'0 t5 E0 sps' sps'' H1 H8).
+    intuition.
+    + rewrite <- (E0_right (t4 ** t5)) in H9.
+      replace (((t4 ** t5) ** E0) ** t')
+         with ((t4 ** t5) ** t')
+           in H9.
+      apply app_inv_head in H9. auto.
+      * rewrite E0_right. reflexivity.
+    + subst.
+      admit.
+    + admit.
 Admitted.
 
-(* partial semantics *)
-Section Semantics.
-  Variable p: program.
-  Variable ctx: Program.interface.
-
-  Hypothesis valid_program:
-    well_formed_program p.
-
-  Hypothesis disjoint_interfaces:
-    fdisjoint (domm (prog_interface p)) (domm ctx).
-
-  Hypothesis merged_interface_is_closed:
-    closed_interface (unionm (prog_interface p) ctx).
-
-  Definition sem :=
-    @Semantics_gen state global_env (kstep p ctx)
-                   (initial_state p ctx)
-                   (final_state p ctx) (prepare_global_env p).
-End Semantics.
+Corollary state_determinism_starN:
+  forall p ctx n sps t sps' sps'',
+    starN (kstep p ctx) (prepare_global_env p) n sps t sps' ->
+    starN (kstep p ctx) (prepare_global_env p) n sps t sps'' ->
+    sps' = sps''.
+Proof.
+  intros p ctx n sps t sps' sps''.
+  intros HstarN1 HstarN2.
+  dependent induction n.
+  - inversion HstarN1; inversion HstarN2; subst.
+    repeat split.
+  - inversion HstarN1; inversion HstarN2; subst.
+    enough (t2 = t5). enough (t1 = t4). subst.
+    pose proof (state_determinism H0 H7). subst.
+    apply (IHn s'0 t5 sps' sps'' H1 H8).
+    + subst. apply app_inv_tail in H9. auto.
+    + pose proof singleton_traces H0.
+      pose proof singleton_traces H7.
+      inversion H; subst.
+      * inversion H2; subst.
+        ** do 2 (destruct t1; simpl in *; try discriminate).
+           do 2 (destruct t4; simpl in *; try discriminate).
+           inversion H9. reflexivity.
+        ** inversion H5; subst.
+           do 2 (destruct t1; simpl in *; try discriminate).
+           destruct t4; simpl in *; try discriminate.
+           rewrite <- H9 in H8.
+           (* case analysis on who has control in the first step *)
+           destruct (is_context_component sps ctx) eqn:Hctx.
+           *** (* context in control *)
+               (* epsilon step is silent
+                  contra, number of steps from sps to sps'' *)
+               assert (H7' := H7).
+               apply context_epsilon_step_is_silent in H7'; auto.
+               subst.
+               admit.
+           *** (* program in control *)
+               (* contra because of determinism ([e] = []) *)
+               assert (Hprog: is_program_component sps ctx). {
+                 PS.simplify_turn. unfold negb. rewrite Hctx. auto.
+               }
+               destruct (state_determinism_program' Hprog H0 H7).
+               discriminate.
+      * inversion H4.
+        inversion H2; subst.
+        ** destruct t1; simpl in *; try discriminate.
+           do 2 (destruct t4; simpl in *; try discriminate).
+           rewrite H9 in H1.
+           (* case analysis on who has control in the first step *)
+           destruct (is_context_component sps ctx) eqn:Hctx.
+           *** (* context in control *)
+               (* epsilon step is silent
+                  contra, number of steps from sps to sps'' *)
+               apply context_epsilon_step_is_silent in H0; auto.
+               subst.
+               admit.
+           *** (* program in control *)
+               (* contra because of determinism ([e] = []) *)
+               assert (Hprog: is_program_component sps ctx). {
+                 PS.simplify_turn. unfold negb. rewrite Hctx. auto.
+               }
+               destruct (state_determinism_program' Hprog H0 H7).
+               discriminate.
+        ** inversion H6; subst.
+           destruct t1; simpl in *; try discriminate.
+           destruct t4; simpl in *; try discriminate.
+           assumption.
+Admitted.
 End PS.
