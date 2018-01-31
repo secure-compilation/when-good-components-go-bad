@@ -197,6 +197,17 @@ Section RSC_DC_MD.
   Hypothesis closedness:
     Intermediate.closed_program (ilink p_compiled Ct).
 
+Lemma prefix_comp : forall t m1 m2 : trace,
+    behavior_prefix m1 (Terminates t) ->
+    behavior_prefix m2 (Terminates t) ->
+    (trace_prefix m1 m2 \/ trace_prefix m2 m1).
+Admitted.
+Lemma trans : forall (m1 m2 : trace) b,
+    trace_prefix m1 m2 ->
+    behavior_prefix m2 b ->
+    behavior_prefix m1 b.
+Admitted.
+
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
@@ -212,7 +223,7 @@ Section RSC_DC_MD.
       Source.closed_program (slink p Cs) /\
       program_behaves (S.CS.sem (Source.program_link p Cs)) beh /\
       exists t',
-        (beh = Terminates t' /\ behavior_prefix m (Terminates t')) \/
+        behavior_prefix m beh \/
           (* CH: last disjunct naive, should consider arbitrary behaviors
              RB: moreover, get the trace prefix involved *)
         (beh = Goes_wrong t' /\ trace_prefix t' m /\
@@ -350,7 +361,7 @@ Section RSC_DC_MD.
     (* BCC *)
     assert (exists beh1,
                program_behaves (S.CS.sem (slink p Cs)) beh1 /\
-               behavior_improves beh1 (Terminates t)) as HpCs_beh. {
+               behavior_improves beh1 (Terminates t3)) as HpCs_beh. {
       apply backward_simulation_behavior_improves
         with (L1:=S.CS.sem (slink p Cs)) in HpCs_compiled_beh; auto.
       - apply S_simulates_I.
@@ -367,37 +378,43 @@ Section RSC_DC_MD.
     - inversion HpCs_beh_imp as [pCs_beh_ok|].
       + split.
         * subst pCs_beh. assumption.
-        * exists t. left. split. by auto.
-          (* RB: The proof breaks here as it tries to compare t with m. *)
-          exists (Terminates E0). simpl. rewrite E0_right. reflexivity.
-      + destruct H as [t' [Hgoes_wrong Hprefix]]. split.
-        * subst pCs_beh. assumption.
-        * exists t'. right. repeat split; auto.
-        (* blame UB -- Guglielmo working on proof *)
-      + rewrite slink_sym in HpCs_beh; [| assumption].
-        apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
-          try assumption.
-        destruct HpCs_beh as [b [H1 [H2 | H2]]].
-        + subst pCs_beh. subst b.
-          eapply close_the_diagram.
-          - pose proof (compilation_preserves_interface p p_compiled
-                                           successfull_compilation) as HH.
-            assert(Source.prog_interface P' = Source.prog_interface p) as HHH
-                by congruence.
-            rewrite <- HHH.
-            eapply Source.Decomposition.decomposition_with_safe_behavior.
-            + assumption.
-            + assumption.
-            + apply linkable_sym. rewrite HHH. assumption.
-            + setoid_rewrite slink_sym. eassumption.
-            + apply linkable_sym. rewrite HHH. assumption.
-            + easy.
-          - assumption.
-          - (* RB: Here, we want to relate t' with t1, not with t, though we know
-               they coincide up to m. Proof by assumption fails. *)
-            assumption.
-        + destruct H2 as [t'' [H21 [H22 H23]]].
-          subst pCs_beh. injection H21; intro H21'. subst t''.
-          setoid_rewrite slink_sym; assumption.
+        * eexists t3. left. subst. assumption.
+      + destruct H as [t' [Hgoes_wrong Hprefix]].
+        assert(trace_prefix m t' \/ trace_prefix t' m) as H by (eapply prefix_comp; eauto).
+        destruct H as [H | H].
+        - split.
+          * subst pCs_beh. assumption.
+          * eexists t'. left. subst. eapply trans. apply H.
+            unfold behavior_prefix. exists (Goes_wrong []). simpl.
+            setoid_rewrite <- app_nil_end. reflexivity.
+        - split.
+          * subst pCs_beh. assumption.
+          * exists t'. right. repeat split; auto.
+          (* blame UB -- Guglielmo working on proof *)
+            rewrite slink_sym in HpCs_beh; [| assumption].
+            apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
+              try assumption.
+            destruct HpCs_beh as [b [H1 [H2 | H2]]].
+            + subst pCs_beh. subst b.
+              eapply close_the_diagram.
+              - pose proof (compilation_preserves_interface p p_compiled
+                                               successfull_compilation) as HH.
+                assert(Source.prog_interface P' = Source.prog_interface p) as HHH
+                    by congruence.
+                rewrite <- HHH.
+                eapply Source.Decomposition.decomposition_with_safe_behavior.
+                + assumption.
+                + assumption.
+                + apply linkable_sym. rewrite HHH. assumption.
+                + setoid_rewrite slink_sym. eassumption.
+                + apply linkable_sym. rewrite HHH. assumption.
+                + easy.
+              - assumption.
+              - eapply trans in H; eassumption.
+            + destruct H2 as [t'' [H21 [H22 H23]]].
+              subst pCs_beh. injection H21; intro H21'. subst t''.
+              setoid_rewrite slink_sym; assumption.
+            + now apply linkable_sym.
+            + setoid_rewrite <- slink_sym; assumption.
   Admitted.
 End RSC_DC_MD.
