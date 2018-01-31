@@ -36,7 +36,13 @@ Lemma trace_behavior_prefix_trans : forall m1 m2 b,
     trace_prefix m1 m2 ->
     behavior_prefix m2 b ->
     behavior_prefix m1 b.
-Admitted.
+Proof.
+  unfold trace_prefix, behavior_prefix.
+  intros m1 m2 b [m3 Hm3] [b' Hb].
+  subst m2 b.
+  exists (behavior_app m3 b').
+  now rewrite <- behavior_app_assoc.
+Qed.
 
 Lemma behavior_prefix_goes_wrong_trans : forall t b m,
   behavior_prefix t b ->
