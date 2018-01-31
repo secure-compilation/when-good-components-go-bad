@@ -211,19 +211,29 @@ Lemma trans2 : forall t b m,
   behavior_prefix t b ->
   behavior_prefix m (Goes_wrong t) ->
   behavior_prefix m b.
-Admitted.
+Proof.
+  unfold behavior_prefix.
+  destruct t as [| e t']; intros b m [b1 H1] [b2 H2]; subst b.
+  - destruct m; destruct b2; simpl in H2; try discriminate.
+    injection H2; intro H. subst. now eauto.
+  - destruct m; destruct b2 as [| | | t'']; simpl in *; try discriminate.
+    + exists (behavior_app (e :: t') b1). now rewrite behavior_app_E0.
+    + injection H2; intros E1 E2; subst e t'.
+      exists (behavior_app t'' b1). rewrite <- behavior_app_assoc.
+      reflexivity.
+Qed.
 
 Lemma trans3 : forall t b m,
     behavior_prefix m t ->
     behavior_improves t b ->
     behavior_prefix m b.
-Proof. 
+Proof.
   intros t b m H0 H1.
-  destruct H1 as  [H1 | [t' [H11 H12]]].  
+  destruct H1 as  [H1 | [t' [H11 H12]]].
   + subst. assumption.
   + subst. eapply trans2; eassumption.
 Qed.
-     
+
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
@@ -255,7 +265,7 @@ Qed.
     (* CH: if we had undefined behavior we would use this *)
     (* destruct (decomposition_with_refinement linkability Hbeh) *)
     (*   as [beh' [Hbeh' Hbeh_improves]]. *)
-    
+
     (* definability *)
     destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability closedness Hbeh Hprefix0)
       as [P' [Cs [beh [Hsame_iface1 [Hsame_iface2 [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]].
@@ -285,7 +295,7 @@ Qed.
       as HP'_Cs_compiled_beh. {
       apply forward_simulation_behavior_improves
         with (L2:=I.CS.sem (ilink P'_compiled Cs_compiled)) in HP'_Cs_beh;
-        simpl; eauto. 
+        simpl; eauto.
       - destruct HP'_Cs_beh as [b2 [H1 H2]]. exists b2. split. assumption.
         destruct H2 as [|[t' [H21 H22]]]. subst. assumption. subst.
         eapply trans2; eassumption.
@@ -355,7 +365,7 @@ Qed.
       as HpCs_compiled_well_formed
         by (apply Intermediate.linking_well_formedness; assumption).
 
-    assert (behavior_prefix m beh2) as Hpref_m_beh2 by (eapply trans3; eassumption). 
+    assert (behavior_prefix m beh2) as Hpref_m_beh2 by (eapply trans3; eassumption).
     pose proof composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkability'' HpCs_compiled_closed
