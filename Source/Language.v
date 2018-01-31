@@ -99,10 +99,11 @@ Module Source.
 
   (* Component C has a buffer of size at least one *)
   Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
-    (exists size, getm (prog_buffers p) C = Some (inl size) /\
-                  (size > 0)%nat) \/
-    (exists values, getm (prog_buffers p) C = Some (inr values) /\
-                  (length values > 0)%nat).
+    exists2 buf, prog_buffers p C = Some buf &
+                 match buf with
+                 | inl size   => size > 0
+                 | inr values => length values > 0
+                 end%nat.
 
   Record well_formed_program (p: program) := {
     (* the interface is sound (but maybe not closed) *)
@@ -310,8 +311,8 @@ Module Source.
       move/wfprog_well_formed_buffers in wf1.
       move/wfprog_well_formed_buffers in wf2.
       rewrite -mem_domm domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
-        by rewrite mem_domm; case/wf1=> [[? [->]]|[? [->]]] /=; eauto.
-      by rewrite mem_domm; case/wf2=> [[? [->]]|[? [->]]] /=; eauto.
+        by rewrite mem_domm; case/wf1=> [? ->] /=; eauto.
+      by rewrite mem_domm; case/wf2=> [? ->] /=; eauto.
     - move=> mainC mainP; rewrite /= /main_link /=.
       move: (linkable_disjoint_mains wf1 wf2 link).
       rewrite /linkable_mains.
