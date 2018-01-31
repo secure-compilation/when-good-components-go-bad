@@ -28,4 +28,4 @@ Definition nested_calls : program := {|
 Definition fuel := 1000.
 Definition to_run := run nested_calls fuel.
 
-Extraction "/tmp/run_nested_calls.ml" to_run.
+Extraction "/tmp/run_source_nested_calls.ml" to_run.

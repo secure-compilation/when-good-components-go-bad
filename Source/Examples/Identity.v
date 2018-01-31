@@ -21,4 +21,4 @@ Definition identity : program := {|
 Definition fuel := 1000.
 Definition to_run := run identity fuel.
 
-Extraction "/tmp/run_identity.ml" to_run.
+Extraction "/tmp/run_source_identity.ml" to_run.

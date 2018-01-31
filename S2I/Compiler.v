@@ -58,13 +58,13 @@ Open Scope monad_scope.
 (* the compilation environment *)
 
 Record comp_env : Type := {
-  next_label: label;
+  next_label: NMap label;
 }.
 
 (* easy environments updates *)
 
-Definition with_next_label l (env:comp_env) :=
-  {| next_label := l; |}.
+Definition with_next_label (comp: Component.id) l (env:comp_env) : comp_env :=
+  {| next_label := setm (next_label env) comp l |}.
 
 (* simplify notations *)
 
@@ -78,11 +78,16 @@ Notation run := (Comp.run comp_env).
 
 (* auxiliary environment operations *)
 
-Definition fresh_label : COMP label :=
+Definition fresh_label (comp: Component.id) : COMP label :=
   do cenv <- get;
-  let l := next_label cenv in
-  do! modify (with_next_label (1 + l));
-  ret l.
+  match getm (next_label cenv) comp with
+  | None =>
+    do! modify (with_next_label comp 1);
+    ret 0
+  | Some l =>
+    do! modify (with_next_label comp (1 + l));
+    ret l
+  end.
 
 (* code generation *)
 
@@ -136,8 +141,8 @@ Fixpoint compile_expr (e: expr) : COMP code :=
     do c1 <- compile_expr e1;
     do c2 <- compile_expr e2;
     do c3 <- compile_expr e3;
-    do lconseq <- fresh_label;
-    do lend <- fresh_label;
+    do lconseq <- fresh_label C;
+    do lend <- fresh_label C;
     ret (c1 ++
          [IBnz R_COM lconseq] ++
          c3 ++
@@ -188,8 +193,8 @@ Fixpoint compile_expr (e: expr) : COMP code :=
 Definition compile_proc (P: Procedure.id) (e: expr)
   : COMP code :=
   do proc_label <- find_proc_label P;
-  do lmain <- fresh_label;
-  do lreturn <- fresh_label;
+  do lmain <- fresh_label C;
+  do lreturn <- fresh_label C;
   do proc_code <- compile_expr e;
   let stack_frame_size := 20%Z in
   ret ([IConst (IInt 1) R_ONE;
@@ -225,13 +230,13 @@ Definition compile_procedures
 End WithComponent.
 
 Definition gen_component_procedures_labels
-         (procs: list (Procedure.id * expr))
+         (comp: Component.id) (procs: list (Procedure.id * expr))
   : COMP (NMap label) :=
   let fix gen acc procs :=
       match procs with
       | [] => ret acc
       | (P, _) :: procs' =>
-        do freshl <- fresh_label;
+        do freshl <- fresh_label comp;
         gen (setm acc P freshl) procs'
       end
   in gen emptym procs.
@@ -243,7 +248,7 @@ Definition gen_all_procedures_labels
       match procs with
       | [] => ret acc
       | (C, Cprocs) :: procs' =>
-        do map <- gen_component_procedures_labels (elementsm Cprocs);
+        do map <- gen_component_procedures_labels C (elementsm Cprocs);
         gen (setm acc C map) procs'
       end
   in gen emptym procs.
@@ -273,20 +278,23 @@ Definition compile_components
   in compile [] comps.
 
 Definition init_env : comp_env :=
-  {| next_label := 1; |}.
+  {| next_label := emptym; |}.
 
 (* In intermediate program, main will be a tiny wrapper routine (in the same component)
    that simply calls the  (translation of the) original main and then halts. *)
 
 (* A fresh procedure id can be calculated by, e.g., taking the max of all procedure id's and adding 1 *)
 
-Definition generate_fresh_procedure_id (procs: NMap (NMap code)) : Procedure.id :=
-  let max_id ps := fold_left (fun id P => Nat.max id (fst P)) (elementsm ps) 0 in
-  Nat.succ (fold_left (fun id C => Nat.max id (max_id (snd C))) (elementsm procs) 0).
+Definition generate_fresh_procedure_id comp (procs: NMap (NMap code)) : Procedure.id :=
+  match getm procs comp with
+  | None => 0
+  | Some comp_procs =>
+    Nat.succ (fold_left (fun proc_id proc => Nat.max proc_id (fst proc)) (elementsm comp_procs) 0)
+  end.
 
 Lemma generate_fresh_procedure_id_fresh:
-  forall procs,
-    generate_fresh_procedure_id procs \in domm procs = false.
+  forall comp procs,
+    generate_fresh_procedure_id comp procs \in domm procs = false.
 Proof.
 Admitted.
 
@@ -297,7 +305,7 @@ Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program)
     do procs <- lift (getm p.(Intermediate.prog_procedures) C);
     do P_labels <- lift (getm procs_labels C);
     do lab <- lift (getm P_labels P);
-    let P' := generate_fresh_procedure_id (p.(Intermediate.prog_procedures)) in
+    let P' := generate_fresh_procedure_id C (p.(Intermediate.prog_procedures)) in
     let iface' :=  {| Component.export := fsetU (fset1 P') iface.(Component.export);
                       Component.import := iface.(Component.import) |} in
     let procs' := setm procs P' [IConst (IInt 1) R_ONE; IJal lab ; IHalt] in
