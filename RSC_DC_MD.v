@@ -65,22 +65,6 @@ Proof.
   + subst. eapply  behavior_prefix_goes_wrong_trans; eassumption.
 Qed.
 
-(* TODO: inline *)
-
-Lemma I_interface_preserves_S_closedness_l :
-  forall p1 p1' p1_c p1'_c p2,
-    Source.closed_program (Source.program_link p1 p2) ->
-    compile_program p1 = Some p1_c ->
-    compile_program p1' = Some p1'_c ->
-    Intermediate.prog_interface p1'_c = Intermediate.prog_interface p1_c ->
-    Source.closed_program (Source.program_link p1' p2).
-Proof.
-  intros p1 p1' p1_c p1'_c p2 H H0 H1 H2.
-  eapply Source.interface_preserves_closedness_l.
-  eassumption. apply compilation_preserves_interface in H0.
-  apply compilation_preserves_interface in H1. congruence.
-Qed.
-
 Section RSC_DC_MD.
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
@@ -242,10 +226,12 @@ Section RSC_DC_MD.
       as HpCs_compiled_beh.
     destruct HpCs_compiled_beh as [b3 [HpCs_compiled_beh HpCs_compiled_prefix]].
 
-    assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs
-      by (apply (I_interface_preserves_S_closedness_l
-                   HP'Cs_closed HP'_compiles successfull_compilation
-                   Hprog_same_iface)).
+    assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
+      apply (Source.interface_preserves_closedness_l HP'Cs_closed).
+      apply compilation_preserves_interface in HP'_compiles.
+      apply compilation_preserves_interface in successfull_compilation.
+      congruence.
+    }
     assert (linkable (Source.prog_interface p) (Source.prog_interface Cs))
       as Hlinkable_p_Cs. {
       inversion linkability'' as [sound_interface_p_Cs fdisjoint_p_Cs].
