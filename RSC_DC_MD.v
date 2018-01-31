@@ -213,6 +213,17 @@ Lemma trans2 : forall t b m,
   behavior_prefix m b.
 Admitted.
 
+Lemma trans3 : forall t b m,
+    behavior_prefix m t ->
+    behavior_improves t b ->
+    behavior_prefix m b.
+Proof. 
+  intros t b m H0 H1.
+  destruct H1 as  [H1 | [t' [H11 H12]]].  
+  + subst. assumption.
+  + subst. eapply trans2; eassumption.
+Qed.
+     
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
@@ -307,9 +318,14 @@ Admitted.
       as well_formed_P'_compiled.
     pose proof compilation_preserves_well_formedness well_formed_Cs HCs_compiles
       as well_formed_Cs_compiled.
+    pose proof Intermediate.Decomposition.decomposition_with_refinement
+         well_formed_Cs_compiled well_formed_P'_compiled
+         linkability' HP'_Cs_compiled_beh as [beh2 [HCs_decomp HCs_beh_improves]].
+    (*!
     pose proof Intermediate.Decomposition.decomposition_with_safe_behavior
          well_formed_Cs_compiled well_formed_P'_compiled
          linkability' HP'_Cs_compiled_beh Hsafe_beh as HCs_decomp.
+*)
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
@@ -339,11 +355,12 @@ Admitted.
       as HpCs_compiled_well_formed
         by (apply Intermediate.linking_well_formedness; assumption).
 
-    pose proof composition_for_termination_prefix
+    assert (behavior_prefix m beh2) as Hpref_m_beh2 by (eapply trans3; eassumption). 
+    pose proof composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkability'' HpCs_compiled_closed
          HP_decomp HCs_decomp
-         Hprefix0 HP'_Cs_compiled_prefix
+         Hprefix0 Hpref_m_beh2
       as HpCs_compiled_beh.
     destruct HpCs_compiled_beh as [t3 [HpCs_compiled_beh HpCs_compiled_prefix]].
 
@@ -366,7 +383,7 @@ Admitted.
     (* BCC *)
     assert (exists beh1,
                program_behaves (S.CS.sem (slink p Cs)) beh1 /\
-               behavior_improves beh1 (Terminates t3)) as HpCs_beh. {
+               behavior_improves beh1 t3) as HpCs_beh. {
       apply backward_simulation_behavior_improves
         with (L1:=S.CS.sem (slink p Cs)) in HpCs_compiled_beh; auto.
       - apply S_simulates_I.

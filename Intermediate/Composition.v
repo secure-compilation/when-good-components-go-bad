@@ -1464,14 +1464,14 @@ Section Composition.
     - apply partial_programs_composition; auto.
   Qed.
 
-  Theorem composition_for_termination_prefix:
-    forall t1 t2 m,
-      program_behaves (PS.sem p (prog_interface c)) (Terminates t1) ->
-      program_behaves (PS.sem c (prog_interface p)) (Terminates t2) ->
-      behavior_prefix m (Terminates t1) ->
-      behavior_prefix m (Terminates t2) ->
-    exists t3,
-      program_behaves (CS.sem (program_link p c)) (Terminates t3) /\
-      behavior_prefix m (Terminates t3).
+  Theorem composition_prefix:
+    forall b1 b2 m,
+      program_behaves (PS.sem p (prog_interface c)) b1 ->
+      program_behaves (PS.sem c (prog_interface p)) b2 ->
+      behavior_prefix m b1 ->
+      behavior_prefix m b2 ->
+    exists b3,
+      program_behaves (CS.sem (program_link p c)) b3 /\
+      behavior_prefix m b3.
   Admitted.
 End Composition.
