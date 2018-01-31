@@ -148,3 +148,16 @@ Proof.
     try discriminate.
   eapply find_label_in_component_helper_guarantees in Hfind; auto.
 Qed.
+
+Lemma execution_invariant_to_linking:
+  forall p c1 c2 pc instr,
+    linkable (prog_interface p) (prog_interface c1) ->
+    linkable (prog_interface p) (prog_interface c2) ->
+    well_formed_program p ->
+    well_formed_program c1 ->
+    well_formed_program c2 ->
+    Pointer.component pc \in domm (prog_interface p) ->
+    executing (prepare_global_env (program_link p c1)) pc instr ->
+    executing (prepare_global_env (program_link p c2)) pc instr.
+Proof.
+Admitted.

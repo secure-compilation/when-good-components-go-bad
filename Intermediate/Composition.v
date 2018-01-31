@@ -441,23 +441,23 @@ Inductive same_turn: PS.state -> PS.state -> Prop :=
 
 (* st_star represents a sequence of events performed by the same actor *)
 (* st stands for same turn *)
-Inductive st_star (p: program) (ctx: Program.interface) (G: global_env)
-  : PS.state -> trace -> PS.state -> Prop :=
-| st_star_refl: forall ips,
-    st_star p ctx G ips E0 ips
-| st_star_step: forall ips t1 ips' t2 ips'' t,
+Inductive st_starN (p: program) (ctx: Program.interface) (G: global_env)
+  : nat -> PS.state -> trace -> PS.state -> Prop :=
+| st_starN_refl: forall ips,
+    st_starN p ctx G 0 ips E0 ips
+| st_starN_step: forall n ips t1 ips' t2 ips'' t,
     PS.step p ctx G ips t1 ips' ->
     same_turn ips ips' ->
-    st_star p ctx G ips' t2 ips'' ->
+    st_starN p ctx G n ips' t2 ips'' ->
     t = t1 ** t2 ->
-    st_star p ctx G ips t ips''.
+    st_starN p ctx G (S n) ips t ips''.
 
-Lemma st_star_same_turn:
-  forall p ctx G ips t ips',
-    st_star p ctx G ips t ips' ->
+Lemma st_starN_same_turn:
+  forall p ctx G n ips t ips',
+    st_starN p ctx G n ips t ips' ->
     same_turn ips ips'.
 Proof.
-  intros p ctx G ips t ips' Hst_star.
+  intros p ctx G n ips t ips' Hst_star.
   induction Hst_star; subst.
   - PS.unfold_states; constructor.
   - repeat PS.unfold_states;
@@ -472,105 +472,115 @@ Qed.
 
 (* mt_star is a sequence of st_star interleaved by steps that change control *)
 (* mt stands for multi turn *)
-Inductive mt_star (p: program) (ctx: Program.interface) (G: global_env)
-  : PS.state -> trace -> PS.state -> Prop :=
-| mt_star_segment: forall ips t ips',
-    st_star p ctx G ips t ips' ->
-    mt_star p ctx G ips t ips'
-| mt_star_control_change: forall ips t1 ips' t2 ips'' t3 ips''' t,
-    st_star p ctx G ips t1 ips' ->
+Inductive mt_starN (p: program) (ctx: Program.interface) (G: global_env)
+  : nat -> PS.state -> trace -> PS.state -> Prop :=
+| mt_starN_segment: forall n ips t ips',
+    st_starN p ctx G n ips t ips' ->
+    mt_starN p ctx G n ips t ips'
+| mt_starN_control_change: forall n1 n2 n3 ips t1 ips' t2 ips'' t3 ips''' t,
+    st_starN p ctx G n1 ips t1 ips' ->
     PS.step p ctx G ips' t2 ips'' ->
     ~ same_turn ips' ips'' ->
-    mt_star p ctx G ips'' t3 ips''' ->
+    mt_starN p ctx G n2 ips'' t3 ips''' ->
+    n3 = S (n1 + n2) ->
     t = t1 ** t2 ** t3 ->
-    mt_star p ctx G ips t ips'''.
+    mt_starN p ctx G n3 ips t ips'''.
 
-Theorem star_if_st_star:
-  forall p ctx G ips t ips',
-    st_star p ctx G ips t ips' ->
-    star (PS.step p ctx) G ips t ips'.
+Theorem starN_if_st_starN:
+  forall p ctx G n ips t ips',
+    st_starN p ctx G n ips t ips' ->
+    starN (PS.step p ctx) G n ips t ips'.
 Proof.
-  intros p ctx G ips t ips' Hst_star.
-  induction Hst_star; subst.
-  - constructor.
-  - econstructor.
-    + eassumption.
-    + eassumption.
-    + reflexivity.
+  intros p ctx G n ips t ips' Hst_starN.
+  induction Hst_starN; subst;
+    econstructor; eauto.
 Qed.
 
-Theorem star_if_mt_star:
-  forall p ctx G ips t ips',
-    mt_star p ctx G ips t ips' ->
+Theorem star_if_st_starN:
+  forall p ctx G n ips t ips',
+    st_starN p ctx G n ips t ips' ->
     star (PS.step p ctx) G ips t ips'.
 Proof.
-  intros p ctx G ips t ips' Hmt_star.
+  intros p ctx G n ips t ips' Hst_star.
+  apply starN_if_st_starN in Hst_star.
+  eapply starN_star; eauto.
+Qed.
+
+Theorem starN_if_mt_starN:
+  forall p ctx G n ips t ips',
+    mt_starN p ctx G n ips t ips' ->
+    starN (PS.step p ctx) G n ips t ips'.
+Proof.
+  intros p ctx G n ips t ips' Hmt_star.
   induction Hmt_star; subst.
 
-  (* st_star *)
-  - apply star_if_st_star; auto.
+  (* st_starN *)
+  - eapply starN_if_st_starN; eauto.
 
-  (* st_star + step that changes control + mt_star *)
-  - eapply star_trans.
-    + eapply star_right.
-      * apply star_if_st_star. eassumption.
+  (* st_starN + step that changes control + mt_starN *)
+  - eapply starN_trans.
+    + eapply starN_right.
+      * eapply starN_if_st_starN. eassumption.
       * eassumption.
       * reflexivity.
     + eassumption.
+    + reflexivity.
     + apply app_assoc.
+Qed.
+
+Theorem star_if_mt_starN:
+  forall p ctx G n ips t ips',
+    mt_starN p ctx G n ips t ips' ->
+    star (PS.step p ctx) G ips t ips'.
+Proof.
+  intros p ctx G n ips t ips' Hmt_star.
+
+  apply starN_if_mt_starN in Hmt_star.
+  apply starN_star in Hmt_star.
+  assumption.
 Qed.
 
 (* We want to prove that a star is either a sequence of steps without change of control,
    or it can be decomposed in a star without change of control + a step with the change
    of control + another star doing the remaining trace *)
 
-Theorem mt_star_if_star:
-  forall p ctx G ips t ips',
-    star (PS.step p ctx) G ips t ips' ->
-    mt_star p ctx G ips t ips'.
+Theorem mt_starN_if_starN:
+  forall p ctx G n ips t ips',
+    starN (PS.step p ctx) G n ips t ips' ->
+    mt_starN p ctx G n ips t ips'.
 Proof.
-  intros p ctx G ips t ips' Hstar.
-
-  induction Hstar; subst.
-
-  (* base case, no steps *)
-  - apply mt_star_segment.
-    apply st_star_refl.
-
-  (* step + star *)
-  - PS.unfold_state s1; PS.unfold_state s2.
-
-    (* PC to PC *)
-    + admit.
-
-    (* PC to CC *)
-    + eapply mt_star_control_change.
-      * apply st_star_refl.
-      * eassumption.
-      * intro contra. inversion contra.
-      * eassumption.
-      * reflexivity.
-
-    (* CC to PC *)
-    + eapply mt_star_control_change.
-      * apply st_star_refl.
-      * eassumption.
-      * intro contra. inversion contra.
-      * eassumption.
-      * reflexivity.
-
-    (* CC to CC *)
-    + (* it should be almost the same as the PC to PC case *)
-      admit.
 Admitted.
 
-Theorem star_mt_star_equivalence:
+Theorem mt_starN_if_star:
   forall p ctx G ips t ips',
-    star (PS.step p ctx) G ips t ips' <-> mt_star p ctx G ips t ips'.
+    star (PS.step p ctx) G ips t ips' ->
+  exists n,
+    mt_starN p ctx G n ips t ips'.
+Proof.
+  intros p ctx G ips t ips' Hstar.
+  apply star_starN in Hstar.
+  destruct Hstar as [n Hstar].
+  exists n. apply mt_starN_if_starN; auto.
+Qed.
+
+Theorem starN_mt_starN_equivalence:
+  forall p ctx G n ips t ips',
+    starN (PS.step p ctx) G n ips t ips' <->
+    mt_starN p ctx G n ips t ips'.
 Proof.
   intros. split.
-  - apply mt_star_if_star.
-  - apply star_if_mt_star.
+  - apply mt_starN_if_starN.
+  - apply starN_if_mt_starN.
+Qed.
+
+Theorem star_mt_starN_equivalence:
+  forall p ctx G ips t ips',
+    star (PS.step p ctx) G ips t ips' <->
+    exists n, mt_starN p ctx G n ips t ips'.
+Proof.
+  intros. split.
+  - apply mt_starN_if_star.
+  - intro. destruct H. eapply star_if_mt_starN. eauto.
 Qed.
 
 (*
@@ -707,13 +717,13 @@ Section Simulation.
     - apply lockstep_simulation.
   Qed.
 
-  Corollary st_star_simulation:
-    forall ips1 t ips1',
-      st_star p (prog_interface c) (prepare_global_env p) ips1 t ips1' ->
+  Corollary st_starN_simulation:
+    forall n ips1 t ips1',
+      st_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
     forall ips2,
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
     exists ips2',
-      st_star c (prog_interface p) (prepare_global_env c) ips2 t ips2' /\
+      st_starN c (prog_interface p) (prepare_global_env c) n ips2 t ips2' /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
   Proof.
   Admitted.
@@ -770,6 +780,15 @@ Section MultiSemantics.
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
       multi_match (ips1, ips2) (PS.merge_partial_states ips1 ips2).
 
+  Lemma merged_initial_states:
+    forall ips1 ips2,
+      PS.initial_state p (prog_interface c) ips1 ->
+      PS.initial_state c (prog_interface p) ips2 ->
+      CS.initial_state (program_link p c)
+                       (PS.unpartialize (PS.merge_partial_states ips1 ips2)).
+  Proof.
+  Admitted.
+
   Lemma multi_match_initial_states:
     forall ms,
       initial_state ms ->
@@ -820,8 +839,13 @@ Section MultiSemantics.
         rewrite linking_empty_program. subst. simpl.
         inversion H0; subst; inversion H1; subst.
         CS.unfold_state ics. CS.unfold_state ics0.
-        * admit.
-    - admit.
+        * apply merged_initial_states; auto.
+    - constructor; auto.
+  Qed.
+
+  Lemma intermediate_program_link_sym:
+    program_link c p = program_link p c.
+  Proof.
   Admitted.
 
   Lemma multi_match_final_states:
@@ -871,17 +895,22 @@ Section MultiSemantics.
       + unfold CS.final_state in H10. CS.unfold_states.
         inversion H9; subst.
         rewrite linking_empty_program.
-        (* execution in a larger program *)
-        admit.
+        unfold CS.final_state in H12.
+        inversion H11; subst. unfold prog.
+        eapply execution_invariant_to_linking; eauto.
       + PS.simplify_turn. rewrite H3 in H1. discriminate.
     - inversion H0; subst.
       + unfold CS.final_state in H10. CS.unfold_states.
         inversion H9; subst.
         rewrite linking_empty_program.
-        (* execution in a larger program *)
-        admit.
+        unfold CS.final_state in H12.
+        inversion H11; subst. unfold prog.
+        replace (program_link p c) with (program_link c p).
+        eapply execution_invariant_to_linking; eauto.
+        * apply linkable_sym. auto.
+        * apply intermediate_program_link_sym.
       + PS.simplify_turn. rewrite H3 in H2. discriminate.
-  Admitted.
+  Qed.
 
   Lemma lockstep_simulation:
     forall ms t ms',
@@ -891,6 +920,8 @@ Section MultiSemantics.
     exists ips',
       PS.step prog emptym (prepare_global_env prog) ips t ips' /\ multi_match ms' ips'.
   Proof.
+  Admitted.
+    (*
     intros ms t ms' Hstep.
     intros ips Hmatch.
 
@@ -927,7 +958,7 @@ Section MultiSemantics.
         * admit.
 
     - (* prove match *) admit.
-  Admitted.
+      *)
 
   Theorem merged_prog_simulates_multisem:
     forward_simulation msem (PS.sem prog emptym).
@@ -961,15 +992,22 @@ Section PartialComposition.
 
   Let prog := program_link p c.
 
-  Lemma threeway_multisem_st_star_simulation:
-    forall ips1 ips2 t ips1' ips2',
+  Lemma mergeable_states_sym:
+    forall s1 s2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
+      PS.mergeable_states (prog_interface p) (prog_interface c) s2 s1.
+  Proof.
+  Admitted.
+
+  Lemma threeway_multisem_st_starN_simulation:
+    forall n ips1 ips2 t ips1' ips2',
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
-      st_star p (prog_interface c) (prepare_global_env p) ips1 t ips1' ->
-      st_star c (prog_interface p) (prepare_global_env c) ips2 t ips2' ->
-      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2') /\
+      st_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
+      st_starN c (prog_interface p) (prepare_global_env c) n ips2 t ips2' ->
+      starN (MultiSem.step p c) (prepare_global_env prog) n (ips1, ips2) t (ips1', ips2') /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
   Proof.
-    intros ips1 ips2 t ips1' ips2'.
+    intros n ips1 ips2 t ips1' ips2'.
     intros Hmergeable Hst_star1 Hst_star2.
 
     generalize dependent ips2.
@@ -980,23 +1018,19 @@ Section PartialComposition.
       inversion Hmergeable; subst.
 
       (* the program doesn't step, hence we stay still *)
-      + apply star_if_st_star in Hst_star2.
+      + apply star_if_st_starN in Hst_star2.
         eapply PS.context_epsilon_star_is_silent in Hst_star2; subst.
         split.
         * constructor.
         * assumption.
       (* the program does a star with an epsilon trace.
          use the fact that the context simulates the program *)
-      + assert (Hmergeable':
-                  PS.mergeable_states (prog_interface p) (prog_interface c)
-                                      (PS.PC (pgps2, pmem2, regs, pc))
-                                      (PS.CC (Pointer.component pc, pgps1, pmem1))). {
-          (* mergeability is symmetric *)
-          admit.
-        }
-        destruct (ProgCtxSim.st_star_simulation wf2 wf1
+      + assert (Hmergeable' := Hmergeable).
+        apply mergeable_states_sym in Hmergeable'.
+        destruct (ProgCtxSim.st_starN_simulation wf2 wf1
                     (linkable_sym linkability) Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
+        (* TODO *)
         admit.
 
     (* non-empty trace *)
@@ -1013,15 +1047,123 @@ Section PartialComposition.
       + admit.
   Admitted.
 
-  Theorem threeway_multisem_mt_star_simulation:
-    forall ips1 ips2 t ips1' ips2',
+  Lemma st_starN_with_turn_change_impossible_1:
+    forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips',
+      PS.mergeable_states (prog_interface c) (prog_interface p)
+                          (PS.PC prog_st2) (PS.CC ctx_st) ->
+      st_starN c (prog_interface p) (prepare_global_env c)
+               n1 (PS.CC ctx_st) t1 ctx_st' ->
+      PS.step c (prog_interface p) (prepare_global_env c) ctx_st' t2 prog_st1 ->
+      ~ same_turn ctx_st' prog_st1 ->
+      mt_starN c (prog_interface p) (prepare_global_env c) n2 prog_st1 t3 ips' ->
+    forall n3 ips'',
+      st_starN p (prog_interface c) (prepare_global_env p)
+               n3 (PS.PC prog_st2) (t1 ** t2 ** t3) ips'' ->
+      False.
+  Proof.
+  Admitted.
+
+  Lemma st_starN_with_turn_change_impossible_1':
+    forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips',
+      PS.mergeable_states (prog_interface c) (prog_interface p)
+                          (PS.CC ctx_st) (PS.PC prog_st2) ->
+      st_starN p (prog_interface c) (prepare_global_env p)
+               n1 (PS.CC ctx_st) t1 ctx_st' ->
+      PS.step p (prog_interface c) (prepare_global_env p) ctx_st' t2 prog_st1 ->
+      ~ same_turn ctx_st' prog_st1 ->
+      mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st1 t3 ips' ->
+    forall n3 ips'',
+      st_starN c (prog_interface p) (prepare_global_env c)
+               n3 (PS.PC prog_st2) (t1 ** t2 ** t3) ips'' ->
+      False.
+  Proof.
+  Admitted.
+
+  Lemma st_starN_with_turn_change_impossible_2:
+    forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
+      PS.mergeable_states (prog_interface c) (prog_interface p)
+                          (PS.CC ctx_st2) (PS.PC prog_st) ->
+      st_starN c (prog_interface p) (prepare_global_env c)
+               n1 (PS.PC prog_st) t1 prog_st' ->
+      PS.step c (prog_interface p) (prepare_global_env c) prog_st' t2 ctx_st1 ->
+      ~ same_turn prog_st' ctx_st1 ->
+      mt_starN c (prog_interface p) (prepare_global_env c) n2 ctx_st1 t3 ips' ->
+    forall n3 ips'',
+      st_starN p (prog_interface c) (prepare_global_env p)
+               n3 (PS.CC ctx_st2) (t1 ** t2 ** t3) ips'' ->
+      False.
+  Proof.
+  Admitted.
+
+  Lemma st_starN_with_turn_change_impossible_3:
+    forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
+      PS.mergeable_states (prog_interface c) (prog_interface p)
+                          (PS.PC prog_st) (PS.CC ctx_st2) ->
+      st_starN p (prog_interface c) (prepare_global_env p)
+               n1 (PS.PC prog_st) t1 prog_st' ->
+      PS.step p (prog_interface c) (prepare_global_env p) prog_st' t2 ctx_st1 ->
+      ~ same_turn prog_st' ctx_st1 ->
+      mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st1 t3 ips' ->
+    forall n3 ips'',
+      st_starN c (prog_interface p) (prepare_global_env c)
+               n3 (PS.CC ctx_st2) (t1 ** t2 ** t3) ips'' ->
+      False.
+  Proof.
+  Admitted.
+
+  Lemma same_trace_and_steps:
+    forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
+           ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
+      PS.mergeable_states (prog_interface c) (prog_interface p)
+                          (PS.PC prog_st1) (PS.CC ctx_st1) ->
+      (* first side *)
+      st_starN p (prog_interface c) (prepare_global_env p)
+               n1 (PS.PC prog_st1) t1 prog_st1' ->
+      PS.step p (prog_interface c) (prepare_global_env p) prog_st1' t2 ctx_st2 ->
+      ~ same_turn prog_st1' ctx_st2 ->
+      mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st2 t3 ips' ->
+      (* second side *)
+      st_starN c (prog_interface p) (prepare_global_env c)
+               n1' (PS.CC ctx_st1) t1' ctx_st1' ->
+      PS.step c (prog_interface p) (prepare_global_env c) ctx_st1' t2' prog_st2 ->
+      ~ same_turn ctx_st1' prog_st2 ->
+      mt_starN c (prog_interface p) (prepare_global_env c) n2' prog_st2 t3' ips'' ->
+      (* same steps and same trace *)
+      t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
+  Proof.
+  Admitted.
+
+  Lemma same_trace_and_steps':
+    forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
+           ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
+      PS.mergeable_states (prog_interface c) (prog_interface p)
+                          (PS.CC ctx_st1) (PS.PC prog_st1) ->
+      (* first side *)
+      st_starN p (prog_interface c) (prepare_global_env p)
+               n1 (PS.CC ctx_st1) t1 ctx_st1' ->
+      PS.step p (prog_interface c) (prepare_global_env p) ctx_st1' t2 prog_st2 ->
+      ~ same_turn ctx_st1' prog_st2 ->
+      mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st2 t3 ips'' ->
+      (* second side *)
+      st_starN c (prog_interface p) (prepare_global_env c)
+               n1' (PS.PC prog_st1) t1' prog_st1' ->
+      PS.step c (prog_interface p) (prepare_global_env c) prog_st1' t2' ctx_st2 ->
+      ~ same_turn prog_st1' ctx_st2 ->
+      mt_starN c (prog_interface p) (prepare_global_env c) n2' ctx_st2 t3' ips' ->
+      (* same steps and same trace *)
+      t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
+  Proof.
+  Admitted.
+
+  Theorem threeway_multisem_mt_starN_simulation:
+    forall n ips1 ips2 t ips1' ips2',
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
-      mt_star p (prog_interface c) (prepare_global_env p) ips1 t ips1' ->
-      mt_star c (prog_interface p) (prepare_global_env c) ips2 t ips2' ->
-      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2') /\
+      mt_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
+      mt_starN c (prog_interface p) (prepare_global_env c) n ips2 t ips2' ->
+      starN (MultiSem.step p c) (prepare_global_env prog) n (ips1, ips2) t (ips1', ips2') /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
   Proof.
-    intros ips1 ips2 t ips1' ips2'.
+    intros n ips1 ips2 t ips1' ips2'.
     intros Hmergeable Hmt_star1 Hmt_star2.
 
     generalize dependent ips2.
@@ -1035,23 +1177,27 @@ Section PartialComposition.
       + inversion Hmt_star2; subst.
 
         (* single segment with the same trace *)
-        * apply threeway_multisem_st_star_simulation; auto.
+        * eapply threeway_multisem_st_starN_simulation; eauto.
 
         (* segment + change of control + mt_star *)
+        (* contradiction *)
         (* this case cannot happen since t2 is an event that changes
            control and it appears in the st_star segment *)
-        * (* contradiction *) admit.
+        * exfalso.
+          eapply st_starN_with_turn_change_impossible_1; eauto.
 
       (* the context has control in the first state of the first sequence *)
       + inversion Hmt_star2; subst.
 
         (* single segment with the same trace *)
-        * apply threeway_multisem_st_star_simulation; auto.
+        * eapply threeway_multisem_st_starN_simulation; eauto.
 
         (* segment + change of control + mt_star *)
+        (* contradiction *)
         (* this case cannot happen since t2 is an event that changes
            control and it appears in the st_star segment *)
-        * (* contradiction *) admit.
+        * exfalso.
+          eapply st_starN_with_turn_change_impossible_2; eauto.
 
     (* segment + change of control + mt_star *)
     - intros ips2 Hmergeable Hmt_star2.
@@ -1061,19 +1207,19 @@ Section PartialComposition.
       + inversion Hmt_star2; subst.
 
         (* single segment with the same trace *)
+        (* contradiction *)
         (* this case cannot happen since t2 is an event that changes
            control and it appears in the st_star segment *)
-        * (* contradiction *) admit.
+        * exfalso.
+          eapply st_starN_with_turn_change_impossible_3; eauto.
 
         (* segment + change of control + mt_star *)
-        * assert (t1=t0). { admit. }
-          assert (t2=t4). { admit. }
-          assert (t3=t5). { admit. }
-          subst.
-
+        * destruct (same_trace_and_steps
+                      Hmergeable H H0 H1 Hmt_star1 H4 H7 H8 H9)
+            as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_star_simulation Hmergeable H H4)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H4)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1097,18 +1243,19 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H14 H9)
+          destruct (IHHmt_star1 ips''0 H15 H9)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
 
           split.
-          ** eapply star_trans.
-             *** eapply star_right.
+          ** eapply starN_trans.
+             *** eapply starN_right.
                  **** apply Hfirst_segment.
                  **** apply Hmultistep.
                  **** reflexivity.
              *** apply Hlast_star.
+             *** reflexivity.
              *** apply app_assoc.
           ** assumption.
 
@@ -1116,19 +1263,20 @@ Section PartialComposition.
       + inversion Hmt_star2; subst.
 
         (* single segment with the same trace *)
+        (* contradiction *)
         (* this case cannot happen since t2 is an event that changes
            control and it appears in the st_star segment *)
-        * (* contradiction *) admit.
+        * exfalso.
+          eapply st_starN_with_turn_change_impossible_1'; eauto.
 
         (* segment + change of control + mt_star *)
-        * assert (t1=t0). { admit. }
-          assert (t2=t4). { admit. }
-          assert (t3=t5). { admit. }
-          subst.
+        * destruct (same_trace_and_steps'
+                      Hmergeable H H0 H1 Hmt_star1 H4 H7 H8 H9)
+            as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
 
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_star_simulation Hmergeable H H4)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H4)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1152,81 +1300,78 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H14 H9)
+          destruct (IHHmt_star1 ips''0 H15 H9)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
 
           split.
-          ** eapply star_trans.
-             *** eapply star_right.
+          ** eapply starN_trans.
+             *** eapply starN_right.
                  **** apply Hfirst_segment.
                  **** apply Hmultistep.
                  **** reflexivity.
              *** apply Hlast_star.
+             *** reflexivity.
              *** apply app_assoc.
           ** assumption.
-  Admitted.
-
-  Corollary threeway_multisem_star:
-    forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
-      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
-      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
-      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2').
-  Proof.
-    intros ips1 ips2 t ips1' ips2'.
-    intros Hmergeable Hstar1 Hstar2.
-    apply threeway_multisem_mt_star_simulation.
-    - assumption.
-    - apply star_mt_star_equivalence; auto.
-    - apply star_mt_star_equivalence; auto.
   Qed.
 
-  Corollary partial_programs_composition:
-    forall t,
-      program_behaves (PS.sem p (prog_interface c)) (Terminates t) ->
-      program_behaves (PS.sem c (prog_interface p)) (Terminates t) ->
-      program_behaves (PS.sem prog emptym) (Terminates t).
+  Corollary threeway_multisem_starN:
+    forall n ips1 ips2 t ips1' ips2',
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+      starN (PS.step p (prog_interface c)) (prepare_global_env p) n ips1 t ips1' ->
+      starN (PS.step c (prog_interface p)) (prepare_global_env c) n ips2 t ips2' ->
+      starN (MultiSem.step p c) (prepare_global_env prog) n (ips1, ips2) t (ips1', ips2').
   Proof.
-    intros t Hprog1_beh Hprog2_beh.
-    inversion Hprog1_beh; subst. inversion H0; subst.
-    inversion Hprog2_beh; subst. inversion H4; subst.
+    intros n ips1 ips2 t ips1' ips2'.
+    intros Hmergeable Hstar1 Hstar2.
+    eapply threeway_multisem_mt_starN_simulation.
+    - assumption.
+    - apply starN_mt_starN_equivalence; auto.
+    - apply starN_mt_starN_equivalence; auto.
+  Qed.
 
-    eapply forward_simulation_same_safe_behavior.
-    + apply MultiSem.merged_prog_simulates_multisem; auto.
-    + assert (Hmergeable:
-               PS.mergeable_states (prog_interface c) (prog_interface p) s s0). {
-        inversion H; subst; inversion H1; subst.
-        inversion H11; subst; inversion H17; subst;
-        inversion H12; subst; inversion H18; subst; simpl in *.
-        - (* contra, pc is neither in (prog_interface c), nor in (prog_interface p) *)
-          PS.simplify_turn.
-          (* show and use the fact that the main has an entrypoint, therefore
-             (Pointer.component pc) must be in either (prog_interface c) or (prog_interface p) *)
-          (* here it's probably where we need well-formed programs *)
-          admit.
-        - constructor; PS.simplify_turn;
-            try assumption;
-            try reflexivity.
-          + inversion linkability.
-            (* RB: With the changes to [linkability], the case analysis on programs
-               does not follow naturally from its inversion. The admits on each
-               resulting proof obligation are replaced by a single admit. Note that
-               automatic hypothesis names have not been corrected as in the rest of
-               the proof following changes to the notion of linkability to be based
-               on interfaces, since they currently do not make sense.
-            unfold linkable_mains in H21.
-            destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
-              try (rewrite H22 in H25; inversion H25; reflexivity).
-            * admit.
-            * admit.
+  Lemma intial_states_mergeability:
+    forall s1 s2,
+      initial_state (PS.sem p (prog_interface c)) s1 ->
+      initial_state (PS.sem c (prog_interface p)) s2 ->
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2.
+  Proof.
+    intros s1 s2 Hs1_init Hs2_init.
+    inversion Hs1_init; subst; inversion Hs2_init; subst.
+    inversion H3; subst; inversion H9; subst;
+      inversion H4; subst; inversion H10; subst; simpl in *.
+
+    (* contra, pc is neither in (prog_interface c), nor in (prog_interface p) *)
+    - PS.simplify_turn.
+      (* show and use the fact that the main has an entrypoint, therefore
+         (Pointer.component pc) must be in either (prog_interface c) or (prog_interface p) *)
+      (* here it's probably where we need well-formed programs *)
+      admit.
+
+    - constructor; PS.simplify_turn;
+        try assumption;
+        try reflexivity.
+      + inversion linkability.
+        (* RB: With the changes to [linkability], the case analysis on programs
+           does not follow naturally from its inversion. The admits on each
+           resulting proof obligation are replaced by a single admit. Note that
+           automatic hypothesis names have not been corrected as in the rest of
+           the proof following changes to the notion of linkability to be based
+           on interfaces, since they currently do not make sense.
+           unfold linkable_mains in H21.
+           destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
+           try (rewrite H22 in H25; inversion H25; reflexivity).
+           * admit.
+           * admit.
             * admit.
             * admit.
             *) admit.
           + admit.
           + unfold PS.mergeable_memories. admit.
-        - constructor; PS.simplify_turn;
+
+    - constructor; PS.simplify_turn;
             try assumption;
             try reflexivity.
           + inversion linkability.
@@ -1244,16 +1389,47 @@ Section PartialComposition.
             (* show use the fact that the initial memory contains just the memories
                for the components present in the program, therefore they are disjoint *)
             admit.
-        - (* contra, pc is both in (prog_interface c) and in (prog_interface p) *)
-          admit.
-      }
-      eapply program_runs with (s:=(s,s0)).
+
+    (* contra, pc is both in (prog_interface c) and in (prog_interface p) *)
+    - admit.
+  Admitted.
+
+  Lemma termination_with_same_number_of_steps:
+    forall t,
+      program_behaves (PS.sem p (prog_interface c)) (Terminates t) ->
+      program_behaves (PS.sem c (prog_interface p)) (Terminates t) ->
+    exists n s1 s1' s2 s2',
+      initial_state (PS.sem p (prog_interface c)) s1 /\
+      starN (PS.step p (prog_interface c)) (prepare_global_env p) n s1 t s1' /\
+      final_state (PS.sem p (prog_interface c)) s1' /\
+      initial_state (PS.sem c (prog_interface p)) s2 /\
+      starN (PS.step c (prog_interface p)) (prepare_global_env c) n s2 t s2' /\
+      final_state (PS.sem c (prog_interface p)) s2'.
+  Proof.
+  Admitted.
+
+  Corollary partial_programs_composition:
+    forall t,
+      program_behaves (PS.sem p (prog_interface c)) (Terminates t) ->
+      program_behaves (PS.sem c (prog_interface p)) (Terminates t) ->
+      program_behaves (PS.sem prog emptym) (Terminates t).
+  Proof.
+    intros t Hprog1_beh Hprog2_beh.
+
+    destruct (termination_with_same_number_of_steps Hprog1_beh Hprog2_beh)
+      as [n1 [s1 [s1' [s2 [s2' [Hinit1 [HstarN1 [Hfinal1 [Hinit2 [HstarN2 Hfinal2]]]]]]]]]].
+
+    eapply forward_simulation_same_safe_behavior.
+    + apply MultiSem.merged_prog_simulates_multisem; auto.
+    + pose proof (intial_states_mergeability Hinit1 Hinit2) as Hmergeable.
+      eapply program_runs with (s:=(s1,s2)).
       * constructor; auto.
-      * eapply state_terminates with (s':=(s',s'0)); auto.
-        ** apply threeway_multisem_star; auto.
+      * eapply state_terminates with (s':=(s1',s2')); auto.
+        ** eapply starN_star.
+           eapply threeway_multisem_starN; eauto.
         ** simpl. constructor; auto.
     + simpl. constructor.
-  Admitted.
+  Qed.
 End PartialComposition.
 
 (*

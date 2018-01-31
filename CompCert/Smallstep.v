@@ -225,6 +225,46 @@ Proof.
   destruct IHstar as [n P]. exists (S n); econstructor; eauto.
 Qed.
 
+Lemma starN_one:
+  forall ge s1 t s2,
+    step ge s1 t s2 ->
+    starN ge 1 s1 t s2.
+Proof.
+  intros.
+  eapply starN_step; eauto.
+  apply starN_refl. traceEq.
+Qed.
+
+Lemma starN_trans:
+  forall ge s1 t1 s2 n1,
+    starN ge n1 s1 t1 s2 ->
+  forall t2 s3 t n2 n3,
+    starN ge n2 s2 t2 s3 ->
+    n3 = (n1 + n2) % nat ->
+    t = t1 ** t2 ->
+    starN ge n3 s1 t s3.
+Proof.
+  induction 1; intros.
+  - rewrite H0. simpl in *. subst.
+    assumption.
+  - rewrite H3. rewrite plus_Sn_m.
+    eapply starN_step; eauto.
+    subst. traceEq.
+Qed.
+
+Lemma starN_right:
+  forall ge s1 t1 s2 t2 s3 t n,
+    starN ge n s1 t1 s2 ->
+    step ge s2 t2 s3 ->
+    t = t1 ** t2 ->
+    starN ge (S n) s1 t s3.
+Proof.
+  intros.
+  eapply starN_trans; eauto.
+  apply starN_one; eauto.
+  rewrite plus_comm. reflexivity.
+Qed.
+
 (** Infinitely many transitions *)
 
 CoInductive forever (ge: genv): state -> traceinf -> Prop :=
@@ -692,7 +732,7 @@ End SIMULATION_SEQUENCES.
 Lemma compose_forward_simulations:
   forall L1 L2 L3, forward_simulation L1 L2 -> forward_simulation L2 L3 -> forward_simulation L1 L3.
 Proof.
-  intros L1 L2 L3 S12 S23. 
+  intros L1 L2 L3 S12 S23.
   destruct S12 as [index order match_states props].
   destruct S23 as [index' order' match_states' props'].
 
@@ -834,7 +874,7 @@ Record bsim_properties (L1 L2: semantics) (index: Type)
       forall i s1 s2,
       match_states i s1 s2 -> safe L1 s1 ->
       (* (exists r, final_state L2 s2 r  ) \/ *)
-      final_state L2 s2 \/ 
+      final_state L2 s2 \/
       (exists t, exists s2', Step L2 s2 t s2');
     bsim_simulation:
       forall s2 t s2', Step L2 s2 t s2' ->
