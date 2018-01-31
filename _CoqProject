@@ -1,6 +1,8 @@
 -arg "-w -parsing"
 -R . RobustImp
 
+RSC_DC.v
+
 Common/Definitions.v
 Common/Values.v
 Common/Maps.v

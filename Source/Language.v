@@ -342,6 +342,13 @@ Module Source.
     by move=> _ _ [].
   Qed.
 
+  Lemma interface_preserves_closedness_l :
+    forall p1 p2 p1',
+      closed_program (program_link p1 p2) ->
+      prog_interface p1 = prog_interface p1' ->
+      closed_program (program_link p1' p2).
+  Admitted.
+
   Fixpoint initialize_buffer
            (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)
     : ComponentMemory.t :=
@@ -402,4 +409,10 @@ Module Source.
     move: C_P; rewrite /find_procedure mem_domm.
     by case: (prog_procedures p1 C).
   Qed.
+
+  Lemma link_sym: forall p c,
+      linkable (prog_interface p) (prog_interface c) ->
+      program_link p c = program_link c p.
+  Admitted.
+
 End Source.

@@ -10,6 +10,7 @@ Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
 Require Import Source.PS.
+Require Import S2I.Definitions.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
@@ -762,4 +763,15 @@ Section Decomposition.
           ** reflexivity.
           ** split; assumption.
   Qed.
+
+  Set Implicit Arguments.
+
+  Lemma blame_program : forall t b p Cs,
+    program_behaves (S.PS.sem Cs (Source.prog_interface p)) b ->
+    program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Goes_wrong t) ->
+    behavior_prefix t b ->
+    undef_in (Source.main_comp (Source.program_link p Cs)) t
+             (Source.prog_interface p).
+  Admitted.
+
 End Decomposition.

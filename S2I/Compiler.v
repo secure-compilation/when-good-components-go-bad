@@ -51,6 +51,8 @@ Require Import Common.Definitions.
 Require Import Source.Language.
 Require Import Intermediate.Machine.
 Require Import S2I.CompMonad.
+Require Import CompCert.Smallstep.
+Require Import S2I.Definitions.
 
 Import MonadNotations.
 Open Scope monad_scope.
@@ -345,3 +347,82 @@ Proof.
        because of wrap_main; a solution would be to and also mark main as private
        (see Interface change after compilation in robust-imp-comments.org) *)
 Admitted.
+
+  Hypothesis separate_compilation:
+    forall p c p_comp c_comp,
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      compile_program p = Some p_comp ->
+      compile_program c = Some c_comp ->
+      compile_program (Source.program_link p c)
+      = Some (Intermediate.program_link p_comp c_comp).
+
+  (* CH: because of the Somes might also want something of the following form: *)
+  (* CH: in general the use of options doesn't make anything simpler,
+         inherited from CompCert *)
+
+  Hypothesis separate_compilation':
+    forall p c pc_comp,
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      compile_program (Source.program_link p c) = Some pc_comp ->
+      exists p_comp c_comp,
+        compile_program p = Some p_comp /\
+        compile_program c = Some c_comp /\
+        pc_comp = Intermediate.program_link p_comp c_comp.
+
+  (* CH: anyway, this is a very strong notion of separate compilation;
+         wondering whether in the general case we could do away with something weaker
+         (anyway, just a thought for later, current version is simpler): *)
+  (* Hypothesis separate_compilation_weaker: *)
+  (*   forall p c pc_comp p_comp c_comp, *)
+  (*     Source.linkable_programs p c -> *)
+  (*     compile_program p = Some p_comp -> *)
+  (*     compile_program c = Some c_comp -> *)
+  (*     compile_program (slink p c) = Some pc_comp -> *)
+  (*     forall b, program_behaves (I.CS.sem pc_comp) b <-> *)
+  (*               program_behaves (I.CS.sem (ilink p_comp c_comp)) b. *)
+
+  Hypothesis compilation_preserves_well_formedness:
+    forall {p p_compiled},
+      Source.well_formed_program p ->
+      compile_program p = Some p_compiled ->
+      Intermediate.well_formed_program p_compiled.
+
+  (* this should follow from preserving interfaces *)
+  Hypothesis compilation_preserves_linkability:
+    forall {p p_compiled c c_compiled},
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      compile_program p = Some p_compiled ->
+      compile_program c = Some c_compiled ->
+      linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
+
+  (* FCC *)
+  Hypothesis I_simulates_S:
+    forall {p},
+      Source.closed_program p ->
+      Source.well_formed_program p ->
+    forall {tp},
+      compile_program p = Some tp ->
+      forward_simulation (S.CS.sem p) (I.CS.sem tp).
+
+  (* BCC *)
+  (* We derive BCC from FCC as in CompCert *)
+  Corollary S_simulates_I:
+    forall {p},
+      Source.closed_program p ->
+      Source.well_formed_program p ->
+    forall {tp},
+      compile_program p = Some tp ->
+      backward_simulation (S.CS.sem p) (I.CS.sem tp).
+  Proof.
+    intros.
+    apply forward_to_backward_simulation.
+    - apply I_simulates_S; auto.
+    - apply S.CS.receptiveness.
+    - apply I.CS.determinacy.
+  Qed.

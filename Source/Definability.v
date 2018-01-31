@@ -634,6 +634,7 @@ End Definability.
 
 Require Import Intermediate.CS.
 Require Import Intermediate.Machine.
+Require Import S2I.Definitions.
 
 Definition stack_state_of (cs:CS.state) : stack_state :=
   let '(gps, mem, regs, pc) := cs in
@@ -682,4 +683,31 @@ Proof.
     unfold GlobalEnv.prepare_global_env in H1.
     destruct (Intermediate.prepare_procedures p0
                 (Intermediate.prepare_initial_memory p0)) as [[]]. easy.
+Admitted.
+
+  (* Definability *)
+  (* CH: this should now be related to what Arthur proved:
+         - TODO his proof is for complete programs, no linking
+           + might need to use source decomposition too?
+           + just disjointness + partialization of things might be enough? (weaker than decomposition)
+         - TODO his current proof gives us at most the program_behaves conclusion,
+           not the conclusions about interfaces and closedness,
+           and linkability (maybe from previous point) *)
+
+Lemma definability_with_linking:
+  forall p c b m,
+    Intermediate.well_formed_program p ->
+    Intermediate.well_formed_program c ->
+    linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
+    Intermediate.closed_program (Intermediate.program_link p c) ->
+    program_behaves (I.CS.sem (Intermediate.program_link p c)) b ->
+    behavior_prefix m b ->
+  exists p' c' b',
+    Source.prog_interface p' = Intermediate.prog_interface p /\
+    Source.prog_interface c' = Intermediate.prog_interface c /\
+    Source.well_formed_program p' /\
+    Source.well_formed_program c' /\
+    Source.closed_program (Source.program_link p' c') /\
+    program_behaves (S.CS.sem (Source.program_link p' c')) b' /\
+    behavior_prefix m b'.
 Admitted.

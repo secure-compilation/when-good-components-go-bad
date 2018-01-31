@@ -556,4 +556,16 @@ Proof.
   apply alloc_static_buffers_after_linking; auto.
 Qed.
 
+Lemma link_sym: forall p c,
+    linkable (prog_interface p) (prog_interface c) ->
+    program_link p c = program_link c p.
+Admitted.
+
+Lemma interface_preserves_closedness_r :
+  forall p1 p2 p2',
+    closed_program (program_link p1 p2) ->
+    prog_interface p2 = prog_interface p2' ->
+    closed_program (program_link p1 p2').
+Admitted.
+
 End Intermediate.
