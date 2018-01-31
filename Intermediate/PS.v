@@ -318,6 +318,52 @@ Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Pro
     mergeable_memories pmem1 pmem2 ->
     mergeable_states ctx1 ctx2 (CC (C, pgps1, pmem1)) (PC (pgps2, pmem2, regs, pc)).
 
+Lemma mergeable_stack_frames_sym:
+  forall frame1 frame2,
+    mergeable_stack_frames frame1 frame2 ->
+    mergeable_stack_frames frame2 frame1.
+Proof.
+  intros.
+  inversion H; subst;
+    econstructor; auto.
+Qed.
+
+Lemma mergeable_stacks_sym:
+  forall pgps1 pgps2,
+    mergeable_stacks pgps1 pgps2 ->
+    mergeable_stacks pgps2 pgps1.
+Proof.
+  intros pgps1 pgps2 Hmergeable.
+  induction Hmergeable; subst;
+    constructor; auto.
+  - apply mergeable_stack_frames_sym; auto.
+Qed.
+
+Lemma mergeable_memories_sym:
+  forall pmem1 pmem2,
+    mergeable_memories pmem1 pmem2 ->
+    mergeable_memories pmem2 pmem1.
+Proof.
+  intros pmem1 pmem2 Hmergeable.
+  unfold mergeable_memories in *.
+  rewrite fdisjointC. auto.
+Qed.
+
+Lemma mergeable_states_sym:
+  forall p c s1 s2,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
+    PS.mergeable_states (prog_interface p) (prog_interface c) s2 s1.
+Proof.
+  intros p c s1 s2 Hp_wf Hc_wf Hlink Hmergeable.
+  inversion Hmergeable; subst;
+  do 2 (constructor; auto;
+        [ apply mergeable_stacks_sym; auto
+        | apply mergeable_memories_sym; auto ]).
+Qed.
+
 Definition merge_stack_frames (frames: PartialPointer.t * PartialPointer.t): PartialPointer.t :=
   match frames with
   | ((C, None), (_, None)) =>
@@ -440,24 +486,18 @@ Proof.
       try (rewrite Pointer.inc_preserves_component; reflexivity);
       try (symmetry; assumption).
     + rewrite Pointer.inc_preserves_component.
-      unfold Memory.store in *.
-      destruct (mem (Pointer.component ptr)) eqn:Hfind;
-        try discriminate.
-      destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr)
-                                      (Register.get r2 regs0)) eqn:Hstore;
-        try discriminate.
-      inversion H18; subst.
-      enough (filterm (fun k _ => k \notin domm (prog_interface p'))
-                      (setm mem (Pointer.component ptr) t0) =
-              filterm (fun k _ => k \notin domm (prog_interface p')) mem) as Hfilter.
-      * rewrite Hfilter.
-        simpl. reflexivity.
-      * apply eq_fmap.
-        intros C.
-        do 2 rewrite (filtermE _ _ C). unfold obind, oapp.
-        rewrite setmE.
-        admit.
-Admitted.
+      destruct ptr as [[]].
+      erewrite context_store_in_partialized_memory; eauto.
+      * rewrite Pointer.inc_preserves_component.
+        rewrite <- H17. eassumption.
+    + erewrite find_label_in_component_1 with (pc:=pc); eauto.
+    + rewrite H17. reflexivity.
+    + erewrite find_label_in_procedure_1 with (pc:=pc); eauto.
+    + rewrite Pointer.inc_preserves_component.
+      erewrite context_allocation_in_partialized_memory; eauto.
+      * rewrite Pointer.inc_preserves_component.
+        eassumption.
+Qed.
 
 Corollary context_epsilon_star_is_silent:
   forall p ctx G ctx_state ips',

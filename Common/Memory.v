@@ -301,3 +301,64 @@ Module Memory.
   Qed.
 
 End Memory.
+
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
+Lemma program_allocation_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem1 mem2,
+    filterm (fun k _ => k \notin ctx) mem1 =
+    filterm (fun k _ => k \notin ctx) mem2 ->
+  forall C size mem1' mem2' ptr1 ptr2,
+    C \notin ctx ->
+    Memory.alloc mem1 C size = Some (mem1', ptr1) ->
+    Memory.alloc mem2 C size = Some (mem2', ptr2) ->
+    ptr1 = ptr2 /\
+    filterm (fun k _ => k \notin ctx) mem1' =
+    filterm (fun k _ => k \notin ctx) mem2'.
+Proof.
+Admitted.
+
+Lemma program_load_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem1 mem2,
+    filterm (fun k _ => k \notin ctx) mem1 =
+    filterm (fun k _ => k \notin ctx) mem2 ->
+  forall C b o v1 v2,
+    C \notin ctx ->
+    Memory.load mem1 (C, b, o) = Some v1 ->
+    Memory.load mem2 (C, b, o) = Some v2 ->
+    v1 = v2.
+Proof.
+Admitted.
+
+Lemma program_store_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem1 mem2,
+    filterm (fun k _ => k \notin ctx) mem1 =
+    filterm (fun k _ => k \notin ctx) mem2 ->
+  forall C b o v mem1' mem2',
+    C \notin ctx ->
+    Memory.store mem1 (C, b, o) v = Some mem1' ->
+    Memory.store mem2 (C, b, o) v = Some mem2' ->
+    filterm (fun k _ => k \notin ctx) mem1' =
+    filterm (fun k _ => k \notin ctx) mem2'.
+Proof.
+Admitted.
+
+Lemma context_allocation_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem C size mem' ptr,
+    C \in ctx ->
+    Memory.alloc mem C size = Some (mem', ptr) ->
+    filterm (fun k _ => k \notin ctx) mem' =
+    filterm (fun k _ => k \notin ctx) mem.
+Proof.
+Admitted.
+
+Lemma context_store_in_partialized_memory:
+  forall (ctx: {fset Component.id}) mem C b o v mem',
+    C \in ctx ->
+    Memory.store mem (C, b, o) v = Some mem' ->
+    filterm (fun k _ => k \notin ctx) mem' =
+    filterm (fun k _ => k \notin ctx) mem.
+Proof.
+Admitted.

@@ -992,13 +992,6 @@ Section PartialComposition.
 
   Let prog := program_link p c.
 
-  Lemma mergeable_states_sym:
-    forall s1 s2,
-      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
-      PS.mergeable_states (prog_interface p) (prog_interface c) s2 s1.
-  Proof.
-  Admitted.
-
   Lemma threeway_multisem_st_starN_simulation:
     forall n ips1 ips2 t ips1' ips2',
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
@@ -1026,7 +1019,7 @@ Section PartialComposition.
       (* the program does a star with an epsilon trace.
          use the fact that the context simulates the program *)
       + assert (Hmergeable' := Hmergeable).
-        apply mergeable_states_sym in Hmergeable'.
+        apply PS.mergeable_states_sym in Hmergeable'; auto.
         destruct (ProgCtxSim.st_starN_simulation wf2 wf1
                     (linkable_sym linkability) Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].

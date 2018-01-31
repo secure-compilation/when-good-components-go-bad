@@ -48,3 +48,15 @@ Proof.
     + specialize (IH Hlast_event).
       discriminate.
 Qed.
+
+Lemma last_event_is_in_trace:
+  forall t e,
+    last_event t = Some e -> In e t.
+Proof.
+  intros t e H.
+  induction t.
+  - discriminate.
+  - destruct t; simpl in H.
+    + inversion H. subst. intuition.
+    + apply in_cons. apply IHt. auto.
+Qed.

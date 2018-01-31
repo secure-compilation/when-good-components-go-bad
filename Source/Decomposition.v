@@ -318,10 +318,10 @@ Section Decomposition.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
           ** PS.simplify_turn.
-             erewrite <- PS.context_allocation_in_partialized_memory; eauto.
+             erewrite <- context_allocation_in_partialized_memory; eauto.
       + eapply PS.ContextControl; eauto.
         * PS.simplify_turn.
-          erewrite <- PS.context_allocation_in_partialized_memory; eauto.
+          erewrite <- context_allocation_in_partialized_memory; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
@@ -347,10 +347,10 @@ Section Decomposition.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
           ** PS.simplify_turn.
-             erewrite <- PS.context_store_in_partialized_memory; eauto.
+             erewrite <- context_store_in_partialized_memory; eauto.
       + eapply PS.ContextControl; eauto.
         * PS.simplify_turn.
-          erewrite <- PS.context_store_in_partialized_memory; eauto.
+          erewrite <- context_store_in_partialized_memory; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
@@ -451,6 +451,47 @@ Section Decomposition.
     apply decomposition.
   Qed.
 
+  Inductive well_defined_components (iface: Program.interface): event -> Prop :=
+  | wf_comps_call: forall C1 P arg C2,
+      C1 \in domm iface ->
+      C2 \in domm iface ->
+      well_defined_components iface (ECall C1 P arg C2)
+  | wf_comps_ret: forall C1 arg C2,
+      C1 \in domm iface ->
+      C2 \in domm iface ->
+      well_defined_components iface (ERet C1 arg C2).
+
+  Lemma step_event_has_well_defined_components:
+    forall s e s',
+      CS.kstep (prepare_global_env (program_link p c)) s [e] s' ->
+      well_defined_components (prog_interface (program_link p c)) e.
+  Proof.
+    intros.
+    inversion H; subst.
+    (* call *)
+    - unfold imported_procedure, Program.has_component in H2.
+      destruct H2 as [CI [HC_in_iface Himport_C']].
+      unfold program_link in HC_in_iface.
+      unfold Component.is_importing in Himport_C'.
+      simpl in *. constructor.
+      (* caller component is defined *)
+      + rewrite mem_domm. rewrite HC_in_iface. auto.
+      (* called component is defined *)
+      + rewrite mem_domm. admit.
+    - constructor.
+      + admit.
+      + admit.
+  Admitted.
+
+  Lemma ub_behavior_has_well_defined_components:
+    forall t,
+      program_behaves (CS.sem (program_link p c))
+                      (Goes_wrong t) ->
+    forall e,
+      In e t -> well_defined_components (prog_interface (program_link p c)) e.
+  Proof.
+  Admitted.
+
   Lemma ub_blaming:
     forall t,
       program_behaves (CS.sem (program_link p c))
@@ -476,14 +517,31 @@ Section Decomposition.
      *)
     intros t Hbeh.
     destruct (last_event t) as [last_event |] eqn:Hlast_event.
-    - pose proof (who_is_in_control_after last_event) as comp_to_blame.
-      (* comp_to_blame is either in p or c due to trace well-formedness *)
-      admit.
+    - assert (In last_event t) as Hin_trace. {
+        apply last_event_is_in_trace; auto.
+      }
+      pose proof ub_behavior_has_well_defined_components Hbeh Hin_trace as Hwf.
+      unfold undef_in. rewrite Hlast_event.
+      inversion Hwf; subst; simpl.
+      + unfold program_link in *. simpl in *.
+        rewrite domm_union in H0.
+        rewrite in_fsetU in H0.
+        unfold orb in H0.
+        destruct (C2 \in domm (prog_interface p)) eqn:HC_in_p.
+        * left. assumption.
+        * rewrite HC_in_p in H0. right. assumption.
+      + unfold program_link in *. simpl in *.
+        rewrite domm_union in H0.
+        rewrite in_fsetU in H0.
+        unfold orb in H0.
+        destruct (C2 \in domm (prog_interface p)) eqn:HC_in_p.
+        * left. assumption.
+        * rewrite HC_in_p in H0. right. assumption.
     - apply no_last_event_implies_empty_trace in Hlast_event.
       rewrite Hlast_event.
       unfold undef_in. simpl.
       apply linked_programs_main_component_origin; auto.
-  Admitted.
+  Qed.
 
   Lemma program_ub_preservation:
     forall t,
@@ -555,8 +613,11 @@ Section Decomposition.
     forall p1 p2 s t t' s' s'',
       star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s' ->
       star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s (t ** t') s'' ->
+      (* same steps, hence same final state and trace *)
       (t' = E0 /\ s'' = s') \/
+      (* missing steps in the first star (with trace t') *)
       star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s' t' s'' \/
+      (* missing internal steps in the second star *)
       (t' = E0 /\
        star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s'' E0 s').
   Proof.
@@ -568,20 +629,12 @@ Section Decomposition.
     destruct Hstar2 as [n2 HstarN2].
     destruct (Nat.compare n1 n2) eqn:Hcmp.
     - left.
-      (* same steps, hence same final state and trace *)
       apply Nat.compare_eq in Hcmp. subst.
-      destruct (PS.state_determinism_starN HstarN1 HstarN2) as []. subst.
-      split.
-      + clear HstarN1. clear HstarN2.
-        induction t.
-        * simpl in *. subst. reflexivity.
-        * inversion H. apply IHt; auto.
-      + reflexivity.
+      destruct (PS.starN_with_same_steps_and_prefix HstarN1 HstarN2) as []. subst.
+      repeat split.
     - right. left.
-      (* less steps, split starN2 at s', then take the rest *)
       admit.
     - right. right.
-      (* more steps, split starN1 at s'', then take the rest *)
       admit.
   Admitted.
 
@@ -609,8 +662,6 @@ Section Decomposition.
         destruct beh_imp; simpl in *; try discriminate;
           inversion H3; subst.
         * (* contra *)
-          (* s' cannot step, hence t1 is E0 and s'0 is s'
-             but s' is not a final state *)
           destruct (star_improvement H4 H7) as [[]|[|[]]]; subst.
           ** contradiction.
           ** inversion H9; subst.
@@ -622,8 +673,6 @@ Section Decomposition.
                  apply Eapp_E0_inv in H12. destruct H12; subst.
                  admit.
         * (* contra *)
-          (* s' cannot step, hence t1 is E0 and s'0 is s'
-             but s' is not forever silent *)
           destruct (star_improvement H4 H7) as [[]|[|[]]]; subst.
           ** inversion H8; subst.
              exfalso. eapply H5. eauto.
@@ -642,7 +691,8 @@ Section Decomposition.
              but s' is not forever reactive *)
           inversion H7; subst. inversion H9; subst.
           ** contradiction.
-          ** exfalso. eapply H5. admit.
+          ** exfalso. eapply H5.
+             admit.
         * (* s' cannot step, hence t1 is E0 and s'0 is s'
              done *)
           destruct (star_improvement H4 H7) as [[]|[|[]]]; subst.
