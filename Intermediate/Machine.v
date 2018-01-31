@@ -480,7 +480,7 @@ Fixpoint reserve_component_blocks p C Cmem Cprocs Centrypoints procs_code
     end
   end.
 
-Fixpoint reserve_procedures_blocks p mem procs entrypoints comps_code
+Fixpoint reserve_procedure_blocks p mem procs entrypoints comps_code
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
   match comps_code with
   | [] => (mem, procs, entrypoints)
@@ -492,17 +492,17 @@ Fixpoint reserve_procedures_blocks p mem procs entrypoints comps_code
       let mem' := setm mem C Cmem' in
       let procs' := setm procs C Cprocs in
       let entrypoints' := setm entrypoints C Centrypoints in
-      reserve_procedures_blocks p mem' procs' entrypoints' comps_code'
+      reserve_procedure_blocks p mem' procs' entrypoints' comps_code'
     | None =>
       (* this shouldn't happen if memory was initialized before the call *)
       (* we just skip initialization for this component *)
-      reserve_procedures_blocks p mem procs entrypoints comps_code'
+      reserve_procedure_blocks p mem procs entrypoints comps_code'
     end
   end.
 
 Definition prepare_procedures (p: program) (mem: Memory.t)
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
-  reserve_procedures_blocks p mem emptym emptym (elementsm (prog_procedures p)).
+  reserve_procedure_blocks p mem emptym emptym (elementsm (prog_procedures p)).
 
 (* initialization of the empty program *)
 
