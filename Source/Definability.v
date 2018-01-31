@@ -1,3 +1,4 @@
+Require Import Lib.Extra.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -11,9 +12,11 @@ Require Import Source.GlobalEnv.
 Require Import Source.CS.
 Require Import Source.PS.
 
-From Coq Require Import ssreflect.
+From Coq Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import eqtype seq.
+From mathcomp Require ssrnat.
 
-Import ListNotations.
+Canonical ssrnat.nat_eqType.
 
 Import Source.
 
@@ -243,7 +246,7 @@ Section Definability.
     end.
 
   Definition comp_subtrace (C: Component.id) (t: trace) :=
-    filter (fun e => Component.eqb C (cur_comp_of_event e)) t.
+    filter (fun e => C == cur_comp_of_event e) t.
 
   Lemma filter_app {T} (P : T -> bool) (l1 l2 : list T) :
     filter P (l1 ++ l2) = filter P l1 ++ filter P l2.
@@ -308,8 +311,12 @@ Section Definability.
       | ECall C _ _ C' =>
         well_bracketed_trace (StackState C' (C :: callers s)) t'
       | ERet C _ C' =>
-        head (callers s) = Some C' /\
-        well_bracketed_trace (StackState C' (tail (callers s))) t'
+        match callers s with
+        | [] => False
+        | head :: tail =>
+          head = C' /\
+          well_bracketed_trace (StackState C' tail) t'
+        end
       end
     end.
 
@@ -345,6 +352,51 @@ Section Definability.
       stk = top ++ bot /\
       All (fun '(C', _, k) => C' = cur_comp s /\ k = Kstop) top /\
       well_formed_callers (callers s) bot.
+
+  Lemma well_formed_events_well_formed_program t :
+    All well_formed_event t ->
+    Source.well_formed_program (program_of_trace t).
+  Proof.
+    move=> Ht; split=> //=.
+    - exact: closed_interface_is_sound.
+    - by rewrite /procedures_of_trace domm_mapi fsubsetxx.
+    - move=> C P.
+      rewrite /exported_procedure /Program.has_component /Component.is_exporting.
+      case=> CI [C_CI P_CI].
+      by rewrite /find_procedure /procedures_of_trace mapimE C_CI /= mkfmapfE P_CI.
+    - move=> C P Pexpr.
+      rewrite /find_procedure /procedures_of_trace mapimE.
+      case intf_C: (intf C)=> [CI|] //=.
+      rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
+        rewrite /procedure_of_trace /expr_of_trace /switch.
+        elim: {t Ht} (comp_subtrace C t) (length _) => [|e t IH] n //=.
+        by case: e=> /=.
+      pose call_of_event e := if e is ECall _ P _ C then Some (C, P) else None.
+      have /fsubsetP sub :
+          fsubset (called_procedures (procedure_of_trace C P t))
+                  ((C, P) |: fset (pmap call_of_event (comp_subtrace C t))).
+        rewrite /procedure_of_trace /expr_of_trace /switch.
+        elim: {t Ht} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
+          exact: fsub0set.
+        move/(_ n) in IH; rewrite !fset0U.
+        case: e=> [C' P' v C''|] //=; last by rewrite fset0U.
+        rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
+        by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
+      move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
+        by rewrite eqxx find_procedures_of_trace //; exists CI; split.
+      rewrite in_fset /= => C'_P'.
+      suffices ? : imported_procedure intf C C' P'.
+        by case: eqP => [<-|] //; rewrite find_procedures_of_trace; eauto.
+      elim: {P P_CI} t Ht P' C'_P' => [|e t IH] //= [He Ht] P.
+      case: (C =P _) => [HC|]; last by eauto.
+      case: e HC He=> [_ P' v C'' /= <-|]; last by eauto.
+      by rewrite inE; case=> [C_C'' imp_C''_P'] /orP [/eqP [-> ->] //|]; eauto.
+    - by rewrite domm_map.
+    - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
+      rewrite /has_required_local_buffers /= mapmE C_CI /=.
+      eexists; eauto=> /=; omega.
+    - by move=> _ _ [<- <-]; rewrite find_procedures_of_trace.
+  Qed.
 
   Arguments Memory.load  : simpl nomatch.
   Arguments Memory.store : simpl nomatch.
@@ -415,12 +467,12 @@ Section Definability.
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
       = (counter_value C prefix
-        + if Component.eqb C (cur_comp_of_event e) then 1 else 0) % Z.
+        + if C == cur_comp_of_event e then 1 else 0) % Z.
     Proof.
       unfold counter_value, comp_subtrace.
       rewrite filter_app app_length. simpl.
       rewrite Nat2Z.inj_add.
-      now destruct (Component.eqb _ _).
+      now destruct (_ == _).
     Qed.
 
     Lemma well_formed_memory_store_counter prefix mem C b e :
@@ -443,16 +495,13 @@ Section Definability.
       rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem'). clear neq.
       split; eauto.
       rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *.
-      destruct (Nat.eqb_spec C' C) as [?|C_neq_C'].
+      case: (altP (C' =P C)) => [?|C_neq_C'].
       - subst C'.
         assert (b' = b) by (unfold component_buffer in *; congruence).
         subst b'. clear C'_b'.
-        now rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem'), Nat.eqb_refl.
-      - assert (neq : (C, b, 1%Z) <> (C', b', 1%Z)) by congruence.
+        by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem').
+      - have neq : (C, b, 1%Z) <> (C', b', 1%Z) by move/eqP in C_neq_C'; congruence.
         rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
-        rewrite <- Nat.eqb_neq in C_neq_C'.
-        unfold Component.eqb.
-        rewrite C_neq_C'.
         now rewrite Z.add_0_r.
     Qed.
 
@@ -516,7 +565,7 @@ Section Definability.
           clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
           destruct e as [C_ P' arg C'|C_ ret_val C'];
           simpl in wf_C, wf_e, wb_suffix; subst C_.
-          - destruct wf_e as [C_ne_C' Himport].
+          - case: wf_e => /eqP C_ne_C' Himport.
             exists (StackState C' (C :: callers)).
             destruct (exported_procedure_has_block (closed_intf Himport)) as [b' C'_b'].
             destruct (well_formed_memory_store_arg (Int arg) C'_b' wf_mem) as [mem' [Hmem' wf_mem']].
@@ -527,7 +576,7 @@ Section Definability.
             + take_step. take_step.
               apply star_one. simpl.
               apply CS.eval_kstep_sound. simpl.
-              rewrite <- Nat.eqb_neq in C_ne_C'. unfold Component.eqb. rewrite C_ne_C'.
+              rewrite (negbTE C_ne_C').
               rewrite -> imported_procedure_iff in Himport. rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
               rewrite (find_procedures_of_trace t (closed_intf Himport)).
@@ -546,10 +595,9 @@ Section Definability.
               exists P'; split; trivial.
               apply (closed_intf Himport).
           - rename wf_e into C_ne_C'.
-            destruct wb_suffix as [HC' wb_suffix].
             destruct callers as [|C'_ callers]; try easy.
-            simpl in HC', wb_suffix. assert (C'_ = C') by congruence. subst C'_. clear HC'.
-            simpl. exists (StackState C' callers).
+            destruct wb_suffix as [HC' wb_suffix].
+            subst C'_. simpl. exists (StackState C' callers).
             destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
             revert mem wf_mem.
             induction top as [|[[C_ saved] k_] top IHtop].
@@ -604,7 +652,7 @@ Section Definability.
     Proof.
       intros wf_t init_cs.
       enough (H : well_formed_state (StackState mainC []) [] t cs).
-      { apply (@definability_gen _ [] t _ eq_refl H). }
+      { apply (@definability_gen _ [] t _ erefl H). }
       destruct cs as [[[[C stk] mem] k] e].
       destruct wf_t as [wb_t wf_t_events].
       do 2 (split; trivial).

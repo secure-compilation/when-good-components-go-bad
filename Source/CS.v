@@ -9,7 +9,10 @@ Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
 Require Import Lib.Monads.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+From mathcomp Require ssrnat.
+
+Canonical ssrnat.nat_eqType.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -240,7 +243,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kderef k' =>
       match v with
       | Ptr (C',b',o') =>
-        if Component.eqb C C' then
+        if C == C' then
           do v <- Memory.load mem (C',b',o');
           ret (E0, (C, s, mem, k', E_val v))
         else
@@ -252,7 +255,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kassign2 v' k' =>
       match v with
       | Ptr (C',b',o') =>
-        if Component.eqb C C' then
+        if C == C' then
           do mem' <- Memory.store mem (C',b',o') v';
           ret (E0, (C, s, mem', k', E_val v'))
         else
@@ -262,7 +265,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kcall C' P k' =>
       match v with
       | Int i =>
-        if Component.eqb C C' then
+        if C == C' then
           (* retrieve the procedure code *)
           do P_expr <- find_procedure (genv_procedures G) C' P;
           (* save the old call argument *)
@@ -292,7 +295,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
         (* restore the old call argument *)
         do b <- getm (genv_buffers G) C';
         do mem' <- Memory.store mem (C', b, 0%Z) old_call_arg;
-        let t := if Component.eqb C C' then E0 else [ERet C i C'] in
+        let t := if C == C' then E0 else [ERet C i C'] in
         ret (t, (C', s', mem', k', E_val (Int i)))
       | _, _ => None
       end
@@ -335,8 +338,7 @@ Proof.
     rewrite Hsize.
     rewrite H0. reflexivity.
   (* external calls *)
-  - apply Nat.eqb_neq in H.
-    unfold Component.eqb. rewrite H.
+  - move/eqP/negbTE: H => ->.
     apply imported_procedure_iff in H0.
     rewrite H0 H1 H2 H3 H4 H5.
     reflexivity.
@@ -345,7 +347,7 @@ Proof.
     unfold Memory.store in *. simpl in *.
     destruct (mem C'); try discriminate.
     destruct (ComponentMemory.store t b 0%Z old_call_arg); try discriminate.
-    unfold Component.eqb. rewrite Nat.eqb_refl.
+    rewrite eqxx.
     inversion H1. subst.
     reflexivity.
   (* external return *)
@@ -353,8 +355,7 @@ Proof.
     unfold Memory.store in *. simpl in *.
     destruct (mem C'); try discriminate.
     destruct (ComponentMemory.store t b 0%Z old_call_arg); try discriminate.
-    apply Nat.eqb_neq in H.
-    unfold Component.eqb. rewrite H.
+    move/eqP/negbTE: H => ->.
     inversion H1; subst.
     reflexivity.
 Qed.
@@ -375,11 +376,7 @@ Proof.
            reflexivity)
   end.
   - repeat simplify_option.
-    + destruct (Component.eqb C0 C) eqn:HC0eqC.
-      * econstructor; eauto.
-        ** apply Nat.eqb_eq. assumption.
-      * econstructor; eauto.
-        ** apply Nat.eqb_neq. assumption.
+    + case: (_ =P _) => [->|?]; econstructor; eauto.
     + econstructor; eauto.
     + econstructor; eauto.
     + econstructor; eauto.
@@ -390,16 +387,12 @@ Proof.
       * pose proof (Zlt_neg_0 p). omega.
     + econstructor; eauto.
       * apply Zgt_is_gt_bool. assumption.
+    + by econstructor; eauto; apply/eqP.
     + econstructor; eauto.
-      * apply Nat.eqb_eq. assumption.
-    + econstructor; eauto.
-    + econstructor; eauto.
-      * apply Nat.eqb_eq. assumption.
-    + econstructor; eauto.
-      * apply Nat.eqb_eq. assumption.
-    + econstructor; eauto.
-      * apply Nat.eqb_neq. assumption.
-      * apply imported_procedure_iff. assumption.
+    + by econstructor; eauto; apply/eqP.
+    + econstructor; eauto; exact/eqP.
+    + econstructor; eauto; first exact/eqP/negbT.
+      apply imported_procedure_iff. assumption.
 Qed.
 
 Theorem eval_kstep_correct:
