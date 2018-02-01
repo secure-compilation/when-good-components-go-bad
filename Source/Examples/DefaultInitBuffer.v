@@ -10,7 +10,7 @@ Import Source.
 Definition default_init_buffer: program := {|
   prog_interface :=
     mkfmap [(1, {| Component.import := fset [];
-                   Component.export := fset [1] |})];
+                   Component.export := fset [] |})];
   prog_buffers :=
     mkfmap [(1, inr [Undef; Int 42])];
   prog_procedures :=

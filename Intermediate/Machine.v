@@ -461,15 +461,21 @@ Definition prepare_initial_memory (p: program) : Memory.t :=
 
 Fixpoint reserve_component_blocks p C Cmem Cprocs Centrypoints procs_code
   : ComponentMemory.t * NMap code * NMap Block.id :=
+  let is_main_proc comp_id proc_id :=
+      match prog_main p with
+      | Some (main_comp_id, main_proc_id) =>
+        (main_comp_id =? comp_id) && (main_proc_id =? proc_id)
+      | None => false
+      end in
   match procs_code with
   | [] => (Cmem, Cprocs, Centrypoints)
   | (P, Pcode) :: procs_code' =>
     let (Cmem', b) := ComponentMemory.reserve_block Cmem in
     let Cprocs' := setm Cprocs b Pcode in
-    (* if P is exported, add an external entrypoint *)
+    (* if P is exported or is the main procedure, add an external entrypoint *)
     match getm (prog_interface p) C with
     | Some Ciface =>
-      if P \in Component.export Ciface then
+      if (P \in Component.export Ciface) || is_main_proc C P then
         let Centrypoints' := setm Centrypoints P b in
         reserve_component_blocks p C Cmem' Cprocs' Centrypoints' procs_code'
       else

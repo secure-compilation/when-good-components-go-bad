@@ -303,15 +303,12 @@ Admitted.
 Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program) : COMP Intermediate.program :=
   match p.(Intermediate.prog_main) with
   | Some (C, P) =>
-    do iface <- lift (getm p.(Intermediate.prog_interface) C);
     do procs <- lift (getm p.(Intermediate.prog_procedures) C);
     do P_labels <- lift (getm procs_labels C);
     do lab <- lift (getm P_labels P);
     let P' := generate_fresh_procedure_id C (p.(Intermediate.prog_procedures)) in
-    let iface' :=  {| Component.export := fsetU (fset1 P') iface.(Component.export);
-                      Component.import := iface.(Component.import) |} in
     let procs' := setm procs P' [IConst (IInt 1) R_ONE; IJal lab ; IHalt] in
-    ret {| Intermediate.prog_interface := setm p.(Intermediate.prog_interface) C iface';
+    ret {| Intermediate.prog_interface := p.(Intermediate.prog_interface);
            Intermediate.prog_procedures := setm p.(Intermediate.prog_procedures) C procs';
            Intermediate.prog_buffers := p.(Intermediate.prog_buffers);
            Intermediate.prog_main := Some (C, P') |}
@@ -334,95 +331,113 @@ Definition compile_program
    wrap_main procs_labels p).
 
 Lemma compilation_preserves_interface:
-    forall p p_compiled,
-      (*Source.prog_main p = None -> this is needed because of the main wrapping *)
-      compile_program p = Some p_compiled ->
-      Intermediate.prog_interface p_compiled = Source.prog_interface p.
+  forall p p_compiled,
+    compile_program p = Some p_compiled ->
+    Intermediate.prog_interface p_compiled = Source.prog_interface p.
 Proof.
-(* CH: Seemed trivial from the line above:
-       Intermediate.prog_interface := Source.prog_interface p; *)
-  intros p p_compiled H. unfold compile_program, run, wrap_main in H. simpl in H.
-(* CH: but less clear when looking at the details *)
-(* CH: after talking with Guglielmo there is a real problem with this
-       because of wrap_main; a solution would be to and also mark main as private
-       (see Interface change after compilation in robust-imp-comments.org) *)
-Admitted.
+  intros p p_compiled Hcompile.
+  unfold compile_program, run, wrap_main in Hcompile.
+  simpl in Hcompile. unfold Comp.bind in Hcompile.
 
-  Hypothesis separate_compilation:
-    forall p c p_comp c_comp,
-      Source.well_formed_program p ->
-      Source.well_formed_program c ->
-      linkable (Source.prog_interface p) (Source.prog_interface c) ->
-      compile_program p = Some p_comp ->
-      compile_program c = Some c_comp ->
-      compile_program (Source.program_link p c)
-      = Some (Intermediate.program_link p_comp c_comp).
+  destruct (gen_all_procedures_labels (elementsm (Source.prog_procedures p)) init_env)
+    as [[labels cenv1]|] eqn:Hlabs;
+    try discriminate.
+  destruct (compile_components (gen_buffers (Source.prog_buffers p)) labels
+                               (elementsm (Source.prog_procedures p)) cenv1)
+    as [[code cenv2]|] eqn:Hcompiled_comps;
+    try discriminate.
+  destruct (Source.prog_main p) as [[mainC mainP]|] eqn:Hmain.
+  - simpl in Hcompile.
+    destruct (lift ((mkfmap (T:=nat_ordType) code) mainC) cenv2) as [[]|] eqn:Hlift_mkfmap;
+      simpl in *; rewrite Hlift_mkfmap in Hcompile; try discriminate.
+    destruct (lift (labels mainC) c) as [[main_label cenv3]|] eqn:Hlift_main_label_C;
+      try discriminate.
+    destruct (lift (main_label mainP) cenv3) as [[]|] eqn:Hlift_main_label_P;
+      try discriminate.
+    simpl in Hcompile. inversion Hcompile.
+    reflexivity.
+  - simpl in Hcompile. inversion Hcompile.
+    reflexivity.
+Qed.
 
-  (* CH: because of the Somes might also want something of the following form: *)
-  (* CH: in general the use of options doesn't make anything simpler,
-         inherited from CompCert *)
+Lemma compilation_preserves_linkability:
+  forall {p p_compiled c c_compiled},
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p = Some p_compiled ->
+    compile_program c = Some c_compiled ->
+    linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
+Proof.
+  intros.
+  repeat (erewrite compilation_preserves_interface; eauto).
+Qed.
 
-  Hypothesis separate_compilation':
-    forall p c pc_comp,
-      Source.well_formed_program p ->
-      Source.well_formed_program c ->
-      linkable (Source.prog_interface p) (Source.prog_interface c) ->
-      compile_program (Source.program_link p c) = Some pc_comp ->
-      exists p_comp c_comp,
-        compile_program p = Some p_comp /\
-        compile_program c = Some c_comp /\
-        pc_comp = Intermediate.program_link p_comp c_comp.
+Hypothesis separate_compilation:
+  forall p c p_comp c_comp,
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p = Some p_comp ->
+    compile_program c = Some c_comp ->
+    compile_program (Source.program_link p c)
+    = Some (Intermediate.program_link p_comp c_comp).
 
-  (* CH: anyway, this is a very strong notion of separate compilation;
-         wondering whether in the general case we could do away with something weaker
-         (anyway, just a thought for later, current version is simpler): *)
-  (* Hypothesis separate_compilation_weaker: *)
-  (*   forall p c pc_comp p_comp c_comp, *)
-  (*     Source.linkable_programs p c -> *)
-  (*     compile_program p = Some p_comp -> *)
-  (*     compile_program c = Some c_comp -> *)
-  (*     compile_program (slink p c) = Some pc_comp -> *)
-  (*     forall b, program_behaves (I.CS.sem pc_comp) b <-> *)
-  (*               program_behaves (I.CS.sem (ilink p_comp c_comp)) b. *)
+(* CH: because of the Somes might also want something of the following form: *)
+(* CH: in general the use of options doesn't make anything simpler,
+   inherited from CompCert *)
 
-  Hypothesis compilation_preserves_well_formedness:
-    forall {p p_compiled},
-      Source.well_formed_program p ->
-      compile_program p = Some p_compiled ->
-      Intermediate.well_formed_program p_compiled.
+Hypothesis separate_compilation':
+  forall p c pc_comp,
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program (Source.program_link p c) = Some pc_comp ->
+    exists p_comp c_comp,
+      compile_program p = Some p_comp /\
+      compile_program c = Some c_comp /\
+      pc_comp = Intermediate.program_link p_comp c_comp.
 
-  (* this should follow from preserving interfaces *)
-  Hypothesis compilation_preserves_linkability:
-    forall {p p_compiled c c_compiled},
-      Source.well_formed_program p ->
-      Source.well_formed_program c ->
-      linkable (Source.prog_interface p) (Source.prog_interface c) ->
-      compile_program p = Some p_compiled ->
-      compile_program c = Some c_compiled ->
-      linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
+(* CH: anyway, this is a very strong notion of separate compilation;
+   wondering whether in the general case we could do away with something weaker
+   (anyway, just a thought for later, current version is simpler): *)
+(* Hypothesis separate_compilation_weaker: *)
+(*   forall p c pc_comp p_comp c_comp, *)
+(*     Source.linkable_programs p c -> *)
+(*     compile_program p = Some p_comp -> *)
+(*     compile_program c = Some c_comp -> *)
+(*     compile_program (slink p c) = Some pc_comp -> *)
+(*     forall b, program_behaves (I.CS.sem pc_comp) b <-> *)
+(*               program_behaves (I.CS.sem (ilink p_comp c_comp)) b. *)
 
-  (* FCC *)
-  Hypothesis I_simulates_S:
-    forall {p},
-      Source.closed_program p ->
-      Source.well_formed_program p ->
-    forall {tp},
-      compile_program p = Some tp ->
-      forward_simulation (S.CS.sem p) (I.CS.sem tp).
+Hypothesis compilation_preserves_well_formedness:
+  forall {p p_compiled},
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    Intermediate.well_formed_program p_compiled.
 
-  (* BCC *)
-  (* We derive BCC from FCC as in CompCert *)
-  Corollary S_simulates_I:
-    forall {p},
-      Source.closed_program p ->
-      Source.well_formed_program p ->
-    forall {tp},
-      compile_program p = Some tp ->
-      backward_simulation (S.CS.sem p) (I.CS.sem tp).
-  Proof.
-    intros.
-    apply forward_to_backward_simulation.
-    - apply I_simulates_S; auto.
-    - apply S.CS.receptiveness.
-    - apply I.CS.determinacy.
-  Qed.
+(* FCC *)
+Hypothesis I_simulates_S:
+  forall {p},
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+  forall {tp},
+    compile_program p = Some tp ->
+    forward_simulation (S.CS.sem p) (I.CS.sem tp).
+
+(* BCC *)
+(* We derive BCC from FCC as in CompCert *)
+Corollary S_simulates_I:
+  forall {p},
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+  forall {tp},
+    compile_program p = Some tp ->
+    backward_simulation (S.CS.sem p) (I.CS.sem tp).
+Proof.
+  intros.
+  apply forward_to_backward_simulation.
+  - apply I_simulates_S; auto.
+  - apply S.CS.receptiveness.
+  - apply I.CS.determinacy.
+Qed.

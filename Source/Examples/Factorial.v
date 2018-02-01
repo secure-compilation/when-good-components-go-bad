@@ -9,7 +9,7 @@ Import Source.
 Definition factorial : program := {|
   prog_interface :=
     mkfmap [(1, {| Component.import := fset [(2, 1)];
-                   Component.export := fset [1] |});
+                   Component.export := fset [] |});
             (2, {| Component.import := fset [];
                    Component.export := fset [1] |})];
   prog_buffers :=

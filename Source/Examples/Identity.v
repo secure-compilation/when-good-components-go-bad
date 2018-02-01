@@ -9,7 +9,7 @@ Import Source.
 Definition identity : program := {|
   prog_interface :=
     mkfmap [(1, {| Component.import := fset [];
-                   Component.export := fset [1] |})];
+                   Component.export := fset [] |})];
   prog_buffers :=
     mkfmap [(1, inl 1)];
   prog_procedures :=
