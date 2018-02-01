@@ -10,6 +10,7 @@ Common/Util.v
 Common/Memory.v
 Common/Linking.v
 Common/Blame.v
+Common/CompCertExtensions.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
