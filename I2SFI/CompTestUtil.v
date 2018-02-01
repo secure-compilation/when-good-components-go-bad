@@ -209,14 +209,22 @@ Instance show_value : Show Common.Values.value :=
               end
   |}.
 
-Instance show_buffers : Show (Block.id * (nat + list value)) :=
+Instance show_buff : Show ({fmap Block.id -> nat + list value}) :=
   {|
-    show := fun p =>
-              match p with
-              | (bid, inl n) => (show bid) ++ "[" ++ (show n) ++"]"
-              | (bid, inr lst) => (show bid) ++ ":" ++ (show lst)
-              end             
+    show := fun buffers =>
+              List.fold_left
+                (fun acc '(bid,v) =>
+                   acc ++ 
+                   ( match v with
+                   | inl n =>  (show bid) ++ "[" ++ (show n) ++"]"
+                   | inr lst => (show bid) ++ ":" ++ (show lst)
+                   end )
+                )
+                (elementsm buffers)
+                Coq.Strings.String.EmptyString
   |}.
+
+
 
 Instance show_intermediate_program : Show Intermediate.program :=
   {|
@@ -278,5 +286,13 @@ Definition list2fset {A:ordType} (l : list A) : {fset A} :=
       match l with
       | nil => fset0
       | x::xs => fsetU (fset1 x) (app xs)
+      end in
+  app l.
+
+Definition list2fmap {T:ordType} {S:Type} ( l : list (T*S) ) : {fmap T->S} :=
+  let fix app l :=
+      match l with
+      | nil => emptym
+      | (k,v)::xs => setm (app xs) k v
       end in
   app l.

@@ -11,7 +11,6 @@ Require Import Intermediate.Machine.
 
 Require Import I2SFI.CompTestUtil.
 
-
 Require Import CoqUtils.ord.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
@@ -315,10 +314,11 @@ Definition buildProcedures (components : list Component.id)
 
 Definition buildBuffers (components : list Component.id)
            (cg : CallGraph)
-           (ip : Intermediate.program) : NMap (list (Block.id * (nat + list value))) :=
+           (ip : Intermediate.program)
+  : {fmap nat_ordType -> {fmap Block.id -> nat + list value}}  :=
   List.fold_left
     ( fun acc cid =>
-        match getm (Intermediate.prog_buffers ip) cid with
+        match (Intermediate.prog_buffers ip) cid with
         | None => acc
         | Some x => setm acc cid x
         end
@@ -388,113 +388,3 @@ Instance shrinkIntermediateProgram : Shrink Intermediate.program :=
         end
   |}.
 
-Open Scope nat_scope.
-Definition ip := 
-  let component1_interface : Component.interface :=
-      (Component.mkCompInterface         
-         (list2fset [1;2;3])
-         (list2fset [(2,1);(2,2);(3,1)])) in
-  let component2_interface : Component.interface :=
-      (Component.mkCompInterface
-         (list2fset [1;2])
-         (list2fset [(1,2)])) in
-  let component3_interface : Component.interface :=
-      (Component.mkCompInterface
-         (list2fset [1])
-         (list2fset [(1,3);(2,1);(2,2)])) in
-  let program_interface : Program.interface :=
-      setm 
-        (setm 
-           (setm (emptym) 1 component1_interface)
-           2 component2_interface)
-        3 component3_interface
-  in
-  let buffers : NMap (list (Block.id * (nat + list value))) :=
-      setm 
-        (setm 
-           (setm (emptym) 1 [(1,(inl 10%nat))])
-           2 [(1,(inl 10%nat))])
-        3 [(1,(inl 10%nat))]
-  in
-  let proc1_1 :=
-      [
-        ICall 2 1
-        ; ICall 3 1
-        ; ICall 2 2
-        ; IReturn
-      ] in
-  let proc2_1 :=
-      [
-        ICall 1 2
-        ; IReturn
-      ] in
-  let proc3_1 :=
-      [
-        ICall 1 3
-        ; ICall 2 1
-        ; ICall 2 2
-        ; IReturn
-      ] in
-    let proc2_2 :=
-      [
-        IReturn
-      ] in
-    let proc1_2 :=
-      [
-        IHalt
-      ] in
-    let proc1_3 :=
-      [
-        IReturn
-      ] in
-    let pmap1 :=
-        setm
-          (setm
-             (setm emptym 1 proc1_1)
-             2 proc1_2)
-          3 proc1_3 in
-    let pmap2 :=
-        setm
-          (setm emptym 1 proc2_1)
-          2 proc2_2 in
-    let pmap3 := setm emptym 1 proc3_1 in
-    let procs := setm
-                   (setm
-                      (setm emptym 1 pmap1)
-                      2 pmap2)
-                   3 pmap3 in
-    {|
-      Intermediate.prog_interface := program_interface;
-      Intermediate.prog_procedures := procs;
-      Intermediate.prog_buffers := buffers;
-      Intermediate.prog_main := Some (1,2)
-    |} .
-
-(* Extract Constant Test.defNumTests => "1". *)
-
-(* Require Import CompEitherMonad. *)
-(* Require Import CompStateMonad. *)
-(* Require Import TestIntermediate. *)
-(* Require Import Coq.Strings.String. *)
-(* Require Import CompTestUtil. *)
-(* Definition test1: Checker := *)
-(*   forAll     *)
-(*     (  *)
-(*       let cg := buildCallGraph ip in *)
-(*       let newip := buildIntermediateProgram cg ip in       *)
-(*       returnGen newip *)
-(*     ) *)
-
-(*     (fun p =>        *)
-(*         let es := runp 20%nat  p in *)
-(*         match es with *)
-(*         | Wrong msg InvalidEnv => whenFail ((show es) ++ (show p))%string false *)
-(*         | Wrong _ _ => whenFail ("InvalidEnv NOT present:" ++ (show p) ++ (show es))%string false *)
-(*         | _ => checker true *)
-(*         end *)
-(*     ). *)
-
-(* QuickChick test1. *)
-  
-
- Close Scope nat_scope.

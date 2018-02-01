@@ -729,10 +729,18 @@ Definition convert_procedures (all : PMap.t (PMap.t Intermediate.Machine.code))
             )
     ) all (emptym).
 
-Definition convert_buffers (buffs : PMap.t  (list (positive * (nat+list value)))) :=
+Definition convert_buffers (buffs : PMap.t  (list (positive * (nat+list value))))
+  : NMap {fmap Block.id -> nat + list value} :=
   PMap.fold
-    (fun cid b acc => setm acc (Pos.to_nat cid)
-                        (List.map (fun '(id,s)=>(Pos.to_nat id,s)) b))
+    (fun cid b acc =>
+       setm acc (Pos.to_nat cid)
+            (list2fmap
+               (
+                 List.map (fun '(bid,v) => (Pos.to_nat bid,v) ) b
+               )
+            )
+            (* (List.map (fun '(id,s)=>(Pos.to_nat id,s)) b)) *)
+    )
     buffs emptym.
 
 (* TODO Check with Arthur and G. *) 
