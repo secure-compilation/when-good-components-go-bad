@@ -398,6 +398,19 @@ Section Definability.
     - by move=> _ _ [<- <-]; rewrite find_procedures_of_trace.
   Qed.
 
+  Lemma closed_program_of_trace t :
+    Source.closed_program (program_of_trace t).
+  Proof.
+    split=> //=.
+    exists mainC, mainP.
+    rewrite /procedures_of_trace mapimE /=.
+    case: main_export=> CI.
+    rewrite /Program.has_component /Component.is_exporting.
+    case=> -> mainP_CI /=.
+    eexists; repeat split; eauto.
+    by rewrite domm_mkfmapf in_fset.
+  Qed.
+
   Arguments Memory.load  : simpl nomatch.
   Arguments Memory.store : simpl nomatch.
 
