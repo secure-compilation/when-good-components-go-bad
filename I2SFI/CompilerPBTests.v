@@ -1383,7 +1383,7 @@ Definition cs_correct (t : test_type) : Checker :=
          ).
 
 (****************** QUICK CHECKS ***************************)
-Extract Constant Test.defNumTests => "1". 
+Extract Constant Test.defNumTests => "100". 
 
 QuickChick (store_correct TStore).
 QuickChick (jump_correct TJump).
