@@ -138,11 +138,6 @@ Section RSC_DC_MD.
 
     (* FCC *)
 
-    (* CH: When is a program compilable (compile_prog returns Some)?
-           - Source.well_formed_program probably enough, and we have it from P'_Cs_linkability *)
-    (* CH: Might use separate_compilation' for proving the assert below,
-           but we don't know that compile_program (Source.program_link P' Cs) = Some something anyway ?
-           Definability needs to give us enough to obtain that the program can be properly compiled. *)
     assert (exists P'_compiled Cs_compiled,
                compile_program P' = Some P'_compiled /\
                compile_program Cs = Some Cs_compiled /\
@@ -150,7 +145,17 @@ Section RSC_DC_MD.
       as HP'_Cs_compiles. {
       (* the definability output can be splitted in two programs *)
       (* probably need partialize to obtain them *)
-      admit.
+      assert (exists P'_compiled, compile_program P' = Some P'_compiled)
+        as [P'_compiled HP'_compiles]
+        by (now apply well_formed_compilable).
+      assert (exists Cs_compiled, compile_program Cs = Some Cs_compiled)
+        as [Cs_compiled HCs_compiles]
+        by (now apply well_formed_compilable).
+      exists P'_compiled, Cs_compiled.
+      split; [assumption |].
+      split; [assumption |].
+      apply Compiler.separate_compilation; try assumption.
+      - congruence.
     }
     destruct HP'_Cs_compiles
       as [P'_compiled [Cs_compiled [HP'_compiles [HCs_compiles HP'_Cs_compiles]]]].
