@@ -203,13 +203,13 @@ Section RSC_DC_MD.
       as Hctx_same_iface. {
       symmetry. erewrite compilation_preserves_interface.
       - rewrite <- Hsame_iface2. reflexivity.
-      - auto.
+      - assumption.
     }
     rewrite Hctx_same_iface in HP_decomp.
     assert (Intermediate.prog_interface p_compiled = Intermediate.prog_interface P'_compiled) as Hprog_same_iface. {
       symmetry. erewrite compilation_preserves_interface.
       - apply Hsame_iface1.
-      - auto.
+      - assumption.
     }
     rewrite <- Hprog_same_iface in HCs_decomp.
 
@@ -268,10 +268,10 @@ Section RSC_DC_MD.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
     exists Cs. exists pCs_beh.
-    split. assumption.
-    split. assumption.
-    split. assumption.
-    split. assumption.
+    split; [assumption |].
+    split; [assumption |].
+    split; [assumption |].
+    split; [assumption |].
     inversion HpCs_beh_imp as [pCs_beh_ok|].
     - split.
       + subst pCs_beh. assumption.
