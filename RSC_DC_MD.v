@@ -397,5 +397,6 @@ Section RSC_DC_MD.
               setoid_rewrite Source.link_sym; assumption.
           - now apply linkable_sym.
           - setoid_rewrite <- Source.link_sym; assumption.
-  Admitted.
+ Qed.
+  
 End RSC_DC_MD.
