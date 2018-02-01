@@ -445,41 +445,42 @@ Qed.
 
 Definition RSC_dc (P : prg) : Prop :=
   forall (C' : ctx') (t : trace), sem' (plug' (compile P) C') t ->
-   (forall m : trace, fin m -> prefix m t ->  
+   (forall m : trace, prefix m t ->  
       exists (C : ctx) (t' : trace), sem (plug P C) t' /\
             (prefix m t' \/ u_prefix P t' m)).
 
 (*
    this formulation of Z_p is different from the one in the paper
-   but we will prove equivalence later on
+   but better suited for proofs,
+   we will prove equivalence later on
  *)
 Definition Z_class (P: prg) (pi : prop) : Prop :=
   forall t : trace, ~ pi t ->
-   (exists m : trace, fin m /\ prefix m t /\
+   (exists m : trace, prefix m t /\
           forall t' : trace, (prefix m t' \/ u_prefix P t' m) -> ~ pi t').
 
 Theorem RSC_dc_RZP : forall P : prg,
     RSC_dc P -> (forall pi : prop, Z_class P pi -> RP P pi).
 Proof.
   intros P r pi z. rewrite contra_RP. intros [C' [t [h0 h1]]].
-  destruct (z t h1) as [m [fm [pmt H]]]. clear z.
-  destruct (r C' t h0 m fm pmt) as [C [ t' [k0 k1]]]. clear r.
+  destruct (z t h1) as [m [pmt H]]. clear z.
+  destruct (r C' t h0 m pmt) as [C [ t' [k0 k1]]]. clear r.
   exists C, t'. split. - assumption. - apply (H t' k1).
 Qed.
 
 Theorem RZP_RSC_dc : forall P : prg,
     (forall pi : prop, Z_class P pi -> RP P pi) -> RSC_dc P.
 Proof.
-  unfold RSC_dc. intros P rz C' t H0 m fm pmt.
+  unfold RSC_dc. intros P rz C' t H0 m pmt.
   assert (K : Z_class P (fun b => ~ (prefix m b \/ u_prefix P b m))).
   { unfold Z_class. intros b hb. rewrite <- dne in hb.
     destruct hb as [pmb | ub].
-    + exists m. split. assumption. split. assumption.
+    + exists m. split. assumption. 
       intros b' [b1 | b2]; rewrite <- dne. left. assumption.
       right. assumption.
     + assert (fb : fin b). { apply (u_imp_fin P b m ub). }
       unfold u_prefix in ub. destruct ub as [mb [ fmt [mtb ub ]]].
-      exists b. split. assumption. split. apply (prefix_refl b fb).
+      exists b. split. apply (prefix_refl b fb).
       intros b' [k1 | k2]. apply (u_end P b b') in k1. rewrite <- dne.
       right. rewrite <-  k1. unfold u_prefix. exists mb. apply (conj fmt (conj mtb ub)).
       exists mb. assumption. rewrite <- dne. right.
@@ -498,7 +499,7 @@ Proof.
   split. assumption. rewrite <- dne in k1. assumption.
 Qed.
 
-Corollary pointwise_equiv : forall P : prg,
+Corollary pointwise_equiv' : forall P : prg,
     RSC_dc P <-> (forall pi : prop, Z_class P pi -> RP P pi).
 Proof.
   intros P. split.
@@ -506,10 +507,10 @@ Proof.
   - apply RZP_RSC_dc.
 Qed.
 
-Corollary more_standard :
+Corollary main_thm' :
     (forall P, RSC_dc P) <-> (forall P pi, Z_class P pi -> RP P pi).
-   (* ^^^^^^^^^^^^^^^^ *)    (* ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ *)
-   (* standard RSC^DC  *)    (*      almost standard RP          *)
+   (* ^^^^^^^^^^^^^^^^ *)    
+   (*      RSC^DC      *)    
 Proof.
   split. - intros H P. now apply RSC_dc_RZP.
          - intros H P. apply RZP_RSC_dc. now apply H.
@@ -520,8 +521,7 @@ Qed.
 (*********************************************************)
 
 Definition Safety (pi : prop) : Prop :=
-  forall t, ~ pi t -> exists m,
-      fin m /\ prefix m t /\
+  forall t, ~ pi t -> exists m, prefix m t /\
         (forall t', prefix m t' -> ~ pi t').
 
 (* Z_class is a sublclass of safety *)
@@ -529,13 +529,15 @@ Lemma Z_p_Safety : forall (P : prg) (pi : prop),
     Z_class P pi -> Safety pi.
 Proof.
   unfold Safety. intros P pi Z t nt.
-  destruct (Z t nt) as [m [fm [pmt H]]]. clear Z.
+  destruct (Z t nt) as [m [pmt H]]. clear Z.
   exists m. split.
   - assumption.
-  - split. assumption. intros t' h0. apply (H t' (or_introl (u_prefix P t' m) h0)).
+  - intros t' h0. apply (H t' (or_introl (u_prefix P t' m) h0)).
 Qed.
 
-
+(* Class of property closed under refinement
+   (undef due to program P)
+ *)
 Definition ref_cl (P : prg) (pi : prop) : Prop :=
   forall t, pi t -> forall t', u_prefix P t t' -> pi t'.
 
@@ -576,14 +578,14 @@ Proof.
   - intros z. split.
     + eapply Z_p_Safety. apply z.
     + rewrite ref_cl'. intros t' nt' t utt'.
-      destruct (z t' nt') as [m [fm [pmt zz]]].
+      destruct (z t' nt') as [m [pmt zz]].
       assert (prefix m t \/ u_prefix P t m) as use_me by
       apply (U_general P t t' utt' m pmt).
       apply (zz t use_me).      
   -  intros [s r]. unfold Z_class.
-     intros t nt. destruct (s t nt) as [m [fm [pmt H]]].
+     intros t nt. destruct (s t nt) as [m [pmt H]].
      exists m. split. assumption.
-     split. assumption. intros t' [k0 | k1].
+     intros t' [k0 | k1].
      apply (H t' k0). assert (use_me : u_prefix P t' t).
      { unfold u_prefix. destruct k1 as [m0 [f0 [p0 u0]]].
        exists m0. split. assumption. split.
@@ -615,68 +617,68 @@ Proof.
 Qed.
 
 (* theorem in the paper *)
-Corollary RSC_dc_equiv2 : 
+Corollary main_thm : 
   (forall P : prg, RSC_dc P) <->
   (forall P pi, (Safety pi /\ ref_cl P pi) -> RP P pi).
-Proof. rewrite <- easy_lemma0. apply more_standard. Qed.
+Proof. rewrite <- easy_lemma0. apply main_thm'. Qed.
 
-Corollary pointwise_equiv2 : forall P : prg,
+Corollary pointwise_equiv : forall P : prg,
     RSC_dc P <->
     (forall pi : prop, (Safety pi /\ ref_cl P pi) -> RP P pi).
 Proof.
   intros P.
-  rewrite <- (easy_lemma1 P). apply pointwise_equiv.
+  rewrite <- (easy_lemma1 P). apply pointwise_equiv'.
 Qed.
-
 
 (*********************************************************)
 (*  extracting a Z_class property from a Safety one      *)
 (*********************************************************)
 
-Definition pi_z (pi : prop) (S:Safety pi) (P : prg) : prop :=
+(* starting from a safety property pi we define the following *)
+Definition z_plus (pi : prop) (S:Safety pi) (P : prg) : prop :=
   fun t : trace =>
     pi t /\ forall (t' : trace), u_prefix P t t' -> pi t'.
 
+(* z_plus is a subproperty of pi *)
 Lemma sub : forall (pi : prop) (S : Safety pi)
                    (P : prg) (b : trace),
-                    (pi_z pi S P b) -> pi b.
+                    (z_plus pi S P b) -> pi b.
 Proof. intros pi S P b [h0 h1]; assumption. Qed.
 
 Lemma sub' : forall (pi : prop) (S : Safety pi)
                     (P : prg) (b : trace),
-                     ~ pi b -> ~ (pi_z pi S P b).
+                     ~ pi b -> ~ (z_plus pi S P b).
 Proof. intros pi S P b. rewrite <- contra.  
        apply (sub pi S P).
 Qed.
 
-(* the property pi_z is indeed in Z_p *)
+(* z_plus is in Z_class *)
 Lemma extraction_lemma :  forall (pi : prop) (P : prg)
                                  (s : Safety pi),
-                           Z_class P (pi_z pi s P).
+                           Z_class P (z_plus pi s P).
 Proof.
   intros pi P s. rewrite Z_p_equivalent. split.
   - unfold Safety. intros t nt.
-    unfold pi_z in nt. rewrite de_morgan1 in nt.
+    unfold z_plus in nt. rewrite de_morgan1 in nt.
     destruct nt as [k0 | k1].
-    + destruct (s t k0) as [m [a1 [a2 a3]]].
-      exists m. split. assumption. split. assumption.
-      intros t' H. specialize (a3 t' H).
-      apply (sub' pi s P t' a3).
+    + destruct (s t k0) as [m [a1 a2]].
+      exists m. split. assumption. 
+      intros t' H. specialize (a2 t' H).
+      apply (sub' pi s P t' a2).
     + rewrite not_forall_ex_not in k1.
       destruct k1 as [m k]. rewrite not_imp in k.
       destruct k as [k00 k11]. exists t.
       assert (ft : fin t) by apply (u_imp_fin P t m k00).
-      split. assumption.
       split. apply (prefix_refl t ft).
       intros t' ptt'. apply (u_end P) in ptt'.
-      rewrite <- ptt'. unfold pi_z. rewrite de_morgan1.
+      rewrite <- ptt'. unfold z_plus. rewrite de_morgan1.
       right. rewrite not_forall_ex_not. exists m. rewrite not_imp.
       split;assumption. unfold u_prefix in k00.
       destruct k00 as [m0 [foo0 [ foo1 use_me]]].
       exists m0; assumption.
   - rewrite ref_cl'. intros t nt t' utt'.
-    unfold pi_z in nt. rewrite de_morgan1 in nt.
-    unfold pi_z. rewrite de_morgan1.
+    unfold z_plus in nt. rewrite de_morgan1 in nt.
+    unfold z_plus. rewrite de_morgan1.
     destruct nt as [k0 | k1].
     right. intros H. apply (k0 (H t utt')).
     rewrite not_forall_ex_not in k1. destruct k1 as [m k].
@@ -685,21 +687,21 @@ Proof.
     split. apply (u_trans P t' t m); assumption. assumption.
 Qed.
 
-(* pi_z is the biggest property in Z_p that is included in pi *)
+(* z_plus is the biggest property in Z_p that is included in pi *)
 Lemma maximality_lemma : forall (P : prg) (pi phi : prop) (S : Safety pi)
                                 (Zphi : Z_class P phi)
                                 (H: forall b, phi b -> pi b),
 
-    forall b, phi b -> (pi_z pi S P) b.
+    forall b, phi b -> (z_plus pi S P) b.
 Proof.
   intros P pi phi S Zphi H b phib.
-  unfold pi_z. split.
+  unfold z_plus. split.
   - apply (H b phib).
   - intros t ubt. rewrite dne. intros npit.
     assert (nphit : ~ phi t).
     { intros phit. apply (npit (H t phit)). }
     specialize (Zphi t nphit).
-    destruct Zphi as [m [fm [pmt K]]].
+    destruct Zphi as [m [pmt K]].
     assert (use_me : prefix m b \/ u_prefix P b m).
     { apply (U_general P b t ubt m pmt). }
     apply ((K b use_me) phib).
@@ -710,6 +712,7 @@ Qed.
 (*  building a Z_class property on a Safety one          *)
 (*********************************************************)
 
+(* starting from a safety property pi we define the following *)
 Definition z_minus (P : prg) (pi : prop) : prop :=
   fun b : trace =>
     pi b \/ (exists t, pi t /\ (u_prefix P t b \/ prefix b t)).
@@ -726,8 +729,8 @@ Proof.
   intros P pi S. rewrite Z_p_equivalent. split.
   - unfold Safety. intros b nb. unfold z_minus in nb.
     rewrite de_morgan2 in nb. destruct nb as [npib nn].
-    destruct (S b npib) as [m [fm [pmb H]]].
-    exists m. split. assumption. split. assumption.
+    destruct (S b npib) as [m [pmb H]].
+    exists m. split. assumption. 
     intros  b' pmb'. unfold z_minus. rewrite de_morgan2. split.
     + apply (H b' pmb').
     + intros [t [pit [k0 | k1]]].
@@ -764,6 +767,6 @@ Proof. intros P pi phi S Z H b' zb'.
        + destruct k2. unfold ref_cl in ref_phi. apply (H t) in k1.
          apply (ref_phi t k1 b' H0).
          unfold Safety in Sphi. rewrite dne. intros ff.
-         destruct (Sphi b' ff) as [m [fm [pmb' K]]]. clear Sphi.
+         destruct (Sphi b' ff) as [m [pmb' K]]. clear Sphi.
          apply (prefix_trans m b' t pmb') in H0. apply ((K t H0) (H t k1)).
 Qed.
