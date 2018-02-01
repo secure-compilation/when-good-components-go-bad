@@ -113,12 +113,13 @@ Section RSC_DC_MD.
       by apply linkability.
 
     assert(linkable (Intermediate.prog_interface p_compiled)
-                    (Intermediate.prog_interface Ct)) as linkability'''.
+                    (Intermediate.prog_interface Ct)) as linkability'''. {
          constructor.
          - apply compilation_preserves_interface in successfull_compilation.
            rewrite successfull_compilation. assumption.
          - apply compilation_preserves_interface in successfull_compilation.
            rewrite successfull_compilation. assumption.
+    }
 
     (* intermediate decomposition (for p_compiled) *)
     pose proof
@@ -159,9 +160,11 @@ Section RSC_DC_MD.
       apply forward_simulation_behavior_improves
         with (L2:=I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) in HP'_Cs_beh;
         simpl; eauto.
-      - destruct HP'_Cs_beh as [b2 [H1 H2]]. exists b2. split. assumption.
-        destruct H2 as [|[t' [H21 H22]]]. subst. assumption. subst.
-        eapply behavior_prefix_goes_wrong_trans; eassumption.
+      - destruct HP'_Cs_beh as [b2 [H1 H2]]. exists b2. split.
+        + assumption.
+        + destruct H2 as [|[t' [H21 H22]]].
+          * subst. assumption.
+          * subst. eapply behavior_prefix_goes_wrong_trans; eassumption.
       - apply Compiler.I_simulates_S; auto.
         apply Source.linking_well_formedness.
         * assumption.
@@ -199,12 +202,14 @@ Section RSC_DC_MD.
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
       as Hctx_same_iface. {
       symmetry. erewrite compilation_preserves_interface.
-      rewrite <- Hsame_iface2. reflexivity. auto.
+      - rewrite <- Hsame_iface2. reflexivity.
+      - auto.
     }
     rewrite Hctx_same_iface in HP_decomp.
     assert (Intermediate.prog_interface p_compiled = Intermediate.prog_interface P'_compiled) as Hprog_same_iface. {
       symmetry. erewrite compilation_preserves_interface.
-      apply Hsame_iface1. auto.
+      - apply Hsame_iface1.
+      - auto.
     }
     rewrite <- Hprog_same_iface in HCs_decomp.
 
@@ -241,7 +246,7 @@ Section RSC_DC_MD.
     assert (linkable (Source.prog_interface p) (Source.prog_interface Cs))
       as Hlinkable_p_Cs. {
       inversion linkability'' as [sound_interface_p_Cs fdisjoint_p_Cs].
-        constructor;
+      constructor;
         (apply compilation_preserves_interface in HCs_compiles;
         apply compilation_preserves_interface in successfull_compilation;
         rewrite <- HCs_compiles; rewrite <- successfull_compilation;
@@ -256,10 +261,10 @@ Section RSC_DC_MD.
                behavior_improves beh1 b3) as HpCs_beh. {
       apply backward_simulation_behavior_improves
         with (L1:=S.CS.sem (Source.program_link p Cs)) in HpCs_compiled_beh; auto.
-      - apply S_simulates_I.
-        + assumption.
-        + assumption.
-        + apply Compiler.separate_compilation; try assumption.
+      apply S_simulates_I.
+      - assumption.
+      - assumption.
+      - apply Compiler.separate_compilation; try assumption.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
     exists Cs. exists pCs_beh.
@@ -267,49 +272,56 @@ Section RSC_DC_MD.
     split. assumption.
     split. assumption.
     split. assumption.
-    - inversion HpCs_beh_imp as [pCs_beh_ok|].
+    inversion HpCs_beh_imp as [pCs_beh_ok|].
+    - split.
+      + subst pCs_beh. assumption.
+      + left. subst. assumption.
+    - destruct H as [t' [Hgoes_wrong Hprefix]].
+      assert(trace_prefix m t' \/ trace_prefix t' m) as H by (eapply behavior_prefix_comp; eauto).
+      destruct H as [H | H].
       + split.
         * subst pCs_beh. assumption.
-        * left. subst. assumption.
-      + destruct H as [t' [Hgoes_wrong Hprefix]].
-        assert(trace_prefix m t' \/ trace_prefix t' m) as H by (eapply behavior_prefix_comp; eauto).
-        destruct H as [H | H].
-        - split.
-          * subst pCs_beh. assumption.
-          * left. subst. eapply trace_behavior_prefix_trans. apply H.
-            unfold behavior_prefix. exists (Goes_wrong []). simpl.
+        * left. subst. eapply trace_behavior_prefix_trans.
+          - apply H.
+          - unfold behavior_prefix. exists (Goes_wrong []). simpl.
             setoid_rewrite <- app_nil_end. reflexivity.
-        - split.
-          * subst pCs_beh. assumption.
-          * right. exists t'. repeat split; auto.
+      + split.
+        * subst pCs_beh. assumption.
+        * right. exists t'. repeat split; auto.
           (* blame UB -- Guglielmo working on proof *)
-            rewrite Source.link_sym in HpCs_beh; [| assumption].
-            apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
-              try assumption. (* TODO: bullets !!! *)
-            setoid_rewrite Source.link_sym in HP'_Cs_beh; [|congruence].
+          rewrite Source.link_sym in HpCs_beh; [| assumption].
+          apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
+              try assumption.
+          - setoid_rewrite Source.link_sym in HP'_Cs_beh; [|congruence].
             eapply Source.Decomposition.decomposition_with_refinement in HP'_Cs_beh;
               [| assumption | assumption | congruence].
             destruct HP'_Cs_beh as [beh' [G1 G2]].
             destruct HpCs_beh as [b [H1 [H2 | H2]]].
             + subst pCs_beh. subst b.
               eapply (@blame_program p Cs).
-              - assumption.
-              - assumption.
-              - assumption.
-              - assumption.
-              - pose proof (compilation_preserves_interface p p_compiled
+              * assumption.
+              * assumption.
+              * assumption.
+              * assumption.
+              * pose proof (compilation_preserves_interface p p_compiled
                                                successfull_compilation) as HH.
                 assert(Source.prog_interface P' = Source.prog_interface p) as HHH
                     by congruence.
                 rewrite <- HHH.
                 now apply G1.
-              - assumption.
-              - assert(behavior_prefix t' beh) as H0. eapply trace_behavior_prefix_trans. now apply H. assumption.
-                eapply behavior_prefix_improves_trans. now eapply H0. assumption.
+              * assumption.
+              * assert(behavior_prefix t' beh) as H0. {
+                  eapply trace_behavior_prefix_trans.
+                  - now apply H.
+                  - assumption.
+                }
+                eapply behavior_prefix_improves_trans.
+                - now eapply H0.
+                - assumption.
             + destruct H2 as [t'' [H21 [H22 H23]]].
               subst pCs_beh. injection H21; intro H21'. subst t''.
               setoid_rewrite Source.link_sym; assumption.
-            + now apply linkable_sym.
-            + setoid_rewrite <- Source.link_sym; assumption.
+          - now apply linkable_sym.
+          - setoid_rewrite <- Source.link_sym; assumption.
   Admitted.
 End RSC_DC_MD.
