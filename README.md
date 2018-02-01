@@ -13,8 +13,7 @@ Replaying the proofs:
     $ make -j4
 
 Our tests are known to work with QuickChick branch 8.7
-(https://github.com/QuickChick/QuickChick) and OCaml 4.06
-(but probably other OCaml versions will work as well).
+(https://github.com/QuickChick/QuickChick) and OCaml from 4.02.3 to 4.06.
 
 Running the tests:
 
