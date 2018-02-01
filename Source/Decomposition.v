@@ -10,7 +10,6 @@ Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
 Require Import Source.PS.
-Require Import S2I.Definitions.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
@@ -462,34 +461,12 @@ Section Decomposition.
       C2 \in domm iface ->
       well_defined_components iface (ERet C1 arg C2).
 
-  Lemma step_event_has_well_defined_components:
-    forall s e s',
-      CS.kstep (prepare_global_env (program_link p c)) s [e] s' ->
-      well_defined_components (prog_interface (program_link p c)) e.
-  Proof.
-    intros.
-    inversion H; subst.
-    (* call *)
-    - unfold imported_procedure, Program.has_component in H2.
-      destruct H2 as [CI [HC_in_iface Himport_C']].
-      unfold program_link in HC_in_iface.
-      unfold Component.is_importing in Himport_C'.
-      simpl in *. constructor.
-      (* caller component is defined *)
-      + rewrite mem_domm. rewrite HC_in_iface. auto.
-      (* called component is defined *)
-      + rewrite mem_domm. admit.
-    - constructor.
-      + admit.
-      + admit.
-  Admitted.
-
   Lemma ub_behavior_has_well_defined_components:
     forall t,
-      program_behaves (CS.sem (program_link p c))
-                      (Goes_wrong t) ->
+      program_behaves (CS.sem (program_link p c)) (Goes_wrong t) ->
     forall e,
-      In e t -> well_defined_components (prog_interface (program_link p c)) e.
+      In e t ->
+      well_defined_components (prog_interface (program_link p c)) e.
   Proof.
   Admitted.
 
@@ -629,10 +606,12 @@ Section Decomposition.
     destruct Hstar1 as [n1 HstarN1].
     destruct Hstar2 as [n2 HstarN2].
     destruct (Nat.compare n1 n2) eqn:Hcmp.
-    - left.
-      apply Nat.compare_eq in Hcmp. subst.
-      destruct (PS.starN_with_same_steps_and_prefix HstarN1 HstarN2) as []. subst.
-      repeat split.
+    - apply Nat.compare_eq in Hcmp. subst.
+      destruct (PS.state_determinism_starN_with_same_prefix HstarN1 HstarN2)
+        as [[]|[[m []]|[m [? []]]]]; subst.
+      + auto.
+      + apply starN_star in H. auto.
+      + apply starN_star in H0. auto.
     - right. left.
       admit.
     - right. right.
@@ -766,12 +745,75 @@ Section Decomposition.
 
   Set Implicit Arguments.
 
-  Lemma blame_program : forall t b p Cs,
-    program_behaves (S.PS.sem Cs (Source.prog_interface p)) b ->
-    program_behaves (S.PS.sem Cs (Source.prog_interface p)) (Goes_wrong t) ->
-    behavior_prefix t b ->
-    undef_in (Source.main_comp (Source.program_link p Cs)) t
-             (Source.prog_interface p).
-  Admitted.
+  Lemma improving_star_ending_in_stuck_state:
+    forall s t s' t' s'',
+      star (PS.kstep c (prog_interface p)) (prepare_global_env c) s t s' ->
+      star (PS.kstep c (prog_interface p)) (prepare_global_env c) s (t ** t') s'' ->
+      nostep (PS.kstep c (prog_interface p)) (prepare_global_env c) s' ->
+      t' = E0 /\
+      (s' = s'' \/ star (PS.kstep c (prog_interface p)) (prepare_global_env c) s'' E0 s').
+  Proof.
+    intros s t s' t' s''.
+    intros Hstar1 Hstar2 Hnostep.
+    destruct (star_improvement Hstar1 Hstar2) as [|[|]].
+    - destruct H. intuition.
+    - inversion H; subst.
+      + split; auto.
+      + exfalso. eapply Hnostep. eauto.
+    - destruct H; subst. split; auto.
+  Qed.
 
+  Lemma blame_program : forall t b,
+    program_behaves (PS.sem c (prog_interface p)) b ->
+    program_behaves (PS.sem c (prog_interface p)) (Goes_wrong t) ->
+    behavior_prefix t b ->
+    undef_in (main_comp (program_link p c)) t (prog_interface p).
+  Proof.
+    intros t b.
+    intros Hbeh_improved Hbeh_wrong Hprefix.
+    unfold behavior_prefix in Hprefix.
+    destruct Hprefix as []; subst.
+    inversion Hbeh_wrong; subst.
+    - inversion Hbeh_improved; subst.
+      + inversion H0; subst.
+        inversion H2; subst;
+          pose proof PS.initial_state_determinism H H1; subst;
+          destruct x; simpl in *; try discriminate;
+          inversion H3; subst.
+        * (* termination *)
+          destruct (improving_star_ending_in_stuck_state H4 H7 H5) as [Ht' [|]]; subst.
+          ** contradiction.
+          ** admit.
+        * (* silent divergence *)
+          destruct (improving_star_ending_in_stuck_state H4 H7 H5) as [Ht' [|]]; subst.
+          ** inversion H8; subst.
+             exfalso. eapply H5. eauto.
+          ** admit.
+        * (* reactive divergence *)
+          admit.
+        * (* goes wrong *)
+          destruct (improving_star_ending_in_stuck_state H4 H7 H5) as [Ht' [|]]; subst.
+          ** admit.
+          ** inversion H10; subst.
+             *** admit.
+             *** exfalso. eapply H8. eauto.
+      + specialize (H2 s). contradiction.
+    - inversion Hbeh_improved; subst.
+      + specialize (H0 s). contradiction.
+      + unfold behavior_app in *. simpl in *.
+        destruct x; try discriminate.
+        inversion H; subst.
+        unfold undef_in. simpl.
+        exfalso. eapply H0.
+        eapply PS.initial_state_intro
+          with (p:=c) (p':=p)
+               (scs:=CS.initial_machine_state (Source.program_link c p))
+               (sps:=PS.partialize (Source.prog_interface p)
+                                   (CS.initial_machine_state (Source.program_link c p)));
+          auto.
+        * apply linkable_sym; auto.
+        * apply PS.partialize_correct; auto.
+        * unfold CS.initial_state.
+          reflexivity.
+  Admitted.
 End Decomposition.

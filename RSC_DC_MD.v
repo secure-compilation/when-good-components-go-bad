@@ -26,11 +26,80 @@ Unset Printing Implicit Defensive.
 
 (* CH: TODO: move these to CompCert files??? *)
 
+Lemma help : forall m1 m2 T,
+    trace_prefix m1 T -> trace_prefix m2 T ->
+    (trace_prefix m1 m2 \/ trace_prefix m2 m1).
+Proof.
+  intros m1. induction m1 as [| e m1]; intros m2 T [x1 H1] [x2 H2].
+  - left. now exists m2.
+  - assert (foo : (exists s, m2 = e :: s) \/ m2 = []).
+   { destruct m2. right. reflexivity. subst T. inversion H2.
+     left. now exists m2. }
+    destruct foo as [[s k0] | k1].
+     + subst m2. subst T. inversion H2. specialize (IHm1 s (m1 ** x1)).
+       assert (use1 : trace_prefix m1 (m1 ** x1)) by now exists x1.
+       assert (use2 : trace_prefix s (m1 ** x1)) by (rewrite H0; now exists x2).
+       destruct (IHm1 use1 use2) as [K | K]. clear IHm1.
+       left. destruct K as [m K]. exists m. simpl. now rewrite K.
+     + right. destruct K as [m K]. exists m. simpl. now rewrite K.
+     + right. rewrite k1. now exists (e :: m1).                                             
+Qed.
+    
+Lemma help_inf : forall m1 m2 T,
+    traceinf_prefix m1 T -> traceinf_prefix m2 T ->
+    (trace_prefix m1 m2 \/ trace_prefix m2 m1).
+Proof.
+   intros m1. induction m1 as [| e m1]; intros m2 T [x1 H1] [x2 H2].
+  - left. now exists m2.
+  - assert (foo : (exists s, m2 = e :: s) \/ m2 = []).
+   { destruct m2. right. reflexivity. subst T. inversion H2.
+     left. now exists m2. }
+    destruct foo as [[s k0] | k1].
+     + subst m2. subst T. inversion H2. specialize (IHm1 s (m1 *** x1)).
+       assert (use1 : traceinf_prefix m1 (m1 *** x1)) by now exists x1.
+       assert (use2 : traceinf_prefix s (m1 *** x1)) by (rewrite H0; now exists x2).
+       destruct (IHm1 use1 use2) as [K | K]. clear IHm1.
+       left. destruct K as [m K]. exists m. simpl. now rewrite K.
+     + right. destruct K as [m K]. exists m. simpl. now rewrite K.
+     + right. rewrite k1. now exists (e :: m1).
+Qed.
+
+
+(* How to simplify this proof ? *)
 Lemma behavior_prefix_comp : forall m1 m2 b,
     behavior_prefix m1 b ->
     behavior_prefix m2 b ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
-Admitted.
+Proof.
+  intros m1 m2 b [beh1 H1] [beh2 H2].
+  destruct b.
+  
+  destruct beh1; inversion H1;
+  destruct beh2; inversion H2;
+  inversion H1; inversion H2.
+  assert (K1 : trace_prefix m1 t) by now exists t0.
+  assert (K2 : trace_prefix m2 t) by now exists t1. 
+  apply (help K1 K2). 
+   
+  destruct beh1; inversion H1.
+  destruct beh2; inversion H2.
+  assert (K1 : trace_prefix m1 t ) by now exists t0.
+  assert (K2 : trace_prefix m2 t) by now exists t1.
+  apply (help K1 K2).
+                                                
+  destruct beh1; inversion H1.
+  destruct beh2; inversion H2.
+  assert (K1 : traceinf_prefix m1 t) by now exists t0.
+  assert (K2 : traceinf_prefix m2 t) by now exists t1.
+  apply (help_inf K1 K2).
+                                                   
+  destruct beh1; inversion H1.
+  destruct beh2; inversion H2.
+  assert (K1 : trace_prefix m1 t) by now exists t0.
+  assert (K2 : trace_prefix m2 t). by now exists t1.
+  apply (help K1 K2).
+Qed.      
+
 
 Lemma trace_behavior_prefix_trans : forall m1 m2 b,
     trace_prefix m1 m2 ->
@@ -138,11 +207,6 @@ Section RSC_DC_MD.
 
     (* FCC *)
 
-    (* CH: When is a program compilable (compile_prog returns Some)?
-           - Source.well_formed_program probably enough, and we have it from P'_Cs_linkability *)
-    (* CH: Might use separate_compilation' for proving the assert below,
-           but we don't know that compile_program (Source.program_link P' Cs) = Some something anyway ?
-           Definability needs to give us enough to obtain that the program can be properly compiled. *)
     assert (exists P'_compiled Cs_compiled,
                compile_program P' = Some P'_compiled /\
                compile_program Cs = Some Cs_compiled /\
@@ -150,7 +214,17 @@ Section RSC_DC_MD.
       as HP'_Cs_compiles. {
       (* the definability output can be splitted in two programs *)
       (* probably need partialize to obtain them *)
-      admit.
+      assert (exists P'_compiled, compile_program P' = Some P'_compiled)
+        as [P'_compiled HP'_compiles]
+        by (now apply well_formed_compilable).
+      assert (exists Cs_compiled, compile_program Cs = Some Cs_compiled)
+        as [Cs_compiled HCs_compiles]
+        by (now apply well_formed_compilable).
+      exists P'_compiled, Cs_compiled.
+      split; [assumption |].
+      split; [assumption |].
+      apply Compiler.separate_compilation; try assumption.
+      - congruence.
     }
     destruct HP'_Cs_compiles
       as [P'_compiled [Cs_compiled [HP'_compiles [HCs_compiles HP'_Cs_compiles]]]].

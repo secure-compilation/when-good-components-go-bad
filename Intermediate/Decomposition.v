@@ -543,31 +543,4 @@ Section Decomposition.
     eapply forward_simulation_same_safe_behavior; eauto.
     apply decomposition.
   Qed.
-
-  Variable mainC: Component.id.
-  Variable mainP: Procedure.id.
-
-  Hypothesis starting_component:
-    prog_main (program_link p c) = Some (mainC, mainP).
-
-  Corollary preservation_of_program_ub:
-    forall t,
-      program_behaves (CS.sem (program_link p c)) (Goes_wrong t) ->
-      undef_in mainC t (prog_interface p) ->
-      program_behaves (PS.sem p (prog_interface c)) (Goes_wrong t).
-  Proof.
-    intros t.
-    intros Hbeh Hblame.
-    inversion Hbeh; subst.
-    - eapply program_runs with (PS.partialize s (prog_interface c)).
-      + apply PS.initial_state_intro with (p':=c) (ics:=s); auto.
-        apply PS.partialized_state_is_partial.
-      + inversion H0; subst.
-        admit.
-    - apply program_goes_initially_wrong.
-      intros s contra.
-      inversion contra; subst.
-      apply (H0 ics).
-      admit.
-  Admitted.
 End Decomposition.

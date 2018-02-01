@@ -519,62 +519,6 @@ Theorem state_determinism:
     step p ctx G ips t ips'' ->
     ips' = ips''.
 Proof.
-  (*
-  intros ctx G ips ctx_state t ctx_state' Heq Hstep1 ctx_state'' Hstep2.
-  inversion Heq; subst.
-  inversion Hstep1; subst; inversion Hstep2; subst.
-  inversion H1; subst; inversion H3; subst.
-  inversion H6; subst; inversion H7; subst.
-
-  inversion H0; subst.
-  + inversion H11; subst; inversion H20; subst.
-    inversion H5; subst.
-    * inversion H21; subst; inversion H23; subst.
-      PS.simplify_turn.
-      constructor.
-      ** do 2 rewrite Pointer.inc_preserves_component.
-         symmetry. assumption.
-      ** assumption.
-      ** rewrite <- H2 in H13.
-         rewrite <- H2 in H17.
-
-         rewrite <- H31 in H30.
-         pose proof (Memory.equivalence_under_filter
-                       mem mem0 (fun k _ => negb (PMap.mem k ctx)) H30).
-         rewrite H24 in H13. rewrite <- H13 in H10.
-
-         rewrite <- H36 in H35.
-         pose proof (Memory.equivalence_under_filter
-                       mem1 mem2 (fun k _ => negb (PMap.mem k ctx)) H35).
-         rewrite H25 in H17. rewrite <- H15 in H17.
-
-         rewrite H10, H17.
-         reflexivity.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-    * admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-  + admit.
-   *)
 Admitted.
 
 (* partial semantics *)

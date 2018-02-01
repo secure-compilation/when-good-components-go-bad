@@ -1330,102 +1330,81 @@ Proof.
   - eapply state_determinism_context; now eauto.
 Qed.
 
-Corollary starN_with_same_steps_and_prefix:
+(* Consider two star sequences starting from the same state (s),
+   with the same number of steps (n) and the same trace (t):
+
+        t            t
+     s ->n s'     s ->n s''
+
+   What can we say about s' and s''?
+   Because of epsilon steps, there are several cases. In particular, problems are created
+   by context epsilon steps in the middle of the sequence and program epsilon steps at the
+   end of sequence. Recall that context epsilon steps are silent (they do not modify the state),
+   while program epsilon steps are not (they modify the state).
+
+   1) desync due to (m > 0) context epsilon steps in the middle of the first star
+           t          E0
+        s ->(n-m) s' ->m s''
+      a) m program epsilon steps at the end of the second star
+         s' <> s''
+      b) m context epsilon steps at the end of the second star
+         s' = s''
+      Notice that we cannot have a mix of program and context steps because
+      there would be a visible event due to the change of control.
+
+   2) desync due to (m > 0) context epsilon steps in the middle of the second star
+           t          E0
+        s ->(n-m) s'' ->m s'
+      a) m program epsilon steps at the end of the second star
+         s' <> s''
+      b) m context epsilon steps at the end of the second star
+         s' = s''
+
+   3) in sync, exact same steps
+        s' = s''
+      or, alternatively:
+           t          E0
+        s ->(n-0) s' ->0 s''
+      which implies s' = s''
+
+   In general:
+     s' = s'' \/
+                       t          E0
+     (exists m > 0, s ->(n-m) s' ->m s'' /\ s' <> s'') \/
+                       t           E0
+     (exists m > 0, s ->(n-m) s'' ->m s' /\ s' <> s'')
+*)
+
+Theorem state_determinism_starN_with_same_prefix:
   forall p ctx n sps t t' sps' sps'',
     starN (kstep p ctx) (prepare_global_env p) n sps t sps' ->
     starN (kstep p ctx) (prepare_global_env p) n sps (t ** t') sps'' ->
-    t' = E0 /\ sps' = sps''.
+    (t' = E0 /\ sps' = sps'') \/
+    (exists m,
+      starN (kstep p ctx) (prepare_global_env p) m sps' t' sps'' /\ sps' <> sps'') \/
+    (exists m,
+      t' = E0 /\ starN (kstep p ctx) (prepare_global_env p) m sps'' E0 sps' /\ sps' <> sps'').
 Proof.
   intros p ctx n sps t t' sps' sps''.
   intros HstarN1 HstarN2.
-  dependent induction n.
-  - inversion HstarN1; inversion HstarN2;
-      subst; simpl in *; subst.
-    repeat split.
-  - inversion HstarN1; inversion HstarN2; subst.
-    enough (t2 = t5). enough (t1 = t4). subst.
-    pose proof (state_determinism H0 H7). subst.
-    rewrite <- (E0_right t5) in H8.
-    pose proof (IHn s'0 t5 E0 sps' sps'' H1 H8).
-    intuition.
-    + rewrite <- (E0_right (t4 ** t5)) in H9.
-      replace (((t4 ** t5) ** E0) ** t')
-         with ((t4 ** t5) ** t')
-           in H9.
-      apply app_inv_head in H9. auto.
-      * rewrite E0_right. reflexivity.
-    + subst.
-      admit.
-    + admit.
 Admitted.
 
 Corollary state_determinism_starN:
   forall p ctx n sps t sps' sps'',
     starN (kstep p ctx) (prepare_global_env p) n sps t sps' ->
     starN (kstep p ctx) (prepare_global_env p) n sps t sps'' ->
-    sps' = sps''.
+    sps' = sps'' \/
+    (exists m,
+      starN (kstep p ctx) (prepare_global_env p) m sps' E0 sps'' /\ sps' <> sps'') \/
+    (exists m,
+      starN (kstep p ctx) (prepare_global_env p) m sps'' E0 sps' /\ sps' <> sps'').
 Proof.
   intros p ctx n sps t sps' sps''.
   intros HstarN1 HstarN2.
-  dependent induction n.
-  - inversion HstarN1; inversion HstarN2; subst.
-    repeat split.
-  - inversion HstarN1; inversion HstarN2; subst.
-    enough (t2 = t5). enough (t1 = t4). subst.
-    pose proof (state_determinism H0 H7). subst.
-    apply (IHn s'0 t5 sps' sps'' H1 H8).
-    + subst. apply app_inv_tail in H9. auto.
-    + pose proof singleton_traces H0.
-      pose proof singleton_traces H7.
-      inversion H; subst.
-      * inversion H2; subst.
-        ** do 2 (destruct t1; simpl in *; try discriminate).
-           do 2 (destruct t4; simpl in *; try discriminate).
-           inversion H9. reflexivity.
-        ** inversion H5; subst.
-           do 2 (destruct t1; simpl in *; try discriminate).
-           destruct t4; simpl in *; try discriminate.
-           rewrite <- H9 in H8.
-           (* case analysis on who has control in the first step *)
-           destruct (is_context_component sps ctx) eqn:Hctx.
-           *** (* context in control *)
-               (* epsilon step is silent
-                  contra, number of steps from sps to sps'' *)
-               assert (H7' := H7).
-               apply context_epsilon_step_is_silent in H7'; auto.
-               subst.
-               admit.
-           *** (* program in control *)
-               (* contra because of determinism ([e] = []) *)
-               assert (Hprog: is_program_component sps ctx). {
-                 PS.simplify_turn. unfold negb. rewrite Hctx. auto.
-               }
-               destruct (state_determinism_program' Hprog H0 H7).
-               discriminate.
-      * inversion H4.
-        inversion H2; subst.
-        ** destruct t1; simpl in *; try discriminate.
-           do 2 (destruct t4; simpl in *; try discriminate).
-           rewrite H9 in H1.
-           (* case analysis on who has control in the first step *)
-           destruct (is_context_component sps ctx) eqn:Hctx.
-           *** (* context in control *)
-               (* epsilon step is silent
-                  contra, number of steps from sps to sps'' *)
-               apply context_epsilon_step_is_silent in H0; auto.
-               subst.
-               admit.
-           *** (* program in control *)
-               (* contra because of determinism ([e] = []) *)
-               assert (Hprog: is_program_component sps ctx). {
-                 PS.simplify_turn. unfold negb. rewrite Hctx. auto.
-               }
-               destruct (state_determinism_program' Hprog H0 H7).
-               discriminate.
-        ** inversion H6; subst.
-           destruct t1; simpl in *; try discriminate.
-           destruct t4; simpl in *; try discriminate.
-           assumption.
-Admitted.
-
+  rewrite <- (E0_right t) in HstarN2.
+  destruct (state_determinism_starN_with_same_prefix HstarN1 HstarN2) as [[]|[|[m []]]]; subst.
+  - left. reflexivity.
+  - right. left. assumption.
+  - right. right. eexists. eassumption.
+Qed.
 End PS.

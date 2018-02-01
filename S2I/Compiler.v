@@ -383,21 +383,6 @@ Hypothesis separate_compilation:
     compile_program (Source.program_link p c)
     = Some (Intermediate.program_link p_comp c_comp).
 
-(* CH: because of the Somes might also want something of the following form: *)
-(* CH: in general the use of options doesn't make anything simpler,
-   inherited from CompCert *)
-
-Hypothesis separate_compilation':
-  forall p c pc_comp,
-    Source.well_formed_program p ->
-    Source.well_formed_program c ->
-    linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program (Source.program_link p c) = Some pc_comp ->
-    exists p_comp c_comp,
-      compile_program p = Some p_comp /\
-      compile_program c = Some c_comp /\
-      pc_comp = Intermediate.program_link p_comp c_comp.
-
 (* CH: anyway, this is a very strong notion of separate compilation;
    wondering whether in the general case we could do away with something weaker
    (anyway, just a thought for later, current version is simpler): *)
@@ -441,3 +426,10 @@ Proof.
   - apply S.CS.receptiveness.
   - apply I.CS.determinacy.
 Qed.
+
+Theorem well_formed_compilable :
+  forall p,
+    Source.well_formed_program p ->
+  exists pc,
+    compile_program p = Some pc.
+Admitted.

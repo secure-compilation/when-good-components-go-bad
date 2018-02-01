@@ -158,7 +158,7 @@ Section Definability.
   Qed.
 
   Lemma switch_spec_else p' C stk mem b n es e_else :
-    getm (genv_buffers (globalenv (CS.sem p'))) C = Some b ->
+    genv_buffers (globalenv (CS.sem p')) C = Some b ->
     Memory.load mem (C, b, 1%Z) = Some (Int (Z.of_nat n)) ->
     (length es <= n)%nat ->
     Star (CS.sem p')
@@ -398,6 +398,19 @@ Section Definability.
     - by move=> _ _ [<- <-]; rewrite find_procedures_of_trace.
   Qed.
 
+  Lemma closed_program_of_trace t :
+    Source.closed_program (program_of_trace t).
+  Proof.
+    split=> //=.
+    exists mainC, mainP.
+    rewrite /procedures_of_trace mapimE /=.
+    case: main_export=> CI.
+    rewrite /Program.has_component /Component.is_exporting.
+    case=> -> mainP_CI /=.
+    eexists; repeat split; eauto.
+    by rewrite domm_mkfmapf in_fset.
+  Qed.
+
   Arguments Memory.load  : simpl nomatch.
   Arguments Memory.store : simpl nomatch.
 
@@ -505,37 +518,37 @@ Section Definability.
         now rewrite Z.add_0_r.
     Qed.
 
-    Definition well_formed_state
-               (s: stack_state) (prefix suffix: trace) (cs: CS.state) : Prop :=
-      let '(C, stk, mem, k, exp) := cs in
-      well_bracketed_trace s suffix /\
-      All well_formed_event suffix /\
-      C = cur_comp s /\
-      well_formed_stack s stk /\
-      well_formed_memory prefix mem /\
-      k = Kstop /\
-      exists P,
-        exported_procedure intf C P /\
-        exp = procedure_of_trace C P t.
-
-    (* AAA: We could probably refine this result and require that [cs'] be a final state. *)
+    CoInductive well_formed_state (s: stack_state) (prefix suffix: trace) : CS.state -> Prop :=
+    | WellFormedState C stk mem k exp P
+      of C = cur_comp s
+      &  k = Kstop
+      &  exp = procedure_of_trace C P t
+      &  well_bracketed_trace s suffix
+      &  All well_formed_event suffix
+      &  well_formed_stack s stk
+      &  well_formed_memory prefix mem
+      &  exported_procedure intf C P
+      :  well_formed_state s prefix suffix (C, stk, mem, k, exp).
 
     Lemma definability_gen s prefix suffix cs :
       t = prefix ++ suffix ->
       well_formed_state s prefix suffix cs ->
-      exists cs', Star (CS.sem p) cs suffix cs'.
+      exists2 cs', Star (CS.sem p) cs suffix cs' &
+                   CS.final_state cs'.
     Proof.
-      assert (Eintf : genv_interface (prepare_global_env p) = intf).
-      { unfold prepare_global_env. now destruct (prepare_buffers p). }
-      assert (Eprocs : genv_procedures (prepare_global_env p) = prog_procedures p).
-      { unfold prepare_global_env. now destruct (prepare_buffers p). }
-      revert s prefix cs.
-      induction suffix as [|e suffix IH].
-      - intros s prefix cs _ _. exists cs. apply star_refl.
-      - intros [C callers] prefix [[[[C_ stk] mem] k] exp] Et. simpl.
-        intros ([wf_C wb_suffix] & [wf_e wf_suffix] & ? & wf_stk & wf_mem & ? &
-                P & P_exp & ?).
-        subst C_ k exp.
+      have Eintf : genv_interface (prepare_global_env p) = intf by [].
+      have Eprocs : genv_procedures (prepare_global_env p) = prog_procedures p by [].
+      elim: suffix s prefix cs=> [|e suffix IH] /= [C callers] prefix.
+      - rewrite cats0 => cs <- {prefix}.
+        case: cs / => /= _ stk mem _ _ P -> -> -> _ _ wf_stk wf_mem P_exp.
+        exists (C, stk, mem, Kstop, E_exit); last by left.
+        have [b C_b] := exported_procedure_has_block P_exp.
+        have [C_local _] := wf_mem _ _ C_b.
+        rewrite /procedure_of_trace /expr_of_trace.
+        apply: switch_spec_else; eauto.
+        rewrite -> size_map; reflexivity.
+      - move=> cs Et /=.
+        case: cs / => /= _ stk mem _ _ P -> -> -> [wf_C wb_suffix] [wf_e wf_suffix] wf_stk wf_mem P_exp.
         destruct (exported_procedure_has_block P_exp) as [b C_b].
         destruct (wf_mem _ _ C_b) as [C_local _].
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
@@ -585,14 +598,12 @@ Section Definability.
               unfold Component.id, Block.id in *. rewrite Hv.
               generalize C'_b'. unfold component_buffer, Block.id. intros ->.
               simpl in Hmem'. now rewrite Hmem'.
-            + do 4 (split; trivial).
+            + econstructor; trivial.
               { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
                 eexists []; eexists; simpl; split; eauto.
                 split; trivial.
                 eexists v, P, top, bot.
                 do 3 (split; trivial). }
-              do 2 (split; trivial).
-              exists P'; split; trivial.
               apply (closed_intf Himport).
           - rename wf_e into C_ne_C'.
             destruct callers as [|C'_ callers]; try easy.
@@ -620,10 +631,8 @@ Section Definability.
                    unfold component_buffer, Component.id, Block.id in *. simpl in *.
                    now rewrite C'_b' (Memory.load_after_store_eq _ _ _ _ Hmem') Hmem''.
                 -- now rewrite E0_right.
-              * do 4 (split; trivial).
-                { exists ((C', saved, Kstop) :: top), bot. simpl. eauto. }
-                do 2 (split; trivial).
-                exists P'. split; trivial.
+              * econstructor; trivial.
+                exists ((C', saved, Kstop) :: top), bot. simpl. eauto.
             + intros mem wf_mem.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
               specialize (IHtop Htop).
@@ -639,44 +648,36 @@ Section Definability.
               * reflexivity. }
         destruct Star2 as (s' & cs' & Star2 & wf_cs').
         specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
-        specialize (IH Et wf_cs'). destruct IH as [cs'' Star3].
-        exists cs''.
+        specialize (IH Et wf_cs'). destruct IH as [cs'' Star3 final].
+        exists cs''; trivial.
         eapply (star_trans Star1); simpl; eauto.
         now eapply (star_trans Star2); simpl; eauto.
     Qed.
 
-    Lemma definability cs :
+    Lemma definability :
       well_formed_trace t ->
-      initial_state (CS.sem p) cs ->
-      exists cs', Star (CS.sem p) cs t cs'.
+      program_behaves (CS.sem p) (Terminates t).
     Proof.
-      intros wf_t init_cs.
-      enough (H : well_formed_state (StackState mainC []) [] t cs).
-      { apply (@definability_gen _ [] t _ erefl H). }
-      destruct cs as [[[[C stk] mem] k] e].
-      destruct wf_t as [wb_t wf_t_events].
-      do 2 (split; trivial).
-      unfold initial_state in init_cs. simpl in *.
-      unfold CS.initial_state, CS.initial_machine_state in init_cs.
-      simpl in init_cs.
-      rewrite (find_procedures_of_trace _ main_export) in init_cs.
-      inversion init_cs; subst C stk mem k e; clear init_cs.
-      do 2 (split; trivial).
-      { exists [], []. now repeat (split; trivial). }
-      split.
-      { intros C b.
-        unfold component_buffer, CS.prepare_initial_memory, Memory.load.
-        simpl. repeat (rewrite mapmE; simpl).
-        destruct (intf C) as [Cint|] eqn:HCint; try easy. simpl.
-        intros H. inversion H; subst b; clear H.
-        rewrite ComponentMemory.load_prealloc. simpl.
-        split; trivial.
-        exists (Int 0).
-        now rewrite ComponentMemory.load_prealloc. }
+      move=> wf_t; eapply program_runs=> /=; try reflexivity.
+      pose cs := CS.initial_machine_state p.
+      suffices H : well_formed_state (StackState mainC [::]) [::] t cs.
+        have [cs' run_cs final_cs'] := @definability_gen _ [::] t _ erefl H.
+        by econstructor; eauto.
+      case: wf_t => wb_t wf_t_events.
+      rewrite /cs /CS.initial_machine_state /= find_procedures_of_trace //.
+      econstructor; eauto.
+        exists [::], [::]. by do ![split; trivial].
+      intros C b.
+      unfold component_buffer, CS.prepare_initial_memory, Memory.load.
+      simpl. repeat (rewrite mapmE; simpl).
+      destruct (intf C) as [Cint|] eqn:HCint; try easy. simpl.
+      intros H. inversion H; subst b; clear H.
+      rewrite ComponentMemory.load_prealloc. simpl.
       split; trivial.
-      exists mainP.
-      now split; trivial.
+      exists (Int 0).
+      by rewrite ComponentMemory.load_prealloc.
     Qed.
+
 End WithTrace.
 End Definability.
 

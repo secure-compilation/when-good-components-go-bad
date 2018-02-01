@@ -843,11 +843,6 @@ Section MultiSemantics.
     - constructor; auto.
   Qed.
 
-  Lemma intermediate_program_link_sym:
-    program_link c p = program_link p c.
-  Proof.
-  Admitted.
-
   Lemma multi_match_final_states:
     forall ms ips,
       multi_match ms ips ->
@@ -908,7 +903,9 @@ Section MultiSemantics.
         replace (program_link p c) with (program_link c p).
         eapply execution_invariant_to_linking; eauto.
         * apply linkable_sym. auto.
-        * apply intermediate_program_link_sym.
+        * rewrite Intermediate.link_sym.
+          ** reflexivity.
+          ** rewrite <- H3. auto.
       + PS.simplify_turn. rewrite H3 in H2. discriminate.
   Qed.
 
@@ -920,8 +917,6 @@ Section MultiSemantics.
     exists ips',
       PS.step prog emptym (prepare_global_env prog) ips t ips' /\ multi_match ms' ips'.
   Proof.
-  Admitted.
-    (*
     intros ms t ms' Hstep.
     intros ips Hmatch.
 
@@ -958,7 +953,7 @@ Section MultiSemantics.
         * admit.
 
     - (* prove match *) admit.
-      *)
+  Admitted.
 
   Theorem merged_prog_simulates_multisem:
     forward_simulation msem (PS.sem prog emptym).
