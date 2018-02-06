@@ -123,6 +123,41 @@ Proof.
   eapply star_forever_reactive; eauto.
 Qed.
 
+Lemma state_behaves_app_inv:
+  Atomic L ->
+  forall s1 t beh,
+    state_behaves s1 (behavior_app t beh) ->
+  exists s2, Star L s1 t s2 /\ state_behaves s2 beh.
+Proof.
+  intros HL s1 t beh H.
+  remember (behavior_app t beh) as beh' eqn:E.
+  destruct H as [t' s s1_s final_s|t' s s1_s silent|t' reacts|t' s Hstar Hstuck1 Hstuck2].
+  - destruct beh as [t''| | |]; simpl in E; try discriminate.
+    inv E.
+    apply star_app_inv in s1_s; trivial.
+    destruct s1_s as [s2 [s1_s2 s2_s]].
+    exists s2; split; trivial.
+    now econstructor; eauto.
+  - destruct beh as [|t''| |]; simpl in E; try discriminate.
+    inv E.
+    apply star_app_inv in s1_s; trivial.
+    destruct s1_s as [s2 [s1_s2 s2_s]].
+    exists s2; split; trivial.
+    now econstructor; eauto.
+  - destruct beh as [| |t''|]; simpl in E; try discriminate.
+    inv E.
+    apply forever_reactive_app_inv in reacts; trivial.
+    destruct reacts as [s2 [Hstar Hforever]].
+    exists s2; split; trivial.
+    now econstructor.
+  - destruct beh as [| | |t'']; simpl in E; try discriminate.
+    inv E.
+    apply star_app_inv in Hstar; trivial.
+    destruct Hstar as [s2 [Hstar1 Hstar2]].
+    exists s2; split; trivial.
+    now econstructor; eauto.
+Qed.
+
 (** * Existence of behaviors *)
 
 Section TRACEINF_REACTS.
@@ -355,7 +390,7 @@ Proof.
   split. exists b2; auto.
   split. auto.
   split. red; intros; red; intros. elim Q. exists t; exists s'0; auto.
-  intros; red; intros. elim P. auto. 
+  intros; red; intros. elim P. auto.
 Qed.
 
 Lemma backward_simulation_star:

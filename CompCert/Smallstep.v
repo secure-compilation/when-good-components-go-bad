@@ -68,6 +68,47 @@ Proof.
   intros. eapply star_trans. eauto. apply star_one. eauto. auto.
 Qed.
 
+Definition atomic ge :=
+  forall s t s', step ge s t s' ->
+  t = E0 \/ exists e, t = cons e nil.
+
+Lemma star_app_inv ge :
+  atomic ge ->
+  forall s1 t1 t2 s2,
+    star ge s1 (t1 ** t2) s2 ->
+  exists s, star ge s1 t1 s /\ star ge s t2 s2.
+Proof.
+  intros Hatomic s1 t1 t2 s2 Hstar.
+  remember (t1 ** t2) as t eqn:E.
+  revert t1 t2 E.
+  induction Hstar as [s|s1 t1' s1' t2' s t' Hstep Hstar IH e].
+  - intros t1 t2 E.
+    assert (E' : t1 = E0 /\ t2 = E0).
+    { destruct t1 as [|??]; try discriminate.
+      split; eauto. }
+    destruct E'; subst t1 t2; clear E.
+    exists s; split; apply star_refl.
+  - intros t1 t2 E.
+    destruct (Hatomic _ _ _ Hstep) as [H|[ev ?]].
+    + subst t1'. simpl in e. subst t2'.
+      destruct (IH _ _ E) as [s' [H1 H2]].
+      exists s'.
+      split; trivial.
+      now eapply star_step; eauto.
+    + subst t1'. simpl in e.
+      destruct t1 as [|ev' t1'].
+      * simpl in E. subst t' t2.
+        exists s1.
+        split; try apply star_refl.
+        eapply star_step; eauto.
+      * simpl in E. subst t'.
+        inv E.
+        destruct (IH _ _ eq_refl) as [s' [Hstar1 Hstar2]].
+        exists s'.
+        split; trivial.
+        eapply star_step; eauto.
+Qed.
+
 Lemma star_E0_ind:
   forall ge (P: state -> state -> Prop),
   (forall s, P s s) ->
@@ -437,6 +478,32 @@ Proof.
   auto.
 Qed.
 
+Lemma forever_reactive_app_inv (ge: genv) :
+  atomic ge ->
+  forall s1 t T,
+    forever_reactive ge s1 (t *** T) ->
+  exists s2, star ge s1 t s2 /\ forever_reactive ge s2 T.
+Proof.
+  intros Hge s1 t T Hforever.
+  remember (t *** T) as T' eqn:E.
+  revert s1 T' E Hforever.
+  induction t as [|ev t IH]; simpl.
+  - intros s1 T' -> Hforever.
+    now exists s1; split; try apply star_refl.
+  - intros s1 T' E Hforever.
+    destruct Hforever as [s1 s2 t' T' Hstar NN Hforever].
+    unfold E0 in NN.
+    destruct t' as [|ev' t']; try congruence.
+    clear NN. inv E.
+    destruct (@star_app_inv _ Hge s1 (ev :: nil) t' s2 Hstar) as [s' [Hstar1 Hstar2]].
+    assert (Hforever' : forever_reactive ge s' (t' *** T')).
+    { eapply star_forever_reactive; eauto. }
+    destruct (IH _ _ H1 Hforever') as [s'' [Hstar3 Hforever'']].
+    exists s''; split; eauto.
+    eapply star_trans; eauto.
+Qed.
+
+
 End CLOSURES.
 
 (** * Transition semantics *)
@@ -458,6 +525,7 @@ Notation " 'Plus' L " := (plus (step L) (globalenv L)) (at level 1) : smallstep_
 Notation " 'Forever_silent' L " := (forever_silent (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Forever_reactive' L " := (forever_reactive (step L) (globalenv L)) (at level 1) : smallstep_scope.
 Notation " 'Nostep' L " := (nostep (step L) (globalenv L)) (at level 1) : smallstep_scope.
+Notation " 'Atomic' L " := (atomic (step L) (globalenv L)) (at level 1) : smallstep_scope.
 
 Open Scope smallstep_scope.
 
