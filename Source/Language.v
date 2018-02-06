@@ -102,8 +102,7 @@ Module Source.
     wfprog_interface_soundness:
       sound_interface (prog_interface p);
     (* there are procedures only for the declared components *)
-    wfprog_well_formed_procedures_1:
-      fsubset (domm (prog_procedures p)) (domm (prog_interface p));
+    wfprog_defined_procedures: domm (prog_interface p) = domm (prog_procedures p);
     (* each exported procedure is actually defined *)
     wfprog_exported_procedures_existence:
       forall C P, exported_procedure (prog_interface p) C P ->
@@ -140,10 +139,7 @@ Module Source.
       fdisjoint (domm (prog_procedures prog1)) (domm (prog_procedures prog2)).
   Proof.
     move=> p1 p2 wf1 wf2 [sound_intf dis].
-    apply: (fdisjoint_trans (wfprog_well_formed_procedures_1 wf1)).
-    rewrite fdisjointC.
-    apply: (fdisjoint_trans (wfprog_well_formed_procedures_1 wf2)).
-    by rewrite fdisjointC.
+    by rewrite -(wfprog_defined_procedures wf1) -(wfprog_defined_procedures wf2).
   Qed.
 
   Theorem linkable_disjoint_buffers :
@@ -161,6 +157,50 @@ Module Source.
     {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
        prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);
        prog_buffers := unionm (prog_buffers p1) (prog_buffers p2) |}.
+
+  Lemma link_sym: forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    program_link p1 p2 = program_link p2 p1.
+  Proof.
+    move=> p1 p2 wf1 wf2 l12; rewrite /program_link.
+    congr mkProg; apply: unionmC.
+    - by case: l12.
+    - by apply: linkable_disjoint_procedures.
+    - by apply: linkable_disjoint_buffers.
+  Qed.
+
+  Definition program_unlink (Cs: {fset Component.id}) (p: program) : program :=
+    {| prog_interface  := filterm (fun C _ => C \in Cs) (prog_interface p);
+       prog_procedures := filterm (fun C _ => C \in Cs) (prog_procedures p);
+       prog_buffers    := filterm (fun C _ => C \in Cs) (prog_buffers p) |}.
+
+  Lemma program_linkKL p1 p2 :
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    program_unlink (domm (prog_interface p1)) (program_link p1 p2) = p1.
+  Proof.
+    case: p1 p2 => [i1 p1 b1] [i2 p2 b2] wf1 wf2 l12.
+    rewrite /program_unlink /program_link /=; congr mkProg;
+    apply/eq_fmap=> C; rewrite filtermE unionmE.
+    - case: l12=> _ /= /fdisjointP/(_ C)/implyP.
+      rewrite mem_domm.
+      by case: (i1 C) (i2 C)=> //= - [|].
+    - have /= /fdisjointP/(_ C)/implyP := linkable_disjoint_procedures wf1 wf2 l12.
+      rewrite -mem_domm.
+      have : C \in domm p1 = (C \in domm p1) by [].
+      rewrite -{-2}(wfprog_defined_procedures wf1) -(wfprog_defined_procedures wf2) /=.
+      rewrite !mem_domm.
+      by case: (i1 C) (p1 C) (p2 C)=> //= [?|] [?|] //= [?|].
+    - have /= /fdisjointP/(_ C)/implyP := linkable_disjoint_buffers wf1 wf2 l12.
+      rewrite -mem_domm.
+      have : C \in domm b1 = (C \in domm b1) by [].
+      rewrite -{-2}(wfprog_defined_buffers wf1) -(wfprog_defined_buffers wf2) /=.
+      rewrite !mem_domm.
+      by case: (i1 C) (b1 C) (b2 C)=> //= [?|] [?|] //= [?|].
+  Qed.
 
   Lemma linkable_programs_has_component p1 p2 :
     linkable (prog_interface p1) (prog_interface p2) ->
@@ -245,7 +285,7 @@ Module Source.
   Proof.
     move=> p1 p2 wf1 wf2 link.
     split; try by case: link.
-    - by case: link => *; rewrite !domm_union fsetUSS // wfprog_well_formed_procedures_1.
+    - by case: link => *; rewrite !domm_union // !wfprog_defined_procedures.
     - move=> C P [CI []].
       rewrite (linkable_programs_has_component link) /= => has_C_CI exp_CI_P.
       rewrite linkable_programs_find_procedure_dom //; apply/orP.
@@ -290,10 +330,8 @@ Module Source.
   Proof.
     move=> p1 p2 wf1 wf2 [_ Hdis] Hclosed.
     have := cprog_main_existence Hclosed.
-    rewrite /find_procedure /= unionmE.
-    have/fsubsetP/(_ Component.main)/implyP := wfprog_well_formed_procedures_1 wf2.
-    have/fsubsetP/(_ Component.main)/implyP := wfprog_well_formed_procedures_1 wf1.
-    rewrite !mem_domm.
+    rewrite /find_procedure /= unionmE -!mem_domm.
+    rewrite !wfprog_defined_procedures // !mem_domm.
     case: (prog_procedures p1 Component.main)=> [main_procs'|] //=; eauto.
     by case: (prog_procedures p2 Component.main)=> [main_procs'|] //=; eauto.
   Qed.
@@ -356,19 +394,11 @@ Module Source.
       C \in domm (prog_interface p1) /\ find_procedure (prog_procedures p1) C P = Some P_expr.
   Proof.
     move=> p1 p2 wf1 wf2 Hlinkable C P P_expr.
-    rewrite linkable_programs_find_procedure // {2}/find_procedure.
-    have/fsubsetP/(_ C)/implyP := (wfprog_well_formed_procedures_1 wf2).
-    rewrite mem_domm.
-    case: (prog_procedures p2 C)=> [C_procs /= ->|] //= _.
-    case=> [C_P _|//]; split=> //.
-    move/fsubsetP: (wfprog_well_formed_procedures_1 wf1); apply.
-    move: C_P; rewrite /find_procedure mem_domm.
-    by case: (prog_procedures p1 C).
+    rewrite linkable_programs_find_procedure // /find_procedure.
+    rewrite !wfprog_defined_procedures //.
+    rewrite !mem_domm; case.
+    - by case: (prog_procedures p1 C); eauto.
+    - by case: (prog_procedures p2 C)=> [C_procs /=|] //= _.
   Qed.
-
-  Lemma link_sym: forall p c,
-      linkable (prog_interface p) (prog_interface c) ->
-      program_link p c = program_link c p.
-  Admitted.
 
 End Source.

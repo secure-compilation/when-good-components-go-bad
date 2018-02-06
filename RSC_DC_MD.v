@@ -246,10 +246,10 @@ Section RSC_DC_MD.
         * subst pCs_beh. assumption.
         * right. exists t'. repeat split; auto.
           (* blame UB -- Guglielmo working on proof *)
-          rewrite Source.link_sym in HpCs_beh; [| assumption].
+          rewrite Source.link_sym in HpCs_beh; try assumption.
           apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
               try assumption.
-          - setoid_rewrite Source.link_sym in HP'_Cs_beh; [|congruence].
+          - setoid_rewrite Source.link_sym in HP'_Cs_beh; trivial; try congruence.
             eapply Source.Decomposition.decomposition_with_refinement in HP'_Cs_beh;
               [| assumption | assumption | congruence].
             destruct HP'_Cs_beh as [beh' [G1 G2]].

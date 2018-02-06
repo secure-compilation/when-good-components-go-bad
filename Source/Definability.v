@@ -356,7 +356,7 @@ Section Definability.
   Proof.
     move=> Ht; split=> //=.
     - exact: closed_interface_is_sound.
-    - by rewrite /procedures_of_trace domm_mapi fsubsetxx.
+    - by rewrite /procedures_of_trace domm_mapi.
     - move=> C P.
       rewrite /exported_procedure /Program.has_component /Component.is_exporting.
       case=> CI [C_CI P_CI].
