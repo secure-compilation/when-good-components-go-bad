@@ -60,11 +60,15 @@ TargetSFI/StateMonad.v
 TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
 TargetSFI/CS.v
+TargetSFI/SFITestUtil.v
 
 I2SFI/CompEitherMonad.v
 I2SFI/CompStateMonad.v
 I2SFI/AbstractMachine.v
 I2SFI/Compiler.v
+I2SFI/CompTestUtil.v
+I2SFI/TestIntermediate.v
+I2SFI/Shrinkers.v
 
 MicroPolicies/Utils.v
 MicroPolicies/Types.v
