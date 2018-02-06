@@ -29,7 +29,7 @@ Section Definability.
 
   Variable intf: Program.interface.
   Variable closed_intf: closed_interface intf.
-  Variable main_export : exported_procedure intf Component.main Procedure.main.
+  Variable has_main: intf Component.main.
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
@@ -262,19 +262,46 @@ Section Definability.
 
   Definition procedures_of_trace (t: trace) : NMap (NMap expr) :=
     mapim (fun C Ciface =>
-             mkfmapf (fun P => procedure_of_trace C P t)
-                     (Component.export Ciface))
+             let procs :=
+                 if C == Component.main then
+                   Procedure.main |: Component.export Ciface
+                 else Component.export Ciface in
+               mkfmapf (fun P => procedure_of_trace C P t) procs)
           intf.
 
-  Lemma find_procedures_of_trace (t: trace) C P :
+  Definition valid_procedure C P :=
+    C = Component.main /\ P = Procedure.main
+    \/ exported_procedure intf C P.
+
+  Lemma find_procedures_of_trace_exp (t: trace) C P :
     exported_procedure intf C P ->
     find_procedure (procedures_of_trace t) C P
     = Some (procedure_of_trace C P t).
   Proof.
     intros [CI [C_CI CI_P]].
     unfold find_procedure, procedures_of_trace.
-    rewrite mapimE C_CI. simpl.
-    now rewrite mkfmapfE CI_P.
+    rewrite mapimE C_CI /= mkfmapfE.
+    case: eqP=> _; last by rewrite CI_P.
+    by rewrite in_fsetU1 CI_P orbT.
+  Qed.
+
+  Lemma find_procedures_of_trace_main (t: trace) :
+    find_procedure (procedures_of_trace t) Component.main Procedure.main
+    = Some (procedure_of_trace Component.main Procedure.main t).
+  Proof.
+    rewrite /find_procedure /procedures_of_trace.
+    rewrite mapimE eqxx.
+    case: (intf Component.main) (has_main)=> [Cint|] //= _.
+    by rewrite mkfmapfE in_fsetU1 eqxx.
+  Qed.
+
+  Lemma find_procedures_of_trace (t: trace) C P :
+    valid_procedure C P ->
+    find_procedure (procedures_of_trace t) C P
+    = Some (procedure_of_trace C P t).
+  Proof.
+    by move=> [[-> ->]|?];
+    [apply: find_procedures_of_trace_main|apply: find_procedures_of_trace_exp].
   Qed.
 
   Definition program_of_trace (t: trace) : program :=
@@ -339,7 +366,7 @@ Section Definability.
     | C :: callers' =>
       exists v P top bot,
       stk = (C, v, Kseq (E_call C P (E_val (Int 0))) Kstop) :: top ++ bot /\
-      exported_procedure intf C P /\
+      valid_procedure C P /\
       All (fun '(C', _, k) => C' = C /\ k = Kstop) top /\
       well_formed_callers callers' bot
     end.
@@ -360,7 +387,7 @@ Section Definability.
     - move=> C P.
       rewrite /exported_procedure /Program.has_component /Component.is_exporting.
       case=> CI [C_CI P_CI].
-      by rewrite /find_procedure /procedures_of_trace mapimE C_CI /= mkfmapfE P_CI.
+      by rewrite find_procedures_of_trace_exp //; exists CI; split; eauto.
     - move=> C P Pexpr.
       rewrite /find_procedure /procedures_of_trace mapimE.
       case intf_C: (intf C)=> [CI|] //=.
@@ -380,10 +407,15 @@ Section Definability.
         rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
         by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
-        by rewrite eqxx find_procedures_of_trace //; exists CI; split.
+        rewrite eqxx find_procedures_of_trace //.
+        move: P_CI; case: eqP intf_C=> [->|_] intf_C.
+          rewrite /valid_procedure.
+          case/fsetU1P=> [->|P_CI]; eauto.
+          by right; exists CI; split.
+        by move=> P_CI; right; exists CI; split.
       rewrite in_fset /= => C'_P'.
       suffices ? : imported_procedure intf C C' P'.
-        by case: eqP => [<-|] //; rewrite find_procedures_of_trace; eauto.
+        by case: eqP => [<-|] //; rewrite find_procedures_of_trace_exp; eauto.
       elim: {P P_CI} t Ht P' C'_P' => [|e t IH] //= [He Ht] P.
       case: (C =P _) => [HC|]; last by eauto.
       case: e HC He=> [_ P' v C'' /= <-|]; last by eauto.
@@ -397,7 +429,7 @@ Section Definability.
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).
   Proof.
-    split=> //=; by rewrite find_procedures_of_trace.
+    split=> //=; by rewrite find_procedures_of_trace_main.
   Qed.
 
   Arguments Memory.load  : simpl nomatch.
@@ -407,18 +439,20 @@ Section Definability.
 
     Variable t : trace.
 
-    Local Definition p    := program_of_trace t.
-    Local Definition init := prepare_buffers p.
+    Let p    := program_of_trace t.
+    Let init := prepare_buffers p.
 
     Local Definition component_buffer C b :=
       genv_buffers (prepare_global_env p) C = Some b.
 
-    Lemma exported_procedure_has_block C P :
-      exported_procedure intf C P ->
+    Lemma valid_procedure_has_block C P :
+      valid_procedure C P ->
       exists b, component_buffer C b.
     Proof.
-      case=> CI.
-      rewrite /Program.has_component /Component.is_exporting /component_buffer /=.
+      case=> [[-> _ {C P}]|[CI]]; rewrite /component_buffer /=.
+        rewrite !mapmE.
+        case: (intf Component.main) (has_main)=> [CI|] //=; by eauto.
+      rewrite /Program.has_component /Component.is_exporting /=.
       by case=> intf_C CI_P; rewrite !mapmE intf_C /=; eauto.
     Qed.
 
@@ -516,7 +550,7 @@ Section Definability.
       &  All well_formed_event suffix
       &  well_formed_stack s stk
       &  well_formed_memory prefix mem
-      &  exported_procedure intf C P
+      &  valid_procedure C P
       :  well_formed_state s prefix suffix (C, stk, mem, k, exp).
 
     Lemma definability_gen s prefix suffix cs :
@@ -531,14 +565,14 @@ Section Definability.
       - rewrite cats0 => cs <- {prefix}.
         case: cs / => /= _ stk mem _ _ P -> -> -> _ _ wf_stk wf_mem P_exp.
         exists (C, stk, mem, Kstop, E_exit); last by left.
-        have [b C_b] := exported_procedure_has_block P_exp.
+        have [b C_b] := valid_procedure_has_block P_exp.
         have [C_local _] := wf_mem _ _ C_b.
         rewrite /procedure_of_trace /expr_of_trace.
         apply: switch_spec_else; eauto.
         rewrite -> size_map; reflexivity.
       - move=> cs Et /=.
         case: cs / => /= _ stk mem _ _ P -> -> -> [wf_C wb_suffix] [wf_e wf_suffix] wf_stk wf_mem P_exp.
-        destruct (exported_procedure_has_block P_exp) as [b C_b].
+        destruct (valid_procedure_has_block P_exp) as [b C_b].
         destruct (wf_mem _ _ C_b) as [C_local _].
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
         assert (Star1 : Star (CS.sem p)
@@ -569,7 +603,7 @@ Section Definability.
           simpl in wf_C, wf_e, wb_suffix; subst C_.
           - case: wf_e => /eqP C_ne_C' Himport.
             exists (StackState C' (C :: callers)).
-            destruct (exported_procedure_has_block (closed_intf Himport)) as [b' C'_b'].
+            destruct (valid_procedure_has_block (or_intror (closed_intf Himport))) as [b' C'_b'].
             destruct (well_formed_memory_store_arg (Int arg) C'_b' wf_mem) as [mem' [Hmem' wf_mem']].
             destruct (wf_mem _ _ C_b) as [_ [v Hv]].
             exists (C', (C, v, Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem',
@@ -581,7 +615,7 @@ Section Definability.
               rewrite (negbTE C_ne_C').
               rewrite -> imported_procedure_iff in Himport. rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
-              rewrite (find_procedures_of_trace t (closed_intf Himport)).
+              rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
               unfold component_buffer in C_b, C'_b'. simpl in C_b, C'_b'.
               rewrite C_b. simpl in Hv.
               unfold Component.id, Block.id in *. rewrite Hv.
@@ -592,8 +626,8 @@ Section Definability.
                 eexists []; eexists; simpl; split; eauto.
                 split; trivial.
                 eexists v, P, top, bot.
-                do 3 (split; trivial). }
-              apply (closed_intf Himport).
+                by do 3 (split; trivial). }
+              right. by apply: (closed_intf Himport).
           - rename wf_e into C_ne_C'.
             destruct callers as [|C'_ callers]; try easy.
             destruct wb_suffix as [HC' wb_suffix].
@@ -604,7 +638,7 @@ Section Definability.
             + clear Htop. rename bot into bot'.
               destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
               subst bot'. simpl.
-              destruct (exported_procedure_has_block P'_exp) as [b' C'_b'].
+              destruct (valid_procedure_has_block P'_exp) as [b' C'_b'].
               intros mem wf_mem.
               destruct (well_formed_memory_store_arg saved   C'_b' wf_mem)  as [mem'  [Hmem' wf_mem']].
               destruct (well_formed_memory_store_arg (Int 0) C'_b' wf_mem') as [mem'' [Hmem'' wf_mem'']].
@@ -653,13 +687,13 @@ Section Definability.
         have [cs' run_cs final_cs'] := @definability_gen _ [::] t _ erefl H.
         by econstructor; eauto.
       case: wf_t => wb_t wf_t_events.
-      rewrite /cs /CS.initial_machine_state /= find_procedures_of_trace //.
-      econstructor; eauto.
+      rewrite /cs /CS.initial_machine_state /= find_procedures_of_trace_main //.
+      econstructor; eauto; last by left; eauto.
         exists [::], [::]. by do ![split; trivial].
       intros C b.
       unfold component_buffer, CS.prepare_initial_memory, Memory.load.
       simpl. repeat (rewrite mapmE; simpl).
-      destruct (intf C) as [Cint|] eqn:HCint; try easy. simpl.
+       destruct (intf C) as [Cint|] eqn:HCint; try easy. simpl.
       intros H. inversion H; subst b; clear H.
       rewrite ComponentMemory.load_prealloc. simpl.
       split; trivial.
@@ -748,4 +782,8 @@ Lemma definability_with_linking:
     Source.closed_program (Source.program_link p' c') /\
     program_behaves (S.CS.sem (Source.program_link p' c')) b' /\
     behavior_prefix m b'.
+Proof.
+  move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre.
+  pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
+  have Hclosed_intf : closed_interface intf by case: Hclosed.
 Admitted.

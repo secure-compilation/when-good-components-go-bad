@@ -202,6 +202,17 @@ Module Source.
       by case: (i1 C) (b1 C) (b2 C)=> //= [?|] [?|] //= [?|].
   Qed.
 
+  Lemma program_linkKR p1 p2 :
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    program_unlink (domm (prog_interface p2)) (program_link p1 p2) = p2.
+  Proof.
+    move=> wf1 wf2 l12.
+    rewrite link_sym // program_linkKL //.
+    exact: linkable_sym.
+  Qed.
+
   Lemma linkable_programs_has_component p1 p2 :
     linkable (prog_interface p1) (prog_interface p2) ->
     forall C CI,
