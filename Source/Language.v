@@ -43,16 +43,8 @@ Module Source.
   Record program : Type := mkProg {
     prog_interface : Program.interface;
     prog_procedures : NMap (NMap expr);
-    prog_buffers : NMap (nat + list value);
-    prog_main : option (Component.id * Procedure.id)
+    prog_buffers : NMap (nat + list value)
   }.
-
-  (* useful function on closed programs *)
-  Definition main_comp (p: Source.program): Component.id :=
-    match prog_main p with
-    | Some (mainC, _) => mainC
-    | None => 0
-    end.
 
   (** Lookup definition of procedure [C.P] in the map [procs]. *)
   Definition find_procedure
@@ -126,12 +118,7 @@ Module Source.
     (* each component's buffer is well formed *)
     wfprog_well_formed_buffers:
       forall C, prog_interface p C ->
-                has_required_local_buffers p C;
-    (* if the main component exists, then the main procedure must exist as well *)
-    wfprog_main_existence:
-      forall mainC mainP,
-        prog_main p = Some (mainC, mainP) ->
-        find_procedure (prog_procedures p) mainC mainP
+                has_required_local_buffers p C
   }.
 
   (* a closed program is a program with a closed interface and an existing main
@@ -142,9 +129,7 @@ Module Source.
       closed_interface (prog_interface p);
     (* the main procedure must exist *)
     cprog_main_existence:
-      exists mainC mainP main_procs,
-        prog_main p = Some (mainC, mainP) /\
-        prog_procedures p mainC = Some main_procs /\ mainP \in domm main_procs
+      find_procedure (prog_procedures p) Component.main Procedure.main
   }.
 
   Theorem linkable_disjoint_procedures :
@@ -172,31 +157,10 @@ Module Source.
     by rewrite (wfprog_defined_buffers wf1) (wfprog_defined_buffers wf2).
   Qed.
 
-  (* AAA: I think this does not follow from the definition of linkable, because
-     there is nothing in the interface that talks about main.  We might have to
-     add linkable_mains into the definition of linkable. *)
-  Theorem linkable_disjoint_mains :
-    forall prog1 prog2,
-      well_formed_program prog1 ->
-      well_formed_program prog2 ->
-      linkable (prog_interface prog1) (prog_interface prog2) ->
-      linkable_mains (prog_main prog1) (prog_main prog2).
-  Proof.
-    move=> p1 p2 wf1 wf2 [sound dis]; rewrite /linkable_mains.
-    case p1_main: (prog_main p1)=> [[mainC mainP]|] //=.
-    move/(wfprog_main_existence wf1) in p1_main.
-    have {p1_main} p1_main: mainC \in domm (prog_procedures p1).
-      move: p1_main; rewrite mem_domm /find_procedure.
-      by case: (prog_procedures p1 mainC).
-    move/fsubsetP/(_ _ p1_main): (wfprog_well_formed_procedures_1 wf1)=> {p1_main} p1_main.
-    move/fdisjointP/(_ _ p1_main): dis.
-  Admitted.
-
   Definition program_link (p1 p2: program) : program :=
     {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
        prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);
-       prog_buffers := unionm (prog_buffers p1) (prog_buffers p2);
-       prog_main := main_link (prog_main p1) (prog_main p2) |}.
+       prog_buffers := unionm (prog_buffers p1) (prog_buffers p2) |}.
 
   Lemma linkable_programs_has_component p1 p2 :
     linkable (prog_interface p1) (prog_interface p2) ->
@@ -313,13 +277,6 @@ Module Source.
       rewrite -mem_domm domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
         by rewrite mem_domm; case/wf1=> [? ->] /=; eauto.
       by rewrite mem_domm; case/wf2=> [? ->] /=; eauto.
-    - move=> mainC mainP; rewrite /= /main_link /=.
-      move: (linkable_disjoint_mains wf1 wf2 link).
-      rewrite /linkable_mains.
-      rewrite linkable_programs_find_procedure_dom //.
-      case Hp1: (prog_main p1)=> [main|] //=.
-        by move=> _ [?]; subst main; rewrite (wfprog_main_existence wf1).
-      by move=> ??; rewrite (wfprog_main_existence wf2) ?orbT.
   Qed.
 
   Lemma linked_programs_main_component_origin:
@@ -328,19 +285,17 @@ Module Source.
       well_formed_program p2 ->
       linkable (prog_interface p1) (prog_interface p2) ->
       closed_program (program_link p1 p2) ->
-      main_comp (program_link p1 p2) \in domm (prog_interface p1) \/
-      main_comp (program_link p1 p2) \in domm (prog_interface p2).
+      Component.main \in domm (prog_interface p1) \/
+      Component.main \in domm (prog_interface p2).
   Proof.
     move=> p1 p2 wf1 wf2 [_ Hdis] Hclosed.
-    have [mainC [mainP [main_procs []]]] := cprog_main_existence Hclosed.
-    rewrite /program_link /main_comp /= unionmE => ->.
-    (*move/fdisjointP/(_ mainC)/implyP: Hdis.*)
-    have/fsubsetP/(_ mainC)/implyP := wfprog_well_formed_procedures_1 wf2.
-    have/fsubsetP/(_ mainC)/implyP := wfprog_well_formed_procedures_1 wf1.
+    have := cprog_main_existence Hclosed.
+    rewrite /find_procedure /= unionmE.
+    have/fsubsetP/(_ Component.main)/implyP := wfprog_well_formed_procedures_1 wf2.
+    have/fsubsetP/(_ Component.main)/implyP := wfprog_well_formed_procedures_1 wf1.
     rewrite !mem_domm.
-    case: (prog_procedures p1 mainC)=> [main_procs'|] //=; eauto.
-    case: (prog_procedures p2 mainC)=> [main_procs'|] //=; eauto.
-    by move=> _ _ [].
+    case: (prog_procedures p1 Component.main)=> [main_procs'|] //=; eauto.
+    by case: (prog_procedures p2 Component.main)=> [main_procs'|] //=; eauto.
   Qed.
 
   Lemma interface_preserves_closedness_l :

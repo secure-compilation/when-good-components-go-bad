@@ -40,23 +40,25 @@ Module NatMapFacts := NatMapExtra.F.
 
 Module ListUtil.
 
+  (* FIXME: This already exists in the standard library as nth_error *)
   Fixpoint get {A:Type} (pos:nat) (l : list A) : option A :=
-    match (pos,l) with
-    | (O, x::_) => Some x
-    | (_,nil) => None
-    | (S pos',_::ls) => get pos' ls
+    match pos, l with
+    | O, x::_ => Some x
+    | _, nil => None
+    | S pos',_::ls => get pos' ls
     end.
 
   (* TODO: I would like to avoid passing eqb *)
+  (* AAA: This can be fixed by using fmap in CoqUtils *)
   Fixpoint get_by_key {K V:Type} (eqb : K->K->bool) (k : K)
            (l : list (K*V)) : option V :=
     match l with
     | nil  => None
-    | (k1,v1)::ls => 
+    | (k1,v1)::ls =>
      if (eqb k k1) then (Some v1)
      else (get_by_key eqb k ls)
     end.
-   
+
 End ListUtil.
 
 
@@ -79,7 +81,7 @@ Module Log.
   end.
 
 Close Scope char_scope.
-  
+
 
   Definition log_nat (n : nat) : string :=
   let fix log_nat_aux (time n : nat) (acc : string) : string :=
@@ -99,5 +101,5 @@ Close Scope char_scope.
 
    Definition log_pos (n : positive) : string :=
     log_nat (Pos.to_nat n).
-  
+
 End Log.

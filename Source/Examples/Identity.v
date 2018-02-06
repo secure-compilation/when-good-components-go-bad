@@ -8,14 +8,15 @@ Import Source.
 
 Definition identity : program := {|
   prog_interface :=
-    mkfmap [(1, {| Component.import := fset [];
-                   Component.export := fset [] |})];
+    mkfmap [(Component.main,
+             {| Component.import := fset [];
+                Component.export := fset [] |})];
   prog_buffers :=
-    mkfmap [(1, inl 1)];
+    mkfmap [(Component.main, inl 1)];
   prog_procedures :=
-    mkfmap [(1, mkfmap [(1, E_call 1 2 (E_val (Int 42)));
-                        (2, E_deref E_local)])];
-  prog_main := Some (1, 1)
+    mkfmap [(Component.main,
+             mkfmap [(Procedure.main, E_call Component.main 1 (E_val (Int 42)));
+                     (1, E_deref E_local)])]
 |}.
 
 Definition fuel := 1000.

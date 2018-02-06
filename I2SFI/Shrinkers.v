@@ -42,7 +42,7 @@ Definition proc_eqb (p1 : Procedure) (p2 : Procedure) : bool :=
 Definition nodeGetCid (v : Node) : Component.id :=
   fst (fst (fst v)).
 
-Definition nodeGetPid (v : Node) : Procedure.id := 
+Definition nodeGetPid (v : Node) : Procedure.id :=
   snd (fst (fst v)).
 
 Definition nodeGetProcedure (v : Node) : Procedure :=
@@ -75,13 +75,13 @@ Definition buildCallGraph (ip : Intermediate.program) : CallGraph :=
           (sz : nat) := (* sz is a decreasing parameter for termination check *)
       match sz with
       | O => acc
-      | S sz' => 
+      | S sz' =>
         match wklst with
         | nil => acc
         | (p,depth) :: xs =>
           if existsb p acc
           then worker xs acc sz'
-          else 
+          else
             (* process p *)
             match getm (Intermediate.prog_procedures ip) (fst p) with
             | None => acc
@@ -109,7 +109,7 @@ Definition buildCallGraph (ip : Intermediate.program) : CallGraph :=
       end in
   match Intermediate.prog_main ip with
   | None => nil
-  | Some p => worker [(p,0%nat)] nil (size ip)
+  | Some p => worker [(Component.main,p,0%nat)] nil (size ip)
   end.
 
 Definition  shrinkNode (pn:Node) : (list (list Procedure)) :=
@@ -136,7 +136,7 @@ Definition shrinkCallGraph (main : Procedure)  (cg : CallGraph) : (list CallGrap
           (sz : nat) := (* sz is a decreasing parameter for termination check *)
       match sz with
       | O => [acc]
-      | S sz' => 
+      | S sz' =>
         match wklst with
         | nil => [acc]
         | p :: xs =>
@@ -149,14 +149,14 @@ Definition shrinkCallGraph (main : Procedure)  (cg : CallGraph) : (list CallGrap
             | Some n =>
               let depth := nodeGetDepth n in
               let calls := nodeGetCallList n in
-              if Nat.ltb depth DEPTH 
+              if Nat.ltb depth DEPTH
               then (* this node can be shrunk*)
                 (* shrink the node and not the procedures it calls *)
                 ((List.flat_map
                     ( fun (newCallList : list Procedure) =>
                         worker
                           xs  (* worklist *)
-                          (* accumulator : add all procedures in newCallList 
+                          (* accumulator : add all procedures in newCallList
                              that are not already in *)
                           (List.fold_left
                              (fun acc' p' =>
@@ -170,7 +170,7 @@ Definition shrinkCallGraph (main : Procedure)  (cg : CallGraph) : (list CallGrap
                              )
                              newCallList
                              (acc ++ [(p,depth,newCallList)])
-                          ) 
+                          )
                           cg sz'
                     )
                     (shrinkNode n))
@@ -228,9 +228,9 @@ Definition buildInterface (components : list Component.id)
                               else acc'
                            ) cg nil
                        ) in
-        
+
         let newcint := Component.mkCompInterface (list2fset newExport)
-                                                 (list2fset newImport) 
+                                                 (list2fset newImport)
         in
         setm acc cid newcint
     )
@@ -278,8 +278,8 @@ Definition buildProcedures (components : list Component.id)
 
   mapm
     ( fun pmaps =>
-  
-  
+
+
         let declared :=
             List.fold_left
               (fun acc '(pid,li) =>
@@ -291,7 +291,7 @@ Definition buildProcedures (components : list Component.id)
                       end) li acc
               ) (elementsm pmaps) nil
         in
-        
+
         mapm
           (fun li =>
              List.map
@@ -306,7 +306,7 @@ Definition buildProcedures (components : list Component.id)
                     then i
                     else INop
                   | _ => i
-                  end) li 
+                  end) li
           ) pmaps
     )
     all_code
@@ -325,7 +325,7 @@ Definition buildBuffers (components : list Component.id)
     )
     components
     emptym.
-  
+
 Definition buildIntermediateProgram (cg : CallGraph)
            (ip : Intermediate.program) : Intermediate.program :=
   let components := getComponents cg in
@@ -340,12 +340,12 @@ Definition list_eqb {A : Type} (eqb : A -> A -> bool) (l1 l2 : list A) : bool :=
   andb
     (List.fold_left
        (
-         fun acc x => andb (List.existsb (eqb x) l1) acc 
+         fun acc x => andb (List.existsb (eqb x) l1) acc
        )
        l2 true)
     (List.fold_left
        (
-         fun acc x => andb (List.existsb (eqb x) l2) acc 
+         fun acc x => andb (List.existsb (eqb x) l2) acc
        )
        l1 true).
 
@@ -354,7 +354,7 @@ Definition interface_contained (small : Program.interface)
   List.fold_left
     (fun acc '(cid,cint) =>
        if acc
-       then 
+       then
          match getm big cid with
          | None => false
          | Some bigCint =>
@@ -373,18 +373,17 @@ Instance shrinkIntermediateProgram : Shrink Intermediate.program :=
       fun ip =>
         match Intermediate.prog_main ip with
         | None => nil
-        | Some main =>
-          (* must deal with the case the program represented by 
-             the call graph is already smallest and not the same 
+        | Some mainP =>
+          (* must deal with the case the program represented by
+             the call graph is already smallest and not the same
              as the original *)
           let cg := buildCallGraph ip in
           let newip := buildIntermediateProgram cg ip in
-          let newCallGraphs := shrinkCallGraph main cg in
+          let newCallGraphs := shrinkCallGraph (Component.main, mainP) cg in
           let shrinked := List.map (fun ncg => buildIntermediateProgram ncg ip) newCallGraphs in
           if interface_contained (Intermediate.prog_interface ip)
                (Intermediate.prog_interface newip)
-          then shrinked            
+          then shrinked
           else newip::shrinked
         end
   |}.
-

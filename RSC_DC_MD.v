@@ -53,7 +53,7 @@ Section RSC_DC_MD.
       (behavior_prefix m beh \/
       (exists t',
         beh = Goes_wrong t' /\ trace_prefix t' m /\
-         undef_in (Source.main_comp (Source.program_link p Cs)) t' (Source.prog_interface p))).
+         undef_in Component.main t' (Source.prog_interface p))).
   Proof.
     intros t m Hbeh Hprefix0 Hsafe_beh.
 
@@ -276,10 +276,9 @@ Section RSC_DC_MD.
                 - now eapply H0.
                 - assumption.
             + destruct H2 as [t'' [H21 [H22 H23]]].
-              subst pCs_beh. injection H21; intro H21'. subst t''.
-              setoid_rewrite Source.link_sym; assumption.
+              subst pCs_beh. injection H21; intro H21'. subst t''. assumption.
           - now apply linkable_sym.
           - setoid_rewrite <- Source.link_sym; assumption.
  Qed.
-  
+
 End RSC_DC_MD.

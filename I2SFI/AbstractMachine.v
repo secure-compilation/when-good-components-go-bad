@@ -8,7 +8,7 @@ Require Import Common.Definitions.
 Require Import Intermediate.Machine.
 Require Import TargetSFI.Machine.
 
-Definition label :Set := positive*N.
+Definition label :Set := N*N.
 
 (*Definition register := RiscMachine.Register.t.*)
 
@@ -32,8 +32,7 @@ Inductive ainstr :=
 
 Definition code := list ainstr.
 
-Definition lcode : Set := list ((option (list AbstractMachine.label)) *
-                                AbstractMachine.ainstr).
+Definition lcode : Set := list ((option (list label)) * ainstr).
 
 Definition map_register (reg : Intermediate.Machine.register) : RiscMachine.Register.t :=
   match reg with
@@ -57,7 +56,7 @@ Definition map_binop (op : Common.Values.binop) : RiscMachine.ISA.binop :=
 Definition label_eqb (l1 l2 : label) :=
   let '(c1,i1) := l1 in
   let '(c2,i2) := l2 in
-  (Pos.eqb c1 c2) && (N.eqb i1 i2).
+  (N.eqb c1 c2) && (N.eqb i1 i2).
 
 Definition label_eq_dec:
   forall l1 l2 : label,  {l1 = l2} + {l1 <> l2}.

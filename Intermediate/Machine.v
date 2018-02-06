@@ -116,14 +116,8 @@ Record program := mkProg {
   prog_interface: Program.interface;
   prog_procedures: NMap (NMap code);
   prog_buffers: NMap {fmap Block.id -> nat + list value};
-  prog_main: option (Component.id * Procedure.id)
+  prog_main: option Procedure.id
 }.
-
-Definition main_comp (p: Intermediate.program): Component.id :=
-  match prog_main p with
-  | Some (mainC, _) => mainC
-  | None => 0
-  end.
 
 (* well-formedness of programs *)
 
@@ -193,10 +187,10 @@ Record well_formed_program (p: program) := {
     fsubset (domm (prog_buffers p)) (domm (prog_interface p));
   (* if the main component exists, then the main procedure must exist as well *)
   wfprog_main_existence:
-    forall mainC mainP,
-      prog_main p = Some (mainC, mainP) ->
+    forall mainP,
+      prog_main p = Some mainP ->
     exists main_procs,
-      getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
+      getm (prog_procedures p) Component.main = Some main_procs /\ mainP \in domm main_procs
 }.
 
 (* a closed program is a program with a closed interface and an existing main
@@ -207,9 +201,9 @@ Record closed_program (p: program) := {
     closed_interface (prog_interface p);
   (* the main procedure must exist *)
   cprog_main_existence:
-    exists mainC mainP main_procs,
-      prog_main p = Some (mainC, mainP) /\
-      getm (prog_procedures p) mainC = Some main_procs /\ mainP \in domm main_procs
+    exists mainP main_procs,
+      prog_main p = Some mainP /\
+      getm (prog_procedures p) Component.main = Some main_procs /\ mainP \in domm main_procs
 }.
 
 Theorem linkability_disjoint_procedures :
@@ -247,6 +241,7 @@ Proof.
   apply Hdisjoint_interface.
 Qed.
 
+(*
 Theorem linkability_disjoint_mains :
   forall prog1 prog2,
     well_formed_program prog1 ->
@@ -270,12 +265,13 @@ Proof.
      shuffle things a bit). *)
   admit.
 Admitted.
+*)
 
 Definition program_link (p1 p2: program): program :=
   {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
      prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);
      prog_buffers := unionm (prog_buffers p1) (prog_buffers p2);
-     prog_main := main_link (prog_main p1) (prog_main p2) |}.
+     prog_main := if prog_main p1 then prog_main p1 else prog_main p2 |}.
 
 Definition partialize_program (p: program) (ctx: Program.interface) : program :=
   {| prog_interface :=
@@ -312,8 +308,8 @@ Proof.
   (* show that there is no main *)
   - rewrite <- Heqprog in Hwf.
     pose proof (wfprog_main_existence Hwf) as Hmain_existence.
-    destruct (prog_main prog) as [[mainC mainP]|] eqn:Hmain.
-    + destruct (Hmain_existence mainC mainP) as [main_procs []].
+    destruct (prog_main prog) as [mainP|] eqn:Hmain.
+    + destruct (Hmain_existence mainP) as [main_procs []].
       reflexivity.
       rewrite Heqprog in H. simpl in *.
       rewrite Hempty_procs in H.
@@ -360,8 +356,7 @@ Proof.
   intros p.
   destruct p. unfold program_link. simpl.
   repeat rewrite unionm0.
-  rewrite main_link_with_empty_main.
-  reflexivity.
+  by case: prog_main0.
 Qed.
 
 Theorem linking_well_formedness:
@@ -424,11 +419,11 @@ Proof.
   - intros. simpl in *.
     pose proof (wfprog_main_existence Hwf1) as Hmain1.
     pose proof (wfprog_main_existence Hwf2) as Hmain2.
-    destruct (prog_main p1) as [[]|] eqn:Hmain_p1;
-    destruct (prog_main p2) as [[]|] eqn:Hmain_p2.
+    destruct (prog_main p1) as [|] eqn:Hmain_p1;
+    destruct (prog_main p2) as [|] eqn:Hmain_p2.
     + simpl in *.
       inversion H1; subst.
-      destruct (Hmain1 mainC mainP eq_refl) as [main_procs []].
+      destruct (Hmain1 mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.
@@ -436,14 +431,14 @@ Proof.
       * assumption.
     + simpl in *.
       inversion H1; subst.
-      destruct (Hmain1 mainC mainP eq_refl) as [main_procs []].
+      destruct (Hmain1 mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.
         rewrite H2. reflexivity.
       * assumption.
     + inversion H1; subst.
-      destruct (Hmain2 mainC mainP eq_refl) as [main_procs []].
+      destruct (Hmain2 mainP eq_refl) as [main_procs []].
       exists main_procs.
       split.
       * rewrite unionmE.
@@ -463,8 +458,8 @@ Fixpoint reserve_component_blocks p C Cmem Cprocs Centrypoints procs_code
   : ComponentMemory.t * NMap code * NMap Block.id :=
   let is_main_proc comp_id proc_id :=
       match prog_main p with
-      | Some (main_comp_id, main_proc_id) =>
-        (main_comp_id =? comp_id) && (main_proc_id =? proc_id)
+      | Some main_proc_id =>
+        (Component.main =? comp_id) && (main_proc_id =? proc_id)
       | None => false
       end in
   match procs_code with

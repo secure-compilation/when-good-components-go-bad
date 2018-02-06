@@ -9,13 +9,13 @@ Import Source.
 
 Definition default_init_buffer: program := {|
   prog_interface :=
-    mkfmap [(1, {| Component.import := fset [];
-                   Component.export := fset [] |})];
+    mkfmap [(Component.main,
+             {| Component.import := fset [];
+                Component.export := fset [] |})];
   prog_buffers :=
-    mkfmap [(1, inr [Undef; Int 42])];
+    mkfmap [(Component.main, inr [Undef; Int 42])];
   prog_procedures :=
-    mkfmap [(1, mkfmap [(1, E_deref (E_binop Add E_local (E_val (Int 1))))])];
-  prog_main := Some (1, 1)
+    mkfmap [(Component.main, mkfmap [(Procedure.main, E_deref (E_binop Add E_local (E_val (Int 1))))])]
 |}.
 
 Definition fuel := 1000.

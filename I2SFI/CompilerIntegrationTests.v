@@ -39,21 +39,21 @@ Definition newline := String "010" ""%string.
 Open Scope nat_scope.
 Definition increment : Source.program := {|
   Source.prog_interface :=
-   mkfmap [(1, {| Component.import := fset1 (2, 1);
-                              Component.export := (fset1 1) |});
-                       (2, {| Component.import := fset0;
-                              Component.export := fset1 1 |})];
-  Source.prog_buffers := mkfmap [(1, (inl 1%nat)); (2, (inl 1%nat))];
+   mkfmap [(Component.main,
+            {| Component.import := fset1 (2, 1);
+               Component.export := (fset1 1) |});
+             (2, {| Component.import := fset0;
+                    Component.export := fset1 1 |})];
+  Source.prog_buffers := mkfmap [(Component.main, (inl 1%nat)); (2, (inl 1%nat))];
   Source.prog_procedures := mkfmap [
     (* NOTE the version with E_exit is the right one, but unfortunately it is difficult
             to debug with extraction. Hence, the second version without E_exit *)
     (*(1, NMapExtra.of_list [(0, E_seq (E_call 2 0 (E_val (Int 6))) E_exit)]);*)
-    (1, mkfmap [(1, E_call 2 1 (E_val (Int 6)))]);
-    (2, mkfmap [(1,     
+    (Component.main, mkfmap [(1, E_call 2 1 (E_val (Int 6)))]);
+    (2, mkfmap [(1,
         (E_binop Add
                  (E_deref E_local)
-                 (E_val (Int 1))))])];
-  Source.prog_main := Some (1, 1)
+                 (E_val (Int 1))))])]
 |}.
 Close Scope nat_scope.
 

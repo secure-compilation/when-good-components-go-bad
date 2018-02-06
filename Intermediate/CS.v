@@ -38,13 +38,13 @@ Instance state_turn : HasTurn state := {
 
 Definition initial_machine_state (p: program) : state :=
   match prog_main p with
-  | Some (mainC, mainP) =>
+  | Some mainP =>
     let initial_mem := prepare_initial_memory p in
     let '(mem, _, entrypoints) := prepare_procedures p initial_mem in
     let regs := Register.init in
-    match EntryPoint.get mainC mainP entrypoints with
+    match EntryPoint.get Component.main mainP entrypoints with
     | Some b =>
-      ([], mem, regs, (mainC, b, 0%Z))
+      ([], mem, regs, (Component.main, b, 0%Z))
     | None =>
       (* this case shoudln't happen for a well formed p *)
       ([], emptym, emptym, (0, 0, 0%Z))

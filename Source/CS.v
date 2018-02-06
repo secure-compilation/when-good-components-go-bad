@@ -66,17 +66,11 @@ Definition prepare_initial_memory (p: program) : Memory.t :=
   fst (prepare_buffers p).
 
 Definition initial_machine_state (p: program) : state :=
-  match prog_main p with
-  | Some (mainC, mainP) =>
-    match find_procedure (prog_procedures p) mainC mainP with
-    | Some main_expr =>
-      (mainC, [], prepare_initial_memory p, Kstop, main_expr)
-    | None =>
-      (* this case shouldn't happen for a well formed p *)
-      (0, [], emptym, Kstop, E_exit)
-    end
+  match find_procedure (prog_procedures p) Component.main Procedure.main with
+  | Some main_expr =>
+    (Component.main, [], prepare_initial_memory p, Kstop, main_expr)
   | None =>
-    (* this case shouldn't happen for a well formed and closed p *)
+    (* this case shouldn't happen for a well formed p *)
     (0, [], emptym, Kstop, E_exit)
   end.
 

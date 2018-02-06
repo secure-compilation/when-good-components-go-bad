@@ -31,17 +31,20 @@ Instance show_pos : Show positive :=
     show := fun p => show (Pos.to_nat p)
   |}.
 
+Instance show_N : Show N :=
+  {| show := fun n => show (N.to_nat n) |}.
 
-Definition show_map { A :Type} `{_ : Show A} (m : (PMap.t A)) : string :=
+
+Definition show_map { A :Type} `{_ : Show A} (m : (BinNatMap.t A)) : string :=
   List.fold_left
     (fun acc '(key,elt) =>
        acc ++ (show key) ++ ":" ++ newline
            ++ (show elt) ++ newline)
-    (PMap.elements m)
+    (BinNatMap.elements m)
     Coq.Strings.String.EmptyString.
 
 
-Instance show_map_i  { A :Type} `{_ : Show A} : Show (PMap.t A) :=
+Instance show_map_i  { A :Type} `{_ : Show A} : Show (BinNatMap.t A) :=
   {| show := show_map |}.
 
 
@@ -55,7 +58,7 @@ Instance show_component_interface : Show Component.interface :=
   {|
     show := fun ci =>
               ("Export: ")
-                ++ (show (Component.export ci)) ++ newline 
+                ++ (show (Component.export ci)) ++ newline
                 ++ "Import:"
                 ++ (show (Component.import ci)) ++ newline
   |}.
@@ -78,7 +81,7 @@ Instance show_ainstr : Show AbstractMachine.ainstr :=
          | AbstractMachine.IStore r1 r2 => "IStore " ++ (show r1) ++ " " ++ (show r2)
          | AbstractMachine.IBnz r l => "IBnz " ++ (show r) ++ " " ++ (show l)
          | AbstractMachine.IJump r => "IJump " ++ (show r)
-         | AbstractMachine.IJal l => "IJal " ++ (show l) 
+         | AbstractMachine.IJal l => "IJal " ++ (show l)
          | AbstractMachine.IHalt => "IHalt"
          end
   |}.
@@ -90,16 +93,16 @@ Instance show_linstr : Show (option (list AbstractMachine.label) * AbstractMachi
         (show ol) ++ ":" ++ (show i)
   |}.
 
-Definition show_lcode ( lcode : PMap.t (PMap.t AbstractMachine.lcode)) :=
-  List.fold_left 
+Definition show_lcode ( lcode : BinNatMap.t (BinNatMap.t AbstractMachine.lcode)) :=
+  List.fold_left
     (fun acc1 '(cid, pmap) =>
        List.fold_left
          (fun acc2 '(pid, lst) =>
             List.fold_left
-               (fun acc3 elt => acc3 ++ (show elt)  ++ newline)            
+               (fun acc3 elt => acc3 ++ (show elt)  ++ newline)
                lst (acc2 ++ "pid=" ++ (show pid) ++ newline)%string
-         ) (PMap.elements pmap) (acc1 ++ "cid=" ++ (show cid) ++ newline)%string
-    ) (PMap.elements lcode) EmptyString.
+         ) (BinNatMap.elements pmap) (acc1 ++ "cid=" ++ (show cid) ++ newline)%string
+    ) (BinNatMap.elements lcode) EmptyString.
 
 Instance show_compiler_error : Show CompilerError :=
   {|
@@ -110,9 +113,9 @@ Instance show_compiler_error : Show CompilerError :=
         | CompEitherMonad.DuplicatedLabels lcode => show_lcode lcode
         | CompEitherMonad.ExportedProcsLabelsC _ _ => "ExportedProcsLabelsC TODO"
         | CompEitherMonad.ExportedProcsLabelsP _ _ _ => "ExportedProcsLabelsP TODO"
-        | CompEitherMonad.PosArg p => show p
-        | CompEitherMonad.TwoPosArg p1 p2 => "(" ++ (show p1) ++ "," ++ (show p2) ++ ")"
-        end                                   
+        | CompEitherMonad.NArg p => show p
+        | CompEitherMonad.TwoNArg p1 p2 => "(" ++ (show p1) ++ "," ++ (show p2) ++ ")"
+        end
   |}.
 
 Definition show_nmap { A :Type} `{_ : Show A} (m : (NMap A)) : string :=
@@ -192,7 +195,7 @@ Instance show_instr : Show Intermediate.Machine.instr :=
            | Intermediate.Machine.IAlloc r1 r2 => "IAlloc " ++ (show r1) ++ " " ++ (show r2)
            | Intermediate.Machine.IBnz r l => "IBnz " ++ (show r) ++ " " ++ (show l)
            | Intermediate.Machine.IJump r => "IJump " ++ (show r)
-           | Intermediate.Machine.IJal l => "IJal " ++ (show l) 
+           | Intermediate.Machine.IJal l => "IJal " ++ (show l)
            | Intermediate.Machine.ICall cid pid => "ICall " ++ (show cid) ++ " " ++ (show pid)
            | Intermediate.Machine.IReturn => "IReturn"
            | Intermediate.Machine.IHalt => "IHalt"
@@ -214,7 +217,7 @@ Instance show_buff : Show ({fmap Block.id -> nat + list value}) :=
     show := fun buffers =>
               List.fold_left
                 (fun acc '(bid,v) =>
-                   acc ++ 
+                   acc ++
                    ( match v with
                    | inl n =>  (show bid) ++ "[" ++ (show n) ++"]"
                    | inr lst => (show bid) ++ ":" ++ (show lst)
@@ -237,7 +240,7 @@ Instance show_intermediate_program : Show Intermediate.program :=
                 ++ (show (Intermediate.prog_procedures ip))
                 ++ ("Main: ") ++ newline
                 ++ (show (Intermediate.prog_main ip))
-                         
+
   |}.
 
 Instance show_ip_exec_state : Show (@execution_state (Events.trace*(CS.state))) :=

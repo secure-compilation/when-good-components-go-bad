@@ -19,6 +19,8 @@ Module Procedure.
   Definition id := nat.
 
   Definition eqb (id1 id2 : id) := Nat.eqb id1 id2.
+
+  Definition main : id := 0.
 End Procedure.
 
 Module Component.
@@ -33,6 +35,9 @@ Module Component.
   Definition is_exporting CI P : Prop := P \in export CI.
 
   Definition eqb (id1 id2 : id) := Nat.eqb id1 id2.
+
+  (* Used only as the main procedure for the source language. *)
+  Definition main : id := 0.
 End Component.
 
 Module Program.

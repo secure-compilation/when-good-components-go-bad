@@ -15,12 +15,12 @@ Set Implicit Arguments.
 
 Inductive CompilerError : Type :=
 | NoInfo : CompilerError
-| DuplicatedLabels :  (PMap.t (PMap.t AbstractMachine.lcode)) -> CompilerError
-| ExportedProcsLabelsC : positive ->  (PMap.t (PMap.t  AbstractMachine.label)) -> CompilerError
-| ExportedProcsLabelsP : positive -> positive ->
-                         (PMap.t (PMap.t AbstractMachine.label)) -> CompilerError
-| PosArg : positive -> CompilerError
-| TwoPosArg : positive -> positive -> CompilerError
+| DuplicatedLabels :  (BinNatMap.t (BinNatMap.t AbstractMachine.lcode)) -> CompilerError
+| ExportedProcsLabelsC : N ->  (BinNatMap.t (BinNatMap.t  AbstractMachine.label)) -> CompilerError
+| ExportedProcsLabelsP : N -> N ->
+                         (BinNatMap.t (BinNatMap.t AbstractMachine.label)) -> CompilerError
+| NArg : N -> CompilerError
+| TwoNArg : N -> N -> CompilerError
 .
 
 Inductive CompEither {A:Type} : Type :=
@@ -29,10 +29,10 @@ Inductive CompEither {A:Type} : Type :=
 
 Instance comp_either_monad : Monad (@CompEither)
   := {
-      
+
       ret := fun {A:Type} (x:A) => @Right A x;
-      
-      bind := fun {A B:Type} (x : @CompEither A) (f : A -> @CompEither B) => 
+
+      bind := fun {A B:Type} (x : @CompEither A) (f : A -> @CompEither B) =>
         match x with
         | Right y => f y
         | Left m err => Left m err

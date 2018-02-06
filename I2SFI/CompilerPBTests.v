@@ -56,7 +56,7 @@ Proof.
 Defined.
 
 Theorem procs_eqdec:
-  forall p1 p2 : (positive*positive), {p1 = p2} + {p1 <> p2}. Proof.
+  forall p1 p2 : (N*N), {p1 = p2} + {p1 <> p2}. Proof.
   repeat decide equality.
 Defined.
 
@@ -199,64 +199,64 @@ Definition alloc_undef (t : test_type) : bool :=
 
 
 
-Definition choose_pos ( p : positive * positive) :=
+Definition choose_pos ( p : N * N) :=
   let (lo,hi) := p in
-  do! p <- choose (Pos.to_nat lo, Pos.to_nat hi);
-    returnGen (Pos.of_nat p).
+  do! p <- choose (N.to_nat lo, N.to_nat hi);
+    returnGen (N.of_nat p).
 
-Definition pos_list (l : nat) : list positive :=
-  List.map Pos.of_nat (List.seq 1 l).
+Definition pos_list (l : nat) : list N :=
+  List.map N.of_nat (List.seq 1 l).
 
 Definition gen_pair_list {A B : Type} (ga : G (list A)) (gb : G (list B)) : G (list (A*B)) :=
-  liftGen (fun '(la,lb) => List.combine la lb) 
+  liftGen (fun '(la,lb) => List.combine la lb)
           (liftGen2 pair ga gb).
 
 Definition gen_sublist {A : Type} ( default : A ) ( all : list A ) : G (list A) :=
   match all with
   | [] => returnGen []
-  | _ => 
+  | _ =>
     do! n <- (choose (1%nat,(List.length all)));
       (vectorOf n (elements default all))
   end.
 
-Definition prog_int := PMap.t ((list positive) * (list (positive*positive))).
+Definition prog_int := BinNatMap.t ((list N) * (list (N*N))).
 
-Definition gen_program_interface (cids : list positive) : G prog_int :=
-  
+Definition gen_program_interface (cids : list N) : G prog_int :=
+
   let proc_ids := do! n <- choose(1%nat,MAX_PROC_PER_COMP); returnGen (pos_list n) in
   do! exported_procs <- (vectorOf (List.length cids) proc_ids);
   let all_procs := List.flat_map
                      (fun '(cid,lp) => List.map (fun pid => (cid,pid)) lp)
                      (List.combine cids exported_procs) in
-  do! imported_procs <-  
+  do! imported_procs <-
     sequenceGen (
       List.map (fun cid =>
-                  do! import_procs <- (gen_sublist (1%positive,1%positive) all_procs);
+                  do! import_procs <- (gen_sublist (N.of_nat Component.main,1%N) all_procs);
                     returnGen (List.filter (fun '(cid',_) =>
-                                              negb (Pos.eqb cid cid'))
-                                           (List.nodup procs_eqdec import_procs))  
+                                              negb (N.eqb cid cid'))
+                                           (List.nodup procs_eqdec import_procs))
                ) cids);
-  returnGen (PMapExtra.of_list
+  returnGen (BinNatMapExtra.of_list
                (List.combine
-                  cids                   
+                  cids
                   (List.combine exported_procs
                                 imported_procs
-                  )                  
+                  )
                )
             ).
 
 Definition gen_value
-           (cid : positive)
-           (all_buffers : list (positive*(list (positive * nat))))
+           (cid : N)
+           (all_buffers : list (N*(list (N * nat))))
   : G value :=
-  let buffers := List.filter (fun '(cid',_) => Pos.eqb cid cid') all_buffers in
+  let buffers := List.filter (fun '(cid',_) => N.eqb cid cid') all_buffers in
   freq [ (3%nat, (do! i <- arbitrary; returnGen (Int i)))
          ; (1%nat, (match buffers with
                   | nil => (do! i <- arbitrary; returnGen (Int i))
                   | p::xs =>
-                    let (cid,blocks) := p in 
+                    let (cid,blocks) := p in
                       do! p' <- elements p xs;
-                        let (cid',blocks') := p' in 
+                        let (cid',blocks') := p' in
                         (match blocks' with
                          | nil => (do! i <- arbitrary; returnGen (Int i))
                          | b::xs' =>
@@ -264,17 +264,17 @@ Definition gen_value
                            do! b' <- elements (bid,s) xs';
                              let (bid',s') := b' in
                              do! off <- choose (0%nat, (s'-1)%nat);
-                               returnGen (Ptr (Pos.to_nat cid'
-                                               , Pos.to_nat bid'
+                               returnGen (Ptr (N.to_nat cid'
+                                               , N.to_nat bid'
                                                , Z.of_nat off))
                          end)
                   end
                  )
            )
        ].
-                 
 
-Definition gen_sum (cid : positive) (bsize : nat) (buffers : list (positive * list (positive * nat)))
+
+Definition gen_sum (cid : N) (bsize : nat) (buffers : list (N * list (N * nat)))
   : G ( nat+ list value) :=
   freq [ (3%nat, returnGen (inl bsize))
          ; (1%nat,
@@ -282,21 +282,21 @@ Definition gen_sum (cid : positive) (bsize : nat) (buffers : list (positive * li
                 returnGen (inr vals)))
        ].
 
-Definition gen_buffers (cids : list positive)
-  : G (PMap.t (list (positive * (nat + list value)))) :=
-  
-  let gen_n_buffers : G (list (positive * nat)) :=
-      do! n <- choose (1%nat,MAX_NO_BUFFERS_PER_COMP); 
+Definition gen_buffers (cids : list N)
+  : G (BinNatMap.t (list (N * (nat + list value)))) :=
+
+  let gen_n_buffers : G (list (N * nat)) :=
+      do! n <- choose (1%nat,MAX_NO_BUFFERS_PER_COMP);
         let ids := pos_list n in
         do! sizes <- vectorOf n (choose (1%nat, MAX_BUFFER_SIZE));
           returnGen (List.combine ids sizes) in
-  
+
   do! buffers <- (vectorOf (List.length cids) gen_n_buffers);
     let comp_buffers := (List.combine cids buffers) in
     do! init_buffers <- sequenceGen
       (List.map
          (fun '(cid,bl_lst) =>
-            do! bvals <- sequenceGen 
+            do! bvals <- sequenceGen
               (List.map (fun '(bid,bsize) =>
                           gen_sum cid bsize comp_buffers
                         )
@@ -306,16 +306,16 @@ Definition gen_buffers (cids : list positive)
          )
          comp_buffers
       );
-    returnGen (PMapExtra.of_list (List.combine cids init_buffers)).
-  
+    returnGen (BinNatMapExtra.of_list (List.combine cids init_buffers)).
+
   Instance genOp : Gen Common.Values.binop :=
     {
       arbitrary := elems [
-                       Common.Values.Add 
-                       ; Common.Values.Minus 
-                       ; Common.Values.Mul 
-                       ; Common.Values.Eq 
-                       ; Common.Values.Leq 
+                       Common.Values.Add
+                       ; Common.Values.Minus
+                       ; Common.Values.Mul
+                       ; Common.Values.Eq
+                       ; Common.Values.Leq
                      ]
     }.
 
@@ -332,18 +332,18 @@ Definition gen_buffers (cids : list positive)
     }.
 
 
-  Definition genPointer (cid : positive)
-             (buffers : PMap.t (list (positive * (nat+list value)))) :=
-    let nat_cid := Pos.to_nat cid in
-    match PMap.find cid buffers with
+  Definition genPointer (cid : N)
+             (buffers : BinNatMap.t (list (N * (nat+list value)))) :=
+    let nat_cid := N.to_nat cid in
+    match BinNatMap.find cid buffers with
     | None => returnGen None
     | Some lst =>
-      match lst with 
+      match lst with
       | nil => returnGen None
       | b::xs =>
         do! b' <- elements b xs;
           let '(bid,bs) := b in
-          let nat_bid := Pos.to_nat bid in
+          let nat_bid := N.to_nat bid in
           match bs with
           | inl sz =>
             if Nat.eqb sz 0%nat
@@ -372,11 +372,11 @@ Definition gen_buffers (cids : list positive)
       end
     end.
 
-  
+
   Definition genPtrImVal
              (pi : prog_int)
-             (buffers : PMap.t (list (positive * (nat+list value))))
-             (cid : positive)
+             (buffers : BinNatMap.t (list (N * (nat+list value))))
+             (cid : N)
              (sameComponent : bool)
     : G (option Intermediate.Machine.imvalue) :=
     if sameComponent
@@ -386,32 +386,32 @@ Definition gen_buffers (cids : list positive)
       backtrack [
           ( 4%nat, (genPointer cid buffers) )
           ; ( 1%nat,
-              (do! id <- (elements (1%positive) (List.map fst (PMap.elements pi)));
+              (do! id <- (elements (1%N) (List.map fst (BinNatMap.elements pi)));
                  (genPointer id buffers)))
         ].
 
-   
+
   Definition genIntImVal : G Intermediate.Machine.imvalue :=
     do! n<-arbitrary; returnGen (Intermediate.Machine.IInt n).
-  
+
   Definition genImVal
              (pi : prog_int)
-             (buffers : PMap.t (list (positive * (nat+list value))))
-             (cid : positive)  : G imvalue :=
-    let genImValAux : G Intermediate.Machine.imvalue :=    
+             (buffers : BinNatMap.t (list (N * (nat+list value))))
+             (cid : N)  : G imvalue :=
+    let genImValAux : G Intermediate.Machine.imvalue :=
         do! res <- genPtrImVal pi buffers cid false;
           match res with
           | None => genIntImVal
           | Some ptr => returnGen ptr
-          end in 
+          end in
     freq
       [ (4%nat, genIntImVal)
         ; (1%nat, genImValAux) ].
 
   Definition genIConst
              (pi : prog_int)
-             (buffers : PMap.t (list (positive * (nat+list value))))
-             (cid : positive) : G (list instr) :=
+             (buffers : BinNatMap.t (list (N * (nat+list value))))
+             (cid : N) : G (list instr) :=
     do! v <- genImVal pi buffers cid;
       do! r <- arbitrary;
       returnGen ([IConst v r]).
@@ -424,8 +424,8 @@ Definition gen_buffers (cids : list positive)
   Definition genMemReg
              (it :  register -> register -> instr)
              (pi : prog_int)
-             (buffers : PMap.t (list (positive * (nat+list value))))
-             (cid : positive)
+             (buffers : BinNatMap.t (list (N * (nat+list value))))
+             (cid : N)
     : G (list instr) :=
     do! r1 <- arbitrary;
       do! r2 <- arbitrary;
@@ -436,7 +436,7 @@ Definition gen_buffers (cids : list positive)
         returnGen [IConst ptr r1; it r1 r2]
       end.
 
-  Definition genIAlloc (t : test_type) : G (list instr) :=    
+  Definition genIAlloc (t : test_type) : G (list instr) :=
     do! r1 <- arbitrary;
       do! r2 <- arbitrary;
       match (alloc_undef t) with
@@ -449,25 +449,25 @@ Definition gen_buffers (cids : list positive)
   Definition genILoad
              (t : test_type)
              (pi : prog_int)
-             (buffers : PMap.t (list (positive * (nat+list value))))
-             (cid : positive)
+             (buffers : BinNatMap.t (list (N * (nat+list value))))
+             (cid : N)
     : G (list instr) :=
     match (load_undef t) with
     | true => gen2Reg ILoad
     | _ => genMemReg ILoad pi buffers cid
     end.
-  
+
   Definition genIStore
              (t : test_type)
              (pi : prog_int)
-             (buffers : PMap.t (list (positive * (nat+list value))))
-             (cid : positive)
+             (buffers : BinNatMap.t (list (N * (nat+list value))))
+             (cid : N)
     : G (list instr) :=
     match (store_undef t) with
     | true => gen2Reg IStore
     | _ => genMemReg IStore pi buffers cid
-    end.   
-    
+    end.
+
   Definition genIBinOp : G (list instr) :=
     do! op <- arbitrary;
       do! r1 <- arbitrary;
@@ -481,9 +481,9 @@ Definition gen_buffers (cids : list positive)
 
   Definition genICall
              (pi : prog_int)
-             (cid : positive)
-             (pid : positive) : G (list instr) :=
-    match PMap.find cid pi with
+             (cid : N)
+             (pid : N) : G (list instr) :=
+    match BinNatMap.find cid pi with
     | None => returnGen [INop] (* This should not happen *)
     | Some comp_interface =>
       let imports := (snd comp_interface) in
@@ -493,7 +493,7 @@ Definition gen_buffers (cids : list positive)
         do! p <- elements (cid1,pid1) imports;
           do! v <- arbitrary;
           let (cid',pid') := p in
-          let call_instr := ICall (Pos.to_nat cid') (Pos.to_nat pid') in
+          let call_instr := ICall (N.to_nat cid') (N.to_nat pid') in
           let const_instr := IConst (Intermediate.Machine.IInt v) R_COM in
           returnGen ([const_instr;call_instr])
       end
@@ -502,7 +502,7 @@ Definition gen_buffers (cids : list positive)
   Definition genIJal : G (list instr) :=
     do! l <- choose (1%nat,20%nat);
       returnGen ([IJal l]).
-  
+
   Definition genIBnz (first_label : nat) (lbl : nat) : G (list instr) :=
     do! r <- arbitrary;
       do! v <- arbitrary;
@@ -513,7 +513,7 @@ Definition gen_buffers (cids : list positive)
       else
         do! target <- choose (lbl,(lbl+3)%nat);
           returnGen ([IConst (IInt v) r; IBnz r target]).
-      
+
   Definition genILabel (lbl : nat) : G (list instr) :=
     returnGen ([ILabel lbl]).
 
@@ -552,7 +552,7 @@ Definition gen_buffers (cids : list positive)
   Fixpoint gen_proc_with_labels proc missing_labels :=
     match missing_labels with
     | nil => returnGen proc
-    | lbl::xs =>          
+    | lbl::xs =>
       do! pos <- choose (0%nat,((List.length missing_labels)-1)%nat);
         let new_proc := ((List.firstn pos proc)
                            ++ [ILabel lbl]
@@ -566,14 +566,14 @@ Definition gen_buffers (cids : list positive)
              (next_label : nat)
              (t : test_type)
              (pi : prog_int)
-             (buffers : PMap.t (list (positive * (nat+list value))))
-             (cid : positive)
-             (pid : positive)
+             (buffers : BinNatMap.t (list (N * (nat+list value))))
+             (cid : N)
+             (pid : N)
     :=
     freq [
         ( (get_freq t Nop) ,(returnGen [INop]))
         ; ( (get_freq t Const), genIConst pi buffers cid)
-        ; ( (get_freq t Label) , genILabel next_label) 
+        ; ( (get_freq t Label) , genILabel next_label)
         ; ( (get_freq t Mov), gen2Reg IMov)
         ; ( (get_freq t BinOp), genIBinOp)
         ; ( (get_freq t Load) , genILoad t pi buffers cid)
@@ -586,15 +586,15 @@ Definition gen_buffers (cids : list positive)
         ; ( (get_freq t Halt), (returnGen [IHalt]))
         ; ( (get_freq t Return), (returnGen [IReturn]))
       ].
-  
+
   Definition gen_procedure
              (t : test_type)
              (pi : prog_int)
-             (buffers : PMap.t (list (positive * (nat+list value))))
-             (cid : positive)
-             (pid : positive)
+             (buffers : BinNatMap.t (list (N * (nat+list value))))
+             (cid : N)
+             (pid : N)
              (next_label : nat) : G Intermediate.Machine.code :=
-   
+
   let fix gen_proc_rec proc len first_lbl lbl :=
       match len with
       | O =>
@@ -615,7 +615,7 @@ Definition gen_buffers (cids : list positive)
 
   (****************** Done gen_procedure (split to avoid stack overflow) *******)
 
-  Definition max_label (procs : PMap.t Intermediate.Machine.code) :=
+  Definition max_label (procs : BinNatMap.t Intermediate.Machine.code) :=
     List.fold_left
       (fun acc '(_,proc)  =>
          (List.fold_left (fun acc' i =>
@@ -624,13 +624,13 @@ Definition gen_buffers (cids : list positive)
                             | _ => acc'
                             end
                          ) proc acc)
-      ) (PMap.elements procs) 1%nat.
-  
+      ) (BinNatMap.elements procs) 1%nat.
+
   Definition gen_procedures
              (t : test_type)
              (pi : prog_int)
-             (buffers : PMap.t (list (positive * (nat+list value))))
-    : G (PMap.t (PMap.t Intermediate.Machine.code)) :=
+             (buffers : BinNatMap.t (list (N * (nat+list value))))
+    : G (BinNatMap.t (BinNatMap.t Intermediate.Machine.code)) :=
 
    foldGen
      (fun acc '(cid, comp_interface)  =>
@@ -639,18 +639,18 @@ Definition gen_buffers (cids : list positive)
             foldGen
               (fun acc pid =>
                  do! proc <- gen_procedure t  pi buffers cid pid ((max_label acc) + 1)%nat;
-                        returnGen (PMap.add pid proc acc)
-              ) lexp (PMap.empty Intermediate.Machine.code));
-          
+                        returnGen (BinNatMap.add pid proc acc)
+              ) lexp (BinNatMap.empty Intermediate.Machine.code));
+
           (* check add labels as needed for IJal *)
           let all_decl_labels := List.fold_left
                                    (fun acc elt => (acc ++ elt)%list )
                                    (List.map (fun p => delared_labels_in_proc (snd p))
-                                             (PMap.elements proc_map))
+                                             (BinNatMap.elements proc_map))
                                    (@nil nat) in
           let uses := List.fold_left
                         (fun acc elt => (acc ++ elt)%list )
-                        (List.map (fun p => 
+                        (List.map (fun p =>
                                      List.map (fun i =>
                                                  match i with
                                                  | IJal l => l
@@ -662,7 +662,7 @@ Definition gen_buffers (cids : list positive)
                                                                   | _ => false
                                                                   end )
                                                            (snd p) ))
-                                  (PMap.elements proc_map))
+                                  (BinNatMap.elements proc_map))
                         (@nil nat) in
           let lbls := List.nodup label_eq_dec
                                  (List.filter (fun l =>
@@ -676,10 +676,10 @@ Definition gen_buffers (cids : list positive)
                                               uses
                                  ) in
           (* TODO do something smarter *)
-          match PMap.elements proc_map with
-          | nil => returnGen (PMap.add cid proc_map acc)
-          | (pid,code)::_ => returnGen (PMap.add cid
-                                                  (PMap.add
+          match BinNatMap.elements proc_map with
+          | nil => returnGen (BinNatMap.add cid proc_map acc)
+          | (pid,code)::_ => returnGen (BinNatMap.add cid
+                                                  (BinNatMap.add
                                                      pid
                                                      (
                                                        (
@@ -692,68 +692,68 @@ Definition gen_buffers (cids : list positive)
                                                   )
                                                   acc
                                       )
-          end 
-          ) (PMap.elements  pi)
-          (PMap.empty (PMap.t Intermediate.Machine.code))
+          end
+          ) (BinNatMap.elements  pi)
+          (BinNatMap.empty (BinNatMap.t Intermediate.Machine.code))
 .
 
-Definition gen_main (pi : prog_int) : G (positive * positive) :=
-  do! cid <- elements 1%positive (List.map fst (PMap.elements pi));
-    match PMap.find cid pi with
-    | None => returnGen (cid,1%positive)
-    | Some cint => do! pid <- elements 1%positive (fst cint);
+Definition gen_main (pi : prog_int) : G (N * N) :=
+  do! cid <- elements 1%N (List.map fst (BinNatMap.elements pi));
+    match BinNatMap.find cid pi with
+    | None => returnGen (cid,1%N)
+    | Some cint => do! pid <- elements 1%N (fst cint);
                     returnGen (cid,pid)
     end.
 
 Definition convert_program_interface (pi : prog_int) : Program.interface :=
-  PMap.fold
+  BinNatMap.fold
     (fun cid cint acc =>
        let '(lexp,limp) := cint in
-       setm acc (Pos.to_nat cid) (Component.mkCompInterface
-                                    (list2fset (List.map Pos.to_nat lexp))
+       setm acc (N.to_nat cid) (Component.mkCompInterface
+                                    (list2fset (List.map N.to_nat lexp))
                                     (list2fset (List.map
-                                                  (fun '(c,p) => (Pos.to_nat c,Pos.to_nat p))
+                                                  (fun '(c,p) => (N.to_nat c,N.to_nat p))
                                                   limp)))
     ) pi (emptym).
 
-Definition convert_procedures (all : PMap.t (PMap.t Intermediate.Machine.code))
+Definition convert_procedures (all : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
   : NMap (NMap Intermediate.Machine.code) :=
-  PMap.fold
+  BinNatMap.fold
     (fun cid pm (acc : NMap ( NMap Intermediate.Machine.code ) ) =>
-       setm acc (Pos.to_nat cid)
+       setm acc (N.to_nat cid)
             (
-              PMap.fold
+              BinNatMap.fold
                 (fun pid pcode (acc1 : NMap Intermediate.Machine.code) =>
-                   setm acc1 (Pos.to_nat pid) pcode)
+                   setm acc1 (N.to_nat pid) pcode)
                 pm (emptym)
             )
     ) all (emptym).
 
-Definition convert_buffers (buffs : PMap.t  (list (positive * (nat+list value))))
+Definition convert_buffers (buffs : BinNatMap.t  (list (N * (nat+list value))))
   : NMap {fmap Block.id -> nat + list value} :=
-  PMap.fold
+  BinNatMap.fold
     (fun cid b acc =>
-       setm acc (Pos.to_nat cid)
+       setm acc (N.to_nat cid)
             (list2fmap
                (
-                 List.map (fun '(bid,v) => (Pos.to_nat bid,v) ) b
+                 List.map (fun '(bid,v) => (N.to_nat bid,v) ) b
                )
             )
-            (* (List.map (fun '(id,s)=>(Pos.to_nat id,s)) b)) *)
+            (* (List.map (fun '(id,s)=>(N.to_nat id,s)) b)) *)
     )
     buffs emptym.
 
-(* TODO Check with Arthur and G. *) 
-Definition fix_main (all : PMap.t (PMap.t Intermediate.Machine.code))
+(* TODO Check with Arthur and G. *)
+Definition fix_main (all : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
            (cid : Component_id) (pid : Procedure_id) :=
-  match PMap.find cid all with
+  match BinNatMap.find cid all with
   | None => all
   | Some pmap =>
-    match PMap.find pid pmap with
+    match BinNatMap.find pid pmap with
     | None => all
     | Some l =>
-      PMap.add cid
-               ( PMap.add
+      BinNatMap.add cid
+               ( BinNatMap.add
                    pid
                    ( List.map
                        (fun i => match i with
@@ -769,23 +769,23 @@ Definition fix_main (all : PMap.t (PMap.t Intermediate.Machine.code))
   end.
 
 Definition genIntermediateProgram (t : test_type) : G Intermediate.program :=
-  
+
   do! n <- choose (1%nat, (N.to_nat (SFI.COMP_MAX-1)%N));
     let cids := pos_list n in
-  
+
     do! pi <- (gen_program_interface cids);
-      
+
       do! buffers <- gen_buffers cids;
-      do! procs <- gen_procedures t pi buffers;      
+      do! procs <- gen_procedures t pi buffers;
       do! main <- gen_main pi;
       let (mc,mp) := main in
       let fixed_procs := fix_main procs mc mp in
-      
+
   returnGen {|
         Intermediate.prog_interface := convert_program_interface pi;
         Intermediate.prog_procedures := convert_procedures fixed_procs;
         Intermediate.prog_buffers := convert_buffers buffers;
-        Intermediate.prog_main := Some (Pos.to_nat mc,Pos.to_nat mp)
+        Intermediate.prog_main := Some (N.to_nat mp)
       |}.
 
 
@@ -797,7 +797,7 @@ Conjecture correct_data_compartmentalized:
     (n : nat) (mem : RiscMachine.Memory.t) (pc : RiscMachine.address)
     (gen_regs : RiscMachine.RegisterFile.t)
     (rp rs : RiscMachine.Register.t)
-    (t : CompCert.Events.trace) 
+    (t : CompCert.Events.trace)
     (ptr sfi_sp_val: RiscMachine.value ),
 
     CompEitherMonad.Right sfi_p = compile_program ip /\
@@ -813,11 +813,11 @@ Conjecture correct_data_compartmentalized:
       Some sfi_sp_val = RiscMachine.RegisterFile.get_register
                           RiscMachine.Register.R_SFI_SP gen_regs /\
       RiscMachine.Memory.to_address ptr = SFI.address_of SFI.MONITOR_COMPONENT_ID
-                                                  (2*(Z.to_N sfi_sp_val))%N N0 
+                                                  (2*(Z.to_N sfi_sp_val))%N N0
     )
     \/ (* same component write into a data block *)
     ( Some ptr = RiscMachine.RegisterFile.get_register rp gen_regs /\
-      (Z0 <= ptr)%Z /\    
+      (Z0 <= ptr)%Z /\
       SFI.is_same_component pc (RiscMachine.Memory.to_address ptr) /\
       (SFI.is_data_address (RiscMachine.Memory.to_address ptr)) = true
     ).
@@ -829,7 +829,7 @@ Definition run_intermediate_program (ip : Intermediate.program) :=
   runp FUEL ip.
 
 (************************************************
- * No writes outside its own memory, 
+ * No writes outside its own memory,
  * except for push sfi.
  *************************************************)
 
@@ -865,7 +865,7 @@ Definition update_store_log
     end
   | _ => (st_log,nlog)
   end.
-            
+
 Definition show_log_entry (entry : store_log_entry) : string :=
   let '(pc,addr,sfi_sp) := entry in
    "pc: " ++ (show_addr pc)
@@ -874,9 +874,9 @@ Definition show_log_entry (entry : store_log_entry) : string :=
           ++ " sfi sp: " ++ (show sfi_sp).
 
 
-(* 1. number of instr exec, 
-   2. number of internal writes, 
-   3. number of push sfi, 
+(* 1. number of instr exec,
+   2. number of internal writes,
+   3. number of push sfi,
    4. result of intermediate program
    5. number of static instructions executed
 *)
@@ -899,7 +899,7 @@ Instance show_store_stat : Show store_stat :=
            ++ " Static instructions: "
            ++ (show si)
   |}.
-             
+
 Definition store_stats (log : store_log) (steps : nat)
            (es : (@execution_state (CompCert.Events.trace*CS.state))) : store_stat :=
   let '(l1,l2) := log in
@@ -913,7 +913,7 @@ Definition store_stats (log : store_log) (steps : nat)
 
 Definition eval_store_program (p : sfi_program)
   : (@Either (CompCert.Events.trace*MachineState.t*nat) * store_log ) :=
-  ((CS.eval_program_with_state     
+  ((CS.eval_program_with_state
      store_log
      update_store_log
      FUEL
@@ -968,7 +968,7 @@ Definition store_correct  (t : test_type) : Checker :=
         | Wrong _ msg NoInfo
         | Wrong _ msg (MissingComponentId _) =>
           if DEBUG
-          then 
+          then
             whenFail ((show es) ++ (show ip))%string false
           else
             checker tt
@@ -977,7 +977,7 @@ Definition store_correct  (t : test_type) : Checker :=
           | TargetSFI.EitherMonad.Left msg err => whenFail
                                                    (msg ++ (show err))
                                                    (store_checker log 0%nat es)
-          | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) => 
+          | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) =>
             (whenFail ("memory of failed program: " ++ (show_mem  mem))%string
                       (store_checker log steps es))
           end
@@ -1036,7 +1036,7 @@ Definition update_jump_log
     end
   | _ => (j_log,nlog)
   end.
-            
+
 Definition show_jump_log_entry (entry : jump_log_entry) : string :=
   let '(pc,addr,type,t) := entry in
    "pc: " ++ (show pc)
@@ -1051,16 +1051,16 @@ Definition show_jump_log_entry (entry : jump_log_entry) : string :=
 
 Definition eval_jump_program (p : sfi_program)
   : (@Either (CompCert.Events.trace*MachineState.t*nat) * jump_log) :=
-  ((CS.eval_program_with_state     
+  ((CS.eval_program_with_state
      jump_log
      update_jump_log
      FUEL
      p
      (RiscMachine.RegisterFile.reset_all)) (nil,nil)).
 
-(* 1. number of instr exec, 
-   2. number of internal jumps, 
-   3. number of cross component jumps 
+(* 1. number of instr exec,
+   2. number of internal jumps,
+   3. number of cross component jumps
    4. result of intermediate program
    5. number of static instructions executed
 *)
@@ -1089,10 +1089,10 @@ Definition jump_stats (log : jump_log) (steps : nat)
   let '(l1,l2) := log in
   let i := (List.length
               (List.filter
-                 (fun '(pc,addr,type,t) =>                  
+                 (fun '(pc,addr,type,t) =>
                     (SFI.is_same_component_bool pc addr)
                     || (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
-                    || (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID) 
+                    || (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
                  ) l1
               )
            ) in
@@ -1126,7 +1126,7 @@ Definition jump_checker (log : jump_log) (steps : nat)
                    if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
                    then checker true
                    else
-                     if (SFI.is_same_component_bool pc addr)                      
+                     if (SFI.is_same_component_bool pc addr)
                      then
                        match t with
                        | nil =>  whenFail ("Register R_T expected in internal jumps "
@@ -1135,7 +1135,7 @@ Definition jump_checker (log : jump_log) (steps : nat)
                                           | Indirect r => RiscMachine.Register.eqb
                                                            RiscMachine.Register.R_T r
                                           | Direct => true
-                                          end)     
+                                          end)
                        | _ => whenFail ("Unexpectected event at log entry:"
                                          ++ (show_jump_log_entry (pc,addr,type,t)))
                                       false
@@ -1154,7 +1154,7 @@ Definition jump_checker (log : jump_log) (steps : nat)
                                            false
                          end
               ) l1)
-      end. 
+      end.
 
 Definition jump_correct  (t : test_type) : Checker :=
   forAllShrink (genIntermediateProgram TJump) shrink
@@ -1178,7 +1178,7 @@ Definition jump_correct  (t : test_type) : Checker :=
                | Wrong _ msg NoInfo
                | Wrong _ msg (MissingComponentId _) =>
                  if DEBUG
-                 then 
+                 then
                    whenFail ((show es) ++ (show ip))%string false
                  else
                    checker tt
@@ -1187,7 +1187,7 @@ Definition jump_correct  (t : test_type) : Checker :=
                  | TargetSFI.EitherMonad.Left msg err => whenFail
                                                           (msg ++ (show err))
                                                           (jump_checker log 0%nat es)
-                 | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) => 
+                 | TargetSFI.EitherMonad.Right (t,(mem,_,regs),steps) =>
                    jump_checker log steps es
                  end
                end
@@ -1236,7 +1236,7 @@ Definition update_cs_log
                          ((cs_log ++ [(pc, addr, Pop, instr)])%list,nlog)
         | _ => (cs_log,nlog)
         end
-          
+
     | RiscMachine.ISA.IJal addr =>
       if SFI.is_same_component_bool pc addr
       then (cs_log,nlog)
@@ -1253,27 +1253,27 @@ Definition update_cs_log
     end
   | _ => (cs_log,nlog)
   end.
-            
+
 Definition show_cs_log_entry (entry : cs_log_entry) : string :=
   let '(pc,addr,t, instr) := entry in
    "pc: " ++ (show_addr pc)
           ++ " ptr: "
           ++ (show_addr addr)
           ++ " stack op: " ++ (show_op t)
-          ++ "instr " ++ (show instr). 
+          ++ "instr " ++ (show instr).
 
 Definition eval_cs_program (p : sfi_program)
   : (@Either (CompCert.Events.trace*MachineState.t*nat) * cs_log) :=
-  ((CS.eval_program_with_state     
+  ((CS.eval_program_with_state
      cs_log
      update_cs_log
      FUEL
      p
      (RiscMachine.RegisterFile.reset_all)) (nil,nil)).
 
-(* 1. number of instr exec, 
-   2. number of internal jump, 
-   3. number of cross component jumps 
+(* 1. number of instr exec,
+   2. number of internal jump,
+   3. number of cross component jumps
    4. result of intermediate program
    5. number of static instructions executed
 *)
@@ -1301,7 +1301,7 @@ Definition cs_stats (log : cs_log) (steps : nat)
            (es : (@execution_state (CompCert.Events.trace*CS.state))) : cs_stat :=
   let '(l1,l2) := log in
   (steps, (List.length l1), es, List.length l2).
-  
+
 Definition cs_checker (log : cs_log)  (steps : nat)
            (es : (@execution_state (CompCert.Events.trace*CS.state))) : Checker :=
   let (l1,l2) := log in
@@ -1327,7 +1327,7 @@ Definition cs_checker (log : cs_log)  (steps : nat)
                                       ++ (show instr)
                                    )%string
                                    false
-           end         
+           end
         end
       end
   in
@@ -1336,7 +1336,7 @@ Definition cs_checker (log : cs_log)  (steps : nat)
     (cs_stats log steps es)
     match steps with
     | O => checker false
-    | _ => 
+    | _ =>
       match l1 with
       | nil => checker tt
       | _ => aux l1 []
@@ -1365,7 +1365,7 @@ Definition cs_correct (t : test_type) : Checker :=
                 | Wrong _ msg NoInfo
                 | Wrong _ msg (MissingComponentId _) =>
                   if DEBUG
-                  then 
+                  then
                     whenFail ((show es) ++ (show ip))%string false
                   else
                     checker tt
@@ -1383,10 +1383,8 @@ Definition cs_correct (t : test_type) : Checker :=
          ).
 
 (****************** QUICK CHECKS ***************************)
-Extract Constant Test.defNumTests => "100". 
+Extract Constant Test.defNumTests => "100".
 
 QuickChick (store_correct TStore).
 QuickChick (jump_correct TJump).
 QuickChick (cs_correct TStack).
-
-

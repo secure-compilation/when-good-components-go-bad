@@ -47,10 +47,10 @@ Inductive execution_state {A:Type} :=
 | Wrong : trace -> string -> ExecutionError -> execution_state.
 
 Instance exec_monad : Monad (@execution_state)
-  := {      
+  := {
       ret := fun {A:Type} (x:A) => @Running A x;
-      
-      bind := fun {A B:Type} (x : @execution_state A) (f : A -> @execution_state B) => 
+
+      bind := fun {A B:Type} (x : @execution_state A) (f : A -> @execution_state B) =>
                 match x with
                 | Running y => f y
                 | Wrong tr m err => Wrong tr m err
@@ -67,7 +67,7 @@ Definition lift {A} (x: option A) (msg : string) (err : ExecutionError) :=
   | None  => (@Wrong A E0 msg err)
   | Some v => (@Running A v)
   end.
-    
+
 Definition fail {A} (msg : string) (err : ExecutionError) :=
   (@Wrong A E0 msg err).
 
@@ -79,7 +79,7 @@ Definition eval_step (G: global_env) (s: CS.state)  : (@execution_state t) :=
         "Missing component"%string (MissingComponentId pc);
     match (getm C_procs (Pointer.block pc)) with
     | None => fail "Missing block"%string (MissingBlock pc)
-    | Some P_code => 
+    | Some P_code =>
       if ((Pointer.offset pc) <? 0)%Z then
         fail "Negative offset"%string (NegativePointerOffset pc)
       else

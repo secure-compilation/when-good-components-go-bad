@@ -302,16 +302,16 @@ Admitted.
 
 Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program) : COMP Intermediate.program :=
   match p.(Intermediate.prog_main) with
-  | Some (C, P) =>
-    do procs <- lift (getm p.(Intermediate.prog_procedures) C);
-    do P_labels <- lift (getm procs_labels C);
+  | Some P =>
+    do procs <- lift (getm p.(Intermediate.prog_procedures) Component.main);
+    do P_labels <- lift (getm procs_labels Component.main);
     do lab <- lift (getm P_labels P);
-    let P' := generate_fresh_procedure_id C (p.(Intermediate.prog_procedures)) in
+    let P' := generate_fresh_procedure_id Component.main (p.(Intermediate.prog_procedures)) in
     let procs' := setm procs P' [IConst (IInt 1) R_ONE; IJal lab ; IHalt] in
     ret {| Intermediate.prog_interface := p.(Intermediate.prog_interface);
-           Intermediate.prog_procedures := setm p.(Intermediate.prog_procedures) C procs';
+           Intermediate.prog_procedures := setm p.(Intermediate.prog_procedures) Component.main procs';
            Intermediate.prog_buffers := p.(Intermediate.prog_buffers);
-           Intermediate.prog_main := Some (C, P') |}
+           Intermediate.prog_main := Some P' |}
   | None => ret p
   end.
 
@@ -327,7 +327,7 @@ Definition compile_program
         {| Intermediate.prog_interface := Source.prog_interface p;
            Intermediate.prog_procedures := mkfmap code;
            Intermediate.prog_buffers := local_buffers;
-           Intermediate.prog_main := Source.prog_main p |} in
+           Intermediate.prog_main := Some Procedure.main |} in
    wrap_main procs_labels p).
 
 Lemma compilation_preserves_interface:
@@ -346,18 +346,15 @@ Proof.
                                (elementsm (Source.prog_procedures p)) cenv1)
     as [[code cenv2]|] eqn:Hcompiled_comps;
     try discriminate.
-  destruct (Source.prog_main p) as [[mainC mainP]|] eqn:Hmain.
-  - simpl in Hcompile.
-    destruct (lift ((mkfmap (T:=nat_ordType) code) mainC) cenv2) as [[]|] eqn:Hlift_mkfmap;
-      simpl in *; rewrite Hlift_mkfmap in Hcompile; try discriminate.
-    destruct (lift (labels mainC) c) as [[main_label cenv3]|] eqn:Hlift_main_label_C;
+  simpl in Hcompile.
+  destruct (lift ((mkfmap (T:=nat_ordType) code) Component.main) cenv2) as [[]|] eqn:Hlift_mkfmap;
+    simpl in *; rewrite Hlift_mkfmap in Hcompile; try discriminate.
+  destruct (lift (labels Component.main) c) as [[main_label cenv3]|] eqn:Hlift_main_label_C;
+    try discriminate.
+  destruct (lift (main_label Procedure.main) cenv3) as [[]|] eqn:Hlift_main_label_P;
       try discriminate.
-    destruct (lift (main_label mainP) cenv3) as [[]|] eqn:Hlift_main_label_P;
-      try discriminate.
-    simpl in Hcompile. inversion Hcompile.
-    reflexivity.
-  - simpl in Hcompile. inversion Hcompile.
-    reflexivity.
+  simpl in Hcompile. inversion Hcompile.
+  reflexivity.
 Qed.
 
 Lemma compilation_preserves_linkability:

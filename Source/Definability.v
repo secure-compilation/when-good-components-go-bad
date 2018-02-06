@@ -29,9 +29,7 @@ Section Definability.
 
   Variable intf: Program.interface.
   Variable closed_intf: closed_interface intf.
-  Variable mainC: Component.id.
-  Variable mainP: Procedure.id.
-  Variable main_export : exported_procedure intf mainC mainP.
+  Variable main_export : exported_procedure intf Component.main Procedure.main.
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
@@ -282,8 +280,7 @@ Section Definability.
   Definition program_of_trace (t: trace) : program :=
     {| prog_interface  := intf;
        prog_procedures := procedures_of_trace t;
-       prog_buffers    := mapm (fun _ => inr [Int 0; Int 0]) intf;
-       prog_main       := Some (mainC, mainP) |}.
+       prog_buffers    := mapm (fun _ => inr [Int 0; Int 0]) intf |}.
 
   (** To prove that [program_of_trace] is correct, we need to describe how the
       state of the program evolves as it emits events from the translated trace.
@@ -333,7 +330,7 @@ Section Definability.
     end.
 
   Definition well_formed_trace (t: trace) : Prop :=
-    well_bracketed_trace (StackState mainC []) t /\
+    well_bracketed_trace (StackState Component.main []) t /\
     All well_formed_event t.
 
   Fixpoint well_formed_callers (callers: list Component.id) (stk: CS.stack) : Prop :=
@@ -395,20 +392,12 @@ Section Definability.
     - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
       rewrite /has_required_local_buffers /= mapmE C_CI /=.
       eexists; eauto=> /=; omega.
-    - by move=> _ _ [<- <-]; rewrite find_procedures_of_trace.
   Qed.
 
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).
   Proof.
-    split=> //=.
-    exists mainC, mainP.
-    rewrite /procedures_of_trace mapimE /=.
-    case: main_export=> CI.
-    rewrite /Program.has_component /Component.is_exporting.
-    case=> -> mainP_CI /=.
-    eexists; repeat split; eauto.
-    by rewrite domm_mkfmapf in_fset.
+    split=> //=; by rewrite find_procedures_of_trace.
   Qed.
 
   Arguments Memory.load  : simpl nomatch.
@@ -660,7 +649,7 @@ Section Definability.
     Proof.
       move=> wf_t; eapply program_runs=> /=; try reflexivity.
       pose cs := CS.initial_machine_state p.
-      suffices H : well_formed_state (StackState mainC [::]) [::] t cs.
+      suffices H : well_formed_state (StackState Component.main [::]) [::] t cs.
         have [cs' run_cs final_cs'] := @definability_gen _ [::] t _ erefl H.
         by econstructor; eauto.
       case: wf_t => wb_t wf_t_events.
@@ -708,14 +697,14 @@ Proof.
     end; trivial; try congruence; easy.
 Qed.
 
-Lemma intermediate_well_formed_trace : forall p mainC mainP t cs cs',
+Lemma intermediate_well_formed_trace : forall p mainP t cs cs',
   Star (CS.sem p) cs t cs' ->
   CS.initial_state p cs ->
-  Intermediate.prog_main p = Some (mainC,mainP) ->
+  Intermediate.prog_main p = Some mainP ->
   Intermediate.well_formed_program p ->
-  well_formed_trace (Intermediate.prog_interface p) mainC t.
+  well_formed_trace (Intermediate.prog_interface p) t.
 Proof.
-  intros p0 mainC mainP t cs cs' H H' H'' H'''.
+  intros p0 mainP t cs cs' H H' H'' H'''.
   unfold well_formed_trace. split.
   - apply intermediate_well_bracketed_trace in H.
     unfold CS.CS.initial_state, CS.CS.initial_machine_state in H'.
@@ -723,7 +712,7 @@ Proof.
     destruct ( Machine.Intermediate.prepare_procedures p0
            (Machine.Intermediate.prepare_initial_memory p0)) as [[mem]].
     destruct (Intermediate.wfprog_main_existence H''' H'') as [main_procs [H43 H44]].
-    destruct (Machine.Intermediate.EntryPoint.get mainC mainP t0).
+    destruct (Machine.Intermediate.EntryPoint.get Component.main mainP t0).
     now rewrite H' in H.
     + rewrite H' in H. simpl in H. admit. (* should be impossible from well-formedness? *)
   - clear H'' H'. induction H as [| cs t1 cs'' t2 cs''' t HStep HStar IH Ht]. easy.
