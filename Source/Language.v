@@ -2,6 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Linking.
+Require Import Lib.Extra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 From CoqUtils Require Import ord fset fmap.
@@ -183,23 +184,12 @@ Module Source.
     program_unlink (domm (prog_interface p1)) (program_link p1 p2) = p1.
   Proof.
     case: p1 p2 => [i1 p1 b1] [i2 p2 b2] wf1 wf2 l12.
-    rewrite /program_unlink /program_link /=; congr mkProg;
-    apply/eq_fmap=> C; rewrite filtermE unionmE.
-    - case: l12=> _ /= /fdisjointP/(_ C)/implyP.
-      rewrite mem_domm.
-      by case: (i1 C) (i2 C)=> //= - [|].
-    - have /= /fdisjointP/(_ C)/implyP := linkable_disjoint_procedures wf1 wf2 l12.
-      rewrite -mem_domm.
-      have : C \in domm p1 = (C \in domm p1) by [].
-      rewrite -{-2}(wfprog_defined_procedures wf1) -(wfprog_defined_procedures wf2) /=.
-      rewrite !mem_domm.
-      by case: (i1 C) (p1 C) (p2 C)=> //= [?|] [?|] //= [?|].
-    - have /= /fdisjointP/(_ C)/implyP := linkable_disjoint_buffers wf1 wf2 l12.
-      rewrite -mem_domm.
-      have : C \in domm b1 = (C \in domm b1) by [].
-      rewrite -{-2}(wfprog_defined_buffers wf1) -(wfprog_defined_buffers wf2) /=.
-      rewrite !mem_domm.
-      by case: (i1 C) (b1 C) (b2 C)=> //= [?|] [?|] //= [?|].
+    rewrite /program_unlink /program_link /=; congr mkProg.
+    - by rewrite -[RHS](unionmK i1 i2); apply/eq_filterm=> ??; rewrite mem_domm.
+    - rewrite -[RHS](unionmK p1 p2); apply/eq_filterm=> ??.
+      by rewrite (wfprog_defined_procedures wf1) /= mem_domm.
+    - rewrite -[RHS](unionmK b1 b2); apply/eq_filterm=> ??.
+      by rewrite (wfprog_defined_buffers wf1) /= mem_domm.
   Qed.
 
   Lemma program_linkKR p1 p2 :

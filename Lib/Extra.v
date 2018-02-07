@@ -26,4 +26,10 @@ Qed.
 Lemma domm_map (f : S -> S') m : domm (mapm f m) = domm m.
 Proof. exact: domm_mapi. Qed.
 
+Lemma unionmK m1 m2 : filterm (fun k _ => m1 k) (unionm m1 m2) = m1.
+Proof.
+apply/eq_fmap=> k; rewrite filtermE unionmE.
+by case: (m1 k) (m2 k)=> //= - [].
+Qed.
+
 End FMap.

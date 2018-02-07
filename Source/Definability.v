@@ -786,4 +786,40 @@ Proof.
   move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
   have Hclosed_intf : closed_interface intf by case: Hclosed.
+  have intf_main : intf Component.main.
+    case: Hclosed => _ [? [main_procs [? [/= e ?]]]].
+    rewrite /intf -mem_domm domm_union.
+    do 2![rewrite Intermediate.wfprog_defined_procedures //].
+    by rewrite -domm_union mem_domm e.
+  have Hatomic : Atomic (I.CS.sem (Intermediate.program_link p c)) by admit.
+  have {Hbeh} [cs [cs' [Hcs Hstar]]] :
+      exists cs cs',
+        I.CS.initial_state (Intermediate.program_link p c) cs /\
+        Star (I.CS.sem (Intermediate.program_link p c)) cs m cs'.
+    case: b / Hbeh Hpre.
+      move=> cs beh Hcs Hbeh [beh' e]; subst beh.
+      case/(state_behaves_app_inv Hatomic): Hbeh=> cs' [Hstar Hbeh'].
+      by exists cs, cs'; split; eauto.
+    (* Program goes wrong initially and produces empty trace.  Thus, any state
+       works. *)
+    move=> _ [[ | | |beh'] //=]; case: m=> [|//] _.
+    do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
+    split; try reflexivity; exact: star_refl.
+  have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m.
+    have [mainP [_ [HmainP _]]] := Intermediate.cprog_main_existence Hclosed.
+    have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
+    exact: intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c.
+  have := definability Hclosed_intf intf_main wf_m.
+  set back := (program_of_trace intf m) => Hback.
+  exists (program_unlink (domm (Intermediate.prog_interface p)) back).
+  exists (program_unlink (domm (Intermediate.prog_interface c)) back).
+  exists (Terminates m); split=> /=.
+    rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
+    by apply/eq_filterm=> ??; rewrite mem_domm.
+  split.
+    rewrite /intf unionmC; last by case: Hlinkable.
+    rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
+    by apply/eq_filterm=> ??; rewrite mem_domm.
+  (* Needs properties about unlinking. *)
+  admit.
 Admitted.
