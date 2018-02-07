@@ -32,4 +32,4 @@ More thorough mutation tests are on the `nora-testing-experiments` branch.
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
-- The code in the `CompCert` dir is taken from the `common` and `lib` dirs of CompCert and is thus dual-licensed under the INRIA Non-Commercial License Agreement and the GNU General Public License version 2 or later (see `Compcert/LICENSE`)
+- The code in the `CompCert` dir is adapted based on files in the `common` and `lib` dirs of CompCert and is thus dual-licensed under the INRIA Non-Commercial License Agreement and the GNU General Public License version 2 or later (see `Compcert/LICENSE`)
