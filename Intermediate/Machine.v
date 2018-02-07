@@ -164,8 +164,8 @@ Record well_formed_program (p: program) := {
   wfprog_interface_soundness:
     sound_interface (prog_interface p);
   (* there are procedures only for the declared components *)
-  wfprog_well_formed_procedures:
-    fsubset (domm (prog_procedures p)) (domm (prog_interface p));
+  wfprog_defined_procedures:
+    domm (prog_interface p) = domm (prog_procedures p);
   (* each exported procedure actually exists *)
   wfprog_exported_procedures_existence:
     forall C CI,
@@ -183,8 +183,8 @@ Record well_formed_program (p: program) := {
       getm Cprocs P = Some Pcode ->
     forall i, In i Pcode -> well_formed_instruction p C P i;
   (* there are buffers only for the declared components *)
-  wfprog_well_formed_buffers:
-    fsubset (domm (prog_buffers p)) (domm (prog_interface p));
+  wfprog_defined_buffers:
+    domm (prog_interface p) = domm (prog_buffers p);
   (* if the main component exists, then the main procedure must exist as well *)
   wfprog_main_existence:
     forall mainP,
@@ -217,11 +217,7 @@ Proof.
     [_ Hdisjoint_interface].
   inversion Hwell_formed1 as [_ Hwell_formed_procs1 _ _ _ _].
   inversion Hwell_formed2 as [_ Hwell_formed_procs2 _ _ _ _].
-  apply (fdisjoint_trans Hwell_formed_procs1) in Hdisjoint_interface.
-  rewrite fdisjointC in Hdisjoint_interface.
-  apply (fdisjoint_trans Hwell_formed_procs2) in Hdisjoint_interface.
-  rewrite fdisjointC.
-  apply Hdisjoint_interface.
+  by rewrite -Hwell_formed_procs1 -Hwell_formed_procs2.
 Qed.
 
 Theorem linkability_disjoint_buffers :
@@ -234,11 +230,7 @@ Proof.
   intros prog1 prog2 Hwell_formed1 Hwell_formed2 [_ Hdisjoint_interface].
   inversion Hwell_formed1 as [_ _ _ _ Hwell_formed_buffers1 _].
   inversion Hwell_formed2 as [_ _ _ _ Hwell_formed_buffers2 _].
-  apply (fdisjoint_trans Hwell_formed_buffers1) in Hdisjoint_interface.
-  rewrite fdisjointC in Hdisjoint_interface.
-  apply (fdisjoint_trans Hwell_formed_buffers2) in Hdisjoint_interface.
-  rewrite fdisjointC.
-  apply Hdisjoint_interface.
+  by rewrite -Hwell_formed_buffers1 -Hwell_formed_buffers2.
 Qed.
 
 (*
@@ -293,61 +285,20 @@ Theorem empty_interface_implies_empty_program:
     prog_interface p = emptym ->
     p = empty_prog.
 Proof.
-  intros p Hwf Hempty_iface.
-  remember p as prog.
-  destruct p.
-  rewrite Heqprog.
-  rewrite Heqprog in Hwf, Hempty_iface.
-  simpl in *.
-  rewrite Hempty_iface.
-  enough (prog_procedures0 = emptym) as Hempty_procs.
-  enough (prog_buffers0 = emptym) as Hempty_bufs.
-  enough (prog_main0 = None) as Hempty_main.
-  rewrite Hempty_procs Hempty_bufs Hempty_main.
-  reflexivity.
-  (* show that there is no main *)
-  - rewrite <- Heqprog in Hwf.
-    pose proof (wfprog_main_existence Hwf) as Hmain_existence.
-    destruct (prog_main prog) as [mainP|] eqn:Hmain.
-    + destruct (Hmain_existence mainP) as [main_procs []].
-      reflexivity.
-      rewrite Heqprog in H. simpl in *.
-      rewrite Hempty_procs in H.
-      inversion H.
-    + rewrite Heqprog in Hmain. simpl in *.
-      assumption.
-  (* show that there are no buffers *)
-  - rewrite <- Heqprog in Hwf.
-    pose proof (wfprog_well_formed_buffers Hwf) as Hbufs_wf.
-    rewrite Heqprog in Hbufs_wf. rewrite Hempty_iface in Hbufs_wf. simpl in *.
-    rewrite domm0 in Hbufs_wf.
-    rewrite fsubset0 in Hbufs_wf.
-    (* not able to use eq_domm0 *)
-    pose proof eq_domm0 as Hempty.
-    admit.
-  (* show that there are no procedures *)
-  - rewrite <- Heqprog in Hwf.
-    pose proof (wfprog_well_formed_procedures Hwf) as Hprocs_wf.
-    rewrite Heqprog in Hprocs_wf. rewrite Hempty_iface in Hprocs_wf. simpl in *.
-    rewrite domm0 in Hprocs_wf.
-    rewrite fsubset0 in Hprocs_wf.
-    (* not able to use eq_domm0 *)
-    pose proof eq_domm0 as Hempty.
+  move=> [intf procs bufs main] [/= _ e_procs _ _ e_bufs _] e_intf.
+  subst intf; congr mkProg.
+  - apply/eq_fmap=> ?; rewrite emptymE; apply/dommPn.
+    by rewrite -e_procs mem_domm emptymE.
+  - apply/eq_fmap=> ?; rewrite emptymE; apply/dommPn.
+    by rewrite -e_bufs mem_domm emptymE.
+  - (* FIXME: This part does not hold right now because the main procedure could
+       be defined even if the interface does not mention the main component. *)
     admit.
 Admitted.
 
 Lemma empty_prog_is_well_formed:
   well_formed_program empty_prog.
-Proof.
-  constructor; simpl.
-  - unfold sound_interface.
-    intros. inversion H0.
-  - repeat rewrite domm0. apply fsubsetxx.
-  - intros. inversion H.
-  - intros. inversion H.
-  - repeat rewrite domm0. apply fsubsetxx.
-  - intros. discriminate.
-Qed.
+Proof. by constructor. Qed.
 
 Theorem linking_empty_program:
   forall p,
@@ -372,9 +323,7 @@ Proof.
   - simpl. assumption.
   - simpl.
     repeat rewrite domm_union.
-    apply fsetUSS.
-    + apply (wfprog_well_formed_procedures Hwf1).
-    + apply (wfprog_well_formed_procedures Hwf2).
+    by do 2![rewrite wfprog_defined_procedures //].
   - intros C CI H1 P H2.
     simpl in *.
     rewrite unionmE.
@@ -411,11 +360,8 @@ Proof.
     + admit.
     + admit.
     + admit.
-  - simpl.
-    repeat rewrite domm_union.
-    apply fsetUSS.
-    + apply (wfprog_well_formed_buffers Hwf1).
-    + apply (wfprog_well_formed_buffers Hwf2).
+  - rewrite /= !domm_union.
+    by do 2![rewrite wfprog_defined_buffers //].
   - intros. simpl in *.
     pose proof (wfprog_main_existence Hwf1) as Hmain1.
     pose proof (wfprog_main_existence Hwf2) as Hmain2.
