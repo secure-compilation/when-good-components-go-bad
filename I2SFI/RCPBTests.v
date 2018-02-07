@@ -211,10 +211,10 @@ Definition compiler_correct (fuel : nat) : Checker :=
   ).
 
 
-Extract Constant Test.defNumTests => "10000". 
+Extract Constant Test.defNumTests => "100".
 
-(* QuickChick (compiler_correct 100%nat). *)
+QuickChick (compiler_correct 100%nat).
 
-(* QuickChick (compiler_correct 1000%nat). *)
+QuickChick (compiler_correct 1000%nat).
 
-(* QuickChick (compiler_correct 10000%nat). *)
+QuickChick (compiler_correct 10000%nat).
