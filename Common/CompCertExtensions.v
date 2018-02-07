@@ -75,10 +75,11 @@ Qed.
 
 (* How to simplify this proof ? *)
 Lemma behavior_prefix_comp : forall m1 m2 b,
-    behavior_prefix m1 b ->
+    prefix m1 b ->
     behavior_prefix m2 b ->
-    (trace_prefix m1 m2 \/ trace_prefix m2 m1).
+    (finpref_trace_prefix m1 m2 \/ trace_finpref_prefix m2 m1).
 Proof.
+(* RB: TODO: New prefix model.
   intros m1 m2 b [beh1 H1] [beh2 H2].
   destruct b.
 
@@ -107,25 +108,35 @@ Proof.
   assert (K2 : trace_prefix m2 t) by now exists t1.
   apply (help K1 K2).
 Qed.
+*) Admitted.
 
 
 Lemma trace_behavior_prefix_trans : forall m1 m2 b,
-    trace_prefix m1 m2 ->
+    finpref_trace_prefix m1 m2 ->
     behavior_prefix m2 b ->
-    behavior_prefix m1 b.
+    prefix m1 b.
 Proof.
+(* RB: TODO: New prefix model.
   unfold trace_prefix, behavior_prefix.
   intros m1 m2 b [m3 Hm3] [b' Hb].
   subst m2 b.
   exists (behavior_app m3 b').
   now rewrite <- behavior_app_assoc.
 Qed.
+*) Admitted.
+
+Lemma trace_behavior_prefix_trans' : forall m1 m2 b,
+  trace_finpref_prefix m1 m2 ->
+  prefix m2 b ->
+  behavior_prefix m1 b.
+Admitted.
 
 Lemma behavior_prefix_goes_wrong_trans : forall t b m,
   behavior_prefix t b ->
-  behavior_prefix m (Goes_wrong t) ->
-  behavior_prefix m b.
+  prefix m (Goes_wrong t) ->
+  prefix m b.
 Proof.
+(* RB: TODO: New prefix model.)
   unfold behavior_prefix.
   destruct t as [| e t']; intros b m [b1 H1] [b2 H2]; subst b.
   - destruct m; destruct b2; simpl in H2; try discriminate.
@@ -136,15 +147,21 @@ Proof.
       exists (behavior_app t'' b1). rewrite <- behavior_app_assoc.
       reflexivity.
 Qed.
+*) Admitted.
 
 Lemma behavior_prefix_improves_trans : forall t b m,
-    behavior_prefix m t ->
+    prefix m t ->
     behavior_improves t b ->
-    behavior_prefix m b.
+    prefix m b.
 Proof.
   intros t b m H0 H1.
   destruct H1 as  [H1 | [t' [H11 H12]]].
   + subst. assumption.
-  + subst. eapply  behavior_prefix_goes_wrong_trans; eassumption.
+  + subst. eapply behavior_prefix_goes_wrong_trans; eassumption.
 Qed.
 
+Lemma behavior_prefix_improves_trans' : forall t b m,
+  behavior_prefix m t ->
+  behavior_improves t b ->
+  behavior_prefix m b.
+Admitted.

@@ -112,7 +112,7 @@ Section RSC_DC_MD.
     destruct HP'_Cs_compiles
       as [P'_compiled [Cs_compiled [HP'_compiles [HCs_compiles HP'_Cs_compiles]]]].
     assert (exists b', program_behaves (I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b'
-                       /\ behavior_prefix m b')
+                       /\ prefix m b')
       as HP'_Cs_compiled_beh. {
       apply forward_simulation_behavior_improves
         with (L2:=I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) in HP'_Cs_beh;
@@ -185,7 +185,7 @@ Section RSC_DC_MD.
       as HpCs_compiled_well_formed
         by (apply Intermediate.linking_well_formedness; assumption).
 
-    assert (behavior_prefix m beh2) as Hpref_m_beh2 by (eapply behavior_prefix_improves_trans; eassumption).
+    assert (prefix m beh2) as Hpref_m_beh2 by (eapply behavior_prefix_improves_trans; eassumption).
     pose proof composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkability'' HpCs_compiled_closed
@@ -234,7 +234,7 @@ Section RSC_DC_MD.
       + subst pCs_beh. assumption.
       + left. subst. assumption.
     - destruct H as [t' [Hgoes_wrong Hprefix]].
-      assert(trace_prefix m t' \/ trace_prefix t' m) as H by (eapply behavior_prefix_comp; eauto).
+      assert(finpref_trace_prefix m t' \/ trace_finpref_prefix t' m) as H by (eapply behavior_prefix_comp; eauto).
       destruct H as [H | H].
       + split.
         * subst pCs_beh. assumption.
@@ -268,11 +268,11 @@ Section RSC_DC_MD.
                 now apply G1.
               * assumption.
               * assert(behavior_prefix t' beh) as H0. {
-                  eapply trace_behavior_prefix_trans.
+                  eapply trace_behavior_prefix_trans'.
                   - now apply H.
                   - assumption.
                 }
-                eapply behavior_prefix_improves_trans.
+                eapply behavior_prefix_improves_trans'.
                 - now eapply H0.
                 - assumption.
             + destruct H2 as [t'' [H21 [H22 H23]]].
