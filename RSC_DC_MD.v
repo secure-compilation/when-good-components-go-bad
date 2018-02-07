@@ -42,7 +42,7 @@ Section RSC_DC_MD.
   Theorem RSC_DC_MD:
     forall b m,
       program_behaves (I.CS.sem (Intermediate.program_link p_compiled Ct)) b ->
-      behavior_prefix m b ->
+      prefix m b ->
       not_wrong b -> (* CH: could try to remove this later *)
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
@@ -50,9 +50,9 @@ Section RSC_DC_MD.
       linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (Source.program_link p Cs) /\
       program_behaves (S.CS.sem (Source.program_link p Cs)) beh /\
-      (behavior_prefix m beh \/
+      (prefix m beh \/
       (exists t',
-        beh = Goes_wrong t' /\ trace_prefix t' m /\
+        beh = Goes_wrong t' /\ trace_finpref_prefix t' m /\
          undef_in Component.main t' (Source.prog_interface p))).
   Proof.
     intros t m Hbeh Hprefix0 Hsafe_beh.
