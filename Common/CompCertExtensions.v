@@ -21,6 +21,17 @@ Definition prefix (m:finpref_behavior) (b:program_behavior) : Prop :=
   | _, _ => False
   end.
 
+Definition trace_finpref_prefix (t : trace) (m : finpref_behavior) : Prop :=
+  match m with
+  | FTerminates t' | FGoes_wrong t' | FTbc t' => trace_prefix t t'
+  end.
+
+Definition finpref_trace_prefix (m : finpref_behavior) (t : trace) : Prop :=
+  match m with
+  | FTerminates t' | FGoes_wrong t' => False
+  | FTbc t' => trace_prefix t' t
+  end.
+
 (* Properties of prefixes. *)
 
 Lemma help : forall m1 m2 T,
