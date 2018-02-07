@@ -6,6 +6,23 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+(* Finite prefixes and behaviors. *)
+
+Inductive finpref_behavior : Type :=
+  | FTerminates: trace -> finpref_behavior
+  | FGoes_wrong: trace -> finpref_behavior
+  | FTbc : trace -> finpref_behavior.
+
+Definition prefix (m:finpref_behavior) (b:program_behavior) : Prop :=
+  match m, b with
+  | FTerminates t1, Terminates t2
+  | FGoes_wrong t1, Goes_wrong t2 => t1 = t2
+  | FTbc t1, b => behavior_prefix t1 b
+  | _, _ => False
+  end.
+
+(* Properties of prefixes. *)
+
 Lemma help : forall m1 m2 T,
     trace_prefix m1 T -> trace_prefix m2 T ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
@@ -120,15 +137,3 @@ Proof.
   + subst. eapply  behavior_prefix_goes_wrong_trans; eassumption.
 Qed.
 
-Inductive finpref_behavior : Type :=
-  | FTerminates: trace -> finpref_behavior
-  | FGoes_wrong: trace -> finpref_behavior
-  | FTbc : trace -> finpref_behavior.
-
-Definition prefix (m:finpref_behavior) (b:program_behavior) : Prop :=
-  match m, b with
-  | FTerminates t1, Terminates t2
-  | FGoes_wrong t1, Goes_wrong t2 => t1 = t2
-  | FTbc t1, b => behavior_prefix t1 b
-  | _, _ => False
-  end.
