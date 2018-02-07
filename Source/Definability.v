@@ -4,6 +4,7 @@ Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Linking.
+Require Import Common.CompCertExtensions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -773,7 +774,7 @@ Lemma definability_with_linking:
     linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
     Intermediate.closed_program (Intermediate.program_link p c) ->
     program_behaves (I.CS.sem (Intermediate.program_link p c)) b ->
-    behavior_prefix m b ->
+    prefix m b ->
   exists p' c' b',
     Source.prog_interface p' = Intermediate.prog_interface p /\
     Source.prog_interface c' = Intermediate.prog_interface c /\
@@ -781,7 +782,7 @@ Lemma definability_with_linking:
     Source.well_formed_program c' /\
     Source.closed_program (Source.program_link p' c') /\
     program_behaves (S.CS.sem (Source.program_link p' c')) b' /\
-    behavior_prefix m b'.
+    prefix m b'.
 Proof.
   move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
@@ -792,6 +793,7 @@ Proof.
     do 2![rewrite Intermediate.wfprog_defined_procedures //].
     by rewrite -domm_union mem_domm e.
   have Hatomic : Atomic (I.CS.sem (Intermediate.program_link p c)) by admit.
+  (* RB: TODO: Fold in new finite behavior prefixes.
   have {Hbeh} [cs [cs' [Hcs Hstar]]] :
       exists cs cs',
         I.CS.initial_state (Intermediate.program_link p c) cs /\
@@ -820,6 +822,7 @@ Proof.
     rewrite /intf unionmC; last by case: Hlinkable.
     rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
+  *)
   (* Needs properties about unlinking. *)
   admit.
 Admitted.
