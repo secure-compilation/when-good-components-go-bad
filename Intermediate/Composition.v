@@ -2,6 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Memory.
 Require Import Common.Linking.
+Require Import Common.CompCertExtensions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -1456,10 +1457,10 @@ Section Composition.
     forall b1 b2 m,
       program_behaves (PS.sem p (prog_interface c)) b1 ->
       program_behaves (PS.sem c (prog_interface p)) b2 ->
-      behavior_prefix m b1 ->
-      behavior_prefix m b2 ->
+      prefix m b1 ->
+      prefix m b2 ->
     exists b3,
       program_behaves (CS.sem (program_link p c)) b3 /\
-      behavior_prefix m b3.
+      prefix m b3.
   Admitted.
 End Composition.
