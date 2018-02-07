@@ -1,13 +1,13 @@
-## When Good Components Go Bad ##
+# When Good Components Go Bad #
 
 This repository contains the Coq development of the paper:
 - Guglielmo Fachini, Cătălin Hriţcu, Marco Stronati, Arthur Azevedo de Amorim, Ana Nora Evans, Carmine Abate, Roberto Blanco, Théo Laurent, Benjamin C. Pierce, and Andrew Tolmach. **[When Good Components Go Bad: Formally Secure Compilation Despite Dynamic Compromise](https://arxiv.org/abs/1802.00588)**. February 2018.
 
-## Top-level theorems:
+### Top-level theorems ###
 - `RSC_DC_MD.v` -- secure compilation for our compiler
 - `RSC_DC.v` -- general proofs about the class of properties preserved by RSC_DC
 
-## Prerequisites
+### Prerequisites ###
 
 This development requires Coq v8.7.1 to work, as well as the following libraries:
 - Mathematical Components 1.6.4 (https://math-comp.github.io/math-comp/)
