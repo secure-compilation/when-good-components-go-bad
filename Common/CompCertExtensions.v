@@ -116,20 +116,32 @@ Lemma trace_behavior_prefix_trans : forall m1 m2 b,
     behavior_prefix m2 b ->
     prefix m1 b.
 Proof.
-(* RB: TODO: New prefix model.
-  unfold trace_prefix, behavior_prefix.
-  intros m1 m2 b [m3 Hm3] [b' Hb].
-  subst m2 b.
-  exists (behavior_app m3 b').
-  now rewrite <- behavior_app_assoc.
+  unfold finpref_trace_prefix, behavior_prefix, prefix.
+  intros f m b Hf [b' Hb'].
+  subst b.
+  destruct f as [| | f].
+  - inversion Hf.
+  - inversion Hf.
+  - unfold trace_prefix in Hf. destruct Hf as [t Ht]. subst m.
+    exists (behavior_app t b'). now rewrite <- behavior_app_assoc.
 Qed.
-*) Admitted.
 
 Lemma trace_behavior_prefix_trans' : forall m1 m2 b,
   trace_finpref_prefix m1 m2 ->
   prefix m2 b ->
   behavior_prefix m1 b.
-Admitted.
+Proof.
+  unfold trace_finpref_prefix, prefix, behavior_prefix.
+  intros t f b Hf Hfb.
+  destruct f as [t1 | t1 | t1];
+    destruct Hf as [t2 Ht2]; subst t1.
+  - destruct b as [t3 | t3 | t3 | t3]; try (inversion Hfb; fail).
+    + subst t3. exists (Terminates t2). reflexivity.
+  - destruct b as [t3 | t3 | t3 | t3]; try (inversion Hfb; fail).
+    + subst t3. exists (Goes_wrong t2). reflexivity.
+  - destruct Hfb as [b1 Hb1]. subst b.
+    exists (behavior_app t2 b1). now rewrite <- behavior_app_assoc.
+Qed.
 
 Lemma behavior_prefix_goes_wrong_trans : forall t b m,
   behavior_prefix t b ->
@@ -164,4 +176,12 @@ Lemma behavior_prefix_improves_trans' : forall t b m,
   behavior_prefix m t ->
   behavior_improves t b ->
   behavior_prefix m b.
-Admitted.
+Proof.
+  unfold behavior_prefix, behavior_improves.
+  intros b1 b2 t1 [b3 Happb1] [Heqb1 | [t2 [Hwrongb1 [b4 Happb2]]]].
+  - subst. eauto.
+  - subst.
+    unfold behavior_app in Hwrongb1. destruct b3; try (inversion Hwrongb1; fail).
+    + inversion Hwrongb1 as [Heqt2].
+      exists (behavior_app t b4). now rewrite <- behavior_app_assoc.
+Qed.
