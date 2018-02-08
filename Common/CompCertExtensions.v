@@ -143,7 +143,19 @@ Proof.
     exists (behavior_app t2 b1). now rewrite <- behavior_app_assoc.
 Qed.
 
-Lemma behavior_prefix_goes_wrong_trans : forall t b m,
+Lemma behavior_prefix_goes_wrong_trans : forall t1 t2 b,
+  behavior_prefix t1 (Goes_wrong t2) ->
+  behavior_prefix t2 b ->
+  behavior_prefix t1 b.
+Proof.
+  unfold behavior_prefix.
+  intros t1 t2 b [b1 Hprefix1] [b2 ?]; subst b.
+  unfold behavior_app in Hprefix1.
+  destruct b1; try (inversion Hprefix1).
+  - subst t2. exists (behavior_app t b2). now rewrite <- behavior_app_assoc.
+Qed.
+
+Lemma behavior_prefix_goes_wrong_trans' : forall t b m,
   behavior_prefix t b ->
   prefix m (Goes_wrong t) ->
   prefix m b.
@@ -169,7 +181,7 @@ Proof.
   intros t b m H0 H1.
   destruct H1 as  [H1 | [t' [H11 H12]]].
   + subst. assumption.
-  + subst. eapply behavior_prefix_goes_wrong_trans; eassumption.
+  + subst. eapply behavior_prefix_goes_wrong_trans'; eassumption.
 Qed.
 
 Lemma behavior_prefix_improves_trans' : forall t b m,

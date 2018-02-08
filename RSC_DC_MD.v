@@ -114,6 +114,7 @@ Section RSC_DC_MD.
     assert (exists b', program_behaves (I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b'
                        /\ prefix m b')
       as HP'_Cs_compiled_beh. {
+
       apply forward_simulation_behavior_improves
         with (L2:=I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) in HP'_Cs_beh;
         simpl; eauto.
@@ -121,7 +122,13 @@ Section RSC_DC_MD.
         + assumption.
         + destruct H2 as [|[t' [H21 H22]]].
           * subst. assumption.
-          * subst. eapply behavior_prefix_goes_wrong_trans; eassumption.
+          * subst. unfold prefix in Hprefix1. destruct m as [? | m' | ?].
+            ** destruct Hprefix1.
+            ** subst m'. destruct H22 as [b22 H22]. subst b2.
+               simpl in Hprefix0.
+               destruct t as [? | ? | ? |t2]; try (inversion Hprefix0).
+               *** subst t2. inversion Hsafe_beh.
+            ** simpl. apply (behavior_prefix_goes_wrong_trans Hprefix1 H22).
       - apply Compiler.I_simulates_S; auto.
         apply Source.linking_well_formedness.
         * assumption.
