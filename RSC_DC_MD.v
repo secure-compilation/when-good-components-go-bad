@@ -192,7 +192,20 @@ Section RSC_DC_MD.
       as HpCs_compiled_well_formed
         by (apply Intermediate.linking_well_formedness; assumption).
 
-    assert (prefix m beh2) as Hpref_m_beh2 by (eapply behavior_prefix_improves_trans; eassumption).
+    assert (prefix m beh2) as Hpref_m_beh2. {
+      unfold prefix in HP'_Cs_compiled_prefix.
+      destruct m as [m' | m' | m'].
+      - destruct t2 as [t2' | ? | ? | ?]; try (inversion HP'_Cs_compiled_prefix; fail).
+        + subst t2'.
+          destruct HCs_beh_improves as [Hterm | [t' [Hterm Hpref]]].
+          * now subst beh2.
+          * inversion Hterm.
+      - simpl in Hprefix0.
+        destruct t; try (inversion Hprefix0; fail).
+        + inversion Hsafe_beh.
+      - simpl.
+        apply (behavior_prefix_improves_trans' HP'_Cs_compiled_prefix HCs_beh_improves).
+    }
     pose proof composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkability'' HpCs_compiled_closed

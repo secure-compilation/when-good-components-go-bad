@@ -155,35 +155,6 @@ Proof.
   - subst t2. exists (behavior_app t b2). now rewrite <- behavior_app_assoc.
 Qed.
 
-Lemma behavior_prefix_goes_wrong_trans' : forall t b m,
-  behavior_prefix t b ->
-  prefix m (Goes_wrong t) ->
-  prefix m b.
-Proof.
-(* RB: TODO: New prefix model.)
-  unfold behavior_prefix.
-  destruct t as [| e t']; intros b m [b1 H1] [b2 H2]; subst b.
-  - destruct m; destruct b2; simpl in H2; try discriminate.
-    injection H2; intro H. subst. now eauto.
-  - destruct m; destruct b2 as [| | | t'']; simpl in *; try discriminate.
-    + exists (behavior_app (e :: t') b1). now rewrite behavior_app_E0.
-    + injection H2; intros E1 E2; subst e t'.
-      exists (behavior_app t'' b1). rewrite <- behavior_app_assoc.
-      reflexivity.
-Qed.
-*) Admitted.
-
-Lemma behavior_prefix_improves_trans : forall t b m,
-    prefix m t ->
-    behavior_improves t b ->
-    prefix m b.
-Proof.
-  intros t b m H0 H1.
-  destruct H1 as  [H1 | [t' [H11 H12]]].
-  + subst. assumption.
-  + subst. eapply behavior_prefix_goes_wrong_trans'; eassumption.
-Qed.
-
 Lemma behavior_prefix_improves_trans' : forall t b m,
   behavior_prefix m t ->
   behavior_improves t b ->
