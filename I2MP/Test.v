@@ -23,6 +23,6 @@ Definition load (m : {fmap mword Symbolic.mt -> matom }) : state :=
 
 Definition test : Intermediate.program.
 Admitted.
-
+(*
 Check let istate := load (encode (precompile test)) in
-      stepf istate.
+      stepf istate. *)

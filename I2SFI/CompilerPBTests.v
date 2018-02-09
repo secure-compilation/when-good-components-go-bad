@@ -401,9 +401,9 @@ Definition eval_program {X:Type} (update_fun : update_records) (ct : checker_typ
 Definition check_correct {log_entry_type : Type}
            (t : instr_gen)
            (ct : checker_type)
-           (update_fun : update_records)
-           (log_checker_error_fun : log_checker_error)
-           (log_checker_fun : log_checker)
+           (update_fun : @update_records log_entry_type)
+           (log_checker_error_fun : @log_checker_error log_entry_type)
+           (log_checker_fun : @log_checker log_entry_type)
            (fuel : nat)
   : Checker :=
   forAllShrink
@@ -426,7 +426,7 @@ Definition check_correct {log_entry_type : Type}
           match res with
           | TargetSFI.EitherMonad.Left msg err =>
             log_checker_error_fun log err
-          | TargetSFI.EitherMonad.Right (t, st,steps) => 
+          | TargetSFI.EitherMonad.Right (t, st,steps) =>
             (whenFail ("memory of failed program: " ++ (show_mem (MachineState.getMemory st)))%string
                       (log_checker_fun log steps st))
           end
