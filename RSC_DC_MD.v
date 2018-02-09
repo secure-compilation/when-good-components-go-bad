@@ -254,7 +254,7 @@ Section RSC_DC_MD.
       + subst pCs_beh. assumption.
       + left. subst. assumption.
     - destruct H as [t' [Hgoes_wrong Hprefix]].
-      assert(finpref_trace_prefix m t' \/ trace_finpref_prefix t' m) as H by (eapply behavior_prefix_comp; eauto).
+      assert(finpref_trace_prefix m t' \/ trace_finpref_prefix t' m) as H by (eapply behavior_prefix_comp'; eauto).
       destruct H as [H | H].
       + split.
         * subst pCs_beh. assumption.
