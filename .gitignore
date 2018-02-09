@@ -4,3 +4,7 @@
 *.aux
 Makefile.coq
 MakefileTest.coq
+I2SFI/*.cmi
+I2SFI/*.cmx
+sfi_safety_properties.exe
+CoqMakefile.conf

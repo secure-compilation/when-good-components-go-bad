@@ -1,14 +1,20 @@
 %: MakefileTest.coq phony
 	+make -f MakefileTest.coq $@
 
-all: MakefileTest.coq
+all: all_coq sfi_safety_properties.exe
+
+all_coq: MakefileTest.coq 
 	+make -f MakefileTest.coq all
-	rm -f /tmp/run_*_test.mli
+	rm -f /tmp/run*test.mli
+
+sfi_safety_properties.exe: all_coq
+	ocamlopt -I /tmp -o sfi_safety_properties.exe /tmp/run_test.ml I2SFI/main.ml
 
 clean: MakefileTest.coq
 	+make -f MakefileTest.coq clean
 	rm -f MakefileTest.coq
-	rm -f /tmp/run_*_test.ml* 
+	rm -f /tmp/run*test.* 
+	rm -f sfi_safety_properties.exe
 
 MakefileTest.coq: _CoqTestProject MakefileTest
 	coq_makefile -f _CoqTestProject | sed 's/$$(COQCHK) $$(COQCHKFLAGS) $$(COQLIBS)/$$(COQCHK) $$(COQCHKFLAGS) $$(subst -Q,-R,$$(COQLIBS))/' > MakefileTest.coq
@@ -19,4 +25,4 @@ MakefileTest: ;
 
 phony: ;
 
-.PHONY: all clean phony run_test.ml 
+.PHONY: all clean phony sfi_safety_properties.exe
