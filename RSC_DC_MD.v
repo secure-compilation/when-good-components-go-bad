@@ -114,6 +114,7 @@ Section RSC_DC_MD.
     assert (exists b', program_behaves (I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b'
                        /\ prefix m b')
       as HP'_Cs_compiled_beh. {
+
       apply forward_simulation_behavior_improves
         with (L2:=I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) in HP'_Cs_beh;
         simpl; eauto.
@@ -121,7 +122,13 @@ Section RSC_DC_MD.
         + assumption.
         + destruct H2 as [|[t' [H21 H22]]].
           * subst. assumption.
-          * subst. eapply behavior_prefix_goes_wrong_trans; eassumption.
+          * subst. unfold prefix in Hprefix1. destruct m as [? | m' | ?].
+            ** destruct Hprefix1.
+            ** subst m'. destruct H22 as [b22 H22]. subst b2.
+               simpl in Hprefix0.
+               destruct t as [? | ? | ? |t2]; try (inversion Hprefix0).
+               *** subst t2. inversion Hsafe_beh.
+            ** simpl. apply (behavior_prefix_goes_wrong_trans Hprefix1 H22).
       - apply Compiler.I_simulates_S; auto.
         apply Source.linking_well_formedness.
         * assumption.
@@ -185,7 +192,20 @@ Section RSC_DC_MD.
       as HpCs_compiled_well_formed
         by (apply Intermediate.linking_well_formedness; assumption).
 
-    assert (prefix m beh2) as Hpref_m_beh2 by (eapply behavior_prefix_improves_trans; eassumption).
+    assert (prefix m beh2) as Hpref_m_beh2. {
+      unfold prefix in HP'_Cs_compiled_prefix.
+      destruct m as [m' | m' | m'].
+      - destruct t2 as [t2' | ? | ? | ?]; try (inversion HP'_Cs_compiled_prefix; fail).
+        + subst t2'.
+          destruct HCs_beh_improves as [Hterm | [t' [Hterm Hpref]]].
+          * now subst beh2.
+          * inversion Hterm.
+      - simpl in Hprefix0.
+        destruct t; try (inversion Hprefix0; fail).
+        + inversion Hsafe_beh.
+      - simpl.
+        apply (behavior_prefix_improves_trans' HP'_Cs_compiled_prefix HCs_beh_improves).
+    }
     pose proof composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkability'' HpCs_compiled_closed
