@@ -75,11 +75,10 @@ Qed.
 
 (* How to simplify this proof ? *)
 Lemma behavior_prefix_comp : forall m1 m2 b,
-    prefix m1 b ->
+    behavior_prefix m1 b ->
     behavior_prefix m2 b ->
-    (finpref_trace_prefix m1 m2 \/ trace_finpref_prefix m2 m1).
+    (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Proof.
-(* RB: TODO: New prefix model.
   intros m1 m2 b [beh1 H1] [beh2 H2].
   destruct b.
 
@@ -108,8 +107,25 @@ Proof.
   assert (K2 : trace_prefix m2 t) by now exists t1.
   apply (help K1 K2).
 Qed.
-*) Admitted.
 
+Lemma behavior_prefix_comp' : forall m1 m2 b,
+    prefix m1 b ->
+    behavior_prefix m2 b ->
+    (finpref_trace_prefix m1 m2 \/ trace_finpref_prefix m2 m1).
+Proof.
+  unfold prefix, finpref_trace_prefix, trace_finpref_prefix.
+  intros m1 m2 b Hbp1 Hbp2.
+  (* Destruct behaviors. *)
+  destruct m1 as [m1'|m1'|m1'];
+    destruct b as [b'|b'|b'|b'];
+    (* Non-matching cases are discarded by a simple inversion. *)
+    try (inversion Hbp1; fail);
+    (* Matching cases are proved by the lemma on standard behaviors. *)
+    try (apply (behavior_prefix_comp Hbp1 Hbp2));
+    (* The remaining cases are trivial. *)
+    subst m1'; destruct Hbp2 as [b'' Happ]; destruct b''; inversion Happ as [Hb'];
+      right; now exists t.
+Qed.
 
 Lemma trace_behavior_prefix_trans : forall m1 m2 b,
     finpref_trace_prefix m1 m2 ->
