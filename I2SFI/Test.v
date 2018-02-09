@@ -2,7 +2,7 @@ Require Import Coq.Strings.String.
 Require Import Coq.Bool.Bool.
 Require Import ZArith.
 
-Require Import CompilerPBTests.
+Require Import I2SFI.CompilerPBTests.
 Require Import I2SFI.StoreTest.
 Require Import I2SFI.JumpTest.
 Require Import I2SFI.StackTest.
@@ -29,12 +29,12 @@ Definition run_jump_test :=
 Definition run_stack_test :=
   show (quickCheck (stack_correct FUEL)).
 
-(* Extraction "/tmp/run_store_test.ml" run_store_test. *)
-(* Extraction "/tmp/run_jump_test.ml" run_jump_test. *)
-(* Extraction "/tmp/run_stack_test.ml" run_stack_test. *)
+Extraction "/tmp/run_store_test.ml" run_store_test.
+Extraction "/tmp/run_jump_test.ml" run_jump_test.
+Extraction "/tmp/run_stack_test.ml" run_stack_test.
 
 (****************** QUICK CHECKS ***************************)
-Extract Constant Test.defNumTests => "10".
-QuickChick (store_correct 100%nat).
-QuickChick (jump_correct 100%nat).
-QuickChick (stack_correct 100%nat).
+(* Extract Constant Test.defNumTests => "10". *)
+(* QuickChick (store_correct 100%nat). *)
+(* QuickChick (jump_correct 100%nat). *)
+(* QuickChick (stack_correct 100%nat). *)

@@ -207,4 +207,4 @@ Definition jump_log_checker_error (log : log_type jump_log_entry) err :=
   end.
 
 Definition jump_correct (fuel : nat) :=
-  check_correct TestSpecific CJump update_jump_log jump_log_checker_error jump_log_checker.
+  check_correct TestSpecific CJump update_jump_log jump_log_checker_error jump_log_checker fuel.

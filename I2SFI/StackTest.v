@@ -270,4 +270,5 @@ Definition stack_log_checker_error (log : log_type stack_log_entry) err :=
   end.
 
 Definition stack_correct (fuel : nat) :=
-  check_correct TestSpecific CStack update_stack_log stack_log_checker_error stack_log_checker.
+  check_correct TestSpecific CStack update_stack_log
+                stack_log_checker_error stack_log_checker fuel.
