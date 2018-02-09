@@ -157,7 +157,24 @@ Definition get_SFI_data_address (cid : Component_id)
 Definition gen_cn (pi : prog_int) : list Component_id :=
   List.map (fun '(key,_) => key) (BinNatMap.elements pi).
 
-Definition exported_procs_labels (procs : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
+Definition add_main_pi (mpid : Procedure_id) (pi : prog_int) :=
+  match BinNatMap.find (N.of_nat Component.main) pi with
+  | None =>
+    BinNatMap.add (N.of_nat Component.main)
+                  ([(N.of_nat Procedure.main)],nil)
+                  pi
+  | Some (exp,imp) =>
+    if (List.existsb (N.eqb mpid) exp)
+    then pi
+    else
+      BinNatMap.add (N.of_nat Component.main)
+                    (mpid::exp,imp)
+                    pi
+  end.
+
+Definition exported_procs_labels
+           (mpid : Procedure_id)
+           (procs : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
            (pi : prog_int) : BinNatMap.t (BinNatMap.t AbstractMachine.label) :=
   let max_code_component_label procs :=
       N.pos ( List.fold_left
@@ -172,8 +189,8 @@ Definition exported_procs_labels (procs : BinNatMap.t (BinNatMap.t Intermediate.
                 )
                 1%positive) in
 
-  let component_exported_procs_labels cid pi procs : (BinNatMap.t AbstractMachine.label) :=
-      match BinNatMap.find cid pi with
+  let component_exported_procs_labels cid pi' procs : (BinNatMap.t AbstractMachine.label) :=
+      match BinNatMap.find cid pi' with
       | None => BinNatMap.empty AbstractMachine.label
       | Some (exp_procs,_) =>
         let start_lbl := ((max_code_component_label procs) + 1)%N in
@@ -184,13 +201,14 @@ Definition exported_procs_labels (procs : BinNatMap.t (BinNatMap.t Intermediate.
                                 (List.repeat cid (List.length exp_procs))
                                 new_labels))
       end in
+  let augmented_pi := add_main_pi mpid pi in
   BinNatMap.fold (fun cid procs_map acc =>
           BinNatMap.add
                cid
                (
                  component_exported_procs_labels
                    cid
-                   pi
+                   augmented_pi
                    (BinNatMap.elements procs_map)
                )
                acc
@@ -559,28 +577,48 @@ Definition compile_IReturn : COMP (AbstractMachine.code) :=
            ++ [
                AbstractMachine.IJump RiscMachine.Register.R_RA]).
 
-Definition compile_ICall (cid1 : Component_id) (pid : Procedure_id)
+Definition compile_ICall (cid1 : Component_id)
+           (pid : Procedure_id) (interface :prog_int)
   : COMP (AbstractMachine.code) :=
   do cenv <- get;
-    do cid <- get_sfiId (current_component cenv);
-    let data_mask := RiscMachine.to_value (SFI.or_data_mask cid) in
-    let code_mask := RiscMachine.to_value (SFI.or_code_mask cid) in
-    do clbl <- get_proc_label cid1 pid;
-      do! modify (with_next_label);
-      let lbl :=  ((current_component cenv),(next_label cenv)) in
-        ret [
-            AbstractMachine.IJal clbl
-            ; AbstractMachine.ILabel lbl (* use this to force the next 4 intruction uninterrupted *)
-            ; AbstractMachine.IConst data_mask RiscMachine.Register.R_OR_DATA_MASK
-            ; AbstractMachine.IConst code_mask RiscMachine.Register.R_OR_CODE_MASK
-            ; AbstractMachine.IConst data_mask RiscMachine.Register.R_D
-            ; AbstractMachine.IConst code_mask RiscMachine.Register.R_T
-          ].
+    (* check if the call is allowed by the interface *)
+    match BinNatMap.find (current_component cenv) interface with
+    | None => fail "No interface entry for current component found" NoInfo
+    | Some (_,imports) =>
+      if (List.existsb (fun '(cid',pid')=> (N.eqb cid' cid1) && (N.eqb pid' pid)) imports)
+      then
+        let m := (exported_procedures_labels cenv) in
+        match BinNatMap.find cid1 m with
+        | None => fail "Procedure not exported 1" NoInfo
+        | Some pmap =>
+          match BinNatMap.find pid pmap with
+          | None => fail "Procedure not exported 2" NoInfo
+          | Some _ =>
+            do cid <- get_sfiId (current_component cenv);
+            let data_mask := RiscMachine.to_value (SFI.or_data_mask cid) in
+            let code_mask := RiscMachine.to_value (SFI.or_code_mask cid) in
+            do clbl <- get_proc_label cid1 pid;
+              do! modify (with_next_label);
+              let lbl :=  ((current_component cenv),(next_label cenv)) in
+              ret [
+                  AbstractMachine.IJal clbl
+                  (* Not Needed *)
+                  (* ; AbstractMachine.ILabel lbl *)
+                  ; AbstractMachine.IConst data_mask RiscMachine.Register.R_OR_DATA_MASK
+                  ; AbstractMachine.IConst code_mask RiscMachine.Register.R_OR_CODE_MASK
+                  ; AbstractMachine.IConst data_mask RiscMachine.Register.R_D
+                  ; AbstractMachine.IConst code_mask RiscMachine.Register.R_T
+                ]
+          end
+        end
+      else
+        fail "Procedure not imported" (ProcNotImported cid1 pid imports)
+    end.
 
 
-Fixpoint compile_instructions (ilist : Intermediate.Machine.code)
+Fixpoint compile_instructions (ilist : Intermediate.Machine.code)  (interface :prog_int)
   : COMP (AbstractMachine.code) :=
-  let compile_instruction i :=
+  let compile_instruction i interface :=
       do cenv <- get;
         let cid := (current_component cenv) in
         match i with
@@ -604,15 +642,15 @@ Fixpoint compile_instructions (ilist : Intermediate.Machine.code)
                                                                       (cid,N.of_nat lbl)]
         | Intermediate.Machine.IJump rt => (compile_IJump rt)
         | Intermediate.Machine.IJal lbl => ret [AbstractMachine.IJal (cid,N.of_nat lbl)]
-        | Intermediate.Machine.ICall c p => (compile_ICall (N.of_nat c) (N.of_nat p))
+        | Intermediate.Machine.ICall c p => (compile_ICall (N.of_nat c) (N.of_nat p) interface)
         | Intermediate.Machine.IReturn => (compile_IReturn)
         | Intermediate.Machine.IHalt => ret [AbstractMachine.IHalt]
         end in
   match (ilist) with
   | [] => ret []
   | i::xs =>
-    do ai <- compile_instruction i;
-      do res <- compile_instructions xs;
+    do ai <- compile_instruction i interface;
+      do res <- compile_instructions xs interface;
       ret (ai ++ res)
   end.
 
@@ -627,9 +665,19 @@ Definition compile_procedure
     let cid := (current_component cenv) in
     do comp_interface <- lift (BinNatMap.find cid interface)
        "Can't find interface for component " (NArg cid);
-      let exported_procs := fst comp_interface in
-      let is_exported := List.existsb (N.eqb pid) exported_procs in
-      do acode <- compile_instructions code;
+
+      let exported_procs := (exported_procedures_labels cenv) in
+      let is_exported :=
+          match BinNatMap.find cid exported_procs with
+          | None => false
+          | Some pmap =>
+            match BinNatMap.find pid pmap with
+            | None => false
+            | Some _ => true
+            end
+          end in
+
+      do acode <- compile_instructions code interface;
         if is_exported then
             do proc_label <- get_proc_label cid pid;
             do sfiId <- get_sfiId cid;
@@ -1155,13 +1203,18 @@ Definition compile_program (ip : Intermediate.program) :=
   let buffs := convert_prog_buffers (Intermediate.prog_buffers ip) in
   let pr_progs := convert_prog_procs (Intermediate.prog_procedures ip) in
 
+  let mpid := match (Intermediate.prog_main ip) with
+              | None => (N.of_nat Procedure.main)
+              | Some id => N.of_nat id
+              end in
+  
   let cn := gen_cn cip in
   let cid2SFIid := List.fold_left
                      (fun acc '(cid,i)  =>
                         BinNatMap.add cid (Env.index2SFIid i) acc)
                      (List.combine cn (List.seq 0 (List.length cn)))
                      (BinNatMap.empty N) in
-  let procs_labels := exported_procs_labels pr_progs cip in
+  let procs_labels := exported_procs_labels mpid pr_progs cip in
   let max_label := List.fold_left
                      N.max
                      (List.flat_map
@@ -1171,8 +1224,13 @@ Definition compile_program (ip : Intermediate.program) :=
 
   let procId2slot := allocate_procedure_slots pr_progs in
 
+
+
   (* FIXME: Using Pos.to_nat is dangerous, because it is not injective. We
      should replace positive by N everywhere. *)
+  (* Pos.to_nat is injective, but not surjective *)
+  (* Pos.of_nat is injective on the strictly positive naturals which is okay to use if 
+     the interface between layers agrees that the identifiers are >= 1 *)
   run (init_env cid2SFIid procId2slot procs_labels (max_label+1)%N)
         (
 
@@ -1191,7 +1249,7 @@ Definition compile_program (ip : Intermediate.program) :=
             do l2a <- label2address labeled_code;
 
             do mem0 <- generate_comp0_memory (N.of_nat Component.main)
-               (N.of_nat Procedure.main) data_mem l2a;
+               mpid data_mem l2a;
 
             do mem <- generate_code_memory labeled_code l2a mem0;
 

@@ -16,6 +16,7 @@ Require Import TargetSFI.CS.
 Require Import TargetSFI.SFITestUtil.
 
 Require Import Intermediate.CS.
+Require Import IntermediateProgramGeneration.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -168,7 +169,16 @@ Definition correct_checker
 
 (* compare traces *)
 Definition compiler_correct (fuel : nat) : Checker :=
-  forAllShrink (genIntermediateProgram TCompilerCorrect) shrink
+  forAllShrink (genIntermediateProgram
+                  EqualNoUndef
+                  (fun i =>
+                     match i with
+                     | Call => 40%nat
+                     | _ => 1
+                     end)
+                  (fun _ _ _ => returnGen [])
+                  (fun _ _ _ _ _ => returnGen [])
+               ) shrink
   ( fun ip =>
       match compile_program ip with
       | CompEitherMonad.Left msg err =>
@@ -210,11 +220,11 @@ Definition compiler_correct (fuel : nat) : Checker :=
       end
   ).
 
+(* TODO:Nora Add extraction *)
+(* Extract Constant Test.defNumTests => "100". *)
 
-Extract Constant Test.defNumTests => "100".
+(* QuickChick (compiler_correct 100%nat). *)
 
-QuickChick (compiler_correct 100%nat).
+(* QuickChick (compiler_correct 1000%nat). *)
 
-QuickChick (compiler_correct 1000%nat).
-
-QuickChick (compiler_correct 10000%nat).
+(* QuickChick (compiler_correct 10000%nat). *)

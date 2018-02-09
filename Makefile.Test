@@ -1,0 +1,22 @@
+%: MakefileTest.coq phony
+	+make -f MakefileTest.coq $@
+
+all: MakefileTest.coq
+	+make -f MakefileTest.coq all
+	rm -f /tmp/run_*_test.mli
+
+clean: MakefileTest.coq
+	+make -f MakefileTest.coq clean
+	rm -f MakefileTest.coq
+	rm -f /tmp/run_*_test.ml* 
+
+MakefileTest.coq: _CoqTestProject MakefileTest
+	coq_makefile -f _CoqTestProject | sed 's/$$(COQCHK) $$(COQCHKFLAGS) $$(COQLIBS)/$$(COQCHK) $$(COQCHKFLAGS) $$(subst -Q,-R,$$(COQLIBS))/' > MakefileTest.coq
+
+_CoqTestProject: ;
+
+MakefileTest: ;
+
+phony: ;
+
+.PHONY: all clean phony run_test.ml 

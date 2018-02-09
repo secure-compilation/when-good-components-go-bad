@@ -61,3 +61,17 @@ Proof.
   intros.
   destruct m; auto.
 Qed.
+
+Definition get_state (err : ExecutionError) : MachineState.t :=
+  match err with
+  | RegisterNotFound st _ => st 
+  | NoInfo => MachineState.empty
+  | UninitializedMemory st _ => st
+  | CodeMemoryException st _ _ => st
+  | DataMemoryException st _ _ => st
+  | MissingComponentId st _ _ => st
+  | CallEventError st _ _ _ _ => st
+  | RetEventError st _ _ _ => st
+  | IllegalJalToZeroComponent st => st
+  | IllegalJumpFromZeroComponent st => st
+  end.

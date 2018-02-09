@@ -89,3 +89,8 @@ TargetSFI/MachineFunctionalTests.v
 I2SFI/CompilerPBTests.v
 I2SFI/RCPBTests.v
 I2SFI/CompilerIntegrationTests.v
+I2SFI/Test.v
+I2SFI/IntermediateProgramGeneration.v
+I2SFI/StoreTest.v
+I2SFI/JumpTest.v
+I2SFI/StackTest.v

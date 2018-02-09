@@ -115,6 +115,8 @@ Instance show_compiler_error : Show CompilerError :=
         | CompEitherMonad.ExportedProcsLabelsP _ _ _ => "ExportedProcsLabelsP TODO"
         | CompEitherMonad.NArg p => show p
         | CompEitherMonad.TwoNArg p1 p2 => "(" ++ (show p1) ++ "," ++ (show p2) ++ ")"
+        | CompEitherMonad.ProcNotImported cid pid lst =>
+          "(" ++ (show cid) ++ "," ++ (show pid) ++ ")" ++ (show lst)
         end
   |}.
 

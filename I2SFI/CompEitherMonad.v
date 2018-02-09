@@ -20,6 +20,7 @@ Inductive CompilerError : Type :=
 | ExportedProcsLabelsP : N -> N ->
                          (BinNatMap.t (BinNatMap.t AbstractMachine.label)) -> CompilerError
 | NArg : N -> CompilerError
+| ProcNotImported : N -> N -> list (N*N) -> CompilerError
 | TwoNArg : N -> N -> CompilerError
 .
 
