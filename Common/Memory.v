@@ -318,7 +318,37 @@ Lemma program_allocation_in_partialized_memory:
     filterm (fun k _ => k \notin ctx) mem1' =
     filterm (fun k _ => k \notin ctx) mem2'.
 Proof.
-Admitted.
+  move=> ctx mem1 mem2.
+  move=> /eq_fmap Hfilter.
+  move=> C size mem1' mem2' ptr1 ptr2 HC_notin_ctx.
+  rewrite /Memory.alloc => Halloc1 Halloc2.
+  assert (Hfilter' := Hfilter).
+  specialize (Hfilter C).
+  rewrite filtermE filtermE in Hfilter.
+  rewrite HC_notin_ctx in Hfilter.
+  case mem1_C: (mem1 C) => [bs1|];
+    rewrite mem1_C // in Halloc1.
+  rewrite mem1_C in Hfilter.
+  simpl in Hfilter.
+  case mem2_C: (mem2 C) => [bs2|];
+    rewrite mem2_C // in Halloc2.
+  rewrite mem2_C in Hfilter.
+  simpl in Hfilter. injection Hfilter.
+  move=> Hsame_bs.
+  rewrite <- Hsame_bs in Halloc2.
+  case e_alloc: (ComponentMemory.alloc bs1 size);
+    rewrite e_alloc in Halloc1, Halloc2.
+  injection Halloc1. injection Halloc2.
+  move=> -> <- -> <-.
+  split.
+    by [].
+  apply/eq_fmap => C'.
+  rewrite filtermE filtermE setmE setmE.
+  case: eqP => _ //.
+  specialize (Hfilter' C').
+  rewrite filtermE filtermE in Hfilter'.
+  apply Hfilter'.
+Qed.
 
 Lemma program_load_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
@@ -330,7 +360,21 @@ Lemma program_load_in_partialized_memory:
     Memory.load mem2 (C, b, o) = Some v2 ->
     v1 = v2.
 Proof.
-Admitted.
+  move=> ctx mem1 mem2 /eq_fmap Hfilter.
+  move=> C b o v1 v2 HC_notin_ctx.
+  rewrite /Memory.load /= => Hload1 Hload2.
+  case mem1_C: (mem1 C);
+    rewrite mem1_C // in Hload1.
+  case mem2_C: (mem2 C);
+    rewrite mem2_C // in Hload2.
+  specialize (Hfilter C).
+  rewrite filtermE filtermE HC_notin_ctx mem1_C mem2_C /= in Hfilter.
+  injection Hfilter.
+  move=> same_mems.
+  rewrite same_mems in Hload1.
+  rewrite Hload1 in Hload2.
+  by injection Hload2.
+Qed.
 
 Lemma program_store_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
@@ -343,7 +387,32 @@ Lemma program_store_in_partialized_memory:
     filterm (fun k _ => k \notin ctx) mem1' =
     filterm (fun k _ => k \notin ctx) mem2'.
 Proof.
-Admitted.
+  move=> ctx mem1 mem2.
+  move/eq_fmap => Hfilter.
+  move=> C b o v mem1' mem2' C_notin_ctx.
+  rewrite /Memory.store /= => Hstore1 Hstore2.
+  assert (Hfilter' := Hfilter).
+  specialize (Hfilter C).
+  case mem1_C: (mem1 C) => [memC1|];
+    rewrite mem1_C // in Hstore1.
+  case mem2_C: (mem2 C) => [memC2|];
+    rewrite mem2_C // in Hstore2.
+  rewrite filtermE filtermE C_notin_ctx in Hfilter.
+  rewrite mem1_C mem2_C /= in Hfilter.
+  injection Hfilter.
+  move=> same_memC.
+  rewrite <- same_memC in Hstore2.
+  case memC1_store: (ComponentMemory.store memC1 b o v);
+    rewrite memC1_store // in Hstore1, Hstore2.
+  injection Hstore1. injection Hstore2.
+  move=> <- <-.
+  apply eq_fmap. intros C'.
+  rewrite filtermE filtermE setmE setmE.
+  case: (@eqP _ C' C) => [->|_].
+  - by rewrite C_notin_ctx.
+  - specialize (Hfilter' C').
+    by rewrite filtermE filtermE in Hfilter'.
+Qed.
 
 Lemma context_allocation_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem C size mem' ptr,
@@ -352,7 +421,19 @@ Lemma context_allocation_in_partialized_memory:
     filterm (fun k _ => k \notin ctx) mem' =
     filterm (fun k _ => k \notin ctx) mem.
 Proof.
-Admitted.
+  move=> ctx mem C size mem' ptr HC_in_ctx.
+  rewrite /Memory.alloc => Halloc.
+  case mem_C: (mem C) => [memC|];
+    rewrite mem_C // in Halloc.
+  case memC_alloc: (ComponentMemory.alloc memC size);
+    rewrite memC_alloc // in Halloc.
+  injection Halloc.
+  move=> Hptr <-.
+  apply/eq_fmap => C'.
+  rewrite filtermE filtermE setmE.
+  case: (@eqP _ C' C) => [-> | _] //.
+  by rewrite HC_in_ctx mem_C /=.
+Qed.
 
 Lemma context_store_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem C b o v mem',
@@ -361,4 +442,16 @@ Lemma context_store_in_partialized_memory:
     filterm (fun k _ => k \notin ctx) mem' =
     filterm (fun k _ => k \notin ctx) mem.
 Proof.
-Admitted.
+  move=> ctx mem C b o v mem' C_in_ctx.
+  rewrite /Memory.store /= => Hstore.
+  case mem_C: (mem C) => [memC|];
+    rewrite mem_C // in Hstore.
+  case memC_store: (ComponentMemory.store memC b o v);
+    rewrite memC_store // in Hstore.
+  injection Hstore.
+  move=> <-.
+  apply/eq_fmap => C'.
+  rewrite filtermE filtermE setmE.
+  case: (@eqP _ C' C) => [-> | _] //.
+  by rewrite C_in_ctx mem_C /=.
+Qed.
