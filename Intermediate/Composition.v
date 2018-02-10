@@ -1419,6 +1419,16 @@ Section PartialComposition.
         ** simpl. constructor; auto.
     + simpl. constructor.
   Qed.
+
+  Corollary partial_programs_composition_prefix :
+    forall bp bc m,
+      program_behaves (PS.sem p (prog_interface c)) bp ->
+      program_behaves (PS.sem c (prog_interface p)) bc ->
+      prefix m bp ->
+      prefix m bc ->
+    exists bprog,
+      program_behaves (PS.sem prog emptym) bprog /\ prefix m bprog.
+  Admitted.
 End PartialComposition.
 
 (*
@@ -1462,5 +1472,15 @@ Section Composition.
     exists b3,
       program_behaves (CS.sem (program_link p c)) b3 /\
       prefix m b3.
-  Admitted.
+  Proof.
+    intros b1 b2 m Hbeh1 Hbeh2 Hpref1 Hpref2.
+    pose proof
+      partial_programs_composition_prefix
+        wf1 wf2 linkability Hbeh1 Hbeh2 Hpref1 Hpref2
+      as Hcomp.
+    destruct Hcomp as [b3 [Hbeh3 Hpref3]].
+    exists b3. split; auto.
+    - apply partial_semantics_implies_complete_semantics; auto.
+      + apply linking_well_formedness; auto.
+  Qed.
 End Composition.
