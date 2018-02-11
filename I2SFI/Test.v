@@ -13,16 +13,12 @@ Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 Require Import ExtrOcamlBasic.
 Require Import ExtrOcamlNatInt.
 
-
 Extract Constant Test.defNumTests => "1000".
-Extract Constant newRandomSeed => "(Random.State.make [| int_of_string (Sys.getenv ""RAND_SEED"") |] )".
-
 (* number of target machine instructions to simulate *)
 Definition FUEL := 100%nat. 
 
 Definition run_store_test :=
-  (* show (quickCheck (store_correct FUEL)). *)
-   show (quickCheck (checker true)).
+  show (quickCheck (store_correct FUEL)). 
 
 Definition run_jump_test :=
   show (quickCheck (jump_correct FUEL)).
@@ -33,7 +29,6 @@ Definition run_stack_test :=
 Extraction "/tmp/run_test.ml" run_store_test run_jump_test  run_stack_test.
 
 (****************** QUICK CHECKS ***************************)
-Extract Constant Test.defNumTests => "10".
-QuickChick (store_correct 100%nat).
+(* QuickChick (store_correct 100%nat). *)
 (* QuickChick (jump_correct 100%nat). *)
 (* QuickChick (stack_correct 100%nat). *)
