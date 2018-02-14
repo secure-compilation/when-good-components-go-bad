@@ -109,7 +109,7 @@ Module Source.
       forall C P, exported_procedure (prog_interface p) C P ->
       find_procedure (prog_procedures p) C P;
     (* each instruction of each procedure is well-formed *)
-    wfprog_well_formed_procedures_2:
+    wfprog_well_formed_procedures:
       forall C P Pexpr,
         find_procedure (prog_procedures p) C P = Some Pexpr ->
         well_formed_expr p C Pexpr;
@@ -201,6 +201,99 @@ Module Source.
     move=> wf1 wf2 l12.
     rewrite link_sym // program_linkKL //.
     exact: linkable_sym.
+  Qed.
+
+  Lemma program_unlinkK i1 i2 p :
+    prog_interface p = unionm i1 i2 ->
+    well_formed_program p ->
+    linkable i1 i2 ->
+    program_link (program_unlink (domm i1) p) (program_unlink (domm i2) p) = p.
+  Proof.
+    case: p => _ pp pb /= -> Hwf [Hsound Hdis]; rewrite /program_link /=.
+    congr mkProg.
+    - apply/eq_fmap=> /= C; move/fdisjointP/(_ C)/implyP: Hdis.
+      rewrite !unionmE !filtermE !unionmE !mem_domm.
+      by case: (i1 C) (i2 C) => [?|] //= [?|] //=.
+    - apply/eq_fmap=> /= C; move/fdisjointP/(_ C)/implyP: Hdis.
+      move/wfprog_defined_procedures/eq_fset/(_ C): Hwf => /=.
+      rewrite !unionmE !filtermE !mem_domm !unionmE.
+      by case: (pp C) (i1 C)=> [?|] //= [?|] //= ->.
+    - apply/eq_fmap=> /= C; move/fdisjointP/(_ C)/implyP: Hdis.
+      move/wfprog_defined_buffers/eq_fset/(_ C): Hwf => /=.
+      rewrite !unionmE !filtermE !mem_domm !unionmE.
+      by case: (pb C) (i1 C)=> [?|] //= [?|] //= ->.
+  Qed.
+
+  Lemma exported_procedure_filter_comp i (f : nat -> bool) C P :
+    exported_procedure (filterm (fun C' _ => f C') i) C P
+    <-> f C /\ exported_procedure i C P.
+  Proof.
+    rewrite /exported_procedure /Program.has_component /Component.is_exporting.
+    split.
+    - case=> CI []; rewrite !filtermE.
+      by case: (i C) (f C)=> [_|] //= [] //= [->]; eauto.
+    - case=> f_C [CI [i_C P_CI]].
+      by exists CI; rewrite filtermE i_C /= f_C.
+  Qed.
+
+  Lemma imported_procedure_filter_comp i (f : nat -> bool) C C' P :
+    imported_procedure (filterm (fun C _ => f C) i) C C' P
+    <-> f C /\ imported_procedure i C C' P.
+  Proof.
+    rewrite /imported_procedure /Program.has_component /Component.is_importing.
+    split.
+    - case=> CI []; rewrite !filtermE.
+      by case: (i C) (f C)=> [_|] //= [] //= [->]; eauto.
+    - case=> f_C [CI [i_C C'_P_CI]].
+      by exists CI; rewrite filtermE i_C /= f_C.
+  Qed.
+
+  Lemma find_procedure_filter_comp procs (f : nat -> bool) C P :
+    find_procedure (filterm (fun C' _ => f C') procs) C P =
+    if f C then find_procedure procs C P else None.
+  Proof.
+    rewrite /find_procedure filtermE.
+    by case: (procs C) (f C)=> [?|] //= [].
+  Qed.
+
+  Lemma well_formed_program_unlink Cs p :
+    well_formed_program p ->
+    well_formed_program (program_unlink Cs p).
+  Proof.
+    case: p => [pi pp pb] wf; split=> /=.
+    - move=> C C' P [CI []].
+      rewrite /Program.has_component /Component.is_importing /Component.is_exporting.
+      rewrite !filtermE.
+      case pi_C: (pi C)=> [CI'|] //= HCI.
+      case: ifP HCI pi_C=> [C_Cs|] //  [->] {CI'} pi_C C'_P CI'.
+      have Himp : imported_procedure pi C C' P by exists CI; split.
+      move/wfprog_interface_soundness/(_ _ _ _ Himp CI'): wf.
+      rewrite /Program.has_component /=.
+      case pi_C': (pi C')=> [CI''|] //=.
+      by case: ifP.
+    - apply/eq_fset=> C; move/wfprog_defined_procedures/eq_fset/(_ C): wf.
+      rewrite /= !mem_domm !filtermE.
+      by case: (pp C) (pi C) (C \in Cs) => [?|] //= [?|] //= [].
+    - move=> C P.
+      rewrite exported_procedure_filter_comp find_procedure_filter_comp.
+      case=> ->.
+      exact: (wfprog_exported_procedures_existence wf).
+    - move=> C P Pexpr; rewrite find_procedure_filter_comp.
+      case: ifP=> //= C_Cs pp_C_P.
+      case/wfprog_well_formed_procedures/(_ _ _ _ pp_C_P): wf=> /= Hcalls Hints.
+      split=> //= C' P' /Hcalls.
+      rewrite find_procedure_filter_comp C_Cs.
+      case: ifP=> // _.
+      by rewrite imported_procedure_filter_comp.
+    - apply/eq_fset=> C; move/wfprog_defined_buffers/eq_fset/(_ C): wf.
+      rewrite /= !mem_domm !filtermE.
+      by case: (pb C) (pi C) (C \in Cs) => [?|] //= [?|] //= [].
+    - move=> C; rewrite filtermE.
+      case pi_C: (pi C)=> [CI|] //=.
+      case: ifP=> //= C_Cs _.
+      move/wfprog_well_formed_buffers/(_ C): wf=> /=.
+      rewrite pi_C=> /(_ erefl) [bufs /= pb_C ?].
+      by exists bufs => //=; rewrite filtermE pb_C /= C_Cs.
   Qed.
 
   Lemma linkable_programs_has_component p1 p2 :
@@ -296,7 +389,7 @@ Module Source.
       rewrite /= (linkable_programs_find_procedure wf1 wf2 link) => find.
       have {find} wf: well_formed_expr p1 C Pexpr \/ well_formed_expr p2 C Pexpr.
         case: find=> [H|H]; [left|right];
-        apply: wfprog_well_formed_procedures_2; by case: link; eauto.
+        apply: wfprog_well_formed_procedures; by case: link; eauto.
       split=> /=; last by case: wf=> [[]|[]].
       without loss {link wf wf1 wf2} [link wf1 wf2 [wf _]]: p1 p2 /
           [/\ linkable (prog_interface p1) (prog_interface p2),
