@@ -799,16 +799,12 @@ Proof.
         I.CS.initial_state (Intermediate.program_link p c) cs /\
         Star (I.CS.sem (Intermediate.program_link p c)) cs m' cs'.
     case: b / Hbeh Hpre.
-      move=> cs beh Hcs Hbeh Hpre. (* [beh' e]; subst beh. *)
-    (* RB: TODO: Refactor and adapt to SSReflect style. *)
-    - destruct m as [m|m|m]; simpl in m'.
-      + inversion Hbeh as [t cs' Hstar Hfinal Ht|?|?|?];
-          subst; try (inversion Hpre; fail).
-        inversion Hpre; subst. exists cs, cs'. split; assumption.
-      + (* Essentially the same as the previous one. *)
-        inversion Hbeh as [?|?|?|t cs' Hstar Hfinal Ht];
-          subst; try (inversion Hpre; fail).
-        inversion Hpre; subst. exists cs, cs'. split; assumption.
+    - rewrite {}/m' => cs beh Hcs Hbeh Hpre.
+      case: m Hpre=> [m|m|m] /= Hpre.
+      + case: beh / Hbeh Hpre=> //= t cs' Hstar Hfinal -> {m}.
+        by exists cs, cs'; split.
+      + case: beh / Hbeh Hpre=> //= t cs' Hstar Hfinal Ht -> {m}.
+        by exists cs, cs'; split.
       + destruct Hpre as [beh' ?]; subst beh.
         pose proof state_behaves_app_inv Hatomic m beh' Hbeh as Hstate.
         destruct Hstate as [cs' [Hstar Hbehaves]].
@@ -826,15 +822,6 @@ Proof.
         (* This last bit is repeated from the previous branch (and proof). *)
         do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
         split; try reflexivity; exact: star_refl.
-(*
-      case/(state_behaves_app_inv Hatomic): Hbeh=> cs' [Hstar Hbeh'].
-      by exists cs, cs'; split; eauto.
-    (* Program goes wrong initially and produces empty trace.  Thus, any state
-       works. *)
-    move=> _ [[ | | |beh'] //=]; case: m=> [|//] _.
-    do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
-    split; try reflexivity; exact: star_refl.
-*)
   have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m'.
     have [mainP [_ [HmainP _]]] := Intermediate.cprog_main_existence Hclosed.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
@@ -850,6 +837,14 @@ Proof.
     rewrite /intf unionmC; last by case: Hlinkable.
     rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
+  have wf_back : well_formed_program back.
+    apply: well_formed_events_well_formed_program=> //.
+    (* FIXME: Show events are well formed *)
+    admit.
+  split; first exact: well_formed_program_unlink.
+  split; first exact: well_formed_program_unlink.
+  rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
+  split=> //.
   (* Needs properties about unlinking. *)
   admit.
 Admitted.
