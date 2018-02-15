@@ -799,8 +799,33 @@ Proof.
         I.CS.initial_state (Intermediate.program_link p c) cs /\
         Star (I.CS.sem (Intermediate.program_link p c)) cs m' cs'.
     case: b / Hbeh Hpre.
-      move=> cs beh Hcs Hbeh Hprefix (* [beh' e]; subst beh. *).
-      (* TODO *) admit. admit.
+      move=> cs beh Hcs Hbeh Hpre. (* [beh' e]; subst beh. *)
+    (* RB: TODO: Refactor and adapt to SSReflect style. *)
+    - destruct m as [m|m|m]; simpl in m'.
+      + inversion Hbeh as [t cs' Hstar Hfinal Ht|?|?|?];
+          subst; try (inversion Hpre; fail).
+        inversion Hpre; subst. exists cs, cs'. split; assumption.
+      + (* Essentially the same as the previous one. *)
+        inversion Hbeh as [?|?|?|t cs' Hstar Hfinal Ht];
+          subst; try (inversion Hpre; fail).
+        inversion Hpre; subst. exists cs, cs'. split; assumption.
+      + destruct Hpre as [beh' ?]; subst beh.
+        pose proof state_behaves_app_inv Hatomic m beh' Hbeh as Hstate.
+        destruct Hstate as [cs' [Hstar Hbehaves]].
+        exists cs, cs'; split; assumption.
+    - intros Hini Hpre.
+      destruct m as [m|m|m].
+      + inversion Hpre.
+      + inversion Hpre; subst.
+        do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
+        split; try reflexivity; exact: star_refl.
+      + inversion Hpre as [beh' Hbeh'].
+        destruct beh' as [t|t|t|t]; try (inversion Hbeh'; fail).
+        inversion Hbeh' as [HE0]. symmetry in HE0. apply Eapp_E0_inv in HE0.
+        destruct HE0; subst.
+        (* This last bit is repeated from the previous branch (and proof). *)
+        do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
+        split; try reflexivity; exact: star_refl.
 (*
       case/(state_behaves_app_inv Hatomic): Hbeh=> cs' [Hstar Hbeh'].
       by exists cs, cs'; split; eauto.
