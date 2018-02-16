@@ -105,11 +105,16 @@ Section RSC_DC_MD.
         by (now apply well_formed_compilable).
       assert (exists Cs_compiled, compile_program Cs = Some Cs_compiled)
         as [Cs_compiled HCs_compiles]
-          by (now apply well_formed_compilable).
+        by (now apply well_formed_compilable).
       assert (exists P'_Cs_compiled,
                  compile_program (Source.program_link P' Cs) = Some P'_Cs_compiled)
-        as [P'_Cs_compiled HP'_Cs_compiles]
-        by admit.
+        as [P'_Cs_compiled HP'_Cs_compiles]. {
+        rewrite <- Hsame_iface1 in linkability'''.
+        rewrite <- Hsame_iface2 in linkability'''.
+        pose proof Source.linking_well_formedness well_formed_P' well_formed_Cs linkability'''
+          as Hlinking_wf.
+        apply well_formed_compilable; assumption.
+      }
       exists P'_compiled, Cs_compiled, P'_Cs_compiled.
       split; [assumption |].
       split; [assumption |].
@@ -244,7 +249,7 @@ Section RSC_DC_MD.
     assert (exists pCs_compiled,
                compile_program (Source.program_link p Cs) = Some pCs_compiled)
       as [pCs_compiled HpCs_compiles]
-      by admit.
+      by now apply well_formed_compilable.
     assert (forall b, program_behaves (I.CS.sem pCs_compiled) b <->
                       program_behaves (I.CS.sem (Intermediate.program_link p_compiled Cs_compiled)) b)
       as HpCs_compiled_behaves
@@ -313,6 +318,6 @@ Section RSC_DC_MD.
               subst pCs_beh. injection H21; intro H21'. subst t''. assumption.
           - now apply linkable_sym.
           - setoid_rewrite <- Source.link_sym; assumption.
- (*Qed.*) Admitted.
+  Qed.
 
 End RSC_DC_MD.
