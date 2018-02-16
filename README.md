@@ -1,7 +1,11 @@
 # When Good Components Go Bad #
 
 This repository contains the Coq development of the paper:
-- Guglielmo Fachini, Cătălin Hriţcu, Marco Stronati, Arthur Azevedo de Amorim, Ana Nora Evans, Carmine Abate, Roberto Blanco, Théo Laurent, Benjamin C. Pierce, and Andrew Tolmach. **[When Good Components Go Bad: Formally Secure Compilation Despite Dynamic Compromise](https://arxiv.org/abs/1802.00588)**. February 2018.
+- Guglielmo Fachini, Cătălin Hriţcu, Marco Stronati, Arthur Azevedo de
+  Amorim, Ana Nora Evans, Carmine Abate, Roberto Blanco, Théo Laurent,
+  Benjamin C. Pierce, and Andrew Tolmach.
+  **[When Good Components Go Bad: Formally Secure Compilation Despite
+     Dynamic Compromise](https://arxiv.org/abs/1802.00588)**. February 2018.
 
 ### Top-level theorems ###
 - `RSC_DC_MD.v` -- secure compilation for our compiler
@@ -34,4 +38,7 @@ More thorough mutation tests are on the `nora-testing-experiments` branch.
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
-- The code in the `CompCert` dir is adapted based on files in the `common` and `lib` dirs of CompCert and is thus dual-licensed under the INRIA Non-Commercial License Agreement and the GNU General Public License version 2 or later (see `Compcert/LICENSE`)
+- The code in the `CompCert` dir is adapted based on files in the
+  `common` and `lib` dirs of CompCert and is thus dual-licensed under
+  the INRIA Non-Commercial License Agreement and the GNU General
+  Public License version 2 or later (see `Compcert/LICENSE`)
