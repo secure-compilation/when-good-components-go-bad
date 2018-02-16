@@ -52,6 +52,7 @@ Require Import Source.Language.
 Require Import Intermediate.Machine.
 Require Import S2I.CompMonad.
 Require Import CompCert.Smallstep.
+Require Import CompCert.Behaviors.
 Require Import S2I.Definitions.
 
 Import MonadNotations.
@@ -383,14 +384,16 @@ Hypothesis separate_compilation:
 (* CH: anyway, this is a very strong notion of separate compilation;
    wondering whether in the general case we could do away with something weaker
    (anyway, just a thought for later, current version is simpler): *)
-(* Hypothesis separate_compilation_weaker: *)
-(*   forall p c pc_comp p_comp c_comp, *)
-(*     Source.linkable_programs p c -> *)
-(*     compile_program p = Some p_comp -> *)
-(*     compile_program c = Some c_comp -> *)
-(*     compile_program (slink p c) = Some pc_comp -> *)
-(*     forall b, program_behaves (I.CS.sem pc_comp) b <-> *)
-(*               program_behaves (I.CS.sem (ilink p_comp c_comp)) b. *)
+Hypothesis separate_compilation_weaker:
+  forall p c pc_comp p_comp c_comp,
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p = Some p_comp ->
+    compile_program c = Some c_comp ->
+    compile_program (Source.program_link p c) = Some pc_comp ->
+    forall b, program_behaves (I.CS.sem pc_comp) b <->
+              program_behaves (I.CS.sem (Intermediate.program_link p_comp c_comp)) b.
 
 Hypothesis compilation_preserves_well_formedness:
   forall {p p_compiled},
