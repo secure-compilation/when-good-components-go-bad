@@ -457,10 +457,12 @@ Definition compile_IConst
         ret [AbstractMachine.IConst (RiscMachine.to_value address) reg']
   end.
 
+(*! Section fault_store_test *) 
 Definition compile_IStore (rp : Intermediate.Machine.register)
            (rs : Intermediate.Machine.register)
   : COMP (AbstractMachine.code) :=
   ret [
+      (*! *)
       AbstractMachine.IBinOp
         (RiscMachine.ISA.BitwiseAnd)
         (map_register rp)
@@ -474,6 +476,31 @@ Definition compile_IStore (rp : Intermediate.Machine.register)
       ; AbstractMachine.IStore
           (RiscMachine.Register.R_D)
           (map_register rs)
+      (*!
+      AbstractMachine.IStore (map_register rp) (map_register rs) 
+     *)
+      (*!
+      AbstractMachine.IMov (map_register rp) (RiscMachine.Register.R_D)
+      ; AbstractMachine.IBinOp
+                  (RiscMachine.ISA.BitwiseOr)
+                  (RiscMachine.Register.R_D)
+                  (RiscMachine.Register.R_OR_DATA_MASK)
+                  (RiscMachine.Register.R_D)
+       ; AbstractMachine.IStore
+                (RiscMachine.Register.R_D)
+                (map_register rs)
+       *)
+        (*!
+        AbstractMachine.IBinOp
+                  (RiscMachine.ISA.BitwiseAnd)
+                  (map_register rp)
+                  (RiscMachine.Register.R_AND_DATA_MASK)
+                  (RiscMachine.Register.R_D)
+        ; AbstractMachine.IStore
+                    (RiscMachine.Register.R_D)
+                    (map_register rs)
+       *)
+          
     ].
 
 Definition compile_IJump (rt : Intermediate.Machine.register)

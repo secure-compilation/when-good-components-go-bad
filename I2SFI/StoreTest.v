@@ -138,7 +138,7 @@ Definition store_log_checker_error (log : log_type store_log_entry) err :=
       (store_log_checker log 0%nat (get_state err))
   end.
 
-
+(*! Section prop_store_correct *) (*! extends fault_store_test *)
 Definition store_correct (fuel : nat) :=
   check_correct TestSpecific
                 CStore
