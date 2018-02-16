@@ -22,11 +22,13 @@ This development requires Coq v8.7.1 to work, as well as the following libraries
 Our tests are known to work with QuickChick branch 8.7
 (https://github.com/QuickChick/QuickChick) and OCaml from 4.02.3 to 4.06.
 
-Running the tests:
+Running the tests (to be simplified):
 
+    $ make clean
     $ make -j4
-    $ ./run_extracted_examples.sh
-    $ make test
+    $ ./run_extracted_examples.sh --force-extraction
+    $ rm sfi_safety_properties.exe
+    $ ./run_sfi_tests.sh
 
 More thorough mutation tests are on the `nora-testing-experiments` branch.
 

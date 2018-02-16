@@ -15,7 +15,7 @@ Import MonadNotations.
 Open Scope monad_scope.
 
 
-(** Encode: resolve labels, encode instructions, allocate buffers, concretize pointers **)
+(** Encode: resolve labels, encode instructions, allocate static buffers, concretize pointers to static buffers **)
 
 Require Import MicroPolicies.Types.
 
@@ -45,7 +45,7 @@ Definition encode_memval (eenv : encoder_env) (x : value * mem_tag) : matom :=
   {| vala := match fst x with
              | Int z => word.as_word (encode_int z)
              | Ptr p => word.as_word (concretize_pointer eenv p)
-             | Undef =>  word.as_word 0
+             | Undef =>  word.as_word 0 (* Invariant: should not be present *)
              end ;
      taga := snd x |}.
 
@@ -107,7 +107,7 @@ Definition encode (prog : Precompile.prog) : {fmap mword mt -> matom}:=
                           (*          switch to eqTypes for Intermediate.instr eventually *)
       map (fun x => match fst x with ILabel l => Posz l | _ => Negz 1 end)
           (Precompile.procedures prog) in
-  let solve (l : label) := index (Posz l) labels in
+  let solve (l : label) : int := index (Posz l) labels in
   (* Concretize pointers *)
   let base_adress c b :=
       length (Precompile.procedures prog) + 1 +

@@ -19,7 +19,7 @@ Record compiler_env :=
 
 Notation code := (seq (instr * mem_tag)).
 
-(** Precompilation: translate call/ret, tag, linearize **)
+(** Precompilation: translate call/ret, tag code and data, linearize code **)
 
 Definition def_tag (c : Component.id) : mem_tag :=
   {| vtag := Other ;
