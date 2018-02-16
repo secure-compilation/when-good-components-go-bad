@@ -29,6 +29,6 @@ Definition run_stack_test :=
 Extraction "/tmp/run_test.ml" run_store_test run_jump_test  run_stack_test.
 
 (****************** QUICK CHECKS ***************************)
-(*! QuickChick (store_correct 100%nat). *)
+
 (* QuickChick (jump_correct 100%nat). *)
 (* QuickChick (stack_correct 100%nat). *)
