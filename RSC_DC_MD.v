@@ -90,10 +90,12 @@ Section RSC_DC_MD.
 
     (* FCC *)
 
-    assert (exists P'_compiled Cs_compiled,
+    assert (exists P'_compiled Cs_compiled P'Cs_compiled,
                compile_program P' = Some P'_compiled /\
                compile_program Cs = Some Cs_compiled /\
-               compile_program (Source.program_link P' Cs) = Some (Intermediate.program_link P'_compiled Cs_compiled))
+               compile_program (Source.program_link P' Cs) = Some P'Cs_compiled /\
+               forall b, program_behaves (I.CS.sem P'Cs_compiled) b <->
+                         program_behaves (I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b)
       as HP'_Cs_compiles. {
       (* the definability output can be splitted in two programs *)
       (* probably need partialize to obtain them *)
@@ -102,21 +104,26 @@ Section RSC_DC_MD.
         by (now apply well_formed_compilable).
       assert (exists Cs_compiled, compile_program Cs = Some Cs_compiled)
         as [Cs_compiled HCs_compiles]
-        by (now apply well_formed_compilable).
-      exists P'_compiled, Cs_compiled.
+          by (now apply well_formed_compilable).
+      assert (exists P'_Cs_compiled,
+                 compile_program (Source.program_link P' Cs) = Some P'_Cs_compiled)
+        as [P'_Cs_compiled HP'_Cs_compiles]
+        by admit.
+      exists P'_compiled, Cs_compiled, P'_Cs_compiled.
       split; [assumption |].
       split; [assumption |].
-      apply Compiler.separate_compilation; try assumption.
+      split; [assumption |].
+      apply Compiler.separate_compilation_weaker with (p:=P') (c:=Cs);
+        try assumption.
       - congruence.
     }
     destruct HP'_Cs_compiles
-      as [P'_compiled [Cs_compiled [HP'_compiles [HCs_compiles HP'_Cs_compiles]]]].
-    assert (exists b', program_behaves (I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b'
-                       /\ prefix m b')
+      as [P'_compiled [Cs_compiled [P'_Cs_compiled [HP'_compiles [HCs_compiles [HP'_Cs_compiles HP'_Cs_behaves]]]]]].
+    assert (exists b', program_behaves (I.CS.sem P'_Cs_compiled) b' /\ prefix m b')
       as HP'_Cs_compiled_beh. {
 
       apply forward_simulation_behavior_improves
-        with (L2:=I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) in HP'_Cs_beh;
+        with (L2:=I.CS.sem P'_Cs_compiled) in HP'_Cs_beh;
         simpl; eauto.
       - destruct HP'_Cs_beh as [b2 [H1 H2]]. exists b2. split.
         + assumption.
@@ -153,14 +160,16 @@ Section RSC_DC_MD.
       rewrite <- Hsame_iface2 in linkability'''.
       apply linkability'''.
     }
-    rewrite <- Intermediate.link_sym in HP'_Cs_compiled_beh; [| assumption].
+    assert (HP'_Cs_compiled_beh' := HP'_Cs_compiled_beh).
+    apply HP'_Cs_behaves in HP'_Cs_compiled_beh'.
+    rewrite <- Intermediate.link_sym in HP'_Cs_compiled_beh'; [| assumption].
     pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
       as well_formed_P'_compiled.
     pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles
       as well_formed_Cs_compiled.
     pose proof Intermediate.Decomposition.decomposition_with_refinement
          well_formed_Cs_compiled well_formed_P'_compiled
-         linkability' HP'_Cs_compiled_beh as [beh2 [HCs_decomp HCs_beh_improves]].
+         linkability' HP'_Cs_compiled_beh' as [beh2 [HCs_decomp HCs_beh_improves]].
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
@@ -213,7 +222,6 @@ Section RSC_DC_MD.
          Hprefix0 Hpref_m_beh2
       as HpCs_compiled_beh.
     destruct HpCs_compiled_beh as [b3 [HpCs_compiled_beh HpCs_compiled_prefix]].
-
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
       apply (Source.interface_preserves_closedness_l HP'Cs_closed).
       apply compilation_preserves_interface in HP'_compiles.
@@ -233,15 +241,24 @@ Section RSC_DC_MD.
       by (apply Source.linking_well_formedness; assumption).
 
     (* BCC *)
+    assert (exists pCs_compiled,
+               compile_program (Source.program_link p Cs) = Some pCs_compiled)
+      as [pCs_compiled HpCs_compiles]
+      by admit.
+    assert (forall b, program_behaves (I.CS.sem pCs_compiled) b <->
+                      program_behaves (I.CS.sem (Intermediate.program_link p_compiled Cs_compiled)) b)
+      as HpCs_compiled_behaves.
+    {
+      apply Compiler.separate_compilation_weaker with (p:=p) (c:=Cs); assumption.
+    }
+    assert (HpCs_compiled_beh' := HpCs_compiled_beh).
+    apply HpCs_compiled_behaves in HpCs_compiled_beh'.
     assert (exists beh1,
                program_behaves (S.CS.sem (Source.program_link p Cs)) beh1 /\
                behavior_improves beh1 b3) as HpCs_beh. {
       apply backward_simulation_behavior_improves
-        with (L1:=S.CS.sem (Source.program_link p Cs)) in HpCs_compiled_beh; auto.
-      apply S_simulates_I.
-      - assumption.
-      - assumption.
-      - apply Compiler.separate_compilation; try assumption.
+        with (L1:=S.CS.sem (Source.program_link p Cs)) in HpCs_compiled_beh'; auto.
+      apply S_simulates_I; assumption.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
     exists Cs. exists pCs_beh.
@@ -299,6 +316,6 @@ Section RSC_DC_MD.
               subst pCs_beh. injection H21; intro H21'. subst t''. assumption.
           - now apply linkable_sym.
           - setoid_rewrite <- Source.link_sym; assumption.
- Qed.
+ (*Qed.*) Admitted.
 
 End RSC_DC_MD.
