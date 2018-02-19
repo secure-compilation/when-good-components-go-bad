@@ -15,6 +15,7 @@ Require Import TargetSFI.Machine.
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 Import GenLow GenHigh.
+Import Common.Values.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 
@@ -215,28 +216,20 @@ Definition gen_buffers (cids : list N)
       );
       returnGen (BinNatMapExtra.of_list (List.combine cids init_buffers)).
 
-Instance genOp : Gen Common.Values.binop :=
-  {
-    arbitrary := elems [
-                     Common.Values.Add
-                     ; Common.Values.Minus
-                     ; Common.Values.Mul
-                     ; Common.Values.Eq
-                     ; Common.Values.Leq
-                   ]
-  }.
+Derive Arbitrary for Common.Values.binop.
+Derive Arbitrary for Intermediate.Machine.register.
 
-Instance genRegs : Gen Intermediate.Machine.register :=
-  {
-    arbitrary := elems [
-                     R_ONE
-                     ; R_COM
-                     ; R_AUX1
-                     ; R_AUX2
-                     ; R_RA
-                     ; R_SP
-                   ]
-  }.
+(* Instance genRegs : Gen Intermediate.Machine.register := *)
+(*   { *)
+(*     arbitrary := elems [ *)
+(*                      R_ONE *)
+(*                      ; R_COM *)
+(*                      ; R_AUX1 *)
+(*                      ; R_AUX2 *)
+(*                      ; R_RA *)
+(*                      ; R_SP *)
+(*                    ] *)
+(*   }. *)
 
 Definition genPointer (cid : N)
            (buffers : BinNatMap.t (list (N * (nat+list value)))) :=

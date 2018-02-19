@@ -8,9 +8,7 @@ Require Import Coq.Strings.String.
 Require Import CompCert.Events.
 
 Require Import Source.Language.
-(* Require Import Source.Examples.Factorial. *)
-(* Require Import Source.Examples.Identity. *)
-(* Require Import Source.Examples.Increment. *)
+
 Require Import S2I.Compiler.
 Require Import I2SFI.Compiler.
 Require Import TargetSFI.EitherMonad.
@@ -20,111 +18,60 @@ Require Import Intermediate.Machine.
 Require Import Common.Definitions.
 Require Import Common.Maps.
 
+Require Export Extraction.Definitions.
+
+Require Import Source.Examples.Factorial.
+Require Import Source.Examples.DefaultInitBuffer.
+Require Import Source.Examples.NestedCalls.
+Require Import Source.Examples.Identity.
+Require Import Source.Examples.Increment.
+
 Require Import I2SFI.CompTestUtil.
 Require Import I2SFI.AbstractMachine.
 Require Import I2SFI.CompEitherMonad.
 Require Import I2SFI.CompStateMonad.
 
-
-Import MonadNotations.
-Open Scope monad_scope.
+Require Import TargetSFI.SFITestUtil.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 Import GenLow GenHigh.
-(* Suppress some annoying warnings: *)
 
 Definition newline := String "010" ""%string.
 
-Open Scope nat_scope.
-Definition increment : Source.program := {|
-  Source.prog_interface :=
-   mkfmap [(Component.main,
-            {| Component.import := fset1 (2, 1);
-               Component.export := (fset1 1) |});
-             (2, {| Component.import := fset0;
-                    Component.export := fset1 1 |})];
-  Source.prog_buffers := mkfmap [(Component.main, (inl 1%nat)); (2, (inl 1%nat))];
-  Source.prog_procedures := mkfmap [
-    (* NOTE the version with E_exit is the right one, but unfortunately it is difficult
-            to debug with extraction. Hence, the second version without E_exit *)
-    (*(1, NMapExtra.of_list [(0, E_seq (E_call 2 0 (E_val (Int 6))) E_exit)]);*)
-    (Component.main, mkfmap [(1, E_call 2 1 (E_val (Int 6)))]);
-    (2, mkfmap [(1,
-        (E_binop Add
-                 (E_deref E_local)
-                 (E_val (Int 1))))])]
-|}.
-Close Scope nat_scope.
-
-Definition test (sp : Source.program) : @CompEither sfi_program :=
+Definition compile_and_run (sp : Source.program) (fuel : nat) :=
   match S2I.Compiler.compile_program sp with
-  | None => CompEitherMonad.Left "S2I compiler failed" NoInfo
-  | Some ip => compile_program ip
+  | None => print_error ocaml_int_0
+  | Some ip =>
+    match I2SFI.Compiler.compile_program ip with
+    | CompEitherMonad.Left msg err => print_string_error (msg ++ " " ++ (show err)
+                                                              ++ newline
+                                                              ++ (show ip))
+    | CompEitherMonad.Right p =>
+      match CS.eval_program fuel p (RiscMachine.RegisterFile.reset_all) with
+      | TargetSFI.EitherMonad.Left msg err => print_error ocaml_int_1
+      | TargetSFI.EitherMonad.Right (t,(mem,_,regs)) =>
+        match  (RiscMachine.RegisterFile.get_register
+                  RiscMachine.Register.R_COM regs) with
+        | Some z =>
+          print_ocaml_int (z2int z)
+        | None => print_error ocaml_int_2
+        end
+      end
+    end
   end.
 
-Instance show_sp : Show Source.program :=
-  {|
-    show := fun _ => Coq.Strings.String.EmptyString
-  |}.
+Definition run_fact := compile_and_run factorial 10000%nat.
+Extraction "/tmp/run_target_compiled_factorial.ml" run_fact.
 
-Definition integration_pbt (sp : Source.program) : Checker :=
-  forAll (returnGen sp)
-         ( fun sp =>
-             match S2I.Compiler.compile_program sp with
-             | None => whenFail "Source program does not compile" false
-             | Some ip =>
-               match I2SFI.Compiler.compile_program ip with
-               | CompEitherMonad.Left msg err =>
-                 whenFail ("Compilation error: "
-                             ++ msg
-                             ++ newline
-                             ++ (show err)
-                             ++ newline
-                             ++ (show ip)
-                          ) false
-               | CompEitherMonad.Right p =>
-                 match CS.eval_program (5000%nat) p (RiscMachine.RegisterFile.reset_all) with
-                 | TargetSFI.EitherMonad.Left msg err => whenFail
-                                                          (msg ++ (show err)
-                                                               ++ newline
-                                                               ++ (show ip) )
-                                                          false
-                 | TargetSFI.EitherMonad.Right (t,(mem,_,regs)) => checker true
-                 end
-               end
-             end
-         ).
+Definition run_buffer := compile_and_run default_init_buffer fuel.
+Extraction "/tmp/run_target_compiled_default_init_buffer.ml" run_buffer.
 
-(* Definition procs_labels_increment : Checker := *)
-(*   forAll *)
-(*     (  *)
-(*        match S2I.Compiler.compile_program increment with *)
-(*        | None => *)
-(*          returnGen 0%N *)
-(*        | Some ip => *)
-(*          returnGen ( *)
-(*              let procs_labels := exported_procs_labels (Intermediate.prog_procedures ip) *)
-(*                                               (Intermediate.prog_interface ip) in *)
-(*              List.fold_left *)
-(*                 N.max *)
-(*                 (List.flat_map *)
-(*                    (fun m => List.map (fun '(_,(_,l)) => l) (elementsm m)) *)
-(*                    (List.map snd (elementsm procs_labels))) *)
-(*                 1%N  *)
-(*            ) *)
-(*        end *)
-(*     ) *)
-(*     ( fun x => *)
-(*         checker *)
-(*           ( *)
-(*               N.eqb 3 x *)
-(*           ) *)
-(*     ). *)
+Definition run_id := compile_and_run identity fuel.
+Extraction "/tmp/run_target_compiled_identityt.ml" run_id.
 
-Extract Constant Test.defNumTests => "1".
-(* QuickChick (procs_labels_increment). *)
-(* QuickChick (integration_pbt identity). *)
-(* QuickChick (integration_pbt increment). *)
-(* QuickChick (integration_pbt factorial). *)
-(* QuickChick (integration_pbt Source.Examples.Increment.increment). *)
+Definition run_inc := compile_and_run increment fuel.
+Extraction "/tmp/run_target_compiled_increment.ml" run_inc.
+
+Definition run_nested := compile_and_run nested_calls fuel.
+Extraction "/tmp/run_target_compiled_nested_calls.ml" run_nested.

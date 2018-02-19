@@ -111,8 +111,13 @@ Instance show_compiler_error : Show CompilerError :=
         match err with
         | CompEitherMonad.NoInfo => EmptyString
         | CompEitherMonad.DuplicatedLabels lcode => show_lcode lcode
-        | CompEitherMonad.ExportedProcsLabelsC _ _ => "ExportedProcsLabelsC TODO"
-        | CompEitherMonad.ExportedProcsLabelsP _ _ _ => "ExportedProcsLabelsP TODO"
+        | CompEitherMonad.ExportedProcsLabelsC p1 p2 => "ExportedProcsLabelsC "
+                                                          ++ (show p1) ++ " "
+                                                          ++ (show p2) ++ " "
+        | CompEitherMonad.ExportedProcsLabelsP p1 p2 p3 => "ExportedProcsLabelsP "
+                                                          ++ (show p1) ++ " "
+                                                          ++ (show p2) ++ " "
+                                                          ++ (show_map p3) ++ " "
         | CompEitherMonad.NArg p => show p
         | CompEitherMonad.TwoNArg p1 p2 => "(" ++ (show p1) ++ "," ++ (show p2) ++ ")"
         | CompEitherMonad.ProcNotImported cid pid lst =>

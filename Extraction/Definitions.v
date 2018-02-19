@@ -1,6 +1,7 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Export Extraction.
+Require Import Coq.Strings.String.
 
 (* NOTE: add the following two lines at the start of the extracted file:
 #load "nums.cma";;
@@ -19,6 +20,7 @@ Axiom print_ocaml_int: ocaml_int -> unit.
 
 Axiom print_explicit_exit: unit -> unit.
 Axiom print_error: ocaml_int -> unit.
+Axiom print_string_error : string -> unit.
 
 Fixpoint pos2int (val: positive) : ocaml_int :=
   match val with
@@ -59,3 +61,5 @@ Extract Constant print_ocaml_int => "(fun n -> print_string (string_of_big_int n
 
 Extract Constant print_explicit_exit => "(fun _ -> print_string ""EXIT""; print_newline ())".
 Extract Constant print_error => "(fun n -> print_string ""FAILED with ""; print_string (string_of_big_int n); print_newline ())".
+
+Extract Constant print_string_error => "(fun str -> print_string ""FAILED with ""; List.fold_left (fun _ c -> print_char c) () str; print_newline ())".

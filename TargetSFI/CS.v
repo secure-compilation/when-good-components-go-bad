@@ -259,7 +259,7 @@ Module CS.
                    (MissingComponentId s  (SFI.C_SFI pc') (fst G));
                 ret ([ERet cpc rcomval cpc'], (mem,pc',gen_regs))
         | IJal addr =>
-          let ra := Z.of_N (pc+1) in
+          let ra := Z.of_N (pc+1)%N in
           let gen_regs' := RegisterFile.set_register Register.R_RA ra gen_regs in
           let pc' := addr in
           if SFI.is_same_component_bool pc pc' then ret (E0, (mem,pc',gen_regs'))
@@ -290,8 +290,12 @@ Module CS.
           if (SFI.last_address_in_slot pc) 
           then            
             ret (E0, (Memory.set_instr mem pc IHalt,pc,gen_regs)) (* IHalt *)
-          else ret (E0, (mem,inc_pc pc,gen_regs)) (* INop *)
-            
+          else
+             if (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
+            then
+              fail "Pc address not initialized" (UninitializedMemory s pc)
+            else
+              ret (E0, (mem,inc_pc pc,gen_regs)) (* INop *)            
       end.
 
     Close Scope string_scope.
