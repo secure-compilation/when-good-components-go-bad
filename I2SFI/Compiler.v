@@ -94,22 +94,6 @@ Definition with_next_label (env : compiler_env) :  compiler_env :=
     next_label := ((next_label env) + 1)%N
    |}.
 
-(* Helper functions *)
-Definition get_proc_label (cid : Component_id) (pid : Procedure_id)
-  : COMP (AbstractMachine.label) :=
-  do env <- get;
-    match (BinNatMap.find cid (exported_procedures_labels env)) with
-    | None => fail "Can not find compoent in exported_procedures_labels"
-                  (ExportedProcsLabelsC cid (exported_procedures_labels env))
-    | Some cprocs =>
-      match (BinNatMap.find pid cprocs) with
-      | None => fail "Can not find procedure for component in exported_procedures_labels"
-                    (ExportedProcsLabelsP cid pid (exported_procedures_labels env))
-      | Some res => ret res
-      end
-    end.
-
-
 Definition get_sfiId (cid : Component_id) : COMP (SFIComponent.id) :=
   do env <- get;
     (lift (BinNatMap.find cid (cid2SFIid env))
@@ -140,7 +124,6 @@ Definition get_data_slotid (cid : Component_id) (bid : Block_id)
          "Missing block id in buffer2slot"%string
          (CompEitherMonad.TwoNArg cid bid).
 
-
 Definition get_SFI_data_address (cid : Component_id)
            (bid : Block_id)
            (offset :  Block.offset)
@@ -161,7 +144,7 @@ Definition add_main_pi (mpid : Procedure_id) (pi : prog_int) :=
   match BinNatMap.find (N.of_nat Component.main) pi with
   | None =>
     BinNatMap.add (N.of_nat Component.main)
-                  ([(N.of_nat Procedure.main)],nil)
+                  ([mpid],nil)
                   pi
   | Some (exp,imp) =>
     if (List.existsb (N.eqb mpid) exp)
@@ -177,19 +160,20 @@ Definition exported_procs_labels
            (procs : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
            (pi : prog_int) : BinNatMap.t (BinNatMap.t AbstractMachine.label) :=
   let max_code_component_label procs :=
-      N.pos ( List.fold_left
-                Pos.max
-                (List.map
-                   (fun i =>
-                      match i with
-                      | Intermediate.Machine.ILabel lbl => Pos.of_nat lbl
-                      | _ => 1%positive
-                      end )
-                      (List.flat_map snd procs)
-                )
-                1%positive) in
+      ( List.fold_left
+          N.max
+          (List.map
+             (fun i =>
+                match i with
+                | Intermediate.Machine.ILabel lbl => N.of_nat lbl
+                | _ => 0%N
+                end )
+             (List.flat_map snd procs)
+          )
+          0%N) in
 
-  let component_exported_procs_labels cid pi' procs : (BinNatMap.t AbstractMachine.label) :=
+  let component_exported_procs_labels cid pi' procs
+      : (BinNatMap.t AbstractMachine.label) :=
       match BinNatMap.find cid pi' with
       | None => BinNatMap.empty AbstractMachine.label
       | Some (exp_procs,_) =>
@@ -215,7 +199,8 @@ Definition exported_procs_labels
             )
             (procs) (BinNatMap.empty (BinNatMap.t AbstractMachine.label)).
 
-Fixpoint allocate_procedure_slots (procs : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
+Fixpoint allocate_procedure_slots
+         (procs : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
   : BinNatMap.t (BinNatMap.t N) :=
   BinNatMapExtra.of_list (
       List.map (fun '(cid,proc_map) =>
@@ -223,11 +208,14 @@ Fixpoint allocate_procedure_slots (procs : BinNatMap.t (BinNatMap.t Intermediate
                   (cid,
                    BinNatMapExtra.of_list
                      (List.combine pids
-                                   (SFI.Allocator.allocate_code_slots (List.length pids))))
+                                   (SFI.Allocator.allocate_code_slots
+                                      (List.length pids))))
                ) (BinNatMap.elements procs)).
 
-Definition init_env (i_cid2SFIid : BinNatMap.t N) (i_procId2slot : BinNatMap.t (BinNatMap.t N))
-           (i_exported_procedures_labels : (BinNatMap.t (BinNatMap.t  AbstractMachine.label)))
+Definition init_env (i_cid2SFIid : BinNatMap.t N)
+           (i_procId2slot : BinNatMap.t (BinNatMap.t N))
+           (i_exported_procedures_labels : (BinNatMap.t (BinNatMap.t
+                                                           AbstractMachine.label)))
            (i_next_label : N)
   : compiler_env :=
   {| current_component := 1%N;
@@ -246,7 +234,8 @@ Definition init_env (i_cid2SFIid : BinNatMap.t N) (i_procId2slot : BinNatMap.t (
  * Returns: memory with data slot 1 reserved for allocator and the static buffers
  *          preallocated
  *)
-Fixpoint allocate_buffers (buffs :  (list (Component_id * (list (Block_id * (nat + list value))))))
+Fixpoint allocate_buffers (buffs :  (list (Component_id *
+                                           (list (Block_id * (nat + list value))))))
   : COMP (RiscMachine.Memory.t) :=
   (* components with static buffers *)
   let allocate_buffers1 buffs :=
@@ -620,17 +609,12 @@ Definition compile_ICall (cid1 : Component_id)
         | Some pmap =>
           match BinNatMap.find pid pmap with
           | None => fail "Procedure not exported 2" NoInfo
-          | Some _ =>
+          | Some clbl =>
             do cid <- get_sfiId (current_component cenv);
             let data_mask := RiscMachine.to_value (SFI.or_data_mask cid) in
             let code_mask := RiscMachine.to_value (SFI.or_code_mask cid) in
-            do clbl <- get_proc_label cid1 pid;
-              do! modify (with_next_label);
-              let lbl :=  ((current_component cenv),(next_label cenv)) in
               ret [
                   AbstractMachine.IJal clbl
-                  (* Not Needed *)
-                  (* ; AbstractMachine.ILabel lbl *)
                   ; AbstractMachine.IConst data_mask RiscMachine.Register.R_OR_DATA_MASK
                   ; AbstractMachine.IConst code_mask RiscMachine.Register.R_OR_CODE_MASK
                   ; AbstractMachine.IConst data_mask RiscMachine.Register.R_D
@@ -661,15 +645,24 @@ Fixpoint compile_instructions (ilist : Intermediate.Machine.code)  (interface :p
                                                            (map_register r1)
                                                            (map_register r2)
                                                            (map_register rd)]
-        | Intermediate.Machine.ILoad rp rd => ret [AbstractMachine.ILoad (map_register rp)
-                                                                        (map_register rd)]
+        | Intermediate.Machine.ILoad rp rd =>
+          ret [AbstractMachine.ILoad (map_register rp)
+                                     (map_register rd)]
         | Intermediate.Machine.IStore rp rs => (compile_IStore rp rs)
         | Intermediate.Machine.IAlloc rp rs => (compile_IAlloc rp rs)
-        | Intermediate.Machine.IBnz r lbl => ret [AbstractMachine.IBnz (map_register r)
-                                                                      (cid,N.of_nat lbl)]
+        | Intermediate.Machine.IBnz r lbl => ret [AbstractMachine.IBnz
+                                                    (map_register r)
+                                                    (cid,N.of_nat lbl)]
         | Intermediate.Machine.IJump rt => (compile_IJump rt)
-        | Intermediate.Machine.IJal lbl => ret [AbstractMachine.IJal (cid,N.of_nat lbl)]
-        | Intermediate.Machine.ICall c p => (compile_ICall (N.of_nat c) (N.of_nat p) interface)
+        | Intermediate.Machine.IJal l1 =>
+          do! modify (with_next_label);
+            let l2 := (cid, (next_label cenv)) in
+            ret [
+                AbstractMachine.IJal (cid, N.of_nat l1)
+                ; AbstractMachine.ILabel l2
+              ]
+        | Intermediate.Machine.ICall c p =>
+          (compile_ICall (N.of_nat c) (N.of_nat p) interface)
         | Intermediate.Machine.IReturn => (compile_IReturn)
         | Intermediate.Machine.IHalt => ret [AbstractMachine.IHalt]
         end in
@@ -680,6 +673,19 @@ Fixpoint compile_instructions (ilist : Intermediate.Machine.code)  (interface :p
       do res <- compile_instructions xs interface;
       ret (ai ++ res)
   end.
+
+
+Definition get_proc_label cid pid : COMP (option AbstractMachine.label) :=
+  do cenv <- get;
+    let exported_procs := (exported_procedures_labels cenv) in
+    match BinNatMap.find cid exported_procs with
+    | None => ret None
+    | Some pmap =>
+      match BinNatMap.find pid pmap with
+      | None => ret None
+      | Some lbl => ret (Some lbl)
+      end
+    end.
 
 (* Needs in environment: current_component and all the other fields initialized properly. *)
 Definition compile_procedure
@@ -692,72 +698,18 @@ Definition compile_procedure
     let cid := (current_component cenv) in
     do comp_interface <- lift (BinNatMap.find cid interface)
        "Can't find interface for component " (NArg cid);
-
-      let exported_procs := (exported_procedures_labels cenv) in
-      let is_exported :=
-          match BinNatMap.find cid exported_procs with
-          | None => false
-          | Some pmap =>
-            match BinNatMap.find pid pmap with
-            | None => false
-            | Some _ => true
-            end
-          end in
-
       do acode <- compile_instructions code interface;
-        if is_exported then
-            do proc_label <- get_proc_label cid pid;
-            do sfiId <- get_sfiId cid;
-            ret (
-                [AbstractMachine.IHalt; AbstractMachine.ILabel proc_label]
-                  ++ (gen_push_sfi sfiId)
-                  ++ (gen_set_sfi_registers sfiId)
-                  ++ acode )
-        else
-          ret acode.
-
-Definition check_component_labels (cid : Component_id)
-           (procs : list (Procedure_id * AbstractMachine.code))
-  : COMP(list (Procedure_id * AbstractMachine.code)) :=
-  (* no duplication in labels *)
-  (* exported proc label in offset 1 *)
-  let check_label_duplication (cid:Component_id) procs :=
-      let all_labels :=
-          (List.fold_left
-             (fun acc linstr =>
-                List.fold_left
-                  (fun acc' i =>
-                     match i with
-                     | AbstractMachine.ILabel l => l::acc'
-                     | _ => acc'
-                     end
-                  )
-                  linstr acc
-             )
-             procs [] )
-      in
-      if (Nat.eqb (List.length all_labels)
-                  (List.length (List.nodup label_eq_dec all_labels)))
-      then ret procs
-      else fail " check_component_labels::label duplication in component" NoInfo
-  in
-
-  let check_procedure cid pid acode :=
-      match acode with
-      | _::(AbstractMachine.ILabel _)::_ => ret procs
-      | _ => fail " check_component_labels::procedure label not found at offset" NoInfo
-      end in
-
-  let fix check_component cid procs :=
-      match procs with
-      | nil => ret procs
-      | (pid,acode)::xs =>
-        do x <- check_procedure cid pid acode;
-          check_component cid xs
-      end in
-
-  check_component cid procs.
-
+      do oplbl <- get_proc_label cid pid;
+      match oplbl with
+      | Some proc_label =>
+        do sfiId <- get_sfiId cid;
+          ret (
+              [AbstractMachine.IHalt; AbstractMachine.ILabel proc_label]
+                ++ (gen_push_sfi sfiId)
+                ++ (gen_set_sfi_registers sfiId)
+                ++ acode )
+      | None => (ret acode)
+      end.
 
 Fixpoint compile_components (components : list (Component_id * BinNatMap.t Intermediate.Machine.code))
          (interface : prog_int)
@@ -777,7 +729,6 @@ Fixpoint compile_components (components : list (Component_id * BinNatMap.t Inter
   | (cid,procs)::xs =>
     do! modify (with_current_component cid);
       do procs <- compile_procedures (BinNatMap.elements procs) interface;
-      do x <- check_component_labels cid procs;
       do res <- compile_components xs interface;
       ret ((cid, BinNatMapExtra.of_list procs)::res)
   end.
@@ -794,15 +745,35 @@ use crt to go over list
 Definition layout_procedure
            (cid : Component_id)
            (pid : Procedure_id)
-           (plbl : AbstractMachine.label)
            (code : AbstractMachine.code)
-  : ( AbstractMachine.lcode) :=
+  : COMP (AbstractMachine.lcode) :=
   let padd acc elt :=
       (* must padd *)
       (* padd code_lst up to a multiple of SFI.BASIC_BLOCK_SIZE *)
       let r := N.modulo (N.of_nat (List.length acc))
                         SFI.BASIC_BLOCK_SIZE in
       let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r)%N
+                        SFI.BASIC_BLOCK_SIZE in
+      match elt with
+      | ( _, AbstractMachine.IJal _) =>
+        acc
+          ++ (List.repeat
+                (None,AbstractMachine.INop)
+                (N.to_nat (p + SFI.BASIC_BLOCK_SIZE - 1%N )%N ) )
+          ++ [elt]
+      | _ => 
+        acc
+          ++ (List.repeat
+                (None,AbstractMachine.INop)
+                (N.to_nat p))
+          ++ [elt]
+      end in
+
+  let padd1 acc elt :=
+      (* elt is the last instruction in the block *)
+      let r := N.modulo (N.of_nat (List.length acc))
+                        SFI.BASIC_BLOCK_SIZE in
+      let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r - 1%N)%N
                         SFI.BASIC_BLOCK_SIZE in
       acc
         ++ (List.repeat
@@ -829,73 +800,41 @@ Definition layout_procedure
             ) code (nil,nil)
         )) in
   (* padding *)
-      List.fold_left
+  do oplbl <- get_proc_label pid cid;
+    let tst :=
+        match oplbl with
+        | Some plbl => label_eqb plbl
+        | None => (fun _ => false)
+        end in
+      ret (List.fold_left
          (fun acc elt =>
             match elt with
-            | (None, i) => acc ++ [elt]
+            | (None, i) =>
+              match i with
+              | AbstractMachine.IJal _ => padd1 acc elt
+              | _ => acc ++ [elt]
+              end
             | (Some ll, i) =>
               match ll with
-              | nil => acc ++ [elt]
-              | lbl::nil =>
-                if (label_eqb lbl plbl)
+              | nil =>
+                match i with
+                | AbstractMachine.IJal _ => padd1 acc elt
+                | _ => acc ++ [elt]
+                end
+              | lbl::nil =>                
+                if (tst lbl)
                 then
-                  acc ++ [elt]
+                  match i with
+                  | AbstractMachine.IJal _ => padd1 acc elt
+                  | _ => acc ++ [elt]
+                  end
                 else
                   padd acc elt
               | _ =>  padd acc elt
 
               end
             end
-         ) lcode1 nil.
-
-
-Definition check_label_duplication (cid:Component_id)
-           (procs : BinNatMap.t AbstractMachine.lcode) :=
-  let all_labels :=
-      (List.fold_left
-         (fun acc '(pid,lcode) =>
-            List.fold_left
-              (fun acc' linstr =>
-                 match linstr with
-                 | (Some ll,_) => acc'++ll
-                 | (None,_) => acc'
-                 end)
-              lcode acc
-         ) (BinNatMap.elements procs) []) in
-  Nat.eqb (List.length all_labels)
-          (List.length (List.nodup label_eq_dec all_labels)).
-
-
-Definition check_labeled_code ( labeled_code : (BinNatMap.t (BinNatMap.t AbstractMachine.lcode)))
-  : COMP( (BinNatMap.t (BinNatMap.t AbstractMachine.lcode)) ) :=
-  let check_procedure cid pid lcode :=
-      do l <- get_proc_label cid pid;
-        match lcode with
-        | _::(Some [lbl],_)::_ => ret  labeled_code
-        | _ => fail " check_labeled_code::procedure label not found at offset "
-                   (DuplicatedLabels labeled_code)
-        end in
-  let fix check_component cid procs :=
-      match procs with
-      | nil => ret  labeled_code
-      | (pid,lcode)::xs =>
-        do x <- check_procedure cid pid lcode;
-          check_component cid xs
-      end in
-  let fix check_progr comps :=
-      match comps with
-      | nil => ret  labeled_code
-      | (cid,comp)::xs =>
-        do x <- check_component cid (BinNatMap.elements comp);
-          if (check_label_duplication cid comp)
-          then
-            check_progr xs
-          else
-            fail " check_labeled_code::label duplication in component "
-                 (DuplicatedLabels labeled_code)
-      end in
-  check_progr (BinNatMap.elements labeled_code).
-
+         ) lcode1 nil).
 
 (* acode: cid -> pid -> list of instr (labeled individually) *)
 Definition layout_code (acode : BinNatMap.t (BinNatMap.t AbstractMachine.code))
@@ -909,9 +848,8 @@ Definition layout_code (acode : BinNatMap.t (BinNatMap.t AbstractMachine.code))
         | [] => ret (BinNatMap.empty AbstractMachine.lcode)
         | (pid,code)::xs =>
           do res_map <- layout_procedures cid xs;
-              do plbl <- (get_proc_label cid pid);
-            let acode := layout_procedure cid pid plbl code in
-            ret (BinNatMap.add pid acode res_map)
+            do acode <- layout_procedure cid pid code;
+               ret (BinNatMap.add pid acode res_map)
         end
   in
   let fix aux lst : COMP (BinNatMap.t (BinNatMap.t AbstractMachine.lcode)) :=
@@ -925,10 +863,7 @@ Definition layout_code (acode : BinNatMap.t (BinNatMap.t AbstractMachine.code))
       end
   in
   do lcode <- aux (BinNatMap.elements acode);
-    check_labeled_code lcode.
-
-
-
+    ret lcode.
 
 (********************* Generate code memory and E **********************)
 
@@ -1057,38 +992,42 @@ Definition generate_comp0_memory (mcid : Component_id) (mpid : Procedure_id)
            (mem : RiscMachine.Memory.t)
            (l2a :  (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label * RiscMachine.address)))))
 : COMP (RiscMachine.Memory.t) :=
-  do main_label <- get_proc_label mcid mpid;
-  do main_address <- get_address mcid mpid main_label l2a;
-  let mem0 := RiscMachine.Memory.set_instr
-                mem
-                (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 0)
-                (RiscMachine.ISA.IConst 0%Z RiscMachine.Register.R_SFI_SP) in
-  let mem1 := RiscMachine.Memory.set_instr
-                mem0
-                (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 1)
-                (RiscMachine.ISA.IConst
-                   (RiscMachine.to_value SFI.AND_DATA_MASK)
-                   RiscMachine.Register.R_AND_DATA_MASK) in
-  let mem2 := RiscMachine.Memory.set_instr
-                mem1
-                (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 2)
-                (RiscMachine.ISA.IConst
-                   (RiscMachine.to_value SFI.AND_CODE_MASK)
-                   RiscMachine.Register.R_AND_CODE_MASK) in
-  let mem3 := RiscMachine.Memory.set_instr
-                mem2
-                (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 3)
-                (RiscMachine.ISA.IConst
-                   1%Z
-                   RiscMachine.Register.R_ONE) in
-  let mem4 := RiscMachine.Memory.set_instr
-                mem3
-                (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 4)
-                (RiscMachine.ISA.IJal main_address) in
-  ret (RiscMachine.Memory.set_instr
-                mem4
-                (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 5)
-                (RiscMachine.ISA.IHalt)).
+  do omain_label <- get_proc_label mcid mpid;
+    match omain_label with
+    | None => fail "Can not find label for main" NoInfo
+    | Some main_label =>
+      do main_address <- get_address mcid mpid main_label l2a;
+        let mem0 := RiscMachine.Memory.set_instr
+                      mem
+                      (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 0)
+                      (RiscMachine.ISA.IConst 0%Z RiscMachine.Register.R_SFI_SP) in
+        let mem1 := RiscMachine.Memory.set_instr
+                      mem0
+                      (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 1)
+                      (RiscMachine.ISA.IConst
+                         (RiscMachine.to_value SFI.AND_DATA_MASK)
+                         RiscMachine.Register.R_AND_DATA_MASK) in
+        let mem2 := RiscMachine.Memory.set_instr
+                      mem1
+                      (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 2)
+                      (RiscMachine.ISA.IConst
+                         (RiscMachine.to_value SFI.AND_CODE_MASK)
+                         RiscMachine.Register.R_AND_CODE_MASK) in
+        let mem3 := RiscMachine.Memory.set_instr
+                      mem2
+                      (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 3)
+                      (RiscMachine.ISA.IConst
+                         1%Z
+                         RiscMachine.Register.R_ONE) in
+        let mem4 := RiscMachine.Memory.set_instr
+                      mem3
+                      (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 4)
+                      (RiscMachine.ISA.IJal main_address) in
+        ret (RiscMachine.Memory.set_instr
+               mem4
+               (SFI.address_of SFI.MONITOR_COMPONENT_ID 0 5)
+               (RiscMachine.ISA.IHalt))
+    end.
 
 
 (*************************** Code Memory *******************************)
