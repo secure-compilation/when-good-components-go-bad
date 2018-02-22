@@ -122,6 +122,7 @@ Definition switch_val (m : tag_type lrc_tags M)
     | {| vtag := v' ; color := c ; entry := e |} => ({| vtag := v ; color := c ; entry := e |}, v')
   end.
 
+
 (* TL TODO: without this, I get a type error *)
 Definition build_tpc (n : nat) : tag_type lrc_tags P := Level n.
 
@@ -196,8 +197,6 @@ Definition transfer (iv : ivec lrc_tags) : option (vovec lrc_tags (op iv)) :=
 
 (** Instance **)
 
-(* TL TODO: use local notation instead? *)
-(*          (for state and step)        *)
 Global Instance sym_lrc : params := {
   ttypes := lrc_tags;
   transfer := transfer;
@@ -221,24 +220,37 @@ Definition matom := (atom (mword mt) mem_tag).
 
 (** Syscalls **)
 
+From CoqUtils Require Import word.
+
 Inductive syscall := Alloc.
 
 Context `{syscall_regs mt}
          {ra_reg : reg mt}
          {alloc_addr : syscall -> mword mt}.
 
+(* alloc is a syscall taking one argument, the size to allocate *)
+(* a syscall don't change the pc level *)
 Definition alloc_fun (st : state) : option state :=
   (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
-  let max_addr := last (domm (mem st)) (word.as_word 0) in
+  let max_addr := last (domm (mem st)) (as_word 0) in
   do! ra <- regs st ra_reg;
   (* TL TODO: Is using return address to compute calling component safe? *)
   let current_c := do! atom <- mem st (vala ra);
                    Some (color (taga atom)) in
-  let def_at : matom := (word.as_word 0)@(def_mem_tag current_c) in
+  (* create the new bloc *)
+  let atom : matom := (word.as_word 0)@(def_mem_tag current_c) in
   do! size <- regs st syscall_arg1;
   do! length <- match word.int_of_word (vala size) with
                 | Posz x => Some x
                 | Negz _ => None
                 end;
-  (* let bloc : list matom := nseq length (word.as_word 0 @ Other in *)
-  Some st.
+  let bloc :=
+      mkseq (fun n => ((word.addw max_addr (word.as_word (n + 1))), atom))
+            length in
+  let mem' := unionm (mem st) (mkfmap bloc) in
+  (* return *)
+  do! addr <- (do! x <- head bloc;
+                 Some (fst x));
+  do! regs' <- updm (regs st) syscall_ret addr@Other;
+  let pc' := (vala ra)@(taga (pc st)) in
+  Some (State mem' regs' pc' tt).
