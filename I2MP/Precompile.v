@@ -21,18 +21,12 @@ Notation code := (seq (instr * mem_tag)).
 
 (** Precompilation: translate call/ret, tag code and data, linearize code **)
 
-Definition def_tag (c : Component.id) : mem_tag :=
-  {| vtag := Other ;
-     color := c ;
-     entry := [:: ]
-  |}.
-
 Definition precompile_callret (cenv : compiler_env)
            (c : Component.id) (i : instr) : code :=
   match i with
-  | ICall C P => [:: (IJal (make_label cenv C P), def_tag c)]
-  | IReturn => [:: (IJump R_RA, def_tag c)]
-  | _ => [:: (i, def_tag c) ]
+  | ICall C P => [:: (IJal (make_label cenv C P), def_mem_tag c)]
+  | IReturn => [:: (IJump R_RA, def_mem_tag c)]
+  | _ => [:: (i, def_mem_tag c) ]
   end.
 
 
@@ -63,7 +57,7 @@ Definition precompile_component (cenv : compiler_env) (c : Component.id) : code 
 
 Definition precompile_code (cenv : compiler_env) : code :=
   let main_code :=
-      [:: (IJal (make_label cenv Component.main Procedure.main), def_tag Component.main)] in
+      [:: (IJal (make_label cenv Component.main Procedure.main), def_mem_tag Component.main)] in
 
   let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
   main_code ++ flatten (map (precompile_component cenv) components).
@@ -74,8 +68,8 @@ Definition precompile_buf (cenv : compiler_env) (c : Component.id) (b : Block.id
   Option.default [::] (do map <- getm (Intermediate.prog_buffers (program cenv)) c ;
                        do block <- getm map b ;
                        Some match block with
-                            | inl n => repeat (Undef, def_tag c) n
-                            | inr l => [seq (x, def_tag c) | x <- l]
+                            | inl n => repeat (Undef, def_mem_tag c) n
+                            | inr l => [seq (x, def_mem_tag c) | x <- l]
                             end).
 
 Definition precompile_bufs (cenv : compiler_env) : bufs :=

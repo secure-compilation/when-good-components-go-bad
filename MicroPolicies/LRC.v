@@ -1,4 +1,4 @@
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq ssrint.
 From CoqUtils Require Import hseq.
 
 Require Import Common.Definitions.
@@ -53,6 +53,14 @@ Record mem_tag : Type := MTag {
   color : Component.id;
   entry : list Component.id;
 }.
+
+
+Definition def_mem_tag (c : Component.id) : mem_tag :=
+  {| vtag := Other ;
+     color := c ;
+     entry := [:: ]
+  |}.
+
 
 
 Module Import MemTagEq.
@@ -184,6 +192,8 @@ Definition transfer (iv : ivec lrc_tags) : option (vovec lrc_tags (op iv)) :=
     end
   end.
 
+
+
 (** Instance **)
 
 (* TL TODO: use local notation instead? *)
@@ -193,6 +203,8 @@ Global Instance sym_lrc : params := {
   transfer := transfer;
   internal_state := [eqType of unit]
 }.
+
+
 
 
 (* TL TODO: these notations inside a module? *)
@@ -206,3 +218,27 @@ Notation stepf  := (@stepf sym_lrc lrc_syscalls).
 
 Definition ratom := (atom (mword mt) value_tag).
 Definition matom := (atom (mword mt) mem_tag).
+
+(** Syscalls **)
+
+Inductive syscall := Alloc.
+
+Context `{syscall_regs mt}
+         {ra_reg : reg mt}
+         {alloc_addr : syscall -> mword mt}.
+
+Definition alloc_fun (st : state) : option state :=
+  (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
+  let max_addr := last (domm (mem st)) (word.as_word 0) in
+  do! ra <- regs st ra_reg;
+  (* TL TODO: Is using return address to compute calling component safe? *)
+  let current_c := do! atom <- mem st (vala ra);
+                   Some (color (taga atom)) in
+  let def_at : matom := (word.as_word 0)@(def_mem_tag current_c) in
+  do! size <- regs st syscall_arg1;
+  do! length <- match word.int_of_word (vala size) with
+                | Posz x => Some x
+                | Negz _ => None
+                end;
+  (* let bloc : list matom := nseq length (word.as_word 0 @ Other in *)
+  Some st.

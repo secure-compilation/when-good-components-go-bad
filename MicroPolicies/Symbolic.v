@@ -10,6 +10,10 @@ Unset Printing Implicit Defensive.
 
 Import DoNotation.
 
+(* TL: hardcoding machine words *)
+Definition mt := concrete_int_32_mt.
+Instance ops : machine_ops mt := concrete_int_32_ops.
+
 Module Symbolic.
 
 (* BCP/AAA: Should some of this be shared with the concrete machine? *)
@@ -132,9 +136,6 @@ Arguments OVec {_} _ _.
 Open Scope bool_scope.
 
 Section WithClasses.
-
-Definition mt := concrete_int_32_mt.
-Instance ops : machine_ops mt := concrete_int_32_ops.
 
 (* Context (mt : machine_types) *)
 (*         {ops : machine_ops mt}. *)
@@ -339,8 +340,8 @@ Inductive step (st st' : state) : Prop :=
 
 End WithClasses.
 
-Notation memory mt s := {fmap mword mt -> atom (mword mt) (@tag_type (@ttypes s) M)}.
-Notation registers mt s := {fmap reg mt -> atom (mword mt) (@tag_type (@ttypes s) R)}.
+Notation memory s := {fmap mword mt -> atom (mword mt) (@tag_type (@ttypes s) M)}.
+Notation registers s := {fmap reg mt -> atom (mword mt) (@tag_type (@ttypes s) R)}.
 
 End Symbolic.
 
