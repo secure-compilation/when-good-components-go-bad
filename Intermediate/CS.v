@@ -42,15 +42,13 @@ Definition initial_machine_state (p: program) : state :=
     let initial_mem := prepare_initial_memory p in
     let '(mem, _, entrypoints) := prepare_procedures p initial_mem in
     let regs := Register.init in
-    match EntryPoint.get Component.main mainP entrypoints with
-    | Some b =>
-      ([], mem, regs, (Component.main, b, 0%Z))
-    | None =>
-      (* this case shoudln't happen for a well formed p *)
-      ([], emptym, emptym, (0, 0, 0%Z))
-    end
-  (* this case shoudln't happen for a well formed p *)
-  | None => ([], emptym, emptym, (0, 0, 0%Z))
+    let b := match EntryPoint.get Component.main mainP entrypoints with
+             | Some b => b
+             | None => 0 (* This case shouldn't happen for a well-formed p *)
+             end in
+    ([], mem, regs, (Component.main, b, 0%Z))
+  (* this case shoudln't happen for a well-formed p *)
+  | None => ([], emptym, emptym, (Component.main, 0, 0%Z))
   end.
 
 (* transition system *)
@@ -778,5 +776,12 @@ Section Semantics.
     - apply determinate_initial_states.
     - apply final_states_stuckness.
   Qed.
+
+  Lemma atomicity : Atomic sem.
+  Proof.
+    intros st t st' Hstep.
+    now destruct Hstep; eauto.
+  Qed.
+
 End Semantics.
 End CS.

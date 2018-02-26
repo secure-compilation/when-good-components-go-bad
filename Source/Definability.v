@@ -345,11 +345,19 @@ Section Definability.
       end
     end.
 
+  (* FIXME: Move somewhere else *)
   Fixpoint All {T} (P : T -> Prop) (l : list T) : Prop :=
     match l with
     | [] => True
     | x :: l' => P x /\ All P l'
     end.
+
+  Lemma All_cat {T} (P : T -> Prop) (s1 s2 : seq T) :
+    All P (s1 ++ s2) <-> All P s1 /\ All P s2.
+  Proof.
+    elim: s1=> /= [|x s1 IH]; first by intuition.
+    by rewrite IH and_assoc.
+  Qed.
 
   Definition well_formed_event (e: event) : Prop :=
     match e with
@@ -732,6 +740,19 @@ Proof.
     end; trivial; try congruence; easy.
 Qed.
 
+Lemma intermediate_well_formed_events p st t st' :
+  Star (I.CS.sem p) st t st' ->
+  All (well_formed_event (Intermediate.prog_interface p)) t.
+Proof.
+elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
+rewrite All_cat; split=> // {IH Hstar t2 st3}.
+case: st1 t1 st2 / Hstep => //= _ _ regs pc b C P call_arg _ ?.
+rewrite {1}/GlobalEnv.prepare_global_env.
+rewrite [Intermediate.prepare_procedures p _]surjective_pairing /=.
+rewrite [(Intermediate.prepare_procedures p _).1]surjective_pairing /=.
+by eauto.
+Qed.
+
 Lemma intermediate_well_formed_trace : forall p mainP t cs cs',
   Star (CS.sem p) cs t cs' ->
   CS.initial_state p cs ->
@@ -740,23 +761,14 @@ Lemma intermediate_well_formed_trace : forall p mainP t cs cs',
   well_formed_trace (Intermediate.prog_interface p) t.
 Proof.
   intros p0 mainP t cs cs' H H' H'' H'''.
-  unfold well_formed_trace. split.
-  - apply intermediate_well_bracketed_trace in H.
-    unfold CS.CS.initial_state, CS.CS.initial_machine_state in H'.
-    rewrite H'' in H'.
-    destruct ( Machine.Intermediate.prepare_procedures p0
-           (Machine.Intermediate.prepare_initial_memory p0)) as [[mem]].
-    destruct (Intermediate.wfprog_main_existence H''' H'') as [main_procs [H43 H44]].
-    destruct (Machine.Intermediate.EntryPoint.get Component.main mainP t0).
-    now rewrite H' in H.
-    + rewrite H' in H. simpl in H. admit. (* should be impossible from well-formedness? *)
-  - clear H'' H'. induction H as [| cs t1 cs'' t2 cs''' t HStep HStar IH Ht]. easy.
-    simpl in HStep. destruct HStep; try (subst t; easy).
-    subst t. simpl. split; try easy. split. easy.
-    unfold GlobalEnv.prepare_global_env in H1.
-    destruct (Intermediate.prepare_procedures p0
-                (Intermediate.prepare_initial_memory p0)) as [[]]. easy.
-Admitted.
+  unfold well_formed_trace. split; last by apply: intermediate_well_formed_events H.
+  apply intermediate_well_bracketed_trace in H.
+  suffices <- : stack_state_of cs = StackState Component.main [::] by [].
+  rewrite /CS.CS.initial_state /CS.CS.initial_machine_state in H'.
+  rewrite H' H''.
+  rewrite [Intermediate.prepare_procedures p0 _]surjective_pairing /=.
+  by rewrite [(Intermediate.prepare_procedures p0 _).1]surjective_pairing.
+Qed.
 
   (* Definability *)
   (* CH: this should now be related to what Arthur proved:
@@ -792,7 +804,6 @@ Proof.
     rewrite /intf -mem_domm domm_union.
     do 2![rewrite Intermediate.wfprog_defined_procedures //].
     by rewrite -domm_union mem_domm e.
-  have Hatomic : Atomic (I.CS.sem (Intermediate.program_link p c)) by admit.
   set m' := finpref_trace m.
   have {Hbeh} [cs [cs' [Hcs Hstar]]] :
       exists cs cs',
@@ -806,22 +817,16 @@ Proof.
       + case: beh / Hbeh Hpre=> //= t cs' Hstar Hfinal Ht -> {m}.
         by exists cs, cs'; split.
       + destruct Hpre as [beh' ?]; subst beh.
-        pose proof state_behaves_app_inv Hatomic m beh' Hbeh as Hstate.
-        destruct Hstate as [cs' [Hstar Hbehaves]].
+        have [cs' [Hstar Hbehaves]] := state_behaves_app_inv (I.CS.atomicity _) m beh' Hbeh.
         exists cs, cs'; split; assumption.
-    - intros Hini Hpre.
-      destruct m as [m|m|m].
-      + inversion Hpre.
-      + inversion Hpre; subst.
-        do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
-        split; try reflexivity; exact: star_refl.
-      + inversion Hpre as [beh' Hbeh'].
-        destruct beh' as [t|t|t|t]; try (inversion Hbeh'; fail).
-        inversion Hbeh' as [HE0]. symmetry in HE0. apply Eapp_E0_inv in HE0.
-        destruct HE0; subst.
-        (* This last bit is repeated from the previous branch (and proof). *)
-        do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
-        split; try reflexivity; exact: star_refl.
+    - move=> _ Hpre; rewrite {}/m'.
+      have {Hpre m} -> : finpref_trace m = E0.
+        case: m Hpre=> //= m [[t|t|t|t] //=].
+        by case: m.
+      do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
+      split; try reflexivity; exact: star_refl.
+  have wf_events : All (well_formed_event intf) m'.
+    by apply: intermediate_well_formed_events Hstar.
   have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m'.
     have [mainP [_ [HmainP _]]] := Intermediate.cprog_main_existence Hclosed.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
@@ -838,13 +843,11 @@ Proof.
     rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
   have wf_back : well_formed_program back.
-    apply: well_formed_events_well_formed_program=> //.
-    (* FIXME: Show events are well formed *)
-    admit.
+    exact: well_formed_events_well_formed_program.
   split; first exact: well_formed_program_unlink.
   split; first exact: well_formed_program_unlink.
   rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
-  split=> //.
-  (* Needs properties about unlinking. *)
+  split=> // {wf_events back Hback wf_back wf_m}.
+  (* FIXME: Something is odd here *)
   admit.
 Admitted.

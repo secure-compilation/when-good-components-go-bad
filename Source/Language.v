@@ -430,6 +430,8 @@ Module Source.
     by case: (prog_procedures p2 Component.main)=> [main_procs'|] //=; eauto.
   Qed.
 
+  (* FIXME: This result does not hold as stated.  The reason is that p1 could
+     have the main procedure defined but not p1'. *)
   Lemma interface_preserves_closedness_l :
     forall p1 p2 p1',
       closed_program (program_link p1 p2) ->
