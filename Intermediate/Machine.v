@@ -6,6 +6,7 @@ Require Import Common.Memory.
 Require Import Lib.Monads.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
+From CoqUtils Require Import fmap.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -310,6 +311,32 @@ Proof.
   by case: prog_main0.
 Qed.
 
+Lemma program_linkC p1 p2 :
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p1) (prog_interface p2) ->
+  program_link p1 p2 = program_link p2 p1.
+Proof.
+  case: p1 p2 => [i1 p1 b1 m1] [i2 p2 b2 m2] /= Hwf1 Hwf2 [_ Hdis_i].
+  have Hdis_p: fdisjoint (domm p1) (domm p2).
+    by rewrite -(wfprog_defined_procedures Hwf1) -(wfprog_defined_procedures Hwf2).
+  congr mkProg=> /=; try rewrite unionmC //.
+    by rewrite -(wfprog_defined_buffers Hwf1) -(wfprog_defined_buffers Hwf2).
+  have {Hwf1} /implyP Hm1 : m1 -> Component.main \in domm p1.
+    move/wfprog_main_existence: Hwf1 => /=.
+    case: m1 => [mainP|] //= /(_ mainP erefl) [main_procs [e _]].
+    by rewrite mem_domm e.
+  have {Hwf2} /implyP Hm2 : m2 -> Component.main \in domm p2.
+    move/wfprog_main_existence: Hwf2 => /=.
+    case: m2 => [mainP|] //= /(_ mainP erefl) [main_procs [e _]].
+    by rewrite mem_domm e.
+  case: m1 Hm1=> [mainP|] //=; last by case: m2 Hm2.
+  move=> in_p1.
+  move: Hm2; rewrite -implybNN.
+  move/fdisjointP/(_ Component.main in_p1): Hdis_p => -> /=.
+  by case: m2.
+Qed.
+
 Theorem linking_well_formedness:
   forall p1 p2,
     well_formed_program p1 ->
@@ -317,81 +344,70 @@ Theorem linking_well_formedness:
     linkable (prog_interface p1) (prog_interface p2) ->
     well_formed_program (program_link p1 p2).
 Proof.
-  intros p1 p2 Hwf1 Hwf2 Hlinkability.
-  inversion Hlinkability; subst.
-  constructor.
-  - simpl. assumption.
+  move=> p1 p2 Hwf1 Hwf2 [Hsound Hdis_i]; split=> //.
   - simpl.
     repeat rewrite domm_union.
     by do 2![rewrite wfprog_defined_procedures //].
-  - intros C CI H1 P H2.
-    simpl in *.
-    rewrite unionmE.
+  - move=> /= C CI H1 P H2.
+    rewrite unionmE -mem_domm -(wfprog_defined_procedures Hwf1) !mem_domm.
     rewrite unionmE in H1.
-    destruct ((prog_interface p1) C) eqn:Hwhere; simpl in *.
-    + rewrite Hwhere in H1.
-      inversion H1; subst.
+    case Hwhere: (prog_interface p1 C) H1 => [CI'|] //=.
+    + move=> [?]; subst CI'.
       destruct (wfprog_exported_procedures_existence Hwf1 Hwhere H2)
         as [Cprocs [Pcode [Hproc Hcode]]].
       rewrite Hproc. simpl.
       exists Cprocs. exists Pcode.
       split; auto.
-    + enough ((prog_procedures p1) C = None) as Hno_p1.
-      * rewrite Hno_p1. rewrite Hwhere in H1. simpl in *.
+    + suffices Hno_p1 : prog_procedures p1 C = None.
+        move=> H1.
         destruct (wfprog_exported_procedures_existence Hwf2 H1 H2)
           as [Cprocs [Pcode [Hproc Hcode]]].
         exists Cprocs. exists Pcode.
         split; auto.
-      * destruct ((prog_procedures p1) C) eqn:Hin_p1.
-        ** rewrite Hwhere in H1. simpl in H1.
-           destruct (wfprog_exported_procedures_existence Hwf2 H1 H2)
-             as [Cprocs [Pcode [Hproc Hcode]]].
-           unfold fdisjoint in H1.
-           admit.
-        ** reflexivity.
-  - intros C Cprocs H1 P Pcode H2 i H3.
-    unfold well_formed_instruction.
-    destruct i; auto.
-    + destruct i; auto.
-      simpl in *.
-      rewrite unionmE.
-      rewrite unionmE in H1.
-      admit.
-    + admit.
-    + admit.
-    + admit.
+      now apply/dommPn; rewrite -(wfprog_defined_procedures Hwf1); apply/dommPn.
+  - move=> C Cprocs H1 P Pcode H2.
+    without loss H: p1 p2 Hwf1 Hwf2 Hsound Hdis_i H1 / prog_procedures p1 C = Some Cprocs.
+    { move: H1; rewrite /= unionmE.
+      case e: (prog_procedures p1 C)=> [Cprocs'|] //=.
+        move=> [<-]; apply=> //.
+        by rewrite unionmE e.
+      move=> Hp2_C Hgen i Hi; rewrite program_linkC //.
+      apply Hgen=> //.
+      + by rewrite unionmC // fdisjointC.
+      + by rewrite fdisjointC.
+      + by rewrite unionmE Hp2_C. }
+    move=> i Hi.
+    move: (wfprog_well_formed_instructions Hwf1 H H2 Hi).
+    case: i Hi=> //=.
+    + (* IConst *)
+      case=> // ptr r Hi [bufs [p1_bufs Hbufs]].
+      by exists bufs; rewrite unionmE p1_bufs.
+    + (* IBnz *)
+      move=> r l Hi [Cprocs' [Pcode']].
+      rewrite H=> - [[<-] {Cprocs'}].
+      rewrite H2=> - [[<-] {Pcode'}] Hl.
+      by exists Cprocs, Pcode; rewrite unionmE H.
+    + (* IJal *)
+      move=> l Hi [Cprocs' [P' [Pcode']]].
+      rewrite H=> - [[<-] {Cprocs'}].
+      case=> H2' Hl.
+      by exists Cprocs, P', Pcode'; rewrite unionmE H.
+    + (* ICall *)
+      move=> C' P' Hi [CC' [CI [p1_C Himport]]]; split=> //.
+      exists CI; split=> //.
+      by rewrite /Program.has_component unionmE p1_C.
   - rewrite /= !domm_union.
     by do 2![rewrite wfprog_defined_buffers //].
-  - intros. simpl in *.
-    pose proof (wfprog_main_existence Hwf1) as Hmain1.
-    pose proof (wfprog_main_existence Hwf2) as Hmain2.
-    destruct (prog_main p1) as [|] eqn:Hmain_p1;
-    destruct (prog_main p2) as [|] eqn:Hmain_p2.
-    + simpl in *.
-      inversion H1; subst.
-      destruct (Hmain1 mainP eq_refl) as [main_procs []].
-      exists main_procs.
-      split.
-      * rewrite unionmE.
-        rewrite H2. reflexivity.
-      * assumption.
-    + simpl in *.
-      inversion H1; subst.
-      destruct (Hmain1 mainP eq_refl) as [main_procs []].
-      exists main_procs.
-      split.
-      * rewrite unionmE.
-        rewrite H2. reflexivity.
-      * assumption.
-    + inversion H1; subst.
-      destruct (Hmain2 mainP eq_refl) as [main_procs []].
-      exists main_procs.
-      split.
-      * rewrite unionmE.
-        admit.
-      * assumption.
-    + simpl in *. discriminate.
-Admitted.
+  - move=> mainP /=.
+    have Hmain1 := @wfprog_main_existence _ Hwf1 mainP.
+    have Hmain2 := @wfprog_main_existence _ Hwf2 mainP.
+    case Hmain_p1: (prog_main p1) Hmain1=> [mainP'|] //=.
+      move=> H1; case/H1=> [main_procs [p1_main HmainP]].
+      by exists main_procs; rewrite unionmE p1_main.
+    move=> _ /Hmain2 [main_procs [p2_main HmainP]].
+    exists main_procs; rewrite unionmC 1?unionmE 1?p2_main //.
+    by rewrite -(wfprog_defined_procedures Hwf1) -(wfprog_defined_procedures Hwf2).
+Qed.
 
 Definition alloc_static_buffers p comps :=
   mkfmapf (fun C =>
