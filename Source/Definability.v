@@ -787,6 +787,7 @@ Lemma definability_with_linking:
     Intermediate.closed_program (Intermediate.program_link p c) ->
     program_behaves (I.CS.sem (Intermediate.program_link p c)) b ->
     prefix m b ->
+    not_wrong_finpref m ->
   exists p' c' b',
     Source.prog_interface p' = Intermediate.prog_interface p /\
     Source.prog_interface c' = Intermediate.prog_interface c /\
@@ -796,7 +797,7 @@ Lemma definability_with_linking:
     program_behaves (S.CS.sem (Source.program_link p' c')) b' /\
     prefix m b'.
 Proof.
-  move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre.
+  move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre Hnot_wrong.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
   have Hclosed_intf : closed_interface intf by case: Hclosed.
   have intf_main : intf Component.main.
@@ -809,7 +810,7 @@ Proof.
       exists cs cs',
         I.CS.initial_state (Intermediate.program_link p c) cs /\
         Star (I.CS.sem (Intermediate.program_link p c)) cs m' cs'.
-    case: b / Hbeh Hpre.
+    case: b / Hbeh Hpre {Hnot_wrong}.
     - rewrite {}/m' => cs beh Hcs Hbeh Hpre.
       case: m Hpre=> [m|m|m] /= Hpre.
       + case: beh / Hbeh Hpre=> //= t cs' Hstar Hfinal -> {m}.
@@ -821,7 +822,7 @@ Proof.
         exists cs, cs'; split; assumption.
     - move=> _ Hpre; rewrite {}/m'.
       have {Hpre m} -> : finpref_trace m = E0.
-        case: m Hpre=> //= m [[t|t|t|t] //=].
+        case: m Hpre => //= m [[t|t|t|t] //=].
         by case: m.
       do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
       split; try reflexivity; exact: star_refl.
@@ -848,6 +849,6 @@ Proof.
   split; first exact: well_formed_program_unlink.
   rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
   split=> // {wf_events back Hback wf_back wf_m}.
-  (* FIXME: Something is odd here *)
-  admit.
-Admitted.
+  rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
+  by exists (Terminates nil); rewrite /= E0_right.
+Qed.

@@ -84,8 +84,11 @@ Section RSC_DC_MD.
     (* destruct (decomposition_with_refinement linkability Hbeh) *)
     (*   as [beh' [Hbeh' Hbeh_improves]]. *)
 
+    assert (Hnot_wrong' : not_wrong_finpref m).
+    { now destruct m, t; simpl; auto. }
+
     (* definability *)
-    destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability''' closedness Hbeh Hprefix0)
+    destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability''' closedness Hbeh Hprefix0 Hnot_wrong')
       as [P' [Cs [beh [Hsame_iface1 [Hsame_iface2 [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]].
 
     (* FCC *)

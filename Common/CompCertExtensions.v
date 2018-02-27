@@ -13,6 +13,12 @@ Inductive finpref_behavior : Type :=
   | FGoes_wrong: trace -> finpref_behavior
   | FTbc : trace -> finpref_behavior.
 
+Definition not_wrong_finpref (m:finpref_behavior) : Prop :=
+  match m with
+  | FGoes_wrong _ => False
+  | _             => True
+  end.
+
 Definition prefix (m:finpref_behavior) (b:program_behavior) : Prop :=
   match m, b with
   | FTerminates t1, Terminates t2
