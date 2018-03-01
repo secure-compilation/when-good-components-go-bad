@@ -82,6 +82,7 @@ MicroPolicies/Examples/Increment.v
 MicroPolicies/Examples/DefaultInitBuffer.v
 MicroPolicies/Examples/NestedCalls.v
 MicroPolicies/Examples/Factorial.v
+MicroPolicies/Examples/Test.v
 
 I2MP/Tmp.v
 I2MP/Precompile.v
