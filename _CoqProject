@@ -69,6 +69,7 @@ I2SFI/Compiler.v
 I2SFI/CompTestUtil.v
 I2SFI/TestIntermediate.v
 I2SFI/Shrinkers.v
+I2SFI/CompilerIntegrationTests.v
 
 MicroPolicies/Utils.v
 MicroPolicies/Types.v
@@ -76,6 +77,13 @@ MicroPolicies/Int32.v
 MicroPolicies/Symbolic.v
 MicroPolicies/Exec.v
 MicroPolicies/LRC.v
+MicroPolicies/Examples/Helper.v
+MicroPolicies/Examples/Identity.v
+MicroPolicies/Examples/Increment.v
+MicroPolicies/Examples/DefaultInitBuffer.v
+MicroPolicies/Examples/NestedCalls.v
+MicroPolicies/Examples/Factorial.v
+MicroPolicies/Examples/Test.v
 
 I2MP/Tmp.v
 I2MP/Precompile.v
