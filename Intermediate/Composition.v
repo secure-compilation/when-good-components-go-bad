@@ -1482,7 +1482,7 @@ Section Composition.
     intros b1 b2 m Hbeh1 Hbeh2 Hpref1 Hpref2.
     pose proof
       partial_programs_composition_prefix
-        wf1 wf2 linkability Hbeh1 Hbeh2 Hpref1 Hpref2
+        wf1 wf2 main_linkability linkability Hbeh1 Hbeh2 Hpref1 Hpref2
       as Hcomp.
     destruct Hcomp as [b3 [Hbeh3 Hpref3]].
     exists b3. split; auto.
