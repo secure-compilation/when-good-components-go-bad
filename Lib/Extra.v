@@ -32,6 +32,13 @@ apply/eq_fmap=> k; rewrite filtermE unionmE.
 by case: (m1 k) (m2 k)=> //= - [].
 Qed.
 
+Lemma emptymP m : reflect (m = emptym) (domm m == fset0).
+Proof.
+apply/(iffP eqP); last by move=> ->; rewrite domm0.
+move=> e; apply/eq_fmap => x; rewrite emptymE.
+by case: (altP (dommPn m x))=> //; rewrite e.
+Qed.
+
 End FMap.
 
 Section Lists.

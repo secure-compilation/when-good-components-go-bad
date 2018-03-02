@@ -4,8 +4,9 @@ Require Export Common.Values.
 Require Export Common.Linking.
 Require Import Common.Memory.
 Require Import Lib.Monads.
+Require Import Lib.Extra.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 From CoqUtils Require Import fmap.
 
 Set Implicit Arguments.
@@ -286,16 +287,15 @@ Theorem empty_interface_implies_empty_program:
     prog_interface p = emptym ->
     p = empty_prog.
 Proof.
-  move=> [intf procs bufs main] [/= _ e_procs _ _ e_bufs _] e_intf.
+  move=> [intf procs bufs main] [/= _ e_procs _ _ e_bufs Hmain] e_intf.
   subst intf; congr mkProg.
   - apply/eq_fmap=> ?; rewrite emptymE; apply/dommPn.
     by rewrite -e_procs mem_domm emptymE.
   - apply/eq_fmap=> ?; rewrite emptymE; apply/dommPn.
     by rewrite -e_bufs mem_domm emptymE.
-  - (* FIXME: This part does not hold right now because the main procedure could
-       be defined even if the interface does not mention the main component. *)
-    admit.
-Admitted.
+  - case e: main Hmain=> [mainP|] //= /(_ _ erefl) [main_procs].
+    by move/eqP: e_procs; rewrite domm0 eq_sym => /emptymP -> [].
+Qed.
 
 Lemma empty_prog_is_well_formed:
   well_formed_program empty_prog.
