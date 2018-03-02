@@ -40,14 +40,6 @@ Module NatMapFacts := NatMapExtra.F.
 
 Module ListUtil.
 
-  (* FIXME: This already exists in the standard library as nth_error *)
-  Fixpoint get {A:Type} (pos:nat) (l : list A) : option A :=
-    match pos, l with
-    | O, x::_ => Some x
-    | _, nil => None
-    | S pos',_::ls => get pos' ls
-    end.
-
   (* TODO: I would like to avoid passing eqb *)
   (* AAA: This can be fixed by using fmap in CoqUtils *)
   Fixpoint get_by_key {K V:Type} (eqb : K->K->bool) (k : K)

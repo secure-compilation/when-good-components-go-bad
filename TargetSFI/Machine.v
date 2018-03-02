@@ -35,7 +35,7 @@ Module RiscMachine.
    * Register Type Definition
    *******************************************)
   Module Register.
-    
+
     Open Scope N_scope.
     Definition t := N.
 
@@ -44,7 +44,7 @@ Module RiscMachine.
     Definition R_AUX1 : t := 3.
     Definition R_AUX2 : t := 4.
     Definition R_RA : t := 5.
-    Definition R_SP : t := 6. 
+    Definition R_SP : t := 6.
     (* reserved SFI registers *)
     Definition R_SFI_SP: t := 26.
     Definition R_AND_CODE_MASK : t := 27.
@@ -52,11 +52,11 @@ Module RiscMachine.
     Definition R_OR_CODE_MASK : t := 29.
     Definition R_OR_DATA_MASK : t := 30.
     Definition R_T : t := 31.
-    Definition R_D : t := 32.    
+    Definition R_D : t := 32.
     Close Scope N_scope.
-    
+
     Definition NO_REGISTERS : nat := 33.
-    
+
     Definition eqb (r1 r2 : t) : bool :=
       N.eqb r1 r2.
 
@@ -69,12 +69,12 @@ Module RiscMachine.
     Theorem eqb_refl:
       forall r : t, eqb r r = true.
     Proof. apply N.eqb_refl. Qed.
-    
+
   End Register.
 
 
   (******************************************************
-   * Register File Definition 
+   * Register File Definition
    * General Registers (does not contain program counter)
    ******************************************************)
   Module RegisterFile <: UsualDecidableType.
@@ -105,13 +105,13 @@ Module RiscMachine.
             end
           end in
       up_aux l pos x.
-    
+
     Definition set_register (reg : Register.t) (val : value)
                (gen_regs  : t) : t :=
       update gen_regs (N.to_nat reg) val Z0.
 
     Definition get_register (reg : Register.t) (gen_regs : t) : option value :=
-      ListUtil.get (N.to_nat reg) gen_regs.
+      nth_error gen_regs (N.to_nat reg).
 
     Fixpoint eqb (regs1 regs2 : t) : bool :=
       match (regs1,regs2) with
@@ -130,8 +130,8 @@ Module RiscMachine.
         rewrite Z.eqb_refl. rewrite IHregs.
         reflexivity.
     Qed.
-    
-    
+
+
     Lemma eqb_eq: forall (regs1 regs2 : t),
         (eqb regs1 regs2) = true <-> regs1 = regs2.
     Proof.
@@ -146,7 +146,7 @@ Module RiscMachine.
             destruct H1 as [Hh Ht].
             apply IHregs1 in Ht.
             rewrite Ht.
-            apply Z.eqb_eq in Hh. 
+            apply Z.eqb_eq in Hh.
             rewrite Hh. reflexivity.
       - intro H. rewrite H. apply eqb_refl.
     Defined.
@@ -157,8 +157,8 @@ Module RiscMachine.
     Proof.
       intros. intro H1. apply eqb_eq in H1. rewrite H1 in H. inversion H.
     Qed.
-                                                             
-        
+
+
     Theorem eq_dec: forall regs1 regs2 : t, {regs1 = regs2} + {regs1 <> regs2}.
     Proof.
       apply List.list_eq_dec. apply Z.eq_dec.
@@ -174,7 +174,7 @@ Module RiscMachine.
    * ISA Definitions: Instructions and binary operations
    ******************************************************)
   Module ISA.
-    
+
     Inductive binop : Type :=
     | Addition : binop
     | Subtraction : binop
@@ -184,7 +184,7 @@ Module RiscMachine.
     | BitwiseOr : binop
     | BitwiseAnd : binop
     | ShiftLeft : binop.
-  
+
     Inductive instr : Set :=
     | INop : instr
     (* register operations *)
@@ -229,7 +229,7 @@ Module RiscMachine.
           try (reflexivity); try (inversion H).
       - intro H. rewrite H. apply eqb_refl_op.
     Qed.
-        
+
     Definition eqb_instr (i1 i2 : instr) : bool :=
       match (i1,i2) with
       | (INop,INop) => true
@@ -268,7 +268,7 @@ Module RiscMachine.
         try (apply  andb_true_iff; split; apply Register.eqb_refl).
       - apply  andb_true_iff. split.
         + apply Z.eqb_refl.
-        + apply Register.eqb_refl. 
+        + apply Register.eqb_refl.
       - repeat (apply  andb_true_iff; split);
           try (apply Register.eqb_refl).
         apply eqb_refl_op.
@@ -276,7 +276,7 @@ Module RiscMachine.
         + apply Register.eqb_refl.
         + apply Z.eqb_refl.
     Qed.
-        
+
     Theorem eqb_eq_instr:
       forall i1 i2 : instr, eqb_instr i1 i2= true <-> i1 = i2.
     Proof.
@@ -310,17 +310,17 @@ Module RiscMachine.
         + apply N.eqb_eq in H. rewrite H. reflexivity.
       - intro H. rewrite H. apply eqb_refl_instr.
         Qed.
-            
-          
+
+
     Theorem instr_eq_dec:
       forall i1 i2 : instr,  {i1 = i2} + {i1 <> i2}.
     Proof.
       repeat decide equality. Defined.
-    
+
   End ISA.
 
   (* Type of a memory location *)
-  Inductive word := 
+  Inductive word :=
   | Data : value -> word
   | Instruction : ISA.instr -> word.
 
@@ -344,7 +344,7 @@ Module RiscMachine.
   Proof.
     intros. destruct w1, w2, w3; inversion H; inversion H0; reflexivity.
   Qed.
-    
+
   Theorem eqb_eq_word: forall (e e' : word),
       eqb_word e e' = true <-> e = e'.
   Proof.
@@ -356,7 +356,7 @@ Module RiscMachine.
       + intro H. apply ISA.eqb_eq_instr in H. rewrite H. reflexivity.
     - intro H. rewrite H. apply eqb_refl_word.
   Qed.
-        
+
   (******************************************************
    * Memory Definitions
    ******************************************************)
@@ -379,8 +379,8 @@ Module RiscMachine.
       | Some (Instruction val) => Some val
       | _ => None
       end.
-    
-    
+
+
     Definition set_value (mem : t) (ptr : address) (val : value) : t :=
       BinNatMap.add ptr (Data val) mem.
 
@@ -408,7 +408,7 @@ Module RiscMachine.
 
     Definition of_list (lst : list (RiscMachine.address * word)) : t :=
       BinNatMapExtra.of_list lst.
-      
+
     Definition eqb (m1 m2 : t) : bool :=
       BinNatMap.equal eqb_word m1 m2.
 
@@ -418,7 +418,7 @@ Module RiscMachine.
     Theorem Equal_sym:
       forall (m1 m2 : t), Equal m1 m2 -> Equal m2 m1.
     Proof.
-      intros m1 m2. apply (BinNatMapFacts.Equal_sym). 
+      intros m1 m2. apply (BinNatMapFacts.Equal_sym).
     Qed.
 
     Theorem Equal_trans:
@@ -432,9 +432,9 @@ Module RiscMachine.
     Theorem Equal_refl:
       forall (m : t), Equal m m.
     Proof.
-      intro m. apply (BinNatMapFacts.Equal_refl). 
+      intro m. apply (BinNatMapFacts.Equal_refl).
     Qed.
-      
+
     Theorem eqb_refl:
       forall (m : t), eqb m m = true.
     Proof.
@@ -444,7 +444,7 @@ Module RiscMachine.
       - apply eqb_eq_word.
       - apply BinNatMapFacts.Equal_refl.
     Qed.
-    
+
     Lemma eqb_Equal: forall (m1 m2 : t),
         (eqb m1 m2) = true <->  BinNatMap.Equal m1 m2.
     Proof.
@@ -465,9 +465,9 @@ Module RiscMachine.
       forall (m1 m2 : t) (ptr : address),
         Equal m1 m2 -> (get_word m1 ptr) = (get_word m2 ptr).
     Proof.
-      intros. unfold Equal in H. 
+      intros. unfold Equal in H.
       unfold BinNatMap.Equal in H.
-      unfold get_word. 
+      unfold get_word.
       apply H.
     Qed.
 
@@ -486,8 +486,8 @@ Module RiscMachine.
       intros. unfold set_value.
       apply BinNatMapFacts.add_m.
       reflexivity. reflexivity. unfold Equal in H. apply H.
-    Qed. 
-      
+    Qed.
+
   End Memory.
 
   (* evaluates the given binary operation *)
@@ -503,7 +503,7 @@ Module RiscMachine.
     | ISA.BitwiseOr => Z.lor op1 op2
     | ISA.ShiftLeft => Z.shiftl op1 op2
   end.
-  
+
   Definition executing (mem : Memory.t) (pc : address) ( i : ISA.instr) : Prop :=
     match (Memory.get_word mem pc) with
     | Some (Instruction i') => i = i'
@@ -521,17 +521,17 @@ Module RiscMachine.
     forall (m1 m2 : Memory.t) (pc : address) ( i : ISA.instr),
       BinNatMap.Equal m1 m2 -> executing m1 pc i -> executing m2 pc i.
   Proof.
-    unfold executing. unfold Memory.get_word. 
+    unfold executing. unfold Memory.get_word.
     simpl. intros.
-    unfold BinNatMap.Equal in H. 
-    rewrite H in H0. apply H0. 
+    unfold BinNatMap.Equal in H.
+    rewrite H in H0. apply H0.
   Qed.
-  
+
 
   Definition inc_pc (a : pc) : pc := N.add a 1.
 
   Definition to_value (v : N) : value := Z.of_N v.
-  
+
 End RiscMachine.
 
 Close Scope Z_scope.
@@ -562,11 +562,11 @@ Module SFI.
 
   (* Slot dimension *)
   Definition SLOT_SIZE : N := 2^OFFSET_BITS_NO.
-  
+
   (* Maximum number of components, including the zero (special) component *)
   Definition COMP_MAX:N := 2^COMP_BITS_NO.
 
-  Definition C_SFI (addr : RiscMachine.address) : SFIComponent.id  := 
+  Definition C_SFI (addr : RiscMachine.address) : SFIComponent.id  :=
     N.land (N.shiftr addr OFFSET_BITS_NO) (2^COMP_BITS_NO - 1).
 
   Definition SLOT_SFI (addr : RiscMachine.address) : N :=
@@ -582,7 +582,7 @@ Module SFI.
   Definition MONITOR_COMPONENT_ID : N := 0.
 
   Definition BLOCK_BITS_NO : N := 9.
-  
+
   Definition AND_DATA_MASK : N :=
     N.lor
       (N.shiftl (2^BLOCK_BITS_NO -1) (OFFSET_BITS_NO+COMP_BITS_NO+1))
@@ -597,7 +597,7 @@ Module SFI.
 
   Definition last_address_in_slot (addr : RiscMachine.address) : bool :=
     N.eqb (OFFSET_SFI addr) (2^OFFSET_BITS_NO - 1).
-  
+
   Definition address_of (cid : SFIComponent.id) (bid off: N) : RiscMachine.address :=
     N.lor
       (N.shiftl bid (COMP_BITS_NO+OFFSET_BITS_NO))
@@ -607,13 +607,13 @@ Module SFI.
 
   Definition convert_address (addr : RiscMachine.address) : SFIComponent.id * N * N :=
     ((C_SFI addr), (SLOT_SFI addr), (OFFSET_SFI addr)).
-  
+
   Close Scope N_scope.
-  
+
   Definition is_same_component (addr1: RiscMachine.address)
              (addr2: RiscMachine.address) : Prop :=
     (C_SFI addr1) = (C_SFI addr2).
-  
+
   Definition is_same_component_bool (addr1: RiscMachine.address)
              (addr2: RiscMachine.address) :=
     N.eqb (C_SFI addr1) (C_SFI addr2).
@@ -630,9 +630,9 @@ Module SFI.
   Definition or_code_mask (cid : SFIComponent.id) : N :=
     (N.shiftl cid OFFSET_BITS_NO).
 
-  
+
   Module Allocator.
-  
+
     Definition allocator_data_slot := 1%N.
 
     (* will allocate starting with 3, odd numbers *)
@@ -643,7 +643,7 @@ Module SFI.
     Definition allocate_code_slots (n : nat) : (list N) :=
       (List.map (fun n => ((N.of_nat n) * 2)%N)
                 (List.seq 0 n)).
-    
+
     Definition initial_allocator_value (n:nat) : RiscMachine.value :=
       Z.of_nat n.
 
@@ -673,10 +673,10 @@ Module Env  <: UsualDecidableType.
   Definition SFIid2index (id : SFIComponent.id) : nat :=
     N.to_nat (id-1).
   Close Scope N_scope.
-  
+
   Definition get_component_name_from_id (id : SFIComponent.id)
              (G : t): option Component.id :=
-    ListUtil.get (SFIid2index id) (fst G).
+    nth_error (fst G) (SFIid2index id).
 
   Definition get_procedure (addr : RiscMachine.address)
              (G : Env.t) : option Procedure.id :=
@@ -688,7 +688,7 @@ Module Env  <: UsualDecidableType.
     repeat decide equality. Defined.
 
   Include HasUsualEq <+ UsualIsEq.
-  
+
 End Env.
 
 
@@ -721,7 +721,7 @@ Module MachineState.
     && (N.eqb pc1 pc2)
     && (RiscMachine.RegisterFile.eqb gen_regs1 gen_regs2).
 
-     
+
 End MachineState.
 
 (******************************************************
@@ -734,4 +734,3 @@ Record sfi_program :=
     mem : RiscMachine.Memory.t;
     prog_interface : Program.interface
   }.
-

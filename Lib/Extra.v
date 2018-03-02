@@ -33,3 +33,56 @@ by case: (m1 k) (m2 k)=> //= - [].
 Qed.
 
 End FMap.
+
+Section Lists.
+
+Variable T : Type.
+
+Fixpoint All (P : T -> Prop) (l : list T) : Prop :=
+  match l with
+  | [::] => True
+  | x :: l' => P x /\ All P l'
+  end.
+
+Lemma All_cat (P : T -> Prop) (s1 s2 : seq T) :
+  All P (s1 ++ s2) <-> All P s1 /\ All P s2.
+Proof.
+elim: s1=> /= [|x s1 IH]; first by intuition.
+by rewrite IH and_assoc.
+Qed.
+
+Fixpoint list_upd (data : list T) (offset : nat) (x : T) : option (list T) :=
+  match data with
+  | [::] => None (* store out of bounds *)
+  | x' :: rest =>
+    match offset with
+    | O => Some (x :: rest)
+    | S offset' =>
+      match list_upd rest offset' x with
+      | Some rest' => Some (x' :: rest')
+      | None       => None (* propagate store out of bounds *)
+      end
+    end
+  end.
+
+Lemma list_upd_nth_error_same:
+  forall blk o v blk',
+    list_upd blk o v = Some blk' ->
+    List.nth_error blk' o = Some v.
+Proof.
+elim=> [|x blk IH] //= [? ? [<-]|o] //=.
+by move=> v blk'; case e: list_upd=> [blk''|] //= [<-]; eauto.
+Qed.
+
+Lemma list_upd_nth_error_other:
+  forall blk o v o' blk',
+    list_upd blk o v = Some blk' ->
+    o <> o' ->
+    List.nth_error blk' o' = List.nth_error blk o'.
+Proof.
+elim=> [|x blk IH] //= [? [|o'] ? [<-] //|o].
+move=> v [|o'] blk'; case e: list_upd=> [blk''|] //= [<-] // ne.
+by apply: (IH _ _ _ _ e); congruence.
+Qed.
+
+End Lists.

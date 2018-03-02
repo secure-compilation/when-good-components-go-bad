@@ -87,25 +87,11 @@ Module ComponentMemory : AbstractComponentMemory.
     | None => None
     end.
 
-  Fixpoint block_update data offset val : option block :=
-    match data with
-    | [] => None (* store out of bounds *)
-    | val' :: rest =>
-      match offset with
-      | O => Some (val :: rest)
-      | S offset' =>
-        match block_update rest offset' val with
-        | Some rest' => Some (val' :: rest')
-        | None       => None (* propagate store out of bounds *)
-        end
-      end
-    end.
-
   Definition store m b i v : option mem :=
     match getm (content m) b with
     | Some chunk =>
       if (0 <=? i)%Z then
-        match block_update chunk (Z.to_nat i) v with
+        match list_upd chunk (Z.to_nat i) v with
         | Some chunk' =>
           Some {| content := setm (content m) b chunk';
                   nextblock := nextblock m |}
@@ -161,40 +147,6 @@ Module ComponentMemory : AbstractComponentMemory.
 
   Ltac inv H := (inversion H; subst; clear H).
 
-  (* FIXME: Move to extra *)
-  Lemma load_after_update_same:
-    forall blk o v blk',
-      block_update blk o v = Some blk' ->
-      nth_error blk' o = Some v.
-  Proof.
-    induction blk; intros; inv H.
-    destruct o.
-    + inv H1; auto.
-    + destruct (block_update blk o v) eqn:?; inv H1.
-      simpl.
-      eapply IHblk; eauto.
-  Qed.
-
-  Lemma load_after_update_other:
-    forall blk o v o' blk',
-      block_update blk o v = Some blk' ->
-      o <> o' ->
-      nth_error blk' o' = nth_error blk o'.
-  Proof.
-    induction blk; intros; inv H.
-    destruct o.
-    + inv H2.
-      destruct o'.
-      - intuition.
-      - auto.
-    + destruct (block_update blk o v) eqn:?.
-      - inv H2.
-        destruct o'.
-        * auto.
-        * simpl. eauto.
-      - inv H2.
-  Qed.
-
   Lemma load_after_store:
     forall m m' b i v,
       store m b i v = Some m' ->
@@ -206,12 +158,12 @@ Module ComponentMemory : AbstractComponentMemory.
     move: Hstore; rewrite /store /load.
     case m_b: (content m b) => [chunk|] //=.
     case: (Z.leb_spec0 0 i)=> [i_pos|//] /=.
-    case upd_chunk: (block_update chunk (Z.to_nat i) v) => [chunk'|] // [<- {m'}] /=.
+    case upd_chunk: (list_upd chunk (Z.to_nat i) v) => [chunk'|] // [<- {m'}] /=.
     rewrite setmE xpair_eqE; case: (b' =P b) => [-> {b'}|] //=.
     case: (i' =P i) => [-> {i'}|i'_ne_i] /=.
-    - move/Z.leb_spec0: i_pos => ->; exact: load_after_update_same upd_chunk.
+    - move/Z.leb_spec0: i_pos => ->; exact: list_upd_nth_error_same upd_chunk.
     - rewrite m_b; case: (Z.leb_spec0 0 i')=> [i'_pos|] //=.
-      apply: load_after_update_other; eauto.
+      apply: list_upd_nth_error_other; eauto.
       contradict i'_ne_i; symmetry; exact: Z2Nat.inj i'_ne_i.
   Qed.
 
@@ -225,7 +177,7 @@ Module ComponentMemory : AbstractComponentMemory.
     case m_b: (content m b)=> [chunk|] //.
     case: (Z.leb_spec0 0 i)=> [i_pos|] //= chunk_i.
     suffices [? ->] :
-      exists chunk', block_update chunk (Z.to_nat i) v' = Some chunk' by eauto.
+      exists chunk', list_upd chunk (Z.to_nat i) v' = Some chunk' by eauto.
     elim: {m_b i i_pos} chunk (Z.to_nat i) chunk_i => [|v'' chunk IH] [|i] //=.
     - by eauto.
     - by move=> /IH [chunk' ->]; eauto.

@@ -345,20 +345,6 @@ Section Definability.
       end
     end.
 
-  (* FIXME: Move somewhere else *)
-  Fixpoint All {T} (P : T -> Prop) (l : list T) : Prop :=
-    match l with
-    | [] => True
-    | x :: l' => P x /\ All P l'
-    end.
-
-  Lemma All_cat {T} (P : T -> Prop) (s1 s2 : seq T) :
-    All P (s1 ++ s2) <-> All P s1 /\ All P s2.
-  Proof.
-    elim: s1=> /= [|x s1 IH]; first by intuition.
-    by rewrite IH and_assoc.
-  Qed.
-
   Definition well_formed_event (e: event) : Prop :=
     match e with
     | ECall C P _ C' => C <> C' /\ imported_procedure intf C C' P

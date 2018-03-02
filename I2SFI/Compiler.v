@@ -446,7 +446,7 @@ Definition compile_IConst
         ret [AbstractMachine.IConst (RiscMachine.to_value address) reg']
   end.
 
-(*! Section fault_store_test *) 
+(*! Section fault_store_test *)
 Definition compile_IStore (rp : Intermediate.Machine.register)
            (rs : Intermediate.Machine.register)
   : COMP (AbstractMachine.code) :=
@@ -466,7 +466,7 @@ Definition compile_IStore (rp : Intermediate.Machine.register)
           (RiscMachine.Register.R_D)
           (map_register rs)
       (*!
-      AbstractMachine.IStore (map_register rp) (map_register rs) 
+      AbstractMachine.IStore (map_register rp) (map_register rs)
      *)
       (*!
       AbstractMachine.IMov (map_register rp) (RiscMachine.Register.R_D)
@@ -489,7 +489,7 @@ Definition compile_IStore (rp : Intermediate.Machine.register)
                     (RiscMachine.Register.R_D)
                     (map_register rs)
        *)
-          
+
     ].
 
 Definition compile_IJump (rt : Intermediate.Machine.register)
@@ -761,7 +761,7 @@ Definition layout_procedure
                 (None,AbstractMachine.INop)
                 (N.to_nat (p + SFI.BASIC_BLOCK_SIZE - 1%N )%N ) )
           ++ [elt]
-      | _ => 
+      | _ =>
         acc
           ++ (List.repeat
                 (None,AbstractMachine.INop)
@@ -821,7 +821,7 @@ Definition layout_procedure
                 | AbstractMachine.IJal _ => padd1 acc elt
                 | _ => acc ++ [elt]
                 end
-              | lbl::nil =>                
+              | lbl::nil =>
                 if (tst lbl)
                 then
                   match i with
@@ -1173,7 +1173,7 @@ Definition compile_program (ip : Intermediate.program) :=
               | None => (N.of_nat Procedure.main)
               | Some id => N.of_nat id
               end in
-  
+
   let cn := gen_cn cip in
   let cid2SFIid := List.fold_left
                      (fun acc '(cid,i)  =>
@@ -1190,13 +1190,6 @@ Definition compile_program (ip : Intermediate.program) :=
 
   let procId2slot := allocate_procedure_slots pr_progs in
 
-
-
-  (* FIXME: Using Pos.to_nat is dangerous, because it is not injective. We
-     should replace positive by N everywhere. *)
-  (* Pos.to_nat is injective, but not surjective *)
-  (* Pos.of_nat is injective on the strictly positive naturals which is okay to use if 
-     the interface between layers agrees that the identifiers are >= 1 *)
   run (init_env cid2SFIid procId2slot procs_labels (max_label+1)%N)
         (
 
