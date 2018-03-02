@@ -745,6 +745,8 @@ Section MultiSemantics.
   Hypothesis wf1 : well_formed_program p.
   Hypothesis wf2 : well_formed_program c.
 
+  Hypothesis main_linkability: linkable_mains (inject_main_comp (prog_main p))
+                                              (inject_main_comp (prog_main c)).
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Let prog := program_link p c.
@@ -904,8 +906,8 @@ Section MultiSemantics.
         replace (program_link p c) with (program_link c p).
         eapply execution_invariant_to_linking; eauto.
         * apply linkable_sym. auto.
-        * rewrite Intermediate.link_sym.
-          ** reflexivity.
+        * rewrite Intermediate.link_sym; auto.
+          ** apply linkable_mains_sym; auto.
           ** rewrite <- H3. auto.
       + PS.simplify_turn. rewrite H3 in H2. discriminate.
   Qed.
@@ -984,6 +986,8 @@ Section PartialComposition.
   Hypothesis wf1 : well_formed_program p.
   Hypothesis wf2 : well_formed_program c.
 
+  Hypothesis main_linkability: linkable_mains (inject_main_comp (prog_main p))
+                                              (inject_main_comp (prog_main c)).
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Let prog := program_link p c.
@@ -1226,7 +1230,7 @@ Section PartialComposition.
 
           (* use the multisem simulation to show that the states after the step are still
              mergeable *)
-          destruct (MultiSem.lockstep_simulation wf1 wf2 linkability Hmultistep Hmultimatch)
+          destruct (MultiSem.lockstep_simulation wf1 wf2 main_linkability linkability Hmultistep Hmultimatch)
             as [merged_state' [Hmiddle_step Hmergeable'']].
           inversion Hmergeable''; subst.
 
@@ -1283,7 +1287,7 @@ Section PartialComposition.
 
           (* use the multisem simulation to show that the states after the step are still
              mergeable *)
-          destruct (MultiSem.lockstep_simulation wf1 wf2 linkability Hmultistep Hmultimatch)
+          destruct (MultiSem.lockstep_simulation wf1 wf2 main_linkability linkability Hmultistep Hmultimatch)
             as [merged_state' [Hmiddle_step Hmergeable'']].
           inversion Hmergeable''; subst.
 
@@ -1446,6 +1450,8 @@ Section Composition.
   Hypothesis wf1 : well_formed_program p.
   Hypothesis wf2 : well_formed_program c.
 
+  Hypothesis main_linkability: linkable_mains (inject_main_comp (prog_main p))
+                                              (inject_main_comp (prog_main c)).
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Hypothesis prog_is_closed:

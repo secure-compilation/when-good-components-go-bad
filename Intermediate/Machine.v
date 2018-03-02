@@ -526,10 +526,62 @@ Proof.
   apply alloc_static_buffers_after_linking; auto.
 Qed.
 
-Lemma link_sym: forall p c,
+Definition inject_main_comp (main: option Procedure.id) :=
+  match main with
+  | None => None
+  | Some P => Some (0, P)
+  end.
+
+Lemma link_sym:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable_mains (inject_main_comp (prog_main p))
+                   (inject_main_comp (prog_main c)) ->
     linkable (prog_interface p) (prog_interface c) ->
     program_link p c = program_link c p.
-Admitted.
+Proof.
+  rewrite /inject_main_comp /linkable.
+  rewrite /linkable_mains /program_link.
+  move=> p c Hp_wf Hc_wf Hmain_link [Hsound Hdisj] /=.
+  rewrite (unionmC (m1:=prog_interface p) (m2:=prog_interface c)); auto.
+  rewrite (unionmC (m1:=prog_procedures p) (m2:=prog_procedures c)); auto.
+  rewrite (unionmC (m1:=prog_buffers p) (m2:=prog_buffers c)); auto.
+  case: ifP => main_p;
+  case: ifP => main_c //.
+  - case main_p_: (prog_main p) => [|].
+    + rewrite main_p_ in Hmain_link.
+      case main_c_: (prog_main c) => [|].
+      * by rewrite main_c_ /= in Hmain_link.
+      * rewrite main_c_ /= in Hmain_link.
+        rewrite main_c_ in main_c.
+        by [].
+    + rewrite main_p_ in Hmain_link.
+      case main_c_: (prog_main c) => [|].
+      * rewrite main_c_ /= in Hmain_link.
+        rewrite main_p_ in main_p.
+        by [].
+      * by rewrite main_c_ /= in Hmain_link.
+  - case main_p_: (prog_main p) => [|].
+    + rewrite main_p_ in Hmain_link.
+      case main_c_: (prog_main c) => [|].
+      * by rewrite main_c_ /= in Hmain_link.
+      * rewrite main_c_ /= in Hmain_link.
+        rewrite main_p_ in main_p.
+        by [].
+    + rewrite main_p_ in Hmain_link.
+      case main_c_: (prog_main c) => [|].
+      * rewrite main_c_ /= in Hmain_link.
+        rewrite main_c_ in main_c.
+        by [].
+      * by rewrite main_c_ /= in Hmain_link.
+  - rewrite -(wfprog_defined_buffers Hp_wf).
+    rewrite -(wfprog_defined_buffers Hc_wf).
+    by [].
+  - rewrite -(wfprog_defined_procedures Hp_wf).
+    rewrite -(wfprog_defined_procedures Hc_wf).
+    by [].
+Qed.
 
 Lemma interface_preserves_closedness_r :
   forall p1 p2 p2',
