@@ -260,6 +260,21 @@ Proof.
 Admitted.
 *)
 
+(* RB: TODO: Uniform names, possibly replace common definition, unprime this. *)
+Definition linkable_mains' (prog1 prog2 : program) : Prop :=
+  ~~ (prog_main prog1 && prog_main prog2).
+
+(* RB: TODO: Beware potential name clashes once renamed. *)
+Lemma linkable_mains_sym' : forall (prog1 prog2 : program),
+  linkable_mains' prog1 prog2 <-> linkable_mains' prog2 prog1.
+Proof.
+  intros prog1 prog2.
+  unfold linkable_mains', andb, negb.
+  destruct (isSome (prog_main prog1));
+    destruct (isSome (prog_main prog2));
+    intuition.
+Qed.
+
 Definition program_link (p1 p2: program): program :=
   {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
      prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);

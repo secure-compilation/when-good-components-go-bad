@@ -371,6 +371,58 @@ Proof.
   repeat (erewrite compilation_preserves_interface; eauto).
 Qed.
 
+(* RB: TODO: Abstract find_procedure in Source (cprog_main_existence).  *)
+Lemma compilation_preserves_main' :
+  forall {p p_compiled},
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    (exists main, Source.prog_main p = Some main) <->
+    (exists main, Intermediate.prog_main p_compiled = Some main).
+Proof.
+  intros p p_compiled Hp_well_formed Hp_compiles.
+  split; intros [main Hmain].
+  - admit.
+  - admit.
+Admitted.
+
+Remark mains_without_source : forall p pc pc',
+  Source.well_formed_program p ->
+  compile_program p = Some pc ->
+  Source.prog_main p = None ->
+  Intermediate.linkable_mains' pc pc'.
+Proof.
+  intros p pc pc' Hwf Hcomp Hmain.
+  pose proof compilation_preserves_main' Hwf Hcomp as [Hpreserve1 Hpreserve2].
+  rewrite Hmain in Hpreserve2.
+  destruct (Intermediate.prog_main pc) as [pc'' |] eqn: Hpc.
+  - assert (exists main, Some pc'' = Some main) as Heq by now exists pc''.
+    specialize (Hpreserve2 Heq). inversion Hpreserve2. inversion H.
+  - unfold Intermediate.linkable_mains'. rewrite Hpc. reflexivity.
+Qed.
+
+Lemma compilation_preserves_main_linkability :
+  forall {p p_compiled c c_compiled},
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p = Some p_compiled ->
+    compile_program c = Some c_compiled ->
+    Intermediate.linkable_mains' p_compiled c_compiled.
+Proof.
+  intros p p_compiled c c_compiled Hwfp Hwfc Hlinkable Hcompp Hcompc.
+  pose proof Source.linkable_disjoint_mains Hwfp Hwfc Hlinkable as Hmains.
+  destruct (Source.prog_main p) as [mp |] eqn:Hmainp;
+    destruct (Source.prog_main c) as [mc |] eqn:Hmainc.
+  - unfold Source.linkable_mains in Hmains.
+    rewrite Hmainp in Hmains.
+    rewrite Hmainc in Hmains.
+    inversion Hmains.
+  - rewrite Intermediate.linkable_mains_sym'.
+    now eapply (mains_without_source c).
+  - now eapply (mains_without_source p).
+  - now eapply (mains_without_source p).
+Qed.
+
 Hypothesis separate_compilation:
   forall p c p_comp c_comp,
     Source.well_formed_program p ->
