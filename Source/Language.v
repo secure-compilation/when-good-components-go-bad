@@ -56,6 +56,9 @@ Module Source.
     | None         => None
     end.
 
+  Definition prog_main (p : program) : option expr :=
+    find_procedure (prog_procedures p) Component.main Procedure.main.
+
   Definition valid_calls
              (procs: NMap (NMap expr))
              (intf: Program.interface)
@@ -130,6 +133,7 @@ Module Source.
     (* the main procedure must exist *)
     cprog_main_existence:
       find_procedure (prog_procedures p) Component.main Procedure.main
+      (* prog_main p *)
   }.
 
   Theorem linkable_disjoint_procedures :
@@ -153,6 +157,23 @@ Module Source.
     move=> p1 p2 wf1 wf2 [].
     by rewrite (wfprog_defined_buffers wf1) (wfprog_defined_buffers wf2).
   Qed.
+
+  (* ... *)
+  Definition linkable_mains (prog1 prog2 : program) : Prop :=
+    ~~ (prog_main prog1 && prog_main prog2).
+
+  Lemma linkable_disjoint_mains :
+    forall prog1 prog2,
+      well_formed_program prog1 ->
+      well_formed_program prog2 ->
+      linkable (prog_interface prog1) (prog_interface prog2) ->
+      linkable_mains prog1 prog2.
+  Proof.
+    intros prog1 prog2 Hwf1 Hwf2 Hlinkable.
+    pose proof linkable_disjoint_procedures Hwf1 Hwf2 Hlinkable as Hdisjoint.
+    unfold linkable_mains, prog_main.
+    admit. (* Easy proof. *)
+  Admitted.
 
   Definition program_link (p1 p2: program) : program :=
     {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
