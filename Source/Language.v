@@ -121,7 +121,11 @@ Module Source.
     (* each component's buffer is well formed *)
     wfprog_well_formed_buffers:
       forall C, prog_interface p C ->
-                has_required_local_buffers p C
+                has_required_local_buffers p C;
+    (* if the main component is defined, so is the main procedure *)
+    wfprog_main_existence:
+      Component.main \in domm (prog_interface p) ->
+      find_procedure (prog_procedures p) Component.main Procedure.main
   }.
 
   (* a closed program is a program with a closed interface and an existing main
@@ -315,6 +319,13 @@ Module Source.
       move/wfprog_well_formed_buffers/(_ C): wf=> /=.
       rewrite pi_C=> /(_ erefl) [bufs /= pb_C ?].
       by exists bufs => //=; rewrite filtermE pb_C /= C_Cs.
+    - have /= /implyP := wfprog_main_existence wf.
+      rewrite /find_procedure !mem_domm !filtermE.
+      have : pi Component.main = pp Component.main :> bool.
+        by rewrite -!mem_domm (wfprog_defined_procedures wf).
+      case: (pi Component.main)=> [CI|] //=.
+      case: (pp Component.main)=> [C_procs|] //= _.
+      by case: (Component.main \in Cs).
   Qed.
 
   Lemma linkable_programs_has_component p1 p2 :
@@ -432,6 +443,13 @@ Module Source.
       rewrite -mem_domm domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
         by rewrite mem_domm; case/wf1=> [? ->] /=; eauto.
       by rewrite mem_domm; case/wf2=> [? ->] /=; eauto.
+    - have /implyP := wfprog_main_existence wf1.
+      have /implyP := wfprog_main_existence wf2.
+      rewrite /= /find_procedure !mem_domm !unionmE.
+      rewrite -[isSome (prog_procedures p1 Component.main)]mem_domm.
+      rewrite -(wfprog_defined_procedures wf1) mem_domm.
+      case: (prog_interface p1 Component.main)=> [CI|] //=.
+      by case: (prog_interface p2 Component.main)=> [CI|] //=.
   Qed.
 
   Lemma linked_programs_main_component_origin:
@@ -451,14 +469,20 @@ Module Source.
     by case: (prog_procedures p2 Component.main)=> [main_procs'|] //=; eauto.
   Qed.
 
-  (* FIXME: This result does not hold as stated.  The reason is that p1 could
-     have the main procedure defined but not p1'. *)
-  Lemma interface_preserves_closedness_l :
-    forall p1 p2 p1',
-      closed_program (program_link p1 p2) ->
-      prog_interface p1 = prog_interface p1' ->
-      closed_program (program_link p1' p2).
-  Admitted.
+  Lemma interface_preserves_closedness_l p1 p2 p1' :
+    closed_program (program_link p1 p2) ->
+    prog_interface p1 = prog_interface p1' ->
+    well_formed_program p1 ->
+    well_formed_program p1' ->
+    closed_program (program_link p1' p2).
+  Proof.
+    move=> [H1 H2] Hint wf1 wf1'; split; first by rewrite /= -Hint.
+    move/implyP: (wfprog_main_existence wf1).
+    move/implyP: (wfprog_main_existence wf1').
+    move: H2; rewrite /find_procedure /= !unionmE -!mem_domm.
+    rewrite -(wfprog_defined_procedures wf1') -Hint (wfprog_defined_procedures wf1).
+    by case: ifP=> //=.
+  Qed.
 
   Fixpoint initialize_buffer
            (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)

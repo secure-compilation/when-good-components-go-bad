@@ -419,6 +419,7 @@ Section Definability.
     - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
       rewrite /has_required_local_buffers /= mapmE C_CI /=.
       eexists; eauto=> /=; omega.
+    - by rewrite find_procedures_of_trace //=; left.
   Qed.
 
   Lemma closed_program_of_trace t :

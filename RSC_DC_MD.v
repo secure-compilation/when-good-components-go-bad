@@ -231,7 +231,7 @@ Section RSC_DC_MD.
       as HpCs_compiled_beh.
     destruct HpCs_compiled_beh as [b3 [HpCs_compiled_beh HpCs_compiled_prefix]].
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
-      apply (Source.interface_preserves_closedness_l HP'Cs_closed).
+      apply (Source.interface_preserves_closedness_l HP'Cs_closed); trivial.
       apply compilation_preserves_interface in HP'_compiles.
       apply compilation_preserves_interface in successfull_compilation.
       congruence.
