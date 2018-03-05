@@ -124,8 +124,7 @@ Module Source.
                 has_required_local_buffers p C;
     (* if the main component is defined, so is the main procedure *)
     wfprog_main_existence:
-      Component.main \in domm (prog_interface p) ->
-      find_procedure (prog_procedures p) Component.main Procedure.main
+      Component.main \in domm (prog_interface p) -> prog_main p
   }.
 
   (* a closed program is a program with a closed interface and an existing main
@@ -135,9 +134,7 @@ Module Source.
     cprog_closed_interface:
       closed_interface (prog_interface p);
     (* the main procedure must exist *)
-    cprog_main_existence:
-      find_procedure (prog_procedures p) Component.main Procedure.main
-      (* prog_main p *)
+    cprog_main_existence: prog_main p
   }.
 
   Theorem linkable_disjoint_procedures :
@@ -162,7 +159,6 @@ Module Source.
     by rewrite (wfprog_defined_buffers wf1) (wfprog_defined_buffers wf2).
   Qed.
 
-  (* ... *)
   Definition linkable_mains (prog1 prog2 : program) : Prop :=
     ~~ (prog_main prog1 && prog_main prog2).
 
@@ -172,12 +168,7 @@ Module Source.
       well_formed_program prog2 ->
       linkable (prog_interface prog1) (prog_interface prog2) ->
       linkable_mains prog1 prog2.
-  Proof.
-    intros prog1 prog2 Hwf1 Hwf2 Hlinkable.
-    pose proof linkable_disjoint_procedures Hwf1 Hwf2 Hlinkable as Hdisjoint.
-    unfold linkable_mains, prog_main.
-    admit. (* Easy proof. *)
-  Admitted.
+  Proof. Admitted.
 
   Lemma linkable_mains_sym :
     forall prog1 prog2,
@@ -326,7 +317,7 @@ Module Source.
       rewrite pi_C=> /(_ erefl) [bufs /= pb_C ?].
       by exists bufs => //=; rewrite filtermE pb_C /= C_Cs.
     - have /= /implyP := wfprog_main_existence wf.
-      rewrite /find_procedure !mem_domm !filtermE.
+      rewrite /prog_main /find_procedure !mem_domm !filtermE.
       have : pi Component.main = pp Component.main :> bool.
         by rewrite -!mem_domm (wfprog_defined_procedures wf).
       case: (pi Component.main)=> [CI|] //=.
@@ -451,7 +442,7 @@ Module Source.
       by rewrite mem_domm; case/wf2=> [? ->] /=; eauto.
     - have /implyP := wfprog_main_existence wf1.
       have /implyP := wfprog_main_existence wf2.
-      rewrite /= /find_procedure !mem_domm !unionmE.
+      rewrite /= /prog_main /find_procedure !mem_domm !unionmE.
       rewrite -[isSome (prog_procedures p1 Component.main)]mem_domm.
       rewrite -(wfprog_defined_procedures wf1) mem_domm.
       case: (prog_interface p1 Component.main)=> [CI|] //=.
@@ -469,7 +460,7 @@ Module Source.
   Proof.
     move=> p1 p2 wf1 wf2 [_ Hdis] Hclosed.
     have := cprog_main_existence Hclosed.
-    rewrite /find_procedure /= unionmE -!mem_domm.
+    rewrite /prog_main /find_procedure /= unionmE -!mem_domm.
     rewrite !wfprog_defined_procedures // !mem_domm.
     case: (prog_procedures p1 Component.main)=> [main_procs'|] //=; eauto.
     by case: (prog_procedures p2 Component.main)=> [main_procs'|] //=; eauto.
@@ -485,7 +476,7 @@ Module Source.
     move=> [H1 H2] Hint wf1 wf1'; split; first by rewrite /= -Hint.
     move/implyP: (wfprog_main_existence wf1).
     move/implyP: (wfprog_main_existence wf1').
-    move: H2; rewrite /find_procedure /= !unionmE -!mem_domm.
+    move: H2; rewrite /prog_main /find_procedure /= !unionmE -!mem_domm.
     rewrite -(wfprog_defined_procedures wf1') -Hint (wfprog_defined_procedures wf1).
     by case: ifP=> //=.
   Qed.
