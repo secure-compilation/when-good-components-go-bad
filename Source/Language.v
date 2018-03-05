@@ -168,13 +168,19 @@ Module Source.
       well_formed_program prog2 ->
       linkable (prog_interface prog1) (prog_interface prog2) ->
       linkable_mains prog1 prog2.
-  Proof. Admitted.
+  Proof.
+    rewrite /linkable_mains /prog_main /find_procedure.
+    move=> p1 p2 Hwf1 Hwf2 [_ /fdisjointP/(_ Component.main)/implyP].
+    rewrite (wfprog_defined_procedures Hwf1) (wfprog_defined_procedures Hwf2) !mem_domm.
+    case: (prog_procedures p1 Component.main)=> [C_procs|] //=.
+    by case: (prog_procedures p2 Component.main)=> //=; rewrite andbF.
+  Qed.
 
   Lemma linkable_mains_sym :
     forall prog1 prog2,
       linkable_mains prog1 prog2 ->
       linkable_mains prog2 prog1.
-  Admitted.
+  Proof. by rewrite /linkable_mains=> p1 p2; rewrite andbC. Qed.
 
   Definition program_link (p1 p2: program) : program :=
     {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
