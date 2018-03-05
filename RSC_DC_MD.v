@@ -237,15 +237,15 @@ Section RSC_DC_MD.
       (Intermediate.inject_main_comp (Intermediate.prog_main Cs_compiled)))
       as linkable_mains by admit.
     (* But it would be cleaner to abstract this as:
-         assert (Intermediate.linkable_mains' p_compiled Cs_compiled).
-       This in turn can be proved by
-         Compiler.compilation_preserves_linked_mains p _ Cs
-       and existing assertions, given that we can prove
-          Source.linkable_mains p Cs
-       given that we know that P' and Cs are linkable at the source, and
-       by compilation p_compiled and p are related by compilation_preserves_main.
-       The connection between the mains of p_compiled and P' must likely be
-       supplied via definability. *)
+    assert (Intermediate.linkable_mains' p_compiled Cs_compiled) as linkable_mains.
+    {
+      eapply (Compiler.compilation_preserves_linked_mains p _ Cs);
+        try assumption.
+      - rewrite <- Hsame_iface2 in linkability.
+        eapply Source.linkable_disjoint_mains; assumption.
+    }
+    *)
+
     pose proof composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkable_mains linkability'' HpCs_compiled_closed
