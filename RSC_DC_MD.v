@@ -34,8 +34,9 @@ Section RSC_DC_MD.
   Hypothesis successfull_compilation : compile_program p = Some p_compiled.
   Hypothesis well_formed_Ct : Intermediate.well_formed_program Ct.
   Hypothesis linkability : linkable (Source.prog_interface p) (Intermediate.prog_interface Ct).
-  Hypothesis closedness:
+  Hypothesis closedness :
     Intermediate.closed_program (Intermediate.program_link p_compiled Ct).
+  Hypothesis mains : Intermediate.linkable_mains' p_compiled Ct.
 
   (* Main Theorem *)
 
@@ -90,6 +91,8 @@ Section RSC_DC_MD.
     (* definability *)
     destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability''' closedness Hbeh Hprefix0 Hnot_wrong')
       as [P' [Cs [beh [Hsame_iface1 [Hsame_iface2 [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]].
+    (* RB: TODO: This needs to come from definability and the new hypothesis. *)
+    assert (Source.linkable_mains P' Cs) as HP'Cs_mains by admit.
 
     (* FCC *)
 
@@ -170,7 +173,12 @@ Section RSC_DC_MD.
       apply linkability'''.
     }
     apply HP'_Cs_behaves in HP'_Cs_compiled_beh.
-    rewrite <- Intermediate.link_sym in HP'_Cs_compiled_beh; [| assumption].
+    apply Source.linkable_mains_sym in HP'Cs_mains.
+    rewrite <- Intermediate.link_sym' in HP'_Cs_compiled_beh;
+      [| eapply Compiler.compilation_preserves_well_formedness
+       | eapply Compiler.compilation_preserves_well_formedness
+       | apply (Compiler.compilation_preserves_linked_mains Cs _ P')
+       | assumption ].
     pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
       as well_formed_P'_compiled.
     pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles
@@ -223,9 +231,24 @@ Section RSC_DC_MD.
       - simpl.
         apply (behavior_prefix_improves_trans' HP'_Cs_compiled_prefix HCs_beh_improves).
     }
+    (* RB: TODO: Right now, this is what composition needs. *)
+    assert (Linking.linkable_mains
+      (Intermediate.inject_main_comp (Intermediate.prog_main p_compiled))
+      (Intermediate.inject_main_comp (Intermediate.prog_main Cs_compiled)))
+      as linkable_mains by admit.
+    (* But it would be cleaner to abstract this as:
+         assert (Intermediate.linkable_mains' p_compiled Cs_compiled).
+       This in turn can be proved by
+         Compiler.compilation_preserves_linked_mains p _ Cs
+       and existing assertions, given that we can prove
+          Source.linkable_mains p Cs
+       given that we know that P' and Cs are linkable at the source, and
+       by compilation p_compiled and p are related by compilation_preserves_main.
+       The connection between the mains of p_compiled and P' must likely be
+       supplied via definability. *)
     pose proof composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
-         linkability'' HpCs_compiled_closed
+         linkable_mains linkability'' HpCs_compiled_closed
          HP_decomp HCs_decomp
          Hprefix0 Hpref_m_beh2
       as HpCs_compiled_beh.
@@ -321,6 +344,6 @@ Section RSC_DC_MD.
               subst pCs_beh. injection H21; intro H21'. subst t''. assumption.
           - now apply linkable_sym.
           - setoid_rewrite <- Source.link_sym; assumption.
-  Qed.
+  (*Qed.*) Admitted.
 
 End RSC_DC_MD.

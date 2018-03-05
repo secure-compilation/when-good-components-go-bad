@@ -371,7 +371,8 @@ Proof.
   repeat (erewrite compilation_preserves_interface; eauto).
 Qed.
 
-(* RB: TODO: Abstract find_procedure in Source (cprog_main_existence).  *)
+(* RB: TODO: Abstract find_procedure in Source (cprog_main_existence).
+   Try to get rid of unnecessary clutter in statement and propagate. *)
 Lemma compilation_preserves_main' :
   forall {p p_compiled},
     Source.well_formed_program p ->
@@ -381,6 +382,31 @@ Lemma compilation_preserves_main' :
 Proof.
   intros p p_compiled Hp_well_formed Hp_compiles.
   split; intros [main Hmain].
+  - admit.
+  - admit.
+Admitted.
+
+(* RB: TODO: Rename to _linkable_ for consistency. *)
+Lemma compilation_preserves_linked_mains : forall p1 p1' p2 p2',
+  Source.well_formed_program p1 ->
+  Source.well_formed_program p2 ->
+  Source.linkable_mains p1 p2 ->
+  compile_program p1 = Some p1' ->
+  compile_program p2 = Some p2' ->
+  Intermediate.linkable_mains' p1' p2'.
+Proof.
+  unfold Source.linkable_mains, Intermediate.linkable_mains'.
+  intros p1 p1' p2 p2' Hwf1 Hwf2 Hmains Hcomp1 Hcomp2.
+  pose proof compilation_preserves_main' Hwf1 Hcomp1 as Hmain1.
+  pose proof compilation_preserves_main' Hwf2 Hcomp2 as Hmain2.
+  destruct (Source.prog_main p1) as [mainp1 |];
+    destruct (Source.prog_main p2) as [mainp2 |];
+    destruct (Intermediate.prog_main p1') as [mainp1' |];
+    destruct (Intermediate.prog_main p2') as [mainp2' |];
+    try reflexivity.
+  - inversion Hmains.
+  (* The rest are easy contradictions. *)
+  - admit.
   - admit.
   - admit.
 Admitted.

@@ -179,6 +179,12 @@ Module Source.
     admit. (* Easy proof. *)
   Admitted.
 
+  Lemma linkable_mains_sym :
+    forall prog1 prog2,
+      linkable_mains prog1 prog2 ->
+      linkable_mains prog2 prog1.
+  Admitted.
+
   Definition program_link (p1 p2: program) : program :=
     {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
        prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);

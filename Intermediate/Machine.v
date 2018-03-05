@@ -596,6 +596,17 @@ Lemma interface_preserves_closedness_r :
     closed_program (program_link p1 p2) ->
     prog_interface p2 = prog_interface p2' ->
     closed_program (program_link p1 p2').
+Proof.
+Admitted.
+
+(* RB: TODO: probably replacing old [link_sym] if this works better. *)
+Lemma link_sym':
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable_mains' p c  ->
+    linkable (prog_interface p) (prog_interface c) ->
+    program_link p c = program_link c p.
 Admitted.
 
 End Intermediate.
