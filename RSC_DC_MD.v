@@ -175,9 +175,9 @@ Section RSC_DC_MD.
     apply HP'_Cs_behaves in HP'_Cs_compiled_beh.
     apply Source.linkable_mains_sym in HP'Cs_mains.
     rewrite <- Intermediate.link_sym' in HP'_Cs_compiled_beh;
-      [| eapply Compiler.compilation_preserves_well_formedness
-       | eapply Compiler.compilation_preserves_well_formedness
-       | apply (Compiler.compilation_preserves_linked_mains Cs _ P')
+      [| (apply (Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles))
+       | (apply (Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles))
+       | (apply (Compiler.compilation_preserves_linked_mains Cs _ P'); assumption)
        | assumption ].
     pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
       as well_formed_P'_compiled.
