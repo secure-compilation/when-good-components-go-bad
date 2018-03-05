@@ -91,8 +91,8 @@ Section RSC_DC_MD.
     (* definability *)
     destruct (definability_with_linking well_formed_p_compiled well_formed_Ct linkability''' closedness Hbeh Hprefix0 Hnot_wrong')
       as [P' [Cs [beh [Hsame_iface1 [Hsame_iface2 [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]].
-    (* RB: TODO: This needs to come from definability and the new hypothesis. *)
-    assert (Source.linkable_mains P' Cs) as HP'Cs_mains by admit.
+    assert (Source.linkable_mains P' Cs) as HP'Cs_mains.
+    { apply Source.linkable_disjoint_mains; trivial; congruence. }
 
     (* FCC *)
 
