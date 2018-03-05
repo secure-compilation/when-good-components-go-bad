@@ -174,7 +174,7 @@ Section RSC_DC_MD.
     }
     apply HP'_Cs_behaves in HP'_Cs_compiled_beh.
     apply Source.linkable_mains_sym in HP'Cs_mains.
-    rewrite <- Intermediate.link_sym' in HP'_Cs_compiled_beh;
+    rewrite <- Intermediate.link_sym in HP'_Cs_compiled_beh;
       [| (apply (Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles))
        | (apply (Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles))
        | (apply (Compiler.compilation_preserves_linked_mains Cs _ P'); assumption)
@@ -231,12 +231,6 @@ Section RSC_DC_MD.
       - simpl.
         apply (behavior_prefix_improves_trans' HP'_Cs_compiled_prefix HCs_beh_improves).
     }
-    (* RB: TODO: Right now, this is what composition needs. *)
-    assert (Linking.linkable_mains
-      (Intermediate.inject_main_comp (Intermediate.prog_main p_compiled))
-      (Intermediate.inject_main_comp (Intermediate.prog_main Cs_compiled)))
-      as linkable_mains by admit.
-    (* But it would be cleaner to abstract this as:
     assert (Intermediate.linkable_mains' p_compiled Cs_compiled) as linkable_mains.
     {
       eapply (Compiler.compilation_preserves_linked_mains p _ Cs);
@@ -244,7 +238,6 @@ Section RSC_DC_MD.
       - rewrite <- Hsame_iface2 in linkability.
         eapply Source.linkable_disjoint_mains; assumption.
     }
-    *)
 
     pose proof composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
@@ -344,6 +337,6 @@ Section RSC_DC_MD.
               subst pCs_beh. injection H21; intro H21'. subst t''. assumption.
           - now apply linkable_sym.
           - setoid_rewrite <- Source.link_sym; assumption.
-  (*Qed.*) Admitted.
+  Qed.
 
 End RSC_DC_MD.

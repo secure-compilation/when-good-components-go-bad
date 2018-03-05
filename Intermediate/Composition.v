@@ -745,8 +745,7 @@ Section MultiSemantics.
   Hypothesis wf1 : well_formed_program p.
   Hypothesis wf2 : well_formed_program c.
 
-  Hypothesis main_linkability: linkable_mains (inject_main_comp (prog_main p))
-                                              (inject_main_comp (prog_main c)).
+  Hypothesis main_linkability: linkable_mains' p c.
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Let prog := program_link p c.
@@ -907,7 +906,7 @@ Section MultiSemantics.
         eapply execution_invariant_to_linking; eauto.
         * apply linkable_sym. auto.
         * rewrite Intermediate.link_sym; auto.
-          ** apply linkable_mains_sym; auto.
+          ** apply linkable_mains_sym'; auto.
           ** rewrite <- H3. auto.
       + PS.simplify_turn. rewrite H3 in H2. discriminate.
   Qed.
@@ -986,8 +985,7 @@ Section PartialComposition.
   Hypothesis wf1 : well_formed_program p.
   Hypothesis wf2 : well_formed_program c.
 
-  Hypothesis main_linkability: linkable_mains (inject_main_comp (prog_main p))
-                                              (inject_main_comp (prog_main c)).
+  Hypothesis main_linkability: linkable_mains' p c.
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Let prog := program_link p c.
@@ -1450,8 +1448,7 @@ Section Composition.
   Hypothesis wf1 : well_formed_program p.
   Hypothesis wf2 : well_formed_program c.
 
-  Hypothesis main_linkability: linkable_mains (inject_main_comp (prog_main p))
-                                              (inject_main_comp (prog_main c)).
+  Hypothesis main_linkability: linkable_mains' p c.
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Hypothesis prog_is_closed:

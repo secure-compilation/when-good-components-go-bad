@@ -544,13 +544,12 @@ Lemma link_sym:
   forall p c,
     well_formed_program p ->
     well_formed_program c ->
-    linkable_mains (inject_main_comp (prog_main p))
-                   (inject_main_comp (prog_main c)) ->
+    linkable_mains' p c  ->
     linkable (prog_interface p) (prog_interface c) ->
     program_link p c = program_link c p.
 Proof.
   rewrite /inject_main_comp /linkable.
-  rewrite /linkable_mains /program_link.
+  rewrite /linkable_mains' /program_link.
   move=> p c Hp_wf Hc_wf Hmain_link [Hsound Hdisj] /=.
   rewrite (unionmC (m1:=prog_interface p) (m2:=prog_interface c)); auto.
   rewrite (unionmC (m1:=prog_procedures p) (m2:=prog_procedures c)); auto.
@@ -597,16 +596,6 @@ Lemma interface_preserves_closedness_r :
     prog_interface p2 = prog_interface p2' ->
     closed_program (program_link p1 p2').
 Proof.
-Admitted.
-
-(* RB: TODO: probably replacing old [link_sym] if this works better. *)
-Lemma link_sym':
-  forall p c,
-    well_formed_program p ->
-    well_formed_program c ->
-    linkable_mains' p c  ->
-    linkable (prog_interface p) (prog_interface c) ->
-    program_link p c = program_link c p.
 Admitted.
 
 End Intermediate.
