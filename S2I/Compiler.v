@@ -386,8 +386,7 @@ Proof.
   - admit.
 Admitted.
 
-(* RB: TODO: Rename to _linkable_ for consistency. *)
-Lemma compilation_preserves_linked_mains : forall p1 p1' p2 p2',
+Lemma compilation_preserves_linkable_mains : forall p1 p1' p2 p2',
   Source.well_formed_program p1 ->
   Source.well_formed_program p2 ->
   Source.linkable_mains p1 p2 ->
@@ -405,11 +404,14 @@ Proof.
     destruct (Intermediate.prog_main p2') as [mainp2' |];
     try reflexivity.
   - inversion Hmains.
-  (* The rest are easy contradictions. *)
-  - admit.
-  - admit.
-  - admit.
-Admitted.
+    Ltac some_eq_none_contra Hcontra id :=
+      destruct Hcontra as [_ Hcontra];
+      specialize (Hcontra (ex_intro (fun x => Some id = Some x) id eq_refl));
+      now destruct Hcontra.
+  - some_eq_none_contra Hmain2 mainp2'.
+  - some_eq_none_contra Hmain1 mainp1'.
+  - some_eq_none_contra Hmain1 mainp1'.
+Qed.
 
 Remark mains_without_source : forall p pc pc',
   Source.well_formed_program p ->

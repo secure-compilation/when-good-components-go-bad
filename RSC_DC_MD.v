@@ -177,7 +177,7 @@ Section RSC_DC_MD.
     rewrite <- Intermediate.link_sym in HP'_Cs_compiled_beh;
       [| (apply (Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles))
        | (apply (Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles))
-       | (apply (Compiler.compilation_preserves_linked_mains Cs _ P'); assumption)
+       | (apply (Compiler.compilation_preserves_linkable_mains Cs _ P'); assumption)
        | assumption ].
     pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
       as well_formed_P'_compiled.
@@ -233,7 +233,7 @@ Section RSC_DC_MD.
     }
     assert (Intermediate.linkable_mains p_compiled Cs_compiled) as linkable_mains.
     {
-      eapply (Compiler.compilation_preserves_linked_mains p _ Cs);
+      eapply (Compiler.compilation_preserves_linkable_mains p _ Cs);
         try assumption.
       - rewrite <- Hsame_iface2 in linkability.
         eapply Source.linkable_disjoint_mains; assumption.
