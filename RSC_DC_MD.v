@@ -36,7 +36,7 @@ Section RSC_DC_MD.
   Hypothesis linkability : linkable (Source.prog_interface p) (Intermediate.prog_interface Ct).
   Hypothesis closedness :
     Intermediate.closed_program (Intermediate.program_link p_compiled Ct).
-  Hypothesis mains : Intermediate.linkable_mains' p_compiled Ct.
+  Hypothesis mains : Intermediate.linkable_mains p_compiled Ct.
 
   (* Main Theorem *)
 
@@ -231,7 +231,7 @@ Section RSC_DC_MD.
       - simpl.
         apply (behavior_prefix_improves_trans' HP'_Cs_compiled_prefix HCs_beh_improves).
     }
-    assert (Intermediate.linkable_mains' p_compiled Cs_compiled) as linkable_mains.
+    assert (Intermediate.linkable_mains p_compiled Cs_compiled) as linkable_mains.
     {
       eapply (Compiler.compilation_preserves_linked_mains p _ Cs);
         try assumption.

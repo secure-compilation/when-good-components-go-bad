@@ -373,7 +373,7 @@ Qed.
 
 (* RB: TODO: Abstract find_procedure in Source (cprog_main_existence).
    Try to get rid of unnecessary clutter in statement and propagate. *)
-Lemma compilation_preserves_main' :
+Lemma compilation_preserves_main :
   forall {p p_compiled},
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
@@ -393,12 +393,12 @@ Lemma compilation_preserves_linked_mains : forall p1 p1' p2 p2',
   Source.linkable_mains p1 p2 ->
   compile_program p1 = Some p1' ->
   compile_program p2 = Some p2' ->
-  Intermediate.linkable_mains' p1' p2'.
+  Intermediate.linkable_mains p1' p2'.
 Proof.
-  unfold Source.linkable_mains, Intermediate.linkable_mains'.
+  unfold Source.linkable_mains, Intermediate.linkable_mains.
   intros p1 p1' p2 p2' Hwf1 Hwf2 Hmains Hcomp1 Hcomp2.
-  pose proof compilation_preserves_main' Hwf1 Hcomp1 as Hmain1.
-  pose proof compilation_preserves_main' Hwf2 Hcomp2 as Hmain2.
+  pose proof compilation_preserves_main Hwf1 Hcomp1 as Hmain1.
+  pose proof compilation_preserves_main Hwf2 Hcomp2 as Hmain2.
   destruct (Source.prog_main p1) as [mainp1 |];
     destruct (Source.prog_main p2) as [mainp2 |];
     destruct (Intermediate.prog_main p1') as [mainp1' |];
@@ -415,15 +415,15 @@ Remark mains_without_source : forall p pc pc',
   Source.well_formed_program p ->
   compile_program p = Some pc ->
   Source.prog_main p = None ->
-  Intermediate.linkable_mains' pc pc'.
+  Intermediate.linkable_mains pc pc'.
 Proof.
   intros p pc pc' Hwf Hcomp Hmain.
-  pose proof compilation_preserves_main' Hwf Hcomp as [Hpreserve1 Hpreserve2].
+  pose proof compilation_preserves_main Hwf Hcomp as [Hpreserve1 Hpreserve2].
   rewrite Hmain in Hpreserve2.
   destruct (Intermediate.prog_main pc) as [pc'' |] eqn: Hpc.
   - assert (exists main, Some pc'' = Some main) as Heq by now exists pc''.
     specialize (Hpreserve2 Heq). inversion Hpreserve2. inversion H.
-  - unfold Intermediate.linkable_mains'. rewrite Hpc. reflexivity.
+  - unfold Intermediate.linkable_mains. rewrite Hpc. reflexivity.
 Qed.
 
 Lemma compilation_preserves_main_linkability :
@@ -433,7 +433,7 @@ Lemma compilation_preserves_main_linkability :
     linkable (Source.prog_interface p) (Source.prog_interface c) ->
     compile_program p = Some p_compiled ->
     compile_program c = Some c_compiled ->
-    Intermediate.linkable_mains' p_compiled c_compiled.
+    Intermediate.linkable_mains p_compiled c_compiled.
 Proof.
   intros p p_compiled c c_compiled Hwfp Hwfc Hlinkable Hcompp Hcompc.
   pose proof Source.linkable_disjoint_mains Hwfp Hwfc Hlinkable as Hmains.
@@ -443,7 +443,7 @@ Proof.
     rewrite Hmainp in Hmains.
     rewrite Hmainc in Hmains.
     inversion Hmains.
-  - rewrite Intermediate.linkable_mains_sym'.
+  - rewrite Intermediate.linkable_mains_sym.
     now eapply (mains_without_source c).
   - now eapply (mains_without_source p).
   - now eapply (mains_without_source p).

@@ -261,16 +261,14 @@ Proof.
 Admitted.
 *)
 
-(* RB: TODO: Uniform names, possibly replace common definition, unprime this. *)
-Definition linkable_mains' (prog1 prog2 : program) : Prop :=
+Definition linkable_mains (prog1 prog2 : program) : Prop :=
   ~~ (prog_main prog1 && prog_main prog2).
 
-(* RB: TODO: Beware potential name clashes once renamed. *)
-Lemma linkable_mains_sym' : forall (prog1 prog2 : program),
-  linkable_mains' prog1 prog2 <-> linkable_mains' prog2 prog1.
+Lemma linkable_mains_sym : forall (prog1 prog2 : program),
+  linkable_mains prog1 prog2 <-> linkable_mains prog2 prog1.
 Proof.
   intros prog1 prog2.
-  unfold linkable_mains', andb, negb.
+  unfold linkable_mains, andb, negb.
   destruct (isSome (prog_main prog1));
     destruct (isSome (prog_main prog2));
     intuition.
@@ -534,22 +532,16 @@ Proof.
   apply alloc_static_buffers_after_linking; auto.
 Qed.
 
-Definition inject_main_comp (main: option Procedure.id) :=
-  match main with
-  | None => None
-  | Some P => Some (0, P)
-  end.
-
 Lemma link_sym:
   forall p c,
     well_formed_program p ->
     well_formed_program c ->
-    linkable_mains' p c  ->
+    linkable_mains p c  ->
     linkable (prog_interface p) (prog_interface c) ->
     program_link p c = program_link c p.
 Proof.
-  rewrite /inject_main_comp /linkable.
-  rewrite /linkable_mains' /program_link.
+  rewrite /linkable.
+  rewrite /linkable_mains /program_link.
   move=> p c Hp_wf Hc_wf Hmain_link [Hsound Hdisj] /=.
   rewrite (unionmC (m1:=prog_interface p) (m2:=prog_interface c)); auto.
   rewrite (unionmC (m1:=prog_procedures p) (m2:=prog_procedures c)); auto.

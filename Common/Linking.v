@@ -56,17 +56,7 @@ Proof.
   - rewrite HCI'' in HCI'. inversion HCI'. reflexivity.
 Qed.
 
-Definition linkable_mains (main1 main2: option (Component.id * Procedure.id)) : Prop :=
-  ~~ (main1 && main2).
-
-Lemma linkable_mains_sym:
-  forall m1 m2,
-    linkable_mains m1 m2 -> linkable_mains m2 m1.
-Proof.
-  intros m1 m2 Hlinkable.
-  destruct m1; destruct m2; simpl in *; auto.
-Qed.
-
+(*
 (* we assume that the provided mains are linkable *)
 Definition main_link (main1 main2: option (Component.id * Procedure.id))
   : option (Component.id * Procedure.id) :=
@@ -79,3 +69,4 @@ Proof.
   intros main.
   destruct main; reflexivity.
 Qed.
+*)
