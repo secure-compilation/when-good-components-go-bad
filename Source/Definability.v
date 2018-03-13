@@ -683,7 +683,7 @@ Section Definability.
         have [cs' run_cs final_cs'] := @definability_gen _ [::] t _ erefl H.
         by econstructor; eauto.
       case: wf_t => wb_t wf_t_events.
-      rewrite /cs /CS.initial_machine_state /= find_procedures_of_trace_main //.
+      rewrite /cs /CS.initial_machine_state /prog_main /= find_procedures_of_trace_main //.
       econstructor; eauto; last by left; eauto.
         exists [::], [::]. by do ![split; trivial].
       intros C b.
