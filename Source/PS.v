@@ -3,6 +3,7 @@ Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Linking.
+Require Import Common.Maps.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import Source.Language.
@@ -93,7 +94,7 @@ Fixpoint to_partial_stack_helper
   match s with
   | [] => [to_partial_frame ctx last_frame]
   | (C, v, k) :: s' =>
-    let '(C', v', k') := last_frame in
+    let '(C', _, _) := last_frame in
     if (C \in ctx) && (C == C') then
       to_partial_stack_helper ctx s' last_frame
     else
@@ -701,15 +702,101 @@ Theorem initial_state_determinism:
     s1 = s2.
 Proof.
   intros p ctx s1 s2 Hinit1 Hinit2.
-  inversion Hinit1; inversion Hinit2; subst.
+  inversion Hinit1 as [p1 scs1 ? ? Hwf Hwf1 Hlinkable1 Hpartial1 Hinitial1];
+    inversion Hinit2 as [p2 scs2 ? Hsame_iface _ Hwf2 Hlinkable2 Hpartial2 Hinitial2];
+    subst.
   unfold CS.initial_state in *. subst.
-  apply partialize_correct in H3.
-  apply partialize_correct in H10.
+  apply partialize_correct in Hpartial1.
+  apply partialize_correct in Hpartial2.
   unfold CS.initial_machine_state in *.
+  (* RB: TODO: CS.initial_machine state shouldn't produce None. *)
+  assert (exists main1, prog_main (program_link p p1) = Some main1) as [main1 Hmain1] by admit.
+  assert (exists main2, prog_main (program_link p p2) = Some main2) as [main2 Hmain2] by admit.
+  rewrite Hmain1 in Hpartial1.
+  rewrite Hmain2 in Hpartial2.
+  (* Some facts of common interest. *)
+  inversion Hwf as [_ _ _ _ Hbuffers _ _].
+  inversion Hwf1 as [_ Hprocs1 _ _ Hbuffers1 _ _].
+  inversion Hwf2 as [_ Hprocs2 _ _ Hbuffers2 _ _].
+  inversion Hlinkable1 as [_ Hdisjoint1]. inversion Hlinkable2 as [_ Hdisjoint2].
+  pose proof linkable_disjoint_procedures Hwf Hwf1 Hlinkable1 as Hdisjproc1.
+  pose proof linkable_disjoint_procedures Hwf Hwf2 Hlinkable2 as Hdisjproc2.
   (* same main component, same main expression *)
   (* empty stack *)
   (* stop continuation *)
   (* same partialized initial memory *)
+  unfold partialize, CS.prepare_initial_memory, prepare_buffers, prog_buffers in Hpartial1.
+  unfold partialize, CS.prepare_initial_memory, prepare_buffers, prog_buffers in Hpartial2.
+  simpl in Hpartial1. simpl in Hpartial2.
+  rewrite Hbuffers1 in Hpartial1. rewrite Hbuffers1 in Hpartial2.
+  rewrite Hbuffers in Hdisjoint1. rewrite Hbuffers2 in Hdisjoint2.
+  (* After unifying terminology, memories are of interest in both main cases. *)
+  assert (
+      filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_buffers p1))
+                    (mapm
+                       (fun initial_buffer : nat + list value =>
+                        ComponentMemory.prealloc (setm emptym 0 initial_buffer))
+                       (unionm (prog_buffers p) (prog_buffers p1)))
+      =
+      filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_buffers p1))
+                    (mapm
+                       (fun initial_buffer : nat + list value =>
+                        ComponentMemory.prealloc (setm emptym 0 initial_buffer))
+                       (unionm (prog_buffers p) (prog_buffers p2)))
+    ) as Hmem.
+  {
+    clear Hpartial1 Hpartial2.
+    pattern (prog_buffers p1) at -3.
+    rewrite <- Hbuffers1.
+    rewrite <- Hsame_iface.
+    rewrite Hbuffers2.
+    rewrite fdisjoint_filterm_mapm_unionm.
+    - rewrite fdisjoint_filterm_mapm_unionm.
+      + (* On p1... *)
+        rewrite Hbuffers1 in Hdisjoint1.
+        pose proof domm_mapm (nat + list value) ComponentMemory.t (prog_buffers p)
+             (fun initial_buffer : nat + list value =>
+                ComponentMemory.prealloc (setm emptym 0 initial_buffer))
+          as Hdomm.
+        rewrite fdisjointC in Hdisjoint1.
+        rewrite <- Hdomm in Hdisjoint1.
+        rewrite fdisjointC in Hdisjoint1.
+        erewrite fdisjoint_filterm_full; last by assumption.
+        (* ... and on p2, essentially the same. *)
+        rewrite Hbuffers in Hdisjoint2.
+        rewrite fdisjointC in Hdisjoint2.
+        rewrite <- Hdomm in Hdisjoint2.
+        rewrite fdisjointC in Hdisjoint2.
+        erewrite fdisjoint_filterm_full; last by assumption.
+        reflexivity.
+      + by rewrite Hbuffers in Hdisjoint2.
+    - by rewrite Hbuffers1 in Hdisjoint1.
+  }
+  (* Done with memory, useful for both cases. *)
+  rewrite Hmem in Hpartial1.
+  destruct (Component.main \in domm (prog_buffers p1)) eqn:Hif;
+    rewrite Hif in Hpartial1; rewrite Hif in Hpartial2.
+  - rewrite <- Hpartial1.
+    rewrite <- Hpartial2.
+    reflexivity.
+  - (* Correspondence of mains is only interesting on this case. On one side... *)
+    unfold prog_main, prog_procedures, program_link in Hmain1.
+    rewrite (unionmC Hdisjproc1) in Hmain1.
+    rewrite <- Hbuffers1 in Hif.
+    rewrite Hprocs1 in Hif.
+    pose proof find_procedure_unionm_r Hmain1 Hif as Hfind1.
+    (* ... and another, almost the same, with some extra rewriting. *)
+    unfold prog_main, prog_procedures, program_link in Hmain2.
+    rewrite <- Hprocs1 in Hif.
+    rewrite <- Hsame_iface in Hif.
+    rewrite Hprocs2 in Hif.
+    rewrite (unionmC Hdisjproc2) in Hmain2.
+    pose proof find_procedure_unionm_r Hmain2 Hif as Hfind2.
+    (* Join both sides, then complete the equality as above. *)
+    assert (main1 = main2) by congruence; subst main2.
+    rewrite <- Hpartial1.
+    rewrite <- Hpartial2.
+    reflexivity.
 Admitted.
 
 Lemma state_determinism_program:

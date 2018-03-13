@@ -545,4 +545,21 @@ Module Source.
     - by case: (prog_procedures p2 C)=> [C_procs /=|] //= _.
   Qed.
 
+  Lemma find_procedure_unionm_r : forall (procs1 procs2 : NMap (NMap expr)) cid pid proc,
+    find_procedure (unionm procs1 procs2) cid pid = Some proc ->
+    cid \in domm procs1 = false ->
+    find_procedure procs2 cid pid = Some proc.
+  Proof.
+    intros procs1 procs2 cid pid proc Hfind Hnotin.
+    unfold find_procedure in Hfind.
+    rewrite unionmE in Hfind.
+    rewrite mem_domm in Hnotin.
+    rewrite Hnotin in Hfind.
+    destruct (procs2 cid) as [C_procs |] eqn:Hprocs;
+      rewrite Hprocs in Hfind.
+    - unfold find_procedure.
+      by rewrite Hprocs.
+    - by inversion Hfind.
+  Qed.
+
 End Source.
