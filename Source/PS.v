@@ -223,6 +223,32 @@ Proof.
   by rewrite /= Hin_ctx /= eqxx.
 Qed.
 
+Lemma partial_stack_outside_context_preserves_top :
+  forall C C' v k s ctx,
+    C' \in ctx = false ->
+  exists frame rest,
+    to_partial_stack ((C', v, k) :: s) ctx C = (C', frame) :: rest.
+Proof.
+  intros Cid' Cid val cont st ctx Hctx.
+  induction st as [| hd st IHst].
+  - unfold to_partial_stack, drop_last_frames_if_needed.
+    rewrite Hctx. simpl.
+    rewrite Hctx. simpl.
+    eexists. eexists. reflexivity.
+  - (* Extract information from IH. *)
+    destruct IHst as [frame [rest IHst]].
+    unfold to_partial_stack in IHst. simpl in IHst.
+    rewrite Hctx in IHst. simpl in IHst.
+    (* Substitute information into the goal. *)
+    unfold to_partial_stack, drop_last_frames_if_needed.
+    rewrite Hctx. simpl.
+    rewrite IHst. simpl.
+    destruct hd as [[C v0] k1].
+    destruct (C \in ctx) eqn:Hcase1; rewrite Hcase1;
+      destruct (C == Cid); simpl;
+        try (try rewrite Hctx; eexists; eexists; reflexivity).
+Qed.
+
 Lemma partial_stack_push_by_context:
   forall ctx C C' v1 k1 v2 k2 gps1 gps2,
     C <> C' ->
