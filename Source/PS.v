@@ -278,21 +278,21 @@ Admitted.
 
 Lemma partial_stacks_unequal_top_internal :
   forall C1 C2 v1 v2 k1 k2 s1 s2 ctx,
+    C1 \notin ctx ->
     C1 <> C2 ->
     to_partial_stack ((C1, v1, k1) :: s1) ctx C1 <>
     to_partial_stack ((C2, v2, k2) :: s2) ctx C1.
 Proof.
-  intros C1 C2 v1 v2 k1 k2 s1 s2 ctx Hneq Heq.
-  assert (C1 \in ctx = false) as Hin1 by admit.
-  assert (C2 \in ctx = false) as Hin2 by admit.
+  intros C1 C2 v1 v2 k1 k2 s1 s2 ctx Hctx Hneq Hstack.
+  assert (C1 \in ctx = false) as Hctx' by admit.
   pose proof partial_stack_outside_context_preserves_top as Hpres1.
-  specialize (Hpres1 C1 _ v1 k1 s1 _ Hin1).
+  specialize (Hpres1 C1 _ v1 k1 s1 _ Hctx').
   destruct Hpres1 as [frame1 [rest1 Hpres1]].
-  pose proof partial_stack_outside_context_preserves_top as Hpres2.
-  specialize (Hpres2 C1 _ v2 k2 s2 _ Hin2).
+  pose proof partial_stack_outside_control_preserves_top as Hpres2.
+  specialize (Hpres2 C1 _ v2 k2 s2 ctx Hneq).
   destruct Hpres2 as [frame2 [rest2 Hpres2]].
-  rewrite Hpres1 in Heq. rewrite Hpres2 in Heq.
-  inversion Heq as [Hcontra].
+  rewrite Hpres1 in Hstack. rewrite Hpres2 in Hstack.
+  inversion Hstack as [Hcontra].
   by intuition.
 Admitted.
 
@@ -317,6 +317,48 @@ Proof.
   inversion Hstack; subst.
   by rewrite Hin in Hnotin.
 Admitted.
+
+Lemma partial_stacks_equal_top_external_context :
+  forall C C1 C2 v1 v2 k1 k2 s1 s2 ctx,
+    C1 \notin ctx ->
+    C2 \notin ctx ->
+    to_partial_stack ((C1, v1, k1) :: s1) ctx C =
+    to_partial_stack ((C2, v2, k2) :: s2) ctx C ->
+    C1 = C2.
+Proof.
+  intros C C1 C2 v1 v2 k1 k2 s1 s2 ctx Hnotin1 Hnotin2 Hstack.
+  pose proof partial_stack_outside_context_preserves_top as Hpres1.
+  assert (C1 \in ctx = false) as Hdomm1 by admit.
+  specialize (Hpres1 C C1 v1 k1 s1 ctx Hdomm1).
+  destruct Hpres1 as [frame1 [rest1 Hpres1]].
+  rewrite Hpres1 in Hstack.
+  pose proof partial_stack_outside_context_preserves_top as Hpres2.
+  assert (C2 \in ctx = false) as Hdomm2 by admit.
+  specialize (Hpres2 C C2 v2 k2 s2 ctx Hdomm2).
+  destruct Hpres2 as [frame2 [rest2 Hpres2]].
+  rewrite Hpres2 in Hstack.
+  by inversion Hstack.
+Admitted.
+
+Lemma partial_stacks_equal_top_external_control :
+  forall C C1 C2 v1 v2 k1 k2 s1 s2 ctx,
+    C <> C1 ->
+    C <> C2 ->
+    to_partial_stack ((C1, v1, k1) :: s1) ctx C =
+    to_partial_stack ((C2, v2, k2) :: s2) ctx C ->
+    C1 = C2.
+Proof.
+  intros C C1 C2 v1 v2 k1 k2 s1 s2 ctx Hneq1 Hneq2 Hstack.
+  pose proof partial_stack_outside_control_preserves_top as Hpres1.
+  specialize (Hpres1 C C1 v1 k1 s1 ctx Hneq1).
+  destruct Hpres1 as [frame1 [rest1 Hpres1]].
+  rewrite Hpres1 in Hstack.
+  pose proof partial_stack_outside_control_preserves_top as Hpres2.
+  specialize (Hpres2 C C2 v2 k2 s2 ctx Hneq2).
+  destruct Hpres2 as [frame2 [rest2 Hpres2]].
+  rewrite Hpres2 in Hstack.
+  by inversion Hstack.
+Qed.
 
 Lemma partial_stack_push_by_context:
   forall ctx C C' v1 k1 v2 k2 gps1 gps2,
@@ -1282,15 +1324,15 @@ Proof.
       reflexivity.
 
     (* First group of nonsensical cases. *)
-    + by pose proof partial_stacks_unequal_top_internal H9 H8.
-    + by pose proof partial_stacks_unequal_top_internal H9 H8.
+    + by eapply partial_stacks_unequal_top_internal in H8.
+    + by eapply partial_stacks_unequal_top_internal in H8.
     + symmetry in H8.
-      by pose proof partial_stacks_unequal_top_internal H10 H8.
+      by eapply partial_stacks_unequal_top_internal in H8.
     + symmetry in H8.
-      by pose proof partial_stacks_unequal_top_internal H10 H8.
+      by eapply partial_stacks_unequal_top_internal in H8.
 
     (* internal *)
-    + assert (C' = C'0) by admit;
+    + assert (C' = C'0) by apply (partial_stacks_equal_top_external_context H15 H16 H8);
         subst C'0.
       split; first by reflexivity.
       (* show stack and memory are changing in the same way *)
@@ -1315,7 +1357,7 @@ Proof.
       by pose proof partial_stacks_unequal_top_external H16 H15 H10 H8.
 
     (* external *)
-    + assert (C' = C'0) by admit;
+    + assert (C' = C'0) by apply (partial_stacks_equal_top_external_control H10 H9 H8);
         subst C'0.
       split; first by reflexivity.
       rewrite (context_store_in_partialized_memory H15 H12).
@@ -1331,7 +1373,9 @@ Proof.
       Hnotin: context[domm (prog_interface p1)] |- _ =>
       rewrite Hin in Hnotin; discriminate
     end.
-Admitted.
+Qed.
+
+(* RB: TODO: Weaker result in terms of stronger result. *)
 
 Lemma context_epsilon_step_is_silent:
   forall p ctx G sps sps',
