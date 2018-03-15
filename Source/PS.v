@@ -249,6 +249,75 @@ Proof.
         try (try rewrite Hctx; eexists; eexists; reflexivity).
 Qed.
 
+Lemma partial_stack_outside_control_preserves_top :
+  forall C C' v k s ctx,
+    C <> C' ->
+  exists frame rest,
+    to_partial_stack ((C', v, k) :: s) ctx C = (C', frame) :: rest.
+Proof.
+  intros Cid' Cid val cont st ctx Hneq'.
+  assert (Cid == Cid' = false) as Hneq by admit.
+  induction st as [| hd st IHst].
+  - unfold to_partial_stack, drop_last_frames_if_needed.
+    rewrite Hneq. rewrite andb_comm. simpl.
+    destruct (Cid \in ctx) eqn:Hcase1; rewrite Hcase1;
+      by eauto.
+  - (* Extract information from IH. *)
+    destruct IHst as [frame [rest IHst]].
+    unfold to_partial_stack in IHst. simpl in IHst.
+    rewrite Hneq in IHst. rewrite andb_comm in IHst. simpl in IHst.
+    (* Substitute information into the goal. *)
+    unfold to_partial_stack, drop_last_frames_if_needed.
+    rewrite Hneq. rewrite andb_comm. simpl.
+    rewrite IHst. simpl.
+    destruct hd as [[C v0] k1].
+    destruct (C \in ctx) eqn:Hcase1; rewrite Hcase1;
+      destruct (C == Cid) eqn:Hcase2; simpl;
+      (try (destruct (Cid \in ctx) eqn:Hcase3; rewrite Hcase3); eauto).
+Admitted.
+
+Lemma partial_stacks_unequal_top_internal :
+  forall C1 C2 v1 v2 k1 k2 s1 s2 ctx,
+    C1 <> C2 ->
+    to_partial_stack ((C1, v1, k1) :: s1) ctx C1 <>
+    to_partial_stack ((C2, v2, k2) :: s2) ctx C1.
+Proof.
+  intros C1 C2 v1 v2 k1 k2 s1 s2 ctx Hneq Heq.
+  assert (C1 \in ctx = false) as Hin1 by admit.
+  assert (C2 \in ctx = false) as Hin2 by admit.
+  pose proof partial_stack_outside_context_preserves_top as Hpres1.
+  specialize (Hpres1 C1 _ v1 k1 s1 _ Hin1).
+  destruct Hpres1 as [frame1 [rest1 Hpres1]].
+  pose proof partial_stack_outside_context_preserves_top as Hpres2.
+  specialize (Hpres2 C1 _ v2 k2 s2 _ Hin2).
+  destruct Hpres2 as [frame2 [rest2 Hpres2]].
+  rewrite Hpres1 in Heq. rewrite Hpres2 in Heq.
+  inversion Heq as [Hcontra].
+  by intuition.
+Admitted.
+
+Lemma partial_stacks_unequal_top_external :
+  forall C C1 C2 v1 v2 k1 k2 s1 s2 ctx,
+    C1 \notin ctx ->
+    C2 \in ctx ->
+    C <> C2 ->
+    to_partial_stack ((C1, v1, k1) :: s1) ctx C <>
+    to_partial_stack ((C2, v2, k2) :: s2) ctx C.
+Proof.
+  intros C C1 C2 v1 v2 k1 k2 s1 s2 ctx Hnotin Hin Hneq Hstack.
+  assert (C1 \in ctx = false) as Hnotin' by admit.
+  pose proof partial_stack_outside_context_preserves_top as Hpres1.
+  specialize (Hpres1 C C1 v1 k1 s1 ctx Hnotin').
+  destruct Hpres1 as [frame1 [rest1 Hpres1]].
+  rewrite Hpres1 in Hstack.
+  pose proof partial_stack_outside_control_preserves_top as Hpres2.
+  specialize (Hpres2 C C2 v2 k2 s2 ctx Hneq).
+  destruct Hpres2 as [frame2 [rest2 Hpres2]].
+  rewrite Hpres2 in Hstack.
+  inversion Hstack; subst.
+  by rewrite Hin in Hnotin.
+Admitted.
+
 Lemma partial_stack_push_by_context:
   forall ctx C C' v1 k1 v2 k2 gps1 gps2,
     C <> C' ->
@@ -1212,10 +1281,13 @@ Proof.
       rewrite (program_store_in_partialized_memory H7 H14 H12 H13).
       reflexivity.
 
-    + admit.
-    + admit.
-    + admit.
-    + admit.
+    (* First group of nonsensical cases. *)
+    + by pose proof partial_stacks_unequal_top_internal H9 H8.
+    + by pose proof partial_stacks_unequal_top_internal H9 H8.
+    + symmetry in H8.
+      by pose proof partial_stacks_unequal_top_internal H10 H8.
+    + symmetry in H8.
+      by pose proof partial_stacks_unequal_top_internal H10 H8.
 
     (* internal *)
     + assert (C' = C'0) by admit;
@@ -1237,8 +1309,10 @@ Proof.
       rewrite (program_store_in_partialized_memory H7 H15 H12 H14).
       reflexivity.
 
-    + admit.
-    + admit.
+    (* Second group of nonsensical cases. *)
+    + by pose proof partial_stacks_unequal_top_external H15 H16 H9 H8.
+    + symmetry in H8.
+      by pose proof partial_stacks_unequal_top_external H16 H15 H10 H8.
 
     (* external *)
     + assert (C' = C'0) by admit;
