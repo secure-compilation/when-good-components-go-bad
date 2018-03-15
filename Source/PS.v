@@ -936,211 +936,7 @@ Proof.
     reflexivity.
 Admitted.
 
-Lemma state_determinism_program:
-  forall p ctx G sps t sps',
-    is_program_component sps ctx ->
-    kstep p ctx G sps t sps' ->
-  forall sps'',
-    kstep p ctx G sps t sps'' ->
-    sps' = sps''.
-Proof.
-  intros p ctx G sps t sps' Hcontrol Hstep1 sps'' Hstep2.
-
-  inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 wf wf1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
-    subst.
-  inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _  wf2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
-    subst.
-
-  (* case analysis on who has control *)
-  inversion Hpartial_sps1; subst.
-  - inversion Hpartial_sps2; subst;
-    inversion Hkstep1; subst; inversion Hkstep2; subst;
-    inversion Hpartial_sps1'; subst; inversion Hpartial_sps2'; subst; PS.simplify_turn;
-      try (match goal with
-           | Hstack: to_partial_stack ?GPS1 _ _ = to_partial_stack ?GPS2 _ _,
-             Hmem: filterm ?PRED ?MEM1 = filterm ?PRED ?MEM2 |- _ =>
-             rewrite Hstack Hmem
-           end);
-      try reflexivity;
-      try (match goal with
-           | Hin: context[domm (prog_interface p1)],
-             Hnotin: context[domm (prog_interface p1)] |- _ =>
-             rewrite Hin in Hnotin; discriminate
-           end);
-      try omega.
-
-    (* local *)
-    + (* show that b and b0 are the same *)
-      suffices -> : b = b0 by [].
-      move: H6 H10; rewrite !mapmE /=.
-      case: getm=> [v1|] //= [<-].
-      by case: getm=> [v2|] //= [<-].
-
-    (* alloc *)
-    + (* show that memory changes in the same way *)
-      destruct (program_allocation_in_partialized_memory H7 H H11 H12)
-        as [Hptr Hmem].
-      rewrite H8 Hptr Hmem.
-      reflexivity.
-
-    (* deref *)
-    + (* show that the loaded value is the same (v == v0) *)
-      rewrite (program_load_in_partialized_memory H7 H H11 H13).
-      reflexivity.
-
-    (* assign *)
-    + (* show that memory changes in the same way *)
-      rewrite H8.
-      rewrite (program_store_in_partialized_memory H7 H H11 H14).
-      reflexivity.
-
-    (* call *)
-
-    (* inside the same component *)
-    + (* show stack and memory are changing in the same way *)
-      assert (b = b0).
-      { move: H12 H18; rewrite !mapmE /=.
-        case: getm=> [v1|] //= [<-].
-        by case: getm=> [v2|] //= [<-]. }
-      assert (b' = b'0).
-      { move: H14 H20; rewrite !mapmE /=.
-        case: getm=> [v1|] //= [<-].
-        by case: getm=> [v2|] //= [<-].
-      }
-      assert (P_expr = P_expr0). {
-        destruct (find_procedure_in_linked_programs wf wf1 Hlink1 H9 H)
-          as [HP_expr Hfind_proc].
-        rewrite <- Hiface2 in H.
-        destruct (find_procedure_in_linked_programs wf wf2 Hlink2 H17 H)
-          as [HP_expr' Hfind_proc'].
-        rewrite Hfind_proc in Hfind_proc'.
-        inversion Hfind_proc'. subst.
-        reflexivity.
-      }
-      subst.
-      assert (old_call_arg0 = old_call_arg)
-        as Hsame_old_call_arg.
-      { eapply program_load_in_partialized_memory
-          with (mem1:=mem0) (mem2:=mem); eauto. }
-      erewrite partial_stack_push_by_program with (gps2:=gps0);
-        auto.
-      rewrite (program_store_in_partialized_memory H7 H H15 H21).
-      subst.
-      reflexivity.
-
-    (* internal *)
-    + (* show stack and memory are changing in the same way *)
-      assert (b = b0).
-      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H13 H) as [? Hb].
-        rewrite <- Hiface2 in H.
-        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H21 H) as [? Hb'].
-        rewrite Hb in Hb'. inversion Hb'.
-        subst.
-        reflexivity.
-      }
-      assert (b' = b'0).
-      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H15 H12) as [? Hb].
-        rewrite <- Hiface2 in H12.
-        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H23 H12) as [? Hb'].
-        rewrite Hb in Hb'. inversion Hb'.
-        subst.
-        reflexivity.
-      }
-      assert (P_expr = P_expr0). {
-        destruct (find_procedure_in_linked_programs wf wf1 Hlink1 H10 H12)
-          as [HP_expr Hfind_proc].
-        rewrite <- Hiface2 in H12.
-        destruct (find_procedure_in_linked_programs wf wf2 Hlink2 H20 H12)
-          as [HP_expr' Hfind_proc'].
-        rewrite Hfind_proc in Hfind_proc'.
-        inversion Hfind_proc'. subst.
-        reflexivity.
-      }
-      subst.
-      assert (old_call_arg0 = old_call_arg)
-        as Hsame_old_call_arg.
-      { eapply program_load_in_partialized_memory
-          with (C:=C) (mem1:=mem0) (mem2:=mem); eauto. }
-      subst.
-      rewrite (program_store_in_partialized_memory H7 H12 H16 H24).
-      erewrite partial_stack_push_by_program with (gps2:=gps0); auto.
-
-    (* external *)
-    + assert (b = b0).
-      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H13 H) as [? Hb].
-        rewrite <- Hiface2 in H.
-        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H21 H) as [? Hb'].
-        rewrite Hb in Hb'. inversion Hb'.
-        subst.
-        reflexivity.
-      }
-      subst.
-      assert (old_call_arg0 = old_call_arg)
-        as Hsame_old_call_arg.
-      { eapply program_load_in_partialized_memory
-          with (C:=C) (mem1:=mem0) (mem2:=mem); eauto. }
-      subst.
-      erewrite partial_stack_push_by_program with (gps2:=gps0); auto.
-      rewrite (context_store_in_partialized_memory H12 H16).
-      rewrite (context_store_in_partialized_memory H12 H24).
-      rewrite H7.
-      reflexivity.
-
-    (* return *)
-
-    (* inside the same component *)
-    (* show stack and memory are changing in the same way *)
-    + assert (b = b0).
-      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H11 H) as [? Hb].
-        rewrite <- Hiface2 in H.
-        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H9 H) as [? Hb'].
-        rewrite Hb in Hb'. inversion Hb'.
-        subst.
-        reflexivity.
-      }
-      subst.
-      destruct (partial_stack_pop_to_program H H8)
-        as [Hold_call_arg [Hkont Hstack]].
-      subst. rewrite Hstack.
-      rewrite (program_store_in_partialized_memory H7 H13 H12 H10).
-      reflexivity.
-
-    (* internal *)
-    + (* show stack and memory are changing in the same way *)
-      assert (b = b0).
-      { destruct (prepare_buffers_of_linked_programs wf wf1 Hlink1 H11 H15) as [? Hb].
-        rewrite <- Hiface2 in H15.
-        destruct (prepare_buffers_of_linked_programs wf wf2 Hlink2 H13 H15) as [? Hb'].
-        rewrite Hb in Hb'. inversion Hb'.
-        subst.
-        reflexivity.
-      }
-      subst.
-      destruct (partial_stack_pop_to_program H15 H8)
-        as [Hold_call_arg [Hkont Hstack]].
-      subst. rewrite Hstack.
-      rewrite (program_store_in_partialized_memory H7 H15 H12 H14).
-      reflexivity.
-
-    (* external *)
-    + rewrite (context_store_in_partialized_memory H15 H12).
-      rewrite (context_store_in_partialized_memory H15 H14).
-      rewrite H7.
-      rewrite (partial_stack_pop_to_context H10 H15 H8).
-      reflexivity.
-
-  (* context has control (contra) *)
-  - PS.simplify_turn.
-    match goal with
-    | Hin: context[domm (prog_interface p1)],
-      Hnotin: context[domm (prog_interface p1)] |- _ =>
-      rewrite Hin in Hnotin; discriminate
-    end.
-Qed.
-
-(* we can prove something stronger when program is in control *)
+(* we can prove a strong form of state determinism when program is in control *)
 Lemma state_determinism_program':
   forall p ctx G sps t1 t2 sps',
     is_program_component sps ctx ->
@@ -1174,9 +970,7 @@ Proof.
              Hnotin: context[domm (prog_interface p1)] |- _ =>
              rewrite Hin in Hnotin; discriminate
            end);
-      try easy; (**)
-      (*try intuition;*)
-      (*try omega.*)
+      try easy;
       try omega.
 
     (* local *)
@@ -1375,7 +1169,18 @@ Proof.
     end.
 Qed.
 
-(* RB: TODO: Weaker result in terms of stronger result. *)
+(* The weaker state determinism with program in control follows from the above. *)
+Lemma state_determinism_program :
+  forall p ctx G sps t sps',
+    is_program_component sps ctx ->
+    kstep p ctx G sps t sps' ->
+  forall sps'',
+    kstep p ctx G sps t sps'' ->
+    sps' = sps''.
+Proof.
+  intros p ctx G sps t sps' Hpc Hkstep1 sps'' Hkstep2.
+  apply (state_determinism_program' Hpc Hkstep1 Hkstep2).
+Qed.
 
 Lemma context_epsilon_step_is_silent:
   forall p ctx G sps sps',
