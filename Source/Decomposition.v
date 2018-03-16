@@ -17,6 +17,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Import Source.
 
 Section Decomposition.
@@ -51,7 +53,7 @@ Section Decomposition.
         * assumption.
         * assumption.
         * eapply PS.ContextControl; eauto.
-          ** apply Hics_init.
+        * apply Hics_init.
       + eapply PS.ContextControl; eauto.
     (* program has control *)
     - split.
@@ -63,7 +65,7 @@ Section Decomposition.
         * eapply PS.ProgramControl; auto.
           ** PS.simplify_turn.
              unfold negb. rewrite Htarget. auto.
-          ** apply Hics_init.
+        * apply Hics_init.
       + eapply PS.ProgramControl; auto.
         * PS.simplify_turn.
           unfold negb. rewrite Htarget. auto.
@@ -564,7 +566,7 @@ Section Decomposition.
                  auto.
              *** reflexivity.
              *** reflexivity.
-             *** auto.
+        * auto.
       + inversion Hstate_beh; subst.
         econstructor.
         * (* simulate star with decomposition *) admit.
