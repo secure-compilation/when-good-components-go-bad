@@ -556,7 +556,7 @@ Section Decomposition.
           of p is preserved.
        2) there is not an initial state
           in this case, by definition, there cannot be an
-          intial state for the partial semantics.
+          initial state for the partial semantics.
           therefore, we are stuck in the partial semantics
           as well.
      *)
@@ -569,20 +569,20 @@ Section Decomposition.
         * reflexivity.
         * assumption.
         * assumption.
-        * auto.
+        * assumption.
         * CS.unfold_state init_s. simpl in *.
           destruct (C \in domm (prog_interface c)) eqn:Hctx.
           ** rewrite Hctx. constructor.
-             *** PS.simplify_turn. auto.
+             *** PS.simplify_turn. assumption.
              *** reflexivity.
              *** reflexivity.
           ** rewrite Hctx. constructor.
              *** PS.simplify_turn.
                  unfold negb. rewrite Hctx.
-                 auto.
+                 reflexivity.
              *** reflexivity.
              *** reflexivity.
-        * auto.
+        * assumption.
       + inversion Hstate_beh; subst.
         econstructor.
         * (* simulate star with decomposition *) admit.
