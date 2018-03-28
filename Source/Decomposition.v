@@ -101,6 +101,22 @@ Section Decomposition.
         rewrite Htarget in H5. discriminate.
   Qed.
 
+  Lemma match_initial_states_by_partialize : forall scs0,
+    CS.initial_state (program_link p c) scs0 ->
+    PS.initial_state p (prog_interface c) (PS.partialize (prog_interface c) scs0).
+  Proof.
+    intros scs0 Hini.
+    eapply PS.initial_state_intro;
+      try reflexivity;
+      try assumption.
+    unfold CS.initial_state in Hini.
+    unfold CS.initial_machine_state in *.
+    rewrite <- PS.partialize_correct.
+    destruct (prog_main (program_link p c)) as [main |] eqn:Hmain;
+      subst;
+      easy.
+  Qed.
+
   Lemma lockstep_simulation:
     forall ics t ics',
       CS.kstep (prepare_global_env (program_link p c)) ics t ics' ->
