@@ -584,10 +584,56 @@ Section Decomposition.
              *** reflexivity.
         * assumption.
       + inversion Hstate_beh; subst.
-        econstructor.
-        * (* simulate star with decomposition *) admit.
-        * (* show preservation of stuckness *) admit.
-        * (* show preservation of non-final state *) admit.
+        (* simulate star with decomposition *)
+        (* We take this step early to get the pieces needed by [econstructor] later. *)
+        pose proof forward_simulation_behavior_improves decomposition Hbeh
+          as [beh1 [Hbeh1 Himpr1]].
+        inversion Himpr1 as [Hbeh2 | [t2 [Heq [beh3 Hbeh3]]]].
+        * subst.
+          inversion Hbeh1 as [s ? Hini Hsbeh | Hini]; subst.
+          -- (* initial_state_determinism *)
+             apply match_initial_states_by_partialize in Hinit.
+             pose proof PS.initial_state_determinism Hini Hinit; subst.
+             inversion Hsbeh. econstructor; eassumption.
+          -- econstructor.
+             ++ apply star_refl.
+             ++ (* show preservation of stuckness *)
+                (* By contradiction on initial state from CS and lack thereof in PS. *)
+                apply match_initial_states in Hinit.
+                destruct Hinit as [init_ps [Hinit Hpartial]].
+                specialize (Hini init_ps).
+                easy.
+             ++ (* show preservation of non-final state *)
+                (* Likewise by contradiction. *)
+                apply match_initial_states in Hinit.
+                destruct Hinit as [init_ps [Hinit Hpartial]].
+                specialize (Hini init_ps).
+                easy.
+        * inversion Heq; subst t2; subst; clear Heq.
+          inversion Hbeh1 as [s ? Hini Hsbeh | Hini Happ]; subst.
+          -- apply match_initial_states_by_partialize in Hinit.
+             pose proof PS.initial_state_determinism Hini Hinit; subst.
+             (* Discharge by stuckness of p in the blame hypothesis. *)
+             admit.
+          -- unfold behavior_app in Happ.
+             destruct beh3 as [? | ? | ? | t1];
+               inversion Happ as [Heq].
+             symmetry in Heq.
+             apply Eapp_E0_inv in Heq.
+             destruct Heq; subst.
+             (* As above. *)
+             econstructor.
+             ++ apply star_refl.
+             ++ (* show preservation of stuckness *)
+                apply match_initial_states in Hinit.
+                destruct Hinit as [init_ps [Hinit Hpartial]].
+                specialize (Hini init_ps).
+                easy.
+             ++ (* show preservation of non-final state *)
+                apply match_initial_states in Hinit.
+                destruct Hinit as [init_ps [Hinit Hpartial]].
+                specialize (Hini init_ps).
+                easy.
     (* program went wrong because it doesn't have an initial state *)
     - apply program_goes_initially_wrong.
       intros s.
