@@ -638,7 +638,7 @@ Section Decomposition.
     - apply program_goes_initially_wrong.
       intros s.
       unfold not. intro contra.
-      inversion contra; subst.
+      inversion contra as [p' scs ? Hsame_iface _ wf' linkability' Hpartial Hini]; subst.
       apply H with (s:=scs). simpl.
       unfold CS.initial_state in *. subst.
       unfold CS.initial_machine_state.
@@ -646,6 +646,50 @@ Section Decomposition.
       (* empty stack *)
       (* stop continuation *)
       (* same initial memory memory because of same components *)
+      (* Stack and continuation are easy. *)
+      (* 1. main has to be in p. *)
+      unfold undef_in in Hblame; simpl in Hblame.
+      inversion wf1 as [_ _ _ _ _ _ Hmain_p].
+      specialize (Hmain_p Hblame).
+      (* Some more facts about mains. *)
+      inversion closedness_after_linking as [_ Hmain_p_c].
+      pose proof linkable_disjoint_mains wf1 wf2 linkability as Hmains_p_c.
+      pose proof linkable_disjoint_mains wf1 wf' linkability' as Hmains_p_p'.
+      unfold linkable_mains in Hmains_p_c. unfold linkable_mains in Hmains_p_p'.
+      rewrite Hmain_p in Hmains_p_c. rewrite Hmain_p in Hmains_p_p'.
+      simpl in Hmains_p_c. simpl in Hmains_p_p'.
+      destruct (prog_main (program_link p c)) as [main_p_c |] eqn:Heqmain_p_c;
+        last by inversion Heqmain_p_c.
+      destruct (prog_main (program_link p p')) as [main_p_p' |] eqn:Heqmain_p_p';
+        last by admit. (* Easy contradiction. *)
+      (* Complete the equality of mains. *)
+      assert (main_p_p' = main_p_c) as Heqmains.
+      {
+        unfold prog_main, program_link in Heqmain_p_c.
+        simpl in Heqmain_p_c.
+        (* Choosing p on both linked programs; other sides identical by contradiction. *)
+        apply
+          (linkable_programs_find_procedure
+             wf1 wf2 linkability Component.main Procedure.main main_p_c)
+          in Heqmain_p_c as [Heqmain_p_c | Heqmain_p_c].
+        - apply
+            (linkable_programs_find_procedure
+               wf1 wf' linkability' Component.main Procedure.main main_p_p')
+            in Heqmain_p_p' as [Heqmain_p_p' | Heqmain_p_p'].
+          + rewrite Heqmain_p_p' in Heqmain_p_c.
+            by inversion Heqmain_p_c.
+          + unfold prog_main, negb in Hmains_p_p'.
+            rewrite Heqmain_p_p' in Hmains_p_p'.
+            simpl in Hmains_p_p'.
+            by inversion Hmains_p_p'.
+        - unfold prog_main, negb in Hmains_p_c.
+          rewrite Heqmain_p_c in Hmains_p_c.
+          simpl in Hmains_p_c.
+          by inversion Hmains_p_c.
+      }
+      subst.
+      (* 2. Equality of memories. *)
+      admit.
   Admitted.
 
   Lemma star_improvement:
