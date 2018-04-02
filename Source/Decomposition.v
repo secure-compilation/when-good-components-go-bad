@@ -692,6 +692,47 @@ Section Decomposition.
       admit.
   Admitted.
 
+  (* If a state s leads to two states s1 and s2 with the same trace t, it must
+     be the case that s1 and s2 are connected. We arrive at s1 and s2 after a
+     series of coordinated and identical alternations between program and
+     context. Both s1 and s2 are either in the program or in the context. From
+     the common starting state, observe the following facts about the sequence
+     of phases.
+
+      - A program phase starting from the same state is deterministic until
+        the end of the execution or a change of control.
+
+      - A context phase from the same state is silent until the end of the
+        execution or a change of control.
+
+     Note moreover that the shared trace preserves the state across turn
+     boundaries. In the final phase, i.e., that of s1 and s2, we stop at two
+     points in the deterministic execution of the program (in which case one
+     of the two may always catch up to the other if needed), or at two
+     indistinguishable states of the context. *)
+  Lemma state_determinism_star_same_trace :
+    forall p1 p2 s t s1 s2,
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s1 ->
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s2 ->
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s1 E0 s2 \/
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s2 E0 s1.
+  Admitted.
+
+  (* s and s1 are both either in the program or in the context.
+
+      - If they are in the program, the transitions are deterministic, thus s1
+        is always after s and goes on to s2.
+
+      - If they are in the program, the transitions are silent, thus s = s1,
+        which goes on to s2. *)
+  Lemma state_determinism_star_silent_prefix :
+    forall p1 p2 s t s1 s2,
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s E0 s1 ->
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s2 ->
+      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s1 t s2.
+  Admitted.
+
+  (* NOTE: the first disjunct is subsumed by the third. *)
   Lemma star_improvement:
     forall p1 p2 s t t' s' s'',
       star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s' ->
@@ -706,6 +747,15 @@ Section Decomposition.
   Proof.
     intros p1 p2 s t t' s' s''.
     intros Hstar1 Hstar2.
+    apply star_app_inv in Hstar2 as [s''' [Hstar2 Hstar2']];
+      last apply PS.atomic_traces.
+    destruct (state_determinism_star_same_trace Hstar1 Hstar2) as [Hstar12 | Hstar21].
+    - pose proof star_trans Hstar12 Hstar2' (E0_right t') as Hstar12'.
+      rewrite E0_right in Hstar12'.
+      right. left. done.
+    - pose proof state_determinism_star_silent_prefix Hstar21 Hstar2' as Hstar1'.
+      right. left. done.
+(*
     apply star_starN in Hstar1.
     apply star_starN in Hstar2.
     destruct Hstar1 as [n1 HstarN1].
@@ -721,7 +771,8 @@ Section Decomposition.
       admit.
     - right. right.
       admit.
-  Admitted.
+*)
+  Qed.
 
   Lemma program_ub_doesnt_improve:
     forall t beh_imp,
