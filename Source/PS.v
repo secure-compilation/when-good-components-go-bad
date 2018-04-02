@@ -1504,13 +1504,20 @@ Admitted.
     - If they are in the program, the transitions are deterministic, thus s1
       is always after s and goes on to s2.
 
-    - If they are in the program, the transitions are silent, thus s = s1,
+    - If they are in the context, the transitions are silent, thus s = s1,
       which goes on to s2. *)
 Lemma state_determinism_star_silent_prefix :
   forall p ctx s t s1 s2,
     star (PS.kstep p ctx) (prepare_global_env p) s E0 s1 ->
     star (PS.kstep p ctx) (prepare_global_env p) s t s2 ->
     star (PS.kstep p ctx) (prepare_global_env p) s1 t s2.
+Proof.
+  intros p ctx s t s1 s2 Hstar_E0 Hstar_t.
+  destruct (is_context_component s ctx) eqn:Hturn.
+  - pose proof context_epsilon_star_is_silent Hturn Hstar_E0 as Heq.
+    subst s1.
+    done.
+  - admit.
 Admitted.
 
 End PS.
