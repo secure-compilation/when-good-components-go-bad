@@ -4,6 +4,7 @@ Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Linking.
 Require Import Common.Maps.
+Require Import Common.CompCertExtensions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import Source.Language.
@@ -829,6 +830,12 @@ Section Semantics.
       | Hcs_step: CS.kstep _ _ _ _ |- _ =>
         apply CS.singleton_traces in Hcs_step
       end; auto.
+  Qed.
+
+  Lemma atomic_traces:
+    atomic (step sem) (globalenv sem).
+  Proof.
+    apply (single_events_atomic singleton_traces).
   Qed.
 End Semantics.
 
