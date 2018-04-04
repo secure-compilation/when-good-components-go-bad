@@ -479,6 +479,21 @@ Section Decomposition.
       C2 \in domm iface ->
       well_defined_components iface (ERet C1 arg C2).
 
+  Remark genv_buffers_in_interface : forall C b,
+    genv_buffers (prepare_global_env (program_link p c)) C = Some b ->
+    C \in domm (prog_interface (program_link p c)).
+  Proof.
+    intros C b Hbufs.
+    inversion Hbufs as [Hmap].
+    inversion wf1 as [_ _ _ _ Hbufs1 _ _].
+    inversion wf2 as [_ _ _ _ Hbufs2 _ _].
+    pose proof mapm_some_in_domm Component.id _ _ _ Hmap as Hdomm.
+    rewrite domm_mapm in Hdomm.
+    rewrite domm_union. rewrite domm_union in Hdomm.
+    rewrite Hbufs1. rewrite Hbufs2.
+    assumption.
+  Qed.
+
   Lemma ub_behavior_has_well_defined_components:
     forall t,
       program_behaves (CS.sem (program_link p c)) (Goes_wrong t) ->
