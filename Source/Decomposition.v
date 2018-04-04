@@ -479,6 +479,9 @@ Section Decomposition.
       C2 \in domm iface ->
       well_defined_components iface (ERet C1 arg C2).
 
+  Definition well_defined_components_trace (iface : Program.interface) (t : trace) : Prop :=
+    forall e, In e t -> well_defined_components iface e.
+
   Remark genv_buffers_in_interface : forall C b,
     genv_buffers (prepare_global_env (program_link p c)) C = Some b ->
     C \in domm (prog_interface (program_link p c)).
@@ -494,6 +497,62 @@ Section Decomposition.
     assumption.
   Qed.
 
+  (* Several alternative formulations are possible. One may include the ERet event
+     in the star, express the inclusion of ECall in the trace via In, etc. *)
+  Lemma eret_from_initial_star_goes_after_ecall_cs :
+    forall s0 t s1 s2 C' v C,
+      CS.initial_state (program_link p c) s0 ->
+      star CS.kstep (prepare_global_env (program_link p c)) s0 t s1 ->
+      CS.kstep (prepare_global_env (program_link p c)) s1 [ERet C' v C] s2 ->
+    exists t1 t2 P v',
+      t = t1 ** [ECall C P v' C'] ** t2.
+  Admitted.
+
+  Lemma ecall_from_star_has_well_defined_components :
+    forall s0 t1 s1 s2 C P v C',
+      star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s1 ->
+      CS.kstep (prepare_global_env (program_link p c)) s1 [ECall C P v C'] s2 ->
+      well_defined_components (prog_interface (program_link p c)) (ECall C P v C').
+  Proof.
+    intros s0 t1 s1 s2 C P v C' Hstar Hkstep.
+    inversion Hkstep; subst.
+    apply wf_comps_call;
+      eapply genv_buffers_in_interface; eassumption.
+  Qed.
+
+  Lemma eret_from_initial_star_has_well_defined_components :
+    forall s0 t1 s1 s2 C v C',
+      CS.initial_state (program_link p c) s0 ->
+      star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s1 ->
+      CS.kstep (prepare_global_env (program_link p c)) s1 [ERet C v C'] s2 ->
+      well_defined_components (prog_interface (program_link p c)) (ERet C v C').
+  Admitted.
+
+  (* RB: TODO: Can be further simplified by automating inversion a bit. *)
+  Lemma step_from_initial_star_has_well_defined_components :
+    forall s0 t1 s1 t2 s2,
+      CS.initial_state (program_link p c) s0 ->
+      star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s1 ->
+      CS.kstep (prepare_global_env (program_link p c)) s1 t2 s2 ->
+      well_defined_components_trace (prog_interface (program_link p c)) t2.
+  Proof.
+    intros s0 t1 s1 t2 s2 Hinitial Hstar Hkstep e HIn.
+    inversion Hkstep; subst;
+      try inversion HIn; subst.
+    - eapply ecall_from_star_has_well_defined_components; eassumption.
+    - by inversion H6.
+    - eapply eret_from_initial_star_has_well_defined_components; eassumption.
+    - by inversion H2.
+  Qed.
+
+  (* This follows easily from previous lemmas by a right-side induction on Star. *)
+  Lemma initial_star_has_well_defined_components :
+    forall sini t sfin,
+      initial_state (CS.sem (program_link p c)) sini ->
+      Star (CS.sem (program_link p c)) sini t sfin ->
+      well_defined_components_trace (unionm (prog_interface p) (prog_interface c)) t.
+  Admitted.
+
   Lemma ub_behavior_has_well_defined_components:
     forall t,
       program_behaves (CS.sem (program_link p c)) (Goes_wrong t) ->
@@ -501,7 +560,12 @@ Section Decomposition.
       In e t ->
       well_defined_components (prog_interface (program_link p c)) e.
   Proof.
-  Admitted.
+    intros t Hprbeh e HIn.
+    inversion Hprbeh as [sini tmp Hini Hstbeh |]; subst;
+      last easy.
+    inversion Hstbeh as [| | | tmp sfin HStar HNostep Hfinalst]; subst.
+    eapply initial_star_has_well_defined_components; eassumption.
+  Qed.
 
   Lemma ub_blaming:
     forall t,
