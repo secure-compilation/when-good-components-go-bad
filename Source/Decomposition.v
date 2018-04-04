@@ -504,7 +504,10 @@ Section Decomposition.
       CS.initial_state (program_link p c) s0 ->
       star CS.kstep (prepare_global_env (program_link p c)) s0 t s1 ->
       CS.kstep (prepare_global_env (program_link p c)) s1 [ERet C' v C] s2 ->
-    exists t1 t2 P v',
+    exists t1 s s' t2 P v',
+      star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s /\
+      CS.kstep (prepare_global_env (program_link p c)) s [ECall C P v' C'] s' /\
+      star CS.kstep (prepare_global_env (program_link p c)) s' t2 s1 /\
       t = t1 ** [ECall C P v' C'] ** t2.
   Admitted.
 
@@ -526,7 +529,18 @@ Section Decomposition.
       star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s1 ->
       CS.kstep (prepare_global_env (program_link p c)) s1 [ERet C v C'] s2 ->
       well_defined_components (prog_interface (program_link p c)) (ERet C v C').
-  Admitted.
+  Proof.
+    intros s0 t1 s1 s2 C v C' Hinitial Hstar Hkstep.
+    inversion Hkstep; subst.
+    apply wf_comps_ret.
+    - destruct (eret_from_initial_star_goes_after_ecall_cs Hinitial Hstar Hkstep)
+        as [t1' [s1' [s2' [t2' [P [v' [Hstar1' [Hkstep' [Hstar2' Heq']]]]]]]]].
+      subst t1.
+      pose proof ecall_from_star_has_well_defined_components Hstar1' Hkstep' as Hwdc.
+      inversion Hwdc; subst.
+      assumption.
+    - eapply genv_buffers_in_interface; eassumption.
+  Qed.
 
   (* RB: TODO: Can be further simplified by automating inversion a bit. *)
   Lemma step_from_initial_star_has_well_defined_components :
