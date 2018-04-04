@@ -2,6 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
+Require Import Common.CompCertExtensions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import Source.Language.
@@ -442,6 +443,12 @@ Section Semantics.
     unfold single_events.
     intros s t s' Hstep.
     inversion Hstep; subst; simpl; auto.
+  Qed.
+
+  Lemma atomic_traces:
+    atomic (step sem) (globalenv sem).
+  Proof.
+    apply (single_events_atomic singleton_traces).
   Qed.
 
   Theorem receptiveness:
