@@ -3,6 +3,7 @@ Require Import Common.Util.
 Require Import Common.Memory.
 Require Import Common.Blame.
 Require Import Common.Linking.
+Require Import Common.CompCertExtensions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -565,7 +566,21 @@ Section Decomposition.
       initial_state (CS.sem (program_link p c)) sini ->
       Star (CS.sem (program_link p c)) sini t sfin ->
       well_defined_components_trace (unionm (prog_interface p) (prog_interface c)) t.
-  Admitted.
+  Proof.
+    intros sini t sfin Hinitial Hstar.
+    apply star_iff_starR in Hstar.
+    induction Hstar as [| s0 t1 s1 t2 s2 t HStar IHHstar HStep].
+    - easy.
+    - subst t.
+      specialize (IHHstar Hinitial).
+      apply star_iff_starR in HStar.
+      pose proof
+        @step_from_initial_star_has_well_defined_components _ _ _ _ _ Hinitial HStar HStep
+        as Hwdc.
+      intros e HIn.
+      apply in_app_or in HIn as [HIn1 | HIn2];
+        by auto.
+  Qed.
 
   Lemma ub_behavior_has_well_defined_components:
     forall t,
