@@ -7,7 +7,68 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(* Smallstep semantics. *)
+(* Smallstep semantics: alternative star. *)
+
+Section CLOSURES.
+
+Variable genv: Type.
+Variable state: Type.
+
+Variable step: genv -> state -> trace -> state -> Prop.
+
+Inductive starR (ge: genv): state -> trace -> state -> Prop :=
+  | starR_refl: forall s,
+      starR ge s E0 s
+  | starR_step: forall s1 t1 s2 t2 s3 t,
+      starR ge s1 t1 s2 -> step ge s2 t2 s3 -> t = t1 ** t2 ->
+      starR ge s1 t s3.
+
+Lemma starR_one:
+  forall ge s1 t s2, step ge s1 t s2 -> starR ge s1 t s2.
+Proof.
+  intros. eapply starR_step; eauto. apply starR_refl. traceEq.
+Qed.
+
+Lemma starR_trans:
+  forall ge s1 t1 s2, starR ge s1 t1 s2 ->
+  forall t2 s3 t, starR ge s2 t2 s3 -> t = t1 ** t2 -> starR ge s1 t s3.
+Proof.
+  intros ge s1 t1 s2 HstarR1 t2 s3 t HstarR2 Ht.
+  generalize dependent t.
+  generalize dependent t1.
+  generalize dependent s1.
+  induction HstarR2 as [| s1 t1 s2 t2 s3 t HstarR1 IHHstarR2 Hstep2 Ht].
+  - intros s1 t1 HstarR1 t Ht.
+    rewrite E0_right in Ht.
+    subst.
+    assumption.
+  - intros s0 t0 HstarR0 t3 Ht3.
+    eapply starR_step.
+    + apply (IHHstarR2 _ _ HstarR0 _ (eq_refl (t0 ** t1))).
+    + apply Hstep2.
+    + subst.
+      rewrite Eapp_assoc.
+      reflexivity.
+Qed.
+
+Lemma star_iff_starR : forall ge s1 t s2, star step ge s1 t s2 <-> starR ge s1 t s2.
+Proof.
+  split.
+  - intros H.
+    induction H.
+    + apply starR_refl.
+    + apply starR_one in H.
+      apply (starR_trans H IHstar H1).
+  - intros H.
+    induction H.
+    + apply star_refl.
+    + apply star_one in H0.
+      apply (star_trans IHstarR H0 H1).
+Qed.
+
+End CLOSURES.
+
+(* Smallstep semantics: single events. *)
 
 Remark singleton_cons_nil_tail : forall A e l,
   @length A (e :: l) = 1 ->
