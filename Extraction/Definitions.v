@@ -5,9 +5,9 @@ Require Import Common.Values.
 From mathcomp Require Import ssrfun seq ssrint ssrnat.
 Require Import Arith ZArith.
 Require Import Coq.extraction.ExtrOcamlBasic.
-Require Import Coq.extraction.ExtrOcamlNatInt.
-Require Import Coq.extraction.ExtrOcamlZInt.
-Require Import Coq.extraction.ExtrOcamlIntConv.
+Require Import Coq.extraction.ExtrOcamlNatBigInt.
+Require Import Coq.extraction.ExtrOcamlZBigInt.
+Require Import Coq.extraction.ExtrOcamlBigIntConv.
 Require Export Extraction.
 Require Import Coq.Strings.String.
 
@@ -104,60 +104,65 @@ Extract Constant print_explicit_exit => "(fun _ -> print_string ""EXIT""; print_
 Extract Constant print_string_error => "(fun str -> print_string ""FAILED with ""; List.fold_left (fun _ c -> print_char c) () str; print_newline ())".
 Extract Constant print_error => "(fun n -> print_string ""FAILED with ""; print_string (Big_int.string_of_big_int n); print_newline ())".
 
-Extract Constant leb    => "(<=)".
+Extract Constant leb    => "Big_int.le_big_int".
 Extract Constant eqb    => "(=)".
 
 
 (* ssr nat *)
-Extract Constant ssrnat.eqn             => "(=)".
-Extract Constant ssrnat.addn_rec        => "(+)".
-Extract Constant ssrnat.addn            => "(+)".
-Extract Constant ssrnat.subn_rec        => "(fun x y -> max (x - y) 0)".
-Extract Constant ssrnat.subn            => "(fun x y -> max (x - y) 0)".
-Extract Constant ssrnat.leq             => "(<=)".
-Extract Constant ssrnat.maxn            => "max".
-Extract Constant ssrnat.minn            => "min".
-Extract Constant ssrnat.muln_rec        => "( * )".
-Extract Constant ssrnat.muln            => "( * )".
-Extract Constant ssrnat.expn_rec        => 
-"(fun x y -> 
-  let rec f acc x = function
-  | 0 -> acc
-  | n -> f (acc * x) x (n-1)
+Extract Constant ssrnat.eqn             => "Big_int.eq_big_int".
+(* Extract Constant ssrnat.addn_rec        => "(+)". *)
+(* Extract Constant ssrnat.addn            => "(+)". *)
+(* Extract Constant ssrnat.subn_rec        => "(fun x y -> max (x - y) 0)". *)
+(* Extract Constant ssrnat.subn            => "(fun x y -> max (x - y) 0)". *)
+(* Extract Constant ssrnat.leq             => "(<=)". *)
+(* Extract Constant ssrnat.maxn            => "max". *)
+(* Extract Constant ssrnat.minn            => "min". *)
+(* Extract Constant ssrnat.muln_rec        => "( * )". *)
+(* Extract Constant ssrnat.muln            => "( * )". *)
+Extract Constant ssrnat.expn_rec        =>
+"(fun x y ->
+  let rec f acc x n =
+  if Big_int.eq_big_int n (Big_int.zero_big_int) then acc
+  else f (Big_int.mult_big_int acc x) x (Big.max Big.zero (Big.pred n))
   in
-  f 1 x y)".
+  f (Big_int.succ_big_int Big_int.zero_big_int) x y)".
 Extract Constant ssrnat.expn            =>
-"(fun x y -> 
-  let rec f acc x = function
-  | 0 -> acc
-  | n -> f (acc * x) x (n-1)
+"(fun x y ->
+  let rec f acc x n =
+  if Big_int.eq_big_int n (Big_int.zero_big_int) then acc
+  else f (Big_int.mult_big_int acc x) x (Big.max Big.zero (Big.pred n))
   in
-  f 1 x y)".
-Extract Constant ssrnat.nat_of_bool     => "(fun b -> if b then 1 else 0)".
-Extract Constant ssrnat.odd             => "(fun n -> (n mod 2) = 1)".
-Extract Constant ssrnat.double_rec      => "(fun n -> n * 2)".
-Extract Constant ssrnat.double          => "(fun n -> n * 2)".
-Extract Constant ssrnat.half            => "(fun n -> n / 2)".
-Extract Constant ssrnat.uphalf          => "(fun n -> (n + 1) / 2)".
+  f (Big_int.succ_big_int Big_int.zero_big_int) x y)".
+
+(* Extract Constant ssrnat.nat_of_bool     => "(fun b -> if b then 1 else 0)". *)
+Extract Constant ssrnat.odd             => "(fun n -> Big_int.eq_big_int
+                                                        (Big_int.mod_big_int n
+                                                          (Big_int.succ_big_int
+                                                             Big_int.unit_big_int))
+                                                         Big_int.unit_big_int)".
+(* Extract Constant ssrnat.double_rec      => "(fun n -> n * 2)". *)
+(* Extract Constant ssrnat.double          => "(fun n -> n * 2)". *)
+(* Extract Constant ssrnat.half            => "(fun n -> n / 2)". *)
+(* Extract Constant ssrnat.uphalf          => "(fun n -> (n + 1) / 2)". *)
 (* ssr div *)
-Extract Constant div.edivn    => "(fun n m -> (n / m, n mod m))".
-Extract Constant div.divn     => "(/)".
-Extract Constant div.modn     => "(mod)".
+Extract Constant div.edivn    => "fun m d -> if Big.lt Big.zero d then Big_int.quomod_big_int m d else (Big.zero,m)".
+Extract Constant div.divn     => "fun m d -> if Big.lt Big.zero d then Big_int.div_big_int m d else Big.zero".
+Extract Constant div.modn     => "fun m d -> if Big.lt Big.zero d then Big_int.mod_big_int m d else m".
 (* Extract Constant div.gcdn_rec => "Big.gcd". *)
 (* Extract Constant div.gcdn     => "Big.gcd". *)
 (* ssr int *)
-Extract Inductive ssrint.int => int
-                         ["" "(fun n -> - (n+1))"]
-                         "(fun fP fN n -> if n >= 0 then fP n else fN ((abs n) -1))".
-Extract Constant intZmod.addz   => "(+)".
-Extract Constant intZmod.oppz   => "(~-)".
-Extract Constant intRing.mulz   => "( * )".
-Extract Constant absz           => "abs".
-Extract Constant intOrdered.lez => "(<=)".
-Extract Constant intOrdered.ltz => "(<)".
+(* Extract Inductive ssrint.int => int *)
+(*                          ["" "(fun n -> - (n+1))"] *)
+(*                          "(fun fP fN n -> if n >= 0 then fP n else fN ((abs n) -1))". *)
+(* Extract Constant intZmod.addz   => "(+)". *)
+(* Extract Constant intZmod.oppz   => "(~-)". *)
+(* Extract Constant intRing.mulz   => "( * )". *)
+(* Extract Constant absz           => "abs". *)
+(* Extract Constant intOrdered.lez => "(<=)". *)
+(* Extract Constant intOrdered.ltz => "(<)". *)
 
-Extract Constant Nat.eq_dec => "(=)".
-Extract Constant Nat.eqb        => "(=)".
+Extract Constant Nat.eq_dec => "Big_int.eq_big_int".
+Extract Constant Nat.eqb    => "Big_int.eq_big_int".
 
 (* Provide tail-recursive versions of functions *)
 Extract Constant foldr => "

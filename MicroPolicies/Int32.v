@@ -107,3 +107,16 @@ constructor=> i.
 rewrite /decode_instr /encode_instr /= wpackK /hnth /=.
 by rewrite word_of_opK //= wcastK wpackK args_of_instrK.
 Qed.
+
+(* Eval compute in encode_instr (Nop concrete_int_32_mt). *)
+(* 16 ->
+000000000000000000000000000 10000
+                            NOP
+ *)
+
+(* Eval vm_compute in decode_instr (as_word 134217730). *)
+
+(* 134217730 ->
+000010000000000000000000000 00010
+                            CONST
+ *)
