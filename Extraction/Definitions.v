@@ -106,7 +106,9 @@ Extract Constant print_error => "(fun n -> print_string ""FAILED with ""; print_
 
 Extract Constant leb    => "Big_int.le_big_int".
 Extract Constant eqb    => "(=)".
-
+(* Extract Constant Nat.eq_dec => "Big_int.eq_big_int". *)
+(* Extract Constant Nat.leb    => "Big_int.le_big_int". *)
+(* Extract Constant Nat.eqb    => "Big_int.eq_big_int". *)
 
 (* ssr nat *)
 Extract Constant ssrnat.eqn             => "Big_int.eq_big_int".
@@ -161,9 +163,6 @@ Extract Constant div.modn     => "fun m d -> if Big.lt Big.zero d then Big_int.m
 (* Extract Constant intOrdered.lez => "(<=)". *)
 (* Extract Constant intOrdered.ltz => "(<)". *)
 
-Extract Constant Nat.eq_dec => "Big_int.eq_big_int".
-Extract Constant Nat.eqb    => "Big_int.eq_big_int".
-
 (* Provide tail-recursive versions of functions *)
 Extract Constant foldr => "
 (fun f b l ->
@@ -184,8 +183,14 @@ Extract Constant foldr => "
 
 Extract Constant map =>
 "(fun f l -> 
-  let rec mapr acc = function
+  let rev l = 
+    let rec revr acc = function
     | [] -> acc
+    | hd::tl -> revr (hd::acc) tl
+    in revr [] l
+  in
+  let rec mapr acc = function
+    | [] -> rev acc
     | x::xs -> mapr ((f x)::acc) xs
   in
   mapr [] l)".
