@@ -797,6 +797,11 @@ Section Decomposition.
       }
       subst.
       (* 2. Equality of memories. *)
+      (* RB: TODO: As confirmed with GF, this cannot be proved at the moment, because the
+         memories of c and p' need not be equal.
+         We know that the domains of the buffers of both programs coincide, but from this
+         we cannot infer that their images are the same.
+         Probably due to a weak definition of initial states. *)
       admit.
   Admitted.
 
