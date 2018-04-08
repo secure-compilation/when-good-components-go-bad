@@ -512,6 +512,24 @@ Proof.
     apply IHHstar; auto.
 Qed.
 
+Lemma state_determinism_program:
+  forall p ctx G ips t ips',
+    is_program_component ips ctx ->
+    step p ctx G ips t ips' ->
+  forall ips'',
+    step p ctx G ips t ips'' ->
+    ips' = ips''.
+Admitted.
+
+Lemma state_determinism_context:
+  forall p ctx G ips t ips',
+    is_context_component ips ctx ->
+    step p ctx G ips t ips' ->
+  forall ips'',
+    step p ctx G ips t ips'' ->
+    ips' = ips''.
+Admitted.
+
 Theorem state_determinism:
   forall p ctx G ips t ips',
     step p ctx G ips t ips' ->
@@ -519,7 +537,15 @@ Theorem state_determinism:
     step p ctx G ips t ips'' ->
     ips' = ips''.
 Proof.
-Admitted.
+  intros p ctx G ps t ps1 Hstep_ps1 ps2 Hstep_ps2.
+  inversion Hstep_ps1
+    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hstep_cs1 Hpartial1 Hpartial1'];
+    subst.
+  inversion Hpartial1 as [cstk ? cmem ? regs pc Hpc | cstk ? cmem ? regs pc Hcc];
+    subst.
+  - eapply (state_determinism_program Hpc Hstep_ps1 Hstep_ps2).
+  - eapply (state_determinism_context Hcc Hstep_ps1 Hstep_ps2).
+Qed.
 
 (* partial semantics *)
 
