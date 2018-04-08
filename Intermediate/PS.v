@@ -16,6 +16,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Module PS.
 
 Import Intermediate.
@@ -519,6 +521,32 @@ Lemma state_determinism_program:
   forall ips'',
     step p ctx G ips t ips'' ->
     ips' = ips''.
+Proof.
+  intros p ctx G ps t ps1 Hcomp Hstep_ps1 ps2 Hstep_ps2.
+
+  inversion Hstep_ps1
+    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hstep_cs1 Hpartial1 Hpartial1'];
+    subst.
+  inversion Hstep_ps2
+    as [p2 ? ? ? cs2 cs2' Hsame_iface _ Hwfp2 Hlink2 Hstep_cs2 Hpartial2 Hpartial2'];
+    subst.
+
+  (* Case analysis on who has control. *)
+  inversion Hpartial1 as [cstk1 ? cmem1 ? regs1 pc1 Hpc1 | cstk1 ? cmem1 ? regs1 pc1 Hcc1];
+    subst;
+    (* Context control is discharged by contradiction. *)
+    last (simplify_turn; rewrite Hcc1 in Hcomp; discriminate).
+
+  inversion Hpartial2 as [cstk2 ? cmem2 ? regs2 pc2 Hpc2 Hmem12 Hstk12 |]; subst.
+  inversion Hstep_cs1; subst;
+  inversion Hstep_cs2; subst;
+  inversion Hpartial1'
+    as [cstk1' ? cmem1' ? regs1' pc1' Hpc1' | cstk1' ? cmem1' ? regs1' pc1' Hcc1'];
+    subst;
+  inversion Hpartial2'
+    as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
+    subst.
+  (* 14 seconds, generates 584 goals. *)
 Admitted.
 
 Lemma state_determinism_context:
