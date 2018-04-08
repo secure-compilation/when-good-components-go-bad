@@ -1381,18 +1381,11 @@ Theorem state_determinism:
     sps' = sps''.
 Proof.
   intros p ctx G sps t sps' Hstep1 sps'' Hstep2.
-
-  inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hwfp Hwfp1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
-    subst.
-  inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _ Hwfp2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
-    subst.
-
+  inversion Hstep1 as [? ? ? ? ? _ _ _ _ _ _ Hpartial_sps1 _]; subst.
   (* case analysis on who has control *)
   inversion Hpartial_sps1; subst.
-  - eapply state_determinism_program; now eauto.
-  - eapply state_determinism_context; now eauto.
+  - eapply state_determinism_program; eassumption.
+  - eapply state_determinism_context; eassumption.
 Qed.
 
 (* Consider two star sequences starting from the same state (s),

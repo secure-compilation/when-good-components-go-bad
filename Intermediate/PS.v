@@ -538,13 +538,11 @@ Theorem state_determinism:
     ips' = ips''.
 Proof.
   intros p ctx G ps t ps1 Hstep_ps1 ps2 Hstep_ps2.
-  inversion Hstep_ps1
-    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hstep_cs1 Hpartial1 Hpartial1'];
-    subst.
-  inversion Hpartial1 as [cstk ? cmem ? regs pc Hpc | cstk ? cmem ? regs pc Hcc];
-    subst.
-  - eapply (state_determinism_program Hpc Hstep_ps1 Hstep_ps2).
-  - eapply (state_determinism_context Hcc Hstep_ps1 Hstep_ps2).
+  inversion Hstep_ps1 as [? ? ? ? ? _ _ _ _ _ _ Hpartial1 _]; subst.
+  (* Case analysis on who has control. *)
+  inversion Hpartial1; subst.
+  - eapply state_determinism_program; eassumption.
+  - eapply state_determinism_context; eassumption.
 Qed.
 
 (* partial semantics *)
