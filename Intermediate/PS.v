@@ -187,10 +187,10 @@ Proof.
 Qed.
 
 Lemma partialized_state_is_partial:
-  forall ips ctx,
-    partial_state ctx ips (partialize ips ctx).
+  forall ics ctx,
+    partial_state ctx ics (partialize ics ctx).
 Proof.
-  intros ips ctx.
+  intros ics ctx.
   apply partialize_correct.
   reflexivity.
 Qed.
