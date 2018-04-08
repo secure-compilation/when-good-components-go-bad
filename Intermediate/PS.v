@@ -514,6 +514,35 @@ Proof.
     apply IHHstar; auto.
 Qed.
 
+Remark pc_component_not_in_ctx:
+  forall stk mem regs pc ctx,
+    is_program_component (PC (stk, mem, regs, pc)) ctx ->
+    Pointer.component pc \notin domm ctx.
+Proof.
+  intros stk mem regs pc ctx Hpc.
+  simplify_turn.
+  assumption.
+Qed.
+
+Remark cc_component_in_ctx:
+  forall cid stk mem ctx,
+    is_context_component (CC (cid, stk, mem)) ctx ->
+    cid \in domm ctx.
+Proof.
+  intros cid stk mem ctx Hcc.
+  simplify_turn.
+  assumption.
+Qed.
+
+(* Taking care for now not to mangle hypotheses that may be useful later.
+   Using the above remarks instead of simplify_turn directly is somewhat faster. *)
+Ltac discharge_pc_cc Hpc Hcc :=
+  pose proof pc_component_not_in_ctx Hpc as Hin;
+  pose proof cc_component_in_ctx Hcc as Hnotin;
+  rewrite Pointer.inc_preserves_component in Hnotin;
+  rewrite Hnotin in Hin;
+  discriminate.
+
 Lemma state_determinism_program:
   forall p ctx G ips t ips',
     is_program_component ips ctx ->
@@ -538,15 +567,22 @@ Proof.
     last (simplify_turn; rewrite Hcc1 in Hcomp; discriminate).
 
   inversion Hpartial2 as [cstk2 ? cmem2 ? regs2 pc2 Hpc2 Hmem12 Hstk12 |]; subst.
+  Time
   inversion Hstep_cs1; subst;
-  inversion Hstep_cs2; subst;
-  inversion Hpartial1'
-    as [cstk1' ? cmem1' ? regs1' pc1' Hpc1' | cstk1' ? cmem1' ? regs1' pc1' Hcc1'];
-    subst;
-  inversion Hpartial2'
-    as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
-    subst.
-  (* 14 seconds, generates 584 goals. *)
+    inversion Hstep_cs2; subst;
+    inversion Hpartial1'
+      as [cstk1' ? cmem1' ? regs1' pc1' Hpc1' | cstk1' ? cmem1' ? regs1' pc1' Hcc1'];
+      subst;
+    inversion Hpartial2'
+      as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
+      subst;
+    (* 14 seconds, generates 584 goals. *)
+    try discharge_pc_cc Hcomp Hcc1';
+    try discharge_pc_cc Hcomp Hcc2';
+    (* 23 seconds, 233 goals left. *)
+    try rewrite Hstk12 Hmem12;
+    try reflexivity.
+    (* 27 seconds, 224 goals left. *)
 Admitted.
 
 Lemma state_determinism_context:
