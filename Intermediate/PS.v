@@ -559,11 +559,25 @@ Lemma genv_procedures_program_link_left:
     (genv_procedures (prepare_global_env p)) Cid = procs.
 Admitted.
 
+Lemma find_label_in_component_program_link_left:
+  forall p c pc l pc',
+    find_label_in_component (prepare_global_env (program_link p c)) pc l = pc' ->
+    Pointer.component pc \notin domm (prog_interface c) ->
+    find_label_in_component (prepare_global_env p) pc l = pc'.
+Admitted.
+
+Lemma find_label_in_procedure_program_link_left:
+  forall p c pc l pc',
+    find_label_in_procedure (prepare_global_env (program_link p c)) pc l = pc' ->
+    Pointer.component pc \notin domm (prog_interface c) ->
+    find_label_in_procedure (prepare_global_env p) pc l = pc'.
+Admitted.
+
 (* In the program, both steps in sync should fetch the same instruction.
    By chaining inversions on component procedures, procedure code and
    instruction, goals involving pairs of non-matching instructions are
-   discharged by contradiction. *)
-Ltac discharge_op_neq Hop1 Hop2 Hcomp Hsame_iface :=
+   moreover discharged by contradiction. *)
+Ltac unify_op Hop1 Hop2 Hcomp Hsame_iface :=
   apply pc_component_not_in_ctx in Hcomp;
   pose proof Hcomp as Hcomp';
   rewrite <- Hsame_iface in Hcomp';
@@ -576,7 +590,66 @@ Ltac discharge_op_neq Hop1 Hop2 Hcomp Hsame_iface :=
   rewrite Hprocs2 in Hprocs1;
   inversion Hprocs1; subst code2;
   rewrite Hinstr2 in Hinstr1;
-  discriminate Hinstr1.
+  inversion Hinstr1.
+
+Ltac discharge_op_neq Hop1 Hop2 Hcomp Hsame_iface :=
+  unify_op Hop1 Hop2 Hcomp Hsame_iface;
+  discriminate.
+
+Ltac unify_op_eq Hop1 Hop2 Hcomp Hsame_iface :=
+  unify_op Hop1 Hop2 Hcomp Hsame_iface;
+  subst.
+
+Ltac unify_get :=
+  match goal with
+  | Hget1 : Register.get ?REG ?REGS = Ptr ?PTR1,
+    Hget2 : Register.get ?REG ?REGS = Ptr ?PTR2 |- _ =>
+    rewrite Hget2 in Hget1;
+    inversion Hget1; subst
+  end.
+
+    (* Hcomp' does not work as name, Htest does*)
+Ltac unify_load pc Hcomp Hmem12 :=
+  match goal with
+  | Hload1 : Memory.load ?CMEM1 ?PTR = Some ?V1,
+    Hload2 : Memory.load ?CMEM2 ?PTR = Some ?V2,
+    Heq: Pointer.component ?PTR = Pointer.component pc |- _ =>
+    pose proof Hcomp as Hptr;
+    rewrite <- Heq in Hptr;
+    pose proof program_load_in_partialized_memory Hmem12 Hptr Hload1 Hload2;
+    subst
+  end.
+
+Ltac unify_store pc Hcomp Hmem12 :=
+  match goal with
+  | Hstore1 : Memory.store ?CMEM1 ?PTR ?GET = Some ?MEM1,
+    Hstore2 : Memory.store ?CMEM2 ?PTR ?GET = Some ?MEM2,
+    Heq: Pointer.component ?PTR = Pointer.component pc |- _ =>
+    pose proof Hcomp as Hptr;
+    rewrite <- Heq in Hptr;
+    pose proof program_store_in_partialized_memory Hmem12 Hptr Hstore1 Hstore2 as Hmem12';
+    rewrite Hmem12'
+  end.
+
+Ltac unify_component_label Hcomp Hcomp' :=
+  match goal with
+  | Hlabel1 : find_label_in_component (prepare_global_env (program_link ?P ?P1)) ?PC ?L = Some ?PC1,
+    Hlabel2 : find_label_in_component (prepare_global_env (program_link ?P ?P2)) ?PC ?L = Some ?PC2  |- _ =>
+    pose proof find_label_in_component_program_link_left Hlabel1 Hcomp as Hlabel1';
+    pose proof find_label_in_component_program_link_left Hlabel2 Hcomp' as Hlabel2';
+    rewrite Hlabel2' in Hlabel1';
+    inversion Hlabel1'; subst
+  end.
+
+Ltac unify_procedure_label Hcomp Hcomp' :=
+  match goal with
+  | Hlabel1 : find_label_in_procedure (prepare_global_env (program_link ?P ?P1)) ?PC ?L = Some ?PC1,
+    Hlabel2 : find_label_in_procedure (prepare_global_env (program_link ?P ?P2)) ?PC ?L = Some ?PC2  |- _ =>
+    pose proof find_label_in_procedure_program_link_left Hlabel1 Hcomp as Hlabel1';
+    pose proof find_label_in_procedure_program_link_left Hlabel2 Hcomp' as Hlabel2';
+    rewrite Hlabel2' in Hlabel1';
+    inversion Hlabel1'; subst
+  end.
 
 Lemma state_determinism_program:
   forall p ctx G ips t ips',
@@ -620,6 +693,16 @@ Proof.
     (* Some easy goals can be solved by rewriting. *)
     try rewrite Hstk12;
     try rewrite Hmem12;
+    try reflexivity;
+    (* For the remaining goals, unify components of their matching opcodes and their
+       various optional components: register and memory reads and stores, component
+       labels, and try for equality. *)
+    unify_op_eq Hop1 Hop2 Hcomp Hsame_iface;
+    try unify_get;
+    try unify_load pc1 Hcomp Hmem12;
+    try unify_store pc1 Hcomp Hmem12;
+    try unify_component_label Hcomp Hcomp';
+    try unify_procedure_label Hcomp Hcomp';
     try reflexivity.
 Admitted.
 
