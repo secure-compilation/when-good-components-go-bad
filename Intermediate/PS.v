@@ -573,10 +573,18 @@ Lemma find_label_in_procedure_program_link_left:
     find_label_in_procedure (prepare_global_env p) pc l = pc'.
 Admitted.
 
-Lemma genv_entrypoints_program_link_left : forall C P p c b,
-  EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) = b ->
-  C \notin domm (prog_interface c) ->
-  EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = b.
+Lemma genv_entrypoints_program_link_left :
+  forall C P p c b,
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) = b ->
+    C \notin domm (prog_interface c) ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = b.
+Admitted.
+
+Lemma partial_pointer_to_pointer_eq :
+  forall pt1 pt2,
+    (Pointer.component pt1, Some (Pointer.block pt1, Pointer.offset pt1)) =
+    (Pointer.component pt2, Some (Pointer.block pt2, Pointer.offset pt2)) ->
+    pt1 = pt2.
 Admitted.
 
 (* In the program, both steps in sync should fetch the same instruction.
@@ -684,6 +692,23 @@ Ltac discharge_pc Hpc Hcc :=
   rewrite Hcc in Hpc;
   discriminate.
 
+(* Generates two sub-goals. *)
+Ltac analyze_stack p1 pc1 pc2 Hhead :=
+  match goal with
+  | Heq : Pointer.component pc1 = Pointer.component pc2  |- _ =>
+    unfold to_partial_frame in Hhead;
+    (* Case analysis on both frame pointers. *)
+    destruct (Pointer.component pc1 \in domm (prog_interface p1)) eqn:Heq1;
+    destruct (Pointer.component pc2 \in domm (prog_interface p1)) eqn:Heq2;
+    [                                               (* User-guided contradiction *)
+    | discriminate                                  (* Direct contradiction *)
+    | discriminate                                  (* Direct contradiction *)
+    | apply partial_pointer_to_pointer_eq in Hhead;
+      subst                                         (* User tactic *)
+    ]
+  end.
+
+
 Lemma state_determinism_program:
   forall p ctx G ips t ips',
     is_program_component ips ctx ->
@@ -723,13 +748,9 @@ Proof.
       subst;
     try discharge_pc_cc Hcomp Hcc1';
     try discharge_pc_cc Hcomp Hcc2';
-    (* Some easy goals can be solved by rewriting. *)
-    try rewrite Hstk12;
-    try rewrite Hmem12;
-    try reflexivity;
     (* For the remaining goals, unify components of their matching opcodes and their
        various optional components: register and memory reads and stores, component
-       labels, allocs. *)
+       labels, allocs and entry points. *)
     unify_op_eq Hop1 Hop2 Hcomp Hsame_iface;
     simplify_turn;
     try unify_get;
@@ -739,13 +760,29 @@ Proof.
     try unify_procedure_label Hcomp Hcomp';
     try unify_alloc Hmem12 Hcomp;
     try unify_entrypoint Hpc1' Hpc2' Hsame_iface;
-    (* ... *)
+    (* Rewrite memory and stack, where applicable. *)
+    try rewrite Hmem12;
+    try rewrite Hstk12;
+    (* With this, most goals go away either by reflexivity or by contradiction, either
+       direct or on the turns of both components. *)
     try reflexivity;
     try contradiction;
-    (* ... *)
     try discharge_pc Hpc1' Hcc2';
-    try discharge_pc Hpc2' Hcc1'.
-Admitted.
+    try discharge_pc Hpc2' Hcc1';
+    (* All that remains are returns, in which case the stack is decomposed. *)
+    inversion Hstk12 as [[Hhead Htail]].
+  (* RB: TODO: Discharges and proof strategies can be found automatically. *)
+  - analyze_stack p1 pc'0 pc' Hhead.
+    + discharge_pc Hpc2' Heq1.
+    + reflexivity.
+  - analyze_stack p1 pc'0 pc' Hhead.
+    + discharge_pc Hpc1' Heq2.
+    + discharge_pc Hcc2' Heq2.
+  - analyze_stack p1 pc'0 pc' Hhead.
+    + discharge_pc Hpc2' Heq1.
+    + discharge_pc Hcc1' Heq1.
+  - congruence.
+Qed.
 
 Lemma state_determinism_context:
   forall p ctx G ips t ips',
