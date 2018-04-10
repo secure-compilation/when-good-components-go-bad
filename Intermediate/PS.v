@@ -26,6 +26,13 @@ Module PartialPointer.
   Definition t : Type := Component.id * option (Block.id * Block.offset).
 End PartialPointer.
 
+Lemma partial_pointer_to_pointer_eq :
+  forall pt1 pt2,
+    (Pointer.component pt1, Some (Pointer.block pt1, Pointer.offset pt1)) =
+    (Pointer.component pt2, Some (Pointer.block pt2, Pointer.offset pt2)) ->
+    pt1 = pt2.
+Admitted. (* Grade 0. *)
+
 Definition stack := list PartialPointer.t.
 
 Definition program_state : Type := stack * Memory.t * Register.t * Pointer.t.
@@ -65,6 +72,26 @@ Ltac simplify_turn :=
   unfold PS.is_program_component, PS.is_context_component in *;
   unfold turn_of, PS.state_turn in *;
   simpl in *.
+
+Remark pc_component_not_in_ctx:
+  forall stk mem regs pc ctx,
+    is_program_component (PC (stk, mem, regs, pc)) ctx ->
+    Pointer.component pc \notin domm ctx.
+Proof.
+  intros stk mem regs pc ctx Hpc.
+  simplify_turn.
+  assumption.
+Qed.
+
+Remark cc_component_in_ctx:
+  forall cid stk mem ctx,
+    is_context_component (CC (cid, stk, mem)) ctx ->
+    cid \in domm ctx.
+Proof.
+  intros cid stk mem ctx Hcc.
+  simplify_turn.
+  assumption.
+Qed.
 
 (* stack partialization *)
 
@@ -514,26 +541,6 @@ Proof.
     apply IHHstar; auto.
 Qed.
 
-Remark pc_component_not_in_ctx:
-  forall stk mem regs pc ctx,
-    is_program_component (PC (stk, mem, regs, pc)) ctx ->
-    Pointer.component pc \notin domm ctx.
-Proof.
-  intros stk mem regs pc ctx Hpc.
-  simplify_turn.
-  assumption.
-Qed.
-
-Remark cc_component_in_ctx:
-  forall cid stk mem ctx,
-    is_context_component (CC (cid, stk, mem)) ctx ->
-    cid \in domm ctx.
-Proof.
-  intros cid stk mem ctx Hcc.
-  simplify_turn.
-  assumption.
-Qed.
-
 (* Taking care for now not to mangle hypotheses that may be useful later.
    Using the above remarks instead of simplify_turn directly is somewhat faster. *)
 Ltac discharge_pc_cc Hpc Hcc :=
@@ -551,41 +558,6 @@ Ltac rename_op p pc1 P12 HOP :=
     rename Hop into HOP
   end.
 
-(* RB: TODO: Complete and move to GlobalEnv. *)
-Lemma genv_procedures_program_link_left:
-  forall p c Cid procs,
-    (genv_procedures (prepare_global_env (program_link p c))) Cid = procs ->
-    Cid \notin domm (prog_interface c) ->
-    (genv_procedures (prepare_global_env p)) Cid = procs.
-Admitted.
-
-Lemma find_label_in_component_program_link_left:
-  forall p c pc l pc',
-    find_label_in_component (prepare_global_env (program_link p c)) pc l = pc' ->
-    Pointer.component pc \notin domm (prog_interface c) ->
-    find_label_in_component (prepare_global_env p) pc l = pc'.
-Admitted.
-
-Lemma find_label_in_procedure_program_link_left:
-  forall p c pc l pc',
-    find_label_in_procedure (prepare_global_env (program_link p c)) pc l = pc' ->
-    Pointer.component pc \notin domm (prog_interface c) ->
-    find_label_in_procedure (prepare_global_env p) pc l = pc'.
-Admitted.
-
-Lemma genv_entrypoints_program_link_left :
-  forall C P p c b,
-    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) = b ->
-    C \notin domm (prog_interface c) ->
-    EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = b.
-Admitted.
-
-Lemma partial_pointer_to_pointer_eq :
-  forall pt1 pt2,
-    (Pointer.component pt1, Some (Pointer.block pt1, Pointer.offset pt1)) =
-    (Pointer.component pt2, Some (Pointer.block pt2, Pointer.offset pt2)) ->
-    pt1 = pt2.
-Admitted.
 
 (* In the program, both steps in sync should fetch the same instruction.
    By chaining inversions on component procedures, procedure code and
@@ -622,7 +594,6 @@ Ltac unify_get :=
     inversion Hget1; subst
   end.
 
-    (* Hcomp' does not work as name, Htest does*)
 Ltac unify_load pc Hcomp Hmem12 :=
   match goal with
   | Hload1 : Memory.load ?CMEM1 ?PTR = Some ?V1,
@@ -708,7 +679,6 @@ Ltac analyze_stack p1 pc1 pc2 Hhead :=
     ]
   end.
 
-
 Lemma state_determinism_program:
   forall p ctx G ips t ips',
     is_program_component ips ctx ->
@@ -791,7 +761,7 @@ Lemma state_determinism_context:
   forall ips'',
     step p ctx G ips t ips'' ->
     ips' = ips''.
-Admitted.
+Admitted. (* Grade 3, check. Compare with state_determinism_program. *)
 
 Theorem state_determinism:
   forall p ctx G ips t ips',

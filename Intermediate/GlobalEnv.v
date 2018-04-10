@@ -37,6 +37,20 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma genv_procedures_program_link_left:
+  forall {p c Cid procs},
+    (genv_procedures (prepare_global_env (program_link p c))) Cid = procs ->
+    Cid \notin domm (prog_interface c) ->
+    (genv_procedures (prepare_global_env p)) Cid = procs.
+Admitted. (* Grade 2, check. *)
+
+Lemma genv_entrypoints_program_link_left :
+  forall {C P p c b},
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) = b ->
+    C \notin domm (prog_interface c) ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = b.
+Admitted. (* Grade 2, check. *)
+
 Fixpoint find_label (c : code) (l : label) : option Z :=
   let fix aux c o :=
       match c with
@@ -119,6 +133,13 @@ Proof.
   eapply find_label_in_procedure_guarantees.
 Qed.
 
+Lemma find_label_in_procedure_program_link_left:
+  forall {p c pc l pc'},
+    find_label_in_procedure (prepare_global_env (program_link p c)) pc l = pc' ->
+    Pointer.component pc \notin domm (prog_interface c) ->
+    find_label_in_procedure (prepare_global_env p) pc l = pc'.
+Admitted. (* Grade 2, check. *)
+
 Lemma find_label_in_component_helper_guarantees:
   forall G procs pc pc' l,
     find_label_in_component_helper G procs pc l = Some pc' ->
@@ -148,6 +169,13 @@ Proof.
     try discriminate.
   eapply find_label_in_component_helper_guarantees in Hfind; auto.
 Qed.
+
+Lemma find_label_in_component_program_link_left:
+  forall {p c pc l pc'},
+    find_label_in_component (prepare_global_env (program_link p c)) pc l = pc' ->
+    Pointer.component pc \notin domm (prog_interface c) ->
+    find_label_in_component (prepare_global_env p) pc l = pc'.
+Admitted. (* Grade 2, check. *)
 
 Lemma execution_invariant_to_linking:
   forall p c1 c2 pc instr,
