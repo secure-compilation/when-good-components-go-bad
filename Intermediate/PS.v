@@ -573,6 +573,12 @@ Lemma find_label_in_procedure_program_link_left:
     find_label_in_procedure (prepare_global_env p) pc l = pc'.
 Admitted.
 
+Lemma genv_entrypoints_program_link_left : forall C P p c b,
+  EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) = b ->
+  C \notin domm (prog_interface c) ->
+  EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = b.
+Admitted.
+
 (* In the program, both steps in sync should fetch the same instruction.
    By chaining inversions on component procedures, procedure code and
    instruction, goals involving pairs of non-matching instructions are
@@ -602,8 +608,8 @@ Ltac unify_op_eq Hop1 Hop2 Hcomp Hsame_iface :=
 
 Ltac unify_get :=
   match goal with
-  | Hget1 : Register.get ?REG ?REGS = Ptr ?PTR1,
-    Hget2 : Register.get ?REG ?REGS = Ptr ?PTR2 |- _ =>
+  | Hget1 : Register.get ?REG ?REGS = ?V1,
+    Hget2 : Register.get ?REG ?REGS = ?V2 |- _ =>
     rewrite Hget2 in Hget1;
     inversion Hget1; subst
   end.
@@ -651,6 +657,33 @@ Ltac unify_procedure_label Hcomp Hcomp' :=
     inversion Hlabel1'; subst
   end.
 
+(* RB: TODO: Simplify Some pattern. *)
+Ltac unify_alloc Hmem12 Hcomp :=
+  match goal with
+  | Halloc1 : Memory.alloc ?CMEM1 ?CID ?SIZE = Some (?MEM1, ?PTR1),
+    Halloc2 : Memory.alloc ?CMEM2 ?CID ?SIZE = Some (?MEM2, ?PTR2) |- _ =>
+    pose proof program_allocation_in_partialized_memory Hmem12 Hcomp Halloc1 Halloc2
+      as [Hptr Halloc];
+    subst;
+    rewrite Halloc
+  end.
+
+Ltac unify_entrypoint Hpc1' Hpc2' Hsame_iface :=
+  match goal with
+  | Hentry1 : EntryPoint.get ?C ?PROC (genv_entrypoints (prepare_global_env (program_link ?P ?P1))) = ?B1,
+    Hentry2 : EntryPoint.get ?C ?PROC (genv_entrypoints (prepare_global_env (program_link ?P ?P2))) = ?B2  |- _ =>
+    pose proof genv_entrypoints_program_link_left Hentry1 Hpc1' as Hentry1';
+    rewrite <- Hsame_iface in Hpc2';
+    pose proof genv_entrypoints_program_link_left Hentry2 Hpc2' as Hentry2';
+    rewrite Hentry2' in Hentry1';
+    inversion Hentry1'; subst
+  end.
+
+(* Turns must have been simplified. *)
+Ltac discharge_pc Hpc Hcc :=
+  rewrite Hcc in Hpc;
+  discriminate.
+
 Lemma state_determinism_program:
   forall p ctx G ips t ips',
     is_program_component ips ctx ->
@@ -696,14 +729,22 @@ Proof.
     try reflexivity;
     (* For the remaining goals, unify components of their matching opcodes and their
        various optional components: register and memory reads and stores, component
-       labels, and try for equality. *)
+       labels, allocs. *)
     unify_op_eq Hop1 Hop2 Hcomp Hsame_iface;
+    simplify_turn;
     try unify_get;
     try unify_load pc1 Hcomp Hmem12;
     try unify_store pc1 Hcomp Hmem12;
     try unify_component_label Hcomp Hcomp';
     try unify_procedure_label Hcomp Hcomp';
-    try reflexivity.
+    try unify_alloc Hmem12 Hcomp;
+    try unify_entrypoint Hpc1' Hpc2' Hsame_iface;
+    (* ... *)
+    try reflexivity;
+    try contradiction;
+    (* ... *)
+    try discharge_pc Hpc1' Hcc2';
+    try discharge_pc Hpc2' Hcc1'.
 Admitted.
 
 Lemma state_determinism_context:
