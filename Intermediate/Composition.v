@@ -1386,7 +1386,7 @@ Section PartialComposition.
     - apply starN_mt_starN_equivalence; auto.
   Qed.
 
-  Lemma intial_states_mergeability:
+  Lemma initial_states_mergeability:
     forall s1 s2,
       initial_state (PS.sem p (prog_interface c)) s1 ->
       initial_state (PS.sem c (prog_interface p)) s2 ->
@@ -1475,7 +1475,7 @@ Section PartialComposition.
 
     eapply forward_simulation_same_safe_behavior.
     + apply MultiSem.merged_prog_simulates_multisem; auto.
-    + pose proof (intial_states_mergeability Hinit1 Hinit2) as Hmergeable.
+    + pose proof (initial_states_mergeability Hinit1 Hinit2) as Hmergeable.
       eapply program_runs with (s:=(s1,s2)).
       * constructor; auto.
       * eapply state_terminates with (s':=(s1',s2')); auto.
