@@ -569,10 +569,12 @@ Ltac unify_op Hop1 Hop2 Hcomp Hsame_iface :=
   rewrite <- Hsame_iface in Hcomp';
   inversion Hop1 as [procs1 [code1 [Hgenv1 [Hprocs1 [_ Hinstr1]]]]];
   inversion Hop2 as [procs2 [code2 [Hgenv2 [Hprocs2 [_ Hinstr2]]]]];
-  pose proof genv_procedures_program_link_left Hgenv1 Hcomp as Hgenv1';
-  pose proof genv_procedures_program_link_left Hgenv2 Hcomp' as Hgenv2';
-  rewrite Hgenv2' in Hgenv1';
-  inversion Hgenv1'; subst procs2;
+  pose proof @genv_procedures_program_link_left _ _ Hcomp as Hgenv1';
+  pose proof @genv_procedures_program_link_left _ _ Hcomp' as Hgenv2';
+  rewrite Hgenv1' in Hgenv1;
+  rewrite Hgenv2' in Hgenv2;
+  rewrite Hgenv2 in Hgenv1;
+  inversion Hgenv1; subst procs2;
   rewrite Hprocs2 in Hprocs1;
   inversion Hprocs1; subst code2;
   rewrite Hinstr2 in Hinstr1;

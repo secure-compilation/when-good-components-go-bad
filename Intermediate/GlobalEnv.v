@@ -38,10 +38,11 @@ Proof.
 Qed.
 
 Lemma genv_procedures_program_link_left:
-  forall {p c Cid procs},
-    (genv_procedures (prepare_global_env (program_link p c))) Cid = procs ->
+  forall {c Cid},
     Cid \notin domm (prog_interface c) ->
-    (genv_procedures (prepare_global_env p)) Cid = procs.
+  forall {p},
+    (genv_procedures (prepare_global_env (program_link p c))) Cid =
+    (genv_procedures (prepare_global_env p)) Cid.
 Admitted. (* Grade 2, check. *)
 
 Lemma genv_entrypoints_program_link_left :
@@ -49,7 +50,7 @@ Lemma genv_entrypoints_program_link_left :
     EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) = b ->
     C \notin domm (prog_interface c) ->
     EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = b.
-Admitted. (* Grade 2, check. *)
+Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
 
 Fixpoint find_label (c : code) (l : label) : option Z :=
   let fix aux c o :=
@@ -138,7 +139,7 @@ Lemma find_label_in_procedure_program_link_left:
     find_label_in_procedure (prepare_global_env (program_link p c)) pc l = pc' ->
     Pointer.component pc \notin domm (prog_interface c) ->
     find_label_in_procedure (prepare_global_env p) pc l = pc'.
-Admitted. (* Grade 2, check. *)
+Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
 
 Lemma find_label_in_component_helper_guarantees:
   forall G procs pc pc' l,
@@ -175,7 +176,7 @@ Lemma find_label_in_component_program_link_left:
     find_label_in_component (prepare_global_env (program_link p c)) pc l = pc' ->
     Pointer.component pc \notin domm (prog_interface c) ->
     find_label_in_component (prepare_global_env p) pc l = pc'.
-Admitted. (* Grade 2, check. *)
+Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
 
 Lemma execution_invariant_to_linking:
   forall p c1 c2 pc instr,
