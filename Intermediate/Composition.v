@@ -550,7 +550,70 @@ Theorem mt_starN_if_starN:
     starN (PS.step p ctx) G n ips t ips' ->
     mt_starN p ctx G n ips t ips'.
 Proof.
-Admitted.
+  intros p ctx G n ips t ips' HstarN.
+  induction HstarN as [| n s1 t t1 s2 t2 s3 Hstep HstarN IHHstarN Ht].
+  - apply mt_starN_segment.
+    apply st_starN_refl.
+  - subst t.
+    destruct s1 as [ps1 | ps1];
+      destruct s2 as [ps2 | ps2].
+    (* If the states belong to the same turn, if the turn is the same as the first turn
+       in the star, it continues its first segment, otherwise it changes control.
+       If the states belong to different turns, the star changes control.
+       RB: TODO: Duplicated (2-3) and redundant (1-4) cases, simplifications. *)
+    + inversion IHHstarN
+        as [? ? ? ? Hst_starN |
+            n1 n2 ? ? t'1 s'1 t'2 s'2 t'3 ? ? Hst_starN' Hstep' Hsame' Hmt_starN'];
+        subst.
+      * apply mt_starN_segment.
+        eapply st_starN_step;
+          try eassumption.
+        -- constructor.
+        -- reflexivity.
+      * eapply mt_starN_control_change;
+          try eassumption.
+        -- eapply st_starN_step;
+             try eassumption.
+           ++ constructor.
+           ++ reflexivity.
+        -- reflexivity.
+        -- rewrite Eapp_assoc.
+           reflexivity.
+    + eapply mt_starN_control_change.
+      * apply st_starN_refl.
+      * apply Hstep.
+      * intros Hsame.
+        inversion Hsame.
+      * apply IHHstarN.
+      * reflexivity.
+      * reflexivity.
+    + eapply mt_starN_control_change.
+      * apply st_starN_refl.
+      * apply Hstep.
+      * intros Hsame.
+        inversion Hsame.
+      * apply IHHstarN.
+      * reflexivity.
+      * reflexivity.
+    + inversion IHHstarN
+        as [? ? ? ? Hst_starN |
+            n1 n2 ? ? t'1 s'1 t'2 s'2 t'3 ? ? Hst_starN' Hstep' Hsame' Hmt_starN'];
+        subst.
+      * apply mt_starN_segment.
+        eapply st_starN_step;
+          try eassumption.
+        -- constructor.
+        -- reflexivity.
+      * eapply mt_starN_control_change;
+          try eassumption.
+        -- eapply st_starN_step;
+             try eassumption.
+           ++ constructor.
+           ++ reflexivity.
+        -- reflexivity.
+        -- rewrite Eapp_assoc.
+           reflexivity.
+Qed.
 
 Theorem mt_starN_if_star:
   forall p ctx G ips t ips',
