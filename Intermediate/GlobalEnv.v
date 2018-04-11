@@ -189,4 +189,14 @@ Lemma execution_invariant_to_linking:
     executing (prepare_global_env (program_link p c1)) pc instr ->
     executing (prepare_global_env (program_link p c2)) pc instr.
 Proof.
-Admitted.
+  intros p c1 c2 pc instr Hlinkable1 Hlinkable2 Hwf Hwf1 Hwf2 Hpc Hexec.
+  inversion Hexec as [procs [proc [Hgenv_procs [Hprocs_proc [Hoffset Hproc_instr]]]]].
+  exists procs, proc.
+  split; [| split; [| split]];
+    [| assumption | assumption | assumption].
+  assert (Pointer.component pc \notin domm (prog_interface c1)) as Hcc1 by admit.
+  assert (Pointer.component pc \notin domm (prog_interface c2)) as Hcc2 by admit.
+  rewrite (genv_procedures_program_link_left Hcc1) in Hgenv_procs.
+  rewrite (genv_procedures_program_link_left Hcc2).
+  assumption.
+Admitted. (* Grade 1. Easy lemma for the admits. *)
