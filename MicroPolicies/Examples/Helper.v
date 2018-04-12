@@ -17,7 +17,7 @@ Require Import Source.Examples.Identity.
 
 Fixpoint execN (n: nat) (st: state) : option state :=
   match n with
-  | O => None
+  | O => Some st
   | S n' =>
     match stepf st with
     | None => None
@@ -28,6 +28,7 @@ Fixpoint execN (n: nat) (st: state) : option state :=
 (* Six needed registers *)
 Definition reg0 : {fmap reg Symbolic.mt -> ratom } :=
   let m := emptym in
+  let m := setm m (as_word 0) (Atom (as_word 0) (Other)) in
   let m := setm m (as_word 1) (Atom (as_word 0) (Other)) in
   let m := setm m (as_word 2) (Atom (as_word 0) (Other)) in
   let m := setm m (as_word 3) (Atom (as_word 0) (Other)) in
