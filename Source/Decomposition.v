@@ -491,8 +491,18 @@ Section Decomposition.
     inversion Hbufs as [Hmap].
     inversion wf1 as [_ _ _ _ Hbufs1 _ _].
     inversion wf2 as [_ _ _ _ Hbufs2 _ _].
-    pose proof mapm_some_in_domm Component.id _ _ _ Hmap as Hdomm.
-    rewrite domm_mapm in Hdomm.
+
+Lemma mapm_some_in_domm : forall T (m : NMap T) k v,
+  m k = Some v -> k \in domm m.
+Admitted. (* TODO *)
+
+    pose proof mapm_some_in_domm Hmap as Hdomm.
+
+    pose proof (ex_intro (fun b => (mapm (fun _ => 0)
+         (unionm (prog_buffers p) (prog_buffers c))) C = Some b) b Hmap) as Hdom'.
+    (* apply dommP in Hdom'. *)
+
+    rewrite domm_map in Hdomm.
     rewrite domm_union. rewrite domm_union in Hdomm.
     rewrite Hbufs1. rewrite Hbufs2.
     assumption.

@@ -898,11 +898,12 @@ Proof.
     - rewrite fdisjoint_filterm_mapm_unionm.
       + (* On p1... *)
         rewrite Hbuffers1 in Hdisjoint1.
-        pose proof domm_mapm (nat + list value) ComponentMemory.t (prog_buffers p)
-             (fun initial_buffer : nat + list value =>
-                ComponentMemory.prealloc (setm emptym 0 initial_buffer))
-          as Hdomm.
         rewrite fdisjointC in Hdisjoint1.
+        pose proof (domm_map
+                   (fun initial_buffer =>
+                     ComponentMemory.prealloc (setm emptym 0 initial_buffer))
+                   (prog_buffers p))
+          as Hdomm.
         rewrite <- Hdomm in Hdisjoint1.
         rewrite fdisjointC in Hdisjoint1.
         erewrite fdisjoint_filterm_full; last by assumption.
