@@ -35,8 +35,7 @@ Lemma eq_in_filterm (T:Type) f1 f2 (m : NMap T) :
   filterm f1 m = filterm f2 m.
 Proof.
   move=> e. apply/eq_fmap=> k. rewrite 2!filtermE.
-  remember (m k) as o. generalize dependent Heqo. (* TODO *)
-  case: o => [v|] H; rewrite -H //=.
+  case H : (m k) => [v|] //=.
   now rewrite e.
 Qed.
 

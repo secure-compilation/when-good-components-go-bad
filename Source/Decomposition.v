@@ -483,29 +483,12 @@ Section Decomposition.
   Definition well_defined_components_trace (iface : Program.interface) (t : trace) : Prop :=
     forall e, In e t -> well_defined_components iface e.
 
-  Remark genv_buffers_in_interface : forall C b,
-    genv_buffers (prepare_global_env (program_link p c)) C = Some b ->
+  Remark genv_buffers_in_interface C :
+    C \in domm (genv_buffers (prepare_global_env (program_link p c))) ->
     C \in domm (prog_interface (program_link p c)).
   Proof.
-    intros C b Hbufs.
-    inversion Hbufs as [Hmap].
-    inversion wf1 as [_ _ _ _ Hbufs1 _ _].
-    inversion wf2 as [_ _ _ _ Hbufs2 _ _].
-
-Lemma mapm_some_in_domm : forall T (m : NMap T) k v,
-  m k = Some v -> k \in domm m.
-Admitted. (* TODO *)
-
-    pose proof mapm_some_in_domm Hmap as Hdomm.
-
-    pose proof (ex_intro (fun b => (mapm (fun _ => 0)
-         (unionm (prog_buffers p) (prog_buffers c))) C = Some b) b Hmap) as Hdom'.
-    (* apply dommP in Hdom'. *)
-
-    rewrite domm_map in Hdomm.
-    rewrite domm_union. rewrite domm_union in Hdomm.
-    rewrite Hbufs1. rewrite Hbufs2.
-    assumption.
+    rewrite /= domm_map !domm_union.
+    by case: wf1 wf2 => [_ _ _ _ -> _ _] [_ _ _ _ -> _ _].
   Qed.
 
   (* Several alternative formulations are possible. One may include the ERet event
@@ -530,8 +513,8 @@ Admitted. (* TODO *)
   Proof.
     intros s0 t1 s1 s2 C P v C' Hstar Hkstep.
     inversion Hkstep; subst.
-    apply wf_comps_call;
-      eapply genv_buffers_in_interface; eassumption.
+    by apply wf_comps_call; apply: genv_buffers_in_interface;
+    rewrite mem_domm ?H7 ?H10.
   Qed.
 
   Lemma eret_from_initial_star_has_well_defined_components :
@@ -550,7 +533,7 @@ Admitted. (* TODO *)
       pose proof ecall_from_star_has_well_defined_components Hstar1' Hkstep' as Hwdc.
       inversion Hwdc; subst.
       assumption.
-    - eapply genv_buffers_in_interface; eassumption.
+    - now apply: genv_buffers_in_interface; rewrite mem_domm H5.
   Qed.
 
   (* RB: TODO: Can be further simplified by automating inversion a bit. *)
