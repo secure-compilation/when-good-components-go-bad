@@ -758,7 +758,18 @@ Section Simulation.
       ProgramSem.final_state (prog_interface c) ips1 ->
       ContextSem.final_state (prog_interface p) ips2.
   Proof.
-  Admitted.
+    intros ips1 ips2 Hmerge Hfinal1.
+    constructor.
+    inversion Hfinal1 as [? Hpc]; subst.
+    inversion Hmerge
+      as [stk1 mem1 regs1 pc1 ? stk2 mem2 Hpc1 Hcc2 ? Hstk Hmem |
+          stk1 mem1 regs1 pc1 ? stk2 mem2 Hcc1 Hpc2 ? Hstk Hmem]; subst.
+    - assumption.
+    - (* Contra. *)
+      PS.simplify_turn.
+      rewrite Hcc1 in Hpc.
+      inversion Hpc.
+  Qed.
 
   Lemma lockstep_simulation:
     forall ips1 t ips1',
