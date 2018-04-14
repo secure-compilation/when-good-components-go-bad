@@ -750,6 +750,16 @@ Section Simulation.
       ContextSem.initial_state (prog_interface p) ips2 /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2.
   Proof.
+    intros ips1 Hini.
+    inversion Hini as [? Hpc]; subst.
+    destruct ips1 as [[[[stk1 mem1] regs1] pc1] | [[Cid1 stk1] mem1]].
+    - admit.
+    - (* There is a problem in this case. PS.mergeable_states expects a
+         PS.is_program_component on a PS.PC state, and a PS.is_context_component
+         on a PS.CC state. Here, we start from a PS.is_program_component on a
+         PS.CC state, which can never satisfy the conditions imposed by its
+         involvement in the goal PS.mergeable_states. *)
+      admit.
   Admitted.
 
   Lemma match_final_states:
