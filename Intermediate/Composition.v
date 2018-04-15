@@ -1017,21 +1017,38 @@ Section MultiSemantics.
       (* program is in the first state *)
       + inversion H9; subst; inversion H14; subst;
         PS.simplify_turn; simpl in *.
-        admit.
+        eapply PS.partial_step with
+            (ics:=PS.unpartialize (PS.PC (PS.merge_stacks pgps1 pgps2,
+                                          PS.merge_memories pmem1 pmem2, regs, pc)))
+            (p':=empty_prog).
+        * reflexivity.
+        * apply linking_well_formedness; assumption.
+        * now apply empty_prog_is_well_formed.
+        * apply linkable_emptym. now apply linkability.
+        * admit.
+        * constructor.
+          ** PS.simplify_turn.
+             by rewrite mem_domm.
+          ** rewrite domm0. rewrite filterm_identity. reflexivity.
+          ** rewrite domm0.
+             rewrite (PS.to_partial_stack_unpartialize_identity
+                        (PS.merged_stack_has_no_holes H4)).
+             reflexivity.
+        * admit.
       + (* program is in the second state *)
         eapply PS.partial_step with
             (ics:=PS.unpartialize (PS.PC (PS.merge_stacks pgps1 pgps2,
                                           PS.merge_memories pmem1 pmem2, regs, pc)))
             (p':=empty_prog).
         * reflexivity.
-        * apply linking_well_formedness; now auto.
+        * apply linking_well_formedness; assumption.
         * now apply empty_prog_is_well_formed.
-        * simpl. apply linkable_emptym. now apply linkability.
+        * apply linkable_emptym. now apply linkability.
         * admit.
         * constructor.
           ** PS.simplify_turn.
-             rewrite mem_domm. auto.
-          ** rewrite domm0. simpl. rewrite filterm_identity. reflexivity.
+             by rewrite mem_domm.
+          ** rewrite domm0. rewrite filterm_identity. reflexivity.
           ** rewrite domm0.
              rewrite (PS.to_partial_stack_unpartialize_identity
                         (PS.merged_stack_has_no_holes H4)).
