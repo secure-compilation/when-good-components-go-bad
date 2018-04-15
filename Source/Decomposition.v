@@ -11,6 +11,7 @@ Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
 Require Import Source.PS.
+Require Import Lib.Extra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 

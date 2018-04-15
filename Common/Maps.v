@@ -1,6 +1,7 @@
 From CoqUtils Require Export ord fmap fset.
 From mathcomp Require Export ssrbool. (* TODO, strange *)
 From mathcomp Require Import ssreflect ssrfun seq.
+Require Import Lib.Extra.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
