@@ -258,7 +258,8 @@ Lemma partial_stack_outside_control_preserves_top :
     to_partial_stack ((C', v, k) :: s) ctx C = (C', frame) :: rest.
 Proof.
   intros Cid' Cid val cont st ctx Hneq'.
-  assert (Cid == Cid' = false) as Hneq by admit.
+  assert (Cid == Cid' = false) as Hneq
+    by (apply /eqP; intro Heq; by symmetry in Heq).
   induction st as [| hd st IHst].
   - unfold to_partial_stack, drop_last_frames_if_needed.
     rewrite Hneq. rewrite andb_comm. simpl.
@@ -276,7 +277,7 @@ Proof.
     destruct (C \in ctx) eqn:Hcase1; rewrite Hcase1;
       destruct (C == Cid) eqn:Hcase2; simpl;
       (try (destruct (Cid \in ctx) eqn:Hcase3; rewrite Hcase3); eauto).
-Admitted.
+Qed.
 
 Lemma partial_stacks_unequal_top_internal :
   forall C1 C2 v1 v2 k1 k2 s1 s2 ctx,
@@ -286,7 +287,7 @@ Lemma partial_stacks_unequal_top_internal :
     to_partial_stack ((C2, v2, k2) :: s2) ctx C1.
 Proof.
   intros C1 C2 v1 v2 k1 k2 s1 s2 ctx Hctx Hneq Hstack.
-  assert (C1 \in ctx = false) as Hctx' by admit.
+  assert (C1 \in ctx = false) as Hctx' by (by destruct (C1 \in ctx)).
   pose proof partial_stack_outside_context_preserves_top as Hpres1.
   specialize (Hpres1 C1 _ v1 k1 s1 _ Hctx').
   destruct Hpres1 as [frame1 [rest1 Hpres1]].
@@ -296,7 +297,7 @@ Proof.
   rewrite Hpres1 in Hstack. rewrite Hpres2 in Hstack.
   inversion Hstack as [Hcontra].
   by intuition.
-Admitted.
+Qed.
 
 Lemma partial_stacks_unequal_top_external :
   forall C C1 C2 v1 v2 k1 k2 s1 s2 ctx,
@@ -307,7 +308,7 @@ Lemma partial_stacks_unequal_top_external :
     to_partial_stack ((C2, v2, k2) :: s2) ctx C.
 Proof.
   intros C C1 C2 v1 v2 k1 k2 s1 s2 ctx Hnotin Hin Hneq Hstack.
-  assert (C1 \in ctx = false) as Hnotin' by admit.
+  assert (C1 \in ctx = false) as Hnotin' by (by destruct (C1 \in ctx)).
   pose proof partial_stack_outside_context_preserves_top as Hpres1.
   specialize (Hpres1 C C1 v1 k1 s1 ctx Hnotin').
   destruct Hpres1 as [frame1 [rest1 Hpres1]].
@@ -318,7 +319,7 @@ Proof.
   rewrite Hpres2 in Hstack.
   inversion Hstack; subst.
   by rewrite Hin in Hnotin.
-Admitted.
+Qed.
 
 Lemma partial_stacks_equal_top_external_context :
   forall C C1 C2 v1 v2 k1 k2 s1 s2 ctx,
@@ -330,17 +331,17 @@ Lemma partial_stacks_equal_top_external_context :
 Proof.
   intros C C1 C2 v1 v2 k1 k2 s1 s2 ctx Hnotin1 Hnotin2 Hstack.
   pose proof partial_stack_outside_context_preserves_top as Hpres1.
-  assert (C1 \in ctx = false) as Hdomm1 by admit.
+  assert (C1 \in ctx = false) as Hdomm1 by (by destruct (C1 \in ctx)).
   specialize (Hpres1 C C1 v1 k1 s1 ctx Hdomm1).
   destruct Hpres1 as [frame1 [rest1 Hpres1]].
   rewrite Hpres1 in Hstack.
   pose proof partial_stack_outside_context_preserves_top as Hpres2.
-  assert (C2 \in ctx = false) as Hdomm2 by admit.
+  assert (C2 \in ctx = false) as Hdomm2 by (by destruct (C2 \in ctx)).
   specialize (Hpres2 C C2 v2 k2 s2 ctx Hdomm2).
   destruct Hpres2 as [frame2 [rest2 Hpres2]].
   rewrite Hpres2 in Hstack.
   by inversion Hstack.
-Admitted.
+Qed.
 
 Lemma partial_stacks_equal_top_external_control :
   forall C C1 C2 v1 v2 k1 k2 s1 s2 ctx,
