@@ -16,6 +16,20 @@ Require Import Coq.Strings.String.
 open Big_int;;
  *)
 
+Axiom fstate : Type.
+Extract Constant fstate => "unit".
+Extraction Inline fstate.
+Axiom fstate0 : fstate.
+Extract Constant fstate0 => "()".
+Extraction Inline fstate0.
+
+Axiom unit_to_fstate : unit -> fstate.
+Extract Constant unit_to_fstate => "".
+Extraction Inline unit_to_fstate.
+Axiom fstate_to_unit : fstate -> unit.
+Extract Constant fstate_to_unit => "".
+Extraction Inline fstate_to_unit.
+
 Axiom ocaml_int : Type.
 Axiom ocaml_int_0 : ocaml_int.
 Axiom ocaml_int_1: ocaml_int.

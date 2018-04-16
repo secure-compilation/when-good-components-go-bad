@@ -25,7 +25,7 @@ Fixpoint execN (n: nat) (st: state) : option state :=
     end
   end.
 
-(* Six needed registers *)
+(* needed registers *)
 Definition reg0 : {fmap reg Symbolic.mt -> ratom } :=
   let m := emptym in
   let m := setm m (as_word 0) (Atom (as_word 0) (Other)) in
@@ -43,11 +43,18 @@ Definition load (m : {fmap mword Symbolic.mt -> matom }) : state :=
      Symbolic.pc := {| vala := word.as_word 0 ; taga := Level 0 |} ;
      Symbolic.internal := tt |}.
 
-Definition print_reg (st : state) (n : nat) :=
+Definition print_reg (st : state) (n : nat) : unit :=
   match (Symbolic.regs st) (as_word n) with
   | None => print_error ocaml_int_2
   | Some n => print_ocaml_int (int2int (int_of_word (vala n)))
   end.
+
+Fixpoint print_regs (st : state) (n : nat) (f : fstate) : fstate :=
+  match n with
+  | O => unit_to_fstate (print_reg st n)
+  | S n => let f' := unit_to_fstate (print_reg st (S n)) in print_regs st n f'
+  end.
+
 
 Definition compile_and_run (p: Source.program) (fuel: nat) :=
   match compile_program p with
@@ -64,6 +71,6 @@ Definition compile_and_run' (p: Intermediate.program) (fuel:nat) :=
   let st := load (encode (precompile p)) in
     match execN fuel st with
     | None => print_error ocaml_int_1
-    | Some st' => print_reg st' 2
+    | Some st' => fstate_to_unit (print_regs st' 6 fstate0)
     end
 .

@@ -171,11 +171,11 @@ Definition instr_rules (op : opcode)
                                    do! _ <- check_ret level.-1 tp;
                                        Some (OVec JUMP (build_tpc level.-1) [hseq Other])
 
-  | JAL,     [hseq tp; tra]    => if belong current tni then
-                                   Some (OVec JAL tpc [hseq tp; tra])
+  | JAL,     [hseq tra]    => if belong current tni then
+                                   Some (OVec JAL tpc [hseq tra])
                                  else
                                    do! _ <- check_entry current tni;
-                                       Some (OVec JAL (build_tpc level.+1) [hseq tp; Ret level])
+                                       Some (OVec JAL (build_tpc level.+1) [hseq Ret level])
 
   | _,     _                   => None
   end.
