@@ -771,6 +771,7 @@ Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
     well_formed_program p ->
     well_formed_program p' ->
     linkable (prog_interface p) (prog_interface p') ->
+    closed_program (program_link p p') ->
     partial_state ctx scs sps ->
     CS.initial_state (program_link p p') scs ->
     initial_state p ctx sps.
@@ -847,16 +848,24 @@ Theorem initial_state_determinism:
     s1 = s2.
 Proof.
   intros p ctx s1 s2 Hinit1 Hinit2.
-  inversion Hinit1 as [p1 scs1 ? ? Hwf Hwf1 Hlinkable1 Hpartial1 Hinitial1];
-    inversion Hinit2 as [p2 scs2 ? Hsame_iface _ Hwf2 Hlinkable2 Hpartial2 Hinitial2];
+  inversion Hinit1 as [p1 scs1 ? ? Hwf Hwf1 Hlinkable1 Hclosed1 Hpartial1 Hinitial1];
+    inversion Hinit2 as [p2 scs2 ? Hsame_iface _ Hwf2 Hlinkable2 Hclosed2 Hpartial2 Hinitial2];
     subst.
   unfold CS.initial_state in *. subst.
   apply partialize_correct in Hpartial1.
   apply partialize_correct in Hpartial2.
   unfold CS.initial_machine_state in *.
-  (* RB: TODO: CS.initial_machine state shouldn't produce None. *)
-  assert (exists main1, prog_main (program_link p p1) = Some main1) as [main1 Hmain1] by admit.
-  assert (exists main2, prog_main (program_link p p2) = Some main2) as [main2 Hmain2] by admit.
+  (* RB: TODO: CS.initial_machine state shouldn't produce None; lemma and refactoring. *)
+  assert (exists main1, prog_main (program_link p p1) = Some main1) as [main1 Hmain1].
+  {
+    inversion Hclosed1.
+    destruct (prog_main (program_link p p1)); [eauto | discriminate].
+  }
+  assert (exists main2, prog_main (program_link p p2) = Some main2) as [main2 Hmain2].
+  {
+    inversion Hclosed2.
+    destruct (prog_main (program_link p p2)); [eauto | discriminate].
+  }
   rewrite Hmain1 in Hpartial1.
   rewrite Hmain2 in Hpartial2.
   (* Some facts of common interest. *)
@@ -943,7 +952,7 @@ Proof.
     rewrite <- Hpartial1.
     rewrite <- Hpartial2.
     reflexivity.
-Admitted.
+Qed.
 
 (* we can prove a strong form of state determinism when program is in control *)
 Lemma state_determinism_program':

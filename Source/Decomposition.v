@@ -54,6 +54,7 @@ Section Decomposition.
         * assumption.
         * assumption.
         * assumption.
+        * assumption.
         * eapply PS.ContextControl; eauto.
         * apply Hics_init.
       + eapply PS.ContextControl; eauto.
@@ -61,6 +62,7 @@ Section Decomposition.
     - split.
       + eapply PS.initial_state_intro with (p':=c).
         * reflexivity.
+        * assumption.
         * assumption.
         * assumption.
         * assumption.
@@ -672,6 +674,7 @@ Section Decomposition.
         * assumption.
         * assumption.
         * assumption.
+        * assumption.
         * CS.unfold_state init_s. simpl in *.
           destruct (C \in domm (prog_interface c)) eqn:Hctx.
           ** rewrite Hctx. constructor.
@@ -1033,6 +1036,7 @@ Section Decomposition.
                                    (CS.initial_machine_state (Source.program_link c p)));
           auto.
         * apply linkable_sym; auto.
+        * by rewrite <- (closed_program_link_sym wf1 wf2 linkability).
         * apply PS.partialize_correct; auto.
         * unfold CS.initial_state.
           reflexivity.
