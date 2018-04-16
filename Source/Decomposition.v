@@ -743,7 +743,27 @@ Section Decomposition.
     - apply program_goes_initially_wrong.
       intros s.
       unfold not. intro contra.
-      inversion contra as [p' scs ? Hsame_iface _ wf' linkability' Hpartial Hini]; subst.
+      inversion contra
+        as [p' scs ? Hsame_iface _ wf' linkability' Hclosed Hpartial Hini];
+        subst.
+      (* NOTE: Currently, the initial state is obtained purely computationally,
+         therefore we can guarantee its existence. What we were trying to prove
+         is that this initial state is invariant across changes in linked programs
+         modulo equality of the interface. However, we cannot conclude that memories
+         are the same without making modifications to the specification of initial
+         states. IMPORTANT: The fact that we can assert the existence of an initial
+         state via computation says nothing about whether they result from the "bad
+         cases" which should not occur but are not reflected in the result of the
+         computation. In this case, as seen in the proof fragment below, reasoning
+         about the existence of mains and ruling out a bad case is feasible. *)
+      assert (exists s, CS.initial_state (program_link p c) s) as [sini Hini'].
+      {
+        exists (CS.initial_machine_state (program_link p c)).
+        constructor.
+      }
+      apply H with (s:=sini).
+      apply Hini'.
+(*
       apply H with (s:=scs). simpl.
       unfold CS.initial_state in *. subst.
       unfold CS.initial_machine_state.
@@ -800,6 +820,7 @@ Section Decomposition.
          we cannot infer that their images are the same.
          Probably due to a weak definition of initial states. *)
       admit.
+*)
   Admitted.
 
   (* NOTE: the first disjunct is subsumed by the third. *)
