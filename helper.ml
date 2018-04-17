@@ -6,7 +6,7 @@
 
 let compiled = encode (precompile program1);;
 
-let instr n = List.nth compiled;;
+let instr n = List.nth compiled n;;
 let decode_mem = (fun x -> concrete_int_32_ops.decode_instr ((snd x).vala));;
 
 let print_word w = let Word x = Lazy.force w in Big.to_string x;;
