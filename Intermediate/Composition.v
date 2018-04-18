@@ -434,11 +434,18 @@ Section PS2CS.
   Qed.
 End PS2CS.
 
-Inductive same_turn: PS.state -> PS.state -> Prop :=
-| same_turn_program: forall prog_st prog_st',
-    same_turn (PS.PC prog_st) (PS.PC prog_st')
-| same_turn_context: forall ctx_st ctx_st',
-    same_turn (PS.CC ctx_st) (PS.CC ctx_st').
+(* Definition in terms of an interface (like everything else in the development).
+   A disadvantage of the current definition is that tactics like [constructor]
+   are ambiguous and cannot choose the obviously correct constructor. *)
+Inductive same_turn (ctx : Program.interface) : PS.state -> PS.state -> Prop :=
+| same_turn_program: forall st st',
+    PS.is_program_component st ctx ->
+    PS.is_program_component st' ctx ->
+    same_turn ctx st st'
+| same_turn_context: forall st st',
+    PS.is_context_component st ctx ->
+    PS.is_context_component st' ctx ->
+    same_turn ctx st st'.
 
 (* st_star represents a sequence of events performed by the same actor *)
 (* st stands for same turn *)
@@ -448,7 +455,7 @@ Inductive st_starN (p: program) (ctx: Program.interface) (G: global_env)
     st_starN p ctx G 0 ips E0 ips
 | st_starN_step: forall n ips t1 ips' t2 ips'' t,
     PS.step p ctx G ips t1 ips' ->
-    same_turn ips ips' ->
+    same_turn ctx ips ips' ->
     st_starN p ctx G n ips' t2 ips'' ->
     t = t1 ** t2 ->
     st_starN p ctx G (S n) ips t ips''.
@@ -456,19 +463,28 @@ Inductive st_starN (p: program) (ctx: Program.interface) (G: global_env)
 Lemma st_starN_same_turn:
   forall p ctx G n ips t ips',
     st_starN p ctx G n ips t ips' ->
-    same_turn ips ips'.
+    same_turn ctx ips ips'.
 Proof.
   intros p ctx G n ips t ips' Hst_star.
-  induction Hst_star; subst.
-  - PS.unfold_states; constructor.
-  - repeat PS.unfold_states;
-      try constructor;
-      match goal with
-      | contra: same_turn (PS.CC _) (PS.PC _) |- _ =>
-        inversion contra
-      | contra: same_turn (PS.PC _) (PS.CC _) |- _ =>
-        inversion contra
-      end.
+  induction Hst_star as [| n s1 t1 s2 t2 s3 ? Hstep12 Hturn12 IHHst_star Hturn23]; subst.
+  - destruct (PS.is_context_component ips ctx) eqn:Hcomp.
+    + apply same_turn_context;
+        assumption.
+    + apply same_turn_program;
+        PS.simplify_turn;
+        rewrite Hcomp;
+        reflexivity.
+  - inversion Hturn12 as [? ? Hcomp1 Hcomp2| ? ? Hcomp1 Hcomp2];
+      inversion Hturn23 as [? ? Hcomp2' Hcomp3 | ? ? Hcomp2' Hcomp3];
+      subst.
+    + apply same_turn_program; assumption.
+    + PS.simplify_turn.
+      rewrite Hcomp2' in Hcomp2.
+      discriminate.
+    + PS.simplify_turn.
+      rewrite Hcomp2 in Hcomp2'.
+      discriminate.
+    + apply same_turn_context; assumption.
 Qed.
 
 (* mt_star is a sequence of st_star interleaved by steps that change control *)
@@ -481,7 +497,7 @@ Inductive mt_starN (p: program) (ctx: Program.interface) (G: global_env)
 | mt_starN_control_change: forall n1 n2 n3 ips t1 ips' t2 ips'' t3 ips''' t,
     st_starN p ctx G n1 ips t1 ips' ->
     PS.step p ctx G ips' t2 ips'' ->
-    ~ same_turn ips' ips'' ->
+    ~ same_turn ctx ips' ips'' ->
     mt_starN p ctx G n2 ips'' t3 ips''' ->
     n3 = S (n1 + n2) ->
     t = t1 ** t2 ** t3 ->
@@ -555,12 +571,14 @@ Proof.
   - apply mt_starN_segment.
     apply st_starN_refl.
   - subst t.
-    destruct s1 as [ps1 | ps1];
-      destruct s2 as [ps2 | ps2].
+    destruct (PS.is_context_component s1 ctx) eqn:Hcomp1;
+      destruct (PS.is_context_component s2 ctx) eqn:Hcomp2.
     (* If the states belong to the same turn, if the turn is the same as the first turn
        in the star, it continues its first segment, otherwise it changes control.
        If the states belong to different turns, the star changes control.
-       RB: TODO: Duplicated (2-3) and redundant (1-4) cases, simplifications. *)
+       RB: TODO: Duplicated (2-3) and redundant (1-4) cases, simplifications and
+       symmetries, more visible through the revised definition of same_turn, slightly
+       less automatic. *)
     + inversion IHHstarN
         as [? ? ? ? Hst_starN |
             n1 n2 ? ? t'1 s'1 t'2 s'2 t'3 ? ? Hst_starN' Hstep' Hsame' Hmt_starN'];
@@ -568,13 +586,13 @@ Proof.
       * apply mt_starN_segment.
         eapply st_starN_step;
           try eassumption.
-        -- constructor.
+        -- apply same_turn_context; assumption.
         -- reflexivity.
       * eapply mt_starN_control_change;
           try eassumption.
         -- eapply st_starN_step;
              try eassumption.
-           ++ constructor.
+           ++ apply same_turn_context; assumption.
            ++ reflexivity.
         -- reflexivity.
         -- rewrite Eapp_assoc.
@@ -583,7 +601,13 @@ Proof.
       * apply st_starN_refl.
       * apply Hstep.
       * intros Hsame.
-        inversion Hsame.
+        inversion Hsame as [? ? Hcomp1' Hcomp2' | ? ? Hcomp1' Hcomp2']; subst.
+        -- PS.simplify_turn.
+           rewrite Hcomp1 in Hcomp1'.
+           discriminate.
+        -- PS.simplify_turn.
+           rewrite Hcomp2 in Hcomp2'.
+           discriminate.
       * apply IHHstarN.
       * reflexivity.
       * reflexivity.
@@ -591,7 +615,13 @@ Proof.
       * apply st_starN_refl.
       * apply Hstep.
       * intros Hsame.
-        inversion Hsame.
+        inversion Hsame as [? ? Hcomp1' Hcomp2' | ? ? Hcomp1' Hcomp2']; subst.
+        -- PS.simplify_turn.
+           rewrite Hcomp2 in Hcomp2'.
+           discriminate.
+        -- PS.simplify_turn.
+           rewrite Hcomp1 in Hcomp1'.
+           discriminate.
       * apply IHHstarN.
       * reflexivity.
       * reflexivity.
@@ -602,13 +632,23 @@ Proof.
       * apply mt_starN_segment.
         eapply st_starN_step;
           try eassumption.
-        -- constructor.
+        -- apply same_turn_program;
+             unfold PS.is_program_component.
+           ++ rewrite Hcomp1.
+              reflexivity.
+           ++ rewrite Hcomp2.
+              reflexivity.
         -- reflexivity.
       * eapply mt_starN_control_change;
           try eassumption.
         -- eapply st_starN_step;
              try eassumption.
-           ++ constructor.
+           ++ apply same_turn_program;
+                unfold PS.is_program_component.
+              ** rewrite Hcomp1.
+                 reflexivity.
+              ** rewrite Hcomp2.
+                 reflexivity.
            ++ reflexivity.
         -- reflexivity.
         -- rewrite Eapp_assoc.
@@ -1139,66 +1179,76 @@ Section PartialComposition.
       + admit.
   Admitted.
 
+  (* RB: TODO: Carefully check statement changes, esp. unproven and w.r.t.
+     same_turn. Consider formulating the new premises in terms of same_turn. *)
   Lemma st_starN_with_turn_change_impossible_1:
     forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips',
+      PS.is_program_component prog_st2 (prog_interface c) ->
+      PS.is_context_component ctx_st (prog_interface p) ->
       PS.mergeable_states (prog_interface c) (prog_interface p)
-                          (PS.PC prog_st2) (PS.CC ctx_st) ->
+                          prog_st2 ctx_st ->
       st_starN c (prog_interface p) (prepare_global_env c)
-               n1 (PS.CC ctx_st) t1 ctx_st' ->
+               n1 ctx_st t1 ctx_st' ->
       PS.step c (prog_interface p) (prepare_global_env c) ctx_st' t2 prog_st1 ->
-      ~ same_turn ctx_st' prog_st1 ->
+      ~ same_turn (prog_interface p) ctx_st' prog_st1 ->
       mt_starN c (prog_interface p) (prepare_global_env c) n2 prog_st1 t3 ips' ->
     forall n3 ips'',
       st_starN p (prog_interface c) (prepare_global_env p)
-               n3 (PS.PC prog_st2) (t1 ** t2 ** t3) ips'' ->
+               n3 prog_st2 (t1 ** t2 ** t3) ips'' ->
       False.
   Proof.
   Admitted.
 
   Lemma st_starN_with_turn_change_impossible_1':
     forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips',
+      PS.is_context_component ctx_st (prog_interface c) ->
+      PS.is_program_component prog_st2 (prog_interface p) ->
       PS.mergeable_states (prog_interface c) (prog_interface p)
-                          (PS.CC ctx_st) (PS.PC prog_st2) ->
+                          ctx_st prog_st2 ->
       st_starN p (prog_interface c) (prepare_global_env p)
-               n1 (PS.CC ctx_st) t1 ctx_st' ->
+               n1 ctx_st t1 ctx_st' ->
       PS.step p (prog_interface c) (prepare_global_env p) ctx_st' t2 prog_st1 ->
-      ~ same_turn ctx_st' prog_st1 ->
+      ~ same_turn (prog_interface c) ctx_st' prog_st1 ->
       mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st1 t3 ips' ->
     forall n3 ips'',
       st_starN c (prog_interface p) (prepare_global_env c)
-               n3 (PS.PC prog_st2) (t1 ** t2 ** t3) ips'' ->
+               n3 prog_st2 (t1 ** t2 ** t3) ips'' ->
       False.
   Proof.
   Admitted.
 
   Lemma st_starN_with_turn_change_impossible_2:
     forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
+      PS.is_context_component ctx_st2 (prog_interface c) ->
+      PS.is_program_component prog_st (prog_interface p) ->
       PS.mergeable_states (prog_interface c) (prog_interface p)
-                          (PS.CC ctx_st2) (PS.PC prog_st) ->
+                          ctx_st2 prog_st ->
       st_starN c (prog_interface p) (prepare_global_env c)
-               n1 (PS.PC prog_st) t1 prog_st' ->
+               n1 prog_st t1 prog_st' ->
       PS.step c (prog_interface p) (prepare_global_env c) prog_st' t2 ctx_st1 ->
-      ~ same_turn prog_st' ctx_st1 ->
+      ~ same_turn (prog_interface p) prog_st' ctx_st1 ->
       mt_starN c (prog_interface p) (prepare_global_env c) n2 ctx_st1 t3 ips' ->
     forall n3 ips'',
       st_starN p (prog_interface c) (prepare_global_env p)
-               n3 (PS.CC ctx_st2) (t1 ** t2 ** t3) ips'' ->
+               n3 ctx_st2 (t1 ** t2 ** t3) ips'' ->
       False.
   Proof.
   Admitted.
 
   Lemma st_starN_with_turn_change_impossible_3:
     forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
+      PS.is_program_component prog_st (prog_interface c) ->
+      PS.is_context_component ctx_st2 (prog_interface p) ->
       PS.mergeable_states (prog_interface c) (prog_interface p)
-                          (PS.PC prog_st) (PS.CC ctx_st2) ->
+                          prog_st ctx_st2 ->
       st_starN p (prog_interface c) (prepare_global_env p)
-               n1 (PS.PC prog_st) t1 prog_st' ->
+               n1 prog_st t1 prog_st' ->
       PS.step p (prog_interface c) (prepare_global_env p) prog_st' t2 ctx_st1 ->
-      ~ same_turn prog_st' ctx_st1 ->
+      ~ same_turn (prog_interface c) prog_st' ctx_st1 ->
       mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st1 t3 ips' ->
     forall n3 ips'',
       st_starN c (prog_interface p) (prepare_global_env c)
-               n3 (PS.CC ctx_st2) (t1 ** t2 ** t3) ips'' ->
+               n3 ctx_st2 (t1 ** t2 ** t3) ips'' ->
       False.
   Proof.
   Admitted.
@@ -1206,19 +1256,21 @@ Section PartialComposition.
   Lemma same_trace_and_steps:
     forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
            ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
+      PS.is_program_component prog_st1 (prog_interface c) ->
+      PS.is_context_component ctx_st1 (prog_interface p) ->
       PS.mergeable_states (prog_interface c) (prog_interface p)
-                          (PS.PC prog_st1) (PS.CC ctx_st1) ->
+                          prog_st1 ctx_st1 ->
       (* first side *)
       st_starN p (prog_interface c) (prepare_global_env p)
-               n1 (PS.PC prog_st1) t1 prog_st1' ->
+               n1 prog_st1 t1 prog_st1' ->
       PS.step p (prog_interface c) (prepare_global_env p) prog_st1' t2 ctx_st2 ->
-      ~ same_turn prog_st1' ctx_st2 ->
+      ~ same_turn (prog_interface c) prog_st1' ctx_st2 ->
       mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st2 t3 ips' ->
       (* second side *)
       st_starN c (prog_interface p) (prepare_global_env c)
-               n1' (PS.CC ctx_st1) t1' ctx_st1' ->
+               n1' ctx_st1 t1' ctx_st1' ->
       PS.step c (prog_interface p) (prepare_global_env c) ctx_st1' t2' prog_st2 ->
-      ~ same_turn ctx_st1' prog_st2 ->
+      ~ same_turn (prog_interface p) ctx_st1' prog_st2 ->
       mt_starN c (prog_interface p) (prepare_global_env c) n2' prog_st2 t3' ips'' ->
       (* same steps and same trace *)
       t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
@@ -1228,19 +1280,21 @@ Section PartialComposition.
   Lemma same_trace_and_steps':
     forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
            ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
+      PS.is_context_component ctx_st1 (prog_interface c) ->
+      PS.is_program_component prog_st1 (prog_interface p) ->
       PS.mergeable_states (prog_interface c) (prog_interface p)
-                          (PS.CC ctx_st1) (PS.PC prog_st1) ->
+                          ctx_st1 prog_st1 ->
       (* first side *)
       st_starN p (prog_interface c) (prepare_global_env p)
-               n1 (PS.CC ctx_st1) t1 ctx_st1' ->
+               n1 ctx_st1 t1 ctx_st1' ->
       PS.step p (prog_interface c) (prepare_global_env p) ctx_st1' t2 prog_st2 ->
-      ~ same_turn ctx_st1' prog_st2 ->
+      ~ same_turn (prog_interface c) ctx_st1' prog_st2 ->
       mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st2 t3 ips'' ->
       (* second side *)
       st_starN c (prog_interface p) (prepare_global_env c)
-               n1' (PS.PC prog_st1) t1' prog_st1' ->
+               n1' prog_st1 t1' prog_st1' ->
       PS.step c (prog_interface p) (prepare_global_env c) prog_st1' t2' ctx_st2 ->
-      ~ same_turn prog_st1' ctx_st2 ->
+      ~ same_turn (prog_interface p) prog_st1' ctx_st2 ->
       mt_starN c (prog_interface p) (prepare_global_env c) n2' ctx_st2 t3' ips' ->
       (* same steps and same trace *)
       t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
@@ -1307,7 +1361,7 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps
-                      Hmergeable H H0 H1 Hmt_star1 H4 H7 H8 H9)
+                      H2 H3 Hmergeable H H0 H1 Hmt_star1 H4 H7 H8 H9)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
           (* simulate the first segment (trace t0) *)
 
@@ -1363,7 +1417,7 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps'
-                      Hmergeable H H0 H1 Hmt_star1 H4 H7 H8 H9)
+                      H2 H3 Hmergeable H H0 H1 Hmt_star1 H4 H7 H8 H9)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
 
           (* simulate the first segment (trace t0) *)

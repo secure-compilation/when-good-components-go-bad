@@ -558,7 +558,6 @@ Ltac rename_op p pc1 P12 HOP :=
     rename Hop into HOP
   end.
 
-
 (* In the program, both steps in sync should fetch the same instruction.
    By chaining inversions on component procedures, procedure code and
    instruction, goals involving pairs of non-matching instructions are
