@@ -77,6 +77,7 @@ MicroPolicies/Int32.v
 MicroPolicies/Symbolic.v
 MicroPolicies/Exec.v
 MicroPolicies/LRC.v
+MicroPolicies/Printer.v
 MicroPolicies/Examples/Helper.v
 MicroPolicies/Examples/Identity.v
 MicroPolicies/Examples/Increment.v
