@@ -783,6 +783,9 @@ Section Simulation.
 
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
+  Hypothesis prog_is_closed:
+    closed_program (program_link p c).
+
   Lemma match_initial_states:
     forall ips1,
       ProgramSem.initial_state (prog_interface c) ips1 ->
@@ -1131,6 +1134,9 @@ Section PartialComposition.
 
   Let prog := program_link p c.
 
+  Hypothesis prog_is_closed:
+    closed_program prog.
+
   Lemma threeway_multisem_st_starN_simulation:
     forall n ips1 ips2 t ips1' ips2',
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
@@ -1159,8 +1165,11 @@ Section PartialComposition.
          use the fact that the context simulates the program *)
       + assert (Hmergeable' := Hmergeable).
         apply PS.mergeable_states_sym in Hmergeable'; auto.
+        assert (prog_is_closed' := prog_is_closed).
+        rewrite (closed_program_link_sym wf1 wf2 linkability main_linkability)
+          in prog_is_closed'.
         destruct (ProgCtxSim.st_starN_simulation wf2 wf1
-                    (linkable_sym linkability) Hst_star2 Hmergeable')
+                    (linkable_sym linkability) prog_is_closed' Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
         (* TODO *)
         admit.
@@ -1634,7 +1643,7 @@ Section Composition.
     intros b1 b2 m Hbeh1 Hbeh2 Hpref1 Hpref2.
     pose proof
       partial_programs_composition_prefix
-        wf1 wf2 main_linkability linkability Hbeh1 Hbeh2 Hpref1 Hpref2
+        wf1 wf2 main_linkability linkability prog_is_closed Hbeh1 Hbeh2 Hpref1 Hpref2
       as Hcomp.
     destruct Hcomp as [b3 [Hbeh3 Hpref3]].
     exists b3. split; auto.
