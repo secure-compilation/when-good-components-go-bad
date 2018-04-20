@@ -32,9 +32,30 @@ Definition coqstring_of_regs (regs : { fmap reg mt -> ratom }) : string :=
 " ++ s) "" regs ++ "}
 ".
 
+Definition coqstring_of_instr (i : instr mt) : string :=
+  match i with
+  | Nop => "Nop"
+  | Const i r => "Const r_" ++ coqstring_of_word r ++ " <- " ++ coqstring_of_word r
+  | Mov r1 r2 => "Mov [TODO]"
+  | Binop o r1 r2 r3 => "Binop [TODO]"
+  | Load r1 r2 => "Load [TODO]"
+  | Store r1 r2 => "Store [TODO]"
+  | Jump r => "Jump r_" ++ coqstring_of_word r
+  | Bnz r i => "Bnz [TODO]"
+  | Jal i => "Jal " ++ coqstring_of_word i
+  | JumpEpc => "JumpEpc"
+  | AddRule => "AddRule"
+  | GetTag r1 r2 => "GetTag [TODO]"
+  | PutTag r1 r2 r3 => "PutTag [TODO]"
+  | Halt => "Halt"
+  end.
 
 Definition coqstring_of_matom (a : matom) : string :=
-  "{ value: " ++ coqstring_of_word (vala a) ++ "; " ++ "tag: " ++ "TODO" ++ " }".
+  let value := match decode_instr (vala a) with
+               | Some i => coqstring_of_instr i
+               | None => coqstring_of_word (vala a)
+               end in
+  "{ value: " ++ value ++ "; " ++ "tag: " ++ "TODO" ++ " }".
 
 Definition coqstring_of_mem (mem : { fmap mword mt -> matom }) : string :=
   "mem:{

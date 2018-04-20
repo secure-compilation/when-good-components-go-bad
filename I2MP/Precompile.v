@@ -57,7 +57,7 @@ Definition precompile_component (cenv : compiler_env) (c : Component.id) : code 
 
 Definition precompile_code (cenv : compiler_env) : code :=
   let main_code :=
-      [:: (IJal (make_label cenv Component.main Procedure.main), def_mem_tag Component.main)] in
+      [:: (IJal (make_label cenv Component.main Procedure.main), def_mem_tag Component.main) ; (IHalt, def_mem_tag Component.main)] in
 
   let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
   main_code ++ flatten (map (precompile_component cenv) components).
