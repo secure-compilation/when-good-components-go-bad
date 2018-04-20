@@ -786,6 +786,46 @@ Section Simulation.
   Hypothesis prog_is_closed:
     closed_program (program_link p c).
 
+  (* RB: TODO: The following two lemmas should live in PS, if useful. *)
+  Lemma mergeable_stack_exists :
+    forall pgps1,
+    exists pgps2,
+      PS.mergeable_stacks pgps1 pgps2.
+  Proof.
+    induction pgps1 as [| ptr pgps1 IH].
+    - exists [].
+      constructor.
+    - destruct IH as [pgps2 IH].
+      destruct ptr as [C [[b o] |]].
+      + exists ((C, None) :: pgps2).
+        constructor.
+        * by apply IH.
+        * by constructor.
+      + exists ((C, Some (0, 0%Z)) :: pgps2).
+        constructor.
+        * by apply IH.
+        * by econstructor.
+  Qed.
+
+  Lemma mergeable_memory_exists :
+    forall mem1,
+    exists mem2,
+      PS.mergeable_memories mem1 mem2.
+  Proof.
+    intro mem1.
+    exists emptym.
+    unfold PS.mergeable_memories.
+    rewrite domm0.
+    apply fdisjoints0.
+  Qed.
+
+  (* RB: TODO: p and c are closed and disjoint, so by well-formedness of the state
+    (to be defined), we must get that if a component is not in c, it must be in p,
+    and so on. The existence of mergeable stacks and memories given one of the
+    halves is used, but it is unclear how informative this is without appealing to
+    well-formed states. The same applies to made up registers and pointers.
+    Regardless, observe that there remains a troublesome case when matching the
+    PC form against mergeable_states. *)
   Lemma match_initial_states:
     forall ips1,
       ProgramSem.initial_state (prog_interface c) ips1 ->
@@ -795,14 +835,29 @@ Section Simulation.
   Proof.
     intros ips1 Hini.
     inversion Hini as [? Hpc]; subst.
-    destruct ips1 as [[[[stk1 mem1] regs1] pc1] | [[Cid1 stk1] mem1]].
-    - admit.
-    - (* There is a problem in this case. PS.mergeable_states expects a
-         PS.is_program_component on a PS.PC state, and a PS.is_context_component
-         on a PS.CC state. Here, we start from a PS.is_program_component on a
-         PS.CC state, which can never satisfy the conditions imposed by its
-         involvement in the goal PS.mergeable_states. *)
-      admit.
+    destruct ips1 as [[[[stk1 mem1] regs1] pc1] | [[Cid1 stk1] mem1]];
+      destruct (PS.mergeable_stack_exists stk1) as [stk2 Hstk12];
+      destruct (PS.mergeable_memory_exists mem1) as [mem2 Hmem12].
+    - exists (PS.CC (Pointer.component pc1, stk2, mem2)).
+      split.
+      + constructor.
+        admit. (* By closedness / well-formedness of the state. *)
+      + constructor.
+        * assumption.
+        * admit. (* By closedness / well-formedness of the state. *)
+        * reflexivity.
+        * assumption. (* Improve by well-formedness of the state? *)
+        * assumption. (* Idem. *)
+    - exists (PS.PC (stk2, mem2, Register.init, (Cid1, 0, 0%Z))).  (* Idem. *)
+      split.
+      + constructor.
+        admit. (* By closedness / well-formedness of the state. *)
+      + constructor.
+        * PS.simplify_turn. admit. (* Dead end! *)
+        * PS.simplify_turn. admit. (* Dead end! *)
+        * reflexivity.
+        * assumption.
+        * assumption.
   Admitted.
 
   Lemma match_final_states:
