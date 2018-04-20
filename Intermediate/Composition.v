@@ -836,8 +836,8 @@ Section Simulation.
     intros ips1 Hini.
     inversion Hini as [? Hpc]; subst.
     destruct ips1 as [[[[stk1 mem1] regs1] pc1] | [[Cid1 stk1] mem1]];
-      destruct (PS.mergeable_stack_exists stk1) as [stk2 Hstk12];
-      destruct (PS.mergeable_memory_exists mem1) as [mem2 Hmem12].
+      destruct (mergeable_stack_exists stk1) as [stk2 Hstk12];
+      destruct (mergeable_memory_exists mem1) as [mem2 Hmem12].
     - exists (PS.CC (Pointer.component pc1, stk2, mem2)).
       split.
       + constructor.
