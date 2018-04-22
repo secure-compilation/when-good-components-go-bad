@@ -42,6 +42,24 @@ Inductive state : Type :=
 | PC : program_state -> state
 | CC : context_state -> state.
 
+Definition state_component (ps: state) : Component.id :=
+  match ps with
+  | PC (_, _, _, pc) => Pointer.component pc
+  | CC (C, _, _) => C
+  end.
+
+Definition state_memory (ps: state) : Memory.t :=
+  match ps with
+  | PC (_, mem, _, _) => mem
+  | CC (_, _, mem) => mem
+  end.
+
+Definition state_stack (ps: state) : stack :=
+  match ps with
+  | PC (gps, _, _, _) => gps
+  | CC (_, gps, _) => gps
+  end.
+
 Ltac unfold_state st :=
   match goal with
     |- _ => let pgps := fresh "pgps" in
@@ -332,20 +350,20 @@ Definition mergeable_memories (mem1 mem2: Memory.t): Prop :=
   fdisjoint (domm mem1) (domm mem2).
 
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
-| mergeable_states_first: forall pgps1 pmem1 regs pc C pgps2 pmem2,
-    is_program_component (PC (pgps1, pmem1, regs, pc)) ctx1 ->
-    is_context_component (CC (C, pgps2, pmem2)) ctx2 ->
-    Pointer.component pc = C ->
-    mergeable_stacks pgps1 pgps2 ->
-    mergeable_memories pmem1 pmem2 ->
-    mergeable_states ctx1 ctx2 (PC (pgps1, pmem1, regs, pc)) (CC (C, pgps2, pmem2))
-| mergeable_states_second: forall pgps1 pmem1 regs pc C pgps2 pmem2,
-    is_context_component (CC (C, pgps1, pmem1)) ctx1 ->
-    is_program_component (PC (pgps2, pmem2, regs, pc)) ctx2 ->
-    Pointer.component pc = C ->
-    mergeable_stacks pgps1 pgps2 ->
-    mergeable_memories pmem1 pmem2 ->
-    mergeable_states ctx1 ctx2 (CC (C, pgps1, pmem1)) (PC (pgps2, pmem2, regs, pc)).
+| mergeable_states_first: forall ips1 ips2,
+    is_program_component ips1 ctx1 ->
+    is_context_component ips2 ctx2 ->
+    state_component ips1 = state_component ips2 ->
+    mergeable_stacks (state_stack ips1) (state_stack ips2) ->
+    mergeable_memories (state_memory ips1) (state_memory ips2) ->
+    mergeable_states ctx1 ctx2 ips1 ips2
+| mergeable_states_second: forall ips1 ips2,
+    is_context_component ips1 ctx1 ->
+    is_program_component ips2 ctx2 ->
+    state_component ips1 = state_component ips2 ->
+    mergeable_stacks (state_stack ips1) (state_stack ips2) ->
+    mergeable_memories (state_memory ips1) (state_memory ips2) ->
+    mergeable_states ctx1 ctx2 ips1 ips2.
 
 Lemma mergeable_stack_frames_sym:
   forall frame1 frame2,
@@ -489,10 +507,11 @@ Inductive step (p: program) (ctx: Program.interface)
 
 Theorem context_epsilon_step_is_silent:
   forall p ctx G ips ips',
-    step p ctx G (CC ips) E0 ips' ->
-    ips' = CC ips.
+    is_context_component ips ctx ->
+    step p ctx G ips E0 ips' ->
+    ips' = ips.
 Proof.
-  intros p ctx G ips ips' Hstep.
+  intros p ctx G ips ips' Hcc Hstep.
   inversion Hstep; subst.
   match goal with
   | Hpartial1: partial_state _ _ _,
@@ -500,6 +519,10 @@ Proof.
     inversion Hpartial2; subst; PS.simplify_turn;
     inversion Hpartial1; subst; PS.simplify_turn
   end.
+  - rewrite Hcc in H.
+    discriminate.
+  - rewrite Hcc in H.
+    discriminate.
   - (* contra *)
     assert (Pointer.component pc = Pointer.component pc0) as Hsame_comp. {
       inversion H3; subst;
@@ -508,8 +531,8 @@ Proof.
       + erewrite find_label_in_component_1; now eauto.
       + erewrite find_label_in_procedure_1; now eauto.
     }
-    rewrite Hsame_comp in H6.
-    rewrite H6 in H.
+    rewrite <- Hsame_comp in H6.
+    rewrite Hcc in H6.
     discriminate.
   - inversion H3; subst;
       try (rewrite Pointer.inc_preserves_component; reflexivity);
@@ -530,14 +553,15 @@ Qed.
 
 Corollary context_epsilon_star_is_silent:
   forall p ctx G ctx_state ips',
-    star (step p ctx) G (CC ctx_state) E0 ips' ->
-    ips' = CC ctx_state.
+    is_context_component ctx_state ctx ->
+    star (step p ctx) G ctx_state E0 ips' ->
+    ips' = ctx_state.
 Proof.
-  intros p ctx G ctx_state ips' Hstar.
+  intros p ctx G ctx_state ips' Hcc Hstar.
   dependent induction Hstar; subst.
   - reflexivity.
-  - apply Eapp_E0_inv in x. destruct x. subst.
-    apply context_epsilon_step_is_silent in H. subst.
+  - symmetry in H0. apply Eapp_E0_inv in H0. destruct H0. subst.
+    apply (context_epsilon_step_is_silent Hcc) in H. subst.
     apply IHHstar; auto.
 Qed.
 

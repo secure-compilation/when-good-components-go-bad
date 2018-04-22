@@ -841,20 +841,20 @@ Section Simulation.
     - exists (PS.CC (Pointer.component pc1, stk2, mem2)).
       split.
       + constructor.
-        admit. (* By closedness / well-formedness of the state. *)
-      + constructor.
+        PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
+      + apply PS.mergeable_states_first.
         * assumption.
-        * admit. (* By closedness / well-formedness of the state. *)
+        * PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
         * reflexivity.
         * assumption. (* Improve by well-formedness of the state? *)
         * assumption. (* Idem. *)
     - exists (PS.PC (stk2, mem2, Register.init, (Cid1, 0, 0%Z))).  (* Idem. *)
       split.
       + constructor.
-        admit. (* By closedness / well-formedness of the state. *)
-      + constructor.
-        * PS.simplify_turn. admit. (* Dead end! *)
-        * PS.simplify_turn. admit. (* Dead end! *)
+        PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
+      + apply PS.mergeable_states_first.
+        * assumption.
+        * PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
         * reflexivity.
         * assumption.
         * assumption.
@@ -870,8 +870,8 @@ Section Simulation.
     constructor.
     inversion Hfinal1 as [? Hpc]; subst.
     inversion Hmerge
-      as [stk1 mem1 regs1 pc1 ? stk2 mem2 Hpc1 Hcc2 ? Hstk Hmem |
-          stk1 mem1 regs1 pc1 ? stk2 mem2 Hcc1 Hpc2 ? Hstk Hmem]; subst.
+      as [ips1' ips2' Hpc1 Hcc2 Hcid Hstk Hmem |
+          ips1' ips2' Hcc1 Hpc2 Hcid Hstk Hmem]; subst.
     - assumption.
     - (* Contra. *)
       PS.simplify_turn.
@@ -993,7 +993,7 @@ Section MultiSemantics.
       + inversion H0; subst. inversion H1; subst.
         inversion H6; subst; inversion H12; subst; PS.simplify_turn.
         * (* contra *)
-          now inversion H.
+          admit. (*now inversion H.*) (* TODO *)
         * econstructor.
           ** PS.simplify_turn.
              rewrite mem_domm. auto.
@@ -1017,7 +1017,7 @@ Section MultiSemantics.
              *** apply PS.merged_stack_has_no_holes.
                  inversion H; subst; assumption.
         * (* contra *)
-          inversion H.
+          admit. (*inversion H.*) (* TODO *)
       + (* unpartilizing the merge preserves the state information that make
            CS.initial_state true *)
         rewrite linking_empty_program. subst. simpl.
@@ -1025,7 +1025,7 @@ Section MultiSemantics.
         CS.unfold_state ics. CS.unfold_state ics0.
         * apply merged_initial_states; auto.
     - constructor; auto.
-  Qed.
+  (*Qed.*) Admitted.
 
   Lemma multi_match_final_states:
     forall ms ips,
@@ -1048,6 +1048,7 @@ Section MultiSemantics.
     - now apply empty_prog_is_well_formed.
     - simpl. apply linkable_emptym. now apply linkability.
     - simpl. apply linkable_emptym. now apply linkability.
+(* TODO
     - rewrite mem_domm. auto.
     - rewrite mem_domm. auto.
     - constructor.
@@ -1091,7 +1092,7 @@ Section MultiSemantics.
           ** apply linkable_mains_sym; auto.
           ** rewrite <- H3. auto.
       + PS.simplify_turn. rewrite H3 in H2. discriminate.
-  Qed.
+  Qed.*) Admitted.
 
   Lemma lockstep_simulation:
     forall ms t ms',
@@ -1115,6 +1116,7 @@ Section MultiSemantics.
       (* program is in the first state *)
       + inversion H9; subst; inversion H14; subst;
         PS.simplify_turn; simpl in *.
+(*
         eapply PS.partial_step with
             (ics:=PS.unpartialize (PS.PC (PS.merge_stacks pgps1 pgps2,
                                           PS.merge_memories pmem1 pmem2, regs, pc)))
@@ -1133,7 +1135,9 @@ Section MultiSemantics.
                         (PS.merged_stack_has_no_holes H4)).
              reflexivity.
         * admit.
+*) admit.
       + (* program is in the second state *)
+(*
         eapply PS.partial_step with
             (ics:=PS.unpartialize (PS.PC (PS.merge_stacks pgps1 pgps2,
                                           PS.merge_memories pmem1 pmem2, regs, pc)))
@@ -1152,6 +1156,7 @@ Section MultiSemantics.
                         (PS.merged_stack_has_no_holes H4)).
              reflexivity.
         * admit.
+*) admit.
 
     - (* prove match *) admit.
   Admitted.
@@ -1212,7 +1217,7 @@ Section PartialComposition.
 
       (* the program doesn't step, hence we stay still *)
       + apply star_if_st_starN in Hst_star2.
-        eapply PS.context_epsilon_star_is_silent in Hst_star2; subst.
+        eapply (PS.context_epsilon_star_is_silent H0) in Hst_star2; subst.
         split.
         * constructor.
         * assumption.
@@ -1425,11 +1430,11 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps
-                      H2 H3 Hmergeable H H0 H1 Hmt_star1 H4 H7 H8 H9)
+                      H2 H3 Hmergeable H H0 H1 Hmt_star1 H7 H8 H9 H10)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H4)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H7)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1453,7 +1458,7 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H15 H9)
+          destruct (IHHmt_star1 ips''0 H16 H10)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
@@ -1481,12 +1486,12 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps'
-                      H2 H3 Hmergeable H H0 H1 Hmt_star1 H4 H7 H8 H9)
+                      H2 H3 Hmergeable H H0 H1 Hmt_star1 H7 H8 H9 H10)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
 
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H4)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H7)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1510,7 +1515,7 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H15 H9)
+          destruct (IHHmt_star1 ips''0 H16 H10)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
@@ -1560,7 +1565,7 @@ Section PartialComposition.
       (* here it's probably where we need well-formed programs *)
       admit.
 
-    - constructor; PS.simplify_turn;
+    - apply PS.mergeable_states_first; PS.simplify_turn;
         try assumption;
         try reflexivity.
       + inversion linkability.
@@ -1581,7 +1586,7 @@ Section PartialComposition.
           + admit.
           + unfold PS.mergeable_memories. admit.
 
-    - constructor; PS.simplify_turn;
+    - apply PS.mergeable_states_second; PS.simplify_turn;
             try assumption;
             try reflexivity.
           + inversion linkability.
