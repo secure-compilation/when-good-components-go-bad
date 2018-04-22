@@ -786,6 +786,9 @@ Section Simulation.
   Hypothesis prog_is_closed:
     closed_program (program_link p c).
 
+  Hypothesis mergeable_interfaces:
+    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+
   (* RB: TODO: The following two lemmas should live in PS, if useful. *)
   Lemma mergeable_stack_exists :
     forall pgps1,
@@ -843,6 +846,7 @@ Section Simulation.
       + constructor.
         PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
       + apply PS.mergeable_states_first.
+        * apply PS.mergeable_interfaces_sym; assumption.
         * assumption.
         * PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
         * reflexivity.
@@ -853,6 +857,7 @@ Section Simulation.
       + constructor.
         PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
       + apply PS.mergeable_states_first.
+        * apply PS.mergeable_interfaces_sym; assumption.
         * assumption.
         * PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
         * reflexivity.
@@ -870,8 +875,8 @@ Section Simulation.
     constructor.
     inversion Hfinal1 as [? Hpc]; subst.
     inversion Hmerge
-      as [ips1' ips2' Hpc1 Hcc2 Hcid Hstk Hmem |
-          ips1' ips2' Hcc1 Hpc2 Hcid Hstk Hmem]; subst.
+      as [ips1' ips2' Hmerge' Hpc1 Hcc2 Hcid Hstk Hmem |
+          ips1' ips2' Hmerge' Hcc1 Hpc2 Hcid Hstk Hmem]; subst.
     - assumption.
     - (* Contra. *)
       PS.simplify_turn.
@@ -1114,7 +1119,7 @@ Section MultiSemantics.
       inversion H2; subst; inversion H5; subst.
 
       (* program is in the first state *)
-      + inversion H9; subst; inversion H14; subst;
+      + inversion H9; subst; inversion H16; subst; (* RB: TODO: Name/review new offsets. *)
         PS.simplify_turn; simpl in *.
 (*
         eapply PS.partial_step with
@@ -1197,6 +1202,9 @@ Section PartialComposition.
   Hypothesis prog_is_closed:
     closed_program prog.
 
+  Hypothesis mergeable_interfaces:
+    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+
   Lemma threeway_multisem_st_starN_simulation:
     forall n ips1 ips2 t ips1' ips2',
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
@@ -1217,7 +1225,7 @@ Section PartialComposition.
 
       (* the program doesn't step, hence we stay still *)
       + apply star_if_st_starN in Hst_star2.
-        eapply (PS.context_epsilon_star_is_silent H0) in Hst_star2; subst.
+        eapply (PS.context_epsilon_star_is_silent H1) in Hst_star2; subst.
         split.
         * constructor.
         * assumption.
@@ -1229,7 +1237,7 @@ Section PartialComposition.
         rewrite (closed_program_link_sym wf1 wf2 linkability main_linkability)
           in prog_is_closed'.
         destruct (ProgCtxSim.st_starN_simulation wf2 wf1
-                    (linkable_sym linkability) prog_is_closed' Hst_star2 Hmergeable')
+                    (linkable_sym linkability) prog_is_closed' H Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
         (* TODO *)
         admit.
@@ -1430,11 +1438,11 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps
-                      H2 H3 Hmergeable H H0 H1 Hmt_star1 H7 H8 H9 H10)
+                      H3 H4 Hmergeable H H0 H1 Hmt_star1 H8 H9 H10 H11)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H7)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H8)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1458,7 +1466,7 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H16 H10)
+          destruct (IHHmt_star1 ips''0 H17 H11)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
@@ -1486,12 +1494,12 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps'
-                      H2 H3 Hmergeable H H0 H1 Hmt_star1 H7 H8 H9 H10)
+                      H3 H4 Hmergeable H H0 H1 Hmt_star1 H8 H9 H10 H11)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
 
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H7)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H8)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1515,7 +1523,7 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H16 H10)
+          destruct (IHHmt_star1 ips''0 H17 H11)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
@@ -1568,6 +1576,7 @@ Section PartialComposition.
     - apply PS.mergeable_states_first; PS.simplify_turn;
         try assumption;
         try reflexivity.
+      + apply PS.mergeable_interfaces_sym; assumption.
       + inversion linkability.
         (* RB: With the changes to [linkability], the case analysis on programs
            does not follow naturally from its inversion. The admits on each
@@ -1589,6 +1598,7 @@ Section PartialComposition.
     - apply PS.mergeable_states_second; PS.simplify_turn;
             try assumption;
             try reflexivity.
+          + apply PS.mergeable_interfaces_sym; assumption.
           + inversion linkability.
             (* RB: Same as above.
             unfold linkable_mains in H21.
@@ -1678,6 +1688,9 @@ Section Composition.
   Hypothesis prog_is_closed:
     closed_program (program_link p c).
 
+  Hypothesis mergeable_interfaces:
+    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+
   Theorem composition_for_termination:
     forall t,
       program_behaves (PS.sem p (prog_interface c)) (Terminates t) ->
@@ -1703,7 +1716,8 @@ Section Composition.
     intros b1 b2 m Hbeh1 Hbeh2 Hpref1 Hpref2.
     pose proof
       partial_programs_composition_prefix
-        wf1 wf2 main_linkability linkability prog_is_closed Hbeh1 Hbeh2 Hpref1 Hpref2
+        wf1 wf2 main_linkability linkability prog_is_closed mergeable_interfaces
+        Hbeh1 Hbeh2 Hpref1 Hpref2
       as Hcomp.
     destruct Hcomp as [b3 [Hbeh3 Hpref3]].
     exists b3. split; auto.

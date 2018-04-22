@@ -349,8 +349,23 @@ Inductive mergeable_stacks : stack -> stack -> Prop :=
 Definition mergeable_memories (mem1 mem2: Memory.t): Prop :=
   fdisjoint (domm mem1) (domm mem2).
 
+Definition mergeable_interfaces (ctx1 ctx2: Program.interface) : Prop :=
+  linkable ctx1 ctx2 /\
+  closed_interface (unionm ctx1 ctx2).
+
+Lemma mergeable_interfaces_sym ctx1 ctx2 :
+  mergeable_interfaces ctx1 ctx2 ->
+  mergeable_interfaces ctx2 ctx1.
+Proof.
+  intros [Hlinkable Hclosed].
+  split.
+  - apply (linkable_sym Hlinkable).
+  - apply (closed_interface_sym _ _ Hclosed).
+Qed.
+
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_first: forall ips1 ips2,
+    mergeable_interfaces ctx1 ctx2 ->
     is_program_component ips1 ctx1 ->
     is_context_component ips2 ctx2 ->
     state_component ips1 = state_component ips2 ->
@@ -358,6 +373,7 @@ Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Pro
     mergeable_memories (state_memory ips1) (state_memory ips2) ->
     mergeable_states ctx1 ctx2 ips1 ips2
 | mergeable_states_second: forall ips1 ips2,
+    mergeable_interfaces ctx1 ctx2 ->
     is_context_component ips1 ctx1 ->
     is_program_component ips2 ctx2 ->
     state_component ips1 = state_component ips2 ->
@@ -405,10 +421,15 @@ Lemma mergeable_states_sym:
     PS.mergeable_states (prog_interface p) (prog_interface c) s2 s1.
 Proof.
   intros p c s1 s2 Hp_wf Hc_wf Hlink Hmergeable.
-  inversion Hmergeable; subst;
-  do 2 (constructor; auto;
-        [ apply mergeable_stacks_sym; auto
-        | apply mergeable_memories_sym; auto ]).
+  inversion Hmergeable; subst.
+  - apply mergeable_states_second; auto.
+    + apply mergeable_interfaces_sym; assumption.
+    + apply mergeable_stacks_sym; assumption.
+    + apply mergeable_memories_sym; assumption.
+  - apply mergeable_states_first; auto.
+    + apply mergeable_interfaces_sym; assumption.
+    + apply mergeable_stacks_sym; assumption.
+    + apply mergeable_memories_sym; assumption.
 Qed.
 
 Definition merge_stack_frames (frames: PartialPointer.t * PartialPointer.t): PartialPointer.t :=
