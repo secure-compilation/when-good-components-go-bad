@@ -849,6 +849,7 @@ Section Simulation.
         * apply PS.mergeable_interfaces_sym; assumption.
         * assumption.
         * eapply PS.domm_partition; eassumption.
+        * constructor.
         * reflexivity.
         * assumption. (* Improve by well-formedness of the state? *)
         * assumption. (* Idem. *)
@@ -860,6 +861,7 @@ Section Simulation.
         * apply PS.mergeable_interfaces_sym; assumption.
         * assumption.
         * eapply PS.domm_partition; eassumption.
+        * constructor.
         * reflexivity.
         * assumption.
         * assumption.
@@ -1438,11 +1440,11 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps
-                      H3 H4 Hmergeable H H0 H1 Hmt_star1 H8 H9 H10 H11)
+                      H3 H4 Hmergeable H H0 H1 Hmt_star1 H9 H10 H11 H12)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H8)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H9)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1466,7 +1468,7 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H17 H11)
+          destruct (IHHmt_star1 ips''0 H18 H12)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
@@ -1494,12 +1496,12 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps'
-                      H3 H4 Hmergeable H H0 H1 Hmt_star1 H8 H9 H10 H11)
+                      H3 H4 Hmergeable H H0 H1 Hmt_star1 H9 H10 H11 H12)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
 
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H8)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H9)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1523,7 +1525,7 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H17 H11)
+          destruct (IHHmt_star1 ips''0 H18 H12)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
@@ -1577,6 +1579,7 @@ Section PartialComposition.
         try assumption;
         try reflexivity.
       + apply PS.mergeable_interfaces_sym; assumption.
+      + constructor.
       + inversion linkability.
         (* RB: With the changes to [linkability], the case analysis on programs
            does not follow naturally from its inversion. The admits on each
@@ -1599,6 +1602,7 @@ Section PartialComposition.
             try assumption;
             try reflexivity.
           + apply PS.mergeable_interfaces_sym; assumption.
+          + constructor.
           + inversion linkability.
             (* RB: Same as above.
             unfold linkable_mains in H21.

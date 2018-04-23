@@ -372,11 +372,18 @@ Lemma domm_partition :
     C \in domm ctx1.
 Admitted. (* Rank 1. *)
 
+Inductive mergeable_states_pc_cc: state -> state -> Prop :=
+| mergeable_states_pc_cc_first: forall gps1 mem1 regs1 pc1 C2 gps2 mem2,
+    mergeable_states_pc_cc (PC (gps1, mem1, regs1, pc1)) (CC (C2, gps2, mem2))
+| mergeable_states_pc_cc_second: forall C1 gps1 mem1 gps2 mem2 regs2 pc2,
+    mergeable_states_pc_cc (CC (C1, gps1, mem1)) (PC (gps2, mem2, regs2, pc2)).
+
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_first: forall ips1 ips2,
     mergeable_interfaces ctx1 ctx2 ->
     is_program_component ips1 ctx1 ->
     is_context_component ips2 ctx2 ->
+    mergeable_states_pc_cc ips1 ips2 ->
     state_component ips1 = state_component ips2 ->
     mergeable_stacks (state_stack ips1) (state_stack ips2) ->
     mergeable_memories (state_memory ips1) (state_memory ips2) ->
@@ -385,6 +392,7 @@ Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Pro
     mergeable_interfaces ctx1 ctx2 ->
     is_context_component ips1 ctx1 ->
     is_program_component ips2 ctx2 ->
+    mergeable_states_pc_cc ips1 ips2 ->
     state_component ips1 = state_component ips2 ->
     mergeable_stacks (state_stack ips1) (state_stack ips2) ->
     mergeable_memories (state_memory ips1) (state_memory ips2) ->
@@ -421,22 +429,34 @@ Proof.
   rewrite fdisjointC. auto.
 Qed.
 
+Lemma mergeable_states_pc_cc_sym s1 s2:
+  mergeable_states_pc_cc s1 s2 ->
+  mergeable_states_pc_cc s2 s1.
+Proof.
+  intros Hmerge.
+  inversion Hmerge; subst;
+    constructor.
+Qed.
+
+(* RB: TODO: Obtain linkability from mergeability. *)
 Lemma mergeable_states_sym:
   forall p c s1 s2,
     well_formed_program p ->
     well_formed_program c ->
     linkable (prog_interface p) (prog_interface c) ->
-    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
-    PS.mergeable_states (prog_interface p) (prog_interface c) s2 s1.
+    mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
+    mergeable_states (prog_interface p) (prog_interface c) s2 s1.
 Proof.
   intros p c s1 s2 Hp_wf Hc_wf Hlink Hmergeable.
   inversion Hmergeable; subst.
   - apply mergeable_states_second; auto.
     + apply mergeable_interfaces_sym; assumption.
+    + apply mergeable_states_pc_cc_sym; assumption.
     + apply mergeable_stacks_sym; assumption.
     + apply mergeable_memories_sym; assumption.
   - apply mergeable_states_first; auto.
     + apply mergeable_interfaces_sym; assumption.
+    + apply mergeable_states_pc_cc_sym; assumption.
     + apply mergeable_stacks_sym; assumption.
     + apply mergeable_memories_sym; assumption.
 Qed.
