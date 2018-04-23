@@ -35,7 +35,7 @@ Definition coqstring_of_regs (regs : { fmap reg mt -> ratom }) : string :=
 Definition coqstring_of_instr (i : instr mt) : string :=
   match i with
   | Nop => "Nop"
-  | Const i r => "Const r_" ++ coqstring_of_word r ++ " <- " ++ coqstring_of_word r
+  | Const i r => "Const r_" ++ coqstring_of_word r ++ " <- " ++ coqstring_of_word i
   | Mov r1 r2 => "Mov [TODO]"
   | Binop o r1 r2 r3 => "Binop [TODO]"
   | Load r1 r2 => "Load [TODO]"
