@@ -67,6 +67,68 @@ Returns: None if the definition is not possible
                        interface
  *)
 
+Definition generate_ctx_component ctx_id main_pid tr : NMap code :=
+  let acc : (list (nat*nat*nat*nat))*(NMap nat) *  (NMap (NMap code)) := 
+      if (Nat.eqb ctx_id Component.main)
+      then ([(Component.main,Component.main,main_pid,0%nat)],
+            (mkfmap [(main_pid,0%nat)]),
+            emptym
+           )
+      else ([],emptym,emptym) in
+  let '(_,_,cmap) :=
+      List.fold_left
+        (fun acc elt =>
+           let '(call_stack,call_nos,cmap) := acc in
+           match elt with
+           | ECall caller_cid pid _ callee_cid =>             
+             if (Nat.eqb ctx_id callee_cid)
+             then
+               let cn :=
+                   match (getm call_nos pid) with
+                   | None => 0%nat
+                   | Some n => n
+                   end
+               in
+               let new_call_nos := (setm call_nos pid (cn+1)%nat) in
+               ((caller_cid,callee_cid,pid,cn)::call_stack,
+                (* increment value stored *)
+                new_call_nos, cmap
+               )
+             else
+               ((caller_cid,callee_cid,pid,0%nat)::call_stack,call_nos,cmap)
+           | ERet crt_cid _ dst_cid =>
+             match call_stack with
+             | nil => acc (* TODO this is an error *)
+             | (caller_id, calee_id, pid, _)::xs =>
+               if (Nat.eqb ctx_id caller_id )
+               then 
+                 match xs with 
+                 | nil => (nil, call_nos,cmap)
+                 | (sid,did,ppid,cn)::_ =>
+                   let pmap := match (getm cmap ppid) with
+                               | None => emptym
+                               | Some x => x
+                               end in
+                   let instr := match (getm pmap cn) with
+                                | None => []
+                                | Some l => l
+                                end in
+                   (xs, call_nos, (setm cmap
+                                        ppid
+                                        (setm pmap
+                                              cn
+                                              instr)))
+                 end
+               else (xs, call_nos, cmap)
+             
+             end
+           end
+        )
+        tr acc in
+(* TODO *)
+  emptym
+.
+
 Definition  get_interm_program
             (ip : Intermediate.program)
             (ctx_cid : Component.id)
@@ -105,19 +167,23 @@ Definition  get_interm_program
            ctx_cid
            ctx_int in
 
-  let buffer_ids := if (Nat.eqb Component.main ctx_cid)
-                    then
-                      (match (Intermediate.prog_main ip) with
+  let pid_main :=  (match (Intermediate.prog_main ip) with
                       | None => Procedure.main
                       | Some pid => pid
-                      end)::export
-                    else  export in
+                      end) in
+
+  let buffer_ids := if (Nat.eqb Component.main ctx_cid)
+                    then pid_main::export
+                    else export in
   let prog_buffers :=
       setm (Intermediate.prog_buffers ip)
            ctx_cid
-           (
-             mkfmap (List.map (fun id => (id, inr [(Int 0%Z)])) buffer_ids)
-           ) in
+           (mkfmap (List.map (fun id => (id, inr [(Int 0%Z)])) buffer_ids) ) in
+
+  let prog_procedure :=
+      setm (Intermediate.prog_procedures ip)
+           ctx_cid
+           (generate_ctx_component ctx_cid pid_main tr) in
   
   None
 .
