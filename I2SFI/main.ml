@@ -6,12 +6,12 @@ begin
     print_newline ()
 end
 
-let main() = begin
-print_string "Run store test\n";
-print_newline ();
-run run_store_test;
-run run_jump_test;
-run run_stack_test;
-end;;
+let main() =
+  begin
+    (* run run_store_test;
+     * run run_jump_test;
+     * run run_stack_test; *)
+    run run_rsc_test;
+  end;;
 
 main();

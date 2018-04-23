@@ -94,3 +94,4 @@ I2SFI/IntermediateProgramGeneration.v
 I2SFI/StoreTest.v
 I2SFI/JumpTest.v
 I2SFI/StackTest.v
+I2SFI/RSC_DC_MD_Test.v

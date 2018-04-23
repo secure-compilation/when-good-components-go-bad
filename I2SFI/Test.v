@@ -6,6 +6,7 @@ Require Import I2SFI.CompilerPBTests.
 Require Import I2SFI.StoreTest.
 Require Import I2SFI.JumpTest.
 Require Import I2SFI.StackTest.
+Require Import I2SFI.RSC_DC_MD_Test.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -26,7 +27,10 @@ Definition run_jump_test :=
 Definition run_stack_test :=
   show (quickCheck (stack_correct FUEL)).
 
-Extraction "/tmp/run_test.ml" run_store_test run_jump_test  run_stack_test.
+Definition run_rsc_test :=
+  show (quickCheck (rsc_correct FUEL)).
+
+Extraction "/tmp/run_test.ml" run_store_test run_jump_test  run_stack_test run_rsc_test.
 
 (****************** QUICK CHECKS ***************************)
 

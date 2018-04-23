@@ -2,6 +2,8 @@ Require Import Coq.Strings.Ascii.
 Require Import Coq.Strings.String.
 Require Import Coq.ZArith.ZArith.
 
+Require Import CompCert.Events.
+
 Require Import Common.Maps.
 Require Import Common.Definitions.
 Require Import Common.Values.
@@ -257,7 +259,7 @@ Instance show_ip_exec_state : Show (@execution_state (Events.trace*(CS.state))) 
               | Running _ => "Running"
               | OutOfFuel _ => "OutOfFuel"
               | Halted _ => "Halted"
-              | Wrong _ msg err  =>
+              | Wrong _ cid msg err  =>
                 "Wrong "
                   ++ match err with
                      | TestIntermediate.MissingComponentId cid => "MissingComponentId "
@@ -306,3 +308,26 @@ Definition list2fmap {T:ordType} {S:Type} ( l : list (T*S) ) : {fmap T->S} :=
       | (k,v)::xs => setm (app xs) k v
       end in
   app l.
+
+Definition event_eqb (e1 e2 : CompCert.Events.event) : bool :=
+  match (e1,e2) with
+  | (ECall c1 p1 v1 c1', ECall c2 p2 v2 c2') => (Component.eqb c1 c2)
+                                         && (Procedure.eqb p1 p2)
+                                         && (Component.eqb c1' c2')
+  | (ERet c1 v1 c1', ERet c2 v2 c2') => (Component.eqb c1 c2)
+                                       && (Component.eqb c1' c2')
+  | _ => false
+  end.
+
+Fixpoint sublist (l1 l2 : CompCert.Events.trace) : bool :=
+    match l1 with
+    | nil => true
+    | x::xs1 =>
+       match l2 with
+       | nil => false
+       | y::xs2 =>
+         if event_eqb x y
+         then (sublist xs1 xs2)
+         else false
+       end
+    end.

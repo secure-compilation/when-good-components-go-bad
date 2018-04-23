@@ -1,3 +1,5 @@
+(** Not actively maintained *)
+
 Require Import Coq.Lists.List.
 Require Import Coq.NArith.BinNat.
 Require Import Coq.Strings.String.
@@ -130,29 +132,6 @@ Definition eval_correct_program (fuel : nat)  (p : sfi_program)
      fuel
      p
      (RiscMachine.RegisterFile.reset_all)) (nil,nil)).
-
-Definition event_eqb (e1 e2 : CompCert.Events.event) : bool :=
-  match (e1,e2) with
-  | (ECall c1 p1 v1 c1', ECall c2 p2 v2 c2') => (Component.eqb c1 c2)
-                                         && (Procedure.eqb p1 p2)
-                                         && (Component.eqb c1' c2')
-  | (ERet c1 v1 c1', ERet c2 v2 c2') => (Component.eqb c1 c2)
-                                       && (Component.eqb c1' c2')
-  | _ => false
-  end.
-
-Fixpoint sublist (l1 l2 : CompCert.Events.trace) : bool :=
-    match l1 with
-    | nil => true
-    | x::xs1 =>
-       match l2 with
-       | nil => false
-       | y::xs2 =>
-         if event_eqb x y
-         then (sublist xs1 xs2)
-         else false
-       end
-    end.
         
       
 Definition correct_checker
@@ -191,7 +170,7 @@ Definition compiler_correct (fuel : nat) : Checker :=
         | _ =>
           let interm_trace := 
               match interm_res with
-              | Wrong tr _ _ => tr
+              | Wrong tr _ _ _ => tr
               | OutOfFuel (tr,_) => tr
               | Halted tr => tr
               | Running (tr,_) => tr (* this should not happen *)
