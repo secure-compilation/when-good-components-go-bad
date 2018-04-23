@@ -247,7 +247,7 @@ Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
   next_state st (
     match op iv as o return vovec _ o -> option state with
     | OP op => fun ov => do! st' <- next_state_do_updates st (tr ov) updts;
-                         Some (State (mem st) (regs st) pc'@(trpc ov) (internal st))
+                         Some (State (mem st') (regs st') pc'@(trpc ov) (internal st'))
 
     | SERVICE => fun _ => None
     end
