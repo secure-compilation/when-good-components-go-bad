@@ -363,6 +363,15 @@ Proof.
   - apply (closed_interface_sym _ _ Hclosed).
 Qed.
 
+(* NOTE: Instance of a more general property which may be added to CoqUtils. *)
+Lemma domm_partition :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall C,
+    C \notin domm ctx2 ->
+    C \in domm ctx1.
+Admitted. (* Rank 1. *)
+
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_first: forall ips1 ips2,
     mergeable_interfaces ctx1 ctx2 ->

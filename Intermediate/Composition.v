@@ -844,26 +844,26 @@ Section Simulation.
     - exists (PS.CC (Pointer.component pc1, stk2, mem2)).
       split.
       + constructor.
-        PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
+        eapply PS.domm_partition; eassumption.
       + apply PS.mergeable_states_first.
         * apply PS.mergeable_interfaces_sym; assumption.
         * assumption.
-        * PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
+        * eapply PS.domm_partition; eassumption.
         * reflexivity.
         * assumption. (* Improve by well-formedness of the state? *)
         * assumption. (* Idem. *)
     - exists (PS.PC (stk2, mem2, Register.init, (Cid1, 0, 0%Z))).  (* Idem. *)
       split.
       + constructor.
-        PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
+        eapply PS.domm_partition; eassumption.
       + apply PS.mergeable_states_first.
         * apply PS.mergeable_interfaces_sym; assumption.
         * assumption.
-        * PS.simplify_turn. admit. (* By closedness / well-formedness of the state. *)
+        * eapply PS.domm_partition; eassumption.
         * reflexivity.
         * assumption.
         * assumption.
-  Admitted.
+  Qed.
 
   Lemma match_final_states:
     forall ips1 ips2,
