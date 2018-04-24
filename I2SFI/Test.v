@@ -32,7 +32,3 @@ Definition run_rsc_test :=
 
 Extraction "/tmp/run_test.ml" run_store_test run_jump_test  run_stack_test run_rsc_test.
 
-(****************** QUICK CHECKS ***************************)
-
-(* QuickChick (jump_correct 100%nat). *)
-(* QuickChick (stack_correct 100%nat). *)

@@ -139,8 +139,9 @@ Definition gen_program_interface (cids : list N) : G prog_int :=
     do! imported_procs <-
       sequenceGen (
         List.map (fun cid =>
-                    do! import_procs <- (gen_sublist (N.of_nat Component.main,
-                                                     N.of_nat Procedure.main) all_procs);
+                    do! import_procs <- (gen_sublist
+                                           (N.of_nat Component.main,
+                                            N.of_nat Procedure.main) all_procs);
                       returnGen (List.filter (fun '(cid',_) =>
                                                 negb (N.eqb cid cid'))
                                              (List.nodup procs_eqdec import_procs))
@@ -501,7 +502,7 @@ Definition gen_instr
            (pid : N)
   :=
     freq [
-        ( (wf Nop) ,(returnGen [INop]))
+        ( (get_freq t wf Call), genICall pi cid pid)
         ; ( (get_freq t wf Const), genIConst pi buffers cid)
         ; ( (get_freq t wf Label) , genILabel next_label) 
         ; ( (get_freq t wf Mov), gen2Reg IMov)
@@ -511,10 +512,10 @@ Definition gen_instr
         ; ( (get_freq t wf Bnz), genIBnz t first_label next_label)
         ; ( (get_freq t wf Jump), genIJump t cag pi cid)
         ; ( (get_freq t wf Jal), genIJal)
-        ; ( (get_freq t wf Call), genICall pi cid pid)
         ; ( (get_freq t wf Alloc), genIAlloc t)
         ; ( (get_freq t wf Halt), (returnGen [IHalt]))
         ; ( (get_freq t wf Return), (returnGen [IReturn]))
+        ; ( (get_freq t wf Nop) ,(returnGen [INop]))
       ].
 
 Definition gen_procedure
