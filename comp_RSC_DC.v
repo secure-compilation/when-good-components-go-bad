@@ -174,7 +174,7 @@ Axiom undef_longer : forall P m,
 Lemma pref_undef_pref : forall P m m',
     trace_prefix m (undef P m') ->
     (m = undef P m') \/ (trace_prefix m m').
-Admitted.
+Admitted.  
 
 Fixpoint snoc m e : trace :=
   match m with
@@ -210,6 +210,12 @@ Lemma same_extension : forall m1 m2 t,
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Admitted. 
 
+Lemma technical_lemma : forall P m1 m0 t1 t0,
+    behavior_prefix m1 t1 ->
+    u_prefix P t1 m0 ->
+    behavior_prefix m0 t0 ->
+    behavior_prefix m1 t0.
+Admitted.
  
 Definition RSC_dc (P : prg) : Prop :=
   forall C' t, sem' (plug' (compile P) C') t ->
@@ -407,8 +413,7 @@ Qed.
 (* starting from a safety property π we define the following *)
 Definition z_plus (π : prop) (S:Safety π) (P : prg) : prop :=
   fun t =>    π t /\
-           forall t', (exists m', behavior_prefix m' t' /\
-                    u_prefix P t m') -> π t'.
+           forall m' t', u_prefix P t m' -> behavior_prefix m' t' -> π t'.
 
 (* z_plus is a subproperty of π *)
 Lemma sub : forall (π : prop) (S : Safety π)
@@ -429,16 +434,29 @@ Lemma extraction_lemma :  forall (π : prop) (P : prg)
                            Z_class P (z_plus π s P).
 Proof.
   intros π P s. rewrite Z_p_equivalent. split.
-  - unfold Safety. intros t nt.
-    unfold z_plus in nt. rewrite de_morgan1 in nt.
-    destruct nt as [k0 | k1].
-    + destruct (s t k0) as [m [a1 a2]].
-      exists m. split; try now auto. 
-      intros t' H. specialize (a2 t' H).
-      apply (sub' π s P t' a2).
-    +admit.
-  - admit.
-Admitted.
+  - unfold Safety. intros t H. unfold z_plus in H.
+    rewrite de_morgan1 in H. destruct H as [K|K].
+    + destruct (s t K) as [m [Hm1 Hm2]].
+      exists m. split; try now auto.
+      intros t' H [ff1 ff2]. apply ((Hm2 t' H) ff1).
+    + rewrite not_forall_ex_not in K.
+      destruct K as [m K]. rewrite not_forall_ex_not in K.
+      destruct K as [b K]. rewrite not_imp in K.
+      destruct K as [[bt [Hb1 Hb2]] K]. rewrite not_imp in K.
+      destruct K as [K2 K3].     
+      exists (undef P bt). split.
+       ++ unfold behavior_prefix. exists (Goes_wrong nil).
+          simpl. now rewrite E0_right.
+       ++ intros t' H. apply undef_no_extension in H.
+          unfold z_plus. rewrite de_morgan1. right.
+          intros ff. assert (u_prefix P t' m) by now exists bt. 
+          specialize (ff m b H0 K2). apply (K3 ff).
+  - unfold ref_cl. intros t [Ht1 Ht2] t' [m' [Hm' Hum']].
+    split.
+    + now apply (Ht2 m' t').
+    + intros m0 t0 H H0. apply (Ht2 m' t0); try now auto.
+      now apply (technical_lemma P m' m0 t' t0).
+Qed.                                                 
 
 
 (* z_plus is the biggest property in Z_p that is included in π *)
