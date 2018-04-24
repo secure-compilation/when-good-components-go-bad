@@ -15,7 +15,6 @@ Require Import MicroPolicies.Exec.
 Require Import I2MP.Encode.
 Require Import I2MP.Precompile.
 
-
 (* needed registers *)
 Definition reg0 : {fmap reg Symbolic.mt -> ratom } :=
   let m := emptym in
@@ -35,13 +34,17 @@ Definition load (m : {fmap mword Symbolic.mt -> matom }) : state :=
      Symbolic.internal := tt |}.
 
 Definition test_program : Intermediate.program :=
-  let code_main := [:: IConst (IInt 5) R_COM; IReturn] in
-  let main := setm emptym 0 (code_main) in
-  let code := setm emptym 0 (main) in
-  let comp_interface := Component.mkCompInterface (fset0) (fset0) in
+  let c0 := [fmap (0, [:: ICall 1 0; IReturn])] in
+  let c0_i := Component.mkCompInterface
+                fset0
+                (fset [:: (1, 0)]) in
+  let c1 := [fmap (0, [:: IConst (IInt 5) R_COM; IReturn])] in
+  let c1_i := Component.mkCompInterface
+                (fset [:: 0])
+                fset0 in
   Intermediate.mkProg
-    (setm emptym 0 comp_interface) (* Interface: nothing imported/exported*)
-    code (* code *)
+    [fmap (0, c0_i); (1, c1_i)] (* Interface: nothing imported/exported*)
+    [fmap (0, c0); (1, c1)] (* code *)
     (emptym) (* Pre-allocated buffers *)
     (Some 0). (* Main procedure idtac *)
 
