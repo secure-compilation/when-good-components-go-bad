@@ -168,19 +168,55 @@ Axiom undef_no_extension : forall P b m,
 Axiom no_nested : forall P m,
     undef P (undef P m) = undef P m.
 
-Axiom undef_longer : forall P m,
+Axiom undef_immediately_after : forall P m,
+    exists e, (m ** (cons e nil)) = undef P m.
+                                 
+Lemma undef_longer : forall P m,
     trace_prefix m (undef P m).
+Proof.
+  intros P m. specialize (undef_immediately_after P m).
+  intros [e He]. now exists (cons e nil).
+Qed. 
 
-Lemma pref_undef_pref : forall P m m',
-    trace_prefix m (undef P m') ->
-    (m = undef P m') \/ (trace_prefix m m').
-Admitted.  
 
 Fixpoint snoc m e : trace :=
   match m with
   | nil => cons e nil 
   | cons x xs => cons x (snoc xs e)
   end.
+
+Lemma snoc_lemma : forall m,
+    m = nil \/ (exists e m', m = snoc m' e).
+Proof.
+  induction m.
+  + now left.
+  + right. destruct IHm as [Knil | [e [m' K]]];
+           [exists a, nil | exists e, (cons a m')]; now subst. 
+Qed.
+
+Lemma snoc_append : forall m1 m2 e,
+    m1 ** (snoc m2 e) = m1 ** m2 ** (cons e nil).
+Proof. Admitted.
+
+Lemma same_length : forall m1 m2 e1 e2,
+    m1 ** (cons e1 nil) = m2 ** (cons e2 nil) ->
+    m1 = m2 /\ e1 = e2.
+Admitted.
+  
+Lemma pref_undef_pref : forall P m m',
+    trace_prefix m (undef P m') ->
+    (m = undef P m') \/ (trace_prefix m m').
+Proof.
+  intros P m m' [t Ht]. specialize (undef_immediately_after P m').
+  intros [e He]. specialize (snoc_lemma t). intros [K | [e0 [m0 K]]]; rewrite K in Ht.
+  + left. now rewrite E0_right in Ht.
+  + rewrite <- He in Ht. right.
+    exists m0. rewrite (snoc_append m m0 e0) in Ht.
+    rewrite <- Eapp_assoc in Ht.
+    apply (same_length m' (m ** m0) e e0) in Ht.
+    now auto.
+Qed.                                  
+                     
         
 Definition u_prefix P b m: Prop :=
   exists mb,  trace_prefix mb m  /\
@@ -193,7 +229,7 @@ Lemma trace_prefix_trans : forall m1 m2 m,
 Admitted.
 
 Lemma trace_prefix_ref : forall m, trace_prefix m m.
-Admitted.
+Proof. intros m. exists nil. now rewrite E0_right. Qed. 
 
 Lemma behavior_prefix_pseudo_trans : forall m1 m2 b,
     behavior_prefix m1 b -> trace_prefix m2 m1 ->
