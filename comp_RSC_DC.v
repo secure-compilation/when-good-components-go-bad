@@ -194,15 +194,47 @@ Proof.
            [exists a, nil | exists e, (cons a m')]; now subst. 
 Qed.
 
+Lemma snoc_app : forall m e,
+    snoc m e = m ** (cons e nil).
+Proof.
+  intros m e. induction m; try now auto.
+  + simpl. now rewrite IHm.
+Qed.
+
 Lemma snoc_append : forall m1 m2 e,
     m1 ** (snoc m2 e) = m1 ** m2 ** (cons e nil).
-Proof. Admitted.
+Proof.
+  intros m1 m2 e. induction m2; try now auto.
+  + simpl. now rewrite (snoc_app m2 e).
+Qed.
 
+Lemma foo_lemma : forall m e, snoc m e = nil -> False.
+Proof.
+  intros m e H. destruct m; now inversion H.
+Qed. 
+
+Lemma snoc_eq : forall m1 m2 e1 e2,
+    snoc m1 e1 = snoc m2 e2 ->
+    m1 = m2 /\ e1 = e2.
+Proof.
+  intros m1. induction m1; intros m2 e1 e2 H.
+  + destruct m2; inversion H; try now auto. 
+    exfalso. symmetry in H2. now apply (foo_lemma m2 e2).
+  + destruct m2; inversion H. 
+    exfalso. symmetry in H2. now apply (foo_lemma m1 e1).
+    specialize (IHm1 m2 e1 e2 H2).
+    destruct IHm1 as [k1 k2]. rewrite k1. now auto.
+Qed. 
+  
 Lemma same_length : forall m1 m2 e1 e2,
     m1 ** (cons e1 nil) = m2 ** (cons e2 nil) ->
     m1 = m2 /\ e1 = e2.
-Admitted.
-  
+Proof.
+  intros m1 m2 e1 e2 H.
+  rewrite <- (snoc_app m1 e1) in H. rewrite <- (snoc_app m2 e2) in H.
+  now apply snoc_eq.
+Qed.
+
 Lemma pref_undef_pref : forall P m m',
     trace_prefix m (undef P m') ->
     (m = undef P m') \/ (trace_prefix m m').
@@ -226,7 +258,10 @@ Definition u_prefix P b m: Prop :=
 Lemma trace_prefix_trans : forall m1 m2 m,
     trace_prefix m1 m2 -> trace_prefix m2 m ->
     trace_prefix m1 m.
-Admitted.
+Proof.
+  intros m1 m2 m [b1 Hb1] [b2 Hb2]. rewrite Hb1 in Hb2.
+  rewrite Eapp_assoc in Hb2. now exists (b1 ** b2).
+Qed. 
 
 Lemma trace_prefix_ref : forall m, trace_prefix m m.
 Proof. intros m. exists nil. now rewrite E0_right. Qed. 
@@ -234,23 +269,33 @@ Proof. intros m. exists nil. now rewrite E0_right. Qed.
 Lemma behavior_prefix_pseudo_trans : forall m1 m2 b,
     behavior_prefix m1 b -> trace_prefix m2 m1 ->
     behavior_prefix m2 b.
-Admitted.
+Proof.
+  intros m1 m2 b [t1 Ht1] [t2 Ht2].
+  unfold behavior_prefix. subst.
+  exists (behavior_app t2 t1). now apply behavior_app_assoc.
+Qed. 
 
 Lemma u_prefix_pseudo_trans: forall P t m1 m2,
     u_prefix P t m1 -> trace_prefix m1 m2 ->
     u_prefix P t m2.
-Proof. Admitted.
+Proof.
+  intros P t m1 m2 [ub [Hub1 Hub2]] [t1 Ht1].
+  unfold u_prefix. exists ub.
+  destruct Hub1 as [tt1 Htt1]. rewrite Htt1 in Ht1.
+  rewrite Eapp_assoc in Ht1. split; try now auto.
+  now exists (tt1 ** t1).
+Qed. 
 
 Lemma same_extension : forall m1 m2 t,
     behavior_prefix m1 t -> behavior_prefix m2 t ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
-Admitted. 
+Admitted.
 
 Lemma technical_lemma : forall P m1 m0 t1 t0,
     behavior_prefix m1 t1 ->
     u_prefix P t1 m0 ->
     behavior_prefix m0 t0 ->
-    behavior_prefix m1 t0.
+    behavior_prefix m1 t0 \/ t1 = Goes_wrong m1.
 Admitted.
  
 Definition RSC_dc (P : prg) : Prop :=
@@ -490,10 +535,11 @@ Proof.
   - unfold ref_cl. intros t [Ht1 Ht2] t' [m' [Hm' Hum']].
     split.
     + now apply (Ht2 m' t').
-    + intros m0 t0 H H0. apply (Ht2 m' t0); try now auto.
-      now apply (technical_lemma P m' m0 t' t0).
-Qed.                                                 
-
+    + intros m0 t0 H H0. specialize (technical_lemma P m' m0 t' t0 Hm' H H0).
+      intros [K | K].
+      ++ now  apply (Ht2 m' t0).
+      ++ admit.
+Admitted.   
 
 (* z_plus is the biggest property in Z_p that is included in π *)
 Lemma maximality_lemma : forall (P : prg) (π phi : prop) (S : Safety π)
@@ -505,13 +551,13 @@ Proof.
   intros P π phi S Zphi H b phib.
   unfold z_plus. split.
   - apply (H b phib).
-  - intros t ubt. rewrite dne. intros nπt.
+  - intros m t ubt Hpref. rewrite dne. intros nπt.
     assert (nphit : ~ phi t).
     { intros phit. apply (nπt (H t phit)). }
     specialize (Zphi t nphit).
-    destruct Zphi as [m [pmt K]].
-    assert (use_me : behavior_prefix m b \/ u_prefix P b m).
-    { apply (U_general P b t ubt m pmt). }
+    destruct Zphi as [m' [pmt K]].
+    assert (use_me : behavior_prefix m' b \/ u_prefix P b m').
+    { apply (U_general P b t); try now auto. now exists m.  }
     apply ((K b use_me) phib).
 Qed.
 
