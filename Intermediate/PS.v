@@ -364,7 +364,8 @@ Proof.
 Qed.
 
 (* NOTE: Instance of a more general property which may be added to CoqUtils.
-   TODO: Harmonize naming of two directions or unify with iff. *)
+   TODO: Harmonize naming of two directions or unify with iff.
+         Add domain conditions. *)
 Lemma domm_partition :
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
@@ -503,8 +504,29 @@ Proof.
     + constructor; auto.
 Qed.
 
+Lemma merge_stacks_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps,
+    unpartialize_stack
+      (merge_stacks
+         (to_partial_stack gps (domm ctx1))
+         (to_partial_stack gps (domm ctx2)))
+  = gps.
+Admitted. (* Grade 2. *)
+
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
   unionm mem1 mem2.
+
+Lemma merge_memories_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall mem,
+    merge_memories
+      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx1) mem)
+      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx2) mem)
+  = mem.
+Admitted. (* Grade 2. *)
 
 Definition merge_partial_states (ips1 ips2: state) : state :=
   match ips1 with
