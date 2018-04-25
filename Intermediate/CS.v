@@ -784,4 +784,10 @@ Section Semantics.
   Qed.
 
 End Semantics.
+
+Definition comes_from_initial_state (s: state) : Prop :=
+  exists p s0 t,
+    initial_state p s0 /\
+    Star (sem p) s0 t s.
+
 End CS.

@@ -836,6 +836,7 @@ Section Simulation.
       ContextSem.initial_state (prog_interface p) ips2 /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2.
   Proof.
+(*
     intros ips1 Hini.
     inversion Hini as [? Hpc]; subst.
     destruct ips1 as [[[[stk1 mem1] regs1] pc1] | [[Cid1 stk1] mem1]];
@@ -865,7 +866,7 @@ Section Simulation.
         * reflexivity.
         * assumption.
         * assumption.
-  Qed.
+  Qed.*) Admitted.
 
   Lemma match_final_states:
     forall ips1 ips2,
@@ -877,13 +878,14 @@ Section Simulation.
     constructor.
     inversion Hfinal1 as [? Hpc]; subst.
     inversion Hmerge
-      as [ips1' ips2' Hmerge' Hpc1 Hcc2 Hcid Hstk Hmem |
-          ips1' ips2' Hmerge' Hcc1 Hpc2 Hcid Hstk Hmem]; subst.
-    - assumption.
-    - (* Contra. *)
+      as [ics ? ? Hmerge_ifaces Hini Hpartial1 Hpartial2]; subst.
+    inversion Hpartial1; subst;
+      inversion Hpartial2; subst;
       PS.simplify_turn.
-      rewrite Hcc1 in Hpc.
-      inversion Hpc.
+    - eapply PS.domm_partition; eassumption.
+    - assumption.
+    - eapply PS.domm_partition; eassumption.
+    - assumption.
   Qed.
 
   Lemma lockstep_simulation:
@@ -895,6 +897,7 @@ Section Simulation.
       Step (ContextSem.sem c (prog_interface p)) ips2 t ips2' /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
   Proof.
+(*
     intros ips1 t ips1' HStep ips2 Hmerge.
     inversion HStep as [? ? ? Hpc1 Hpc1' Hstep_ps]; subst.
     inversion Hmerge
@@ -946,6 +949,7 @@ Section Simulation.
         * assumption.
         * assumption.
     (* RB: TODO: A couple of cases dealing with memories, etc.; then compose. *)
+*)
   Admitted.
 
   Theorem context_simulates_program:
@@ -1051,7 +1055,16 @@ Section MultiSemantics.
       + inversion H0; subst. inversion H1; subst.
         inversion H6; subst; inversion H12; subst; PS.simplify_turn.
         * (* contra *)
-          admit. (*now inversion H.*) (* TODO *)
+          (* RB: TODO: Extract and simplify patterns if inversion of mergeable_states
+             followed by the two partial_state: four standard cases, of which two are
+             contradictory. More instances of this below. *)
+          inversion H as [? ? ? Hmerge_ifaces ? Hpartial1 Hpartial2]; subst.
+          inversion Hpartial1 as [? ? ? ? ? ? Hpc1 |]; subst.
+          inversion Hpartial2 as [? ? ? ? ? ? Hpc2 |]; subst.
+          PS.simplify_turn.
+          apply (PS.domm_partition Hmerge_ifaces) in Hpc2.
+          rewrite Hpc2 in Hpc1.
+          discriminate.
         * econstructor.
           ** PS.simplify_turn.
              rewrite mem_domm. auto.
@@ -1062,7 +1075,7 @@ Section MultiSemantics.
              rewrite PS.to_partial_stack_unpartialize_identity.
              *** reflexivity.
              *** apply PS.merged_stack_has_no_holes.
-                 inversion H; subst; assumption.
+                 apply (PS.mergeable_states_stacks H); reflexivity.
         * econstructor.
           ** PS.simplify_turn.
              rewrite mem_domm. auto.
@@ -1073,9 +1086,15 @@ Section MultiSemantics.
              rewrite PS.to_partial_stack_unpartialize_identity.
              *** reflexivity.
              *** apply PS.merged_stack_has_no_holes.
-                 inversion H; subst; assumption.
-        * (* contra *)
-          admit. (*inversion H.*) (* TODO *)
+                 apply (PS.mergeable_states_stacks H); reflexivity.
+        * (* contra *) (* Symmetric case of contra above. *)
+          inversion H as [? ? ? Hmerge_ifaces ? Hpartial1 Hpartial2]; subst.
+          inversion Hpartial1 as [| ? ? ? ? ? ? Hpc1]; subst.
+          inversion Hpartial2 as [| ? ? ? ? ? ? Hpc2]; subst.
+          PS.simplify_turn.
+          apply (PS.domm_partition_notin Hmerge_ifaces) in Hpc2.
+          rewrite Hpc1 in Hpc2.
+          discriminate.
       + (* unpartilizing the merge preserves the state information that make
            CS.initial_state true *)
         rewrite linking_empty_program. subst. simpl.
@@ -1083,7 +1102,7 @@ Section MultiSemantics.
         CS.unfold_state ics. CS.unfold_state ics0.
         * apply merged_initial_states; auto.
     - constructor; auto.
-  (*Qed.*) Admitted.
+  Qed.
 
   Lemma multi_match_final_states:
     forall ms ips,
@@ -1099,13 +1118,9 @@ Section MultiSemantics.
            (p':=empty_prog);
       inversion H4; subst; PS.simplify_turn.
     - reflexivity.
-    - reflexivity.
-    - apply linking_well_formedness; now auto.
-    - apply linking_well_formedness; now auto.
+    - apply linking_well_formedness; assumption.
     - now apply empty_prog_is_well_formed.
-    - now apply empty_prog_is_well_formed.
-    - simpl. apply linkable_emptym. now apply linkability.
-    - simpl. apply linkable_emptym. now apply linkability.
+    - apply linkable_emptym. now apply linkability.
 (* TODO
     - rewrite mem_domm. auto.
     - rewrite mem_domm. auto.
@@ -1168,13 +1183,17 @@ Section MultiSemantics.
 
     exists (PS.merge_partial_states ips1' ips2'). split.
 
-    - inversion H; subst; simpl;
-      inversion H2; subst; inversion H5; subst.
-
-      (* program is in the first state *)
-      + inversion H9; subst; inversion H16; subst; (* RB: TODO: Name/review new offsets. *)
-        PS.simplify_turn; simpl in *.
+    - inversion H as [ics ? ? Hmerge_ifaces Hfrom_initial Hpartial1 Hpartial2]; subst;
+        inversion H2; subst;
+        inversion H5; subst;
+        inversion Hpartial1; subst;
+        inversion Hpartial2; subst;
+        simpl in *; PS.simplify_turn.
+      + admit. (* contra *)
+      + (* program is in the first state *)
 (*
+        inversion H8; subst; inversion H15; subst; (* RB: TODO: Name/review new offsets. *)
+        PS.simplify_turn; simpl in *.
         eapply PS.partial_step with
             (ics:=PS.unpartialize (PS.PC (PS.merge_stacks pgps1 pgps2,
                                           PS.merge_memories pmem1 pmem2, regs, pc)))
@@ -1194,6 +1213,7 @@ Section MultiSemantics.
              reflexivity.
         * admit.
 *) admit.
+      + admit. (* contra *)
       + (* program is in the second state *)
 (*
         eapply PS.partial_step with
@@ -1274,14 +1294,23 @@ Section PartialComposition.
 
     (* empty trace *)
     - intros ips2 Hmergeable Hst_star2.
-      inversion Hmergeable; subst.
+      inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+        subst.
+      inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+
+      + admit. (* Contra. *)
 
       (* the program doesn't step, hence we stay still *)
       + apply star_if_st_starN in Hst_star2.
-        eapply (PS.context_epsilon_star_is_silent H1) in Hst_star2; subst.
+        pose proof PS.context_epsilon_star_is_silent.
+        eapply (PS.context_epsilon_star_is_silent Hcc2) in Hst_star2; subst.
         split.
         * constructor.
         * assumption.
+
+      + admit. (* Contra. *)
+
       (* the program does a star with an epsilon trace.
          use the fact that the context simulates the program *)
       + assert (Hmergeable' := Hmergeable).
@@ -1290,20 +1319,28 @@ Section PartialComposition.
         rewrite (closed_program_link_sym wf1 wf2 linkability main_linkability)
           in prog_is_closed'.
         destruct (ProgCtxSim.st_starN_simulation wf2 wf1
-                    (linkable_sym linkability) prog_is_closed' H Hst_star2 Hmergeable')
+                   (linkable_sym linkability) prog_is_closed'
+                   Hmergeable_ifaces Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
         (* TODO *)
         admit.
 
     (* non-empty trace *)
     - intros ips2 Hmergeable Hst_star2.
-      inversion Hmergeable; subst.
+      inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+        subst.
+      inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+
+      + admit. (* Contra. *)
 
       (* the program is stepping *)
       + (* simulate the step *)
         (* use inductive hypothesis *)
         (* compose previous results *)
         admit.
+
+      + admit. (* Contra. *)
 
       (* the context is stepping *)
       + admit.
@@ -1447,7 +1484,16 @@ Section PartialComposition.
 
     (* single segment *)
     - intros ips2 Hmergeable Hmt_star2.
-      inversion Hmergeable; subst.
+      inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2];
+        subst.
+      inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+
+      + (* Contra. *)
+        PS.simplify_turn.
+        apply (PS.domm_partition Hsame_ifaces) in Hpc2.
+        rewrite Hpc2 in Hpc1.
+        discriminate.
 
       (* the program has control in the first state of the first sequence *)
       + inversion Hmt_star2; subst.
@@ -1475,9 +1521,24 @@ Section PartialComposition.
         * exfalso.
           eapply st_starN_with_turn_change_impossible_2; eauto.
 
+      + (* Contra. *)
+        PS.simplify_turn.
+        apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2.
+        rewrite Hcc1 in Hcc2.
+        discriminate.
+
     (* segment + change of control + mt_star *)
     - intros ips2 Hmergeable Hmt_star2.
-      inversion Hmergeable; subst.
+      inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2];
+        subst.
+      inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+
+      + (* Contra. *)
+        PS.simplify_turn.
+        apply (PS.domm_partition Hsame_ifaces) in Hpc2.
+        rewrite Hpc2 in Hpc1.
+        discriminate.
 
       (* the program has control in the first state of the first sequence *)
       + inversion Hmt_star2; subst.
@@ -1491,11 +1552,11 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps
-                      H3 H4 Hmergeable H H0 H1 Hmt_star1 H9 H10 H11 H12)
+                      Hpc1 Hcc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H9)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H2)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1519,7 +1580,7 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H18 H12)
+          destruct (IHHmt_star1 ips''0 H11 H5)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
@@ -1547,12 +1608,12 @@ Section PartialComposition.
 
         (* segment + change of control + mt_star *)
         * destruct (same_trace_and_steps'
-                      H3 H4 Hmergeable H H0 H1 Hmt_star1 H9 H10 H11 H12)
+                      Hcc1 Hpc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5)
             as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
 
           (* simulate the first segment (trace t0) *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H9)
+          destruct (threeway_multisem_st_starN_simulation Hmergeable H H2)
             as [Hfirst_segment Hmergeable'].
 
           (* build the step that changes control (trace t4) *)
@@ -1576,7 +1637,7 @@ Section PartialComposition.
 
           (* simulate the rest of the sequence (trace t5) *)
 
-          destruct (IHHmt_star1 ips''0 H18 H12)
+          destruct (IHHmt_star1 ips''0 H11 H5)
             as [Hlast_star Hmergeable'''].
 
           (* compose first segment + step that changes control + last star *)
@@ -1591,6 +1652,13 @@ Section PartialComposition.
              *** reflexivity.
              *** apply app_assoc.
           ** assumption.
+
+      + (* Contra. *)
+        PS.simplify_turn.
+        apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2.
+        rewrite Hcc1 in Hcc2.
+        discriminate.
+
   Qed.
 
   Corollary threeway_multisem_starN:
@@ -1626,11 +1694,15 @@ Section PartialComposition.
       (* here it's probably where we need well-formed programs *)
       admit.
 
-    - apply PS.mergeable_states_first; PS.simplify_turn;
-        try assumption;
-        try reflexivity.
+    - econstructor.
       + apply PS.mergeable_interfaces_sym; assumption.
+      + admit.
       + constructor.
+        * assumption.
+        * admit.
+        * admit.
+      + admit.
+(*
       + inversion linkability.
         (* RB: With the changes to [linkability], the case analysis on programs
            does not follow naturally from its inversion. The admits on each
@@ -1648,12 +1720,14 @@ Section PartialComposition.
             *) admit.
           + admit.
           + unfold PS.mergeable_memories. admit.
+*)
 
-    - apply PS.mergeable_states_second; PS.simplify_turn;
-            try assumption;
-            try reflexivity.
-          + apply PS.mergeable_interfaces_sym; assumption.
-          + constructor.
+    - econstructor.
+      + apply PS.mergeable_interfaces_sym; assumption.
+      + admit.
+      + admit.
+      + admit.
+(*
           + inversion linkability.
             (* RB: Same as above.
             unfold linkable_mains in H21.
@@ -1669,6 +1743,7 @@ Section PartialComposition.
             (* show use the fact that the initial memory contains just the memories
                for the components present in the program, therefore they are disjoint *)
             admit.
+*)
 
     (* contra, pc is both in (prog_interface c) and in (prog_interface p) *)
     - admit.

@@ -363,13 +363,22 @@ Proof.
   - apply (closed_interface_sym _ _ Hclosed).
 Qed.
 
-(* NOTE: Instance of a more general property which may be added to CoqUtils. *)
+(* NOTE: Instance of a more general property which may be added to CoqUtils.
+   TODO: Harmonize naming of two directions or unify with iff. *)
 Lemma domm_partition :
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
   forall C,
     C \notin domm ctx2 ->
     C \in domm ctx1.
+Admitted. (* Rank 1. *)
+
+Lemma domm_partition_notin :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall C,
+    C \in domm ctx2 ->
+    C \notin domm ctx1.
 Admitted. (* Rank 1. *)
 
 Inductive mergeable_states_pc_cc: state -> state -> Prop :=
@@ -379,23 +388,11 @@ Inductive mergeable_states_pc_cc: state -> state -> Prop :=
     mergeable_states_pc_cc (CC (C1, gps1, mem1)) (PC (gps2, mem2, regs2, pc2)).
 
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
-| mergeable_states_first: forall ips1 ips2,
+| mergeable_states_intro: forall ics ips1 ips2,
     mergeable_interfaces ctx1 ctx2 ->
-    is_program_component ips1 ctx1 ->
-    is_context_component ips2 ctx2 ->
-    mergeable_states_pc_cc ips1 ips2 ->
-    state_component ips1 = state_component ips2 ->
-    mergeable_stacks (state_stack ips1) (state_stack ips2) ->
-    mergeable_memories (state_memory ips1) (state_memory ips2) ->
-    mergeable_states ctx1 ctx2 ips1 ips2
-| mergeable_states_second: forall ips1 ips2,
-    mergeable_interfaces ctx1 ctx2 ->
-    is_context_component ips1 ctx1 ->
-    is_program_component ips2 ctx2 ->
-    mergeable_states_pc_cc ips1 ips2 ->
-    state_component ips1 = state_component ips2 ->
-    mergeable_stacks (state_stack ips1) (state_stack ips2) ->
-    mergeable_memories (state_memory ips1) (state_memory ips2) ->
+    CS.comes_from_initial_state ics ->
+    partial_state ctx1 ics ips1 ->
+    partial_state ctx2 ics ips2 ->
     mergeable_states ctx1 ctx2 ips1 ips2.
 
 Lemma mergeable_stack_frames_sym:
@@ -418,6 +415,12 @@ Proof.
     constructor; auto.
   - apply mergeable_stack_frames_sym; auto.
 Qed.
+
+Lemma mergeable_stacks_partition gps ctx1 ctx2:
+  mergeable_interfaces ctx1 ctx2 ->
+  mergeable_stacks (to_partial_stack gps (domm ctx1)) (to_partial_stack gps (domm ctx2)).
+Proof.
+Admitted. (* Grade 2. *)
 
 Lemma mergeable_memories_sym:
   forall pmem1 pmem2,
@@ -449,16 +452,24 @@ Lemma mergeable_states_sym:
 Proof.
   intros p c s1 s2 Hp_wf Hc_wf Hlink Hmergeable.
   inversion Hmergeable; subst.
-  - apply mergeable_states_second; auto.
+  - econstructor; auto.
     + apply mergeable_interfaces_sym; assumption.
-    + apply mergeable_states_pc_cc_sym; assumption.
-    + apply mergeable_stacks_sym; assumption.
-    + apply mergeable_memories_sym; assumption.
-  - apply mergeable_states_first; auto.
-    + apply mergeable_interfaces_sym; assumption.
-    + apply mergeable_states_pc_cc_sym; assumption.
-    + apply mergeable_stacks_sym; assumption.
-    + apply mergeable_memories_sym; assumption.
+    + eassumption.
+    + eassumption.
+    + eassumption.
+Qed.
+
+Lemma mergeable_states_stacks ctx1 ctx2 ips1 ips2 gps1 gps2:
+  mergeable_states ctx1 ctx2 ips1 ips2 ->
+  state_stack ips1 = gps1 ->
+  state_stack ips2 = gps2 ->
+  mergeable_stacks gps1 gps2.
+Proof.
+  intros Hmerge Hstk1 Hstk2.
+  inversion Hmerge as [ics ? ? Hmerge_ifaces Hprovenance Hpartial1 Hpartial2]; subst.
+    inversion Hpartial1; subst;
+    inversion Hpartial2; subst;
+    apply mergeable_stacks_partition; assumption.
 Qed.
 
 Definition merge_stack_frames (frames: PartialPointer.t * PartialPointer.t): PartialPointer.t :=
