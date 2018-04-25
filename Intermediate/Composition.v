@@ -900,59 +900,78 @@ Section Simulation.
       Step (ContextSem.sem c (prog_interface p)) ips2 t ips2' /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
   Proof.
-(*
     intros ips1 t ips1' HStep ips2 Hmerge.
     inversion HStep as [? ? ? Hpc1 Hpc1' Hstep_ps]; subst.
-    inversion Hmerge
-      as [pc1 ? Hifaces Hpc_merge1 Hcc_merge2' Hpc_cc Hcid Hstk Hmem |
-          pc1 ? Hifaces Hcc_merge1 Hpc_merge2' Hpc_cc Hcid Hstk Hmem];
-      subst;
+    inversion Hmerge as [ics ? ? Hmerge_iface Hfrom_initial Hpartial1 Hpartial2]; subst;
+      inversion Hpartial1 as [? ? ? ? ? ? _ | ? ? ? ? ? ? Hcc1]; subst;
+      inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst;
       PS.simplify_turn;
-      (* Contradiction, like above. *)
-      last by rewrite Hcc_merge1 in Hpc1.
+      [admit | | admit | admit]. (* Contra. *)
     inversion Hstep_ps
-      as [p' ? ? ? ics1 ics1' Hsame_iface _ Hwf2' Hlinkable Hstep_cs Hpartial1 Hpartial1'];
+      as [p' ? ? ? ics1 ics1' Hsame_iface _ Hwf2' Hlinkable Hstep_cs Hpartial Hpartial'];
       subst.
     destruct ips1' as [[[[stk1' mem1'] regs1'] pc1'] | [[Cid1' stk1'] mem1']];
       (* RB: TODO: Ltac to discharge \in-\notin sequents, propagate and reuse; cf. PS. *)
       last by
-        inversion Hpartial1;
-        inversion Hpartial1' as [| ? ? ? ? ? ? Hcontra];
+        inversion Hpartial;
+        inversion Hpartial' as [| ? ? ? ? ? ? Hcontra];
         subst;
         PS.simplify_turn;
         rewrite Hcontra in Hpc1'.
-    inversion Hpartial1 as [? ? ? ? ? ? Hpc_partial1 |]; subst.
-    inversion Hpartial1' as [? ? ? ? ? ? Hpc_partial1' |]; subst.
-    destruct ips2 as [[[[stk2 mem2] regs2] pc2] | [[Cid2 stk2] mem2]];
-      first easy. (* Contra. *)
-    inversion Hstep_cs; subst;
-      PS.simplify_turn.
+    inversion Hpartial as [? ? ? ? ? ? Hpc_partial Hmem Hstk |]; subst.
+    inversion Hpartial' as [? ? ? ? ? ? Hpc_partial' |]; subst.
+    PS.simplify_turn.
+    inversion Hstep_cs; subst.
     - (* INop *)
-      exists (PS.CC (Cid2, stk2, mem2)). split.
-      + econstructor.
-        * assumption.
-        * assumption.
+      exists
+        (PS.CC
+           (Pointer.component pc,
+            PS.to_partial_stack gps (domm (prog_interface p)),
+            filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem)).
+      split.
+      + constructor.
+        * easy.
+        * easy.
         * econstructor.
           -- reflexivity.
           -- assumption.
           -- assumption.
-          -- by apply linkable_sym.
+          -- eapply linkable_sym; eassumption.
+          -- eapply CS.Nop.
+             admit.
           -- admit.
-          -- rewrite <- Hcid. eapply PS.ContextControl.
-             ++ PS.simplify_turn. eapply PS.domm_partition; eassumption.
-             ++ admit.
-             ++ admit.
           -- admit.
-      + apply PS.mergeable_states_first.
-        * by apply PS.mergeable_interfaces_sym.
-        * PS.simplify_turn. by rewrite Pointer.inc_preserves_component.
-        * assumption.
+      + rewrite <- Hmem.
+        rewrite <- Hstk.
+        (* RB: TODO: Refer to ics symbolically, e.g. from goal via Ltac. *)
+        eapply PS.mergeable_states_intro with
+          (ics := (PS.unpartialize (PS.merge_partial_states
+            (PS.PC
+               (PS.to_partial_stack gps (domm (prog_interface c)),
+               filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface c)) mem,
+               regs1', Pointer.inc pc))
+            (PS.CC
+               (Pointer.component pc, PS.to_partial_stack gps (domm (prog_interface p)),
+               filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem))
+          ))).
+        * easy.
+        * simpl.
+          rewrite (PS.merge_stacks_partition Hmerge_iface).
+          rewrite (PS.merge_memories_partition Hmerge_iface).
+          admit.
         * constructor.
-        * simpl. rewrite Pointer.inc_preserves_component. assumption.
-        * assumption.
-        * assumption.
+          -- assumption.
+          -- by rewrite (PS.merge_memories_partition Hmerge_iface).
+          -- by rewrite (PS.merge_stacks_partition Hmerge_iface).
+        * simpl.
+          rewrite (PS.merge_memories_partition Hmerge_iface).
+          rewrite (PS.merge_stacks_partition Hmerge_iface).
+          rewrite <- Pointer.inc_preserves_component.
+          constructor.
+          -- by rewrite Pointer.inc_preserves_component.
+          -- reflexivity.
+          -- reflexivity.
     (* RB: TODO: A couple of cases dealing with memories, etc.; then compose. *)
-*)
   Admitted.
 
   Theorem context_simulates_program:
