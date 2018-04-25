@@ -718,7 +718,9 @@ Section Semantics.
     closed_interface (unionm (prog_interface prog) ctx).
 
   Inductive initial_state : PS.state -> Prop :=
-  | initial_state_intro: forall ips,
+  | initial_state_intro: forall ics ips,
+      CS.comes_from_initial_state ics ->
+      PS.partial_state ctx ics ips ->
       PS.is_program_component ips ctx ->
       initial_state ips.
 
@@ -752,7 +754,9 @@ Section Semantics.
     closed_interface (unionm (prog_interface prog) ctx).
 
   Inductive initial_state : PS.state -> Prop :=
-  | initial_state_intro: forall ips,
+  | initial_state_intro: forall ics ips,
+      CS.comes_from_initial_state ics ->
+      PS.partial_state ctx ics ips ->
       PS.is_context_component ips ctx ->
       initial_state ips.
 
@@ -828,7 +832,9 @@ Section Simulation.
     halves is used, but it is unclear how informative this is without appealing to
     well-formed states. The same applies to made up registers and pointers.
     Regardless, observe that there remains a troublesome case when matching the
-    PC form against mergeable_states. *)
+    PC form against mergeable_states.
+
+    Observe several goals repeat: pose, refactor, etc. *)
   Lemma match_initial_states:
     forall ips1,
       ProgramSem.initial_state (prog_interface c) ips1 ->
@@ -836,37 +842,34 @@ Section Simulation.
       ContextSem.initial_state (prog_interface p) ips2 /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2.
   Proof.
-(*
     intros ips1 Hini.
-    inversion Hini as [? Hpc]; subst.
-    destruct ips1 as [[[[stk1 mem1] regs1] pc1] | [[Cid1 stk1] mem1]];
-      destruct (mergeable_stack_exists stk1) as [stk2 Hstk12];
-      destruct (mergeable_memory_exists mem1) as [mem2 Hmem12].
-    - exists (PS.CC (Pointer.component pc1, stk2, mem2)).
-      split.
+    inversion Hini as [ics ? Hcomes_from Hpartial1 Hpc1]; subst.
+    inversion Hcomes_from as [p' [s' [t' [Hini' Hstar']]]].
+    inversion Hpartial1 as [? ? ? ? ? ? _ | ? ? ? ? ? ? Hcc1]; subst;
+      PS.simplify_turn;
+      last by rewrite Hcc1 in Hpc1. (* Contra. *)
+    exists
+      (PS.CC
+         (Pointer.component pc,
+          PS.to_partial_stack gps (domm (prog_interface p)),
+          filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem)).
+    split.
+    - econstructor.
+      + eassumption.
       + constructor.
-        eapply PS.domm_partition; eassumption.
-      + apply PS.mergeable_states_first.
-        * apply PS.mergeable_interfaces_sym; assumption.
-        * assumption.
-        * eapply PS.domm_partition; eassumption.
-        * constructor.
+        * PS.simplify_turn. eapply PS.domm_partition; eassumption.
         * reflexivity.
-        * assumption. (* Improve by well-formedness of the state? *)
-        * assumption. (* Idem. *)
-    - exists (PS.PC (stk2, mem2, Register.init, (Cid1, 0, 0%Z))).  (* Idem. *)
-      split.
+        * reflexivity.
+      + PS.simplify_turn. eapply PS.domm_partition; eassumption.
+    - econstructor.
+      + eapply PS.mergeable_interfaces_sym; eassumption.
+      + eassumption.
+      + assumption.
       + constructor.
-        eapply PS.domm_partition; eassumption.
-      + apply PS.mergeable_states_first.
-        * apply PS.mergeable_interfaces_sym; assumption.
-        * assumption.
-        * eapply PS.domm_partition; eassumption.
-        * constructor.
+        * PS.simplify_turn. eapply PS.domm_partition; eassumption.
         * reflexivity.
-        * assumption.
-        * assumption.
-  Qed.*) Admitted.
+        * reflexivity.
+  Qed.
 
   Lemma match_final_states:
     forall ips1 ips2,
