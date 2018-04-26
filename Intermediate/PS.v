@@ -382,20 +382,17 @@ Lemma domm_partition_notin :
   forall C,
     C \in domm ctx2 ->
     C \notin domm ctx1.
-Admitted. (* Rank 1. *)
+Proof.
+by move=> ctx1 ctx2 [[_]]; rewrite fdisjointC=> /fdisjointP.
+Qed.
 
 Inductive mergeable_states_pc_cc: state -> state -> Prop :=
 | mergeable_states_pc_cc_first: forall gps1 mem1 regs1 pc1 C2 gps2 mem2,
     mergeable_states_pc_cc (PC (gps1, mem1, regs1, pc1)) (CC (C2, gps2, mem2))
 | mergeable_states_pc_cc_second: forall C1 gps1 mem1 gps2 mem2 regs2 pc2,
     mergeable_states_pc_cc (CC (C1, gps1, mem1)) (PC (gps2, mem2, regs2, pc2)).
-Lemma domm_partition_in_both ctx1 ctx2 C :
-  mergeable_interfaces ctx1 ctx2 ->
-  C \in domm ctx1 ->
-  C \in domm ctx2 ->
-  False.
-Admitted. (* Rank 1. *)
 
+(* XXX: This assumption is also impossible, for the same reason as above. *)
 Lemma domm_partition_in_neither ctx1 ctx2 C :
   mergeable_interfaces ctx1 ctx2 ->
   C \notin domm ctx1 ->
