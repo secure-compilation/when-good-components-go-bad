@@ -1,4 +1,3 @@
-
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrint seq.
 From CoqUtils Require Import fmap word.
 
@@ -19,10 +18,7 @@ Global Instance scr : syscall_regs mt := concrete_int_32_scr.
    syscall_arg2 := as_word 18;
    syscall_arg3 := as_word 19 *)
 
-Definition alloc_addr : mword mt := as_word 4096.
-(* TL TODO: 4096 is the largest power of 2 that doesn't cause coq stack overflow *)
-(*          could also be syscall addr at the beginning of memory, but would     *)
-(*          need to change encoding.                                             *)
+Definition alloc_addr : mword mt := shlw 1%w (as_word 20). (* 1 << 20 *)
 
 Definition table : @Symbolic.syscall_table mt sym_lrc :=
   [fmap (alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})].
