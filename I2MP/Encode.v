@@ -7,7 +7,7 @@ From CoqUtils Require Import fmap fset word.
 Require Import Intermediate.Machine.
 Require Import MicroPolicies.LRC.
 Require Import MicroPolicies.Instance.
-Require Precompile.
+Require Linearize.
 Require Tmp.
 
 Require Import Lib.Monads.
@@ -91,29 +91,29 @@ Definition encode_instr  (eenv : encoder_env) (x : Machine.instr * mem_tag) : ma
      taga := snd x |}.
 
 
-Definition encode_code (eenv : encoder_env) (code : Precompile.code) : memory :=
+Definition encode_code (eenv : encoder_env) (code : Linearize.code) : memory :=
   let f : nat -> mword mt := word.as_word in
   Tmp.mapk f (fmap_of_seq (map (encode_instr eenv) code)).
 
-Definition alloc_buffers (eenv : encoder_env) (bufs : Precompile.bufs) : memory :=
+Definition alloc_buffers (eenv : encoder_env) (bufs : Linearize.bufs) : memory :=
   let f (x : nat * nat * nat) : mword mt :=
       match x with (c, b, o) => word.as_word (concretize_pointer eenv (c, b, Z.of_nat o)) end
   in Tmp.mapk f (mapm (encode_memval eenv) bufs).
 
-Definition encode (prog : Precompile.prog) : {fmap mword mt -> matom}:=
+Definition encode (prog : Linearize.prog) : {fmap mword mt -> matom}:=
   (* Solve labels *)
   let labels : seq int := (* TL TODO: int is an ugly hack to get an eqType for free;      *)
                           (*          switch to eqTypes for Intermediate.instr eventually *)
       map (fun x => match fst x with ILabel l => Posz l | _ => Negz 1 end)
-          (Precompile.procedures prog) in
+          (Linearize.procedures prog) in
   let solve (l : label) : int := index (Posz l) labels in
   (* Concretize pointers *)
   let base_adress c b :=
-      length (Precompile.procedures prog) + 1 +
+      length (Linearize.procedures prog) + 1 +
       length (filter (fun x => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end)
                      (* TL TODO codomm doesn't typecheck... *)
-                     (* Invariant: Precompile.buffers is "continuous" *)
-                     (unzip1 (Precompile.buffers prog)))
+                     (* Invariant: Linearize.buffers is "continuous" *)
+                     (unzip1 (Linearize.buffers prog)))
   in
   let concretize := (fun p => match p with
                               | (c, b, o) =>
@@ -123,5 +123,5 @@ Definition encode (prog : Precompile.prog) : {fmap mword mt -> matom}:=
   in
   let eenv := {| solve_label := solve ;
                  concretize_pointer := concretize |}
-  in unionm (encode_code eenv (Precompile.procedures prog))
-            (alloc_buffers eenv (Precompile.buffers prog)).
+  in unionm (encode_code eenv (Linearize.procedures prog))
+            (alloc_buffers eenv (Linearize.buffers prog)).

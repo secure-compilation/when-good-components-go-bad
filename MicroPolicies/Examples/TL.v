@@ -10,7 +10,7 @@ Require Import Common.Definitions.
 Require Import MicroPolicies.Instance.
 Require Import MicroPolicies.Printer.
 Require Import I2MP.Encode.
-Require Import I2MP.Precompile.
+Require Import I2MP.Linearize.
 
 Definition test_program : Intermediate.program :=
   let c0 := [fmap (0, [:: ICall 1 0; IReturn])] in
@@ -27,8 +27,6 @@ Definition test_program : Intermediate.program :=
     (emptym) (* Pre-allocated buffers *)
     (Some 0). (* Main procedure idtac *)
 
-Definition empty_machine := load emptym.
+Definition test_program_machine := load (encode (linearize test_program)).
 
-Definition test_program_machine := load (encode (precompile test_program)).
-
-Extraction "/tmp/tl_test.ml" coqstring_of_state encode precompile test_program_machine stepf.
+Extraction "/tmp/tl_test.ml" coqstring_of_state test_program_machine stepf.

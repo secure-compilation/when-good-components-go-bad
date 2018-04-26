@@ -81,5 +81,5 @@ MicroPolicies/Instance.v
 MicroPolicies/Printer.v
 
 I2MP/Tmp.v
-I2MP/Precompile.v
+I2MP/Linearize.v
 I2MP/Encode.v
