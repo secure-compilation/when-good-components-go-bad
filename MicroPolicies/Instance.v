@@ -18,10 +18,10 @@ Global Instance scr : syscall_regs mt := concrete_int_32_scr.
    syscall_arg2 := as_word 18;
    syscall_arg3 := as_word 19 *)
 
-Definition alloc_addr : mword mt := shlw 1%w (as_word 20). (* 1 << 20 *)
+Definition alloc_addr : imm mt := shlw 1%w (as_word 14). (* 1 << 14 ; as to be an imm for Jal, so under 2^15 *)
 
 Definition table : @Symbolic.syscall_table mt sym_lrc :=
-  [fmap (alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})].
+  [fmap (swcast alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})].
 
 Definition state := (@Symbolic.state mt sym_lrc).
 Definition stepf := (@Exec.stepf mt ops sym_lrc table).
