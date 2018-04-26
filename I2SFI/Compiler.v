@@ -199,8 +199,8 @@ Definition exported_procs_labels
             )
             (procs) (BinNatMap.empty (BinNatMap.t AbstractMachine.label)).
 
-Fixpoint allocate_procedure_slots
-         (procs : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
+Definition allocate_procedure_slots
+           (procs : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
   : BinNatMap.t (BinNatMap.t N) :=
   BinNatMapExtra.of_list (
       List.map (fun '(cid,proc_map) =>
