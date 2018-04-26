@@ -19,9 +19,13 @@ Global Instance scr : syscall_regs mt := concrete_int_32_scr.
    syscall_arg2 := as_word 18;
    syscall_arg3 := as_word 19 *)
 
+Definition alloc_addr : mword mt := as_word 4096.
+(* TL TODO: 4096 is the largest power of 2 that doesn't cause coq stack overflow *)
+(*          could also be syscall addr at the beginning of memory, but would     *)
+(*          need to change encoding.                                             *)
+
 Definition table : @Symbolic.syscall_table mt sym_lrc :=
-  (* [fmap (as_word 65536, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})]. *)
-  [fmap (as_word 0, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})].
+  [fmap (alloc_addr, {| Symbolic.entry_tag := tt ; Symbolic.sem := alloc_fun |})].
 
 Definition state := (@Symbolic.state mt sym_lrc).
 Definition stepf := (@Exec.stepf mt ops sym_lrc table).
