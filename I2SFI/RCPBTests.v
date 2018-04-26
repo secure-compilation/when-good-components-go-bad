@@ -157,6 +157,7 @@ Definition compiler_correct (fuel : nat) : Checker :=
                      end)
                   (fun _ _ _ => returnGen [])
                   (fun _ _ _ _ _ => returnGen [])
+                  false
                ) shrink
   ( fun ip =>
       match compile_program ip with

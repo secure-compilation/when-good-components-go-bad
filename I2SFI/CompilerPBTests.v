@@ -304,6 +304,7 @@ Definition check_correct {log_entry_type : Type}
         end)
        (genIConstCodeAddress ct)
        (genStoreAddresConstInstr ct)
+       false
     ) shrink
     ( fun ip =>
         match compile_program ip with

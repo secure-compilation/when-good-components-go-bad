@@ -636,8 +636,12 @@ Definition gen_procedures
 Definition gen_main_pid (pi : prog_int) : G (N) :=
   match BinNatMap.find (N.of_nat Component.main) pi with
   | None => returnGen (N.of_nat Procedure.main)
-  | Some cint => do! pid <- elements (N.of_nat Procedure.main) (fst cint);
-                  returnGen (pid)
+  | Some cint =>    
+    returnGen
+      ((List.fold_left
+          (fun acc elt => if (N.leb acc elt) then elt else acc)
+          (fst cint)
+          (N.of_nat Procedure.main))+1)%N
   end.
 
 Definition convert_program_interface (pi : prog_int) : Program.interface :=
@@ -687,73 +691,67 @@ Definition gen_main_code
            (buffers : BinNatMap.t (list (N * (nat+list value))))
            (all : BinNatMap.t (BinNatMap.t Intermediate.Machine.code))
            (pid : Procedure_id) :=
-  match BinNatMap.find (N.of_nat Component.main) all with
-  | None =>
-    do! p <- gen_procedure t wf cag dag pi buffers (N.of_nat Component.main) pid 1%nat;
-      returnGen (BinNatMap.add
-                   (N.of_nat Component.main)
-                   (BinNatMap.add pid p (BinNatMap.empty Intermediate.Machine.code))
-                   all)
-  | Some pmap =>
-    match BinNatMap.find pid pmap with
-    | None => (* must generate code for this procedure *)
-      do! p <- gen_procedure t wf cag dag pi buffers
-        (N.of_nat Component.main)
-        pid (max_label pmap );
+
+  do! p' <-
+    match BinNatMap.find (N.of_nat Component.main) all with
+    | None =>
+      gen_procedure t wf cag dag pi buffers (N.of_nat Component.main) pid 1%nat
+    | Some pmap =>
+      match BinNatMap.find pid pmap with
+      | None => (* must generate code for this procedure *)
+        gen_procedure t wf cag dag pi buffers
+                      (N.of_nat Component.main)
+                      pid (max_label pmap )
+      | Some l => returnGen l
+      end
+    end;
         (* check add labels as needed for IJal *)
-        let all_decl_labels := delared_labels_in_proc p in
-        let uses := List.map (fun i =>
-                                match i with
-                                | IJal l => l
-                                | _ => 1%nat (* this is not happening *)
-                                end
-                             )
-                             (List.filter (fun i => match i with
-                                                 | IJal _  => true
-                                                 | _ => false
-                                                 end )
-                                          p ) in
-        let lbls := List.nodup label_eq_dec
-                               (List.fold_left (fun acc elt =>
-                                                  (List.remove label_eq_dec elt acc))
-                                               all_decl_labels uses) in
-        match BinNatMap.elements pmap with
+    let all_decl_labels := delared_labels_in_proc p' in
+    let uses := List.map
+                  (fun i =>
+                     match i with
+                     | IJal l => l
+                     | _ => 1%nat (* this is not happening *)
+                     end
+                  )
+                  (List.filter (fun i => match i with
+                                         | IJal _  => true
+                                         | _ => false
+                                         end )
+                               p' ) in
+    let lbls := List.nodup label_eq_dec
+                           (List.fold_left (fun acc elt =>
+                                              (List.remove label_eq_dec elt acc))
+                                           all_decl_labels uses) in
+    let pmap := match BinNatMap.find (N.of_nat Component.main) all with
+                | None => BinNatMap.empty (code)
+                | Some m => m
+                end in
+    let p := List.map
+               (fun i => match i with
+                         | IReturn => IHalt
+                         | _ => i
+                         end
+               ) p' in
+    returnGen 
+      ( match BinNatMap.elements pmap with
         | nil =>
-          returnGen (BinNatMap.add
-                       (N.of_nat Component.main)
-                       (BinNatMap.add
-                          pid
-                          ((List.map (fun l => ILabel l) lbls) ++ p)%list
-                          pmap)
-                       all)
+          (BinNatMap.add
+             (N.of_nat Component.main)
+             (BinNatMap.add
+                pid
+                ((List.map (fun l => ILabel l) lbls) ++ p)%list
+                pmap)
+             all)
         | (pid',code)::_ =>
-          let m1 := BinNatMap.add (N.of_nat Component.main)
-                                  (BinNatMap.add pid p pmap) all in
           let code' := ((List.map (fun l => ILabel l) lbls) ++ code)%list in
-          let m2 :=
-              BinNatMap.add
-                (N.of_nat Component.main)
-                (BinNatMap.add pid' code' pmap)
-                m1 in
-          returnGen m2
-        end
-    | Some l =>
-      returnGen all
-                (* (BinNatMap.add (N.of_nat Component.main) *)
-                (*                ( BinNatMap.add *)
-                (*                    pid *)
-                (*                    ( List.map *)
-                (*                        (fun i => match i with *)
-                (*                               | IReturn => IHalt *)
-                (*                               | _ => i *)
-                (*                               end *)
-                (*                        ) l *)
-                (*                    ) *)
-                (*                    pmap *)
-                (*                ) *)
-                (*                all) *)
-    end
-  end.
+          BinNatMap.add (N.of_nat Component.main)
+                        (BinNatMap.add
+                           pid
+                           p
+                           (BinNatMap.add pid' code' pmap)
+                        ) all
+        end).
 
 
 Definition genIntermediateProgram
@@ -761,9 +759,13 @@ Definition genIntermediateProgram
            (wf : instr_weight)
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
+           (max_components : bool)
   : G Intermediate.program :=
 
-  do! n <- choose (1%nat, (N.to_nat (SFI.COMP_MAX-1)%N));
+  do! n <-
+      (if max_components
+      then returnGen (N.to_nat (SFI.COMP_MAX-1)%N)
+      else choose (1%nat, (N.to_nat (SFI.COMP_MAX-1)%N)));
     let cids := N_list n in
 
     do! pi <- (gen_program_interface cids);

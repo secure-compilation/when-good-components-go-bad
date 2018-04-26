@@ -14,7 +14,7 @@ Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 Require Import ExtrOcamlBasic.
 Require Import ExtrOcamlNatInt.
 
-Extract Constant Test.defNumTests => "10".
+Extract Constant Test.defNumTests => "1000".
 (* number of target machine instructions to simulate *)
 Definition FUEL := 100%nat. 
 

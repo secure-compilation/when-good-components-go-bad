@@ -27,6 +27,8 @@ Require Import TargetSFI.SFITestUtil.
 Require Import I2SFI.IntermediateProgramGeneration.
 Require Import I2SFI.CompilerPBTests.
 
+Require Import CoqUtils.ord.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -102,12 +104,11 @@ Definition generate_procedure_code ctx_cid pid (pmap : NMap code) (fst_lbl:nat)
                 end
                 ++
                 [ IConst (IInt 1%Z) R_ONE
-                  ; IBnz R_ONE fst_lbl])%list
+                  ; IBnz R_ONE (fst_lbl+calls_no+1)])%list
         )
         (List.seq 1 calls_no)
         ([
-            ILabel (fst_lbl+calls_no+1)
-            ; IConst (IPtr (ctx_cid,pid,0%Z)) R_AUX1
+            IConst (IPtr (ctx_cid,pid,0%Z)) R_AUX1
             ; ILoad R_AUX1 R_AUX1
             ; IConst (IInt 1%Z) R_ONE
             ; IBinOp Add R_ONE R_AUX1 R_AUX2
@@ -115,10 +116,10 @@ Definition generate_procedure_code ctx_cid pid (pmap : NMap code) (fst_lbl:nat)
             ; IStore R_ONE R_AUX2
             ; IConst (IInt 1%Z) R_ONE
           ]) in
-  ((res ++ [ILabel fst_lbl; IReturn])%list, (fst_lbl+calls_no+2)%nat)
+  ((res ++ [ILabel (fst_lbl+calls_no+1)])%list, (fst_lbl+calls_no+2)%nat)
 .
 
-Definition generate_ctx_component ctx_id main_pid tr : NMap code :=
+Definition generate_ctx_component ctx_id main_pid tr export: NMap code :=
   let acc : (list (nat*nat*nat*nat))*(NMap nat) * (NMap (NMap code)) := 
       if (Nat.eqb ctx_id Component.main)
       then ([(Component.main,Component.main,main_pid,1%nat)],
@@ -161,12 +162,12 @@ Definition generate_ctx_component ctx_id main_pid tr : NMap code :=
                (* retrieve highest call number *)
                let cn :=
                    match (getm call_nos pid) with
-                   | None => 1%nat
+                   | None => 0%nat
                    | Some n => n
                    end
                in
                let new_call_nos := (setm call_nos pid (cn+1)%nat) in               
-               ((caller_cid,callee_cid,pid,cn)::call_stack,
+               ((caller_cid,callee_cid,pid,(cn+1)%nat)::call_stack,
                 new_call_nos, new_cmap)
              else
                (* not the context component, call number does not matter*)
@@ -183,59 +184,44 @@ Definition generate_ctx_component ctx_id main_pid tr : NMap code :=
   let '(res,_) :=
       List.fold_left
         (fun '(acc,last_lbl) '(pid,pmap) =>
-           let '(m,l) := (generate_procedure_code ctx_id pid pmap last_lbl) in 
-           (setm acc pid m, l)
+           let '(m,l) := (generate_procedure_code ctx_id pid pmap last_lbl) in
+           (setm acc pid
+                 (if (Nat.eqb ctx_id Component.main)
+                       && (Nat.eqb pid main_pid)
+                  then (m ++ [IHalt])%list
+                  else (m ++ [IReturn])%list)
+            , l)
         )
         (elementsm cmap)
-        (emptym,0%nat)
-  in res.
+        (emptym,0%nat) in
+  List.fold_left
+    (fun acc pid =>
+       match getm acc pid with
+       | Some _ => acc
+       | None => setm acc pid [IReturn]
+       end
+    )
+    export
+    res.
 
 Definition  get_interm_program
             (ip : Intermediate.program)
             (ctx_cid : Component.id)
             (tr : CompCert.Events.trace) : @option Intermediate.program :=
-   let export :=
-      List.map (fun ev =>
-                  match ev with
-                  | ECall _ pid _ _ => pid
-                  | _ => 0%nat
-                  end
-               )
-               (List.filter
-                  (fun ev =>
-                     match ev with
-                     | ECall _ _ _ cid => (Nat.eqb cid ctx_cid)
-                     | _ => false
-                     end                                               
-                  ) tr) in
-  let import :=
-      List.map (fun ev =>
-                  match ev with
-                      | ECall _ pid _ cid => (cid,pid)
-                      | _ => (0%nat,0%nat)
-                  end)
-               (List.filter
-                  (fun ev =>
-                     match ev with
-                     | ECall cid _ _ _ => (Nat.eqb cid ctx_cid)
-                     | _ => false
-                     end ) tr) in
-  
-  let ctx_int :=  Component.mkCompInterface (list2fset export)
-                                           (list2fset import) in
-  let new_prog_interface :=
-      setm (Intermediate.prog_interface ip)
-           ctx_cid
-           ctx_int in
-
-  let pid_main :=  (match (Intermediate.prog_main ip) with
+  match getm (Intermediate.prog_interface ip) ctx_cid with
+  | None => None
+  | Some ctx_interface =>
+    let export := (val (Component.export ctx_interface)) in
+    let import := (val (Component.import ctx_interface)) in
+    
+    let pid_main :=  (match (Intermediate.prog_main ip) with
                       | None => Procedure.main
                       | Some pid => pid
                       end) in
 
-  let buffer_ids := if (Nat.eqb Component.main ctx_cid)
-                    then pid_main::export
-                    else export in
+    let buffer_ids := if (Nat.eqb Component.main ctx_cid)
+                      then pid_main::export
+                      else export in
   let new_prog_buffers :=
       setm (Intermediate.prog_buffers ip)
            ctx_cid
@@ -244,14 +230,14 @@ Definition  get_interm_program
   let new_prog_procedures :=
       setm (Intermediate.prog_procedures ip)
            ctx_cid
-           (generate_ctx_component ctx_cid pid_main tr) in
+           (generate_ctx_component ctx_cid pid_main tr export) in
    Some {|
-       Intermediate.prog_interface := new_prog_interface;
+       Intermediate.prog_interface := (Intermediate.prog_interface ip);
        Intermediate.prog_procedures := new_prog_procedures;
        Intermediate.prog_buffers := new_prog_buffers;
        Intermediate.prog_main := Some pid_main
      |}
-.
+  end.
 
 Definition rsc_correct (fuel : nat) :=
   forAll
@@ -260,6 +246,7 @@ Definition rsc_correct (fuel : nat) :=
        get_freq_instr 
        (genIConstCodeAddress CStore) (* valid  jumps*)
        (genStoreAddresConstInstr CJump) (* valid pointers *)
+       true
     ) 
     ( fun ip =>
         (* compile intermediate *)
@@ -272,6 +259,7 @@ Definition rsc_correct (fuel : nat) :=
               ((CS.eval_program_with_state 
                   (log_type log_entry)
                   update_log
+                  (* TODO calculate this *)
                   fuel
                   p
                   (RiscMachine.RegisterFile.reset_all)) (nil,nil)) in
@@ -292,7 +280,7 @@ Definition rsc_correct (fuel : nat) :=
                   ("Original program:"
                      ++ newline ++ (show ip) ++ newline              
                      ++ "Target Trace: " ++ (show t_t) ++ newline )
-                  (checker (* false *) tt) (* discard tests with empty traces *)
+                  (checker (*false*) tt ) (* discard tests with empty traces *)
           | fcid::_ =>
             (* select context component ctx_cid *)
             let ctx_cid := List.last cids fcid in
@@ -301,7 +289,7 @@ Definition rsc_correct (fuel : nat) :=
             | None => whenFail "Can not define source component" (checker false)
             | Some newip =>
               (* run in intermediate semantics *)
-              let interm_res := runp fuel newip in
+              let interm_res := runp (10*fuel)%nat newip in
               match interm_res with
               | Wrong t_s cid msg _ => (* t_s <= t_t undef not in ctx_cid *)
                 whenFail
@@ -314,7 +302,12 @@ Definition rsc_correct (fuel : nat) :=
                      ++ "Context component: " ++ (show ctx_cid) ++ newline
                      ++ "Execution error: " ++ msg
                   )
-                  (checker ( (sublist t_s t_t) && (negb (cid =? ctx_cid))))
+                  (checker
+                     (
+                       (sublist t_t t_s) ||
+                       ((sublist t_s t_t) && (negb (cid =? ctx_cid)))
+                     )
+                  )
               | _ => (* t_t <= t_s *)
                 let t_s := 
                     match interm_res with
@@ -339,7 +332,12 @@ Definition rsc_correct (fuel : nat) :=
                      | Running _ => "Running"
                      end) ++ newline
                   )
-                  (checker (sublist t_t t_s))
+                   (checker
+                     (
+                       (sublist t_t t_s) 
+                       (*|| ((sublist t_s t_t) && (negb (cid =? ctx_cid)))*)
+                     )
+                  )
               end
             end
           end
