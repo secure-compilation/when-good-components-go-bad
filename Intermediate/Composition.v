@@ -1126,6 +1126,8 @@ Section MultiSemantics.
     - constructor; auto.
   Qed.
 
+  (* TODO: Compare with old definitions/proof, try to reproduce structure.
+     Consider the use (as in the old proof: which, where) of partition lemmas. *)
   Lemma multi_match_final_states:
     forall ms ips,
       multi_match ms ips ->
@@ -1178,8 +1180,42 @@ Section MultiSemantics.
         inversion Hfinal'; subst.
         eapply (execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
     - (* The second case is symmetric *)
-      admit.
-  Admitted.
+      eapply PS.final_state_program with
+        (ics := (PS.unpartialize_stack
+                   (PS.merge_stacks (PS.to_partial_stack gps (domm (prog_interface c)))
+                                    (PS.to_partial_stack gps (domm (prog_interface p)))),
+                 PS.merge_memories
+                   (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface c)) mem)
+                   (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem),
+                 regs, pc))
+        (p' := empty_prog).
+      + reflexivity.
+      + apply linking_well_formedness; assumption.
+      + now apply empty_prog_is_well_formed.
+      + apply linkable_emptym. now apply linkability.
+      + PS.simplify_turn. now rewrite mem_domm.
+      + constructor.
+        * PS.simplify_turn.
+          now rewrite mem_domm.
+        * rewrite domm0.
+          rewrite filterm_predT.
+          reflexivity.
+        * rewrite domm0.
+          rewrite (PS.merge_stacks_partition Hmergeable_ifaces).
+          rewrite (PS.merge_stacks_partition_emptym Hmergeable_ifaces).
+          reflexivity.
+      + rewrite linking_empty_program.
+        inversion Hfinal2
+          as [p' ics ? Hsame_iface' _ Hwf' Hlinkable' Hnotin' Hpartial' Hfinal' | ? Hcontra];
+          subst;
+          PS.simplify_turn;
+          last by destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcontra).
+        inversion Hpartial'; subst.
+        inversion Hfinal'; subst.
+        unfold prog. rewrite (program_linkC wf1 wf2 linkability).
+        pose proof linkable_sym linkability as linkability'.
+        eapply (execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
+  Qed.
 
   Lemma lockstep_simulation:
     forall ms t ms',
