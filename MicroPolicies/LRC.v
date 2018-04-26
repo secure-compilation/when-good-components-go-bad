@@ -92,12 +92,13 @@ Definition lrc_tags := {|
 Import DoNotation.
 
 
-Definition belong (c : Component.id) (m : tag_type lrc_tags M) : bool :=
+Definition belong (c : Component.id) (m : option (tag_type lrc_tags M)) : bool :=
   match m with
-    | {| color := c'  |} => c == c'
+  | Some {| color := c'  |} => c == c'
+  | None => true (* accepting ni = None, assuming it implies monitor service or stopping the machine *)
   end.
 
-Definition check_belong (c : Component.id) (m : tag_type lrc_tags M) : option unit :=
+Definition check_belong (c : Component.id) (m : option (tag_type lrc_tags M)) : option unit :=
   match belong c m with
     | true => Some tt
     | false => None
@@ -110,9 +111,10 @@ Definition check_ret (n : nat) (r : tag_type lrc_tags R) : option unit :=
     | Other => None
   end.
 
-Definition check_entry (c : Component.id) (m : tag_type lrc_tags M) : option unit :=
+Definition check_entry (c : Component.id) (m : option (tag_type lrc_tags M)) : option unit :=
   match m with
-    | {| entry := l |} => if mem_seq l c then Some tt else None
+    | Some {| entry := l |} => if mem_seq l c then Some tt else None
+    | None => Some tt (* accepting ni = None, assuming it implies monitor service or stopping the machine *)
   end.
 
 
@@ -131,7 +133,7 @@ Definition instr_rules (op : opcode)
            (tpc : tag_type lrc_tags P)
            (ti : tag_type lrc_tags M)
            (ts : hseq (tag_type lrc_tags) (inputs op))
-           (tni : tag_type lrc_tags M) : option (ovec lrc_tags op) :=
+           (tni : option (tag_type lrc_tags M)) : option (ovec lrc_tags op) :=
   let current := match ti with {| color := c |} => c end in
   let level := match tpc with Level n => n end in
   match op, ts return option (ovec _ op) with
@@ -148,14 +150,14 @@ Definition instr_rules (op : opcode)
                                      Some (OVec (BINOP b) tpc [hseq tx; ty; Other])
 
   | LOAD,    [hseq tp; ts; td] => do! _ <- check_belong current tni;
-                                     if belong current ts then
+                                     if belong current (Some ts) then
                                        let (ts', td') := switch_val ts Other in
                                        Some (OVec LOAD tpc [hseq tp; ts'; td'])
                                      else
                                        Some (OVec LOAD tpc [hseq tp; ts; Other])
 
   | STORE,   [hseq tp; ts; td] => do! _ <- check_belong current tni;
-                                 do! _ <- check_belong current td;
+                                 do! _ <- check_belong current (Some td);
                                      let (td', _) := switch_val td ts in
                                      Some (OVec STORE tpc [hseq tp; Other; td'])
 
@@ -186,7 +188,7 @@ Definition transfer (iv : ivec lrc_tags) : option (vovec lrc_tags (op iv)) :=
   match iv with (* TL TODO: ask someone obout this dependent boilerplate *)
   | IVec vop tpc ti ts tni =>
     match vop, ts, ti, tni return option (vovec _ vop) with
-    | (OP op), ts, ti, Some tni => instr_rules op tpc ti ts tni
+    | (OP op), ts, ti, tni => instr_rules op tpc ti ts tni
     (* Monitor stuff *)
     | SERVICE, [hseq], ti, None => Some tt
     |       _,      _,  _,    _ => None
@@ -229,17 +231,18 @@ Definition alloc_fun (st : state) : option state :=
   let max_addr := last (domm (mem st)) (as_word 0) in
   do! ra <- regs st ra;
   (* TL TODO: Is using return address to compute calling component safe? *)
-  let current_c := do! atom <- mem st (vala ra);
-                   Some (color (taga atom)) in
+  do! ra_atom <- mem st (vala ra);
+  let current_c := (color (taga ra_atom)) in
   (* create the new bloc *)
-  let atom : matom := (word.as_word 0)@(def_mem_tag current_c) in
+  (* let atom : matom := (word.as_word 0)@(def_mem_tag current_c) in *)
+  let atom : matom := (word.as_word 0)@(def_mem_tag 0) in (* TL TODO: bug 0 should be current_c *)
   do! size <- regs st syscall_arg1;
   do! length <- match word.int_of_word (vala size) with
                 | Posz x => Some x
                 | Negz _ => None
                 end;
   let bloc :=
-      mkseq (fun n => ((word.addw max_addr (word.as_word (n + 1))), atom))
+      mkseq (fun n => ((word.addw max_addr (word.as_word (n + 2))), atom)) (* this + 2 is giving you one unallocated word between each block *)
             length in
   let mem' := unionm (mem st) (mkfmap bloc) in
   (* return *)

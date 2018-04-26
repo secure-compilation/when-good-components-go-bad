@@ -238,8 +238,10 @@ Fixpoint next_state_do_updates (st : state) (tks : seq tag_kind)
 
 Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
            (updts : seq update) (pc' : word) : option state :=
-  do! ni <- mem st pc';
-  let iv := kiv (Some (taga ni)) in
+  let iv := match mem st pc' with
+            | None => kiv None
+            | Some ni => kiv (Some (taga ni))
+            end in
   next_state st (
     match op iv as o return vovec _ o -> option state with
     | OP op => fun ov => do! st' <- next_state_do_updates st (tr ov) updts;
