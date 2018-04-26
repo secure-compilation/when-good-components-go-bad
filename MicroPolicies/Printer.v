@@ -2,9 +2,10 @@ From mathcomp Require Import ssreflect ssrfun eqtype seq ssrint.
 From CoqUtils Require Import fmap fset word.
 
 
+Require Import MicroPolicies.Types.
 Require Import MicroPolicies.Symbolic.
 Require Import MicroPolicies.LRC.
-Require Import MicroPolicies.Types.
+Require Import MicroPolicies.Instance.
 
 Require Import Coq.Strings.String.
 Require Import Coq.Strings.Ascii.
