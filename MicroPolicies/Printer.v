@@ -50,7 +50,7 @@ Definition coqstring_of_instr (i : instr mt) : string :=
   match i with
   | Nop => "Nop"
   | Const i r => "Const r_" ++ coqstring_of_word r ++ " <- " ++ coqstring_of_word i
-  | Mov r1 r2 => "Mov [TODO]"
+  | Mov r1 r2 => "Mov " ++ coqstring_of_word r1 ++ " -> " ++ coqstring_of_word r2
   | Binop o r1 r2 r3 => "Binop [TODO]"
   | Load r1 r2 => "Load [TODO]"
   | Store r1 r2 => "Store [TODO]"

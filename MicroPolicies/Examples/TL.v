@@ -12,6 +12,9 @@ Require Import MicroPolicies.Printer.
 Require Import I2MP.Encode.
 Require Import I2MP.Linearize.
 
+Require Import MicroPolicies.Utils.
+Import DoNotation.
+
 Definition test_program : Intermediate.program :=
   let c0 := [fmap (0, [:: ICall 1 0; IReturn])] in
   let c0_i := Component.mkCompInterface
@@ -27,6 +30,17 @@ Definition test_program : Intermediate.program :=
     (emptym) (* Pre-allocated buffers *)
     (Some 0). (* Main procedure idtac *)
 
-Definition test_program_machine := load (encode (linearize test_program)).
 
-Extraction "/tmp/tl_test.ml" coqstring_of_state test_program_machine stepf.
+Definition test_alloc : Intermediate.program :=
+  let c0 := [fmap (0, [:: IConst (IInt 5) R_ONE ; IAlloc R_COM R_ONE; IReturn])] in
+  let c0_i := Component.mkCompInterface fset0 fset0 in
+  Intermediate.mkProg
+    emptym (* Interface: nothing imported/exported*)
+    [fmap (0, c0)] (* code *)
+    (emptym) (* Pre-allocated buffers *)
+    (Some 0). (* Main procedure idtac *)
+
+Definition test_program_machine := load (encode (linearize test_program)).
+Definition test_alloc_machine := load (encode (linearize test_alloc)).
+
+Extraction "/tmp/tl_test.ml" coqstring_of_state test_program_machine test_alloc_machine stepf.

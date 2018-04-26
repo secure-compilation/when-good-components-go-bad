@@ -17,16 +17,30 @@ Record compiler_env :=
     make_label : Component.id -> Procedure.id -> label ;
   }.
 
-Notation code := (seq (instr * mem_tag)).
+(* non intermediate instr *)
+Inductive sp_instr :=
+| SJalAlloc       : sp_instr
+| SSyscallSetArg1 : register -> sp_instr
+| SSyscallGetRet  : register -> sp_instr
+(* Using syscall_arg3 to save ra, quick and dirty, but effective *)
+| SSyscallSetArg3 : register -> sp_instr
+| SSyscallGetArg3 : register -> sp_instr.
+
+Notation code := (seq (sum sp_instr instr * mem_tag)).
 
 (** Precompilation: translate call/ret, tag code and data, linearize code **)
 
-Definition linearize_callret (cenv : compiler_env)
+Definition linearize_instr (cenv : compiler_env)
            (c : Component.id) (i : instr) : code :=
   match i with
-  | ICall C P => [:: (IJal (make_label cenv C P), def_mem_tag c)]
-  | IReturn => [:: (IJump R_RA, def_mem_tag c)]
-  | _ => [:: (i, def_mem_tag c) ]
+  | ICall C P => [:: (inr (IJal (make_label cenv C P)), def_mem_tag c)]
+  | IReturn => [:: (inr (IJump R_RA), def_mem_tag c)]
+  | IAlloc rptr rsize => [:: (inl (SSyscallSetArg1 rsize), def_mem_tag c) ;
+                             (inl (SSyscallSetArg3 R_RA), def_mem_tag c) ;
+                             (inl (SJalAlloc), def_mem_tag c) ;
+                             (inl (SSyscallGetArg3 R_RA), def_mem_tag c) ;
+                             (inl (SSyscallGetRet rptr), def_mem_tag c) ]
+  | _ => [:: (inr i, def_mem_tag c) ]
   end.
 
 
@@ -46,7 +60,7 @@ Definition linearize_proc (cenv : compiler_env)
            (c : Component.id) (p : Procedure.id) : code :=
   let code := Option.default [:: ] (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
                                     getm map p)
-  in (ILabel (make_label cenv c p), head_tag cenv c p) :: flatten (map (linearize_callret cenv c) code).
+  in (inr (ILabel (make_label cenv c p)), head_tag cenv c p) :: flatten (map (linearize_instr cenv c) code).
 
 Definition linearize_component (cenv : compiler_env) (c : Component.id) : code :=
   let procs : seq Procedure.id :=
@@ -57,7 +71,7 @@ Definition linearize_component (cenv : compiler_env) (c : Component.id) : code :
 
 Definition linearize_code (cenv : compiler_env) : code :=
   let main_code :=
-      [:: (IJal (make_label cenv Component.main Procedure.main), def_mem_tag Component.main) ; (IHalt, def_mem_tag Component.main)] in
+      [:: (inr (IJal (make_label cenv Component.main Procedure.main)), def_mem_tag Component.main) ; (inr IHalt, def_mem_tag Component.main)] in
 
   let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
   main_code ++ flatten (map (linearize_component cenv) components).

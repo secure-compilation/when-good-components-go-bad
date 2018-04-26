@@ -68,25 +68,34 @@ Definition encode_binop (eenv : encoder_env) (b : Values.binop) : binop :=
   | Leq => LEQ
   end.
 
-Definition encode_instr  (eenv : encoder_env) (x : Machine.instr * mem_tag) : matom :=
+Definition encode_instr  (eenv : encoder_env) (x : sum Linearize.sp_instr Machine.instr * mem_tag) : matom :=
   (* TL TODO: are binop arguments in the same order, etc.*)
   {| vala := match fst x with
-             | ICall _ _         => word.as_word 0 (* Invariant: should not be present *)
-             | IReturn           => word.as_word 0 (* Invariant: should not be present *)
-             | INop              => encode_instr (Nop mt)
-             | ILabel _          => encode_instr (Nop mt)
-             | IConst i r        => encode_instr (Const (encode_imval eenv i) (encode_reg eenv r))
-             | IMov r1 r2        => encode_instr (Mov (encode_reg eenv r1) (encode_reg eenv r2))
-             | IBinOp o r1 r2 r3 => encode_instr (Binop (encode_binop eenv o) (encode_reg eenv r1)
-                                                       (encode_reg eenv r2) (encode_reg eenv r3))
-             | ILoad r1 r2       => encode_instr (Load (encode_reg eenv r1) (encode_reg eenv r2))
-             | IStore r1 r2      => encode_instr (Store (encode_reg eenv r1) (encode_reg eenv r2))
-             | IAlloc _ _        => word.as_word 0 (* TL TODO: memory allocation *)
-             | IBnz r l          => encode_instr (Bnz (encode_reg eenv r)
-                                                     (word.as_word (solve_label eenv l)))
-             | IJump r           => encode_instr (Jump (encode_reg eenv r))
-             | IJal l            => encode_instr (Jal (word.as_word (solve_label eenv l)))
-             | IHalt             => encode_instr (Halt mt)
+             | inr i => match i with
+               | ICall _ _         => word.as_word 0 (* Invariant: should not be present *)
+               | IReturn           => word.as_word 0 (* Invariant: should not be present *)
+               | INop              => encode_instr (Nop mt)
+               | ILabel _          => encode_instr (Nop mt)
+               | IConst i r        => encode_instr (Const (encode_imval eenv i) (encode_reg eenv r))
+               | IMov r1 r2        => encode_instr (Mov (encode_reg eenv r1) (encode_reg eenv r2))
+               | IBinOp o r1 r2 r3 => encode_instr (Binop (encode_binop eenv o) (encode_reg eenv r1)
+                                                          (encode_reg eenv r2) (encode_reg eenv r3))
+               | ILoad r1 r2       => encode_instr (Load (encode_reg eenv r1) (encode_reg eenv r2))
+               | IStore r1 r2      => encode_instr (Store (encode_reg eenv r1) (encode_reg eenv r2))
+               | IAlloc _ _        => word.as_word 0 (* Invariant: should not be present *)
+               | IBnz r l          => encode_instr (Bnz (encode_reg eenv r)
+                                                        (word.as_word (solve_label eenv l)))
+               | IJump r           => encode_instr (Jump (encode_reg eenv r))
+               | IJal l            => encode_instr (Jal (word.as_word (solve_label eenv l)))
+               | IHalt             => encode_instr (Halt mt)
+               end
+             | inl i => match i with
+                        | Linearize.SJalAlloc => encode_instr (Jal (swcast alloc_addr))
+                        | Linearize.SSyscallSetArg1 r => encode_instr (Mov (encode_reg eenv r) syscall_arg1)
+                        | Linearize.SSyscallSetArg3 r => encode_instr (Mov (encode_reg eenv r) syscall_arg3)
+                        | Linearize.SSyscallGetArg3 r => encode_instr (Mov syscall_arg3 (encode_reg eenv r))
+                        | Linearize.SSyscallGetRet  r => encode_instr (Mov syscall_ret (encode_reg eenv r))
+                        end
              end ;
      taga := snd x |}.
 
@@ -104,7 +113,7 @@ Definition encode (prog : Linearize.prog) : {fmap mword mt -> matom}:=
   (* Solve labels *)
   let labels : seq int := (* TL TODO: int is an ugly hack to get an eqType for free;      *)
                           (*          switch to eqTypes for Intermediate.instr eventually *)
-      map (fun x => match fst x with ILabel l => Posz l | _ => Negz 1 end)
+      map (fun x => match fst x with inr (ILabel l) => Posz l | _ => Negz 1 end)
           (Linearize.procedures prog) in
   let solve (l : label) : int := index (Posz l) labels in
   (* Concretize pointers *)
