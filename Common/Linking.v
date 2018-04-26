@@ -33,7 +33,7 @@ Theorem linkable_emptym:
     linkable i emptym.
 Proof.
   intros i Hsound. constructor.
-  - now rewrite unionm0. 
+  - now rewrite unionm0.
   - rewrite domm0. apply fdisjoints0.
 Qed.
 
@@ -55,11 +55,6 @@ Proof.
   - subst. auto.
   - rewrite HCI'' in HCI'. inversion HCI'. reflexivity.
 Qed.
-
-Lemma closed_interface_sym i1 i2:
-  closed_interface (unionm i1 i2) ->
-  closed_interface (unionm i2 i1).
-Admitted. (* Grade 1. *)
 
 (*
 (* we assume that the provided mains are linkable *)

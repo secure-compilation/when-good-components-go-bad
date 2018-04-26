@@ -357,10 +357,8 @@ Lemma mergeable_interfaces_sym ctx1 ctx2 :
   mergeable_interfaces ctx1 ctx2 ->
   mergeable_interfaces ctx2 ctx1.
 Proof.
-  intros [Hlinkable Hclosed].
-  split.
-  - apply (linkable_sym Hlinkable).
-  - apply (closed_interface_sym _ _ Hclosed).
+  case=> [[Hsound Hdis] Hclosed].
+  by do 2?split; rewrite -1?unionmC // fdisjointC.
 Qed.
 
 (* NOTE: Instance of a more general property which may be added to CoqUtils.
