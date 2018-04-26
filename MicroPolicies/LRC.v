@@ -229,13 +229,13 @@ Definition matom := (atom (mword mt) mem_tag).
 Definition alloc_fun (st : state) : option state :=
   (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
   let max_addr := last (domm (mem st)) (as_word 0) in
-  do! ra <- regs st ra;
+  do! ra_val <- regs st ra;
+  let next_pc := (vala ra_val)@(taga (pc st)) in
   (* TL TODO: Is using return address to compute calling component safe? *)
-  do! ra_atom <- mem st (vala ra);
+  do! ra_atom <- mem st (vala ra_val);
   let current_c := (color (taga ra_atom)) in
   (* create the new bloc *)
-  (* let atom : matom := (word.as_word 0)@(def_mem_tag current_c) in *)
-  let atom : matom := (word.as_word 0)@(def_mem_tag 0) in (* TL TODO: bug 0 should be current_c *)
+  let atom : matom := (word.as_word 0)@(def_mem_tag current_c) in
   do! size <- regs st syscall_arg1;
   do! length <- match word.int_of_word (vala size) with
                 | Posz x => Some x
@@ -249,7 +249,6 @@ Definition alloc_fun (st : state) : option state :=
   do! addr <- (do! x <- head bloc;
                  Some (fst x));
   do! regs' <- updm (regs st) syscall_ret addr@Other;
-  let pc' := (vala ra)@(taga (pc st)) in
-  Some (State mem' regs' pc' tt).
+  Some (State mem' regs' next_pc tt).
 
 End WithClasses.
