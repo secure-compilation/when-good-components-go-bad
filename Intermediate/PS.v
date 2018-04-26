@@ -365,7 +365,8 @@ Qed.
 
 (* NOTE: Instance of a more general property which may be added to CoqUtils.
    TODO: Harmonize naming of two directions or unify with iff.
-         Add domain conditions. *)
+         Add domain conditions to the following lemmas.
+         Reduce amount of lemmas, possibly supplement with tactics. *)
 Lemma domm_partition :
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
@@ -387,6 +388,19 @@ Inductive mergeable_states_pc_cc: state -> state -> Prop :=
     mergeable_states_pc_cc (PC (gps1, mem1, regs1, pc1)) (CC (C2, gps2, mem2))
 | mergeable_states_pc_cc_second: forall C1 gps1 mem1 gps2 mem2 regs2 pc2,
     mergeable_states_pc_cc (CC (C1, gps1, mem1)) (PC (gps2, mem2, regs2, pc2)).
+Lemma domm_partition_in_both ctx1 ctx2 C :
+  mergeable_interfaces ctx1 ctx2 ->
+  C \in domm ctx1 ->
+  C \in domm ctx2 ->
+  False.
+Admitted. (* Rank 1. *)
+
+Lemma domm_partition_in_neither ctx1 ctx2 C :
+  mergeable_interfaces ctx1 ctx2 ->
+  C \notin domm ctx1 ->
+  C \notin domm ctx2 ->
+  False.
+Admitted. (* Rank 1. *)
 
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_intro: forall ics ips1 ips2,
@@ -504,6 +518,7 @@ Proof.
     + constructor; auto.
 Qed.
 
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
 Lemma merge_stacks_partition:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
@@ -512,7 +527,17 @@ Lemma merge_stacks_partition:
       (merge_stacks
          (to_partial_stack gps (domm ctx1))
          (to_partial_stack gps (domm ctx2)))
-  = gps.
+    = gps.
+Admitted. (* Grade 2. *)
+
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
+Lemma merge_stacks_partition_emptym:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps,
+    merge_stacks (to_partial_stack gps (domm ctx1))
+                 (to_partial_stack gps (domm ctx2)) =
+    to_partial_stack gps fset0.
 Admitted. (* Grade 2. *)
 
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
