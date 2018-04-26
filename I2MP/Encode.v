@@ -5,8 +5,8 @@ From mathcomp Require Import ssreflect ssrfun eqtype seq ssrint ssrnat.
 From CoqUtils Require Import fmap fset word.
 
 Require Import Intermediate.Machine.
-Require Import MicroPolicies.Symbolic.
 Require Import MicroPolicies.LRC.
+Require Import MicroPolicies.Instance.
 Require Precompile.
 Require Tmp.
 
@@ -19,7 +19,6 @@ Open Scope monad_scope.
 
 Require Import MicroPolicies.Types.
 
-Local Notation mt := Symbolic.mt.
 Local Notation memory := {fmap mword mt -> matom }.
 
 Record encoder_env :=

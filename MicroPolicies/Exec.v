@@ -14,14 +14,14 @@ Context {mt : machine_types}
         {ops : machine_ops mt}
         {sp : Symbolic.params}.
 
-Variable table : Symbolic.syscall_table.
+Variable table : @Symbolic.syscall_table mt sp.
 
 Import Symbolic.
 
 Local Open Scope word_scope.
 Local Notation "x .+1" := (x + 1).
 
-Definition stepf (st : state) : option state :=
+Definition stepf (st : @state mt sp) : option (@state mt sp) :=
   let 'State mem reg pc@tpc extra := st in
   match mem pc with
   | Some iti =>

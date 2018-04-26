@@ -2,7 +2,6 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq word fmap.
 
 Require Import MicroPolicies.Utils MicroPolicies.Types.
-Require Import MicroPolicies.Int32.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -11,9 +10,6 @@ Unset Printing Implicit Defensive.
 Import DoNotation.
 
 (* TL: hardcoding machine words *)
-Definition mt := concrete_int_32_mt.
-Instance ops : machine_ops mt := concrete_int_32_ops.
-
 Module Symbolic.
 
 (* BCP/AAA: Should some of this be shared with the concrete machine? *)
@@ -137,8 +133,8 @@ Open Scope bool_scope.
 
 Section WithClasses.
 
-(* Context (mt : machine_types) *)
-(*         {ops : machine_ops mt}. *)
+Context {mt : machine_types}
+        {ops : machine_ops mt}.
 
 Class params := {
   ttypes :> tag_types;
@@ -340,8 +336,9 @@ Inductive step (st st' : state) : Prop :=
 
 End WithClasses.
 
-Notation memory s := {fmap mword mt -> atom (mword mt) (@tag_type (@ttypes s) M)}.
-Notation registers s := {fmap reg mt -> atom (mword mt) (@tag_type (@ttypes s) R)}.
+
+Notation memory mt s := {fmap mword mt -> atom (mword mt) (@tag_type (@ttypes s) M)}.
+Notation registers mt s := {fmap reg mt -> atom (mword mt) (@tag_type (@ttypes s) R)}.
 
 End Symbolic.
 
@@ -349,13 +346,13 @@ Module Exports.
 
 Import Symbolic.
 
-Definition state_eqb p : rel (@state p) :=
+Definition state_eqb mt p : rel (@state mt p) :=
   [rel s1 s2 | [&& mem s1 == mem s2,
                    regs s1 == regs s2,
                    pc s1 == pc s2 &
                    internal s1 == internal s2 ] ].
 
-Lemma state_eqbP p : Equality.axiom (@state_eqb p).
+Lemma state_eqbP mt p : Equality.axiom (@state_eqb mt p).
 Proof.
   move => [? ? ? ?] [? ? ? ?].
   apply (iffP and4P); simpl.
@@ -363,8 +360,8 @@ Proof.
   - by move => [-> -> -> ->].
 Qed.
 
-Definition state_eqMixin p := EqMixin (@state_eqbP p).
-Canonical state_eqType p := Eval hnf in EqType _ (@state_eqMixin p).
+Definition state_eqMixin mt p := EqMixin (@state_eqbP mt p).
+Canonical state_eqType mt p := Eval hnf in EqType _ (@state_eqMixin mt p).
 
 Export TagKindEq.
 

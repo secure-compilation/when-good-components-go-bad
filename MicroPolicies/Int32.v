@@ -120,3 +120,10 @@ Qed.
 000010000000000000000000000 00010
                             CONST
  *)
+
+Global Instance concrete_int_32_scr : syscall_regs mt := {|
+  syscall_ret  := as_word 16;
+  syscall_arg1 := as_word 17;
+  syscall_arg2 := as_word 18;
+  syscall_arg3 := as_word 19
+|}.

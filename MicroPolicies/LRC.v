@@ -205,35 +205,29 @@ Global Instance sym_lrc : params := {
 
 
 
-
-(* TL TODO: these notations inside a module? *)
-
-Notation state := (@Symbolic.state sym_lrc).
-
-Definition lrc_syscalls : syscall_table := emptym.
-
-Notation step  := (@Symbolic.step sym_lrc lrc_syscalls).
-Notation stepf  := (@stepf sym_lrc lrc_syscalls).
-
-Definition ratom := (atom (mword mt) value_tag).
-Definition matom := (atom (mword mt) mem_tag).
-
 (** Syscalls **)
 
 From CoqUtils Require Import word.
 
-Inductive syscall := Alloc.
+Section WithClasses.
 
-Context `{syscall_regs mt}
-         {ra_reg : reg mt}
-         {alloc_addr : syscall -> mword mt}.
+Context {mt : machine_types}
+        {ops : machine_ops mt}
+        {sregs : syscall_regs mt}.
+(* TL TODO: these notations inside a module? *)
+
+Notation state := (@Symbolic.state mt sym_lrc).
+Notation State := (@Symbolic.State mt sym_lrc).
+
+Definition ratom := (atom (mword mt) value_tag).
+Definition matom := (atom (mword mt) mem_tag).
 
 (* alloc is a syscall taking one argument, the size to allocate *)
 (* a syscall don't change the pc level *)
 Definition alloc_fun (st : state) : option state :=
   (* TL TODO: Rely on the fact that it set implem is a sorted list, kinda fishy *)
   let max_addr := last (domm (mem st)) (as_word 0) in
-  do! ra <- regs st ra_reg;
+  do! ra <- regs st ra;
   (* TL TODO: Is using return address to compute calling component safe? *)
   let current_c := do! atom <- mem st (vala ra);
                    Some (color (taga atom)) in
@@ -254,3 +248,5 @@ Definition alloc_fun (st : state) : option state :=
   do! regs' <- updm (regs st) syscall_ret addr@Other;
   let pc' := (vala ra)@(taga (pc st)) in
   Some (State mem' regs' pc' tt).
+
+End WithClasses.

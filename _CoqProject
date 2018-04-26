@@ -77,16 +77,9 @@ MicroPolicies/Int32.v
 MicroPolicies/Symbolic.v
 MicroPolicies/Exec.v
 MicroPolicies/LRC.v
+MicroPolicies/Instance.v
 MicroPolicies/Printer.v
-MicroPolicies/Examples/Helper.v
-MicroPolicies/Examples/Identity.v
-MicroPolicies/Examples/Increment.v
-MicroPolicies/Examples/DefaultInitBuffer.v
-MicroPolicies/Examples/NestedCalls.v
-MicroPolicies/Examples/Factorial.v
-MicroPolicies/Examples/Test.v
 
 I2MP/Tmp.v
 I2MP/Precompile.v
 I2MP/Encode.v
-I2MP/Test.v
