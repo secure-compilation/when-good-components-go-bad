@@ -528,7 +528,53 @@ Qed.
 Lemma extraction_lemma :  forall (π : prop) (P : prg)
                                  (s : Safety π),
                            Z_class P (z_plus π s P).
-Proof. Admitted.   
+Proof.
+  intros π P s. unfold Z_class. intros t H.
+  unfold z_plus in *. rewrite de_morgan1 in H.
+  destruct H as [K | K].
+  + destruct (s t K) as [m [Hm1 Hm2]]. 
+    exists m. split; try now auto.
+    intros t' [Hpref | Hundef]; rewrite de_morgan1.
+    ++ left. now apply (Hm2 t').
+    ++ right. intros Hf. apply K.
+       apply (Hf t). unfold u_prefix_b.
+       now exists m.
+  + rewrite not_forall_ex_not in K. destruct K as [t' Ht'].
+    rewrite not_imp in Ht'. destruct Ht' as [[b [Hb1 [m [H1 H2]]]] H].
+    destruct (s t' H) as [m' [Hm' HHm']].
+    exists (snoc m (undef P)). split.
+    ++ unfold behavior_prefix. exists (Goes_wrong nil). simpl. now rewrite E0_right.
+    ++ intros t'0 [Hpref | Hundef]; rewrite de_morgan1.
+       +++ apply undef_no_extension_behavior in Hpref.
+           apply (behavior_prefix_pseudo_trans b m t' Hb1) in H1.
+           assert (trace_prefix m m' \/ trace_prefix m' m)
+             by now apply (same_extension m m' t').
+           destruct H0.
+           *  right. intros ff. apply H. apply ff.
+             unfold u_prefix_b. exists m. split; try now auto.
+             unfold u_prefix. exists m. split; try now auto.
+             now apply trace_prefix_ref. 
+           * left. subst. apply HHm'. destruct H0 as [l Hl].
+             rewrite Hl. exists (Goes_wrong (snoc l (undef P))).
+             simpl. rewrite (snoc_append m' l (undef P)).
+             rewrite (snoc_app (m' ** l) (undef P)).
+             now rewrite Eapp_assoc.
+        +++ destruct Hundef as [b0 [Hb0 Hb00]].  
+            assert (b0 = (snoc m (undef P)) \/ trace_prefix b0 m) by
+                now apply (pref_undef_pref P b0 m).
+            destruct H0 as [K | K].
+           * rewrite K in Hb00. rewrite no_nested in Hb00. rewrite <- H2 in Hb00.
+             rewrite Hb00 in *. right. intros Hf. apply H. apply Hf.
+             exists m. split. 
+             ** now apply (behavior_prefix_pseudo_trans b m t'). 
+             ** exists m. split; try now auto. now apply trace_prefix_ref.
+           * right. intros ff. apply H. apply ff.
+             unfold u_prefix_b. exists b0. split.
+             apply (behavior_prefix_pseudo_trans b m t' Hb1) in H1. 
+             now apply (behavior_prefix_pseudo_trans m b0 t').
+             exists b0. split; try now auto. now apply trace_prefix_ref. 
+Qed.      
+
 
 (* z_plus is the biggest property in Z_p that is included in π *)
 Lemma maximality_lemma : forall (P : prg) (π phi : prop) (S : Safety π)
