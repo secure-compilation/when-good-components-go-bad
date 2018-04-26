@@ -1133,61 +1133,53 @@ Section MultiSemantics.
       PS.final_state prog emptym ips.
   Proof.
     intros ms ips Hmmatch Hms_final.
-    inversion Hms_final; subst.
-    inversion Hmmatch; subst.
-    eapply PS.final_state_program
-      with (ics:=PS.unpartialize (PS.merge_partial_states ips1 ips2))
-           (p':=empty_prog);
-      inversion H4; subst; PS.simplify_turn.
-    - reflexivity.
-    - apply linking_well_formedness; assumption.
-    - now apply empty_prog_is_well_formed.
-    - apply linkable_emptym. now apply linkability.
-(* TODO
-    - rewrite mem_domm. auto.
-    - rewrite mem_domm. auto.
-    - constructor.
-      + PS.simplify_turn.
-        rewrite mem_domm. auto.
-      + simpl. rewrite domm0. simpl. rewrite filterm_identity.
-        reflexivity.
-      + simpl. rewrite domm0.
-        rewrite PS.to_partial_stack_unpartialize_identity.
-        * reflexivity.
-        * apply PS.merged_stack_has_no_holes.
-          inversion H; subst; assumption.
-    - constructor.
-      + PS.simplify_turn.
-        rewrite mem_domm. auto.
-      + simpl. rewrite domm0. simpl. rewrite filterm_identity.
-        reflexivity.
-      + simpl. rewrite domm0.
-        rewrite PS.to_partial_stack_unpartialize_identity.
-        * reflexivity.
-        * apply PS.merged_stack_has_no_holes.
-          inversion H; subst; assumption.
-    - inversion H; subst.
-      + unfold CS.final_state in H10. CS.unfold_states.
-        inversion H9; subst.
-        rewrite linking_empty_program.
-        unfold CS.final_state in H12.
-        inversion H11; subst. unfold prog.
-        eapply execution_invariant_to_linking; eauto.
-      + PS.simplify_turn. rewrite H3 in H1. discriminate.
-    - inversion H0; subst.
-      + unfold CS.final_state in H10. CS.unfold_states.
-        inversion H9; subst.
-        rewrite linking_empty_program.
-        unfold CS.final_state in H12.
-        inversion H11; subst. unfold prog.
-        replace (program_link p c) with (program_link c p).
-        eapply execution_invariant_to_linking; eauto.
-        * apply linkable_sym. auto.
-        * rewrite Intermediate.link_sym; auto.
-          ** apply linkable_mains_sym; auto.
-          ** rewrite <- H3. auto.
-      + PS.simplify_turn. rewrite H3 in H2. discriminate.
-  Qed.*) Admitted.
+    inversion Hms_final as [ips1 ips2 Hfinal1 Hfinal2]; subst.
+    inversion Hmmatch as [? ? Hmergeable]; subst.
+    inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2]; subst.
+    inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+      inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst;
+      PS.simplify_turn;
+      [ now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2)
+      |
+      |
+      | now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2) ].
+    - eapply PS.final_state_program with
+        (ics := (PS.unpartialize_stack
+                   (PS.merge_stacks (PS.to_partial_stack gps (domm (prog_interface c)))
+                                    (PS.to_partial_stack gps (domm (prog_interface p)))),
+                 PS.merge_memories
+                   (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface c)) mem)
+                   (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem),
+                 regs, pc))
+        (p' := empty_prog).
+      + reflexivity.
+      + apply linking_well_formedness; assumption.
+      + now apply empty_prog_is_well_formed.
+      + apply linkable_emptym. now apply linkability.
+      + PS.simplify_turn. now rewrite mem_domm.
+      + constructor.
+        * PS.simplify_turn.
+          now rewrite mem_domm.
+        * rewrite domm0.
+          rewrite filterm_predT.
+          reflexivity.
+        * rewrite domm0.
+          Check PS.to_partial_stack_unpartialize_identity.
+          rewrite (PS.merge_stacks_partition Hmergeable_ifaces).
+          rewrite (PS.merge_stacks_partition_emptym Hmergeable_ifaces).
+          reflexivity.
+      + rewrite linking_empty_program.
+        inversion Hfinal1
+          as [p' ics ? Hsame_iface' _ Hwf' Hlinkable' Hnotin' Hpartial' Hfinal' | ? Hcontra];
+          subst;
+          PS.simplify_turn;
+          last by rewrite Hcontra in Hpc1.
+        inversion Hpartial'; subst.
+        inversion Hfinal'; subst.
+        eapply (execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
+    - (* The second case is symmetric *)
+      admit.
+  Admitted.
 
   Lemma lockstep_simulation:
     forall ms t ms',
