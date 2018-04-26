@@ -838,31 +838,14 @@ Section Decomposition.
   Proof.
     intros p1 p2 s t t' s' s''.
     intros Hstar1 Hstar2.
-    apply star_app_inv in Hstar2 as [s''' [Hstar2 Hstar2']];
-      last apply PS.atomic_traces.
+    apply (star_app_inv (@PS.singleton_traces p1 (prog_interface p2))) in Hstar2.
+    destruct Hstar2 as [s''' [Hstar2 Hstar2']].
     destruct (PS.state_determinism_star_same_trace Hstar1 Hstar2) as [Hstar12 | Hstar21].
     - pose proof star_trans Hstar12 Hstar2' (E0_right t') as Hstar12'.
       rewrite E0_right in Hstar12'.
       right. left. done.
     - pose proof PS.state_determinism_star_silent_prefix Hstar21 Hstar2' as Hstar1'.
       right. left. done.
-(*
-    apply star_starN in Hstar1.
-    apply star_starN in Hstar2.
-    destruct Hstar1 as [n1 HstarN1].
-    destruct Hstar2 as [n2 HstarN2].
-    destruct (Nat.compare n1 n2) eqn:Hcmp.
-    - apply Nat.compare_eq in Hcmp. subst.
-      destruct (PS.state_determinism_starN_with_same_prefix HstarN1 HstarN2)
-        as [[]|[[m []]|[m [? []]]]]; subst.
-      + auto.
-      + apply starN_star in H. auto.
-      + apply starN_star in H0. auto.
-    - right. left.
-      admit.
-    - right. right.
-      admit.
-*)
   Qed.
 
   Lemma program_ub_doesnt_improve:

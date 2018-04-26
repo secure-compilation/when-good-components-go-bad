@@ -68,40 +68,6 @@ Qed.
 
 End CLOSURES.
 
-(* Smallstep semantics: single events. *)
-
-Remark singleton_cons_nil_tail : forall A e l,
-  @length A (e :: l) = 1 ->
-  l = [].
-Proof.
-  intros A e l Hlen.
-  destruct l as [| e' l'].
-  - reflexivity.
-  - inversion Hlen.
-Qed.
-
-Lemma single_events_atomic : forall L,
-  single_events L -> atomic (step L) (globalenv L).
-Proof.
-  unfold single_events, atomic.
-  intros L Hsingle s t s' HStep.
-  specialize (Hsingle s t s' HStep).
-  destruct (length t) as [| n] eqn:Hlength;
-    [| destruct n as [| n]].
-  - left.
-    destruct t.
-    + easy.
-    + inversion Hlength.
-  - right.
-    destruct t as [| e t'].
-    + inversion Hlength.
-    + apply singleton_cons_nil_tail in Hlength.
-      subst t'.
-      exists e.
-      reflexivity.
-  - inversion Hsingle as [| ? []].
-Qed.
-
 (* Finite prefixes and behaviors. *)
 
 Inductive finpref_behavior : Type :=

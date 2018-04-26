@@ -777,12 +777,6 @@ Section Semantics.
     - apply final_states_stuckness.
   Qed.
 
-  Lemma atomicity : Atomic sem.
-  Proof.
-    intros st t st' Hstep.
-    now destruct Hstep; eauto.
-  Qed.
-
 End Semantics.
 
 Definition comes_from_initial_state (s: state) : Prop :=

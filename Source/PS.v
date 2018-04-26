@@ -834,12 +834,6 @@ Section Semantics.
         apply CS.singleton_traces in Hcs_step
       end; auto.
   Qed.
-
-  Lemma atomic_traces:
-    atomic (step sem) (globalenv sem).
-  Proof.
-    apply (single_events_atomic singleton_traces).
-  Qed.
 End Semantics.
 
 Theorem initial_state_determinism:
