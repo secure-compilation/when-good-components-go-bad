@@ -239,9 +239,18 @@ Section RSC_DC_MD.
         eapply Source.linkable_disjoint_mains; assumption.
     }
 
+    assert (PS.mergeable_interfaces (Intermediate.prog_interface p_compiled)
+                                    (Intermediate.prog_interface Cs_compiled))
+      as Hmergeable_ifaces.
+    {
+      split.
+      - assumption.
+      - by destruct HpCs_compiled_closed.
+    }
     pose proof composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkable_mains linkability'' HpCs_compiled_closed
+         Hmergeable_ifaces
          HP_decomp HCs_decomp
          Hprefix0 Hpref_m_beh2
       as HpCs_compiled_beh.

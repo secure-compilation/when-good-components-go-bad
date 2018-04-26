@@ -590,4 +590,16 @@ Lemma interface_preserves_closedness_r :
 Proof.
 Admitted.
 
+Lemma closed_program_link_sym p1 p2 :
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p1) (prog_interface p2) ->
+  linkable_mains p1 p2 ->
+  closed_program (program_link p1 p2) = closed_program (program_link p2 p1).
+Proof.
+  intros Hwf1 Hwf2 Hlinkable Hmains.
+  rewrite (link_sym Hwf1 Hwf2 Hmains Hlinkable).
+  reflexivity.
+Qed.
+
 End Intermediate.

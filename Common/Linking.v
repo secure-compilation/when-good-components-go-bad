@@ -56,6 +56,11 @@ Proof.
   - rewrite HCI'' in HCI'. inversion HCI'. reflexivity.
 Qed.
 
+Lemma closed_interface_sym i1 i2:
+  closed_interface (unionm i1 i2) ->
+  closed_interface (unionm i2 i1).
+Admitted. (* Grade 1. *)
+
 (*
 (* we assume that the provided mains are linkable *)
 Definition main_link (main1 main2: option (Component.id * Procedure.id))

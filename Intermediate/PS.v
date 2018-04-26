@@ -42,6 +42,24 @@ Inductive state : Type :=
 | PC : program_state -> state
 | CC : context_state -> state.
 
+Definition state_component (ps: state) : Component.id :=
+  match ps with
+  | PC (_, _, _, pc) => Pointer.component pc
+  | CC (C, _, _) => C
+  end.
+
+Definition state_memory (ps: state) : Memory.t :=
+  match ps with
+  | PC (_, mem, _, _) => mem
+  | CC (_, _, mem) => mem
+  end.
+
+Definition state_stack (ps: state) : stack :=
+  match ps with
+  | PC (gps, _, _, _) => gps
+  | CC (_, gps, _) => gps
+  end.
+
 Ltac unfold_state st :=
   match goal with
     |- _ => let pgps := fresh "pgps" in
@@ -331,21 +349,66 @@ Inductive mergeable_stacks : stack -> stack -> Prop :=
 Definition mergeable_memories (mem1 mem2: Memory.t): Prop :=
   fdisjoint (domm mem1) (domm mem2).
 
+Definition mergeable_interfaces (ctx1 ctx2: Program.interface) : Prop :=
+  linkable ctx1 ctx2 /\
+  closed_interface (unionm ctx1 ctx2).
+
+Lemma mergeable_interfaces_sym ctx1 ctx2 :
+  mergeable_interfaces ctx1 ctx2 ->
+  mergeable_interfaces ctx2 ctx1.
+Proof.
+  intros [Hlinkable Hclosed].
+  split.
+  - apply (linkable_sym Hlinkable).
+  - apply (closed_interface_sym _ _ Hclosed).
+Qed.
+
+(* NOTE: Instance of a more general property which may be added to CoqUtils.
+   TODO: Harmonize naming of two directions or unify with iff.
+         Add domain conditions to the following lemmas.
+         Reduce amount of lemmas, possibly supplement with tactics. *)
+Lemma domm_partition :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall C,
+    C \notin domm ctx2 ->
+    C \in domm ctx1.
+Admitted. (* Rank 1. *)
+
+Lemma domm_partition_notin :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall C,
+    C \in domm ctx2 ->
+    C \notin domm ctx1.
+Admitted. (* Rank 1. *)
+
+Inductive mergeable_states_pc_cc: state -> state -> Prop :=
+| mergeable_states_pc_cc_first: forall gps1 mem1 regs1 pc1 C2 gps2 mem2,
+    mergeable_states_pc_cc (PC (gps1, mem1, regs1, pc1)) (CC (C2, gps2, mem2))
+| mergeable_states_pc_cc_second: forall C1 gps1 mem1 gps2 mem2 regs2 pc2,
+    mergeable_states_pc_cc (CC (C1, gps1, mem1)) (PC (gps2, mem2, regs2, pc2)).
+Lemma domm_partition_in_both ctx1 ctx2 C :
+  mergeable_interfaces ctx1 ctx2 ->
+  C \in domm ctx1 ->
+  C \in domm ctx2 ->
+  False.
+Admitted. (* Rank 1. *)
+
+Lemma domm_partition_in_neither ctx1 ctx2 C :
+  mergeable_interfaces ctx1 ctx2 ->
+  C \notin domm ctx1 ->
+  C \notin domm ctx2 ->
+  False.
+Admitted. (* Rank 1. *)
+
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
-| mergeable_states_first: forall pgps1 pmem1 regs pc C pgps2 pmem2,
-    is_program_component (PC (pgps1, pmem1, regs, pc)) ctx1 ->
-    is_context_component (CC (C, pgps2, pmem2)) ctx2 ->
-    Pointer.component pc = C ->
-    mergeable_stacks pgps1 pgps2 ->
-    mergeable_memories pmem1 pmem2 ->
-    mergeable_states ctx1 ctx2 (PC (pgps1, pmem1, regs, pc)) (CC (C, pgps2, pmem2))
-| mergeable_states_second: forall pgps1 pmem1 regs pc C pgps2 pmem2,
-    is_context_component (CC (C, pgps1, pmem1)) ctx1 ->
-    is_program_component (PC (pgps2, pmem2, regs, pc)) ctx2 ->
-    Pointer.component pc = C ->
-    mergeable_stacks pgps1 pgps2 ->
-    mergeable_memories pmem1 pmem2 ->
-    mergeable_states ctx1 ctx2 (CC (C, pgps1, pmem1)) (PC (pgps2, pmem2, regs, pc)).
+| mergeable_states_intro: forall ics ips1 ips2,
+    mergeable_interfaces ctx1 ctx2 ->
+    CS.comes_from_initial_state ics ->
+    partial_state ctx1 ics ips1 ->
+    partial_state ctx2 ics ips2 ->
+    mergeable_states ctx1 ctx2 ips1 ips2.
 
 Lemma mergeable_stack_frames_sym:
   forall frame1 frame2,
@@ -368,6 +431,12 @@ Proof.
   - apply mergeable_stack_frames_sym; auto.
 Qed.
 
+Lemma mergeable_stacks_partition gps ctx1 ctx2:
+  mergeable_interfaces ctx1 ctx2 ->
+  mergeable_stacks (to_partial_stack gps (domm ctx1)) (to_partial_stack gps (domm ctx2)).
+Proof.
+Admitted. (* Grade 2. *)
+
 Lemma mergeable_memories_sym:
   forall pmem1 pmem2,
     mergeable_memories pmem1 pmem2 ->
@@ -378,19 +447,44 @@ Proof.
   rewrite fdisjointC. auto.
 Qed.
 
+Lemma mergeable_states_pc_cc_sym s1 s2:
+  mergeable_states_pc_cc s1 s2 ->
+  mergeable_states_pc_cc s2 s1.
+Proof.
+  intros Hmerge.
+  inversion Hmerge; subst;
+    constructor.
+Qed.
+
+(* RB: TODO: Obtain linkability from mergeability. *)
 Lemma mergeable_states_sym:
   forall p c s1 s2,
     well_formed_program p ->
     well_formed_program c ->
     linkable (prog_interface p) (prog_interface c) ->
-    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
-    PS.mergeable_states (prog_interface p) (prog_interface c) s2 s1.
+    mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
+    mergeable_states (prog_interface p) (prog_interface c) s2 s1.
 Proof.
   intros p c s1 s2 Hp_wf Hc_wf Hlink Hmergeable.
-  inversion Hmergeable; subst;
-  do 2 (constructor; auto;
-        [ apply mergeable_stacks_sym; auto
-        | apply mergeable_memories_sym; auto ]).
+  inversion Hmergeable; subst.
+  - econstructor; auto.
+    + apply mergeable_interfaces_sym; assumption.
+    + eassumption.
+    + eassumption.
+    + eassumption.
+Qed.
+
+Lemma mergeable_states_stacks ctx1 ctx2 ips1 ips2 gps1 gps2:
+  mergeable_states ctx1 ctx2 ips1 ips2 ->
+  state_stack ips1 = gps1 ->
+  state_stack ips2 = gps2 ->
+  mergeable_stacks gps1 gps2.
+Proof.
+  intros Hmerge Hstk1 Hstk2.
+  inversion Hmerge as [ics ? ? Hmerge_ifaces Hprovenance Hpartial1 Hpartial2]; subst.
+    inversion Hpartial1; subst;
+    inversion Hpartial2; subst;
+    apply mergeable_stacks_partition; assumption.
 Qed.
 
 Definition merge_stack_frames (frames: PartialPointer.t * PartialPointer.t): PartialPointer.t :=
@@ -424,8 +518,40 @@ Proof.
     + constructor; auto.
 Qed.
 
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
+Lemma merge_stacks_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps,
+    unpartialize_stack
+      (merge_stacks
+         (to_partial_stack gps (domm ctx1))
+         (to_partial_stack gps (domm ctx2)))
+    = gps.
+Admitted. (* Grade 2. *)
+
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
+Lemma merge_stacks_partition_emptym:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps,
+    merge_stacks (to_partial_stack gps (domm ctx1))
+                 (to_partial_stack gps (domm ctx2)) =
+    to_partial_stack gps fset0.
+Admitted. (* Grade 2. *)
+
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
   unionm mem1 mem2.
+
+Lemma merge_memories_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall mem,
+    merge_memories
+      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx1) mem)
+      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx2) mem)
+  = mem.
+Admitted. (* Grade 2. *)
 
 Definition merge_partial_states (ips1 ips2: state) : state :=
   match ips1 with
@@ -489,10 +615,11 @@ Inductive step (p: program) (ctx: Program.interface)
 
 Theorem context_epsilon_step_is_silent:
   forall p ctx G ips ips',
-    step p ctx G (CC ips) E0 ips' ->
-    ips' = CC ips.
+    is_context_component ips ctx ->
+    step p ctx G ips E0 ips' ->
+    ips' = ips.
 Proof.
-  intros p ctx G ips ips' Hstep.
+  intros p ctx G ips ips' Hcc Hstep.
   inversion Hstep; subst.
   match goal with
   | Hpartial1: partial_state _ _ _,
@@ -500,6 +627,10 @@ Proof.
     inversion Hpartial2; subst; PS.simplify_turn;
     inversion Hpartial1; subst; PS.simplify_turn
   end.
+  - rewrite Hcc in H.
+    discriminate.
+  - rewrite Hcc in H.
+    discriminate.
   - (* contra *)
     assert (Pointer.component pc = Pointer.component pc0) as Hsame_comp. {
       inversion H3; subst;
@@ -508,8 +639,8 @@ Proof.
       + erewrite find_label_in_component_1; now eauto.
       + erewrite find_label_in_procedure_1; now eauto.
     }
-    rewrite Hsame_comp in H6.
-    rewrite H6 in H.
+    rewrite <- Hsame_comp in H6.
+    rewrite Hcc in H6.
     discriminate.
   - inversion H3; subst;
       try (rewrite Pointer.inc_preserves_component; reflexivity);
@@ -530,14 +661,15 @@ Qed.
 
 Corollary context_epsilon_star_is_silent:
   forall p ctx G ctx_state ips',
-    star (step p ctx) G (CC ctx_state) E0 ips' ->
-    ips' = CC ctx_state.
+    is_context_component ctx_state ctx ->
+    star (step p ctx) G ctx_state E0 ips' ->
+    ips' = ctx_state.
 Proof.
-  intros p ctx G ctx_state ips' Hstar.
+  intros p ctx G ctx_state ips' Hcc Hstar.
   dependent induction Hstar; subst.
   - reflexivity.
-  - apply Eapp_E0_inv in x. destruct x. subst.
-    apply context_epsilon_step_is_silent in H. subst.
+  - symmetry in H0. apply Eapp_E0_inv in H0. destruct H0. subst.
+    apply (context_epsilon_step_is_silent Hcc) in H. subst.
     apply IHHstar; auto.
 Qed.
 
@@ -557,7 +689,6 @@ Ltac rename_op p pc1 P12 HOP :=
   | Hop : executing (prepare_global_env (program_link p P12)) pc1 _ |- _ =>
     rename Hop into HOP
   end.
-
 
 (* In the program, both steps in sync should fetch the same instruction.
    By chaining inversions on component procedures, procedure code and
