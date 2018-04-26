@@ -31,7 +31,7 @@ Lemma partial_pointer_to_pointer_eq :
     (Pointer.component pt1, Some (Pointer.block pt1, Pointer.offset pt1)) =
     (Pointer.component pt2, Some (Pointer.block pt2, Pointer.offset pt2)) ->
     pt1 = pt2.
-Admitted. (* Grade 0. *)
+Proof. by move=> [[??]?] [[??]?] [-> -> ->]. Qed.
 
 Definition stack := list PartialPointer.t.
 
@@ -367,6 +367,9 @@ Qed.
    TODO: Harmonize naming of two directions or unify with iff.
          Add domain conditions to the following lemmas.
          Reduce amount of lemmas, possibly supplement with tactics. *)
+(* XXX: This result is false without assuming more hypotheses about C: it is
+        equivalent to saying that if two interfaces are mergeable then every
+        component belongs to one of them. *)
 Lemma domm_partition :
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
