@@ -2,7 +2,6 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq word fmap.
 
 Require Import MicroPolicies.Utils MicroPolicies.Types.
-Require Import MicroPolicies.Int32.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -11,9 +10,6 @@ Unset Printing Implicit Defensive.
 Import DoNotation.
 
 (* TL: hardcoding machine words *)
-Definition mt := concrete_int_32_mt.
-Instance ops : machine_ops mt := concrete_int_32_ops.
-
 Module Symbolic.
 
 (* BCP/AAA: Should some of this be shared with the concrete machine? *)
@@ -47,7 +43,7 @@ Definition inputs (op : opcode) : seq tag_kind :=
   | STORE   => [:: R;R;M]
   | JUMP    => [:: R]
   | BNZ     => [:: R]
-  | JAL     => [:: R;R]
+  | JAL     => [:: R]
   (* the other opcodes are not used by the symbolic machine *)
   | JUMPEPC => [:: P]
   | ADDRULE => [::]
@@ -137,8 +133,8 @@ Open Scope bool_scope.
 
 Section WithClasses.
 
-(* Context (mt : machine_types) *)
-(*         {ops : machine_ops mt}. *)
+Context {mt : machine_types}
+        {ops : machine_ops mt}.
 
 Class params := {
   ttypes :> tag_types;
@@ -242,12 +238,14 @@ Fixpoint next_state_do_updates (st : state) (tks : seq tag_kind)
 
 Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
            (updts : seq update) (pc' : word) : option state :=
-  do! ni <- mem st pc';
-  let iv := kiv (Some (taga ni)) in
+  let iv := match mem st pc' with
+            | None => kiv None
+            | Some ni => kiv (Some (taga ni))
+            end in
   next_state st (
     match op iv as o return vovec _ o -> option state with
     | OP op => fun ov => do! st' <- next_state_do_updates st (tr ov) updts;
-                         Some (State (mem st) (regs st) pc'@(trpc ov) (internal st))
+                         Some (State (mem st') (regs st') pc'@(trpc ov) (internal st'))
 
     | SERVICE => fun _ => None
     end
@@ -324,14 +322,14 @@ Inductive step (st st' : state) : Prop :=
      let pc' := pc + (if w == 0%w
                       then 1%w else swcast n) in forall
     (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] pc' = Some st'),     step st st'
-| step_jal : forall mem reg pc i r w tpc ti t1 old told extra
+| step_jal : forall mem reg pc i imm tpc ti old told extra
     (ST : st = State mem reg pc@tpc extra)
     (PC : mem pc = Some i@ti)
-    (INST : decode_instr i = Some (Jal r))
-    (RW : reg r = Some w@t1)
+    (INST : decode_instr i = Some (Jal imm))
     (OLD : reg ra = Some old@told),
-     let mvec := IVec JAL tpc ti [hseq t1; told] in forall
-    (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ; RegWrite ra (pc.+1) ] w = Some st'), step st st'
+    let mvec := IVec JAL tpc ti [hseq told] in
+    let pc' := (swcast imm) in forall
+    (NEXT : next_state_updates_and_pc st mvec [:: RegWrite ra (pc.+1) ] pc' = Some st'), step st st'
 | step_syscall : forall mem reg pc sc tpc extra
     (ST : st = State mem reg pc@tpc extra)
     (PC : mem pc = None)
@@ -340,8 +338,9 @@ Inductive step (st st' : state) : Prop :=
 
 End WithClasses.
 
-Notation memory s := {fmap mword mt -> atom (mword mt) (@tag_type (@ttypes s) M)}.
-Notation registers s := {fmap reg mt -> atom (mword mt) (@tag_type (@ttypes s) R)}.
+
+Notation memory mt s := {fmap mword mt -> atom (mword mt) (@tag_type (@ttypes s) M)}.
+Notation registers mt s := {fmap reg mt -> atom (mword mt) (@tag_type (@ttypes s) R)}.
 
 End Symbolic.
 
@@ -349,13 +348,13 @@ Module Exports.
 
 Import Symbolic.
 
-Definition state_eqb p : rel (@state p) :=
+Definition state_eqb mt p : rel (@state mt p) :=
   [rel s1 s2 | [&& mem s1 == mem s2,
                    regs s1 == regs s2,
                    pc s1 == pc s2 &
                    internal s1 == internal s2 ] ].
 
-Lemma state_eqbP p : Equality.axiom (@state_eqb p).
+Lemma state_eqbP mt p : Equality.axiom (@state_eqb mt p).
 Proof.
   move => [? ? ? ?] [? ? ? ?].
   apply (iffP and4P); simpl.
@@ -363,8 +362,8 @@ Proof.
   - by move => [-> -> -> ->].
 Qed.
 
-Definition state_eqMixin p := EqMixin (@state_eqbP p).
-Canonical state_eqType p := Eval hnf in EqType _ (@state_eqMixin p).
+Definition state_eqMixin mt p := EqMixin (@state_eqbP mt p).
+Canonical state_eqType mt p := Eval hnf in EqType _ (@state_eqMixin mt p).
 
 Export TagKindEq.
 

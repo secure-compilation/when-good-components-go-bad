@@ -31,7 +31,7 @@ Definition fields_of_op op : seq nat :=
   | STORE => [:: 5; 5; 17]
   | JUMP => [:: 5; 22]
   | BNZ => [:: 5; 15; 7]
-  | JAL => [:: 5; 22]
+  | JAL => [:: 15; 12]
   | JUMPEPC => [:: 27]
   | ADDRULE => [:: 27]
   | GETTAG => [:: 5; 5; 17]
@@ -52,7 +52,7 @@ Definition args_of_instr (i : instr mt) : hseq word (fields_of_op (opcode_of i))
   | Store r1 r2 => [hseq r1 : word _; r2 : word _; 0%w]
   | Jump r => [hseq r : word _; 0%w]
   | Bnz r i => [hseq r : word _; i : word _; 0%w]
-  | Jal r => [hseq r : word _; 0%w]
+  | Jal i => [hseq i : word _; 0%w]
   | JumpEpc => [hseq 0%w]
   | AddRule => [hseq 0%w]
   | GetTag r1 r2 => [hseq r1 : word _; r2 : word _; 0%w]
@@ -97,7 +97,7 @@ Instance concrete_int_32_ops : machine_ops mt := {|
     let args := wcast (esym (fields_of_opP op)) [hnth i' 1] in
     Some (instr_of_args (wunpack args));
 
-  ra := zerow
+  ra := word.as_word 5
 
 |}.
 
@@ -107,3 +107,23 @@ constructor=> i.
 rewrite /decode_instr /encode_instr /= wpackK /hnth /=.
 by rewrite word_of_opK //= wcastK wpackK args_of_instrK.
 Qed.
+
+(* Eval compute in encode_instr (Nop concrete_int_32_mt). *)
+(* 16 ->
+000000000000000000000000000 10000
+                            NOP
+ *)
+
+(* Eval vm_compute in decode_instr (as_word 134217730). *)
+
+(* 134217730 ->
+000010000000000000000000000 00010
+                            CONST
+ *)
+
+Global Instance concrete_int_32_scr : syscall_regs mt := {|
+  syscall_ret  := as_word 16;
+  syscall_arg1 := as_word 17;
+  syscall_arg2 := as_word 18;
+  syscall_arg3 := as_word 19
+|}.

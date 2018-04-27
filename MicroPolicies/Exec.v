@@ -14,14 +14,14 @@ Context {mt : machine_types}
         {ops : machine_ops mt}
         {sp : Symbolic.params}.
 
-Variable table : Symbolic.syscall_table.
+Variable table : @Symbolic.syscall_table mt sp.
 
 Import Symbolic.
 
 Local Open Scope word_scope.
 Local Notation "x .+1" := (x + 1).
 
-Definition stepf (st : state) : option state :=
+Definition stepf (st : @state mt sp) : option (@state mt sp) :=
   let 'State mem reg pc@tpc extra := st in
   match mem pc with
   | Some iti =>
@@ -82,13 +82,12 @@ Definition stepf (st : state) : option state :=
                        then 1 else swcast n) in
       let ivec := IVec BNZ tpc ti [hseq t1] in
       next_state_updates_and_pc st ivec [:: RegRead r] pc'
-    | Jal r =>
-      do! a <- reg r;
-      let: w@t1 := a in
+    | Jal i =>
       do! oldtold <- reg ra;
       let: _@told := oldtold in
-      let mvec := IVec JAL tpc ti [hseq t1; told] in
-      next_state_updates_and_pc st mvec [:: RegRead r ; RegWrite ra (pc.+1)] w
+      let mvec := IVec JAL tpc ti [hseq told] in
+      let pc' := swcast i in
+      next_state_updates_and_pc st mvec [:: RegWrite ra (pc.+1)] pc'
     | JumpEpc | AddRule | GetTag _ _ | PutTag _ _ _ | Halt =>
       None
     end
@@ -184,9 +183,8 @@ Definition build_k_ivec st : option (k_ivec ttypes)  :=
               do! w <- regs st r;
               Some (part [hseq taga w])
             | Jal  r => fun part =>
-              do! w <- regs st r;
               do! old <- regs st ra;
-              Some (part [hseq taga w; taga old])
+              Some (part [hseq taga old])
             | JumpEpc => fun _ => None
             | AddRule => fun _ => None
             | GetTag _ _ => fun _ => None
