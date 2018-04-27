@@ -307,10 +307,53 @@ Proof.
   now exists (tt1 ** t1).
 Qed. 
 
+Lemma same_extension_trace : forall m1 m2 t,
+    trace_prefix m1 t -> trace_prefix m2 t ->
+    (trace_prefix m1 m2 \/ trace_prefix m2 m1).
+Proof.
+  intros m1. induction m1; intros m2 t [b1 Hb1] [b2 Hb2]; rewrite Hb1 in Hb2.
+  + left. exists m2. now rewrite E0_left. 
+  + destruct m2.
+    ++ right. exists (cons a m1). now rewrite E0_left. inversion Hb2. subst.
+       destruct (IHm1 m2 (m1 ** b1)) as [[l Hl] | [l Hl]].
+       now exists b1. now exists b2.
+       +++ left. exists l. simpl. now rewrite Hl.
+       +++ right; exists l. simpl. now rewrite Hl.
+Qed. 
+    
+Lemma same_extension_stream : forall m1 m2 t,
+    traceinf_prefix m1 t -> traceinf_prefix m2 t ->
+    (trace_prefix m1 m2 \/ trace_prefix m2 m1).
+Proof.
+  intros m1. induction m1; intros m2 t [b1 Hb1] [b2 Hb2]; rewrite Hb1 in Hb2.
+  + left. exists m2. now rewrite E0_left. 
+  + destruct m2.
+    ++ right. exists (cons a m1). now rewrite E0_left. inversion Hb2. subst.
+       destruct (IHm1 m2 (m1 *** b1)) as [[l Hl] | [l Hl]].
+       now exists b1. now exists b2.
+       +++ left. exists l. simpl. now rewrite Hl.
+       +++ right; exists l. simpl. now rewrite Hl.
+Qed.
+
 Lemma same_extension : forall m1 m2 t,
     behavior_prefix m1 t -> behavior_prefix m2 t ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
-Admitted.
+Proof.
+  intros m1 m2 [] [[] Hb1] [[] Hb2]; try (inversion Hb1; inversion Hb2);
+    rewrite H0 in H1.
+    + assert (trace_prefix m1 (m1 ** t0)) by now exists t0.
+      assert (trace_prefix m2 (m1 ** t0)) by now exists t1.
+      now apply (same_extension_trace m1 m2 (m1 ** t0)).
+    + assert (trace_prefix m1 (m1 ** t0)) by now exists t0.
+      assert (trace_prefix m2 (m1 ** t0)) by now exists t1.
+      now apply (same_extension_trace m1 m2 (m1 ** t0)).  
+    + assert (traceinf_prefix m1 (m1 *** t0)) by now exists t0.
+      assert (traceinf_prefix m2 (m1 *** t0)) by now exists t1.
+      now apply (same_extension_stream m1 m2 (m1 *** t0)).
+    + assert (trace_prefix m1 (m1 ** t0)) by now exists t0.
+      assert (trace_prefix m2 (m1 ** t0)) by now exists t1.
+      now apply (same_extension_trace m1 m2 (m1 ** t0)). 
+Qed.
        
 Definition RSC_dc (P : prg) : Prop :=
   forall C' t, sem' (plug' (compile P) C') t ->
@@ -624,8 +667,9 @@ Proof.
   + exists b2. split; try now auto.
     exists m1. split; try now auto.
     now apply (trace_prefix_trans m1 m2 b2).
-  + (* should deduce some contraddiction *) admit.
+  + admit.
 Admitted.
+    
 
 (* z_minus is in Z_p *)
 Lemma growth_lemma : forall (P : prg) (π : prop) (S : Safety π),
