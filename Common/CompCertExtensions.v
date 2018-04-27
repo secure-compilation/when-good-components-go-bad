@@ -3,6 +3,8 @@ Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
 
+From mathcomp Require Import ssreflect.
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -64,6 +66,28 @@ Proof.
     + apply star_refl.
     + apply star_one in H0.
       apply (star_trans IHstarR H0 H1).
+Qed.
+
+Lemma star_E0_ind' ge (P : state -> state -> Prop) :
+  (forall s, P s s) ->
+  (forall s1 s2 s3, step ge s1 E0 s2 -> star step ge s2 E0 s3 -> P s2 s3 -> P s1 s3) ->
+  forall s1 s2, star step ge s1 E0 s2 -> P s1 s2.
+Proof.
+move=> H0 H1 s1 s2; move e_t: E0 => t Hstar.
+elim: s1 t s2 / Hstar e_t => // s1 t1 s2 t2 s3 t Hstep Hstar IH ->.
+move=> /(@eq_sym _ _ _)/Eapp_E0_inv [??]; subst t1 t2.
+by apply: H1; eauto.
+Qed.
+
+Lemma star_cons_inv L s1 e t s2 :
+  single_events L ->
+  Star L s1 (e :: t) s2 ->
+  exists s1' s2', Star L s1 E0 s1' /\ Step L s1' [e] s2' /\ Star L s2' t s2.
+Proof.
+rewrite -[e :: t]/([e] ** t) => Hsingle.
+case/(star_app_inv Hsingle)=> s2'' [Hstar1 Hstar2].
+case/star_non_E0_split: Hstar1=> // [s1' [s2' [A [B C]]]].
+by exists s1', s2'; do !split=> //; apply: star_trans; eauto.
 Qed.
 
 End CLOSURES.
