@@ -823,13 +823,10 @@ Section Decomposition.
 *)
   Admitted.
 
-  (* NOTE: the first disjunct is subsumed by the third. *)
   Lemma star_improvement:
     forall p1 p2 s t t' s' s'',
       star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s' ->
       star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s (t ** t') s'' ->
-      (* same steps, hence same final state and trace *)
-      (t' = E0 /\ s'' = s') \/
       (* missing steps in the first star (with trace t') *)
       star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s' t' s'' \/
       (* missing internal steps in the second star *)
@@ -843,9 +840,9 @@ Section Decomposition.
     destruct (PS.state_determinism_star_same_trace Hstar1 Hstar2) as [Hstar12 | Hstar21].
     - pose proof star_trans Hstar12 Hstar2' (E0_right t') as Hstar12'.
       rewrite E0_right in Hstar12'.
-      right. left. done.
+      left. done.
     - pose proof PS.state_determinism_star_silent_prefix Hstar21 Hstar2' as Hstar1'.
-      right. left. done.
+      left. done.
   Qed.
 
   Lemma program_ub_doesnt_improve:
@@ -871,8 +868,7 @@ Section Decomposition.
         destruct beh_imp; simpl in *; try discriminate;
           inversion H3; subst.
         * (* contra *)
-          destruct (star_improvement H4 H7) as [[]|[|[]]]; subst.
-          ** contradiction.
+          destruct (star_improvement H4 H7) as [|[]]; subst.
           ** inversion H9; subst.
              *** contradiction.
              *** exfalso. eapply H5. eauto.
@@ -882,9 +878,7 @@ Section Decomposition.
                  apply Eapp_E0_inv in H12. destruct H12; subst.
                  admit.
         * (* contra *)
-          destruct (star_improvement H4 H7) as [[]|[|[]]]; subst.
-          ** inversion H8; subst.
-             exfalso. eapply H5. eauto.
+          destruct (star_improvement H4 H7) as [|[]]; subst.
           ** inversion H9; subst.
              *** inversion H8; subst.
                  exfalso. eapply H5. eauto.
@@ -904,8 +898,7 @@ Section Decomposition.
              admit.
         * (* s' cannot step, hence t1 is E0 and s'0 is s'
              done *)
-          destruct (star_improvement H4 H7) as [[]|[|[]]]; subst.
-          ** reflexivity.
+          destruct (star_improvement H4 H7) as [|[]]; subst.
           ** inversion H10; subst.
              *** reflexivity.
              *** exfalso. eapply H5. eauto.
@@ -983,8 +976,7 @@ Section Decomposition.
   Proof.
     intros s t s' t' s''.
     intros Hstar1 Hstar2 Hnostep.
-    destruct (star_improvement Hstar1 Hstar2) as [|[|]].
-    - destruct H. intuition.
+    destruct (star_improvement Hstar1 Hstar2) as [|].
     - inversion H; subst.
       + split; auto.
       + exfalso. eapply Hnostep. eauto.
