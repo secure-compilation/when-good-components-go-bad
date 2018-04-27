@@ -487,6 +487,17 @@ Module Source.
     by case: ifP=> //=.
   Qed.
 
+  Lemma closed_program_link_sym p1 p2 :
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    closed_program (program_link p1 p2) = closed_program (program_link p2 p1).
+  Proof.
+    intros Hwf1 Hwf2 Hlinkable.
+    rewrite (link_sym Hwf1 Hwf2 Hlinkable).
+    reflexivity.
+  Qed.
+
   Fixpoint initialize_buffer
            (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)
     : ComponentMemory.t :=

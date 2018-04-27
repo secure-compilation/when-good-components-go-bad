@@ -550,7 +550,70 @@ Theorem mt_starN_if_starN:
     starN (PS.step p ctx) G n ips t ips' ->
     mt_starN p ctx G n ips t ips'.
 Proof.
-Admitted.
+  intros p ctx G n ips t ips' HstarN.
+  induction HstarN as [| n s1 t t1 s2 t2 s3 Hstep HstarN IHHstarN Ht].
+  - apply mt_starN_segment.
+    apply st_starN_refl.
+  - subst t.
+    destruct s1 as [ps1 | ps1];
+      destruct s2 as [ps2 | ps2].
+    (* If the states belong to the same turn, if the turn is the same as the first turn
+       in the star, it continues its first segment, otherwise it changes control.
+       If the states belong to different turns, the star changes control.
+       RB: TODO: Duplicated (2-3) and redundant (1-4) cases, simplifications. *)
+    + inversion IHHstarN
+        as [? ? ? ? Hst_starN |
+            n1 n2 ? ? t'1 s'1 t'2 s'2 t'3 ? ? Hst_starN' Hstep' Hsame' Hmt_starN'];
+        subst.
+      * apply mt_starN_segment.
+        eapply st_starN_step;
+          try eassumption.
+        -- constructor.
+        -- reflexivity.
+      * eapply mt_starN_control_change;
+          try eassumption.
+        -- eapply st_starN_step;
+             try eassumption.
+           ++ constructor.
+           ++ reflexivity.
+        -- reflexivity.
+        -- rewrite Eapp_assoc.
+           reflexivity.
+    + eapply mt_starN_control_change.
+      * apply st_starN_refl.
+      * apply Hstep.
+      * intros Hsame.
+        inversion Hsame.
+      * apply IHHstarN.
+      * reflexivity.
+      * reflexivity.
+    + eapply mt_starN_control_change.
+      * apply st_starN_refl.
+      * apply Hstep.
+      * intros Hsame.
+        inversion Hsame.
+      * apply IHHstarN.
+      * reflexivity.
+      * reflexivity.
+    + inversion IHHstarN
+        as [? ? ? ? Hst_starN |
+            n1 n2 ? ? t'1 s'1 t'2 s'2 t'3 ? ? Hst_starN' Hstep' Hsame' Hmt_starN'];
+        subst.
+      * apply mt_starN_segment.
+        eapply st_starN_step;
+          try eassumption.
+        -- constructor.
+        -- reflexivity.
+      * eapply mt_starN_control_change;
+          try eassumption.
+        -- eapply st_starN_step;
+             try eassumption.
+           ++ constructor.
+           ++ reflexivity.
+        -- reflexivity.
+        -- rewrite Eapp_assoc.
+           reflexivity.
+Qed.
 
 Theorem mt_starN_if_star:
   forall p ctx G ips t ips',
@@ -687,6 +750,16 @@ Section Simulation.
       ContextSem.initial_state (prog_interface p) ips2 /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2.
   Proof.
+    intros ips1 Hini.
+    inversion Hini as [? Hpc]; subst.
+    destruct ips1 as [[[[stk1 mem1] regs1] pc1] | [[Cid1 stk1] mem1]].
+    - admit.
+    - (* There is a problem in this case. PS.mergeable_states expects a
+         PS.is_program_component on a PS.PC state, and a PS.is_context_component
+         on a PS.CC state. Here, we start from a PS.is_program_component on a
+         PS.CC state, which can never satisfy the conditions imposed by its
+         involvement in the goal PS.mergeable_states. *)
+      admit.
   Admitted.
 
   Lemma match_final_states:
@@ -695,7 +768,18 @@ Section Simulation.
       ProgramSem.final_state (prog_interface c) ips1 ->
       ContextSem.final_state (prog_interface p) ips2.
   Proof.
-  Admitted.
+    intros ips1 ips2 Hmerge Hfinal1.
+    constructor.
+    inversion Hfinal1 as [? Hpc]; subst.
+    inversion Hmerge
+      as [stk1 mem1 regs1 pc1 ? stk2 mem2 Hpc1 Hcc2 ? Hstk Hmem |
+          stk1 mem1 regs1 pc1 ? stk2 mem2 Hcc1 Hpc2 ? Hstk Hmem]; subst.
+    - assumption.
+    - (* Contra. *)
+      PS.simplify_turn.
+      rewrite Hcc1 in Hpc.
+      inversion Hpc.
+  Qed.
 
   Lemma lockstep_simulation:
     forall ips1 t ips1',
@@ -933,21 +1017,38 @@ Section MultiSemantics.
       (* program is in the first state *)
       + inversion H9; subst; inversion H14; subst;
         PS.simplify_turn; simpl in *.
-        admit.
+        eapply PS.partial_step with
+            (ics:=PS.unpartialize (PS.PC (PS.merge_stacks pgps1 pgps2,
+                                          PS.merge_memories pmem1 pmem2, regs, pc)))
+            (p':=empty_prog).
+        * reflexivity.
+        * apply linking_well_formedness; assumption.
+        * now apply empty_prog_is_well_formed.
+        * apply linkable_emptym. now apply linkability.
+        * admit.
+        * constructor.
+          ** PS.simplify_turn.
+             by rewrite mem_domm.
+          ** rewrite domm0. rewrite filterm_identity. reflexivity.
+          ** rewrite domm0.
+             rewrite (PS.to_partial_stack_unpartialize_identity
+                        (PS.merged_stack_has_no_holes H4)).
+             reflexivity.
+        * admit.
       + (* program is in the second state *)
         eapply PS.partial_step with
             (ics:=PS.unpartialize (PS.PC (PS.merge_stacks pgps1 pgps2,
                                           PS.merge_memories pmem1 pmem2, regs, pc)))
             (p':=empty_prog).
         * reflexivity.
-        * apply linking_well_formedness; now auto.
+        * apply linking_well_formedness; assumption.
         * now apply empty_prog_is_well_formed.
-        * simpl. apply linkable_emptym. now apply linkability.
+        * apply linkable_emptym. now apply linkability.
         * admit.
         * constructor.
           ** PS.simplify_turn.
-             rewrite mem_domm. auto.
-          ** rewrite domm0. simpl. rewrite filterm_identity. reflexivity.
+             by rewrite mem_domm.
+          ** rewrite domm0. rewrite filterm_identity. reflexivity.
           ** rewrite domm0.
              rewrite (PS.to_partial_stack_unpartialize_identity
                         (PS.merged_stack_has_no_holes H4)).
@@ -1323,7 +1424,7 @@ Section PartialComposition.
     - apply starN_mt_starN_equivalence; auto.
   Qed.
 
-  Lemma intial_states_mergeability:
+  Lemma initial_states_mergeability:
     forall s1 s2,
       initial_state (PS.sem p (prog_interface c)) s1 ->
       initial_state (PS.sem c (prog_interface p)) s2 ->
@@ -1412,7 +1513,7 @@ Section PartialComposition.
 
     eapply forward_simulation_same_safe_behavior.
     + apply MultiSem.merged_prog_simulates_multisem; auto.
-    + pose proof (intial_states_mergeability Hinit1 Hinit2) as Hmergeable.
+    + pose proof (initial_states_mergeability Hinit1 Hinit2) as Hmergeable.
       eapply program_runs with (s:=(s1,s2)).
       * constructor; auto.
       * eapply state_terminates with (s':=(s1',s2')); auto.

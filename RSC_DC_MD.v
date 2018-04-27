@@ -309,7 +309,15 @@ Section RSC_DC_MD.
               try assumption.
           - setoid_rewrite Source.link_sym in HP'_Cs_beh; trivial; try congruence.
             eapply Source.Decomposition.decomposition_with_refinement in HP'_Cs_beh;
-              [| assumption | assumption | congruence].
+              [| assumption | assumption | congruence |];
+              (* Retaining most of the structure of the proof, though we need to add a not
+                 completely insignificant sub-proof here, to be harmonized. *)
+              last by (
+                assert (linkable (Source.prog_interface P') (Source.prog_interface Cs))
+                  as Hlink by congruence;
+                rewrite <- (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlink);
+                assumption
+              ).
             destruct HP'_Cs_beh as [beh' [G1 G2]].
             destruct HpCs_beh as [b [H1 [H2 | H2]]].
             + subst pCs_beh. subst b.

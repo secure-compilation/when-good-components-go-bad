@@ -10,6 +10,7 @@ Require Import CompCert.Smallstep.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
+Require Import Lib.Extra.
 
 Require Import Coq.Program.Equality.
 
@@ -770,6 +771,7 @@ Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
     well_formed_program p ->
     well_formed_program p' ->
     linkable (prog_interface p) (prog_interface p') ->
+    closed_program (program_link p p') ->
     partial_state ctx scs sps ->
     CS.initial_state (program_link p p') scs ->
     initial_state p ctx sps.
@@ -846,16 +848,24 @@ Theorem initial_state_determinism:
     s1 = s2.
 Proof.
   intros p ctx s1 s2 Hinit1 Hinit2.
-  inversion Hinit1 as [p1 scs1 ? ? Hwf Hwf1 Hlinkable1 Hpartial1 Hinitial1];
-    inversion Hinit2 as [p2 scs2 ? Hsame_iface _ Hwf2 Hlinkable2 Hpartial2 Hinitial2];
+  inversion Hinit1 as [p1 scs1 ? ? Hwf Hwf1 Hlinkable1 Hclosed1 Hpartial1 Hinitial1];
+    inversion Hinit2 as [p2 scs2 ? Hsame_iface _ Hwf2 Hlinkable2 Hclosed2 Hpartial2 Hinitial2];
     subst.
   unfold CS.initial_state in *. subst.
   apply partialize_correct in Hpartial1.
   apply partialize_correct in Hpartial2.
   unfold CS.initial_machine_state in *.
-  (* RB: TODO: CS.initial_machine state shouldn't produce None. *)
-  assert (exists main1, prog_main (program_link p p1) = Some main1) as [main1 Hmain1] by admit.
-  assert (exists main2, prog_main (program_link p p2) = Some main2) as [main2 Hmain2] by admit.
+  (* RB: TODO: CS.initial_machine state shouldn't produce None; lemma and refactoring. *)
+  assert (exists main1, prog_main (program_link p p1) = Some main1) as [main1 Hmain1].
+  {
+    inversion Hclosed1.
+    destruct (prog_main (program_link p p1)); [eauto | discriminate].
+  }
+  assert (exists main2, prog_main (program_link p p2) = Some main2) as [main2 Hmain2].
+  {
+    inversion Hclosed2.
+    destruct (prog_main (program_link p p2)); [eauto | discriminate].
+  }
   rewrite Hmain1 in Hpartial1.
   rewrite Hmain2 in Hpartial2.
   (* Some facts of common interest. *)
@@ -898,11 +908,12 @@ Proof.
     - rewrite fdisjoint_filterm_mapm_unionm.
       + (* On p1... *)
         rewrite Hbuffers1 in Hdisjoint1.
-        pose proof domm_mapm (nat + list value) ComponentMemory.t (prog_buffers p)
-             (fun initial_buffer : nat + list value =>
-                ComponentMemory.prealloc (setm emptym 0 initial_buffer))
-          as Hdomm.
         rewrite fdisjointC in Hdisjoint1.
+        pose proof (domm_map
+                   (fun initial_buffer =>
+                     ComponentMemory.prealloc (setm emptym 0 initial_buffer))
+                   (prog_buffers p))
+          as Hdomm.
         rewrite <- Hdomm in Hdisjoint1.
         rewrite fdisjointC in Hdisjoint1.
         erewrite fdisjoint_filterm_full; last by assumption.
@@ -941,7 +952,7 @@ Proof.
     rewrite <- Hpartial1.
     rewrite <- Hpartial2.
     reflexivity.
-Admitted.
+Qed.
 
 (* we can prove a strong form of state determinism when program is in control *)
 Lemma state_determinism_program':
@@ -1381,18 +1392,11 @@ Theorem state_determinism:
     sps' = sps''.
 Proof.
   intros p ctx G sps t sps' Hstep1 sps'' Hstep2.
-
-  inversion Hstep1
-    as [p1 sps1 t1 sps1' scs1 scs1' Hiface1 Hwfp Hwfp1 Hlink1 Hkstep1 Hpartial_sps1 Hpartial_sps1'];
-    subst.
-  inversion Hstep2
-    as [p2 sps2 t2 sps2' scs2 scs2' Hiface2 _ Hwfp2 Hlink2 Hkstep2 Hpartial_sps2 Hpartial_sps2'];
-    subst.
-
+  inversion Hstep1 as [? ? ? ? ? _ _ _ _ _ _ Hpartial_sps1 _]; subst.
   (* case analysis on who has control *)
   inversion Hpartial_sps1; subst.
-  - eapply state_determinism_program; now eauto.
-  - eapply state_determinism_context; now eauto.
+  - eapply state_determinism_program; eassumption.
+  - eapply state_determinism_context; eassumption.
 Qed.
 
 (* Consider two star sequences starting from the same state (s),

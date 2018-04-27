@@ -311,7 +311,7 @@ Proof.
       destruct Hexec as [procs [P_code [Hprocs [HP_code [? Hinstr]]]]]
     end;
     (* simplify *)
-    simpl; unfold code in *; rewrite Hprocs, HP_code, Hinstr;
+    simpl; unfold code in *; rewrite -> Hprocs, HP_code, Hinstr;
     (* the program counter is good *)
     match goal with
     | Hpc: (Pointer.offset _ >= 0) % Z |- _ =>
@@ -324,7 +324,7 @@ Proof.
   - match goal with
     | Hregs_update: Register.get _ _ = _,
       Hsame_component: Pointer.component _ = Pointer.component _ |- _ =>
-      rewrite Hregs_update, Hsame_component, Nat.eqb_refl
+      rewrite -> Hregs_update, Hsame_component, Nat.eqb_refl
     end.
     unfold Memory.load in *.
     destruct ptr as [[C' b'] o'].
@@ -333,7 +333,7 @@ Proof.
   - match goal with
     | Hregs_value: Register.get _ _ = _,
       Hsame_component: Pointer.component _ = Pointer.component _ |- _ =>
-      rewrite Hregs_value, Hsame_component, Nat.eqb_refl
+      rewrite -> Hregs_value, Hsame_component, Nat.eqb_refl
     end.
     unfold Memory.store in *.
     destruct ptr as [[C' b'] o'].
@@ -348,14 +348,14 @@ Proof.
   - match goal with
     | Hregs_value: Register.get _ _ = _,
       Hsame_component: Pointer.component _ = Pointer.component _ |- _ =>
-      rewrite Hregs_value, Hsame_component, Nat.eqb_refl
+      rewrite -> Hregs_value, Hsame_component, Nat.eqb_refl
     end.
     reflexivity.
 
   - match goal with
     | Hregs_value: Register.get _ _ = _,
       Hfind: find_label_in_procedure _ _ _ = _ |- _ =>
-      rewrite Hregs_value, Hfind
+      rewrite -> Hregs_value, Hfind
     end.
     destruct val;
       try contradiction;
@@ -380,7 +380,7 @@ Proof.
   - match goal with
     | Hentrypoint: EntryPoint.get _ _ _ = _,
       Hregs_value: Register.get _ _ = _ |- _ =>
-      rewrite Hentrypoint, Hregs_value
+      rewrite -> Hentrypoint, Hregs_value
     end.
     apply Nat.eqb_neq in H0. unfold Component.eqb. rewrite H0. simpl.
     apply imported_procedure_iff in H1. rewrite H1.
@@ -417,7 +417,7 @@ Proof.
              destruct (Pointer.offset pc0); discriminate.
            }
            simpl in Heval_step. unfold code in *.
-           rewrite HC_procs, HP_code, Hinstr in Heval_step.
+           rewrite -> HC_procs, HP_code, Hinstr in Heval_step.
            destruct instr; inversion Heval_step; subst; clear Heval_step;
              try (match goal with
                   | Hpcfalse: (Pointer.offset ?PC <? 0) % Z = false,

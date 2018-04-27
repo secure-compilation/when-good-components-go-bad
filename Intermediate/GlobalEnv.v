@@ -37,6 +37,21 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma genv_procedures_program_link_left:
+  forall {c Cid},
+    Cid \notin domm (prog_interface c) ->
+  forall {p},
+    (genv_procedures (prepare_global_env (program_link p c))) Cid =
+    (genv_procedures (prepare_global_env p)) Cid.
+Admitted. (* Grade 2, check. *)
+
+Lemma genv_entrypoints_program_link_left :
+  forall {C P p c b},
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) = b ->
+    C \notin domm (prog_interface c) ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = b.
+Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
+
 Fixpoint find_label (c : code) (l : label) : option Z :=
   let fix aux c o :=
       match c with
@@ -119,6 +134,13 @@ Proof.
   eapply find_label_in_procedure_guarantees.
 Qed.
 
+Lemma find_label_in_procedure_program_link_left:
+  forall {p c pc l pc'},
+    find_label_in_procedure (prepare_global_env (program_link p c)) pc l = pc' ->
+    Pointer.component pc \notin domm (prog_interface c) ->
+    find_label_in_procedure (prepare_global_env p) pc l = pc'.
+Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
+
 Lemma find_label_in_component_helper_guarantees:
   forall G procs pc pc' l,
     find_label_in_component_helper G procs pc l = Some pc' ->
@@ -149,6 +171,13 @@ Proof.
   eapply find_label_in_component_helper_guarantees in Hfind; auto.
 Qed.
 
+Lemma find_label_in_component_program_link_left:
+  forall {p c pc l pc'},
+    find_label_in_component (prepare_global_env (program_link p c)) pc l = pc' ->
+    Pointer.component pc \notin domm (prog_interface c) ->
+    find_label_in_component (prepare_global_env p) pc l = pc'.
+Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
+
 Lemma execution_invariant_to_linking:
   forall p c1 c2 pc instr,
     linkable (prog_interface p) (prog_interface c1) ->
@@ -160,4 +189,14 @@ Lemma execution_invariant_to_linking:
     executing (prepare_global_env (program_link p c1)) pc instr ->
     executing (prepare_global_env (program_link p c2)) pc instr.
 Proof.
-Admitted.
+  intros p c1 c2 pc instr Hlinkable1 Hlinkable2 Hwf Hwf1 Hwf2 Hpc Hexec.
+  inversion Hexec as [procs [proc [Hgenv_procs [Hprocs_proc [Hoffset Hproc_instr]]]]].
+  exists procs, proc.
+  split; [| split; [| split]];
+    [| assumption | assumption | assumption].
+  assert (Pointer.component pc \notin domm (prog_interface c1)) as Hcc1 by admit.
+  assert (Pointer.component pc \notin domm (prog_interface c2)) as Hcc2 by admit.
+  rewrite (genv_procedures_program_link_left Hcc1) in Hgenv_procs.
+  rewrite (genv_procedures_program_link_left Hcc2).
+  assumption.
+Admitted. (* Grade 1. Easy lemma for the admits. *)

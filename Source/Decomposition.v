@@ -11,6 +11,7 @@ Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
 Require Import Source.PS.
+Require Import Lib.Extra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
@@ -53,6 +54,7 @@ Section Decomposition.
         * assumption.
         * assumption.
         * assumption.
+        * assumption.
         * eapply PS.ContextControl; eauto.
         * apply Hics_init.
       + eapply PS.ContextControl; eauto.
@@ -60,6 +62,7 @@ Section Decomposition.
     - split.
       + eapply PS.initial_state_intro with (p':=c).
         * reflexivity.
+        * assumption.
         * assumption.
         * assumption.
         * assumption.
@@ -483,19 +486,12 @@ Section Decomposition.
   Definition well_defined_components_trace (iface : Program.interface) (t : trace) : Prop :=
     forall e, In e t -> well_defined_components iface e.
 
-  Remark genv_buffers_in_interface : forall C b,
-    genv_buffers (prepare_global_env (program_link p c)) C = Some b ->
+  Remark genv_buffers_in_interface C :
+    C \in domm (genv_buffers (prepare_global_env (program_link p c))) ->
     C \in domm (prog_interface (program_link p c)).
   Proof.
-    intros C b Hbufs.
-    inversion Hbufs as [Hmap].
-    inversion wf1 as [_ _ _ _ Hbufs1 _ _].
-    inversion wf2 as [_ _ _ _ Hbufs2 _ _].
-    pose proof mapm_some_in_domm Component.id _ _ _ Hmap as Hdomm.
-    rewrite domm_mapm in Hdomm.
-    rewrite domm_union. rewrite domm_union in Hdomm.
-    rewrite Hbufs1. rewrite Hbufs2.
-    assumption.
+    rewrite /= domm_map !domm_union.
+    by case: wf1 wf2 => [_ _ _ _ -> _ _] [_ _ _ _ -> _ _].
   Qed.
 
   (* Several alternative formulations are possible. One may include the ERet event
@@ -520,8 +516,8 @@ Section Decomposition.
   Proof.
     intros s0 t1 s1 s2 C P v C' Hstar Hkstep.
     inversion Hkstep; subst.
-    apply wf_comps_call;
-      eapply genv_buffers_in_interface; eassumption.
+    by apply wf_comps_call; apply: genv_buffers_in_interface;
+    rewrite mem_domm ?H7 ?H10.
   Qed.
 
   Lemma eret_from_initial_star_has_well_defined_components :
@@ -540,7 +536,7 @@ Section Decomposition.
       pose proof ecall_from_star_has_well_defined_components Hstar1' Hkstep' as Hwdc.
       inversion Hwdc; subst.
       assumption.
-    - eapply genv_buffers_in_interface; eassumption.
+    - now apply: genv_buffers_in_interface; rewrite mem_domm H5.
   Qed.
 
   (* RB: TODO: Can be further simplified by automating inversion a bit. *)
@@ -678,6 +674,7 @@ Section Decomposition.
         * assumption.
         * assumption.
         * assumption.
+        * assumption.
         * CS.unfold_state init_s. simpl in *.
           destruct (C \in domm (prog_interface c)) eqn:Hctx.
           ** rewrite Hctx. constructor.
@@ -746,7 +743,27 @@ Section Decomposition.
     - apply program_goes_initially_wrong.
       intros s.
       unfold not. intro contra.
-      inversion contra as [p' scs ? Hsame_iface _ wf' linkability' Hpartial Hini]; subst.
+      inversion contra
+        as [p' scs ? Hsame_iface _ wf' linkability' Hclosed Hpartial Hini];
+        subst.
+      (* NOTE: Currently, the initial state is obtained purely computationally,
+         therefore we can guarantee its existence. What we were trying to prove
+         is that this initial state is invariant across changes in linked programs
+         modulo equality of the interface. However, we cannot conclude that memories
+         are the same without making modifications to the specification of initial
+         states. IMPORTANT: The fact that we can assert the existence of an initial
+         state via computation says nothing about whether they result from the "bad
+         cases" which should not occur but are not reflected in the result of the
+         computation. In this case, as seen in the proof fragment below, reasoning
+         about the existence of mains and ruling out a bad case is feasible. *)
+      assert (exists s, CS.initial_state (program_link p c) s) as [sini Hini'].
+      {
+        exists (CS.initial_machine_state (program_link p c)).
+        constructor.
+      }
+      apply H with (s:=sini).
+      apply Hini'.
+(*
       apply H with (s:=scs). simpl.
       unfold CS.initial_state in *. subst.
       unfold CS.initial_machine_state.
@@ -797,7 +814,13 @@ Section Decomposition.
       }
       subst.
       (* 2. Equality of memories. *)
+      (* RB: TODO: As confirmed with GF, this cannot be proved at the moment, because the
+         memories of c and p' need not be equal.
+         We know that the domains of the buffers of both programs coincide, but from this
+         we cannot infer that their images are the same.
+         Probably due to a weak definition of initial states. *)
       admit.
+*)
   Admitted.
 
   (* NOTE: the first disjunct is subsumed by the third. *)
@@ -1034,6 +1057,7 @@ Section Decomposition.
                                    (CS.initial_machine_state (Source.program_link c p)));
           auto.
         * apply linkable_sym; auto.
+        * by rewrite <- (closed_program_link_sym wf1 wf2 linkability).
         * apply PS.partialize_correct; auto.
         * unfold CS.initial_state.
           reflexivity.
