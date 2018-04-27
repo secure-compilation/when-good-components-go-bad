@@ -1346,10 +1346,11 @@ Section PartialComposition.
     - intros ips2 Hmergeable Hst_star2.
       inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
         subst.
+      inversion Hst_star2; subst.
       inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
 
-      + admit. (* Contra. *)
+      + destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
 
       (* the program doesn't step, hence we stay still *)
       + apply star_if_st_starN in Hst_star2.
@@ -1358,8 +1359,6 @@ Section PartialComposition.
         split.
         * constructor.
         * assumption.
-
-      + admit. (* Contra. *)
 
       (* the program does a star with an epsilon trace.
          use the fact that the context simulates the program *)
@@ -1372,8 +1371,44 @@ Section PartialComposition.
                    (linkable_sym linkability) prog_is_closed'
                    Hmergeable_ifaces Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
-        (* TODO *)
-        admit.
+        (* The following is used by both branches of the split. *)
+        inversion Hstar; subst.
+        inversion Hmergeable''
+          as [ics ? ? Hmergeable_ifaces' Hcomes_from' Hpartial1' Hpartial2'];
+          subst.
+        inversion Hpartial1' as [? ? ? ? ? ? Hpc1' Hmem1' Hstk1' |]; subst;
+          inversion Hpartial2' as [| ? ? ? ? ? ? Hcc2' Hmem2' Hstk2']; subst;
+          PS.simplify_turn.
+        split.
+        * rewrite Hmem1' Hstk1' Hmem2' Hstk2'.
+          constructor.
+        * eapply PS.mergeable_states_intro with
+            (ics := (PS.unpartialize (PS.merge_partial_states
+    (* From goal. *)
+    (PS.CC
+       (Pointer.component pc, PS.to_partial_stack gps (domm (prog_interface c)),
+       filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface c)) mem))
+    (PS.PC
+       (PS.to_partial_stack gps (domm (prog_interface p)),
+       filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem, regs,
+       pc))
+            ))).
+          (* RB: TODO: Refactor occurrences of the following proof pattern once complete. *)
+          -- assumption.
+          -- simpl.
+             rewrite (PS.merge_stacks_partition Hmergeable_ifaces).
+             rewrite (PS.merge_memories_partition Hmergeable_ifaces).
+             assumption.
+          -- constructor.
+             ++ assumption.
+             ++ now rewrite (PS.merge_memories_partition Hmergeable_ifaces).
+             ++ now rewrite (PS.merge_stacks_partition Hmergeable_ifaces).
+          -- constructor.
+             ++ assumption.
+             ++ now rewrite (PS.merge_memories_partition Hmergeable_ifaces).
+             ++ now rewrite (PS.merge_stacks_partition Hmergeable_ifaces).
+
+      + destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
 
     (* non-empty trace *)
     - intros ips2 Hmergeable Hst_star2.
