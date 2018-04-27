@@ -654,10 +654,49 @@ Lemma sub_minus : forall (P : prg) (π : prop) (b : program_behavior),
                   π b -> (z_minus P π) b.
 Proof. intros P π b H.  unfold z_minus. left. apply H. Qed.    
 
+
+Lemma app_nil : forall m l,
+    m = m ** l -> l = nil.
+Proof.
+  intros m. induction m; intros l H.
+  + rewrite E0_left in H. congruence.
+  + inversion H. now apply IHm.
+Qed.
+
+Lemma trace_prefix_asym : forall m1 m2,
+    trace_prefix m1 m2 -> trace_prefix m2 m1 -> m1 = m2.
+Proof.
+  intros m1 m2 [l1 Hl1] [l2 Hl2]. rewrite Hl1 in Hl2.
+  rewrite Eapp_assoc in Hl2. apply (app_nil m1 (l1 ** l2)) in Hl2.
+  destruct l1, l2; try (rewrite E0_right in Hl1; congruence);
+  try rewrite E0_right in Hl2; inversion Hl2.
+Qed.
+  
+Lemma u_prefix_b_asym : forall P t1 t2,
+    u_prefix_b P t1 t2 -> u_prefix_b P t2 t1 -> t1 = t2.
+Proof.
+  intros P t1 t2 [b1 [H11 [m1 [Hm1 Hm1']]]]  [b2 [H22 [m2 [Hm2 Hm2']]]].
+  assert (behavior_prefix m1 t2) by now apply (behavior_prefix_pseudo_trans b1 m1 t2).
+  assert (behavior_prefix m2 t1) by now apply (behavior_prefix_pseudo_trans b2 m2 t1).
+  assert (trace_prefix m1 (snoc m2 (undef P))).
+  { destruct H as [beh Hbeh]. rewrite Hm2' in Hbeh. destruct beh; inversion Hbeh.
+    now exists t. }
+  assert (trace_prefix m2 (snoc m1 (undef P))).
+  { destruct H0 as [beh Hbeh]. rewrite Hm1' in Hbeh. destruct beh; inversion Hbeh.
+    now exists t. }
+  apply snoc_pref in H1. apply snoc_pref in H2.
+  destruct H1, H2.
+  + subst. repeat (rewrite no_nested). reflexivity.
+  + rewrite H1 in Hm1'. rewrite no_nested in Hm1'. now subst.
+  + rewrite H2 in Hm2'. rewrite no_nested in Hm2'. now subst.
+  + apply (trace_prefix_asym m1 m2 H1) in H2. rewrite H2 in *.
+    now rewrite Hm2'.
+Qed.
+
 Lemma u_prefix_b_trans : forall P t1 t2 t3,
     u_prefix_b P t1 t2 -> u_prefix_b P t2 t3 -> u_prefix_b P t1 t3.
 Proof.
-  intros P t1 t2 t3 [b1 [H11 [m1 [Hm1 Hm1']]]]  [b2 [H22 [m2 [Hm2 Hm2']]]] . 
+  intros P t1 t2 t3 [b1 [H11 [m1 [Hm1 Hm1']]]]  [b2 [H22 [m2 [Hm2 Hm2']]]].
   assert (trace_prefix m1 m2 \/ trace_prefix m2 m1).
   { assert (behavior_prefix m1 t2) by now apply (behavior_prefix_pseudo_trans b1 m1 t2).
     assert (behavior_prefix m2 t2).
@@ -667,10 +706,18 @@ Proof.
   + exists b2. split; try now auto.
     exists m1. split; try now auto.
     now apply (trace_prefix_trans m1 m2 b2).
-  + admit.
-Admitted.
+  + assert (u_prefix_b P t2 t1).
+    { exists m1. split.
+      exists (Goes_wrong (cons (undef P) nil)). simpl.
+      now rewrite <- snoc_app. now exists m2. }
+    assert (t1 = t2).
+    { apply (u_prefix_b_asym P t1 t2); try now auto.
+      exists b1; split; try now auto. now exists m1. }
+    rewrite H1 in *. exists b2. split; try now auto.
+    now exists m2.
+Qed.
+                                       
     
-
 (* z_minus is in Z_p *)
 Lemma growth_lemma : forall (P : prg) (π : prop) (S : Safety π),
                      Z_class P (z_minus P π).
