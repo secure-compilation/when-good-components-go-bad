@@ -1504,22 +1504,6 @@ suffices -> : s1 = s2 by [].
 by apply: state_determinism Hstep2.
 Qed.
 
-Lemma state_determinism_star_E0_step1 p ctx s s1 e s1' s2 :
-  star (PS.kstep p ctx) (prepare_global_env p) s E0 s1 ->
-  PS.kstep p ctx (prepare_global_env p) s1 [e] s1' ->
-  star (PS.kstep p ctx) (prepare_global_env p) s E0 s2 ->
-  star (PS.kstep p ctx) (prepare_global_env p) s2 E0 s1.
-Proof.
-move=> Hstar1 Hstep1 Hstar2.
-have [H|//] := state_determinism_star_E0 Hstar1 Hstar2.
-suffices -> : s1 = s2 by apply: star_refl.
-have [in_c|in_p] := boolP (is_context_component s1 ctx).
-  exact: context_epsilon_star_is_silent H.
-elim/star_E0_ind: s1 s2 / H Hstar1 Hstep1 Hstar2 in_p=> //.
-move=> s1 s1'm s2 Hstep1' _ _ Hstep1 _ in_p.
-by have [] := state_determinism_program' in_p Hstep1 Hstep1'.
-Qed.
-
 Lemma state_determinism_star_same_trace p ctx s t s1 s2 :
   star (PS.kstep p ctx) (prepare_global_env p) s t s1 ->
   star (PS.kstep p ctx) (prepare_global_env p) s t s2 ->
@@ -1540,6 +1524,41 @@ have {e_01 e_02} e_s : s' = s'_.
   by have [] := state_determinism_program' in_p Hstep1 Hstep2.
 move: e_s e_12 => <- {s'_} e_12.
 by have {s2' e_12} <- := state_determinism e_11 e_12; eauto.
+Qed.
+
+Lemma star_prefix p ctx s t t' s' s'' :
+  star (kstep p ctx) (prepare_global_env p) s t s' ->
+  star (kstep p ctx) (prepare_global_env p) s (t ** t') s'' ->
+  (* missing steps in the first star (with trace t') *)
+  star (kstep p ctx) (prepare_global_env p) s' t' s'' \/
+  (* missing internal steps in the second star *)
+  (t' = E0 /\
+   star (kstep p ctx) (prepare_global_env p) s'' E0 s').
+Proof.
+case: t'=> [|e t'].
+  rewrite E0_right => Hstar1 Hstar2.
+  by case: (state_determinism_star_same_trace Hstar1 Hstar2); eauto.
+move=> Hstar1 Hstar2; left.
+have {Hstar2} [sa [sb [Hstar2a Hstep2b Hstar2c]]] :
+  exists sa sb,
+    [/\ Star (sem p ctx) s t sa,
+        Step (sem p ctx) sa [e] sb &
+        Star (sem p ctx) sb t' s''].
+  case/(star_app_inv (@singleton_traces p ctx)): Hstar2.
+  move=> sa' [Hstar2a' Hstar2a''].
+  case/(star_cons_inv (@singleton_traces p ctx)): Hstar2a''.
+  move=> sa [sb [H1 [H2 H3]]]; exists sa, sb; split=> //.
+  by apply: star_trans; eauto; rewrite E0_right.
+have [s'_sa|sa_s'] := state_determinism_star_same_trace Hstar1 Hstar2a.
+  rewrite -[e :: t']/(E0 ** [e] ** t').
+  apply: star_trans; eauto.
+  by apply: star_step; eauto.
+suffices <- : sa = s' by rewrite -[e :: t']/([e] ** t'); apply: star_step; eauto.
+have [in_c|in_p] := boolP (is_context_component sa ctx).
+  by apply: context_epsilon_star_is_silent; eauto.
+elim/star_E0_ind: sa s' / sa_s' Hstep2b in_p {Hstar1 Hstar2a}=> //.
+move=> sa sa' sb' Hstep1 _ Hstep2 in_p.
+by have [] := state_determinism_program' in_p Hstep1 Hstep2.
 Qed.
 
 End PS.

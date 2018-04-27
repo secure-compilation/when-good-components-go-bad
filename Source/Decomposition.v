@@ -823,41 +823,6 @@ Section Decomposition.
 *)
   Admitted.
 
-  Lemma star_improvement p1 p2 s t t' s' s'' :
-    star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s' ->
-    star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s (t ** t') s'' ->
-    (* missing steps in the first star (with trace t') *)
-    star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s' t' s'' \/
-    (* missing internal steps in the second star *)
-    (t' = E0 /\
-     star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s'' E0 s').
-  Proof.
-    case: t'=> [|e t'].
-      rewrite E0_right => Hstar1 Hstar2.
-      by case: (PS.state_determinism_star_same_trace Hstar1 Hstar2); eauto.
-    move=> Hstar1 Hstar2; left.
-    have {Hstar2} [sa [sb [Hstar2a Hstep2b Hstar2c]]] :
-      exists sa sb,
-        [/\ Star (PS.sem p1 (prog_interface p2)) s t sa,
-            Step (PS.sem p1 (prog_interface p2)) sa [e] sb &
-            Star (PS.sem p1 (prog_interface p2)) sb t' s''].
-      case/(star_app_inv (@PS.singleton_traces p1 (prog_interface p2))): Hstar2.
-      move=> sa' [Hstar2a' Hstar2a''].
-      case/(star_cons_inv (@PS.singleton_traces p1 (prog_interface p2))): Hstar2a''.
-      move=> sa [sb [H1 [H2 H3]]]; exists sa, sb; split=> //.
-      by apply: star_trans; eauto; rewrite E0_right.
-    have [s'_sa|sa_s'] := PS.state_determinism_star_same_trace Hstar1 Hstar2a.
-      rewrite -[e :: t']/(E0 ** [e] ** t').
-      apply: star_trans; eauto.
-      by apply: star_step; eauto.
-    suffices <- : sa = s' by rewrite -[e :: t']/([e] ** t'); apply: star_step; eauto.
-    have [in_c|in_p] := boolP (PS.is_context_component sa (prog_interface p2)).
-      by apply: PS.context_epsilon_star_is_silent; eauto.
-    elim/star_E0_ind: sa s' / sa_s' Hstep2b in_p {Hstar1 Hstar2a}=> //.
-    move=> sa sa' sb' Hstep1 _ Hstep2 in_p.
-    by have [] := PS.state_determinism_program' in_p Hstep1 Hstep2.
-  Qed.
-
   Lemma program_ub_doesnt_improve:
     forall t beh_imp,
       program_behaves (PS.sem p (prog_interface c))
@@ -881,7 +846,7 @@ Section Decomposition.
         destruct beh_imp; simpl in *; try discriminate;
           inversion H3; subst.
         * (* contra *)
-          destruct (star_improvement H4 H7) as [|[]]; subst.
+          destruct (PS.star_prefix H4 H7) as [|[]]; subst.
           ** inversion H9; subst.
              *** contradiction.
              *** exfalso. eapply H5. eauto.
@@ -891,7 +856,7 @@ Section Decomposition.
                  apply Eapp_E0_inv in H12. destruct H12; subst.
                  admit.
         * (* contra *)
-          destruct (star_improvement H4 H7) as [|[]]; subst.
+          destruct (PS.star_prefix H4 H7) as [|[]]; subst.
           ** inversion H9; subst.
              *** inversion H8; subst.
                  exfalso. eapply H5. eauto.
@@ -911,7 +876,7 @@ Section Decomposition.
              admit.
         * (* s' cannot step, hence t1 is E0 and s'0 is s'
              done *)
-          destruct (star_improvement H4 H7) as [|[]]; subst.
+          destruct (PS.star_prefix H4 H7) as [|[]]; subst.
           ** inversion H10; subst.
              *** reflexivity.
              *** exfalso. eapply H5. eauto.
@@ -989,7 +954,7 @@ Section Decomposition.
   Proof.
     intros s t s' t' s''.
     intros Hstar1 Hstar2 Hnostep.
-    destruct (star_improvement Hstar1 Hstar2) as [|].
+    destruct (PS.star_prefix Hstar1 Hstar2) as [|].
     - inversion H; subst.
       + split; auto.
       + exfalso. eapply Hnostep. eauto.
