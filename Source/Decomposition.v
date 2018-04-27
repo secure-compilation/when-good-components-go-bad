@@ -823,26 +823,39 @@ Section Decomposition.
 *)
   Admitted.
 
-  Lemma star_improvement:
-    forall p1 p2 s t t' s' s'',
-      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s' ->
-      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s (t ** t') s'' ->
-      (* missing steps in the first star (with trace t') *)
-      star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s' t' s'' \/
-      (* missing internal steps in the second star *)
-      (t' = E0 /\
-       star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s'' E0 s').
+  Lemma star_improvement p1 p2 s t t' s' s'' :
+    star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s t s' ->
+    star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s (t ** t') s'' ->
+    (* missing steps in the first star (with trace t') *)
+    star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s' t' s'' \/
+    (* missing internal steps in the second star *)
+    (t' = E0 /\
+     star (PS.kstep p1 (prog_interface p2)) (prepare_global_env p1) s'' E0 s').
   Proof.
-    intros p1 p2 s t t' s' s''.
-    intros Hstar1 Hstar2.
-    apply (star_app_inv (@PS.singleton_traces p1 (prog_interface p2))) in Hstar2.
-    destruct Hstar2 as [s''' [Hstar2 Hstar2']].
-    destruct (PS.state_determinism_star_same_trace Hstar1 Hstar2) as [Hstar12 | Hstar21].
-    - pose proof star_trans Hstar12 Hstar2' (E0_right t') as Hstar12'.
-      rewrite E0_right in Hstar12'.
-      left. done.
-    - pose proof PS.state_determinism_star_silent_prefix Hstar21 Hstar2' as Hstar1'.
-      left. done.
+    case: t'=> [|e t'].
+      rewrite E0_right => Hstar1 Hstar2.
+      by case: (PS.state_determinism_star_same_trace Hstar1 Hstar2); eauto.
+    move=> Hstar1 Hstar2; left.
+    have {Hstar2} [sa [sb [Hstar2a Hstep2b Hstar2c]]] :
+      exists sa sb,
+        [/\ Star (PS.sem p1 (prog_interface p2)) s t sa,
+            Step (PS.sem p1 (prog_interface p2)) sa [e] sb &
+            Star (PS.sem p1 (prog_interface p2)) sb t' s''].
+      case/(star_app_inv (@PS.singleton_traces p1 (prog_interface p2))): Hstar2.
+      move=> sa' [Hstar2a' Hstar2a''].
+      case/(star_cons_inv (@PS.singleton_traces p1 (prog_interface p2))): Hstar2a''.
+      move=> sa [sb [H1 [H2 H3]]]; exists sa, sb; split=> //.
+      by apply: star_trans; eauto; rewrite E0_right.
+    have [s'_sa|sa_s'] := PS.state_determinism_star_same_trace Hstar1 Hstar2a.
+      rewrite -[e :: t']/(E0 ** [e] ** t').
+      apply: star_trans; eauto.
+      by apply: star_step; eauto.
+    suffices <- : sa = s' by rewrite -[e :: t']/([e] ** t'); apply: star_step; eauto.
+    have [in_c|in_p] := boolP (PS.is_context_component sa (prog_interface p2)).
+      by apply: PS.context_epsilon_star_is_silent; eauto.
+    elim/star_E0_ind: sa s' / sa_s' Hstep2b in_p {Hstar1 Hstar2a}=> //.
+    move=> sa sa' sb' Hstep1 _ Hstep2 in_p.
+    by have [] := PS.state_determinism_program' in_p Hstep1 Hstep2.
   Qed.
 
   Lemma program_ub_doesnt_improve:
