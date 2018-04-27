@@ -1139,11 +1139,11 @@ Section MultiSemantics.
     inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
       inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst;
       PS.simplify_turn;
-      [ (* XXX: This relies on a false assumption *)
-        now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2)
+      (* XXX: This relies on incomplete assumptions *)
+      [ now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2)
       |
       |
-      | ].
+      | now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2) ].
     - eapply PS.final_state_program with
         (ics := (PS.unpartialize_stack
                    (PS.merge_stacks (PS.to_partial_stack gps (domm (prog_interface c)))
@@ -1175,7 +1175,6 @@ Section MultiSemantics.
         eapply (execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
     - (* The second case is symmetric *)
       admit.
-    - by move: (PS.domm_partition_notin Hmergeable_ifaces Hcc2); rewrite Hcc1.
   Admitted.
 
   Lemma lockstep_simulation:
