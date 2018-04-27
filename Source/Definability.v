@@ -805,7 +805,7 @@ Proof.
       + case: beh / Hbeh Hpre=> //= t cs' Hstar Hfinal Ht -> {m}.
         by exists cs, cs'; split.
       + destruct Hpre as [beh' ?]; subst beh.
-        have [cs' [Hstar Hbehaves]] := state_behaves_app_inv (I.CS.atomicity _) m beh' Hbeh.
+        have [cs' [Hstar Hbehaves]] := state_behaves_app_inv (I.CS.singleton_traces _) m beh' Hbeh.
         exists cs, cs'; split; assumption.
     - move=> _ Hpre; rewrite {}/m'.
       have {Hpre m} -> : finpref_trace m = E0.

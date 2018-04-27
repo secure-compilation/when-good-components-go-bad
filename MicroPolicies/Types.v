@@ -305,7 +305,7 @@ Inductive instr : Type :=
 | Store : reg mt -> reg mt -> instr
 | Jump : reg mt -> instr
 | Bnz : reg mt -> imm mt -> instr
-| Jal : reg mt -> instr
+| Jal : imm mt -> instr
 (* only for the concrete machine: *)
 | JumpEpc : instr
 | AddRule : instr

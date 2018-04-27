@@ -33,7 +33,7 @@ Theorem linkable_emptym:
     linkable i emptym.
 Proof.
   intros i Hsound. constructor.
-  - now rewrite unionm0. 
+  - now rewrite unionm0.
   - rewrite domm0. apply fdisjoints0.
 Qed.
 

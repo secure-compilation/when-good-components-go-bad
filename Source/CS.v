@@ -445,12 +445,6 @@ Section Semantics.
     inversion Hstep; subst; simpl; auto.
   Qed.
 
-  Lemma atomic_traces:
-    atomic (step sem) (globalenv sem).
-  Proof.
-    apply (single_events_atomic singleton_traces).
-  Qed.
-
   Theorem receptiveness:
     receptive sem.
   Proof.

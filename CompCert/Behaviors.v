@@ -124,7 +124,7 @@ Proof.
 Qed.
 
 Lemma state_behaves_app_inv:
-  Atomic L ->
+  single_events L ->
   forall s1 t beh,
     state_behaves s1 (behavior_app t beh) ->
   exists s2, Star L s1 t s2 /\ state_behaves s2 beh.
