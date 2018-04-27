@@ -1439,16 +1439,42 @@ Qed.
      (exists m > 0, s ->(n-m) s'' ->m s' /\ s' <> s'')
 *)
 
-Theorem state_determinism_starN_with_same_prefix:
-  forall p ctx n sps t t' sps' sps'',
-    starN (kstep p ctx) (prepare_global_env p) n sps t sps' ->
-    starN (kstep p ctx) (prepare_global_env p) n sps (t ** t') sps'' ->
-    (t' = E0 /\ sps' = sps'') \/
+(*Theorem state_determinism_starN_with_same_prefix:
+  forall p ctx n sps t t' sps1' sps2',
+    starN (kstep p ctx) (prepare_global_env p) n sps t sps1' ->
+    starN (kstep p ctx) (prepare_global_env p) n sps (t ** t') sps2' ->
+    (t' = E0 /\ sps1' = sps2') \/
     (exists m,
-      starN (kstep p ctx) (prepare_global_env p) m sps' t' sps'' /\ sps' <> sps'') \/
+      starN (kstep p ctx) (prepare_global_env p) m sps1' t' sps2' /\ sps1' <> sps2') \/
     (exists m,
-      t' = E0 /\ starN (kstep p ctx) (prepare_global_env p) m sps'' E0 sps' /\ sps' <> sps'').
+      t' = E0 /\ starN (kstep p ctx) (prepare_global_env p) m sps2' E0 sps1' /\ sps1' <> sps2').
 Proof.
+move=> p ctx n sps t t' sps1' sps2' Hstar1 Hstar2.
+elim: n sps t t' {1 3}(n) (Nat.le_refl n) Hstar1 {1 3}(n) (Nat.le_refl n) Hstar2.
+  move=> sps t t' n1 n1_0 Hstar1.
+  case: n1 sps t sps1' / Hstar1 n1_0; last by move=> *; omega.
+  move=> sps _ n2 n2_0 /= Hstar2.
+  case: n2 sps t' sps2' / Hstar2 n2_0; last by move=> *; omega.
+  by auto.
+move=> n IH sps t t' n1 n1_n Hstar1.
+case: n1 sps t sps1' / Hstar1 n1_n IH.
+  move=> sps _ _ {n} n _ /= Hstar2.
+  elim: n sps t' sps2' / Hstar2; first by eauto.
+  move=> n sps _ t1 sps' t2 sps'' Hstep Hstar [[? ?]|[?|?]] ->.
+  - subst t2 sps''.
+
+  case: n2 sps t' sps2' / Hstar2 n2_n IH; first by auto.
+  move=> n2 sps t' t1 sps' t2 sps''.
+
+elim: n sps t sps1' / => [sps|n sps t t1 sps' t2 sps1'] //=.
+  move e_n: 0 => n Hstar2.
+  by case: n sps t' sps2' / Hstar2 e_n => //; auto.
+move=> Hstep1 Hstar1 IH -> {t}.
+move e_n: (S n) => n'; move e_t: ((t1 ** t2) ** t')=> t Hstar2.
+case: n' sps t sps2' / Hstar2 e_n e_t Hstep1 Hstar1 IH => //.
+move=> n' sps t t1' sps'0 t2' sp2' Hstep2 Hstar2 -> {t} [?]; subst n'.
+move=> e_t Hstep1 Hstar1 IH.
+
   intros p ctx n sps t t' sps' sps''.
   intros HstarN1 HstarN2.
 Admitted.
@@ -1471,6 +1497,7 @@ Proof.
   - right. left. assumption.
   - right. right. eexists. eassumption.
 Qed.
+*)
 
 (* If a state s leads to two states s1 and s2 with the same trace t, it must
    be the case that s1 and s2 are connected. We arrive at s1 and s2 after a
@@ -1490,13 +1517,58 @@ Qed.
    points in the deterministic execution of the program (in which case one
    of the two may always catch up to the other if needed), or at two
    indistinguishable states of the context. *)
-Lemma state_determinism_star_same_trace :
-  forall p ctx s t s1 s2,
-    star (PS.kstep p ctx) (prepare_global_env p) s t s1 ->
-    star (PS.kstep p ctx) (prepare_global_env p) s t s2 ->
-    star (PS.kstep p ctx) (prepare_global_env p) s1 E0 s2 \/
-    star (PS.kstep p ctx) (prepare_global_env p) s2 E0 s1.
-Admitted.
+Lemma state_determinism_star_E0 p ctx s s1 s2 :
+  star (PS.kstep p ctx) (prepare_global_env p) s E0 s1 ->
+  star (PS.kstep p ctx) (prepare_global_env p) s E0 s2 ->
+  star (PS.kstep p ctx) (prepare_global_env p) s1 E0 s2 \/
+  star (PS.kstep p ctx) (prepare_global_env p) s2 E0 s1.
+Proof.
+move=> Hstar1.
+elim/star_E0_ind': s s1 / Hstar1 s2=> [s|s s1 s1' Hstep1 Hstar1 IH] s2; eauto.
+move=> Hstar2; elim/star_E0_ind': s s2 / Hstar2 Hstep1.
+  by move=> s Hstep1; right; apply: star_step; eauto.
+move=> s s2 s2' Hstep2 Hstar2 _ Hstep1; apply: IH.
+suffices -> : s1 = s2 by [].
+by apply: state_determinism Hstep2.
+Qed.
+
+Lemma state_determinism_star_E0_step1 p ctx s s1 e s1' s2 :
+  star (PS.kstep p ctx) (prepare_global_env p) s E0 s1 ->
+  PS.kstep p ctx (prepare_global_env p) s1 [e] s1' ->
+  star (PS.kstep p ctx) (prepare_global_env p) s E0 s2 ->
+  star (PS.kstep p ctx) (prepare_global_env p) s2 E0 s1.
+Proof.
+move=> Hstar1 Hstep1 Hstar2.
+have [H|//] := state_determinism_star_E0 Hstar1 Hstar2.
+suffices -> : s1 = s2 by apply: star_refl.
+have [in_c|in_p] := boolP (is_context_component s1 ctx).
+  exact: context_epsilon_star_is_silent H.
+elim/star_E0_ind: s1 s2 / H Hstar1 Hstep1 Hstar2 in_p=> //.
+move=> s1 s1'm s2 Hstep1' _ _ Hstep1 _ in_p.
+by have [] := state_determinism_program' in_p Hstep1 Hstep1'.
+Qed.
+
+Lemma state_determinism_star_same_trace p ctx s t s1 s2 :
+  star (PS.kstep p ctx) (prepare_global_env p) s t s1 ->
+  star (PS.kstep p ctx) (prepare_global_env p) s t s2 ->
+  star (PS.kstep p ctx) (prepare_global_env p) s1 E0 s2 \/
+  star (PS.kstep p ctx) (prepare_global_env p) s2 E0 s1.
+Proof.
+elim: t s => [|e t IH] s; first exact: state_determinism_star_E0.
+case/(star_cons_inv (@singleton_traces p ctx)) => [s' [s1' [e_01 [e_11 e_t1]]]].
+case/(star_cons_inv (@singleton_traces p ctx)) => [s'_ [s2' [e_02 [e_12]]]].
+have {e_01 e_02} e_s : s' = s'_.
+  have {e_t1 IH} H := state_determinism_star_E0 e_01 e_02.
+  without loss H : s' s'_ s1' s2' e_11 e_12 {H e_01 e_02} / Star (sem p ctx) s' E0 s'_.
+    by case: H; eauto=> H1 H2; apply: esym; eauto.
+  have [in_c|in_p] := boolP (is_context_component s' ctx).
+    exact: context_epsilon_star_is_silent in_c H.
+  elim/star_E0_ind: s' s'_ / H in_p e_11 {e_12} => //.
+  move=> s' s'm s'_ Hstep1 _ in_p Hstep2.
+  by have [] := state_determinism_program' in_p Hstep1 Hstep2.
+move: e_s e_12 => <- {s'_} e_12.
+by have {s2' e_12} <- := state_determinism e_11 e_12; eauto.
+Qed.
 
 (* s and s1 are both either in the program or in the context.
 
