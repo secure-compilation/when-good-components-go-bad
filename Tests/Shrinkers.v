@@ -9,15 +9,12 @@ Require Import Common.Maps.
 
 Require Import Intermediate.Machine.
 
-Require Import I2SFI.CompTestUtil.
-
 Require Import CoqUtils.ord.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
-Import GenLow GenHigh.
 
 Definition DEPTH := 5%nat.
 
@@ -34,6 +31,14 @@ Proof.
 Theorem callGraph_eq_dec :  forall g1 g2 : CallGraph,  {g1 = g2} + {g1 <> g2}.
 Proof.
   repeat decide equality. Defined.
+
+Definition list2fset {A:ordType} (l : list A) : {fset A} :=
+  let fix app  l  :=
+      match l with
+      | nil => fset0
+      | x::xs => fsetU (fset1 x) (app xs)
+      end in
+  app l.
 
 Definition proc_eqb (p1 : Procedure) (p2 : Procedure) : bool :=
   andb (Nat.eqb (fst p1) (fst p2))

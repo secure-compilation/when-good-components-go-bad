@@ -7,28 +7,14 @@ Require Import Coq.Lists.List.
 Require Import Coq.Strings.String.
 
 Require Import CompCert.Events.
-
-Require Import Common.Definitions.
-Require Import Common.Maps.
-
-Require Import I2SFI.Compiler.
 Require Import TargetSFI.Machine.
-Require Import TargetSFI.EitherMonad.
-Require Import TargetSFI.StateMonad.
-Require Import TargetSFI.CS.
-Require Import TargetSFI.SFIUtil.
-Require Import CompEitherMonad.
-Require Import CompStateMonad.
-Require Import TestIntermediate.
 
-Require Import Intermediate.Machine.
-Require Import Intermediate.CS.
+Require Import TargetSFI.ExecutionError.
+Require Import Tests.TargetSFI.SFITestUtil.
+Require Import Tests.IntermediateProgramGeneration.
+Require Import Tests.CompilerPBTests.
 
-Require Import CompTestUtil.
-Require Import I2SFI.Shrinkers.
-Require Import TargetSFI.SFITestUtil.
-Require Import I2SFI.IntermediateProgramGeneration.
-Require Import I2SFI.CompilerPBTests.
+Require Import Tests.I2SFI.SFIPBTests.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -60,19 +46,20 @@ Instance show_cs_log_entry_i : Show stack_log_entry :=
 Definition update_stack_log
            (G : Env.t)
            (st : MachineState.t) (t : CompCert.Events.trace)
-           (st' : MachineState.t) (log : (log_type stack_log_entry)) :=
+           (st' : MachineState.t)
+           (log : (log_type stack_log_entry)) :=
   let '(mem,pc,regs) := st in
   let '(cs_log,addr_log) := log in
   let nlog :=
       if (Nat.eqb (List.count_occ N.eq_dec addr_log pc) 0%nat)
-      then (addr_log ++ [pc])%list
+      then (addr_log ++ pc::nil)%list
       else addr_log
   in
   let '(mem,pc,regs) := st in
   let '(cs_log,addr_log) := log in
   let nlog :=
       if (Nat.eqb (List.count_occ N.eq_dec addr_log pc) 0%nat)
-      then (addr_log ++ [pc])%list
+      then (addr_log ++ pc::nil)%list
       else addr_log
   in
   match RiscMachine.Memory.get_word mem pc with
@@ -84,7 +71,7 @@ Definition update_stack_log
                      if SFI.is_same_component_bool pc addr
                      then (cs_log,nlog)
                      else (* cross-component return *)
-                         ((cs_log ++ [(pc, addr, Pop, instr)])%list,nlog)
+                         ((cs_log ++ (pc, addr, Pop, instr)::nil)%list,nlog)
         | _ => (cs_log,nlog)
         end
           
@@ -96,7 +83,7 @@ Definition update_stack_log
         match RiscMachine.RegisterFile.get_register RiscMachine.Register.R_RA regs' with
         | Some addr => ((cs_log
                           ++
-                          [(pc, RiscMachine.Memory.to_address addr,Push, instr)])%list
+                          (pc, RiscMachine.Memory.to_address addr,Push, instr)::nil)%list
                        ,nlog)
         | _ => (cs_log,nlog)
         end
@@ -125,7 +112,8 @@ Instance show_stack_stat : Show stack_stat :=
           ++ "," ++ (show op)
   |}.
 
-Definition stack_stats (log : (log_type stack_log_entry)) (steps : nat) : stack_stat :=
+Definition stack_stats (log : (log_type stack_log_entry))
+           (steps : nat) : stack_stat :=
   let '(l1,l2) := log in
   (steps, (List.length l1), List.length l2).
 
@@ -176,9 +164,9 @@ Fixpoint stack_step_checker (l : list stack_log_entry) s  mem :=
   end.
 
 
-Definition stack_log_checker (log : (log_type stack_log_entry)) (steps : nat)
-          (st : MachineState.t)
-  : Checker :=
+Definition stack_log_checker (log : (log_type stack_log_entry))
+           (res : CompCert.Events.trace*MachineState.t*nat) : Checker :=
+  let '(_,st,steps) := res in
   let mem := MachineState.getMemory st in
   let (l1,l2) := log in
   collect
@@ -191,7 +179,7 @@ Definition stack_log_checker (log : (log_type stack_log_entry)) (steps : nat)
       | _ =>
         if DEBUG
         then
-          stack_step_checker l1 [] mem
+          (stack_step_checker l1 nil mem)
         else
           let ostack :=
               List.fold_left
@@ -211,7 +199,7 @@ Definition stack_log_checker (log : (log_type stack_log_entry)) (steps : nat)
                        end             
                      end
                    end
-                ) l1 (Some []) in
+                ) l1 (Some nil) in
                    match ostack with
           | None => whenFail
                      ( "Address didn't match: log=" ++ (show l1) )
@@ -256,7 +244,8 @@ Definition stack_log_checker (log : (log_type stack_log_entry)) (steps : nat)
       end
     end.
 
-Definition stack_log_checker_error (log : log_type stack_log_entry) err :=
+Definition stack_log_checker_error
+           (log : log_type stack_log_entry) err :=
   match err with
   | DataMemoryException _ _ _
   | UninitializedMemory _ _ =>
@@ -265,10 +254,10 @@ Definition stack_log_checker_error (log : log_type stack_log_entry) err :=
   | _ =>
     whenFail
       ("TargetExecutionError:" ++ (show err))
-      (stack_log_checker log 0%nat 
-                 (get_state err))
+      (* TODO add trace *)
+      (stack_log_checker log ((nil,get_state err),0%nat))
   end.
 
 Definition stack_correct (fuel : nat) :=
-  check_correct TestSpecific CStack update_stack_log
+  sfi_check_correct TestSpecific CStack update_stack_log
                 stack_log_checker_error stack_log_checker fuel.

@@ -1,17 +1,18 @@
-
+Require Import Coq.NArith.BinNat.
 Require Export Lib.Monads.
 Require Import Coq.Strings.String.
-
-Require Import SFIUtil.
-
 Require Import FunctionalExtensionality.
-Require Import CompEitherMonad.
+Require Import Common.Either.
+Require Import Common.CoqMaps.
+
+Require Import I2SFI.AbstractMachine.
+Require Import CompilerError.
 
 Module CompStateMonad.
   Section Def.
     Variable st: Type.
 
-    Definition t (res: Type) := st -> (@CompEither res) * st.
+    Definition t (res: Type) := st -> (@Either res CompilerError) * st.
 
     Definition ret (A:Type) (x:A) : (t A)
       := fun (s:st) => (Right x,s).
@@ -40,7 +41,7 @@ Module CompStateMonad.
     Definition fail {A} (msg : string) (err : CompilerError): t A :=
       fun s => (Left msg err, s).
 
-    Definition run {A} (s: st) (m: t A) : CompEither :=
+    Definition run {A} (s: st) (m: t A) : Either :=
       match m s with
       | (Left msg err,_) => Left msg err
       | (Right v,s') => Right v
@@ -73,7 +74,7 @@ Section CompStateMonadLaws.
     unfold CompStateMonad.ret, CompStateMonad.bind.
     extensionality x.
     destruct (m x); auto.
-    destruct c. auto. reflexivity. 
+    destruct e. auto. reflexivity. 
   Qed.
 
   Lemma state_monad_associativity:
@@ -86,7 +87,7 @@ Section CompStateMonadLaws.
     unfold CompStateMonad.ret, CompStateMonad.bind.
     extensionality x.
     destruct m; auto.
-    destruct c. destruct (f r s); auto. reflexivity.
+    destruct e. destruct (f r s); auto. reflexivity.
   Qed.
 End CompStateMonadLaws.
 

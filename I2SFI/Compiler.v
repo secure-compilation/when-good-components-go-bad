@@ -3,16 +3,16 @@
  **************************************************)
 Require Import Coq.NArith.BinNat.
 Require Import Coq.Lists.List.
-Require Import Coq.Numbers.Natural.Peano.NPeano.
 
 Require Import Common.Maps.
 Require Import Common.Definitions.
 Require Import Intermediate.Machine.
 Require Import TargetSFI.Machine.
 Require Import TargetSFI.SFIUtil.
-Require Import CompEitherMonad.
+Require Import Common.Either.
 Require Import CompStateMonad.
 Require Import I2SFI.AbstractMachine.
+Require Import I2SFI.CompilerError.
 
 Require Import TargetSFI.SFIUtil.
 
@@ -32,7 +32,7 @@ Definition Procedure_id := N.
 Definition Block_id := N.
 
 Definition prog_int := BinNatMap.t ((list Procedure_id) *
-                               (list (Component_id * Procedure_id))).
+                                    (list (Component_id * Procedure_id))).
 
 (******* Compiler Environment ************)
 
@@ -98,7 +98,7 @@ Definition get_sfiId (cid : Component_id) : COMP (SFIComponent.id) :=
   do env <- get;
     (lift (BinNatMap.find cid (cid2SFIid env))
           "Missing component id in cid2SFIid"%string
-          (CompEitherMonad.NArg cid)
+          (NArg cid)
     ).
 
 Definition get_SFI_code_address (cid : Component_id)
@@ -108,10 +108,10 @@ Definition get_SFI_code_address (cid : Component_id)
     do sfiId <- get_sfiId cid;
     do cmap <- (lift (BinNatMap.find cid (procId2slot cenv))
        "Missing component id in procId2slot"%string
-          (CompEitherMonad.NArg cid));
+          (NArg cid));
     do slotid <- (lift (BinNatMap.find pid cmap)
        "Missing componentprocedure id in procId2slot"%string
-       (CompEitherMonad.TwoNArg cid pid));
+       (TwoNArg cid pid));
     ret (SFI.address_of sfiId slotid (N.of_nat offset)).
 
 Definition get_data_slotid (cid : Component_id) (bid : Block_id)
@@ -119,10 +119,10 @@ Definition get_data_slotid (cid : Component_id) (bid : Block_id)
   do cenv <- get;
   do cmap <- lift (BinNatMap.find cid (buffer2slot cenv))
      "Missing component id in buffer2slot"%string
-     (CompEitherMonad.NArg cid);
+     (NArg cid);
     lift (BinNatMap.find bid cmap)
          "Missing block id in buffer2slot"%string
-         (CompEitherMonad.TwoNArg cid bid).
+         (TwoNArg cid bid).
 
 Definition get_SFI_data_address (cid : Component_id)
            (bid : Block_id)
@@ -895,7 +895,7 @@ Definition get_E (lcode : BinNatMap.t (BinNatMap.t AbstractMachine.lcode)) : COM
           | None => fail "get_E did not find procedure in lcode" (TwoNArg cid pid)
           | Some listing =>
             let i := index_of lbl listing in
-            if (ltb i (List.length listing))
+            if (Nat.ltb i (List.length listing))
             then
               do address <- get_SFI_code_address cid pid i;
                 (fold_procs cid xs ((address,(N.to_nat pid))::acc))

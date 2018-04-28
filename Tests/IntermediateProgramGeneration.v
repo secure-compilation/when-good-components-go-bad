@@ -5,12 +5,10 @@ Require Import Coq.NArith.BinNat.
 Require Import Coq.Lists.List.
 
 Require Import Common.Definitions.
-Require Import Common.Maps.
+Require Import Common.CoqMaps.
 Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
 Require Import CompTestUtil.
-Require Import TargetSFI.SFIUtil.
-Require Import TargetSFI.Machine.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -36,13 +34,13 @@ Import DoNotation.
 Definition Component_id := N.
 Definition Procedure_id := N.
 Definition Block_id := N.
-Definition prog_int := BinNatMap.t ((list Procedure_id) * (list (Component_id*Procedure_id))).
+Definition prog_int := BinNatMap.t ((list Procedure_id) *
+                                    (list (Component_id*Procedure_id))).
 
 Inductive instr_gen : Type :=
 | EqualUndefAllowed : instr_gen
 | EqualNoUndef : instr_gen
 | TestSpecific : instr_gen.
-
 
 Inductive instr_type :=
 | Nop : instr_type
@@ -71,6 +69,11 @@ Definition data_address_const_instr :=
   prog_int -> BinNatMap.t (list (Block_id * (nat+list value))) ->
   Component_id -> G (list instr).
 
+Definition empty_cag : code_address_const_instr :=
+  (fun _ _ _ => returnGen nil).
+
+Definition empty_dag : data_address_const_instr :=
+  (fun _ _ _ _ _ => returnGen nil).
 
 Theorem label_eq_dec:
   forall l1 l2 : Intermediate.Machine.label,  {l1 = l2} + {l1 <> l2}.
@@ -219,18 +222,6 @@ Definition gen_buffers (cids : list N)
 
 Derive Arbitrary for Common.Values.binop.
 Derive Arbitrary for Intermediate.Machine.register.
-
-(* Instance genRegs : Gen Intermediate.Machine.register := *)
-(*   { *)
-(*     arbitrary := elems [ *)
-(*                      R_ONE *)
-(*                      ; R_COM *)
-(*                      ; R_AUX1 *)
-(*                      ; R_AUX2 *)
-(*                      ; R_RA *)
-(*                      ; R_SP *)
-(*                    ] *)
-(*   }. *)
 
 Definition genPointer (cid : N)
            (buffers : BinNatMap.t (list (N * (nat+list value)))) :=
@@ -759,13 +750,15 @@ Definition genIntermediateProgram
            (wf : instr_weight)
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
-           (max_components : bool)
+           (max_components : nat)
+           (generate_max_components : bool)
   : G Intermediate.program :=
 
   do! n <-
-      (if max_components
-      then returnGen (N.to_nat (SFI.COMP_MAX-1)%N)
-      else choose (1%nat, (N.to_nat (SFI.COMP_MAX-1)%N)));
+      (if generate_max_components
+       then returnGen max_components
+              (* (N.to_nat (SFI.COMP_MAX-1)%N) *)
+      else choose (1%nat, max_components));
     let cids := N_list n in
 
     do! pi <- (gen_program_interface cids);

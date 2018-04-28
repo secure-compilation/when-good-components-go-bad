@@ -13,7 +13,7 @@ Require Import Coq.Strings.String.
 Require Import TargetSFI.SFIUtil.
 
 Require Import Program.
-Require Import EitherMonad.
+Require Import Common.Either.
 Require Import SFITestUtil.
 
 From QuickChick Require Import QuickChick.
@@ -961,7 +961,7 @@ Definition eval_step_complete_exec : Checker :=
             if (step g st t st')?
             then
               match (eval_step g st) with
-              | EitherMonad.Right (t1,st1) =>
+              | Either.Right (t1,st1) =>
                 conjoin [ (trace_checker t1 t); (state_checker st' st1) ]
               | _ =>
                 checker false
@@ -975,11 +975,11 @@ Definition eval_step_sound : Checker :=
             forAll (genStateForEnv g)
                    (fun st =>
                       match eval_step g st with
-                      | TargetSFI.EitherMonad.Left msg err =>
+                      | Either.Left msg err =>
                       (* TODO check this again *)
                         whenFail ("eval_step failed" ++(show  err))%string 
                                  (negb ((step g st E0 st)?))
-                      | TargetSFI.EitherMonad.Right (t,st') =>
+                      | Either.Right (t,st') =>
                         if (RiscMachine.is_executing (MachineState.getMemory st)
                                                      (MachineState.getPC st)
                                                      IHalt)
@@ -997,6 +997,7 @@ Definition eval_step_sound : Checker :=
                    )
          ).
 
+(* This is a first test I tried, it's not included in the main tests. *)
 (* QuickChick eval_step_complete_exec. *)
-(* QuickChick eval_step_sound.                                    *)
+(* QuickChick eval_step_sound. *)
   

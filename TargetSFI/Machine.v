@@ -24,7 +24,7 @@ Module RiscMachine.
 
   Definition immediate := Z.
 
-  Definition address := N.
+  Definition address : Set := N.
 
   (* program counter register type *)
   Definition pc : Set := address.

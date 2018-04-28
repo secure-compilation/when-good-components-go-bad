@@ -21,10 +21,10 @@ Local Open Scope string.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Maps.
+Require Import Common.Either.
 
 Require Import TargetSFI.Machine.
 Require Import TargetSFI.CS.
-Require Import TargetSFI.EitherMonad.
 
 Require Import CompCert.Events.
 

@@ -1,34 +1,19 @@
 (**************************************************
  * Author: Ana Nora Evans (ananevans@virginia.edu)
  **************************************************)
+Require Import Coq.Bool.Bool.
 Require Import Coq.NArith.BinNat.
-Require Import Coq.ZArith.ZArith.
 Require Import Coq.Lists.List.
 Require Import Coq.Strings.String.
 
 Require Import CompCert.Events.
-
-Require Import Common.Definitions.
-Require Import Common.Maps.
-
-Require Import I2SFI.Compiler.
 Require Import TargetSFI.Machine.
-Require Import TargetSFI.EitherMonad.
-Require Import TargetSFI.StateMonad.
-Require Import TargetSFI.CS.
-Require Import TargetSFI.SFIUtil.
-Require Import CompEitherMonad.
-Require Import CompStateMonad.
-Require Import TestIntermediate.
+Require Import TargetSFI.ExecutionError.
+Require Import Tests.TargetSFI.SFITestUtil.
+Require Import Tests.IntermediateProgramGeneration.
+Require Import Tests.CompilerPBTests.
 
-Require Import Intermediate.Machine.
-Require Import Intermediate.CS.
-
-Require Import CompTestUtil.
-Require Import I2SFI.Shrinkers.
-Require Import TargetSFI.SFITestUtil.
-Require Import I2SFI.IntermediateProgramGeneration.
-Require Import I2SFI.CompilerPBTests.
+Require Import Tests.I2SFI.SFIPBTests.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
@@ -67,13 +52,14 @@ Definition show_jump_log_entry (entry : jump_log_entry) : string :=
 Definition update_jump_log
            (G : Env.t)
            (st : MachineState.t) (t : CompCert.Events.trace)
-           (st' : MachineState.t) (log :(log_type jump_log_entry)) :=
+           (st' : MachineState.t)
+           log :=
   let '(mem,pc,regs) := st in
   let '(j_log,addr_log) := log in
   let nlog :=
-      if (Nat.eqb (List.count_occ N.eq_dec addr_log pc) 0%nat)
-      then (addr_log ++ [pc])%list
-      else addr_log
+      (if (Nat.eqb (List.count_occ N.eq_dec addr_log pc) 0%nat)
+      then (addr_log ++ pc::nil)%list
+      else addr_log)
   in
   match RiscMachine.Memory.get_word mem pc with
   | Some (RiscMachine.Instruction instr) =>
@@ -82,11 +68,13 @@ Definition update_jump_log
       if (N.eqb r RiscMachine.Register.R_RA) || (N.eqb r RiscMachine.Register.R_T)
       then
         match RiscMachine.RegisterFile.get_register r regs with
-        | Some ptr => ((j_log ++ [(pc, RiscMachine.Memory.to_address ptr,Indirect r,t)])%list,nlog)
+        | Some ptr =>
+          ( (j_log ++ (pc, RiscMachine.Memory.to_address ptr,Indirect r,t)::nil)%list,
+           nlog)
         | _ => (j_log,nlog)
         end
       else (j_log,nlog)
-    | RiscMachine.ISA.IJal addr => ((j_log ++ [(pc,addr,Direct,t)])%list,nlog)
+    | RiscMachine.ISA.IJal addr => ((j_log ++ (pc,addr,Direct,t)::nil)%list,nlog)
     | _ => (j_log,nlog)
     end
   | _ => (j_log,nlog)
@@ -114,7 +102,9 @@ Instance show_jump_stat : Show jump_stat :=
            ++ "," ++ (show e)
   |}.
 
-Definition jump_stats (log : (log_type jump_log_entry)) (steps : nat) : jump_stat :=
+Definition jump_stats
+           (log : (log_type jump_log_entry))
+           (steps : nat) : jump_stat :=
   let '(l1,l2) := log in
   let i := (List.length
               (List.filter
@@ -175,11 +165,13 @@ Fixpoint entries_checker (l : list jump_log_entry) : Checker :=
     if (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
     then checker true
     else entry_checker (pc,addr,type,t)
-  | e::xs => conjoin ([entry_checker e] ++ [entries_checker xs])%list
+  | e::xs => conjoin ((entry_checker e)::(entries_checker xs)::nil)
   end.
 
-Definition jump_log_checker (log :(log_type jump_log_entry)) (steps : nat)
-  (_: MachineState.t) : Checker :=
+Definition jump_log_checker
+           (log :(log_type jump_log_entry))
+           (res : CompCert.Events.trace*MachineState.t*nat) : Checker :=
+  let (_,steps) := res in
   let (l1,l2) := log in
   collect
     (jump_stats log steps)
@@ -194,7 +186,8 @@ Definition jump_log_checker (log :(log_type jump_log_entry)) (steps : nat)
                  (checker false)
     end. 
 
-Definition jump_log_checker_error (log : log_type jump_log_entry) err :=
+Definition jump_log_checker_error
+           (log : log_type jump_log_entry) err :=
   match err with
   | DataMemoryException _ _ _
   | UninitializedMemory _ _ =>
@@ -203,8 +196,9 @@ Definition jump_log_checker_error (log : log_type jump_log_entry) err :=
   | _ =>
     whenFail
       ("TargetExecutionError:" ++ (show err))
-      (jump_log_checker log 0%nat (get_state err))
+      (* TODO get the trace here *)
+      (jump_log_checker log ((nil,get_state err),0%nat))
   end.
 
 Definition jump_correct (fuel : nat) :=
-  check_correct TestSpecific CJump update_jump_log jump_log_checker_error jump_log_checker fuel.
+  sfi_check_correct TestSpecific CJump update_jump_log jump_log_checker_error jump_log_checker fuel.

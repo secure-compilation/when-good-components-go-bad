@@ -8,9 +8,9 @@ end
 
 let main() =
   begin
-    (* run run_store_test;
-     * run run_jump_test;
-     * run run_stack_test; *)
+    run run_store_test;
+    run run_jump_test;
+    run run_stack_test;
     run run_rsc_test;
   end;;
 

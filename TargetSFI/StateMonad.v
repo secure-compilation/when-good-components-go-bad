@@ -3,13 +3,14 @@ Require Export Lib.Monads.
 Require Import Coq.Strings.String.
 
 Require Import FunctionalExtensionality.
-Require Import TargetSFI.EitherMonad.
+Require Import Common.Either.
+Require Import TargetSFI.ExecutionError.
 
 Module StateMonad.
   Section Def.
     Variable st: Type.
 
-    Definition t (res: Type) := st -> (@Either res) * st.
+    Definition t (res: Type) := st -> (@Either res ExecutionError) * st.
 
     Definition ret (A:Type) (x:A) : (t A)
       := fun (s:st) => (Right x,s).
@@ -38,7 +39,7 @@ Module StateMonad.
     Definition fail {A} (msg : string) (err : ExecutionError) : t A :=
       fun s => (Left msg err, s).
 
-    Definition run {A} (s: st) (m: t A) : Either :=
+    Definition run {A} (s: st) (m: t A) : (@Either A ExecutionError) :=
       match m s with
       | (Left msg err,_) => Left msg err
       | (Right v,s') => Right v

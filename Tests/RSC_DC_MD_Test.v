@@ -8,13 +8,7 @@ Require Import CompCert.Events.
 Require Import Common.Definitions.
 Require Import Common.Maps.
 
-Require Import I2SFI.Compiler.
-Require Import TargetSFI.Machine.
-Require Import TargetSFI.EitherMonad.
-Require Import TargetSFI.StateMonad.
-Require Import TargetSFI.CS.
-Require Import TargetSFI.SFIUtil.
-Require Import CompEitherMonad.
+Require Import Common.Either.
 Require Import CompStateMonad.
 Require Import TestIntermediate.
 
@@ -22,10 +16,11 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
 
 Require Import CompTestUtil.
-Require Import I2SFI.Shrinkers.
-Require Import TargetSFI.SFITestUtil.
-Require Import I2SFI.IntermediateProgramGeneration.
-Require Import I2SFI.CompilerPBTests.
+Require Import Tests.Shrinkers.
+Require Import Tests.IntermediateProgramGeneration.
+Require Import Tests.CompilerPBTests.
+Require Import Tests.TargetSFI.SFITestUtil.
+
 
 Require Import CoqUtils.ord.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
@@ -33,6 +28,9 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 Import GenLow GenHigh.
+
+
+Definition Log := CompCert.Events.trace.
 
 Definition get_freq_instr i :=
   match i with
@@ -50,30 +48,6 @@ Definition get_freq_instr i :=
   | Call => 80%nat
   | Return => 2%nat
   | Halt => 1%nat
-  end.
-
-Definition log_entry := (RiscMachine.pc
-                         * CompCert.Events.trace)%type.
-
-Definition show_log_entry (entry : log_entry) : string :=
-  let '(pc,events) := entry in
-  ("pc: " ++ (show pc)
-         ++ " trace: " ++ (show t))%string.
-
-Definition update_log
-           (G : Env.t)
-           (st : MachineState.t) (t : CompCert.Events.trace)
-           (st' : MachineState.t) (log :(log_type log_entry)) :=
-  let '(mem,pc,regs) := st in
-  let '(test_log,addr_log) := log in
-  let nlog :=
-      if (Nat.eqb (List.count_occ N.eq_dec addr_log pc) 0%nat)
-      then (addr_log ++ [pc])%list
-      else addr_log
-  in
-  match t with
-  | nil =>  (test_log,nlog)
-  | _ => ((test_log ++ [(pc,t)])%list,nlog)
   end.
 
 (* TODO decide on statistics *)
@@ -239,33 +213,40 @@ Definition  get_interm_program
      |}
   end.
 
-Definition rsc_correct (fuel : nat) :=
+(* TODO *)
+Definition rsc_correct
+           {CompilerErrorType:Type}
+           {TargetProgramType:Type}
+           {ExecutionResult:Type} {ExecutionError:Type}
+           `{Show CompilerErrorType}
+           
+           (cag : code_address_const_instr)
+           (dag : data_address_const_instr)
+           (max_components : nat)
+           (cf : @compile TargetProgramType CompilerErrorType)
+           (ef : @eval TargetProgramType ExecutionResult ExecutionError
+                  Log
+           )
+           (fuel : nat) :=
   forAll
     (genIntermediateProgram
        TestSpecific
-       get_freq_instr 
-       (genIConstCodeAddress CStore) (* valid  jumps*)
-       (genStoreAddresConstInstr CJump) (* valid pointers *)
+       get_freq_instr
+       cag
+       dag
+       max_components
        true
-    ) 
+    )
     ( fun ip =>
         (* compile intermediate *)
-        match compile_program ip with
-        | CompEitherMonad.Left msg err =>
+        match cf ip with
+        | Common.Either.Left msg err =>
           whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
-        | CompEitherMonad.Right p =>
+        | Common.Either.Right p =>
           (* run target *)
-          let '(res,log) :=
-              ((CS.eval_program_with_state 
-                  (log_type log_entry)
-                  update_log
-                  (* TODO calculate this *)
-                  fuel
-                  p
-                  (RiscMachine.RegisterFile.reset_all)) (nil,nil)) in
-          let '(test_log,addr_log) := log in
+          let '(res,log) :=  ef p fuel in
           (* obtain target trace t_t *)
-          let t_t := (List.flat_map snd test_log) in
+          let t_t := log in
           let cids := List.flat_map
                         (fun e =>
                            match e with
@@ -278,7 +259,7 @@ Definition rsc_correct (fuel : nat) :=
           | nil =>
             whenFail
                   ("Original program:"
-                     ++ newline ++ (show ip) ++ newline              
+                     ++ newline ++ (show ip) ++ newline
                      ++ "Target Trace: " ++ (show t_t) ++ newline )
                   (checker (*false*) tt ) (* discard tests with empty traces *)
           | fcid::_ =>
@@ -309,12 +290,12 @@ Definition rsc_correct (fuel : nat) :=
                      )
                   )
               | _ => (* t_t <= t_s *)
-                let t_s := 
+                let t_s :=
                     match interm_res with
                     | Wrong tr _ _ _ => tr
                     | OutOfFuel (tr,_) => tr
                     | Halted tr => tr
-                    | Running (tr,_) => tr 
+                    | Running (tr,_) => tr
                     end in
                 whenFail
                   ("Original program:"
@@ -334,7 +315,7 @@ Definition rsc_correct (fuel : nat) :=
                   )
                    (checker
                      (
-                       (sublist t_t t_s) 
+                       (sublist t_t t_s)
                        (*|| ((sublist t_s t_t) && (negb (cid =? ctx_cid)))*)
                      )
                   )

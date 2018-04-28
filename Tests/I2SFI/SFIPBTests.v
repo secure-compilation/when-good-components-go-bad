@@ -1,55 +1,67 @@
 (**************************************************
  * Author: Ana Nora Evans (ananevans@virginia.edu)
  **************************************************)
+Require Import Coq.Lists.List.
 Require Import Coq.NArith.BinNat.
 Require Import Coq.ZArith.ZArith.
-Require Import Coq.Lists.List.
-Require Import Coq.Strings.String.
 
 Require Import CompCert.Events.
 
-Require Import Common.Definitions.
-Require Import Common.Maps.
-
-Require Import I2SFI.Compiler.
-Require Import TargetSFI.Machine.
-Require Import TargetSFI.EitherMonad.
-Require Import TargetSFI.StateMonad.
-Require Import TargetSFI.CS.
-Require Import TargetSFI.SFIUtil.
-Require Import CompEitherMonad.
-Require Import CompStateMonad.
-Require Import TestIntermediate.
+Require Import Common.CoqMaps.
+Require Import Common.Values.
+Require Import Common.Either.
 
 Require Import Intermediate.Machine.
-Require Import Intermediate.CS.
 
-Require Import CompTestUtil.
-Require Import I2SFI.Shrinkers.
-Require Import TargetSFI.SFITestUtil.
-Require Import I2SFI.IntermediateProgramGeneration.
+Require Import I2SFI.Compiler.
+
+Require Import TargetSFI.Machine.
+Require Import TargetSFI.CS.
+Require Import TargetSFI.ExecutionError.
+
+Require Import Tests.CompilerPBTests.
+Require Import Tests.IntermediateProgramGeneration.
+Require Import Tests.I2SFI.I2SFICompUtil.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
-Import GenLow GenHigh.
-
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
-
-Require Import CoqUtils.ord.
-
-Set Implicit Arguments.
-Unset Strict Implicit.
-Unset Printing Implicit Defensive.
 
 Module DoNotation.
-Import ssrfun.
-Notation "'do!' X <- A ; B" :=
-  (bindGen A (fun X => B))
-  (at level 200, X ident, A at level 100, B at level 200).
+  Import ssrfun.
+  Notation "'do!' X <- A ; B" :=
+    (bindGen A (fun X => B))
+      (at level 200, X ident, A at level 100, B at level 200).
 End DoNotation.
 Import DoNotation.
 
-Definition get_freq_store i :=
+Inductive checker_type : Type :=
+| CStore : checker_type
+| CJump : checker_type
+| CStack : checker_type.
+
+(**************************
+ * Log data structures
+ **************************)
+(* first list rescords event of interest to the test
+   second list records the program counter of the executed instructions *)
+Definition log_type (entry_type:Type) :=
+  ((list entry_type) * (list RiscMachine.address))%type.
+
+
+(**************************
+ * Log Update Functions 
+ **************************)
+(* env, old state, trace, new state, old log
+   Returns: updated log *)
+Definition update_records {entry_type:Type} := 
+  Env.t ->
+  MachineState.t -> CompCert.Events.trace ->
+  MachineState.t ->
+  (log_type entry_type) ->
+  (log_type entry_type).
+
+
+Definition get_freq_store (i : instr_type) :=
   match i with
   | Nop => 1%nat
   | Label => 4%nat
@@ -67,12 +79,7 @@ Definition get_freq_store i :=
   | Halt => 1%nat
   end.
 
-Inductive checker_type : Type :=
-| CStore : checker_type
-| CJump : checker_type
-| CStack : checker_type.
-
-Definition get_freq_jump i :=
+Definition get_freq_jump (i : instr_type) :=
   match i with
   | Nop => 1%nat
   | Label => 4%nat
@@ -90,7 +97,7 @@ Definition get_freq_jump i :=
   | Halt => 1%nat
   end.
 
-Definition get_freq_call i :=
+Definition get_freq_call (i : instr_type) :=
   match i with
   | Nop => 1%nat
   | Label => 4%nat
@@ -114,7 +121,6 @@ Definition get_weigths (ct : checker_type) : instr_weight :=
   | CJump => get_freq_jump
   | CStack => get_freq_call
   end.
-
 
 Definition gen_code_address_offset : G N :=
   freq [ (8%nat, choose_N (0%N, 15%N));
@@ -144,13 +150,14 @@ Definition gen_code_address_offset : G N :=
 
 Definition genIConstCodeAddress
            (ct : checker_type)
+           (max_components : nat)
            (r : Intermediate.Machine.register)
            (pi : prog_int)
            (cid : Component_id)
   : G (list instr) :=
   match ct with
   | CJump =>
-    do! cid' <- choose_N (1%N, (SFI.COMP_MAX - 1)%N);
+    do! cid' <- choose_N (1%N, ((N.of_nat max_components) - 1)%N);
       do! cid1 <- elems [0%N;cid'];
       do! pid <- choose_N (1%N, (N.of_nat MAX_PROC_PER_COMP));
       do! offset <- (
@@ -163,7 +170,7 @@ Definition genIConstCodeAddress
                  cid1
                  (2*(pid - 1))%N
                  offset in
-      returnGen ([IConst (IInt (Z.of_N v)) r])
+      returnGen ((IConst (IInt (Z.of_N v)) r)::nil)
   | _ =>
     do! pid <-
       ( match BinNatMap.find cid pi with
@@ -175,17 +182,12 @@ Definition genIConstCodeAddress
                  cid
                  (2*(N.of_nat pid))%N
                  offset in
-      returnGen ([IConst (IInt (Z.of_N v)) r])
+      returnGen ((IConst (IInt (Z.of_N v)) r)::nil)
   end.
-
-Definition pos_of_N (n : N) :=
-    match n with
-    | N0 => 1%positive
-    | Npos p => p
-    end.
 
 Definition genTargetedStore
            (ct : checker_type)
+           (max_components : nat)
            (r1 r2: Intermediate.Machine.register)
            (pi : prog_int)
            (buffers : BinNatMap.t (list (Block_id * (nat+list value))))
@@ -193,7 +195,7 @@ Definition genTargetedStore
     : G (list instr) :=
 
       (* 50% in component zero *)
-      do! cid' <- choose_N (1%N, (SFI.COMP_MAX - 1)%N);
+      do! cid' <- choose_N (1%N, ((N.of_nat max_components) - 1)%N);
       do! cid1 <- elems [0%N;cid'];
 
       (* (* valid slot id *) *)
@@ -220,12 +222,13 @@ Definition genTargetedStore
       let v := SFI.address_of cid1
                               (2*bid+1)%N
                               offset in
-      do! li <- genIConstCodeAddress ct r2 pi cid;
+      do! li <- genIConstCodeAddress ct max_components r2 pi cid;
       
-      returnGen  (li ++ [IConst (IInt (Z.of_N v)) r1])%list.
+      returnGen  (li ++ (IConst (IInt (Z.of_N v)) r1)::nil)%list.
 
 Definition genStoreAddresConstInstr
            (ct : checker_type)
+           (max_components : nat)
            (r1 r2: Intermediate.Machine.register)
            (pi : prog_int)
            (buffers : BinNatMap.t (list (Block_id * (nat+list value))))
@@ -234,50 +237,25 @@ Definition genStoreAddresConstInstr
   match ct with
   | CStore
   | CStack
-    => genTargetedStore ct r1 r2 pi buffers cid
+    => genTargetedStore ct max_components r1 r2 pi buffers cid
   | _ =>
     do! res <- genPtrImVal pi buffers cid true;
       match res with
-    | None => returnGen []
-    | Some ptr =>
-      returnGen [IConst ptr r1]
-    end
+      | None => returnGen nil
+      | Some ptr =>
+        returnGen ((IConst ptr r1)::nil)
+      end
   end.
 
-(**************************
- * Log data structures
- **************************)
 
-Definition log_type (entry_type : Type) :=
-  ((list entry_type) * (list RiscMachine.address))%type.
-
-
-(**************************
- * Log Update Functions 
- **************************)
-
-Definition update_records {entry_type:Type} := 
-  Env.t ->
-  MachineState.t -> CompCert.Events.trace ->
-  MachineState.t -> (log_type entry_type) -> (log_type entry_type).
-
-
-(************************************************
- * Checkers
- ************************************************)
-Definition log_checker  {entry_type:Type} :=
-  (log_type entry_type ) -> nat -> MachineState.t -> Checker.
-
-(*****************************************************
- * Checkers when target execution returnd error
- ******************************************************)
-
-Definition log_checker_error {entry_type:Type} :=
-  (log_type entry_type) -> TargetSFI.EitherMonad.ExecutionError -> Checker.
-
-
-Definition eval_program {X:Type} (update_fun : update_records) (ct : checker_type) (p : sfi_program) (fuel : nat)
-  : (@Either (CompCert.Events.trace*MachineState.t*nat) * (log_type X) ) :=
+Definition eval_program {X:Type}
+           (update_fun : update_records)
+           (* (ct : checker_type) *)
+           (p : sfi_program)
+           (fuel : nat)
+  : (@Either (CompCert.Events.trace*MachineState.t*nat)%type ExecutionError)
+    * (log_type X)
+  :=
   ((CS.eval_program_with_state     
      (log_type X)
      update_fun
@@ -285,40 +263,63 @@ Definition eval_program {X:Type} (update_fun : update_records) (ct : checker_typ
      p
      (RiscMachine.RegisterFile.reset_all)) (nil,nil)).
 
-
-Definition check_correct {log_entry_type : Type}
+Definition sfi_check_correct {log_entry_type : Type}
            (t : instr_gen)
            (ct : checker_type)
-           (update_fun : @update_records log_entry_type)
-           (log_checker_error_fun : @log_checker_error log_entry_type)
-           (log_checker_fun : @log_checker log_entry_type)
+           (update_fun : @update_records                           
+                           log_entry_type)
+           (log_checker_error_fun : @log_checker_error
+                                      (@log_type log_entry_type)
+                                      ExecutionError
+           )
+           (log_checker_fun : @log_checker
+                                (@log_type log_entry_type)
+                                (* execution result *)
+                                (CompCert.Events.trace * MachineState.t * nat)
+           )
            (fuel : nat)
   : Checker :=
-  forAllShrink
-    (genIntermediateProgram
-       t
-       (match ct with
+  (* if we have 0 components we have a silly case *)
+  let max_components := ((N.to_nat SFI.COMP_MAX) - 1)%nat in
+  check_correct
+    t
+    (match ct with
         | CStore => get_freq_store
         | CJump => get_freq_jump
         | CStack => get_freq_call
         end)
-       (genIConstCodeAddress ct)
-       (genStoreAddresConstInstr ct)
-       false
-    ) shrink
-    ( fun ip =>
-        match compile_program ip with
-        | CompEitherMonad.Left msg err =>
-          whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false
-        | CompEitherMonad.Right p =>
-          let '(res,log) := @eval_program log_entry_type update_fun ct p fuel in
-          match res with
-          | TargetSFI.EitherMonad.Left msg err =>
-            log_checker_error_fun log err
-          | TargetSFI.EitherMonad.Right (t, st,steps) =>
-            (whenFail ("memory of failed program: " ++ (show_mem (MachineState.getMemory st)))%string
-                      (log_checker_fun log steps st))
-          end
-        end).
-
-
+    (genIConstCodeAddress ct max_components)
+    (genStoreAddresConstInstr ct max_components)
+    max_components
+    false
+    log_checker_error_fun
+    log_checker_fun
+    compile_program
+    (eval_program update_fun)
+    fuel.
+  (* forAllShrink *)
+  (*   (genIntermediateProgram *)
+  (*      t *)
+  (*      (match ct with *)
+  (*       | CStore => get_freq_store *)
+  (*       | CJump => get_freq_jump *)
+  (*       | CStack => get_freq_call *)
+  (*       end) *)
+  (*      (genIConstCodeAddress ct) *)
+  (*      (genStoreAddresConstInstr ct) *)
+  (*      false *)
+  (*   ) shrink *)
+  (*   ( fun ip => *)
+  (*       match compile_program ip with *)
+  (*       | CompEitherMonad.Left msg err => *)
+  (*         whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false *)
+  (*       | CompEitherMonad.Right p => *)
+  (*         let '(res,log) := @eval_program log_entry_type update_fun ct p fuel in *)
+  (*         match res with *)
+  (*         | TargetSFI.EitherMonad.Left msg err => *)
+  (*           log_checker_error_fun log err *)
+  (*         | TargetSFI.EitherMonad.Right (t, st,steps) => *)
+  (*           (whenFail ("memory of failed program: " ++ (show_mem (MachineState.getMemory st)))%string *)
+  (*                     (log_checker_fun log steps st)) *)
+  (*         end *)
+  (*       end). *)

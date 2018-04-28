@@ -11,6 +11,8 @@ Common/Memory.v
 Common/Linking.v
 Common/Blame.v
 Common/CompCertExtensions.v
+Common/Either.v
+Common/CoqMaps.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
@@ -55,21 +57,16 @@ Intermediate/Composition.v
 
 RSC_DC_MD.v
 
-TargetSFI/EitherMonad.v
 TargetSFI/StateMonad.v
 TargetSFI/SFIUtil.v
 TargetSFI/Machine.v
 TargetSFI/CS.v
-TargetSFI/SFITestUtil.v
+TargetSFI/ExecutionError.v
 
-I2SFI/CompEitherMonad.v
 I2SFI/CompStateMonad.v
 I2SFI/AbstractMachine.v
 I2SFI/Compiler.v
-I2SFI/CompTestUtil.v
-I2SFI/TestIntermediate.v
-I2SFI/Shrinkers.v
-I2SFI/CompilerIntegrationTests.v
+I2SFI/CompilerError.v
 
 MicroPolicies/Utils.v
 MicroPolicies/Types.v
@@ -83,3 +80,4 @@ MicroPolicies/Printer.v
 I2MP/Tmp.v
 I2MP/Linearize.v
 I2MP/Encode.v
+

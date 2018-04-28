@@ -8,7 +8,7 @@ all_coq: MakefileTest.coq
 	rm -f /tmp/run*test.mli
 
 sfi_safety_properties.exe: all_coq
-	ocamlopt -I /tmp -o sfi_safety_properties.exe /tmp/run_test.ml I2SFI/main.ml
+	ocamlopt -I /tmp -o sfi_safety_properties.exe /tmp/run_test.ml Tests/I2SFI/main.ml
 
 clean: MakefileTest.coq
 	+make -f MakefileTest.coq clean

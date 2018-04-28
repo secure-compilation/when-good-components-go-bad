@@ -4,20 +4,17 @@ Require Import Coq.ZArith.ZArith.
 
 Require Import CompCert.Events.
 
-Require Import Common.Maps.
+Require Import Common.CoqMaps.
 Require Import Common.Definitions.
 Require Import Common.Values.
+Require Import Common.Either.
 
 Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
 
 Require Import I2SFI.AbstractMachine.
-Require Import I2SFI.CompEitherMonad.
-Require Import I2SFI.TestIntermediate.
 
-Require Import TargetSFI.EitherMonad.
-Require Import TargetSFI.SFITestUtil.
-Require Import TargetSFI.SFIUtil.
+Require Import Tests.TestIntermediate.
 
 Require Import CoqUtils.ord.
 
@@ -63,68 +60,6 @@ Instance show_component_interface : Show Component.interface :=
                 ++ (show (Component.export ci)) ++ newline
                 ++ "Import:"
                 ++ (show (Component.import ci)) ++ newline
-  |}.
-
-
-
-Instance show_ainstr : Show AbstractMachine.ainstr :=
-  {| show :=
-       fun i =>
-         match i with
-         | AbstractMachine.INop => "INop"
-         | AbstractMachine.ILabel lbl => "ILabel " ++ (show lbl)
-         | AbstractMachine.IConst v r => "IConst " ++ (show v) ++ " " ++ (show r)
-         | AbstractMachine.IMov r1 r2 => "IMov " ++ (show r1) ++ " " ++ (show r2)
-         | AbstractMachine.IBinOp op r1 r2 r3 => "IBinop " ++ (show op)
-                                          ++ " " ++ (show r1)
-                                          ++ " " ++ (show r2)
-                                          ++ " " ++ (show r3)
-         | AbstractMachine.ILoad r1 r2 => "ILoad " ++ (show r1) ++ " " ++ (show r2)
-         | AbstractMachine.IStore r1 r2 => "IStore " ++ (show r1) ++ " " ++ (show r2)
-         | AbstractMachine.IBnz r l => "IBnz " ++ (show r) ++ " " ++ (show l)
-         | AbstractMachine.IJump r => "IJump " ++ (show r)
-         | AbstractMachine.IJal l => "IJal " ++ (show l)
-         | AbstractMachine.IHalt => "IHalt"
-         end
-  |}.
-
-Instance show_linstr : Show (option (list AbstractMachine.label) * AbstractMachine.ainstr) :=
-  {|
-    show :=
-      fun '(ol,i) =>
-        (show ol) ++ ":" ++ (show i)
-  |}.
-
-Definition show_lcode ( lcode : BinNatMap.t (BinNatMap.t AbstractMachine.lcode)) :=
-  List.fold_left
-    (fun acc1 '(cid, pmap) =>
-       List.fold_left
-         (fun acc2 '(pid, lst) =>
-            List.fold_left
-               (fun acc3 elt => acc3 ++ (show elt)  ++ newline)
-               lst (acc2 ++ "pid=" ++ (show pid) ++ newline)%string
-         ) (BinNatMap.elements pmap) (acc1 ++ "cid=" ++ (show cid) ++ newline)%string
-    ) (BinNatMap.elements lcode) EmptyString.
-
-Instance show_compiler_error : Show CompilerError :=
-  {|
-    show :=
-      fun (err:CompilerError) =>
-        match err with
-        | CompEitherMonad.NoInfo => EmptyString
-        | CompEitherMonad.DuplicatedLabels lcode => show_lcode lcode
-        | CompEitherMonad.ExportedProcsLabelsC p1 p2 => "ExportedProcsLabelsC "
-                                                          ++ (show p1) ++ " "
-                                                          ++ (show p2) ++ " "
-        | CompEitherMonad.ExportedProcsLabelsP p1 p2 p3 => "ExportedProcsLabelsP "
-                                                          ++ (show p1) ++ " "
-                                                          ++ (show p2) ++ " "
-                                                          ++ (show_map p3) ++ " "
-        | CompEitherMonad.NArg p => show p
-        | CompEitherMonad.TwoNArg p1 p2 => "(" ++ (show p1) ++ "," ++ (show p2) ++ ")"
-        | CompEitherMonad.ProcNotImported cid pid lst =>
-          "(" ++ (show cid) ++ "," ++ (show pid) ++ ")" ++ (show lst)
-        end
   |}.
 
 Definition show_nmap { A :Type} `{_ : Show A} (m : (NMap A)) : string :=
@@ -252,46 +187,6 @@ Instance show_intermediate_program : Show Intermediate.program :=
 
   |}.
 
-Instance show_ip_exec_state : Show (@execution_state (Events.trace*(CS.state))) :=
-  {|
-    show := fun es =>
-              match es with
-              | Running _ => "Running"
-              | OutOfFuel _ => "OutOfFuel"
-              | Halted _ => "Halted"
-              | Wrong _ cid msg err  =>
-                "Wrong "
-                  ++ match err with
-                     | TestIntermediate.MissingComponentId cid => "MissingComponentId "
-                                                                 ++ (show cid) ++ newline
-                     | NegativePointerOffset _ => "NegativePointerOffset" ++ newline
-                     | LoadOutsideComponent => "LoadOutsideComponent" ++ newline
-                     | LoadNotAddressInReg => "LoadNotAddressInReg" ++ newline
-                     | StoreOutsideComponent => "StoreOutsideComponent" ++ newline
-                     | StoreNotAddressInReg => "StoreNotAddressInReg" ++ newline
-                     | JumpOutsideComponent => "JumpOutsideComponent" ++ newline
-                     | JumpNotAddressInReg => "JumpNotAddressInReg" ++ newline
-                     | MissingJalLabel => "MissingJalLabel" ++ newline
-                     | MissingLabel => "MissingLabel" ++ newline
-                     | MissingBlock a => "MissingBlock " ++ (show a) ++ newline
-                     | OffsetTooBig a => "OffsetTooBig " ++ (show a) ++ newline
-                     | MemoryError ptr pc => "MemoryError address:" ++ (show ptr)
-                                                                   ++ " pc: "
-                                                                   ++ (show pc)
-                                                                   ++ newline
-                     | StoreMemoryError ptr pc => "StoreMemoryError address:" ++ (show ptr)
-                                                                   ++ " pc: "
-                                                                   ++ (show pc)
-                                                                   ++ newline
-
-                     | NotIntInReg => "NotIntInReg" ++ newline
-                     | AllocNegativeBlockSize => "AllocNegativeBlockSize" ++ newline
-                     | InvalidEnv => "InvalidEnv(" ++ msg ++")" ++ newline
-                     | TestIntermediate.NoInfo => msg ++ newline
-                     end
-              end
-  |}.
-
 
 Definition list2fset {A:ordType} (l : list A) : {fset A} :=
   let fix app  l  :=
@@ -331,3 +226,4 @@ Fixpoint sublist (l1 l2 : CompCert.Events.trace) : bool :=
          else false
        end
     end.
+

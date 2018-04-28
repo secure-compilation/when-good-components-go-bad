@@ -10,9 +10,10 @@ From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
 
 Require Import CompCert.Events.
 Require Import Common.Definitions.
+Require Import Common.Either.
 Require Import TargetSFI.Machine.
 Require Import TargetSFI.StateMonad.
-Require Import TargetSFI.EitherMonad.
+Require Import TargetSFI.ExecutionError.
 
 Require Export Lib.Monads.
 Export MonadNotations.
@@ -326,7 +327,8 @@ Module CS.
                   end
       end.
 
-    Fixpoint eval_program_with_state (fuel : nat) (p : sfi_program) (regs : RegisterFile.t)
+    Definition eval_program_with_state (fuel : nat) (p : sfi_program)
+             (regs : RegisterFile.t)
       : STATE (trace * MachineState.t * nat) :=
       let st0 := ((TargetSFI.Machine.mem p), RiscMachine.PC0, regs) in
       let g := ((TargetSFI.Machine.cn p),(TargetSFI.Machine.e p)) in
@@ -341,13 +343,15 @@ Module CS.
              (_ : MachineState.t) (_ : unit) : unit := tt.
   
   Definition eval_step (G : Env.t) (s : MachineState.t)
-    : @Either (trace * MachineState.t) :=
+    : @Either (trace * MachineState.t) ExecutionError :=
     fst ((eval_step_with_state unit G s) tt).
 
-  Definition eval_program (fuel : nat) (p : sfi_program) (regs : RegisterFile.t)
-      : @Either (trace * MachineState.t) :=
-    do res <- fst ((eval_program_with_state unit update_empty_records fuel p regs) tt);
-      ret (fst res).
+  Definition eval_program (fuel : nat) (p : sfi_program)
+             (regs : RegisterFile.t)
+      : @Either (trace * MachineState.t*nat) ExecutionError :=
+     (fst ((eval_program_with_state
+                      unit update_empty_records fuel p
+                      regs) tt)).
 
   Definition initial_state (p : sfi_program) (s0 : MachineState.t) : bool :=
     MachineState.eqb
