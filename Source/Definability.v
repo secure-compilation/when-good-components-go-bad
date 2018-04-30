@@ -1,13 +1,14 @@
 Require Import Lib.Extra.
+Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
+Require Import CompCert.Behaviors.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Linking.
 Require Import Common.CompCertExtensions.
-Require Import CompCert.Events.
-Require Import CompCert.Smallstep.
-Require Import CompCert.Behaviors.
+Require Import Common.Traces.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
@@ -238,15 +239,10 @@ Section Definability.
       [expr_of_trace] to each one of them.  We also initialize the memory of
       each component to hold 0 at the second local variable. *)
 
-  Definition cur_comp_of_event (e: event) : Component.id :=
-    match e with
-    | ECall C _ _ _ => C
-    | ERet  C _ _   => C
-    end.
-
   Definition comp_subtrace (C: Component.id) (t: trace) :=
     filter (fun e => C == cur_comp_of_event e) t.
 
+  (* FIXME: Use mathcomp *)
   Lemma filter_app {T} (P : T -> bool) (l1 l2 : list T) :
     filter P (l1 ++ l2) = filter P l1 ++ filter P l2.
   Proof.
@@ -319,42 +315,6 @@ Section Definability.
       returns from those recursive calls.  We describe this pattern with the
       following data structure.  *)
 
-  Inductive stack_state := StackState {
-    (* The current running component.  *)
-    cur_comp : Component.id;
-
-    (* Other running components further down the stack. *)
-    callers  : list Component.id
-  }.
-
-  Fixpoint well_bracketed_trace (s: stack_state) (t: trace) : Prop :=
-    match t with
-    | [] => True
-    | e :: t' =>
-      cur_comp s = cur_comp_of_event e /\
-      match e with
-      | ECall C _ _ C' =>
-        well_bracketed_trace (StackState C' (C :: callers s)) t'
-      | ERet C _ C' =>
-        match callers s with
-        | [] => False
-        | head :: tail =>
-          head = C' /\
-          well_bracketed_trace (StackState C' tail) t'
-        end
-      end
-    end.
-
-  Definition well_formed_event (e: event) : Prop :=
-    match e with
-    | ECall C P _ C' => C <> C' /\ imported_procedure intf C C' P
-    | ERet  C _   C' => C <> C'
-    end.
-
-  Definition well_formed_trace (t: trace) : Prop :=
-    well_bracketed_trace (StackState Component.main []) t /\
-    All well_formed_event t.
-
   Fixpoint well_formed_callers (callers: list Component.id) (stk: CS.stack) : Prop :=
     match callers with
     | [] => True
@@ -373,7 +333,7 @@ Section Definability.
       well_formed_callers (callers s) bot.
 
   Lemma well_formed_events_well_formed_program t :
-    All well_formed_event t ->
+    All (well_formed_event intf) t ->
     Source.well_formed_program (program_of_trace t).
   Proof.
     move=> Ht; split=> //=.
@@ -543,7 +503,7 @@ Section Definability.
       &  k = Kstop
       &  exp = procedure_of_trace C P t
       &  well_bracketed_trace s suffix
-      &  All well_formed_event suffix
+      &  All (well_formed_event intf) suffix
       &  well_formed_stack s stk
       &  well_formed_memory prefix mem
       &  valid_procedure C P
@@ -674,7 +634,7 @@ Section Definability.
     Qed.
 
     Lemma definability :
-      well_formed_trace t ->
+      well_formed_trace intf t ->
       program_behaves (CS.sem p) (Terminates t).
     Proof.
       move=> wf_t; eapply program_runs=> /=; try reflexivity.

@@ -13,6 +13,7 @@ Common/Blame.v
 Common/CompCertExtensions.v
 Common/Either.v
 Common/CoqMaps.v
+Common/Traces.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
@@ -80,4 +81,3 @@ MicroPolicies/Printer.v
 I2MP/Tmp.v
 I2MP/Linearize.v
 I2MP/Encode.v
-

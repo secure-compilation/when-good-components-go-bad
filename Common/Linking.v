@@ -55,18 +55,3 @@ Proof.
   - subst. auto.
   - rewrite HCI'' in HCI'. inversion HCI'. reflexivity.
 Qed.
-
-(*
-(* we assume that the provided mains are linkable *)
-Definition main_link (main1 main2: option (Component.id * Procedure.id))
-  : option (Component.id * Procedure.id) :=
-  if main1 then main1 else main2.
-
-Lemma main_link_with_empty_main:
-  forall main,
-    main_link main None = main.
-Proof.
-  intros main.
-  destruct main; reflexivity.
-Qed.
-*)

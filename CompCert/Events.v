@@ -5,6 +5,12 @@ Inductive event :=
 | ECall : Component.id -> Procedure.id -> Z -> Component.id -> event
 | ERet : Component.id -> Z -> Component.id -> event.
 
+Definition cur_comp_of_event (e: event) : Component.id :=
+  match e with
+  | ECall C _ _ _ => C
+  | ERet  C _ _   => C
+  end.
+
 Definition trace := list event.
 
 Definition E0 : trace := nil.
