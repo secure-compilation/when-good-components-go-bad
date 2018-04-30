@@ -1,11 +1,13 @@
+Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Linking.
-Require Import CompCert.Events.
-Require Import CompCert.Smallstep.
 Require Import Common.Memory.
+Require Import Common.Traces.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
+Require Import Lib.Extra.
 Require Import Lib.Monads.
 
 Module CS.
@@ -776,6 +778,59 @@ Section Semantics.
     - apply determinate_initial_states.
     - apply final_states_stuckness.
   Qed.
+
+From mathcomp Require Import ssreflect.
+
+Definition stack_state_of (cs:CS.state) : stack_state :=
+  let '(gps, mem, regs, pc) := cs in
+  StackState (Pointer.component pc) (List.map Pointer.component gps).
+
+Lemma intermediate_well_bracketed_trace : forall t cs cs',
+  Star sem cs t cs' ->
+  well_bracketed_trace (stack_state_of cs) t.
+Proof.
+  intros t cs cs' H. induction H.
+  - compute. now trivial.
+  - destruct H; subst t; simpl in *;
+    try match goal with
+    | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+        rewrite Pointer.inc_preserves_component in H
+    | [ H : find_label_in_component _ ?pc ?l = Some ?pc' |- _] =>
+        apply find_label_in_component_1 in H; rewrite H
+    | [ H : find_label_in_procedure _ ?pc ?l = Some ?pc' |- _] =>
+        apply find_label_in_procedure_1 in H; rewrite H
+    end; trivial; try congruence; try easy.
+Qed.
+
+Lemma intermediate_well_formed_events st t st' :
+  Star sem st t st' ->
+  All (well_formed_event (Intermediate.prog_interface p)) t.
+Proof.
+elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
+rewrite All_cat; split=> // {IH Hstar t2 st3}.
+case: st1 t1 st2 / Hstep => //= _ _ regs pc b C P call_arg _ ?.
+rewrite /G {1}/prepare_global_env.
+rewrite [Intermediate.prepare_procedures p _]surjective_pairing /=.
+rewrite [fst (Intermediate.prepare_procedures p _)]surjective_pairing /=.
+by eauto.
+Qed.
+
+Lemma intermediate_well_formed_trace : forall mainP t cs cs',
+  Star sem cs t cs' ->
+  CS.initial_state p cs ->
+  Intermediate.prog_main p = Some mainP ->
+  Intermediate.well_formed_program p ->
+  well_formed_trace (Intermediate.prog_interface p) t.
+Proof.
+  intros mainP t cs cs' H H' H'' H'''.
+  unfold well_formed_trace. split; last by apply: intermediate_well_formed_events H.
+  apply intermediate_well_bracketed_trace in H.
+  suffices <- : stack_state_of cs = StackState Component.main [] by [].
+  rewrite /initial_state /initial_machine_state in H'.
+  rewrite H' H''.
+  rewrite [Intermediate.prepare_procedures p _]surjective_pairing /=.
+  by rewrite [fst (Intermediate.prepare_procedures p _)]surjective_pairing.
+Qed.
 
 End Semantics.
 

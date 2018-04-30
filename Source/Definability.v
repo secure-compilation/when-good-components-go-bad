@@ -656,58 +656,6 @@ Require Import Intermediate.CS.
 Require Import Intermediate.Machine.
 Require Import S2I.Definitions.
 
-Definition stack_state_of (cs:CS.state) : stack_state :=
-  let '(gps, mem, regs, pc) := cs in
-  StackState (Pointer.component pc) (List.map Pointer.component gps).
-
-Lemma intermediate_well_bracketed_trace : forall p t cs cs',
-  Star (CS.sem p) cs t cs' ->
-  well_bracketed_trace (stack_state_of cs) t.
-Proof.
-  intros p0 t cs cs' H. induction H.
-  - compute. now trivial.
-  - destruct H; subst t; simpl in *;
-    try match goal with
-     | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
-         rewrite Pointer.inc_preserves_component in H
-     | [ H : GlobalEnv.find_label_in_component
-               (GlobalEnv.prepare_global_env ?p0) ?pc ?l = Some ?pc' |- _] =>
-         apply GlobalEnv.find_label_in_component_1 in H; rewrite H
-     | [ H : GlobalEnv.find_label_in_procedure
-               (GlobalEnv.prepare_global_env ?p0) ?pc ?l = Some ?pc' |- _] =>
-         apply GlobalEnv.find_label_in_procedure_1 in H; rewrite H
-    end; trivial; try congruence; easy.
-Qed.
-
-Lemma intermediate_well_formed_events p st t st' :
-  Star (I.CS.sem p) st t st' ->
-  All (well_formed_event (Intermediate.prog_interface p)) t.
-Proof.
-elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
-rewrite All_cat; split=> // {IH Hstar t2 st3}.
-case: st1 t1 st2 / Hstep => //= _ _ regs pc b C P call_arg _ ?.
-rewrite {1}/GlobalEnv.prepare_global_env.
-rewrite [Intermediate.prepare_procedures p _]surjective_pairing /=.
-rewrite [(Intermediate.prepare_procedures p _).1]surjective_pairing /=.
-by eauto.
-Qed.
-
-Lemma intermediate_well_formed_trace : forall p mainP t cs cs',
-  Star (CS.sem p) cs t cs' ->
-  CS.initial_state p cs ->
-  Intermediate.prog_main p = Some mainP ->
-  Intermediate.well_formed_program p ->
-  well_formed_trace (Intermediate.prog_interface p) t.
-Proof.
-  intros p0 mainP t cs cs' H H' H'' H'''.
-  unfold well_formed_trace. split; last by apply: intermediate_well_formed_events H.
-  apply intermediate_well_bracketed_trace in H.
-  suffices <- : stack_state_of cs = StackState Component.main [::] by [].
-  rewrite /CS.CS.initial_state /CS.CS.initial_machine_state in H'.
-  rewrite H' H''.
-  rewrite [Intermediate.prepare_procedures p0 _]surjective_pairing /=.
-  by rewrite [(Intermediate.prepare_procedures p0 _).1]surjective_pairing.
-Qed.
 
   (* Definability *)
   (* CH: this should now be related to what Arthur proved:
@@ -766,11 +714,11 @@ Proof.
       do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
       split; try reflexivity; exact: star_refl.
   have wf_events : All (well_formed_event intf) m'.
-    by apply: intermediate_well_formed_events Hstar.
+    by apply: CS.intermediate_well_formed_events Hstar.
   have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m'.
     have [mainP [_ [HmainP _]]] := Intermediate.cprog_main_existence Hclosed.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
-    exact: intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c.
+    exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c.
   have := definability Hclosed_intf intf_main wf_m.
   set back := (program_of_trace intf m') => Hback.
   exists (program_unlink (domm (Intermediate.prog_interface p)) back).
