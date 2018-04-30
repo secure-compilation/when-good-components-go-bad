@@ -242,17 +242,9 @@ Section Definability.
   Definition comp_subtrace (C: Component.id) (t: trace) :=
     filter (fun e => C == cur_comp_of_event e) t.
 
-  (* FIXME: Use mathcomp *)
-  Lemma filter_app {T} (P : T -> bool) (l1 l2 : list T) :
-    filter P (l1 ++ l2) = filter P l1 ++ filter P l2.
-  Proof.
-    induction l1 as [|x l1 IH]; simpl; trivial.
-    now rewrite IH; destruct (P x).
-  Qed.
-
   Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace) :
     comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
-  Proof. apply filter_app. Qed.
+  Proof. apply: filter_cat. Qed.
 
   Definition procedure_of_trace C P t :=
     expr_of_trace C P (comp_subtrace C t).
@@ -462,7 +454,7 @@ Section Definability.
         + if C == cur_comp_of_event e then 1 else 0) % Z.
     Proof.
       unfold counter_value, comp_subtrace.
-      rewrite filter_app app_length. simpl.
+      rewrite filter_cat app_length. simpl.
       rewrite Nat2Z.inj_add.
       now destruct (_ == _).
     Qed.
