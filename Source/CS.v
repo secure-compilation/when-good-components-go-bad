@@ -1,16 +1,18 @@
+Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.CompCertExtensions.
-Require Import CompCert.Events.
-Require Import CompCert.Smallstep.
+Require Import Common.Traces.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
 Require Import Lib.Monads.
+Require Import Lib.Extra.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype seq.
 From mathcomp Require ssrnat.
 
 Canonical ssrnat.nat_eqType.
@@ -452,5 +454,55 @@ Section Semantics.
     - apply receptiveness_step.
     - apply singleton_traces.
   Qed.
+
+  Fixpoint unstutter (T : eqType) (x : T) (s : seq T) :=
+    if s is x' :: s' then
+      if x == x' then unstutter x s'
+      else x' :: unstutter x' s'
+    else [::].
+
+  Definition stack_state_of (cs: state) : stack_state :=
+    let '(curr, stk, _, _, _) := cs in
+    StackState curr (unstutter curr (map (fun '(id, _, _) => id) stk)).
+
+  Lemma trace_wb t cs cs' :
+    Star sem cs t cs' ->
+    well_bracketed_trace (stack_state_of cs) t.
+  Proof.
+    elim: cs t cs' / => //= s1 t1 s2 t2 s3 t Hstep Hstar IH -> {t}.
+    case: s1 t1 s2 / Hstep Hstar IH=> //=.
+    - (* Internal Return *)
+      by move=> C stk mem mem' k _ P v P_expr b b' old <-; rewrite eqxx.
+    - (* External Return *)
+      move=> C stk mem mem' k C' P v P_expr b b' old.
+      by rewrite eq_sym => /eqP/negbTE ->; eauto.
+    - (* Internal Call *)
+      by move=> C stk mem mem' k v _ old b <-; rewrite eqxx.
+    - (* External Call *)
+      by move=> C stk mem mem' k v C' old b /eqP/negbTE ->; eauto.
+  Qed.
+
+  Lemma events_wf st t st' :
+    Star sem st t st' ->
+    All (well_formed_event (prog_interface p)) t.
+  Proof.
+  elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
+  by rewrite All_cat; split=> // {IH Hstar t2 st3}; case: st1 t1 st2 / Hstep.
+  Qed.
+
+  Lemma trace_wf mainP t cs cs' :
+    Star sem cs t cs' ->
+    initial_state p cs ->
+    prog_main p = Some mainP ->
+    well_formed_program p ->
+    well_formed_trace (prog_interface p) t.
+  Proof.
+    move=> Hstar Hinitial Hmain Hwf; rewrite /well_formed_trace.
+    split; last by apply: events_wf; eauto.
+    suffices <- : stack_state_of cs = StackState Component.main [].
+      by apply: trace_wb; eauto.
+    by move: Hinitial; rewrite /initial_state /initial_machine_state Hmain => ->.
+  Qed.
+
 End Semantics.
 End CS.
