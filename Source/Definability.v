@@ -656,15 +656,7 @@ Require Import Intermediate.CS.
 Require Import Intermediate.Machine.
 Require Import S2I.Definitions.
 
-
-  (* Definability *)
-  (* CH: this should now be related to what Arthur proved:
-         - TODO his proof is for complete programs, no linking
-           + might need to use source decomposition too?
-           + just disjointness + partialization of things might be enough? (weaker than decomposition)
-         - TODO his current proof gives us at most the program_behaves conclusion,
-           not the conclusions about interfaces and closedness,
-           and linkability (maybe from previous point) *)
+(* Definability *)
 
 Lemma definability_with_linking:
   forall p c b m,
