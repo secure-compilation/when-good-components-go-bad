@@ -487,6 +487,23 @@ Proof.
     + apply same_turn_context; assumption.
 Qed.
 
+Inductive st_starNR (p: program) (ctx: Program.interface) (G: global_env)
+  : nat -> PS.state -> trace -> PS.state -> Prop :=
+| st_starNR_refl: forall ips,
+    st_starNR p ctx G 0 ips E0 ips
+| st_starNR_step: forall n ips t1 ips' t2 ips'' t,
+    st_starNR p ctx G n ips t1 ips' ->
+    PS.step p ctx G ips' t2 ips'' ->
+    same_turn ctx ips' ips'' ->
+    t = t1 ** t2 ->
+    st_starNR p ctx G (S n) ips t ips''.
+
+Theorem st_starN_iff_st_starNR:
+  forall p ctx G n ips t ips',
+    st_starN p ctx G n ips t ips' <->
+    st_starNR p ctx G n ips t ips'.
+Admitted.
+
 (* mt_star is a sequence of st_star interleaved by steps that change control *)
 (* mt stands for multi turn *)
 Inductive mt_starN (p: program) (ctx: Program.interface) (G: global_env)
