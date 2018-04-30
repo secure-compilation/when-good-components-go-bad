@@ -487,17 +487,6 @@ Proof.
     + apply same_turn_context; assumption.
 Qed.
 
-Inductive st_starNR (p: program) (ctx: Program.interface) (G: global_env)
-  : nat -> PS.state -> trace -> PS.state -> Prop :=
-| st_starNR_refl: forall ips,
-    st_starNR p ctx G 0 ips E0 ips
-| st_starNR_step: forall n ips t1 ips' t2 ips'' t,
-    st_starNR p ctx G n ips t1 ips' ->
-    PS.step p ctx G ips' t2 ips'' ->
-    same_turn ctx ips' ips'' ->
-    t = t1 ** t2 ->
-    st_starNR p ctx G (S n) ips t ips''.
-
 Lemma st_starN_one:
   forall p ctx G s1 t s2,
     PS.step p ctx G s1 t s2 ->
@@ -540,6 +529,17 @@ Proof.
     rewrite Eapp_assoc.
     apply Hst_starN.
 Qed.
+
+Inductive st_starNR (p: program) (ctx: Program.interface) (G: global_env)
+  : nat -> PS.state -> trace -> PS.state -> Prop :=
+| st_starNR_refl: forall ips,
+    st_starNR p ctx G 0 ips E0 ips
+| st_starNR_step: forall n ips t1 ips' t2 ips'' t,
+    st_starNR p ctx G n ips t1 ips' ->
+    PS.step p ctx G ips' t2 ips'' ->
+    same_turn ctx ips' ips'' ->
+    t = t1 ** t2 ->
+    st_starNR p ctx G (S n) ips t ips''.
 
 Lemma st_starN_if_st_starNR:
   forall p ctx G n ips t ips',
