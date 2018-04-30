@@ -541,29 +541,102 @@ Inductive st_starNR (p: program) (ctx: Program.interface) (G: global_env)
     t = t1 ** t2 ->
     st_starNR p ctx G (S n) ips t ips''.
 
+Lemma st_starNR_one:
+  forall p ctx G s1 t s2,
+    PS.step p ctx G s1 t s2 ->
+    same_turn ctx s1 s2 ->
+    st_starNR p ctx G 1 s1 t s2.
+Proof.
+  intros p ctx G s1 t s2 Hstep Hsame_turn.
+  eapply st_starNR_step.
+  - apply st_starNR_refl.
+  - apply Hstep.
+  - apply Hsame_turn.
+  - reflexivity.
+Qed.
+
+Lemma st_starNR_trans:
+  forall p ctx G n1 s1 t1 s2,
+    st_starNR p ctx G n1 s1 t1 s2 ->
+  forall n2 t2 s3,
+    st_starNR p ctx G n2 s2 t2 s3 ->
+  forall n12,
+    n12 = n1 + n2 ->
+  forall t12,
+    t12 = t1 ** t2 ->
+    st_starNR p ctx G n12 s1 t12 s3.
+Proof.
+  intros p ctx G n1 s1 t1 s2 Hst_starNR1 n2 t2 s3 Hst_starNR2.
+  generalize dependent Hst_starNR1.
+  generalize dependent t1.
+  generalize dependent s1.
+  generalize dependent n1.
+  induction Hst_starNR2
+    as [| n s1 t1 s2 t2 s3 t Hst_starNR IHHst_starNR2 Hstep Hsame_turn Ht];
+    intros n1 s1' t1' Hst_starNR1 n12 Hn12 t12 Ht12.
+  - rewrite plus_comm in Hn12.
+    rewrite E0_right in Ht12.
+    subst n12 t12.
+    apply Hst_starNR1.
+  - subst n12 t12.
+    assert (n1 + n = n1 + n) as Hn' by reflexivity.
+    assert (t1' ** t1 = t1' ** t1) as Ht' by reflexivity.
+    specialize (IHHst_starNR2 _ _ _ Hst_starNR1 _ Hn' _ Ht').
+    assert ((t1' ** t1) ** t2 = (t1' ** t1) ** t2) as Ht'' by reflexivity.
+    pose proof st_starNR_step IHHst_starNR2 Hstep Hsame_turn Ht'' as Hst_starNR'.
+    subst t.
+    rewrite <- Eapp_assoc.
+    rewrite <- Nat.add_succ_comm.
+    apply Hst_starNR'.
+Qed.
+
 Lemma st_starN_if_st_starNR:
   forall p ctx G n ips t ips',
     st_starNR p ctx G n ips t ips' ->
     st_starN p ctx G n ips t ips'.
 Proof.
   intros p ctx G n ips t ips' Hst_starNR.
-  induction Hst_starNR as [| n s1 t1 s2 t2 s3 t Hst_starNR Hst_starN Hstep Hsame_turn Ht].
-  + apply st_starN_refl.
-  + apply st_starN_one in Hstep.
-    - assert (n + 1 = n + 1) as Hn' by reflexivity.
+  induction Hst_starNR
+    as [| n s1 t1 s2 t2 s3 t Hst_starNR Hst_starN Hstep Hsame_turn Ht].
+  - apply st_starN_refl.
+  - apply st_starN_one in Hstep.
+    + assert (n + 1 = n + 1) as Hn' by reflexivity.
       assert (t1 ** t2 = t1 ** t2) as Ht' by reflexivity.
       pose proof st_starN_trans Hst_starN Hstep Hn' Ht' as Hst_starN'.
       subst t.
       rewrite plus_comm in Hst_starN'.
       apply Hst_starN'.
-    - apply Hsame_turn.
+    + apply Hsame_turn.
+Qed.
+
+Lemma st_starNR_if_st_starN:
+  forall p ctx G n ips t ips',
+    st_starN p ctx G n ips t ips' ->
+    st_starNR p ctx G n ips t ips'.
+Proof.
+  intros p ctx G n ips t ips' Hst_starN.
+  induction Hst_starN
+    as [| n s1 t1 s2 t2 s3 t Hstep Hsame_turn Hst_starN Hst_starNR Ht].
+  - apply st_starNR_refl.
+  - apply st_starNR_one in Hstep.
+    + assert (n + 1 = 1 + n) as Hn' by (rewrite plus_comm; reflexivity).
+      assert (t1 ** t2 = t1 ** t2) as Ht' by reflexivity.
+      pose proof st_starNR_trans Hstep Hst_starNR Hn' Ht' as Hst_starN'.
+      subst t.
+      rewrite plus_comm in Hst_starN'.
+      apply Hst_starN'.
+    + apply Hsame_turn.
 Qed.
 
 Theorem st_starN_iff_st_starNR:
   forall p ctx G n ips t ips',
     st_starN p ctx G n ips t ips' <->
     st_starNR p ctx G n ips t ips'.
-Admitted.
+Proof.
+  split.
+  - apply st_starNR_if_st_starN.
+  - apply st_starN_if_st_starNR.
+Qed.
 
 (* mt_star is a sequence of st_star interleaved by steps that change control *)
 (* mt stands for multi turn *)
