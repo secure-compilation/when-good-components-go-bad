@@ -498,6 +498,67 @@ Inductive st_starNR (p: program) (ctx: Program.interface) (G: global_env)
     t = t1 ** t2 ->
     st_starNR p ctx G (S n) ips t ips''.
 
+Lemma st_starN_one:
+  forall p ctx G s1 t s2,
+    PS.step p ctx G s1 t s2 ->
+    same_turn ctx s1 s2 ->
+    st_starN p ctx G 1 s1 t s2.
+Proof.
+  intros p ctx G s1 t s2 Hstep Hsame_turn.
+  eapply st_starN_step.
+  - apply Hstep.
+  - apply Hsame_turn.
+  - apply st_starN_refl.
+  - rewrite E0_right. reflexivity.
+Qed.
+
+Lemma st_starN_trans:
+  forall p ctx G n1 s1 t1 s2,
+    st_starN p ctx G n1 s1 t1 s2 ->
+  forall n2 t2 s3,
+    st_starN p ctx G n2 s2 t2 s3 ->
+  forall n12,
+    n12 = n1 + n2 ->
+  forall t12,
+    t12 = t1 ** t2 ->
+    st_starN p ctx G n12 s1 t12 s3.
+Proof.
+  intros p ctx G n1.
+  induction n1 as [| n1' IHn1'];
+    intros s1 t1 s2 H n2 t2 s3 H0 n12 H1 t12 H2.
+  - simpl in *; subst.
+    inversion H; subst.
+    apply H0.
+  - inversion H as [| ? ? t1' s2' t2' ? ? Hstep' Hsame_turn' Hst_starN']; subst.
+    (* NOTE: Why does the usual eq_refl trick not work here? *)
+    assert (n1' + n2 = n1' + n2) as Hn' by reflexivity.
+    assert (t2' ** t2 = t2' ** t2) as Ht' by reflexivity.
+    specialize (IHn1' _ _ _ Hst_starN' _ _ _ H0
+                      _ Hn' _ Ht').
+    assert (t1' ** (t2' ** t2) = t1' ** (t2' ** t2)) as Ht'' by reflexivity.
+    pose proof st_starN_step Hstep' Hsame_turn' IHn1' Ht'' as Hst_starN.
+    rewrite Eapp_assoc.
+    apply Hst_starN.
+Qed.
+
+Lemma st_starN_if_st_starNR:
+  forall p ctx G n ips t ips',
+    st_starNR p ctx G n ips t ips' ->
+    st_starN p ctx G n ips t ips'.
+Proof.
+  intros p ctx G n ips t ips' Hst_starNR.
+  induction Hst_starNR as [| n s1 t1 s2 t2 s3 t Hst_starNR Hst_starN Hstep Hsame_turn Ht].
+  + apply st_starN_refl.
+  + apply st_starN_one in Hstep.
+    - assert (n + 1 = n + 1) as Hn' by reflexivity.
+      assert (t1 ** t2 = t1 ** t2) as Ht' by reflexivity.
+      pose proof st_starN_trans Hst_starN Hstep Hn' Ht' as Hst_starN'.
+      subst t.
+      rewrite plus_comm in Hst_starN'.
+      apply Hst_starN'.
+    - apply Hsame_turn.
+Qed.
+
 Theorem st_starN_iff_st_starNR:
   forall p ctx G n ips t ips',
     st_starN p ctx G n ips t ips' <->
