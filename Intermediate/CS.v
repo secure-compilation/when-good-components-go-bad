@@ -10,6 +10,8 @@ Require Import Intermediate.GlobalEnv.
 Require Import Lib.Extra.
 Require Import Lib.Monads.
 
+From mathcomp Require ssreflect.
+
 Module CS.
 
 Import Intermediate.
@@ -779,7 +781,7 @@ Section Semantics.
     - apply final_states_stuckness.
   Qed.
 
-From mathcomp Require Import ssreflect.
+Import ssreflect.
 
 Definition stack_state_of (cs:CS.state) : stack_state :=
   let '(gps, mem, regs, pc) := cs in
