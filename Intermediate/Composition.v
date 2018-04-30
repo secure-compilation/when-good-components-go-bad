@@ -1010,6 +1010,50 @@ Section Simulation.
       st_starN c (prog_interface p) (prepare_global_env c) n ips2 t ips2' /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
   Proof.
+    intros n ips1 t ips1' Hst_starN.
+    apply st_starN_iff_st_starNR in Hst_starN.
+    induction Hst_starN
+      as [| n ips t1 ips' t2 ips'' t Hst_starNR IHHst_starN Hstep Hsame_turn Ht];
+      intros ips2 Hmergeable.
+    - eexists. split.
+      + constructor.
+      + assumption.
+    - specialize (IHHst_starN _ Hmergeable).
+      destruct IHHst_starN as [ips2' [IHHst_starN IHHmergeable]].
+      (* By case analysis on program and context components. *)
+      destruct (PS.is_program_component ips' (prog_interface c)) eqn:Hcomp_ips'.
+      + assert (Step (ProgramSem.sem p (prog_interface c)) ips' t2 ips'') as Hstep'.
+        {
+          simpl.
+          constructor.
+          - apply Hcomp_ips'.
+          - inversion Hsame_turn as [? ? Hpc_ips' Hpc_ips'' | ? ? Hcc_ips' Hcc_ips''];
+              subst.
+            * apply Hpc_ips''.
+            * unfold PS.is_program_component in Hcomp_ips'.
+              rewrite Hcc_ips' in Hcomp_ips'.
+              discriminate.
+          - apply Hstep.
+        }
+        destruct (lockstep_simulation Hstep' IHHmergeable)
+          as [ips2'' [Hstep'' Hmergeable'']].
+        apply st_starN_iff_st_starNR in IHHst_starN.
+        assert (PS.step c (prog_interface p) (prepare_global_env c) ips2' t2 ips2'')
+          as Hstep_ctx''.
+        {
+          inversion Hstep'' as [? ? ? ? ? Hstep_c]; subst.
+          apply Hstep_c.
+        }
+        assert (same_turn (prog_interface p) ips2' ips2'') as Hsame_step'.
+        {
+          admit.
+        }
+        pose proof st_starNR_step IHHst_starN Hstep_ctx'' Hsame_step' Ht as Hst_starN'.
+        apply st_starN_iff_st_starNR in Hst_starN'.
+        exists ips2''. split.
+        * apply Hst_starN'.
+        * apply Hmergeable''.
+      + admit.
   Admitted.
 End Simulation.
 End ProgCtxSim.
