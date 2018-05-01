@@ -523,11 +523,8 @@ Section Semantics.
       by rewrite Hinitial /= /CS.initial_machine_state /=; case: prog_main.
     case/well_bracketed_trace_inv=> t1 [P [arg [t2 e]]].
     move: Hstar; rewrite {}e -[seq.cat]/Eapp.
-    (* AAA: Could maybe combine these two inversion lemmas into a single one. *)
-    case/(star_app_inv singleton_traces)=> s1' [Hstar0].
-    case/(star_cons_inv singleton_traces)=> s2' [s3' [Hstar1 [Hstep2 Hstar3]]].
-    exists t1, s2', s3', t2, P, arg; repeat split=> //.
-    by rewrite -[t1]E0_right; apply: star_trans; eauto.
+    case/(star_middle1_inv singleton_traces)=> s1' [s2' [Hstar1 [Hstep2 Hstar3]]].
+    by exists t1, s1', s2', t2, P, arg; repeat split=> //.
   Qed.
 
 End Semantics.

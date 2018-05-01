@@ -624,25 +624,9 @@ Section Decomposition.
     (* program reaches a stuck state after zero or many steps *)
     - eapply program_runs.
       + apply PS.initial_state_intro
-          with (p':=c) (scs:=init_s) (sps:=PS.partialize (prog_interface c) init_s).
-        * reflexivity.
-        * assumption.
-        * assumption.
-        * assumption.
-        * assumption.
-        * CS.unfold_state init_s. simpl in *.
-          destruct (C \in domm (prog_interface c)) eqn:Hctx.
-          ** rewrite Hctx. constructor.
-             *** PS.simplify_turn. assumption.
-             *** reflexivity.
-             *** reflexivity.
-          ** rewrite Hctx. constructor.
-             *** PS.simplify_turn.
-                 unfold negb. rewrite Hctx.
-                 reflexivity.
-             *** reflexivity.
-             *** reflexivity.
-        * assumption.
+          with (p':=c) (scs:=init_s) (sps:=PS.partialize (prog_interface c) init_s)=> //.
+        CS.unfold_state init_s. simpl in *.
+        have [Hctx|Hctx] := boolP (C \in domm (prog_interface c)); by constructor.
       + inversion Hstate_beh; subst.
         (* simulate star with decomposition *)
         (* We take this step early to get the pieces needed by [econstructor] later. *)
@@ -778,78 +762,72 @@ Section Decomposition.
 *)
   Admitted.
 
-  Lemma program_ub_doesnt_improve:
-    forall t beh_imp,
-      program_behaves (PS.sem p (prog_interface c))
-                      (Goes_wrong t) ->
-      undef_in t (prog_interface p) ->
-      program_behaves (PS.sem p (prog_interface c))
-                      (behavior_app t beh_imp) ->
-      beh_imp = Goes_wrong E0.
+  Lemma program_ub_doesnt_improve t beh_imp :
+    program_behaves (PS.sem p (prog_interface c)) (Goes_wrong t) ->
+    undef_in t (prog_interface p) ->
+    program_behaves (PS.sem p (prog_interface c)) (behavior_app t beh_imp) ->
+    beh_imp = Goes_wrong E0.
   Proof.
-    intros t beh_imp Hbeh1 Hblame Hbeh2.
-    inversion Hbeh1; subst.
+    move e_t: (Goes_wrong t)=> beh Hbeh.
+    case: beh / Hbeh e_t; last first.
+      (* program went wrong because it doesn't have an initial state *)
+      move=> not_init [->] _; rewrite behavior_app_E0.
+      by case: beh_imp / => // ? ? /not_init.
     (* program reaches a stuck state after zero or many steps *)
-    - inversion Hbeh2; subst.
-      + (* show that we start from the same state *)
-        assert (s = s0). {
-          apply PS.initial_state_determinism with p (prog_interface c); auto.
-        }
-        subst.
-        (* show that (Goes_wrong t) makes beh_imp empty *)
-        inversion H0; subst; inversion H2; subst;
-        destruct beh_imp; simpl in *; try discriminate;
-          inversion H3; subst.
-        * (* contra *)
-          destruct (PS.star_prefix H4 H7) as [|[]]; subst.
-          ** inversion H9; subst.
-             *** contradiction.
-             *** exfalso. eapply H5. eauto.
-          ** inversion H10; subst.
-             *** contradiction.
-             *** symmetry in H12.
-                 apply Eapp_E0_inv in H12. destruct H12; subst.
-                 admit.
-        * (* contra *)
-          destruct (PS.star_prefix H4 H7) as [|[]]; subst.
-          ** inversion H9; subst.
-             *** inversion H8; subst.
-                 exfalso. eapply H5. eauto.
-             *** exfalso. eapply H5. eauto.
-          ** inversion H10; subst.
-             *** inversion H8; subst.
-                 exfalso. eapply H5. eauto.
-             *** symmetry in H12.
-                 apply Eapp_E0_inv in H12. destruct H12; subst.
-                 admit.
-        * (* contra *)
-          (* s' cannot step, hence t1 is E0 and s'0 is s'
-             but s' is not forever reactive *)
-          inversion H7; subst. inversion H9; subst.
-          ** contradiction.
-          ** exfalso. eapply H5.
-             admit.
-        * (* s' cannot step, hence t1 is E0 and s'0 is s'
-             done *)
-          destruct (PS.star_prefix H4 H7) as [|[]]; subst.
-          ** inversion H10; subst.
-             *** reflexivity.
-             *** exfalso. eapply H5. eauto.
-          ** inversion H11; subst; reflexivity.
-      + assert (t = E0).
-        { destruct t.
-          - reflexivity.
-          - destruct beh_imp; simpl in *;
-              discriminate.
-        } subst.
-        rewrite H1 behavior_app_E0.
-        reflexivity.
-    (* program went wrong because it doesn't have an initial state *)
-    - inversion Hbeh2; subst.
-      + exfalso.
-        eapply H0. eauto.
-      + rewrite H behavior_app_E0.
-        reflexivity.
+    move=> s_i beh Hinitial Hbeh.
+    case: beh / Hbeh t=> // t s_f Hstar Hstuck Hnot_final _ [->] Hin_p.
+    move e_beh: (behavior_app t beh_imp)=> beh Hbeh.
+    case: beh / Hbeh e_beh; last by move=> /(_ _ Hinitial).
+    move=> s_i' beh Hinitial'; have {s_i' Hinitial'} -> : s_i' = s_i.
+      exact: PS.initial_state_determinism Hinitial' Hinitial.
+    have [|/empty_behaviorPn beh_n0] := boolP (empty_behavior beh_imp).
+      case: beh_imp=> _ //= /eqP ->; rewrite E0_right=> Hbeh e_beh;
+      case: beh / Hbeh t e_beh Hstar Hin_p;
+      move=> // t s_f' Hstar' Hfinal _ [->] Hstar Hin_p.
+        have [ff|ff] := PS.state_determinism_star_same_trace Hstar Hstar'.
+          case: ff Hnot_final Hfinal Hstuck=> [? Hnot_final /Hnot_final //|].
+          by move=> ?????? Hstep _ _ _ _ /(_ _ _ Hstep).
+        have {Hin_p} Hin_p : PS.is_program_component s_f' (prog_interface c).
+          (* Because of Hin_p, the last call was back into the program.  This
+             can probably be a standalone lemma. *)
+          admit.
+        (* Should prove a lemma saying that the partial semantics is stuck on
+           states that are both final and in the program. *)
+        admit.
+      have [ff|ff] := PS.state_determinism_star_same_trace Hstar Hstar'.
+        suffices [s contra] : exists s, Step (PS.sem p (prog_interface c)) s_f E0 s.
+          by case/Hstuck: contra.
+        by elim/star_E0_ind: ff Hfinal=> [? []|]; eauto.
+      have {Hin_p} Hin_p : PS.is_program_component s_f' (prog_interface c).
+        (* Same as above *)
+        admit.
+      suffices [s contra] : exists s, Step (PS.sem p (prog_interface c)) s_f E0 s.
+        by case/Hstuck: contra.
+      elim/star_E0_ind: s_f' s_f / ff Hfinal Hin_p {Hstuck Hnot_final Hstar Hstar'}.
+        by move=> s []; eauto.
+      move=> s_a s_b s_c Hstep IH Hfinal Hin_p; apply: IH=> //.
+        case: s_a / Hfinal Hstep Hin_p=> s_a s_b' /= Hstep' Hfinal Hstep Hin_p.
+        by rewrite (PS.state_determinism_program Hin_p Hstep Hstep').
+      (* If the program takes a step without emitting any events, the following
+         state must also be in the program. *)
+      admit.
+    case: beh_n0=> {beh_imp} e [beh_imp ->].
+    rewrite -behavior_app_assoc => Hbeh e_beh.
+    move: Hbeh; rewrite -{}e_beh {beh}.
+    case/(@state_behaves_app_inv _ (@PS.singleton_traces p (prog_interface c))).
+    move=> s3 [/(star_middle1_inv (@PS.singleton_traces p (prog_interface c)))].
+    case=> s1 [s2 [Hstar1 [Hstep2 Hstar3]]].
+    have {Hstar} [Hstar|Hstar] := PS.state_determinism_star_same_trace Hstar Hstar1.
+      suffices [s [t' contra]] : exists s t', Step (PS.sem p (prog_interface c)) s_f t' s.
+        by case/Hstuck: contra.
+      by elim/star_E0_ind: s_f s1 / Hstar Hstep2 {Hstuck Hnot_final Hstar1}; eauto.
+    have {Hin_p} Hin_p : PS.is_program_component s1 (prog_interface c).
+      (* Same as above *)
+      admit.
+    elim/star_E0_ind: s1 s_f / Hstar Hstuck Hstep2 Hin_p {Hnot_final Hstar1}.
+      by move=> s_f Hstuck /Hstuck.
+    move=> s1 s1a s1b Hstep1 _ _ Hstep2 Hin_p.
+    by have [] := PS.state_determinism_program' Hin_p Hstep1 Hstep2.
   Admitted.
 
   Corollary decomposition_with_refinement_and_blame:
@@ -870,31 +848,26 @@ Section Decomposition.
       + eassumption.
       + left. reflexivity.
     - destruct Hwrong as [t [Hbeh1_wrong Hbeh2_pref]]; subst.
-      eexists. split.
-      + eassumption.
-      + (* sketch:
-           p[c] does UB(t), therefore either we blame p or
-           we blame c.
-           - if we blame p, we prove the left disjunct by
-             showing that the undefined behavior is preserved
-           - if we blame c, we prove the right disjunct by
-             using our assumptions
-         *)
-        destruct (ub_blaming Hbeh1) as [Hblame | Hblame].
-        * left.
-          apply program_ub_preservation in Hbeh1; auto.
-          (* beh2 is an improvement of t, but we know that
-             p goes wrong with t (which is a prefix of beh2).
-             Moreover, p remains the same after partialization
-             (it's determinate).
-           *)
-          destruct Hbeh2_pref as [Hbeh_imp ?]; subst.
-          rewrite (program_ub_doesnt_improve Hbeh1 Hblame Hbeh2).
-          simpl. rewrite E0_right. reflexivity.
-        * right.
-          eexists. split.
-          ** reflexivity.
-          ** split; assumption.
+      eexists. split; first eauto.
+      (* sketch:
+         p[c] does UB(t), therefore either we blame p or
+         we blame c.
+         - if we blame p, we prove the left disjunct by
+           showing that the undefined behavior is preserved
+         - if we blame c, we prove the right disjunct by
+           using our assumptions
+       *)
+      destruct (ub_blaming Hbeh1) as [Hblame | Hblame]; last eauto.
+      left.
+      apply program_ub_preservation in Hbeh1; auto.
+      (* beh2 is an improvement of t, but we know that
+         p goes wrong with t (which is a prefix of beh2).
+         Moreover, p remains the same after partialization
+         (it's determinate).
+       *)
+      destruct Hbeh2_pref as [Hbeh_imp ?]; subst.
+      rewrite (program_ub_doesnt_improve Hbeh1 Hblame Hbeh2).
+      by rewrite /= E0_right.
   Qed.
 
   Set Implicit Arguments.

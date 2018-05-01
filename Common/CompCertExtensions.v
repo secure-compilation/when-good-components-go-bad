@@ -4,7 +4,7 @@ Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
 Require Import Lib.Extra.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype seq.
 
 Definition sum_of_event (e : event) :=
   match e with
@@ -19,6 +19,24 @@ Qed.
 
 Definition event_eqMixin := InjEqMixin sum_of_event_inj.
 Canonical event_eqType := Eval hnf in EqType event event_eqMixin.
+
+Definition empty_behavior (beh : program_behavior) :=
+  match beh with
+  | Terminates t | Diverges t | Goes_wrong t => t == E0
+  | Reacts _ => false
+  end.
+
+Lemma empty_behaviorPn beh :
+  reflect (exists e beh', beh = behavior_app [:: e] beh')
+          (~~ empty_behavior beh).
+Proof.
+case: beh=> [[|e t]|[|e t]|[e t]|[|e t]] /=; constructor;
+try by case=> [e [[|||]]].
+- eexists e, (Terminates _); rewrite /=; eauto.
+- eexists e, (Diverges _); rewrite /=; eauto.
+- eexists e, (Reacts _); rewrite /=; eauto.
+- eexists e, (Goes_wrong _); rewrite /=; eauto.
+Qed.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -94,18 +112,33 @@ move=> /(@esym _ _ _)/Eapp_E0_inv [??]; subst t1 t2.
 by apply: H1; eauto.
 Qed.
 
-Lemma star_cons_inv L s1 e t s2 :
-  single_events L ->
+End CLOSURES.
+
+Section Inversion.
+
+Variables (L : semantics) (Hsingle : single_events L).
+
+Lemma star_cons_inv s1 e t s2 :
   Star L s1 (e :: t) s2 ->
   exists s1' s2', Star L s1 E0 s1' /\ Step L s1' [e] s2' /\ Star L s2' t s2.
 Proof.
-rewrite -[e :: t]/([e] ** t) => Hsingle.
+rewrite -[e :: t]/([e] ** t).
 case/(star_app_inv Hsingle)=> s2'' [Hstar1 Hstar2].
 case/star_non_E0_split: Hstar1=> // [s1' [s2' [A [B C]]]].
 by exists s1', s2'; do !split=> //; apply: star_trans; eauto.
 Qed.
 
-End CLOSURES.
+Lemma star_middle1_inv s1 t1 e t2 s2 :
+  Star L s1 (t1 ** e :: t2) s2 ->
+  exists s1' s2', Star L s1 t1 s1' /\ Step L s1' [e] s2' /\ Star L s2' t2 s2.
+Proof.
+case/(star_app_inv Hsingle)=> s0 [Hstar0].
+case/star_cons_inv=> s1' [s2' [Hstar1 [Hstep2 Hstar3]]].
+exists s1', s2'; do !split=> //; apply: star_trans; eauto.
+by rewrite E0_right.
+Qed.
+
+End Inversion.
 
 (* Finite prefixes and behaviors. *)
 

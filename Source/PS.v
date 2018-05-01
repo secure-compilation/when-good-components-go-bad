@@ -1538,17 +1538,8 @@ Proof.
 case: t'=> [|e t'].
   rewrite E0_right => Hstar1 Hstar2.
   by case: (state_determinism_star_same_trace Hstar1 Hstar2); eauto.
-move=> Hstar1 Hstar2; left.
-have {Hstar2} [sa [sb [Hstar2a Hstep2b Hstar2c]]] :
-  exists sa sb,
-    [/\ Star (sem p ctx) s t sa,
-        Step (sem p ctx) sa [e] sb &
-        Star (sem p ctx) sb t' s''].
-  case/(star_app_inv (@singleton_traces p ctx)): Hstar2.
-  move=> sa' [Hstar2a' Hstar2a''].
-  case/(star_cons_inv (@singleton_traces p ctx)): Hstar2a''.
-  move=> sa [sb [H1 [H2 H3]]]; exists sa, sb; split=> //.
-  by apply: star_trans; eauto; rewrite E0_right.
+move=> Hstar1 /(star_middle1_inv (@singleton_traces p ctx)) Hstar2; left.
+case: Hstar2=> sa [sb [Hstar2a [Hstep2b Hstar2c]]].
 have [s'_sa|sa_s'] := state_determinism_star_same_trace Hstar1 Hstar2a.
   rewrite -[e :: t']/(E0 ** [e] ** t').
   apply: star_trans; eauto.
