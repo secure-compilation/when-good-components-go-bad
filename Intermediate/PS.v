@@ -398,7 +398,7 @@ Lemma domm_partition_in_both ctx1 ctx2 C :
   C \in domm ctx1 ->
   C \in domm ctx2 ->
   False.
-Admitted. (* Rank 1. *)
+Admitted. (* Grade 1. *)
 
 (* XXX: This assumption is also impossible, for the same reason as above. *)
 Lemma domm_partition_in_neither ctx1 ctx2 C :
@@ -406,7 +406,15 @@ Lemma domm_partition_in_neither ctx1 ctx2 C :
   C \notin domm ctx1 ->
   C \notin domm ctx2 ->
   False.
-Admitted. (* Rank 1. *)
+Admitted. (* Grade 1. *)
+
+(* RB: TODO: Complete assumptions as above. *)
+Lemma domm_partition_in_notin ctx1 ctx2 C :
+  mergeable_interfaces ctx1 ctx2 ->
+  C \in domm ctx1 ->
+  C \notin domm ctx1 ->
+  False.
+Admitted. (* Grade 1. *)
 
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_intro: forall ics ips1 ips2,
@@ -478,6 +486,70 @@ Proof.
     + eassumption.
     + eassumption.
     + eassumption.
+Qed.
+
+Lemma mergeable_states_program_to_program ctx1 ctx2 ps1 ps2 :
+  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
+  PS.is_program_component ps1 ctx1 ->
+  PS.is_program_component ps2 ctx1.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
+  - assumption.
+  - assumption.
+  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_program_to_context ctx1 ctx2 ps1 ps2 :
+  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
+  PS.is_program_component ps1 ctx1 ->
+  PS.is_context_component ps2 ctx2.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
+  - assumption.
+  - now destruct (PS.domm_partition_in_notin Hmergeable_ifaces Hcc1 Hpc).
+  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_context_to_context ctx1 ctx2 ps1 ps2 :
+  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
+  PS.is_context_component ps1 ctx1 ->
+  PS.is_context_component ps2 ctx1.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
+  - assumption.
+  - assumption.
+  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_context_to_program ctx1 ctx2 ps1 ps2 :
+  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
+  PS.is_context_component ps1 ctx1 ->
+  PS.is_program_component ps2 ctx2.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
+  - destruct (PS.domm_partition_in_notin Hmergeable_ifaces Hpc Hpc1).
+  - assumption.
+  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
 Qed.
 
 Lemma mergeable_states_stacks ctx1 ctx2 ips1 ips2 gps1 gps2:

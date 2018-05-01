@@ -1,12 +1,13 @@
+Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
+Require Import CompCert.Behaviors.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Memory.
 Require Import Common.Blame.
 Require Import Common.Linking.
 Require Import Common.CompCertExtensions.
-Require Import CompCert.Events.
-Require Import CompCert.Smallstep.
-Require Import CompCert.Behaviors.
+Require Import Common.Traces.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
@@ -494,20 +495,6 @@ Section Decomposition.
     by case: wf1 wf2 => [_ _ _ _ -> _ _] [_ _ _ _ -> _ _].
   Qed.
 
-  (* Several alternative formulations are possible. One may include the ERet event
-     in the star, express the inclusion of ECall in the trace via In, etc. *)
-  Lemma eret_from_initial_star_goes_after_ecall_cs :
-    forall s0 t s1 s2 C' v C,
-      CS.initial_state (program_link p c) s0 ->
-      star CS.kstep (prepare_global_env (program_link p c)) s0 t s1 ->
-      CS.kstep (prepare_global_env (program_link p c)) s1 [ERet C' v C] s2 ->
-    exists t1 s s' t2 P v',
-      star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s /\
-      CS.kstep (prepare_global_env (program_link p c)) s [ECall C P v' C'] s' /\
-      star CS.kstep (prepare_global_env (program_link p c)) s' t2 s1 /\
-      t = t1 ** [ECall C P v' C'] ** t2.
-  Admitted.
-
   Lemma ecall_from_star_has_well_defined_components :
     forall s0 t1 s1 s2 C P v C',
       star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s1 ->
@@ -530,7 +517,7 @@ Section Decomposition.
     intros s0 t1 s1 s2 C v C' Hinitial Hstar Hkstep.
     inversion Hkstep; subst.
     apply wf_comps_ret.
-    - destruct (eret_from_initial_star_goes_after_ecall_cs Hinitial Hstar Hkstep)
+    - destruct (CS.eret_from_initial_star_goes_after_ecall_cs Hinitial Hstar Hkstep)
         as [t1' [s1' [s2' [t2' [P [v' [Hstar1' [Hkstep' [Hstar2' Heq']]]]]]]]].
       subst t1.
       pose proof ecall_from_star_has_well_defined_components Hstar1' Hkstep' as Hwdc.
@@ -596,8 +583,8 @@ Section Decomposition.
     forall t,
       program_behaves (CS.sem (program_link p c))
                       (Goes_wrong t) ->
-      undef_in Component.main t (prog_interface p) \/
-      undef_in Component.main t (prog_interface c).
+      undef_in t (prog_interface p) \/
+      undef_in t (prog_interface c).
   Proof.
     (* sketch:
        consider the trace t
@@ -645,7 +632,7 @@ Section Decomposition.
     forall t,
       program_behaves (CS.sem (program_link p c))
                       (Goes_wrong t) ->
-      undef_in Component.main t (prog_interface p) ->
+      undef_in t (prog_interface p) ->
       program_behaves (PS.sem p (prog_interface c))
                       (Goes_wrong t).
   Proof.
@@ -827,7 +814,7 @@ Section Decomposition.
     forall t beh_imp,
       program_behaves (PS.sem p (prog_interface c))
                       (Goes_wrong t) ->
-      undef_in Component.main t (prog_interface p) ->
+      undef_in t (prog_interface p) ->
       program_behaves (PS.sem p (prog_interface c))
                       (behavior_app t beh_imp) ->
       beh_imp = Goes_wrong E0.
@@ -905,7 +892,7 @@ Section Decomposition.
       (beh1 = beh2 \/
        exists t, beh1 = Goes_wrong t /\
                  behavior_prefix t beh2 /\
-                 undef_in Component.main t (prog_interface c)).
+                 undef_in t (prog_interface c)).
   Proof.
     intros beh1 Hbeh1.
     assert (Hbeh1' := Hbeh1).
@@ -965,7 +952,7 @@ Section Decomposition.
     program_behaves (PS.sem c (prog_interface p)) b ->
     program_behaves (PS.sem c (prog_interface p)) (Goes_wrong t) ->
     behavior_prefix t b ->
-    undef_in Component.main t (prog_interface p).
+    undef_in t (prog_interface p).
   Proof.
     intros t b.
     intros Hbeh_improved Hbeh_wrong Hprefix.

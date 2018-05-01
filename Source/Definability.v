@@ -519,7 +519,7 @@ Section Definability.
         apply: switch_spec_else; eauto.
         rewrite -> size_map; reflexivity.
       - move=> cs Et /=.
-        case: cs / => /= _ stk mem _ _ P -> -> -> [wf_C wb_suffix] [wf_e wf_suffix] wf_stk wf_mem P_exp.
+        case: cs / => /= _ stk mem _ _ P -> -> -> /andP [/eqP wf_C wb_suffix] [wf_e wf_suffix] wf_stk wf_mem P_exp.
         destruct (valid_procedure_has_block P_exp) as [b C_b].
         destruct (wf_mem _ _ C_b) as [C_local _].
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
@@ -576,9 +576,9 @@ Section Definability.
                 eexists v, P, top, bot.
                 by do 3 (split; trivial). }
               right. by apply: (closed_intf Himport).
-          - rename wf_e into C_ne_C'.
+          - move: wf_e=> C_ne_C'.
             destruct callers as [|C'_ callers]; try easy.
-            destruct wb_suffix as [HC' wb_suffix].
+            case/andP: wb_suffix=> [/eqP HC' wb_suffix].
             subst C'_. simpl. exists (StackState C' callers).
             destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
             revert mem wf_mem.

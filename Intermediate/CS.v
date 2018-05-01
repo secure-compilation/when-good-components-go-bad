@@ -10,7 +10,7 @@ Require Import Intermediate.GlobalEnv.
 Require Import Lib.Extra.
 Require Import Lib.Monads.
 
-From mathcomp Require ssreflect.
+From mathcomp Require ssreflect ssrfun ssrbool eqtype.
 
 Module CS.
 
@@ -781,27 +781,26 @@ Section Semantics.
     - apply final_states_stuckness.
   Qed.
 
-Import ssreflect.
+Import ssreflect eqtype.
 
 Definition stack_state_of (cs:CS.state) : stack_state :=
   let '(gps, mem, regs, pc) := cs in
   StackState (Pointer.component pc) (List.map Pointer.component gps).
 
-Lemma intermediate_well_bracketed_trace : forall t cs cs',
+Lemma intermediate_well_bracketed_trace t cs cs' :
   Star sem cs t cs' ->
   well_bracketed_trace (stack_state_of cs) t.
 Proof.
-  intros t cs cs' H. induction H.
-  - compute. now trivial.
-  - destruct H; subst t; simpl in *;
-    try match goal with
-    | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
-        rewrite Pointer.inc_preserves_component in H
-    | [ H : find_label_in_component _ ?pc ?l = Some ?pc' |- _] =>
-        apply find_label_in_component_1 in H; rewrite H
-    | [ H : find_label_in_procedure _ ?pc ?l = Some ?pc' |- _] =>
-        apply find_label_in_procedure_1 in H; rewrite H
-    end; trivial; try congruence; try easy.
+elim: cs t cs' / => [|cs1 t1 cs2 t2 cs3 t Hstep _ IH ->] //=.
+case: cs1 t1 cs2 / Hstep IH => /=;
+try by move=> *; match goal with
+| [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+        rewrite Pointer.inc_preserves_component in H end.
+- by move=> ???????? /find_label_in_component_1 ->.
+- by move=> ???????? ->.
+- by move=> ??????????? /find_label_in_procedure_1 ->.
+- by move=> ???????????; rewrite eqxx Pointer.inc_preserves_component.
+- by move=> ?????????; rewrite !eqxx.
 Qed.
 
 Lemma intermediate_well_formed_events st t st' :

@@ -475,11 +475,11 @@ Section Semantics.
       by move=> C stk mem mem' k _ P v P_expr b b' old <-; rewrite eqxx.
     - (* External Return *)
       move=> C stk mem mem' k C' P v P_expr b b' old.
-      by rewrite eq_sym => /eqP/negbTE ->; eauto.
+      by rewrite eq_sym eqxx=> /eqP/negbTE -> /=.
     - (* Internal Call *)
       by move=> C stk mem mem' k v _ old b <-; rewrite eqxx.
     - (* External Call *)
-      by move=> C stk mem mem' k v C' old b /eqP/negbTE ->; eauto.
+      by move=> C stk mem mem' k v C' old b /eqP/negbTE ->; rewrite !eqxx.
   Qed.
 
   Lemma events_wf st t st' :
@@ -504,5 +504,32 @@ Section Semantics.
     by move: Hinitial; rewrite /initial_state /initial_machine_state Hmain => ->.
   Qed.
 
+  (* Several alternative formulations are possible. One may include the ERet event
+     in the star, express the inclusion of ECall in the trace via In, etc. *)
+  Lemma eret_from_initial_star_goes_after_ecall_cs s0 t s1 s2 C' v C :
+    CS.initial_state p s0 ->
+    Star sem s0 t s1 ->
+    Step sem s1 [:: ERet C' v C] s2 ->
+    exists t1 s s' t2 P v',
+      Star sem s0 t1 s /\
+      Step sem s [ECall C P v' C'] s' /\
+      Star sem s' t2 s1 /\
+      t = t1 ** [ECall C P v' C'] ** t2.
+  Proof.
+    move=> Hinitial Hstar Hstep.
+    have {Hstep} /trace_wb : Star sem s0 (t ++ [:: ERet C' v C]) s2.
+      apply: star_trans; eauto; exact: star_one.
+    have -> : stack_state_of s0 = stack_state0.
+      by rewrite Hinitial /= /CS.initial_machine_state /=; case: prog_main.
+    case/well_bracketed_trace_inv=> t1 [P [arg [t2 e]]].
+    move: Hstar; rewrite {}e -[seq.cat]/Eapp.
+    (* AAA: Could maybe combine these two inversion lemmas into a single one. *)
+    case/(star_app_inv singleton_traces)=> s1' [Hstar0].
+    case/(star_cons_inv singleton_traces)=> s2' [s3' [Hstar1 [Hstep2 Hstar3]]].
+    exists t1, s2', s3', t2, P, arg; repeat split=> //.
+    by rewrite -[t1]E0_right; apply: star_trans; eauto.
+  Qed.
+
 End Semantics.
+
 End CS.
