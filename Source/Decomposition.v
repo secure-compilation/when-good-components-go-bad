@@ -583,8 +583,8 @@ Section Decomposition.
     forall t,
       program_behaves (CS.sem (program_link p c))
                       (Goes_wrong t) ->
-      undef_in Component.main t (prog_interface p) \/
-      undef_in Component.main t (prog_interface c).
+      undef_in t (prog_interface p) \/
+      undef_in t (prog_interface c).
   Proof.
     (* sketch:
        consider the trace t
@@ -632,7 +632,7 @@ Section Decomposition.
     forall t,
       program_behaves (CS.sem (program_link p c))
                       (Goes_wrong t) ->
-      undef_in Component.main t (prog_interface p) ->
+      undef_in t (prog_interface p) ->
       program_behaves (PS.sem p (prog_interface c))
                       (Goes_wrong t).
   Proof.
@@ -814,7 +814,7 @@ Section Decomposition.
     forall t beh_imp,
       program_behaves (PS.sem p (prog_interface c))
                       (Goes_wrong t) ->
-      undef_in Component.main t (prog_interface p) ->
+      undef_in t (prog_interface p) ->
       program_behaves (PS.sem p (prog_interface c))
                       (behavior_app t beh_imp) ->
       beh_imp = Goes_wrong E0.
@@ -892,7 +892,7 @@ Section Decomposition.
       (beh1 = beh2 \/
        exists t, beh1 = Goes_wrong t /\
                  behavior_prefix t beh2 /\
-                 undef_in Component.main t (prog_interface c)).
+                 undef_in t (prog_interface c)).
   Proof.
     intros beh1 Hbeh1.
     assert (Hbeh1' := Hbeh1).
@@ -952,7 +952,7 @@ Section Decomposition.
     program_behaves (PS.sem c (prog_interface p)) b ->
     program_behaves (PS.sem c (prog_interface p)) (Goes_wrong t) ->
     behavior_prefix t b ->
-    undef_in Component.main t (prog_interface p).
+    undef_in t (prog_interface p).
   Proof.
     intros t b.
     intros Hbeh_improved Hbeh_wrong Hprefix.

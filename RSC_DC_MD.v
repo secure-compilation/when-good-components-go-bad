@@ -54,7 +54,7 @@ Section RSC_DC_MD.
       (prefix m beh \/
       (exists t',
         beh = Goes_wrong t' /\ trace_finpref_prefix t' m /\
-         undef_in Component.main t' (Source.prog_interface p))).
+         undef_in t' (Source.prog_interface p))).
   Proof.
     intros t m Hbeh Hprefix0 Hsafe_beh.
 
