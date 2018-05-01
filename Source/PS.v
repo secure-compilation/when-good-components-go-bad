@@ -778,8 +778,8 @@ Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
     CS.initial_state (program_link p p') scs ->
     initial_state p ctx sps.
 
-Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
-| final_state_program: forall p' scs sps,
+Inductive final_state (p: program) (ctx: Program.interface) (sps: state) : Prop :=
+| final_state_program: forall p' scs,
     prog_interface p' = ctx ->
     well_formed_program p ->
     well_formed_program p' ->
@@ -788,7 +788,7 @@ Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
     partial_state ctx scs sps ->
     CS.final_state scs ->
     final_state p ctx sps
-| final_state_context: forall sps,
+| final_state_context:
     turn_of sps ctx ->
     final_state p ctx sps.
 
@@ -820,6 +820,34 @@ case: G s t s' /.
 move=> p' sps t sps' scs scs' p'_ctx wf_p wf_p' Hlink Hstep.
 move=> /partial_state_component -> /partial_state_component ->.
 by rewrite (CS.kstep_component Hstep).
+Qed.
+
+Lemma final_state_stuck p ctx G st :
+  final_state p ctx st ->
+  is_program_component st ctx ->
+  forall t st', ~ kstep p ctx G st t st'.
+Proof.
+move=> Hfinal Hin_p t st' Hstep.
+case: G st t st' / Hstep Hfinal Hin_p.
+move=> p1 sps t sps' scs1 scs1' e_ctx1 wf_p wf_p1 Hlink1 Hstep Hpart1 _.
+case; last first.
+  by rewrite /is_program_component /is_context_component => ->.
+move=> p2 scs2 e_ctx2 _ wf_p2 Hlink2 _ Hpart2 Hfinal Hin_p.
+suffices /CS.final_state_stuck: CS.final_state scs1 by apply; eauto.
+case: scs1 sps / Hpart1 Hpart2 Hin_p {Hstep}; last first.
+  by rewrite /is_program_component=> ??????? ->.
+move=> C gps pgps mem pmem k e _ e_pmem e_pgps.
+move e_sps: (PC _)=> sps Hpart2.
+case: scs2 sps / Hpart2 e_sps Hfinal e_pgps; last first.
+  by rewrite /is_program_component=> ??????? ->.
+move=> C' gps' _ mem' _ _ _ _ _ -> [-> -> <- <- <-] /=.
+rewrite /is_program_component /is_context_component /turn_of /=.
+case; first by auto.
+case=> [v [-> [-> ->]]] e_gps notin; rewrite (_ : gps = [::]); eauto.
+move/esym: e_gps; rewrite /to_partial_stack /=.
+case: gps=> //= [[[C'' v'] k'] gps]; rewrite andbC.
+by case: eqP=> //= [->|_]; first rewrite (negbTE notin);
+move=> /to_partial_stack_helper_nonempty.
 Qed.
 
 (* partial semantics *)

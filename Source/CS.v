@@ -198,6 +198,19 @@ Lemma kstep_component G s t s' :
   else component_of_state s.
 Proof. by case: s t s' /. Qed.
 
+Lemma final_state_stuck G (st: state) :
+  final_state st ->
+  forall t st', ~ kstep G st t st'.
+Proof.
+move=> Hfinal t st' Hstep.
+case: st t st' / Hstep Hfinal => //= *;
+by repeat match goal with
+| H : _ \/ _ |- _ => case: H=> ?
+| H : exists _, _ |- _ => case: H => ??
+| H : _ /\ _ |- _ => case: H => ??
+end.
+Qed.
+
 (* functional kstep *)
 
 Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=

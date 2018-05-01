@@ -789,9 +789,10 @@ Section Decomposition.
           by move=> ?????? Hstep _ _ _ _ /(_ _ _ Hstep).
         have {Hin_p} Hin_p : PS.is_program_component s_f' (prog_interface c).
           by apply: PS.undef_in_program; eauto; case: linkability.
-        (* Should prove a lemma saying that the partial semantics is stuck on
-           states that are both final and in the program. *)
-        admit.
+        elim/star_E0_ind: s_f' s_f / ff Hnot_final Hfinal Hin_p {Hstuck Hstar Hstar'}.
+          by move=> ? Hnot_final /Hnot_final.
+        move=> s_f' s s_f Hstep _ _ Hfinal Hin_p.
+        by have := PS.final_state_stuck Hfinal Hin_p Hstep.
       have [ff|ff] := PS.state_determinism_star_same_trace Hstar Hstar'.
         suffices [s contra] : exists s, Step (PS.sem p (prog_interface c)) s_f E0 s.
           by case/Hstuck: contra.
@@ -823,7 +824,7 @@ Section Decomposition.
       by move=> s_f Hstuck /Hstuck.
     move=> s1 s1a s1b Hstep1 _ _ Hstep2 Hin_p.
     by have [] := PS.state_determinism_program' Hin_p Hstep1 Hstep2.
-  Admitted.
+  Qed.
 
   Corollary decomposition_with_refinement_and_blame:
     forall beh1,
