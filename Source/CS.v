@@ -475,11 +475,11 @@ Section Semantics.
       by move=> C stk mem mem' k _ P v P_expr b b' old <-; rewrite eqxx.
     - (* External Return *)
       move=> C stk mem mem' k C' P v P_expr b b' old.
-      by rewrite eq_sym => /eqP/negbTE ->; eauto.
+      by rewrite eq_sym eqxx=> /eqP/negbTE -> /=.
     - (* Internal Call *)
       by move=> C stk mem mem' k v _ old b <-; rewrite eqxx.
     - (* External Call *)
-      by move=> C stk mem mem' k v C' old b /eqP/negbTE ->; eauto.
+      by move=> C stk mem mem' k v C' old b /eqP/negbTE ->; rewrite !eqxx.
   Qed.
 
   Lemma events_wf st t st' :
