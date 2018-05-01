@@ -44,7 +44,7 @@ Section RSC_DC_MD.
     forall b m,
       program_behaves (I.CS.sem (Intermediate.program_link p_compiled Ct)) b ->
       prefix m b ->
-      not_wrong b -> (* CH: could try to remove this later *)
+      not_wrong b -> (* CH: could try to weaken this later to `nor_wrong m` *)
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
