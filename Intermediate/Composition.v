@@ -1180,7 +1180,13 @@ Section Simulation.
         }
         assert (same_turn (prog_interface p) ips2' ips2'') as Hsame_step'.
         {
-          admit.
+          inversion Hsame_turn as [? ? Hpc1 Hpc2 | ? ? Hcc1 Hcc2]; subst.
+          - apply (PS.mergeable_states_program_to_context IHHmergeable) in Hpc1.
+            apply (PS.mergeable_states_program_to_context Hmergeable'') in Hpc2.
+            exact (same_turn_context Hpc1 Hpc2).
+          - apply (PS.mergeable_states_context_to_program IHHmergeable) in Hcc1.
+            apply (PS.mergeable_states_context_to_program Hmergeable'') in Hcc2.
+            exact (same_turn_program Hcc1 Hcc2).
         }
         pose proof st_starNR_step IHHst_starN Hstep_ctx'' Hsame_step' Ht as Hst_starN'.
         apply st_starN_iff_st_starNR in Hst_starN'.
