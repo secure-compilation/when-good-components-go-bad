@@ -14,7 +14,7 @@ Require Import Source.CS.
 Require Import Source.PS.
 Require Import Lib.Extra.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -579,53 +579,21 @@ Section Decomposition.
     eapply initial_star_has_well_defined_components; eassumption.
   Qed.
 
-  Lemma ub_blaming:
-    forall t,
-      program_behaves (CS.sem (program_link p c))
-                      (Goes_wrong t) ->
-      undef_in t (prog_interface p) \/
-      undef_in t (prog_interface c).
+  Lemma ub_blaming t :
+    program_behaves (CS.sem (program_link p c)) (Goes_wrong t) ->
+    undef_in t (prog_interface p) \/
+    undef_in t (prog_interface c).
   Proof.
-    (* sketch:
-       consider the trace t
-       - if it's empty, look at the main component of
-         program_link p c. It is either a component of p
-         or a component of c because of linking.
-       - if it's non-empty, look at the last event.
-         an event is either a call or a return.
-         consider the component that is in control after
-         such event: by well-formedness (maybe the same used
-         in definability?) of the trace, it must be a component
-         present in the interface of program_link p c.
-         Therefore, it must be either a component of p or a
-         component of c.
-     *)
-    intros t Hbeh.
-    destruct (last_event t) as [last_event |] eqn:Hlast_event.
-    - assert (In last_event t) as Hin_trace. {
-        apply last_event_is_in_trace; auto.
-      }
-      pose proof ub_behavior_has_well_defined_components Hbeh Hin_trace as Hwf.
-      unfold undef_in. rewrite Hlast_event.
-      inversion Hwf; subst; simpl.
-      + unfold program_link in *. simpl in *.
-        rewrite domm_union in H0.
-        rewrite in_fsetU in H0.
-        unfold orb in H0.
-        destruct (C2 \in domm (prog_interface p)) eqn:HC_in_p.
-        * left. assumption.
-        * rewrite HC_in_p in H0. right. assumption.
-      + unfold program_link in *. simpl in *.
-        rewrite domm_union in H0.
-        rewrite in_fsetU in H0.
-        unfold orb in H0.
-        destruct (C2 \in domm (prog_interface p)) eqn:HC_in_p.
-        * left. assumption.
-        * rewrite HC_in_p in H0. right. assumption.
-    - apply no_last_event_implies_empty_trace in Hlast_event.
-      rewrite Hlast_event.
-      unfold undef_in. simpl.
-      apply linked_programs_main_component_origin; auto.
+    move=> Hbeh; rewrite /undef_in /last_comp.
+    apply/fsetUP; rewrite -domm_union /last_comp.
+    have wf12 := linking_well_formedness wf1 wf2 linkability.
+    rewrite -[unionm _ _]/(prog_interface (program_link p c)).
+    move: (seq.mem_last Component.main (seq.map who_is_in_control_after t)).
+    rewrite seq.inE=> /orP [/eqP ->|].
+      case: closedness_after_linking; rewrite wfprog_defined_procedures //.
+      by rewrite /prog_main /find_procedure mem_domm; case: getm.
+    case/seq.mapP=> e /In_in e_in_t ->.
+    by case: (ub_behavior_has_well_defined_components Hbeh e_in_t).
   Qed.
 
   Lemma program_ub_preservation:

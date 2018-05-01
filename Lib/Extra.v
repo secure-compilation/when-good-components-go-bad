@@ -93,3 +93,9 @@ by apply: (IH _ _ _ _ e); congruence.
 Qed.
 
 End Lists.
+
+Lemma In_in (T : eqType) (x : T) (s : seq T) : x \in s <-> List.In x s.
+Proof.
+by elim: s=> //= x' s <-; rewrite inE; split => [/orP [/eqP ->|]|[->|->]];
+eauto; rewrite ?eqxx ?orbT.
+Qed.

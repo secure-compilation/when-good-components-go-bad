@@ -2,8 +2,23 @@ Require Import Common.Definitions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
+Require Import Lib.Extra.
 
-From mathcomp Require Import ssreflect.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype.
+
+Definition sum_of_event (e : event) :=
+  match e with
+  | ERet C v C' => inl (C, v, C')
+  | ECall C P v C' => inr (C, P, v, C')
+  end.
+
+Lemma sum_of_event_inj : injective sum_of_event.
+Proof.
+by case=> [????|???] [????|???] //= => [[-> -> -> ->]|[-> -> ->]].
+Qed.
+
+Definition event_eqMixin := InjEqMixin sum_of_event_inj.
+Canonical event_eqType := Eval hnf in EqType event event_eqMixin.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -46,7 +61,7 @@ Proof.
     assumption.
   - intros s0 t0 HstarR0 t3 Ht3.
     eapply starR_step.
-    + apply (IHHstarR2 _ _ HstarR0 _ (eq_refl (t0 ** t1))).
+    + apply (IHHstarR2 _ _ HstarR0 _ (erefl (t0 ** t1))).
     + apply Hstep2.
     + subst.
       rewrite Eapp_assoc.
@@ -75,7 +90,7 @@ Lemma star_E0_ind' ge (P : state -> state -> Prop) :
 Proof.
 move=> H0 H1 s1 s2; move e_t: E0 => t Hstar.
 elim: s1 t s2 / Hstar e_t => // s1 t1 s2 t2 s3 t Hstep Hstar IH ->.
-move=> /(@eq_sym _ _ _)/Eapp_E0_inv [??]; subst t1 t2.
+move=> /(@esym _ _ _)/Eapp_E0_inv [??]; subst t1 t2.
 by apply: H1; eauto.
 Qed.
 
