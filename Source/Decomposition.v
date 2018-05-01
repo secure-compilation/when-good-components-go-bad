@@ -788,9 +788,7 @@ Section Decomposition.
           case: ff Hnot_final Hfinal Hstuck=> [? Hnot_final /Hnot_final //|].
           by move=> ?????? Hstep _ _ _ _ /(_ _ _ Hstep).
         have {Hin_p} Hin_p : PS.is_program_component s_f' (prog_interface c).
-          (* Because of Hin_p, the last call was back into the program.  This
-             can probably be a standalone lemma. *)
-          admit.
+          by apply: PS.undef_in_program; eauto; case: linkability.
         (* Should prove a lemma saying that the partial semantics is stuck on
            states that are both final and in the program. *)
         admit.
@@ -799,8 +797,7 @@ Section Decomposition.
           by case/Hstuck: contra.
         by elim/star_E0_ind: ff Hfinal=> [? []|]; eauto.
       have {Hin_p} Hin_p : PS.is_program_component s_f' (prog_interface c).
-        (* Same as above *)
-        admit.
+        by apply: PS.undef_in_program; eauto; case: linkability.
       suffices [s contra] : exists s, Step (PS.sem p (prog_interface c)) s_f E0 s.
         by case/Hstuck: contra.
       elim/star_E0_ind: s_f' s_f / ff Hfinal Hin_p {Hstuck Hnot_final Hstar Hstar'}.
@@ -808,9 +805,8 @@ Section Decomposition.
       move=> s_a s_b s_c Hstep IH Hfinal Hin_p; apply: IH=> //.
         case: s_a / Hfinal Hstep Hin_p=> s_a s_b' /= Hstep' Hfinal Hstep Hin_p.
         by rewrite (PS.state_determinism_program Hin_p Hstep Hstep').
-      (* If the program takes a step without emitting any events, the following
-         state must also be in the program. *)
-      admit.
+      rewrite /PS.is_program_component /PS.is_context_component /turn_of /=.
+      by rewrite (PS.kstep_component Hstep).
     case: beh_n0=> {beh_imp} e [beh_imp ->].
     rewrite -behavior_app_assoc => Hbeh e_beh.
     move: Hbeh; rewrite -{}e_beh {beh}.
@@ -822,8 +818,7 @@ Section Decomposition.
         by case/Hstuck: contra.
       by elim/star_E0_ind: s_f s1 / Hstar Hstep2 {Hstuck Hnot_final Hstar1}; eauto.
     have {Hin_p} Hin_p : PS.is_program_component s1 (prog_interface c).
-      (* Same as above *)
-      admit.
+      by apply: PS.undef_in_program; eauto; case: linkability.
     elim/star_E0_ind: s1 s_f / Hstar Hstuck Hstep2 Hin_p {Hnot_final Hstar1}.
       by move=> s_f Hstuck /Hstuck.
     move=> s1 s1a s1b Hstep1 _ _ Hstep2 Hin_p.

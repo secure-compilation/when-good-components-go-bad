@@ -6,6 +6,7 @@ Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.CompCertExtensions.
 Require Import Common.Traces.
+Require Import Common.Blame.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Lib.Tactics.
@@ -43,6 +44,9 @@ Definition stack : Type := list (Component.id * value * cont).
 
 Definition state : Type := Component.id * stack * Memory.t * cont * expr.
 
+Definition component_of_state (s : state) : Component.id :=
+  let: (C, _, _, _, _) := s in C.
+
 Ltac unfold_state st :=
   let C := fresh "C" in
   let s := fresh "s" in
@@ -57,9 +61,7 @@ Ltac unfold_states :=
           end).
 
 Instance state_turn : HasTurn state := {
-  turn_of s iface :=
-    let '(C, _, _, _, _) := s in
-    C \in domm iface
+  turn_of s iface := component_of_state s \in domm iface
 }.
 
 Import MonadNotations.
@@ -188,6 +190,13 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     kstep G (C, (C', old_call_arg, k) :: s, mem, Kstop, E_val (Int v))
             [ERet C v C']
             (C', s, mem', k, E_val (Int v)).
+
+Lemma kstep_component G s t s' :
+  kstep G s t s' ->
+  component_of_state s' =
+  if t is e :: _ then who_is_in_control_after e
+  else component_of_state s.
+Proof. by case: s t s' /. Qed.
 
 (* functional kstep *)
 

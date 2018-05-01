@@ -1,3 +1,5 @@
+Require Import CompCert.Events.
+Require Import CompCert.Smallstep.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -5,8 +7,7 @@ Require Import Common.Memory.
 Require Import Common.Linking.
 Require Import Common.Maps.
 Require Import Common.CompCertExtensions.
-Require Import CompCert.Events.
-Require Import CompCert.Smallstep.
+Require Import Common.Blame.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
@@ -14,7 +15,7 @@ Require Import Lib.Extra.
 
 Require Import Coq.Program.Equality.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype seq.
 From mathcomp Require ssrnat.
 
 Canonical ssrnat.nat_eqType.
@@ -804,6 +805,23 @@ Inductive kstep (p: program) (ctx: Program.interface)
       partial_state ctx scs' sps' ->
       kstep p ctx (prepare_global_env p) sps t sps'.
 
+Lemma partial_state_component ctx scs sps :
+  partial_state ctx scs sps ->
+  component_of_state sps = CS.component_of_state scs.
+Proof. by case: scs sps /. Qed.
+
+Lemma kstep_component p ctx G s t s' :
+  kstep p ctx G s t s' ->
+  component_of_state s' =
+  if t is e :: _ then who_is_in_control_after e
+  else component_of_state s.
+Proof.
+case: G s t s' /.
+move=> p' sps t sps' scs scs' p'_ctx wf_p wf_p' Hlink Hstep.
+move=> /partial_state_component -> /partial_state_component ->.
+by rewrite (CS.kstep_component Hstep).
+Qed.
+
 (* partial semantics *)
 Section Semantics.
   Variable p: program.
@@ -834,6 +852,34 @@ Section Semantics.
         apply CS.singleton_traces in Hcs_step
       end; auto.
   Qed.
+
+  Lemma star_component s1 t s2 :
+    Star sem s1 t s2 ->
+    component_of_state s2 =
+    last (component_of_state s1) [seq who_is_in_control_after e | e <- t].
+  Proof.
+    elim: s1 t s2 / => //= s1 t1 s2 t2 s3 _ Hstep _ -> ->.
+    rewrite map_cat last_cat (kstep_component Hstep).
+    move/singleton_traces: Hstep.
+    by case: t1=> [|e [|e' t1]] //= *; omega.
+  Qed.
+
+  Lemma undef_in_program s1 t s2 :
+    initial_state p ctx s1 ->
+    Star sem s1 t s2 ->
+    undef_in t (prog_interface p) ->
+    is_program_component s2 ctx.
+  Proof.
+    move=> Hinitial Hstar.
+    rewrite /undef_in /last_comp /is_program_component /is_context_component.
+    rewrite /turn_of /= (star_component Hstar).
+    have -> : component_of_state s1 = Component.main.
+      case: s1 / Hinitial {Hstar} => ???????? Hpart.
+      rewrite (partial_state_component Hpart) => ->.
+      by rewrite /CS.initial_machine_state; case: prog_main.
+    by move/fdisjointP: disjoint_interfaces; apply.
+  Qed.
+
 End Semantics.
 
 Theorem initial_state_determinism:
