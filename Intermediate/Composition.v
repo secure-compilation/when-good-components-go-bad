@@ -1134,67 +1134,6 @@ Section Simulation.
     - apply match_final_states.
     - apply lockstep_simulation.
   Qed.
-
-  Corollary st_starN_simulation:
-    forall n ips1 t ips1',
-      st_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
-    forall ips2,
-      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
-    exists ips2',
-      st_starN c (prog_interface p) (prepare_global_env c) n ips2 t ips2' /\
-      PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
-  Proof.
-    intros n ips1 t ips1' Hst_starN.
-    apply st_starN_iff_st_starNR in Hst_starN.
-    induction Hst_starN
-      as [| n ips t1 ips' t2 ips'' t Hst_starNR IHHst_starN Hstep Hsame_turn Ht];
-      intros ips2 Hmergeable.
-    - eexists. split.
-      + constructor.
-      + assumption.
-    - specialize (IHHst_starN _ Hmergeable).
-      destruct IHHst_starN as [ips2' [IHHst_starN IHHmergeable]].
-      (* By case analysis on program and context components. *)
-      destruct (PS.is_program_component ips' (prog_interface c)) eqn:Hcomp_ips'.
-      + assert (Step (ProgramSem.sem p (prog_interface c)) ips' t2 ips'') as Hstep'.
-        {
-          simpl.
-          constructor.
-          - apply Hcomp_ips'.
-          - inversion Hsame_turn as [? ? Hpc_ips' Hpc_ips'' | ? ? Hcc_ips' Hcc_ips''];
-              subst.
-            * apply Hpc_ips''.
-            * unfold PS.is_program_component in Hcomp_ips'.
-              rewrite Hcc_ips' in Hcomp_ips'.
-              discriminate.
-          - apply Hstep.
-        }
-        destruct (lockstep_simulation Hstep' IHHmergeable)
-          as [ips2'' [Hstep'' Hmergeable'']].
-        apply st_starN_iff_st_starNR in IHHst_starN.
-        assert (PS.step c (prog_interface p) (prepare_global_env c) ips2' t2 ips2'')
-          as Hstep_ctx''.
-        {
-          inversion Hstep'' as [? ? ? ? ? Hstep_c]; subst.
-          apply Hstep_c.
-        }
-        assert (same_turn (prog_interface p) ips2' ips2'') as Hsame_step'.
-        {
-          inversion Hsame_turn as [? ? Hpc1 Hpc2 | ? ? Hcc1 Hcc2]; subst.
-          - apply (PS.mergeable_states_program_to_context IHHmergeable) in Hpc1.
-            apply (PS.mergeable_states_program_to_context Hmergeable'') in Hpc2.
-            exact (same_turn_context Hpc1 Hpc2).
-          - apply (PS.mergeable_states_context_to_program IHHmergeable) in Hcc1.
-            apply (PS.mergeable_states_context_to_program Hmergeable'') in Hcc2.
-            exact (same_turn_program Hcc1 Hcc2).
-        }
-        pose proof st_starNR_step IHHst_starN Hstep_ctx'' Hsame_step' Ht as Hst_starN'.
-        apply st_starN_iff_st_starNR in Hst_starN'.
-        exists ips2''. split.
-        * apply Hst_starN'.
-        * apply Hmergeable''.
-      + admit.
-  Admitted.
 End Simulation.
 End ProgCtxSim.
 
@@ -1257,7 +1196,24 @@ Section Simulation.
     - apply lockstep_simulation.
   Qed.
 
-(*
+End Simulation.
+End CtxProgSim.
+
+Module StarNSim.
+Section Simulation.
+  Variables p c: program.
+
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
+
+  Hypothesis prog_is_closed:
+    closed_program (program_link p c).
+
+  Hypothesis mergeable_interfaces:
+    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+
   Corollary st_starN_simulation:
     forall n ips1 t ips1',
       st_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
@@ -1266,10 +1222,62 @@ Section Simulation.
     exists ips2',
       st_starN c (prog_interface p) (prepare_global_env c) n ips2 t ips2' /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
+  Proof.
+    intros n ips1 t ips1' Hst_starN.
+    apply st_starN_iff_st_starNR in Hst_starN.
+    induction Hst_starN
+      as [| n ips t1 ips' t2 ips'' t Hst_starNR IHHst_starN Hstep Hsame_turn Ht];
+      intros ips2 Hmergeable.
+    - eexists. split.
+      + constructor.
+      + assumption.
+    - specialize (IHHst_starN _ Hmergeable).
+      destruct IHHst_starN as [ips2' [IHHst_starN IHHmergeable]].
+      (* By case analysis on program and context components. *)
+      destruct (PS.is_program_component ips' (prog_interface c)) eqn:Hcomp_ips'.
+      + assert (Step (ProgramSem.sem p (prog_interface c)) ips' t2 ips'') as Hstep'.
+        {
+          simpl.
+          constructor.
+          - apply Hcomp_ips'.
+          - inversion Hsame_turn as [? ? Hpc_ips' Hpc_ips'' | ? ? Hcc_ips' Hcc_ips''];
+              subst.
+            * apply Hpc_ips''.
+            * unfold PS.is_program_component in Hcomp_ips'.
+              rewrite Hcc_ips' in Hcomp_ips'.
+              discriminate.
+          - apply Hstep.
+        }
+        destruct (ProgCtxSim.lockstep_simulation
+                    wf1 wf2 linkability prog_is_closed mergeable_interfaces
+                    Hstep' IHHmergeable)
+          as [ips2'' [Hstep'' Hmergeable'']].
+        apply st_starN_iff_st_starNR in IHHst_starN.
+        assert (PS.step c (prog_interface p) (prepare_global_env c) ips2' t2 ips2'')
+          as Hstep_ctx''.
+        {
+          inversion Hstep'' as [? ? ? ? ? Hstep_c]; subst.
+          apply Hstep_c.
+        }
+        assert (same_turn (prog_interface p) ips2' ips2'') as Hsame_step'.
+        {
+          inversion Hsame_turn as [? ? Hpc1 Hpc2 | ? ? Hcc1 Hcc2]; subst.
+          - apply (PS.mergeable_states_program_to_context IHHmergeable) in Hpc1.
+            apply (PS.mergeable_states_program_to_context Hmergeable'') in Hpc2.
+            exact (same_turn_context Hpc1 Hpc2).
+          - apply (PS.mergeable_states_context_to_program IHHmergeable) in Hcc1.
+            apply (PS.mergeable_states_context_to_program Hmergeable'') in Hcc2.
+            exact (same_turn_program Hcc1 Hcc2).
+        }
+        pose proof st_starNR_step IHHst_starN Hstep_ctx'' Hsame_step' Ht as Hst_starN'.
+        apply st_starN_iff_st_starNR in Hst_starN'.
+        exists ips2''. split.
+        * apply Hst_starN'.
+        * apply Hmergeable''.
+      + admit.
   Admitted.
-*)
 End Simulation.
-End CtxProgSim.
+End StarNSim.
 
 (*
   Three-way Simulation
