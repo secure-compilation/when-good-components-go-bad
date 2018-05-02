@@ -1199,7 +1199,7 @@ Section Simulation.
 End Simulation.
 End CtxProgSim.
 
-Module StarNSim.
+Module StStarNSim.
 Section Simulation.
   Variables p c: program.
 
@@ -1214,6 +1214,8 @@ Section Simulation.
   Hypothesis mergeable_interfaces:
     PS.mergeable_interfaces (prog_interface p) (prog_interface c).
 
+  (* RB: TODO: Refactor lemmas (and proof structure) common to both halves of
+     the inductive step. *)
   Corollary st_starN_simulation:
     forall n ips1 t ips1',
       st_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
@@ -1274,10 +1276,50 @@ Section Simulation.
         exists ips2''. split.
         * apply Hst_starN'.
         * apply Hmergeable''.
-      + admit.
-  Admitted.
+      + unfold PS.is_program_component in Hcomp_ips'.
+        apply negb_false_iff in Hcomp_ips'.
+        assert (Step (ContextSem.sem p (prog_interface c)) ips' t2 ips'') as Hstep'.
+        {
+          simpl.
+          constructor.
+          - apply Hcomp_ips'.
+          - inversion Hsame_turn as [? ? Hpc_ips' Hpc_ips'' | ? ? Hcc_ips' Hcc_ips''];
+              subst.
+            * unfold PS.is_program_component in Hpc_ips'.
+              rewrite Hcomp_ips' in Hpc_ips'.
+              discriminate.
+            * apply Hcc_ips''.
+          - apply Hstep.
+        }
+        destruct (CtxProgSim.lockstep_simulation
+                    wf1 wf2 linkability prog_is_closed mergeable_interfaces
+                    Hstep' IHHmergeable)
+          as [ips2'' [Hstep'' Hmergeable'']].
+        apply st_starN_iff_st_starNR in IHHst_starN.
+        assert (PS.step c (prog_interface p) (prepare_global_env c) ips2' t2 ips2'')
+          as Hstep_ctx''.
+        {
+          inversion Hstep'' as [? ? ? ? ? Hstep_c]; subst.
+          apply Hstep_c.
+        }
+        assert (same_turn (prog_interface p) ips2' ips2'') as Hsame_step'.
+        {
+          inversion Hsame_turn as [? ? Hpc1 Hpc2 | ? ? Hcc1 Hcc2]; subst.
+          - apply (PS.mergeable_states_program_to_context IHHmergeable) in Hpc1.
+            apply (PS.mergeable_states_program_to_context Hmergeable'') in Hpc2.
+            exact (same_turn_context Hpc1 Hpc2).
+          - apply (PS.mergeable_states_context_to_program IHHmergeable) in Hcc1.
+            apply (PS.mergeable_states_context_to_program Hmergeable'') in Hcc2.
+            exact (same_turn_program Hcc1 Hcc2).
+        }
+        pose proof st_starNR_step IHHst_starN Hstep_ctx'' Hsame_step' Ht as Hst_starN'.
+        apply st_starN_iff_st_starNR in Hst_starN'.
+        exists ips2''. split.
+        * apply Hst_starN'.
+        * apply Hmergeable''.
+  Qed.
 End Simulation.
-End StarNSim.
+End StStarNSim.
 
 (*
   Three-way Simulation
