@@ -1167,14 +1167,57 @@ Section Simulation.
     exists ips2,
       ProgramSem.initial_state (prog_interface p) ips2 /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2.
-  Admitted.
+  Proof.
+    intros ips1 Hini.
+    inversion Hini as [ics ? Hcomes_from Hpartial1 Hcc1]; subst.
+    inversion Hcomes_from as [p' [s' [t' [Hini' Hstar']]]].
+    inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? _]; subst;
+      PS.simplify_turn;
+      first destruct (PS.domm_partition_in_notin
+                        (PS.mergeable_interfaces_sym mergeable_interfaces)
+                        Hcc1 Hpc1).
+    exists
+      (PS.PC
+         (PS.to_partial_stack gps (domm (prog_interface p)),
+          filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem,
+          regs, pc)).
+    split.
+    - econstructor.
+      + eassumption.
+      + constructor.
+        * PS.simplify_turn. eapply PS.domm_partition_notin; eassumption.
+        * reflexivity.
+        * reflexivity.
+      + PS.simplify_turn. eapply PS.domm_partition_notin; eassumption.
+    - econstructor.
+      + eapply PS.mergeable_interfaces_sym; eassumption.
+      + eassumption.
+      + assumption.
+      + constructor.
+        * PS.simplify_turn. eapply PS.domm_partition_notin; eassumption.
+        * reflexivity.
+        * reflexivity.
+  Qed.
 
   Lemma match_final_states:
     forall ips1 ips2,
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
       ContextSem.final_state (prog_interface c) ips1 ->
       ProgramSem.final_state (prog_interface p) ips2.
-  Admitted.
+  Proof.
+    intros ips1 ips2 Hmerge Hfinal1.
+    constructor.
+    inversion Hfinal1 as [? Hcc]; subst.
+    inversion Hmerge
+      as [ics ? ? Hmerge_ifaces Hini Hpartial1 Hpartial2]; subst.
+    inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+      inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst;
+      PS.simplify_turn.
+    - eapply PS.domm_partition_notin; eassumption.
+    - destruct (PS.domm_partition_in_both Hmerge_ifaces Hcc Hcc2).
+    - eapply PS.domm_partition_notin; eassumption.
+    - destruct (PS.domm_partition_in_both Hmerge_ifaces Hcc Hcc2).
+  Qed.
 
   Lemma lockstep_simulation:
     forall ips1 t ips1',
