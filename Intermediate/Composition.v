@@ -1687,7 +1687,7 @@ Section PartialComposition.
         assert (prog_is_closed' := prog_is_closed).
         rewrite (closed_program_link_sym wf1 wf2 linkability main_linkability)
           in prog_is_closed'.
-        destruct (ProgCtxSim.st_starN_simulation wf2 wf1
+        destruct (StStarNSim.st_starN_simulation wf2 wf1
                    (linkable_sym linkability) prog_is_closed'
                    Hmergeable_ifaces Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
