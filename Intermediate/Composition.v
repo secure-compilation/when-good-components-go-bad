@@ -1199,6 +1199,79 @@ End Simulation.
 End ProgCtxSim.
 
 (*
+  Context-Program Simulation
+
+  The symmetric of ProgCtxSim. Its structure should be fully equivalent
+  and permit complementary reasoning from the side of the context.
+
+  RB: TODO: Refactoring vis-a-vis ProgCtxSim and instantiation of both.
+*)
+
+Module CtxProgSim.
+Section Simulation.
+  Variables p c: program.
+
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
+
+  Hypothesis prog_is_closed:
+    closed_program (program_link p c).
+
+  Hypothesis mergeable_interfaces:
+    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Lemma match_initial_states:
+    forall ips1,
+      ContextSem.initial_state (prog_interface c) ips1 ->
+    exists ips2,
+      ProgramSem.initial_state (prog_interface p) ips2 /\
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2.
+  Admitted.
+
+  Lemma match_final_states:
+    forall ips1 ips2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+      ContextSem.final_state (prog_interface c) ips1 ->
+      ProgramSem.final_state (prog_interface p) ips2.
+  Admitted.
+
+  Lemma lockstep_simulation:
+    forall ips1 t ips1',
+      Step (ContextSem.sem p (prog_interface c)) ips1 t ips1' ->
+    forall ips2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+    exists ips2',
+      Step (ProgramSem.sem c (prog_interface p)) ips2 t ips2' /\
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
+  Admitted.
+
+  Theorem program_simulates_context:
+    forward_simulation (ContextSem.sem p (prog_interface c))
+                       (ProgramSem.sem c (prog_interface p)).
+  Proof.
+    eapply forward_simulation_step.
+    - apply match_initial_states.
+    - apply match_final_states.
+    - apply lockstep_simulation.
+  Qed.
+
+(*
+  Corollary st_starN_simulation:
+    forall n ips1 t ips1',
+      st_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
+    forall ips2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+    exists ips2',
+      st_starN c (prog_interface p) (prepare_global_env c) n ips2 t ips2' /\
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
+  Admitted.
+*)
+End Simulation.
+End CtxProgSim.
+
+(*
   Three-way Simulation
 
   The main intuition is that whenever two mergeable states make the same step, then
