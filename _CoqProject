@@ -2,6 +2,7 @@
 -R . RobustImp
 
 RSC_DC.v
+RSC_DC_4_compcert.v
 
 Common/Definitions.v
 Common/Values.v
