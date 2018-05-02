@@ -532,6 +532,36 @@ Proof.
   apply alloc_static_buffers_after_linking; auto.
 Qed.
 
+Definition prepare_procedures_memory (p: program) (mem: Memory.t) : Memory.t :=
+  let '(mem, _, _) := prepare_procedures p mem in
+  mem.
+
+Theorem prepare_procedures_memory_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    prepare_procedures_memory (program_link p c)
+                              (prepare_initial_memory (program_link p c)) =
+    unionm (prepare_procedures_memory p (prepare_initial_memory p))
+           (prepare_procedures_memory c (prepare_initial_memory c)).
+Admitted.
+
+Definition prepare_procedures_entrypoints (p: program) (mem: Memory.t) : EntryPoint.t :=
+  let '(_, _, entrypoints) := prepare_procedures p mem in
+  entrypoints.
+
+Theorem prepare_procedures_entrypoints_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    prepare_procedures_entrypoints (program_link p c)
+                                   (prepare_initial_memory (program_link p c)) =
+    unionm (prepare_procedures_entrypoints p (prepare_initial_memory p))
+           (prepare_procedures_entrypoints c (prepare_initial_memory c)).
+Admitted.
+
 Lemma link_sym:
   forall p c,
     well_formed_program p ->
