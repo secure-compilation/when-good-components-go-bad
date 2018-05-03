@@ -45,6 +45,14 @@ Lemma genv_procedures_program_link_left_notin :
     (genv_procedures (prepare_global_env p)) Cid.
 Admitted. (* Grade 2, check. Possibly add linkability conditions, etc. *)
 
+Lemma genv_procedures_program_link_left_in :
+  forall {p Cid},
+    Cid \in domm (prog_interface p) ->
+  forall {c},
+    (genv_procedures (prepare_global_env (program_link p c))) Cid =
+    (genv_procedures (prepare_global_env p)) Cid.
+Admitted. (* Grade 2, check. Possibly add linkability conditions, etc. *)
+
 Lemma genv_entrypoints_program_link_left :
   forall {C P p c b},
     EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) = b ->
