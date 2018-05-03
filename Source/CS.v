@@ -104,16 +104,12 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_Seq2 : forall C s mem k v e2,
     kstep G (C, s, mem, Kseq e2 k, E_val v) E0
             (C, s, mem, k, e2)
-| KS_If : forall C s mem k e1 e2 e3,
+| KS_If1 : forall C s mem k e1 e2 e3,
     kstep G (C, s, mem, k, E_if e1 e2 e3) E0
             (C, s, mem, Kif e2 e3 k, e1)
-| KS_IfTrue : forall C s mem k e2 e3 i,
-    (i <> 0) % Z ->
+| KS_If2 : forall C s mem k e2 e3 i,
     kstep G (C, s, mem, Kif e2 e3 k, E_val (Int i)) E0
-            (C, s, mem, k, e2)
-| KS_IfFalse : forall C s mem k e2 e3,
-    kstep G (C, s, mem, Kif e2 e3 k, E_val (Int 0)) E0
-            (C, s, mem, k, e3)
+            (C, s, mem, k, if i != 0%Z then e2 else e3)
 | KS_LocalBuffer : forall C s mem k b,
     getm (genv_buffers G) C = Some b ->
     kstep G (C, s, mem, k, E_local) E0
@@ -245,8 +241,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       ret (E0, (C, s, mem, k', e2))
     | Kif e2 e3 k' =>
       match v with
-      | Int 0 => ret (E0, (C, s, mem, k', e3))
-      | Int i => ret (E0, (C, s, mem, k', e2))
+      | Int z => ret (E0, (C, s, mem, k', if z != 0%Z then e2 else e3))
       | _ => None
       end
     | Kalloc k' =>
@@ -349,8 +344,6 @@ Proof.
          repeat simplify_option;
          reflexivity).
   (* if expressions *)
-  - destruct i eqn:Hi;
-      try contradiction; auto.
   - assert (Hsize: (size >? 0) % Z = true). {
       destruct size; try inversion H; auto.
     }
@@ -399,11 +392,7 @@ Proof.
     + econstructor; eauto.
     + econstructor; eauto.
     + econstructor; eauto.
-    + econstructor; eauto.
-    + econstructor; eauto.
-      * pose proof (Zgt_pos_0 p). omega.
-    + econstructor; eauto.
-      * pose proof (Zlt_neg_0 p). omega.
+    + destruct z; econstructor; eauto; discriminate.
     + econstructor; eauto.
       * apply Zgt_is_gt_bool. assumption.
     + by econstructor; eauto; apply/eqP.

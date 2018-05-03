@@ -133,14 +133,15 @@ Section Definability.
       eexists; split; eauto.
       repeat take_step; trivial; try eassumption.
       repeat take_step; trivial; try eassumption.
-      { rewrite Z.eqb_refl. discriminate. }
+      rewrite Z.eqb_refl -[_ != _]/(true) /=.
+      repeat take_step; trivial; try eassumption.
       { unfold Memory.store. simpl. rewrite EmemC. simpl. now rewrite Z.add_1_r EmemC'. }
       apply star_refl.
     - unfold switch_clause.
       repeat take_step; trivial; try eassumption.
       eapply (@star_step _ _ _ _ _ E0 _ E0 _ E0); trivial; simpl.
       { rewrite <- Z.eqb_neq in n_n'. rewrite n_n'. simpl.
-        eapply CS.KS_IfFalse. }
+        eapply CS.KS_If2. }
       apply star_refl.
   Qed.
 
