@@ -46,7 +46,7 @@ Section Decomposition.
     CS.unfold_states.
     (* case analysis on who has control, then build the partial state *)
     destruct (C \in domm (prog_interface c)) eqn:Htarget;
-      exists (PS.partialize (prog_interface c) (C, s, mem, k, e));
+      exists (PS.partialize (prog_interface c) [CState C, s, mem, k, e]);
       simpl; rewrite Htarget.
     (* context has control *)
     - split.

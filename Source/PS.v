@@ -73,7 +73,7 @@ Ltac simplify_turn :=
 (* stack partialization *)
 
 Definition to_partial_frame (ctx: {fset Component.id}) frame : Component.id * option (value * CS.cont) :=
-  let '(C, v, k) := frame in
+  let: CS.Frame C v k := frame in
   if C \in ctx then
     (C, None)
   else
@@ -84,7 +84,7 @@ Fixpoint drop_last_frames_if_needed
   : CS.stack :=
   match s with
   | [] => []
-  | (C, v, k) :: s' =>
+  | CS.Frame C v k :: s' =>
     if (C \in ctx) && (C == Cincontrol) then
       drop_last_frames_if_needed ctx s' Cincontrol
     else
@@ -95,22 +95,22 @@ Fixpoint to_partial_stack_helper
          (ctx: {fset Component.id}) (s: CS.stack) last_frame
   : PS.stack :=
   match s with
-  | [] => [to_partial_frame ctx last_frame]
-  | (C, v, k) :: s' =>
-    let '(C', _, _) := last_frame in
+  | [] => [:: to_partial_frame ctx last_frame]
+  | CS.Frame C v k :: s' =>
+    let: CS.Frame C' _ _ := last_frame in
     if (C \in ctx) && (C == C') then
       to_partial_stack_helper ctx s' last_frame
     else
       to_partial_frame ctx last_frame ::
-      to_partial_stack_helper ctx s' (C, v, k)
+      to_partial_stack_helper ctx s' (CS.Frame C v k)
   end.
 
 Lemma to_partial_stack_helper_nonempty:
   forall ctx gps frame,
     to_partial_stack_helper ctx gps frame <> [].
 Proof.
-  move=> ctx gps [[C v] k].
-  elim: gps => [|[[C' v'] k'] gps' IH] //=.
+  move=> ctx gps [C v k].
+  elim: gps => [|[C' v' k'] gps' IH] //=.
   by case: ifP.
 Qed.
 
@@ -123,43 +123,50 @@ Definition to_partial_stack
   end.
 
 Example to_partial_stack_empty_context:
-  let in_s := [(1, Int 1, Kstop);
-               (0, Int 0, Kstop)] in
+  let in_s := [CS.Frame 1 (Int 1) Kstop;
+               CS.Frame 0 (Int 0) Kstop] in
   let out_s := [(1, Some (Int 1, Kstop));
                 (0, Some (Int 0, Kstop))] in
   to_partial_stack in_s fset0 1 = out_s.
 Proof. by []. Qed.
 
 Example to_partial_stack_context_internal_call_at_the_end:
-  let in_s := [(1, Int 2, Kstop); (1, Int 1, Kstop);
-               (0, Int 0, Kstop)] in
+  let in_s := [CS.Frame 1 (Int 2) Kstop;
+               CS.Frame 1 (Int 1) Kstop;
+               CS.Frame 0 (Int 0) Kstop] in
   let out_s := [(1, None); (0, Some (Int 0, Kstop))] in
   to_partial_stack in_s (fset1 1) 2 = out_s.
 Proof. by []. Qed.
 
 Example to_partial_stack_context_internal_call_at_the_beginning:
-  let in_s := [(1, Int 2, Kstop);
-               (0, Int 1, Kstop); (0, Int 0, Kstop)] in
+  let in_s := [CS.Frame 1 (Int 2) Kstop;
+               CS.Frame 0 (Int 1) Kstop;
+               CS.Frame 0 (Int 0) Kstop] in
   let out_s := [(1, Some (Int 2, Kstop));
                 (0, None)] in
   to_partial_stack in_s (fset1 0) 1 = out_s.
 Proof. by []. Qed.
 
 Example to_partial_stack_context_internal_call_in_the_middle:
-  let in_s := [(2, Int 4, Kstop);
-               (1, Int 3, Kstop); (1, Int 2, Kstop); (1, Int 1, Kstop);
-               (0, Int 0, Kstop)] in
+  let in_s := [CS.Frame 2 (Int 4) Kstop;
+               CS.Frame 1 (Int 3) Kstop;
+               CS.Frame 1 (Int 2) Kstop;
+               CS.Frame 1 (Int 1) Kstop;
+               CS.Frame 0 (Int 0) Kstop] in
   let out_s := [(2, Some (Int 4, Kstop));
                 (1, None); (0, Some (Int 0, Kstop))] in
   to_partial_stack in_s (fset1 1) 1 = out_s.
 Proof.  by []. Qed.
 
 Example to_partial_stack_program_internal_calls:
-  let in_s := [(3, Int 7, Kstop); (3, Int 6, Kstop);
-               (1, Int 5, Kstop);
-               (2, Int 4, Kstop); (2, Int 3, Kstop);
-               (1, Int 2, Kstop);
-               (0, Int 1, Kstop); (0, Int 0, Kstop)] in
+  let in_s := [CS.Frame 3 (Int 7) Kstop;
+               CS.Frame 3 (Int 6) Kstop;
+               CS.Frame 1 (Int 5) Kstop;
+               CS.Frame 2 (Int 4) Kstop;
+               CS.Frame 2 (Int 3) Kstop;
+               CS.Frame 1 (Int 2) Kstop;
+               CS.Frame 0 (Int 1) Kstop;
+               CS.Frame 0 (Int 0) Kstop] in
   let out_s := [(3, Some (Int 7, Kstop)); (3, Some (Int 6, Kstop));
                 (1, None);
                 (2, Some (Int 4, Kstop)); (2, Some (Int 3, Kstop));
@@ -171,11 +178,14 @@ Proof.
 Qed.
 
 Example to_partial_stack_context_internal_calls:
-  let in_s := [(0, Int 7, Kstop); (0, Int 6, Kstop);
-               (2, Int 5, Kstop);
-               (0, Int 4, Kstop); (0, Int 3, Kstop);
-               (1, Int 2, Kstop);
-               (0, Int 1, Kstop); (0, Int 0, Kstop)] in
+  let in_s := [CS.Frame 0 (Int 7) Kstop;
+               CS.Frame 0 (Int 6) Kstop;
+               CS.Frame 2 (Int 5) Kstop;
+               CS.Frame 0 (Int 4) Kstop;
+               CS.Frame 0 (Int 3) Kstop;
+               CS.Frame 1 (Int 2) Kstop;
+               CS.Frame 0 (Int 1) Kstop;
+               CS.Frame 0 (Int 0) Kstop] in
   let out_s := [(2, Some (Int 5, Kstop));
                 (0, None);
                 (1, Some (Int 2, Kstop));
@@ -191,17 +201,17 @@ Lemma partial_stack_push_by_program:
     to_partial_stack gps1 ctx C_incontrol =
     to_partial_stack gps2 ctx C_incontrol ->
   forall v k C_incontrol',
-    to_partial_stack ((C_incontrol, v, k) :: gps1) ctx C_incontrol' =
-    to_partial_stack ((C_incontrol, v, k) :: gps2) ctx C_incontrol'.
+    to_partial_stack (CS.Frame C_incontrol v k :: gps1) ctx C_incontrol' =
+    to_partial_stack (CS.Frame C_incontrol v k :: gps2) ctx C_incontrol'.
 Proof.
   rewrite /to_partial_stack /=.
   move=> ctx gps1 gps2 C_incontrol Hprog Hsame_stacks.
   move=> v k C_incontrol'; rewrite (negbTE Hprog) /=.
-  elim: gps1 gps2 Hsame_stacks=> [|[[C1 v1] k1] gps1 IH] /=.
-    case=> [|[[C' v'] k'] gps2']; rewrite /= (negbTE Hprog) //.
+  elim: gps1 gps2 Hsame_stacks=> [|[C1 v1 k1] gps1 IH] /=.
+    case=> [|[C' v' k'] gps2']; rewrite /= (negbTE Hprog) //.
     case: ifP => [|_ <- //] /andP [HC'_in_ctx /eqP contra].
     by move: Hprog; rewrite -contra HC'_in_ctx.
-  case=> [|[[C2 v2] k2] gps2]; rewrite /= (negbTE Hprog).
+  case=> [|[C2 v2 k2] gps2]; rewrite /= (negbTE Hprog).
     case: ifP; last by move=> _ ->.
     case/andP => [HC'_in_ctx /eqP contra].
     by move: Hprog; rewrite -contra HC'_in_ctx.
@@ -217,12 +227,12 @@ Lemma partial_stack_ignores_change_by_context_with_control:
   forall ctx gps C_incontrol,
     C_incontrol \in ctx ->
   forall v k,
-    to_partial_stack ((C_incontrol, v, k) :: gps) ctx C_incontrol =
+    to_partial_stack (CS.Frame C_incontrol v k :: gps) ctx C_incontrol =
     to_partial_stack gps ctx C_incontrol.
 Proof.
   intros ctx gps C_incontrol Hin_ctx v k.
   unfold to_partial_stack.
-  destruct gps as [|[[C' v'] k'] gps'];
+  destruct gps as [|[C' v' k'] gps'];
   by rewrite /= Hin_ctx /= eqxx.
 Qed.
 
@@ -230,7 +240,7 @@ Lemma partial_stack_outside_context_preserves_top :
   forall C C' v k s ctx,
     C' \in ctx = false ->
   exists frame rest,
-    to_partial_stack ((C', v, k) :: s) ctx C = (C', frame) :: rest.
+    to_partial_stack (CS.Frame C' v k :: s) ctx C = (C', frame) :: rest.
 Proof.
   intros Cid' Cid val cont st ctx Hctx.
   induction st as [| hd st IHst].
@@ -246,7 +256,7 @@ Proof.
     unfold to_partial_stack, drop_last_frames_if_needed.
     rewrite Hctx. simpl.
     rewrite IHst. simpl.
-    destruct hd as [[C v0] k1].
+    destruct hd as [C v0 k1].
     destruct (C \in ctx) eqn:Hcase1; rewrite Hcase1;
       destruct (C == Cid); simpl;
         try (try rewrite Hctx; eexists; eexists; reflexivity).
@@ -256,7 +266,7 @@ Lemma partial_stack_outside_control_preserves_top :
   forall C C' v k s ctx,
     C <> C' ->
   exists frame rest,
-    to_partial_stack ((C', v, k) :: s) ctx C = (C', frame) :: rest.
+    to_partial_stack (CS.Frame C' v k :: s) ctx C = (C', frame) :: rest.
 Proof.
   intros Cid' Cid val cont st ctx Hneq'.
   assert (Cid == Cid' = false) as Hneq
@@ -274,7 +284,7 @@ Proof.
     unfold to_partial_stack, drop_last_frames_if_needed.
     rewrite Hneq. rewrite andb_comm. simpl.
     rewrite IHst. simpl.
-    destruct hd as [[C v0] k1].
+    destruct hd as [C v0 k1].
     destruct (C \in ctx) eqn:Hcase1; rewrite Hcase1;
       destruct (C == Cid) eqn:Hcase2; simpl;
       (try (destruct (Cid \in ctx) eqn:Hcase3; rewrite Hcase3); eauto).
@@ -284,8 +294,8 @@ Lemma partial_stacks_unequal_top_internal :
   forall C1 C2 v1 v2 k1 k2 s1 s2 ctx,
     C1 \notin ctx ->
     C1 <> C2 ->
-    to_partial_stack ((C1, v1, k1) :: s1) ctx C1 <>
-    to_partial_stack ((C2, v2, k2) :: s2) ctx C1.
+    to_partial_stack (CS.Frame C1 v1 k1 :: s1) ctx C1 <>
+    to_partial_stack (CS.Frame C2 v2 k2 :: s2) ctx C1.
 Proof.
   intros C1 C2 v1 v2 k1 k2 s1 s2 ctx Hctx Hneq Hstack.
   assert (C1 \in ctx = false) as Hctx' by (by destruct (C1 \in ctx)).
@@ -305,8 +315,8 @@ Lemma partial_stacks_unequal_top_external :
     C1 \notin ctx ->
     C2 \in ctx ->
     C <> C2 ->
-    to_partial_stack ((C1, v1, k1) :: s1) ctx C <>
-    to_partial_stack ((C2, v2, k2) :: s2) ctx C.
+    to_partial_stack (CS.Frame C1 v1 k1 :: s1) ctx C <>
+    to_partial_stack (CS.Frame C2 v2 k2 :: s2) ctx C.
 Proof.
   intros C C1 C2 v1 v2 k1 k2 s1 s2 ctx Hnotin Hin Hneq Hstack.
   assert (C1 \in ctx = false) as Hnotin' by (by destruct (C1 \in ctx)).
@@ -326,8 +336,8 @@ Lemma partial_stacks_equal_top_external_context :
   forall C C1 C2 v1 v2 k1 k2 s1 s2 ctx,
     C1 \notin ctx ->
     C2 \notin ctx ->
-    to_partial_stack ((C1, v1, k1) :: s1) ctx C =
-    to_partial_stack ((C2, v2, k2) :: s2) ctx C ->
+    to_partial_stack (CS.Frame C1 v1 k1 :: s1) ctx C =
+    to_partial_stack (CS.Frame C2 v2 k2 :: s2) ctx C ->
     C1 = C2.
 Proof.
   intros C C1 C2 v1 v2 k1 k2 s1 s2 ctx Hnotin1 Hnotin2 Hstack.
@@ -348,8 +358,8 @@ Lemma partial_stacks_equal_top_external_control :
   forall C C1 C2 v1 v2 k1 k2 s1 s2 ctx,
     C <> C1 ->
     C <> C2 ->
-    to_partial_stack ((C1, v1, k1) :: s1) ctx C =
-    to_partial_stack ((C2, v2, k2) :: s2) ctx C ->
+    to_partial_stack (CS.Frame C1 v1 k1 :: s1) ctx C =
+    to_partial_stack (CS.Frame C2 v2 k2 :: s2) ctx C ->
     C1 = C2.
 Proof.
   intros C C1 C2 v1 v2 k1 k2 s1 s2 ctx Hneq1 Hneq2 Hstack.
@@ -370,16 +380,16 @@ Lemma partial_stack_push_by_context:
     C \in ctx ->
     to_partial_stack gps1 ctx C =
     to_partial_stack gps2 ctx C ->
-    to_partial_stack ((C, v1, k1) :: gps1) ctx C' =
-    to_partial_stack ((C, v2, k2) :: gps2) ctx C'.
+    to_partial_stack (CS.Frame C v1 k1 :: gps1) ctx C' =
+    to_partial_stack (CS.Frame C v2 k2 :: gps2) ctx C'.
 Proof.
   intros ctx C C' v1 k1 v2 k2 gps1 gps2.
   move=> /eqP Hdiff Hctx Hstacks.
   unfold to_partial_stack. simpl.
   rewrite Hctx /= (negbTE Hdiff).
   unfold to_partial_stack in Hstacks.
-  induction gps1 as [|[[C_a v_a] k_a] gps1']; simpl in *.
-  - induction gps2 as [|[[C_b v_b] k_b] gps2']; simpl in *.
+  induction gps1 as [|[C_a v_a k_a] gps1']; simpl in *.
+  - induction gps2 as [|[C_b v_b k_b] gps2']; simpl in *.
     + rewrite Hctx. reflexivity.
     + rewrite Hctx.
       rewrite Hctx in IHgps2'.
@@ -398,7 +408,7 @@ Proof.
         eapply to_partial_stack_helper_nonempty.
         eauto.
   - rewrite Hctx.
-    induction gps2 as [|[[C_b v_b] k_b] gps2']; simpl in *.
+    induction gps2 as [|[C_b v_b k_b] gps2']; simpl in *.
     * destruct (C_a \in ctx) eqn:HC_a_in_ctx.
       ** rewrite HC_a_in_ctx.
          rewrite HC_a_in_ctx in Hstacks. simpl in *.
@@ -466,8 +476,8 @@ Qed.
 Lemma partial_stack_pop_to_program:
   forall ctx C C' old_call_arg1 k1 old_call_arg2 k2 gps1 gps2,
     C' \notin ctx ->
-    to_partial_stack ((C', old_call_arg1, k1) :: gps1) ctx C =
-    to_partial_stack ((C', old_call_arg2, k2) :: gps2) ctx C ->
+    to_partial_stack (CS.Frame C' old_call_arg1 k1 :: gps1) ctx C =
+    to_partial_stack (CS.Frame C' old_call_arg2 k2 :: gps2) ctx C ->
     old_call_arg1 = old_call_arg2 /\ k1 = k2 /\
     to_partial_stack gps1 ctx C' = to_partial_stack gps2 ctx C'.
 Proof.
@@ -478,8 +488,8 @@ Proof.
   destruct (C' \in ctx) eqn:Hin_ctx_aux;
     try discriminate.
   rewrite Hin_ctx_aux in Hstack. simpl in Hstack.
-  destruct gps1 as [|[[C_a v_a] k_a] gps1'].
-  - destruct gps2 as [|[[C_b v_b] k_b] gps2'].
+  destruct gps1 as [|[C_a v_a k_a] gps1'].
+  - destruct gps2 as [|[C_b v_b k_b] gps2'].
     + simpl in *.
       rewrite Hin_ctx_aux in Hstack.
       inversion Hstack. subst.
@@ -504,7 +514,7 @@ Proof.
         symmetry in H2.
         eapply to_partial_stack_helper_nonempty.
         eauto.
-  - destruct gps2 as [|[[C_b v_b] k_b] gps2'].
+  - destruct gps2 as [|[C_b v_b k_b] gps2'].
     + simpl in *.
       rewrite Hin_ctx_aux in Hstack.
       destruct (C_a \in ctx) eqn:HC_a_in_ctx;
@@ -600,16 +610,16 @@ Lemma partial_stack_pop_to_context:
   forall ctx C C' v1 k1 v2 k2 gps1 gps2,
     C <> C' ->
     C' \in ctx ->
-    to_partial_stack ((C', v1, k1) :: gps1) ctx C =
-    to_partial_stack ((C', v2, k2) :: gps2) ctx C ->
+    to_partial_stack (CS.Frame C' v1 k1 :: gps1) ctx C =
+    to_partial_stack (CS.Frame C' v2 k2 :: gps2) ctx C ->
     to_partial_stack gps1 ctx C' = to_partial_stack gps2 ctx C'.
 Proof.
   intros ctx C C' v1 k1 v2 k2 gps1 gps2.
   move=> /eqP Hdiff Hctx Hstacks.
   unfold to_partial_stack in Hstacks. simpl in *.
   rewrite eq_sym (negbTE Hdiff) Hctx /= in Hstacks.
-  induction gps1 as [|[[C_a v_a] k_a] gps1']; simpl in *.
-  - induction gps2 as [|[[C_b v_b] k_b] gps2']; simpl in *.
+  induction gps1 as [|[C_a v_a k_a] gps1']; simpl in *.
+  - induction gps2 as [|[C_b v_b k_b] gps2']; simpl in *.
     + reflexivity.
     + rewrite Hctx in Hstacks.
       rewrite Hctx in IHgps2'.
@@ -635,7 +645,7 @@ Proof.
         symmetry in H0.
         eapply to_partial_stack_helper_nonempty in H0.
         auto.
-  - induction gps2 as [|[[C_b v_b] k_b] gps2']; simpl in *.
+  - induction gps2 as [|[C_b v_b k_b] gps2']; simpl in *.
     + rewrite Hctx in Hstacks.
       rewrite Hctx in IHgps1'.
       unfold to_partial_stack. simpl.
@@ -717,7 +727,7 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (domm ctx) C ->
 
-    partial_state ctx (C, gps, mem, k, e) (PC (C, pgps, pmem, k, e))
+    partial_state ctx [CState C, gps, mem, k, e] (PC (C, pgps, pmem, k, e))
 
 | ContextControl: forall C gps pgps mem pmem k e,
     (* context has control *)
@@ -729,10 +739,10 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (domm ctx) C ->
 
-    partial_state ctx (C, gps, mem, k, e) (CC (C, pgps, pmem)).
+    partial_state ctx [CState C, gps, mem, k, e] (CC (C, pgps, pmem)).
 
 Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
-  let '(C, gps, mem, k, e) := scs in
+  let: CS.State C gps mem k e := scs in
   let pgps := to_partial_stack gps (domm ctx) C in
   let pmem := filterm (fun k _ => negb (k \in domm ctx)) mem in
   if C \in domm ctx then CC (C, pgps, pmem)
@@ -772,7 +782,7 @@ Ltac backward_easy :=
     e_part  : (if ?C \in ?Cs then _ else _) = partialize ?ctx ?scs2
   |- match CS.eval_kstep _ ?scs2 with _ => _ end =>
     rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm) in e_part *;
-    case: scs2 e_part=> [[[[C' stk2] mem2] k'] e'] /=;
+    case: scs2 e_part=> [C' stk2 mem2 k' e'] /=;
     case: ifP => // _ []; rewrite -(lock filterm);
     intros <- e_stk e_mem <- <-;
     rewrite -lock /= (negbTE in_prog) e_stk e_mem
@@ -787,7 +797,7 @@ Lemma backward p ctx p1 p2 scs1 t scs1' scs2 :
   prog_interface p1 = ctx ->
   prog_interface p2 = ctx ->
   partialize ctx scs1 = partialize ctx scs2 ->
-  CS.component_of_state scs1 \notin domm ctx ->
+  CS.s_component scs1 \notin domm ctx ->
   CS.kstep (prepare_global_env (program_link p p1)) scs1 t scs1' ->
   exists2 scs2',
     CS.kstep (prepare_global_env (program_link p p2)) scs2 t scs2' &
@@ -809,7 +819,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
     move: in_prog; rewrite -int1 wfprog_defined_buffers // mem_domm.
     by case: getm.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [[[[C' stk2] mem2] k'] e'] /=.
+  case: scs2=> [C' stk2 mem2 k' e'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
   move=> {C' k' e'} <- e_stk e_mem <- <-.
   rewrite -lock /= mapmE unionmE -mem_domm.
@@ -818,7 +828,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
 - (* Allocation *)
   move=> C stk1 mem1 mem1' k size ptr /Zgt_is_gt_bool size_pos e_mem1 in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [[[[C' stk2] mem2] k'] e'] /=.
+  case: scs2=> [C' stk2 mem2 k' e'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
   move=> {C' k' e'} <- e_stk e_mem <- <-.
   rewrite -lock /= size_pos.
@@ -827,7 +837,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
 - (* Load *)
   move=> C stk1 mem1 k _ b' o' v <- e_v in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [[[[C' stk2] mem2] k'] e'] /=.
+  case: scs2=> [C' stk2 mem2 k' e'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
   move=> {C' k' e'} <- e_stk e_mem <- <-.
   rewrite -lock /= eqxx.
@@ -836,7 +846,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
 - (* Store *)
   move=> C stk mem1 mem1' k v _ b' o' <- e_mem1 in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [[[[C' stk2] mem2] k'] e'] /=.
+  case: scs2=> [C' stk2 mem2 k' e'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
   move=> {C' k' e'} <- e_stk e_mem <- <-.
   rewrite -lock /= eqxx.
@@ -848,7 +858,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
   rewrite !mapmE; case: (getm (unionm _ _) _)=> [_|] //=.
   move=> e_P [<-] e_load [<-] e_store {b b'} in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [[[[C' stk2] mem2] k'] e'] /=.
+  case: scs2=> [C' stk2 mem2 k' e'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
   move=> {C' k' e'} <- e_stk e_mem <- <-.
   rewrite -lock /= eqxx.
@@ -869,7 +879,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
   rewrite !mapmE; do 2![case: getm=> [_|] //=].
   move=> {b b'} [<-] e_load [<-] e_store in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [[[[C'' stk2] mem2] k'] e'] /=.
+  case: scs2=> [C'' stk2 mem2 k' e'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
   move=> {C'' k' e'} <- e_stk e_mem <- <-.
   rewrite -lock /= (negbTE ne).
@@ -999,7 +1009,7 @@ Inductive kstep
 
 Lemma partial_state_component ctx scs sps :
   partial_state ctx scs sps ->
-  component_of_state sps = CS.component_of_state scs.
+  component_of_state sps = CS.s_component scs.
 Proof. by case: scs sps /. Qed.
 
 Lemma kstep_component p ctx G s t s' :
@@ -1036,7 +1046,7 @@ rewrite /is_program_component /is_context_component /turn_of /=.
 case; first by auto.
 case=> [v [-> [-> ->]]] e_gps notin; rewrite (_ : gps = [::]); eauto.
 move/esym: e_gps; rewrite /to_partial_stack /=.
-case: gps=> //= [[[C'' v'] k'] gps]; rewrite andbC.
+case: gps=> //= [[C'' v' k'] gps]; rewrite andbC.
 by case: eqP=> //= [->|_]; first rewrite (negbTE notin);
 move=> /to_partial_stack_helper_nonempty.
 Qed.
@@ -1227,9 +1237,9 @@ Proof.
                         in_prog sps''.
   case=> {sps''} p2 scs2 scs2' int2 _  wf2 _ _ kstep2
          /partialize_correct e12 /partialize_correct <-.
-  have {in_prog} in_prog : CS.component_of_state scs1 \notin domm ctx.
+  have {in_prog} in_prog : CS.s_component scs1 \notin domm ctx.
     move: in_prog; simplify_turn.
-    case: (scs1)=> [[[[C ?] ?] ?] ?] /=.
+    case: (scs1)=> [C ? ? ? ?] /=.
     by case: ifPn => /= [-> //|].
   rewrite int1 in link clos.
   move/CS.eval_kstep_complete in kstep2.

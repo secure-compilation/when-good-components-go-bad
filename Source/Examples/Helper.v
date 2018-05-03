@@ -12,7 +12,7 @@ Definition run (p: program) (fuel: nat) :=
   let G := prepare_global_env p in
   let st := CS.initial_machine_state p in
   match CS.execN fuel G st with
-  | Some (_, _, _, _, E_exit) => print_explicit_exit tt
-  | Some (_, _, _, _, E_val (Int n)) => print_ocaml_int (z2int n)
+  | Some [CState _, _, _, _, E_exit] => print_explicit_exit tt
+  | Some [CState _, _, _, _, E_val (Int n)] => print_ocaml_int (z2int n)
   | _ => print_error ocaml_int_0
   end.

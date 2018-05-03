@@ -40,12 +40,26 @@ Inductive cont : Type :=
 
 Module CS.
 
-Definition stack : Type := list (Component.id * value * cont).
+CoInductive frame : Type := Frame {
+  f_component : Component.id;
+  f_arg       : value;
+  f_cont      : cont
+}.
 
-Definition state : Type := Component.id * stack * Memory.t * cont * expr.
+Definition stack : Type := list frame.
 
-Definition component_of_state (s : state) : Component.id :=
-  let: (C, _, _, _, _) := s in C.
+CoInductive state : Type := State {
+  s_component : Component.id;
+  s_stack     : stack;
+  s_memory    : Memory.t;
+  s_cont      : cont;
+  s_expr      : expr
+}.
+
+Notation "[ 'State' C , stk , mem , k , e ]" :=
+  (State C stk mem k e)
+  (at level 0, format "[ 'State'  C ,  stk ,  mem ,  k ,  e ]").
+
 
 Ltac unfold_state st :=
   let C := fresh "C" in
@@ -53,7 +67,7 @@ Ltac unfold_state st :=
   let mem := fresh "mem" in
   let k := fresh "k" in
   let e := fresh "e" in
-  destruct st as [[[[C s] mem] k] e].
+  destruct st as [C s mem k e].
 
 Ltac unfold_states :=
   repeat (match goal with
@@ -61,7 +75,7 @@ Ltac unfold_states :=
           end).
 
 Instance state_turn : HasTurn state := {
-  turn_of s iface := component_of_state s \in domm iface
+  turn_of s iface := s_component s \in domm iface
 }.
 
 Import MonadNotations.
@@ -72,11 +86,10 @@ Definition prepare_initial_memory (p: program) : Memory.t :=
 
 Definition initial_machine_state (p: program) : state :=
   match prog_main p with
-  | Some main_expr =>
-    (Component.main, [], prepare_initial_memory p, Kstop, main_expr)
+  | Some main_expr => State Component.main [::] (prepare_initial_memory p) Kstop main_expr
   | None =>
     (* this case shouldn't happen for a well formed p *)
-    (0, [], emptym, Kstop, E_exit)
+    State Component.main [::] emptym Kstop E_exit
   end.
 
 (* transition system *)
@@ -85,65 +98,65 @@ Definition initial_state (p: program) (st: state) : Prop :=
   st = initial_machine_state p.
 
 Definition final_state (st: state) : Prop :=
-  let '(C, s, mem, k, e) := st in
+  let: State C s mem k e := st in
   e = E_exit \/ (exists v, e = E_val v /\ k = Kstop /\ s = []).
 
 Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_Binop1 : forall C s mem k op e1 e2,
-    kstep G (C, s, mem, k, E_binop op e1 e2) E0
-            (C, s, mem, Kbinop1 op e2 k, e1)
+    kstep G [State C, s, mem, k, E_binop op e1 e2] E0
+            [State C, s, mem, Kbinop1 op e2 k, e1]
 | KS_Binop2 : forall C s mem k op v1 e2,
-    kstep G (C, s, mem, Kbinop1 op e2 k, E_val v1) E0
-            (C, s, mem, Kbinop2 op v1 k, e2)
+    kstep G [State C, s, mem, Kbinop1 op e2 k, E_val v1] E0
+            [State C, s, mem, Kbinop2 op v1 k, e2]
 | KS_BinopEval : forall C s mem k op v1 v2,
-    kstep G (C, s, mem, Kbinop2 op v1 k, E_val v2) E0
-            (C, s, mem, k, E_val (eval_binop op v1 v2))
+    kstep G [State C, s, mem, Kbinop2 op v1 k, E_val v2] E0
+            [State C, s, mem, k, E_val (eval_binop op v1 v2)]
 | KS_Seq1 :  forall C s mem k e1 e2,
-    kstep G (C, s, mem, k, E_seq e1 e2) E0
-            (C, s, mem, Kseq e2 k, e1)
+    kstep G [State C, s, mem, k, E_seq e1 e2] E0
+            [State C, s, mem, Kseq e2 k, e1]
 | KS_Seq2 : forall C s mem k v e2,
-    kstep G (C, s, mem, Kseq e2 k, E_val v) E0
-            (C, s, mem, k, e2)
+    kstep G [State C, s, mem, Kseq e2 k, E_val v] E0
+            [State C, s, mem, k, e2]
 | KS_If1 : forall C s mem k e1 e2 e3,
-    kstep G (C, s, mem, k, E_if e1 e2 e3) E0
-            (C, s, mem, Kif e2 e3 k, e1)
+    kstep G [State C, s, mem, k, E_if e1 e2 e3] E0
+            [State C, s, mem, Kif e2 e3 k, e1]
 | KS_If2 : forall C s mem k e2 e3 i,
-    kstep G (C, s, mem, Kif e2 e3 k, E_val (Int i)) E0
-            (C, s, mem, k, if i != 0%Z then e2 else e3)
+    kstep G [State C, s, mem, Kif e2 e3 k, E_val (Int i)] E0
+            [State C, s, mem, k, if i != 0%Z then e2 else e3]
 | KS_LocalBuffer : forall C s mem k b,
     getm (genv_buffers G) C = Some b ->
-    kstep G (C, s, mem, k, E_local) E0
-            (C, s, mem, k, E_val (Ptr (C,b,0%Z)))
+    kstep G [State C, s, mem, k, E_local] E0
+            [State C, s, mem, k, E_val (Ptr (C,b,0%Z))]
 | KS_Alloc1 : forall C s mem k e,
-    kstep G (C, s, mem, k, E_alloc e) E0
-            (C, s, mem, Kalloc k, e)
+    kstep G [State C, s, mem, k, E_alloc e] E0
+            [State C, s, mem, Kalloc k, e]
 | KS_AllocEval : forall C s mem mem' k size ptr,
     (size > 0) % Z ->
     Memory.alloc mem C (Z.to_nat size) = Some (mem', ptr) ->
-    kstep G (C, s, mem, Kalloc k, E_val (Int size)) E0
-            (C, s, mem', k, E_val (Ptr ptr))
+    kstep G [State C, s, mem, Kalloc k, E_val (Int size)] E0
+            [State C, s, mem', k, E_val (Ptr ptr)]
 | KS_Deref1 : forall C s mem k e,
-    kstep G (C, s, mem, k, E_deref e) E0
-            (C, s, mem, Kderef k, e)
+    kstep G [State C, s, mem, k, E_deref e] E0
+            [State C, s, mem, Kderef k, e]
 | KS_DerefEval : forall C s mem k C' b' o' v,
     C = C' ->
     Memory.load mem (C',b',o') = Some v ->
-    kstep G (C, s, mem, Kderef k, E_val (Ptr (C',b',o'))) E0
-            (C, s, mem, k, E_val v)
+    kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o'))] E0
+            [State C, s, mem, k, E_val v]
 | KS_Assign1 : forall C s mem k e1 e2,
-    kstep G (C, s, mem, k, E_assign e1 e2) E0
-            (C, s, mem, Kassign1 e1 k, e2)
+    kstep G [State C, s, mem, k, E_assign e1 e2] E0
+            [State C, s, mem, Kassign1 e1 k, e2]
 | KS_Assign2 : forall C s mem k v e1,
-    kstep G (C, s, mem, Kassign1 e1 k, E_val v) E0
-            (C, s, mem, Kassign2 v k, e1)
+    kstep G [State C, s, mem, Kassign1 e1 k, E_val v] E0
+            [State C, s, mem, Kassign2 v k, e1]
 | KS_AssignEval : forall C s mem mem' k v C' b' o',
     C = C' ->
     Memory.store mem (C', b', o') v = Some mem' ->
-    kstep G (C, s, mem, Kassign2 v k, E_val (Ptr (C', b', o'))) E0
-            (C, s, mem', k, E_val v)
+    kstep G [State C, s, mem, Kassign2 v k, E_val (Ptr (C', b', o'))] E0
+            [State C, s, mem', k, E_val v]
 | KS_InitCall : forall C s mem k C' P e,
-    kstep G (C, s, mem, k, E_call C' P e) E0
-            (C, s, mem, Kcall C' P k, e)
+    kstep G [State C, s, mem, k, E_call C' P e] E0
+            [State C, s, mem, Kcall C' P k, e]
 | KS_InternalCall : forall C s mem mem' k C' P v P_expr b b' old_call_arg,
     C = C' ->
     (* retrieve the procedure code *)
@@ -154,8 +167,8 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     (* place the call argument in the target memory *)
     getm (genv_buffers G) C' = Some b' ->
     Memory.store mem (C', b', 0%Z) (Int v) = Some mem' ->
-    kstep G (C, s, mem, Kcall C' P k, E_val (Int v)) E0
-            (C', (C, old_call_arg, k) :: s, mem', Kstop, P_expr)
+    kstep G [State C, s, mem, Kcall C' P k, E_val (Int v)] E0
+            [State C', Frame C old_call_arg k :: s, mem', Kstop, P_expr]
 | KS_ExternalCall : forall C s mem mem' k C' P v P_expr b b' old_call_arg,
     C <> C' ->
     (* check permission *)
@@ -168,30 +181,30 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     (* place the call argument in the target memory *)
     getm (genv_buffers G) C' = Some b' ->
     Memory.store mem (C', b', 0%Z) (Int v) = Some mem' ->
-    kstep G (C, s, mem, Kcall C' P k, E_val (Int v))
-            [ECall C P v C']
-            (C', (C, old_call_arg, k) :: s, mem', Kstop, P_expr)
+    kstep G [State C, s, mem, Kcall C' P k, E_val (Int v)]
+            [:: ECall C P v C']
+            [State C', Frame C old_call_arg k :: s, mem', Kstop, P_expr]
 | KS_InternalReturn: forall C s mem mem' k v C' old_call_arg b,
     C = C' ->
     (* restore the old call argument *)
     getm (genv_buffers G) C' = Some b ->
     Memory.store mem (C', b, 0%Z) old_call_arg = Some mem' ->
-    kstep G (C, (C', old_call_arg, k) :: s, mem, Kstop, E_val (Int v)) E0
-            (C', s, mem', k, E_val (Int v))
+    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v)] E0
+            [State C', s, mem', k, E_val (Int v)]
 | KS_ExternalReturn: forall C s mem mem' k v C' old_call_arg b,
     C <> C' ->
     (* restore the old call argument *)
     getm (genv_buffers G) C' = Some b ->
     Memory.store mem (C', b, 0%Z) old_call_arg = Some mem' ->
-    kstep G (C, (C', old_call_arg, k) :: s, mem, Kstop, E_val (Int v))
-            [ERet C v C']
-            (C', s, mem', k, E_val (Int v)).
+    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v)]
+            [:: ERet C v C']
+            [State C', s, mem', k, E_val (Int v)].
 
 Lemma kstep_component G s t s' :
   kstep G s t s' ->
-  component_of_state s' =
+  s_component s' =
   if t is e :: _ then who_is_in_control_after e
-  else component_of_state s.
+  else s_component s.
 Proof. by case: s t s' /. Qed.
 
 Lemma final_state_stuck G (st: state) :
@@ -210,38 +223,38 @@ Qed.
 (* functional kstep *)
 
 Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
-  let '(C, s, mem, k, e) := st in
+  let: State C s mem k e := st in
   match e with
   (* pushing a new continuation *)
   | E_binop b_op e1 e2 =>
-    ret (E0, (C, s, mem, Kbinop1 b_op e2 k, e1))
+    ret (E0, [State C, s, mem, Kbinop1 b_op e2 k, e1])
   | E_seq e1 e2 =>
-    ret (E0, (C, s, mem, Kseq e2 k, e1))
+    ret (E0, [State C, s, mem, Kseq e2 k, e1])
   | E_if e1 e2 e3 =>
-    ret (E0, (C, s, mem, Kif e2 e3 k, e1))
+    ret (E0, [State C, s, mem, Kif e2 e3 k, e1])
   | E_local =>
     do b <- getm (genv_buffers G) C;
-    ret (E0, (C, s, mem, k, E_val (Ptr (C, b, 0%Z))))
+    ret (E0, [State C, s, mem, k, E_val (Ptr (C, b, 0%Z))])
   | E_alloc e =>
-    ret (E0, (C, s, mem, Kalloc k, e))
+    ret (E0, [State C, s, mem, Kalloc k, e])
   | E_deref e =>
-    ret (E0, (C, s, mem, Kderef k, e))
+    ret (E0, [State C, s, mem, Kderef k, e])
   | E_assign e1 e2 =>
-    ret (E0, (C, s, mem, Kassign1 e1 k, e2))
+    ret (E0, [State C, s, mem, Kassign1 e1 k, e2])
   | E_call C' P e =>
-    ret (E0, (C, s, mem, Kcall C' P k, e))
+    ret (E0, [State C, s, mem, Kcall C' P k, e])
   (* evaluating current continuation *)
   | E_val v =>
     match k with
     | Kbinop1 b_op e2 k' =>
-      ret (E0, (C, s, mem, Kbinop2 b_op v k', e2))
+      ret (E0, [State C, s, mem, Kbinop2 b_op v k', e2])
     | Kbinop2 b_op v1 k' =>
-      ret (E0, (C, s, mem, k', E_val (eval_binop b_op v1 v)))
+      ret (E0, [State C, s, mem, k', E_val (eval_binop b_op v1 v)])
     | Kseq e2 k' =>
-      ret (E0, (C, s, mem, k', e2))
+      ret (E0, [State C, s, mem, k', e2])
     | Kif e2 e3 k' =>
       match v with
-      | Int z => ret (E0, (C, s, mem, k', if z != 0%Z then e2 else e3))
+      | Int z => ret (E0, [State C, s, mem, k', if z != 0%Z then e2 else e3])
       | _ => None
       end
     | Kalloc k' =>
@@ -249,7 +262,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       | Int size =>
         if (size >? 0) % Z then
           do (mem',ptr) <- Memory.alloc mem C (Z.to_nat size);
-          ret (E0, (C, s, mem', k', E_val (Ptr ptr)))
+          ret (E0, [State C, s, mem', k', E_val (Ptr ptr)])
         else
           None
       | _ => None
@@ -259,19 +272,19 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       | Ptr (C',b',o') =>
         if C == C' then
           do v <- Memory.load mem (C',b',o');
-          ret (E0, (C, s, mem, k', E_val v))
+          ret (E0, [State C, s, mem, k', E_val v])
         else
           None
       | _ => None
       end
     | Kassign1 e1 k' =>
-      ret (E0, (C, s, mem, Kassign2 v k', e1))
+      ret (E0, [State C, s, mem, Kassign2 v k', e1])
     | Kassign2 v' k' =>
       match v with
       | Ptr (C',b',o') =>
         if C == C' then
           do mem' <- Memory.store mem (C',b',o') v';
-          ret (E0, (C, s, mem', k', E_val v'))
+          ret (E0, [State C, s, mem', k', E_val v'])
         else
           None
       | _ => None
@@ -288,7 +301,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
           (* place the call argument in the target memory *)
           do b' <- getm (genv_buffers G) C';
           do mem' <- Memory.store mem (C', b', 0%Z) (Int i);
-          ret (E0, (C', (C, old_call_arg, k') :: s, mem', Kstop, P_expr))
+          ret (E0, [State C', Frame C old_call_arg k' :: s, mem', Kstop, P_expr])
         else if imported_procedure_b (genv_interface G) C C' P then
           (* retrieve the procedure code *)
           do P_expr <- find_procedure (genv_procedures G) C' P;
@@ -298,19 +311,19 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
           (* place the call argument in the target memory *)
           do b' <- getm (genv_buffers G) C';
           do mem' <- Memory.store mem (C', b', 0%Z) (Int i);
-          ret ([ECall C P i C'], (C', (C, old_call_arg, k') :: s, mem', Kstop, P_expr))
+          ret ([ECall C P i C'], [State C', Frame C old_call_arg k' :: s, mem', Kstop, P_expr])
         else
           None
       | _ => None
       end
     | Kstop =>
       match v, s with
-      | Int i, (C',old_call_arg,k') :: s' =>
+      | Int i, Frame C' old_call_arg k' :: s' =>
         (* restore the old call argument *)
         do b <- getm (genv_buffers G) C';
         do mem' <- Memory.store mem (C', b, 0%Z) old_call_arg;
-        let t := if C == C' then E0 else [ERet C i C'] in
-        ret (t, (C', s', mem', k', E_val (Int i)))
+        let t := if C == C' then E0 else [:: ERet C i C'] in
+        ret (t, [State C', s', mem', k', E_val (Int i)])
       | _, _ => None
       end
     end
@@ -379,7 +392,7 @@ Proof.
   intros.
   unfold_states.
   match goal with
-  | H: eval_kstep _ _ = Some _ |- kstep _ (_, _, _, _, ?E) _ (_, _, _, _, _) =>
+  | H: eval_kstep _ _ = Some _ |- kstep _ [State _, _, _, _, ?E] _ [State _, _, _, _, _] =>
     destruct E; simpl in H;
       try discriminate;
       try (repeat simplify_option;
@@ -473,8 +486,8 @@ Section Semantics.
     else [::].
 
   Definition stack_state_of (cs: state) : stack_state :=
-    let '(curr, stk, _, _, _) := cs in
-    StackState curr (unstutter curr (map (fun '(id, _, _) => id) stk)).
+    let: State curr stk _ _ _ := cs in
+    StackState curr (unstutter curr (map f_component stk)).
 
   Lemma trace_wb t cs cs' :
     Star sem cs t cs' ->
@@ -541,3 +554,7 @@ Section Semantics.
 End Semantics.
 
 End CS.
+
+Notation "[ 'CState' C , stk , mem , k , e ]" :=
+  (CS.State C stk mem k e)
+  (at level 0, format "[ 'CState'  C ,  stk ,  mem ,  k ,  e ]").
