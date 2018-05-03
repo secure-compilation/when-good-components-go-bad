@@ -398,15 +398,21 @@ Lemma domm_partition_in_both ctx1 ctx2 C :
   C \in domm ctx1 ->
   C \in domm ctx2 ->
   False.
-Admitted. (* Grade 1. *)
-
+Proof.
+  intros H H0 H1. apply (domm_partition_notin H) in H1.
+  now rewrite H0 in H1.
+Qed.
+  
 (* XXX: This assumption is also impossible, for the same reason as above. *)
 Lemma domm_partition_in_neither ctx1 ctx2 C :
   mergeable_interfaces ctx1 ctx2 ->
   C \notin domm ctx1 ->
   C \notin domm ctx2 ->
   False.
-Admitted. (* Grade 1. *)
+Proof.
+  intros H H0 H1. apply (domm_partition H) in H1.
+  now rewrite H1 in H0.
+Qed.
 
 (* RB: TODO: Complete assumptions as above. *)
 Lemma domm_partition_in_notin ctx1 ctx2 C :
@@ -414,7 +420,9 @@ Lemma domm_partition_in_notin ctx1 ctx2 C :
   C \in domm ctx1 ->
   C \notin domm ctx1 ->
   False.
-Admitted. (* Grade 1. *)
+Proof.
+  intros H H0 H1. now rewrite H0 in H1.
+Qed.
 
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_intro: forall ics ips1 ips2,
@@ -449,6 +457,9 @@ Lemma mergeable_stacks_partition gps ctx1 ctx2:
   mergeable_interfaces ctx1 ctx2 ->
   mergeable_stacks (to_partial_stack gps (domm ctx1)) (to_partial_stack gps (domm ctx2)).
 Proof.
+  induction gps; intros H.
+  + constructor.
+  + specialize (IHgps H). simpl. constructor. now auto.
 Admitted. (* Grade 2. *)
 
 Lemma mergeable_memories_sym:
