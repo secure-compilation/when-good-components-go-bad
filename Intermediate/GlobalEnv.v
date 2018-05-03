@@ -37,13 +37,13 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma genv_procedures_program_link_left:
+Lemma genv_procedures_program_link_left_notin :
   forall {c Cid},
     Cid \notin domm (prog_interface c) ->
   forall {p},
     (genv_procedures (prepare_global_env (program_link p c))) Cid =
     (genv_procedures (prepare_global_env p)) Cid.
-Admitted. (* Grade 2, check. *)
+Admitted. (* Grade 2, check. Possibly add linkability conditions, etc. *)
 
 Lemma genv_entrypoints_program_link_left :
   forall {C P p c b},
@@ -196,7 +196,7 @@ Proof.
     [| assumption | assumption | assumption].
   assert (Pointer.component pc \notin domm (prog_interface c1)) as Hcc1 by admit.
   assert (Pointer.component pc \notin domm (prog_interface c2)) as Hcc2 by admit.
-  rewrite (genv_procedures_program_link_left Hcc1) in Hgenv_procs.
-  rewrite (genv_procedures_program_link_left Hcc2).
+  rewrite (genv_procedures_program_link_left_notin Hcc1) in Hgenv_procs.
+  rewrite (genv_procedures_program_link_left_notin Hcc2).
   assumption.
 Admitted. (* Grade 1. Easy lemma for the admits. *)
