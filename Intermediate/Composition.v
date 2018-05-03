@@ -1057,7 +1057,10 @@ Section Simulation.
       inversion Hpartial1 as [? ? ? ? ? ? _ | ? ? ? ? ? ? Hcc1]; subst;
       inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst;
       PS.simplify_turn;
-      [admit | | admit | admit]. (* Contra. *)
+      [ destruct (PS.domm_partition_in_neither Hmerge_iface Hpc1 Hpc2)
+      |
+      | destruct (PS.domm_partition_in_notin Hmerge_iface Hcc1 Hpc1)
+      | destruct (PS.domm_partition_in_both Hmerge_iface Hcc1 Hcc2)].
     inversion Hstep_ps
       as [p' ? ? ? ics1 ics1' Hsame_iface _ Hwf2' Hlinkable Hstep_cs Hpartial Hpartial'];
       subst.
@@ -1072,7 +1075,8 @@ Section Simulation.
     inversion Hpartial as [? ? ? ? ? ? Hpc_partial Hmem Hstk |]; subst.
     inversion Hpartial' as [? ? ? ? ? ? Hpc_partial' |]; subst.
     PS.simplify_turn.
-    inversion Hstep_cs; subst.
+    inversion Hstep_cs; subst;
+      PS.rename_op p pc p' Hop.
     - (* INop *)
       exists
         (PS.CC
@@ -1089,9 +1093,22 @@ Section Simulation.
           -- assumption.
           -- eapply linkable_sym; eassumption.
           -- eapply CS.Nop.
-             admit.
-          -- admit.
-          -- admit.
+             unfold executing in Hop.
+             rewrite (genv_procedures_program_link_left_in Hcc2) in Hop.
+             unfold executing.
+             rewrite <- (program_linkC wf1 wf2 linkability).
+             erewrite (genv_procedures_program_link_left_in Hcc2).
+             assumption.
+          -- econstructor.
+             ++ assumption.
+             ++ reflexivity.
+             ++ reflexivity.
+          -- rewrite <- Pointer.inc_preserves_component.
+             econstructor.
+             ++ rewrite Pointer.inc_preserves_component.
+                assumption.
+             ++ reflexivity.
+             ++ reflexivity.
       + rewrite <- Hmem.
         rewrite <- Hstk.
         (* RB: TODO: Refer to ics symbolically, e.g. from goal via Ltac. *)
