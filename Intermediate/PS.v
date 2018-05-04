@@ -361,20 +361,7 @@ Proof.
   by do 2?split; rewrite -1?unionmC // fdisjointC.
 Qed.
 
-(* NOTE: Instance of a more general property which may be added to CoqUtils.
-   TODO: Harmonize naming of two directions or unify with iff.
-         Add domain conditions to the following lemmas.
-         Reduce amount of lemmas, possibly supplement with tactics. *)
-(* XXX: This result is false without assuming more hypotheses about C: it is
-        equivalent to saying that if two interfaces are mergeable then every
-        component belongs to one of them. *)
-Lemma domm_partition :
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall C,
-    C \notin domm ctx2 ->
-    C \in domm ctx1.
-Admitted. (* Rank 1. *)
+(* Lemma placeholder: not_partition *)
 
 Lemma domm_partition_notin :
   forall ctx1 ctx2,
@@ -402,17 +389,8 @@ Proof.
   intros H H0 H1. apply (domm_partition_notin H) in H1.
   now rewrite H0 in H1.
 Qed.
-  
-(* XXX: This assumption is also impossible, for the same reason as above. *)
-Lemma domm_partition_in_neither ctx1 ctx2 C :
-  mergeable_interfaces ctx1 ctx2 ->
-  C \notin domm ctx1 ->
-  C \notin domm ctx2 ->
-  False.
-Proof.
-  intros H H0 H1. apply (domm_partition H) in H1.
-  now rewrite H1 in H0.
-Qed.
+
+(* Lemma placeholder: domm_partition_in_neither *)
 
 (* RB: TODO: Complete assumptions as above. *)
 Lemma domm_partition_in_notin ctx1 ctx2 C :
@@ -453,14 +431,7 @@ Proof.
   - apply mergeable_stack_frames_sym; auto.
 Qed.
 
-Lemma mergeable_stacks_partition gps ctx1 ctx2:
-  mergeable_interfaces ctx1 ctx2 ->
-  mergeable_stacks (to_partial_stack gps (domm ctx1)) (to_partial_stack gps (domm ctx2)).
-Proof.
-  induction gps; intros H.
-  + constructor.
-  + specialize (IHgps H). simpl. constructor. now auto.
-Admitted. (* Grade 2. *)
+(* Lemma placeholder: mergeable_stacks_partition *)
 
 Lemma mergeable_memories_sym:
   forall pmem1 pmem2,
@@ -499,82 +470,11 @@ Proof.
     + eassumption.
 Qed.
 
-Lemma mergeable_states_program_to_program ctx1 ctx2 ps1 ps2 :
-  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
-  PS.is_program_component ps1 ctx1 ->
-  PS.is_program_component ps2 ctx1.
-Proof.
-  intros Hmergeable Hpc.
-  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
-    subst.
-  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
-    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
-  - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
-  - assumption.
-  - assumption.
-  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
-Qed.
-
-Lemma mergeable_states_program_to_context ctx1 ctx2 ps1 ps2 :
-  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
-  PS.is_program_component ps1 ctx1 ->
-  PS.is_context_component ps2 ctx2.
-Proof.
-  intros Hmergeable Hpc.
-  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
-    subst.
-  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
-    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
-  - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
-  - assumption.
-  - now destruct (PS.domm_partition_in_notin Hmergeable_ifaces Hcc1 Hpc).
-  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
-Qed.
-
-Lemma mergeable_states_context_to_context ctx1 ctx2 ps1 ps2 :
-  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
-  PS.is_context_component ps1 ctx1 ->
-  PS.is_context_component ps2 ctx1.
-Proof.
-  intros Hmergeable Hpc.
-  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
-    subst.
-  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
-    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
-  - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
-  - assumption.
-  - assumption.
-  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
-Qed.
-
-Lemma mergeable_states_context_to_program ctx1 ctx2 ps1 ps2 :
-  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
-  PS.is_context_component ps1 ctx1 ->
-  PS.is_program_component ps2 ctx2.
-Proof.
-  intros Hmergeable Hpc.
-  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
-    subst.
-  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
-    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
-  - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
-  - destruct (PS.domm_partition_in_notin Hmergeable_ifaces Hpc Hpc1).
-  - assumption.
-  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
-Qed.
-
-Lemma mergeable_states_stacks ctx1 ctx2 ips1 ips2 gps1 gps2:
-  mergeable_states ctx1 ctx2 ips1 ips2 ->
-  state_stack ips1 = gps1 ->
-  state_stack ips2 = gps2 ->
-  mergeable_stacks gps1 gps2.
-Proof.
-  intros Hmerge Hstk1 Hstk2.
-  inversion Hmerge as [ics ? ? Hmerge_ifaces Hprovenance Hpartial1 Hpartial2]; subst.
-    inversion Hpartial1; subst;
-    inversion Hpartial2; subst;
-    apply mergeable_stacks_partition; assumption.
-Qed.
+(* Lemma placeholder: mergeable_states_program_to_program *)
+(* Lemma placeholder: mergeable_states_program_to_context *)
+(* Lemma placeholder: mergeable_states_context_to_context *)
+(* Lemma placeholder: mergeable_states_context_to_program *)
+(* Lemma placeholder: mergeable_states_stacks *)
 
 Definition merge_stack_frames (frames: PartialPointer.t * PartialPointer.t): PartialPointer.t :=
   match frames with
@@ -607,40 +507,13 @@ Proof.
     + constructor; auto.
 Qed.
 
-(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
-Lemma merge_stacks_partition:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall gps,
-    unpartialize_stack
-      (merge_stacks
-         (to_partial_stack gps (domm ctx1))
-         (to_partial_stack gps (domm ctx2)))
-    = gps.
-Admitted. (* Grade 2. *)
-
-(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
-Lemma merge_stacks_partition_emptym:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall gps,
-    merge_stacks (to_partial_stack gps (domm ctx1))
-                 (to_partial_stack gps (domm ctx2)) =
-    to_partial_stack gps fset0.
-Admitted. (* Grade 2. *)
+(* Lemma placeholder: merge_stacks_partition *)
+(* Lemma placeholder: merge_stacks_partition_emptym *)
 
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
   unionm mem1 mem2.
 
-Lemma merge_memories_partition:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall mem,
-    merge_memories
-      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx1) mem)
-      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx2) mem)
-  = mem.
-Admitted. (* Grade 2. *)
+(* Lemma placeholder: merge_memories_partition *)
 
 Definition merge_partial_states (ips1 ips2: state) : state :=
   match ips1 with

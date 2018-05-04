@@ -25,6 +25,263 @@ Set Bullet Behavior "Strict Subproofs".
 Import Intermediate.
 
 (*
+  Machine components
+
+  RB: TODO: The following results are currently only used here, but belong
+  logically in Machine, and should be relocated as they are proved and, where
+  needed, generalized. Module qualifiers will be tweaked as needed.
+*)
+
+Lemma alloc_static_buffers_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    let pc := program_link p c in
+    alloc_static_buffers pc (domm (prog_interface pc)) =
+    unionm (alloc_static_buffers p (domm (prog_interface p)))
+           (alloc_static_buffers c (domm (prog_interface c))).
+Proof.
+  intros p c Hwf1 Hwf2 Hlinkable Hpc.
+  subst Hpc. simpl.
+  apply eq_fmap. intros k.
+  rewrite unionmE.
+  destruct (isSome ((alloc_static_buffers p (domm (prog_interface p))) k))
+           eqn:Hin.
+  - admit.
+  - admit.
+Admitted.
+
+Theorem prepare_initial_memory_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    prepare_initial_memory (program_link p c) =
+    unionm (prepare_initial_memory p) (prepare_initial_memory c).
+Proof.
+  intros p c Hwf1 Hwf2 Hlinkable.
+  unfold prepare_initial_memory.
+  apply alloc_static_buffers_after_linking; auto.
+Qed.
+
+Theorem prepare_procedures_memory_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    prepare_procedures_memory (program_link p c)
+                              (prepare_initial_memory (program_link p c)) =
+    unionm (prepare_procedures_memory p (prepare_initial_memory p))
+           (prepare_procedures_memory c (prepare_initial_memory c)).
+Admitted.
+
+Theorem prepare_procedures_entrypoints_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    prepare_procedures_entrypoints (program_link p c)
+                                   (prepare_initial_memory (program_link p c)) =
+    unionm (prepare_procedures_entrypoints p (prepare_initial_memory p))
+           (prepare_procedures_entrypoints c (prepare_initial_memory c)).
+Admitted.
+
+(*
+  GlobalEnv components
+
+  RB: TODO: The following results are currently only used here, but belong
+  logically in GlobalEnv, and should be relocated as they are proved and, where
+  needed, generalized. Module qualifiers will be tweaked as needed.
+
+  Uses of execution_invariant_to_linking in this file are currently @-prefixed;
+  this can be dropped once restored to GlobalEnv.
+*)
+
+Lemma genv_procedures_program_link_left_in :
+  forall {p Cid},
+    Cid \in domm (prog_interface p) ->
+  forall {c},
+    (genv_procedures (prepare_global_env (program_link p c))) Cid =
+    (genv_procedures (prepare_global_env p)) Cid.
+Admitted. (* Grade 2, check. Possibly add linkability conditions, etc. *)
+
+Lemma execution_invariant_to_linking:
+  forall p c1 c2 pc instr,
+    linkable (prog_interface p) (prog_interface c1) ->
+    linkable (prog_interface p) (prog_interface c2) ->
+    well_formed_program p ->
+    well_formed_program c1 ->
+    well_formed_program c2 ->
+    Pointer.component pc \in domm (prog_interface p) ->
+    executing (prepare_global_env (program_link p c1)) pc instr ->
+    executing (prepare_global_env (program_link p c2)) pc instr.
+Proof.
+  intros p c1 c2 pc instr Hlinkable1 Hlinkable2 Hwf Hwf1 Hwf2 Hpc Hexec.
+  inversion Hexec as [procs [proc [Hgenv_procs [Hprocs_proc [Hoffset Hproc_instr]]]]].
+  exists procs, proc.
+  split; [| split; [| split]];
+    [| assumption | assumption | assumption].
+  assert (Pointer.component pc \notin domm (prog_interface c1)) as Hcc1 by admit.
+  assert (Pointer.component pc \notin domm (prog_interface c2)) as Hcc2 by admit.
+  rewrite (genv_procedures_program_link_left_notin Hcc1) in Hgenv_procs.
+  rewrite (genv_procedures_program_link_left_notin Hcc2).
+  assumption.
+Admitted. (* Grade 1. Easy lemma for the admits. *)
+
+(*
+  PS components
+
+  RB: TODO: The following results are currently only used here, but belong
+  logically in PS, and should be relocated as they are proved and, where needed,
+  generalized. Module qualifiers will be tweaked as needed.
+*)
+
+(* NOTE: Instance of a more general property which may be added to CoqUtils.
+   TODO: Harmonize naming of two directions or unify with iff.
+         Add domain conditions to the following lemmas.
+         Reduce amount of lemmas, possibly supplement with tactics. *)
+(* XXX: This result is false without assuming more hypotheses about C: it is
+        equivalent to saying that if two interfaces are mergeable then every
+        component belongs to one of them. *)
+Lemma domm_partition :
+  forall ctx1 ctx2,
+    PS.mergeable_interfaces ctx1 ctx2 ->
+  forall C,
+    C \notin domm ctx2 ->
+    C \in domm ctx1.
+Admitted. (* Rank 1. *)
+
+(* XXX: This assumption is also impossible, for the same reason as above. *)
+Lemma domm_partition_in_neither ctx1 ctx2 C :
+  PS.mergeable_interfaces ctx1 ctx2 ->
+  C \notin domm ctx1 ->
+  C \notin domm ctx2 ->
+  False.
+Proof.
+  intros H H0 H1. apply (domm_partition H) in H1.
+  now rewrite H1 in H0.
+Qed.
+
+Lemma mergeable_stacks_partition gps ctx1 ctx2:
+  PS.mergeable_interfaces ctx1 ctx2 ->
+  PS.mergeable_stacks (PS.to_partial_stack gps (domm ctx1)) (PS.to_partial_stack gps (domm ctx2)).
+Proof.
+  induction gps; intros H.
+  + constructor.
+  + specialize (IHgps H). simpl. constructor. now auto.
+Admitted. (* Grade 2. *)
+
+Lemma mergeable_states_program_to_program ctx1 ctx2 ps1 ps2 :
+  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
+  PS.is_program_component ps1 ctx1 ->
+  PS.is_program_component ps2 ctx1.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
+  - assumption.
+  - assumption.
+  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_program_to_context ctx1 ctx2 ps1 ps2 :
+  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
+  PS.is_program_component ps1 ctx1 ->
+  PS.is_context_component ps2 ctx2.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
+  - assumption.
+  - now destruct (PS.domm_partition_in_notin Hmergeable_ifaces Hcc1 Hpc).
+  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_context_to_context ctx1 ctx2 ps1 ps2 :
+  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
+  PS.is_context_component ps1 ctx1 ->
+  PS.is_context_component ps2 ctx1.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
+  - assumption.
+  - assumption.
+  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_context_to_program ctx1 ctx2 ps1 ps2 :
+  PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
+  PS.is_context_component ps1 ctx1 ->
+  PS.is_program_component ps2 ctx2.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
+  - destruct (PS.domm_partition_in_notin Hmergeable_ifaces Hpc Hpc1).
+  - assumption.
+  - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_stacks ctx1 ctx2 ips1 ips2 gps1 gps2:
+  PS.mergeable_states ctx1 ctx2 ips1 ips2 ->
+  PS.state_stack ips1 = gps1 ->
+  PS.state_stack ips2 = gps2 ->
+  PS.mergeable_stacks gps1 gps2.
+Proof.
+  intros Hmerge Hstk1 Hstk2.
+  inversion Hmerge as [ics ? ? Hmerge_ifaces Hprovenance Hpartial1 Hpartial2]; subst.
+    inversion Hpartial1; subst;
+    inversion Hpartial2; subst;
+    apply mergeable_stacks_partition; assumption.
+Qed.
+
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
+Lemma merge_stacks_partition:
+  forall ctx1 ctx2,
+    PS.mergeable_interfaces ctx1 ctx2 ->
+  forall gps,
+    PS.unpartialize_stack
+      (PS.merge_stacks
+         (PS.to_partial_stack gps (domm ctx1))
+         (PS.to_partial_stack gps (domm ctx2)))
+    = gps.
+Admitted. (* Grade 2. *)
+
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
+Lemma merge_stacks_partition_emptym:
+  forall ctx1 ctx2,
+    PS.mergeable_interfaces ctx1 ctx2 ->
+  forall gps,
+    PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
+                    (PS.to_partial_stack gps (domm ctx2)) =
+    PS.to_partial_stack gps fset0.
+Admitted. (* Grade 2. *)
+
+Lemma merge_memories_partition:
+  forall ctx1 ctx2,
+    PS.mergeable_interfaces ctx1 ctx2 ->
+  forall mem,
+    PS.merge_memories
+      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx1) mem)
+      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx2) mem)
+  = mem.
+Admitted. (* Grade 2. *)
+
+(*
   P and C are two partial programs whose linking results in a whole program.
   We want to show that P and C do the same terminating behavior in the partial semantics
   iff their linking produces the very same behavior in the complete semantics.
@@ -1008,16 +1265,16 @@ Section Simulation.
     - econstructor.
       + eassumption.
       + constructor.
-        * PS.simplify_turn. eapply PS.domm_partition; eassumption.
+        * PS.simplify_turn. eapply domm_partition; eassumption.
         * reflexivity.
         * reflexivity.
-      + PS.simplify_turn. eapply PS.domm_partition; eassumption.
+      + PS.simplify_turn. eapply domm_partition; eassumption.
     - econstructor.
       + eapply PS.mergeable_interfaces_sym; eassumption.
       + eassumption.
       + assumption.
       + constructor.
-        * PS.simplify_turn. eapply PS.domm_partition; eassumption.
+        * PS.simplify_turn. eapply domm_partition; eassumption.
         * reflexivity.
         * reflexivity.
   Qed.
@@ -1036,9 +1293,9 @@ Section Simulation.
     inversion Hpartial1; subst;
       inversion Hpartial2; subst;
       PS.simplify_turn.
-    - eapply PS.domm_partition; eassumption.
+    - eapply domm_partition; eassumption.
     - assumption.
-    - eapply PS.domm_partition; eassumption.
+    - eapply domm_partition; eassumption.
     - assumption.
   Qed.
 
@@ -1057,7 +1314,7 @@ Section Simulation.
       inversion Hpartial1 as [? ? ? ? ? ? _ | ? ? ? ? ? ? Hcc1]; subst;
       inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst;
       PS.simplify_turn;
-      [ destruct (PS.domm_partition_in_neither Hmerge_iface Hpc1 Hpc2)
+      [ destruct (domm_partition_in_neither Hmerge_iface Hpc1 Hpc2)
       |
       | destruct (PS.domm_partition_in_notin Hmerge_iface Hcc1 Hpc1)
       | destruct (PS.domm_partition_in_both Hmerge_iface Hcc1 Hcc2)].
@@ -1124,16 +1381,16 @@ Section Simulation.
           ))).
         * easy.
         * simpl.
-          rewrite (PS.merge_stacks_partition Hmerge_iface).
-          rewrite (PS.merge_memories_partition Hmerge_iface).
+          rewrite (merge_stacks_partition Hmerge_iface).
+          rewrite (merge_memories_partition Hmerge_iface).
           admit.
         * constructor.
           -- assumption.
-          -- by rewrite (PS.merge_memories_partition Hmerge_iface).
-          -- by rewrite (PS.merge_stacks_partition Hmerge_iface).
+          -- by rewrite (merge_memories_partition Hmerge_iface).
+          -- by rewrite (merge_stacks_partition Hmerge_iface).
         * simpl.
-          rewrite (PS.merge_memories_partition Hmerge_iface).
-          rewrite (PS.merge_stacks_partition Hmerge_iface).
+          rewrite (merge_memories_partition Hmerge_iface).
+          rewrite (merge_stacks_partition Hmerge_iface).
           rewrite <- Pointer.inc_preserves_component.
           constructor.
           -- by rewrite Pointer.inc_preserves_component.
@@ -1324,11 +1581,11 @@ Section Simulation.
         assert (same_turn (prog_interface p) ips2' ips2'') as Hsame_step'.
         {
           inversion Hsame_turn as [? ? Hpc1 Hpc2 | ? ? Hcc1 Hcc2]; subst.
-          - apply (PS.mergeable_states_program_to_context IHHmergeable) in Hpc1.
-            apply (PS.mergeable_states_program_to_context Hmergeable'') in Hpc2.
+          - apply (mergeable_states_program_to_context IHHmergeable) in Hpc1.
+            apply (mergeable_states_program_to_context Hmergeable'') in Hpc2.
             exact (same_turn_context Hpc1 Hpc2).
-          - apply (PS.mergeable_states_context_to_program IHHmergeable) in Hcc1.
-            apply (PS.mergeable_states_context_to_program Hmergeable'') in Hcc2.
+          - apply (mergeable_states_context_to_program IHHmergeable) in Hcc1.
+            apply (mergeable_states_context_to_program Hmergeable'') in Hcc2.
             exact (same_turn_program Hcc1 Hcc2).
         }
         pose proof st_starNR_step IHHst_starN Hstep_ctx'' Hsame_step' Ht as Hst_starN'.
@@ -1365,11 +1622,11 @@ Section Simulation.
         assert (same_turn (prog_interface p) ips2' ips2'') as Hsame_step'.
         {
           inversion Hsame_turn as [? ? Hpc1 Hpc2 | ? ? Hcc1 Hcc2]; subst.
-          - apply (PS.mergeable_states_program_to_context IHHmergeable) in Hpc1.
-            apply (PS.mergeable_states_program_to_context Hmergeable'') in Hpc2.
+          - apply (mergeable_states_program_to_context IHHmergeable) in Hpc1.
+            apply (mergeable_states_program_to_context Hmergeable'') in Hpc2.
             exact (same_turn_context Hpc1 Hpc2).
-          - apply (PS.mergeable_states_context_to_program IHHmergeable) in Hcc1.
-            apply (PS.mergeable_states_context_to_program Hmergeable'') in Hcc2.
+          - apply (mergeable_states_context_to_program IHHmergeable) in Hcc1.
+            apply (mergeable_states_context_to_program Hmergeable'') in Hcc2.
             exact (same_turn_program Hcc1 Hcc2).
         }
         pose proof st_starNR_step IHHst_starN Hstep_ctx'' Hsame_step' Ht as Hst_starN'.
@@ -1468,7 +1725,7 @@ Section MultiSemantics.
           inversion Hpartial1 as [? ? ? ? ? ? Hpc1 |]; subst.
           inversion Hpartial2 as [? ? ? ? ? ? Hpc2 |]; subst.
           PS.simplify_turn.
-          apply (PS.domm_partition Hmerge_ifaces) in Hpc2.
+          apply (domm_partition Hmerge_ifaces) in Hpc2.
           rewrite Hpc2 in Hpc1.
           discriminate.
         * econstructor.
@@ -1481,7 +1738,7 @@ Section MultiSemantics.
              rewrite PS.to_partial_stack_unpartialize_identity.
              *** reflexivity.
              *** apply PS.merged_stack_has_no_holes.
-                 apply (PS.mergeable_states_stacks H); reflexivity.
+                 apply (mergeable_states_stacks H); reflexivity.
         * econstructor.
           ** PS.simplify_turn.
              rewrite mem_domm. auto.
@@ -1492,7 +1749,7 @@ Section MultiSemantics.
              rewrite PS.to_partial_stack_unpartialize_identity.
              *** reflexivity.
              *** apply PS.merged_stack_has_no_holes.
-                 apply (PS.mergeable_states_stacks H); reflexivity.
+                 apply (mergeable_states_stacks H); reflexivity.
         * (* contra *) (* Symmetric case of contra above. *)
           inversion H as [? ? ? Hmerge_ifaces ? Hpartial1 Hpartial2]; subst.
           inversion Hpartial1 as [| ? ? ? ? ? ? Hpc1]; subst.
@@ -1526,7 +1783,7 @@ Section MultiSemantics.
       inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst;
       PS.simplify_turn;
       (* XXX: This relies on incomplete assumptions *)
-      [ now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2)
+      [ now destruct (domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2)
       |
       |
       | now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2) ].
@@ -1548,8 +1805,8 @@ Section MultiSemantics.
         * PS.simplify_turn.
           now rewrite mem_domm.
         * by rewrite domm0 filterm_predT.
-        * rewrite domm0 (PS.merge_stacks_partition Hmergeable_ifaces).
-          by rewrite (PS.merge_stacks_partition_emptym Hmergeable_ifaces).
+        * rewrite domm0 (merge_stacks_partition Hmergeable_ifaces).
+          by rewrite (merge_stacks_partition_emptym Hmergeable_ifaces).
       + rewrite linking_empty_program.
         inversion Hfinal1
           as [p' ics ? Hsame_iface' _ Hwf' Hlinkable' Hnotin' Hpartial' Hfinal' | ? Hcontra];
@@ -1558,7 +1815,7 @@ Section MultiSemantics.
           last by rewrite Hcontra in Hpc1.
         inversion Hpartial'; subst.
         inversion Hfinal'; subst.
-        eapply (execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
+        eapply (@execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
     - (* The second case is symmetric *)
       eapply PS.final_state_program with
         (ics := (PS.unpartialize_stack
@@ -1581,8 +1838,8 @@ Section MultiSemantics.
           rewrite filterm_predT.
           reflexivity.
         * rewrite domm0.
-          rewrite (PS.merge_stacks_partition Hmergeable_ifaces).
-          rewrite (PS.merge_stacks_partition_emptym Hmergeable_ifaces).
+          rewrite (merge_stacks_partition Hmergeable_ifaces).
+          rewrite (merge_stacks_partition_emptym Hmergeable_ifaces).
           reflexivity.
       + rewrite linking_empty_program.
         inversion Hfinal2
@@ -1594,7 +1851,7 @@ Section MultiSemantics.
         inversion Hfinal'; subst.
         unfold prog. rewrite (program_linkC wf1 wf2 linkability).
         pose proof linkable_sym linkability as linkability'.
-        eapply (execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
+        eapply (@execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
   Qed.
 
   Lemma lockstep_simulation:
@@ -1730,7 +1987,7 @@ Section PartialComposition.
       inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
 
-      + destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
+      + destruct (domm_partition_in_neither Hmergeable_ifaces Hpc1 Hpc2).
 
       (* the program doesn't step, hence we stay still *)
       + apply star_if_st_starN in Hst_star2.
@@ -1776,17 +2033,17 @@ Section PartialComposition.
           (* RB: TODO: Refactor occurrences of the following proof pattern once complete. *)
           -- assumption.
           -- simpl.
-             rewrite (PS.merge_stacks_partition Hmergeable_ifaces).
-             rewrite (PS.merge_memories_partition Hmergeable_ifaces).
+             rewrite (merge_stacks_partition Hmergeable_ifaces).
+             rewrite (merge_memories_partition Hmergeable_ifaces).
              assumption.
           -- constructor.
              ++ assumption.
-             ++ now rewrite (PS.merge_memories_partition Hmergeable_ifaces).
-             ++ now rewrite (PS.merge_stacks_partition Hmergeable_ifaces).
+             ++ now rewrite (merge_memories_partition Hmergeable_ifaces).
+             ++ now rewrite (merge_stacks_partition Hmergeable_ifaces).
           -- constructor.
              ++ assumption.
-             ++ now rewrite (PS.merge_memories_partition Hmergeable_ifaces).
-             ++ now rewrite (PS.merge_stacks_partition Hmergeable_ifaces).
+             ++ now rewrite (merge_memories_partition Hmergeable_ifaces).
+             ++ now rewrite (merge_stacks_partition Hmergeable_ifaces).
 
       + destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
 
@@ -1956,7 +2213,7 @@ Section PartialComposition.
 
       + (* Contra. *)
         PS.simplify_turn.
-        apply (PS.domm_partition Hsame_ifaces) in Hpc2.
+        apply (domm_partition Hsame_ifaces) in Hpc2.
         rewrite Hpc2 in Hpc1.
         discriminate.
 
@@ -2001,7 +2258,7 @@ Section PartialComposition.
 
       + (* Contra. *)
         PS.simplify_turn.
-        apply (PS.domm_partition Hsame_ifaces) in Hpc2.
+        apply (domm_partition Hsame_ifaces) in Hpc2.
         rewrite Hpc2 in Hpc1.
         discriminate.
 

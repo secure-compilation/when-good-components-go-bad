@@ -45,13 +45,7 @@ Lemma genv_procedures_program_link_left_notin :
     (genv_procedures (prepare_global_env p)) Cid.
 Admitted. (* Grade 2, check. Possibly add linkability conditions, etc. *)
 
-Lemma genv_procedures_program_link_left_in :
-  forall {p Cid},
-    Cid \in domm (prog_interface p) ->
-  forall {c},
-    (genv_procedures (prepare_global_env (program_link p c))) Cid =
-    (genv_procedures (prepare_global_env p)) Cid.
-Admitted. (* Grade 2, check. Possibly add linkability conditions, etc. *)
+(* Lemma placeholder: genv_procedures_program_link_left_in *)
 
 Lemma genv_entrypoints_program_link_left :
   forall {C P p c b},
@@ -186,25 +180,4 @@ Lemma find_label_in_component_program_link_left:
     find_label_in_component (prepare_global_env p) pc l = pc'.
 Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
 
-Lemma execution_invariant_to_linking:
-  forall p c1 c2 pc instr,
-    linkable (prog_interface p) (prog_interface c1) ->
-    linkable (prog_interface p) (prog_interface c2) ->
-    well_formed_program p ->
-    well_formed_program c1 ->
-    well_formed_program c2 ->
-    Pointer.component pc \in domm (prog_interface p) ->
-    executing (prepare_global_env (program_link p c1)) pc instr ->
-    executing (prepare_global_env (program_link p c2)) pc instr.
-Proof.
-  intros p c1 c2 pc instr Hlinkable1 Hlinkable2 Hwf Hwf1 Hwf2 Hpc Hexec.
-  inversion Hexec as [procs [proc [Hgenv_procs [Hprocs_proc [Hoffset Hproc_instr]]]]].
-  exists procs, proc.
-  split; [| split; [| split]];
-    [| assumption | assumption | assumption].
-  assert (Pointer.component pc \notin domm (prog_interface c1)) as Hcc1 by admit.
-  assert (Pointer.component pc \notin domm (prog_interface c2)) as Hcc2 by admit.
-  rewrite (genv_procedures_program_link_left_notin Hcc1) in Hgenv_procs.
-  rewrite (genv_procedures_program_link_left_notin Hcc2).
-  assumption.
-Admitted. (* Grade 1. Easy lemma for the admits. *)
+(* Lemma placeholder: execution_invariant_to_linking *)

@@ -499,68 +499,20 @@ Qed.
 
 (* initialization of a linked program *)
 
-Lemma alloc_static_buffers_after_linking:
-  forall p c,
-    well_formed_program p ->
-    well_formed_program c ->
-    linkable (prog_interface p) (prog_interface c) ->
-    let pc := program_link p c in
-    alloc_static_buffers pc (domm (prog_interface pc)) =
-    unionm (alloc_static_buffers p (domm (prog_interface p)))
-           (alloc_static_buffers c (domm (prog_interface c))).
-Proof.
-  intros p c Hwf1 Hwf2 Hlinkable Hpc.
-  subst Hpc. simpl.
-  apply eq_fmap. intros k.
-  rewrite unionmE.
-  destruct (isSome ((alloc_static_buffers p (domm (prog_interface p))) k))
-           eqn:Hin.
-  - admit.
-  - admit.
-Admitted.
-
-Theorem prepare_initial_memory_after_linking:
-  forall p c,
-    well_formed_program p ->
-    well_formed_program c ->
-    linkable (prog_interface p) (prog_interface c) ->
-    prepare_initial_memory (program_link p c) =
-    unionm (prepare_initial_memory p) (prepare_initial_memory c).
-Proof.
-  intros p c Hwf1 Hwf2 Hlinkable.
-  unfold prepare_initial_memory.
-  apply alloc_static_buffers_after_linking; auto.
-Qed.
+(* Lemma placeholder: alloc_static_buffers_after_linking *)
+(* Lemma placeholder: prepare_initial_memory_after_linking *)
 
 Definition prepare_procedures_memory (p: program) (mem: Memory.t) : Memory.t :=
   let '(mem, _, _) := prepare_procedures p mem in
   mem.
 
-Theorem prepare_procedures_memory_after_linking:
-  forall p c,
-    well_formed_program p ->
-    well_formed_program c ->
-    linkable (prog_interface p) (prog_interface c) ->
-    prepare_procedures_memory (program_link p c)
-                              (prepare_initial_memory (program_link p c)) =
-    unionm (prepare_procedures_memory p (prepare_initial_memory p))
-           (prepare_procedures_memory c (prepare_initial_memory c)).
-Admitted.
+(* Lemma placeholder: prepare_procedures_memory_after_linking *)
 
 Definition prepare_procedures_entrypoints (p: program) (mem: Memory.t) : EntryPoint.t :=
   let '(_, _, entrypoints) := prepare_procedures p mem in
   entrypoints.
 
-Theorem prepare_procedures_entrypoints_after_linking:
-  forall p c,
-    well_formed_program p ->
-    well_formed_program c ->
-    linkable (prog_interface p) (prog_interface c) ->
-    prepare_procedures_entrypoints (program_link p c)
-                                   (prepare_initial_memory (program_link p c)) =
-    unionm (prepare_procedures_entrypoints p (prepare_initial_memory p))
-           (prepare_procedures_entrypoints c (prepare_initial_memory c)).
-Admitted.
+(* Lemma placeholder: prepare_procedures_entrypoints_after_linking *)
 
 Lemma link_sym:
   forall p c,
