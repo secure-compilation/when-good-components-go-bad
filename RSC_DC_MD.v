@@ -102,41 +102,26 @@ Section RSC_DC_MD.
 
     (* FCC *)
 
-    assert (exists P'_compiled Cs_compiled P'Cs_compiled,
-               compile_program P' = Some P'_compiled /\
-               compile_program Cs = Some Cs_compiled /\
-               compile_program (Source.program_link P' Cs) = Some P'Cs_compiled /\
-               forall b, program_behaves (I.CS.sem P'Cs_compiled) b <->
-                         program_behaves (I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b)
-
-      as HP'_Cs_compiles. {
-      (* the definability output can be splitted in two programs *)
-      (* probably need partialize to obtain them *)
-      assert (exists P'_compiled, compile_program P' = Some P'_compiled)
-        as [P'_compiled HP'_compiles]
-        by (now apply well_formed_compilable).
-      assert (exists Cs_compiled, compile_program Cs = Some Cs_compiled)
-        as [Cs_compiled HCs_compiles]
-        by (now apply well_formed_compilable).
-      assert (exists P'_Cs_compiled,
-                 compile_program (Source.program_link P' Cs) = Some P'_Cs_compiled)
-        as [P'_Cs_compiled HP'_Cs_compiles]. {
-        rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
-        rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
-        pose proof Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct
-          as Hlinking_wf.
-        apply well_formed_compilable; assumption.
-      }
-      exists P'_compiled, Cs_compiled, P'_Cs_compiled.
-      split; [assumption |].
-      split; [assumption |].
-      split; [assumption |].
-      apply Compiler.separate_compilation_weaker with (p:=P') (c:=Cs);
-        try assumption.
-      - congruence.
+    (* the definability output can be split in two programs *)
+    (* probably need partialize to obtain them *)
+    destruct (well_formed_compilable _ well_formed_P') as [P'_compiled HP'_compiles].
+    destruct (well_formed_compilable _ well_formed_Cs) as [Cs_compiled HCs_compiles].
+    assert (exists P'_Cs_compiled,
+              compile_program (Source.program_link P' Cs) = Some P'_Cs_compiled)
+      as [P'_Cs_compiled HP'_Cs_compiles]. {
+      rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
+      rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
+      pose proof Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct
+        as Hlinking_wf.
+      apply well_formed_compilable; assumption.
     }
-    destruct HP'_Cs_compiles
-      as [P'_compiled [Cs_compiled [P'_Cs_compiled [HP'_compiles [HCs_compiles [HP'_Cs_compiles HP'_Cs_behaves]]]]]].
+    assert (forall b, program_behaves (I.CS.sem P'_Cs_compiled) b <->
+                 program_behaves (I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b)
+      as HP'_Cs_behaves. {
+      apply Compiler.separate_compilation_weaker with (p:=P') (c:=Cs);
+        try assumption;
+        [congruence].
+    }
     assert (exists b', program_behaves (I.CS.sem P'_Cs_compiled) b' /\ prefix m b')
       as HP'_Cs_compiled_beh. {
 
@@ -179,7 +164,7 @@ Section RSC_DC_MD.
       apply linkability_pcomp_Ct.
     }
     apply HP'_Cs_behaves in HP'_Cs_compiled_beh.
- (*   apply Source.linkable_mains_sym in HP'Cs_mains. *)
+    apply Source.linkable_mains_sym in HP'Cs_mains.
     rewrite <- Intermediate.link_sym in HP'_Cs_compiled_beh;
       [| (apply (Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles))
        | (apply (Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles))
