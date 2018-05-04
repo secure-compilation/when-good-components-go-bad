@@ -227,7 +227,10 @@ Instance show_exec_error : Show ExecutionError :=
     show :=
       fun err =>
         match err with
-        | RegisterNotFound st reg => "RegisterNotFound" ++ (show reg)
+        | RegisterNotFound st reg => "RegisterNotFound"
+                                       ++ (show reg)
+                                       ++ newline
+                                       ++ (show st)
         | NoInfo => EmptyString
         | UninitializedMemory st addr =>
           "UninitializedMemory PC=" ++ (show_addr (MachineState.getPC st))               

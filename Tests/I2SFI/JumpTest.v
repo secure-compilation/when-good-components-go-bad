@@ -38,9 +38,9 @@ Instance show_jump_type : Show jump_type :=
 
 Definition show_jump_log_entry (entry : jump_log_entry) : string :=
   let '(pc,addr,type,t) := entry in
-   "pc: " ++ (show pc)
+   "pc: " ++ (show_addr pc)
           ++ " ptr: "
-          ++ (show addr)
+          ++ (show_addr addr)
           ++ " type: "
           ++ ( match type with
                | Indirect r => "Jmp " ++ (show r)
@@ -133,20 +133,21 @@ Definition entry_checker (entry : jump_log_entry) : Checker :=
   if (SFI.is_same_component_bool pc addr)                      
   then
     match t with
-    | nil =>  whenFail ("Register R_T expected in internal jumps "
-                         ++ (show type))
+    | nil =>  whenFail (  "Register R_T expected in internal jumps "
+                          ++ (show_jump_log_entry (pc,addr,type,t)))
                       (match type with
                        | Indirect r => RiscMachine.Register.eqb
                                         RiscMachine.Register.R_T r
                        | Direct => true
                        end)     
-    | _ => whenFail ("Unexpectected event at log entry:"
-                      ++ (show_jump_log_entry (pc,addr,type,t)))
+    | _ => whenFail (  "Unexpectected event at log entry:"
+                        ++ (show_jump_log_entry (pc,addr,type,t)))
                    false
     end
   else
     match t with
-    | _::_ =>  whenFail ("Register R_A expected in internal jumps "
+    | _::_ =>  whenFail ( (show_addr pc)
+                          ++ ": Register R_A expected in internal jumps "
                           ++ (show type))
                        (match type with
                         | Indirect r => RiscMachine.Register.eqb

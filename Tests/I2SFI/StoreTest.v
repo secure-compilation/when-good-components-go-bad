@@ -137,4 +137,5 @@ Definition store_correct (fuel : nat) :=
                 store_log_checker fuel.
 
 Extract Constant Test.defNumTests => "10".
+
 (*! QuickChick (store_correct 100%nat). *)

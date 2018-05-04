@@ -56,6 +56,8 @@ Definition check_correct
            {ExecutionResult:Type} {ExecutionError:Type}
            {Log:Type}
            `{Show CompilerErrorType}
+           `{Show ExecutionResult}
+           `{Show ExecutionError}
            
            (t : instr_gen)
            (wf : instr_weight)
@@ -85,9 +87,13 @@ Definition check_correct
           let '(res,log) := ef p fuel in
           match res with
           | Common.Either.Left msg err =>
-            log_checker_error_fun log err
+            (whenFail ("Execution error of failed program: "
+                         ++ (show err)))%string
+            (log_checker_error_fun log err)
           | Common.Either.Right exec_res =>
             (* (whenFail ("memory of failed program: " ++ (show_mem (MachineState.getMemory st)))%string *)
+            (whenFail ("Execution Result of failed program: "
+                         ++ (show exec_res)))%string
             (log_checker_fun log exec_res)
           end
         end).

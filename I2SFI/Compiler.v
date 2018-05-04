@@ -754,20 +754,20 @@ Definition layout_procedure
                         SFI.BASIC_BLOCK_SIZE in
       let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r)%N
                         SFI.BASIC_BLOCK_SIZE in
-      match elt with
-      | ( _, AbstractMachine.IJal _) =>
-        acc
-          ++ (List.repeat
-                (None,AbstractMachine.INop)
-                (N.to_nat (p + SFI.BASIC_BLOCK_SIZE - 1%N )%N ) )
-          ++ [elt]
-      | _ =>
+      (* match elt with *)
+      (* | ( _, AbstractMachine.IJal _) => *)
+      (*   acc *)
+      (*     ++ (List.repeat *)
+      (*           (None,AbstractMachine.INop) *)
+      (*           (N.to_nat (p + SFI.BASIC_BLOCK_SIZE - 1%N )%N ) ) *)
+      (*     ++ [elt] *)
+      (* | _ => *)
         acc
           ++ (List.repeat
                 (None,AbstractMachine.INop)
                 (N.to_nat p))
           ++ [elt]
-      end in
+  in
 
   let padd1 acc elt :=
       (* elt is the last instruction in the block *)
@@ -800,12 +800,18 @@ Definition layout_procedure
             ) code (nil,nil)
         )) in
   (* padding *)
-  do oplbl <- get_proc_label pid cid;
-    let tst :=
+  do oplbl <- get_proc_label cid pid;
+    let is_exported_proc :=
         match oplbl with
-        | Some plbl => label_eqb plbl
-        | None => (fun _ => false)
+        | Some plbl => true
+        | None => false
         end in
+    let plbl :=
+        match oplbl with
+        | Some plbl => plbl
+        | None => (0%N,0%N) 
+        end in
+
       ret (List.fold_left
          (fun acc elt =>
             match elt with
@@ -815,25 +821,57 @@ Definition layout_procedure
               | _ => acc ++ [elt]
               end
             | (Some ll, i) =>
-              match ll with
-              | nil =>
-                match i with
-                | AbstractMachine.IJal _ => padd1 acc elt
-                | _ => acc ++ [elt]
-                end
-              | lbl::nil =>
-                if (tst lbl)
+              if is_exported_proc
+              then 
+                (* labels present *)
+                if (List.existsb (label_eqb plbl) ll)
                 then
-                  match i with
-                  | AbstractMachine.IJal _ => padd1 acc elt
-                  | _ => acc ++ [elt]
-                  end
+                  (* the first instruction after Halt guard *)
+                  acc++[elt]
                 else
-                  padd acc elt
-              | _ =>  padd acc elt
-
-              end
+                  match i with
+                  | AbstractMachine.IJal _ =>
+                    padd1 (padd acc (Some ll,AbstractMachine.INop)) (None,i)
+                  | _ => padd acc elt
+                  end
+              else
+                match i with
+                | AbstractMachine.IJal _ =>
+                  padd1 (padd acc (Some ll,AbstractMachine.INop)) (None,i)
+                | _ => padd acc elt
+                end
             end
+            (*   match ll with *)
+            (*   | nil => *)
+            (*     match i with *)
+            (*     | AbstractMachine.IJal _ => padd1 acc elt *)
+            (*     | _ => acc ++ [elt] *)
+            (*     end *)
+            (*   | lbl::nil => *)
+            (*     if (tst lbl) *)
+            (*     then *)
+            (*       (* if this branch is taken, then this is  *)
+            (*          the header of this procedure and the first  *)
+            (*          instruction is not IJal *) *)
+            (*       acc ++ [elt] *)
+            (*       (* match i with *) *)
+            (*       (* | AbstractMachine.IJal _ => padd1 acc elt *) *)
+            (*       (* | _ => acc ++ [elt] *) *)
+            (*       (* end *) *)
+            (*     else *)
+            (*        match i with *)
+            (*        | AbstractMachine.IJal _ => *)
+            (*          padd1 (padd acc (Some (lbl::nil),AbstractMachine.INop)) (None,i) *)
+            (*        | _ => padd acc elt *)
+            (*        end                      *)
+            (*   | _::_::_ => *)
+            (*     match i with *)
+            (*     | AbstractMachine.IJal _ => *)
+            (*       padd1 (padd acc (Some ll,AbstractMachine.INop)) (None,i) *)
+            (*     | _ => padd acc elt *)
+            (*     end *)
+            (*   end *)
+            (* end *)
          ) lcode1 nil).
 
 (* acode: cid -> pid -> list of instr (labeled individually) *)
@@ -1127,13 +1165,17 @@ Definition generate_code_memory
 Definition convert_prog_interface (pi : Program.interface) : prog_int :=
   List.fold_left
     (fun acc '(cid,cint) =>
-       BinNatMap.add (N.of_nat cid)
-                ((List.map N.of_nat (val (Component.export cint))),
-                 (List.map (fun '(c,p)=>(N.of_nat c,N.of_nat p)) (val (Component.import cint))))
-                acc
+       BinNatMap.add
+         (N.of_nat cid)
+         (
+           (List.map N.of_nat (val (Component.export cint))),
+           (List.map (fun '(c,p)=>(N.of_nat c,N.of_nat p))
+                     (val (Component.import cint))))
+         acc
     )
-    (elementsm pi) (BinNatMap.empty  ((list Procedure_id) *
-                                 (list (Component_id * Procedure_id)))).
+    (elementsm pi)
+    (BinNatMap.empty
+       ((list Procedure_id) * (list (Component_id * Procedure_id)))).
 
 Definition convert_prog_buffers (buffers : NMap {fmap Block.id -> nat + list value})
   : list (Component_id * (list (Block_id *  (nat + list value)))) :=
@@ -1146,7 +1188,8 @@ Definition convert_prog_buffers (buffers : NMap {fmap Block.id -> nat + list val
     (elementsm buffers)
     nil.
 
-Definition convert_prog_procs (procs :  NMap (NMap Machine.code)) : BinNatMap.t (BinNatMap.t Machine.code) :=
+Definition convert_prog_procs (procs :  NMap (NMap Machine.code))
+  : BinNatMap.t (BinNatMap.t Machine.code) :=
   List.fold_left
     (fun acc1 '(cid,pmap) =>
        BinNatMap.add (N.of_nat cid)
