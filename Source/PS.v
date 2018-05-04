@@ -75,10 +75,7 @@ Ltac simplify_turn :=
 
 Definition to_partial_frame (ctx: {fset Component.id}) frame : Component.id * option (value * CS.cont) :=
   let: CS.Frame C v k := frame in
-  if C \in ctx then
-    (C, None)
-  else
-    (C, Some (v, k)).
+  (C, if C \in ctx then None else Some (v, k)).
 
 Fixpoint drop_last_frames_if_needed
          (ctx: {fset Component.id}) (s: CS.stack) (Cincontrol: Component.id)
@@ -279,7 +276,7 @@ case: stk'=> [[<- <-]|[C' v' k'] stk'] //=.
 rewrite andbC; case: ifP=> [/andP [/eqP -> {C'} in_ctx e]|_].
   move: (head_to_partial_stack_helper ctx stk' frame') in_ctx in_prog in_prog'.
   rewrite e /= => ->; case: (frame')=> C' ?? /= in_ctx.
-  by rewrite in_ctx /= in_ctx.
+  by rewrite in_ctx.
 move=> [e_frame e_stk]; do 2!eexists; split; eauto.
 by rewrite /to_partial_stack drop_last_frames_if_needed_context.
 Qed.
