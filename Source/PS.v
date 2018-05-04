@@ -83,6 +83,15 @@ Fixpoint drop_while {T : Type} (a : pred T) (s : seq T) :=
     if a x then drop_while a s' else s
   else [::].
 
+Lemma eq_drop_while T (a1 a2 : T -> bool) :
+  a1 =1 a2 -> drop_while a1 =1 drop_while a2.
+Proof. by move=> e_a; elim=> [//|x s /= ->]; rewrite e_a. Qed.
+
+(** FIXME: This function could probably be simplified if we replaced
+    [last_frame] with the component of the last frame, and changed the
+    definition of [to_partial_stack] so that it always put the last frame at the
+    head of the list. *)
+
 Fixpoint to_partial_stack_helper
          (ctx: {fset Component.id}) (s: CS.stack) last_frame
   : PS.stack :=
@@ -95,6 +104,20 @@ Fixpoint to_partial_stack_helper
       to_partial_frame ctx last_frame ::
       to_partial_stack_helper ctx s' (CS.Frame C v k)
   end.
+
+Lemma to_partial_stack_helperE ctx stk last_frame :
+  to_partial_stack_helper ctx stk last_frame =
+  to_partial_frame ctx last_frame ::
+  match drop_while (fun '(CS.Frame C _ _) => (C \in ctx) && (C == CS.f_component last_frame)) stk with
+  | [::] => [::]
+  | last_frame' :: stk => to_partial_stack_helper ctx stk last_frame'
+  end.
+Proof.
+elim: stk last_frame=> [|[C' v' k'] stk IH] //= [C v k] /=.
+case: eqP=> [-> {C'}|_].
+  by rewrite andbT IH /=; case: ifP=> //= ->.
+by rewrite andbF.
+Qed.
 
 Lemma head_to_partial_stack_helper ctx stk frame :
   head (to_partial_frame ctx frame) (to_partial_stack_helper ctx stk frame) =
@@ -117,6 +140,30 @@ Definition to_partial_stack
   | last_frame :: s' =>
     to_partial_stack_helper ctx s' last_frame
   end.
+
+(* XXX: This lemma seems more useful to reason about [to_partial_stack] *)
+
+Lemma to_partial_stackE stk ctx C :
+  to_partial_stack stk ctx C =
+  let stk := if C \in ctx
+             then drop_while (pred1 C \o CS.f_component) stk
+             else stk in
+  if stk is frame :: stk'
+  then to_partial_frame ctx frame :: to_partial_stack stk' ctx (CS.f_component frame)
+  else [::].
+Proof.
+case: stk=> [|[C' v k] stk] /=; first by rewrite if_same.
+rewrite /to_partial_stack /=.
+case: eqP => [-> {C'}|_]; last first.
+  rewrite andbF to_partial_stack_helperE.
+  by case: ifP=> [Cin|Cnin].
+rewrite andbT; case: ifP=> [Cin|Cnin]; last by rewrite to_partial_stack_helperE.
+rewrite (_ : drop_while _ _ = drop_while (pred1 C \o CS.f_component) stk); last first.
+  apply/eq_drop_while; case=> [???] /=; rewrite andbC.
+  by case: eqP=> // ->; rewrite Cin.
+case: drop_while=> [|frame stk'] //.
+by rewrite to_partial_stack_helperE.
+Qed.
 
 Example to_partial_stack_empty_context:
   let in_s := [CS.Frame 1 (Int 1) Kstop;
@@ -230,49 +277,6 @@ Proof.
   unfold to_partial_stack.
   destruct gps as [|[C' v' k'] gps'];
   by rewrite /= Hin_ctx /= eqxx.
-Qed.
-
-Lemma drop_last_frames_if_needed_context (ctx : {fset Component.id}) stk C :
-  C \notin ctx ->
-  drop_while (fun '(CS.Frame C' _ _) => (C' \in ctx) && (C' == C)) stk = stk.
-Proof.
-case: stk=> [|[C' v k] stk] //= in_prog.
-rewrite /= andbC; case: eqP=> [-> {C'}|] //=.
-by rewrite (negbTE in_prog).
-Qed.
-
-Lemma to_partial_stack_context C frame stk ctx :
-  C \notin ctx ->
-  CS.f_component frame \notin ctx ->
-  to_partial_stack (frame :: stk) ctx C =
-  to_partial_frame ctx frame :: to_partial_stack stk ctx (CS.f_component frame).
-Proof.
-move=> in_prog in_prog'; rewrite /to_partial_stack !drop_last_frames_if_needed_context //.
-case: frame stk in_prog'=> [C1 v1 k1] [|[C2 v2 k2] stk] //= in_prog'.
-rewrite andbC; case: eqP=> [-> {C2}|] //=.
-by rewrite (negbTE in_prog').
-Qed.
-
-Lemma to_partial_stack_inv stk ctx C pframe pstk :
-  C \notin ctx ->
-  pframe.1 \notin ctx ->
-  to_partial_stack stk ctx C = pframe :: pstk ->
-  exists frame' stk',
-    [/\ stk = frame' :: stk',
-        pframe = to_partial_frame ctx frame' &
-        pstk = to_partial_stack stk' ctx pframe.1].
-Proof.
-move=> in_prog in_prog'.
-rewrite {1}/to_partial_stack drop_last_frames_if_needed_context //.
-case: stk=> [|frame' stk'] //=.
-case: stk'=> [[<- <-]|[C' v' k'] stk'] //=.
-  by exists frame', [::]; split.
-rewrite andbC; case: ifP=> [/andP [/eqP -> {C'} in_ctx e]|_].
-  move: (head_to_partial_stack_helper ctx stk' frame') in_ctx in_prog in_prog'.
-  rewrite e /= => ->; case: (frame')=> C' ?? /= in_ctx.
-  by rewrite in_ctx.
-move=> [e_frame e_stk]; do 2!eexists; split; eauto.
-by rewrite /to_partial_stack drop_last_frames_if_needed_context.
 Qed.
 
 Lemma partial_stack_outside_context_preserves_top :
@@ -937,12 +941,10 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
   case: scs2=> [C' stk2 mem2 k' e' arg'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
   move=> {C' k' e' arg'} <- e_stk e_mem <- <- <-.
-  move/esym: e_stk; rewrite (to_partial_stack_context _ in_prog) //= (negbTE in_prog).
-  case/(to_partial_stack_inv in_prog)=> //.
-  move=> [C' v' k'] [stk2' [-> /= e_frame]].
-  have e : C = C' by case: (C' \in domm ctx) e_frame=> [|] [<-].
-  move: e_frame; rewrite -{}e {C'} (negbTE in_prog) => - [<- <-] {v' k'} e_stk.
-  by rewrite -lock /= eqxx (negbTE in_prog) e_stk e_mem.
+  move: e_stk; rewrite to_partial_stackE (negbTE in_prog) /= (negbTE in_prog).
+  rewrite (to_partial_stackE stk2) (negbTE in_prog) /=.
+  case: stk2=> [//|[_ v' k'] stk2] /= [<-]; rewrite (negbTE in_prog).
+  by case=> <- <- e_stk; rewrite -lock /= eqxx (negbTE in_prog) e_stk e_mem.
 - (* External return *)
   move=> C stk1 mem1 k v arg C' old ne in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
@@ -951,21 +953,20 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
   move=> {C'' k' e' arg'} <- e_stk e_mem <- <- <-.
   case: ifPn=> [in_ctx|in_prog'].
   + (* Return to context *)
-    move: e_stk.
-    rewrite {1}/to_partial_stack drop_last_frames_if_needed_context //.
-    move=> e_stk.
-    move: (head_to_partial_stack_helper (domm ctx) stk1 (CS.Frame C' old k)).
-    rewrite e_stk.
-    admit.
+    move: ne e_stk=> /eqP ne.
+    rewrite to_partial_stackE (negbTE in_prog) /= in_ctx.
+    rewrite [to_partial_stack stk2 _ _]to_partial_stackE (negbTE in_prog) /=.
+    case: stk2=> [|[C2 v2 k2] stk2] //= [<- {C2} _ e_stk].
+    by rewrite -lock /= in_ctx (negbTE ne) e_stk e_mem.
   + (* Return to program *)
-    move/esym: e_stk; rewrite (to_partial_stack_context _ in_prog) //= (negbTE in_prog').
-    case/(to_partial_stack_inv in_prog)=> //.
-    move=> [C'' v'' k''] [stk2' [-> /= e_frame]].
-    have e : C'' = C' by case: (C'' \in domm ctx) e_frame=> [|] [<-].
-    move: e_frame; rewrite {}e {C''} (negbTE in_prog') => - [<- <-] {v'' k''} e_stk.
+    move: e_stk.
+    rewrite to_partial_stackE (negbTE in_prog) /= (negbTE in_prog').
+    rewrite (to_partial_stackE stk2) (negbTE in_prog) /=.
+    case: stk2=> [|[_ old2 k2] stk2] //= [<-]; rewrite (negbTE in_prog').
+    case=> <- <- {old2 k2} e_stk.
     rewrite -lock /=; move/eqP/negbTE: ne=> ->.
     by rewrite (negbTE in_prog') e_stk e_mem.
-Admitted.
+Qed.
 
 (* transition system *)
 
