@@ -77,17 +77,11 @@ Definition to_partial_frame (ctx: {fset Component.id}) frame : Component.id * op
   let: CS.Frame C v k := frame in
   (C, if C \in ctx then None else Some (v, k)).
 
-Fixpoint drop_last_frames_if_needed
-         (ctx: {fset Component.id}) (s: CS.stack) (Cincontrol: Component.id)
-  : CS.stack :=
-  match s with
-  | [] => []
-  | CS.Frame C v k :: s' =>
-    if (C \in ctx) && (C == Cincontrol) then
-      drop_last_frames_if_needed ctx s' Cincontrol
-    else
-      s
-  end.
+(** FIXME: Move to extra *)
+Fixpoint drop_while {T : Type} (a : pred T) (s : seq T) :=
+  if s is x :: s' then
+    if a x then drop_while a s' else s
+  else [::].
 
 Fixpoint to_partial_stack_helper
          (ctx: {fset Component.id}) (s: CS.stack) last_frame
@@ -118,7 +112,7 @@ Qed.
 
 Definition to_partial_stack
           (s: CS.stack) (ctx: {fset Component.id}) (Cincontrol: Component.id) :=
-  match drop_last_frames_if_needed ctx s Cincontrol with
+  match drop_while (fun '(CS.Frame C _ _) => (C \in ctx) && (C == Cincontrol)) s with
   | [] => []
   | last_frame :: s' =>
     to_partial_stack_helper ctx s' last_frame
@@ -238,12 +232,12 @@ Proof.
   by rewrite /= Hin_ctx /= eqxx.
 Qed.
 
-Lemma drop_last_frames_if_needed_context ctx stk C :
+Lemma drop_last_frames_if_needed_context (ctx : {fset Component.id}) stk C :
   C \notin ctx ->
-  drop_last_frames_if_needed ctx stk C = stk.
+  drop_while (fun '(CS.Frame C' _ _) => (C' \in ctx) && (C' == C)) stk = stk.
 Proof.
 case: stk=> [|[C' v k] stk] //= in_prog.
-rewrite andbC; case: eqP=> [-> {C'}|] //=.
+rewrite /= andbC; case: eqP=> [-> {C'}|] //=.
 by rewrite (negbTE in_prog).
 Qed.
 
@@ -289,8 +283,8 @@ Lemma partial_stack_outside_context_preserves_top :
 Proof.
   intros Cid' Cid val cont st ctx Hctx.
   induction st as [| hd st IHst].
-  - unfold to_partial_stack, drop_last_frames_if_needed.
-    rewrite Hctx. simpl.
+  - unfold to_partial_stack.
+    simpl. rewrite Hctx. simpl.
     rewrite Hctx. simpl.
     eexists. eexists. reflexivity.
   - (* Extract information from IH. *)
@@ -298,8 +292,8 @@ Proof.
     unfold to_partial_stack in IHst. simpl in IHst.
     rewrite Hctx in IHst. simpl in IHst.
     (* Substitute information into the goal. *)
-    unfold to_partial_stack, drop_last_frames_if_needed.
-    rewrite Hctx. simpl.
+    unfold to_partial_stack.
+    simpl. rewrite Hctx. simpl.
     rewrite IHst. simpl.
     destruct hd as [C v0 k1].
     destruct (C \in ctx) eqn:Hcase1; rewrite Hcase1;
@@ -317,8 +311,8 @@ Proof.
   assert (Cid == Cid' = false) as Hneq
     by (apply /eqP; intro Heq; by symmetry in Heq).
   induction st as [| hd st IHst].
-  - unfold to_partial_stack, drop_last_frames_if_needed.
-    rewrite Hneq. rewrite andb_comm. simpl.
+  - unfold to_partial_stack.
+    simpl. rewrite Hneq. rewrite andb_comm. simpl.
     destruct (Cid \in ctx) eqn:Hcase1; rewrite Hcase1;
       by eauto.
   - (* Extract information from IH. *)
@@ -326,8 +320,8 @@ Proof.
     unfold to_partial_stack in IHst. simpl in IHst.
     rewrite Hneq in IHst. rewrite andb_comm in IHst. simpl in IHst.
     (* Substitute information into the goal. *)
-    unfold to_partial_stack, drop_last_frames_if_needed.
-    rewrite Hneq. rewrite andb_comm. simpl.
+    unfold to_partial_stack.
+    simpl. rewrite Hneq. rewrite andb_comm. simpl.
     rewrite IHst. simpl.
     destruct hd as [C v0 k1].
     destruct (C \in ctx) eqn:Hcase1; rewrite Hcase1;
@@ -529,25 +523,20 @@ Proof.
   intros ctx C C' old_call_arg1 k1 old_call_arg2 k2 gps1 gps2.
   intros Hprog Hstack.
   unfold to_partial_stack in Hstack.
-  unfold drop_last_frames_if_needed in Hstack.
-  destruct (C' \in ctx) eqn:Hin_ctx_aux;
-    try discriminate.
-  rewrite Hin_ctx_aux in Hstack. simpl in Hstack.
+  rewrite /= (negbTE Hprog) /= in Hstack.
   destruct gps1 as [|[C_a v_a k_a] gps1'].
   - destruct gps2 as [|[C_b v_b k_b] gps2'].
-    + simpl in *.
-      rewrite Hin_ctx_aux in Hstack.
+    + rewrite /= (negbTE Hprog) in Hstack.
       inversion Hstack. subst.
       repeat split.
     + simpl in *.
-      rewrite Hin_ctx_aux in Hstack.
+      rewrite (negbTE Hprog) in Hstack.
       destruct (C_b \in ctx) eqn:HC_b_in_ctx;
         rewrite HC_b_in_ctx in Hstack.
       * destruct (C_b == C') eqn:HC_b_eq_C';
           simpl in *.
         ** move/eqP in HC_b_eq_C'. subst.
-           rewrite Hin_ctx_aux in HC_b_in_ctx.
-           discriminate.
+           by rewrite HC_b_in_ctx in Hprog.
         ** inversion Hstack.
            exfalso.
            symmetry in H2.
@@ -561,13 +550,13 @@ Proof.
         eauto.
   - destruct gps2 as [|[C_b v_b k_b] gps2'].
     + simpl in *.
-      rewrite Hin_ctx_aux in Hstack.
+      rewrite (negbTE Hprog) in Hstack.
       destruct (C_a \in ctx) eqn:HC_a_in_ctx;
         rewrite HC_a_in_ctx in Hstack.
       * destruct (C_a == C') eqn:HC_a_eq_C';
           simpl in *.
         ** move/eqP in HC_a_eq_C'. subst.
-           rewrite Hin_ctx_aux in HC_a_in_ctx.
+           rewrite (negbTE Hprog) in HC_a_in_ctx.
            discriminate.
         ** inversion Hstack.
            exfalso.
@@ -581,7 +570,7 @@ Proof.
         eapply to_partial_stack_helper_nonempty.
         eauto.
     + simpl in Hstack.
-      rewrite Hin_ctx_aux in Hstack.
+      rewrite (negbTE Hprog) in Hstack.
       destruct (C_a \in ctx) eqn:HC_a_in_ctx.
       * destruct (C_b \in ctx) eqn:HC_b_in_ctx.
         ** rewrite HC_a_in_ctx in Hstack.
@@ -590,22 +579,22 @@ Proof.
            *** destruct (C_b == C') eqn:HC_b_eq_C'.
                **** simpl in *.
                     apply Nat.eqb_eq in HC_a_eq_C'. subst.
-                    rewrite Hin_ctx_aux in HC_a_in_ctx.
+                    rewrite (negbTE Hprog) in HC_a_in_ctx.
                     discriminate.
                **** simpl in *.
                     apply Nat.eqb_eq in HC_a_eq_C'. subst.
-                    rewrite Hin_ctx_aux in HC_a_in_ctx.
+                    rewrite (negbTE Hprog) in HC_a_in_ctx.
                     discriminate.
            *** destruct (C_b == C') eqn:HC_b_eq_C'.
                **** simpl in *.
                     apply Nat.eqb_eq in HC_b_eq_C'. subst.
-                    rewrite Hin_ctx_aux in HC_b_in_ctx.
+                    rewrite (negbTE Hprog) in HC_b_in_ctx.
                     discriminate.
                **** simpl in *.
                     inversion Hstack. subst.
                     repeat split.
                     unfold to_partial_stack.
-                    unfold drop_last_frames_if_needed.
+                    simpl.
                     rewrite HC_a_in_ctx HC_b_in_ctx.
                     rewrite HC_a_eq_C' HC_b_eq_C'.
                     simpl. auto.
@@ -614,12 +603,12 @@ Proof.
            simpl in *.
            destruct (C_a == C') eqn:HC_a_eq_C'.
            *** apply Nat.eqb_eq in HC_a_eq_C'. subst.
-               rewrite Hin_ctx_aux in HC_a_in_ctx.
+               rewrite (negbTE Hprog) in HC_a_in_ctx.
                discriminate.
            *** inversion Hstack. subst.
                repeat split.
                unfold to_partial_stack.
-               unfold drop_last_frames_if_needed.
+               simpl.
                rewrite HC_a_in_ctx HC_b_in_ctx.
                simpl.
                rewrite HC_a_eq_C'.
@@ -630,12 +619,12 @@ Proof.
            simpl in *.
            destruct (C_b == C') eqn:HC_b_eq_C'.
            *** apply Nat.eqb_eq in HC_b_eq_C'. subst.
-               rewrite Hin_ctx_aux in HC_b_in_ctx.
+               rewrite (negbTE Hprog) in HC_b_in_ctx.
                discriminate.
            *** inversion Hstack. subst.
                repeat split.
                unfold to_partial_stack.
-               unfold drop_last_frames_if_needed.
+               simpl.
                rewrite HC_b_in_ctx HC_b_eq_C'.
                rewrite HC_a_in_ctx. simpl.
                rewrite H2. reflexivity.
@@ -645,7 +634,7 @@ Proof.
            inversion Hstack. subst.
            repeat split.
            unfold to_partial_stack.
-           unfold drop_last_frames_if_needed.
+           simpl.
            rewrite HC_b_in_ctx.
            rewrite HC_a_in_ctx. simpl.
            rewrite H2. reflexivity.
@@ -964,6 +953,9 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
   + (* Return to context *)
     move: e_stk.
     rewrite {1}/to_partial_stack drop_last_frames_if_needed_context //.
+    move=> e_stk.
+    move: (head_to_partial_stack_helper (domm ctx) stk1 (CS.Frame C' old k)).
+    rewrite e_stk.
     admit.
   + (* Return to program *)
     move/esym: e_stk; rewrite (to_partial_stack_context _ in_prog) //= (negbTE in_prog').
