@@ -46,7 +46,7 @@ Section Decomposition.
     CS.unfold_states.
     (* case analysis on who has control, then build the partial state *)
     destruct (C \in domm (prog_interface c)) eqn:Htarget;
-      exists (PS.partialize (prog_interface c) [CState C, s, mem, k, e]);
+      exists (PS.partialize (prog_interface c) [CState C, s, mem, k, e, arg]);
       simpl; rewrite Htarget.
     (* context has control *)
     - split.
@@ -89,7 +89,7 @@ Section Decomposition.
     (* context has control *)
     - inversion Hpartial; inversion H; subst.
       + PS.simplify_turn.
-        rewrite Htarget in H5. discriminate.
+        by rewrite Htarget in H6.
       + apply PS.final_state_context.
         PS.simplify_turn. auto.
     (* program has control *)
@@ -103,7 +103,7 @@ Section Decomposition.
         * eauto.
         * assumption.
       + PS.simplify_turn.
-        rewrite Htarget in H5. discriminate.
+        rewrite Htarget in H6. discriminate.
   Qed.
 
   Lemma match_initial_states_by_partialize : forall scs0,
@@ -141,6 +141,12 @@ Section Decomposition.
     (** program has control **)
 
     (* epsilon steps *)
+
+    - eexists. split.
+      + eapply PS.partial_step with (p':=c); eauto.
+        * apply: cprog_closed_interface closedness_after_linking.
+        * econstructor; eauto.
+      + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
@@ -303,6 +309,12 @@ Section Decomposition.
              unfold negb. rewrite Htarget. auto.
 
     (** context has control **)
+
+    - eexists. split.
+      + eapply PS.partial_step with (p':=c); eauto.
+        * apply: cprog_closed_interface closedness_after_linking.
+        * eapply PS.ContextControl; eauto.
+      + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.

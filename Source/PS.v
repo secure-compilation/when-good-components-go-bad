@@ -32,7 +32,7 @@ Import Source.
 
 Definition stack : Type := list (Component.id * option (value * CS.cont)).
 
-Definition program_state : Type := Component.id * stack * Memory.t * CS.cont * expr.
+Definition program_state : Type := Component.id * stack * Memory.t * CS.cont * expr * value.
 Definition context_state : Type := Component.id * stack * Memory.t.
 
 Inductive state : Type :=
@@ -45,7 +45,8 @@ Ltac unfold_state st :=
   let pmem := fresh "pmem" in
   let k := fresh "k" in
   let e := fresh "e" in
-  destruct st as [[[[[C pgps] pmem] k] e] | [[C pgps] pmem]].
+  let arg := fresh "arg" in
+  destruct st as [[[[[[C pgps] pmem] k] e] arg] | [[C pgps] pmem]].
 
 Ltac unfold_states :=
   repeat match goal with
@@ -54,8 +55,8 @@ Ltac unfold_states :=
 
 Definition s_component (sps: state) : Component.id :=
   match sps with
-  | PC (C, _, _, _, _) => C
-  | CC (C, _, _)       => C
+  | PC (C, _, _, _, _, _) => C
+  | CC (C, _, _)          => C
   end.
 
 Instance state_turn : HasTurn state := {
@@ -717,9 +718,9 @@ Proof.
 Qed.
 
 Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
-| ProgramControl: forall C gps pgps mem pmem k e,
+| ProgramControl: forall C gps pgps mem pmem k e arg,
     (* program has control *)
-    is_program_component (PC (C, pgps, pmem, k, e)) ctx ->
+    is_program_component (PC (C, pgps, pmem, k, e, arg)) ctx ->
 
     (* we forget about context memories *)
     pmem = filterm (fun k _ => negb (k \in domm ctx)) mem ->
@@ -727,9 +728,9 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (domm ctx) C ->
 
-    partial_state ctx [CState C, gps, mem, k, e] (PC (C, pgps, pmem, k, e))
+    partial_state ctx [CState C, gps, mem, k, e, arg] (PC (C, pgps, pmem, k, e, arg))
 
-| ContextControl: forall C gps pgps mem pmem k e,
+| ContextControl: forall C gps pgps mem pmem k e arg,
     (* context has control *)
     is_context_component (CC (C, pgps, pmem)) ctx ->
 
@@ -739,18 +740,18 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (domm ctx) C ->
 
-    partial_state ctx [CState C, gps, mem, k, e] (CC (C, pgps, pmem)).
+    partial_state ctx [CState C, gps, mem, k, e, arg] (CC (C, pgps, pmem)).
 
 Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
-  let: CS.State C gps mem k e := scs in
+  let: CS.State C gps mem k e arg := scs in
   let pgps := to_partial_stack gps (domm ctx) C in
   let pmem := filterm (fun k _ => negb (k \in domm ctx)) mem in
   if C \in domm ctx then CC (C, pgps, pmem)
-  else PC (C, pgps, pmem, k, e).
+  else PC (C, pgps, pmem, k, e, arg).
 
 Lemma s_component_partialize ctx scs :
   s_component (partialize ctx scs) = CS.s_component scs.
-Proof. by case: scs=> C ???? /=; case: ifP. Qed.
+Proof. by case: scs=> C ????? /=; case: ifP. Qed.
 
 Lemma partialize_correct:
   forall scs sps ctx,
@@ -788,9 +789,9 @@ Ltac backward_easy :=
     e_part  : (if ?C \in ?Cs then _ else _) = partialize ?ctx ?scs2
   |- match CS.eval_kstep _ ?scs2 with _ => _ end =>
     rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm) in e_part *;
-    case: scs2 e_part=> [C' stk2 mem2 k' e'] /=;
+    case: scs2 e_part=> [C' stk2 mem2 k' e' arg'] /=;
     case: ifP => // _ []; rewrite -(lock filterm);
-    intros <- e_stk e_mem <- <-;
+    intros <- e_stk e_mem <- <- <-;
     rewrite -lock /= (negbTE in_prog) e_stk e_mem
   end.
 
@@ -818,55 +819,52 @@ suffices : match CS.eval_kstep (prepare_global_env (program_link p p2)) scs2 ret
   by move/CS.eval_kstep_sound in ev => - [-> ?]; eauto.
 case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
 - (* Allocation *)
-  move=> C stk1 mem1 mem1' k size ptr /Zgt_is_gt_bool size_pos e_mem1 in_prog.
+  move=> C stk1 mem1 mem1' k size ptr arg /Zgt_is_gt_bool size_pos e_mem1 in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [C' stk2 mem2 k' e'] /=.
+  case: scs2=> [C' stk2 mem2 k' e' arg'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
-  move=> {C' k' e'} <- e_stk e_mem <- <-.
+  move=> {C' k' e' arg'} <- e_stk e_mem <- <- <-.
   rewrite -lock /= size_pos.
   case: (program_allocation_in_partialized_memory_strong e_mem in_prog e_mem1).
   by move=> mem2' e_mem2 e_mem'; rewrite e_mem2 /= (negbTE in_prog) e_stk e_mem'.
 - (* Load *)
-  move=> C stk1 mem1 k _ b' o' v <- e_v in_prog.
+  move=> C stk1 mem1 k _ b' o' v arg <- e_v in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [C' stk2 mem2 k' e'] /=.
+  case: scs2=> [C' stk2 mem2 k' e' arg'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
-  move=> {C' k' e'} <- e_stk e_mem <- <-.
+  move=> {C' k' e' arg'} <- e_stk e_mem <- <- <-.
   rewrite -lock /= eqxx.
   rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_v) /=.
   by rewrite (negbTE in_prog) e_stk e_mem.
 - (* Store *)
-  move=> C stk mem1 mem1' k v _ b' o' <- e_mem1 in_prog.
+  move=> C stk mem1 mem1' k v _ b' o' arg <- e_mem1 in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [C' stk2 mem2 k' e'] /=.
+  case: scs2=> [C' stk2 mem2 k' e' arg'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
-  move=> {C' k' e'} <- e_stk e_mem <- <-.
+  move=> {C' k' e' arg'} <- e_stk e_mem <- <- <-.
   rewrite -lock /= eqxx.
   case: (program_store_in_partialized_memory_strong e_mem in_prog e_mem1).
   move=> mem2' e_mem2 e_mem'; rewrite e_mem2 /=.
   by rewrite (negbTE in_prog) e_stk e_mem'.
 - (* Internal Call *)
-  move=> C stk1 mem1 mem1' k _ P v P_expr old <- e_P e_load e_store in_prog.
+  move=> C stk1 mem1 k _ P v P_expr old <- e_P in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [C' stk2 mem2 k' e'] /=.
+  case: scs2=> [C' stk2 mem2 k' e' arg'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
-  move=> {C' k' e'} <- e_stk e_mem <- <-.
+  move=> {C' k' e' arg'} <- e_stk e_mem <- <- <-.
   rewrite -lock /= eqxx.
   case: (find_procedure_in_linked_programs wf wf1 _ e_P); rewrite ?int1 //.
   move=> in_p e_P'.
   rewrite (_ : find_procedure _ _ _ = Some P_expr); last first.
     apply/linkable_programs_find_procedure=> //; auto.
     by rewrite int2.
-  rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_load).
-  case: (program_store_in_partialized_memory_strong e_mem in_prog e_store).
-  move=> mem2' -> e_mem' /=; rewrite (negbTE in_prog) e_mem'.
-  by rewrite (partial_stack_push_by_program in_prog e_stk).
+  by rewrite /= (negbTE in_prog) (partial_stack_push_by_program in_prog e_stk) e_mem.
 - (* External Call *)
-  move=> C stk1 mem1 mem1' k C' P v P_expr old /eqP ne import e_P e_load e_store in_prog.
+  move=> C stk1 mem1 k C' P v P_expr old /eqP ne import e_P in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [C'' stk2 mem2 k' e'] /=.
+  case: scs2=> [C'' stk2 mem2 k' e' arg'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
-  move=> {C'' k' e'} <- e_stk e_mem <- <-.
+  move=> {C'' k' e' arg'} <- e_stk e_mem <- <- <-.
   rewrite -lock /= (negbTE ne).
   move/imported_procedure_iff: import.
   rewrite /imported_procedure_b !unionmE.
@@ -876,19 +874,16 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
   case C'_p: (prog_procedures p C')=> [CI'|] //=.
   + (* Call into program *)
     move=> ->.
-    rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_load).
     have in_prog' : C' \notin domm ctx.
       case: link => _ /fdisjointP/(_ C'); apply.
       by rewrite wfprog_defined_procedures // mem_domm C'_p.
-    case: (program_store_in_partialized_memory_strong e_mem in_prog' e_store).
-    move=> mem2' e_store' e_mem'; rewrite e_store'.
-    rewrite /= (negbTE in_prog') e_mem'.
-    by rewrite (partial_stack_push_by_program in_prog e_stk).
+    by rewrite /= (negbTE in_prog') (partial_stack_push_by_program in_prog e_stk) e_mem.
   + (* Call into context *)
     case C'_ctx1: (prog_procedures p1 C')=> [C'_procs1|] //= C'_P1.
+    have in_ctx : C' \in domm ctx.
+      by rewrite -int1 wfprog_defined_procedures // mem_domm C'_ctx1.
     have /dommP [C'_procs2 C'_ctx2] : C' \in domm (prog_procedures p2).
-      rewrite -wfprog_defined_procedures // int2 -int1 wfprog_defined_procedures //.
-      by rewrite mem_domm C'_ctx1.
+      by rewrite -wfprog_defined_procedures // int2.
     rewrite C'_ctx2.
     have C'_P' : exported_procedure (prog_interface (program_link p p2)) C' P.
       move: (clos C); rewrite -int2; apply.
@@ -902,25 +897,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
     move: (wfprog_exported_procedures_existence wf2 C'_P').
     rewrite /find_procedure C'_ctx2.
     case: (C'_procs2 P)=> //= P_expr' _.
-    case e_buf: (prog_buffers p C)=> [buf /=|]; last first.
-      by move/dommPn: e_buf; rewrite -wfprog_defined_buffers // mem_domm C_p.
-    rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_load).
-    case e_buf': (prog_buffers p2 C')=> [buf' /=|]; last first.
-      move/dommPn: e_buf'; rewrite -wfprog_defined_buffers //.
-      by rewrite wfprog_defined_procedures // mem_domm C'_ctx2.
-    have [mem2' e_store' e_mem'] :
-      exists2 mem2', Memory.store mem2 (C', 0, 0%Z) (Int v) = Some mem2' &
-                     filterm (fun C _ => C \notin domm ctx) mem1' =
-                     filterm (fun C _ => C \notin domm ctx) mem2'.
-      (* FIXME: This property does not hold currently because there is nothing
-         that guarantees that all the components of the program have a defined
-         memory in the program state with a well-defined local buffer.  We need
-         to add this well-formedness assumption into this theorem and show that
-         it is preserved by CS.kstep; otherwise the top-level statement cannot
-         hold. *)
-      admit.
-    rewrite e_store' /= -{1 6}int2 wfprog_defined_procedures // mem_domm C'_ctx2 /=.
-    by rewrite (partial_stack_push_by_program in_prog e_stk) e_mem'.
+    by rewrite in_ctx e_mem (partial_stack_push_by_program in_prog e_stk).
 - (* Internal return *)
   admit.
 - (* External return *)
@@ -1014,12 +991,12 @@ case; last first.
 move=> p2 scs2 e_ctx2 _ wf_p2 Hlink2 _ Hpart2 Hfinal Hin_p.
 suffices /CS.final_state_stuck: CS.final_state scs1 by apply; eauto.
 case: scs1 st / Hpart1 Hpart2 Hin_p {Hstep}; last first.
-  by rewrite /is_program_component=> ??????? ->.
-move=> C gps pgps mem pmem k e _ e_pmem e_pgps.
+  by rewrite /is_program_component=> ???????? ->.
+move=> C gps pgps mem pmem k e arg _ e_pmem e_pgps.
 move e_sps: (PC _)=> sps Hpart2.
 case: scs2 sps / Hpart2 e_sps Hfinal e_pgps; last first.
-  by rewrite /is_program_component=> ??????? ->.
-move=> C' gps' _ mem' _ _ _ _ _ -> [-> -> <- <- <-] /=.
+  by rewrite /is_program_component=> ???????? ->.
+move=> C' gps' ?????? _ -> -> [-> -> <- <- <- ->] /=.
 rewrite /is_program_component /is_context_component /turn_of /=.
 case; first by auto.
 case=> [v [-> [-> ->]]] e_gps notin; rewrite (_ : gps = [::]); eauto.
@@ -1217,7 +1194,7 @@ Proof.
          /partialize_correct e12 /partialize_correct <-.
   have {in_prog} in_prog : CS.s_component scs1 \notin domm ctx.
     move: in_prog; simplify_turn.
-    case: (scs1)=> [C ? ? ? ?] /=.
+    case: (scs1)=> [C ? ? ? ? ?] /=.
     by case: ifPn => /= [-> //|].
   rewrite int1 in link clos.
   move/CS.eval_kstep_complete in kstep2.
@@ -1277,12 +1254,10 @@ Proof.
     + erewrite context_store_in_partialized_memory with (mem':=mem'); eauto.
 
     (* same component call *)
-    + erewrite context_store_in_partialized_memory with (mem':=mem'); eauto.
-      rewrite partial_stack_ignores_change_by_context_with_control; auto.
+    + rewrite partial_stack_ignores_change_by_context_with_control; auto.
 
     (* same component return *)
-    + erewrite context_store_in_partialized_memory with (mem':=mem'); eauto.
-      rewrite partial_stack_ignores_change_by_context_with_control; auto.
+    + rewrite partial_stack_ignores_change_by_context_with_control; auto.
 Qed.
 
 Lemma context_epsilon_star_is_silent:
@@ -1321,38 +1296,33 @@ move: partial_sps1; rewrite -{}partial_sps2 => part.
 rewrite -{}partial_sps1' -{}partial_sps2' {sps' sps''}.
 case: scs1 t scs1' / kstep1 in_ctx ne part kstep2 => //=.
 - (* External call *)
-  move=> C stk1 mem1 mem1' k1 C' P v P_expr old1.
-  move=> /eqP ne Himport1 Hfind1 e_load1 e_store1 in_ctx _ e_part.
+  move=> C stk1 mem1 k1 C' P v P_expr old1.
+  move=> /eqP ne Himport1 Hfind1 in_ctx _ e_part.
   move e_t: [:: ECall _ _ _ _] => t kstep2.
-  case: scs2 t scs2' / kstep2 C P v C' e_t in_ctx ne Himport1 Hfind1 e_load1 e_store1 e_part => //.
-  move=> C stk2 mem2 mem2' k2 C' P v P_expr2 old2 _ Himport2 Hfind2 e_load2 e_store2.
-  move=> _ _ _ _ [-> -> -> ->] in_ctx /eqP ne Himport1 Hfind1 e_load1 e_store1.
+  case: scs2 t scs2' / kstep2 C P v C' e_t in_ctx ne Himport1 Hfind1 e_part => //.
+  move=> C stk2 mem2 k2 C' P v P_expr2 old2 _ Himport2 Hfind2.
+  move=> _ _ _ _ [-> -> -> ->] in_ctx /eqP ne Himport1 Hfind1.
   rewrite /= in_ctx (lock filterm); case => e_stk; rewrite -lock => e_mem.
   have [in_ctx'|in_prog] := boolP (C' \in domm ctx).
-    rewrite (partial_stack_push_by_context old1 k1 old2 k2 ne in_ctx e_stk).
-    rewrite (context_store_in_partialized_memory in_ctx' e_store1).
-    by rewrite (context_store_in_partialized_memory in_ctx' e_store2) e_mem.
-  rewrite (partial_stack_push_by_context old1 k1 old2 k2 ne in_ctx e_stk).
-  rewrite (program_store_in_partialized_memory e_mem in_prog e_store1 e_store2).
+    by rewrite (partial_stack_push_by_context old1 k1 old2 k2 ne in_ctx e_stk) e_mem.
+  rewrite (partial_stack_push_by_context old1 k1 old2 k2 ne in_ctx e_stk) e_mem.
   case: (find_procedure_in_linked_programs wfp wfp1 link1 Hfind1).
     by rewrite iface1.
   case: (find_procedure_in_linked_programs wfp wfp2 link2 Hfind2).
     by rewrite iface2.
   by move=> _ -> _ [->].
 - (* External return *)
-  move=> C stk1 mem1 mem1' k1 v C' old1 ne e_store1 in_ctx _ e_part.
+  move=> C stk1 mem1 k1 v arg C' old1 ne in_ctx _ e_part.
   move e_t: [:: ERet _ _ _] => t kstep2.
-  case: scs2 t scs2' / kstep2 C v C' e_t in_ctx ne e_store1 e_part=> //.
-  move=> C stk2 mem2 mem2' k2 v C' old2 _ e_store2.
-  move=> _ _ _ [-> -> ->] in_ctx ne e_store1.
+  case: scs2 t scs2' / kstep2 C v C' e_t in_ctx ne e_part=> //.
+  move=> C stk2 mem2 mem2' k2 v C' old2 _.
+  move=> _ _ _ [-> -> ->] in_ctx ne.
   rewrite /= in_ctx (lock filterm).
   case=> e_stk; rewrite -lock=> e_mem.
   have [in_ctx'|in_prog] := boolP (C' \in domm ctx).
-    rewrite (partial_stack_pop_to_context ne in_ctx' e_stk).
-    rewrite (context_store_in_partialized_memory in_ctx' e_store1).
-    by rewrite (context_store_in_partialized_memory in_ctx' e_store2) e_mem.
-  case: (partial_stack_pop_to_program in_prog e_stk) e_store2=> [<- [<- <-]] e_store2.
-  by rewrite (program_store_in_partialized_memory e_mem in_prog e_store1 e_store2).
+    by rewrite (partial_stack_pop_to_context ne in_ctx' e_stk) e_mem.
+  case: (partial_stack_pop_to_program in_prog e_stk)=> <- [<- <-].
+  by rewrite e_mem.
 Qed.
 
 Theorem state_determinism:

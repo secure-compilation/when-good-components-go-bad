@@ -17,6 +17,7 @@ Set Bullet Behavior "Strict Subproofs".
 
 Inductive expr : Type :=
 | E_val : value -> expr
+| E_arg : expr
 | E_local : expr
 | E_binop : binop -> expr -> expr -> expr
 | E_seq : expr -> expr -> expr
@@ -72,6 +73,7 @@ Module Source.
     match e with
     | E_val (Int _)   => true
     | E_val _         => false
+    | E_arg           => true
     | E_local         => true
     | E_exit          => true
     | E_binop _ e1 e2 => values_are_integers e1 && values_are_integers e2

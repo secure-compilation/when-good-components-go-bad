@@ -57,6 +57,7 @@ Definition encode_reg (eenv : encoder_env) (r : register) : reg mt :=
   | R_AUX2 => word.as_word 4
   | R_RA => word.as_word 5
   | R_SP => word.as_word 6
+  | R_ARG => word.as_word 7
   end.
 
 Definition encode_binop (eenv : encoder_env) (b : Values.binop) : binop :=

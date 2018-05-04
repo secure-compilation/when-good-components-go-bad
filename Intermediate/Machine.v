@@ -16,7 +16,7 @@ Unset Printing Implicit Defensive.
 Set Bullet Behavior "Strict Subproofs".
 
 Inductive register : Type :=
-  R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP.
+  R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP | R_ARG.
 
 Definition label := nat.
 
@@ -66,6 +66,7 @@ Module Register.
     | R_AUX2 => 3
     | R_RA   => 4
     | R_SP   => 5
+    | R_ARG  => 6
     end.
 
   Definition init :=
@@ -74,7 +75,8 @@ Module Register.
             (to_nat R_AUX1, Undef);
             (to_nat R_AUX2, Undef);
             (to_nat R_RA, Undef);
-            (to_nat R_SP, Undef)].
+            (to_nat R_SP, Undef);
+            (to_nat R_ARG, Undef)].
 
   Definition get (r : register) (regs : t) : value :=
     match getm regs (to_nat r) with
@@ -92,7 +94,8 @@ Module Register.
             (to_nat R_AUX1, Undef);
             (to_nat R_AUX2, Undef);
             (to_nat R_RA, Undef);
-            (to_nat R_SP, Undef)].
+            (to_nat R_SP, Undef);
+            (to_nat R_ARG, Undef)].
 
   Lemma init_registers_wf:
     forall r, exists val, get r init = val.
@@ -587,7 +590,7 @@ Proof.
     rewrite Hsame_int in Hclosed.
     apply Hclosed.
   - destruct (prog_main p1) as [main1 |] eqn:Hmain1;
-      destruct (prog_main p2) as [main2 |] eqn:Hmain2. 
+      destruct (prog_main p2) as [main2 |] eqn:Hmain2.
     + unfold linkable_mains in Hlinkable_mains.
       rewrite Hmain1 in Hlinkable_mains.
       rewrite Hmain2 in Hlinkable_mains.

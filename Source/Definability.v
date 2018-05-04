@@ -105,18 +105,18 @@ Section Definability.
       eapply (@star_step _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
     end.
 
-  Lemma switch_clause_spec p' C stk mem n n' e_then e_else :
+  Lemma switch_clause_spec p' C stk mem n n' e_then e_else arg :
     Memory.load mem (C, Block.local, 1%Z) = Some (Int n) ->
     if (n =? n') % Z then
       exists mem',
         Memory.store mem (C, Block.local, 1%Z) (Int (Z.succ n)) = Some mem' /\
         Star (CS.sem p')
-             [CState C, stk, mem , Kstop, switch_clause n' e_then e_else] E0
-             [CState C, stk, mem', Kstop, e_then]
+             [CState C, stk, mem , Kstop, switch_clause n' e_then e_else, arg] E0
+             [CState C, stk, mem', Kstop, e_then, arg]
     else
       Star (CS.sem p')
-           [CState C, stk, mem, Kstop, switch_clause n' e_then e_else] E0
-           [CState C, stk, mem, Kstop, e_else].
+           [CState C, stk, mem, Kstop, switch_clause n' e_then e_else, arg] E0
+           [CState C, stk, mem, Kstop, e_else, arg].
   Proof.
     intros Hload.
     destruct (Z.eqb_spec n n') as [n_n'|n_n'].
@@ -157,20 +157,20 @@ Section Definability.
     simpl. now rewrite IH Nat.sub_succ_r.
   Qed.
 
-  Lemma switch_spec_else p' C stk mem n es e_else :
+  Lemma switch_spec_else p' C stk mem n es e_else arg :
     Memory.load mem (C, Block.local, 1%Z) = Some (Int (Z.of_nat n)) ->
     (length es <= n)%nat ->
     Star (CS.sem p')
-         [CState C, stk, mem, Kstop, switch es e_else] E0
-         [CState C, stk, mem, Kstop, e_else].
+         [CState C, stk, mem, Kstop, switch es e_else, arg] E0
+         [CState C, stk, mem, Kstop, e_else, arg].
   Proof.
     intros C_local es_n. unfold switch.
     enough (forall m,
                m <= n -> length es <= m ->
                Star (CS.sem p')
-                    [CState C, stk, mem, Kstop, snd (fold_right switch_add_expr (m, e_else) es)]
+                    [CState C, stk, mem, Kstop, snd (fold_right switch_add_expr (m, e_else) es), arg]
                     E0
-                    [CState C, stk, mem, Kstop, e_else])%nat.
+                    [CState C, stk, mem, Kstop, e_else, arg])%nat.
     { apply (H (length es)); trivial. }
     clear es_n. intros m m_le_n es_le_n.
     induction es as [|e es IH]; try apply star_refl.
@@ -185,13 +185,13 @@ Section Definability.
     apply IH. omega.
   Qed.
 
-  Lemma switch_spec p' C stk mem es e es' e_else :
+  Lemma switch_spec p' C stk mem es e es' e_else arg :
     Memory.load mem (C, Block.local, 1%Z) = Some (Int (Z.of_nat (length es))) ->
     exists mem',
       Memory.store mem (C, Block.local, 1%Z) (Int (Z.of_nat (S (length es)))) = Some mem' /\
       Star (CS.sem p')
-           [CState C, stk, mem , Kstop, switch (es ++ e :: es') e_else] E0
-           [CState C, stk, mem', Kstop, e].
+           [CState C, stk, mem , Kstop, switch (es ++ e :: es') e_else, arg] E0
+           [CState C, stk, mem', Kstop, e, arg].
   Proof.
     intros Hload.
     assert (Eswitch :
@@ -205,12 +205,12 @@ Section Definability.
       assert (H : (S (length es + length es') - length es' = S (length es))%nat) by omega.
       rewrite H. reflexivity. }
     destruct Eswitch as [e_else' ->]. clear e_else. rename e_else' into e_else.
-    assert (Hcont := switch_clause_spec p' stk (Z.of_nat (length es)) e e_else Hload).
+    assert (Hcont := switch_clause_spec p' stk (Z.of_nat (length es)) e e_else arg Hload).
     rewrite Z.eqb_refl in Hcont.
     destruct Hcont as (mem' & Hstore & Hstar2).
     exists mem'. rewrite Nat2Z.inj_succ. split; trivial.
     apply (fun H => @star_trans _ _ _ _ _ E0 _ H E0 _ _ Hstar2); trivial.
-    apply (switch_spec_else p' stk _ Hload).
+    apply (switch_spec_else p' stk _ arg Hload).
     reflexivity.
   Qed.
 
@@ -411,6 +411,9 @@ Section Definability.
       now rewrite comp_subtrace_app app_length Nat2Z.inj_add.
     Qed.
 
+    (* FIXME: This invariant is too strong now, since we can store the counter
+       directly in position 0: that position is not reserved to function arguments
+       anymore. *)
     Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
       forall C,
         component_buffer C ->
@@ -482,7 +485,7 @@ Section Definability.
     Qed.
 
     CoInductive well_formed_state (s: stack_state) (prefix suffix: trace) : CS.state -> Prop :=
-    | WellFormedState C stk mem k exp P
+    | WellFormedState C stk mem k exp arg P
       of C = cur_comp s
       &  k = Kstop
       &  exp = procedure_of_trace C P t
@@ -491,7 +494,7 @@ Section Definability.
       &  well_formed_stack s stk
       &  well_formed_memory prefix mem
       &  valid_procedure C P
-      :  well_formed_state s prefix suffix [CState C, stk, mem, k, exp].
+      :  well_formed_state s prefix suffix [CState C, stk, mem, k, exp, arg].
 
     Lemma definability_gen s prefix suffix cs :
       t = prefix ++ suffix ->
@@ -503,28 +506,28 @@ Section Definability.
       have Eprocs : genv_procedures (prepare_global_env p) = prog_procedures p by [].
       elim: suffix s prefix cs=> [|e suffix IH] /= [C callers] prefix.
       - rewrite cats0 => cs <- {prefix}.
-        case: cs / => /= _ stk mem _ _ P -> -> -> _ _ wf_stk wf_mem P_exp.
-        exists [CState C, stk, mem, Kstop, E_exit]; last by left.
+        case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk wf_mem P_exp.
+        exists [CState C, stk, mem, Kstop, E_exit, arg]; last by left.
         have C_b := valid_procedure_has_block P_exp.
         have [C_local _] := wf_mem _ C_b.
         rewrite /procedure_of_trace /expr_of_trace.
         apply: switch_spec_else; eauto.
         rewrite -> size_map; reflexivity.
       - move=> cs Et /=.
-        case: cs / => /= _ stk mem _ _ P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
+        case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
         have C_b := valid_procedure_has_block P_exp.
         destruct (wf_mem _ C_b) as [C_local _].
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
         assert (Star1 : Star (CS.sem p)
-                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t)] E0
-                             [CState C, stk, mem', Kstop, expr_of_event C P e]).
+                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
+                             [CState C, stk, mem', Kstop, expr_of_event C P e, arg]).
         { unfold expr_of_trace. rewrite Et comp_subtrace_app. simpl.
           rewrite <- wf_C, Nat.eqb_refl, map_app. simpl.
           assert (H := @switch_spec p C  stk mem
                                     (map (expr_of_event C P) (comp_subtrace C prefix))
                                     (expr_of_event C P e)
                                     (map (expr_of_event C P) (comp_subtrace C suffix))
-                                    E_exit).
+                                    E_exit arg).
           rewrite map_length in H. specialize (H C_local).
           destruct H as [mem'' [Hmem'' Hstar]].
           enough (H : mem'' = mem') by (subst mem''; easy).
@@ -535,19 +538,19 @@ Section Definability.
           rewrite Hmem' in Hmem''.
           congruence. }
         assert (Star2 : exists s' cs',
-                   Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e] [:: e] cs' /\
+                   Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] [:: e] cs' /\
                    well_formed_state s' (prefix ++ [e]) suffix cs').
         {
           clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
-          destruct e as [C_ P' arg C'|C_ ret_val C'];
+          destruct e as [C_ P' new_arg C'|C_ ret_val C'];
           simpl in wf_C, wf_e, wb_suffix; subst C_.
           - case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
             exists (StackState C' (C :: callers)).
             have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
-            destruct (well_formed_memory_store_arg (Int arg) C'_b wf_mem) as [mem' [Hmem' wf_mem']].
+            destruct (well_formed_memory_store_arg (Int new_arg) C'_b wf_mem) as [mem' [Hmem' wf_mem']].
             destruct (wf_mem _ C_b) as [_ [v Hv]].
-            exists [CState C', CS.Frame C v (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem',
-                    Kstop, procedure_of_trace C' P' t].
+            exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem,
+                    Kstop, procedure_of_trace C' P' t, Int new_arg].
             split.
             + take_step. take_step.
               apply star_one. simpl.
@@ -555,17 +558,12 @@ Section Definability.
               rewrite (negbTE C_ne_C').
               rewrite -> imported_procedure_iff in Himport. rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
-              rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
-              unfold component_buffer in C_b, C'_b. simpl in C_b, C'_b.
-              simpl in Hv.
-              unfold Component.id, Block.id in *. rewrite Hv.
-              generalize C'_b. unfold component_buffer, Block.id. intros _.
-              simpl in Hmem'. now rewrite Hmem'.
+              by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
             + econstructor; trivial.
               { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
                 eexists []; eexists; simpl; split; eauto.
                 split; trivial.
-                eexists v, P, top, bot.
+                eexists arg, P, top, bot.
                 by do 3 (split; trivial). }
               right. by apply: (closed_intf Himport).
           - move: wf_e=> /eqP C_ne_C'.
@@ -573,41 +571,30 @@ Section Definability.
             case/andP: wb_suffix=> [/eqP HC' wb_suffix].
             subst C'_. simpl. exists (StackState C' callers).
             destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
-            revert mem wf_mem.
+            revert mem wf_mem arg.
             induction top as [|[C_ saved k_] top IHtop].
             + clear Htop. rename bot into bot'.
               destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
               subst bot'. simpl.
               have C'_b := valid_procedure_has_block P'_exp.
               intros mem wf_mem.
-              destruct (well_formed_memory_store_arg saved   C'_b wf_mem)  as [mem'  [Hmem' wf_mem']].
-              destruct (well_formed_memory_store_arg (Int 0) C'_b wf_mem') as [mem'' [Hmem'' wf_mem'']].
-              exists [CState C', CS.Frame C' saved Kstop :: top ++ bot, mem'', Kstop, procedure_of_trace C' P' t].
+              exists [CState C', CS.Frame C' saved Kstop :: top ++ bot, mem, Kstop, procedure_of_trace C' P' t, Int 0].
               split.
               * eapply star_step.
                 -- now eapply CS.KS_ExternalReturn; eauto.
                 -- take_step. take_step; eauto.
                    apply star_one. apply CS.eval_kstep_sound.
-                   simpl. rewrite -> Nat.eqb_refl.
-                   rewrite (find_procedures_of_trace t P'_exp). simpl in *.
-                   unfold component_buffer, Component.id, Block.id in *. simpl in *.
-                   unfold component_buffer, Component.id, Block.id in *. simpl in *.
-                   now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem') Hmem''.
+                   by rewrite /= eqxx (find_procedures_of_trace t P'_exp).
                 -- now rewrite E0_right.
               * econstructor; trivial.
                 exists (CS.Frame C' saved Kstop :: top), bot. simpl. eauto.
-            + intros mem wf_mem.
+            + intros mem wf_mem arg.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
               specialize (IHtop Htop).
-              destruct (well_formed_memory_store_arg saved C_b wf_mem) as [mem' [Hmem' wf_mem']].
-              simpl.
-              specialize (IHtop _ wf_mem'). destruct IHtop as [cs' [StarRet wf_cs']].
+              specialize (IHtop _ wf_mem saved). destruct IHtop as [cs' [StarRet wf_cs']].
               exists cs'. split; trivial.
               eapply star_step; try eassumption.
-              * apply CS.eval_kstep_sound. simpl.
-                unfold component_buffer in *. simpl in *.
-                unfold Component.id, Block.id in *.
-                rewrite -> Hmem', Nat.eqb_refl. eauto.
+              * by apply/CS.eval_kstep_sound; rewrite /= eqxx.
               * reflexivity. }
         destruct Star2 as (s' & cs' & Star2 & wf_cs').
         specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.

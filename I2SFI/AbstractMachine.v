@@ -42,6 +42,7 @@ Definition map_register (reg : Intermediate.Machine.register) : RiscMachine.Regi
   | Intermediate.Machine.R_AUX2 => RiscMachine.Register.R_AUX2
   | Intermediate.Machine.R_RA => RiscMachine.Register.R_RA
   | Intermediate.Machine.R_SP => RiscMachine.Register.R_SP
+  | Intermediate.Machine.R_ARG => RiscMachine.Register.R_ARG
   end.
 
 Definition map_binop (op : Common.Values.binop) : RiscMachine.ISA.binop :=

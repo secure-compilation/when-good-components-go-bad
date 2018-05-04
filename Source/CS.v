@@ -53,13 +53,13 @@ CoInductive state : Type := State {
   s_stack     : stack;
   s_memory    : Memory.t;
   s_cont      : cont;
-  s_expr      : expr
+  s_expr      : expr;
+  s_arg       : value
 }.
 
-Notation "[ 'State' C , stk , mem , k , e ]" :=
-  (State C stk mem k e)
-  (at level 0, format "[ 'State'  C ,  stk ,  mem ,  k ,  e ]").
-
+Notation "[ 'State' C , stk , mem , k , e , arg ]" :=
+  (State C stk mem k e arg)
+  (at level 0, format "[ 'State'  C ,  stk ,  mem ,  k ,  e ,  arg ]").
 
 Ltac unfold_state st :=
   let C := fresh "C" in
@@ -67,7 +67,8 @@ Ltac unfold_state st :=
   let mem := fresh "mem" in
   let k := fresh "k" in
   let e := fresh "e" in
-  destruct st as [C s mem k e].
+  let arg := fresh "arg" in
+  destruct st as [C s mem k e arg].
 
 Ltac unfold_states :=
   repeat (match goal with
@@ -86,10 +87,10 @@ Definition prepare_initial_memory (p: program) : Memory.t :=
 
 Definition initial_machine_state (p: program) : state :=
   match prog_main p with
-  | Some main_expr => State Component.main [::] (prepare_initial_memory p) Kstop main_expr
+  | Some main_expr => State Component.main [::] (prepare_initial_memory p) Kstop main_expr (Int 0)
   | None =>
     (* this case shouldn't happen for a well formed p *)
-    State Component.main [::] emptym Kstop E_exit
+    State Component.main [::] emptym Kstop E_exit (Int 0)
   end.
 
 (* transition system *)
@@ -98,100 +99,91 @@ Definition initial_state (p: program) (st: state) : Prop :=
   st = initial_machine_state p.
 
 Definition final_state (st: state) : Prop :=
-  let: State C s mem k e := st in
+  let: State C s mem k e arg := st in
   e = E_exit \/ (exists v, e = E_val v /\ k = Kstop /\ s = []).
 
 Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
-| KS_Binop1 : forall C s mem k op e1 e2,
-    kstep G [State C, s, mem, k, E_binop op e1 e2] E0
-            [State C, s, mem, Kbinop1 op e2 k, e1]
-| KS_Binop2 : forall C s mem k op v1 e2,
-    kstep G [State C, s, mem, Kbinop1 op e2 k, E_val v1] E0
-            [State C, s, mem, Kbinop2 op v1 k, e2]
-| KS_BinopEval : forall C s mem k op v1 v2,
-    kstep G [State C, s, mem, Kbinop2 op v1 k, E_val v2] E0
-            [State C, s, mem, k, E_val (eval_binop op v1 v2)]
-| KS_Seq1 :  forall C s mem k e1 e2,
-    kstep G [State C, s, mem, k, E_seq e1 e2] E0
-            [State C, s, mem, Kseq e2 k, e1]
-| KS_Seq2 : forall C s mem k v e2,
-    kstep G [State C, s, mem, Kseq e2 k, E_val v] E0
-            [State C, s, mem, k, e2]
-| KS_If1 : forall C s mem k e1 e2 e3,
-    kstep G [State C, s, mem, k, E_if e1 e2 e3] E0
-            [State C, s, mem, Kif e2 e3 k, e1]
-| KS_If2 : forall C s mem k e2 e3 i,
-    kstep G [State C, s, mem, Kif e2 e3 k, E_val (Int i)] E0
-            [State C, s, mem, k, if i != 0%Z then e2 else e3]
-| KS_LocalBuffer : forall C s mem k,
-    kstep G [State C, s, mem, k, E_local] E0
-            [State C, s, mem, k, E_val (Ptr (C,Block.local,0%Z))]
-| KS_Alloc1 : forall C s mem k e,
-    kstep G [State C, s, mem, k, E_alloc e] E0
-            [State C, s, mem, Kalloc k, e]
-| KS_AllocEval : forall C s mem mem' k size ptr,
+| KS_Binop1 : forall C s mem k op e1 e2 arg,
+    kstep G [State C, s, mem, k, E_binop op e1 e2, arg] E0
+            [State C, s, mem, Kbinop1 op e2 k, e1, arg]
+| KS_Binop2 : forall C s mem k op v1 e2 arg,
+    kstep G [State C, s, mem, Kbinop1 op e2 k, E_val v1, arg] E0
+            [State C, s, mem, Kbinop2 op v1 k, e2, arg]
+| KS_BinopEval : forall C s mem k op v1 v2 arg,
+    kstep G [State C, s, mem, Kbinop2 op v1 k, E_val v2, arg] E0
+            [State C, s, mem, k, E_val (eval_binop op v1 v2), arg]
+| KS_Seq1 :  forall C s mem k e1 e2 arg,
+    kstep G [State C, s, mem, k, E_seq e1 e2, arg] E0
+            [State C, s, mem, Kseq e2 k, e1, arg]
+| KS_Seq2 : forall C s mem k v e2 arg,
+    kstep G [State C, s, mem, Kseq e2 k, E_val v, arg] E0
+            [State C, s, mem, k, e2, arg]
+| KS_If1 : forall C s mem k e1 e2 e3 arg,
+    kstep G [State C, s, mem, k, E_if e1 e2 e3, arg] E0
+            [State C, s, mem, Kif e2 e3 k, e1, arg]
+| KS_If2 : forall C s mem k e2 e3 i arg,
+    kstep G [State C, s, mem, Kif e2 e3 k, E_val (Int i), arg] E0
+            [State C, s, mem, k, if i != 0%Z then e2 else e3, arg]
+| KS_Arg : forall C s mem k i,
+    kstep G [State C, s, mem, k, E_arg, Int i] E0
+            [State C, s, mem, k, E_val (Int i), Int i]
+| KS_LocalBuffer : forall C s mem k arg,
+    kstep G [State C, s, mem, k, E_local, arg] E0
+            [State C, s, mem, k, E_val (Ptr (C,Block.local,0%Z)), arg]
+| KS_Alloc1 : forall C s mem k e arg,
+    kstep G [State C, s, mem, k, E_alloc e, arg] E0
+            [State C, s, mem, Kalloc k, e, arg]
+| KS_AllocEval : forall C s mem mem' k size ptr arg,
     (size > 0) % Z ->
     Memory.alloc mem C (Z.to_nat size) = Some (mem', ptr) ->
-    kstep G [State C, s, mem, Kalloc k, E_val (Int size)] E0
-            [State C, s, mem', k, E_val (Ptr ptr)]
-| KS_Deref1 : forall C s mem k e,
-    kstep G [State C, s, mem, k, E_deref e] E0
-            [State C, s, mem, Kderef k, e]
-| KS_DerefEval : forall C s mem k C' b' o' v,
+    kstep G [State C, s, mem, Kalloc k, E_val (Int size), arg] E0
+            [State C, s, mem', k, E_val (Ptr ptr), arg]
+| KS_Deref1 : forall C s mem k e arg,
+    kstep G [State C, s, mem, k, E_deref e, arg] E0
+            [State C, s, mem, Kderef k, e, arg]
+| KS_DerefEval : forall C s mem k C' b' o' v arg,
     C = C' ->
     Memory.load mem (C',b',o') = Some v ->
-    kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o'))] E0
-            [State C, s, mem, k, E_val v]
-| KS_Assign1 : forall C s mem k e1 e2,
-    kstep G [State C, s, mem, k, E_assign e1 e2] E0
-            [State C, s, mem, Kassign1 e1 k, e2]
-| KS_Assign2 : forall C s mem k v e1,
-    kstep G [State C, s, mem, Kassign1 e1 k, E_val v] E0
-            [State C, s, mem, Kassign2 v k, e1]
-| KS_AssignEval : forall C s mem mem' k v C' b' o',
+    kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o')), arg] E0
+            [State C, s, mem, k, E_val v, arg]
+| KS_Assign1 : forall C s mem k e1 e2 arg,
+    kstep G [State C, s, mem, k, E_assign e1 e2, arg] E0
+            [State C, s, mem, Kassign1 e1 k, e2, arg]
+| KS_Assign2 : forall C s mem k v e1 arg,
+    kstep G [State C, s, mem, Kassign1 e1 k, E_val v, arg] E0
+            [State C, s, mem, Kassign2 v k, e1, arg]
+| KS_AssignEval : forall C s mem mem' k v C' b' o' arg,
     C = C' ->
     Memory.store mem (C', b', o') v = Some mem' ->
-    kstep G [State C, s, mem, Kassign2 v k, E_val (Ptr (C', b', o'))] E0
-            [State C, s, mem', k, E_val v]
-| KS_InitCall : forall C s mem k C' P e,
-    kstep G [State C, s, mem, k, E_call C' P e] E0
-            [State C, s, mem, Kcall C' P k, e]
-| KS_InternalCall : forall C s mem mem' k C' P v P_expr old_call_arg,
+    kstep G [State C, s, mem, Kassign2 v k, E_val (Ptr (C', b', o')), arg] E0
+            [State C, s, mem', k, E_val v, arg]
+| KS_InitCall : forall C s mem k C' P e arg,
+    kstep G [State C, s, mem, k, E_call C' P e, arg] E0
+            [State C, s, mem, Kcall C' P k, e, arg]
+| KS_InternalCall : forall C s mem k C' P v P_expr old_call_arg,
     C = C' ->
     (* retrieve the procedure code *)
     find_procedure (genv_procedures G) C' P = Some P_expr ->
-    (* save the old call argument *)
-    Memory.load mem (C, Block.local, 0%Z) = Some old_call_arg ->
-    (* place the call argument in the target memory *)
-    Memory.store mem (C', Block.local, 0%Z) (Int v) = Some mem' ->
-    kstep G [State C, s, mem, Kcall C' P k, E_val (Int v)] E0
-            [State C', Frame C old_call_arg k :: s, mem', Kstop, P_expr]
-| KS_ExternalCall : forall C s mem mem' k C' P v P_expr old_call_arg,
+    kstep G [State C, s, mem, Kcall C' P k, E_val (Int v), old_call_arg] E0
+            [State C', Frame C old_call_arg k :: s, mem, Kstop, P_expr, Int v]
+| KS_ExternalCall : forall C s mem k C' P v P_expr old_call_arg,
     C <> C' ->
     (* check permission *)
     imported_procedure (genv_interface G) C C' P  ->
     (* retrieve the procedure code *)
     find_procedure (genv_procedures G) C' P = Some P_expr ->
-    (* save the old call argument *)
-    Memory.load mem (C, Block.local, 0%Z) = Some old_call_arg ->
-    (* place the call argument in the target memory *)
-    Memory.store mem (C', Block.local, 0%Z) (Int v) = Some mem' ->
-    kstep G [State C, s, mem, Kcall C' P k, E_val (Int v)]
+    kstep G [State C, s, mem, Kcall C' P k, E_val (Int v), old_call_arg]
             [:: ECall C P v C']
-            [State C', Frame C old_call_arg k :: s, mem', Kstop, P_expr]
-| KS_InternalReturn: forall C s mem mem' k v C' old_call_arg,
+            [State C', Frame C old_call_arg k :: s, mem, Kstop, P_expr, Int v]
+| KS_InternalReturn: forall C s mem k v arg C' old_call_arg,
     C = C' ->
-    (* restore the old call argument *)
-    Memory.store mem (C', Block.local, 0%Z) old_call_arg = Some mem' ->
-    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v)] E0
-            [State C', s, mem', k, E_val (Int v)]
-| KS_ExternalReturn: forall C s mem mem' k v C' old_call_arg,
+    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v), arg] E0
+            [State C', s, mem, k, E_val (Int v), old_call_arg]
+| KS_ExternalReturn: forall C s mem k v arg C' old_call_arg,
     C <> C' ->
-    (* restore the old call argument *)
-    Memory.store mem (C', Block.local, 0%Z) old_call_arg = Some mem' ->
-    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v)]
+    kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v), arg]
             [:: ERet C v C']
-            [State C', s, mem', k, E_val (Int v)].
+            [State C', s, mem, k, E_val (Int v), old_call_arg].
 
 Lemma kstep_component G s t s' :
   kstep G s t s' ->
@@ -216,37 +208,41 @@ Qed.
 (* functional kstep *)
 
 Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
-  let: State C s mem k e := st in
+  let: State C s mem k e arg := st in
   match e with
   (* pushing a new continuation *)
   | E_binop b_op e1 e2 =>
-    ret (E0, [State C, s, mem, Kbinop1 b_op e2 k, e1])
+    ret (E0, [State C, s, mem, Kbinop1 b_op e2 k, e1, arg])
   | E_seq e1 e2 =>
-    ret (E0, [State C, s, mem, Kseq e2 k, e1])
+    ret (E0, [State C, s, mem, Kseq e2 k, e1, arg])
   | E_if e1 e2 e3 =>
-    ret (E0, [State C, s, mem, Kif e2 e3 k, e1])
+    ret (E0, [State C, s, mem, Kif e2 e3 k, e1, arg])
+  | E_arg =>
+    if arg is Int v then
+      ret (E0, [State C, s, mem, k, E_val (Int v), arg])
+    else None
   | E_local =>
-    ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.local, 0%Z))])
+    ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.local, 0%Z)), arg])
   | E_alloc e =>
-    ret (E0, [State C, s, mem, Kalloc k, e])
+    ret (E0, [State C, s, mem, Kalloc k, e, arg])
   | E_deref e =>
-    ret (E0, [State C, s, mem, Kderef k, e])
+    ret (E0, [State C, s, mem, Kderef k, e, arg])
   | E_assign e1 e2 =>
-    ret (E0, [State C, s, mem, Kassign1 e1 k, e2])
+    ret (E0, [State C, s, mem, Kassign1 e1 k, e2, arg])
   | E_call C' P e =>
-    ret (E0, [State C, s, mem, Kcall C' P k, e])
+    ret (E0, [State C, s, mem, Kcall C' P k, e, arg])
   (* evaluating current continuation *)
   | E_val v =>
     match k with
     | Kbinop1 b_op e2 k' =>
-      ret (E0, [State C, s, mem, Kbinop2 b_op v k', e2])
+      ret (E0, [State C, s, mem, Kbinop2 b_op v k', e2, arg])
     | Kbinop2 b_op v1 k' =>
-      ret (E0, [State C, s, mem, k', E_val (eval_binop b_op v1 v)])
+      ret (E0, [State C, s, mem, k', E_val (eval_binop b_op v1 v), arg])
     | Kseq e2 k' =>
-      ret (E0, [State C, s, mem, k', e2])
+      ret (E0, [State C, s, mem, k', e2, arg])
     | Kif e2 e3 k' =>
       match v with
-      | Int z => ret (E0, [State C, s, mem, k', if z != 0%Z then e2 else e3])
+      | Int z => ret (E0, [State C, s, mem, k', if z != 0%Z then e2 else e3, arg])
       | _ => None
       end
     | Kalloc k' =>
@@ -254,7 +250,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       | Int size =>
         if (size >? 0) % Z then
           do (mem',ptr) <- Memory.alloc mem C (Z.to_nat size);
-          ret (E0, [State C, s, mem', k', E_val (Ptr ptr)])
+          ret (E0, [State C, s, mem', k', E_val (Ptr ptr), arg])
         else
           None
       | _ => None
@@ -264,19 +260,19 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       | Ptr (C',b',o') =>
         if C == C' then
           do v <- Memory.load mem (C',b',o');
-          ret (E0, [State C, s, mem, k', E_val v])
+          ret (E0, [State C, s, mem, k', E_val v, arg])
         else
           None
       | _ => None
       end
     | Kassign1 e1 k' =>
-      ret (E0, [State C, s, mem, Kassign2 v k', e1])
+      ret (E0, [State C, s, mem, Kassign2 v k', e1, arg])
     | Kassign2 v' k' =>
       match v with
       | Ptr (C',b',o') =>
         if C == C' then
           do mem' <- Memory.store mem (C',b',o') v';
-          ret (E0, [State C, s, mem', k', E_val v'])
+          ret (E0, [State C, s, mem', k', E_val v', arg])
         else
           None
       | _ => None
@@ -287,19 +283,11 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
         if C == C' then
           (* retrieve the procedure code *)
           do P_expr <- find_procedure (genv_procedures G) C' P;
-          (* save the old call argument *)
-          do old_call_arg <- Memory.load mem (C, Block.local, 0%Z);
-          (* place the call argument in the target memory *)
-          do mem' <- Memory.store mem (C', Block.local, 0%Z) (Int i);
-          ret (E0, [State C', Frame C old_call_arg k' :: s, mem', Kstop, P_expr])
+          ret (E0, [State C', Frame C arg k' :: s, mem, Kstop, P_expr, Int i])
         else if imported_procedure_b (genv_interface G) C C' P then
           (* retrieve the procedure code *)
           do P_expr <- find_procedure (genv_procedures G) C' P;
-          (* save the old call argument *)
-          do old_call_arg <- Memory.load mem (C, Block.local, 0%Z);
-          (* place the call argument in the target memory *)
-          do mem' <- Memory.store mem (C', Block.local, 0%Z) (Int i);
-          ret ([ECall C P i C'], [State C', Frame C old_call_arg k' :: s, mem', Kstop, P_expr])
+          ret ([ECall C P i C'], [State C', Frame C arg k' :: s, mem, Kstop, P_expr, Int i])
         else
           None
       | _ => None
@@ -307,10 +295,8 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     | Kstop =>
       match v, s with
       | Int i, Frame C' old_call_arg k' :: s' =>
-        (* restore the old call argument *)
-        do mem' <- Memory.store mem (C', Block.local, 0%Z) old_call_arg;
         let t := if C == C' then E0 else [:: ERet C i C'] in
-        ret (t, [State C', s', mem', k', E_val (Int i)])
+        ret (t, [State C', s', mem, k', E_val (Int i), old_call_arg])
       | _, _ => None
       end
     end
@@ -352,14 +338,10 @@ Proof.
   (* external calls *)
   - move/eqP/negbTE: H => ->.
     apply imported_procedure_iff in H0.
-    rewrite H0 H1 H2 H3.
+    rewrite H0 H1.
     reflexivity.
   (* external return *)
-  - rewrite H0.
-    unfold Memory.store in *. simpl in *.
-    destruct (mem C'); try discriminate.
-    destruct (ComponentMemory.store t Block.local 0%Z old_call_arg); try discriminate.
-    move/eqP/negbTE: H => ->.
+  - move/eqP/negbTE: H => ->.
     reflexivity.
 Qed.
 
@@ -370,7 +352,7 @@ Proof.
   intros.
   unfold_states.
   match goal with
-  | H: eval_kstep _ _ = Some _ |- kstep _ [State _, _, _, _, ?E] _ [State _, _, _, _, _] =>
+  | H: eval_kstep _ _ = Some _ |- kstep _ [State _, _, _, _, ?E, _] _ [State _, _, _, _, _, _] =>
     destruct E; simpl in H;
       try discriminate;
       try (repeat simplify_option;
@@ -464,7 +446,7 @@ Section Semantics.
     else [::].
 
   Definition stack_state_of (cs: state) : stack_state :=
-    let: State curr stk _ _ _ := cs in
+    let: State curr stk _ _ _ _ := cs in
     StackState curr (unstutter curr (map f_component stk)).
 
   Lemma trace_wb t cs cs' :
@@ -474,14 +456,14 @@ Section Semantics.
     elim: cs t cs' / => //= s1 t1 s2 t2 s3 t Hstep Hstar IH -> {t}.
     case: s1 t1 s2 / Hstep Hstar IH=> //=.
     - (* Internal Return *)
-      by move=> C stk mem mem' k _ P v P_expr old <-; rewrite eqxx.
+      by move=> C stk mem k _ P v P_expr old <-; rewrite eqxx.
     - (* External Return *)
-      move=> C stk mem mem' k C' P v P_expr old.
+      move=> C stk mem k C' P v P_expr old.
       by rewrite eq_sym eqxx=> /eqP/negbTE -> /=.
     - (* Internal Call *)
-      by move=> C stk mem mem' k v _ old <-; rewrite eqxx.
+      by move=> C stk mem k v _ _ old <-; rewrite eqxx.
     - (* External Call *)
-      by move=> C stk mem mem' k v C' old /eqP/negbTE ->; rewrite !eqxx.
+      by move=> C stk mem k v _ C' old /eqP/negbTE ->; rewrite !eqxx.
   Qed.
 
   Lemma events_wf st t st' :
@@ -490,7 +472,7 @@ Section Semantics.
   Proof.
   elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
   rewrite all_cat; case: st1 t1 st2 / Hstep {Hstar} => //=.
-  - by move=> ?????????? /eqP -> /imported_procedure_iff ->.
+  - by move=> ????????? /eqP -> /imported_procedure_iff ->.
   - by move=> ????????   /eqP ->.
   Qed.
 
@@ -534,6 +516,6 @@ End Semantics.
 
 End CS.
 
-Notation "[ 'CState' C , stk , mem , k , e ]" :=
-  (CS.State C stk mem k e)
-  (at level 0, format "[ 'CState'  C ,  stk ,  mem ,  k ,  e ]").
+Notation "[ 'CState' C , stk , mem , k , e , arg ]" :=
+  (CS.State C stk mem k e arg)
+  (at level 0, format "[ 'CState'  C ,  stk ,  mem ,  k ,  e ,  arg ]").

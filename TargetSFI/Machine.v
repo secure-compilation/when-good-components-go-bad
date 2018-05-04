@@ -45,6 +45,7 @@ Module RiscMachine.
     Definition R_AUX2 : t := 4.
     Definition R_RA : t := 5.
     Definition R_SP : t := 6.
+    Definition R_ARG : t := 7.
     (* reserved SFI registers *)
     Definition R_SFI_SP: t := 26.
     Definition R_AND_CODE_MASK : t := 27.

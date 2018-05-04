@@ -1,7 +1,5 @@
 (*
-The calling conventions adepted is described as follows:
-
-Main ideas:
+The calling conventions are roughly the following:
 
 1. The external entry point has jal to the internal entrypoint.
    This simplifies the code, although it does result in one needless but
@@ -21,12 +19,12 @@ Internal caller (within same component):
 
 External caller (between components):
   push R_RA
-  push contents of B_C (caller's arg)
+  push contents of R_ARG (caller's arg)
   store R_SP into B_C
   ICall C' P'
   set R_ONE = 1
   set R_SP to contents of B_C
-  pop caller's arg into B_C
+  pop caller's arg into R_ARG
   pop into R_RA
 
 Code at external entry point:
@@ -38,9 +36,13 @@ Code at internal entry label:
   save R_SP to R_AUX1
   allocate stack frame for this procedure, pointed to by R_SP
   push R_AUX1 (old R_SP) [for an external call this is random garbage, but harmless]
-  push contents of B_C [for an internal call, this is caller's arg; for an external call, this is SP at point when callee component last called externally]
-  store R_COM into B_C
+  push contents of B_C [for an internal call, this is random garbage, but harmless.
+                        for an external call, this is SP at point when callee component
+                        last called externally]
+  push R_ARG [caller argument]
+  move R_COM to R_ARG
   ...body of function...
+  pop into R_ARG
   pop into B_C
   pop into R_SP [for an external call this is pointless, but harmless]
   [if we did stack frame deallocation, it would happen here]
@@ -126,6 +128,8 @@ Fixpoint compile_expr (e: expr) : COMP code :=
   | E_val (Ptr p) =>
     ret [IConst (IPtr p) R_COM]
   | E_val Undef => fail (* we don't compile undef *)
+  | E_arg =>
+    ret [IMov R_ARG R_COM]
   | E_local =>
     ret [IConst (IPtr local_buf_ptr) R_COM]
   | E_binop bop e1 e2 =>
@@ -180,14 +184,12 @@ Fixpoint compile_expr (e: expr) : COMP code :=
     else
       ret (call_arg_code ++
            push R_RA ++
-           load_arg local_buf_ptr R_AUX1 ++
-           push R_AUX1 ++
+           push R_ARG ++
            store_arg local_buf_ptr R_SP R_AUX2 ++
            [ICall C' P'] ++
            [IConst (IInt 1) R_ONE] ++
            load_arg local_buf_ptr R_SP ++
-           pop R_AUX1 ++
-           store_arg local_buf_ptr R_AUX1 R_AUX2 ++
+           pop R_ARG ++
            pop R_RA
            )
   | E_exit => ret [IHalt]
@@ -210,8 +212,10 @@ Definition compile_proc (P: Procedure.id) (e: expr)
         push R_AUX1 ++
         load_arg local_buf_ptr R_AUX1 ++
         push R_AUX1 ++
-        store_arg local_buf_ptr R_COM R_AUX2 ++
+        push R_ARG ++
+        [IMov R_COM R_ARG] ++
         proc_code ++
+        pop R_ARG ++
         pop R_AUX1 ++
         store_arg local_buf_ptr R_AUX1 R_AUX2 ++
         pop R_SP ++
