@@ -119,11 +119,6 @@ case: eqP=> [-> {C'}|_].
 by rewrite andbF.
 Qed.
 
-Lemma head_to_partial_stack_helper ctx stk frame :
-  head (to_partial_frame ctx frame) (to_partial_stack_helper ctx stk frame) =
-  to_partial_frame ctx frame.
-Proof. by elim: stk=> [|[C v k] stk IH] //=; case: ifP=> //. Qed.
-
 Lemma to_partial_stack_helper_nonempty:
   forall ctx gps frame,
     to_partial_stack_helper ctx gps frame <> [].
@@ -238,32 +233,18 @@ Proof.
   compute. reflexivity.
 Qed.
 
-Lemma partial_stack_push_by_program:
-  forall ctx gps1 gps2 C_incontrol,
-    C_incontrol \notin ctx ->
-    to_partial_stack gps1 ctx C_incontrol =
-    to_partial_stack gps2 ctx C_incontrol ->
-  forall v k C_incontrol',
-    to_partial_stack (CS.Frame C_incontrol v k :: gps1) ctx C_incontrol' =
-    to_partial_stack (CS.Frame C_incontrol v k :: gps2) ctx C_incontrol'.
+Lemma partial_stack_push_by_program ctx gps1 gps2 C :
+  C \notin ctx ->
+  to_partial_stack gps1 ctx C =
+  to_partial_stack gps2 ctx C ->
+  forall v k C',
+    to_partial_stack (CS.Frame C v k :: gps1) ctx C' =
+    to_partial_stack (CS.Frame C v k :: gps2) ctx C'.
 Proof.
-  rewrite /to_partial_stack /=.
-  move=> ctx gps1 gps2 C_incontrol Hprog Hsame_stacks.
-  move=> v k C_incontrol'; rewrite (negbTE Hprog) /=.
-  elim: gps1 gps2 Hsame_stacks=> [|[C1 v1 k1] gps1 IH] /=.
-    case=> [|[C' v' k'] gps2']; rewrite /= (negbTE Hprog) //.
-    case: ifP => [|_ <- //] /andP [HC'_in_ctx /eqP contra].
-    by move: Hprog; rewrite -contra HC'_in_ctx.
-  case=> [|[C2 v2 k2] gps2]; rewrite /= (negbTE Hprog).
-    case: ifP; last by move=> _ ->.
-    case/andP => [HC'_in_ctx /eqP contra].
-    by move: Hprog; rewrite -contra HC'_in_ctx.
-  case: ifP.
-    case/andP=> [C1_in_ctx /eqP e1]; subst C_incontrol.
-    by rewrite C1_in_ctx in Hprog.
-  case: ifP => [|_ _ -> //].
-  case/andP=> [C2_in_ctx /eqP e2]; subst C_incontrol.
-  by rewrite C2_in_ctx in Hprog.
+move=> in_prog e_stk v k C'.
+rewrite to_partial_stackE [RHS]to_partial_stackE /=.
+case: eqP => [<- {C'}|ne]; last by rewrite !if_same e_stk.
+by rewrite (negbTE in_prog) /= (negbTE in_prog) e_stk.
 Qed.
 
 Lemma partial_stack_ignores_change_by_context_with_control:
@@ -285,24 +266,10 @@ Lemma partial_stack_outside_context_preserves_top :
   exists frame rest,
     to_partial_stack (CS.Frame C' v k :: s) ctx C = (C', frame) :: rest.
 Proof.
-  intros Cid' Cid val cont st ctx Hctx.
-  induction st as [| hd st IHst].
-  - unfold to_partial_stack.
-    simpl. rewrite Hctx. simpl.
-    rewrite Hctx. simpl.
-    eexists. eexists. reflexivity.
-  - (* Extract information from IH. *)
-    destruct IHst as [frame [rest IHst]].
-    unfold to_partial_stack in IHst. simpl in IHst.
-    rewrite Hctx in IHst. simpl in IHst.
-    (* Substitute information into the goal. *)
-    unfold to_partial_stack.
-    simpl. rewrite Hctx. simpl.
-    rewrite IHst. simpl.
-    destruct hd as [C v0 k1].
-    destruct (C \in ctx) eqn:Hcase1; rewrite Hcase1;
-      destruct (C == Cid); simpl;
-        try (try rewrite Hctx; eexists; eexists; reflexivity).
+move=> C C' v k stk ctx in_prog.
+rewrite to_partial_stackE /=; case: eqP in_prog=> [-> {C'}|ne] in_prog.
+  by rewrite in_prog /= in_prog; eauto.
+by rewrite if_same /= in_prog; eauto.
 Qed.
 
 Lemma partial_stack_outside_control_preserves_top :
@@ -311,26 +278,8 @@ Lemma partial_stack_outside_control_preserves_top :
   exists frame rest,
     to_partial_stack (CS.Frame C' v k :: s) ctx C = (C', frame) :: rest.
 Proof.
-  intros Cid' Cid val cont st ctx Hneq'.
-  assert (Cid == Cid' = false) as Hneq
-    by (apply /eqP; intro Heq; by symmetry in Heq).
-  induction st as [| hd st IHst].
-  - unfold to_partial_stack.
-    simpl. rewrite Hneq. rewrite andb_comm. simpl.
-    destruct (Cid \in ctx) eqn:Hcase1; rewrite Hcase1;
-      by eauto.
-  - (* Extract information from IH. *)
-    destruct IHst as [frame [rest IHst]].
-    unfold to_partial_stack in IHst. simpl in IHst.
-    rewrite Hneq in IHst. rewrite andb_comm in IHst. simpl in IHst.
-    (* Substitute information into the goal. *)
-    unfold to_partial_stack.
-    simpl. rewrite Hneq. rewrite andb_comm. simpl.
-    rewrite IHst. simpl.
-    destruct hd as [C v0 k1].
-    destruct (C \in ctx) eqn:Hcase1; rewrite Hcase1;
-      destruct (C == Cid) eqn:Hcase2; simpl;
-      (try (destruct (Cid \in ctx) eqn:Hcase3; rewrite Hcase3); eauto).
+move=> C C' v k s ctx /eqP ne.
+by rewrite to_partial_stackE /= eq_sym (negbTE ne) if_same /=; eauto.
 Qed.
 
 Lemma partial_stacks_unequal_top_internal :
@@ -340,17 +289,9 @@ Lemma partial_stacks_unequal_top_internal :
     to_partial_stack (CS.Frame C1 v1 k1 :: s1) ctx C1 <>
     to_partial_stack (CS.Frame C2 v2 k2 :: s2) ctx C1.
 Proof.
-  intros C1 C2 v1 v2 k1 k2 s1 s2 ctx Hctx Hneq Hstack.
-  assert (C1 \in ctx = false) as Hctx' by (by destruct (C1 \in ctx)).
-  pose proof partial_stack_outside_context_preserves_top as Hpres1.
-  specialize (Hpres1 C1 _ v1 k1 s1 _ Hctx').
-  destruct Hpres1 as [frame1 [rest1 Hpres1]].
-  pose proof partial_stack_outside_control_preserves_top as Hpres2.
-  specialize (Hpres2 C1 _ v2 k2 s2 ctx Hneq).
-  destruct Hpres2 as [frame2 [rest2 Hpres2]].
-  rewrite Hpres1 in Hstack. rewrite Hpres2 in Hstack.
-  inversion Hstack as [Hcontra].
-  by intuition.
+move=> C1 C2 v1 v2 k1 k2 s1 s2 ctx in_prog H contra; apply: H.
+move: contra; rewrite to_partial_stackE (to_partial_stackE (_ :: s2)).
+by rewrite (negbTE in_prog) /= (negbTE in_prog); case.
 Qed.
 
 Lemma partial_stacks_unequal_top_external :
@@ -361,18 +302,12 @@ Lemma partial_stacks_unequal_top_external :
     to_partial_stack (CS.Frame C1 v1 k1 :: s1) ctx C <>
     to_partial_stack (CS.Frame C2 v2 k2 :: s2) ctx C.
 Proof.
-  intros C C1 C2 v1 v2 k1 k2 s1 s2 ctx Hnotin Hin Hneq Hstack.
-  assert (C1 \in ctx = false) as Hnotin' by (by destruct (C1 \in ctx)).
-  pose proof partial_stack_outside_context_preserves_top as Hpres1.
-  specialize (Hpres1 C C1 v1 k1 s1 ctx Hnotin').
-  destruct Hpres1 as [frame1 [rest1 Hpres1]].
-  rewrite Hpres1 in Hstack.
-  pose proof partial_stack_outside_control_preserves_top as Hpres2.
-  specialize (Hpres2 C C2 v2 k2 s2 ctx Hneq).
-  destruct Hpres2 as [frame2 [rest2 Hpres2]].
-  rewrite Hpres2 in Hstack.
-  inversion Hstack; subst.
-  by rewrite Hin in Hnotin.
+move=> C C1 C2 v1 v2 k1 k2 s1 s2 ctx in_prog in_ctx H contra; apply: H.
+move: contra; rewrite to_partial_stackE (to_partial_stackE (_ :: s2)) /=.
+case: (C1 =P C) in_prog => [-> {C1}|ne1] in_prog.
+  by rewrite (negbTE in_prog) /=; case.
+case: (C2 =P C) in_ctx  => [-> {C2} //|ne2] in_ctx.
+by rewrite !if_same /= (negbTE in_prog) in_ctx.
 Qed.
 
 Lemma partial_stacks_equal_top_external_context :
@@ -426,94 +361,8 @@ Lemma partial_stack_push_by_context:
     to_partial_stack (CS.Frame C v1 k1 :: gps1) ctx C' =
     to_partial_stack (CS.Frame C v2 k2 :: gps2) ctx C'.
 Proof.
-  intros ctx C C' v1 k1 v2 k2 gps1 gps2.
-  move=> /eqP Hdiff Hctx Hstacks.
-  unfold to_partial_stack. simpl.
-  rewrite Hctx /= (negbTE Hdiff).
-  unfold to_partial_stack in Hstacks.
-  induction gps1 as [|[C_a v_a k_a] gps1']; simpl in *.
-  - induction gps2 as [|[C_b v_b k_b] gps2']; simpl in *.
-    + rewrite Hctx. reflexivity.
-    + rewrite Hctx.
-      rewrite Hctx in IHgps2'.
-      destruct (C_b \in ctx) eqn:HC_b_in_ctx.
-      * rewrite HC_b_in_ctx.
-        rewrite HC_b_in_ctx in Hstacks. simpl in *.
-        destruct (C_b == C) eqn:HC_b_eq_C.
-        ** simpl. apply IHgps2'; auto.
-        ** exfalso.
-           symmetry in Hstacks.
-           eapply to_partial_stack_helper_nonempty.
-           eauto.
-      * rewrite HC_b_in_ctx in Hstacks. simpl in *.
-        exfalso.
-        symmetry in Hstacks.
-        eapply to_partial_stack_helper_nonempty.
-        eauto.
-  - rewrite Hctx.
-    induction gps2 as [|[C_b v_b k_b] gps2']; simpl in *.
-    * destruct (C_a \in ctx) eqn:HC_a_in_ctx.
-      ** rewrite HC_a_in_ctx.
-         rewrite HC_a_in_ctx in Hstacks. simpl in *.
-         destruct (C_a == C) eqn:HC_a_eq_C.
-         *** apply IHgps1'; auto.
-         *** exfalso.
-             symmetry in Hstacks.
-             eapply to_partial_stack_helper_nonempty.
-             eauto.
-      ** rewrite HC_a_in_ctx in Hstacks. simpl in *.
-         exfalso.
-         eapply to_partial_stack_helper_nonempty.
-         eauto.
-    * rewrite Hctx.
-      rewrite Hctx in IHgps1'.
-      destruct (C_a \in ctx) eqn:HC_a_in_ctx.
-      ** rewrite HC_a_in_ctx.
-         rewrite HC_a_in_ctx in Hstacks.
-         rewrite HC_a_in_ctx in IHgps2'.
-         destruct (C_a == C) eqn:HC_a_eq_C.
-         *** destruct (C_b \in ctx) eqn:HC_b_in_ctx.
-             **** rewrite HC_b_in_ctx.
-                  rewrite HC_b_in_ctx in Hstacks.
-                  rewrite HC_b_in_ctx in IHgps1'.
-                  simpl in *.
-                  destruct (C_b == C) eqn:HC_b_eq_C.
-                  ***** apply IHgps1'; auto.
-                  ***** apply IHgps1'; auto.
-             **** rewrite HC_b_in_ctx.
-                  rewrite HC_b_in_ctx in Hstacks.
-                  rewrite HC_b_in_ctx in IHgps1'.
-                  simpl in *.
-                  apply IHgps1'; auto.
-         *** destruct (C_b \in ctx) eqn:HC_b_in_ctx.
-             **** rewrite HC_b_in_ctx.
-                  rewrite HC_b_in_ctx in Hstacks.
-                  rewrite HC_b_in_ctx in IHgps1'.
-                  simpl in *.
-                  destruct (C_b == C) eqn:HC_b_eq_C.
-                  ***** apply IHgps2'; auto.
-                  ***** rewrite Hstacks. reflexivity.
-             **** rewrite HC_b_in_ctx.
-                  rewrite HC_b_in_ctx in Hstacks.
-                  rewrite HC_b_in_ctx in IHgps1'.
-                  simpl in *.
-                  rewrite Hstacks. reflexivity.
-      ** rewrite HC_a_in_ctx.
-         rewrite HC_a_in_ctx in Hstacks.
-         rewrite HC_a_in_ctx in IHgps2'.
-         destruct (C_b \in ctx) eqn:HC_b_in_ctx.
-         *** rewrite HC_b_in_ctx.
-             rewrite HC_b_in_ctx in Hstacks.
-             rewrite HC_b_in_ctx in IHgps1'.
-             destruct (C_b == C) eqn:HC_b_eq_C.
-             **** apply IHgps2'; auto.
-             **** simpl in *.
-                  rewrite Hstacks. reflexivity.
-         *** rewrite HC_b_in_ctx.
-             rewrite HC_b_in_ctx in Hstacks.
-             rewrite HC_b_in_ctx in IHgps1'.
-             simpl in *.
-             rewrite Hstacks. reflexivity.
+move=> ctx C C' v1 k1 v2 k2 gps1 gps2 /eqP ne in_ctx.
+by rewrite !(to_partial_stackE (_ :: _)) /= (negbTE ne) !if_same /= in_ctx => ->.
 Qed.
 
 Lemma partial_stack_pop_to_program:
@@ -524,124 +373,11 @@ Lemma partial_stack_pop_to_program:
     old_call_arg1 = old_call_arg2 /\ k1 = k2 /\
     to_partial_stack gps1 ctx C' = to_partial_stack gps2 ctx C'.
 Proof.
-  intros ctx C C' old_call_arg1 k1 old_call_arg2 k2 gps1 gps2.
-  intros Hprog Hstack.
-  unfold to_partial_stack in Hstack.
-  rewrite /= (negbTE Hprog) /= in Hstack.
-  destruct gps1 as [|[C_a v_a k_a] gps1'].
-  - destruct gps2 as [|[C_b v_b k_b] gps2'].
-    + rewrite /= (negbTE Hprog) in Hstack.
-      inversion Hstack. subst.
-      repeat split.
-    + simpl in *.
-      rewrite (negbTE Hprog) in Hstack.
-      destruct (C_b \in ctx) eqn:HC_b_in_ctx;
-        rewrite HC_b_in_ctx in Hstack.
-      * destruct (C_b == C') eqn:HC_b_eq_C';
-          simpl in *.
-        ** move/eqP in HC_b_eq_C'. subst.
-           by rewrite HC_b_in_ctx in Hprog.
-        ** inversion Hstack.
-           exfalso.
-           symmetry in H2.
-           eapply to_partial_stack_helper_nonempty.
-           eauto.
-      * simpl in *.
-        inversion Hstack.
-        exfalso.
-        symmetry in H2.
-        eapply to_partial_stack_helper_nonempty.
-        eauto.
-  - destruct gps2 as [|[C_b v_b k_b] gps2'].
-    + simpl in *.
-      rewrite (negbTE Hprog) in Hstack.
-      destruct (C_a \in ctx) eqn:HC_a_in_ctx;
-        rewrite HC_a_in_ctx in Hstack.
-      * destruct (C_a == C') eqn:HC_a_eq_C';
-          simpl in *.
-        ** move/eqP in HC_a_eq_C'. subst.
-           rewrite (negbTE Hprog) in HC_a_in_ctx.
-           discriminate.
-        ** inversion Hstack.
-           exfalso.
-           symmetry in H2.
-           eapply to_partial_stack_helper_nonempty.
-           eauto.
-      * simpl in *.
-        inversion Hstack.
-        exfalso.
-        symmetry in H2.
-        eapply to_partial_stack_helper_nonempty.
-        eauto.
-    + simpl in Hstack.
-      rewrite (negbTE Hprog) in Hstack.
-      destruct (C_a \in ctx) eqn:HC_a_in_ctx.
-      * destruct (C_b \in ctx) eqn:HC_b_in_ctx.
-        ** rewrite HC_a_in_ctx in Hstack.
-           rewrite HC_b_in_ctx in Hstack.
-           destruct (C_a == C') eqn:HC_a_eq_C'.
-           *** destruct (C_b == C') eqn:HC_b_eq_C'.
-               **** simpl in *.
-                    apply Nat.eqb_eq in HC_a_eq_C'. subst.
-                    rewrite (negbTE Hprog) in HC_a_in_ctx.
-                    discriminate.
-               **** simpl in *.
-                    apply Nat.eqb_eq in HC_a_eq_C'. subst.
-                    rewrite (negbTE Hprog) in HC_a_in_ctx.
-                    discriminate.
-           *** destruct (C_b == C') eqn:HC_b_eq_C'.
-               **** simpl in *.
-                    apply Nat.eqb_eq in HC_b_eq_C'. subst.
-                    rewrite (negbTE Hprog) in HC_b_in_ctx.
-                    discriminate.
-               **** simpl in *.
-                    inversion Hstack. subst.
-                    repeat split.
-                    unfold to_partial_stack.
-                    simpl.
-                    rewrite HC_a_in_ctx HC_b_in_ctx.
-                    rewrite HC_a_eq_C' HC_b_eq_C'.
-                    simpl. auto.
-        ** rewrite HC_a_in_ctx in Hstack.
-           rewrite HC_b_in_ctx in Hstack.
-           simpl in *.
-           destruct (C_a == C') eqn:HC_a_eq_C'.
-           *** apply Nat.eqb_eq in HC_a_eq_C'. subst.
-               rewrite (negbTE Hprog) in HC_a_in_ctx.
-               discriminate.
-           *** inversion Hstack. subst.
-               repeat split.
-               unfold to_partial_stack.
-               simpl.
-               rewrite HC_a_in_ctx HC_b_in_ctx.
-               simpl.
-               rewrite HC_a_eq_C'.
-               auto.
-      * destruct (C_b \in ctx) eqn:HC_b_in_ctx.
-        ** rewrite HC_a_in_ctx in Hstack.
-           rewrite HC_b_in_ctx in Hstack.
-           simpl in *.
-           destruct (C_b == C') eqn:HC_b_eq_C'.
-           *** apply Nat.eqb_eq in HC_b_eq_C'. subst.
-               rewrite (negbTE Hprog) in HC_b_in_ctx.
-               discriminate.
-           *** inversion Hstack. subst.
-               repeat split.
-               unfold to_partial_stack.
-               simpl.
-               rewrite HC_b_in_ctx HC_b_eq_C'.
-               rewrite HC_a_in_ctx. simpl.
-               rewrite H2. reflexivity.
-        ** rewrite HC_a_in_ctx in Hstack.
-           rewrite HC_b_in_ctx in Hstack.
-           simpl in *.
-           inversion Hstack. subst.
-           repeat split.
-           unfold to_partial_stack.
-           simpl.
-           rewrite HC_b_in_ctx.
-           rewrite HC_a_in_ctx. simpl.
-           rewrite H2. reflexivity.
+move=> ????????? in_prog.
+rewrite !(to_partial_stackE (_ :: _)) /=.
+case: eqP in_prog=> [->|ne] in_prog.
+  by rewrite (negbTE in_prog) /= (negbTE in_prog); case=> -> -> ->.
+by rewrite !if_same /= (negbTE in_prog); case=> -> -> ->.
 Qed.
 
 Lemma partial_stack_pop_to_context:
@@ -652,106 +388,8 @@ Lemma partial_stack_pop_to_context:
     to_partial_stack (CS.Frame C' v2 k2 :: gps2) ctx C ->
     to_partial_stack gps1 ctx C' = to_partial_stack gps2 ctx C'.
 Proof.
-  intros ctx C C' v1 k1 v2 k2 gps1 gps2.
-  move=> /eqP Hdiff Hctx Hstacks.
-  unfold to_partial_stack in Hstacks. simpl in *.
-  rewrite eq_sym (negbTE Hdiff) Hctx /= in Hstacks.
-  induction gps1 as [|[C_a v_a k_a] gps1']; simpl in *.
-  - induction gps2 as [|[C_b v_b k_b] gps2']; simpl in *.
-    + reflexivity.
-    + rewrite Hctx in Hstacks.
-      rewrite Hctx in IHgps2'.
-      unfold to_partial_stack. simpl.
-      destruct (C_b \in ctx) eqn:HC_b_in_ctx.
-      * rewrite HC_b_in_ctx.
-        rewrite HC_b_in_ctx in Hstacks.
-        destruct (C_b == C') eqn:HC_b_eq_C'.
-        ** unfold to_partial_stack in IHgps2'.
-           simpl in *.
-           apply IHgps2'; auto.
-        ** simpl in *.
-           inversion Hstacks.
-           exfalso.
-           symmetry in H0.
-           eapply to_partial_stack_helper_nonempty in H0.
-           auto.
-      * rewrite HC_b_in_ctx.
-        rewrite HC_b_in_ctx in Hstacks.
-        simpl in *.
-        inversion Hstacks.
-        exfalso.
-        symmetry in H0.
-        eapply to_partial_stack_helper_nonempty in H0.
-        auto.
-  - induction gps2 as [|[C_b v_b k_b] gps2']; simpl in *.
-    + rewrite Hctx in Hstacks.
-      rewrite Hctx in IHgps1'.
-      unfold to_partial_stack. simpl.
-      destruct (C_a \in ctx) eqn:HC_a_in_ctx.
-      * rewrite HC_a_in_ctx.
-        rewrite HC_a_in_ctx in Hstacks.
-        destruct (C_a == C') eqn:HC_a_eq_C'.
-        ** unfold to_partial_stack in IHgps1'.
-           simpl in *.
-           apply IHgps1'; auto.
-        ** simpl in *.
-           inversion Hstacks.
-           exfalso.
-           eapply to_partial_stack_helper_nonempty in H0.
-           auto.
-      * rewrite HC_a_in_ctx.
-        rewrite HC_a_in_ctx in Hstacks.
-        simpl in *.
-        inversion Hstacks.
-        exfalso.
-        eapply to_partial_stack_helper_nonempty in H0.
-        auto.
-    + rewrite Hctx in Hstacks.
-      rewrite Hctx in IHgps1'.
-      rewrite Hctx in IHgps2'.
-      unfold to_partial_stack.
-      unfold to_partial_stack in IHgps1'.
-      unfold to_partial_stack in IHgps2'.
-      simpl in *.
-      destruct (C_a \in ctx) eqn:HC_a_in_ctx.
-      * rewrite HC_a_in_ctx.
-        rewrite HC_a_in_ctx in Hstacks.
-        rewrite HC_a_in_ctx in IHgps2'.
-        destruct (C_a == C') eqn:HC_a_eq_C'.
-        ** apply IHgps1'. auto.
-        ** simpl in *.
-           destruct (C_b \in ctx) eqn:HC_b_in_ctx.
-           *** rewrite HC_b_in_ctx.
-               rewrite HC_b_in_ctx in Hstacks.
-               rewrite HC_b_in_ctx in IHgps1'.
-               destruct (C_b == C') eqn:HC_b_eq_C'.
-               **** simpl in *.
-                    apply IHgps2'; auto.
-               **** simpl in *.
-                    inversion Hstacks. rewrite H0. reflexivity.
-           *** rewrite HC_b_in_ctx.
-               rewrite HC_b_in_ctx in Hstacks.
-               rewrite HC_b_in_ctx in IHgps1'.
-               simpl in *.
-               inversion Hstacks. rewrite H0. reflexivity.
-      * rewrite HC_a_in_ctx.
-        rewrite HC_a_in_ctx in Hstacks.
-        rewrite HC_a_in_ctx in IHgps2'.
-        simpl in *.
-        destruct (C_b \in ctx) eqn:HC_b_in_ctx.
-        ** rewrite HC_b_in_ctx.
-           rewrite HC_b_in_ctx in Hstacks.
-           rewrite HC_b_in_ctx in IHgps1'.
-           destruct (C_b == C') eqn:HC_b_eq_C'.
-           *** simpl in *.
-               apply IHgps2'; auto.
-           *** simpl in *.
-               inversion Hstacks. rewrite H0. reflexivity.
-        ** rewrite HC_b_in_ctx.
-           rewrite HC_b_in_ctx in Hstacks.
-           rewrite HC_b_in_ctx in IHgps1'.
-           simpl in *.
-           inversion Hstacks. rewrite H0. reflexivity.
+move=> ????????? /eqP ne in_ctx; rewrite !(to_partial_stackE (_ :: _)) /=.
+by rewrite eq_sym (negbTE ne) !if_same /= in_ctx; case.
 Qed.
 
 Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
@@ -816,8 +454,6 @@ Proof.
     + PS.simplify_turn.
       rewrite H. reflexivity.
 Qed.
-
-
 
 Ltac backward_easy :=
   by move=> *;
