@@ -4,6 +4,7 @@ Require Import Common.Util.
 Module Block.
   Definition id := nat.
   Definition offset := Z.
+  Definition local : id := 0.
 End Block.
 
 Module Pointer.

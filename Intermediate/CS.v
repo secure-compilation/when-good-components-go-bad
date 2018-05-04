@@ -803,17 +803,21 @@ try by move=> *; match goal with
 - by move=> ?????????; rewrite !eqxx.
 Qed.
 
+Canonical ssrnat.nat_eqType.
+
 Lemma intermediate_well_formed_events st t st' :
   Star sem st t st' ->
-  All (well_formed_event (Intermediate.prog_interface p)) t.
+  seq.all (well_formed_event (Intermediate.prog_interface p)) t.
 Proof.
 elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
-rewrite All_cat; split=> // {IH Hstar t2 st3}.
-case: st1 t1 st2 / Hstep => //= _ _ regs pc b C P call_arg _ ?.
-rewrite /G {1}/prepare_global_env.
-rewrite [Intermediate.prepare_procedures p _]surjective_pairing /=.
-rewrite [fst (Intermediate.prepare_procedures p _)]surjective_pairing /=.
-by eauto.
+rewrite seq.all_cat IH andbT {Hstar}.
+case: st1 t1 st2 / Hstep => //=.
+- move=> ????????? /eqP ->.
+  rewrite /G {1}/prepare_global_env.
+  rewrite [Intermediate.prepare_procedures p _]surjective_pairing /=.
+  rewrite [fst (Intermediate.prepare_procedures p _)]surjective_pairing /=.
+  by move=> /imported_procedure_iff /= ->.
+- by move=> ??????? /eqP ->.
 Qed.
 
 Lemma intermediate_well_formed_trace : forall mainP t cs cs',
@@ -824,9 +828,9 @@ Lemma intermediate_well_formed_trace : forall mainP t cs cs',
   well_formed_trace (Intermediate.prog_interface p) t.
 Proof.
   intros mainP t cs cs' H H' H'' H'''.
-  unfold well_formed_trace. split; last by apply: intermediate_well_formed_events H.
+  unfold well_formed_trace. apply/andP; split; last by apply: intermediate_well_formed_events H.
   apply intermediate_well_bracketed_trace in H.
-  suffices <- : stack_state_of cs = StackState Component.main [] by [].
+  suffices <- : stack_state_of cs = stack_state0 by [].
   rewrite /initial_state /initial_machine_state in H'.
   rewrite H' H''.
   rewrite [Intermediate.prepare_procedures p _]surjective_pairing /=.

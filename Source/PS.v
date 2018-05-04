@@ -52,14 +52,14 @@ Ltac unfold_states :=
          | st: state |- _ => unfold_state st
          end.
 
-Definition component_of_state (sps: state) : Component.id :=
+Definition s_component (sps: state) : Component.id :=
   match sps with
   | PC (C, _, _, _, _) => C
   | CC (C, _, _)       => C
   end.
 
 Instance state_turn : HasTurn state := {
-  turn_of s iface := component_of_state s \in domm iface
+  turn_of s iface := s_component s \in domm iface
 }.
 
 Definition is_context_component (ps: state) ctx := turn_of ps ctx.
@@ -748,6 +748,10 @@ Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
   if C \in domm ctx then CC (C, pgps, pmem)
   else PC (C, pgps, pmem, k, e).
 
+Lemma s_component_partialize ctx scs :
+  s_component (partialize ctx scs) = CS.s_component scs.
+Proof. by case: scs=> C ???? /=; case: ifP. Qed.
+
 Lemma partialize_correct:
   forall scs sps ctx,
     partialize ctx scs = sps <-> partial_state ctx scs sps.
@@ -774,6 +778,8 @@ Proof.
     + PS.simplify_turn.
       rewrite H. reflexivity.
 Qed.
+
+
 
 Ltac backward_easy :=
   by move=> *;
@@ -811,20 +817,6 @@ suffices : match CS.eval_kstep (prepare_global_env (program_link p p2)) scs2 ret
   case ev: CS.eval_kstep=> [[t' scs2']|] //=.
   by move/CS.eval_kstep_sound in ev => - [-> ?]; eauto.
 case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
-- (* Local *)
-  move=> C stk1 mem1 k b get_C in_prog.
-  have [{get_C b} -> in_prog'] : b = 0 /\ C \in domm (prog_buffers p).
-    move: get_C; rewrite mapmE unionmE -mem_domm.
-    case: ifP=> //= _; first by case: getm => //= _ [<-].
-    move: in_prog; rewrite -int1 wfprog_defined_buffers // mem_domm.
-    by case: getm.
-  rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
-  case: scs2=> [C' stk2 mem2 k' e'] /=.
-  case: ifP=> // _ []; rewrite -(lock filterm).
-  move=> {C' k' e'} <- e_stk e_mem <- <-.
-  rewrite -lock /= mapmE unionmE -mem_domm.
-  move: in_prog'; rewrite mem_domm; case: getm=> //= _ _.
-  by rewrite (negbTE in_prog) e_stk e_mem.
 - (* Allocation *)
   move=> C stk1 mem1 mem1' k size ptr /Zgt_is_gt_bool size_pos e_mem1 in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
@@ -854,9 +846,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
   move=> mem2' e_mem2 e_mem'; rewrite e_mem2 /=.
   by rewrite (negbTE in_prog) e_stk e_mem'.
 - (* Internal Call *)
-  move=> C stk1 mem1 mem1' k _ P v P_expr b b' old <-.
-  rewrite !mapmE; case: (getm (unionm _ _) _)=> [_|] //=.
-  move=> e_P [<-] e_load [<-] e_store {b b'} in_prog.
+  move=> C stk1 mem1 mem1' k _ P v P_expr old <- e_P e_load e_store in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
   case: scs2=> [C' stk2 mem2 k' e'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
@@ -867,17 +857,12 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
   rewrite (_ : find_procedure _ _ _ = Some P_expr); last first.
     apply/linkable_programs_find_procedure=> //; auto.
     by rewrite int2.
-  rewrite mapmE unionmE -mem_domm -wfprog_defined_buffers // in_p.
-  move: (in_p); rewrite wfprog_defined_buffers // mem_domm.
-  case: getm=> //= _ _.
   rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_load).
   case: (program_store_in_partialized_memory_strong e_mem in_prog e_store).
   move=> mem2' -> e_mem' /=; rewrite (negbTE in_prog) e_mem'.
   by rewrite (partial_stack_push_by_program in_prog e_stk).
 - (* External Call *)
-  move=> C stk1 mem1 mem1' k C' P v P_expr b b' old /eqP ne import e_P.
-  rewrite !mapmE; do 2![case: getm=> [_|] //=].
-  move=> {b b'} [<-] e_load [<-] e_store in_prog.
+  move=> C stk1 mem1 mem1' k C' P v P_expr old /eqP ne import e_P e_load e_store in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
   case: scs2=> [C'' stk2 mem2 k' e'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
@@ -890,14 +875,8 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
   move=> import; rewrite import; move: e_P; rewrite /find_procedure !unionmE.
   case C'_p: (prog_procedures p C')=> [CI'|] //=.
   + (* Call into program *)
-    move=> ->; rewrite !mapmE unionmE -mem_domm.
-    rewrite -wfprog_defined_buffers  // mem_domm C_p /=.
-    have /dommP [_ -> /=] : C \in domm (prog_buffers p).
-      by rewrite -wfprog_defined_buffers // mem_domm C_p.
+    move=> ->.
     rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_load).
-    rewrite unionmE.
-    have /dommP [_ -> /=] : C' \in domm (prog_buffers p).
-      by rewrite -wfprog_defined_buffers // wfprog_defined_procedures // mem_domm C'_p.
     have in_prog' : C' \notin domm ctx.
       case: link => _ /fdisjointP/(_ C'); apply.
       by rewrite wfprog_defined_procedures // mem_domm C'_p.
@@ -923,12 +902,9 @@ case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
     move: (wfprog_exported_procedures_existence wf2 C'_P').
     rewrite /find_procedure C'_ctx2.
     case: (C'_procs2 P)=> //= P_expr' _.
-    rewrite mapmE unionmE.
     case e_buf: (prog_buffers p C)=> [buf /=|]; last first.
       by move/dommPn: e_buf; rewrite -wfprog_defined_buffers // mem_domm C_p.
     rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_load).
-    rewrite mapmE unionmE -mem_domm -wfprog_defined_buffers //.
-    rewrite wfprog_defined_procedures // mem_domm C'_p /=.
     case e_buf': (prog_buffers p2 C')=> [buf' /=|]; last first.
       move/dommPn: e_buf'; rewrite -wfprog_defined_buffers //.
       by rewrite wfprog_defined_procedures // mem_domm C'_ctx2.
@@ -1007,16 +983,18 @@ Inductive kstep
       partial_state ctx scs' sps' ->
       kstep p ctx G sps t sps'.
 
+(* FIXME: This is subsumed by s_component_partialize *)
+
 Lemma partial_state_component ctx scs sps :
   partial_state ctx scs sps ->
-  component_of_state sps = CS.s_component scs.
+  s_component sps = CS.s_component scs.
 Proof. by case: scs sps /. Qed.
 
 Lemma kstep_component p ctx G s t s' :
   kstep p ctx G s t s' ->
-  component_of_state s' =
-  if t is e :: _ then who_is_in_control_after e
-  else component_of_state s.
+  s_component s' =
+  if t is e :: _ then next_comp_of_event e
+  else s_component s.
 Proof.
 case=> p' scs scs' p'_ctx wf_p wf_p' Hlink _ Hstep.
 move=> /partial_state_component -> /partial_state_component ->.
@@ -1084,8 +1062,8 @@ Section Semantics.
 
   Lemma star_component s1 t s2 :
     Star sem s1 t s2 ->
-    component_of_state s2 =
-    last (component_of_state s1) [seq who_is_in_control_after e | e <- t].
+    s_component s2 =
+    last (s_component s1) [seq next_comp_of_event e | e <- t].
   Proof.
     elim: s1 t s2 / => //= s1 t1 s2 t2 s3 _ Hstep _ -> ->.
     rewrite map_cat last_cat (kstep_component Hstep).
@@ -1102,7 +1080,7 @@ Section Semantics.
     move=> Hinitial Hstar.
     rewrite /undef_in /last_comp /is_program_component /is_context_component.
     rewrite /turn_of /= (star_component Hstar).
-    have -> : component_of_state s1 = Component.main.
+    have -> : s_component s1 = Component.main.
       case: s1 / Hinitial {Hstar} => ???????? Hpart.
       rewrite (partial_state_component Hpart) => ->.
       by rewrite /CS.initial_machine_state; case: prog_main.
@@ -1330,119 +1308,51 @@ Lemma state_determinism_context:
     kstep p ctx G sps t sps'' ->
     sps' = sps''.
 Proof.
-  intros p ctx G sps t sps' Hcontrol Hstep1 sps'' Hstep2.
-
-  inversion Hstep1
-    as [p1 scs1 scs1' Hiface1 Hwfp Hwfp1 Hlink1 _ Hkstep1 Hpartial_sps1 Hpartial_sps1'];
-    subst.
-  inversion Hstep2
-    as [p2 scs2 scs2' Hiface2 _ Hwfp2 Hlink2 _ Hkstep2 Hpartial_sps2 Hpartial_sps2'];
-    subst.
-
-  (* case analysis on who has control *)
-  inversion Hpartial_sps1; subst.
-  - PS.simplify_turn.
-    match goal with
-    | Hin: context[domm (prog_interface p1)],
-      Hnotin: context[domm (prog_interface p1)] |- _ =>
-      rewrite Hin in Hnotin; discriminate
-    end.
-
-  - inversion Hpartial_sps2; subst.
-    inversion Hkstep1; subst;
-      try (rewrite <- (context_epsilon_step_is_silent H Hstep1);
-           rewrite <- (context_epsilon_step_is_silent H4 Hstep2);
-           simpl; reflexivity).
-
-    (* internal & external call *)
-    + inversion Hkstep2; subst.
-      inversion Hpartial_sps1'; subst;
-      inversion Hpartial_sps2'; subst; PS.simplify_turn.
-      (* external call *)
-      * assert (P_expr = P_expr0). {
-          destruct (find_procedure_in_linked_programs Hwfp Hwfp1 Hlink1 H10 H12)
-            as [HP_expr Hfind_proc].
-          rewrite <- Hiface2 in H12.
-          destruct (find_procedure_in_linked_programs Hwfp Hwfp2 Hlink2 H21 H12)
-            as [HP_expr' Hfind_proc'].
-          rewrite Hfind_proc in Hfind_proc'.
-          inversion Hfind_proc'. subst.
-          reflexivity.
-        }
-        subst.
-        assert (b' = b'0).
-        { destruct (prepare_buffers_of_linked_programs Hwfp Hwfp1 Hlink1 H15 H12) as [? Hb].
-          rewrite <- Hiface2 in H12.
-          destruct (prepare_buffers_of_linked_programs Hwfp Hwfp2 Hlink2 H24 H12) as [? Hb'].
-          rewrite Hb in Hb'. inversion Hb'.
-          subst.
-          reflexivity.
-        }
-        subst.
-        (* same stack *)
-        rewrite (partial_stack_push_by_context
-                   old_call_arg k1 old_call_arg0 k H8 H H6).
-        (* same memory *)
-        rewrite (program_store_in_partialized_memory H5 H12 H16 H25).
-        reflexivity.
-      * match goal with
-        | Hin: context[domm (prog_interface p1)],
-          Hnotin: context[domm (prog_interface p1)] |- _ =>
-          rewrite Hin in Hnotin; discriminate
-        end.
-      * match goal with
-        | Hin: context[domm (prog_interface p1)],
-          Hnotin: context[domm (prog_interface p1)] |- _ =>
-          rewrite Hin in Hnotin; discriminate
-        end.
-      (* internal call *)
-      * (* same stack *)
-        rewrite (partial_stack_push_by_context
-                   old_call_arg k1 old_call_arg0 k H8 H H6).
-        (* same memory *)
-        erewrite context_store_in_partialized_memory with (mem0:=mem) (mem':=mem'); eauto.
-        erewrite context_store_in_partialized_memory with (mem0:=mem0) (mem':=mem'0); eauto.
-        rewrite H5.
-        reflexivity.
-
-    (* internal & external return *)
-    + inversion Hkstep2; subst.
-      inversion Hpartial_sps1'; subst;
-      inversion Hpartial_sps2'; subst; PS.simplify_turn.
-      (* external return *)
-      * (* same stack *)
-        destruct (partial_stack_pop_to_program H9 H6) as [Hsame_arg [Hsame_k Hstack]].
-        subst. rewrite Hstack.
-        (* same memory *)
-        assert (b = b0).
-        { destruct (prepare_buffers_of_linked_programs Hwfp Hwfp1 Hlink1 H11 H9) as [? Hb].
-          rewrite <- Hiface2 in H9.
-          destruct (prepare_buffers_of_linked_programs Hwfp Hwfp2 Hlink2 H15 H9) as [? Hb'].
-          rewrite Hb in Hb'. inversion Hb'.
-          subst.
-          reflexivity.
-        }
-        subst.
-        rewrite (program_store_in_partialized_memory H5 H9 H12 H16).
-        reflexivity.
-      * match goal with
-        | Hin: context[domm (prog_interface p1)],
-          Hnotin: context[domm (prog_interface p1)] |- _ =>
-          rewrite Hin in Hnotin; discriminate
-        end.
-      * match goal with
-        | Hin: context[domm (prog_interface p1)],
-          Hnotin: context[domm (prog_interface p1)] |- _ =>
-          rewrite Hin in Hnotin; discriminate
-        end.
-      (* internal return *)
-      * (* same stack *)
-        rewrite (partial_stack_pop_to_context H10 H9 H6).
-        (* same memory *)
-        erewrite context_store_in_partialized_memory with (mem0:=mem) (mem':=mem'); eauto.
-        erewrite context_store_in_partialized_memory with (mem0:=mem0) (mem':=mem'0); eauto.
-        rewrite H5.
-        reflexivity.
+move=> p ctx G sps t sps' in_ctx.
+have [-> {t}|ne] := altP (t =P E0).
+  move/(context_epsilon_step_is_silent in_ctx) => <- ?.
+  by move/(context_epsilon_step_is_silent in_ctx) => <-.
+case=> p1 scs1 scs1' iface1 wfp wfp1 link1 _ kstep1
+      /partialize_correct partial_sps1 /partialize_correct partial_sps1' sps''.
+case=> p2 scs2 scs2' iface2 _ wfp2 link2 _ kstep2
+      /partialize_correct partial_sps2 /partialize_correct partial_sps2'.
+PS.simplify_turn; rewrite -partial_sps1 s_component_partialize in in_ctx.
+move: partial_sps1; rewrite -{}partial_sps2 => part.
+rewrite -{}partial_sps1' -{}partial_sps2' {sps' sps''}.
+case: scs1 t scs1' / kstep1 in_ctx ne part kstep2 => //=.
+- (* External call *)
+  move=> C stk1 mem1 mem1' k1 C' P v P_expr old1.
+  move=> /eqP ne Himport1 Hfind1 e_load1 e_store1 in_ctx _ e_part.
+  move e_t: [:: ECall _ _ _ _] => t kstep2.
+  case: scs2 t scs2' / kstep2 C P v C' e_t in_ctx ne Himport1 Hfind1 e_load1 e_store1 e_part => //.
+  move=> C stk2 mem2 mem2' k2 C' P v P_expr2 old2 _ Himport2 Hfind2 e_load2 e_store2.
+  move=> _ _ _ _ [-> -> -> ->] in_ctx /eqP ne Himport1 Hfind1 e_load1 e_store1.
+  rewrite /= in_ctx (lock filterm); case => e_stk; rewrite -lock => e_mem.
+  have [in_ctx'|in_prog] := boolP (C' \in domm ctx).
+    rewrite (partial_stack_push_by_context old1 k1 old2 k2 ne in_ctx e_stk).
+    rewrite (context_store_in_partialized_memory in_ctx' e_store1).
+    by rewrite (context_store_in_partialized_memory in_ctx' e_store2) e_mem.
+  rewrite (partial_stack_push_by_context old1 k1 old2 k2 ne in_ctx e_stk).
+  rewrite (program_store_in_partialized_memory e_mem in_prog e_store1 e_store2).
+  case: (find_procedure_in_linked_programs wfp wfp1 link1 Hfind1).
+    by rewrite iface1.
+  case: (find_procedure_in_linked_programs wfp wfp2 link2 Hfind2).
+    by rewrite iface2.
+  by move=> _ -> _ [->].
+- (* External return *)
+  move=> C stk1 mem1 mem1' k1 v C' old1 ne e_store1 in_ctx _ e_part.
+  move e_t: [:: ERet _ _ _] => t kstep2.
+  case: scs2 t scs2' / kstep2 C v C' e_t in_ctx ne e_store1 e_part=> //.
+  move=> C stk2 mem2 mem2' k2 v C' old2 _ e_store2.
+  move=> _ _ _ [-> -> ->] in_ctx ne e_store1.
+  rewrite /= in_ctx (lock filterm).
+  case=> e_stk; rewrite -lock=> e_mem.
+  have [in_ctx'|in_prog] := boolP (C' \in domm ctx).
+    rewrite (partial_stack_pop_to_context ne in_ctx' e_stk).
+    rewrite (context_store_in_partialized_memory in_ctx' e_store1).
+    by rewrite (context_store_in_partialized_memory in_ctx' e_store2) e_mem.
+  case: (partial_stack_pop_to_program in_prog e_stk) e_store2=> [<- [<- <-]] e_store2.
+  by rewrite (program_store_in_partialized_memory e_mem in_prog e_store1 e_store2).
 Qed.
 
 Theorem state_determinism:

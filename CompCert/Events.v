@@ -11,6 +11,12 @@ Definition cur_comp_of_event (e: event) : Component.id :=
   | ERet  C _ _   => C
   end.
 
+Definition next_comp_of_event (e: event) : Component.id :=
+  match e with
+  | ECall _ _ _ C => C
+  | ERet  _ _   C => C
+  end.
+
 Definition trace := list event.
 
 Definition E0 : trace := nil.

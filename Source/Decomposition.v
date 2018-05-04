@@ -521,62 +521,6 @@ Section Decomposition.
   Definition well_defined_components_trace (iface : Program.interface) (t : trace) : Prop :=
     forall e, In e t -> well_defined_components iface e.
 
-  Remark genv_buffers_in_interface C :
-    C \in domm (genv_buffers (prepare_global_env (program_link p c))) ->
-    C \in domm (prog_interface (program_link p c)).
-  Proof.
-    rewrite /= domm_map !domm_union.
-    by case: wf1 wf2 => [_ _ _ _ -> _ _] [_ _ _ _ -> _ _].
-  Qed.
-
-  Lemma ecall_from_star_has_well_defined_components :
-    forall s0 t1 s1 s2 C P v C',
-      star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s1 ->
-      CS.kstep (prepare_global_env (program_link p c)) s1 [ECall C P v C'] s2 ->
-      well_defined_components (prog_interface (program_link p c)) (ECall C P v C').
-  Proof.
-    intros s0 t1 s1 s2 C P v C' Hstar Hkstep.
-    inversion Hkstep; subst.
-    by apply wf_comps_call; apply: genv_buffers_in_interface;
-    rewrite mem_domm ?H7 ?H10.
-  Qed.
-
-  Lemma eret_from_initial_star_has_well_defined_components :
-    forall s0 t1 s1 s2 C v C',
-      CS.initial_state (program_link p c) s0 ->
-      star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s1 ->
-      CS.kstep (prepare_global_env (program_link p c)) s1 [ERet C v C'] s2 ->
-      well_defined_components (prog_interface (program_link p c)) (ERet C v C').
-  Proof.
-    intros s0 t1 s1 s2 C v C' Hinitial Hstar Hkstep.
-    inversion Hkstep; subst.
-    apply wf_comps_ret.
-    - destruct (CS.eret_from_initial_star_goes_after_ecall_cs Hinitial Hstar Hkstep)
-        as [t1' [s1' [s2' [t2' [P [v' [Hstar1' [Hkstep' [Hstar2' Heq']]]]]]]]].
-      subst t1.
-      pose proof ecall_from_star_has_well_defined_components Hstar1' Hkstep' as Hwdc.
-      inversion Hwdc; subst.
-      assumption.
-    - now apply: genv_buffers_in_interface; rewrite mem_domm H5.
-  Qed.
-
-  (* RB: TODO: Can be further simplified by automating inversion a bit. *)
-  Lemma step_from_initial_star_has_well_defined_components :
-    forall s0 t1 s1 t2 s2,
-      CS.initial_state (program_link p c) s0 ->
-      star CS.kstep (prepare_global_env (program_link p c)) s0 t1 s1 ->
-      CS.kstep (prepare_global_env (program_link p c)) s1 t2 s2 ->
-      well_defined_components_trace (prog_interface (program_link p c)) t2.
-  Proof.
-    intros s0 t1 s1 t2 s2 Hinitial Hstar Hkstep e HIn.
-    inversion Hkstep; subst;
-      try inversion HIn; subst.
-    - eapply ecall_from_star_has_well_defined_components; eassumption.
-    - by inversion H6.
-    - eapply eret_from_initial_star_has_well_defined_components; eassumption.
-    - by inversion H2.
-  Qed.
-
   (* This follows easily from previous lemmas by a right-side induction on Star. *)
   Lemma initial_star_has_well_defined_components :
     forall sini t sfin,
@@ -584,19 +528,15 @@ Section Decomposition.
       Star (CS.sem (program_link p c)) sini t sfin ->
       well_defined_components_trace (unionm (prog_interface p) (prog_interface c)) t.
   Proof.
-    intros sini t sfin Hinitial Hstar.
-    apply star_iff_starR in Hstar.
-    induction Hstar as [| s0 t1 s1 t2 s2 t HStar IHHstar HStep].
-    - easy.
-    - subst t.
-      specialize (IHHstar Hinitial).
-      apply star_iff_starR in HStar.
-      pose proof
-        @step_from_initial_star_has_well_defined_components _ _ _ _ _ Hinitial HStar HStep
-        as Hwdc.
-      intros e HIn.
-      apply in_app_or in HIn as [HIn1 | HIn2];
-        by auto.
+    move=> sini t sfin Hinitial Hstar e /In_in in_t.
+    move: (cprog_main_existence closedness_after_linking).
+    case e_main: (prog_main _)=> [mainP|] //= _.
+    have := linking_well_formedness wf1 wf2 linkability.
+    move/(CS.trace_wf Hstar Hinitial e_main)=> trace_wf.
+    have := cprog_closed_interface closedness_after_linking.
+    move/(well_formed_trace_int trace_wf)/seq.allP/(_ _ in_t).
+    rewrite /declared_event_comps.
+    by case: e {in_t}=> /= [????|???] /andP [??]; constructor.
   Qed.
 
   Lemma ub_behavior_has_well_defined_components:
@@ -622,7 +562,7 @@ Section Decomposition.
     apply/fsetUP; rewrite -domm_union /last_comp.
     have wf12 := linking_well_formedness wf1 wf2 linkability.
     rewrite -[unionm _ _]/(prog_interface (program_link p c)).
-    move: (seq.mem_last Component.main (seq.map who_is_in_control_after t)).
+    move: (seq.mem_last Component.main (seq.map next_comp_of_event t)).
     rewrite seq.inE=> /orP [/eqP ->|].
       case: closedness_after_linking; rewrite wfprog_defined_procedures //.
       by rewrite /prog_main /find_procedure mem_domm; case: getm.

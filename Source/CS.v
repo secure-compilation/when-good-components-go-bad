@@ -123,10 +123,9 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_If2 : forall C s mem k e2 e3 i,
     kstep G [State C, s, mem, Kif e2 e3 k, E_val (Int i)] E0
             [State C, s, mem, k, if i != 0%Z then e2 else e3]
-| KS_LocalBuffer : forall C s mem k b,
-    getm (genv_buffers G) C = Some b ->
+| KS_LocalBuffer : forall C s mem k,
     kstep G [State C, s, mem, k, E_local] E0
-            [State C, s, mem, k, E_val (Ptr (C,b,0%Z))]
+            [State C, s, mem, k, E_val (Ptr (C,Block.local,0%Z))]
 | KS_Alloc1 : forall C s mem k e,
     kstep G [State C, s, mem, k, E_alloc e] E0
             [State C, s, mem, Kalloc k, e]
@@ -157,45 +156,39 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_InitCall : forall C s mem k C' P e,
     kstep G [State C, s, mem, k, E_call C' P e] E0
             [State C, s, mem, Kcall C' P k, e]
-| KS_InternalCall : forall C s mem mem' k C' P v P_expr b b' old_call_arg,
+| KS_InternalCall : forall C s mem mem' k C' P v P_expr old_call_arg,
     C = C' ->
     (* retrieve the procedure code *)
     find_procedure (genv_procedures G) C' P = Some P_expr ->
     (* save the old call argument *)
-    getm (genv_buffers G) C = Some b ->
-    Memory.load mem (C, b, 0%Z) = Some old_call_arg ->
+    Memory.load mem (C, Block.local, 0%Z) = Some old_call_arg ->
     (* place the call argument in the target memory *)
-    getm (genv_buffers G) C' = Some b' ->
-    Memory.store mem (C', b', 0%Z) (Int v) = Some mem' ->
+    Memory.store mem (C', Block.local, 0%Z) (Int v) = Some mem' ->
     kstep G [State C, s, mem, Kcall C' P k, E_val (Int v)] E0
             [State C', Frame C old_call_arg k :: s, mem', Kstop, P_expr]
-| KS_ExternalCall : forall C s mem mem' k C' P v P_expr b b' old_call_arg,
+| KS_ExternalCall : forall C s mem mem' k C' P v P_expr old_call_arg,
     C <> C' ->
     (* check permission *)
     imported_procedure (genv_interface G) C C' P  ->
     (* retrieve the procedure code *)
     find_procedure (genv_procedures G) C' P = Some P_expr ->
     (* save the old call argument *)
-    getm (genv_buffers G) C = Some b ->
-    Memory.load mem (C, b, 0%Z) = Some old_call_arg ->
+    Memory.load mem (C, Block.local, 0%Z) = Some old_call_arg ->
     (* place the call argument in the target memory *)
-    getm (genv_buffers G) C' = Some b' ->
-    Memory.store mem (C', b', 0%Z) (Int v) = Some mem' ->
+    Memory.store mem (C', Block.local, 0%Z) (Int v) = Some mem' ->
     kstep G [State C, s, mem, Kcall C' P k, E_val (Int v)]
             [:: ECall C P v C']
             [State C', Frame C old_call_arg k :: s, mem', Kstop, P_expr]
-| KS_InternalReturn: forall C s mem mem' k v C' old_call_arg b,
+| KS_InternalReturn: forall C s mem mem' k v C' old_call_arg,
     C = C' ->
     (* restore the old call argument *)
-    getm (genv_buffers G) C' = Some b ->
-    Memory.store mem (C', b, 0%Z) old_call_arg = Some mem' ->
+    Memory.store mem (C', Block.local, 0%Z) old_call_arg = Some mem' ->
     kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v)] E0
             [State C', s, mem', k, E_val (Int v)]
-| KS_ExternalReturn: forall C s mem mem' k v C' old_call_arg b,
+| KS_ExternalReturn: forall C s mem mem' k v C' old_call_arg,
     C <> C' ->
     (* restore the old call argument *)
-    getm (genv_buffers G) C' = Some b ->
-    Memory.store mem (C', b, 0%Z) old_call_arg = Some mem' ->
+    Memory.store mem (C', Block.local, 0%Z) old_call_arg = Some mem' ->
     kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val (Int v)]
             [:: ERet C v C']
             [State C', s, mem', k, E_val (Int v)].
@@ -203,7 +196,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 Lemma kstep_component G s t s' :
   kstep G s t s' ->
   s_component s' =
-  if t is e :: _ then who_is_in_control_after e
+  if t is e :: _ then next_comp_of_event e
   else s_component s.
 Proof. by case: s t s' /. Qed.
 
@@ -233,8 +226,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
   | E_if e1 e2 e3 =>
     ret (E0, [State C, s, mem, Kif e2 e3 k, e1])
   | E_local =>
-    do b <- getm (genv_buffers G) C;
-    ret (E0, [State C, s, mem, k, E_val (Ptr (C, b, 0%Z))])
+    ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.local, 0%Z))])
   | E_alloc e =>
     ret (E0, [State C, s, mem, Kalloc k, e])
   | E_deref e =>
@@ -296,21 +288,17 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
           (* retrieve the procedure code *)
           do P_expr <- find_procedure (genv_procedures G) C' P;
           (* save the old call argument *)
-          do b <- getm (genv_buffers G) C;
-          do old_call_arg <- Memory.load mem (C, b, 0%Z);
+          do old_call_arg <- Memory.load mem (C, Block.local, 0%Z);
           (* place the call argument in the target memory *)
-          do b' <- getm (genv_buffers G) C';
-          do mem' <- Memory.store mem (C', b', 0%Z) (Int i);
+          do mem' <- Memory.store mem (C', Block.local, 0%Z) (Int i);
           ret (E0, [State C', Frame C old_call_arg k' :: s, mem', Kstop, P_expr])
         else if imported_procedure_b (genv_interface G) C C' P then
           (* retrieve the procedure code *)
           do P_expr <- find_procedure (genv_procedures G) C' P;
           (* save the old call argument *)
-          do b <- getm (genv_buffers G) C;
-          do old_call_arg <- Memory.load mem (C, b, 0%Z);
+          do old_call_arg <- Memory.load mem (C, Block.local, 0%Z);
           (* place the call argument in the target memory *)
-          do b' <- getm (genv_buffers G) C';
-          do mem' <- Memory.store mem (C', b', 0%Z) (Int i);
+          do mem' <- Memory.store mem (C', Block.local, 0%Z) (Int i);
           ret ([ECall C P i C'], [State C', Frame C old_call_arg k' :: s, mem', Kstop, P_expr])
         else
           None
@@ -320,8 +308,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       match v, s with
       | Int i, Frame C' old_call_arg k' :: s' =>
         (* restore the old call argument *)
-        do b <- getm (genv_buffers G) C';
-        do mem' <- Memory.store mem (C', b, 0%Z) old_call_arg;
+        do mem' <- Memory.store mem (C', Block.local, 0%Z) old_call_arg;
         let t := if C == C' then E0 else [:: ERet C i C'] in
         ret (t, [State C', s', mem', k', E_val (Int i)])
       | _, _ => None
@@ -365,23 +352,14 @@ Proof.
   (* external calls *)
   - move/eqP/negbTE: H => ->.
     apply imported_procedure_iff in H0.
-    rewrite H0 H1 H2 H3 H4 H5.
-    reflexivity.
-  (* internal calls *)
-  - rewrite H0.
-    unfold Memory.store in *. simpl in *.
-    destruct (mem C'); try discriminate.
-    destruct (ComponentMemory.store t b 0%Z old_call_arg); try discriminate.
-    rewrite eqxx.
-    inversion H1. subst.
+    rewrite H0 H1 H2 H3.
     reflexivity.
   (* external return *)
   - rewrite H0.
     unfold Memory.store in *. simpl in *.
     destruct (mem C'); try discriminate.
-    destruct (ComponentMemory.store t b 0%Z old_call_arg); try discriminate.
+    destruct (ComponentMemory.store t Block.local 0%Z old_call_arg); try discriminate.
     move/eqP/negbTE: H => ->.
-    inversion H1; subst.
     reflexivity.
 Qed.
 
@@ -496,22 +474,24 @@ Section Semantics.
     elim: cs t cs' / => //= s1 t1 s2 t2 s3 t Hstep Hstar IH -> {t}.
     case: s1 t1 s2 / Hstep Hstar IH=> //=.
     - (* Internal Return *)
-      by move=> C stk mem mem' k _ P v P_expr b b' old <-; rewrite eqxx.
+      by move=> C stk mem mem' k _ P v P_expr old <-; rewrite eqxx.
     - (* External Return *)
-      move=> C stk mem mem' k C' P v P_expr b b' old.
+      move=> C stk mem mem' k C' P v P_expr old.
       by rewrite eq_sym eqxx=> /eqP/negbTE -> /=.
     - (* Internal Call *)
-      by move=> C stk mem mem' k v _ old b <-; rewrite eqxx.
+      by move=> C stk mem mem' k v _ old <-; rewrite eqxx.
     - (* External Call *)
-      by move=> C stk mem mem' k v C' old b /eqP/negbTE ->; rewrite !eqxx.
+      by move=> C stk mem mem' k v C' old /eqP/negbTE ->; rewrite !eqxx.
   Qed.
 
   Lemma events_wf st t st' :
     Star sem st t st' ->
-    All (well_formed_event (prog_interface p)) t.
+    all (well_formed_event (prog_interface p)) t.
   Proof.
   elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
-  by rewrite All_cat; split=> // {IH Hstar t2 st3}; case: st1 t1 st2 / Hstep.
+  rewrite all_cat; case: st1 t1 st2 / Hstep {Hstar} => //=.
+  - by move=> ?????????? /eqP -> /imported_procedure_iff ->.
+  - by move=> ????????   /eqP ->.
   Qed.
 
   Lemma trace_wf mainP t cs cs' :
@@ -522,9 +502,8 @@ Section Semantics.
     well_formed_trace (prog_interface p) t.
   Proof.
     move=> Hstar Hinitial Hmain Hwf; rewrite /well_formed_trace.
-    split; last by apply: events_wf; eauto.
-    suffices <- : stack_state_of cs = StackState Component.main [].
-      by apply: trace_wb; eauto.
+    rewrite (events_wf Hstar) andbT.
+    suffices <- : stack_state_of cs = stack_state0 by apply: trace_wb; eauto.
     by move: Hinitial; rewrite /initial_state /initial_machine_state Hmain => ->.
   Qed.
 

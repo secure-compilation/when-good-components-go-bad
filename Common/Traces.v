@@ -2,6 +2,7 @@ Require Import Lib.Extra.
 Require Import CompCert.Events.
 Require Import Common.Definitions.
 Require Import Common.Linking.
+Require Import Common.CompCertExtensions.
 
 From mathcomp
   Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
@@ -46,7 +47,7 @@ Inductive stack_state := StackState {
 
 Definition stack_state0 := StackState Component.main [::].
 
-Implicit Types (t : trace) (C : Component.id) (s : stack_state).
+Implicit Types (t : trace) (C : Component.id) (s : stack_state) (intf : Program.interface).
 
 Fixpoint well_bracketed_trace s t : bool :=
   match t with
@@ -140,14 +141,38 @@ have : suffix [:: C, C' & tail (callers (run_trace stack_state0 pre))]
 exact: well_bracketed_trace_suffix=> //.
 Qed.
 
-Definition well_formed_event intf (e: event) : Prop :=
+Definition well_formed_event intf (e: event) : bool :=
   match e with
-  | ECall C P _ C' => C <> C' /\ imported_procedure intf C C' P
-  | ERet  C _   C' => C <> C'
+  | ECall C P _ C' => (C != C') && imported_procedure_b intf C C' P
+  | ERet  C _   C' => (C != C')
   end.
 
-Definition well_formed_trace intf (t: trace) : Prop :=
-  well_bracketed_trace (StackState Component.main []) t /\
-  All (well_formed_event intf) t.
+Definition well_formed_trace intf (t: trace) : bool :=
+  well_bracketed_trace stack_state0 t &&
+  all (well_formed_event intf) t.
+
+Definition declared_event_comps intf e :=
+  [&& cur_comp_of_event e \in domm intf &
+      next_comp_of_event e \in domm intf].
+
+Lemma well_formed_trace_int intf t :
+  well_formed_trace intf t ->
+  closed_interface intf ->
+  all (declared_event_comps intf) t.
+Proof.
+case/andP=> wb wf clos; rewrite /declared_event_comps.
+apply/allP; case=> [C P v C'|C v C'] /=; rewrite !mem_domm.
+- move/(allP wf)=> /andP [_ imp].
+  move: (imp); rewrite /imported_procedure_b; case: getm => //= _ _.
+  by case/imported_procedure_iff/clos: imp=> ? [->].
+- move=> in_p; case/path.splitP: in_p wb wf => {t} t1 t2.
+  rewrite -cats1 /= well_bracketed_trace_cat.
+  case/andP=> /well_bracketed_trace_inv [t11 [P [v' [t12 ->]]]] _ wf.
+  have : well_formed_event intf (ECall C' P v' C).
+    by move/allP: wf; apply; rewrite !mem_cat inE eqxx /= orbT.
+  case/andP=> _ imp.
+  case/imported_procedure_iff/clos: (imp)=> ? [-> _] /=.
+  by move: imp; rewrite /imported_procedure_b; case: getm.
+Qed.
 
 End Traces.
