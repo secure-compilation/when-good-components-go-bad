@@ -568,8 +568,27 @@ Lemma interface_preserves_closedness_r :
   forall p1 p2 p2',
     closed_program (program_link p1 p2) ->
     prog_interface p2 = prog_interface p2' ->
+    linkable_mains p1 p2 ->
     closed_program (program_link p1 p2').
 Proof.
+  intros p1 p2 p2'
+         [Hclosed [mainP [main_procs [Hmain [Hprocs Hin]]]]] Hsame_int Hlinkable_mains.
+  constructor.
+  - simpl in Hclosed.
+    rewrite Hsame_int in Hclosed.
+    apply Hclosed.
+  - destruct (prog_main p1) as [main1 |] eqn:Hmain1;
+      destruct (prog_main p2) as [main2 |] eqn:Hmain2.
+    + unfold linkable_mains in Hlinkable_mains.
+      rewrite Hmain1 in Hlinkable_mains.
+      rewrite Hmain2 in Hlinkable_mains.
+      discriminate.
+    + admit.
+    + admit.
+    + simpl in Hmain.
+      rewrite Hmain1 in Hmain.
+      rewrite Hmain2 in Hmain.
+      discriminate.
 Admitted.
 
 Lemma closed_program_link_sym p1 p2 :
