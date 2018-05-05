@@ -833,63 +833,47 @@ Section Decomposition.
     behavior_prefix t b ->
     undef_in t (prog_interface p).
   Proof.
-    case: b / => //; last first.
-      move: closedness_after_linking; rewrite link_sym // => H.
-      by case: (PS.exists_initial_state (linkable_sym linkability) wf2 wf1 H)=> ? H' /(_ _ H').
-    move e_beh': (Goes_wrong _) => beh' s0 beh Hinitial Hbeh Hbeh'.
-    case: beh' / Hbeh' e_beh'; last by move=> /(_ _ Hinitial).
-    move=> s0' beh' Hinitial'.
-    rewrite -(PS.initial_state_determinism Hinitial Hinitial') {s0' Hinitial'}.
-    move=> Hbeh'; case: beh' / Hbeh' t => //=.
-    move=> t' s_f' Hstar' Hstuck' Hnot_final' _ [->].
-(*    case: beh / Hbeh.
-    - (* termination *)
-      move=> t'' s_f Hstar Hfinal [[t| | |] //= [e_beh']]; subst t''.
-      have [? Hstar''] := improving_star_ending_in_stuck_state Hstar' Hstar Hstuck'.
-      subst t; rewrite E0_right in Hstar.
-      move/linkable_sym: linkability=> linkability'.
-      rewrite (PS.undef_in_program linkability'.2 Hinitial).
-
-
-
-    intros Hbeh_improved Hbeh_wrong Hprefix.
-    unfold behavior_prefix in Hprefix.
-    destruct Hprefix as []; subst.
-    inversion Hbeh_wrong; subst.
-    - inversion Hbeh_improved; subst.
-      + inversion H0; subst.
-        inversion H2; subst;
-          pose proof PS.initial_state_determinism H H1; subst;
-          destruct x; simpl in *; try discriminate;
-          inversion H3; subst.
-        * (* termination *)
-          destruct (improving_star_ending_in_stuck_state H4 H7 H5) as [Ht' ?]; subst.
-          admit.
-        * (* silent divergence *)
-          destruct (improving_star_ending_in_stuck_state H4 H7 H5) as [Ht' ?]; subst.
-          admit.
-        * (* reactive divergence *)
-          admit.
-        * (* goes wrong *)
-          destruct (improving_star_ending_in_stuck_state H4 H7 H5) as [Ht' ?]; subst.
-          admit.
-      + specialize (H2 s). contradiction.
-    - inversion Hbeh_improved; subst.
-      + specialize (H0 s). contradiction.
-      + unfold behavior_app in *. simpl in *.
-        destruct x; try discriminate.
-        inversion H; subst.
-        exfalso. eapply H0.
-        eapply PS.initial_state_intro
-          with (p:=c) (p':=p)
-               (scs:=CS.initial_machine_state (Source.program_link c p))
-               (sps:=PS.partialize (Source.prog_interface p)
-                                   (CS.initial_machine_state (Source.program_link c p)));
-          auto.
-        * apply linkable_sym; auto.
-        * by rewrite <- (closed_program_link_sym wf1 wf2 linkability).
-        * apply PS.partialize_correct; auto.
-        * unfold CS.initial_state.
-          reflexivity.*)
+  case: b / => //; last first.
+    move: closedness_after_linking; rewrite link_sym // => H.
+    by case: (PS.exists_initial_state (linkable_sym linkability) wf2 wf1 H)=> ? H' /(_ _ H').
+  move e_beh': (Goes_wrong _) => beh' s0 beh Hinitial Hbeh Hbeh'.
+  case: beh' / Hbeh' e_beh'; last by move=> /(_ _ Hinitial).
+  move=> s0' beh' Hinitial'.
+  rewrite -(PS.initial_state_determinism Hinitial Hinitial') {s0' Hinitial'}.
+  move=> Hbeh'; case: beh' / Hbeh' t => //=.
+  move=> t' s_f' Hstar' Hstuck' Hnot_final' _ [->].
   Admitted.
+
+  Lemma blame_program' t b :
+    program_behaves (PS.sem c (prog_interface p)) b ->
+    program_behaves (PS.sem c (prog_interface p)) (Goes_wrong t) ->
+    behavior_prefix t b ->
+    undef_in t (prog_interface c).
+  Proof.
+  case: b / => //; last first.
+    move: closedness_after_linking; rewrite link_sym // => H.
+    by case: (PS.exists_initial_state (linkable_sym linkability) wf2 wf1 H)=> ? H' /(_ _ H').
+  move e_beh': (Goes_wrong _) => beh' s0 beh Hinitial Hbeh Hbeh'.
+  case: beh' / Hbeh' e_beh'; last by move=> /(_ _ Hinitial).
+  move=> s0' beh' Hinitial'.
+  rewrite -(PS.initial_state_determinism Hinitial Hinitial') {s0' Hinitial'}.
+  move=> Hbeh'; case: beh' / Hbeh' t => //=.
+  move=> t' s_f' Hstar' Hstuck' Hnot_final' _ [->].
+  move/linkable_sym: linkability=> linkability'.
+  rewrite (PS.undef_in_program linkability'.2 Hinitial Hstar').
+  move=> _.
+  apply/negP=> in_context; apply: Hnot_final'.
+  constructor; by eauto.
+  Qed.
+
+  Lemma weird t : ~ program_behaves (PS.sem c (prog_interface p)) (Goes_wrong t).
+  Proof.
+  move=> Ht.
+  have pre : behavior_prefix t (Goes_wrong t).
+    by exists (Goes_wrong E0); rewrite /= E0_right.
+  move: (blame_program Ht Ht pre) (blame_program' Ht Ht pre).
+  rewrite /undef_in => H.
+  by case: linkability=> _ /fdisjointP/(_ _ H)/negP.
+  Qed.
+
 End Decomposition.
