@@ -41,6 +41,7 @@ Definition sfi_rsc_correct (fuel : nat) :=
   rsc_correct
     (genIConstCodeAddress CStore max_components) (* valid  jumps*)
     (genStoreAddresConstInstr CJump max_components) (* valid pointers *)
+    3%nat
     max_components
     compile_program
     sfi_eval

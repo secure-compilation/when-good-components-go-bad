@@ -130,7 +130,7 @@ Definition store_log_checker_error
 
 (*! Section prop_store_correct *) (*! extends fault_store_test *)
 Definition store_correct (fuel : nat) :=
-  sfi_check_correct TestSpecific
+  sfi_check_correct NoUndef
                 CStore
                 update_store_log
                 store_log_checker_error

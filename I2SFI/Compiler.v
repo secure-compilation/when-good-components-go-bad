@@ -383,7 +383,8 @@ Definition gen_push_sfi (cid : SFIComponent.id) : AbstractMachine.code :=
         (sfi_top_address RiscMachine.Register.R_AUX1 cid)
           ++
           [
-            AbstractMachine.IStore RiscMachine.Register.R_AUX1 RiscMachine.Register.R_RA
+            AbstractMachine.IStore RiscMachine.Register.R_AUX1
+                                   RiscMachine.Register.R_RA
             ; AbstractMachine.IConst 1%Z RiscMachine.Register.R_AUX1
             ; AbstractMachine.IBinOp (RiscMachine.ISA.Addition)
                                      RiscMachine.Register.R_SFI_SP
@@ -754,14 +755,6 @@ Definition layout_procedure
                         SFI.BASIC_BLOCK_SIZE in
       let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r)%N
                         SFI.BASIC_BLOCK_SIZE in
-      (* match elt with *)
-      (* | ( _, AbstractMachine.IJal _) => *)
-      (*   acc *)
-      (*     ++ (List.repeat *)
-      (*           (None,AbstractMachine.INop) *)
-      (*           (N.to_nat (p + SFI.BASIC_BLOCK_SIZE - 1%N )%N ) ) *)
-      (*     ++ [elt] *)
-      (* | _ => *)
         acc
           ++ (List.repeat
                 (None,AbstractMachine.INop)
@@ -841,37 +834,6 @@ Definition layout_procedure
                 | _ => padd acc elt
                 end
             end
-            (*   match ll with *)
-            (*   | nil => *)
-            (*     match i with *)
-            (*     | AbstractMachine.IJal _ => padd1 acc elt *)
-            (*     | _ => acc ++ [elt] *)
-            (*     end *)
-            (*   | lbl::nil => *)
-            (*     if (tst lbl) *)
-            (*     then *)
-            (*       (* if this branch is taken, then this is  *)
-            (*          the header of this procedure and the first  *)
-            (*          instruction is not IJal *) *)
-            (*       acc ++ [elt] *)
-            (*       (* match i with *) *)
-            (*       (* | AbstractMachine.IJal _ => padd1 acc elt *) *)
-            (*       (* | _ => acc ++ [elt] *) *)
-            (*       (* end *) *)
-            (*     else *)
-            (*        match i with *)
-            (*        | AbstractMachine.IJal _ => *)
-            (*          padd1 (padd acc (Some (lbl::nil),AbstractMachine.INop)) (None,i) *)
-            (*        | _ => padd acc elt *)
-            (*        end                      *)
-            (*   | _::_::_ => *)
-            (*     match i with *)
-            (*     | AbstractMachine.IJal _ => *)
-            (*       padd1 (padd acc (Some ll,AbstractMachine.INop)) (None,i) *)
-            (*     | _ => padd acc elt *)
-            (*     end *)
-            (*   end *)
-            (* end *)
          ) lcode1 nil).
 
 (* acode: cid -> pid -> list of instr (labeled individually) *)
@@ -1004,7 +966,8 @@ Definition label2address (lc : BinNatMap.t (BinNatMap.t AbstractMachine.lcode))
 Definition get_address (cid : Component_id)
            (pid : Procedure_id)
            (lbl : AbstractMachine.label)
-           (l2a :  (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a : (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label *
+                                                   RiscMachine.address)))))
   : COMP (RiscMachine.address) :=
   do pmap <- lift (BinNatMap.find cid l2a) "get_address:No cid" (NArg cid);
     do pl <- lift (BinNatMap.find pid pmap) "get_address:No pid" (TwoNArg cid pid);
@@ -1015,7 +978,8 @@ Definition get_address (cid : Component_id)
 
 Definition  get_address_by_label
             (lbl : AbstractMachine.label)
-            (l2a :  (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label * RiscMachine.address)))))
+            (l2a :  (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label *
+                                                     RiscMachine.address)))))
   : COMP (RiscMachine.address) :=
 
   let ll := List.concat
@@ -1028,7 +992,8 @@ Definition  get_address_by_label
 
 Definition generate_comp0_memory (mcid : Component_id) (mpid : Procedure_id)
            (mem : RiscMachine.Memory.t)
-           (l2a :  (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a :  (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label *
+                                                    RiscMachine.address)))))
 : COMP (RiscMachine.Memory.t) :=
   do omain_label <- get_proc_label mcid mpid;
     match omain_label with
@@ -1074,7 +1039,8 @@ Definition generate_instruction
            (cid : Component_id)
            (pid : Procedure_id)
            (li :(option (list AbstractMachine.label)) * AbstractMachine.ainstr)
-           (l2a : (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a : (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label *
+                                                   RiscMachine.address)))))
            (offset : nat)
            (mem0 : RiscMachine.Memory.t) : COMP (RiscMachine.Memory.t) :=
   do address <-  get_SFI_code_address cid pid offset;
@@ -1124,7 +1090,8 @@ Definition generate_procedure_code
            (cid : Component_id)
            (pid : Procedure_id)
            (linstrs : lcode)
-           (l2a : (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a : (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label *
+                                                   RiscMachine.address)))))
            (mem0 : RiscMachine.Memory.t) : COMP (RiscMachine.Memory.t) :=
     let fix aux lst acc :=
         let '(index,mem) := acc in
@@ -1140,7 +1107,8 @@ Definition generate_procedure_code
 Definition generate_component_code
            (cid : Component_id)
            (pmap : BinNatMap.t lcode)
-           (l2a : (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a : (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label *
+                                                   RiscMachine.address)))))
            (mem0 : RiscMachine.Memory.t) : COMP (RiscMachine.Memory.t) :=
   let fix aux (lst : list (Procedure_id * lcode)) acc :=
       match lst with
@@ -1152,7 +1120,8 @@ Definition generate_component_code
 
 Definition generate_code_memory
            ( labeled_code : (BinNatMap.t (BinNatMap.t lcode)))
-           (l2a :  (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label * RiscMachine.address)))))
+           (l2a :  (BinNatMap.t (BinNatMap.t (list (AbstractMachine.label *
+                                                    RiscMachine.address)))))
            (mem0 : RiscMachine.Memory.t) : COMP (RiscMachine.Memory.t) :=
   let fix aux lst acc  :=
       match lst with

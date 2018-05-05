@@ -43,7 +43,7 @@ Definition get_freq_instr i :=
   | Store => 4%nat
   | Alloc => 4%nat
   | Bnz => 1%nat (* could generate infinite loops *)
-  | Jump => 4%nat
+  | Jump => 20%nat (* increase it to attempt illegal jumps *)
   | Jal => 1%nat
   | Call => 80%nat
   | Return => 2%nat
@@ -213,15 +213,157 @@ Definition  get_interm_program
      |}
   end.
 
-(* TODO *)
+
+(* 1. target trace length
+   2. intermediate trace length
+   3. number of context components *)
+Definition stat := (nat * nat * nat)%type.
+
+Definition error1 (ip:Intermediate.program)
+           (newip:Intermediate.program)
+           (t_t:CompCert.Events.trace)
+           (t_s:CompCert.Events.trace)
+           (ctx_cid:list nat) msg : string :=
+  "Original program:"
+    ++ newline ++ (show ip)
+    ++ "New Program: " ++ newline ++ (show newip)
+    ++ newline
+    ++ "Target Trace: " ++ (show t_t) ++ newline
+    ++ "Source Trace: " ++ (show t_s) ++ newline
+    ++ "Context component: " ++ (show ctx_cid) ++ newline
+    ++ "Execution error: " ++ msg.
+
+Definition error2 (ip:Intermediate.program)
+           (newip:Intermediate.program)
+           (t_t:CompCert.Events.trace)
+           (t_s:CompCert.Events.trace)
+           (ctx_cid:list nat)
+           (interm_res:@execution_state (CompCert.Events.trace*CS.state))
+  : string :=
+ "Original program:"
+   ++ newline ++ (show ip)
+   ++ "New Program: " ++ newline ++ (show newip)
+   ++ newline
+   ++ "Target Trace: " ++ (show t_t) ++ newline
+   ++ "Source Trace: " ++ (show t_s) ++ newline
+   ++ "Context component: " ++ (show ctx_cid) ++ newline
+   ++ "Source ended with: " ++
+   (match interm_res with
+    | Wrong _ _ _ _ => "Wrong"
+    | OutOfFuel _ => "OutOfFuel"
+    | Halted _ => "Halted"
+    | Running _ => "Running"
+    end) ++ newline.
+
+Definition get_trace
+           (interm_res:@execution_state (CompCert.Events.trace*CS.state))
+  : CompCert.Events.trace :=
+  match interm_res with
+  | Wrong tr _ _ _ => tr
+  | OutOfFuel (tr,_) => tr
+  | Halted tr => tr
+  | Running (tr,_) => tr
+  end.
+
+Definition try_all_components_one_by_one
+           (ip : Intermediate.program)           
+           (t_t : CompCert.Events.trace)
+           cids
+           fuel
+  : Checker :=
+  (* try all components from the trace as context *)
+  conjoin 
+    (List.map
+       (fun ctx_cid =>
+          (* generate c_s *)
+          match get_interm_program ip ctx_cid t_t with
+          | None =>
+            whenFail "Can not define source component" (checker false)
+          | Some newip =>
+            (* run in intermediate semantics *)
+            let interm_res := runp (10*fuel)%nat newip in
+            match interm_res with
+            | Wrong t_s cid msg _ => (* t_s <= t_t undef not in ctx_cid *)
+              whenFail 
+                (error1 ip newip t_t t_s (ctx_cid::nil) msg)
+                (checker
+                   ((sublist t_t t_s) ||
+                     ((sublist t_s t_t) && (negb (cid =? ctx_cid)))))
+            | _ => (* t_t <= t_s *)
+              let t_s := get_trace interm_res in
+              whenFail
+                (error2 ip newip t_t t_s (ctx_cid::nil) interm_res)
+                (checker (sublist t_t t_s) )
+            end
+          end
+       ) cids).
+
+
+Definition try_all_components_with_undef
+           (ip : Intermediate.program)           
+           (t_t : CompCert.Events.trace)
+           cids
+           fuel
+  : Checker :=
+  let fix get_ip ip depth :=
+      match depth with
+      | O => (Some ip,nil)
+      | S n =>
+        let interm_res := runp (10*fuel)%nat ip in
+        match interm_res with
+        | Wrong t_s cid msg _ =>
+          if (List.existsb (Nat.eqb cid) cids)
+          then
+            match (get_interm_program ip cid t_t) with
+            | None => (None,nil)
+            | Some p =>
+              let '(nip,ctx_cids) := get_ip p n in
+              (nip,cid::ctx_cids)
+            end
+          else
+            (Some ip,nil)
+        | _ => (Some ip,nil)
+        end
+      end in  
+  match get_ip ip (List.length cids) with
+  | (None,_) =>
+    whenFail "Can not define source component" (checker false)
+  | (Some newip,ctx_cids) =>
+    match ctx_cids with
+    | nil => whenFail "No undef behavior" (checker tt (*false*))
+    | _ =>
+      (* run in intermediate semantics *)
+      let interm_res := runp (10*fuel)%nat newip in
+      match interm_res with
+      | Wrong t_s cid msg _ => (* t_s <= t_t undef not in ctx_cid *)
+        whenFail 
+          (error1 ip newip t_t t_s ctx_cids msg)
+          (collect
+             ((List.length t_t),(List.length t_s),(List.length ctx_cids))
+             (checker
+                ((sublist t_t t_s) ||
+                 ((sublist t_s t_t)
+                    &&
+                    (negb (List.existsb (fun x => Nat.eqb x cid) ctx_cids))))))
+      | _ => (* t_t <= t_s *)
+        let t_s := get_trace interm_res in
+        whenFail
+          (error2 ip newip t_t t_s ctx_cids interm_res)
+          (collect
+             ((List.length t_t),(List.length t_s),(List.length ctx_cids))
+             (checker (sublist t_t t_s)))
+      end
+    end
+  end.
+
 Definition rsc_correct
            {CompilerErrorType:Type}
            {TargetProgramType:Type}
            {ExecutionResult:Type} {ExecutionError:Type}
-           `{Show CompilerErrorType}
-           
+           `{Show CompilerErrorType}           
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
+           (min_components : nat)
            (max_components : nat)
            (cf : @compile TargetProgramType CompilerErrorType)
            (ef : @eval TargetProgramType ExecutionResult ExecutionError
@@ -229,13 +371,15 @@ Definition rsc_correct
            )
            (fuel : nat) :=
   forAll
-    (genIntermediateProgram
-       TestSpecific
+    (
+      genIntermediateProgram
+      (* genRSCIntermediateProgram *)
+       NoUndef
        get_freq_instr
        cag
        dag
+       min_components
        max_components
-       true
     )
     ( fun ip =>
         (* compile intermediate *)
@@ -247,14 +391,17 @@ Definition rsc_correct
           let '(res,log) :=  ef p fuel in
           (* obtain target trace t_t *)
           let t_t := log in
-          let cids := List.flat_map
-                        (fun e =>
-                           match e with
-                           | ECall c1 _ _ c2 => [c1;c2]
-                           | ERet c1 _ c2 => [c1;c2]
-                           end
-                        )
-                        t_t in
+          let cids :=
+              List.nodup
+                Nat.eq_dec
+                (List.flat_map
+                   (fun e =>
+                      match e with
+                      | ECall c1 _ _ c2 => [c1;c2]
+                      | ERet c1 _ c2 => [c1;c2]
+                      end
+                   )
+                   t_t) in
           match cids with
           | nil =>
             whenFail
@@ -262,64 +409,8 @@ Definition rsc_correct
                      ++ newline ++ (show ip) ++ newline
                      ++ "Target Trace: " ++ (show t_t) ++ newline )
                   (checker (*false*) tt ) (* discard tests with empty traces *)
-          | fcid::_ =>
-            (* select context component ctx_cid *)
-            let ctx_cid := List.last cids fcid in
-            (* generate c_s *)
-            match get_interm_program ip ctx_cid t_t with
-            | None => whenFail "Can not define source component" (checker false)
-            | Some newip =>
-              (* run in intermediate semantics *)
-              let interm_res := runp (10*fuel)%nat newip in
-              match interm_res with
-              | Wrong t_s cid msg _ => (* t_s <= t_t undef not in ctx_cid *)
-                whenFail
-                  ("Original program:"
-                     ++ newline ++ (show ip)
-                     ++ "New Program: " ++ newline ++ (show newip)
-                     ++ newline
-                     ++ "Target Trace: " ++ (show t_t) ++ newline
-                     ++ "Source Trace: " ++ (show t_s) ++ newline
-                     ++ "Context component: " ++ (show ctx_cid) ++ newline
-                     ++ "Execution error: " ++ msg
-                  )
-                  (checker
-                     (
-                       (sublist t_t t_s) ||
-                       ((sublist t_s t_t) && (negb (cid =? ctx_cid)))
-                     )
-                  )
-              | _ => (* t_t <= t_s *)
-                let t_s :=
-                    match interm_res with
-                    | Wrong tr _ _ _ => tr
-                    | OutOfFuel (tr,_) => tr
-                    | Halted tr => tr
-                    | Running (tr,_) => tr
-                    end in
-                whenFail
-                  ("Original program:"
-                     ++ newline ++ (show ip)
-                     ++ "New Program: " ++ newline ++ (show newip)
-                     ++ newline
-                     ++ "Target Trace: " ++ (show t_t) ++ newline
-                     ++ "Source Trace: " ++ (show t_s) ++ newline
-                     ++ "Context component: " ++ (show ctx_cid) ++ newline
-                     ++ "Source ended with: " ++
-                     (match interm_res with
-                     | Wrong _ _ _ _ => "Wrong"
-                     | OutOfFuel _ => "OutOfFuel"
-                     | Halted _ => "Halted"
-                     | Running _ => "Running"
-                     end) ++ newline
-                  )
-                   (checker
-                     (
-                       (sublist t_t t_s)
-                       (*|| ((sublist t_s t_t) && (negb (cid =? ctx_cid)))*)
-                     )
-                  )
-              end
-            end
+          | _ =>
+            (* try_all_components_one_by_one ip t_t cids fuel *)
+            try_all_components_with_undef ip t_t cids fuel
           end
         end).

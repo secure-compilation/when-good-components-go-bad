@@ -202,4 +202,4 @@ Definition jump_log_checker_error
   end.
 
 Definition jump_correct (fuel : nat) :=
-  sfi_check_correct TestSpecific CJump update_jump_log jump_log_checker_error jump_log_checker fuel.
+  sfi_check_correct NoUndef CJump update_jump_log jump_log_checker_error jump_log_checker fuel.

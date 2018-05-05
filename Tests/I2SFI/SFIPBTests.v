@@ -264,7 +264,7 @@ Definition eval_program {X:Type}
      (RiscMachine.RegisterFile.reset_all)) (nil,nil)).
 
 Definition sfi_check_correct {log_entry_type : Type}
-           (t : instr_gen)
+           (t : undef_allowed)
            (ct : checker_type)
            (update_fun : @update_records                           
                            log_entry_type)
@@ -290,36 +290,11 @@ Definition sfi_check_correct {log_entry_type : Type}
         end)
     (genIConstCodeAddress ct max_components)
     (genStoreAddresConstInstr ct max_components)
-    max_components
-    false
+    3%nat
+    3%nat
     log_checker_error_fun
     log_checker_fun
     compile_program
     (eval_program update_fun)
     fuel.
-  (* forAllShrink *)
-  (*   (genIntermediateProgram *)
-  (*      t *)
-  (*      (match ct with *)
-  (*       | CStore => get_freq_store *)
-  (*       | CJump => get_freq_jump *)
-  (*       | CStack => get_freq_call *)
-  (*       end) *)
-  (*      (genIConstCodeAddress ct) *)
-  (*      (genStoreAddresConstInstr ct) *)
-  (*      false *)
-  (*   ) shrink *)
-  (*   ( fun ip => *)
-  (*       match compile_program ip with *)
-  (*       | CompEitherMonad.Left msg err => *)
-  (*         whenFail ("Compilation error: " ++ msg ++ newline ++ (show err) ) false *)
-  (*       | CompEitherMonad.Right p => *)
-  (*         let '(res,log) := @eval_program log_entry_type update_fun ct p fuel in *)
-  (*         match res with *)
-  (*         | TargetSFI.EitherMonad.Left msg err => *)
-  (*           log_checker_error_fun log err *)
-  (*         | TargetSFI.EitherMonad.Right (t, st,steps) => *)
-  (*           (whenFail ("memory of failed program: " ++ (show_mem (MachineState.getMemory st)))%string *)
-  (*                     (log_checker_fun log steps st)) *)
-  (*         end *)
-  (*       end). *)
+

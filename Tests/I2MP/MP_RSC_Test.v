@@ -29,10 +29,12 @@ Definition compile_program
   := Common.Either.Left "" "".
 
 Definition mp_rsc_correct (fuel : nat) :=
-  let max_components := 4%nat in
+  let max_components := 15%nat in
+  let min_components := 8%nat in
   rsc_correct
     empty_cag
     empty_dag
+    min_components
     max_components
     compile_program
     mp_eval

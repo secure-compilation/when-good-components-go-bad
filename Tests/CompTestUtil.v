@@ -106,6 +106,7 @@ Instance show_register : Show register :=
         | R_AUX2 => "R_AUX2"
         | R_RA => "R_RA"
         | R_SP => "R_SP"
+        | R_ARG => "R_ARG"
         end
   |}.
 

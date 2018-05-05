@@ -37,10 +37,11 @@ Definition Block_id := N.
 Definition prog_int := BinNatMap.t ((list Procedure_id) *
                                     (list (Component_id*Procedure_id))).
 
-Inductive instr_gen : Type :=
-| EqualUndefAllowed : instr_gen
-| EqualNoUndef : instr_gen
-| TestSpecific : instr_gen.
+Inductive undef_allowed : Type :=
+| UndefAllowed : undef_allowed
+| NoUndef : undef_allowed
+| StrictNoUndef : undef_allowed
+.
 
 Inductive instr_type :=
 | Nop : instr_type
@@ -124,13 +125,8 @@ Definition gen_sublist {A : Type} ( default : A ) ( all : list A ) : G (list A) 
       (vectorOf n (elements default all))
   end.
 
-Definition get_freq (t : instr_gen) (wf : instr_weight) (i:instr_type) : nat :=
-  match t with
-  | EqualUndefAllowed => 1%nat
-  | EqualNoUndef => 1%nat
-  | TestSpecific =>
-    wf i
-  end.
+Definition get_freq (wf : instr_weight) (i:instr_type) : nat :=
+  wf i.
 
 Definition gen_program_interface (cids : list N) : G prog_int :=
 
@@ -326,37 +322,39 @@ Definition genMemReg
       returnGen [IConst ptr r1; it r1 r2]
     end.
 
-Definition genIAlloc (t : instr_gen) : G (list instr) :=    
+Definition genIAlloc (t : undef_allowed) : G (list instr) :=    
   do! r1 <- arbitrary;
     do! r2 <- arbitrary;
     match t with
-    | EqualUndefAllowed => returnGen [IAlloc r1 r2]
+    | UndefAllowed => returnGen [IAlloc r1 r2]
     | _ =>
       do! v <- choose (1%nat,10%nat);
         returnGen [IConst (IInt (Z.of_nat v)) r2; IAlloc r1 r2]
     end.
 
 Definition genILoad
-           (t : instr_gen)
+           (t : undef_allowed)
            (pi : prog_int)
            (buffers : BinNatMap.t (list (Block_id * (nat+list value))))
            (cid : Component_id)
   : G (list instr) :=
   match t with
-  | EqualUndefAllowed => gen2Reg ILoad
+  | UndefAllowed => gen2Reg ILoad
   | _ => genMemReg ILoad pi buffers cid
   end.
 
 Definition genIStore
-           (t : instr_gen)
+           (t : undef_allowed)
            (addr_gen : data_address_const_instr)
            (pi : prog_int)
            (buffers : BinNatMap.t (list (Block_id * (nat+list value))))
            (cid : Component_id)
   : G (list instr) :=
   match t with
-  | EqualUndefAllowed =>
+  | UndefAllowed =>
     gen2Reg IStore
+  | StrictNoUndef =>
+    genMemReg IStore pi buffers cid
   | _ =>
     do! r1 <- arbitrary;
       do! r2 <- arbitrary;
@@ -372,15 +370,16 @@ Definition genIBinOp : G (list instr) :=
     returnGen ([IBinOp op r1 r2 r3]).
 
 Definition genIJump
-           (t : instr_gen)
+           (t : undef_allowed)
            (cag : code_address_const_instr)
            (pi : prog_int)
            (cid : Component_id)
   : G (list instr) :=
   match t with
-  | EqualUndefAllowed  =>
+  | UndefAllowed  =>
     do! r <- arbitrary;
       returnGen ([IJump r])
+  | StrictNoUndef => returnGen ([INop])
   | _ =>
     do! r <- arbitrary;
       do! li <- cag r pi cid;
@@ -411,10 +410,10 @@ Definition genIJal : G (list instr) :=
   do! l <- choose (1%nat,20%nat);
     returnGen ([IJal l]).
 
-Definition genIBnz (t : instr_gen)
+Definition genIBnz (t : undef_allowed)
            (first_label : nat) (lbl : nat) : G (list instr) :=
   match t with
-  | EqualUndefAllowed =>
+  | UndefAllowed =>
     do! r <- arbitrary;
       if (Nat.ltb first_label (lbl+3))%nat
       then
@@ -423,6 +422,7 @@ Definition genIBnz (t : instr_gen)
       else
         do! target <- choose (lbl,(lbl+3)%nat);
       returnGen ([IBnz r target])
+  | StrictNoUndef => returnGen ([INop])
   | _ => 
     do! r <- arbitrary;
       do! v <- arbitrary;
@@ -481,7 +481,7 @@ Fixpoint gen_proc_with_labels proc missing_labels :=
   end.
 
 Definition gen_instr
-           (t : instr_gen)
+           (t : undef_allowed)
            (wf : instr_weight)
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
@@ -493,24 +493,24 @@ Definition gen_instr
            (pid : N)
   :=
     freq [
-        ( (get_freq t wf Call), genICall pi cid pid)
-        ; ( (get_freq t wf Const), genIConst pi buffers cid)
-        ; ( (get_freq t wf Label) , genILabel next_label) 
-        ; ( (get_freq t wf Mov), gen2Reg IMov)
-        ; ( (get_freq t wf BinOp), genIBinOp)
-        ; ( (get_freq t wf Load) , genILoad t pi buffers cid)
-        ; ( (get_freq t wf Store), genIStore t dag pi buffers cid)
-        ; ( (get_freq t wf Bnz), genIBnz t first_label next_label)
-        ; ( (get_freq t wf Jump), genIJump t cag pi cid)
-        ; ( (get_freq t wf Jal), genIJal)
-        ; ( (get_freq t wf Alloc), genIAlloc t)
-        ; ( (get_freq t wf Halt), (returnGen [IHalt]))
-        ; ( (get_freq t wf Return), (returnGen [IReturn]))
-        ; ( (get_freq t wf Nop) ,(returnGen [INop]))
+        ( (get_freq wf Call), genICall pi cid pid)
+        ; ( (get_freq wf Const), genIConst pi buffers cid)
+        ; ( (get_freq wf Label) , genILabel next_label) 
+        ; ( (get_freq wf Mov), gen2Reg IMov)
+        ; ( (get_freq wf BinOp), genIBinOp)
+        ; ( (get_freq wf Load) , genILoad t pi buffers cid)
+        ; ( (get_freq wf Store), genIStore t dag pi buffers cid)
+        ; ( (get_freq wf Bnz), genIBnz t first_label next_label)
+        ; ( (get_freq wf Jump), genIJump t cag pi cid)
+        ; ( (get_freq wf Jal), genIJal)
+        ; ( (get_freq wf Alloc), genIAlloc t)
+        ; ( (get_freq wf Halt), (returnGen [IHalt]))
+        ; ( (get_freq wf Return), (returnGen [IReturn]))
+        ; ( (get_freq wf Nop) ,(returnGen [INop]))
       ].
 
 Definition gen_procedure
-           (t : instr_gen)
+           (t : undef_allowed)
            (wf : instr_weight)
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
@@ -518,7 +518,8 @@ Definition gen_procedure
            (buffers : BinNatMap.t (list (Block_id * (nat+list value))))
            (cid : Component_id)
            (pid : Procedure_id)
-           (next_label : nat) : G Intermediate.Machine.code :=
+           (next_label : nat)
+  : G Intermediate.Machine.code :=
   
   let fix gen_proc_rec proc len first_lbl lbl :=
       match len with
@@ -551,74 +552,89 @@ Definition max_label (procs : BinNatMap.t Intermediate.Machine.code) :=
     ) (BinNatMap.elements procs) 1%nat.
 
 Definition gen_procedures
-           (t : instr_gen)
+           (t : undef_allowed)
            (wf : instr_weight)
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
            (pi : prog_int)
            (buffers : BinNatMap.t (list (N * (nat+list value))))
+           (no_undef_cids : list N)
   : G (BinNatMap.t (BinNatMap.t Intermediate.Machine.code)) :=
 
   foldGen
     (fun acc '(cid, comp_interface)  =>
+       let no_undef := List.existsb (N.eqb cid) no_undef_cids in
        do! proc_map <- (
            let '(lexp,limp) := comp_interface in
            foldGen
              (fun acc pid =>
-                do! proc <- gen_procedure t wf cag dag pi buffers cid pid ((max_label acc) + 1)%nat;
+                if no_undef
+                then 
+                  do! proc <- gen_procedure StrictNoUndef wf cag dag pi
+                    buffers cid pid ((max_label acc) + 1)%nat;
+                    returnGen (BinNatMap.add pid proc acc)                       
+                else                  
+                  do! proc <- gen_procedure t wf cag dag pi
+                  buffers cid pid ((max_label acc) + 1)%nat;
                   returnGen (BinNatMap.add pid proc acc)
              ) lexp (BinNatMap.empty Intermediate.Machine.code));
          
          (* check add labels as needed for IJal *)
-         let all_decl_labels := List.fold_left
-                                  (fun acc elt => (acc ++ elt)%list )
-                                  (List.map (fun p => delared_labels_in_proc (snd p))
-                                            (BinNatMap.elements proc_map))
-                                  (@nil nat) in
-         let uses := List.fold_left
-                       (fun acc elt => (acc ++ elt)%list )
-                       (List.map (fun p => 
-                                    List.map (fun i =>
-                                                match i with
-                                                | IJal l => l
-                                                | _ => 1%nat (* this is not happening *)
-                                                end
-                                             )
-                                             (List.filter (fun i => match i with
-                                                                 | IJal _  => true
-                                                                 | _ => false
-                                                                 end )
-                                                          (snd p) ))
-                                 (BinNatMap.elements proc_map))
-                       (@nil nat) in
+         let all_decl_labels :=
+             List.fold_left
+               (fun acc elt => (acc ++ elt)%list )
+               (List.map (fun p => delared_labels_in_proc (snd p))
+                         (BinNatMap.elements proc_map))
+               (@nil nat) in
+         let uses :=
+             List.fold_left
+               (fun acc elt => (acc ++ elt)%list )
+               (List.map
+                  (fun p => 
+                     List.map
+                       (fun i =>
+                          match i with
+                          | IJal l => l
+                          | _ => 1%nat (* this is not happening *)
+                          end
+                       )
+                       (List.filter
+                          (fun i =>
+                             match i with
+                             | IJal _  => true
+                             | _ => false
+                             end )
+                          (snd p) ))
+                  (BinNatMap.elements proc_map))
+               (@nil nat) in
          let lbls := List.nodup label_eq_dec
-                                (List.filter (fun l =>
-                                                Nat.eqb 0%nat
-                                                        (List.count_occ
-                                                           label_eq_dec
-                                                           all_decl_labels
-                                                           l
-                                                        )
-                                             )
-                                             uses
+                                (List.filter
+                                   (fun l =>
+                                      Nat.eqb 0%nat
+                                              (List.count_occ
+                                                 label_eq_dec
+                                                 all_decl_labels
+                                                 l
+                                              )
+                                   )
+                                   uses
                                 ) in
          (* TODO do something smarter *)
          match BinNatMap.elements proc_map with
          | nil => returnGen (BinNatMap.add cid proc_map acc)
-         | (pid,code)::_ => returnGen (BinNatMap.add cid
-                                                    (BinNatMap.add
-                                                       pid
-                                                       (
-                                                         (
-                                                           List.map
-                                                             (fun l => ILabel l)
-                                                             lbls
-                                                         )++code
-                                                       )%list
-                                                       proc_map
-                                                    )
-                                                    acc
-                                     )
+         | (pid,code)::_ =>
+           returnGen (BinNatMap.add
+                        cid
+                        (BinNatMap.add
+                           pid
+                           ((List.map
+                               (fun l => ILabel l)
+                               lbls
+                            )++code)%list
+                           proc_map
+                        )
+                        acc
+                     )
          end 
     ) (BinNatMap.elements  pi)
     (BinNatMap.empty (BinNatMap.t Intermediate.Machine.code))
@@ -674,7 +690,7 @@ Definition convert_buffers (buffs : BinNatMap.t  (list (N * (nat+list value))))
     buffs emptym.
 
 Definition gen_main_code
-           (t : instr_gen)
+           (t : undef_allowed)
            (wf : instr_weight)
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
@@ -746,25 +762,67 @@ Definition gen_main_code
 
 
 Definition genIntermediateProgram
-           (t : instr_gen)
+           (t : undef_allowed)
            (wf : instr_weight)
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
+           (min_components : nat)
            (max_components : nat)
-           (generate_max_components : bool)
   : G Intermediate.program :=
 
   do! n <-
-      (if generate_max_components
+      (if (Nat.eqb min_components max_components)
        then returnGen max_components
-              (* (N.to_nat (SFI.COMP_MAX-1)%N) *)
-      else choose (1%nat, max_components));
+       else choose (min_components, max_components));
+    
     let cids := N_list n in
 
     do! pi <- (gen_program_interface cids);
 
       do! buffers <- gen_buffers cids;
-      do! procs <- gen_procedures t wf cag dag pi buffers;
+      do! procs <- gen_procedures t wf cag dag pi buffers nil;
+      do! main <- gen_main_pid pi;
+      do! all_procs <- gen_main_code t wf cag dag pi buffers procs main;
+      returnGen {|
+          Intermediate.prog_interface := convert_program_interface pi;
+          Intermediate.prog_procedures := convert_procedures all_procs;
+          Intermediate.prog_buffers := convert_buffers buffers;
+          Intermediate.prog_main := Some (N.to_nat main)
+        |}.
+
+Fixpoint gen_ids size cids : G (list N) :=
+  match size with
+  | O => returnGen ((N.of_nat Component.main)::nil)
+  | S n =>
+    do! prev <- gen_ids n cids;
+      do! cid <- elements (N.of_nat Component.main) cids;
+      returnGen (cid::prev)
+  end.
+
+Definition genRSCIntermediateProgram
+           (t : undef_allowed)
+           (wf : instr_weight)
+           (cag : code_address_const_instr)
+           (dag : data_address_const_instr)
+           (min_components : nat)
+           (max_components : nat)
+  : G Intermediate.program :=
+
+  do! n <-
+      (if (Nat.eqb min_components max_components)
+       then returnGen max_components
+       else choose (min_components, max_components));
+    
+    let cids := N_list n in
+    do! size <- choose (2%nat, (Nat.max 3%nat (max_components - 3%nat)%nat));
+      do! no_undef_cids <- gen_ids size cids;
+      
+      do! pi <- (gen_program_interface cids);
+
+      do! buffers <- gen_buffers cids;
+      
+      do! procs <- gen_procedures t wf cag dag pi buffers no_undef_cids;
+
       do! main <- gen_main_pid pi;
       do! all_procs <- gen_main_code t wf cag dag pi buffers procs main;
       returnGen {|

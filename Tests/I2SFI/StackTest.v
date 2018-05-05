@@ -259,5 +259,5 @@ Definition stack_log_checker_error
   end.
 
 Definition stack_correct (fuel : nat) :=
-  sfi_check_correct TestSpecific CStack update_stack_log
+  sfi_check_correct NoUndef CStack update_stack_log
                 stack_log_checker_error stack_log_checker fuel.

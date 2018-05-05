@@ -21,12 +21,12 @@ Import BinNatMapExtra.
 Import SFI.
 
 Example test_CODE_DATA_BIT_MASK :
-  SFI.CODE_DATA_BIT_MASK = hex2N "4000".
+  SFI.CODE_DATA_BIT_MASK = hex2N "10000".
 Proof. unfold CODE_DATA_BIT_MASK. unfold OFFSET_BITS_NO. unfold COMP_BITS_NO.
        simpl. unfold hex2N. reflexivity. Qed.
 
 Example test_AND_DATA_MASK :
-  SFI.AND_DATA_MASK = hex2N "FF8FFF".
+  SFI.AND_DATA_MASK = hex2N "FE0FFF".
 Proof.
   compute. eauto. Qed.
   
@@ -35,7 +35,7 @@ Proof.
   (* reflexivity. Qed. *)
 
 Example test_AND_CODE_MASK :
-  SFI.AND_CODE_MASK = hex2N "FF8FF0".
+  SFI.AND_CODE_MASK = hex2N "FE0FF0".
 Proof.
   unfold AND_DATA_MASK. unfold OFFSET_BITS_NO.
   unfold COMP_BITS_NO. unfold BLOCK_BITS_NO.
@@ -63,21 +63,21 @@ Proof.
   reflexivity. Qed.
 
 Example test_is_code_address_false :
-  is_code_address (hex2N "00F000") = false.
+  is_code_address (hex2N "01F000") = false.
 Proof.
   unfold is_code_address.
   unfold CODE_DATA_BIT_MASK. unfold COMP_BITS_NO. unfold OFFSET_BITS_NO.
   reflexivity. Qed.
 
 Example test_or_data_mask0 :
-  or_data_mask 0%N = (hex2N "004000").
+  or_data_mask 0%N = (hex2N "010000").
 Proof.
   unfold or_data_mask.
   unfold COMP_BITS_NO. unfold OFFSET_BITS_NO.
   reflexivity. Qed.
 
 Example test_or_data_mask3 :
-  or_data_mask 3%N = (hex2N "007000").
+  or_data_mask 3%N = (hex2N "013000").
 Proof.
   unfold or_data_mask.
   unfold COMP_BITS_NO. unfold OFFSET_BITS_NO.

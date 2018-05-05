@@ -59,12 +59,12 @@ Definition check_correct
            `{Show ExecutionResult}
            `{Show ExecutionError}
            
-           (t : instr_gen)
+           (t : undef_allowed)
            (wf : instr_weight)
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
+           (min_components : nat)
            (max_components : nat)
-           (generate_max_components : bool)
            (log_checker_error_fun : @log_checker_error Log
                                                        ExecutionError)
            (log_checker_fun : @log_checker Log
@@ -77,7 +77,7 @@ Definition check_correct
   : Checker :=
   forAllShrink
     (genIntermediateProgram
-       t wf cag dag max_components false
+       t wf cag dag min_components  max_components 
     ) shrink
     ( fun ip =>
         match cf ip with

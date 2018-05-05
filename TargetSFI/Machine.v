@@ -555,7 +555,7 @@ Module SFI.
   Definition OFFSET_BITS_NO : N := 12.
 
   (* Number of bits used for component *)
-  Definition COMP_BITS_NO : N := 2.
+  Definition COMP_BITS_NO : N := 4.
 
   (* Definition COMPONENT_MASK : N := 2^CID_SIZE - 1. *)
 
@@ -582,7 +582,7 @@ Module SFI.
 
   Definition MONITOR_COMPONENT_ID : N := 0.
 
-  Definition BLOCK_BITS_NO : N := 9.
+  Definition BLOCK_BITS_NO : N := 7.
 
   Definition AND_DATA_MASK : N :=
     N.lor
