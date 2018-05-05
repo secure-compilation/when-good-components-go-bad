@@ -844,25 +844,19 @@ Section Decomposition.
   move=> t' s_f' Hstar' Hstuck' Hnot_final' _ [->].
   Admitted.
 
-  Lemma blame_program' t b :
-    program_behaves (PS.sem c (prog_interface p)) b ->
+  Lemma blame_program' t :
     program_behaves (PS.sem c (prog_interface p)) (Goes_wrong t) ->
-    behavior_prefix t b ->
     undef_in t (prog_interface c).
   Proof.
-  case: b / => //; last first.
+  move e_b: (Goes_wrong _) => b Hb.
+  case: b / Hb e_b => //; last first.
     move: closedness_after_linking; rewrite link_sym // => H.
     by case: (PS.exists_initial_state (linkable_sym linkability) wf2 wf1 H)=> ? H' /(_ _ H').
-  move e_beh': (Goes_wrong _) => beh' s0 beh Hinitial Hbeh Hbeh'.
-  case: beh' / Hbeh' e_beh'; last by move=> /(_ _ Hinitial).
-  move=> s0' beh' Hinitial'.
-  rewrite -(PS.initial_state_determinism Hinitial Hinitial') {s0' Hinitial'}.
-  move=> Hbeh'; case: beh' / Hbeh' t => //=.
-  move=> t' s_f' Hstar' Hstuck' Hnot_final' _ [->].
+  move=> s0 beh Hinitial Hbeh e_beh.
+  case: beh / Hbeh t e_beh=> // t s' star stuck not_final _ [->].
   move/linkable_sym: linkability=> linkability'.
-  rewrite (PS.undef_in_program linkability'.2 Hinitial Hstar').
-  move=> _.
-  apply/negP=> in_context; apply: Hnot_final'.
+  rewrite (PS.undef_in_program linkability'.2 Hinitial star).
+  apply/negP=> in_context; apply: not_final.
   constructor; by eauto.
   Qed.
 
@@ -871,7 +865,7 @@ Section Decomposition.
   move=> Ht.
   have pre : behavior_prefix t (Goes_wrong t).
     by exists (Goes_wrong E0); rewrite /= E0_right.
-  move: (blame_program Ht Ht pre) (blame_program' Ht Ht pre).
+  move: (blame_program Ht Ht pre) (blame_program' Ht).
   rewrite /undef_in => H.
   by case: linkability=> _ /fdisjointP/(_ _ H)/negP.
   Qed.
