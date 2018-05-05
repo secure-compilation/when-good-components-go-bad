@@ -569,22 +569,18 @@ Qed.
 
 Lemma interface_preserves_closedness_r :
   forall p1 p2 p2',
-    closed_program (program_link p1 p2) ->
+    well_formed_program p1 ->
+    well_formed_program p2' ->
     prog_interface p2 = prog_interface p2' ->
-    closed_program (program_link p1 p2').
-Admitted.
-
-(*
-Lemma interface_preserves_closedness_r :
-  forall p1 p2 p2',
+    linkable (prog_interface p1) (prog_interface p2) ->
     closed_program (program_link p1 p2) ->
-    prog_interface p2 = prog_interface p2' ->
     linkable_mains p1 p2 ->
-    linkable_mains p1 p2' ->
     closed_program (program_link p1 p2').
 Proof.
   intros p1 p2 p2'
-         [Hclosed [mainP [main_procs [Hmain [Hprocs Hin]]]]] Hsame_int Hlinkable_mains Hlinkable_mains'.
+         Hwf1 Hwf2' Hsame_int Hlinkable
+         [Hclosed [mainP [main_procs [Hmain [Hprocs Hin]]]]]
+         Hlinkable_mains.
   constructor.
   - simpl in Hclosed.
     rewrite Hsame_int in Hclosed.
@@ -592,28 +588,51 @@ Proof.
   - destruct (prog_main p1) as [main1 |] eqn:Hmain1;
       destruct (prog_main p2) as [main2 |] eqn:Hmain2.
     + unfold linkable_mains in Hlinkable_mains.
-      rewrite Hmain1 in Hlinkable_mains.
-      rewrite Hmain2 in Hlinkable_mains.
+      rewrite Hmain1 Hmain2 in Hlinkable_mains.
       discriminate.
-    + destruct (prog_main p2') eqn: Hmain2';
-      unfold linkable_mains in Hlinkable_mains';
-      rewrite Hmain1 in Hlinkable_mains';
-      rewrite Hmain2' in Hlinkable_mains';
-      simpl in Hlinkable_mains'; try now auto.
-      exists mainP, main_procs. split; try now auto.
-      ++  simpl in Hmain. rewrite Hmain1 in Hmain.
-          inversion Hmain. subst.
-          simpl. now rewrite Hmain1.
-      ++ split; try now auto.
-          admit. (* CA :true ??*)
-    + admit. (* CA: true?? I am not sure we can use mainP and main_procs here *)
+    + (* main is in p1.*)
+      unfold program_link in Hmain.
+      rewrite Hmain1 in Hmain.
+      simpl in Hmain.
+      inversion Hmain; subst mainP; clear Hmain.
+      (* Likewise main_procs (used only in second sub-goal). *)
+      unfold program_link in Hprocs; simpl in Hprocs.
+      destruct (wfprog_main_existence Hwf1 Hmain1)
+        as [main_procs1 [Hmain_procs1 Hin1]].
+      rewrite unionmE Hmain_procs1 in Hprocs.
+      inversion Hprocs; subst main_procs; clear Hprocs.
+      (* Instantiate and solve. *)
+      exists main1, main_procs1. split; [| split].
+      * unfold program_link.
+        rewrite Hmain1.
+        reflexivity.
+      * unfold program_link; simpl.
+        rewrite unionmE Hmain_procs1.
+        reflexivity.
+      * assumption.
+    + (* main is in p2'. *)
+      destruct (prog_main p2') as [main2' |] eqn:Hmain2';
+        last admit.
+      (* Likewise main_procs (used only in second sub-goal). *)
+      destruct (wfprog_main_existence Hwf2' Hmain2')
+        as [main_procs2' [Hmain_procs2' Hin2']].
+      exists main2', main_procs2'. split; [| split].
+      * unfold program_link.
+        rewrite Hmain1 Hmain2'.
+        reflexivity.
+      * unfold program_link; simpl.
+        inversion Hlinkable as [_ Hdisjoint].
+        inversion Hwf1 as [_ Hdomm1 _ _ _ _].
+        inversion Hwf2' as [_ Hdomm2' _ _ _ _].
+        rewrite Hsame_int Hdomm1 Hdomm2' in Hdisjoint.
+        rewrite (unionmC Hdisjoint) unionmE Hmain_procs2'.
+        reflexivity.
+      * assumption.
     + simpl in Hmain.
       rewrite Hmain1 in Hmain.
       rewrite Hmain2 in Hmain.
       discriminate.
 Admitted.
- *)
-
 
 Lemma closed_program_link_sym p1 p2 :
   well_formed_program p1 ->

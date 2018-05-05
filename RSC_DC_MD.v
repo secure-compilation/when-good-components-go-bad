@@ -204,7 +204,9 @@ Section RSC_DC_MD.
     }
     assert (Intermediate.closed_program (Intermediate.program_link p_compiled Cs_compiled))
       as HpCs_compiled_closed.
-      now apply (Intermediate.interface_preserves_closedness_r closedness Hctx_same_iface); auto.
+    now apply (Intermediate.interface_preserves_closedness_r
+                 well_formed_p_compiled well_formed_Cs_compiled
+                 Hctx_same_iface linkability_pcomp_Ct closedness mains); auto.
     assert (Intermediate.well_formed_program (Intermediate.program_link p_compiled Cs_compiled))
       as HpCs_compiled_well_formed
         by (apply Intermediate.linking_well_formedness; assumption).
