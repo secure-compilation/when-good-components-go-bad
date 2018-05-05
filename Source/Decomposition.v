@@ -144,109 +144,91 @@ Section Decomposition.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
@@ -257,7 +239,6 @@ Section Decomposition.
       (* external call *)
       + eexists. split.
         * eapply PS.partial_step with (p':=c); auto.
-          ** apply: cprog_closed_interface closedness_after_linking.
           ** eassumption.
           ** eapply PS.ProgramControl; auto.
           ** eapply PS.ContextControl; auto.
@@ -265,7 +246,6 @@ Section Decomposition.
       (* internal call *)
       + eexists. split.
         * eapply PS.partial_step with (p':=c); auto.
-          ** apply: cprog_closed_interface closedness_after_linking.
           ** eassumption.
           ** eapply PS.ProgramControl; auto.
           ** eapply PS.ProgramControl; auto.
@@ -279,7 +259,6 @@ Section Decomposition.
     - PS.simplify_turn.
       eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * econstructor; eauto.
       + econstructor; auto.
 
@@ -290,7 +269,6 @@ Section Decomposition.
       (* external return *)
       + eexists. split.
         * eapply PS.partial_step with (p':=c); auto.
-          ** apply: cprog_closed_interface closedness_after_linking.
           ** eassumption.
           ** eapply PS.ProgramControl; auto.
           ** eapply PS.ContextControl; auto.
@@ -298,7 +276,6 @@ Section Decomposition.
       (* internal return *)
       + eexists. split.
         * eapply PS.partial_step with (p':=c); auto.
-          ** apply: cprog_closed_interface closedness_after_linking.
           ** eassumption.
           ** eapply PS.ProgramControl; auto.
           ** eapply PS.ProgramControl; auto.
@@ -312,67 +289,56 @@ Section Decomposition.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
           ** PS.simplify_turn.
              erewrite <- context_allocation_in_partialized_memory; eauto.
@@ -382,31 +348,26 @@ Section Decomposition.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
           ** PS.simplify_turn.
              erewrite <- context_store_in_partialized_memory; eauto.
@@ -416,7 +377,6 @@ Section Decomposition.
 
     - eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
@@ -424,7 +384,6 @@ Section Decomposition.
     - PS.simplify_turn.
       eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
@@ -435,7 +394,6 @@ Section Decomposition.
       (* internal call *)
       + eexists. split.
         * eapply PS.partial_step with (p':=c); auto.
-          ** apply: cprog_closed_interface closedness_after_linking.
           ** eassumption.
           ** eapply PS.ContextControl; auto.
           ** eapply PS.ContextControl; auto.
@@ -443,7 +401,6 @@ Section Decomposition.
       (* external call *)
       + eexists. split.
         * eapply PS.partial_step with (p':=c); auto.
-          ** apply: cprog_closed_interface closedness_after_linking.
           ** eassumption.
           ** eapply PS.ContextControl; auto.
           ** eapply PS.ProgramControl; auto.
@@ -457,7 +414,6 @@ Section Decomposition.
     - PS.simplify_turn.
       eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
-        * apply: cprog_closed_interface closedness_after_linking.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
@@ -468,7 +424,6 @@ Section Decomposition.
       (* internal return *)
       + eexists. split.
         * eapply PS.partial_step with (p':=c); auto.
-          ** apply: cprog_closed_interface closedness_after_linking.
           ** eassumption.
           ** eapply PS.ContextControl; auto.
           ** eapply PS.ContextControl; auto.
@@ -476,7 +431,6 @@ Section Decomposition.
       (* external return *)
       + eexists. split.
         * eapply PS.partial_step with (p':=c); auto.
-          ** apply: cprog_closed_interface closedness_after_linking.
           ** eassumption.
           ** eapply PS.ContextControl; auto.
           ** eapply PS.ProgramControl; auto.
@@ -774,7 +728,8 @@ Section Decomposition.
           case: ff Hnot_final Hfinal Hstuck=> [? Hnot_final /Hnot_final //|].
           by move=> ?????? Hstep _ _ _ _ /(_ _ _ Hstep).
         have {Hin_p} Hin_p : PS.is_program_component s_f' (prog_interface c).
-          by apply: PS.undef_in_program; eauto; case: linkability.
+          case: linkability=> _ dis.
+          by rewrite -(PS.undef_in_program dis Hinitial Hstar').
         elim/star_E0_ind: s_f' s_f / ff Hnot_final Hfinal Hin_p {Hstuck Hstar Hstar'}.
           by move=> ? Hnot_final /Hnot_final.
         move=> s_f' s s_f Hstep _ _ Hfinal Hin_p.
@@ -784,7 +739,8 @@ Section Decomposition.
           by case/Hstuck: contra.
         by elim/star_E0_ind: ff Hfinal=> [? []|]; eauto.
       have {Hin_p} Hin_p : PS.is_program_component s_f' (prog_interface c).
-        by apply: PS.undef_in_program; eauto; case: linkability.
+        case: linkability=> _ dis.
+        by rewrite -(PS.undef_in_program dis Hinitial Hstar').
       suffices [s contra] : exists s, Step (PS.sem p (prog_interface c)) s_f E0 s.
         by case/Hstuck: contra.
       elim/star_E0_ind: s_f' s_f / ff Hfinal Hin_p {Hstuck Hnot_final Hstar Hstar'}.
@@ -805,7 +761,8 @@ Section Decomposition.
         by case/Hstuck: contra.
       by elim/star_E0_ind: s_f s1 / Hstar Hstep2 {Hstuck Hnot_final Hstar1}; eauto.
     have {Hin_p} Hin_p : PS.is_program_component s1 (prog_interface c).
-      by apply: PS.undef_in_program; eauto; case: linkability.
+      case: linkability=> _ dis.
+      by rewrite -(PS.undef_in_program dis Hinitial Hstar1).
     elim/star_E0_ind: s1 s_f / Hstar Hstuck Hstep2 Hin_p {Hnot_final Hstar1}.
       by move=> s_f Hstuck /Hstuck.
     move=> s1 s1a s1b Hstep1 _ _ Hstep2 Hin_p.
@@ -876,33 +833,24 @@ Section Decomposition.
     behavior_prefix t b ->
     undef_in t (prog_interface p).
   Proof.
-(*    case: b / => //; last first.
-    { (* AAA: This is showing that there is always an initial state in the
-         partial semantics.  It could become a standalone lemma. *)
-      move=> Hnot_init; suffices : False by [].
-      apply: Hnot_init.
-      eapply PS.initial_state_intro
-          with (p:=c) (p':=p)
-               (scs:=CS.initial_machine_state (Source.program_link c p))
-               (sps:=PS.partialize (Source.prog_interface p)
-                                   (CS.initial_machine_state (Source.program_link c p)));
-          auto.
-        * apply linkable_sym; auto.
-        * by rewrite <- (closed_program_link_sym wf1 wf2 linkability).
-        * apply PS.partialize_correct; auto.
-        * unfold CS.initial_state.
-          reflexivity. }
+    case: b / => //; last first.
+      move: closedness_after_linking; rewrite link_sym // => H.
+      by case: (PS.exists_initial_state (linkable_sym linkability) wf2 wf1 H)=> ? H' /(_ _ H').
     move e_beh': (Goes_wrong _) => beh' s0 beh Hinitial Hbeh Hbeh'.
     case: beh' / Hbeh' e_beh'; last by move=> /(_ _ Hinitial).
     move=> s0' beh' Hinitial'.
     rewrite -(PS.initial_state_determinism Hinitial Hinitial') {s0' Hinitial'}.
     move=> Hbeh'; case: beh' / Hbeh' t => //=.
     move=> t' s_f' Hstar' Hstuck' Hnot_final' _ [->].
-    case: beh / Hbeh.
+(*    case: beh / Hbeh.
     - (* termination *)
       move=> t'' s_f Hstar Hfinal [[t| | |] //= [e_beh']]; subst t''.
       have [? Hstar''] := improving_star_ending_in_stuck_state Hstar' Hstar Hstuck'.
-      subst t.*)
+      subst t; rewrite E0_right in Hstar.
+      move/linkable_sym: linkability=> linkability'.
+      rewrite (PS.undef_in_program linkability'.2 Hinitial).
+
+
 
     intros Hbeh_improved Hbeh_wrong Hprefix.
     unfold behavior_prefix in Hprefix.
@@ -942,6 +890,6 @@ Section Decomposition.
         * by rewrite <- (closed_program_link_sym wf1 wf2 linkability).
         * apply PS.partialize_correct; auto.
         * unfold CS.initial_state.
-          reflexivity.
+          reflexivity.*)
   Admitted.
 End Decomposition.

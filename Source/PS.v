@@ -8,6 +8,7 @@ Require Import Common.Linking.
 Require Import Common.Maps.
 Require Import Common.CompCertExtensions.
 Require Import Common.Blame.
+Require Import Common.Traces.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
@@ -59,6 +60,12 @@ Definition s_component (sps: state) : Component.id :=
   | CC (C, _, _)          => C
   end.
 
+Definition s_stack (sps: state) : stack :=
+  match sps with
+  | PC (_, stk, _, _, _, _) => stk
+  | CC (_, stk, _)          => stk
+  end.
+
 Instance state_turn : HasTurn state := {
   turn_of s iface := s_component s \in domm iface
 }.
@@ -77,7 +84,7 @@ Definition to_partial_frame (ctx: {fset Component.id}) frame : Component.id * op
   let: CS.Frame C v k := frame in
   (C, if C \in ctx then None else Some (v, k)).
 
-(** FIXME: Move to extra *)
+(* FIXME: This can be expressed in terms of drop and find. *)
 Fixpoint drop_while {T : Type} (a : pred T) (s : seq T) :=
   if s is x :: s' then
     if a x then drop_while a s' else s
@@ -455,7 +462,7 @@ Proof.
       rewrite H. reflexivity.
 Qed.
 
-Ltac backward_easy :=
+Ltac parallel_concrete_easy :=
   by move=> *;
   match goal with
   | in_prog : is_true (?C \notin domm ?ctx),
@@ -468,7 +475,7 @@ Ltac backward_easy :=
     rewrite -lock /= (negbTE in_prog) e_stk e_mem
   end.
 
-Lemma backward p ctx p1 p2 scs1 t scs1' scs2 :
+Lemma parallel_concrete p ctx p1 p2 scs1 t scs1' scs2 :
   well_formed_program p ->
   well_formed_program p1 ->
   well_formed_program p2 ->
@@ -490,7 +497,7 @@ suffices : match CS.eval_kstep (prepare_global_env (program_link p p2)) scs2 ret
            end.
   case ev: CS.eval_kstep=> [[t' scs2']|] //=.
   by move/CS.eval_kstep_sound in ev => - [-> ?]; eauto.
-case: scs1 t scs1' / step in_prog e_part => /=; try backward_easy.
+case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
 - (* Allocation *)
   move=> C stk1 mem1 mem1' k size ptr arg /Zgt_is_gt_bool size_pos e_mem1 in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
@@ -654,11 +661,32 @@ Inductive kstep
       well_formed_program p ->
       well_formed_program p' ->
       linkable (prog_interface p) (prog_interface p') ->
-      closed_interface (unionm (prog_interface p) (prog_interface p')) ->
+      closed_program (program_link p p') ->
       CS.kstep (prepare_global_env (program_link p p')) scs t scs' ->
       partial_state ctx scs sps ->
       partial_state ctx scs' sps' ->
       kstep p ctx G sps t sps'.
+
+Lemma backward p c G scs sps t sps' :
+  well_formed_program p ->
+  well_formed_program c ->
+  linkable (prog_interface p) (prog_interface c) ->
+  closed_interface (unionm (prog_interface p) (prog_interface c)) ->
+  is_program_component sps (prog_interface c) ->
+  kstep p (prog_interface c) G sps t sps' ->
+  partialize (prog_interface c) scs = sps ->
+  exists2 scs',
+    CS.kstep (prepare_global_env (program_link p c)) scs t scs' &
+    partialize (prog_interface c) scs' = sps'.
+Proof.
+rewrite /is_program_component /is_context_component /=.
+move=> wfp wfc link clos in_prog step e_sps.
+case: step e_sps in_prog => c2 scs2 scs2' e_int _ wfc2 _ _ /= step2.
+move=> /partialize_correct <- /partialize_correct <- e_sps.
+rewrite s_component_partialize => in_prog.
+have [scs' step ->] := parallel_concrete wfp wfc2 wfc link clos e_int erefl (esym e_sps) in_prog step2.
+by eauto.
+Qed.
 
 (* FIXME: This is subsumed by s_component_partialize *)
 
@@ -748,20 +776,73 @@ Section Semantics.
     by case: t1=> [|e [|e' t1]] //= *; omega.
   Qed.
 
+  Local Open Scope fset_scope.
+
+  Definition stack_components (ps : state) :=
+    s_component ps |: fset [seq f.1 | f <- s_stack ps].
+
+  Lemma stack_components_partialize scs :
+    stack_components (partialize ctx scs) = CS.stack_components scs.
+  Proof.
+  rewrite /stack_components /CS.stack_components.
+  case: scs=> C stk mem k e arg; do 2![rewrite fun_if /= if_same].
+  elim: stk C {mem k e arg} => [//|[C' v k] stk IH] C /=.
+  rewrite to_partial_stackE /=; case: eqP=> [-> {C'}|_]; last first.
+    by rewrite if_same /= 2!fset_cons IH.
+  case: ifP=> [Cin|] /=; last by rewrite 2!fset_cons IH.
+  by rewrite fset_cons fsetUA fsetUid -IH // to_partial_stackE Cin.
+  Qed.
+
+  Lemma stack_components_step ps t ps' :
+    Step sem ps t ps' ->
+    fsubset (stack_components ps) (domm (unionm (prog_interface p) ctx)) ->
+    fsubset (stack_components ps') (domm (unionm (prog_interface p) ctx)).
+  Proof.
+  case=> p' cs cs' e_ctx wf wf' link clos step.
+  do 2![move=> /partialize_correct <-]; rewrite !stack_components_partialize.
+  by rewrite -e_ctx; apply: CS.stack_components_step step.
+  Qed.
+
+  Lemma stack_components_star ps t ps' :
+    initial_state p ctx ps ->
+    Star sem ps t ps' ->
+    fsubset (stack_components ps') (domm (unionm (prog_interface p) ctx)).
+  Proof.
+  move=> init star.
+  set S := domm (unionm (prog_interface p) ctx).
+  have {init} ps_ok : fsubset (stack_components ps) S.
+    case: ps / init {star}=> p' cs ps e_p' wf wf' link clos.
+    move=> /partialize_correct <- ->; rewrite stack_components_partialize.
+    rewrite /S -e_p'.
+    have {wf wf'} wf : well_formed_program (program_link p p').
+      exact: linking_well_formedness.
+    apply: (CS.stack_components_star wf clos)=> //.
+    exact: star_refl.
+  elim: ps t ps' / star ps_ok=> // ps1 t1 ps2 t2 ps3 _ step _ IH _ ps1_ok.
+  by apply: IH; apply: stack_components_step ps1_ok; eauto.
+  Qed.
+
   Lemma undef_in_program s1 t s2 :
     initial_state p ctx s1 ->
     Star sem s1 t s2 ->
-    undef_in t (prog_interface p) ->
-    is_program_component s2 ctx.
+    undef_in t (prog_interface p) = is_program_component s2 ctx.
   Proof.
-    move=> Hinitial Hstar.
-    rewrite /undef_in /last_comp /is_program_component /is_context_component.
-    rewrite /turn_of /= (star_component Hstar).
-    have -> : s_component s1 = Component.main.
-      case: s1 / Hinitial {Hstar} => ???????? Hpart.
-      rewrite (partial_state_component Hpart) => ->.
-      by rewrite /CS.initial_machine_state; case: prog_main.
-    by move/fdisjointP: disjoint_interfaces; apply.
+  move=> Hinitial Hstar.
+  rewrite /undef_in /last_comp /is_program_component /is_context_component.
+  rewrite /turn_of /= (star_component Hstar).
+  have -> : Component.main = s_component s1.
+    case: s1 / Hinitial {Hstar} => ???????? Hpart.
+    rewrite (partial_state_component Hpart) => ->.
+    by rewrite /CS.initial_machine_state; case: prog_main.
+  rewrite -(star_component Hstar).
+  move: (stack_components_star Hinitial Hstar).
+  rewrite /stack_components fsubU1set; case/andP.
+  rewrite domm_union; case/fsetUP.
+    move=> in_p; rewrite in_p.
+    by rewrite (fdisjointP _ _ disjoint_interfaces).
+  move=> in_ctx; rewrite in_ctx => _; apply/negbTE.
+  move: disjoint_interfaces; rewrite fdisjointC.
+  by move/fdisjointP; apply.
   Qed.
 
 End Semantics.
@@ -886,21 +967,21 @@ Lemma state_determinism_program' p ctx G sps t1 t2 sps' :
   forall sps'', kstep p ctx G sps t2 sps'' ->
                 t1 = t2 /\ sps' = sps''.
 Proof.
-  move=> in_prog step1.
-  case: step1 in_prog=> {sps sps'} p1 scs1 scs1' int1 wf wf1 link clos kstep1
-                        /partialize_correct <- /partialize_correct <-
-                        in_prog sps''.
-  case=> {sps''} p2 scs2 scs2' int2 _  wf2 _ _ kstep2
-         /partialize_correct e12 /partialize_correct <-.
-  have {in_prog} in_prog : CS.s_component scs1 \notin domm ctx.
-    move: in_prog; simplify_turn.
-    case: (scs1)=> [C ? ? ? ? ?] /=.
-    by case: ifPn => /= [-> //|].
-  rewrite int1 in link clos.
-  move/CS.eval_kstep_complete in kstep2.
-  case: (backward wf wf1 wf2 link clos int1 int2 (esym e12) in_prog kstep1).
-  move=> scs2'' /CS.eval_kstep_complete; rewrite kstep2.
-  by move=> [<- <-] <-.
+move=> in_prog step1.
+case: step1 in_prog
+      => {sps sps'} p1 scs1 scs1' int1 wf wf1 link /cprog_closed_interface clos
+         kstep1 /partialize_correct <- /partialize_correct <- in_prog sps''.
+case=> {sps''} p2 scs2 scs2' int2 _  wf2 _ _ kstep2
+       /partialize_correct e12 /partialize_correct <-.
+have {in_prog} in_prog : CS.s_component scs1 \notin domm ctx.
+  move: in_prog; simplify_turn.
+  case: (scs1)=> [C ? ? ? ? ?] /=.
+  by case: ifPn => /= [-> //|].
+rewrite /= int1 in link clos.
+move/CS.eval_kstep_complete in kstep2.
+case: (parallel_concrete wf wf1 wf2 link clos int1 int2 (esym e12) in_prog kstep1).
+move=> scs2'' /CS.eval_kstep_complete; rewrite kstep2.
+by move=> [<- <-] <-.
 Qed.
 
 (* The weaker state determinism with program in control follows from the above. *)

@@ -439,6 +439,49 @@ Section Semantics.
     - apply singleton_traces.
   Qed.
 
+  Local Open Scope fset_scope.
+
+  Definition stack_components (cs: state) : {fset Component.id} :=
+    s_component cs |: fset [seq f_component f | f <- s_stack cs].
+
+  Lemma stack_components_step cs t cs' :
+    Step sem cs t cs' ->
+    fsubset (stack_components cs) (domm (prog_interface p)) ->
+    fsubset (stack_components cs') (domm (prog_interface p)).
+  Proof.
+  case: cs t cs' / => //=.
+  - (* Internal Call *)
+    move=> C stk mem k _ P v P_expr arg <-; rewrite /stack_components /=.
+    by rewrite fset_cons fsetUA fsetUid.
+  - (* External Call *)
+    move=> C stk mem k C' P v P_expr arg _; rewrite /stack_components /=.
+    rewrite (fsubU1set C') mem_domm fset_cons.
+    by case/(cprog_closed_interface complete_program)=> CI [->].
+  - (* Internal Return *)
+    move=> C stk mem k v arg _ old <-; rewrite /stack_components /=.
+    by rewrite fset_cons fsetUA fsetUid.
+  - (* External Return *)
+    move=> C stk mem k v arg C' old _; rewrite /stack_components /=.
+    by rewrite (fsubU1set C) fset_cons; case/andP.
+  Qed.
+
+  Lemma stack_components_star cs t cs' :
+    initial_state p cs ->
+    Star sem cs t cs' ->
+    fsubset (stack_components cs') (domm (prog_interface p)).
+  Proof.
+  move=> init star.
+  have main_ok : Component.main \in domm (prog_interface p).
+    have := cprog_main_existence complete_program.
+    rewrite wfprog_defined_procedures // mem_domm /prog_main /find_procedure.
+    by case: getm.
+  have {init main_ok} cs_ok : fsubset (stack_components cs) (domm (prog_interface p)).
+    rewrite init /initial_machine_state /stack_components.
+    by case e_main: (prog_main p)=> [mainP|] /=; rewrite -fset0E fsetU0 fsub1set.
+  elim: cs t cs' / star cs_ok=> // cs1 t1 cs2 t2 cs3 t step _ IH _ cs1_ok.
+  by apply: IH; apply: stack_components_step cs1_ok; eauto.
+  Qed.
+
   Fixpoint unstutter (T : eqType) (x : T) (s : seq T) :=
     if s is x' :: s' then
       if x == x' then unstutter x s'
@@ -473,7 +516,7 @@ Section Semantics.
   elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
   rewrite all_cat; case: st1 t1 st2 / Hstep {Hstar} => //=.
   - by move=> ????????? /eqP -> /imported_procedure_iff ->.
-  - by move=> ????????   /eqP ->.
+  - by move=> ????????  /eqP ->.
   Qed.
 
   Lemma trace_wf mainP t cs cs' :
