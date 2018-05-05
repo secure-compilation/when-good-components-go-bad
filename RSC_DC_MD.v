@@ -95,7 +95,7 @@ Section RSC_DC_MD.
                 linkability_pcomp_Ct closedness Hbeh Hprefix0 Hnot_wrong')
       as [P' [Cs [beh
          [Hsame_iface1 [Hsame_iface2
-         [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]].
+         [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh [Hprefix1 not_wrong_beh]]]]]]]]]].
 
     assert (Source.linkable_mains P' Cs) as HP'Cs_mains.
     { apply Source.linkable_disjoint_mains; trivial; congruence. }
