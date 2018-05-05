@@ -31,7 +31,7 @@ Section RSC_DC_MD.
   (* Some reasonable assumptions about our programs *)
 
   Hypothesis well_formed_p : Source.well_formed_program p.
-  Hypothesis successfull_compilation : compile_program p = Some p_compiled.
+  Hypothesis successful_compilation : compile_program p = Some p_compiled.
   Hypothesis well_formed_Ct : Intermediate.well_formed_program Ct.
   Hypothesis linkability : linkable (Source.prog_interface p) (Intermediate.prog_interface Ct).
   Hypothesis closedness :
@@ -60,7 +60,7 @@ Section RSC_DC_MD.
 
     (* Some auxiliary results. *)
     pose proof
-      Compiler.compilation_preserves_well_formedness well_formed_p successfull_compilation
+      Compiler.compilation_preserves_well_formedness well_formed_p successful_compilation
       as well_formed_p_compiled.
 
     assert (linkability_pcomp_Ct :
@@ -74,8 +74,8 @@ Section RSC_DC_MD.
                                          (domm (Intermediate.prog_interface Ct)))
         by apply linkability.
       constructor;
-        apply compilation_preserves_interface in successfull_compilation;
-        now rewrite successfull_compilation.
+        apply compilation_preserves_interface in successful_compilation;
+        now rewrite successful_compilation.
     }
 
     assert (Hnot_wrong' : not_wrong_finpref m).
@@ -252,7 +252,7 @@ Section RSC_DC_MD.
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
       apply (Source.interface_preserves_closedness_l HP'Cs_closed); trivial.
       apply compilation_preserves_interface in HP'_compiles.
-      apply compilation_preserves_interface in successfull_compilation.
+      apply compilation_preserves_interface in successful_compilation.
       congruence.
     }
     assert (linkable (Source.prog_interface p) (Source.prog_interface Cs))
@@ -260,8 +260,8 @@ Section RSC_DC_MD.
       inversion linkability'' as [sound_interface_p_Cs fdisjoint_p_Cs].
       constructor;
         (apply compilation_preserves_interface in HCs_compiles;
-        apply compilation_preserves_interface in successfull_compilation;
-        rewrite <- HCs_compiles; rewrite <- successfull_compilation;
+        apply compilation_preserves_interface in successful_compilation;
+        rewrite <- HCs_compiles; rewrite <- successful_compilation;
         assumption).
     }
     assert (Source.well_formed_program (Source.program_link p Cs)) as Hwf_p_Cs
@@ -332,7 +332,7 @@ Section RSC_DC_MD.
               * assumption.
               * assumption.
               * pose proof (compilation_preserves_interface p p_compiled
-                                               successfull_compilation) as HH.
+                                               successful_compilation) as HH.
                 assert(Source.prog_interface P' = Source.prog_interface p) as HHH
                     by congruence.
                 rewrite <- HHH.
