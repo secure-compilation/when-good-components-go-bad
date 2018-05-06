@@ -333,6 +333,7 @@ Section RSC_DC_MD.
                   by congruence.
               rewrite <- HHH. apply HP'_Cs_beh.
             * exact Hprefix1.
+            * exact Hgoes_wrong.
             * exact H1.
             * exact H2.
             * eexists. split; eassumption.

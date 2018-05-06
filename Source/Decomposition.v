@@ -838,17 +838,31 @@ Section Decomposition.
     - destruct H; subst. split; auto.
   Qed.
 
-  (* CH: This one also closes the diagram, but it's unfortunately as false as blame_program *)
+  (* CH: This one also closes the diagram,
+         but it might be as bad as blame_program???
+         it seems to require blame_program in case b' = b''
+         ... but maybe we have more things in scope here?
+         (or we could pass into this lemma?) *)
   Lemma blame_program_fixed t b m b' b'':
     program_behaves (PS.sem c (prog_interface p)) b ->
     prefix m b ->
+    b' = Goes_wrong t ->
     program_behaves (PS.sem c (prog_interface p)) b'' ->
-    (b' = b'' \/ (exists t', b' = Goes_wrong t' /\
-                             behavior_prefix t' b'' /\
-                             undef_in t' (prog_interface p))) ->
-    (exists t', b' = Goes_wrong t' /\ trace_finpref_prefix t' m)->
+    (b' = b'' \/ (exists s', b' = Goes_wrong s' /\
+                             behavior_prefix s' b'' /\
+                             undef_in s' (prog_interface p))) ->
+    (exists t', b' = Goes_wrong t' /\ trace_finpref_prefix t' m) ->
     undef_in t (prog_interface p).
   Proof.
+    intros H H0 Hgoes_wrong H1 H2 H3.
+    destruct H3 as [s' [H3 H3']]. subst b'.
+    destruct H2 as [H2 | [t' [H21 [H22 H23]]]].
+    - (* this is the interesting case ...
+         do we have more assumptions than what we passed blame program? *)
+      subst b''. admit.
+    - (* this case is easy once passed enough information into this lemma;
+         it used to be proved directly in RSC_DC_MD *)
+       injection H21; intro H21'. subst t'. assumption.
   Admitted.
 
   (* CH: This one was proved false below *)
