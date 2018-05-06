@@ -839,7 +839,7 @@ Section Decomposition.
   Qed.
 
   (* CH: This one also closes the diagram,
-         but it might be as bad as blame_program???
+         but it seems as bad as blame_program;
          it seems to require blame_program in case b' = b''
          ... but maybe we have more things in scope here?
          (or we could pass into this lemma?) *)
@@ -859,7 +859,8 @@ Section Decomposition.
     destruct H2 as [H2 | [t' [H21 [H22 H23]]]].
     - (* this is the interesting case ...
          do we have more assumptions than what we passed blame program? *)
-      subst b''. admit.
+      subst b''. injection H3. intro Hts'. subst s'. clear H3.
+      admit.
     - (* this case is easy once passed enough information into this lemma;
          it used to be proved directly in RSC_DC_MD *)
        injection H21; intro H21'. subst t'. assumption.
