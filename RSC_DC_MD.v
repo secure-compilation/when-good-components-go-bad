@@ -309,8 +309,7 @@ Section RSC_DC_MD.
       + split; first by subst pCs_beh.
         right. exists t'. do 2 (split; first now auto).
         rewrite Source.link_sym in HpCs_beh; try assumption.
-        subst pCs_beh.
-        apply Source.Decomposition.decomposition_with_refinement_and_blame_better in HpCs_beh;
+        apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
           [ | assumption | assumption | now apply linkable_sym
             | setoid_rewrite <- Source.link_sym; assumption].
         - setoid_rewrite Source.link_sym in HP'_Cs_beh; trivial; try congruence.
@@ -321,7 +320,22 @@ Section RSC_DC_MD.
                rewrite <- (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlink);
                assumption
              | exact not_wrong_beh].
-          destruct HpCs_beh as [b [H1 [H2 H3]]]. exact H3.
+          (* destruct HP'_Cs_beh as [beh' [G1 G2]]. *)
+          destruct HpCs_beh as [b [H1 H2]].
+          eapply (@blame_program_fixed p Cs).
+            * assumption.
+            * assumption.
+            * assumption.
+            * assumption.
+            * pose proof (compilation_preserves_interface p p_compiled
+                                             successful_compilation) as HH.
+              assert(Source.prog_interface P' = Source.prog_interface p) as HHH
+                  by congruence.
+              rewrite <- HHH. apply HP'_Cs_beh.
+            * exact Hprefix1.
+            * exact H1.
+            * exact H2.
+            * eexists. split; eassumption.
   Qed.
 
 End RSC_DC_MD.

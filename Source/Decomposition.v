@@ -809,7 +809,9 @@ Section Decomposition.
       by rewrite /= E0_right.
   Qed.
 
-  Corollary decomposition_with_refinement_and_blame_better:
+  (* CH: This is nonsense too, it would imply that any undefined
+         behavior can be blamed on an arbitrary c (aka scapegoat) *)
+  Corollary decomposition_with_refinement_and_blame_broken_too:
     forall t',
       program_behaves (CS.sem (program_link p c)) (Goes_wrong t') ->
     exists beh2,
