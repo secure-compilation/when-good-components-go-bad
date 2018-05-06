@@ -652,6 +652,7 @@ Inductive final_state (p: program) (ctx: Program.interface) (sps: state) : Prop 
     turn_of sps ctx ->
     final_state p ctx sps.
 
+(* FIXME: The global environment is not serving any purpose right now. *)
 Inductive kstep
           (p: program) (ctx: Program.interface) (G : global_env)
           (sps : state) (t : trace) (sps' : state) : Prop :=
@@ -1041,6 +1042,24 @@ Proof.
     + rewrite partial_stack_ignores_change_by_context_with_control; auto.
 Qed.
 
+Lemma context_epsilon_step_is_silent' p ctx scs scs' :
+  well_formed_program p ->
+  well_formed_program ctx ->
+  linkable (prog_interface p) (prog_interface ctx) ->
+  closed_program (program_link p ctx) ->
+  CS.s_component scs \in domm (prog_interface ctx) ->
+  Step (CS.sem (program_link p ctx)) scs E0 scs' ->
+  partialize (prog_interface ctx) scs = partialize (prog_interface ctx) scs'.
+Proof.
+move=> wf wf_ctx link clos in_ctx step.
+pose G := mkGlobalEnv emptym emptym.
+have {step} :
+  kstep p (prog_interface ctx) G (partialize (prog_interface ctx) scs) E0 (partialize (prog_interface ctx) scs').
+  by apply: partial_step; eauto; apply/partialize_correct.
+apply: context_epsilon_step_is_silent=> /=.
+by rewrite /is_context_component /= s_component_partialize.
+Qed.
+
 Lemma context_epsilon_star_is_silent:
   forall p ctx G sps sps',
     is_context_component sps ctx ->
@@ -1054,6 +1073,22 @@ Proof.
     destruct H0 as []. subst.
     apply context_epsilon_step_is_silent in H; auto. subst.
     apply IHHstar; auto.
+Qed.
+
+Lemma context_epsilon_star_is_silent' p ctx scs scs':
+  well_formed_program p ->
+  well_formed_program ctx ->
+  linkable (prog_interface p) (prog_interface ctx) ->
+  closed_program (program_link p ctx) ->
+  CS.s_component scs \in domm (prog_interface ctx) ->
+  Star (CS.sem (program_link p ctx)) scs E0 scs' ->
+  partialize (prog_interface ctx) scs = partialize (prog_interface ctx) scs'.
+Proof.
+move=> wf wf_ctx link clos in_ctx star.
+elim/star_E0_ind: scs scs' / star in_ctx=> // scs scs' scs'' step IH in_ctx.
+have e := context_epsilon_step_is_silent' wf wf_ctx link clos in_ctx step.
+rewrite e; apply: IH.
+by rewrite -(s_component_partialize (prog_interface ctx)) -e s_component_partialize.
 Qed.
 
 Lemma state_determinism_context:
@@ -1119,6 +1154,120 @@ Proof.
   inversion Hpartial_sps1; subst.
   - eapply state_determinism_program; eassumption.
   - eapply state_determinism_context; eassumption.
+Qed.
+
+Lemma state_determinism' p ctx p1 p2 scs1 t scs1' scs2 scs2' :
+  well_formed_program p ->
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p) ctx ->
+  closed_program (program_link p p1) ->
+  closed_program (program_link p p2) ->
+  prog_interface p1 = ctx ->
+  prog_interface p2 = ctx ->
+  partialize ctx scs1 = partialize ctx scs2 ->
+  CS.kstep (prepare_global_env (program_link p p1)) scs1 t scs1' ->
+  CS.kstep (prepare_global_env (program_link p p2)) scs2 t scs2' ->
+  partialize ctx scs1' = partialize ctx scs2'.
+Proof.
+move=> wf wf1 wf2 link clos1 clos2 int1 int2 part step1 step2.
+pose G := {| genv_interface := emptym; genv_procedures := emptym |}.
+have {step1 clos1 int1} step1 : kstep p ctx G (partialize ctx scs1) t (partialize ctx scs1').
+  move=> {wf2 int2 step2}; apply: partial_step; eauto; try congruence;
+  exact/partialize_correct.
+have {step2 clos2 int2} step2 : kstep p ctx G (partialize ctx scs1) t (partialize ctx scs2').
+  move=> {wf1}; apply: partial_step; eauto; try congruence;
+  exact/partialize_correct.
+by apply: state_determinism step2.
+Qed.
+
+Lemma parallel_exec p ctx p1 p2 scs1 scs1' scs2 scs2' t t' :
+  well_formed_program p ->
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p) ctx ->
+  closed_program (program_link p p1) ->
+  closed_program (program_link p p2) ->
+  prog_interface p1 = ctx ->
+  prog_interface p2 = ctx ->
+  partialize ctx scs1 = partialize ctx scs2 ->
+  Star (CS.sem (program_link p p1)) scs1 (t ** t') scs1' ->
+  Star (CS.sem (program_link p p2)) scs2 (t      ) scs2' ->
+  Nostep (CS.sem (program_link p p1)) scs1' ->
+  Nostep (CS.sem (program_link p p2)) scs2' ->
+  CS.final_state scs1' ->
+  CS.s_component scs2' \notin domm ctx ->
+  CS.final_state scs2'.
+Proof.
+move=> wf wf1 wf2 link clos1 clos2 int1 int2.
+elim: t scs1 scs2=> /= [|e t IH] scs1 scs2.
+  move=> part star1 star2; rewrite (CS.star_component star2) /=.
+  elim: scs1 t' scs1' / star1 scs2 part star2.
+    move=> scs1 scs2 part star2 nostep1 nostep2 final1 in_prog.
+    have final2 : CS.final_state scs2.
+      case: scs1 scs2 in_prog part final1 {star2 nostep1}
+            => [C1 stk1 mem1 k1 e1 arg1] [C2 stk2 mem2 k2 e2 arg2] /=.
+      move=> in_prog; rewrite (negbTE in_prog).
+      case: ifP=> // _ [-> {C1} e_stk _ -> -> _] H.
+      case: H e_stk => [-> //|[v [-> [-> ->]]]] /=; auto.
+      do 2![rewrite to_partial_stackE (negbTE in_prog) /=].
+      by case: stk2=> //; right; eauto.
+    elim/star_E0_ind: scs2 scs2' / star2 final2 {part nostep2 in_prog}=> //.
+    move=> scs2 scs2' scs2'' step2 _ final2.
+    by case/(CS.final_state_stuck final2): step2.
+  move=> scs1 t1 scs1' t2 scs1'' _ step1 _ IH _.
+  move=> scs2 part star2 nostep1 nostep2 final1 in_prog2.
+  have clos : closed_interface (unionm (prog_interface p) ctx).
+    by rewrite -int1; apply: cprog_closed_interface clos1.
+  have in_prog1 : CS.s_component scs1 \notin domm ctx.
+    by rewrite -(s_component_partialize ctx scs1) part s_component_partialize.
+  case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1).
+  elim/star_E0_ind': scs2 scs2' / star2 {part} nostep2 in_prog2 IH.
+    by move=> scs2 nostep2 _ _ scs2' /nostep2.
+  move=> scs2 scs21' scs2'' step21 star2 _ nostep2 in_prog2 IH scs22'.
+  have {in_prog2} in_prog2 : CS.s_component scs21' \notin domm ctx.
+    by rewrite (CS.kstep_component step21).
+  move/CS.eval_kstep_correct; move/CS.eval_kstep_correct: step21 => -> [_ <-] {scs22'}.
+  move=> part'.
+  exact: IH part' star2 nostep1 nostep2 final1 in_prog2.
+move=> part.
+case/(star_cons_inv (@CS.singleton_traces _))=> scs1a [scs1b [star1a [step1b star1c]]].
+case/(star_cons_inv (@CS.singleton_traces _))=> scs2a [scs2b [star2a [step2b star2c]]].
+apply: IH star1c star2c.
+have clos : closed_interface (unionm (prog_interface p) ctx).
+  rewrite -int1; apply: cprog_closed_interface clos1.
+have [in_ctx1|in_prog1] := boolP (CS.s_component scs1 \in domm ctx).
+  have e_1a : partialize ctx scs1 = partialize ctx scs1a.
+    move: wf wf1 link clos1 in_ctx1 star1a; rewrite -int1.
+    exact: context_epsilon_star_is_silent'.
+  have e_2a : partialize ctx scs2 = partialize ctx scs2a.
+    move: wf wf2 link clos2 in_ctx1 star2a.
+    rewrite -(s_component_partialize ctx scs1) part s_component_partialize -int2.
+    exact: context_epsilon_star_is_silent'.
+  rewrite e_1a e_2a in part.
+  exact: (state_determinism' wf wf1 wf2 link clos1 clos2 int1 int2 part step1b step2b).
+elim/star_E0_ind: scs1 scs1a / star1a scs2 star2a part step1b in_prog1.
+  move=> scs1a scs2 star2a part step1a in_prog1.
+  elim/star_E0_ind: scs2 scs2a / star2a part step2b.
+    move=> scs2a part step2a.
+    exact: (state_determinism' wf wf1 wf2 link clos1 clos2 int1 int2 part step1a step2a).
+  move=> scs2 scs2a scs2a' step2a _ part _.
+  case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
+  move=> ? /CS.eval_kstep_correct.
+  by move/CS.eval_kstep_correct: step2a=> ->.
+move=> scs1 scs1a scs1a' step1a IH scs2 star2a part step1a' in_prog1.
+case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
+move=> scs2a' step2a' part'.
+have star2a' : Star (CS.sem (program_link p p2)) scs2a' E0 scs2a.
+  elim/star_E0_ind': scs2 scs2a / star2a step2b {IH part} step2a'.
+    move=> ? /CS.eval_kstep_correct H.
+    by move/CS.eval_kstep_correct; rewrite H.
+  move=> scs2aa scs2ab scs2ac step2aa star2ab _ step2ac.
+  move/CS.eval_kstep_correct.
+  by move/CS.eval_kstep_correct: step2aa => -> [<-].
+have {in_prog1} in_prog1 : CS.s_component scs1a \notin domm ctx.
+  by rewrite (CS.kstep_component step1a).
+by apply: IH star2a' part' step1a' in_prog1.
 Qed.
 
 (* Consider two star sequences starting from the same state (s),

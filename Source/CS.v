@@ -555,6 +555,17 @@ Section Semantics.
     by exists t1, s1', s2', t2, P, arg; repeat split=> //.
   Qed.
 
+  Lemma star_component s1 t s2 :
+    Star sem s1 t s2 ->
+    s_component s2 =
+    last (s_component s1) [seq next_comp_of_event e | e <- t].
+  Proof.
+  elim: s1 t s2 / => //= s1 t1 s2 t2 s3 _ Hstep _ -> ->.
+  rewrite map_cat last_cat (kstep_component Hstep).
+  move/singleton_traces: Hstep.
+  by case: t1=> [|e [|e' t1]] //= *; omega.
+  Qed.
+
 End Semantics.
 
 End CS.
