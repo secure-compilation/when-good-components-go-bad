@@ -809,6 +809,15 @@ Section Decomposition.
       by rewrite /= E0_right.
   Qed.
 
+  Corollary decomposition_with_refinement_and_blame_better:
+    forall t',
+      program_behaves (CS.sem (program_link p c)) (Goes_wrong t') ->
+    exists beh2,
+      program_behaves (PS.sem p (prog_interface c)) beh2 /\
+      behavior_prefix t' beh2 /\
+      undef_in t' (prog_interface c).
+  Admitted.
+
   Set Implicit Arguments.
 
   Lemma improving_star_ending_in_stuck_state:
@@ -827,7 +836,7 @@ Section Decomposition.
     - destruct H; subst. split; auto.
   Qed.
 
-  (* CH: This one also closes the diagram without being obviously wrong *)
+  (* CH: This one also closes the diagram, but it's unfortunately as false as blame_program *)
   Lemma blame_program_fixed t b m b' b'':
     program_behaves (PS.sem c (prog_interface p)) b ->
     prefix m b ->
