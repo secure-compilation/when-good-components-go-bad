@@ -297,7 +297,8 @@ Section RSC_DC_MD.
       + subst pCs_beh. assumption.
       + left. subst. assumption.
     - destruct H as [t' [Hgoes_wrong Hprefix]].
-      assert(finpref_trace_prefix m t' \/ trace_finpref_prefix t' m) as H by (eapply behavior_prefix_comp'; eauto).
+      assert(finpref_trace_prefix m t' \/ trace_finpref_prefix t' m) as H
+          by (eapply behavior_prefix_comp'; eauto).
       destruct H as [H | H].
       + split.
         * subst pCs_beh. assumption.
@@ -306,26 +307,22 @@ Section RSC_DC_MD.
           - unfold behavior_prefix. exists (Goes_wrong []). simpl.
             setoid_rewrite <- app_nil_end. reflexivity.
       + split; first by subst pCs_beh.
-        right. exists t'. repeat split; auto.
-        (* blame UB -- Guglielmo working on proof *)
+        right. exists t'. do 2 (split; first now auto).
         rewrite Source.link_sym in HpCs_beh; try assumption.
         apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
-            try assumption.
+          [ | assumption | assumption | now apply linkable_sym
+            | setoid_rewrite <- Source.link_sym; assumption].
         - setoid_rewrite Source.link_sym in HP'_Cs_beh; trivial; try congruence.
-          eapply Source.Decomposition.decomposition_with_refinement in HP'_Cs_beh;
-            [| assumption | assumption | congruence |];
-            (* Retaining most of the structure of the proof, though we need to add a not
-               completely insignificant sub-proof here, to be harmonized. *)
-            last by (
-              assert (linkable (Source.prog_interface P') (Source.prog_interface Cs))
-                as Hlink by congruence;
-              rewrite <- (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlink);
-              assumption
-            ).
-          destruct HP'_Cs_beh as [beh' [G1 G2]].
-          destruct HpCs_beh as [b [H1 [H2 | H2]]].
-          + subst pCs_beh. subst b.
-            eapply (@blame_program p Cs).
+          eapply Source.Decomposition.decomposition_with_safe_behavior in HP'_Cs_beh;
+            [| assumption | assumption | congruence |
+               assert (linkable (Source.prog_interface P') (Source.prog_interface Cs))
+                 as Hlink by congruence;
+               rewrite <- (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlink);
+               assumption
+             | exact not_wrong_beh].
+          (* destruct HP'_Cs_beh as [beh' [G1 G2]]. *)
+          destruct HpCs_beh as [b [H1 H2]].
+          eapply (@blame_program_fixed p Cs).
             * assumption.
             * assumption.
             * assumption.
@@ -334,21 +331,11 @@ Section RSC_DC_MD.
                                              successful_compilation) as HH.
               assert(Source.prog_interface P' = Source.prog_interface p) as HHH
                   by congruence.
-              rewrite <- HHH.
-              now apply G1.
-            * assumption.
-            * assert(behavior_prefix t' beh) as H0. {
-                eapply trace_behavior_prefix_trans'.
-                - now apply H.
-                - assumption.
-              }
-              eapply behavior_prefix_improves_trans'.
-              - now eapply H0.
-              - assumption.
-          + destruct H2 as [t'' [H21 [H22 H23]]].
-            subst pCs_beh. injection H21; intro H21'. subst t''. assumption.
-        - now apply linkable_sym.
-        - setoid_rewrite <- Source.link_sym; assumption.
+              rewrite <- HHH. apply HP'_Cs_beh.
+            * exact Hprefix1.
+            * exact H1.
+            * exact H2.
+            * eexists. split; eassumption.
   Qed.
 
 End RSC_DC_MD.

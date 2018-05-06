@@ -827,6 +827,20 @@ Section Decomposition.
     - destruct H; subst. split; auto.
   Qed.
 
+  (* CH: This one also closes the diagram without being obviously wrong *)
+  Lemma blame_program_fixed t b m b' b'':
+    program_behaves (PS.sem c (prog_interface p)) b ->
+    prefix m b ->
+    program_behaves (PS.sem c (prog_interface p)) b'' ->
+    (b' = b'' \/ (exists t', b' = Goes_wrong t' /\
+                             behavior_prefix t' b'' /\
+                             undef_in t' (prog_interface p))) ->
+    (exists t', b' = Goes_wrong t' /\ trace_finpref_prefix t' m)->
+    undef_in t (prog_interface p).
+  Proof.
+  Admitted.
+
+  (* CH: This one was proved false below *)
   Lemma blame_program t b :
     program_behaves (PS.sem c (prog_interface p)) b ->
     program_behaves (PS.sem c (prog_interface p)) (Goes_wrong t) ->
