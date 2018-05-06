@@ -170,10 +170,9 @@ Section RSC_DC_MD.
     (* intermediate decomposition (for Cs_compiled) *)
     apply HP'_Cs_behaves in HP'_Cs_compiled_beh.
     apply Source.linkable_mains_sym in HP'Cs_mains. (* TODO: Check if this is used later. *)
-    rewrite <- Intermediate.link_sym in HP'_Cs_compiled_beh;
+    rewrite <- Intermediate.program_linkC in HP'_Cs_compiled_beh;
       [| (apply (Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles))
        | (apply (Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles))
-       | (apply (Compiler.compilation_preserves_linkable_mains Cs _ P'); assumption)
        | assumption ].
     pose proof Intermediate.Decomposition.decomposition_with_refinement
          well_formed_Cs_compiled well_formed_P'_compiled
