@@ -148,22 +148,11 @@ Section RSC_DC_MD.
         try assumption;
         [congruence].
     }
-    assert (exists b', program_behaves (I.CS.sem P'_Cs_compiled) b' /\ prefix m b')
-      as [t2 [HP'_Cs_compiled_beh HP'_Cs_compiled_prefix]]. {
-      apply forward_simulation_behavior_improves
-        with (L2:=I.CS.sem P'_Cs_compiled) in HP'_Cs_beh;
-        simpl; eauto.
-      - destruct HP'_Cs_beh as [b2 [H1 H2]]. exists b2. split.
-        + assumption.
-        + by case: H2 => [<-|[? []]].
-      - apply Compiler.I_simulates_S; auto.
-        apply Source.linking_well_formedness.
-        * assumption.
-        * assumption.
-        * rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
-          rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
-          now apply linkability_pcomp_Ct.
-    }
+    have HP'_Cs_compiled_beh : program_behaves (I.CS.sem P'_Cs_compiled) beh.
+      rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
+      have well_formed_P'Cs := Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
+      have sim := Compiler.I_simulates_S HP'Cs_closed well_formed_P'Cs HP'_Cs_compiles.
+      exact: (forward_simulation_same_safe_behavior sim).
 
     (* intermediate decomposition (for Cs_compiled) *)
     apply HP'_Cs_behaves in HP'_Cs_compiled_beh.
@@ -172,9 +161,13 @@ Section RSC_DC_MD.
       [| (apply (Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles))
        | (apply (Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles))
        | assumption ].
-    pose proof Intermediate.Decomposition.decomposition_with_refinement
-         well_formed_Cs_compiled well_formed_P'_compiled
-         linkability' HP'_Cs_compiled_beh as [beh2 [HCs_decomp HCs_beh_improves]].
+
+    have [beh2 [HCs_decomp HCs_beh_improves]] :=
+         Intermediate.Decomposition.decomposition_with_refinement
+           well_formed_Cs_compiled well_formed_P'_compiled
+           linkability' HP'_Cs_compiled_beh.
+    have {HCs_beh_improves} ? : beh2 = beh by case: HCs_beh_improves => [<-|[? []]].
+    subst beh2.
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
@@ -208,20 +201,6 @@ Section RSC_DC_MD.
       as HpCs_compiled_well_formed
         by (apply Intermediate.linking_well_formedness; assumption).
 
-    assert (prefix m beh2) as Hpref_m_beh2. {
-      unfold prefix in HP'_Cs_compiled_prefix.
-      destruct m as [m' | m' | m'].
-      - destruct t2 as [t2' | ? | ? | ?]; try (inversion HP'_Cs_compiled_prefix; fail).
-        + subst t2'.
-          destruct HCs_beh_improves as [Hterm | [t' [Hterm Hpref]]].
-          * now subst beh2.
-          * inversion Hterm.
-      - simpl in Hprefix0.
-        destruct t; try (inversion Hprefix0; fail).
-        + inversion Hsafe_beh.
-      - simpl.
-        apply (behavior_prefix_improves_trans' HP'_Cs_compiled_prefix HCs_beh_improves).
-    }
     assert (Intermediate.linkable_mains p_compiled Cs_compiled) as linkable_mains.
     {
       eapply (Compiler.compilation_preserves_linkable_mains p _ Cs);
@@ -243,7 +222,7 @@ Section RSC_DC_MD.
          linkable_mains linkability'' HpCs_compiled_closed
          Hmergeable_ifaces
          HP_decomp HCs_decomp
-         Hprefix0 Hpref_m_beh2
+         Hprefix0 Hprefix1
       as HpCs_compiled_beh.
     destruct HpCs_compiled_beh as [b3 [HpCs_compiled_beh HpCs_compiled_prefix]].
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
