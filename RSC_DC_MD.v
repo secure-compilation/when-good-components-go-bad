@@ -148,9 +148,10 @@ Section RSC_DC_MD.
         try assumption;
         [congruence].
     }
-    have HP'_Cs_compiled_beh : program_behaves (I.CS.sem P'_Cs_compiled) beh.
+    have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
-      have well_formed_P'Cs := Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
+      exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
+    have HP'_Cs_compiled_beh : program_behaves (I.CS.sem P'_Cs_compiled) beh.
       have sim := Compiler.I_simulates_S HP'Cs_closed well_formed_P'Cs HP'_Cs_compiles.
       exact: (forward_simulation_same_safe_behavior sim).
 
@@ -261,6 +262,26 @@ Section RSC_DC_MD.
       apply S_simulates_I; assumption.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
+
+    (* At this point we know:
+
+       1. (HP'_Cs_beh) P' `union` Cs goes from s_i to s_f producing
+          finpref_trace m, s_f is stuck and final.
+
+       2. Either
+
+          a. p `union` Cs goes from s_i' to s_f' producing a proper prefix of
+             finpref_trace m, and s_f' is stuck and not final.
+
+          b. p `union` Cs goes from s_i' to s_f' producing a super sequence of
+             finpref_trace m.
+
+       In (2.a), we should be able to conclude with parallel_exec.  This
+       corresponds to the right side of the disjunction.
+
+       In (2.b), we are in the left side of the disjunction.
+
+    *)
 
     (* Source-level decompositions (p and P') and closure of the diagram. *)
     exists Cs. exists pCs_beh.
