@@ -23,6 +23,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Section RSC_DC_MD.
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
@@ -302,16 +304,16 @@ Section RSC_DC_MD.
       + split.
         * subst pCs_beh. assumption.
         * left. subst. eapply trace_behavior_prefix_trans.
-          - apply H.
-          - unfold behavior_prefix. exists (Goes_wrong []). simpl.
-            setoid_rewrite <- app_nil_end. reflexivity.
+          -- apply H.
+          -- unfold behavior_prefix. exists (Goes_wrong []). simpl.
+             setoid_rewrite <- app_nil_end. reflexivity.
       + split; first by subst pCs_beh.
         right. exists t'. do 2 (split; first now auto).
         rewrite Source.link_sym in HpCs_beh; try assumption.
         apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
           [ | assumption | assumption | now apply linkable_sym
             | setoid_rewrite <- Source.link_sym; assumption].
-        - setoid_rewrite Source.link_sym in HP'_Cs_beh; trivial; try congruence.
+        * setoid_rewrite Source.link_sym in HP'_Cs_beh; trivial; try congruence.
           eapply Source.Decomposition.decomposition_with_safe_behavior in HP'_Cs_beh;
             [| assumption | assumption | congruence |
                assert (linkable (Source.prog_interface P') (Source.prog_interface Cs))
@@ -322,20 +324,20 @@ Section RSC_DC_MD.
           (* destruct HP'_Cs_beh as [beh' [G1 G2]]. *)
           destruct HpCs_beh as [b [H1 H2]].
           eapply (@blame_program_fixed p Cs).
-            * assumption.
-            * assumption.
-            * assumption.
-            * assumption.
-            * pose proof (compilation_preserves_interface p p_compiled
-                                             successful_compilation) as HH.
-              assert(Source.prog_interface P' = Source.prog_interface p) as HHH
-                  by congruence.
-              rewrite <- HHH. apply HP'_Cs_beh.
-            * exact Hprefix1.
-            * exact Hgoes_wrong.
-            * exact H1.
-            * exact H2.
-            * eexists. split; eassumption.
+          -- assumption.
+          -- assumption.
+          -- assumption.
+          -- assumption.
+          -- pose proof (compilation_preserves_interface
+                           p p_compiled successful_compilation) as HH.
+             assert(Source.prog_interface P' = Source.prog_interface p) as HHH
+               by congruence.
+             rewrite <- HHH. apply HP'_Cs_beh.
+          -- exact Hprefix1.
+          -- exact Hgoes_wrong.
+          -- exact H1.
+          -- exact H2.
+          -- eexists. split; eassumption.
   Qed.
 
 End RSC_DC_MD.
