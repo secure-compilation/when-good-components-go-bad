@@ -281,8 +281,28 @@ Section RSC_DC_MD.
 
        In (2.b), we are in the left side of the disjunction.
 
-    *)
+     *)
 
+    (** *only 2.a to be completed... but PS.v does not compile on my machine  *)
+
+    destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
+    + subst. exists Cs, b3.
+      repeat (split; try now auto).
+    + assert(finpref_trace_prefix m t' \/ trace_finpref_prefix t' m) as H
+          by (eapply behavior_prefix_comp'; eauto).
+      destruct H as [K | K].
+      ++ exists Cs, pCs_beh. repeat (split; try now auto). left.
+         subst. destruct m;
+         inversion K. exists (Goes_wrong x). simpl. now rewrite H. 
+      ++ exists Cs, pCs_beh. repeat (split; try now auto).
+         right. exists t'. repeat (split; try now auto).
+         inversion HpCs_beh. (* now we need to apply parallel_exec lemma *)
+         admit.
+
+      (** *~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  *)
+
+         
+         
     (* Source-level decompositions (p and P') and closure of the diagram. *)
     exists Cs. exists pCs_beh.
     split; [assumption |].
