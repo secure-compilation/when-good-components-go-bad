@@ -297,12 +297,13 @@ Section RSC_DC_MD.
       ++ exists Cs, pCs_beh. repeat (split; try now auto).
          right. exists t'. repeat (split; try now auto).
          inversion HpCs_beh. (* now we need to apply parallel_exec lemma *)
-         admit.
+         ** admit.
+         ** admit.
 
       (** *~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  *)
 
-         
-         
+  Admitted.
+(*
     (* Source-level decompositions (p and P') and closure of the diagram. *)
     exists Cs. exists pCs_beh.
     split; [assumption |].
@@ -355,5 +356,6 @@ Section RSC_DC_MD.
           -- exact H2.
           -- eexists. split; eassumption.
   Qed.
+*)
 
 End RSC_DC_MD.
