@@ -291,15 +291,72 @@ Section RSC_DC_MD.
     + assert(finpref_trace_prefix m t' \/ trace_finpref_prefix t' m) as H
           by (eapply behavior_prefix_comp'; eauto).
       destruct H as [K | K].
-      ++ exists Cs, pCs_beh. repeat (split; try now auto). left.
-         subst. destruct m;
-         inversion K. exists (Goes_wrong x). simpl. now rewrite H. 
-      ++ exists Cs, pCs_beh. repeat (split; try now auto).
-         right. exists t'. repeat (split; try now auto).
-         inversion HpCs_beh. (* now we need to apply parallel_exec lemma *)
-         ** admit.
-         ** admit.
+      * exists Cs, pCs_beh. repeat (split; try now auto). left.
+        subst. destruct m;
+        inversion K. exists (Goes_wrong x). simpl. now rewrite H.
+      * exists Cs, pCs_beh. repeat (split; try now auto).
+        right. exists t'. repeat (split; try now auto).
 
+        subst pCs_beh.
+        inversion HP'_Cs_beh as [sini1 ? Hini1 Hstbeh1 |]; subst.
+        inversion Hstbeh1 as [? sfin1 HStar1 Hfinal1 | | |]; subst.
+        (* RB: TODO: Lemma relating final_state and Nostep. *)
+        assert (HNostep1 : Nostep (S.CS.sem (Source.program_link P' Cs)) sfin1).
+        {
+          simpl in Hfinal1. simpl.
+          intros tcon scon Hcontra.
+          CS.unfold_state sfin1.
+          destruct Hfinal1 as [Hexit | [val [Hexpr [Hcont Hstack]]]]; subst;
+            inversion Hcontra.
+        }
+        inversion HpCs_beh as [sini2 ? Hini2 Hstbeh2 | Hnot_initial2];
+          subst.
+        -- inversion Hstbeh2 as [| | | ? sfin2 HStar2 HNostep2 Hnot_final2]; subst.
+           rewrite
+             (Source.closed_program_link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+             in Hclosed_p_Cs.
+           pose proof compilation_preserves_interface _ _ successful_compilation
+             as Hsame_iface3.
+           assert (Hlinkable_P'_Cs := Hlinkable_p_Cs).
+           rewrite <- Hsame_iface3 in Hlinkable_P'_Cs.
+           rewrite <- Hsame_iface1 in Hlinkable_P'_Cs.
+           rewrite
+             (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+             in HP'Cs_closed.
+           rewrite Hsame_iface3 in Hsame_iface1.
+           assert (Hpartialize :
+                     Source.PS.PS.partialize (Source.prog_interface p) sini1 =
+                     Source.PS.PS.partialize (Source.prog_interface p) sini2)
+             by admit. (* RB: A pending lemma with parts used elsewhere. *)
+           rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+             in HStar1 HNostep1 Hfinal1.
+           rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+             in HStar2 HNostep2.
+           (* Case analysis on m. *)
+           destruct m as [tm | tm | tm].
+           ++ destruct K as [tm' Htm']; subst tm.
+              unfold finpref_trace in HStar1.
+              pose proof PS.parallel_exec
+                well_formed_Cs well_formed_P' well_formed_p
+                (linkable_sym Hlinkable_p_Cs)
+                HP'Cs_closed Hclosed_p_Cs
+                Hsame_iface1 (eq_refl (Source.prog_interface p))
+                Hpartialize
+                HStar1 HStar2 HNostep1 HNostep2 Hfinal1.
+              admit.
+           ++ inversion Hnot_wrong'. (* Contra. *)
+           ++ (* As in first case. *)
+              destruct K as [tm' Htm']; subst tm.
+              unfold finpref_trace in HStar1.
+              pose proof PS.parallel_exec
+                well_formed_Cs well_formed_P' well_formed_p
+                (linkable_sym Hlinkable_p_Cs)
+                HP'Cs_closed Hclosed_p_Cs
+                Hsame_iface1 (eq_refl (Source.prog_interface p))
+                Hpartialize
+                HStar1 HStar2 HNostep1 HNostep2 Hfinal1.
+              admit.
+        -- admit.
       (** *~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  *)
 
   Admitted.
