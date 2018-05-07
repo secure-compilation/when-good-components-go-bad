@@ -95,9 +95,13 @@ Section RSC_DC_MD.
     destruct (definability_with_linking
                 well_formed_p_compiled well_formed_Ct
                 linkability_pcomp_Ct closedness Hbeh Hprefix0 Hnot_wrong')
-      as [P' [Cs [beh
+      as [P' [Cs
          [Hsame_iface1 [Hsame_iface2
-         [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh [Hprefix1 not_wrong_beh]]]]]]]]]].
+         [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]].
+
+    move: HP'_Cs_beh Hprefix1.
+    set beh := Terminates _.
+    move=> HP'_Cs_beh Hprefix1.
 
     assert (Source.linkable_mains P' Cs) as HP'Cs_mains.
     { apply Source.linkable_disjoint_mains; trivial; congruence. }
@@ -151,15 +155,7 @@ Section RSC_DC_MD.
         simpl; eauto.
       - destruct HP'_Cs_beh as [b2 [H1 H2]]. exists b2. split.
         + assumption.
-        + destruct H2 as [|[t' [H21 H22]]].
-          * subst. assumption.
-          * subst. unfold prefix in Hprefix1. destruct m as [? | m' | ?].
-            ** destruct Hprefix1.
-            ** subst m'. destruct H22 as [b22 H22]. subst b2.
-               simpl in Hprefix0.
-               destruct t as [? | ? | ? |t2]; try (inversion Hprefix0).
-               *** subst t2. inversion Hsafe_beh.
-            ** simpl. apply (behavior_prefix_goes_wrong_trans Hprefix1 H22).
+        + by case: H2 => [<-|[? []]].
       - apply Compiler.I_simulates_S; auto.
         apply Source.linking_well_formedness.
         * assumption.
@@ -320,7 +316,7 @@ Section RSC_DC_MD.
                  as Hlink by congruence;
                rewrite <- (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlink);
                assumption
-             | exact not_wrong_beh].
+             | by [] ].
           (* destruct HP'_Cs_beh as [beh' [G1 G2]]. *)
           destruct HpCs_beh as [b [H1 H2]].
           eapply (@blame_program_fixed p Cs).

@@ -645,15 +645,14 @@ Lemma definability_with_linking:
     program_behaves (I.CS.sem (Intermediate.program_link p c)) b ->
     prefix m b ->
     not_wrong_finpref m ->
-  exists p' c' b',
+  exists p' c',
     Source.prog_interface p' = Intermediate.prog_interface p /\
     Source.prog_interface c' = Intermediate.prog_interface c /\
     Source.well_formed_program p' /\
     Source.well_formed_program c' /\
     Source.closed_program (Source.program_link p' c') /\
-    program_behaves (S.CS.sem (Source.program_link p' c')) b' /\
-    prefix m b' /\
-    not_wrong b'.
+    program_behaves (S.CS.sem (Source.program_link p' c')) (Terminates (finpref_trace m)) /\
+    prefix m (Terminates (finpref_trace m)).
 Proof.
   move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre Hnot_wrong.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
@@ -694,7 +693,7 @@ Proof.
   set back := (program_of_trace intf m') => Hback.
   exists (program_unlink (domm (Intermediate.prog_interface p)) back).
   exists (program_unlink (domm (Intermediate.prog_interface c)) back).
-  exists (Terminates m'); split=> /=.
+  split=> /=.
     rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
   split.
@@ -708,5 +707,5 @@ Proof.
   rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
   split=> // {wf_events back Hback wf_back wf_m}.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
-  by split=> //; exists (Terminates nil); rewrite /= E0_right.
+  by exists (Terminates nil); rewrite /= E0_right.
 Qed.
