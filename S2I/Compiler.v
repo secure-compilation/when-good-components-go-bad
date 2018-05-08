@@ -455,20 +455,18 @@ Proof.
   - now eapply (mains_without_source p).
 Qed.
 
-Hypothesis separate_compilation:
-  forall p c p_comp c_comp,
-    Source.well_formed_program p ->
-    Source.well_formed_program c ->
-    linkable (Source.prog_interface p) (Source.prog_interface c) ->
-    compile_program p = Some p_comp ->
-    compile_program c = Some c_comp ->
-    compile_program (Source.program_link p c)
-    = Some (Intermediate.program_link p_comp c_comp).
+(* Hypothesis separate_compilation: *)
+(*   forall p c p_comp c_comp, *)
+(*     Source.well_formed_program p -> *)
+(*     Source.well_formed_program c -> *)
+(*     linkable (Source.prog_interface p) (Source.prog_interface c) -> *)
+(*     compile_program p = Some p_comp -> *)
+(*     compile_program c = Some c_comp -> *)
+(*     compile_program (Source.program_link p c) *)
+(*     = Some (Intermediate.program_link p_comp c_comp). *)
 
-(* CH: anyway, this is a very strong notion of separate compilation;
-   wondering whether in the general case we could do away with something weaker
-   (anyway, just a thought for later, current version is simpler): *)
-Corollary separate_compilation_weaker:
+(* We can currently do with a weaker notion of separate compilation *)
+Hypothesis separate_compilation_weaker:
   forall p c pc_comp p_comp c_comp,
     Source.well_formed_program p ->
     Source.well_formed_program c ->
@@ -478,13 +476,13 @@ Corollary separate_compilation_weaker:
     compile_program (Source.program_link p c) = Some pc_comp ->
     forall b, program_behaves (I.CS.sem pc_comp) b <->
               program_behaves (I.CS.sem (Intermediate.program_link p_comp c_comp)) b.
-Proof.
-  intros p c pc_comp p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c Hcomp_link b.
-  pose proof separate_compilation p c p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c as Hsc.
-  rewrite Hcomp_link in Hsc.
-  injection Hsc; intro Heq.
-  now rewrite Heq.
-Qed.
+(* Proof. *)
+(*   intros p c pc_comp p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c Hcomp_link b. *)
+(*   pose proof separate_compilation p c p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c as Hsc. *)
+(*   rewrite Hcomp_link in Hsc. *)
+(*   injection Hsc; intro Heq. *)
+(*   now rewrite Heq. *)
+(* Qed. *)
 
 Hypothesis compilation_preserves_well_formedness:
   forall {p p_compiled},
