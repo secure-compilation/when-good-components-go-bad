@@ -104,40 +104,24 @@ Section RSC_DC_MD.
       in HStar1 HNostep1 Hfinal1.
     rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
       in HStar2 HNostep2.
-    (* Case analysis on m. *)
-    destruct m as [tm | tm | tm].
-    - destruct K as [tm' Htm']; subst tm.
-      unfold finpref_trace in HStar1.
-      pose proof PS.parallel_exec
-        well_formed_Cs well_formed_P' well_formed_p
-        (linkable_sym Hlinkable_p_Cs)
-        HP'Cs_closed Hclosed_p_Cs
-        Hsame_iface1 (eq_refl (Source.prog_interface p))
-        Hpartialize
-        HStar1 HStar2 HNostep1 HNostep2 Hfinal1
-        as Hparallel.
-      case: (boolP (CS.s_component sfin2 \in domm (Source.prog_interface p)))=> [Hparallel1|/Hparallel Hparallel2].
-      + rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
-          in Hini2.
-        exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
-      + easy.
-    - inversion Hnot_wrong'. (* Contra. *)
-    - (* As in first case: refactor. *)
-      destruct K as [tm' Htm']; subst tm.
-      unfold finpref_trace in HStar1.
-      pose proof PS.parallel_exec
-        well_formed_Cs well_formed_P' well_formed_p
-        (linkable_sym Hlinkable_p_Cs)
-        HP'Cs_closed Hclosed_p_Cs
-        Hsame_iface1 (eq_refl (Source.prog_interface p))
-        Hpartialize
-        HStar1 HStar2 HNostep1 HNostep2 Hfinal1
-        as Hparallel.
-      case: (boolP (CS.s_component sfin2 \in domm (Source.prog_interface p)))=> [Hparallel1|/Hparallel Hparallel2].
-      + rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
-          in Hini2.
-        exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
-      + easy.
+    (* Case analysis on m. FGoes_wrong can be ruled out by contradiction,
+       but also solved exactly like the others. *)
+    destruct m as [tm | tm | tm];
+      (destruct K as [tm' Htm']; subst tm;
+       unfold finpref_trace in HStar1;
+       pose proof PS.parallel_exec
+         well_formed_Cs well_formed_P' well_formed_p
+         (linkable_sym Hlinkable_p_Cs)
+         HP'Cs_closed Hclosed_p_Cs
+         Hsame_iface1 (eq_refl (Source.prog_interface p))
+         Hpartialize
+         HStar1 HStar2 HNostep1 HNostep2 Hfinal1
+         as Hparallel;
+       case: (boolP (CS.s_component sfin2 \in domm (Source.prog_interface p)))=> [Hparallel1|/Hparallel Hparallel2];
+         [ rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+             in Hini2;
+           exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1)
+         | easy ]).
   Qed.
 
   (* Main Theorem *)
