@@ -19,6 +19,9 @@ Require Import Definability.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
+(* Classical reasoning is used to close the diagram. *)
+Require Import Coq.Logic.Classical_Prop.
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -283,7 +286,7 @@ Section RSC_DC_MD.
 
      *)
 
-    (** *only 2.a to be completed... but PS.v does not compile on my machine  *)
+    (** *only 2.a to be completed *)
 
     destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
     + subst. exists Cs, b3.
@@ -300,7 +303,8 @@ Section RSC_DC_MD.
         subst pCs_beh.
         inversion HP'_Cs_beh as [sini1 ? Hini1 Hstbeh1 |]; subst.
         inversion Hstbeh1 as [? sfin1 HStar1 Hfinal1 | | |]; subst.
-        (* RB: TODO: Lemma relating final_state and Nostep. *)
+        (* RB: TODO: Lemma relating final_state and Nostep.
+           Also simplify all the annoying rewriting that follows. *)
         assert (HNostep1 : Nostep (S.CS.sem (Source.program_link P' Cs)) sfin1).
         {
           simpl in Hfinal1. simpl.
@@ -342,10 +346,19 @@ Section RSC_DC_MD.
                 HP'Cs_closed Hclosed_p_Cs
                 Hsame_iface1 (eq_refl (Source.prog_interface p))
                 Hpartialize
-                HStar1 HStar2 HNostep1 HNostep2 Hfinal1.
-              admit.
+                HStar1 HStar2 HNostep1 HNostep2 Hfinal1
+                as Hparallel.
+              apply imply_to_or in Hparallel.
+              destruct Hparallel as [Hparallel1 | Hparallel2].
+              ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+                   in Hini2.
+                 exact (PS.blame_last_comp_star
+                          well_formed_Cs well_formed_p
+                          (linkable_sym Hlinkable_p_Cs) Hclosed_p_Cs
+                          Hini2 HStar2 Hparallel1).
+              ** easy.
            ++ inversion Hnot_wrong'. (* Contra. *)
-           ++ (* As in first case. *)
+           ++ (* As in first case: refactor. *)
               destruct K as [tm' Htm']; subst tm.
               unfold finpref_trace in HStar1.
               pose proof PS.parallel_exec
@@ -354,8 +367,17 @@ Section RSC_DC_MD.
                 HP'Cs_closed Hclosed_p_Cs
                 Hsame_iface1 (eq_refl (Source.prog_interface p))
                 Hpartialize
-                HStar1 HStar2 HNostep1 HNostep2 Hfinal1.
-              admit.
+                HStar1 HStar2 HNostep1 HNostep2 Hfinal1
+                as Hparallel.
+              apply imply_to_or in Hparallel.
+              destruct Hparallel as [Hparallel1 | Hparallel2].
+              ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+                   in Hini2.
+                 exact (PS.blame_last_comp_star
+                          well_formed_Cs well_formed_p
+                          (linkable_sym Hlinkable_p_Cs) Hclosed_p_Cs
+                          Hini2 HStar2 Hparallel1).
+              ** easy.
         -- admit.
       (** *~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  *)
 
