@@ -373,7 +373,7 @@ Definition rsc_correct
   forAll
     (
       genIntermediateProgram
-      (* genRSCIntermediateProgram *)
+      (* genRSCIntermediateProgram *) 
        NoUndef
        get_freq_instr
        cag
@@ -411,6 +411,14 @@ Definition rsc_correct
                   (checker (*false*) tt ) (* discard tests with empty traces *)
           | _ =>
             (* try_all_components_one_by_one ip t_t cids fuel *)
-            try_all_components_with_undef ip t_t cids fuel
+            conjoin
+              (List.map
+              (fun i =>                 
+                 try_all_components_with_undef
+                   ip
+                   (List.firstn i t_t)
+                   cids fuel
+              )
+              (List.seq 1 (List.length t_t)))
           end
         end).

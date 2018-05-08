@@ -25,6 +25,10 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 Import MonadNotations.
 Open Scope monad_scope.
 
+(* This should only be true when running 
+   fault injection experiments *)
+Definition TURN_OFF_ALIGNMENT := false.
+
 Definition newline := String "010" ""%string.
 
 Definition Component_id := N.
@@ -749,12 +753,16 @@ Definition layout_procedure
            (code : AbstractMachine.code)
   : COMP (AbstractMachine.lcode) :=
   let padd acc elt :=
-      (* must padd *)
-      (* padd code_lst up to a multiple of SFI.BASIC_BLOCK_SIZE *)
-      let r := N.modulo (N.of_nat (List.length acc))
-                        SFI.BASIC_BLOCK_SIZE in
-      let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r)%N
-                        SFI.BASIC_BLOCK_SIZE in
+      if TURN_OFF_ALIGNMENT
+      then
+        acc ++ [elt]
+      else
+        (* must padd *)
+        (* padd code_lst up to a multiple of SFI.BASIC_BLOCK_SIZE *)
+        let r := N.modulo (N.of_nat (List.length acc))
+                          SFI.BASIC_BLOCK_SIZE in
+        let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r)%N
+                          SFI.BASIC_BLOCK_SIZE in
         acc
           ++ (List.repeat
                 (None,AbstractMachine.INop)
@@ -763,16 +771,20 @@ Definition layout_procedure
   in
 
   let padd1 acc elt :=
-      (* elt is the last instruction in the block *)
-      let r := N.modulo (N.of_nat (List.length acc))
-                        SFI.BASIC_BLOCK_SIZE in
-      let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r - 1%N)%N
-                        SFI.BASIC_BLOCK_SIZE in
-      acc
-        ++ (List.repeat
-              (None,AbstractMachine.INop)
-              (N.to_nat p))
-        ++ [elt] in
+      if TURN_OFF_ALIGNMENT
+      then
+        acc ++ [elt]
+      else
+        (* elt is the last instruction in the block *)
+        let r := N.modulo (N.of_nat (List.length acc))
+                          SFI.BASIC_BLOCK_SIZE in
+        let p := N.modulo (SFI.BASIC_BLOCK_SIZE - r - 1%N)%N
+                          SFI.BASIC_BLOCK_SIZE in
+        acc
+          ++ (List.repeat
+                (None,AbstractMachine.INop)
+                (N.to_nat p))
+          ++ [elt] in
 
   (* accumulate labels *)
   let lcode1 :=

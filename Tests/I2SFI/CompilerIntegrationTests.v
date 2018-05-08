@@ -62,17 +62,17 @@ Definition compile_and_run (sp : Source.program) (fuel : nat) :=
     end
   end.
 
-Definition run_fact := compile_and_run factorial 10000%nat.
+Definition run_fact := (compile_and_run factorial 10000%nat).
 Extraction "/tmp/run_target_compiled_factorial.ml" run_fact.
 
-Definition run_buffer := compile_and_run default_init_buffer fuel.
+Definition run_buffer := (compile_and_run default_init_buffer fuel).
 Extraction "/tmp/run_target_compiled_default_init_buffer.ml" run_buffer.
 
-Definition run_id := compile_and_run identity fuel.
+Definition run_id := (compile_and_run identity fuel).
 Extraction "/tmp/run_target_compiled_identityt.ml" run_id.
 
-Definition run_inc := compile_and_run increment fuel.
+Definition run_inc := (compile_and_run increment fuel).
 Extraction "/tmp/run_target_compiled_increment.ml" run_inc.
 
-Definition run_nested := compile_and_run nested_calls fuel.
+Definition run_nested := (compile_and_run nested_calls fuel).
 Extraction "/tmp/run_target_compiled_nested_calls.ml" run_nested.
