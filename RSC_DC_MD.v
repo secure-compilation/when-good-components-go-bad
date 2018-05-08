@@ -18,9 +18,6 @@ Require Import Definability.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
-(* Classical reasoning is used to close the diagram. *)
-Require Import Coq.Logic.Classical_Prop.
-
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -116,11 +113,9 @@ Section RSC_DC_MD.
             Hpartialize
             HStar1 HStar2 HNostep1 HNostep2 Hfinal1
             as Hparallel.
-          apply imply_to_or in Hparallel.
-          destruct Hparallel as [Hparallel1 | Hparallel2].
+          case: (boolP (CS.s_component sfin2 \in domm (Source.prog_interface p)))=> [Hparallel1|/Hparallel Hparallel2].
           ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
                in Hini2.
-             move/negP: Hparallel1; rewrite negbK=> Hparallel1.
              exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
           ** easy.
        ++ inversion Hnot_wrong'. (* Contra. *)
@@ -135,11 +130,9 @@ Section RSC_DC_MD.
             Hpartialize
             HStar1 HStar2 HNostep1 HNostep2 Hfinal1
             as Hparallel.
-          apply imply_to_or in Hparallel.
-          destruct Hparallel as [Hparallel1 | Hparallel2].
+          case: (boolP (CS.s_component sfin2 \in domm (Source.prog_interface p)))=> [Hparallel1|/Hparallel Hparallel2].
           ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
                in Hini2.
-             move/negP: Hparallel1; rewrite negbK=> Hparallel1.
              exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
           ** easy.
     -- destruct (CS.initial_state_exists
