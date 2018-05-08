@@ -286,8 +286,6 @@ Section RSC_DC_MD.
 
      *)
 
-    (** *only 2.a to be completed *)
-
     destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
     + subst. exists Cs, b3.
       repeat (split; try now auto).
@@ -392,5 +390,6 @@ Section RSC_DC_MD.
         -- destruct (CS.initial_state_exists
                      (Source.program_link p Cs)) as [wit  Hf].
            exfalso. now apply (Hnot_initial2 wit).
-Qed.
+  Qed.
+
 End RSC_DC_MD.
