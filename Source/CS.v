@@ -566,6 +566,12 @@ Section Semantics.
   by case: t1=> [|e [|e' t1]] //= *; omega.
   Qed.
 
+  Lemma initial_state_exists:
+    exists s, initial_state p s.
+  Proof.
+    unfold initial_state, initial_machine_state;
+      by eauto.
+  Qed.
 End Semantics.
 
 End CS.
