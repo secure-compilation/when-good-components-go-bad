@@ -618,7 +618,7 @@ Section Definability.
       econstructor; eauto; last by left; eauto.
         exists [::], [::]. by do ![split; trivial].
       intros C.
-      unfold component_buffer, CS.prepare_initial_memory, Memory.load.
+      unfold component_buffer, Memory.load.
       simpl. repeat (rewrite mapmE; simpl); rewrite mem_domm.
       case HCint: (intf C) => [Cint|] //=.
       rewrite ComponentMemory.load_prealloc. simpl.

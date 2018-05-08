@@ -886,8 +886,8 @@ Proof.
   (* empty stack *)
   (* stop continuation *)
   (* same partialized initial memory *)
-  unfold partialize, CS.prepare_initial_memory, prepare_buffers, prog_buffers in Hpartial1.
-  unfold partialize, CS.prepare_initial_memory, prepare_buffers, prog_buffers in Hpartial2.
+  unfold partialize, prepare_buffers, prog_buffers in Hpartial1.
+  unfold partialize, prepare_buffers, prog_buffers in Hpartial2.
   simpl in Hpartial1. simpl in Hpartial2.
   rewrite Hbuffers1 in Hpartial1. rewrite Hbuffers1 in Hpartial2.
   rewrite Hbuffers in Hdisjoint1. rewrite Hbuffers2 in Hdisjoint2.

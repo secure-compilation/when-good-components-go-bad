@@ -517,28 +517,10 @@ Module Source.
         end
     in init Cmem values 0%Z.
 
-  Definition prepare_buffers (p: program) : Memory.t * NMap Block.id :=
-    (mapm (fun initial_buffer =>
-             ComponentMemory.prealloc (mkfmap [(0, initial_buffer)]))
-          (prog_buffers p),
-     mapm (fun _ => 0) (prog_buffers p)).
-
-  Lemma prepare_buffers_of_linked_programs:
-    forall p1 p2,
-      well_formed_program p1 ->
-      well_formed_program p2 ->
-      linkable (prog_interface p1) (prog_interface p2) ->
-    forall C b,
-      (prepare_buffers (program_link p1 p2)).2 C = Some b ->
-      C \notin domm (prog_interface p2) ->
-      C \in domm (prog_interface p1) /\ (prepare_buffers p1).2 C = Some b.
-  Proof.
-    move=> p1 p2 wf1 wf2 Hlinkable C b.
-    rewrite /prepare_buffers /= !mapmE unionmE.
-    do 2![rewrite wfprog_defined_buffers //=].
-    rewrite !mem_domm.
-    by case: (prog_buffers p1 C) (prog_buffers p2 C)=> [b'|] //= [b'|].
-  Qed.
+  Definition prepare_buffers (p: program) : Memory.t :=
+    mapm (fun initial_buffer =>
+            ComponentMemory.prealloc (mkfmap [(0, initial_buffer)]))
+         (prog_buffers p).
 
   Lemma find_procedure_in_linked_programs:
     forall p1 p2,

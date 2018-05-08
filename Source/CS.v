@@ -82,12 +82,9 @@ Instance state_turn : HasTurn state := {
 Import MonadNotations.
 Open Scope monad_scope.
 
-Definition prepare_initial_memory (p: program) : Memory.t :=
-  fst (prepare_buffers p).
-
 Definition initial_machine_state (p: program) : state :=
   match prog_main p with
-  | Some main_expr => State Component.main [::] (prepare_initial_memory p) Kstop main_expr (Int 0)
+  | Some main_expr => State Component.main [::] (prepare_buffers p) Kstop main_expr (Int 0)
   | None =>
     (* this case shouldn't happen for a well formed p *)
     State Component.main [::] emptym Kstop E_exit (Int 0)
