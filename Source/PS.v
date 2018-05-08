@@ -1270,6 +1270,19 @@ have {in_prog1} in_prog1 : CS.s_component scs1a \notin domm ctx.
 by apply: IH star2a' part' step1a' in_prog1.
 Qed.
 
+(* Placement note: right now, there are similar lemmas to this one here in PS,
+  as opposed to none in CS, where it would more logically belong. *)
+Lemma blame_last_comp_star p c scs1 t scs2:
+  well_formed_program p ->
+  well_formed_program c ->
+  linkable (prog_interface p) (prog_interface c) ->
+  closed_program (program_link p c) ->
+  CS.initial_state (program_link p c) scs1 ->
+  Star (CS.sem (program_link p c)) scs1 t scs2 ->
+  ~ CS.s_component scs2 \notin domm (prog_interface c) -> (* FIXME: non-negated \in *)
+  last_comp t \in domm (prog_interface c).
+Admitted.
+
 (* Consider two star sequences starting from the same state (s),
    with the same number of steps (n) and the same trace (t):
 
