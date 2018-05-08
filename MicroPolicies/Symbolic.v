@@ -2,6 +2,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq word fmap.
 
 Require Import MicroPolicies.Utils MicroPolicies.Types.
+Require Import CompCert.Events.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -136,10 +137,16 @@ Section WithClasses.
 Context {mt : machine_types}
         {ops : machine_ops mt}.
 
+(* TL TODO: following CH's instruction, adding arguments ad-hoc to allow
+            transfer function to produces events *)
+Notation vovec_ev tty vop := (vovec tty vop * option event)%type.
+
+Record ev_inputs : Type := { rcom_value : BinNums.Z }.
+
 Class params := {
   ttypes :> tag_types;
 
-  transfer : forall (iv : ivec ttypes), option (vovec ttypes (op iv));
+  transfer : forall (iv : ivec ttypes), ev_inputs -> option (vovec_ev ttypes (op iv));
 
   internal_state : eqType
 }.
@@ -162,8 +169,14 @@ Record state := State {
   internal : internal_state
 }.
 
+
 Definition pcv (s : state) := vala (pc s).
 Definition pct (s : state) := taga (pc s).
+
+(* TL TODO: following CH's instruction, adding arguments ad-hoc to allow
+            transfer function to produces events *)
+Definition evi (st : state) : ev_inputs. Admitted.
+Notation state_ev := (state * option event)%type.
 
 Lemma state_eta st :
   st = State (mem st) (regs st) (pcv st)@(pct st) (internal st).
@@ -180,15 +193,16 @@ Definition syscall_table := {fmap mword mt -> syscall}.
 
 Variable table : syscall_table.
 
-Definition run_syscall (sc : syscall) (st : state) : option state :=
-  match transfer (IVec SERVICE (taga (pc st)) (entry_tag sc) [hseq] None) with
-  | Some _ => sem sc st
+Definition run_syscall (sc : syscall) (st : state) : option state_ev :=
+  match transfer (IVec SERVICE (taga (pc st)) (entry_tag sc) [hseq] None) (evi st) with
+  | Some _ => do! s <- sem sc st;
+                Some (s, None)
   | None => None
   end.
 
 Definition next_state (st : state) (iv : ivec ttypes)
-                      (k : vovec ttypes (op iv) -> option state) : option state :=
-  do! ov <- transfer iv;
+                      (k : vovec_ev ttypes (op iv) -> option state_ev) : option state_ev :=
+  do! ov <- transfer iv (evi st);
     k ov.
 
 (* TL TODO: do we want it to be dependent? / part of ivec? *)
@@ -237,39 +251,40 @@ Fixpoint next_state_do_updates (st : state) (tks : seq tag_kind)
 
 
 Definition next_state_updates_and_pc (st : state) (kiv : k_ivec ttypes)
-           (updts : seq update) (pc' : word) : option state :=
+           (updts : seq update) (pc' : word) : option state_ev :=
   let iv := match mem st pc' with
             | None => kiv None
             | Some ni => kiv (Some (taga ni))
             end in
   next_state st (
-    match op iv as o return vovec _ o -> option state with
-    | OP op => fun ov => do! st' <- next_state_do_updates st (tr ov) updts;
-                         Some (State (mem st') (regs st') pc'@(trpc ov) (internal st'))
-
+    match op iv as o return vovec_ev _ o -> option state_ev with
+    | OP op => fun ov_ev => match ov_ev with
+                              | (ov, ev) => do! st' <- next_state_do_updates st (tr ov) updts;
+                                              Some (State (mem st') (regs st') pc'@(trpc ov) (internal st'), ev)
+                            end
     | SERVICE => fun _ => None
     end
   ).
 
 
-Definition next_state_updates (st : state) (iv : k_ivec ttypes) (updts : seq update) : option state :=
+Definition next_state_updates (st : state) (iv : k_ivec ttypes) (updts : seq update) : option state_ev :=
   next_state_updates_and_pc st iv updts (vala (pc st)).+1.
 
 
-Inductive step (st st' : state) : Prop :=
+Inductive step (st st' : state) (ev : option event) : Prop :=
 | step_nop : forall mem reg pc tpc i ti extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Nop _)),
     let mvec := IVec NOP tpc ti [hseq] in forall
-    (NEXT : next_state_updates st mvec [:: ] = Some st'),    step st st'
+    (NEXT : next_state_updates st mvec [:: ] = Some (st', ev)),    step st st' ev
 | step_const : forall mem reg pc tpc i ti n r old (told : tag_type ttypes R) extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Const n r))
     (OLD  : reg r = Some old@told),
     let mvec := IVec CONST tpc ti [hseq told] in forall
-    (NEXT : next_state_updates st mvec [:: RegWrite r (swcast n)] = Some st'),   step st st'
+    (NEXT : next_state_updates st mvec [:: RegWrite r (swcast n)] = Some (st', ev)),   step st st' ev
 | step_mov : forall mem reg pc tpc i ti r1 w1 t1 r2 old told extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
@@ -277,7 +292,7 @@ Inductive step (st st' : state) : Prop :=
     (R1W  : reg r1 = Some w1@t1)
     (OLD  : reg r2 = Some old@told),
     let mvec := IVec MOV tpc ti [hseq t1; told] in forall
-    (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegWrite r2 w1 ] = Some st'),   step st st'
+    (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegWrite r2 w1 ] = Some (st', ev)),   step st st' ev
 | step_binop : forall mem reg pc tpc i ti op r1 r2 r3 w1 w2 t1 t2 old told extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
@@ -286,8 +301,8 @@ Inductive step (st st' : state) : Prop :=
     (R2W  : reg r2 = Some w2@t2)
     (OLD  : reg r3 = Some old@told),
     let mvec := IVec (BINOP op) tpc ti [hseq t1; t2; told] in forall
-    (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegRead r2 ; RegWrite r3 (binop_denote op w1 w2) ] = Some st'),
-      step st st'
+    (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegRead r2 ; RegWrite r3 (binop_denote op w1 w2) ] = Some (st', ev)),
+      step st st' ev
 | step_load : forall mem reg pc tpc i ti r1 r2 w1 w2 t1 t2 old told extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
@@ -296,7 +311,7 @@ Inductive step (st st' : state) : Prop :=
     (MEM1 : mem w1 = Some w2@t2)
     (OLD  : reg r2 = Some old@told),
     let mvec := IVec LOAD tpc ti [hseq t1; t2; told] in forall
-    (NEXT : next_state_updates st mvec [:: RegRead r1 ; MemRead w1 ; RegWrite r2 w2 ] = Some st'),    step st st'
+    (NEXT : next_state_updates st mvec [:: RegRead r1 ; MemRead w1 ; RegWrite r2 w2 ] = Some (st', ev)),    step st st' ev
 | step_store : forall mem reg pc i r1 r2 w1 w2 tpc ti t1 t2 old told extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
@@ -305,14 +320,14 @@ Inductive step (st st' : state) : Prop :=
     (R2W  : reg r2 = Some w2@t2)
     (OLD  : mem w1 = Some old@told),
     let mvec := IVec STORE tpc ti [hseq t1; t2; told] in forall
-    (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegRead r2 ; MemWrite w1 w2 ] = Some st'),    step st st'
+    (NEXT : next_state_updates st mvec [:: RegRead r1 ; RegRead r2 ; MemWrite w1 w2 ] = Some (st', ev)),    step st st' ev
 | step_jump : forall mem reg pc i r w tpc ti t1 extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
     (INST : decode_instr i = Some (Jump r))
     (RW   : reg r = Some w@t1),
     let mvec := IVec JUMP tpc ti [hseq t1] in forall
-    (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] w = Some st'),    step st st'
+    (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] w = Some (st', ev)),    step st st' ev
 | step_bnz : forall mem reg pc i r n w tpc ti t1 extra
     (ST   : st = State mem reg pc@tpc extra)
     (PC   : mem pc = Some i@ti)
@@ -321,7 +336,7 @@ Inductive step (st st' : state) : Prop :=
      let mvec := IVec BNZ tpc ti [hseq t1] in
      let pc' := pc + (if w == 0%w
                       then 1%w else swcast n) in forall
-    (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] pc' = Some st'),     step st st'
+    (NEXT : next_state_updates_and_pc st mvec [:: RegRead r ] pc' = Some (st', ev)),     step st st' ev
 | step_jal : forall mem reg pc i imm tpc ti old told extra
     (ST : st = State mem reg pc@tpc extra)
     (PC : mem pc = Some i@ti)
@@ -329,12 +344,12 @@ Inductive step (st st' : state) : Prop :=
     (OLD : reg ra = Some old@told),
     let mvec := IVec JAL tpc ti [hseq told] in
     let pc' := (swcast imm) in forall
-    (NEXT : next_state_updates_and_pc st mvec [:: RegWrite ra (pc.+1) ] pc' = Some st'), step st st'
+    (NEXT : next_state_updates_and_pc st mvec [:: RegWrite ra (pc.+1) ] pc' = Some (st', ev)), step st st' ev
 | step_syscall : forall mem reg pc sc tpc extra
     (ST : st = State mem reg pc@tpc extra)
     (PC : mem pc = None)
     (GETCALL : table pc = Some sc)
-    (CALL : run_syscall sc st = Some st'), step st st'.
+    (CALL : run_syscall sc st = Some (st', ev)), step st st' ev.
 
 End WithClasses.
 

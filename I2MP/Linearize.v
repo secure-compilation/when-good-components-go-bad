@@ -53,7 +53,7 @@ Definition head_tag (cenv : compiler_env) (c : Component.id) (p : Procedure.id) 
                             Some ((p \in Component.export i) && ((c, p) \in Component.import i')))
   in {| vtag := Other ;
         color := c ;
-        entry := filter allowed_call_by (domm I) |}.
+        entry := Some (p, filter allowed_call_by (domm I)) |}.
 
 
 Definition linearize_proc (cenv : compiler_env)

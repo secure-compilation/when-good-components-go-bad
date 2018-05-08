@@ -1,8 +1,8 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq ssrint.
 From CoqUtils Require Import hseq.
 
-Require Import Common.Definitions.
 Require Import MicroPolicies.Utils MicroPolicies.Types MicroPolicies.Symbolic MicroPolicies.Exec.
+Require Import Common.Definitions CompCert.Events.
 
 
 (** Tags **)
@@ -49,16 +49,16 @@ Canonical pc_tag_eqType := EqType pc_tag pc_tag_eqMixin.
 End PCTagEq.
 
 Record mem_tag : Type := MTag {
-  vtag  : [eqType of value_tag];
-  color : Component.id;
-  entry : list Component.id;
+  vtag   : [eqType of value_tag];
+  color  : Component.id;
+  entry  : option (Procedure.id * list Component.id);
 }.
 
 
 Definition def_mem_tag (c : Component.id) : mem_tag :=
   {| vtag := Other ;
      color := c ;
-     entry := [:: ]
+     entry := None
   |}.
 
 
@@ -113,7 +113,8 @@ Definition check_ret (n : nat) (r : tag_type lrc_tags R) : option unit :=
 
 Definition check_entry (c : Component.id) (m : option (tag_type lrc_tags M)) : option unit :=
   match m with
-    | Some {| entry := l |} => if mem_seq l c then Some tt else None
+    | Some {| entry := Some (_, l) |} => if mem_seq l c then Some tt else None
+    | Some {| entry := None |} => None
     | None => Some tt (* accepting ni = None, assuming it implies monitor service or stopping the machine *)
   end.
 
@@ -129,68 +130,68 @@ Definition switch_val (m : tag_type lrc_tags M)
 Definition build_tpc (n : nat) : tag_type lrc_tags P := Level n.
 
 (* TL TODO: comments? cf org file *)
-Definition instr_rules (op : opcode)
+Definition instr_rules (evi : ev_inputs) (op : opcode)
            (tpc : tag_type lrc_tags P)
            (ti : tag_type lrc_tags M)
            (ts : hseq (tag_type lrc_tags) (inputs op))
-           (tni : option (tag_type lrc_tags M)) : option (ovec lrc_tags op) :=
+           (tni : option (tag_type lrc_tags M)) : option (ovec lrc_tags op * option event) :=
   let current := match ti with {| color := c |} => c end in
   let level := match tpc with Level n => n end in
-  match op, ts return option (ovec _ op) with
+  match op, ts return option (ovec _ op * option event) with
   | NOP,     [hseq]            => do! _ <- check_belong current tni;
-                                     Some (OVec NOP       tpc [hseq])
+                                     Some (OVec NOP       tpc [hseq], None)
 
   | CONST,   [hseq td]         => do! _ <- check_belong current tni;
-                                     Some (OVec CONST     tpc [hseq Other])
+                                     Some (OVec CONST     tpc [hseq Other], None)
 
   | MOV,     [hseq ts; td]     => do! _ <- check_belong current tni;
-                                     Some (OVec MOV       tpc [hseq Other; ts])
+                                     Some (OVec MOV       tpc [hseq Other; ts], None)
 
   | BINOP b, [hseq tx; ty; td] => do! _ <- check_belong current tni;
-                                     Some (OVec (BINOP b) tpc [hseq tx; ty; Other])
+                                     Some (OVec (BINOP b) tpc [hseq tx; ty; Other], None)
 
   | LOAD,    [hseq tp; ts; td] => do! _ <- check_belong current tni;
                                      if belong current (Some ts) then
                                        let (ts', td') := switch_val ts Other in
-                                       Some (OVec LOAD tpc [hseq tp; ts'; td'])
+                                       Some (OVec LOAD tpc [hseq tp; ts'; td'], None)
                                      else
-                                       Some (OVec LOAD tpc [hseq tp; ts; Other])
+                                       Some (OVec LOAD tpc [hseq tp; ts; Other], None)
 
   | STORE,   [hseq tp; ts; td] => do! _ <- check_belong current tni;
                                  do! _ <- check_belong current (Some td);
                                      let (td', _) := switch_val td ts in
-                                     Some (OVec STORE tpc [hseq tp; Other; td'])
+                                     Some (OVec STORE tpc [hseq tp; Other; td'], None)
 
   | BNZ,     [hseq tx]         => do! _ <- check_belong current tni;
-                                     Some (OVec BNZ       tpc [hseq tx])
+                                     Some (OVec BNZ       tpc [hseq tx], None)
 
   | JUMP,    [hseq tp]         => if belong current tni then
-                                   Some (OVec JUMP tpc [hseq tp])
+                                   Some (OVec JUMP tpc [hseq tp], None)
                                  else
                                    (* TL TODO: should forbid return if level = 0 ?         *)
                                    (*          I think it is already enforced by invariant *)
                                    (*          (unique Ret n)                              *)
                                    do! _ <- check_ret level.-1 tp;
-                                       Some (OVec JUMP (build_tpc level.-1) [hseq Other])
+                                       Some (OVec JUMP (build_tpc level.-1) [hseq Other], None)
 
   | JAL,     [hseq tra]    => if belong current tni then
-                                   Some (OVec JAL tpc [hseq tra])
+                                   Some (OVec JAL tpc [hseq tra], None)
                                  else
                                    do! _ <- check_entry current tni;
-                                       Some (OVec JAL (build_tpc level.+1) [hseq Ret level])
+                                       Some (OVec JAL (build_tpc level.+1) [hseq Ret level], None)
 
   | _,     _                   => None
   end.
 
 
 
-Definition transfer (iv : ivec lrc_tags) : option (vovec lrc_tags (op iv)) :=
+Definition transfer (iv : ivec lrc_tags) (evi : ev_inputs) : option (vovec lrc_tags (op iv) * option event) :=
   match iv with (* TL TODO: ask someone obout this dependent boilerplate *)
   | IVec vop tpc ti ts tni =>
-    match vop, ts, ti, tni return option (vovec _ vop) with
-    | (OP op), ts, ti, tni => instr_rules op tpc ti ts tni
+    match vop, ts, ti, tni return option (vovec _ vop * option event) with
+    | (OP op), ts, ti, tni => instr_rules evi op tpc ti ts tni
     (* Monitor stuff *)
-    | SERVICE, [hseq], ti, None => Some tt
+    | SERVICE, [hseq], ti, None => Some (tt, None)
     |       _,      _,  _,    _ => None
     end
   end.

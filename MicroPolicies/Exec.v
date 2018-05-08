@@ -1,6 +1,7 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
 From CoqUtils Require Import hseq word fmap.
 Require Import MicroPolicies.Utils MicroPolicies.Types MicroPolicies.Symbolic.
+Require Import CompCert.Events.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -21,7 +22,7 @@ Import Symbolic.
 Local Open Scope word_scope.
 Local Notation "x .+1" := (x + 1).
 
-Definition stepf (st : @state mt sp) : option (@state mt sp) :=
+Definition stepf (st : @state mt sp) : option (@state mt sp * option event) :=
   let 'State mem reg pc@tpc extra := st in
   match mem pc with
   | Some iti =>
@@ -102,9 +103,9 @@ Definition stepf (st : @state mt sp) : option (@state mt sp) :=
   end.
 
 Lemma stepP :
-  forall st st',
-    stepf st = Some st' <->
-    step table st st'.
+  forall st st' ev,
+    stepf st = Some (st', ev) <->
+    step table st st' ev.
   Admitted.
 (* Proof. *)
 (*   intros st st'. split; intros STEP. *)
@@ -137,13 +138,13 @@ Lemma stepP :
 (*   } *)
 (* Qed. *)
 
-Lemma stepP' :
-  forall st st',
-    reflect (step table st st') (stepf st == Some st').
-Proof.
-  move => st st'.
-  apply (iffP eqP); by move => /stepP.
-Qed.
+(* Lemma stepP' : *)
+(*   forall st st' ev, *)
+(*     reflect (step table st st' ev) (stepf st == Some (st', ev)). *)
+(* Proof. *)
+(*   move => st st'. *)
+(*   apply (iffP eqP); by move => /stepP. *)
+(* Qed. *)
 
 Definition build_k_ivec st : option (k_ivec ttypes)  :=
   match mem st (pcv st) with

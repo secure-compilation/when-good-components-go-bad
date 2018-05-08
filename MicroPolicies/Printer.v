@@ -13,6 +13,8 @@ Require Export Extraction.Definitions.
 
 Open Scope string_scope.
 
+(* TL TODO: switch to Show type class *)
+
 Axiom coqstring_of_word : forall {k}, word k -> string.
 (* TL TODO: move this to Extraction.v *)
 Extract Constant coqstring_of_word => "(fun _ w -> let Word x = Lazy.force w in coqstring_of_camlstring (Big.to_string x))".
@@ -64,11 +66,17 @@ Definition coqstring_of_instr (i : instr mt) : string :=
   | Halt => "Halt"
   end.
 
+Definition coqstring_of_entry e  :=
+  match e with
+  | None => ""
+  | Some (p, l) => coqstring_of_nat p ++ ": " ++ coqstring_of_nat_list l
+  end.
+
 
 Definition coqstring_of_mem_tag (t : mem_tag) :=
   "{ vtag: " ++ coqstring_of_value_tag (vtag t) ++
   "; color: " ++ coqstring_of_nat (color t) ++
-  "; entry: " ++ coqstring_of_nat_list (entry t) ++ "; }".
+  "; entry: " ++ coqstring_of_entry (entry t) ++ "; }".
 
 Definition coqstring_of_matom (a : matom) : string :=
   let value := match decode_instr (vala a) with

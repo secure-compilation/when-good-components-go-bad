@@ -6,6 +6,8 @@ question: are they mandatory for now (just seeking for an execution) ?
 integration: remove Utils.v and use the files in Lib?
              remove Tmp.v in I2MP as well
 
+integration: homogeneise the various integers representations
+
 integration: modules interface for RC instance?
              but is it relevant? cf linking problems
 
