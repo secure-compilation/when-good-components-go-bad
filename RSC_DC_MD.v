@@ -364,10 +364,7 @@ Section RSC_DC_MD.
               ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
                    in Hini2.
                  move/negP: Hparallel1; rewrite negbK=> Hparallel1.
-                 exact (PS.blame_last_comp_star
-                          well_formed_Cs well_formed_p
-                          (linkable_sym Hlinkable_p_Cs) Hclosed_p_Cs
-                          Hini2 HStar2 Hparallel1).
+                 exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
               ** easy.
            ++ inversion Hnot_wrong'. (* Contra. *)
            ++ (* As in first case: refactor. *)
@@ -386,10 +383,7 @@ Section RSC_DC_MD.
               ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
                    in Hini2.
                  move/negP: Hparallel1; rewrite negbK=> Hparallel1.
-                 exact (PS.blame_last_comp_star
-                          well_formed_Cs well_formed_p
-                          (linkable_sym Hlinkable_p_Cs) Hclosed_p_Cs
-                          Hini2 HStar2 Hparallel1).
+                 exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
               ** easy.
         -- destruct (CS.initial_state_exists
                      (Source.program_link p Cs)) as [wit  Hf].

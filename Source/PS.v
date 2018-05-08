@@ -1273,15 +1273,15 @@ Qed.
 (* Placement note: right now, there are similar lemmas to this one here in PS,
   as opposed to none in CS, where it would more logically belong. *)
 Lemma blame_last_comp_star p c scs1 t scs2:
-  well_formed_program p ->
-  well_formed_program c ->
-  linkable (prog_interface p) (prog_interface c) ->
-  closed_program (program_link p c) ->
   CS.initial_state (program_link p c) scs1 ->
   Star (CS.sem (program_link p c)) scs1 t scs2 ->
   CS.s_component scs2 \in domm (prog_interface c) ->
   last_comp t \in domm (prog_interface c).
-Admitted.
+Proof.
+move=> -> star.
+rewrite (CS.star_component star) /CS.initial_machine_state.
+by case: prog_main.
+Qed.
 
 (* RB: Clear unneded assumptions if needed. *)
 Lemma partialize_partition p p1 p2 scs1 scs2 :
