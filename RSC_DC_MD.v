@@ -72,81 +72,81 @@ Section RSC_DC_MD.
       destruct Hfinal1 as [Hexit | [val [Hexpr [Hcont Hstack]]]]; subst;
         inversion Hcontra.
     }
-    inversion HpCs_beh as [sini2 ? Hini2 Hstbeh2 | Hnot_initial2];
-      subst.
-    -- inversion Hstbeh2 as [| | | ? sfin2 HStar2 HNostep2 Hnot_final2]; subst.
-       rewrite
-         (Source.closed_program_link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
-         in Hclosed_p_Cs.
-       pose proof compilation_preserves_interface _ _ successful_compilation
-         as Hsame_iface3.
-       assert (Hlinkable_P'_Cs := Hlinkable_p_Cs).
-       rewrite <- Hsame_iface3 in Hlinkable_P'_Cs.
-       rewrite <- Hsame_iface1 in Hlinkable_P'_Cs.
-       rewrite
-         (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
-         in HP'Cs_closed.
-       rewrite Hsame_iface3 in Hsame_iface1.
-       assert (Hpartialize :
-                 Source.PS.PS.partialize (Source.prog_interface p) sini1 =
-                 Source.PS.PS.partialize (Source.prog_interface p) sini2).
-       {
-         pose proof PS.partialize_partition.
-         rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
-           in Hini1.
-         rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
-           in Hini2.
-         pose proof PS.partialize_partition
-              well_formed_Cs well_formed_P' well_formed_p
-              Hsame_iface1 (linkable_sym Hlinkable_P'_Cs) HP'Cs_closed Hclosed_p_Cs
-              Hini1 Hini2.
-         congruence.
-       }
-       rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
-         in HStar1 HNostep1 Hfinal1.
-       rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
-         in HStar2 HNostep2.
-       (* Case analysis on m. *)
-       destruct m as [tm | tm | tm].
-       ++ destruct K as [tm' Htm']; subst tm.
-          unfold finpref_trace in HStar1.
-          pose proof PS.parallel_exec
-            well_formed_Cs well_formed_P' well_formed_p
-            (linkable_sym Hlinkable_p_Cs)
-            HP'Cs_closed Hclosed_p_Cs
-            Hsame_iface1 (eq_refl (Source.prog_interface p))
-            Hpartialize
-            HStar1 HStar2 HNostep1 HNostep2 Hfinal1
-            as Hparallel.
-          apply imply_to_or in Hparallel.
-          destruct Hparallel as [Hparallel1 | Hparallel2].
-          ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
-               in Hini2.
-             move/negP: Hparallel1; rewrite negbK=> Hparallel1.
-             exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
-          ** easy.
-       ++ inversion Hnot_wrong'. (* Contra. *)
-       ++ (* As in first case: refactor. *)
-          destruct K as [tm' Htm']; subst tm.
-          unfold finpref_trace in HStar1.
-          pose proof PS.parallel_exec
-            well_formed_Cs well_formed_P' well_formed_p
-            (linkable_sym Hlinkable_p_Cs)
-            HP'Cs_closed Hclosed_p_Cs
-            Hsame_iface1 (eq_refl (Source.prog_interface p))
-            Hpartialize
-            HStar1 HStar2 HNostep1 HNostep2 Hfinal1
-            as Hparallel.
-          apply imply_to_or in Hparallel.
-          destruct Hparallel as [Hparallel1 | Hparallel2].
-          ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
-               in Hini2.
-             move/negP: Hparallel1; rewrite negbK=> Hparallel1.
-             exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
-          ** easy.
-    -- destruct (CS.initial_state_exists
-                 (Source.program_link p Cs)) as [wit Hf].
-       exfalso. now apply (Hnot_initial2 wit).
+    inversion HpCs_beh as [sini2 ? Hini2 Hstbeh2 | Hnot_initial2]; subst;
+    last
+      (destruct (CS.initial_state_exists (Source.program_link p Cs)) as [wit Hf];
+       specialize (Hnot_initial2 wit);
+       contradiction).
+    inversion Hstbeh2 as [| | | ? sfin2 HStar2 HNostep2 Hnot_final2]; subst.
+    rewrite
+      (Source.closed_program_link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+      in Hclosed_p_Cs.
+    pose proof compilation_preserves_interface _ _ successful_compilation
+      as Hsame_iface3.
+    assert (Hlinkable_P'_Cs := Hlinkable_p_Cs).
+    rewrite <- Hsame_iface3 in Hlinkable_P'_Cs.
+    rewrite <- Hsame_iface1 in Hlinkable_P'_Cs.
+    rewrite
+      (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+      in HP'Cs_closed.
+    rewrite Hsame_iface3 in Hsame_iface1.
+    assert (Hpartialize :
+              Source.PS.PS.partialize (Source.prog_interface p) sini1 =
+              Source.PS.PS.partialize (Source.prog_interface p) sini2).
+    {
+      pose proof PS.partialize_partition.
+      rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+        in Hini1.
+      rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+        in Hini2.
+      pose proof PS.partialize_partition
+           well_formed_Cs well_formed_P' well_formed_p
+           Hsame_iface1 (linkable_sym Hlinkable_P'_Cs) HP'Cs_closed Hclosed_p_Cs
+           Hini1 Hini2.
+      congruence.
+    }
+    rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+      in HStar1 HNostep1 Hfinal1.
+    rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+      in HStar2 HNostep2.
+    (* Case analysis on m. *)
+    destruct m as [tm | tm | tm].
+    - destruct K as [tm' Htm']; subst tm.
+      unfold finpref_trace in HStar1.
+      pose proof PS.parallel_exec
+        well_formed_Cs well_formed_P' well_formed_p
+        (linkable_sym Hlinkable_p_Cs)
+        HP'Cs_closed Hclosed_p_Cs
+        Hsame_iface1 (eq_refl (Source.prog_interface p))
+        Hpartialize
+        HStar1 HStar2 HNostep1 HNostep2 Hfinal1
+        as Hparallel.
+      apply imply_to_or in Hparallel.
+      destruct Hparallel as [Hparallel1 | Hparallel2].
+      + rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+          in Hini2.
+        move/negP: Hparallel1; rewrite negbK=> Hparallel1.
+        exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
+      + easy.
+    - inversion Hnot_wrong'. (* Contra. *)
+    - (* As in first case: refactor. *)
+      destruct K as [tm' Htm']; subst tm.
+      unfold finpref_trace in HStar1.
+      pose proof PS.parallel_exec
+        well_formed_Cs well_formed_P' well_formed_p
+        (linkable_sym Hlinkable_p_Cs)
+        HP'Cs_closed Hclosed_p_Cs
+        Hsame_iface1 (eq_refl (Source.prog_interface p))
+        Hpartialize
+        HStar1 HStar2 HNostep1 HNostep2 Hfinal1
+        as Hparallel.
+      apply imply_to_or in Hparallel.
+      destruct Hparallel as [Hparallel1 | Hparallel2].
+      + rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+          in Hini2.
+        move/negP: Hparallel1; rewrite negbK=> Hparallel1.
+        exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
+      + easy.
   Qed.
 
   (* Main Theorem *)
