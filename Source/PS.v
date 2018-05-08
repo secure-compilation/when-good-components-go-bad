@@ -1283,7 +1283,6 @@ rewrite (CS.star_component star) /CS.initial_machine_state.
 by case: prog_main.
 Qed.
 
-(* RB: Clear unneded assumptions if needed. *)
 Lemma partialize_partition p p1 p2 scs1 scs2 :
   well_formed_program p ->
   well_formed_program p1 ->
@@ -1296,7 +1295,27 @@ Lemma partialize_partition p p1 p2 scs1 scs2 :
   CS.initial_state (program_link p p2) scs2 ->
   partialize (prog_interface p1) scs1 =
   partialize (prog_interface p1) scs2.
-Admitted.
+Proof.
+move: scs1 scs2=> _ _ wf wf1 wf2 e_int link clos1 clos2 -> ->.
+rewrite /CS.initial_machine_state.
+case e1: (prog_main (program_link p p1)) (cprog_main_existence clos1) => [main1|] //= _.
+case e2: (prog_main (program_link p p2)) (cprog_main_existence clos2) => [main2|] //= _.
+rewrite (_ : filterm _ _ = filterm (fun k _ => k \notin domm (prog_interface p1))
+                                   (prepare_buffers (program_link p p2))); last first.
+  apply/eq_fmap=> C; rewrite/prepare_buffers /= !filtermE !mapmE !unionmE.
+  case p_b: (prog_buffers p C)=> [buf|] //=.
+  have : prog_buffers p1 C = prog_buffers p2 C :> bool.
+    by rewrite -!mem_domm -2?wfprog_defined_buffers // e_int.
+  case e: (prog_buffers p1 C) (prog_buffers p2 C)=> [buf1|] [buf2|] //= _.
+  by rewrite wfprog_defined_buffers // mem_domm e.
+case: ifP=> [//|nin]; congr PC; repeat congr pair.
+move: e1 e2.
+rewrite /prog_main 2?[program_link p _]link_sym -1?e_int //.
+move: nin (nin); rewrite {2}e_int ?wfprog_defined_procedures // => nin1 nin2.
+move/find_procedure_unionm_r/(_ nin1)=> e1.
+move/find_procedure_unionm_r/(_ nin2).
+by rewrite e1; case.
+Qed.
 
 (* If a state s leads to two states s1 and s2 with the same trace t, it must
    be the case that s1 and s2 are connected. We arrive at s1 and s2 after a
