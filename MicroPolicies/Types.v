@@ -371,7 +371,8 @@ Class machine_ops (mt : machine_types) := {
   encode_instr : instr mt -> mword mt;
   decode_instr : mword mt -> option (instr mt);
 
-  ra : reg mt
+  ra : reg mt;
+  rcom : reg mt;
 }.
 
 Class machine_ops_spec mt (ops : machine_ops mt) := {

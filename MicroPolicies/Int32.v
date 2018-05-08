@@ -97,7 +97,8 @@ Instance concrete_int_32_ops : machine_ops mt := {|
     let args := wcast (esym (fields_of_opP op)) [hnth i' 1] in
     Some (instr_of_args (wunpack args));
 
-  ra := word.as_word 5
+  ra := word.as_word 5;
+  rcom := word.as_word 2;
 
 |}.
 

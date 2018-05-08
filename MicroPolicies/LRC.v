@@ -118,6 +118,17 @@ Definition check_entry (c : Component.id) (m : option (tag_type lrc_tags M)) : o
     | None => Some tt (* accepting ni = None, assuming it implies monitor service or stopping the machine *)
   end.
 
+Definition get_tni_color (m : option (tag_type lrc_tags M)) : option Component.id :=
+  match m with
+  | Some {| color := c' |} => Some c'
+  | _ => None
+  end.
+
+Definition get_proc_name (m : option (tag_type lrc_tags M)) : option Procedure.id :=
+  match m with
+  | Some {| entry := Some (p, _) |} => Some p
+  | _ => None
+  end.
 
 Definition switch_val (m : tag_type lrc_tags M)
            (v : tag_type lrc_tags R) : (tag_type lrc_tags M * tag_type lrc_tags R) :=
@@ -171,12 +182,17 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                    (* TL TODO: should forbid return if level = 0 ?         *)
                                    (*          I think it is already enforced by invariant *)
                                    (*          (unique Ret n)                              *)
+                                   let ev := do! c' <- get_tni_color tni;
+                                               Some (ERet current (rcom_value evi) c') in
                                    do! _ <- check_ret level.-1 tp;
-                                       Some (OVec JUMP (build_tpc level.-1) [hseq Other], None)
+                                     Some (OVec JUMP (build_tpc level.-1) [hseq Other], ev)
 
   | JAL,     [hseq tra]    => if belong current tni then
                                    Some (OVec JAL tpc [hseq tra], None)
                                  else
+                                   let ev := do! c' <- get_tni_color tni;
+                                             do! p  <- get_proc_name tni;
+                                                 Some (ECall current p (rcom_value evi) c') in
                                    do! _ <- check_entry current tni;
                                        Some (OVec JAL (build_tpc level.+1) [hseq Ret level], None)
 

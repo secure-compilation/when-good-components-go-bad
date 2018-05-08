@@ -175,7 +175,8 @@ Definition pct (s : state) := taga (pc s).
 
 (* TL TODO: following CH's instruction, adding arguments ad-hoc to allow
             transfer function to produces events *)
-Definition evi (st : state) : ev_inputs. Admitted.
+Definition evi (st : state) : ev_inputs :=
+  {| rcom_value := BinNums.Z0 |} .
 Notation state_ev := (state * option event)%type.
 
 Lemma state_eta st :

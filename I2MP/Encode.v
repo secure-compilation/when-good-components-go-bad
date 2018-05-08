@@ -52,10 +52,10 @@ Definition encode_reg (eenv : encoder_env) (r : register) : reg mt :=
   match r with
   (* TL TODO: this is a totally arbitrary mapping *)
   | R_ONE => word.as_word 1
-  | R_COM => word.as_word 2
+  | R_COM => word.as_word 2 (* should be same as Int32.rcom *)
   | R_AUX1 => word.as_word 3
   | R_AUX2 => word.as_word 4
-  | R_RA => word.as_word 5
+  | R_RA => word.as_word 5 (* should be same as Int32.ra *)
   | R_SP => word.as_word 6
   | R_ARG => word.as_word 7
   end.
