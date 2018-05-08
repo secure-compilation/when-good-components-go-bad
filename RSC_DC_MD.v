@@ -363,6 +363,7 @@ Section RSC_DC_MD.
               destruct Hparallel as [Hparallel1 | Hparallel2].
               ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
                    in Hini2.
+                 move/negP: Hparallel1; rewrite negbK=> Hparallel1.
                  exact (PS.blame_last_comp_star
                           well_formed_Cs well_formed_p
                           (linkable_sym Hlinkable_p_Cs) Hclosed_p_Cs
@@ -384,6 +385,7 @@ Section RSC_DC_MD.
               destruct Hparallel as [Hparallel1 | Hparallel2].
               ** rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
                    in Hini2.
+                 move/negP: Hparallel1; rewrite negbK=> Hparallel1.
                  exact (PS.blame_last_comp_star
                           well_formed_Cs well_formed_p
                           (linkable_sym Hlinkable_p_Cs) Hclosed_p_Cs

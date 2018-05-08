@@ -1279,7 +1279,7 @@ Lemma blame_last_comp_star p c scs1 t scs2:
   closed_program (program_link p c) ->
   CS.initial_state (program_link p c) scs1 ->
   Star (CS.sem (program_link p c)) scs1 t scs2 ->
-  ~ CS.s_component scs2 \notin domm (prog_interface c) -> (* FIXME: non-negated \in *)
+  CS.s_component scs2 \in domm (prog_interface c) ->
   last_comp t \in domm (prog_interface c).
 Admitted.
 
