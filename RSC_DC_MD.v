@@ -330,8 +330,19 @@ Section RSC_DC_MD.
            rewrite Hsame_iface3 in Hsame_iface1.
            assert (Hpartialize :
                      Source.PS.PS.partialize (Source.prog_interface p) sini1 =
-                     Source.PS.PS.partialize (Source.prog_interface p) sini2)
-             by admit. (* RB: A pending lemma with parts used elsewhere. *)
+                     Source.PS.PS.partialize (Source.prog_interface p) sini2).
+           {
+             pose proof PS.partialize_partition.
+             rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+               in Hini1.
+             rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+               in Hini2.
+             pose proof PS.partialize_partition
+                  well_formed_Cs well_formed_P' well_formed_p
+                  Hsame_iface1 (linkable_sym Hlinkable_P'_Cs) HP'Cs_closed Hclosed_p_Cs
+                  Hini1 Hini2.
+             congruence.
+           }
            rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
              in HStar1 HNostep1 Hfinal1.
            rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)

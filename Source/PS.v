@@ -1283,6 +1283,21 @@ Lemma blame_last_comp_star p c scs1 t scs2:
   last_comp t \in domm (prog_interface c).
 Admitted.
 
+(* RB: Clear unneded assumptions if needed. *)
+Lemma partialize_partition p p1 p2 scs1 scs2 :
+  well_formed_program p ->
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  prog_interface p1 = prog_interface p2 ->
+  linkable (prog_interface p) (prog_interface p1) ->
+  closed_program (program_link p p1) ->
+  closed_program (program_link p p2) ->
+  CS.initial_state (program_link p p1) scs1 ->
+  CS.initial_state (program_link p p2) scs2 ->
+  partialize (prog_interface p1) scs1 =
+  partialize (prog_interface p1) scs2.
+Admitted.
+
 (* Consider two star sequences starting from the same state (s),
    with the same number of steps (n) and the same trace (t):
 
