@@ -44,21 +44,22 @@ Section RSC_DC_MD.
   Hypothesis mains : Intermediate.linkable_mains p_compiled Ct.
 
   Lemma blame:
-    forall m P' Cs t'
-      (HP'_Cs_beh : program_behaves (S.CS.sem (Source.program_link P' Cs)) (Terminates (finpref_trace m)))
-      (HpCs_beh : program_behaves (S.CS.sem (Source.program_link p Cs)) (Goes_wrong t'))
-      (Hclosed_p_Cs : Source.closed_program (Source.program_link p Cs))
-      (Hlinkable_p_Cs : linkable (Source.prog_interface p) (Source.prog_interface Cs))
+    forall
+      Cs t' P' m
       (well_formed_Cs : Source.well_formed_program Cs)
+      (Hlinkable_p_Cs : linkable (Source.prog_interface p) (Source.prog_interface Cs))
+      (Hclosed_p_Cs : Source.closed_program (Source.program_link p Cs))
+      (HpCs_beh : program_behaves (S.CS.sem (Source.program_link p Cs)) (Goes_wrong t'))
+      (well_formed_P' : Source.well_formed_program P')
       (Hsame_iface1 : Source.prog_interface P' = Intermediate.prog_interface p_compiled)
       (HP'Cs_closed : Source.closed_program (Source.program_link P' Cs))
-      (well_formed_P' : Source.well_formed_program P')
-      (K : trace_finpref_prefix t' m)
-      (Hnot_wrong' : not_wrong_finpref m),
+      (HP'_Cs_beh : program_behaves (S.CS.sem (Source.program_link P' Cs)) (Terminates (finpref_trace m)))
+      (Hnot_wrong' : not_wrong_finpref m)
+      (K : trace_finpref_prefix t' m),
       undef_in t' (Source.prog_interface p).
   Proof.
-    intros m P' Cs t' HP'_Cs_beh HpCs_beh Hclosed_p_Cs Hlinkable_p_Cs
-           well_formed_Cs Hsame_iface1 HP'Cs_closed well_formed_P' K Hnot_wrong'.
+    intros Cs t' P' m well_formed_Cs Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
+           well_formed_P' Hsame_iface1 HP'Cs_closed HP'_Cs_beh Hnot_wrong' K.
     inversion HP'_Cs_beh as [sini1 ? Hini1 Hstbeh1 |]; subst.
     inversion Hstbeh1 as [? sfin1 HStar1 Hfinal1 | | |]; subst.
     (* RB: TODO: Lemma relating final_state and Nostep.
@@ -144,7 +145,7 @@ Section RSC_DC_MD.
              exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1).
           ** easy.
     -- destruct (CS.initial_state_exists
-                 (Source.program_link p Cs)) as [wit  Hf].
+                 (Source.program_link p Cs)) as [wit Hf].
        exfalso. now apply (Hnot_initial2 wit).
   Qed.
 
@@ -404,6 +405,7 @@ Section RSC_DC_MD.
         right. exists t'. repeat (split; try now auto).
         subst pCs_beh.
         unfold beh in HP'_Cs_beh.
+        (* Close the diagram. *)
         exact (blame
                  HP'_Cs_beh HpCs_beh Hclosed_p_Cs Hlinkable_p_Cs well_formed_Cs
                  Hsame_iface1 HP'Cs_closed well_formed_P' K Hnot_wrong').
