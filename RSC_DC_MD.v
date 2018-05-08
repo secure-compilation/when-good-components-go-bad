@@ -389,63 +389,8 @@ Section RSC_DC_MD.
                           (linkable_sym Hlinkable_p_Cs) Hclosed_p_Cs
                           Hini2 HStar2 Hparallel1).
               ** easy.
-        -- admit.
-      (** *~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  *)
-
-  Admitted.
-(*
-    (* Source-level decompositions (p and P') and closure of the diagram. *)
-    exists Cs. exists pCs_beh.
-    split; [assumption |].
-    split; [assumption |].
-    split; [assumption |].
-    split; [assumption |].
-    inversion HpCs_beh_imp as [pCs_beh_ok|].
-    - split.
-      + subst pCs_beh. assumption.
-      + left. subst. assumption.
-    - destruct H as [t' [Hgoes_wrong Hprefix]].
-      assert(finpref_trace_prefix m t' \/ trace_finpref_prefix t' m) as H
-          by (eapply behavior_prefix_comp'; eauto).
-      destruct H as [H | H].
-      + split.
-        * subst pCs_beh. assumption.
-        * left. subst. eapply trace_behavior_prefix_trans.
-          -- apply H.
-          -- unfold behavior_prefix. exists (Goes_wrong []). simpl.
-             setoid_rewrite <- app_nil_end. reflexivity.
-      + split; first by subst pCs_beh.
-        right. exists t'. do 2 (split; first now auto).
-        rewrite Source.link_sym in HpCs_beh; try assumption.
-        apply Source.Decomposition.decomposition_with_refinement_and_blame in HpCs_beh;
-          [ | assumption | assumption | now apply linkable_sym
-            | setoid_rewrite <- Source.link_sym; assumption].
-        * setoid_rewrite Source.link_sym in HP'_Cs_beh; trivial; try congruence.
-          eapply Source.Decomposition.decomposition_with_safe_behavior in HP'_Cs_beh;
-            [| assumption | assumption | congruence |
-               assert (linkable (Source.prog_interface P') (Source.prog_interface Cs))
-                 as Hlink by congruence;
-               rewrite <- (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlink);
-               assumption
-             | by [] ].
-          (* destruct HP'_Cs_beh as [beh' [G1 G2]]. *)
-          destruct HpCs_beh as [b [H1 H2]].
-          eapply (@blame_program_fixed p Cs).
-          -- assumption.
-          -- assumption.
-          -- assumption.
-          -- assumption.
-          -- pose proof (compilation_preserves_interface
-                           p p_compiled successful_compilation) as HH.
-             assert(Source.prog_interface P' = Source.prog_interface p) as HHH
-               by congruence.
-             rewrite <- HHH. apply HP'_Cs_beh.
-          -- exact Hprefix1.
-          -- exact Hgoes_wrong.
-          -- exact H1.
-          -- exact H2.
-          -- eexists. split; eassumption.
-  Qed.
-*)
-
+        -- destruct (CS.initial_state_exists
+                     (Source.program_link p Cs)) as [wit  Hf].
+           exfalso. now apply (Hnot_initial2 wit).
+Qed.
 End RSC_DC_MD.
