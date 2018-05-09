@@ -109,8 +109,8 @@ Extract Inductive list => "list" [ "[]" "(::)" ].
 
 Extract Inductive option => "option" [ "Some" "None" ].
 
-Extract Inductive nat => "Big_int"
-  [ "Big_int.zero" "Big_int.succ" ].
+Extract Inductive nat => "Big_int.big_int"
+  [ "Big_int.zero_big_int" "Big_int.succ_big_int" ].
 
 Extract Constant ocaml_int => "Big_int.big_int".
 Extract Constant ocaml_int_0 => "Big_int.zero_big_int".
