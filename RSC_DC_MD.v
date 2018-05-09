@@ -48,7 +48,7 @@ Module Type Source_Sig.
   End CS.
 End Source_Sig.
 
-Module Source_Instance : Source_Sig.
+Module Source_Instance <: Source_Sig.
   Definition program :=
     @Source.program.
 
@@ -193,7 +193,7 @@ End Compiler_Sig.
 
 (* RB: TODO: How to inform the module system that the types in Source_Instance
    are precisely those in Source? *)
-Module Compiler_Instance : Compiler_Sig Source_Instance.
+Module Compiler_Instance <: Compiler_Sig Source_Instance.
   Definition compile_program :=
     @Compiler.compile_program.
 
