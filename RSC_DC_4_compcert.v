@@ -1,4 +1,4 @@
-*(** * Proofs in this file 
+(** * Proofs in this file 
        are within the Compcert model
        of traces.
 
