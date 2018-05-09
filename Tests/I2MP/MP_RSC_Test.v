@@ -73,3 +73,6 @@ Definition mp_rsc_correct (fuel : nat) :=
     compile_program
     mp_eval
     fuel.
+
+Definition run_rsc_test :=
+  show (quickCheck (mp_rsc_correct 500%nat)).
