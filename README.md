@@ -5,7 +5,8 @@ This repository contains the Coq development of the paper:
   Amorim, Ana Nora Evans, Carmine Abate, Roberto Blanco, Théo Laurent,
   Benjamin C. Pierce, and Andrew Tolmach.
   **[When Good Components Go Bad: Formally Secure Compilation Despite
-     Dynamic Compromise](https://arxiv.org/abs/1802.00588)**. February 2018.
+     Dynamic Compromise]
+     (https://arxiv.org/abs/1802.00588)**. February 2018.
 
 ### Top-level theorems ###
 - `RSC_DC_MD.v` -- secure compilation for our compiler
