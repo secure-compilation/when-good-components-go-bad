@@ -24,7 +24,99 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Section RSC_DC_MD.
+Module Type Compiler_Sig.
+  Parameter compile_program : Source.program -> option Intermediate.program.
+
+  Axiom well_formed_compilable :
+    forall p,
+      Source.well_formed_program p ->
+    exists pc, compile_program p = Some pc.
+
+  Axiom compilation_preserves_well_formedness : forall p p_compiled,
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    Intermediate.well_formed_program p_compiled.
+
+  Axiom compilation_preserves_interface : forall p p_compiled,
+    compile_program p = Some p_compiled ->
+    Intermediate.prog_interface p_compiled = Source.prog_interface p.
+
+  Axiom compilation_preserves_linkability : forall p p_compiled c c_compiled,
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p = Some p_compiled ->
+    compile_program c = Some c_compiled ->
+    linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
+
+  Axiom compilation_preserves_linkable_mains : forall p1 p1' p2 p2',
+    Source.well_formed_program p1 ->
+    Source.well_formed_program p2 ->
+    Source.linkable_mains p1 p2 ->
+    compile_program p1 = Some p1' ->
+    compile_program p2 = Some p2' ->
+    Intermediate.linkable_mains p1' p2'.
+
+  Axiom separate_compilation_weaker :
+    forall p c pc_comp p_comp c_comp,
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      compile_program p = Some p_comp ->
+      compile_program c = Some c_comp ->
+      compile_program (Source.program_link p c) = Some pc_comp ->
+    forall b : program_behavior,
+      program_behaves (I.CS.sem pc_comp) b <->
+      program_behaves (I.CS.sem (Intermediate.program_link p_comp c_comp)) b.
+
+  Axiom I_simulates_S :
+    forall p,
+      Source.closed_program p ->
+      Source.well_formed_program p ->
+    forall tp,
+      compile_program p = Some tp -> forward_simulation (S.CS.sem p) (I.CS.sem tp).
+
+  Axiom S_simulates_I:
+    forall p,
+      Source.closed_program p ->
+      Source.well_formed_program p ->
+    forall tp,
+      compile_program p = Some tp ->
+      backward_simulation (S.CS.sem p) (I.CS.sem tp).
+End Compiler_Sig.
+
+Module Compiler_Instance : Compiler_Sig.
+  Definition compile_program :=
+    @Compiler.compile_program.
+
+  Definition well_formed_compilable :=
+    @Compiler.well_formed_compilable.
+
+  Definition compilation_preserves_well_formedness :=
+    @Compiler.compilation_preserves_well_formedness.
+
+  Definition compilation_preserves_interface :=
+    @Compiler.compilation_preserves_interface.
+
+  Definition compilation_preserves_linkability :=
+    @Compiler.compilation_preserves_linkability.
+
+  Definition compilation_preserves_linkable_mains :=
+    @Compiler.compilation_preserves_linkable_mains.
+
+  Definition separate_compilation_weaker :=
+    @Compiler.separate_compilation_weaker.
+
+  Definition I_simulates_S :=
+    @Compiler.I_simulates_S.
+
+  Definition S_simulates_I :=
+    @Compiler.S_simulates_I.
+End Compiler_Instance.
+
+Module RSC_DC_MD_Module (Compiler : Compiler_Sig).
+Section RSC_DC_MD_Section.
+
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
   Variable Ct: Intermediate.program.
@@ -32,7 +124,7 @@ Section RSC_DC_MD.
   (* Some reasonable assumptions about our programs *)
 
   Hypothesis well_formed_p : Source.well_formed_program p.
-  Hypothesis successful_compilation : compile_program p = Some p_compiled.
+  Hypothesis successful_compilation : Compiler.compile_program p = Some p_compiled.
   Hypothesis well_formed_Ct : Intermediate.well_formed_program Ct.
   Hypothesis linkability : linkable (Source.prog_interface p) (Intermediate.prog_interface Ct).
   Hypothesis closedness :
@@ -75,7 +167,7 @@ Section RSC_DC_MD.
                                          (domm (Intermediate.prog_interface Ct)))
         by apply linkability.
       constructor;
-        apply compilation_preserves_interface in successful_compilation;
+        apply Compiler.compilation_preserves_interface in successful_compilation;
         now rewrite successful_compilation.
     }
 
@@ -111,10 +203,10 @@ Section RSC_DC_MD.
     (* probably need partialize to obtain them *)
 
     (* At this point, we compile P' and Cs and establish their basic properties. *)
-    destruct (well_formed_compilable _ well_formed_P') as [P'_compiled HP'_compiles].
+    destruct (Compiler.well_formed_compilable well_formed_P') as [P'_compiled HP'_compiles].
     pose proof Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles
       as well_formed_P'_compiled.
-    destruct (well_formed_compilable _ well_formed_Cs) as [Cs_compiled HCs_compiles].
+    destruct (Compiler.well_formed_compilable well_formed_Cs) as [Cs_compiled HCs_compiles].
     pose proof Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles
       as well_formed_Cs_compiled.
     assert
@@ -131,13 +223,13 @@ Section RSC_DC_MD.
       apply linkability_pcomp_Ct.
     }
     assert (exists P'_Cs_compiled,
-              compile_program (Source.program_link P' Cs) = Some P'_Cs_compiled)
+              Compiler.compile_program (Source.program_link P' Cs) = Some P'_Cs_compiled)
       as [P'_Cs_compiled HP'_Cs_compiles]. {
       rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
       rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
       pose proof Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct
         as Hlinking_wf.
-      apply well_formed_compilable; assumption.
+      apply Compiler.well_formed_compilable; assumption.
     }
 
     assert (forall b, program_behaves (I.CS.sem P'_Cs_compiled) b <->
@@ -172,13 +264,13 @@ Section RSC_DC_MD.
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
       as Hctx_same_iface. {
-      symmetry. erewrite compilation_preserves_interface.
+      symmetry. erewrite Compiler.compilation_preserves_interface.
       - rewrite <- Hsame_iface2. reflexivity.
       - assumption.
     }
     rewrite Hctx_same_iface in HP_decomp.
     assert (Intermediate.prog_interface p_compiled = Intermediate.prog_interface P'_compiled) as Hprog_same_iface. {
-      symmetry. erewrite compilation_preserves_interface.
+      symmetry. erewrite Compiler.compilation_preserves_interface.
       - apply Hsame_iface1.
       - assumption.
     }
@@ -203,7 +295,7 @@ Section RSC_DC_MD.
 
     assert (Intermediate.linkable_mains p_compiled Cs_compiled) as linkable_mains.
     {
-      eapply (Compiler.compilation_preserves_linkable_mains p _ Cs);
+      eapply (@Compiler.compilation_preserves_linkable_mains p _ Cs);
         try assumption.
       - rewrite <- Hsame_iface2 in linkability.
         eapply Source.linkable_disjoint_mains; assumption.
@@ -227,16 +319,16 @@ Section RSC_DC_MD.
     destruct HpCs_compiled_beh as [b3 [HpCs_compiled_beh HpCs_compiled_prefix]].
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
       apply (Source.interface_preserves_closedness_l HP'Cs_closed); trivial.
-      apply compilation_preserves_interface in HP'_compiles.
-      apply compilation_preserves_interface in successful_compilation.
+      apply Compiler.compilation_preserves_interface in HP'_compiles.
+      apply Compiler.compilation_preserves_interface in successful_compilation.
       congruence.
     }
     assert (linkable (Source.prog_interface p) (Source.prog_interface Cs))
       as Hlinkable_p_Cs. {
       inversion linkability'' as [sound_interface_p_Cs fdisjoint_p_Cs].
       constructor;
-        (apply compilation_preserves_interface in HCs_compiles;
-        apply compilation_preserves_interface in successful_compilation;
+        (apply Compiler.compilation_preserves_interface in HCs_compiles;
+        apply Compiler.compilation_preserves_interface in successful_compilation;
         rewrite <- HCs_compiles; rewrite <- successful_compilation;
         assumption).
     }
@@ -245,11 +337,11 @@ Section RSC_DC_MD.
 
     (* BCC *)
     assert (exists pCs_compiled,
-               compile_program (Source.program_link p Cs) = Some pCs_compiled)
+               Compiler.compile_program (Source.program_link p Cs) = Some pCs_compiled)
       as [pCs_compiled HpCs_compiles]
-      by now apply well_formed_compilable.
+      by now apply Compiler.well_formed_compilable.
     assert (forall b, program_behaves (I.CS.sem pCs_compiled) b <->
-                      program_behaves (I.CS.sem (Intermediate.program_link p_compiled Cs_compiled)) b)
+                 program_behaves (I.CS.sem (Intermediate.program_link p_compiled Cs_compiled)) b)
       as HpCs_compiled_behaves
       by now apply Compiler.separate_compilation_weaker with (p:=p) (c:=Cs).
     apply HpCs_compiled_behaves in HpCs_compiled_beh.
@@ -258,7 +350,7 @@ Section RSC_DC_MD.
                behavior_improves beh1 b3) as HpCs_beh. {
       apply backward_simulation_behavior_improves
         with (L1:=S.CS.sem (Source.program_link p Cs)) in HpCs_compiled_beh; auto.
-      apply S_simulates_I; assumption.
+      apply Compiler.S_simulates_I; assumption.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
 
@@ -298,7 +390,7 @@ Section RSC_DC_MD.
         (* Close the diagram. *)
         assert (Hsame_iface3 : Source.prog_interface P' = Source.prog_interface p).
         {
-          pose proof compilation_preserves_interface _ _ successful_compilation
+          pose proof Compiler.compilation_preserves_interface successful_compilation
             as Hsame_iface3.
           congruence.
         }
@@ -308,4 +400,10 @@ Section RSC_DC_MD.
                                 HP'_Cs_beh Hnot_wrong' K).
   Qed.
 
-End RSC_DC_MD.
+End RSC_DC_MD_Section.
+End RSC_DC_MD_Module.
+
+Module RSC_DC_MD_Instance := RSC_DC_MD_Module Compiler_Instance.
+
+Definition RSC_DC_MD :=
+  RSC_DC_MD_Instance.RSC_DC_MD.
