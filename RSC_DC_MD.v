@@ -24,6 +24,23 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
+(* RB: Eventually, we may not want have these interfaces distracting from
+  the high-level proof here. *)
+
+Module Type Source_Sig.
+  Parameter program : Type.
+
+  Parameter well_formed_program : program -> Prop.
+End Source_Sig.
+
+Module Source_Instance : Source_Sig.
+  Definition program :=
+    @Source.program.
+
+  Definition well_formed_program :=
+    @Source.well_formed_program.
+End Source_Instance.
+
 Module Type Compiler_Sig.
   Parameter compile_program : Source.program -> option Intermediate.program.
 
