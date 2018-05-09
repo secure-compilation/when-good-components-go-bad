@@ -41,11 +41,68 @@ Module Type Source_Sig.
 
   Parameter linkable_mains : program -> program -> Prop.
 
+  Axiom linkable_mains_sym : forall prog1 prog2,
+    linkable_mains prog1 prog2 ->
+    linkable_mains prog2 prog1.
+
+  Axiom linkable_disjoint_mains: forall prog1 prog2,
+    well_formed_program prog1 ->
+    well_formed_program prog2 ->
+    linkable (prog_interface prog1) (prog_interface prog2) ->
+    linkable_mains prog1 prog2.
+
   Parameter program_link : program -> program -> program.
+
+  Axiom linking_well_formedness : forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    well_formed_program (program_link p1 p2).
+
+  Axiom interface_preserves_closedness_l : forall p1 p2 p1',
+    closed_program (program_link p1 p2) ->
+    prog_interface p1 = prog_interface p1' ->
+    well_formed_program p1 ->
+    well_formed_program p1' ->
+    closed_program (program_link p1' p2).
 
   Module CS.
     Parameter sem : program -> semantics.
   End CS.
+
+  Axiom definability_with_linking :
+    forall p c b m,
+      Intermediate.well_formed_program p ->
+      Intermediate.well_formed_program c ->
+      linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
+      Intermediate.closed_program (Intermediate.program_link p c) ->
+      program_behaves (I.CS.sem (Intermediate.program_link p c)) b ->
+      prefix m b ->
+      not_wrong_finpref m ->
+    exists p' c',
+      prog_interface p' = Intermediate.prog_interface p /\
+      prog_interface c' = Intermediate.prog_interface c /\
+      well_formed_program p' /\
+      well_formed_program c' /\
+      closed_program (program_link p' c') /\
+      program_behaves (CS.sem (program_link p' c')) (Terminates (finpref_trace m)) /\
+      prefix m (Terminates (finpref_trace m)).
+
+  Module PS.
+    Axiom blame_program : forall p Cs t' P' m,
+      well_formed_program p ->
+      well_formed_program Cs ->
+      linkable (prog_interface p) (prog_interface Cs) ->
+      closed_program (program_link p Cs) ->
+      program_behaves (CS.sem (program_link p Cs)) (Goes_wrong t') ->
+      well_formed_program P' ->
+      prog_interface P' = prog_interface p ->
+      closed_program (program_link P' Cs) ->
+      program_behaves (CS.sem (program_link P' Cs)) (Terminates (finpref_trace m)) ->
+      not_wrong_finpref m ->
+      trace_finpref_prefix t' m ->
+      undef_in t' (prog_interface p).
+  End PS.
 End Source_Sig.
 
 Module Source_Instance <: Source_Sig.
@@ -64,13 +121,33 @@ Module Source_Instance <: Source_Sig.
   Definition linkable_mains :=
     @Source.linkable_mains.
 
+  Definition linkable_mains_sym :=
+    @Source.linkable_mains_sym.
+
+  Definition linkable_disjoint_mains :=
+    @Source.linkable_disjoint_mains.
+
   Definition program_link :=
     @Source.program_link.
+
+  Definition linking_well_formedness :=
+    @Source.linking_well_formedness.
+
+  Definition interface_preserves_closedness_l :=
+    @Source.interface_preserves_closedness_l.
 
   Module CS.
     Definition sem :=
       @Source.CS.CS.sem.
   End CS.
+
+  Definition definability_with_linking :=
+    @Source.Definability.definability_with_linking.
+
+  Module PS.
+    Definition blame_program :=
+      @Source.PS.PS.blame_program.
+  End PS.
 End Source_Instance.
 
 Module Type Compiler_Sig (Source : Source_Sig).
@@ -134,8 +211,6 @@ Module Type Compiler_Sig (Source : Source_Sig).
       backward_simulation (Source.CS.sem p) (I.CS.sem tp).
 End Compiler_Sig.
 
-(* RB: TODO: How to inform the module system that the types in Source_Instance
-   are precisely those in Source? *)
 Module Compiler_Instance <: Compiler_Sig Source_Instance.
   Definition compile_program :=
     @Compiler.compile_program.
@@ -170,7 +245,9 @@ Module Compiler_Gen (Source : Source_Sig) : Compiler_Sig Source.
 Module Compiler_Instance : Compiler_Gen Source_Instance.
 *)
 
-Module RSC_DC_MD_Module (Compiler : Compiler_Sig).
+Module RSC_DC_MD_Module
+       (Source : Source_Sig)
+       (Compiler : Compiler_Sig Source).
 Section RSC_DC_MD_Section.
 
   Variable p: Source.program.
@@ -199,7 +276,7 @@ Section RSC_DC_MD_Section.
       Source.well_formed_program Cs /\
       linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (Source.program_link p Cs) /\
-      program_behaves (S.CS.sem (Source.program_link p Cs)) beh /\
+      program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
       (prefix m beh \/
       (exists t',
         beh = Goes_wrong t' /\ trace_finpref_prefix t' m /\
@@ -239,7 +316,7 @@ Section RSC_DC_MD_Section.
     (*   as [beh' [Hbeh' Hbeh_improves]]. *)
 
     (* definability *)
-    destruct (definability_with_linking
+    destruct (Source.definability_with_linking
                 well_formed_p_compiled well_formed_Ct
                 linkability_pcomp_Ct closedness Hbeh Hprefix0 Hnot_wrong')
       as [P' [Cs
@@ -402,10 +479,10 @@ Section RSC_DC_MD_Section.
       by now apply Compiler.separate_compilation_weaker with (p:=p) (c:=Cs).
     apply HpCs_compiled_behaves in HpCs_compiled_beh.
     assert (exists beh1,
-               program_behaves (S.CS.sem (Source.program_link p Cs)) beh1 /\
+               program_behaves (Source.CS.sem (Source.program_link p Cs)) beh1 /\
                behavior_improves beh1 b3) as HpCs_beh. {
       apply backward_simulation_behavior_improves
-        with (L1:=S.CS.sem (Source.program_link p Cs)) in HpCs_compiled_beh; auto.
+        with (L1:=Source.CS.sem (Source.program_link p Cs)) in HpCs_compiled_beh; auto.
       apply Compiler.S_simulates_I; assumption.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
@@ -450,7 +527,7 @@ Section RSC_DC_MD_Section.
             as Hsame_iface3.
           congruence.
         }
-        exact (PS.blame_program well_formed_p well_formed_Cs
+        exact (Source.PS.blame_program well_formed_p well_formed_Cs
                                 Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                                 well_formed_P' Hsame_iface3 HP'Cs_closed
                                 HP'_Cs_beh Hnot_wrong' K).
@@ -459,7 +536,7 @@ Section RSC_DC_MD_Section.
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Module.
 
-Module RSC_DC_MD_Instance := RSC_DC_MD_Module Compiler_Instance.
+Module RSC_DC_MD_Instance := RSC_DC_MD_Module Source_Instance Compiler_Instance.
 
 Definition RSC_DC_MD :=
   RSC_DC_MD_Instance.RSC_DC_MD.
