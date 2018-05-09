@@ -13,7 +13,7 @@ Require Export Extraction.Definitions.
 
 Open Scope string_scope.
 
-(* TL TODO: switch to Show type class *)
+(* TL TODO: switch to Show type class, cf coqstring_of_Z *)
 
 Axiom coqstring_of_word : forall {k}, word k -> string.
 (* TL TODO: move this to Extraction.v *)
@@ -113,3 +113,20 @@ Definition coqstring_of_state (st : state) : string :=
   ++ coqstring_of_mem (Symbolic.mem st) ++
 "============================
 ".
+
+
+(* Require Import CompCert.Events. *)
+(* From QuickChick Require Import QuickChick. *)
+
+(* Definition coqstring_of_Z (z : BinNums.Z) := show z. *)
+
+(* Definition coqstring_of_event (e : event) := *)
+(*   match e with *)
+(*   | ECall c p r c' => "(ECall " ++ coqstring_of_nat c ++ " " *)
+(*                                 ++ coqstring_of_nat p ++ " " *)
+(*                                 ++ coqstring_of_Z r   ++ " " *)
+(*                                 ++ coqstring_of_nat c' ++ ")" *)
+(*   | ERet c r c' => "(ERet " ++ coqstring_of_nat c ++ " " *)
+(*                             ++ coqstring_of_Z r   ++ " " *)
+(*                             ++ coqstring_of_nat c' ++ ")" *)
+(*   end. *)

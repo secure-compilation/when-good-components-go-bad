@@ -36,12 +36,24 @@ Definition mp_program := { fmap mword mt -> matom }.
 Definition ExecutionResult := unit.
 Definition ExecutionError := unit.
 
-Definition mp_eval
-           (p : mp_program)
-           (fuel : nat)
-  : (@Either ExecutionResult ExecutionError)
-     * Log
-  := ((Common.Either.Left "" tt),nil).
+Fixpoint mp_exec (s : state) (fuel : nat)
+  : (@Either ExecutionResult ExecutionError) * Log :=
+  let list_of_option {A : Type} (o : option A) : list A := match o with
+                         | None => nil
+                         | Some x => cons x nil
+                         end in
+  match fuel with
+  | O => (Common.Either.Right tt, nil)
+  | S n => match stepf s with
+           | Some (s', e) => let (r, l) := mp_exec s' n in
+                             (r, (list_of_option e ++ l))%list
+           | None => (Common.Either.Left "The machine either halted or failed" tt, nil)
+           end
+  end.
+
+
+Definition mp_eval (p : mp_program) (fuel : nat)
+  : (@Either ExecutionResult ExecutionError) * Log := mp_exec (load p) fuel.
 
 Definition compile_program
            (ip : Intermediate.program)
