@@ -194,7 +194,7 @@ Definition instr_rules (evi : ev_inputs) (op : opcode)
                                              do! p  <- get_proc_name tni;
                                                  Some (ECall current p (rcom_value evi) c') in
                                    do! _ <- check_entry current tni;
-                                       Some (OVec JAL (build_tpc level.+1) [hseq Ret level], None)
+                                       Some (OVec JAL (build_tpc level.+1) [hseq Ret level], ev)
 
   | _,     _                   => None
   end.
