@@ -102,3 +102,5 @@ Tests/I2SFI/I2SFICompUtil.v
 Tests/I2SFI/SFIPBTests.v
 Tests/I2SFI/SFI_RSC_Test.v
 Tests/I2MP/MP_RSC_Test.v
+Tests/I2SFI/CompilerIntegrationTests.v
+
