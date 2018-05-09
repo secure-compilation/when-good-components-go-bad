@@ -156,7 +156,8 @@ Module Type Compiler_Sig (Source : Source_Sig).
   Axiom well_formed_compilable :
     forall p,
       Source.well_formed_program p ->
-    exists pc, compile_program p = Some pc.
+    exists pc,
+      compile_program p = Some pc.
 
   Axiom compilation_preserves_well_formedness : forall p p_compiled,
     Source.well_formed_program p ->
