@@ -1,5 +1,6 @@
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
+Require Import CompCert.Behaviors.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -1315,6 +1316,89 @@ move: nin (nin); rewrite {2}e_int ?wfprog_defined_procedures // => nin1 nin2.
 move/find_procedure_unionm_r/(_ nin1)=> e1.
 move/find_procedure_unionm_r/(_ nin2).
 by rewrite e1; case.
+Qed.
+
+(* RB: TODO: Source prefixes no longer needed: clean proof. *)
+Lemma blame_program:
+  forall
+    p Cs t' P' m
+    (well_formed_p : well_formed_program p)
+    (well_formed_Cs : well_formed_program Cs)
+    (Hlinkable_p_Cs : linkable (prog_interface p) (prog_interface Cs))
+    (Hclosed_p_Cs : Source.closed_program (Source.program_link p Cs))
+    (HpCs_beh : program_behaves (CS.sem (program_link p Cs)) (Goes_wrong t'))
+    (well_formed_P' : well_formed_program P')
+    (Hsame_iface1 : prog_interface P' = prog_interface p)
+    (HP'Cs_closed : Source.closed_program (Source.program_link P' Cs))
+    (HP'_Cs_beh : program_behaves (CS.sem (Source.program_link P' Cs)) (Terminates (finpref_trace m)))
+    (Hnot_wrong' : not_wrong_finpref m)
+    (K : trace_finpref_prefix t' m),
+    undef_in t' (Source.prog_interface p).
+Proof.
+  intros p Cs t' P' m well_formed_p well_formed_Cs Hlinkable_p_Cs Hclosed_p_Cs
+         HpCs_beh well_formed_P' Hsame_iface1 HP'Cs_closed HP'_Cs_beh Hnot_wrong' K.
+  inversion HP'_Cs_beh as [sini1 ? Hini1 Hstbeh1 |]; subst.
+  inversion Hstbeh1 as [? sfin1 HStar1 Hfinal1 | | |]; subst.
+  (* RB: TODO: Lemma relating final_state and Nostep.
+     Also simplify all the annoying rewriting that follows. *)
+  assert (HNostep1 : Nostep (CS.sem (Source.program_link P' Cs)) sfin1).
+  {
+    simpl in Hfinal1. simpl.
+    intros tcon scon Hcontra.
+    CS.unfold_state sfin1.
+    destruct Hfinal1 as [Hexit | [val [Hexpr [Hcont Hstack]]]]; subst;
+      inversion Hcontra.
+  }
+  inversion HpCs_beh as [sini2 ? Hini2 Hstbeh2 | Hnot_initial2]; subst;
+    last (destruct (CS.initial_state_exists (Source.program_link p Cs)) as [wit Hf];
+          specialize (Hnot_initial2 wit);
+          contradiction).
+  inversion Hstbeh2 as [| | | ? sfin2 HStar2 HNostep2 Hnot_final2]; subst.
+  rewrite
+    (Source.closed_program_link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+    in Hclosed_p_Cs.
+  assert (Hlinkable_P'_Cs := Hlinkable_p_Cs).
+  rewrite <- Hsame_iface1 in Hlinkable_P'_Cs.
+  rewrite
+    (Source.closed_program_link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+    in HP'Cs_closed.
+  assert (Hpartialize :
+            partialize (prog_interface p) sini1 = partialize (prog_interface p) sini2).
+  {
+    pose proof partialize_partition.
+    rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+      in Hini1.
+    rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+      in Hini2.
+    pose proof PS.partialize_partition
+         well_formed_Cs well_formed_P' well_formed_p
+         Hsame_iface1 (linkable_sym Hlinkable_P'_Cs) HP'Cs_closed Hclosed_p_Cs
+         Hini1 Hini2.
+    congruence.
+  }
+  rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+    in HStar1 HNostep1 Hfinal1.
+  rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+    in HStar2 HNostep2.
+  (* Case analysis on m. FGoes_wrong can be ruled out by contradiction,
+     but also solved exactly like the others. *)
+  assert (Hrefl : prog_interface p = prog_interface p) by reflexivity.
+  destruct m as [tm | tm | tm];
+    (destruct K as [tm' Htm']; subst tm;
+     unfold finpref_trace in HStar1;
+     pose proof PS.parallel_exec
+       well_formed_Cs well_formed_P' well_formed_p
+       (linkable_sym Hlinkable_p_Cs)
+       HP'Cs_closed Hclosed_p_Cs
+       Hsame_iface1 Hrefl
+       Hpartialize
+       HStar1 HStar2 HNostep1 HNostep2 Hfinal1
+       as Hparallel;
+     case: (boolP (CS.s_component sfin2 \in domm (Source.prog_interface p)))=> [Hparallel1|/Hparallel Hparallel2];
+       [ rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
+           in Hini2;
+         exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1)
+       | easy ]).
 Qed.
 
 (* If a state s leads to two states s1 and s2 with the same trace t, it must
