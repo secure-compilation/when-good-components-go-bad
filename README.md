@@ -85,7 +85,6 @@ Running the tests (to be simplified):
 
     $ make clean
     $ make -j4
-    $ ./run_extracted_examples.sh --force-extraction
     $ rm sfi_safety_properties.exe
     $ ./run_sfi_tests.sh
 
