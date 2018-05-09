@@ -64,7 +64,7 @@ Assumption B.6: Separate Compilation
 - `S2I.Compiler.separate_compilation_weaker`
 
 Assumption B.7: Blame
-- `RSC_DC_MD.blame`
+- `Source.PS.PS.blame_program`
 
 ### Prerequisites ###
 
