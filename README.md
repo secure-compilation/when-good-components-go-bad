@@ -9,8 +9,62 @@ This repository contains the Coq development of the paper:
      (https://arxiv.org/abs/1802.00588)**. February 2018.
 
 ### Top-level theorems ###
-- `RSC_DC_MD.v` -- secure compilation for our compiler
-- `RSC_DC.v` -- general proofs about the class of properties preserved by RSC_DC
+
+At the top level, the development provides high-level proofs with the following
+entry points:
+- `RSC_DC_MD.v`: secure compilation for our compiler
+- `RSC_DC.v`: general proofs about the class of properties preserved by RSC^DC
+- `RSC_DC_4_compcert.v`: proofs in `RSC_DC.v` adapted to the general CompCert
+  trace model
+
+The correspondences between the main definitions and results in the paper and
+in Coq are as follows.
+
+Definition 3.2: Robustly Safe Compilation with Dynamic Compromise (RSC^DC)
+- `RSC_DC.RSC_dc` in the simple trace model
+- `RSC_DC_4_compcert.RSC_dc` in the CompCert trace model
+
+Definition 3.3: Robustly Safe Compilation with Dynamic Compromise and Mutual
+Distrust (RSC^DC_MD)
+- `RSC_DC_MD.RSC_DC_MD`
+
+Definition A.1: Z_P class of safety properties preserved by RSC^DC
+- `RSC_DC.Z_class` (proof-friendly definition)
+  and `RSC_DC.Z_p_equivalent`
+  (proof of equivalence between the proof-friendly and the paper definitions)
+  in the simple trace model
+- `RSC_DC_4_compcert.Z_class` (proof-friendly definition)
+  and `RSC_DC_4_compcert.Z_p_equivalent`
+  (proof of equivalence between the proof-friendly and the paper definitions)
+  in the CompCert trace model
+
+Theorem A.2: RSC^DC characterization via Z_P
+- `RSC_DC.main_thm` in the simple trace model
+- `RSC_DC_4_compcert.main_thm` in the CompCert trace model
+
+Assumption B.2: Decomposition
+- `Intermediate.Decomposition.decomposition_with_safe_behavior`
+- `Intermediate.Decomposition.decomposition_with_refinement`
+
+Assumption B.3: Composition
+- `Intermediate.Composition.composition_prefix`
+
+Assumption B.4: Definability
+- `Source.Definability.definability_with_linking`
+
+Assumption B.5: Compiler Correctness
+- `S2I.Compiler.I_simulates_S` and
+  `CompCert.Behaviors.forward_simulation_same_safe_behavior`
+  for Forward Compiler Correctness
+- `S2I.Compiler.S_simulates_I` and
+  `CompCert.Behaviors.backward_simulation_behavior_improves`
+  for Backward Compiler Correctness
+
+Assumption B.6: Separate Compilation
+- `S2I.Compiler.separate_compilation_weaker`
+
+Assumption B.7: Blame
+- `RSC_DC_MD.blame`
 
 ### Prerequisites ###
 
