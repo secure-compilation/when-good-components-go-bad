@@ -1,3 +1,11 @@
+*(** * Proofs in this file 
+       are within the Compcert model
+       of traces.
+
+       In RSC_DC.v we create our model 
+       for traces proving the same results
+ *)
+
 Require Import Classical.
 Require Import Classical_Pred_Type.
 Require Import Setoid.
