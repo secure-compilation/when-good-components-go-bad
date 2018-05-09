@@ -173,10 +173,19 @@ Record state := State {
 Definition pcv (s : state) := vala (pc s).
 Definition pct (s : state) := taga (pc s).
 
+(* TL TODO: quick-and-dirty ssrint.int to BinNums.Z convertion (to get rid of) *)
+(* TL TODO: BTW, forced to use nat, so it won't scale well *)
+Definition convert (i : ssrint.int) : BinNums.Z :=
+  match i with
+  | ssrint.Posz n => BinInt.Z.of_nat n
+  | ssrint.Negz n => BinInt.Z.opp (BinInt.Z.of_nat n)
+  end.
+
 (* TL TODO: following CH's instruction, adding arguments ad-hoc to allow
             transfer function to produces events *)
-Definition evi (st : state) : ev_inputs :=
-  {| rcom_value := BinNums.Z0 |} .
+Definition evi (st : state) : option ev_inputs :=
+  do! a <- regs st rcom;
+    Some {| rcom_value := convert (int_of_word (vala a)) |} .
 Notation state_ev := (state * option event)%type.
 
 Lemma state_eta st :
@@ -195,7 +204,8 @@ Definition syscall_table := {fmap mword mt -> syscall}.
 Variable table : syscall_table.
 
 Definition run_syscall (sc : syscall) (st : state) : option state_ev :=
-  match transfer (IVec SERVICE (taga (pc st)) (entry_tag sc) [hseq] None) (evi st) with
+  do! i <- evi st;
+  match transfer (IVec SERVICE (taga (pc st)) (entry_tag sc) [hseq] None) i with
   | Some _ => do! s <- sem sc st;
                 Some (s, None)
   | None => None
@@ -203,7 +213,8 @@ Definition run_syscall (sc : syscall) (st : state) : option state_ev :=
 
 Definition next_state (st : state) (iv : ivec ttypes)
                       (k : vovec_ev ttypes (op iv) -> option state_ev) : option state_ev :=
-  do! ov <- transfer iv (evi st);
+  do! i <- (evi st);
+  do! ov <- transfer iv i;
     k ov.
 
 (* TL TODO: do we want it to be dependent? / part of ivec? *)
