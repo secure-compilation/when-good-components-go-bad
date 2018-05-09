@@ -25,23 +25,55 @@ Unset Printing Implicit Defensive.
 Set Bullet Behavior "Strict Subproofs".
 
 (* RB: Eventually, we may not want have these interfaces distracting from
-  the high-level proof here. *)
+   the high-level proof here.
+
+   The repetition verbatim of theorem statements as axioms is particularly
+   annoying; we will want to eliminate this duplication. *)
 
 Module Type Source_Sig.
   Parameter program : Type.
 
+  Parameter prog_interface : program -> Program.interface.
+
   Parameter well_formed_program : program -> Prop.
+
+  Parameter closed_program : program -> Prop.
+
+  Parameter linkable_mains : program -> program -> Prop.
+
+  Parameter program_link : program -> program -> program.
+
+  Module CS.
+    Parameter sem : program -> semantics.
+  End CS.
 End Source_Sig.
 
 Module Source_Instance : Source_Sig.
   Definition program :=
     @Source.program.
 
+  Definition prog_interface :=
+    @Source.prog_interface.
+
   Definition well_formed_program :=
     @Source.well_formed_program.
+
+  Definition closed_program :=
+    @Source.closed_program.
+
+  Definition linkable_mains :=
+    @Source.linkable_mains.
+
+  Definition program_link :=
+    @Source.program_link.
+
+  Module CS.
+    Definition sem :=
+      @Source.CS.CS.sem.
+  End CS.
 End Source_Instance.
 
-Module Type Compiler_Sig.
+Module Type Compiler_Sig (Source : Source_Sig).
   Parameter compile_program : Source.program -> option Intermediate.program.
 
   Axiom well_formed_compilable :
@@ -91,7 +123,7 @@ Module Type Compiler_Sig.
       Source.closed_program p ->
       Source.well_formed_program p ->
     forall tp,
-      compile_program p = Some tp -> forward_simulation (S.CS.sem p) (I.CS.sem tp).
+      compile_program p = Some tp -> forward_simulation (Source.CS.sem p) (I.CS.sem tp).
 
   Axiom S_simulates_I:
     forall p,
@@ -99,10 +131,12 @@ Module Type Compiler_Sig.
       Source.well_formed_program p ->
     forall tp,
       compile_program p = Some tp ->
-      backward_simulation (S.CS.sem p) (I.CS.sem tp).
+      backward_simulation (Source.CS.sem p) (I.CS.sem tp).
 End Compiler_Sig.
 
-Module Compiler_Instance : Compiler_Sig.
+(* RB: TODO: How to inform the module system that the types in Source_Instance
+   are precisely those in Source? *)
+Module Compiler_Instance : Compiler_Sig Source_Instance.
   Definition compile_program :=
     @Compiler.compile_program.
 
@@ -130,6 +164,11 @@ Module Compiler_Instance : Compiler_Sig.
   Definition S_simulates_I :=
     @Compiler.S_simulates_I.
 End Compiler_Instance.
+
+(* A wacky alternative (that does not work like this):
+Module Compiler_Gen (Source : Source_Sig) : Compiler_Sig Source.
+Module Compiler_Instance : Compiler_Gen Source_Instance.
+*)
 
 Module RSC_DC_MD_Module (Compiler : Compiler_Sig).
 Section RSC_DC_MD_Section.
