@@ -30,6 +30,59 @@ Set Bullet Behavior "Strict Subproofs".
    The repetition verbatim of theorem statements as axioms is particularly
    annoying; we will want to eliminate this duplication. *)
 
+Module Type Intermediate_Sig.
+  Parameter program : Type.
+
+  Parameter prog_interface : program -> Program.interface.
+
+  Parameter well_formed_program : program -> Prop.
+
+  Parameter closed_program : program -> Prop.
+
+  Parameter linkable_mains : program -> program -> Prop.
+
+  Parameter program_link : program -> program -> program.
+
+  Module CS.
+    Parameter sem : program -> semantics.
+  End CS.
+
+  Module PS.
+    Parameter sem : program -> Program.interface -> semantics.
+  End PS.
+End Intermediate_Sig.
+
+Module Intermediate_Instace : Intermediate_Sig.
+  Definition program :=
+    @Intermediate.program.
+
+  Definition prog_interface :=
+    @Intermediate.prog_interface.
+
+  Definition well_formed_program :=
+    @Intermediate.well_formed_program.
+
+  Definition closed_program :=
+    @Intermediate.closed_program.
+
+   Definition linkable_mains :=
+    @Intermediate.linkable_mains.
+
+  Definition program_link :=
+    @Intermediate.program_link.
+
+  Module CS.
+    Definition sem :=
+      @Intermediate.CS.CS.sem.
+  End CS.
+
+  Module PS.
+    Definition sem :=
+      @Intermediate.PS.PS.sem.
+  End PS.  
+End Intermediate_Instace.
+
+
 Module Type Source_Sig.
   Parameter program : Type.
 
