@@ -28,7 +28,18 @@ Set Bullet Behavior "Strict Subproofs".
    the high-level proof here.
 
    The repetition verbatim of theorem statements as axioms is particularly
-   annoying; we will want to eliminate this duplication. *)
+   annoying; we will want to eliminate this duplication.
+
+   Note the blame lemma in Source as a dependency on Intermediate. Should
+   we keep it this way? It feels ugly.
+
+   Naming comventions can also be harmonized.
+
+   The current proof is generic while still relying on our Common and
+   CompCert's infrastructure. Note that PS.mergeable_interfaces is defined
+   in Intermediate and used there, but is actually independent from it and
+   not factored as part of the interface: this points to it belonging in
+   Common and not in Intermediate. *)
 
 Module Type Intermediate_Sig.
   Parameter program : Type.
@@ -43,6 +54,27 @@ Module Type Intermediate_Sig.
 
   Parameter program_link : program -> program -> program.
 
+  Axiom program_linkC : forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    program_link p1 p2 = program_link p2 p1.
+
+  Axiom linking_well_formedness : forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    well_formed_program (program_link p1 p2).
+
+  Axiom interface_preserves_closedness_r : forall p1 p2 p2',
+    well_formed_program p1 ->
+    well_formed_program p2' ->
+    prog_interface p2 = prog_interface p2' ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    closed_program (program_link p1 p2) ->
+    linkable_mains p1 p2 ->
+    closed_program (program_link p1 p2').
+
   Module CS.
     Parameter sem : program -> semantics.
   End CS.
@@ -50,9 +82,67 @@ Module Type Intermediate_Sig.
   Module PS.
     Parameter sem : program -> Program.interface -> semantics.
   End PS.
+
+  Axiom decomposition_with_safe_behavior:
+    forall p c,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable (prog_interface p) (prog_interface c) ->
+    forall beh,
+      program_behaves (CS.sem (program_link p c)) beh ->
+      not_wrong beh ->
+      program_behaves (PS.sem p (prog_interface c)) beh.
+
+  Axiom decomposition_with_refinement :
+    forall p c,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable (prog_interface p) (prog_interface c) ->
+    forall beh1,
+      program_behaves (CS.sem (program_link p c)) beh1 ->
+    exists beh2,
+      program_behaves (PS.sem p (prog_interface c)) beh2 /\
+      behavior_improves beh1 beh2.
+
+  Axiom composition_prefix :
+    forall p c,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable_mains p c ->
+      linkable (prog_interface p) (prog_interface c) ->
+      closed_program (program_link p c) ->
+      PS.mergeable_interfaces (prog_interface p) (prog_interface c) ->
+    forall b1 b2 m,
+      program_behaves (PS.sem p (prog_interface c)) b1 ->
+      program_behaves (PS.sem c (prog_interface p)) b2 ->
+      prefix m b1 ->
+      prefix m b2 ->
+    exists b3,
+      program_behaves (CS.sem (program_link p c)) b3 /\ prefix m b3.
+
+  (* The top-level proof performs low-level manipulations on the now-abstract
+     definitions in a couple of places. These definitions must now become
+     opaque and exposed through the interface, and its operations given as
+     trivial inversion-type lemmas. We may want to think about removing these
+     noisy details through further abstraction. *)
+  Parameter prog_main : program -> option Procedure.id.
+
+  Parameter prog_procedures : program -> NMap (NMap code).
+
+  Axiom closed_program_inv : forall p,
+    closed_program p ->
+    closed_interface (prog_interface p) /\
+    exists mainP main_procs,
+      prog_main p = Some mainP /\
+      (prog_procedures p) Component.main = Some main_procs /\
+      mainP \in domm main_procs.
+
+  Axiom closed_interface_inv : forall p1 p2,
+    closed_interface (prog_interface (program_link p1 p2)) =
+    closed_interface (unionm (prog_interface p1) (prog_interface p2)).
 End Intermediate_Sig.
 
-Module Intermediate_Instace : Intermediate_Sig.
+Module Intermediate_Instance <: Intermediate_Sig.
   Definition program :=
     @Intermediate.program.
 
@@ -71,6 +161,15 @@ Module Intermediate_Instace : Intermediate_Sig.
   Definition program_link :=
     @Intermediate.program_link.
 
+  Definition program_linkC :=
+    @Intermediate.program_linkC.
+
+  Definition linking_well_formedness :=
+    @Intermediate.linking_well_formedness.
+
+  Definition interface_preserves_closedness_r :=
+    @Intermediate.interface_preserves_closedness_r.
+
   Module CS.
     Definition sem :=
       @Intermediate.CS.CS.sem.
@@ -79,11 +178,48 @@ Module Intermediate_Instace : Intermediate_Sig.
   Module PS.
     Definition sem :=
       @Intermediate.PS.PS.sem.
-  End PS.  
-End Intermediate_Instace.
+    End PS.
 
+  Definition decomposition_with_safe_behavior :=
+    @Intermediate.Decomposition.decomposition_with_safe_behavior.
 
-Module Type Source_Sig.
+  Definition decomposition_with_refinement :=
+    @Intermediate.Decomposition.decomposition_with_refinement.
+
+  Definition composition_prefix :=
+    @Intermediate.Composition.composition_prefix.
+
+  (* The following additions are required by the top-level proof to perform
+     some basic manipulations that the standard Coq tactics cannot handle once
+     we hide Intermediate behind an interface. Inversion lemmas to replace
+     simple destructs and rewrites are, of course, trivial: these do not need
+     to be added to our instance's Intermediate. *)
+  Definition prog_main :=
+    @Intermediate.prog_main.
+
+  Definition prog_procedures :=
+    @Intermediate.prog_procedures.
+
+  Lemma closed_program_inv : forall p,
+    closed_program p ->
+    closed_interface (prog_interface p) /\
+    exists mainP main_procs,
+      prog_main p = Some mainP /\
+      (prog_procedures p) Component.main = Some main_procs /\
+      mainP \in domm main_procs.
+  Proof.
+    by intros p [Hclosed Hmain].
+  Qed.
+
+  Lemma closed_interface_inv : forall p1 p2,
+    closed_interface (prog_interface (program_link p1 p2)) =
+    closed_interface (unionm (prog_interface p1) (prog_interface p2)).
+  Proof.
+    easy.
+  Qed.
+End Intermediate_Instance.
+
+Module Type Source_Sig (Intermediate : Intermediate_Sig).
   Parameter program : Type.
 
   Parameter prog_interface : program -> Program.interface.
@@ -129,7 +265,7 @@ Module Type Source_Sig.
       Intermediate.well_formed_program c ->
       linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
       Intermediate.closed_program (Intermediate.program_link p c) ->
-      program_behaves (I.CS.sem (Intermediate.program_link p c)) b ->
+      program_behaves (Intermediate.CS.sem (Intermediate.program_link p c)) b ->
       prefix m b ->
       not_wrong_finpref m ->
     exists p' c',
@@ -158,7 +294,7 @@ Module Type Source_Sig.
   End PS.
 End Source_Sig.
 
-Module Source_Instance <: Source_Sig.
+Module Source_Instance <: Source_Sig Intermediate_Instance.
   Definition program :=
     @Source.program.
 
@@ -203,7 +339,9 @@ Module Source_Instance <: Source_Sig.
   End PS.
 End Source_Instance.
 
-Module Type Compiler_Sig (Source : Source_Sig).
+Module Type Compiler_Sig
+       (Intermediate : Intermediate_Sig)
+       (Source : Source_Sig Intermediate).
   Parameter compile_program : Source.program -> option Intermediate.program.
 
   Axiom well_formed_compilable :
@@ -246,15 +384,16 @@ Module Type Compiler_Sig (Source : Source_Sig).
       compile_program c = Some c_comp ->
       compile_program (Source.program_link p c) = Some pc_comp ->
     forall b : program_behavior,
-      program_behaves (I.CS.sem pc_comp) b <->
-      program_behaves (I.CS.sem (Intermediate.program_link p_comp c_comp)) b.
+      program_behaves (Intermediate.CS.sem pc_comp) b <->
+      program_behaves (Intermediate.CS.sem (Intermediate.program_link p_comp c_comp)) b.
 
   Axiom I_simulates_S :
     forall p,
       Source.closed_program p ->
       Source.well_formed_program p ->
     forall tp,
-      compile_program p = Some tp -> forward_simulation (Source.CS.sem p) (I.CS.sem tp).
+      compile_program p = Some tp ->
+      forward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp).
 
   Axiom S_simulates_I:
     forall p,
@@ -262,10 +401,10 @@ Module Type Compiler_Sig (Source : Source_Sig).
       Source.well_formed_program p ->
     forall tp,
       compile_program p = Some tp ->
-      backward_simulation (Source.CS.sem p) (I.CS.sem tp).
+      backward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp).
 End Compiler_Sig.
 
-Module Compiler_Instance <: Compiler_Sig Source_Instance.
+Module Compiler_Instance <: Compiler_Sig Intermediate_Instance Source_Instance.
   Definition compile_program :=
     @Compiler.compile_program.
 
@@ -295,8 +434,9 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance.
 End Compiler_Instance.
 
 Module RSC_DC_MD_Module
-       (Source : Source_Sig)
-       (Compiler : Compiler_Sig Source).
+       (Intermediate : Intermediate_Sig)
+       (Source : Source_Sig Intermediate)
+       (Compiler : Compiler_Sig Intermediate Source).
 Section RSC_DC_MD_Section.
 
   Variable p: Source.program.
@@ -317,7 +457,7 @@ Section RSC_DC_MD_Section.
 
   Theorem RSC_DC_MD:
     forall b m,
-      program_behaves (I.CS.sem (Intermediate.program_link p_compiled Ct)) b ->
+      program_behaves (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) b ->
       prefix m b ->
       not_wrong b -> (* CH: could try to weaken this later to `nor_wrong m` *)
     exists Cs beh,
@@ -357,7 +497,7 @@ Section RSC_DC_MD_Section.
     { now destruct m, t; simpl; auto. }
 
     (* intermediate decomposition (for p_compiled) *)
-    pose proof Intermediate.Decomposition.decomposition_with_safe_behavior
+    pose proof Intermediate.decomposition_with_safe_behavior
       well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct Hbeh Hsafe_beh as HP_decomp.
 
     (* CH: if we had undefined behavior we would use this *)
@@ -414,8 +554,8 @@ Section RSC_DC_MD_Section.
       apply Compiler.well_formed_compilable; assumption.
     }
 
-    assert (forall b, program_behaves (I.CS.sem P'_Cs_compiled) b <->
-                 program_behaves (I.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b)
+    assert (forall b, program_behaves (Intermediate.CS.sem P'_Cs_compiled) b <->
+                      program_behaves (Intermediate.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b)
       as HP'_Cs_behaves. {
       apply Compiler.separate_compilation_weaker with (p:=P') (c:=Cs);
         try assumption;
@@ -424,7 +564,7 @@ Section RSC_DC_MD_Section.
     have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
-    have HP'_Cs_compiled_beh : program_behaves (I.CS.sem P'_Cs_compiled) beh.
+    have HP'_Cs_compiled_beh : program_behaves (Intermediate.CS.sem P'_Cs_compiled) beh.
       have sim := Compiler.I_simulates_S HP'Cs_closed well_formed_P'Cs HP'_Cs_compiles.
       exact: (forward_simulation_same_safe_behavior sim).
 
@@ -437,7 +577,7 @@ Section RSC_DC_MD_Section.
        | assumption ].
 
     have [beh2 [HCs_decomp HCs_beh_improves]] :=
-         Intermediate.Decomposition.decomposition_with_refinement
+         Intermediate.decomposition_with_refinement
            well_formed_Cs_compiled well_formed_P'_compiled
            linkability' HP'_Cs_compiled_beh.
     have {HCs_beh_improves} ? : beh2 = beh by case: HCs_beh_improves => [<-|[? []]].
@@ -483,15 +623,21 @@ Section RSC_DC_MD_Section.
         eapply Source.linkable_disjoint_mains; assumption.
     }
 
+    (* RB: TODO: This definition needs to be transparent and does not actually rely on
+       the Intermediate interface at all! Relocate? *)
     assert (PS.mergeable_interfaces (Intermediate.prog_interface p_compiled)
                                     (Intermediate.prog_interface Cs_compiled))
       as Hmergeable_ifaces.
     {
       split.
       - assumption.
-      - by destruct HpCs_compiled_closed.
+      - apply Intermediate.closed_program_inv in HpCs_compiled_closed.
+        destruct HpCs_compiled_closed
+          as [HpCs_compiled_closed_interface HpCs_compiled_closed_main].
+        erewrite <- Intermediate.closed_interface_inv.
+        assumption.
     }
-    pose proof composition_prefix
+    pose proof Intermediate.composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkable_mains linkability'' HpCs_compiled_closed
          Hmergeable_ifaces
@@ -522,8 +668,8 @@ Section RSC_DC_MD_Section.
                Compiler.compile_program (Source.program_link p Cs) = Some pCs_compiled)
       as [pCs_compiled HpCs_compiles]
       by now apply Compiler.well_formed_compilable.
-    assert (forall b, program_behaves (I.CS.sem pCs_compiled) b <->
-                 program_behaves (I.CS.sem (Intermediate.program_link p_compiled Cs_compiled)) b)
+    assert (forall b, program_behaves (Intermediate.CS.sem pCs_compiled) b <->
+                      program_behaves (Intermediate.CS.sem (Intermediate.program_link p_compiled Cs_compiled)) b)
       as HpCs_compiled_behaves
       by now apply Compiler.separate_compilation_weaker with (p:=p) (c:=Cs).
     apply HpCs_compiled_behaves in HpCs_compiled_beh.
@@ -585,7 +731,8 @@ Section RSC_DC_MD_Section.
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Module.
 
-Module RSC_DC_MD_Instance := RSC_DC_MD_Module Source_Instance Compiler_Instance.
+Module RSC_DC_MD_Instance :=
+  RSC_DC_MD_Module Intermediate_Instance Source_Instance Compiler_Instance.
 
 Definition RSC_DC_MD :=
   RSC_DC_MD_Instance.RSC_DC_MD.
