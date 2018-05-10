@@ -41,6 +41,105 @@ Set Bullet Behavior "Strict Subproofs".
    not factored as part of the interface: this points to it belonging in
    Common and not in Intermediate. *)
 
+Module Type Source_Sig.
+  Parameter program : Type.
+
+  Parameter prog_interface : program -> Program.interface.
+
+  Parameter well_formed_program : program -> Prop.
+
+  Parameter closed_program : program -> Prop.
+
+  Parameter linkable_mains : program -> program -> Prop.
+
+  Axiom linkable_mains_sym : forall prog1 prog2,
+    linkable_mains prog1 prog2 ->
+    linkable_mains prog2 prog1.
+
+  Axiom linkable_disjoint_mains: forall prog1 prog2,
+    well_formed_program prog1 ->
+    well_formed_program prog2 ->
+    linkable (prog_interface prog1) (prog_interface prog2) ->
+    linkable_mains prog1 prog2.
+
+  Parameter program_link : program -> program -> program.
+
+  Axiom linking_well_formedness : forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    well_formed_program (program_link p1 p2).
+
+  Axiom interface_preserves_closedness_l : forall p1 p2 p1',
+    closed_program (program_link p1 p2) ->
+    prog_interface p1 = prog_interface p1' ->
+    well_formed_program p1 ->
+    well_formed_program p1' ->
+    closed_program (program_link p1' p2).
+
+  Module CS.
+    Parameter sem : program -> semantics.
+  End CS.
+
+  Module PS.
+    Axiom blame_program : forall p Cs t' P' m,
+      well_formed_program p ->
+      well_formed_program Cs ->
+      linkable (prog_interface p) (prog_interface Cs) ->
+      closed_program (program_link p Cs) ->
+      program_behaves (CS.sem (program_link p Cs)) (Goes_wrong t') ->
+      well_formed_program P' ->
+      prog_interface P' = prog_interface p ->
+      closed_program (program_link P' Cs) ->
+      program_behaves (CS.sem (program_link P' Cs)) (Terminates (finpref_trace m)) ->
+      not_wrong_finpref m ->
+      trace_finpref_prefix t' m ->
+      undef_in t' (prog_interface p).
+  End PS.
+End Source_Sig.
+
+Module Source_Instance <: Source_Sig.
+  Definition program :=
+    @Source.program.
+
+  Definition prog_interface :=
+    @Source.prog_interface.
+
+  Definition well_formed_program :=
+    @Source.well_formed_program.
+
+  Definition closed_program :=
+    @Source.closed_program.
+
+  Definition linkable_mains :=
+    @Source.linkable_mains.
+
+  Definition linkable_mains_sym :=
+    @Source.linkable_mains_sym.
+
+  Definition linkable_disjoint_mains :=
+    @Source.linkable_disjoint_mains.
+
+  Definition program_link :=
+    @Source.program_link.
+
+  Definition linking_well_formedness :=
+    @Source.linking_well_formedness.
+
+  Definition interface_preserves_closedness_l :=
+    @Source.interface_preserves_closedness_l.
+
+  Module CS.
+    Definition sem :=
+      @Source.CS.CS.sem.
+  End CS.
+
+  Module PS.
+    Definition blame_program :=
+      @Source.PS.PS.blame_program.
+  End PS.
+End Source_Instance.
+
 Module Type Intermediate_Sig.
   Parameter program : Type.
 
@@ -219,138 +318,34 @@ Module Intermediate_Instance <: Intermediate_Sig.
   Qed.
 End Intermediate_Instance.
 
-Module Type Source_Sig.
-  Parameter program : Type.
-
-  Parameter prog_interface : program -> Program.interface.
-
-  Parameter well_formed_program : program -> Prop.
-
-  Parameter closed_program : program -> Prop.
-
-  Parameter linkable_mains : program -> program -> Prop.
-
-  Axiom linkable_mains_sym : forall prog1 prog2,
-    linkable_mains prog1 prog2 ->
-    linkable_mains prog2 prog1.
-
-  Axiom linkable_disjoint_mains: forall prog1 prog2,
-    well_formed_program prog1 ->
-    well_formed_program prog2 ->
-    linkable (prog_interface prog1) (prog_interface prog2) ->
-    linkable_mains prog1 prog2.
-
-  Parameter program_link : program -> program -> program.
-
-  Axiom linking_well_formedness : forall p1 p2,
-    well_formed_program p1 ->
-    well_formed_program p2 ->
-    linkable (prog_interface p1) (prog_interface p2) ->
-    well_formed_program (program_link p1 p2).
-
-  Axiom interface_preserves_closedness_l : forall p1 p2 p1',
-    closed_program (program_link p1 p2) ->
-    prog_interface p1 = prog_interface p1' ->
-    well_formed_program p1 ->
-    well_formed_program p1' ->
-    closed_program (program_link p1' p2).
-
-  Module CS.
-    Parameter sem : program -> semantics.
-  End CS.
-
-  Module PS.
-    Axiom blame_program : forall p Cs t' P' m,
-      well_formed_program p ->
-      well_formed_program Cs ->
-      linkable (prog_interface p) (prog_interface Cs) ->
-      closed_program (program_link p Cs) ->
-      program_behaves (CS.sem (program_link p Cs)) (Goes_wrong t') ->
-      well_formed_program P' ->
-      prog_interface P' = prog_interface p ->
-      closed_program (program_link P' Cs) ->
-      program_behaves (CS.sem (program_link P' Cs)) (Terminates (finpref_trace m)) ->
-      not_wrong_finpref m ->
-      trace_finpref_prefix t' m ->
-      undef_in t' (prog_interface p).
-  End PS.
-End Source_Sig.
-
-Module Source_Instance <: Source_Sig.
-  Definition program :=
-    @Source.program.
-
-  Definition prog_interface :=
-    @Source.prog_interface.
-
-  Definition well_formed_program :=
-    @Source.well_formed_program.
-
-  Definition closed_program :=
-    @Source.closed_program.
-
-  Definition linkable_mains :=
-    @Source.linkable_mains.
-
-  Definition linkable_mains_sym :=
-    @Source.linkable_mains_sym.
-
-  Definition linkable_disjoint_mains :=
-    @Source.linkable_disjoint_mains.
-
-  Definition program_link :=
-    @Source.program_link.
-
-  Definition linking_well_formedness :=
-    @Source.linking_well_formedness.
-
-  Definition interface_preserves_closedness_l :=
-    @Source.interface_preserves_closedness_l.
-
-  Module CS.
-    Definition sem :=
-      @Source.CS.CS.sem.
-  End CS.
-
-  Module PS.
-    Definition blame_program :=
-      @Source.PS.PS.blame_program.
-  End PS.
-End Source_Instance.
-
-Module Type Linker_Sig (intermediate : Intermediate_Sig) (source : Source_Sig).
-       
+Module Type Linker_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
   Axiom  definability_with_linking :
     forall p c b m,
-      intermediate.well_formed_program p ->
-      intermediate.well_formed_program c ->
-      linkable (intermediate.prog_interface p) (intermediate.prog_interface c) ->
-      intermediate.closed_program (intermediate.program_link p c) ->
-      program_behaves (intermediate.CS.sem (intermediate.program_link p c)) b ->
+      Intermediate.well_formed_program p ->
+      Intermediate.well_formed_program c ->
+      linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
+      Intermediate.closed_program (Intermediate.program_link p c) ->
+      program_behaves (Intermediate.CS.sem (Intermediate.program_link p c)) b ->
       prefix m b ->
       not_wrong_finpref m ->
     exists p' c',
-      source.prog_interface p' = intermediate.prog_interface p /\
-      source.prog_interface c' = intermediate.prog_interface c /\
-      source.well_formed_program p' /\
-      source.well_formed_program c' /\
-      source.closed_program (source.program_link p' c') /\
-      program_behaves (source.CS.sem (source.program_link p' c')) (Terminates (finpref_trace m)) /\
+      Source.prog_interface p' = Intermediate.prog_interface p /\
+      Source.prog_interface c' = Intermediate.prog_interface c /\
+      Source.well_formed_program p' /\
+      Source.well_formed_program c' /\
+      Source.closed_program (Source.program_link p' c') /\
+      program_behaves (Source.CS.sem (Source.program_link p' c')) (Terminates (finpref_trace m)) /\
       prefix m (Terminates (finpref_trace m)).
-
 End Linker_Sig.
 
-Module Linker_Instance <: Linker_Sig (Intermediate_Instance) (Source_Instance).
-
+Module Linker_Instance <: Linker_Sig (Source_Instance) (Intermediate_Instance).
   Definition definability_with_linking :=
-    @RobustImp.Source.Definability.definability_with_linking.  
-  
+    @RobustImp.Source.Definability.definability_with_linking.
 End Linker_Instance.
 
-
 Module Type Compiler_Sig
-       (Intermediate : Intermediate_Sig)
-       (Source : Source_Sig).
+       (Source : Source_Sig)
+       (Intermediate : Intermediate_Sig).
   Parameter compile_program : Source.program -> option Intermediate.program.
 
   Axiom well_formed_compilable :
@@ -413,7 +408,7 @@ Module Type Compiler_Sig
       backward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp).
 End Compiler_Sig.
 
-Module Compiler_Instance <: Compiler_Sig Intermediate_Instance Source_Instance.
+Module Compiler_Instance <: Compiler_Sig Source_Instance Intermediate_Instance.
   Definition compile_program :=
     @Compiler.compile_program.
 
@@ -442,11 +437,11 @@ Module Compiler_Instance <: Compiler_Sig Intermediate_Instance Source_Instance.
     @Compiler.S_simulates_I.
 End Compiler_Instance.
 
-Module RSC_DC_MD_Module
-       (Intermediate : Intermediate_Sig)
+Module RSC_DC_MD_Gen
        (Source : Source_Sig)
-       (Compiler : Compiler_Sig Intermediate Source)
-       (Linker : Linker_Sig Intermediate Source).
+       (Intermediate : Intermediate_Sig)
+       (Compiler : Compiler_Sig Source Intermediate)
+       (Linker : Linker_Sig Source Intermediate).
 Section RSC_DC_MD_Section.
 
   Variable p: Source.program.
@@ -739,10 +734,11 @@ Section RSC_DC_MD_Section.
   Qed.
 
 End RSC_DC_MD_Section.
-End RSC_DC_MD_Module.
+End RSC_DC_MD_Gen.
 
 Module RSC_DC_MD_Instance :=
-  RSC_DC_MD_Module Intermediate_Instance Source_Instance Compiler_Instance Linker_Instance.
+  RSC_DC_MD_Gen
+    Source_Instance Intermediate_Instance Compiler_Instance Linker_Instance.
 
 Definition RSC_DC_MD :=
   RSC_DC_MD_Instance.RSC_DC_MD.
