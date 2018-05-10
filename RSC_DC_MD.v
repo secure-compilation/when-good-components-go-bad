@@ -219,7 +219,7 @@ Module Intermediate_Instance <: Intermediate_Sig.
   Qed.
 End Intermediate_Instance.
 
-Module Type Source_Sig (Intermediate : Intermediate_Sig).
+Module Type Source_Sig.
   Parameter program : Type.
 
   Parameter prog_interface : program -> Program.interface.
@@ -259,24 +259,6 @@ Module Type Source_Sig (Intermediate : Intermediate_Sig).
     Parameter sem : program -> semantics.
   End CS.
 
-  Axiom definability_with_linking :
-    forall p c b m,
-      Intermediate.well_formed_program p ->
-      Intermediate.well_formed_program c ->
-      linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
-      Intermediate.closed_program (Intermediate.program_link p c) ->
-      program_behaves (Intermediate.CS.sem (Intermediate.program_link p c)) b ->
-      prefix m b ->
-      not_wrong_finpref m ->
-    exists p' c',
-      prog_interface p' = Intermediate.prog_interface p /\
-      prog_interface c' = Intermediate.prog_interface c /\
-      well_formed_program p' /\
-      well_formed_program c' /\
-      closed_program (program_link p' c') /\
-      program_behaves (CS.sem (program_link p' c')) (Terminates (finpref_trace m)) /\
-      prefix m (Terminates (finpref_trace m)).
-
   Module PS.
     Axiom blame_program : forall p Cs t' P' m,
       well_formed_program p ->
@@ -294,7 +276,7 @@ Module Type Source_Sig (Intermediate : Intermediate_Sig).
   End PS.
 End Source_Sig.
 
-Module Source_Instance <: Source_Sig Intermediate_Instance.
+Module Source_Instance <: Source_Sig.
   Definition program :=
     @Source.program.
 
@@ -330,18 +312,45 @@ Module Source_Instance <: Source_Sig Intermediate_Instance.
       @Source.CS.CS.sem.
   End CS.
 
-  Definition definability_with_linking :=
-    @Source.Definability.definability_with_linking.
-
   Module PS.
     Definition blame_program :=
       @Source.PS.PS.blame_program.
   End PS.
 End Source_Instance.
 
+Module Type Linker_Sig (intermediate : Intermediate_Sig) (source : Source_Sig).
+       
+  Axiom  definability_with_linking :
+    forall p c b m,
+      intermediate.well_formed_program p ->
+      intermediate.well_formed_program c ->
+      linkable (intermediate.prog_interface p) (intermediate.prog_interface c) ->
+      intermediate.closed_program (intermediate.program_link p c) ->
+      program_behaves (intermediate.CS.sem (intermediate.program_link p c)) b ->
+      prefix m b ->
+      not_wrong_finpref m ->
+    exists p' c',
+      source.prog_interface p' = intermediate.prog_interface p /\
+      source.prog_interface c' = intermediate.prog_interface c /\
+      source.well_formed_program p' /\
+      source.well_formed_program c' /\
+      source.closed_program (source.program_link p' c') /\
+      program_behaves (source.CS.sem (source.program_link p' c')) (Terminates (finpref_trace m)) /\
+      prefix m (Terminates (finpref_trace m)).
+
+End Linker_Sig.
+
+Module Linker_Instance <: Linker_Sig (Intermediate_Instance) (Source_Instance).
+
+  Definition definability_with_linking :=
+    @RobustImp.Source.Definability.definability_with_linking.  
+  
+End Linker_Instance.
+
+
 Module Type Compiler_Sig
        (Intermediate : Intermediate_Sig)
-       (Source : Source_Sig Intermediate).
+       (Source : Source_Sig).
   Parameter compile_program : Source.program -> option Intermediate.program.
 
   Axiom well_formed_compilable :
@@ -435,8 +444,9 @@ End Compiler_Instance.
 
 Module RSC_DC_MD_Module
        (Intermediate : Intermediate_Sig)
-       (Source : Source_Sig Intermediate)
-       (Compiler : Compiler_Sig Intermediate Source).
+       (Source : Source_Sig)
+       (Compiler : Compiler_Sig Intermediate Source)
+       (Linker : Linker_Sig Intermediate Source).
 Section RSC_DC_MD_Section.
 
   Variable p: Source.program.
@@ -505,7 +515,7 @@ Section RSC_DC_MD_Section.
     (*   as [beh' [Hbeh' Hbeh_improves]]. *)
 
     (* definability *)
-    destruct (Source.definability_with_linking
+    destruct (Linker.definability_with_linking
                 well_formed_p_compiled well_formed_Ct
                 linkability_pcomp_Ct closedness Hbeh Hprefix0 Hnot_wrong')
       as [P' [Cs
@@ -732,7 +742,7 @@ End RSC_DC_MD_Section.
 End RSC_DC_MD_Module.
 
 Module RSC_DC_MD_Instance :=
-  RSC_DC_MD_Module Intermediate_Instance Source_Instance Compiler_Instance.
+  RSC_DC_MD_Module Intermediate_Instance Source_Instance Compiler_Instance Linker_Instance.
 
 Definition RSC_DC_MD :=
   RSC_DC_MD_Instance.RSC_DC_MD.
