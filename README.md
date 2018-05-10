@@ -8,14 +8,47 @@ This repository contains the Coq development of the paper:
      Dynamic Compromise]
      (https://arxiv.org/abs/1802.00588)**. February 2018.
 
+### IEEE S&P Reviews ###
+
+File `sp2019-reviews-answers.txt` contains the reviews we received on
+a previous IEEE S&P submission together with answers and explanations
+of how we have improved the paper in response to this helpful feedback.
+
+### Prerequisites ###
+
+This development requires Coq v8.7.1 to work, as well as the following libraries:
+- Mathematical Components 1.6.4 (https://math-comp.github.io/math-comp/)
+- CoqUtils master branch (https://github.com/arthuraa/coq-utils)
+
+### Replaying the proofs ###
+
+    $ make -j4
+
+### Running the tests ###
+
+Our tests are known to work with QuickChick branch 8.7
+(https://github.com/QuickChick/QuickChick) and OCaml from 4.02.3 to 4.06.
+
+Running the tests (to be simplified):
+
+    $ make clean
+    $ make -j4
+    $ ./run_extracted_examples.sh
+    $ rm sfi_safety_properties.exe
+    $ ./run_sfi_tests.sh
+
+More thorough mutation tests are on the `nora-testing-experiments` branch.
+
 ### Top-level theorems ###
 
 At the top level, the development provides high-level proofs with the following
 entry points:
-- `RSC_DC_MD.v`: secure compilation for our compiler
-- `RSC_DC.v`: general proofs about the class of properties preserved by RSC^DC
+- `RSC_DC_MD.v`: generic secure compilation proof (Section 3.5) and
+  its instantiation for our compiler (Section 4.3)
+- `RSC_DC.v`: general proofs about the class of properties preserved
+  by RSC^DC (Appendix A)
 - `RSC_DC_4_compcert.v`: proofs in `RSC_DC.v` adapted to the general CompCert
-  trace model
+  trace model (Appendix A)
 
 The correspondences between the main definitions and results in the paper and
 in Coq are as follows.
@@ -65,31 +98,6 @@ Assumption B.6: Separate Compilation
 
 Assumption B.7: Blame
 - `Source.PS.PS.blame_program`
-
-### Prerequisites ###
-
-This development requires Coq v8.7.1 to work, as well as the following libraries:
-- Mathematical Components 1.6.4 (https://math-comp.github.io/math-comp/)
-- CoqUtils master branch (https://github.com/arthuraa/coq-utils)
-
-### Replaying the proofs ###
-
-    $ make -j4
-
-### Running the tests ###
-
-Our tests are known to work with QuickChick branch 8.7
-(https://github.com/QuickChick/QuickChick) and OCaml from 4.02.3 to 4.06.
-
-Running the tests (to be simplified):
-
-    $ make clean
-    $ make -j4
-    $ ./run_extracted_examples.sh
-    $ rm sfi_safety_properties.exe
-    $ ./run_sfi_tests.sh
-
-More thorough mutation tests are on the `nora-testing-experiments` branch.
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
