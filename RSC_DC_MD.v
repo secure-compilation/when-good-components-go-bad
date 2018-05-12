@@ -210,7 +210,7 @@ Module Type Intermediate_Sig.
       linkable_mains p c ->
       linkable (prog_interface p) (prog_interface c) ->
       closed_program (program_link p c) ->
-      PS.mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      mergeable_interfaces (prog_interface p) (prog_interface c) ->
     forall b1 b2 m,
       program_behaves (PS.sem p (prog_interface c)) b1 ->
       program_behaves (PS.sem c (prog_interface p)) b2 ->
@@ -628,10 +628,8 @@ Section RSC_DC_MD_Section.
         eapply Source.linkable_disjoint_mains; assumption.
     }
 
-    (* RB: TODO: This definition needs to be transparent and does not actually rely on
-       the Intermediate interface at all! Relocate? *)
-    assert (PS.mergeable_interfaces (Intermediate.prog_interface p_compiled)
-                                    (Intermediate.prog_interface Cs_compiled))
+    assert (mergeable_interfaces (Intermediate.prog_interface p_compiled)
+                                 (Intermediate.prog_interface Cs_compiled))
       as Hmergeable_ifaces.
     {
       split.

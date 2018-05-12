@@ -346,20 +346,16 @@ Inductive mergeable_stacks : stack -> stack -> Prop :=
     mergeable_stack_frames frame1 frame2 ->
     mergeable_stacks (frame1 :: pgps1) (frame2 :: pgps2).
 
+(* RB: TODO: We may want to either define what it means for each component to
+   be mergeable as close as possible to its original definition, or collect
+   all these together. The current definition of the top-level proof points to
+   interface mergeability at least not belonging here, but in the Common part
+   of the development. (Is it possible to reorganize the components of the top-
+   level proof, in particular the proof of composition where an assumption of
+   this type appears, so that this detail is hidden?) *)
+
 Definition mergeable_memories (mem1 mem2: Memory.t): Prop :=
   fdisjoint (domm mem1) (domm mem2).
-
-Definition mergeable_interfaces (ctx1 ctx2: Program.interface) : Prop :=
-  linkable ctx1 ctx2 /\
-  closed_interface (unionm ctx1 ctx2).
-
-Lemma mergeable_interfaces_sym ctx1 ctx2 :
-  mergeable_interfaces ctx1 ctx2 ->
-  mergeable_interfaces ctx2 ctx1.
-Proof.
-  case=> [[Hsound Hdis] Hclosed].
-  by do 2?split; rewrite -1?unionmC // fdisjointC.
-Qed.
 
 (* Lemma placeholder: not_partition *)
 

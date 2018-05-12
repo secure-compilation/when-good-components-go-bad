@@ -146,7 +146,7 @@ Admitted. (* Grade 1. Easy lemma for the admits. *)
         component belongs to one of them. *)
 Lemma domm_partition :
   forall ctx1 ctx2,
-    PS.mergeable_interfaces ctx1 ctx2 ->
+    mergeable_interfaces ctx1 ctx2 ->
   forall C,
     C \notin domm ctx2 ->
     C \in domm ctx1.
@@ -154,7 +154,7 @@ Admitted. (* Rank 1. *)
 
 (* XXX: This assumption is also impossible, for the same reason as above. *)
 Lemma domm_partition_in_neither ctx1 ctx2 C :
-  PS.mergeable_interfaces ctx1 ctx2 ->
+  mergeable_interfaces ctx1 ctx2 ->
   C \notin domm ctx1 ->
   C \notin domm ctx2 ->
   False.
@@ -164,7 +164,7 @@ Proof.
 Qed.
 
 Lemma mergeable_stacks_partition gps ctx1 ctx2:
-  PS.mergeable_interfaces ctx1 ctx2 ->
+  mergeable_interfaces ctx1 ctx2 ->
   PS.mergeable_stacks (PS.to_partial_stack gps (domm ctx1)) (PS.to_partial_stack gps (domm ctx2)).
 Proof.
   induction gps; intros H.
@@ -252,7 +252,7 @@ Qed.
 (* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
 Lemma merge_stacks_partition:
   forall ctx1 ctx2,
-    PS.mergeable_interfaces ctx1 ctx2 ->
+    mergeable_interfaces ctx1 ctx2 ->
   forall gps,
     PS.unpartialize_stack
       (PS.merge_stacks
@@ -264,7 +264,7 @@ Admitted. (* Grade 2. *)
 (* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
 Lemma merge_stacks_partition_emptym:
   forall ctx1 ctx2,
-    PS.mergeable_interfaces ctx1 ctx2 ->
+    mergeable_interfaces ctx1 ctx2 ->
   forall gps,
     PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
                     (PS.to_partial_stack gps (domm ctx2)) =
@@ -273,7 +273,7 @@ Admitted. (* Grade 2. *)
 
 Lemma merge_memories_partition:
   forall ctx1 ctx2,
-    PS.mergeable_interfaces ctx1 ctx2 ->
+    mergeable_interfaces ctx1 ctx2 ->
   forall mem,
     PS.merge_memories
       (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx1) mem)
@@ -1199,7 +1199,7 @@ Section Simulation.
     closed_program (program_link p c).
 
   Hypothesis mergeable_interfaces:
-    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+    mergeable_interfaces (prog_interface p) (prog_interface c).
 
   (* RB: TODO: The following two lemmas should live in PS, if useful. *)
   Lemma mergeable_stack_exists :
@@ -1270,7 +1270,7 @@ Section Simulation.
         * reflexivity.
       + PS.simplify_turn. eapply domm_partition; eassumption.
     - econstructor.
-      + eapply PS.mergeable_interfaces_sym; eassumption.
+      + eapply mergeable_interfaces_sym; eassumption.
       + eassumption.
       + assumption.
       + constructor.
@@ -1433,7 +1433,7 @@ Section Simulation.
     closed_program (program_link p c).
 
   Hypothesis mergeable_interfaces:
-    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+    mergeable_interfaces (prog_interface p) (prog_interface c).
 
   Lemma match_initial_states:
     forall ips1,
@@ -1448,7 +1448,7 @@ Section Simulation.
     inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? _]; subst;
       PS.simplify_turn;
       first destruct (PS.domm_partition_in_notin
-                        (PS.mergeable_interfaces_sym mergeable_interfaces)
+                        (@mergeable_interfaces_sym _ _ mergeable_interfaces)
                         Hcc1 Hpc1).
     exists
       (PS.PC
@@ -1464,7 +1464,7 @@ Section Simulation.
         * reflexivity.
       + PS.simplify_turn. eapply PS.domm_partition_notin; eassumption.
     - econstructor.
-      + eapply PS.mergeable_interfaces_sym; eassumption.
+      + eapply mergeable_interfaces_sym; eassumption.
       + eassumption.
       + assumption.
       + constructor.
@@ -1529,7 +1529,7 @@ Section Simulation.
     closed_program (program_link p c).
 
   Hypothesis mergeable_interfaces:
-    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+    mergeable_interfaces (prog_interface p) (prog_interface c).
 
   (* RB: TODO: Refactor lemmas (and proof structure) common to both halves of
      the inductive step. *)
@@ -1963,7 +1963,7 @@ Section PartialComposition.
     closed_program prog.
 
   Hypothesis mergeable_interfaces:
-    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+    mergeable_interfaces (prog_interface p) (prog_interface c).
 
   Lemma threeway_multisem_st_starN_simulation:
     forall n ips1 ips2 t ips1' ips2',
@@ -2417,7 +2417,7 @@ Section PartialComposition.
       admit.
 
     - econstructor.
-      + apply PS.mergeable_interfaces_sym; assumption.
+      + apply mergeable_interfaces_sym; assumption.
       + admit.
       + constructor.
         * assumption.
@@ -2445,7 +2445,7 @@ Section PartialComposition.
 *)
 
     - econstructor.
-      + apply PS.mergeable_interfaces_sym; assumption.
+      + apply mergeable_interfaces_sym; assumption.
       + admit.
       + admit.
       + admit.
@@ -2541,7 +2541,7 @@ Section Composition.
     closed_program (program_link p c).
 
   Hypothesis mergeable_interfaces:
-    PS.mergeable_interfaces (prog_interface p) (prog_interface c).
+    mergeable_interfaces (prog_interface p) (prog_interface c).
 
   Theorem composition_for_termination:
     forall t,

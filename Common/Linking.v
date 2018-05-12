@@ -55,3 +55,15 @@ Proof.
   - subst. auto.
   - rewrite HCI'' in HCI'. inversion HCI'. reflexivity.
 Qed.
+
+Definition mergeable_interfaces (i1 i2: Program.interface) : Prop :=
+  linkable i1 i2 /\
+  closed_interface (unionm i1 i2).
+
+Lemma mergeable_interfaces_sym i1 i2 :
+  mergeable_interfaces i1 i2 ->
+  mergeable_interfaces i2 i1.
+Proof.
+  case=> [[Hsound Hdis] Hclosed].
+  by do 2?split; rewrite -1?unionmC // fdisjointC.
+Qed.
