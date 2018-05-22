@@ -17,7 +17,7 @@ Import Common.Values.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 
-Require Import CoqUtils.ord.
+Require Import extructures.ord.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

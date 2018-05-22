@@ -22,8 +22,8 @@ Require Import Tests.CompilerPBTests.
 Require Import Tests.TargetSFI.SFITestUtil.
 
 
-Require Import CoqUtils.ord.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
+Require Import extructures.ord.
 
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.

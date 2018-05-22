@@ -1,4 +1,4 @@
-From CoqUtils Require Export ord fmap fset.
+From extructures Require Export ord fmap fset.
 From mathcomp Require Export ssrbool. (* TODO, strange *)
 From mathcomp Require Import ssreflect ssrfun seq.
 Require Import Lib.Extra.

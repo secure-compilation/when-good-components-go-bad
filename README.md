@@ -15,9 +15,10 @@ of how we have improved the paper in response to this helpful feedback.
 
 ### Prerequisites ###
 
-This development requires Coq v8.7.1 to work, as well as the following libraries:
-- [Mathematical Components](https://math-comp.github.io/math-comp/) 1.6.4
-- [CoqUtils 5aa6da3](https://github.com/arthuraa/coq-utils/commit/5aa6da3a465233883c239daa6ed3372008cd959f)
+This development requires Coq v8.7.1, v8.7.2 or v8.8.0 to work, as well as the following libraries:
+- [Mathematical Components](https://math-comp.github.io/math-comp/) 1.6.4 or 1.7.0
+- [CoqUtils 17c7869](https://github.com/arthuraa/coq-utils/commit/17c78698c348ae15288fc8c147dc67e1df115596)
+- [Extensional Structures 4d29a4d](https://github.com/arthuraa/extructures/commit/4d29a4d6da518f40b85876dd703eb5f71970f5db)
 
 ### Replaying the proofs ###
 
@@ -25,8 +26,9 @@ This development requires Coq v8.7.1 to work, as well as the following libraries
 
 ### Running the tests ###
 
-Our tests are known to work with [QuickChick](https://github.com/QuickChick/QuickChick) branch 8.7
-and OCaml from 4.02.3 to 4.06.
+Our tests are known to work with [QuickChick](https://github.com/QuickChick/QuickChick) 
+branch 8.7 (with coq 8.7.1 or 8.7.2) and version 1.0.1 (with coq 8.8.0) and OCaml
+from 4.02.3 to 4.06.
 
 Running the tests (to be simplified):
 

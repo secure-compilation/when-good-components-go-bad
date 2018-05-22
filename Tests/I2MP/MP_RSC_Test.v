@@ -1,5 +1,6 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrint seq.
-From CoqUtils Require Import fmap word.
+From extructures Require Import fmap.
+From CoqUtils Require Import word.
 
 Require Import Coq.Strings.String.
 Require Import Common.Either.

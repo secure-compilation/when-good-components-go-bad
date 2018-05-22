@@ -2,7 +2,7 @@
 
 Require Import Coq.ZArith.ZArith.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype seq.
-From CoqUtils Require Import ord fset fmap.
+From extructures Require Import ord fset fmap.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

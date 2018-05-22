@@ -5,7 +5,7 @@ Require Import Common.Linking.
 Require Import Lib.Extra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
-From CoqUtils Require Import ord fset fmap.
+From extructures Require Import ord fset fmap.
 
 Local Open Scope fset_scope.
 

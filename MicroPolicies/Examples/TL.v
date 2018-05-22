@@ -1,6 +1,7 @@
 
 From mathcomp Require Import ssreflect ssrfun eqtype seq ssrint.
-From CoqUtils Require Import fmap fset word.
+From extructures Require Import fmap fset.
+From CoqUtils Require Import word.
 
 Require Extraction.
 Require extraction.ExtrOcamlString.

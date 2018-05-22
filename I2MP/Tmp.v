@@ -2,7 +2,8 @@
 Require Import Common.Definitions.
 
 From mathcomp Require Import ssreflect ssrfun eqtype seq ssrint.
-From CoqUtils Require Import fmap fset word.
+From extructures Require Import fmap fset.
+From CoqUtils Require Import word.
 
 (* TL TODO: this is a very dirty implementation, ask Arthur anyway *)
 Definition mapk {T T' : ordType} {S : Type} (f : T -> T') (map : {fmap T -> S})
