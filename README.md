@@ -17,8 +17,8 @@ of how we have improved the paper in response to this helpful feedback.
 ### Prerequisites ###
 
 This development requires Coq v8.7.1 to work, as well as the following libraries:
-- Mathematical Components 1.6.4 (https://math-comp.github.io/math-comp/)
-- CoqUtils master branch (https://github.com/arthuraa/coq-utils)
+- [Mathematical Components](https://math-comp.github.io/math-comp/) 1.6.4
+- [CoqUtils 5aa6da3](https://github.com/arthuraa/coq-utils/commit/5aa6da3a465233883c239daa6ed3372008cd959f)
 
 ### Replaying the proofs ###
 
@@ -26,8 +26,8 @@ This development requires Coq v8.7.1 to work, as well as the following libraries
 
 ### Running the tests ###
 
-Our tests are known to work with QuickChick branch 8.7
-(https://github.com/QuickChick/QuickChick) and OCaml from 4.02.3 to 4.06.
+Our tests are known to work with [QuickChick](https://github.com/QuickChick/QuickChick) branch 8.7
+and OCaml from 4.02.3 to 4.06.
 
 Running the tests (to be simplified):
 
