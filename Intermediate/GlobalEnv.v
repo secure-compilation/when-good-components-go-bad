@@ -185,11 +185,26 @@ Proof.
 Qed.
 
 Lemma find_label_in_procedure_program_link_left:
-  forall {p c pc l pc'},
-    find_label_in_procedure (prepare_global_env (program_link p c)) pc l = pc' ->
+  forall {c pc},
     Pointer.component pc \notin domm (prog_interface c) ->
-    find_label_in_procedure (prepare_global_env p) pc l = pc'.
-Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
+  forall {p},
+    linkable (prog_interface p) (prog_interface c) ->
+  forall {l},
+    find_label_in_procedure (prepare_global_env (program_link p c)) pc l =
+    find_label_in_procedure (prepare_global_env p) pc l.
+Proof.
+  (* RB: Note the proof strategy for all these lemmas is remarkably similar.
+     It may be worthwhile to refactor it and/or its intermediate steps. *)
+  intros c pc Hnotin p Hlinkable l.
+  rewrite (prepare_global_env_link Hlinkable).
+  unfold find_label_in_procedure, global_env_union; simpl.
+  rewrite unionmE.
+  assert (HNone : (genv_procedures (prepare_global_env c)) (Pointer.component pc) = None)
+    by (apply /dommPn; rewrite domm_genv_procedures; done).
+  rewrite HNone.
+  destruct ((genv_procedures (prepare_global_env p)) (Pointer.component pc)) eqn:Hcase;
+    by rewrite Hcase.
+Qed.
 
 Lemma find_label_in_component_helper_guarantees:
   forall G procs pc pc' l,
