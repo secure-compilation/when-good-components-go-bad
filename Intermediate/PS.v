@@ -652,14 +652,14 @@ Ltac rename_op p pc1 P12 HOP :=
    By chaining inversions on component procedures, procedure code and
    instruction, goals involving pairs of non-matching instructions are
    moreover discharged by contradiction. *)
-Ltac unify_op Hop1 Hop2 Hcomp Hsame_iface :=
+Ltac unify_op Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface :=
   apply pc_component_not_in_ctx in Hcomp;
   pose proof Hcomp as Hcomp';
   rewrite <- Hsame_iface in Hcomp';
   inversion Hop1 as [procs1 [code1 [Hgenv1 [Hprocs1 [_ Hinstr1]]]]];
   inversion Hop2 as [procs2 [code2 [Hgenv2 [Hprocs2 [_ Hinstr2]]]]];
-  pose proof @genv_procedures_program_link_left_notin _ _ Hcomp as Hgenv1';
-  pose proof @genv_procedures_program_link_left_notin _ _ Hcomp' as Hgenv2';
+  pose proof @genv_procedures_program_link_left_notin _ _ Hcomp _ Hlink1 as Hgenv1';
+  pose proof @genv_procedures_program_link_left_notin _ _ Hcomp' _ Hlink2 as Hgenv2';
   rewrite Hgenv1' in Hgenv1;
   rewrite Hgenv2' in Hgenv2;
   rewrite Hgenv2 in Hgenv1;
@@ -669,12 +669,12 @@ Ltac unify_op Hop1 Hop2 Hcomp Hsame_iface :=
   rewrite Hinstr2 in Hinstr1;
   inversion Hinstr1.
 
-Ltac discharge_op_neq Hop1 Hop2 Hcomp Hsame_iface :=
-  unify_op Hop1 Hop2 Hcomp Hsame_iface;
+Ltac discharge_op_neq Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface :=
+  unify_op Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface;
   discriminate.
 
-Ltac unify_op_eq Hop1 Hop2 Hcomp Hsame_iface :=
-  unify_op Hop1 Hop2 Hcomp Hsame_iface;
+Ltac unify_op_eq Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface :=
+  unify_op Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface;
   subst.
 
 Ltac unify_get :=
@@ -798,7 +798,7 @@ Proof.
      Cases where the operations in both steps do not coincide can be discharged. *)
   inversion Hstep_cs1; subst; rename_op p pc1 p1 Hop1;
     inversion Hstep_cs2; subst; rename_op p pc1 p2 Hop2;
-    try discharge_op_neq Hop1 Hop2 Hcomp Hsame_iface;
+    try discharge_op_neq Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface;
     (* Second, case analysis of partial steps.
        Cases where program and component do not match can be discharged. *)
     inversion Hpartial1'
@@ -812,7 +812,7 @@ Proof.
     (* For the remaining goals, unify components of their matching opcodes and their
        various optional components: register and memory reads and stores, component
        labels, allocs and entry points. *)
-    unify_op_eq Hop1 Hop2 Hcomp Hsame_iface;
+    unify_op_eq Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface;
     simplify_turn;
     try unify_get;
     try unify_load pc1 Hcomp Hmem12;

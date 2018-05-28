@@ -5,6 +5,10 @@ Require Import Lib.Monads.
 
 Import Intermediate.
 
+From mathcomp Require Import ssreflect.
+
+Set Bullet Behavior "Strict Subproofs".
+
 Record global_env := mkGlobalEnv {
   genv_interface: Program.interface;
   genv_procedures: NMap (NMap code);
@@ -57,9 +61,21 @@ Lemma genv_procedures_program_link_left_notin :
   forall {c Cid},
     Cid \notin domm (prog_interface c) ->
   forall {p},
+    linkable (prog_interface p) (prog_interface c) ->
     (genv_procedures (prepare_global_env (program_link p c))) Cid =
     (genv_procedures (prepare_global_env p)) Cid.
-Admitted. (* Grade 2, check. Possibly add linkability conditions, etc. *)
+Proof.
+  intros c Cid Hnotin p Hlinkable.
+  rewrite (prepare_global_env_link Hlinkable).
+  unfold global_env_union; simpl.
+  rewrite unionmE.
+  assert (HNone : (genv_procedures (prepare_global_env c)) Cid = None)
+    by (apply /dommPn; rewrite domm_genv_procedures; done).
+  setoid_rewrite HNone.
+  destruct ((genv_procedures (prepare_global_env p)) Cid) eqn:Hcase;
+    setoid_rewrite Hcase; simpl;
+    done.
+Qed.
 
 (* Lemma placeholder: genv_procedures_program_link_left_in *)
 
