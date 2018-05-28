@@ -45,6 +45,10 @@ Lemma domm_genv_procedures : forall {p},
   domm (genv_procedures (prepare_global_env p)) = domm (prog_interface p).
 Admitted. (* Grade 2. Spec. *)
 
+Lemma domm_genv_entrypoints : forall {p},
+  domm (genv_entrypoints (prepare_global_env p)) = domm (prog_interface p).
+Admitted. (* Grade 2. Spec. *)
+
 Definition global_env_union (genv1 genv2 : global_env) : global_env := {|
   genv_interface   := unionm (genv_interface   genv1) (genv_interface   genv2);
   genv_procedures  := unionm (genv_procedures  genv1) (genv_procedures  genv2);
@@ -73,18 +77,30 @@ Proof.
     by (apply /dommPn; rewrite domm_genv_procedures; done).
   setoid_rewrite HNone.
   destruct ((genv_procedures (prepare_global_env p)) Cid) eqn:Hcase;
-    setoid_rewrite Hcase; simpl;
-    done.
+    by setoid_rewrite Hcase.
 Qed.
 
 (* Lemma placeholder: genv_procedures_program_link_left_in *)
 
 Lemma genv_entrypoints_program_link_left :
-  forall {C P p c b},
-    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) = b ->
+  forall {c C},
     C \notin domm (prog_interface c) ->
-    EntryPoint.get C P (genv_entrypoints (prepare_global_env p)) = b.
-Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
+  forall {p},
+    linkable (prog_interface p) (prog_interface c) ->
+  forall {P},
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) =
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p)).
+Proof.
+  intros c C Hnotin p Hlinkable P.
+  rewrite (prepare_global_env_link Hlinkable).
+  unfold EntryPoint.get, global_env_union; simpl.
+  rewrite unionmE.
+  assert (HNone : (genv_entrypoints (prepare_global_env c)) C = None)
+    by (apply /dommPn; rewrite domm_genv_entrypoints; done).
+  rewrite HNone.
+  destruct ((genv_entrypoints (prepare_global_env p)) C) eqn:Hcase;
+    by rewrite Hcase.
+Qed.
 
 Fixpoint find_label (c : code) (l : label) : option Z :=
   let fix aux c o :=

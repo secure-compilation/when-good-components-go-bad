@@ -738,15 +738,17 @@ Ltac unify_alloc Hmem12 Hcomp :=
     rewrite Halloc
   end.
 
-Ltac unify_entrypoint Hpc1' Hpc2' Hsame_iface :=
+Ltac unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface :=
   match goal with
   | Hentry1 : EntryPoint.get ?C ?PROC (genv_entrypoints (prepare_global_env (program_link ?P ?P1))) = ?B1,
     Hentry2 : EntryPoint.get ?C ?PROC (genv_entrypoints (prepare_global_env (program_link ?P ?P2))) = ?B2  |- _ =>
-    pose proof genv_entrypoints_program_link_left Hentry1 Hpc1' as Hentry1';
+    pose proof @genv_entrypoints_program_link_left _ _ Hpc1' _ Hlink1 as Hentry1';
     rewrite <- Hsame_iface in Hpc2';
-    pose proof genv_entrypoints_program_link_left Hentry2 Hpc2' as Hentry2';
-    rewrite Hentry2' in Hentry1';
-    inversion Hentry1'; subst
+    pose proof @genv_entrypoints_program_link_left _ _ Hpc2' _ Hlink2 as Hentry2';
+    rewrite Hentry1' in Hentry1;
+    rewrite Hentry2' in Hentry2;
+    rewrite Hentry2 in Hentry1;
+    inversion Hentry1; subst
   end.
 
 (* Turns must have been simplified. *)
@@ -820,7 +822,7 @@ Proof.
     try unify_component_label Hcomp Hcomp';
     try unify_procedure_label Hcomp Hcomp';
     try unify_alloc Hmem12 Hcomp;
-    try unify_entrypoint Hpc1' Hpc2' Hsame_iface;
+    try unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface;
     (* Rewrite memory and stack, where applicable. *)
     try rewrite Hmem12;
     try rewrite Hstk12;
