@@ -37,6 +37,22 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma domm_genv_procedures : forall {p},
+  domm (genv_procedures (prepare_global_env p)) = domm (prog_interface p).
+Admitted. (* Grade 2. Spec. *)
+
+Definition global_env_union (genv1 genv2 : global_env) : global_env := {|
+  genv_interface   := unionm (genv_interface   genv1) (genv_interface   genv2);
+  genv_procedures  := unionm (genv_procedures  genv1) (genv_procedures  genv2);
+  genv_entrypoints := unionm (genv_entrypoints genv1) (genv_entrypoints genv2)
+|}.
+
+Lemma prepare_global_env_link : forall {p c},
+  linkable (prog_interface p) (prog_interface c) ->
+  prepare_global_env (program_link p c) =
+  global_env_union (prepare_global_env p) (prepare_global_env c).
+Admitted. (* Grade 2. Spec. *)
+
 Lemma genv_procedures_program_link_left_notin :
   forall {c Cid},
     Cid \notin domm (prog_interface c) ->
