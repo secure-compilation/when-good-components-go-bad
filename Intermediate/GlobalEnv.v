@@ -80,7 +80,25 @@ Proof.
     by setoid_rewrite Hcase.
 Qed.
 
-(* Lemma placeholder: genv_procedures_program_link_left_in *)
+Lemma genv_procedures_program_link_left_in :
+  forall {p Cid},
+    Cid \in domm (prog_interface p) ->
+  forall {c},
+    linkable (prog_interface p) (prog_interface c) ->
+    (genv_procedures (prepare_global_env (program_link p c))) Cid =
+    (genv_procedures (prepare_global_env p)) Cid.
+Proof.
+  intros p Cid Hin c Hlinkable.
+  rewrite (prepare_global_env_link Hlinkable).
+  unfold global_env_union; simpl.
+  rewrite unionmE.
+  assert
+    (exists procs, (genv_procedures (prepare_global_env p)) Cid = Some procs)
+    as [procs Hprocs]
+    by (apply /dommP; rewrite domm_genv_procedures; assumption).
+  setoid_rewrite Hprocs.
+  assumption.
+Qed.
 
 Lemma genv_entrypoints_program_link_left :
   forall {c C},

@@ -98,14 +98,6 @@ Admitted.
   this can be dropped once restored to GlobalEnv.
 *)
 
-Lemma genv_procedures_program_link_left_in :
-  forall {p Cid},
-    Cid \in domm (prog_interface p) ->
-  forall {c},
-    (genv_procedures (prepare_global_env (program_link p c))) Cid =
-    (genv_procedures (prepare_global_env p)) Cid.
-Admitted. (* Grade 2, check. Possibly add linkability conditions, etc. *)
-
 Lemma execution_invariant_to_linking:
   forall p c1 c2 pc instr,
     linkable (prog_interface p) (prog_interface c1) ->
@@ -1355,10 +1347,10 @@ Section Simulation.
           -- eapply linkable_sym; eassumption.
           -- eapply CS.Nop.
              unfold executing in Hop.
-             rewrite (genv_procedures_program_link_left_in Hcc2) in Hop.
+             rewrite (genv_procedures_program_link_left_in Hcc2 Hlinkable) in Hop.
              unfold executing.
              rewrite <- (program_linkC wf1 wf2 linkability).
-             erewrite (genv_procedures_program_link_left_in Hcc2).
+             erewrite (genv_procedures_program_link_left_in Hcc2 linkability).
              assumption.
           -- econstructor.
              ++ assumption.
