@@ -707,14 +707,16 @@ Ltac unify_store pc Hcomp Hmem12 :=
     rewrite Hmem12'
   end.
 
-Ltac unify_component_label Hcomp Hcomp' :=
+Ltac unify_component_label Hcomp Hcomp' Hlink1 Hlink2 :=
   match goal with
   | Hlabel1 : find_label_in_component (prepare_global_env (program_link ?P ?P1)) ?PC ?L = Some ?PC1,
     Hlabel2 : find_label_in_component (prepare_global_env (program_link ?P ?P2)) ?PC ?L = Some ?PC2  |- _ =>
-    pose proof find_label_in_component_program_link_left Hlabel1 Hcomp as Hlabel1';
-    pose proof find_label_in_component_program_link_left Hlabel2 Hcomp' as Hlabel2';
-    rewrite Hlabel2' in Hlabel1';
-    inversion Hlabel1'; subst
+    pose proof @find_label_in_component_program_link_left _ _ Hcomp _ Hlink1 as Hlabel1';
+    pose proof @find_label_in_component_program_link_left _ _ Hcomp' _ Hlink2 as Hlabel2';
+    rewrite Hlabel1' in Hlabel1;
+    rewrite Hlabel2' in Hlabel2;
+    rewrite Hlabel2 in Hlabel1;
+    inversion Hlabel1; subst
   end.
 
 Ltac unify_procedure_label Hcomp Hcomp' Hlink1 Hlink2 :=
@@ -821,7 +823,7 @@ Proof.
     try unify_get;
     try unify_load pc1 Hcomp Hmem12;
     try unify_store pc1 Hcomp Hmem12;
-    try unify_component_label Hcomp Hcomp';
+    try unify_component_label Hcomp Hcomp' Hlink1 Hlink2;
     try unify_procedure_label Hcomp Hcomp' Hlink1 Hlink2;
     try unify_alloc Hmem12 Hcomp;
     try unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface;

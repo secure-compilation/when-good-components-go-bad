@@ -237,10 +237,39 @@ Proof.
 Qed.
 
 Lemma find_label_in_component_program_link_left:
-  forall {p c pc l pc'},
-    find_label_in_component (prepare_global_env (program_link p c)) pc l = pc' ->
+  forall {c pc},
     Pointer.component pc \notin domm (prog_interface c) ->
-    find_label_in_component (prepare_global_env p) pc l = pc'.
-Admitted. (* Grade 2, check. Rephrase in the style of genv_procedures_program_link_left. *)
+  forall {p},
+    linkable (prog_interface p) (prog_interface c) ->
+  forall {l},
+    find_label_in_component (prepare_global_env (program_link p c)) pc l =
+    find_label_in_component (prepare_global_env p) pc l.
+Proof.
+  intros c pc Hnotin p Hlinkable l.
+  rewrite (prepare_global_env_link Hlinkable).
+  unfold find_label_in_component. unfold global_env_union at 1. simpl.
+  rewrite unionmE.
+  assert (HNone : (genv_procedures (prepare_global_env c)) (Pointer.component pc) = None)
+    by (apply /dommPn; rewrite domm_genv_procedures; done).
+  rewrite HNone.
+  destruct ((genv_procedures (prepare_global_env p)) (Pointer.component pc))
+    as [procs |] eqn:Hcase;
+    rewrite Hcase.
+  - simpl.
+    (* Inlined is the corresponding lemma on find_label_in_component_helper. *)
+    induction (elementsm procs) as [| [p_block code] elts IHelts];
+      first reflexivity.
+    unfold find_label_in_component_helper; simpl.
+    assert (Hnotin' : Pointer.component (Pointer.component pc, p_block, 0%Z)
+                      \notin domm (prog_interface c)).
+      by done.
+    rewrite <- (prepare_global_env_link Hlinkable).
+    rewrite (find_label_in_procedure_program_link_left Hnotin' Hlinkable).
+    fold find_label_in_component_helper.
+    rewrite <- IHelts.
+    rewrite <- (prepare_global_env_link Hlinkable).
+    reflexivity.
+  - reflexivity.
+Qed.
 
 (* Lemma placeholder: execution_invariant_to_linking *)
