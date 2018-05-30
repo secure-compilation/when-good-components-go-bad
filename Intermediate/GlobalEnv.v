@@ -41,11 +41,11 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma domm_genv_procedures : forall {p},
+Lemma domm_genv_procedures : forall p,
   domm (genv_procedures (prepare_global_env p)) = domm (prog_interface p).
 Admitted. (* Grade 2. Spec. *)
 
-Lemma domm_genv_entrypoints : forall {p},
+Lemma domm_genv_entrypoints : forall p,
   domm (genv_entrypoints (prepare_global_env p)) = domm (prog_interface p).
 Admitted. (* Grade 2. Spec. *)
 

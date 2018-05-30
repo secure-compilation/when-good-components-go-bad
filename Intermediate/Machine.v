@@ -261,7 +261,6 @@ Proof.
      prog2, which are however disjoint, and main is unique (may need to
      shuffle things a bit). *)
   admit.
-Admitted.
 *)
 
 Definition linkable_mains (prog1 prog2 : program) : Prop :=
