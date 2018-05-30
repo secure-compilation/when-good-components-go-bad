@@ -10,7 +10,6 @@ Unset Printing Implicit Defensive.
 
 Import DoNotation.
 
-(* TL: hardcoding machine words *)
 Module Symbolic.
 
 (* BCP/AAA: Should some of this be shared with the concrete machine? *)
