@@ -502,8 +502,94 @@ Qed.
 
 (* initialization of a linked program *)
 
-(* Lemma placeholder: alloc_static_buffers_after_linking *)
-(* Lemma placeholder: prepare_initial_memory_after_linking *)
+(* The following two lemmas are quick conveniences for the proper
+   result of the partition lemma that follows.*)
+Lemma prog_buffers_in_domm :
+  forall p Cid,
+    well_formed_program p ->
+    Cid \in domm (prog_interface p) ->
+  exists bufs,
+    (prog_buffers p) Cid = Some bufs.
+Proof.
+  intros p Cid [_ _ _ _ Hbufs _] Hin.
+  apply /dommP.
+  congruence.
+Qed.
+
+Lemma prog_buffers_notin_domm :
+  forall p Cid,
+    well_formed_program p ->
+    Cid \notin domm (prog_interface p) ->
+    (prog_buffers p) Cid = None.
+Proof.
+  intros p Cid [_ _ _ _ Hbufs _] Hin.
+  apply /dommPn.
+  congruence.
+Qed.
+
+(* TODO: Refactor proof (easy). Inline or relocate auxiliary lemmas. *)
+Lemma alloc_static_buffers_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    alloc_static_buffers (program_link p c)
+                         (domm (prog_interface (program_link p c))) =
+    unionm (alloc_static_buffers p (domm (prog_interface p)))
+           (alloc_static_buffers c (domm (prog_interface c))).
+Proof.
+  intros p c Hwfp Hwfc [Hsound Hdisjoint].
+  unfold alloc_static_buffers.
+  rewrite <- eq_fmap. (* Operate from extensional equality. *)
+  unfold eqfun. simpl. intros Cid.
+  rewrite !(mkfmapfE, unionmE).
+  destruct (Cid \in domm (prog_interface p)) eqn:Hintp;
+    destruct (Cid \in domm (prog_interface c)) eqn:Hintc.
+  - (* Contra.
+       However, note this case works out with the current definition. *)
+    pose proof prog_buffers_in_domm Hwfp Hintp as [bufsp Hbufsp].
+    rewrite !mem_domm.
+    rewrite unionmE.
+    rewrite mem_domm in Hintp. rewrite !Hintp.
+    rewrite mem_domm in Hintc. rewrite !Hintc.
+    rewrite Hbufsp.
+    reflexivity.
+  - pose proof prog_buffers_in_domm Hwfp Hintp as [bufsp Hbufsp].
+    rewrite !mem_domm.
+    rewrite unionmE.
+    rewrite mem_domm in Hintp. rewrite !Hintp.
+    rewrite mem_domm in Hintc. rewrite !Hintc.
+    rewrite Hbufsp.
+    reflexivity.
+  - apply negb_true_iff in Hintp.
+    pose proof prog_buffers_notin_domm Hwfp Hintp as Hbufsp.
+    apply negb_true_iff in Hintp.
+    rewrite !mem_domm.
+    rewrite unionmE.
+    rewrite mem_domm in Hintp. rewrite !Hintp.
+    rewrite mem_domm in Hintc. rewrite !Hintc.
+    rewrite Hbufsp.
+    reflexivity.
+  - (* Trivial case. *)
+    rewrite !mem_domm.
+    rewrite unionmE.
+    rewrite mem_domm in Hintp. rewrite Hintp.
+    rewrite mem_domm in Hintc. rewrite Hintc.
+    reflexivity.
+Qed.
+
+Theorem prepare_initial_memory_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    prepare_initial_memory (program_link p c) =
+    unionm (prepare_initial_memory p) (prepare_initial_memory c).
+Proof.
+  intros p c Hwf1 Hwf2 Hlinkable.
+  unfold prepare_initial_memory.
+  apply alloc_static_buffers_after_linking; auto.
+Qed.
 
 Definition prepare_procedures_memory (p: program) (mem: Memory.t) : Memory.t :=
   let '(mem, _, _) := prepare_procedures p mem in

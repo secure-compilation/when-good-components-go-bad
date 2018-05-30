@@ -32,39 +32,6 @@ Import Intermediate.
   needed, generalized. Module qualifiers will be tweaked as needed.
 *)
 
-Lemma alloc_static_buffers_after_linking:
-  forall p c,
-    well_formed_program p ->
-    well_formed_program c ->
-    linkable (prog_interface p) (prog_interface c) ->
-    let pc := program_link p c in
-    alloc_static_buffers pc (domm (prog_interface pc)) =
-    unionm (alloc_static_buffers p (domm (prog_interface p)))
-           (alloc_static_buffers c (domm (prog_interface c))).
-Proof.
-  intros p c Hwf1 Hwf2 Hlinkable Hpc.
-  subst Hpc. simpl.
-  apply eq_fmap. intros k.
-  rewrite unionmE.
-  destruct (isSome ((alloc_static_buffers p (domm (prog_interface p))) k))
-           eqn:Hin.
-  - admit.
-  - admit.
-Admitted.
-
-Theorem prepare_initial_memory_after_linking:
-  forall p c,
-    well_formed_program p ->
-    well_formed_program c ->
-    linkable (prog_interface p) (prog_interface c) ->
-    prepare_initial_memory (program_link p c) =
-    unionm (prepare_initial_memory p) (prepare_initial_memory c).
-Proof.
-  intros p c Hwf1 Hwf2 Hlinkable.
-  unfold prepare_initial_memory.
-  apply alloc_static_buffers_after_linking; auto.
-Qed.
-
 Theorem prepare_procedures_memory_after_linking:
   forall p c,
     well_formed_program p ->
