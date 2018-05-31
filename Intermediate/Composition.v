@@ -122,12 +122,16 @@ Proof.
   exists procs, proc.
   split; [| split; [| split]];
     [| assumption | assumption | assumption].
-  assert (Pointer.component pc \notin domm (prog_interface c1)) as Hcc1 by admit.
-  assert (Pointer.component pc \notin domm (prog_interface c2)) as Hcc2 by admit.
-  rewrite (genv_procedures_program_link_left_notin Hcc1) in Hgenv_procs.
-  rewrite (genv_procedures_program_link_left_notin Hcc2).
+  assert (Pointer.component pc \notin domm (prog_interface c1)) as Hcc1.
+  { inversion Hlinkable1 as [_ Hdisjoint]. apply /fdisjointP. apply Hdisjoint. assumption.
+  }
+  assert (Pointer.component pc \notin domm (prog_interface c2)) as Hcc2.
+  { inversion Hlinkable2 as [_ Hdisjoint]. apply /fdisjointP. apply Hdisjoint. assumption.
+  }
+  rewrite (genv_procedures_program_link_left_notin Hcc1 Hlinkable1) in Hgenv_procs.
+  rewrite (genv_procedures_program_link_left_notin Hcc2 Hlinkable2).
   assumption.
-Admitted. (* Grade 1. Easy lemma for the admits. *)
+Qed.
 
 (*
   PS components
