@@ -55,44 +55,6 @@ Theorem prepare_procedures_entrypoints_after_linking:
 Admitted.
 
 (*
-  GlobalEnv components
-
-  RB: TODO: The following results are currently only used here, but belong
-  logically in GlobalEnv, and should be relocated as they are proved and, where
-  needed, generalized. Module qualifiers will be tweaked as needed.
-
-  Uses of execution_invariant_to_linking in this file are currently @-prefixed;
-  this can be dropped once restored to GlobalEnv.
-*)
-
-Lemma execution_invariant_to_linking:
-  forall p c1 c2 pc instr,
-    linkable (prog_interface p) (prog_interface c1) ->
-    linkable (prog_interface p) (prog_interface c2) ->
-    well_formed_program p ->
-    well_formed_program c1 ->
-    well_formed_program c2 ->
-    Pointer.component pc \in domm (prog_interface p) ->
-    executing (prepare_global_env (program_link p c1)) pc instr ->
-    executing (prepare_global_env (program_link p c2)) pc instr.
-Proof.
-  intros p c1 c2 pc instr Hlinkable1 Hlinkable2 Hwf Hwf1 Hwf2 Hpc Hexec.
-  inversion Hexec as [procs [proc [Hgenv_procs [Hprocs_proc [Hoffset Hproc_instr]]]]].
-  exists procs, proc.
-  split; [| split; [| split]];
-    [| assumption | assumption | assumption].
-  assert (Pointer.component pc \notin domm (prog_interface c1)) as Hcc1.
-  { inversion Hlinkable1 as [_ Hdisjoint]. apply /fdisjointP. apply Hdisjoint. assumption.
-  }
-  assert (Pointer.component pc \notin domm (prog_interface c2)) as Hcc2.
-  { inversion Hlinkable2 as [_ Hdisjoint]. apply /fdisjointP. apply Hdisjoint. assumption.
-  }
-  rewrite (genv_procedures_program_link_left_notin Hcc1 Hlinkable1) in Hgenv_procs.
-  rewrite (genv_procedures_program_link_left_notin Hcc2 Hlinkable2).
-  assumption.
-Qed.
-
-(*
   PS components
 
   RB: TODO: The following results are currently only used here, but belong
