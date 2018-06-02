@@ -858,6 +858,31 @@ Lemma state_determinism_context:
   forall ips'',
     step p ctx G ips t ips'' ->
     ips' = ips''.
+Proof.
+  intros p ctx G ps t ps1 Hcomp Hstep_ps1 ps2 Hstep_ps2.
+
+  inversion Hstep_ps1
+    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hstep_cs1 Hpartial1 Hpartial1'];
+    subst.
+  inversion Hstep_ps2
+    as [p2 ? ? ? cs2 cs2' Hsame_iface _ Hwfp2 Hlink2 Hstep_cs2 Hpartial2 Hpartial2'];
+    subst.
+
+  (* Case analysis on who has control. *)
+  inversion Hpartial1 as [cstk1 ? cmem1 ? regs1 pc1 Hpc1 | cstk1 ? cmem1 ? regs1 pc1 Hcc1];
+    subst;
+    (* Program control is discharged by contradiction. *)
+    first (simplify_turn; rewrite Hcomp in Hpc1; discriminate).
+
+  inversion Hpartial2 as [| cstk2 ? cmem2 ? regs2 pc2 Hcc2 Hmem12 Hstk12 DUMMY Hcompeq];
+    subst.
+  (* First, case analysis of CS steps. *)
+  inversion Hstep_cs1; subst;
+    inversion Hstep_cs2; subst;
+    (* All subgoals but two involve an emtpy trace: state determinism applies. *)
+    try (rewrite (context_epsilon_step_is_silent Hcomp Hstep_ps1);
+         rewrite (context_epsilon_step_is_silent Hcomp Hstep_ps2);
+         reflexivity).
 Admitted. (* Grade 3, check. Compare with state_determinism_program. *)
 
 Theorem state_determinism:
