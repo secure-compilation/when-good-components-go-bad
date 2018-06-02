@@ -755,6 +755,14 @@ Ltac unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface :=
     inversion Hentry1; subst
   end.
 
+Ltac unify_inc_pc Hcc1 Hcc2 :=
+  rewrite <- Pointer.inc_preserves_component in Hcc1;
+  rewrite (ptr_within_partial_frame_1 Hcc1);
+  rewrite Pointer.inc_preserves_component;
+  rewrite <- Pointer.inc_preserves_component in Hcc2;
+  rewrite (ptr_within_partial_frame_1 Hcc2);
+  rewrite Pointer.inc_preserves_component.
+
 Ltac unify_regs :=
   match goal with
   | Hregs1 : Register.get R_COM ?REGS1 = Int ?CALL_ARG,
@@ -790,7 +798,7 @@ Ltac analyze_stack p1 pc1 pc2 Hhead :=
     ]
   end.
 
-(* Where to put this? Is it direct from CoqUtils?
+(* RB: Where to put this? Is it direct from CoqUtils?
    As it is, just a convenience to make tactics more readable. *)
 Remark notin_to_in_false : forall (Cid : Component.id) (iface : Program.interface),
   Cid \notin domm iface -> Cid \in domm iface = false.
@@ -917,27 +925,16 @@ Proof.
   (* ICall *)
   - rewrite Hmem12.
     rewrite Hstk12.
-    rewrite <- Pointer.inc_preserves_component in Hcc1.
-    rewrite (ptr_within_partial_frame_1 Hcc1).
-    rewrite Pointer.inc_preserves_component.
-    rewrite <- Pointer.inc_preserves_component in Hcc2.
-    rewrite (ptr_within_partial_frame_1 Hcc2).
-    rewrite Pointer.inc_preserves_component.
+    unify_inc_pc Hcc1 Hcc2.
     unify_regs.
     unify_components_eq.
     unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface.
     reflexivity.
   - discharge_pc Hpc1' Hcc2'.
   - discharge_pc Hpc2' Hcc1'.
-  - (* Subset of "sub-tactics" used above. *)
-    rewrite Hmem12.
+  - rewrite Hmem12.
     rewrite Hstk12.
-    rewrite <- Pointer.inc_preserves_component in Hcc1.
-    rewrite (ptr_within_partial_frame_1 Hcc1).
-    rewrite Pointer.inc_preserves_component.
-    rewrite <- Pointer.inc_preserves_component in Hcc2.
-    rewrite (ptr_within_partial_frame_1 Hcc2).
-    rewrite Pointer.inc_preserves_component.
+    unify_inc_pc Hcc1 Hcc2.
     unify_components_eq.
     reflexivity.
   (* IReturn *)
