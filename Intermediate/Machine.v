@@ -440,7 +440,7 @@ Definition alloc_static_buffers p comps :=
 Definition prepare_initial_memory (p: program) : Memory.t :=
   alloc_static_buffers p (domm (prog_interface p)).
 
-Fixpoint reserve_component_blocks p C Cmem Cprocs Centrypoints procs_code
+Fixpoint reserve_component_blocks p C acc procs_code
   : ComponentMemory.t * NMap code * NMap Block.id :=
   let is_main_proc comp_id proc_id :=
       match prog_main p with
@@ -448,9 +448,9 @@ Fixpoint reserve_component_blocks p C Cmem Cprocs Centrypoints procs_code
         (Component.main =? comp_id) && (main_proc_id =? proc_id)
       | None => false
       end in
-  match procs_code with
-  | [] => (Cmem, Cprocs, Centrypoints)
-  | (P, Pcode) :: procs_code' =>
+  let aux acc procs_code :=
+      let '(Cmem, Cprocs, Centrypoints) := acc in
+      let '(P, Pcode) := procs_code in
     let (Cmem', b) := ComponentMemory.reserve_block Cmem in
     let Cprocs' := setm Cprocs b Pcode in
     (* if P is exported or is the main procedure, add an external entrypoint *)
@@ -458,38 +458,38 @@ Fixpoint reserve_component_blocks p C Cmem Cprocs Centrypoints procs_code
     | Some Ciface =>
       if (P \in Component.export Ciface) || is_main_proc C P then
         let Centrypoints' := setm Centrypoints P b in
-        reserve_component_blocks p C Cmem' Cprocs' Centrypoints' procs_code'
+        (Cmem', Cprocs', Centrypoints')
       else
-        reserve_component_blocks p C Cmem' Cprocs' Centrypoints procs_code'
+        (Cmem', Cprocs', Centrypoints)
     | None =>
       (* this case shouldn't happen for well formed p *)
-      reserve_component_blocks p C Cmem' Cprocs' Centrypoints procs_code'
+      (Cmem', Cprocs', Centrypoints)
     end
-  end.
+  in fold_left aux procs_code acc.
 
-Fixpoint reserve_procedure_blocks p mem procs entrypoints comps_code
+Fixpoint reserve_procedure_blocks p acc comps_code
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
-  match comps_code with
-  | [] => (mem, procs, entrypoints)
-  | (C, Cprocs) :: comps_code' =>
+  let aux acc comps_code :=
+      let '(mem, procs, entrypoints) := acc in
+      let '(C, Cprocs) := comps_code in
     match getm mem C with
     | Some Cmem =>
       let '(Cmem', Cprocs, Centrypoints) :=
-          reserve_component_blocks p C Cmem emptym emptym (elementsm Cprocs) in
+          reserve_component_blocks p C (Cmem, emptym, emptym) (elementsm Cprocs) in
       let mem' := setm mem C Cmem' in
       let procs' := setm procs C Cprocs in
       let entrypoints' := setm entrypoints C Centrypoints in
-      reserve_procedure_blocks p mem' procs' entrypoints' comps_code'
+      (mem', procs', entrypoints')
     | None =>
       (* this shouldn't happen if memory was initialized before the call *)
       (* we just skip initialization for this component *)
-      reserve_procedure_blocks p mem procs entrypoints comps_code'
+      (mem, procs, entrypoints)
     end
-  end.
+  in fold_left aux comps_code acc.
 
 Definition prepare_procedures (p: program) (mem: Memory.t)
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
-  reserve_procedure_blocks p mem emptym emptym (elementsm (prog_procedures p)).
+  reserve_procedure_blocks p (mem, emptym, emptym) (elementsm (prog_procedures p)).
 
 (* initialization of the empty program *)
 
