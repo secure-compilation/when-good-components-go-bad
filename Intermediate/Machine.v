@@ -103,6 +103,15 @@ Module Register.
     intros r. unfold get.
     exists Undef. destruct r; auto.
   Qed.
+
+  Lemma invalidate_eq : forall regs1 regs2,
+    get R_COM regs1 = get R_COM regs2 ->
+    invalidate regs1 = invalidate regs2.
+  Proof.
+    intros regs1 regs2 Hregs.
+    unfold invalidate.
+    congruence.
+  Qed.
 End Register.
 
 Module EntryPoint.

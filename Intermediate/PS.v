@@ -755,6 +755,20 @@ Ltac unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface :=
     inversion Hentry1; subst
   end.
 
+Ltac unify_regs :=
+  match goal with
+  | Hregs1 : Register.get R_COM ?REGS1 = Int ?CALL_ARG,
+    Hregs2 : Register.get R_COM ?REGS2 = Int ?CALL_ARG |- _ =>
+    rewrite <- Hregs1 in Hregs2;
+    rewrite (Register.invalidate_eq Hregs2)
+  end.
+
+Ltac unify_components_eq :=
+  match goal with
+  | Hcomps : Pointer.component ?PC1 = Pointer.component ?PC2 |- _ =>
+    rewrite Hcomps
+  end.
+
 (* Turns must have been simplified. *)
 Ltac discharge_pc Hpc Hcc :=
   rewrite Hcc in Hpc;
@@ -775,6 +789,16 @@ Ltac analyze_stack p1 pc1 pc2 Hhead :=
       subst                                         (* User tactic *)
     ]
   end.
+
+(* Where to put this? Is it direct from CoqUtils?
+   As it is, just a convenience to make tactics more readable. *)
+Remark notin_to_in_false : forall (Cid : Component.id) (iface : Program.interface),
+  Cid \notin domm iface -> Cid \in domm iface = false.
+Proof.
+  intros Cid iface Hnotin.
+  destruct (Cid \in domm iface) eqn:Heq;
+    easy.
+Qed.
 
 Lemma state_determinism_program:
   forall p ctx G ips t ips',
@@ -882,8 +906,59 @@ Proof.
     (* All subgoals but two involve an emtpy trace: state determinism applies. *)
     try (rewrite (context_epsilon_step_is_silent Hcomp Hstep_ps1);
          rewrite (context_epsilon_step_is_silent Hcomp Hstep_ps2);
-         reflexivity).
-Admitted. (* Grade 3, check. Compare with state_determinism_program. *)
+         reflexivity);
+    inversion Hpartial1'
+      as [cstk1' ? cmem1' ? regs1' pc1' Hpc1' | cstk1' ? cmem1' ? regs1' pc1' Hcc1'];
+      subst;
+    inversion Hpartial2'
+      as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
+      subst;
+    simplify_turn.
+  (* ICall *)
+  - rewrite Hmem12.
+    rewrite Hstk12.
+    rewrite <- Pointer.inc_preserves_component in Hcc1.
+    rewrite (ptr_within_partial_frame_1 Hcc1).
+    rewrite Pointer.inc_preserves_component.
+    rewrite <- Pointer.inc_preserves_component in Hcc2.
+    rewrite (ptr_within_partial_frame_1 Hcc2).
+    rewrite Pointer.inc_preserves_component.
+    unify_regs.
+    unify_components_eq.
+    unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface.
+    reflexivity.
+  - discharge_pc Hpc1' Hcc2'.
+  - discharge_pc Hpc2' Hcc1'.
+  - (* Subset of "sub-tactics" used above. *)
+    rewrite Hmem12.
+    rewrite Hstk12.
+    rewrite <- Pointer.inc_preserves_component in Hcc1.
+    rewrite (ptr_within_partial_frame_1 Hcc1).
+    rewrite Pointer.inc_preserves_component.
+    rewrite <- Pointer.inc_preserves_component in Hcc2.
+    rewrite (ptr_within_partial_frame_1 Hcc2).
+    rewrite Pointer.inc_preserves_component.
+    unify_components_eq.
+    reflexivity.
+  (* IReturn *)
+  - rewrite Hmem12.
+    inversion Hstk12 as [Hstk12'].
+    rewrite (ptr_within_partial_frame_2 (notin_to_in_false Hpc1')) in Hstk12'.
+    rewrite (ptr_within_partial_frame_2 (notin_to_in_false Hpc2')) in Hstk12'.
+    apply partial_pointer_to_pointer_eq in Hstk12'; subst.
+    unify_regs.
+    reflexivity.
+  - rewrite (ptr_within_partial_frame_1 Hcc2') in Hstk12.
+    rewrite (ptr_within_partial_frame_2 (notin_to_in_false Hpc1')) in Hstk12.
+    easy.
+  - rewrite (ptr_within_partial_frame_1 Hcc1') in Hstk12.
+    rewrite (ptr_within_partial_frame_2 (notin_to_in_false Hpc2')) in Hstk12.
+    easy.
+  - rewrite Hmem12.
+    inversion Hstk12.
+    unify_components_eq.
+    reflexivity.
+Qed.
 
 Theorem state_determinism:
   forall p ctx G ips t ips',
