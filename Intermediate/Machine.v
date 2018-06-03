@@ -491,6 +491,29 @@ Definition prepare_procedures (p: program) (mem: Memory.t)
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
   reserve_procedure_blocks p (mem, emptym, emptym) (elementsm (prog_procedures p)).
 
+(* For each component, integrate the (now separate) fetching of its procedures,
+   obtention of its initial component memory and then reserve_component_blocks.
+   The logic of reserve_procedure_blocks is implicit in the map-like nature of
+   its results. Then, decompose the results, composed as a whole in the result
+   of reserving component blocks, turning a map of triples into a triple of
+   identically indexed maps. *)
+Definition prepare_procedures_initial_memory (p: program)
+  : Memory.t * NMap (NMap code) * EntryPoint.t :=
+  let m :=
+      mkfmapf
+        (fun C =>
+           let Cprocs := odflt emptym ((prog_procedures p) C) in
+           let Cmem := ComponentMemory.prealloc (odflt emptym ((prog_buffers p) C)) in
+           reserve_component_blocks p C (Cmem, emptym, emptym) (elementsm Cprocs))
+        (domm (prog_interface p)) in
+  (mapm (fun x => fst (fst x)) m, mapm (fun x => snd (fst x)) m, mapm snd m).
+
+(* We want to ensure something like this:
+     Goal
+       forall p, prepare_procedures_initial_memory p =
+                 prepare_procedures p (prepare_initial_memory p).
+  Possibly assuming the well-formedness of the program. *)
+
 (* initialization of the empty program *)
 
 Theorem prepare_initial_memory_empty_program:
