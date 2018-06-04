@@ -633,6 +633,42 @@ Definition prepare_procedures_memory (p: program) (mem: Memory.t) : Memory.t :=
 
 (* Lemma placeholder: prepare_procedures_memory_after_linking *)
 
+Definition prepare_procedures_memory' (p: program) : Memory.t :=
+  let '(mem, _, _) := prepare_procedures_initial_memory p in
+  mem.
+
+(* First, prove domain preservation for all of the (already existing, plus
+   recent improvements) initialization code. *)
+Lemma domm_prepare_procedures_initial_memory_aux: forall p,
+  (*well_formed_program p ->*)
+  domm (prepare_procedures_initial_memory_aux p) = domm (prog_interface p).
+Proof.
+  intros p.
+  unfold prepare_procedures_initial_memory_aux.
+  rewrite domm_mkfmapf.
+Admitted. (* Grade 1. *)
+
+(* Now it's easy to extend this to the parts of the final result. *)
+Lemma domm_prepare_procedures_memory': forall p,
+  domm (prepare_procedures_memory' p) = domm (prog_interface p).
+Proof.
+  intros p.
+  unfold prepare_procedures_memory', prepare_procedures_initial_memory.
+  rewrite domm_map.
+  rewrite domm_prepare_procedures_initial_memory_aux.
+  reflexivity.
+Qed.
+
+(* RB: TODO: Simplify hypotheses if possible. *)
+Theorem prepare_procedures_memory_after_linking':
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    prepare_procedures_memory' (program_link p c) =
+    unionm (prepare_procedures_memory' p) (prepare_procedures_memory' c).
+Admitted.
+
 Definition prepare_procedures_entrypoints (p: program) (mem: Memory.t) : EntryPoint.t :=
   let '(_, _, entrypoints) := prepare_procedures p mem in
   entrypoints.
