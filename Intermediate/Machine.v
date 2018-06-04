@@ -659,6 +659,31 @@ Proof.
   reflexivity.
 Qed.
 
+(* RB: TODO: Relocate these simple helpers, review names, etc.
+   For now, trying to keep cruft out of the higher-level proofs. *)
+Lemma mapm_eq: forall (T : ordType) (S S' : Type) (m1 m2 : {fmap T -> S}) (f : S -> S'),
+  m1 = m2 -> (mapm f m1) = (mapm f m2).
+Proof.
+  intros T S S' m1 m2 f Heq.
+  subst.
+  reflexivity.
+Qed.
+
+Lemma in_domm_program_link:
+  forall Cid p,
+    Cid \in domm (prog_interface p) ->
+  forall c,
+    Cid \in domm (prog_interface (program_link p c)).
+Proof.
+  intros Cid p Hin c.
+  simpl.
+  rewrite mem_domm.
+  rewrite mem_domm in Hin.
+  rewrite unionmE.
+  rewrite Hin.
+  assumption.
+Qed.
+
 (* RB: TODO: Simplify hypotheses if possible. *)
 Theorem prepare_procedures_memory_after_linking':
   forall p c,
@@ -667,6 +692,41 @@ Theorem prepare_procedures_memory_after_linking':
     linkable (prog_interface p) (prog_interface c) ->
     prepare_procedures_memory' (program_link p c) =
     unionm (prepare_procedures_memory' p) (prepare_procedures_memory' c).
+Proof.
+  intros p c Hwfp Hwfc Hlinkable.
+  unfold prepare_procedures_memory',
+         prepare_procedures_initial_memory, prepare_procedures_initial_memory_aux.
+  (* Peel off the top-level maps. *)
+  rewrite <- mapm_unionm.
+  apply mapm_eq.
+  apply eq_fmap. intros Cid.
+  (* Case analysis on component provenance. *)
+  destruct (Cid \in domm (prog_interface p)) eqn:Hp;
+    destruct (Cid \in domm (prog_interface c)) eqn:Hc.
+  - admit. (* Contra. *)
+  - rewrite unionmE.
+    rewrite !mkfmapfE.
+    rewrite Hp Hc.
+    assert (Hpc : Cid \in domm (prog_interface (program_link p c)))
+      by (by apply in_domm_program_link).
+    rewrite Hpc.
+    assert ((elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
+            (elementsm (odflt emptym ((prog_procedures p) Cid))))
+      as Helts by admit.
+    rewrite Helts.
+    assert (ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
+            ComponentMemory.prealloc (odflt emptym ((prog_buffers p) Cid)))
+      as Hprealloc by admit.
+    rewrite Hprealloc.
+    simpl.
+    rewrite unionmE.
+    assert (exists x, (prog_interface p) Cid = Some x)
+      as [x Hp'] by (by apply /dommP).
+    rewrite Hp'.
+    (* What remains is to reason about prog_main. *)
+    admit.
+  - admit. (* (Mostly?) symmetric to last case. *)
+  - admit. (* Easy case. *)
 Admitted.
 
 Definition prepare_procedures_entrypoints (p: program) (mem: Memory.t) : EntryPoint.t :=
