@@ -440,6 +440,7 @@ Definition alloc_static_buffers p comps :=
 Definition prepare_initial_memory (p: program) : Memory.t :=
   alloc_static_buffers p (domm (prog_interface p)).
 
+(* RB: Are the names of reserve_[component|procedure]_blocks swapped? *)
 Fixpoint reserve_component_blocks p C acc procs_code
   : ComponentMemory.t * NMap code * NMap Block.id :=
   let is_main_proc comp_id proc_id :=
@@ -494,19 +495,23 @@ Definition prepare_procedures (p: program) (mem: Memory.t)
 (* For each component, integrate the (now separate) fetching of its procedures,
    obtention of its initial component memory and then reserve_component_blocks.
    The logic of reserve_procedure_blocks is implicit in the map-like nature of
-   its results. Then, decompose the results, composed as a whole in the result
-   of reserving component blocks, turning a map of triples into a triple of
-   identically indexed maps. *)
+   its results. (By splitting the definition and proving some intermediate
+   results on the auxiliary, the composition of the parts will be easier.) *)
+Definition prepare_procedures_initial_memory_aux (p: program) :=
+  mkfmapf
+    (fun C =>
+       let Cprocs := odflt emptym ((prog_procedures p) C) in
+       let Cmem := ComponentMemory.prealloc (odflt emptym ((prog_buffers p) C)) in
+       reserve_component_blocks p C (Cmem, emptym, emptym) (elementsm Cprocs))
+    (domm (prog_interface p)).
+
+(* Decompose the results of the auxiliary call, composed as a whole in the
+   result of reserving component blocks, turning a map of triples into a triple
+   of identically indexed maps *)
 Definition prepare_procedures_initial_memory (p: program)
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
-  let m :=
-      mkfmapf
-        (fun C =>
-           let Cprocs := odflt emptym ((prog_procedures p) C) in
-           let Cmem := ComponentMemory.prealloc (odflt emptym ((prog_buffers p) C)) in
-           reserve_component_blocks p C (Cmem, emptym, emptym) (elementsm Cprocs))
-        (domm (prog_interface p)) in
-  (mapm (fun x => fst (fst x)) m, mapm (fun x => snd (fst x)) m, mapm snd m).
+  let m := prepare_procedures_initial_memory_aux p in
+  (mapm (fun x => x.1.1) m, mapm (fun x => x.1.2) m, mapm snd m).
 
 (* We want to ensure something like this:
      Goal
