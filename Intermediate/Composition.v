@@ -32,18 +32,6 @@ Import Intermediate.
   needed, generalized. Module qualifiers will be tweaked as needed.
 *)
 
-Theorem prepare_procedures_memory_after_linking:
-  forall p c,
-    well_formed_program p ->
-    well_formed_program c ->
-    linkable (prog_interface p) (prog_interface c) ->
-    linkable_mains p c ->
-    prepare_procedures_memory (program_link p c)
-                              (prepare_initial_memory (program_link p c)) =
-    unionm (prepare_procedures_memory p (prepare_initial_memory p))
-           (prepare_procedures_memory c (prepare_initial_memory c)).
-Admitted.
-
 Theorem prepare_procedures_entrypoints_after_linking:
   forall p c,
     well_formed_program p ->
