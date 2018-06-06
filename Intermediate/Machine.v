@@ -441,7 +441,7 @@ Definition prepare_initial_memory (p: program) : Memory.t :=
   alloc_static_buffers p (domm (prog_interface p)).
 
 (* RB: Are the names of reserve_[component|procedure]_blocks swapped? *)
-Fixpoint reserve_component_blocks p C acc procs_code
+Definition reserve_component_blocks p C acc procs_code
   : ComponentMemory.t * NMap code * NMap Block.id :=
   let is_main_proc comp_id proc_id :=
       match prog_main p with
@@ -690,17 +690,18 @@ Theorem prepare_procedures_memory_after_linking':
     well_formed_program p ->
     well_formed_program c ->
     linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
     prepare_procedures_memory' (program_link p c) =
     unionm (prepare_procedures_memory' p) (prepare_procedures_memory' c).
 Proof.
-  intros p c Hwfp Hwfc Hlinkable.
+  intros p c Hwfp Hwfc Hlinkable Hmains.
   unfold prepare_procedures_memory',
          prepare_procedures_initial_memory, prepare_procedures_initial_memory_aux.
   (* Peel off the top-level maps. *)
   rewrite <- mapm_unionm.
   apply mapm_eq.
   apply eq_fmap. intros Cid.
-  (* Case analysis on component provenance. *)
+  (* Case analysis on component provenance after some common preprocessing. *)
   destruct (Cid \in domm (prog_interface p)) eqn:Hp;
     destruct (Cid \in domm (prog_interface c)) eqn:Hc.
   - admit. (* Contra. *)
@@ -719,14 +720,58 @@ Proof.
       as Hprealloc by admit.
     rewrite Hprealloc.
     simpl.
+    unfold reserve_component_blocks.
     rewrite unionmE.
     assert (exists x, (prog_interface p) Cid = Some x)
-      as [x Hp'] by (by apply /dommP).
+      as [Cid_int Hp'] by (by apply /dommP).
     rewrite Hp'.
-    (* What remains is to reason about prog_main. *)
-    admit.
-  - admit. (* (Mostly?) symmetric to last case. *)
-  - admit. (* Easy case. *)
+    simpl.
+    destruct (prog_main p) as [mainp |] eqn:Hmainp;
+      destruct (prog_main c) as [mainc |] eqn:Hmainc.
+    + easy. (* Contra. *)
+    + reflexivity.
+    + destruct Cid as [| n].
+      * (* It does not make sense that Component.main is in p,
+           but main is defined in c. *)
+        admit.
+      * reflexivity.
+    + reflexivity. (* Easy case. *)
+  - (* RB: TODO: Refactor symmetric case to last one. *)
+    rewrite unionmE.
+    rewrite !mkfmapfE.
+    rewrite Hp Hc.
+    assert (Hpc : Cid \in domm (prog_interface (program_link p c)))
+      by admit.
+    rewrite Hpc.
+    assert ((elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
+            (elementsm (odflt emptym ((prog_procedures c) Cid))))
+      as Helts by admit.
+    rewrite Helts.
+    assert (ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
+            ComponentMemory.prealloc (odflt emptym ((prog_buffers c) Cid)))
+      as Hprealloc by admit.
+    rewrite Hprealloc.
+    simpl.
+    unfold reserve_component_blocks.
+    rewrite unionmE.
+    assert ((prog_interface p) Cid = None)
+      as Hp' by (by apply /dommPn; rewrite Hp).
+    rewrite Hp'.
+    assert (exists x, (prog_interface c) Cid = Some x)
+      as [Cid_int Hc'] by (by apply /dommP).
+    rewrite Hc'.
+    destruct (prog_main p) as [mainp |] eqn:Hmainp;
+      destruct (prog_main c) as [mainc |] eqn:Hmainc.
+    + (* Contra. *)
+      unfold linkable_mains in Hmains.
+      rewrite Hmainp Hmainc in Hmains.
+      discriminate.
+    + simpl. rewrite Hmainp Hmainc.
+      destruct Cid as [| n].
+      * (* Should-be contra. *) admit.
+      * reflexivity.
+    + simpl. rewrite Hmainp Hmainc. reflexivity.
+    + simpl. rewrite Hmainp Hmainc. reflexivity. (* Easy case. *)
 Admitted.
 
 Definition prepare_procedures_entrypoints (p: program) (mem: Memory.t) : EntryPoint.t :=
