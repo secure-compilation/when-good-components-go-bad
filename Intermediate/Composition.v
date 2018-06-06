@@ -25,25 +25,6 @@ Set Bullet Behavior "Strict Subproofs".
 Import Intermediate.
 
 (*
-  Machine components
-
-  RB: TODO: The following results are currently only used here, but belong
-  logically in Machine, and should be relocated as they are proved and, where
-  needed, generalized. Module qualifiers will be tweaked as needed.
-*)
-
-Theorem prepare_procedures_entrypoints_after_linking:
-  forall p c,
-    well_formed_program p ->
-    well_formed_program c ->
-    linkable (prog_interface p) (prog_interface c) ->
-    prepare_procedures_entrypoints (program_link p c)
-                                   (prepare_initial_memory (program_link p c)) =
-    unionm (prepare_procedures_entrypoints p (prepare_initial_memory p))
-           (prepare_procedures_entrypoints c (prepare_initial_memory c)).
-Admitted.
-
-(*
   PS components
 
   RB: TODO: The following results are currently only used here, but belong

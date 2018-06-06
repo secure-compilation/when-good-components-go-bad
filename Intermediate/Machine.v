@@ -774,11 +774,106 @@ Proof.
     + simpl. rewrite Hmainp Hmainc. reflexivity. (* Easy case. *)
 Admitted. (* Grade 2. A few easy admits and "the issue". *)
 
+(*
 Definition prepare_procedures_entrypoints (p: program) (mem: Memory.t) : EntryPoint.t :=
   let '(_, _, entrypoints) := prepare_procedures p mem in
   entrypoints.
+*)
 
-(* Lemma placeholder: prepare_procedures_entrypoints_after_linking *)
+Definition prepare_procedures_entrypoints (p: program) : EntryPoint.t :=
+  let '(_, _, entrypoints) := prepare_procedures_initial_memory p in
+  entrypoints.
+
+(* RB: TODO: Observe this is the exact same proof as the _memory_ analog! *)
+Theorem prepare_procedures_entrypoints_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
+    prepare_procedures_entrypoints (program_link p c) =
+    unionm (prepare_procedures_entrypoints p)
+           (prepare_procedures_entrypoints c).
+Proof.
+  intros p c Hwfp Hwfc Hlinkable Hmains.
+  unfold prepare_procedures_entrypoints,
+         prepare_procedures_initial_memory, prepare_procedures_initial_memory_aux.
+  (* Peel off the top-level maps. *)
+  rewrite <- mapm_unionm.
+  apply mapm_eq.
+  apply eq_fmap. intros Cid.
+  (* Case analysis on component provenance after some common preprocessing. *)
+  destruct (Cid \in domm (prog_interface p)) eqn:Hp;
+    destruct (Cid \in domm (prog_interface c)) eqn:Hc.
+  - admit. (* Contra. *)
+  - rewrite unionmE.
+    rewrite !mkfmapfE.
+    rewrite Hp Hc.
+    assert (Hpc : Cid \in domm (prog_interface (program_link p c)))
+      by (by apply in_domm_program_link).
+    rewrite Hpc.
+    assert ((elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
+            (elementsm (odflt emptym ((prog_procedures p) Cid))))
+      as Helts by admit.
+    rewrite Helts.
+    assert (ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
+            ComponentMemory.prealloc (odflt emptym ((prog_buffers p) Cid)))
+      as Hprealloc by admit.
+    rewrite Hprealloc.
+    simpl.
+    unfold reserve_component_blocks.
+    rewrite unionmE.
+    assert (exists x, (prog_interface p) Cid = Some x)
+      as [Cid_int Hp'] by (by apply /dommP).
+    rewrite Hp'.
+    simpl.
+    destruct (prog_main p) as [mainp |] eqn:Hmainp;
+      destruct (prog_main c) as [mainc |] eqn:Hmainc.
+    + easy. (* Contra. *)
+    + reflexivity.
+    + destruct Cid as [| n].
+      * (* It does not make sense that Component.main is in p,
+           but main is defined in c. *)
+        admit.
+      * reflexivity.
+    + reflexivity. (* Easy case. *)
+  - (* RB: TODO: Refactor symmetric case to last one. *)
+    rewrite unionmE.
+    rewrite !mkfmapfE.
+    rewrite Hp Hc.
+    assert (Hpc : Cid \in domm (prog_interface (program_link p c)))
+      by admit.
+    rewrite Hpc.
+    assert ((elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
+            (elementsm (odflt emptym ((prog_procedures c) Cid))))
+      as Helts by admit.
+    rewrite Helts.
+    assert (ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
+            ComponentMemory.prealloc (odflt emptym ((prog_buffers c) Cid)))
+      as Hprealloc by admit.
+    rewrite Hprealloc.
+    simpl.
+    unfold reserve_component_blocks.
+    rewrite unionmE.
+    assert ((prog_interface p) Cid = None)
+      as Hp' by (by apply /dommPn; rewrite Hp).
+    rewrite Hp'.
+    assert (exists x, (prog_interface c) Cid = Some x)
+      as [Cid_int Hc'] by (by apply /dommP).
+    rewrite Hc'.
+    destruct (prog_main p) as [mainp |] eqn:Hmainp;
+      destruct (prog_main c) as [mainc |] eqn:Hmainc.
+    + (* Contra. *)
+      unfold linkable_mains in Hmains.
+      rewrite Hmainp Hmainc in Hmains.
+      discriminate.
+    + simpl. rewrite Hmainp Hmainc.
+      destruct Cid as [| n].
+      * (* Should-be contra. *) admit.
+      * reflexivity.
+    + simpl. rewrite Hmainp Hmainc. reflexivity.
+    + simpl. rewrite Hmainp Hmainc. reflexivity. (* Easy case. *)
+Admitted. (* Grade 2. A few easy admits and "the issue". *)
 
 Lemma interface_preserves_closedness_r :
   forall p1 p2 p2',
