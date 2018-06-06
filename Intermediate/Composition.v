@@ -37,6 +37,7 @@ Theorem prepare_procedures_memory_after_linking:
     well_formed_program p ->
     well_formed_program c ->
     linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
     prepare_procedures_memory (program_link p c)
                               (prepare_initial_memory (program_link p c)) =
     unionm (prepare_procedures_memory p (prepare_initial_memory p))
