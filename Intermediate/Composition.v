@@ -45,7 +45,7 @@ Lemma domm_partition :
   forall C,
     C \notin domm ctx2 ->
     C \in domm ctx1.
-Admitted. (* Grade 1. *)
+Admitted. (* Grade 3. Get design right and propagate, then easy. *)
 
 (* XXX: This assumption is also impossible, for the same reason as above. *)
 Lemma domm_partition_in_neither ctx1 ctx2 C :
