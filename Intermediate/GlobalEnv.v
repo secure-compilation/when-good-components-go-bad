@@ -42,13 +42,27 @@ Proof.
   reflexivity.
 Qed.
 
+(* global environments are computational and pure: deterministic.
+   what else do I need? some kind of per-component isolation stated
+   in a way that's easy to reuse *)
 Lemma domm_genv_procedures : forall p,
   domm (genv_procedures (prepare_global_env p)) = domm (prog_interface p).
-Admitted. (* Grade 2. Spec. *)
+Proof.
+  intros p.
+  unfold genv_procedures, prepare_global_env.
+  rewrite Extra.domm_map. (* RB: Should be domm_mapm! *)
+  rewrite domm_prepare_procedures_initial_memory_aux.
+  reflexivity.
+Qed.
 
 Lemma domm_genv_entrypoints : forall p,
   domm (genv_entrypoints (prepare_global_env p)) = domm (prog_interface p).
-Admitted. (* Grade 2. Spec. *)
+Proof.
+  intros p.
+  unfold genv_procedures, prepare_global_env.
+  rewrite Extra.domm_map domm_prepare_procedures_initial_memory_aux.
+  reflexivity.
+Qed.
 
 Definition global_env_union (genv1 genv2 : global_env) : global_env := {|
   genv_interface   := unionm (genv_interface   genv1) (genv_interface   genv2);
