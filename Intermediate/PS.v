@@ -744,8 +744,8 @@ Ltac unify_alloc Hmem12 Hcomp :=
 
 Ltac unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface :=
   match goal with
-  | Hentry1 : EntryPoint.get ?C ?PROC (genv_entrypoints (prepare_global_env (program_link ?P ?P1))) = ?B1,
-    Hentry2 : EntryPoint.get ?C ?PROC (genv_entrypoints (prepare_global_env (program_link ?P ?P2))) = ?B2  |- _ =>
+  | Hentry1 : EntryPoint.get ?C ?PROC (_ _ (_ (program_link ?P ?P1))) = ?B1,
+    Hentry2 : EntryPoint.get ?C ?PROC (_ _ (_ (program_link ?P ?P2))) = ?B2  |- _ =>
     pose proof @genv_entrypoints_program_link_left _ _ Hpc1' _ Hlink1 as Hentry1';
     rewrite <- Hsame_iface in Hpc2';
     pose proof @genv_entrypoints_program_link_left _ _ Hpc2' _ Hlink2 as Hentry2';

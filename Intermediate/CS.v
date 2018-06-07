@@ -813,9 +813,6 @@ elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
 rewrite seq.all_cat IH andbT {Hstar}.
 case: st1 t1 st2 / Hstep => //=.
 - move=> ????????? /eqP ->.
-  rewrite /G {1}/prepare_global_env.
-  rewrite [Intermediate.prepare_procedures p _]surjective_pairing /=.
-  rewrite [fst (Intermediate.prepare_procedures p _)]surjective_pairing /=.
   by move=> /imported_procedure_iff /= ->.
 - by move=> ??????? /eqP ->.
 Qed.

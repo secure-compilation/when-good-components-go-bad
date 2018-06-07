@@ -23,8 +23,7 @@ Definition executing G (pc : Pointer.t) (i : instr) : Prop :=
     nth_error P_code (Z.to_nat (Pointer.offset pc)) = Some i.
 
 Definition prepare_global_env (p: program) : global_env :=
-  let mem := prepare_initial_memory p in
-  let '(_, procs, entrypoints) := prepare_procedures p mem in
+  let '(_, procs, entrypoints) := prepare_procedures_initial_memory p in
   {| genv_interface := prog_interface p;
      genv_procedures := procs;
      genv_entrypoints := entrypoints |}.
@@ -38,6 +37,8 @@ Definition empty_global_env := {|
 Lemma prepare_global_env_empty_prog:
   prepare_global_env empty_prog = empty_global_env.
 Proof.
+  unfold prepare_global_env.
+  rewrite prepare_procedures_initial_memory_empty_program.
   reflexivity.
 Qed.
 
