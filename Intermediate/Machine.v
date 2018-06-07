@@ -536,6 +536,28 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma prepare_procedures_initial_memory_aux_empty_program:
+  prepare_procedures_initial_memory_aux empty_prog = emptym.
+Proof.
+  unfold prepare_procedures_initial_memory_aux.
+  rewrite domm0.
+  reflexivity.
+Qed.
+
+(* RB: Relocate this. *)
+Lemma mapm_empty: forall (T : ordType) (S S' : Type) (f : S -> S'),
+  mapm f (@emptym T S) = emptym.
+Admitted. (* Grade 1. *)
+
+Theorem prepare_procedures_initial_memory_empty_program:
+  prepare_procedures_initial_memory empty_prog = (emptym, emptym, emptym).
+Proof.
+  unfold prepare_procedures_initial_memory.
+  rewrite prepare_procedures_initial_memory_aux_empty_program.
+  rewrite !mapm_empty.
+  reflexivity.
+Qed.
+
 (* initialization of a linked program *)
 
 (* The following two lemmas are quick conveniences for the proper
