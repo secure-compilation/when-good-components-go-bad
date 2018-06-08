@@ -151,6 +151,8 @@ Module Type Intermediate_Sig.
 
   Parameter linkable_mains : program -> program -> Prop.
 
+  Parameter matching_mains : program -> program -> Prop.
+
   Parameter program_link : program -> program -> program.
 
   Axiom program_linkC : forall p1 p2,
@@ -172,6 +174,7 @@ Module Type Intermediate_Sig.
     linkable (prog_interface p1) (prog_interface p2) ->
     closed_program (program_link p1 p2) ->
     linkable_mains p1 p2 ->
+    matching_mains p2 p2' ->
     closed_program (program_link p1 p2').
 
   Module CS.
@@ -254,8 +257,11 @@ Module Intermediate_Instance <: Intermediate_Sig.
   Definition closed_program :=
     @Intermediate.closed_program.
 
-   Definition linkable_mains :=
+  Definition linkable_mains :=
     @Intermediate.linkable_mains.
+
+  Definition matching_mains :=
+    @Intermediate.matching_mains.
 
   Definition program_link :=
     @Intermediate.program_link.
@@ -613,9 +619,10 @@ Section RSC_DC_MD_Section.
     }
     assert (Intermediate.closed_program (Intermediate.program_link p_compiled Cs_compiled))
       as HpCs_compiled_closed.
+    assert (Hctx_match_mains : Intermediate.matching_mains Ct Cs_compiled) by admit.
     now apply (Intermediate.interface_preserves_closedness_r
                  well_formed_p_compiled well_formed_Cs_compiled
-                 Hctx_same_iface linkability_pcomp_Ct closedness mains); auto.
+                 Hctx_same_iface linkability_pcomp_Ct closedness mains Hctx_match_mains); auto.
     assert (Intermediate.well_formed_program (Intermediate.program_link p_compiled Cs_compiled))
       as HpCs_compiled_well_formed
         by (apply Intermediate.linking_well_formedness; assumption).
@@ -729,7 +736,8 @@ Section RSC_DC_MD_Section.
                                 Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                                 well_formed_P' Hsame_iface3 HP'Cs_closed
                                 HP'_Cs_beh Hnot_wrong' K).
-  Qed.
+  (*Qed.*)
+  Admitted.
 
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Gen.
