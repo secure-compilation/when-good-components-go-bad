@@ -285,6 +285,9 @@ Proof.
     intuition.
 Qed.
 
+Definition matching_mains (prog1 prog2 : program) : Prop :=
+  prog_main prog1 = None <-> prog_main prog2 = None.
+
 Definition program_link (p1 p2: program): program :=
   {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
      prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);
@@ -836,6 +839,9 @@ Proof.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
 Qed.
 
+(* RB: Slight "misnomer" because of the presence of matching_mains.
+   Closely connected to linkable, but not exactly the same at this
+   level. Is there a benefit to combining these two in a definition? *)
 Lemma interface_preserves_closedness_r :
   forall p1 p2 p2',
     well_formed_program p1 ->
@@ -844,12 +850,13 @@ Lemma interface_preserves_closedness_r :
     linkable (prog_interface p1) (prog_interface p2) ->
     closed_program (program_link p1 p2) ->
     linkable_mains p1 p2 ->
+    matching_mains p2 p2' ->
     closed_program (program_link p1 p2').
 Proof.
   intros p1 p2 p2'
          Hwf1 Hwf2' Hsame_int Hlinkable
          [Hclosed [mainP [main_procs [Hmain [Hprocs Hin]]]]]
-         Hlinkable_mains.
+         Hlinkable_mains Hmatching_mains.
   constructor.
   - simpl in Hclosed.
     rewrite Hsame_int in Hclosed.
@@ -881,7 +888,9 @@ Proof.
       * assumption.
     + (* main is in p2'. *)
       destruct (prog_main p2') as [main2' |] eqn:Hmain2';
-        last admit.
+        last (apply Hmatching_mains in Hmain2';
+              rewrite Hmain2' in Hmain2;
+              inversion Hmain2).
       (* Likewise main_procs (used only in second sub-goal). *)
       destruct (wfprog_main_existence Hwf2' Hmain2')
         as [main_procs2' [Hmain_procs2' Hin2']].
@@ -901,7 +910,7 @@ Proof.
       rewrite Hmain1 in Hmain.
       rewrite Hmain2 in Hmain.
       discriminate.
-Admitted.
+Qed.
 
 Lemma closed_program_link_sym p1 p2 :
   well_formed_program p1 ->
