@@ -1,9 +1,9 @@
 # When Good Components Go Bad #
 
 This repository contains the Coq development of the paper:
-- Guglielmo Fachini, Cătălin Hriţcu, Marco Stronati, Arthur Azevedo de
-  Amorim, Ana Nora Evans, Carmine Abate, Roberto Blanco, Théo Laurent,
-  Benjamin C. Pierce, and Andrew Tolmach.
+- Carmine Abate, Arthur Azevedo de Amorim, Roberto Blanco, Ana Nora Evans,
+  Guglielmo Fachini, Catalin Hritcu, Théo Laurent, Benjamin C. Pierce,
+  Marco Stronati, Andrew Tolmach.
   **[When Good Components Go Bad: Formally Secure Compilation Despite
      Dynamic Compromise]
      (https://arxiv.org/abs/1802.00588)**. February 2018.
