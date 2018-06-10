@@ -636,6 +636,9 @@ Require Import S2I.Definitions.
 
 (* Definability *)
 
+Definition matching_mains (prog1: program) (prog2: Intermediate.program) : Prop :=
+  prog_main prog1 = None <-> Intermediate.prog_main prog2 = None.
+
 Lemma definability_with_linking:
   forall p c b m,
     Intermediate.well_formed_program p ->
@@ -648,6 +651,8 @@ Lemma definability_with_linking:
   exists p' c',
     Source.prog_interface p' = Intermediate.prog_interface p /\
     Source.prog_interface c' = Intermediate.prog_interface c /\
+    matching_mains p' p /\
+    matching_mains c' c /\
     Source.well_formed_program p' /\
     Source.well_formed_program c' /\
     Source.closed_program (Source.program_link p' c') /\
@@ -702,10 +707,13 @@ Proof.
     by apply/eq_filterm=> ??; rewrite mem_domm.
   have wf_back : well_formed_program back.
     exact: well_formed_events_well_formed_program.
+  split; first admit.
+  split; first admit.
   split; first exact: well_formed_program_unlink.
   split; first exact: well_formed_program_unlink.
   rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
   split=> // {wf_events back Hback wf_back wf_m}.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
   by exists (Terminates nil); rewrite /= E0_right.
-Qed.
+(*Qed.*)
+Admitted.

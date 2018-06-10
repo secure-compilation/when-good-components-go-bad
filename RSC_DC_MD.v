@@ -325,7 +325,9 @@ Module Intermediate_Instance <: Intermediate_Sig.
 End Intermediate_Instance.
 
 Module Type Linker_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
-  Axiom  definability_with_linking :
+  Parameter matching_mains : Source.program -> Intermediate.program -> Prop.
+
+  Axiom definability_with_linking :
     forall p c b m,
       Intermediate.well_formed_program p ->
       Intermediate.well_formed_program c ->
@@ -337,6 +339,8 @@ Module Type Linker_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
     exists p' c',
       Source.prog_interface p' = Intermediate.prog_interface p /\
       Source.prog_interface c' = Intermediate.prog_interface c /\
+      matching_mains p' p /\
+      matching_mains c' c /\
       Source.well_formed_program p' /\
       Source.well_formed_program c' /\
       Source.closed_program (Source.program_link p' c') /\
@@ -345,6 +349,9 @@ Module Type Linker_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
 End Linker_Sig.
 
 Module Linker_Instance <: Linker_Sig (Source_Instance) (Intermediate_Instance).
+  Definition matching_mains :=
+    @RobustImp.Source.Definability.matching_mains.
+
   Definition definability_with_linking :=
     @RobustImp.Source.Definability.definability_with_linking.
 End Linker_Instance.
@@ -521,7 +528,8 @@ Section RSC_DC_MD_Section.
                 linkability_pcomp_Ct closedness Hbeh Hprefix0 Hnot_wrong')
       as [P' [Cs
          [Hsame_iface1 [Hsame_iface2
-         [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]].
+         [Hmains1 [Hmains2
+         [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]]].
 
     move: HP'_Cs_beh Hprefix1.
     set beh := Terminates _.
