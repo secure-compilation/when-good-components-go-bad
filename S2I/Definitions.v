@@ -45,3 +45,19 @@ Proof.
     apply H12 in HNone.
     exact HNone.
 Qed.
+
+Lemma matching_mains_equiv : forall p1 p2 p3,
+  matching_mains p1 p2 ->
+  matching_mains p1 p3 ->
+  Intermediate.matching_mains p2 p3.
+Proof.
+  unfold matching_mains, Intermediate.matching_mains.
+  intros p1 p2 p3 H12 H13.
+  split; intros HNone.
+  - apply H12 in HNone.
+    apply H13 in HNone.
+    exact HNone.
+  - apply H13 in HNone.
+    apply H12 in HNone.
+    exact HNone.
+Qed.

@@ -455,6 +455,13 @@ Proof.
   - now eapply (mains_without_source p).
 Qed.
 
+Lemma compilation_has_matching_mains :
+  forall {p p_compiled},
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    matching_mains p p_compiled.
+Admitted.
+
 (* Hypothesis separate_compilation: *)
 (*   forall p c p_comp c_comp, *)
 (*     Source.well_formed_program p -> *)
