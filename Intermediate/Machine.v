@@ -204,7 +204,11 @@ Record well_formed_program (p: program) := {
     forall mainP,
       prog_main p = Some mainP ->
     exists main_procs,
-      getm (prog_procedures p) Component.main = Some main_procs /\ mainP \in domm main_procs
+      getm (prog_procedures p) Component.main = Some main_procs /\ mainP \in domm main_procs;
+  (* The main component is not in the interface if no main procedure is given. *)
+  wfprog_main_component:
+    prog_main p = None ->
+    Component.main \notin domm (prog_interface p)
 }.
 
 (* a closed program is a program with a closed interface and an existing main
@@ -314,7 +318,7 @@ Theorem empty_interface_implies_empty_program:
     prog_interface p = emptym ->
     p = empty_prog.
 Proof.
-  move=> [intf procs bufs main] [/= _ e_procs _ _ e_bufs Hmain] e_intf.
+  move=> [intf procs bufs main] [/= _ e_procs _ _ e_bufs Hmain _] e_intf.
   subst intf; congr mkProg.
   - apply/eq_fmap=> ?; rewrite emptymE; apply/dommPn.
     by rewrite -e_procs mem_domm emptymE.
@@ -326,7 +330,10 @@ Qed.
 
 Lemma empty_prog_is_well_formed:
   well_formed_program empty_prog.
-Proof. by constructor. Qed.
+Proof.
+  constructor; try by [].
+  - by rewrite domm0.
+Qed.
 
 Theorem linking_empty_program:
   forall p,
@@ -362,6 +369,28 @@ Proof.
   move: Hm2; rewrite -implybNN.
   move/fdisjointP/(_ Component.main in_p1): Hdis_p => -> /=.
   by case: m2.
+Qed.
+
+Lemma prog_main_link_none_left: forall p1 p2,
+  prog_main (program_link p1 p2) = None ->
+  prog_main p1 = None.
+Proof.
+  intros p1 p2 Hprog_main.
+  unfold program_link in Hprog_main. simpl in Hprog_main.
+  destruct (prog_main p1);
+    destruct (prog_main p2);
+    easy.
+Qed.
+
+Lemma prog_main_link_none_right: forall p1 p2,
+  prog_main (program_link p1 p2) = None ->
+  prog_main p2 = None.
+Proof.
+  intros p1 p2 Hprog_main.
+  unfold program_link in Hprog_main. simpl in Hprog_main.
+  destruct (prog_main p1);
+    destruct (prog_main p2);
+    easy.
 Qed.
 
 Theorem linking_well_formedness:
@@ -434,6 +463,17 @@ Proof.
     move=> _ /Hmain2 [main_procs [p2_main HmainP]].
     exists main_procs; rewrite unionmC 1?unionmE 1?p2_main //.
     by rewrite -(wfprog_defined_procedures Hwf1) -(wfprog_defined_procedures Hwf2).
+  - inversion Hwf1 as [_ _ _ _ _ _ Hmain_comp1].
+    inversion Hwf2 as [_ _ _ _ _ _ Hmain_comp2].
+    intros Hprog_main1.
+    assert (Hprog_main2 := Hprog_main1).
+    apply prog_main_link_none_left in Hprog_main1.
+    apply prog_main_link_none_right in Hprog_main2.
+    specialize (Hmain_comp1 Hprog_main1).
+    specialize (Hmain_comp2 Hprog_main2).
+    rewrite domm_union in_fsetU.
+    rewrite negb_or Hmain_comp1 Hmain_comp2.
+    reflexivity.
 Qed.
 
 Definition alloc_static_buffers p comps :=
