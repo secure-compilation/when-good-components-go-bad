@@ -528,7 +528,7 @@ Section RSC_DC_MD_Section.
                 linkability_pcomp_Ct closedness Hbeh Hprefix0 Hnot_wrong')
       as [P' [Cs
          [Hsame_iface1 [Hsame_iface2
-         [Hmains1 [Hmains2
+         [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
          [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]]].
 
     move: HP'_Cs_beh Hprefix1.
