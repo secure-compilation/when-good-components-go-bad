@@ -324,9 +324,27 @@ Module Intermediate_Instance <: Intermediate_Sig.
   Qed.
 End Intermediate_Instance.
 
-Module Type Linker_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
+Module Type S2I_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
   Parameter matching_mains : Source.program -> Intermediate.program -> Prop.
 
+  Axiom matching_mains_equiv : forall p1 p2 p3,
+    matching_mains p1 p2 ->
+    matching_mains p1 p3 ->
+    Intermediate.matching_mains p2 p3.
+End S2I_Sig.
+
+Module S2I_Instance <: S2I_Sig (Source_Instance) (Intermediate_Instance).
+  Definition matching_mains :=
+    @S2I.Definitions.matching_mains.
+
+  Definition matching_mains_equiv :=
+    @S2I.Definitions.matching_mains_equiv.
+End S2I_Instance.
+
+Module Type Linker_Sig
+       (Source : Source_Sig)
+       (Intermediate : Intermediate_Sig)
+       (S2I : S2I_Sig Source Intermediate).
   Axiom definability_with_linking :
     forall p c b m,
       Intermediate.well_formed_program p ->
@@ -339,8 +357,8 @@ Module Type Linker_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
     exists p' c',
       Source.prog_interface p' = Intermediate.prog_interface p /\
       Source.prog_interface c' = Intermediate.prog_interface c /\
-      matching_mains p' p /\
-      matching_mains c' c /\
+      S2I.matching_mains p' p /\
+      S2I.matching_mains c' c /\
       Source.well_formed_program p' /\
       Source.well_formed_program c' /\
       Source.closed_program (Source.program_link p' c') /\
@@ -348,17 +366,17 @@ Module Type Linker_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
       prefix m (Terminates (finpref_trace m)).
 End Linker_Sig.
 
-Module Linker_Instance <: Linker_Sig (Source_Instance) (Intermediate_Instance).
-  Definition matching_mains :=
-    @S2I.Definitions.matching_mains.
-
+Module Linker_Instance <: Linker_Sig (Source_Instance)
+                                     (Intermediate_Instance)
+                                     (S2I_Instance).
   Definition definability_with_linking :=
     @RobustImp.Source.Definability.definability_with_linking.
 End Linker_Instance.
 
 Module Type Compiler_Sig
        (Source : Source_Sig)
-       (Intermediate : Intermediate_Sig).
+       (Intermediate : Intermediate_Sig)
+       (S2I : S2I_Sig Source Intermediate).
   Parameter compile_program : Source.program -> option Intermediate.program.
 
   Axiom well_formed_compilable :
@@ -392,6 +410,11 @@ Module Type Compiler_Sig
     compile_program p2 = Some p2' ->
     Intermediate.linkable_mains p1' p2'.
 
+  Axiom compilation_has_matching_mains : forall p p_compiled,
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    S2I.matching_mains p p_compiled.
+
   Axiom separate_compilation_weaker :
     forall p c pc_comp p_comp c_comp,
       Source.well_formed_program p ->
@@ -421,9 +444,17 @@ Module Type Compiler_Sig
       backward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp).
 End Compiler_Sig.
 
-Module Compiler_Instance <: Compiler_Sig Source_Instance Intermediate_Instance.
+Module Compiler_Instance <: Compiler_Sig Source_Instance
+                                         Intermediate_Instance
+                                         S2I_Instance.
   Definition compile_program :=
     @Compiler.compile_program.
+
+  Definition matching_mains :=
+    @S2I.Definitions.matching_mains.
+
+  Definition matching_mains_trans :=
+    @S2I.Definitions.matching_mains_trans.
 
   Definition well_formed_compilable :=
     @Compiler.well_formed_compilable.
@@ -440,6 +471,9 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance Intermediate_Instance.
   Definition compilation_preserves_linkable_mains :=
     @Compiler.compilation_preserves_linkable_mains.
 
+  Definition compilation_has_matching_mains :=
+    @Compiler.compilation_has_matching_mains.
+
   Definition separate_compilation_weaker :=
     @Compiler.separate_compilation_weaker.
 
@@ -453,8 +487,9 @@ End Compiler_Instance.
 Module RSC_DC_MD_Gen
        (Source : Source_Sig)
        (Intermediate : Intermediate_Sig)
-       (Compiler : Compiler_Sig Source Intermediate)
-       (Linker : Linker_Sig Source Intermediate).
+       (S2I : S2I_Sig Source Intermediate)
+       (Compiler : Compiler_Sig Source Intermediate S2I)
+       (Linker : Linker_Sig Source Intermediate S2I).
 Section RSC_DC_MD_Section.
 
   Variable p: Source.program.
@@ -627,7 +662,10 @@ Section RSC_DC_MD_Section.
     }
     assert (Intermediate.closed_program (Intermediate.program_link p_compiled Cs_compiled))
       as HpCs_compiled_closed.
-    assert (Hctx_match_mains : Intermediate.matching_mains Ct Cs_compiled) by admit.
+    pose proof S2I.matching_mains_equiv
+         Hmatching_mains_Cs_Ct
+         (Compiler.compilation_has_matching_mains well_formed_Cs HCs_compiles)
+         as Hctx_match_mains.
     now apply (Intermediate.interface_preserves_closedness_r
                  well_formed_p_compiled well_formed_Cs_compiled
                  Hctx_same_iface linkability_pcomp_Ct closedness mains Hctx_match_mains); auto.
@@ -744,15 +782,16 @@ Section RSC_DC_MD_Section.
                                 Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                                 well_formed_P' Hsame_iface3 HP'Cs_closed
                                 HP'_Cs_beh Hnot_wrong' K).
-  (*Qed.*)
-  Admitted.
+  Qed.
 
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Gen.
 
 Module RSC_DC_MD_Instance :=
   RSC_DC_MD_Gen
-    Source_Instance Intermediate_Instance Compiler_Instance Linker_Instance.
+    Source_Instance Intermediate_Instance
+    S2I_Instance
+    Compiler_Instance Linker_Instance.
 
 Definition RSC_DC_MD :=
   RSC_DC_MD_Instance.RSC_DC_MD.
