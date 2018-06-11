@@ -782,9 +782,12 @@ Proof.
     + easy. (* Contra. *)
     + reflexivity.
     + destruct Cid as [| n].
-      * (* It does not make sense that Component.main is in p,
-           but main is defined in c. *)
-        admit.
+      * (* Contra. *)
+        inversion Hwfp as [_ _ _ _ _ _ Hmain_compp].
+        specialize (Hmain_compp Hmainp).
+        assert (Hp'' : (prog_interface p) 0 = None) by (apply /dommPn; exact Hmain_compp).
+        rewrite Hp'' in Hp'.
+        discriminate.
       * reflexivity.
     + reflexivity. (* Easy case. *)
   - (* RB: TODO: Refactor symmetric case to last one. *)
@@ -819,11 +822,16 @@ Proof.
       discriminate.
     + simpl. rewrite Hmainp Hmainc.
       destruct Cid as [| n].
-      * (* Should-be contra. *) admit.
+      * (* Contra, *)
+        inversion Hwfc as [_ _ _ _ _ _ Hmain_compc].
+        specialize (Hmain_compc Hmainc).
+        assert (Hc'' : (prog_interface c) 0 = None) by (apply /dommPn; exact Hmain_compc).
+        rewrite Hc'' in Hc'.
+        discriminate.
       * reflexivity.
     + simpl. rewrite Hmainp Hmainc. reflexivity.
     + simpl. rewrite Hmainp Hmainc. reflexivity. (* Easy case. *)
-Admitted. (* Grade 2. A few easy admits and "the issue". *)
+Admitted. (* Grade 2. A few easy admits. *)
 
 (* Now it's easy to extend this to the parts of the final result. *)
 Lemma domm_prepare_procedures_memory: forall p,
