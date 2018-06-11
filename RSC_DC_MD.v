@@ -350,7 +350,7 @@ End Linker_Sig.
 
 Module Linker_Instance <: Linker_Sig (Source_Instance) (Intermediate_Instance).
   Definition matching_mains :=
-    @RobustImp.Source.Definability.matching_mains.
+    @S2I.Definitions.matching_mains.
 
   Definition definability_with_linking :=
     @RobustImp.Source.Definability.definability_with_linking.

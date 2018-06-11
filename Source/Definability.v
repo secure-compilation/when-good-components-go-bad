@@ -636,9 +636,8 @@ Require Import S2I.Definitions.
 
 (* Definability *)
 
-Definition matching_mains (prog1: program) (prog2: Intermediate.program) : Prop :=
-  prog_main prog1 = None <-> Intermediate.prog_main prog2 = None.
-
+(* RB: Relocate? As the S2I require above seems to indicate, this is not where
+   this result belongs. *)
 Lemma definability_with_linking:
   forall p c b m,
     Intermediate.well_formed_program p ->
