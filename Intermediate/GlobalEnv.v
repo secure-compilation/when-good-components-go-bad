@@ -71,10 +71,21 @@ Definition global_env_union (genv1 genv2 : global_env) : global_env := {|
 |}.
 
 Lemma prepare_global_env_link : forall {p c},
+  well_formed_program p ->
+  well_formed_program c ->
   linkable (prog_interface p) (prog_interface c) ->
+  linkable_mains p c ->
   prepare_global_env (program_link p c) =
   global_env_union (prepare_global_env p) (prepare_global_env c).
-Admitted. (* Grade 2. Spec. *)
+Proof.
+  intros p c Hwfp Hwfc Hlinkable Hmains.
+  unfold prepare_global_env, prepare_procedures_initial_memory.
+  rewrite (prepare_procedures_initial_memory_aux_after_linking
+           Hwfp Hwfc Hlinkable Hmains).
+  unfold global_env_union. simpl.
+  rewrite !mapm_unionm.
+  reflexivity.
+Qed.
 
 Lemma genv_procedures_program_link_left_notin :
   forall {c Cid},
