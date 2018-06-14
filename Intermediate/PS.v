@@ -539,6 +539,7 @@ Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
     well_formed_program p ->
     well_formed_program p' ->
     linkable (prog_interface p) (prog_interface p') ->
+    linkable_mains p p' ->
     partial_state ctx ics ips ->
     CS.initial_state (program_link p p') ics ->
     initial_state p ctx ips.
@@ -549,6 +550,7 @@ Inductive final_state (p: program) (ctx: Program.interface) : state -> Prop :=
     well_formed_program p ->
     well_formed_program p' ->
     linkable (prog_interface p) (prog_interface p') ->
+    linkable_mains p p' ->
     ~ turn_of ips ctx ->
     partial_state ctx ics ips ->
     CS.final_state
@@ -566,6 +568,7 @@ Inductive step (p: program) (ctx: Program.interface)
       well_formed_program p ->
       well_formed_program p' ->
       linkable (prog_interface p) (prog_interface p') ->
+      linkable_mains p p' ->
       CS.step (prepare_global_env (program_link p p')) ics t ics' ->
       partial_state ctx ics ips ->
       partial_state ctx ics' ips' ->
@@ -591,25 +594,25 @@ Proof.
     discriminate.
   - (* contra *)
     assert (Pointer.component pc = Pointer.component pc0) as Hsame_comp. {
-      inversion H3; subst;
+      inversion H4; subst;
         try (rewrite Pointer.inc_preserves_component; reflexivity);
         try (symmetry; assumption).
       + erewrite find_label_in_component_1; now eauto.
       + erewrite find_label_in_procedure_1; now eauto.
     }
-    rewrite <- Hsame_comp in H6.
-    rewrite Hcc in H6.
+    rewrite <- Hsame_comp in H7.
+    rewrite Hcc in H7.
     discriminate.
-  - inversion H3; subst;
+  - inversion H4; subst;
       try (rewrite Pointer.inc_preserves_component; reflexivity);
       try (symmetry; assumption).
     + rewrite Pointer.inc_preserves_component.
       destruct ptr as [[]].
       erewrite context_store_in_partialized_memory; eauto.
       * rewrite Pointer.inc_preserves_component.
-        rewrite <- H17. eassumption.
+        rewrite <- H18. eassumption.
     + erewrite find_label_in_component_1 with (pc:=pc); eauto.
-    + rewrite H17. reflexivity.
+    + rewrite H18. reflexivity.
     + erewrite find_label_in_procedure_1 with (pc:=pc); eauto.
     + rewrite Pointer.inc_preserves_component.
       erewrite context_allocation_in_partialized_memory; eauto.
@@ -652,14 +655,16 @@ Ltac rename_op p pc1 P12 HOP :=
    By chaining inversions on component procedures, procedure code and
    instruction, goals involving pairs of non-matching instructions are
    moreover discharged by contradiction. *)
-Ltac unify_op Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface :=
+Ltac unify_op Hop1 Hop2 Hcomp Hwf Hwf1 Hwf2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface :=
   apply pc_component_not_in_ctx in Hcomp;
   pose proof Hcomp as Hcomp';
   rewrite <- Hsame_iface in Hcomp';
   inversion Hop1 as [procs1 [code1 [Hgenv1 [Hprocs1 [_ Hinstr1]]]]];
   inversion Hop2 as [procs2 [code2 [Hgenv2 [Hprocs2 [_ Hinstr2]]]]];
-  pose proof @genv_procedures_program_link_left_notin _ _ Hcomp _ Hlink1 as Hgenv1';
-  pose proof @genv_procedures_program_link_left_notin _ _ Hcomp' _ Hlink2 as Hgenv2';
+  pose proof @genv_procedures_program_link_left_notin _ _ Hcomp _ Hwf Hwf1 Hlink1 Hmains1
+    as Hgenv1';
+  pose proof @genv_procedures_program_link_left_notin _ _ Hcomp' _ Hwf Hwf2 Hlink2 Hmains2
+    as Hgenv2';
   rewrite Hgenv1' in Hgenv1;
   rewrite Hgenv2' in Hgenv2;
   rewrite Hgenv2 in Hgenv1;
@@ -669,12 +674,12 @@ Ltac unify_op Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface :=
   rewrite Hinstr2 in Hinstr1;
   inversion Hinstr1.
 
-Ltac discharge_op_neq Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface :=
-  unify_op Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface;
+Ltac discharge_op_neq Hop1 Hop2 Hcomp Hwf Hwf1 Hwf2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface :=
+  unify_op Hop1 Hop2 Hcomp Hwf Hwf1 Hwf2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface;
   discriminate.
 
-Ltac unify_op_eq Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface :=
-  unify_op Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface;
+Ltac unify_op_eq Hop1 Hop2 Hcomp Hwf Hwf1 Hwf2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface :=
+  unify_op Hop1 Hop2 Hcomp Hwf Hwf1 Hwf2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface;
   subst.
 
 Ltac unify_get :=
@@ -707,24 +712,28 @@ Ltac unify_store pc Hcomp Hmem12 :=
     rewrite Hmem12'
   end.
 
-Ltac unify_component_label Hcomp Hcomp' Hlink1 Hlink2 :=
+Ltac unify_component_label Hcomp Hcomp' Hwf Hwf1 Hwf2 Hlink1 Hlink2 Hmains1 Hmains2 :=
   match goal with
   | Hlabel1 : find_label_in_component (prepare_global_env (program_link ?P ?P1)) ?PC ?L = Some ?PC1,
     Hlabel2 : find_label_in_component (prepare_global_env (program_link ?P ?P2)) ?PC ?L = Some ?PC2  |- _ =>
-    pose proof @find_label_in_component_program_link_left _ _ Hcomp _ Hlink1 as Hlabel1';
-    pose proof @find_label_in_component_program_link_left _ _ Hcomp' _ Hlink2 as Hlabel2';
+    pose proof @find_label_in_component_program_link_left _ _ Hcomp _ Hwf Hwf1 Hlink1 Hmains1
+      as Hlabel1';
+    pose proof @find_label_in_component_program_link_left _ _ Hcomp' _ Hwf Hwf2 Hlink2 Hmains2
+      as Hlabel2';
     rewrite Hlabel1' in Hlabel1;
     rewrite Hlabel2' in Hlabel2;
     rewrite Hlabel2 in Hlabel1;
     inversion Hlabel1; subst
   end.
 
-Ltac unify_procedure_label Hcomp Hcomp' Hlink1 Hlink2 :=
+Ltac unify_procedure_label Hcomp Hcomp' Hwf Hwf1 Hwf2 Hlink1 Hlink2 Hmains1 Hmains2 :=
   match goal with
   | Hlabel1 : find_label_in_procedure (prepare_global_env (program_link ?P ?P1)) ?PC ?L = Some ?PC1,
     Hlabel2 : find_label_in_procedure (prepare_global_env (program_link ?P ?P2)) ?PC ?L = Some ?PC2  |- _ =>
-    pose proof @find_label_in_procedure_program_link_left _ _ Hcomp _ Hlink1 as Hlabel1';
-    pose proof @find_label_in_procedure_program_link_left _ _ Hcomp' _ Hlink2 as Hlabel2';
+    pose proof @find_label_in_procedure_program_link_left _ _ Hcomp _ Hwf Hwf1 Hlink1 Hmains1
+      as Hlabel1';
+    pose proof @find_label_in_procedure_program_link_left _ _ Hcomp' _ Hwf Hwf2 Hlink2 Hmains2
+      as Hlabel2';
     rewrite Hlabel1' in Hlabel1;
     rewrite Hlabel2' in Hlabel2;
     rewrite Hlabel2 in Hlabel1;
@@ -742,13 +751,22 @@ Ltac unify_alloc Hmem12 Hcomp :=
     rewrite Halloc
   end.
 
-Ltac unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface :=
+(* At the moment, with the new definitions, two pattern-maching scenarios
+      EntryPoint.get ?C ?PROC (_ (program_link ?P ?P1))
+      EntryPoint.get ?C ?PROC (_ (_ (program_link ?P ?P1)))
+   depending on the state of unfolding. Ltac is not smart enough to see one
+   as a special case of the other. It is innocuous at the moment and quick
+   to ignore that part of the pattern-match, but even wildcards in place of
+   the concrete, now duplicate pattern, are less clear. *)
+Ltac unify_entrypoint Hpc1' Hpc2' Hwf Hwf1 Hwf2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface :=
   match goal with
-  | Hentry1 : EntryPoint.get ?C ?PROC (_ _ (_ (program_link ?P ?P1))) = ?B1,
-    Hentry2 : EntryPoint.get ?C ?PROC (_ _ (_ (program_link ?P ?P2))) = ?B2  |- _ =>
-    pose proof @genv_entrypoints_program_link_left _ _ Hpc1' _ Hlink1 as Hentry1';
+  | Hentry1 : EntryPoint.get ?C ?PROC _ = ?B1,
+    Hentry2 : EntryPoint.get ?C ?PROC _ = ?B2  |- _ =>
+    pose proof @genv_entrypoints_program_link_left _ _ Hpc1' _ Hwf Hwf1 Hlink1 Hmains1
+      as Hentry1';
     rewrite <- Hsame_iface in Hpc2';
-    pose proof @genv_entrypoints_program_link_left _ _ Hpc2' _ Hlink2 as Hentry2';
+    pose proof @genv_entrypoints_program_link_left _ _ Hpc2' _ Hwf Hwf2 Hlink2 Hmains2
+      as Hentry2';
     rewrite Hentry1' in Hentry1;
     rewrite Hentry2' in Hentry2;
     rewrite Hentry2 in Hentry1;
@@ -819,10 +837,10 @@ Proof.
   intros p ctx G ps t ps1 Hcomp Hstep_ps1 ps2 Hstep_ps2.
 
   inversion Hstep_ps1
-    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hstep_cs1 Hpartial1 Hpartial1'];
+    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hmains1 Hstep_cs1 Hpartial1 Hpartial1'];
     subst.
   inversion Hstep_ps2
-    as [p2 ? ? ? cs2 cs2' Hsame_iface _ Hwfp2 Hlink2 Hstep_cs2 Hpartial2 Hpartial2'];
+    as [p2 ? ? ? cs2 cs2' Hsame_iface _ Hwfp2 Hlink2 Hmains2 Hstep_cs2 Hpartial2 Hpartial2'];
     subst.
 
   (* Case analysis on who has control. *)
@@ -836,7 +854,7 @@ Proof.
      Cases where the operations in both steps do not coincide can be discharged. *)
   inversion Hstep_cs1; subst; rename_op p pc1 p1 Hop1;
     inversion Hstep_cs2; subst; rename_op p pc1 p2 Hop2;
-    try discharge_op_neq Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface;
+    try discharge_op_neq Hop1 Hop2 Hcomp Hwfp Hwfp1 Hwfp2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface;
     (* Second, case analysis of partial steps.
        Cases where program and component do not match can be discharged. *)
     inversion Hpartial1'
@@ -850,15 +868,15 @@ Proof.
     (* For the remaining goals, unify components of their matching opcodes and their
        various optional components: register and memory reads and stores, component
        labels, allocs and entry points. *)
-    unify_op_eq Hop1 Hop2 Hcomp Hlink1 Hlink2 Hsame_iface;
+    unify_op_eq Hop1 Hop2 Hcomp Hwfp Hwfp1 Hwfp2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface;
     simplify_turn;
     try unify_get;
     try unify_load pc1 Hcomp Hmem12;
     try unify_store pc1 Hcomp Hmem12;
-    try unify_component_label Hcomp Hcomp' Hlink1 Hlink2;
-    try unify_procedure_label Hcomp Hcomp' Hlink1 Hlink2;
+    try unify_component_label Hcomp Hcomp' Hwfp Hwfp1 Hwfp2 Hlink1 Hlink2 Hmains1 Hmains2;
+    try unify_procedure_label Hcomp Hcomp' Hwfp Hwfp1 Hwfp2 Hlink1 Hlink2 Hmains1 Hmains2;
     try unify_alloc Hmem12 Hcomp;
-    try unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface;
+    try unify_entrypoint Hpc1' Hpc2' Hwfp Hwfp1 Hwfp2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface;
     (* Rewrite memory and stack, where applicable. *)
     try rewrite Hmem12;
     try rewrite Hstk12;
@@ -894,10 +912,10 @@ Proof.
   intros p ctx G ps t ps1 Hcomp Hstep_ps1 ps2 Hstep_ps2.
 
   inversion Hstep_ps1
-    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hstep_cs1 Hpartial1 Hpartial1'];
+    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hmains1 Hstep_cs1 Hpartial1 Hpartial1'];
     subst.
   inversion Hstep_ps2
-    as [p2 ? ? ? cs2 cs2' Hsame_iface _ Hwfp2 Hlink2 Hstep_cs2 Hpartial2 Hpartial2'];
+    as [p2 ? ? ? cs2 cs2' Hsame_iface _ Hwfp2 Hlink2 Hmains2 Hstep_cs2 Hpartial2 Hpartial2'];
     subst.
 
   (* Case analysis on who has control. *)
@@ -928,7 +946,7 @@ Proof.
     unify_inc_pc Hcc1 Hcc2.
     unify_regs.
     unify_components_eq.
-    unify_entrypoint Hpc1' Hpc2' Hlink1 Hlink2 Hsame_iface.
+    unify_entrypoint Hpc1' Hpc2' Hwfp Hwfp1 Hwfp2 Hlink1 Hlink2 Hmains1 Hmains2 Hsame_iface.
     reflexivity.
   - discharge_pc Hpc1' Hcc2'.
   - discharge_pc Hpc2' Hcc1'.
@@ -965,7 +983,7 @@ Theorem state_determinism:
     ips' = ips''.
 Proof.
   intros p ctx G ps t ps1 Hstep_ps1 ps2 Hstep_ps2.
-  inversion Hstep_ps1 as [? ? ? ? ? _ _ _ _ _ _ Hpartial1 _]; subst.
+  inversion Hstep_ps1 as [? ? ? ? ? _ _ _ _ _ _ _ Hpartial1 _]; subst.
   (* Case analysis on who has control. *)
   inversion Hpartial1; subst.
   - eapply state_determinism_program; eassumption.
