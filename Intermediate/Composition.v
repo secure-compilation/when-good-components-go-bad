@@ -415,7 +415,7 @@ Section PS2CS.
       CS.initial_state prog ics /\ PS.partial_state emptym ics ips.
   Proof.
     intros ips Hips_init.
-    inversion Hips_init; subst.
+    inversion Hips_init as [? ? ? ? ? ? ? Hmains]; subst.
     enough (p' = empty_prog) as Hempty_prog.
     subst. eexists. split; eauto.
     - rewrite linking_empty_program in H4. assumption.
@@ -431,7 +431,7 @@ Section PS2CS.
       CS.final_state (prepare_global_env prog) ics.
   Proof.
     intros ips ics Hics_partial Hips_final.
-    inversion Hips_final; subst.
+    inversion Hips_final as [? ? ? ? ? ? ? Hmains |]; subst.
     (* program has control *)
     - inversion Hics_partial; subst;
         try (PS.simplify_turn; contradiction).
@@ -468,7 +468,7 @@ Section PS2CS.
     inversion Hics_partial; subst; PS.simplify_turn;
       try (rewrite mem_domm in H; inversion H; clear H).
 
-    inversion Hstep; subst.
+    inversion Hstep as [? ? ? ? ? ? ? ? ? ? Hmains]; subst.
 
     inversion H4; subst; PS.simplify_turn;
       try contradiction.
@@ -537,7 +537,7 @@ Section PS2CS.
 
     inversion H; subst.
     - (* program has run *)
-      inversion H0; subst.
+      inversion H0 as [? ? ? ? ? ? ? Hmains]; subst.
       assert (p' = empty_prog) as Hempty_prog. {
         inversion H4.
         apply empty_interface_implies_empty_program; auto.
@@ -552,7 +552,7 @@ Section PS2CS.
         * unfold nostep in *. intros.
           unfold not. intro.
           rewrite <- (linking_empty_program prog) in H14.
-          destruct (Decomposition.lockstep_simulation H4 H5 H6 H14 H13)
+          destruct (Decomposition.lockstep_simulation H4 H5 H6 Hmains H14 H13)
             as [s'' []].
           eapply H11. econstructor; eauto.
         * unfold not. intros.
@@ -576,6 +576,8 @@ Section PS2CS.
         unfold linkable. simpl. split.
         * rewrite unionm0. assumption.
         * rewrite domm0. apply fdisjoints0.
+      + unfold linkable_mains, empty_prog.
+        destruct (prog_main prog); reflexivity.
       + apply PS.partialize_correct.
         reflexivity.
       + destruct prog.
@@ -1090,6 +1092,8 @@ Section Simulation.
 
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
+  Hypothesis main_linkability: linkable_mains p c.
+
   Hypothesis prog_is_closed:
     closed_program (program_link p c).
 
@@ -1214,7 +1218,7 @@ Section Simulation.
       | destruct (PS.domm_partition_in_notin Hmerge_iface Hcc1 Hpc1)
       | destruct (PS.domm_partition_in_both Hmerge_iface Hcc1 Hcc2)].
     inversion Hstep_ps
-      as [p' ? ? ? ics1 ics1' Hsame_iface _ Hwf2' Hlinkable Hstep_cs Hpartial Hpartial'];
+      as [p' ? ? ? ics1 ics1' Hsame_iface _ Hwf2' Hlinkable Hmains Hstep_cs Hpartial Hpartial'];
       subst.
     destruct ips1' as [[[[stk1' mem1'] regs1'] pc1'] | [[Cid1' stk1'] mem1']];
       (* RB: TODO: Ltac to discharge \in-\notin sequents, propagate and reuse; cf. PS. *)
@@ -1244,12 +1248,14 @@ Section Simulation.
           -- assumption.
           -- assumption.
           -- eapply linkable_sym; eassumption.
+          -- exact ((proj1 (linkable_mains_sym p c)) main_linkability).
           -- eapply CS.Nop.
              unfold executing in Hop.
-             rewrite (genv_procedures_program_link_left_in Hcc2 Hlinkable) in Hop.
+             rewrite (genv_procedures_program_link_left_in Hcc2 wf1 Hwf2' Hlinkable Hmains) in Hop.
              unfold executing.
              rewrite <- (program_linkC wf1 wf2 linkability).
-             erewrite (genv_procedures_program_link_left_in Hcc2 linkability).
+             erewrite (genv_procedures_program_link_left_in
+                         Hcc2 wf1 wf2 linkability main_linkability).
              assumption.
           -- econstructor.
              ++ assumption.
@@ -1420,6 +1426,8 @@ Section Simulation.
 
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
+  Hypothesis main_linkability: linkable_mains p c.
+
   Hypothesis prog_is_closed:
     closed_program (program_link p c).
 
@@ -1463,8 +1471,8 @@ Section Simulation.
           - apply Hstep.
         }
         destruct (ProgCtxSim.lockstep_simulation
-                    wf1 wf2 linkability prog_is_closed mergeable_interfaces
-                    Hstep' IHHmergeable)
+                    wf1 wf2 linkability main_linkability prog_is_closed
+                    mergeable_interfaces Hstep' IHHmergeable)
           as [ips2'' [Hstep'' Hmergeable'']].
         apply st_starN_iff_st_starNR in IHHst_starN.
         assert (PS.step c (prog_interface p) (prepare_global_env c) ips2' t2 ips2'')
@@ -1610,7 +1618,9 @@ Section MultiSemantics.
       + apply linking_well_formedness; now auto.
       + now apply empty_prog_is_well_formed.
       + simpl. apply linkable_emptym. now apply linkability.
-      + inversion H0; subst. inversion H1; subst.
+      + exact (linkable_mains_empty_prog prog).
+      + inversion H0 as [? ? ? ? ? ? ? Hmains1]; subst.
+        inversion H1 as [? ? ? ? ? ? ? Hmains2]; subst.
         inversion H6; subst; inversion H12; subst; PS.simplify_turn.
         * (* contra *)
           (* RB: TODO: Extract and simplify patterns if inversion of mergeable_states
@@ -1695,6 +1705,7 @@ Section MultiSemantics.
       + apply linking_well_formedness; assumption.
       + now apply empty_prog_is_well_formed.
       + apply linkable_emptym. now apply linkability.
+      + exact (linkable_mains_empty_prog prog).
       + PS.simplify_turn. now rewrite mem_domm.
       + constructor.
         * PS.simplify_turn.
@@ -1704,7 +1715,7 @@ Section MultiSemantics.
           by rewrite (merge_stacks_partition_emptym Hmergeable_ifaces).
       + rewrite linking_empty_program.
         inversion Hfinal1
-          as [p' ics ? Hsame_iface' _ Hwf' Hlinkable' Hnotin' Hpartial' Hfinal' | ? Hcontra];
+          as [p' ics ? Hsame_iface' _ Hwf' Hlinkable' Hmains' Hnotin' Hpartial' Hfinal' | ? Hcontra];
           subst;
           PS.simplify_turn;
           last by rewrite Hcontra in Hpc1.
@@ -1725,6 +1736,7 @@ Section MultiSemantics.
       + apply linking_well_formedness; assumption.
       + now apply empty_prog_is_well_formed.
       + apply linkable_emptym. now apply linkability.
+      + exact (linkable_mains_empty_prog prog).
       + PS.simplify_turn. now rewrite mem_domm.
       + constructor.
         * PS.simplify_turn.
@@ -1738,7 +1750,7 @@ Section MultiSemantics.
           reflexivity.
       + rewrite linking_empty_program.
         inversion Hfinal2
-          as [p' ics ? Hsame_iface' _ Hwf' Hlinkable' Hnotin' Hpartial' Hfinal' | ? Hcontra];
+          as [p' ics ? Hsame_iface' _ Hwf' Hlinkable' Hmains' Hnotin' Hpartial' Hfinal' | ? Hcontra];
           subst;
           PS.simplify_turn;
           last by destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcontra).
@@ -1746,6 +1758,8 @@ Section MultiSemantics.
         inversion Hfinal'; subst.
         unfold prog. rewrite (program_linkC wf1 wf2 linkability).
         pose proof linkable_sym linkability as linkability'.
+        assert (main_linkability_sym := main_linkability).
+        apply linkable_mains_sym in main_linkability_sym.
         eapply (@execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
   Qed.
 
@@ -1899,9 +1913,11 @@ Section PartialComposition.
         assert (prog_is_closed' := prog_is_closed).
         rewrite (closed_program_link_sym wf1 wf2 linkability)
           in prog_is_closed'.
-        destruct (StStarNSim.st_starN_simulation wf2 wf1
-                   (linkable_sym linkability) prog_is_closed'
-                   Hmergeable_ifaces Hst_star2 Hmergeable')
+        destruct (StStarNSim.st_starN_simulation
+                    wf2 wf1
+                    (linkable_sym linkability)
+                    ((proj1 (linkable_mains_sym p c)) main_linkability)
+                    prog_is_closed' Hmergeable_ifaces Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
         (* The following is used by both branches of the split. *)
         inversion Hstar; subst.
@@ -2300,7 +2316,8 @@ Section PartialComposition.
       PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2.
   Proof.
     intros s1 s2 Hs1_init Hs2_init.
-    inversion Hs1_init; subst; inversion Hs2_init; subst.
+    inversion Hs1_init as [? ? ? ? ? ? ? Hmains1]; subst;
+      inversion Hs2_init as [? ? ? ? ? ? ? Hmains2]; subst.
     inversion H3; subst; inversion H9; subst;
       inversion H4; subst; inversion H10; subst; simpl in *.
 

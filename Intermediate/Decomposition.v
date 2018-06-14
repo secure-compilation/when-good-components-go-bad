@@ -25,6 +25,7 @@ Section Decomposition.
   Hypothesis wf2 : well_formed_program c.
 
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
+  Hypothesis main_linkability: linkable_mains p c.
 
   Hypothesis closedness_after_linking:
     closed_program (program_link p c).
@@ -49,6 +50,7 @@ Section Decomposition.
         * assumption.
         * assumption.
         * assumption.
+        * assumption.
         * eapply PS.ContextControl; eauto.
           ** apply Hics_init.
       + eapply PS.ContextControl; eauto.
@@ -56,6 +58,7 @@ Section Decomposition.
     - split.
       + eapply PS.initial_state_intro with (p':=c).
         * reflexivity.
+        * assumption.
         * assumption.
         * assumption.
         * assumption.
@@ -88,6 +91,7 @@ Section Decomposition.
     - inversion Hpartial; inversion H; subst.
       + eapply PS.final_state_program with (p':=c).
         * reflexivity.
+        * assumption.
         * assumption.
         * assumption.
         * assumption.
