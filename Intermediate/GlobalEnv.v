@@ -91,12 +91,15 @@ Lemma genv_procedures_program_link_left_notin :
   forall {c Cid},
     Cid \notin domm (prog_interface c) ->
   forall {p},
+    well_formed_program p ->
+    well_formed_program c ->
     linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
     (genv_procedures (prepare_global_env (program_link p c))) Cid =
     (genv_procedures (prepare_global_env p)) Cid.
 Proof.
-  intros c Cid Hnotin p Hlinkable.
-  rewrite (prepare_global_env_link Hlinkable).
+  intros c Cid Hnotin p Hwfp Hwfc Hlinkable Hmains.
+  rewrite (prepare_global_env_link Hwfp Hwfc Hlinkable Hmains).
   unfold global_env_union; simpl.
   rewrite unionmE.
   assert (HNone : (genv_procedures (prepare_global_env c)) Cid = None)
@@ -110,12 +113,15 @@ Lemma genv_procedures_program_link_left_in :
   forall {p Cid},
     Cid \in domm (prog_interface p) ->
   forall {c},
+    well_formed_program p ->
+    well_formed_program c ->
     linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
     (genv_procedures (prepare_global_env (program_link p c))) Cid =
     (genv_procedures (prepare_global_env p)) Cid.
 Proof.
-  intros p Cid Hin c Hlinkable.
-  rewrite (prepare_global_env_link Hlinkable).
+  intros p Cid Hin c Hwfp Hwfc Hlinkable Hmains.
+  rewrite (prepare_global_env_link Hwfp Hwfc Hlinkable Hmains).
   unfold global_env_union; simpl.
   rewrite unionmE.
   assert
@@ -130,13 +136,16 @@ Lemma genv_entrypoints_program_link_left :
   forall {c C},
     C \notin domm (prog_interface c) ->
   forall {p},
+    well_formed_program p ->
+    well_formed_program c ->
     linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
   forall {P},
     EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c))) =
     EntryPoint.get C P (genv_entrypoints (prepare_global_env p)).
 Proof.
-  intros c C Hnotin p Hlinkable P.
-  rewrite (prepare_global_env_link Hlinkable).
+  intros c C Hnotin p Hwfp Hwfc Hlinkable Hmains P.
+  rewrite (prepare_global_env_link Hwfp Hwfc Hlinkable Hmains).
   unfold EntryPoint.get, global_env_union; simpl.
   rewrite unionmE.
   assert (HNone : (genv_entrypoints (prepare_global_env c)) C = None)
@@ -232,15 +241,18 @@ Lemma find_label_in_procedure_program_link_left:
   forall {c pc},
     Pointer.component pc \notin domm (prog_interface c) ->
   forall {p},
+    well_formed_program p ->
+    well_formed_program c ->
     linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
   forall {l},
     find_label_in_procedure (prepare_global_env (program_link p c)) pc l =
     find_label_in_procedure (prepare_global_env p) pc l.
 Proof.
   (* RB: Note the proof strategy for all these lemmas is remarkably similar.
      It may be worthwhile to refactor it and/or its intermediate steps. *)
-  intros c pc Hnotin p Hlinkable l.
-  rewrite (prepare_global_env_link Hlinkable).
+  intros c pc Hnotin p Hwfp Hwfc Hlinkable Hmains l.
+  rewrite (prepare_global_env_link Hwfp Hwfc Hlinkable Hmains).
   unfold find_label_in_procedure, global_env_union; simpl.
   rewrite unionmE.
   assert (HNone : (genv_procedures (prepare_global_env c)) (Pointer.component pc) = None)
@@ -284,13 +296,16 @@ Lemma find_label_in_component_program_link_left:
   forall {c pc},
     Pointer.component pc \notin domm (prog_interface c) ->
   forall {p},
+    well_formed_program p ->
+    well_formed_program c ->
     linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
   forall {l},
     find_label_in_component (prepare_global_env (program_link p c)) pc l =
     find_label_in_component (prepare_global_env p) pc l.
 Proof.
-  intros c pc Hnotin p Hlinkable l.
-  rewrite (prepare_global_env_link Hlinkable).
+  intros c pc Hnotin p Hwfp Hwfc Hlinkable Hmains l.
+  rewrite (prepare_global_env_link Hwfp Hwfc Hlinkable Hmains).
   unfold find_label_in_component. unfold global_env_union at 1. simpl.
   rewrite unionmE.
   assert (HNone : (genv_procedures (prepare_global_env c)) (Pointer.component pc) = None)
@@ -307,19 +322,23 @@ Proof.
     assert (Hnotin' : Pointer.component (Pointer.component pc, p_block, 0%Z)
                       \notin domm (prog_interface c)).
       by done.
-    rewrite <- (prepare_global_env_link Hlinkable).
-    rewrite (find_label_in_procedure_program_link_left Hnotin' Hlinkable).
+    rewrite <- (prepare_global_env_link Hwfp Hwfc Hlinkable Hmains).
+    rewrite (find_label_in_procedure_program_link_left Hnotin' Hwfp Hwfc Hlinkable Hmains).
     fold find_label_in_component_helper.
     rewrite <- IHelts.
-    rewrite <- (prepare_global_env_link Hlinkable).
+    rewrite <- (prepare_global_env_link Hwfp Hwfc Hlinkable Hmains).
     reflexivity.
   - reflexivity.
 Qed.
 
+(* RB: Unified presentation of linkable + linkable_mains, to be used as needed
+   around the development? *)
 Lemma execution_invariant_to_linking:
   forall p c1 c2 pc instr,
     linkable (prog_interface p) (prog_interface c1) ->
     linkable (prog_interface p) (prog_interface c2) ->
+    linkable_mains p c1 ->
+    linkable_mains p c2 ->
     well_formed_program p ->
     well_formed_program c1 ->
     well_formed_program c2 ->
@@ -327,7 +346,7 @@ Lemma execution_invariant_to_linking:
     executing (prepare_global_env (program_link p c1)) pc instr ->
     executing (prepare_global_env (program_link p c2)) pc instr.
 Proof.
-  intros p c1 c2 pc instr Hlinkable1 Hlinkable2 Hwf Hwf1 Hwf2 Hpc Hexec.
+  intros p c1 c2 pc instr Hlinkable1 Hlinkable2 Hmains1 Hmains2 Hwf Hwf1 Hwf2 Hpc Hexec.
   inversion Hexec as [procs [proc [Hgenv_procs [Hprocs_proc [Hoffset Hproc_instr]]]]].
   exists procs, proc.
   split; [| split; [| split]];
@@ -340,7 +359,7 @@ Proof.
   {
     inversion Hlinkable2 as [_ Hdisjoint]. apply /fdisjointP. apply Hdisjoint. assumption.
   }
-  rewrite (genv_procedures_program_link_left_notin Hcc1 Hlinkable1) in Hgenv_procs.
-  rewrite (genv_procedures_program_link_left_notin Hcc2 Hlinkable2).
+  rewrite (genv_procedures_program_link_left_notin Hcc1 Hwf Hwf1 Hlinkable1 Hmains1) in Hgenv_procs.
+  rewrite (genv_procedures_program_link_left_notin Hcc2 Hwf Hwf2 Hlinkable2 Hmains2).
   assumption.
 Qed.
