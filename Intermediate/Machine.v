@@ -345,6 +345,15 @@ Proof.
   by case: prog_main0.
 Qed.
 
+Lemma linkable_mains_empty_prog:
+  forall p,
+    linkable_mains p empty_prog.
+Proof.
+  intros p.
+  destruct p. unfold linkable_mains.
+  now rewrite andb_comm.
+Qed.
+
 Lemma program_linkC p1 p2 :
   well_formed_program p1 ->
   well_formed_program p2 ->
@@ -476,6 +485,10 @@ Proof.
     reflexivity.
 Qed.
 
+(* Given a list of components, create the map that associates to
+   each component the preallocated buffers according to program p.
+   If no buffers are found, use the empty map as a default (this
+   will not happen in regular use!). *)
 Definition alloc_static_buffers p comps :=
   mkfmapf (fun C =>
     ComponentMemory.prealloc (odflt emptym (prog_buffers p C))) comps.
@@ -511,6 +524,11 @@ Definition reserve_component_blocks p C acc procs_code
     end
   in fold_left aux procs_code acc.
 
+(* In the foreseen, controlled use of this function, we always go on the Some
+   branch. For each component C, we read its (initial) memory and use it to
+   construct the initial state of C, recursing after we update its maps. Given
+   identical inputs (component memories, which we have by compositionality of
+   that piece of code) the outputs will be identical. *)
 Fixpoint reserve_procedure_blocks p acc comps_code
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
   let aux acc comps_code :=
