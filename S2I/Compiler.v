@@ -449,7 +449,7 @@ Proof.
     rewrite Hmainp in Hmains.
     rewrite Hmainc in Hmains.
     inversion Hmains.
-  - rewrite Intermediate.linkable_mains_sym.
+  - apply Intermediate.linkable_mains_sym.
     now eapply (mains_without_source c).
   - now eapply (mains_without_source p).
   - now eapply (mains_without_source p).

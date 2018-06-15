@@ -280,7 +280,7 @@ Definition linkable_mains (prog1 prog2 : program) : Prop :=
   ~~ (prog_main prog1 && prog_main prog2).
 
 Lemma linkable_mains_sym : forall (prog1 prog2 : program),
-  linkable_mains prog1 prog2 <-> linkable_mains prog2 prog1.
+  linkable_mains prog1 prog2 -> linkable_mains prog2 prog1.
 Proof.
   intros prog1 prog2.
   unfold linkable_mains, andb, negb.

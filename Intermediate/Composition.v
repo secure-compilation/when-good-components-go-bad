@@ -1248,7 +1248,7 @@ Section Simulation.
           -- assumption.
           -- assumption.
           -- eapply linkable_sym; eassumption.
-          -- exact ((proj1 (linkable_mains_sym p c)) main_linkability).
+          -- exact (linkable_mains_sym main_linkability).
           -- eapply CS.Nop.
              unfold executing in Hop.
              rewrite (genv_procedures_program_link_left_in Hcc2 wf1 Hwf2' Hlinkable Hmains) in Hop.
@@ -1916,7 +1916,7 @@ Section PartialComposition.
         destruct (StStarNSim.st_starN_simulation
                     wf2 wf1
                     (linkable_sym linkability)
-                    ((proj1 (linkable_mains_sym p c)) main_linkability)
+                    (linkable_mains_sym main_linkability)
                     prog_is_closed' Hmergeable_ifaces Hst_star2 Hmergeable')
           as [ips1' [Hstar Hmergeable'']].
         (* The following is used by both branches of the split. *)
