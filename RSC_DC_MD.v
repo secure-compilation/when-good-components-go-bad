@@ -155,6 +155,9 @@ Module Type Intermediate_Sig.
 
   Parameter program_link : program -> program -> program.
 
+  Axiom linkable_mains_sym : forall p1 p2,
+    linkable_mains p1 p2 -> linkable_mains p2 p1.
+
   Axiom program_linkC : forall p1 p2,
     well_formed_program p1 ->
     well_formed_program p2 ->
@@ -190,6 +193,7 @@ Module Type Intermediate_Sig.
       well_formed_program p ->
       well_formed_program c ->
       linkable (prog_interface p) (prog_interface c) ->
+      linkable_mains p c ->
     forall beh,
       program_behaves (CS.sem (program_link p c)) beh ->
       not_wrong beh ->
@@ -200,6 +204,7 @@ Module Type Intermediate_Sig.
       well_formed_program p ->
       well_formed_program c ->
       linkable (prog_interface p) (prog_interface c) ->
+      linkable_mains p c ->
     forall beh1,
       program_behaves (CS.sem (program_link p c)) beh1 ->
     exists beh2,
@@ -265,6 +270,9 @@ Module Intermediate_Instance <: Intermediate_Sig.
 
   Definition program_link :=
     @Intermediate.program_link.
+
+  Definition linkable_mains_sym :=
+    @Intermediate.linkable_mains_sym.
 
   Definition program_linkC :=
     @Intermediate.program_linkC.
@@ -551,7 +559,8 @@ Section RSC_DC_MD_Section.
 
     (* intermediate decomposition (for p_compiled) *)
     pose proof Intermediate.decomposition_with_safe_behavior
-      well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct Hbeh Hsafe_beh as HP_decomp.
+      well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains
+      Hbeh Hsafe_beh as HP_decomp.
 
     (* CH: if we had undefined behavior we would use this *)
     (* destruct (decomposition_with_refinement linkability Hbeh) *)
@@ -598,6 +607,11 @@ Section RSC_DC_MD_Section.
       rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
       apply linkability_pcomp_Ct.
     }
+    pose proof
+      Intermediate.linkable_mains_sym
+        (Compiler.compilation_preserves_linkable_mains
+          well_formed_P' well_formed_Cs HP'Cs_mains HP'_compiles HCs_compiles)
+      as mains'.
     assert (exists P'_Cs_compiled,
               Compiler.compile_program (Source.program_link P' Cs) = Some P'_Cs_compiled)
       as [P'_Cs_compiled HP'_Cs_compiles]. {
@@ -633,7 +647,7 @@ Section RSC_DC_MD_Section.
     have [beh2 [HCs_decomp HCs_beh_improves]] :=
          Intermediate.decomposition_with_refinement
            well_formed_Cs_compiled well_formed_P'_compiled
-           linkability' HP'_Cs_compiled_beh.
+           linkability' mains' HP'_Cs_compiled_beh.
     have {HCs_beh_improves} ? : beh2 = beh by case: HCs_beh_improves => [<-|[? []]].
     subst beh2.
 
