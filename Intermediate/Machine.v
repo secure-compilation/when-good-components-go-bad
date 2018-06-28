@@ -606,9 +606,12 @@ Proof.
 Qed.
 
 (* RB: Relocate this. *)
+(* Maybe can be pushed in Arthur's extructures *)
 Lemma mapm_empty: forall (T : ordType) (S S' : Type) (f : S -> S'),
   mapm f (@emptym T S) = emptym.
-Admitted. (* Grade 1. *)
+Proof.
+    by move => T S S' f; apply /eq_fmap => n; rewrite emptymE.
+Qed.
 
 Theorem prepare_procedures_initial_memory_empty_program:
   prepare_procedures_initial_memory empty_prog = (emptym, emptym, emptym).
@@ -745,6 +748,10 @@ Proof.
   assumption.
 Qed.
 
+Lemma fsetid (T : ordType) (s: seq.seq T) :
+  fset (fset s) = fset s.
+Proof. by apply /eq_fset => x; rewrite in_fset. Qed.
+
 (* First, prove domain preservation for all of the (already existing, plus
    recent improvements) initialization code. *)
 Lemma domm_prepare_procedures_initial_memory_aux: forall p,
@@ -754,7 +761,54 @@ Proof.
   intros p.
   unfold prepare_procedures_initial_memory_aux.
   rewrite domm_mkfmapf.
-Admitted. (* Grade 1. *)
+  apply fsetid.
+Qed.
+
+(* FG : maybe relocate this in extructures? (when rewritten in proper SSReflect) *)
+Lemma fdisjoint_partition_notinboth (T: ordType) (s1 s2 : {fset T}) :
+  fdisjoint s1 s2 ->
+  forall x,
+    x \in s2 ->
+    x \in s1 ->
+    False.
+Proof.
+  unfold fdisjoint. move => Hinter x Hs2 Hs1.
+  have H' : x \in (s1 :&: s2)%fset by rewrite in_fsetI Hs1 Hs2.
+  have H'' : (s1 :&: s2)%fset = fset0 by apply /eqP.
+  rewrite H'' in H'. inversion H'.
+Qed.
+
+(* Better name, maybe ? *)
+(* keeping it generic over program/context *)
+Lemma prog_link_procedures_unionm :
+  forall p1 p2 Cid,
+    well_formed_program p1 ->
+    (* well_formed_program p2 -> *)
+    (Cid \in domm (prog_interface p1)) = true ->
+    (Cid \in domm (prog_interface p2)) = false -> (* not used, to remove  or keep as sanity check ? *)
+    (prog_procedures (program_link p1 p2)) Cid = (prog_procedures p1) Cid.
+Proof.
+  intros p1 p2 Cid Hwfp Hp _.
+  rewrite unionmE. rewrite <- mem_domm. inversion Hwfp as [? Hproc _ _ _ _ _]. (* if no binding of 1st hypothesis : anomaly : "make_elim_branch_assumptions" *)
+  rewrite Hproc in Hp. rewrite Hp. reflexivity.
+Qed.
+
+
+(* maybe write a tactic that does the core except the inversion ... ? *)
+(* or suppress the prog_smth part and keep it generic for all types of program_link ? *)
+Lemma prog_link_buffers_unionm :
+  forall p1 p2 Cid,
+    well_formed_program p1 ->
+    (* well_formed_program p2 -> *)
+    (Cid \in domm (prog_interface p1)) = true ->
+    (Cid \in domm (prog_interface p2)) = false -> (* same *)
+    (prog_buffers (program_link p1 p2)) Cid = (prog_buffers p1) Cid.
+Proof.
+  intros p1 p2 Cid Hwfp Hp _. simpl.
+  rewrite unionmE. rewrite <- mem_domm. inversion Hwfp as [? _ _ _ Hbuf _ _]. (* if no binding of 1st hypothesis : anomaly : "make_elim_branch_assumptions" *)
+  rewrite Hbuf in Hp. rewrite Hp. reflexivity.
+Qed.
+
 
 (* RB: TODO: Simplify hypotheses if possible. *)
 Lemma prepare_procedures_initial_memory_aux_after_linking:
@@ -773,26 +827,29 @@ Proof.
   (* Case analysis on component provenance after some common preprocessing. *)
   destruct (Cid \in domm (prog_interface p)) eqn:Hp;
     destruct (Cid \in domm (prog_interface c)) eqn:Hc.
-  - admit. (* Contra. *)
+  - (* Contra. *)
+    inversion Hlinkable as [_ Hdisjoint].
+    have Hcontra : False by apply (fdisjoint_partition_notinboth Hdisjoint Hc Hp).
+    inversion Hcontra.
   - rewrite unionmE.
     rewrite !mkfmapfE.
     rewrite Hp Hc.
-    assert (Hpc : Cid \in domm (prog_interface (program_link p c)))
-      by (by apply in_domm_program_link).
+    have Hpc : Cid \in domm (prog_interface (program_link p c))
+      by apply in_domm_program_link.
     rewrite Hpc.
-    assert ((elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
-            (elementsm (odflt emptym ((prog_procedures p) Cid))))
-      as Helts by admit.
+    have Helts : (elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
+            (elementsm (odflt emptym ((prog_procedures p) Cid)))
+      by rewrite (prog_link_procedures_unionm Hwfp Hp Hc).
     rewrite Helts.
-    assert (ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
-            ComponentMemory.prealloc (odflt emptym ((prog_buffers p) Cid)))
-      as Hprealloc by admit.
+    have Hprealloc : ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
+            ComponentMemory.prealloc (odflt emptym ((prog_buffers p) Cid))
+      by rewrite (prog_link_buffers_unionm Hwfp Hp Hc).
     rewrite Hprealloc.
     simpl.
     unfold reserve_component_blocks.
     rewrite unionmE.
-    assert (exists x, (prog_interface p) Cid = Some x)
-      as [Cid_int Hp'] by (by apply /dommP).
+    have [Cid_int Hp']: (exists x, (prog_interface p) Cid = Some x)
+      by  apply /dommP.
     rewrite Hp'.
     simpl.
     destruct (prog_main p) as [mainp |] eqn:Hmainp;
@@ -803,7 +860,7 @@ Proof.
       * (* Contra. *)
         inversion Hwfp as [_ _ _ _ _ _ Hmain_compp].
         specialize (Hmain_compp Hmainp).
-        assert (Hp'' : (prog_interface p) 0 = None) by (apply /dommPn; exact Hmain_compp).
+        have Hp'' : (prog_interface p) 0 = None by apply /dommPn.
         rewrite Hp'' in Hp'.
         discriminate.
       * reflexivity.
@@ -812,25 +869,26 @@ Proof.
     rewrite unionmE.
     rewrite !mkfmapfE.
     rewrite Hp Hc.
-    assert (Hpc : Cid \in domm (prog_interface (program_link p c)))
-      by admit.
+    have Hpc : Cid \in domm (prog_interface (program_link p c))
+      by rewrite (program_linkC Hwfp Hwfc Hlinkable) ;
+      apply in_domm_program_link.
     rewrite Hpc.
-    assert ((elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
-            (elementsm (odflt emptym ((prog_procedures c) Cid))))
-      as Helts by admit.
+    have Helts: (elementsm (odflt emptym ((prog_procedures (program_link p c)) Cid))) =
+            (elementsm (odflt emptym ((prog_procedures c) Cid)))
+      by rewrite (program_linkC Hwfp Hwfc Hlinkable) (prog_link_procedures_unionm Hwfc Hc Hp).
     rewrite Helts.
-    assert (ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
-            ComponentMemory.prealloc (odflt emptym ((prog_buffers c) Cid)))
-      as Hprealloc by admit.
+    have Hprealloc : ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
+            ComponentMemory.prealloc (odflt emptym ((prog_buffers c) Cid))
+      by rewrite (program_linkC Hwfp Hwfc Hlinkable) (prog_link_buffers_unionm Hwfc Hc Hp).
     rewrite Hprealloc.
     simpl.
     unfold reserve_component_blocks.
     rewrite unionmE.
-    assert ((prog_interface p) Cid = None)
-      as Hp' by (by apply /dommPn; rewrite Hp).
+    have Hp': (prog_interface p) Cid = None
+      by apply /dommPn; rewrite Hp.
     rewrite Hp'.
-    assert (exists x, (prog_interface c) Cid = Some x)
-      as [Cid_int Hc'] by (by apply /dommP).
+    have [Cid_int Hc'] : exists x, (prog_interface c) Cid = Some x
+      by apply /dommP.
     rewrite Hc'.
     destruct (prog_main p) as [mainp |] eqn:Hmainp;
       destruct (prog_main c) as [mainc |] eqn:Hmainc.
@@ -843,13 +901,15 @@ Proof.
       * (* Contra, *)
         inversion Hwfc as [_ _ _ _ _ _ Hmain_compc].
         specialize (Hmain_compc Hmainc).
-        assert (Hc'' : (prog_interface c) 0 = None) by (apply /dommPn; exact Hmain_compc).
+        have Hc'' : (prog_interface c) 0 = None by apply /dommPn.
         rewrite Hc'' in Hc'.
         discriminate.
       * reflexivity.
     + simpl. rewrite Hmainp Hmainc. reflexivity.
-    + simpl. rewrite Hmainp Hmainc. reflexivity. (* Easy case. *)
-Admitted. (* Grade 2. A few easy admits. *)
+    + simpl. rewrite Hmainp Hmainc. reflexivity.
+  - (* in neither, pretty immediate *)
+    by rewrite unionmE !mkfmapfE domm_union in_fsetU Hp Hc.
+Qed.
 
 (* Now it's easy to extend this to the parts of the final result. *)
 Lemma domm_prepare_procedures_memory: forall p,
