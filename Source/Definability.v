@@ -704,9 +704,27 @@ Proof.
     rewrite /intf unionmC; last by case: Hlinkable.
     rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
-  have wf_back : well_formed_program back.
-    exact: well_formed_events_well_formed_program.
-  split; first admit.
+  have wf_back : well_formed_program back by exact: well_formed_events_well_formed_program.
+  split.
+    (* matching mains between backtranslated (source) p and intermediate P *)
+    unfold matching_mains.
+    split ; first last.
+    (* <-, no main in intermediate implies no main in source bactkanslated *)
+      unfold prog_main, program_unlink. simpl.
+      rewrite find_procedure_filter_comp.
+      move => Hinterm.
+      apply (Intermediate.wfprog_main_component wf_p), negbTE in Hinterm.
+      rewrite Hinterm. done.
+    (* -> *)
+      unfold prog_main, program_unlink. simpl. rewrite find_procedure_filter_comp.
+      destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hmain ; rewrite Hmain.
+        (* contra *)
+        rewrite (find_procedures_of_trace_main intf_main). intro H. inversion H.
+        (*  *)
+        intro H ; destruct H. unfold Intermediate.prog_main.
+        admit.
+
+  (* same proof but for c, extract proof from above when finished (to where ?) then exact *)
   split; first admit.
   split; first exact: well_formed_program_unlink.
   split; first exact: well_formed_program_unlink.
