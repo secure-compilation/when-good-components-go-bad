@@ -634,6 +634,44 @@ Require Import Intermediate.CS.
 Require Import Intermediate.Machine.
 Require Import S2I.Definitions.
 
+(* FG : Put back some sanity checks ? some are present but commented in the premise and the move => *)
+Lemma matching_mains_backtranslated_program p c intf back m:
+  Intermediate.well_formed_program p ->
+  Intermediate.well_formed_program c ->
+  (* intf = unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c) -> *)
+  back = program_of_trace intf m ->
+  intf Component.main ->
+  (* well_formed_trace intf m -> *)
+  matching_mains (program_unlink (domm (Intermediate.prog_interface p)) back) p.
+Proof.
+  move => wf_p wf_c (* intf' *) Hback intf_main (* wf_back *).
+  unfold matching_mains.
+  split.
+  - (* -> *) (* maybe can be done with more finesse *)
+    unfold prog_main. unfold program_unlink. rewrite Hback. simpl. rewrite find_procedure_filter_comp.
+    destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hmain_comp ; rewrite Hmain_comp.
+    + (* contra *)
+      rewrite (find_procedures_of_trace_main intf_main). intro contra. inversion contra.
+    + (*  *)
+      intro Htauto ; clear Htauto.
+      (* either contra or trivial case *)
+      destruct (Intermediate.prog_main p) as [ id | _ ] eqn: Hmain_prog; first exfalso ; last by [].
+      (* contra : Component.main is not in interface of p but is in its procedures *)
+      (* contradiction with wfprog_defined_procedures (Intermediate.well_formed_program p)  *)
+      apply (Intermediate.wfprog_main_existence wf_p) in Hmain_prog.
+      destruct Hmain_prog as [main_procs [Hcontra _]].
+      have Hcontra_def : domm (Intermediate.prog_interface p) = domm (Intermediate.prog_procedures p) by apply wf_p.
+      have Hcontra' : Component.main \in domm (Intermediate.prog_procedures p) by apply /dommP ; exists main_procs.
+      have Hmain_contra : Component.main \in domm (Intermediate.prog_interface p) by rewrite Hcontra_def.
+      rewrite Hmain_contra in Hmain_comp. inversion Hmain_comp.
+  - (* <-, no main in intermediate implies no main in source bactkanslated *)
+    unfold prog_main, program_unlink. simpl.
+    rewrite find_procedure_filter_comp.
+    move => Hinterm.
+    apply (Intermediate.wfprog_main_component wf_p), negbTE in Hinterm.
+    rewrite Hinterm. done.
+Qed.
+
 (* Definability *)
 
 (* RB: Relocate? As the S2I require above seems to indicate, this is not where
@@ -705,32 +743,14 @@ Proof.
     rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
   have wf_back : well_formed_program back by exact: well_formed_events_well_formed_program.
-  split.
-    (* matching mains between backtranslated (source) p and intermediate P *)
-    unfold matching_mains.
-    split ; first last.
-    (* <-, no main in intermediate implies no main in source bactkanslated *)
-      unfold prog_main, program_unlink. simpl.
-      rewrite find_procedure_filter_comp.
-      move => Hinterm.
-      apply (Intermediate.wfprog_main_component wf_p), negbTE in Hinterm.
-      rewrite Hinterm. done.
-    (* -> *)
-      unfold prog_main, program_unlink. simpl. rewrite find_procedure_filter_comp.
-      destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hmain ; rewrite Hmain.
-        (* contra *)
-        rewrite (find_procedures_of_trace_main intf_main). intro H. inversion H.
-        (*  *)
-        intro H ; destruct H. unfold Intermediate.prog_main.
-        admit.
-
-  (* same proof but for c, extract proof from above when finished (to where ?) then exact *)
-  split; first admit.
+  have Hback' : back = program_of_trace intf m' by [].
+  split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main.
+  split; first exact: matching_mains_backtranslated_program wf_c wf_p Hback' intf_main.
+  clear Hback'.
   split; first exact: well_formed_program_unlink.
   split; first exact: well_formed_program_unlink.
   rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
   split=> // {wf_events back Hback wf_back wf_m}.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
   by exists (Terminates nil); rewrite /= E0_right.
-(*Qed.*)
-Admitted.
+Qed.
