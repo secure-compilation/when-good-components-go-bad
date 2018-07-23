@@ -17,7 +17,7 @@ of how we have improved the paper in response to this helpful feedback.
 
 This development requires Coq v8.7.1 to work, as well as the following libraries:
 - [Mathematical Components](https://math-comp.github.io/math-comp/) 1.6.4
-- [CoqUtils 5aa6da3](https://github.com/arthuraa/coq-utils/commit/5aa6da3a465233883c239daa6ed3372008cd959f)
+- [CoqUtils 3904d85](https://github.com/arthuraa/coq-utils/commit/3904d85d3f32496802b621b181c3cfe0b9940a43)
 
 ### Replaying the proofs ###
 
