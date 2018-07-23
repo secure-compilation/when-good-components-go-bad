@@ -1,6 +1,7 @@
 From mathcomp Require Import
   ssreflect ssrfun ssrbool eqtype ssrnat seq choice fintype div ssrint ssralg intdiv.
-From CoqUtils Require Import ord word.
+From extructures Require Import ord.
+From CoqUtils Require Import word.
 
 Require Import MicroPolicies.Utils.
 

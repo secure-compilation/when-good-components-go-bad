@@ -16,7 +16,7 @@ Require Import I2SFI.AbstractMachine.
 
 Require Import Tests.TestIntermediate.
 
-Require Import CoqUtils.ord.
+Require Import extructures.ord.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 

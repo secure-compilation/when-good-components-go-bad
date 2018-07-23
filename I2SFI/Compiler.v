@@ -18,7 +18,7 @@ Require Import TargetSFI.SFIUtil.
 
 Require Import Coq.Strings.String.
 
-Require Import CoqUtils.ord.
+Require Import extructures.ord.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 

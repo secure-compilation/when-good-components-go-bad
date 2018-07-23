@@ -9,7 +9,7 @@ Require Import Common.Maps.
 
 Require Import Intermediate.Machine.
 
-Require Import CoqUtils.ord.
+Require Import extructures.ord.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 

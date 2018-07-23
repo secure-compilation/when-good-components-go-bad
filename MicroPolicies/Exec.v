@@ -1,5 +1,6 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
-From CoqUtils Require Import hseq word fmap.
+From CoqUtils Require Import hseq word.
+From extructures Require Import fmap.
 Require Import MicroPolicies.Utils MicroPolicies.Types MicroPolicies.Symbolic.
 Require Import CompCert.Events.
 

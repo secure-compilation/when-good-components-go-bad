@@ -1,5 +1,6 @@
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype ssrint seq.
-From CoqUtils Require Import fmap word.
+From CoqUtils Require Import word.
+From extructures Require Import fmap.
 
 Require Import Int32.
 Require Import LRC.

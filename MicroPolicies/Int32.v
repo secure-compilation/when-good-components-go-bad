@@ -2,7 +2,8 @@
 
 From mathcomp Require Import
   ssreflect ssrfun ssrbool eqtype ssrnat seq choice fintype ssrint tuple.
-From CoqUtils Require Import hseq ord word fmap.
+From CoqUtils Require Import hseq word.
+From extructures Require Import ord fmap.
 
 Require Import MicroPolicies.Utils.
 Require Import MicroPolicies.Types.

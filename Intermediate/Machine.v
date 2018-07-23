@@ -7,7 +7,7 @@ Require Import Lib.Monads.
 Require Import Lib.Extra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
-From CoqUtils Require Import fmap.
+From extructures Require Import fmap.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

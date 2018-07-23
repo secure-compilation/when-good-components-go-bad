@@ -20,7 +20,7 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-Require Import CoqUtils.ord.
+Require Import extructures.ord.
 
 Module N_as_OT := Backport_OT N_as_OT.
 Module BinNatMap := FMapAVL.Make(N_as_OT).

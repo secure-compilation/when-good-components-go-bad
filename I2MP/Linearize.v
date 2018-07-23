@@ -2,7 +2,7 @@ Require Import Common.Definitions.
 (* TL TODO: Ariths Export is a pain *)
 
 From mathcomp Require Import ssreflect ssrfun eqtype seq.
-From CoqUtils Require Import fmap fset.
+From extructures Require Import fmap fset.
 
 Require Import Intermediate.Machine.
 Require Import MicroPolicies.LRC.

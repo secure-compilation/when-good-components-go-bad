@@ -1,6 +1,6 @@
 From mathcomp Require Import ssreflect ssrfun eqtype seq ssrint.
-From CoqUtils Require Import fmap fset word.
-
+From CoqUtils Require Import word.
+From extructures Require Import fmap fset.
 
 Require Import MicroPolicies.Types.
 Require Import MicroPolicies.Symbolic.
