@@ -3,18 +3,20 @@ Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
 Require Import Lib.Extra.
+Require Import Common.Values.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype seq.
 
 Definition sum_of_event (e : event) :=
   match e with
-  | ERet C v C' => inl (C, v, C')
-  | ECall C P v C' => inr (C, P, v, C')
+  | ERet C v C' => inl (inl (C, v, C'))
+  | ECall C P v C' => inl (inr (C, P, v, C'))
+  | ELoad C v C' => inr (C, v, C')
   end.
 
 Lemma sum_of_event_inj : injective sum_of_event.
 Proof.
-by case=> [????|???] [????|???] //= => [[-> -> -> ->]|[-> -> ->]].
+  by case => [????|???|???] [????|???|???] //= => [[-> -> -> ->]|[-> -> ->]|[-> -> ->]].
 Qed.
 
 Definition event_eqMixin := InjEqMixin sum_of_event_inj.

@@ -1,5 +1,8 @@
 Require Import Common.Definitions.
 Require Import Common.Util.
+Require Import Lib.Extra.
+From mathcomp Require Import
+     ssreflect ssrnat eqtype.
 
 Module Block.
   Definition id := nat.
@@ -18,11 +21,6 @@ Module Pointer.
 
   Definition offset (p : t) : Block.offset :=
     let '(_, _, o) := p in o.
-
-  Definition eq (p1 p2 : t) : bool :=
-    let '(C1, b1, o1) := p1 in
-    let '(C2, b2, o2) := p2 in
-    (Nat.eqb C1 C2) && (Nat.eqb b1 b2) && (Z.eqb o1 o2).
 
   Definition leq (p1 p2 : t) : option bool :=
     let '(C1, b1, o1) := p1 in
@@ -78,6 +76,28 @@ Inductive value : Type :=
 | Ptr : Pointer.t -> value
 | Undef : value.
 
+Definition eqvalue v1 v2 :=
+  match v1, v2 with
+  | Int z1, Int z2 => z1 == z2
+  | Ptr p1, Ptr p2 =>  p1 == p2
+  | Undef, Undef => true         (* should undef not be equal to itself ? Since it can be anything *)
+  | _, _ => false
+  end.
+
+Lemma eqvalueP : Equality.axiom eqvalue.
+Proof.
+  move; elim => [z1 | p1 |] [z2 | p2|]//= ;
+                 apply: (iffP idP); move => H; inversion H ; try constructor.
+  by move: H => /Z.eqb_spec => H; rewrite H.
+  done.
+  by move: H => /pair_eqP => H; rewrite H.
+  done.
+Qed.
+
+Definition value_eqMixin: Equality.mixin_of value := EqMixin eqvalueP.
+Canonical value_eqType := Eval hnf in EqType value value_eqMixin.
+
+
 Inductive binop := Add | Minus | Mul | Eq | Leq.
 
 Definition eval_binop (op : binop) (v1 v2 : value) : value :=
@@ -98,7 +118,7 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
                              else
                                Undef
   | Minus, Ptr p,  Int n  => Ptr (Pointer.sub p n)
-  | Eq,    Ptr p1, Ptr p2 => Int (Util.Z.of_bool (Pointer.eq p1 p2))
+  | Eq,    Ptr p1, Ptr p2 => Int (Util.Z.of_bool (p1 == p2))
   | Leq,   Ptr p1, Ptr p2 => match Pointer.leq p1 p2 with
                              | Some res => Int (Util.Z.of_bool res)
                              | None     => Undef
