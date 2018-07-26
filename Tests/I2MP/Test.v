@@ -178,6 +178,7 @@ Extract Constant div.divn     => "fun m d -> if Big.lt Big.zero d then Big_int.d
 Extract Constant div.modn     => "fun m d -> if Big.lt Big.zero d then Big_int.mod_big_int m d else m".
 (* Extract Constant div.gcdn_rec => "Big.gcd". *)
 (* Extract Constant div.gcdn     => "Big.gcd". *)
+Extract Constant Pos.gcdn     => "Big.gcd".
 (* ssr int *)
 (* Extract Inductive ssrint.int => int *)
 (*                          ["" "(fun n -> - (n+1))"] *)
