@@ -7,12 +7,6 @@ This repository contains the Coq development of the paper:
   **[When Good Components Go Bad: Formally Secure Compilation Despite
      Dynamic Compromise](https://arxiv.org/abs/1802.00588)**. February 2018.
 
-### IEEE S&P Reviews ###
-
-File `sp2019-reviews-answers.txt` contains the reviews we received on
-a previous IEEE S&P submission together with answers and explanations
-of how we have improved the paper in response to this helpful feedback.
-
 ### Prerequisites ###
 
 This development requires Coq v8.7.1 to work, as well as the following libraries:
