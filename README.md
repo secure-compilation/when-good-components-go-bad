@@ -5,7 +5,9 @@ This repository contains the Coq development of the paper:
   Guglielmo Fachini, Catalin Hritcu, Théo Laurent, Benjamin C. Pierce,
   Marco Stronati, Andrew Tolmach.
   **[When Good Components Go Bad: Formally Secure Compilation Despite
-     Dynamic Compromise](https://arxiv.org/abs/1802.00588)**. February 2018.
+     Dynamic Compromise](https://arxiv.org/abs/1802.00588)**.
+     In 25th ACM Conference on Computer and Communications Security
+     (CCS 2018), October 2018.
 
 ### Prerequisites ###
 
