@@ -1,9 +1,15 @@
-Require Import Common.Definitions.
-Require Import Common.Blame.
-Require Import Common.CompCertExtensions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
+
+Require Import Common.Definitions.
+Require Import Common.Util.
+Require Import Common.Linking.
+Require Import Common.Blame.
+Require Import Common.CompCertExtensions.
+
+(* CH: Ideally all these imports would move to a different file
+       together with the actual instances, see next comment below. *)
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
@@ -25,21 +31,36 @@ Unset Printing Implicit Defensive.
 Set Bullet Behavior "Strict Subproofs".
 
 (* RB: Eventually, we may not want have these interfaces distracting from
-   the high-level proof here.
+       the high-level proof here.
+   [CH: These interfaces explain the proved statement in a
+        (relatively) self-contained way, so I don't see them as
+        distractions! I think what should move to a different file are
+        the instantiations of these parameters and hypotheses together
+        with all the concrete imports at the top. This should be
+        possible once the few abstraction leaks are fixed.]
 
    The repetition verbatim of theorem statements as axioms is particularly
    annoying; we will want to eliminate this duplication.
+     [CH: Agreed, but easy to fix with some extra definitions.]
 
-   Note the blame lemma in Source as a dependency on Intermediate. Should
+   Note the blame lemma in Source has a dependency on Intermediate. Should
    we keep it this way? It feels ugly.
+     [CH: I don't see any dependency on Intermediate. Maybe already removed?]
 
-   Naming comventions can also be harmonized.
+   Naming conventions can also be harmonized.
 
    The current proof is generic while still relying on our Common and
-   CompCert's infrastructure. Note that PS.mergeable_interfaces is defined
-   in Intermediate and used there, but is actually independent from it and
-   not factored as part of the interface: this points to it belonging in
-   Common and not in Intermediate. *)
+   CompCert's infrastructure. [CH: I find this just fine.]
+
+   Note that PS.mergeable_interfaces is defined in Intermediate and
+   used there, but is actually independent from it and not factored as
+   part of the interface: this points to it belonging in Common and
+   not in Intermediate. *)
+
+(* CH: It seemed a bit strange that Program.interface is used
+       concretely, instead of being just another parameter below.
+       Same for linkable. It seems related to using everything in
+       Common though, and so it's just fine for now. *)
 
 Module Type Source_Sig.
   Parameter program : Type.
@@ -81,21 +102,20 @@ Module Type Source_Sig.
     Parameter sem : program -> semantics.
   End CS.
 
-  Module PS.
-    Hypothesis blame_program : forall p Cs t' P' m,
-      well_formed_program p ->
-      well_formed_program Cs ->
-      linkable (prog_interface p) (prog_interface Cs) ->
-      closed_program (program_link p Cs) ->
-      program_behaves (CS.sem (program_link p Cs)) (Goes_wrong t') ->
-      well_formed_program P' ->
-      prog_interface P' = prog_interface p ->
-      closed_program (program_link P' Cs) ->
-      program_behaves (CS.sem (program_link P' Cs)) (Terminates (finpref_trace m)) ->
-      not_wrong_finpref m ->
-      trace_finpref_prefix t' m ->
-      undef_in t' (prog_interface p).
-  End PS.
+  Hypothesis blame_program : forall p Cs t' P' m,
+    well_formed_program p ->
+    well_formed_program Cs ->
+    linkable (prog_interface p) (prog_interface Cs) ->
+    closed_program (program_link p Cs) ->
+    program_behaves (CS.sem (program_link p Cs)) (Goes_wrong t') ->
+    well_formed_program P' ->
+    prog_interface P' = prog_interface p ->
+    closed_program (program_link P' Cs) ->
+    program_behaves (CS.sem (program_link P' Cs)) (Terminates (finpref_trace m)) ->
+    not_wrong_finpref m ->
+    trace_finpref_prefix t' m ->
+    undef_in t' (prog_interface p).
+
 End Source_Sig.
 
 Module Source_Instance <: Source_Sig.
@@ -134,11 +154,13 @@ Module Source_Instance <: Source_Sig.
       @Source.CS.CS.sem.
   End CS.
 
-  Module PS.
-    Definition blame_program :=
-      @Source.PS.PS.blame_program.
-  End PS.
+  Definition blame_program :=
+    @Source.PS.PS.blame_program.
+
 End Source_Instance.
+
+(* CH: The number of different well-formedness conditions seems a bit
+       out of control here. *)
 
 Module Type Intermediate_Sig.
   Parameter program : Type.
@@ -231,7 +253,8 @@ Module Type Intermediate_Sig.
      definitions in a couple of places. These definitions must now become
      opaque and exposed through the interface, and its operations given as
      trivial inversion-type lemmas. We may want to think about removing these
-     noisy details through further abstraction. *)
+     noisy details through further abstraction.
+       [CH: We should indeed try to fix these bad abstraction leaks.] *)
   Parameter prog_main : program -> option Procedure.id.
 
   Parameter prog_procedures : program -> NMap (NMap code).
@@ -306,7 +329,9 @@ Module Intermediate_Instance <: Intermediate_Sig.
      some basic manipulations that the standard Coq tactics cannot handle once
      we hide Intermediate behind an interface. Inversion lemmas to replace
      simple destructs and rewrites are, of course, trivial: these do not need
-     to be added to our instance's Intermediate. *)
+     to be added to our instance's Intermediate.
+       [CH: We should indeed try to fix these bad abstraction leaks.] *)
+
   Definition prog_main :=
     @Intermediate.prog_main.
 
@@ -498,8 +523,39 @@ Module RSC_DC_MD_Gen
        (S2I : S2I_Sig Source Intermediate)
        (Compiler : Compiler_Sig Source Intermediate S2I)
        (Linker : Linker_Sig Source Intermediate S2I).
-Section RSC_DC_MD_Section.
 
+(* CH: We should actually introduce a definition for
+       program_behaves_prefix and use it everywhere, instead of
+       unfolding it everywhere *)
+
+(* CH: Here is the weaker assumption we should try to use in the
+       proof below to closer match the paper argument. Here is a proof
+       that it's indeed weaker than decomposition_with_refinement, so
+       obtaining it for our instance is not an issue. *)
+Lemma decomposition_prefix :
+  forall p c,
+    Intermediate.well_formed_program p ->
+    Intermediate.well_formed_program c ->
+    linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
+    Intermediate.linkable_mains p c ->
+  forall b1 m,
+    not_wrong_finpref m -> (* needed here, and will have it in main proof *)
+    program_behaves (Intermediate.CS.sem (Intermediate.program_link p c)) b1 ->
+    prefix m b1 ->
+  exists b2,
+    program_behaves (Intermediate.PS.sem p (Intermediate.prog_interface c)) b2 /\
+    prefix m b2.
+Proof.
+  intros p c Hwfp Hwfc Hl Hlm b1 m Hmsafe Hb1 Hm.
+  destruct (Intermediate.decomposition_with_refinement Hwfp Hwfc Hl Hlm Hb1)
+    as [b2 [Hb2 H12]].
+  exists b2. split. exact Hb2.
+  unfold behavior_improves in H12. destruct H12 as [|[t [H1 H2]]]; subst. assumption.
+  unfold prefix in Hm. destruct m as [| t' | t']. tauto. simpl in Hmsafe; tauto.
+  eapply behavior_prefix_goes_wrong_trans; eassumption.
+Qed.
+
+Section RSC_DC_MD_Section.
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
   Variable Ct: Intermediate.program.
@@ -520,7 +576,7 @@ Section RSC_DC_MD_Section.
     forall b m,
       program_behaves (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) b ->
       prefix m b ->
-      not_wrong b -> (* CH: could try to weaken this later to `nor_wrong m` *)
+      not_wrong b -> (* CH: should further weaken this to `not_wrong_finpref m` *)
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
@@ -562,8 +618,9 @@ Section RSC_DC_MD_Section.
       well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains
       Hbeh Hsafe_beh as HP_decomp.
 
-    (* CH: if we had undefined behavior we would use this *)
-    (* destruct (decomposition_with_refinement linkability Hbeh) *)
+    (* CH: if we had undefined behavior above we would use this *)
+    (* destruct (@decomposition_with_refinement p_compiled Ct *)
+    (*             well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct Hbeh) *)
     (*   as [beh' [Hbeh' Hbeh_improves]]. *)
 
     (* definability *)
@@ -792,7 +849,7 @@ Section RSC_DC_MD_Section.
             as Hsame_iface3.
           congruence.
         }
-        exact (Source.PS.blame_program well_formed_p well_formed_Cs
+        exact (Source.blame_program well_formed_p well_formed_Cs
                                 Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                                 well_formed_P' Hsame_iface3 HP'Cs_closed
                                 HP'_Cs_beh Hnot_wrong' K).
