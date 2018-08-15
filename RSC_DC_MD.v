@@ -52,11 +52,11 @@ Module Type Source_Sig.
 
   Parameter linkable_mains : program -> program -> Prop.
 
-  Axiom linkable_mains_sym : forall prog1 prog2,
+  Hypothesis linkable_mains_sym : forall prog1 prog2,
     linkable_mains prog1 prog2 ->
     linkable_mains prog2 prog1.
 
-  Axiom linkable_disjoint_mains: forall prog1 prog2,
+  Hypothesis linkable_disjoint_mains: forall prog1 prog2,
     well_formed_program prog1 ->
     well_formed_program prog2 ->
     linkable (prog_interface prog1) (prog_interface prog2) ->
@@ -64,13 +64,13 @@ Module Type Source_Sig.
 
   Parameter program_link : program -> program -> program.
 
-  Axiom linking_well_formedness : forall p1 p2,
+  Hypothesis linking_well_formedness : forall p1 p2,
     well_formed_program p1 ->
     well_formed_program p2 ->
     linkable (prog_interface p1) (prog_interface p2) ->
     well_formed_program (program_link p1 p2).
 
-  Axiom interface_preserves_closedness_l : forall p1 p2 p1',
+  Hypothesis interface_preserves_closedness_l : forall p1 p2 p1',
     closed_program (program_link p1 p2) ->
     prog_interface p1 = prog_interface p1' ->
     well_formed_program p1 ->
@@ -82,7 +82,7 @@ Module Type Source_Sig.
   End CS.
 
   Module PS.
-    Axiom blame_program : forall p Cs t' P' m,
+    Hypothesis blame_program : forall p Cs t' P' m,
       well_formed_program p ->
       well_formed_program Cs ->
       linkable (prog_interface p) (prog_interface Cs) ->
@@ -155,22 +155,22 @@ Module Type Intermediate_Sig.
 
   Parameter program_link : program -> program -> program.
 
-  Axiom linkable_mains_sym : forall p1 p2,
+  Hypothesis linkable_mains_sym : forall p1 p2,
     linkable_mains p1 p2 -> linkable_mains p2 p1.
 
-  Axiom program_linkC : forall p1 p2,
+  Hypothesis program_linkC : forall p1 p2,
     well_formed_program p1 ->
     well_formed_program p2 ->
     linkable (prog_interface p1) (prog_interface p2) ->
     program_link p1 p2 = program_link p2 p1.
 
-  Axiom linking_well_formedness : forall p1 p2,
+  Hypothesis linking_well_formedness : forall p1 p2,
     well_formed_program p1 ->
     well_formed_program p2 ->
     linkable (prog_interface p1) (prog_interface p2) ->
     well_formed_program (program_link p1 p2).
 
-  Axiom interface_preserves_closedness_r : forall p1 p2 p2',
+  Hypothesis interface_preserves_closedness_r : forall p1 p2 p2',
     well_formed_program p1 ->
     well_formed_program p2' ->
     prog_interface p2 = prog_interface p2' ->
@@ -188,7 +188,7 @@ Module Type Intermediate_Sig.
     Parameter sem : program -> Program.interface -> semantics.
   End PS.
 
-  Axiom decomposition_with_safe_behavior:
+  Hypothesis decomposition_with_safe_behavior:
     forall p c,
       well_formed_program p ->
       well_formed_program c ->
@@ -199,7 +199,7 @@ Module Type Intermediate_Sig.
       not_wrong beh ->
       program_behaves (PS.sem p (prog_interface c)) beh.
 
-  Axiom decomposition_with_refinement :
+  Hypothesis decomposition_with_refinement :
     forall p c,
       well_formed_program p ->
       well_formed_program c ->
@@ -211,7 +211,7 @@ Module Type Intermediate_Sig.
       program_behaves (PS.sem p (prog_interface c)) beh2 /\
       behavior_improves beh1 beh2.
 
-  Axiom composition_prefix :
+  Hypothesis composition_prefix :
     forall p c,
       well_formed_program p ->
       well_formed_program c ->
@@ -236,7 +236,7 @@ Module Type Intermediate_Sig.
 
   Parameter prog_procedures : program -> NMap (NMap code).
 
-  Axiom closed_program_inv : forall p,
+  Hypothesis closed_program_inv : forall p,
     closed_program p ->
     closed_interface (prog_interface p) /\
     exists mainP main_procs,
@@ -244,7 +244,7 @@ Module Type Intermediate_Sig.
       (prog_procedures p) Component.main = Some main_procs /\
       mainP \in domm main_procs.
 
-  Axiom closed_interface_inv : forall p1 p2,
+  Hypothesis closed_interface_inv : forall p1 p2,
     closed_interface (prog_interface (program_link p1 p2)) =
     closed_interface (unionm (prog_interface p1) (prog_interface p2)).
 End Intermediate_Sig.
@@ -335,7 +335,7 @@ End Intermediate_Instance.
 Module Type S2I_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
   Parameter matching_mains : Source.program -> Intermediate.program -> Prop.
 
-  Axiom matching_mains_equiv : forall p1 p2 p3,
+  Hypothesis matching_mains_equiv : forall p1 p2 p3,
     matching_mains p1 p2 ->
     matching_mains p1 p3 ->
     Intermediate.matching_mains p2 p3.
@@ -353,7 +353,7 @@ Module Type Linker_Sig
        (Source : Source_Sig)
        (Intermediate : Intermediate_Sig)
        (S2I : S2I_Sig Source Intermediate).
-  Axiom definability_with_linking :
+  Hypothesis definability_with_linking :
     forall p c b m,
       Intermediate.well_formed_program p ->
       Intermediate.well_formed_program c ->
@@ -387,22 +387,22 @@ Module Type Compiler_Sig
        (S2I : S2I_Sig Source Intermediate).
   Parameter compile_program : Source.program -> option Intermediate.program.
 
-  Axiom well_formed_compilable :
+  Hypothesis well_formed_compilable :
     forall p,
       Source.well_formed_program p ->
     exists pc,
       compile_program p = Some pc.
 
-  Axiom compilation_preserves_well_formedness : forall p p_compiled,
+  Hypothesis compilation_preserves_well_formedness : forall p p_compiled,
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
     Intermediate.well_formed_program p_compiled.
 
-  Axiom compilation_preserves_interface : forall p p_compiled,
+  Hypothesis compilation_preserves_interface : forall p p_compiled,
     compile_program p = Some p_compiled ->
     Intermediate.prog_interface p_compiled = Source.prog_interface p.
 
-  Axiom compilation_preserves_linkability : forall p p_compiled c c_compiled,
+  Hypothesis compilation_preserves_linkability : forall p p_compiled c c_compiled,
     Source.well_formed_program p ->
     Source.well_formed_program c ->
     linkable (Source.prog_interface p) (Source.prog_interface c) ->
@@ -410,7 +410,7 @@ Module Type Compiler_Sig
     compile_program c = Some c_compiled ->
     linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
 
-  Axiom compilation_preserves_linkable_mains : forall p1 p1' p2 p2',
+  Hypothesis compilation_preserves_linkable_mains : forall p1 p1' p2 p2',
     Source.well_formed_program p1 ->
     Source.well_formed_program p2 ->
     Source.linkable_mains p1 p2 ->
@@ -418,12 +418,12 @@ Module Type Compiler_Sig
     compile_program p2 = Some p2' ->
     Intermediate.linkable_mains p1' p2'.
 
-  Axiom compilation_has_matching_mains : forall p p_compiled,
+  Hypothesis compilation_has_matching_mains : forall p p_compiled,
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
     S2I.matching_mains p p_compiled.
 
-  Axiom separate_compilation_weaker :
+  Hypothesis separate_compilation_weaker :
     forall p c pc_comp p_comp c_comp,
       Source.well_formed_program p ->
       Source.well_formed_program c ->
@@ -435,7 +435,7 @@ Module Type Compiler_Sig
       program_behaves (Intermediate.CS.sem pc_comp) b <->
       program_behaves (Intermediate.CS.sem (Intermediate.program_link p_comp c_comp)) b.
 
-  Axiom I_simulates_S :
+  Hypothesis I_simulates_S :
     forall p,
       Source.closed_program p ->
       Source.well_formed_program p ->
@@ -443,7 +443,7 @@ Module Type Compiler_Sig
       compile_program p = Some tp ->
       forward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp).
 
-  Axiom S_simulates_I:
+  Hypothesis S_simulates_I:
     forall p,
       Source.closed_program p ->
       Source.well_formed_program p ->
