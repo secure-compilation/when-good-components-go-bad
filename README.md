@@ -13,7 +13,8 @@ This repository contains the Coq development of the paper:
 
 This development requires Coq v8.7.1 to work, as well as the following libraries:
 - [Mathematical Components](https://math-comp.github.io/math-comp/) 1.6.4
-- [CoqUtils 3904d85](https://github.com/arthuraa/coq-utils/commit/3904d85d3f32496802b621b181c3cfe0b9940a43)
+- [Extensional Structures](https://github.com/arthuraa/extructures) 0.1
+- [CoqUtils](https://github.com/arthuraa/coq-utils/releases/tag/v0.1) 0.1
 
 ### Replaying the proofs ###
 
