@@ -55,7 +55,7 @@ Set Bullet Behavior "Strict Subproofs".
    Note that PS.mergeable_interfaces is defined in Intermediate and
    used there, but is actually independent from it and not factored as
    part of the interface: this points to it belonging in Common and
-   not in Intermediate. *)
+   not in Intermediate. [CH: this comment seems obsolete] *)
 
 (* CH: It seemed a bit strange that Program.interface is used
        concretely, instead of being just another parameter below.
@@ -241,6 +241,7 @@ Module Type Intermediate_Sig.
       linkable (prog_interface p) (prog_interface c) ->
       closed_program (program_link p c) ->
       mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      (* CH: mergeable_interfaces implies linkable, so we don't need both, do we? *)
     forall b1 b2 m,
       program_behaves (PS.sem p (prog_interface c)) b1 ->
       program_behaves (PS.sem c (prog_interface p)) b2 ->
@@ -525,28 +526,25 @@ Module RSC_DC_MD_Gen
        (Linker : Linker_Sig Source Intermediate S2I).
 
 (* CH: We should actually introduce a definition for
-       program_behaves_prefix and use it everywhere, instead of
-       unfolding it everywhere *)
+       program_behaves_prefix and use it everywhere where it's
+       possible, instead of unfolding it everywhere. *)
+Definition does_prefix x m := exists b, program_behaves x b /\ prefix m b.
 
-(* CH: Here is the weaker assumption we should try to use in the
+(* CH: Here is a weaker assumption we should try to use in the
        proof below to closer match the paper argument. Here is a proof
        that it's indeed weaker than decomposition_with_refinement, so
        obtaining it for our instance is not an issue. *)
 Lemma decomposition_prefix :
-  forall p c,
+  forall p c m,
     Intermediate.well_formed_program p ->
     Intermediate.well_formed_program c ->
     linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
     Intermediate.linkable_mains p c ->
-  forall b1 m,
     not_wrong_finpref m -> (* needed here, and will have it in main proof *)
-    program_behaves (Intermediate.CS.sem (Intermediate.program_link p c)) b1 ->
-    prefix m b1 ->
-  exists b2,
-    program_behaves (Intermediate.PS.sem p (Intermediate.prog_interface c)) b2 /\
-    prefix m b2.
+    does_prefix (Intermediate.CS.sem (Intermediate.program_link p c)) m ->
+    does_prefix (Intermediate.PS.sem p (Intermediate.prog_interface c)) m.
 Proof.
-  intros p c Hwfp Hwfc Hl Hlm b1 m Hmsafe Hb1 Hm.
+  intros p c m Hwfp Hwfc Hl Hlm Hmsafe [b1 [Hb1 Hm]].
   destruct (Intermediate.decomposition_with_refinement Hwfp Hwfc Hl Hlm Hb1)
     as [b2 [Hb2 H12]].
   exists b2. split. exact Hb2.
@@ -554,6 +552,66 @@ Proof.
   unfold prefix in Hm. destruct m as [| t' | t']. tauto. simpl in Hmsafe; tauto.
   eapply behavior_prefix_goes_wrong_trans; eassumption.
 Qed.
+
+(* CH: Here is are other weaker assumptions we should try to use in
+       the proof below to closer match the paper argument. *)
+
+Lemma not_wrong_prefix : forall m b,
+  prefix m b ->
+  not_wrong_finpref m ->
+  not_wrong b.
+Admitted.
+
+Lemma forward_simulation_same_safe_prefix:
+  forall p p_compiled m,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    does_prefix (Source.CS.sem p) m ->
+    not_wrong_finpref m ->
+    Compiler.compile_program p = Some p_compiled ->
+    does_prefix (Intermediate.CS.sem p_compiled) m.
+Proof.
+  intros p p_compiled m Hcp Hwfp [b [Hb Hmb]] Hsafem Hcmp. exists b. split; [| tauto].
+  eapply forward_simulation_same_safe_behavior; [|eassumption|].
+  apply Compiler.I_simulates_S; assumption.
+  eapply not_wrong_prefix; eassumption.
+Qed.
+
+Definition behavior_improves_finpref b m :=
+  exists t, b = Goes_wrong t /\ trace_finpref_prefix t m.
+
+Lemma backward_simulation_behavior_improves_prefix :
+  forall p p_compiled m,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    Compiler.compile_program p = Some p_compiled ->
+    does_prefix (Intermediate.CS.sem p_compiled) m ->
+  exists b,
+    program_behaves (Source.CS.sem p) b /\
+    (prefix m b \/ behavior_improves_finpref b m).
+Proof.
+  intros p p_compiled m Hcp Hwfp Hcmp [b [Hb Hmb]].
+  assert(Hbs : backward_simulation (Source.CS.sem p) (Intermediate.CS.sem p_compiled)).
+    apply Compiler.S_simulates_I; assumption.
+  apply (backward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
+  destruct Hb as [b' [Hb' Hb'b]]. exists b'. split. assumption.
+  destruct Hb'b as [Hb'b | [t [Hb't Htb]]].
+  - left. now subst.
+  - unfold behavior_improves_finpref. subst b'.
+    (* right. exists t. split. assumption. -- committing too early *)
+    (* we start by combining behavior_prefix t b and prefix m b to get
+       that t and m must be in the prefix relation one way or the other *)
+    eapply behavior_prefix_comp' in Htb; [| exact Hmb].
+    destruct Htb.
+    + left. destruct m as [| |t']; simpl in H. tauto. tauto. simpl.
+      destruct H as [t'' ?]. subst.
+      exists (Goes_wrong t''). reflexivity.
+    + right. exists t. split. reflexivity. assumption.
+Qed.
+
+Definition behavior_improves_blame b m p :=
+  exists t, b = Goes_wrong t /\ trace_finpref_prefix t m /\
+             undef_in t (Source.prog_interface p).
 
 Section RSC_DC_MD_Section.
   Variable p: Source.program.
@@ -577,16 +635,14 @@ Section RSC_DC_MD_Section.
       program_behaves (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) b ->
       prefix m b ->
       not_wrong b -> (* CH: should further weaken this to `not_wrong_finpref m` *)
+                     (* CH: would also allow us to hide b above behind does_prefix *)
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
       linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (Source.program_link p Cs) /\
       program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
-      (prefix m beh \/
-      (exists t',
-        beh = Goes_wrong t' /\ trace_finpref_prefix t' m /\
-         undef_in t' (Source.prog_interface p))).
+      (prefix m beh \/ behavior_improves_blame beh m p).
   Proof.
     intros t m Hbeh Hprefix0 Hsafe_beh.
 
@@ -849,6 +905,7 @@ Section RSC_DC_MD_Section.
             as Hsame_iface3.
           congruence.
         }
+        unfold behavior_improves_blame.
         exact (Source.blame_program well_formed_p well_formed_Cs
                                 Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                                 well_formed_P' Hsame_iface3 HP'Cs_closed
