@@ -201,17 +201,6 @@ Module Type Intermediate_Sig.
     Parameter sem : program -> Program.interface -> semantics.
   End PS.
 
-  Hypothesis decomposition_with_safe_behavior:
-    forall p c,
-      well_formed_program p ->
-      well_formed_program c ->
-      linkable (prog_interface p) (prog_interface c) ->
-      linkable_mains p c ->
-    forall beh,
-      program_behaves (CS.sem (program_link p c)) beh ->
-      not_wrong beh ->
-      program_behaves (PS.sem p (prog_interface c)) beh.
-
   Hypothesis decomposition_with_refinement :
     forall p c,
       well_formed_program p ->
@@ -300,9 +289,6 @@ Module Intermediate_Instance <: Intermediate_Sig.
     Definition sem :=
       @Intermediate.PS.PS.sem.
     End PS.
-
-  Definition decomposition_with_safe_behavior :=
-    @Intermediate.Decomposition.decomposition_with_safe_behavior.
 
   Definition decomposition_with_refinement :=
     @Intermediate.Decomposition.decomposition_with_refinement.
