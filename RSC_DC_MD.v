@@ -225,11 +225,12 @@ Module Type Intermediate_Sig.
       behavior_improves beh1 beh2.
 
   Hypothesis decomposition_prefix :
-    forall p c m,
+    forall p c,
       well_formed_program p ->
       well_formed_program c ->
       linkable (prog_interface p) (prog_interface c) ->
       linkable_mains p c ->
+    forall m,
       not_wrong_finpref m -> (* needed here, and will have it in main proof *)
       does_prefix (CS.sem (program_link p c)) m ->
       does_prefix (PS.sem p (prog_interface c)) m.
@@ -306,20 +307,8 @@ Module Intermediate_Instance <: Intermediate_Sig.
   Definition decomposition_with_refinement :=
     @Intermediate.Decomposition.decomposition_with_refinement.
 
-  (* RB: Reorder the binders or shift things around in a mini-proof. *)
-  Lemma decomposition_prefix :
-    forall p c m,
-      well_formed_program p ->
-      well_formed_program c ->
-      linkable (prog_interface p) (prog_interface c) ->
-      linkable_mains p c ->
-      not_wrong_finpref m -> (* needed here, and will have it in main proof *)
-      does_prefix (CS.sem (program_link p c)) m ->
-      does_prefix (PS.sem p (prog_interface c)) m.
-  Proof.
-    intros.
-    apply Intermediate.Decomposition.decomposition_prefix; assumption.
-  Qed.
+  Definition decomposition_prefix :=
+    @Intermediate.Decomposition.decomposition_prefix.
 
   Definition composition_prefix :=
     @Intermediate.Composition.composition_prefix.
