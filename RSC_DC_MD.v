@@ -635,8 +635,8 @@ Section RSC_DC_MD_Section.
     forall b m,
       program_behaves (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) b ->
       prefix m b ->
-      not_wrong b -> (* CH: should further weaken this to `not_wrong_finpref m` *)
-                     (* CH: would also allow us to hide b above behind does_prefix *)
+      not_wrong_finpref m -> (* CH: should further weaken this to `not_wrong_finpref m` *)
+                             (* CH: would also allow us to hide b above behind does_prefix *)
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
@@ -645,7 +645,7 @@ Section RSC_DC_MD_Section.
       program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
       (prefix m beh \/ behavior_improves_blame beh m p).
   Proof.
-    intros t m Hbeh Hprefix0 Hsafe_beh.
+    intros t m Hbeh Hprefix0 Hsafe_pref.
 
     (* Some auxiliary results. *)
     pose proof
@@ -667,13 +667,13 @@ Section RSC_DC_MD_Section.
         now rewrite successful_compilation.
     }
 
-    assert (Hnot_wrong' : not_wrong_finpref m).
-    { now destruct m, t; simpl; auto. }
+     assert (H_doesm: does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m)
+     by now exists t. 
 
     (* intermediate decomposition (for p_compiled) *)
-    pose proof Intermediate.decomposition_with_safe_behavior
+    pose proof decomposition_prefix 
       well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains
-      Hbeh Hsafe_beh as HP_decomp.
+      Hsafe_pref H_doesm  as HP_decomp.
 
     (* CH: if we had undefined behavior above we would use this *)
     (* destruct (@decomposition_with_refinement p_compiled Ct *)
@@ -683,7 +683,7 @@ Section RSC_DC_MD_Section.
     (* definability *)
     destruct (Linker.definability_with_linking
                 well_formed_p_compiled well_formed_Ct
-                linkability_pcomp_Ct closedness Hbeh Hprefix0 Hnot_wrong')
+                linkability_pcomp_Ct closedness Hbeh Hprefix0 Hsafe_pref)
       as [P' [Cs
          [Hsame_iface1 [Hsame_iface2
          [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
@@ -821,12 +821,15 @@ Section RSC_DC_MD_Section.
         erewrite <- Intermediate.closed_interface_inv.
         assumption.
     }
+
+    destruct HP_decomp as [b1 [Hbehvesb1 Hprefixb1]]. 
+    
     pose proof Intermediate.composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkable_mains linkability'' HpCs_compiled_closed
          Hmergeable_ifaces
-         HP_decomp HCs_decomp
-         Hprefix0 Hprefix1
+         Hbehvesb1 HCs_decomp
+         Hprefixb1 Hprefix1
       as HpCs_compiled_beh.
     destruct HpCs_compiled_beh as [b3 [HpCs_compiled_beh HpCs_compiled_prefix]].
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
@@ -910,7 +913,7 @@ Section RSC_DC_MD_Section.
         exact (Source.blame_program well_formed_p well_formed_Cs
                                 Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                                 well_formed_P' Hsame_iface3 HP'Cs_closed
-                                HP'_Cs_beh Hnot_wrong' K).
+                                HP'_Cs_beh Hsafe_pref K).
   Qed.
 
 End RSC_DC_MD_Section.
