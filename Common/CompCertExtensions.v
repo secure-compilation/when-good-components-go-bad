@@ -177,6 +177,13 @@ Definition finpref_trace_prefix (m : finpref_behavior) (t : trace) : Prop :=
   | FTbc t' => trace_prefix t' t
   end.
 
+(* CH: Introduce a definition for
+       does_prefix and use it everywhere where it's
+       possible, instead of unfolding it everywhere. *)
+Definition does_prefix x m := exists b, program_behaves x b /\ prefix m b.
+(* CH: Alternatively could define this in terms of Star and prove the
+       predicate above as an alternative characterization. *)
+
 (* Properties of prefixes. *)
 
 Lemma help : forall m1 m2 T,

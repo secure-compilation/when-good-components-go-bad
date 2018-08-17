@@ -2,6 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Memory.
 Require Import Common.Blame.
+Require Import Common.CompCertExtensions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -547,4 +548,24 @@ Section Decomposition.
     eapply forward_simulation_same_safe_behavior; eauto.
     apply decomposition.
   Qed.
+
+  (* CH: Here is a weaker assumption we should try to use in the
+         proof below to closer match the paper argument. Here is a proof
+         that it's indeed weaker than decomposition_with_refinement, so
+         obtaining it for our instance is not an issue. *)
+  Lemma decomposition_prefix :
+    forall m,
+      not_wrong_finpref m -> (* needed here, and will have it in main proof *)
+      does_prefix (CS.sem (program_link p c)) m ->
+      does_prefix (PS.sem p (Intermediate.prog_interface c)) m.
+  Proof.
+    intros m Hmsafe [b1 [Hb1 Hm]].
+    destruct (decomposition_with_refinement Hb1)
+      as [b2 [Hb2 H12]].
+    exists b2. split. exact Hb2.
+    unfold behavior_improves in H12. destruct H12 as [|[t [H1 H2]]]; subst. assumption.
+    unfold prefix in Hm. destruct m as [| t' | t']. tauto. simpl in Hmsafe; tauto.
+    eapply behavior_prefix_goes_wrong_trans; eassumption.
+  Qed.
+
 End Decomposition.

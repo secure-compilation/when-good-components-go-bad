@@ -224,6 +224,16 @@ Module Type Intermediate_Sig.
       program_behaves (PS.sem p (prog_interface c)) beh2 /\
       behavior_improves beh1 beh2.
 
+  Hypothesis decomposition_prefix :
+    forall p c m,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable (prog_interface p) (prog_interface c) ->
+      linkable_mains p c ->
+      not_wrong_finpref m -> (* needed here, and will have it in main proof *)
+      does_prefix (CS.sem (program_link p c)) m ->
+      does_prefix (PS.sem p (prog_interface c)) m.
+
   Hypothesis composition_prefix :
     forall p c,
       well_formed_program p ->
@@ -295,6 +305,21 @@ Module Intermediate_Instance <: Intermediate_Sig.
 
   Definition decomposition_with_refinement :=
     @Intermediate.Decomposition.decomposition_with_refinement.
+
+  (* RB: Reorder the binders or shift things around in a mini-proof. *)
+  Lemma decomposition_prefix :
+    forall p c m,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable (prog_interface p) (prog_interface c) ->
+      linkable_mains p c ->
+      not_wrong_finpref m -> (* needed here, and will have it in main proof *)
+      does_prefix (CS.sem (program_link p c)) m ->
+      does_prefix (PS.sem p (prog_interface c)) m.
+  Proof.
+    intros.
+    apply Intermediate.Decomposition.decomposition_prefix; assumption.
+  Qed.
 
   Definition composition_prefix :=
     @Intermediate.Composition.composition_prefix.
@@ -473,39 +498,8 @@ Module RSC_DC_MD_Gen
        (Compiler : Compiler_Sig Source Intermediate S2I)
        (Linker : Linker_Sig Source Intermediate S2I).
 
-(* CH: We should actually introduce a definition for
-       does_prefix and use it everywhere where it's
-       possible, instead of unfolding it everywhere. *)
-Definition does_prefix x m := exists b, program_behaves x b /\ prefix m b.
-(* CH: Alternatively could define this in terms of Star and prove the
-       predicate above as an alternative characterization. *)
-
-(* CH: Here is a weaker assumption we should try to use in the
-       proof below to closer match the paper argument. Here is a proof
-       that it's indeed weaker than decomposition_with_refinement, so
-       obtaining it for our instance is not an issue. *)
-Lemma decomposition_prefix :
-  forall p c m,
-    Intermediate.well_formed_program p ->
-    Intermediate.well_formed_program c ->
-    linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
-    Intermediate.linkable_mains p c ->
-    not_wrong_finpref m -> (* needed here, and will have it in main proof *)
-    does_prefix (Intermediate.CS.sem (Intermediate.program_link p c)) m ->
-    does_prefix (Intermediate.PS.sem p (Intermediate.prog_interface c)) m.
-Proof.
-  intros p c m Hwfp Hwfc Hl Hlm Hmsafe [b1 [Hb1 Hm]].
-  destruct (Intermediate.decomposition_with_refinement Hwfp Hwfc Hl Hlm Hb1)
-    as [b2 [Hb2 H12]].
-  exists b2. split. exact Hb2.
-  unfold behavior_improves in H12. destruct H12 as [|[t [H1 H2]]]; subst. assumption.
-  unfold prefix in Hm. destruct m as [| t' | t']. tauto. simpl in Hmsafe; tauto.
-  eapply behavior_prefix_goes_wrong_trans; eassumption.
-Qed.
-
 (* CH: Here is are other weaker assumptions we should try to use in
        the proof below to closer match the paper argument. *)
-
 Lemma forward_simulation_same_safe_prefix:
   forall p p_compiled m,
     Source.closed_program p ->
@@ -617,7 +611,7 @@ Section RSC_DC_MD_Section.
      by now exists t. 
 
     (* intermediate decomposition (for p_compiled) *)
-    pose proof decomposition_prefix 
+    pose proof Intermediate.decomposition_prefix 
       well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains
       Hsafe_pref H_doesm  as HP_decomp.
 
