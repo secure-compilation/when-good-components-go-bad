@@ -1049,4 +1049,24 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma closed_interface_union : forall p1 p2,
+  closed_interface (prog_interface (program_link p1 p2)) =
+  closed_interface (unionm (prog_interface p1) (prog_interface p2)).
+Proof.
+  easy.
+Qed.
+
+Lemma compose_mergeable_interfaces : forall p1 p2,
+  linkable (prog_interface p1) (prog_interface p2) ->
+  closed_program (program_link p1 p2) ->
+  mergeable_interfaces (prog_interface p1) (prog_interface p2).
+Proof.
+  intros p1 p2 Hlinkable Hclosed.
+  split.
+  - assumption.
+  - inversion Hclosed as [Hclosed_iface _].
+    rewrite closed_interface_union in Hclosed_iface.
+    assumption.
+Qed.
+
 End Intermediate.

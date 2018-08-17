@@ -239,27 +239,11 @@ Module Type Intermediate_Sig.
     exists b3,
       program_behaves (CS.sem (program_link p c)) b3 /\ prefix m b3.
 
-  (* The top-level proof performs low-level manipulations on the now-abstract
-     definitions in a couple of places. These definitions must now become
-     opaque and exposed through the interface, and its operations given as
-     trivial inversion-type lemmas. We may want to think about removing these
-     noisy details through further abstraction.
-       [CH: We should indeed try to fix these bad abstraction leaks.] *)
-  Parameter prog_main : program -> option Procedure.id.
-
-  Parameter prog_procedures : program -> NMap (NMap code).
-
-  Hypothesis closed_program_inv : forall p,
-    closed_program p ->
-    closed_interface (prog_interface p) /\
-    exists mainP main_procs,
-      prog_main p = Some mainP /\
-      (prog_procedures p) Component.main = Some main_procs /\
-      mainP \in domm main_procs.
-
-  Hypothesis closed_interface_inv : forall p1 p2,
-    closed_interface (prog_interface (program_link p1 p2)) =
-    closed_interface (unionm (prog_interface p1) (prog_interface p2)).
+  Hypothesis compose_mergeable_interfaces :
+    forall p c,
+      linkable (prog_interface p) (prog_interface c) ->
+      closed_program (program_link p c) ->
+      mergeable_interfaces (prog_interface p) (prog_interface c).
 End Intermediate_Sig.
 
 Module Intermediate_Instance <: Intermediate_Sig.
@@ -315,36 +299,8 @@ Module Intermediate_Instance <: Intermediate_Sig.
   Definition composition_prefix :=
     @Intermediate.Composition.composition_prefix.
 
-  (* The following additions are required by the top-level proof to perform
-     some basic manipulations that the standard Coq tactics cannot handle once
-     we hide Intermediate behind an interface. Inversion lemmas to replace
-     simple destructs and rewrites are, of course, trivial: these do not need
-     to be added to our instance's Intermediate.
-       [CH: We should indeed try to fix these bad abstraction leaks.] *)
-
-  Definition prog_main :=
-    @Intermediate.prog_main.
-
-  Definition prog_procedures :=
-    @Intermediate.prog_procedures.
-
-  Lemma closed_program_inv : forall p,
-    closed_program p ->
-    closed_interface (prog_interface p) /\
-    exists mainP main_procs,
-      prog_main p = Some mainP /\
-      (prog_procedures p) Component.main = Some main_procs /\
-      mainP \in domm main_procs.
-  Proof.
-    by intros p [Hclosed Hmain].
-  Qed.
-
-  Lemma closed_interface_inv : forall p1 p2,
-    closed_interface (prog_interface (program_link p1 p2)) =
-    closed_interface (unionm (prog_interface p1) (prog_interface p2)).
-  Proof.
-    easy.
-  Qed.
+  Definition compose_mergeable_interfaces :=
+    @Intermediate.compose_mergeable_interfaces.
 End Intermediate_Instance.
 
 Module Type S2I_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
@@ -738,6 +694,8 @@ Section RSC_DC_MD_Section.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
     have HP'_Cs_compiled_beh : program_behaves (Intermediate.CS.sem P'_Cs_compiled) beh.
       have sim := Compiler.I_simulates_S HP'Cs_closed well_formed_P'Cs HP'_Cs_compiles.
+      pose proof forward_simulation_same_safe_prefix.
+      Print does_prefix.
       exact: (forward_simulation_same_safe_behavior sim).
 
     (* intermediate decomposition (for Cs_compiled) *)
@@ -802,17 +760,9 @@ Section RSC_DC_MD_Section.
     assert (mergeable_interfaces (Intermediate.prog_interface p_compiled)
                                  (Intermediate.prog_interface Cs_compiled))
       as Hmergeable_ifaces.
-    {
-      split.
-      - assumption.
-      - apply Intermediate.closed_program_inv in HpCs_compiled_closed.
-        destruct HpCs_compiled_closed
-          as [HpCs_compiled_closed_interface HpCs_compiled_closed_main].
-        erewrite <- Intermediate.closed_interface_inv.
-        assumption.
-    }
+      by apply Intermediate.compose_mergeable_interfaces.
 
-    destruct HP_decomp as [b1 [Hbehvesb1 Hprefixb1]]. 
+    destruct HP_decomp as [b1 [Hbehvesb1 Hprefixb1]].
 
     pose proof Intermediate.composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
