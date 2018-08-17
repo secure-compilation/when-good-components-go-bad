@@ -526,9 +526,11 @@ Module RSC_DC_MD_Gen
        (Linker : Linker_Sig Source Intermediate S2I).
 
 (* CH: We should actually introduce a definition for
-       program_behaves_prefix and use it everywhere where it's
+       does_prefix and use it everywhere where it's
        possible, instead of unfolding it everywhere. *)
 Definition does_prefix x m := exists b, program_behaves x b /\ prefix m b.
+(* CH: Alternatively could define this in terms of Star and prove the
+       predicate above as an alternative characterization. *)
 
 (* CH: Here is a weaker assumption we should try to use in the
        proof below to closer match the paper argument. Here is a proof
@@ -556,12 +558,6 @@ Qed.
 (* CH: Here is are other weaker assumptions we should try to use in
        the proof below to closer match the paper argument. *)
 
-Lemma not_wrong_prefix : forall m b,
-  prefix m b ->
-  not_wrong_finpref m ->
-  not_wrong b.
-Admitted.
-
 Lemma forward_simulation_same_safe_prefix:
   forall p p_compiled m,
     Source.closed_program p ->
@@ -571,10 +567,15 @@ Lemma forward_simulation_same_safe_prefix:
     Compiler.compile_program p = Some p_compiled ->
     does_prefix (Intermediate.CS.sem p_compiled) m.
 Proof.
-  intros p p_compiled m Hcp Hwfp [b [Hb Hmb]] Hsafem Hcmp. exists b. split; [| tauto].
-  eapply forward_simulation_same_safe_behavior; [|eassumption|].
-  apply Compiler.I_simulates_S; assumption.
-  eapply not_wrong_prefix; eassumption.
+  intros p p_compiled m Hcp Hwfp [b [Hb Hmb]] Hsafem Hcmp.
+  assert(Hbs : forward_simulation (Source.CS.sem p) (Intermediate.CS.sem p_compiled)).
+    apply Compiler.I_simulates_S; assumption.
+  apply (forward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
+  destruct Hb as [b' [Hb' [Hbb' | [t [H1 H2]]]]]; unfold does_prefix.
+  - exists b. split; [| tauto]. subst. assumption.
+  - exists b'. split. assumption. subst.
+    destruct m as [| ? ?| t']; simpl in Hmb, Hsafem. tauto. tauto.
+    simpl. eapply behavior_prefix_goes_wrong_trans; eassumption.
 Qed.
 
 Definition behavior_improves_finpref b m :=
