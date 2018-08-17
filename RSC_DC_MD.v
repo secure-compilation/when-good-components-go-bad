@@ -398,6 +398,9 @@ Module Type Linker_Sig
       Source.closed_program (Source.program_link p' c') /\
       program_behaves (Source.CS.sem (Source.program_link p' c')) (Terminates (finpref_trace m)) /\
       prefix m (Terminates (finpref_trace m)).
+  (* CH: Do we really need to expose the `Terminates (finpref_trace m)`
+         part here? It might hold for our instance, but I don't
+         think the proof below needs it. *)
 End Linker_Sig.
 
 Module Linker_Instance <: Linker_Sig (Source_Instance)
