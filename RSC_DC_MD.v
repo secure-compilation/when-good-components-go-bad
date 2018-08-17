@@ -43,19 +43,10 @@ Set Bullet Behavior "Strict Subproofs".
    annoying; we will want to eliminate this duplication.
      [CH: Agreed, but easy to fix with some extra definitions.]
 
-   Note the blame lemma in Source has a dependency on Intermediate. Should
-   we keep it this way? It feels ugly.
-     [CH: I don't see any dependency on Intermediate. Maybe already removed?]
-
    Naming conventions can also be harmonized.
 
    The current proof is generic while still relying on our Common and
-   CompCert's infrastructure. [CH: I find this just fine.]
-
-   Note that PS.mergeable_interfaces is defined in Intermediate and
-   used there, but is actually independent from it and not factored as
-   part of the interface: this points to it belonging in Common and
-   not in Intermediate. [CH: this comment seems obsolete] *)
+   CompCert's infrastructure. [CH: I find this just fine.] *)
 
 (* CH: It seemed a bit strange that Program.interface is used
        concretely, instead of being just another parameter below.
