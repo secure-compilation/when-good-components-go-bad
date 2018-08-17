@@ -632,11 +632,9 @@ Section RSC_DC_MD_Section.
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
-    forall b m,
-      program_behaves (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) b ->
-      prefix m b ->
-      not_wrong_finpref m -> (* CH: should further weaken this to `not_wrong_finpref m` *)
-                             (* CH: would also allow us to hide b above behind does_prefix *)
+    forall m,
+      does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m ->
+      not_wrong_finpref m -> 
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
@@ -645,7 +643,7 @@ Section RSC_DC_MD_Section.
       program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
       (prefix m beh \/ behavior_improves_blame beh m p).
   Proof.
-    intros t m Hbeh Hprefix0 Hsafe_pref.
+    intros m [t [Hbeh Hprefix0]] Hsafe_pref.
 
     (* Some auxiliary results. *)
     pose proof
