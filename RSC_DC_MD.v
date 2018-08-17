@@ -229,10 +229,8 @@ Module Type Intermediate_Sig.
       well_formed_program p ->
       well_formed_program c ->
       linkable_mains p c ->
-      linkable (prog_interface p) (prog_interface c) ->
       closed_program (program_link p c) ->
       mergeable_interfaces (prog_interface p) (prog_interface c) ->
-      (* CH: mergeable_interfaces implies linkable, so we don't need both, do we? *)
     forall b1 b2 m,
       program_behaves (PS.sem p (prog_interface c)) b1 ->
       program_behaves (PS.sem c (prog_interface p)) b2 ->
@@ -815,10 +813,10 @@ Section RSC_DC_MD_Section.
     }
 
     destruct HP_decomp as [b1 [Hbehvesb1 Hprefixb1]]. 
-    
+
     pose proof Intermediate.composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
-         linkable_mains linkability'' HpCs_compiled_closed
+         linkable_mains HpCs_compiled_closed
          Hmergeable_ifaces
          Hbehvesb1 HCs_decomp
          Hprefixb1 Hprefix1
