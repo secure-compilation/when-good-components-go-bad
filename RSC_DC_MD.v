@@ -213,8 +213,11 @@ Section RSC_DC_MD_Section.
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
       have HP'_Cs_compiled_doesm : does_prefix (Intermediate.CS.sem P'_Cs_compiled) m.
-      { admit. }
-        
+      {
+        eapply forward_simulation_same_safe_prefix; try eassumption.
+        exists beh. auto.
+      }
+
       (*   have sim := Compiler.I_simulates_S HP'Cs_closed well_formed_P'Cs HP'_Cs_compiles. *)
       (*               pose proof forward_simulation_same_safe_prefix. *)
       (* Print does_prefix. *)
@@ -393,7 +396,7 @@ Section RSC_DC_MD_Section.
                                 Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                                 well_formed_P' Hsame_iface3 HP'Cs_closed
                                 HP'_Cs_beh Hsafe_pref K).
-Admitted.
+Qed.
 
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Gen.
