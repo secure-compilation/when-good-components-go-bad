@@ -452,6 +452,7 @@ Module Type Compiler_Sig
     compile_program p = Some p_compiled ->
     S2I.matching_mains p p_compiled.
 
+(* CH: To match the paper this should be weakened even more to work with prefixes *)
   Hypothesis separate_compilation_weaker :
     forall p c pc_comp p_comp c_comp,
       Source.well_formed_program p ->
@@ -675,11 +676,6 @@ Section RSC_DC_MD_Section.
     pose proof decomposition_prefix 
       well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains
       Hsafe_pref H_doesm  as HP_decomp.
-
-    (* CH: if we had undefined behavior above we would use this *)
-    (* destruct (@decomposition_with_refinement p_compiled Ct *)
-    (*             well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct Hbeh) *)
-    (*   as [beh' [Hbeh' Hbeh_improves]]. *)
 
     (* definability *)
     destruct (Linker.definability_with_linking
