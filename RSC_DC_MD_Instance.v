@@ -158,9 +158,6 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance
   Definition separate_compilation_weaker :=
     @Compiler.separate_compilation_weaker.
 
-  Definition I_simulates_S :=
-    @Compiler.I_simulates_S.
-
   Definition S_simulates_I :=
     @Compiler.S_simulates_I.
 

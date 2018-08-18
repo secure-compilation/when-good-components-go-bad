@@ -1,6 +1,4 @@
-Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
-
 Require Import Common.Definitions.
 Require Import Common.Linking.
 Require Import Common.Blame.
@@ -158,12 +156,7 @@ Section RSC_DC_MD_Section.
         exists beh. auto.
       }
 
-      (*   have sim := Compiler.I_simulates_S HP'Cs_closed well_formed_P'Cs HP'_Cs_compiles. *)
-      (*               pose proof forward_simulation_same_safe_prefix. *)
-      (* Print does_prefix. *)
-      (* exact: (forward_simulation_same_safe_prefix sim). *)
-
-      (* intermediate decomposition (for Cs_compiled) *)
+    (* intermediate decomposition (for Cs_compiled) *)
 
     destruct HP'_Cs_compiled_doesm as [beh1 [HP'_Cs_compiled_beh1 Hprefix2]].
 
@@ -178,10 +171,6 @@ Section RSC_DC_MD_Section.
          Intermediate.decomposition_with_refinement
            well_formed_Cs_compiled well_formed_P'_compiled
            linkability' mains' HP'_Cs_compiled_beh1.
-
-    (* CA: the following should be no more true nor useful *)
-    (* have {HCs_beh_improves} ? : beh2 = beh by case: HCs_beh_improves => [<-|[? []]]. *)
-    (* subst beh2. *)
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)

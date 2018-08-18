@@ -263,7 +263,7 @@ Module Type Compiler_Sig
     compile_program p = Some p_compiled ->
     S2I.matching_mains p p_compiled.
 
-(* CH: To match the paper this should be weakened even more to work with prefixes *)
+  (* CH: To match the paper this should be weakened even more to work with prefixes *)
   Hypothesis separate_compilation_weaker :
     forall p c pc_comp p_comp c_comp,
       Source.well_formed_program p ->
@@ -275,14 +275,6 @@ Module Type Compiler_Sig
     forall b : program_behavior,
       program_behaves (Intermediate.CS.sem pc_comp) b <->
       program_behaves (Intermediate.CS.sem (Intermediate.program_link p_comp c_comp)) b.
-
-  Hypothesis I_simulates_S :
-    forall p,
-      Source.closed_program p ->
-      Source.well_formed_program p ->
-    forall tp,
-      compile_program p = Some tp ->
-      forward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp).
 
   Hypothesis S_simulates_I:
     forall p,
