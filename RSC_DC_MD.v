@@ -7,7 +7,6 @@ Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
 
 Require Import RSC_DC_MD_Sigs.
-Require Import RSC_DC_MD_Instance.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
@@ -141,11 +140,6 @@ Section RSC_DC_MD_Section.
       well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains
       Hsafe_pref H_doesm  as HP_decomp.
 
-    (* CH: if we had undefined behavior above we would use this *)
-    (* destruct (@decomposition_with_refinement p_compiled Ct *)
-    (*             well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct Hbeh) *)
-    (*   as [beh' [Hbeh' Hbeh_improves]]. *)
-
     (* definability *)
     destruct (Linker.definability_with_linking
                 well_formed_p_compiled well_formed_Ct
@@ -226,7 +220,7 @@ Section RSC_DC_MD_Section.
       (* intermediate decomposition (for Cs_compiled) *)
 
     destruct HP'_Cs_compiled_doesm as [beh1 [HP'_Cs_compiled_beh1 Hprefix2]].
-      
+
     apply HP'_Cs_behaves in HP'_Cs_compiled_beh1.
     apply Source.linkable_mains_sym in HP'Cs_mains. (* TODO: Check if this is used later. *)
     rewrite <- Intermediate.program_linkC in HP'_Cs_compiled_beh1;
@@ -396,10 +390,12 @@ Section RSC_DC_MD_Section.
                                 Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                                 well_formed_P' Hsame_iface3 HP'Cs_closed
                                 HP'_Cs_beh Hsafe_pref K).
-Qed.
+  Qed.
 
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Gen.
+
+Require Import RSC_DC_MD_Instance.
 
 Module RSC_DC_MD_Instance :=
   RSC_DC_MD_Gen
