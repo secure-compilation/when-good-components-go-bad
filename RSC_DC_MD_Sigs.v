@@ -263,6 +263,7 @@ Module Type Compiler_Sig
     compile_program p = Some p_compiled ->
     S2I.matching_mains p p_compiled.
 
+(* CH: To match the paper this should be weakened even more to work with prefixes *)
   Hypothesis separate_compilation_weaker :
     forall p c pc_comp p_comp c_comp,
       Source.well_formed_program p ->
