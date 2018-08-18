@@ -291,8 +291,18 @@ Section RSC_DC_MD_Section.
 
     destruct HP_decomp as [b1 [Hbehvesb1 Hprefixb1]].
 
-    assert (Hprefix_m_beh2 : prefix m beh2) by admit. (* beh2 improves beh1 and m < beh1 *)
-    
+    assert (Hprefix_m_beh2 : prefix m beh2). (* beh2 improves beh1 and m < beh1 *)
+    {
+      inversion HCs_beh_improves as [| [t' [? Hbeh_prefix']]]; subst.
+      - assumption.
+      - eapply trace_behavior_prefix_trans.
+        2: { eapply Hbeh_prefix'. }
+        destruct m; try contradiction.
+        inversion Hprefix2 as [x H].
+        unfold behavior_app in H. destruct x; try inversion H.
+        subst. simpl. unfold Events.trace_prefix. eauto.
+    }
+
     pose proof Intermediate.composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkable_mains HpCs_compiled_closed
