@@ -141,6 +141,11 @@ Section RSC_DC_MD_Section.
       well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains
       Hsafe_pref H_doesm  as HP_decomp.
 
+    (* CH: if we had undefined behavior above we would use this *)
+    (* destruct (@decomposition_with_refinement p_compiled Ct *)
+    (*             well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct Hbeh) *)
+    (*   as [beh' [Hbeh' Hbeh_improves]]. *)
+
     (* definability *)
     destruct (Linker.definability_with_linking
                 well_formed_p_compiled well_formed_Ct
@@ -207,16 +212,21 @@ Section RSC_DC_MD_Section.
     have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
-    have HP'_Cs_compiled_beh : program_behaves (Intermediate.CS.sem P'_Cs_compiled) beh.
-      have sim := Compiler.I_simulates_S HP'Cs_closed well_formed_P'Cs HP'_Cs_compiles.
-      pose proof forward_simulation_same_safe_prefix.
-      Print does_prefix.
-      exact: (forward_simulation_same_safe_behavior sim).
+      have HP'_Cs_compiled_doesm : does_prefix (Intermediate.CS.sem P'_Cs_compiled) m.
+      { admit. }
+        
+      (*   have sim := Compiler.I_simulates_S HP'Cs_closed well_formed_P'Cs HP'_Cs_compiles. *)
+      (*               pose proof forward_simulation_same_safe_prefix. *)
+      (* Print does_prefix. *)
+      (* exact: (forward_simulation_same_safe_prefix sim). *)
 
-    (* intermediate decomposition (for Cs_compiled) *)
-    apply HP'_Cs_behaves in HP'_Cs_compiled_beh.
+      (* intermediate decomposition (for Cs_compiled) *)
+
+    destruct HP'_Cs_compiled_doesm as [beh1 [HP'_Cs_compiled_beh1 Hprefix2]].
+      
+    apply HP'_Cs_behaves in HP'_Cs_compiled_beh1.
     apply Source.linkable_mains_sym in HP'Cs_mains. (* TODO: Check if this is used later. *)
-    rewrite <- Intermediate.program_linkC in HP'_Cs_compiled_beh;
+    rewrite <- Intermediate.program_linkC in HP'_Cs_compiled_beh1;
       [| (apply (Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles))
        | (apply (Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles))
        | assumption ].
@@ -224,9 +234,11 @@ Section RSC_DC_MD_Section.
     have [beh2 [HCs_decomp HCs_beh_improves]] :=
          Intermediate.decomposition_with_refinement
            well_formed_Cs_compiled well_formed_P'_compiled
-           linkability' mains' HP'_Cs_compiled_beh.
-    have {HCs_beh_improves} ? : beh2 = beh by case: HCs_beh_improves => [<-|[? []]].
-    subst beh2.
+           linkability' mains' HP'_Cs_compiled_beh1.
+
+    (* CA: the following should be no more true nor useful *)
+    (* have {HCs_beh_improves} ? : beh2 = beh by case: HCs_beh_improves => [<-|[? []]]. *)
+    (* subst beh2. *)
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
@@ -279,12 +291,14 @@ Section RSC_DC_MD_Section.
 
     destruct HP_decomp as [b1 [Hbehvesb1 Hprefixb1]].
 
+    assert (Hprefix_m_beh2 : prefix m beh2) by admit. (* beh2 improves beh1 and m < beh1 *)
+    
     pose proof Intermediate.composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkable_mains HpCs_compiled_closed
          Hmergeable_ifaces
          Hbehvesb1 HCs_decomp
-         Hprefixb1 Hprefix1
+         Hprefixb1 Hprefix_m_beh2
       as HpCs_compiled_beh.
     destruct HpCs_compiled_beh as [b3 [HpCs_compiled_beh HpCs_compiled_prefix]].
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
@@ -369,7 +383,7 @@ Section RSC_DC_MD_Section.
                                 Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                                 well_formed_P' Hsame_iface3 HP'Cs_closed
                                 HP'_Cs_beh Hsafe_pref K).
-  Qed.
+Admitted.
 
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Gen.
