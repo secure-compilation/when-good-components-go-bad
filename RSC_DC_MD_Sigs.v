@@ -291,4 +291,24 @@ Module Type Compiler_Sig
     forall tp,
       compile_program p = Some tp ->
       backward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp).
+
+  Hypothesis forward_simulation_same_safe_prefix:
+    forall p p_compiled m,
+      Source.closed_program p ->
+      Source.well_formed_program p ->
+      does_prefix (Source.CS.sem p) m ->
+      not_wrong_finpref m ->
+      compile_program p = Some p_compiled ->
+      does_prefix (Intermediate.CS.sem p_compiled) m.
+
+  Hypothesis backward_simulation_behavior_improves_prefix :
+    forall p p_compiled m,
+      Source.closed_program p ->
+      Source.well_formed_program p ->
+      compile_program p = Some p_compiled ->
+      does_prefix (Intermediate.CS.sem p_compiled) m ->
+    exists b,
+      program_behaves (Source.CS.sem p) b /\
+      (prefix m b \/ behavior_improves_finpref b m).
+
 End Compiler_Sig.

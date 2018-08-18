@@ -23,60 +23,6 @@ Module RSC_DC_MD_Gen
        (Compiler : Compiler_Sig Source Intermediate S2I)
        (Linker : Linker_Sig Source Intermediate S2I).
 
-(* CH: Here is are other weaker assumptions we should try to use in
-       the proof below to closer match the paper argument. *)
-Lemma forward_simulation_same_safe_prefix:
-  forall p p_compiled m,
-    Source.closed_program p ->
-    Source.well_formed_program p ->
-    does_prefix (Source.CS.sem p) m ->
-    not_wrong_finpref m ->
-    Compiler.compile_program p = Some p_compiled ->
-    does_prefix (Intermediate.CS.sem p_compiled) m.
-Proof.
-  intros p p_compiled m Hcp Hwfp [b [Hb Hmb]] Hsafem Hcmp.
-  assert(Hbs : forward_simulation (Source.CS.sem p) (Intermediate.CS.sem p_compiled)).
-    apply Compiler.I_simulates_S; assumption.
-  apply (forward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
-  destruct Hb as [b' [Hb' [Hbb' | [t [H1 H2]]]]]; unfold does_prefix.
-  - exists b. split; [| tauto]. subst. assumption.
-  - exists b'. split. assumption. subst.
-    destruct m as [| ? ?| t']; simpl in Hmb, Hsafem. tauto. tauto.
-    simpl. eapply behavior_prefix_goes_wrong_trans; eassumption.
-Qed.
-
-Definition behavior_improves_finpref b m :=
-  exists t, b = Goes_wrong t /\ trace_finpref_prefix t m.
-
-Lemma backward_simulation_behavior_improves_prefix :
-  forall p p_compiled m,
-    Source.closed_program p ->
-    Source.well_formed_program p ->
-    Compiler.compile_program p = Some p_compiled ->
-    does_prefix (Intermediate.CS.sem p_compiled) m ->
-  exists b,
-    program_behaves (Source.CS.sem p) b /\
-    (prefix m b \/ behavior_improves_finpref b m).
-Proof.
-  intros p p_compiled m Hcp Hwfp Hcmp [b [Hb Hmb]].
-  assert(Hbs : backward_simulation (Source.CS.sem p) (Intermediate.CS.sem p_compiled)).
-    apply Compiler.S_simulates_I; assumption.
-  apply (backward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
-  destruct Hb as [b' [Hb' Hb'b]]. exists b'. split. assumption.
-  destruct Hb'b as [Hb'b | [t [Hb't Htb]]].
-  - left. now subst.
-  - unfold behavior_improves_finpref. subst b'.
-    (* right. exists t. split. assumption. -- committing too early *)
-    (* we start by combining behavior_prefix t b and prefix m b to get
-       that t and m must be in the prefix relation one way or the other *)
-    eapply behavior_prefix_comp' in Htb; [| exact Hmb].
-    destruct Htb.
-    + left. destruct m as [| |t']; simpl in H. tauto. tauto. simpl.
-      destruct H as [t'' ?]. subst.
-      exists (Goes_wrong t''). reflexivity.
-    + right. exists t. split. reflexivity. assumption.
-Qed.
-
 Definition behavior_improves_blame b m p :=
   exists t, b = Goes_wrong t /\ trace_finpref_prefix t m /\
              undef_in t (Source.prog_interface p).
@@ -208,7 +154,7 @@ Section RSC_DC_MD_Section.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
       have HP'_Cs_compiled_doesm : does_prefix (Intermediate.CS.sem P'_Cs_compiled) m.
       {
-        eapply forward_simulation_same_safe_prefix; try eassumption.
+        eapply Compiler.forward_simulation_same_safe_prefix; try eassumption.
         exists beh. auto.
       }
 

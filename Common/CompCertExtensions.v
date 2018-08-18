@@ -177,6 +177,9 @@ Definition finpref_trace_prefix (m : finpref_behavior) (t : trace) : Prop :=
   | FTbc t' => trace_prefix t' t
   end.
 
+Definition behavior_improves_finpref b m :=
+  exists t, b = Goes_wrong t /\ trace_finpref_prefix t m.
+
 (* CH: Introduce a definition for
        does_prefix and use it everywhere where it's
        possible, instead of unfolding it everywhere. *)

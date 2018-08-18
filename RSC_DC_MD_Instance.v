@@ -163,4 +163,10 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance
 
   Definition S_simulates_I :=
     @Compiler.S_simulates_I.
+
+  Definition forward_simulation_same_safe_prefix :=
+    @Compiler.forward_simulation_same_safe_prefix.
+
+  Definition backward_simulation_behavior_improves_prefix :=
+    @Compiler.backward_simulation_behavior_improves_prefix.
 End Compiler_Instance.
