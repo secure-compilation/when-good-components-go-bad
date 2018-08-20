@@ -57,6 +57,8 @@ Intermediate/PS.v
 Intermediate/Decomposition.v
 Intermediate/Composition.v
 
+RSC_DC_MD_Sigs.v
+RSC_DC_MD_Instance.v
 RSC_DC_MD.v
 
 TargetSFI/StateMonad.v

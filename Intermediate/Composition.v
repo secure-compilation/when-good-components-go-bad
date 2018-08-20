@@ -2447,7 +2447,6 @@ Section Composition.
   Hypothesis wf2 : well_formed_program c.
 
   Hypothesis main_linkability: linkable_mains p c.
-  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
   Hypothesis prog_is_closed:
     closed_program (program_link p c).
@@ -2462,6 +2461,7 @@ Section Composition.
       program_behaves (CS.sem (program_link p c)) (Terminates t).
   Proof.
     intros t Hbeh1 Hbeh2.
+    inversion mergeable_interfaces as [linkability _].
     eapply partial_semantics_implies_complete_semantics; auto.
     - apply linking_well_formedness; auto.
     - apply partial_programs_composition; auto.
@@ -2478,6 +2478,7 @@ Section Composition.
       prefix m b3.
   Proof.
     intros b1 b2 m Hbeh1 Hbeh2 Hpref1 Hpref2.
+    inversion mergeable_interfaces as [linkability _].
     pose proof
       partial_programs_composition_prefix
         wf1 wf2 main_linkability linkability prog_is_closed mergeable_interfaces

@@ -50,6 +50,7 @@ Code at internal entry label:
 *)
 
 Require Import Common.Definitions.
+Require Import Common.CompCertExtensions.
 Require Import Source.Language.
 Require Import Intermediate.Machine.
 Require Import S2I.CompMonad.
@@ -529,3 +530,52 @@ Theorem well_formed_compilable :
   exists pc,
     compile_program p = Some pc.
 Admitted.
+
+Lemma forward_simulation_same_safe_prefix:
+  forall p p_compiled m,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    does_prefix (Source.CS.CS.sem p) m ->
+    not_wrong_finpref m ->
+    compile_program p = Some p_compiled ->
+    does_prefix (Intermediate.CS.CS.sem p_compiled) m.
+Proof.
+  intros p p_compiled m Hcp Hwfp [b [Hb Hmb]] Hsafem Hcmp.
+  assert(Hbs : forward_simulation (Source.CS.CS.sem p) (Intermediate.CS.CS.sem p_compiled)).
+    apply I_simulates_S; assumption.
+  apply (forward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
+  destruct Hb as [b' [Hb' [Hbb' | [t [H1 H2]]]]]; unfold does_prefix.
+  - exists b. split; [| tauto]. subst. assumption.
+  - exists b'. split. assumption. subst.
+    destruct m as [| ? ?| t']; simpl in Hmb, Hsafem. tauto. tauto.
+    simpl. eapply behavior_prefix_goes_wrong_trans; eassumption.
+Qed.
+
+Lemma backward_simulation_behavior_improves_prefix :
+  forall p p_compiled m,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    does_prefix (Intermediate.CS.CS.sem p_compiled) m ->
+  exists b,
+    program_behaves (Source.CS.CS.sem p) b /\
+    (prefix m b \/ behavior_improves_finpref b m).
+Proof.
+  intros p p_compiled m Hcp Hwfp Hcmp [b [Hb Hmb]].
+  assert(Hbs : backward_simulation (Source.CS.CS.sem p) (Intermediate.CS.CS.sem p_compiled)).
+    apply S_simulates_I; assumption.
+  apply (backward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
+  destruct Hb as [b' [Hb' Hb'b]]. exists b'. split. assumption.
+  destruct Hb'b as [Hb'b | [t [Hb't Htb]]].
+  - left. now subst.
+  - unfold behavior_improves_finpref. subst b'.
+    (* right. exists t. split. assumption. -- committing too early *)
+    (* we start by combining behavior_prefix t b and prefix m b to get
+       that t and m must be in the prefix relation one way or the other *)
+    eapply behavior_prefix_comp' in Htb; [| exact Hmb].
+    destruct Htb.
+    + left. destruct m as [| |t']; simpl in H. tauto. tauto. simpl.
+      destruct H as [t'' ?]. subst.
+      exists (Goes_wrong t''). reflexivity.
+    + right. exists t. split. reflexivity. assumption.
+Qed.
