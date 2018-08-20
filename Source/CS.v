@@ -127,6 +127,9 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_LocalBuffer : forall C s mem k arg,
     kstep G [State C, s, mem, k, E_local, arg] E0
             [State C, s, mem, k, E_val (Ptr (C,Block.local,0%Z)), arg]
+| KS_ComponentBuffer : forall C s mem k C' arg,
+    kstep G [State C, s, mem, k, E_component_buf C', arg] E0 (* is the event only when we dereference ? it looks like it should be *)
+            [State C, s, mem, k, E_val (Ptr (C',Block.local,0%Z)), arg]
 | KS_Alloc1 : forall C s mem k e arg,
     kstep G [State C, s, mem, k, E_alloc e, arg] E0
             [State C, s, mem, Kalloc k, e, arg]
@@ -143,6 +146,14 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     Memory.load mem (C',b',o') = Some v ->
     kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o')), arg] E0
             [State C, s, mem, k, E_val v, arg]
+| KS_DerefComponentEval : forall C s mem k C' b' o' v arg,
+    C <> C' ->
+    (* TODO shouldn't be more verified... ? *)
+    Memory.load mem (C',b',o') = Some (Int v) -> (* for now, only allowing int *)
+    (* TODO (but shouldn't we add also Undef ?) *)
+    kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o')), arg]
+            [:: ELoad C v C']
+            [State C, s, mem, k, E_val (Int v), arg]
 | KS_Assign1 : forall C s mem k e1 e2 arg,
     kstep G [State C, s, mem, k, E_assign e1 e2, arg] E0
             [State C, s, mem, Kassign1 e1 k, e2, arg]
@@ -220,6 +231,8 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     else None
   | E_local =>
     ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.local, 0%Z)), arg])
+  | E_component_buf C' =>
+    ret (E0, [State C, s, mem, k, E_val (Ptr (C', Block.local, 0%Z)), arg])
   | E_alloc e =>
     ret (E0, [State C, s, mem, Kalloc k, e, arg])
   | E_deref e =>
@@ -259,7 +272,13 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
           do v <- Memory.load mem (C',b',o');
           ret (E0, [State C, s, mem, k', E_val v, arg])
         else
-          None
+          do v <- Memory.load mem (C', b', o');
+          match v with
+          (* TODO is that right ? *)
+          | Int i => ret ([:: ELoad C i C'], [State C, s, mem, k', E_val (Int i), arg])
+          | Ptr t => None
+          | Undef => (* ?? *) None
+          end
       | _ => None
       end
     | Kassign1 e1 k' =>
@@ -325,20 +344,20 @@ Proof.
     try (unfold Memory.store, Memory.load, Memory.alloc in *;
          repeat simplify_nat_equalities;
          repeat simplify_option;
-         reflexivity).
+         reflexivity);
+    try move/eqP/negbTE: H => -> ;
+    try done.
   (* if expressions *)
   - assert (Hsize: (size >? 0) % Z = true). {
       destruct size; try inversion H; auto.
     }
     rewrite Hsize.
     rewrite H0. reflexivity.
+  (* component buffer load *)
+  - by rewrite H0.
   (* external calls *)
-  - move/eqP/negbTE: H => ->.
-    apply imported_procedure_iff in H0.
+  - apply imported_procedure_iff in H0.
     rewrite H0 H1.
-    reflexivity.
-  (* external return *)
-  - move/eqP/negbTE: H => ->.
     reflexivity.
 Qed.
 
@@ -359,14 +378,15 @@ Proof.
   end.
   - repeat simplify_option.
     + case: (_ =P _) => [->|?]; econstructor; eauto.
-    + econstructor; eauto.
-    + econstructor; eauto.
-    + econstructor; eauto.
-    + destruct z; econstructor; eauto; discriminate.
+    + econstructor.
+    + econstructor.
+    + econstructor.
+    + destruct z ; econstructor; eauto; discriminate.
     + econstructor; eauto.
       * apply Zgt_is_gt_bool. assumption.
     + by econstructor; eauto; apply/eqP.
-    + econstructor; eauto.
+    + econstructor; [apply /eqP/negbT; assumption | assumption].
+    + econstructor.
     + by econstructor; eauto; apply/eqP.
     + econstructor; eauto; exact/eqP.
     + econstructor; eauto; first exact/eqP/negbT.
@@ -495,6 +515,8 @@ Section Semantics.
   Proof.
     elim: cs t cs' / => //= s1 t1 s2 t2 s3 t Hstep Hstar IH -> {t}.
     case: s1 t1 s2 / Hstep Hstar IH=> //=.
+    - (* Component buffer load *)
+      by move => C stk mem k C' b' o' v arg; rewrite eqxx.
     - (* Internal Return *)
       by move=> C stk mem k _ P v P_expr old <-; rewrite eqxx.
     - (* External Return *)
@@ -512,6 +534,7 @@ Section Semantics.
   Proof.
   elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
   rewrite all_cat; case: st1 t1 st2 / Hstep {Hstar} => //=.
+  - by move=> ????????? /eqP ->.
   - by move=> ????????? /eqP -> /imported_procedure_iff ->.
   - by move=> ????????  /eqP ->.
   Qed.

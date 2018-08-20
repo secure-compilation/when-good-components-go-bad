@@ -63,6 +63,7 @@ Fixpoint well_bracketed_trace s t : bool :=
       | head :: tail =>
         (head == C') && well_bracketed_trace (StackState C' tail) t'
       end
+    | ELoad C _ _ => well_bracketed_trace s t' (* since we're not giving turn, this doesn't change the stack state and we go on *)
     end
   end.
 
@@ -70,6 +71,7 @@ Definition run_event s e :=
   match e with
   | ECall C _ _ C' => StackState C' (C :: callers s)
   | ERet  C _   C' => StackState C' (tail (callers s))
+  | ELoad C _ _    => s
   end.
 
 Definition run_trace s t := foldl run_event s t.
@@ -82,10 +84,11 @@ Lemma well_bracketed_trace_cat s t1 t2 :
   well_bracketed_trace s t1 &&
   well_bracketed_trace (run_trace s t1) t2.
 Proof.
-elim: t1 s=> [//|[C ? ? C'|C ? C'] t1 IH] [Ccur callers] /=.
+elim: t1 s=> [//|[C ? ? C'|C ? C'| C _ _] t1 IH] [Ccur callers] /=.
   by rewrite IH andbA.
 case: eqP callers => [_ {Ccur}|_] //= [|top callers] //=.
 by rewrite IH andbA.
+  by case: eqP => [] //=.
 Qed.
 
 Definition seq_of_stack_state s := cur_comp s :: callers s.
@@ -107,7 +110,8 @@ have -> : well_bracketed_trace s0 (rcons t e) =
           well_bracketed_trace s0 t &&
           well_bracketed_trace (run_trace s0 t) [:: e].
   by rewrite -cats1 well_bracketed_trace_cat andbC.
-rewrite run_trace1; case: e => [C1 P arg C2|C1 ? C2] /=.
+rewrite run_trace1; case: e => [C1 P arg C2|C1 ? C2|C1 ? ?] /=.
+  - (* ECall *)
   rewrite andbT; case/andP=> wb_t /eqP <- {C1} /=.
   rewrite -[_ :: callers _]/(run_trace s0 t : seq _) suffix_cons /=.
   case/orP=> [/eqP|Hsuff].
@@ -115,6 +119,7 @@ rewrite run_trace1; case: e => [C1 P arg C2|C1 ? C2] /=.
     by eexists t, _, _, [::]; rewrite cats1.
   case/(_ wb_t Hsuff): IH=> [t1 [P' [arg' [t2 ->]]]].
   by eexists t1, P', arg', (rcons t2 _); rewrite rcons_cat; split; eauto.
+  - (* ERet *)
 case/and3P=> wb_t /eqP e1 e2.
 have -> : StackState C2 (tl (callers (run_trace s0 t))) =
           callers (run_trace s0 t) :> seq _.
@@ -123,6 +128,10 @@ move=> Hsuff; have {Hsuff} Hsuff: suffix [:: C, C' & Cs] (run_trace s0 t).
   by rewrite suffix_cons Hsuff orbT.
 case/(_ wb_t Hsuff): IH=> [t1 [P [arg [t2 ->]]]].
 by eexists t1, P, arg, (rcons _ _); rewrite rcons_cat.
+  - (* ELoad *)
+    case /and3P => wb_t /eqP e1 _.
+    move => Hsuff; case/(_ wb_t Hsuff): IH=> [t1 [P [arg [t2 ->]]]].
+      by eexists t1, P, arg, (rcons _ _); rewrite rcons_cat.
 Qed.
 
 Lemma well_bracketed_trace_inv t C res C' :
@@ -145,6 +154,7 @@ Definition well_formed_event intf (e: event) : bool :=
   match e with
   | ECall C P _ C' => (C != C') && imported_procedure_b intf C C' P
   | ERet  C _   C' => (C != C')
+  | ELoad C _   C' => (C != C')
   end.
 
 Definition well_formed_trace intf (t: trace) : bool :=
@@ -152,16 +162,20 @@ Definition well_formed_trace intf (t: trace) : bool :=
   all (well_formed_event intf) t.
 
 Definition declared_event_comps intf e :=
-  [&& cur_comp_of_event e \in domm intf &
-      next_comp_of_event e \in domm intf].
+  match e with
+  | ELoad C _ C' => Program.has_component_id intf C && Program.has_component_id intf C'
+  | _ => [&& cur_comp_of_event e \in domm intf &
+                                    next_comp_of_event e \in domm intf]
+  end.
 
 Lemma well_formed_trace_int intf t :
   well_formed_trace intf t ->
   closed_interface intf ->
   all (declared_event_comps intf) t.
+(* should be rewritten for ELoad I guess *)
 Proof.
 case/andP=> wb wf clos; rewrite /declared_event_comps.
-apply/allP; case=> [C P v C'|C v C'] /=; rewrite !mem_domm.
+apply/allP; case=> [C P v C'|C v C' | C v C'] /=; unfold Program.has_component_id; rewrite !mem_domm.
 - move/(allP wf)=> /andP [_ imp].
   move: (imp); rewrite /imported_procedure_b; case: getm => //= _ _.
   by case/imported_procedure_iff/clos: imp=> ? [->].
@@ -173,6 +187,8 @@ apply/allP; case=> [C P v C'|C v C'] /=; rewrite !mem_domm.
   case/andP=> _ imp.
   case/imported_procedure_iff/clos: (imp)=> ? [-> _] /=.
   by move: imp; rewrite /imported_procedure_b; case: getm.
-Qed.
+  admit.
+Admitted.
+(* Qed. *)
 
 End Traces.

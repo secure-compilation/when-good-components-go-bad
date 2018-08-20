@@ -26,6 +26,7 @@ Inductive expr : Type :=
 | E_deref : expr -> expr
 | E_assign : expr -> expr -> expr
 | E_call : Component.id -> Procedure.id -> expr -> expr
+| E_component_buf : Component.id -> expr (* should behave similarily to E_Local *)
 | E_exit : expr.
 
 Fixpoint called_procedures (e : expr) : {fset Component.id * Procedure.id} :=
@@ -84,6 +85,7 @@ Module Source.
     | E_deref e       => values_are_integers e
     | E_assign  e1 e2 => values_are_integers e1 && values_are_integers e2
     | E_call   _ _ e  => values_are_integers e
+    | E_component_buf _ => true
     end.
 
   (* An expression is well-formed when:

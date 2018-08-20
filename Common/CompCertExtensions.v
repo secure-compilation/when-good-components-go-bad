@@ -3,7 +3,6 @@ Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
 Require Import Lib.Extra.
-Require Import Common.Values.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype seq.
 

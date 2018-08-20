@@ -1,11 +1,10 @@
 Require Import Common.Definitions.
 Require Import CompCert.Coqlib.
-Require Import Common.Values.
 
 Inductive event :=
 | ECall : Component.id -> Procedure.id -> Z -> Component.id -> event
 | ERet : Component.id -> Z -> Component.id -> event
-| ELoad : Component.id (* -> ptr *) -> value -> Component.id -> event
+| ELoad : Component.id (* -> ptr *) -> Z (* TODO add Undef *) -> Component.id -> event
 (* the fitting pointer to the buffer  would be added eventually *)
 .
 
