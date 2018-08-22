@@ -142,92 +142,110 @@ Section Decomposition.
 
     (* epsilon steps *)
 
-    - eexists. split.
+    - (* KS_Binop1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_Binop2 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_BinopEval *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_Seq1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_Seq2 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_If1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_If2 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_Arg *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_LocalBuffer *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_Alloc1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_AllocEval *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_Deref1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_DerefEval *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_Assign1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_Assign2 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_AssignEval *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_InitCall *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - eexists. split.
+    - (* KS_InternalCall *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
       + econstructor; auto.
@@ -287,57 +305,68 @@ Section Decomposition.
 
     (** context has control **)
 
-    - eexists. split.
+    - (* KS_Binop1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_Binop2 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_BinopEval *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_Seq1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_Seq2 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_If1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_If2 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_Arg *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_LocalBuffer *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_Alloc1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_AllocEval *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
           ** PS.simplify_turn.
@@ -346,27 +375,32 @@ Section Decomposition.
         * PS.simplify_turn.
           erewrite <- context_allocation_in_partialized_memory; eauto.
 
-    - eexists. split.
+    - (* KS_Deref1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_DerefEval *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_Assign1 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_Assign2 *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - eexists. split.
+    - (* KS_AssignEval *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
           ** PS.simplify_turn.
@@ -375,7 +409,8 @@ Section Decomposition.
         * PS.simplify_turn.
           erewrite <- context_store_in_partialized_memory; eauto.
 
-    - eexists. split.
+    - (* KS_InitCall *)
+      eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
