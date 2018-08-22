@@ -1337,6 +1337,7 @@ Lemma blame_program:
 Proof.
   intros p Cs t' P' m well_formed_p well_formed_Cs Hlinkable_p_Cs Hclosed_p_Cs
          HpCs_beh well_formed_P' Hsame_iface1 HP'Cs_closed HP'_Cs_beh Hnot_wrong' K.
+  clear Hnot_wrong'. (* CH: this is not used, surprising? *)
   inversion HP'_Cs_beh as [sini1 ? Hini1 Hstbeh1 |]; subst.
   inversion Hstbeh1 as [? sfin1 HStar1 Hfinal1 | | |]; subst.
   (* RB: TODO: Lemma relating final_state and Nostep.

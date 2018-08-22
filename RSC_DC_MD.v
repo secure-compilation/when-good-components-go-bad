@@ -227,8 +227,7 @@ Section RSC_DC_MD_Section.
     {
       inversion HCs_beh_improves as [| [t' [? Hbeh_prefix']]]; subst.
       - assumption.
-      - eapply trace_behavior_prefix_trans.
-        2: { eapply Hbeh_prefix'. }
+      - eapply trace_behavior_prefix_trans; [| now eapply Hbeh_prefix'].
         destruct m; try contradiction.
         inversion Hprefix2 as [x H].
         unfold behavior_app in H. destruct x; try inversion H.

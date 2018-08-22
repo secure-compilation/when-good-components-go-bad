@@ -9,23 +9,14 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
-(* RB: Eventually, we may not want have these interfaces distracting from
-       the high-level proof here.
-   [CH: These interfaces explain the proved statement in a
-        (relatively) self-contained way, so I don't see them as
-        distractions! I think what should move to a different file are
-        the instantiations of these parameters and hypotheses together
-        with all the concrete imports at the top. This should be
-        possible once the few abstraction leaks are fixed.]
-
-   The repetition verbatim of theorem statements as axioms is particularly
-   annoying; we will want to eliminate this duplication.
+(* The repetition verbatim of theorem statements as axioms is
+   particularly annoying; we will want to eliminate this duplication.
      [CH: Agreed, but easy to fix with some extra definitions.]
 
    Naming conventions can also be harmonized.
 
    The current proof is generic while still relying on our Common and
-   CompCert's infrastructure. [CH: I find this just fine.] *)
+   CompCert's infrastructure. [CH: I find this just fine for now.] *)
 
 (* CH: It seemed a bit strange that Program.interface is used
        concretely, instead of being just another parameter below.
@@ -72,6 +63,14 @@ Module Type Source_Sig.
     Parameter sem : program -> semantics.
   End CS.
 
+  (* Notes:
+     - the trace (i.e. behavior) `t` in the diagram from the paper
+       corresponds to `Goes_wrong t'` in the notation below
+     - in the paper we use the following notations:
+       + t ≺ m = exists m' <= m. t = Goes_wrong m'
+         t ≺P m = exists m' <= m. t = Goes_wrong m' /\ undef_in t (prog_interface P)
+       + this means that t' plays below the role of m' above
+  *)
   Hypothesis blame_program : forall p Cs t' P' m,
     well_formed_program p ->
     well_formed_program Cs ->
@@ -82,7 +81,11 @@ Module Type Source_Sig.
     prog_interface P' = prog_interface p ->
     closed_program (program_link P' Cs) ->
     program_behaves (CS.sem (program_link P' Cs)) (Terminates (finpref_trace m)) ->
+    (* CH: This `program_behaves` assumption seems too concrete. Can it be
+           replaced with just `does_prefix (CS.sem (program_link P' Cs)) m`?
+           Could it be that this extra Terminates event is crucially used?*)
     not_wrong_finpref m ->
+    (* CH: Q: not_wrong_finpref assumption doesn't seem used in instance proof? *)
     trace_finpref_prefix t' m ->
     undef_in t' (prog_interface p).
 
@@ -218,7 +221,8 @@ Module Type Linker_Sig
       prefix m (Terminates (finpref_trace m)).
   (* CH: Do we really need to expose the `Terminates (finpref_trace m)`
          part here? It might hold for our instance, but I don't
-         think the proof below needs it. *)
+         think the top-level proof needs it. It's curretly used
+         for blame, but I don't think it should really be required. *)
 End Linker_Sig.
 
 Module Type Compiler_Sig
