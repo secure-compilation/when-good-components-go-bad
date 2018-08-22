@@ -80,14 +80,10 @@ Module Type Source_Sig.
     well_formed_program P' ->
     prog_interface P' = prog_interface p ->
     closed_program (program_link P' Cs) ->
-    program_behaves (CS.sem (program_link P' Cs)) (Terminates (finpref_trace m)) ->
-    (* CH: This `program_behaves` assumption seems too concrete. Can it be
-           replaced with just `does_prefix (CS.sem (program_link P' Cs)) m`?
-           Could it be that this extra Terminates event is crucially used?*)
+    does_prefix (CS.sem (program_link P' Cs)) m ->
     not_wrong_finpref m ->
-    (* CH: Q: not_wrong_finpref assumption doesn't seem used in instance proof? *)
     trace_finpref_prefix t' m ->
-    undef_in t' (prog_interface p).
+    (prefix m (Goes_wrong t') \/ undef_in t' (prog_interface p)).
 
 End Source_Sig.
 
@@ -217,12 +213,7 @@ Module Type Linker_Sig
       Source.well_formed_program p' /\
       Source.well_formed_program c' /\
       Source.closed_program (Source.program_link p' c') /\
-      program_behaves (Source.CS.sem (Source.program_link p' c')) (Terminates (finpref_trace m)) /\
-      prefix m (Terminates (finpref_trace m)).
-  (* CH: Do we really need to expose the `Terminates (finpref_trace m)`
-         part here? It might hold for our instance, but I don't
-         think the top-level proof needs it. It's curretly used
-         for blame, but I don't think it should really be required. *)
+      does_prefix (Source.CS.sem (Source.program_link p' c')) m.
 End Linker_Sig.
 
 Module Type Compiler_Sig

@@ -654,8 +654,7 @@ Lemma definability_with_linking:
     Source.well_formed_program p' /\
     Source.well_formed_program c' /\
     Source.closed_program (Source.program_link p' c') /\
-    program_behaves (S.CS.sem (Source.program_link p' c')) (Terminates (finpref_trace m)) /\
-    prefix m (Terminates (finpref_trace m)).
+    does_prefix (S.CS.sem (Source.program_link p' c')) m.
 Proof.
   move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre Hnot_wrong.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
@@ -711,6 +710,7 @@ Proof.
   split; first exact: well_formed_program_unlink.
   split; first exact: well_formed_program_unlink.
   rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
+  exists (Terminates m').
   split=> // {wf_events back Hback wf_back wf_m}.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
   by exists (Terminates nil); rewrite /= E0_right.
