@@ -29,7 +29,7 @@ Running the tests (to be simplified):
 
     $ make clean
     $ make -j4
-    $ ./run_extracted_examples.sh
+    $ ./run_extracted_examples.sh --force-extraction
     $ rm sfi_safety_properties.exe
     $ ./run_sfi_tests.sh
 
@@ -39,8 +39,10 @@ More thorough mutation tests are on the `nora-testing-experiments` branch.
 
 At the top level, the development provides high-level proofs with the following
 entry points:
-- `RSC_DC_MD.v`: generic secure compilation proof (Section 3.5) and
-  its instantiation for our compiler (Section 4.3)
+- `RSC_DC_MD.v`: generic secure compilation proof
+  against the assumptions in `RSC_DC_MD_Sigs.v` (Section 3.5)
+- `RSC_DC_MD_Instance.v`: an instantiation of the assumptions
+  from `RSC_DC_MD_Sigs.v` to our compilation chain  (Section 4.3)
 - `RSC_DC.v`: general proofs about the class of properties preserved
   by RSC^DC (Appendix A)
 - `RSC_DC_4_compcert.v`: proofs in `RSC_DC.v` adapted to the general CompCert
@@ -70,30 +72,6 @@ Definition A.1: Z_P class of safety properties preserved by RSC^DC
 Theorem A.2: RSC^DC characterization via Z_P
 - `RSC_DC.main_thm` in the simple trace model
 - `RSC_DC_4_compcert.main_thm` in the CompCert trace model
-
-Assumption B.2: Decomposition
-- `Intermediate.Decomposition.decomposition_with_safe_behavior`
-- `Intermediate.Decomposition.decomposition_with_refinement`
-
-Assumption B.3: Composition
-- `Intermediate.Composition.composition_prefix`
-
-Assumption B.4: Definability
-- `Source.Definability.definability_with_linking`
-
-Assumption B.5: Compiler Correctness
-- `S2I.Compiler.I_simulates_S` and
-  `CompCert.Behaviors.forward_simulation_same_safe_behavior`
-  for Forward Compiler Correctness
-- `S2I.Compiler.S_simulates_I` and
-  `CompCert.Behaviors.backward_simulation_behavior_improves`
-  for Backward Compiler Correctness
-
-Assumption B.6: Separate Compilation
-- `S2I.Compiler.separate_compilation_weaker`
-
-Assumption B.7: Blame
-- `Source.PS.PS.blame_program`
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
