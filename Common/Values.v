@@ -8,9 +8,25 @@ Module Block.
   Definition id := nat.
   Definition offset := Z.
   (* local public buffer *)
-  Definition local : id := 0.
+  Definition public : id := 0.
   (* local private buffer *)
   Definition private : id := 1.
+
+  Inductive buffer_kind : Type :=
+  | pub : buffer_kind
+  | priv : buffer_kind
+  .
+  Definition buffer_kind_to_block_id bk : id :=
+    match bk with
+    | pub => public
+    | priv => private
+    end.
+  Definition block_id_to_buffer_kind (i:id) : option buffer_kind :=
+    match i with
+    | (* public *)  0 => Some pub
+    | (* private *) 1 => Some priv
+    | _ => None
+    end.
 End Block.
 
 Module Pointer.

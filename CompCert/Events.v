@@ -4,8 +4,9 @@ Require Import CompCert.Coqlib.
 Inductive event :=
 | ECall : Component.id -> Procedure.id -> Z -> Component.id -> event
 | ERet : Component.id -> Z -> Component.id -> event
-| ELoad : Component.id (* -> ptr *) -> Z (* TODO add Undef *) -> Component.id -> event
-(* the fitting pointer to the buffer  would be added eventually *)
+| ELoad : Component.id (* -> ptr *) (* -> offset *) -> Z (* TODO add Undef *) ->  Component.id -> event
+(* the fitting pointer to the buffer would be added eventually *)
+(* The offset should be added sooner *)
 .
 
 Definition cur_comp_of_event (e: event) : Component.id :=

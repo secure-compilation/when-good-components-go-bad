@@ -124,13 +124,15 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_Arg : forall C s mem k i,
     kstep G [State C, s, mem, k, E_arg, Int i] E0
             [State C, s, mem, k, E_val (Int i), Int i]
-| KS_LocalBuffer : forall C s mem k arg,
-    kstep G [State C, s, mem, k, E_local, arg] E0
-            [State C, s, mem, k, E_val (Ptr (C,Block.local,0%Z)), arg]
+| KS_LocalBufferPublic : forall C s mem k arg,
+    kstep G [State C, s, mem, k, E_local Block.pub, arg] E0
+            [State C, s, mem, k, E_val (Ptr (C,Block.public,0%Z)), arg]
+| KS_LocalBufferPrivate : forall C s mem k arg,
+    kstep G [State C, s, mem, k, E_local Block.priv, arg] E0
+          [State C, s, mem, k, E_val (Ptr (C,Block.private,0%Z)), arg]
 | KS_ComponentBuffer : forall C s mem k C' arg,
     kstep G [State C, s, mem, k, E_component_buf C', arg] E0
-          (* is the event only when we dereference ? it looks like it should be *)
-            [State C, s, mem, k, E_val (Ptr (C',Block.local,0%Z)), arg]
+            [State C, s, mem, k, E_val (Ptr (C',Block.public,0%Z)), arg]
 | KS_Alloc1 : forall C s mem k e arg,
     kstep G [State C, s, mem, k, E_alloc e, arg] E0
             [State C, s, mem, Kalloc k, e, arg]
@@ -151,7 +153,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     C <> C' ->
     Memory.load mem (C',b',o') = Some (Int v) -> (* for now, only allowing int *)
     kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o')), arg]
-            [:: ELoad C v C']
+            [:: ELoad C (* o' *) v C']
             [State C, s, mem, k, E_val (Int v), arg]
 | KS_Assign1 : forall C s mem k e1 e2 arg,
     kstep G [State C, s, mem, k, E_assign e1 e2, arg] E0
@@ -228,10 +230,13 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
     if arg is Int v then
       ret (E0, [State C, s, mem, k, E_val (Int v), arg])
     else None
-  | E_local =>
-    ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.local, 0%Z)), arg])
+  | E_local bk =>
+    match bk with
+    | Block.pub => ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.public, 0%Z)), arg])
+    | Block.priv => ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.private, 0%Z)), arg])
+    end
   | E_component_buf C' =>
-    ret (E0, [State C, s, mem, k, E_val (Ptr (C', Block.local, 0%Z)), arg])
+    ret (E0, [State C, s, mem, k, E_val (Ptr (C', Block.public, 0%Z)), arg])
   | E_alloc e =>
     ret (E0, [State C, s, mem, Kalloc k, e, arg])
   | E_deref e =>
@@ -274,10 +279,10 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
           (* component buffer load *)
           do v <- Memory.load mem (C', b', o');
           match v with
-          (* TODO is that right ? *)
+          (* For now, only allowing ints *)
           | Int i => ret ([:: ELoad C i C'], [State C, s, mem, k', E_val (Int i), arg])
           | Ptr t => None
-          | Undef => (* ?? *) None
+          | Undef => (* Not even Undef, but surely that should change *) None
           end
       | _ => None
       end

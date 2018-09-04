@@ -18,7 +18,7 @@ Set Bullet Behavior "Strict Subproofs".
 Inductive expr : Type :=
 | E_val : value -> expr
 | E_arg : expr
-| E_local : expr
+| E_local : Block.buffer_kind -> expr
 | E_binop : binop -> expr -> expr -> expr
 | E_seq : expr -> expr -> expr
 | E_if : expr -> expr -> expr -> expr
@@ -26,7 +26,7 @@ Inductive expr : Type :=
 | E_deref : expr -> expr
 | E_assign : expr -> expr -> expr
 | E_call : Component.id -> Procedure.id -> expr -> expr
-| E_component_buf : Component.id -> expr (* should behave similarily to E_Local *)
+| E_component_buf : Component.id -> expr
 | E_exit : expr.
 
 Fixpoint called_procedures (e : expr) : {fset Component.id * Procedure.id} :=
@@ -43,12 +43,47 @@ Fixpoint called_procedures (e : expr) : {fset Component.id * Procedure.id} :=
   end.
 
 Module Source.
+
+  (* maybe move it elsewhere *)
+  Definition component_buffers : Type
+    := buffer * buffer.
+
   Record program : Type := mkProg {
     prog_interface : Program.interface;
     prog_procedures : NMap (NMap expr);
     (* public and private *)
-    prog_buffers : NMap (buffer * buffer)
+    prog_buffers : NMap component_buffers
   }.
+
+  (* maybe not really useful *)
+  (* but allows us to abstract the buffer*buffer type at some extent *)
+  Definition get_buffer_with_id
+             (prog:program)
+             (cid:Component.id)
+             (bk:Block.buffer_kind) : option buffer :=
+    match (prog_buffers prog) cid with
+    | Some comp_bufs =>
+      match bk with
+      | Block.pub  => Some (fst comp_bufs)
+      | Block.priv => Some (snd comp_bufs)
+      end
+    | None => None
+    end.
+
+  Definition get_buffer
+             (comp_bufs:component_buffers)
+             bk : buffer :=
+    match bk with
+    | Block.pub  => fst comp_bufs
+    | Block.priv => snd comp_bufs
+    end.
+
+  (* maybe use something like converting the component_buffers to a
+  list/map for when we use both of them (would be better than
+  selecting one then the other since it's used repeatedly *)
+  Definition get_buffers_as_map (comp_bufs:component_buffers) :=
+    let '(pub, priv) := comp_bufs in
+    mkfmap [(Block.public, pub); (Block.private, priv)].
 
   (** Lookup definition of procedure [C.P] in the map [procs]. *)
   Definition find_procedure
@@ -71,29 +106,29 @@ Module Source.
       if C == cur_comp then find_procedure procs cur_comp P : Prop
       else imported_procedure intf cur_comp C P.
 
-  (* a program has valid buffers if the size in the component interfaces is
-     the same as the statically allocated public buffers *)
+  (* a program has valid buffers if the sizes in the components interfaces is
+     the same as the one of the statically allocated public buffers *)
  Definition valid_buffers
             (prog : program) :=
-    mapm (fun (comp_bufs : (buffer * buffer)) =>
-            let (pub, _) := comp_bufs in buffer_size pub) (prog_buffers prog) =
+   mapm (fun (comp_bufs : component_buffers) =>
+           buffer_size (get_buffer comp_bufs Block.pub)) (prog_buffers prog) =
     mapm (fun comp_intf => Component.public_buffer_size comp_intf) (prog_interface prog).
 
   Fixpoint values_are_integers (e: expr) : bool :=
     match e with
-    | E_val (Int _)   => true
-    | E_val _         => false
-    | E_arg           => true
-    | E_local         => true
-    | E_exit          => true
-    | E_binop _ e1 e2 => values_are_integers e1 && values_are_integers e2
-    | E_seq     e1 e2 => values_are_integers e1 && values_are_integers e2
-    | E_if   e1 e2 e3 => [&& values_are_integers e1, values_are_integers e2 &
+    | E_val (Int _)     => true
+    | E_val _           => false
+    | E_arg             => true
+    | E_local _         => true
+    | E_exit            => true
+    | E_binop _ e1 e2   => values_are_integers e1 && values_are_integers e2
+    | E_seq     e1 e2   => values_are_integers e1 && values_are_integers e2
+    | E_if   e1 e2 e3   => [&& values_are_integers e1, values_are_integers e2 &
                              values_are_integers e3]
-    | E_alloc e       => values_are_integers e
-    | E_deref e       => values_are_integers e
-    | E_assign  e1 e2 => values_are_integers e1 && values_are_integers e2
-    | E_call   _ _ e  => values_are_integers e
+    | E_alloc e         => values_are_integers e
+    | E_deref e         => values_are_integers e
+    | E_assign  e1 e2   => values_are_integers e1 && values_are_integers e2
+    | E_call   _ _ e    => values_are_integers e
     | E_component_buf _ => true
     end.
 
@@ -107,7 +142,8 @@ Module Source.
     (* /\ valid_static_access p cur_com e *)
     /\ values_are_integers e.
 
-  (* Component C has a buffer of size at least one *)
+  (* Component C has a private buffer of size at least one *)
+  (* used for the counter during back-translation *)
   Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
     exists2 bufs,
       prog_buffers p C = Some bufs &
@@ -550,8 +586,7 @@ Module Source.
   (* Prealloc the public part and the private part "flatly" *)
   Definition prepare_buffers (p: program) : Memory.t :=
     mapm (fun bufs =>
-            let '(pub, priv):= bufs in
-            ComponentMemory.prealloc (mkfmap [(Block.local, pub); (Block.private,priv)]))
+            ComponentMemory.prealloc (get_buffers_as_map bufs))
          (prog_buffers p).
 
   Lemma find_procedure_in_linked_programs:
