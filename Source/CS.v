@@ -128,7 +128,8 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     kstep G [State C, s, mem, k, E_local, arg] E0
             [State C, s, mem, k, E_val (Ptr (C,Block.local,0%Z)), arg]
 | KS_ComponentBuffer : forall C s mem k C' arg,
-    kstep G [State C, s, mem, k, E_component_buf C', arg] E0 (* is the event only when we dereference ? it looks like it should be *)
+    kstep G [State C, s, mem, k, E_component_buf C', arg] E0
+          (* is the event only when we dereference ? it looks like it should be *)
             [State C, s, mem, k, E_val (Ptr (C',Block.local,0%Z)), arg]
 | KS_Alloc1 : forall C s mem k e arg,
     kstep G [State C, s, mem, k, E_alloc e, arg] E0
@@ -148,9 +149,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
             [State C, s, mem, k, E_val v, arg]
 | KS_DerefComponentEval : forall C s mem k C' b' o' v arg,
     C <> C' ->
-    (* TODO shouldn't be more verified... ? *)
     Memory.load mem (C',b',o') = Some (Int v) -> (* for now, only allowing int *)
-    (* TODO (but shouldn't we add also Undef ?) *)
     kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o')), arg]
             [:: ELoad C v C']
             [State C, s, mem, k, E_val (Int v), arg]
@@ -272,6 +271,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
           do v <- Memory.load mem (C',b',o');
           ret (E0, [State C, s, mem, k', E_val v, arg])
         else
+          (* component buffer load *)
           do v <- Memory.load mem (C', b', o');
           match v with
           (* TODO is that right ? *)

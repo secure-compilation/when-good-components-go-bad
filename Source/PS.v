@@ -516,7 +516,10 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
   move=> {C' k' e' arg'} <- e_stk e_mem <- <- <-.
   rewrite -lock /= eqxx.
   rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_v) /=.
-  by rewrite (negbTE in_prog) e_stk e_mem.
+    by rewrite (negbTE in_prog) e_stk e_mem.
+- (* Component load *)
+  (* stumbling upon C <> C' basically, a bit awkward with SSReflect for me *)
+  admit.
 - (* Store *)
   move=> C stk mem1 mem1' k v _ b' o' arg <- e_mem1 in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
@@ -610,7 +613,8 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
     case=> <- <- {old2 k2} e_stk.
     rewrite -lock /=; move/eqP/negbTE: ne=> ->.
     by rewrite (negbTE in_prog') e_stk e_mem.
-Qed.
+Admitted.
+(* Qed. *)
 
 (* transition system *)
 
@@ -1112,6 +1116,9 @@ PS.simplify_turn; rewrite -partial_sps1 s_component_partialize in in_ctx.
 move: partial_sps1; rewrite -{}partial_sps2 => part.
 rewrite -{}partial_sps1' -{}partial_sps2' {sps' sps''}.
 case: scs1 t scs1' / kstep1 in_ctx ne part kstep2 => //=.
+- (* Component Load *)
+(* same ssreflect issue than previously I suppose *)
+  admit.
 - (* External call *)
   move=> C stk1 mem1 k1 C' P v P_expr old1.
   move=> /eqP ne Himport1 Hfind1 in_ctx _ e_part.
@@ -1140,7 +1147,8 @@ case: scs1 t scs1' / kstep1 in_ctx ne part kstep2 => //=.
     by rewrite (partial_stack_pop_to_context ne in_ctx' e_stk) e_mem.
   case: (partial_stack_pop_to_program in_prog e_stk)=> <- [<- <-].
   by rewrite e_mem.
-Qed.
+Admitted.
+(* Qed. *)
 
 Theorem state_determinism:
   forall p ctx G sps t sps',

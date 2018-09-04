@@ -133,6 +133,12 @@ Fixpoint compile_expr (e: expr) : COMP code :=
     ret [IMov R_ARG R_COM]
   | E_local =>
     ret [IConst (IPtr local_buf_ptr) R_COM]
+
+  (* should be pretty much the same thing as above
+     but pointing outside of the component...
+   *)
+  | E_component_buf C =>
+    (* ret [IConst (IPtr (* not *) local_buf_ptr) R_COM] *)
   | E_binop bop e1 e2 =>
     do c1 <- compile_expr e1;
     do c2 <- compile_expr e2;

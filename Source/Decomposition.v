@@ -196,6 +196,12 @@ Section Decomposition.
         * econstructor; eauto.
       + econstructor; auto.
 
+    - (* KS_ComponentBuffer *)
+      eexists. split.
+      + eapply PS.partial_step with (p':=c); eauto.
+        * econstructor; eauto.
+      + econstructor; auto.
+
     - (* KS_Alloc1 *)
       eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
@@ -215,6 +221,12 @@ Section Decomposition.
       + econstructor; auto.
 
     - (* KS_DerefEval *)
+      eexists. split.
+      + eapply PS.partial_step with (p':=c); eauto.
+        * econstructor; eauto.
+      + econstructor; auto.
+
+    - (* KS_DerefComponentEval *)
       eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
@@ -359,6 +371,12 @@ Section Decomposition.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
+    - (* KS_ComponentBuffer *)
+      eexists. split.
+      + eapply PS.partial_step with (p':=c); eauto.
+        * eapply PS.ContextControl; eauto.
+      + eapply PS.ContextControl; eauto.
+
     - (* KS_Alloc1 *)
       eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
@@ -382,6 +400,12 @@ Section Decomposition.
       + eapply PS.ContextControl; eauto.
 
     - (* KS_DerefEval *)
+      eexists. split.
+      + eapply PS.partial_step with (p':=c); eauto.
+        * eapply PS.ContextControl; eauto.
+      + eapply PS.ContextControl; eauto.
+
+    - (* KS_DerefComponentEval *)
       eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
@@ -517,7 +541,12 @@ Section Decomposition.
   | wf_comps_ret: forall C1 arg C2,
       C1 \in domm iface ->
       C2 \in domm iface ->
-      well_defined_components iface (ERet C1 arg C2).
+      well_defined_components iface (ERet C1 arg C2)
+  | wf_comps_load: forall C1 val C2,
+      Program.has_component_id iface C1 ->
+      Program.has_component_id iface C2 ->
+      well_defined_components iface (ELoad C1 val C2)
+  .
 
   Definition well_defined_components_trace (iface : Program.interface) (t : trace) : Prop :=
     forall e, In e t -> well_defined_components iface e.
@@ -537,7 +566,7 @@ Section Decomposition.
     have := cprog_closed_interface closedness_after_linking.
     move/(well_formed_trace_int trace_wf)/seq.allP/(_ _ in_t).
     rewrite /declared_event_comps.
-    by case: e {in_t}=> /= [????|???] /andP [??]; constructor.
+    by case: e {in_t}=> /= [????|???|???] /andP [??] ; constructor.
   Qed.
 
   Lemma ub_behavior_has_well_defined_components:

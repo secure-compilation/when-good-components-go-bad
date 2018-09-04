@@ -172,7 +172,6 @@ Lemma well_formed_trace_int intf t :
   well_formed_trace intf t ->
   closed_interface intf ->
   all (declared_event_comps intf) t.
-(* should be rewritten for ELoad I guess *)
 Proof.
 case/andP=> wb wf clos; rewrite /declared_event_comps.
 apply/allP; case=> [C P v C'|C v C' | C v C'] /=; unfold Program.has_component_id; rewrite !mem_domm.

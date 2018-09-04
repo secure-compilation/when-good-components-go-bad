@@ -92,6 +92,11 @@ Section Definability.
 
    *)
 
+  (** FG : Additional changes to include static read
+           Elements read from the public buffer in the traces should
+           be put in the backtranslated program
+   *)
+
   Definition switch_clause n e_then e_else :=
     let one := E_val (Int 1%Z) in
     E_if (E_binop Eq (E_deref E_local) (E_val (Int n)))
@@ -225,6 +230,10 @@ Section Definability.
       E_seq (E_call C' P' (E_val (Int arg)))
             (E_call C  P  (E_val (Int 0)))
     | ERet  _ ret_val _ => E_val (Int ret_val)
+    (* the ELoad doesn't contains the offset of the pointer,
+       this is pretty awkward in this case because we would only deref the begining of the buffer
+     *)
+    (* | ELoad C_caller ret_val C' => E_deref (E_component_buf C') *)
     end.
 
   Definition expr_of_trace (C: Component.id) (P: Procedure.id) (t: trace) : expr :=
@@ -346,7 +355,7 @@ Section Definability.
         elim: {t Ht} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
           exact: fsub0set.
         move/(_ n) in IH; rewrite !fset0U.
-        case: e=> [C' P' v C''|] //=; last by rewrite fset0U.
+        case: e=> [C' P' v C''| |] //=; try  by rewrite fset0U.
         rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
         by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
@@ -361,7 +370,7 @@ Section Definability.
         by case: eqP => [<-|] //; rewrite find_procedures_of_trace_exp; eauto.
       elim: {P P_CI} t Ht P' C'_P' => [|e t IH] //= /andP [He Ht] P.
       case: (C =P _) => [HC|]; last by eauto.
-      case: e HC He=> [_ P' v C'' /= <-|]; last by eauto.
+      case: e HC He=> [_ P' v C'' /= <-| |]; try by eauto.
       rewrite inE; case/andP=> [C_C'' /imported_procedure_iff imp_C''_P'].
       by case/orP=> [/eqP [-> ->] //|]; eauto.
     - by rewrite domm_map.
@@ -508,7 +517,7 @@ Section Definability.
                    well_formed_state s' (prefix ++ [e]) suffix cs').
         {
           clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
-          destruct e as [C_ P' new_arg C'|C_ ret_val C'];
+          destruct e as [C_ P' new_arg C'|C_ ret_val C'| C_ loaded_val C'];
           simpl in wf_C, wf_e, wb_suffix; subst C_.
           - case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
             exists (StackState C' (C :: callers)).
@@ -559,14 +568,17 @@ Section Definability.
               exists cs'. split; trivial.
               eapply star_step; try eassumption.
               * by apply/CS.eval_kstep_sound; rewrite /= eqxx.
-              * reflexivity. }
+              * reflexivity.
+              * admit.
+        }
         destruct Star2 as (s' & cs' & Star2 & wf_cs').
         specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
         specialize (IH Et wf_cs'). destruct IH as [cs'' Star3 final].
         exists cs''; trivial.
         eapply (star_trans Star1); simpl; eauto.
         now eapply (star_trans Star2); simpl; eauto.
-    Qed.
+    Admitted.
+    (* Qed. *)
 
     Lemma definability :
       well_formed_trace intf t ->

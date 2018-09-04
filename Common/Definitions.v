@@ -46,6 +46,7 @@ Module Program.
     getm Is C = Some CI.
   Definition has_component_id (Is: interface) (C: Component.id) :=
     C \in domm Is.
+  (* Hint Unfold has_component has_component_id. *)
 End Program.
 
 Definition exported_procedure
