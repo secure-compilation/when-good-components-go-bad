@@ -46,7 +46,8 @@ Module Source.
   Record program : Type := mkProg {
     prog_interface : Program.interface;
     prog_procedures : NMap (NMap expr);
-    prog_buffers : NMap (nat + list value)
+    (* public and private *)
+    prog_buffers : NMap (buffer * buffer)
   }.
 
   (** Lookup definition of procedure [C.P] in the map [procs]. *)
@@ -69,6 +70,14 @@ Module Source.
     forall C P, (C, P) \in calls ->
       if C == cur_comp then find_procedure procs cur_comp P : Prop
       else imported_procedure intf cur_comp C P.
+
+  (* a program has valid buffers if the size in the component interfaces is
+     the same as the statically allocated public buffers *)
+ Definition valid_buffers
+            (prog : program) :=
+    mapm (fun (comp_bufs : (buffer * buffer)) =>
+            let (pub, _) := comp_bufs in buffer_size pub) (prog_buffers prog) =
+    mapm (fun comp_intf => Component.public_buffer_size comp_intf) (prog_interface prog).
 
   Fixpoint values_are_integers (e: expr) : bool :=
     match e with
@@ -95,15 +104,15 @@ Module Source.
      4) pointers are not present (no pointer forging) *)
   Definition well_formed_expr (p: program) (cur_comp: Component.id) (e: expr) : Prop :=
     valid_calls (prog_procedures p) (prog_interface p) cur_comp (called_procedures e)
+    (* /\ valid_static_access p cur_com e *)
     /\ values_are_integers e.
 
   (* Component C has a buffer of size at least one *)
   Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
-    exists2 buf, prog_buffers p C = Some buf &
-                 match buf with
-                 | inl size   => size > 0
-                 | inr values => length values > 0
-                 end%nat.
+    exists2 bufs,
+      prog_buffers p C = Some bufs &
+      let '(pub, priv) := bufs in
+        (* (buffer_size pub) > 0 /\ *) (buffer_size priv) > 0.
 
   Record well_formed_program (p: program) := {
     (* the interface is sound (but maybe not closed) *)
@@ -121,14 +130,17 @@ Module Source.
         find_procedure (prog_procedures p) C P = Some Pexpr ->
         well_formed_expr p C Pexpr;
     (* each declared component has the required static buffers *)
+
+    (* FG : shouldn't this evidence go along with well formed buffers ? *)
     wfprog_defined_buffers: domm (prog_interface p) = domm (prog_buffers p);
     (* each component's buffer is well formed *)
     wfprog_well_formed_buffers:
+      valid_buffers p /\
       forall C, prog_interface p C ->
-                has_required_local_buffers p C;
+           has_required_local_buffers p C;
     (* if the main component is defined, so is the main procedure *)
     wfprog_main_existence:
-      Component.main \in domm (prog_interface p) -> prog_main p
+      Component.main \in domm (prog_interface p) -> prog_main p;
   }.
 
   (* a closed program is a program with a closed interface and an existing main
@@ -293,7 +305,8 @@ Module Source.
     well_formed_program (program_unlink Cs p).
   Proof.
     case: p => [pi pp pb] wf; split=> /=.
-    - move=> C C' P [CI []].
+    - (* interface soundness *)
+      move=> C C' P [CI []].
       rewrite /Program.has_component /Component.is_importing /Component.is_exporting.
       rewrite !filtermE.
       case pi_C: (pi C)=> [CI'|] //= HCI.
@@ -302,38 +315,49 @@ Module Source.
       move/wfprog_interface_soundness/(_ _ _ _ Himp CI'): wf.
       rewrite /Program.has_component /=.
       case pi_C': (pi C')=> [CI''|] //=.
-      by case: ifP.
-    - apply/eq_fset=> C; move/wfprog_defined_procedures/eq_fset/(_ C): wf.
+        by case: ifP.
+    - (* defined procedures *)
+      apply/eq_fset=> C; move/wfprog_defined_procedures/eq_fset/(_ C): wf.
       rewrite /= !mem_domm !filtermE.
       by case: (pp C) (pi C) (C \in Cs) => [?|] //= [?|] //= [].
-    - move=> C P.
+    - (* exported procedures existence *)
+      move=> C P.
       rewrite exported_procedure_filter_comp find_procedure_filter_comp.
       case=> ->.
       exact: (wfprog_exported_procedures_existence wf).
-    - move=> C P Pexpr; rewrite find_procedure_filter_comp.
+    - (* well formed procedures *)
+      move=> C P Pexpr; rewrite find_procedure_filter_comp.
       case: ifP=> //= C_Cs pp_C_P.
       case/wfprog_well_formed_procedures/(_ _ _ _ pp_C_P): wf=> /= Hcalls Hints.
       split=> //= C' P' /Hcalls.
       rewrite find_procedure_filter_comp C_Cs.
       case: ifP=> // _.
       by rewrite imported_procedure_filter_comp.
-    - apply/eq_fset=> C; move/wfprog_defined_buffers/eq_fset/(_ C): wf.
+    - (* defined buffers *)
+      apply/eq_fset=> C; move/wfprog_defined_buffers/eq_fset/(_ C): wf.
       rewrite /= !mem_domm !filtermE.
       by case: (pb C) (pi C) (C \in Cs) => [?|] //= [?|] //= [].
-    - move=> C; rewrite filtermE.
-      case pi_C: (pi C)=> [CI|] //=.
-      case: ifP=> //= C_Cs _.
-      move/wfprog_well_formed_buffers/(_ C): wf=> /=.
-      rewrite pi_C=> /(_ erefl) [bufs /= pb_C ?].
-      by exists bufs => //=; rewrite filtermE pb_C /= C_Cs.
-    - have /= /implyP := wfprog_main_existence wf.
+    - (* well formed buffers *)
+      split.
+      + admit.
+      + move=> C; rewrite filtermE.
+        case pi_C: (pi C)=> [CI|] //=.
+        case: ifP=> //= C_Cs _.
+
+        (* move/wfprog_well_formed_buffers/(_ C): wf=> /=. *)
+        (* rewrite pi_C=> /(_ erefl) [bufs /= pb_C ?]. *)
+        (*   by exists bufs => //=; rewrite filtermE pb_C /= C_Cs. *)
+        admit.
+
+    - (* main existence *)
+      have /= /implyP := wfprog_main_existence wf.
       rewrite /prog_main /find_procedure !mem_domm !filtermE.
       have : pi Component.main = pp Component.main :> bool.
         by rewrite -!mem_domm (wfprog_defined_procedures wf).
       case: (pi Component.main)=> [CI|] //=.
       case: (pp Component.main)=> [C_procs|] //= _.
       by case: (Component.main \in Cs).
-  Qed.
+  Admitted.
 
   Lemma linkable_programs_has_component p1 p2 :
     linkable (prog_interface p1) (prog_interface p2) ->
@@ -443,13 +467,17 @@ Module Source.
       + by rewrite linkable_programs_find_procedure_dom // => ->.
       + by rewrite linkable_imported_procedure //; eauto.
     - by rewrite /= !domm_union (wfprog_defined_buffers wf1) (wfprog_defined_buffers wf2).
-    - rewrite /has_required_local_buffers /= => C.
-      move: (linkable_disjoint_buffers wf1 wf2 link)=> dis_buf.
-      move/wfprog_well_formed_buffers in wf1.
-      move/wfprog_well_formed_buffers in wf2.
-      rewrite -mem_domm domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
-        by rewrite mem_domm; case/wf1=> [? ->] /=; eauto.
-      by rewrite mem_domm; case/wf2=> [? ->] /=; eauto.
+    - split.
+      + admit.
+      + rewrite /has_required_local_buffers /= => C.
+        move: (linkable_disjoint_buffers wf1 wf2 link)=> dis_buf.
+        move/wfprog_well_formed_buffers in wf1.
+        move/wfprog_well_formed_buffers in wf2.
+        destruct wf1 as [_ wf1'].
+        destruct wf2 as [_ wf2'].
+        rewrite -mem_domm domm_union in_fsetU ; case/orP; last rewrite unionmC //; rewrite unionmE.
+          rewrite mem_domm ; case/wf1'=> [? ->] /=; eauto.
+            by rewrite mem_domm; case/wf2'=> [? ->] /=; eauto.
     - have /implyP := wfprog_main_existence wf1.
       have /implyP := wfprog_main_existence wf2.
       rewrite /= /prog_main /find_procedure !mem_domm !unionmE.
@@ -457,7 +485,7 @@ Module Source.
       rewrite -(wfprog_defined_procedures wf1) mem_domm.
       case: (prog_interface p1 Component.main)=> [CI|] //=.
       by case: (prog_interface p2 Component.main)=> [CI|] //=.
-  Qed.
+  Admitted.
 
   Lemma linked_programs_main_component_origin:
     forall p1 p2,
@@ -519,9 +547,11 @@ Module Source.
         end
     in init Cmem values 0%Z.
 
+  (* Prealloc the public part and the private part "flatly" *)
   Definition prepare_buffers (p: program) : Memory.t :=
-    mapm (fun initial_buffer =>
-            ComponentMemory.prealloc (mkfmap [(0, initial_buffer)]))
+    mapm (fun bufs =>
+            let '(pub, priv):= bufs in
+            ComponentMemory.prealloc (mkfmap [(Block.local, pub); (Block.private,priv)]))
          (prog_buffers p).
 
   Lemma find_procedure_in_linked_programs:

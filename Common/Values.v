@@ -7,7 +7,10 @@ From mathcomp Require Import
 Module Block.
   Definition id := nat.
   Definition offset := Z.
+  (* local public buffer *)
   Definition local : id := 0.
+  (* local private buffer *)
+  Definition private : id := 1.
 End Block.
 
 Module Pointer.
@@ -126,3 +129,11 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
   (* undefined operations *)
   | _,     _,       _       => Undef
   end.
+
+(* Should be place surely elsewhere, but it doesn't break the dependency tree that way *)
+  Definition buffer : Type := (nat + list value).
+  Definition buffer_size (buf : buffer) :=
+    match buf with
+    | inl n => n
+    | inr seq => length seq
+    end.

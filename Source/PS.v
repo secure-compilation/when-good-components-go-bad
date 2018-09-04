@@ -900,14 +900,18 @@ Proof.
   assert (
       filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_buffers p1))
                     (mapm
-                       (fun initial_buffer : nat + list value =>
-                        ComponentMemory.prealloc (setm emptym 0 initial_buffer))
+                       (fun bufs =>
+                          let '(pub, priv):= bufs in
+                          ComponentMemory.prealloc
+                            (setm (setm emptym Block.local pub) Block.private priv))
                        (unionm (prog_buffers p) (prog_buffers p1)))
       =
       filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_buffers p1))
                     (mapm
-                       (fun initial_buffer : nat + list value =>
-                        ComponentMemory.prealloc (setm emptym 0 initial_buffer))
+                       (fun bufs =>
+                         let '(pub, priv):= bufs in
+                         ComponentMemory.prealloc
+                           (setm (setm emptym Block.local pub) Block.private priv))
                        (unionm (prog_buffers p) (prog_buffers p2)))
     ) as Hmem.
   {
@@ -922,8 +926,10 @@ Proof.
         rewrite Hbuffers1 in Hdisjoint1.
         rewrite fdisjointC in Hdisjoint1.
         pose proof (domm_map
-                   (fun initial_buffer =>
-                     ComponentMemory.prealloc (setm emptym 0 initial_buffer))
+                      (fun initial_buffers =>
+                           let '(pub, priv):= initial_buffers in
+                           ComponentMemory.prealloc
+                             (setm (setm emptym Block.local pub) Block.private priv))
                    (prog_buffers p))
           as Hdomm.
         rewrite <- Hdomm in Hdisjoint1.

@@ -6,7 +6,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype.
 Module Type AbstractComponentMemory.
   Parameter t : Type.
 
-  Parameter prealloc : {fmap Block.id -> nat + list value} -> t.
+  Parameter prealloc : {fmap Block.id -> buffer } -> t.
   Parameter empty : t.
   Parameter reserve_block : t -> t * Block.id.
   Parameter alloc : t -> nat -> t * Block.id.

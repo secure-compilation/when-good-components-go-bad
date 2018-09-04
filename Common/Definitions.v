@@ -28,7 +28,8 @@ Module Component.
 
   Record interface := mkCompInterface {
     export: {fset Procedure.id};
-    import: {fset Component.id * Procedure.id}
+    import: {fset Component.id * Procedure.id};
+    public_buffer_size: nat
   }.
 
   Definition is_importing CI C P : Prop := (C,P) \in import CI.
