@@ -99,8 +99,9 @@ Section Definability.
 
   Definition switch_clause n e_then e_else :=
     let one := E_val (Int 1%Z) in
-    E_if (E_binop Eq (E_deref E_local) (E_val (Int n)))
-         (E_seq (E_assign E_local (E_binop Add (E_deref E_local) one)) e_then)
+    E_if (E_binop Eq (E_deref (E_local Block.priv)) (E_val (Int n)))
+         (E_seq (E_assign (E_local Block.priv)
+                          (E_binop Add (E_deref (E_local Block.priv)) one)) e_then)
          e_else.
 
   Ltac take_step :=
@@ -110,10 +111,10 @@ Section Definability.
     end.
 
   Lemma switch_clause_spec p' C stk mem n n' e_then e_else arg :
-    Memory.load mem (C, Block.local, 0%Z) = Some (Int n) ->
+    Memory.load mem (C, Block.private, 0%Z) = Some (Int n) ->
     if (n =? n') % Z then
       exists mem',
-        Memory.store mem (C, Block.local, 0%Z) (Int (Z.succ n)) = Some mem' /\
+        Memory.store mem (C, Block.private, 0%Z) (Int (Z.succ n)) = Some mem' /\
         Star (CS.sem p')
              [CState C, stk, mem , Kstop, switch_clause n' e_then e_else, arg] E0
              [CState C, stk, mem', Kstop, e_then, arg]
@@ -162,7 +163,7 @@ Section Definability.
   Qed.
 
   Lemma switch_spec_else p' C stk mem n es e_else arg :
-    Memory.load mem (C, Block.local, 0%Z) = Some (Int (Z.of_nat n)) ->
+    Memory.load mem (C, Block.private, 0%Z) = Some (Int (Z.of_nat n)) ->
     (length es <= n)%nat ->
     Star (CS.sem p')
          [CState C, stk, mem, Kstop, switch es e_else, arg] E0
@@ -190,9 +191,9 @@ Section Definability.
   Qed.
 
   Lemma switch_spec p' C stk mem es e es' e_else arg :
-    Memory.load mem (C, Block.local, 0%Z) = Some (Int (Z.of_nat (length es))) ->
+    Memory.load mem (C, Block.private, 0%Z) = Some (Int (Z.of_nat (length es))) ->
     exists mem',
-      Memory.store mem (C, Block.local, 0%Z) (Int (Z.of_nat (S (length es)))) = Some mem' /\
+      Memory.store mem (C, Block.private, 0%Z) (Int (Z.of_nat (S (length es)))) = Some mem' /\
       Star (CS.sem p')
            [CState C, stk, mem , Kstop, switch (es ++ e :: es') e_else, arg] E0
            [CState C, stk, mem', Kstop, e, arg].

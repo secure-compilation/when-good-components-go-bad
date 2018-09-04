@@ -190,7 +190,13 @@ Section Decomposition.
         * econstructor; eauto.
       + econstructor; auto.
 
-    - (* KS_LocalBuffer *)
+    - (* KS_LocalBufferPublic *)
+      eexists. split.
+      + eapply PS.partial_step with (p':=c); eauto.
+        * econstructor; eauto.
+      + econstructor; auto.
+
+    - (* KS_LocalBufferPrivate *)
       eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * econstructor; eauto.
@@ -365,7 +371,13 @@ Section Decomposition.
         * eapply PS.ContextControl; eauto.
       + eapply PS.ContextControl; eauto.
 
-    - (* KS_LocalBuffer *)
+    - (* KS_LocalBufferPublic *)
+      eexists. split.
+      + eapply PS.partial_step with (p':=c); eauto.
+        * eapply PS.ContextControl; eauto.
+      + eapply PS.ContextControl; eauto.
+
+    - (* KS_LocalBufferPrivate *)
       eexists. split.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
