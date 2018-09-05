@@ -1,26 +1,26 @@
 Require Import Common.Definitions.
 Require Import CompCert.Coqlib.
+Require Import Common.Values.
 
 Inductive event :=
 | ECall : Component.id -> Procedure.id -> Z -> Component.id -> event
 | ERet : Component.id -> Z -> Component.id -> event
-| ELoad : Component.id (* -> ptr *) (* -> offset *) -> Z (* TODO add Undef *) ->  Component.id -> event
-(* the fitting pointer to the buffer would be added eventually *)
-(* The offset should be added sooner *)
+| ELoad : Component.id (* -> ptr *) -> Block.offset -> Z (* TODO add Undef *) ->  Component.id -> event
+(* the fitting pointer to the buffer would replace the offset eventually *)
 .
 
 Definition cur_comp_of_event (e: event) : Component.id :=
   match e with
   | ECall C _ _ _ => C
   | ERet  C _ _   => C
-  | ELoad C _ _   => C
+  | ELoad C _ _ _ => C
   end.
 
 Definition next_comp_of_event (e: event) : Component.id :=
   match e with
   | ECall _ _ _ C => C
   | ERet  _ _   C => C
-  | ELoad C _ _   => C           (* we're not giving turn to the component that owns the pointer *)
+  | ELoad C _ _ _ => C           (* we're not giving turn to the component that owns the pointer *)
   end.
 
 Definition trace := list event.
@@ -219,7 +219,7 @@ Inductive match_traces: trace -> trace -> Prop :=
   | match_traces_ret: forall C retval C',
       match_traces (ERet C retval C' :: nil)
                    (ERet C retval C' :: nil)
-  | match_traces_load: forall C val C',
-      match_traces (ELoad C val C' :: nil)
-                   (ELoad C val C' :: nil)
+  | match_traces_load: forall C off val C',
+      match_traces (ELoad C off val C' :: nil)
+                   (ELoad C off val C' :: nil)
 .

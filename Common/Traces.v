@@ -63,7 +63,7 @@ Fixpoint well_bracketed_trace s t : bool :=
       | head :: tail =>
         (head == C') && well_bracketed_trace (StackState C' tail) t'
       end
-    | ELoad C _ _ => well_bracketed_trace s t' (* since we're not giving turn, this doesn't change the stack state and we go on *)
+    | ELoad C _ _ _ => well_bracketed_trace s t' (* since we're not giving turn, this doesn't change the stack state and we go on *)
     end
   end.
 
@@ -71,7 +71,7 @@ Definition run_event s e :=
   match e with
   | ECall C _ _ C' => StackState C' (C :: callers s)
   | ERet  C _   C' => StackState C' (tail (callers s))
-  | ELoad C _ _    => s
+  | ELoad C _ _ _  => s
   end.
 
 Definition run_trace s t := foldl run_event s t.
@@ -84,7 +84,7 @@ Lemma well_bracketed_trace_cat s t1 t2 :
   well_bracketed_trace s t1 &&
   well_bracketed_trace (run_trace s t1) t2.
 Proof.
-elim: t1 s=> [//|[C ? ? C'|C ? C'| C _ _] t1 IH] [Ccur callers] /=.
+elim: t1 s=> [//|[C ? ? C'|C ? C'| C _ _ _] t1 IH] [Ccur callers] /=.
   by rewrite IH andbA.
 case: eqP callers => [_ {Ccur}|_] //= [|top callers] //=.
 by rewrite IH andbA.
@@ -110,7 +110,7 @@ have -> : well_bracketed_trace s0 (rcons t e) =
           well_bracketed_trace s0 t &&
           well_bracketed_trace (run_trace s0 t) [:: e].
   by rewrite -cats1 well_bracketed_trace_cat andbC.
-rewrite run_trace1; case: e => [C1 P arg C2|C1 ? C2|C1 ? ?] /=.
+rewrite run_trace1; case: e => [C1 P arg C2|C1 ? C2|C1 ? ? ?] /=.
   - (* ECall *)
   rewrite andbT; case/andP=> wb_t /eqP <- {C1} /=.
   rewrite -[_ :: callers _]/(run_trace s0 t : seq _) suffix_cons /=.
@@ -154,7 +154,7 @@ Definition well_formed_event intf (e: event) : bool :=
   match e with
   | ECall C P _ C' => (C != C') && imported_procedure_b intf C C' P
   | ERet  C _   C' => (C != C')
-  | ELoad C _   C' => (C != C')
+  | ELoad C _ _ C' => (C != C')
   end.
 
 Definition well_formed_trace intf (t: trace) : bool :=
@@ -163,7 +163,7 @@ Definition well_formed_trace intf (t: trace) : bool :=
 
 Definition declared_event_comps intf e :=
   match e with
-  | ELoad C _ C' => Program.has_component_id intf C && Program.has_component_id intf C'
+  | ELoad C _ _ C' => Program.has_component_id intf C && Program.has_component_id intf C' (* when would we want to check the offset compared to the interface ? *)
   | _ => [&& cur_comp_of_event e \in domm intf &
                                     next_comp_of_event e \in domm intf]
   end.
@@ -174,7 +174,7 @@ Lemma well_formed_trace_int intf t :
   all (declared_event_comps intf) t.
 Proof.
 case/andP=> wb wf clos; rewrite /declared_event_comps.
-apply/allP; case=> [C P v C'|C v C' | C v C'] /=; unfold Program.has_component_id; rewrite !mem_domm.
+apply/allP; case=> [C P v C'|C v C' | C off v C'] /=; unfold Program.has_component_id; rewrite !mem_domm.
 - move/(allP wf)=> /andP [_ imp].
   move: (imp); rewrite /imported_procedure_b; case: getm => //= _ _.
   by case/imported_procedure_iff/clos: imp=> ? [->].

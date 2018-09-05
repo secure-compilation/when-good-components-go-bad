@@ -10,12 +10,12 @@ Definition sum_of_event (e : event) :=
   match e with
   | ERet C v C' => inl (inl (C, v, C'))
   | ECall C P v C' => inl (inr (C, P, v, C'))
-  | ELoad C v C' => inr (C, v, C')
+  | ELoad C off v C' => inr (C, off, v, C')
   end.
 
 Lemma sum_of_event_inj : injective sum_of_event.
 Proof.
-  by case => [????|???|???] [????|???|???] //= => [[-> -> -> ->]|[-> -> ->]|[-> -> ->]].
+  by case => [????|???|????] [????|???|????] //= => [[-> -> -> ->]|[-> -> ->]|[-> -> -> ->]].
 Qed.
 
 Definition event_eqMixin := InjEqMixin sum_of_event_inj.
