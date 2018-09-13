@@ -836,8 +836,9 @@ Qed.
 
 End Semantics.
 
-Definition comes_from_initial_state (s: state) : Prop :=
+Definition comes_from_initial_state (s: state) (iface : Program.interface) : Prop :=
   exists p s0 t,
+    prog_interface p = iface /\
     initial_state p s0 /\
     Star (sem p) s0 t s.
 
