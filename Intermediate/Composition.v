@@ -169,7 +169,8 @@ Admitted. (* Grade 2. *)
 Lemma merge_memories_partition:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
-  forall mem,
+  forall stk mem regs pc,
+    CS.comes_from_initial_state (stk, mem, regs, pc) (unionm ctx1 ctx2) ->
     PS.merge_memories
       (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx1) mem)
       (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx2) mem)
@@ -1283,14 +1284,14 @@ Section Simulation.
         * easy.
         * simpl.
           rewrite (merge_stacks_partition Hmerge_iface).
-          rewrite (merge_memories_partition Hmerge_iface).
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
           admit.
         * constructor.
           -- assumption.
-          -- by rewrite (merge_memories_partition Hmerge_iface).
+          -- by rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
           -- by rewrite (merge_stacks_partition Hmerge_iface).
         * simpl.
-          rewrite (merge_memories_partition Hmerge_iface).
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
           rewrite (merge_stacks_partition Hmerge_iface).
           rewrite <- Pointer.inc_preserves_component.
           constructor.
@@ -1945,15 +1946,15 @@ Section PartialComposition.
           -- assumption.
           -- simpl.
              rewrite (merge_stacks_partition Hmergeable_ifaces).
-             rewrite (merge_memories_partition Hmergeable_ifaces).
+             rewrite (merge_memories_partition Hmergeable_ifaces Hcomes_from).
              assumption.
           -- constructor.
              ++ assumption.
-             ++ now rewrite (merge_memories_partition Hmergeable_ifaces).
+             ++ now rewrite (merge_memories_partition Hmergeable_ifaces Hcomes_from).
              ++ now rewrite (merge_stacks_partition Hmergeable_ifaces).
           -- constructor.
              ++ assumption.
-             ++ now rewrite (merge_memories_partition Hmergeable_ifaces).
+             ++ now rewrite (merge_memories_partition Hmergeable_ifaces Hcomes_from).
              ++ now rewrite (merge_stacks_partition Hmergeable_ifaces).
 
       + destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
