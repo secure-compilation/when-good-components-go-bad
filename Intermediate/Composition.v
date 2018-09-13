@@ -1024,7 +1024,7 @@ Section Semantics.
 
   Inductive initial_state : PS.state -> Prop :=
   | initial_state_intro: forall ics ips,
-      CS.comes_from_initial_state ics ->
+      CS.comes_from_initial_state ics (unionm (prog_interface prog) ctx) ->
       PS.partial_state ctx ics ips ->
       PS.is_program_component ips ctx ->
       initial_state ips.
@@ -1060,7 +1060,7 @@ Section Semantics.
 
   Inductive initial_state : PS.state -> Prop :=
   | initial_state_intro: forall ics ips,
-      CS.comes_from_initial_state ics ->
+      CS.comes_from_initial_state ics (unionm (prog_interface prog) ctx) ->
       PS.partial_state ctx ics ips ->
       PS.is_context_component ips ctx ->
       initial_state ips.
@@ -1141,12 +1141,12 @@ Section Simulation.
     Regardless, observe that there remains a troublesome case when matching the
     PC form against mergeable_states.
 
-    Observe several goals repeat: pose, refactor, etc. *)
+    Observe several goals repeat: pose, refactor, etc. *) Print ProgramSem.initial_state.
   Lemma match_initial_states:
     forall ips1,
-      ProgramSem.initial_state (prog_interface c) ips1 ->
+      ProgramSem.initial_state p (prog_interface c) ips1 ->
     exists ips2,
-      ContextSem.initial_state (prog_interface p) ips2 /\
+      ContextSem.initial_state c (prog_interface p) ips2 /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2.
   Proof.
     intros ips1 Hini.
@@ -1162,7 +1162,7 @@ Section Simulation.
           filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem)).
     split.
     - econstructor.
-      + eassumption.
+      + apply CS.comes_from_initial_state_mergeable_sym; eassumption.
       + constructor.
         * PS.simplify_turn. eapply domm_partition; eassumption.
         * reflexivity.
@@ -1170,8 +1170,8 @@ Section Simulation.
       + PS.simplify_turn. eapply domm_partition; eassumption.
     - econstructor.
       + eapply mergeable_interfaces_sym; eassumption.
+      + apply CS.comes_from_initial_state_mergeable_sym; eassumption.
       + eassumption.
-      + assumption.
       + constructor.
         * PS.simplify_turn. eapply domm_partition; eassumption.
         * reflexivity.
@@ -1338,9 +1338,9 @@ Section Simulation.
 
   Lemma match_initial_states:
     forall ips1,
-      ContextSem.initial_state (prog_interface c) ips1 ->
+      ContextSem.initial_state p (prog_interface c) ips1 ->
     exists ips2,
-      ProgramSem.initial_state (prog_interface p) ips2 /\
+      ProgramSem.initial_state c (prog_interface p) ips2 /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2.
   Proof.
     intros ips1 Hini.
@@ -1358,7 +1358,7 @@ Section Simulation.
           regs, pc)).
     split.
     - econstructor.
-      + eassumption.
+      + apply CS.comes_from_initial_state_mergeable_sym; eassumption.
       + constructor.
         * PS.simplify_turn. eapply PS.domm_partition_notin; eassumption.
         * reflexivity.
@@ -1366,7 +1366,7 @@ Section Simulation.
       + PS.simplify_turn. eapply PS.domm_partition_notin; eassumption.
     - econstructor.
       + eapply mergeable_interfaces_sym; eassumption.
-      + eassumption.
+      + apply CS.comes_from_initial_state_mergeable_sym; eassumption.
       + assumption.
       + constructor.
         * PS.simplify_turn. eapply PS.domm_partition_notin; eassumption.
