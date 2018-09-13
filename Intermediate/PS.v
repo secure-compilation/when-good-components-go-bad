@@ -401,7 +401,7 @@ Qed.
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_intro: forall ics ips1 ips2,
     mergeable_interfaces ctx1 ctx2 ->
-    CS.comes_from_initial_state ics ->
+    CS.comes_from_initial_state ics (unionm ctx1 ctx2) ->
     partial_state ctx1 ics ips1 ->
     partial_state ctx2 ics ips2 ->
     mergeable_states ctx1 ctx2 ips1 ips2.
@@ -461,9 +461,9 @@ Proof.
   inversion Hmergeable; subst.
   - econstructor; auto.
     + apply mergeable_interfaces_sym; assumption.
-    + eassumption.
-    + eassumption.
-    + eassumption.
+    + apply CS.comes_from_initial_state_mergeable_sym; eassumption.
+    + assumption.
+    + assumption.
 Qed.
 
 (* Lemma placeholder: mergeable_states_program_to_program *)

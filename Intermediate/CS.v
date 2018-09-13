@@ -842,4 +842,15 @@ Definition comes_from_initial_state (s: state) (iface : Program.interface) : Pro
     initial_state p s0 /\
     Star (sem p) s0 t s.
 
+Lemma comes_from_initial_state_mergeable_sym :
+  forall s iface1 iface2,
+    Linking.mergeable_interfaces iface1 iface2 ->
+    comes_from_initial_state s (unionm iface1 iface2) ->
+    comes_from_initial_state s (unionm iface2 iface1).
+Proof.
+  intros s iface1 iface2 [[_ Hdisjoint] _] Hfrom_initial.
+  rewrite <- (unionmC Hdisjoint).
+  exact Hfrom_initial.
+Qed.
+
 End CS.
