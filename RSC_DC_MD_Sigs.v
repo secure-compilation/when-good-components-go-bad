@@ -138,43 +138,38 @@ Module Type Intermediate_Sig.
     Parameter sem : program -> Program.interface -> semantics.
   End PS.
 
-  Hypothesis decomposition_with_refinement :
-    forall p c,
-      well_formed_program p ->
-      well_formed_program c ->
-      linkable (prog_interface p) (prog_interface c) ->
-      linkable_mains p c ->
-    forall beh1,
-      program_behaves (CS.sem (program_link p c)) beh1 ->
-    exists beh2,
-      program_behaves (PS.sem p (prog_interface c)) beh2 /\
-      behavior_improves beh1 beh2.
+  (* Hypothesis decomposition_with_refinement : *)
+  (*   forall p c, *)
+  (*     well_formed_program p -> *)
+  (*     well_formed_program c -> *)
+  (*     linkable (prog_interface p) (prog_interface c) -> *)
+  (*     linkable_mains p c -> *)
+  (*   forall beh1, *)
+  (*     program_behaves (CS.sem (program_link p c)) beh1 -> *)
+  (*   exists beh2, *)
+  (*     program_behaves (PS.sem p (prog_interface c)) beh2 /\ *)
+  (*     behavior_improves beh1 beh2. *)
 
   Hypothesis decomposition_prefix :
-    forall p c,
+    forall p c m,
       well_formed_program p ->
       well_formed_program c ->
       linkable (prog_interface p) (prog_interface c) ->
       linkable_mains p c ->
-    forall m,
       not_wrong_finpref m -> (* needed here, and will have it in main proof *)
       does_prefix (CS.sem (program_link p c)) m ->
       does_prefix (PS.sem p (prog_interface c)) m.
 
   Hypothesis composition_prefix :
-    forall p c,
+    forall p c m,
       well_formed_program p ->
       well_formed_program c ->
       linkable_mains p c ->
       closed_program (program_link p c) ->
       mergeable_interfaces (prog_interface p) (prog_interface c) ->
-    forall b1 b2 m,
-      program_behaves (PS.sem p (prog_interface c)) b1 ->
-      program_behaves (PS.sem c (prog_interface p)) b2 ->
-      prefix m b1 ->
-      prefix m b2 ->
-    exists b3,
-      program_behaves (CS.sem (program_link p c)) b3 /\ prefix m b3.
+      does_prefix (PS.sem p (prog_interface c)) m ->
+      does_prefix (PS.sem c (prog_interface p)) m ->
+      does_prefix (CS.sem (program_link p c)) m.
 
   Hypothesis compose_mergeable_interfaces :
     forall p c,
@@ -214,6 +209,31 @@ Module Type Linker_Sig
       Source.well_formed_program c' /\
       Source.closed_program (Source.program_link p' c') /\
       does_prefix (Source.CS.sem (Source.program_link p' c')) m.
+
+(* TODO: split definability_with_linking into a more standard
+         definability + a "unlinking" lemma *)
+
+  (* Hypothesis definability : *)
+  (*   forall p m, *)
+  (*     Intermediate.well_formed_program p -> *)
+  (*     Intermediate.closed_program p -> *)
+  (*     does_prefix (Intermediate.CS.sem p) m -> *)
+  (*     not_wrong_finpref m -> *)
+  (*   exists p', *)
+  (*     Source.prog_interface p' = Intermediate.prog_interface p /\ *)
+  (*     S2I.matching_mains p' p /\ *)
+  (*     Source.well_formed_program p' /\ *)
+  (*     Source.closed_program p' /\ *)
+  (*     does_prefix (Source.CS.sem p') m. *)
+
+  (* Hypothesis unlinking : forall p i1 i2, *)
+  (*   Source.prog_interface p = unionm i1 i2 -> *)
+  (*   Source.well_formed_program p -> *)
+  (*   linkable i1 i2 -> *)
+  (*   exists p1 p2, Source.program_link p1 p2 = p /\ *)
+  (*     Source.prog_interface p1 = i1 /\ *)
+  (*     Source.prog_interface p2 = i2. *)
+
 End Linker_Sig.
 
 Module Type Compiler_Sig
@@ -259,43 +279,49 @@ Module Type Compiler_Sig
     S2I.matching_mains p p_compiled.
 
   (* CH: To match the paper this should be weakened even more to work with prefixes *)
-  Hypothesis separate_compilation_weaker :
-    forall p c pc_comp p_comp c_comp,
-      Source.well_formed_program p ->
-      Source.well_formed_program c ->
-      linkable (Source.prog_interface p) (Source.prog_interface c) ->
-      compile_program p = Some p_comp ->
-      compile_program c = Some c_comp ->
-      compile_program (Source.program_link p c) = Some pc_comp ->
-    forall b : program_behavior,
-      program_behaves (Intermediate.CS.sem pc_comp) b <->
-      program_behaves (Intermediate.CS.sem (Intermediate.program_link p_comp c_comp)) b.
+  (* Hypothesis separate_compilation_weaker : *)
+  (*   forall p c pc_comp p_comp c_comp, *)
+  (*     Source.well_formed_program p -> *)
+  (*     Source.well_formed_program c -> *)
+  (*     linkable (Source.prog_interface p) (Source.prog_interface c) -> *)
+  (*     compile_program p = Some p_comp -> *)
+  (*     compile_program c = Some c_comp -> *)
+  (*     compile_program (Source.program_link p c) = Some pc_comp -> *)
+  (*   forall b : program_behavior, *)
+  (*     program_behaves (Intermediate.CS.sem pc_comp) b <-> *)
+  (*     program_behaves (Intermediate.CS.sem (Intermediate.program_link p_comp c_comp)) b. *)
 
-  Hypothesis S_simulates_I:
-    forall p,
-      Source.closed_program p ->
-      Source.well_formed_program p ->
-    forall tp,
-      compile_program p = Some tp ->
-      backward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp).
+  (* Hypothesis S_simulates_I: *)
+  (*   forall p, *)
+  (*     Source.closed_program p -> *)
+  (*     Source.well_formed_program p -> *)
+  (*   forall tp, *)
+  (*     compile_program p = Some tp -> *)
+  (*     backward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp). *)
 
   Hypothesis forward_simulation_same_safe_prefix:
-    forall p p_compiled m,
-      Source.closed_program p ->
+    forall p p_compiled c c_compiled m,
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      Source.closed_program (Source.program_link p c) ->
       Source.well_formed_program p ->
-      does_prefix (Source.CS.sem p) m ->
+      Source.well_formed_program c ->
+      does_prefix (Source.CS.sem (Source.program_link p c)) m ->
       not_wrong_finpref m ->
       compile_program p = Some p_compiled ->
-      does_prefix (Intermediate.CS.sem p_compiled) m.
+      compile_program c = Some c_compiled ->
+      does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled c_compiled)) m.
 
   Hypothesis backward_simulation_behavior_improves_prefix :
-    forall p p_compiled m,
-      Source.closed_program p ->
+    forall p p_compiled c c_compiled m,
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      Source.closed_program (Source.program_link p c) ->
       Source.well_formed_program p ->
+      Source.well_formed_program c ->
       compile_program p = Some p_compiled ->
-      does_prefix (Intermediate.CS.sem p_compiled) m ->
+      compile_program c = Some c_compiled ->
+      does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled c_compiled)) m ->
     exists b,
-      program_behaves (Source.CS.sem p) b /\
+      program_behaves (Source.CS.sem (Source.program_link p c)) b /\
       (prefix m b \/ behavior_improves_finpref b m).
 
 End Compiler_Sig.

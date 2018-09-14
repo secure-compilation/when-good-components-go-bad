@@ -1347,7 +1347,7 @@ Proof.
   intros X m Hprefix Hnot_wrong'.
   destruct Hprefix as [b [Hb Hmb]]. inversion Hb; subst. inversion H0; subst.
   destruct m as [t'| t' |t']; simpl; simpl in Hmb; subst; try easy. eauto.
-  5 : {
+  Focus 5. {
     destruct m as [t | t | t];
       try contradiction.
     destruct t as [| e t].
