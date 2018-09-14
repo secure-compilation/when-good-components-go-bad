@@ -148,7 +148,8 @@ Qed.
 Lemma merge_stacks_partition:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
-  forall gps,
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
     PS.unpartialize_stack
       (PS.merge_stacks
          (PS.to_partial_stack gps (domm ctx1))
@@ -160,7 +161,8 @@ Admitted. (* Grade 2. *)
 Lemma merge_stacks_partition_emptym:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
-  forall gps,
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
     PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
                     (PS.to_partial_stack gps (domm ctx2)) =
     PS.to_partial_stack gps fset0.
@@ -1283,7 +1285,7 @@ Section Simulation.
           ))).
         * easy.
         * simpl.
-          rewrite (merge_stacks_partition Hmerge_iface).
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
           rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
           {
             (* RB: TODO: Refactor into lemma (cf. other cases). *)
@@ -1301,10 +1303,10 @@ Section Simulation.
         * constructor.
           -- assumption.
           -- by rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
-          -- by rewrite (merge_stacks_partition Hmerge_iface).
+          -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
         * simpl.
           rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
-          rewrite (merge_stacks_partition Hmerge_iface).
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
           rewrite <- Pointer.inc_preserves_component.
           constructor.
           -- by rewrite Pointer.inc_preserves_component.
@@ -1724,8 +1726,8 @@ Section MultiSemantics.
         * PS.simplify_turn.
           now rewrite mem_domm.
         * by rewrite domm0 filterm_predT.
-        * rewrite domm0 (merge_stacks_partition Hmergeable_ifaces).
-          by rewrite (merge_stacks_partition_emptym Hmergeable_ifaces).
+        * rewrite domm0 (merge_stacks_partition Hmergeable_ifaces Hcomes_from).
+          by rewrite (merge_stacks_partition_emptym Hmergeable_ifaces Hcomes_from).
       + rewrite linking_empty_program.
         inversion Hfinal1
           as [p' ics ? Hsame_iface' _ Hwf' Hlinkable' Hmains' Hnotin' Hpartial' Hfinal' | ? Hcontra];
@@ -1758,8 +1760,8 @@ Section MultiSemantics.
           rewrite filterm_predT.
           reflexivity.
         * rewrite domm0.
-          rewrite (merge_stacks_partition Hmergeable_ifaces).
-          rewrite (merge_stacks_partition_emptym Hmergeable_ifaces).
+          rewrite (merge_stacks_partition Hmergeable_ifaces Hcomes_from).
+          rewrite (merge_stacks_partition_emptym Hmergeable_ifaces Hcomes_from).
           reflexivity.
       + rewrite linking_empty_program.
         inversion Hfinal2
@@ -1957,17 +1959,17 @@ Section PartialComposition.
           (* RB: TODO: Refactor occurrences of the following proof pattern once complete. *)
           -- assumption.
           -- simpl.
-             rewrite (merge_stacks_partition Hmergeable_ifaces).
+             rewrite (merge_stacks_partition Hmergeable_ifaces Hcomes_from).
              rewrite (merge_memories_partition Hmergeable_ifaces Hcomes_from).
              assumption.
           -- constructor.
              ++ assumption.
              ++ now rewrite (merge_memories_partition Hmergeable_ifaces Hcomes_from).
-             ++ now rewrite (merge_stacks_partition Hmergeable_ifaces).
+             ++ now rewrite (merge_stacks_partition Hmergeable_ifaces Hcomes_from).
           -- constructor.
              ++ assumption.
              ++ now rewrite (merge_memories_partition Hmergeable_ifaces Hcomes_from).
-             ++ now rewrite (merge_stacks_partition Hmergeable_ifaces).
+             ++ now rewrite (merge_stacks_partition Hmergeable_ifaces Hcomes_from).
 
       + destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
 
