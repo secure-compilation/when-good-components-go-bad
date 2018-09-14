@@ -169,8 +169,8 @@ Admitted. (* Grade 2. *)
 Lemma merge_memories_partition:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
-  forall stk mem regs pc,
-    CS.comes_from_initial_state (stk, mem, regs, pc) (unionm ctx1 ctx2) ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
     PS.merge_memories
       (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx1) mem)
       (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx2) mem)
