@@ -1152,7 +1152,7 @@ Section Simulation.
     Regardless, observe that there remains a troublesome case when matching the
     PC form against mergeable_states.
 
-    Observe several goals repeat: pose, refactor, etc. *) Print ProgramSem.initial_state.
+    Observe several goals repeat: pose, refactor, etc. *)
   Lemma match_initial_states:
     forall ips1,
       ProgramSem.initial_state p (prog_interface c) ips1 ->
