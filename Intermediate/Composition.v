@@ -63,12 +63,16 @@ Proof.
 Qed.
 
 Lemma mergeable_stacks_partition gps ctx1 ctx2:
-  mergeable_interfaces ctx1 ctx2 ->
-  PS.mergeable_stacks (PS.to_partial_stack gps (domm ctx1)) (PS.to_partial_stack gps (domm ctx2)).
+    mergeable_interfaces ctx1 ctx2 ->
+  forall mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    PS.mergeable_stacks (PS.to_partial_stack gps (domm ctx1)) (PS.to_partial_stack gps (domm ctx2)).
+(*
 Proof.
   induction gps; intros H.
   + constructor.
   + specialize (IHgps H). simpl. constructor. now auto.
+*)
 Admitted. (* Grade 2. *)
 
 Lemma mergeable_states_program_to_program ctx1 ctx2 ps1 ps2 :
@@ -145,7 +149,7 @@ Proof.
   inversion Hmerge as [ics ? ? Hmerge_ifaces Hprovenance Hpartial1 Hpartial2]; subst.
     inversion Hpartial1; subst;
     inversion Hpartial2; subst;
-    apply mergeable_stacks_partition; assumption.
+    eapply mergeable_stacks_partition; eassumption.
 Qed.
 
 (* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
