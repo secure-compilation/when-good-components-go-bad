@@ -53,17 +53,30 @@ Proof.
   remember CS.step as step.
   remember (prepare_global_env p) as env.
   remember (gps, mem, regs, pc) as ics'.
-  revert Heqstep p Heqenv gps mem regs pc Heqics'.
+  (* The well-formedness condition is (probably?) missing from
+     CS.comes_from_initial_state. *)
+  assert (Hwf : well_formed_program p) by admit.
+  revert Heqstep p Hwf Heqenv gps mem regs pc Heqics'.
   apply star_iff_starR in HStar.
   induction HStar as [| s1 t1 s2 t2 s3 t12 HstarR IHHStar Hstep Ht12];
-    intros Heqstep p Heqenv gps mem regs pc Heqics' ctx1 ctx2 Hmerge Hiface Hini Hpc2;
+    intros Heqstep p Hwf Heqenv gps mem regs pc Heqics' ctx1 ctx2 Hmerge Hiface Hini Hpc2;
     subst.
   - unfold CS.initial_state, CS.initial_machine_state in Hini.
-    admit.
+    destruct (prog_main p) as [main |] eqn:Hmain.
+    + destruct (prepare_procedures p (prepare_initial_memory p))
+        as [[mem_p _] entrypoints_p].
+      destruct (EntryPoint.get Component.main main entrypoints_p) as [b |].
+      * inversion Hini; subst. simpl in *.
+        (* Does the disconnect between main and interface pose a problem here? *)
+        admit.
+      * (* This case should be ruled out by contradiction. *)
+        admit.
+    + (* To rule this out, p needs to have a main. Otherwise, we are stuck. *)
+      admit.
   - (* Peel trivial layers off IH. *)
     assert (Heq : CS.step = CS.step) by reflexivity; specialize (IHHStar Heq); clear Heq.
     assert (Heq : prepare_global_env p = prepare_global_env p) by reflexivity;
-      specialize (IHHStar p Heq); clear Heq.
+      specialize (IHHStar p Hwf Heq); clear Heq.
     destruct s2 as [[[gps2 mem2] regs2] pc2].
     specialize (IHHStar gps2 mem2 regs2 pc2).
     assert (Heq : (gps2, mem2, regs2, pc2) = (gps2, mem2, regs2, pc2)) by reflexivity;
@@ -76,7 +89,13 @@ Proof.
            rewrite Pointer.inc_preserves_component in Hpc2;
            auto).
     (* The interesting cases involve tests, jumps, calls and returns. *)
-    all:admit.
+    + apply find_label_in_component_1 in H9.
+      rewrite <- H9. rewrite <- H9 in Hpc2. auto.
+    + rewrite H10. rewrite H10 in Hpc2. auto.
+    + apply find_label_in_procedure_1 in H11.
+      rewrite <- H11. rewrite <- H11 in Hpc2. auto.
+    + admit.
+    + admit.
 Admitted. (* Grade 3. Get design right and propagate, then easy. *)
 
 (* XXX: This assumption is also impossible, for the same reason as above. *)
