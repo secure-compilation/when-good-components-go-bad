@@ -46,6 +46,37 @@ Lemma domm_partition :
     CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
     Pointer.component pc \notin domm ctx2 ->
     Pointer.component pc \in domm ctx1.
+Proof.
+  intros ctx1 ctx2 Hmerge gps mem regs pc [p [ics [t [Hiface [Hini HStar]]]]].
+  revert ctx1 ctx2 Hmerge Hiface Hini.
+  simpl in HStar.
+  remember CS.step as step.
+  remember (prepare_global_env p) as env.
+  remember (gps, mem, regs, pc) as ics'.
+  revert Heqstep p Heqenv gps mem regs pc Heqics'.
+  apply star_iff_starR in HStar.
+  induction HStar as [| s1 t1 s2 t2 s3 t12 HstarR IHHStar Hstep Ht12];
+    intros Heqstep p Heqenv gps mem regs pc Heqics' ctx1 ctx2 Hmerge Hiface Hini Hpc2;
+    subst.
+  - unfold CS.initial_state, CS.initial_machine_state in Hini.
+    admit.
+  - (* Peel trivial layers off IH. *)
+    assert (Heq : CS.step = CS.step) by reflexivity; specialize (IHHStar Heq); clear Heq.
+    assert (Heq : prepare_global_env p = prepare_global_env p) by reflexivity;
+      specialize (IHHStar p Heq); clear Heq.
+    destruct s2 as [[[gps2 mem2] regs2] pc2].
+    specialize (IHHStar gps2 mem2 regs2 pc2).
+    assert (Heq : (gps2, mem2, regs2, pc2) = (gps2, mem2, regs2, pc2)) by reflexivity;
+      specialize (IHHStar Heq); clear Heq.
+    specialize (IHHStar ctx1 ctx2 Hmerge Hiface Hini).
+    (* Continue by case analysis. *)
+    inversion Hstep; subst;
+      (* Most cases are straightforward. *)
+      try (rewrite Pointer.inc_preserves_component;
+           rewrite Pointer.inc_preserves_component in Hpc2;
+           auto).
+    (* The interesting cases involve tests, jumps, calls and returns. *)
+    all:admit.
 Admitted. (* Grade 3. Get design right and propagate, then easy. *)
 
 (* XXX: This assumption is also impossible, for the same reason as above. *)
