@@ -100,8 +100,20 @@ Module Intermediate_Instance <: Intermediate_Sig.
   Definition decomposition_with_refinement :=
     @Intermediate.Decomposition.decomposition_with_refinement.
 
-  Definition decomposition_prefix :=
-    @Intermediate.Decomposition.decomposition_prefix.
+  Theorem decomposition_prefix :
+    forall p c m,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable (prog_interface p) (prog_interface c) ->
+      linkable_mains p c ->
+      CompCertExtensions.not_wrong_finpref m ->
+      CompCertExtensions.does_prefix (CS.sem (program_link p c)) m ->
+      CompCertExtensions.does_prefix (PS.sem p (prog_interface c)) m.
+  Proof.
+    (* We need some trivial reordering to match instance and interface. *)
+    intros.
+    now apply Intermediate.Decomposition.decomposition_prefix.
+  Qed.
 
   Definition composition_prefix :=
     @Intermediate.Composition.composition_prefix.
