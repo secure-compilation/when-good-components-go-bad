@@ -241,44 +241,24 @@ Section RSC_DC_MD_Section.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
 
-    (* At this point we know:
-
-       1. (HP'_Cs_beh) P' `union` Cs goes from s_i to s_f producing
-          finpref_trace m, s_f is stuck and final.
-
-       2. Either
-
-          a. p `union` Cs goes from s_i' to s_f' producing a proper prefix of
-             finpref_trace m, and s_f' is stuck and not final.
-
-          b. p `union` Cs goes from s_i' to s_f' producing a super sequence of
-             finpref_trace m.
-
-       In (2.a), we should be able to conclude with parallel_exec.  This
-       corresponds to the right side of the disjunction.
-
-       In (2.b), we are in the left side of the disjunction.
-
-     *)
-
+    (* Case analysis on improved behavior. *)
     destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
     + subst. exists Cs, pCs_beh.
       repeat (split; try now auto).
-    + * exists Cs, pCs_beh. repeat (split; try now auto).
-        subst pCs_beh.
-        (* unfold beh in HP'_Cs_beh. *)
-        (* Close the diagram. *)
-        assert (Hsame_iface3 : Source.prog_interface P' = Source.prog_interface p).
-        {
-          pose proof Compiler.compilation_preserves_interface successful_compilation
-            as Hsame_iface3.
-          congruence.
-        }
-        unfold behavior_improves_blame.
-        destruct (Source.blame_program well_formed_p well_formed_Cs
-                                Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
-                                well_formed_P' Hsame_iface3 HP'Cs_closed
-                                HP'_Cs_m Hsafe_pref Klonger) as [H|H]; by eauto.
+    + exists Cs, pCs_beh. repeat (split; try now auto).
+      subst pCs_beh.
+      (* Blame the program and close the diagram. *)
+      assert (Hsame_iface3 : Source.prog_interface P' = Source.prog_interface p).
+      {
+        pose proof Compiler.compilation_preserves_interface successful_compilation
+          as Hsame_iface3.
+        congruence.
+      }
+      unfold behavior_improves_blame.
+      destruct (Source.blame_program well_formed_p well_formed_Cs
+                              Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
+                              well_formed_P' Hsame_iface3 HP'Cs_closed
+                              HP'_Cs_m Hsafe_pref Klonger) as [H|H]; by eauto.
   Qed.
 
 End RSC_DC_MD_Section.
