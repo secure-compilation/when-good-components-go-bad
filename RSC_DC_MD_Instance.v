@@ -115,8 +115,21 @@ Module Intermediate_Instance <: Intermediate_Sig.
     now apply Intermediate.Decomposition.decomposition_prefix.
   Qed.
 
-  Definition composition_prefix :=
-    @Intermediate.Composition.composition_prefix.
+  Theorem composition_prefix :
+    forall p c m,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable_mains p c ->
+      closed_program (program_link p c) ->
+      mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      CompCertExtensions.does_prefix (PS.sem p (prog_interface c)) m ->
+      CompCertExtensions.does_prefix (PS.sem c (prog_interface p)) m ->
+      CompCertExtensions.does_prefix (CS.sem (program_link p c)) m.
+  Proof.
+    (* We need some trivial reordering to match instance and interface. *)
+    intros.
+    now apply Intermediate.Composition.composition_prefix.
+  Qed.
 
   Definition compose_mergeable_interfaces :=
     @Intermediate.compose_mergeable_interfaces.
