@@ -64,14 +64,18 @@ Proof.
   - unfold CS.initial_state, CS.initial_machine_state in Hini.
     destruct (prog_main p) as [main |] eqn:Hmain.
     + destruct (prepare_procedures p (prepare_initial_memory p))
-        as [[mem_p _] entrypoints_p].
-      destruct (EntryPoint.get Component.main main entrypoints_p) as [b |].
-      * inversion Hini; subst. simpl in *.
+        as [[mem_p dummy] entrypoints_p] eqn:Hprocs.
+      destruct (EntryPoint.get Component.main main entrypoints_p)
+        as [b |] eqn:Hblock.
+      * inversion Hini; subst; simpl in *.
         (* Does the disconnect between main and interface pose a problem here? *)
         admit.
       * (* This case should be ruled out by contradiction. *)
+        inversion Hini; subst; simpl in *.
         admit.
-    + (* To rule this out, p needs to have a main. Otherwise, we are stuck. *)
+    + (* p needs to have a main (component exposed in its interface), otherwise
+         we are stuck. *)
+      inversion Hini; subst; simpl in *.
       admit.
   - (* Peel trivial layers off IH. *)
     assert (Heq : CS.step = CS.step) by reflexivity; specialize (IHHStar Heq); clear Heq.
@@ -89,11 +93,26 @@ Proof.
            rewrite Pointer.inc_preserves_component in Hpc2;
            auto).
     (* The interesting cases involve tests, jumps, calls and returns. *)
-    + apply find_label_in_component_1 in H9.
-      rewrite <- H9. rewrite <- H9 in Hpc2. auto.
-    + rewrite H10. rewrite H10 in Hpc2. auto.
-    + apply find_label_in_procedure_1 in H11.
-      rewrite <- H11. rewrite <- H11 in Hpc2. auto.
+    + match goal with
+      | H : find_label_in_component _ pc2 _ = Some _ |- _ =>
+        apply find_label_in_component_1 in H;
+        rewrite <- H;
+        rewrite <- H in Hpc2;
+        auto
+      end.
+    + match goal with
+      | H : Pointer.component pc = Pointer.component pc2 |- _ =>
+        rewrite H;
+        rewrite H in Hpc2;
+        auto
+      end.
+    + match goal with
+      | H : find_label_in_procedure _ pc2 _ = Some _ |- _ =>
+        apply find_label_in_procedure_1 in H;
+        rewrite <- H;
+        rewrite <- H in Hpc2;
+        auto
+      end.
     + admit.
     + admit.
 Admitted. (* Grade 3. Get design right and propagate, then easy. *)
