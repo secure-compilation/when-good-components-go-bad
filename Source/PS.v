@@ -1271,6 +1271,24 @@ have {in_prog1} in_prog1 : CS.s_component scs1a \notin domm ctx.
 by apply: IH star2a' part' step1a' in_prog1.
 Qed.
 
+(* This is a new version of parallel_exec that we need in the new
+   proof of blame_program *)
+Lemma parallel_exec' p ctx p1 p2 scs1 scs1' scs2 scs2' t t' e :
+  well_formed_program p ->
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p) ctx ->
+  closed_program (program_link p p1) ->
+  closed_program (program_link p p2) ->
+  prog_interface p1 = ctx ->
+  prog_interface p2 = ctx ->
+  partialize ctx scs1 = partialize ctx scs2 ->
+  Star (CS.sem (program_link p p1)) scs1 (t ** e :: t') scs1' ->
+  Star (CS.sem (program_link p p2)) scs2 (t      ) scs2' ->
+  Nostep (CS.sem (program_link p p2)) scs2' ->
+  CS.s_component scs2' \in domm ctx.
+Admitted.
+
 (* Placement note: right now, there are similar lemmas to this one here in PS,
   as opposed to none in CS, where it would more logically belong. *)
 Lemma blame_last_comp_star p c scs1 t scs2:
@@ -1318,6 +1336,27 @@ move/find_procedure_unionm_r/(_ nin2).
 by rewrite e1; case.
 Qed.
 
+Lemma does_prefix_star : forall X m
+  (Hprefix : does_prefix X m)
+  (Hnot_wrong' : not_wrong_finpref m),
+  exists (si : Smallstep.state X) (sf : Smallstep.state X),
+    Smallstep.initial_state X si /\
+    Star X si (finpref_trace m) sf  /\
+    ((exists t, m = FTerminates t) -> Smallstep.final_state X sf).
+Proof.
+  intros X m Hprefix Hnot_wrong'.
+  destruct Hprefix as [b [Hb Hmb]]. inversion Hb; subst. inversion H0; subst.
+  destruct m as [t'| t' |t']; simpl; simpl in Hmb; subst; try easy. eauto.
+  Focus 5. {
+    destruct m as [t | t | t];
+      try contradiction.
+    destruct t as [| e t].
+    - simpl in *. (* Dead end. *) admit.
+    - admit.
+  }
+Admitted.
+
+
 (* RB: TODO: Source prefixes no longer needed: clean proof. *)
 Lemma blame_program:
   forall
@@ -1330,26 +1369,18 @@ Lemma blame_program:
     (well_formed_P' : well_formed_program P')
     (Hsame_iface1 : prog_interface P' = prog_interface p)
     (HP'Cs_closed : Source.closed_program (Source.program_link P' Cs))
-    (HP'_Cs_beh : program_behaves (CS.sem (Source.program_link P' Cs)) (Terminates (finpref_trace m)))
+    (HP'_Cs_beh_new : does_prefix (CS.sem (program_link P' Cs)) m)
     (Hnot_wrong' : not_wrong_finpref m)
     (K : trace_finpref_prefix t' m),
-    undef_in t' (Source.prog_interface p).
+    (prefix m (Goes_wrong t') \/ undef_in t' (Source.prog_interface p)).
 Proof.
   intros p Cs t' P' m well_formed_p well_formed_Cs Hlinkable_p_Cs Hclosed_p_Cs
-         HpCs_beh well_formed_P' Hsame_iface1 HP'Cs_closed HP'_Cs_beh Hnot_wrong' K.
-  clear Hnot_wrong'. (* CH: this is not used, surprising? *)
-  inversion HP'_Cs_beh as [sini1 ? Hini1 Hstbeh1 |]; subst.
-  inversion Hstbeh1 as [? sfin1 HStar1 Hfinal1 | | |]; subst.
-  (* RB: TODO: Lemma relating final_state and Nostep.
-     Also simplify all the annoying rewriting that follows. *)
-  assert (HNostep1 : Nostep (CS.sem (Source.program_link P' Cs)) sfin1).
-  {
-    simpl in Hfinal1. simpl.
-    intros tcon scon Hcontra.
-    CS.unfold_state sfin1.
-    destruct Hfinal1 as [Hexit | [val [Hexpr [Hcont Hstack]]]]; subst;
-      inversion Hcontra.
-  }
+         HpCs_beh well_formed_P' Hsame_iface1 HP'Cs_closed
+         HP'_Cs_beh_new Hnot_wrong' K.
+
+  apply does_prefix_star in HP'_Cs_beh_new; [| easy].
+  destruct HP'_Cs_beh_new as [sini1 [sfin1 [Hini1 [HStar1 Hfinal1']]]].
+
   inversion HpCs_beh as [sini2 ? Hini2 Hstbeh2 | Hnot_initial2]; subst;
     last (destruct (CS.initial_state_exists (Source.program_link p Cs)) as [wit Hf];
           specialize (Hnot_initial2 wit);
@@ -1378,15 +1409,34 @@ Proof.
     congruence.
   }
   rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
-    in HStar1 HNostep1 Hfinal1.
+    in HStar1 (* HNostep1 Hfinal1*).
   rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
     in HStar2 HNostep2.
   (* Case analysis on m. FGoes_wrong can be ruled out by contradiction,
      but also solved exactly like the others. *)
   assert (Hrefl : prog_interface p = prog_interface p) by reflexivity.
+  (* destruct (classic (t' = m)). *)
   destruct m as [tm | tm | tm];
     (destruct K as [tm' Htm']; subst tm;
-     unfold finpref_trace in HStar1;
+     unfold finpref_trace in HStar1).
+  - simpl. right.
+    assert(Hfinal1 : Smallstep.final_state (CS.sem (program_link P' Cs)) sfin1).
+      apply Hfinal1'. eauto.
+
+    (* RB: TODO: Lemma relating final_state and Nostep.
+       Also simplify all the annoying rewriting that follows. *)
+    assert (HNostep1 : Nostep (CS.sem (Source.program_link P' Cs)) sfin1).
+    {
+      simpl in Hfinal1. simpl.
+      intros tcon scon Hcontra.
+      CS.unfold_state sfin1.
+      destruct Hfinal1 as [Hexit | [val [Hexpr [Hcont Hstack]]]]; subst;
+        inversion Hcontra.
+    }
+
+    rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
+      in HNostep1 Hfinal1.
+
      pose proof PS.parallel_exec
        well_formed_Cs well_formed_P' well_formed_p
        (linkable_sym Hlinkable_p_Cs)
@@ -1399,7 +1449,21 @@ Proof.
        [ rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
            in Hini2;
          exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1)
-       | easy ]).
+       | easy ].
+  - simpl in Hnot_wrong'. tauto.
+  - simpl. destruct tm'.
+    + left. exists (Goes_wrong []). simpl. repeat rewrite E0_right. reflexivity.
+    + right.
+     pose proof PS.parallel_exec'
+       well_formed_Cs well_formed_P' well_formed_p
+       (linkable_sym Hlinkable_p_Cs)
+       HP'Cs_closed Hclosed_p_Cs
+       Hsame_iface1 Hrefl
+       Hpartialize
+       HStar1 HStar2 HNostep2
+       as Hparallel. unfold undef_in.
+       rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs) in Hini2;
+       eapply PS.blame_last_comp_star; try eassumption. exact Hini2.
 Qed.
 
 (* If a state s leads to two states s1 and s2 with the same trace t, it must
