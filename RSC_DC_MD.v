@@ -115,8 +115,6 @@ Section RSC_DC_MD_Section.
       as linkability'. {
       eapply @Compiler.compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto.
       apply linkable_sym.
-      (* RB: If [linkability] is not used for anything else, refactor these
-         rewrites with the instance above, or craft a separate assumption. *)
       rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
       rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
       apply linkability_pcomp_Ct.
@@ -145,9 +143,6 @@ Section RSC_DC_MD_Section.
       }
 
     (* intermediate decomposition (for Cs_compiled) *)
-
-    apply Source.linkable_mains_sym in HP'Cs_mains. (* TODO: Check if this is used later. *)
-
     rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm;
        [| assumption |assumption | apply linkable_sym in linkability'; assumption].
     pose proof (Intermediate.decomposition_prefix
@@ -241,12 +236,12 @@ Section RSC_DC_MD_Section.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
 
-    (* Case analysis on improved behavior. *)
+    (* Instantiate behavior, case analysis on improvement. *)
+    exists Cs, pCs_beh.
     destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
-    + subst. exists Cs, pCs_beh.
+    + repeat (split; try now auto).
+    + subst pCs_beh.
       repeat (split; try now auto).
-    + exists Cs, pCs_beh. repeat (split; try now auto).
-      subst pCs_beh.
       (* Blame the program and close the diagram. *)
       assert (Hsame_iface3 : Source.prog_interface P' = Source.prog_interface p).
       {
