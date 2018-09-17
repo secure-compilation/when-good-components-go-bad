@@ -214,7 +214,33 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance
     - apply Hsc. exact Hbeh.
     - exact Hprefix_beh.
   Qed.
-
-  Definition backward_simulation_behavior_improves_prefix :=
-    @Compiler.backward_simulation_behavior_improves_prefix.
+  
+  Theorem backward_simulation_behavior_improves_prefix :
+    forall p p_compiled c c_compiled m,
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      Source.closed_program (Source.program_link p c) ->
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      compile_program p = Some p_compiled ->
+      compile_program c = Some c_compiled ->
+      CompCertExtensions.does_prefix (Intermediate_Instance.CS.sem (Intermediate.program_link p_compiled c_compiled)) m ->
+    exists b,
+      Behaviors.program_behaves (Source_Instance.CS.sem (Source.program_link p c)) b /\
+      (CompCertExtensions.prefix m b \/ CompCertExtensions.behavior_improves_finpref b m).
+  Proof.
+    intros p p_compiled c c_compiled m
+           Hlinkable Hclosed Hwfp Hwfc Hcompp Hcompc Hprefix.
+    (* Auxiliary results, some used multiple times, some need to be in scope. *)
+    pose proof Source.linking_well_formedness Hwfp Hwfc Hlinkable as Hwfpc.
+    destruct (Compiler.well_formed_compilable _ Hwfpc) as [pc_compiled Hcomppc].
+    pose proof Compiler.separate_compilation_weaker _ _ _ _ _
+         Hwfp Hwfc Hlinkable Hcompp Hcompc Hcomppc
+      as Hsc.
+    eapply Compiler.backward_simulation_behavior_improves_prefix;
+      try eassumption.
+    - destruct Hprefix as [beh [Hbeh Hprefix_beh]].
+      exists beh. split.
+      + apply Hsc. exact Hbeh.
+      + exact Hprefix_beh.
+  Qed.
 End Compiler_Instance.
