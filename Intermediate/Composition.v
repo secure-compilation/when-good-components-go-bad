@@ -47,7 +47,7 @@ Lemma domm_partition :
     Pointer.component pc \notin domm ctx2 ->
     Pointer.component pc \in domm ctx1.
 Proof.
-  intros ctx1 ctx2 Hmerge gps mem regs pc [p [ics [t [Hiface [Hini HStar]]]]].
+  intros ctx1 ctx2 Hmerge gps mem regs pc [p [ics [t [Hwf [Hiface [Hini HStar]]]]]].
   revert ctx1 ctx2 Hmerge Hiface Hini.
   simpl in HStar.
   remember CS.step as step.
@@ -55,7 +55,6 @@ Proof.
   remember (gps, mem, regs, pc) as ics'.
   (* The well-formedness condition is (probably?) missing from
      CS.comes_from_initial_state. *)
-  assert (Hwf : well_formed_program p) by admit.
   revert Heqstep p Hwf Heqenv gps mem regs pc Heqics'.
   apply star_iff_starR in HStar.
   induction HStar as [| s1 t1 s2 t2 s3 t12 HstarR IHHStar Hstep Ht12];
