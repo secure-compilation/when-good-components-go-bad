@@ -1010,4 +1010,12 @@ Section Semantics.
                    (initial_state p ctx)
                    (final_state p ctx) (prepare_global_env p).
 End Semantics.
+
+Lemma comes_from_initial_state_step :
+  forall p ctx s t s',
+    CS.comes_from_initial_state s (unionm (prog_interface p) ctx) ->
+    step p ctx (prepare_global_env p) (partialize s ctx) t (partialize s' ctx) ->
+    CS.comes_from_initial_state s' (unionm (prog_interface p) ctx).
+Admitted.
+
 End PS.
