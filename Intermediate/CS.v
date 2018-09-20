@@ -836,6 +836,22 @@ Qed.
 
 End Semantics.
 
+(* A similar result is used above. Here is a weaker formulation. *)
+Lemma initial_state_stack_state0 p s :
+  initial_state p s ->
+  stack_state_of s = Traces.stack_state0.
+Proof.
+  intros Hini.
+  unfold initial_state, initial_machine_state in Hini.
+  destruct (prog_main p) as [mainP |]; simpl in Hini.
+  - destruct (prepare_procedures p (prepare_initial_memory p))
+      as [[mem dummy] entrypoints].
+    destruct (EntryPoint.get Component.main mainP entrypoints).
+    + subst. reflexivity.
+    + subst. reflexivity.
+  - subst. reflexivity.
+Qed.
+
 Definition comes_from_initial_state (s: state) (iface : Program.interface) : Prop :=
   exists p s0 t,
     well_formed_program p /\
