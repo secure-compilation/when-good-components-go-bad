@@ -47,7 +47,8 @@ Lemma domm_partition :
     Pointer.component pc \notin domm ctx2 ->
     Pointer.component pc \in domm ctx1.
 Proof.
-  intros ctx1 ctx2 Hmerge gps mem regs pc [p [ics [t [Hwf [Hiface [Hini HStar]]]]]].
+  intros ctx1 ctx2 Hmerge gps mem regs pc
+         [p [mainP [ics [t [Hwf [Hmain [Hiface [Hini HStar]]]]]]]].
   revert ctx1 ctx2 Hmerge Hiface Hini.
   simpl in HStar.
   remember CS.step as step.
@@ -55,31 +56,28 @@ Proof.
   remember (gps, mem, regs, pc) as ics'.
   (* The well-formedness condition is (probably?) missing from
      CS.comes_from_initial_state. *)
-  revert Heqstep p Hwf Heqenv gps mem regs pc Heqics'.
+  revert Heqstep p mainP Hwf Hmain Heqenv gps mem regs pc Heqics'.
   apply star_iff_starR in HStar.
   induction HStar as [| s1 t1 s2 t2 s3 t12 HstarR IHHStar Hstep Ht12];
-    intros Heqstep p Hwf Heqenv gps mem regs pc Heqics' ctx1 ctx2 Hmerge Hiface Hini Hpc2;
+    intros Heqstep p mainP Hwf Hmain Heqenv gps mem regs pc Heqics'
+           ctx1 ctx2 Hmerge Hiface Hini Hpc2;
     subst.
   - unfold CS.initial_state, CS.initial_machine_state in Hini.
-    destruct (prog_main p) as [main |] eqn:Hmain.
-    + destruct (prepare_procedures p (prepare_initial_memory p))
-        as [[mem_p dummy] entrypoints_p] eqn:Hprocs.
-      destruct (EntryPoint.get Component.main main entrypoints_p)
-        as [b |] eqn:Hblock.
-      * inversion Hini; subst; simpl in *.
-        (* Does the disconnect between main and interface pose a problem here? *)
-        admit.
-      * (* This case should be ruled out by contradiction. *)
-        inversion Hini; subst; simpl in *.
-        admit.
-    + (* p needs to have a main (component exposed in its interface), otherwise
-         we are stuck. *)
+    rewrite Hmain in Hini.
+    destruct (prepare_procedures p (prepare_initial_memory p))
+      as [[mem_p dummy] entrypoints_p] eqn:Hprocs.
+    destruct (EntryPoint.get Component.main mainP entrypoints_p)
+      as [b |] eqn:Hblock.
+    + inversion Hini; subst; simpl in *.
+      (* Does the disconnect between main and interface pose a problem here? *)
+      admit.
+    + (* This case should be ruled out by contradiction. *)
       inversion Hini; subst; simpl in *.
       admit.
   - (* Peel trivial layers off IH. *)
     assert (Heq : CS.step = CS.step) by reflexivity; specialize (IHHStar Heq); clear Heq.
     assert (Heq : prepare_global_env p = prepare_global_env p) by reflexivity;
-      specialize (IHHStar p Hwf Heq); clear Heq.
+      specialize (IHHStar p _ Hwf Hmain Heq); clear Heq.
     destruct s2 as [[[gps2 mem2] regs2] pc2].
     specialize (IHHStar gps2 mem2 regs2 pc2).
     assert (Heq : (gps2, mem2, regs2, pc2) = (gps2, mem2, regs2, pc2)) by reflexivity;
