@@ -64,14 +64,26 @@ Proof.
     rewrite Hmain in Hini.
     destruct (prepare_procedures p (prepare_initial_memory p))
       as [[mem_p dummy] entrypoints_p] eqn:Hprocs.
-    destruct (EntryPoint.get Component.main mainP entrypoints_p)
-      as [b |] eqn:Hblock.
-    + inversion Hini; subst; simpl in *.
-      (* Does the disconnect between main and interface pose a problem here? *)
-      admit.
-    + (* This case should be ruled out by contradiction. *)
-      inversion Hini; subst; simpl in *.
-      admit.
+    inversion Hini; subst; simpl in *.
+    inversion Hwf as [_ _ _ _ _ Hmain_existence _].
+    specialize (Hmain_existence _ Hmain).
+    destruct Hmain_existence as [main_procs [Hmain_procs Hdomm_main_procs]].
+    (* TODO: Here is the recurring dommP inelegance again. *)
+    assert (Hdomm_procs : Component.main \in domm (prog_procedures p))
+      by (apply /dommP; eauto).
+    inversion Hwf as [_ Hdef_procs _ _ _ _ _].
+    rewrite <- Hdef_procs, Hiface in Hdomm_procs.
+    assert (exists CI, (unionm ctx1 ctx2) Component.main = Some CI)
+      as [CI Hctx12]
+      by (apply /dommP; assumption).
+    assert (Hctx2 : ctx2 Component.main = None)
+      by (apply /dommPn; assumption).
+    rewrite unionmE in Hctx12.
+    destruct (ctx1 Component.main) as [main1 |] eqn:Hcase1;
+      rewrite Hcase1 in Hctx12;
+      simpl in Hctx12.
+    + apply /dommP. now eauto.
+    + congruence.
   - (* Peel trivial layers off IH. *)
     assert (Heq : CS.step = CS.step) by reflexivity; specialize (IHHStar Heq); clear Heq.
     assert (Heq : prepare_global_env p = prepare_global_env p) by reflexivity;
