@@ -108,7 +108,44 @@ Proof.
         rewrite <- H in Hpc2;
         auto
       end.
-    + admit.
+    + (* Calls are well-formed events, so their components are properly imported.
+         Because the global interface is closed, this implies they are exported
+         at the right place, from which they can be concluded be part of said
+         global interface, on one side or the other. *)
+      simpl in *.
+      match goal with
+      | H1 : starR CS.step _ _ ?T1 _, H2 : CS.step _ _ ?T2 _ |- _ =>
+        assert (Heq : T1 ** T2 = T1 ** T2) by reflexivity;
+        pose proof starR_step H1 H2 Heq as Htrace;
+        clear Heq
+      end.
+      apply star_iff_starR in Htrace.
+      pose proof CS.intermediate_well_formed_trace _ _ _ _ _ Htrace Hini Hmain Hwf as Hwft.
+      (* We need to play with sequences here; let's get the interesting part
+         right first, but not the information is in Hwft. *)
+      assert (Hwfe : Traces.well_formed_event (prog_interface p)
+                                              (ECall (Pointer.component pc2) P call_arg C'))
+        by admit.
+      apply andb_prop in Hwfe. destruct Hwfe as [_ Himported].
+      apply imported_procedure_iff in Himported.
+      inversion Hmerge as [_ Hclosed_exported].
+      rewrite <- Hiface in Hclosed_exported.
+      specialize (Hclosed_exported _ _ _ Himported).
+      destruct Hclosed_exported as [CI [Hhas_comp Hexporting]].
+      apply has_component_in_domm_prog_interface in Hhas_comp.
+      (*rewrite Hiface in Hhas_comp.*)
+      (* TODO: Apply dommP on premises less haphazardly. *)
+      assert (exists CI', (prog_interface p) C' = Some CI')
+        as [CI' HCI']
+        by (by apply /dommP).
+      rewrite Hiface unionmE in HCI'.
+      destruct (ctx1 C') as [CI'' |] eqn:Hcase.
+      * apply /dommP. eauto.
+      * rewrite Hcase in HCI'. simpl in HCI'.
+        (* TODO: Same artifact on dommP as above. *)
+        assert (Hcontra : C' \in domm ctx2) by (apply /dommP; eauto).
+        rewrite Hcontra in Hpc2.
+        discriminate.
     + admit.
 Admitted. (* Grade 3. Get design right and propagate, then easy. *)
 
