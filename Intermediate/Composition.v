@@ -54,8 +54,6 @@ Proof.
   remember CS.step as step.
   remember (prepare_global_env p) as env.
   remember (gps, mem, regs, pc) as ics'.
-  (* The well-formedness condition is (probably?) missing from
-     CS.comes_from_initial_state. *)
   revert Heqstep p mainP Hwf Hmain Heqenv gps mem regs pc Heqics'.
   apply star_iff_starR in HStar.
   induction HStar as [| s1 t1 s2 t2 s3 t12 HstarR IHHStar Hstep Ht12];
