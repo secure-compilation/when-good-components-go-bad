@@ -93,20 +93,20 @@ Proof.
         apply find_label_in_component_1 in H;
         rewrite <- H;
         rewrite <- H in Hpc2;
-        auto
+        now auto
       end.
     + match goal with
       | H : Pointer.component pc = Pointer.component pc2 |- _ =>
         rewrite H;
         rewrite H in Hpc2;
-        auto
+        now auto
       end.
     + match goal with
       | H : find_label_in_procedure _ pc2 _ = Some _ |- _ =>
         apply find_label_in_procedure_1 in H;
         rewrite <- H;
         rewrite <- H in Hpc2;
-        auto
+        now auto
       end.
     + (* Calls are well-formed events, so their components are properly imported.
          Because the global interface is closed, this implies they are exported
@@ -140,7 +140,7 @@ Proof.
         by (by apply /dommP).
       rewrite Hiface unionmE in HCI'.
       destruct (ctx1 C') as [CI'' |] eqn:Hcase.
-      * apply /dommP. eauto.
+      * apply /dommP. now eauto.
       * rewrite Hcase in HCI'. simpl in HCI'.
         (* TODO: Same artifact on dommP as above. *)
         assert (Hcontra : C' \in domm ctx2) by (apply /dommP; eauto).
