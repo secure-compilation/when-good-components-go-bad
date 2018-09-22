@@ -157,7 +157,38 @@ Proof.
         assert (Hcontra : C' \in domm ctx2) by (apply /dommP; eauto).
         rewrite Hcontra in Hpc2.
         discriminate.
-    + admit.
+    + (* Returns are well-bracketed events, each paired with a prior matching
+         call event. The call for the return is itself a well-formed event whose
+         source component correctly imports the requisite components. From this
+         fact we can case analyze the side of the interface the source is in. *)
+      match goal with
+      | H1 : starR CS.step _ _ ?T1 _, H2 : CS.step _ _ ?T2 _ |- _ =>
+        assert (Heq : T1 ** T2 = T1 ** T2) by reflexivity;
+        pose proof starR_step H1 H2 Heq as Htrace;
+        clear Heq
+      end.
+      apply star_iff_starR in Htrace.
+      apply CS.intermediate_well_bracketed_trace in Htrace.
+      rewrite (CS.initial_state_stack_state0 _ _ Hini) in Htrace.
+      destruct (Traces.well_bracketed_trace_inv Htrace) as [t1' [Pid [arg [t2 Ht1]]]].
+      subst t1.
+      assert (Hwfe : Traces.well_formed_event (prog_interface p)
+                                              (ECall (Pointer.component pc) Pid arg
+                                                     (Pointer.component pc2)))
+        by admit.
+      apply andb_prop in Hwfe. destruct Hwfe as [_ Himported].
+      apply imported_procedure_iff in Himported.
+      destruct Himported as [CI [Hhas_comp _]].
+      unfold Program.has_component in Hhas_comp.
+      rewrite Hiface unionmE in Hhas_comp.
+      destruct (ctx1 (Pointer.component pc)) as [CI' |] eqn:Hcase;
+        rewrite Hcase in Hhas_comp;
+        simpl in Hhas_comp.
+      * apply /dommP. now eauto.
+      * assert (Hcontra : ctx2 (Pointer.component pc) = None)
+          by (apply /dommPn; assumption).
+        (* TODO: Above, better application of dommPn on a premise. *)
+        rewrite Hcontra in Hhas_comp. discriminate.
 Admitted. (* Grade 3. Get design right and propagate, then easy. *)
 
 (* XXX: This assumption is also impossible, for the same reason as above. *)
