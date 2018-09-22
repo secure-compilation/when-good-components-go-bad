@@ -145,7 +145,6 @@ Proof.
       specialize (Hclosed_exported _ _ _ Himported).
       destruct Hclosed_exported as [CI [Hhas_comp Hexporting]].
       apply has_component_in_domm_prog_interface in Hhas_comp.
-      (*rewrite Hiface in Hhas_comp.*)
       (* TODO: Apply dommP on premises less haphazardly. *)
       assert (exists CI', (prog_interface p) C' = Some CI')
         as [CI' HCI']
