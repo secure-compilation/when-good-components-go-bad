@@ -486,10 +486,11 @@ Proof.
         assert (Hcontra : C' \in domm ctx2) by (apply /dommP; eauto).
         rewrite Hcontra in Hpc2.
         discriminate.
-    + (* Returns are well-bracketed events, each paired with a prior matching
+      (* Returns are well-bracketed events, each paired with a prior matching
          call event. The call for the return is itself a well-formed event whose
          source component correctly imports the requisite components. From this
          fact we can case analyze the side of the interface the source is in. *)
+    + (* NOTE: Comment above breaks COQDEP build if placed here in this file! *)
       match goal with
       | H1 : starR CS.step _ _ ?T1 _, H2 : CS.step _ _ ?T2 _ |- _ =>
         assert (Heq : T1 ** T2 = T1 ** T2) by reflexivity;
