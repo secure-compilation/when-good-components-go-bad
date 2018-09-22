@@ -136,8 +136,15 @@ Proof.
       (* We need to play with sequences here; let's get the interesting part
          right first, but not the information is in Hwft. *)
       assert (Hwfe : Traces.well_formed_event (prog_interface p)
-                                              (ECall (Pointer.component pc2) P call_arg C'))
-        by admit.
+                                              (ECall (Pointer.component pc2) P call_arg C')).
+      {
+        unfold Traces.well_formed_trace in Hwft.
+        apply andb_prop in Hwft. destruct Hwft as [_ Hall].
+        rewrite seq.all_cat in Hall.
+        apply andb_prop in Hall. destruct Hall as [_ Hall].
+        rewrite seq.all_seq1 in Hall.
+        assumption.
+      }
       apply andb_prop in Hwfe. destruct Hwfe as [_ Himported].
       apply imported_procedure_iff in Himported.
       inversion Hmerge as [_ Hclosed_exported].
@@ -174,8 +181,17 @@ Proof.
       subst t1.
       assert (Hwfe : Traces.well_formed_event (prog_interface p)
                                               (ECall (Pointer.component pc) Pid arg
-                                                     (Pointer.component pc2)))
-        by admit.
+                                                     (Pointer.component pc2))).
+      {
+        apply star_iff_starR in HstarR.
+        pose proof CS.intermediate_well_formed_trace _ _ _ _ _ HstarR Hini Hmain Hwf as Hwft.
+        unfold Traces.well_formed_trace in Hwft.
+        apply andb_prop in Hwft. destruct Hwft as [_ Hall].
+        rewrite seq.all_cat in Hall.
+        apply andb_prop in Hall. destruct Hall as [_ Hall].
+        apply andb_prop in Hall. destruct Hall as [Hwfe _].
+        assumption.
+      }
       apply andb_prop in Hwfe. destruct Hwfe as [_ Himported].
       apply imported_procedure_iff in Himported.
       destruct Himported as [CI [Hhas_comp _]].
@@ -189,7 +205,7 @@ Proof.
           by (apply /dommPn; assumption).
         (* TODO: Above, better application of dommPn on a premise. *)
         rewrite Hcontra in Hhas_comp. discriminate.
-Admitted. (* Grade 3. Get design right and propagate, then easy. *)
+Qed.
 
 (* XXX: This assumption is also impossible, for the same reason as above. *)
 Lemma domm_partition_in_neither ctx1 ctx2 :
