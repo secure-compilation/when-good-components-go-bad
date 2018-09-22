@@ -2,6 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Memory.
 Require Import Common.Linking.
+Require Import Common.CompCertExtensions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import Intermediate.Machine.
@@ -357,7 +358,176 @@ Inductive mergeable_stacks : stack -> stack -> Prop :=
 Definition mergeable_memories (mem1 mem2: Memory.t): Prop :=
   fdisjoint (domm mem1) (domm mem2).
 
-(* Lemma placeholder: not_partition *)
+(* NOTE: Instance of a more general property which may be added to CoqUtils.
+   TODO: Harmonize naming of two directions or unify with iff.
+         Reduce amount of lemmas, possibly supplement with tactics. *)
+Lemma domm_partition :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    Pointer.component pc \notin domm ctx2 ->
+    Pointer.component pc \in domm ctx1.
+Proof.
+  intros ctx1 ctx2 Hmerge gps mem regs pc
+         [p [mainP [ics [t [Hwf [Hmain [Hiface [Hini HStar]]]]]]]].
+  revert ctx1 ctx2 Hmerge Hiface Hini.
+  simpl in HStar.
+  remember CS.step as step.
+  remember (prepare_global_env p) as env.
+  remember (gps, mem, regs, pc) as ics'.
+  revert Heqstep p mainP Hwf Hmain Heqenv gps mem regs pc Heqics'.
+  apply star_iff_starR in HStar.
+  induction HStar as [| s1 t1 s2 t2 s3 t12 HstarR IHHStar Hstep Ht12];
+    intros Heqstep p mainP Hwf Hmain Heqenv gps mem regs pc Heqics'
+           ctx1 ctx2 Hmerge Hiface Hini Hpc2;
+    subst.
+  - unfold CS.initial_state, CS.initial_machine_state in Hini.
+    rewrite Hmain in Hini.
+    destruct (prepare_procedures p (prepare_initial_memory p))
+      as [[mem_p dummy] entrypoints_p] eqn:Hprocs.
+    inversion Hini; subst; simpl in *.
+    inversion Hwf as [_ _ _ _ _ Hmain_existence _].
+    specialize (Hmain_existence _ Hmain).
+    destruct Hmain_existence as [main_procs [Hmain_procs Hdomm_main_procs]].
+    (* TODO: Here is the recurring dommP inelegance again. *)
+    assert (Hdomm_procs : Component.main \in domm (prog_procedures p))
+      by (apply /dommP; eauto).
+    inversion Hwf as [_ Hdef_procs _ _ _ _ _].
+    rewrite <- Hdef_procs, Hiface in Hdomm_procs.
+    assert (exists CI, (unionm ctx1 ctx2) Component.main = Some CI)
+      as [CI Hctx12]
+      by (apply /dommP; assumption).
+    assert (Hctx2 : ctx2 Component.main = None)
+      by (apply /dommPn; assumption).
+    rewrite unionmE in Hctx12.
+    destruct (ctx1 Component.main) as [main1 |] eqn:Hcase1;
+      rewrite Hcase1 in Hctx12;
+      simpl in Hctx12.
+    + apply /dommP. now eauto.
+    + congruence.
+  - (* Peel trivial layers off IH. *)
+    assert (Heq : CS.step = CS.step) by reflexivity; specialize (IHHStar Heq); clear Heq.
+    assert (Heq : prepare_global_env p = prepare_global_env p) by reflexivity;
+      specialize (IHHStar p _ Hwf Hmain Heq); clear Heq.
+    destruct s2 as [[[gps2 mem2] regs2] pc2].
+    specialize (IHHStar gps2 mem2 regs2 pc2).
+    assert (Heq : (gps2, mem2, regs2, pc2) = (gps2, mem2, regs2, pc2)) by reflexivity;
+      specialize (IHHStar Heq); clear Heq.
+    specialize (IHHStar ctx1 ctx2 Hmerge Hiface Hini).
+    (* Continue by case analysis. *)
+    inversion Hstep; subst;
+      (* Most cases are straightforward. *)
+      try (rewrite Pointer.inc_preserves_component;
+           rewrite Pointer.inc_preserves_component in Hpc2;
+           auto).
+    (* The interesting cases involve tests, jumps, calls and returns. *)
+    + match goal with
+      | H : find_label_in_component _ pc2 _ = Some _ |- _ =>
+        apply find_label_in_component_1 in H;
+        rewrite <- H;
+        rewrite <- H in Hpc2;
+        now auto
+      end.
+    + match goal with
+      | H : Pointer.component pc = Pointer.component pc2 |- _ =>
+        rewrite H;
+        rewrite H in Hpc2;
+        now auto
+      end.
+    + match goal with
+      | H : find_label_in_procedure _ pc2 _ = Some _ |- _ =>
+        apply find_label_in_procedure_1 in H;
+        rewrite <- H;
+        rewrite <- H in Hpc2;
+        now auto
+      end.
+    + (* Calls are well-formed events, so their components are properly imported.
+         Because the global interface is closed, this implies they are exported
+         at the right place, from which they can be concluded be part of said
+         global interface, on one side or the other. *)
+      simpl in *.
+      match goal with
+      | H1 : starR CS.step _ _ ?T1 _, H2 : CS.step _ _ ?T2 _ |- _ =>
+        assert (Heq : T1 ** T2 = T1 ** T2) by reflexivity;
+        pose proof starR_step H1 H2 Heq as Htrace;
+        clear Heq
+      end.
+      apply star_iff_starR in Htrace.
+      pose proof CS.intermediate_well_formed_trace _ _ _ _ _ Htrace Hini Hmain Hwf as Hwft.
+      (* We need to play with sequences here; let's get the interesting part
+         right first, but not the information is in Hwft. *)
+      assert (Hwfe : Traces.well_formed_event (prog_interface p)
+                                              (ECall (Pointer.component pc2) P call_arg C')).
+      {
+        unfold Traces.well_formed_trace in Hwft.
+        apply andb_prop in Hwft. destruct Hwft as [_ Hall].
+        rewrite seq.all_cat in Hall.
+        apply andb_prop in Hall. destruct Hall as [_ Hall].
+        rewrite seq.all_seq1 in Hall.
+        assumption.
+      }
+      apply andb_prop in Hwfe. destruct Hwfe as [_ Himported].
+      apply imported_procedure_iff in Himported.
+      inversion Hmerge as [_ Hclosed_exported].
+      rewrite <- Hiface in Hclosed_exported.
+      specialize (Hclosed_exported _ _ _ Himported).
+      destruct Hclosed_exported as [CI [Hhas_comp Hexporting]].
+      apply has_component_in_domm_prog_interface in Hhas_comp.
+      (* TODO: Apply dommP on premises less haphazardly. *)
+      assert (exists CI', (prog_interface p) C' = Some CI')
+        as [CI' HCI']
+        by (by apply /dommP).
+      rewrite Hiface unionmE in HCI'.
+      destruct (ctx1 C') as [CI'' |] eqn:Hcase.
+      * apply /dommP. now eauto.
+      * rewrite Hcase in HCI'. simpl in HCI'.
+        (* TODO: Same artifact on dommP as above. *)
+        assert (Hcontra : C' \in domm ctx2) by (apply /dommP; eauto).
+        rewrite Hcontra in Hpc2.
+        discriminate.
+    + (* Returns are well-bracketed events, each paired with a prior matching
+         call event. The call for the return is itself a well-formed event whose
+         source component correctly imports the requisite components. From this
+         fact we can case analyze the side of the interface the source is in. *)
+      match goal with
+      | H1 : starR CS.step _ _ ?T1 _, H2 : CS.step _ _ ?T2 _ |- _ =>
+        assert (Heq : T1 ** T2 = T1 ** T2) by reflexivity;
+        pose proof starR_step H1 H2 Heq as Htrace;
+        clear Heq
+      end.
+      apply star_iff_starR in Htrace.
+      apply CS.intermediate_well_bracketed_trace in Htrace.
+      rewrite (CS.initial_state_stack_state0 _ _ Hini) in Htrace.
+      destruct (Traces.well_bracketed_trace_inv Htrace) as [t1' [Pid [arg [t2 Ht1]]]].
+      subst t1.
+      assert (Hwfe : Traces.well_formed_event (prog_interface p)
+                                              (ECall (Pointer.component pc) Pid arg
+                                                     (Pointer.component pc2))).
+      {
+        apply star_iff_starR in HstarR.
+        pose proof CS.intermediate_well_formed_trace _ _ _ _ _ HstarR Hini Hmain Hwf as Hwft.
+        unfold Traces.well_formed_trace in Hwft.
+        apply andb_prop in Hwft. destruct Hwft as [_ Hall].
+        rewrite seq.all_cat in Hall.
+        apply andb_prop in Hall. destruct Hall as [_ Hall].
+        apply andb_prop in Hall. destruct Hall as [Hwfe _].
+        assumption.
+      }
+      apply andb_prop in Hwfe. destruct Hwfe as [_ Himported].
+      apply imported_procedure_iff in Himported.
+      destruct Himported as [CI [Hhas_comp _]].
+      unfold Program.has_component in Hhas_comp.
+      rewrite Hiface unionmE in Hhas_comp.
+      destruct (ctx1 (Pointer.component pc)) as [CI' |] eqn:Hcase;
+        rewrite Hcase in Hhas_comp;
+        simpl in Hhas_comp.
+      * apply /dommP. now eauto.
+      * assert (Hcontra : ctx2 (Pointer.component pc) = None)
+          by (apply /dommPn; assumption).
+        (* TODO: Above, better application of dommPn on a premise. *)
+        rewrite Hcontra in Hhas_comp. discriminate.
+Qed.
 
 Lemma domm_partition_notin :
   forall ctx1 ctx2,
@@ -386,7 +556,18 @@ Proof.
   now rewrite H0 in H1.
 Qed.
 
-(* Lemma placeholder: domm_partition_in_neither *)
+Lemma domm_partition_in_neither ctx1 ctx2 :
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    Pointer.component pc \notin domm ctx1 ->
+    Pointer.component pc \notin domm ctx2 ->
+    False.
+Proof.
+  intros Hmerge_ifaces gps mem regs pc Hcomes_from Hnotin1 Hnotin2.
+  apply (domm_partition Hmerge_ifaces Hcomes_from) in Hnotin2.
+  now rewrite Hnotin2 in Hnotin1.
+Qed.
 
 (* RB: TODO: Complete assumptions as above. *)
 Lemma domm_partition_in_notin ctx1 ctx2 C :
