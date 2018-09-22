@@ -34,11 +34,7 @@ Import Intermediate.
 
 (* NOTE: Instance of a more general property which may be added to CoqUtils.
    TODO: Harmonize naming of two directions or unify with iff.
-         Add domain conditions to the following lemmas.
          Reduce amount of lemmas, possibly supplement with tactics. *)
-(* XXX: This result is false without assuming more hypotheses about C: it is
-        equivalent to saying that if two interfaces are mergeable then every
-        component belongs to one of them. *)
 Lemma domm_partition :
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
@@ -207,7 +203,6 @@ Proof.
         rewrite Hcontra in Hhas_comp. discriminate.
 Qed.
 
-(* XXX: This assumption is also impossible, for the same reason as above. *)
 Lemma domm_partition_in_neither ctx1 ctx2 :
     mergeable_interfaces ctx1 ctx2 ->
   forall gps mem regs pc,
