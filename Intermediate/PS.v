@@ -407,14 +407,9 @@ Proof.
     + apply /dommP. now eauto.
     + congruence.
   - (* Peel trivial layers off IH. *)
-    assert (Heq : CS.step = CS.step) by reflexivity; specialize (IHHStar Heq); clear Heq.
-    assert (Heq : prepare_global_env p = prepare_global_env p) by reflexivity;
-      specialize (IHHStar p _ Hwf Hmain Heq); clear Heq.
     destruct s2 as [[[gps2 mem2] regs2] pc2].
-    specialize (IHHStar gps2 mem2 regs2 pc2).
-    assert (Heq : (gps2, mem2, regs2, pc2) = (gps2, mem2, regs2, pc2)) by reflexivity;
-      specialize (IHHStar Heq); clear Heq.
-    specialize (IHHStar ctx1 ctx2 Hmerge Hiface Hini).
+    specialize (IHHStar (eq_refl _) _ _ Hwf Hmain (eq_refl _)
+               gps2 mem2 regs2 pc2 (eq_refl _) ctx1 ctx2 Hmerge Hiface Hini).
     (* Continue by case analysis. *)
     inversion Hstep; subst;
       (* Most cases are straightforward. *)
@@ -449,9 +444,7 @@ Proof.
       simpl in *.
       match goal with
       | H1 : starR CS.step _ _ ?T1 _, H2 : CS.step _ _ ?T2 _ |- _ =>
-        assert (Heq : T1 ** T2 = T1 ** T2) by reflexivity;
-        pose proof starR_step H1 H2 Heq as Htrace;
-        clear Heq
+        pose proof starR_step H1 H2 (eq_refl _) as Htrace
       end.
       apply star_iff_starR in Htrace.
       pose proof CS.intermediate_well_formed_trace _ _ _ _ _ Htrace Hini Hmain Hwf as Hwft.
@@ -493,9 +486,7 @@ Proof.
     + (* NOTE: Comment above breaks COQDEP build if placed here in this file! *)
       match goal with
       | H1 : starR CS.step _ _ ?T1 _, H2 : CS.step _ _ ?T2 _ |- _ =>
-        assert (Heq : T1 ** T2 = T1 ** T2) by reflexivity;
-        pose proof starR_step H1 H2 Heq as Htrace;
-        clear Heq
+        pose proof starR_step H1 H2 (eq_refl _) as Htrace
       end.
       apply star_iff_starR in Htrace.
       apply CS.intermediate_well_bracketed_trace in Htrace.
