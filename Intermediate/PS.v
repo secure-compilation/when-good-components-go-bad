@@ -331,13 +331,15 @@ Qed.
 
 (* merging partial states *)
 
+(* NOTE: Why not rely on unification instead of having a separate premise on the
+   equality of the component ids? *)
 Inductive mergeable_stack_frames: PartialPointer.t -> PartialPointer.t -> Prop :=
 | mergeable_stack_frames_first: forall C1 b1 o1 C2,
     C1 = C2 ->
     mergeable_stack_frames (C1, Some (b1, o1)) (C2, None)
 | mergeable_stack_frames_second: forall C1 C2 b2 o2,
     C1 = C2 ->
-    mergeable_stack_frames (C1, None) (C1, Some (b2, o2)).
+    mergeable_stack_frames (C1, None) (C2, Some (b2, o2)).
 
 Inductive mergeable_stacks : stack -> stack -> Prop :=
 | mergeable_stacks_nil:
