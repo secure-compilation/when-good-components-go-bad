@@ -331,15 +331,11 @@ Qed.
 
 (* merging partial states *)
 
-(* NOTE: Why not rely on unification instead of having a separate premise on the
-   equality of the component ids? *)
 Inductive mergeable_stack_frames: PartialPointer.t -> PartialPointer.t -> Prop :=
-| mergeable_stack_frames_first: forall C1 b1 o1 C2,
-    C1 = C2 ->
-    mergeable_stack_frames (C1, Some (b1, o1)) (C2, None)
-| mergeable_stack_frames_second: forall C1 C2 b2 o2,
-    C1 = C2 ->
-    mergeable_stack_frames (C1, None) (C2, Some (b2, o2)).
+| mergeable_stack_frames_first: forall C b1 o1,
+    mergeable_stack_frames (C, Some (b1, o1)) (C, None)
+| mergeable_stack_frames_second: forall C b2 o2,
+    mergeable_stack_frames (C, None) (C, Some (b2, o2)).
 
 Inductive mergeable_stacks : stack -> stack -> Prop :=
 | mergeable_stacks_nil:
@@ -673,7 +669,7 @@ Proof.
            }
            rewrite (ptr_within_partial_frame_1 Hdomm).
            rewrite (ptr_within_partial_frame_2 Hdomm').
-           econstructor; [reflexivity].
+           now constructor.
         -- assert (Hdomm' : Pointer.component (Pointer.inc pc2) \in domm ctx1 = false).
            {
              pose proof domm_partition_notin Hmerge Hdomm as Hdomm'.
@@ -684,7 +680,7 @@ Proof.
            }
            rewrite (ptr_within_partial_frame_1 Hdomm).
            rewrite (ptr_within_partial_frame_2 Hdomm').
-           econstructor; [reflexivity].
+           now constructor.
     + (* IReturn case: the IH contains the desired substack. *)
       inversion IHHStar; subst.
       assumption.
