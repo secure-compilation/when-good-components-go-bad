@@ -37,14 +37,91 @@ Lemma mergeable_stacks_partition gps ctx1 ctx2:
   forall mem regs pc,
     CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
     PS.mergeable_stacks (PS.to_partial_stack gps (domm ctx1)) (PS.to_partial_stack gps (domm ctx2)).
-(*
 Proof.
-  induction gps; intros H.
-  + constructor.
-  + specialize (IHgps H). simpl. constructor. now auto.
-*)
-Admitted. (* Grade 2. *)
+  intros Hmerge mem regs pc
+         [p [mainP [ics [t [Hwf [Hmain [Hiface [Hini HStar]]]]]]]].
+  revert ctx1 ctx2 Hmerge Hiface Hini.
+  simpl in HStar.
+  remember CS.step as step.
+  remember (prepare_global_env p) as env.
+  remember (gps, mem, regs, pc) as ics'.
+  revert Heqstep p mainP Hwf Hmain Heqenv gps mem regs pc Heqics'.
+  apply star_iff_starR in HStar.
+  induction HStar as [| s1 t1 s2 t2 s3 t12 HstarR IHHStar Hstep Ht12];
+    intros Heqstep p mainP Hwf Hmain Heqenv gps mem regs pc Heqics'
+           ctx1 ctx2 Hmerge Hiface Hini;
+    subst.
+  - unfold CS.initial_state, CS.initial_machine_state in Hini.
+    rewrite Hmain in Hini.
+    destruct (prepare_procedures p (prepare_initial_memory p))
+      as [[mem_p _] entrypoints_p].
+    inversion Hini; subst.
+    now constructor.
+  - destruct s2 as [[[gps2 mem2] regs2] pc2].
+    specialize (IHHStar (eq_refl _) _ _ Hwf Hmain (eq_refl _)
+                        gps2 mem2 regs2 pc2 (eq_refl _) _ _ Hmerge Hiface Hini).
+    inversion Hstep; subst;
+      (* In most cases, the stack is unchanged. The goal is exactly the IH. *)
+      try assumption.
+    + (* ICall case *)
+      simpl. constructor.
+      * (* On the one hand, we have the base stack in the IH. *)
+        assumption.
+      * (* On the other, we have the new frame. *)
+        simpl.
+        (* TODO: This kind of useful results can be expressed easily as lemmas
+           in the fashion of existing results, e.g., domm_partition (ideally,
+           derive these from the simplest formulation). *)
+        assert (Hdomm : Pointer.component pc2 \in domm ctx1 \/
+                        Pointer.component pc2 \in domm ctx2).
+        {
+          destruct (Pointer.component pc2 \in domm ctx1) eqn:Hcase.
+          - left. reflexivity.
+          - right.
+            eapply PS.domm_partition.
+            + apply mergeable_interfaces_sym.
+              eassumption.
+            + rewrite unionmC.
+              * apply star_iff_starR in HstarR.
+                now repeat (esplit; eauto).
+              * inversion Hmerge as [[_ Hdisjoint] _].
+                rewrite fdisjointC.
+                assumption.
+            + rewrite Hcase. reflexivity.
+        }
+        destruct Hdomm as [Hdomm | Hdomm];
+          rewrite <- Pointer.inc_preserves_component in Hdomm.
+        (* TODO: The following two cases are symmetric and could be refactored. *)
+        -- assert (Hdomm' : Pointer.component (Pointer.inc pc2) \in domm ctx2 = false).
+           {
+             apply mergeable_interfaces_sym in Hmerge.
+             pose proof PS.domm_partition_notin Hmerge Hdomm as Hdomm'.
+             (* TODO: There are probably more succinct ways to do this. *)
+             destruct (Pointer.component (Pointer.inc pc2) \in domm ctx2) eqn:Hcase.
+             - rewrite Hcase in Hdomm'. discriminate.
+             - reflexivity.
+           }
+           rewrite (PS.ptr_within_partial_frame_1 Hdomm).
+           rewrite (PS.ptr_within_partial_frame_2 Hdomm').
+           econstructor; [reflexivity].
+        -- assert (Hdomm' : Pointer.component (Pointer.inc pc2) \in domm ctx1 = false).
+           {
+             pose proof PS.domm_partition_notin Hmerge Hdomm as Hdomm'.
+             (* TODO: There are probably more succinct ways to do this. *)
+             destruct (Pointer.component (Pointer.inc pc2) \in domm ctx1) eqn:Hcase.
+             - rewrite Hcase in Hdomm'. discriminate.
+             - reflexivity.
+           }
+           rewrite (PS.ptr_within_partial_frame_1 Hdomm).
+           rewrite (PS.ptr_within_partial_frame_2 Hdomm').
+           econstructor; [reflexivity].
+    + (* IReturn case: the IH contains the desired substack. *)
+      inversion IHHStar; subst.
+      assumption.
+Qed.
 
+(* TODO: Consider potential refactors with other [mergeable_] results
+   as the proofs are being built. *)
 Lemma mergeable_states_program_to_program ctx1 ctx2 ps1 ps2 :
   PS.mergeable_states ctx1 ctx2 ps1 ps2 ->
   PS.is_program_component ps1 ctx1 ->
