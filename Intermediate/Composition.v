@@ -14,7 +14,7 @@ Require Import Intermediate.Decomposition.
 
 Require Import Coq.Program.Equality.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
