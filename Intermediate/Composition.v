@@ -1209,11 +1209,10 @@ Section Simulation.
     inversion Hstep_cs; subst;
       PS.rename_op p pc p' Hop.
     - (* INop *)
-      exists
-        (PS.CC
-           (Pointer.component pc,
-            PS.to_partial_stack gps (domm (prog_interface p)),
-            filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem)).
+      match goal with
+      | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
+        exists (PS.CC (C, GPS, MEM))
+      end.
       split.
       + constructor.
         * easy.
@@ -1244,17 +1243,11 @@ Section Simulation.
              ++ reflexivity.
       + rewrite <- Hmem.
         rewrite <- Hstk.
-        (* RB: TODO: Refer to ics symbolically, e.g. from goal via Ltac. *)
-        eapply PS.mergeable_states_intro with
-          (ics := (PS.unpartialize (PS.merge_partial_states
-            (PS.PC
-               (PS.to_partial_stack gps (domm (prog_interface c)),
-               filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface c)) mem,
-               regs1', Pointer.inc pc))
-            (PS.CC
-               (Pointer.component pc, PS.to_partial_stack gps (domm (prog_interface p)),
-               filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem))
-          ))).
+        match goal with
+        | |- PS.mergeable_states _ _ ?PC ?CC =>
+          eapply PS.mergeable_states_intro
+            with (ics := PS.unpartialize (PS.merge_partial_states PC CC))
+        end.
         * easy.
         * simpl.
           rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
