@@ -1233,7 +1233,9 @@ Section Simulation.
     PS.simplify_turn.
     inversion Hstep_cs; subst;
       PS.rename_op p pc p' Hop.
-    - (* INop *)
+
+    1:{
+    (* - (* INop *) *)
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -1248,14 +1250,14 @@ Section Simulation.
           -- assumption.
           -- eapply linkable_sym; eassumption.
           -- exact (linkable_mains_sym main_linkability).
-          -- eapply CS.Nop.
+          -- eapply CS.Nop; try reflexivity.
              unfold executing in Hop.
              rewrite (genv_procedures_program_link_left_in Hcc2 wf1 Hwf2' Hlinkable Hmains) in Hop.
              unfold executing.
              rewrite <- (program_linkC wf1 wf2 linkability).
              erewrite (genv_procedures_program_link_left_in
                          Hcc2 wf1 wf2 linkability main_linkability).
-             assumption.
+             eassumption.
           -- econstructor.
              ++ assumption.
              ++ reflexivity.
@@ -1302,6 +1304,7 @@ Section Simulation.
           -- by rewrite Pointer.inc_preserves_component.
           -- reflexivity.
           -- reflexivity.
+    }
     (* RB: TODO: A couple of cases dealing with memories, etc.; then compose. *)
   Admitted.
 
