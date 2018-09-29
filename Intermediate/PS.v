@@ -174,13 +174,19 @@ Proof.
       rewrite (IHgps1 gps2); auto.
 Qed.
 
+(* Memory partialization, *)
+
+(* RB: TODO: Here and above, Program.interface vs. fset. *)
+Definition to_partial_memory (mem : Memory.t) (ctx : {fset Component.id}) :=
+  filterm (fun k _ => negb (k \in ctx)) mem.
+
 Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
 | ProgramControl: forall gps pgps mem pmem regs pc,
     (* program has control *)
     is_program_component (PC (pgps, pmem, regs, pc)) ctx ->
 
     (* we forget about context memories *)
-    pmem = filterm (fun k _ => negb (k \in domm ctx)) mem ->
+    pmem = to_partial_memory mem (domm ctx) ->
 
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (domm ctx) ->
@@ -192,7 +198,7 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
     is_context_component (CC (Pointer.component pc, pgps, pmem)) ctx ->
 
     (* we forget about context memories *)
-    pmem = filterm (fun k _ => negb (k \in domm ctx)) mem ->
+    pmem = to_partial_memory mem (domm ctx) ->
 
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (domm ctx) ->
@@ -204,10 +210,10 @@ Definition partialize (ics: CS.state) (ctx: Program.interface) : PS.state :=
   if Pointer.component pc \in domm ctx then
     CC (Pointer.component pc,
         to_partial_stack gps (domm ctx),
-        filterm (fun k _ => negb (k \in domm ctx)) mem)
+        to_partial_memory mem (domm ctx))
   else
     PC (to_partial_stack gps (domm ctx),
-        filterm (fun k _ => negb (k \in domm ctx)) mem,
+        to_partial_memory mem (domm ctx),
         regs, pc).
 
 Lemma partialize_correct:
@@ -326,7 +332,7 @@ Proof.
   rewrite mem_domm. simpl.
   rewrite domm0.
   rewrite unpartializing_complete_stack.
-  rewrite filterm_identity. reflexivity.
+  unfold to_partial_memory. rewrite filterm_identity. reflexivity.
 Qed.
 
 (* merging partial states *)
@@ -865,14 +871,14 @@ Proof.
       try (symmetry; assumption).
     + rewrite Pointer.inc_preserves_component.
       destruct ptr as [[]].
-      erewrite context_store_in_partialized_memory; eauto.
+      unfold to_partial_memory. erewrite context_store_in_partialized_memory; eauto.
       * rewrite Pointer.inc_preserves_component.
         rewrite <- H18. eassumption.
     + erewrite find_label_in_component_1 with (pc:=pc); eauto.
     + rewrite H18. reflexivity.
     + erewrite find_label_in_procedure_1 with (pc:=pc); eauto.
     + rewrite Pointer.inc_preserves_component.
-      erewrite context_allocation_in_partialized_memory; eauto.
+      unfold to_partial_memory. erewrite context_allocation_in_partialized_memory; eauto.
       * rewrite Pointer.inc_preserves_component.
         eassumption.
 Qed.
@@ -1120,6 +1126,8 @@ Proof.
     inversion Hpartial2'
       as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
       subst;
+    (* (Now that we are done inverting, expose this definition.) *)
+    unfold to_partial_memory in *;
     try discharge_pc_cc Hcomp Hcc1';
     try discharge_pc_cc Hcomp Hcc2';
     (* For the remaining goals, unify components of their matching opcodes and their

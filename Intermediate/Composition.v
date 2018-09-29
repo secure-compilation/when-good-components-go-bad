@@ -449,6 +449,7 @@ Section PS2CS.
 
     (* show mem0 = mem *)
     rewrite domm0 in H12. simpl in *.
+    unfold PS.to_partial_memory in *.
     do 2 rewrite filterm_identity in H12.
     subst.
 
@@ -1724,7 +1725,8 @@ Section MultiSemantics.
           ** PS.simplify_turn.
              rewrite mem_domm. auto.
           ** simpl.
-             rewrite domm0. simpl. rewrite filterm_identity.
+             rewrite domm0. simpl.
+             unfold PS.to_partial_memory. rewrite filterm_identity.
              reflexivity.
           ** simpl. rewrite domm0.
              rewrite PS.to_partial_stack_unpartialize_identity.
@@ -1735,7 +1737,8 @@ Section MultiSemantics.
           ** PS.simplify_turn.
              rewrite mem_domm. auto.
           ** simpl.
-             rewrite domm0. simpl. rewrite filterm_identity.
+             rewrite domm0. simpl.
+             unfold PS.to_partial_memory. rewrite filterm_identity.
              reflexivity.
           ** simpl. rewrite domm0.
              rewrite PS.to_partial_stack_unpartialize_identity.
@@ -1797,7 +1800,8 @@ Section MultiSemantics.
       + constructor.
         * PS.simplify_turn.
           now rewrite mem_domm.
-        * by rewrite domm0 filterm_predT.
+        * unfold PS.to_partial_memory.
+          by rewrite domm0 filterm_predT.
         * rewrite domm0 (merge_stacks_partition Hmergeable_ifaces Hcomes_from).
           by rewrite (merge_stacks_partition_emptym Hmergeable_ifaces Hcomes_from).
       + rewrite linking_empty_program.
@@ -1829,7 +1833,7 @@ Section MultiSemantics.
         * PS.simplify_turn.
           now rewrite mem_domm.
         * rewrite domm0.
-          rewrite filterm_predT.
+          unfold PS.to_partial_memory. rewrite filterm_predT.
           reflexivity.
         * rewrite domm0.
           rewrite (merge_stacks_partition Hmergeable_ifaces Hcomes_from).
