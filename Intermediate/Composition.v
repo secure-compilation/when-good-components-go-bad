@@ -32,6 +32,18 @@ Import Intermediate.
   generalized. Module qualifiers will be tweaked as needed.
 *)
 
+(* RB: TODO: Consider necessary assumptions in a way that most closely matches
+   the contexts we will use this on. Do away with uses of [domm] here?*)
+Lemma to_partial_memory_merge_memories_left
+      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+  mergeable_interfaces iface1 iface2 ->
+  PS.to_partial_memory
+    (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
+                       (PS.to_partial_memory mem2 (domm iface2)))
+    (domm iface1) =
+  PS.to_partial_memory mem1 (domm iface1).
+Admitted. (* Grade 1. *)
+
 (* TODO: Consider potential refactors with other [mergeable_] results
    as the proofs are being built. *)
 Lemma mergeable_states_program_to_program ctx1 ctx2 ps1 ps2 :
