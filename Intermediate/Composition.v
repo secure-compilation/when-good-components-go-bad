@@ -44,6 +44,16 @@ Lemma to_partial_memory_merge_memories_left
   PS.to_partial_memory mem1 (domm iface1).
 Admitted. (* Grade 1. *)
 
+Lemma to_partial_memory_merge_memories_right
+      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+  mergeable_interfaces iface1 iface2 ->
+  PS.to_partial_memory
+    (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
+                       (PS.to_partial_memory mem2 (domm iface2)))
+    (domm iface2) =
+  PS.to_partial_memory mem2 (domm iface2).
+Admitted. (* Grade 1. *)
+
 (* TODO: Consider potential refactors with other [mergeable_] results
    as the proofs are being built. *)
 Lemma mergeable_states_program_to_program ctx1 ctx2 ps1 ps2 :
