@@ -1273,7 +1273,7 @@ Section Simulation.
           -- assumption.
           -- eapply linkable_sym; eassumption.
           -- exact (linkable_mains_sym main_linkability).
-          -- eapply CS.Nop; try reflexivity.
+          -- CS_step_of_executing; try reflexivity.
              unfold executing in Hop.
              rewrite (genv_procedures_program_link_left_in Hcc2 wf1 Hwf2' Hlinkable Hmains) in Hop.
              unfold executing.
@@ -1328,13 +1328,302 @@ Section Simulation.
           -- reflexivity.
           -- reflexivity.
     }
-    (* RB: TODO: A couple of cases dealing with memories, etc.; then compose. *)
 
     (* The next few cases admit the same pattern as above, sometimes with very
-       minor generalizations. The ones that follow, then, are more interesting
-       as the first pattern finds problematic sub-goals in its present form. *)
+       minor generalizations. *)
 
-    5:{
+    1:{
+    (* - (* ILabel *) *)
+      match goal with
+      | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
+        exists (PS.CC (C, GPS, MEM))
+      end.
+      split.
+      + constructor.
+        * easy.
+        * easy.
+        * econstructor.
+          -- reflexivity.
+          -- assumption.
+          -- assumption.
+          -- eapply linkable_sym; eassumption.
+          -- exact (linkable_mains_sym main_linkability).
+          -- CS_step_of_executing; try reflexivity.
+             unfold executing in Hop.
+             rewrite (genv_procedures_program_link_left_in Hcc2 wf1 Hwf2' Hlinkable Hmains) in Hop.
+             unfold executing.
+             rewrite <- (program_linkC wf1 wf2 linkability).
+             erewrite (genv_procedures_program_link_left_in
+                         Hcc2 wf1 wf2 linkability main_linkability).
+             eassumption. (* Change: existential. *)
+          -- econstructor.
+             ++ assumption.
+             ++ reflexivity.
+             ++ reflexivity.
+          -- rewrite <- Pointer.inc_preserves_component.
+             econstructor.
+             ++ rewrite Pointer.inc_preserves_component.
+                assumption.
+             ++ reflexivity.
+             ++ reflexivity.
+      + rewrite <- Hmem.
+        rewrite <- Hstk.
+        match goal with
+        | |- PS.mergeable_states _ _ ?PC ?CC =>
+          eapply PS.mergeable_states_intro
+            with (ics := PS.unpartialize (PS.merge_partial_states PC CC))
+        end.
+        * easy.
+        * simpl.
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          {
+            (* RB: TODO: Refactor into lemma (cf. other cases). *)
+            inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
+            rewrite (unionmC Hdisjoint) in Hfrom_initial.
+            rewrite (unionmC Hdisjoint).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            unfold PS.partialize.
+            apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
+            apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
+            rewrite Hmem. rewrite Hmem in Hstep_ps.
+            rewrite Hstk. rewrite Hstk in Hstep_ps.
+            exact Hstep_ps.
+          }
+        * constructor.
+          -- assumption.
+          -- by rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+        * simpl.
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          rewrite <- Pointer.inc_preserves_component.
+          constructor.
+          -- by rewrite Pointer.inc_preserves_component.
+          -- reflexivity.
+          -- reflexivity.
+    }
+
+    1:{
+    (* - (* IConst *) *)
+      match goal with
+      | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
+        exists (PS.CC (C, GPS, MEM))
+      end.
+      split.
+      + constructor.
+        * easy.
+        * easy.
+        * econstructor.
+          -- reflexivity.
+          -- assumption.
+          -- assumption.
+          -- eapply linkable_sym; eassumption.
+          -- exact (linkable_mains_sym main_linkability).
+          -- CS_step_of_executing; try reflexivity.
+             unfold executing in Hop.
+             rewrite (genv_procedures_program_link_left_in Hcc2 wf1 Hwf2' Hlinkable Hmains) in Hop.
+             unfold executing.
+             rewrite <- (program_linkC wf1 wf2 linkability).
+             erewrite (genv_procedures_program_link_left_in
+                         Hcc2 wf1 wf2 linkability main_linkability).
+             eassumption. (* Change: existential. *)
+          -- econstructor.
+             ++ assumption.
+             ++ reflexivity.
+             ++ reflexivity.
+          -- rewrite <- Pointer.inc_preserves_component.
+             econstructor.
+             ++ rewrite Pointer.inc_preserves_component.
+                assumption.
+             ++ reflexivity.
+             ++ reflexivity.
+      + rewrite <- Hmem.
+        rewrite <- Hstk.
+        match goal with
+        | |- PS.mergeable_states _ _ ?PC ?CC =>
+          eapply PS.mergeable_states_intro
+            with (ics := PS.unpartialize (PS.merge_partial_states PC CC))
+        end.
+        * easy.
+        * simpl.
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          {
+            (* RB: TODO: Refactor into lemma (cf. other cases). *)
+            inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
+            rewrite (unionmC Hdisjoint) in Hfrom_initial.
+            rewrite (unionmC Hdisjoint).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            unfold PS.partialize.
+            apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
+            apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
+            rewrite Hmem. rewrite Hmem in Hstep_ps.
+            rewrite Hstk. rewrite Hstk in Hstep_ps.
+            exact Hstep_ps.
+          }
+        * constructor.
+          -- assumption.
+          -- by rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+        * simpl.
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          rewrite <- Pointer.inc_preserves_component.
+          constructor.
+          -- by rewrite Pointer.inc_preserves_component.
+          -- reflexivity.
+          -- reflexivity.
+    }
+
+    1:{
+    (* - (* IMov *) *)
+      match goal with
+      | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
+        exists (PS.CC (C, GPS, MEM))
+      end.
+      split.
+      + constructor.
+        * easy.
+        * easy.
+        * econstructor.
+          -- reflexivity.
+          -- assumption.
+          -- assumption.
+          -- eapply linkable_sym; eassumption.
+          -- exact (linkable_mains_sym main_linkability).
+          -- CS_step_of_executing; try reflexivity.
+             unfold executing in Hop.
+             rewrite (genv_procedures_program_link_left_in Hcc2 wf1 Hwf2' Hlinkable Hmains) in Hop.
+             unfold executing.
+             rewrite <- (program_linkC wf1 wf2 linkability).
+             erewrite (genv_procedures_program_link_left_in
+                         Hcc2 wf1 wf2 linkability main_linkability).
+             eassumption. (* Change: existential. *)
+          -- econstructor.
+             ++ assumption.
+             ++ reflexivity.
+             ++ reflexivity.
+          -- rewrite <- Pointer.inc_preserves_component.
+             econstructor.
+             ++ rewrite Pointer.inc_preserves_component.
+                assumption.
+             ++ reflexivity.
+             ++ reflexivity.
+      + rewrite <- Hmem.
+        rewrite <- Hstk.
+        match goal with
+        | |- PS.mergeable_states _ _ ?PC ?CC =>
+          eapply PS.mergeable_states_intro
+            with (ics := PS.unpartialize (PS.merge_partial_states PC CC))
+        end.
+        * easy.
+        * simpl.
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          {
+            (* RB: TODO: Refactor into lemma (cf. other cases). *)
+            inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
+            rewrite (unionmC Hdisjoint) in Hfrom_initial.
+            rewrite (unionmC Hdisjoint).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            unfold PS.partialize.
+            apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
+            apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
+            rewrite Hmem. rewrite Hmem in Hstep_ps.
+            rewrite Hstk. rewrite Hstk in Hstep_ps.
+            exact Hstep_ps.
+          }
+        * constructor.
+          -- assumption.
+          -- by rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+        * simpl.
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          rewrite <- Pointer.inc_preserves_component.
+          constructor.
+          -- by rewrite Pointer.inc_preserves_component.
+          -- reflexivity.
+          -- reflexivity.
+    }
+
+    1:{
+    (* - (* IBinOp *) *)
+      match goal with
+      | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
+        exists (PS.CC (C, GPS, MEM))
+      end.
+      split.
+      + constructor.
+        * easy.
+        * easy.
+        * econstructor.
+          -- reflexivity.
+          -- assumption.
+          -- assumption.
+          -- eapply linkable_sym; eassumption.
+          -- exact (linkable_mains_sym main_linkability).
+          -- CS_step_of_executing; try reflexivity.
+             unfold executing in Hop.
+             rewrite (genv_procedures_program_link_left_in Hcc2 wf1 Hwf2' Hlinkable Hmains) in Hop.
+             unfold executing.
+             rewrite <- (program_linkC wf1 wf2 linkability).
+             erewrite (genv_procedures_program_link_left_in
+                         Hcc2 wf1 wf2 linkability main_linkability).
+             eassumption. (* Change: existential. *)
+          -- econstructor.
+             ++ assumption.
+             ++ reflexivity.
+             ++ reflexivity.
+          -- rewrite <- Pointer.inc_preserves_component.
+             econstructor.
+             ++ rewrite Pointer.inc_preserves_component.
+                assumption.
+             ++ reflexivity.
+             ++ reflexivity.
+      + rewrite <- Hmem.
+        rewrite <- Hstk.
+        match goal with
+        | |- PS.mergeable_states _ _ ?PC ?CC =>
+          eapply PS.mergeable_states_intro
+            with (ics := PS.unpartialize (PS.merge_partial_states PC CC))
+        end.
+        * easy.
+        * simpl.
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          {
+            (* RB: TODO: Refactor into lemma (cf. other cases). *)
+            inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
+            rewrite (unionmC Hdisjoint) in Hfrom_initial.
+            rewrite (unionmC Hdisjoint).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            unfold PS.partialize.
+            apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
+            apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
+            rewrite Hmem. rewrite Hmem in Hstep_ps.
+            rewrite Hstk. rewrite Hstk in Hstep_ps.
+            exact Hstep_ps.
+          }
+        * constructor.
+          -- assumption.
+          -- by rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+        * simpl.
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          rewrite <- Pointer.inc_preserves_component.
+          constructor.
+          -- by rewrite Pointer.inc_preserves_component.
+          -- reflexivity.
+          -- reflexivity.
+    }
+
+    (* The ones that follow are more interesting as the first pattern finds
+       problematic sub-goals in its present form. *)
+
+    1:{
     (* - (* ILoad *) *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs, pc) E0
@@ -1408,7 +1697,7 @@ Section Simulation.
           -- reflexivity.
     }
 
-    5:{
+    1:{
     (* - (* IStore *) *)
       assert (exists mem', Memory.store mem ptr (Register.get r2 regs1') = Some mem')
         as [mem' Hmem'].
