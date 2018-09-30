@@ -84,7 +84,7 @@ Proof.
     inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
   - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hcomes_from Hpc1 Hpc2).
   - assumption.
-  - now destruct (PS.domm_partition_in_notin Hmergeable_ifaces Hcc1 Hpc).
+  - now destruct (PS.domm_partition_in_notin Hcc1 Hpc).
   - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
 Qed.
 
@@ -115,7 +115,7 @@ Proof.
   inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
     inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
   - now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hcomes_from Hpc1 Hpc2).
-  - destruct (PS.domm_partition_in_notin Hmergeable_ifaces Hpc Hpc1).
+  - destruct (PS.domm_partition_in_notin Hpc Hpc1).
   - assumption.
   - now destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
 Qed.
@@ -1238,7 +1238,7 @@ Section Simulation.
       PS.simplify_turn;
       [ destruct (PS.domm_partition_in_neither Hmerge_iface Hfrom_initial Hpc1 Hpc2)
       |
-      | destruct (PS.domm_partition_in_notin Hmerge_iface Hcc1 Hpc1)
+      | destruct (PS.domm_partition_in_notin Hcc1 Hpc1)
       | destruct (PS.domm_partition_in_both Hmerge_iface Hcc1 Hcc2)].
     inversion Hstep_ps
       as [p' ? ? ? ics1 ics1' Hsame_iface _ Hwf2' Hlinkable Hmains Hstep_cs Hpartial Hpartial'];
@@ -2228,7 +2228,6 @@ Section Simulation.
     inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? _]; subst;
       PS.simplify_turn;
       first destruct (PS.domm_partition_in_notin
-                        (@mergeable_interfaces_sym _ _ mergeable_interfaces)
                         Hcc1 Hpc1).
     exists
       (PS.PC

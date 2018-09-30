@@ -565,14 +565,14 @@ Proof.
   now rewrite Hnotin2 in Hnotin1.
 Qed.
 
-(* RB: TODO: Complete assumptions as above. *)
-Lemma domm_partition_in_notin ctx1 ctx2 C :
-  mergeable_interfaces ctx1 ctx2 ->
+(* RB: TODO: Complete assumptions as above.
+   Look for places where instances of this lemma are inlined in the proofs? *)
+Lemma domm_partition_in_notin (ctx1 : Program.interface) C :
   C \in domm ctx1 ->
   C \notin domm ctx1 ->
   False.
 Proof.
-  intros H H0 H1. now rewrite H0 in H1.
+  intros Hin Hnotin. now rewrite Hin in Hnotin.
 Qed.
 
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
