@@ -2086,6 +2086,97 @@ Section Simulation.
           -- reflexivity.
     }
 
+    1:{
+    (* - (* IAlloc *) *)
+      (* Auxiliary assert based on the corresponding hypothesis. *)
+      assert
+        (exists mem' ptr',
+            Memory.alloc mem (Pointer.component pc) (Z.to_nat size) = Some (mem', ptr'))
+        as [mem' [ptr' Hmem']]
+        by admit.
+      assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
+                                  (gps, mem, regs, pc) E0
+                                  (gps,
+                                   PS.merge_memories
+                                     (PS.to_partial_memory mem1 (domm (prog_interface c)))
+                                     (PS.to_partial_memory mem (domm (prog_interface p))),
+                                   Register.set rptr (Ptr ptr') regs, Pointer.inc pc))
+        by admit.
+      match goal with
+      | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
+        exists (PS.CC (C, GPS, MEM))
+      end.
+      split.
+      + constructor.
+        * easy.
+        * assumption.
+        * pose proof PS.context_epsilon_step_is_silent. econstructor.
+          -- reflexivity.
+          -- assumption.
+          -- assumption.
+          -- eapply linkable_sym; eassumption.
+          -- exact (linkable_mains_sym main_linkability).
+          -- rewrite program_linkC.
+             apply Hstep_cs'.
+             ++ assumption.
+             ++ assumption.
+             ++ apply linkable_sym; assumption.
+          -- assumption.
+          -- pose proof PS.partialized_state_is_partial
+                  (gps,
+                   (* RB: TODO: Here and elsewhere, notice duplicate state above. *)
+                   PS.merge_memories
+                     (PS.to_partial_memory mem1 (domm (prog_interface c)))
+                     (PS.to_partial_memory mem (domm (prog_interface p))),
+                   Register.set rptr (Ptr ptr') regs, Pointer.inc pc)
+                  (prog_interface p)
+               as Hpartial''.
+             assert (Htmp : Pointer.component (Pointer.inc pc) \in domm (prog_interface p))
+               by admit.
+             unfold PS.partialize in Hpartial''.
+             rewrite Htmp in Hpartial''.
+             rewrite <- Pointer.inc_preserves_component.
+             rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface) in Hpartial''.
+             assumption.
+      + (* rewrite <- Hmem. *)
+        rewrite <- Hstk.
+        match goal with
+        | |- PS.mergeable_states _ _ ?PC ?CC =>
+          eapply PS.mergeable_states_intro
+            with (ics := PS.unpartialize (PS.merge_partial_states PC CC))
+        end.
+        * easy.
+        * simpl.
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          (* rewrite (merge_memories_partition Hmerge_iface Hfrom_initial). *)
+          {
+            (* RB: TODO: Refactor into lemma (cf. other cases). *)
+            inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
+            rewrite (unionmC Hdisjoint) in Hfrom_initial.
+            rewrite (unionmC Hdisjoint).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            unfold PS.partialize.
+            apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
+            apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
+            rewrite Hmem. rewrite Hmem in Hstep_ps.
+            rewrite Hstk. rewrite Hstk in Hstep_ps.
+            rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+            exact Hstep_ps.
+          }
+        * constructor.
+          -- assumption.
+          -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+          -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+        * simpl.
+          (* rewrite (merge_memories_partition Hmerge_iface Hfrom_initial). *)
+          rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
+          rewrite <- Pointer.inc_preserves_component.
+          constructor.
+          -- admit. (* Easy. *)
+          -- now rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface).
+          -- reflexivity.
+    }
+
   Admitted.
 
   Theorem context_simulates_program:
