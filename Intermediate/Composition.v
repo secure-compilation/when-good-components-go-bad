@@ -1645,7 +1645,7 @@ Section Simulation.
           -- reflexivity.
     }
 
-    (* The ones that follow are more interesting as the first pattern finds
+    (* The cases that follow are more interesting as the first pattern finds
        problematic sub-goals in its present form. *)
 
     1:{
@@ -2200,6 +2200,92 @@ Section Simulation.
           -- admit. (* Easy. *)
           -- now rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface).
           -- reflexivity.
+    }
+
+    (* The final cases are the most interesting in that the executing instruction
+       transfers control to a different component, which may be outside the
+       domain of the program, i.e., in the context's. In addition, the usual
+       stock of state manipulations make their appearance. *)
+
+    1:{
+    (* - (* ICall *) *)
+      (* First discard the case where we step out of the program. *)
+      destruct (C' \in domm (prog_interface p)) eqn:Hpc';
+        last admit. (* Easy contradiction. *)
+      (* Continue with the proof. *)
+      assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
+                                  (gps, mem, regs, pc)
+                                  [ECall (Pointer.component pc) P call_arg C']
+                                  (Pointer.inc pc :: gps,
+                                   mem,
+                                   Register.invalidate regs, (C', b, 0%Z)))
+        by admit.
+      match goal with
+      | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
+        exists (PS.CC (C', PS.to_partial_frame (domm (prog_interface p)) (Pointer.inc pc) :: GPS, MEM))
+      end.
+      split.
+      + constructor.
+        * easy.
+        * assumption.
+        * econstructor.
+          -- reflexivity.
+          -- assumption.
+          -- assumption.
+          -- eapply linkable_sym; eassumption.
+          -- exact (linkable_mains_sym main_linkability).
+          -- rewrite program_linkC.
+             apply Hstep_cs'.
+             ++ assumption.
+             ++ assumption.
+             ++ apply linkable_sym; assumption.
+          -- assumption.
+          -- pose proof PS.partialized_state_is_partial
+                  (Pointer.inc pc :: gps, mem, Register.invalidate regs, (C', b, 0%Z))
+                  (prog_interface p)
+               as Hpartial''.
+             simpl in Hpartial''. rewrite Hpc' in Hpartial''.
+             assumption.
+      + rewrite <- Hmem.
+        (* rewrite <- Hstk. *)
+        match goal with
+        | |- PS.mergeable_states _ _ ?PC ?CC =>
+          eapply PS.mergeable_states_intro
+            with (ics := PS.unpartialize (PS.merge_partial_states PC CC))
+        end.
+        * easy.
+        * (* simpl. *)
+          unfold PS.unpartialize.
+          unfold PS.merge_partial_states; fold PS.merge_partial_states.
+          (* rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial). *)
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          {
+            (* RB: TODO: Refactor into lemma (cf. other cases). *)
+            inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
+            rewrite (unionmC Hdisjoint) in Hfrom_initial.
+            rewrite (unionmC Hdisjoint).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            unfold PS.partialize.
+            apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
+            apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
+            rewrite Hmem. rewrite Hmem in Hstep_ps.
+            rewrite Hstk. rewrite Hstk in Hstep_ps.
+            (* rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface). *)
+            admit. (* Easy, stack. *)
+          }
+        * constructor.
+          -- assumption.
+          -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+          -- admit. (* Easy, stack. *)
+        * (* Here, pushing the constructor forward to get simpler goals instead
+             of dealing with untimely local unfoldings, and applying the
+             constructor after the obvious rewrites have been applied globally
+             as in previous cases. (Probably a better generic strategy.) *)
+          constructor.
+          -- admit. (* Easy. *)
+          -- rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+             reflexivity.
+          -- admit. (* Easy, stack. *)
     }
 
   Admitted.
