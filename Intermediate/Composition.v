@@ -157,6 +157,31 @@ Lemma merge_stacks_partition_emptym:
     PS.to_partial_stack gps fset0.
 Admitted. (* Grade 2. *)
 
+Lemma unpartialize_stack_frame_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall ptr,
+    PS.unpartialize_stack_frame
+      (PS.merge_stack_frames ((PS.to_partial_frame (domm ctx1) ptr),
+                              (PS.to_partial_frame (domm ctx2) ptr))) =
+    ptr.
+Admitted. (* Grade 1. *)
+
+Lemma unpartialize_stack_merge_stacks_cons_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall ptr pgps1 pgps2,
+    PS.unpartialize_stack
+      (PS.merge_stacks (PS.to_partial_frame (domm ctx1) ptr :: pgps1)
+                       (PS.to_partial_frame (domm ctx2) ptr :: pgps2)) =
+    ptr :: PS.unpartialize_stack (PS.merge_stacks pgps1 pgps2).
+Proof.
+  intros ctx1 ctx2 Hmerge_ifaces ptr pgps1 pgps2.
+  simpl.
+  rewrite (unpartialize_stack_frame_partition Hmerge_ifaces).
+  reflexivity.
+Qed.
+
 Lemma merge_memories_partition:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
