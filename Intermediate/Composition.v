@@ -189,8 +189,9 @@ Qed.
 Lemma to_partial_stack_merge_stacks_left:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
-  forall gps1 gps2 mem1 mem2 regs1 regs2 pc1 pc2,
+  forall gps1 mem1 regs1 pc1,
     CS.comes_from_initial_state (gps1, mem1, regs1, pc1) (unionm ctx1 ctx2) ->
+  forall gps2 mem2 regs2 pc2,
     CS.comes_from_initial_state (gps2, mem2, regs2, pc2) (unionm ctx1 ctx2) ->
     PS.to_partial_stack gps1 (domm ctx1) = PS.to_partial_stack gps2 (domm ctx1) ->
     PS.to_partial_stack
@@ -204,8 +205,9 @@ Admitted.
 Lemma to_partial_stack_merge_stacks_right:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
-  forall gps1 gps2 mem1 mem2 regs1 regs2 pc1 pc2,
+  forall gps1 mem1 regs1 pc1,
     CS.comes_from_initial_state (gps1, mem1, regs1, pc1) (unionm ctx1 ctx2) ->
+  forall gps2 mem2 regs2 pc2,
     CS.comes_from_initial_state (gps2, mem2, regs2, pc2) (unionm ctx1 ctx2) ->
     PS.to_partial_stack gps1 (domm ctx1) = PS.to_partial_stack gps2 (domm ctx1) ->
     PS.to_partial_stack
