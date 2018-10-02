@@ -2260,6 +2260,14 @@ Section Simulation.
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C', PS.to_partial_frame (domm (prog_interface p)) (Pointer.inc pc) :: GPS, MEM))
       end.
+      (* RB: TODO: Normalizing the stack expression for now, manually, to retain
+         the part that is already determined by the match (but still not
+         perfect). *)
+      change
+        (PS.to_partial_frame (domm (prog_interface p)) (Pointer.inc pc) ::
+         PS.to_partial_stack gps (domm (prog_interface p)))
+      with
+        (PS.to_partial_stack (Pointer.inc pc :: gps) (domm (prog_interface p))).
       split.
       + constructor.
         * easy.
@@ -2284,6 +2292,19 @@ Section Simulation.
              assumption.
       + rewrite <- Hmem.
         (* rewrite <- Hstk. *)
+        (* Before processing the goal and looking for its constituents, prepare
+           the provenance information that will be needed for all simplifications
+           on partial stacks. *)
+        assert (Hprov : CS.comes_from_initial_state (gps, mem, regs, pc)
+                                                    (unionm (prog_interface c) (prog_interface p)))
+          by admit. (* Easy, commutativity of interfaces. *)
+        (* RB: TODO: The provenance of the second stack is fully expected, though
+           not directly available from the context. [Hstep_cs] offers a starting
+           point for completing this step. *)
+        assert (Hprov' : CS.comes_from_initial_state (gps0, mem1, regs, pc)
+                                                     (unionm (prog_interface c) (prog_interface p)))
+          by admit.
+        (* Continue with the regular proof. *)
         match goal with
         | |- PS.mergeable_states _ _ ?PC ?CC =>
           eapply PS.mergeable_states_intro
@@ -2307,12 +2328,55 @@ Section Simulation.
             rewrite Hmem. rewrite Hmem in Hstep_ps.
             rewrite Hstk. rewrite Hstk in Hstep_ps.
             (* rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface). *)
-            admit. (* Easy, stack. *)
+            rewrite (unpartialize_stack_merge_stacks_cons_partition Hmerge_iface).
+            simpl.
+            (* RB: TODO: The rewrite mangles the goal horribly; for now, [change]
+               this back to an orderly form. [match goal] is of course better if
+               an easier way does not avail. This problem occurs in identical
+               form in all three instances where the above rewrite is used (and
+               before [simpl] is used to expose the structure unveiled by the
+               rewrite more explicitly, paving the way for the application of the
+               second rewrite. *)
+            change
+              (PS.merge_stacks
+                 ((fix map (l : list Pointer.t) : list PS.PartialPointer.t :=
+                     match l with
+                     | [] => []
+                     | a :: t => PS.to_partial_frame (domm (prog_interface c)) a :: map t
+                     end) gps0)
+                 ((fix map (l : list Pointer.t) : list PS.PartialPointer.t :=
+                     match l with
+                     | [] => []
+                     | a :: t => PS.to_partial_frame (domm (prog_interface p)) a :: map t
+                     end) gps))
+            with
+              (PS.merge_stacks (PS.to_partial_stack gps0 (domm (prog_interface c)))
+                               (PS.to_partial_stack gps (domm (prog_interface p)))).
+            rewrite (to_partial_stack_merge_stacks_left Hmerge_iface Hprov' Hprov (eq_sym Hstk)).
+            exact Hstep_ps.
           }
         * constructor.
           -- assumption.
           -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
-          -- admit. (* Easy, stack. *)
+          -- rewrite (unpartialize_stack_merge_stacks_cons_partition Hmerge_iface).
+             simpl.
+             change
+               (PS.merge_stacks
+                  ((fix map (l : list Pointer.t) : list PS.PartialPointer.t :=
+                      match l with
+                      | [] => []
+                      | a :: t => PS.to_partial_frame (domm (prog_interface c)) a :: map t
+                      end) gps0)
+                  ((fix map (l : list Pointer.t) : list PS.PartialPointer.t :=
+                      match l with
+                      | [] => []
+                      | a :: t => PS.to_partial_frame (domm (prog_interface p)) a :: map t
+                      end) gps))
+             with
+               (PS.merge_stacks (PS.to_partial_stack gps0 (domm (prog_interface c)))
+                                (PS.to_partial_stack gps (domm (prog_interface p)))).
+             rewrite (to_partial_stack_merge_stacks_left Hmerge_iface  Hprov' Hprov (eq_sym Hstk)).
+             reflexivity.
         * (* Here, pushing the constructor forward to get simpler goals instead
              of dealing with untimely local unfoldings, and applying the
              constructor after the obvious rewrites have been applied globally
@@ -2321,7 +2385,25 @@ Section Simulation.
           -- admit. (* Easy. *)
           -- rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
              reflexivity.
-          -- admit. (* Easy, stack. *)
+          -- rewrite (unpartialize_stack_merge_stacks_cons_partition Hmerge_iface).
+             simpl.
+             change
+               (PS.merge_stacks
+                  ((fix map (l : list Pointer.t) : list PS.PartialPointer.t :=
+                      match l with
+                      | [] => []
+                      | a :: t => PS.to_partial_frame (domm (prog_interface c)) a :: map t
+                      end) gps0)
+                  ((fix map (l : list Pointer.t) : list PS.PartialPointer.t :=
+                      match l with
+                      | [] => []
+                      | a :: t => PS.to_partial_frame (domm (prog_interface p)) a :: map t
+                      end) gps))
+             with
+               (PS.merge_stacks (PS.to_partial_stack gps0 (domm (prog_interface c)))
+                                (PS.to_partial_stack gps (domm (prog_interface p)))).
+             rewrite (to_partial_stack_merge_stacks_right Hmerge_iface Hprov' Hprov (eq_sym Hstk)).
+             reflexivity.
     }
 
   Admitted.
