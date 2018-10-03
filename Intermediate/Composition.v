@@ -1318,8 +1318,7 @@ Section Simulation.
     inversion Hstep_cs; subst;
       PS.rename_op p pc p' Hop.
 
-    1:{
-    (* - (* INop *) *)
+    - (* INop *)
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -1388,13 +1387,11 @@ Section Simulation.
           -- by rewrite Pointer.inc_preserves_component.
           -- reflexivity.
           -- reflexivity.
-    }
 
     (* The next few cases admit the same pattern as above, sometimes with very
        minor generalizations. *)
 
-    1:{
-    (* - (* ILabel *) *)
+    - (* ILabel *)
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -1463,10 +1460,8 @@ Section Simulation.
           -- by rewrite Pointer.inc_preserves_component.
           -- reflexivity.
           -- reflexivity.
-    }
 
-    1:{
-    (* - (* IConst *) *)
+    - (* IConst *)
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -1535,10 +1530,8 @@ Section Simulation.
           -- by rewrite Pointer.inc_preserves_component.
           -- reflexivity.
           -- reflexivity.
-    }
 
-    1:{
-    (* - (* IMov *) *)
+    - (* IMov *)
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -1607,10 +1600,8 @@ Section Simulation.
           -- by rewrite Pointer.inc_preserves_component.
           -- reflexivity.
           -- reflexivity.
-    }
 
-    1:{
-    (* - (* IBinOp *) *)
+    - (* IBinOp *)
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -1679,13 +1670,11 @@ Section Simulation.
           -- by rewrite Pointer.inc_preserves_component.
           -- reflexivity.
           -- reflexivity.
-    }
 
     (* The cases that follow are more interesting as the first pattern finds
        problematic sub-goals in its present form. *)
 
-    1:{
-    (* - (* ILoad *) *)
+    - (* ILoad *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs, pc) E0
                                   (gps, mem, Register.set r2 v regs, Pointer.inc pc))
@@ -1756,10 +1745,8 @@ Section Simulation.
           -- by rewrite Pointer.inc_preserves_component.
           -- reflexivity.
           -- reflexivity.
-    }
 
-    1:{
-    (* - (* IStore *) *)
+    - (* IStore *)
       assert (exists mem', Memory.store mem ptr (Register.get r2 regs1') = Some mem')
         as [mem' Hmem'].
       {
@@ -1848,10 +1835,8 @@ Section Simulation.
           -- by rewrite Pointer.inc_preserves_component.
           -- now rewrite to_partial_memory_merge_memories_right.
           -- reflexivity. (* TODO: Move rewrite here? *)
-    }
 
-    1:{
-    (* - (* IJal *) *)
+    - (* IJal *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs, pc) E0
                                   (gps, mem, Register.set R_RA (Ptr (Pointer.inc pc)) regs, pc1'))
@@ -1921,10 +1906,8 @@ Section Simulation.
           -- admit. (* Easy. *)
           -- reflexivity.
           -- reflexivity.
-    }
 
-    1:{
-    (* - (* IJump *) *)
+    - (* IJump *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs1', pc) E0
                                   (gps, mem, regs1', pc1'))
@@ -1998,10 +1981,8 @@ Section Simulation.
              assumption.
           -- reflexivity.
           -- reflexivity.
-    }
 
-    1:{
-    (* - (* IBnz (CS.BnzNZ) *) *)
+    - (* IBnz (CS.BnzNZ) *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs1', pc) E0
                                   (gps, mem, regs1', pc1'))
@@ -2071,10 +2052,8 @@ Section Simulation.
           -- admit. (* Easy. *)
           -- reflexivity.
           -- reflexivity.
-    }
 
-    1:{
-    (* - (* IBnz (CS.BnzZ) *) *)
+    - (* IBnz (CS.BnzZ) *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs1', pc) E0
                                   (gps, mem, regs1', Pointer.inc pc))
@@ -2145,10 +2124,8 @@ Section Simulation.
           -- admit. (* Easy. *)
           -- reflexivity.
           -- reflexivity.
-    }
 
-    1:{
-    (* - (* IAlloc *) *)
+    - (* IAlloc *)
       (* Auxiliary assert based on the corresponding hypothesis. *)
       assert
         (exists mem' ptr',
@@ -2236,15 +2213,13 @@ Section Simulation.
           -- admit. (* Easy. *)
           -- now rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface).
           -- reflexivity.
-    }
 
     (* The final cases are the most interesting in that the executing instruction
        transfers control to a different component, which may be outside the
        domain of the program, i.e., in the context's. In addition, the usual
        stock of state manipulations make their appearance. *)
 
-    1:{
-    (* - (* ICall *) *)
+    - (* ICall *)
       (* First discard the case where we step out of the program. *)
       destruct (C' \in domm (prog_interface p)) eqn:Hpc';
         last admit. (* Easy contradiction. *)
@@ -2406,10 +2381,8 @@ Section Simulation.
                                 (PS.to_partial_stack gps (domm (prog_interface p)))).
              rewrite (to_partial_stack_merge_stacks_right Hmerge_iface Hprov' Hprov (eq_sym Hstk)).
              reflexivity.
-    }
 
-    1:{
-      (* - (* IReturn *) *)
+    - (* IReturn *)
       (* Here we know where pc1' is all along. *)
       assert (Hpc' : Pointer.component pc1' \in domm (prog_interface p))
         by admit. (* Easy. *)
@@ -2505,7 +2478,6 @@ Section Simulation.
              reflexivity.
           -- rewrite (merge_stacks_partition Hmerge_iface Hprov).
              reflexivity.
-    }
 
   Admitted.
 
