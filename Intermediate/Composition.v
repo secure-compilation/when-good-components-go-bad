@@ -2295,14 +2295,16 @@ Section Simulation.
         (* Before processing the goal and looking for its constituents, prepare
            the provenance information that will be needed for all simplifications
            on partial stacks. *)
-        assert (Hprov : CS.comes_from_initial_state (gps, mem, regs, pc)
-                                                    (unionm (prog_interface c) (prog_interface p)))
+        assert (Hprov : CS.comes_from_initial_state
+                          (gps, mem, regs, pc)
+                          (unionm (prog_interface c) (prog_interface p)))
           by admit. (* Easy, commutativity of interfaces. *)
         (* RB: TODO: The provenance of the second stack is fully expected, though
            not directly available from the context. [Hstep_cs] offers a starting
            point for completing this step. *)
-        assert (Hprov' : CS.comes_from_initial_state (gps0, mem1, regs, pc)
-                                                     (unionm (prog_interface c) (prog_interface p)))
+        assert (Hprov' : CS.comes_from_initial_state
+                           (gps0, mem1, regs, pc)
+                           (unionm (prog_interface c) (prog_interface p)))
           by admit.
         (* Continue with the regular proof. *)
         match goal with
@@ -2403,6 +2405,105 @@ Section Simulation.
                (PS.merge_stacks (PS.to_partial_stack gps0 (domm (prog_interface c)))
                                 (PS.to_partial_stack gps (domm (prog_interface p)))).
              rewrite (to_partial_stack_merge_stacks_right Hmerge_iface Hprov' Hprov (eq_sym Hstk)).
+             reflexivity.
+    }
+
+    1:{
+      (* - (* IReturn *) *)
+      (* Here we know where pc1' is all along. *)
+      assert (Hpc' : Pointer.component pc1' \in domm (prog_interface p))
+        by admit. (* Easy. *)
+      (* Before we proceed, we need to ascertain that gps (the stack on p and c)
+         is a perfect counterpart of the stack on p and p' (pc1' :: gps1). That
+         is, the top of gps is precisely pc1'. *)
+      assert (exists gps', gps = pc1' :: gps')
+        as [gps' Heq]
+        by admit.
+      subst gps.
+      (* After the prologue we continue with the standard proof strategy. *)
+      assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
+                                  (pc1' :: gps', mem, regs, pc)
+                                  [ERet (Pointer.component pc) ret_arg (Pointer.component pc1')]
+                                  (gps', mem, Register.invalidate regs, pc1'))
+        by admit.
+      match goal with
+      | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
+        exists (PS.CC (Pointer.component pc1',
+                       PS.to_partial_stack gps' (domm (prog_interface p)), (* Get from GPS! *)
+                       MEM))
+      end.
+      split.
+      + constructor.
+        * easy.
+        * assumption.
+        * econstructor.
+          -- reflexivity.
+          -- assumption.
+          -- assumption.
+          -- eapply linkable_sym; eassumption.
+          -- exact (linkable_mains_sym main_linkability).
+          -- rewrite program_linkC.
+             apply Hstep_cs'.
+             ++ assumption.
+             ++ assumption.
+             ++ apply linkable_sym; assumption.
+          -- assumption.
+          -- pose proof PS.partialized_state_is_partial
+                  (gps', mem, Register.invalidate regs, pc1')
+                  (prog_interface p)
+               as Hpartial''.
+             simpl in Hpartial''. rewrite Hpc' in Hpartial''.
+             assumption.
+      + rewrite <- Hmem.
+        (* rewrite <- Hstk. *)
+        (* Before decomposing the goal in its constituting sub-goals, we process
+           the stack to get the information needed for the partialized
+           rewrites. *)
+        inversion Hstk as [Hstk'].
+        (* As in the ICall case, we determine that the two stacks involved in the
+           partialized rewrites arise from proper executions of programs on the
+           joint program-context interface. *)
+        assert (Hprov : CS.comes_from_initial_state
+                          (gps', mem, Register.invalidate regs, pc1')
+                          (unionm (prog_interface c) (prog_interface p)))
+          by admit.
+        assert (Hprov' : CS.comes_from_initial_state
+                           (gps1, mem1, Register.invalidate regs, pc1')
+                           (unionm (prog_interface c) (prog_interface p)))
+          by admit.
+        (* And we continue with the goal. *)
+        match goal with
+        | |- PS.mergeable_states _ _ ?PC ?CC =>
+          eapply PS.mergeable_states_intro
+            with (ics := PS.unpartialize (PS.merge_partial_states PC CC))
+        end.
+        * easy.
+        * simpl.
+          (* unfold PS.unpartialize. *)
+          (* unfold PS.merge_partial_states; fold PS.merge_partial_states. *)
+          rewrite (merge_stacks_partition Hmerge_iface Hprov).
+          rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+          (* RB: The back that we do not use the bracketed proto-lemma in this
+             case points to the provenance information that we need for the stack
+             rewrites as the key for this part as well. In fact, the stack cases
+             in this IReturn case fall into the purview of the simpler partition
+             lemmas given the extended provenance information is available.
+             TODO: Have a look at ICall (and the other cases) too. *)
+          exact Hprov.
+        * constructor.
+          -- assumption.
+          -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+          -- rewrite (merge_stacks_partition Hmerge_iface Hprov).
+             reflexivity.
+        * (* Here, pushing the constructor forward to get simpler goals instead
+             of dealing with untimely local unfoldings, and applying the
+             constructor after the obvious rewrites have been applied globally
+             as in previous cases. (Probably a better generic strategy.) *)
+          constructor.
+          -- assumption. (* RB: TODO: Bring down assert at the top of case? *)
+          -- rewrite (merge_memories_partition Hmerge_iface Hfrom_initial).
+             reflexivity.
+          -- rewrite (merge_stacks_partition Hmerge_iface Hprov).
              reflexivity.
     }
 
