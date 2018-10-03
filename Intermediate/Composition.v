@@ -224,8 +224,8 @@ Lemma merge_memories_partition:
   forall gps mem regs pc,
     CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
     PS.merge_memories
-      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx1) mem)
-      (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm ctx2) mem)
+      (PS.to_partial_memory mem (domm ctx1))
+      (PS.to_partial_memory mem (domm ctx2))
   = mem.
 Admitted. (* Grade 2. *)
 
@@ -1213,7 +1213,7 @@ Section Simulation.
       (PS.CC
          (Pointer.component pc,
           PS.to_partial_stack gps (domm (prog_interface p)),
-          filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem)).
+          PS.to_partial_memory mem (domm (prog_interface p)))).
     split.
     - econstructor.
       + apply CS.comes_from_initial_state_mergeable_sym; eassumption.
@@ -2562,7 +2562,7 @@ Section Simulation.
     exists
       (PS.PC
          (PS.to_partial_stack gps (domm (prog_interface p)),
-          filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem,
+          PS.to_partial_memory mem (domm (prog_interface p)),
           regs, pc)).
     split.
     - econstructor.
@@ -2907,8 +2907,8 @@ Section MultiSemantics.
                    (PS.merge_stacks (PS.to_partial_stack gps (domm (prog_interface c)))
                                     (PS.to_partial_stack gps (domm (prog_interface p)))),
                  PS.merge_memories
-                   (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface c)) mem)
-                   (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem),
+                   (PS.to_partial_memory mem (domm (prog_interface c)))
+                   (PS.to_partial_memory mem (domm (prog_interface p))),
                  regs, pc))
         (p' := empty_prog).
       + reflexivity.
@@ -2939,8 +2939,8 @@ Section MultiSemantics.
                    (PS.merge_stacks (PS.to_partial_stack gps (domm (prog_interface c)))
                                     (PS.to_partial_stack gps (domm (prog_interface p)))),
                  PS.merge_memories
-                   (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface c)) mem)
-                   (filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem),
+                   (PS.to_partial_memory mem (domm (prog_interface c)))
+                   (PS.to_partial_memory mem (domm (prog_interface p))),
                  regs, pc))
         (p' := empty_prog).
       + reflexivity.
@@ -3145,12 +3145,13 @@ Section PartialComposition.
             (ics := (PS.unpartialize (PS.merge_partial_states
     (* From goal. *)
     (PS.CC
-       (Pointer.component pc, PS.to_partial_stack gps (domm (prog_interface c)),
-       filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface c)) mem))
+       (Pointer.component pc,
+        PS.to_partial_stack gps (domm (prog_interface c)),
+        PS.to_partial_memory mem (domm (prog_interface c))))
     (PS.PC
        (PS.to_partial_stack gps (domm (prog_interface p)),
-       filterm (fun (k : nat) (_ : ComponentMemory.t) => k \notin domm (prog_interface p)) mem, regs,
-       pc))
+        PS.to_partial_memory mem (domm (prog_interface p)),
+        regs, pc))
             ))).
           (* RB: TODO: Refactor occurrences of the following proof pattern once complete. *)
           -- assumption.
