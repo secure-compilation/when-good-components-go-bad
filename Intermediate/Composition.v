@@ -2582,7 +2582,7 @@ Section Simulation.
     exists ips2',
       Step (ProgramSem.sem c (prog_interface p)) ips2 t ips2' /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
-  Admitted.
+  Admitted. (* Grade 3. *)
 
   Theorem program_simulates_context:
     forward_simulation (ContextSem.sem p (prog_interface c))
