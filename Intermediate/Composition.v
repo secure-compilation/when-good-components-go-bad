@@ -2738,6 +2738,9 @@ Section MultiSemantics.
   Hypothesis main_linkability: linkable_mains p c.
   Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
 
+  Hypothesis mergeable_interfaces:
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
   Let prog := program_link p c.
 
   Definition state : Type := PS.state * PS.state.
@@ -3391,7 +3394,9 @@ Section PartialComposition.
 
           (* use the multisem simulation to show that the states after the step are still
              mergeable *)
-          destruct (MultiSem.lockstep_simulation wf1 wf2 main_linkability linkability Hmultistep Hmultimatch)
+          destruct (MultiSem.lockstep_simulation
+                      wf1 wf2 main_linkability linkability mergeable_interfaces
+                      Hmultistep Hmultimatch)
             as [merged_state' [Hmiddle_step Hmergeable'']].
           inversion Hmergeable''; subst.
 
@@ -3448,7 +3453,9 @@ Section PartialComposition.
 
           (* use the multisem simulation to show that the states after the step are still
              mergeable *)
-          destruct (MultiSem.lockstep_simulation wf1 wf2 main_linkability linkability Hmultistep Hmultimatch)
+          destruct (MultiSem.lockstep_simulation
+                      wf1 wf2 main_linkability linkability mergeable_interfaces
+                      Hmultistep Hmultimatch)
             as [merged_state' [Hmiddle_step Hmergeable'']].
           inversion Hmergeable''; subst.
 
