@@ -2782,6 +2782,49 @@ Section MultiSemantics.
       CS.initial_state (program_link p c)
                        (PS.unpartialize (PS.merge_partial_states ips1 ips2)).
   Proof.
+    intros ips1 ips2 HPSini1 HPSini2.
+    (* ??? matching_mains introduction *)
+    inversion HPSini1
+      as [p' ics1 ? Hiface1 _ Hwf1 Hlinkable1 Hmains1 Hpartial1 HCSini1];
+      subst.
+    inversion HPSini2
+      as [c' ics2 ? Hiface2 _ Hwf2 Hlinkable2 Hmains2 Hpartial2 HCSini2];
+      subst.
+    unfold CS.initial_state, CS.initial_machine_state in HCSini1, HCSini2.
+    unfold CS.initial_state, CS.initial_machine_state.
+    (* Inline initial states in Hpartial hypotheses; work on those from there. *)
+    subst ics1 ics2.
+    simpl in Hpartial1, Hpartial2. simpl.
+    (* Extract mains compatibility information before case analysis. *)
+    inversion main_linkability as [Hmainpc];
+      inversion Hmains1 as [Hmainpp'];
+      inversion Hmains2 as [Hmaincc'].
+    destruct (prog_main p) as [mainp |] eqn:Hmainp;
+      destruct (prog_main c) as [mainc |] eqn:Hmainc;
+      destruct (prog_main p') as [mainp' | ] eqn:Hmainp';
+      destruct (prog_main c') as [mainc' | ] eqn:Hmainc';
+      try discriminate;
+      simpl in Hpartial1, Hpartial2; simpl.
+    - admit. (* By composability of [prepare_]. *)
+    - admit. (* Discard by matching_mains. *)
+    - admit. (* By composability of [prepare_]. *)
+    - admit. (* Discard by matching_mains. *)
+    - admit. (* Discard by matching_mains. *)
+    - admit. (* Discard by matching_mains. *)
+    - admit. (* Discard by matching_mains. *)
+    - inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+        PS.simplify_turn.
+      + admit. (* Easy. *)
+      + inversion Hwf2 as [_ _ _ _ _ _ Hmain2].
+        specialize (Hmain2 Hmainc').
+        rewrite Hiface2 in Hmain2.
+        now destruct (PS.domm_partition_in_notin Hcomp2 Hmain2).
+      + inversion Hwf1 as [_ _ _ _ _ _ Hmain1].
+        specialize (Hmain1 Hmainp').
+        rewrite Hiface1 in Hmain1.
+        now destruct (PS.domm_partition_in_notin Hcomp1 Hmain1).
+      + now destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1).
   Admitted.
 
   Lemma multi_match_initial_states:
