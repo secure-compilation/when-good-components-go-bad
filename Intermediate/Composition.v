@@ -2915,7 +2915,6 @@ Section MultiSemantics.
     inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
       inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst;
       PS.simplify_turn;
-      (* XXX: This relies on incomplete assumptions *)
       [ now destruct (PS.domm_partition_in_neither Hmergeable_ifaces Hcomes_from Hpc1 Hpc2)
       |
       |
