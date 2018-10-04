@@ -3002,16 +3002,23 @@ Section MultiSemantics.
     intros ms t ms' Hstep.
     intros ips Hmatch.
 
-    inversion Hmatch; subst.
-    inversion Hstep; subst.
+    inversion Hmatch as [ips1 ips2 Hmergeable]; subst.
+    inversion Hstep as [? ? ips1' ? ips2' Hstep1 Hstep2]; subst.
 
     exists (PS.merge_partial_states ips1' ips2'). split.
 
-    - inversion H as [ics ? ? Hmerge_ifaces Hfrom_initial Hpartial1 Hpartial2]; subst;
-        inversion H2; subst;
-        inversion H5; subst;
-        inversion Hpartial1; subst;
-        inversion Hpartial2; subst;
+    - inversion Hmergeable as [ics ? ? Hmerge_ifaces Hfrom_initial Hpartial1 Hpartial2];
+        subst.
+      inversion Hstep1
+        as [p' ? ? ? ics1 ics1'
+            Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1'];
+        subst;
+        inversion Hstep2
+          as [c' ? ? ? ics2 ics2'
+              Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2'];
+        subst;
+        inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
         simpl in *; PS.simplify_turn.
       + admit. (* contra *)
       + (* program is in the first state *)
