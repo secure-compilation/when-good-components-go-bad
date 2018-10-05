@@ -3005,31 +3005,32 @@ Section MultiSemantics.
     inversion Hmatch as [ips1 ips2 Hmergeable]; subst; clear Hmatch.
     inversion Hstep as [? ? ips1' ? ips2' Hstep1 Hstep2]; subst; clear Hstep.
 
-    exists (PS.merge_partial_states ips1' ips2'). split.
+    inversion Hmergeable as [ics ? ? Hmerge_ifaces Hfrom_initial Hpartial1 Hpartial2];
+      subst(*; clear Hmergeable*).
+    inversion Hstep1
+      as [p' ? ? ? ics1 ics1'
+          Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1'];
+      subst(*; clear Hstep1*);
+      inversion Hstep2
+        as [c' ? ? ? ics2 ics2'
+            Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2'];
+      subst(*; clear Hstep2*);
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1];
+      subst(*; clear Hpartial1*);
+      inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2];
+      subst(*; clear Hpartial2*);
+      simpl in *; PS.simplify_turn.
 
-    - inversion Hmergeable as [ics ? ? Hmerge_ifaces Hfrom_initial Hpartial1 Hpartial2];
-        subst; clear Hmergeable.
-      inversion Hstep1
-        as [p' ? ? ? ics1 ics1'
-            Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1'];
-        subst; clear Hstep1;
-        inversion Hstep2
-          as [c' ? ? ? ics2 ics2'
-              Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2'];
-        subst; clear Hstep2;
-        inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1];
-        subst; clear Hpartial1;
-        inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2];
-        subst; clear Hpartial2;
-        simpl in *; PS.simplify_turn.
+    - (* Contra. *)
+      now destruct (PS.domm_partition_in_neither
+                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                      Hfrom_initial Hcomp1 Hcomp2).
 
-      + destruct (PS.domm_partition_in_neither
-                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                    Hfrom_initial Hcomp1 Hcomp2).
+    - (* program is in the first state *)
+      exists (PS.merge_partial_states ips1' ips2'). split.
 
-      + (* program is in the first state *)
-        inversion Hpartial_ips1; subst; clear Hpartial_ips1;
-          inversion Hpartial_ips2; subst; clear Hpartial_ips2;
+      + inversion Hpartial_ips1; subst(*; clear Hpartial_ips1*);
+          inversion Hpartial_ips2; subst(*; clear Hpartial_ips2*);
           PS.simplify_turn; simpl in *.
         (* RB: TODO: Existing information, and new information, can be extracted
            from the goal and the context, respectively. *)
@@ -3064,13 +3065,15 @@ Section MultiSemantics.
              reflexivity.
         * admit.
 
-      + (* program is in the second state *)
-        admit. (* RB: Fully symmetrical case. *)
+      + (* prove match *)
+        admit.
 
-      + destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1).
+    - (* program is in the second state *)
+      admit. (* RB: Fully symmetrical case. *)
 
-    - (* prove match *)
-      admit.
+    - (* Contra. *)
+      now destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1).
+
   Admitted.
 
   Theorem merged_prog_simulates_multisem:
