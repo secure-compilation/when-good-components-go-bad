@@ -1677,8 +1677,13 @@ Section Simulation.
     - (* ILoad *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs, pc) E0
-                                  (gps, mem, Register.set r2 v regs, Pointer.inc pc))
-        by admit.
+                                  (gps, mem, Register.set r2 v regs, Pointer.inc pc)).
+      {
+        (* RB: TODO: Lemma, refactoring for following cases. *)
+        CS_step_of_executing; try (reflexivity || eassumption).
+        - eapply execution_invariant_to_linking; eassumption.
+        - admit.
+      }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -1759,8 +1764,12 @@ Section Simulation.
                                      (PS.to_partial_memory mem1 (domm (prog_interface c)))
                                      (PS.to_partial_memory mem (domm (prog_interface p))),
                                    regs1',
-                                   Pointer.inc pc))
-        by admit.
+                                   Pointer.inc pc)).
+      {
+        CS_step_of_executing; try (reflexivity || eassumption).
+        - eapply execution_invariant_to_linking; eassumption.
+        - admit.
+      }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -1839,8 +1848,12 @@ Section Simulation.
     - (* IJal *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs, pc) E0
-                                  (gps, mem, Register.set R_RA (Ptr (Pointer.inc pc)) regs, pc1'))
-        by admit.
+                                  (gps, mem, Register.set R_RA (Ptr (Pointer.inc pc)) regs, pc1')).
+      {
+        CS_step_of_executing; try (reflexivity || eassumption).
+        - eapply execution_invariant_to_linking; eassumption.
+        - admit.
+      }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (Pointer.component pc1', GPS, MEM))
@@ -1910,8 +1923,11 @@ Section Simulation.
     - (* IJump *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs1', pc) E0
-                                  (gps, mem, regs1', pc1'))
-        by admit.
+                                  (gps, mem, regs1', pc1')).
+      {
+        CS_step_of_executing; try (reflexivity || eassumption).
+        - eapply execution_invariant_to_linking; eassumption.
+      }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (Pointer.component pc1', GPS, MEM))
@@ -1985,8 +2001,12 @@ Section Simulation.
     - (* IBnz (CS.BnzNZ) *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs1', pc) E0
-                                  (gps, mem, regs1', pc1'))
-        by admit.
+                                  (gps, mem, regs1', pc1')).
+      {
+        CS_step_of_executing; try (reflexivity || eassumption).
+        - eapply execution_invariant_to_linking; eassumption.
+        - admit.
+      }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (Pointer.component pc1', GPS, MEM))
@@ -2056,8 +2076,11 @@ Section Simulation.
     - (* IBnz (CS.BnzZ) *)
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs1', pc) E0
-                                  (gps, mem, regs1', Pointer.inc pc))
-        by admit.
+                                  (gps, mem, regs1', Pointer.inc pc)).
+      {
+        CS_step_of_executing; try (reflexivity || eassumption).
+        - eapply execution_invariant_to_linking; eassumption.
+      }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -2138,8 +2161,12 @@ Section Simulation.
                                    PS.merge_memories
                                      (PS.to_partial_memory mem1 (domm (prog_interface c)))
                                      (PS.to_partial_memory mem (domm (prog_interface p))),
-                                   Register.set rptr (Ptr ptr') regs, Pointer.inc pc))
-        by admit.
+                                   Register.set rptr (Ptr ptr') regs, Pointer.inc pc)).
+      {
+        CS_step_of_executing; try (reflexivity || eassumption).
+        - eapply execution_invariant_to_linking; eassumption.
+        - admit.
+      }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C, GPS, MEM))
@@ -2229,8 +2256,13 @@ Section Simulation.
                                   [ECall (Pointer.component pc) P call_arg C']
                                   (Pointer.inc pc :: gps,
                                    mem,
-                                   Register.invalidate regs, (C', b, 0%Z)))
-        by admit.
+                                   Register.invalidate regs, (C', b, 0%Z))).
+      {
+        CS_step_of_executing; try (reflexivity || eassumption).
+        - eapply execution_invariant_to_linking; eassumption.
+        - admit.
+        - admit.
+      }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (C', PS.to_partial_frame (domm (prog_interface p)) (Pointer.inc pc) :: GPS, MEM))
@@ -2397,8 +2429,11 @@ Section Simulation.
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (pc1' :: gps', mem, regs, pc)
                                   [ERet (Pointer.component pc) ret_arg (Pointer.component pc1')]
-                                  (gps', mem, Register.invalidate regs, pc1'))
-        by admit.
+                                  (gps', mem, Register.invalidate regs, pc1')).
+      {
+        CS_step_of_executing; try (reflexivity || eassumption).
+        - eapply execution_invariant_to_linking; eassumption.
+      }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (Pointer.component pc1',
