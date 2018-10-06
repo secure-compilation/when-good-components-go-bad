@@ -1137,6 +1137,31 @@ Section Semantics.
 End Semantics.
 End ContextSem.
 
+Ltac CS_step_of_executing :=
+  match goal with
+  | H : executing _ _ ?INSTR |- _ =>
+    match INSTR with
+    | INop           => eapply CS.Nop
+    | ILabel _       => eapply CS.Label
+    | IConst _ _     => eapply CS.Const
+    | IMov _ _       => eapply CS.Mov
+    | IBinOp _ _ _ _ => eapply CS.BinOp
+    | ILoad _ _      => eapply CS.Load
+    | IStore _ _     => eapply CS.Store
+    | IAlloc _ _     => eapply CS.Alloc
+    | IBnz _ _       =>
+      match goal with
+      | H : Register.get _ _ = Int 0 |- _ => eapply CS.BnzZ
+      | _                                 => eapply CS.BnzNZ
+      end
+    | IJump _        => eapply CS.Jump
+    | IJal _         => eapply CS.Jal
+    | ICall _ _      => eapply CS.Call
+    | IReturn        => eapply CS.Return
+    | IHalt          => fail
+    end
+  end.
+
 Module ProgCtxSim.
 Section Simulation.
   Variables p c: program.
@@ -1256,31 +1281,6 @@ Section Simulation.
     - eapply PS.domm_partition; eassumption.
     - assumption.
   Qed.
-
-  Ltac CS_step_of_executing :=
-    match goal with
-    | H : executing _ _ ?INSTR |- _ =>
-      match INSTR with
-      | INop           => eapply CS.Nop
-      | ILabel _       => eapply CS.Label
-      | IConst _ _     => eapply CS.Const
-      | IMov _ _       => eapply CS.Mov
-      | IBinOp _ _ _ _ => eapply CS.BinOp
-      | ILoad _ _      => eapply CS.Load
-      | IStore _ _     => eapply CS.Store
-      | IAlloc _ _     => eapply CS.Alloc
-      | IBnz _ _       =>
-        match goal with
-        | H : Register.get _ _ = Int 0 |- _ => eapply CS.BnzZ
-        | _                                 => eapply CS.BnzNZ
-        end
-      | IJump _        => eapply CS.Jump
-      | IJal _         => eapply CS.Jal
-      | ICall _ _      => eapply CS.Call
-      | IReturn        => eapply CS.Return
-      | IHalt          => fail
-      end
-    end.
 
   Lemma lockstep_simulation:
     forall ips1 t ips1',
