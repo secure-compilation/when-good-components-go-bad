@@ -61,6 +61,15 @@ Lemma program_store_to_partialized_memory
   PS.to_partial_memory mem (domm iface) = PS.to_partial_memory mem' (domm iface).
 Admitted. (* Grade 2. *)
 
+(* RB: TODO: Same notes as above.
+   Cf.  program_allocation_in_partialized_memory_strong. *)
+Lemma program_allocation_to_partialized_memory
+      C (iface : Program.interface) size mem mem' ptr :
+  C \in domm iface ->
+  Memory.alloc mem C size = Some (mem', ptr) ->
+  PS.to_partial_memory mem (domm iface) = PS.to_partial_memory mem' (domm iface).
+Admitted. (* Grade 2. *)
+
 (* RB: TODO: On a related note to that above, consider using [Pointer.component]
    in results such as [program_store_in_partialized_memory]. This will save us
    the trouble of having to destruct pointers to use these results. *)
