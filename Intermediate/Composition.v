@@ -2093,7 +2093,15 @@ Section Simulation.
       assert (H'pc1' : Pointer.component pc1' \in domm (prog_interface p)).
       {
         eapply PS.domm_partition; try eassumption.
-        admit.
+        (* RB: TODO: Here and elsewhere in this proof, better way to move between
+           unionm and prog_interface? *)
+        change (unionm (prog_interface p) (prog_interface c))
+          with (prog_interface (program_link p c)).
+        rewrite <- (unionmC (proj2 linkability)) in Hfrom_initial.
+        change (unionm (prog_interface p) (prog_interface c))
+          with (prog_interface (program_link p c))
+          in Hfrom_initial.
+        exact (comes_from_initial_state_step_trans Hfrom_initial Hstep_cs').
       }
       split.
       + constructor.
@@ -2249,7 +2257,10 @@ Section Simulation.
       {
         CS_step_of_executing; try (reflexivity || eassumption).
         - eapply execution_invariant_to_linking; eassumption.
-        - admit.
+        - pose proof program_allocation_to_partialized_memory Hcc2 Hmem' as Hmem''.
+          rewrite Hmem'. rewrite Hmem''.
+          unfold PS.to_partial_memory. rewrite H. (* RB: TODO: H by name. *)
+          admit.
       }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
@@ -2346,7 +2357,13 @@ Section Simulation.
         CS_step_of_executing; try (reflexivity || eassumption).
         - eapply execution_invariant_to_linking; eassumption.
         - admit.
-        - admit.
+        - match goal with
+          | H : EntryPoint.get _ _ _ = _ |- _ =>
+            rewrite <- H
+          end.
+          rewrite <- Hsame_iface in Hpc_partial'. simpl in Hpc_partial'.
+          erewrite 2!genv_entrypoints_program_link_left; try eassumption.
+          reflexivity.
       }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
@@ -2390,7 +2407,7 @@ Section Simulation.
         assert (Hprov : CS.comes_from_initial_state
                           (gps, mem, regs, pc)
                           (unionm (prog_interface c) (prog_interface p)))
-          by admit. (* Easy, commutativity of interfaces. *)
+          by assumption.
         (* RB: TODO: The provenance of the second stack is fully expected, though
            not directly available from the context. [Hstep_cs] offers a starting
            point for completing this step. *)
