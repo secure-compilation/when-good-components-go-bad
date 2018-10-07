@@ -1809,6 +1809,7 @@ Section Simulation.
         CS_step_of_executing; try (reflexivity || eassumption).
         - eapply execution_invariant_to_linking; eassumption.
         - rewrite Hmem'.
+          (* RB: TODO: H is the proof introduced above. *)
           unfold PS.to_partial_memory. rewrite H.
           assert (Hcc2' : Pointer.component ptr \in domm (prog_interface p))
             by now rewrite Hptr.
@@ -1913,7 +1914,12 @@ Section Simulation.
       split.
       + constructor.
         * easy.
-        * PS.simplify_turn. admit.
+        * PS.simplify_turn. eapply PS.domm_partition; try eassumption.
+          rewrite <- (unionmC (proj2 linkability)) in Hfrom_initial.
+          change (unionm (prog_interface p) (prog_interface c))
+            with (prog_interface (program_link p c))
+            in Hfrom_initial.
+          exact (comes_from_initial_state_step_trans Hfrom_initial Hstep_cs').
         * pose proof PS.context_epsilon_step_is_silent. econstructor.
           -- reflexivity.
           -- assumption.
@@ -2543,8 +2549,15 @@ Section Simulation.
            joint program-context interface. *)
         assert (Hprov : CS.comes_from_initial_state
                           (gps', mem, Register.invalidate regs, pc1')
-                          (unionm (prog_interface c) (prog_interface p)))
-          by admit.
+                          (unionm (prog_interface c) (prog_interface p))).
+        {
+          rewrite <- (unionmC (proj2 linkability)).
+          rewrite <- (unionmC (proj2 linkability)) in Hfrom_initial.
+          change (unionm (prog_interface p) (prog_interface c))
+            with (prog_interface (program_link p c))
+            in Hfrom_initial.
+          exact (comes_from_initial_state_step_trans Hfrom_initial Hstep_cs').
+        }
         assert (Hprov' : CS.comes_from_initial_state
                            (gps1, mem1, Register.invalidate regs, pc1')
                            (unionm (prog_interface c) (prog_interface p)))
