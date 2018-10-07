@@ -1698,7 +1698,11 @@ Section Simulation.
         (* RB: TODO: Lemma, refactoring for following cases. *)
         CS_step_of_executing; try (reflexivity || eassumption).
         - eapply execution_invariant_to_linking; eassumption.
-        - admit.
+        - destruct ptr as [[C b] o].
+          eapply program_load_in_partialized_memory_strong.
+          + exact (eq_sym Hmem).
+          + PS.simplify_turn. subst C. assumption.
+          + assumption.
       }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
@@ -1725,7 +1729,7 @@ Section Simulation.
                   (prog_interface p)
                as Hpartial''.
              assert (Htmp : Pointer.component (Pointer.inc pc) \in domm (prog_interface p))
-               by admit.
+               by now rewrite Pointer.inc_preserves_component.
              unfold PS.partialize in Hpartial''.
              rewrite Htmp in Hpartial''.
              rewrite Pointer.inc_preserves_component in Hpartial''.
@@ -1768,11 +1772,14 @@ Section Simulation.
           -- reflexivity.
 
     - (* IStore *)
-      assert (exists mem', Memory.store mem ptr (Register.get r2 regs1') = Some mem')
-        as [mem' Hmem'].
-      {
-        admit. (* RB: TODO: Check that this is really necessary. *)
-      }
+      destruct ptr as [[C b] o] eqn:Hptr.
+      PS.simplify_turn. subst C.
+      match goal with
+      | H : Memory.store _ _ _ = _ |- _ =>
+        (* RB: TODO: Destruct and name proof term. *)
+        destruct (program_store_in_partialized_memory_strong (eq_sym Hmem) Hpc_partial H)
+          as [mem' Hmem']
+      end.
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs1', pc) E0
                                   (gps,
@@ -1811,7 +1818,7 @@ Section Simulation.
                   (prog_interface p)
                as Hpartial''.
              assert (Htmp : Pointer.component (Pointer.inc pc) \in domm (prog_interface p))
-               by admit.
+               by now rewrite Pointer.inc_preserves_component.
              unfold PS.partialize in Hpartial''.
              rewrite Htmp in Hpartial''.
              rewrite Pointer.inc_preserves_component in Hpartial''.
@@ -1868,7 +1875,12 @@ Section Simulation.
       {
         CS_step_of_executing; try (reflexivity || eassumption).
         - eapply execution_invariant_to_linking; eassumption.
-        - admit.
+        - erewrite find_label_in_component_program_link_left; try assumption.
+          match goal with
+          | H : find_label_in_component _ _ _ = _ |- _ =>
+            erewrite find_label_in_component_program_link_left in H; try assumption
+          end.
+          rewrite Hsame_iface. assumption.
       }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
@@ -1948,10 +1960,18 @@ Section Simulation.
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (Pointer.component pc1', GPS, MEM))
       end.
+      (* Before splitting, we will be needing this on both sides. *)
+      assert (H'pc1' : Pointer.component pc1' \in domm (prog_interface p)).
+      {
+        match goal with
+        | H : _ = Pointer.component pc |- _ =>
+          rewrite H; assumption
+        end.
+      }
       split.
       + constructor.
         * easy.
-        * PS.simplify_turn. admit.
+        * assumption.
         * pose proof PS.context_epsilon_step_is_silent. econstructor.
           -- reflexivity.
           -- assumption.
@@ -1968,10 +1988,8 @@ Section Simulation.
                   (gps, mem, regs1', pc1')
                   (prog_interface p)
                as Hpartial''.
-             assert (Htmp : Pointer.component pc1' \in domm (prog_interface p))
-               by admit.
              unfold PS.partialize in Hpartial''.
-             rewrite Htmp in Hpartial''.
+             rewrite H'pc1' in Hpartial''.
              assumption.
       + rewrite <- Hmem.
         rewrite <- Hstk.
@@ -2021,16 +2039,27 @@ Section Simulation.
       {
         CS_step_of_executing; try (reflexivity || eassumption).
         - eapply execution_invariant_to_linking; eassumption.
-        - admit.
+        - erewrite find_label_in_procedure_program_link_left; try assumption.
+          match goal with
+          | H : find_label_in_procedure _ _ _ = _ |- _ =>
+            erewrite find_label_in_procedure_program_link_left in H; try assumption
+          end.
+          rewrite Hsame_iface; assumption.
       }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (Pointer.component pc1', GPS, MEM))
       end.
+      (* Before splitting, we will be needing this on both sides. *)
+      assert (H'pc1' : Pointer.component pc1' \in domm (prog_interface p)).
+      {
+        eapply PS.domm_partition; try eassumption.
+        admit.
+      }
       split.
       + constructor.
         * easy.
-        * PS.simplify_turn. admit.
+        * assumption.
         * pose proof PS.context_epsilon_step_is_silent. econstructor.
           -- reflexivity.
           -- assumption.
@@ -2047,10 +2076,8 @@ Section Simulation.
                   (gps, mem, regs1', pc1')
                   (prog_interface p)
                as Hpartial''.
-             assert (Htmp : Pointer.component pc1' \in domm (prog_interface p))
-               by admit.
              unfold PS.partialize in Hpartial''.
-             rewrite Htmp in Hpartial''.
+             rewrite H'pc1' in Hpartial''.
              assumption.
       + rewrite <- Hmem.
         rewrite <- Hstk.
@@ -2085,7 +2112,7 @@ Section Simulation.
           rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
           (* rewrite <- Pointer.inc_preserves_component. *)
           constructor.
-          -- admit. (* Easy. *)
+          -- assumption.
           -- reflexivity.
           -- reflexivity.
 
@@ -2104,7 +2131,7 @@ Section Simulation.
       split.
       + constructor.
         * easy.
-        * PS.simplify_turn. admit.
+        * assumption.
         * pose proof PS.context_epsilon_step_is_silent. econstructor.
           -- reflexivity.
           -- assumption.
@@ -2121,8 +2148,9 @@ Section Simulation.
                   (gps, mem, regs1', Pointer.inc pc)
                   (prog_interface p)
                as Hpartial''.
+             (* RB: NOTE: This is used at the end, as well. *)
              assert (Htmp : Pointer.component (Pointer.inc pc) \in domm (prog_interface p))
-               by admit.
+               by now rewrite Pointer.inc_preserves_component.
              unfold PS.partialize in Hpartial''.
              rewrite Htmp in Hpartial''.
              rewrite <- Pointer.inc_preserves_component.
@@ -2160,24 +2188,25 @@ Section Simulation.
           rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
           rewrite <- Pointer.inc_preserves_component.
           constructor.
-          -- admit. (* Easy. *)
+          -- rewrite Pointer.inc_preserves_component. assumption.
           -- reflexivity.
           -- reflexivity.
 
     - (* IAlloc *)
       (* Auxiliary assert based on the corresponding hypothesis. *)
-      assert
-        (exists mem' ptr',
-            Memory.alloc mem (Pointer.component pc) (Z.to_nat size) = Some (mem', ptr'))
-        as [mem' [ptr' Hmem']]
-        by admit.
+      match goal with
+      | H : Memory.alloc _ _ _ = _ |- _ =>
+        (* RB: TODO: Name proof. *)
+        destruct (program_allocation_in_partialized_memory_strong (eq_sym Hmem) Hpc_partial H)
+          as [mem' Hmem']
+      end.
       assert (Hstep_cs' : CS.step (prepare_global_env (program_link p c))
                                   (gps, mem, regs, pc) E0
                                   (gps,
                                    PS.merge_memories
                                      (PS.to_partial_memory mem1 (domm (prog_interface c)))
                                      (PS.to_partial_memory mem (domm (prog_interface p))),
-                                   Register.set rptr (Ptr ptr') regs, Pointer.inc pc)).
+                                   Register.set rptr (Ptr ptr) regs, Pointer.inc pc)).
       {
         CS_step_of_executing; try (reflexivity || eassumption).
         - eapply execution_invariant_to_linking; eassumption.
@@ -2209,11 +2238,12 @@ Section Simulation.
                    PS.merge_memories
                      (PS.to_partial_memory mem1 (domm (prog_interface c)))
                      (PS.to_partial_memory mem (domm (prog_interface p))),
-                   Register.set rptr (Ptr ptr') regs, Pointer.inc pc)
+                   Register.set rptr (Ptr ptr) regs, Pointer.inc pc)
                   (prog_interface p)
                as Hpartial''.
+             (* RB: NOTE: Same argument used at bottom of proof as well. *)
              assert (Htmp : Pointer.component (Pointer.inc pc) \in domm (prog_interface p))
-               by admit.
+               by now rewrite Pointer.inc_preserves_component.
              unfold PS.partialize in Hpartial''.
              rewrite Htmp in Hpartial''.
              rewrite <- Pointer.inc_preserves_component.
@@ -2253,7 +2283,7 @@ Section Simulation.
           rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
           rewrite <- Pointer.inc_preserves_component.
           constructor.
-          -- admit. (* Easy. *)
+          -- now rewrite Pointer.inc_preserves_component.
           -- now rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface).
           -- reflexivity.
 
