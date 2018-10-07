@@ -1409,7 +1409,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -1482,7 +1482,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -1552,7 +1552,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -1622,7 +1622,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -1692,7 +1692,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -1776,7 +1776,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -1878,7 +1878,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -1966,7 +1966,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -2046,7 +2046,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -2142,7 +2142,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -2218,7 +2218,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -2315,7 +2315,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
@@ -2432,7 +2432,7 @@ Section Simulation.
             inversion mergeable_interfaces as [[_ Hdisjoint] _]. rewrite fdisjointC in Hdisjoint.
             rewrite (unionmC Hdisjoint) in Hfrom_initial.
             rewrite (unionmC Hdisjoint).
-            eapply (PS.comes_from_initial_state_step Hfrom_initial).
+            eapply (PS.comes_from_initial_state_step Hfrom_initial); try easy.
             unfold PS.partialize.
             apply PS.notin_to_in_false in Hpc1. rewrite Hpc1.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
