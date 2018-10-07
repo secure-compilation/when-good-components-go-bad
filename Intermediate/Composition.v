@@ -2558,10 +2558,6 @@ Section Simulation.
             in Hfrom_initial.
           exact (comes_from_initial_state_step_trans Hfrom_initial Hstep_cs').
         }
-        assert (Hprov' : CS.comes_from_initial_state
-                           (gps1, mem1, Register.invalidate regs, pc1')
-                           (unionm (prog_interface c) (prog_interface p)))
-          by admit.
         (* And we continue with the goal. *)
         match goal with
         | |- PS.mergeable_states _ _ ?PC ?CC =>
