@@ -1791,7 +1791,14 @@ Section Simulation.
       {
         CS_step_of_executing; try (reflexivity || eassumption).
         - eapply execution_invariant_to_linking; eassumption.
-        - admit.
+        - rewrite Hmem'.
+          unfold PS.to_partial_memory. rewrite H.
+          assert (Hcc2' : Pointer.component ptr \in domm (prog_interface p))
+            by now rewrite Hptr.
+          rewrite Hptr in Hcc2'.
+          pose proof program_store_to_partialized_memory Hcc2' Hmem' as Hmem''.
+          unfold PS.to_partial_memory in Hmem''. rewrite Hmem''.
+          admit.
       }
       match goal with
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
