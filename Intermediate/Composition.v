@@ -32,6 +32,22 @@ Import Intermediate.
   generalized. Module qualifiers will be tweaked as needed.
 *)
 
+(* RB: TODO: More properly, this seems to belong in Machine.Memory. However, it
+   is natural to resort to a notion of partial memory that seems logically
+   related to the supporting components of PS. Again, note, however, that this
+   notion of partial memory is already used in the Memory module, and it may be
+   a good idea to relocate our compact definitions there. *)
+Lemma program_store_to_partialized_memory
+      ptr (iface : Program.interface) mem mem' v :
+  Pointer.component ptr \in domm iface ->
+  Memory.store mem ptr v = Some mem' ->
+  PS.to_partial_memory mem (domm iface) = PS.to_partial_memory mem' (domm iface).
+Admitted. (* Grade 2. *)
+
+(* RB: TODO: On a related note to that above, consider using [Pointer.component]
+   in results such as [program_store_in_partialized_memory]. This will save us
+   the trouble of having to destruct pointers to use these results. *)
+
 (* RB: TODO: Consider necessary assumptions in a way that most closely matches
    the contexts we will use this on. Do away with uses of [domm] here?*)
 Lemma to_partial_memory_merge_memories_left
