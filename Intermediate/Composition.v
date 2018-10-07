@@ -1920,6 +1920,27 @@ Section Simulation.
       | |- context[PS.CC (?C, ?GPS, ?MEM)] =>
         exists (PS.CC (Pointer.component pc1', GPS, MEM))
       end.
+      (* Before the split, assert this fact used on both sides. *)
+      assert (Hpc_pc1' : Pointer.component pc1' \in domm (prog_interface p)).
+      {
+        eapply PS.domm_partition.
+        - exact (mergeable_interfaces_sym _ _ Hmerge_iface).
+        - rewrite <- (unionmC (proj2 linkability)) in Hfrom_initial.
+          eapply PS.comes_from_initial_state_step.
+          + exact Hfrom_initial.
+          + exact Hstep_ps.
+          + simpl.
+            assert (Htmp : Pointer.component pc \in domm (prog_interface c) = false)
+              by admit. (* Easy. *)
+            rewrite Htmp.
+            reflexivity.
+          + simpl.
+            assert (Htmp : Pointer.component pc1' \in domm (prog_interface c) = false)
+              by admit. (* Easy. *)
+            rewrite Htmp.
+            reflexivity.
+        - assumption.
+      }
       split.
       + constructor.
         * easy.
@@ -1945,10 +1966,8 @@ Section Simulation.
                   (gps, mem, Register.set R_RA (Ptr (Pointer.inc pc)) regs, pc1')
                   (prog_interface p)
                as Hpartial''.
-             assert (Htmp : Pointer.component pc1' \in domm (prog_interface p))
-               by admit.
              unfold PS.partialize in Hpartial''.
-             rewrite Htmp in Hpartial''.
+             rewrite Hpc_pc1' in Hpartial''.
              assumption.
       + rewrite <- Hmem.
         rewrite <- Hstk.
@@ -1983,7 +2002,7 @@ Section Simulation.
           rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
           (* rewrite <- Pointer.inc_preserves_component. *)
           constructor.
-          -- admit. (* Easy. *)
+          -- assumption. (* Hpc_pc1' *)
           -- reflexivity.
           -- reflexivity.
 
