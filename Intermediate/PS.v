@@ -1276,15 +1276,13 @@ Section Semantics.
                    (final_state p ctx) (prepare_global_env p).
 End Semantics.
 
-(* RB: TODO: Unify naming with [comes_from_initial_state_step] (_trans?) on
-   CS.step. *)
-Lemma comes_from_initial_state_step :
+Lemma comes_from_initial_state_step_trans :
   forall p ctx ics ips t ics' ips',
     CS.comes_from_initial_state ics (unionm (prog_interface p) ctx) ->
     step p ctx (prepare_global_env p) ips t ips' ->
     ips = partialize ics ctx ->
     ips' = partialize ics' ctx ->
     CS.comes_from_initial_state ics' (unionm (prog_interface p) ctx).
-Admitted.
+Admitted. (* Grade 3. *)
 
 End PS.
