@@ -780,6 +780,19 @@ Proof.
     apply Hst_starN.
 Qed.
 
+(* This helper is not a fundamental lemma and can be derived easily from the
+   elementary results above. *)
+Lemma st_starN_event_split:
+  forall p ctx G n s1 t1 e t2 s2,
+    st_starN p ctx G n s1 (t1 ** [e] ** t2) s2 ->
+  exists n1 s1' s2' n2,
+    st_starN p ctx G n1 s1 t1 s1' /\
+    PS.step p ctx G s1' [e] s2' /\
+    same_turn ctx s1' s2' /\
+    st_starN p ctx G n2 s2' t2 s2 /\
+    n = n1 + 1 + n2.
+Admitted. (* Grade 2. *)
+
 Inductive st_starNR (p: program) (ctx: Program.interface) (G: global_env)
   : nat -> PS.state -> trace -> PS.state -> Prop :=
 | st_starNR_refl: forall ips,
