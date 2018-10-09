@@ -1930,13 +1930,21 @@ Section Simulation.
           + exact Hfrom_initial.
           + exact Hstep_ps.
           + simpl.
-            assert (Htmp : Pointer.component pc \in domm (prog_interface c) = false)
-              by admit. (* Easy. *)
+            assert (Htmp : Pointer.component pc \in domm (prog_interface c) = false).
+            {
+              destruct (Pointer.component pc \in domm (prog_interface c)) eqn:Hcase.
+              - rewrite Hcase in Hpc1. discriminate.
+              - reflexivity.
+            }
             rewrite Htmp.
             reflexivity.
           + simpl.
-            assert (Htmp : Pointer.component pc1' \in domm (prog_interface c) = false)
-              by admit. (* Easy. *)
+            assert (Htmp : Pointer.component pc1' \in domm (prog_interface c) = false).
+            {
+              destruct (Pointer.component pc1' \in domm (prog_interface c)) eqn:Hcase.
+              - rewrite Hcase in Hpc_partial'. discriminate.
+              - reflexivity.
+            }
             rewrite Htmp.
             reflexivity.
         - assumption.
@@ -2375,7 +2383,11 @@ Section Simulation.
       {
         CS_step_of_executing; try (reflexivity || eassumption).
         - eapply execution_invariant_to_linking; eassumption.
-        - admit.
+        - match goal with
+          | H : imported_procedure _ _ _ _ |- _ =>
+            simpl in H; rewrite Hsame_iface in H
+          end.
+          assumption.
         - match goal with
           | H : EntryPoint.get _ _ _ = _ |- _ =>
             rewrite <- H
@@ -2741,7 +2753,7 @@ Section Simulation.
     exists ips2',
       Step (ProgramSem.sem c (prog_interface p)) ips2 t ips2' /\
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
-  Admitted. (* Grade 3. *)
+  Admitted. (* Grade 3. After ProgCtxSim.lockstep_simulation. *)
 
   Theorem program_simulates_context:
     forward_simulation (ContextSem.sem p (prog_interface c))
