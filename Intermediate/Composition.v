@@ -3423,6 +3423,74 @@ Section PartialComposition.
                n3 prog_st2 (t1 ** t2 ** t3) ips'' ->
       False.
   Proof.
+    intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4
+           Hps1 Hcc1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
+           n s4' Hst_starN14.
+    (* We reason on two runs: a "program run" that goes all the way in a single
+       turn, and a "context run" that changes turns explicitly. In the latter,
+       Hstep23 means that t2 is an event that changes from c to p. This must
+       involve a contradiction in Hst_starN14. *)
+
+    (* First, move this to the goal. This will help to more easily discharge some
+       contradictory cases. *)
+    apply Hturn23.
+
+    (* Case analysis on the turn-changing step of the short run. *)
+    inversion Hstep23
+      as [p' ? ? ? ics1 ics1'
+          Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1'];
+      subst.
+    inversion HCSstep1; subst.
+
+    (* RB: TODO: Name variables and hypotheses that are explicitly used. *)
+    13:{
+    (* - (* ICall *) *)
+      (* This event entails a change of turn as per Hturn23. *)
+      destruct (C' \in domm (prog_interface p)) eqn:HpcC';
+        first admit. (* Contra. *)
+
+      (* The event is now visible in the long run, so we can split it. *)
+      destruct (st_starN_event_split Hst_starN14)
+        as [n1' [ps2 [cs3 [n3' [Hst_starN12' [Hstep23' [Hturn23' [Hst_starN14' Hn]]]]]]]].
+      pose proof st_starN_same_turn Hst_starN12' as Hturn12'.
+
+      (* Propagate the turn from the beginning of the long run to the event that
+         triggers the turn change in the short run. *)
+      inversion Hturn12'; subst;
+        last admit. (* Contra. *)
+      inversion Hturn23'; subst;
+        last admit. (* Contra. *)
+
+      (* Extract the information in the target step of the long run.  *)
+      inversion Hstep23'
+        as [c' ? ? ? ics2 ics2'
+            Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2'];
+        subst.
+      inversion HCSstep2; subst.
+      (* Extract the information of the partial states. All combinations except
+         one are obvious contradictions. *)
+      inversion Hpartial_ips2
+        as [? ? ? ? ? ? Hcomp_ips2 | ? ? ? ? ? ? Hcomp_ips2]; subst;
+        inversion Hpartial_ips2'
+          as [? ? ? ? ? ? Hcomp_ips2' | ? ? ? ? ? ? Hcomp_ips2']; subst;
+        PS.simplify_turn;
+        [| admit | admit | admit]. (* Contra. *)
+
+      (* The remaining case is also a contradiction because C' is not in c, but
+         as we know from the turn change in the short run, it is also not in p.
+         (To conclude this we need provenance information.) *)
+      admit.
+    }
+
+    13:{
+    (* - (* IReturn *) *)
+      (* This case will be similar to ICall. *)
+      admit.
+    }
+
+    (* All other, non-event-producing cases are easily discharged, as without
+       an event a turn change is impossible. *)
+    all:admit. (* Contra: same turn. *)
   Admitted.
 
   Lemma st_starN_with_turn_change_impossible_1':
