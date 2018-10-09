@@ -697,6 +697,12 @@ Inductive same_turn (ctx : Program.interface) : PS.state -> PS.state -> Prop :=
     PS.is_context_component st' ctx ->
     same_turn ctx st st'.
 
+Lemma step_E0_same_turn:
+  forall p ctx G s1 s2,
+    PS.step p ctx G s1 E0 s2 ->
+    same_turn ctx s1 s2.
+Admitted. (* Grade 1. *)
+
 (* st_star represents a sequence of events performed by the same actor *)
 (* st stands for same turn *)
 Inductive st_starN (p: program) (ctx: Program.interface) (G: global_env)
@@ -3440,11 +3446,12 @@ Section PartialComposition.
       as [p' ? ? ? ics1 ics1'
           Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1'];
       subst.
-    inversion HCSstep1; subst.
+    inversion HCSstep1; subst;
+      (* Silent steps preserve the turn and are discharged right away. *)
+      try (eapply step_E0_same_turn; eassumption).
 
     (* RB: TODO: Name variables and hypotheses that are explicitly used. *)
-    13:{
-    (* - (* ICall *) *)
+    - (* ICall *)
       (* This event entails a change of turn as per Hturn23. *)
       destruct (C' \in domm (prog_interface p)) eqn:HpcC';
         first admit. (* Contra. *)
@@ -3480,17 +3487,10 @@ Section PartialComposition.
          as we know from the turn change in the short run, it is also not in p.
          (To conclude this we need provenance information.) *)
       admit.
-    }
 
-    13:{
-    (* - (* IReturn *) *)
+    - (* IReturn *)
       (* This case will be similar to ICall. *)
       admit.
-    }
-
-    (* All other, non-event-producing cases are easily discharged, as without
-       an event a turn change is impossible. *)
-    all:admit. (* Contra: same turn. *)
   Admitted.
 
   Lemma st_starN_with_turn_change_impossible_1':
