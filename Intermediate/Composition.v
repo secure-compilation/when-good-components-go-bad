@@ -3430,7 +3430,7 @@ Section PartialComposition.
       False.
   Proof.
     intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4
-           Hps1 Hcc1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
+           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
            n s4' Hst_starN14.
     (* We reason on two runs: a "program run" that goes all the way in a single
        turn, and a "context run" that changes turns explicitly. In the latter,
@@ -3509,7 +3509,10 @@ Section PartialComposition.
                n3 prog_st2 (t1 ** t2 ** t3) ips'' ->
       False.
   Proof.
-  Admitted.
+    intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4
+           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
+           n s4' Hst_starN14.
+  Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *)
 
   Lemma st_starN_with_turn_change_impossible_2:
     forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
@@ -3527,7 +3530,10 @@ Section PartialComposition.
                n3 ctx_st2 (t1 ** t2 ** t3) ips'' ->
       False.
   Proof.
-  Admitted.
+    intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4
+           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
+           n s4' Hst_starN14.
+  Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *)
 
   Lemma st_starN_with_turn_change_impossible_3:
     forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
@@ -3545,7 +3551,10 @@ Section PartialComposition.
                n3 ctx_st2 (t1 ** t2 ** t3) ips'' ->
       False.
   Proof.
-  Admitted.
+    intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4
+           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
+           n s4' Hst_starN14.
+  Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *)
 
   (* RB: XXX: I do not believe this is true. In particular, after the turn
      changes nothing tells us that the two runs need to run to exhaustion: each
