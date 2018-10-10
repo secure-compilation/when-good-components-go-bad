@@ -3547,6 +3547,11 @@ Section PartialComposition.
   Proof.
   Admitted.
 
+  (* RB: XXX: I do not believe this is true. In particular, after the turn
+     changes nothing tells us that the two runs need to run to exhaustion: each
+     is free to stop at any point independently from the other, irrespective of
+     whether the runs up to the turn change are identical, and nothing connects
+     their "final" states. *)
   Lemma same_trace_and_steps:
     forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
            ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
@@ -3569,8 +3574,14 @@ Section PartialComposition.
       (* same steps and same trace *)
       t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
   Proof.
+    intros s1 s2 s3' s1' s2'
+           s3 s4 s4' n1 n1' n3 n3' t1 t1' t2 t2' t3 t3'
+           Hpc_s1 Hcc_s1' Hmerge
+           Hst_starN12 Hstep23 Hturn23 Hmt_starN34
+           Hst_starN12' Hstep23' Hturn23' Hmt_starN34'.
   Admitted.
 
+  (* RB: XXX: See [same_trace_and_steps] above. *)
   Lemma same_trace_and_steps':
     forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
            ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
@@ -3593,6 +3604,11 @@ Section PartialComposition.
       (* same steps and same trace *)
       t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
   Proof.
+    intros s1' s2' s3 s1 s2
+           s3' s4' s4 n1 n1' n3 n3' t1 t1' t2 t2' t3 t3'
+           Hpc_s1 Hcc_s1' Hmerge
+           Hst_starN12 Hstep23 Hturn23 Hmt_starN34
+           Hst_starN12' Hstep23' Hturn23' Hmt_starN34'.
   Admitted.
 
   Theorem threeway_multisem_mt_starN_simulation:
