@@ -729,11 +729,84 @@ Proof.
     + assumption.
 Qed.
 
-(* Lemma placeholder: mergeable_states_program_to_program *)
-(* Lemma placeholder: mergeable_states_program_to_context *)
-(* Lemma placeholder: mergeable_states_context_to_context *)
-(* Lemma placeholder: mergeable_states_context_to_program *)
-(* Lemma placeholder: mergeable_states_stacks *)
+(* TODO: Consider potential refactors with other [mergeable_] results
+   as the proofs are being built. *)
+Lemma mergeable_states_program_to_program ctx1 ctx2 ps1 ps2 :
+  mergeable_states ctx1 ctx2 ps1 ps2 ->
+  is_program_component ps1 ctx1 ->
+  is_program_component ps2 ctx1.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (domm_partition_in_neither Hmergeable_ifaces Hcomes_from Hpc1 Hpc2).
+  - assumption.
+  - assumption.
+  - now destruct (domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_program_to_context ctx1 ctx2 ps1 ps2 :
+  mergeable_states ctx1 ctx2 ps1 ps2 ->
+  is_program_component ps1 ctx1 ->
+  is_context_component ps2 ctx2.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (domm_partition_in_neither Hmergeable_ifaces Hcomes_from Hpc1 Hpc2).
+  - assumption.
+  - now destruct (domm_partition_in_notin Hcc1 Hpc).
+  - now destruct (domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_context_to_context ctx1 ctx2 ps1 ps2 :
+  mergeable_states ctx1 ctx2 ps1 ps2 ->
+  is_context_component ps1 ctx1 ->
+  is_context_component ps2 ctx1.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (domm_partition_in_neither Hmergeable_ifaces Hcomes_from Hpc1 Hpc2).
+  - assumption.
+  - assumption.
+  - now destruct (domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_context_to_program ctx1 ctx2 ps1 ps2 :
+  mergeable_states ctx1 ctx2 ps1 ps2 ->
+  is_context_component ps1 ctx1 ->
+  is_program_component ps2 ctx2.
+Proof.
+  intros Hmergeable Hpc.
+  inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
+    subst.
+  inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
+    inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+  - now destruct (domm_partition_in_neither Hmergeable_ifaces Hcomes_from Hpc1 Hpc2).
+  - destruct (domm_partition_in_notin Hpc Hpc1).
+  - assumption.
+  - now destruct (domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
+Qed.
+
+Lemma mergeable_states_stacks ctx1 ctx2 ips1 ips2 gps1 gps2:
+  mergeable_states ctx1 ctx2 ips1 ips2 ->
+  state_stack ips1 = gps1 ->
+  state_stack ips2 = gps2 ->
+  mergeable_stacks gps1 gps2.
+Proof.
+  intros Hmerge Hstk1 Hstk2.
+  inversion Hmerge as [ics ? ? Hmerge_ifaces Hprovenance Hpartial1 Hpartial2]; subst.
+    inversion Hpartial1; subst;
+    inversion Hpartial2; subst;
+    eapply mergeable_stacks_partition; eassumption.
+Qed.
 
 Definition merge_stack_frames (frames: PartialPointer.t * PartialPointer.t): PartialPointer.t :=
   match frames with
