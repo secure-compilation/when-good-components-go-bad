@@ -3309,7 +3309,7 @@ Section PartialComposition.
 
     generalize dependent ips2.
     induction Hst_star1
-      as [| n1 ips1 t1 ips2 t2 ips3 t Hstep12 Hturn1 Hst_starN23 IHHst_star1 Ht];
+      as [| n1 ips1 t1 ips2 t2 ips3 t Hstep12 Hturn12 Hst_starN23 IHHst_star1 Ht];
       subst.
 
     (* Zero steps, therefore empty trace. *)
@@ -3380,17 +3380,25 @@ Section PartialComposition.
     - rename ips2' into ips3'.
       intros ips1' Hmergeable1 Hst_starN13'.
       (* Trace the first step from the "p" to the "c" run. *)
-      assert
-        (exists ips2',
-            PS.step c (prog_interface p) (prepare_global_env c) ips1' t1 ips2' /\
-            PS.mergeable_states (prog_interface c) (prog_interface p) ips2 ips2')
-        as [ips2' [Hstep12' Hmergeable2]].
-      {
-        (* This will be proved by ProgCtxSim.lockstep_simulation or by
-           CtxProgSim.lockstep_simulation, depending on which run is the program
-           run and which the context run. *)
-        admit.
-      }
+      pose proof
+           st_starN_refl p (prog_interface c) (prepare_global_env p) ips2
+        as Hst_starN22.
+      pose proof
+           st_starN_step Hstep12 Hturn12 Hst_starN22 (eq_refl _)
+        as Hst_starN12.
+      setoid_rewrite E0_right in Hst_starN12.
+      destruct
+        (StarNSim.st_starN_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hst_starN12 Hmergeable1)
+        as [ips2' [Hst_starN12' Hmergeable2]].
+      (* (And extract the contained step.) *)
+      inversion Hst_starN12'
+        as [| ? ? t1' ? ? ? ? Hstep12' Hturn12' Hst_starN_0];
+        subst.
+      inversion Hst_starN_0; subst.
+      rename t1' into t1.
+      rewrite E0_right. rewrite E0_right in Hstep12, Hst_starN13'.
       (* Decompose the "c" star into the first step and the remainder. *)
       assert
         (st_starN c (prog_interface p) (prepare_global_env c) n1 ips2' t2 ips3')
@@ -3398,17 +3406,17 @@ Section PartialComposition.
       {
         (* We know that the single-turn run (in "c", here) is deterministic, and
            moreover we have the first step from ips1' to ips2' producing t1. *)
-        admit.
+        destruct
+          (StarNSim.st_starN_simulation
+             wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+             Hst_starN23 Hmergeable2)
+          as [ips3'' [Hst_starN23' _]].
+        pose proof st_starN_step Hstep12' Hturn12' Hst_starN23' (eq_refl _)
+          as Hst_starN13''.
+        pose proof state_determinism_st_starN Hst_starN13' Hst_starN13'';
+          subst ips3''.
+        assumption.
       }
-      (* assert *)
-      (*   (exists ips3', *)
-      (*       st_starN c (prog_interface p) (prepare_global_env c) n1 ips2' t2 ips3') *)
-      (*   as [ips3'' Hst_starN23']. *)
-      (* { *)
-      (*   admit. *)
-      (* } *)
-      (* pose proof state_determinism_st_starN Hst_starN23. Hst_starN23'. *)
-      (* From here process the IH and solve the goal. *)
       specialize (IHHst_star1 ips2' Hmergeable2 Hst_starN23').
       destruct IHHst_star1 as [HstarN23 Hmergeable3].
       split.
@@ -3417,25 +3425,7 @@ Section PartialComposition.
         * assumption.
         * reflexivity.
       + assumption.
-
-      (* inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2]; *)
-      (*   subst. *)
-      (* inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst; *)
-      (*   inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst. *)
-
-      (* + admit. (* Contra. *) *)
-
-      (* (* the program is stepping *) *)
-      (* + (* simulate the step *) *)
-      (*   (* use inductive hypothesis *) *)
-      (*   (* compose previous results *) *)
-      (*   admit. *)
-
-      (* + admit. (* Contra. *) *)
-
-      (* (* the context is stepping *) *)
-      (* + admit. *)
-  Admitted. (* Grade 3. RB: Might need polishing, but should be fairly simple. *)
+  Qed.
 
   (* RB: TODO: Carefully check statement changes, esp. unproven and w.r.t.
      same_turn. Consider formulating the new premises in terms of same_turn.
