@@ -720,6 +720,19 @@ Lemma st_starN_event_split:
     n = n1 + 1 + n2.
 Admitted. (* Grade 2. *)
 
+(* RB: This kind of result seems to point to a possible relocation of the
+   "turn stars", possibly to PS, or to their own dedicated module.
+   NOTE: The statement of this lemma is stronger than strictly necessary if the
+   star runs in the context: here, the number of steps is irrelevant to us:
+   only the traces need to coincide. *)
+Lemma state_determinism_st_starN:
+  forall p ctx G n s1 t s2,
+    st_starN p ctx G n s1 t s2 ->
+  forall s2',
+    st_starN p ctx G n s1 t s2' ->
+    s2 = s2'.
+Admitted. (* Grade 2. *)
+
 Inductive st_starNR (p: program) (ctx: Program.interface) (G: global_env)
   : nat -> PS.state -> trace -> PS.state -> Prop :=
 | st_starNR_refl: forall ips,
