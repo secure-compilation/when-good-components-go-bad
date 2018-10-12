@@ -3665,48 +3665,62 @@ Section PartialComposition.
 
     (* single segment *)
     - intros ips2 Hmergeable Hmt_star2.
-      inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2];
-        subst.
-      inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
-        inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+      rename H into Hst_starN.
 
-      + (* Contra. *)
-        PS.simplify_turn.
-        apply (PS.domm_partition Hsame_ifaces Hcomes_from) in Hpc2.
-        rewrite Hpc2 in Hpc1.
-        discriminate.
+      destruct
+        (StarNSim.st_starN_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hst_starN Hmergeable)
+        as [ips2'' [Hst_starN2 Hmergeable']].
+      (* If ips2 takes n steps to get to ips2'' in one turn, and to ips2' in
+         possibly several, clearly they coincide. *)
+      assert (ips2' = ips2'') by admit;
+        subst ips2''.
 
-      (* the program has control in the first state of the first sequence *)
-      + inversion Hmt_star2; subst.
+      exact (threeway_multisem_st_starN_simulation Hmergeable Hst_starN Hst_starN2).
 
-        (* single segment with the same trace *)
-        * eapply threeway_multisem_st_starN_simulation; eauto.
+      (* inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2]; *)
+      (*   subst. *)
+      (* inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst; *)
+      (*   inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst. *)
 
-        (* segment + change of control + mt_star *)
-        (* contradiction *)
-        (* this case cannot happen since t2 is an event that changes
-           control and it appears in the st_star segment *)
-        * exfalso.
-          eapply st_starN_with_turn_change_impossible_1; eauto.
+      (* + (* Contra. *) *)
+      (*   PS.simplify_turn. *)
+      (*   apply (PS.domm_partition Hsame_ifaces Hcomes_from) in Hpc2. *)
+      (*   rewrite Hpc2 in Hpc1. *)
+      (*   discriminate. *)
 
-      (* the context has control in the first state of the first sequence *)
-      + inversion Hmt_star2; subst.
+      (* (* the program has control in the first state of the first sequence *) *)
+      (* + inversion Hmt_star2; subst. *)
 
-        (* single segment with the same trace *)
-        * eapply threeway_multisem_st_starN_simulation; eauto.
+      (*   (* single segment with the same trace *) *)
+      (*   * eapply threeway_multisem_st_starN_simulation; eauto. *)
 
-        (* segment + change of control + mt_star *)
-        (* contradiction *)
-        (* this case cannot happen since t2 is an event that changes
-           control and it appears in the st_star segment *)
-        * exfalso.
-          eapply st_starN_with_turn_change_impossible_2; eauto.
+      (*   (* segment + change of control + mt_star *) *)
+      (*   (* contradiction *) *)
+      (*   (* this case cannot happen since t2 is an event that changes *)
+      (*      control and it appears in the st_star segment *) *)
+      (*   * exfalso. *)
+      (*     eapply st_starN_with_turn_change_impossible_1; eauto. *)
 
-      + (* Contra. *)
-        PS.simplify_turn.
-        apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2.
-        rewrite Hcc1 in Hcc2.
-        discriminate.
+      (* (* the context has control in the first state of the first sequence *) *)
+      (* + inversion Hmt_star2; subst. *)
+
+      (*   (* single segment with the same trace *) *)
+      (*   * eapply threeway_multisem_st_starN_simulation; eauto. *)
+
+      (*   (* segment + change of control + mt_star *) *)
+      (*   (* contradiction *) *)
+      (*   (* this case cannot happen since t2 is an event that changes *)
+      (*      control and it appears in the st_star segment *) *)
+      (*   * exfalso. *)
+      (*     eapply st_starN_with_turn_change_impossible_2; eauto. *)
+
+      (* + (* Contra. *) *)
+      (*   PS.simplify_turn. *)
+      (*   apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2. *)
+      (*   rewrite Hcc1 in Hcc2. *)
+      (*   discriminate. *)
 
     (* segment + change of control + mt_star *)
     - rename ips2' into s4'.
