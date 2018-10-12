@@ -3519,26 +3519,26 @@ Section PartialComposition.
       admit.
   Admitted.
 
-  Lemma st_starN_with_turn_change_impossible_1':
-    forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips',
-      PS.is_context_component ctx_st (prog_interface c) ->
-      PS.is_program_component prog_st2 (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          ctx_st prog_st2 ->
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n1 ctx_st t1 ctx_st' ->
-      PS.step p (prog_interface c) (prepare_global_env p) ctx_st' t2 prog_st1 ->
-      ~ same_turn (prog_interface c) ctx_st' prog_st1 ->
-      mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st1 t3 ips' ->
-    forall n3 ips'',
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n3 prog_st2 (t1 ** t2 ** t3) ips'' ->
-      False.
-  Proof.
-    intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4
-           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           n s4' Hst_starN14.
-  Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *)
+  (* Lemma st_starN_with_turn_change_impossible_1': *)
+  (*   forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips', *)
+  (*     PS.is_context_component ctx_st (prog_interface c) -> *)
+  (*     PS.is_program_component prog_st2 (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         ctx_st prog_st2 -> *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n1 ctx_st t1 ctx_st' -> *)
+  (*     PS.step p (prog_interface c) (prepare_global_env p) ctx_st' t2 prog_st1 -> *)
+  (*     ~ same_turn (prog_interface c) ctx_st' prog_st1 -> *)
+  (*     mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st1 t3 ips' -> *)
+  (*   forall n3 ips'', *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n3 prog_st2 (t1 ** t2 ** t3) ips'' -> *)
+  (*     False. *)
+  (* Proof. *)
+  (*   intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4 *)
+  (*          Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          n s4' Hst_starN14. *)
+  (* Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
 
   Lemma st_starN_with_turn_change_impossible_2:
     forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
@@ -3561,90 +3561,90 @@ Section PartialComposition.
            n s4' Hst_starN14.
   Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *)
 
-  Lemma st_starN_with_turn_change_impossible_3:
-    forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
-      PS.is_program_component prog_st (prog_interface c) ->
-      PS.is_context_component ctx_st2 (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          prog_st ctx_st2 ->
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n1 prog_st t1 prog_st' ->
-      PS.step p (prog_interface c) (prepare_global_env p) prog_st' t2 ctx_st1 ->
-      ~ same_turn (prog_interface c) prog_st' ctx_st1 ->
-      mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st1 t3 ips' ->
-    forall n3 ips'',
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n3 ctx_st2 (t1 ** t2 ** t3) ips'' ->
-      False.
-  Proof.
-    intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4
-           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           n s4' Hst_starN14.
-  Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *)
+  (* Lemma st_starN_with_turn_change_impossible_3: *)
+  (*   forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips', *)
+  (*     PS.is_program_component prog_st (prog_interface c) -> *)
+  (*     PS.is_context_component ctx_st2 (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         prog_st ctx_st2 -> *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n1 prog_st t1 prog_st' -> *)
+  (*     PS.step p (prog_interface c) (prepare_global_env p) prog_st' t2 ctx_st1 -> *)
+  (*     ~ same_turn (prog_interface c) prog_st' ctx_st1 -> *)
+  (*     mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st1 t3 ips' -> *)
+  (*   forall n3 ips'', *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n3 ctx_st2 (t1 ** t2 ** t3) ips'' -> *)
+  (*     False. *)
+  (* Proof. *)
+  (*   intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4 *)
+  (*          Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          n s4' Hst_starN14. *)
+  (* Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
 
-  (* RB: XXX: I do not believe this is true. In particular, after the turn
-     changes nothing tells us that the two runs need to run to exhaustion: each
-     is free to stop at any point independently from the other, irrespective of
-     whether the runs up to the turn change are identical, and nothing connects
-     their "final" states. *)
-  Lemma same_trace_and_steps:
-    forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
-           ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
-      PS.is_program_component prog_st1 (prog_interface c) ->
-      PS.is_context_component ctx_st1 (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          prog_st1 ctx_st1 ->
-      (* first side *)
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n1 prog_st1 t1 prog_st1' ->
-      PS.step p (prog_interface c) (prepare_global_env p) prog_st1' t2 ctx_st2 ->
-      ~ same_turn (prog_interface c) prog_st1' ctx_st2 ->
-      mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st2 t3 ips' ->
-      (* second side *)
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n1' ctx_st1 t1' ctx_st1' ->
-      PS.step c (prog_interface p) (prepare_global_env c) ctx_st1' t2' prog_st2 ->
-      ~ same_turn (prog_interface p) ctx_st1' prog_st2 ->
-      mt_starN c (prog_interface p) (prepare_global_env c) n2' prog_st2 t3' ips'' ->
-      (* same steps and same trace *)
-      t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
-  Proof.
-    intros s1 s2 s3' s1' s2'
-           s3 s4 s4' n1 n1' n3 n3' t1 t1' t2 t2' t3 t3'
-           Hpc_s1 Hcc_s1' Hmerge
-           Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           Hst_starN12' Hstep23' Hturn23' Hmt_starN34'.
-  Admitted.
+  (* (* RB: XXX: I do not believe this is true. In particular, after the turn *)
+  (*    changes nothing tells us that the two runs need to run to exhaustion: each *)
+  (*    is free to stop at any point independently from the other, irrespective of *)
+  (*    whether the runs up to the turn change are identical, and nothing connects *)
+  (*    their "final" states. *) *)
+  (* Lemma same_trace_and_steps: *)
+  (*   forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1' *)
+  (*          ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3', *)
+  (*     PS.is_program_component prog_st1 (prog_interface c) -> *)
+  (*     PS.is_context_component ctx_st1 (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         prog_st1 ctx_st1 -> *)
+  (*     (* first side *) *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n1 prog_st1 t1 prog_st1' -> *)
+  (*     PS.step p (prog_interface c) (prepare_global_env p) prog_st1' t2 ctx_st2 -> *)
+  (*     ~ same_turn (prog_interface c) prog_st1' ctx_st2 -> *)
+  (*     mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st2 t3 ips' -> *)
+  (*     (* second side *) *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n1' ctx_st1 t1' ctx_st1' -> *)
+  (*     PS.step c (prog_interface p) (prepare_global_env c) ctx_st1' t2' prog_st2 -> *)
+  (*     ~ same_turn (prog_interface p) ctx_st1' prog_st2 -> *)
+  (*     mt_starN c (prog_interface p) (prepare_global_env c) n2' prog_st2 t3' ips'' -> *)
+  (*     (* same steps and same trace *) *)
+  (*     t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'. *)
+  (* Proof. *)
+  (*   intros s1 s2 s3' s1' s2' *)
+  (*          s3 s4 s4' n1 n1' n3 n3' t1 t1' t2 t2' t3 t3' *)
+  (*          Hpc_s1 Hcc_s1' Hmerge *)
+  (*          Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          Hst_starN12' Hstep23' Hturn23' Hmt_starN34'. *)
+  (* Admitted. *)
 
-  (* RB: XXX: See [same_trace_and_steps] above. *)
-  Lemma same_trace_and_steps':
-    forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
-           ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
-      PS.is_context_component ctx_st1 (prog_interface c) ->
-      PS.is_program_component prog_st1 (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          ctx_st1 prog_st1 ->
-      (* first side *)
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n1 ctx_st1 t1 ctx_st1' ->
-      PS.step p (prog_interface c) (prepare_global_env p) ctx_st1' t2 prog_st2 ->
-      ~ same_turn (prog_interface c) ctx_st1' prog_st2 ->
-      mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st2 t3 ips'' ->
-      (* second side *)
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n1' prog_st1 t1' prog_st1' ->
-      PS.step c (prog_interface p) (prepare_global_env c) prog_st1' t2' ctx_st2 ->
-      ~ same_turn (prog_interface p) prog_st1' ctx_st2 ->
-      mt_starN c (prog_interface p) (prepare_global_env c) n2' ctx_st2 t3' ips' ->
-      (* same steps and same trace *)
-      t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
-  Proof.
-    intros s1' s2' s3 s1 s2
-           s3' s4' s4 n1 n1' n3 n3' t1 t1' t2 t2' t3 t3'
-           Hpc_s1 Hcc_s1' Hmerge
-           Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           Hst_starN12' Hstep23' Hturn23' Hmt_starN34'.
-  Admitted.
+  (* (* RB: XXX: See [same_trace_and_steps] above. *) *)
+  (* Lemma same_trace_and_steps': *)
+  (*   forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1' *)
+  (*          ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3', *)
+  (*     PS.is_context_component ctx_st1 (prog_interface c) -> *)
+  (*     PS.is_program_component prog_st1 (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         ctx_st1 prog_st1 -> *)
+  (*     (* first side *) *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n1 ctx_st1 t1 ctx_st1' -> *)
+  (*     PS.step p (prog_interface c) (prepare_global_env p) ctx_st1' t2 prog_st2 -> *)
+  (*     ~ same_turn (prog_interface c) ctx_st1' prog_st2 -> *)
+  (*     mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st2 t3 ips'' -> *)
+  (*     (* second side *) *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n1' prog_st1 t1' prog_st1' -> *)
+  (*     PS.step c (prog_interface p) (prepare_global_env c) prog_st1' t2' ctx_st2 -> *)
+  (*     ~ same_turn (prog_interface p) prog_st1' ctx_st2 -> *)
+  (*     mt_starN c (prog_interface p) (prepare_global_env c) n2' ctx_st2 t3' ips' -> *)
+  (*     (* same steps and same trace *) *)
+  (*     t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'. *)
+  (* Proof. *)
+  (*   intros s1' s2' s3 s1 s2 *)
+  (*          s3' s4' s4 n1 n1' n3 n3' t1 t1' t2 t2' t3 t3' *)
+  (*          Hpc_s1 Hcc_s1' Hmerge *)
+  (*          Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          Hst_starN12' Hstep23' Hturn23' Hmt_starN34'. *)
+  (* Admitted. *)
 
   Theorem threeway_multisem_mt_starN_simulation:
     forall n ips1 ips2 t ips1' ips2',
