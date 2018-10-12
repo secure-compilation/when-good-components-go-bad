@@ -3239,6 +3239,12 @@ Section PartialComposition.
   Hypothesis mergeable_interfaces:
     mergeable_interfaces (prog_interface p) (prog_interface c).
 
+  (* In this lemma we reason about two complementary single-turn runs, one in p
+     and another in c. One of them runs in the program and the other in the
+     context; which is which does not matter. Both runs produce the same trace.
+     In our languages, steps produce singleton traces, which simplifies our
+     reasoning as we can proceed stepwise. The context does not matter when its
+     events are produced: it is for the program to choose. *)
   Lemma threeway_multisem_st_starN_simulation:
     forall n ips1 ips2 t ips1' ips2',
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
@@ -3251,9 +3257,11 @@ Section PartialComposition.
     intros Hmergeable Hst_star1 Hst_star2.
 
     generalize dependent ips2.
-    induction Hst_star1; subst.
+    induction Hst_star1
+      as [| n1 ips1 t1 ips2 t2 ips3 t Hstep12 Hturn1 Hst_starN23 IHHst_star1 Ht];
+      subst.
 
-    (* empty trace *)
+    (* Zero steps. *)
     - intros ips2 Hmergeable Hst_star2.
       inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
         subst.
@@ -3324,25 +3332,65 @@ Section PartialComposition.
 
       + destruct (PS.domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
 
-    (* non-empty trace *)
-    - intros ips2 Hmergeable Hst_star2.
-      inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
-        subst.
-      inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
-        inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
-
-      + admit. (* Contra. *)
-
-      (* the program is stepping *)
-      + (* simulate the step *)
-        (* use inductive hypothesis *)
-        (* compose previous results *)
+    (* Step and star, possibly non-empty trace. *)
+    - rename ips2' into ips3'.
+      intros ips1' Hmergeable1 Hst_starN13'.
+      (* Trace the first step from the "p" to the "c" run. *)
+      assert
+        (exists ips2',
+            PS.step c (prog_interface p) (prepare_global_env c) ips1' t1 ips2' /\
+            PS.mergeable_states (prog_interface c) (prog_interface p) ips2 ips2')
+        as [ips2' [Hstep12' Hmergeable2]].
+      {
+        (* This will be proved by ProgCtxSim.lockstep_simulation or by
+           CtxProgSim.lockstep_simulation, depending on which run is the program
+           run and which the context run. *)
         admit.
+      }
+      (* Decompose the "c" star into the first step and the remainder. *)
+      assert
+        (st_starN c (prog_interface p) (prepare_global_env c) n1 ips2' t2 ips3')
+        as Hst_starN23'.
+      {
+        (* We know that the single-turn run (in "c", here) is deterministic, and
+           moreover we have the first step from ips1' to ips2' producing t1. *)
+        admit.
+      }
+      (* assert *)
+      (*   (exists ips3', *)
+      (*       st_starN c (prog_interface p) (prepare_global_env c) n1 ips2' t2 ips3') *)
+      (*   as [ips3'' Hst_starN23']. *)
+      (* { *)
+      (*   admit. *)
+      (* } *)
+      (* pose proof state_determinism_st_starN Hst_starN23. Hst_starN23'. *)
+      (* From here process the IH and solve the goal. *)
+      specialize (IHHst_star1 ips2' Hmergeable2 Hst_starN23').
+      destruct IHHst_star1 as [HstarN23 Hmergeable3].
+      split.
+      + apply starN_step with (t1 := t1) (s' := (ips2, ips2')) (t2 := t2).
+        * constructor; assumption.
+        * assumption.
+        * reflexivity.
+      + assumption.
 
-      + admit. (* Contra. *)
+      (* inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2]; *)
+      (*   subst. *)
+      (* inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst; *)
+      (*   inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst. *)
 
-      (* the context is stepping *)
-      + admit.
+      (* + admit. (* Contra. *) *)
+
+      (* (* the program is stepping *) *)
+      (* + (* simulate the step *) *)
+      (*   (* use inductive hypothesis *) *)
+      (*   (* compose previous results *) *)
+      (*   admit. *)
+
+      (* + admit. (* Contra. *) *)
+
+      (* (* the context is stepping *) *)
+      (* + admit. *)
   Admitted.
 
   (* RB: TODO: Carefully check statement changes, esp. unproven and w.r.t.
