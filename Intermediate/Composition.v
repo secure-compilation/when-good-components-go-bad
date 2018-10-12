@@ -2843,6 +2843,17 @@ Section Simulation.
         * apply Hmergeable''.
   Qed.
 
+  Corollary control_change_simulation:
+    forall s1 t s2 s1',
+      PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+      ~ same_turn (prog_interface c) s1 s2 ->
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    exists s2',
+      PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' /\
+      ~ same_turn (prog_interface p) s1' s2' /\
+      PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
+  Admitted.
+
   Corollary mt_starN_simulation:
     forall n ips1 t ips1',
       mt_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
@@ -2871,15 +2882,8 @@ Section Simulation.
       destruct (st_starN_simulation Hst_starN12 Hmergeable1)
         as [s2' [Hst_starN12' Hmergeable2]].
       (* Next, simulate the turn change proper. *)
-      assert
-        (exists s3',
-            PS.step c (prog_interface p) (prepare_global_env c) s2' t2 s3' /\
-            ~ same_turn (prog_interface p) s2' s3' /\
-            PS.mergeable_states (prog_interface c) (prog_interface p) s3 s3')
+      destruct (control_change_simulation Hstep23 Hturn23 Hmergeable2)
         as [s3' [Hstep23' [Hturn23' Hmergeable3]]].
-      {
-        admit.
-      }
       (* Finally, specialize the IH, compose the pieces and finish. *)
       specialize (IHmt_starN14 s3' Hmergeable3).
       destruct IHmt_starN14 as [s4' [Hmt_starN34' Hmergeable4]].
@@ -2888,7 +2892,7 @@ Section Simulation.
                  Hst_starN12' Hstep23' Hturn23' Hmt_starN34'
                  (eq_refl _) (eq_refl _)).
       + exact Hmergeable4.
-  Admitted.
+  Qed.
 End Simulation.
 End StarNSim.
 
