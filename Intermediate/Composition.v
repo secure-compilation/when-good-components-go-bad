@@ -3658,7 +3658,10 @@ Section PartialComposition.
     intros Hmergeable Hmt_star1 Hmt_star2.
 
     generalize dependent ips2.
-    induction Hmt_star1; subst.
+    induction Hmt_star1
+      as [| n1 n2 n3 s1 t1 s2 t2 s3 t3 s4 t
+            Hst_starN12 Hstep23 Hturn23 Hmt_starN34 IHmt_starN14 Hn3 Ht];
+      subst.
 
     (* single segment *)
     - intros ips2 Hmergeable Hmt_star2.
@@ -3706,142 +3709,185 @@ Section PartialComposition.
         discriminate.
 
     (* segment + change of control + mt_star *)
-    - intros ips2 Hmergeable Hmt_star2.
-      inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2];
-        subst.
-      inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
-        inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+    - rename ips2' into s4'.
+      intros s1' Hmergeable1 Hmt_starN14'.
 
-      + (* Contra. *)
-        PS.simplify_turn.
-        apply (PS.domm_partition Hsame_ifaces Hcomes_from) in Hpc2.
-        rewrite Hpc2 in Hpc1.
-        discriminate.
+      destruct
+        (StarNSim.st_starN_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hst_starN12 Hmergeable1)
+        as [s2' [Hst_starN12' Hmergeable2]].
+      destruct
+        (threeway_multisem_st_starN_simulation
+           Hmergeable1 Hst_starN12 Hst_starN12')
+        as [HstarN12 _].
 
-      (* the program has control in the first state of the first sequence *)
-      + inversion Hmt_star2; subst.
+      destruct
+        (StarNSim.control_change_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hstep23 Hturn23 Hmergeable2)
+        as [s3' [Hstep23' [Hturn23' Hmergeable3]]].
 
-        (* single segment with the same trace *)
-        (* contradiction *)
-        (* this case cannot happen since t2 is an event that changes
-           control and it appears in the st_star segment *)
-        * exfalso.
-          eapply st_starN_with_turn_change_impossible_3; eauto.
+      destruct
+        (StarNSim.mt_starN_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hmt_starN34 Hmergeable3)
+        as [s4'' [Hmt_starN34' Hmergeable4]].
+      assert (Hs4' : s4' = s4'') by admit;
+        subst s4''.
+      specialize (IHmt_starN14 s3' Hmergeable3 Hmt_starN34').
+      destruct IHmt_starN14 as [HstarN34 _].
 
-        (* segment + change of control + mt_star *)
-        * destruct (same_trace_and_steps
-                      Hpc1 Hcc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5)
-            as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
-          (* simulate the first segment (trace t0) *)
+      split.
+      + eapply starN_trans
+          with (n1 := n1) (t1 := t1) (s2 := (s2, s2'))
+               (n2 := 1 + n2) (t2 := t2 ** t3).
+        * assumption.
+        * eapply starN_step with (t1 := t2) (s' := (s3, s3')) (t2 := t3).
+          -- constructor; assumption.
+          -- assumption.
+          -- reflexivity.
+        * omega.
+        * reflexivity.
+      + assumption.
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H2)
-            as [Hfirst_segment Hmergeable'].
+    (* - intros ips2 Hmergeable Hmt_star2. *)
+    (*   inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2]; *)
+    (*     subst. *)
+    (*   inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst; *)
+    (*     inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst. *)
 
-          (* build the step that changes control (trace t4) *)
+    (*   + (* Contra. *) *)
+    (*     PS.simplify_turn. *)
+    (*     apply (PS.domm_partition Hsame_ifaces Hcomes_from) in Hpc2. *)
+    (*     rewrite Hpc2 in Hpc1. *)
+    (*     discriminate. *)
 
-          assert (MultiSem.step p c (prepare_global_env prog) (ips', ips'0) t4 (ips'', ips''0))
-            as Hmultistep. {
-            constructor; auto.
-          }
+    (*   (* the program has control in the first state of the first sequence *) *)
+    (*   + inversion Hmt_star2; subst. *)
 
-          assert (MultiSem.multi_match p c
-                                       (ips', ips'0) (PS.merge_partial_states ips' ips'0))
-            as Hmultimatch. {
-            constructor; auto.
-          }
+    (*     (* single segment with the same trace *) *)
+    (*     (* contradiction *) *)
+    (*     (* this case cannot happen since t2 is an event that changes *)
+    (*        control and it appears in the st_star segment *) *)
+    (*     * exfalso. *)
+    (*       eapply st_starN_with_turn_change_impossible_3; eauto. *)
 
-          (* use the multisem simulation to show that the states after the step are still
-             mergeable *)
-          destruct (MultiSem.lockstep_simulation
-                      wf1 wf2 main_linkability linkability mergeable_interfaces
-                      Hmultistep Hmultimatch)
-            as [merged_state' [Hmiddle_step Hmergeable'']].
-          inversion Hmergeable''; subst.
+    (*     (* segment + change of control + mt_star *) *)
+    (*     * destruct (same_trace_and_steps *)
+    (*                   Hpc1 Hcc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5) *)
+    (*         as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst. *)
+    (*       (* simulate the first segment (trace t0) *) *)
 
-          (* simulate the rest of the sequence (trace t5) *)
+    (*       destruct (threeway_multisem_st_starN_simulation Hmergeable H H2) *)
+    (*         as [Hfirst_segment Hmergeable']. *)
 
-          destruct (IHHmt_star1 ips''0 H11 H5)
-            as [Hlast_star Hmergeable'''].
+    (*       (* build the step that changes control (trace t4) *) *)
 
-          (* compose first segment + step that changes control + last star *)
+    (*       assert (MultiSem.step p c (prepare_global_env prog) (ips', ips'0) t4 (ips'', ips''0)) *)
+    (*         as Hmultistep. { *)
+    (*         constructor; auto. *)
+    (*       } *)
 
-          split.
-          ** eapply starN_trans.
-             *** eapply starN_right.
-                 **** apply Hfirst_segment.
-                 **** apply Hmultistep.
-                 **** reflexivity.
-             *** apply Hlast_star.
-             *** reflexivity.
-             *** apply app_assoc.
-          ** assumption.
+    (*       assert (MultiSem.multi_match p c *)
+    (*                                    (ips', ips'0) (PS.merge_partial_states ips' ips'0)) *)
+    (*         as Hmultimatch. { *)
+    (*         constructor; auto. *)
+    (*       } *)
 
-      (* the context has control in the first state of the first sequence *)
-      + inversion Hmt_star2; subst.
+    (*       (* use the multisem simulation to show that the states after the step are still *)
+    (*          mergeable *) *)
+    (*       destruct (MultiSem.lockstep_simulation *)
+    (*                   wf1 wf2 main_linkability linkability mergeable_interfaces *)
+    (*                   Hmultistep Hmultimatch) *)
+    (*         as [merged_state' [Hmiddle_step Hmergeable'']]. *)
+    (*       inversion Hmergeable''; subst. *)
 
-        (* single segment with the same trace *)
-        (* contradiction *)
-        (* this case cannot happen since t2 is an event that changes
-           control and it appears in the st_star segment *)
-        * exfalso.
-          eapply st_starN_with_turn_change_impossible_1'; eauto.
+    (*       (* simulate the rest of the sequence (trace t5) *) *)
 
-        (* segment + change of control + mt_star *)
-        * destruct (same_trace_and_steps'
-                      Hcc1 Hpc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5)
-            as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
+    (*       destruct (IHHmt_star1 ips''0 H11 H5) *)
+    (*         as [Hlast_star Hmergeable''']. *)
 
-          (* simulate the first segment (trace t0) *)
+    (*       (* compose first segment + step that changes control + last star *) *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H2)
-            as [Hfirst_segment Hmergeable'].
+    (*       split. *)
+    (*       ** eapply starN_trans. *)
+    (*          *** eapply starN_right. *)
+    (*              **** apply Hfirst_segment. *)
+    (*              **** apply Hmultistep. *)
+    (*              **** reflexivity. *)
+    (*          *** apply Hlast_star. *)
+    (*          *** reflexivity. *)
+    (*          *** apply app_assoc. *)
+    (*       ** assumption. *)
 
-          (* build the step that changes control (trace t4) *)
+    (*   (* the context has control in the first state of the first sequence *) *)
+    (*   + inversion Hmt_star2; subst. *)
 
-          assert (MultiSem.step p c (prepare_global_env prog) (ips', ips'0) t4 (ips'', ips''0))
-            as Hmultistep. {
-            constructor; auto.
-          }
+    (*     (* single segment with the same trace *) *)
+    (*     (* contradiction *) *)
+    (*     (* this case cannot happen since t2 is an event that changes *)
+    (*        control and it appears in the st_star segment *) *)
+    (*     * exfalso. *)
+    (*       eapply st_starN_with_turn_change_impossible_1'; eauto. *)
 
-          assert (MultiSem.multi_match p c
-                                       (ips', ips'0) (PS.merge_partial_states ips' ips'0))
-            as Hmultimatch. {
-            constructor; auto.
-          }
+    (*     (* segment + change of control + mt_star *) *)
+    (*     * destruct (same_trace_and_steps' *)
+    (*                   Hcc1 Hpc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5) *)
+    (*         as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst. *)
 
-          (* use the multisem simulation to show that the states after the step are still
-             mergeable *)
-          destruct (MultiSem.lockstep_simulation
-                      wf1 wf2 main_linkability linkability mergeable_interfaces
-                      Hmultistep Hmultimatch)
-            as [merged_state' [Hmiddle_step Hmergeable'']].
-          inversion Hmergeable''; subst.
+    (*       (* simulate the first segment (trace t0) *) *)
 
-          (* simulate the rest of the sequence (trace t5) *)
+    (*       destruct (threeway_multisem_st_starN_simulation Hmergeable H H2) *)
+    (*         as [Hfirst_segment Hmergeable']. *)
 
-          destruct (IHHmt_star1 ips''0 H11 H5)
-            as [Hlast_star Hmergeable'''].
+    (*       (* build the step that changes control (trace t4) *) *)
 
-          (* compose first segment + step that changes control + last star *)
+    (*       assert (MultiSem.step p c (prepare_global_env prog) (ips', ips'0) t4 (ips'', ips''0)) *)
+    (*         as Hmultistep. { *)
+    (*         constructor; auto. *)
+    (*       } *)
 
-          split.
-          ** eapply starN_trans.
-             *** eapply starN_right.
-                 **** apply Hfirst_segment.
-                 **** apply Hmultistep.
-                 **** reflexivity.
-             *** apply Hlast_star.
-             *** reflexivity.
-             *** apply app_assoc.
-          ** assumption.
+    (*       assert (MultiSem.multi_match p c *)
+    (*                                    (ips', ips'0) (PS.merge_partial_states ips' ips'0)) *)
+    (*         as Hmultimatch. { *)
+    (*         constructor; auto. *)
+    (*       } *)
 
-      + (* Contra. *)
-        PS.simplify_turn.
-        apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2.
-        rewrite Hcc1 in Hcc2.
-        discriminate.
+    (*       (* use the multisem simulation to show that the states after the step are still *)
+    (*          mergeable *) *)
+    (*       destruct (MultiSem.lockstep_simulation *)
+    (*                   wf1 wf2 main_linkability linkability mergeable_interfaces *)
+    (*                   Hmultistep Hmultimatch) *)
+    (*         as [merged_state' [Hmiddle_step Hmergeable'']]. *)
+    (*       inversion Hmergeable''; subst. *)
 
-  Qed.
+    (*       (* simulate the rest of the sequence (trace t5) *) *)
+
+    (*       destruct (IHHmt_star1 ips''0 H11 H5) *)
+    (*         as [Hlast_star Hmergeable''']. *)
+
+    (*       (* compose first segment + step that changes control + last star *) *)
+
+    (*       split. *)
+    (*       ** eapply starN_trans. *)
+    (*          *** eapply starN_right. *)
+    (*              **** apply Hfirst_segment. *)
+    (*              **** apply Hmultistep. *)
+    (*              **** reflexivity. *)
+    (*          *** apply Hlast_star. *)
+    (*          *** reflexivity. *)
+    (*          *** apply app_assoc. *)
+    (*       ** assumption. *)
+
+    (*   + (* Contra. *) *)
+    (*     PS.simplify_turn. *)
+    (*     apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2. *)
+    (*     rewrite Hcc1 in Hcc2. *)
+    (*     discriminate. *)
+
+  (* Qed. *)
+  Admitted.
 
   Corollary threeway_multisem_starN:
     forall n ips1 ips2 t ips1' ips2',
