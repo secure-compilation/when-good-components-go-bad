@@ -3261,7 +3261,7 @@ Section PartialComposition.
       as [| n1 ips1 t1 ips2 t2 ips3 t Hstep12 Hturn1 Hst_starN23 IHHst_star1 Ht];
       subst.
 
-    (* Zero steps. *)
+    (* Zero steps, therefore empty trace. *)
     - intros ips2 Hmergeable Hst_star2.
       inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2];
         subst.
@@ -3303,18 +3303,11 @@ Section PartialComposition.
         split.
         * rewrite Hmem1' Hstk1' Hmem2' Hstk2'.
           constructor.
-        * eapply PS.mergeable_states_intro with
-            (ics := (PS.unpartialize (PS.merge_partial_states
-    (* From goal. *)
-    (PS.CC
-       (Pointer.component pc,
-        PS.to_partial_stack gps (domm (prog_interface c)),
-        PS.to_partial_memory mem (domm (prog_interface c))))
-    (PS.PC
-       (PS.to_partial_stack gps (domm (prog_interface p)),
-        PS.to_partial_memory mem (domm (prog_interface p)),
-        regs, pc))
-            ))).
+        * match goal with
+            | |- PS.mergeable_states _ _ ?S1 ?S2 =>
+              eapply PS.mergeable_states_intro with
+                  (ics := (PS.unpartialize (PS.merge_partial_states S1 S2)))
+          end.
           (* RB: TODO: Refactor occurrences of the following proof pattern once complete. *)
           -- assumption.
           -- simpl.
@@ -3391,7 +3384,7 @@ Section PartialComposition.
 
       (* (* the context is stepping *) *)
       (* + admit. *)
-  Admitted.
+  Admitted. (* Grade 3. RB: Might need polishing, but should be fairly simple. *)
 
   (* RB: TODO: Carefully check statement changes, esp. unproven and w.r.t.
      same_turn. Consider formulating the new premises in terms of same_turn. *)
