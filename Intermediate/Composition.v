@@ -1041,6 +1041,15 @@ Proof.
   - intro. destruct H. eapply star_if_mt_starN. eauto.
 Qed.
 
+Theorem mt_starN_if_st_starN:
+  forall p ctx G n ips t ips',
+    st_starN p ctx G n ips t ips' ->
+    mt_starN p ctx G n ips t ips'.
+Proof.
+  intros p ctx G n ips t ips' Hst_starN.
+  exact (mt_starN_segment Hst_starN).
+Qed.
+
 (*
   Program-Context Simulation
 
