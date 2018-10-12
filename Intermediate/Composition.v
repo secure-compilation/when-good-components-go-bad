@@ -2842,6 +2842,53 @@ Section Simulation.
         * apply Hst_starN'.
         * apply Hmergeable''.
   Qed.
+
+  Corollary mt_starN_simulation:
+    forall n ips1 t ips1',
+      mt_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
+    forall ips2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+    exists ips2',
+      mt_starN c (prog_interface p) (prepare_global_env c) n ips2 t ips2' /\
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
+  Proof.
+    intros n s1 t s2 Hmt_star12.
+    induction Hmt_star12
+      as [ n s1 t s2 Hst_starN12
+         | n1 n2 n3 s1 t1 s2 t2 s3 t3 s4 t
+           Hst_starN12 Hstep23 Hturn23 Hmt_starN34 IHmt_starN14 Hn3 Ht];
+      subst;
+      intros s1' Hmergeable1.
+    - (* Single-segment case. *)
+      (* The goal follows directly from the single-turn simulation. *)
+      destruct (st_starN_simulation Hst_starN12 Hmergeable1)
+        as [s2' [Hst_starN12' Hmergeable2]].
+      exists s2'. split.
+      + apply mt_starN_segment. assumption.
+      + assumption.
+    - (* Multi-segment case. *)
+      (* Here too, we start by simulating the first turn. *)
+      destruct (st_starN_simulation Hst_starN12 Hmergeable1)
+        as [s2' [Hst_starN12' Hmergeable2]].
+      (* Next, simulate the turn change proper. *)
+      assert
+        (exists s3',
+            PS.step c (prog_interface p) (prepare_global_env c) s2' t2 s3' /\
+            ~ same_turn (prog_interface p) s2' s3' /\
+            PS.mergeable_states (prog_interface c) (prog_interface p) s3 s3')
+        as [s3' [Hstep23' [Hturn23' Hmergeable3]]].
+      {
+        admit.
+      }
+      (* Finally, specialize the IH, compose the pieces and finish. *)
+      specialize (IHmt_starN14 s3' Hmergeable3).
+      destruct IHmt_starN14 as [s4' [Hmt_starN34' Hmergeable4]].
+      exists s4'. split.
+      + exact (mt_starN_control_change
+                 Hst_starN12' Hstep23' Hturn23' Hmt_starN34'
+                 (eq_refl _) (eq_refl _)).
+      + exact Hmergeable4.
+  Admitted.
 End Simulation.
 End StarNSim.
 
