@@ -2898,7 +2898,33 @@ Section Simulation.
       PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' /\
       ~ same_turn (prog_interface p) s1' s2' /\
       PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
-  Admitted.
+  Proof.
+    (* May it work to use emptyp and prog? *)
+    intros s1 t s2 s1' Hstep12 Hturn12 Hmergeable1.
+    inversion Hmergeable1
+      as [cs1 ? ? Hmergeable_ifaces1 Hcomes_from1 Hpartial1 Hpartial1'];
+      subst.
+    inversion Hstep12
+      as [p' ? ? ? cs1' cs2'
+          Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial1_bis Hpartial2];
+      subst.
+    (* Case analysis on CS step and executing instruction. *)
+    inversion HCSstep1; subst;
+      (* Discard silent steps. *)
+      try (exfalso;
+           apply Hturn12;
+           apply (step_E0_same_turn Hstep12)).
+    - (* ICall *)
+      (* Case analysis on the location (p or c) of both pc's. *)
+      destruct (Pointer.component pc \in domm (prog_interface p)) eqn:Hcase1;
+        destruct (C' \in domm (prog_interface p)) eqn:Hcase2.
+      + admit. (* Contra. *)
+      + admit.
+      + admit.
+      + admit. (* Contra. *)
+    - (* IReturn *)
+      admit.
+  Admitted. (* Grade 3. Should be somewhat tedious but straightforward. *)
 
   Corollary mt_starN_simulation:
     forall n ips1 t ips1',
