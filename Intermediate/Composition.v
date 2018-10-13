@@ -163,7 +163,7 @@ Lemma to_partial_stack_merge_stacks_left:
                           (PS.to_partial_stack gps2 (domm ctx2))))
       (domm ctx1) =
     PS.to_partial_stack gps1 (domm ctx1).
-Admitted.
+Admitted. (* Grade 2. Note comments. *)
 
 Lemma to_partial_stack_merge_stacks_right:
   forall ctx1 ctx2,
@@ -179,7 +179,7 @@ Lemma to_partial_stack_merge_stacks_right:
                           (PS.to_partial_stack gps2 (domm ctx2))))
       (domm ctx2) =
     PS.to_partial_stack gps2 (domm ctx2).
-Admitted.
+Admitted. (* Grade 2. Note comments for lemma above. *)
 
 Lemma merge_memories_partition:
   forall ctx1 ctx2,
@@ -1075,7 +1075,7 @@ Section StateDet.
     forall n2 t2 s3,
       mt_starN p (prog_interface c) (prepare_global_env p) (n1 + n2) s1 (t1 ** t2) s3 ->
       mt_starN p (prog_interface c) (prepare_global_env p) n2 s2 t2 s3.
-  Admitted.
+  Admitted. (* Grade 2. Optional for the one below, possibly slightly annoying. *)
 
   Theorem state_determinism_mt_starN:
     forall n s1 t s2,
@@ -1083,7 +1083,7 @@ Section StateDet.
     forall s2',
       mt_starN p (prog_interface c) (prepare_global_env p) n s1 t s2' ->
       s2 = s2'.
-  Admitted.
+  Admitted. (* Grade 2. Possibly slightly annonying, think of possible lemmas. *)
 End StateDet.
 End StateDet.
 
