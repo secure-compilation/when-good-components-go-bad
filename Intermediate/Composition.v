@@ -4092,7 +4092,7 @@ Section PartialComposition.
       starN (PS.step c (prog_interface p)) (prepare_global_env c) n s2 t s2' /\
       final_state (PS.sem c (prog_interface p)) s2'.
   Proof.
-  Admitted.
+  Admitted. (* RB: Only if needed by partial_programs_composition_prefix. *)
 
   Corollary partial_programs_composition:
     forall t,
