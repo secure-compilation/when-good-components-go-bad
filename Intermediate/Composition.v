@@ -3696,6 +3696,9 @@ Section PartialComposition.
     intros n ips1 ips2 t ips1' ips2'.
     intros Hmergeable Hmt_star1 Hmt_star2.
 
+    assert (prog_is_closed_sym := prog_is_closed).
+    rewrite (closed_program_link_sym wf1 wf2 linkability) in prog_is_closed_sym.
+
     generalize dependent ips2.
     induction Hmt_star1
       as [| n1 n2 n3 s1 t1 s2 t2 s3 t3 s4 t
@@ -3713,8 +3716,15 @@ Section PartialComposition.
         as [ips2'' [Hst_starN2 Hmergeable']].
       (* If ips2 takes n steps to get to ips2'' in one turn, and to ips2' in
          possibly several, clearly they coincide. *)
-      assert (ips2' = ips2'') by admit;
-        subst ips2''.
+      assert (Hst_starN2' := Hst_starN2).
+      apply mt_starN_if_st_starN in Hst_starN2'.
+      pose proof StateDet.state_determinism_mt_starN
+           wf2 wf1
+           (linkable_sym linkability) (linkable_mains_sym main_linkability)
+           prog_is_closed_sym (mergeable_interfaces_sym _ _ mergeable_interfaces)
+           Hmt_star2 Hst_starN2'
+        as Heq.
+      subst ips2''.
 
       exact (threeway_multisem_st_starN_simulation Hmergeable Hst_starN Hst_starN2).
 
@@ -3780,14 +3790,28 @@ Section PartialComposition.
            wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
            Hstep23 Hturn23 Hmergeable2)
         as [s3' [Hstep23' [Hturn23' Hmergeable3]]].
+      (* destruct *)
+        (* (threeway_multisem_control_change *)
+           (* Hmergeable2 Hstep23 Hstep23' Hturn23 Hturn23') *)
+        (* as [HstarN23 _]. *)
 
       destruct
         (StarNSim.mt_starN_simulation
            wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
            Hmt_starN34 Hmergeable3)
         as [s4'' [Hmt_starN34' Hmergeable4]].
-      assert (Hs4' : s4' = s4'') by admit;
-        subst s4''.
+      pose proof (mt_starN_control_change
+                    Hst_starN12' Hstep23' Hturn23' Hmt_starN34'
+                    (eq_refl _) (eq_refl _))
+        as Hmt_starN14''.
+      pose proof StateDet.state_determinism_mt_starN
+           wf2 wf1
+           (linkable_sym linkability) (linkable_mains_sym main_linkability)
+           prog_is_closed_sym (mergeable_interfaces_sym _ _ mergeable_interfaces)
+           Hmt_starN14' Hmt_starN14''
+        as Heq.
+      subst s4''.
+
       specialize (IHmt_starN14 s3' Hmergeable3 Hmt_starN34').
       destruct IHmt_starN14 as [HstarN34 _].
 
@@ -3939,8 +3963,7 @@ Section PartialComposition.
     (*     rewrite Hcc1 in Hcc2. *)
     (*     discriminate. *)
 
-  (* Qed. *)
-  Admitted.
+  Qed.
 
   Corollary threeway_multisem_starN:
     forall n ips1 ips2 t ips1' ips2',
