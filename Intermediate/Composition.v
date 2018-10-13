@@ -1050,6 +1050,43 @@ Proof.
   exact (mt_starN_segment Hst_starN).
 Qed.
 
+(* RB: TODO: Here and in other sections, remove unnecessary hypotheses. *)
+Module StateDet.
+Section StateDet.
+  Variables p c: program.
+
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
+
+  Hypothesis main_linkability: linkable_mains p c.
+
+  Hypothesis prog_is_closed:
+    closed_program (program_link p c).
+
+  Hypothesis mergeable_interfaces:
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  (* A helper for state_determinism_mt_starN. *)
+  Lemma st_starN_prefix_of_mt_starN:
+    forall n1 s1 t1 s2,
+      st_starN p (prog_interface c) (prepare_global_env p) n1 s1 t1 s2 ->
+    forall n2 t2 s3,
+      mt_starN p (prog_interface c) (prepare_global_env p) (n1 + n2) s1 (t1 ** t2) s3 ->
+      mt_starN p (prog_interface c) (prepare_global_env p) n2 s2 t2 s3.
+  Admitted.
+
+  Theorem state_determinism_mt_starN:
+    forall n s1 t s2,
+      mt_starN p (prog_interface c) (prepare_global_env p) n s1 t s2 ->
+    forall s2',
+      mt_starN p (prog_interface c) (prepare_global_env p) n s1 t s2' ->
+      s2 = s2'.
+  Admitted.
+End StateDet.
+End StateDet.
+
 (*
   Program-Context Simulation
 
