@@ -55,6 +55,35 @@ Definition initial_machine_state (p: program) : state :=
   | None => ([], emptym, emptym, (Component.main, 0, 0%Z))
   end.
 
+(* A slightly hacky way to express the initial pc of a linked program as a
+   function of its components, subject to well-formed conditions given in the
+   following theorem. *)
+Definition prog_main_block (p : program) : Block.id :=
+  match prog_main p with
+  | Some mainP =>
+    match EntryPoint.get Component.main mainP (prepare_procedures_entrypoints p) with
+    | Some b => b
+    | None => 0
+    end
+  | None => 0
+  end.
+
+Theorem initial_machine_state_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    closed_program (program_link p c) ->
+    initial_machine_state (program_link p c) =
+    ([],
+     unionm (prepare_procedures_memory p)
+            (prepare_procedures_memory c),
+     Register.init,
+     (Component.main,
+      prog_main_block p + prog_main_block c,
+      0%Z)).
+Admitted. (* Grade 2. *)
+
 (* transition system *)
 
 Definition initial_state (p: program) (ics: state) : Prop :=
