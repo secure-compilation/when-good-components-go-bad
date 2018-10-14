@@ -930,6 +930,26 @@ Proof.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
 Qed.
 
+Definition prepare_procedures_procs (p: program) : NMap (NMap code) :=
+  let '(_, procs, _) := prepare_procedures_initial_memory p in
+  procs.
+
+Theorem prepare_procedures_procs_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
+    prepare_procedures_procs (program_link p c) =
+    unionm (prepare_procedures_procs p) (prepare_procedures_procs c).
+Proof.
+  intros p c Hwfp Hwfc Hlinkable Hmains.
+  unfold prepare_procedures_procs,
+         prepare_procedures_initial_memory, prepare_procedures_initial_memory_aux.
+  rewrite <- mapm_unionm. apply mapm_eq.
+  apply prepare_procedures_initial_memory_aux_after_linking; assumption.
+Qed.
+
 Definition prepare_procedures_entrypoints (p: program) : EntryPoint.t :=
   let '(_, _, entrypoints) := prepare_procedures_initial_memory p in
   entrypoints.
@@ -949,6 +969,27 @@ Proof.
          prepare_procedures_initial_memory, prepare_procedures_initial_memory_aux.
   rewrite <- mapm_unionm. apply mapm_eq.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
+Qed.
+
+Corollary prepare_procedures_initial_memory_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
+    prepare_procedures_initial_memory (program_link p c) =
+    (unionm (prepare_procedures_memory p)
+            (prepare_procedures_memory c),
+     unionm (prepare_procedures_procs p)
+            (prepare_procedures_procs c),
+     unionm (prepare_procedures_entrypoints p)
+            (prepare_procedures_entrypoints c)).
+Proof.
+  intros p c Hwfp Hwfc Hlinkable Hmains.
+  rewrite <- prepare_procedures_memory_after_linking; try assumption.
+  rewrite <- prepare_procedures_procs_after_linking; try assumption.
+  rewrite <- prepare_procedures_entrypoints_after_linking; try assumption.
+  reflexivity.
 Qed.
 
 (* RB: Slight "misnomer" because of the presence of matching_mains.
