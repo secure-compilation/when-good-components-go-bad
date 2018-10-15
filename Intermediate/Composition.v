@@ -4012,72 +4012,127 @@ Section PartialComposition.
       initial_state (PS.sem c (prog_interface p)) s2 ->
       PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2.
   Proof.
+    simpl.
     intros s1 s2 Hs1_init Hs2_init.
-    inversion Hs1_init as [? ? ? ? ? ? ? Hmains1]; subst;
-      inversion Hs2_init as [? ? ? ? ? ? ? Hmains2]; subst.
-    inversion H3; subst; inversion H9; subst;
-      inversion H4; subst; inversion H10; subst; simpl in *.
 
-    (* contra, pc is neither in (prog_interface c), nor in (prog_interface p) *)
-    - PS.simplify_turn.
-      (* show and use the fact that the main has an entrypoint, therefore
-         (Pointer.component pc) must be in either (prog_interface c) or (prog_interface p) *)
-      (* here it's probably where we need well-formed programs *)
-      admit.
+    inversion Hs1_init
+      as [p' ics1 ? Hiface1 _ Hwf1' Hlinkable1 Hmains1 Hpartial1 HCSini1];
+      subst.
+    inversion Hs2_init
+      as [c' ics2 ? Hiface2 _ Hwf2' Hlinkable2 Hmains2 Hpartial2 HCSini2];
+      subst.
+    unfold CS.initial_state in HCSini1, HCSini2.
 
-    - econstructor.
-      + apply mergeable_interfaces_sym; assumption.
-      + admit.
+    assert (prog_is_closed_sym := prog_is_closed);
+      rewrite (closed_program_link_sym wf1 wf2 linkability) in prog_is_closed_sym.
+    assert (Hmatching1 : matching_mains c p') by admit.
+    assert (Hmatching2 : matching_mains p c') by admit.
+    rewrite (CS.initial_machine_state_after_linking
+               _ _ wf1 Hwf1' Hlinkable1
+               (interface_preserves_closedness_r
+                  wf1 Hwf1' (eq_sym Hiface1) linkability prog_is_closed
+                  main_linkability Hmatching1))
+      in HCSini1.
+    rewrite (CS.initial_machine_state_after_linking
+               _ _ wf2 Hwf2' Hlinkable2
+               (interface_preserves_closedness_r
+                  wf2 Hwf2' (eq_sym Hiface2) (linkable_sym linkability)
+                  prog_is_closed_sym (linkable_mains_sym main_linkability)
+                  Hmatching2))
+      in HCSini2.
+    subst ics1 ics2.
+
+    eapply PS.mergeable_states_intro with
+        (ics := CS.initial_machine_state (program_link p c)).
+    - now apply mergeable_interfaces_sym.
+    - admit. (* Easy. *)
+    - inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+        PS.simplify_turn;
+        (* Decompose the initial state in the goal. *)
+        try rewrite (CS.initial_machine_state_after_linking
+                       _ _ wf1 wf2 linkability prog_is_closed).
+      + admit. (* Contra. *)
+      + assert (Hmain_block1 : CS.prog_main_block c = 0) by admit.
+        assert (Hmain_block2 : CS.prog_main_block p' = 0) by admit.
+        rewrite Hmain_block1 Hmain_block2 Nat.add_0_r.
+        constructor.
+        * exact Hcomp1.
+        * admit. (* Easy. *)
+        * admit. (* Easy. *)
       + constructor.
-        * assumption.
-        * admit.
-        * admit.
-      + admit.
-(*
-      + inversion linkability.
-        (* RB: With the changes to [linkability], the case analysis on programs
-           does not follow naturally from its inversion. The admits on each
-           resulting proof obligation are replaced by a single admit. Note that
-           automatic hypothesis names have not been corrected as in the rest of
-           the proof following changes to the notion of linkability to be based
-           on interfaces, since they currently do not make sense.
-           unfold linkable_mains in H21.
-           destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
-           try (rewrite H22 in H25; inversion H25; reflexivity).
-           * admit.
-           * admit.
-            * admit.
-            * admit.
-            *) admit.
-          + admit.
-          + unfold PS.mergeable_memories. admit.
-*)
+        * exact Hcomp1.
+        * admit. (* Easy. *)
+        * admit. (* Easy. *)
+      + admit. (* Contra. *)
+    - admit. (* Symmetric case. *)
 
-    - econstructor.
-      + apply mergeable_interfaces_sym; assumption.
-      + admit.
-      + admit.
-      + admit.
-(*
-          + inversion linkability.
-            (* RB: Same as above.
-            unfold linkable_mains in H21.
-            destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
-              try (rewrite H22 in H25; inversion H25; reflexivity).
-            * admit.
-            * admit.
-            * admit.
-            * admit.
-            *) admit.
-          + admit.
-          + unfold PS.mergeable_memories.
-            (* show use the fact that the initial memory contains just the memories
-               for the components present in the program, therefore they are disjoint *)
-            admit.
-*)
+(*     intros s1 s2 Hs1_init Hs2_init. *)
+(*     inversion Hs1_init as [? ? ? ? ? ? ? Hmains1]; subst; *)
+(*       inversion Hs2_init as [? ? ? ? ? ? ? Hmains2]; subst. *)
+(*     inversion H3; subst; inversion H9; subst; *)
+(*       inversion H4; subst; inversion H10; subst; simpl in *. *)
 
-    (* contra, pc is both in (prog_interface c) and in (prog_interface p) *)
-    - admit.
+(*     (* contra, pc is neither in (prog_interface c), nor in (prog_interface p) *) *)
+(*     - PS.simplify_turn. *)
+(*       (* show and use the fact that the main has an entrypoint, therefore *)
+(*          (Pointer.component pc) must be in either (prog_interface c) or (prog_interface p) *) *)
+(*       (* here it's probably where we need well-formed programs *) *)
+(*       admit. *)
+
+(*     - econstructor. *)
+(*       + apply mergeable_interfaces_sym; assumption. *)
+(*       + admit. *)
+(*       + constructor. *)
+(*         * assumption. *)
+(*         * admit. *)
+(*         * admit. *)
+(*       + admit. *)
+(* (* *)
+(*       + inversion linkability. *)
+(*         (* RB: With the changes to [linkability], the case analysis on programs *)
+(*            does not follow naturally from its inversion. The admits on each *)
+(*            resulting proof obligation are replaced by a single admit. Note that *)
+(*            automatic hypothesis names have not been corrected as in the rest of *)
+(*            the proof following changes to the notion of linkability to be based *)
+(*            on interfaces, since they currently do not make sense. *)
+(*            unfold linkable_mains in H21. *)
+(*            destruct (prog_main p); destruct (prog_main c); subst; simpl in *; *)
+(*            try (rewrite H22 in H25; inversion H25; reflexivity). *)
+(*            * admit. *)
+(*            * admit. *)
+(*             * admit. *)
+(*             * admit. *)
+(*             *) admit. *)
+(*           + admit. *)
+(*           + unfold PS.mergeable_memories. admit. *)
+(* *) *)
+
+(*     - econstructor. *)
+(*       + apply mergeable_interfaces_sym; assumption. *)
+(*       + admit. *)
+(*       + admit. *)
+(*       + admit. *)
+(* (* *)
+(*           + inversion linkability. *)
+(*             (* RB: Same as above. *)
+(*             unfold linkable_mains in H21. *)
+(*             destruct (prog_main p); destruct (prog_main c); subst; simpl in *; *)
+(*               try (rewrite H22 in H25; inversion H25; reflexivity). *)
+(*             * admit. *)
+(*             * admit. *)
+(*             * admit. *)
+(*             * admit. *)
+(*             *) admit. *)
+(*           + admit. *)
+(*           + unfold PS.mergeable_memories. *)
+(*             (* show use the fact that the initial memory contains just the memories *)
+(*                for the components present in the program, therefore they are disjoint *) *)
+(*             admit. *)
+(* *) *)
+
+(*     (* contra, pc is both in (prog_interface c) and in (prog_interface p) *) *)
+(*     - admit. *)
   Admitted.
 
   Lemma termination_with_same_number_of_steps:
