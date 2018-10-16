@@ -3582,7 +3582,7 @@ Section PartialComposition.
   (*   - (* IReturn *) *)
   (*     (* This case will be similar to ICall. *) *)
   (*     admit. *)
-  (* Admitted. *)
+  (* Abort. *)
 
   (* Lemma st_starN_with_turn_change_impossible_1': *)
   (*   forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips', *)
@@ -3603,7 +3603,7 @@ Section PartialComposition.
   (*   intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4 *)
   (*          Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
   (*          n s4' Hst_starN14. *)
-  (* Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
+  (* Abort. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
 
   (* Lemma st_starN_with_turn_change_impossible_2: *)
   (*   forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips', *)
@@ -3624,7 +3624,7 @@ Section PartialComposition.
   (*   intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4 *)
   (*          Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
   (*          n s4' Hst_starN14. *)
-  (* Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
+  (* Abort. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
 
   (* Lemma st_starN_with_turn_change_impossible_3: *)
   (*   forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips', *)
@@ -3645,7 +3645,7 @@ Section PartialComposition.
   (*   intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4 *)
   (*          Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
   (*          n s4' Hst_starN14. *)
-  (* Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
+  (* Abort. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
 
   (* (* RB: XXX: I do not believe this is true. In particular, after the turn *)
   (*    changes nothing tells us that the two runs need to run to exhaustion: each *)
@@ -3679,7 +3679,7 @@ Section PartialComposition.
   (*          Hpc_s1 Hcc_s1' Hmerge *)
   (*          Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
   (*          Hst_starN12' Hstep23' Hturn23' Hmt_starN34'. *)
-  (* Admitted. *)
+  (* Abort. *)
 
   (* (* RB: XXX: See [same_trace_and_steps] above. *) *)
   (* Lemma same_trace_and_steps': *)
@@ -3709,7 +3709,7 @@ Section PartialComposition.
   (*          Hpc_s1 Hcc_s1' Hmerge *)
   (*          Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
   (*          Hst_starN12' Hstep23' Hturn23' Hmt_starN34'. *)
-  (* Admitted. *)
+  (* Abort. *)
 
   Theorem threeway_multisem_mt_starN_simulation:
     forall n ips1 ips2 t ips1' ips2',
