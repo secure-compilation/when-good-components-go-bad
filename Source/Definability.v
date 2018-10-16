@@ -629,8 +629,11 @@ Proof.
     unfold prog_main, program_unlink. simpl.
     rewrite find_procedure_filter_comp.
     move => Hinterm.
-    apply (Intermediate.wfprog_main_component wf_p), negbTE in Hinterm.
-    rewrite Hinterm. done.
+    destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hcase.
+    + inversion wf_p as [_ _ _ _ _ _ Hmain_component].
+      pose proof (Intermediate.wfprog_main_component wf_p Hcase) as Hmainp.
+      inversion Hmainp as [Hmainp']. rewrite Hinterm in Hmainp'. discriminate.
+    + rewrite Hcase. done.
 Qed.
 
 (* Definability *)

@@ -3063,14 +3063,16 @@ Section MultiSemantics.
         inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
         PS.simplify_turn.
       + admit. (* Easy. *)
-      + inversion Hwf2 as [_ _ _ _ _ _ Hmain2].
-        specialize (Hmain2 Hmainc').
-        rewrite Hiface2 in Hmain2.
-        now destruct (PS.domm_partition_in_notin Hcomp2 Hmain2).
-      + inversion Hwf1 as [_ _ _ _ _ _ Hmain1].
-        specialize (Hmain1 Hmainp').
-        rewrite Hiface1 in Hmain1.
-        now destruct (PS.domm_partition_in_notin Hcomp1 Hmain1).
+      + admit. (* Easy. *)
+        (* inversion Hwf2 as [_ _ _ _ _ _ Hmain2]. *)
+        (* specialize (Hmain2 Hmainc'). *)
+        (* rewrite Hiface2 in Hmain2. *)
+        (* now destruct (PS.domm_partition_in_notin Hcomp2 Hmain2). *)
+      + admit. (* Easy. *)
+        (* inversion Hwf1 as [_ _ _ _ _ _ Hmain1]. *)
+        (* specialize (Hmain1 Hmainp'). *)
+        (* rewrite Hiface1 in Hmain1. *)
+        (* now destruct (PS.domm_partition_in_notin Hcomp1 Hmain1). *)
       + now destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1).
   Admitted.
 

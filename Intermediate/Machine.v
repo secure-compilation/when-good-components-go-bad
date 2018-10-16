@@ -205,10 +205,13 @@ Record well_formed_program (p: program) := {
       prog_main p = Some mainP ->
     exists main_procs,
       getm (prog_procedures p) Component.main = Some main_procs /\ mainP \in domm main_procs;
-  (* The main component is not in the interface if no main procedure is given. *)
+  (* If the main component is in the interface, a main procedure is given. *)
   wfprog_main_component:
-    prog_main p = None ->
-    Component.main \notin domm (prog_interface p)
+    (* (RB: Old-style fix.) *)
+    (* prog_main p = None -> *)
+    (* Component.main \notin domm (prog_interface p) *)
+    Component.main \in domm (prog_interface p) ->
+    prog_main p
 }.
 
 (* a closed program is a program with a closed interface and an existing main
@@ -476,14 +479,17 @@ Proof.
     inversion Hwf2 as [_ _ _ _ _ _ Hmain_comp2].
     intros Hprog_main1.
     assert (Hprog_main2 := Hprog_main1).
-    apply prog_main_link_none_left in Hprog_main1.
-    apply prog_main_link_none_right in Hprog_main2.
-    specialize (Hmain_comp1 Hprog_main1).
-    specialize (Hmain_comp2 Hprog_main2).
-    rewrite domm_union in_fsetU.
-    rewrite negb_or Hmain_comp1 Hmain_comp2.
-    reflexivity.
-Qed.
+    simpl in *.
+    destruct (Component.main \in domm (prog_interface p1)) eqn:Hcase1;
+      destruct (Component.main \in domm (prog_interface p2)) eqn:Hcase2.
+    + admit. (* Easy, contra. *)
+    + specialize (Hmain_comp1 Hcase1). rewrite Hmain_comp1. assumption.
+    + destruct (prog_main p1) as [main1 |] eqn:Hmain1.
+      * reflexivity.
+      * specialize (Hmain_comp2 Hcase2). assumption.
+    + admit. (* Easy, contra. *)
+(* Qed. *)
+Admitted. (* Grade 1. *)
 
 (* Given a list of components, create the map that associates to
    each component the preallocated buffers according to program p.
@@ -851,9 +857,11 @@ Proof.
     + destruct Cid as [| n].
       * (* Contra. *)
         inversion Hwfp as [_ _ _ _ _ _ Hmain_compp].
-        specialize (Hmain_compp Hmainp).
-        have Hp'' : (prog_interface p) 0 = None by apply /dommPn.
-        rewrite Hp'' in Hp'.
+        (* specialize (Hmain_compp Hmainp). *)
+        (* have Hp'' : (prog_interface p) 0 = None by apply /dommPn. *)
+        (* rewrite Hp'' in Hp'. *)
+        specialize (Hmain_compp Hp).
+        rewrite Hmainp in Hmain_compp.
         discriminate.
       * reflexivity.
     + reflexivity. (* Easy case. *)
@@ -892,9 +900,11 @@ Proof.
       destruct Cid as [| n].
       * (* Contra, *)
         inversion Hwfc as [_ _ _ _ _ _ Hmain_compc].
-        specialize (Hmain_compc Hmainc).
-        have Hc'' : (prog_interface c) 0 = None by apply /dommPn.
-        rewrite Hc'' in Hc'.
+        (* specialize (Hmain_compc Hmainc). *)
+        (* have Hc'' : (prog_interface c) 0 = None by apply /dommPn. *)
+        (* rewrite Hc'' in Hc'. *)
+        specialize (Hmain_compc Hc).
+        rewrite Hmainc in Hmain_compc.
         discriminate.
       * reflexivity.
     + simpl. rewrite Hmainp Hmainc. reflexivity.
