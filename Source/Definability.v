@@ -26,6 +26,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Section Definability.
   Local Open Scope fset_scope.
 
@@ -688,6 +690,7 @@ Proof.
         by case: m.
       do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
       split; try reflexivity; exact: star_refl.
+  -
   have wf_events : all (well_formed_event intf) m'.
     by apply: CS.intermediate_well_formed_events Hstar.
   have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m'.
