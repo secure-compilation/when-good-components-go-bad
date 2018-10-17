@@ -3276,6 +3276,15 @@ Section MultiSemantics.
             (PS.merge_partial_states s2 s2').
   Admitted.
 
+  (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
+     in this section, but these should be pared down. *)
+  Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
+    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+    PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
+    PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
+  Admitted.
+
   Lemma lockstep_simulation:
     forall ms t ms',
       step (prepare_global_env prog) ms t ms' ->
