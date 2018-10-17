@@ -205,9 +205,9 @@ Record well_formed_program (p: program) := {
       prog_main p = Some mainP ->
     exists main_procs,
       getm (prog_procedures p) Component.main = Some main_procs /\ mainP \in domm main_procs;
-  (* If the main component is in the interface, a main procedure is given. *)
+  (* Iff the main component is in the interface, a main procedure is given. *)
   wfprog_main_component:
-    (* (RB: Old-style fix.) *)
+    (* (RB: Old-style fix, later changed from a simple implication.) *)
     (* prog_main p = None -> *)
     (* Component.main \notin domm (prog_interface p) *)
     Component.main \in domm (prog_interface p) <->

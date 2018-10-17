@@ -124,7 +124,8 @@ Module Source.
     wfprog_well_formed_buffers:
       forall C, prog_interface p C ->
                 has_required_local_buffers p C;
-    (* if the main component is defined, so is the main procedure *)
+    (* iff the main component is defined, so is the main procedure
+       RB: Changed from a simple conditional. *)
     wfprog_main_existence:
       Component.main \in domm (prog_interface p) <-> prog_main p
   }.
