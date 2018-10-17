@@ -3039,15 +3039,14 @@ Section MultiSemantics.
                        (PS.unpartialize (PS.merge_partial_states ips1 ips2)).
   Proof.
     intros ips1 ips2 HPSini1 HPSini2.
-    (* ??? matching_mains introduction *)
     inversion HPSini1
       as [p' ics1 ? Hiface1 _ Hwf1 Hlinkable1 Hmains1 Hpartial1 HCSini1];
       subst.
     inversion HPSini2
       as [c' ics2 ? Hiface2 _ Hwf2 Hlinkable2 Hmains2 Hpartial2 HCSini2];
       subst.
-    unfold CS.initial_state, CS.initial_machine_state in HCSini1, HCSini2.
-    unfold CS.initial_state, CS.initial_machine_state.
+    unfold CS.initial_state in HCSini1, HCSini2.
+    unfold CS.initial_state.
     (* Inline initial states in Hpartial hypotheses; work on those from there. *)
     subst ics1 ics2.
     simpl in Hpartial1, Hpartial2. simpl.
@@ -3061,39 +3060,46 @@ Section MultiSemantics.
       destruct (prog_main c') as [mainc' | ] eqn:Hmainc';
       try discriminate;
       simpl in Hpartial1, Hpartial2; simpl.
-    - admit. (* By composability of [prepare_]. *)
-    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
-      rewrite Hmainc' in Hmainp.
-      discriminate.
-    - admit. (* By composability of [prepare_]. *)
-    - rewrite <- (prog_main_same_interface Hiface1) in Hmainc.
-      rewrite Hmainc in Hmainp'.
-      discriminate.
-    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
-      rewrite Hmainc' in Hmainp.
-      discriminate.
-    - rewrite <- (prog_main_same_interface Hiface1) in Hmainc.
-      rewrite Hmainc in Hmainp'.
-      discriminate.
-    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
-      rewrite Hmainc' in Hmainp.
-      discriminate.
-    - inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+    (* In the remaining cases:
+        - The "correct" ones (in which one of p and c and their counterpart
+          have mains) are solved by composability of initial states.
+        - Cases where both p and c have no mains are ruled out by closedness
+          of their linking.
+        - Cases where the indirect "matching mains" condition on either p and its
+          counterpart or c and its counterpart is not respected are ruled out by
+          the strong well-formedness of programs.
+       There is overlap among the two classes of contradictions.
+       RB: NOTE: It is easy to use tactics to refactor contradictory cases, and
+       symmetry to refactor the two proper cases. *)
+    - rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 wf2 linkability prog_is_closed).
+      assert (Hclosed1 : closed_program (program_link p p')) by admit.
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 Hwf1 Hlinkable1 Hclosed1) in Hpartial1.
+      assert (Hclosed2 : closed_program (program_link c c')) by admit.
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf2 Hwf2 Hlinkable2 Hclosed2) in Hpartial2.
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
-        PS.simplify_turn.
-      + admit. (* Easy. *)
-      + admit. (* Easy. *)
-        (* inversion Hwf2 as [_ _ _ _ _ _ Hmain2]. *)
-        (* specialize (Hmain2 Hmainc'). *)
-        (* rewrite Hiface2 in Hmain2. *)
-        (* now destruct (PS.domm_partition_in_notin Hcomp2 Hmain2). *)
-      + admit. (* Easy. *)
-        (* inversion Hwf1 as [_ _ _ _ _ _ Hmain1]. *)
-        (* specialize (Hmain1 Hmainp'). *)
-        (* rewrite Hiface1 in Hmain1. *)
-        (* now destruct (PS.domm_partition_in_notin Hcomp1 Hmain1). *)
-      + now destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1).
-  Admitted.
+        admit. (* All subgoals are easy. *)
+    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
+      rewrite Hmainc' in Hmainp.
+      discriminate.
+    - admit. (* By composability of [prepare_], like above. *)
+    - rewrite <- (prog_main_same_interface Hiface1) in Hmainc.
+      rewrite Hmainc in Hmainp'.
+      discriminate.
+    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
+      rewrite Hmainc' in Hmainp.
+      discriminate.
+    - rewrite <- (prog_main_same_interface Hiface1) in Hmainc.
+      rewrite Hmainc in Hmainp'.
+      discriminate.
+    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
+      rewrite Hmainc' in Hmainp.
+      discriminate.
+    - admit. (* Contra: by prog_is_closed, there should be a main. *)
+  Admitted. (* Grade 2. *)
 
   Lemma multi_match_initial_states:
     forall ms,
