@@ -3265,6 +3265,17 @@ Section MultiSemantics.
         eapply (@execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
   Qed.
 
+  (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
+     in this section, but these should be pared down. *)
+  Lemma mergeable_states_step : forall s1 s1' s2 s2' t,
+    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+    PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
+    PS.step (program_link p c) emptym (prepare_global_env (program_link p c))
+            (PS.merge_partial_states s1 s1') t
+            (PS.merge_partial_states s2 s2').
+  Admitted.
+
   Lemma lockstep_simulation:
     forall ms t ms',
       step (prepare_global_env prog) ms t ms' ->
