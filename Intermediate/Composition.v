@@ -4073,17 +4073,17 @@ Section PartialComposition.
         (ics := CS.initial_machine_state (program_link p c)).
     - now apply mergeable_interfaces_sym.
     - admit. (* Easy. *)
-    - inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+    - rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 wf2 linkability prog_is_closed).
+      assert (Hblocks1 : CS.prog_main_block p = CS.prog_main_block c') by admit.
+      assert (Hblocks2 : CS.prog_main_block c = CS.prog_main_block p') by admit.
+      rewrite <- Hblocks1 in Hpartial2.
+      rewrite <- Hblocks2 in Hpartial1.
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
-        PS.simplify_turn;
-        (* Decompose the initial state in the goal. *)
-        try rewrite (CS.initial_machine_state_after_linking
-                       _ _ wf1 wf2 linkability prog_is_closed).
+        PS.simplify_turn.
       + admit. (* Contra. *)
-      + assert (Hmain_block1 : CS.prog_main_block c = 0) by admit.
-        assert (Hmain_block2 : CS.prog_main_block p' = 0) by admit.
-        rewrite Hmain_block1 Hmain_block2 Nat.add_0_r.
-        constructor.
+      + constructor.
         * exact Hcomp1.
         * admit. (* Easy. *)
         * admit. (* Easy. *)
@@ -4160,7 +4160,7 @@ Section PartialComposition.
 
 (*     (* contra, pc is both in (prog_interface c) and in (prog_interface p) *) *)
 (*     - admit. *)
-  Admitted.
+  Admitted. (* Grade 2. *)
 
   Lemma termination_with_same_number_of_steps:
     forall t,
