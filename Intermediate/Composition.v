@@ -2990,6 +2990,8 @@ Section MultiSemantics.
 
   Let prog := program_link p c.
 
+  Hypothesis prog_is_closed : closed_program prog.
+
   Definition state : Type := PS.state * PS.state.
 
   Inductive initial_state : state -> Prop :=
