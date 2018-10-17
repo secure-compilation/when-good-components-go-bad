@@ -3022,6 +3022,13 @@ Section MultiSemantics.
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
       multi_match (ips1, ips2) (PS.merge_partial_states ips1 ips2).
 
+  (* RB: TODO: Move to Machine.v when done? *)
+  Remark prog_main_same_interface :
+    forall p1 p2,
+      prog_interface p1 = prog_interface p2 ->
+      prog_main p1 = prog_main p2.
+  Admitted. (* Grade 1. *)
+
   Lemma merged_initial_states:
     forall ips1 ips2,
       PS.initial_state p (prog_interface c) ips1 ->
@@ -3053,12 +3060,22 @@ Section MultiSemantics.
       try discriminate;
       simpl in Hpartial1, Hpartial2; simpl.
     - admit. (* By composability of [prepare_]. *)
-    - admit. (* Discard by matching_mains. *)
+    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
+      rewrite Hmainc' in Hmainp.
+      discriminate.
     - admit. (* By composability of [prepare_]. *)
-    - admit. (* Discard by matching_mains. *)
-    - admit. (* Discard by matching_mains. *)
-    - admit. (* Discard by matching_mains. *)
-    - admit. (* Discard by matching_mains. *)
+    - rewrite <- (prog_main_same_interface Hiface1) in Hmainc.
+      rewrite Hmainc in Hmainp'.
+      discriminate.
+    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
+      rewrite Hmainc' in Hmainp.
+      discriminate.
+    - rewrite <- (prog_main_same_interface Hiface1) in Hmainc.
+      rewrite Hmainc in Hmainp'.
+      discriminate.
+    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
+      rewrite Hmainc' in Hmainp.
+      discriminate.
     - inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
         PS.simplify_turn.
