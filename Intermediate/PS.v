@@ -535,12 +535,6 @@ Proof.
 by move=> ctx1 ctx2 [[_]]; rewrite fdisjointC=> /fdisjointP.
 Qed.
 
-Inductive mergeable_states_pc_cc: state -> state -> Prop :=
-| mergeable_states_pc_cc_first: forall gps1 mem1 regs1 pc1 C2 gps2 mem2,
-    mergeable_states_pc_cc (PC (gps1, mem1, regs1, pc1)) (CC (C2, gps2, mem2))
-| mergeable_states_pc_cc_second: forall C1 gps1 mem1 gps2 mem2 regs2 pc2,
-    mergeable_states_pc_cc (CC (C1, gps1, mem1)) (PC (gps2, mem2, regs2, pc2)).
-
 (* RB: TODO: Complete assumptions, possibly rephrase in terms of _neither. *)
 Lemma domm_partition_in_both ctx1 ctx2 C :
   mergeable_interfaces ctx1 ctx2 ->
@@ -700,15 +694,6 @@ Proof.
   intros pmem1 pmem2 Hmergeable.
   unfold mergeable_memories in *.
   rewrite fdisjointC. auto.
-Qed.
-
-Lemma mergeable_states_pc_cc_sym s1 s2:
-  mergeable_states_pc_cc s1 s2 ->
-  mergeable_states_pc_cc s2 s1.
-Proof.
-  intros Hmerge.
-  inversion Hmerge; subst;
-    constructor.
 Qed.
 
 (* RB: TODO: Obtain linkability from mergeability. *)
