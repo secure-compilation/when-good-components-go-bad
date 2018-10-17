@@ -639,7 +639,7 @@ Proof.
     move => Hinterm.
     destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hcase.
     + inversion wf_p as [_ _ _ _ _ _ Hmain_component].
-      pose proof (Intermediate.wfprog_main_component wf_p Hcase) as Hmainp.
+      pose proof (proj1 (Intermediate.wfprog_main_component wf_p) Hcase) as Hmainp.
       inversion Hmainp as [Hmainp']. rewrite Hinterm in Hmainp'. discriminate.
     + rewrite Hcase. done.
 Qed.

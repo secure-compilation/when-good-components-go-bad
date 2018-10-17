@@ -210,7 +210,7 @@ Record well_formed_program (p: program) := {
     (* (RB: Old-style fix.) *)
     (* prog_main p = None -> *)
     (* Component.main \notin domm (prog_interface p) *)
-    Component.main \in domm (prog_interface p) ->
+    Component.main \in domm (prog_interface p) <->
     prog_main p
 }.
 
@@ -477,17 +477,21 @@ Proof.
     by rewrite -(wfprog_defined_procedures Hwf1) -(wfprog_defined_procedures Hwf2).
   - inversion Hwf1 as [_ _ _ _ _ _ Hmain_comp1].
     inversion Hwf2 as [_ _ _ _ _ _ Hmain_comp2].
-    intros Hprog_main1.
-    assert (Hprog_main2 := Hprog_main1).
-    simpl in *.
-    destruct (Component.main \in domm (prog_interface p1)) eqn:Hcase1;
-      destruct (Component.main \in domm (prog_interface p2)) eqn:Hcase2.
-    + admit. (* Easy, contra. *)
-    + specialize (Hmain_comp1 Hcase1). rewrite Hmain_comp1. assumption.
-    + destruct (prog_main p1) as [main1 |] eqn:Hmain1.
-      * reflexivity.
-      * specialize (Hmain_comp2 Hcase2). assumption.
-    + admit. (* Easy, contra. *)
+    split;
+      intros Hprog_main1.
+    + assert (Hprog_main2 := Hprog_main1).
+      simpl in *.
+      destruct (Component.main \in domm (prog_interface p1)) eqn:Hcase1;
+        destruct (Component.main \in domm (prog_interface p2)) eqn:Hcase2.
+      * admit. (* Easy, contra. *)
+      * apply proj1 in Hmain_comp1.
+        specialize (Hmain_comp1 Hcase1). rewrite Hmain_comp1. assumption.
+      * destruct (prog_main p1) as [main1 |] eqn:Hmain1.
+        -- reflexivity.
+        -- apply proj1 in Hmain_comp2.
+           specialize (Hmain_comp2 Hcase2). assumption.
+      * admit. (* Easy, contra. *)
+    + admit.
 (* Qed. *)
 Admitted. (* Grade 1. *)
 
@@ -860,6 +864,7 @@ Proof.
         (* specialize (Hmain_compp Hmainp). *)
         (* have Hp'' : (prog_interface p) 0 = None by apply /dommPn. *)
         (* rewrite Hp'' in Hp'. *)
+        apply proj1 in Hmain_compp.
         specialize (Hmain_compp Hp).
         rewrite Hmainp in Hmain_compp.
         discriminate.
@@ -903,6 +908,7 @@ Proof.
         (* specialize (Hmain_compc Hmainc). *)
         (* have Hc'' : (prog_interface c) 0 = None by apply /dommPn. *)
         (* rewrite Hc'' in Hc'. *)
+        apply proj1 in Hmain_compc.
         specialize (Hmain_compc Hc).
         rewrite Hmainc in Hmain_compc.
         discriminate.
