@@ -3296,79 +3296,84 @@ Section MultiSemantics.
     intros ms t ms' Hstep.
     intros ips Hmatch.
 
-    inversion Hmatch as [ips1 ips2 Hmergeable]; subst; clear Hmatch.
-    inversion Hstep as [? ? ips1' ? ips2' Hstep1 Hstep2]; subst; clear Hstep.
+    inversion Hmatch as [ips1 ips2 Hmergeable]; subst.
+    inversion Hstep as [? ? ips1' ? ips2' Hstep1 Hstep2]; subst.
 
-    inversion Hmergeable as [ics ? ? Hmerge_ifaces Hfrom_initial Hpartial1 Hpartial2];
-      subst(*; clear Hmergeable*).
-    inversion Hstep1
-      as [p' ? ? ? ics1 ics1'
-          Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1'];
-      subst(*; clear Hstep1*);
-      inversion Hstep2
-        as [c' ? ? ? ics2 ics2'
-            Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2'];
-      subst(*; clear Hstep2*);
-      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1];
-      subst(*; clear Hpartial1*);
-      inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2];
-      subst(*; clear Hpartial2*);
-      simpl in *; PS.simplify_turn.
+    exists (PS.merge_partial_states ips1' ips2'). split.
+    - exact (mergeable_states_step Hmergeable Hstep1 Hstep2).
+    - constructor.
+      exact (mergeable_states_step_trans Hmergeable Hstep1 Hstep2).
 
-    - (* Contra. *)
-      now destruct (PS.domm_partition_in_neither
-                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                      Hfrom_initial Hcomp1 Hcomp2).
+    (* inversion Hmergeable as [ics ? ? Hmerge_ifaces Hfrom_initial Hpartial1 Hpartial2]; *)
+    (*   subst(*; clear Hmergeable*). *)
+    (* inversion Hstep1 *)
+    (*   as [p' ? ? ? ics1 ics1' *)
+    (*       Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1']; *)
+    (*   subst(*; clear Hstep1*); *)
+    (*   inversion Hstep2 *)
+    (*     as [c' ? ? ? ics2 ics2' *)
+    (*         Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2']; *)
+    (*   subst(*; clear Hstep2*); *)
+    (*   inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; *)
+    (*   subst(*; clear Hpartial1*); *)
+    (*   inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; *)
+    (*   subst(*; clear Hpartial2*); *)
+    (*   simpl in *; PS.simplify_turn. *)
 
-    - (* program is in the first state *)
-      exists (PS.merge_partial_states ips1' ips2'). split.
+    (* - (* Contra. *) *)
+    (*   now destruct (PS.domm_partition_in_neither *)
+    (*                   (mergeable_interfaces_sym _ _ mergeable_interfaces) *)
+    (*                   Hfrom_initial Hcomp1 Hcomp2). *)
 
-      + inversion Hpartial_ips1; subst(*; clear Hpartial_ips1*);
-          inversion Hpartial_ips2; subst(*; clear Hpartial_ips2*);
-          PS.simplify_turn; simpl in *.
-        (* RB: TODO: Existing information, and new information, can be extracted
-           from the goal and the context, respectively. *)
-        eapply PS.partial_step
-          with
-            (ics:=PS.unpartialize
-                    (PS.PC
-                       (PS.merge_stacks (PS.to_partial_stack gps (domm (prog_interface c)))
-                                        (PS.to_partial_stack gps (domm (prog_interface p))),
-                        PS.merge_memories (PS.to_partial_memory mem (domm (prog_interface c)))
-                                          (PS.to_partial_memory mem (domm (prog_interface p))),
-                        regs, pc)))
-            (p':=empty_prog).
-        * reflexivity.
-        * apply linking_well_formedness; assumption.
-        * now apply empty_prog_is_well_formed.
-        * apply linkable_emptym. now apply linkability.
-        * unfold linkable_mains, empty_prog. simpl.
-          now rewrite andb_false_r.
-        * admit.
-        * constructor.
-          ** PS.simplify_turn.
-             by rewrite mem_domm.
-          ** rewrite domm0. unfold PS.to_partial_memory.
-             rewrite filterm_identity. reflexivity.
-          ** rewrite domm0.
-             rewrite (PS.to_partial_stack_unpartialize_identity
-                        (PS.merged_stack_has_no_holes
-                           (PS.mergeable_stacks_partition
-                              (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                              Hfrom_initial))).
-             reflexivity.
-        * admit.
+    (* - (* program is in the first state *) *)
+    (*   exists (PS.merge_partial_states ips1' ips2'). split. *)
 
-      + (* prove match *)
-        admit.
+    (*   + inversion Hpartial_ips1; subst(*; clear Hpartial_ips1*); *)
+    (*       inversion Hpartial_ips2; subst(*; clear Hpartial_ips2*); *)
+    (*       PS.simplify_turn; simpl in *. *)
+    (*     (* RB: TODO: Existing information, and new information, can be extracted *)
+    (*        from the goal and the context, respectively. *) *)
+    (*     eapply PS.partial_step *)
+    (*       with *)
+    (*         (ics:=PS.unpartialize *)
+    (*                 (PS.PC *)
+    (*                    (PS.merge_stacks (PS.to_partial_stack gps (domm (prog_interface c))) *)
+    (*                                     (PS.to_partial_stack gps (domm (prog_interface p))), *)
+    (*                     PS.merge_memories (PS.to_partial_memory mem (domm (prog_interface c))) *)
+    (*                                       (PS.to_partial_memory mem (domm (prog_interface p))), *)
+    (*                     regs, pc))) *)
+    (*         (p':=empty_prog). *)
+    (*     * reflexivity. *)
+    (*     * apply linking_well_formedness; assumption. *)
+    (*     * now apply empty_prog_is_well_formed. *)
+    (*     * apply linkable_emptym. now apply linkability. *)
+    (*     * unfold linkable_mains, empty_prog. simpl. *)
+    (*       now rewrite andb_false_r. *)
+    (*     * admit. *)
+    (*     * constructor. *)
+    (*       ** PS.simplify_turn. *)
+    (*          by rewrite mem_domm. *)
+    (*       ** rewrite domm0. unfold PS.to_partial_memory. *)
+    (*          rewrite filterm_identity. reflexivity. *)
+    (*       ** rewrite domm0. *)
+    (*          rewrite (PS.to_partial_stack_unpartialize_identity *)
+    (*                     (PS.merged_stack_has_no_holes *)
+    (*                        (PS.mergeable_stacks_partition *)
+    (*                           (mergeable_interfaces_sym _ _ mergeable_interfaces) *)
+    (*                           Hfrom_initial))). *)
+    (*          reflexivity. *)
+    (*     * admit. *)
 
-    - (* program is in the second state *)
-      admit. (* RB: Fully symmetrical case. *)
+    (*   + (* prove match *) *)
+    (*     admit. *)
 
-    - (* Contra. *)
-      now destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1).
+    (* - (* program is in the second state *) *)
+    (*   admit. (* RB: Fully symmetrical case. *) *)
 
-  Admitted.
+    (* - (* Contra. *) *)
+    (*   now destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1). *)
+
+  Qed.
 
   Theorem merged_prog_simulates_multisem:
     forward_simulation msem (PS.sem prog emptym).
