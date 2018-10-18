@@ -4224,11 +4224,66 @@ Section PartialComposition.
     + simpl. constructor.
   Qed.
 
+  (* RB: TODO: To CompCertExtensions. *)
+  Lemma program_behaves_finpref_exists :
+    forall L s t s',
+      initial_state L s ->
+      Star L s t s' ->
+    exists beh,
+      program_behaves L beh /\
+      prefix (FTbc t) beh.
+  Admitted.
+
+  (* RB: TODO: Add hypothesis and/or encapsulate in own section (both directions
+     will be needed in the main proof). Relocate to PS? *)
+  Lemma behavior_prefix_star :
+    forall b m,
+      program_behaves (PS.sem p (prog_interface c)) b ->
+      prefix m b ->
+    exists s s',
+      PS.initial_state p (prog_interface c) s /\
+      star (PS.step p (prog_interface c)) (prepare_global_env p) s (finpref_trace m) s'.
+  Admitted.
+
+  (* RB: TODO: Add hypothesis and/or encapsulate in own section, or relocate to
+     PS. *)
+  Lemma partial_programs_composition_star :
+    forall sini1 sini2 t s1 s2,
+      PS.initial_state p (prog_interface c) sini1 ->
+      PS.initial_state c (prog_interface p) sini2 ->
+      star (PS.step p (prog_interface c)) (prepare_global_env p) sini1 t s1 ->
+      star (PS.step c (prog_interface p)) (prepare_global_env c) sini2 t s2 ->
+    exists sini s,
+      PS.initial_state prog emptym sini /\
+      star (PS.step prog emptym) (prepare_global_env prog) sini t s.
+  Admitted.
+
   Corollary partial_programs_composition_prefix :
     forall m,
       does_prefix (PS.sem p (prog_interface c)) m ->
       does_prefix (PS.sem c (prog_interface p)) m ->
       does_prefix (PS.sem prog emptym) m.
+  Proof.
+    unfold does_prefix.
+    intros m [b1 [Hbeh1 Hprefix1]] [b2 [Hbeh2 Hprefix2]].
+    assert
+      (exists s s',
+          PS.initial_state p (prog_interface c) s /\
+          star (PS.step p (prog_interface c)) (prepare_global_env p) s (finpref_trace m) s')
+      as [s1 [s1' [Hini1 Hstar1]]]
+      by admit. (* behavior_prefix_star *)
+    assert
+      (exists s s',
+          PS.initial_state c (prog_interface p) s /\
+          star (PS.step c (prog_interface p)) (prepare_global_env c) s (finpref_trace m) s')
+      as [s2 [s2' [Hini2 Hstar2]]]
+      by admit. (* behavior_prefix_star *)
+    destruct (partial_programs_composition_star Hini1 Hini2 Hstar1 Hstar2)
+      as [s [s' [Hini Hstar]]].
+    destruct m as [tm | tm | tm].
+    - admit.
+    - admit.
+    - exact (@program_behaves_finpref_exists (PS.sem prog emptym) _ _ _ Hini Hstar).
   Admitted.
 End PartialComposition.
 
