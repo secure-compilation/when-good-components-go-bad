@@ -1332,6 +1332,16 @@ Section Semantics.
     @Semantics_gen state global_env (step p ctx)
                    (initial_state p ctx)
                    (final_state p ctx) (prepare_global_env p).
+
+  Lemma singleton_traces:
+    single_events sem.
+  Proof.
+    unfold single_events.
+    intros s t s' Hstep.
+    inversion Hstep as [? ? ? ? ? ? ? ? ? ? ? HCSstep]; subst.
+    apply CS.singleton_traces in HCSstep.
+    exact HCSstep.
+  Qed.
 End Semantics.
 
 Lemma comes_from_initial_state_step_trans :
