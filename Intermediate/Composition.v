@@ -857,6 +857,26 @@ Inductive mt_starN (p: program) (ctx: Program.interface) (G: global_env)
     t = t1 ** t2 ** t3 ->
     mt_starN p ctx G n3 ips t ips'''.
 
+Inductive mt_starNR (p: program) (ctx: Program.interface) (G: global_env)
+  : nat -> PS.state -> trace -> PS.state -> Prop :=
+| mt_starNR_segment: forall n ips t ips',
+    st_starNR p ctx G n ips t ips' ->
+    mt_starNR p ctx G n ips t ips'
+| mt_starNR_control_change: forall n1 n2 n3 ips t1 ips' t2 ips'' t3 ips''' t,
+    mt_starNR p ctx G n1 ips t1 ips' ->
+    PS.step p ctx G ips' t2 ips'' ->
+    ~ same_turn ctx ips' ips'' ->
+    st_starNR p ctx G n2 ips'' t3 ips''' ->
+    n3 = S (n1 + n2) ->
+    t = t1 ** t2 ** t3 ->
+    mt_starNR p ctx G n3 ips t ips'''.
+
+Theorem mt_starN_iff_mt_starNR:
+  forall p ctx G n ips t ips',
+    mt_starN p ctx G n ips t ips' <->
+    mt_starNR p ctx G n ips t ips'.
+Admitted. (* Grade 2. *)
+
 Theorem starN_if_st_starN:
   forall p ctx G n ips t ips',
     st_starN p ctx G n ips t ips' ->
