@@ -4224,23 +4224,6 @@ Section PartialComposition.
     + simpl. constructor.
   Qed.
 
-  (* RB: TODO: To CompCertExtensions. *)
-  Lemma program_behaves_finpref_exists :
-    forall L s t s',
-      initial_state L s ->
-      Star L s t s' ->
-    exists beh,
-      program_behaves L beh /\
-      prefix (FTbc t) beh.
-  Proof.
-    intros L s t s' Hini HStar.
-    destruct (state_behaves_exists L s') as [beh_s' Hbeh_s'].
-    pose proof program_runs Hini (state_behaves_app HStar Hbeh_s') as Hbeh.
-    eexists. split.
-    - exact Hbeh.
-    - simpl. exists beh_s'. reflexivity.
-  Qed.
-
   (* RB: TODO: Add hypotheses and/or encapsulate in own section (both directions
      will be needed in the main proof). Relocate to PS? *)
   Lemma behavior_prefix_star :
