@@ -4241,7 +4241,7 @@ Section PartialComposition.
     - simpl. exists beh_s'. reflexivity.
   Qed.
 
-  (* RB: TODO: Add hypothesis and/or encapsulate in own section (both directions
+  (* RB: TODO: Add hypotheses and/or encapsulate in own section (both directions
      will be needed in the main proof). Relocate to PS? *)
   Lemma behavior_prefix_star :
     forall b m,
@@ -4250,9 +4250,59 @@ Section PartialComposition.
     exists s s',
       PS.initial_state p (prog_interface c) s /\
       star (PS.step p (prog_interface c)) (prepare_global_env p) s (finpref_trace m) s'.
+  Proof.
+    intros b m.
+    destruct m as [tm | tm | tm].
+    - intros Hb Hm.
+      destruct b as [t | ? | ? | ?];
+        simpl in Hm; try contradiction;
+        subst t.
+      inversion Hb as [s1 ? Hini Hbeh |]; subst.
+      inversion Hbeh as [? s2 Hstar Hfinal | | |]; subst.
+      now eauto.
+    - intros Hb Hm.
+      destruct b as [? | ? | ? | t];
+        simpl in Hm; try contradiction;
+        subst t.
+      inversion Hb as [s1 ? Hini Hbeh | Hini]; subst.
+      + inversion Hbeh as [| | | ? s2 Hstar Hnostep Hfinal]; subst.
+        now eauto.
+      + admit. (* Trivial case/contra. *)
+    - revert b.
+      induction tm as [| e t IHt] using rev_ind;
+        intros b Hb Hm;
+        simpl in *.
+      + admit. (* Easy. *)
+      + assert (Hprefix : behavior_prefix t b) by admit. (* Easy. *)
+        specialize (IHt _ Hb Hprefix).
+        destruct IHt as [s1 [s2 [Hini Hstar]]].
+        inversion Hm as [b']; subst.
+        inversion Hb as [s1' ? Hini' Hbeh' |]; subst.
+        * assert (Heq : s1 = s1') by admit.
+          subst s1'.
+          inversion Hbeh' as [ t' s2' Hstar' Hfinal' Heq
+                             |
+                             |
+                             |];
+            subst.
+          -- destruct b' as [tb' | ? | ? | ?];
+               simpl in Heq;
+               try discriminate.
+             inversion Heq; subst t'; clear Heq.
+             destruct
+               (star_app_inv
+                  (PS.singleton_traces (proj2 linkability)
+                                       (proj2 mergeable_interfaces))
+                  _ _ Hstar')
+               as [s' [Hstar'1 Hstar'2]].
+             now eauto.
+          -- admit.
+          -- admit.
+          -- admit.
+        * admit. (* Contra. *)
   Admitted.
 
-  (* RB: TODO: Add hypothesis and/or encapsulate in own section, or relocate to
+  (* RB: TODO: Add hypotheses and/or encapsulate in own section, or relocate to
      PS. *)
   Lemma partial_programs_composition_star :
     forall sini1 sini2 t s1 s2,
