@@ -4283,7 +4283,7 @@ Section PartialComposition.
           -- admit.
           -- admit.
         * admit. (* Contra. *)
-  Admitted.
+  Admitted. (* Grade 2. Consider where helper lemmas are natural. *)
 
   (* RB: TODO: Add hypotheses and/or encapsulate in own section, or relocate to
      PS. *)
