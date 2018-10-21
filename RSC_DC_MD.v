@@ -269,3 +269,5 @@ Module RSC_DC_MD_Instance :=
 
 Definition RSC_DC_MD :=
   RSC_DC_MD_Instance.RSC_DC_MD.
+
+Print Assumptions RSC_DC_MD.
