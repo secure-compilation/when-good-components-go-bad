@@ -920,9 +920,15 @@ Section Semantics.
   Proof.
     unfold single_events.
     intros s t s' Hstep.
-    inversion Hstep as [? ? ? ? ? ? ? ? ? ? ? HCSstep]; subst.
-    apply CS.singleton_traces in HCSstep.
-    exact HCSstep.
+    (* RB: This generates unnecessarily restrictive conditions. *)
+    (* inversion Hstep as [? ? ? ? ? ? ? ? ? ? ? HCSstep]; subst. *)
+    (* apply CS.singleton_traces in HCSstep. *)
+    (* exact HCSstep. *)
+    inversion Hstep; simpl;
+      match goal with
+      | Hcs_step: CS.step _ _ _ _ |- _ =>
+        apply CS.singleton_traces in Hcs_step
+      end; auto.
   Qed.
 End Semantics.
 
