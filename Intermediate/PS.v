@@ -1184,6 +1184,14 @@ Proof.
     easy.
 Qed.
 
+(* we can prove a strong form of state determinism when the program is in control *)
+Lemma state_determinism_program' p ctx G sps t1 t2 sps' :
+  is_program_component sps ctx ->
+  step p ctx G sps t1 sps' ->
+  forall sps'', step p ctx G sps t2 sps'' ->
+                t1 = t2 /\ sps' = sps''.
+Admitted. (* Grade 3. Not hard; requires some additional porting from Source. *)
+
 Lemma state_determinism_program:
   forall p ctx G ips t ips',
     is_program_component ips ctx ->
@@ -1349,6 +1357,46 @@ Proof.
   - eapply state_determinism_program; eassumption.
   - eapply state_determinism_context; eassumption.
 Qed.
+
+Lemma state_determinism_star_E0 p ctx s s1 s2 :
+  star (PS.step p ctx) (prepare_global_env p) s E0 s1 ->
+  star (PS.step p ctx) (prepare_global_env p) s E0 s2 ->
+  star (PS.step p ctx) (prepare_global_env p) s1 E0 s2 \/
+  star (PS.step p ctx) (prepare_global_env p) s2 E0 s1.
+Proof.
+move=> Hstar1.
+elim/star_E0_ind': s s1 / Hstar1 s2=> [s|s s1 s1' Hstep1 Hstar1 IH] s2; eauto.
+move=> Hstar2; elim/star_E0_ind': s s2 / Hstar2 Hstep1.
+  by move=> s Hstep1; right; apply: star_step; eauto.
+move=> s s2 s2' Hstep2 Hstar2 _ Hstep1; apply: IH.
+suffices -> : s1 = s2 by [].
+by apply: state_determinism Hstep2.
+Qed.
+
+Lemma state_determinism_star_same_trace p ctx s t s1 s2 :
+  star (PS.step p ctx) (prepare_global_env p) s t s1 ->
+  star (PS.step p ctx) (prepare_global_env p) s t s2 ->
+  star (PS.step p ctx) (prepare_global_env p) s1 E0 s2 \/
+  star (PS.step p ctx) (prepare_global_env p) s2 E0 s1.
+Proof.
+elim: t s => [|e t IH] s; first exact: state_determinism_star_E0.
+case/(star_cons_inv (@singleton_traces p ctx)) => [s' [s1' [e_01 [e_11 e_t1]]]].
+case/(star_cons_inv (@singleton_traces p ctx)) => [s'_ [s2' [e_02 [e_12]]]].
+have {e_01 e_02} e_s : s' = s'_.
+  have {e_t1 IH} H := state_determinism_star_E0 e_01 e_02.
+  without loss H : s' s'_ s1' s2' e_11 e_12 {H e_01 e_02} / Star (sem p ctx) s' E0 s'_.
+    by case: H; eauto=> H1 H2; apply: esym; eauto.
+  have [in_c|in_p] := boolP (is_context_component s' ctx).
+    symmetry. (* RB: The equality of the following lemma is reversed! *)
+    exact: context_epsilon_star_is_silent in_c H.
+  elim/star_E0_ind: s' s'_ / H in_p e_11 {e_12} => //.
+  move=> s' s'm s'_ Hstep1 _ in_p Hstep2.
+  by have [] := state_determinism_program' in_p Hstep1 Hstep2.
+move: e_s e_12 => <- {s'_} e_12.
+by have {s2' e_12} <- := state_determinism e_11 e_12; eauto.
+Qed.
+
+(* RB: TODO: Port missing generic results from Source.PS to here. *)
 
 Lemma comes_from_initial_state_step_trans :
   forall p ctx ics ips t ics' ips',
