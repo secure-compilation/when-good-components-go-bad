@@ -895,6 +895,37 @@ Inductive step (p: program) (ctx: Program.interface)
       partial_state ctx ics' ips' ->
       step p ctx (prepare_global_env p) ips t ips'.
 
+(* partial semantics *)
+
+Section Semantics.
+  Variable p: program.
+  Variable ctx: Program.interface.
+
+  Hypothesis valid_program:
+    well_formed_program p.
+
+  Hypothesis disjoint_interfaces:
+    fdisjoint (domm (prog_interface p)) (domm ctx).
+
+  Hypothesis merged_interface_is_closed:
+    closed_interface (unionm (prog_interface p) ctx).
+
+  Definition sem :=
+    @Semantics_gen state global_env (step p ctx)
+                   (initial_state p ctx)
+                   (final_state p ctx) (prepare_global_env p).
+
+  Lemma singleton_traces:
+    single_events sem.
+  Proof.
+    unfold single_events.
+    intros s t s' Hstep.
+    inversion Hstep as [? ? ? ? ? ? ? ? ? ? ? HCSstep]; subst.
+    apply CS.singleton_traces in HCSstep.
+    exact HCSstep.
+  Qed.
+End Semantics.
+
 Theorem context_epsilon_step_is_silent:
   forall p ctx G ips ips',
     is_context_component ips ctx ->
@@ -1312,37 +1343,6 @@ Proof.
   - eapply state_determinism_program; eassumption.
   - eapply state_determinism_context; eassumption.
 Qed.
-
-(* partial semantics *)
-
-Section Semantics.
-  Variable p: program.
-  Variable ctx: Program.interface.
-
-  Hypothesis valid_program:
-    well_formed_program p.
-
-  Hypothesis disjoint_interfaces:
-    fdisjoint (domm (prog_interface p)) (domm ctx).
-
-  Hypothesis merged_interface_is_closed:
-    closed_interface (unionm (prog_interface p) ctx).
-
-  Definition sem :=
-    @Semantics_gen state global_env (step p ctx)
-                   (initial_state p ctx)
-                   (final_state p ctx) (prepare_global_env p).
-
-  Lemma singleton_traces:
-    single_events sem.
-  Proof.
-    unfold single_events.
-    intros s t s' Hstep.
-    inversion Hstep as [? ? ? ? ? ? ? ? ? ? ? HCSstep]; subst.
-    apply CS.singleton_traces in HCSstep.
-    exact HCSstep.
-  Qed.
-End Semantics.
 
 Lemma comes_from_initial_state_step_trans :
   forall p ctx ics ips t ics' ips',
