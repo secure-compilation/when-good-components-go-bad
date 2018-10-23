@@ -4292,11 +4292,7 @@ Section PartialComposition.
                simpl in Heq;
                try discriminate.
              inversion Heq; subst t'; clear Heq.
-             destruct
-               (star_app_inv
-                  (PS.singleton_traces (proj2 linkability)
-                                       (proj2 mergeable_interfaces))
-                  _ _ Hstar')
+             destruct (star_app_inv (@PS.singleton_traces _ _) _ _ Hstar')
                as [s' [Hstar'1 Hstar'2]].
              now eauto.
           -- admit.
