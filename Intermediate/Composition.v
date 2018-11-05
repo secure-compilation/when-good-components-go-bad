@@ -622,6 +622,22 @@ Lemma step_E0_same_turn:
   forall p ctx G s1 s2,
     PS.step p ctx G s1 E0 s2 ->
     same_turn ctx s1 s2.
+  intros p ctx G s1 s2 Hstep.
+  inversion Hstep
+    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hmains1 Hstep_cs1 Hpartial1 Hpartial1'];
+    subst.
+  inversion Hstep_cs1 ; subst.
+  - inversion Hpartial1
+      as [cstk1' ? cmem1' ? regs1' pc1' Hpc1' | cstk1' ? cmem1' ? regs1' pc1' Hcc1'];
+      subst;
+    inversion Hpartial1'
+      as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
+      subst;
+    PS.simplify_turn.
+    + apply same_turn_program; assumption.
+    + rewrite Pointer.inc_preserves_component in Hcc2'.
+      rewrite Hcc2' in Hpc1'.
+      discriminate.
 Admitted. (* Grade 1. *)
 
 (* st_star represents a sequence of events performed by the same actor *)
