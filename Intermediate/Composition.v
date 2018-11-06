@@ -107,7 +107,7 @@ Lemma merge_stacks_partition:
          (PS.to_partial_stack gps (domm ctx1))
          (PS.to_partial_stack gps (domm ctx2)))
     = gps.
-Admitted. (* Grade 2. *)
+Admitted. (* Grade 2. RB: Assigned to FG. *)
 
 (* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
 Lemma merge_stacks_partition_emptym:
@@ -118,7 +118,7 @@ Lemma merge_stacks_partition_emptym:
     PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
                     (PS.to_partial_stack gps (domm ctx2)) =
     PS.to_partial_stack gps fset0.
-Admitted. (* Grade 2. *)
+Admitted. (* Grade 2: RB: Assigned to FG. *)
 
 Lemma unpartialize_stack_frame_partition:
   forall ctx1 ctx2,
