@@ -96,6 +96,16 @@ Lemma to_partial_memory_merge_memories_right
   PS.to_partial_memory mem2 (domm iface2).
 Admitted. (* Grade 1. *)
 
+Lemma unpartialize_stack_frame_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall ptr,
+    PS.unpartialize_stack_frame
+      (PS.merge_stack_frames ((PS.to_partial_frame (domm ctx1) ptr),
+                              (PS.to_partial_frame (domm ctx2) ptr))) =
+    ptr.
+Admitted. (* Grade 1. *)
+
 (* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
 Lemma merge_stacks_partition:
   forall ctx1 ctx2,
@@ -119,16 +129,6 @@ Lemma merge_stacks_partition_emptym:
                     (PS.to_partial_stack gps (domm ctx2)) =
     PS.to_partial_stack gps fset0.
 Admitted. (* Grade 2: RB: Assigned to FG. *)
-
-Lemma unpartialize_stack_frame_partition:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall ptr,
-    PS.unpartialize_stack_frame
-      (PS.merge_stack_frames ((PS.to_partial_frame (domm ctx1) ptr),
-                              (PS.to_partial_frame (domm ctx2) ptr))) =
-    ptr.
-Admitted. (* Grade 1. *)
 
 Lemma unpartialize_stack_merge_stacks_cons_partition:
   forall ctx1 ctx2,
