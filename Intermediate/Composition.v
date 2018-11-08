@@ -74,27 +74,57 @@ Admitted. (* Grade 2. *)
    in results such as [program_store_in_partialized_memory]. This will save us
    the trouble of having to destruct pointers to use these results. *)
 
-(* RB: TODO: Consider necessary assumptions in a way that most closely matches
-   the contexts we will use this on. Do away with uses of [domm] here?*)
+(* RB: TODO: This is a specialized version that utilizes premises in the exact
+   shape they are available in our contexts. It could be a wrapper of a slightly
+   more abstract form of the lemma, where the two memories are related, say, by
+   their domains. (Incidentally, do away with uses of [domm] here?) *)
 Lemma to_partial_memory_merge_memories_left
       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
-  mergeable_interfaces iface1 iface2 ->
-  PS.to_partial_memory
-    (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
-                       (PS.to_partial_memory mem2 (domm iface2)))
-    (domm iface1) =
-  PS.to_partial_memory mem1 (domm iface1).
-Admitted. (* Grade 1. *)
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions:
+       - mem2's domain is that of iface1 and iface2.
+       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
+         of iface1 and iface2.
+       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
+  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
+    PS.to_partial_memory mem2 (domm iface1) =
+    PS.to_partial_memory mem0 (domm iface1) ->
+  forall gps2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    (* And the main result. *)
+    PS.to_partial_memory
+      (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
+                         (PS.to_partial_memory mem2 (domm iface2)))
+      (domm iface1) =
+    PS.to_partial_memory mem1 (domm iface1).
+Proof.
+Admitted. (* Grade 2. *)
 
 Lemma to_partial_memory_merge_memories_right
       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
-  mergeable_interfaces iface1 iface2 ->
-  PS.to_partial_memory
-    (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
-                       (PS.to_partial_memory mem2 (domm iface2)))
-    (domm iface2) =
-  PS.to_partial_memory mem2 (domm iface2).
-Admitted. (* Grade 1. *)
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions:
+       - mem2's domain is that of iface1 and iface2.
+       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
+         of iface1 and iface2.
+       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
+  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
+    PS.to_partial_memory mem2 (domm iface1) =
+    PS.to_partial_memory mem0 (domm iface1) ->
+  forall gps2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    (* And the main result. *)
+
+    PS.to_partial_memory
+      (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
+                         (PS.to_partial_memory mem2 (domm iface2)))
+      (domm iface2) =
+    PS.to_partial_memory mem2 (domm iface2).
+Admitted. (* Grade 2. *)
 
 Lemma unpartialize_stack_frame_partition:
   forall ctx1 ctx2,
@@ -1895,7 +1925,7 @@ Section Simulation.
              rewrite <- Pointer.inc_preserves_component.
              constructor.
              ++ assumption.
-             ++ now rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface).
+             ++ erewrite to_partial_memory_merge_memories_right; now eauto.
              ++ reflexivity.
       + (* rewrite <- Hmem. *)
         rewrite <- Hstk.
@@ -1921,12 +1951,12 @@ Section Simulation.
             rewrite Hstk. rewrite Hstk in Hstep_ps.
             (* The following rewrite replaces the one above, which could be
                performed before the bracketed sequence of operations. *)
-            rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
-            exact Hstep_ps.
+            erewrite to_partial_memory_merge_memories_left; try eauto.
+            erewrite unionmC; now eauto.
           }
         * constructor.
           -- assumption.
-          -- now rewrite to_partial_memory_merge_memories_left.
+          -- erewrite to_partial_memory_merge_memories_left; eauto.
           -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
         * simpl.
           (* rewrite (merge_memories_partition Hmerge_iface Hfrom_initial). *)
@@ -1934,7 +1964,7 @@ Section Simulation.
           rewrite <- Pointer.inc_preserves_component.
           constructor.
           -- by rewrite Pointer.inc_preserves_component.
-          -- now rewrite to_partial_memory_merge_memories_right.
+          -- erewrite to_partial_memory_merge_memories_right; now eauto.
           -- reflexivity. (* TODO: Move rewrite here? *)
 
     - (* IJal *)
@@ -2359,8 +2389,7 @@ Section Simulation.
              unfold PS.partialize in Hpartial''.
              rewrite Htmp in Hpartial''.
              rewrite <- Pointer.inc_preserves_component.
-             rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface) in Hpartial''.
-             assumption.
+             erewrite to_partial_memory_merge_memories_right in Hpartial''; now eauto.
       + (* rewrite <- Hmem. *)
         rewrite <- Hstk.
         match goal with
@@ -2383,12 +2412,12 @@ Section Simulation.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
             rewrite Hmem. rewrite Hmem in Hstep_ps.
             rewrite Hstk. rewrite Hstk in Hstep_ps.
-            rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
-            exact Hstep_ps.
+            erewrite to_partial_memory_merge_memories_left; try eauto.
+            erewrite unionmC; now eauto.
           }
         * constructor.
           -- assumption.
-          -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+          -- erewrite to_partial_memory_merge_memories_left; now eauto.
           -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
         * simpl.
           (* rewrite (merge_memories_partition Hmerge_iface Hfrom_initial). *)
@@ -2396,7 +2425,7 @@ Section Simulation.
           rewrite <- Pointer.inc_preserves_component.
           constructor.
           -- now rewrite Pointer.inc_preserves_component.
-          -- now rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface).
+          -- erewrite to_partial_memory_merge_memories_right; now eauto.
           -- reflexivity.
 
     (* The final cases are the most interesting in that the executing instruction
