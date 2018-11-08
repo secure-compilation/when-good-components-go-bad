@@ -2534,7 +2534,7 @@ Section Simulation.
           }
         * constructor.
           -- assumption.
-          -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+          -- now rewrite (merge_memories_partition Hmerge_iface Hprov).
           -- rewrite (unpartialize_stack_merge_stacks_cons_partition Hmerge_iface).
              simpl.
              change
@@ -2671,7 +2671,7 @@ Section Simulation.
           exact Hprov.
         * constructor.
           -- assumption.
-          -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+          -- now rewrite (merge_memories_partition Hmerge_iface Hprov).
           -- rewrite (merge_stacks_partition Hmerge_iface Hprov).
              reflexivity.
         * (* Here, pushing the constructor forward to get simpler goals instead
