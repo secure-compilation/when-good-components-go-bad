@@ -34,13 +34,13 @@ Section Definability.
   Variable has_main: intf Component.main.
 
   (** The definability proof takes an execution trace as its input and builds a
-      source program that can produce that trace.  Roughly speaking, it does so
+      source program that can produce that trace. Roughly speaking, it does so
       by keeping one counter for each component, and using that counter to track
       how many calls or returns have been executed by that component.
 
       To see how this works, suppose that we have an interface with two
-      procedures P1 and P2, which live in components C1 and C2.  Given the trace
-      *)
+      procedures P1 and P2, which live in components C1 and C2, and with C1 and
+      C2 having a public buffer of size 2. Given the trace *)
 
 
   (**   ECall mainC P1    0 C1
@@ -53,12 +53,12 @@ Section Definability.
 
   (**   C1 {
           P1() {
-            if (local[0] == 0) {
-              local[0]++;
+            if (local.private[0] == 0) {
+              local.private[0]++;
               C2.P2(1);
               C1.P1(0);
-            } else if (local[0] == 1) {
-              local[0]++;
+            } else if (local.private[0] == 1) {
+              local.private[0]++;
               C2.P2(3);
               C1.P1(0);
             } else {
@@ -69,11 +69,11 @@ Section Definability.
 
         C2 {
           P2() {
-            if (local[0] == 0) {
-              local[0]++;
+            if (local.private[0] == 0) {
+              local.private[0]++;
               return 2;
-            } else if (local[0] == 1) {
-              local[0]++;
+            } else if (local.private[0] == 1) {
+              local.private[0]++;
               mainC.mainP(4);
               C2.P2(0);
             } else {
@@ -92,16 +92,22 @@ Section Definability.
 
    *)
 
-  (** FG : Additional changes to include static read
-           Elements read from the public buffer in the traces should
-           be put in the backtranslated program
-   *)
+  Definition counter_idx : Block.offset := 0%Z.
+  Definition increment exp_val := E_binop Add exp_val (E_val (Int 1%Z)).
+
+  Definition FAIL : expr := E_val Undef.
+  (* Maybe define NOP in language in order to avoir such a workaround (or use
+     another expression).
+     Should be fine since this would just set R_COM to 0, and R_COM would be
+     redefined before used *)
+  Definition NOP : expr := E_val (Int 0).
+
+  Hint Unfold increment counter_idx NOP.
 
   Definition switch_clause n e_then e_else :=
-    let one := E_val (Int 1%Z) in
     E_if (E_binop Eq (E_deref (E_local Block.priv)) (E_val (Int n)))
          (E_seq (E_assign (E_local Block.priv)
-                          (E_binop Add (E_deref (E_local Block.priv)) one)) e_then)
+                          (increment (E_deref (E_local Block.priv)))) e_then)
          e_else.
 
   Ltac take_step :=
@@ -111,10 +117,10 @@ Section Definability.
     end.
 
   Lemma switch_clause_spec p' C stk mem n n' e_then e_else arg :
-    Memory.load mem (C, Block.private, 0%Z) = Some (Int n) ->
+    Memory.load mem (C, Block.private, counter_idx) = Some (Int n) ->
     if (n =? n') % Z then
       exists mem',
-        Memory.store mem (C, Block.private, 0%Z) (Int (Z.succ n)) = Some mem' /\
+        Memory.store mem (C, Block.private, counter_idx) (Int (Z.succ n)) = Some mem' /\
         Star (CS.sem p')
              [CState C, stk, mem , Kstop, switch_clause n' e_then e_else, arg] E0
              [CState C, stk, mem', Kstop, e_then, arg]
@@ -163,7 +169,7 @@ Section Definability.
   Qed.
 
   Lemma switch_spec_else p' C stk mem n es e_else arg :
-    Memory.load mem (C, Block.private, 0%Z) = Some (Int (Z.of_nat n)) ->
+    Memory.load mem (C, Block.private, counter_idx) = Some (Int (Z.of_nat n)) ->
     (length es <= n)%nat ->
     Star (CS.sem p')
          [CState C, stk, mem, Kstop, switch es e_else, arg] E0
@@ -191,9 +197,9 @@ Section Definability.
   Qed.
 
   Lemma switch_spec p' C stk mem es e es' e_else arg :
-    Memory.load mem (C, Block.private, 0%Z) = Some (Int (Z.of_nat (length es))) ->
+    Memory.load mem (C, Block.private, counter_idx) = Some (Int (Z.of_nat (length es))) ->
     exists mem',
-      Memory.store mem (C, Block.private, 0%Z) (Int (Z.of_nat (S (length es)))) = Some mem' /\
+      Memory.store mem (C, Block.private, counter_idx) (Int (Z.of_nat (S (length es)))) = Some mem' /\
       Star (CS.sem p')
            [CState C, stk, mem , Kstop, switch (es ++ e :: es') e_else, arg] E0
            [CState C, stk, mem', Kstop, e, arg].
@@ -225,20 +231,242 @@ Section Definability.
       events were produced from the same component.  The [C] and [P] arguments
       are only needed to generate the recursive calls depicted above. *)
 
-  Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event) : expr :=
-    match e with
-    | ECall _ P' arg C' =>
-      E_seq (E_call C' P' (E_val (Int arg)))
-            (E_call C  P  (E_val (Int 0)))
-    | ERet  _ ret_val _ => E_val (Int ret_val)
-    (* the ELoad doesn't contains the offset of the pointer,
-       this is pretty awkward in this case because we would only deref the begining of the buffer
-     *)
-    (* | ELoad C_caller ret_val C' => E_deref (E_component_buf C') *)
+  (* TODO maybe move the following additions somewhere else ?
+     at least move the sanity checks in a separate file until specs and proofs
+     are there *)
+  Fixpoint suffixes_of_trace_aux (t:trace) (n:nat) (acc:list trace) : list trace :=
+    match n with
+    | O => acc
+    | S n' => suffixes_of_trace_aux t n' (skipn n' t :: acc)
+    end.
+
+  (** Produces suffixes of traces (except the empty one) *)
+  Definition suffixes_of_trace (t:trace) : list trace :=
+    suffixes_of_trace_aux t (length t) [].
+
+  (* Quick sanity check (unrealistic) *)
+  (* TODO Would be better to declare all of this in some variable inside of a section ? *)
+  Example test_suffixes_of_trace :
+    let '(C1,P1) := (1,1) in
+    let '(arg1, ret1) := (17%Z, 42%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let ev1 := ECall Component.main P1 arg1 C1 in
+    let ev2 := ERet C1 ret1 Component.main in
+    let ev3 := ELoad Component.main off1 load1 C1 in
+    let ev4 := ELoad Component.main off2 load2 C1 in
+    suffixes_of_trace [ ev1 ; ev2; ev3 ; ev4 ] =
+    [   [ ev1 ; ev2; ev3 ; ev4 ];
+        [ ev2; ev3 ; ev4 ];
+        [ ev3 ; ev4 ];
+        [ ev4 ]
+    ].
+  Proof. reflexivity. Qed.
+
+  (** Gives a map of the different offsets of a component's public memory to
+      bool, all initialized at false *)
+  Definition offset_read_init (comp: Component.interface) :  NMap bool :=
+    let size_buf :=
+        Component.public_buffer_size comp in
+    mkfmap (combine (List.seq 0 size_buf) (nseq size_buf false)).
+
+  (* Quick sanity check *)
+  Example test_offset_read_init :
+    let intf_comp :=
+        {| Component.import := fset0;
+           Component.export := fset0;
+           Component.public_buffer_size := 3
+        |} in
+    offset_read_init intf_comp = mkfmap [(0,false); (1,false); (2,false) ].
+  Proof. reflexivity. Qed.
+
+  (** Flattens a list of expr into a single E_seq expr. *)
+  (*  Impl note : Since we will later give lists in reverse order, we
+      can either use
+      - a fold_right (which is not tail recursive) which will reverse the
+        result, or
+      - a fold_left + a rev' on the input (outside of the function), so the
+        fold_left won't reverse it. Second option chosen *)
+  Definition E_seq_of_list_expr (exprs : list expr) : option expr :=
+    match exprs with
+    | nil => None
+    | expr :: exprs' => Some (fold_left (fun exp1 exp__added => E_seq exp1 exp__added)
+                                       exprs' expr)
+    end.
+
+  (* non tail recursive (might be easier to reason with since we won't use
+       list reversing) *)
+  (* Problem : we don't have something like init and last (well we have last and
+     remove last but that could add proof burden compared to have rev...) *)
+  Definition E_seq_of_list_expr' (exprs : list expr) : option expr :=
+    match exprs with
+    | nil => None
+    | h :: t => Some (fold_right (fun exp__added exp1 => E_seq exp1 exp__added ) (last h t) (removelast exprs)) (* or belast h t *)
+    end.
+
+
+  (* for now, sticking to :
+     e1; e2; e3 = (e1; e2); e3 *)
+  (* Quick sanity check (unrealistic) *)
+  Example test_E_seq_of_list_expr :
+    let list_expr := [E_val (Int 0); E_val (Int 1); E_val (Int 2)] in
+    let seq_expr  := E_seq (E_seq (E_val (Int 0))
+                                  (E_val (Int 1)))
+                           (E_val (Int 2)) in
+    E_seq_of_list_expr list_expr = Some seq_expr.
+  Proof. reflexivity. Qed.
+  Example test_E_seq_of_list_expr' :
+    let list_expr := [E_val (Int 2); E_val (Int 1); E_val (Int 0)] in
+    let seq_expr  := E_seq (E_seq (E_val (Int 0))
+                                  (E_val (Int 1)))
+                           (E_val (Int 2)) in
+    E_seq_of_list_expr' list_expr = Some seq_expr.
+  Proof. simpl. reflexivity. Qed.
+
+  (** Gives an assignement expression of the public memory (at index off) to val *)
+  Definition assign_public off val :=
+    E_assign (E_binop Add (E_local Block.pub) (E_val (Int off))) (E_val (Int val)).
+
+  (** Gives a list of assignement depending on the ELoad events in the future of
+      the trace (accumulated)
+      This list is in reverse order since append costs more than cons
+   *)
+  Fixpoint prefill_read_aux
+           (C: Component.id)
+           (suffix: trace)
+           (acc:list expr)
+           (offset_read:NMap bool) : list expr:=
+
+    let stop := acc in
+    (* Maybe express it in an other way than membership of codomain *)
+    if (false \in codomm offset_read)
+    then                        (* a read is still possible *)
+      match suffix with
+      | [] => stop            (* if no further events, give back exprs created *)
+      | ev :: suffix' =>
+        let keep_on :=  (prefill_read_aux C suffix' acc offset_read) in
+        match ev with
+        | ELoad _ off val C =>   (* component is read *)
+          (* TODO fix this Z.to_nat, too permissive *)
+          (* Do Memory.load ? Check if positive ? *)
+          match offset_read (Z.to_nat off) with
+          | None => []           (* Never happens *)
+          | Some true => keep_on (* already read so go on *)
+          | Some false => prefill_read_aux C
+                                          suffix'
+                                          ((assign_public off val) :: acc)
+                                          (* TODO fix this Z.to_nat, too permissive *)
+                                          (setm offset_read (Z.to_nat off) true)
+
+
+          end
+        (* if the component is given turn again, give back exprs created *)
+        | ERet C _ _  | ECall C _ _ _  => stop
+        end
+      end
+    else stop.     (* if all offset have been read, give back exprs created *)
+
+  (* TODO *)
+  Example test_prefill_read_aux1 :
+    let '(C1,P1) := (1,1) in
+    let '(arg1, ret1) := (17%Z, 42%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let ev1 := ECall Component.main P1 arg1 C1 in
+    let ev2 := ERet C1 ret1 Component.main in
+    let ev3 := ELoad Component.main off1 load1 C1 in
+    let ev4 := ELoad Component.main off2 load2 C1 in
+    let acc := [] in
+    let offsets := emptym in
+       prefill_read_aux Component.main [  ev3 ; ev4 ] acc offsets  = [].
+  Proof.
+      by simpl ; rewrite codomm0. Qed.
+  Example test_prefill_read_aux2 :
+    let '(C1,P1) := (1,1) in
+    let '(arg1, ret1) := (17%Z, 42%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let ev1 := ECall Component.main P1 arg1 C1 in
+    let ev2 := ERet C1 ret1 Component.main in
+    let ev3 := ELoad Component.main off1 load1 C1 in
+    let ev4 := ELoad Component.main off2 load2 C1 in
+    let acc := [] in
+    let offsets := mkfmap[(0,false);(1,false);(2,false)] in
+    prefill_read_aux C1 [ ev3 ; ev4 ] acc offsets = [(assign_public 2 1337); (assign_public 1 420)].
+  Proof. simpl.
+         have H:false \in codomm (setm (setm (setm emptym 2 false) 1 false) 0 false).
+         { apply /codommP. exists 0. done. }
+         rewrite H.
+         have H':false \in codomm (setm (setm (setm (setm emptym 2 false) 1 false) 0 false) (Pos.to_nat 1) true).
+         { apply /codommP. exists 0. done. }
+           by rewrite H'.
+  Qed.
+
+
+  (** Gives Some expr that is the (sequence of) assignement(s) or None if it's
+      not the case.
+      As said above, we can use rev' before flattening the list of expressions
+      to keep this tail-recursive *)
+  Definition prefill_read (C: Component.id) (suffix: trace) : option expr :=
+    (* Only used to accomodate with the fact that the interface is a map.
+       None is never returned by this match, but can be returned by
+       E_seq_of_list_expr on an empty list of expressions. *)
+    match intf C with
+    | Some comp => E_seq_of_list_expr (rev' (prefill_read_aux
+                                             C
+                                             suffix
+                                             []
+                                             (offset_read_init comp)))
+    | None => None
+    end.
+
+  (** Variant without rev and with a fold right *)
+  Definition prefill_read' (C: Component.id) (suffix: trace) : option expr :=
+    match intf C with
+    | Some comp => E_seq_of_list_expr' (prefill_read_aux
+                                             C
+                                             suffix
+                                             []
+                                             (offset_read_init comp))
+    | None => None
+    end.
+
+  (** Recreates the fitting expression for triggering an event.
+
+      In the case we give turn to the component we're recreating (if it is
+      called/ returned to), goes forward in the trace to make sure the
+      subsequent ELoad would be successful. *)
+  Definition expr_of_event (C: Component.id) (P: Procedure.id) (suffix: trace) : expr :=
+    match suffix with
+    (* Never happens except for an empty trace *)
+    | nil => NOP
+    (* This C should be the same. Can it be done directly in pattern matchin in coq ? *)
+    | ECall C' P' arg C'' :: suffix' =>
+      if C == C' then
+        let call_trigger := E_seq (E_call C' P' (E_val (Int arg)))
+                                  (E_call C  P  (E_val (Int 0))) in
+        match (prefill_read C suffix') with
+        | None => call_trigger
+        | Some prefill => E_seq prefill call_trigger
+        end
+      (* Should never happen in procedure_of_trace *)
+      else FAIL
+    | ERet C' ret_val _ :: suffix' =>
+      if C == C' then
+        let return_trigger := E_val (Int ret_val) in
+        match prefill_read C suffix' with
+        | None => return_trigger
+        | Some prefill => E_seq prefill return_trigger
+        end
+      (* Should never happen in procedure_of_trace *)
+      else FAIL
+    | ELoad C' off _ C'' :: suffix' =>
+      if C == C'' then E_deref (E_binop Add (E_component_buf C') (E_val (Int off)))
+      (* problem(?) : should produce nothing, we use a kind of NOP ( otherwise
+        switch should handle option, too many useless changes) *)
+      else
+        NOP
     end.
 
   Definition expr_of_trace (C: Component.id) (P: Procedure.id) (t: trace) : expr :=
-    switch (map (expr_of_event C P) t) E_exit.
+    switch (map (expr_of_event C P) (suffixes_of_trace t)) E_exit.
 
   (** To compile a complete trace mixing events from different components, we
       split it into individual traces for each component and apply
@@ -246,7 +474,33 @@ Section Definability.
       each component to hold 0 at the first local variable. *)
 
   Definition comp_subtrace (C: Component.id) (t: trace) :=
-    filter (fun e => C == cur_comp_of_event e) t.
+    filter (fun e => (C == cur_comp_of_event e) ||
+                  match e with | ELoad _ _ _ C => true | _ => false end)
+           t.
+
+  Example test_comp_subtrace0 :
+    let '(C1,P1) := (1,1) in
+    let '(arg1, ret1) := (17%Z, 42%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let ev1 := ECall Component.main P1 arg1 C1 in
+    let ev2 := ERet C1 ret1 Component.main in
+    let ev3 := ELoad Component.main off1 load1 C1 in
+    let ev4 := ELoad Component.main off2 load2 C1 in
+    comp_subtrace Component.main [ ev1; ev2; ev3 ; ev4 ] = [ev1 ; ev3 ; ev4].
+  Proof.
+    simpl. reflexivity. Qed.
+
+Example test_comp_subtrace1 :
+    let '(C1,P1) := (1,1) in
+    let '(arg1, ret1) := (17%Z, 42%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let ev1 := ECall Component.main P1 arg1 C1 in
+    let ev2 := ERet C1 ret1 Component.main in
+    let ev3 := ELoad Component.main off1 load1 C1 in
+    let ev4 := ELoad Component.main off2 load2 C1 in
+    comp_subtrace C1 [ ev1; ev2; ev3 ; ev4 ] = [ev2 ; ev3 ; ev4].
+  Proof.
+    simpl. reflexivity. Qed.
 
   Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace) :
     comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
@@ -254,6 +508,8 @@ Section Definability.
 
   Definition procedure_of_trace C P t :=
     expr_of_trace C P (comp_subtrace C t).
+
+  (* Lemma procedure_of_trace_correct *)
 
   Definition procedures_of_trace (t: trace) : NMap (NMap expr) :=
     mapim (fun C Ciface =>
@@ -299,10 +555,11 @@ Section Definability.
     [apply: find_procedures_of_trace_main|apply: find_procedures_of_trace_exp].
   Qed.
 
+  (* TODO modify to accomodate to public buffers (plus, what is happening ? no static buffer is allocated ? where is the counter stored ???) *)
   Definition program_of_trace (t: trace) : program :=
     {| prog_interface  := intf;
        prog_procedures := procedures_of_trace t;
-       prog_buffers    := mapm (fun _ => inr [Int 0]) intf |}.
+       prog_buffers    := mapm (fun Cintf => (inl (Component.public_buffer_size Cintf) , inr [Int 0])) intf |}.
 
   (** To prove that [program_of_trace] is correct, we need to describe how the
       state of the program evolves as it emits events from the translated trace.
@@ -423,7 +680,7 @@ Section Definability.
     Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
       forall C,
         component_buffer C ->
-        Memory.load mem (C, Block.local, 0%Z) = Some (Int (counter_value C prefix)).
+        Memory.load mem (C, Block.local, counter_idx) = Some (Int (counter_value C prefix)).
 
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
@@ -441,7 +698,7 @@ Section Definability.
       well_formed_memory prefix mem ->
       C = cur_comp_of_event e ->
       exists mem',
-        Memory.store mem (C, Block.local, 0%Z) (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
+        Memory.store mem (C, Block.local, counter_idx) (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
         well_formed_memory (prefix ++ [e]) mem'.
     Proof.
       move=> C_b wf_mem HC.
@@ -455,7 +712,7 @@ Section Definability.
       case: (altP (C' =P C)) => [?|C_neq_C'].
       - subst C'.
         by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem').
-      - have neq : (C, Block.local, 0%Z) <> (C', Block.local, 0%Z) by move/eqP in C_neq_C'; congruence.
+      - have neq : (C, Block.local, counter_idx) <> (C', Block.local, counter_idx) by move/eqP in C_neq_C'; congruence.
         rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
         now rewrite Z.add_0_r.
     Qed.
