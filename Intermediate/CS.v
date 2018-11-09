@@ -38,6 +38,9 @@ Instance state_turn : HasTurn state := {
     Pointer.component pc \in domm iface
 }.
 
+Definition state_mem (st : state) : Memory.t :=
+  let '(_, mem, _, _) := st in mem.
+
 (* preparing the machine for running a program *)
 
 Definition initial_machine_state (p: program) : state :=
@@ -881,6 +884,11 @@ Proof.
   - subst. reflexivity.
 Qed.
 
+Remark step_preserves_mem_domm G s t s' :
+  CS.step G s t s' ->
+  domm (state_mem s) = domm (state_mem s').
+Admitted. (* Grade 1. *)
+
 Definition comes_from_initial_state (s: state) (iface : Program.interface) : Prop :=
   exists p mainP s0 t,
     well_formed_program p /\
@@ -899,5 +907,10 @@ Proof.
   rewrite <- (unionmC Hdisjoint).
   exact Hfrom_initial.
 Qed.
+
+Remark comes_from_initial_state_mem_domm s ctx :
+  comes_from_initial_state s ctx ->
+  domm (state_mem s) = domm ctx.
+Admitted. (* Grade 1. *)
 
 End CS.

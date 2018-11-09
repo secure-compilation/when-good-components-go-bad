@@ -78,6 +78,24 @@ Admitted. (* Grade 2. *)
    shape they are available in our contexts. It could be a wrapper of a slightly
    more abstract form of the lemma, where the two memories are related, say, by
    their domains. (Incidentally, do away with uses of [domm] here?) *)
+Remark prog_ctx_sim_domm_memories
+       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions:
+       - mem2's domain is that of iface1 and iface2.
+       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
+         of iface1 and iface2.
+       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
+  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
+    PS.to_partial_memory mem2 (domm iface1) =
+    PS.to_partial_memory mem0 (domm iface1) ->
+  forall gps2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    domm mem1 = domm mem2.
+Admitted. (* Grade 2. *)
+
 Lemma to_partial_memory_merge_memories_left
       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
     mergeable_interfaces iface1 iface2 ->
