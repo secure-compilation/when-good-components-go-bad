@@ -612,6 +612,25 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
     by rewrite (negbTE in_prog') e_stk e_mem.
 Qed.
 
+Lemma parallel_concrete' p ctx p1 p2 scs1 t1 scs1' scs2 t2 scs2' :
+  well_formed_program p ->
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p) ctx ->
+  closed_interface (unionm (prog_interface p) ctx) ->
+  prog_interface p1 = ctx ->
+  prog_interface p2 = ctx ->
+  partialize ctx scs1 = partialize ctx scs2 ->
+  CS.s_component scs1 \notin domm ctx ->
+  CS.kstep (prepare_global_env (program_link p p1)) scs1 t1 scs1' ->
+  CS.kstep (prepare_global_env (program_link p p2)) scs2 t2 scs2' ->
+  t1 = t2 /\ partialize ctx scs1' = partialize ctx scs2'.
+Proof.
+move=> wf wf1 wf2 link clos int1 int2 part in_prog1 step1 /CS.eval_kstep_complete step2.
+have := parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1.
+case=> scs2'' /CS.eval_kstep_complete step2' ->; split; congruence.
+Qed.
+
 (* transition system *)
 
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
@@ -1234,9 +1253,7 @@ elim/star_E0_ind: scs1 scs1a / star1a scs2 star2a part step1b in_prog1.
   move=> scs1a scs2 star2a part step1a in_prog1.
   elim/star_E0_ind: scs2 scs2a / star2a part step2b=> //.
   move=> scs2 scs2a scs2a' step2a _ part _.
-  case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
-  move=> ? /CS.eval_kstep_correct.
-  by move/CS.eval_kstep_correct: step2a=> ->.
+  by case: (parallel_concrete' wf wf1 wf2 link clos int1 int2 part in_prog1 step1a step2a).
 move=> {IH} scs1 scs1a scs1a' step1a IH scs2 star2a part step1a' in_prog1.
 case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
 move=> scs2a' step2a' part'.
@@ -1252,6 +1269,7 @@ have {in_prog1} in_prog1 : CS.s_component scs1a \notin domm ctx.
 by apply: IH star2a' part' step1a' in_prog1.
 Qed.
 
+(* FIXME: This is not being used right now *)
 Lemma parallel_exec p ctx p1 p2 scs1 scs1' scs2 scs2' t t' :
   well_formed_program p ->
   well_formed_program p1 ->
@@ -1320,7 +1338,36 @@ Lemma parallel_exec' p ctx p1 p2 scs1 scs1' scs2 scs2' t t' e :
   Star (CS.sem (program_link p p2)) scs2 (t           ) scs2' ->
   Nostep (CS.sem (program_link p p2)) scs2' ->
   CS.s_component scs2' \in domm ctx.
-Admitted.
+Proof.
+rewrite -[t in Star _ _ t scs2']E0_right.
+move=> wf wf1 wf2 link clos1 clos2 int1 int2 part star1 star2.
+have clos : closed_interface (unionm (prog_interface p) ctx).
+  by rewrite -int1; apply: cprog_closed_interface clos1.
+have := parallel_exec1 wf wf1 wf2 link clos1 clos2 int1 int2 part star1 star2.
+case=> {t scs1 scs2 star1 star2 part} [scs1 [scs2 [_ _ star1 star2 part]]] nostep2.
+rewrite (CS.star_component star2) /=.
+have [//|in_prog2] := boolP (_ \in _).
+case/(star_cons_inv (@CS.singleton_traces _)): star1=> scs1a [scs1b [star1a [step1b _]]].
+elim/star_E0_ind': scs2 scs2' / star2 scs1 star1a part nostep2 in_prog2.
+  move=> scs2 scs1 star1a.
+  have [t [scs1a' step1]]: exists t scs1a', Step (CS.sem (program_link p p1)) scs1 t scs1a'.
+    elim/star_E0_ind': scs1 scs1a / star1a step1b; by eauto.
+  move=> part nostep2 in_prog2.
+  rewrite -(s_component_partialize ctx) -part s_component_partialize in in_prog2.
+  have := parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog2 step1.
+  by case=> scs2' /nostep2.
+move=> scs2 scs2' scs2'' step2 star2 IH scs1 star1 part nostep2 in_prog2.
+elim/star_E0_ind': scs1 scs1a / star1 step1b IH part.
+  move=> scs1 step1b _ part.
+  rewrite -(s_component_partialize ctx) -part s_component_partialize in in_prog2.
+  by have [] := parallel_concrete' wf wf1 wf2 link clos int1 int2 part in_prog2 step1b step2.
+move=> scs1 scs1a scs1a' step1a star1 _ step1b IH part.
+move: (in_prog2); rewrite -(s_component_partialize ctx) -part s_component_partialize => in_prog1.
+have {part} [_ part] :=
+  parallel_concrete' wf wf1 wf2 link clos int1 int2 part in_prog1 step1a step2.
+move: (CS.kstep_component step2) in_prog2=> /= <-.
+exact: IH star1 part nostep2.
+Qed.
 
 (* Placement note: right now, there are similar lemmas to this one here in PS,
   as opposed to none in CS, where it would more logically belong. *)
