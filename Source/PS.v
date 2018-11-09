@@ -1182,6 +1182,76 @@ have {step2 clos2 int2} step2 : kstep p ctx G (partialize ctx scs1) t (partializ
 by apply: state_determinism step2.
 Qed.
 
+(* FIXME: Rename this *)
+Lemma parallel_exec1 p ctx p1 p2 scs1 scs1' scs2 scs2' t t1 t2 :
+  well_formed_program p ->
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p) ctx ->
+  closed_program (program_link p p1) ->
+  closed_program (program_link p p2) ->
+  prog_interface p1 = ctx ->
+  prog_interface p2 = ctx ->
+  partialize ctx scs1 = partialize ctx scs2 ->
+  Star (CS.sem (program_link p p1)) scs1 (t ** t1) scs1' ->
+  Star (CS.sem (program_link p p2)) scs2 (t ** t2) scs2' ->
+  exists scs1'' scs2'',
+    [/\ Star (CS.sem (program_link p p1)) scs1 t scs1'',
+        Star (CS.sem (program_link p p2)) scs2 t scs2'',
+        Star (CS.sem (program_link p p1)) scs1'' t1 scs1',
+        Star (CS.sem (program_link p p2)) scs2'' t2 scs2' &
+        partialize ctx scs1'' = partialize ctx scs2''].
+Proof.
+move=> wf wf1 wf2 link clos1 clos2 int1 int2.
+elim: t scs1 scs2=> /= [|e t IH] scs1 scs2.
+  move=> part star1 star2; exists scs1, scs2; split=> //;
+  exact: star_refl.
+move=> part.
+case/(star_cons_inv (@CS.singleton_traces _))=> scs1a [scs1b [star1a [step1b star1c]]].
+case/(star_cons_inv (@CS.singleton_traces _))=> scs2a [scs2b [star2a [step2b star2c]]].
+have clos: closed_interface (unionm (prog_interface p) ctx).
+  rewrite -int1; apply: cprog_closed_interface clos1.
+suffices: partialize ctx scs1a = partialize ctx scs2a.
+  move=> {part} part.
+  have {part} part: partialize ctx scs1b = partialize ctx scs2b.
+    exact: state_determinism' step1b step2b.
+  case/(_ _ _ part): IH=> // {part} [scs1c [scs2c [star1c' star2c' star1d star2d part]]].
+  exists scs1c, scs2c; split=> //.
+    apply: (star_trans star1a)=> //=.
+    exact: (star_step _ _ step1b star1c').
+  apply: (star_trans star2a)=> //=.
+  exact: (star_step _ _ step2b star2c').
+have [in_ctx1|in_prog1] := boolP (CS.s_component scs1 \in domm ctx).
+  have e_1a : partialize ctx scs1 = partialize ctx scs1a.
+    move: wf wf1 link clos1 in_ctx1 star1a; rewrite -int1.
+    exact: context_epsilon_star_is_silent'.
+  have e_2a : partialize ctx scs2 = partialize ctx scs2a.
+    move: wf wf2 link clos2 in_ctx1 star2a.
+    rewrite -(s_component_partialize ctx scs1) part s_component_partialize -int2.
+    exact: context_epsilon_star_is_silent'.
+  by rewrite e_1a e_2a in part.
+elim/star_E0_ind: scs1 scs1a / star1a scs2 star2a part step1b in_prog1.
+  move=> scs1a scs2 star2a part step1a in_prog1.
+  elim/star_E0_ind: scs2 scs2a / star2a part step2b=> //.
+  move=> scs2 scs2a scs2a' step2a _ part _.
+  case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
+  move=> ? /CS.eval_kstep_correct.
+  by move/CS.eval_kstep_correct: step2a=> ->.
+move=> {IH} scs1 scs1a scs1a' step1a IH scs2 star2a part step1a' in_prog1.
+case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
+move=> scs2a' step2a' part'.
+have star2a' : Star (CS.sem (program_link p p2)) scs2a' E0 scs2a.
+  elim/star_E0_ind': scs2 scs2a / star2a step2b {IH part} step2a'.
+    move=> ? /CS.eval_kstep_correct H.
+    by move/CS.eval_kstep_correct; rewrite H.
+  move=> scs2aa scs2ab scs2ac step2aa star2ab _ step2ac.
+  move/CS.eval_kstep_correct.
+  by move/CS.eval_kstep_correct: step2aa => -> [<-].
+have {in_prog1} in_prog1 : CS.s_component scs1a \notin domm ctx.
+  by rewrite (CS.kstep_component step1a).
+by apply: IH star2a' part' step1a' in_prog1.
+Qed.
+
 Lemma parallel_exec p ctx p1 p2 scs1 scs1' scs2 scs2' t t' :
   well_formed_program p ->
   well_formed_program p1 ->
@@ -1199,75 +1269,39 @@ Lemma parallel_exec p ctx p1 p2 scs1 scs1' scs2 scs2' t t' :
   CS.s_component scs2' \notin domm ctx ->
   CS.final_state scs2'.
 Proof.
-move=> wf wf1 wf2 link clos1 clos2 int1 int2.
-elim: t scs1 scs2=> /= [|e t IH] scs1 scs2.
-  move=> part star1 star2; rewrite (CS.star_component star2) /=.
-  elim: scs1 t' scs1' / star1 scs2 part star2.
-    move=> scs1 scs2 part star2 nostep2 final1 in_prog.
-    have final2 : CS.final_state scs2.
-      case: scs1 scs2 in_prog part final1 {star2}
-            => [C1 stk1 mem1 k1 e1 arg1] [C2 stk2 mem2 k2 e2 arg2] /=.
-      move=> in_prog; rewrite (negbTE in_prog).
-      case: ifP=> // _ [-> {C1} e_stk _ -> -> _] H.
-      case: H e_stk => [-> //|[v [-> [-> ->]]]] /=; auto.
-      do 2![rewrite to_partial_stackE (negbTE in_prog) /=].
-      by case: stk2=> //; right; eauto.
-    elim/star_E0_ind: scs2 scs2' / star2 final2 {part nostep2 in_prog}=> //.
-    move=> scs2 scs2' scs2'' step2 _ final2.
-    by case/(CS.final_state_stuck final2): step2.
-  move=> scs1 t1 scs1' t2 scs1'' _ step1 _ IH _.
-  move=> scs2 part star2 nostep2 final1 in_prog2.
-  have clos : closed_interface (unionm (prog_interface p) ctx).
-    by rewrite -int1; apply: cprog_closed_interface clos1.
-  have in_prog1 : CS.s_component scs1 \notin domm ctx.
-    by rewrite -(s_component_partialize ctx scs1) part s_component_partialize.
-  case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1).
-  elim/star_E0_ind': scs2 scs2' / star2 {part} nostep2 in_prog2 IH.
-    by move=> scs2 nostep2 _ _ scs2' /nostep2.
-  move=> scs2 scs21' scs2'' step21 star2 _ nostep2 in_prog2 IH scs22'.
-  have {in_prog2} in_prog2 : CS.s_component scs21' \notin domm ctx.
-    by rewrite (CS.kstep_component step21).
-  move/CS.eval_kstep_correct; move/CS.eval_kstep_correct: step21 => -> [_ <-] {scs22'}.
-  move=> part'.
-  exact: IH part' star2 nostep2 final1 in_prog2.
-move=> part.
-case/(star_cons_inv (@CS.singleton_traces _))=> scs1a [scs1b [star1a [step1b star1c]]].
-case/(star_cons_inv (@CS.singleton_traces _))=> scs2a [scs2b [star2a [step2b star2c]]].
-apply: IH star1c star2c.
+rewrite -[t in Star _ _ t scs2']E0_right.
+move=> wf wf1 wf2 link clos1 clos2 int1 int2 part star1 star2.
+have := parallel_exec1 wf wf1 wf2 link clos1 clos2 int1 int2 part star1 star2.
+case=> {t scs1 scs2 star1 star2 part} [scs1 [scs2 [_ _ star1 star2 part]]].
+rewrite (CS.star_component star2) /=.
+elim: scs1 t' scs1' / star1 scs2 part star2.
+  move=> scs1 scs2 part star2 nostep2 final1 in_prog.
+  have final2 : CS.final_state scs2.
+    case: scs1 scs2 in_prog part final1 {star2}
+          => [C1 stk1 mem1 k1 e1 arg1] [C2 stk2 mem2 k2 e2 arg2] /=.
+    move=> in_prog; rewrite (negbTE in_prog).
+    case: ifP=> // _ [-> {C1} e_stk _ -> -> _] H.
+    case: H e_stk => [-> //|[v [-> [-> ->]]]] /=; auto.
+    do 2![rewrite to_partial_stackE (negbTE in_prog) /=].
+    by case: stk2=> //; right; eauto.
+  elim/star_E0_ind: scs2 scs2' / star2 final2 {part nostep2 in_prog}=> //.
+  move=> scs2 scs2' scs2'' step2 _ final2.
+  by case/(CS.final_state_stuck final2): step2.
+move=> scs1 t1 scs1' t2 scs1'' _ step1 _ IH _.
+move=> scs2 part star2 nostep2 final1 in_prog2.
 have clos : closed_interface (unionm (prog_interface p) ctx).
-  rewrite -int1; apply: cprog_closed_interface clos1.
-have [in_ctx1|in_prog1] := boolP (CS.s_component scs1 \in domm ctx).
-  have e_1a : partialize ctx scs1 = partialize ctx scs1a.
-    move: wf wf1 link clos1 in_ctx1 star1a; rewrite -int1.
-    exact: context_epsilon_star_is_silent'.
-  have e_2a : partialize ctx scs2 = partialize ctx scs2a.
-    move: wf wf2 link clos2 in_ctx1 star2a.
-    rewrite -(s_component_partialize ctx scs1) part s_component_partialize -int2.
-    exact: context_epsilon_star_is_silent'.
-  rewrite e_1a e_2a in part.
-  exact: (state_determinism' wf wf1 wf2 link clos1 clos2 int1 int2 part step1b step2b).
-elim/star_E0_ind: scs1 scs1a / star1a scs2 star2a part step1b in_prog1.
-  move=> scs1a scs2 star2a part step1a in_prog1.
-  elim/star_E0_ind: scs2 scs2a / star2a part step2b.
-    move=> scs2a part step2a.
-    exact: (state_determinism' wf wf1 wf2 link clos1 clos2 int1 int2 part step1a step2a).
-  move=> scs2 scs2a scs2a' step2a _ part _.
-  case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
-  move=> ? /CS.eval_kstep_correct.
-  by move/CS.eval_kstep_correct: step2a=> ->.
-move=> scs1 scs1a scs1a' step1a IH scs2 star2a part step1a' in_prog1.
-case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
-move=> scs2a' step2a' part'.
-have star2a' : Star (CS.sem (program_link p p2)) scs2a' E0 scs2a.
-  elim/star_E0_ind': scs2 scs2a / star2a step2b {IH part} step2a'.
-    move=> ? /CS.eval_kstep_correct H.
-    by move/CS.eval_kstep_correct; rewrite H.
-  move=> scs2aa scs2ab scs2ac step2aa star2ab _ step2ac.
-  move/CS.eval_kstep_correct.
-  by move/CS.eval_kstep_correct: step2aa => -> [<-].
-have {in_prog1} in_prog1 : CS.s_component scs1a \notin domm ctx.
-  by rewrite (CS.kstep_component step1a).
-by apply: IH star2a' part' step1a' in_prog1.
+  by rewrite -int1; apply: cprog_closed_interface clos1.
+have in_prog1 : CS.s_component scs1 \notin domm ctx.
+  by rewrite -(s_component_partialize ctx scs1) part s_component_partialize.
+case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1).
+elim/star_E0_ind': scs2 scs2' / star2 {part} nostep2 in_prog2 IH.
+  by move=> scs2 nostep2 _ _ scs2' /nostep2.
+move=> scs2 scs21' scs2'' step21 star2 _ nostep2 in_prog2 IH scs22'.
+have {in_prog2} in_prog2 : CS.s_component scs21' \notin domm ctx.
+  by rewrite (CS.kstep_component step21).
+move/CS.eval_kstep_correct; move/CS.eval_kstep_correct: step21 => -> [_ <-] {scs22'}.
+move=> part'.
+exact: IH part' star2 nostep2 final1 in_prog2.
 Qed.
 
 (* This is a new version of parallel_exec that we need in the new
@@ -1283,7 +1317,7 @@ Lemma parallel_exec' p ctx p1 p2 scs1 scs1' scs2 scs2' t t' e :
   prog_interface p2 = ctx ->
   partialize ctx scs1 = partialize ctx scs2 ->
   Star (CS.sem (program_link p p1)) scs1 (t ** e :: t') scs1' ->
-  Star (CS.sem (program_link p p2)) scs2 (t      ) scs2' ->
+  Star (CS.sem (program_link p p2)) scs2 (t           ) scs2' ->
   Nostep (CS.sem (program_link p p2)) scs2' ->
   CS.s_component scs2' \in domm ctx.
 Admitted.
