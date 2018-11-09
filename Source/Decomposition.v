@@ -554,10 +554,10 @@ Section Decomposition.
       C1 \in domm iface ->
       C2 \in domm iface ->
       well_defined_components iface (ERet C1 arg C2)
-  | wf_comps_load: forall C1 val C2,
+  | wf_comps_load: forall C1 off val C2,
       Program.has_component_id iface C1 ->
       Program.has_component_id iface C2 ->
-      well_defined_components iface (ELoad C1 val C2)
+      well_defined_components iface (ELoad C1 off val C2)
   .
 
   Definition well_defined_components_trace (iface : Program.interface) (t : trace) : Prop :=
@@ -578,7 +578,7 @@ Section Decomposition.
     have := cprog_closed_interface closedness_after_linking.
     move/(well_formed_trace_int trace_wf)/seq.allP/(_ _ in_t).
     rewrite /declared_event_comps.
-    by case: e {in_t}=> /= [????|???|???] /andP [??] ; constructor.
+    by case: e {in_t}=> /= [????|???|????] /andP [??] ; constructor.
   Qed.
 
   Lemma ub_behavior_has_well_defined_components:

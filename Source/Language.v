@@ -15,6 +15,11 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
+(* Pondering : E_seq (e1) (E_seq e2 e3) should be the same as E_seq (E_seq e1 e2) e3 *)
+(* or more more naturally : e1; (e2; e3) = (e1; e2); e3 *)
+(* sequence should be associative ?*)
+(* or maybe we just stick to one of the representation since this could
+   complicate things in the semantics / during the compilaiton *)
 Inductive expr : Type :=
 | E_val : value -> expr
 | E_arg : expr

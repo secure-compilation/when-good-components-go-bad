@@ -3,9 +3,9 @@ Require Import CompCert.Coqlib.
 Require Import Common.Values.
 
 Inductive event :=
-| ECall : Component.id -> Procedure.id -> Z -> Component.id -> event
-| ERet : Component.id -> Z -> Component.id -> event
-| ELoad : Component.id (* -> ptr *) -> Block.offset -> Z (* TODO add Undef *) ->  Component.id -> event
+| ECall : (* Calling *) Component.id -> Procedure.id -> Z -> (* Called *) Component.id -> event
+| ERet : (* Called *) Component.id -> Z -> (* Calling *) Component.id -> event
+| ELoad : (* Dereferencing *) Component.id -> Block.offset -> Z (* TODO add Undef *) ->  (* Owning *) Component.id -> event
 (* the fitting pointer to the buffer would replace the offset eventually *)
 .
 

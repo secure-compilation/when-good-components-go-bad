@@ -152,8 +152,10 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_DerefComponentEval : forall C s mem k C' b' o' v arg,
     C <> C' ->
     Memory.load mem (C',b',o') = Some (Int v) -> (* for now, only allowing int *)
+    b' = Block.private -> (* for now, only allowing the preallocated private buffer (should this rule be before the previous one ? *)
+    (* or this can be even enforced as Memory.load(C',Block.private,o') *)
     kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o')), arg]
-            [:: ELoad C (* o' *) v C']
+            [:: ELoad C  o' v C']
             [State C, s, mem, k, E_val (Int v), arg]
 | KS_Assign1 : forall C s mem k e1 e2 arg,
     kstep G [State C, s, mem, k, E_assign e1 e2, arg] E0
@@ -278,11 +280,16 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
         else
           (* component buffer load *)
           do v <- Memory.load mem (C', b', o');
-          match v with
-          (* For now, only allowing ints *)
-          | Int i => ret ([:: ELoad C i C'], [State C, s, mem, k', E_val (Int i), arg])
-          | Ptr t => None
-          | Undef => (* Not even Undef, but surely that should change *) None
+          match b' with
+            (* should this be before Memory.load ? Since at this level it's pretty safe (returns None if out of bounds) I guess it doesn't matter *)
+            | (* Block.private *) 1 =>
+              match v with
+              (* For now, only allowing ints *)
+              | Int i => ret ([:: ELoad C o' i C'], [State C, s, mem, k', E_val (Int i), arg])
+              | Ptr t => None
+              | Undef => (* Not even Undef, but surely that should change *) None
+              end
+            | _ => None
           end
       | _ => None
       end
@@ -390,7 +397,7 @@ Proof.
     + econstructor; eauto.
       * apply Zgt_is_gt_bool. assumption.
     + by econstructor; eauto; apply/eqP.
-    + econstructor; [apply /eqP/negbT; assumption | assumption].
+    + econstructor ; [apply /eqP/negbT; assumption | assumption | done].
     + econstructor.
     + by econstructor; eauto; apply/eqP.
     + econstructor; eauto; exact/eqP.
