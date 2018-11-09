@@ -1194,7 +1194,6 @@ Lemma parallel_exec p ctx p1 p2 scs1 scs1' scs2 scs2' t t' :
   partialize ctx scs1 = partialize ctx scs2 ->
   Star (CS.sem (program_link p p1)) scs1 (t ** t') scs1' ->
   Star (CS.sem (program_link p p2)) scs2 (t      ) scs2' ->
-  Nostep (CS.sem (program_link p p1)) scs1' ->
   Nostep (CS.sem (program_link p p2)) scs2' ->
   CS.final_state scs1' ->
   CS.s_component scs2' \notin domm ctx ->
@@ -1204,9 +1203,9 @@ move=> wf wf1 wf2 link clos1 clos2 int1 int2.
 elim: t scs1 scs2=> /= [|e t IH] scs1 scs2.
   move=> part star1 star2; rewrite (CS.star_component star2) /=.
   elim: scs1 t' scs1' / star1 scs2 part star2.
-    move=> scs1 scs2 part star2 nostep1 nostep2 final1 in_prog.
+    move=> scs1 scs2 part star2 nostep2 final1 in_prog.
     have final2 : CS.final_state scs2.
-      case: scs1 scs2 in_prog part final1 {star2 nostep1}
+      case: scs1 scs2 in_prog part final1 {star2}
             => [C1 stk1 mem1 k1 e1 arg1] [C2 stk2 mem2 k2 e2 arg2] /=.
       move=> in_prog; rewrite (negbTE in_prog).
       case: ifP=> // _ [-> {C1} e_stk _ -> -> _] H.
@@ -1217,7 +1216,7 @@ elim: t scs1 scs2=> /= [|e t IH] scs1 scs2.
     move=> scs2 scs2' scs2'' step2 _ final2.
     by case/(CS.final_state_stuck final2): step2.
   move=> scs1 t1 scs1' t2 scs1'' _ step1 _ IH _.
-  move=> scs2 part star2 nostep1 nostep2 final1 in_prog2.
+  move=> scs2 part star2 nostep2 final1 in_prog2.
   have clos : closed_interface (unionm (prog_interface p) ctx).
     by rewrite -int1; apply: cprog_closed_interface clos1.
   have in_prog1 : CS.s_component scs1 \notin domm ctx.
@@ -1230,7 +1229,7 @@ elim: t scs1 scs2=> /= [|e t IH] scs1 scs2.
     by rewrite (CS.kstep_component step21).
   move/CS.eval_kstep_correct; move/CS.eval_kstep_correct: step21 => -> [_ <-] {scs22'}.
   move=> part'.
-  exact: IH part' star2 nostep1 nostep2 final1 in_prog2.
+  exact: IH part' star2 nostep2 final1 in_prog2.
 move=> part.
 case/(star_cons_inv (@CS.singleton_traces _))=> scs1a [scs1b [star1a [step1b star1c]]].
 case/(star_cons_inv (@CS.singleton_traces _))=> scs2a [scs2b [star2a [step2b star2c]]].
@@ -1443,7 +1442,7 @@ Proof.
        HP'Cs_closed Hclosed_p_Cs
        Hsame_iface1 Hrefl
        Hpartialize
-       HStar1 HStar2 HNostep1 HNostep2 Hfinal1
+       HStar1 HStar2 HNostep2 Hfinal1
        as Hparallel;
      case: (boolP (CS.s_component sfin2 \in domm (Source.prog_interface p)))=> [Hparallel1|/Hparallel Hparallel2];
        [ rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
