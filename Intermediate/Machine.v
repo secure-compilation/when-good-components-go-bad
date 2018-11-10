@@ -713,12 +713,6 @@ Proof.
   apply alloc_static_buffers_after_linking; auto.
 Qed.
 
-(*
-Definition prepare_procedures_memory (p: program) (mem: Memory.t) : Memory.t :=
-  let '(mem, _, _) := prepare_procedures p mem in
-  mem.
-*)
-
 Definition prepare_procedures_memory (p: program) : Memory.t :=
   let '(mem, _, _) := prepare_procedures_initial_memory p in
   mem.
@@ -793,7 +787,6 @@ Proof.
   rewrite Hproc in Hp. rewrite Hp. reflexivity.
 Qed.
 
-
 (* maybe write a tactic that does the core except the inversion ... ? *)
 (* or suppress the prog_smth part and keep it generic for all types of program_link ? *)
 Lemma prog_link_buffers_unionm :
@@ -808,7 +801,6 @@ Proof.
   rewrite unionmE. rewrite <- mem_domm. inversion Hwfp as [? _ _ _ Hbuf _ _]. (* if no binding of 1st hypothesis : anomaly : "make_elim_branch_assumptions" *)
   rewrite Hbuf in Hp. rewrite Hp. reflexivity.
 Qed.
-
 
 (* RB: TODO: Simplify hypotheses if possible. *)
 Lemma prepare_procedures_initial_memory_aux_after_linking:
@@ -937,12 +929,6 @@ Proof.
   rewrite <- mapm_unionm. apply mapm_eq.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
 Qed.
-
-(*
-Definition prepare_procedures_entrypoints (p: program) (mem: Memory.t) : EntryPoint.t :=
-  let '(_, _, entrypoints) := prepare_procedures p mem in
-  entrypoints.
-*)
 
 Definition prepare_procedures_entrypoints (p: program) : EntryPoint.t :=
   let '(_, _, entrypoints) := prepare_procedures_initial_memory p in

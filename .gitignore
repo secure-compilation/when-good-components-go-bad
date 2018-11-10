@@ -2,6 +2,9 @@
 *.glob
 *.v.d
 *.aux
+*.cmi
+*.cmx
+*.o
 .coqdeps.d
 Makefile.coq
 MakefileTest.coq
@@ -9,3 +12,4 @@ I2SFI/*.cmi
 I2SFI/*.cmx
 sfi_safety_properties.exe
 CoqMakefile.conf
+test_out

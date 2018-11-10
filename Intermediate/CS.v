@@ -836,9 +836,39 @@ Qed.
 
 End Semantics.
 
-Definition comes_from_initial_state (s: state) : Prop :=
-  exists p s0 t,
+(* A similar result is used above. Here is a weaker formulation. *)
+Lemma initial_state_stack_state0 p s :
+  initial_state p s ->
+  stack_state_of s = Traces.stack_state0.
+Proof.
+  intros Hini.
+  unfold initial_state, initial_machine_state in Hini.
+  destruct (prog_main p) as [mainP |]; simpl in Hini.
+  - destruct (prepare_procedures p (prepare_initial_memory p))
+      as [[mem dummy] entrypoints].
+    destruct (EntryPoint.get Component.main mainP entrypoints).
+    + subst. reflexivity.
+    + subst. reflexivity.
+  - subst. reflexivity.
+Qed.
+
+Definition comes_from_initial_state (s: state) (iface : Program.interface) : Prop :=
+  exists p mainP s0 t,
+    well_formed_program p /\
+    prog_main p = Some mainP /\
+    prog_interface p = iface /\
     initial_state p s0 /\
     Star (sem p) s0 t s.
+
+Lemma comes_from_initial_state_mergeable_sym :
+  forall s iface1 iface2,
+    Linking.mergeable_interfaces iface1 iface2 ->
+    comes_from_initial_state s (unionm iface1 iface2) ->
+    comes_from_initial_state s (unionm iface2 iface1).
+Proof.
+  intros s iface1 iface2 [[_ Hdisjoint] _] Hfrom_initial.
+  rewrite <- (unionmC Hdisjoint).
+  exact Hfrom_initial.
+Qed.
 
 End CS.

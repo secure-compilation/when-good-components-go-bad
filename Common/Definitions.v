@@ -93,6 +93,16 @@ Proof.
     split; eassumption.
 Qed.
 
+Lemma has_component_in_domm_prog_interface Piface Cid Ciface :
+  Program.has_component Piface Cid Ciface ->
+  Cid \in domm Piface.
+Proof.
+  intros Hhas_comp.
+  unfold Program.has_component in Hhas_comp.
+  apply /dommP.
+  eauto.
+Qed.
+
 Class HasTurn A := {
   turn_of : A -> Program.interface -> bool
 }.
