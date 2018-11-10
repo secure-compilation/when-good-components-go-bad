@@ -1416,26 +1416,39 @@ move/find_procedure_unionm_r/(_ nin2).
 by rewrite e1; case.
 Qed.
 
-Lemma does_prefix_star : forall X m
-  (Hprefix : does_prefix X m)
+(* RB: TODO: Refactor contradictory cases. *)
+Lemma does_prefix_star : forall p m
+  (Hprefix : does_prefix (CS.sem p) m)
   (Hnot_wrong' : not_wrong_finpref m),
-  exists (si : Smallstep.state X) (sf : Smallstep.state X),
-    Smallstep.initial_state X si /\
-    Star X si (finpref_trace m) sf  /\
-    ((exists t, m = FTerminates t) -> Smallstep.final_state X sf).
+  exists (si : Smallstep.state (CS.sem p)) (sf : Smallstep.state (CS.sem p)),
+    Smallstep.initial_state (CS.sem p) si /\
+    Star (CS.sem p) si (finpref_trace m) sf  /\
+    ((exists t, m = FTerminates t) -> Smallstep.final_state (CS.sem p) sf).
 Proof.
-  intros X m Hprefix Hnot_wrong'.
-  destruct Hprefix as [b [Hb Hmb]]. inversion Hb; subst. inversion H0; subst.
-  destruct m as [t'| t' |t']; simpl; simpl in Hmb; subst; try easy. eauto.
-  Focus 5. {
-    destruct m as [t | t | t];
-      try contradiction.
-    destruct t as [| e t].
-    - simpl in *. (* Dead end. *) admit.
-    - admit.
-  }
+  intros p m Hprefix Hnot_wrong'.
+  destruct Hprefix as [b [Hb Hmb]].
+  inversion Hb as [s beh Hini Hbeh | Hini]; subst.
+  - inversion Hbeh as [| | ? Hreact |]; subst.
+    (* Matching case. *)
+    + destruct m as [tm | tm | tm].
+      * simpl in *; subst. now eauto.
+      * contradiction.
+      * (* This is like the contradictory cases below. *)
+        admit.
+    (* The remaining cases are essentially identical. *)
+    + destruct m as [tm | tm | tm];
+        try contradiction.
+      admit.
+    + destruct m as [tm | tm | tm];
+        try contradiction.
+      admit.
+    + destruct m as [tm | tm | tm];
+        try contradiction.
+      admit.
+  - destruct (CS.initial_state_exists p) as [sini Hcontra].
+    specialize (Hini sini).
+    contradiction.
 Admitted.
-
 
 (* RB: TODO: Source prefixes no longer needed: clean proof. *)
 Lemma blame_program:
