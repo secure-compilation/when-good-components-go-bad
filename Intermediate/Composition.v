@@ -674,19 +674,58 @@ Lemma step_E0_same_turn:
   inversion Hstep
     as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hmains1 Hstep_cs1 Hpartial1 Hpartial1'];
     subst.
-  inversion Hstep_cs1 ; subst.
-  - inversion Hpartial1
-      as [cstk1' ? cmem1' ? regs1' pc1' Hpc1' | cstk1' ? cmem1' ? regs1' pc1' Hcc1'];
-      subst;
+  inversion Hstep_cs1 ; subst ;
+    inversion Hpartial1
+    as [cstk1' ? cmem1' ? regs1' pc1' Hpc1' | cstk1' ? cmem1' ? regs1' pc1' Hcc1'];
+    subst;
     inversion Hpartial1'
       as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
-      subst;
-    PS.simplify_turn.
-    + apply same_turn_program; assumption.
-    + rewrite Pointer.inc_preserves_component in Hcc2'.
-      rewrite Hcc2' in Hpc1'.
-      discriminate.
-Admitted. (* Grade 1. *)
+    subst ;
+    PS.simplify_turn ;
+
+    match goal with
+    (* Obviously true cases *)
+    | [ |- same_turn (prog_interface _) (PS.PC _) (PS.PC _)]
+      => apply same_turn_program ; assumption
+    | [ |- same_turn (prog_interface _) (PS.CC _) (PS.CC _)]
+      => apply same_turn_context ; assumption
+
+    (* Obviously wrong cases *)
+    (* is_true coercion is not automatic in Ltac *)
+    (* IJump *)
+    | [ H__notin: is_true (Pointer.component _ \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component  _  \in domm (prog_interface _)),
+        H__pcEq: Pointer.component _ = Pointer.component _ |- _ ]
+      => first [rewrite H__pcEq in H__notin | rewrite <- H__pcEq in H__notin] ;
+        rewrite H__in in H__notin ; discriminate
+
+    (* Pointer.inc (most of instructions) *)
+    | [ H__notin: is_true (Pointer.component _ \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component  (Pointer.inc _) \in domm (prog_interface _)) |- _ ]
+      => rewrite Pointer.inc_preserves_component in H__in ;
+        rewrite H__in in H__notin ; discriminate
+    | [ H__notin: is_true (Pointer.component (Pointer.inc _) \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component _ \in domm (prog_interface _)) |- _ ]
+      => rewrite Pointer.inc_preserves_component in H__notin ;
+        rewrite H__in in H__notin ;      discriminate
+
+    (* IJal *)
+    | [ H__notin: is_true (Pointer.component _ \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component  _  \in domm (prog_interface _)),
+        H__labelComp : find_label_in_component _ _ _ = Some _ |- _ ]
+      => apply find_label_in_component_1 in H__labelComp;
+        first [rewrite H__labelComp in H__notin | rewrite <- H__labelComp in H__notin];
+        rewrite H__in in H__notin ; discriminate
+
+    (* IBnz *)
+    | [ H__notin: is_true (Pointer.component _ \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component  _  \in domm (prog_interface _)),
+        H__labelProc : find_label_in_procedure _ _ _ = Some _ |- _ ]
+      => apply find_label_in_procedure_1 in H__labelProc;
+        first [rewrite H__labelProc in H__notin | rewrite <- H__labelProc in H__notin];
+        rewrite H__in in H__notin ; discriminate
+    end.
+Qed.
 
 (* st_star represents a sequence of events performed by the same actor *)
 (* st stands for same turn *)
