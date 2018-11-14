@@ -4439,8 +4439,21 @@ Section PartialComposition.
     destruct (partial_programs_composition_star Hini1 Hini2 Hstar1 Hstar2)
       as [s [s' [Hini Hstar]]].
     destruct m as [tm | tm | tm].
-    - admit.
-    - admit.
+    - destruct b1 as [t1 | ? | ? | ?]; try contradiction.
+      destruct b2 as [t2 | ? | ? | ?]; try contradiction.
+      simpl in Hprefix1, Hprefix2. subst t1 t2. simpl in Hstar1, Hstar2.
+      exists (Terminates tm). split; last reflexivity.
+      apply program_runs with (s := s); first assumption.
+      apply state_terminates with (s' := s'); first assumption.
+      admit.
+    - destruct b1 as [? | ? | ? | t1]; try contradiction.
+      destruct b2 as [? | ? | ? | t2]; try contradiction.
+      simpl in Hprefix1, Hprefix2. subst t1 t2. simpl in Hstar1, Hstar2.
+      exists (Goes_wrong tm). split; last reflexivity.
+      apply program_runs with (s := s); first assumption.
+      apply state_goes_wrong with (s' := s'); first assumption.
+      + admit.
+      + admit.
     - exact (@program_behaves_finpref_exists (PS.sem prog emptym) _ _ _ Hini Hstar).
   Admitted.
 End PartialComposition.
