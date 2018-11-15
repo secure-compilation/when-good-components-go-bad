@@ -3497,6 +3497,27 @@ Section MultiSemantics.
 
   Qed.
 
+  Lemma star_simulation:
+    forall ms t ms',
+      Star msem ms t ms' ->
+    forall ips,
+      multi_match ms ips ->
+    exists ips',
+      Star (PS.sem prog emptym) ips t ips' /\ multi_match ms' ips'.
+  Proof.
+    intros ms t ms' Hstar.
+    induction Hstar as [| ? ? ? ? ? ? H ? IHHstar]; subst.
+    - eexists. split.
+      + left.
+      + auto.
+    - intros ips Hmulti_match.
+      destruct (lockstep_simulation H Hmulti_match) as [ips' [? H1]].
+      destruct (IHHstar ips' H1) as [ips'' []].
+      exists ips''. split.
+      + eapply star_left; eauto.
+      + auto.
+  Qed.
+
   Theorem merged_prog_simulates_multisem:
     forward_simulation msem (PS.sem prog emptym).
   Proof.
