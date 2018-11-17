@@ -3540,6 +3540,81 @@ End MultiSem.
         into another possibly partial program.
 *)
 
+Section BehaviorStar.
+  Variables p c: program.
+
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis main_linkability: linkable_mains p c.
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
+
+  Let prog := program_link p c.
+
+  Hypothesis prog_is_closed:
+    closed_program prog.
+
+  Hypothesis mergeable_interfaces:
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  (* RB: TODO: Add hypotheses and/or encapsulate in own section (both directions
+     will be needed in the main proof). Relocate to PS? *)
+  Lemma behavior_prefix_star :
+    forall b m,
+      program_behaves (PS.sem p (prog_interface c)) b ->
+      prefix m b ->
+    exists s s',
+      PS.initial_state p (prog_interface c) s /\
+      star (PS.step p (prog_interface c)) (prepare_global_env p) s (finpref_trace m) s'.
+  Proof.
+    intros b m.
+    destruct m as [tm | tm | tm].
+    - intros Hb Hm.
+      destruct b as [t | ? | ? | ?];
+        simpl in Hm; try contradiction;
+        subst t.
+      inversion Hb as [s1 ? Hini Hbeh |]; subst.
+      inversion Hbeh as [? s2 Hstar Hfinal | | |]; subst.
+      now eauto.
+    - intros Hb Hm.
+      destruct b as [? | ? | ? | t];
+        simpl in Hm; try contradiction;
+        subst t.
+      inversion Hb as [s1 ? Hini Hbeh | Hini]; subst.
+      + inversion Hbeh as [| | | ? s2 Hstar Hnostep Hfinal]; subst.
+        now eauto.
+      + admit. (* Trivial case/contra. *)
+    - revert b.
+      induction tm as [| e t IHt] using rev_ind;
+        intros b Hb Hm;
+        simpl in *.
+      + admit. (* Easy. *)
+      + assert (Hprefix : behavior_prefix t b) by admit. (* Easy. *)
+        specialize (IHt _ Hb Hprefix).
+        destruct IHt as [s1 [s2 [Hini Hstar]]].
+        inversion Hm as [b']; subst.
+        inversion Hb as [s1' ? Hini' Hbeh' |]; subst.
+        * assert (Heq : s1 = s1') by admit.
+          subst s1'.
+          inversion Hbeh' as [ t' s2' Hstar' Hfinal' Heq
+                             |
+                             |
+                             |];
+            subst.
+          -- destruct b' as [tb' | ? | ? | ?];
+               simpl in Heq;
+               try discriminate.
+             inversion Heq; subst t'; clear Heq.
+             destruct (star_app_inv (@PS.singleton_traces _ _) _ _ Hstar')
+               as [s' [Hstar'1 Hstar'2]].
+             now eauto.
+          -- admit.
+          -- admit.
+          -- admit.
+        * admit. (* Contra. *)
+  Admitted. (* Grade 2. Consider where helper lemmas are natural. *)
+End BehaviorStar.
+
 Section PartialComposition.
   Variables p c: program.
 
@@ -4376,63 +4451,6 @@ Section PartialComposition.
     + simpl. constructor.
   Qed.
 
-  (* RB: TODO: Add hypotheses and/or encapsulate in own section (both directions
-     will be needed in the main proof). Relocate to PS? *)
-  Lemma behavior_prefix_star :
-    forall b m,
-      program_behaves (PS.sem p (prog_interface c)) b ->
-      prefix m b ->
-    exists s s',
-      PS.initial_state p (prog_interface c) s /\
-      star (PS.step p (prog_interface c)) (prepare_global_env p) s (finpref_trace m) s'.
-  Proof.
-    intros b m.
-    destruct m as [tm | tm | tm].
-    - intros Hb Hm.
-      destruct b as [t | ? | ? | ?];
-        simpl in Hm; try contradiction;
-        subst t.
-      inversion Hb as [s1 ? Hini Hbeh |]; subst.
-      inversion Hbeh as [? s2 Hstar Hfinal | | |]; subst.
-      now eauto.
-    - intros Hb Hm.
-      destruct b as [? | ? | ? | t];
-        simpl in Hm; try contradiction;
-        subst t.
-      inversion Hb as [s1 ? Hini Hbeh | Hini]; subst.
-      + inversion Hbeh as [| | | ? s2 Hstar Hnostep Hfinal]; subst.
-        now eauto.
-      + admit. (* Trivial case/contra. *)
-    - revert b.
-      induction tm as [| e t IHt] using rev_ind;
-        intros b Hb Hm;
-        simpl in *.
-      + admit. (* Easy. *)
-      + assert (Hprefix : behavior_prefix t b) by admit. (* Easy. *)
-        specialize (IHt _ Hb Hprefix).
-        destruct IHt as [s1 [s2 [Hini Hstar]]].
-        inversion Hm as [b']; subst.
-        inversion Hb as [s1' ? Hini' Hbeh' |]; subst.
-        * assert (Heq : s1 = s1') by admit.
-          subst s1'.
-          inversion Hbeh' as [ t' s2' Hstar' Hfinal' Heq
-                             |
-                             |
-                             |];
-            subst.
-          -- destruct b' as [tb' | ? | ? | ?];
-               simpl in Heq;
-               try discriminate.
-             inversion Heq; subst t'; clear Heq.
-             destruct (star_app_inv (@PS.singleton_traces _ _) _ _ Hstar')
-               as [s' [Hstar'1 Hstar'2]].
-             now eauto.
-          -- admit.
-          -- admit.
-          -- admit.
-        * admit. (* Contra. *)
-  Admitted. (* Grade 2. Consider where helper lemmas are natural. *)
-
   (* RB: TODO: Move to PS when done. Note the [*_after_linking] convention used
      for similar results in that module as opposed to [*_composition_*] being
      used here (and various forms of [*merge*]). It would be desirable to have a
@@ -4515,19 +4533,39 @@ Section PartialComposition.
       + intros Hcontra.
         inversion Hcontra as [? ? Hfinal1' Hfinal2']; subst. contradiction.
     - (* Here we talk about the stars associated to the behaviors, without
-         worrying now about connecting them to the existing initial states. *)
+         worrying now about connecting them to the existing initial states.
+         RB: TODO: Remove asserts, phrase in terms of the instances of
+         behavior_prefix_star directly. *)
       assert
         (exists s s',
             PS.initial_state p (prog_interface c) s /\
             star (PS.step p (prog_interface c)) (prepare_global_env p) s tm s')
-        as [s1' [s1'' [Hini1' Hstar1]]]
-        by admit. (* behavior_prefix_star *)
+        as [s1' [s1'' [Hini1' Hstar1]]].
+      {
+        destruct
+          (behavior_prefix_star
+             wf1 wf2 main_linkability linkability prog_is_closed mergeable_interfaces
+             Hbeh1 Hprefix1)
+          as [s [s' [Hini Hstar]]].
+        now exists s, s'.
+      }
       assert
         (exists s s',
             PS.initial_state c (prog_interface p) s /\
             star (PS.step c (prog_interface p)) (prepare_global_env c) s tm s')
-        as [s2' [s2'' [Hini2' Hstar2]]]
-        by admit. (* behavior_prefix_star *)
+        as [s2' [s2'' [Hini2' Hstar2]]].
+      {
+        assert (prog_is_closed_sym := prog_is_closed).
+        rewrite (closed_program_link_sym wf1 wf2 linkability) in prog_is_closed_sym.
+        destruct
+          (behavior_prefix_star
+             wf2 wf1
+             (linkable_mains_sym main_linkability) (linkable_sym linkability)
+             prog_is_closed_sym (mergeable_interfaces_sym _ _ mergeable_interfaces)
+             Hbeh2 Hprefix2)
+          as [s [s' [Hini Hstar]]].
+        now exists s, s'.
+      }
       pose proof initial_states_mergeability Hini1' Hini2' as Hmerge.
       destruct (threeway_multisem_star_simulation Hmerge Hstar1 Hstar2)
         as [Hstar12 Hmerge'].
