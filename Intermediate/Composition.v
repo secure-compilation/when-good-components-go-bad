@@ -4537,7 +4537,7 @@ Section PartialComposition.
            Hstar12 (MultiSem.multi_match_intro Hmerge))
         as [s [Hstar12' Hmulti]].
       eapply program_behaves_finpref_exists; last now apply Hstar12'.
-      admit. (* Easy. *)
+      now apply initial_state_merge_after_linking.
   Admitted. (* Grade 2. *)
 End PartialComposition.
 
