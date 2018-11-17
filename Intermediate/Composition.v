@@ -4454,38 +4454,65 @@ Section PartialComposition.
   Proof.
     unfold does_prefix.
     intros m [b1 [Hbeh1 Hprefix1]] [b2 [Hbeh2 Hprefix2]].
-    assert
-      (exists s s',
-          PS.initial_state p (prog_interface c) s /\
-          star (PS.step p (prog_interface c)) (prepare_global_env p) s (finpref_trace m) s')
-      as [s1 [s1' [Hini1 Hstar1]]]
-      by admit. (* behavior_prefix_star *)
-    assert
-      (exists s s',
-          PS.initial_state c (prog_interface p) s /\
-          star (PS.step c (prog_interface p)) (prepare_global_env c) s (finpref_trace m) s')
-      as [s2 [s2' [Hini2 Hstar2]]]
-      by admit. (* behavior_prefix_star *)
-    destruct (partial_programs_composition_star Hini1 Hini2 Hstar1 Hstar2)
-      as [s [s' [Hini Hstar]]].
+    inversion Hbeh1 as [s1 beh1 Hini1 Hst_beh1 | Hini1]; subst;
+      last admit. (* Contra. *)
+    inversion Hbeh2 as [s2 beh2 Hini2 Hst_beh2 | Hini2]; subst;
+      last admit. (* Contra. *)
     destruct m as [tm | tm | tm].
     - destruct b1 as [t1 | ? | ? | ?]; try contradiction.
       destruct b2 as [t2 | ? | ? | ?]; try contradiction.
-      simpl in Hprefix1, Hprefix2. subst t1 t2. simpl in Hstar1, Hstar2.
+      simpl in Hprefix1, Hprefix2. subst t1 t2.
+      inversion Hst_beh1 as [? s1' Hstar1 Hfinal1 | | |]; subst.
+      inversion Hst_beh2 as [? s2' Hstar2 Hfinal2 | | |]; subst.
       exists (Terminates tm). split; last reflexivity.
-      apply program_runs with (s := s); first assumption.
-      apply state_terminates with (s' := s'); first assumption.
-      admit.
+      pose proof initial_states_mergeability Hini1 Hini2 as Hmerge.
+      destruct (threeway_multisem_star_simulation Hmerge Hstar1 Hstar2)
+        as [Hstar12 Hmerge'].
+      apply MultiSem.multi_semantics_implies_partial_semantics; try assumption.
+      apply program_runs with (s := (s1, s2)); first easy.
+      apply state_terminates with (s' := (s1', s2')); easy.
     - destruct b1 as [? | ? | ? | t1]; try contradiction.
       destruct b2 as [? | ? | ? | t2]; try contradiction.
-      simpl in Hprefix1, Hprefix2. subst t1 t2. simpl in Hstar1, Hstar2.
+      simpl in Hprefix1, Hprefix2. subst t1 t2.
+      inversion Hst_beh1 as [| | | ? s1' Hstar1 Hstep1 Hfinal1]; subst.
+      inversion Hst_beh2 as [| | | ? s2' Hstar2 Hstep2 Hfinal2]; subst.
       exists (Goes_wrong tm). split; last reflexivity.
-      apply program_runs with (s := s); first assumption.
-      apply state_goes_wrong with (s' := s'); first assumption.
-      + admit.
-      + admit.
-    - exact (@program_behaves_finpref_exists (PS.sem prog emptym) _ _ _ Hini Hstar).
-  Admitted.
+      pose proof initial_states_mergeability Hini1 Hini2 as Hmerge.
+      destruct (threeway_multisem_star_simulation Hmerge Hstar1 Hstar2)
+        as [Hstar12 Hmerge'].
+      apply MultiSem.multi_semantics_implies_partial_semantics; try assumption.
+      apply program_runs with (s := (s1, s2)); first easy.
+      apply state_goes_wrong with (s' := (s1', s2')); first easy.
+      + intros t s Hcontra.
+        inversion Hcontra as [? ? s1'' ? s2'' Hstep1' Hstep2']; subst.
+        apply (Hstep1 t s1''). assumption.
+      + intros Hcontra.
+        inversion Hcontra as [? ? Hfinal1' Hfinal2']; subst. contradiction.
+    - (* Here we talk about the stars associated to the behaviors, without
+         worrying now about connecting them to the existing initial states. *)
+      assert
+        (exists s s',
+            PS.initial_state p (prog_interface c) s /\
+            star (PS.step p (prog_interface c)) (prepare_global_env p) s tm s')
+        as [s1' [s1'' [Hini1' Hstar1]]]
+        by admit. (* behavior_prefix_star *)
+      assert
+        (exists s s',
+            PS.initial_state c (prog_interface p) s /\
+            star (PS.step c (prog_interface p)) (prepare_global_env c) s tm s')
+        as [s2' [s2'' [Hini2' Hstar2]]]
+        by admit. (* behavior_prefix_star *)
+      pose proof initial_states_mergeability Hini1' Hini2' as Hmerge.
+      destruct (threeway_multisem_star_simulation Hmerge Hstar1 Hstar2)
+        as [Hstar12 Hmerge'].
+      destruct
+        (MultiSem.star_simulation
+           wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
+           Hstar12 (MultiSem.multi_match_intro Hmerge))
+        as [s [Hstar12' Hmulti]].
+      eapply program_behaves_finpref_exists; last now apply Hstar12'.
+      admit. (* Easy. *)
+  Admitted. (* Grade 2. *)
 End PartialComposition.
 
 (*
