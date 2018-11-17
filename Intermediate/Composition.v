@@ -4499,9 +4499,14 @@ Section PartialComposition.
     unfold does_prefix.
     intros m [b1 [Hbeh1 Hprefix1]] [b2 [Hbeh2 Hprefix2]].
     inversion Hbeh1 as [s1 beh1 Hini1 Hst_beh1 | Hini1]; subst;
-      last admit. (* Contra. *)
+      last now destruct (PS.not_initial_state_contra
+                           wf1 wf2 linkability main_linkability Hini1).
     inversion Hbeh2 as [s2 beh2 Hini2 Hst_beh2 | Hini2]; subst;
-      last admit. (* Contra. *)
+      last now destruct (PS.not_initial_state_contra
+                           wf2 wf1
+                           (linkable_sym linkability)
+                           (linkable_mains_sym main_linkability)
+                           Hini2).
     destruct m as [tm | tm | tm].
     - destruct b1 as [t1 | ? | ? | ?]; try contradiction.
       destruct b2 as [t2 | ? | ? | ?]; try contradiction.
@@ -4576,7 +4581,7 @@ Section PartialComposition.
         as [s [Hstar12' Hmulti]].
       eapply program_behaves_finpref_exists; last now apply Hstar12'.
       now apply initial_state_merge_after_linking.
-  Admitted. (* Grade 2. *)
+  Qed.
 End PartialComposition.
 
 (*

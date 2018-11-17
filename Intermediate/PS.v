@@ -1407,4 +1407,31 @@ Lemma comes_from_initial_state_step_trans :
     CS.comes_from_initial_state ics' (unionm (prog_interface p) ctx).
 Admitted. (* Grade 3. *)
 
+Lemma initial_state_exists :
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
+  exists s,
+    initial_state p (prog_interface c) s.
+Proof.
+  eexists. econstructor; try (reflexivity || assumption).
+  apply partialized_state_is_partial.
+Qed.
+
+Lemma not_initial_state_contra : forall p c,
+  well_formed_program p ->
+  well_formed_program c ->
+  linkable (prog_interface p) (prog_interface c) ->
+  linkable_mains p c ->
+  (forall s, ~ initial_state p (prog_interface c) s) ->
+  False.
+Proof.
+  intros ? ? H1 H2 H3 H4 Hcontra.
+  destruct (initial_state_exists H1 H2 H3 H4) as [s ?].
+  specialize (Hcontra s).
+  contradiction.
+Qed.
+
 End PS.
