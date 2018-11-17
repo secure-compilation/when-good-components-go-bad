@@ -4433,18 +4433,44 @@ Section PartialComposition.
         * admit. (* Contra. *)
   Admitted. (* Grade 2. Consider where helper lemmas are natural. *)
 
+  (* RB: TODO: Move to PS when done. Note the [*_after_linking] convention used
+     for similar results in that module as opposed to [*_composition_*] being
+     used here (and various forms of [*merge*]). It would be desirable to have a
+     look at these and harmonize as needed. *)
+  Lemma initial_state_merge_after_linking :
+    forall s1 s2,
+      PS.initial_state p (prog_interface c) s1 ->
+      PS.initial_state c (prog_interface p) s2 ->
+      PS.initial_state prog emptym (PS.merge_partial_states s1 s2).
+  Admitted. (* Grade 2. May use some easy lemmas not yet in place. *)
+
+  (* Equivalence st_starN n1, n2 on program and context *)
+  (* Lemma partial_programs_composition_st_starN : *)
+  (*   forall s1 s1' s2 s2' n1 n2 t, *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' -> *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) n1 s1 t s2 -> *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) n2 s1' t s2' -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'. *)
+  (* Abort. *)
+
   (* RB: TODO: Add hypotheses and/or encapsulate in own section, or relocate to
-     PS. *)
-  Lemma partial_programs_composition_star :
-    forall sini1 sini2 t s1 s2,
-      PS.initial_state p (prog_interface c) sini1 ->
-      PS.initial_state c (prog_interface p) sini2 ->
-      star (PS.step p (prog_interface c)) (prepare_global_env p) sini1 t s1 ->
-      star (PS.step c (prog_interface p)) (prepare_global_env c) sini2 t s2 ->
-    exists sini s,
-      PS.initial_state prog emptym sini /\
-      star (PS.step prog emptym) (prepare_global_env prog) sini t s.
-  Admitted.
+     PS: what is a better match?
+     NOTE: For some of these results, I wonder whether the use of "fancy stars"
+     is substantially simpler than regular stars, and whether some of the results
+     are too strong to be used effectively in all situations where we would need
+     their assistance. In particular, the focus on two executions, in the program
+     and in the context, taking place in the same number of steps seems too
+     strong. *)
+  (* Lemma partial_programs_composition_star : *)
+  (*   forall sini1 sini2 t s1 s2, *)
+  (*     PS.initial_state p (prog_interface c) sini1 -> *)
+  (*     PS.initial_state c (prog_interface p) sini2 -> *)
+  (*     star (PS.step p (prog_interface c)) (prepare_global_env p) sini1 t s1 -> *)
+  (*     star (PS.step c (prog_interface p)) (prepare_global_env c) sini2 t s2 -> *)
+  (*   exists sini s, *)
+  (*     PS.initial_state prog emptym sini /\ *)
+  (*     star (PS.step prog emptym) (prepare_global_env prog) sini t s.     *)
+  (* Abort. *)
 
   Corollary partial_programs_composition_prefix :
     forall m,
