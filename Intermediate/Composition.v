@@ -3209,10 +3209,41 @@ Section MultiSemantics.
        symmetry to refactor the two proper cases. *)
     - rewrite (CS.initial_machine_state_after_linking
                  _ _ wf1 wf2 linkability prog_is_closed).
-      assert (Hclosed1 : closed_program (program_link p p')) by admit.
+      assert (Hclosed1 : closed_program (program_link p p')).
+      {
+        (* RB: TODO: Refactor this (and instance below) into lemma. *)
+        constructor.
+        - simpl. rewrite Hiface1. now inversion prog_is_closed.
+        - destruct (wfprog_main_existence wf1 Hmainp)
+            as [main_procs [Hmain_procs Hinmain_procs]].
+          exists mainp, main_procs. split; [| split].
+          + simpl. now rewrite Hmainp.
+          + simpl. now rewrite unionmE Hmain_procs.
+          + assumption.
+      }
       rewrite (CS.initial_machine_state_after_linking
                  _ _ wf1 Hwf1 Hlinkable1 Hclosed1) in Hpartial1.
-      assert (Hclosed2 : closed_program (program_link c c')) by admit.
+      assert (Hclosed2 : closed_program (program_link c c')).
+      {
+        (* RB: TODO: Refactor this (and instance above) into lemma. *)
+        constructor.
+        - simpl. rewrite Hiface2.
+          inversion linkability as [_ Hdisjoint].
+          rewrite <- (unionmC Hdisjoint).
+          now inversion prog_is_closed.
+        - destruct (wfprog_main_existence Hwf2 Hmainc')
+            as [main_procs [Hmain_procs Hinmain_procs]].
+          exists mainc', main_procs. split; [| split].
+          + simpl. now rewrite Hmainc Hmainc'.
+          + simpl.
+            (* Here, the easiest solution is to commute c' to the front. *)
+            inversion Hlinkable2 as [_ Hdisjoint].
+            rewrite (wfprog_defined_procedures wf2)
+                    (wfprog_defined_procedures Hwf2) in Hdisjoint.
+            rewrite (unionmC Hdisjoint).
+            now rewrite unionmE Hmain_procs.
+          + assumption.
+      }
       rewrite (CS.initial_machine_state_after_linking
                  _ _ wf2 Hwf2 Hlinkable2 Hclosed2) in Hpartial2.
       inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
@@ -3234,7 +3265,10 @@ Section MultiSemantics.
     - rewrite (prog_main_none_same_interface wf1 Hwf2 (eq_sym Hiface2) Hmainp)
         in Hmainc'.
       discriminate.
-    - admit. (* Contra: by prog_is_closed, there should be a main. *)
+    - (* Contra: by prog_is_closed, there should be a main. *)
+      inversion prog_is_closed as [_ [mainP [_ [HmainP _]]]].
+      simpl in HmainP. rewrite Hmainp Hmainc in HmainP.
+      discriminate.
   Admitted. (* Grade 2. *)
 
   Lemma multi_match_initial_states:
