@@ -3147,11 +3147,25 @@ Section MultiSemantics.
       multi_match (ips1, ips2) (PS.merge_partial_states ips1 ips2).
 
   (* RB: TODO: Move to Machine.v when done? *)
-  Remark prog_main_same_interface :
+  Remark prog_main_none_same_interface :
     forall p1 p2,
+      well_formed_program p1 ->
+      well_formed_program p2 ->
       prog_interface p1 = prog_interface p2 ->
-      prog_main p1 = prog_main p2.
-  Admitted. (* Grade 1. *)
+      prog_main p1 = None ->
+      prog_main p2 = None.
+  Proof.
+    intros p1 p2 Hwf1 Hwf2 Hiface Hnone.
+    inversion Hwf1 as [_ _ _ _ _ _ [Hmain1 Hmain1']].
+    inversion Hwf2 as [_ _ _ _ _ _ [Hmain2 Hmain2']].
+    destruct p1 as [iface1 procs1 bufs1 main1];
+      destruct p2 as [iface2 procs2 bufs2 main2];
+      simpl in *.
+    destruct main2 as [main2P |] eqn:Hcase1;
+      last reflexivity.
+    subst.
+    now intuition.
+  Qed.
 
   Lemma merged_initial_states:
     forall ips1 ips2,
@@ -3204,21 +3218,21 @@ Section MultiSemantics.
       inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
         admit. (* All subgoals are easy. *)
-    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
-      rewrite Hmainc' in Hmainp.
+    - rewrite (prog_main_none_same_interface Hwf2 wf1 Hiface2 Hmainc')
+        in Hmainp.
       discriminate.
     - admit. (* By composability of [prepare_], like above. *)
-    - rewrite <- (prog_main_same_interface Hiface1) in Hmainc.
-      rewrite Hmainc in Hmainp'.
+    - rewrite (prog_main_none_same_interface Hwf1 wf2 Hiface1 Hmainp')
+        in Hmainc.
       discriminate.
-    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
-      rewrite Hmainc' in Hmainp.
+    - rewrite (prog_main_none_same_interface wf1 Hwf2 (eq_sym Hiface2) Hmainp)
+        in Hmainc'.
       discriminate.
-    - rewrite <- (prog_main_same_interface Hiface1) in Hmainc.
-      rewrite Hmainc in Hmainp'.
+    - rewrite (prog_main_none_same_interface wf2 Hwf1 (eq_sym Hiface1) Hmainc)
+        in Hmainp'.
       discriminate.
-    - rewrite (prog_main_same_interface Hiface2) in Hmainc'.
-      rewrite Hmainc' in Hmainp.
+    - rewrite (prog_main_none_same_interface wf1 Hwf2 (eq_sym Hiface2) Hmainp)
+        in Hmainc'.
       discriminate.
     - admit. (* Contra: by prog_is_closed, there should be a main. *)
   Admitted. (* Grade 2. *)
