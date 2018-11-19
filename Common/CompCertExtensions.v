@@ -340,6 +340,16 @@ Proof.
       exists (behavior_app t b4). now rewrite <- behavior_app_assoc.
 Qed.
 
+Lemma behavior_prefix_app_inv : forall t1 t2 b,
+  behavior_prefix (t1 ++ t2) b ->
+  behavior_prefix t1 b.
+Proof.
+  intros t1 t2 ? [b ?]; subst.
+  exists (behavior_app t2 b).
+  rewrite behavior_app_assoc.
+  reflexivity.
+Qed.
+
 Lemma program_behaves_finpref_exists :
   forall L s t s',
     initial_state L s ->

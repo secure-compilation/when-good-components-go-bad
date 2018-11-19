@@ -3754,7 +3754,7 @@ Section BehaviorStar.
       + destruct (PS.initial_state_exists wf1 wf2 linkability main_linkability)
           as [s Hini'].
         exists s, s. split; [assumption | now apply star_refl].
-      + assert (Hprefix : behavior_prefix t b) by admit. (* Easy. *)
+      + pose proof behavior_prefix_app_inv Hm as Hprefix.
         specialize (IHt _ Hb Hprefix).
         destruct IHt as [s1 [s2 [Hini Hstar]]].
         inversion Hm as [b']; subst.
