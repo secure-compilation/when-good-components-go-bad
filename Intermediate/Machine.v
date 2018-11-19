@@ -1081,6 +1081,42 @@ Proof.
       discriminate.
 Qed.
 
+(* A more lightweight variation on the above lemma.
+   RB: NOTE: is_true_true replaces eq_refl on specializations, as eqtype is
+   imported. *)
+Lemma interface_preserves_closedness_r' :
+  forall p1 p2 p2',
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    closed_program (program_link p1 p2) ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    linkable_mains p1 p2 ->
+    well_formed_program p2' ->
+    prog_interface p2 = prog_interface p2' ->
+    closed_program (program_link p1 p2').
+Proof.
+  intros p c c' Hwfp Hwfc Hclosed Hlinkable Hmains Hwfc' Hifaces.
+  apply interface_preserves_closedness_r with (p2 := c);
+    try assumption.
+  - (* RB: TODO: Extract lemma from here. The stronger relation between
+       interfaces and main procedures essentially renders matching_mains
+       superfluous, trivially derivable. *)
+    inversion Hwfc as [_ _ _ _ _ _ [Hmainc Hmainc']].
+    inversion Hwfc' as [_ _ _ _ _ _ [Hmainc1 Hmainc1']].
+    rewrite <- Hifaces in Hmainc1, Hmainc1'.
+    destruct (Component.main \in domm (prog_interface c)) eqn:Hcase1.
+    + specialize (Hmainc is_true_true). specialize (Hmainc1 is_true_true).
+      unfold matching_mains.
+      destruct (prog_main c) as [mainc |] eqn:Hcase2;
+        destruct (prog_main c') as [mainc' |] eqn:Hcase3;
+        done.
+    + destruct (prog_main c) as [mainc |] eqn:Hcase2.
+      * now specialize (Hmainc' is_true_true).
+      * destruct (prog_main c') as [mainc' |] eqn:Hcase3;
+          last done.
+        now specialize (Hmainc1' is_true_true).
+Qed.
+
 Lemma closed_program_link_sym p1 p2 :
   well_formed_program p1 ->
   well_formed_program p2 ->
