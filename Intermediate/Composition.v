@@ -3252,7 +3252,50 @@ Section MultiSemantics.
     - rewrite (prog_main_none_same_interface Hwf2 wf1 Hiface2 Hmainc')
         in Hmainp.
       discriminate.
-    - admit. (* By composability of [prepare_], like above. *)
+    - (* By composability of [prepare_], like above.
+         RB: TODO: Refactor. This is the symmetric of the above. *)
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 wf2 linkability prog_is_closed).
+      assert (Hclosed1 : closed_program (program_link p p')).
+      {
+        (* RB: TODO: Refactor this (and instance below) into lemma. *)
+        constructor.
+        - simpl. rewrite Hiface1. now inversion prog_is_closed.
+        - destruct (wfprog_main_existence Hwf1 Hmainp')
+            as [main_procs [Hmain_procs Hinmain_procs]].
+          exists mainp', main_procs. split; [| split].
+          + simpl. now rewrite Hmainp Hmainp'.
+          + simpl.
+            (* Here, the easiest solution is to commute c' to the front. *)
+            inversion Hlinkable1 as [_ Hdisjoint].
+            rewrite (wfprog_defined_procedures wf1)
+                    (wfprog_defined_procedures Hwf1) in Hdisjoint.
+            rewrite (unionmC Hdisjoint).
+            now rewrite unionmE Hmain_procs.
+          + assumption.
+      }
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 Hwf1 Hlinkable1 Hclosed1) in Hpartial1.
+      assert (Hclosed2 : closed_program (program_link c c')).
+      {
+        (* RB: TODO: Refactor this (and instance above) into lemma. *)
+        constructor.
+        - simpl. rewrite Hiface2.
+          inversion linkability as [_ Hdisjoint].
+          rewrite <- (unionmC Hdisjoint).
+          now inversion prog_is_closed.
+        - destruct (wfprog_main_existence wf2 Hmainc)
+            as [main_procs [Hmain_procs Hinmain_procs]].
+          exists mainc, main_procs. split; [| split].
+          + simpl. now rewrite Hmainc.
+          + simpl. now rewrite unionmE Hmain_procs.
+          + assumption.
+      }
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf2 Hwf2 Hlinkable2 Hclosed2) in Hpartial2.
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+        admit. (* All subgoals are easy. *)
     - rewrite (prog_main_none_same_interface Hwf1 wf2 Hiface1 Hmainp')
         in Hmainc.
       discriminate.
