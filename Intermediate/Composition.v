@@ -3743,24 +3743,30 @@ Section BehaviorStar.
       inversion Hb as [s1 ? Hini Hbeh | Hini]; subst.
       + inversion Hbeh as [| | | ? s2 Hstar Hnostep Hfinal]; subst.
         now eauto.
-      + admit. (* Trivial case/contra. *)
+      + destruct (PS.initial_state_exists wf1 wf2 linkability main_linkability)
+          as [s Hini'].
+        specialize (Hini s).
+        contradiction.
     - revert b.
       induction tm as [| e t IHt] using rev_ind;
         intros b Hb Hm;
         simpl in *.
-      + admit. (* Easy. *)
+      + destruct (PS.initial_state_exists wf1 wf2 linkability main_linkability)
+          as [s Hini'].
+        exists s, s. split; [assumption | now apply star_refl].
       + assert (Hprefix : behavior_prefix t b) by admit. (* Easy. *)
         specialize (IHt _ Hb Hprefix).
         destruct IHt as [s1 [s2 [Hini Hstar]]].
         inversion Hm as [b']; subst.
-        inversion Hb as [s1' ? Hini' Hbeh' |]; subst.
+        inversion Hb as [s1' ? Hini' Hbeh' | Hini' Hbeh']; subst.
         * assert (Heq : s1 = s1') by admit.
           subst s1'.
           inversion Hbeh' as [ t' s2' Hstar' Hfinal' Heq
-                             |
-                             |
-                             |];
+                             | t' s2' Hstar' Hsilent' Heq
+                             | T' Hreact' Heq
+                             | t' s2' Hstar' Hstep' Hfinal' Heq];
             subst.
+          (* RB: TODO: Refactor block. *)
           -- destruct b' as [tb' | ? | ? | ?];
                simpl in Heq;
                try discriminate.
@@ -3768,10 +3774,35 @@ Section BehaviorStar.
              destruct (star_app_inv (@PS.singleton_traces _ _) _ _ Hstar')
                as [s' [Hstar'1 Hstar'2]].
              now eauto.
-          -- admit.
-          -- admit.
-          -- admit.
-        * admit. (* Contra. *)
+          -- (* Same as Terminates case. *)
+             destruct b' as [? | tb' | ? | ?];
+               simpl in Heq;
+               try discriminate.
+             inversion Heq; subst t'; clear Heq.
+             destruct (star_app_inv (@PS.singleton_traces _ _) _ _ Hstar')
+               as [s' [Hstar'1 Hstar'2]].
+             now eauto.
+          -- (* Similar to Terminates and Diverges, but on an infinite trace.
+                Ltac can easily take care of these commonalities. *)
+             destruct b' as [? | ? | Tb' | ?];
+               simpl in Heq;
+               try discriminate.
+             inversion Heq; subst T'; clear Heq.
+             destruct (forever_reactive_app_inv (@PS.singleton_traces _ _) _ _ Hreact')
+               as [s' [Hstar'1 Hreact'2]].
+             now eauto.
+          -- (* Same as Terminate and Diverges. *)
+             destruct b' as [? | ? | ? | tb'];
+               simpl in Heq;
+               try discriminate.
+             inversion Heq; subst t'; clear Heq.
+             destruct (star_app_inv (@PS.singleton_traces _ _) _ _ Hstar')
+               as [s' [Hstar'1 Hstar'2]].
+             now eauto.
+        * destruct (PS.initial_state_exists wf1 wf2 linkability main_linkability)
+            as [s Hini''].
+          specialize (Hini' s).
+          contradiction.
   Admitted. (* Grade 2. Consider where helper lemmas are natural. *)
 End BehaviorStar.
 
