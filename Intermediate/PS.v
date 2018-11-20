@@ -1434,4 +1434,66 @@ Proof.
   contradiction.
 Qed.
 
+(* A version of state determinism inspired by the needs and resources in
+   Composition. RB: NOTE: Consider a simpler version of this result such as is
+   given for Source.PS. *)
+Lemma initial_state_determinism :
+  forall p c s1 s2,
+    initial_state p (prog_interface c) s1 ->
+    initial_state p (prog_interface c) s2 ->
+    well_formed_program p ->
+    well_formed_program c ->
+    closed_program (program_link p c) ->
+    linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
+    s1 = s2.
+Proof.
+  intros p c ? ?
+         [c1 ics1 s1 Hiface1 _ Hwf1 Hlinkable1 Hmains1 Hpartial1 HCSini1]
+         [c2 ics2 s2 Hiface2 _ Hwf2 Hlinkable2 Hmains2 Hpartial2 HCSini2]
+         Hwfp Hwfc Hclosed Hlinkable Hmains.
+  unfold CS.initial_state in HCSini1, HCSini2; subst ics1 ics2.
+  (* RB: TODO: Possibly spin out another mini-lemma for the application to
+     CS.initial_machine_state. *)
+  symmetry in Hiface1, Hiface2.
+  assert (Hclosed1 : closed_program (program_link p c1)). {
+    apply interface_preserves_closedness_r' with (p2 := c); assumption.
+  }
+  assert (Hclosed2 : closed_program (program_link p c2)). {
+    apply interface_preserves_closedness_r' with (p2 := c); assumption.
+  }
+  rewrite CS.initial_machine_state_after_linking in Hpartial1; try assumption.
+  rewrite CS.initial_machine_state_after_linking in Hpartial2; try assumption.
+  (* Case analysis on the location of the main procedure, exposing some of the
+     structure up front to make case rewrites automatic. Also observe the common
+     case analysis and inversion structure on both cases, susceptible to simple,
+     tactic-based refactoring (or otherwise). *)
+  unfold linkable_mains in Hmains1, Hmains2.
+  inversion Hclosed1 as [_ [mainpc1 [main_procs1 [Hmainpc1 _]]]].
+  inversion Hclosed2 as [_ [mainpc2 [main_procs2 [Hmainpc2 _]]]].
+  simpl in Hmainpc1, Hmainpc2.
+  unfold CS.prog_main_block in Hpartial1, Hpartial2.
+  destruct (prog_main p) as [mainp |] eqn:Hmainp.
+  - (* main in p. *)
+    destruct (prog_main c1) as [mainc1 |] eqn:Hmainc1; first discriminate.
+    destruct (prog_main c2) as [mainc1 |] eqn:Hmainc2; first discriminate.
+    inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+      inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+      simplify_turn.
+    + admit. (* Easy. *)
+    + admit. (* Contra. *)
+    + admit. (* Contra. *)
+    + admit. (* Contra/easy. *)
+  - (* main in c1 and c2. *)
+    destruct (prog_main c1) as [mainc1 |] eqn:Hmainc1; last discriminate.
+    destruct (prog_main c2) as [mainc2 |] eqn:Hmainc2; last discriminate.
+    inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+      inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+      simplify_turn.
+    + admit. (* Contra. *)
+    + admit. (* Contra. *)
+    + admit. (* Contra. *)
+    + admit. (* Easy. *)
+Admitted. (* Grade 1. *)
+
 End PS.
