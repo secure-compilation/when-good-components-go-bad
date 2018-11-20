@@ -3718,7 +3718,8 @@ Section BehaviorStar.
     mergeable_interfaces (prog_interface p) (prog_interface c).
 
   (* RB: TODO: Add hypotheses and/or encapsulate in own section (both directions
-     will be needed in the main proof). Relocate to PS? *)
+     will be needed in the main proof). Relocate to PS?
+     Consider what helper lemmas are natural. *)
   Lemma behavior_prefix_star :
     forall b m,
       program_behaves (PS.sem p (prog_interface c)) b ->
@@ -3759,7 +3760,8 @@ Section BehaviorStar.
         destruct IHt as [s1 [s2 [Hini Hstar]]].
         inversion Hm as [b']; subst.
         inversion Hb as [s1' ? Hini' Hbeh' | Hini' Hbeh']; subst.
-        * assert (Heq : s1 = s1') by admit.
+        * assert (Heq : s1 = s1')
+            by (eapply PS.initial_state_determinism; eassumption).
           subst s1'.
           inversion Hbeh' as [ t' s2' Hstar' Hfinal' Heq
                              | t' s2' Hstar' Hsilent' Heq
@@ -3803,7 +3805,7 @@ Section BehaviorStar.
             as [s Hini''].
           specialize (Hini' s).
           contradiction.
-  Admitted. (* Grade 2. Consider where helper lemmas are natural. *)
+  Qed.
 End BehaviorStar.
 
 Section PartialComposition.
@@ -4740,7 +4742,7 @@ Section PartialComposition.
       {
         destruct
           (behavior_prefix_star
-             wf1 wf2 main_linkability linkability prog_is_closed mergeable_interfaces
+             wf1 wf2 main_linkability linkability prog_is_closed
              Hbeh1 Hprefix1)
           as [s [s' [Hini Hstar]]].
         now exists s, s'.
@@ -4757,7 +4759,7 @@ Section PartialComposition.
           (behavior_prefix_star
              wf2 wf1
              (linkable_mains_sym main_linkability) (linkable_sym linkability)
-             prog_is_closed_sym (mergeable_interfaces_sym _ _ mergeable_interfaces)
+             prog_is_closed_sym
              Hbeh2 Hprefix2)
           as [s [s' [Hini Hstar]]].
         now exists s, s'.
