@@ -3686,6 +3686,12 @@ Section MultiSemantics.
     - apply multi_match_final_states.
     - apply lockstep_simulation.
   Qed.
+
+  Corollary multi_semantics_implies_partial_semantics:
+    forall beh,
+      program_behaves msem beh ->
+      program_behaves (PS.sem prog emptym) beh.
+  Admitted.
 End MultiSemantics.
 End MultiSem.
 
