@@ -4613,7 +4613,39 @@ Section PartialComposition.
         * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
         * reflexivity.
       + exfalso. eapply PS.domm_partition_in_both; eassumption.
-    - admit. (* Symmetric case. *)
+    - (* Symmetric case. *)
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 wf2 linkability prog_is_closed).
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+        PS.simplify_turn.
+      + exfalso. apply (@domm_partition_program_link_in_neither p c); assumption.
+      + assert (Hmainc : CS.prog_main_block c = 0)
+          by now rewrite CS.prog_main_block_no_main.
+        rewrite Hmainc.
+        constructor.
+        * exact Hcomp2.
+        * inversion linkability as [_ Hdisjoint].
+          rewrite <- !domm_prepare_procedures_memory in Hdisjoint.
+          rewrite (unionmC Hdisjoint).
+          apply to_partial_memory_merge_prepare_procedures_memory_left; first assumption.
+          apply linkable_sym; assumption.
+        * reflexivity.
+      + assert (Hmainp : CS.prog_main_block p = 0)
+          by now rewrite CS.prog_main_block_no_main.
+        assert (Hmainc' : CS.prog_main_block c' = 0)
+          by (rewrite <- Hiface2 in Hcomp2;
+              now rewrite CS.prog_main_block_no_main).
+        rewrite Hmainp Hmainc' Nat.add_0_r.
+        constructor.
+        * exact Hcomp2.
+        * inversion linkability as [_ Hdisjoint].
+          rewrite <- !domm_prepare_procedures_memory in Hdisjoint.
+          rewrite (unionmC Hdisjoint).
+          apply to_partial_memory_merge_prepare_procedures_memory_left; first assumption.
+          apply linkable_sym; assumption.
+        * reflexivity.
+      + exfalso. eapply PS.domm_partition_in_both; eassumption.
 
 (*     intros s1 s2 Hs1_init Hs2_init. *)
 (*     inversion Hs1_init as [? ? ? ? ? ? ? Hmains1]; subst; *)
@@ -4681,7 +4713,7 @@ Section PartialComposition.
 
 (*     (* contra, pc is both in (prog_interface c) and in (prog_interface p) *) *)
 (*     - admit. *)
-  Admitted. (* Grade 2. *)
+  Qed.
 
   Lemma termination_with_same_number_of_steps:
     forall t,
