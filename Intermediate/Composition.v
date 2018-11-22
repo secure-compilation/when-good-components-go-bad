@@ -96,6 +96,36 @@ Remark prog_ctx_sim_domm_memories
     domm mem1 = domm mem2.
 Admitted. (* Grade 2. *)
 
+(* RB: TODO: The main rewrite sequence can be seen as two instances of a simpler
+   lemma, which will probably operate on simpler assumptions than the ones here,
+   taken from the contexts where we will apply these rewrites. In addition,
+   some of the previous reasoning on memories may be rephrased using these
+   results. *)
+Lemma to_partial_memory_merge_prepare_procedures_memory_left (p c1 c2 : program) :
+  prog_interface c1 = prog_interface c2 ->
+  linkable (prog_interface p) (prog_interface c2) ->
+  PS.to_partial_memory (PS.merge_memories (prepare_procedures_memory p)
+                                          (prepare_procedures_memory c1))
+                       (domm (prog_interface c2)) =
+  PS.to_partial_memory (PS.merge_memories (prepare_procedures_memory p)
+                                          (prepare_procedures_memory c2))
+                       (domm (prog_interface c2)).
+Proof.
+  intros Hiface [_ Hdisjoint].
+  unfold PS.to_partial_memory, PS.merge_memories.
+  rewrite <- domm_prepare_procedures_memory,
+          -> filterm_union,
+          -> fdisjoint_filterm_full,
+          -> fdisjoint_filterm_empty, -> unionm0,
+          -> filterm_union,
+          -> fdisjoint_filterm_full,
+          -> fdisjoint_filterm_empty, -> unionm0;
+    first reflexivity;
+    (* The rewrites generate a few extra goals that we can discharge by normalizing
+       the domain expression and then using our assumptions. *)
+    try rewrite -> !domm_prepare_procedures_memory; congruence.
+Qed.
+
 Lemma to_partial_memory_merge_partial_memories_left
       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
     mergeable_interfaces iface1 iface2 ->
