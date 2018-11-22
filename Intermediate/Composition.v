@@ -4556,8 +4556,10 @@ Section PartialComposition.
 
     assert (prog_is_closed_sym := prog_is_closed);
       rewrite (closed_program_link_sym wf1 wf2 linkability) in prog_is_closed_sym.
-    assert (Hmatching1 : matching_mains c p') by admit.
-    assert (Hmatching2 : matching_mains p c') by admit.
+    assert (Hmatching1 : matching_mains c p')
+      by now eapply interface_implies_matching_mains.
+    assert (Hmatching2 : matching_mains p c')
+      by now eapply interface_implies_matching_mains.
     rewrite (CS.initial_machine_state_after_linking
                _ _ wf1 Hwf1' Hlinkable1
                (interface_preserves_closedness_r
@@ -4576,26 +4578,41 @@ Section PartialComposition.
     eapply PS.mergeable_states_intro with
         (ics := CS.initial_machine_state (program_link p c)).
     - now apply mergeable_interfaces_sym.
-    - admit. (* Easy. *)
+    - destruct (cprog_main_existence prog_is_closed)
+        as [main [main_procs [Hmain [Hmain_procs Hdomm]]]].
+      exists (program_link p c), main, (CS.initial_machine_state (program_link p c)), E0.
+      split; [| split; [| split; [| split]]].
+      + apply linking_well_formedness; assumption.
+      + assumption.
+      + inversion linkability; now rewrite <- unionmC.
+      + reflexivity.
+      + now apply star_refl.
     - rewrite (CS.initial_machine_state_after_linking
                  _ _ wf1 wf2 linkability prog_is_closed).
-      assert (Hblocks1 : CS.prog_main_block p = CS.prog_main_block c') by admit.
-      assert (Hblocks2 : CS.prog_main_block c = CS.prog_main_block p') by admit.
-      rewrite <- Hblocks1 in Hpartial2.
-      rewrite <- Hblocks2 in Hpartial1.
       inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
         PS.simplify_turn.
-      + admit. (* Contra. *)
-      + constructor.
+      + exfalso. apply (@domm_partition_program_link_in_neither p c); assumption.
+      + assert (Hmainc : CS.prog_main_block c = 0)
+          by now rewrite CS.prog_main_block_no_main.
+        (* RB: NOTE: The lemma may be generalized by adding an equality on
+           interfaces and keeping the two instances distinct in the statement. *)
+        assert (Hmainp' : CS.prog_main_block p' = 0)
+          by (rewrite <- Hiface1 in Hcomp1;
+              now rewrite CS.prog_main_block_no_main).
+        rewrite Hmainc Hmainp'.
+        constructor.
         * exact Hcomp1.
-        * admit. (* Easy. *)
-        * admit. (* Easy. *)
-      + constructor.
+        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * reflexivity.
+      + assert (Hmainp : CS.prog_main_block p = 0)
+          by now rewrite CS.prog_main_block_no_main.
+        rewrite Hmainp.
+        constructor.
         * exact Hcomp1.
-        * admit. (* Easy. *)
-        * admit. (* Easy. *)
-      + admit. (* Contra. *)
+        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * reflexivity.
+      + exfalso. eapply PS.domm_partition_in_both; eassumption.
     - admit. (* Symmetric case. *)
 
 (*     intros s1 s2 Hs1_init Hs2_init. *)
