@@ -1117,6 +1117,38 @@ Proof.
         now specialize (Hmainc1' is_true_true).
 Qed.
 
+(* RB: TODO: Revisit uses of matching_mains as hypotheses and see when they can
+   be removed due to their being derivable from this result. *)
+Lemma interface_implies_matching_mains :
+  forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    prog_interface p1 = prog_interface p2 ->
+    matching_mains p1 p2.
+Proof.
+  intros p1 p2 Hwf1 Hwf2 Hiface.
+  unfold matching_mains.
+  destruct (prog_main p1) as [main1 |] eqn:Hcase1;
+    destruct (prog_main p2) as [main2 |] eqn:Hcase2.
+  - easy.
+  - split; first easy.
+    exfalso.
+    exfalso.
+    inversion Hwf2 as [_ _ _ _ _ _ [Hmain2' _]].
+    inversion Hwf1 as [_ _ _ _ _ _ [_ Hmain1']].
+    rewrite Hcase1 in Hmain1'. specialize (Hmain1' is_true_true).
+    rewrite -> Hcase2, <- Hiface in Hmain2'. apply Hmain2' in  Hmain1'.
+    discriminate.
+  - split; last easy.
+    exfalso.
+    inversion Hwf1 as [_ _ _ _ _ _ [Hmain1' _]].
+    inversion Hwf2 as [_ _ _ _ _ _ [_ Hmain2']].
+    rewrite Hcase2 in Hmain2'. specialize (Hmain2' is_true_true).
+    rewrite -> Hcase1, -> Hiface in Hmain1'. apply Hmain1' in  Hmain2'.
+    discriminate.
+  - easy.
+Qed.
+
 Lemma closed_program_link_sym p1 p2 :
   well_formed_program p1 ->
   well_formed_program p2 ->
