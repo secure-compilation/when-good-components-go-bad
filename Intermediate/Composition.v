@@ -49,6 +49,29 @@ Admitted. (* Grade 2. *)
   generalized. Module qualifiers will be tweaked as needed.
 *)
 
+Lemma domm_partition_program_link_in_neither p c :
+  well_formed_program p ->
+  well_formed_program c ->
+  closed_program (program_link p c) ->
+  Component.main \notin domm (prog_interface p) ->
+  Component.main \notin domm (prog_interface c) ->
+  False.
+Proof.
+  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
+         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
+  destruct (prog_main p) as [mainp |] eqn:Hcasep.
+  - specialize (Hmainp (eq_refl _)).
+    rewrite Hmainp in Hmainp'.
+    discriminate.
+  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
+    +  specialize (Hmainc (eq_refl _)).
+       rewrite Hmainc in Hmainc'.
+       discriminate.
+    + simpl in Hmain.
+      rewrite Hcasep Hcasec in Hmain.
+      discriminate.
+Qed.
+
 (* RB: TODO: More properly, this seems to belong in Machine.Memory. However, it
    is natural to resort to a notion of partial memory that seems logically
    related to the supporting components of PS. Again, note, however, that this
