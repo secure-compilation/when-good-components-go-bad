@@ -1,6 +1,7 @@
 Require Import Lib.Extra.
 Require Import CompCert.Events.
 Require Import Common.Definitions.
+Require Import Common.Values.
 Require Import Common.Linking.
 Require Import Common.CompCertExtensions.
 
@@ -154,7 +155,7 @@ Definition well_formed_event intf (e: event) : bool :=
   match e with
   | ECall C P _ C' => (C != C') && imported_procedure_b intf C C' P
   | ERet  C _   C' => (C != C')
-  | ELoad C _ _ C' => (C != C')
+  | ELoad C _ v C' => (C != C') && (is_transferable_value v)
   end.
 
 Definition well_formed_trace intf (t: trace) : bool :=

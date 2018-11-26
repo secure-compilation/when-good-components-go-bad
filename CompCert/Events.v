@@ -5,7 +5,7 @@ Require Import Common.Values.
 Inductive event :=
 | ECall : (* Calling *) Component.id -> Procedure.id -> Z -> (* Called *) Component.id -> event
 | ERet : (* Called *) Component.id -> Z -> (* Calling *) Component.id -> event
-| ELoad : (* Dereferencing *) Component.id -> Block.offset -> Z (* TODO add Undef *) ->  (* Owning *) Component.id -> event
+| ELoad : (* Dereferencing *) Component.id -> Block.offset -> value -> (* Owning *) Component.id -> event
 (* the fitting pointer to the buffer would replace the offset eventually *)
 .
 

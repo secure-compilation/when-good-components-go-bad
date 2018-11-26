@@ -244,12 +244,14 @@ Section Definability.
   Definition suffixes_of_trace (t:trace) : list trace :=
     suffixes_of_trace_aux t (length t) [].
 
+  Hint Unfold suffixes_of_trace_aux suffixes_of_trace.
+
   (* Quick sanity check (unrealistic) *)
   (* TODO Would be better to declare all of this in some variable inside of a section ? *)
   Example test_suffixes_of_trace :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
-    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
     let ev1 := ECall Component.main P1 arg1 C1 in
     let ev2 := ERet C1 ret1 Component.main in
     let ev3 := ELoad Component.main off1 load1 C1 in
@@ -324,7 +326,7 @@ Section Definability.
 
   (** Gives an assignement expression of the public memory (at index off) to val *)
   Definition assign_public off val :=
-    E_assign (E_binop Add (E_local Block.pub) (E_val (Int off))) (E_val (Int val)).
+    E_assign (E_binop Add (E_local Block.pub) (E_val (Int off))) (E_val val).
 
   (** Gives a list of assignement depending on the ELoad events in the future of
       the trace (accumulated)
@@ -369,7 +371,7 @@ Section Definability.
   Example test_prefill_read_aux1 :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
-    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
     let ev1 := ECall Component.main P1 arg1 C1 in
     let ev2 := ERet C1 ret1 Component.main in
     let ev3 := ELoad Component.main off1 load1 C1 in
@@ -382,14 +384,14 @@ Section Definability.
   Example test_prefill_read_aux2 :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
-    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
     let ev1 := ECall Component.main P1 arg1 C1 in
     let ev2 := ERet C1 ret1 Component.main in
     let ev3 := ELoad Component.main off1 load1 C1 in
     let ev4 := ELoad Component.main off2 load2 C1 in
     let acc := [] in
     let offsets := mkfmap[(0,false);(1,false);(2,false)] in
-    prefill_read_aux C1 [ ev3 ; ev4 ] acc offsets = [(assign_public 2 1337); (assign_public 1 420)].
+    prefill_read_aux C1 [ ev3 ; ev4 ] acc offsets = [(assign_public 2 (Int 1337)); (assign_public 1 (Int 420))].
   Proof. simpl.
          have H:false \in codomm (setm (setm (setm emptym 2 false) 1 false) 0 false).
          { apply /codommP. exists 0. done. }
@@ -481,7 +483,7 @@ Section Definability.
   Example test_comp_subtrace0 :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
-    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
     let ev1 := ECall Component.main P1 arg1 C1 in
     let ev2 := ERet C1 ret1 Component.main in
     let ev3 := ELoad Component.main off1 load1 C1 in
@@ -493,7 +495,7 @@ Section Definability.
 Example test_comp_subtrace1 :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
-    let '(off1, load1, off2, load2) := (1%Z, 420%Z, 2%Z, 1337%Z) in
+    let '(off1, load1, off2, load2) := (1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
     let ev1 := ECall Component.main P1 arg1 C1 in
     let ev2 := ERet C1 ret1 Component.main in
     let ev3 := ELoad Component.main off1 load1 C1 in

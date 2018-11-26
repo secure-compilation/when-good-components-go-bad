@@ -151,12 +151,14 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
             [State C, s, mem, k, E_val v, arg]
 | KS_DerefComponentEval : forall C s mem k C' b' o' v arg,
     C <> C' ->
-    Memory.load mem (C',b',o') = Some (Int v) -> (* for now, only allowing int *)
-    b' = Block.private -> (* for now, only allowing the preallocated private buffer (should this rule be before the previous one ? *)
-    (* or this can be even enforced as Memory.load(C',Block.private,o') *)
+    b' = Block.public -> (* for now, only allowing the preallocated public buffer *)
+    Memory.load mem (C',b',o') = Some v ->
+    (* for now, only allowing int and undef to be passed *)
+    is_transferable_value v ->
+    (* or this can be even enforced as Memory.load(C',Block.public,o') *)
     kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o')), arg]
             [:: ELoad C  o' v C']
-            [State C, s, mem, k, E_val (Int v), arg]
+            [State C, s, mem, k, E_val v, arg]
 | KS_Assign1 : forall C s mem k e1 e2 arg,
     kstep G [State C, s, mem, k, E_assign e1 e2, arg] E0
             [State C, s, mem, Kassign1 e1 k, e2, arg]
@@ -233,10 +235,8 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       ret (E0, [State C, s, mem, k, E_val (Int v), arg])
     else None
   | E_local bk =>
-    match bk with
-    | Block.pub => ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.public, 0%Z)), arg])
-    | Block.priv => ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.private, 0%Z)), arg])
-    end
+    let block_id := Block.buffer_kind_to_block_id bk in
+    ret (E0, [State C, s, mem, k, E_val (Ptr (C, block_id, 0%Z)), arg])
   | E_component_buf C' =>
     ret (E0, [State C, s, mem, k, E_val (Ptr (C', Block.public, 0%Z)), arg])
   | E_alloc e =>
@@ -280,16 +280,16 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
         else
           (* component buffer load *)
           do v <- Memory.load mem (C', b', o');
+          (* match Block.block_id_to_buffer_kind b' with *)
+          (* | Some pub => *)
           match b' with
-            (* should this be before Memory.load ? Since at this level it's pretty safe (returns None if out of bounds) I guess it doesn't matter *)
-            | (* Block.private *) 1 =>
-              match v with
+          | (* public *) 0 =>
+            if is_transferable_value v then
               (* For now, only allowing ints *)
-              | Int i => ret ([:: ELoad C o' i C'], [State C, s, mem, k', E_val (Int i), arg])
-              | Ptr t => None
-              | Undef => (* Not even Undef, but surely that should change *) None
-              end
-            | _ => None
+              ret ([:: ELoad C o' v C'],
+                                   [State C, s, mem, k', E_val v, arg])
+            else None
+          | _ => None
           end
       | _ => None
       end
@@ -352,25 +352,30 @@ Theorem eval_kstep_complete:
     kstep G st t st' -> eval_kstep G st = Some (t, st').
 Proof.
   intros G st t st' Hkstep.
-  inversion Hkstep; subst; simpl; auto;
+  inversion Hkstep as [ | | | | | | | | | | |
+                        | ?C ?s ?mem ?mem' ?k size ?ptr ?arg Hsize Halloc | |
+                        (* DerefComponentEval *)
+                        | ?C ?s ?mem ?k ?C' ?b' ?o' v ?arg HCC' Hpub Hload Htransf | | | | |
+                        | | | ];
+    subst; simpl; auto;
     try (unfold Memory.store, Memory.load, Memory.alloc in *;
          repeat simplify_nat_equalities;
          repeat simplify_option;
          reflexivity);
     try move/eqP/negbTE: H => -> ;
     try done.
-  (* if expressions *)
-  - assert (Hsize: (size >? 0) % Z = true). {
-      destruct size; try inversion H; auto.
+  (* alloc eval *)
+  - assert (HsizeBool: (size >? 0) % Z). {
+      destruct size ; inversion Hsize ; auto.
     }
-    rewrite Hsize.
-    rewrite H0. reflexivity.
-  (* component buffer load *)
-  - by rewrite H0.
+    rewrite HsizeBool.
+    by rewrite Halloc.
+  (* KS_DerefComponentEval -> _ *)
+  - case: eqP; first done.
+    by rewrite Hload Htransf.
   (* external calls *)
   - apply imported_procedure_iff in H0.
-    rewrite H0 H1.
-    reflexivity.
+    by rewrite H0 H1.
 Qed.
 
 Theorem eval_kstep_sound:
@@ -397,12 +402,14 @@ Proof.
     + econstructor; eauto.
       * apply Zgt_is_gt_bool. assumption.
     + by econstructor; eauto; apply/eqP.
-    + econstructor ; [apply /eqP/negbT; assumption | assumption | done].
+    + (* _ -> KS_DerefComponentEval *)
+    constructor ; [by apply /eqP/negbT | reflexivity | assumption | assumption ].
     + econstructor.
     + by econstructor; eauto; apply/eqP.
     + econstructor; eauto; exact/eqP.
     + econstructor; eauto; first exact/eqP/negbT.
       apply imported_procedure_iff. assumption.
+  - unfold Block.buffer_kind_to_block_id in H. destruct b ; inversion H ; constructor.
 Qed.
 
 Theorem eval_kstep_correct:
@@ -546,7 +553,7 @@ Section Semantics.
   Proof.
   elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
   rewrite all_cat; case: st1 t1 st2 / Hstep {Hstar} => //=.
-  - by move=> ????????? /eqP ->.
+  - move=> ????????? /eqP -> -> => ? transf. by rewrite transf IH.
   - by move=> ????????? /eqP -> /imported_procedure_iff ->.
   - by move=> ????????  /eqP ->.
   Qed.

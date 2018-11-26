@@ -2,6 +2,7 @@ Require Import Common.Definitions.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
+Require Import Common.Values.
 Require Import Lib.Extra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype seq.

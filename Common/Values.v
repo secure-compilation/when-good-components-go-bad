@@ -147,9 +147,18 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
   end.
 
 (* Should be place surely elsewhere, but it doesn't break the dependency tree that way *)
-  Definition buffer : Type := (nat + list value).
-  Definition buffer_size (buf : buffer) :=
-    match buf with
-    | inl n => n
-    | inr seq => length seq
-    end.
+Definition buffer : Type := (nat + list value).
+Definition buffer_size (buf : buffer) :=
+  match buf with
+  | inl n => n
+  | inr seq => length seq
+  end.
+
+(* Simple predicate to allow undef but not pointer passing *)
+Definition is_transferable_value (v : value ) :=
+  match v with
+  | Int _ => true
+  | Ptr _ => false
+  | Undef => true
+  end.
+Hint Unfold is_transferable_value.
