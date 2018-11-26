@@ -1008,6 +1008,16 @@ Proof.
   reflexivity.
 Qed.
 
+Remark prepare_procedures_initial_memory_decompose:
+  forall p,
+    prepare_procedures_initial_memory p =
+    (prepare_procedures_memory p,
+     prepare_procedures_procs p,
+     prepare_procedures_entrypoints p).
+Proof.
+  reflexivity.
+Qed.
+
 (* RB: Slight "misnomer" because of the presence of matching_mains.
    Closely connected to linkable, but not exactly the same at this
    level. Is there a benefit to combining these two in a definition? *)
