@@ -852,6 +852,36 @@ Definition merge_partial_states (ips1 ips2: state) : state :=
     end
   end.
 
+(* Composition of mergeable states. *)
+
+(* The following definitions are meant to manipulate pairs of mergeable states
+   piecemeal. If the states are indeed mergeable, no error conditions (treated
+   silently by the definitions, for now) occur. Moreover, they result in stacks
+   and memories "without holes" w.r.t. to the generating states and interfaces,
+   provided that the mergeability assumptions is present. *)
+
+Definition mergeable_states_stack (s s' : state) : stack :=
+  merge_stacks (state_stack s) (state_stack s').
+
+Definition mergeable_states_memory (s s' : state) : Memory.t :=
+  merge_memories (state_memory s) (state_memory s').
+
+Definition mergeable_states_regs (s s' : state) : Register.t :=
+  match s, s' with
+    | PS.PC(_, _, regs, _), PS.CC(_, _, _)
+    | PS.CC(_, _, _), PS.PC(_, _, regs, _) => regs
+    (* The following will not happen if s and s' are mergeable. *)
+    | _, _ => Register.init
+  end.
+
+Definition mergeable_states_pc (s s' : state) : Pointer.t :=
+  match s, s' with
+    | PS.PC(_, _, _, pc), PS.CC(_, _, _)
+    | PS.CC(_, _, _), PS.PC(_, _, _, pc) => pc
+    (* The following will not happen if s and s' are mergeable. *)
+    | _, _ => (Component.main, 0, 0%Z)
+  end.
+
 (* transition system *)
 
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
