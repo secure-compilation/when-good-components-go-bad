@@ -882,6 +882,12 @@ Definition mergeable_states_pc (s s' : state) : Pointer.t :=
     | _, _ => (Component.main, 0, 0%Z)
   end.
 
+Definition mergeable_states_state (s s' : state) : state :=
+  PS.PC (mergeable_states_stack s s',
+         mergeable_states_memory s s',
+         mergeable_states_regs s s',
+         mergeable_states_pc s s').
+
 (* transition system *)
 
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
