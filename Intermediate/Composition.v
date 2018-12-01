@@ -3619,6 +3619,15 @@ Section MultiSemantics.
                        (PS.merge_partial_states s s').
   Admitted. (* Grade 1. *)
 
+  (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
+     in this section, but these should be pared down. *)
+  Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
+    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+    PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
+    PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
+  Admitted.
+
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
@@ -3637,16 +3646,23 @@ Section MultiSemantics.
     PS.step (program_link p c) emptym (prepare_global_env (program_link p c))
             (PS.merge_partial_states s1 s1') t
             (PS.merge_partial_states s2 s2').
-  Admitted.
-
-  (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
-     in this section, but these should be pared down. *)
-  Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
-    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
-    PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
-    PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
-    PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
-  Admitted.
+  Proof.
+    intros s1 s1' s2 s2' t Hmergeable1 Hstep Hstep'.
+    pose proof mergeable_states_step_trans Hmergeable1 Hstep Hstep'
+      as Hmergeable2.
+    apply PS.partial_step
+      with (p' := empty_prog)
+           (ics := PS.unpartialize (PS.merge_partial_states s1 s1'))
+           (ics' := PS.unpartialize (PS.merge_partial_states s2 s2')).
+    - reflexivity.
+    - now apply linking_well_formedness.
+    - exact empty_prog_is_well_formed.
+    - exact (linkable_emptym _ (proj1 linkability)).
+    - now apply linkable_mains_empty_prog.
+    - rewrite linking_empty_program. now apply mergeable_states_step_CS.
+    - now apply mergeable_states_partial_state_emptym.
+    - now apply mergeable_states_partial_state_emptym.
+  Qed.
 
   Lemma lockstep_simulation:
     forall ms t ms',
