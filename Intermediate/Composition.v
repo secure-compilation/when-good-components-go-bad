@@ -516,7 +516,8 @@ Admitted. (* Grade 2. *)
       which is what we wanted to show.
 *)
 
-Section PS2CS.
+Module PS2CS.
+Section Simulation.
   Variable prog: program.
 
   Hypothesis prog_is_well_formed:
@@ -704,6 +705,7 @@ Section PS2CS.
         destruct prog_main0; simpl;
         assumption.
   Qed.
+End Simulation.
 End PS2CS.
 
 Module CS2PS.
@@ -5019,7 +5021,7 @@ Section Composition.
   Proof.
     intros t Hbeh1 Hbeh2.
     inversion mergeable_interfaces as [linkability _].
-    eapply partial_semantics_implies_complete_semantics; auto.
+    eapply PS2CS.partial_semantics_implies_complete_semantics; auto.
     - apply linking_well_formedness; auto.
     - apply partial_programs_composition; auto.
   Qed.
@@ -5038,7 +5040,7 @@ Section Composition.
          Hpref1 Hpref2)
       as [beh [Hbeh Hprefix]].
     exists beh. split; auto.
-    - apply partial_semantics_implies_complete_semantics; auto.
+    - apply PS2CS.partial_semantics_implies_complete_semantics; auto.
       + apply linking_well_formedness; auto.
   Qed.
 
