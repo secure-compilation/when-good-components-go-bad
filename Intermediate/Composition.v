@@ -706,6 +706,65 @@ Section PS2CS.
   Qed.
 End PS2CS.
 
+Module CS2PS.
+Section Simulation.
+  Variable prog: program.
+
+  Hypothesis prog_is_well_formed:
+    well_formed_program prog.
+
+  Hypothesis prog_is_closed:
+    closed_program prog.
+
+  Lemma match_initial_states:
+    forall ics,
+      CS.initial_state prog ics ->
+    exists ips,
+      PS.initial_state prog emptym ips /\ PS.partial_state emptym ics ips.
+  Admitted.
+
+  Lemma match_final_states:
+    forall ics ips,
+      PS.partial_state emptym ics ips ->
+      CS.final_state (prepare_global_env prog) ics ->
+      PS.final_state prog emptym ips.
+  Admitted.
+
+  Lemma lockstep_simulation:
+    forall ics t ics',
+      CS.step (prepare_global_env prog) ics t ics' ->
+    forall ips,
+      PS.partial_state emptym ics ips ->
+    exists ips',
+      PS.step prog emptym (prepare_global_env prog) ips t ips' /\ PS.partial_state emptym ics' ips'.
+  Admitted.
+
+  (* Lemma star_simulation: *)
+  (*   forall ips t ips', *)
+  (*     Star (PS.sem prog emptym) ips t ips' -> *)
+  (*   forall ics, *)
+  (*     PS.partial_state emptym ics ips -> *)
+  (*   exists ics', *)
+  (*     Star (CS.sem prog) ics t ics' /\ PS.partial_state emptym ics' ips'. *)
+  (* Qed. *)
+
+  Theorem PS_simulates_CS:
+    forward_simulation (CS.sem prog) (PS.sem prog emptym).
+  Proof.
+    eapply forward_simulation_step.
+    - apply match_initial_states.
+    - apply match_final_states.
+    - apply lockstep_simulation.
+  Qed.
+
+  Corollary partial_semantics_implies_complete_semantics:
+    forall beh,
+      program_behaves (CS.sem prog) beh ->
+      program_behaves (PS.sem prog emptym) beh.
+  Admitted.
+End Simulation.
+End CS2PS.
+
 (* Definition in terms of an interface (like everything else in the development).
    A disadvantage of the current definition is that tactics like [constructor]
    are ambiguous and cannot choose the obviously correct constructor. *)
