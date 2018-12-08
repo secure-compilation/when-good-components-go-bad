@@ -3864,6 +3864,13 @@ Section MultiSemantics.
      A partial step, partialized on the empty interface (that is, a complete
      step in disguise) can be rearranged as two partial steps split along the
      lines of a pair of mergeable interfaces. *)
+  Lemma initial_state_split :
+    forall s1 s2,
+      PS.initial_state p (prog_interface c) s1 ->
+      PS.initial_state c (prog_interface p) s2 ->
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2.
+  Admitted. (* Grade 2. See ProgCtxSim.match_initial_states. *)
+
   Lemma step_emptym_split :
     forall s t s',
       PS.step prog emptym (prepare_global_env prog) s t s' ->
