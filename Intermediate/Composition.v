@@ -3857,6 +3857,9 @@ Section MultiSemantics.
     now destruct (Eapp_E0_inv _ _ (eq_sym Happ)).
   Qed.
 
+  Lemma initial_state_exists : exists s, initial_state s.
+  Admitted. (* Grade 2. *)
+
   (* RB: TODO: To PS when done.
      A partial step, partialized on the empty interface (that is, a complete
      step in disguise) can be rearranged as two partial steps split along the
