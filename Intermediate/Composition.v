@@ -4952,7 +4952,24 @@ Section PartialComposition.
       PS.initial_state p (prog_interface c) s1 ->
       PS.initial_state c (prog_interface p) s2 ->
       PS.initial_state prog emptym (PS.merge_partial_states s1 s2).
-  Admitted. (* Grade 2. May use some easy lemmas not yet in place. *)
+  Proof.
+    intros s1 s2 Hini1 Hini2.
+    apply PS.initial_state_intro
+      with (p' := empty_prog)
+           (ics := PS.unpartialize (PS.merge_partial_states s1 s2)).
+    - reflexivity.
+    - now apply linking_well_formedness.
+    - exact empty_prog_is_well_formed.
+    - apply linkable_emptym.
+      now inversion linkability.
+    - now apply linkable_mains_empty_prog.
+    - apply MultiSem.mergeable_states_partial_state_emptym
+        with (p := p) (c := c);
+        try assumption.
+      now apply MultiSem.initial_state_split.
+    - rewrite linking_empty_program.
+      now apply MultiSem.merged_initial_states.
+  Qed.
 
   (* Equivalence st_starN n1, n2 on program and context *)
   (* Lemma partial_programs_composition_st_starN : *)
