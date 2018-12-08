@@ -3900,7 +3900,35 @@ Section MultiSemantics.
     forall beh,
       program_behaves msem beh ->
       program_behaves (PS.sem prog emptym) beh.
-  Admitted.
+  Proof.
+    intros beh Hbeh.
+    destruct (forward_simulation_behavior_improves merged_prog_simulates_multisem Hbeh)
+      as [beh' [Hbeh' [| [t [? Hprefix]]]]]; subst;
+      first assumption.
+    inversion Hbeh as [sini_ms ? Hini_ms Hstbeh_ms | Hini_ms]; subst;
+      last by destruct (initial_state_exists) as [sini Hini]; specialize (Hini_ms sini).
+    destruct (multi_match_initial_states Hini_ms) as [ini_ps [Hini_ps Hmatch_ini]].
+    simpl in *.
+    eapply program_runs;
+      first exact Hini_ps.
+    inversion Hstbeh_ms as [| | | ? [s1 s2] Hstar_ms Hnostep_ms Hfinal_ms]; subst.
+    destruct (star_simulation Hstar_ms Hmatch_ini) as [s_ps [Hstar_ps Hmatch]].
+    eapply state_goes_wrong;
+      first exact Hstar_ps.
+    - intros t_ps s_ps' Hstep_ps.
+      inversion Hmatch as [? ? Hmerge]; subst.
+      apply step_emptym_split in Hstep_ps. destruct Hstep_ps as [Hstep_ps1 Hstep_ps2].
+      rewrite (partialize_mergeable_states_left Hmerge) in Hstep_ps1.
+      rewrite (partialize_mergeable_states_right Hmerge) in Hstep_ps2.
+      eapply Hnostep_ms. econstructor; eassumption.
+    - intros Hfinal_ps.
+      inversion Hmatch as [? ? Hmerge]; subst.
+      apply final_state_emptym_split in Hfinal_ps.
+      destruct Hfinal_ps as [Hfinal_ps1 Hfinal_ps2].
+      rewrite (partialize_mergeable_states_left Hmerge) in Hfinal_ps1.
+      rewrite (partialize_mergeable_states_right Hmerge) in Hfinal_ps2.
+      apply Hfinal_ms. constructor; assumption.
+  Qed.
 End MultiSemantics.
 End MultiSem.
 
