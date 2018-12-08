@@ -3845,6 +3845,54 @@ Section MultiSemantics.
     - apply lockstep_simulation.
   Qed.
 
+  (* RB: TODO: Move to CompCertExtensions, integrate in existing proofs. *)
+  Lemma behavior_prefix_goes_initially_wrong_inv : forall t,
+    behavior_prefix t (Goes_wrong E0) ->
+    t = E0.
+  Proof.
+    intros t [beh Hbeh].
+    destruct beh as [| | | tbeh];
+      try discriminate.
+    inversion Hbeh as [Happ].
+    now destruct (Eapp_E0_inv _ _ (eq_sym Happ)).
+  Qed.
+
+  (* RB: TODO: To PS when done.
+     A partial step, partialized on the empty interface (that is, a complete
+     step in disguise) can be rearranged as two partial steps split along the
+     lines of a pair of mergeable interfaces. *)
+  Lemma step_emptym_split :
+    forall s t s',
+      PS.step prog emptym (prepare_global_env prog) s t s' ->
+      PS.step p (prog_interface c) (prepare_global_env p)
+              (PS.partialize (PS.unpartialize s) (prog_interface c)) t
+              (PS.partialize (PS.unpartialize s') (prog_interface c)) /\
+      PS.step c (prog_interface p) (prepare_global_env c)
+              (PS.partialize (PS.unpartialize s) (prog_interface p)) t
+              (PS.partialize (PS.unpartialize s') (prog_interface p)).
+  Admitted. (* Grade 2. *)
+
+  Lemma final_state_emptym_split :
+    forall s,
+      PS.final_state prog emptym s ->
+      PS.final_state p (prog_interface c)
+                     (PS.partialize (PS.unpartialize s) (prog_interface c)) /\
+      PS.final_state c (prog_interface p)
+                     (PS.partialize (PS.unpartialize s) (prog_interface p)).
+  Admitted. (* Grade 2. *)
+
+  Lemma partialize_mergeable_states_left :
+    forall s1 s2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
+      PS.partialize (PS.unpartialize (PS.merge_partial_states s1 s2)) (prog_interface c) = s1.
+  Admitted. (* Grade 2. *)
+
+  Lemma partialize_mergeable_states_right :
+    forall s1 s2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
+      PS.partialize (PS.unpartialize (PS.merge_partial_states s1 s2)) (prog_interface p) = s2.
+  Admitted. (* Grade 2. *)
+
   Corollary multi_semantics_implies_partial_semantics:
     forall beh,
       program_behaves msem beh ->
