@@ -3806,7 +3806,8 @@ rename Hpartial1' into _Hpartial1'.
       (* Case analysis on p's step. *)
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
-      + inversion Hpartial2
+      + (* INop *)
+        inversion Hpartial2
           as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
           subst;
           last admit. (* Contra. *)
@@ -3818,16 +3819,41 @@ rename Hpartial2 into _Hpartial2.
         simpl in *.
 rename Hpartial2' into _Hpartial2'.
         PS.simplify_turn.
+        rewrite <- Hmem1, <- Hstack1.
+        erewrite (merge_stacks_partition
+                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                    Hcomes_from).
+        erewrite (merge_memories_partition
+                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                    Hcomes_from).
+        (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
-rename Hstep_cs' into _Hstep_csep_cs'.
-        * rewrite <- Hmem1, <- Hstack1, <- Hmem1', <- Hstack1'.
+rename Hstep_cs' into _Hstep_csep_cs';
+          (* Specialized rewrites for store and alloc. *)
+          try match goal with
+          | Hop : executing _ ?PC (IStore _ _),
+            Hcomp : Pointer.component ?PTR = Pointer.component ?PC,
+            Hstore : Memory.store ?MEM1 ?PTR _ = Some ?MEM2
+            |- _ =>
+            rewrite <- Hcomp in Hics_pc1';
+            rewrite -> (program_store_to_partialized_memory Hics_pc1' Hstore) in Hmem1'
+          end;
+          try match goal with
+          | Hop : executing _ ?PC (IAlloc _ _),
+            Halloc : Memory.alloc ?MEM1 (Pointer.component ?PTR) _ = Some (?MEM2, _)
+            |- _ =>
+            rewrite -> (program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
+          end;
+          (* Stack and memory rewrites, then solve goal. *)
+          rewrite <- Hmem1';
+          rewrite <- Hstack1';
           erewrite (merge_stacks_partition
                       (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                      Hcomes_from).
+                      Hcomes_from);
           erewrite (merge_memories_partition
-                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                      Hcomes_from).
-          apply CS.Nop.
+                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                          Hcomes_from);
+          apply CS.Nop;
           now apply execution_invariant_to_linking with (c1 := c').
   Admitted.
 
