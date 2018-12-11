@@ -3768,6 +3768,67 @@ rename Hstep_cs' into _Hstep_cs'.
     CS.step (prepare_global_env (program_link p c))
             (PS.unpartialize (PS.merge_partial_states s1 s1')) t
             (PS.unpartialize (PS.merge_partial_states s2 s2')).
+  Proof.
+    intros s1 s1' s2 s2' t Hmergeable Hstep Hstep'.
+    (* Top-level case analysis. *)
+    inversion Hmergeable
+      as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial_ics1 Hpartial_ics1'];
+      subst.
+rename Hmergeable into _Hmergeable.
+    inversion Hstep
+      as [c' ? ? ? ics1 ics2
+          Hsame_iface1 _ Hwf1 Hlinkable Hmains Hstep_cs Hpartial1 Hpartial2];
+      subst.
+rename Hstep into _Hstep.
+    inversion Hstep'
+      as [p' ? ? ? ics1' ics2'
+          Hsame_iface2 _ Hwf2 Hlinkable' Hmains' Hstep_cs' Hpartial1' Hpartial2'];
+      subst.
+rename Hstep' into _Hstep'.
+    inversion Hpartial_ics1
+      as [gps1 ? mem1 ? regs1 pc1 Hpc1 | gps1 ? mem1 ? ? pc1 Hcc1]; subst;
+      last admit. (* Symmetric case. *)
+rename Hpartial_ics1 into _Hpartial_ics1.
+    - (* p has control. *)
+      inversion Hpartial_ics1'
+        as [? | gps1' ? mem1' ? ? pc1' Hcc1']; subst;
+        first admit. (* Contra. *)
+rename Hpartial_ics1' into _Hpartial_ics1'.
+      inversion Hpartial1
+        as [ics_gps1 ? ics_mem1 ? ics_regs1 ics_pc1 Hics_pc1 Hmem1 Hstack1 |];
+        subst.
+rename Hpartial1 into _Hpartial1.
+      inversion Hpartial1'
+        as [| ics_gps1' ? ics_mem1' ? ics_regs1' ics_pc1' Hics_pc1' Hmem1' Hstack1' dummy Hcomp1'];
+        subst.
+rename Hpartial1' into _Hpartial1'.
+      PS.simplify_turn.
+      (* Case analysis on p's step. *)
+      inversion Hstep_cs; subst;
+rename Hstep_cs into _Hstep_cs.
+      + inversion Hpartial2
+          as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
+          subst;
+          last admit. (* Contra. *)
+rename Hpartial2 into _Hpartial2.
+        inversion Hpartial2'
+          as [| ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2'];
+          subst;
+          first admit. (* Contra (after Hstep_cs', maybe.). *)
+        simpl in *.
+rename Hpartial2' into _Hpartial2'.
+        PS.simplify_turn.
+        inversion Hstep_cs'; subst;
+rename Hstep_cs' into _Hstep_csep_cs'.
+        * rewrite <- Hmem1, <- Hstack1, <- Hmem1', <- Hstack1'.
+          erewrite (merge_stacks_partition
+                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                      Hcomes_from).
+          erewrite (merge_memories_partition
+                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                      Hcomes_from).
+          apply CS.Nop.
+          now apply execution_invariant_to_linking with (c1 := c').
   Admitted.
 
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
