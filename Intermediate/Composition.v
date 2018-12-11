@@ -3687,6 +3687,78 @@ Section MultiSemantics.
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
     PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
     PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
+  Proof.
+    intros s1 s1' s2 s2' t Hmergeable Hstep Hstep'.
+    (* Top-level case analysis. *)
+    inversion Hmergeable
+      as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial_ics1 Hpartial_ics1'];
+      subst.
+rename Hmergeable into _Hmergeable.
+    inversion Hstep
+      as [c' ? ? ? ics1 ics2
+          Hsame_iface1 _ Hwf1 Hlinkable Hmains Hstep_cs Hpartial1 Hpartial2];
+      subst.
+rename Hstep into _Hstep.
+    inversion Hstep'
+      as [p' ? ? ? ics1' ics2'
+          Hsame_iface2 _ Hwf2 Hlinkable' Hmains' Hstep_cs' Hpartial1' Hpartial2'];
+      subst.
+rename Hstep' into _Hstep'.
+    inversion Hpartial_ics1
+      as [gps1 ? mem1 ? regs1 pc1 Hpc1 | gps1 ? mem1 ? ? pc1 Hcc1]; subst;
+      last admit. (* Symmetric case. *)
+rename Hpartial_ics1 into _Hpartial_ics1.
+    - (* p has control. *)
+      inversion Hpartial_ics1'
+        as [? | gps1' ? mem1' ? ? pc1' Hcc1']; subst;
+        first admit. (* Contra. *)
+rename Hpartial_ics1' into _Hpartial_ics1'.
+      inversion Hpartial1
+        as [ics_gps1 ? ics_mem1 ? ics_regs1 ics_pc1 Hics_pc1 Hmem1 Hstack1 |];
+        subst.
+rename Hpartial1 into _Hpartial1.
+      inversion Hpartial1'
+        as [| ics_gps1' ? ics_mem1' ? ics_regs1' ics_pc1' Hics_pc1' Hmem1' Hstack1' dummy Hcomp1'];
+        subst.
+rename Hpartial1' into _Hpartial1'.
+      PS.simplify_turn.
+      (* Case analysis on p's step. *)
+      inversion Hstep_cs; subst;
+rename Hstep_cs into _Hstep_cs.
+      + inversion Hpartial2
+          as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
+          subst;
+          last admit. (* Contra. *)
+rename Hpartial2 into _Hpartial2.
+        inversion Hpartial2'
+          as [| ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2'];
+          subst;
+          first admit. (* Contra (after Hstep_cs', maybe.). *)
+rename Hpartial2' into _Hpartial2'.
+        PS.simplify_turn.
+        inversion Hstep_cs'; subst;
+rename Hstep_cs' into _Hstep_cs'.
+        * apply PS.mergeable_states_intro
+            with (ics :=
+                    (PS.unpartialize_stack
+                       (PS.merge_stacks (PS.to_partial_stack ics_gps1 (domm (prog_interface c)))
+                                        (PS.to_partial_stack ics_gps2' (domm (prog_interface p)))),
+                     PS.merge_memories (PS.to_partial_memory ics_mem1 (domm (prog_interface c)))
+                                       (PS.to_partial_memory ics_mem2' (domm (prog_interface p))),
+                     regs1, Pointer.inc pc1)).
+          -- admit. (* Easy. *)
+          -- exists prog. admit.
+          -- constructor.
+             ++ assumption.
+             ++ admit.
+             ++ admit.
+          -- rewrite -> Pointer.inc_preserves_component,
+                     -> Hcomp1',
+                     <- Pointer.inc_preserves_component.
+             constructor.
+             ++ now rewrite -> Pointer.inc_preserves_component.
+             ++ admit.
+             ++ admit.
   Admitted.
 
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
