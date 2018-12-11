@@ -3761,6 +3761,32 @@ rename Hstep_cs' into _Hstep_cs'.
              ++ admit.
   Admitted.
 
+(* RB: TODO: Relocate, generalize existing tactic? *)
+Ltac CS_step_of_executing' PROG :=
+  match goal with
+  | H : executing (prepare_global_env PROG) _ ?INSTR |- _ =>
+    match INSTR with
+    | INop           => eapply CS.Nop
+    | ILabel _       => eapply CS.Label
+    | IConst _ _     => eapply CS.Const
+    | IMov _ _       => eapply CS.Mov
+    | IBinOp _ _ _ _ => eapply CS.BinOp
+    | ILoad _ _      => eapply CS.Load
+    | IStore _ _     => eapply CS.Store
+    | IAlloc _ _     => eapply CS.Alloc
+    | IBnz _ _       =>
+      match goal with
+      | H : Register.get _ _ = Int 0 |- _ => eapply CS.BnzZ
+      | _                                 => eapply CS.BnzNZ
+      end
+    | IJump _        => eapply CS.Jump
+    | IJal _         => eapply CS.Jal
+    | ICall _ _      => eapply CS.Call
+    | IReturn        => eapply CS.Return
+    | IHalt          => fail
+    end
+  end.
+
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
@@ -3806,6 +3832,7 @@ rename Hpartial1' into _Hpartial1'.
       (* Case analysis on p's step. *)
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
+
       + (* INop *)
         inversion Hpartial2
           as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
@@ -3828,7 +3855,7 @@ rename Hpartial2' into _Hpartial2'.
                     Hcomes_from).
         (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
-rename Hstep_cs' into _Hstep_csep_cs';
+rename Hstep_cs' into _Hstep_cs';
           (* Specialized rewrites for store and alloc. *)
           try match goal with
           | Hop : executing _ ?PC (IStore _ _),
@@ -3853,8 +3880,8 @@ rename Hstep_cs' into _Hstep_csep_cs';
           erewrite (merge_memories_partition
                           (mergeable_interfaces_sym _ _ mergeable_interfaces)
                           Hcomes_from);
-          apply CS.Nop;
-          now apply execution_invariant_to_linking with (c1 := c').
+          CS_step_of_executing' (program_link p c'); try reflexivity;
+          apply execution_invariant_to_linking with (c1 := c'); eassumption.
   Admitted.
 
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
