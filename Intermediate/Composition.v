@@ -3880,7 +3880,29 @@ rename Hstep_cs' into _Hstep_cs';
           erewrite (merge_memories_partition
                           (mergeable_interfaces_sym _ _ mergeable_interfaces)
                           Hcomes_from);
-          CS_step_of_executing' (program_link p c'); try reflexivity;
+          (* Apply CS lemma and prove special-case side conditions. *)
+          CS_step_of_executing' (program_link p c');
+          try reflexivity;
+          try eassumption;
+          try match goal with
+          | Hlabel : find_label_in_component _ _ _ = _
+            |- find_label_in_component _ _ _ = _
+            =>
+            rewrite find_label_in_component_program_link_left; try assumption;
+            rewrite find_label_in_component_program_link_left in Hlabel; try assumption;
+            try eassumption;
+            now rewrite <- Hsame_iface1 in Hpc1
+          end;
+          try match goal with
+          | Hlabel : find_label_in_procedure _ _ _ = _
+            |- find_label_in_procedure _ _ _ = _
+            =>
+            rewrite find_label_in_procedure_program_link_left; try assumption;
+            rewrite find_label_in_procedure_program_link_left in Hlabel; try assumption;
+            try eassumption;
+            now rewrite <- Hsame_iface1 in Hpc1
+          end;
+          (* Finish goal. *)
           apply execution_invariant_to_linking with (c1 := c'); eassumption.
   Admitted.
 
