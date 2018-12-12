@@ -3787,6 +3787,41 @@ Ltac CS_step_of_executing' PROG :=
     end
   end.
 
+(* Controlled rewrites on cons'ed stacks. *)
+Lemma to_partial_stack_cons :
+  forall frame gps ctx,
+    PS.to_partial_stack (frame :: gps) ctx =
+    PS.to_partial_frame ctx frame :: PS.to_partial_stack gps ctx.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma merge_stacks_cons :
+  forall ctx1 ctx2 ptr1 ptr2 gps1 gps2,
+    PS.merge_stacks
+      (PS.to_partial_frame ctx1 ptr1 :: PS.to_partial_stack gps1 ctx1)
+      (PS.to_partial_frame ctx2 ptr2 :: PS.to_partial_stack gps2 ctx2) =
+    PS.merge_stack_frames (PS.to_partial_frame ctx1 ptr1, PS.to_partial_frame ctx2 ptr2) ::
+      PS.merge_stacks (PS.to_partial_stack gps1 ctx1) (PS.to_partial_stack gps2 ctx2).
+Proof.
+  reflexivity.
+Qed.
+
+Lemma unpartialize_stack_cons :
+  forall ptr gps,
+    PS.unpartialize_stack (ptr :: gps) =
+    PS.unpartialize_stack_frame ptr :: PS.unpartialize_stack gps.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma pointer_compose :
+  forall ptr,
+    (Pointer.component ptr, Pointer.block ptr, Pointer.offset ptr) = ptr.
+Proof.
+  now intros [[C b] o].
+Qed.
+
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
