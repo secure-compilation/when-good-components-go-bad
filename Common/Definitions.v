@@ -101,6 +101,23 @@ Proof.
   eauto.
 Qed.
 
+Lemma imported_procedure_unionm_left :
+  forall {Ciface C},
+    C \notin domm Ciface ->
+  forall {Piface P C'},
+    imported_procedure (unionm Piface Ciface) C C' P =
+    imported_procedure Piface C C' P.
+Proof.
+  intros Ciface C Hnotin Piface P C'.
+  unfold imported_procedure, Program.has_component.
+  rewrite unionmE.
+  assert (HNone : Ciface C = None).
+  { by apply /dommPn. }
+  rewrite HNone.
+  destruct (Piface C) eqn:Hcase;
+    by rewrite Hcase.
+Qed.
+
 Class HasTurn A := {
   turn_of : A -> Program.interface -> bool
 }.
