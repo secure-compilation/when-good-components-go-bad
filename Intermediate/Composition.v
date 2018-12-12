@@ -3981,7 +3981,6 @@ rename Hstep_cs' into _Hstep_cs';
           end;
           (* Finish goal. *)
           apply execution_invariant_to_linking with (c1 := c'); eassumption.
-      }
 
   Admitted.
 
