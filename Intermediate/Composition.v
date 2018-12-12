@@ -220,6 +220,23 @@ Lemma merge_stacks_partition:
     = gps.
 Admitted. (* Grade 2. RB: Assigned to FG. *)
 
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces.
+   This follows from the well-bracketedness of traces. More generally, the
+   merge_stacks_partition property holds whenever the domain of the stack is
+   that of the mergeable interfaces. In particular, this property is satisfied
+   by stacks that originate from a correct program execution. *)
+Lemma merge_stacks_partition_cons:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall frame gps mem regs pc,
+    CS.comes_from_initial_state (frame :: gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    PS.unpartialize_stack
+      (PS.merge_stacks
+         (PS.to_partial_stack gps (domm ctx1))
+         (PS.to_partial_stack gps (domm ctx2)))
+    = gps.
+Admitted. (* Grade 2. RB: Assigned to FG. *)
+
 (* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
 Lemma merge_stacks_partition_emptym:
   forall ctx1 ctx2,
