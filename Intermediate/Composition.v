@@ -3918,8 +3918,9 @@ rename Hpartial2 into _Hpartial2.
         simpl in *.
 rename Hpartial2' into _Hpartial2'.
         PS.simplify_turn.
+        (* Stack and memory simplifications. *)
         rewrite <- Hmem1.
-        rewrite <- Hstack1.
+        try rewrite <- Hstack1.
         erewrite (merge_stacks_partition
                     (mergeable_interfaces_sym _ _ mergeable_interfaces)
                     Hcomes_from).
@@ -3944,7 +3945,7 @@ rename Hstep_cs' into _Hstep_cs';
             |- _ =>
             rewrite -> (program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
           end;
-          (* Specialized stack rewrites for call. *)
+          (* Specialized stack rewrites for call and return. *)
           try match goal with
           | Hcomp : Pointer.component ics_pc1' = Pointer.component pc1
             |- CS.step _ _ [ECall _ _ _ _] _
@@ -3960,15 +3961,30 @@ rename Hstep_cs' into _Hstep_cs';
             simpl; rewrite pointer_compose;
             rewrite Hcomp
           end;
+          try match goal with
+          | Hcomp1 : Pointer.component ics_pc1' = Pointer.component pc1,
+            Hcomp2 : Pointer.component ics_pc2' = Pointer.component _
+            |- CS.step _ _ [ERet _ _ _] _
+            =>
+            destruct gps1 as [| gps1_hd gps1]; [now inversion Hstack1' | ];
+            inversion Hstack1 as [[Hstack1_hd Htmp]]; clear Hstack1; rename Htmp into Hstack1;
+            inversion Hstack1' as [[Hstack1'_hd Htmp]]; clear Hstack1'; rename Htmp into Hstack1';
+            rewrite Hcomp1;
+            rewrite Hcomp2;
+            pose proof ptr_within_partial_frame_inv_2 (eq_sym Hstack1_hd) Hics_pc2; subst gps1_hd;
+            erewrite (merge_stacks_partition_cons
+                        (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                        Hcomes_from)
+          end;
           (* Stack and memory rewrites, then solve goal. *)
           rewrite <- Hmem1';
-          rewrite <- Hstack1';
-          erewrite (merge_stacks_partition
+          try rewrite <- Hstack1';
+          try rewrite (merge_stacks_partition
+                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                         Hcomes_from);
+          erewrite (merge_memories_partition
                       (mergeable_interfaces_sym _ _ mergeable_interfaces)
                       Hcomes_from);
-          erewrite (merge_memories_partition
-                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                          Hcomes_from);
           (* Apply CS lemma and prove special-case side conditions. *)
           CS_step_of_executing' (program_link p c');
           try eassumption;
