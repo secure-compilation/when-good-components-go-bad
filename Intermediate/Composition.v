@@ -3907,6 +3907,22 @@ rename Hstep_cs' into _Hstep_cs';
             |- _ =>
             rewrite -> (program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
           end;
+          (* Specialized stack rewrites for call. *)
+          try match goal with
+          | Hcomp : Pointer.component ics_pc1' = Pointer.component pc1
+            |- CS.step _ _ [ECall _ _ _ _] _
+            =>
+            rewrite to_partial_stack_cons merge_stacks_cons unpartialize_stack_cons;
+            assert (Hpc1c := Hpc1); rewrite <- Pointer.inc_preserves_component in Hpc1c;
+            assert (Hpc1p := Hcc1'); rewrite <- Hcomp1' in Hpc1p; rewrite <- Pointer.inc_preserves_component in Hpc1p;
+            assert (Hpc1c' : Pointer.component (Pointer.inc pc1) \in domm (prog_interface c) = false)
+              by (destruct (Pointer.component (Pointer.inc pc1) \in domm (prog_interface c)) eqn:Hcase;
+                  now rewrite Hcase in Hpc1c);
+            rewrite (PS.ptr_within_partial_frame_1 Hpc1p);
+            rewrite (PS.ptr_within_partial_frame_2 Hpc1c');
+            simpl; rewrite pointer_compose;
+            rewrite Hcomp
+          end;
           (* Stack and memory rewrites, then solve goal. *)
           rewrite <- Hmem1';
           rewrite <- Hstack1';
@@ -3947,8 +3963,26 @@ rename Hstep_cs' into _Hstep_cs';
             eapply program_load_in_partialized_memory_strong;
             eassumption
           end;
+          try match goal with
+          | Hentry : EntryPoint.get _ _ _ = _
+            |- EntryPoint.get _ _ _ = _
+            =>
+            rewrite genv_entrypoints_program_link_left; try assumption;
+            rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
+            now rewrite Hsame_iface1
+          end;
+          try match goal with
+          | Himport : imported_procedure _ ?C _ _
+            |- imported_procedure _ ?C _ _
+            =>
+            rewrite imported_procedure_unionm_left; try assumption;
+            rewrite imported_procedure_unionm_left in H7; try assumption;
+            now rewrite Hsame_iface1
+          end;
           (* Finish goal. *)
           apply execution_invariant_to_linking with (c1 := c'); eassumption.
+      }
+
   Admitted.
 
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
