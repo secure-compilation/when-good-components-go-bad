@@ -3832,6 +3832,26 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma ptr_within_partial_frame_inv_2 :
+  forall ptr1 ptr2 (ctx : Program.interface),
+    PS.to_partial_frame (domm ctx) ptr1 = PS.to_partial_frame (domm ctx) ptr2 ->
+    Pointer.component ptr1 \notin domm ctx ->
+    ptr1 = ptr2.
+Proof.
+  intros ptr1 ptr2 ctx Heq Hnotin.
+  destruct ptr1 as [[C1 b1] o1].
+  destruct ptr2 as [[C2 b2] o2].
+  rewrite PS.ptr_within_partial_frame_2 in Heq.
+  - destruct (C2 \in domm ctx) eqn:Hcase.
+    + rewrite PS.ptr_within_partial_frame_1 in Heq.
+      * now inversion Heq.
+      * now rewrite Hcase.
+    + rewrite PS.ptr_within_partial_frame_2 in Heq.
+      * now inversion Heq.
+      * now rewrite Hcase.
+  - destruct (C1 \in domm ctx) eqn:Hcase; now rewrite Hcase in Hnotin.
+Qed.
+
 Lemma pointer_compose :
   forall ptr,
     (Pointer.component ptr, Pointer.block ptr, Pointer.offset ptr) = ptr.
