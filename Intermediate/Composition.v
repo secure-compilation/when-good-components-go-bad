@@ -4093,11 +4093,24 @@ rename Hstep_cs' into _Hstep_cs';
                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
                          Hcomes_from)
                     at 1;
-            rewrite Hmem1;
+            rewrite -> Hmem1;
             rewrite <- Hcomp in Hpc1;
             apply (partialize_program_store Hpc1) in Hstore;
             apply unpartialize_program_store;
             now apply Hstore
+          end;
+          try match goal with
+          | Halloc : Memory.alloc ics_mem1 _ _ = Some (_, _)
+            |- Memory.alloc mem1 _ _ = Some (_, _)
+            =>
+            rewrite <- (merge_memories_partition
+                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                         Hcomes_from)
+                    at 1;
+            apply (partialize_program_alloc Hpc1) in Halloc;
+            rewrite <- Hmem1 in Halloc;
+            apply unpartialize_program_alloc;
+            now apply Halloc
           end;
           (* Finish goal. *)
           apply execution_invariant_to_linking with (c1 := c'); eassumption.
