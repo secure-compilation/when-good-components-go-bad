@@ -3947,7 +3947,7 @@ rename Hpartial2 into _Hpartial2.
 rename Hpartial2' into _Hpartial2'.
         PS.simplify_turn.
         (* Stack and memory simplifications. *)
-        rewrite <- Hmem1.
+        try rewrite <- Hmem1.
         try rewrite <- Hstack1.
         erewrite (merge_stacks_partition
                     (mergeable_interfaces_sym _ _ mergeable_interfaces)
@@ -4010,9 +4010,9 @@ rename Hstep_cs' into _Hstep_cs';
           try rewrite (merge_stacks_partition
                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
                          Hcomes_from);
-          erewrite (merge_memories_partition
-                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                      Hcomes_from);
+          try erewrite (merge_memories_partition
+                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                          Hcomes_from);
           (* Apply CS lemma and prove special-case side conditions. *)
           CS_step_of_executing' (program_link p c');
           try eassumption;
@@ -4059,6 +4059,21 @@ rename Hstep_cs' into _Hstep_cs';
             rewrite imported_procedure_unionm_left; try assumption;
             rewrite imported_procedure_unionm_left in H7; try assumption;
             now rewrite Hsame_iface1
+          end;
+          try match goal with
+          | Hstore : Memory.store ics_mem1 _ _ = Some _,
+            Hcomp : Pointer.component _ = Pointer.component pc1
+            |- Memory.store _ _ _ = Some _
+            =>
+            rewrite <- (merge_memories_partition
+                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                         Hcomes_from)
+                    at 1;
+            rewrite Hmem1;
+            rewrite <- Hcomp in Hpc1;
+            apply (partialize_program_store Hpc1) in Hstore;
+            apply unpartialize_program_store;
+            now apply Hstore
           end;
           (* Finish goal. *)
           apply execution_invariant_to_linking with (c1 := c'); eassumption.
