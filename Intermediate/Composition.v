@@ -3887,6 +3887,30 @@ Proof.
   rewrite setm_union. now inversion Hstore.
 Qed.
 
+Lemma partialize_program_alloc :
+  forall mem mem' (ctx : Program.interface) C ptr size,
+    C \notin domm ctx ->
+    Memory.alloc mem C size = Some (mem', ptr) ->
+    Memory.alloc (PS.to_partial_memory mem (domm ctx)) C size =
+    Some (PS.to_partial_memory mem' (domm ctx), ptr).
+Admitted. (* Grade 1. *)
+
+Lemma unpartialize_program_alloc :
+  forall mem1 mem1' mem2 C ptr size,
+    Memory.alloc mem1 C size = Some (mem1', ptr) ->
+    Memory.alloc (PS.merge_memories mem1 mem2) C size =
+    Some (PS.merge_memories mem1' mem2, ptr).
+Proof.
+  unfold Memory.alloc.
+  intros mem1 mem1' mem2 C ptr size Halloc.
+  unfold PS.merge_memories. rewrite unionmE.
+  destruct (mem1 C) as [memC |] eqn:Hcase1; rewrite Hcase1;
+    last discriminate.
+  simpl.
+  destruct (ComponentMemory.alloc memC size) as [memC' b].
+  rewrite setm_union. now inversion Halloc.
+Qed.
+
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
