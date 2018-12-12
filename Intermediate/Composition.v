@@ -3859,6 +3859,34 @@ Proof.
   now intros [[C b] o].
 Qed.
 
+(* The following two lemmas manipulate memory stores and partialized memories
+   more conveniently than the full-fledged "partialized" results. Note naming
+   conventions for some of those are currently somewhat confusing.  *)
+Lemma partialize_program_store :
+  forall mem mem' (ctx : Program.interface) ptr v,
+    Pointer.component ptr \notin domm ctx ->
+    Memory.store mem ptr v = Some mem' ->
+    Memory.store (PS.to_partial_memory mem (domm ctx)) ptr v =
+    Some (PS.to_partial_memory mem' (domm ctx)).
+Admitted. (* Grade 1. *)
+
+Lemma unpartialize_program_store :
+  forall mem1 mem1' mem2 ptr v,
+    Memory.store mem1 ptr v = Some mem1' ->
+    Memory.store (PS.merge_memories mem1 mem2) ptr v =
+    Some (PS.merge_memories mem1' mem2).
+Proof.
+  unfold Memory.store.
+  intros mem1 mem1' mem2 ptr v Hstore.
+  unfold PS.merge_memories. rewrite unionmE.
+  destruct (mem1 (Pointer.component ptr)) eqn:Hcase1; rewrite Hcase1;
+    last discriminate.
+  simpl.
+  destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) v) eqn:Hcase2;
+    last discriminate.
+  rewrite setm_union. now inversion Hstore.
+Qed.
+
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
