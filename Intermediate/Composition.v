@@ -3881,7 +3881,8 @@ rename Hpartial2 into _Hpartial2.
         simpl in *.
 rename Hpartial2' into _Hpartial2'.
         PS.simplify_turn.
-        rewrite <- Hmem1, <- Hstack1.
+        rewrite <- Hmem1.
+        rewrite <- Hstack1.
         erewrite (merge_stacks_partition
                     (mergeable_interfaces_sym _ _ mergeable_interfaces)
                     Hcomes_from).
@@ -3891,7 +3892,7 @@ rename Hpartial2' into _Hpartial2'.
         (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs';
-          (* Specialized rewrites for store and alloc. *)
+          (* Specialized memory rewrites for store and alloc. *)
           try match goal with
           | Hop : executing _ ?PC (IStore _ _),
             Hcomp : Pointer.component ?PTR = Pointer.component ?PC,
@@ -3917,8 +3918,8 @@ rename Hstep_cs' into _Hstep_cs';
                           Hcomes_from);
           (* Apply CS lemma and prove special-case side conditions. *)
           CS_step_of_executing' (program_link p c');
-          try reflexivity;
           try eassumption;
+          try reflexivity;
           try match goal with
           | Hlabel : find_label_in_component _ _ _ = _
             |- find_label_in_component _ _ _ = _
@@ -3936,6 +3937,15 @@ rename Hstep_cs' into _Hstep_cs';
             rewrite find_label_in_procedure_program_link_left in Hlabel; try assumption;
             try eassumption;
             now rewrite <- Hsame_iface1 in Hpc1
+          end;
+          try match goal with
+          | Hload : Memory.load ics_mem1 ?PTR = Some ?V
+            |- Memory.load mem1 ?PTR = Some ?V
+            =>
+            symmetry in Hmem1;
+            destruct PTR as [[C b] o]; simpl in *; subst;
+            eapply program_load_in_partialized_memory_strong;
+            eassumption
           end;
           (* Finish goal. *)
           apply execution_invariant_to_linking with (c1 := c'); eassumption.
