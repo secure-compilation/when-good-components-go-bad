@@ -173,6 +173,18 @@ Lemma to_partial_memory_merge_partial_memories_left
 Proof.
 Admitted. (* Grade 2. *)
 
+Corollary to_partial_memory_merge_memory_left :
+  forall iface1 iface2,
+    mergeable_interfaces iface1 iface2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm iface1 iface2) ->
+    PS.to_partial_memory
+      (PS.merge_memories (PS.to_partial_memory mem (domm iface1))
+                         (PS.to_partial_memory mem (domm iface2)))
+      (domm iface1) =
+    PS.to_partial_memory mem (domm iface1).
+Admitted. (* Grade 2. *)
+
 Lemma to_partial_memory_merge_partial_memories_right
       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
     mergeable_interfaces iface1 iface2 ->
@@ -189,12 +201,23 @@ Lemma to_partial_memory_merge_partial_memories_right
     CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
                                 (unionm iface1 iface2) ->
     (* And the main result. *)
-
     PS.to_partial_memory
       (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
                          (PS.to_partial_memory mem2 (domm iface2)))
       (domm iface2) =
     PS.to_partial_memory mem2 (domm iface2).
+Admitted. (* Grade 2. *)
+
+Corollary to_partial_memory_merge_memory_right :
+  forall iface1 iface2,
+    mergeable_interfaces iface1 iface2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm iface1 iface2) ->
+    PS.to_partial_memory
+      (PS.merge_memories (PS.to_partial_memory mem (domm iface1))
+                         (PS.to_partial_memory mem (domm iface2)))
+      (domm iface2) =
+    PS.to_partial_memory mem (domm iface2).
 Admitted. (* Grade 2. *)
 
 Lemma unpartialize_stack_frame_partition:
@@ -283,6 +306,19 @@ Lemma to_partial_stack_merge_stacks_left:
     PS.to_partial_stack gps1 (domm ctx1).
 Admitted. (* Grade 2. Note comments. *)
 
+Corollary to_partial_stack_merge_stack_left :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    PS.to_partial_stack
+      (PS.unpartialize_stack
+         (PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
+                          (PS.to_partial_stack gps (domm ctx2))))
+      (domm ctx1) =
+    PS.to_partial_stack gps (domm ctx1).
+Admitted. (* Grade 2. *)
+
 Lemma to_partial_stack_merge_stacks_right:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
@@ -298,6 +334,19 @@ Lemma to_partial_stack_merge_stacks_right:
       (domm ctx2) =
     PS.to_partial_stack gps2 (domm ctx2).
 Admitted. (* Grade 2. Note comments for lemma above. *)
+
+Corollary to_partial_stack_merge_stack_right :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    PS.to_partial_stack
+      (PS.unpartialize_stack
+         (PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
+                          (PS.to_partial_stack gps (domm ctx2))))
+      (domm ctx2) =
+    PS.to_partial_stack gps (domm ctx2).
+Admitted. (* Grade 2. *)
 
 Lemma merge_memories_partition:
   forall ctx1 ctx2,
