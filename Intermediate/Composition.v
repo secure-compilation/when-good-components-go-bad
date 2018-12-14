@@ -3791,7 +3791,9 @@ rename Hpartial1' into _Hpartial1'.
       (* Case analysis on p's step. *)
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
-      + inversion Hpartial2
+
+      + (* INop1 *)
+        inversion Hpartial2
           as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
           subst;
           last admit. (* Contra. *)
@@ -3804,27 +3806,67 @@ rename Hpartial2' into _Hpartial2'.
         PS.simplify_turn.
         inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs'.
-        * apply PS.mergeable_states_intro
-            with (ics :=
-                    (PS.unpartialize_stack
-                       (PS.merge_stacks (PS.to_partial_stack ics_gps1 (domm (prog_interface c)))
-                                        (PS.to_partial_stack ics_gps2' (domm (prog_interface p)))),
-                     PS.merge_memories (PS.to_partial_memory ics_mem1 (domm (prog_interface c)))
-                                       (PS.to_partial_memory ics_mem2' (domm (prog_interface p))),
-                     regs1, Pointer.inc pc1)).
-          -- admit. (* Easy. *)
-          -- exists prog. admit.
-          -- constructor.
-             ++ assumption.
-             ++ admit.
-             ++ admit.
-          -- rewrite -> Pointer.inc_preserves_component,
-                     -> Hcomp1',
-                     <- Pointer.inc_preserves_component.
-             constructor.
-             ++ now rewrite -> Pointer.inc_preserves_component.
-             ++ admit.
-             ++ admit.
+
+        * (* INop2 *) {
+          match goal with
+          | |- PS.mergeable_states
+                _ _
+                (PS.PC (?GPS1, ?MEM1, ?REGS, ?PC))
+                (PS.CC (_, ?GPS2, ?MEM2))
+            =>
+            apply PS.mergeable_states_intro
+              with (ics :=
+                      (PS.unpartialize_stack (PS.merge_stacks GPS1 GPS2),
+                       PS.merge_memories MEM1 MEM2,
+                       REGS, PC))
+          end.
+          - now apply mergeable_interfaces_sym.
+          - eapply PS.comes_from_initial_state_step_trans;
+              try eassumption.
+            + simpl. now rewrite Hcc1'.
+            + simpl.
+              rewrite -> Pointer.inc_preserves_component,
+                      -> Hcomp1',
+                      <- Pointer.inc_preserves_component in Hics_pc2'.
+              rewrite -> Hics_pc2'.
+              rewrite <- Hstack1, <- Hstack1'.
+              rewrite (to_partial_stack_merge_stack_right
+                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                         Hcomes_from).
+              rewrite <- Hmem1, <- Hmem1'.
+              rewrite (to_partial_memory_merge_memory_right
+                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                         Hcomes_from).
+              rewrite -> Pointer.inc_preserves_component.
+              rewrite -> Pointer.inc_preserves_component.
+              rewrite -> Hcomp1'.
+              reflexivity.
+          - constructor.
+            + assumption.
+            + rewrite <- Hmem1, <- Hmem1'.
+              rewrite (to_partial_memory_merge_memory_left
+                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                         Hcomes_from).
+              reflexivity.
+            + rewrite <- Hstack1, <- Hstack1'.
+              rewrite (to_partial_stack_merge_stack_left
+                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                         Hcomes_from).
+              reflexivity.
+          - rewrite -> Pointer.inc_preserves_component,
+                    -> Hcomp1',
+                    <- Pointer.inc_preserves_component.
+            constructor.
+            + now rewrite -> Pointer.inc_preserves_component.
+            + rewrite <- Hmem1, <- Hmem1'.
+              now rewrite (to_partial_memory_merge_memory_right
+                             (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                             Hcomes_from).
+            + rewrite <- Hstack1, <- Hstack1'.
+              now rewrite (to_partial_stack_merge_stack_right
+                             (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                             Hcomes_from).
+          }
   Admitted.
 
 (* RB: TODO: Relocate, generalize existing tactic? *)
