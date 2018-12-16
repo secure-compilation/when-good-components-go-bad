@@ -3814,6 +3814,22 @@ rename Hpartial2' into _Hpartial2'.
 rename Hstep_cs' into _Hstep_cs'.
 
         * (* INop2 *) {
+          (* Specialized memory rewrites for store and alloc. *)
+          try match goal with
+          | Hop : executing _ ?PC (IStore _ _),
+            Hcomp : Pointer.component ?PTR = Pointer.component ?PC,
+            Hstore : Memory.store ?MEM1 ?PTR _ = Some ?MEM2
+            |- _ =>
+            rewrite <- Hcomp in Hics_pc1';
+            rewrite -> (program_store_to_partialized_memory Hics_pc1' Hstore) in Hmem1'
+          end;
+          try match goal with
+          | Hop : executing _ ?PC (IAlloc _ _),
+            Halloc : Memory.alloc ?MEM1 (Pointer.component ?PTR) _ = Some (?MEM2, _)
+            |- _ =>
+            rewrite -> (program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
+          end.
+          (* Stack and memory rewrites, then solve goal. *)
           rewrite <- Hmem1' in *.
           rewrite <- Hstack1' in *.
           assert (Hcomp1'inc := Hcomp1');
