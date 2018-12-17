@@ -3746,6 +3746,14 @@ Section MultiSemantics.
                        (PS.merge_partial_states s s').
   Admitted. (* Grade 1. *)
 
+  Ltac rewrite_if_then :=
+    match goal with
+    | H: is_true ?X
+      |- _ = (if ?X then _ else _)
+      =>
+      rewrite H
+    end.
+
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
      in this section, but these should be pared down. *)
   Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
@@ -3828,14 +3836,45 @@ rename Hstep_cs' into _Hstep_cs'.
             Halloc : Memory.alloc ?MEM1 (Pointer.component ?PTR) _ = Some (?MEM2, _)
             |- _ =>
             rewrite -> (program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
+          end;
+          (* Specialized memory rewrites for jumps. *)
+          try match goal with
+          | Hlabel : find_label_in_component _ ics_pc1' _ = Some _
+            |- _ =>
+            rewrite <- (find_label_in_component_1 _ _ _ _ Hlabel) in *
           end.
-          (* Stack and memory rewrites, then solve goal. *)
+          try match goal with
+          | Hop : executing _ ics_pc1' (IJump ?REG),
+            Hreg : Register.get ?REG _ = Ptr ?PTR,
+            Hcomp : Pointer.component ?PTR = Pointer.component ics_pc1'
+            |- _ =>
+            rewrite -> Hcomp in *
+          end;
+          try match goal with
+          | Hlabel : find_label_in_procedure _ ics_pc1' _ = Some _
+            |- _ =>
+            rewrite <- (find_label_in_procedure_1 _ _ _ _ Hlabel) in *
+          end.
+          (* Stack and memory rewrites. *)
           rewrite <- Hmem1' in *.
           rewrite <- Hstack1' in *.
           assert (Hcomp1'inc := Hcomp1');
             rewrite -Pointer.inc_preserves_component
                     -[in RHS]Pointer.inc_preserves_component in Hcomp1'inc.
-          rewrite -> Hcomp1'inc in *.
+          try rewrite -> Hcomp1'inc in *.
+          try rewrite -> Hcomp1' in *.
+          (* Preprocess PC increments for jumps. *)
+          try match goal with
+          | Hcomp : is_true (Pointer.component pc1 \in _)
+            |- PS.mergeable_states
+                _ _
+                (PS.PC (_, _, _, Pointer.inc ?PC))
+                (PS.CC (Pointer.component ?PC, _, _))
+            =>
+            rewrite <- Pointer.inc_preserves_component;
+            assert (Hinc := Hcomp); rewrite <- Pointer.inc_preserves_component in Hinc
+              end.
+          (* Solve goal. *)
           match goal with
           | |- PS.mergeable_states
                 _ _
@@ -3853,7 +3892,7 @@ rename Hstep_cs' into _Hstep_cs'.
           [ assumption
           | eapply PS.comes_from_initial_state_step_trans; try eassumption;
             [ simpl; now rewrite -> Hcc1'
-            | simpl; now rewrite -> Hics_pc2' ]
+            | simpl; rewrite_if_then; now try rewrite -> Pointer.inc_preserves_component ]
           | now constructor
           | now constructor ].
           }
