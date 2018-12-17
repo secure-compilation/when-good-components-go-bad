@@ -3754,6 +3754,17 @@ Section MultiSemantics.
       rewrite H
     end.
 
+  Ltac step_trans_solve_CC :=
+    try rewrite -> Pointer.inc_preserves_component;
+    try erewrite -> to_partial_memory_merge_partial_memories_right;
+    (eassumption || reflexivity).
+
+  Ltac step_trans_solve_partial_state :=
+    constructor;
+    try erewrite -> to_partial_memory_merge_partial_memories_left;
+    try erewrite -> to_partial_memory_merge_partial_memories_right;
+    (eassumption || reflexivity).
+
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
      in this section, but these should be pared down. *)
   Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
@@ -3815,7 +3826,7 @@ rename Hpartial2 into _Hpartial2.
 rename Hpartial2' into _Hpartial2'.
         PS.simplify_turn.
         (* Stack and memory simplifications. *)
-        rewrite <- Hmem1.
+        try rewrite <- Hmem1.
         rewrite <- Hstack1.
         (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
@@ -3873,7 +3884,7 @@ rename Hstep_cs' into _Hstep_cs'.
             =>
             rewrite <- Pointer.inc_preserves_component;
             assert (Hinc := Hcomp); rewrite <- Pointer.inc_preserves_component in Hinc
-              end.
+          end.
           (* Solve goal. *)
           match goal with
           | |- PS.mergeable_states
@@ -3884,7 +3895,7 @@ rename Hstep_cs' into _Hstep_cs'.
             remember (PS.unpartialize_stack (PS.merge_stacks GPS1 GPS2)) as gps12 eqn:Hgps12;
             remember (PS.merge_memories MEM1 MEM2) as mem12 eqn:Hmem12;
             rewrite (merge_stacks_partition Hmergeable_ifaces Hcomes_from) in Hgps12;
-            rewrite (merge_memories_partition Hmergeable_ifaces Hcomes_from) in Hmem12;
+            try rewrite (merge_memories_partition Hmergeable_ifaces Hcomes_from) in Hmem12;
             apply PS.mergeable_states_intro
               with (ics := (gps12, mem12, REGS, PC))
           end;
@@ -3892,10 +3903,10 @@ rename Hstep_cs' into _Hstep_cs'.
           [ assumption
           | eapply PS.comes_from_initial_state_step_trans; try eassumption;
             [ simpl; now rewrite -> Hcc1'
-            | simpl; rewrite_if_then; now try rewrite -> Pointer.inc_preserves_component ]
-          | now constructor
-          | now constructor ].
-          }
+            | simpl; rewrite_if_then; now step_trans_solve_CC ]
+          | now step_trans_solve_partial_state
+          | now step_trans_solve_partial_state ].
+        }
 
   Admitted.
 
