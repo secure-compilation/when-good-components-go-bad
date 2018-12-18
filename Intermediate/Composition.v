@@ -3813,7 +3813,7 @@ rename Hpartial1' into _Hpartial1'.
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
 
-      (* Cases left: 9 IJump, 13 ICall, 14 IReturn *)
+      (* Cases left: 13 ICall, 14 IReturn *)
 
       1:{
       (* + (* INop1 *) *)
@@ -3842,6 +3842,13 @@ rename Hpartial2' into _Hpartial2'.
           Hlabel : find_label_in_component _ pc1 _ = Some _
           |- _ =>
           pose proof find_label_in_component_1 _ _ _ _ Hlabel as HJal1
+        end.
+        try match goal with
+        | Hop : executing _ pc1 (IJump _),
+          Hreg : Register.get ?REG _ = Ptr ?PTR,
+          Hcomp : Pointer.component ?PTR = Pointer.component pc1
+          |- _ =>
+          rename Hcomp into HJump1
         end.
         (* Stack and memory simplifications. *)
         try rewrite <- Hmem1.
@@ -3925,6 +3932,7 @@ rename Hstep_cs' into _Hstep_cs'.
             + simpl.
               try rewrite <- HBnz1.
               try rewrite <- HJal1.
+              try rewrite -> HJump1.
               rewrite_if_then.
               now step_trans_solve_CC.
           - now step_trans_solve_partial_state.
@@ -3941,11 +3949,18 @@ rename Hstep_cs' into _Hstep_cs'.
               try rewrite -> Pointer.inc_preserves_component;
               rewrite -> HJal1
             end.
+            try match goal with
+            | Hop : executing _ pc1 (IJump _)
+              |- _ =>
+              try rewrite -> Pointer.inc_preserves_component;
+              rewrite <- HJump1
+            end.
             constructor;
               try erewrite -> to_partial_memory_merge_partial_memories_left;
               try erewrite -> to_partial_memory_merge_partial_memories_right;
               try rewrite <- HBnz1;
               try rewrite <- HJal1;
+              try rewrite -> HJump1;
               eassumption || reflexivity.
           (* [ assumption *)
           (* | eapply PS.comes_from_initial_state_step_trans; try eassumption; *)
