@@ -3813,7 +3813,7 @@ rename Hpartial1' into _Hpartial1'.
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
 
-      (* Cases left: 8 IJal, 9 IJump, 13 ICall, 14 IReturn *)
+      (* Cases left: 9 IJump, 13 ICall, 14 IReturn *)
 
       1:{
       (* + (* INop1 *) *)
@@ -3830,12 +3830,18 @@ rename Hpartial2' into _Hpartial2'.
         PS.simplify_turn.
         (* Jump rewrite rule. This hypothesis will be used to rewrite, implicitly
            acting in the corresponding sub-case. Sometimes it will be necessary
-           to re-detect the case we are in. *)
+           to re-detect the case we are in. Similarly for jumps. *)
         try match goal with
         | Hop : executing _ pc1 (IBnz _ _),
           Hlabel : find_label_in_procedure _ pc1 _ = Some _
           |- _ =>
           pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as HBnz1
+        end.
+        try match goal with
+        | Hop : executing _ pc1 (IJal _),
+          Hlabel : find_label_in_component _ pc1 _ = Some _
+          |- _ =>
+          pose proof find_label_in_component_1 _ _ _ _ Hlabel as HJal1
         end.
         (* Stack and memory simplifications. *)
         try rewrite <- Hmem1.
@@ -3918,6 +3924,7 @@ rename Hstep_cs' into _Hstep_cs'.
             + simpl; now rewrite -> Hcc1'.
             + simpl.
               try rewrite <- HBnz1.
+              try rewrite <- HJal1.
               rewrite_if_then.
               now step_trans_solve_CC.
           - now step_trans_solve_partial_state.
@@ -3928,10 +3935,17 @@ rename Hstep_cs' into _Hstep_cs'.
               try rewrite -> Pointer.inc_preserves_component;
               rewrite -> HBnz1
             end.
+            try match goal with
+            | Hop : executing _ pc1 (IJal _)
+              |- _ =>
+              try rewrite -> Pointer.inc_preserves_component;
+              rewrite -> HJal1
+            end.
             constructor;
               try erewrite -> to_partial_memory_merge_partial_memories_left;
               try erewrite -> to_partial_memory_merge_partial_memories_right;
               try rewrite <- HBnz1;
+              try rewrite <- HJal1;
               eassumption || reflexivity.
           (* [ assumption *)
           (* | eapply PS.comes_from_initial_state_step_trans; try eassumption; *)
