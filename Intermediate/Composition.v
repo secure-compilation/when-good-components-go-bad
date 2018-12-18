@@ -3813,7 +3813,10 @@ rename Hpartial1' into _Hpartial1'.
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
 
-      + (* INop1 *)
+      (* Cases left: 8 IJal, 9 IJump, 13 ICall, 14 IReturn *)
+
+      1:{
+      (* + (* INop1 *) *)
         inversion Hpartial2
           as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
           subst;
@@ -3825,6 +3828,15 @@ rename Hpartial2 into _Hpartial2.
           first admit. (* Contra (after Hstep_cs', maybe.). *)
 rename Hpartial2' into _Hpartial2'.
         PS.simplify_turn.
+        (* Jump rewrite rule. This hypothesis will be used to rewrite, implicitly
+           acting in the corresponding sub-case. Sometimes it will be necessary
+           to re-detect the case we are in. *)
+        try match goal with
+        | Hop : executing _ pc1 (IBnz _ _),
+          Hlabel : find_label_in_procedure _ pc1 _ = Some _
+          |- _ =>
+          pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as HBnz1
+        end.
         (* Stack and memory simplifications. *)
         try rewrite <- Hmem1.
         rewrite <- Hstack1.
@@ -3832,7 +3844,8 @@ rename Hpartial2' into _Hpartial2'.
         inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs'.
 
-        * (* INop2 *) {
+        1:{
+        (* * (* INop2 *) { *)
           (* Specialized memory rewrites for store and alloc. *)
           try match goal with
           | Hop : executing _ ?PC (IStore _ _),
@@ -3899,13 +3912,33 @@ rename Hstep_cs' into _Hstep_cs'.
             apply PS.mergeable_states_intro
               with (ics := (gps12, mem12, REGS, PC))
           end;
-          subst;
-          [ assumption
-          | eapply PS.comes_from_initial_state_step_trans; try eassumption;
-            [ simpl; now rewrite -> Hcc1'
-            | simpl; rewrite_if_then; now step_trans_solve_CC ]
-          | now step_trans_solve_partial_state
-          | now step_trans_solve_partial_state ].
+          subst.
+          - assumption.
+          - eapply PS.comes_from_initial_state_step_trans; try eassumption.
+            + simpl; now rewrite -> Hcc1'.
+            + simpl.
+              try rewrite <- HBnz1.
+              rewrite_if_then.
+              now step_trans_solve_CC.
+          - now step_trans_solve_partial_state.
+          - (* now step_trans_solve_partial_state. *)
+            try match goal with
+            | Hop : executing _ pc1 (IBnz _ _)
+              |- _ =>
+              try rewrite -> Pointer.inc_preserves_component;
+              rewrite -> HBnz1
+            end.
+            constructor;
+              try erewrite -> to_partial_memory_merge_partial_memories_left;
+              try erewrite -> to_partial_memory_merge_partial_memories_right;
+              try rewrite <- HBnz1;
+              eassumption || reflexivity.
+          (* [ assumption *)
+          (* | eapply PS.comes_from_initial_state_step_trans; try eassumption; *)
+          (*   [ simpl; now rewrite -> Hcc1' *)
+          (*   | simpl; rewrite_if_then; now step_trans_solve_CC ] *)
+          (* | now step_trans_solve_partial_state *)
+          (* | now step_trans_solve_partial_state ]. *)
         }
 
   Admitted.
