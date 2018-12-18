@@ -3746,6 +3746,139 @@ Section MultiSemantics.
                        (PS.merge_partial_states s s').
   Admitted. (* Grade 1. *)
 
+(* RB: TODO: Relocate, generalize existing tactic? *)
+Ltac CS_step_of_executing' PROG :=
+  match goal with
+  | H : executing (prepare_global_env PROG) _ ?INSTR |- _ =>
+    match INSTR with
+    | INop           => eapply CS.Nop
+    | ILabel _       => eapply CS.Label
+    | IConst _ _     => eapply CS.Const
+    | IMov _ _       => eapply CS.Mov
+    | IBinOp _ _ _ _ => eapply CS.BinOp
+    | ILoad _ _      => eapply CS.Load
+    | IStore _ _     => eapply CS.Store
+    | IAlloc _ _     => eapply CS.Alloc
+    | IBnz _ _       =>
+      match goal with
+      | H : Register.get _ _ = Int 0 |- _ => eapply CS.BnzZ
+      | _                                 => eapply CS.BnzNZ
+      end
+    | IJump _        => eapply CS.Jump
+    | IJal _         => eapply CS.Jal
+    | ICall _ _      => eapply CS.Call
+    | IReturn        => eapply CS.Return
+    | IHalt          => fail
+    end
+  end.
+
+(* Controlled rewrites on cons'ed stacks. *)
+Lemma to_partial_stack_cons :
+  forall frame gps ctx,
+    PS.to_partial_stack (frame :: gps) ctx =
+    PS.to_partial_frame ctx frame :: PS.to_partial_stack gps ctx.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma merge_stacks_cons :
+  forall ctx1 ctx2 ptr1 ptr2 gps1 gps2,
+    PS.merge_stacks
+      (PS.to_partial_frame ctx1 ptr1 :: PS.to_partial_stack gps1 ctx1)
+      (PS.to_partial_frame ctx2 ptr2 :: PS.to_partial_stack gps2 ctx2) =
+    PS.merge_stack_frames (PS.to_partial_frame ctx1 ptr1, PS.to_partial_frame ctx2 ptr2) ::
+      PS.merge_stacks (PS.to_partial_stack gps1 ctx1) (PS.to_partial_stack gps2 ctx2).
+Proof.
+  reflexivity.
+Qed.
+
+Lemma unpartialize_stack_cons :
+  forall ptr gps,
+    PS.unpartialize_stack (ptr :: gps) =
+    PS.unpartialize_stack_frame ptr :: PS.unpartialize_stack gps.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma ptr_within_partial_frame_inv_2 :
+  forall ptr1 ptr2 (ctx : Program.interface),
+    PS.to_partial_frame (domm ctx) ptr1 = PS.to_partial_frame (domm ctx) ptr2 ->
+    Pointer.component ptr1 \notin domm ctx ->
+    ptr1 = ptr2.
+Proof.
+  intros ptr1 ptr2 ctx Heq Hnotin.
+  destruct ptr1 as [[C1 b1] o1].
+  destruct ptr2 as [[C2 b2] o2].
+  rewrite PS.ptr_within_partial_frame_2 in Heq.
+  - destruct (C2 \in domm ctx) eqn:Hcase.
+    + rewrite PS.ptr_within_partial_frame_1 in Heq.
+      * now inversion Heq.
+      * now rewrite Hcase.
+    + rewrite PS.ptr_within_partial_frame_2 in Heq.
+      * now inversion Heq.
+      * now rewrite Hcase.
+  - destruct (C1 \in domm ctx) eqn:Hcase; now rewrite Hcase in Hnotin.
+Qed.
+
+Lemma pointer_compose :
+  forall ptr,
+    (Pointer.component ptr, Pointer.block ptr, Pointer.offset ptr) = ptr.
+Proof.
+  now intros [[C b] o].
+Qed.
+
+(* The following two lemmas manipulate memory stores and partialized memories
+   more conveniently than the full-fledged "partialized" results. Note naming
+   conventions for some of those are currently somewhat confusing.  *)
+Lemma partialize_program_store :
+  forall mem mem' (ctx : Program.interface) ptr v,
+    Pointer.component ptr \notin domm ctx ->
+    Memory.store mem ptr v = Some mem' ->
+    Memory.store (PS.to_partial_memory mem (domm ctx)) ptr v =
+    Some (PS.to_partial_memory mem' (domm ctx)).
+Admitted. (* Grade 1. *)
+
+Lemma unpartialize_program_store :
+  forall mem1 mem1' mem2 ptr v,
+    Memory.store mem1 ptr v = Some mem1' ->
+    Memory.store (PS.merge_memories mem1 mem2) ptr v =
+    Some (PS.merge_memories mem1' mem2).
+Proof.
+  unfold Memory.store.
+  intros mem1 mem1' mem2 ptr v Hstore.
+  unfold PS.merge_memories. rewrite unionmE.
+  destruct (mem1 (Pointer.component ptr)) eqn:Hcase1; rewrite Hcase1;
+    last discriminate.
+  simpl.
+  destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) v) eqn:Hcase2;
+    last discriminate.
+  rewrite setm_union. now inversion Hstore.
+Qed.
+
+Lemma partialize_program_alloc :
+  forall mem mem' (ctx : Program.interface) C ptr size,
+    C \notin domm ctx ->
+    Memory.alloc mem C size = Some (mem', ptr) ->
+    Memory.alloc (PS.to_partial_memory mem (domm ctx)) C size =
+    Some (PS.to_partial_memory mem' (domm ctx), ptr).
+Admitted. (* Grade 1. *)
+
+Lemma unpartialize_program_alloc :
+  forall mem1 mem1' mem2 C ptr size,
+    Memory.alloc mem1 C size = Some (mem1', ptr) ->
+    Memory.alloc (PS.merge_memories mem1 mem2) C size =
+    Some (PS.merge_memories mem1' mem2, ptr).
+Proof.
+  unfold Memory.alloc.
+  intros mem1 mem1' mem2 C ptr size Halloc.
+  unfold PS.merge_memories. rewrite unionmE.
+  destruct (mem1 C) as [memC |] eqn:Hcase1; rewrite Hcase1;
+    last discriminate.
+  simpl.
+  destruct (ComponentMemory.alloc memC size) as [memC' b].
+  rewrite setm_union. now inversion Halloc.
+Qed.
+
   Ltac rewrite_if_then :=
     match goal with
     | H: is_true ?X
@@ -3971,139 +4104,6 @@ rename Hstep_cs' into _Hstep_cs'.
         }
 
   Admitted.
-
-(* RB: TODO: Relocate, generalize existing tactic? *)
-Ltac CS_step_of_executing' PROG :=
-  match goal with
-  | H : executing (prepare_global_env PROG) _ ?INSTR |- _ =>
-    match INSTR with
-    | INop           => eapply CS.Nop
-    | ILabel _       => eapply CS.Label
-    | IConst _ _     => eapply CS.Const
-    | IMov _ _       => eapply CS.Mov
-    | IBinOp _ _ _ _ => eapply CS.BinOp
-    | ILoad _ _      => eapply CS.Load
-    | IStore _ _     => eapply CS.Store
-    | IAlloc _ _     => eapply CS.Alloc
-    | IBnz _ _       =>
-      match goal with
-      | H : Register.get _ _ = Int 0 |- _ => eapply CS.BnzZ
-      | _                                 => eapply CS.BnzNZ
-      end
-    | IJump _        => eapply CS.Jump
-    | IJal _         => eapply CS.Jal
-    | ICall _ _      => eapply CS.Call
-    | IReturn        => eapply CS.Return
-    | IHalt          => fail
-    end
-  end.
-
-(* Controlled rewrites on cons'ed stacks. *)
-Lemma to_partial_stack_cons :
-  forall frame gps ctx,
-    PS.to_partial_stack (frame :: gps) ctx =
-    PS.to_partial_frame ctx frame :: PS.to_partial_stack gps ctx.
-Proof.
-  reflexivity.
-Qed.
-
-Lemma merge_stacks_cons :
-  forall ctx1 ctx2 ptr1 ptr2 gps1 gps2,
-    PS.merge_stacks
-      (PS.to_partial_frame ctx1 ptr1 :: PS.to_partial_stack gps1 ctx1)
-      (PS.to_partial_frame ctx2 ptr2 :: PS.to_partial_stack gps2 ctx2) =
-    PS.merge_stack_frames (PS.to_partial_frame ctx1 ptr1, PS.to_partial_frame ctx2 ptr2) ::
-      PS.merge_stacks (PS.to_partial_stack gps1 ctx1) (PS.to_partial_stack gps2 ctx2).
-Proof.
-  reflexivity.
-Qed.
-
-Lemma unpartialize_stack_cons :
-  forall ptr gps,
-    PS.unpartialize_stack (ptr :: gps) =
-    PS.unpartialize_stack_frame ptr :: PS.unpartialize_stack gps.
-Proof.
-  reflexivity.
-Qed.
-
-Lemma ptr_within_partial_frame_inv_2 :
-  forall ptr1 ptr2 (ctx : Program.interface),
-    PS.to_partial_frame (domm ctx) ptr1 = PS.to_partial_frame (domm ctx) ptr2 ->
-    Pointer.component ptr1 \notin domm ctx ->
-    ptr1 = ptr2.
-Proof.
-  intros ptr1 ptr2 ctx Heq Hnotin.
-  destruct ptr1 as [[C1 b1] o1].
-  destruct ptr2 as [[C2 b2] o2].
-  rewrite PS.ptr_within_partial_frame_2 in Heq.
-  - destruct (C2 \in domm ctx) eqn:Hcase.
-    + rewrite PS.ptr_within_partial_frame_1 in Heq.
-      * now inversion Heq.
-      * now rewrite Hcase.
-    + rewrite PS.ptr_within_partial_frame_2 in Heq.
-      * now inversion Heq.
-      * now rewrite Hcase.
-  - destruct (C1 \in domm ctx) eqn:Hcase; now rewrite Hcase in Hnotin.
-Qed.
-
-Lemma pointer_compose :
-  forall ptr,
-    (Pointer.component ptr, Pointer.block ptr, Pointer.offset ptr) = ptr.
-Proof.
-  now intros [[C b] o].
-Qed.
-
-(* The following two lemmas manipulate memory stores and partialized memories
-   more conveniently than the full-fledged "partialized" results. Note naming
-   conventions for some of those are currently somewhat confusing.  *)
-Lemma partialize_program_store :
-  forall mem mem' (ctx : Program.interface) ptr v,
-    Pointer.component ptr \notin domm ctx ->
-    Memory.store mem ptr v = Some mem' ->
-    Memory.store (PS.to_partial_memory mem (domm ctx)) ptr v =
-    Some (PS.to_partial_memory mem' (domm ctx)).
-Admitted. (* Grade 1. *)
-
-Lemma unpartialize_program_store :
-  forall mem1 mem1' mem2 ptr v,
-    Memory.store mem1 ptr v = Some mem1' ->
-    Memory.store (PS.merge_memories mem1 mem2) ptr v =
-    Some (PS.merge_memories mem1' mem2).
-Proof.
-  unfold Memory.store.
-  intros mem1 mem1' mem2 ptr v Hstore.
-  unfold PS.merge_memories. rewrite unionmE.
-  destruct (mem1 (Pointer.component ptr)) eqn:Hcase1; rewrite Hcase1;
-    last discriminate.
-  simpl.
-  destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) v) eqn:Hcase2;
-    last discriminate.
-  rewrite setm_union. now inversion Hstore.
-Qed.
-
-Lemma partialize_program_alloc :
-  forall mem mem' (ctx : Program.interface) C ptr size,
-    C \notin domm ctx ->
-    Memory.alloc mem C size = Some (mem', ptr) ->
-    Memory.alloc (PS.to_partial_memory mem (domm ctx)) C size =
-    Some (PS.to_partial_memory mem' (domm ctx), ptr).
-Admitted. (* Grade 1. *)
-
-Lemma unpartialize_program_alloc :
-  forall mem1 mem1' mem2 C ptr size,
-    Memory.alloc mem1 C size = Some (mem1', ptr) ->
-    Memory.alloc (PS.merge_memories mem1 mem2) C size =
-    Some (PS.merge_memories mem1' mem2, ptr).
-Proof.
-  unfold Memory.alloc.
-  intros mem1 mem1' mem2 C ptr size Halloc.
-  unfold PS.merge_memories. rewrite unionmE.
-  destruct (mem1 C) as [memC |] eqn:Hcase1; rewrite Hcase1;
-    last discriminate.
-  simpl.
-  destruct (ComponentMemory.alloc memC size) as [memC' b].
-  rewrite setm_union. now inversion Halloc.
-Qed.
 
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
