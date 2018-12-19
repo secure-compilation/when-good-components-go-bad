@@ -3898,6 +3898,18 @@ Qed.
     try erewrite -> to_partial_memory_merge_partial_memories_right;
     (eassumption || reflexivity).
 
+  (* RB: TODO: Infer parameters from context. *)
+  Ltac mergeable_step_call_stack Hpc1 Hcc1' Hcomp1' pc1 :=
+    rewrite to_partial_stack_cons merge_stacks_cons unpartialize_stack_cons;
+    assert (Hpc1c := Hpc1); rewrite <- Pointer.inc_preserves_component in Hpc1c;
+    assert (Hpc1p := Hcc1'); rewrite <- Hcomp1' in Hpc1p; rewrite <- Pointer.inc_preserves_component in Hpc1p;
+    assert (Hpc1c' : Pointer.component (Pointer.inc pc1) \in domm (prog_interface c) = false)
+      by (destruct (Pointer.component (Pointer.inc pc1) \in domm (prog_interface c)) eqn:Hcase;
+          now rewrite Hcase in Hpc1c);
+    rewrite (PS.ptr_within_partial_frame_1 Hpc1p);
+    rewrite (PS.ptr_within_partial_frame_2 Hpc1c');
+    simpl; rewrite pointer_compose.
+
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
      in this section, but these should be pared down. *)
   Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
@@ -4196,15 +4208,7 @@ rename Hstep_cs' into _Hstep_cs';
           | Hcomp : Pointer.component ics_pc1' = Pointer.component pc1
             |- CS.step _ _ [ECall _ _ _ _] _
             =>
-            rewrite to_partial_stack_cons merge_stacks_cons unpartialize_stack_cons;
-            assert (Hpc1c := Hpc1); rewrite <- Pointer.inc_preserves_component in Hpc1c;
-            assert (Hpc1p := Hcc1'); rewrite <- Hcomp1' in Hpc1p; rewrite <- Pointer.inc_preserves_component in Hpc1p;
-            assert (Hpc1c' : Pointer.component (Pointer.inc pc1) \in domm (prog_interface c) = false)
-              by (destruct (Pointer.component (Pointer.inc pc1) \in domm (prog_interface c)) eqn:Hcase;
-                  now rewrite Hcase in Hpc1c);
-            rewrite (PS.ptr_within_partial_frame_1 Hpc1p);
-            rewrite (PS.ptr_within_partial_frame_2 Hpc1c');
-            simpl; rewrite pointer_compose;
+            mergeable_step_call_stack Hpc1 Hcc1' Hcomp1' pc1;
             rewrite Hcomp
           end;
           try match goal with
