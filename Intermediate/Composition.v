@@ -5351,6 +5351,22 @@ Section PartialComposition.
       star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
       star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
+  Proof.
+    intros s1 s1' t s2 s2' Hmerge1 Hstar12.
+    destruct (PS.is_program_component s1 (prog_interface c)) eqn:Hcomp1;
+      last admit. (* Symmetric case. *)
+    pose proof PS.mergeable_states_program_to_context Hmerge1 Hcomp1 as Hcomp1'.
+    revert s1' s2' Hmerge1 Hcomp1 Hcomp1'.
+    apply star_iff_starR in Hstar12.
+    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
+      intros s1' s2' Hmerge1 Hcomp1 Hcomp1' Hstar12'.
+    - pose proof PS.context_epsilon_star_is_silent Hcomp1' Hstar12'; subst s2'.
+      assumption.
+    - rename s2' into s3'. rename Hstar12' into Hstar13'.
+      apply (star_app_inv (@PS.singleton_traces _ _)) in Hstar13'.
+      destruct Hstar13' as [s2' [Hstar12' Hstar23']].
+      specialize (IHstar s1' s2' Hmerge1 Hcomp1 Hcomp1' Hstar12').
+      rename IHstar into Hmerge2.
   Admitted.
 
   Corollary threeway_multisem_star_simulation:
