@@ -3879,10 +3879,18 @@ Proof.
   rewrite setm_union. now inversion Halloc.
 Qed.
 
+  (* RB: TODO: This lemma is related to the ones below, on mergeable states, but
+     should also be relocated once the sections are finished. *)
+  Lemma mergeable_states_star_E0 :
+    forall s s1 s2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) s s1 ->
+      Star (PS.sem c (prog_interface p)) s1 E0 s2 ->
+      PS.mergeable_states (prog_interface c) (prog_interface p) s s2.
+  Admitted.
+
   Ltac rewrite_if_then :=
     match goal with
     | H: is_true ?X
-      |- _ = (if ?X then _ else _)
       =>
       rewrite H
     end.
