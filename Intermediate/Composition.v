@@ -5422,6 +5422,49 @@ Section PartialComposition.
       star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
       star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
       star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2').
+  Proof.
+    intros s1 s1' t s2 s2' Hmerge1 Hstar12.
+    destruct (PS.is_program_component s1 (prog_interface c)) eqn:Hcomp1;
+      last admit. (* Symmetric case. *)
+    pose proof PS.mergeable_states_program_to_context Hmerge1 Hcomp1 as Hcomp1'.
+    revert s1' s2' Hmerge1 Hcomp1 Hcomp1'.
+    apply star_iff_starR in Hstar12.
+    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
+      intros s1' s2' Hmerge1 Hcomp1 Hcomp1' Hstar12'.
+    - pose proof PS.context_epsilon_star_is_silent Hcomp1' Hstar12'; subst s2'.
+      now apply star_refl.
+    - rename s2' into s3'. rename Hstar12' into Hstar13'.
+      apply (star_app_inv (@PS.singleton_traces _ _)) in Hstar13'.
+      destruct Hstar13' as [s2' [Hstar12' Hstar23']].
+      specialize (IHstar s1' s2' Hmerge1 Hcomp1 Hcomp1' Hstar12').
+      (* Apply instantiated IH and case analyze step trace. *)
+      apply star_trans with (t1 := t1) (s2 := (s2, s2')) (t2 := t2);
+        [assumption | | reflexivity].
+      apply star_iff_starR in Hstar12.
+      pose proof threeway_multisem_mergeable Hmerge1 Hstar12 Hstar12' as Hmerge2.
+      destruct t2 as [| e2 [| e2' t2]].
+      + (* An epsilon step and comparable epsilon star. One is in the context and
+           therefore silent, the other executes and leads the MultiSem star. *)
+        eapply star_step in Hstep23; [| now apply star_refl | now apply eq_refl].
+        exact (threeway_multisem_star_E0 Hmerge2 Hstep23 Hstar23').
+      + (* The step generates a trace event, mimicked on the other side (possibly
+           between sequences of silent steps). *)
+        change [e2] with (E0 ** e2 :: E0) in Hstar23'.
+        apply (star_middle1_inv (@PS.singleton_traces _ _)) in Hstar23'.
+        destruct Hstar23' as [s2'1 [s2'2 [Hstar2' [Hstep23' Hstar3']]]].
+        assert (star (MultiSem.step p c) (prepare_global_env prog) (s2, s2') E0 (s2, s2'1))
+          as Hmstar1
+          by admit.
+        assert (MultiSem.step p c (prepare_global_env prog) (s2, s2'1) [e2] (s3, s2'2))
+          as Hmstep2
+          by admit.
+        assert (star (MultiSem.step p c) (prepare_global_env prog) (s3, s2'2) E0 (s3, s3'))
+          as Hmstar3
+          by admit.
+        admit.
+      + (* Contradiction: a step generates at most one event. *)
+        pose proof @PS.singleton_traces _ _ _ _ _ Hstep23 as Hcontra.
+        simpl in Hcontra. omega.
   Admitted.
 
   Corollary threeway_multisem_star_simulation:
