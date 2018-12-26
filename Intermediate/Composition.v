@@ -5403,6 +5403,17 @@ Section PartialComposition.
       + (* Contradiction: a step generates at most one event. *)
         pose proof @PS.singleton_traces _ _ _ _ _ Hstep23 as Hcontra.
         simpl in Hcontra. omega.
+  Admitted. (* Grade 2. Refactor symmetries. *)
+
+  (* Compose two stars into a multi-step star. One of the two stars is in the
+     context and its partial state remains unaltered; the other performs all the
+     steps without interruption. *)
+  Lemma threeway_multisem_star_E0:
+    forall ips1 ips2 ips1' ips2',
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 E0 ips1' ->
+      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 E0 ips2' ->
+      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) E0 (ips1', ips2').
   Admitted.
 
   Theorem threeway_multisem_star:
