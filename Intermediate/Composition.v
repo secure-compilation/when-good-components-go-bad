@@ -5452,20 +5452,29 @@ Section PartialComposition.
         change [e2] with (E0 ** e2 :: E0) in Hstar23'.
         apply (star_middle1_inv (@PS.singleton_traces _ _)) in Hstar23'.
         destruct Hstar23' as [s2'1 [s2'2 [Hstar2' [Hstep23' Hstar3']]]].
-        assert (star (MultiSem.step p c) (prepare_global_env prog) (s2, s2') E0 (s2, s2'1))
-          as Hmstar1
-          by admit.
-        assert (MultiSem.step p c (prepare_global_env prog) (s2, s2'1) [e2] (s3, s2'2))
-          as Hmstep2
-          by admit.
-        assert (star (MultiSem.step p c) (prepare_global_env prog) (s3, s2'2) E0 (s3, s3'))
-          as Hmstar3
-          by admit.
-        admit.
+        (* Prefix star. *)
+        pose proof star_refl (PS.step p (prog_interface c)) (prepare_global_env p) s2
+          as Hstar2.
+        pose proof threeway_multisem_star_E0 Hmerge2 Hstar2 Hstar2' as Hmstar1.
+        (* Propagate mergeability, step. *)
+        pose proof threeway_multisem_mergeable Hmerge2 Hstar2 Hstar2' as Hmerge21.
+        pose proof MultiSem.multi_step (prepare_global_env prog) Hstep23 Hstep23'
+          as Hmstep2.
+        (* Propagate mergeability, suffix star. *)
+        pose proof MultiSem.mergeable_states_step_trans
+             wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
+             Hmerge21 Hstep23 Hstep23' as Hmerge22.
+        pose proof star_refl (PS.step p (prog_interface c)) (prepare_global_env p) s3
+          as Hstar3.
+        pose proof threeway_multisem_star_E0 Hmerge22 Hstar3 Hstar3' as Hmstar3.
+        (* Compose. *)
+        exact (star_trans
+                 (star_right _ _ Hmstar1 Hmstep2 (eq_refl _))
+                 Hmstar3 (eq_refl _)).
       + (* Contradiction: a step generates at most one event. *)
         pose proof @PS.singleton_traces _ _ _ _ _ Hstep23 as Hcontra.
         simpl in Hcontra. omega.
-  Admitted.
+  Admitted. (* Grade 2. Refactor symmetries. *)
 
   Corollary threeway_multisem_star_simulation:
     forall ips1 ips2 t ips1' ips2',
