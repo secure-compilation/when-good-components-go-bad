@@ -5345,14 +5345,6 @@ Section PartialComposition.
     - apply starN_mt_starN_equivalence; auto.
   Qed.
 
-  Theorem threeway_multisem_star:
-    forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
-      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
-      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
-      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2').
-  Admitted.
-
   Theorem threeway_multisem_mergeable:
     forall ips1 ips2 t ips1' ips2',
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
@@ -5411,6 +5403,14 @@ Section PartialComposition.
       + (* Contradiction: a step generates at most one event. *)
         pose proof @PS.singleton_traces _ _ _ _ _ Hstep23 as Hcontra.
         simpl in Hcontra. omega.
+  Admitted.
+
+  Theorem threeway_multisem_star:
+    forall ips1 ips2 t ips1' ips2',
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
+      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
+      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2').
   Admitted.
 
   Corollary threeway_multisem_star_simulation:
