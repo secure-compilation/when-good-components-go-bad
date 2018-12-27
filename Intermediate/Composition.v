@@ -5405,6 +5405,21 @@ Section PartialComposition.
         simpl in Hcontra. omega.
   Admitted. (* Grade 2. Refactor symmetries. *)
 
+  Lemma epsilon_star_preserves_program_component:
+    forall ips1 ips1',
+      PS.is_program_component ips1 (prog_interface c) ->
+      Star (PS.sem p (prog_interface c)) ips1 E0 ips1' ->
+      PS.is_program_component ips1' (prog_interface c).
+  Admitted. (* Grade 2. *)
+
+  Lemma threeway_multisem_step_E0:
+    forall ips1 ips2 ips1',
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+      PS.is_program_component ips1 (prog_interface c) ->
+      Step (PS.sem p (prog_interface c)) ips1 E0 ips1' ->
+      Step (PS.sem c (prog_interface p)) ips2 E0 ips2.
+  Admitted. (* Grade 2. *)
+
   (* Compose two stars into a multi-step star. One of the two stars is in the
      context and its partial state remains unaltered; the other performs all the
      steps without interruption. *)
@@ -5414,7 +5429,33 @@ Section PartialComposition.
       star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 E0 ips1' ->
       star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 E0 ips2' ->
       star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) E0 (ips1', ips2').
-  Admitted.
+  Proof.
+    intros s1 s1' s2 s2' Hmerge1 Hstar12 Hstar12'.
+    destruct (PS.is_program_component s1 (prog_interface c)) eqn:Hcomp1;
+      last admit. (* Symmetric case. *)
+    pose proof PS.mergeable_states_program_to_context Hmerge1 Hcomp1 as Hcomp1'.
+    pose proof PS.context_epsilon_star_is_silent Hcomp1' Hstar12'; subst s2'.
+    remember E0 as t eqn:Ht.
+    revert s1' Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'.
+    apply star_iff_starR in Hstar12.
+    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
+      intros s' Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'.
+    - now apply star_refl.
+    - apply Eapp_E0_inv in Ht. destruct Ht; subst.
+      specialize (IHstar _ (eq_refl _) Hmerge1 Hcomp1 Hcomp1' Hstar12').
+      apply star_trans with (t1 := E0) (s2 := (s2, s')) (t2 := E0);
+        [assumption | | reflexivity].
+      apply star_step with (t1 := E0) (s2 := (s3, s')) (t2 := E0).
+      + apply star_iff_starR in Hstar12.
+        pose proof threeway_multisem_mergeable Hmerge1 Hstar12 Hstar12'
+          as Hmerge2.
+        pose proof epsilon_star_preserves_program_component Hcomp1 Hstar12
+          as Hcomp2.
+        pose proof threeway_multisem_step_E0 Hmerge2 Hcomp2 Hstep23 as Hstep23'.
+        now constructor.
+      + now constructor.
+      + reflexivity.
+  Admitted. (* Grade 1. Refactor symmetries. *)
 
   Theorem threeway_multisem_star:
     forall ips1 ips2 t ips1' ips2',
@@ -5474,7 +5515,7 @@ Section PartialComposition.
       + (* Contradiction: a step generates at most one event. *)
         pose proof @PS.singleton_traces _ _ _ _ _ Hstep23 as Hcontra.
         simpl in Hcontra. omega.
-  Admitted. (* Grade 2. Refactor symmetries. *)
+  Admitted. (* Grade 1. Refactor symmetries. *)
 
   Corollary threeway_multisem_star_simulation:
     forall ips1 ips2 t ips1' ips2',
