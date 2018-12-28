@@ -4684,7 +4684,7 @@ Section BehaviorStar.
   Qed.
 End BehaviorStar.
 
-Section PartialCompositionAux.
+Section ThreewayMultisemMergeableProgram.
   Variables p c: program.
 
   Hypothesis wf1 : well_formed_program p.
@@ -4764,7 +4764,47 @@ Section PartialCompositionAux.
         pose proof @PS.singleton_traces _ _ _ _ _ Hstep23 as Hcontra.
         simpl in Hcontra. omega.
   Qed.
-End PartialCompositionAux.
+End ThreewayMultisemMergeableProgram.
+
+Section ThreewayMultisemMergeable.
+  Variables p c: program.
+
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis main_linkability: linkable_mains p c.
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
+
+  Let prog := program_link p c.
+
+  Hypothesis prog_is_closed:
+    closed_program prog.
+
+  Hypothesis mergeable_interfaces:
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Theorem threeway_multisem_mergeable:
+    forall ips1 ips2 t ips1' ips2',
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
+      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
+  Proof.
+    intros s1 s1' t s2 s2' Hmerge1 Hstar12 Hstar12'.
+    destruct (PS.is_program_component s1 (prog_interface c)) eqn:Hcomp1.
+    - eapply threeway_multisem_mergeable_program; eassumption.
+    - apply negb_false_iff in Hcomp1.
+      apply (PS.mergeable_states_context_to_program Hmerge1) in Hcomp1.
+      apply (PS.mergeable_states_sym wf2 wf1 (linkable_sym linkability)).
+      eapply threeway_multisem_mergeable_program; try eassumption.
+      + now apply linkable_mains_sym.
+      + now apply linkable_sym.
+      + erewrite closed_program_link_sym; try eassumption.
+        now apply linkable_sym.
+      + now apply mergeable_interfaces_sym.
+      + now apply PS.mergeable_states_sym.
+  Qed.
+End ThreewayMultisemMergeable.
 
 Section PartialComposition.
   Variables p c: program.
@@ -5425,28 +5465,6 @@ Section PartialComposition.
     - assumption.
     - apply starN_mt_starN_equivalence; auto.
     - apply starN_mt_starN_equivalence; auto.
-  Qed.
-
-  Theorem threeway_multisem_mergeable:
-    forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
-      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
-      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
-      PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
-  Proof.
-    intros s1 s1' t s2 s2' Hmerge1 Hstar12 Hstar12'.
-    destruct (PS.is_program_component s1 (prog_interface c)) eqn:Hcomp1.
-    - eapply threeway_multisem_mergeable_program; eassumption.
-    - apply negb_false_iff in Hcomp1.
-      apply (PS.mergeable_states_context_to_program Hmerge1) in Hcomp1.
-      apply (PS.mergeable_states_sym wf2 wf1 (linkable_sym linkability)).
-      eapply threeway_multisem_mergeable_program; try eassumption.
-      + now apply linkable_mains_sym.
-      + now apply linkable_sym.
-      + erewrite closed_program_link_sym; try eassumption.
-        now apply linkable_sym.
-      + now apply mergeable_interfaces_sym.
-      + now apply PS.mergeable_states_sym.
   Qed.
 
   Lemma epsilon_star_preserves_program_component:
