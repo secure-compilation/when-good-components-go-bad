@@ -70,7 +70,7 @@ Definition int2int (val : ssrint.int) : ocaml_int :=
   | Negz n => ocaml_int_neg (nat2int n)
   end.
 
-Extraction Language OCaml.
+Extraction Language Ocaml.
 
 Extract Inductive unit => "unit" [ "()" ].
 
