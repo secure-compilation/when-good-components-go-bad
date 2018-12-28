@@ -5371,20 +5371,25 @@ Section PartialComposition.
       + (* An epsilon step and comparable epsilon star. One is in the context and
            therefore silent, the other preserves mergeability. *)
         eapply star_step in Hstep23; [| now apply star_refl | now apply eq_refl].
-        destruct (PS.is_program_component s2 (prog_interface c)) eqn:Hcomp2;
-          last admit. (* Symmetric case. *)
-        pose proof PS.mergeable_states_program_to_context Hmerge2 Hcomp2 as Hcomp2'.
-        pose proof PS.context_epsilon_star_is_silent Hcomp2' Hstar23'; subst s3'.
-        assert (Hprog_is_closed_sym := prog_is_closed);
-          rewrite closed_program_link_sym in Hprog_is_closed_sym; try assumption.
-        pose proof PS.mergeable_states_sym wf1 wf2 linkability Hmerge2 as Hmerge2'.
-        pose proof linkable_sym linkability as Hlinkability_sym.
-        pose proof MultiSem.mergeable_states_star_E0
-             wf2 wf1
-             (linkable_mains_sym main_linkability) Hlinkability_sym
-             (mergeable_interfaces_sym _ _ mergeable_interfaces) Hprog_is_closed_sym
-             Hmerge2' Hstep23 as Hmerge3'.
-        now apply PS.mergeable_states_sym.
+        destruct (PS.is_program_component s2 (prog_interface c)) eqn:Hcomp2.
+        * pose proof PS.mergeable_states_program_to_context Hmerge2 Hcomp2 as Hcomp2'.
+          pose proof PS.context_epsilon_star_is_silent Hcomp2' Hstar23'; subst s3'.
+          assert (Hprog_is_closed_sym := prog_is_closed);
+            rewrite closed_program_link_sym in Hprog_is_closed_sym; try assumption.
+          pose proof PS.mergeable_states_sym wf1 wf2 linkability Hmerge2 as Hmerge2'.
+          pose proof linkable_sym linkability as Hlinkability_sym.
+          pose proof MultiSem.mergeable_states_star_E0
+               wf2 wf1
+               (linkable_mains_sym main_linkability) Hlinkability_sym
+               (mergeable_interfaces_sym _ _ mergeable_interfaces) Hprog_is_closed_sym
+               Hmerge2' Hstep23 as Hmerge3'.
+          now apply PS.mergeable_states_sym.
+        * apply negb_false_iff in Hcomp2.
+          pose proof PS.context_epsilon_star_is_silent Hcomp2 Hstep23; subst s3.
+          exact
+            (MultiSem.mergeable_states_star_E0
+               wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
+               Hmerge2 Hstar23').
       + (* The step generates a trace event, mimicked on the other side (possibly
            between sequences of silent steps). *)
         change [e2] with (E0 ** e2 :: E0) in Hstar23'.
