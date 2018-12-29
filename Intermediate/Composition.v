@@ -4910,7 +4910,108 @@ Section ThreewayMultisem.
       + now apply mergeable_interfaces_sym.
       + now apply PS.mergeable_states_sym.
   Qed.
+
+  Theorem threeway_multisem_star_program:
+    forall ips1 ips2 t ips1' ips2',
+      PS.is_program_component ips1 (prog_interface c) ->
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
+      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
+      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2').
+  Proof.
+    intros s1 s1' t s2 s2' Hcomp1 Hmerge1 Hstar12.
+    pose proof PS.mergeable_states_program_to_context Hmerge1 Hcomp1 as Hcomp1'.
+    revert s1' s2' Hmerge1 Hcomp1 Hcomp1'.
+    apply star_iff_starR in Hstar12.
+    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
+      intros s1' s2' Hmerge1 Hcomp1 Hcomp1' Hstar12'.
+    - pose proof PS.context_epsilon_star_is_silent Hcomp1' Hstar12'; subst s2'.
+      now apply star_refl.
+    - rename s2' into s3'. rename Hstar12' into Hstar13'.
+      apply (star_app_inv (@PS.singleton_traces _ _)) in Hstar13'.
+      destruct Hstar13' as [s2' [Hstar12' Hstar23']].
+      specialize (IHstar s1' s2' Hmerge1 Hcomp1 Hcomp1' Hstar12').
+      (* Apply instantiated IH and case analyze step trace. *)
+      apply star_trans with (t1 := t1) (s2 := (s2, s2')) (t2 := t2);
+        [assumption | | reflexivity].
+      apply star_iff_starR in Hstar12.
+      pose proof threeway_multisem_mergeable Hmerge1 Hstar12 Hstar12'
+        as Hmerge2.
+      destruct t2 as [| e2 [| e2' t2]].
+      + (* An epsilon step and comparable epsilon star. One is in the context and
+           therefore silent, the other executes and leads the MultiSem star. *)
+        eapply star_step in Hstep23; [| now apply star_refl | now apply eq_refl].
+        exact (threeway_multisem_star_E0 Hmerge2 Hstep23 Hstar23').
+      + (* The step generates a trace event, mimicked on the other side (possibly
+           between sequences of silent steps). *)
+        change [e2] with (E0 ** e2 :: E0) in Hstar23'.
+        apply (star_middle1_inv (@PS.singleton_traces _ _)) in Hstar23'.
+        destruct Hstar23' as [s2'1 [s2'2 [Hstar2' [Hstep23' Hstar3']]]].
+        (* Prefix star. *)
+        pose proof star_refl (PS.step p (prog_interface c)) (prepare_global_env p) s2
+          as Hstar2.
+        pose proof threeway_multisem_star_E0 Hmerge2 Hstar2 Hstar2'
+          as Hmstar1.
+        (* Propagate mergeability, step. *)
+        pose proof threeway_multisem_mergeable Hmerge2 Hstar2 Hstar2' as Hmerge21.
+        pose proof MultiSem.multi_step (prepare_global_env prog) Hstep23 Hstep23'
+          as Hmstep2.
+        (* Propagate mergeability, suffix star. *)
+        pose proof MultiSem.mergeable_states_step_trans
+             wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
+             Hmerge21 Hstep23 Hstep23' as Hmerge22.
+        pose proof star_refl (PS.step p (prog_interface c)) (prepare_global_env p) s3
+          as Hstar3.
+        pose proof threeway_multisem_star_E0 Hmerge22 Hstar3 Hstar3' as Hmstar3.
+        (* Compose. *)
+        exact (star_trans
+                 (star_right _ _ Hmstar1 Hmstep2 (eq_refl _))
+                 Hmstar3 (eq_refl _)).
+      + (* Contradiction: a step generates at most one event. *)
+        pose proof @PS.singleton_traces _ _ _ _ _ Hstep23 as Hcontra.
+        simpl in Hcontra. omega.
+  Qed.
 End ThreewayMultisem.
+
+Section ThreewayMultisem'.
+  Variables p c: program.
+
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis main_linkability: linkable_mains p c.
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
+
+  Let prog := program_link p c.
+
+  Hypothesis prog_is_closed:
+    closed_program prog.
+
+  Hypothesis mergeable_interfaces:
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Theorem threeway_multisem_star:
+    forall ips1 ips2 t ips1' ips2',
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
+      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
+      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2').
+  Proof.
+    intros s1 s1' t s2 s2' Hmerge1 Hstar12 Hstar12'.
+    destruct (PS.is_program_component s1 (prog_interface c)) eqn:Hcomp1.
+    - now apply threeway_multisem_star_program.
+    - apply negb_false_iff in Hcomp1.
+      apply (PS.mergeable_states_context_to_program Hmerge1) in Hcomp1.
+      apply MultiSem.star_sym.
+      apply threeway_multisem_star_program; try assumption.
+      + now apply linkable_mains_sym.
+      + now apply linkable_sym.
+      + rewrite closed_program_link_sym; try assumption.
+        now apply linkable_sym.
+      + now apply mergeable_interfaces_sym.
+      + now apply PS.mergeable_states_sym.
+  Qed.
+End ThreewayMultisem'.
 
 Section PartialComposition.
   Variables p c: program.
@@ -5572,66 +5673,6 @@ Section PartialComposition.
     - apply starN_mt_starN_equivalence; auto.
     - apply starN_mt_starN_equivalence; auto.
   Qed.
-
-  Theorem threeway_multisem_star:
-    forall ips1 ips2 t ips1' ips2',
-      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
-      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
-      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
-      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2').
-  Proof.
-    intros s1 s1' t s2 s2' Hmerge1 Hstar12.
-    destruct (PS.is_program_component s1 (prog_interface c)) eqn:Hcomp1;
-      last admit. (* Symmetric case. *)
-    pose proof PS.mergeable_states_program_to_context Hmerge1 Hcomp1 as Hcomp1'.
-    revert s1' s2' Hmerge1 Hcomp1 Hcomp1'.
-    apply star_iff_starR in Hstar12.
-    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
-      intros s1' s2' Hmerge1 Hcomp1 Hcomp1' Hstar12'.
-    - pose proof PS.context_epsilon_star_is_silent Hcomp1' Hstar12'; subst s2'.
-      now apply star_refl.
-    - rename s2' into s3'. rename Hstar12' into Hstar13'.
-      apply (star_app_inv (@PS.singleton_traces _ _)) in Hstar13'.
-      destruct Hstar13' as [s2' [Hstar12' Hstar23']].
-      specialize (IHstar s1' s2' Hmerge1 Hcomp1 Hcomp1' Hstar12').
-      (* Apply instantiated IH and case analyze step trace. *)
-      apply star_trans with (t1 := t1) (s2 := (s2, s2')) (t2 := t2);
-        [assumption | | reflexivity].
-      apply star_iff_starR in Hstar12.
-      pose proof threeway_multisem_mergeable Hmerge1 Hstar12 Hstar12' as Hmerge2.
-      destruct t2 as [| e2 [| e2' t2]].
-      + (* An epsilon step and comparable epsilon star. One is in the context and
-           therefore silent, the other executes and leads the MultiSem star. *)
-        eapply star_step in Hstep23; [| now apply star_refl | now apply eq_refl].
-        exact (threeway_multisem_star_E0 Hmerge2 Hstep23 Hstar23').
-      + (* The step generates a trace event, mimicked on the other side (possibly
-           between sequences of silent steps). *)
-        change [e2] with (E0 ** e2 :: E0) in Hstar23'.
-        apply (star_middle1_inv (@PS.singleton_traces _ _)) in Hstar23'.
-        destruct Hstar23' as [s2'1 [s2'2 [Hstar2' [Hstep23' Hstar3']]]].
-        (* Prefix star. *)
-        pose proof star_refl (PS.step p (prog_interface c)) (prepare_global_env p) s2
-          as Hstar2.
-        pose proof threeway_multisem_star_E0 Hmerge2 Hstar2 Hstar2' as Hmstar1.
-        (* Propagate mergeability, step. *)
-        pose proof threeway_multisem_mergeable Hmerge2 Hstar2 Hstar2' as Hmerge21.
-        pose proof MultiSem.multi_step (prepare_global_env prog) Hstep23 Hstep23'
-          as Hmstep2.
-        (* Propagate mergeability, suffix star. *)
-        pose proof MultiSem.mergeable_states_step_trans
-             wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
-             Hmerge21 Hstep23 Hstep23' as Hmerge22.
-        pose proof star_refl (PS.step p (prog_interface c)) (prepare_global_env p) s3
-          as Hstar3.
-        pose proof threeway_multisem_star_E0 Hmerge22 Hstar3 Hstar3' as Hmstar3.
-        (* Compose. *)
-        exact (star_trans
-                 (star_right _ _ Hmstar1 Hmstep2 (eq_refl _))
-                 Hmstar3 (eq_refl _)).
-      + (* Contradiction: a step generates at most one event. *)
-        pose proof @PS.singleton_traces _ _ _ _ _ Hstep23 as Hcontra.
-        simpl in Hcontra. omega.
-  Admitted. (* Grade 1. Refactor symmetries. *)
 
   Corollary threeway_multisem_star_simulation:
     forall ips1 ips2 t ips1' ips2',
