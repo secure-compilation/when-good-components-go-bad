@@ -4563,6 +4563,39 @@ rename Hstep_cs' into _Hstep_cs';
       apply Hfinal_ms. constructor; assumption.
   Qed.
 End MultiSemantics.
+
+Section Symmetry.
+  Variables p c : program.
+
+  Remark step_sym :
+    forall sp sc t sp' sc',
+      step p c (prepare_global_env (program_link p c)) (sp, sc) t (sp', sc') ->
+      step c p (prepare_global_env (program_link c p)) (sc, sp) t (sc', sp').
+  Proof.
+    intros ? ? ? ? ? Hstep.
+    inversion Hstep; subst.
+    now constructor.
+  Qed.
+
+  Remark star_sym :
+    forall sp sc t sp' sc',
+      star (MultiSem.step p c) (prepare_global_env (program_link p c)) (sp, sc) t (sp', sc') ->
+      star (MultiSem.step c p) (prepare_global_env (program_link c p)) (sc, sp) t (sc', sp').
+  Proof.
+    intros sp sc t sp' sc' Hstar.
+    remember (sp, sc) as s eqn:Hs. remember (sp', sc') as s' eqn:Hs'.
+    revert sp sc sp' sc' Hs Hs'.
+    apply star_iff_starR in Hstar.
+    induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar IHHstar Hstep];
+      intros sp sc sp' sc' Hs Hs'.
+    - rewrite Hs in Hs'. inversion Hs'; subst.
+      now apply star_refl.
+    - subst. destruct s2 as [s2 s2'].
+      specialize (IHHstar sp sc s2 s2' (eq_refl _) (eq_refl _)).
+      apply step_sym in Hstep.
+      exact (star_right _ _ IHHstar Hstep (eq_refl _)).
+  Qed.
+End Symmetry.
 End MultiSem.
 
 (*
