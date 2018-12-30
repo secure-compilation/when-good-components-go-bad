@@ -4483,9 +4483,6 @@ rename Hstep_cs' into _Hstep_cs';
     now destruct (Eapp_E0_inv _ _ (eq_sym Happ)).
   Qed.
 
-  Lemma initial_state_exists : exists s, initial_state s.
-  Admitted. (* Grade 2. *)
-
   (* RB: TODO: To PS when done.
      A partial step, partialized on the empty interface (that is, a complete
      step in disguise) can be rearranged as two partial steps split along the
@@ -4496,6 +4493,19 @@ rename Hstep_cs' into _Hstep_cs';
       PS.initial_state c (prog_interface p) s2 ->
       PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2.
   Admitted. (* Grade 2. See ProgCtxSim.match_initial_states. *)
+
+  Lemma initial_state_exists : exists s, initial_state s.
+  Proof.
+    destruct (PS.initial_state_exists wf1 wf2 linkability main_linkability)
+      as [s1 Hini1].
+    destruct (PS.initial_state_exists
+                wf2 wf1 (linkable_sym linkability)
+                (linkable_mains_sym main_linkability))
+      as [s2 Hini2].
+    pose proof initial_state_split Hini1 Hini2 as Hmerge.
+    pose proof initial_state_intro Hmerge Hini1 Hini2.
+    now exists (s1, s2).
+  Qed.
 
   Lemma step_emptym_split :
     forall s t s',
