@@ -3734,7 +3734,25 @@ Section MultiSemantics.
       PS.mergeable_states (prog_interface c) (prog_interface p) s s' ->
       PS.merge_partial_states s s' =
       PS.mergeable_states_state s s'.
-  Admitted. (* Grade 2. *)
+  Proof.
+    intros s1 s2 Hmerge.
+    inversion Hmerge as [ics ? ? Hifaces Hcomes_from Hpartial1 Hpartial2];
+      subst.
+    unfold PS.merge_partial_states, PS.mergeable_states_state,
+           PS.mergeable_states_stack, PS.mergeable_states_memory,
+           PS.mergeable_states_regs, PS.mergeable_states_pc.
+    inversion Hpartial1 as [gps1 ? mem1 ? regs1 pc1 Hcomp1 |
+                            gps1 ? mem1 ? regs1 pc1 Hcomp1];
+      subst;
+      inversion Hpartial2 as [gps2 ? mem2 ? regs2 pc2 Hcomp2 |
+                              gps2 ? mem2 ? regs2 pc2 Hcomp2];
+      subst;
+      PS.simplify_turn.
+    - exfalso. eapply PS.domm_partition_in_neither; eassumption.
+    - reflexivity.
+    - reflexivity.
+    - exfalso. eapply PS.domm_partition_in_both; eassumption.
+  Qed.
 
   (* A special case of a more general property on [PS.partial_state emptym] that
      would relate a CS state to its injection to a PS state. *)
