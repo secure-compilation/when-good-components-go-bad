@@ -3762,7 +3762,22 @@ Section MultiSemantics.
       PS.partial_state emptym
                        (PS.unpartialize (PS.merge_partial_states s s'))
                        (PS.merge_partial_states s s').
-  Admitted. (* Grade 1. *)
+  Proof.
+    intros s1 s2 Hmerge.
+    inversion Hmerge as [ics ? ? Hifaces Hcomes_from Hpartial1 Hpartial2];
+      subst.
+    rewrite (mergeable_states_merge Hmerge).
+    apply PS.ProgramControl.
+    - PS.simplify_turn. now rewrite domm0 in_fset0.
+    - unfold PS.mergeable_states_memory, PS.to_partial_memory.
+      rewrite fdisjoint_filterm_full; first reflexivity.
+      rewrite domm0. now apply fdisjoints0.
+    - unfold PS.mergeable_states_stack.
+      rewrite domm0.
+      rewrite PS.to_partial_stack_unpartialize_identity; first reflexivity.
+      apply PS.merged_stack_has_no_holes.
+      now apply (PS.mergeable_states_stacks Hmerge).
+  Qed.
 
 (* RB: TODO: Relocate, generalize existing tactic? *)
 Ltac CS_step_of_executing' PROG :=
