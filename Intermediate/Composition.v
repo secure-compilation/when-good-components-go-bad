@@ -4531,7 +4531,34 @@ rename Hstep_cs' into _Hstep_cs';
     forall s1 s2,
       PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
       PS.partialize (PS.unpartialize (PS.merge_partial_states s1 s2)) (prog_interface c) = s1.
-  Admitted. (* Grade 2. *)
+  Proof.
+    intros s1 s2 Hmerge.
+    inversion Hmerge as [ics ? ? Hmerge_ifaces Hcomes_from Hpartial1 Hpartial2]; subst.
+    rewrite (mergeable_states_merge Hmerge).
+    inversion Hpartial1
+      as [gps1 ? mem1 ? regs1 pc1 Hcomp1 | gps1 ? mem1 ? regs1 pc1 Hcomp1];
+      subst;
+      inversion Hpartial2
+        as [gps2 ? mem2 ? regs2 pc2 Hcomp2 | gps2 ? mem2 ? regs2 pc2 Hcomp2];
+      subst;
+      PS.simplify_turn.
+    - exfalso.
+      eapply PS.domm_partition_in_neither; eassumption.
+    - destruct (Pointer.component pc1 \in domm (prog_interface c)) eqn:Hcase;
+        first (rewrite Hcase in Hcomp1; discriminate).
+      rewrite Hcase.
+      unfold PS.mergeable_states_stack, PS.mergeable_states_memory. simpl.
+      erewrite to_partial_stack_merge_stack_left; try eassumption.
+      erewrite to_partial_memory_merge_memory_left; try eassumption.
+      reflexivity.
+    - rewrite Hcomp1.
+      unfold PS.mergeable_states_stack, PS.mergeable_states_memory. simpl.
+      erewrite to_partial_stack_merge_stack_left; try eassumption.
+      erewrite to_partial_memory_merge_memory_left; try eassumption.
+      reflexivity.
+    - exfalso.
+      eapply PS.domm_partition_in_both; eassumption.
+  Qed.
 
   Lemma partialize_mergeable_states_right :
     forall s1 s2,
