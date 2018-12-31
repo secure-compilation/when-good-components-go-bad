@@ -220,15 +220,40 @@ Corollary to_partial_memory_merge_memory_right :
     PS.to_partial_memory mem (domm iface2).
 Admitted. (* Grade 2. *)
 
+Lemma pointer_compose :
+  forall ptr,
+    (Pointer.component ptr, Pointer.block ptr, Pointer.offset ptr) = ptr.
+Proof.
+  now intros [[C b] o].
+Qed.
+
 Lemma unpartialize_stack_frame_partition:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
   forall ptr,
+    Pointer.component ptr \in domm (unionm ctx1 ctx2) ->
     PS.unpartialize_stack_frame
       (PS.merge_stack_frames ((PS.to_partial_frame (domm ctx1) ptr),
                               (PS.to_partial_frame (domm ctx2) ptr))) =
     ptr.
-Admitted. (* Grade 1. *)
+Proof.
+  intros ctx1 ctx2 Hmergeable ptr Hdomm.
+  destruct (Pointer.component ptr \in domm ctx1) eqn:Hcase1;
+    destruct (Pointer.component ptr \in domm ctx2) eqn:Hcase2;
+    unfold PS.to_partial_frame;
+    rewrite Hcase1 Hcase2; simpl.
+  - exfalso. eapply PS.domm_partition_in_both; eassumption.
+  - now rewrite pointer_compose.
+  - now rewrite pointer_compose.
+  - assert (Hmap1 : ctx1 (Pointer.component ptr) = None)
+      by (apply /dommPn; unfold negb; now rewrite Hcase1).
+    assert (Hmap2 : ctx2 (Pointer.component ptr) = None)
+      by (apply /dommPn; unfold negb; now rewrite Hcase2).
+    assert (exists v, (unionm ctx1 ctx2) (Pointer.component ptr) = Some v)
+      as [Ci Hunion]
+      by now apply /dommP.
+    now rewrite unionmE Hmap1 Hmap2 in Hunion.
+Qed.
 
 (* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
 Lemma merge_stacks_partition:
@@ -3851,13 +3876,6 @@ Proof.
       * now inversion Heq.
       * now rewrite Hcase.
   - destruct (C1 \in domm ctx) eqn:Hcase; now rewrite Hcase in Hnotin.
-Qed.
-
-Lemma pointer_compose :
-  forall ptr,
-    (Pointer.component ptr, Pointer.block ptr, Pointer.offset ptr) = ptr.
-Proof.
-  now intros [[C b] o].
 Qed.
 
 (* The following two lemmas manipulate memory stores and partialized memories
