@@ -4537,12 +4537,71 @@ rename Hstep_cs' into _Hstep_cs';
   (* RB: TODO: To PS when done.
      A partial step, partialized on the empty interface (that is, a complete
      step in disguise) can be rearranged as two partial steps split along the
-     lines of a pair of mergeable interfaces. *)
+     lines of a pair of mergeable interfaces.
+     Possible refactoring of CS.prog_main_block parts, see similar uses in
+     initial_states_mergeability. Symmetric sub-goals as well. *)
   Lemma initial_state_split :
     forall s1 s2,
       PS.initial_state p (prog_interface c) s1 ->
       PS.initial_state c (prog_interface p) s2 ->
       PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2.
+  Proof.
+    intros s1 s2 Hini1 Hini2.
+    apply PS.mergeable_states_intro with (ics := CS.initial_machine_state prog).
+    - now apply mergeable_interfaces_sym.
+    - unfold CS.comes_from_initial_state.
+      destruct (cprog_main_existence prog_is_closed)
+        as [main [main_procs [Hmain [Hprocs Hdomm]]]].
+      exists prog, main, (CS.initial_machine_state prog), E0.
+      split; [| split; [| split; [| split]]].
+      + now apply linking_well_formedness.
+      + assumption.
+      + rewrite unionmC; first reflexivity.
+        rewrite fdisjointC.
+        now inversion linkability.
+      + reflexivity.
+      + now apply star_refl.
+    - inversion Hini1
+        as [p' ics ? Hiface _ Hwf1 Hlinkable1 Hmains1 Hpartial1 HCSini1];
+        subst.
+      assert (Hclosed : closed_program (program_link p p')).
+      {
+        (* Refactored for later sub-proofs. *)
+        apply interface_preserves_closedness_r with (p2 := c); try easy.
+        apply interface_implies_matching_mains; easy.
+      }
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+        PS.simplify_turn.
+      + rewrite CS.initial_machine_state_after_linking; try assumption.
+        unfold CS.initial_state in HCSini1.
+        rewrite CS.initial_machine_state_after_linking in HCSini1; try assumption.
+        inversion HCSini1; subst.
+        pose proof CS.prog_main_block_no_main _ wf2 Hcomp1 as Hmain1. rewrite Hmain1.
+        rewrite <- Hiface in Hcomp1.
+        pose proof CS.prog_main_block_no_main _ Hwf1 Hcomp1 as Hmain2. rewrite Hmain2.
+        rewrite -> Hiface in Hcomp1. (* Restore for later sub-goal. *)
+        apply PS.ProgramControl.
+        * assumption.
+        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * reflexivity.
+      + rewrite CS.initial_machine_state_after_linking; try assumption.
+        unfold CS.initial_state in HCSini1.
+        rewrite CS.initial_machine_state_after_linking in HCSini1; try assumption.
+        inversion HCSini1; subst.
+        assert (Hcomp2 : Component.main \notin domm (prog_interface p)).
+        {
+          destruct (Component.main \in domm (prog_interface p)) eqn:Hcase.
+          - simpl in Hcomp1. exfalso. eapply PS.domm_partition_in_both; eassumption.
+          - reflexivity.
+        }
+        pose proof CS.prog_main_block_no_main _ wf1 Hcomp2 as Hmain1. rewrite Hmain1.
+        simpl.
+        apply PS.ContextControl.
+        * assumption.
+        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * reflexivity.
+    - (* Symmetric case. *)
+      admit.
   Admitted. (* Grade 2. See ProgCtxSim.match_initial_states. *)
 
   Lemma initial_state_exists : exists s, initial_state s.
