@@ -4685,6 +4685,47 @@ rename Hstep_cs' into _Hstep_cs';
                      (PS.partialize (PS.unpartialize s) (prog_interface c)) /\
       PS.final_state c (prog_interface p)
                      (PS.partialize (PS.unpartialize s) (prog_interface p)).
+  Proof.
+    intros s Hfinal.
+    inversion Hfinal as [p' ics ips Hiface Hwf Hwf' _ _ _ Hpartial HCSfinal | ? Hturn];
+      subst;
+      last (PS.simplify_turn;
+            PS.unfold_state s; now rewrite domm0 in_fset0 in Hturn).
+    pose proof empty_interface_implies_empty_program Hwf' Hiface; subst p'.
+    clear Hwf' Hiface.
+    rewrite linking_empty_program in HCSfinal.
+    inversion Hpartial as [gps ? mem ? regs pc Hcomp | ? ? ? ? ? ? Hcomp]; subst;
+      last (PS.simplify_turn; now rewrite domm0 in_fset0 in Hcomp).
+    simpl.
+    destruct (Pointer.component pc \in domm (prog_interface p)) eqn:Hcase1;
+      destruct (Pointer.component pc \in domm (prog_interface c)) eqn:Hcase2;
+      rewrite Hcase1 Hcase2.
+    - exfalso. eapply PS.domm_partition_in_both; eassumption.
+    - split.
+      + apply PS.final_state_program with (p' := c) (ics := (gps, mem, regs, pc));
+          try easy;
+          first (PS.simplify_turn; congruence).
+        apply PS.ProgramControl.
+        * admit.
+        * admit.
+        * admit.
+      + now apply PS.final_state_context.
+    - (* Symmetric case. *)
+      split.
+      + now apply PS.final_state_context.
+      + apply PS.final_state_program with (p' := p) (ics := (gps, mem, regs, pc));
+          try easy.
+        * now apply linkable_sym.
+        * now apply linkable_mains_sym.
+        * PS.simplify_turn. congruence.
+        * apply PS.ProgramControl.
+          -- admit.
+          -- admit.
+          -- admit.
+        * now rewrite <- (program_linkC wf1 wf2 linkability).
+    - (* Contra. *)
+      PS.simplify_turn.
+      admit.
   Admitted. (* Grade 2. *)
 
   (* RB: TODO: Refactor case symmetry and left-right lemma symmetry. *)
