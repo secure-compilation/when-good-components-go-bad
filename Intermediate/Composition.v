@@ -5205,12 +5205,59 @@ Section ThreewayMultisemProgram.
       exact (epsilon_step_preserves_program_component IHstar Hstep23).
   Qed.
 
+  (* RB: TODO: Rename, context can step. *)
   Lemma threeway_multisem_step_E0:
     forall ips1 ips2 ips1',
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
       PS.is_program_component ips1 (prog_interface c) ->
       Step (PS.sem p (prog_interface c)) ips1 E0 ips1' ->
       Step (PS.sem c (prog_interface p)) ips2 E0 ips2.
+  Proof.
+    intros s1 s1' s2 Hmerge1 Hcomp1 Hstep12.
+    inversion Hmerge1 as [ics ? ? Hmerge_ifaces Hcomes_from Hpartialm1 Hpartialm1'];
+      subst.
+    inversion Hstep12
+      as [p' ? ? ? ics1 ics2 Hiface _ Hwf1 Hlinkable Hmains HCSstep Hpartials1 Hpartials2];
+      subst.
+    apply PS.partial_step
+      with (p' := p)
+           (ics := PS.unpartialize (PS.merge_partial_states s1 s1'))
+           (ics' := PS.unpartialize (PS.merge_partial_states s2 s1')).
+    - reflexivity.
+    - assumption.
+    - assumption.
+    - now apply linkable_sym.
+    - now apply linkable_mains_sym.
+    - inversion Hpartials1 as [? ? ? ? ? ? Hcomps1 | ? ? ? ? ? ? Hcomps1]; subst;
+        last admit. (* Contra. *)
+      inversion HCSstep; subst.
+      1:{
+        inversion Hpartials2 as [? ? ? ? ? ? Hcomps2 | ? ? ? ? ? ? Hcomps2]; subst;
+          last admit. (* Contra. *)
+        inversion Hpartialm1 as [? ? ? ? ? ? Hcompm1 Hmem1' Hstack1' |]; subst.
+        inversion Hpartialm1' as [? ? ? ? ? ? Hcompm1' | ? ? ? ? ? ? Hcompm1']; subst;
+          first admit. (* Contra. *)
+        CS_step_of_executing.
+        rewrite program_linkC; try assumption;
+          last now apply linkable_sym.
+        eapply execution_invariant_to_linking; eassumption.
+      }
+      all:admit.
+    - (* RB: TODO: Interesting to spin into a lemma, like similar sub-goals. *)
+      inversion Hpartialm1 as [? ? ? ? ? ? _ | ? ? ? ? ? ? Hcontra];
+        subst;
+        last (PS.simplify_turn;
+              exfalso; eapply PS.domm_partition_in_notin; eassumption).
+      inversion Hpartialm1' as [? ? ? ? ? ? Hcomp1' | ? ? ? ? ? ? Hcomp1'];
+        subst;
+        first (exfalso; eapply PS.domm_partition_in_neither; eassumption).
+      constructor.
+      + assumption.
+      + erewrite to_partial_memory_merge_memory_right; try easy.
+        eassumption.
+      + erewrite to_partial_stack_merge_stack_right; try easy.
+        eassumption.
+    - admit.
   Admitted. (* Grade 2. *)
 
   (* Compose two stars into a multi-step star. One of the two stars is in the
