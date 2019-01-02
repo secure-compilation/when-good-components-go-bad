@@ -4678,6 +4678,45 @@ rename Hstep_cs' into _Hstep_cs';
               (PS.partialize (PS.unpartialize s') (prog_interface p)).
   Admitted. (* Grade 2. *)
 
+  (* RB: TODO: Move helper lemmas. *)
+  Remark to_partial_memory_empty_prog :
+    forall (mem : Memory.t),
+      PS.to_partial_memory mem (domm (prog_interface empty_prog)) = mem.
+  Proof.
+    intros mem.
+    unfold PS.to_partial_memory.
+    rewrite fdisjoint_filterm_full; first reflexivity.
+    rewrite domm0. now apply fdisjoints0.
+  Qed.
+
+  Remark to_partial_stack_empty_prog :
+    forall gps,
+      PS.unpartialize_stack
+        (PS.to_partial_stack gps (domm (prog_interface empty_prog))) =
+      gps.
+  Proof.
+    intros gps. induction gps as [| [[C b] o] gps IHgps].
+    - reflexivity.
+    - simpl. rewrite IHgps.
+      unfold PS.unpartialize_stack_frame, PS.to_partial_frame.
+      rewrite domm0. reflexivity.
+  Qed.
+
+  Remark in_domm_unionm :
+    forall ptr (ctx1 ctx2 : Program.interface),
+      ptr \in domm (unionm ctx1 ctx2) -> ptr \in domm ctx1 \/ ptr \in domm ctx2.
+  Proof.
+    intros ptr ctx1 ctx2 Hdomm.
+    assert (exists v, (unionm ctx1 ctx2) ptr = Some v)
+      as [v HSome]
+      by now apply /dommP.
+    rewrite unionmE in HSome.
+    destruct (isSome (ctx1 ptr)) eqn:Hcase;
+      rewrite Hcase in HSome.
+    - left. apply /dommP. now eauto.
+    - right. apply /dommP. now eauto.
+  Qed.
+
   Lemma final_state_emptym_split :
     forall s,
       PS.final_state prog emptym s ->
@@ -4706,9 +4745,9 @@ rename Hstep_cs' into _Hstep_cs';
           try easy;
           first (PS.simplify_turn; congruence).
         apply PS.ProgramControl.
-        * admit.
-        * admit.
-        * admit.
+        * PS.simplify_turn. unfold negb. now rewrite Hcase2. (* Mini-lemma? *)
+        * now rewrite to_partial_memory_empty_prog.
+        * now rewrite to_partial_stack_empty_prog.
       + now apply PS.final_state_context.
     - (* Symmetric case. *)
       split.
@@ -4719,14 +4758,20 @@ rename Hstep_cs' into _Hstep_cs';
         * now apply linkable_mains_sym.
         * PS.simplify_turn. congruence.
         * apply PS.ProgramControl.
-          -- admit.
-          -- admit.
-          -- admit.
+          -- PS.simplify_turn. unfold negb. now rewrite Hcase1.
+          -- now rewrite to_partial_memory_empty_prog.
+          -- now rewrite to_partial_stack_empty_prog.
         * now rewrite <- (program_linkC wf1 wf2 linkability).
     - (* Contra. *)
-      PS.simplify_turn.
-      admit.
-  Admitted. (* Grade 2. *)
+      destruct HCSfinal as [C_procs [_ [Hdomm _]]].
+      assert (Pointer.component pc \in domm (genv_procedures (prepare_global_env prog)))
+        as Hcase
+        by (apply /dommP; now eauto).
+      rewrite domm_genv_procedures in Hcase.
+      destruct (in_domm_unionm Hcase) as [Hcontra | Hcontra].
+      + rewrite Hcontra in Hcase1. discriminate.
+      + rewrite Hcontra in Hcase2. discriminate.
+  Qed.
 
   (* RB: TODO: Refactor case symmetry and left-right lemma symmetry. *)
   Lemma partialize_mergeable_states_left :
