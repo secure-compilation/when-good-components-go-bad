@@ -4667,17 +4667,6 @@ rename Hstep_cs' into _Hstep_cs';
     now exists (s1, s2).
   Qed.
 
-  Lemma step_emptym_split :
-    forall s t s',
-      PS.step prog emptym (prepare_global_env prog) s t s' ->
-      PS.step p (prog_interface c) (prepare_global_env p)
-              (PS.partialize (PS.unpartialize s) (prog_interface c)) t
-              (PS.partialize (PS.unpartialize s') (prog_interface c)) /\
-      PS.step c (prog_interface p) (prepare_global_env c)
-              (PS.partialize (PS.unpartialize s) (prog_interface p)) t
-              (PS.partialize (PS.unpartialize s') (prog_interface p)).
-  Admitted. (* Grade 2. *)
-
   (* RB: TODO: Move helper lemmas. *)
   Remark to_partial_memory_empty_prog :
     forall (mem : Memory.t),
@@ -4715,6 +4704,79 @@ rename Hstep_cs' into _Hstep_cs';
       rewrite Hcase in HSome.
     - left. apply /dommP. now eauto.
     - right. apply /dommP. now eauto.
+  Qed.
+
+  (* RB: TODO: As usual, refactor symmetries. *)
+  Lemma step_emptym_split :
+    forall s t s',
+      PS.step prog emptym (prepare_global_env prog) s t s' ->
+      PS.step p (prog_interface c) (prepare_global_env p)
+              (PS.partialize (PS.unpartialize s) (prog_interface c)) t
+              (PS.partialize (PS.unpartialize s') (prog_interface c)) /\
+      PS.step c (prog_interface p) (prepare_global_env c)
+              (PS.partialize (PS.unpartialize s) (prog_interface p)) t
+              (PS.partialize (PS.unpartialize s') (prog_interface p)).
+  Proof.
+    intros s1 t s2 Hstep12.
+    inversion Hstep12
+      as [p' ? ? ? ics1 ics2 Hiface Hwf Hwf' _ _ HCSstep Hpartial1 Hpartial2];
+      subst.
+    pose proof empty_interface_implies_empty_program Hwf' Hiface; subst p'.
+    clear Hwf' Hiface.
+    rewrite linking_empty_program in HCSstep.
+    split.
+    - apply PS.partial_step with (p' := c) (ics := ics1) (ics' := ics2);
+        try easy.
+      + inversion Hpartial1 as [gps ? mem ? regs pc Hcomp | ? ? ? ? ? ? Hcomp];
+          subst;
+          last (PS.simplify_turn; now rewrite domm0 in_fset0 in Hcomp).
+        unfold PS.unpartialize.
+        rewrite to_partial_memory_empty_prog to_partial_stack_empty_prog.
+        unfold PS.partialize.
+        destruct (Pointer.component pc \in domm (prog_interface c)) eqn:Hcase.
+        * now constructor.
+        * constructor; try easy.
+          PS.simplify_turn. unfold negb. now rewrite Hcase.
+      + (* Symmetric case. *)
+        inversion Hpartial2 as [gps ? mem ? regs pc Hcomp | ? ? ? ? ? ? Hcomp];
+          subst;
+          last (PS.simplify_turn; now rewrite domm0 in_fset0 in Hcomp).
+        unfold PS.unpartialize.
+        rewrite to_partial_memory_empty_prog to_partial_stack_empty_prog.
+        unfold PS.partialize.
+        destruct (Pointer.component pc \in domm (prog_interface c)) eqn:Hcase.
+        * now constructor.
+        * constructor; try easy.
+          PS.simplify_turn. unfold negb. now rewrite Hcase.
+    - (* Symmetric case. *)
+      apply PS.partial_step with (p' := p) (ics := ics1) (ics' := ics2);
+        try easy.
+      + now apply linkable_sym.
+      + now apply linkable_mains_sym.
+      + rewrite program_linkC; try assumption.
+        now apply linkable_sym.
+      (* The remaining two cases are as above, with p instead of c. *)
+      + inversion Hpartial1 as [gps ? mem ? regs pc Hcomp | ? ? ? ? ? ? Hcomp];
+          subst;
+          last (PS.simplify_turn; now rewrite domm0 in_fset0 in Hcomp).
+        unfold PS.unpartialize.
+        rewrite to_partial_memory_empty_prog to_partial_stack_empty_prog.
+        unfold PS.partialize.
+        destruct (Pointer.component pc \in domm (prog_interface p)) eqn:Hcase.
+        * now constructor.
+        * constructor; try easy.
+          PS.simplify_turn. unfold negb. now rewrite Hcase.
+      + (* Symmetric case. *)
+        inversion Hpartial2 as [gps ? mem ? regs pc Hcomp | ? ? ? ? ? ? Hcomp];
+          subst;
+          last (PS.simplify_turn; now rewrite domm0 in_fset0 in Hcomp).
+        unfold PS.unpartialize.
+        rewrite to_partial_memory_empty_prog to_partial_stack_empty_prog.
+        unfold PS.partialize.
+        destruct (Pointer.component pc \in domm (prog_interface p)) eqn:Hcase.
+        * now constructor.
+        * constructor; try easy.
+          PS.simplify_turn. unfold negb. now rewrite Hcase.
   Qed.
 
   Lemma final_state_emptym_split :
