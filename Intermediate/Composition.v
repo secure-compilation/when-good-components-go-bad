@@ -5314,7 +5314,32 @@ Section ThreewayMultisemProgram.
         eassumption.
       + erewrite to_partial_stack_merge_stack_right; try easy.
         eassumption.
-    - admit.
+    - inversion Hpartialm1 as [? ? ? ? ? ? _ | ? ? ? ? ? ? Hcontra];
+        subst;
+        last (PS.simplify_turn;
+              exfalso; eapply PS.domm_partition_in_notin; eassumption).
+      inversion Hpartialm1' as [? ? ? ? ? ? Hcompm1' | ? ? ? ? ? ? Hcompm1'];
+        subst;
+        first (exfalso; eapply PS.domm_partition_in_neither; eassumption).
+      inversion Hpartials1 as [? ? ? ? ? ? Hcomps1 Hmem Hstk |];
+        subst.
+      inversion Hpartials2 as [? ? ? ? ? ? Hcomps2 | ? ? ? ? ? ? Hcontra];
+        subst;
+        last admit.
+      inversion HCSstep; subst.
+      1:{
+        rewrite <- Pointer.inc_preserves_component.
+        constructor.
+        - PS.simplify_turn.
+          now rewrite -> Pointer.inc_preserves_component.
+        - rewrite <- Hmem.
+          erewrite to_partial_memory_merge_memory_right; try easy.
+          eassumption.
+        - rewrite <- Hstk.
+          erewrite to_partial_stack_merge_stack_right; try easy.
+          eassumption.
+      }
+      all:admit.
   Admitted. (* Grade 2. *)
 
   (* Compose two stars into a multi-step star. One of the two stars is in the
