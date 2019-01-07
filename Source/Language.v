@@ -512,7 +512,7 @@ Module Source.
       + by rewrite linkable_imported_procedure //; eauto.
     - by rewrite /= !domm_union (wfprog_defined_buffers wf1) (wfprog_defined_buffers wf2).
     - split.
-      + admit.
+      + rewrite /valid_buffers. admit.
       + rewrite /has_required_local_buffers /= => C.
         move: (linkable_disjoint_buffers wf1 wf2 link)=> dis_buf.
         move/wfprog_well_formed_buffers in wf1.
@@ -538,7 +538,7 @@ Module Source.
         case: (prog_interface p1 Component.main)=> [CI|] //=.
         case: ((prog_procedures p2) Component.main)=> [CI|] //=.
         intros H1 H2 H3. by rewrite H3 in H1.
-  Qed.
+  Admitted.
 
   Lemma linked_programs_main_component_origin:
     forall p1 p2,

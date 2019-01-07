@@ -646,7 +646,7 @@ Example test_comp_subtrace1 :
         * apply /dommP. exists mainP. assumption.
         * discriminate.
       + by left.
-  Qed.
+  Admitted.
 
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).

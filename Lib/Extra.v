@@ -39,6 +39,20 @@ move=> e; apply/eq_fmap => x; rewrite emptymE.
 by case: (altP (dommPn m x))=> //; rewrite e.
 Qed.
 
+Lemma domm_mkfmap' (kvs : seq (T * S)) : domm (mkfmap kvs) = fset (unzip1 kvs).
+Proof.
+  rewrite -eq_fset.
+  (* would be nice to use domm_mkfmap. *)
+
+  (* for the time being, taking example on proof of domm_mkfmap *)
+
+  move=> k; rewrite mem_domm.
+  elim: kvs => [|kv kvs IH] //=.
+  - rewrite <- fset0E. apply (in_fset0 k).
+  - rewrite !inE setmE fset_cons in_fsetU1.
+    by case : (_ == _).
+Qed.
+
 End FMap.
 
 Section Lists.
