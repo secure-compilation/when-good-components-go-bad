@@ -38,6 +38,9 @@ Instance state_turn : HasTurn state := {
     Pointer.component pc \in domm iface
 }.
 
+Definition state_mem (st : state) : Memory.t :=
+  let '(_, mem, _, _) := st in mem.
+
 (* preparing the machine for running a program *)
 
 Definition initial_machine_state (p: program) : state :=
@@ -54,6 +57,55 @@ Definition initial_machine_state (p: program) : state :=
   (* this case shoudln't happen for a well-formed p *)
   | None => ([], emptym, emptym, (Component.main, 0, 0%Z))
   end.
+
+(* A slightly hacky way to express the initial pc of a linked program as a
+   function of its components, subject to well-formed conditions given in the
+   following theorem. *)
+Definition prog_main_block (p : program) : Block.id :=
+  match prog_main p with
+  | Some mainP =>
+    match EntryPoint.get Component.main mainP (prepare_procedures_entrypoints p) with
+    | Some b => b
+    | None => 0
+    end
+  | None => 0
+  end.
+
+Lemma prog_main_block_no_main:
+  forall p,
+    well_formed_program p ->
+    Component.main \notin domm (prog_interface p) ->
+    CS.prog_main_block p = 0.
+Proof.
+  intros p Hwf Hdomm.
+  unfold CS.prog_main_block. (* Enable automatic rewrite on destruct. *)
+  destruct (prog_main p) as [main |] eqn:Hmain'.
+  - (* RB: TODO: Report bug.
+       Below, replacing BUGGY with an anonymous pattern triggers:
+       Error: Anomaly "make_elim_branch_assumptions." Please report at http://coq.inria.fr/bugs/.
+       This does not happen in other places. *)
+    inversion Hwf as [BUGGY _ _ _ _ _ [_ Hcontra]]; clear BUGGY.
+    rewrite Hmain' in Hcontra. specialize (Hcontra (eq_refl _)).
+    rewrite Hcontra in Hdomm.
+    discriminate.
+  - reflexivity.
+Qed.
+
+Theorem initial_machine_state_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    closed_program (program_link p c) ->
+    initial_machine_state (program_link p c) =
+    ([],
+     unionm (prepare_procedures_memory p)
+            (prepare_procedures_memory c),
+     Register.init,
+     (Component.main,
+      prog_main_block p + prog_main_block c,
+      0%Z)).
+Admitted. (* Grade 2. *)
 
 (* transition system *)
 
@@ -852,6 +904,11 @@ Proof.
   - subst. reflexivity.
 Qed.
 
+Remark step_preserves_mem_domm G s t s' :
+  CS.step G s t s' ->
+  domm (state_mem s) = domm (state_mem s').
+Admitted. (* Grade 1. *)
+
 Definition comes_from_initial_state (s: state) (iface : Program.interface) : Prop :=
   exists p mainP s0 t,
     well_formed_program p /\
@@ -870,5 +927,10 @@ Proof.
   rewrite <- (unionmC Hdisjoint).
   exact Hfrom_initial.
 Qed.
+
+Remark comes_from_initial_state_mem_domm s ctx :
+  comes_from_initial_state s ctx ->
+  domm (state_mem s) = domm ctx.
+Admitted. (* Grade 1. *)
 
 End CS.

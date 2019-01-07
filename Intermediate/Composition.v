@@ -49,6 +49,29 @@ Admitted. (* Grade 2. *)
   generalized. Module qualifiers will be tweaked as needed.
 *)
 
+Lemma domm_partition_program_link_in_neither p c :
+  well_formed_program p ->
+  well_formed_program c ->
+  closed_program (program_link p c) ->
+  Component.main \notin domm (prog_interface p) ->
+  Component.main \notin domm (prog_interface c) ->
+  False.
+Proof.
+  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
+         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
+  destruct (prog_main p) as [mainp |] eqn:Hcasep.
+  - specialize (Hmainp (eq_refl _)).
+    rewrite Hmainp in Hmainp'.
+    discriminate.
+  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
+    +  specialize (Hmainc (eq_refl _)).
+       rewrite Hmainc in Hmainc'.
+       discriminate.
+    + simpl in Hmain.
+      rewrite Hcasep Hcasec in Hmain.
+      discriminate.
+Qed.
+
 (* RB: TODO: More properly, this seems to belong in Machine.Memory. However, it
    is natural to resort to a notion of partial memory that seems logically
    related to the supporting components of PS. Again, note, however, that this
@@ -74,26 +97,114 @@ Admitted. (* Grade 2. *)
    in results such as [program_store_in_partialized_memory]. This will save us
    the trouble of having to destruct pointers to use these results. *)
 
-(* RB: TODO: Consider necessary assumptions in a way that most closely matches
-   the contexts we will use this on. Do away with uses of [domm] here?*)
-Lemma to_partial_memory_merge_memories_left
-      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
-  mergeable_interfaces iface1 iface2 ->
-  PS.to_partial_memory
-    (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
-                       (PS.to_partial_memory mem2 (domm iface2)))
-    (domm iface1) =
-  PS.to_partial_memory mem1 (domm iface1).
-Admitted. (* Grade 1. *)
+(* RB: TODO: This is a specialized version that utilizes premises in the exact
+   shape they are available in our contexts. It could be a wrapper of a slightly
+   more abstract form of the lemma, where the two memories are related, say, by
+   their domains. (Incidentally, do away with uses of [domm] here?) *)
+Remark prog_ctx_sim_domm_memories
+       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions:
+       - mem2's domain is that of iface1 and iface2.
+       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
+         of iface1 and iface2.
+       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
+  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
+    PS.to_partial_memory mem2 (domm iface1) =
+    PS.to_partial_memory mem0 (domm iface1) ->
+  forall gps2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    domm mem1 = domm mem2.
+Admitted. (* Grade 2. *)
 
-Lemma to_partial_memory_merge_memories_right
+(* RB: TODO: The main rewrite sequence can be seen as two instances of a simpler
+   lemma, which will probably operate on simpler assumptions than the ones here,
+   taken from the contexts where we will apply these rewrites. In addition,
+   some of the previous reasoning on memories may be rephrased using these
+   results. *)
+Lemma to_partial_memory_merge_prepare_procedures_memory_left (p c1 c2 : program) :
+  prog_interface c1 = prog_interface c2 ->
+  linkable (prog_interface p) (prog_interface c2) ->
+  PS.to_partial_memory (PS.merge_memories (prepare_procedures_memory p)
+                                          (prepare_procedures_memory c1))
+                       (domm (prog_interface c2)) =
+  PS.to_partial_memory (PS.merge_memories (prepare_procedures_memory p)
+                                          (prepare_procedures_memory c2))
+                       (domm (prog_interface c2)).
+Proof.
+  intros Hiface [_ Hdisjoint].
+  unfold PS.to_partial_memory, PS.merge_memories.
+  rewrite <- domm_prepare_procedures_memory,
+          -> filterm_union,
+          -> fdisjoint_filterm_full,
+          -> fdisjoint_filterm_empty, -> unionm0,
+          -> filterm_union,
+          -> fdisjoint_filterm_full,
+          -> fdisjoint_filterm_empty, -> unionm0;
+    first reflexivity;
+    (* The rewrites generate a few extra goals that we can discharge by normalizing
+       the domain expression and then using our assumptions. *)
+    try rewrite -> !domm_prepare_procedures_memory; congruence.
+Qed.
+
+Lemma to_partial_memory_merge_partial_memories_left
       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
-  mergeable_interfaces iface1 iface2 ->
-  PS.to_partial_memory
-    (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
-                       (PS.to_partial_memory mem2 (domm iface2)))
-    (domm iface2) =
-  PS.to_partial_memory mem2 (domm iface2).
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions:
+       - mem2's domain is that of iface1 and iface2.
+       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
+         of iface1 and iface2.
+       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
+  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
+    PS.to_partial_memory mem2 (domm iface1) =
+    PS.to_partial_memory mem0 (domm iface1) ->
+  forall gps2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    (* And the main result. *)
+    PS.to_partial_memory
+      (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
+                         (PS.to_partial_memory mem2 (domm iface2)))
+      (domm iface1) =
+    PS.to_partial_memory mem1 (domm iface1).
+Proof.
+Admitted. (* Grade 2. *)
+
+Lemma to_partial_memory_merge_partial_memories_right
+      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions:
+       - mem2's domain is that of iface1 and iface2.
+       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
+         of iface1 and iface2.
+       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
+  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
+    PS.to_partial_memory mem2 (domm iface1) =
+    PS.to_partial_memory mem0 (domm iface1) ->
+  forall gps2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    (* And the main result. *)
+
+    PS.to_partial_memory
+      (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
+                         (PS.to_partial_memory mem2 (domm iface2)))
+      (domm iface2) =
+    PS.to_partial_memory mem2 (domm iface2).
+Admitted. (* Grade 2. *)
+
+Lemma unpartialize_stack_frame_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall ptr,
+    PS.unpartialize_stack_frame
+      (PS.merge_stack_frames ((PS.to_partial_frame (domm ctx1) ptr),
+                              (PS.to_partial_frame (domm ctx2) ptr))) =
+    ptr.
 Admitted. (* Grade 1. *)
 
 (* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
@@ -107,7 +218,7 @@ Lemma merge_stacks_partition:
          (PS.to_partial_stack gps (domm ctx1))
          (PS.to_partial_stack gps (domm ctx2)))
     = gps.
-Admitted. (* Grade 2. *)
+Admitted. (* Grade 2. RB: Assigned to FG. *)
 
 (* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
 Lemma merge_stacks_partition_emptym:
@@ -118,17 +229,7 @@ Lemma merge_stacks_partition_emptym:
     PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
                     (PS.to_partial_stack gps (domm ctx2)) =
     PS.to_partial_stack gps fset0.
-Admitted. (* Grade 2. *)
-
-Lemma unpartialize_stack_frame_partition:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall ptr,
-    PS.unpartialize_stack_frame
-      (PS.merge_stack_frames ((PS.to_partial_frame (domm ctx1) ptr),
-                              (PS.to_partial_frame (domm ctx2) ptr))) =
-    ptr.
-Admitted. (* Grade 1. *)
+Admitted. (* Grade 2: RB: Assigned to FG. *)
 
 Lemma unpartialize_stack_merge_stacks_cons_partition:
   forall ctx1 ctx2,
@@ -163,7 +264,7 @@ Lemma to_partial_stack_merge_stacks_left:
                           (PS.to_partial_stack gps2 (domm ctx2))))
       (domm ctx1) =
     PS.to_partial_stack gps1 (domm ctx1).
-Admitted.
+Admitted. (* Grade 2. Note comments. *)
 
 Lemma to_partial_stack_merge_stacks_right:
   forall ctx1 ctx2,
@@ -179,7 +280,7 @@ Lemma to_partial_stack_merge_stacks_right:
                           (PS.to_partial_stack gps2 (domm ctx2))))
       (domm ctx2) =
     PS.to_partial_stack gps2 (domm ctx2).
-Admitted.
+Admitted. (* Grade 2. Note comments for lemma above. *)
 
 Lemma merge_memories_partition:
   forall ctx1 ctx2,
@@ -415,7 +516,8 @@ Admitted. (* Grade 2. *)
       which is what we wanted to show.
 *)
 
-Section PS2CS.
+Module PS2CS.
+Section Simulation.
   Variable prog: program.
 
   Hypothesis prog_is_well_formed:
@@ -603,7 +705,67 @@ Section PS2CS.
         destruct prog_main0; simpl;
         assumption.
   Qed.
+End Simulation.
 End PS2CS.
+
+Module CS2PS.
+Section Simulation.
+  Variable prog: program.
+
+  Hypothesis prog_is_well_formed:
+    well_formed_program prog.
+
+  Hypothesis prog_is_closed:
+    closed_program prog.
+
+  Lemma match_initial_states:
+    forall ics,
+      CS.initial_state prog ics ->
+    exists ips,
+      PS.initial_state prog emptym ips /\ PS.partial_state emptym ics ips.
+  Admitted.
+
+  Lemma match_final_states:
+    forall ics ips,
+      PS.partial_state emptym ics ips ->
+      CS.final_state (prepare_global_env prog) ics ->
+      PS.final_state prog emptym ips.
+  Admitted.
+
+  Lemma lockstep_simulation:
+    forall ics t ics',
+      CS.step (prepare_global_env prog) ics t ics' ->
+    forall ips,
+      PS.partial_state emptym ics ips ->
+    exists ips',
+      PS.step prog emptym (prepare_global_env prog) ips t ips' /\ PS.partial_state emptym ics' ips'.
+  Admitted.
+
+  (* Lemma star_simulation: *)
+  (*   forall ips t ips', *)
+  (*     Star (PS.sem prog emptym) ips t ips' -> *)
+  (*   forall ics, *)
+  (*     PS.partial_state emptym ics ips -> *)
+  (*   exists ics', *)
+  (*     Star (CS.sem prog) ics t ics' /\ PS.partial_state emptym ics' ips'. *)
+  (* Qed. *)
+
+  Theorem PS_simulates_CS:
+    forward_simulation (CS.sem prog) (PS.sem prog emptym).
+  Proof.
+    eapply forward_simulation_step.
+    - apply match_initial_states.
+    - apply match_final_states.
+    - apply lockstep_simulation.
+  Qed.
+
+  Corollary partial_semantics_implies_complete_semantics:
+    forall beh,
+      program_behaves (CS.sem prog) beh ->
+      program_behaves (PS.sem prog emptym) beh.
+  Admitted.
+End Simulation.
+End CS2PS.
 
 (* Definition in terms of an interface (like everything else in the development).
    A disadvantage of the current definition is that tactics like [constructor]
@@ -622,7 +784,62 @@ Lemma step_E0_same_turn:
   forall p ctx G s1 s2,
     PS.step p ctx G s1 E0 s2 ->
     same_turn ctx s1 s2.
-Admitted. (* Grade 1. *)
+  intros p ctx G s1 s2 Hstep.
+  inversion Hstep
+    as [p1 ? ? ? cs1 cs1' ? Hwfp Hwfp1 Hlink1 Hmains1 Hstep_cs1 Hpartial1 Hpartial1'];
+    subst.
+  inversion Hstep_cs1 ; subst ;
+    inversion Hpartial1
+    as [cstk1' ? cmem1' ? regs1' pc1' Hpc1' | cstk1' ? cmem1' ? regs1' pc1' Hcc1'];
+    subst;
+    inversion Hpartial1'
+      as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
+    subst ;
+    PS.simplify_turn ;
+
+    match goal with
+    (* Obviously true cases *)
+    | [ |- same_turn (prog_interface _) (PS.PC _) (PS.PC _)]
+      => apply same_turn_program ; assumption
+    | [ |- same_turn (prog_interface _) (PS.CC _) (PS.CC _)]
+      => apply same_turn_context ; assumption
+
+    (* Obviously wrong cases *)
+    (* is_true coercion is not automatic in Ltac *)
+    (* IJump *)
+    | [ H__notin: is_true (Pointer.component _ \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component  _  \in domm (prog_interface _)),
+        H__pcEq: Pointer.component _ = Pointer.component _ |- _ ]
+      => first [rewrite H__pcEq in H__notin | rewrite <- H__pcEq in H__notin] ;
+        rewrite H__in in H__notin ; discriminate
+
+    (* Pointer.inc (most of instructions) *)
+    | [ H__notin: is_true (Pointer.component _ \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component  (Pointer.inc _) \in domm (prog_interface _)) |- _ ]
+      => rewrite Pointer.inc_preserves_component in H__in ;
+        rewrite H__in in H__notin ; discriminate
+    | [ H__notin: is_true (Pointer.component (Pointer.inc _) \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component _ \in domm (prog_interface _)) |- _ ]
+      => rewrite Pointer.inc_preserves_component in H__notin ;
+        rewrite H__in in H__notin ;      discriminate
+
+    (* IJal *)
+    | [ H__notin: is_true (Pointer.component _ \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component  _  \in domm (prog_interface _)),
+        H__labelComp : find_label_in_component _ _ _ = Some _ |- _ ]
+      => apply find_label_in_component_1 in H__labelComp;
+        first [rewrite H__labelComp in H__notin | rewrite <- H__labelComp in H__notin];
+        rewrite H__in in H__notin ; discriminate
+
+    (* IBnz *)
+    | [ H__notin: is_true (Pointer.component _ \notin domm (prog_interface _)),
+        H__in: is_true (Pointer.component  _  \in domm (prog_interface _)),
+        H__labelProc : find_label_in_procedure _ _ _ = Some _ |- _ ]
+      => apply find_label_in_procedure_1 in H__labelProc;
+        first [rewrite H__labelProc in H__notin | rewrite <- H__labelProc in H__notin];
+        rewrite H__in in H__notin ; discriminate
+    end.
+Qed.
 
 (* st_star represents a sequence of events performed by the same actor *)
 (* st stands for same turn *)
@@ -857,6 +1074,26 @@ Inductive mt_starN (p: program) (ctx: Program.interface) (G: global_env)
     t = t1 ** t2 ** t3 ->
     mt_starN p ctx G n3 ips t ips'''.
 
+Inductive mt_starNR (p: program) (ctx: Program.interface) (G: global_env)
+  : nat -> PS.state -> trace -> PS.state -> Prop :=
+| mt_starNR_segment: forall n ips t ips',
+    st_starNR p ctx G n ips t ips' ->
+    mt_starNR p ctx G n ips t ips'
+| mt_starNR_control_change: forall n1 n2 n3 ips t1 ips' t2 ips'' t3 ips''' t,
+    mt_starNR p ctx G n1 ips t1 ips' ->
+    PS.step p ctx G ips' t2 ips'' ->
+    ~ same_turn ctx ips' ips'' ->
+    st_starNR p ctx G n2 ips'' t3 ips''' ->
+    n3 = S (n1 + n2) ->
+    t = t1 ** t2 ** t3 ->
+    mt_starNR p ctx G n3 ips t ips'''.
+
+Theorem mt_starN_iff_mt_starNR:
+  forall p ctx G n ips t ips',
+    mt_starN p ctx G n ips t ips' <->
+    mt_starNR p ctx G n ips t ips'.
+Admitted. (* Grade 2. *)
+
 Theorem starN_if_st_starN:
   forall p ctx G n ips t ips',
     st_starN p ctx G n ips t ips' ->
@@ -1040,6 +1277,52 @@ Proof.
   - apply mt_starN_if_star.
   - intro. destruct H. eapply star_if_mt_starN. eauto.
 Qed.
+
+Theorem mt_starN_if_st_starN:
+  forall p ctx G n ips t ips',
+    st_starN p ctx G n ips t ips' ->
+    mt_starN p ctx G n ips t ips'.
+Proof.
+  intros p ctx G n ips t ips' Hst_starN.
+  exact (mt_starN_segment Hst_starN).
+Qed.
+
+(* RB: TODO: Here and in other sections, remove unnecessary hypotheses. *)
+Module StateDet.
+Section StateDet.
+  Variables p c: program.
+
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
+
+  Hypothesis main_linkability: linkable_mains p c.
+
+  Hypothesis prog_is_closed:
+    closed_program (program_link p c).
+
+  Hypothesis mergeable_interfaces:
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  (* A helper for state_determinism_mt_starN. *)
+  Lemma st_starN_prefix_of_mt_starN:
+    forall n1 s1 t1 s2,
+      st_starN p (prog_interface c) (prepare_global_env p) n1 s1 t1 s2 ->
+    forall n2 t2 s3,
+      mt_starN p (prog_interface c) (prepare_global_env p) (n1 + n2) s1 (t1 ** t2) s3 ->
+      mt_starN p (prog_interface c) (prepare_global_env p) n2 s2 t2 s3.
+  Admitted. (* Grade 2. Optional for the one below, possibly slightly annoying. *)
+
+  Theorem state_determinism_mt_starN:
+    forall n s1 t s2,
+      mt_starN p (prog_interface c) (prepare_global_env p) n s1 t s2 ->
+    forall s2',
+      mt_starN p (prog_interface c) (prepare_global_env p) n s1 t s2' ->
+      s2 = s2'.
+  Admitted. (* Grade 2. Possibly slightly annonying, think of possible lemmas. *)
+End StateDet.
+End StateDet.
 
 (*
   Program-Context Simulation
@@ -1813,7 +2096,7 @@ Section Simulation.
              rewrite <- Pointer.inc_preserves_component.
              constructor.
              ++ assumption.
-             ++ now rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface).
+             ++ erewrite to_partial_memory_merge_partial_memories_right; now eauto.
              ++ reflexivity.
       + (* rewrite <- Hmem. *)
         rewrite <- Hstk.
@@ -1839,12 +2122,12 @@ Section Simulation.
             rewrite Hstk. rewrite Hstk in Hstep_ps.
             (* The following rewrite replaces the one above, which could be
                performed before the bracketed sequence of operations. *)
-            rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
-            exact Hstep_ps.
+            erewrite to_partial_memory_merge_partial_memories_left; try eauto.
+            erewrite unionmC; now eauto.
           }
         * constructor.
           -- assumption.
-          -- now rewrite to_partial_memory_merge_memories_left.
+          -- erewrite to_partial_memory_merge_partial_memories_left; eauto.
           -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
         * simpl.
           (* rewrite (merge_memories_partition Hmerge_iface Hfrom_initial). *)
@@ -1852,7 +2135,7 @@ Section Simulation.
           rewrite <- Pointer.inc_preserves_component.
           constructor.
           -- by rewrite Pointer.inc_preserves_component.
-          -- now rewrite to_partial_memory_merge_memories_right.
+          -- erewrite to_partial_memory_merge_partial_memories_right; now eauto.
           -- reflexivity. (* TODO: Move rewrite here? *)
 
     - (* IJal *)
@@ -2277,8 +2560,7 @@ Section Simulation.
              unfold PS.partialize in Hpartial''.
              rewrite Htmp in Hpartial''.
              rewrite <- Pointer.inc_preserves_component.
-             rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface) in Hpartial''.
-             assumption.
+             erewrite to_partial_memory_merge_partial_memories_right in Hpartial''; now eauto.
       + (* rewrite <- Hmem. *)
         rewrite <- Hstk.
         match goal with
@@ -2301,12 +2583,12 @@ Section Simulation.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
             rewrite Hmem. rewrite Hmem in Hstep_ps.
             rewrite Hstk. rewrite Hstk in Hstep_ps.
-            rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
-            exact Hstep_ps.
+            erewrite to_partial_memory_merge_partial_memories_left; try eauto.
+            erewrite unionmC; now eauto.
           }
         * constructor.
           -- assumption.
-          -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+          -- erewrite to_partial_memory_merge_partial_memories_left; now eauto.
           -- by rewrite (merge_stacks_partition Hmerge_iface Hfrom_initial).
         * simpl.
           (* rewrite (merge_memories_partition Hmerge_iface Hfrom_initial). *)
@@ -2314,7 +2596,7 @@ Section Simulation.
           rewrite <- Pointer.inc_preserves_component.
           constructor.
           -- now rewrite Pointer.inc_preserves_component.
-          -- now rewrite (to_partial_memory_merge_memories_right _ _ Hmerge_iface).
+          -- erewrite to_partial_memory_merge_partial_memories_right; now eauto.
           -- reflexivity.
 
     (* The final cases are the most interesting in that the executing instruction
@@ -2422,7 +2704,7 @@ Section Simulation.
             apply PS.notin_to_in_false in Hpc1'. rewrite Hpc1'.
             rewrite Hmem. rewrite Hmem in Hstep_ps.
             rewrite Hstk. rewrite Hstk in Hstep_ps.
-            (* rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface). *)
+            (* rewrite (to_partial_memory_merge_partial_memories_left _ _ Hmerge_iface). *)
             rewrite (unpartialize_stack_merge_stacks_cons_partition Hmerge_iface).
             simpl.
             (* RB: TODO: The rewrite mangles the goal horribly; for now, [change]
@@ -2452,7 +2734,7 @@ Section Simulation.
           }
         * constructor.
           -- assumption.
-          -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+          -- now rewrite (merge_memories_partition Hmerge_iface Hprov).
           -- rewrite (unpartialize_stack_merge_stacks_cons_partition Hmerge_iface).
              simpl.
              change
@@ -2589,7 +2871,7 @@ Section Simulation.
           exact Hprov.
         * constructor.
           -- assumption.
-          -- now rewrite (to_partial_memory_merge_memories_left _ _ Hmerge_iface).
+          -- now rewrite (merge_memories_partition Hmerge_iface Hprov).
           -- rewrite (merge_stacks_partition Hmerge_iface Hprov).
              reflexivity.
         * (* Here, pushing the constructor forward to get simpler goals instead
@@ -2721,7 +3003,7 @@ Section Simulation.
 End Simulation.
 End CtxProgSim.
 
-Module StStarNSim.
+Module StarNSim.
 Section Simulation.
   Variables p c: program.
 
@@ -2842,8 +3124,85 @@ Section Simulation.
         * apply Hst_starN'.
         * apply Hmergeable''.
   Qed.
+
+  Corollary control_change_simulation:
+    forall s1 t s2 s1',
+      PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+      ~ same_turn (prog_interface c) s1 s2 ->
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    exists s2',
+      PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' /\
+      ~ same_turn (prog_interface p) s1' s2' /\
+      PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
+  Proof.
+    (* May it work to use emptyp and prog? *)
+    intros s1 t s2 s1' Hstep12 Hturn12 Hmergeable1.
+    inversion Hmergeable1
+      as [cs1 ? ? Hmergeable_ifaces1 Hcomes_from1 Hpartial1 Hpartial1'];
+      subst.
+    inversion Hstep12
+      as [p' ? ? ? cs1' cs2'
+          Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial1_bis Hpartial2];
+      subst.
+    (* Case analysis on CS step and executing instruction. *)
+    inversion HCSstep1; subst;
+      (* Discard silent steps. *)
+      try (exfalso;
+           apply Hturn12;
+           apply (step_E0_same_turn Hstep12)).
+    - (* ICall *)
+      (* Case analysis on the location (p or c) of both pc's. *)
+      destruct (Pointer.component pc \in domm (prog_interface p)) eqn:Hcase1;
+        destruct (C' \in domm (prog_interface p)) eqn:Hcase2.
+      + admit. (* Contra. *)
+      + admit.
+      + admit.
+      + admit. (* Contra. *)
+    - (* IReturn *)
+      admit.
+  Admitted. (* Grade 3. Should be somewhat tedious but straightforward. *)
+
+  Corollary mt_starN_simulation:
+    forall n ips1 t ips1',
+      mt_starN p (prog_interface c) (prepare_global_env p) n ips1 t ips1' ->
+    forall ips2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+    exists ips2',
+      mt_starN c (prog_interface p) (prepare_global_env c) n ips2 t ips2' /\
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
+  Proof.
+    intros n s1 t s2 Hmt_star12.
+    induction Hmt_star12
+      as [ n s1 t s2 Hst_starN12
+         | n1 n2 n3 s1 t1 s2 t2 s3 t3 s4 t
+           Hst_starN12 Hstep23 Hturn23 Hmt_starN34 IHmt_starN14 Hn3 Ht];
+      subst;
+      intros s1' Hmergeable1.
+    - (* Single-segment case. *)
+      (* The goal follows directly from the single-turn simulation. *)
+      destruct (st_starN_simulation Hst_starN12 Hmergeable1)
+        as [s2' [Hst_starN12' Hmergeable2]].
+      exists s2'. split.
+      + apply mt_starN_segment. assumption.
+      + assumption.
+    - (* Multi-segment case. *)
+      (* Here too, we start by simulating the first turn. *)
+      destruct (st_starN_simulation Hst_starN12 Hmergeable1)
+        as [s2' [Hst_starN12' Hmergeable2]].
+      (* Next, simulate the turn change proper. *)
+      destruct (control_change_simulation Hstep23 Hturn23 Hmergeable2)
+        as [s3' [Hstep23' [Hturn23' Hmergeable3]]].
+      (* Finally, specialize the IH, compose the pieces and finish. *)
+      specialize (IHmt_starN14 s3' Hmergeable3).
+      destruct IHmt_starN14 as [s4' [Hmt_starN34' Hmergeable4]].
+      exists s4'. split.
+      + exact (mt_starN_control_change
+                 Hst_starN12' Hstep23' Hturn23' Hmt_starN34'
+                 (eq_refl _) (eq_refl _)).
+      + exact Hmergeable4.
+  Qed.
 End Simulation.
-End StStarNSim.
+End StarNSim.
 
 (*
   Three-way Simulation
@@ -2866,6 +3225,8 @@ Section MultiSemantics.
     mergeable_interfaces (prog_interface p) (prog_interface c).
 
   Let prog := program_link p c.
+
+  Hypothesis prog_is_closed : closed_program prog.
 
   Definition state : Type := PS.state * PS.state.
 
@@ -2899,6 +3260,27 @@ Section MultiSemantics.
       PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
       multi_match (ips1, ips2) (PS.merge_partial_states ips1 ips2).
 
+  (* RB: TODO: Move to Machine.v when done? *)
+  Remark prog_main_none_same_interface :
+    forall p1 p2,
+      well_formed_program p1 ->
+      well_formed_program p2 ->
+      prog_interface p1 = prog_interface p2 ->
+      prog_main p1 = None ->
+      prog_main p2 = None.
+  Proof.
+    intros p1 p2 Hwf1 Hwf2 Hiface Hnone.
+    inversion Hwf1 as [_ _ _ _ _ _ [Hmain1 Hmain1']].
+    inversion Hwf2 as [_ _ _ _ _ _ [Hmain2 Hmain2']].
+    destruct p1 as [iface1 procs1 bufs1 main1];
+      destruct p2 as [iface2 procs2 bufs2 main2];
+      simpl in *.
+    destruct main2 as [main2P |] eqn:Hcase1;
+      last reflexivity.
+    subst.
+    now intuition.
+  Qed.
+
   Lemma merged_initial_states:
     forall ips1 ips2,
       PS.initial_state p (prog_interface c) ips1 ->
@@ -2907,15 +3289,14 @@ Section MultiSemantics.
                        (PS.unpartialize (PS.merge_partial_states ips1 ips2)).
   Proof.
     intros ips1 ips2 HPSini1 HPSini2.
-    (* ??? matching_mains introduction *)
     inversion HPSini1
       as [p' ics1 ? Hiface1 _ Hwf1 Hlinkable1 Hmains1 Hpartial1 HCSini1];
       subst.
     inversion HPSini2
       as [c' ics2 ? Hiface2 _ Hwf2 Hlinkable2 Hmains2 Hpartial2 HCSini2];
       subst.
-    unfold CS.initial_state, CS.initial_machine_state in HCSini1, HCSini2.
-    unfold CS.initial_state, CS.initial_machine_state.
+    unfold CS.initial_state in HCSini1, HCSini2.
+    unfold CS.initial_state.
     (* Inline initial states in Hpartial hypotheses; work on those from there. *)
     subst ics1 ics2.
     simpl in Hpartial1, Hpartial2. simpl.
@@ -2929,27 +3310,192 @@ Section MultiSemantics.
       destruct (prog_main c') as [mainc' | ] eqn:Hmainc';
       try discriminate;
       simpl in Hpartial1, Hpartial2; simpl.
-    - admit. (* By composability of [prepare_]. *)
-    - admit. (* Discard by matching_mains. *)
-    - admit. (* By composability of [prepare_]. *)
-    - admit. (* Discard by matching_mains. *)
-    - admit. (* Discard by matching_mains. *)
-    - admit. (* Discard by matching_mains. *)
-    - admit. (* Discard by matching_mains. *)
-    - inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+    (* In the remaining cases:
+        - The "correct" ones (in which one of p and c and their counterpart
+          have mains) are solved by composability of initial states.
+        - Cases where both p and c have no mains are ruled out by closedness
+          of their linking.
+        - Cases where the indirect "matching mains" condition on either p and its
+          counterpart or c and its counterpart is not respected are ruled out by
+          the strong well-formedness of programs.
+       There is overlap among the two classes of contradictions.
+       RB: NOTE: It is easy to use tactics to refactor contradictory cases, and
+       symmetry to refactor the two proper cases. *)
+    - rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 wf2 linkability prog_is_closed).
+      assert (Hclosed1 : closed_program (program_link p p')).
+      {
+        (* RB: TODO: Refactor this (and instance below) into lemma. *)
+        constructor.
+        - simpl. rewrite Hiface1. now inversion prog_is_closed.
+        - destruct (wfprog_main_existence wf1 Hmainp)
+            as [main_procs [Hmain_procs Hinmain_procs]].
+          exists mainp, main_procs. split; [| split].
+          + simpl. now rewrite Hmainp.
+          + simpl. now rewrite unionmE Hmain_procs.
+          + assumption.
+      }
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 Hwf1 Hlinkable1 Hclosed1) in Hpartial1.
+      assert (Hclosed2 : closed_program (program_link c c')).
+      {
+        (* RB: TODO: Refactor this (and instance above) into lemma. *)
+        constructor.
+        - simpl. rewrite Hiface2.
+          inversion linkability as [_ Hdisjoint].
+          rewrite <- (unionmC Hdisjoint).
+          now inversion prog_is_closed.
+        - destruct (wfprog_main_existence Hwf2 Hmainc')
+            as [main_procs [Hmain_procs Hinmain_procs]].
+          exists mainc', main_procs. split; [| split].
+          + simpl. now rewrite Hmainc Hmainc'.
+          + simpl.
+            (* Here, the easiest solution is to commute c' to the front. *)
+            inversion Hlinkable2 as [_ Hdisjoint].
+            rewrite (wfprog_defined_procedures wf2)
+                    (wfprog_defined_procedures Hwf2) in Hdisjoint.
+            rewrite (unionmC Hdisjoint).
+            now rewrite unionmE Hmain_procs.
+          + assumption.
+      }
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf2 Hwf2 Hlinkable2 Hclosed2) in Hpartial2.
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
         PS.simplify_turn.
-      + admit. (* Easy. *)
-      + inversion Hwf2 as [_ _ _ _ _ _ Hmain2].
-        specialize (Hmain2 Hmainc').
-        rewrite Hiface2 in Hmain2.
-        now destruct (PS.domm_partition_in_notin Hcomp2 Hmain2).
-      + inversion Hwf1 as [_ _ _ _ _ _ Hmain1].
-        specialize (Hmain1 Hmainp').
-        rewrite Hiface1 in Hmain1.
-        now destruct (PS.domm_partition_in_notin Hcomp1 Hmain1).
-      + now destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1).
-  Admitted.
+      (* RB: TODO: The structure revealed below is also subject to refactoring. *)
+      + inversion wf1 as [_ _ _ _ _ _ [_ Hcontra]].
+        rewrite Hmainp in Hcontra. specialize (Hcontra (eq_refl _)).
+        rewrite Hcontra in Hcomp2.
+        discriminate.
+      + (* Expose memory structures and rewrite. *)
+        unfold PS.merge_memories, PS.to_partial_memory.
+        rewrite <- Hiface1,
+                -> filterm_union (**), <- domm_prepare_procedures_memory,
+                -> fdisjoint_filterm_full (**), -> (fdisjoint_filterm_empty (eq_refl _)),
+                -> unionm0,
+                <- Hiface2,
+                -> filterm_union (**), <- domm_prepare_procedures_memory,
+                -> fdisjoint_filterm_full (**), -> (fdisjoint_filterm_empty (eq_refl _)),
+                -> unionm0.
+        (* Expose main block arithmetic, simplify and close. *)
+        unfold CS.prog_main_block.
+        rewrite -> Hmainp, -> Hmainc, -> Hmainp'.
+        reflexivity.
+        (* Discharge disjointness goals generated by memory rewrites. *)
+        * rewrite -> !domm_prepare_procedures_memory. now inversion Hlinkable2.
+        * rewrite -> !domm_prepare_procedures_memory. now inversion Hlinkable2.
+        * rewrite -> !domm_prepare_procedures_memory. now inversion Hlinkable1.
+        * rewrite -> !domm_prepare_procedures_memory. now inversion Hlinkable1.
+      + inversion wf2 as [_ _ _ _ _ _ [Hcontra _]].
+        specialize (Hcontra Hcomp1). rewrite Hmainc in Hcontra.
+        discriminate.
+      + (* The usual funky mixture of SSR rewrites in what would normally be
+           applications. *)
+        pose proof PS.domm_partition_notin mergeable_interfaces as Hcontra.
+        specialize (Hcontra Component.main).
+        rewrite Hcomp1 Hcomp2 in Hcontra.
+        specialize (Hcontra (eq_refl _)).
+        discriminate.
+    - rewrite (prog_main_none_same_interface Hwf2 wf1 Hiface2 Hmainc')
+        in Hmainp.
+      discriminate.
+    - (* By composability of [prepare_], like above.
+         RB: TODO: Refactor. This is the symmetric of the above. *)
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 wf2 linkability prog_is_closed).
+      assert (Hclosed1 : closed_program (program_link p p')).
+      {
+        (* RB: TODO: Refactor this (and instance below) into lemma. *)
+        constructor.
+        - simpl. rewrite Hiface1. now inversion prog_is_closed.
+        - destruct (wfprog_main_existence Hwf1 Hmainp')
+            as [main_procs [Hmain_procs Hinmain_procs]].
+          exists mainp', main_procs. split; [| split].
+          + simpl. now rewrite Hmainp Hmainp'.
+          + simpl.
+            (* Here, the easiest solution is to commute c' to the front. *)
+            inversion Hlinkable1 as [_ Hdisjoint].
+            rewrite (wfprog_defined_procedures wf1)
+                    (wfprog_defined_procedures Hwf1) in Hdisjoint.
+            rewrite (unionmC Hdisjoint).
+            now rewrite unionmE Hmain_procs.
+          + assumption.
+      }
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 Hwf1 Hlinkable1 Hclosed1) in Hpartial1.
+      assert (Hclosed2 : closed_program (program_link c c')).
+      {
+        (* RB: TODO: Refactor this (and instance above) into lemma. *)
+        constructor.
+        - simpl. rewrite Hiface2.
+          inversion linkability as [_ Hdisjoint].
+          rewrite <- (unionmC Hdisjoint).
+          now inversion prog_is_closed.
+        - destruct (wfprog_main_existence wf2 Hmainc)
+            as [main_procs [Hmain_procs Hinmain_procs]].
+          exists mainc, main_procs. split; [| split].
+          + simpl. now rewrite Hmainc.
+          + simpl. now rewrite unionmE Hmain_procs.
+          + assumption.
+      }
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf2 Hwf2 Hlinkable2 Hclosed2) in Hpartial2.
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+        PS.simplify_turn.
+      (* RB: TODO: The structure revealed below is also subject to refactoring. *)
+      + inversion wf2 as [_ _ _ _ _ _ [_ Hcontra]].
+        rewrite Hmainc in Hcontra. specialize (Hcontra (eq_refl _)).
+        rewrite Hcontra in Hcomp1.
+        discriminate.
+      + inversion wf1 as [_ _ _ _ _ _ [Hcontra _]].
+        specialize (Hcontra Hcomp2). rewrite Hmainp in Hcontra.
+        discriminate.
+      + (* Expose memory structures and rewrite. *)
+        unfold PS.merge_memories, PS.to_partial_memory.
+        rewrite <- Hiface1,
+                -> filterm_union (**), <- domm_prepare_procedures_memory,
+                -> fdisjoint_filterm_full (**), -> (fdisjoint_filterm_empty (eq_refl _)),
+                -> unionm0,
+                <- Hiface2,
+                -> filterm_union (**), <- domm_prepare_procedures_memory,
+                -> fdisjoint_filterm_full (**), -> (fdisjoint_filterm_empty (eq_refl _)),
+                -> unionm0.
+        (* Expose main block arithmetic, simplify and close. *)
+        unfold CS.prog_main_block.
+        rewrite -> Hmainp, -> Hmainc, -> Hmainc'.
+        rewrite Nat.add_0_r.
+        reflexivity.
+        (* Discharge disjointness goals generated by memory rewrites. *)
+        * rewrite -> !domm_prepare_procedures_memory. now inversion Hlinkable2.
+        * rewrite -> !domm_prepare_procedures_memory. now inversion Hlinkable2.
+        * rewrite -> !domm_prepare_procedures_memory. now inversion Hlinkable1.
+        * rewrite -> !domm_prepare_procedures_memory. now inversion Hlinkable1.
+      + (* The usual funky mixture of SSR rewrites in what would normally be
+           applications. *)
+        pose proof PS.domm_partition_notin mergeable_interfaces as Hcontra.
+        specialize (Hcontra Component.main).
+        rewrite Hcomp1 Hcomp2 in Hcontra.
+        specialize (Hcontra (eq_refl _)).
+        discriminate.
+    - rewrite (prog_main_none_same_interface Hwf1 wf2 Hiface1 Hmainp')
+        in Hmainc.
+      discriminate.
+    - rewrite (prog_main_none_same_interface wf1 Hwf2 (eq_sym Hiface2) Hmainp)
+        in Hmainc'.
+      discriminate.
+    - rewrite (prog_main_none_same_interface wf2 Hwf1 (eq_sym Hiface1) Hmainc)
+        in Hmainp'.
+      discriminate.
+    - rewrite (prog_main_none_same_interface wf1 Hwf2 (eq_sym Hiface2) Hmainp)
+        in Hmainc'.
+      discriminate.
+    - (* Contra: by prog_is_closed, there should be a main. *)
+      inversion prog_is_closed as [_ [mainP [_ [HmainP _]]]].
+      simpl in HmainP. rewrite Hmainp Hmainc in HmainP.
+      discriminate.
+  Qed.
 
   Lemma multi_match_initial_states:
     forall ms,
@@ -3115,6 +3661,356 @@ Section MultiSemantics.
         eapply (@execution_invariant_to_linking _ _ _ _ _ Hlinkable'); assumption.
   Qed.
 
+  (* RB: TODO: Add side conditions (well-formed programs, linkable interfaces,
+     etc. *)
+  Lemma mergeable_states_merge :
+    forall s s',
+      PS.mergeable_states (prog_interface c) (prog_interface p) s s' ->
+      PS.merge_partial_states s s' =
+      PS.mergeable_states_state s s'.
+  Admitted. (* Grade 2. *)
+
+  (* A special case of a more general property on [PS.partial_state emptym] that
+     would relate a CS state to its injection to a PS state. *)
+  Lemma mergeable_states_partial_state_emptym :
+    forall s s',
+      PS.mergeable_states (prog_interface c) (prog_interface p) s s' ->
+      PS.partial_state emptym
+                       (PS.unpartialize (PS.merge_partial_states s s'))
+                       (PS.merge_partial_states s s').
+  Admitted. (* Grade 1. *)
+
+  (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
+     in this section, but these should be pared down. *)
+  Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
+    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+    PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
+    PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
+  Proof.
+    intros s1 s1' s2 s2' t Hmergeable Hstep Hstep'.
+    (* Top-level case analysis. *)
+    inversion Hmergeable
+      as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial_ics1 Hpartial_ics1'];
+      subst.
+rename Hmergeable into _Hmergeable.
+    inversion Hstep
+      as [c' ? ? ? ics1 ics2
+          Hsame_iface1 _ Hwf1 Hlinkable Hmains Hstep_cs Hpartial1 Hpartial2];
+      subst.
+rename Hstep into _Hstep.
+    inversion Hstep'
+      as [p' ? ? ? ics1' ics2'
+          Hsame_iface2 _ Hwf2 Hlinkable' Hmains' Hstep_cs' Hpartial1' Hpartial2'];
+      subst.
+rename Hstep' into _Hstep'.
+    inversion Hpartial_ics1
+      as [gps1 ? mem1 ? regs1 pc1 Hpc1 | gps1 ? mem1 ? ? pc1 Hcc1]; subst;
+      last admit. (* Symmetric case. *)
+rename Hpartial_ics1 into _Hpartial_ics1.
+    - (* p has control. *)
+      inversion Hpartial_ics1'
+        as [? | gps1' ? mem1' ? ? pc1' Hcc1']; subst;
+        first admit. (* Contra. *)
+rename Hpartial_ics1' into _Hpartial_ics1'.
+      inversion Hpartial1
+        as [ics_gps1 ? ics_mem1 ? ics_regs1 ics_pc1 Hics_pc1 Hmem1 Hstack1 |];
+        subst.
+rename Hpartial1 into _Hpartial1.
+      inversion Hpartial1'
+        as [| ics_gps1' ? ics_mem1' ? ics_regs1' ics_pc1' Hics_pc1' Hmem1' Hstack1' dummy Hcomp1'];
+        subst.
+rename Hpartial1' into _Hpartial1'.
+      PS.simplify_turn.
+      (* Case analysis on p's step. *)
+      inversion Hstep_cs; subst;
+rename Hstep_cs into _Hstep_cs.
+      + inversion Hpartial2
+          as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
+          subst;
+          last admit. (* Contra. *)
+rename Hpartial2 into _Hpartial2.
+        inversion Hpartial2'
+          as [| ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2'];
+          subst;
+          first admit. (* Contra (after Hstep_cs', maybe.). *)
+rename Hpartial2' into _Hpartial2'.
+        PS.simplify_turn.
+        inversion Hstep_cs'; subst;
+rename Hstep_cs' into _Hstep_cs'.
+        * apply PS.mergeable_states_intro
+            with (ics :=
+                    (PS.unpartialize_stack
+                       (PS.merge_stacks (PS.to_partial_stack ics_gps1 (domm (prog_interface c)))
+                                        (PS.to_partial_stack ics_gps2' (domm (prog_interface p)))),
+                     PS.merge_memories (PS.to_partial_memory ics_mem1 (domm (prog_interface c)))
+                                       (PS.to_partial_memory ics_mem2' (domm (prog_interface p))),
+                     regs1, Pointer.inc pc1)).
+          -- admit. (* Easy. *)
+          -- exists prog. admit.
+          -- constructor.
+             ++ assumption.
+             ++ admit.
+             ++ admit.
+          -- rewrite -> Pointer.inc_preserves_component,
+                     -> Hcomp1',
+                     <- Pointer.inc_preserves_component.
+             constructor.
+             ++ now rewrite -> Pointer.inc_preserves_component.
+             ++ admit.
+             ++ admit.
+  Admitted.
+
+(* RB: TODO: Relocate, generalize existing tactic? *)
+Ltac CS_step_of_executing' PROG :=
+  match goal with
+  | H : executing (prepare_global_env PROG) _ ?INSTR |- _ =>
+    match INSTR with
+    | INop           => eapply CS.Nop
+    | ILabel _       => eapply CS.Label
+    | IConst _ _     => eapply CS.Const
+    | IMov _ _       => eapply CS.Mov
+    | IBinOp _ _ _ _ => eapply CS.BinOp
+    | ILoad _ _      => eapply CS.Load
+    | IStore _ _     => eapply CS.Store
+    | IAlloc _ _     => eapply CS.Alloc
+    | IBnz _ _       =>
+      match goal with
+      | H : Register.get _ _ = Int 0 |- _ => eapply CS.BnzZ
+      | _                                 => eapply CS.BnzNZ
+      end
+    | IJump _        => eapply CS.Jump
+    | IJal _         => eapply CS.Jal
+    | ICall _ _      => eapply CS.Call
+    | IReturn        => eapply CS.Return
+    | IHalt          => fail
+    end
+  end.
+
+(* Controlled rewrites on cons'ed stacks. *)
+Lemma to_partial_stack_cons :
+  forall frame gps ctx,
+    PS.to_partial_stack (frame :: gps) ctx =
+    PS.to_partial_frame ctx frame :: PS.to_partial_stack gps ctx.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma merge_stacks_cons :
+  forall ctx1 ctx2 ptr1 ptr2 gps1 gps2,
+    PS.merge_stacks
+      (PS.to_partial_frame ctx1 ptr1 :: PS.to_partial_stack gps1 ctx1)
+      (PS.to_partial_frame ctx2 ptr2 :: PS.to_partial_stack gps2 ctx2) =
+    PS.merge_stack_frames (PS.to_partial_frame ctx1 ptr1, PS.to_partial_frame ctx2 ptr2) ::
+      PS.merge_stacks (PS.to_partial_stack gps1 ctx1) (PS.to_partial_stack gps2 ctx2).
+Proof.
+  reflexivity.
+Qed.
+
+Lemma unpartialize_stack_cons :
+  forall ptr gps,
+    PS.unpartialize_stack (ptr :: gps) =
+    PS.unpartialize_stack_frame ptr :: PS.unpartialize_stack gps.
+Proof.
+  reflexivity.
+Qed.
+
+Lemma pointer_compose :
+  forall ptr,
+    (Pointer.component ptr, Pointer.block ptr, Pointer.offset ptr) = ptr.
+Proof.
+  now intros [[C b] o].
+Qed.
+
+  Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
+    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+    PS.step c (prog_interface p) (prepare_global_env c) s1' t s2'->
+    CS.step (prepare_global_env (program_link p c))
+            (PS.unpartialize (PS.merge_partial_states s1 s1')) t
+            (PS.unpartialize (PS.merge_partial_states s2 s2')).
+  Proof.
+    intros s1 s1' s2 s2' t Hmergeable Hstep Hstep'.
+    (* Top-level case analysis. *)
+    inversion Hmergeable
+      as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial_ics1 Hpartial_ics1'];
+      subst.
+rename Hmergeable into _Hmergeable.
+    inversion Hstep
+      as [c' ? ? ? ics1 ics2
+          Hsame_iface1 _ Hwf1 Hlinkable Hmains Hstep_cs Hpartial1 Hpartial2];
+      subst.
+rename Hstep into _Hstep.
+    inversion Hstep'
+      as [p' ? ? ? ics1' ics2'
+          Hsame_iface2 _ Hwf2 Hlinkable' Hmains' Hstep_cs' Hpartial1' Hpartial2'];
+      subst.
+rename Hstep' into _Hstep'.
+    inversion Hpartial_ics1
+      as [gps1 ? mem1 ? regs1 pc1 Hpc1 | gps1 ? mem1 ? ? pc1 Hcc1]; subst;
+      last admit. (* Symmetric case. *)
+rename Hpartial_ics1 into _Hpartial_ics1.
+    - (* p has control. *)
+      inversion Hpartial_ics1'
+        as [? | gps1' ? mem1' ? ? pc1' Hcc1']; subst;
+        first admit. (* Contra. *)
+rename Hpartial_ics1' into _Hpartial_ics1'.
+      inversion Hpartial1
+        as [ics_gps1 ? ics_mem1 ? ics_regs1 ics_pc1 Hics_pc1 Hmem1 Hstack1 |];
+        subst.
+rename Hpartial1 into _Hpartial1.
+      inversion Hpartial1'
+        as [| ics_gps1' ? ics_mem1' ? ics_regs1' ics_pc1' Hics_pc1' Hmem1' Hstack1' dummy Hcomp1'];
+        subst.
+rename Hpartial1' into _Hpartial1'.
+      PS.simplify_turn.
+      (* Case analysis on p's step. *)
+      inversion Hstep_cs; subst;
+rename Hstep_cs into _Hstep_cs.
+
+      + (* INop *)
+        inversion Hpartial2
+          as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
+          subst;
+          last admit. (* Contra. *)
+rename Hpartial2 into _Hpartial2.
+        inversion Hpartial2'
+          as [| ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2'];
+          subst;
+          first admit. (* Contra (after Hstep_cs', maybe.). *)
+        simpl in *.
+rename Hpartial2' into _Hpartial2'.
+        PS.simplify_turn.
+        rewrite <- Hmem1.
+        rewrite <- Hstack1.
+        erewrite (merge_stacks_partition
+                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                    Hcomes_from).
+        erewrite (merge_memories_partition
+                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                    Hcomes_from).
+        (* Synchronize with c's step. *)
+        inversion Hstep_cs'; subst;
+rename Hstep_cs' into _Hstep_cs';
+          (* Specialized memory rewrites for store and alloc. *)
+          try match goal with
+          | Hop : executing _ ?PC (IStore _ _),
+            Hcomp : Pointer.component ?PTR = Pointer.component ?PC,
+            Hstore : Memory.store ?MEM1 ?PTR _ = Some ?MEM2
+            |- _ =>
+            rewrite <- Hcomp in Hics_pc1';
+            rewrite -> (program_store_to_partialized_memory Hics_pc1' Hstore) in Hmem1'
+          end;
+          try match goal with
+          | Hop : executing _ ?PC (IAlloc _ _),
+            Halloc : Memory.alloc ?MEM1 (Pointer.component ?PTR) _ = Some (?MEM2, _)
+            |- _ =>
+            rewrite -> (program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
+          end;
+          (* Specialized stack rewrites for call. *)
+          try match goal with
+          | Hcomp : Pointer.component ics_pc1' = Pointer.component pc1
+            |- CS.step _ _ [ECall _ _ _ _] _
+            =>
+            rewrite to_partial_stack_cons merge_stacks_cons unpartialize_stack_cons;
+            assert (Hpc1c := Hpc1); rewrite <- Pointer.inc_preserves_component in Hpc1c;
+            assert (Hpc1p := Hcc1'); rewrite <- Hcomp1' in Hpc1p; rewrite <- Pointer.inc_preserves_component in Hpc1p;
+            assert (Hpc1c' : Pointer.component (Pointer.inc pc1) \in domm (prog_interface c) = false)
+              by (destruct (Pointer.component (Pointer.inc pc1) \in domm (prog_interface c)) eqn:Hcase;
+                  now rewrite Hcase in Hpc1c);
+            rewrite (PS.ptr_within_partial_frame_1 Hpc1p);
+            rewrite (PS.ptr_within_partial_frame_2 Hpc1c');
+            simpl; rewrite pointer_compose;
+            rewrite Hcomp
+          end;
+          (* Stack and memory rewrites, then solve goal. *)
+          rewrite <- Hmem1';
+          rewrite <- Hstack1';
+          erewrite (merge_stacks_partition
+                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                      Hcomes_from);
+          erewrite (merge_memories_partition
+                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                          Hcomes_from);
+          (* Apply CS lemma and prove special-case side conditions. *)
+          CS_step_of_executing' (program_link p c');
+          try eassumption;
+          try reflexivity;
+          try match goal with
+          | Hlabel : find_label_in_component _ _ _ = _
+            |- find_label_in_component _ _ _ = _
+            =>
+            rewrite find_label_in_component_program_link_left; try assumption;
+            rewrite find_label_in_component_program_link_left in Hlabel; try assumption;
+            try eassumption;
+            now rewrite <- Hsame_iface1 in Hpc1
+          end;
+          try match goal with
+          | Hlabel : find_label_in_procedure _ _ _ = _
+            |- find_label_in_procedure _ _ _ = _
+            =>
+            rewrite find_label_in_procedure_program_link_left; try assumption;
+            rewrite find_label_in_procedure_program_link_left in Hlabel; try assumption;
+            try eassumption;
+            now rewrite <- Hsame_iface1 in Hpc1
+          end;
+          try match goal with
+          | Hload : Memory.load ics_mem1 ?PTR = Some ?V
+            |- Memory.load mem1 ?PTR = Some ?V
+            =>
+            symmetry in Hmem1;
+            destruct PTR as [[C b] o]; simpl in *; subst;
+            eapply program_load_in_partialized_memory_strong;
+            eassumption
+          end;
+          try match goal with
+          | Hentry : EntryPoint.get _ _ _ = _
+            |- EntryPoint.get _ _ _ = _
+            =>
+            rewrite genv_entrypoints_program_link_left; try assumption;
+            rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
+            now rewrite Hsame_iface1
+          end;
+          try match goal with
+          | Himport : imported_procedure _ ?C _ _
+            |- imported_procedure _ ?C _ _
+            =>
+            rewrite imported_procedure_unionm_left; try assumption;
+            rewrite imported_procedure_unionm_left in H7; try assumption;
+            now rewrite Hsame_iface1
+          end;
+          (* Finish goal. *)
+          apply execution_invariant_to_linking with (c1 := c'); eassumption.
+
+  Admitted.
+
+  (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
+     in this section, but these should be pared down. *)
+  Lemma mergeable_states_step : forall s1 s1' s2 s2' t,
+    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+    PS.step c (prog_interface p) (prepare_global_env c) s1' t s2'->
+    PS.step (program_link p c) emptym (prepare_global_env (program_link p c))
+            (PS.merge_partial_states s1 s1') t
+            (PS.merge_partial_states s2 s2').
+  Proof.
+    intros s1 s1' s2 s2' t Hmergeable1 Hstep Hstep'.
+    pose proof mergeable_states_step_trans Hmergeable1 Hstep Hstep'
+      as Hmergeable2.
+    apply PS.partial_step
+      with (p' := empty_prog)
+           (ics := PS.unpartialize (PS.merge_partial_states s1 s1'))
+           (ics' := PS.unpartialize (PS.merge_partial_states s2 s2')).
+    - reflexivity.
+    - now apply linking_well_formedness.
+    - exact empty_prog_is_well_formed.
+    - exact (linkable_emptym _ (proj1 linkability)).
+    - now apply linkable_mains_empty_prog.
+    - rewrite linking_empty_program. now apply mergeable_states_step_CS.
+    - now apply mergeable_states_partial_state_emptym.
+    - now apply mergeable_states_partial_state_emptym.
+  Qed.
+
   Lemma lockstep_simulation:
     forall ms t ms',
       step (prepare_global_env prog) ms t ms' ->
@@ -3126,79 +4022,105 @@ Section MultiSemantics.
     intros ms t ms' Hstep.
     intros ips Hmatch.
 
-    inversion Hmatch as [ips1 ips2 Hmergeable]; subst; clear Hmatch.
-    inversion Hstep as [? ? ips1' ? ips2' Hstep1 Hstep2]; subst; clear Hstep.
+    inversion Hmatch as [ips1 ips2 Hmergeable]; subst.
+    inversion Hstep as [? ? ips1' ? ips2' Hstep1 Hstep2]; subst.
 
-    inversion Hmergeable as [ics ? ? Hmerge_ifaces Hfrom_initial Hpartial1 Hpartial2];
-      subst(*; clear Hmergeable*).
-    inversion Hstep1
-      as [p' ? ? ? ics1 ics1'
-          Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1'];
-      subst(*; clear Hstep1*);
-      inversion Hstep2
-        as [c' ? ? ? ics2 ics2'
-            Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2'];
-      subst(*; clear Hstep2*);
-      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1];
-      subst(*; clear Hpartial1*);
-      inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2];
-      subst(*; clear Hpartial2*);
-      simpl in *; PS.simplify_turn.
+    exists (PS.merge_partial_states ips1' ips2'). split.
+    - exact (mergeable_states_step Hmergeable Hstep1 Hstep2).
+    - constructor.
+      exact (mergeable_states_step_trans Hmergeable Hstep1 Hstep2).
 
-    - (* Contra. *)
-      now destruct (PS.domm_partition_in_neither
-                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                      Hfrom_initial Hcomp1 Hcomp2).
+    (* inversion Hmergeable as [ics ? ? Hmerge_ifaces Hfrom_initial Hpartial1 Hpartial2]; *)
+    (*   subst(*; clear Hmergeable*). *)
+    (* inversion Hstep1 *)
+    (*   as [p' ? ? ? ics1 ics1' *)
+    (*       Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1']; *)
+    (*   subst(*; clear Hstep1*); *)
+    (*   inversion Hstep2 *)
+    (*     as [c' ? ? ? ics2 ics2' *)
+    (*         Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2']; *)
+    (*   subst(*; clear Hstep2*); *)
+    (*   inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; *)
+    (*   subst(*; clear Hpartial1*); *)
+    (*   inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; *)
+    (*   subst(*; clear Hpartial2*); *)
+    (*   simpl in *; PS.simplify_turn. *)
 
-    - (* program is in the first state *)
-      exists (PS.merge_partial_states ips1' ips2'). split.
+    (* - (* Contra. *) *)
+    (*   now destruct (PS.domm_partition_in_neither *)
+    (*                   (mergeable_interfaces_sym _ _ mergeable_interfaces) *)
+    (*                   Hfrom_initial Hcomp1 Hcomp2). *)
 
-      + inversion Hpartial_ips1; subst(*; clear Hpartial_ips1*);
-          inversion Hpartial_ips2; subst(*; clear Hpartial_ips2*);
-          PS.simplify_turn; simpl in *.
-        (* RB: TODO: Existing information, and new information, can be extracted
-           from the goal and the context, respectively. *)
-        eapply PS.partial_step
-          with
-            (ics:=PS.unpartialize
-                    (PS.PC
-                       (PS.merge_stacks (PS.to_partial_stack gps (domm (prog_interface c)))
-                                        (PS.to_partial_stack gps (domm (prog_interface p))),
-                        PS.merge_memories (PS.to_partial_memory mem (domm (prog_interface c)))
-                                          (PS.to_partial_memory mem (domm (prog_interface p))),
-                        regs, pc)))
-            (p':=empty_prog).
-        * reflexivity.
-        * apply linking_well_formedness; assumption.
-        * now apply empty_prog_is_well_formed.
-        * apply linkable_emptym. now apply linkability.
-        * unfold linkable_mains, empty_prog. simpl.
-          now rewrite andb_false_r.
-        * admit.
-        * constructor.
-          ** PS.simplify_turn.
-             by rewrite mem_domm.
-          ** rewrite domm0. unfold PS.to_partial_memory.
-             rewrite filterm_identity. reflexivity.
-          ** rewrite domm0.
-             rewrite (PS.to_partial_stack_unpartialize_identity
-                        (PS.merged_stack_has_no_holes
-                           (PS.mergeable_stacks_partition
-                              (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                              Hfrom_initial))).
-             reflexivity.
-        * admit.
+    (* - (* program is in the first state *) *)
+    (*   exists (PS.merge_partial_states ips1' ips2'). split. *)
 
-      + (* prove match *)
-        admit.
+    (*   + inversion Hpartial_ips1; subst(*; clear Hpartial_ips1*); *)
+    (*       inversion Hpartial_ips2; subst(*; clear Hpartial_ips2*); *)
+    (*       PS.simplify_turn; simpl in *. *)
+    (*     (* RB: TODO: Existing information, and new information, can be extracted *)
+    (*        from the goal and the context, respectively. *) *)
+    (*     eapply PS.partial_step *)
+    (*       with *)
+    (*         (ics:=PS.unpartialize *)
+    (*                 (PS.PC *)
+    (*                    (PS.merge_stacks (PS.to_partial_stack gps (domm (prog_interface c))) *)
+    (*                                     (PS.to_partial_stack gps (domm (prog_interface p))), *)
+    (*                     PS.merge_memories (PS.to_partial_memory mem (domm (prog_interface c))) *)
+    (*                                       (PS.to_partial_memory mem (domm (prog_interface p))), *)
+    (*                     regs, pc))) *)
+    (*         (p':=empty_prog). *)
+    (*     * reflexivity. *)
+    (*     * apply linking_well_formedness; assumption. *)
+    (*     * now apply empty_prog_is_well_formed. *)
+    (*     * apply linkable_emptym. now apply linkability. *)
+    (*     * unfold linkable_mains, empty_prog. simpl. *)
+    (*       now rewrite andb_false_r. *)
+    (*     * admit. *)
+    (*     * constructor. *)
+    (*       ** PS.simplify_turn. *)
+    (*          by rewrite mem_domm. *)
+    (*       ** rewrite domm0. unfold PS.to_partial_memory. *)
+    (*          rewrite filterm_identity. reflexivity. *)
+    (*       ** rewrite domm0. *)
+    (*          rewrite (PS.to_partial_stack_unpartialize_identity *)
+    (*                     (PS.merged_stack_has_no_holes *)
+    (*                        (PS.mergeable_stacks_partition *)
+    (*                           (mergeable_interfaces_sym _ _ mergeable_interfaces) *)
+    (*                           Hfrom_initial))). *)
+    (*          reflexivity. *)
+    (*     * admit. *)
 
-    - (* program is in the second state *)
-      admit. (* RB: Fully symmetrical case. *)
+    (*   + (* prove match *) *)
+    (*     admit. *)
 
-    - (* Contra. *)
-      now destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1).
+    (* - (* program is in the second state *) *)
+    (*   admit. (* RB: Fully symmetrical case. *) *)
 
-  Admitted.
+    (* - (* Contra. *) *)
+    (*   now destruct (PS.domm_partition_in_both mergeable_interfaces Hcomp2 Hcomp1). *)
+
+  Qed.
+
+  Lemma star_simulation:
+    forall ms t ms',
+      Star msem ms t ms' ->
+    forall ips,
+      multi_match ms ips ->
+    exists ips',
+      Star (PS.sem prog emptym) ips t ips' /\ multi_match ms' ips'.
+  Proof.
+    intros ms t ms' Hstar.
+    induction Hstar as [| ? ? ? ? ? ? H ? IHHstar]; subst.
+    - eexists. split.
+      + left.
+      + auto.
+    - intros ips Hmulti_match.
+      destruct (lockstep_simulation H Hmulti_match) as [ips' [? H1]].
+      destruct (IHHstar ips' H1) as [ips'' []].
+      exists ips''. split.
+      + eapply star_left; eauto.
+      + auto.
+  Qed.
 
   Theorem merged_prog_simulates_multisem:
     forward_simulation msem (PS.sem prog emptym).
@@ -3207,6 +4129,98 @@ Section MultiSemantics.
     - apply multi_match_initial_states.
     - apply multi_match_final_states.
     - apply lockstep_simulation.
+  Qed.
+
+  (* RB: TODO: Move to CompCertExtensions, integrate in existing proofs. *)
+  Lemma behavior_prefix_goes_initially_wrong_inv : forall t,
+    behavior_prefix t (Goes_wrong E0) ->
+    t = E0.
+  Proof.
+    intros t [beh Hbeh].
+    destruct beh as [| | | tbeh];
+      try discriminate.
+    inversion Hbeh as [Happ].
+    now destruct (Eapp_E0_inv _ _ (eq_sym Happ)).
+  Qed.
+
+  Lemma initial_state_exists : exists s, initial_state s.
+  Admitted. (* Grade 2. *)
+
+  (* RB: TODO: To PS when done.
+     A partial step, partialized on the empty interface (that is, a complete
+     step in disguise) can be rearranged as two partial steps split along the
+     lines of a pair of mergeable interfaces. *)
+  Lemma initial_state_split :
+    forall s1 s2,
+      PS.initial_state p (prog_interface c) s1 ->
+      PS.initial_state c (prog_interface p) s2 ->
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2.
+  Admitted. (* Grade 2. See ProgCtxSim.match_initial_states. *)
+
+  Lemma step_emptym_split :
+    forall s t s',
+      PS.step prog emptym (prepare_global_env prog) s t s' ->
+      PS.step p (prog_interface c) (prepare_global_env p)
+              (PS.partialize (PS.unpartialize s) (prog_interface c)) t
+              (PS.partialize (PS.unpartialize s') (prog_interface c)) /\
+      PS.step c (prog_interface p) (prepare_global_env c)
+              (PS.partialize (PS.unpartialize s) (prog_interface p)) t
+              (PS.partialize (PS.unpartialize s') (prog_interface p)).
+  Admitted. (* Grade 2. *)
+
+  Lemma final_state_emptym_split :
+    forall s,
+      PS.final_state prog emptym s ->
+      PS.final_state p (prog_interface c)
+                     (PS.partialize (PS.unpartialize s) (prog_interface c)) /\
+      PS.final_state c (prog_interface p)
+                     (PS.partialize (PS.unpartialize s) (prog_interface p)).
+  Admitted. (* Grade 2. *)
+
+  Lemma partialize_mergeable_states_left :
+    forall s1 s2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
+      PS.partialize (PS.unpartialize (PS.merge_partial_states s1 s2)) (prog_interface c) = s1.
+  Admitted. (* Grade 2. *)
+
+  Lemma partialize_mergeable_states_right :
+    forall s1 s2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2 ->
+      PS.partialize (PS.unpartialize (PS.merge_partial_states s1 s2)) (prog_interface p) = s2.
+  Admitted. (* Grade 2. *)
+
+  Corollary multi_semantics_implies_partial_semantics:
+    forall beh,
+      program_behaves msem beh ->
+      program_behaves (PS.sem prog emptym) beh.
+  Proof.
+    intros beh Hbeh.
+    destruct (forward_simulation_behavior_improves merged_prog_simulates_multisem Hbeh)
+      as [beh' [Hbeh' [| [t [? Hprefix]]]]]; subst;
+      first assumption.
+    inversion Hbeh as [sini_ms ? Hini_ms Hstbeh_ms | Hini_ms]; subst;
+      last by destruct (initial_state_exists) as [sini Hini]; specialize (Hini_ms sini).
+    destruct (multi_match_initial_states Hini_ms) as [ini_ps [Hini_ps Hmatch_ini]].
+    simpl in *.
+    eapply program_runs;
+      first exact Hini_ps.
+    inversion Hstbeh_ms as [| | | ? [s1 s2] Hstar_ms Hnostep_ms Hfinal_ms]; subst.
+    destruct (star_simulation Hstar_ms Hmatch_ini) as [s_ps [Hstar_ps Hmatch]].
+    eapply state_goes_wrong;
+      first exact Hstar_ps.
+    - intros t_ps s_ps' Hstep_ps.
+      inversion Hmatch as [? ? Hmerge]; subst.
+      apply step_emptym_split in Hstep_ps. destruct Hstep_ps as [Hstep_ps1 Hstep_ps2].
+      rewrite (partialize_mergeable_states_left Hmerge) in Hstep_ps1.
+      rewrite (partialize_mergeable_states_right Hmerge) in Hstep_ps2.
+      eapply Hnostep_ms. econstructor; eassumption.
+    - intros Hfinal_ps.
+      inversion Hmatch as [? ? Hmerge]; subst.
+      apply final_state_emptym_split in Hfinal_ps.
+      destruct Hfinal_ps as [Hfinal_ps1 Hfinal_ps2].
+      rewrite (partialize_mergeable_states_left Hmerge) in Hfinal_ps1.
+      rewrite (partialize_mergeable_states_right Hmerge) in Hfinal_ps2.
+      apply Hfinal_ms. constructor; assumption.
   Qed.
 End MultiSemantics.
 End MultiSem.
@@ -3221,6 +4235,114 @@ End MultiSem.
         it would be nice to prove a theorem which composes two partial program
         into another possibly partial program.
 *)
+
+Section BehaviorStar.
+  Variables p c: program.
+
+  Hypothesis wf1 : well_formed_program p.
+  Hypothesis wf2 : well_formed_program c.
+
+  Hypothesis main_linkability: linkable_mains p c.
+  Hypothesis linkability: linkable (prog_interface p) (prog_interface c).
+
+  Let prog := program_link p c.
+
+  Hypothesis prog_is_closed:
+    closed_program prog.
+
+  Hypothesis mergeable_interfaces:
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  (* RB: TODO: Add hypotheses and/or encapsulate in own section (both directions
+     will be needed in the main proof). Relocate to PS?
+     Consider what helper lemmas are natural. *)
+  Lemma behavior_prefix_star :
+    forall b m,
+      program_behaves (PS.sem p (prog_interface c)) b ->
+      prefix m b ->
+    exists s s',
+      PS.initial_state p (prog_interface c) s /\
+      star (PS.step p (prog_interface c)) (prepare_global_env p) s (finpref_trace m) s'.
+  Proof.
+    intros b m.
+    destruct m as [tm | tm | tm].
+    - intros Hb Hm.
+      destruct b as [t | ? | ? | ?];
+        simpl in Hm; try contradiction;
+        subst t.
+      inversion Hb as [s1 ? Hini Hbeh |]; subst.
+      inversion Hbeh as [? s2 Hstar Hfinal | | |]; subst.
+      now eauto.
+    - intros Hb Hm.
+      destruct b as [? | ? | ? | t];
+        simpl in Hm; try contradiction;
+        subst t.
+      inversion Hb as [s1 ? Hini Hbeh | Hini]; subst.
+      + inversion Hbeh as [| | | ? s2 Hstar Hnostep Hfinal]; subst.
+        now eauto.
+      + destruct (PS.initial_state_exists wf1 wf2 linkability main_linkability)
+          as [s Hini'].
+        specialize (Hini s).
+        contradiction.
+    - revert b.
+      induction tm as [| e t IHt] using rev_ind;
+        intros b Hb Hm;
+        simpl in *.
+      + destruct (PS.initial_state_exists wf1 wf2 linkability main_linkability)
+          as [s Hini'].
+        exists s, s. split; [assumption | now apply star_refl].
+      + pose proof behavior_prefix_app_inv Hm as Hprefix.
+        specialize (IHt _ Hb Hprefix).
+        destruct IHt as [s1 [s2 [Hini Hstar]]].
+        inversion Hm as [b']; subst.
+        inversion Hb as [s1' ? Hini' Hbeh' | Hini' Hbeh']; subst.
+        * assert (Heq : s1 = s1')
+            by (eapply PS.initial_state_determinism; eassumption).
+          subst s1'.
+          inversion Hbeh' as [ t' s2' Hstar' Hfinal' Heq
+                             | t' s2' Hstar' Hsilent' Heq
+                             | T' Hreact' Heq
+                             | t' s2' Hstar' Hstep' Hfinal' Heq];
+            subst.
+          (* RB: TODO: Refactor block. *)
+          -- destruct b' as [tb' | ? | ? | ?];
+               simpl in Heq;
+               try discriminate.
+             inversion Heq; subst t'; clear Heq.
+             destruct (star_app_inv (@PS.singleton_traces _ _) _ _ Hstar')
+               as [s' [Hstar'1 Hstar'2]].
+             now eauto.
+          -- (* Same as Terminates case. *)
+             destruct b' as [? | tb' | ? | ?];
+               simpl in Heq;
+               try discriminate.
+             inversion Heq; subst t'; clear Heq.
+             destruct (star_app_inv (@PS.singleton_traces _ _) _ _ Hstar')
+               as [s' [Hstar'1 Hstar'2]].
+             now eauto.
+          -- (* Similar to Terminates and Diverges, but on an infinite trace.
+                Ltac can easily take care of these commonalities. *)
+             destruct b' as [? | ? | Tb' | ?];
+               simpl in Heq;
+               try discriminate.
+             inversion Heq; subst T'; clear Heq.
+             destruct (forever_reactive_app_inv (@PS.singleton_traces _ _) _ _ Hreact')
+               as [s' [Hstar'1 Hreact'2]].
+             now eauto.
+          -- (* Same as Terminate and Diverges. *)
+             destruct b' as [? | ? | ? | tb'];
+               simpl in Heq;
+               try discriminate.
+             inversion Heq; subst t'; clear Heq.
+             destruct (star_app_inv (@PS.singleton_traces _ _) _ _ Hstar')
+               as [s' [Hstar'1 Hstar'2]].
+             now eauto.
+        * destruct (PS.initial_state_exists wf1 wf2 linkability main_linkability)
+            as [s Hini''].
+          specialize (Hini' s).
+          contradiction.
+  Qed.
+End BehaviorStar.
 
 Section PartialComposition.
   Variables p c: program.
@@ -3258,7 +4380,7 @@ Section PartialComposition.
 
     generalize dependent ips2.
     induction Hst_star1
-      as [| n1 ips1 t1 ips2 t2 ips3 t Hstep12 Hturn1 Hst_starN23 IHHst_star1 Ht];
+      as [| n1 ips1 t1 ips2 t2 ips3 t Hstep12 Hturn12 Hst_starN23 IHHst_star1 Ht];
       subst.
 
     (* Zero steps, therefore empty trace. *)
@@ -3286,7 +4408,7 @@ Section PartialComposition.
         assert (prog_is_closed' := prog_is_closed).
         rewrite (closed_program_link_sym wf1 wf2 linkability)
           in prog_is_closed'.
-        destruct (StStarNSim.st_starN_simulation
+        destruct (StarNSim.st_starN_simulation
                     wf2 wf1
                     (linkable_sym linkability)
                     (linkable_mains_sym main_linkability)
@@ -3329,17 +4451,25 @@ Section PartialComposition.
     - rename ips2' into ips3'.
       intros ips1' Hmergeable1 Hst_starN13'.
       (* Trace the first step from the "p" to the "c" run. *)
-      assert
-        (exists ips2',
-            PS.step c (prog_interface p) (prepare_global_env c) ips1' t1 ips2' /\
-            PS.mergeable_states (prog_interface c) (prog_interface p) ips2 ips2')
-        as [ips2' [Hstep12' Hmergeable2]].
-      {
-        (* This will be proved by ProgCtxSim.lockstep_simulation or by
-           CtxProgSim.lockstep_simulation, depending on which run is the program
-           run and which the context run. *)
-        admit.
-      }
+      pose proof
+           st_starN_refl p (prog_interface c) (prepare_global_env p) ips2
+        as Hst_starN22.
+      pose proof
+           st_starN_step Hstep12 Hturn12 Hst_starN22 (eq_refl _)
+        as Hst_starN12.
+      setoid_rewrite E0_right in Hst_starN12.
+      destruct
+        (StarNSim.st_starN_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hst_starN12 Hmergeable1)
+        as [ips2' [Hst_starN12' Hmergeable2]].
+      (* (And extract the contained step.) *)
+      inversion Hst_starN12'
+        as [| ? ? t1' ? ? ? ? Hstep12' Hturn12' Hst_starN_0];
+        subst.
+      inversion Hst_starN_0; subst.
+      rename t1' into t1.
+      rewrite E0_right. rewrite E0_right in Hstep12, Hst_starN13'.
       (* Decompose the "c" star into the first step and the remainder. *)
       assert
         (st_starN c (prog_interface p) (prepare_global_env c) n1 ips2' t2 ips3')
@@ -3347,17 +4477,17 @@ Section PartialComposition.
       {
         (* We know that the single-turn run (in "c", here) is deterministic, and
            moreover we have the first step from ips1' to ips2' producing t1. *)
-        admit.
+        destruct
+          (StarNSim.st_starN_simulation
+             wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+             Hst_starN23 Hmergeable2)
+          as [ips3'' [Hst_starN23' _]].
+        pose proof st_starN_step Hstep12' Hturn12' Hst_starN23' (eq_refl _)
+          as Hst_starN13''.
+        pose proof state_determinism_st_starN Hst_starN13' Hst_starN13'';
+          subst ips3''.
+        assumption.
       }
-      (* assert *)
-      (*   (exists ips3', *)
-      (*       st_starN c (prog_interface p) (prepare_global_env c) n1 ips2' t2 ips3') *)
-      (*   as [ips3'' Hst_starN23']. *)
-      (* { *)
-      (*   admit. *)
-      (* } *)
-      (* pose proof state_determinism_st_starN Hst_starN23. Hst_starN23'. *)
-      (* From here process the IH and solve the goal. *)
       specialize (IHHst_star1 ips2' Hmergeable2 Hst_starN23').
       destruct IHHst_star1 as [HstarN23 Hmergeable3].
       split.
@@ -3366,234 +4496,219 @@ Section PartialComposition.
         * assumption.
         * reflexivity.
       + assumption.
-
-      (* inversion Hmergeable as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial1 Hpartial2]; *)
-      (*   subst. *)
-      (* inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst; *)
-      (*   inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst. *)
-
-      (* + admit. (* Contra. *) *)
-
-      (* (* the program is stepping *) *)
-      (* + (* simulate the step *) *)
-      (*   (* use inductive hypothesis *) *)
-      (*   (* compose previous results *) *)
-      (*   admit. *)
-
-      (* + admit. (* Contra. *) *)
-
-      (* (* the context is stepping *) *)
-      (* + admit. *)
-  Admitted. (* Grade 3. RB: Might need polishing, but should be fairly simple. *)
+  Qed.
 
   (* RB: TODO: Carefully check statement changes, esp. unproven and w.r.t.
-     same_turn. Consider formulating the new premises in terms of same_turn. *)
-  Lemma st_starN_with_turn_change_impossible_1:
-    forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips',
-      PS.is_program_component prog_st2 (prog_interface c) ->
-      PS.is_context_component ctx_st (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          prog_st2 ctx_st ->
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n1 ctx_st t1 ctx_st' ->
-      PS.step c (prog_interface p) (prepare_global_env c) ctx_st' t2 prog_st1 ->
-      ~ same_turn (prog_interface p) ctx_st' prog_st1 ->
-      mt_starN c (prog_interface p) (prepare_global_env c) n2 prog_st1 t3 ips' ->
-    forall n3 ips'',
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n3 prog_st2 (t1 ** t2 ** t3) ips'' ->
-      False.
-  Proof.
-    intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4
-           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           n s4' Hst_starN14.
-    (* We reason on two runs: a "program run" that goes all the way in a single
-       turn, and a "context run" that changes turns explicitly. In the latter,
-       Hstep23 means that t2 is an event that changes from c to p. This must
-       involve a contradiction in Hst_starN14. *)
+     same_turn. Consider formulating the new premises in terms of same_turn.
+     The following few lemmas are currently not used, although it may be useful
+     to prove a slightly more general version that encompasses all of them,
+     even if the ongoing revision succeeds without their use. *)
+  (* Lemma st_starN_with_turn_change_impossible_1: *)
+  (*   forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips', *)
+  (*     PS.is_program_component prog_st2 (prog_interface c) -> *)
+  (*     PS.is_context_component ctx_st (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         prog_st2 ctx_st -> *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n1 ctx_st t1 ctx_st' -> *)
+  (*     PS.step c (prog_interface p) (prepare_global_env c) ctx_st' t2 prog_st1 -> *)
+  (*     ~ same_turn (prog_interface p) ctx_st' prog_st1 -> *)
+  (*     mt_starN c (prog_interface p) (prepare_global_env c) n2 prog_st1 t3 ips' -> *)
+  (*   forall n3 ips'', *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n3 prog_st2 (t1 ** t2 ** t3) ips'' -> *)
+  (*     False. *)
+  (* Proof. *)
+  (*   intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4 *)
+  (*          Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          n s4' Hst_starN14. *)
+  (*   (* We reason on two runs: a "program run" that goes all the way in a single *)
+  (*      turn, and a "context run" that changes turns explicitly. In the latter, *)
+  (*      Hstep23 means that t2 is an event that changes from c to p. This must *)
+  (*      involve a contradiction in Hst_starN14. *) *)
 
-    (* First, move this to the goal. This will help to more easily discharge some
-       contradictory cases. *)
-    apply Hturn23.
+  (*   (* First, move this to the goal. This will help to more easily discharge some *)
+  (*      contradictory cases. *) *)
+  (*   apply Hturn23. *)
 
-    (* Case analysis on the turn-changing step of the short run. *)
-    inversion Hstep23
-      as [p' ? ? ? ics1 ics1'
-          Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1'];
-      subst.
-    inversion HCSstep1; subst;
-      (* Silent steps preserve the turn and are discharged right away. *)
-      try (eapply step_E0_same_turn; eassumption).
+  (*   (* Case analysis on the turn-changing step of the short run. *) *)
+  (*   inversion Hstep23 *)
+  (*     as [p' ? ? ? ics1 ics1' *)
+  (*         Hifaces1 _ Hwf1' Hlinkable1 Hmains1 HCSstep1 Hpartial_ips1 Hpartial_ips1']; *)
+  (*     subst. *)
+  (*   inversion HCSstep1; subst; *)
+  (*     (* Silent steps preserve the turn and are discharged right away. *) *)
+  (*     try (eapply step_E0_same_turn; eassumption). *)
 
-    (* RB: TODO: Name variables and hypotheses that are explicitly used. *)
-    - (* ICall *)
-      (* This event entails a change of turn as per Hturn23. *)
-      destruct (C' \in domm (prog_interface p)) eqn:HpcC';
-        first admit. (* Contra. *)
+  (*   (* RB: TODO: Name variables and hypotheses that are explicitly used. *) *)
+  (*   - (* ICall *) *)
+  (*     (* This event entails a change of turn as per Hturn23. *) *)
+  (*     destruct (C' \in domm (prog_interface p)) eqn:HpcC'; *)
+  (*       first admit. (* Contra. *) *)
 
-      (* The event is now visible in the long run, so we can split it. *)
-      destruct (st_starN_event_split Hst_starN14)
-        as [n1' [ps2 [cs3 [n3' [Hst_starN12' [Hstep23' [Hturn23' [Hst_starN14' Hn]]]]]]]].
-      pose proof st_starN_same_turn Hst_starN12' as Hturn12'.
+  (*     (* The event is now visible in the long run, so we can split it. *) *)
+  (*     destruct (st_starN_event_split Hst_starN14) *)
+  (*       as [n1' [ps2 [cs3 [n3' [Hst_starN12' [Hstep23' [Hturn23' [Hst_starN14' Hn]]]]]]]]. *)
+  (*     pose proof st_starN_same_turn Hst_starN12' as Hturn12'. *)
 
-      (* Propagate the turn from the beginning of the long run to the event that
-         triggers the turn change in the short run. *)
-      inversion Hturn12'; subst;
-        last admit. (* Contra. *)
-      inversion Hturn23'; subst;
-        last admit. (* Contra. *)
+  (*     (* Propagate the turn from the beginning of the long run to the event that *)
+  (*        triggers the turn change in the short run. *) *)
+  (*     inversion Hturn12'; subst; *)
+  (*       last admit. (* Contra. *) *)
+  (*     inversion Hturn23'; subst; *)
+  (*       last admit. (* Contra. *) *)
 
-      (* Extract the information in the target step of the long run.  *)
-      inversion Hstep23'
-        as [c' ? ? ? ics2 ics2'
-            Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2'];
-        subst.
-      inversion HCSstep2; subst.
-      (* Extract the information of the partial states. All combinations except
-         one are obvious contradictions. *)
-      inversion Hpartial_ips2
-        as [? ? ? ? ? ? Hcomp_ips2 | ? ? ? ? ? ? Hcomp_ips2]; subst;
-        inversion Hpartial_ips2'
-          as [? ? ? ? ? ? Hcomp_ips2' | ? ? ? ? ? ? Hcomp_ips2']; subst;
-        PS.simplify_turn;
-        [| admit | admit | admit]. (* Contra. *)
+  (*     (* Extract the information in the target step of the long run.  *) *)
+  (*     inversion Hstep23' *)
+  (*       as [c' ? ? ? ics2 ics2' *)
+  (*           Hifaces2 _ Hwf2' Hlinkable2 Hmains2 HCSstep2 Hpartial_ips2 Hpartial_ips2']; *)
+  (*       subst. *)
+  (*     inversion HCSstep2; subst. *)
+  (*     (* Extract the information of the partial states. All combinations except *)
+  (*        one are obvious contradictions. *) *)
+  (*     inversion Hpartial_ips2 *)
+  (*       as [? ? ? ? ? ? Hcomp_ips2 | ? ? ? ? ? ? Hcomp_ips2]; subst; *)
+  (*       inversion Hpartial_ips2' *)
+  (*         as [? ? ? ? ? ? Hcomp_ips2' | ? ? ? ? ? ? Hcomp_ips2']; subst; *)
+  (*       PS.simplify_turn; *)
+  (*       [| admit | admit | admit]. (* Contra. *) *)
 
-      (* The remaining case is also a contradiction because C' is not in c, but
-         as we know from the turn change in the short run, it is also not in p.
-         (To conclude this we need provenance information.) *)
-      admit.
+  (*     (* The remaining case is also a contradiction because C' is not in c, but *)
+  (*        as we know from the turn change in the short run, it is also not in p. *)
+  (*        (To conclude this we need provenance information.) *) *)
+  (*     admit. *)
 
-    - (* IReturn *)
-      (* This case will be similar to ICall. *)
-      admit.
-  Admitted.
+  (*   - (* IReturn *) *)
+  (*     (* This case will be similar to ICall. *) *)
+  (*     admit. *)
+  (* Abort. *)
 
-  Lemma st_starN_with_turn_change_impossible_1':
-    forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips',
-      PS.is_context_component ctx_st (prog_interface c) ->
-      PS.is_program_component prog_st2 (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          ctx_st prog_st2 ->
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n1 ctx_st t1 ctx_st' ->
-      PS.step p (prog_interface c) (prepare_global_env p) ctx_st' t2 prog_st1 ->
-      ~ same_turn (prog_interface c) ctx_st' prog_st1 ->
-      mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st1 t3 ips' ->
-    forall n3 ips'',
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n3 prog_st2 (t1 ** t2 ** t3) ips'' ->
-      False.
-  Proof.
-    intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4
-           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           n s4' Hst_starN14.
-  Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *)
+  (* Lemma st_starN_with_turn_change_impossible_1': *)
+  (*   forall n1 ctx_st prog_st2 ctx_st' t1 prog_st1 t2 n2 t3 ips', *)
+  (*     PS.is_context_component ctx_st (prog_interface c) -> *)
+  (*     PS.is_program_component prog_st2 (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         ctx_st prog_st2 -> *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n1 ctx_st t1 ctx_st' -> *)
+  (*     PS.step p (prog_interface c) (prepare_global_env p) ctx_st' t2 prog_st1 -> *)
+  (*     ~ same_turn (prog_interface c) ctx_st' prog_st1 -> *)
+  (*     mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st1 t3 ips' -> *)
+  (*   forall n3 ips'', *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n3 prog_st2 (t1 ** t2 ** t3) ips'' -> *)
+  (*     False. *)
+  (* Proof. *)
+  (*   intros n1 cs1 ps1 cs2 t1 ps3 t2 n3 t3 s4 *)
+  (*          Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          n s4' Hst_starN14. *)
+  (* Abort. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
 
-  Lemma st_starN_with_turn_change_impossible_2:
-    forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
-      PS.is_context_component ctx_st2 (prog_interface c) ->
-      PS.is_program_component prog_st (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          ctx_st2 prog_st ->
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n1 prog_st t1 prog_st' ->
-      PS.step c (prog_interface p) (prepare_global_env c) prog_st' t2 ctx_st1 ->
-      ~ same_turn (prog_interface p) prog_st' ctx_st1 ->
-      mt_starN c (prog_interface p) (prepare_global_env c) n2 ctx_st1 t3 ips' ->
-    forall n3 ips'',
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n3 ctx_st2 (t1 ** t2 ** t3) ips'' ->
-      False.
-  Proof.
-    intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4
-           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           n s4' Hst_starN14.
-  Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *)
+  (* Lemma st_starN_with_turn_change_impossible_2: *)
+  (*   forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips', *)
+  (*     PS.is_context_component ctx_st2 (prog_interface c) -> *)
+  (*     PS.is_program_component prog_st (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         ctx_st2 prog_st -> *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n1 prog_st t1 prog_st' -> *)
+  (*     PS.step c (prog_interface p) (prepare_global_env c) prog_st' t2 ctx_st1 -> *)
+  (*     ~ same_turn (prog_interface p) prog_st' ctx_st1 -> *)
+  (*     mt_starN c (prog_interface p) (prepare_global_env c) n2 ctx_st1 t3 ips' -> *)
+  (*   forall n3 ips'', *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n3 ctx_st2 (t1 ** t2 ** t3) ips'' -> *)
+  (*     False. *)
+  (* Proof. *)
+  (*   intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4 *)
+  (*          Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          n s4' Hst_starN14. *)
+  (* Abort. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
 
-  Lemma st_starN_with_turn_change_impossible_3:
-    forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips',
-      PS.is_program_component prog_st (prog_interface c) ->
-      PS.is_context_component ctx_st2 (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          prog_st ctx_st2 ->
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n1 prog_st t1 prog_st' ->
-      PS.step p (prog_interface c) (prepare_global_env p) prog_st' t2 ctx_st1 ->
-      ~ same_turn (prog_interface c) prog_st' ctx_st1 ->
-      mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st1 t3 ips' ->
-    forall n3 ips'',
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n3 ctx_st2 (t1 ** t2 ** t3) ips'' ->
-      False.
-  Proof.
-    intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4
-           Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           n s4' Hst_starN14.
-  Admitted. (* Grade 2. After st_starN_with_turn_change_impossible_1. *)
+  (* Lemma st_starN_with_turn_change_impossible_3: *)
+  (*   forall n1 prog_st ctx_st2 prog_st' t1 ctx_st1 t2 n2 t3 ips', *)
+  (*     PS.is_program_component prog_st (prog_interface c) -> *)
+  (*     PS.is_context_component ctx_st2 (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         prog_st ctx_st2 -> *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n1 prog_st t1 prog_st' -> *)
+  (*     PS.step p (prog_interface c) (prepare_global_env p) prog_st' t2 ctx_st1 -> *)
+  (*     ~ same_turn (prog_interface c) prog_st' ctx_st1 -> *)
+  (*     mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st1 t3 ips' -> *)
+  (*   forall n3 ips'', *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n3 ctx_st2 (t1 ** t2 ** t3) ips'' -> *)
+  (*     False. *)
+  (* Proof. *)
+  (*   intros n1 ps1 cs1 ps2 t1 cs3 t2 n3 t3 s4 *)
+  (*          Hcs1 Hps1 Hmerge1 Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          n s4' Hst_starN14. *)
+  (* Abort. (* Grade 2. After st_starN_with_turn_change_impossible_1. *) *)
 
-  (* RB: XXX: I do not believe this is true. In particular, after the turn
-     changes nothing tells us that the two runs need to run to exhaustion: each
-     is free to stop at any point independently from the other, irrespective of
-     whether the runs up to the turn change are identical, and nothing connects
-     their "final" states. *)
-  Lemma same_trace_and_steps:
-    forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
-           ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
-      PS.is_program_component prog_st1 (prog_interface c) ->
-      PS.is_context_component ctx_st1 (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          prog_st1 ctx_st1 ->
-      (* first side *)
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n1 prog_st1 t1 prog_st1' ->
-      PS.step p (prog_interface c) (prepare_global_env p) prog_st1' t2 ctx_st2 ->
-      ~ same_turn (prog_interface c) prog_st1' ctx_st2 ->
-      mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st2 t3 ips' ->
-      (* second side *)
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n1' ctx_st1 t1' ctx_st1' ->
-      PS.step c (prog_interface p) (prepare_global_env c) ctx_st1' t2' prog_st2 ->
-      ~ same_turn (prog_interface p) ctx_st1' prog_st2 ->
-      mt_starN c (prog_interface p) (prepare_global_env c) n2' prog_st2 t3' ips'' ->
-      (* same steps and same trace *)
-      t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
-  Proof.
-    intros s1 s2 s3' s1' s2'
-           s3 s4 s4' n1 n1' n3 n3' t1 t1' t2 t2' t3 t3'
-           Hpc_s1 Hcc_s1' Hmerge
-           Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           Hst_starN12' Hstep23' Hturn23' Hmt_starN34'.
-  Admitted.
+  (* (* RB: XXX: I do not believe this is true. In particular, after the turn *)
+  (*    changes nothing tells us that the two runs need to run to exhaustion: each *)
+  (*    is free to stop at any point independently from the other, irrespective of *)
+  (*    whether the runs up to the turn change are identical, and nothing connects *)
+  (*    their "final" states. *) *)
+  (* Lemma same_trace_and_steps: *)
+  (*   forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1' *)
+  (*          ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3', *)
+  (*     PS.is_program_component prog_st1 (prog_interface c) -> *)
+  (*     PS.is_context_component ctx_st1 (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         prog_st1 ctx_st1 -> *)
+  (*     (* first side *) *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n1 prog_st1 t1 prog_st1' -> *)
+  (*     PS.step p (prog_interface c) (prepare_global_env p) prog_st1' t2 ctx_st2 -> *)
+  (*     ~ same_turn (prog_interface c) prog_st1' ctx_st2 -> *)
+  (*     mt_starN p (prog_interface c) (prepare_global_env p) n2 ctx_st2 t3 ips' -> *)
+  (*     (* second side *) *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n1' ctx_st1 t1' ctx_st1' -> *)
+  (*     PS.step c (prog_interface p) (prepare_global_env c) ctx_st1' t2' prog_st2 -> *)
+  (*     ~ same_turn (prog_interface p) ctx_st1' prog_st2 -> *)
+  (*     mt_starN c (prog_interface p) (prepare_global_env c) n2' prog_st2 t3' ips'' -> *)
+  (*     (* same steps and same trace *) *)
+  (*     t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'. *)
+  (* Proof. *)
+  (*   intros s1 s2 s3' s1' s2' *)
+  (*          s3 s4 s4' n1 n1' n3 n3' t1 t1' t2 t2' t3 t3' *)
+  (*          Hpc_s1 Hcc_s1' Hmerge *)
+  (*          Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          Hst_starN12' Hstep23' Hturn23' Hmt_starN34'. *)
+  (* Abort. *)
 
-  (* RB: XXX: See [same_trace_and_steps] above. *)
-  Lemma same_trace_and_steps':
-    forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1'
-           ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3',
-      PS.is_context_component ctx_st1 (prog_interface c) ->
-      PS.is_program_component prog_st1 (prog_interface p) ->
-      PS.mergeable_states (prog_interface c) (prog_interface p)
-                          ctx_st1 prog_st1 ->
-      (* first side *)
-      st_starN p (prog_interface c) (prepare_global_env p)
-               n1 ctx_st1 t1 ctx_st1' ->
-      PS.step p (prog_interface c) (prepare_global_env p) ctx_st1' t2 prog_st2 ->
-      ~ same_turn (prog_interface c) ctx_st1' prog_st2 ->
-      mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st2 t3 ips'' ->
-      (* second side *)
-      st_starN c (prog_interface p) (prepare_global_env c)
-               n1' prog_st1 t1' prog_st1' ->
-      PS.step c (prog_interface p) (prepare_global_env c) prog_st1' t2' ctx_st2 ->
-      ~ same_turn (prog_interface p) prog_st1' ctx_st2 ->
-      mt_starN c (prog_interface p) (prepare_global_env c) n2' ctx_st2 t3' ips' ->
-      (* same steps and same trace *)
-      t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'.
-  Proof.
-    intros s1' s2' s3 s1 s2
-           s3' s4' s4 n1 n1' n3 n3' t1 t1' t2 t2' t3 t3'
-           Hpc_s1 Hcc_s1' Hmerge
-           Hst_starN12 Hstep23 Hturn23 Hmt_starN34
-           Hst_starN12' Hstep23' Hturn23' Hmt_starN34'.
-  Admitted.
+  (* (* RB: XXX: See [same_trace_and_steps] above. *) *)
+  (* Lemma same_trace_and_steps': *)
+  (*   forall prog_st1 prog_st1' prog_st2 ctx_st1 ctx_st1' *)
+  (*          ctx_st2 ips' ips'' n1 n1' n2 n2' t1 t1' t2 t2' t3 t3', *)
+  (*     PS.is_context_component ctx_st1 (prog_interface c) -> *)
+  (*     PS.is_program_component prog_st1 (prog_interface p) -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) *)
+  (*                         ctx_st1 prog_st1 -> *)
+  (*     (* first side *) *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) *)
+  (*              n1 ctx_st1 t1 ctx_st1' -> *)
+  (*     PS.step p (prog_interface c) (prepare_global_env p) ctx_st1' t2 prog_st2 -> *)
+  (*     ~ same_turn (prog_interface c) ctx_st1' prog_st2 -> *)
+  (*     mt_starN p (prog_interface c) (prepare_global_env p) n2 prog_st2 t3 ips'' -> *)
+  (*     (* second side *) *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) *)
+  (*              n1' prog_st1 t1' prog_st1' -> *)
+  (*     PS.step c (prog_interface p) (prepare_global_env c) prog_st1' t2' ctx_st2 -> *)
+  (*     ~ same_turn (prog_interface p) prog_st1' ctx_st2 -> *)
+  (*     mt_starN c (prog_interface p) (prepare_global_env c) n2' ctx_st2 t3' ips' -> *)
+  (*     (* same steps and same trace *) *)
+  (*     t1 = t1' /\ t2 = t2' /\ t3 = t3' /\ n1 = n1' /\ n2 = n2'. *)
+  (* Proof. *)
+  (*   intros s1' s2' s3 s1 s2 *)
+  (*          s3' s4' s4 n1 n1' n3 n3' t1 t1' t2 t2' t3 t3' *)
+  (*          Hpc_s1 Hcc_s1' Hmerge *)
+  (*          Hst_starN12 Hstep23 Hturn23 Hmt_starN34 *)
+  (*          Hst_starN12' Hstep23' Hturn23' Hmt_starN34'. *)
+  (* Abort. *)
 
   Theorem threeway_multisem_mt_starN_simulation:
     forall n ips1 ips2 t ips1' ips2',
@@ -3606,189 +4721,272 @@ Section PartialComposition.
     intros n ips1 ips2 t ips1' ips2'.
     intros Hmergeable Hmt_star1 Hmt_star2.
 
+    assert (prog_is_closed_sym := prog_is_closed).
+    rewrite (closed_program_link_sym wf1 wf2 linkability) in prog_is_closed_sym.
+
     generalize dependent ips2.
-    induction Hmt_star1; subst.
+    induction Hmt_star1
+      as [| n1 n2 n3 s1 t1 s2 t2 s3 t3 s4 t
+            Hst_starN12 Hstep23 Hturn23 Hmt_starN34 IHmt_starN14 Hn3 Ht];
+      subst.
 
     (* single segment *)
     - intros ips2 Hmergeable Hmt_star2.
-      inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2];
-        subst.
-      inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
-        inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+      rename H into Hst_starN.
 
-      + (* Contra. *)
-        PS.simplify_turn.
-        apply (PS.domm_partition Hsame_ifaces Hcomes_from) in Hpc2.
-        rewrite Hpc2 in Hpc1.
-        discriminate.
+      destruct
+        (StarNSim.st_starN_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hst_starN Hmergeable)
+        as [ips2'' [Hst_starN2 Hmergeable']].
+      (* If ips2 takes n steps to get to ips2'' in one turn, and to ips2' in
+         possibly several, clearly they coincide. *)
+      assert (Hst_starN2' := Hst_starN2).
+      apply mt_starN_if_st_starN in Hst_starN2'.
+      pose proof StateDet.state_determinism_mt_starN
+           wf2 wf1
+           (linkable_sym linkability) (linkable_mains_sym main_linkability)
+           prog_is_closed_sym (mergeable_interfaces_sym _ _ mergeable_interfaces)
+           Hmt_star2 Hst_starN2'
+        as Heq.
+      subst ips2''.
 
-      (* the program has control in the first state of the first sequence *)
-      + inversion Hmt_star2; subst.
+      exact (threeway_multisem_st_starN_simulation Hmergeable Hst_starN Hst_starN2).
 
-        (* single segment with the same trace *)
-        * eapply threeway_multisem_st_starN_simulation; eauto.
+      (* inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2]; *)
+      (*   subst. *)
+      (* inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst; *)
+      (*   inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst. *)
 
-        (* segment + change of control + mt_star *)
-        (* contradiction *)
-        (* this case cannot happen since t2 is an event that changes
-           control and it appears in the st_star segment *)
-        * exfalso.
-          eapply st_starN_with_turn_change_impossible_1; eauto.
+      (* + (* Contra. *) *)
+      (*   PS.simplify_turn. *)
+      (*   apply (PS.domm_partition Hsame_ifaces Hcomes_from) in Hpc2. *)
+      (*   rewrite Hpc2 in Hpc1. *)
+      (*   discriminate. *)
 
-      (* the context has control in the first state of the first sequence *)
-      + inversion Hmt_star2; subst.
+      (* (* the program has control in the first state of the first sequence *) *)
+      (* + inversion Hmt_star2; subst. *)
 
-        (* single segment with the same trace *)
-        * eapply threeway_multisem_st_starN_simulation; eauto.
+      (*   (* single segment with the same trace *) *)
+      (*   * eapply threeway_multisem_st_starN_simulation; eauto. *)
 
-        (* segment + change of control + mt_star *)
-        (* contradiction *)
-        (* this case cannot happen since t2 is an event that changes
-           control and it appears in the st_star segment *)
-        * exfalso.
-          eapply st_starN_with_turn_change_impossible_2; eauto.
+      (*   (* segment + change of control + mt_star *) *)
+      (*   (* contradiction *) *)
+      (*   (* this case cannot happen since t2 is an event that changes *)
+      (*      control and it appears in the st_star segment *) *)
+      (*   * exfalso. *)
+      (*     eapply st_starN_with_turn_change_impossible_1; eauto. *)
 
-      + (* Contra. *)
-        PS.simplify_turn.
-        apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2.
-        rewrite Hcc1 in Hcc2.
-        discriminate.
+      (* (* the context has control in the first state of the first sequence *) *)
+      (* + inversion Hmt_star2; subst. *)
+
+      (*   (* single segment with the same trace *) *)
+      (*   * eapply threeway_multisem_st_starN_simulation; eauto. *)
+
+      (*   (* segment + change of control + mt_star *) *)
+      (*   (* contradiction *) *)
+      (*   (* this case cannot happen since t2 is an event that changes *)
+      (*      control and it appears in the st_star segment *) *)
+      (*   * exfalso. *)
+      (*     eapply st_starN_with_turn_change_impossible_2; eauto. *)
+
+      (* + (* Contra. *) *)
+      (*   PS.simplify_turn. *)
+      (*   apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2. *)
+      (*   rewrite Hcc1 in Hcc2. *)
+      (*   discriminate. *)
 
     (* segment + change of control + mt_star *)
-    - intros ips2 Hmergeable Hmt_star2.
-      inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2];
-        subst.
-      inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst;
-        inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst.
+    - rename ips2' into s4'.
+      intros s1' Hmergeable1 Hmt_starN14'.
 
-      + (* Contra. *)
-        PS.simplify_turn.
-        apply (PS.domm_partition Hsame_ifaces Hcomes_from) in Hpc2.
-        rewrite Hpc2 in Hpc1.
-        discriminate.
+      destruct
+        (StarNSim.st_starN_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hst_starN12 Hmergeable1)
+        as [s2' [Hst_starN12' Hmergeable2]].
+      destruct
+        (threeway_multisem_st_starN_simulation
+           Hmergeable1 Hst_starN12 Hst_starN12')
+        as [HstarN12 _].
 
-      (* the program has control in the first state of the first sequence *)
-      + inversion Hmt_star2; subst.
+      destruct
+        (StarNSim.control_change_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hstep23 Hturn23 Hmergeable2)
+        as [s3' [Hstep23' [Hturn23' Hmergeable3]]].
+      (* destruct *)
+        (* (threeway_multisem_control_change *)
+           (* Hmergeable2 Hstep23 Hstep23' Hturn23 Hturn23') *)
+        (* as [HstarN23 _]. *)
 
-        (* single segment with the same trace *)
-        (* contradiction *)
-        (* this case cannot happen since t2 is an event that changes
-           control and it appears in the st_star segment *)
-        * exfalso.
-          eapply st_starN_with_turn_change_impossible_3; eauto.
+      destruct
+        (StarNSim.mt_starN_simulation
+           wf1 wf2 linkability main_linkability prog_is_closed mergeable_interfaces
+           Hmt_starN34 Hmergeable3)
+        as [s4'' [Hmt_starN34' Hmergeable4]].
+      pose proof (mt_starN_control_change
+                    Hst_starN12' Hstep23' Hturn23' Hmt_starN34'
+                    (eq_refl _) (eq_refl _))
+        as Hmt_starN14''.
+      pose proof StateDet.state_determinism_mt_starN
+           wf2 wf1
+           (linkable_sym linkability) (linkable_mains_sym main_linkability)
+           prog_is_closed_sym (mergeable_interfaces_sym _ _ mergeable_interfaces)
+           Hmt_starN14' Hmt_starN14''
+        as Heq.
+      subst s4''.
 
-        (* segment + change of control + mt_star *)
-        * destruct (same_trace_and_steps
-                      Hpc1 Hcc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5)
-            as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
-          (* simulate the first segment (trace t0) *)
+      specialize (IHmt_starN14 s3' Hmergeable3 Hmt_starN34').
+      destruct IHmt_starN14 as [HstarN34 _].
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H2)
-            as [Hfirst_segment Hmergeable'].
+      split.
+      + eapply starN_trans
+          with (n1 := n1) (t1 := t1) (s2 := (s2, s2'))
+               (n2 := 1 + n2) (t2 := t2 ** t3).
+        * assumption.
+        * eapply starN_step with (t1 := t2) (s' := (s3, s3')) (t2 := t3).
+          -- constructor; assumption.
+          -- assumption.
+          -- reflexivity.
+        * omega.
+        * reflexivity.
+      + assumption.
 
-          (* build the step that changes control (trace t4) *)
+    (* - intros ips2 Hmergeable Hmt_star2. *)
+    (*   inversion Hmergeable as [ics ? ? Hsame_ifaces Hcomes_from Hpartial1 Hpartial2]; *)
+    (*     subst. *)
+    (*   inversion Hpartial1 as [? ? ? ? ? ? Hpc1 | ? ? ? ? ? ? Hcc1]; subst; *)
+    (*     inversion Hpartial2 as [? ? ? ? ? ? Hpc2 | ? ? ? ? ? ? Hcc2]; subst. *)
 
-          assert (MultiSem.step p c (prepare_global_env prog) (ips', ips'0) t4 (ips'', ips''0))
-            as Hmultistep. {
-            constructor; auto.
-          }
+    (*   + (* Contra. *) *)
+    (*     PS.simplify_turn. *)
+    (*     apply (PS.domm_partition Hsame_ifaces Hcomes_from) in Hpc2. *)
+    (*     rewrite Hpc2 in Hpc1. *)
+    (*     discriminate. *)
 
-          assert (MultiSem.multi_match p c
-                                       (ips', ips'0) (PS.merge_partial_states ips' ips'0))
-            as Hmultimatch. {
-            constructor; auto.
-          }
+    (*   (* the program has control in the first state of the first sequence *) *)
+    (*   + inversion Hmt_star2; subst. *)
 
-          (* use the multisem simulation to show that the states after the step are still
-             mergeable *)
-          destruct (MultiSem.lockstep_simulation
-                      wf1 wf2 main_linkability linkability mergeable_interfaces
-                      Hmultistep Hmultimatch)
-            as [merged_state' [Hmiddle_step Hmergeable'']].
-          inversion Hmergeable''; subst.
+    (*     (* single segment with the same trace *) *)
+    (*     (* contradiction *) *)
+    (*     (* this case cannot happen since t2 is an event that changes *)
+    (*        control and it appears in the st_star segment *) *)
+    (*     * exfalso. *)
+    (*       eapply st_starN_with_turn_change_impossible_3; eauto. *)
 
-          (* simulate the rest of the sequence (trace t5) *)
+    (*     (* segment + change of control + mt_star *) *)
+    (*     * destruct (same_trace_and_steps *)
+    (*                   Hpc1 Hcc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5) *)
+    (*         as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst. *)
+    (*       (* simulate the first segment (trace t0) *) *)
 
-          destruct (IHHmt_star1 ips''0 H11 H5)
-            as [Hlast_star Hmergeable'''].
+    (*       destruct (threeway_multisem_st_starN_simulation Hmergeable H H2) *)
+    (*         as [Hfirst_segment Hmergeable']. *)
 
-          (* compose first segment + step that changes control + last star *)
+    (*       (* build the step that changes control (trace t4) *) *)
 
-          split.
-          ** eapply starN_trans.
-             *** eapply starN_right.
-                 **** apply Hfirst_segment.
-                 **** apply Hmultistep.
-                 **** reflexivity.
-             *** apply Hlast_star.
-             *** reflexivity.
-             *** apply app_assoc.
-          ** assumption.
+    (*       assert (MultiSem.step p c (prepare_global_env prog) (ips', ips'0) t4 (ips'', ips''0)) *)
+    (*         as Hmultistep. { *)
+    (*         constructor; auto. *)
+    (*       } *)
 
-      (* the context has control in the first state of the first sequence *)
-      + inversion Hmt_star2; subst.
+    (*       assert (MultiSem.multi_match p c *)
+    (*                                    (ips', ips'0) (PS.merge_partial_states ips' ips'0)) *)
+    (*         as Hmultimatch. { *)
+    (*         constructor; auto. *)
+    (*       } *)
 
-        (* single segment with the same trace *)
-        (* contradiction *)
-        (* this case cannot happen since t2 is an event that changes
-           control and it appears in the st_star segment *)
-        * exfalso.
-          eapply st_starN_with_turn_change_impossible_1'; eauto.
+    (*       (* use the multisem simulation to show that the states after the step are still *)
+    (*          mergeable *) *)
+    (*       destruct (MultiSem.lockstep_simulation *)
+    (*                   wf1 wf2 main_linkability linkability mergeable_interfaces *)
+    (*                   Hmultistep Hmultimatch) *)
+    (*         as [merged_state' [Hmiddle_step Hmergeable'']]. *)
+    (*       inversion Hmergeable''; subst. *)
 
-        (* segment + change of control + mt_star *)
-        * destruct (same_trace_and_steps'
-                      Hcc1 Hpc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5)
-            as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst.
+    (*       (* simulate the rest of the sequence (trace t5) *) *)
 
-          (* simulate the first segment (trace t0) *)
+    (*       destruct (IHHmt_star1 ips''0 H11 H5) *)
+    (*         as [Hlast_star Hmergeable''']. *)
 
-          destruct (threeway_multisem_st_starN_simulation Hmergeable H H2)
-            as [Hfirst_segment Hmergeable'].
+    (*       (* compose first segment + step that changes control + last star *) *)
 
-          (* build the step that changes control (trace t4) *)
+    (*       split. *)
+    (*       ** eapply starN_trans. *)
+    (*          *** eapply starN_right. *)
+    (*              **** apply Hfirst_segment. *)
+    (*              **** apply Hmultistep. *)
+    (*              **** reflexivity. *)
+    (*          *** apply Hlast_star. *)
+    (*          *** reflexivity. *)
+    (*          *** apply app_assoc. *)
+    (*       ** assumption. *)
 
-          assert (MultiSem.step p c (prepare_global_env prog) (ips', ips'0) t4 (ips'', ips''0))
-            as Hmultistep. {
-            constructor; auto.
-          }
+    (*   (* the context has control in the first state of the first sequence *) *)
+    (*   + inversion Hmt_star2; subst. *)
 
-          assert (MultiSem.multi_match p c
-                                       (ips', ips'0) (PS.merge_partial_states ips' ips'0))
-            as Hmultimatch. {
-            constructor; auto.
-          }
+    (*     (* single segment with the same trace *) *)
+    (*     (* contradiction *) *)
+    (*     (* this case cannot happen since t2 is an event that changes *)
+    (*        control and it appears in the st_star segment *) *)
+    (*     * exfalso. *)
+    (*       eapply st_starN_with_turn_change_impossible_1'; eauto. *)
 
-          (* use the multisem simulation to show that the states after the step are still
-             mergeable *)
-          destruct (MultiSem.lockstep_simulation
-                      wf1 wf2 main_linkability linkability mergeable_interfaces
-                      Hmultistep Hmultimatch)
-            as [merged_state' [Hmiddle_step Hmergeable'']].
-          inversion Hmergeable''; subst.
+    (*     (* segment + change of control + mt_star *) *)
+    (*     * destruct (same_trace_and_steps' *)
+    (*                   Hcc1 Hpc2 Hmergeable H H0 H1 Hmt_star1 H2 H3 H4 H5) *)
+    (*         as [Ht1 [Ht2 [Ht3 [Hn1 Hn2]]]]. subst. *)
 
-          (* simulate the rest of the sequence (trace t5) *)
+    (*       (* simulate the first segment (trace t0) *) *)
 
-          destruct (IHHmt_star1 ips''0 H11 H5)
-            as [Hlast_star Hmergeable'''].
+    (*       destruct (threeway_multisem_st_starN_simulation Hmergeable H H2) *)
+    (*         as [Hfirst_segment Hmergeable']. *)
 
-          (* compose first segment + step that changes control + last star *)
+    (*       (* build the step that changes control (trace t4) *) *)
 
-          split.
-          ** eapply starN_trans.
-             *** eapply starN_right.
-                 **** apply Hfirst_segment.
-                 **** apply Hmultistep.
-                 **** reflexivity.
-             *** apply Hlast_star.
-             *** reflexivity.
-             *** apply app_assoc.
-          ** assumption.
+    (*       assert (MultiSem.step p c (prepare_global_env prog) (ips', ips'0) t4 (ips'', ips''0)) *)
+    (*         as Hmultistep. { *)
+    (*         constructor; auto. *)
+    (*       } *)
 
-      + (* Contra. *)
-        PS.simplify_turn.
-        apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2.
-        rewrite Hcc1 in Hcc2.
-        discriminate.
+    (*       assert (MultiSem.multi_match p c *)
+    (*                                    (ips', ips'0) (PS.merge_partial_states ips' ips'0)) *)
+    (*         as Hmultimatch. { *)
+    (*         constructor; auto. *)
+    (*       } *)
+
+    (*       (* use the multisem simulation to show that the states after the step are still *)
+    (*          mergeable *) *)
+    (*       destruct (MultiSem.lockstep_simulation *)
+    (*                   wf1 wf2 main_linkability linkability mergeable_interfaces *)
+    (*                   Hmultistep Hmultimatch) *)
+    (*         as [merged_state' [Hmiddle_step Hmergeable'']]. *)
+    (*       inversion Hmergeable''; subst. *)
+
+    (*       (* simulate the rest of the sequence (trace t5) *) *)
+
+    (*       destruct (IHHmt_star1 ips''0 H11 H5) *)
+    (*         as [Hlast_star Hmergeable''']. *)
+
+    (*       (* compose first segment + step that changes control + last star *) *)
+
+    (*       split. *)
+    (*       ** eapply starN_trans. *)
+    (*          *** eapply starN_right. *)
+    (*              **** apply Hfirst_segment. *)
+    (*              **** apply Hmultistep. *)
+    (*              **** reflexivity. *)
+    (*          *** apply Hlast_star. *)
+    (*          *** reflexivity. *)
+    (*          *** apply app_assoc. *)
+    (*       ** assumption. *)
+
+    (*   + (* Contra. *) *)
+    (*     PS.simplify_turn. *)
+    (*     apply (PS.domm_partition_notin Hsame_ifaces) in Hcc2. *)
+    (*     rewrite Hcc1 in Hcc2. *)
+    (*     discriminate. *)
 
   Qed.
 
@@ -3807,79 +5005,192 @@ Section PartialComposition.
     - apply starN_mt_starN_equivalence; auto.
   Qed.
 
+  Theorem threeway_multisem_star_simulation:
+    forall ips1 ips2 t ips1' ips2',
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1 ips2 ->
+      star (PS.step p (prog_interface c)) (prepare_global_env p) ips1 t ips1' ->
+      star (PS.step c (prog_interface p)) (prepare_global_env c) ips2 t ips2' ->
+      star (MultiSem.step p c) (prepare_global_env prog) (ips1, ips2) t (ips1', ips2') /\
+      PS.mergeable_states (prog_interface c) (prog_interface p) ips1' ips2'.
+  Admitted.
+
   Lemma initial_states_mergeability:
     forall s1 s2,
       initial_state (PS.sem p (prog_interface c)) s1 ->
       initial_state (PS.sem c (prog_interface p)) s2 ->
       PS.mergeable_states (prog_interface c) (prog_interface p) s1 s2.
   Proof.
+    simpl.
     intros s1 s2 Hs1_init Hs2_init.
-    inversion Hs1_init as [? ? ? ? ? ? ? Hmains1]; subst;
-      inversion Hs2_init as [? ? ? ? ? ? ? Hmains2]; subst.
-    inversion H3; subst; inversion H9; subst;
-      inversion H4; subst; inversion H10; subst; simpl in *.
 
-    (* contra, pc is neither in (prog_interface c), nor in (prog_interface p) *)
-    - PS.simplify_turn.
-      (* show and use the fact that the main has an entrypoint, therefore
-         (Pointer.component pc) must be in either (prog_interface c) or (prog_interface p) *)
-      (* here it's probably where we need well-formed programs *)
-      admit.
+    inversion Hs1_init
+      as [p' ics1 ? Hiface1 _ Hwf1' Hlinkable1 Hmains1 Hpartial1 HCSini1];
+      subst.
+    inversion Hs2_init
+      as [c' ics2 ? Hiface2 _ Hwf2' Hlinkable2 Hmains2 Hpartial2 HCSini2];
+      subst.
+    unfold CS.initial_state in HCSini1, HCSini2.
 
-    - econstructor.
-      + apply mergeable_interfaces_sym; assumption.
-      + admit.
-      + constructor.
-        * assumption.
-        * admit.
-        * admit.
-      + admit.
-(*
-      + inversion linkability.
-        (* RB: With the changes to [linkability], the case analysis on programs
-           does not follow naturally from its inversion. The admits on each
-           resulting proof obligation are replaced by a single admit. Note that
-           automatic hypothesis names have not been corrected as in the rest of
-           the proof following changes to the notion of linkability to be based
-           on interfaces, since they currently do not make sense.
-           unfold linkable_mains in H21.
-           destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
-           try (rewrite H22 in H25; inversion H25; reflexivity).
-           * admit.
-           * admit.
-            * admit.
-            * admit.
-            *) admit.
-          + admit.
-          + unfold PS.mergeable_memories. admit.
-*)
+    assert (prog_is_closed_sym := prog_is_closed);
+      rewrite (closed_program_link_sym wf1 wf2 linkability) in prog_is_closed_sym.
+    assert (Hmatching1 : matching_mains c p')
+      by now eapply interface_implies_matching_mains.
+    assert (Hmatching2 : matching_mains p c')
+      by now eapply interface_implies_matching_mains.
+    rewrite (CS.initial_machine_state_after_linking
+               _ _ wf1 Hwf1' Hlinkable1
+               (interface_preserves_closedness_r
+                  wf1 Hwf1' (eq_sym Hiface1) linkability prog_is_closed
+                  main_linkability Hmatching1))
+      in HCSini1.
+    rewrite (CS.initial_machine_state_after_linking
+               _ _ wf2 Hwf2' Hlinkable2
+               (interface_preserves_closedness_r
+                  wf2 Hwf2' (eq_sym Hiface2) (linkable_sym linkability)
+                  prog_is_closed_sym (linkable_mains_sym main_linkability)
+                  Hmatching2))
+      in HCSini2.
+    subst ics1 ics2.
 
-    - econstructor.
-      + apply mergeable_interfaces_sym; assumption.
-      + admit.
-      + admit.
-      + admit.
-(*
-          + inversion linkability.
-            (* RB: Same as above.
-            unfold linkable_mains in H21.
-            destruct (prog_main p); destruct (prog_main c); subst; simpl in *;
-              try (rewrite H22 in H25; inversion H25; reflexivity).
-            * admit.
-            * admit.
-            * admit.
-            * admit.
-            *) admit.
-          + admit.
-          + unfold PS.mergeable_memories.
-            (* show use the fact that the initial memory contains just the memories
-               for the components present in the program, therefore they are disjoint *)
-            admit.
-*)
+    eapply PS.mergeable_states_intro with
+        (ics := CS.initial_machine_state (program_link p c)).
+    - now apply mergeable_interfaces_sym.
+    - destruct (cprog_main_existence prog_is_closed)
+        as [main [main_procs [Hmain [Hmain_procs Hdomm]]]].
+      exists (program_link p c), main, (CS.initial_machine_state (program_link p c)), E0.
+      split; [| split; [| split; [| split]]].
+      + apply linking_well_formedness; assumption.
+      + assumption.
+      + inversion linkability; now rewrite <- unionmC.
+      + reflexivity.
+      + now apply star_refl.
+    - rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 wf2 linkability prog_is_closed).
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+        PS.simplify_turn.
+      + exfalso. apply (@domm_partition_program_link_in_neither p c); assumption.
+      + assert (Hmainc : CS.prog_main_block c = 0)
+          by now rewrite CS.prog_main_block_no_main.
+        (* RB: NOTE: The lemma may be generalized by adding an equality on
+           interfaces and keeping the two instances distinct in the statement. *)
+        assert (Hmainp' : CS.prog_main_block p' = 0)
+          by (rewrite <- Hiface1 in Hcomp1;
+              now rewrite CS.prog_main_block_no_main).
+        rewrite Hmainc Hmainp'.
+        constructor.
+        * exact Hcomp1.
+        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * reflexivity.
+      + assert (Hmainp : CS.prog_main_block p = 0)
+          by now rewrite CS.prog_main_block_no_main.
+        rewrite Hmainp.
+        constructor.
+        * exact Hcomp1.
+        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * reflexivity.
+      + exfalso. eapply PS.domm_partition_in_both; eassumption.
+    - (* Symmetric case. *)
+      rewrite (CS.initial_machine_state_after_linking
+                 _ _ wf1 wf2 linkability prog_is_closed).
+      inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+        inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+        PS.simplify_turn.
+      + exfalso. apply (@domm_partition_program_link_in_neither p c); assumption.
+      + assert (Hmainc : CS.prog_main_block c = 0)
+          by now rewrite CS.prog_main_block_no_main.
+        rewrite Hmainc.
+        constructor.
+        * exact Hcomp2.
+        * inversion linkability as [_ Hdisjoint].
+          rewrite <- !domm_prepare_procedures_memory in Hdisjoint.
+          rewrite (unionmC Hdisjoint).
+          apply to_partial_memory_merge_prepare_procedures_memory_left; first assumption.
+          apply linkable_sym; assumption.
+        * reflexivity.
+      + assert (Hmainp : CS.prog_main_block p = 0)
+          by now rewrite CS.prog_main_block_no_main.
+        assert (Hmainc' : CS.prog_main_block c' = 0)
+          by (rewrite <- Hiface2 in Hcomp2;
+              now rewrite CS.prog_main_block_no_main).
+        rewrite Hmainp Hmainc' Nat.add_0_r.
+        constructor.
+        * exact Hcomp2.
+        * inversion linkability as [_ Hdisjoint].
+          rewrite <- !domm_prepare_procedures_memory in Hdisjoint.
+          rewrite (unionmC Hdisjoint).
+          apply to_partial_memory_merge_prepare_procedures_memory_left; first assumption.
+          apply linkable_sym; assumption.
+        * reflexivity.
+      + exfalso. eapply PS.domm_partition_in_both; eassumption.
 
-    (* contra, pc is both in (prog_interface c) and in (prog_interface p) *)
-    - admit.
-  Admitted.
+(*     intros s1 s2 Hs1_init Hs2_init. *)
+(*     inversion Hs1_init as [? ? ? ? ? ? ? Hmains1]; subst; *)
+(*       inversion Hs2_init as [? ? ? ? ? ? ? Hmains2]; subst. *)
+(*     inversion H3; subst; inversion H9; subst; *)
+(*       inversion H4; subst; inversion H10; subst; simpl in *. *)
+
+(*     (* contra, pc is neither in (prog_interface c), nor in (prog_interface p) *) *)
+(*     - PS.simplify_turn. *)
+(*       (* show and use the fact that the main has an entrypoint, therefore *)
+(*          (Pointer.component pc) must be in either (prog_interface c) or (prog_interface p) *) *)
+(*       (* here it's probably where we need well-formed programs *) *)
+(*       admit. *)
+
+(*     - econstructor. *)
+(*       + apply mergeable_interfaces_sym; assumption. *)
+(*       + admit. *)
+(*       + constructor. *)
+(*         * assumption. *)
+(*         * admit. *)
+(*         * admit. *)
+(*       + admit. *)
+(* (* *)
+(*       + inversion linkability. *)
+(*         (* RB: With the changes to [linkability], the case analysis on programs *)
+(*            does not follow naturally from its inversion. The admits on each *)
+(*            resulting proof obligation are replaced by a single admit. Note that *)
+(*            automatic hypothesis names have not been corrected as in the rest of *)
+(*            the proof following changes to the notion of linkability to be based *)
+(*            on interfaces, since they currently do not make sense. *)
+(*            unfold linkable_mains in H21. *)
+(*            destruct (prog_main p); destruct (prog_main c); subst; simpl in *; *)
+(*            try (rewrite H22 in H25; inversion H25; reflexivity). *)
+(*            * admit. *)
+(*            * admit. *)
+(*             * admit. *)
+(*             * admit. *)
+(*             *) admit. *)
+(*           + admit. *)
+(*           + unfold PS.mergeable_memories. admit. *)
+(* *) *)
+
+(*     - econstructor. *)
+(*       + apply mergeable_interfaces_sym; assumption. *)
+(*       + admit. *)
+(*       + admit. *)
+(*       + admit. *)
+(* (* *)
+(*           + inversion linkability. *)
+(*             (* RB: Same as above. *)
+(*             unfold linkable_mains in H21. *)
+(*             destruct (prog_main p); destruct (prog_main c); subst; simpl in *; *)
+(*               try (rewrite H22 in H25; inversion H25; reflexivity). *)
+(*             * admit. *)
+(*             * admit. *)
+(*             * admit. *)
+(*             * admit. *)
+(*             *) admit. *)
+(*           + admit. *)
+(*           + unfold PS.mergeable_memories. *)
+(*             (* show use the fact that the initial memory contains just the memories *)
+(*                for the components present in the program, therefore they are disjoint *) *)
+(*             admit. *)
+(* *) *)
+
+(*     (* contra, pc is both in (prog_interface c) and in (prog_interface p) *) *)
+(*     - admit. *)
+  Qed.
 
   Lemma termination_with_same_number_of_steps:
     forall t,
@@ -3893,7 +5204,7 @@ Section PartialComposition.
       starN (PS.step c (prog_interface p)) (prepare_global_env c) n s2 t s2' /\
       final_state (PS.sem c (prog_interface p)) s2'.
   Proof.
-  Admitted.
+  Admitted. (* RB: Only if needed by partial_programs_composition_prefix. *)
 
   Corollary partial_programs_composition:
     forall t,
@@ -3918,12 +5229,154 @@ Section PartialComposition.
     + simpl. constructor.
   Qed.
 
+  (* RB: TODO: Move to PS when done. Note the [*_after_linking] convention used
+     for similar results in that module as opposed to [*_composition_*] being
+     used here (and various forms of [*merge*]). It would be desirable to have a
+     look at these and harmonize as needed. *)
+  Lemma initial_state_merge_after_linking :
+    forall s1 s2,
+      PS.initial_state p (prog_interface c) s1 ->
+      PS.initial_state c (prog_interface p) s2 ->
+      PS.initial_state prog emptym (PS.merge_partial_states s1 s2).
+  Proof.
+    intros s1 s2 Hini1 Hini2.
+    apply PS.initial_state_intro
+      with (p' := empty_prog)
+           (ics := PS.unpartialize (PS.merge_partial_states s1 s2)).
+    - reflexivity.
+    - now apply linking_well_formedness.
+    - exact empty_prog_is_well_formed.
+    - apply linkable_emptym.
+      now inversion linkability.
+    - now apply linkable_mains_empty_prog.
+    - apply MultiSem.mergeable_states_partial_state_emptym
+        with (p := p) (c := c);
+        try assumption.
+      now apply MultiSem.initial_state_split.
+    - rewrite linking_empty_program.
+      now apply MultiSem.merged_initial_states.
+  Qed.
+
+  (* Equivalence st_starN n1, n2 on program and context *)
+  (* Lemma partial_programs_composition_st_starN : *)
+  (*   forall s1 s1' s2 s2' n1 n2 t, *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' -> *)
+  (*     st_starN p (prog_interface c) (prepare_global_env p) n1 s1 t s2 -> *)
+  (*     st_starN c (prog_interface p) (prepare_global_env c) n2 s1' t s2' -> *)
+  (*     PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'. *)
+  (* Abort. *)
+
+  (* RB: TODO: Add hypotheses and/or encapsulate in own section, or relocate to
+     PS: what is a better match?
+     NOTE: For some of these results, I wonder whether the use of "fancy stars"
+     is substantially simpler than regular stars, and whether some of the results
+     are too strong to be used effectively in all situations where we would need
+     their assistance. In particular, the focus on two executions, in the program
+     and in the context, taking place in the same number of steps seems too
+     strong. *)
+  (* Lemma partial_programs_composition_star : *)
+  (*   forall sini1 sini2 t s1 s2, *)
+  (*     PS.initial_state p (prog_interface c) sini1 -> *)
+  (*     PS.initial_state c (prog_interface p) sini2 -> *)
+  (*     star (PS.step p (prog_interface c)) (prepare_global_env p) sini1 t s1 -> *)
+  (*     star (PS.step c (prog_interface p)) (prepare_global_env c) sini2 t s2 -> *)
+  (*   exists sini s, *)
+  (*     PS.initial_state prog emptym sini /\ *)
+  (*     star (PS.step prog emptym) (prepare_global_env prog) sini t s.     *)
+  (* Abort. *)
+
   Corollary partial_programs_composition_prefix :
     forall m,
       does_prefix (PS.sem p (prog_interface c)) m ->
       does_prefix (PS.sem c (prog_interface p)) m ->
       does_prefix (PS.sem prog emptym) m.
-  Admitted.
+  Proof.
+    unfold does_prefix.
+    intros m [b1 [Hbeh1 Hprefix1]] [b2 [Hbeh2 Hprefix2]].
+    inversion Hbeh1 as [s1 beh1 Hini1 Hst_beh1 | Hini1]; subst;
+      last now destruct (PS.not_initial_state_contra
+                           wf1 wf2 linkability main_linkability Hini1).
+    inversion Hbeh2 as [s2 beh2 Hini2 Hst_beh2 | Hini2]; subst;
+      last now destruct (PS.not_initial_state_contra
+                           wf2 wf1
+                           (linkable_sym linkability)
+                           (linkable_mains_sym main_linkability)
+                           Hini2).
+    destruct m as [tm | tm | tm].
+    - destruct b1 as [t1 | ? | ? | ?]; try contradiction.
+      destruct b2 as [t2 | ? | ? | ?]; try contradiction.
+      simpl in Hprefix1, Hprefix2. subst t1 t2.
+      inversion Hst_beh1 as [? s1' Hstar1 Hfinal1 | | |]; subst.
+      inversion Hst_beh2 as [? s2' Hstar2 Hfinal2 | | |]; subst.
+      exists (Terminates tm). split; last reflexivity.
+      pose proof initial_states_mergeability Hini1 Hini2 as Hmerge.
+      destruct (threeway_multisem_star_simulation Hmerge Hstar1 Hstar2)
+        as [Hstar12 Hmerge'].
+      apply MultiSem.multi_semantics_implies_partial_semantics; try assumption.
+      apply program_runs with (s := (s1, s2)); first easy.
+      apply state_terminates with (s' := (s1', s2')); easy.
+    - destruct b1 as [? | ? | ? | t1]; try contradiction.
+      destruct b2 as [? | ? | ? | t2]; try contradiction.
+      simpl in Hprefix1, Hprefix2. subst t1 t2.
+      inversion Hst_beh1 as [| | | ? s1' Hstar1 Hstep1 Hfinal1]; subst.
+      inversion Hst_beh2 as [| | | ? s2' Hstar2 Hstep2 Hfinal2]; subst.
+      exists (Goes_wrong tm). split; last reflexivity.
+      pose proof initial_states_mergeability Hini1 Hini2 as Hmerge.
+      destruct (threeway_multisem_star_simulation Hmerge Hstar1 Hstar2)
+        as [Hstar12 Hmerge'].
+      apply MultiSem.multi_semantics_implies_partial_semantics; try assumption.
+      apply program_runs with (s := (s1, s2)); first easy.
+      apply state_goes_wrong with (s' := (s1', s2')); first easy.
+      + intros t s Hcontra.
+        inversion Hcontra as [? ? s1'' ? s2'' Hstep1' Hstep2']; subst.
+        apply (Hstep1 t s1''). assumption.
+      + intros Hcontra.
+        inversion Hcontra as [? ? Hfinal1' Hfinal2']; subst. contradiction.
+    - (* Here we talk about the stars associated to the behaviors, without
+         worrying now about connecting them to the existing initial states.
+         RB: TODO: Remove asserts, phrase in terms of the instances of
+         behavior_prefix_star directly. *)
+      assert
+        (exists s s',
+            PS.initial_state p (prog_interface c) s /\
+            star (PS.step p (prog_interface c)) (prepare_global_env p) s tm s')
+        as [s1' [s1'' [Hini1' Hstar1]]].
+      {
+        destruct
+          (behavior_prefix_star
+             wf1 wf2 main_linkability linkability prog_is_closed
+             Hbeh1 Hprefix1)
+          as [s [s' [Hini Hstar]]].
+        now exists s, s'.
+      }
+      assert
+        (exists s s',
+            PS.initial_state c (prog_interface p) s /\
+            star (PS.step c (prog_interface p)) (prepare_global_env c) s tm s')
+        as [s2' [s2'' [Hini2' Hstar2]]].
+      {
+        assert (prog_is_closed_sym := prog_is_closed).
+        rewrite (closed_program_link_sym wf1 wf2 linkability) in prog_is_closed_sym.
+        destruct
+          (behavior_prefix_star
+             wf2 wf1
+             (linkable_mains_sym main_linkability) (linkable_sym linkability)
+             prog_is_closed_sym
+             Hbeh2 Hprefix2)
+          as [s [s' [Hini Hstar]]].
+        now exists s, s'.
+      }
+      pose proof initial_states_mergeability Hini1' Hini2' as Hmerge.
+      destruct (threeway_multisem_star_simulation Hmerge Hstar1 Hstar2)
+        as [Hstar12 Hmerge'].
+      destruct
+        (MultiSem.star_simulation
+           wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
+           Hstar12 (MultiSem.multi_match_intro Hmerge))
+        as [s [Hstar12' Hmulti]].
+      eapply program_behaves_finpref_exists; last now apply Hstar12'.
+      now apply initial_state_merge_after_linking.
+  Qed.
 End PartialComposition.
 
 (*
@@ -3957,7 +5410,7 @@ Section Composition.
   Proof.
     intros t Hbeh1 Hbeh2.
     inversion mergeable_interfaces as [linkability _].
-    eapply partial_semantics_implies_complete_semantics; auto.
+    eapply PS2CS.partial_semantics_implies_complete_semantics; auto.
     - apply linking_well_formedness; auto.
     - apply partial_programs_composition; auto.
   Qed.
@@ -3976,7 +5429,7 @@ Section Composition.
          Hpref1 Hpref2)
       as [beh [Hbeh Hprefix]].
     exists beh. split; auto.
-    - apply partial_semantics_implies_complete_semantics; auto.
+    - apply PS2CS.partial_semantics_implies_complete_semantics; auto.
       + apply linking_well_formedness; auto.
   Qed.
 

@@ -341,3 +341,29 @@ Proof.
     + inversion Hwrongb1 as [Heqt2].
       exists (behavior_app t b4). now rewrite <- behavior_app_assoc.
 Qed.
+
+Lemma behavior_prefix_app_inv : forall t1 t2 b,
+  behavior_prefix (t1 ++ t2) b ->
+  behavior_prefix t1 b.
+Proof.
+  intros t1 t2 ? [b ?]; subst.
+  exists (behavior_app t2 b).
+  rewrite behavior_app_assoc.
+  reflexivity.
+Qed.
+
+Lemma program_behaves_finpref_exists :
+  forall L s t s',
+    initial_state L s ->
+    Star L s t s' ->
+  exists beh,
+    program_behaves L beh /\
+    prefix (FTbc t) beh.
+Proof.
+  intros L s t s' Hini HStar.
+  destruct (state_behaves_exists L s') as [beh_s' Hbeh_s'].
+  pose proof program_runs Hini (state_behaves_app HStar Hbeh_s') as Hbeh.
+  eexists. split.
+  - exact Hbeh.
+  - simpl. exists beh_s'. reflexivity.
+Qed.

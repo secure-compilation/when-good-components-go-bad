@@ -553,7 +553,7 @@ Proof.
   destruct Hb as [b' [Hb' [Hbb' | [t [H1 H2]]]]]; unfold does_prefix.
   - exists b. split; [| tauto]. subst. assumption.
   - exists b'. split. assumption. subst.
-    destruct m as [| ? ?| t']; simpl in Hmb, Hsafem. tauto. tauto.
+    destruct m as [| | t']; simpl in Hmb, Hsafem. tauto. tauto.
     simpl. eapply behavior_prefix_goes_wrong_trans; eassumption.
 Qed.
 

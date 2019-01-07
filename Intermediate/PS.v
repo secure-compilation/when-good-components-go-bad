@@ -535,12 +535,6 @@ Proof.
 by move=> ctx1 ctx2 [[_]]; rewrite fdisjointC=> /fdisjointP.
 Qed.
 
-Inductive mergeable_states_pc_cc: state -> state -> Prop :=
-| mergeable_states_pc_cc_first: forall gps1 mem1 regs1 pc1 C2 gps2 mem2,
-    mergeable_states_pc_cc (PC (gps1, mem1, regs1, pc1)) (CC (C2, gps2, mem2))
-| mergeable_states_pc_cc_second: forall C1 gps1 mem1 gps2 mem2 regs2 pc2,
-    mergeable_states_pc_cc (CC (C1, gps1, mem1)) (PC (gps2, mem2, regs2, pc2)).
-
 (* RB: TODO: Complete assumptions, possibly rephrase in terms of _neither. *)
 Lemma domm_partition_in_both ctx1 ctx2 C :
   mergeable_interfaces ctx1 ctx2 ->
@@ -702,15 +696,6 @@ Proof.
   rewrite fdisjointC. auto.
 Qed.
 
-Lemma mergeable_states_pc_cc_sym s1 s2:
-  mergeable_states_pc_cc s1 s2 ->
-  mergeable_states_pc_cc s2 s1.
-Proof.
-  intros Hmerge.
-  inversion Hmerge; subst;
-    constructor.
-Qed.
-
 (* RB: TODO: Obtain linkability from mergeability. *)
 Lemma mergeable_states_sym:
   forall p c s1 s2,
@@ -867,6 +852,42 @@ Definition merge_partial_states (ips1 ips2: state) : state :=
     end
   end.
 
+(* Composition of mergeable states. *)
+
+(* The following definitions are meant to manipulate pairs of mergeable states
+   piecemeal. If the states are indeed mergeable, no error conditions (treated
+   silently by the definitions, for now) occur. Moreover, they result in stacks
+   and memories "without holes" w.r.t. to the generating states and interfaces,
+   provided that the mergeability assumptions is present. *)
+
+Definition mergeable_states_stack (s s' : state) : stack :=
+  merge_stacks (state_stack s) (state_stack s').
+
+Definition mergeable_states_memory (s s' : state) : Memory.t :=
+  merge_memories (state_memory s) (state_memory s').
+
+Definition mergeable_states_regs (s s' : state) : Register.t :=
+  match s, s' with
+    | PS.PC(_, _, regs, _), PS.CC(_, _, _)
+    | PS.CC(_, _, _), PS.PC(_, _, regs, _) => regs
+    (* The following will not happen if s and s' are mergeable. *)
+    | _, _ => Register.init
+  end.
+
+Definition mergeable_states_pc (s s' : state) : Pointer.t :=
+  match s, s' with
+    | PS.PC(_, _, _, pc), PS.CC(_, _, _)
+    | PS.CC(_, _, _), PS.PC(_, _, _, pc) => pc
+    (* The following will not happen if s and s' are mergeable. *)
+    | _, _ => (Component.main, 0, 0%Z)
+  end.
+
+Definition mergeable_states_state (s s' : state) : state :=
+  PS.PC (mergeable_states_stack s s',
+         mergeable_states_memory s s',
+         mergeable_states_regs s s',
+         mergeable_states_pc s s').
+
 (* transition system *)
 
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
@@ -909,6 +930,43 @@ Inductive step (p: program) (ctx: Program.interface)
       partial_state ctx ics ips ->
       partial_state ctx ics' ips' ->
       step p ctx (prepare_global_env p) ips t ips'.
+
+(* partial semantics *)
+
+Section Semantics.
+  Variable p: program.
+  Variable ctx: Program.interface.
+
+  Hypothesis valid_program:
+    well_formed_program p.
+
+  Hypothesis disjoint_interfaces:
+    fdisjoint (domm (prog_interface p)) (domm ctx).
+
+  Hypothesis merged_interface_is_closed:
+    closed_interface (unionm (prog_interface p) ctx).
+
+  Definition sem :=
+    @Semantics_gen state global_env (step p ctx)
+                   (initial_state p ctx)
+                   (final_state p ctx) (prepare_global_env p).
+
+  Lemma singleton_traces:
+    single_events sem.
+  Proof.
+    unfold single_events.
+    intros s t s' Hstep.
+    (* RB: This generates unnecessarily restrictive conditions. *)
+    (* inversion Hstep as [? ? ? ? ? ? ? ? ? ? ? HCSstep]; subst. *)
+    (* apply CS.singleton_traces in HCSstep. *)
+    (* exact HCSstep. *)
+    inversion Hstep; simpl;
+      match goal with
+      | Hcs_step: CS.step _ _ _ _ |- _ =>
+        apply CS.singleton_traces in Hcs_step
+      end; auto.
+  Qed.
+End Semantics.
 
 Theorem context_epsilon_step_is_silent:
   forall p ctx G ips ips',
@@ -1162,6 +1220,14 @@ Proof.
     easy.
 Qed.
 
+(* we can prove a strong form of state determinism when the program is in control *)
+Lemma state_determinism_program' p ctx G sps t1 t2 sps' :
+  is_program_component sps ctx ->
+  step p ctx G sps t1 sps' ->
+  forall sps'', step p ctx G sps t2 sps'' ->
+                t1 = t2 /\ sps' = sps''.
+Admitted. (* Grade 3. Not hard; requires some additional porting from Source. *)
+
 Lemma state_determinism_program:
   forall p ctx G ips t ips',
     is_program_component ips ctx ->
@@ -1328,26 +1394,45 @@ Proof.
   - eapply state_determinism_context; eassumption.
 Qed.
 
-(* partial semantics *)
+Lemma state_determinism_star_E0 p ctx s s1 s2 :
+  star (PS.step p ctx) (prepare_global_env p) s E0 s1 ->
+  star (PS.step p ctx) (prepare_global_env p) s E0 s2 ->
+  star (PS.step p ctx) (prepare_global_env p) s1 E0 s2 \/
+  star (PS.step p ctx) (prepare_global_env p) s2 E0 s1.
+Proof.
+move=> Hstar1.
+elim/star_E0_ind': s s1 / Hstar1 s2=> [s|s s1 s1' Hstep1 Hstar1 IH] s2; eauto.
+move=> Hstar2; elim/star_E0_ind': s s2 / Hstar2 Hstep1.
+  by move=> s Hstep1; right; apply: star_step; eauto.
+move=> s s2 s2' Hstep2 Hstar2 _ Hstep1; apply: IH.
+suffices -> : s1 = s2 by [].
+by apply: state_determinism Hstep2.
+Qed.
 
-Section Semantics.
-  Variable p: program.
-  Variable ctx: Program.interface.
+Lemma state_determinism_star_same_trace p ctx s t s1 s2 :
+  star (PS.step p ctx) (prepare_global_env p) s t s1 ->
+  star (PS.step p ctx) (prepare_global_env p) s t s2 ->
+  star (PS.step p ctx) (prepare_global_env p) s1 E0 s2 \/
+  star (PS.step p ctx) (prepare_global_env p) s2 E0 s1.
+Proof.
+elim: t s => [|e t IH] s; first exact: state_determinism_star_E0.
+case/(star_cons_inv (@singleton_traces p ctx)) => [s' [s1' [e_01 [e_11 e_t1]]]].
+case/(star_cons_inv (@singleton_traces p ctx)) => [s'_ [s2' [e_02 [e_12]]]].
+have {e_01 e_02} e_s : s' = s'_.
+  have {e_t1 IH} H := state_determinism_star_E0 e_01 e_02.
+  without loss H : s' s'_ s1' s2' e_11 e_12 {H e_01 e_02} / Star (sem p ctx) s' E0 s'_.
+    by case: H; eauto=> H1 H2; apply: esym; eauto.
+  have [in_c|in_p] := boolP (is_context_component s' ctx).
+    symmetry. (* RB: The equality of the following lemma is reversed! *)
+    exact: context_epsilon_star_is_silent in_c H.
+  elim/star_E0_ind: s' s'_ / H in_p e_11 {e_12} => //.
+  move=> s' s'm s'_ Hstep1 _ in_p Hstep2.
+  by have [] := state_determinism_program' in_p Hstep1 Hstep2.
+move: e_s e_12 => <- {s'_} e_12.
+by have {s2' e_12} <- := state_determinism e_11 e_12; eauto.
+Qed.
 
-  Hypothesis valid_program:
-    well_formed_program p.
-
-  Hypothesis disjoint_interfaces:
-    fdisjoint (domm (prog_interface p)) (domm ctx).
-
-  Hypothesis merged_interface_is_closed:
-    closed_interface (unionm (prog_interface p) ctx).
-
-  Definition sem :=
-    @Semantics_gen state global_env (step p ctx)
-                   (initial_state p ctx)
-                   (final_state p ctx) (prepare_global_env p).
-End Semantics.
+(* RB: TODO: Port missing generic results from Source.PS to here. *)
 
 Lemma comes_from_initial_state_step_trans :
   forall p ctx ics ips t ics' ips',
@@ -1357,5 +1442,94 @@ Lemma comes_from_initial_state_step_trans :
     ips' = partialize ics' ctx ->
     CS.comes_from_initial_state ics' (unionm (prog_interface p) ctx).
 Admitted. (* Grade 3. *)
+
+Lemma initial_state_exists :
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
+  exists s,
+    initial_state p (prog_interface c) s.
+Proof.
+  eexists. econstructor; try (reflexivity || assumption).
+  apply partialized_state_is_partial.
+Qed.
+
+Lemma not_initial_state_contra : forall p c,
+  well_formed_program p ->
+  well_formed_program c ->
+  linkable (prog_interface p) (prog_interface c) ->
+  linkable_mains p c ->
+  (forall s, ~ initial_state p (prog_interface c) s) ->
+  False.
+Proof.
+  intros ? ? H1 H2 H3 H4 Hcontra.
+  destruct (initial_state_exists H1 H2 H3 H4) as [s ?].
+  specialize (Hcontra s).
+  contradiction.
+Qed.
+
+(* A version of state determinism inspired by the needs and resources in
+   Composition. RB: NOTE: Consider a simpler version of this result such as is
+   given for Source.PS. *)
+Lemma initial_state_determinism :
+  forall p c s1 s2,
+    initial_state p (prog_interface c) s1 ->
+    initial_state p (prog_interface c) s2 ->
+    well_formed_program p ->
+    well_formed_program c ->
+    closed_program (program_link p c) ->
+    linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
+    s1 = s2.
+Proof.
+  intros p c ? ?
+         [c1 ics1 s1 Hiface1 _ Hwf1 Hlinkable1 Hmains1 Hpartial1 HCSini1]
+         [c2 ics2 s2 Hiface2 _ Hwf2 Hlinkable2 Hmains2 Hpartial2 HCSini2]
+         Hwfp Hwfc Hclosed Hlinkable Hmains.
+  unfold CS.initial_state in HCSini1, HCSini2; subst ics1 ics2.
+  (* RB: TODO: Possibly spin out another mini-lemma for the application to
+     CS.initial_machine_state. *)
+  symmetry in Hiface1, Hiface2.
+  assert (Hclosed1 : closed_program (program_link p c1)). {
+    apply interface_preserves_closedness_r' with (p2 := c); assumption.
+  }
+  assert (Hclosed2 : closed_program (program_link p c2)). {
+    apply interface_preserves_closedness_r' with (p2 := c); assumption.
+  }
+  rewrite CS.initial_machine_state_after_linking in Hpartial1; try assumption.
+  rewrite CS.initial_machine_state_after_linking in Hpartial2; try assumption.
+  (* Case analysis on the location of the main procedure, exposing some of the
+     structure up front to make case rewrites automatic. Also observe the common
+     case analysis and inversion structure on both cases, susceptible to simple,
+     tactic-based refactoring (or otherwise). *)
+  unfold linkable_mains in Hmains1, Hmains2.
+  inversion Hclosed1 as [_ [mainpc1 [main_procs1 [Hmainpc1 _]]]].
+  inversion Hclosed2 as [_ [mainpc2 [main_procs2 [Hmainpc2 _]]]].
+  simpl in Hmainpc1, Hmainpc2.
+  unfold CS.prog_main_block in Hpartial1, Hpartial2.
+  destruct (prog_main p) as [mainp |] eqn:Hmainp.
+  - (* main in p. *)
+    destruct (prog_main c1) as [mainc1 |] eqn:Hmainc1; first discriminate.
+    destruct (prog_main c2) as [mainc1 |] eqn:Hmainc2; first discriminate.
+    inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+      inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+      simplify_turn.
+    + admit. (* Easy. *)
+    + admit. (* Contra. *)
+    + admit. (* Contra. *)
+    + admit. (* Contra/easy. *)
+  - (* main in c1 and c2. *)
+    destruct (prog_main c1) as [mainc1 |] eqn:Hmainc1; last discriminate.
+    destruct (prog_main c2) as [mainc2 |] eqn:Hmainc2; last discriminate.
+    inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
+      inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+      simplify_turn.
+    + admit. (* Contra. *)
+    + admit. (* Contra. *)
+    + admit. (* Contra. *)
+    + admit. (* Easy. *)
+Admitted. (* Grade 1. *)
 
 End PS.
