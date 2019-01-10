@@ -2808,7 +2808,7 @@ Section ThreewayMultisemProgram.
       exact (epsilon_step_preserves_program_component IHstar Hstep23).
   Qed.
 
-  Ltac t_threeway_multisem_step_E0_CS pc Hcompm1' Hmem Hstk :=
+  Ltac t_threeway_multisem_step_E0_PS pc Hcompm1' Hmem Hstk :=
     try match goal with (* Jumps. *)
     | Hlabel : find_label_in_component _ pc _ = Some ?PC
       |- _ =>
@@ -2976,7 +2976,7 @@ Section ThreewayMultisemProgram.
               eapply PS.domm_partition_in_notin; eassumption).
       inversion HCSstep; subst;
         (* RB: TODO: Can we make these applications faster? *)
-        t_threeway_multisem_step_E0_CS pc Hcompm1' Hmem Hstk.
+        t_threeway_multisem_step_E0_PS pc Hcompm1' Hmem Hstk.
   Admitted. (* Grade 2. *)
 
   (* Compose two stars into a multi-step star. One of the two stars is in the
