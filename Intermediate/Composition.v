@@ -2868,15 +2868,20 @@ Section ThreewayMultisemProgram.
     - now apply linkable_sym.
     - now apply linkable_mains_sym.
     - inversion Hpartials1 as [? ? ? ? ? ? Hcomps1 | ? ? ? ? ? ? Hcomps1]; subst;
-        last admit. (* Contra. *)
+        last (exfalso;
+              PS.simplify_turn; eapply PS.domm_partition_in_notin; eassumption).
       inversion HCSstep; subst.
       1:{
         (* Case analysis with special cases for memory and label operations. *)
         inversion Hpartials2 as [? ? ? ? ? ? Hcomps2 | ? ? ? ? ? ? Hcomps2]; subst;
-          last admit. (* Contra. *)
+          last (exfalso;
+                pose proof CS.silent_step_preserves_component _ _ _ HCSstep as Hcomp;
+                simpl in Hcomp; PS.simplify_turn; rewrite Hcomp in Hcomps1;
+                eapply PS.domm_partition_in_notin; eassumption).
         inversion Hpartialm1 as [? ? ? ? ? ? Hcompm1 Hmem1' Hstack1' |]; subst.
         inversion Hpartialm1' as [? ? ? ? ? ? Hcompm1' | ? ? ? ? ? ? Hcompm1']; subst;
-          first admit. (* Contra. *)
+          first (exfalso;
+                 PS.simplify_turn; eapply PS.domm_partition_in_neither; eassumption).
         CS_step_of_executing;
           try eassumption; try reflexivity;
           try match goal with
@@ -2964,7 +2969,11 @@ Section ThreewayMultisemProgram.
         subst.
       inversion Hpartials2 as [? ? ? ? ? ? Hcomps2 | ? ? ? ? ? ? Hcontra];
         subst;
-        last admit.
+        (* RB: TODO: Possible refactoring of this into lemma, see use above. *)
+        last (exfalso;
+              pose proof CS.silent_step_preserves_component _ _ _ HCSstep as Hcomp;
+              simpl in Hcomp; PS.simplify_turn; rewrite Hcomp in Hcomps1;
+              eapply PS.domm_partition_in_notin; eassumption).
       inversion HCSstep; subst;
         (* RB: TODO: Can we make these applications faster? *)
         t_threeway_multisem_step_E0_CS pc Hcompm1' Hmem Hstk.
