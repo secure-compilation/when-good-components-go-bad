@@ -2935,12 +2935,18 @@ Section ThreewayMultisemProgram.
         constructor.
         - PS.simplify_turn.
           now rewrite -> Pointer.inc_preserves_component.
-        - rewrite <- Hmem.
-          erewrite to_partial_memory_merge_memory_right; try easy.
-          eassumption.
-        - rewrite <- Hstk.
-          erewrite to_partial_stack_merge_stack_right; try easy.
-          eassumption.
+        - (erewrite to_partial_memory_merge_partial_memories_right;
+           reflexivity || eassumption) ||
+          (rewrite <- Hmem;
+           erewrite to_partial_memory_merge_memory_right;
+           try easy;
+           [eassumption]).
+        - (erewrite to_partial_stack_merge_partial_stacks_right;
+           reflexivity || eassumption) ||
+          (rewrite <- Hstk;
+           erewrite to_partial_stack_merge_stack_right;
+           try easy;
+           [eassumption]).
       }
       all:admit.
   Admitted. (* Grade 2. *)
