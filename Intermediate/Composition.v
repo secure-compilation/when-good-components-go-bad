@@ -2808,6 +2808,42 @@ Section ThreewayMultisemProgram.
       exact (epsilon_step_preserves_program_component IHstar Hstep23).
   Qed.
 
+  Ltac t_threeway_multisem_step_E0_CS pc Hcompm1' Hmem Hstk :=
+    try match goal with (* Jumps. *)
+    | Hlabel : find_label_in_component _ pc _ = Some ?PC
+      |- _ =>
+      pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hcomp;
+      rewrite Hcomp
+    | Hlabel: find_label_in_procedure _ pc _ = Some ?PC
+      |- _ =>
+      pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hcomp;
+      rewrite Hcomp
+    | Hop : executing _ pc (IJump _),
+      Hpc : Pointer.component ?PC = Pointer.component pc
+      |- _ =>
+      symmetry in Hpc; rewrite Hpc; rename Hpc into Hcomp
+  end;
+  [   constructor (* Jumps. *)
+    || (rewrite <- Pointer.inc_preserves_component; constructor)
+  ];
+  [   match goal with
+      | Hcomp : Pointer.component pc = Pointer.component _
+        |- _ =>
+        now rewrite Hcomp in Hcompm1' (* Jumps. *)
+      end
+    || now rewrite -> Pointer.inc_preserves_component
+  |   (erewrite to_partial_memory_merge_partial_memories_right; (* Memory. *)
+       reflexivity || eassumption)
+    || (rewrite <- Hmem;
+       erewrite to_partial_memory_merge_memory_right;
+       try easy;
+       eassumption)
+  | rewrite <- Hstk;
+    erewrite to_partial_stack_merge_stack_right;
+    try easy;
+    eassumption
+  ].
+
   (* RB: TODO: Rename, context can step. *)
   Lemma threeway_multisem_step_E0:
     forall ips1 ips2 ips1',
@@ -2929,42 +2965,9 @@ Section ThreewayMultisemProgram.
       inversion Hpartials2 as [? ? ? ? ? ? Hcomps2 | ? ? ? ? ? ? Hcontra];
         subst;
         last admit.
-      inversion HCSstep; subst.
-      1:{
-        try match goal with (* Jumps. *)
-        | Hlabel : find_label_in_component _ pc _ = Some ?PC
-          |- _ =>
-          pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hcomp;
-          rewrite Hcomp
-        | Hlabel: find_label_in_procedure _ pc _ = Some ?PC
-          |- _ =>
-          pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hcomp;
-          rewrite Hcomp
-        | Hop : executing _ pc (IJump _),
-          Hpc : Pointer.component ?PC = Pointer.component pc
-          |- _ =>
-          rename Hpc into Hcomp; symmetry in Hcomp;
-          rewrite Hcomp
-        end.
-          constructor (* Jumps. *)
-        || (rewrite <- Pointer.inc_preserves_component; constructor).
-        -   now rewrite Hcomp in Hcompm1' (* Jumps. *)
-          || now rewrite -> Pointer.inc_preserves_component.
-        -   (erewrite to_partial_memory_merge_partial_memories_right; (* Memory. *)
-             reflexivity || eassumption)
-          || (rewrite <- Hmem;
-             erewrite to_partial_memory_merge_memory_right;
-             try easy;
-             [eassumption]).
-        -   (erewrite to_partial_stack_merge_partial_stacks_right; (* Stack. *)
-             reflexivity || eassumption)
-          ||
-            (rewrite <- Hstk;
-             erewrite to_partial_stack_merge_stack_right;
-             try easy;
-             [eassumption]).
-      }
-      all:admit.
+      inversion HCSstep; subst;
+        (* RB: TODO: Can we make these applications faster? *)
+        t_threeway_multisem_step_E0_CS pc Hcompm1' Hmem Hstk.
   Admitted. (* Grade 2. *)
 
   (* Compose two stars into a multi-step star. One of the two stars is in the
