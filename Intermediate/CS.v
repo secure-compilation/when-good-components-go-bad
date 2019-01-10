@@ -41,6 +41,9 @@ Instance state_turn : HasTurn state := {
 Definition state_mem (st : state) : Memory.t :=
   let '(_, mem, _, _) := st in mem.
 
+Definition state_pc (st : state) : Pointer.t :=
+  let '(_, _, _, pc) := st in pc.
+
 (* preparing the machine for running a program *)
 
 Definition initial_machine_state (p: program) : state :=
@@ -932,5 +935,17 @@ Remark comes_from_initial_state_mem_domm s ctx :
   comes_from_initial_state s ctx ->
   domm (state_mem s) = domm ctx.
 Admitted. (* Grade 1. *)
+
+Lemma silent_step_preserves_component G s s' :
+  CS.step G s E0 s' ->
+  Pointer.component (state_pc s) = Pointer.component (state_pc s').
+Proof.
+  intros Hstep.
+  inversion Hstep; subst; simpl;
+    try now rewrite Pointer.inc_preserves_component.
+  - erewrite find_label_in_component_1; try eassumption. reflexivity.
+  - congruence.
+  - erewrite find_label_in_procedure_1; try eassumption. reflexivity.
+Qed.
 
 End CS.
