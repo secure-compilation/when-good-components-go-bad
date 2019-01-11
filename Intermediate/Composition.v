@@ -2894,7 +2894,7 @@ Section ThreewayMultisemProgram.
               with (p := p) (c := c) (ctx := prog_interface c) in Hstore;
               try assumption;
             apply MultiSem.unpartialize_program_store;
-            assumption
+            eassumption
           end;
           try match goal with
           | Halloc : Memory.alloc mem _ _ = Some _
