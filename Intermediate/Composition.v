@@ -2807,6 +2807,92 @@ Section ThreewayMultisemProgram.
       exact (epsilon_step_preserves_program_component IHstar Hstep23).
   Qed.
 
+  Ltac t_threeway_multisem_step_E0_CS
+       Hpartials2 HCSstep Hcomps1 Hpartialm1 Hpartialm1' mem pc Hcomps Hiface :=
+        (* Case analysis with special cases for memory and label operations. *)
+        inversion Hpartials2 as [? ? ? ? ? ? Hcomps2 | ? ? ? ? ? ? Hcomps2]; subst;
+          last (exfalso;
+                pose proof CS.silent_step_preserves_component _ _ _ HCSstep as Hcomp;
+                simpl in Hcomp; PS.simplify_turn; rewrite Hcomp in Hcomps1;
+                eapply PS.domm_partition_in_notin; eassumption);
+
+        [inversion Hpartialm1 as [? ? ? ? ? ? Hcompm1 Hmem1' Hstack1' |]; subst];
+
+        [inversion Hpartialm1' as [? ? ? ? ? ? Hcompm1' | ? ? ? ? ? ? Hcompm1']; subst];
+          first (exfalso;
+                 PS.simplify_turn; eapply PS.domm_partition_in_neither; eassumption);
+
+        [CS_step_of_executing];
+          try eassumption; try reflexivity;
+          try match goal with
+          | Hstore : Memory.store mem ?PTR _ = Some _,
+            Hcomps : Pointer.component ?PTR = Pointer.component pc
+            |- Memory.store _ _ _ = Some _
+            =>
+            (* BEGIN HACK *)
+            PS.simplify_turn;
+            match goal with
+            | Hcompm1 : is_true (Pointer.component pc \notin domm (prog_interface c)) (* HACK *)
+              |- _ =>
+            (* END HACK *)
+              rewrite <- Hcomps in Hcompm1;
+              apply MultiSem.partialize_program_store
+                with (p := p) (c := c) (ctx := prog_interface c) in Hstore;
+                try assumption;
+              apply MultiSem.unpartialize_program_store;
+              eassumption
+            end
+          end;
+          try match goal with
+          | Halloc : Memory.alloc mem _ _ = Some _
+            |- Memory.alloc _ _ _ = Some _
+            =>
+            apply MultiSem.unpartialize_program_alloc;
+            apply MultiSem.partialize_program_alloc
+              with (p := p) (c := c) (ctx := prog_interface c) in Halloc;
+            assumption
+          end;
+          try match goal with
+          | Hload : Memory.load mem ?PTR = Some _,
+            Hmem1' : PS.to_partial_memory mem (domm (prog_interface c)) = (* HACK *)
+                     PS.to_partial_memory _ (domm (prog_interface c))
+            |- Memory.load _ _ = Some _
+            =>
+            symmetry in Hmem1';
+            destruct PTR as [[C b] o]; simpl in *; subst;
+            apply program_load_in_partialized_memory_strong
+              with (ctx := domm (prog_interface c)) (mem1 := mem);
+              try assumption;
+            setoid_rewrite to_partial_memory_merge_partial_memories_left;
+              try eassumption;
+            reflexivity
+          end;
+          try match goal with
+          | Hlabel : find_label_in_component _ _ _ = Some _
+            |- find_label_in_component _ _ _ = Some _
+            =>
+            rewrite find_label_in_component_program_link_left in Hlabel;
+              try assumption; [| now rewrite Hiface];
+            rewrite program_linkC;
+              try assumption; [| now apply linkable_sym];
+            rewrite find_label_in_component_program_link_left; eassumption
+          end;
+          try match goal with
+          | Hlabel : find_label_in_procedure _ _ _ = Some _
+            |- find_label_in_procedure _ _ _ = Some _
+            =>
+            rewrite find_label_in_procedure_program_link_left in Hlabel;
+              try assumption; [| now rewrite Hiface];
+            rewrite program_linkC;
+              try assumption; [| now apply linkable_sym];
+            rewrite find_label_in_procedure_program_link_left; eassumption
+          end;
+
+        rewrite program_linkC; try assumption;
+          [ | now apply linkable_sym];
+
+        eapply execution_invariant_to_linking; eassumption.
+
   Ltac t_threeway_multisem_step_E0_PS pc Hcompm1' Hmem Hstk :=
     try match goal with (* Jumps. *)
     | Hlabel : find_label_in_component _ pc _ = Some ?PC
@@ -2869,80 +2955,9 @@ Section ThreewayMultisemProgram.
     - inversion Hpartials1 as [? ? ? ? ? ? Hcomps1 | ? ? ? ? ? ? Hcomps1]; subst;
         last (exfalso;
               PS.simplify_turn; eapply PS.domm_partition_in_notin; eassumption).
-      inversion HCSstep; subst.
-      1:{
-        (* Case analysis with special cases for memory and label operations. *)
-        inversion Hpartials2 as [? ? ? ? ? ? Hcomps2 | ? ? ? ? ? ? Hcomps2]; subst;
-          last (exfalso;
-                pose proof CS.silent_step_preserves_component _ _ _ HCSstep as Hcomp;
-                simpl in Hcomp; PS.simplify_turn; rewrite Hcomp in Hcomps1;
-                eapply PS.domm_partition_in_notin; eassumption).
-        inversion Hpartialm1 as [? ? ? ? ? ? Hcompm1 Hmem1' Hstack1' |]; subst.
-        inversion Hpartialm1' as [? ? ? ? ? ? Hcompm1' | ? ? ? ? ? ? Hcompm1']; subst;
-          first (exfalso;
-                 PS.simplify_turn; eapply PS.domm_partition_in_neither; eassumption).
-        CS_step_of_executing;
-          try eassumption; try reflexivity;
-          try match goal with
-          | Hstore : Memory.store mem ?PTR _ = Some _,
-            Hcomps : Pointer.component ?PTR = Pointer.component pc
-            |- Memory.store _ _ _ = Some _
-            =>
-            PS.simplify_turn;
-            rewrite <- Hcomps in Hcompm1;
-            apply MultiSem.partialize_program_store
-              with (p := p) (c := c) (ctx := prog_interface c) in Hstore;
-              try assumption;
-            apply MultiSem.unpartialize_program_store;
-            eassumption
-          end;
-          try match goal with
-          | Halloc : Memory.alloc mem _ _ = Some _
-            |- Memory.alloc _ _ _ = Some _
-            =>
-            apply MultiSem.unpartialize_program_alloc;
-            apply MultiSem.partialize_program_alloc
-              with (p := p) (c := c) (ctx := prog_interface c) in Halloc;
-            assumption
-          end;
-          try match goal with
-          | Hload : Memory.load mem ?PTR = Some _
-            |- Memory.load _ _ = Some _
-            =>
-            symmetry in Hmem1';
-            destruct PTR as [[C b] o]; simpl in *; subst;
-            apply program_load_in_partialized_memory_strong
-              with (ctx := domm (prog_interface c)) (mem1 := mem);
-              try assumption;
-            setoid_rewrite to_partial_memory_merge_partial_memories_left;
-              try eassumption;
-            reflexivity
-          end;
-          try match goal with
-          | Hlabel : find_label_in_component _ _ _ = Some _
-            |- find_label_in_component _ _ _ = Some _
-            =>
-            rewrite find_label_in_component_program_link_left in Hlabel;
-              try assumption; [| now rewrite Hiface];
-            rewrite program_linkC;
-              try assumption; [| now apply linkable_sym];
-            rewrite find_label_in_component_program_link_left; eassumption
-          end;
-          try match goal with
-          | Hlabel : find_label_in_procedure _ _ _ = Some _
-            |- find_label_in_procedure _ _ _ = Some _
-            =>
-            rewrite find_label_in_procedure_program_link_left in Hlabel;
-              try assumption; [| now rewrite Hiface];
-            rewrite program_linkC;
-              try assumption; [| now apply linkable_sym];
-            rewrite find_label_in_procedure_program_link_left; eassumption
-          end.
-        rewrite program_linkC; try assumption;
-          last now apply linkable_sym.
-        eapply execution_invariant_to_linking; eassumption.
-      }
-      all:admit.
+      inversion HCSstep; subst;
+        t_threeway_multisem_step_E0_CS
+          Hpartials2 HCSstep Hcomps1 Hpartialm1 Hpartialm1' mem pc Hcomps Hiface.
     - (* RB: TODO: Interesting to spin into a lemma, like similar sub-goals. *)
       inversion Hpartialm1 as [? ? ? ? ? ? _ | ? ? ? ? ? ? Hcontra];
         subst;
@@ -2976,7 +2991,7 @@ Section ThreewayMultisemProgram.
       inversion HCSstep; subst;
         (* RB: TODO: Can we make these applications faster? *)
         t_threeway_multisem_step_E0_PS pc Hcompm1' Hmem Hstk.
-  Admitted. (* Grade 2. *)
+  Qed.
 
   (* Compose two stars into a multi-step star. One of the two stars is in the
      context and its partial state remains unaltered; the other performs all the
