@@ -174,11 +174,58 @@ Proof.
       rewrite (IHgps1 gps2); auto.
 Qed.
 
-(* Memory partialization, *)
+(* Memory partialization. *)
 
 (* RB: TODO: Here and above, Program.interface vs. fset. *)
 Definition to_partial_memory (mem : Memory.t) (ctx : {fset Component.id}) :=
   filterm (fun k _ => negb (k \in ctx)) mem.
+
+(* RB: TODO: More properly, this seems to belong in Machine.Memory. However, it
+   is natural to resort to a notion of partial memory that seems logically
+   related to the supporting components of PS. Again, note, however, that this
+   notion of partial memory is already used in the Memory module, and it may be
+   a good idea to relocate our compact definitions there. *)
+Lemma program_store_to_partialized_memory
+      ptr (iface : Program.interface) mem mem' v :
+  Pointer.component ptr \in domm iface ->
+  Memory.store mem ptr v = Some mem' ->
+  to_partial_memory mem (domm iface) = to_partial_memory mem' (domm iface).
+Admitted. (* Grade 2. *)
+
+(* RB: TODO: Same notes as above.
+   Cf.  program_allocation_in_partialized_memory_strong. *)
+Lemma program_allocation_to_partialized_memory
+      C (iface : Program.interface) size mem mem' ptr :
+  C \in domm iface ->
+  Memory.alloc mem C size = Some (mem', ptr) ->
+  to_partial_memory mem (domm iface) = to_partial_memory mem' (domm iface).
+Admitted. (* Grade 2. *)
+
+(* RB: TODO: On a related note to that above, consider using [Pointer.component]
+   in results such as [program_store_in_partialized_memory]. This will save us
+   the trouble of having to destruct pointers to use these results. *)
+
+(* RB: TODO: This is a specialized version that utilizes premises in the exact
+   shape they are available in our contexts. It could be a wrapper of a slightly
+   more abstract form of the lemma, where the two memories are related, say, by
+   their domains. (Incidentally, do away with uses of [domm] here?) *)
+Remark prog_ctx_sim_domm_memories
+       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions:
+       - mem2's domain is that of iface1 and iface2.
+       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
+         of iface1 and iface2.
+       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
+  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
+    to_partial_memory mem2 (domm iface1) =
+    to_partial_memory mem0 (domm iface1) ->
+  forall gps2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    domm mem1 = domm mem2.
+Admitted. (* Grade 2. *)
 
 Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
 | ProgramControl: forall gps pgps mem pmem regs pc,
@@ -569,6 +616,29 @@ Proof.
   intros Hin Hnotin. now rewrite Hin in Hnotin.
 Qed.
 
+Lemma domm_partition_program_link_in_neither p c :
+  well_formed_program p ->
+  well_formed_program c ->
+  closed_program (program_link p c) ->
+  Component.main \notin domm (prog_interface p) ->
+  Component.main \notin domm (prog_interface c) ->
+  False.
+Proof.
+  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
+         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
+  destruct (prog_main p) as [mainp |] eqn:Hcasep.
+  - specialize (Hmainp (eq_refl _)).
+    rewrite Hmainp in Hmainp'.
+    discriminate.
+  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
+    +  specialize (Hmainc (eq_refl _)).
+       rewrite Hmainc in Hmainc'.
+       discriminate.
+    + simpl in Hmain.
+      rewrite Hcasep Hcasec in Hmain.
+      discriminate.
+Qed.
+
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_intro: forall ics ips1 ips2,
     mergeable_interfaces ctx1 ctx2 ->
@@ -780,6 +850,8 @@ Proof.
   - now destruct (domm_partition_in_both Hmergeable_ifaces Hcc1 Hcc2).
 Qed.
 
+(* Merged stacks and their properties. *)
+
 Lemma mergeable_states_stacks ctx1 ctx2 ips1 ips2 gps1 gps2:
   mergeable_states ctx1 ctx2 ips1 ips2 ->
   state_stack ips1 = gps1 ->
@@ -824,13 +896,268 @@ Proof.
     + constructor; auto.
 Qed.
 
-(* Lemma placeholder: merge_stacks_partition *)
-(* Lemma placeholder: merge_stacks_partition_emptym *)
+Lemma unpartialize_stack_frame_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall ptr,
+    Pointer.component ptr \in domm (unionm ctx1 ctx2) ->
+    unpartialize_stack_frame
+      (merge_stack_frames ((to_partial_frame (domm ctx1) ptr),
+                           (to_partial_frame (domm ctx2) ptr))) =
+    ptr.
+Proof.
+  intros ctx1 ctx2 Hmergeable ptr Hdomm.
+  destruct (Pointer.component ptr \in domm ctx1) eqn:Hcase1;
+    destruct (Pointer.component ptr \in domm ctx2) eqn:Hcase2;
+    unfold PS.to_partial_frame;
+    rewrite Hcase1 Hcase2; simpl.
+  - exfalso. eapply domm_partition_in_both; eassumption.
+  - now rewrite Pointer.compose.
+  - now rewrite Pointer.compose.
+  - assert (Hmap1 : ctx1 (Pointer.component ptr) = None)
+      by (apply /dommPn; unfold negb; now rewrite Hcase1).
+    assert (Hmap2 : ctx2 (Pointer.component ptr) = None)
+      by (apply /dommPn; unfold negb; now rewrite Hcase2).
+    assert (exists v, (unionm ctx1 ctx2) (Pointer.component ptr) = Some v)
+      as [Ci Hunion]
+      by now apply /dommP.
+    now rewrite unionmE Hmap1 Hmap2 in Hunion.
+Qed.
+
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
+Lemma merge_stacks_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    unpartialize_stack
+      (merge_stacks
+         (to_partial_stack gps (domm ctx1))
+         (to_partial_stack gps (domm ctx2)))
+    = gps.
+Admitted. (* Grade 2. RB: Assigned to FG. *)
+
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces.
+   This follows from the well-bracketedness of traces. More generally, the
+   merge_stacks_partition property holds whenever the domain of the stack is
+   that of the mergeable interfaces. In particular, this property is satisfied
+   by stacks that originate from a correct program execution. *)
+Lemma merge_stacks_partition_cons:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall frame gps mem regs pc,
+    CS.comes_from_initial_state (frame :: gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    unpartialize_stack
+      (merge_stacks
+         (to_partial_stack gps (domm ctx1))
+         (to_partial_stack gps (domm ctx2)))
+    = gps.
+Admitted. (* Grade 2. RB: Assigned to FG. *)
+
+(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
+Lemma merge_stacks_partition_emptym:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    merge_stacks (to_partial_stack gps (domm ctx1))
+                 (to_partial_stack gps (domm ctx2)) =
+    to_partial_stack gps fset0.
+Admitted. (* Grade 2: RB: Assigned to FG. *)
+
+Lemma unpartialize_stack_merge_stacks_cons_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall ptr pgps1 pgps2,
+    Pointer.component ptr \in domm (unionm ctx1 ctx2) ->
+    unpartialize_stack
+      (merge_stacks (to_partial_frame (domm ctx1) ptr :: pgps1)
+                    (to_partial_frame (domm ctx2) ptr :: pgps2)) =
+    ptr :: unpartialize_stack (merge_stacks pgps1 pgps2).
+Proof.
+  intros ctx1 ctx2 Hmerge_ifaces ptr pgps1 pgps2 Hptr.
+  simpl.
+  now rewrite (unpartialize_stack_frame_partition Hmerge_ifaces).
+Qed.
+
+(* RB: TODO: Verify the necessary hypotheses for this lemma and its sibling.
+   In what provenance conditions are needed on the stacks? Can they be weaker
+   than those given here? (This extends beyond extracting parts of the given
+   [CS.comes_from_initial_state].) *)
+Lemma to_partial_stack_merge_stacks_left:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps1 mem1 regs1 pc1,
+    CS.comes_from_initial_state (gps1, mem1, regs1, pc1) (unionm ctx1 ctx2) ->
+  forall gps2 mem2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2) (unionm ctx1 ctx2) ->
+    to_partial_stack gps1 (domm ctx1) = to_partial_stack gps2 (domm ctx1) ->
+    to_partial_stack
+      (unpartialize_stack
+         (merge_stacks (to_partial_stack gps1 (domm ctx1))
+                       (to_partial_stack gps2 (domm ctx2))))
+      (domm ctx1) =
+    to_partial_stack gps1 (domm ctx1).
+Admitted. (* Grade 2. Note comments. *)
+
+Corollary to_partial_stack_merge_stack_left :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    to_partial_stack
+      (unpartialize_stack
+         (merge_stacks (to_partial_stack gps (domm ctx1))
+                       (to_partial_stack gps (domm ctx2))))
+      (domm ctx1) =
+    to_partial_stack gps (domm ctx1).
+Admitted. (* Grade 2. *)
+
+Lemma to_partial_stack_merge_stacks_right:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps1 mem1 regs1 pc1,
+    CS.comes_from_initial_state (gps1, mem1, regs1, pc1) (unionm ctx1 ctx2) ->
+  forall gps2 mem2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2) (unionm ctx1 ctx2) ->
+    to_partial_stack gps1 (domm ctx1) = to_partial_stack gps2 (domm ctx1) ->
+    to_partial_stack
+      (unpartialize_stack
+         (merge_stacks (to_partial_stack gps1 (domm ctx1))
+                       (to_partial_stack gps2 (domm ctx2))))
+      (domm ctx2) =
+    to_partial_stack gps2 (domm ctx2).
+Admitted. (* Grade 2. Note comments for lemma above. *)
+
+Corollary to_partial_stack_merge_stack_right :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    to_partial_stack
+      (unpartialize_stack
+         (merge_stacks (to_partial_stack gps (domm ctx1))
+                       (to_partial_stack gps (domm ctx2))))
+      (domm ctx2) =
+    to_partial_stack gps (domm ctx2).
+Admitted. (* Grade 2. *)
+
+(* Merged memories and their properties. *)
 
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
   unionm mem1 mem2.
 
-(* Lemma placeholder: merge_memories_partition *)
+Lemma merge_memories_partition:
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
+    merge_memories
+      (to_partial_memory mem (domm ctx1))
+      (to_partial_memory mem (domm ctx2))
+  = mem.
+Admitted. (* Grade 2. *)
+
+(* RB: TODO: The main rewrite sequence can be seen as two instances of a simpler
+   lemma, which will probably operate on simpler assumptions than the ones here,
+   taken from the contexts where we will apply these rewrites. In addition,
+   some of the previous reasoning on memories may be rephrased using these
+   results. *)
+Lemma to_partial_memory_merge_prepare_procedures_memory_left (p c1 c2 : program) :
+  prog_interface c1 = prog_interface c2 ->
+  linkable (prog_interface p) (prog_interface c2) ->
+  to_partial_memory (merge_memories (prepare_procedures_memory p)
+                                    (prepare_procedures_memory c1))
+                    (domm (prog_interface c2)) =
+  to_partial_memory (merge_memories (prepare_procedures_memory p)
+                                    (prepare_procedures_memory c2))
+                    (domm (prog_interface c2)).
+Proof.
+  intros Hiface [_ Hdisjoint].
+  unfold to_partial_memory, merge_memories.
+  rewrite <- domm_prepare_procedures_memory,
+          -> filterm_union,
+          -> fdisjoint_filterm_full,
+          -> fdisjoint_filterm_empty, -> unionm0,
+          -> filterm_union,
+          -> fdisjoint_filterm_full,
+          -> fdisjoint_filterm_empty, -> unionm0;
+    first reflexivity;
+    (* The rewrites generate a few extra goals that we can discharge by normalizing
+       the domain expression and then using our assumptions. *)
+    try rewrite -> !domm_prepare_procedures_memory; congruence.
+Qed.
+
+Lemma to_partial_memory_merge_partial_memories_left
+      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions:
+       - mem2's domain is that of iface1 and iface2.
+       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
+         of iface1 and iface2.
+       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
+  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
+    to_partial_memory mem2 (domm iface1) =
+    to_partial_memory mem0 (domm iface1) ->
+  forall gps2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    (* And the main result. *)
+    to_partial_memory
+      (merge_memories (to_partial_memory mem1 (domm iface1))
+                      (to_partial_memory mem2 (domm iface2)))
+      (domm iface1) =
+    to_partial_memory mem1 (domm iface1).
+Proof.
+Admitted. (* Grade 2. *)
+
+Corollary to_partial_memory_merge_memory_left :
+  forall iface1 iface2,
+    mergeable_interfaces iface1 iface2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm iface1 iface2) ->
+    to_partial_memory
+      (merge_memories (to_partial_memory mem (domm iface1))
+                      (to_partial_memory mem (domm iface2)))
+      (domm iface1) =
+    to_partial_memory mem (domm iface1).
+Admitted. (* Grade 2. *)
+
+Lemma to_partial_memory_merge_partial_memories_right
+      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions:
+       - mem2's domain is that of iface1 and iface2.
+       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
+         of iface1 and iface2.
+       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
+  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
+    to_partial_memory mem2 (domm iface1) =
+    to_partial_memory mem0 (domm iface1) ->
+  forall gps2 regs2 pc2,
+    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    (* And the main result. *)
+    to_partial_memory
+      (merge_memories (to_partial_memory mem1 (domm iface1))
+                      (to_partial_memory mem2 (domm iface2)))
+      (domm iface2) =
+    to_partial_memory mem2 (domm iface2).
+Admitted. (* Grade 2. *)
+
+Corollary to_partial_memory_merge_memory_right :
+  forall iface1 iface2,
+    mergeable_interfaces iface1 iface2 ->
+  forall gps mem regs pc,
+    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm iface1 iface2) ->
+    to_partial_memory
+      (merge_memories (to_partial_memory mem (domm iface1))
+                      (to_partial_memory mem (domm iface2)))
+      (domm iface2) =
+    to_partial_memory mem (domm iface2).
+Admitted. (* Grade 2. *)
 
 Definition merge_partial_states (ips1 ips2: state) : state :=
   match ips1 with

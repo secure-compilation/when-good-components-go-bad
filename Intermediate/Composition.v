@@ -42,349 +42,6 @@ Lemma comes_from_initial_state_step_trans p s t s' :
 Admitted. (* Grade 2. *)
 
 (*
-  PS components
-
-  RB: TODO: The following results are currently only used here, but belong
-  logically in PS, and should be relocated as they are proved and, where needed,
-  generalized. Module qualifiers will be tweaked as needed.
-*)
-
-Lemma domm_partition_program_link_in_neither p c :
-  well_formed_program p ->
-  well_formed_program c ->
-  closed_program (program_link p c) ->
-  Component.main \notin domm (prog_interface p) ->
-  Component.main \notin domm (prog_interface c) ->
-  False.
-Proof.
-  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
-         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
-  destruct (prog_main p) as [mainp |] eqn:Hcasep.
-  - specialize (Hmainp (eq_refl _)).
-    rewrite Hmainp in Hmainp'.
-    discriminate.
-  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
-    +  specialize (Hmainc (eq_refl _)).
-       rewrite Hmainc in Hmainc'.
-       discriminate.
-    + simpl in Hmain.
-      rewrite Hcasep Hcasec in Hmain.
-      discriminate.
-Qed.
-
-(* RB: TODO: More properly, this seems to belong in Machine.Memory. However, it
-   is natural to resort to a notion of partial memory that seems logically
-   related to the supporting components of PS. Again, note, however, that this
-   notion of partial memory is already used in the Memory module, and it may be
-   a good idea to relocate our compact definitions there. *)
-Lemma program_store_to_partialized_memory
-      ptr (iface : Program.interface) mem mem' v :
-  Pointer.component ptr \in domm iface ->
-  Memory.store mem ptr v = Some mem' ->
-  PS.to_partial_memory mem (domm iface) = PS.to_partial_memory mem' (domm iface).
-Admitted. (* Grade 2. *)
-
-(* RB: TODO: Same notes as above.
-   Cf.  program_allocation_in_partialized_memory_strong. *)
-Lemma program_allocation_to_partialized_memory
-      C (iface : Program.interface) size mem mem' ptr :
-  C \in domm iface ->
-  Memory.alloc mem C size = Some (mem', ptr) ->
-  PS.to_partial_memory mem (domm iface) = PS.to_partial_memory mem' (domm iface).
-Admitted. (* Grade 2. *)
-
-(* RB: TODO: On a related note to that above, consider using [Pointer.component]
-   in results such as [program_store_in_partialized_memory]. This will save us
-   the trouble of having to destruct pointers to use these results. *)
-
-(* RB: TODO: This is a specialized version that utilizes premises in the exact
-   shape they are available in our contexts. It could be a wrapper of a slightly
-   more abstract form of the lemma, where the two memories are related, say, by
-   their domains. (Incidentally, do away with uses of [domm] here?) *)
-Remark prog_ctx_sim_domm_memories
-       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
-    mergeable_interfaces iface1 iface2 ->
-    (* Specialized assumptions:
-       - mem2's domain is that of iface1 and iface2.
-       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
-         of iface1 and iface2.
-       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
-  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
-    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
-    PS.to_partial_memory mem2 (domm iface1) =
-    PS.to_partial_memory mem0 (domm iface1) ->
-  forall gps2 regs2 pc2,
-    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
-                                (unionm iface1 iface2) ->
-    domm mem1 = domm mem2.
-Admitted. (* Grade 2. *)
-
-(* RB: TODO: The main rewrite sequence can be seen as two instances of a simpler
-   lemma, which will probably operate on simpler assumptions than the ones here,
-   taken from the contexts where we will apply these rewrites. In addition,
-   some of the previous reasoning on memories may be rephrased using these
-   results. *)
-Lemma to_partial_memory_merge_prepare_procedures_memory_left (p c1 c2 : program) :
-  prog_interface c1 = prog_interface c2 ->
-  linkable (prog_interface p) (prog_interface c2) ->
-  PS.to_partial_memory (PS.merge_memories (prepare_procedures_memory p)
-                                          (prepare_procedures_memory c1))
-                       (domm (prog_interface c2)) =
-  PS.to_partial_memory (PS.merge_memories (prepare_procedures_memory p)
-                                          (prepare_procedures_memory c2))
-                       (domm (prog_interface c2)).
-Proof.
-  intros Hiface [_ Hdisjoint].
-  unfold PS.to_partial_memory, PS.merge_memories.
-  rewrite <- domm_prepare_procedures_memory,
-          -> filterm_union,
-          -> fdisjoint_filterm_full,
-          -> fdisjoint_filterm_empty, -> unionm0,
-          -> filterm_union,
-          -> fdisjoint_filterm_full,
-          -> fdisjoint_filterm_empty, -> unionm0;
-    first reflexivity;
-    (* The rewrites generate a few extra goals that we can discharge by normalizing
-       the domain expression and then using our assumptions. *)
-    try rewrite -> !domm_prepare_procedures_memory; congruence.
-Qed.
-
-Lemma to_partial_memory_merge_partial_memories_left
-      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
-    mergeable_interfaces iface1 iface2 ->
-    (* Specialized assumptions:
-       - mem2's domain is that of iface1 and iface2.
-       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
-         of iface1 and iface2.
-       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
-  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
-    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
-    PS.to_partial_memory mem2 (domm iface1) =
-    PS.to_partial_memory mem0 (domm iface1) ->
-  forall gps2 regs2 pc2,
-    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
-                                (unionm iface1 iface2) ->
-    (* And the main result. *)
-    PS.to_partial_memory
-      (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
-                         (PS.to_partial_memory mem2 (domm iface2)))
-      (domm iface1) =
-    PS.to_partial_memory mem1 (domm iface1).
-Proof.
-Admitted. (* Grade 2. *)
-
-Corollary to_partial_memory_merge_memory_left :
-  forall iface1 iface2,
-    mergeable_interfaces iface1 iface2 ->
-  forall gps mem regs pc,
-    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm iface1 iface2) ->
-    PS.to_partial_memory
-      (PS.merge_memories (PS.to_partial_memory mem (domm iface1))
-                         (PS.to_partial_memory mem (domm iface2)))
-      (domm iface1) =
-    PS.to_partial_memory mem (domm iface1).
-Admitted. (* Grade 2. *)
-
-Lemma to_partial_memory_merge_partial_memories_right
-      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
-    mergeable_interfaces iface1 iface2 ->
-    (* Specialized assumptions:
-       - mem2's domain is that of iface1 and iface2.
-       - mem0 and mem2's domains are related, so in mem0 there is nothing outside
-         of iface1 and iface2.
-       - mem0 steps to mem1, so their domains coincide: mem1 is also "clean". *)
-  forall G gps0 mem0 regs0 pc0 t gps1 regs1 pc1,
-    CS.step G (gps0, mem0, regs0, pc0) t (gps1, mem1, regs1, pc1) ->
-    PS.to_partial_memory mem2 (domm iface1) =
-    PS.to_partial_memory mem0 (domm iface1) ->
-  forall gps2 regs2 pc2,
-    CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
-                                (unionm iface1 iface2) ->
-    (* And the main result. *)
-    PS.to_partial_memory
-      (PS.merge_memories (PS.to_partial_memory mem1 (domm iface1))
-                         (PS.to_partial_memory mem2 (domm iface2)))
-      (domm iface2) =
-    PS.to_partial_memory mem2 (domm iface2).
-Admitted. (* Grade 2. *)
-
-Corollary to_partial_memory_merge_memory_right :
-  forall iface1 iface2,
-    mergeable_interfaces iface1 iface2 ->
-  forall gps mem regs pc,
-    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm iface1 iface2) ->
-    PS.to_partial_memory
-      (PS.merge_memories (PS.to_partial_memory mem (domm iface1))
-                         (PS.to_partial_memory mem (domm iface2)))
-      (domm iface2) =
-    PS.to_partial_memory mem (domm iface2).
-Admitted. (* Grade 2. *)
-
-Lemma pointer_compose :
-  forall ptr,
-    (Pointer.component ptr, Pointer.block ptr, Pointer.offset ptr) = ptr.
-Proof.
-  now intros [[C b] o].
-Qed.
-
-Lemma unpartialize_stack_frame_partition:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall ptr,
-    Pointer.component ptr \in domm (unionm ctx1 ctx2) ->
-    PS.unpartialize_stack_frame
-      (PS.merge_stack_frames ((PS.to_partial_frame (domm ctx1) ptr),
-                              (PS.to_partial_frame (domm ctx2) ptr))) =
-    ptr.
-Proof.
-  intros ctx1 ctx2 Hmergeable ptr Hdomm.
-  destruct (Pointer.component ptr \in domm ctx1) eqn:Hcase1;
-    destruct (Pointer.component ptr \in domm ctx2) eqn:Hcase2;
-    unfold PS.to_partial_frame;
-    rewrite Hcase1 Hcase2; simpl.
-  - exfalso. eapply PS.domm_partition_in_both; eassumption.
-  - now rewrite pointer_compose.
-  - now rewrite pointer_compose.
-  - assert (Hmap1 : ctx1 (Pointer.component ptr) = None)
-      by (apply /dommPn; unfold negb; now rewrite Hcase1).
-    assert (Hmap2 : ctx2 (Pointer.component ptr) = None)
-      by (apply /dommPn; unfold negb; now rewrite Hcase2).
-    assert (exists v, (unionm ctx1 ctx2) (Pointer.component ptr) = Some v)
-      as [Ci Hunion]
-      by now apply /dommP.
-    now rewrite unionmE Hmap1 Hmap2 in Hunion.
-Qed.
-
-(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
-Lemma merge_stacks_partition:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall gps mem regs pc,
-    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
-    PS.unpartialize_stack
-      (PS.merge_stacks
-         (PS.to_partial_stack gps (domm ctx1))
-         (PS.to_partial_stack gps (domm ctx2)))
-    = gps.
-Admitted. (* Grade 2. RB: Assigned to FG. *)
-
-(* RB: TODO: Add stack well-formedness w.r.t. interfaces.
-   This follows from the well-bracketedness of traces. More generally, the
-   merge_stacks_partition property holds whenever the domain of the stack is
-   that of the mergeable interfaces. In particular, this property is satisfied
-   by stacks that originate from a correct program execution. *)
-Lemma merge_stacks_partition_cons:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall frame gps mem regs pc,
-    CS.comes_from_initial_state (frame :: gps, mem, regs, pc) (unionm ctx1 ctx2) ->
-    PS.unpartialize_stack
-      (PS.merge_stacks
-         (PS.to_partial_stack gps (domm ctx1))
-         (PS.to_partial_stack gps (domm ctx2)))
-    = gps.
-Admitted. (* Grade 2. RB: Assigned to FG. *)
-
-(* RB: TODO: Add stack well-formedness w.r.t. interfaces. *)
-Lemma merge_stacks_partition_emptym:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall gps mem regs pc,
-    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
-    PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
-                    (PS.to_partial_stack gps (domm ctx2)) =
-    PS.to_partial_stack gps fset0.
-Admitted. (* Grade 2: RB: Assigned to FG. *)
-
-Lemma unpartialize_stack_merge_stacks_cons_partition:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall ptr pgps1 pgps2,
-    Pointer.component ptr \in domm (unionm ctx1 ctx2) ->
-    PS.unpartialize_stack
-      (PS.merge_stacks (PS.to_partial_frame (domm ctx1) ptr :: pgps1)
-                       (PS.to_partial_frame (domm ctx2) ptr :: pgps2)) =
-    ptr :: PS.unpartialize_stack (PS.merge_stacks pgps1 pgps2).
-Proof.
-  intros ctx1 ctx2 Hmerge_ifaces ptr pgps1 pgps2 Hptr.
-  simpl.
-  now rewrite (unpartialize_stack_frame_partition Hmerge_ifaces).
-Qed.
-
-(* RB: TODO: Verify the necessary hypotheses for this lemma and its sibling.
-   In what provenance conditions are needed on the stacks? Can they be weaker
-   than those given here? (This extends beyond extracting parts of the given
-   [CS.comes_from_initial_state].) *)
-Lemma to_partial_stack_merge_stacks_left:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall gps1 mem1 regs1 pc1,
-    CS.comes_from_initial_state (gps1, mem1, regs1, pc1) (unionm ctx1 ctx2) ->
-  forall gps2 mem2 regs2 pc2,
-    CS.comes_from_initial_state (gps2, mem2, regs2, pc2) (unionm ctx1 ctx2) ->
-    PS.to_partial_stack gps1 (domm ctx1) = PS.to_partial_stack gps2 (domm ctx1) ->
-    PS.to_partial_stack
-      (PS.unpartialize_stack
-         (PS.merge_stacks (PS.to_partial_stack gps1 (domm ctx1))
-                          (PS.to_partial_stack gps2 (domm ctx2))))
-      (domm ctx1) =
-    PS.to_partial_stack gps1 (domm ctx1).
-Admitted. (* Grade 2. Note comments. *)
-
-Corollary to_partial_stack_merge_stack_left :
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall gps mem regs pc,
-    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
-    PS.to_partial_stack
-      (PS.unpartialize_stack
-         (PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
-                          (PS.to_partial_stack gps (domm ctx2))))
-      (domm ctx1) =
-    PS.to_partial_stack gps (domm ctx1).
-Admitted. (* Grade 2. *)
-
-Lemma to_partial_stack_merge_stacks_right:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall gps1 mem1 regs1 pc1,
-    CS.comes_from_initial_state (gps1, mem1, regs1, pc1) (unionm ctx1 ctx2) ->
-  forall gps2 mem2 regs2 pc2,
-    CS.comes_from_initial_state (gps2, mem2, regs2, pc2) (unionm ctx1 ctx2) ->
-    PS.to_partial_stack gps1 (domm ctx1) = PS.to_partial_stack gps2 (domm ctx1) ->
-    PS.to_partial_stack
-      (PS.unpartialize_stack
-         (PS.merge_stacks (PS.to_partial_stack gps1 (domm ctx1))
-                          (PS.to_partial_stack gps2 (domm ctx2))))
-      (domm ctx2) =
-    PS.to_partial_stack gps2 (domm ctx2).
-Admitted. (* Grade 2. Note comments for lemma above. *)
-
-Corollary to_partial_stack_merge_stack_right :
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall gps mem regs pc,
-    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
-    PS.to_partial_stack
-      (PS.unpartialize_stack
-         (PS.merge_stacks (PS.to_partial_stack gps (domm ctx1))
-                          (PS.to_partial_stack gps (domm ctx2))))
-      (domm ctx2) =
-    PS.to_partial_stack gps (domm ctx2).
-Admitted. (* Grade 2. *)
-
-Lemma merge_memories_partition:
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall gps mem regs pc,
-    CS.comes_from_initial_state (gps, mem, regs, pc) (unionm ctx1 ctx2) ->
-    PS.merge_memories
-      (PS.to_partial_memory mem (domm ctx1))
-      (PS.to_partial_memory mem (domm ctx2))
-  = mem.
-Admitted. (* Grade 2. *)
-
-(*
   P and C are two partial programs whose linking results in a whole program.
   We want to show that P and C do the same terminating behavior in the partial semantics
   iff their linking produces the very same behavior in the complete semantics.
@@ -1303,8 +960,8 @@ Section MultiSemantics.
           now rewrite mem_domm.
         * unfold PS.to_partial_memory.
           by rewrite domm0 filterm_predT.
-        * rewrite domm0 (merge_stacks_partition Hmergeable_ifaces Hcomes_from).
-          by rewrite (merge_stacks_partition_emptym Hmergeable_ifaces Hcomes_from).
+        * rewrite domm0 (PS.merge_stacks_partition Hmergeable_ifaces Hcomes_from).
+          by rewrite (PS.merge_stacks_partition_emptym Hmergeable_ifaces Hcomes_from).
       + rewrite linking_empty_program.
         inversion Hfinal1
           as [p' ics ? Hsame_iface' _ Hwf' Hlinkable' Hmains' Hnotin' Hpartial' Hfinal' | ? Hcontra];
@@ -1337,8 +994,8 @@ Section MultiSemantics.
           unfold PS.to_partial_memory. rewrite filterm_predT.
           reflexivity.
         * rewrite domm0.
-          rewrite (merge_stacks_partition Hmergeable_ifaces Hcomes_from).
-          rewrite (merge_stacks_partition_emptym Hmergeable_ifaces Hcomes_from).
+          rewrite (PS.merge_stacks_partition Hmergeable_ifaces Hcomes_from).
+          rewrite (PS.merge_stacks_partition_emptym Hmergeable_ifaces Hcomes_from).
           reflexivity.
       + rewrite linking_empty_program.
         inversion Hfinal2
@@ -1553,13 +1210,13 @@ Qed.
 
   Ltac step_trans_solve_CC :=
     try rewrite -> Pointer.inc_preserves_component;
-    try erewrite -> to_partial_memory_merge_partial_memories_right;
+    try erewrite -> PS.to_partial_memory_merge_partial_memories_right;
     (eassumption || reflexivity).
 
   Ltac step_trans_solve_partial_state :=
     constructor;
-    try erewrite -> to_partial_memory_merge_partial_memories_left;
-    try erewrite -> to_partial_memory_merge_partial_memories_right;
+    try erewrite -> PS.to_partial_memory_merge_partial_memories_left;
+    try erewrite -> PS.to_partial_memory_merge_partial_memories_right;
     (eassumption || reflexivity).
 
   (* RB: TODO: Infer parameters from context. *)
@@ -1572,7 +1229,7 @@ Qed.
           now rewrite Hcase in Hpc1c);
     rewrite (PS.ptr_within_partial_frame_1 Hpc1p);
     rewrite (PS.ptr_within_partial_frame_2 Hpc1c');
-    simpl; rewrite pointer_compose.
+    simpl; rewrite Pointer.compose.
 
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
      in this section, but these should be pared down. *)
@@ -1729,8 +1386,8 @@ rename Hstep_cs' into _Hstep_cs'.
             =>
             remember (PS.unpartialize_stack (PS.merge_stacks GPS1 GPS2)) as gps12 eqn:Hgps12;
             remember (PS.merge_memories MEM1 MEM2) as mem12 eqn:Hmem12;
-            rewrite (merge_stacks_partition Hmergeable_ifaces Hcomes_from) in Hgps12;
-            try rewrite (merge_memories_partition Hmergeable_ifaces Hcomes_from) in Hmem12;
+            rewrite (PS.merge_stacks_partition Hmergeable_ifaces Hcomes_from) in Hgps12;
+            try rewrite (PS.merge_memories_partition Hmergeable_ifaces Hcomes_from) in Hmem12;
             apply PS.mergeable_states_intro
               with (ics := (gps12, mem12, REGS, PC))
           end;
@@ -1843,10 +1500,10 @@ rename Hpartial2' into _Hpartial2'.
         (* Stack and memory simplifications. *)
         try rewrite <- Hmem1.
         try rewrite <- Hstack1.
-        erewrite (merge_stacks_partition
+        erewrite (PS.merge_stacks_partition
                     (mergeable_interfaces_sym _ _ mergeable_interfaces)
                     Hcomes_from).
-        erewrite (merge_memories_partition
+        erewrite (PS.merge_memories_partition
                     (mergeable_interfaces_sym _ _ mergeable_interfaces)
                     Hcomes_from).
         (* Synchronize with c's step. *)
@@ -1859,13 +1516,13 @@ rename Hstep_cs' into _Hstep_cs';
             Hstore : Memory.store ?MEM1 ?PTR _ = Some ?MEM2
             |- _ =>
             rewrite <- Hcomp in Hics_pc1';
-            rewrite -> (program_store_to_partialized_memory Hics_pc1' Hstore) in Hmem1'
+            rewrite -> (PS.program_store_to_partialized_memory Hics_pc1' Hstore) in Hmem1'
           end;
           try match goal with
           | Hop : executing _ ?PC (IAlloc _ _),
             Halloc : Memory.alloc ?MEM1 (Pointer.component ?PTR) _ = Some (?MEM2, _)
             |- _ =>
-            rewrite -> (program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
+            rewrite -> (PS.program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
           end;
           (* Specialized stack rewrites for call and return. *)
           try match goal with
@@ -1886,17 +1543,17 @@ rename Hstep_cs' into _Hstep_cs';
             rewrite Hcomp1;
             rewrite Hcomp2;
             pose proof ptr_within_partial_frame_inv_2 (eq_sym Hstack1_hd) Hics_pc2; subst gps1_hd;
-            erewrite (merge_stacks_partition_cons
+            erewrite (PS.merge_stacks_partition_cons
                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
                         Hcomes_from)
           end;
           (* Stack and memory rewrites, then solve goal. *)
           rewrite <- Hmem1';
           try rewrite <- Hstack1';
-          try rewrite (merge_stacks_partition
+          try rewrite (PS.merge_stacks_partition
                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
                          Hcomes_from);
-          try erewrite (merge_memories_partition
+          try erewrite (PS.merge_memories_partition
                           (mergeable_interfaces_sym _ _ mergeable_interfaces)
                           Hcomes_from);
           (* Apply CS lemma and prove special-case side conditions. *)
@@ -2116,7 +1773,7 @@ rename Hstep_cs' into _Hstep_cs';
         rewrite -> Hiface in Hcomp1. (* Restore for later sub-goal. *)
         apply PS.ProgramControl.
         * assumption.
-        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * apply PS.to_partial_memory_merge_prepare_procedures_memory_left; assumption.
         * reflexivity.
       + rewrite CS.initial_machine_state_after_linking; try assumption.
         unfold CS.initial_state in HCSini1.
@@ -2132,7 +1789,7 @@ rename Hstep_cs' into _Hstep_cs';
         simpl.
         apply PS.ContextControl.
         * assumption.
-        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * apply PS.to_partial_memory_merge_prepare_procedures_memory_left; assumption.
         * reflexivity.
     - (* Symmetric case. *)
       inversion Hini2
@@ -2164,7 +1821,7 @@ rename Hstep_cs' into _Hstep_cs';
         * assumption.
         * setoid_rewrite unionmC at 2;
             last (rewrite 2!domm_prepare_procedures_memory; now apply linkability).
-          apply to_partial_memory_merge_prepare_procedures_memory_left; try assumption.
+          apply PS.to_partial_memory_merge_prepare_procedures_memory_left; try assumption.
           now apply linkable_sym.
         * reflexivity.
       + rewrite CS.initial_machine_state_after_linking; try assumption.
@@ -2183,7 +1840,7 @@ rename Hstep_cs' into _Hstep_cs';
         * assumption.
         * setoid_rewrite unionmC at 2;
             last (rewrite 2!domm_prepare_procedures_memory; now apply linkability).
-          apply to_partial_memory_merge_prepare_procedures_memory_left; try assumption.
+          apply PS.to_partial_memory_merge_prepare_procedures_memory_left; try assumption.
           now apply linkable_sym.
         * reflexivity.
   Qed.
@@ -2391,13 +2048,13 @@ rename Hstep_cs' into _Hstep_cs';
         first (rewrite Hcase in Hcomp1; discriminate).
       rewrite Hcase.
       unfold PS.mergeable_states_stack, PS.mergeable_states_memory. simpl.
-      erewrite to_partial_stack_merge_stack_left; try eassumption.
-      erewrite to_partial_memory_merge_memory_left; try eassumption.
+      erewrite PS.to_partial_stack_merge_stack_left; try eassumption.
+      erewrite PS.to_partial_memory_merge_memory_left; try eassumption.
       reflexivity.
     - rewrite Hcomp1.
       unfold PS.mergeable_states_stack, PS.mergeable_states_memory. simpl.
-      erewrite to_partial_stack_merge_stack_left; try eassumption.
-      erewrite to_partial_memory_merge_memory_left; try eassumption.
+      erewrite PS.to_partial_stack_merge_stack_left; try eassumption.
+      erewrite PS.to_partial_memory_merge_memory_left; try eassumption.
       reflexivity.
     - exfalso.
       eapply PS.domm_partition_in_both; eassumption.
@@ -2422,15 +2079,15 @@ rename Hstep_cs' into _Hstep_cs';
       eapply PS.domm_partition_in_neither; eassumption.
     - rewrite Hcomp2.
       unfold PS.mergeable_states_stack, PS.mergeable_states_memory. simpl.
-      erewrite to_partial_stack_merge_stack_right; try eassumption.
-      erewrite to_partial_memory_merge_memory_right; try eassumption.
+      erewrite PS.to_partial_stack_merge_stack_right; try eassumption.
+      erewrite PS.to_partial_memory_merge_memory_right; try eassumption.
       reflexivity.
     - destruct (Pointer.component pc1 \in domm (prog_interface p)) eqn:Hcase;
         first (rewrite Hcase in Hcomp2; discriminate).
       rewrite Hcase.
       unfold PS.mergeable_states_stack, PS.mergeable_states_memory. simpl.
-      erewrite to_partial_stack_merge_stack_right; try eassumption.
-      erewrite to_partial_memory_merge_memory_right; try eassumption.
+      erewrite PS.to_partial_stack_merge_stack_right; try eassumption.
+      erewrite PS.to_partial_memory_merge_memory_right; try eassumption.
       reflexivity.
     - exfalso.
       eapply PS.domm_partition_in_both; eassumption.
@@ -2795,7 +2452,7 @@ Section ThreewayMultisemProgram.
             apply program_load_in_partialized_memory_strong
               with (ctx := domm (prog_interface c)) (mem1 := mem);
               try assumption;
-            setoid_rewrite to_partial_memory_merge_partial_memories_left;
+            setoid_rewrite PS.to_partial_memory_merge_partial_memories_left;
               try eassumption;
             reflexivity
           end;
@@ -2849,14 +2506,14 @@ Section ThreewayMultisemProgram.
         now rewrite Hcomp in Hcompm1' (* Jumps. *)
       end
     || now rewrite -> Pointer.inc_preserves_component
-  |   (erewrite to_partial_memory_merge_partial_memories_right; (* Memory. *)
+  |   (erewrite PS.to_partial_memory_merge_partial_memories_right; (* Memory. *)
        reflexivity || eassumption)
     || (rewrite <- Hmem;
-       erewrite to_partial_memory_merge_memory_right;
+       erewrite PS.to_partial_memory_merge_memory_right;
        try easy;
        eassumption)
   | rewrite <- Hstk;
-    erewrite to_partial_stack_merge_stack_right;
+    erewrite PS.to_partial_stack_merge_stack_right;
     try easy;
     eassumption
   ].
@@ -2900,9 +2557,9 @@ Section ThreewayMultisemProgram.
         first (exfalso; eapply PS.domm_partition_in_neither; eassumption).
       constructor.
       + assumption.
-      + erewrite to_partial_memory_merge_memory_right; try easy.
+      + erewrite PS.to_partial_memory_merge_memory_right; try easy.
         eassumption.
-      + erewrite to_partial_stack_merge_stack_right; try easy.
+      + erewrite PS.to_partial_stack_merge_stack_right; try easy.
         eassumption.
     - inversion Hpartialm1 as [? ? ? ? ? ? _ | ? ? ? ? ? ? Hcontra];
         subst;
@@ -3210,7 +2867,7 @@ Section PartialComposition.
       inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
         PS.simplify_turn.
-      + exfalso. apply (@domm_partition_program_link_in_neither p c); assumption.
+      + exfalso. apply (@PS.domm_partition_program_link_in_neither p c); assumption.
       + assert (Hmainc : CS.prog_main_block c = 0)
           by now rewrite CS.prog_main_block_no_main.
         (* RB: NOTE: The lemma may be generalized by adding an equality on
@@ -3221,14 +2878,14 @@ Section PartialComposition.
         rewrite Hmainc Hmainp'.
         constructor.
         * exact Hcomp1.
-        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * apply PS.to_partial_memory_merge_prepare_procedures_memory_left; assumption.
         * reflexivity.
       + assert (Hmainp : CS.prog_main_block p = 0)
           by now rewrite CS.prog_main_block_no_main.
         rewrite Hmainp.
         constructor.
         * exact Hcomp1.
-        * apply to_partial_memory_merge_prepare_procedures_memory_left; assumption.
+        * apply PS.to_partial_memory_merge_prepare_procedures_memory_left; assumption.
         * reflexivity.
       + exfalso. eapply PS.domm_partition_in_both; eassumption.
     - (* Symmetric case. *)
@@ -3237,7 +2894,7 @@ Section PartialComposition.
       inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
         inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
         PS.simplify_turn.
-      + exfalso. apply (@domm_partition_program_link_in_neither p c); assumption.
+      + exfalso. apply (@PS.domm_partition_program_link_in_neither p c); assumption.
       + assert (Hmainc : CS.prog_main_block c = 0)
           by now rewrite CS.prog_main_block_no_main.
         rewrite Hmainc.
@@ -3246,7 +2903,7 @@ Section PartialComposition.
         * inversion linkability as [_ Hdisjoint].
           rewrite <- !domm_prepare_procedures_memory in Hdisjoint.
           rewrite (unionmC Hdisjoint).
-          apply to_partial_memory_merge_prepare_procedures_memory_left; first assumption.
+          apply PS.to_partial_memory_merge_prepare_procedures_memory_left; first assumption.
           apply linkable_sym; assumption.
         * reflexivity.
       + assert (Hmainp : CS.prog_main_block p = 0)
@@ -3260,7 +2917,7 @@ Section PartialComposition.
         * inversion linkability as [_ Hdisjoint].
           rewrite <- !domm_prepare_procedures_memory in Hdisjoint.
           rewrite (unionmC Hdisjoint).
-          apply to_partial_memory_merge_prepare_procedures_memory_left; first assumption.
+          apply PS.to_partial_memory_merge_prepare_procedures_memory_left; first assumption.
           apply linkable_sym; assumption.
         * reflexivity.
       + exfalso. eapply PS.domm_partition_in_both; eassumption.
