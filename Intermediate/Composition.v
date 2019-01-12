@@ -1542,9 +1542,11 @@ Qed.
       PS.mergeable_states (prog_interface c) (prog_interface p) s s2.
   Admitted.
 
+  (* RB: TODO: Rename. *)
   Ltac rewrite_if_then :=
     match goal with
     | H: is_true ?X
+      |- context [ (if ?X then _ else _) ]
       =>
       rewrite H
     end.
