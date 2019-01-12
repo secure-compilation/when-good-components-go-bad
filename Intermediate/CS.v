@@ -936,6 +936,15 @@ Remark comes_from_initial_state_mem_domm s ctx :
   domm (state_mem s) = domm ctx.
 Admitted. (* Grade 1. *)
 
+(* RB: NOTE: Consider possible alternatives on [CS.comes_from_initial_state]
+   complemented instead by, say, [PS.step] based on what we usually have in
+   the context, making for more direct routes. *)
+Lemma comes_from_initial_state_step_trans p s t s' :
+  CS.comes_from_initial_state s (prog_interface p) ->
+  CS.step (prepare_global_env p) s t s' ->
+  CS.comes_from_initial_state s' (prog_interface p).
+Admitted. (* Grade 2. *)
+
 Lemma silent_step_preserves_component G s s' :
   CS.step G s E0 s' ->
   Pointer.component (state_pc s) = Pointer.component (state_pc s').

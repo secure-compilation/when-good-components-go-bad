@@ -25,23 +25,6 @@ Set Bullet Behavior "Strict Subproofs".
 Import Intermediate.
 
 (*
-  CS components
-
-  RB: TODO: The following results are currently only used here, but belong
-  logically in CS, and should be relocated as they are proved and, where needed,
-  generalized. Module qualifiers will be tweaked as needed.
-*)
-
-(* RB: NOTE: Consider possible alternatives on [CS.comes_from_initial_state]
-   complemented instead by, say, [PS.step] based on what we usually have in
-   the context, making for more direct routes. *)
-Lemma comes_from_initial_state_step_trans p s t s' :
-  CS.comes_from_initial_state s (prog_interface p) ->
-  CS.step (prepare_global_env p) s t s' ->
-  CS.comes_from_initial_state s' (prog_interface p).
-Admitted. (* Grade 2. *)
-
-(*
   P and C are two partial programs whose linking results in a whole program.
   We want to show that P and C do the same terminating behavior in the partial semantics
   iff their linking produces the very same behavior in the complete semantics.
