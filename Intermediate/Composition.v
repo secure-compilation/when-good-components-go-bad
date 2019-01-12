@@ -1583,7 +1583,7 @@ rename Hstep_cs' into _Hstep_cs';
             |- imported_procedure _ ?C _ _
             =>
             rewrite imported_procedure_unionm_left; try assumption;
-            rewrite imported_procedure_unionm_left in H7; try assumption;
+            rewrite imported_procedure_unionm_left in Himport; try assumption;
             now rewrite Hsame_iface1
           end;
           try match goal with
