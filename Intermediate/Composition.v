@@ -300,15 +300,15 @@ Lemma unpartialize_stack_merge_stacks_cons_partition:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
   forall ptr pgps1 pgps2,
+    Pointer.component ptr \in domm (unionm ctx1 ctx2) ->
     PS.unpartialize_stack
       (PS.merge_stacks (PS.to_partial_frame (domm ctx1) ptr :: pgps1)
                        (PS.to_partial_frame (domm ctx2) ptr :: pgps2)) =
     ptr :: PS.unpartialize_stack (PS.merge_stacks pgps1 pgps2).
 Proof.
-  intros ctx1 ctx2 Hmerge_ifaces ptr pgps1 pgps2.
+  intros ctx1 ctx2 Hmerge_ifaces ptr pgps1 pgps2 Hptr.
   simpl.
-  rewrite (unpartialize_stack_frame_partition Hmerge_ifaces).
-  reflexivity.
+  now rewrite (unpartialize_stack_frame_partition Hmerge_ifaces).
 Qed.
 
 (* RB: TODO: Verify the necessary hypotheses for this lemma and its sibling.
