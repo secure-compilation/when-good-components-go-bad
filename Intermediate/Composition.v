@@ -1173,6 +1173,15 @@ Proof.
   rewrite setm_union. now inversion Halloc.
 Qed.
 
+  (* RB: TODO: Rename. *)
+  Ltac rewrite_if_then :=
+    match goal with
+    | H: is_true ?X
+      |- context [ (if ?X then _ else _) ]
+      =>
+      rewrite H
+    end.
+
   (* RB: TODO: This lemma is related to the ones below, on mergeable states, but
      should also be relocated once the sections are finished.
      Also, for the sake of findability, consistently use shorthand notation
@@ -1247,15 +1256,6 @@ Qed.
       specialize (IHHstar Hmerge (eq_refl _)).
       exact (mergeable_states_step_E0 IHHstar Hstep).
   Qed.
-
-  (* RB: TODO: Rename. *)
-  Ltac rewrite_if_then :=
-    match goal with
-    | H: is_true ?X
-      |- context [ (if ?X then _ else _) ]
-      =>
-      rewrite H
-    end.
 
   Ltac step_trans_solve_CC :=
     try rewrite -> Pointer.inc_preserves_component;
