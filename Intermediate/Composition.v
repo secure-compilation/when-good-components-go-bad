@@ -1223,8 +1223,14 @@ Qed.
         rewrite <- Pointer.inc_preserves_component.
         rewrite <- Hmem1.
         rewrite <- Hstk1.
-        apply PS.mergeable_states_intro
-          with (ics := (gps, mem, regs, Pointer.inc pc)).
+        match goal with
+        | |- PS.mergeable_states
+              _ _ (PS.CC (_, ?GPS1, ?MEM1)) (PS.PC (?GPS2, ?MEM2, ?REGS, ?PC))
+          =>
+          apply PS.mergeable_states_intro
+            with (ics := (PS.unpartialize_stack (PS.merge_stacks GPS1 GPS2),
+                          PS.merge_memories MEM1 MEM2, REGS, PC))
+        end.
         - constructor; try easy.
           + now apply linkable_sym.
           + pose proof (cprog_closed_interface prog_is_closed) as Hclosed.
@@ -1234,10 +1240,18 @@ Qed.
           + simpl. PS.simplify_turn. now rewrite_if_else_negb.
           + rewrite <- Hmem1.
             rewrite <- Hstk1.
-            simpl. PS.simplify_turn. now rewrite_if_else_negb.
+            simpl.
+            simpl. PS.simplify_turn. rewrite_if_else_negb.
+            erewrite PS.to_partial_stack_merge_stack_right; [| easy | eassumption].
+            erewrite PS.to_partial_memory_merge_memory_right; [| easy | eassumption].
+            reflexivity.
         - constructor; try reflexivity.
-          now rewrite Pointer.inc_preserves_component.
-        - constructor; easy.
+          + now rewrite Pointer.inc_preserves_component.
+          + erewrite PS.to_partial_memory_merge_memory_left; try easy; eassumption.
+          + erewrite PS.to_partial_stack_merge_stack_left; try easy; eassumption.
+        - constructor; try easy.
+          + erewrite PS.to_partial_memory_merge_memory_right; try easy; eassumption.
+          + erewrite PS.to_partial_stack_merge_stack_right; try easy; eassumption.
       }
 
       all:admit.
