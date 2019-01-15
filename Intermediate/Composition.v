@@ -1174,13 +1174,34 @@ Proof.
 Qed.
 
   (* RB: TODO: This lemma is related to the ones below, on mergeable states, but
-     should also be relocated once the sections are finished. *)
+     should also be relocated once the sections are finished.
+     Also, for the sake of findability, consistently use shorthand notation
+     (involving PS.sem) or its extension into PS.step et al.). *)
+  Lemma mergeable_states_step_E0 :
+    forall s s1 s2,
+      PS.mergeable_states (prog_interface c) (prog_interface p) s s1 ->
+      PS.step c (prog_interface p) (prepare_global_env c) s1 E0 s2 ->
+      PS.mergeable_states (prog_interface c) (prog_interface p) s s2.
+  Admitted.
+
   Lemma mergeable_states_star_E0 :
     forall s s1 s2,
       PS.mergeable_states (prog_interface c) (prog_interface p) s s1 ->
       Star (PS.sem c (prog_interface p)) s1 E0 s2 ->
       PS.mergeable_states (prog_interface c) (prog_interface p) s s2.
-  Admitted.
+  Proof.
+    simpl.
+    intros s s1 s2 Hmerge Hstar.
+    apply star_iff_starR in Hstar.
+    remember E0 as t eqn:Ht. revert Ht.
+    induction Hstar as [| ? ? ? ? ? ? ? IHHstar Hstep];
+      subst;
+      intros Ht.
+    - assumption.
+    - apply Eapp_E0_inv in Ht. destruct Ht; subst t1 t2.
+      specialize (IHHstar Hmerge (eq_refl _)).
+      exact (mergeable_states_step_E0 IHHstar Hstep).
+  Qed.
 
   (* RB: TODO: Rename. *)
   Ltac rewrite_if_then :=
