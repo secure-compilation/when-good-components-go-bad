@@ -1182,6 +1182,51 @@ Qed.
       PS.mergeable_states (prog_interface c) (prog_interface p) s s1 ->
       PS.step c (prog_interface p) (prepare_global_env c) s1 E0 s2 ->
       PS.mergeable_states (prog_interface c) (prog_interface p) s s2.
+  Proof.
+    intros s s1 s2 Hmerge Hstep.
+    inversion Hmerge as [ics ? ? Hmerge_ifaces Hcomes_from Hpartial Hpartial1]; subst.
+    inversion Hstep
+      as [p' ? ? ? ics1 ics2
+          Hsame_iface1 _ Hwf1 Hlinkable1 Hmains1 HCSstep HCSpartial1 HCSpartial2];
+      subst.
+    inversion Hpartial1 as [ ? ? ? ? ? ? Hcomp1' | ? ? ? ? ? ? Hcomp1']; subst;
+      inversion Hpartial as [? ? ? ? ? ? Hcomp | ? ? ? ? ? ? Hcomp]; subst;
+      PS.simplify_turn;
+      [ admit | | | admit]. (* Contra.*)
+    - (* On the program. *)
+      inversion HCSpartial1 as [? ? ? ? ? ? Hcomp1 Hmem1 Hstk1 |]; subst.
+      inversion HCSstep; subst.
+
+      1:{
+        inversion HCSpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+          [| admit]. (* Contra. *)
+        rewrite <- Pointer.inc_preserves_component.
+        rewrite <- Hmem1.
+        rewrite <- Hstk1.
+        apply PS.mergeable_states_intro
+          with (ics := (gps, mem, regs, Pointer.inc pc)).
+        - constructor; try easy.
+          + now apply linkable_sym.
+          + admit.
+        - eapply PS.comes_from_initial_state_step_trans; try eassumption.
+          + admit.
+          + rewrite <- Hmem1.
+            rewrite <- Hstk1.
+            admit.
+        - constructor; try reflexivity.
+          now rewrite Pointer.inc_preserves_component.
+        - constructor; easy.
+      }
+
+      all:admit.
+
+    - (* On the context, this is straightforward. *)
+      match goal with
+      | Hstep : PS.step _ _ _ ?S1 E0 s2
+        |- _ =>
+        assert (Hcc1 : PS.is_context_component S1 (prog_interface p))
+          by assumption
+      end.
   Admitted.
 
   Lemma mergeable_states_star_E0 :
