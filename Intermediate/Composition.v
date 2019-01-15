@@ -1182,6 +1182,14 @@ Qed.
       rewrite H
     end.
 
+  Ltac rewrite_if_else_negb :=
+    match goal with
+    | H: is_true (negb ?X)
+      |- context [ (if ?X then _ else _) ]
+      =>
+      apply negb_true_iff in H; rewrite H
+    end.
+
   (* RB: TODO: This lemma is related to the ones below, on mergeable states, but
      should also be relocated once the sections are finished.
      Also, for the sake of findability, consistently use shorthand notation
@@ -1208,7 +1216,10 @@ Qed.
 
       1:{
         inversion HCSpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
-          [| admit]. (* Contra. *)
+          last (exfalso;
+                PS.simplify_turn;
+                rewrite (CS.silent_step_preserves_component _ _ _ HCSstep) in Hcomp1';
+                exfalso; eapply PS.domm_partition_in_notin; eassumption).
         rewrite <- Pointer.inc_preserves_component.
         rewrite <- Hmem1.
         rewrite <- Hstk1.
@@ -1216,12 +1227,14 @@ Qed.
           with (ics := (gps, mem, regs, Pointer.inc pc)).
         - constructor; try easy.
           + now apply linkable_sym.
-          + admit.
+          + pose proof (cprog_closed_interface prog_is_closed) as Hclosed.
+            rewrite unionmC; first assumption.
+            rewrite fdisjointC. now inversion linkability.
         - eapply PS.comes_from_initial_state_step_trans; try eassumption.
-          + admit.
+          + simpl. PS.simplify_turn. now rewrite_if_else_negb.
           + rewrite <- Hmem1.
             rewrite <- Hstk1.
-            admit.
+            simpl. PS.simplify_turn. now rewrite_if_else_negb.
         - constructor; try reflexivity.
           now rewrite Pointer.inc_preserves_component.
         - constructor; easy.
