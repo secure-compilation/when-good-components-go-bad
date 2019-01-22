@@ -1109,7 +1109,25 @@ Lemma to_partial_memory_merge_partial_memories_left
                       (to_partial_memory mem2 (domm iface2)))
       (domm iface1) =
     to_partial_memory mem1 (domm iface1).
-Proof.
+Admitted. (* Grade 2. *)
+
+Lemma to_partial_memory_merge_partial_memories_left_2
+      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions: symmetric to those above. *)
+  forall G gps0 mem0 regs0 pc0 t gps2 regs2 pc2,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps2, mem2, regs2, pc2) ->
+  forall gps1 regs1 pc1,
+    to_partial_memory mem1 (domm iface2) =
+    to_partial_memory mem0 (domm iface2) ->
+    CS.comes_from_initial_state (gps1, mem1, regs1, pc1)
+                                (unionm iface1 iface2) ->
+    (* And the main result. *)
+    to_partial_memory
+      (merge_memories (to_partial_memory mem1 (domm iface1))
+                      (to_partial_memory mem2 (domm iface2)))
+      (domm iface1) =
+    to_partial_memory mem1 (domm iface1).
 Admitted. (* Grade 2. *)
 
 Corollary to_partial_memory_merge_memory_left :
@@ -1138,6 +1156,25 @@ Lemma to_partial_memory_merge_partial_memories_right
     to_partial_memory mem0 (domm iface1) ->
   forall gps2 regs2 pc2,
     CS.comes_from_initial_state (gps2, mem2, regs2, pc2)
+                                (unionm iface1 iface2) ->
+    (* And the main result. *)
+    to_partial_memory
+      (merge_memories (to_partial_memory mem1 (domm iface1))
+                      (to_partial_memory mem2 (domm iface2)))
+      (domm iface2) =
+    to_partial_memory mem2 (domm iface2).
+Admitted. (* Grade 2. *)
+
+Lemma to_partial_memory_merge_partial_memories_right_2
+      (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
+    mergeable_interfaces iface1 iface2 ->
+    (* Specialized assumptions: symmetric to those above. *)
+  forall G gps0 mem0 regs0 pc0 t gps2 regs2 pc2,
+    CS.step G (gps0, mem0, regs0, pc0) t (gps2, mem2, regs2, pc2) ->
+  forall gps1 regs1 pc1,
+    to_partial_memory mem1 (domm iface2) =
+    to_partial_memory mem0 (domm iface2) ->
+    CS.comes_from_initial_state (gps1, mem1, regs1, pc1)
                                 (unionm iface1 iface2) ->
     (* And the main result. *)
     to_partial_memory
