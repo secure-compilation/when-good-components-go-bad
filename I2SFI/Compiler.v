@@ -29,7 +29,9 @@ Open Scope monad_scope.
    fault injection experiments *)
 Definition TURN_OFF_ALIGNMENT := false.
 
-Definition newline := String "010" ""%string.
+Require Import String.
+Require Import Ascii.
+Definition newline := String "010"%char ""%string.
 
 Definition Component_id := N.
 Definition Procedure_id := N.
@@ -881,7 +883,7 @@ Definition layout_code (acode : BinNatMap.t (BinNatMap.t AbstractMachine.code))
 
 Definition index_of (lbl : AbstractMachine.label) (listing : AbstractMachine.lcode) : nat :=
   fst (List.fold_left (fun '(index,found) '(crt_lbls,_) =>
-                    if (eqb found false)
+                    if (Bool.eqb found false)
                     then
                       match crt_lbls with
                       | None => ((index+1)%nat,false)
