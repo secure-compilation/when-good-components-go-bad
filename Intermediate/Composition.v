@@ -1194,6 +1194,107 @@ Qed.
      should also be relocated once the sections are finished.
      Also, for the sake of findability, consistently use shorthand notation
      (involving PS.sem) or its extension into PS.step et al.). *)
+  Ltac t_mergeable_states_step_E0
+       HCSpartial2 HCSstep Hcomp1' Hmem1 Hstk1 Hcomp pc :=
+    inversion HCSpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
+      [| (exfalso;
+          PS.simplify_turn;
+          rewrite (CS.silent_step_preserves_component _ _ _ HCSstep) in Hcomp1';
+          exfalso; eapply PS.domm_partition_in_notin; eassumption)
+      ];
+    [rewrite <- Pointer.inc_preserves_component];
+    [try rewrite <- Hmem1];
+    [rewrite <- Hstk1];
+    [match goal with
+     | |- PS.mergeable_states
+            _ _ (PS.CC (_, ?GPS1, ?MEM1)) (PS.PC (?GPS2, ?MEM2, ?REGS, ?PC))
+       =>
+       apply PS.mergeable_states_intro
+         with (ics := (PS.unpartialize_stack (PS.merge_stacks GPS1 GPS2),
+                       PS.merge_memories MEM1 MEM2, REGS, PC))
+     end];
+    [ constructor; try easy;
+      [ now apply linkable_sym
+      | pose proof (cprog_closed_interface prog_is_closed) as Hclosed;
+        rewrite unionmC; first assumption;
+        rewrite fdisjointC; now inversion linkability
+      ]
+    | eapply PS.comes_from_initial_state_step_trans; try eassumption;
+      [ simpl; PS.simplify_turn; now rewrite_if_else_negb
+      | try rewrite <- Hmem1;
+        [rewrite <- Hstk1];
+        [simpl];
+        [simpl]; [PS.simplify_turn]; [rewrite_if_else_negb];
+        [erewrite PS.to_partial_stack_merge_stack_right]; [| easy | eassumption];
+        (* RB: TODO: Here and in other instances, try distributing
+           PS.partial_memory over appropriate instances of PS.merge_memories
+           for a more uniform treatment of the cases. Note also this
+           case-specific treatment of memories reoccurs in three sub-goals of
+           this case analysis. *)
+        [match goal with
+         | Hop : executing _ pc (IAlloc _ _)
+           |- _ =>
+           erewrite PS.to_partial_memory_merge_partial_memories_right_2; try eassumption
+         | Hop : executing _ pc (IStore _ _)
+           |- _ =>
+           erewrite PS.to_partial_memory_merge_partial_memories_right_2; try eassumption
+         | |- _ =>
+           erewrite PS.to_partial_memory_merge_memory_right; [| easy | eassumption]
+         end];
+        [reflexivity]
+      ]
+    | try match goal with
+      | Hlabel : find_label_in_component _ pc _ = Some _
+        |- _ =>
+        rewrite -> Pointer.inc_preserves_component,
+                -> (find_label_in_component_1 _ _ _ _ Hlabel);
+        rewrite (find_label_in_component_1 _ _ _ _ Hlabel) in Hcomp
+      | Hlabel : find_label_in_procedure _ pc _ = Some _
+        |- _ =>
+        rewrite -> Pointer.inc_preserves_component,
+                -> (find_label_in_procedure_1 _ _ _ _ Hlabel);
+        rewrite (find_label_in_procedure_1 _ _ _ _ Hlabel) in Hcomp
+      | Hop : executing _ pc (IJump _),
+        Heq : Pointer.component _ = Pointer.component pc
+        |- _ =>
+        rewrite -> Pointer.inc_preserves_component,
+                <- Heq;
+        rewrite <- Heq in Hcomp
+      end;
+      [constructor]; try reflexivity;
+      [   assumption
+        || now rewrite Pointer.inc_preserves_component
+      | match goal with
+        | Hop : executing _ pc (IAlloc _ _)
+          |- _ =>
+          erewrite PS.to_partial_memory_merge_partial_memories_left_2;
+            try eassumption; reflexivity
+        | Hop : executing _ pc (IStore _ _)
+          |- _ =>
+          erewrite PS.to_partial_memory_merge_partial_memories_left_2;
+            try eassumption; reflexivity
+        | |- _ =>
+          erewrite PS.to_partial_memory_merge_memory_left; try easy; eassumption
+        end
+      | erewrite PS.to_partial_stack_merge_stack_left; try easy; eassumption
+      ]
+    | constructor; try easy;
+      [ match goal with
+        | Hop : executing _ pc (IAlloc _ _)
+          |- _ =>
+          erewrite PS.to_partial_memory_merge_partial_memories_right_2;
+          try eassumption; reflexivity
+        | Hop : executing _ pc (IStore _ _)
+          |- _ =>
+          erewrite PS.to_partial_memory_merge_partial_memories_right_2;
+          try eassumption; reflexivity
+        | |- _ =>
+          erewrite PS.to_partial_memory_merge_memory_right; try easy; eassumption
+        end
+      | erewrite PS.to_partial_stack_merge_stack_right; try easy; eassumption
+      ]
+    ].
+
   Lemma mergeable_states_step_E0 :
     forall s s1 s2,
       PS.mergeable_states (prog_interface c) (prog_interface p) s s1 ->
@@ -1212,105 +1313,8 @@ Qed.
       [ admit | | | admit]. (* Contra.*)
     - (* On the program. *)
       inversion HCSpartial1 as [? ? ? ? ? ? Hcomp1 Hmem1 Hstk1 |]; subst.
-      inversion HCSstep; subst.
-
-      1:{
-        inversion HCSpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
-          last (exfalso;
-                PS.simplify_turn;
-                rewrite (CS.silent_step_preserves_component _ _ _ HCSstep) in Hcomp1';
-                exfalso; eapply PS.domm_partition_in_notin; eassumption).
-        rewrite <- Pointer.inc_preserves_component.
-        try rewrite <- Hmem1.
-        rewrite <- Hstk1.
-        match goal with
-        | |- PS.mergeable_states
-              _ _ (PS.CC (_, ?GPS1, ?MEM1)) (PS.PC (?GPS2, ?MEM2, ?REGS, ?PC))
-          =>
-          apply PS.mergeable_states_intro
-            with (ics := (PS.unpartialize_stack (PS.merge_stacks GPS1 GPS2),
-                          PS.merge_memories MEM1 MEM2, REGS, PC))
-        end.
-        - constructor; try easy.
-          + now apply linkable_sym.
-          + pose proof (cprog_closed_interface prog_is_closed) as Hclosed.
-            rewrite unionmC; first assumption.
-            rewrite fdisjointC. now inversion linkability.
-        - eapply PS.comes_from_initial_state_step_trans; try eassumption.
-          + simpl. PS.simplify_turn. now rewrite_if_else_negb.
-          + try rewrite <- Hmem1.
-            rewrite <- Hstk1.
-            simpl.
-            simpl. PS.simplify_turn. rewrite_if_else_negb.
-            erewrite PS.to_partial_stack_merge_stack_right; [| easy | eassumption].
-            (* RB: TODO: Here and in other instances, try distributing
-               PS.partial_memory over appropriate instances of PS.merge_memories
-               for a more uniform treatment of the cases. Note also this
-               case-specific treatment of memories reoccurs in three sub-goals of
-               this case analysis. *)
-            match goal with
-            | Hop : executing _ pc (IAlloc _ _)
-              |- _ =>
-              erewrite PS.to_partial_memory_merge_partial_memories_right_2; try eassumption
-            | Hop : executing _ pc (IStore _ _)
-              |- _ =>
-              erewrite PS.to_partial_memory_merge_partial_memories_right_2; try eassumption
-            | |- _ =>
-              erewrite PS.to_partial_memory_merge_memory_right; [| easy | eassumption]
-            end.
-            reflexivity.
-        - try match goal with
-          | Hlabel : find_label_in_component _ pc _ = Some _
-            |- _ =>
-            rewrite -> Pointer.inc_preserves_component,
-                    -> (find_label_in_component_1 _ _ _ _ Hlabel);
-            rewrite (find_label_in_component_1 _ _ _ _ Hlabel) in Hcomp
-          | Hlabel : find_label_in_procedure _ pc _ = Some _
-            |- _ =>
-            rewrite -> Pointer.inc_preserves_component,
-                    -> (find_label_in_procedure_1 _ _ _ _ Hlabel);
-            rewrite (find_label_in_procedure_1 _ _ _ _ Hlabel) in Hcomp
-          | Hop : executing _ pc (IJump _),
-            Heq : Pointer.component _ = Pointer.component pc
-            |- _ =>
-            rewrite -> Pointer.inc_preserves_component,
-                    <- Heq;
-            rewrite <- Heq in Hcomp
-          end.
-          constructor; try reflexivity.
-          +    assumption
-            || now rewrite Pointer.inc_preserves_component.
-          + match goal with
-            | Hop : executing _ pc (IAlloc _ _)
-              |- _ =>
-              erewrite PS.to_partial_memory_merge_partial_memories_left_2;
-                try eassumption; reflexivity
-            | Hop : executing _ pc (IStore _ _)
-              |- _ =>
-              erewrite PS.to_partial_memory_merge_partial_memories_left_2;
-                try eassumption; reflexivity
-            | |- _ =>
-              erewrite PS.to_partial_memory_merge_memory_left; try easy; eassumption
-            end.
-          + erewrite PS.to_partial_stack_merge_stack_left; try easy; eassumption.
-        - constructor; try easy.
-          + match goal with
-            | Hop : executing _ pc (IAlloc _ _)
-              |- _ =>
-              erewrite PS.to_partial_memory_merge_partial_memories_right_2;
-                try eassumption; reflexivity
-            | Hop : executing _ pc (IStore _ _)
-              |- _ =>
-              erewrite PS.to_partial_memory_merge_partial_memories_right_2;
-                try eassumption; reflexivity
-            | |- _ =>
-              erewrite PS.to_partial_memory_merge_memory_right; try easy; eassumption
-            end.
-          + erewrite PS.to_partial_stack_merge_stack_right; try easy; eassumption.
-      }
-
-      all:admit.
-
+      inversion HCSstep; subst;
+        now t_mergeable_states_step_E0 HCSpartial2 HCSstep Hcomp1' Hmem1 Hstk1 Hcomp pc.
     - (* On the context, this is straightforward. *)
       match goal with
       | Hstep : PS.step _ _ _ ?S1 E0 s2
