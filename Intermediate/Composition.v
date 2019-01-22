@@ -1551,7 +1551,7 @@ rename Hstep_cs' into _Hstep_cs';
           end;
           try match goal with
           | Hcomp1 : Pointer.component ics_pc1' = Pointer.component pc1,
-            Hcomp2 : Pointer.component ics_pc2' = Pointer.component _
+            Hcomp2 : Pointer.component ?ICS_PC2' = Pointer.component _
             |- CS.step _ _ [ERet _ _ _] _
             =>
             destruct gps1 as [| gps1_hd gps1]; [now inversion Hstack1' | ];
@@ -1625,7 +1625,7 @@ rename Hstep_cs' into _Hstep_cs';
             Hcomp : Pointer.component _ = Pointer.component pc1
             |- Memory.store _ _ _ = Some _
             =>
-            rewrite <- (merge_memories_partition
+            rewrite <- (PS.merge_memories_partition
                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
                          Hcomes_from)
                     at 1;
@@ -1639,7 +1639,7 @@ rename Hstep_cs' into _Hstep_cs';
           | Halloc : Memory.alloc ics_mem1 _ _ = Some (_, _)
             |- Memory.alloc mem1 _ _ = Some (_, _)
             =>
-            rewrite <- (merge_memories_partition
+            rewrite <- (PS.merge_memories_partition
                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
                          Hcomes_from)
                     at 1;
