@@ -1259,8 +1259,27 @@ Qed.
               erewrite PS.to_partial_memory_merge_memory_right; [| easy | eassumption]
             end.
             reflexivity.
-        - constructor; try reflexivity.
-          + now rewrite Pointer.inc_preserves_component.
+        - try match goal with
+          | Hlabel : find_label_in_component _ pc _ = Some _
+            |- _ =>
+            rewrite -> Pointer.inc_preserves_component,
+                    -> (find_label_in_component_1 _ _ _ _ Hlabel);
+            rewrite (find_label_in_component_1 _ _ _ _ Hlabel) in Hcomp
+          | Hlabel : find_label_in_procedure _ pc _ = Some _
+            |- _ =>
+            rewrite -> Pointer.inc_preserves_component,
+                    -> (find_label_in_procedure_1 _ _ _ _ Hlabel);
+            rewrite (find_label_in_procedure_1 _ _ _ _ Hlabel) in Hcomp
+          | Hop : executing _ pc (IJump _),
+            Heq : Pointer.component _ = Pointer.component pc
+            |- _ =>
+            rewrite -> Pointer.inc_preserves_component,
+                    <- Heq;
+            rewrite <- Heq in Hcomp
+          end.
+          constructor; try reflexivity.
+          +    assumption
+            || now rewrite Pointer.inc_preserves_component.
           + match goal with
             | Hop : executing _ pc (IAlloc _ _)
               |- _ =>
