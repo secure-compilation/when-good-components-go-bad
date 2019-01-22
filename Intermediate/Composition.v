@@ -1221,7 +1221,7 @@ Qed.
                 rewrite (CS.silent_step_preserves_component _ _ _ HCSstep) in Hcomp1';
                 exfalso; eapply PS.domm_partition_in_notin; eassumption).
         rewrite <- Pointer.inc_preserves_component.
-        rewrite <- Hmem1.
+        try rewrite <- Hmem1.
         rewrite <- Hstk1.
         match goal with
         | |- PS.mergeable_states
@@ -1238,19 +1238,55 @@ Qed.
             rewrite fdisjointC. now inversion linkability.
         - eapply PS.comes_from_initial_state_step_trans; try eassumption.
           + simpl. PS.simplify_turn. now rewrite_if_else_negb.
-          + rewrite <- Hmem1.
+          + try rewrite <- Hmem1.
             rewrite <- Hstk1.
             simpl.
             simpl. PS.simplify_turn. rewrite_if_else_negb.
             erewrite PS.to_partial_stack_merge_stack_right; [| easy | eassumption].
-            erewrite PS.to_partial_memory_merge_memory_right; [| easy | eassumption].
+            (* RB: TODO: Here and in other instances, try distributing
+               PS.partial_memory over appropriate instances of PS.merge_memories
+               for a more uniform treatment of the cases. Note also this
+               case-specific treatment of memories reoccurs in three sub-goals of
+               this case analysis. *)
+            match goal with
+            | Hop : executing _ pc (IAlloc _ _)
+              |- _ =>
+              erewrite PS.to_partial_memory_merge_partial_memories_right_2; try eassumption
+            | Hop : executing _ pc (IStore _ _)
+              |- _ =>
+              erewrite PS.to_partial_memory_merge_partial_memories_right_2; try eassumption
+            | |- _ =>
+              erewrite PS.to_partial_memory_merge_memory_right; [| easy | eassumption]
+            end.
             reflexivity.
         - constructor; try reflexivity.
           + now rewrite Pointer.inc_preserves_component.
-          + erewrite PS.to_partial_memory_merge_memory_left; try easy; eassumption.
+          + match goal with
+            | Hop : executing _ pc (IAlloc _ _)
+              |- _ =>
+              erewrite PS.to_partial_memory_merge_partial_memories_left_2;
+                try eassumption; reflexivity
+            | Hop : executing _ pc (IStore _ _)
+              |- _ =>
+              erewrite PS.to_partial_memory_merge_partial_memories_left_2;
+                try eassumption; reflexivity
+            | |- _ =>
+              erewrite PS.to_partial_memory_merge_memory_left; try easy; eassumption
+            end.
           + erewrite PS.to_partial_stack_merge_stack_left; try easy; eassumption.
         - constructor; try easy.
-          + erewrite PS.to_partial_memory_merge_memory_right; try easy; eassumption.
+          + match goal with
+            | Hop : executing _ pc (IAlloc _ _)
+              |- _ =>
+              erewrite PS.to_partial_memory_merge_partial_memories_right_2;
+                try eassumption; reflexivity
+            | Hop : executing _ pc (IStore _ _)
+              |- _ =>
+              erewrite PS.to_partial_memory_merge_partial_memories_right_2;
+                try eassumption; reflexivity
+            | |- _ =>
+              erewrite PS.to_partial_memory_merge_memory_right; try easy; eassumption
+            end.
           + erewrite PS.to_partial_stack_merge_stack_right; try easy; eassumption.
       }
 
