@@ -1455,6 +1455,69 @@ rename Hstep_cs' into _Hstep_cs'.
 
   Admitted.
 
+  Ltac t_mergeable_states_step_CS_partial2 Hpartial2 pc1 :=
+    inversion Hpartial2
+      as [ ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2
+         | ? ? ? ? ? ? Hcontra];
+      subst;
+    [ idtac
+    | exfalso; PS.simplify_turn;
+      match goal with
+      | Hlabel : find_label_in_component _ pc1 _ = Some ?PC
+        |- _ =>
+        rewrite <- (find_label_in_component_1 _ _ _ _ Hlabel) in Hcontra
+      | Hlabel : find_label_in_procedure _ pc1 _ = Some ?PC
+        |- _ =>
+        rewrite <- (find_label_in_procedure_1 _ _ _ _ Hlabel) in Hcontra
+      | Hop : executing _ pc1 (IJump _),
+        Heq : Pointer.component _ = Pointer.component pc1
+        |- _ =>
+        rewrite -> Heq in Hcontra
+      | Hop : executing _ pc1 (ICall _ _)
+        |- _ =>
+        admit
+      | Hop : executing _ pc1 IReturn
+        |- _ =>
+        admit
+      | |- _ =>
+        rewrite -> Pointer.inc_preserves_component in Hcontra
+      end;
+      eapply PS.domm_partition_in_notin; eassumption
+    ];
+rename Hpartial2 into _Hpartial2.
+
+  Ltac t_mergeable_states_step_CS_partial2' Hpartial2' Hcomp1' ics_pc1' :=
+    inversion Hpartial2'
+      as [ ? ? ? ? ? ? Hcontra
+         | ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2'];
+      subst;
+    [ exfalso; PS.simplify_turn;
+      match goal with
+      | Hlabel : find_label_in_component _ ics_pc1' _ = Some _
+        |- _ =>
+        rewrite <- (find_label_in_component_1 _ _ _ _ Hlabel) in Hcontra
+      | Hlabel : find_label_in_procedure _ ics_pc1' _ = Some _
+        |- _ =>
+        rewrite <- (find_label_in_procedure_1 _ _ _ _ Hlabel) in Hcontra
+      | Hop : executing _ ics_pc1' (IJump _),
+        Heq : Pointer.component _ = Pointer.component ics_pc1'
+        |- _ =>
+        rewrite -> Heq in Hcontra
+      | Hop : executing _ ics_pc1' (ICall _ _)
+        |- _ =>
+        admit
+      | Hop : executing _ ics_pc1' IReturn
+        |- _ =>
+        admit
+      | |- _ =>
+        rewrite -> Pointer.inc_preserves_component in Hcontra
+      end;
+      rewrite -> Hcomp1' in Hcontra;
+      eapply PS.domm_partition_in_neither; eassumption
+    | idtac
+    ];
+rename Hpartial2' into _Hpartial2'.
+
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
@@ -1486,7 +1549,7 @@ rename Hpartial_ics1 into _Hpartial_ics1.
     - (* p has control. *)
       inversion Hpartial_ics1'
         as [? | gps1' ? mem1' ? ? pc1' Hcc1']; subst;
-        first admit. (* Contra. *)
+        first (exfalso; eapply PS.domm_partition_in_neither; eassumption).
 rename Hpartial_ics1' into _Hpartial_ics1'.
       inversion Hpartial1
         as [ics_gps1 ? ics_mem1 ? ics_regs1 ics_pc1 Hics_pc1 Hmem1 Hstack1 |];
@@ -1502,30 +1565,23 @@ rename Hpartial1' into _Hpartial1'.
 rename Hstep_cs into _Hstep_cs.
 
       + (* INop *)
-        inversion Hpartial2
-          as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
-          subst;
-          last admit. (* Contra. *)
-rename Hpartial2 into _Hpartial2.
-        inversion Hpartial2'
-          as [| ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2'];
-          subst;
-          first admit. (* Contra (after Hstep_cs', maybe.). *)
-        simpl in *.
-rename Hpartial2' into _Hpartial2'.
+        t_mergeable_states_step_CS_partial2 Hpartial2 pc1.
         PS.simplify_turn.
-        (* Stack and memory simplifications. *)
-        try rewrite <- Hmem1.
-        try rewrite <- Hstack1.
-        erewrite (PS.merge_stacks_partition
-                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                    Hcomes_from).
-        erewrite (PS.merge_memories_partition
-                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                    Hcomes_from).
         (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs';
+          t_mergeable_states_step_CS_partial2' Hpartial2' Hcomp1' ics_pc1';
+          (* Explicit unfolding. *)
+          unfold PS.unpartialize;
+          (* Stack and memory simplifications. *)
+          try rewrite <- Hmem1;
+          try rewrite <- Hstack1;
+          erewrite (PS.merge_stacks_partition
+                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                      Hcomes_from);
+          erewrite (PS.merge_memories_partition
+                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                      Hcomes_from);
           (* Specialized memory rewrites for store and alloc. *)
           try match goal with
           | Hop : executing _ ?PC (IStore _ _),
