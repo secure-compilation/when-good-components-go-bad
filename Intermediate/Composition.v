@@ -1310,7 +1310,8 @@ Qed.
     inversion Hpartial1 as [ ? ? ? ? ? ? Hcomp1' | ? ? ? ? ? ? Hcomp1']; subst;
       inversion Hpartial as [? ? ? ? ? ? Hcomp | ? ? ? ? ? ? Hcomp]; subst;
       PS.simplify_turn;
-      [ admit | | | admit]. (* Contra.*)
+      [ exfalso; eapply PS.domm_partition_in_neither; eassumption | |
+      | exfalso; eapply PS.domm_partition_in_both; eassumption].
     - (* On the program. *)
       inversion HCSpartial1 as [? ? ? ? ? ? Hcomp1 Hmem1 Hstk1 |]; subst.
       inversion HCSstep; subst;
@@ -1322,7 +1323,9 @@ Qed.
         assert (Hcc1 : PS.is_context_component S1 (prog_interface p))
           by assumption
       end.
-  Admitted.
+      pose proof PS.context_epsilon_step_is_silent Hcc1 Hstep; subst s2.
+      econstructor; try eassumption.
+  Qed.
 
   Lemma mergeable_states_star_E0 :
     forall s s1 s2,
