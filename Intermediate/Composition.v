@@ -2469,32 +2469,24 @@ Section ThreewayMultisemProgram.
           pose proof PS.mergeable_states_sym wf1 wf2 linkability Hmerge2 as Hmerge2'.
           pose proof linkable_sym linkability as Hlinkability_sym.
           pose proof MultiSem.mergeable_states_star_E0
-               wf2 wf1
-               (linkable_mains_sym main_linkability) Hlinkability_sym
-               (mergeable_interfaces_sym _ _ mergeable_interfaces) Hprog_is_closed_sym
-               Hmerge2' Hstep23 as Hmerge3'.
+               Hlinkability_sym Hprog_is_closed_sym Hmerge2' Hstep23 as Hmerge3'.
           now apply PS.mergeable_states_sym.
         * apply negb_false_iff in Hcomp2.
           pose proof PS.context_epsilon_star_is_silent Hcomp2 Hstep23; subst s3.
-          exact
-            (MultiSem.mergeable_states_star_E0
-               wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
-               Hmerge2 Hstar23').
+          exact (MultiSem.mergeable_states_star_E0
+                   linkability prog_is_closed Hmerge2 Hstar23').
       + (* The step generates a trace event, mimicked on the other side (possibly
            between sequences of silent steps). *)
         change [e2] with (E0 ** e2 :: E0) in Hstar23'.
         apply (star_middle1_inv (@PS.singleton_traces _ _)) in Hstar23'.
         destruct Hstar23' as [s2'1 [s2'2 [Hstar2' [Hstep23' Hstar3']]]].
-        pose proof MultiSem.mergeable_states_star_E0
-             wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
+        pose proof MultiSem.mergeable_states_star_E0 linkability prog_is_closed
              Hmerge2 Hstar2' as Hmerge21.
         pose proof MultiSem.mergeable_states_step_trans
              wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
              Hmerge21 Hstep23 Hstep23' as Hmerge22.
-        exact
-          (MultiSem.mergeable_states_star_E0
-             wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
-             Hmerge22 Hstar3').
+        exact (MultiSem.mergeable_states_star_E0
+                 linkability prog_is_closed Hmerge22 Hstar3').
       + (* Contradiction: a step generates at most one event. *)
         pose proof @PS.singleton_traces _ _ _ _ _ Hstep23 as Hcontra.
         simpl in Hcontra. omega.
