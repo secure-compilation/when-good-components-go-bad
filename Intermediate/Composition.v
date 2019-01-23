@@ -1531,12 +1531,14 @@ rename Hstep_cs into _Hstep_cs.
 
       1:{
       (* + (* INop *) *)
-        t_mergeable_states_step_CS_partial2 Hpartial2 _Hstep_cs.
-        PS.simplify_turn.
+        t_mergeable_states_step_CS_partial2 Hpartial2 _Hstep_cs;
+        PS.simplify_turn;
         (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs';
-          t_mergeable_states_step_CS_partial2' Hpartial2' _Hstep_cs';
+          t_mergeable_states_step_CS_partial2' Hpartial2' _Hstep_cs'.
+
+        1:{
           (* Explicit unfolding. *)
           unfold PS.unpartialize;
           (* Stack and memory simplifications. *)
