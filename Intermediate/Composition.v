@@ -1066,7 +1066,7 @@ Ltac CS_step_of_executing' PROG :=
     | H: is_true (negb ?X)
       |- context [ (if ?X then _ else _) ]
       =>
-      apply negb_true_iff in H; rewrite H
+      apply negb_true_iff in H; setoid_rewrite H
     end.
 
   (* RB: TODO: This lemma is related to the ones below, on mergeable states, but
@@ -1349,13 +1349,13 @@ rename Hstep_cs' into _Hstep_cs'.
             Hstore : Memory.store ?MEM1 ?PTR _ = Some ?MEM2
             |- _ =>
             rewrite <- Hcomp in Hics_pc1';
-            rewrite -> (program_store_to_partialized_memory Hics_pc1' Hstore) in Hmem1'
+            rewrite -> (PS.program_store_to_partialized_memory Hics_pc1' Hstore) in Hmem1'
           end;
           try match goal with
           | Hop : executing _ ?PC (IAlloc _ _),
             Halloc : Memory.alloc ?MEM1 (Pointer.component ?PTR) _ = Some (?MEM2, _)
             |- _ =>
-            rewrite -> (program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
+            rewrite -> (PS.program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
           end;
           (* Specialized memory rewrites for jumps. *)
           try match goal with
