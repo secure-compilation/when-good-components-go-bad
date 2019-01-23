@@ -1483,7 +1483,8 @@ rename Hpartial2' into _Hpartial2';
        product, two of which cases are nonsensical and can be discharged. *)
     idtac.
 
-  Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
+  Lemma mergeable_states_step_CS_program : forall s1 s1' s2 s2' t,
+    PS.is_program_component s1 (prog_interface c) ->
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
     PS.step c (prog_interface p) (prepare_global_env c) s1' t s2'->
@@ -1491,7 +1492,7 @@ rename Hpartial2' into _Hpartial2';
             (PS.unpartialize (PS.merge_partial_states s1 s1')) t
             (PS.unpartialize (PS.merge_partial_states s2 s2')).
   Proof.
-    intros s1 s1' s2 s2' t Hmergeable Hstep Hstep'.
+    intros s1 s1' s2 s2' t Hpcomp Hmergeable Hstep Hstep'.
     (* Top-level case analysis. *)
     inversion Hmergeable
       as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial_ics1 Hpartial_ics1'];
@@ -1509,7 +1510,7 @@ rename Hstep into _Hstep.
 rename Hstep' into _Hstep'.
     inversion Hpartial_ics1
       as [gps1 ? mem1 ? regs1 pc1 Hpc1 | gps1 ? mem1 ? ? pc1 Hcc1]; subst;
-      last admit. (* Symmetric case. *)
+      last (exfalso; PS.simplify_turn; eapply PS.domm_partition_in_notin; eassumption).
 rename Hpartial_ics1 into _Hpartial_ics1.
     - (* p has control. *)
       inversion Hpartial_ics1'
@@ -1703,6 +1704,15 @@ rename Hstep_cs' into _Hstep_cs';
           (* Finish goal. *)
           apply execution_invariant_to_linking with (c1 := c'); eassumption.
 
+  Admitted.
+
+  Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
+    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+    PS.step c (prog_interface p) (prepare_global_env c) s1' t s2'->
+    CS.step (prepare_global_env (program_link p c))
+            (PS.unpartialize (PS.merge_partial_states s1 s1')) t
+            (PS.unpartialize (PS.merge_partial_states s2 s2')).
   Admitted.
 
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
