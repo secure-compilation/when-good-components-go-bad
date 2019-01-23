@@ -1469,7 +1469,7 @@ rename Hpartial2 into _Hpartial2.
 
   Ltac t_mergeable_states_step_CS_partial2' Hpartial2' _Hstep_cs' :=
     inversion Hpartial2'
-      as [ ? ? ? ? ? ? Hics_pc2'
+      as [ ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2'
          | ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2'];
       subst;
     [ try (pose proof CS.silent_step_preserves_component _ _ _ _Hstep_cs' as Heq;
@@ -1529,8 +1529,6 @@ rename Hpartial1' into _Hpartial1'.
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
 
-      (* Missing cases: second goals in ICall and IReturn. *)
-
       1:{
       (* + (* INop *) *)
         t_mergeable_states_step_CS_partial2 Hpartial2 _Hstep_cs.
@@ -1582,8 +1580,14 @@ rename Hstep_cs' into _Hstep_cs';
             inversion Hstack1 as [[Hstack1_hd Htmp]]; clear Hstack1; rename Htmp into Hstack1;
             inversion Hstack1' as [[Hstack1'_hd Htmp]]; clear Hstack1'; rename Htmp into Hstack1';
             rewrite Hcomp1;
-            rewrite Hcomp2;
-            pose proof PS.ptr_within_partial_frame_inv_2 (eq_sym Hstack1_hd) Hics_pc2; subst gps1_hd;
+            ( (* Return to program component. *)
+              (rewrite Hcomp2;
+               pose proof PS.ptr_within_partial_frame_inv_2 (eq_sym Hstack1_hd) Hics_pc2;
+               subst gps1_hd)
+            || (* Return to context component. *)
+              (pose proof PS.ptr_within_partial_frame_inv_2 (eq_sym Hstack1'_hd) Hics_pc2';
+               subst gps1_hd)
+            );
             erewrite (PS.merge_stacks_partition_cons
                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
                         Hcomes_from)
@@ -1597,10 +1601,9 @@ rename Hstep_cs' into _Hstep_cs';
           try erewrite (PS.merge_memories_partition
                           (mergeable_interfaces_sym _ _ mergeable_interfaces)
                           Hcomes_from);
-          (* Specialized rewrites for context calls. *)
+          (* Register rewrites for context calls and returns. *)
           try match goal with
-          | Hop : executing _ _ (ICall ?C _),
-            Hin : is_true (?C \in domm (prog_interface c))
+          | Hstep : CS.step _ _ [_] _
             |- _ =>
             assert (Register.invalidate ics_regs1' = Register.invalidate regs1)
               as Hregs
@@ -1611,6 +1614,7 @@ rename Hstep_cs' into _Hstep_cs';
           CS_step_of_executing' (program_link p c');
           try eassumption;
           try reflexivity;
+          try congruence; (* (Used for context component return.) *)
           try match goal with
           | Hlabel : find_label_in_component _ _ _ = _
             |- find_label_in_component _ _ _ = _
