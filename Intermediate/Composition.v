@@ -1467,7 +1467,7 @@ rename Hstep_cs' into _Hstep_cs'.
     ];
 rename Hpartial2 into _Hpartial2.
 
-  Ltac t_mergeable_states_step_CS_partial2' Hpartial2' _Hstep_cs' :=
+  Ltac t_mergeable_states_step_CS_partial2' Hpartial2' _Hstep_cs' Hsame_iface1 :=
     inversion Hpartial2'
       as [ ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2'
          | ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2'];
@@ -1481,7 +1481,21 @@ rename Hpartial2' into _Hpartial2';
     (* After this and the previous inversion, silent steps are in one-to-one
        correspondence. Calls and returns are not and present the usual four-case
        product, two of which cases are nonsensical and can be discharged. *)
-    idtac.
+    try (exfalso; PS.simplify_turn; eapply PS.domm_partition_in_both; eassumption);
+    try match goal with
+    | Heq : Pointer.component _ = Pointer.component _
+      |- _ =>
+      rewrite Heq in Hics_pc2';
+      exfalso; PS.simplify_turn; eapply PS.domm_partition_in_both; eassumption
+    end;
+    try match goal with
+    | Hentry : EntryPoint.get _ _ _ = Some _
+      |- _ =>
+      apply EntryPoint.get_some in Hentry;
+      rewrite domm_genv_entrypoints in Hentry;
+      simpl in Hentry; rewrite Hsame_iface1 in Hentry;
+      exfalso; eapply PS.domm_partition_in_union_in_neither; eassumption
+    end.
 
   Lemma mergeable_states_step_CS_program : forall s1 s1' s2 s2' t,
     PS.is_program_component s1 (prog_interface c) ->
@@ -1537,7 +1551,7 @@ rename Hstep_cs into _Hstep_cs.
         (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs';
-          t_mergeable_states_step_CS_partial2' Hpartial2' _Hstep_cs'.
+          t_mergeable_states_step_CS_partial2' Hpartial2' _Hstep_cs' Hsame_iface1.
 
         1:{
           (* Explicit unfolding. *)
