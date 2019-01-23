@@ -1296,7 +1296,7 @@ rename Hpartial1' into _Hpartial1'.
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
 
-      (* Cases left: 13 ICall, 14 IReturn *)
+      (* Cases left: 14 IReturn *)
 
       1:{
       (* + (* INop1 *) *)
@@ -1377,7 +1377,7 @@ rename Hstep_cs' into _Hstep_cs'.
           end.
           (* Stack and memory rewrites. *)
           rewrite <- Hmem1' in *.
-          rewrite <- Hstack1' in *.
+          try rewrite <- Hstack1' in *. (* (Calls rewrite the stack later.) *)
           assert (Hcomp1'inc := Hcomp1');
             rewrite -Pointer.inc_preserves_component
                     -[in RHS]Pointer.inc_preserves_component in Hcomp1'inc.
@@ -1394,6 +1394,9 @@ rename Hstep_cs' into _Hstep_cs'.
             rewrite <- Pointer.inc_preserves_component;
             assert (Hinc := Hcomp); rewrite <- Pointer.inc_preserves_component in Hinc
           end.
+          (* On calls, we cannot do too much work up front *and* reuse lemmas,
+             but some useful facts can be established. *)
+          simpl in Hics_pc2'.
           (* Solve goal. *)
           match goal with
           | |- PS.mergeable_states
@@ -1403,7 +1406,7 @@ rename Hstep_cs' into _Hstep_cs'.
             =>
             remember (PS.unpartialize_stack (PS.merge_stacks GPS1 GPS2)) as gps12 eqn:Hgps12;
             remember (PS.merge_memories MEM1 MEM2) as mem12 eqn:Hmem12;
-            rewrite (PS.merge_stacks_partition Hmergeable_ifaces Hcomes_from) in Hgps12;
+            try rewrite (PS.merge_stacks_partition Hmergeable_ifaces Hcomes_from) in Hgps12;
             try rewrite (PS.merge_memories_partition Hmergeable_ifaces Hcomes_from) in Hmem12;
             apply PS.mergeable_states_intro
               with (ics := (gps12, mem12, REGS, PC))
@@ -1412,13 +1415,36 @@ rename Hstep_cs' into _Hstep_cs'.
           - assumption.
           - eapply PS.comes_from_initial_state_step_trans; try eassumption.
             + simpl; now rewrite -> Hcc1'.
-            + simpl.
+            + (* Stack rewrites, before simplification. *)
+              try match goal with
+              | Hop : executing _ _ (ICall _ _)
+                |- _ =>
+                mergeable_step_call_stack Hpc1 Hcc1' Hcomp1' pc1;
+                rewrite <- Hstack1'; (* This always follows mergeable_step_call_stack. *)
+                erewrite PS.to_partial_stack_merge_stack_right; try eassumption;
+                unfold PS.to_partial_frame;
+                rewrite !Pointer.inc_preserves_component Hcc1' Hcomp1'
+              end.
+              simpl.
               try rewrite <- HBnz1.
               try rewrite <- HJal1.
               try rewrite -> HJump1.
               rewrite_if_then.
               now step_trans_solve_CC.
-          - now step_trans_solve_partial_state.
+          - match goal with
+            | Hop : executing _ _ (ICall _ _)
+              |- _ =>
+              mergeable_step_call_stack Hpc1 Hcc1' Hcomp1' pc1;
+              rewrite <- Hstack1';
+              erewrite PS.merge_stacks_partition; try eassumption;
+              constructor;
+                [ assumption
+                | reflexivity
+                | simpl; unfold PS.to_partial_frame; rewrite Hpc1c'; reflexivity
+                ]
+            | |- _ =>
+              now step_trans_solve_partial_state
+            end.
           - (* now step_trans_solve_partial_state. *)
             try match goal with
             | Hop : executing _ pc1 (IBnz _ _)
@@ -1438,13 +1464,27 @@ rename Hstep_cs' into _Hstep_cs'.
               try rewrite -> Pointer.inc_preserves_component;
               rewrite <- HJump1
             end.
-            constructor;
-              try erewrite -> to_partial_memory_merge_partial_memories_left;
-              try erewrite -> to_partial_memory_merge_partial_memories_right;
-              try rewrite <- HBnz1;
-              try rewrite <- HJal1;
-              try rewrite -> HJump1;
-              eassumption || reflexivity.
+            match goal with
+            | Hop : executing _ _ (ICall _ _)
+              |- _ =>
+              mergeable_step_call_stack Hpc1 Hcc1' Hcomp1' pc1;
+              rewrite <- Hstack1';
+              constructor;
+                [ assumption
+                | reflexivity
+                | erewrite PS.merge_stacks_partition; try eassumption;
+                  simpl; unfold PS.to_partial_frame;
+                  rewrite Hcomp1'inc in Hpc1p; rewrite Hpc1p Hcomp1'inc; reflexivity
+                ]
+            | |- _ =>
+              constructor;
+                try erewrite -> PS.to_partial_memory_merge_partial_memories_left;
+                try erewrite -> PS.to_partial_memory_merge_partial_memories_right;
+                try rewrite <- HBnz1;
+                try rewrite <- HJal1;
+                try rewrite -> HJump1;
+                try eassumption || reflexivity
+            end.
           (* [ assumption *)
           (* | eapply PS.comes_from_initial_state_step_trans; try eassumption; *)
           (*   [ simpl; now rewrite -> Hcc1' *)
