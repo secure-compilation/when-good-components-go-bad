@@ -1477,7 +1477,11 @@ rename Hpartial2 into _Hpartial2.
            exfalso; eapply PS.domm_partition_in_notin; eassumption)
     | idtac
     ];
-rename Hpartial2' into _Hpartial2'.
+rename Hpartial2' into _Hpartial2';
+    (* After this and the previous inversion, silent steps are in one-to-one
+       correspondence. Calls and returns are not and present the usual four-case
+       product, two of which cases are nonsensical and can be discharged. *)
+    idtac.
 
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
@@ -1593,6 +1597,16 @@ rename Hstep_cs' into _Hstep_cs';
           try erewrite (PS.merge_memories_partition
                           (mergeable_interfaces_sym _ _ mergeable_interfaces)
                           Hcomes_from);
+          (* Specialized rewrites for context calls. *)
+          try match goal with
+          | Hop : executing _ _ (ICall ?C _),
+            Hin : is_true (?C \in domm (prog_interface c))
+            |- _ =>
+            assert (Register.invalidate ics_regs1' = Register.invalidate regs1)
+              as Hregs
+              by (apply Register.invalidate_eq; congruence);
+            rewrite Hregs
+          end;
           (* Apply CS lemma and prove special-case side conditions. *)
           CS_step_of_executing' (program_link p c');
           try eassumption;
@@ -1624,6 +1638,7 @@ rename Hstep_cs' into _Hstep_cs';
             eapply program_load_in_partialized_memory_strong;
             eassumption
           end;
+          (* (Program component call.) *)
           try match goal with
           | Hentry : EntryPoint.get _ _ _ = _
             |- EntryPoint.get _ _ _ = _
@@ -1631,6 +1646,17 @@ rename Hstep_cs' into _Hstep_cs';
             rewrite genv_entrypoints_program_link_left; try assumption;
             rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
             now rewrite Hsame_iface1
+          end;
+          (* (Context component call.) *)
+          try match goal with
+          | Hentry : EntryPoint.get _ _ _ = Some ?B
+            |- EntryPoint.get _ _ _ = Some ?B
+            =>
+            rewrite (program_linkC wf1 wf2 linkability);
+            rewrite genv_entrypoints_program_link_left; try assumption;
+              [| now apply linkable_sym | now apply linkable_mains_sym];
+            rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
+            now rewrite Hsame_iface2
           end;
           try match goal with
           | Himport : imported_procedure _ ?C _ _
