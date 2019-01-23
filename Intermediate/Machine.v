@@ -122,6 +122,13 @@ Module EntryPoint.
     | Some addrs => getm addrs P
     | None => None
     end.
+
+  Lemma get_some C P E b : get C P E = Some b -> C \in domm E.
+  Proof.
+    unfold get. intros Hget.
+    destruct (E C) as [M |] eqn:Hcase; last discriminate.
+    apply /dommP. eauto.
+  Qed.
 End EntryPoint.
 
 (* programs *)

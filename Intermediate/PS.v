@@ -659,6 +659,24 @@ Proof.
       discriminate.
 Qed.
 
+Lemma domm_partition_in_union_in_neither (ctx1 ctx2 : Program.interface) C :
+  C \in domm (unionm ctx1 ctx2) ->
+  C \notin domm ctx1 ->
+  C \notin domm ctx2 ->
+  False.
+Proof.
+  intros Hin12 Hnotin1 Hnotin2.
+  destruct (C \in domm ctx1) eqn:Hcase1; first discriminate.
+  destruct (C \in domm ctx2) eqn:Hcase2; first discriminate.
+  assert (exists v, (unionm ctx1 ctx2) C = Some v)
+    as [v Hv12]
+    by now apply /dommP.
+  rewrite unionmE in Hv12.
+  assert (Hv1 : ctx1 C = None) by (apply /dommPn; congruence).
+  assert (Hv2 : ctx2 C = None) by (apply /dommPn; congruence).
+  rewrite Hv1 Hv2 in Hv12. discriminate.
+Qed.
+
 Inductive mergeable_states (ctx1 ctx2: Program.interface): state -> state -> Prop :=
 | mergeable_states_intro: forall ics ips1 ips2,
     mergeable_interfaces ctx1 ctx2 ->
