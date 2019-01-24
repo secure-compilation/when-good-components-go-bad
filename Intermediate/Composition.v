@@ -1362,18 +1362,32 @@ rename Hpartial1' into _Hpartial1'.
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
 
+      (* To adjust: calls and returns. *)
+
+      1:{
+        (* Invert first final partial step. *)
+        t_mergeable_states_step_partial2 Hpartial2 _Hstep_cs;
+        PS.simplify_turn;
+        (* Synchronize with c's step. *)
+        inversion Hstep_cs'; subst;
+rename Hstep_cs' into _Hstep_cs';
+        (* Invert second final partial step, remove contradictions. *)
+        t_mergeable_states_step_partial2'
+          Hpartial2' _Hstep_cs' Hsame_iface1 gps1 Hstack1 Hstack1' Hcomes_from Hics_pc2 Hics_pc2'
+          Hstack1_hd Hcase1 gps1_hd. (* Hack variables introduced by the tactic. *)
+
       1:{
       (* + (* INop1 *) *)
-        inversion Hpartial2
-          as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |];
-          subst;
-          last admit. (* Contra. *)
-rename Hpartial2 into _Hpartial2.
-        inversion Hpartial2'
-          as [| ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2'];
-          subst;
-          first admit. (* Contra (after Hstep_cs', maybe.). *)
-rename Hpartial2' into _Hpartial2'.
+(*         inversion Hpartial2 *)
+(*           as [ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2 |]; *)
+(*           subst; *)
+(*           last admit. (* Contra. *) *)
+(* rename Hpartial2 into _Hpartial2. *)
+(*         inversion Hpartial2' *)
+(*           as [| ics_gps2' ? ics_mem2' ? ics_regs2' ics_pc2' Hics_pc2' Hmem2' Hstack2' dummy Hcomp2']; *)
+(*           subst; *)
+(*           first admit. (* Contra (after Hstep_cs', maybe.). *) *)
+(* rename Hpartial2' into _Hpartial2'. *)
         PS.simplify_turn.
         (* Jump rewrite rule. This hypothesis will be used to rewrite, implicitly
            acting in the corresponding sub-case. Sometimes it will be necessary
@@ -1409,11 +1423,11 @@ rename Hpartial2' into _Hpartial2'.
         (* Stack and memory simplifications. *)
         try rewrite <- Hmem1.
         try rewrite <- Hstack1. (* (Returns rewrite the stack later.) *)
-        (* Synchronize with c's step. *)
-        inversion Hstep_cs'; subst;
-rename Hstep_cs' into _Hstep_cs'.
+(*         (* Synchronize with c's step. *) *)
+(*         inversion Hstep_cs'; subst; *)
+(* rename Hstep_cs' into _Hstep_cs'. *)
 
-        1:{
+        (* 1:{ *)
         (* * (* INop2 *) { *)
           (* Specialized memory rewrites for store and alloc. *)
           try match goal with
