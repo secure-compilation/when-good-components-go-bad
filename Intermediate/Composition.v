@@ -1584,7 +1584,7 @@ rename Hpartial2' into _Hpartial2';
       eapply PS.domm_partition_in_union_in_neither; eassumption
     end.
 
-  Ltac t_mergeable_states_step_CS_case2
+  Ltac t_mergeable_states_step_CS_solve
        Hmem1 Hstack1 Hcomes_from Hics_pc1' Hmem1' ics_pc1' pc1 Hpc1 Hcc1' Hcomp1'
        gps1 Hstack1' Hics_pc2' Hics_pc2 ics_regs1' regs1 c' Hsame_iface1 ics_mem1
        mem1 Hsame_iface2 :=
@@ -1797,26 +1797,23 @@ rename Hpartial1' into _Hpartial1'.
       PS.simplify_turn.
       (* Case analysis on p's step. *)
       inversion Hstep_cs; subst;
-rename Hstep_cs into _Hstep_cs.
-
-      1:{
-      (* + (* INop *) *)
+rename Hstep_cs into _Hstep_cs;
+        (* Invert first final partial step. *)
         t_mergeable_states_step_CS_partial2 Hpartial2 _Hstep_cs;
         PS.simplify_turn;
         (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs';
-          (* Invert second partial step, remove contradictions. *)
+          (* Invert second final partial step, remove contradictions. *)
           t_mergeable_states_step_CS_partial2'
             Hpartial2' _Hstep_cs' Hsame_iface1 gps1 Hstack1 Hstack1' Hcomes_from Hics_pc2 Hics_pc2'
             Hstack1_hd Hcase1 gps1_hd; (* Hack variables introduced by the tactic. *)
           (* Solve legitimate goals. *)
-          t_mergeable_states_step_CS_case2
+          t_mergeable_states_step_CS_solve
             Hmem1 Hstack1 Hcomes_from Hics_pc1' Hmem1' ics_pc1' pc1 Hpc1 Hcc1' Hcomp1'
             gps1 Hstack1' Hics_pc2' Hics_pc2 ics_regs1' regs1 c' Hsame_iface1 ics_mem1
             mem1 Hsame_iface2.
-
-  Admitted.
+  Qed.
 
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
