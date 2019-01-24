@@ -1549,13 +1549,14 @@ rename Hpartial2' into _Hpartial2';
 
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
      in this section, but these should be pared down. *)
-  Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
+  Lemma mergeable_states_step_trans_program : forall s1 s1' s2 s2' t,
+    PS.is_program_component s1 (prog_interface c) ->
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
     PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
     PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
   Proof.
-    intros s1 s1' s2 s2' t Hmergeable Hstep Hstep'.
+    intros s1 s1' s2 s2' t Hpcomp Hmergeable Hstep Hstep'.
     pose proof mergeable_interfaces_sym _ _ mergeable_interfaces
       as Hmergeable_interfaces.
     (* Top-level case analysis. *)
@@ -1575,12 +1576,12 @@ rename Hstep into _Hstep.
 rename Hstep' into _Hstep'.
     inversion Hpartial_ics1
       as [gps1 ? mem1 ? regs1 pc1 Hpc1 | gps1 ? mem1 ? ? pc1 Hcc1]; subst;
-      last admit. (* Symmetric case. *)
+      last (exfalso; PS.simplify_turn; eapply PS.domm_partition_in_notin; eassumption).
 rename Hpartial_ics1 into _Hpartial_ics1.
     - (* p has control. *)
       inversion Hpartial_ics1'
         as [? | gps1' ? mem1' ? ? pc1' Hcc1']; subst;
-        first admit. (* Contra. *)
+        first (exfalso; eapply PS.domm_partition_in_neither; eassumption).
 rename Hpartial_ics1' into _Hpartial_ics1'.
       inversion Hpartial1
         as [ics_gps1 ? ics_mem1 ? ics_regs1 ics_pc1 Hics_pc1 Hmem1 Hstack1 |];
@@ -1609,6 +1610,13 @@ rename Hstep_cs' into _Hstep_cs';
           pc1 gps1 Hstack1 Hstack1' Hmem1 Hics_pc1' Hmem1' ics_pc1' Hcomp1'
           Hics_pc2' Hcomes_from Hmergeable_ifaces Hcc1' Hpc1 Hpc1c' Hpc1p
           HBnz1 HJal1 HJump1. (* Hack variables. *)
+  Qed.
+
+  Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
+    PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
+    PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
+    PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
+    PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
   Admitted.
 
   Ltac t_mergeable_states_step_CS_solve
