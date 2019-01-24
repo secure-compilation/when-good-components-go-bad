@@ -1225,6 +1225,11 @@ Ltac CS_step_of_executing' PROG :=
       exact (mergeable_states_step_E0 IHHstar Hstep).
   Qed.
 
+  (* RB: TODO: In this set of tactics, replace [try match goal] constructs by a
+     [match goal] with an [idtac] default case, so that instructions are mandated
+     for certain branches and failure to carry them out is detected
+     immediately. More generally, document every [try] with the goals it is
+     supposed to act on, either by white- or black-listing. *)
   Ltac t_mergeable_states_step_partial2 Hpartial2 _Hstep_cs :=
     inversion Hpartial2
       as [ ics_gps2 ? ics_mem2 ? ics_regs2 ics_pc2 Hics_pc2 Hmem2 Hstack2
@@ -1606,7 +1611,7 @@ rename Hstep_cs' into _Hstep_cs';
                 try rewrite <- HBnz1;
                 try rewrite <- HJal1;
                 try rewrite -> HJump1;
-                try eassumption || reflexivity
+                eassumption || reflexivity
             end.
           (* [ assumption *)
           (* | eapply PS.comes_from_initial_state_step_trans; try eassumption; *)
