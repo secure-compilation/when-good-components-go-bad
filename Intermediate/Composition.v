@@ -1584,6 +1584,174 @@ rename Hpartial2' into _Hpartial2';
       eapply PS.domm_partition_in_union_in_neither; eassumption
     end.
 
+  Ltac t_mergeable_states_step_CS_case2
+       Hmem1 Hstack1 Hcomes_from Hics_pc1' Hmem1' ics_pc1' pc1 Hpc1 Hcc1' Hcomp1'
+       gps1 Hstack1' Hics_pc2' Hics_pc2 ics_regs1' regs1 c' Hsame_iface1 ics_mem1
+       mem1 Hsame_iface2 :=
+    (* Explicit unfolding. *)
+    unfold PS.unpartialize;
+    (* Stack and memory simplifications. *)
+    try rewrite <- Hmem1;
+    try rewrite <- Hstack1;
+    erewrite (PS.merge_stacks_partition
+                (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                Hcomes_from);
+    erewrite (PS.merge_memories_partition
+                (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                Hcomes_from);
+    (* Specialized memory rewrites for store and alloc. *)
+    try match goal with
+    | Hop : executing _ ?PC (IStore _ _),
+      Hcomp : Pointer.component ?PTR = Pointer.component ?PC,
+      Hstore : Memory.store ?MEM1 ?PTR _ = Some ?MEM2
+      |- _ =>
+      rewrite <- Hcomp in Hics_pc1';
+      rewrite -> (PS.program_store_to_partialized_memory Hics_pc1' Hstore) in Hmem1'
+    end;
+    try match goal with
+    | Hop : executing _ ?PC (IAlloc _ _),
+      Halloc : Memory.alloc ?MEM1 (Pointer.component ?PTR) _ = Some (?MEM2, _)
+      |- _ =>
+      rewrite -> (PS.program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
+    end;
+    (* Specialized stack rewrites for call and return. *)
+    try match goal with
+    | Hcomp : Pointer.component ics_pc1' = Pointer.component pc1
+      |- CS.step _ _ [ECall _ _ _ _] _
+      =>
+      mergeable_step_call_stack Hpc1 Hcc1' Hcomp1' pc1;
+      rewrite Hcomp
+    end;
+    try match goal with
+    | Hcomp1 : Pointer.component ics_pc1' = Pointer.component pc1,
+      Hcomp2 : Pointer.component ?ICS_PC2' = Pointer.component _
+      |- CS.step _ _ [ERet _ _ _] _
+      =>
+      destruct gps1 as [| gps1_hd gps1]; [now inversion Hstack1' | ];
+      inversion Hstack1 as [[Hstack1_hd Htmp]]; clear Hstack1; rename Htmp into Hstack1;
+      inversion Hstack1' as [[Hstack1'_hd Htmp]]; clear Hstack1'; rename Htmp into Hstack1';
+      rewrite Hcomp1;
+      ( (* Return to program component. *)
+        (rewrite Hcomp2;
+         pose proof PS.ptr_within_partial_frame_inv_2 (eq_sym Hstack1_hd) Hics_pc2;
+         subst gps1_hd)
+      || (* Return to context component. *)
+        (pose proof PS.ptr_within_partial_frame_inv_2 (eq_sym Hstack1'_hd) Hics_pc2';
+         subst gps1_hd)
+      );
+      erewrite (PS.merge_stacks_partition_cons
+                  (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                  Hcomes_from)
+    end;
+    (* Stack and memory rewrites, then solve goal. *)
+    rewrite <- Hmem1';
+    try rewrite <- Hstack1';
+    try rewrite (PS.merge_stacks_partition
+                   (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                   Hcomes_from);
+    try erewrite (PS.merge_memories_partition
+                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                    Hcomes_from);
+    (* Register rewrites for context calls and returns. *)
+    try match goal with
+    | Hstep : CS.step _ _ [_] _
+      |- _ =>
+      assert (Register.invalidate ics_regs1' = Register.invalidate regs1)
+        as Hregs
+        by (apply Register.invalidate_eq; congruence);
+      rewrite Hregs
+    end;
+    (* Apply CS lemma and prove special-case side conditions. *)
+    CS_step_of_executing' (program_link p c');
+    try eassumption;
+    try reflexivity;
+    try congruence; (* (Used for context component return.) *)
+    try match goal with
+    | Hlabel : find_label_in_component _ _ _ = _
+      |- find_label_in_component _ _ _ = _
+      =>
+      rewrite find_label_in_component_program_link_left; try assumption;
+      rewrite find_label_in_component_program_link_left in Hlabel; try assumption;
+      try eassumption;
+      now rewrite <- Hsame_iface1 in Hpc1
+    end;
+    try match goal with
+    | Hlabel : find_label_in_procedure _ _ _ = _
+      |- find_label_in_procedure _ _ _ = _
+      =>
+      rewrite find_label_in_procedure_program_link_left; try assumption;
+      rewrite find_label_in_procedure_program_link_left in Hlabel; try assumption;
+      try eassumption;
+      now rewrite <- Hsame_iface1 in Hpc1
+    end;
+    try match goal with
+    | Hload : Memory.load ics_mem1 ?PTR = Some ?V
+      |- Memory.load mem1 ?PTR = Some ?V
+      =>
+      symmetry in Hmem1;
+      destruct PTR as [[C b] o]; simpl in *; subst;
+      eapply program_load_in_partialized_memory_strong;
+      eassumption
+    end;
+    (* (Program component call.) *)
+    try match goal with
+    | Hentry : EntryPoint.get _ _ _ = _
+      |- EntryPoint.get _ _ _ = _
+      =>
+      rewrite genv_entrypoints_program_link_left; try assumption;
+      rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
+      now rewrite Hsame_iface1
+    end;
+    (* (Context component call.) *)
+    try match goal with
+    | Hentry : EntryPoint.get _ _ _ = Some ?B
+      |- EntryPoint.get _ _ _ = Some ?B
+      =>
+      rewrite (program_linkC wf1 wf2 linkability);
+      rewrite genv_entrypoints_program_link_left; try assumption;
+        [| now apply linkable_sym | now apply linkable_mains_sym];
+      rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
+      now rewrite Hsame_iface2
+    end;
+    try match goal with
+    | Himport : imported_procedure _ ?C _ _
+      |- imported_procedure _ ?C _ _
+      =>
+      rewrite imported_procedure_unionm_left; try assumption;
+      rewrite imported_procedure_unionm_left in Himport; try assumption;
+      now rewrite Hsame_iface1
+    end;
+    try match goal with
+    | Hstore : Memory.store ics_mem1 _ _ = Some _,
+      Hcomp : Pointer.component _ = Pointer.component pc1
+      |- Memory.store _ _ _ = Some _
+      =>
+      rewrite <- (PS.merge_memories_partition
+                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                    Hcomes_from)
+              at 1;
+      rewrite -> Hmem1;
+      rewrite <- Hcomp in Hpc1;
+      apply (PS.partialize_program_store Hpc1) in Hstore;
+      apply PS.unpartialize_program_store;
+      now apply Hstore
+    end;
+    try match goal with
+    | Halloc : Memory.alloc ics_mem1 _ _ = Some (_, _)
+      |- Memory.alloc mem1 _ _ = Some (_, _)
+      =>
+      rewrite <- (PS.merge_memories_partition
+                    (mergeable_interfaces_sym _ _ mergeable_interfaces)
+                    Hcomes_from)
+              at 1;
+      apply (PS.partialize_program_alloc Hpc1) in Halloc;
+      rewrite <- Hmem1 in Halloc;
+      apply PS.unpartialize_program_alloc;
+      now apply Halloc
+    end;
+    (* Finish goal. *)
+    apply execution_invariant_to_linking with (c1 := c'); eassumption.
+
   Lemma mergeable_states_step_CS_program : forall s1 s1' s2 s2' t,
     PS.is_program_component s1 (prog_interface c) ->
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
@@ -1638,174 +1806,15 @@ rename Hstep_cs into _Hstep_cs.
         (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs';
+          (* Invert second partial step, remove contradictions. *)
           t_mergeable_states_step_CS_partial2'
             Hpartial2' _Hstep_cs' Hsame_iface1 gps1 Hstack1 Hstack1' Hcomes_from Hics_pc2 Hics_pc2'
-            Hstack1_hd Hcase1 gps1_hd. (* Hack variables introduced by the tactic. *)
-
-        1:{
-          (* Explicit unfolding. *)
-          unfold PS.unpartialize;
-          (* Stack and memory simplifications. *)
-          try rewrite <- Hmem1;
-          try rewrite <- Hstack1;
-          erewrite (PS.merge_stacks_partition
-                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                      Hcomes_from);
-          erewrite (PS.merge_memories_partition
-                      (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                      Hcomes_from);
-          (* Specialized memory rewrites for store and alloc. *)
-          try match goal with
-          | Hop : executing _ ?PC (IStore _ _),
-            Hcomp : Pointer.component ?PTR = Pointer.component ?PC,
-            Hstore : Memory.store ?MEM1 ?PTR _ = Some ?MEM2
-            |- _ =>
-            rewrite <- Hcomp in Hics_pc1';
-            rewrite -> (PS.program_store_to_partialized_memory Hics_pc1' Hstore) in Hmem1'
-          end;
-          try match goal with
-          | Hop : executing _ ?PC (IAlloc _ _),
-            Halloc : Memory.alloc ?MEM1 (Pointer.component ?PTR) _ = Some (?MEM2, _)
-            |- _ =>
-            rewrite -> (PS.program_allocation_to_partialized_memory Hics_pc1' Halloc) in Hmem1'
-          end;
-          (* Specialized stack rewrites for call and return. *)
-          try match goal with
-          | Hcomp : Pointer.component ics_pc1' = Pointer.component pc1
-            |- CS.step _ _ [ECall _ _ _ _] _
-            =>
-            mergeable_step_call_stack Hpc1 Hcc1' Hcomp1' pc1;
-            rewrite Hcomp
-          end;
-          try match goal with
-          | Hcomp1 : Pointer.component ics_pc1' = Pointer.component pc1,
-            Hcomp2 : Pointer.component ?ICS_PC2' = Pointer.component _
-            |- CS.step _ _ [ERet _ _ _] _
-            =>
-            destruct gps1 as [| gps1_hd gps1]; [now inversion Hstack1' | ];
-            inversion Hstack1 as [[Hstack1_hd Htmp]]; clear Hstack1; rename Htmp into Hstack1;
-            inversion Hstack1' as [[Hstack1'_hd Htmp]]; clear Hstack1'; rename Htmp into Hstack1';
-            rewrite Hcomp1;
-            ( (* Return to program component. *)
-              (rewrite Hcomp2;
-               pose proof PS.ptr_within_partial_frame_inv_2 (eq_sym Hstack1_hd) Hics_pc2;
-               subst gps1_hd)
-            || (* Return to context component. *)
-              (pose proof PS.ptr_within_partial_frame_inv_2 (eq_sym Hstack1'_hd) Hics_pc2';
-               subst gps1_hd)
-            );
-            erewrite (PS.merge_stacks_partition_cons
-                        (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                        Hcomes_from)
-          end;
-          (* Stack and memory rewrites, then solve goal. *)
-          rewrite <- Hmem1';
-          try rewrite <- Hstack1';
-          try rewrite (PS.merge_stacks_partition
-                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                         Hcomes_from);
-          try erewrite (PS.merge_memories_partition
-                          (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                          Hcomes_from);
-          (* Register rewrites for context calls and returns. *)
-          try match goal with
-          | Hstep : CS.step _ _ [_] _
-            |- _ =>
-            assert (Register.invalidate ics_regs1' = Register.invalidate regs1)
-              as Hregs
-              by (apply Register.invalidate_eq; congruence);
-            rewrite Hregs
-          end;
-          (* Apply CS lemma and prove special-case side conditions. *)
-          CS_step_of_executing' (program_link p c');
-          try eassumption;
-          try reflexivity;
-          try congruence; (* (Used for context component return.) *)
-          try match goal with
-          | Hlabel : find_label_in_component _ _ _ = _
-            |- find_label_in_component _ _ _ = _
-            =>
-            rewrite find_label_in_component_program_link_left; try assumption;
-            rewrite find_label_in_component_program_link_left in Hlabel; try assumption;
-            try eassumption;
-            now rewrite <- Hsame_iface1 in Hpc1
-          end;
-          try match goal with
-          | Hlabel : find_label_in_procedure _ _ _ = _
-            |- find_label_in_procedure _ _ _ = _
-            =>
-            rewrite find_label_in_procedure_program_link_left; try assumption;
-            rewrite find_label_in_procedure_program_link_left in Hlabel; try assumption;
-            try eassumption;
-            now rewrite <- Hsame_iface1 in Hpc1
-          end;
-          try match goal with
-          | Hload : Memory.load ics_mem1 ?PTR = Some ?V
-            |- Memory.load mem1 ?PTR = Some ?V
-            =>
-            symmetry in Hmem1;
-            destruct PTR as [[C b] o]; simpl in *; subst;
-            eapply program_load_in_partialized_memory_strong;
-            eassumption
-          end;
-          (* (Program component call.) *)
-          try match goal with
-          | Hentry : EntryPoint.get _ _ _ = _
-            |- EntryPoint.get _ _ _ = _
-            =>
-            rewrite genv_entrypoints_program_link_left; try assumption;
-            rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
-            now rewrite Hsame_iface1
-          end;
-          (* (Context component call.) *)
-          try match goal with
-          | Hentry : EntryPoint.get _ _ _ = Some ?B
-            |- EntryPoint.get _ _ _ = Some ?B
-            =>
-            rewrite (program_linkC wf1 wf2 linkability);
-            rewrite genv_entrypoints_program_link_left; try assumption;
-              [| now apply linkable_sym | now apply linkable_mains_sym];
-            rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
-            now rewrite Hsame_iface2
-          end;
-          try match goal with
-          | Himport : imported_procedure _ ?C _ _
-            |- imported_procedure _ ?C _ _
-            =>
-            rewrite imported_procedure_unionm_left; try assumption;
-            rewrite imported_procedure_unionm_left in Himport; try assumption;
-            now rewrite Hsame_iface1
-          end;
-          try match goal with
-          | Hstore : Memory.store ics_mem1 _ _ = Some _,
-            Hcomp : Pointer.component _ = Pointer.component pc1
-            |- Memory.store _ _ _ = Some _
-            =>
-            rewrite <- (PS.merge_memories_partition
-                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                         Hcomes_from)
-                    at 1;
-            rewrite -> Hmem1;
-            rewrite <- Hcomp in Hpc1;
-            apply (PS.partialize_program_store Hpc1) in Hstore;
-            apply PS.unpartialize_program_store;
-            now apply Hstore
-          end;
-          try match goal with
-          | Halloc : Memory.alloc ics_mem1 _ _ = Some (_, _)
-            |- Memory.alloc mem1 _ _ = Some (_, _)
-            =>
-            rewrite <- (PS.merge_memories_partition
-                         (mergeable_interfaces_sym _ _ mergeable_interfaces)
-                         Hcomes_from)
-                    at 1;
-            apply (PS.partialize_program_alloc Hpc1) in Halloc;
-            rewrite <- Hmem1 in Halloc;
-            apply PS.unpartialize_program_alloc;
-            now apply Halloc
-          end;
-          (* Finish goal. *)
-          apply execution_invariant_to_linking with (c1 := c'); eassumption.
+            Hstack1_hd Hcase1 gps1_hd; (* Hack variables introduced by the tactic. *)
+          (* Solve legitimate goals. *)
+          t_mergeable_states_step_CS_case2
+            Hmem1 Hstack1 Hcomes_from Hics_pc1' Hmem1' ics_pc1' pc1 Hpc1 Hcc1' Hcomp1'
+            gps1 Hstack1' Hics_pc2' Hics_pc2 ics_regs1' regs1 c' Hsame_iface1 ics_mem1
+            mem1 Hsame_iface2.
 
   Admitted.
 
