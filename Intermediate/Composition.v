@@ -1388,7 +1388,6 @@ rename Hstep_cs' into _Hstep_cs';
 (*           subst; *)
 (*           first admit. (* Contra (after Hstep_cs', maybe.). *) *)
 (* rename Hpartial2' into _Hpartial2'. *)
-        PS.simplify_turn.
         (* Jump rewrite rule. This hypothesis will be used to rewrite, implicitly
            acting in the corresponding sub-case. Sometimes it will be necessary
            to re-detect the case we are in. Similarly for jumps. *)
@@ -1483,13 +1482,28 @@ rename Hstep_cs' into _Hstep_cs';
           end.
           (* On calls, we cannot do too much work up front *and* reuse lemmas,
              but some useful facts can be established. *)
-          simpl in Hics_pc2'.
+          unfold PS.is_context_component in Hics_pc2'; simpl in Hics_pc2'.
           (* Solve goal. *)
           match goal with
           | |- PS.mergeable_states
                 _ _
                 (PS.PC (?GPS1, ?MEM1, ?REGS, ?PC))
                 (PS.CC (_, ?GPS2, ?MEM2))
+            =>
+            remember (PS.unpartialize_stack (PS.merge_stacks GPS1 GPS2)) as gps12 eqn:Hgps12;
+            remember (PS.merge_memories MEM1 MEM2) as mem12 eqn:Hmem12;
+            try rewrite (PS.merge_stacks_partition Hmergeable_ifaces Hcomes_from) in Hgps12;
+            try rewrite (PS.merge_memories_partition Hmergeable_ifaces Hcomes_from) in Hmem12;
+            apply PS.mergeable_states_intro
+              with (ics := (gps12, mem12, REGS, PC))
+          (* RB: TODO: In calls and returns from the context, same thing
+             (refactoring target). Importantly, keeping the order of partial
+             stacks and memories as in the goal, so that tactics work on both
+             cases. *)
+          | |- PS.mergeable_states
+                _ _
+                (PS.CC (_, ?GPS1, ?MEM1))
+                (PS.PC (?GPS2, ?MEM2, ?REGS, ?PC))
             =>
             remember (PS.unpartialize_stack (PS.merge_stacks GPS1 GPS2)) as gps12 eqn:Hgps12;
             remember (PS.merge_memories MEM1 MEM2) as mem12 eqn:Hmem12;
@@ -1522,7 +1536,11 @@ rename Hstep_cs' into _Hstep_cs';
               try rewrite <- HBnz1.
               try rewrite <- HJal1.
               try rewrite -> HJump1.
-              rewrite_if_then.
+              ( (* Usual case. *)
+                rewrite_if_then
+              || (* Calls and returns from context. *)
+                (PS.simplify_turn; rewrite_if_else_negb)
+              ).
               now step_trans_solve_CC.
           - match goal with
             | Hop : executing _ _ (ICall _ _)
