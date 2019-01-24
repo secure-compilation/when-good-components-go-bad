@@ -1228,6 +1228,7 @@ Ltac CS_step_of_executing' PROG :=
   Ltac step_trans_solve_CC :=
     try rewrite -> Pointer.inc_preserves_component;
     try erewrite -> PS.to_partial_memory_merge_partial_memories_right;
+    try erewrite -> PS.merge_stacks_partition_cons;
     (eassumption || reflexivity).
 
   Ltac step_trans_solve_partial_state :=
@@ -1296,8 +1297,6 @@ rename Hpartial1' into _Hpartial1'.
       inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs.
 
-      (* Cases left: 14 IReturn *)
-
       1:{
       (* + (* INop1 *) *)
         inversion Hpartial2
@@ -1333,9 +1332,18 @@ rename Hpartial2' into _Hpartial2'.
           |- _ =>
           rename Hcomp into HJump1
         end.
+        (* Simplify cons'ed stack. *)
+        try match goal with
+        | Hop : executing _ _ IReturn
+          |- _ =>
+          destruct gps1 as [| gps1_hd gps1]; [now inversion Hstack1 | ];
+          inversion Hstack1 as [[Hstack1_hd Htmp]]; clear Hstack1; rename Htmp into Hstack1;
+          destruct ics_gps1' as [| ics_gps1'_hd ics_gps1']; [now inversion Hstack1' | ];
+          inversion Hstack1' as [[Hstack1'_hd Htmp]]; clear Hstack1'; rename Htmp into Hstack1'
+        end.
         (* Stack and memory simplifications. *)
         try rewrite <- Hmem1.
-        rewrite <- Hstack1.
+        try rewrite <- Hstack1. (* (Returns rewrite the stack later.) *)
         (* Synchronize with c's step. *)
         inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs'.
@@ -1425,6 +1433,12 @@ rename Hstep_cs' into _Hstep_cs'.
                 unfold PS.to_partial_frame;
                 rewrite !Pointer.inc_preserves_component Hcc1' Hcomp1'
               end.
+              try match goal with
+              | Hop : CS.step _ _ [ERet _ _ (Pointer.component ?PC)] _,
+                Heq : Pointer.component _ = Pointer.component ?PC
+                |- _ =>
+                rewrite -> Heq in Hics_pc2'; rewrite -> Heq
+              end.
               simpl.
               try rewrite <- HBnz1.
               try rewrite <- HJal1.
@@ -1442,6 +1456,10 @@ rename Hstep_cs' into _Hstep_cs'.
                 | reflexivity
                 | simpl; unfold PS.to_partial_frame; rewrite Hpc1c'; reflexivity
                 ]
+            | Hop : executing _ _ IReturn
+              |- _ =>
+              erewrite -> PS.merge_stacks_partition_cons; try eassumption;
+              now constructor
             | |- _ =>
               now step_trans_solve_partial_state
             end.
@@ -1476,6 +1494,12 @@ rename Hstep_cs' into _Hstep_cs'.
                   simpl; unfold PS.to_partial_frame;
                   rewrite Hcomp1'inc in Hpc1p; rewrite Hpc1p Hcomp1'inc; reflexivity
                 ]
+            | Hop : CS.step _ _ [ERet _ _ (Pointer.component ?PC)] _,
+              Heq : Pointer.component _ = Pointer.component ?PC
+              |- _ =>
+              rewrite -> Heq; rewrite -> Heq in Hics_pc2';
+              erewrite -> PS.merge_stacks_partition_cons; try eassumption;
+              now constructor
             | |- _ =>
               constructor;
                 try erewrite -> PS.to_partial_memory_merge_partial_memories_left;
