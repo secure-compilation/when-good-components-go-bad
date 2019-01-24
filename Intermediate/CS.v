@@ -945,6 +945,12 @@ Lemma comes_from_initial_state_step_trans p s t s' :
   CS.comes_from_initial_state s' (prog_interface p).
 Admitted. (* Grade 2. *)
 
+(* RB: This result admits more general formulations which may be useful. *)
+Lemma comes_from_initial_state_stack_cons_domm frame gps mem regs pc iface :
+  comes_from_initial_state (frame :: gps, mem, regs, pc) iface ->
+  Pointer.component frame \in domm iface.
+Admitted. (* Grade 2. *)
+
 Lemma silent_step_preserves_component G s s' :
   CS.step G s E0 s' ->
   Pointer.component (state_pc s) = Pointer.component (state_pc s').
