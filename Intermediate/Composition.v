@@ -1416,7 +1416,7 @@ rename Hstep_cs' into _Hstep_cs';
           |- _ =>
           destruct gps1 as [| gps1_hd gps1]; [now inversion Hstack1 | ];
           inversion Hstack1 as [[Hstack1_hd Htmp]]; clear Hstack1; rename Htmp into Hstack1;
-          destruct ics_gps1' as [| ics_gps1'_hd ics_gps1']; [now inversion Hstack1' | ];
+          (* destruct ics_gps1' as [| ics_gps1'_hd ics_gps1']; [now inversion Hstack1' | ]; *)
           inversion Hstack1' as [[Hstack1'_hd Htmp]]; clear Hstack1'; rename Htmp into Hstack1'
         end.
         (* Stack and memory simplifications. *)
@@ -1556,7 +1556,8 @@ rename Hstep_cs' into _Hstep_cs';
             | Hop : executing _ _ IReturn
               |- _ =>
               erewrite -> PS.merge_stacks_partition_cons; try eassumption;
-              now constructor
+              constructor;
+                PS.simplify_turn; congruence (* (Refined for context component return.) *)
             | |- _ =>
               now step_trans_solve_partial_state
             end.
@@ -1601,6 +1602,7 @@ rename Hstep_cs' into _Hstep_cs';
               constructor;
                 try erewrite -> PS.to_partial_memory_merge_partial_memories_left;
                 try erewrite -> PS.to_partial_memory_merge_partial_memories_right;
+                try erewrite -> PS.merge_stacks_partition_cons;
                 try rewrite <- HBnz1;
                 try rewrite <- HJal1;
                 try rewrite -> HJump1;
