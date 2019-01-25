@@ -1370,6 +1370,15 @@ Definition mergeable_states_state (s s' : state) : state :=
          mergeable_states_regs s s',
          mergeable_states_pc s s').
 
+(* Moreover, mergeable states can, by definition, be merged, and the order of the
+   arguments does not affect the result. (If they are not mergeable, the result
+   would be morally the same, but the resulting garbage may not be identical). *)
+
+Lemma merge_partial_states_sym ctx1 ctx2 ips1 ips2 :
+  mergeable_states ctx1 ctx2 ips1 ips2 ->
+  merge_partial_states ips1 ips2 = merge_partial_states ips2 ips1.
+Admitted.
+
 (* transition system *)
 
 Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
