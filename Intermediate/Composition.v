@@ -1860,12 +1860,28 @@ Section MultiSemantics.
       exact (mergeable_states_step_E0 IHHstar Hstep).
   Qed.
 
-  Lemma mergeable_states_step_trans : forall s1 s1' s2 s2' t,
+  Corollary mergeable_states_step_trans : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
     PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
     PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
-  Admitted.
+  Proof.
+    intros s1 s1' s2 s2' t Hmergeable Hstep Hstep'.
+    destruct (PS.is_program_component s1 (prog_interface c)) eqn:Hpcomp.
+    - eapply mergeable_states_step_trans_program; eassumption.
+    - apply PS.mergeable_states_sym;
+        [assumption | assumption | now apply linkable_sym |].
+      eapply mergeable_states_step_trans_program.
+      + now apply linkable_mains_sym.
+      + now apply mergeable_interfaces_sym.
+      + eapply PS.mergeable_states_context_to_program;
+          [eassumption |].
+        unfold PS.is_program_component in Hpcomp.
+        now apply negb_false_iff in Hpcomp.
+      + eapply PS.mergeable_states_sym; eassumption.
+      + eassumption.
+      + eassumption.
+  Qed.
 
   Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
