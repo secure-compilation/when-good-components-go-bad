@@ -1883,14 +1883,38 @@ Section MultiSemantics.
       + eassumption.
   Qed.
 
-  Lemma mergeable_states_step_CS : forall s1 s1' s2 s2' t,
+  Corollary mergeable_states_step_CS : forall s1 s1' s2 s2' t,
     PS.mergeable_states (prog_interface c) (prog_interface p) s1 s1' ->
     PS.step p (prog_interface c) (prepare_global_env p) s1 t s2 ->
     PS.step c (prog_interface p) (prepare_global_env c) s1' t s2'->
     CS.step (prepare_global_env (program_link p c))
             (PS.unpartialize (PS.merge_partial_states s1 s1')) t
             (PS.unpartialize (PS.merge_partial_states s2 s2')).
-  Admitted.
+  Proof.
+    intros s1 s1' s2 s2' t Hmergeable1 Hstep Hstep'.
+    destruct (PS.is_program_component s1 (prog_interface c)) eqn:Hpcomp.
+    - eapply mergeable_states_step_CS_program; eassumption.
+    - pose proof program_linkC wf1 wf2 linkability as HlinkC.
+      assert (Hprog_is_closed := prog_is_closed);
+        unfold prog in Hprog_is_closed; rewrite -> HlinkC in Hprog_is_closed.
+      unfold PS.is_program_component in Hpcomp. apply negb_false_iff in Hpcomp.
+      pose proof PS.mergeable_states_context_to_program Hmergeable1 Hpcomp
+        as Hpcomp'.
+      assert (Hmergeable1' := Hmergeable1);
+        apply PS.mergeable_states_sym in Hmergeable1'; try assumption.
+      pose proof mergeable_states_step_CS_program
+           wf2 wf1
+           (linkable_mains_sym main_linkability) (linkable_sym linkability)
+           (mergeable_interfaces_sym _ _ mergeable_interfaces)
+           Hpcomp' Hmergeable1' Hstep' Hstep
+        as HCSstep.
+      rewrite <- HlinkC in HCSstep.
+      rewrite <- (PS.merge_partial_states_sym Hmergeable1) in HCSstep.
+      pose proof mergeable_states_step_trans Hmergeable1 Hstep Hstep'
+        as Hmergeable2.
+      rewrite <- (PS.merge_partial_states_sym Hmergeable2) in HCSstep.
+      exact HCSstep.
+  Qed.
 
   (* RB: TODO: This result very likely belongs in PS. I am reusing the hypotheses
      in this section, but these should be pared down. *)
