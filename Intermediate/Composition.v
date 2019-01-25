@@ -2625,7 +2625,7 @@ Section ThreewayMultisemProgram.
         pose proof MultiSem.mergeable_states_star_E0 linkability prog_is_closed
              Hmerge2 Hstar2' as Hmerge21.
         pose proof MultiSem.mergeable_states_step_trans
-             wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
+             wf1 wf2 main_linkability linkability mergeable_interfaces
              Hmerge21 Hstep23 Hstep23' as Hmerge22.
         exact (MultiSem.mergeable_states_star_E0
                  linkability prog_is_closed Hmerge22 Hstar3').
@@ -2999,7 +2999,7 @@ Section ThreewayMultisem.
           as Hmstep2.
         (* Propagate mergeability, suffix star. *)
         pose proof MultiSem.mergeable_states_step_trans
-             wf1 wf2 main_linkability linkability mergeable_interfaces prog_is_closed
+             wf1 wf2 main_linkability linkability mergeable_interfaces
              Hmerge21 Hstep23 Hstep23' as Hmerge22.
         pose proof star_refl (PS.step p (prog_interface c)) (prepare_global_env p) s3
           as Hstar3.
