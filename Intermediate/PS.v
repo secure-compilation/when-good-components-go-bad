@@ -204,13 +204,23 @@ Definition to_partial_memory (mem : Memory.t) (ctx : {fset Component.id}) :=
    is natural to resort to a notion of partial memory that seems logically
    related to the supporting components of PS. Again, note, however, that this
    notion of partial memory is already used in the Memory module, and it may be
-   a good idea to relocate our compact definitions there. *)
+   a good idea to relocate our compact definitions there.
+
+   Otherwise, this is a more convenient wrapper for
+   context_store_in_partialized_memory which does not require the destruction of
+   pointers, and could conceivably replace the wrappee throughout the
+   development. *)
 Lemma program_store_to_partialized_memory
       ptr (iface : Program.interface) mem mem' v :
   Pointer.component ptr \in domm iface ->
   Memory.store mem ptr v = Some mem' ->
   to_partial_memory mem (domm iface) = to_partial_memory mem' (domm iface).
-Admitted. (* Grade 2. *)
+Proof.
+  destruct ptr as [[C b] o]. simpl.
+  intros Hdome Hsome.
+  unfold to_partial_memory. symmetry.
+  eapply context_store_in_partialized_memory; eassumption.
+Qed.
 
 (* RB: TODO: Same notes as above.
    Cf.  program_allocation_in_partialized_memory_strong. *)
@@ -219,7 +229,12 @@ Lemma program_allocation_to_partialized_memory
   C \in domm iface ->
   Memory.alloc mem C size = Some (mem', ptr) ->
   to_partial_memory mem (domm iface) = to_partial_memory mem' (domm iface).
-Admitted. (* Grade 2. *)
+Proof.
+  destruct ptr as [[C' b] o]. simpl.
+  intros Hdome Hsome.
+  unfold to_partial_memory. symmetry.
+  eapply context_allocation_in_partialized_memory; eassumption.
+Qed.
 
 (* RB: TODO: On a related note to that above, consider using [Pointer.component]
    in results such as [program_store_in_partialized_memory]. This will save us
