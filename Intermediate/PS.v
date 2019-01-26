@@ -2022,20 +2022,26 @@ Proof.
     inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
       inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
       simplify_turn.
-    + admit. (* Easy. *)
-    + admit. (* Contra. *)
-    + admit. (* Contra. *)
-    + admit. (* Contra/easy. *)
+    + rewrite !to_partial_memory_merge_prepare_procedures_memory_left; congruence.
+    + exfalso. eapply domm_partition_in_notin; eassumption.
+    + exfalso. eapply domm_partition_in_notin; eassumption.
+    + rewrite !to_partial_memory_merge_prepare_procedures_memory_left; congruence.
   - (* main in c1 and c2. *)
     destruct (prog_main c1) as [mainc1 |] eqn:Hmainc1; last discriminate.
     destruct (prog_main c2) as [mainc2 |] eqn:Hmainc2; last discriminate.
     inversion Hpartial1 as [? ? ? ? ? ? Hcomp1 | ? ? ? ? ? ? Hcomp1]; subst;
       inversion Hpartial2 as [? ? ? ? ? ? Hcomp2 | ? ? ? ? ? ? Hcomp2]; subst;
       simplify_turn.
-    + admit. (* Contra. *)
-    + admit. (* Contra. *)
-    + admit. (* Contra. *)
-    + admit. (* Easy. *)
-Admitted. (* Grade 1. *)
+    + (* RB: NOTE Another possibility here is to prove reflexivity by rewriting
+         as in the other cases. This also requires a rewrite on EntryPoint.get to
+         their None case. *)
+      assert (Hmainc1' : is_true (prog_main c1)) by now rewrite Hmainc1.
+      pose proof (proj2 (wfprog_main_component Hwf1) Hmainc1') as Hcontra.
+      rewrite <- Hiface1 in Hcontra.
+      exfalso. eapply domm_partition_in_notin; eassumption.
+    + exfalso. eapply domm_partition_in_notin; eassumption.
+    + exfalso. eapply domm_partition_in_notin; eassumption.
+    + rewrite !to_partial_memory_merge_prepare_procedures_memory_left; congruence.
+Qed.
 
 End PS.
