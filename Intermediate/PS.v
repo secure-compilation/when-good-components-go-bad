@@ -1392,7 +1392,36 @@ Definition mergeable_states_state (s s' : state) : state :=
 Lemma merge_partial_states_sym ctx1 ctx2 ips1 ips2 :
   mergeable_states ctx1 ctx2 ips1 ips2 ->
   merge_partial_states ips1 ips2 = merge_partial_states ips2 ips1.
-Admitted.
+Proof.
+  intros Hmerge.
+  inversion Hmerge as [ics ? ? Hifaces Hcomes_from Hpartial1 Hpartial2]; subst.
+  (* Some up front facts about symmetry. *)
+  pose proof mergeable_interfaces_sym _ _ Hifaces as Hifaces_sym.
+  pose proof unionmC (proj2 (proj1 Hifaces)) as Hunionm_sym.
+  (* Case analysis. *)
+  inversion Hpartial1 as [ gps1 ? mem1 ? regs1 pc1 Hcomp1
+                         | gps1 ? mem1 ? regs1 pc1 Hcomp1];
+    inversion Hpartial2 as [ gps2 ? mem2 ? regs2 pc2 Hcomp2 ? ? Heq
+                           | gps2 ? mem2 ? regs2 pc2 Hcomp2 ? ? Heq];
+    subst;
+    PS.simplify_turn;
+    inversion Heq; subst gps2 mem2 regs2 pc2.
+  - (* RB: NOTE: Some of these common patterns are potential lemma candidates. *)
+    pose proof CS.comes_from_initial_state_pc_domm _ _ Hcomes_from as Hcontra.
+    exfalso. eapply domm_partition_in_union_in_neither; eassumption.
+  - (* RB: NOTE: Symmetric lemmas? Also same script for next two cases. *)
+    erewrite merge_memories_partition; try eassumption.
+    erewrite merge_memories_partition; try (try rewrite <- Hunionm_sym; eassumption).
+    erewrite merge_stacks_partition_emptym; try eassumption.
+    erewrite merge_stacks_partition_emptym; try (try rewrite <- Hunionm_sym; eassumption).
+    reflexivity.
+  - erewrite merge_memories_partition; try eassumption.
+    erewrite merge_memories_partition; try (try rewrite <- Hunionm_sym; eassumption).
+    erewrite merge_stacks_partition_emptym; try eassumption.
+    erewrite merge_stacks_partition_emptym; try (try rewrite <- Hunionm_sym; eassumption).
+    reflexivity.
+  - exfalso. eapply domm_partition_in_both; eassumption.
+Qed.
 
 (* transition system *)
 

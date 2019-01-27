@@ -951,6 +951,11 @@ Lemma comes_from_initial_state_stack_cons_domm frame gps mem regs pc iface :
   Pointer.component frame \in domm iface.
 Admitted. (* Grade 2. *)
 
+Lemma comes_from_initial_state_pc_domm s ctx :
+  comes_from_initial_state s ctx ->
+  Pointer.component (state_pc s) \in domm ctx.
+Admitted.
+
 Lemma silent_step_preserves_component G s s' :
   CS.step G s E0 s' ->
   Pointer.component (state_pc s) = Pointer.component (state_pc s').
