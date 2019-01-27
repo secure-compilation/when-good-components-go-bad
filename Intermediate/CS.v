@@ -12,6 +12,8 @@ Require Import Lib.Monads.
 
 From mathcomp Require ssreflect ssrfun ssrbool eqtype.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Module CS.
 
 Import Intermediate.
@@ -487,8 +489,6 @@ Proof.
 
            *** eapply Nop.
                eexists. eexists. eauto.
-                 try reflexivity;
-                 try (eexists; eexists; eauto).
 
            *** eapply Label;
                  try reflexivity;
