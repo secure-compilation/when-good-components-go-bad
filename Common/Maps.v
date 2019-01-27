@@ -7,6 +7,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Definition NMap T := {fmap nat -> T}.
 
 Definition elementsm {A: Type} : NMap A -> list (nat * A) := @FMap.fmval nat_ordType A _.
@@ -76,15 +78,28 @@ Proof.
   - by rewrite! domm_map.
 Qed.
 
+(* Filter has no effect on reads outside its domain. *)
 Lemma getm_filterm_notin_domm :
   forall (T T' : Type) (m1 : NMap T) (m2 : NMap T') k,
     k \notin domm m1 ->
     (filterm (fun (k : nat) (_ : T') => k \notin domm m1) m2) k = m2 k.
-Admitted.
+Proof.
+  intros T T' m1 m2 k Hnotin.
+  rewrite filtermE Hnotin.
+  destruct (m2 k) as [v |] eqn:Hcase; now rewrite Hcase.
+Qed.
 
+(* Set and filter commute if the key is outside the domain of filter. *)
 Lemma setm_filterm_notin_domm :
   forall (T T' : Type) (m1 : NMap T) (m2 : NMap T') k (v : T'),
     k \notin domm m1 ->
     setm (filterm (fun (k : nat_ordType) (_ : T') => k \notin domm m1) m2) k v =
     filterm (fun (k : nat_ordType) (_ : T') => k \notin domm m1) (setm m2 k v).
-Admitted.
+Proof.
+  intros T T' m1 m2 k v Hnotin.
+  apply /eq_fmap => n.
+  rewrite filtermE !setmE filtermE.
+  destruct (eqtype.eq_op n k) eqn:Hcase.
+  - pose proof eqtype.eqP Hcase; subst n. now rewrite Hnotin.
+  - reflexivity.
+Qed.
