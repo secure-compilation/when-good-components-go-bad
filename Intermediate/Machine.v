@@ -490,17 +490,34 @@ Proof.
       simpl in *.
       destruct (Component.main \in domm (prog_interface p1)) eqn:Hcase1;
         destruct (Component.main \in domm (prog_interface p2)) eqn:Hcase2.
-      * admit. (* Easy, contra. *)
+      * (* Contra/easy. *)
+        pose proof (proj1 Hmain_comp1 Hcase1) as Hmain1. now rewrite Hmain1.
       * apply proj1 in Hmain_comp1.
         specialize (Hmain_comp1 Hcase1). rewrite Hmain_comp1. assumption.
       * destruct (prog_main p1) as [main1 |] eqn:Hmain1.
         -- reflexivity.
         -- apply proj1 in Hmain_comp2.
            specialize (Hmain_comp2 Hcase2). assumption.
-      * admit. (* Easy, contra. *)
-    + admit.
-(* Qed. *)
-Admitted. (* Grade 1. *)
+      * (* Contra. *)
+        destruct (dommP _ _ Hprog_main1) as [CI HCI]. rewrite unionmE in HCI.
+        apply negb_true_iff in Hcase1. apply negb_true_iff in Hcase2.
+        now rewrite (dommPn _ _ Hcase1) (dommPn _ _ Hcase2) in HCI.
+    + inversion Hprog_main1 as [Hmain].
+      destruct (prog_main p1) as [main1 |] eqn:Hcase1;
+        destruct (prog_main p2) as [main2 |] eqn:Hcase2.
+      * (* Contra/easy. RB: NOTE: Three cases can be solved as instances of a
+           little lemma, or a tactic. Is it useful elsewhere? *)
+        apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
+        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        apply /dommP. exists CI. now rewrite unionmE HCI.
+      * apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
+        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        apply /dommP. exists CI. now rewrite unionmE HCI.
+      * apply proj2 in Hmain_comp2. specialize (Hmain_comp2 isT).
+        destruct (dommP _ _ Hmain_comp2) as [CI HCI].
+        apply /dommP. exists CI. simpl. now rewrite (unionmC Hdis_i) unionmE HCI.
+      * discriminate.
+Qed.
 
 (* Given a list of components, create the map that associates to
    each component the preallocated buffers according to program p.
