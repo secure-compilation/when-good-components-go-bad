@@ -75,3 +75,16 @@ Proof.
   - by rewrite -(fdisjoint_filterm_full Hdisjoint) fdisjoint_filterm_mapm_empty unionm0.
   - by rewrite! domm_map.
 Qed.
+
+Lemma getm_filterm_notin_domm :
+  forall (T T' : Type) (m1 : NMap T) (m2 : NMap T') k,
+    k \notin domm m1 ->
+    (filterm (fun (k : nat) (_ : T') => k \notin domm m1) m2) k = m2 k.
+Admitted.
+
+Lemma setm_filterm_notin_domm :
+  forall (T T' : Type) (m1 : NMap T) (m2 : NMap T') k (v : T'),
+    k \notin domm m1 ->
+    setm (filterm (fun (k : nat_ordType) (_ : T') => k \notin domm m1) m2) k v =
+    filterm (fun (k : nat_ordType) (_ : T') => k \notin domm m1) (setm m2 k v).
+Admitted.
