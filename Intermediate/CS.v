@@ -5,6 +5,7 @@ Require Import Common.Util.
 Require Import Common.Linking.
 Require Import Common.Memory.
 Require Import Common.Traces.
+Require Import Common.CompCertExtensions.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Lib.Extra.
@@ -954,7 +955,47 @@ Admitted. (* Grade 2. *)
 Lemma comes_from_initial_state_pc_domm s ctx :
   comes_from_initial_state s ctx ->
   Pointer.component (state_pc s) \in domm ctx.
-Admitted.
+Proof.
+  intros [p [main [s0 [t [Hwf [Hmain [Hctx [Hinitial Hstar]]]]]]]].
+  revert main Hwf Hmain Hctx Hinitial.
+  apply star_iff_starR in Hstar.
+  induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
+    subst;
+    intros main Hwf Hmain Hctx Hinitial.
+  - unfold initial_state, initial_machine_state in Hinitial; subst.
+    rewrite Hmain.
+    destruct (prepare_procedures p (prepare_initial_memory p))
+      as [[mem _] entrypoints].
+    apply (wfprog_main_component Hwf). now rewrite Hmain.
+  - specialize (IHHstar main Hwf Hmain Hctx Hinitial).
+    inversion Hstep23; subst; simpl;
+      match goal with
+      | Hlabel : find_label_in_component _ _ _ = _
+        |- _=>
+        now rewrite <- (find_label_in_component_1 _ _ _ _ Hlabel)
+      | Hlabel : find_label_in_procedure _ _ _ = _
+        |- _=>
+        now rewrite <- (find_label_in_procedure_1 _ _ _ _ Hlabel)
+      | Heq : Pointer.component _ = Pointer.component _
+        |- _ =>
+        now rewrite -> Heq
+      | Hentry : EntryPoint.get _ _ _ = _
+        |- _ =>
+        change (genv_entrypoints _)
+          with (genv_entrypoints (prepare_global_env p))
+          in Hentry;
+        pose proof EntryPoint.get_some Hentry as Hdomm;
+        now rewrite domm_genv_entrypoints in Hdomm
+      | Hop : executing _ _ IReturn
+        |- _ =>
+        eapply comes_from_initial_state_stack_cons_domm;
+        unfold comes_from_initial_state;
+        apply star_iff_starR in Hstar12;
+        now eauto 9
+      | |- _ =>
+        now rewrite -> Pointer.inc_preserves_component
+      end.
+Qed.
 
 Lemma silent_step_preserves_component G s s' :
   CS.step G s E0 s' ->
