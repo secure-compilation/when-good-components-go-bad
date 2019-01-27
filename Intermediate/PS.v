@@ -1286,7 +1286,18 @@ Lemma partialize_program_store :
     Memory.store mem ptr v = Some mem' ->
     Memory.store (PS.to_partial_memory mem (domm ctx)) ptr v =
     Some (PS.to_partial_memory mem' (domm ctx)).
-Admitted. (* Grade 1. *)
+Proof.
+  unfold Memory.store, to_partial_memory.
+  intros mem mem' ctx ptr v Hnotin Hstore.
+  destruct (mem (Pointer.component ptr)) as [memC |] eqn:HmemC;
+    last discriminate.
+  destruct (ComponentMemory.store memC (Pointer.block ptr) (Pointer.offset ptr) v)
+    as [memC' |] eqn:HmemC';
+    last discriminate.
+  inversion Hstore as [[Hstore']].
+  now rewrite (getm_filterm_notin_domm _ Hnotin) HmemC HmemC'
+      (setm_filterm_notin_domm _ _ Hnotin).
+Qed.
 
 Lemma unpartialize_program_store :
   forall mem1 mem1' mem2 ptr v,
@@ -1311,7 +1322,16 @@ Lemma partialize_program_alloc :
     Memory.alloc mem C size = Some (mem', ptr) ->
     Memory.alloc (to_partial_memory mem (domm ctx)) C size =
     Some (to_partial_memory mem' (domm ctx), ptr).
-Admitted. (* Grade 1. *)
+Proof.
+  unfold Memory.alloc, to_partial_memory.
+  intros mem mem' ctx C ptr size Hnotin Halloc.
+  destruct (mem C) as [memC |] eqn:HmemC;
+    last discriminate.
+  destruct (ComponentMemory.alloc memC size) as [memC' b] eqn:HmemC'.
+  inversion Halloc; subst.
+  now rewrite (getm_filterm_notin_domm _ Hnotin) HmemC HmemC'
+      (setm_filterm_notin_domm _ _ Hnotin).
+Qed.
 
 Lemma unpartialize_program_alloc :
   forall mem1 mem1' mem2 C ptr size,
