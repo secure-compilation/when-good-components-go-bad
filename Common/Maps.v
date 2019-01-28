@@ -51,6 +51,8 @@ Proof.
   apply H. apply /dommP. by exists v.
 Qed.
 
+(* RB: TODO: Fix name! There is no disjointness condition here, even though its
+   counterpart does have it. *)
 Lemma fdisjoint_filterm_empty (T : Type) (m1 m2 : NMap T) :
   domm m1 = domm m2 ->
   filterm (fun (k : nat) (_ : T) => k \notin domm m1) m2 = emptym.
@@ -103,3 +105,28 @@ Proof.
   - pose proof eqtype.eqP Hcase; subst n. now rewrite Hnotin.
   - reflexivity.
 Qed.
+
+(* RB: NOTE: filterm_union, a related lemma, does not include the final 'm' in
+   its name. *)
+Lemma filterm_domm_unionm (T T' : Type) (m : NMap T) (m1 m2 : NMap T') :
+  filterm (fun (k : nat) (_ : T) => k \notin domm m1)
+          (filterm (fun (k : nat) (_ : T) => k \notin domm m2) m) =
+  filterm (fun (k : nat) (_ : T) => k \notin domm (unionm m1 m2)) m.
+Admitted.
+
+Lemma domm_filterm_fdisjoint_unionm
+      (T T' : Type) (i1 i2 : NMap T) (m : NMap T') :
+  fdisjoint (domm i1) (domm i2) ->
+  domm m = domm (unionm i1 i2) ->
+  domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) = domm i1.
+Admitted.
+
+Lemma domm_filterm_partial_memory
+      (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
+  fdisjoint (domm i1) (domm i2) ->
+  domm m0 = domm m1 ->
+  domm m2 = domm (unionm i1 i2) ->
+  filterm (fun (k : nat) (_ : T') => k \notin domm i1) m0 =
+  filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
+  domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) = domm i2.
+Admitted.
