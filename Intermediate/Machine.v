@@ -613,6 +613,11 @@ Definition prepare_procedures_initial_memory (p: program)
        forall p, prepare_procedures_initial_memory p =
                  prepare_procedures p (prepare_initial_memory p).
   Possibly assuming the well-formedness of the program. *)
+Theorem prepare_procedures_initial_memory_equiv :
+  forall p,
+    prepare_procedures_initial_memory p =
+    prepare_procedures p (prepare_initial_memory p).
+Admitted.
 
 (* initialization of the empty program *)
 
@@ -993,6 +998,16 @@ Qed.
 Definition prepare_procedures_entrypoints (p: program) : EntryPoint.t :=
   let '(_, _, entrypoints) := prepare_procedures_initial_memory p in
   entrypoints.
+
+Lemma domm_prepare_procedures_entrypoints: forall p,
+  domm (prepare_procedures_entrypoints p) = domm (prog_interface p).
+Proof.
+  intros p.
+  unfold prepare_procedures_entrypoints, prepare_procedures_initial_memory.
+  rewrite domm_map.
+  rewrite domm_prepare_procedures_initial_memory_aux.
+  reflexivity.
+Qed.
 
 Theorem prepare_procedures_entrypoints_after_linking:
   forall p c,
