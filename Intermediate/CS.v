@@ -111,7 +111,62 @@ Theorem initial_machine_state_after_linking:
      (Component.main,
       prog_main_block p + prog_main_block c,
       0%Z)).
-Admitted. (* Grade 2. *)
+Proof.
+  intros p c Hwfp Hwfc Hlinkable Hclosed.
+  unfold initial_machine_state.
+  inversion Hclosed as [_ [mainpc [procspc [Hmainpc [Hprocspc Hdommpc]]]]];
+    rewrite Hmainpc.
+  rewrite <- prepare_procedures_initial_memory_equiv,
+          -> prepare_procedures_initial_memory_after_linking;
+    try assumption;
+    last now apply linkable_implies_linkable_mains.
+  destruct (prog_main p) as [mainp |] eqn:Hmainp;
+    destruct (prog_main c) as [mainc |] eqn:Hmainc.
+  - exfalso.
+    pose proof proj2 (wfprog_main_component Hwfp) as Hdommp.
+    rewrite Hmainp in Hdommp. specialize (Hdommp isT).
+    pose proof proj2 (wfprog_main_component Hwfc) as Hdommc.
+    rewrite Hmainc in Hdommc. specialize (Hdommc isT).
+    inversion Hlinkable as [_ Hdisjoint].
+    eapply fdisjoint_partition_notinboth; eassumption.
+  - (* RB: NOTE: As usual, the following two cases are symmetric. *)
+    simpl in Hmainpc. rewrite Hmainp in Hmainpc.
+    inversion Hmainpc; subst mainpc.
+    unfold prog_main_block, EntryPoint.get.
+    rewrite Hmainp, Hmainc, unionmE.
+    pose proof proj2 (wfprog_main_component Hwfp) as Hdommp.
+    rewrite Hmainp in Hdommp. specialize (Hdommp isT).
+    pose proof proj1 (wfprog_main_component Hwfc) as Hdommc.
+    destruct (Component.main \in domm (prog_interface c)) eqn:Hcase;
+      first (specialize (Hdommc isT); now rewrite Hmainc in Hdommc).
+    rewrite <- domm_prepare_procedures_entrypoints in Hdommp, Hcase.
+    destruct (dommP _ _ Hdommp) as [entrypointsp Hentrypointsp].
+    do 2 setoid_rewrite Hentrypointsp.
+    now rewrite Nat.add_0_r.
+  - (* Deal with the symmetries upfront; because of disjointness it is also
+       possible to delay that and work on the "else" branch. *)
+    setoid_rewrite unionmC at 1 2 3;
+      try (try rewrite 2!domm_prepare_procedures_memory;
+           try rewrite 2!domm_prepare_procedures_entrypoints;
+           now inversion Hlinkable).
+    (* Proceed (no symmetry on the hypothesis, here). *)
+    simpl in Hmainpc. rewrite Hmainp, Hmainc in Hmainpc.
+    inversion Hmainpc; subst mainpc.
+    unfold prog_main_block, EntryPoint.get.
+    rewrite Hmainp, Hmainc, unionmE.
+    pose proof proj2 (wfprog_main_component Hwfc) as Hdommc.
+    rewrite Hmainc in Hdommc. specialize (Hdommc isT).
+    pose proof proj1 (wfprog_main_component Hwfp) as Hdommp.
+    destruct (Component.main \in domm (prog_interface p)) eqn:Hcase;
+      first (specialize (Hdommp isT); now rewrite Hmainp in Hdommp).
+    rewrite <- domm_prepare_procedures_entrypoints in Hdommc, Hcase.
+    destruct (dommP _ _ Hdommc) as [entrypointsc Hentrypointsc].
+    do 2 setoid_rewrite Hentrypointsc.
+    reflexivity.
+  - (* Another easy/contra goal. *)
+    simpl in Hmainpc. rewrite Hmainp, Hmainc in Hmainpc.
+    now inversion Hmainpc.
+Qed.
 
 (* transition system *)
 
