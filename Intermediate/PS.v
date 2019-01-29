@@ -1190,7 +1190,23 @@ Lemma to_partial_memory_merge_partial_memories_left
                       (to_partial_memory mem2 (domm iface2)))
       (domm iface1) =
     to_partial_memory mem1 (domm iface1).
-Admitted. (* Grade 2. *)
+Proof.
+  intros Hmerge G gps0 mem0 regs0 pc0 t gps1 regs1 pc1
+         Hstep01 Hpartial20 gps2 regs2 pc2 Hcomes_from2.
+  inversion Hmerge as [[_ Hdisjoint] _].
+  apply CS.step_preserves_mem_domm in Hstep01.
+  apply CS.comes_from_initial_state_mem_domm in Hcomes_from2.
+  simpl in Hstep01, Hcomes_from2.
+  unfold to_partial_memory, merge_memories in *.
+  rewrite -> filterm_union, -> 2!filterm_domm_unionm,
+          -> unionmI, <- Hcomes_from2, -> fdisjoint_filterm_empty, -> unionm0;
+    try reflexivity.
+  simpl.
+  rewrite (domm_filterm_fdisjoint_unionm Hdisjoint Hcomes_from2).
+  rewrite (domm_filterm_partial_memory
+             Hdisjoint Hstep01 Hcomes_from2 (eq_sym Hpartial20)).
+  now rewrite fdisjointC.
+Qed.
 
 Lemma to_partial_memory_merge_partial_memories_left_2
       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
