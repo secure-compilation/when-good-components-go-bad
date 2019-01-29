@@ -299,6 +299,28 @@ Proof.
     intuition.
 Qed.
 
+(* RB: TODO: Remove superfluous linkable_main assumptions from development.
+   Observe the relation to PS.domm_partition_in_union_in_neither. *)
+Theorem linkable_implies_linkable_mains : forall (p1 p2 : program),
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p1) (prog_interface p2) ->
+  linkable_mains p1 p2.
+Proof.
+  intros p1 p2 Hwf1 Hwf2 [_ Hdisjoint].
+  unfold linkable_mains.
+  destruct (prog_main p1) as [main1 |] eqn:Hmain1;
+    destruct (prog_main p2) as [main2 |] eqn:Hmain2;
+    try reflexivity.
+  (* All that remains is the contradictory case. *)
+  pose proof (proj2 (wfprog_main_component Hwf1)) as Hdomm1.
+  rewrite Hmain1 in Hdomm1. specialize (Hdomm1 isT).
+  pose proof (proj2 (wfprog_main_component Hwf2)) as Hdomm2.
+  rewrite Hmain2 in Hdomm2. specialize (Hdomm2 isT).
+  pose proof fdisjointP _ _ Hdisjoint _ Hdomm1 as Hcontra.
+  now rewrite Hdomm2 in Hcontra.
+Qed.
+
 Definition matching_mains (prog1 prog2 : program) : Prop :=
   prog_main prog1 = None <-> prog_main prog2 = None.
 
