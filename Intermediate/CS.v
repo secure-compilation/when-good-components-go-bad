@@ -52,8 +52,7 @@ Definition state_pc (st : state) : Pointer.t :=
 Definition initial_machine_state (p: program) : state :=
   match prog_main p with
   | Some mainP =>
-    let initial_mem := prepare_initial_memory p in
-    let '(mem, _, entrypoints) := prepare_procedures p initial_mem in
+    let '(mem, _, entrypoints) := prepare_procedures_initial_memory p in
     let regs := Register.init in
     let b := match EntryPoint.get Component.main mainP entrypoints with
              | Some b => b
@@ -116,8 +115,7 @@ Proof.
   unfold initial_machine_state.
   inversion Hclosed as [_ [mainpc [procspc [Hmainpc [Hprocspc Hdommpc]]]]];
     rewrite Hmainpc.
-  rewrite <- prepare_procedures_initial_memory_equiv,
-          -> prepare_procedures_initial_memory_after_linking;
+  rewrite -> prepare_procedures_initial_memory_after_linking;
     try assumption;
     last now apply linkable_implies_linkable_mains.
   destruct (prog_main p) as [mainp |] eqn:Hmainp;
@@ -940,9 +938,7 @@ Proof.
   apply intermediate_well_bracketed_trace in H.
   suffices <- : stack_state_of cs = stack_state0 by [].
   rewrite /initial_state /initial_machine_state in H'.
-  rewrite H' H''.
-  rewrite [Intermediate.prepare_procedures p _]surjective_pairing /=.
-  by rewrite [fst (Intermediate.prepare_procedures p _)]surjective_pairing.
+  by rewrite H' H''.
 Qed.
 
 End Semantics.
