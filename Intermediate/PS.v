@@ -1279,7 +1279,26 @@ Lemma to_partial_memory_merge_partial_memories_right_2
                       (to_partial_memory mem2 (domm iface2)))
       (domm iface2) =
     to_partial_memory mem2 (domm iface2).
-Admitted. (* Grade 2. *)
+Proof.
+  intros Hmerge G gps0 mem0 regs0 pc0 t gps2 regs2 pc2
+         Hstep02 gps1 regs1 pc1 Hpartial10 Hcomes_from1.
+  inversion Hmerge as [[_ Hdisjoint] _].
+  apply CS.step_preserves_mem_domm in Hstep02.
+  apply CS.comes_from_initial_state_mem_domm in Hcomes_from1.
+  simpl in Hstep02, Hcomes_from1.
+  (* Rewrite symmetries up front. *)
+  rewrite (unionmC Hdisjoint) in Hcomes_from1. rewrite fdisjointC in Hdisjoint.
+  unfold to_partial_memory, merge_memories in *.
+  rewrite -> filterm_union, -> 2!filterm_domm_unionm,
+          -> unionmI, <- Hcomes_from1,
+          -> fdisjoint_filterm_empty, -> union0m;
+    try reflexivity.
+  rewrite (domm_filterm_fdisjoint_unionm Hdisjoint Hcomes_from1).
+  rewrite (domm_filterm_partial_memory
+             Hdisjoint Hstep02 Hcomes_from1 (eq_sym Hpartial10)).
+  (* The end is simplified w.r.t. *_left. *)
+  assumption.
+Qed.
 
 Corollary to_partial_memory_merge_memory_right :
   forall iface1 iface2,
