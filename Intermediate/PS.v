@@ -1136,8 +1136,25 @@ Lemma merge_memories_partition:
     merge_memories
       (to_partial_memory mem (domm ctx1))
       (to_partial_memory mem (domm ctx2))
-  = mem.
-Admitted. (* Grade 2. *)
+    = mem.
+Proof.
+  intros ctx1 ctx2 Hmerge gps mem regs pc Hcomes_from.
+  inversion Hmerge as [[_ Hdisjoint] _].
+  apply CS.comes_from_initial_state_mem_domm in Hcomes_from.
+  simpl in Hcomes_from.
+  unfold merge_memories, to_partial_memory.
+  (* By case analysis. *)
+  apply /eq_fmap => C.
+  rewrite unionmE 2!filtermE.
+  destruct (C \notin domm ctx1) eqn:Hdomm1;
+    destruct (C \notin domm ctx2) eqn:Hdomm2;
+    destruct (mem C) as [memC |] eqn:Hmem; rewrite Hmem;
+    try reflexivity.
+  (* A single contradictory case is left. *)
+  - exfalso.
+    apply negb_false_iff in Hdomm1. apply negb_false_iff in Hdomm2.
+    eapply fdisjoint_partition_notinboth; eassumption.
+Qed.
 
 (* RB: TODO: The main rewrite sequence can be seen as two instances of a simpler
    lemma, which will probably operate on simpler assumptions than the ones here,
