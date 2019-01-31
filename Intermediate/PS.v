@@ -1169,6 +1169,10 @@ Proof.
     try rewrite -> !domm_prepare_procedures_memory; congruence.
 Qed.
 
+(* RB: TODO: In this and related lemmas, consider symmetric versions and simplify
+   accordingly (for example, two pairs on each of these: _left and _right2, and
+   _left2 and _right). The single-memory _left lemma is also closely related
+   to both. *)
 Lemma to_partial_memory_merge_partial_memories_left
       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
     mergeable_interfaces iface1 iface2 ->
@@ -1237,7 +1241,20 @@ Corollary to_partial_memory_merge_memory_left :
                       (to_partial_memory mem (domm iface2)))
       (domm iface1) =
     to_partial_memory mem (domm iface1).
-Admitted. (* Grade 2. *)
+Proof.
+  intros iface1 iface2 Hmerge gps mem regs pc Hcomes_from.
+  inversion Hmerge as [[_ Hdisjoint] _].
+  apply CS.comes_from_initial_state_mem_domm in Hcomes_from.
+  simpl in Hcomes_from.
+  unfold to_partial_memory, merge_memories in *.
+  rewrite -> filterm_union, -> 2!filterm_domm_unionm,
+          -> unionmI, <- Hcomes_from, -> fdisjoint_filterm_empty, -> unionm0;
+    try reflexivity.
+  rewrite (domm_filterm_fdisjoint_unionm Hdisjoint Hcomes_from).
+  rewrite (unionmC Hdisjoint) in Hcomes_from. rewrite fdisjointC in Hdisjoint.
+  rewrite (domm_filterm_fdisjoint_unionm Hdisjoint Hcomes_from).
+  assumption.
+Qed.
 
 Lemma to_partial_memory_merge_partial_memories_right
       (mem1 mem2 : Memory.t) (iface1 iface2 : Program.interface) :
