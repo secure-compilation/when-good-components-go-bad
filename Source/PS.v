@@ -1428,27 +1428,57 @@ Proof.
   intros p m Hprefix Hnot_wrong'.
   destruct Hprefix as [b [Hb Hmb]].
   inversion Hb as [s beh Hini Hbeh | Hini]; subst.
-  - inversion Hbeh as [| | ? Hreact |]; subst.
+  - inversion Hbeh as [? ? Hstar | ? ? Hstar | ? Hreact | ? ? Hstar]; subst.
     (* Matching case. *)
     + destruct m as [tm | tm | tm].
       * simpl in *; subst. now eauto.
       * contradiction.
       * (* This is like the contradictory cases below. *)
-        admit.
+        destruct Hmb as [b Hb'].
+        destruct b as [tb | tb | tb | tb];
+          try discriminate.
+        inversion Hb'; subst.
+        destruct (star_app_inv (@CS.singleton_traces p) _ _ Hstar)
+          as [s1 [Hstar1 Hstar2]].
+        exists s, s1. split; [| split]; try assumption.
+        now intros [t' Hcontra].
     (* The remaining cases are essentially identical. *)
     + destruct m as [tm | tm | tm];
         try contradiction.
-      admit.
+      destruct Hmb as [b Hb'].
+      destruct b as [tb | tb | tb | tb];
+        try discriminate.
+      inversion Hb'; subst.
+      destruct (star_app_inv (@CS.singleton_traces p) _ _ Hstar)
+        as [s1 [Hstar1 Hstar2]].
+      exists s, s1. split; [| split]; try assumption.
+      now intros [t' Hcontra].
     + destruct m as [tm | tm | tm];
         try contradiction.
-      admit.
-    + destruct m as [tm | tm | tm];
+      destruct Hmb as [b Hb'].
+      destruct b as [tb | tb | tb | tb];
+        try discriminate.
+      inversion Hb'; subst.
+      (* The only difference in this case is the lemma to be applied here. *)
+      destruct (forever_reactive_app_inv (@CS.singleton_traces p) _ _ Hreact)
+        as [s1 [Hstar Hreact']].
+      exists s, s1. split; [| split]; try assumption.
+      now intros [t' Hcontra].
+    + (* Same script as Diverges. *)
+      destruct m as [tm | tm | tm];
         try contradiction.
-      admit.
+      destruct Hmb as [b Hb'].
+      destruct b as [tb | tb | tb | tb];
+        try discriminate.
+      inversion Hb'; subst.
+      destruct (star_app_inv (@CS.singleton_traces p) _ _ Hstar)
+        as [s1 [Hstar1 Hstar2]].
+      exists s, s1. split; [| split]; try assumption.
+      now intros [t' Hcontra].
   - destruct (CS.initial_state_exists p) as [sini Hcontra].
     specialize (Hini sini).
     contradiction.
-Admitted.
+Qed.
 
 (* RB: TODO: Source prefixes no longer needed: clean proof. *)
 Lemma blame_program:
