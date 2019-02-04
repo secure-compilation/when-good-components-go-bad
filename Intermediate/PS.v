@@ -1064,7 +1064,27 @@ Corollary to_partial_stack_merge_stack_left :
                        (to_partial_stack gps (domm ctx2))))
       (domm ctx1) =
     to_partial_stack gps (domm ctx1).
-Admitted. (* Grade 2. *)
+Proof.
+  intros iface1 iface2 Hmerge gps mem regs pc Hcomes_from.
+  inversion Hmerge as [[_ Hdisjoint] _].
+  apply CS.comes_from_initial_state_stack_domm in Hcomes_from.
+  simpl in Hcomes_from.
+  induction gps as [| frame gps IHgps].
+  - reflexivity.
+  - simpl in *. destruct Hcomes_from as [Hdomm_hd Hdomm_gps].
+    rewrite (IHgps Hdomm_gps).
+    unfold to_partial_frame.
+    destruct (Pointer.component frame \in domm iface1) eqn:Hdomm1;
+      destruct (Pointer.component frame \in domm iface2) eqn:Hdomm2;
+      rewrite Hdomm1.
+    + exfalso. eapply domm_partition_in_both; eassumption.
+    + reflexivity.
+    + reflexivity.
+    + exfalso. eapply domm_partition_in_union_in_neither.
+      * eassumption.
+      * now rewrite Hdomm1.
+      * now rewrite Hdomm2.
+Qed.
 
 Lemma to_partial_stack_merge_stacks_right:
   forall ctx1 ctx2,
@@ -1082,6 +1102,7 @@ Lemma to_partial_stack_merge_stacks_right:
     to_partial_stack gps2 (domm ctx2).
 Admitted. (* Grade 2. Note comments for lemma above. *)
 
+(* RB: TODO: Refactor proof w.r.t. left version. *)
 Corollary to_partial_stack_merge_stack_right :
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
@@ -1093,7 +1114,27 @@ Corollary to_partial_stack_merge_stack_right :
                        (to_partial_stack gps (domm ctx2))))
       (domm ctx2) =
     to_partial_stack gps (domm ctx2).
-Admitted. (* Grade 2. *)
+Proof.
+  intros iface1 iface2 Hmerge gps mem regs pc Hcomes_from.
+  inversion Hmerge as [[_ Hdisjoint] _].
+  apply CS.comes_from_initial_state_stack_domm in Hcomes_from.
+  simpl in Hcomes_from.
+  induction gps as [| frame gps IHgps].
+  - reflexivity.
+  - simpl in *. destruct Hcomes_from as [Hdomm_hd Hdomm_gps].
+    rewrite (IHgps Hdomm_gps).
+    unfold to_partial_frame.
+    destruct (Pointer.component frame \in domm iface1) eqn:Hdomm1;
+      destruct (Pointer.component frame \in domm iface2) eqn:Hdomm2;
+      rewrite Hdomm2. (* RB: NOTE: Single change in proof script. *)
+    + exfalso. eapply domm_partition_in_both; eassumption.
+    + reflexivity.
+    + reflexivity.
+    + exfalso. eapply domm_partition_in_union_in_neither.
+      * eassumption.
+      * now rewrite Hdomm1.
+      * now rewrite Hdomm2.
+Qed.
 
 (* Controlled rewrites on cons'ed stacks. *)
 Lemma to_partial_stack_cons :
