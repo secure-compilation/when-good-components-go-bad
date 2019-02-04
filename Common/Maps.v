@@ -62,6 +62,12 @@ Proof.
   apply negbTE. apply /negPn. rewrite H. apply /dommP. by exists v.
 Qed.
 
+(* RB: NOTE: This generalizes the above result. *)
+Lemma fsubset_filterm_domm_emptym (T : Type) (m1 m2 : NMap T) :
+  fsubset (domm m2) (domm m1) ->
+  filterm (fun (k : nat) (_ : T) => k \notin domm m1) m2 = emptym.
+Admitted.
+
 Lemma fdisjoint_filterm_mapm_empty (T T' : Type) (m : NMap T) (f : T -> T') :
   filterm (fun (k : nat) (_ : T') => k \notin domm m) (mapm f m) = emptym.
 Proof.
@@ -129,4 +135,14 @@ Lemma domm_filterm_partial_memory
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m0 =
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) = domm i2.
+Admitted.
+
+Lemma filterm_partial_memory_fsubset
+      (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
+  fdisjoint (domm i1) (domm i2) ->
+  domm m0 = domm m1 ->
+  domm m2 = domm (unionm i1 i2) ->
+  filterm (fun (k : nat) (_ : T') => k \notin domm i1) m0 =
+  filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
+  fsubset (domm m1) (domm m2).
 Admitted.
