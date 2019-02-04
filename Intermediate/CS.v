@@ -41,6 +41,9 @@ Instance state_turn : HasTurn state := {
     Pointer.component pc \in domm iface
 }.
 
+Definition state_stack (st : state) : stack :=
+  let '(gps, _, _, _) := st in gps.
+
 Definition state_mem (st : state) : Memory.t :=
   let '(_, mem, _, _) := st in mem.
 
@@ -995,6 +998,11 @@ Lemma comes_from_initial_state_step_trans p s t s' :
   CS.comes_from_initial_state s (prog_interface p) ->
   CS.step (prepare_global_env p) s t s' ->
   CS.comes_from_initial_state s' (prog_interface p).
+Admitted. (* Grade 2. *)
+
+Lemma comes_from_initial_state_stack_domm s ctx :
+  comes_from_initial_state s ctx ->
+  All (fun frame => Pointer.component frame \in domm ctx) (state_stack s).
 Admitted. (* Grade 2. *)
 
 (* RB: This result admits more general formulations which may be useful. *)
