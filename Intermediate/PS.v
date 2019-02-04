@@ -1366,7 +1366,22 @@ Corollary to_partial_memory_merge_memory_right :
                       (to_partial_memory mem (domm iface2)))
       (domm iface2) =
     to_partial_memory mem (domm iface2).
-Admitted. (* Grade 2. *)
+Proof.
+  intros iface1 iface2 Hmerge gps mem regs pc Hcomes_from.
+  inversion Hmerge as [[_ Hdisjoint] _].
+  apply CS.comes_from_initial_state_mem_domm in Hcomes_from.
+  simpl in Hcomes_from.
+  (* Rewrite symmetries up front. *)
+  rewrite (unionmC Hdisjoint) in Hcomes_from. rewrite fdisjointC in Hdisjoint.
+  unfold to_partial_memory, merge_memories in *.
+  rewrite -> filterm_union, -> 2!filterm_domm_unionm,
+          -> unionmI, <- Hcomes_from, -> fdisjoint_filterm_empty, -> union0m;
+    try reflexivity.
+  rewrite (domm_filterm_fdisjoint_unionm Hdisjoint Hcomes_from).
+  rewrite (unionmC Hdisjoint) in Hcomes_from. rewrite fdisjointC in Hdisjoint.
+  rewrite (domm_filterm_fdisjoint_unionm Hdisjoint Hcomes_from).
+  now rewrite fdisjointC.
+Qed.
 
 (* The following two lemmas manipulate memory stores and partialized memories
    more conveniently than the full-fledged "partialized" results. Note naming
