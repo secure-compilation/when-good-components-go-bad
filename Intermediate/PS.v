@@ -1246,7 +1246,30 @@ Lemma to_partial_memory_merge_partial_memories_left_2
                       (to_partial_memory mem2 (domm iface2)))
       (domm iface1) =
     to_partial_memory mem1 (domm iface1).
-Admitted. (* Grade 2. *)
+Proof.
+  intros Hmerge G gps0 mem0 regs0 pc0 t gps2 regs2 pc2
+         Hstep02 gps1 regs1 pc1 Hpartial10 Hcomes_from1.
+  inversion Hmerge as [[_ Hdisjoint] _].
+  apply CS.step_preserves_mem_domm in Hstep02.
+  apply CS.comes_from_initial_state_mem_domm in Hcomes_from1.
+  simpl in Hstep02, Hcomes_from1.
+  unfold to_partial_memory, merge_memories in *.
+  (* Pose the symmetric statement. *)
+  assert (Hcomes_from1' := Hcomes_from1);
+    rewrite -> (unionmC Hdisjoint) in Hcomes_from1'.
+  rewrite fdisjointC in Hdisjoint.
+  (* And state the subset fact, the other novelty w.r.t. the other proofs. *)
+  pose proof filterm_partial_memory_fsubset
+       Hdisjoint Hstep02 Hcomes_from1' (eq_sym Hpartial10)
+    as Hsubset.
+  rewrite -> filterm_union, -> 2!filterm_domm_unionm,
+          -> unionmI, <- Hcomes_from1, -> fsubset_filterm_domm_emptym, -> unionm0;
+    try easy. (* Here we apply the new assumption, as well. *)
+  rewrite (domm_filterm_fdisjoint_unionm Hdisjoint Hcomes_from1').
+  rewrite (domm_filterm_partial_memory
+             Hdisjoint Hstep02 Hcomes_from1' (eq_sym Hpartial10)).
+  assumption.
+Qed.
 
 Corollary to_partial_memory_merge_memory_left :
   forall iface1 iface2,
