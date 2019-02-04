@@ -1051,7 +1051,42 @@ Lemma to_partial_stack_merge_stacks_left:
                        (to_partial_stack gps2 (domm ctx2))))
       (domm ctx1) =
     to_partial_stack gps1 (domm ctx1).
-Admitted. (* Grade 2. Note comments. *)
+Proof.
+  intros ctx1 ctx2 Hmerge gps1 mem1 regs1 pc1
+         Hcomes_from1 gps2 mem2 regs2 pc2 Hcomes_from2 Hpartial12.
+  inversion Hmerge as [[_ Hdisjoint] _].
+  apply CS.comes_from_initial_state_stack_domm in Hcomes_from1.
+  apply CS.comes_from_initial_state_stack_domm in Hcomes_from2.
+  simpl in Hcomes_from1, Hcomes_from2.
+  revert gps2 Hcomes_from2 Hpartial12.
+  induction gps1 as [| frame1 gps1 IHgps1];
+    intros gps2 Hcomes_from2 Hpartial12.
+  - reflexivity.
+  - destruct Hcomes_from1 as [Hdomm_hd1 Hdomm_gps1].
+    destruct gps2 as [| frame2 gps2];
+      first discriminate.
+    inversion Hpartial12 as [[Hpartial12_frame Hpartial12_gps]].
+    destruct Hcomes_from2 as [Hdomm_frame2 Hdomm_gps2].
+    simpl in *.
+    rewrite (IHgps1 Hdomm_gps1 _ Hdomm_gps2 Hpartial12_gps).
+    unfold to_partial_frame.
+    destruct (Pointer.component frame1 \in domm ctx1) eqn:Hdomm1;
+      destruct (Pointer.component frame2 \in domm ctx2) eqn:Hdomm2;
+      rewrite Hdomm1.
+    + reflexivity.
+    + reflexivity.
+    + reflexivity.
+    + unfold to_partial_frame in Hpartial12_frame.
+      rewrite Hdomm1 in Hpartial12_frame.
+      destruct (Pointer.component frame2 \in domm ctx1) eqn:Hdomm2';
+        first discriminate.
+      inversion Hpartial12_frame as [[Hcomp Hdummy1 Hdummy2]].
+      (* rewrite Hcomp in Hdomm1. *)
+      exfalso. eapply domm_partition_in_union_in_neither.
+      * eassumption.
+      * rewrite <- Hcomp. now rewrite Hdomm1.
+      * now rewrite Hdomm2.
+Qed.
 
 Corollary to_partial_stack_merge_stack_left :
   forall ctx1 ctx2,
