@@ -66,7 +66,12 @@ Qed.
 Lemma fsubset_filterm_domm_emptym (T : Type) (m1 m2 : NMap T) :
   fsubset (domm m2) (domm m1) ->
   filterm (fun (k : nat) (_ : T) => k \notin domm m1) m2 = emptym.
-Admitted.
+Proof.
+  move=> H.
+  rewrite -[RHS](filterm_predF m2). apply eq_in_filterm => k v kv.
+  apply negbTE. apply /negPn.
+  apply /fsubsetP. apply H. apply /dommP. by exists v.
+Qed.
 
 Lemma fdisjoint_filterm_mapm_empty (T T' : Type) (m : NMap T) (f : T -> T') :
   filterm (fun (k : nat) (_ : T') => k \notin domm m) (mapm f m) = emptym.
