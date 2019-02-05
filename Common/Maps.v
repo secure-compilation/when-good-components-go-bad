@@ -151,4 +151,14 @@ Admitted.
    arbitrary subsets. *)
 Lemma fsetU1in (T : ordType) (x : T) (s : {fset T}) :
   x \in s -> (x |: s)%fset = s.
-Admitted.
+Proof.
+  rewrite -eq_fset.
+  move => x_in_s x0.
+  case: (@in_fsetU1 T x0 x s) => H0. 
+  destruct (x0 \in s) eqn: Hx0.
+     by rewrite H0 orbT. 
+  rewrite H0 orbF.     
+  destruct (eqtype.eq_op x0 x) eqn: Hx0_x; auto. 
+    rewrite -(eqtype.eqP Hx0_x) in x_in_s.  
+    now inversion x_in_s.
+Qed.
