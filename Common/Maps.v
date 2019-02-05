@@ -146,3 +146,9 @@ Lemma filterm_partial_memory_fsubset
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   fsubset (domm m1) (domm m2).
 Admitted.
+
+(* RB: NOTE: This is not a map lemma proper. More generally, absorption on
+   arbitrary subsets. *)
+Lemma fsetU1in (T : ordType) (x : T) (s : {fset T}) :
+  x \in s -> (x |: s)%fset = s.
+Admitted.
