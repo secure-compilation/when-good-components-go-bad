@@ -87,10 +87,10 @@ Lemma prog_main_block_no_main:
   forall p,
     well_formed_program p ->
     Component.main \notin domm (prog_interface p) ->
-    CS.prog_main_block p = 0.
+    prog_main_block p = 0.
 Proof.
   intros p Hwf Hdomm.
-  unfold CS.prog_main_block. (* Enable automatic rewrite on destruct. *)
+  unfold prog_main_block. (* Enable automatic rewrite on destruct. *)
   destruct (prog_main p) as [main |] eqn:Hmain'.
   - (* RB: TODO: Report bug.
        Below, replacing BUGGY with an anonymous pattern triggers:
