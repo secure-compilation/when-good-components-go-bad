@@ -989,7 +989,19 @@ Qed.
 Remark comes_from_initial_state_mem_domm s ctx :
   comes_from_initial_state s ctx ->
   domm (state_mem s) = domm ctx.
-Admitted. (* Grade 1. *)
+Proof.
+  intros [p [main [s0 [t [Hwf [Hmain [Hiface [Hini Hstar]]]]]]]].
+  apply star_iff_starR in Hstar.
+  revert ctx main Hwf Hmain Hiface Hini.
+  induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
+    subst;
+    intros ctx main Hwf Hmain Hiface Hini.
+  - unfold initial_state, initial_machine_state in Hini; subst s.
+    rewrite Hmain. simpl.
+    rewrite domm_map, domm_prepare_procedures_initial_memory_aux. congruence.
+  - specialize (IHHstar _ _ Hwf Hmain Hiface Hini).
+    apply step_preserves_mem_domm in Hstep23. congruence.
+Qed.
 
 (* RB: NOTE: Consider possible alternatives on [CS.comes_from_initial_state]
    complemented instead by, say, [PS.step] based on what we usually have in
