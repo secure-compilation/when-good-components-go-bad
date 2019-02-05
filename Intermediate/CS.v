@@ -1015,7 +1015,30 @@ Admitted. (* Grade 2. *)
 Lemma comes_from_initial_state_stack_domm s ctx :
   comes_from_initial_state s ctx ->
   All (fun frame => Pointer.component frame \in domm ctx) (state_stack s).
-Admitted. (* Grade 2. *)
+Proof.
+  intros [p [main [s0 [t [Hwf [Hmain [Hiface [Hini Hstar]]]]]]]].
+  apply star_iff_starR in Hstar.
+  revert ctx main Hwf Hmain Hiface Hini.
+  induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
+    subst;
+    intros ctx main Hwf Hmain Hiface Hini.
+  - unfold initial_state, initial_machine_state in Hini; subst s.
+    now rewrite Hmain.
+  - specialize (IHHstar _ _ Hwf Hmain Hiface Hini).
+    (* Case analysis on the step. Most operations do not modify the stack, and
+       returns only pop. *)
+    inversion Hstep23; subst;
+      simpl in *;
+      try easy.
+    (* The only semi-interesting cases is the call instruction. *)
+    split; [| assumption].
+    rewrite Pointer.inc_preserves_component.
+    match goal with
+    | Himp : imported_procedure _ _ _ _ |- _ =>
+      destruct Himp as [CI [Hhas_comp Himp]];
+      exact (has_component_in_domm_prog_interface Hhas_comp)
+    end.
+Qed.
 
 (* RB: This result admits more general formulations which may be useful. *)
 Lemma comes_from_initial_state_stack_cons_domm frame gps mem regs pc iface :
