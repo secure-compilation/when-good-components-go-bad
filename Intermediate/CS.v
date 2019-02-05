@@ -13,6 +13,10 @@ Require Import Lib.Monads.
 
 From mathcomp Require ssreflect ssrfun ssrbool eqtype.
 
+Set Implicit Arguments.
+Unset Strict Implicit.
+Unset Printing Implicit Defensive.
+
 Set Bullet Behavior "Strict Subproofs".
 
 Module CS.
@@ -962,10 +966,43 @@ Proof.
   - subst. reflexivity.
 Qed.
 
+(* RB: TODO: Use SSR imports consistently (we use SSR exclusively for the next
+   lemma). *)
+Import ssreflect.
 Remark step_preserves_mem_domm G s t s' :
   CS.step G s t s' ->
   domm (state_mem s) = domm (state_mem s').
-Admitted. (* Grade 1. *)
+Proof.
+  intros Hstep.
+  inversion Hstep; subst;
+    try reflexivity. (* Most operations do not modify the memory. *)
+  - (* Preservation by Memory.store. *)
+    match goal with
+    | Hstore : Memory.store _ ?PTR (Register.get ?REG ?REGS) = _ |- _ =>
+      unfold Memory.store in Hstore;
+      destruct (mem (Pointer.component PTR)) as [memC |] eqn:Hcase1;
+        [| discriminate];
+      destruct (ComponentMemory.store
+                  memC (Pointer.block PTR) (Pointer.offset PTR) (Register.get REG REGS))
+        as [memC' |] eqn:Hcase2;
+        [| discriminate];
+      inversion Hstore as [Hsetm];
+      simpl; rewrite domm_set fsetU1in;
+        [reflexivity |];
+      apply /dommP; now eauto
+    end.
+  - (* Preservation by Memory.alloc. *)
+    match goal with
+    | Halloc : Memory.alloc _ _ _ = _ |- _ =>
+      unfold Memory.alloc in Halloc;
+      destruct (mem (Pointer.component pc)) as [memC |] eqn:Hcase;
+        [| discriminate];
+      destruct (ComponentMemory.alloc memC (Z.to_nat size)) as [memC' b];
+      inversion Halloc; subst; simpl;
+      rewrite domm_set fsetU1in; [reflexivity |];
+      apply /dommP; now eauto
+    end.
+Qed.
 
 Definition comes_from_initial_state (s: state) (iface : Program.interface) : Prop :=
   exists p mainP s0 t,
