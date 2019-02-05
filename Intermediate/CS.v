@@ -1040,11 +1040,17 @@ Proof.
     end.
 Qed.
 
-(* RB: This result admits more general formulations which may be useful. *)
-Lemma comes_from_initial_state_stack_cons_domm frame gps mem regs pc iface :
+(* RB: TODO: This result admits more general formulations (see above).
+   Replace this with those whenever convenient, including the "bootstrapping"
+   on the stack in the result for the domain of the PC, just below. *)
+Corollary comes_from_initial_state_stack_cons_domm frame gps mem regs pc iface :
   comes_from_initial_state (frame :: gps, mem, regs, pc) iface ->
   Pointer.component frame \in domm iface.
-Admitted. (* Grade 2. *)
+Proof.
+  intros Hcomes_from.
+  apply comes_from_initial_state_stack_domm in Hcomes_from.
+  now simpl in Hcomes_from.
+Qed.
 
 Lemma comes_from_initial_state_pc_domm s ctx :
   comes_from_initial_state s ctx ->
