@@ -1008,19 +1008,40 @@ Section Definability.
       case intf_C: (intf C)=> [CI|] //=.
       rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
         rewrite /procedure_of_trace /expr_of_trace /switch.
-        elim: {t Ht} (comp_subtrace C t) (length _) => [|e t IH] n //=.
-        by case: e=> /=.
-      pose call_of_event e := if e is ECall _ P _ C then Some (C, P) else None.
+        (* values_are_integers is treated here *)
+        rewrite /suffixes_of_seq.
+        (* Surely, should change the IH ? *)
+        elim: t Ht => [| e t IH] //=.
+        (* elim: {t Ht} (comp_subtrace C t) (length _) => [|e t IH] n //=. *)
+
+      (* by case: e=> /=. *)
+      (* + induction t. *)
+        (* Treat different events, only E_Load should be painful *)
+        + case: e ; admit.
+
+
+
+      (* Valid calls *)
+        + pose call_of_event e := if e is ECall _ P _ C then Some (C, P) else None.
       have /fsubsetP sub :
           fsubset (called_procedures (procedure_of_trace C P t))
                   ((C, P) |: fset (pmap call_of_event (comp_subtrace C t))).
         rewrite /procedure_of_trace /expr_of_trace /switch.
+        (* This induction should replace many elements by fset0 in the base case *)
         elim: {t Ht} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
           exact: fsub0set.
-        move/(_ n) in IH; rewrite !fset0U.
-        case: e=> [C' P' v C''| |] //=; try  by rewrite fset0U.
-        rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
-        by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
+        move/(_ n) in IH (* ; rewrite !fset0U *).
+        case: e=> [C' P' v C''| |] //= (* ; try  by rewrite fset0U *).
+        (* ECall *)
+        admit.
+        (* ERet *)
+        admit.
+        (* ELoad *)
+        admit.
+        (* rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=. *)
+        (* by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT. *)
+
+        (* Back to Valid calls *)
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
         rewrite eqxx find_procedures_of_trace //.
         move: P_CI; case: eqP intf_C=> [->|_] intf_C.
@@ -1032,14 +1053,18 @@ Section Definability.
       suffices ? : imported_procedure intf C C' P'.
         by case: eqP => [<-|] //; rewrite find_procedures_of_trace_exp; eauto.
       elim: {P P_CI} t Ht P' C'_P' => [|e t IH] //= /andP [He Ht] P.
-      case: (C =P _) => [HC|]; last by eauto.
+      case: (C =P _) => [HC|].
       case: e HC He=> [_ P' v C'' /= <-| |]; try by eauto.
       rewrite inE; case/andP=> [C_C'' /imported_procedure_iff imp_C''_P'].
       by case/orP=> [/eqP [-> ->] //|]; eauto.
+      case: e He => [ ? ? ? ? | ? ? ? | ? ? ? ?] ; try by eauto.
     - by rewrite domm_map.
-    - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
+    - split; first last.
+      move=> C; rewrite -mem_domm => /dommP [CI C_CI].
       rewrite /has_required_local_buffers /= mapmE C_CI /=.
       eexists; eauto=> /=; omega.
+    (* valid_buffers *)
+      admit.
     - rewrite /prog_main find_procedures_of_trace //=.
       + split; first reflexivity.
         intros _.
