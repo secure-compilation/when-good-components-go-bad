@@ -382,38 +382,82 @@ Section Definability.
            (C: Component.id)
            (suffix: trace)
            (acc:list expr)
-           (offset_read:NMap bool) : list expr:=
+           (indexes_read:NMap bool) : list expr:=
 
     let stop := acc in
     (* Maybe express it in an other way than membership of codomain *)
-    if (false \in codomm offset_read)
+    if (false \in codomm indexes_read)
     then                        (* a read is still possible *)
       match suffix with
       | [] => stop            (* if no further events, give back exprs created *)
       | ev :: suffix' =>
-        let keep_on :=  (prefill_read_aux C suffix' acc offset_read) in
+        let keep_on :=  (prefill_read_aux C suffix' acc indexes_read) in
         match ev with
-        | ELoad _ off val C =>   (* component is read *)
-          (* TODO fix this Z.to_nat, too permissive *)
-          (* Do Memory.load ? Check if positive ? *)
-          match offset_read (Z.to_nat off) with
-          | None => []           (* Never happens *)
-          | Some true => keep_on (* already read so go on *)
-          | Some false => prefill_read_aux C
-                                          suffix'
-                                          ((assign_public off val) :: acc)
-                                          (* TODO fix this Z.to_nat, too permissive *)
-                                          (setm offset_read (Z.to_nat off) true)
+        | ELoad Cdrf off val Cown =>   (* component is read *)
+          (* kinda useless check since the trace is well formed, we shouldn't
+             have "wild" ELoad events *)
+          if Cown == C then
+            (* TODO fix this Z.to_nat, too permissive *)
+            (* Do Memory.load ? Check if positive ? *)
+            match indexes_read (Z.to_nat off) with
+            | None => []           (* Never happens *)
+            | Some true => keep_on (* already read so go on *)
+            | Some false => prefill_read_aux C
+                                            suffix'
+                                            ((assign_public off val) :: acc)
+                                            (* TODO fix this Z.to_nat, too permissive *)
+                                            (* TODO should use updm but knowing
+                                               that it would return (Some _)
+                                               each time *)
+                                            (setm indexes_read (Z.to_nat off) true)
 
 
-          end
+            end
+          else keep_on
         (* if the component is given turn again, give back exprs created *)
-        | ERet C _ _  | ECall C _ _ _  => stop
+        | ERet _(* C *) _ _  | ECall _(* C *) _ _ _  => stop
         end
       end
     else stop.     (* if all offset have been read, give back exprs created *)
 
-  (* TODO *)
+   Fixpoint prefill_read_aux_ntr
+           (C: Component.id)
+           (suffix: trace)
+           (indexes_read:NMap bool) : list expr:=
+    let stop := [] in
+    (* Maybe express it in an other way than membership of codomain *)
+    if (false \in codomm indexes_read)
+    then                        (* a read is still possible *)
+      match suffix with
+      | [] => stop            (* if no further events, give back exprs created *)
+      | ev :: suffix' =>
+        let keep_on :=  (prefill_read_aux_ntr C suffix' indexes_read) in
+        match ev with
+        | ELoad Cdrf off val Cown =>   (* component is read *)
+          (* kinda useless check since the trace is well formed, we shouldn't
+             have "wild" ELoad events *)
+          if Cown == C then
+            (* TODO fix this Z.to_nat, too permissive *)
+            (* Do Memory.load ? Check if positive ? *)
+            match indexes_read (Z.to_nat off) with
+            | None => []           (* Never happens but mandatory *)
+            | Some true => keep_on (* already read so go on *)
+            | Some false =>
+              (assign_public off val)
+                ::(prefill_read_aux_ntr C
+                                       suffix'
+                                       (* TODO fix this Z.to_nat, too permissive *)
+                                       (setm indexes_read (Z.to_nat off) true))
+
+
+            end
+          else keep_on
+        (* if the component is given turn again, give back exprs created *)
+        | ERet _(* C *) _ _  | ECall _(* C *) _ _ _  => stop
+        end
+      end
+    else stop.     (* if all offset have been read, give back exprs created *)
+
   Example test_prefill_read_aux1 :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
