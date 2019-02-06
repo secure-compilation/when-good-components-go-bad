@@ -334,10 +334,11 @@ Section Definability.
   (** Flattens a list of expr into a single E_seq expr. *)
   (*  Impl note : Since we will later give lists in reverse order, we
       can either use
-      - a fold_right (which is not tail recursive) which will reverse the
-        result, or
       - a fold_left + a rev' on the input (outside of the function), so the
-        fold_left won't reverse it. Second option chosen *)
+        fold_left won't reverse it ; or
+      - a fold_right (which is not tail recursive) which will reverse the
+        result.
+      First option chosen *)
   Definition E_seq_of_list_expr (exprs : list expr) : option expr :=
     match exprs with
     | nil => None
@@ -345,16 +346,18 @@ Section Definability.
                                        exprs' expr)
     end.
 
-  (* non tail recursive (might be easier to reason with since we won't use
-       list reversing) *)
-  (* Problem : we don't have something like init and last (well we have last and
-     remove last but that could add proof burden compared to have rev...) *)
-  Definition E_seq_of_list_expr' (exprs : list expr) : option expr :=
-    match exprs with
-    | nil => None
-    | h :: t => Some (fold_right (fun exp__added exp1 => E_seq exp1 exp__added ) (last h t) (removelast exprs)) (* or belast h t *)
-    end.
-
+  Lemma E_seq_of_list_expr_integers (exprs : list expr) : forall (e : expr),
+    all (values_are_integers) exprs ->
+    E_seq_of_list_expr exprs = Some e ->
+    values_are_integers e.
+  Proof.
+    rewrite /E_seq_of_list_expr ; destruct exprs => //.
+    generalize dependent e.
+    induction exprs.
+    - intros e e' Hval Hsome ; inversion Hsome ; subst.
+        by move:Hval ; rewrite all_seq1 => ->.
+    - intro e. intros. by apply IHexprs with (e:= E_seq e a) => //= ; rewrite -andbA.
+  Qed.
 
   (* for now, sticking to :
      e1; e2; e3 = (e1; e2); e3 *)
@@ -366,13 +369,6 @@ Section Definability.
                            (E_val (Int 2)) in
     E_seq_of_list_expr list_expr = Some seq_expr.
   Proof. reflexivity. Qed.
-  Example test_E_seq_of_list_expr' :
-    let list_expr := [E_val (Int 2); E_val (Int 1); E_val (Int 0)] in
-    let seq_expr  := E_seq (E_seq (E_val (Int 0))
-                                  (E_val (Int 1)))
-                           (E_val (Int 2)) in
-    E_seq_of_list_expr' list_expr = Some seq_expr.
-  Proof. simpl. reflexivity. Qed.
 
   (** Gives an assignement expression of the public memory (at index off) to val *)
   Definition assign_public off val :=
