@@ -549,6 +549,137 @@ Section Definability.
   prefill_read_aux_ntr C1 [ ev3 ; ev4 ] offsets = [ (assign_public 1 (Int 420)); (assign_public 2 (Int 1337))].
   Proof. split ; by repeat (find_in_codomm ; simpl). Qed.
 
+  Example test_prefill_read_tricky :
+    let '(C1,P1,C2,P2) := (1,1,2,2) in
+    let Pintf := [fmap
+                    (Component.main, Component.mkCompInterface fset0 [fset (C1, P1)] 3  );
+                    (C1, Component.mkCompInterface [fset P1] [fset (C2, P2)] 3 );
+                    (C2, Component.mkCompInterface [fset P2] [fset (C1, P1)] 3 )] in
+    (* we are not interested in call args and return values *)
+    let '(arg, ret) := (17%Z, 42%Z) in
+        let '(load1, load2, load3, load4,
+          load5, load6, load7, load8,
+          load9, load10, load11, load12,
+          load13, load14) := (Int 1%Z, Int 2%Z, Int 3%Z, Int 4%Z,
+                              Int 5%Z, Int 6%Z, Int 3%Z, Int 8%Z,
+                              Int 5%Z, Int 10%Z, Int 3%Z, Int 12%Z,
+                              Int 13%Z, Int 14%Z) in
+    let '(off1, off2, off3, off4,
+          off5, off6, off7, off8,
+          off9, off10, off11, off12,
+          off13, off14) :=  (0%Z, 0%Z, 0%Z, 1%Z,
+                             1%Z, 0%Z, 0%Z, 1%Z,
+                             1%Z, 1%Z, 0%Z, 0%Z,
+                             1%Z, 1%Z) in
+    let load_ev1 := ELoad Component.main off1 load1 C1 in
+    let load_ev2 := ELoad Component.main off2 load2 C2 in
+    let call_ev1 := ECall Component.main P1 arg C1 in
+
+    let load_ev3 := ELoad C1 off3 load3 Component.main in
+    let load_ev4 := ELoad C1 off4 load4 C2 in
+    let call_ev2 := ECall C1 P2 arg C2 in
+
+    let load_ev5 := ELoad C2 off5 load5 Component.main in
+    let load_ev6 := ELoad C2 off6 load6 C1 in
+    let call_ev3 := ECall C2 P1 arg C1 in
+
+    let load_ev7 := ELoad C1 off7 load7 Component.main in
+    let load_ev8 := ELoad C1 off8 load8 C2 in
+    let ret_ev1  := ERet C1 ret C2 in
+
+    let load_ev9 := ELoad C2 off9 load9 Component.main in
+    let load_ev10:= ELoad C2 off10 load10 C1 in
+    let ret_ev2  := ERet C2 ret C1 in
+
+    let load_ev11:= ELoad C1 off11 load11 Component.main in
+    let load_ev12:= ELoad C1 off12 load12 C2 in
+    let ret_ev3  := ERet C1 ret Component.main in
+
+    let load_ev13:= ELoad Component.main off13 load13 C1 in
+    let load_ev14:= ELoad Component.main off14 load14 C2 in
+
+    let acc := [::] in
+    let offsets := mkfmap[(0,false);(1,false);(2,false)] in
+    let cst :=  fun (C: Component.id) (t: trace) =>
+                            filter (fun e => (C == cur_comp_of_event e) ||
+                                          match e with
+                                          | ELoad _ _ _ C => true
+                                          | _ => false end) t in
+    let trace := [load_ev1;  load_ev2;  call_ev1;
+                  load_ev3;  load_ev4;  call_ev2;
+                  load_ev5;  load_ev6;  call_ev3;
+                  load_ev7;  load_ev8;  ret_ev1;
+                  load_ev9;  load_ev10;  ret_ev2;
+                  load_ev11;  load_ev12;  ret_ev3;
+                    load_ev13;  load_ev14] in
+    (* be careful to not have too many suffixes! suffixes_of_trace (or _seq)
+       produces all of them ! *)
+    let sfx1 := [ load_ev3;  load_ev4;  call_ev2;
+                  load_ev5;  load_ev6;  call_ev3;
+                  load_ev7;  load_ev8;  ret_ev1;
+                  load_ev9;  load_ev10;  ret_ev2;
+                  load_ev11;  load_ev12;  ret_ev3;
+                  load_ev13;  load_ev14] in
+    let sfx2 := [ load_ev5;  load_ev6;  call_ev3;
+                  load_ev7;  load_ev8;  ret_ev1;
+                  load_ev9;  load_ev10;  ret_ev2;
+                  load_ev11;  load_ev12;  ret_ev3;
+                  load_ev13;  load_ev14] in
+    let sfx3 := [ load_ev7;  load_ev8;  ret_ev1;
+                  load_ev9;  load_ev10;  ret_ev2;
+                  load_ev11;  load_ev12;  ret_ev3;
+                  load_ev13;  load_ev14] in
+    let sfx4 := [ load_ev9;  load_ev10;  ret_ev2;
+                  load_ev11;  load_ev12;  ret_ev3;
+                  load_ev13;  load_ev14] in
+    let sfx5 := [ load_ev11;  load_ev12;  ret_ev3;
+                    load_ev13;  load_ev14] in
+    let sfx6 := [ load_ev13;  load_ev14] in
+    let '(ssfx1, ssfx2,
+          ssfx3, ssfx4, ssfx5, ssfx6) :=
+        (cst Component.main sfx1, cst C1 sfx2,
+         cst C2 sfx3, cst C1 sfx4, cst C2 sfx5, cst C1 sfx6 ) in
+    let st0 := stack_state0 in
+    let st1 := StackState C1 [Component.main] in
+    let st2 := StackState C2 [C1; Component.main] in
+    let st3 := StackState C1 [C2; C1; Component.main] in
+    let st4 := StackState C2 [C1; Component.main] in
+    let st5 := StackState C1 [Component.main] in
+    all (well_formed_event Pintf) trace /\
+    (well_bracketed_trace st0 (call_ev1::sfx1) /\
+     prefill_read_aux Component.main ssfx1 acc offsets =
+         [(assign_public off5 load5); (assign_public off3 load3)] /\
+     prefill_read_aux_ntr Component.main ssfx1 offsets =
+         [(assign_public off3 load3); (assign_public off5 load5)]) /\
+    (well_bracketed_trace st1 (call_ev2::sfx2) /\
+     prefill_read_aux C1 ssfx2 acc offsets = [(assign_public off6 load6)] /\
+     prefill_read_aux_ntr C1 ssfx2 offsets = [(assign_public off6 load6)]) /\
+    (well_bracketed_trace st2 (call_ev3::sfx3) /\
+     prefill_read_aux C2 ssfx3 acc offsets  = [(assign_public off8 load8)] /\
+     prefill_read_aux_ntr C2 ssfx3 offsets  = [(assign_public off8 load8)]) /\
+    (well_bracketed_trace st3 (ret_ev1::sfx4) /\
+     prefill_read_aux C1 ssfx4 acc offsets  = [(assign_public off10 load10)] /\
+     prefill_read_aux_ntr C1 ssfx4 offsets  = [(assign_public off10 load10)]) /\
+    (well_bracketed_trace st4 (ret_ev2::sfx5) /\
+     prefill_read_aux C2 ssfx5 acc offsets  =
+         [(assign_public off14 load14) ; (assign_public off12 load12)] /\
+     prefill_read_aux_ntr C2 ssfx5 offsets  =
+         [(assign_public off12 load12) ; (assign_public off14 load14)]) /\
+    (well_bracketed_trace st5 (ret_ev3::sfx6) /\
+     prefill_read_aux C1 ssfx6 acc offsets  =
+         [(assign_public off13 load13)] /\
+     prefill_read_aux_ntr C1 ssfx6 offsets  =
+       [(assign_public off13 load13)]).
+  Proof.
+    (* well formed events sanity check *)
+    simpl ; rewrite /imported_procedure_b ; simpl. split.
+    find_in_fset ; done.
+
+    (* getting rid of the membership tests *)
+    repeat (find_in_codomm ; simpl).
+    by repeat (split ; first reflexivity).
+ Qed.
+
   Qed.
 
 
