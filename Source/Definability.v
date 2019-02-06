@@ -680,6 +680,58 @@ Section Definability.
     by repeat (split ; first reflexivity).
  Qed.
 
+  Lemma prefill_read_aux_invar : forall suffix C comp acc indexes res ,
+      intf C = Some comp ->
+      (* Add a restriction on the indexes wrt comp.public_buffer_size *)
+      prefill_read_aux C suffix acc indexes (* (indexes_read_init comp) *) = res ->
+      exists res', prefill_read_aux_ntr C suffix indexes = res' /\
+              res = rev res' ++ acc.
+  Proof.
+    induction suffix as [| ev suffix IHsuffix] ; intros C comp acc indexes res Hintf.
+    - simpl. case : (_ \in _) ; exists [] ; subst ;  split ; done.
+    - generalize dependent C ; generalize dependent comp ; generalize dependent acc ;
+      generalize dependent indexes ; generalize dependent res.
+      rewrite /prefill_read_aux/prefill_read_aux_ntr ;
+        elim: ev => [ Ccur proc arg Cnext | Cret ret Cnext  | CSrc o v CTrg ] ;
+                     intros res indexes acc comp C Hintf ;
+      case: (_ \in _) => <- ; try (exists [] ; split ; done).
+      rewrite -/prefill_read_aux -/prefill_read_aux_ntr.
+      (* Load event *)
+      destruct (CTrg == C) eqn:WhichTrgComp => // ;
+      (* Case analysis on presence of the index in the map,
+         case None never happens, how to avoid it ? *)
+        case: (indexes (Z.to_nat o)) => // ;
+          try case  ; (* if the index is present, trivial  *)
+          try by apply (IHsuffix C comp).
+      + set indexes_upd := setm indexes (Z.to_nat o) true.
+        set res_IH :=prefill_read_aux C suffix (assign_public o v :: acc) indexes_upd.
+        set res'_IH := prefill_read_aux_ntr C suffix indexes_upd.
+        set acc_IH := (assign_public o v :: acc).
+        specialize (IHsuffix C comp acc_IH indexes_upd res_IH Hintf).
+        have refl: prefill_read_aux C suffix acc_IH indexes_upd = res_IH by [].
+        apply IHsuffix in refl.
+        destruct refl as [? [? H]]. exists (assign_public o v::x). subst.
+        (* exists (assign_public o v :: prefill_read_aux_ntr C suffix indexes_upd). *)
+        rewrite rev_cons cat_rcons.
+        split ; done.
+       + (* ELoad event with index out of bounds... *)
+         admit.
+  Admitted.
+
+  Lemma prefill_read_aux_equiv : forall suffix C comp,
+      intf C = Some comp ->
+      prefill_read_aux_ntr C suffix (indexes_read_init comp) =
+      rev (prefill_read_aux C suffix [] (indexes_read_init comp)).
+  Proof.
+    intros suffix C comp Hintf.
+    set indexes := indexes_read_init comp.
+      by apply prefill_read_aux_invar with (suffix := suffix)
+                                           (indexes := indexes)
+                                           (res := prefill_read_aux C suffix [] indexes)
+                                           (acc := []) in Hintf ;
+        destruct Hintf as [? [? H] ] ; subst ; [by rewrite H cats0 revK | done].
+  Qed.
+
   Qed.
 
 
