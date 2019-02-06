@@ -233,22 +233,103 @@ Section Definability.
       events were produced from the same component.  The [C] and [P] arguments
       are only needed to generate the recursive calls depicted above. *)
 
-  (** Gives a map of the different offsets of a component's public memory to
+  (* TODO maybe move the following additions somewhere else ? *)
+  Lemma nseq_add {T:Type} (n1 n2:nat) (x:T) : nseq (n1+n2) x = nseq n1 x ++ nseq n2 x.
+  Proof.
+    by elim: n1 => //= n1 IHn1 ; rewrite IHn1.
+  Qed.
+
+  Lemma cat_app {T:Type} (l1 l2:list T) :
+    app l1 l2 = cat l1 l2.
+  Proof. by elim: l1. Qed.
+
+  (* Coq or ssr conventions (cat/app, length/size) ? *)
+  Lemma combine_cat {A B : Type} : forall (beg1 end1:list A), forall (beg2 end2:list B),
+    size beg1 = size beg2 ->
+    (* Not useful *)
+    (* size end1 = size end2 -> *)
+    combine (beg1 ++ end1) (beg2 ++ end2) = combine beg1 beg2 ++ combine end1 end2.
+  Proof.
+    induction beg1 as [|a1 beg1' IHbeg1'] => end1 beg2 end2 Hbeg.
+    - by inversion Hbeg as [Hsize0] ; symmetry in Hsize0 ;
+        apply size0nil in Hsize0 ; subst.
+    - destruct beg2 as [| a2 beg2'] => //.
+      inversion Hbeg as [Hsize]. apply (IHbeg1' end1 _ end2) in Hsize => /=.
+        by rewrite Hsize.
+  Qed.
+
+  Lemma mkfmap_cat {T:ordType} (S:Type) (s1 s2:seq (T*S)) :
+    (* Is it necessary ? *)
+    (* all (fun x => (mkfmap s1) x) (split s2).1  -> *)
+    (* Or *)
+    (* fdisjoint (mkfmap s1) (mkfmap s2) -> *)
+    mkfmap (s1 ++ s2) = unionm (mkfmap s1) (mkfmap s2).
+  Proof.
+(*     generalize dependent s2. *)
+(*     induction s1 as [| a1 s1 IHs1] ; first done. *)
+
+(*   (*   setm_union: *) *)
+(*   (* forall (T : ordType) (S : Type) (m1 m2 : {fmap T -> S}) (k : T) (v : S), *) *)
+(*   (* setm (unionm m1 m2) k v = unionm (setm m1 k v) m2 *) *)
+
+(* rewrite /unionm/mkfmap.  *)
+    rewrite /unionm/mkfmap. rewrite -foldr_cat. rewrite-/mkfmap.
+    generalize dependent s2 ; induction s1 ; first done.
+    move => s2. simpl. rewrite /setm.
+    rewrite -/mkfmap.
+    (* rewrite (IHs1 s2). *)
+    (* rewrite -/setm_subproof. *)
+
+    (* rewrite -(foldr _ (foldr _ (_++_))/[mkfmap _++_]. *)
+    Admitted.
+
+
+  (** Gives a map of the different indexes of a component's public memory to
       bool, all initialized at false *)
-  Definition offset_read_init (comp: Component.interface) :  NMap bool :=
+  Definition indexes_read_init (comp: Component.interface) :  NMap bool :=
     let size_buf :=
         Component.public_buffer_size comp in
-    mkfmap (combine (List.seq 0 size_buf) (nseq size_buf false)).
+    mkfmap (combine (iota 0 size_buf) (nseq size_buf false)).
 
-  (* Quick sanity check *)
-  Example test_offset_read_init :
-    let intf_comp :=
-        {| Component.import := fset0;
-           Component.export := fset0;
-           Component.public_buffer_size := 3
-        |} in
-    offset_read_init intf_comp = mkfmap [(0,false); (1,false); (2,false) ].
-  Proof. reflexivity. Qed.
+  Lemma indexes_read_init_correct (comp: Component.interface) :
+    all (fun b:bool => b == false) (codomm (indexes_read_init comp)) /\
+    domm (indexes_read_init comp) = fset (iota 0 (Component.public_buffer_size comp)).
+  Proof.
+    split.
+  (*   (* all at false *) *)
+  (*   - rewrite /indexes_read_init/codomm/invm domm_mkfmap'. *)
+  (*     admit. *)
+  (*   (* Correct indexing *) *)
+  (*   - admit. *)
+  (* Admitted. *)
+
+    - rewrite /indexes_read_init.
+      set (size_buf := Component.public_buffer_size comp). induction size_buf.
+      + move => /=. rewrite codomm0. apply all_nil.
+      + move: IHsize_buf.
+        rewrite /codomm/invm !domm_mkfmap'.
+        have:iota 0 (S size_buf) = iota 0 (size_buf) ++ [size_buf]
+          by rewrite -ssrnat.addn1 iota_add.
+        move => -> IHsize_buf.
+        have:nseq (S size_buf) false = nseq size_buf false ++ [false]
+          by rewrite -ssrnat.addn1 nseq_add.
+        move => -> ; rewrite combine_cat ; last by rewrite size_iota size_nseq.
+        (* rewrite mkfmap_cat. *)
+
+        admit.
+
+    (* domm_union:
+       forall (T : ordType) (S : Type) (m1 m2 : {fmap T -> S}),
+       domm (unionm m1 m2) = domm m1 :|: domm m2 *)
+    (* How does it goes with codomm ? *)
+
+        (* rewrite mapm_unionm. *)
+
+        (* rewrite map_cat. *)
+
+        (* rewrite /nseq/ncons ssrnat.iterSr. rewrite cats1/rcons. *)
+     - admit.
+  Admitted.
 
   (** Flattens a list of expr into a single E_seq expr. *)
   (*  Impl note : Since we will later give lists in reverse order, we
