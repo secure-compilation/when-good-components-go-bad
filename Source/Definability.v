@@ -880,7 +880,7 @@ Section Definability.
 
   Definition comp_subtrace (C: Component.id) (t: trace) :=
     filter (fun e => (C == cur_comp_of_event e) ||
-                  match e with | ELoad _ _ _ C => true | _ => false end)
+                  match e with | ELoad _ _ _ C' => (C == C') | _ => false end)
            t.
 
   Example test_comp_subtrace0 :
@@ -1058,6 +1058,8 @@ Section Definability.
       rewrite inE; case/andP=> [C_C'' /imported_procedure_iff imp_C''_P'].
       by case/orP=> [/eqP [-> ->] //|]; eauto.
       case: e He => [ ? ? ? ? | ? ? ? | ? ? ? ?] ; try by eauto.
+      move => /andP => [[? ?]] ;
+      case: (_==_) ; by eauto.
     - by rewrite domm_map.
     - split; first last.
       move=> C; rewrite -mem_domm => /dommP [CI C_CI].
@@ -1102,32 +1104,46 @@ Section Definability.
       by rewrite mem_domm; case=> ->.
     Qed.
 
+    (* So, either we change the definition to get what we had before (we filter
+       the ELoad events not triggered by the component out of the comp_subtrace)
+       or we take into account the ELoad events, *)
+    (* Going for the first one (complicates a bit the definition but makes more
+       sense) *)
     Local Definition counter_value C prefix :=
-      Z.of_nat (length (comp_subtrace C prefix)).
-
+      Z.of_nat (length [seq e <- (comp_subtrace C prefix) |
+                        match e with
+                        | ELoad _ _ _ C' => (C != C')
+                        | _ => true end ]).
+      (* Z.of_nat (length (comp_subtrace C prefix)). *)
     Lemma counter_value_app C prefix1 prefix2 :
       counter_value C (prefix1 ++ prefix2)
       = (counter_value C prefix1 + counter_value C prefix2) % Z.
     Proof.
       unfold counter_value.
-      now rewrite comp_subtrace_app app_length Nat2Z.inj_add.
+      now rewrite comp_subtrace_app filter_cat app_length Nat2Z.inj_add.
     Qed.
 
     Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
       forall C,
         component_buffer C ->
-        Memory.load mem (C, Block.local, counter_idx) = Some (Int (counter_value C prefix)).
+        Memory.load mem (C, Block.private, counter_idx) = Some (Int (counter_value C prefix)).
 
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
       = (counter_value C prefix
-        + if C == cur_comp_of_event e then 1 else 0) % Z.
+         + if (C == cur_comp_of_event e)
+                || match e with
+                   | ELoad _ _ _ C' => (C != C')
+                   | _ => true end
+           then 1 else 0) % Z.
     Proof.
+      Print counter_value. rewrite /counter_value.
       unfold counter_value, comp_subtrace.
-      rewrite filter_cat app_length. simpl.
+      rewrite !filter_cat app_length. simpl.
       rewrite Nat2Z.inj_add.
-      now destruct (_ == _).
-    Qed.
+      (* now *) destruct (_ == _) ; destruct e as [| |? ? ? C' ]=> //.
+      (* case: (C == _) => // ; case: (C != _) => //= . *)
+      Admitted.
 
     Lemma well_formed_memory_store_counter prefix mem C e :
       component_buffer C ->
