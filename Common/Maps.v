@@ -158,7 +158,8 @@ Lemma domm_filterm_fdisjoint_unionm
   fdisjoint (domm i1) (domm i2) ->
   domm m = domm (unionm i1 i2) ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) = domm i1.
-Admitted.
+Proof.
+Admitted. 
 
 Lemma domm_filterm_partial_memory
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
@@ -178,8 +179,21 @@ Lemma filterm_partial_memory_fsubset
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m0 =
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   fsubset (domm m1) (domm m2).
-Admitted.
-
+Proof. 
+  move => disj_i1_i2 m0_eq_m2 m2_eq_union Hfilter.
+  rewrite m2_eq_union -m0_eq_m2 domm_union.    
+  apply (* /fsubsetU /orP. *) /fsubsetP => x Hx. 
+  assert (x \in (domm i1) \/ x \notin (domm i1)).
+  { admit. }    
+  case: H => H.  
+      move: H. apply /fsubsetP /fsubsetU /orP. 
+      left. by apply: fsubsetxx.
+      
+  have x_in_i2 : x \in domm i2. { admit. }
+   move: x_in_i2. apply /fsubsetP /fsubsetU /orP.    
+   right. by apply: fsubsetxx. 
+Admitted.     
+    
 (* RB: NOTE: This is not a map lemma proper. More generally, absorption on
    arbitrary subsets. *)
 Lemma fsetU1in (T : ordType) (x : T) (s : {fset T}) :
