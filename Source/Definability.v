@@ -732,6 +732,86 @@ Section Definability.
         destruct Hintf as [? [? H] ] ; subst ; [by rewrite H cats0 revK | done].
   Qed.
 
+  Definition expr_assign_public (e:expr) :=
+    match e with
+    | E_assign (E_binop Add (E_local Block.pub) (E_val (Int _(* index *))))
+               (E_val  _ (* value *)) => true
+    | _ => false
+    end.
+
+  (* To move somewhere else *)
+  Lemma rev_inj {T:Type} : injective (@rev T).
+  Proof. by apply (can_inj revK). Qed.
+
+  Lemma prefill_read_aux_only_assign (suffix : trace) (C : Component.id) (comp : Component.interface) :
+    (intf C = Some comp) ->
+    all expr_assign_public (prefill_read_aux C suffix [] (indexes_read_init comp)).
+  Proof.
+    intro Hintf.
+    (* translating to non-tail-recursive function *)
+    have : prefill_read_aux_ntr C suffix (indexes_read_init comp) =
+           rev (prefill_read_aux C suffix [] (indexes_read_init comp)) by apply (@prefill_read_aux_equiv suffix C comp Hintf).
+    rewrite -[prefill_read_aux_ntr C suffix (indexes_read_init comp)]revK.
+    move => Hequiv ; apply rev_inj in Hequiv.
+    rewrite -Hequiv all_rev ; clear Hequiv.
+
+    generalize dependent (indexes_read_init comp).
+    induction suffix  as [| ev suffix IHsuffix ] ; rewrite /prefill_read_aux_ntr => indexes ; case: (_ \in _) => //.
+    (* generalize dependent C ; generalize dependent comp. *)
+    elim: ev => [ Ccur proc arg Cnext | Cret ret Cnext  | CSrc o v CTrg ] => //.
+    case: (CTrg == C) => // ; case: (indexes (Z.to_nat o)) => // is_in_offs.
+    case: is_in_offs => //=.
+  Qed.
+
+  (* FALSE ! Since we can backtranslate load events of pointers/undef (from the moment the events are not well_formed), this implication isn't strong. *)
+  (* Remark assign_implies_only_int : subpred expr_assign_public values_are_integers. *)
+  (* This would mean that we should strengthen the hypothesis for the next lemma (compared to the previous one) *)
+
+  (* Should we use well_formed_event instead ? (We would need the program interface) *)
+  Definition only_transferable_values_in_ELoad (e:event) :=
+    match e with
+    | ELoad _ _ v _ => is_transferable_value v
+    | _ => false
+    end.
+
+  Lemma prefill_read_aux_only_values_integers (suffix : trace) (C : Component.id) (comp : Component.interface) :
+    (intf C = Some comp) ->
+    all only_transferable_values_in_ELoad suffix ->
+    all values_are_integers (prefill_read_aux C suffix [] (indexes_read_init comp)).
+  Proof.
+
+    intros Hintf Htransf_sfx.
+    have Hassign: all expr_assign_public (prefill_read_aux C suffix [] (indexes_read_init comp))
+       by apply (prefill_read_aux_only_assign suffix Hintf).
+    (* would be nice to prove the goal pretty directly from this *)
+
+    (* In the meantime... *)
+    (* translating to non-tail-recursive function *)
+    have : prefill_read_aux_ntr C suffix (indexes_read_init comp) =
+           rev (prefill_read_aux C suffix [] (indexes_read_init comp)) by apply (@prefill_read_aux_equiv suffix C comp Hintf).
+    rewrite -[prefill_read_aux_ntr C suffix (indexes_read_init comp)]revK.
+    move => Hequiv ; apply rev_inj in Hequiv.
+    rewrite -Hequiv all_rev ; rewrite -Hequiv in Hassign ; clear Hequiv.
+
+    generalize dependent (indexes_read_init comp).
+    induction suffix as [| ev sfx IHsfx] ; rewrite (* /values_are_integers *)/prefill_read_aux_ntr ; intro indexes.
+    - by case:(_ \in _).
+    - (* rewrite -/prefill_read_aux_ntr. *) (* more clear now *)
+      induction ev as [ | | CSrc o v CTrg ]; case: (_ \in _) => //. rewrite -/prefill_read_aux_ntr.
+      (* Load event *)
+      (* Getting rid of the trivial cases *)
+      case: (CTrg == C) => // ;
+      case: (indexes (Z.to_nat o)) => // is_in_offs ;
+      case: is_in_offs => //= ;  move: Htransf_sfx ; simpl ; move => /andP => [ [Htransf_v Htransf_sfx ] ].
+        all: try apply (IHsfx Htransf_sfx indexes).
+
+      (* Case in which we produce an assignement and the indexes_map is updated *)
+      set indexes_upd := (setm indexes (Z.to_nat o) true).
+      move => Hassign ; apply /andP. split.
+
+      move : Htransf_v ; rewrite /is_transferable_value. done.
+      apply (IHsfx Htransf_sfx indexes_upd).
+        by move: Hassign ; rewrite !all_rev.
   Qed.
 
 

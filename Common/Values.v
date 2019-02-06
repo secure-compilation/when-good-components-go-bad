@@ -161,11 +161,11 @@ Definition buffer_size (buf : buffer) :=
   | inr seq => length seq
   end.
 
-(* Simple predicate to allow undef but not pointer passing *)
+(* Simple predicate to avoid pointer passing for now *)
 Definition is_transferable_value (v : value ) :=
   match v with
   | Int _ => true
   | Ptr _ => false
-  | Undef => true
+  | Undef => false (* Passing undef is not undefined ! *)
   end.
 Hint Unfold is_transferable_value.
