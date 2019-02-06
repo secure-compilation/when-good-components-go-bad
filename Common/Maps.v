@@ -119,11 +119,39 @@ Qed.
 
 (* RB: NOTE: filterm_union, a related lemma, does not include the final 'm' in
    its name. *)
+(* JT: this proof needs a lot of cleaning *)
 Lemma filterm_domm_unionm (T T' : Type) (m : NMap T) (m1 m2 : NMap T') :
   filterm (fun (k : nat) (_ : T) => k \notin domm m1)
           (filterm (fun (k : nat) (_ : T) => k \notin domm m2) m) =
   filterm (fun (k : nat) (_ : T) => k \notin domm (unionm m1 m2)) m.
-Admitted.
+Proof.
+  apply /eq_fmap => n.
+  rewrite !filtermE.
+  unfold obind. unfold oapp.
+  destruct (m n) eqn:Hcase; rewrite Hcase.
+  -  destruct (n \notin domm m2) eqn:Hcase'; rewrite Hcase'.
+     + destruct (n \notin domm m1) eqn:Hcase''; rewrite Hcase''.
+       ++ assert (n \notin domm (unionm m1 m2)).
+          rewrite domm_union.
+          apply /fsetUP /orP.
+          apply Bool.negb_true_iff in Hcase'; apply Bool.negb_true_iff in Hcase''.
+          rewrite Hcase' Hcase''. by [].
+            by rewrite H.
+       ++ assert (n \notin domm (unionm m1 m2) = false).
+          rewrite domm_union.
+          apply /fsetUP /orP.
+          apply Bool.negb_false_iff in Hcase''; rewrite Hcase''. by [].
+          by rewrite H.
+    + destruct (n \notin domm (unionm m1 m2)) eqn:Hcase''; rewrite Hcase''.
+      ++ rewrite domm_union in Hcase''.
+         move: Hcase''. move=> /fsetUP Hcase''.
+         destruct (n \in domm m2) eqn:Hcase'''.
+         +++ move: Hcase''. move=> /orP. rewrite orbC. simpl. by [].
+         +++ by [].
+      ++ by reflexivity.
+  - by reflexivity.
+Qed.
+
 
 Lemma domm_filterm_fdisjoint_unionm
       (T T' : Type) (i1 i2 : NMap T) (m : NMap T') :
