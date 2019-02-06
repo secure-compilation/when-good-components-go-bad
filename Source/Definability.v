@@ -458,6 +458,52 @@ Section Definability.
       end
     else stop.     (* if all offset have been read, give back exprs created *)
 
+
+
+  (* I find that checking fmap membership, even for map with given static data,
+     is a bit of a pain. It would be nice to add these to the 'done' tactical or
+     some other automation mean *)
+  Example setm_thingy :
+    let fmap_thing := [fmap (0, false); (1, false); (2, false)] in
+    let fset_thing := [fset 0; 1; 2] in
+     1 \in domm fmap_thing /\ false \in codomm fmap_thing /\ 1 \in fset_thing.
+  Proof.
+    simpl. split.
+    (* \in domm of something is usually solved automatically once mem_domm has
+         been used *)
+    rewrite mem_domm ; done. Undo.
+      (* I guess dommP(n) can be used too *)
+    apply /dommP. eexists. done.
+    split.
+
+    (* codomm is a bit more subtle, either use codommP(n) *)
+    apply /codommP ; exists 1 ; done. Undo. (* Not automatic so not really useful *)
+    (* eexists doesn't help much : in the previous case we had m k = some ?v,
+       there we have  m ?k = some v, which is less trivial *)
+    apply /codommP ; eexists. Undo.
+    (* Rewriting codomm with its definition works much better *)
+    rewrite /codomm. rewrite /invm. simpl. (* from there, its' just as with domm *)
+    apply /dommP ; eexists ; done. Undo.
+    rewrite mem_domm ; done.
+
+    (* Since [fset a1; .. ; an ] is a notation for nested (fsetU (fset a1) ..
+       (fsetU (fset an))), we can rewrite it easily *)
+      by rewrite !in_fsetU1.
+  Qed.
+
+  (* In the meantime, let's use these notations for examples *)
+  Tactic Notation "find_in_domm" :=
+    rewrite mem_domm.
+  Tactic Notation "find_in_domm_goal" :=
+    apply /dommP ; eexists.
+  Tactic Notation "find_in_codomm" :=
+    rewrite /codomm ; rewrite /invm ; simpl ;
+    find_in_domm.
+  Tactic Notation "find_in_codomm_goal" int_or_var(n) :=
+    apply /codommP ; exists n.
+  Tactic Notation "find_in_fset" :=
+    rewrite !in_fsetU1.
+
   Example test_prefill_read_aux1 :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
