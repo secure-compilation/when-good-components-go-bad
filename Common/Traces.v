@@ -18,6 +18,7 @@ Variable T : eqType.
 
 Implicit Types (x : T) (s : seq T).
 
+(* Decidable notion of a suffix (s1 is a suffix of s2) *)
 Fixpoint suffix_rec s1 s2 : bool :=
   (s1 == s2) ||
   if s2 is x :: s2' then suffix_rec s1 s2' else false.
@@ -33,6 +34,89 @@ Proof. by rewrite /suffix; unlock. Qed.
 
 Lemma suffix_nil s1 : suffix s1 [::] = (s1 == [::]).
 Proof. by rewrite /suffix -lock /= orbF. Qed.
+
+(** Produces suffixes of a sequence (except the empty one)
+    Would be used to produce the suffixes of a trace for the back-translation
+    (since we don't look at the events, we can use a sequence of type T)
+ *)
+
+Definition suffixes_of_seq s : seq (seq T) :=
+  let fix aux s (acc:seq (seq T)) :=
+      match s with
+      | [::]  => acc
+      | h::t => aux t ((h::t)::acc)
+      end in
+  rev (aux s [::]).
+
+Definition suffix_flip a b := suffix b a.
+
+Definition all_sfxs s (suffxs : seq (seq T)) : Prop :=
+  all (suffix_flip s) suffxs.
+
+Definition shape_sfxs s (suffxs : seq (seq T)) :=
+  shape suffxs =(* == ? *) rev (iota 1 (size s)).
+
+Definition wf_suffixes s :=
+  { suffxs : seq (seq T) | all_sfxs s suffxs &
+                         shape_sfxs s suffxs}.
+
+Lemma suffix_prepended s1 x s2 :
+  suffix s1 s2 -> suffix s1 (x::s2).
+Proof. by rewrite suffix_cons orbC => ->. Qed.
+
+Corollary suffix_prepended_bool s1 x s2 :
+  suffix s1 s2 ==> suffix s1 (x::s2).
+Proof. by apply /implyP ; apply suffix_prepended. Qed.
+
+Lemma suffix_subpred x seq :
+  subpred (suffix_flip seq) (suffix_flip (x::seq)).
+Proof. rewrite /subpred/suffix_flip. move => suffix. by apply suffix_prepended. Qed.
+
+(* Lemma all_sfxs_cons {T: eqType} (t:trace) (x:event) (suffxs: seq trace) : *)
+(*   all_sfxs t suffxs -> all_sfxs (x::t) suffxs. *)
+(* Proof. *)
+
+Lemma suffixes_of_seq_correct seq :
+  all (suffix_flip seq) (suffixes_of_seq' seq) /\
+  shape (suffixes_of_seq' seq) = rev (iota 1 (size seq)).
+Proof.
+  split.
+  (* all are suffixes *)
+  -
+    rewrite /suffix_flip.
+    (* rewrite all_cat all_seq1 suffix_refl => /=. *)
+    (* move => /all_filterP IHt'. *)
+    apply /all_filterP.         (* or allP ? *)
+
+    elim: seq => [//| h t].
+    have: (suffixes_of_seq' (h::t)) = [h::t] ++ (suffixes_of_seq' t)
+      by rewrite /suffixes_of_seq' => //=.
+    move => -> .
+    rewrite filter_cat => /= ; rewrite suffix_refl => /=. move => IHt.
+    (* Getting rid of the leading trace *)
+    apply /eqseqP => /=. apply /andP ; split ; [done| apply /eqseqP].
+
+    apply /all_filterP. move : IHt => /all_filterP.
+
+    (* OK now since we can generalize about this one here, maybe we don't have
+       to deal with all this boilerplate above. *)
+    generalize (suffixes_of_seq' t).
+    have: subpred (suffix_flip t) (suffix_flip (h::t)) by apply suffix_subpred.
+    rewrite/suffix_flip.
+    by apply sub_all.
+  - (* right order and right sizes *)
+    (* induction s => //=.          (* wth?? the simplification with iota is plainly wrong *) *)
+    induction seq => //. set size_seq := size seq.
+    (* rewrite -[size (a::s)](size s).+1. *)
+    admit.
+Admitted.
+
+(* Relocate in Lib/Extra ? *)
+Lemma size_shape {A:Type} (s : seq (seq A)) :
+  size s = size (shape s).
+Proof.
+    by rewrite /shape size_map.
+Qed.
 
 End Suffix.
 

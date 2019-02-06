@@ -233,39 +233,6 @@ Section Definability.
       events were produced from the same component.  The [C] and [P] arguments
       are only needed to generate the recursive calls depicted above. *)
 
-  (* TODO maybe move the following additions somewhere else ?
-     at least move the sanity checks in a separate file until specs and proofs
-     are there *)
-  Fixpoint suffixes_of_trace_aux (t:trace) (n:nat) (acc:list trace) : list trace :=
-    match n with
-    | O => acc
-    | S n' => suffixes_of_trace_aux t n' (skipn n' t :: acc)
-    end.
-
-  (** Produces suffixes of traces (except the empty one) *)
-  Definition suffixes_of_trace (t:trace) : list trace :=
-    suffixes_of_trace_aux t (length t) [].
-
-  Hint Unfold suffixes_of_trace_aux suffixes_of_trace.
-
-  (* Quick sanity check (unrealistic) *)
-  (* TODO Would be better to declare all of this in some variable inside of a section ? *)
-  Example test_suffixes_of_trace :
-    let '(C1,P1) := (1,1) in
-    let '(arg1, ret1) := (17%Z, 42%Z) in
-    let '(off1, load1, off2, load2) := (1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
-    let ev1 := ECall Component.main P1 arg1 C1 in
-    let ev2 := ERet C1 ret1 Component.main in
-    let ev3 := ELoad Component.main off1 load1 C1 in
-    let ev4 := ELoad Component.main off2 load2 C1 in
-    suffixes_of_trace [ ev1 ; ev2; ev3 ; ev4 ] =
-    [   [ ev1 ; ev2; ev3 ; ev4 ];
-        [ ev2; ev3 ; ev4 ];
-        [ ev3 ; ev4 ];
-        [ ev4 ]
-    ].
-  Proof. reflexivity. Qed.
-
   (** Gives a map of the different offsets of a component's public memory to
       bool, all initialized at false *)
   Definition offset_read_init (comp: Component.interface) :  NMap bool :=
