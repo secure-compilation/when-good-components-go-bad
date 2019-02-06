@@ -88,6 +88,13 @@ Module Pointer.
     destruct p as [[C b] o].
     reflexivity.
   Qed.
+
+  Lemma compose :
+    forall ptr,
+      (component ptr, block ptr, offset ptr) = ptr.
+  Proof.
+    now intros [[C b] o].
+  Qed.
 End Pointer.
 
 Inductive value : Type :=

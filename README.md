@@ -22,8 +22,8 @@ This development requires Coq v8.7.1 to work, as well as the following libraries
 
 ### Running the tests ###
 
-Our tests are known to work with [QuickChick](https://github.com/QuickChick/QuickChick) branch 8.7
-and OCaml from 4.02.3 to 4.06.
+Our tests are known to work with [QuickChick](https://github.com/QuickChick/QuickChick) branch 8.7 and
+OCaml from 4.02.3 to 4.06.
 
 Running the tests (to be simplified):
 

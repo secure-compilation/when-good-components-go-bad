@@ -122,6 +122,13 @@ Module EntryPoint.
     | Some addrs => getm addrs P
     | None => None
     end.
+
+  Lemma get_some C P E b : get C P E = Some b -> C \in domm E.
+  Proof.
+    unfold get. intros Hget.
+    destruct (E C) as [M |] eqn:Hcase; last discriminate.
+    apply /dommP. eauto.
+  Qed.
 End EntryPoint.
 
 (* programs *)
@@ -290,6 +297,28 @@ Proof.
   destruct (isSome (prog_main prog1));
     destruct (isSome (prog_main prog2));
     intuition.
+Qed.
+
+(* RB: TODO: Remove superfluous linkable_main assumptions from development.
+   Observe the relation to PS.domm_partition_in_union_in_neither. *)
+Theorem linkable_implies_linkable_mains : forall (p1 p2 : program),
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p1) (prog_interface p2) ->
+  linkable_mains p1 p2.
+Proof.
+  intros p1 p2 Hwf1 Hwf2 [_ Hdisjoint].
+  unfold linkable_mains.
+  destruct (prog_main p1) as [main1 |] eqn:Hmain1;
+    destruct (prog_main p2) as [main2 |] eqn:Hmain2;
+    try reflexivity.
+  (* All that remains is the contradictory case. *)
+  pose proof (proj2 (wfprog_main_component Hwf1)) as Hdomm1.
+  rewrite Hmain1 in Hdomm1. specialize (Hdomm1 isT).
+  pose proof (proj2 (wfprog_main_component Hwf2)) as Hdomm2.
+  rewrite Hmain2 in Hdomm2. specialize (Hdomm2 isT).
+  pose proof fdisjointP _ _ Hdisjoint _ Hdomm1 as Hcontra.
+  now rewrite Hdomm2 in Hcontra.
 Qed.
 
 Definition matching_mains (prog1 prog2 : program) : Prop :=
@@ -483,17 +512,34 @@ Proof.
       simpl in *.
       destruct (Component.main \in domm (prog_interface p1)) eqn:Hcase1;
         destruct (Component.main \in domm (prog_interface p2)) eqn:Hcase2.
-      * admit. (* Easy, contra. *)
+      * (* Contra/easy. *)
+        pose proof (proj1 Hmain_comp1 Hcase1) as Hmain1. now rewrite Hmain1.
       * apply proj1 in Hmain_comp1.
         specialize (Hmain_comp1 Hcase1). rewrite Hmain_comp1. assumption.
       * destruct (prog_main p1) as [main1 |] eqn:Hmain1.
         -- reflexivity.
         -- apply proj1 in Hmain_comp2.
            specialize (Hmain_comp2 Hcase2). assumption.
-      * admit. (* Easy, contra. *)
-    + admit.
-(* Qed. *)
-Admitted. (* Grade 1. *)
+      * (* Contra. *)
+        destruct (dommP _ _ Hprog_main1) as [CI HCI]. rewrite unionmE in HCI.
+        apply negb_true_iff in Hcase1. apply negb_true_iff in Hcase2.
+        now rewrite (dommPn _ _ Hcase1) (dommPn _ _ Hcase2) in HCI.
+    + inversion Hprog_main1 as [Hmain].
+      destruct (prog_main p1) as [main1 |] eqn:Hcase1;
+        destruct (prog_main p2) as [main2 |] eqn:Hcase2.
+      * (* Contra/easy. RB: NOTE: Three cases can be solved as instances of a
+           little lemma, or a tactic. Is it useful elsewhere? *)
+        apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
+        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        apply /dommP. exists CI. now rewrite unionmE HCI.
+      * apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
+        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        apply /dommP. exists CI. now rewrite unionmE HCI.
+      * apply proj2 in Hmain_comp2. specialize (Hmain_comp2 isT).
+        destruct (dommP _ _ Hmain_comp2) as [CI HCI].
+        apply /dommP. exists CI. simpl. now rewrite (unionmC Hdis_i) unionmE HCI.
+      * discriminate.
+Qed.
 
 (* Given a list of components, create the map that associates to
    each component the preallocated buffers according to program p.
@@ -589,6 +635,11 @@ Definition prepare_procedures_initial_memory (p: program)
        forall p, prepare_procedures_initial_memory p =
                  prepare_procedures p (prepare_initial_memory p).
   Possibly assuming the well-formedness of the program. *)
+Theorem prepare_procedures_initial_memory_equiv :
+  forall p,
+    prepare_procedures_initial_memory p =
+    prepare_procedures p (prepare_initial_memory p).
+Admitted.
 
 (* initialization of the empty program *)
 
@@ -970,6 +1021,16 @@ Definition prepare_procedures_entrypoints (p: program) : EntryPoint.t :=
   let '(_, _, entrypoints) := prepare_procedures_initial_memory p in
   entrypoints.
 
+Lemma domm_prepare_procedures_entrypoints: forall p,
+  domm (prepare_procedures_entrypoints p) = domm (prog_interface p).
+Proof.
+  intros p.
+  unfold prepare_procedures_entrypoints, prepare_procedures_initial_memory.
+  rewrite domm_map.
+  rewrite domm_prepare_procedures_initial_memory_aux.
+  reflexivity.
+Qed.
+
 Theorem prepare_procedures_entrypoints_after_linking:
   forall p c,
     well_formed_program p ->
@@ -1188,6 +1249,27 @@ Proof.
   - inversion Hclosed as [Hclosed_iface _].
     rewrite closed_interface_union in Hclosed_iface.
     assumption.
+Qed.
+
+Remark prog_main_none_same_interface :
+  forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    prog_interface p1 = prog_interface p2 ->
+    prog_main p1 = None ->
+    prog_main p2 = None.
+Proof.
+  intros p1 p2 Hwf1 Hwf2 Hiface Hnone.
+  inversion Hwf1 as [_ _ _ _ _ _ [Hmain1 Hmain1']].
+  inversion Hwf2 as [_ _ _ _ _ _ [Hmain2 Hmain2']].
+  destruct p1 as [iface1 procs1 bufs1 main1];
+    destruct p2 as [iface2 procs2 bufs2 main2];
+    simpl in *.
+  destruct main2 as [main2P |] eqn:Hcase1;
+    last reflexivity.
+  subst.
+  specialize (Hmain1 (Hmain2' isT)).
+  discriminate.
 Qed.
 
 End Intermediate.
