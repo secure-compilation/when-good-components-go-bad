@@ -825,23 +825,13 @@ Section Definability.
        E_seq_of_list_expr on an empty list of expressions. *)
     match intf C with
     | Some comp => E_seq_of_list_expr (rev' (prefill_read_aux
-                                             C
-                                             suffix
-                                             []
-                                             (offset_read_init comp)))
+                                                  C
+                                                  suffix
+                                                  []
+                                                  (indexes_read_init comp)))
     | None => None
     end.
 
-  (** Variant without rev and with a fold right *)
-  Definition prefill_read' (C: Component.id) (suffix: trace) : option expr :=
-    match intf C with
-    | Some comp => E_seq_of_list_expr' (prefill_read_aux
-                                             C
-                                             suffix
-                                             []
-                                             (offset_read_init comp))
-    | None => None
-    end.
 
   (** Recreates the fitting expression for triggering an event.
 
@@ -861,7 +851,7 @@ Section Definability.
         | None => call_trigger
         | Some prefill => E_seq prefill call_trigger
         end
-      (* Should never happen in procedure_of_trace *)
+      (* Should never happen with procedure_of_trace *)
       else FAIL
     | ERet C' ret_val _ :: suffix' =>
       if C == C' then
@@ -870,18 +860,18 @@ Section Definability.
         | None => return_trigger
         | Some prefill => E_seq prefill return_trigger
         end
-      (* Should never happen in procedure_of_trace *)
+      (* Should never happen with procedure_of_trace *)
       else FAIL
     | ELoad C' off _ C'' :: suffix' =>
       if C == C'' then E_deref (E_binop Add (E_component_buf C') (E_val (Int off)))
-      (* problem(?) : should produce nothing, we use a kind of NOP ( otherwise
-        switch should handle option, too many useless changes) *)
+      (* problem(?) : should produce nothing, we use a kind of NOP (otherwise
+        switch should handle option as a parameter, too many useless changes) *)
       else
         NOP
     end.
 
   Definition expr_of_trace (C: Component.id) (P: Procedure.id) (t: trace) : expr :=
-    switch (map (expr_of_event C P) (suffixes_of_trace t)) E_exit.
+    switch (map (expr_of_event C P) (suffixes_of_seq t)) E_exit.
 
   (** To compile a complete trace mixing events from different components, we
       split it into individual traces for each component and apply
@@ -905,7 +895,7 @@ Section Definability.
   Proof.
     simpl. reflexivity. Qed.
 
-Example test_comp_subtrace1 :
+  Example test_comp_subtrace1 :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
     let '(off1, load1, off2, load2) := (1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
