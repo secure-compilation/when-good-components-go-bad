@@ -504,19 +504,37 @@ Section Definability.
   Tactic Notation "find_in_fset" :=
     rewrite !in_fsetU1.
 
+  Example test_prefill_read_aux0 :
+    let '(C1,P1) := (1,1) in
+    let '(arg1, ret1) := (17%Z, 42%Z) in
+    let '(off0, load0, off1, load1, off2, load2) := (0%Z, Int 17%Z, 1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
+    let ev1 := ECall Component.main P1 arg1 C1 in
+    let ev1':= ELoad C1 off0 load0 Component.main in
+    let ev2 := ERet C1 ret1 Component.main in
+    let ev3 := ELoad Component.main off1 load1 C1 in
+    let ev4 := ELoad Component.main off2 load2 C1 in
+    let acc := [] in
+    let offsets := mkfmap[(0,false);(1,false);(2,false)] in
+    prefill_read_aux Component.main [  ev1'; ev2;  ev3 ; ev4 ] acc offsets  = [(assign_public off0 load0)] /\
+    prefill_read_aux_ntr Component.main [  ev1'; ev2;  ev3 ; ev4 ] offsets  = [(assign_public off0 load0)]
+  .
+  Proof. split ; by repeat (find_in_codomm ; simpl). Qed.
+
   Example test_prefill_read_aux1 :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
-    let '(off1, load1, off2, load2) := (1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
+    let '(off0, load0, off1, load1, off2, load2) := (0%Z, Int 17%Z, 1%Z, Int 420%Z, 2%Z, Int 1337%Z) in
     let ev1 := ECall Component.main P1 arg1 C1 in
+    let ev1':= ELoad C1 off0 load0 Component.main in
     let ev2 := ERet C1 ret1 Component.main in
     let ev3 := ELoad Component.main off1 load1 C1 in
     let ev4 := ELoad Component.main off2 load2 C1 in
     let acc := [] in
     let offsets := emptym in
-       prefill_read_aux Component.main [  ev3 ; ev4 ] acc offsets  = [].
-  Proof.
-      by simpl ; rewrite codomm0. Qed.
+    prefill_read_aux Component.main [  ev3 ; ev4 ] acc offsets  = []
+  /\ prefill_read_aux_ntr Component.main [  ev3 ; ev4 ] offsets  = [].
+  Proof. split ; by simpl ; rewrite codomm0. Qed.
+
   Example test_prefill_read_aux2 :
     let '(C1,P1) := (1,1) in
     let '(arg1, ret1) := (17%Z, 42%Z) in
@@ -527,14 +545,10 @@ Section Definability.
     let ev4 := ELoad Component.main off2 load2 C1 in
     let acc := [] in
     let offsets := mkfmap[(0,false);(1,false);(2,false)] in
-    prefill_read_aux C1 [ ev3 ; ev4 ] acc offsets = [(assign_public 2 (Int 1337)); (assign_public 1 (Int 420))].
-  Proof. simpl.
-         have H:false \in codomm (setm (setm (setm emptym 2 false) 1 false) 0 false).
-         { apply /codommP. exists 0. done. }
-         rewrite H.
-         have H':false \in codomm (setm (setm (setm (setm emptym 2 false) 1 false) 0 false) (Pos.to_nat 1) true).
-         { apply /codommP. exists 0. done. }
-           by rewrite H'.
+    prefill_read_aux C1 [ ev3 ; ev4 ] acc offsets = [(assign_public 2 (Int 1337)); (assign_public 1 (Int 420))] /\
+  prefill_read_aux_ntr C1 [ ev3 ; ev4 ] offsets = [ (assign_public 1 (Int 420)); (assign_public 2 (Int 1337))].
+  Proof. split ; by repeat (find_in_codomm ; simpl). Qed.
+
   Qed.
 
 
