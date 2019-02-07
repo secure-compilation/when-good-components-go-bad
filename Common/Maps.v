@@ -159,7 +159,18 @@ Lemma domm_filterm_fdisjoint_unionm
   domm m = domm (unionm i1 i2) ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) = domm i1.
 Proof.
+  (* rewrite domm_union => Hdisjoint Hunion. *)
+  (* Search (domm _ = domm _). *)
+  (* Search _ fdisjoint unionm. *)
+  (* Search filterm.  *)
+  (* have HH: domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) = *)
+  (*          domm (filterm (fun (k : nat) (_ : T) => k \notin domm i2) (unionm i1 i2)) by admit. *)
+  (* rewrite HH (filterm_union _ Hdisjoint). *)
+  (* rewrite -eq_fset => x. *) 
 Admitted. 
+  
+  
+  
 
 Lemma domm_filterm_partial_memory
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
