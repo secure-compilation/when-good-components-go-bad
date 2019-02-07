@@ -863,7 +863,10 @@ Section Definability.
       (* Should never happen with procedure_of_trace *)
       else FAIL
     | ELoad C' off _ C'' :: suffix' =>
-      if C == C'' then E_deref (E_binop Add (E_component_buf C') (E_val (Int off)))
+      if C == C'' then E_seq (E_deref (E_binop Add (
+                                                 E_component_buf C') (E_val (Int off))))
+                             (E_assign (E_local Block.priv)
+                                       (increment (E_deref (E_local Block.priv))))
       (* problem(?) : should produce nothing, we use a kind of NOP (otherwise
         switch should handle option as a parameter, too many useless changes) *)
       else
@@ -878,10 +881,15 @@ Section Definability.
       [expr_of_trace] to each one of them.  We also initialize the memory of
       each component to hold 0 at the first local variable. *)
 
+  Definition filter_comp_subtrace (C: Component.id) (ev:event) :=
+    (C == cur_comp_of_event ev)
+    || match ev with
+      | ELoad _ _ _ C' => (C == C')
+      | _ => false
+      end.
+  Hint Transparent filter_comp_subtrace.
   Definition comp_subtrace (C: Component.id) (t: trace) :=
-    filter (fun e => (C == cur_comp_of_event e) ||
-                  match e with | ELoad _ _ _ C' => (C == C') | _ => false end)
-           t.
+    filter (filter_comp_subtrace C) t.
 
   Example test_comp_subtrace0 :
     let '(C1,P1) := (1,1) in
@@ -1052,7 +1060,7 @@ Section Definability.
       rewrite in_fset /= => C'_P'.
       suffices ? : imported_procedure intf C C' P'.
         by case: eqP => [<-|] //; rewrite find_procedures_of_trace_exp; eauto.
-      elim: {P P_CI} t Ht P' C'_P' => [|e t IH] //= /andP [He Ht] P.
+      elim: {P P_CI} t Ht P' C'_P' => [|e t IH] //= /andP [He Ht] P. rewrite /filter_comp_subtrace.
       case: (C =P _) => [HC|].
       case: e HC He=> [_ P' v C'' /= <-| |]; try by eauto.
       rewrite inE; case/andP=> [C_C'' /imported_procedure_iff imp_C''_P'].
@@ -1107,20 +1115,17 @@ Section Definability.
     (* So, either we change the definition to get what we had before (we filter
        the ELoad events not triggered by the component out of the comp_subtrace)
        or we take into account the ELoad events, *)
-    (* Going for the first one (complicates a bit the definition but makes more
-       sense) *)
+    (* In the end, we just end up ruling out all ELoad events. But since this
+       affects the spec 'switch_spec_else', we won't change anything *)
     Local Definition counter_value C prefix :=
-      Z.of_nat (length [seq e <- (comp_subtrace C prefix) |
-                        match e with
-                        | ELoad _ _ _ C' => (C != C')
-                        | _ => true end ]).
-      (* Z.of_nat (length (comp_subtrace C prefix)). *)
+      Z.of_nat (length (comp_subtrace C prefix)).
+
     Lemma counter_value_app C prefix1 prefix2 :
       counter_value C (prefix1 ++ prefix2)
       = (counter_value C prefix1 + counter_value C prefix2) % Z.
     Proof.
       unfold counter_value.
-      now rewrite comp_subtrace_app filter_cat app_length Nat2Z.inj_add.
+      now rewrite comp_subtrace_app  app_length Nat2Z.inj_add.
     Qed.
 
     Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
@@ -1131,26 +1136,22 @@ Section Definability.
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
       = (counter_value C prefix
-         + if (C == cur_comp_of_event e)
-                || match e with
-                   | ELoad _ _ _ C' => (C != C')
-                   | _ => true end
+         + if (filter_comp_subtrace C) e
            then 1 else 0) % Z.
     Proof.
       Print counter_value. rewrite /counter_value.
-      unfold counter_value, comp_subtrace.
-      rewrite !filter_cat app_length. simpl.
+      unfold counter_value, comp_subtrace, filter_comp_subtrace.
+      rewrite filter_cat app_length. simpl.
       rewrite Nat2Z.inj_add.
-      (* now *) destruct (_ == _) ; destruct e as [| |? ? ? C' ]=> //.
-      (* case: (C == _) => // ; case: (C != _) => //= . *)
-      Admitted.
+      now destruct (_ == _) ; destruct e as [| |? ? ? C' ]=> //= ; case: (_ == _) => //.
+    Qed.
 
     Lemma well_formed_memory_store_counter prefix mem C e :
       component_buffer C ->
       well_formed_memory prefix mem ->
       C = cur_comp_of_event e ->
       exists mem',
-        Memory.store mem (C, Block.local, counter_idx) (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
+        Memory.store mem (C, Block.private, counter_idx) (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
         well_formed_memory (prefix ++ [e]) mem'.
     Proof.
       move=> C_b wf_mem HC.
