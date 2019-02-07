@@ -11,6 +11,8 @@ Module Block.
   Definition public : id := 0.
   (* local private buffer *)
   Definition private : id := 1.
+  (* RB: STATIC_READ: Missing definition, used later. To fix. *)
+  Definition local : id := 2.
 
   Inductive buffer_kind : Type :=
   | pub : buffer_kind
