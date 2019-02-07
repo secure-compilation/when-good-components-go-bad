@@ -10,21 +10,23 @@ Definition factorial : program := {|
   prog_interface :=
     mkfmap [(Component.main,
              {| Component.import := fset [(2, 1)];
-                Component.export := fset [] |});
+                Component.export := fset [];
+                   Component.public_buffer_size := 0|});
             (2, {| Component.import := fset [];
-                   Component.export := fset [1] |})];
+                   Component.export := fset [1];
+                   Component.public_buffer_size := 0|})];
   prog_buffers :=
-    mkfmap [(Component.main, inl 1); (2, inl 1)];
+    mkfmap [(Component.main, (inl 1, inl 0)); (2, (inl 1, inl 0))];
   prog_procedures :=
     mkfmap [
       (Component.main, mkfmap [
         (Procedure.main, E_call 2 1 (E_val (Int 6)))]);
       (2, mkfmap [
-        (1, E_if (E_binop Leq (E_deref E_local) (E_val (Int 1)))
+        (1, E_if (E_binop Leq (E_deref (E_local Block.priv)) (E_val (Int 1)))
                  (E_val (Int 1))
                  (E_binop Mul
-                          (E_deref E_local)
-                          (E_call 2 1 (E_binop Minus (E_deref E_local) (E_val (Int 1))))))])]
+                          (E_deref (E_local Block.priv))
+                          (E_call 2 1 (E_binop Minus (E_deref (E_local Block.priv)) (E_val (Int 1))))))])]
 |}.
 
 Definition fuel := 1000.

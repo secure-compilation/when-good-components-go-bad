@@ -11,11 +11,12 @@ Definition default_init_buffer: program := {|
   prog_interface :=
     mkfmap [(Component.main,
              {| Component.import := fset [];
-                Component.export := fset [] |})];
+                Component.export := fset [];
+                Component.public_buffer_size := 0|})];
   prog_buffers :=
-    mkfmap [(Component.main, inr [Undef; Int 42])];
+    mkfmap [(Component.main, (inr [Undef; Int 42], inl 0))];
   prog_procedures :=
-    mkfmap [(Component.main, mkfmap [(Procedure.main, E_deref (E_binop Add E_local (E_val (Int 1))))])]
+    mkfmap [(Component.main, mkfmap [(Procedure.main, E_deref (E_binop Add (E_local Block.priv) (E_val (Int 1))))])]
 |}.
 
 Definition fuel := 1000.
