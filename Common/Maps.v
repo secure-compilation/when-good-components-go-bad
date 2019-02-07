@@ -220,3 +220,14 @@ Proof.
     rewrite -(eqtype.eqP Hx0_x) in x_in_s.  
     now inversion x_in_s.
 Qed.
+
+(* notation filtermI isn't quite right since idempotent (in SSReflect
+   conventions) applies to binary operators *)
+(* Since a function is pure in coq, this should hold *)
+Lemma filtermIdempotent (T : ordType) (S : Type) p (m : {fmap T -> S}) :
+  filterm p (filterm p m) = filterm p m.
+Proof.
+  apply/eq_fmap=> k; rewrite !filtermE.
+  case get_k: (m k)=> [v|] //=.
+  case: ifP => //= pkv ; by rewrite pkv.
+Qed.
