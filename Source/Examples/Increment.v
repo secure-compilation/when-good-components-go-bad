@@ -10,13 +10,14 @@ Definition increment : program := {|
   prog_interface :=
     mkfmap [(Component.main,
              {| Component.import := fset [];
-                Component.export := fset [] |})];
+                Component.export := fset [];
+                Component.public_buffer_size := 0|})];
   prog_buffers :=
-    mkfmap [(Component.main, inl 1)];
+    mkfmap [(Component.main, (inl 1, inl 0))];
   prog_procedures :=
     mkfmap [(Component.main,
              mkfmap [(Procedure.main, E_call Component.main 1 (E_val (Int 42)));
-                     (1, E_binop Add (E_deref E_local) (E_val (Int 1)))])]
+                     (1, E_binop Add (E_deref (E_local Block.priv)) (E_val (Int 1)))])]
 |}.
 
 Definition fuel := 1000.
