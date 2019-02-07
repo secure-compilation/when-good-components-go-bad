@@ -42,8 +42,7 @@ Qed.
 Lemma domm_mkfmap' (kvs : seq (T * S)) : domm (mkfmap kvs) = fset (unzip1 kvs).
 Proof.
   rewrite -eq_fset.
-  (* would be nice to use domm_mkfmap. *)
-
+  (* would be nice to use domm_mkfmap. would it be possible to use it with in_fset ? *)
   (* for the time being, taking example on proof of domm_mkfmap *)
 
   move=> k; rewrite mem_domm.

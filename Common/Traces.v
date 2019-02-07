@@ -48,6 +48,13 @@ Definition suffixes_of_seq s : seq (seq T) :=
       end in
   rev (aux s [::]).
 
+(* Non tail-recursive but still fairly efficient (doesn't use append) *)
+(* Fixpoint suffixes_of_seq' s : seq (seq T) := *)
+(*   match s with *)
+(*   | [::]  => [::] *)
+(*   | h::t => (h::t) :: suffixes_of_seq' t *)
+(*   end. *)
+
 Definition suffix_flip a b := suffix b a.
 
 Definition all_sfxs s (suffxs : seq (seq T)) : Prop :=
