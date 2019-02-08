@@ -152,6 +152,19 @@ Proof.
   - by reflexivity.
 Qed.
 
+(* CA: not really needed *)
+Lemma mapm_id : forall (T : Type) (i: NMap T), mapm id i = i.
+Proof.
+Admitted. 
+
+  
+(* needed in the proof of domm_filterm_fdisjoint_unionm *)
+Lemma filterm_id : forall (T : Type) (i : NMap T) p,
+       
+                   domm (filterm p i) = domm (filterm p (mapm id i)).
+Proof.
+  move => T i. by rewrite mapm_id. 
+Qed.
 
 Lemma domm_filterm_fdisjoint_unionm
       (T T' : Type) (i1 i2 : NMap T) (m : NMap T') :
@@ -159,18 +172,14 @@ Lemma domm_filterm_fdisjoint_unionm
   domm m = domm (unionm i1 i2) ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) = domm i1.
 Proof.
-  (* rewrite domm_union => Hdisjoint Hunion. *)
-  (* Search (domm _ = domm _). *)
-  (* Search _ fdisjoint unionm. *)
-  (* Search filterm.  *)
-  (* have HH: domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) = *)
-  (*          domm (filterm (fun (k : nat) (_ : T) => k \notin domm i2) (unionm i1 i2)) by admit. *)
-  (* rewrite HH (filterm_union _ Hdisjoint). *)
-  (* rewrite -eq_fset => x. *) 
+  rewrite domm_union => Hdisjoint Hunion.
+  have HH: domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) =
+           domm (filterm (fun (k : nat) (_ : T) => k \notin domm i2) (unionm i1 i2))
+  by admit.
+  rewrite HH filterm_id fdisjoint_filterm_mapm_unionm; auto. 
+  rewrite -filterm_id fdisjoint_filterm_full; auto.  
 Admitted. 
-  
-  
-  
+    
 
 Lemma domm_filterm_partial_memory
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
@@ -180,8 +189,10 @@ Lemma domm_filterm_partial_memory
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m0 =
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) = domm i2.
-Admitted.
+Proof. 
+Admitted. 
 
+  
 Lemma filterm_partial_memory_fsubset
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
   fdisjoint (domm i1) (domm i2) ->
