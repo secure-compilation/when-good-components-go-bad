@@ -845,6 +845,19 @@ Section Definability.
     end.
 
 
+  Lemma prefill_read_only_values_integers (suffix : trace) (C : Component.id) (comp : Component.interface) (e:expr):
+    (intf C = Some comp) ->
+    all only_transferable_values_in_ELoad suffix ->
+    prefill_read C suffix = Some e ->
+    values_are_integers e.
+  Proof.
+    rewrite /prefill_read. move => Hcomp ; rewrite Hcomp => Hpref.
+    have: all values_are_integers (rev' (prefill_read_aux C suffix [::] (indexes_read_init comp)))
+      by apply prefill_read_aux_only_values_integers with (C:=C) (comp:= comp)
+      in Hpref => // ; rewrite all_rev.
+    by apply E_seq_of_list_expr_integers.
+  Qed.
+
   (** Recreates the fitting expression for triggering an event.
 
       In the case we give turn to the component we're recreating (if it is
