@@ -40,20 +40,41 @@ Proof. by rewrite /suffix -lock /= orbF. Qed.
     (since we don't look at the events, we can use a sequence of type T)
  *)
 
-Definition suffixes_of_seq s : seq (seq T) :=
-  let fix aux s (acc:seq (seq T)) :=
-      match s with
-      | [::]  => acc
-      | h::t => aux t ((h::t)::acc)
-      end in
-  rev (aux s [::]).
+Let Fixpoint suffixes_of_seq_aux s acc :=
+  match s with
+  | [::]  => acc
+  | h::t => suffixes_of_seq_aux t ((h::t)::acc)
+  end.
+Definition suffixes_of_seq s := rev (suffixes_of_seq_aux s [::]).
 
 (* Non tail-recursive but still fairly efficient (doesn't use append) *)
-(* Fixpoint suffixes_of_seq' s : seq (seq T) := *)
-(*   match s with *)
-(*   | [::]  => [::] *)
-(*   | h::t => (h::t) :: suffixes_of_seq' t *)
-(*   end. *)
+Fixpoint suffixes_of_seq' s :=
+  match s with
+  | [::]  => [::]
+  | h::t => (h::t) :: suffixes_of_seq' t
+  end.
+
+Local Lemma suffixes_of_seq_aux_invar : forall s acc res,
+   suffixes_of_seq_aux s acc = res ->
+    exists res', suffixes_of_seq' s = res' /\
+            res = rev res' ++ acc.
+Proof.
+  induction s as [|h t IHt].
+  - by intros ; exists [].
+  - intros acc res H. apply IHt in H. destruct H as [res' [H1 H2]].
+    simpl. exists ((h::t)::res'). subst.
+    split ; first done ;
+      last by rewrite rev_cons -cat_rcons.
+Qed.
+
+Lemma suffixes_of_seq_equiv s : suffixes_of_seq s = suffixes_of_seq' s.
+Proof.
+  rewrite /suffixes_of_seq.
+  have H: suffixes_of_seq_aux s [] = suffixes_of_seq_aux s [] by [].
+  apply suffixes_of_seq_aux_invar in H.
+  destruct H as [ ? [? H]] ; subst. by rewrite H cats0 revK.
+Qed.
+
 
 Definition suffix_flip a b := suffix b a.
 
@@ -83,9 +104,6 @@ Proof. rewrite /subpred/suffix_flip. move => suffix. by apply suffix_prepended. 
 (*   all_sfxs t suffxs -> all_sfxs (x::t) suffxs. *)
 (* Proof. *)
 
-(* RB: STATIC_READ: Missing definition, used later and for now aliased to a
-   previous one. To fix. *)
-Definition suffixes_of_seq' := suffixes_of_seq.
 
 Lemma suffixes_of_seq_correct seq :
   all (suffix_flip seq) (suffixes_of_seq' seq) /\

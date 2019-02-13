@@ -233,16 +233,18 @@ Section Definability.
       events were produced from the same component.  The [C] and [P] arguments
       are only needed to generate the recursive calls depicted above. *)
 
-  (* TODO maybe move the following additions somewhere else ? *)
+  (* TODO relocate *)
   Lemma nseq_add {T:Type} (n1 n2:nat) (x:T) : nseq (n1+n2) x = nseq n1 x ++ nseq n2 x.
   Proof.
     by elim: n1 => //= n1 IHn1 ; rewrite IHn1.
   Qed.
 
+  (* TODO relocate *)
   Lemma cat_app {T:Type} (l1 l2:list T) :
     app l1 l2 = cat l1 l2.
   Proof. by elim: l1. Qed.
 
+  (* TODO relocate *)
   (* Coq or ssr conventions (cat/app, length/size) ? *)
   Lemma combine_cat {A B : Type} : forall (beg1 end1:list A), forall (beg2 end2:list B),
     size beg1 = size beg2 ->
@@ -258,6 +260,7 @@ Section Definability.
         by rewrite Hsize.
   Qed.
 
+  (* TODO relocate *)
   Lemma mkfmap_cat {T:ordType} (S:Type) (s1 s2:seq (T*S)) :
     (* Is it necessary ? *)
     (* all (fun x => (mkfmap s1) x) (split s2).1  -> *)
@@ -739,7 +742,7 @@ Section Definability.
     | _ => false
     end.
 
-  (* To move somewhere else *)
+  (* To relocate *)
   Lemma rev_inj {T:Type} : injective (@rev T).
   Proof. by apply (can_inj revK). Qed.
 
@@ -768,15 +771,24 @@ Section Definability.
   (* This would mean that we should strengthen the hypothesis for the next lemma (compared to the previous one) *)
 
   (* Should we use well_formed_event instead ? (We would need the program interface) *)
+  (* Filters out non transferable values in load events, so it doesn't touches the others *)
   Definition only_transferable_values_in_ELoad (e:event) :=
     match e with
     | ELoad _ _ v _ => is_transferable_value v
-    | _ => false
+    | _ => true
     end.
+
+  Remark well_formed_event_implies_only_transferable_values_in_ELoad :
+    subpred (well_formed_event intf) only_transferable_values_in_ELoad.
+  Proof. by case => [_ _ _ _|_ _ _|_ _ ? _] //= /andP [_ ?]. Qed.
+
+  (* This might be silly to not use well_formed_event instead of
+     only_transferable since we have access to the program interface *)
 
   Lemma prefill_read_aux_only_values_integers (suffix : trace) (C : Component.id) (comp : Component.interface) :
     (intf C = Some comp) ->
     all only_transferable_values_in_ELoad suffix ->
+    (* all (well_formed_event intf) suffix -> *)
     all values_are_integers (prefill_read_aux C suffix [] (indexes_read_init comp)).
   Proof.
 
@@ -890,6 +902,16 @@ Section Definability.
   Hint Transparent filter_comp_subtrace.
   Definition comp_subtrace (C: Component.id) (t: trace) :=
     filter (filter_comp_subtrace C) t.
+
+  Remark subseq_comp_subtrace C t : subseq (comp_subtrace C t) t.
+  Proof. by apply filter_subseq. Qed.
+
+  (* To relocate *)
+  Lemma all_subseq {T:eqType} (s ss : seq T) (a : pred T) :
+    all a s -> subseq ss s -> all a ss.
+  Proof.
+    by move => /all_filterP <- ; rewrite subseq_filter => /andP [? _].
+  Qed.
 
   Example test_comp_subtrace0 :
     let '(C1,P1) := (1,1) in
@@ -1015,23 +1037,31 @@ Section Definability.
       rewrite /find_procedure /procedures_of_trace mapimE.
       case intf_C: (intf C)=> [CI|] //=.
       rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
+      + (* values_are_integers *)
         rewrite /procedure_of_trace /expr_of_trace /switch.
-        (* values_are_integers is treated here *)
-        rewrite /suffixes_of_seq.
-        (* Surely, should change the IH ? *)
-        elim: t Ht => [| e t IH] //=.
-        (* elim: {t Ht} (comp_subtrace C t) (length _) => [|e t IH] n //=. *)
-
-      (* by case: e=> /=. *)
-      (* + induction t. *)
-        (* Treat different events, only E_Load should be painful *)
-        + case: e ; admit.
-
-
-
-      (* Valid calls *)
-        + pose call_of_event e := if e is ECall _ P _ C then Some (C, P) else None.
-      have /fsubsetP sub :
+        elim: t Ht (length _) => [| e t] IH //= /andP [Hwf_e Hwf_t].
+        move: IH ; rewrite !suffixes_of_seq_equiv => IH n /=.
+        destruct e as [ C' p arg ? | C' ret ? | Cderef off ? Cown] eqn:H_ev ;
+          rewrite /filter_comp_subtrace ;
+          destruct (C == _) eqn:C_eq => /= ; try by apply (IH Hwf_t).
+        all : try (apply /andP ; split ; last by apply (IH Hwf_t)).
+        1-2 : destruct (C == _) eqn:C_eq' ; try discriminate ; (* rule out FAILs *)
+          destruct (prefill_read C (comp_subtrace C t)) eqn:prefill.
+        5-6: destruct (C==Cown) eqn:C_eq_Cown.
+        all :have Hpref: forall expr, prefill_read C (comp_subtrace C t) = Some expr ->
+                                 values_are_integers expr
+              by intro ; apply (prefill_read_only_values_integers intf_C) ;
+                 apply (sub_all well_formed_event_implies_only_transferable_values_in_ELoad) ;
+                 apply (all_subseq Hwf_t (subseq_comp_subtrace C t)).
+        (* apply IH in Hwf_t. *) (* if we don't reuse Hwf_t, would be shorter that way *)
+        all : try apply Hpref in prefill ;
+          try done ;
+          try by (simpl ; rewrite prefill).
+        * simpl. apply/andP ; split ; last by apply (IH Hwf_t). by case: (C == Cown) => //.
+        * by apply (IH Hwf_t).
+      + (* Valid calls *)
+        pose call_of_event e := if e is ECall _ P _ C then Some (C, P) else None.
+        have /fsubsetP sub :
           fsubset (called_procedures (procedure_of_trace C P t))
                   ((C, P) |: fset (pmap call_of_event (comp_subtrace C t))).
         rewrite /procedure_of_trace /expr_of_trace /switch.
