@@ -155,8 +155,12 @@ Qed.
 (* CA: not really needed *) 
 Lemma mapm_id : forall (T : Type) (i: NMap T), mapm id i = i.
 Proof.
-Admitted. (*CA: this should be an easy proof but I got lost in the notation form NMap *)
-
+  move=> T i. apply /eq_fmap => n.
+  Search _ mapm.
+  rewrite mapmE. unfold omap, obind, oapp.
+  remember (i n) as v; simpl in *; rewrite <- Heqv.
+  now destruct v.
+Qed.
   
 (* needed in the proof of domm_filterm_fdisjoint_unionm *)
 Lemma filterm_id : forall (T : Type) (i : NMap T) p,
