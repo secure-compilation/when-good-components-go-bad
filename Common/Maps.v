@@ -181,7 +181,32 @@ Proof.
            domm (filterm (fun (k : nat) (_ : T) => k \notin domm i2) (unionm i1 i2))
   by admit.
   rewrite HH filterm_id fdisjoint_filterm_mapm_unionm; auto. 
-  rewrite -filterm_id fdisjoint_filterm_full; auto.  
+  rewrite -filterm_id fdisjoint_filterm_full; auto.
+  Grab Existential Variables.
+  (* have HHH: domm m = (domm i1 :|: domm i2)%fset -> exists m1 m2, m = unionm m1 m2 /\ *)
+  (*                                                          domm m1 = domm i1 /\ domm m2 = domm i2 *)
+  (*       by admit. *)
+  (* specialize (HHH Hunion). destruct HHH as [m1 [m2 [Hu [H1 H2]]]]. *)
+  (* subst. Search _ domm filterm unionm. *)
+  rewrite filterm_union.
+  Search _ filterm "\notin".
+  rewrite (@fdisjoint_filterm_empty T i2 i2). rewrite unionm0.
+  rewrite (@fdisjoint_filterm_full T T).
+  have HHH: exists m1 m2, m = unionm m1 m2 /\ domm m1 = domm i1 /\ domm m2 = domm i2 by admit.
+  destruct HHH as [m1 [m2 [Hu [H1 H2]]]].
+  rewrite Hu. rewrite <- H2. Search _ filterm "\notin" unionm.
+  rewrite filterm_id.
+  rewrite fdisjoint_filterm_mapm_unionm. rewrite <- filterm_id.
+  rewrite fdisjoint_filterm_full.
+  
+  assumption. rewrite H1 H2; assumption. rewrite H1 H2; assumption.
+  assumption.
+  reflexivity. assumption.
+  Grab Existential Variables.
+  exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i1))) m).
+  exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i2))) m).
+  (* exists (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m). *)
+  split; try split.  
 Admitted. 
     
 
