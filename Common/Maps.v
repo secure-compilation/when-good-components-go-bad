@@ -152,10 +152,10 @@ Proof.
   - by reflexivity.
 Qed.
 
-(* CA: not really needed *)
+(* CA: not really needed *) 
 Lemma mapm_id : forall (T : Type) (i: NMap T), mapm id i = i.
 Proof.
-Admitted. 
+Admitted. (*CA: this should be an easy proof but I got lost in the notation form NMap *)
 
   
 (* needed in the proof of domm_filterm_fdisjoint_unionm *)
@@ -189,7 +189,7 @@ Lemma domm_filterm_partial_memory
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m0 =
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) = domm i2.
-Proof. 
+Proof.
 Admitted. 
 
   
@@ -206,12 +206,15 @@ Proof.
   rewrite m2_eq_union -m0_eq_m2 domm_union.    
   apply (* /fsubsetU /orP. *) /fsubsetP => x Hx. 
   assert (x \in (domm i1) \/ x \notin (domm i1)).
-  { admit. }    
+  { admit. } (* CA: do we have classical reasoning? *)   
   case: H => H.  
       move: H. apply /fsubsetP /fsubsetU /orP. 
       left. by apply: fsubsetxx.
       
-  have x_in_i2 : x \in domm i2. { admit. }
+  have x_in_i2 : x \in domm i2. { admit. } (*CA: by Hfilter deduce x \in domm m2
+                                                 then by m2_eq_union, x \in domm i1 \/x \in domm i2 
+                                                 together with H we get x \in domm i2
+                                            *)
    move: x_in_i2. apply /fsubsetP /fsubsetU /orP.    
    right. by apply: fsubsetxx. 
 Admitted.     
