@@ -227,12 +227,6 @@ Section Definability.
     reflexivity.
   Qed.
 
-  (** We use [switch] to define the following function [expr_of_trace], which
-      converts a sequence of events to an expression that produces that sequence
-      of events when run from the appropriate component.  We assume that all
-      events were produced from the same component.  The [C] and [P] arguments
-      are only needed to generate the recursive calls depicted above. *)
-
   (* TODO relocate *)
   Lemma nseq_add {T:Type} (n1 n2:nat) (x:T) : nseq (n1+n2) x = nseq n1 x ++ nseq n2 x.
   Proof.
@@ -858,6 +852,13 @@ Section Definability.
     by apply E_seq_of_list_expr_integers.
   Qed.
 
+  (** We use [switch] to define the following function [expr_of_trace], which
+      converts a sequence of events to an expression that produces that sequence
+      of events when run from the appropriate component. We assume that all
+      events were produced from the same component, or reach the memory of this
+      component in case of a load event. The [C] and [P] arguments are only
+      needed to generate the recursive calls depicted above. *)
+
   (** Recreates the fitting expression for triggering an event.
 
       In the case we give turn to the component we're recreating (if it is
@@ -867,34 +868,29 @@ Section Definability.
     match suffix with
     (* Never happens except for an empty trace *)
     | nil => NOP
-    (* This C should be the same. Can it be done directly in pattern matchin in coq ? *)
-    | ECall C' P' arg C'' :: suffix' =>
-      if C == C' then
-        let call_trigger := E_seq (E_call C' P' (E_val (Int arg)))
-                                  (E_call C  P  (E_val (Int 0))) in
-        match (prefill_read C suffix') with
-        | None => call_trigger
-        | Some prefill => E_seq prefill call_trigger
-        end
-      (* Should never happen with procedure_of_trace *)
-      else FAIL
-    | ERet C' ret_val _ :: suffix' =>
-      if C == C' then
-        let return_trigger := E_val (Int ret_val) in
-        match prefill_read C suffix' with
-        | None => return_trigger
-        | Some prefill => E_seq prefill return_trigger
-        end
-      (* Should never happen with procedure_of_trace *)
-      else FAIL
+    | ECall _ P' arg C' :: suffix' =>
+      let call_trigger := E_seq (E_call C' P' (E_val (Int arg)))
+                                (E_call C  P  (E_val (Int 0))) in
+      match (prefill_read C suffix') with
+      | None => call_trigger
+      | Some prefill => E_seq prefill call_trigger
+      end
+    | ERet _ ret_val _ :: suffix' =>
+      let return_trigger := E_val (Int ret_val) in
+      match prefill_read C suffix' with
+      | None => return_trigger
+      | Some prefill => E_seq prefill return_trigger
+      end
     | ELoad C' off _ C'' :: suffix' =>
-      if C == C'' then E_seq (E_deref (E_binop Add (
-                                                 E_component_buf C') (E_val (Int off))))
-                             (E_assign (E_local Block.priv)
-                                       (increment (E_deref (E_local Block.priv))))
-      (* problem(?) : should produce nothing, we use a kind of NOP (otherwise
-        switch should handle option as a parameter, too many useless changes) *)
+      (* In case of load performed by the current component *)
+      if C == C' then E_seq (E_deref (E_binop Add (E_component_buf C'') (E_val (Int off))))
+                            (E_assign (E_local Block.priv)
+                                      (increment (E_deref (E_local Block.priv))))
       else
+        (* In the case the memory from the current component is loaded, we don't
+           do anything here (this kind of event is used in prefill_read) *)
+        (* problem(?) : should produce nothing, we use a kind of NOP (otherwise
+           switch should handle option as a parameter, too many useless changes) *)
         NOP
     end.
 
