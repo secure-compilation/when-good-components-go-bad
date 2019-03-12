@@ -329,18 +329,15 @@ Section Definability.
   Admitted.
 
   (** Flattens a list of expr into a single E_seq expr. *)
-  (*  Impl note : Since we will later give lists in reverse order, we
-      can either use
-      - a fold_left + a rev' on the input (outside of the function), so the
-        fold_left won't reverse it ; or
-      - a fold_right (which is not tail recursive) which will reverse the
-        result.
-      First option chosen *)
+  Local Definition E_seq_of_exprs_right (ex : expr) (exprs : list expr) : expr :=
+    foldr E_seq
+          (last ex exprs)
+          (belast ex exprs).
+
   Definition E_seq_of_list_expr (exprs : list expr) : option expr :=
     match exprs with
     | nil => None
-    | expr :: exprs' => Some (fold_left (fun exp1 exp__added => E_seq exp1 exp__added)
-                                       exprs' expr)
+    | expr :: exprs' => Some (E_seq_of_exprs_right expr exprs')
     end.
 
   Lemma E_seq_of_list_expr_integers (exprs : list expr) : forall (e : expr),
@@ -348,22 +345,23 @@ Section Definability.
     E_seq_of_list_expr exprs = Some e ->
     values_are_integers e.
   Proof.
-    rewrite /E_seq_of_list_expr ; destruct exprs => //.
+    rewrite /E_seq_of_list_expr/E_seq_of_exprs_right ; destruct exprs => //.
     generalize dependent e.
-    induction exprs.
-    - intros e e' Hval Hsome ; inversion Hsome ; subst.
-        by move:Hval ; rewrite all_seq1 => ->.
-    - intro e. intros. by apply IHexprs with (e:= E_seq e a) => //= ; rewrite -andbA.
+    elim:exprs => //=.
+    - by move => e e' /andP[Hval _] Hsome ; inversion Hsome ; subst.
+    - move => e' seq IH e e_seq /andP[Hval_e] ;
+               move => /andP [Hval_seq Hval_e'] Hsome.
+      inversion Hsome as [H].
+      apply /andP ; rewrite -/values_are_integers ; split; first done.
+      by apply IH with (e:= e') ; first by apply/andP.
   Qed.
 
-  (* for now, sticking to :
-     e1; e2; e3 = (e1; e2); e3 *)
   (* Quick sanity check (unrealistic) *)
   Example test_E_seq_of_list_expr :
     let list_expr := [E_val (Int 0); E_val (Int 1); E_val (Int 2)] in
-    let seq_expr  := E_seq (E_seq (E_val (Int 0))
-                                  (E_val (Int 1)))
-                           (E_val (Int 2)) in
+    let seq_expr  := E_seq (E_val (Int 0))
+                           (E_seq (E_val (Int 1))
+                                  (E_val (Int 2))) in
     E_seq_of_list_expr list_expr = Some seq_expr.
   Proof. reflexivity. Qed.
 
