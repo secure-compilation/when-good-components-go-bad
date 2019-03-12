@@ -1102,53 +1102,50 @@ Section Definability.
     - move=> C P.
       rewrite /exported_procedure /Program.has_component /Component.is_exporting.
       case=> CI [C_CI P_CI].
-      by rewrite find_procedures_of_trace_exp //; exists CI; split; eauto.
+        by rewrite find_procedures_of_trace_exp //; exists CI; split; eauto.
     - move=> C P Pexpr.
+      have Hwf_sbt: all (well_formed_event intf) (comp_subtrace C t)
+        by apply (all_subseq Ht (subseq_comp_subtrace C t)).
       rewrite /find_procedure /procedures_of_trace mapimE.
       case intf_C: (intf C)=> [CI|] //=.
       rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
       + (* values_are_integers *)
         rewrite /procedure_of_trace /expr_of_trace /switch.
-        elim: t Ht (length _) => [| e t] IH //= /andP [Hwf_e Hwf_t].
-        move: IH ; rewrite !suffixes_of_seq_equiv => IH n /=.
-        destruct e as [ C' p arg ? | C' ret ? | Cderef off ? Cown] eqn:H_ev ;
-          rewrite /filter_comp_subtrace ;
-          destruct (C == _) eqn:C_eq => /= ; try by apply (IH Hwf_t).
-        all : try (apply /andP ; split ; last by apply (IH Hwf_t)).
-        1-2 : destruct (C == _) eqn:C_eq' ; try discriminate ; (* rule out FAILs *)
-          destruct (prefill_read C (comp_subtrace C t)) eqn:prefill.
-        5-6: destruct (C==Cown) eqn:C_eq_Cown.
-        all :have Hpref: forall expr, prefill_read C (comp_subtrace C t) = Some expr ->
-                                 values_are_integers expr
-              by intro ; apply (prefill_read_only_values_integers intf_C) ;
-                 apply (sub_all well_formed_event_implies_only_transferable_values_in_ELoad) ;
-                 apply (all_subseq Hwf_t (subseq_comp_subtrace C t)).
-        (* apply IH in Hwf_t. *) (* if we don't reuse Hwf_t, would be shorter that way *)
-        all : try apply Hpref in prefill ;
-          try done ;
-          try by (simpl ; rewrite prefill).
-        * simpl. apply/andP ; split ; last by apply (IH Hwf_t). by case: (C == Cown) => //.
-        * by apply (IH Hwf_t).
+        elim: {t Ht} (comp_subtrace C t) (length _) Hwf_sbt => [| e t IH] //= n /andP [_ Ht].
+        have Hpref: forall expr, prefill_read C t = Some expr ->
+                            values_are_integers expr
+            by move => ? ; apply (prefill_read_only_values_integers intf_C) ;
+                        apply (sub_all wf_event_implies_transf Ht).
+        move: IH ; rewrite !suffixes_of_seq_equiv => IH.
+        specialize (IH n Ht).
+        case: e => /= [ C' p arg ? | C' ret ? | Cderef off ? Cown] ;
+          case: (prefill_read C t) Hpref => /= [ex|] Hpref ;
+            try (apply/andP ; split ; first by (rewrite andbT ; apply Hpref)) ;
+            try done.
+        all : apply /andP ; split ; last done.
+        all : by case:(C==_).
       + (* Valid calls *)
         pose call_of_event e := if e is ECall _ P _ C then Some (C, P) else None.
         have /fsubsetP sub :
           fsubset (called_procedures (procedure_of_trace C P t))
                   ((C, P) |: fset (pmap call_of_event (comp_subtrace C t))).
-        rewrite /procedure_of_trace /expr_of_trace /switch.
-        (* This induction should replace many elements by fset0 in the base case *)
-        elim: {t Ht} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
-          exact: fsub0set.
-        move/(_ n) in IH (* ; rewrite !fset0U *).
-        case: e=> [C' P' v C''| |] //= (* ; try  by rewrite fset0U *).
-        (* ECall *)
-        admit.
-        (* ERet *)
-        admit.
-        (* ELoad *)
-        admit.
-        (* rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=. *)
-        (* by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT. *)
-
+        { rewrite /procedure_of_trace /expr_of_trace /switch suffixes_of_seq_equiv.
+          elim: {t Ht} (comp_subtrace C t) (length _) Hwf_sbt => [|e t IH] /= n Ht ;
+              first exact: fsub0set ; rewrite !fset0U.
+          move:Ht => /andP[_ Ht].
+          have Hpref: forall expr, prefill_read C t = Some expr ->
+                              called_procedures expr = fset0
+              by move => ? ; apply (prefill_read_no_calls intf_C).
+          specialize (IH n Ht).
+          case: e => [C' P' arg C''| C' ret C'' | C' i v C''] ;
+                      last by (case: (C== _) => /= ; by rewrite !fset0U).
+          all: case: (prefill_read C t) Hpref => [ex|] Hpref //= ;
+                                                  first (rewrite (Hpref ex); last done);
+                                                  try by rewrite !fset0U.
+          rewrite fset0U.
+          all :rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
+          all:by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
+        }
         (* Back to Valid calls *)
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
         rewrite eqxx find_procedures_of_trace //.
@@ -1160,7 +1157,7 @@ Section Definability.
       rewrite in_fset /= => C'_P'.
       suffices ? : imported_procedure intf C C' P'.
         by case: eqP => [<-|] //; rewrite find_procedures_of_trace_exp; eauto.
-      elim: {P P_CI} t Ht P' C'_P' => [|e t IH] //= /andP [He Ht] P. rewrite /filter_comp_subtrace.
+      elim: {P P_CI} t Ht {Hwf_sbt} P' C'_P' => [|e t IH] //= /andP [He Ht] P. rewrite /filter_comp_subtrace.
       case: (C =P _) => [HC|].
       case: e HC He=> [_ P' v C'' /= <-| |]; try by eauto.
       rewrite inE; case/andP=> [C_C'' /imported_procedure_iff imp_C''_P'].
