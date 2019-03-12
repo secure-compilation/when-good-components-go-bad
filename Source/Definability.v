@@ -724,9 +724,12 @@ Section Definability.
                                            (indexes := indexes)
                                            (res := prefill_read_aux C suffix [] indexes)
                                            (acc := []) in Hintf ;
-        destruct Hintf as [? [? H] ] ; subst ; [by rewrite H cats0 revK | done].
+        first destruct Hintf as [? [? H]] ; subst ; [by rewrite H cats0 revK | done].
   Qed.
 
+  (* Since we only backtranslate, and we got a well-formed program if the events
+     are well-formed, we can just assign any value transmitted in the load
+     events (if it's a pointer or an undef, the event is not well-formed) *)
   Definition expr_assign_public (e:expr) :=
     match e with
     | E_assign (E_binop Add (E_local Block.pub) (E_val (Int _(* index *))))
@@ -758,10 +761,6 @@ Section Definability.
     case: is_in_offs => //=.
   Qed.
 
-  (* FALSE ! Since we can backtranslate load events of pointers/undef (from the moment the events are not well_formed), this implication isn't strong. *)
-  (* Remark assign_implies_only_int : subpred expr_assign_public values_are_integers. *)
-  (* This would mean that we should strengthen the hypothesis for the next lemma (compared to the previous one) *)
-
   (* Should we use well_formed_event instead ? (We would need the program interface) *)
   (* Filters out non transferable values in load events, so it doesn't touches the others *)
   Definition only_transferable_values_in_ELoad (e:event) :=
@@ -770,7 +769,7 @@ Section Definability.
     | _ => true
     end.
 
-  Remark well_formed_event_implies_only_transferable_values_in_ELoad :
+  Remark wf_event_implies_transf :
     subpred (well_formed_event intf) only_transferable_values_in_ELoad.
   Proof. by case => [_ _ _ _|_ _ _|_ _ ? _] //= /andP [_ ?]. Qed.
 
@@ -787,7 +786,7 @@ Section Definability.
     intros Hintf Htransf_sfx.
     have Hassign: all expr_assign_public (prefill_read_aux C suffix [] (indexes_read_init comp))
        by apply (prefill_read_aux_only_assign suffix Hintf).
-    (* would be nice to prove the goal pretty directly from this *)
+    (* would be nice to prove the goal almost directly from this *)
 
     (* In the meantime... *)
     (* translating to non-tail-recursive function *)
@@ -804,8 +803,8 @@ Section Definability.
       induction ev as [ | | CSrc o v CTrg ]; case: (_ \in _) => //. rewrite -/prefill_read_aux_ntr.
       (* Load event *)
       (* Getting rid of the trivial cases *)
-      case: (CTrg == C) => // ;
-      case: (indexes (Z.to_nat o)) => // is_in_offs ;
+      case: (CTrg == C) => // ; case: (indexes (Z.to_nat o)) => // is_in_offs ;
+      (* TODO change this bit, is_in_offs is not binded to a boolean in the last case *)
       case: is_in_offs => //= ;  move: Htransf_sfx ; simpl ; move => /andP => [ [Htransf_v Htransf_sfx ] ].
         all: try apply (IHsfx Htransf_sfx indexes).
 
@@ -828,7 +827,7 @@ Section Definability.
        None is never returned by this match, but can be returned by
        E_seq_of_list_expr on an empty list of expressions. *)
     match intf C with
-    | Some comp => E_seq_of_list_expr (rev' (prefill_read_aux
+    | Some comp => E_seq_of_list_expr (rev (prefill_read_aux
                                                   C
                                                   suffix
                                                   []
