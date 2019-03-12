@@ -835,6 +835,40 @@ Section Definability.
     | None => None
     end.
 
+  Fixpoint e_seq_right_assign_public (e:expr) :=
+    expr_assign_public e
+    || match e with
+      | E_seq e1 e2 =>
+        expr_assign_public e1 && e_seq_right_assign_public e2
+      | _ => false
+      end.
+
+  Lemma prefill_read_only_seq_assign (suffix : trace) (C : Component.id) (comp : Component.interface) (expr_seq : expr) :
+    (intf C = Some comp) ->
+    prefill_read C suffix = Some expr_seq ->
+    e_seq_right_assign_public expr_seq.
+  Proof.
+    rewrite /prefill_read.
+    move => Hcomp ; rewrite Hcomp.
+    have: prefill_read_aux_ntr C suffix (indexes_read_init comp) =
+          rev (prefill_read_aux C suffix [::] (indexes_read_init comp))
+      by apply prefill_read_aux_equiv, Hcomp.
+    move => <- .
+    set prefill := prefill_read_aux_ntr C suffix (indexes_read_init comp).
+    have: all expr_assign_public prefill
+      by rewrite /prefill prefill_read_aux_equiv ; last done ;
+      rewrite all_rev ; apply prefill_read_aux_only_assign, Hcomp.
+    generalize dependent expr_seq.
+    rewrite/E_seq_of_list_expr/E_seq_of_exprs_right.
+    case: prefill (* eqn:pref *)  => //= e prefill.
+    elim: prefill e => //= e.
+    - move => expr_seq /andP[Hass_e _] Hsome ; inversion Hsome as [H] ; subst.
+      rewrite/e_seq_right_assign_public ; destruct expr_seq => //. by rewrite orbF.
+    - move => prefill IH a expr_seq /andP[Hass_a] /andP[Hass_e Hass_prefill] Hsome ;
+               inversion Hsome as [H] ; subst ; clear Hsome => /=.
+      apply /andP ; split ; first done.
+      by apply IH with (e := e) ; first by apply /andP.
+  Qed.
 
   Lemma prefill_read_only_values_integers (suffix : trace) (C : Component.id) (comp : Component.interface) (e:expr):
     (intf C = Some comp) ->
@@ -847,6 +881,36 @@ Section Definability.
       by apply prefill_read_aux_only_values_integers with (C:=C) (comp:= comp)
       in Hpref => // ; rewrite all_rev.
     by apply E_seq_of_list_expr_integers.
+  Qed.
+
+  Lemma prefill_read_no_calls (suffix : trace) (C : Component.id) (comp : Component.interface) (e:expr) :
+    (intf C = Some comp) ->
+    prefill_read C suffix = Some e ->
+    called_procedures e = fset0.
+  Proof.
+    move => Hcomp Hpref.
+    have: e_seq_right_assign_public e by apply (prefill_read_only_seq_assign Hcomp Hpref).
+    elim: e {Hpref} => // e IH_e e_seq IH_e_seq ; first last.
+    - (* Attempt to avoid the case analysis *)
+      (* move: IH_e IH_e_seq ; rewrite /e_seq_right_assign_public orbF. *)
+      (* move => H ;  apply expr_assign_public_implies_e_seq_right_assign_public in H. *)
+      (* simpl in H. *)
+
+      (* Silly case analysis; to refactor or replace *)
+      rewrite /e_seq_right_assign_public orbF. (* simpl. move => <-. *) case: e {IH_e IH_e_seq} => // bin_add e_loc e_index.
+      case: bin_add => //. case: e_loc => // bk_pub.
+      case: bk_pub => //. case:e_index => // val_int.
+      case: val_int => // i.
+      case: e_seq => // val. case: val => // [z|t|] /= ; by rewrite !fset0U.
+    - (* Real part of the induction *)
+      move => /andP[Hass_e Hass_seq_right]. rewrite -/e_seq_right_assign_public in Hass_seq_right. apply IH_e_seq in Hass_seq_right. rewrite /= Hass_seq_right fsetU0.
+      (* Back to silly case analysis *)
+      case: e IH_e Hass_e => // e_ass e_val.
+      case: e_ass => // bin_add e_loc e_index.
+      case: bin_add => //. case: e_loc => // bk_pub.
+      case: bk_pub => //. case:e_index => // val_int.
+      case: val_int => // i.
+      case: e_val => // val.
   Qed.
 
   (** We use [switch] to define the following function [expr_of_trace], which
