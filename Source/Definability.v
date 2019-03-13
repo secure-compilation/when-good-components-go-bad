@@ -893,7 +893,6 @@ Section Definability.
     elim: e {Hpref} => // e IH_e e_seq IH_e_seq ; first last.
     - (* Attempt to avoid the case analysis *)
       (* move: IH_e IH_e_seq ; rewrite /e_seq_right_assign_public orbF. *)
-      (* move => H ;  apply expr_assign_public_implies_e_seq_right_assign_public in H. *)
       (* simpl in H. *)
 
       (* Silly case analysis; to refactor or replace *)
@@ -1167,11 +1166,13 @@ Section Definability.
       case: (_==_) ; by eauto.
     - by rewrite domm_map.
     - split; first last.
+      (* Required local buffers *)
       move=> C; rewrite -mem_domm => /dommP [CI C_CI].
       rewrite /has_required_local_buffers /= mapmE C_CI /=.
       eexists; eauto=> /=; omega.
-    (* valid_buffers *)
-      admit.
+      (* valid_buffers *)
+      rewrite/valid_buffers/program_of_trace -eq_fmap /= => Cid ; rewrite !mapmE.
+        by case: (intf Cid) => //.
     - rewrite /prog_main find_procedures_of_trace //=.
       + split; first reflexivity.
         intros _.
@@ -1179,7 +1180,7 @@ Section Definability.
         * apply /dommP. exists mainP. assumption.
         * discriminate.
       + by left.
-  Admitted.
+  Qed.
 
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).
