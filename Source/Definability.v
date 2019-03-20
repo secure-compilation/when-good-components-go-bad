@@ -95,21 +95,16 @@ Section Definability.
    *)
 
   Definition counter_idx : Block.offset := 0%Z.
+  Definition counter_loc : expr := E_local Block.priv.
   Definition increment exp_val := E_binop Add exp_val (E_val (Int 1%Z)).
 
-  Definition FAIL : expr := E_val Undef.
-  (* Maybe define NOP in language in order to avoir such a workaround (or use
-     another expression).
-     Should be fine since this would just set R_COM to 0, and R_COM would be
-     redefined before used *)
-  Definition NOP : expr := E_val (Int 0).
-
-  Hint Unfold increment counter_idx NOP.
+  Hint Unfold increment counter_idx counter_loc.
+  Hint Transparent increment counter_idx counter_loc.
 
   Definition switch_clause n e_then e_else :=
     E_if (E_binop Eq (E_deref (E_local Block.priv)) (E_val (Int n)))
          (E_seq (E_assign (E_local Block.priv)
-                          (increment (E_deref (E_local Block.priv)))) e_then)
+                          (increment (E_deref counter_loc))) e_then)
          e_else.
 
   Ltac take_step :=
@@ -458,12 +453,14 @@ Section Definability.
   (* I find that checking fmap membership, even for map with given static data,
      is a bit of a pain. It would be nice to add these to the 'done' tactical or
      some other automation mean *)
-  Example setm_thingy :
+  Example setm_fmap_membership :
     let fmap_thing := [fmap (0, false); (1, false); (2, false)] in
     let fset_thing := [fset 0; 1; 2] in
      1 \in domm fmap_thing /\ false \in codomm fmap_thing /\ 1 \in fset_thing.
   Proof.
     simpl. split.
+    (* Not automated yet *)
+    all: simpl; try done.
     (* \in domm of something is usually solved automatically once mem_domm has
          been used *)
     rewrite mem_domm ; done. Undo.
@@ -677,7 +674,8 @@ Section Definability.
 
   Lemma prefill_read_aux_invar : forall suffix C comp acc indexes res ,
       intf C = Some comp ->
-      (* Add a restriction on the indexes wrt comp.public_buffer_size *)
+      (* Add a restriction on the indexes wrt comp.public_buffer_size ? case
+         analysis on indexes_read_init comp should suffice *)
       prefill_read_aux C suffix acc indexes (* (indexes_read_init comp) *) = res ->
       exists res', prefill_read_aux_ntr C suffix indexes = res' /\
               res = rev res' ++ acc.
@@ -819,9 +817,7 @@ Section Definability.
 
 
   (** Gives Some expr that is the (sequence of) assignement(s) or None if it's
-      not the case.
-      As said above, we can use rev' before flattening the list of expressions
-      to keep this tail-recursive *)
+      not the case. *)
   Definition prefill_read (C: Component.id) (suffix: trace) : option expr :=
     (* Only used to accomodate with the fact that the interface is a map.
        None is never returned by this match, but can be returned by
@@ -924,38 +920,34 @@ Section Definability.
       In the case we give turn to the component we're recreating (if it is
       called/ returned to), goes forward in the trace to make sure the
       subsequent ELoad would be successful. *)
-  Definition expr_of_event (C: Component.id) (P: Procedure.id) (suffix: trace) : expr :=
+  Definition expr_of_event (C: Component.id) (P: Procedure.id) (suffix: trace) : option expr :=
     match suffix with
-    (* Never happens except for an empty trace *)
-    | nil => NOP
+    | nil => None
     | ECall _ P' arg C' :: suffix' =>
       let call_trigger := E_seq (E_call C' P' (E_val (Int arg)))
                                 (E_call C  P  (E_val (Int 0))) in
       match (prefill_read C suffix') with
-      | None => call_trigger
-      | Some prefill => E_seq prefill call_trigger
+      | None => Some call_trigger
+      | Some prefill => Some (E_seq prefill call_trigger)
       end
     | ERet _ ret_val _ :: suffix' =>
       let return_trigger := E_val (Int ret_val) in
       match prefill_read C suffix' with
-      | None => return_trigger
-      | Some prefill => E_seq prefill return_trigger
+      | None => Some return_trigger
+      | Some prefill => Some (E_seq prefill return_trigger)
       end
     | ELoad C' off _ C'' :: suffix' =>
       (* In case of load performed by the current component *)
-      if C == C' then E_seq (E_deref (E_binop Add (E_component_buf C'') (E_val (Int off))))
-                            (E_assign (E_local Block.priv)
-                                      (increment (E_deref (E_local Block.priv))))
+      if C == C' then
+        Some (E_deref (E_binop Add (E_component_buf C'') (E_val (Int off))))
       else
         (* In the case the memory from the current component is loaded, we don't
            do anything here (this kind of event is used in prefill_read) *)
-        (* problem(?) : should produce nothing, we use a kind of NOP (otherwise
-           switch should handle option as a parameter, too many useless changes) *)
-        NOP
+        None
     end.
 
   Definition expr_of_trace (C: Component.id) (P: Procedure.id) (t: trace) : expr :=
-    switch (map (expr_of_event C P) (suffixes_of_seq t)) E_exit.
+    switch (pmap (expr_of_event C P) (suffixes_of_seq t)) E_exit.
 
   (** To compile a complete trace mixing events from different components, we
       split it into individual traces for each component and apply
@@ -969,11 +961,24 @@ Section Definability.
       | _ => false
       end.
   Hint Transparent filter_comp_subtrace.
+
   Definition comp_subtrace (C: Component.id) (t: trace) :=
     filter (filter_comp_subtrace C) t.
 
   Remark subseq_comp_subtrace C t : subseq (comp_subtrace C t) t.
   Proof. by apply filter_subseq. Qed.
+
+  Lemma length_comp_subtrace C P t : length (pmap (expr_of_event C P) (suffixes_of_seq (comp_subtrace C t))) =
+                                   length (filter (fun ev => ( C == cur_comp_of_event ev)) t).
+  Proof.
+    rewrite /comp_subtrace/filter_comp_subtrace. rewrite -!size_length size_pmap.
+    elim: t => //= ev t IHt.
+    case: ev => /= [????|??? |??? Cown] ; destruct (C == _) eqn:Ceq => //= ;
+        try (rewrite suffixes_of_seq_cons /= IHt -ssrnat.add1n ; apply/eqP ; rewrite ssrnat.eqn_add2r ;
+             case: (prefill_read _ _) => // ; by rewrite Ceq).
+    destruct (C == Cown) eqn:Ceq' ; last by rewrite IHt.
+    by rewrite suffixes_of_seq_cons /= IHt Ceq.
+  Qed.
 
   (* To relocate *)
   Lemma all_subseq {T:eqType} (s ss : seq T) (a : pred T) :
@@ -1110,6 +1115,8 @@ Section Definability.
       rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
       + (* values_are_integers *)
         rewrite /procedure_of_trace /expr_of_trace /switch.
+        (* Btw, would it be simpler to do induction by appending an event at the
+           end (with last_ind)? *)
         elim: {t Ht} (comp_subtrace C t) (length _) Hwf_sbt => [| e t IH] //= n /andP [_ Ht].
         have Hpref: forall expr, prefill_read C t = Some expr ->
                             values_are_integers expr
@@ -1121,7 +1128,6 @@ Section Definability.
           case: (prefill_read C t) Hpref => /= [ex|] Hpref ;
             try (apply/andP ; split ; first by (rewrite andbT ; apply Hpref)) ;
             try done.
-        all : apply /andP ; split ; last done.
         all : by case:(C==_).
       + (* Valid calls *)
         pose call_of_event e := if e is ECall _ P _ C then Some (C, P) else None.
@@ -1130,20 +1136,19 @@ Section Definability.
                   ((C, P) |: fset (pmap call_of_event (comp_subtrace C t))).
         { rewrite /procedure_of_trace /expr_of_trace /switch suffixes_of_seq_equiv.
           elim: {t Ht} (comp_subtrace C t) (length _) Hwf_sbt => [|e t IH] /= n Ht ;
-              first exact: fsub0set ; rewrite !fset0U.
+              first exact: fsub0set.
           move:Ht => /andP[_ Ht].
           have Hpref: forall expr, prefill_read C t = Some expr ->
                               called_procedures expr = fset0
               by move => ? ; apply (prefill_read_no_calls intf_C).
           specialize (IH n Ht).
           case: e => [C' P' arg C''| C' ret C'' | C' i v C''] ;
-                      last by (case: (C== _) => /= ; by rewrite !fset0U).
+                      last by (case: (C== _) => /= ; first rewrite !fset0U).
           all: case: (prefill_read C t) Hpref => [ex|] Hpref //= ;
                                                   first (rewrite (Hpref ex); last done);
-                                                  try by rewrite !fset0U.
-          rewrite fset0U.
-          all :rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
-          all:by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
+                                                  rewrite !fset0U => //.
+          all: rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
+          all: by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
         }
         (* Back to Valid calls *)
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
@@ -1210,21 +1215,15 @@ Section Definability.
       by rewrite mem_domm; case=> ->.
     Qed.
 
-    (* So, either we change the definition to get what we had before (we filter
-       the ELoad events not triggered by the component out of the comp_subtrace)
-       or we take into account the ELoad events, *)
-    (* In the end, we just end up ruling out all ELoad events. But since this
-       affects the spec 'switch_spec_else', we won't change anything *)
+    (** equals to the number of events triggered by the component at this point
+     *)
     Local Definition counter_value C prefix :=
-      Z.of_nat (length (comp_subtrace C prefix)).
+      Z.of_nat (length (filter (fun ev => C == cur_comp_of_event ev) prefix)).
 
     Lemma counter_value_app C prefix1 prefix2 :
       counter_value C (prefix1 ++ prefix2)
       = (counter_value C prefix1 + counter_value C prefix2) % Z.
-    Proof.
-      unfold counter_value.
-      now rewrite comp_subtrace_app  app_length Nat2Z.inj_add.
-    Qed.
+    Proof. by rewrite /counter_value filter_cat app_length Nat2Z.inj_add. Qed.
 
     Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
       forall C,
@@ -1234,11 +1233,10 @@ Section Definability.
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
       = (counter_value C prefix
-         + if (filter_comp_subtrace C) e
+         + if C == cur_comp_of_event e
            then 1 else 0) % Z.
     Proof.
       Print counter_value. rewrite /counter_value.
-      unfold counter_value, comp_subtrace, filter_comp_subtrace.
       rewrite filter_cat app_length. simpl.
       rewrite Nat2Z.inj_add.
       now destruct (_ == _) ; destruct e as [| |? ? ? C' ]=> //= ; case: (_ == _) => //.
@@ -1249,7 +1247,8 @@ Section Definability.
       well_formed_memory prefix mem ->
       C = cur_comp_of_event e ->
       exists mem',
-        Memory.store mem (C, Block.private, counter_idx) (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
+        Memory.store mem (C, Block.private, counter_idx)
+                     (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
         well_formed_memory (prefix ++ [e]) mem'.
     Proof.
       move=> C_b wf_mem HC.
@@ -1257,18 +1256,21 @@ Section Definability.
       have [mem' Hmem'] := Memory.store_after_load
                              _ _ _ (Int (counter_value C (prefix ++ [e])))
                              C_local.
-    (* RB: STATIC_READ: To fix. *)
-    (*   exists mem'. split; trivial=> C' C'_b. *)
-    (*   have C'_local := wf_mem _ C'_b. *)
-    (*   rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *. *)
-    (*   case: (altP (C' =P C)) => [?|C_neq_C']. *)
-    (*   - subst C'. *)
-    (*     by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem'). *)
-    (*   - have neq : (C, Block.local, counter_idx) <> (C', Block.local, counter_idx) by move/eqP in C_neq_C'; congruence. *)
-    (*     rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem'). *)
-    (*     now rewrite Z.add_0_r. *)
-    (* Qed. *)
-    Admitted.
+
+      exists mem'. split; trivial => C' C'_b.
+      have C'_local := wf_mem _ C'_b.
+      move:Hmem' ;
+        rewrite !counter_value_snoc -!HC => Hmem'.
+      rewrite -> Nat.eqb_refl in Hmem'.
+      case: (altP (C' =P C)) => [?|C_neq_C'].
+      - subst C'.
+        by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem').
+      - have neq : (C, Block.private, counter_idx) <> (C', Block.private, counter_idx)
+          by move/eqP in C_neq_C'; congruence.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
+        case: e HC => [????|???|??? Cown] HC; last case:(C'==Cown) => // ;
+        rewrite Z.add_0_r ; assumption.
+    Qed.
 
     CoInductive well_formed_state (s: stack_state) (prefix suffix: trace) : CS.state -> Prop :=
     | WellFormedState C stk mem k exp arg P
@@ -1298,16 +1300,16 @@ Section Definability.
         have C_local := wf_mem _ C_b.
         rewrite /procedure_of_trace /expr_of_trace.
         apply: switch_spec_else; eauto.
-      (* RB: STATIC_READ: To fix. *)
-      (*   rewrite -> size_map; reflexivity. *)
-      (* - move=> cs Et /=. *)
-      (*   case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp. *)
-      (*   have C_b := valid_procedure_has_block P_exp. *)
-      (*   have C_local := wf_mem _ C_b. *)
-      (*   destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']]. *)
+        by rewrite length_comp_subtrace.
+      - move=> cs Et /=.
+        case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
+        have C_b := valid_procedure_has_block P_exp.
+        have C_local := wf_mem _ C_b.
+        destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
       (*   assert (Star1 : Star (CS.sem p) *)
       (*                        [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0 *)
-      (*                        [CState C, stk, mem', Kstop, expr_of_event C P e, arg]). *)
+      (*                        [CState C, stk, mem', Kstop, expr_of_event C P (e::suffix), arg]). *)
+
       (*   { unfold expr_of_trace. rewrite Et comp_subtrace_app. simpl. *)
       (*     rewrite <- wf_C, Nat.eqb_refl, map_app. simpl. *)
       (*     assert (H := @switch_spec p C  stk mem *)

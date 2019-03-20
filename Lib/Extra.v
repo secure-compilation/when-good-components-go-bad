@@ -105,6 +105,10 @@ move=> v [|o'] blk'; case e: list_upd=> [blk''|] //= [<-] // ne.
 by apply: (IH _ _ _ _ e); congruence.
 Qed.
 
+Lemma size_length:
+  forall l:seq T, size l = length l.
+Proof. reflexivity. Qed.
+
 End Lists.
 
 Lemma In_in (T : eqType) (x : T) (s : seq T) : x \in s <-> List.In x s.

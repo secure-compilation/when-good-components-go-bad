@@ -75,6 +75,15 @@ Proof.
   destruct H as [ ? [? H]] ; subst. by rewrite H cats0 revK.
 Qed.
 
+(* Maybe not even worth it *)
+Remark suffixes_of_seq_cons s x : suffixes_of_seq (x::s) = (x::s) :: suffixes_of_seq s.
+Proof. by rewrite !suffixes_of_seq_equiv. Qed.
+
+Remark suffixes_of_seq_rcons x s : suffixes_of_seq (rcons s x) =
+                                  rcons (map (rcons ^~ x) (suffixes_of_seq s)) [x].
+(* or (map (rcons x) (suffixes_of_seq s)) ++ [x] *)
+Proof. elim: s => //= x' s IH ; by rewrite !suffixes_of_seq_cons IH /=. Qed.
+
 
 Definition suffix_flip a b := suffix b a.
 
