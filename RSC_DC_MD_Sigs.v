@@ -176,6 +176,27 @@ Module Type Intermediate_Sig.
       linkable (prog_interface p) (prog_interface c) ->
       closed_program (program_link p c) ->
       mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis recombination_prefix :
+    forall p c p' c',
+      well_formed_program p ->
+      well_formed_program c ->
+      well_formed_program p' ->
+      well_formed_program c' ->
+    forall ip ic,
+      mergeable_interfaces ip ic ->
+      prog_interface p = ip ->
+      prog_interface c = ic ->
+      prog_interface p' = ip ->
+      prog_interface c' = ic ->
+      linkable_mains p c ->
+      linkable_mains p' c' ->
+      closed_program (program_link p c) ->
+      closed_program (program_link p' c') ->
+    forall m,
+      does_prefix (CS.sem (program_link p c)) m ->
+      does_prefix (CS.sem (program_link p' c')) m ->
+      does_prefix (CS.sem (program_link p c')) m.
 End Intermediate_Sig.
 
 Module Type S2I_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).

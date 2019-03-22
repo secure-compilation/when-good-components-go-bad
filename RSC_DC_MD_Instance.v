@@ -8,6 +8,7 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.PS.
 Require Import Intermediate.Decomposition.
 Require Import Intermediate.Composition.
+Require Import Intermediate.Recombination.
 Require Import S2I.Compiler.
 Require Import S2I.Definitions.
 Require Import Definability.
@@ -135,6 +136,9 @@ Module Intermediate_Instance <: Intermediate_Sig.
 
   Definition compose_mergeable_interfaces :=
     @Intermediate.compose_mergeable_interfaces.
+
+  Definition recombination_prefix :=
+    @Intermediate.Recombination.recombination_prefix.
 End Intermediate_Instance.
 
 Module S2I_Instance <: S2I_Sig (Source_Instance) (Intermediate_Instance).
