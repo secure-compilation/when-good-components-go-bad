@@ -150,26 +150,26 @@ Module Type Intermediate_Sig.
   (*     program_behaves (PS.sem p (prog_interface c)) beh2 /\ *)
   (*     behavior_improves beh1 beh2. *)
 
-  Hypothesis decomposition_prefix :
-    forall p c m,
-      well_formed_program p ->
-      well_formed_program c ->
-      linkable (prog_interface p) (prog_interface c) ->
-      linkable_mains p c ->
-      not_wrong_finpref m -> (* needed here, and will have it in main proof *)
-      does_prefix (CS.sem (program_link p c)) m ->
-      does_prefix (PS.sem p (prog_interface c)) m.
+  (* Hypothesis decomposition_prefix : *)
+  (*   forall p c m, *)
+  (*     well_formed_program p -> *)
+  (*     well_formed_program c -> *)
+  (*     linkable (prog_interface p) (prog_interface c) -> *)
+  (*     linkable_mains p c -> *)
+  (*     not_wrong_finpref m -> (* needed here, and will have it in main proof *) *)
+  (*     does_prefix (CS.sem (program_link p c)) m -> *)
+  (*     does_prefix (PS.sem p (prog_interface c)) m. *)
 
-  Hypothesis composition_prefix :
-    forall p c m,
-      well_formed_program p ->
-      well_formed_program c ->
-      linkable_mains p c ->
-      closed_program (program_link p c) ->
-      mergeable_interfaces (prog_interface p) (prog_interface c) ->
-      does_prefix (PS.sem p (prog_interface c)) m ->
-      does_prefix (PS.sem c (prog_interface p)) m ->
-      does_prefix (CS.sem (program_link p c)) m.
+  (* Hypothesis composition_prefix : *)
+  (*   forall p c m, *)
+  (*     well_formed_program p -> *)
+  (*     well_formed_program c -> *)
+  (*     linkable_mains p c -> *)
+  (*     closed_program (program_link p c) -> *)
+  (*     mergeable_interfaces (prog_interface p) (prog_interface c) -> *)
+  (*     does_prefix (PS.sem p (prog_interface c)) m -> *)
+  (*     does_prefix (PS.sem c (prog_interface p)) m -> *)
+  (*     does_prefix (CS.sem (program_link p c)) m. *)
 
   Hypothesis compose_mergeable_interfaces :
     forall p c,
