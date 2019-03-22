@@ -80,9 +80,9 @@ Section RSC_DC_MD_Section.
      by now exists t. 
 
     (* intermediate decomposition (for p_compiled) *)
-    pose proof Intermediate.decomposition_prefix 
-      well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains
-      Hsafe_pref H_doesm  as HP_decomp.
+    (* pose proof Intermediate.decomposition_prefix  *)
+    (*   well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains *)
+    (*   Hsafe_pref H_doesm  as HP_decomp. *)
 
     (* definability *)
     destruct (Linker.definability_with_linking
@@ -145,9 +145,9 @@ Section RSC_DC_MD_Section.
     (* intermediate decomposition (for Cs_compiled) *)
     rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm;
        [| assumption |assumption | apply linkable_sym in linkability'; assumption].
-    pose proof (Intermediate.decomposition_prefix
-           well_formed_Cs_compiled well_formed_P'_compiled
-           linkability' mains' Hsafe_pref HP'_Cs_compiled_doesm) as HCs_decomp.
+    (* pose proof (Intermediate.decomposition_prefix *)
+    (*        well_formed_Cs_compiled well_formed_P'_compiled *)
+    (*        linkability' mains' Hsafe_pref HP'_Cs_compiled_doesm) as HCs_decomp. *)
 
     apply Intermediate.linkable_mains_sym in mains'.
 
@@ -158,13 +158,13 @@ Section RSC_DC_MD_Section.
       - rewrite <- Hsame_iface2. reflexivity.
       - assumption.
     }
-    rewrite Hctx_same_iface in HP_decomp.
+    (* rewrite Hctx_same_iface in HP_decomp. *)
     assert (Intermediate.prog_interface p_compiled = Intermediate.prog_interface P'_compiled) as Hprog_same_iface. {
       symmetry. erewrite Compiler.compilation_preserves_interface.
       - apply Hsame_iface1.
       - assumption.
     }
-    rewrite <- Hprog_same_iface in HCs_decomp.
+    (* rewrite <- Hprog_same_iface in HCs_decomp. *)
 
     assert (linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface Cs_compiled))
       as linkability''.
@@ -200,12 +200,12 @@ Section RSC_DC_MD_Section.
       as Hmergeable_ifaces.
       by apply Intermediate.compose_mergeable_interfaces.
 
-    pose proof Intermediate.composition_prefix
-         well_formed_p_compiled well_formed_Cs_compiled
-         linkable_mains HpCs_compiled_closed
-         Hmergeable_ifaces
-         HP_decomp HCs_decomp
-      as HpCs_compiled_beh.
+    (* pose proof Intermediate.composition_prefix *)
+    (*      well_formed_p_compiled well_formed_Cs_compiled *)
+    (*      linkable_mains HpCs_compiled_closed *)
+    (*      Hmergeable_ifaces *)
+    (*      HP_decomp HCs_decomp *)
+    (*   as HpCs_compiled_beh. *)
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
       apply (Source.interface_preserves_closedness_l HP'Cs_closed); trivial.
       apply Compiler.compilation_preserves_interface in HP'_compiles.
@@ -224,10 +224,31 @@ Section RSC_DC_MD_Section.
     assert (Source.well_formed_program (Source.program_link p Cs)) as Hwf_p_Cs
       by (apply Source.linking_well_formedness; assumption).
 
+    assert (HP'Cs_compiled_closed :
+              Intermediate.closed_program (Intermediate.program_link P'_compiled Cs_compiled)).
+    {
+      rewrite Intermediate.program_linkC; try easy; try now apply linkable_sym.
+      apply Intermediate.interface_preserves_closedness_r with (p2 := p_compiled); eauto.
+      apply linkable_sym; eauto.
+      rewrite Intermediate.program_linkC; eauto.
+      apply linkable_sym; eauto.
+      apply Intermediate.linkable_mains_sym; eauto.
+      eapply S2I.matching_mains_equiv; eauto.
+      apply Compiler.compilation_has_matching_mains; eauto.
+    }
+
+    rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm; try assumption.
+    pose proof Intermediate.recombination_prefix
+         well_formed_p_compiled well_formed_Ct well_formed_P'_compiled well_formed_Cs_compiled
+         Hmergeable_ifaces (eq_refl _) Hctx_same_iface (eq_sym Hprog_same_iface) (eq_refl _)
+         mains mains' closedness HP'Cs_compiled_closed
+         H_doesm HP'_Cs_compiled_doesm
+         as HpCs_compiled_beh.
+
     (* BCC *)
     assert (exists pCs_compiled,
                Compiler.compile_program (Source.program_link p Cs) = Some pCs_compiled)
-      as [pCs_compiled HpCs_compiles]
+      as [pCs_compiled HpCs_compiles].
       by now apply Compiler.well_formed_compilable.
     assert (exists beh1,
                program_behaves (Source.CS.sem (Source.program_link p Cs)) beh1 /\
