@@ -183,12 +183,9 @@ Module Type Intermediate_Sig.
       well_formed_program c ->
       well_formed_program p' ->
       well_formed_program c' ->
-    forall ip ic,
-      mergeable_interfaces ip ic ->
-      prog_interface p = ip ->
-      prog_interface c = ic ->
-      prog_interface p' = ip ->
-      prog_interface c' = ic ->
+      mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      prog_interface p = prog_interface p' ->
+      prog_interface c = prog_interface c' ->
       linkable_mains p c ->
       linkable_mains p' c' ->
       closed_program (program_link p c) ->

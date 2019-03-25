@@ -58,14 +58,11 @@ Section Recombination.
   Hypothesis Hwfp' : well_formed_program p'.
   Hypothesis Hwfc' : well_formed_program c'.
 
-  Variables ip ic : Program.interface.
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
 
-  Hypothesis Hmergeable_ifaces: mergeable_interfaces ip ic.
-
-  Hypothesis Hifacep  : prog_interface p  = ip.
-  Hypothesis Hifacec  : prog_interface c  = ic.
-  Hypothesis Hifacep' : prog_interface p' = ip.
-  Hypothesis Hifacec' : prog_interface c' = ic.
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
 
   (* RB: TODO: Simplify redundancies in standard hypotheses. *)
   Hypothesis Hmain_linkability  : linkable_mains p  c.
@@ -82,7 +79,7 @@ Section Recombination.
   Theorem initial_states_mergeability s s'' :
     initial_state (CS.sem (program_link p  c )) s   ->
     initial_state (CS.sem (program_link p' c')) s'' ->
-    mergeable_states ip ic s s''.
+    mergeable_states (prog_interface p) (prog_interface c) s s''.
   Admitted.
 
   Lemma initial_state_merge_after_linking s s'' :
@@ -94,7 +91,7 @@ Section Recombination.
   Admitted.
 
   Theorem threeway_multisem_star_simulation s1 s1'' t s2 s2'' :
-    mergeable_states ip ic s1 s1'' ->
+    mergeable_states (prog_interface p) (prog_interface c) s1 s1'' ->
     Star (CS.sem (program_link p  c )) s1   t s2   ->
     Star (CS.sem (program_link p' c')) s1'' t s2'' ->
   exists s1' s2',

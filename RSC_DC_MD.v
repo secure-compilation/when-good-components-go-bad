@@ -238,9 +238,10 @@ Section RSC_DC_MD_Section.
     }
 
     rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm; try assumption.
+    rewrite <- Hctx_same_iface in Hmergeable_ifaces.
     pose proof Intermediate.recombination_prefix
          well_formed_p_compiled well_formed_Ct well_formed_P'_compiled well_formed_Cs_compiled
-         Hmergeable_ifaces (eq_refl _) Hctx_same_iface (eq_sym Hprog_same_iface) (eq_refl _)
+         Hmergeable_ifaces Hprog_same_iface Hctx_same_iface
          mains mains' closedness HP'Cs_compiled_closed
          H_doesm HP'_Cs_compiled_doesm
          as HpCs_compiled_beh.
