@@ -235,17 +235,23 @@ Proof.
   rewrite m2_eq_union -m0_eq_m2 domm_union.    
   apply (* /fsubsetU /orP. *) /fsubsetP => x Hx. 
   assert (x \in (domm i1) \/ x \notin (domm i1)).
-  { admit. } (* CA: do we have classical reasoning? *)   
+  { apply /orP. by destruct (x \in domm i1). } (* CA: do we have classical reasoning? *)   
   case: H => H.  
-      move: H. apply /fsubsetP /fsubsetU /orP. 
-      left. by apply: fsubsetxx.
+  move: H. apply /fsubsetP /fsubsetU /orP. 
+  left. by apply: fsubsetxx.
       
-  have x_in_i2 : x \in domm i2. { admit. } (*CA: by Hfilter deduce x \in domm m2
-                                                 then by m2_eq_union, x \in domm i1 \/x \in domm i2 
-                                                 together with H we get x \in domm i2
-                                            *)
+  have x_in_i2 : x \in domm i2.
+  { have x_in_m2 : x\in domm m2 by admit.
+    move: x_in_m2.
+    rewrite m2_eq_union domm_union.
+    case /fsetUP => [| //].
+    move: H => /negP //. 
+  } (*CA: by Hfilter deduce x \in domm m2
+               then by m2_eq_union, x \in domm i1 \/x \in domm i2 
+               together with H we get x \in domm i2
+              *)
    move: x_in_i2. apply /fsubsetP /fsubsetU /orP.    
-   right. by apply: fsubsetxx. 
+   right. by apply: fsubsetxx.
 Admitted.     
     
 (* RB: NOTE: This is not a map lemma proper. More generally, absorption on
