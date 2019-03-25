@@ -1,5 +1,6 @@
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
+Require Import CompCert.Behaviors.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Linking.
@@ -891,6 +892,20 @@ Section Semantics.
     - apply singleton_traces.
     - apply determinate_initial_states.
     - apply final_states_stuckness.
+  Qed.
+
+  Lemma program_behaves_inv:
+    forall b,
+      program_behaves sem b ->
+    exists s,
+      initial_state p s /\ state_behaves sem s b.
+  Proof.
+    intros b [s b' Hini Hbeh | Hini]; subst.
+    - now exists s.
+    - simpl in Hini.
+      specialize (Hini (initial_machine_state p)).
+      unfold initial_state in Hini.
+      contradiction.
   Qed.
 
 Import ssreflect eqtype.
