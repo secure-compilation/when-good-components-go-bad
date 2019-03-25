@@ -28,18 +28,6 @@ Import Intermediate.
 Section BehaviorStar.
   Variables p c: program.
 
-  Hypothesis wf1 : well_formed_program p.
-  Hypothesis wf2 : well_formed_program c.
-
-  Hypothesis mergeable_interfaces:
-    mergeable_interfaces (prog_interface p) (prog_interface c).
-
-  (* Hypothesis linkability: linkable (prog_interface p) (prog_interface c). *)
-  Hypothesis main_linkability: linkable_mains p c.
-
-  Hypothesis prog_is_closed:
-    closed_program (program_link p c).
-
   (* RB: Could be phrased in terms of does_prefix. *)
   Theorem behavior_prefix_star b m :
     program_behaves (CS.sem (program_link p c)) b ->
@@ -220,10 +208,7 @@ Section Recombination.
         as [s1_ [s2 [Hini1_ Hstar12]]].
       {
         inversion Hmergeable_ifaces as [Hlinkable _].
-        destruct
-          (behavior_prefix_star
-             Hwfp Hwfc Hmergeable_ifaces Hmain_linkability Hprog_is_closed
-             Hbeh Hprefix)
+        destruct (behavior_prefix_star Hbeh Hprefix)
           as [s1_ [s2 [Hini1_ Hstar12]]].
         now exists s1_, s2.
       }
@@ -234,10 +219,7 @@ Section Recombination.
         as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
       {
         rewrite -> Hifacep, -> Hifacec in Hmergeable_ifaces.
-        destruct
-          (behavior_prefix_star
-             Hwfp' Hwfc' Hmergeable_ifaces Hmain_linkability' Hprog_is_closed'
-             Hbeh'' Hprefix'')
+        destruct (behavior_prefix_star Hbeh'' Hprefix'')
           as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
         now exists s1''_, s2''.
       }
