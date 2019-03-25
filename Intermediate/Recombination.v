@@ -101,9 +101,78 @@ Section Recombination.
     (* /\ mergeable_states ip ic s2 s2'' *)
   Admitted.
 
+  (* RB: NOTE: Possible improvements:
+      - Get rid of asserts in FTbc case. (RB: TODO: Assigned to JT.)
+      - Try to refactor case analysis in proof. *)
   Theorem recombination_prefix m :
     does_prefix (CS.sem (program_link p  c )) m ->
     does_prefix (CS.sem (program_link p' c')) m ->
     does_prefix (CS.sem (program_link p  c')) m.
-  Admitted.
+  Proof.
+    unfold does_prefix.
+    intros [b [Hbeh Hprefix]] [b'' [Hbeh'' Hprefix'']].
+    assert (Hst_beh := Hbeh). assert (Hst_beh'' := Hbeh'').
+    apply CS.program_behaves_inv in Hst_beh   as [s1   [Hini1   Hst_beh  ]].
+    apply CS.program_behaves_inv in Hst_beh'' as [s1'' [Hini1'' Hst_beh'']].
+    destruct m as [tm | tm | tm].
+    - destruct b   as [t   | ? | ? | ?]; try contradiction.
+      destruct b'' as [t'' | ? | ? | ?]; try contradiction.
+      simpl in Hprefix, Hprefix''. subst t t''.
+      inversion Hst_beh   as [? s2   Hstar12   Hfinal2   | | |]; subst.
+      inversion Hst_beh'' as [? s2'' Hstar12'' Hfinal2'' | | |]; subst.
+      exists (Terminates tm). split; last reflexivity.
+      pose proof initial_states_mergeability Hini1 Hini1'' as Hmerge1.
+      destruct (threeway_multisem_star_simulation Hmerge1 Hstar12 Hstar12'')
+        as [s1' [s2' [Hs1' [Hs2' Hstar12']]]].
+      apply program_runs with (s := s1'); first easy.
+      apply state_terminates with (s' := s2'); easy.
+    - destruct b   as [? | ? | ? | t  ]; try contradiction.
+      destruct b'' as [? | ? | ? | t'']; try contradiction.
+      simpl in Hprefix, Hprefix''. subst t t''.
+      inversion Hst_beh   as [| | | ? s2   Hstar12   Hstep2   Hfinal2  ]; subst.
+      inversion Hst_beh'' as [| | | ? s2'' Hstar12'' Hstep2'' Hfinal2'']; subst.
+      exists (Goes_wrong tm). split; last reflexivity.
+      pose proof initial_states_mergeability Hini1 Hini1'' as Hmerge1.
+      destruct (threeway_multisem_star_simulation Hmerge1 Hstar12 Hstar12'')
+        as [s1' [s2' [Hs1' [Hs2' Hstar12']]]].
+      apply program_runs with (s := s1'); first easy.
+      apply state_goes_wrong with (s' := s2'); easy.
+    - (* Here we talk about the stars associated to the behaviors, without
+         worrying now about connecting them to the existing initial states.
+         RB: TODO: Remove asserts, phrase in terms of the instances of
+         behavior_prefix_star directly. *)
+      assert
+        (exists s s',
+            initial_state (CS.sem (program_link p c)) s /\
+            Star (CS.sem (program_link p c)) s tm s')
+        as [s1_ [s2 [Hini1_ Hstar12]]].
+      {
+        inversion Hmergeable_ifaces as [Hlinkable _].
+        destruct
+          (behavior_prefix_star
+             Hwfp Hwfc Hmergeable_ifaces Hmain_linkability Hprog_is_closed
+             Hbeh Hprefix)
+          as [s1_ [s2 [Hini1_ Hstar12]]].
+        now exists s1_, s2.
+      }
+      assert
+        (exists s s',
+            initial_state (CS.sem (program_link p' c')) s /\
+            Star (CS.sem (program_link p' c')) s tm s')
+        as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
+      {
+        rewrite -> Hifacep, -> Hifacec in Hmergeable_ifaces.
+        destruct
+          (behavior_prefix_star
+             Hwfp' Hwfc' Hmergeable_ifaces Hmain_linkability' Hprog_is_closed'
+             Hbeh'' Hprefix'')
+          as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
+        now exists s1''_, s2''.
+      }
+      pose proof initial_states_mergeability Hini1_ Hini1''_ as Hmerge1.
+      destruct (threeway_multisem_star_simulation Hmerge1 Hstar12 Hstar12'')
+        as [ss1' [ss2' [Hss1' [Hss2' Hstar12']]]].
+      eapply program_behaves_finpref_exists; last now apply Hstar12'.
+      now destruct (initial_state_merge_after_linking Hini1 Hini1'').
+  Qed.
 End Recombination.
