@@ -35,6 +35,9 @@ Section Merge.
   Hypothesis wf_c : well_formed_program c.
   Hypothesis wf_c' : well_formed_program c'.
 
+  Hypothesis same_interfacep : prog_interface p = prog_interface p'.
+  Hypothesis same_interfacec : prog_interface c = prog_interface c'.
+
   Hypothesis main_linkability : linkable_mains p c.
   Hypothesis main_linkability'' : linkable_mains p' c'.
   Hypothesis linkability : linkable (prog_interface p) (prog_interface c).
@@ -56,6 +59,7 @@ Section Merge.
   Inductive mergeable_frames : Pointer.t -> Pointer.t -> Prop :=
   | mergeable_frames_same_component : forall c c'' b b'' o o'',
       c = c'' ->
+      c \in domm (prog_interface prog) -> 
       mergeable_frames (c, b, o) (c'', b'', o'')
   .
 
@@ -80,6 +84,7 @@ Section Merge.
       mergeable_stacks s s'' ->
       mergeable_memories m m'' ->
       Pointer.component pc = Pointer.component pc'' ->
+      Pointer.component pc \in domm (prog_interface prog) ->
       mergeable_states (s, m, r, pc) (s'', m'', r'', pc'')
   .
  
@@ -109,7 +114,7 @@ Section Merge.
   
   Definition merge_memories (m m'' : Memory.t) :=
     unionm (PS.to_partial_memory m (domm (prog_interface p)))
-           (PS.to_partial_memory m'' (domm (prog_interface c))).
+           (PS.to_partial_memory m'' (domm (prog_interface c'))).
 
   Definition merge_registers (r r'' : Register.t) (pc : Pointer.t) : option Register.t :=
     let id := Pointer.component pc in
@@ -144,8 +149,50 @@ Section Merge.
   Lemma mergeable_states_are_mergeable : forall state state'',
       mergeable_states state state'' -> exists state', merge_states state state'' = Some state'.
   Proof.
-  Admitted.
-
+    intros state state'' H.
+    inversion H as [? ? ? ? ? ? ? ? Hstacks Hmems Hpceq Hpcin]; subst.
+    assert (Hreg : exists r', merge_registers r r'' pc = Some r').
+    { unfold merge_registers.
+      unfold prog in Hpcin.
+      simpl in Hpcin.
+      rewrite domm_union in Hpcin.
+      move: Hpcin => /fsetUP Hpcin.
+      destruct Hpcin as [Hpcin | Hpcin]; try rewrite Hpcin. now eexists.
+      rewrite same_interfacec in Hpcin; rewrite Hpcin.
+      destruct (Pointer.component pc \in domm (prog_interface p)); eauto.
+    }
+    assert (Hpc : exists pc', merge_pcs pc pc'' = Some pc').
+    { unfold merge_pcs.
+      unfold prog in Hpcin. simpl in Hpcin.
+      rewrite domm_union in Hpcin.
+      move: Hpcin => /fsetUP Hpcin.
+      destruct Hpcin as [Hpcin | Hpcin]; [rewrite Hpcin; now eexists|].
+      rewrite same_interfacec in Hpcin; rewrite Hpcin.
+      destruct (Pointer.component pc \in domm (prog_interface p)); eauto.
+    }
+    destruct Hreg as [r' Hr']; destruct Hpc as [pc' Hpc'].
+    assert (Hstacks': exists s', merge_stacks s s'' = Some s').
+    { induction Hstacks.
+      - now eexists.
+      - assert (Hmergeable: mergeable_states (s, m, r, pc) (s'', m'', r'', pc''))
+          by now constructor.
+        destruct (IHHstacks Hmergeable) as [s' Hs'].
+        simpl; rewrite Hs'.
+        assert (Hframes : exists f', merge_frames f f'' = Some f').
+        { unfold merge_frames. inversion H0; subst. simpl.
+          assert (H1: c'' =? c'') by (clear; induction c''; eauto); rewrite H1.
+          unfold prog in H2. simpl in H2.
+          rewrite domm_union in H2.
+          move: H2 => /fsetUP H2.
+          destruct H2 as [H2 | H2]; [rewrite H2; now eexists|].
+          destruct (c'' \in domm (prog_interface p)) eqn:eq; rewrite eq; eauto.
+          rewrite same_interfacec in H2; rewrite H2; eauto.
+        }
+        destruct Hframes as [f' Hf']; rewrite Hf'; now eauto.
+    }
+    destruct Hstacks' as [s' Hs']; simpl; rewrite Hs' Hpc' Hr'; eauto.
+  Qed.
+  
 End Merge.
 
 
