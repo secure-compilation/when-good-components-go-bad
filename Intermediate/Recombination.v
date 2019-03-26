@@ -79,45 +79,72 @@ Section Merge.
                         (r r'' : Register.t) (pc pc'' : Pointer.t),
       mergeable_stacks s s'' ->
       mergeable_memories m m'' ->
+      Pointer.component pc = Pointer.component pc'' ->
       mergeable_states (s, m, r, pc) (s'', m'', r'', pc'')
   .
+ 
 
 
   (* Definition of the function to merge two states *)
-  Definition merge_stacks (s s'' : CS.stack) (pc : Pointer.t) :=
-    let '(component_id_pc, _, _) := pc in
-    if component_id_pc \in domm (prog_interface p) then Some s else
-      if component_id_pc \in domm (prog_interface c') then Some s'' else
-        None.
-
+  Definition merge_frames (f f'' : Pointer.t) :=
+    if Nat.eqb (Pointer.component f) (Pointer.component f'') then
+      if Pointer.component f \in domm (prog_interface p) then
+        Some f
+      else
+        if Pointer.component f \in domm (prog_interface c') then Some f''
+        else
+          None
+    else None.
+  
+  Fixpoint merge_stacks (s s'' : CS.stack) : option CS.stack :=
+    match s, s'' with
+    | [], [] => Some []
+    | f :: s, f'' :: s'' =>
+      match merge_stacks s s'', merge_frames f f'' with
+      | Some s', Some f' => Some (f' :: s')
+      | _, _ => None
+      end
+    | _, _ => None
+    end.
+  
   Definition merge_memories (m m'' : Memory.t) :=
-    let mfilter := filterm (fun id v => id \in domm (prog_interface p)) m in
-    let mfilter'' := filterm (fun id v => id \in domm (prog_interface p)) m'' in
-    unionm mfilter mfilter''.
+    unionm (PS.to_partial_memory m (domm (prog_interface p)))
+           (PS.to_partial_memory m'' (domm (prog_interface c))).
 
-  Definition merge_registers (r r'' : Register.t) (pc : Pointer.t) :=
-    let '(component_id_pc, _, _) := pc in
-    if component_id_pc \in domm (prog_interface p) then Some r else
-      if component_id_pc \in domm (prog_interface c') then Some r'' else
+  Definition merge_registers (r r'' : Register.t) (pc : Pointer.t) : option Register.t :=
+    let id := Pointer.component pc in
+    if id \in domm (prog_interface p) then Some r else
+      if id \in domm (prog_interface c') then Some r'' else
         None.
 
-  Definition merge_pcs (pc pc'' : Pointer.t) := pc.
+  Definition merge_pcs (pc pc'' : Pointer.t) : option Pointer.t :=
+    let id := Pointer.component pc in
+    if id \in domm (prog_interface p) then Some pc else
+      if id \in domm (prog_interface c') then Some pc'' else
+        None.
 
   Definition merge_states (state state'' : CS.state) : option CS.state :=
     let '(s, m, r, pc) := state in
     let '(s'', m'', r'', pc'') := state'' in
 
-    match merge_stacks s s'' pc with
+    match merge_stacks s s'' with
     | None => None
     | Some s' =>
       let m' := merge_memories m m'' in
       match merge_registers r r'' pc with
       | None => None
       | Some r' =>
-        let pc' := merge_pcs pc pc'' in
-        Some (s', m', r', pc')
+        match merge_pcs pc pc'' with
+        | None => None
+        | Some pc' => Some (s', m', r', pc')
+        end
       end
     end.
+
+  Lemma mergeable_states_are_mergeable : forall state state'',
+      mergeable_states state state'' -> exists state', merge_states state state'' = Some state'.
+  Proof.
+  Admitted.
 
 End Merge.
 
