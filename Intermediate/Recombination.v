@@ -25,6 +25,103 @@ Set Bullet Behavior "Strict Subproofs".
 
 Import Intermediate.
 
+Section Merge.
+
+  (* Hypotheses *)
+  Variable p c p' c' : program.
+
+  Hypothesis wf_p : well_formed_program p.
+  Hypothesis wf_p' : well_formed_program p'.
+  Hypothesis wf_c : well_formed_program c.
+  Hypothesis wf_c' : well_formed_program c'.
+
+  Hypothesis main_linkability : linkable_mains p c.
+  Hypothesis main_linkability'' : linkable_mains p' c'.
+  Hypothesis linkability : linkable (prog_interface p) (prog_interface c).
+  Hypothesis linkability'' : linkable (prog_interface p') (prog_interface c').
+
+  Hypothesis mergeable_ifaces:
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+  Hypothesis mergeable_ifaces'':
+    mergeable_interfaces (prog_interface p') (prog_interface c').
+
+  Let prog := program_link p c.
+  Let prog'' := program_link p' c'.
+
+  Hypothesis prog_is_closed : closed_program prog.
+  Hypothesis prog''_is_closed : closed_program prog''.
+
+
+  (* Defintiion of mergeable states *)
+  Inductive mergeable_frames : Pointer.t -> Pointer.t -> Prop :=
+  | mergeable_frames_same_component : forall c c'' b b'' o o'',
+      c = c'' ->
+      mergeable_frames (c, b, o) (c'', b'', o'')
+  .
+
+  Inductive mergeable_stacks : CS.stack -> CS.stack -> Prop :=
+  | mergeable_stacks_nil  : mergeable_stacks [] []
+  | mergeable_stacks_cons : forall (s s'' : CS.stack) (f f'' : Pointer.t),
+      mergeable_stacks s s'' ->
+      mergeable_frames f f'' ->
+      mergeable_stacks (f :: s) (f'' :: s'')
+  .
+
+  Inductive mergeable_memories : Memory.t -> Memory.t -> Prop :=
+  | mergeable_memory_same_domm : forall (m m'' : Memory.t),
+      domm m = domm (prog_interface prog)  ->
+      domm m'' = domm (prog_interface prog'') ->
+      mergeable_memories m m''
+  .
+
+  Inductive mergeable_states : CS.state -> CS.state -> Prop :=
+  | mergeable : forall (s s'' : CS.stack) (m m'' : Memory.t)
+                        (r r'' : Register.t) (pc pc'' : Pointer.t),
+      mergeable_stacks s s'' ->
+      mergeable_memories m m'' ->
+      mergeable_states (s, m, r, pc) (s'', m'', r'', pc'')
+  .
+
+
+  (* Definition of the function to merge two states *)
+  Definition merge_stacks (s s'' : CS.stack) (pc : Pointer.t) :=
+    let '(component_id_pc, _, _) := pc in
+    if component_id_pc \in domm (prog_interface p) then Some s else
+      if component_id_pc \in domm (prog_interface c') then Some s'' else
+        None.
+
+  Definition merge_memories (m m'' : Memory.t) :=
+    let mfilter := filterm (fun id v => id \in domm (prog_interface p)) m in
+    let mfilter'' := filterm (fun id v => id \in domm (prog_interface p)) m'' in
+    unionm mfilter mfilter''.
+
+  Definition merge_registers (r r'' : Register.t) (pc : Pointer.t) :=
+    let '(component_id_pc, _, _) := pc in
+    if component_id_pc \in domm (prog_interface p) then Some r else
+      if component_id_pc \in domm (prog_interface c') then Some r'' else
+        None.
+
+  Definition merge_pcs (pc pc'' : Pointer.t) := pc.
+
+  Definition merge_states (state state'' : CS.state) : option CS.state :=
+    let '(s, m, r, pc) := state in
+    let '(s'', m'', r'', pc'') := state'' in
+
+    match merge_stacks s s'' pc with
+    | None => None
+    | Some s' =>
+      let m' := merge_memories m m'' in
+      match merge_registers r r'' pc with
+      | None => None
+      | Some r' =>
+        let pc' := merge_pcs pc pc'' in
+        Some (s', m', r', pc')
+      end
+    end.
+
+End Merge.
+
+
 Section BehaviorStar.
   Variables p c: program.
 
