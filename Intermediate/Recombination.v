@@ -222,6 +222,65 @@ Section ThreewayMultisem2.
     Star (CS.sem (program_link p  c )) s1   t s2   ->
     Star (CS.sem (program_link p' c')) s1'' t s2'' ->
     Star (CS.sem (program_link p  c')) (merge_states s1 s1'') t (merge_states s2 s2'').
+  Proof.
+    simpl in *. intros Hpc1 Hmerge1 Hstar12. revert s1'' s2'' Hpc1 Hmerge1.
+    apply star_iff_starR in Hstar12.
+    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar12' Hstep23]; subst;
+      intros s1'' s2'' Hpc1 Hmerge1 Hstar12''.
+    - (* RB: TODO: We need a multi-semantics counterpart of PS context stars. *)
+      (* pose proof PS.context_epsilon_star_is_silent Hcomp1' Hstar12'; subst s2'. *)
+      (* now apply star_refl. *)
+      admit.
+    - rename s2'' into s3''. rename Hstar12'' into Hstar13''.
+      apply (star_app_inv (@CS.singleton_traces _)) in Hstar13''
+        as [s2'' [Hstar12'' Hstar23'']].
+      specialize (IHstar12' _ _ Hpc1 Hmerge1 Hstar12'').
+      (* Apply instantiated IH and case analyze step trace. *)
+      apply star_trans with (t1 := t1) (s2 := merge_states s2 s2'') (t2 := t2);
+        [assumption | | reflexivity].
+      apply star_iff_starR in Hstar12.
+      pose proof threeway_multisem_mergeable Hmerge1 Hstar12 Hstar12''
+        as Hmerge2.
+      destruct t2 as [| e2 [| e2' t2]].
+      + (* An epsilon step and comparable epsilon star. One is in the context and
+           therefore silent, the other executes and leads the MultiSem star. *)
+        eapply star_step in Hstep23; [| now apply star_refl | now apply eq_refl].
+        exact (threeway_multisem_star_E0 Hmerge2 Hstep23 Hstar23'').
+      + (* The step generates a trace event, mimicked on the other side (possibly
+           between sequences of silent steps). *)
+        change [e2] with (E0 ** e2 :: E0) in Hstar23''.
+        apply (star_middle1_inv (@CS.singleton_traces _)) in Hstar23''
+          as [s2''1 [s2''2 [Hstar2'' [Hstep23'' Hstar3'']]]].
+        (* Prefix star. *)
+        pose proof star_refl CS.step (prepare_global_env (program_link p c)) s2
+          as Hstar2.
+        pose proof threeway_multisem_star_E0 Hmerge2 Hstar2 Hstar2''
+          as Hstar2'.
+        (* Propagate mergeability, step. *)
+        pose proof threeway_multisem_mergeable Hmerge2 Hstar2 Hstar2'' as Hmerge21.
+        (* RB: TODO: Here is where we depart from the multi-semantics and need to
+           furnish our own version. *)
+        (* pose proof MultiSem.multi_step (prepare_global_env prog) Hstep23 Hstep23' *)
+        (*   as Hmstep2. *)
+        assert (Step (CS.sem (program_link p c'))
+                     (merge_states s2 s2''1) [e2] (merge_states s3 s2''2))
+          as Hstep23' by admit.
+        (* Propagate mergeability, suffix star. *)
+        (* pose proof MultiSem.mergeable_states_step_trans *)
+        (*      wf1 wf2 main_linkability linkability mergeable_interfaces *)
+        (*      Hmerge21 Hstep23 Hstep23' as Hmerge22. *)
+        assert (mergeable_states (prog_interface c) (prog_interface p) s3 s2''2)
+          as Hmerge22 by admit.
+        pose proof star_refl CS.step (prepare_global_env (program_link p c)) s3
+          as Hstar3.
+        pose proof threeway_multisem_star_E0 Hmerge22 Hstar3 Hstar3'' as Hstar3'.
+        (* Compose. *)
+        exact (star_trans
+                 (star_right _ _ Hstar2' Hstep23' (eq_refl _))
+                 Hstar3' (eq_refl _)).
+      + (* Contradiction: a step generates at most one event. *)
+        pose proof @CS.singleton_traces _ _ _ _ Hstep23 as Hcontra.
+        simpl in Hcontra. omega.
   Admitted.
 End ThreewayMultisem2.
 
