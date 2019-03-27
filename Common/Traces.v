@@ -84,6 +84,11 @@ Remark suffixes_of_seq_rcons x s : suffixes_of_seq (rcons s x) =
 (* or (map (rcons x) (suffixes_of_seq s)) ++ [x] *)
 Proof. elim: s => //= x' s IH ; by rewrite !suffixes_of_seq_cons IH /=. Qed.
 
+Lemma suffixes_of_seq_cat s1 s2 : suffixes_of_seq (s1 ++ s2) =
+                                  map (cat^~ s2) (suffixes_of_seq s1) ++ suffixes_of_seq s2.
+Proof.
+  elim: s1 => // h1 s1 IHs1. by rewrite cat_cons !suffixes_of_seq_cons IHs1.
+Qed.
 
 Definition suffix_flip a b := suffix b a.
 

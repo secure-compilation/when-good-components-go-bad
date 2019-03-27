@@ -430,7 +430,9 @@ Section Definability.
             (* TODO fix this Z.to_nat, too permissive *)
             (* Do Memory.load ? Check if positive ? *)
             match indexes_read (Z.to_nat off) with
-            | None => []           (* Never happens but mandatory *)
+            | None => []           (* Never happens in a well-formed program, if
+              a ELoad event occurs out of bounds, causes undef to the component
+              that tries to load, so no issue for the component owning memory *)
             | Some true => keep_on (* already read so go on *)
             | Some false =>
               (assign_public off val)
@@ -1284,6 +1286,17 @@ Section Definability.
       &  valid_procedure C P
       :  well_formed_state s prefix suffix [CState C, stk, mem, k, exp, arg].
 
+    Lemma pmap_cat : forall {aT rT: Type} (f:aT -> option rT) (s1 s2: seq aT),
+        pmap f (s1 ++ s2) = (pmap f s1) ++ (pmap f s2).
+    Proof. induction s1 => s2 //=. case: (f a) => //=. by rewrite IHs1. Qed.
+
+    (* Used only because simpl simplifies too much, without possibility of
+       folding back *)
+    Remark pmap_cons : forall {aT rT: Type} (f:aT -> option rT) (x: aT) (s: seq aT),
+        pmap f (x::s) = oapp (cons ^~ []) [] (f x)
+                            ++ pmap f s.
+    Proof. intros. by rewrite -cat1s pmap_cat. Qed.
+
     Lemma definability_gen s prefix suffix cs :
       t = prefix ++ suffix ->
       well_formed_state s prefix suffix cs ->
@@ -1306,26 +1319,62 @@ Section Definability.
         have C_b := valid_procedure_has_block P_exp.
         have C_local := wf_mem _ C_b.
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
-      (*   assert (Star1 : Star (CS.sem p) *)
-      (*                        [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0 *)
-      (*                        [CState C, stk, mem', Kstop, expr_of_event C P (e::suffix), arg]). *)
+        assert (Star1 : match expr_of_event C P (e::comp_subtrace C suffix) with
+                        | Some exp =>
+                          Star (CS.sem p)
+                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
+                             [CState C, stk, mem', Kstop, exp, arg]
+                        | None =>
+                          (* Star on the suffix ? Don't exactly know what to do in the None case *)
+                          Star (CS.sem p)
+                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
+                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg]
+                             end
+               ).
+        { destruct (expr_of_event C P (e::comp_subtrace C suffix)) as [exp_produced|] eqn:some_expr_of_event ;
+            last by constructor.
+          unfold expr_of_trace.
+          have: length (pmap (expr_of_event C P) (suffixes_of_seq (comp_subtrace C t))) =
+                                length [seq ev <- t | C == cur_comp_of_event ev]
+            by rewrite length_comp_subtrace. unfold counter_value in C_local.
+          rewrite !Et comp_subtrace_app /=.
+          unfold filter_comp_subtrace.
+          rewrite <- wf_C, Nat.eqb_refl, suffixes_of_seq_cat, pmap_cat ; simpl.
+          rewrite suffixes_of_seq_cons. rewrite pmap_cons. rewrite some_expr_of_event. move => /= length_comp_sbt.
+          assert (H := @switch_spec p C  stk mem
+                                    (pmap (expr_of_event C P)
+                                          [seq x ++ e :: comp_subtrace C suffix
+                                        | x <- suffixes_of_seq (comp_subtrace C prefix)]
+                                    )
+                                    exp_produced
+                                    (* formerly *)
+                                    (* (expr_of_event C P e) *)
 
-      (*   { unfold expr_of_trace. rewrite Et comp_subtrace_app. simpl. *)
-      (*     rewrite <- wf_C, Nat.eqb_refl, map_app. simpl. *)
-      (*     assert (H := @switch_spec p C  stk mem *)
-      (*                               (map (expr_of_event C P) (comp_subtrace C prefix)) *)
-      (*                               (expr_of_event C P e) *)
-      (*                               (map (expr_of_event C P) (comp_subtrace C suffix)) *)
-      (*                               E_exit arg). *)
-      (*     rewrite map_length in H. specialize (H C_local). *)
-      (*     destruct H as [mem'' [Hmem'' Hstar]]. *)
-      (*     enough (H : mem'' = mem') by (subst mem''; easy). *)
-      (*     rewrite -> counter_value_snoc, <- wf_C, Nat.eqb_refl in Hmem'. *)
-      (*     rewrite <- Nat.add_1_r, Nat2Z.inj_add in Hmem''. simpl in Hmem''. *)
-      (*     unfold counter_value in *. *)
-      (*     unfold Memory.store in *. simpl in *. *)
-      (*     rewrite Hmem' in Hmem''. *)
-      (*     congruence. } *)
+                                    (pmap (expr_of_event C P)
+                                          (suffixes_of_seq (comp_subtrace C suffix))
+                                    )
+                                    E_exit arg).
+
+          have Hprefix_length: Memory.load mem (C, Block.private, counter_idx) =
+                Some (Int (Z.of_nat (length (pmap (expr_of_event C P) [seq x ++ e :: comp_subtrace C suffix | x <- suffixes_of_seq (comp_subtrace C prefix)])))).
+          move: length_comp_sbt. rewrite C_local.
+
+          (* getting rid of length of the suffix *)
+          (* To clean up, there's a lot of going back and forth between size<->length *)
+          rewrite -!size_length !size_filter count_cat /=. move: wf_C => /eqP -> /=.
+          rewrite !size_cat ssrnat.add1n.
+          rewrite !size_length /=.
+          rewrite !length_comp_subtrace. rewrite -!size_filter !size_length. move=> /eqP. rewrite ssrnat.eqn_add2r. move => /eqP ->. done.
+          (* to clean up *)
+          rewrite Hprefix_length in C_local. inversion C_local as [H'].
+
+          specialize (H Hprefix_length).
+          destruct H as [mem'' [Hmem'' Hstar]].
+          enough (H : mem'' = mem') by (subst mem''; easy).
+          rewrite -> counter_value_snoc, <- wf_C, Nat.eqb_refl in Hmem'.
+          rewrite <- Nat.add_1_r, Nat2Z.inj_add in Hmem''. simpl in Hmem''. rewrite H' in Hmem''.
+          rewrite Hmem' in Hmem''.
+          congruence. }
       (*   assert (Star2 : exists s' cs', *)
       (*              Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] [:: e] cs' /\ *)
       (*              well_formed_state s' (prefix ++ [e]) suffix cs'). *)
