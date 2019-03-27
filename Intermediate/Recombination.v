@@ -25,6 +25,12 @@ Set Bullet Behavior "Strict Subproofs".
 
 Import Intermediate.
 
+(* RB: NOTE: The current build depends on PS and Composition, both taking a
+   relatively long time to compile, but it may still be desirable to consult
+   them interactively. To speed up the build process, small, tentative additions
+   to those modules can be added here. Note that, in principle, the role of PS
+   will be assimilated by Recombination or become very reduced. *)
+
 Section BehaviorStar.
   Variables p c: program.
 
@@ -131,33 +137,35 @@ Section Recombination.
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
   Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
 
-  Inductive mergeable_states (iface1 iface2 : Program.interface) (s1 s2 : CS.state) : Prop.
+  (* An "extensional" reading of program states a la Composition. *)
+  Inductive mergeable_states (s s'' : CS.state) : Prop :=
+    mergeable_states_intro : forall s0 s0'' t,
+      initial_state (CS.sem (program_link p  c )) s0   ->
+      initial_state (CS.sem (program_link p' c')) s0'' ->
+      Star (CS.sem (program_link p  c )) s0   t s   ->
+      Star (CS.sem (program_link p' c')) s0'' t s'' ->
+      mergeable_states s s''.
 
-  Definition merge_states (s1 s2 : CS.state) : option CS.state :=
-    None.
+  Definition merge_states (s s'' : CS.state) : CS.state :=
+    s.
 
   Theorem initial_states_mergeability s s'' :
     initial_state (CS.sem (program_link p  c )) s   ->
     initial_state (CS.sem (program_link p' c')) s'' ->
-    mergeable_states (prog_interface p) (prog_interface c) s s''.
+    mergeable_states s s''.
   Admitted.
 
   Lemma initial_state_merge_after_linking s s'' :
     initial_state (CS.sem (program_link p  c )) s   ->
     initial_state (CS.sem (program_link p' c')) s'' ->
-  exists s',
-    merge_states s s'' = Some s' /\
-    initial_state (CS.sem (program_link p  c')) s'.
+    initial_state (CS.sem (program_link p  c')) (merge_states s s'').
   Admitted.
 
   Theorem threeway_multisem_star_simulation s1 s1'' t s2 s2'' :
-    mergeable_states (prog_interface p) (prog_interface c) s1 s1'' ->
+    mergeable_states s1 s1'' ->
     Star (CS.sem (program_link p  c )) s1   t s2   ->
     Star (CS.sem (program_link p' c')) s1'' t s2'' ->
-  exists s1' s2',
-    merge_states s1 s1'' = Some s1' /\
-    merge_states s2 s2'' = Some s2' /\
-    Star (CS.sem (program_link p  c')) s1' t s2'.
+    Star (CS.sem (program_link p  c')) (merge_states s1 s1'') t (merge_states s2 s2'').
     (* /\ mergeable_states ip ic s2 s2'' *)
   Admitted.
 
