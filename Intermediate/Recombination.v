@@ -143,7 +143,7 @@ Section BehaviorStar.
   Qed.
 End BehaviorStar.
 
-Section ThreewayMultisemProgram.
+Section ThreewayMultisem1.
   Variables p c p' c' : program.
 
   Hypothesis Hwfp  : well_formed_program p.
@@ -172,6 +172,50 @@ Section ThreewayMultisemProgram.
     mergeable_states (prog_interface c) (prog_interface p) s2 s2''.
   Admitted.
 
+  Theorem threeway_multisem_star_E0_program s1 s1'' s2 s2'':
+    CS.is_program_component s1 (prog_interface c) ->
+    mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
+    Star (CS.sem (program_link p  c )) s1   E0 s2   ->
+    Star (CS.sem (program_link p' c')) s1'' E0 s2'' ->
+    Star (CS.sem (program_link p  c')) (merge_states s1 s1'') E0 (merge_states s2 s2'').
+  Admitted.
+End ThreewayMultisem1.
+
+Section ThreewayMultisem2.
+  Variables p c p' c' : program.
+
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
+
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+
+  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
+  Hypothesis Hmain_linkability  : linkable_mains p  c.
+  Hypothesis Hmain_linkability' : linkable_mains p' c'.
+
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+
+  Lemma threeway_multisem_mergeable s1 s1'' t s2 s2'' :
+    mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
+    Star (CS.sem (program_link p  c )) s1   t s2   ->
+    Star (CS.sem (program_link p' c')) s1'' t s2'' ->
+    mergeable_states (prog_interface c) (prog_interface p) s2 s2''.
+  Admitted.
+
+  Lemma threeway_multisem_star_E0 s1 s1'' s2 s2'':
+    mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
+    Star (CS.sem (program_link p  c )) s1   E0 s2   ->
+    Star (CS.sem (program_link p' c')) s1'' E0 s2'' ->
+    Star (CS.sem (program_link p  c')) (merge_states s1 s1'') E0 (merge_states s2 s2'').
+  Admitted.
+
   Theorem threeway_multisem_star_program s1 s1'' t s2 s2'' :
     CS.is_program_component s1 (prog_interface c) ->
     mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
@@ -179,9 +223,9 @@ Section ThreewayMultisemProgram.
     Star (CS.sem (program_link p' c')) s1'' t s2'' ->
     Star (CS.sem (program_link p  c')) (merge_states s1 s1'') t (merge_states s2 s2'').
   Admitted.
-End ThreewayMultisemProgram.
+End ThreewayMultisem2.
 
-Section ThreewayMultisem.
+Section ThreewayMultisem3.
   Variables p c p' c' : program.
 
   Hypothesis Hwfp  : well_formed_program p.
@@ -216,10 +260,11 @@ Section ThreewayMultisem.
     - apply negb_false_iff in Hcomp1.
       apply (mergeable_states_context_to_program Hmerge1) in Hcomp1.
       rewrite program_linkC; try assumption;
-        last admit.
-      apply threeway_multisem_star_program with (c := p') (p' := c).
+        last admit. (* Easy. *)
+      apply threeway_multisem_star_program with (c := p') (p' := c);
+        admit. (* Easy. *)
   Admitted.
-End ThreewayMultisem.
+End ThreewayMultisem3.
 
 Section Recombination.
   Variables p c p' c' : program.
