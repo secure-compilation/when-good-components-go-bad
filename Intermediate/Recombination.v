@@ -25,6 +25,7 @@ Set Bullet Behavior "Strict Subproofs".
 
 Import Intermediate.
 
+(*
 Section Merge.
 
   (* Hypotheses *)
@@ -194,6 +195,7 @@ Section Merge.
   Qed.
   
 End Merge.
+*)
 
 (* RB: NOTE: The current build depends on PS and Composition, both taking a
    relatively long time to compile, but it may still be desirable to consult
