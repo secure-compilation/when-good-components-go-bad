@@ -48,8 +48,10 @@ Inductive mergeable_states (ic ip : Program.interface) (s s'' : CS.state)
     Star (CS.sem (program_link p' c')) s0'' t s'' ->
     mergeable_states ic ip s s''.
 
-Definition merge_states (s s'' : CS.state) : CS.state :=
-  s.
+Definition merge_states (ic ip : Program.interface) (s s'' : CS.state)
+  : CS.state :=
+  PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
+                                           (PS.partialize s'' ip)).
 
 Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 :
   mergeable_states ctx1 ctx2 s1 s2 ->
@@ -57,6 +59,11 @@ Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 :
   CS.is_program_component s2 ctx2.
 Admitted.
 
+Lemma mergeable_states_program_to_context ctx1 ctx2 s1 s2 :
+  mergeable_states ctx1 ctx2 s1 s2 ->
+  CS.is_program_component s1 ctx1 ->
+  CS.is_context_component s2 ctx2.
+Admitted.
 
 Section BehaviorStar.
   Variables p c: program.
@@ -164,6 +171,8 @@ Section ThreewayMultisem1.
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
   Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
 
+  (* RB: NOTE: The structure follows closely that of
+     threeway_multisem_star_program. *)
   Theorem threeway_multisem_mergeable_program s1 s1'' t s2 s2'' :
     CS.is_program_component s1 (prog_interface c) ->
     mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
@@ -207,14 +216,14 @@ Section ThreewayMultisem2.
     Star (CS.sem (program_link p  c )) s1   t s2   ->
     Star (CS.sem (program_link p' c')) s1'' t s2'' ->
     mergeable_states (prog_interface c) (prog_interface p) s2 s2''.
-  Admitted.
+  Admitted. (* Grade 1. *)
 
   Lemma threeway_multisem_star_E0 s1 s1'' s2 s2'':
     mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
     Star (CS.sem (program_link p  c )) s1   E0 s2   ->
     Star (CS.sem (program_link p' c')) s1'' E0 s2'' ->
     Star (CS.sem (program_link p  c')) (merge_states s1 s1'') E0 (merge_states s2 s2'').
-  Admitted.
+  Admitted. (* Grade 1. *)
 
   Theorem threeway_multisem_star_program s1 s1'' t s2 s2'' :
     CS.is_program_component s1 (prog_interface c) ->
@@ -223,10 +232,10 @@ Section ThreewayMultisem2.
     Star (CS.sem (program_link p' c')) s1'' t s2'' ->
     Star (CS.sem (program_link p  c')) (merge_states s1 s1'') t (merge_states s2 s2'').
   Proof.
-    simpl in *. intros Hpc1 Hmerge1 Hstar12. revert s1'' s2'' Hpc1 Hmerge1.
+    simpl in *. intros Hcomp1 Hmerge1 Hstar12. revert s1'' s2'' Hcomp1 Hmerge1.
     apply star_iff_starR in Hstar12.
     induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar12' Hstep23]; subst;
-      intros s1'' s2'' Hpc1 Hmerge1 Hstar12''.
+      intros s1'' s2'' Hcomp1 Hmerge1 Hstar12''.
     - (* RB: TODO: We need a multi-semantics counterpart of PS context stars. *)
       (* pose proof PS.context_epsilon_star_is_silent Hcomp1' Hstar12'; subst s2'. *)
       (* now apply star_refl. *)
@@ -234,7 +243,7 @@ Section ThreewayMultisem2.
     - rename s2'' into s3''. rename Hstar12'' into Hstar13''.
       apply (star_app_inv (@CS.singleton_traces _)) in Hstar13''
         as [s2'' [Hstar12'' Hstar23'']].
-      specialize (IHstar12' _ _ Hpc1 Hmerge1 Hstar12'').
+      specialize (IHstar12' _ _ Hcomp1 Hmerge1 Hstar12'').
       (* Apply instantiated IH and case analyze step trace. *)
       apply star_trans with (t1 := t1) (s2 := merge_states s2 s2'') (t2 := t2);
         [assumption | | reflexivity].
@@ -259,7 +268,8 @@ Section ThreewayMultisem2.
         (* Propagate mergeability, step. *)
         pose proof threeway_multisem_mergeable Hmerge2 Hstar2 Hstar2'' as Hmerge21.
         (* RB: TODO: Here is where we depart from the multi-semantics and need to
-           furnish our own version. *)
+           furnish our own version. We may save effort if, as is the case here, we only
+           need to concern ourselves with visible steps. *)
         (* pose proof MultiSem.multi_step (prepare_global_env prog) Hstep23 Hstep23' *)
         (*   as Hmstep2. *)
         assert (Step (CS.sem (program_link p c'))
@@ -322,7 +332,7 @@ Section ThreewayMultisem3.
         last admit. (* Easy. *)
       apply threeway_multisem_star_program with (c := p') (p' := c);
         admit. (* Easy. *)
-  Admitted.
+  Admitted. (* Grade 1. *)
 End ThreewayMultisem3.
 
 Section Recombination.
