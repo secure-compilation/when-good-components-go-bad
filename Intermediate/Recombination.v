@@ -195,6 +195,45 @@ Section Merge.
   
 End Merge.
 
+(* RB: NOTE: The current build depends on PS and Composition, both taking a
+   relatively long time to compile, but it may still be desirable to consult
+   them interactively. To speed up the build process, small, tentative additions
+   to those modules can be added here. Note that, in principle, the role of PS
+   will be assimilated by Recombination or become very reduced. *)
+
+(* An "extensional" reading of program states a la Composition.
+   RB: TODO: If the number, organization and order of parameters is confusing,
+   look at alternatives, here and in the sections that use this. *)
+Inductive mergeable_states (ic ip : Program.interface) (s s'' : CS.state)
+  : Prop :=
+  mergeable_states_intro : forall p c p' c' s0 s0'' t,
+    mergeable_interfaces ip ic ->
+    prog_interface p = ip ->
+    prog_interface c = ic ->
+    prog_interface p' = ip ->
+    prog_interface c' = ic ->
+    initial_state (CS.sem (program_link p  c )) s0   ->
+    initial_state (CS.sem (program_link p' c')) s0'' ->
+    Star (CS.sem (program_link p  c )) s0   t s   ->
+    Star (CS.sem (program_link p' c')) s0'' t s'' ->
+    mergeable_states ic ip s s''.
+
+Definition merge_states (ic ip : Program.interface) (s s'' : CS.state)
+  : CS.state :=
+  PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
+                                           (PS.partialize s'' ip)).
+
+Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 :
+  mergeable_states ctx1 ctx2 s1 s2 ->
+  CS.is_context_component s1 ctx1 ->
+  CS.is_program_component s2 ctx2.
+Admitted.
+
+Lemma mergeable_states_program_to_context ctx1 ctx2 s1 s2 :
+  mergeable_states ctx1 ctx2 s1 s2 ->
+  CS.is_program_component s1 ctx1 ->
+  CS.is_context_component s2 ctx2.
+Admitted.
 
 Section BehaviorStar.
   Variables p c: program.
@@ -281,6 +320,191 @@ Section BehaviorStar.
   Qed.
 End BehaviorStar.
 
+Section ThreewayMultisem1.
+  Variables p c p' c' : program.
+
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
+
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+
+  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
+  Hypothesis Hmain_linkability  : linkable_mains p  c.
+  Hypothesis Hmain_linkability' : linkable_mains p' c'.
+
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+
+  (* RB: NOTE: The structure follows closely that of
+     threeway_multisem_star_program. *)
+  Theorem threeway_multisem_mergeable_program s1 s1'' t s2 s2'' :
+    CS.is_program_component s1 (prog_interface c) ->
+    mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
+    Star (CS.sem (program_link p  c )) s1   t s2   ->
+    Star (CS.sem (program_link p' c')) s1'' t s2'' ->
+    mergeable_states (prog_interface c) (prog_interface p) s2 s2''.
+  Admitted.
+
+  Theorem threeway_multisem_star_E0_program s1 s1'' s2 s2'':
+    CS.is_program_component s1 (prog_interface c) ->
+    mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
+    Star (CS.sem (program_link p  c )) s1   E0 s2   ->
+    Star (CS.sem (program_link p' c')) s1'' E0 s2'' ->
+    Star (CS.sem (program_link p  c')) (merge_states s1 s1'') E0 (merge_states s2 s2'').
+  Admitted.
+End ThreewayMultisem1.
+
+Section ThreewayMultisem2.
+  Variables p c p' c' : program.
+
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
+
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+
+  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
+  Hypothesis Hmain_linkability  : linkable_mains p  c.
+  Hypothesis Hmain_linkability' : linkable_mains p' c'.
+
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+
+  Lemma threeway_multisem_mergeable s1 s1'' t s2 s2'' :
+    mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
+    Star (CS.sem (program_link p  c )) s1   t s2   ->
+    Star (CS.sem (program_link p' c')) s1'' t s2'' ->
+    mergeable_states (prog_interface c) (prog_interface p) s2 s2''.
+  Admitted. (* Grade 1. *)
+
+  Lemma threeway_multisem_star_E0 s1 s1'' s2 s2'':
+    mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
+    Star (CS.sem (program_link p  c )) s1   E0 s2   ->
+    Star (CS.sem (program_link p' c')) s1'' E0 s2'' ->
+    Star (CS.sem (program_link p  c')) (merge_states s1 s1'') E0 (merge_states s2 s2'').
+  Admitted. (* Grade 1. *)
+
+  Theorem threeway_multisem_star_program s1 s1'' t s2 s2'' :
+    CS.is_program_component s1 (prog_interface c) ->
+    mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
+    Star (CS.sem (program_link p  c )) s1   t s2   ->
+    Star (CS.sem (program_link p' c')) s1'' t s2'' ->
+    Star (CS.sem (program_link p  c')) (merge_states s1 s1'') t (merge_states s2 s2'').
+  Proof.
+    simpl in *. intros Hcomp1 Hmerge1 Hstar12. revert s1'' s2'' Hcomp1 Hmerge1.
+    apply star_iff_starR in Hstar12.
+    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar12' Hstep23]; subst;
+      intros s1'' s2'' Hcomp1 Hmerge1 Hstar12''.
+    - (* RB: TODO: We need a multi-semantics counterpart of PS context stars. *)
+      (* pose proof PS.context_epsilon_star_is_silent Hcomp1' Hstar12'; subst s2'. *)
+      (* now apply star_refl. *)
+      admit.
+    - rename s2'' into s3''. rename Hstar12'' into Hstar13''.
+      apply (star_app_inv (@CS.singleton_traces _)) in Hstar13''
+        as [s2'' [Hstar12'' Hstar23'']].
+      specialize (IHstar12' _ _ Hcomp1 Hmerge1 Hstar12'').
+      (* Apply instantiated IH and case analyze step trace. *)
+      apply star_trans with (t1 := t1) (s2 := merge_states s2 s2'') (t2 := t2);
+        [assumption | | reflexivity].
+      apply star_iff_starR in Hstar12.
+      pose proof threeway_multisem_mergeable Hmerge1 Hstar12 Hstar12''
+        as Hmerge2.
+      destruct t2 as [| e2 [| e2' t2]].
+      + (* An epsilon step and comparable epsilon star. One is in the context and
+           therefore silent, the other executes and leads the MultiSem star. *)
+        eapply star_step in Hstep23; [| now apply star_refl | now apply eq_refl].
+        exact (threeway_multisem_star_E0 Hmerge2 Hstep23 Hstar23'').
+      + (* The step generates a trace event, mimicked on the other side (possibly
+           between sequences of silent steps). *)
+        change [e2] with (E0 ** e2 :: E0) in Hstar23''.
+        apply (star_middle1_inv (@CS.singleton_traces _)) in Hstar23''
+          as [s2''1 [s2''2 [Hstar2'' [Hstep23'' Hstar3'']]]].
+        (* Prefix star. *)
+        pose proof star_refl CS.step (prepare_global_env (program_link p c)) s2
+          as Hstar2.
+        pose proof threeway_multisem_star_E0 Hmerge2 Hstar2 Hstar2''
+          as Hstar2'.
+        (* Propagate mergeability, step. *)
+        pose proof threeway_multisem_mergeable Hmerge2 Hstar2 Hstar2'' as Hmerge21.
+        (* RB: TODO: Here is where we depart from the multi-semantics and need to
+           furnish our own version. We may save effort if, as is the case here, we only
+           need to concern ourselves with visible steps. *)
+        (* pose proof MultiSem.multi_step (prepare_global_env prog) Hstep23 Hstep23' *)
+        (*   as Hmstep2. *)
+        assert (Step (CS.sem (program_link p c'))
+                     (merge_states s2 s2''1) [e2] (merge_states s3 s2''2))
+          as Hstep23' by admit.
+        (* Propagate mergeability, suffix star. *)
+        (* pose proof MultiSem.mergeable_states_step_trans *)
+        (*      wf1 wf2 main_linkability linkability mergeable_interfaces *)
+        (*      Hmerge21 Hstep23 Hstep23' as Hmerge22. *)
+        assert (mergeable_states (prog_interface c) (prog_interface p) s3 s2''2)
+          as Hmerge22 by admit.
+        pose proof star_refl CS.step (prepare_global_env (program_link p c)) s3
+          as Hstar3.
+        pose proof threeway_multisem_star_E0 Hmerge22 Hstar3 Hstar3'' as Hstar3'.
+        (* Compose. *)
+        exact (star_trans
+                 (star_right _ _ Hstar2' Hstep23' (eq_refl _))
+                 Hstar3' (eq_refl _)).
+      + (* Contradiction: a step generates at most one event. *)
+        pose proof @CS.singleton_traces _ _ _ _ Hstep23 as Hcontra.
+        simpl in Hcontra. omega.
+  Admitted.
+End ThreewayMultisem2.
+
+Section ThreewayMultisem3.
+  Variables p c p' c' : program.
+
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
+
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+
+  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
+  Hypothesis Hmain_linkability  : linkable_mains p  c.
+  Hypothesis Hmain_linkability' : linkable_mains p' c'.
+
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+
+  (* RB: NOTE: At the moment, this becomes the old threeway_multisem_star. *)
+  Theorem threeway_multisem_star_simulation s1 s1'' t s2 s2'' :
+    mergeable_states (prog_interface c) (prog_interface p) s1 s1'' ->
+    Star (CS.sem (program_link p  c )) s1   t s2   ->
+    Star (CS.sem (program_link p' c')) s1'' t s2'' ->
+    Star (CS.sem (program_link p  c')) (merge_states s1 s1'') t (merge_states s2 s2'').
+    (* /\ mergeable_states ip ic s2 s2'' *)
+  Proof.
+    intros Hmerge1 Hstar12 Hstar12''.
+    destruct (CS.is_program_component s1 (prog_interface c)) eqn:Hcomp1.
+    - now apply threeway_multisem_star_program.
+    - apply negb_false_iff in Hcomp1.
+      apply (mergeable_states_context_to_program Hmerge1) in Hcomp1.
+      rewrite program_linkC; try assumption;
+        last admit. (* Easy. *)
+      apply threeway_multisem_star_program with (c := p') (p' := c);
+        admit. (* Easy. *)
+  Admitted. (* Grade 1. *)
+End ThreewayMultisem3.
+
 Section Recombination.
   Variables p c p' c' : program.
 
@@ -302,34 +526,18 @@ Section Recombination.
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
   Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
 
-  Inductive mergeable_states (iface1 iface2 : Program.interface) (s1 s2 : CS.state) : Prop.
-
-  Definition merge_states (s1 s2 : CS.state) : option CS.state :=
-    None.
-
+  (* RB: NOTE: Relocate lemmas on initial states when ready. *)
   Theorem initial_states_mergeability s s'' :
     initial_state (CS.sem (program_link p  c )) s   ->
     initial_state (CS.sem (program_link p' c')) s'' ->
-    mergeable_states (prog_interface p) (prog_interface c) s s''.
+    mergeable_states (prog_interface c) (prog_interface p) s s''.
   Admitted.
 
+  (* RB: NOTE: Relocate lemmas on initial states when ready. *)
   Lemma initial_state_merge_after_linking s s'' :
     initial_state (CS.sem (program_link p  c )) s   ->
     initial_state (CS.sem (program_link p' c')) s'' ->
-  exists s',
-    merge_states s s'' = Some s' /\
-    initial_state (CS.sem (program_link p  c')) s'.
-  Admitted.
-
-  Theorem threeway_multisem_star_simulation s1 s1'' t s2 s2'' :
-    mergeable_states (prog_interface p) (prog_interface c) s1 s1'' ->
-    Star (CS.sem (program_link p  c )) s1   t s2   ->
-    Star (CS.sem (program_link p' c')) s1'' t s2'' ->
-  exists s1' s2',
-    merge_states s1 s1'' = Some s1' /\
-    merge_states s2 s2'' = Some s2' /\
-    Star (CS.sem (program_link p  c')) s1' t s2'.
-    (* /\ mergeable_states ip ic s2 s2'' *)
+    initial_state (CS.sem (program_link p  c')) (merge_states s s'').
   Admitted.
 
   (* RB: NOTE: Possible improvements:

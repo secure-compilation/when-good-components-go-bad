@@ -42,6 +42,9 @@ Instance state_turn : HasTurn state := {
     Pointer.component pc \in domm iface
 }.
 
+Definition is_context_component (st: state) ctx := turn_of st ctx.
+Definition is_program_component (st: state) ctx := negb (is_context_component st ctx).
+
 Definition state_stack (st : state) : stack :=
   let '(gps, _, _, _) := st in gps.
 
@@ -50,6 +53,9 @@ Definition state_mem (st : state) : Memory.t :=
 
 Definition state_pc (st : state) : Pointer.t :=
   let '(_, _, _, pc) := st in pc.
+
+Definition state_component (st : CS.state) : Component.id :=
+  Pointer.component (state_pc st).
 
 (* preparing the machine for running a program *)
 
