@@ -204,44 +204,56 @@ End Merge.
    to those modules can be added here. Note that, in principle, the role of PS
    will be assimilated by Recombination or become very reduced. *)
 
-(* An "extensional" reading of program states a la Composition.
-   RB: TODO: If the number, organization and order of parameters is confusing,
-   look at alternatives, here and in the sections that use this. *)
-Inductive mergeable_states (ic ip : Program.interface) (s s'' : CS.state)
+Section PS.
+  (* An "extensional" reading of program states a la Composition.
+     RB: TODO: If the number, organization and order of parameters is confusing,
+     look at alternatives, here and in the sections that use this. *)
+  Inductive mergeable_states (ic ip : Program.interface) (s s'' : CS.state)
   : Prop :=
-  mergeable_states_intro : forall p c p' c' s0 s0'' t,
-    mergeable_interfaces ip ic ->
-    prog_interface p = ip ->
-    prog_interface c = ic ->
-    prog_interface p' = ip ->
-    prog_interface c' = ic ->
-    initial_state (CS.sem (program_link p  c )) s0   ->
-    initial_state (CS.sem (program_link p' c')) s0'' ->
-    Star (CS.sem (program_link p  c )) s0   t s   ->
-    Star (CS.sem (program_link p' c')) s0'' t s'' ->
-    mergeable_states ic ip s s''.
+    mergeable_states_intro : forall p c p' c' s0 s0'' t,
+      mergeable_interfaces ip ic ->
+      prog_interface p = ip ->
+      prog_interface c = ic ->
+      prog_interface p' = ip ->
+      prog_interface c' = ic ->
+      initial_state (CS.sem (program_link p  c )) s0   ->
+      initial_state (CS.sem (program_link p' c')) s0'' ->
+      Star (CS.sem (program_link p  c )) s0   t s   ->
+      Star (CS.sem (program_link p' c')) s0'' t s'' ->
+      mergeable_states ic ip s s''.
 
-Definition merge_states (ic ip : Program.interface) (s s'' : CS.state)
-  : CS.state :=
-  PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
-                                           (PS.partialize s'' ip)).
+  Definition merge_states (ic ip : Program.interface) (s s'' : CS.state)
+    : CS.state :=
+    PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
+                                             (PS.partialize s'' ip)).
 
-Lemma merge_states_sym ctx1 ctx2 s1 s2 :
-   mergeable_states ctx1 ctx2 s1 s2 ->
-   merge_states ctx1 ctx2 s1 s2 = merge_states ctx2 ctx1 s2 s1.
-Admitted.
+  Lemma merge_states_sym ctx1 ctx2 s1 s2 :
+    mergeable_states ctx1 ctx2 s1 s2 ->
+    merge_states ctx1 ctx2 s1 s2 = merge_states ctx2 ctx1 s2 s1.
+  Admitted.
 
-Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 :
-  mergeable_states ctx1 ctx2 s1 s2 ->
-  CS.is_context_component s1 ctx1 ->
-  CS.is_program_component s2 ctx2.
-Admitted.
+  Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 :
+    mergeable_states ctx1 ctx2 s1 s2 ->
+    CS.is_context_component s1 ctx1 ->
+    CS.is_program_component s2 ctx2.
+  Admitted.
 
-Lemma mergeable_states_program_to_context ctx1 ctx2 s1 s2 :
-  mergeable_states ctx1 ctx2 s1 s2 ->
-  CS.is_program_component s1 ctx1 ->
-  CS.is_context_component s2 ctx2.
-Admitted.
+  Lemma mergeable_states_program_to_context ctx1 ctx2 s1 s2 :
+    mergeable_states ctx1 ctx2 s1 s2 ->
+    CS.is_program_component s1 ctx1 ->
+    CS.is_context_component s2 ctx2.
+  Admitted.
+
+  (* Given a silent star driven by a "context" c, *)
+  Lemma context_epsilon_star_is_silent p p' c s s1 s2 :
+    mergeable_states (prog_interface c) (prog_interface p) s s1 ->
+    CS.is_program_component s (prog_interface c) ->
+    Star (CS.sem (program_link p  c)) s1 E0 s2 ->
+    Star (CS.sem (program_link p' c))
+         (merge_states (prog_interface c) (prog_interface p) s s1) E0
+         (merge_states (prog_interface c) (prog_interface p) s s2).
+  Admitted.
+End PS.
 
 Section BehaviorStar.
   Variables p c: program.
@@ -423,6 +435,22 @@ Section ThreewayMultisem2.
     Star sem'  (merge_states ic ip s1 s1'') E0 (merge_states ic ip s2 s2'').
   Admitted. (* Grade 1. *)
 
+  (* A restricted version of the lockstep simulation on event-producing steps.
+     RB: NOTE: Here is where we depart from the multi-semantics and need to
+     furnish our own version. We may save effort if, as is the case here, we only
+     need to concern ourselves with visible steps.
+
+     This replaces the following two steps below:
+      - MultiSem.multi_step
+      - MultiSem.mergeable_states_step_trans *)
+  Lemma threeway_multisem_event_lockstep s1 s1'' e s2 s2'' :
+    mergeable_states ic ip s1 s1'' ->
+    Step sem   s1   [e] s2   ->
+    Step sem'' s1'' [e] s2'' ->
+    Step sem'  (merge_states ic ip s1 s1'') [e] (merge_states ic ip s2 s2'') /\
+    mergeable_states ic ip s2 s2''.
+  Admitted.
+
   Theorem threeway_multisem_star_program s1 s1'' t s2 s2'' :
     CS.is_program_component s1 ic ->
     mergeable_states ic ip s1 s1'' ->
@@ -434,10 +462,9 @@ Section ThreewayMultisem2.
     apply star_iff_starR in Hstar12.
     induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar12' Hstep23]; subst;
       intros s1'' s2'' Hcomp1 Hmerge1 Hstar12''.
-    - (* RB: TODO: We need a multi-semantics counterpart of PS context stars. *)
-      (* pose proof PS.context_epsilon_star_is_silent Hcomp1' Hstar12'; subst s2'. *)
-      (* now apply star_refl. *)
-      admit.
+    - unfold ip, ic in *. rewrite Hifacep Hifacec in Hcomp1, Hmerge1.
+      pose proof context_epsilon_star_is_silent p Hmerge1 Hcomp1 Hstar12''.
+      now rewrite Hifacep Hifacec.
     - rename s2'' into s3''. rename Hstar12'' into Hstar13''.
       apply (star_app_inv (@CS.singleton_traces _)) in Hstar13''
         as [s2'' [Hstar12'' Hstar23'']].
@@ -465,20 +492,9 @@ Section ThreewayMultisem2.
           as Hstar2'.
         (* Propagate mergeability, step. *)
         pose proof threeway_multisem_mergeable Hmerge2 Hstar2 Hstar2'' as Hmerge21.
-        (* RB: TODO: Here is where we depart from the multi-semantics and need to
-           furnish our own version. We may save effort if, as is the case here, we only
-           need to concern ourselves with visible steps. *)
-        (* pose proof MultiSem.multi_step (prepare_global_env prog) Hstep23 Hstep23' *)
-        (*   as Hmstep2. *)
-        assert (Step (CS.sem (program_link p c'))
-                     (merge_states ic ip s2 s2''1) [e2] (merge_states ic ip s3 s2''2))
-          as Hstep23' by admit.
+        pose proof threeway_multisem_event_lockstep Hmerge21 Hstep23 Hstep23''
+          as [Hstep23' Hmerge22].
         (* Propagate mergeability, suffix star. *)
-        (* pose proof MultiSem.mergeable_states_step_trans *)
-        (*      wf1 wf2 main_linkability linkability mergeable_interfaces *)
-        (*      Hmerge21 Hstep23 Hstep23' as Hmerge22. *)
-        assert (mergeable_states (prog_interface c) (prog_interface p) s3 s2''2)
-          as Hmerge22 by admit.
         pose proof star_refl CS.step (prepare_global_env (program_link p c)) s3
           as Hstar3.
         pose proof threeway_multisem_star_E0 Hmerge22 Hstar3 Hstar3'' as Hstar3'.
@@ -489,7 +505,7 @@ Section ThreewayMultisem2.
       + (* Contradiction: a step generates at most one event. *)
         pose proof @CS.singleton_traces _ _ _ _ Hstep23 as Hcontra.
         simpl in Hcontra. omega.
-  Admitted.
+  Qed.
 End ThreewayMultisem2.
 
 Section ThreewayMultisem3.
@@ -626,8 +642,6 @@ Section Recombination.
     ~ final_state sem'' s'' ->
     ~ final_state sem'  (merge_states ic ip s s'').
   Admitted.
-
-  (* Corollary match_nofinal *)
 (* End ThreewayMultisem. *)
 
 (* Section Recombination. *)
