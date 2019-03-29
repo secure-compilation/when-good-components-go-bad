@@ -14,6 +14,7 @@ Require Import Intermediate.Decomposition.
 Require Import Intermediate.Composition.
 
 Require Import Coq.Program.Equality.
+Require Import Coq.Setoids.Setoid.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
@@ -224,6 +225,11 @@ Definition merge_states (ic ip : Program.interface) (s s'' : CS.state)
   : CS.state :=
   PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
                                            (PS.partialize s'' ip)).
+
+Lemma merge_states_sym ctx1 ctx2 s1 s2 :
+   mergeable_states ctx1 ctx2 s1 s2 ->
+   merge_states ctx1 ctx2 s1 s2 = merge_states ctx2 ctx1 s2 s1.
+Admitted.
 
 Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 :
   mergeable_states ctx1 ctx2 s1 s2 ->
@@ -517,8 +523,7 @@ Section ThreewayMultisem3.
   Let sem'' := CS.sem prog''.
   Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
-  (* RB: NOTE: At the moment, this becomes the old threeway_multisem_star. *)
-  Theorem threeway_multisem_star_simulation s1 s1'' t s2 s2'' :
+  Theorem threeway_multisem_star s1 s1'' t s2 s2'' :
     mergeable_states ic ip s1 s1'' ->
     Star (CS.sem (program_link p  c )) s1   t s2   ->
     Star (CS.sem (program_link p' c')) s1'' t s2'' ->
@@ -526,17 +531,22 @@ Section ThreewayMultisem3.
     (* /\ mergeable_states ip ic s2 s2'' *)
   Proof.
     intros Hmerge1 Hstar12 Hstar12''.
-    destruct (CS.is_program_component s1 (prog_interface c)) eqn:Hcomp1.
+    destruct (CS.is_program_component s1 ic) eqn:Hcomp1.
     - now apply threeway_multisem_star_program.
     - apply negb_false_iff in Hcomp1.
       apply (mergeable_states_context_to_program Hmerge1) in Hcomp1.
+      assert (Hmerge2: mergeable_states ic ip s2 s2'')
+        by (eapply threeway_multisem_mergeable; eassumption).
       rewrite program_linkC; try assumption;
         last admit. (* Easy. *)
-      apply threeway_multisem_star_program with (c := p') (p' := c);
+      setoid_rewrite merge_states_sym at 1 2; try assumption.
+      unfold ip, ic; rewrite -> Hifacep, -> Hifacec.
+      apply threeway_multisem_star_program with (p' := c);
         admit. (* Easy. *)
   Admitted. (* Grade 1. *)
 End ThreewayMultisem3.
 
+(* Section ThreewayMultisem. *)
 Section Recombination.
   Variables p c p' c' : program.
 
@@ -569,22 +579,94 @@ Section Recombination.
   Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
   (* RB: NOTE: Relocate lemmas on initial states when ready. *)
-  Theorem initial_states_mergeability s s'' :
+  Lemma initial_states_mergeability s s'' :
     initial_state sem   s   ->
     initial_state sem'' s'' ->
     mergeable_states ic ip s s''.
   Admitted.
 
-  (* RB: NOTE: Relocate lemmas on initial states when ready. *)
-  Lemma initial_state_merge_after_linking s s'' :
+  (* RB: NOTE: Here, the existential is explicitly instantiated; the mergeability
+     relation is also different than in standard "two-way" simulations. *)
+  Theorem match_initial_states s s'' :
     initial_state sem   s   ->
     initial_state sem'' s'' ->
-    initial_state sem'  (merge_states ic ip s s'').
+    initial_state sem'  (merge_states ic ip s s'') /\
+    mergeable_states ic ip s s''.
   Admitted.
 
+  Theorem match_final_states s s'' :
+    mergeable_states ic ip s s'' ->
+    final_state sem   s   ->
+    final_state sem'' s'' ->
+    final_state sem'  (merge_states ic ip s s'').
+  Admitted.
+
+  Theorem star_simulation s1 s1'' t s2 s2'' :
+    mergeable_states ic ip s1 s1'' ->
+    Star sem   s1   t s2   ->
+    Star sem'' s1'' t s2'' ->
+    Star sem'  (merge_states ic ip s1 s1'') t (merge_states ic ip s2 s2'') /\
+    mergeable_states ic ip s2 s2''.
+  Proof.
+    intros. split.
+    - now apply threeway_multisem_star.
+    - eapply threeway_multisem_mergeable; eassumption.
+  Qed.
+
+  Corollary match_nostep s s'' :
+    mergeable_states ic ip s s'' ->
+    Nostep sem   s   ->
+    Nostep sem'' s'' ->
+    Nostep sem'  (merge_states ic ip s s'').
+  Admitted.
+
+  Corollary match_nofinal s s'' :
+    mergeable_states ic ip s s'' ->
+    ~ final_state sem   s   ->
+    ~ final_state sem'' s'' ->
+    ~ final_state sem'  (merge_states ic ip s s'').
+  Admitted.
+
+  (* Corollary match_nofinal *)
+(* End ThreewayMultisem. *)
+
+(* Section Recombination. *)
+(*   Variables p c p' c' : program. *)
+
+(*   Hypothesis Hwfp  : well_formed_program p. *)
+(*   Hypothesis Hwfc  : well_formed_program c. *)
+(*   Hypothesis Hwfp' : well_formed_program p'. *)
+(*   Hypothesis Hwfc' : well_formed_program c'. *)
+
+(*   Hypothesis Hmergeable_ifaces : *)
+(*     mergeable_interfaces (prog_interface p) (prog_interface c). *)
+
+(*   Hypothesis Hifacep  : prog_interface p  = prog_interface p'. *)
+(*   Hypothesis Hifacec  : prog_interface c  = prog_interface c'. *)
+
+(*   (* RB: TODO: Simplify redundancies in standard hypotheses. *) *)
+(*   Hypothesis Hmain_linkability  : linkable_mains p  c. *)
+(*   Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
+
+(*   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ). *)
+(*   Hypothesis Hprog_is_closed' : closed_program (program_link p' c'). *)
+
+(*   Let ip := prog_interface p. *)
+(*   Let ic := prog_interface c. *)
+(*   Let prog   := program_link p  c. *)
+(*   Let prog'  := program_link p  c'. *)
+(*   Let prog'' := program_link p' c'. *)
+(*   Let sem   := CS.sem prog. *)
+(*   Let sem'  := CS.sem prog'. *)
+(*   Let sem'' := CS.sem prog''. *)
+(*   Hint Unfold ip ic prog prog' prog'' sem sem' sem''. *)
+
   (* RB: NOTE: Possible improvements:
-      - Get rid of asserts in FTbc case. (RB: TODO: Assigned to JT.)
-      - Try to refactor case analysis in proof. *)
+      - Get rid of assert idioms in FTbc case. RB: TODO: Assigned to JT.
+      - Try to refactor case analysis in proof.
+     This result is currently doing the legwork of going from a simulation on
+     stars to one on program behaviors without direct mediation from the CompCert
+     framework. *)
   Theorem recombination_prefix m :
     does_prefix sem   m ->
     does_prefix sem'' m ->
@@ -602,22 +684,27 @@ Section Recombination.
       inversion Hst_beh   as [? s2   Hstar12   Hfinal2   | | |]; subst.
       inversion Hst_beh'' as [? s2'' Hstar12'' Hfinal2'' | | |]; subst.
       exists (Terminates tm). split; last reflexivity.
-      pose proof initial_states_mergeability Hini1 Hini1'' as Hmerge1.
-      destruct (threeway_multisem_star_simulation Hmerge1 Hstar12 Hstar12'')
-        as [s1' [s2' [Hs1' [Hs2' Hstar12']]]].
-      apply program_runs with (s := s1'); first easy.
-      apply state_terminates with (s' := s2'); easy.
+      pose proof match_initial_states Hini1 Hini1'' as [Hini1' Hmerge1].
+      pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
+      apply program_runs with (s := merge_states ic ip s1 s1'');
+        first assumption.
+      apply state_terminates with (s' := merge_states ic ip s2 s2'');
+        first assumption.
+      now apply match_final_states.
     - destruct b   as [? | ? | ? | t  ]; try contradiction.
       destruct b'' as [? | ? | ? | t'']; try contradiction.
       simpl in Hprefix, Hprefix''. subst t t''.
       inversion Hst_beh   as [| | | ? s2   Hstar12   Hstep2   Hfinal2  ]; subst.
       inversion Hst_beh'' as [| | | ? s2'' Hstar12'' Hstep2'' Hfinal2'']; subst.
       exists (Goes_wrong tm). split; last reflexivity.
-      pose proof initial_states_mergeability Hini1 Hini1'' as Hmerge1.
-      destruct (threeway_multisem_star_simulation Hmerge1 Hstar12 Hstar12'')
-        as [s1' [s2' [Hs1' [Hs2' Hstar12']]]].
-      apply program_runs with (s := s1'); first easy.
-      apply state_goes_wrong with (s' := s2'); easy.
+      pose proof match_initial_states Hini1 Hini1'' as [Hini' Hmerge1].
+      pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
+      apply program_runs with (s := merge_states ic ip s1 s1'');
+        first assumption.
+      apply state_goes_wrong with (s' := merge_states ic ip s2 s2'');
+        first assumption.
+      + now apply match_nostep.
+      + now apply match_nofinal.
     - (* Here we talk about the stars associated to the behaviors, without
          worrying now about connecting them to the existing initial states.
          RB: TODO: Remove asserts, phrase in terms of the instances of
@@ -644,10 +731,10 @@ Section Recombination.
           as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
         now exists s1''_, s2''.
       }
-      pose proof initial_states_mergeability Hini1_ Hini1''_ as Hmerge1.
-      destruct (threeway_multisem_star_simulation Hmerge1 Hstar12 Hstar12'')
-        as [ss1' [ss2' [Hss1' [Hss2' Hstar12']]]].
-      eapply program_behaves_finpref_exists; last now apply Hstar12'.
-      now destruct (initial_state_merge_after_linking Hini1 Hini1'').
+      pose proof match_initial_states Hini1_ Hini1''_ as [Hini1' Hmerge1].
+      pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
+      eapply program_behaves_finpref_exists;
+        last now apply Hstar12'.
+      assumption.
   Qed.
 End Recombination.
