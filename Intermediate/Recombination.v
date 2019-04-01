@@ -237,23 +237,30 @@ Section Merge.
       Star (CS.sem (program_link p' c')) s0'' t s'' ->
       mergeable_states s s''.
 
-  (* Inductive mergeable_states' (ic ip : Program.interface) (s s'' : CS.state) *)
-  (*   : Prop := *)
-  (* | mergeable_ini : forall p c p' c', *)
-  (*     mergeable_interfaces ip ic -> *)
-  (*     prog_interface p = ip -> *)
-  (*     prog_interface c = ic -> *)
-  (*     prog_interface p' = ip -> *)
-  (*     prog_interface c' = ic -> *)
-  (*     initial_state (CS.sem (program_link p  c )) s   -> *)
-  (*     initial_state (CS.sem (program_link p' c')) s'' -> *)
-  (*     mergeable_states' ic ip s s'' *)
-  (* | mergeable_trace : forall p c p' c' t s0 s0'', *)
-  (*     mergeable_states' ic ip s0 s0'' -> *)
-  (*     Star (CS.sem (program_link p  c )) s0   t s   -> *)
-  (*     Star (CS.sem (program_link p' c')) s0'' t s'' -> *)
-  (*     mergeable_states' ic ip s s''. *)
-    
+  Inductive mergeable_states' (s s'' : CS.state)
+    : Prop :=
+  | mergeable_ini :
+      initial_state (CS.sem (program_link p  c )) s   ->
+      initial_state (CS.sem (program_link p' c')) s'' ->
+      mergeable_states' s s''
+  | mergeable_trace : forall t s0 s0'',
+      mergeable_states' s0 s0'' ->
+      Star (CS.sem (program_link p  c )) s0   t s   ->
+      Star (CS.sem (program_link p' c')) s0'' t s'' ->
+      mergeable_states' s s''.
+
+  Lemma mergeable_states_equiv : forall s s'',
+      mergeable_states s s'' <-> mergeable_states' s s''.
+  Proof.
+    intros s s''; split; intros H.
+    - inversion H; subst.
+      eapply mergeable_trace; eauto. now apply mergeable_ini.
+    - induction H.
+      + econstructor; now eauto using star_refl.
+      + inversion IHmergeable_states'.
+        econstructor; now eauto using star_trans.
+  Qed.
+   
 
   Definition merge_states (s s'' : CS.state)
     : CS.state :=
@@ -293,13 +300,17 @@ Section Merge.
     rewrite fdisjointC => /fdisjointP Hdisj.
     now auto.
   Qed.
-
-  Lemma mergeable_states_program_to_context s1 s2 :
-    mergeable_states s1 s2 ->
-    CS.is_program_component s1 ic ->
-    CS.is_context_component s2 ip.
+  
+  Lemma mergeable_states_program_to_context s s'' :
+    mergeable_states s s'' ->
+    CS.is_program_component s ic ->
+    CS.is_context_component s'' ip.
   Proof.
-    admit.
+    (* Related to PS.domm_partition? The proof is scary. *)
+    intros Hmerg.
+    inversion Hmerg as [? ? ? Hini Hini'' Hstar Hstar'']; subst.
+    apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''.
+    induction Hstar.    
   Admitted.
 End Merge.
 
