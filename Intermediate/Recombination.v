@@ -211,6 +211,16 @@ Section Merge.
   Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
   Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
 
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
+
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+
+
+
+
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
@@ -435,12 +445,24 @@ Section Merge.
     CS.is_program_component s ic ->
     CS.is_context_component s'' ip.
   Proof.
-    (* Related to PS.domm_partition? The proof is scary. *)
     intros Hmerg.
-    inversion Hmerg as [? ? ? Hini Hini'' Hstar Hstar'']; subst.
-    apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''.
-    induction Hstar.    
-  Admitted.
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
+    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    assert (Hpc : Pointer.component pc = Pointer.component pc'').
+    { eapply mergeable_states_pc_same_component with
+          (s := (stack, mem, reg, pc)) (s'' := (stack'', mem'', reg'', pc'')).
+      eassumption. }
+    rewrite <- Hpc.
+
+    (* Now, this is an application of PS.domm_partition. *)
+    inversion Hmerg as [s0 _ t Hini _ Hstar _].
+    apply (PS.domm_partition Hmergeable_ifaces) with (gps := stack) (mem0 := mem) (regs := reg).
+    destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
+    exists prog, i, s0, t.
+    split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
+    repeat split; eauto.
+  Qed.
+
 End Merge.
 
 Section BehaviorStar.
