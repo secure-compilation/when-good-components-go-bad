@@ -260,6 +260,106 @@ Section Merge.
       + inversion IHmergeable_states'.
         econstructor; now eauto using star_trans.
   Qed.
+
+  Lemma mergeable_states_ind' : forall P : CS.state -> CS.state -> Prop,
+      (forall (s s'' : CS.state),
+          initial_state (CS.sem (program_link p c)) s ->
+          initial_state (CS.sem (program_link p' c')) s'' ->
+          P s s'') ->
+      (forall (s1 s2 s'' : CS.state),
+          mergeable_states s1 s'' ->
+          Step (CS.sem (program_link p c)) s1 E0 s2 ->
+          P s1 s'' ->
+          P s2 s'') ->
+      (forall (s s1'' s2'' : CS.state),
+          mergeable_states s s1'' ->
+          Step (CS.sem (program_link p' c')) s1'' E0 s2'' ->
+          P s s1'' ->
+          P s s2'') ->
+      (forall (s1 s2 s1'' s2'' : CS.state) (t : trace),
+          t <> E0 ->
+          mergeable_states s1 s1'' ->
+          Step (CS.sem (program_link p c)) s1 t s2 ->
+          Step (CS.sem (program_link p' c')) s1'' t s2'' ->
+          P s1 s1'' ->
+          P s2 s2'') ->
+      forall (s s'' : CS.state), mergeable_states s s'' -> P s s''.
+  Proof.
+    intros P.
+    intros Hindini HindE0l HindE0r Hindstep.
+    intros s s'' Hmerg.
+    inversion Hmerg as
+        [s0 s0'' t Hini Hini'' Hstar Hstar''].
+    apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''.
+    generalize dependent s''.
+    induction Hstar; intros s'' Hmerg Hstar''.
+    - remember E0 as t.
+      induction Hstar''.
+      + now apply Hindini.
+      + subst.
+        assert (Ht1 : t1 = E0) by now destruct t1.
+        assert (Ht2 : t2 = E0) by now destruct t1.
+        subst; clear H0.
+        specialize (IHHstar'' eq_refl HindE0l HindE0r Hindstep).
+        assert (Hmergss2 : mergeable_states s s2).
+        { apply star_iff_starR in Hstar''.
+          econstructor. apply Hini. apply Hini''. apply star_refl.
+          assumption. }
+        specialize (IHHstar'' Hini'' Hmergss2). eapply HindE0r; eauto.
+    - pose proof (CS.singleton_traces (program_link p c) _ _ _ H).
+      assert (t2 = E0 \/ exists ev, t2 = [ev]).
+      { clear -H1.
+        inversion H1.
+        - right. destruct t2. simpl in *; congruence.
+          simpl in *. destruct t2; eauto. simpl in *. congruence.
+        - left. inversion H0. destruct t2; simpl in *. reflexivity.
+          congruence. }
+      destruct H2 as [Ht2E0 | [ev Ht2ev]].
+      + subst.
+        unfold "**" in Hstar''; rewrite app_nil_r in Hstar''.
+        assert (Hmergs2s'' : mergeable_states s2 s'').
+        { econstructor. eauto. eauto.
+          apply star_iff_starR in Hstar. apply Hstar.
+          apply star_iff_starR in Hstar''. apply Hstar''. }
+        specialize (IHHstar Hini s'' Hmergs2s'' Hstar'').
+        eapply HindE0l; eauto.
+      + subst.
+        remember (t1 ** [ev]) as t.
+        induction Hstar''; subst.
+        * (* contradiction *)
+          assert (E0 <> t1 ** [ev]) by now induction t1. contradiction.
+        * subst.
+          specialize (IHHstar'' Hini'' IHHstar).
+          pose proof (CS.singleton_traces (program_link p' c') _ _ _ H0) as H4.
+          assert (H5: t2 = E0 \/ exists ev, t2 = [ev]).
+          { clear -H4.
+            inversion H4.
+            - right. destruct t2. simpl in *; congruence.
+              simpl in *. destruct t2; eauto. simpl in *. congruence.
+            - left. inversion H0. destruct t2; simpl in *. reflexivity.
+              congruence. }
+          destruct H5 as [ht2E0 | [ev' Ht2ev']].
+          ** subst.
+             unfold "**" in H2; rewrite app_nil_r in H2; subst.
+             assert (Hmergs3s4 : mergeable_states s3 s4).
+             { econstructor; eauto.
+               apply star_iff_starR.
+               eapply starR_step.
+               apply Hstar.
+               eauto. reflexivity.
+               apply star_iff_starR in Hstar''; apply Hstar''. }
+             specialize (IHHstar'' Hmergs3s4 eq_refl).
+             eapply HindE0r; eauto.
+          ** subst.
+             assert (t1 = t0 /\ ev = ev') as [Ht1t0 Hevev'] by now apply app_inj_tail.
+             subst. clear H4 IHHstar'' H1 H2.
+             specialize (IHHstar Hini s4).
+             assert (mergeable_states s2 s4).
+             { econstructor; eauto. apply star_iff_starR in Hstar; apply Hstar.
+               apply star_iff_starR in Hstar''; apply Hstar''. }
+             specialize (IHHstar H1 Hstar'').
+             eapply Hindstep with (t := [ev']); eauto. unfold E0. congruence.
+  Qed.
    
 
   Definition merge_states (s s'' : CS.state)
@@ -267,18 +367,47 @@ Section Merge.
     PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
                                              (PS.partialize s'' ip)).
 
-  Lemma mergeable_states_pc_same_component s1 s2 :
-    mergeable_states s1 s2 ->
-    Pointer.component (CS.state_pc s1) = Pointer.component (CS.state_pc s2).
+  Lemma mergeable_states_pc_same_component s s'' :
+    mergeable_states s s'' ->
+    Pointer.component (CS.state_pc s) = Pointer.component (CS.state_pc s'').
   Proof.
     intros Hmerg.
-    inversion Hmerg
-      as [? ? ? Hini Hini'' Hstar Hstar'']; subst.
-    induction Hstar.
-    admit.
-    admit.
-  Admitted.
-
+    induction Hmerg
+      as [s s'' Hini Hini''
+         | s1 s2 s'' Hmerg Hstep IH
+         | s s1'' s2'' Hmerg Hstep IH
+         | s1 s2 s1'' s2'' t Hdiff Hmerg Hstep Hstep'' IH]
+           using mergeable_states_ind'.
+    - (* Initial state *)
+      inversion Hini; inversion Hini''; subst.
+      unfold CS.state_pc. unfold CS.initial_machine_state.
+      destruct (prog_main (program_link p c)); destruct (prog_main (program_link p' c')); eauto.
+    - (* Silent step on the left *)
+      rewrite <- IH.
+      (* Now, the only result to prove is that stepping silently doesn't modify the
+         component we're executing. Most of the cases are solvable trivially.
+         The two other cases are solved by applying lemmas proved previously.
+       *)
+      inversion Hstep; subst; try now (destruct pc as [[C b] o]; eauto).
+      + simpl in *.
+        now apply find_label_in_component_1 in H0.
+      + simpl in *.
+        now apply find_label_in_procedure_1 in H2.
+    - (* Silent step on the right *)
+      rewrite IH.
+      (* Same as above *)
+      inversion Hstep; subst; try now (destruct pc as [[C b] o]; eauto).
+      + simpl in *.
+        now apply find_label_in_component_1 in H0.
+      + simpl in *.
+        now apply find_label_in_procedure_1 in H2.
+    - (* Non-silent step *)
+      inversion Hstep; subst; try contradiction.
+      inversion Hstep''; subst; try contradiction.
+      + reflexivity.
+      + simpl in *.
+        inversion Hstep''; reflexivity.
+  Qed.
 
   Lemma mergeable_states_context_to_program s1 s2 :
     mergeable_states s1 s2 ->
@@ -290,7 +419,7 @@ Section Merge.
     destruct s1 as [[[stack1 mem1] reg1] pc1]; destruct s2 as [[[stack2 mem2] reg2] pc2].
     assert (Hpc : Pointer.component pc1 = Pointer.component pc2).
     { eapply mergeable_states_pc_same_component with
-          (s1 := (stack1, mem1, reg1, pc1)) (s2 := (stack2, mem2, reg2, pc2)).
+          (s := (stack1, mem1, reg1, pc1)) (s'' := (stack2, mem2, reg2, pc2)).
       eassumption. }
     rewrite <- Hpc; clear Hpc.
     inversion Hmerg
