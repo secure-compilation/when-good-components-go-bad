@@ -245,7 +245,15 @@ Section PS.
   Admitted.
 
   (* Given a silent star driven by a "context" c, *)
-  Lemma context_epsilon_star_is_silent p p' c s s1 s2 :
+  Lemma context_epsilon_star_is_silent p c s s1 s2 :
+    mergeable_states (prog_interface c) (prog_interface p) s s1 ->
+    CS.is_program_component s (prog_interface c) ->
+    Star (CS.sem (program_link p c)) s1 E0 s2 ->
+    PS.partialize s1 (prog_interface p) = PS.partialize s2 (prog_interface p).
+  Admitted.
+
+  (* The following should be an easy corollary of the _is_silent lemma. *)
+  Lemma context_epsilon_star_merge_states p p' c s s1 s2 :
     mergeable_states (prog_interface c) (prog_interface p) s s1 ->
     CS.is_program_component s (prog_interface c) ->
     Star (CS.sem (program_link p  c)) s1 E0 s2 ->
