@@ -204,6 +204,7 @@ End Merge.
    to those modules can be added here. Note that, in principle, the role of PS
    will be assimilated by Recombination or become very reduced. *)
 
+(* RB: TODO: Harmonize naming conventions. *)
 Section Merge.
   Variables p c p' c' : program.
   Hypothesis Hmergeable_ifaces :
@@ -221,14 +222,10 @@ Section Merge.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
   Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
-
   
-  (* An "extensional" reading of program states a la Composition.
-   RB: TODO: If the number, organization and order of parameters is confusing,
-   look at alternatives, here and in the sections that use this. *)
-  (* JT: This doesn't seem right. This should not take arbitrary interfaces
-     and programs but rather depend on the partial programs.
-     I put this in a section to achieve this *)
+  (* An "extensional" reading of program states a la Composition, depending
+     directly on the partial programs concerned (implicitly through the section
+     mechanism. *)
   Inductive mergeable_states (s s'' : CS.state)
   : Prop :=
     mergeable_states_intro : forall s0 s0'' t,
@@ -362,7 +359,6 @@ Section Merge.
              eapply Hindstep with (t := [ev']); eauto. unfold E0. congruence.
   Qed.
    
-
   Definition merge_states (s s'' : CS.state)
     : CS.state :=
     PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
@@ -410,6 +406,12 @@ Section Merge.
         inversion Hstep''; reflexivity.
   Qed.
 
+  Lemma mergeable_states_program_to_program s1 s2 :
+    mergeable_states s1 s2 ->
+    CS.is_program_component s1 ic ->
+    CS.is_program_component s2 ic.
+  Admitted.
+
   Lemma mergeable_states_context_to_program s1 s2 :
     mergeable_states s1 s2 ->
     CS.is_context_component s1 ic ->
@@ -442,68 +444,50 @@ Section Merge.
     apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''.
     induction Hstar.    
   Admitted.
+
 End Merge.
 
-(*
+Section MergeSym.
+  Lemma merge_states_sym p c p' c' s s'' :
+    mergeable_states p c p' c' s s'' ->
+    merge_states p c s s'' = merge_states c p s'' s.
+  Admitted.
+End MergeSym.
+
 Section PS.
-  (* An "extensional" reading of program states a la Composition.
-     RB: TODO: If the number, organization and order of parameters is confusing,
-     look at alternatives, here and in the sections that use this. *)
-  Inductive mergeable_states (ic ip : Program.interface) (s s'' : CS.state)
-  : Prop :=
-    mergeable_states_intro : forall p c p' c' s0 s0'' t,
-      mergeable_interfaces ip ic ->
-      prog_interface p = ip ->
-      prog_interface c = ic ->
-      prog_interface p' = ip ->
-      prog_interface c' = ic ->
-      initial_state (CS.sem (program_link p  c )) s0   ->
-      initial_state (CS.sem (program_link p' c')) s0'' ->
-      Star (CS.sem (program_link p  c )) s0   t s   ->
-      Star (CS.sem (program_link p' c')) s0'' t s'' ->
-      mergeable_states ic ip s s''.
+  (* RB: TODO: Add hypotheses to section. *)
 
-  Definition merge_states (ic ip : Program.interface) (s s'' : CS.state)
-    : CS.state :=
-    PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
-                                             (PS.partialize s'' ip)).
 
-  Lemma merge_states_sym ctx1 ctx2 s1 s2 :
-    mergeable_states ctx1 ctx2 s1 s2 ->
-    merge_states ctx1 ctx2 s1 s2 = merge_states ctx2 ctx1 s2 s1.
-  Admitted.
+  (* Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 : *)
+  (*   mergeable_states ctx1 ctx2 s1 s2 -> *)
+  (*   CS.is_context_component s1 ctx1 -> *)
+  (*   CS.is_program_component s2 ctx2. *)
+  (* Admitted. *)
 
-  Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 :
-    mergeable_states ctx1 ctx2 s1 s2 ->
-    CS.is_context_component s1 ctx1 ->
-    CS.is_program_component s2 ctx2.
-  Admitted.
+  (* Lemma mergeable_states_program_to_context ctx1 ctx2 s1 s2 : *)
+  (*   mergeable_states ctx1 ctx2 s1 s2 -> *)
+  (*   CS.is_program_component s1 ctx1 -> *)
+  (*   CS.is_context_component s2 ctx2. *)
+  (* Admitted. *)
 
-  Lemma mergeable_states_program_to_context ctx1 ctx2 s1 s2 :
-    mergeable_states ctx1 ctx2 s1 s2 ->
-    CS.is_program_component s1 ctx1 ->
-    CS.is_context_component s2 ctx2.
-  Admitted.
-
-  (* Given a silent star driven by a "context" c, *)
-  Lemma context_epsilon_star_is_silent p c s s1 s2 :
-    mergeable_states (prog_interface c) (prog_interface p) s s1 ->
-    CS.is_program_component s (prog_interface c) ->
+  (* Given a silent star driven by the "program" side p, the "context" side c
+     remains unaltered. *)
+  Lemma context_epsilon_star_is_silent p c s1 s2 :
+    CS.is_program_component s1 (prog_interface c) ->
     Star (CS.sem (program_link p c)) s1 E0 s2 ->
     PS.partialize s1 (prog_interface p) = PS.partialize s2 (prog_interface p).
   Admitted.
 
   (* The following should be an easy corollary of the _is_silent lemma. *)
-  Lemma context_epsilon_star_merge_states p p' c s s1 s2 :
-    mergeable_states (prog_interface c) (prog_interface p) s s1 ->
+  Lemma context_epsilon_star_merge_states p c p' c' s s1 s2 :
+    mergeable_states p c p' c' s s1 ->
     CS.is_program_component s (prog_interface c) ->
-    Star (CS.sem (program_link p  c)) s1 E0 s2 ->
-    Star (CS.sem (program_link p' c))
-         (merge_states (prog_interface c) (prog_interface p) s s1) E0
-         (merge_states (prog_interface c) (prog_interface p) s s2).
+    Star (CS.sem (program_link p' c')) s1 E0 s2 ->
+    Star (CS.sem (program_link p  c'))
+         (merge_states p c s s1) E0
+         (merge_states p c s s2).
   Admitted.
 End PS.
-*)
 
 Section BehaviorStar.
   Variables p c: program.
@@ -630,7 +614,7 @@ Section ThreewayMultisem1.
     Star sem'' s1'' t s2'' ->
     mergeable_states p c p' c' s2 s2''.
   Proof.
-  Admitted.
+  Admitted. (* RB: NOTE: JT will fill it in. *)
 
   Theorem threeway_multisem_star_E0_program s1 s1'' s2 s2'':
     CS.is_program_component s1 ic ->
@@ -706,11 +690,11 @@ Section ThreewayMultisem2.
       - MultiSem.multi_step
       - MultiSem.mergeable_states_step_trans *)
   Lemma threeway_multisem_event_lockstep s1 s1'' e s2 s2'' :
-    mergeable_states ic ip s1 s1'' ->
+    mergeable_states p c p' c' s1 s1'' ->
     Step sem   s1   [e] s2   ->
     Step sem'' s1'' [e] s2'' ->
-    Step sem'  (merge_states ic ip s1 s1'') [e] (merge_states ic ip s2 s2'') /\
-    mergeable_states ic ip s2 s2''.
+    Step sem'  (merge_states p c s1 s1'') [e] (merge_states p c s2 s2'') /\
+    mergeable_states p c p' c' s2 s2''.
   Admitted.
 
   Theorem threeway_multisem_star_program s1 s1'' t s2 s2'' :
@@ -724,9 +708,7 @@ Section ThreewayMultisem2.
     apply star_iff_starR in Hstar12.
     induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar12' Hstep23]; subst;
       intros s1'' s2'' Hcomp1 Hmerge1 Hstar12''.
-    - unfold ip, ic in *. rewrite Hifacep Hifacec in Hcomp1, Hmerge1.
-      pose proof context_epsilon_star_is_silent p Hmerge1 Hcomp1 Hstar12''.
-      now rewrite Hifacep Hifacec.
+    - exact (context_epsilon_star_merge_states Hmerge1 Hcomp1 Hstar12'').
     - rename s2'' into s3''. rename Hstar12'' into Hstar13''.
       apply (star_app_inv (@CS.singleton_traces _)) in Hstar13''
         as [s2'' [Hstar12'' Hstar23'']].
@@ -802,25 +784,26 @@ Section ThreewayMultisem3.
   Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
   Theorem threeway_multisem_star s1 s1'' t s2 s2'' :
-    mergeable_states ic ip s1 s1'' ->
+    mergeable_states p c p' c' s1 s1'' ->
     Star (CS.sem (program_link p  c )) s1   t s2   ->
     Star (CS.sem (program_link p' c')) s1'' t s2'' ->
-    Star (CS.sem (program_link p  c')) (merge_states ic ip s1 s1'') t (merge_states ic ip s2 s2'').
+    Star (CS.sem (program_link p  c')) (merge_states p c s1 s1'') t (merge_states p c s2 s2'').
     (* /\ mergeable_states ip ic s2 s2'' *)
   Proof.
     intros Hmerge1 Hstar12 Hstar12''.
     destruct (CS.is_program_component s1 ic) eqn:Hcomp1.
     - now apply threeway_multisem_star_program.
     - apply negb_false_iff in Hcomp1.
-      apply (mergeable_states_context_to_program Hmerge1) in Hcomp1.
-      assert (Hmerge2: mergeable_states ic ip s2 s2'')
+      apply (mergeable_states_context_to_program Hmergeable_ifaces Hmerge1)
+        in Hcomp1.
+      assert (Hmerge2: mergeable_states p c p' c' s2 s2'')
         by (eapply threeway_multisem_mergeable; eassumption).
       rewrite program_linkC; try assumption;
         last admit. (* Easy. *)
-      setoid_rewrite merge_states_sym at 1 2; try assumption.
-      unfold ip, ic; rewrite -> Hifacep, -> Hifacec.
-      apply threeway_multisem_star_program with (p' := c);
-        admit. (* Easy. *)
+      setoid_rewrite merge_states_sym at 1 2; try eassumption.
+      (* unfold ip, ic; rewrite -> Hifacep, -> Hifacec. *)
+      (* apply threeway_multisem_star_program with (p' := c); *)
+      (*   admit. (* Easy. *) *)
   Admitted. (* Grade 1. *)
 End ThreewayMultisem3.
 
@@ -868,23 +851,23 @@ Section Recombination.
   Theorem match_initial_states s s'' :
     initial_state sem   s   ->
     initial_state sem'' s'' ->
-    initial_state sem'  (merge_states ic ip s s'') /\
-    mergeable_states ic ip s s''.
+    initial_state sem'  (merge_states p c s s'') /\
+    mergeable_states p c p' c' s s''.
   Admitted.
 
   Theorem match_final_states s s'' :
-    mergeable_states ic ip s s'' ->
+    mergeable_states p c p' c' s s'' ->
     final_state sem   s   ->
     final_state sem'' s'' ->
-    final_state sem'  (merge_states ic ip s s'').
+    final_state sem'  (merge_states p c s s'').
   Admitted.
 
   Theorem star_simulation s1 s1'' t s2 s2'' :
-    mergeable_states ic ip s1 s1'' ->
+    mergeable_states p c p' c' s1 s1'' ->
     Star sem   s1   t s2   ->
     Star sem'' s1'' t s2'' ->
-    Star sem'  (merge_states ic ip s1 s1'') t (merge_states ic ip s2 s2'') /\
-    mergeable_states ic ip s2 s2''.
+    Star sem'  (merge_states p c s1 s1'') t (merge_states p c s2 s2'') /\
+    mergeable_states p c p' c' s2 s2''.
   Proof.
     intros. split.
     - now apply threeway_multisem_star.
@@ -892,17 +875,17 @@ Section Recombination.
   Qed.
 
   Corollary match_nostep s s'' :
-    mergeable_states ic ip s s'' ->
+    mergeable_states p c p' c' s s'' ->
     Nostep sem   s   ->
     Nostep sem'' s'' ->
-    Nostep sem'  (merge_states ic ip s s'').
+    Nostep sem'  (merge_states p c s s'').
   Admitted.
 
   Corollary match_nofinal s s'' :
-    mergeable_states ic ip s s'' ->
+    mergeable_states p c p' c' s s'' ->
     ~ final_state sem   s   ->
     ~ final_state sem'' s'' ->
-    ~ final_state sem'  (merge_states ic ip s s'').
+    ~ final_state sem'  (merge_states p c s s'').
   Admitted.
 (* End ThreewayMultisem. *)
 
@@ -962,9 +945,9 @@ Section Recombination.
       exists (Terminates tm). split; last reflexivity.
       pose proof match_initial_states Hini1 Hini1'' as [Hini1' Hmerge1].
       pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
-      apply program_runs with (s := merge_states ic ip s1 s1'');
+      apply program_runs with (s := merge_states p c s1 s1'');
         first assumption.
-      apply state_terminates with (s' := merge_states ic ip s2 s2'');
+      apply state_terminates with (s' := merge_states p c s2 s2'');
         first assumption.
       now apply match_final_states.
     - destruct b   as [? | ? | ? | t  ]; try contradiction.
@@ -975,9 +958,9 @@ Section Recombination.
       exists (Goes_wrong tm). split; last reflexivity.
       pose proof match_initial_states Hini1 Hini1'' as [Hini' Hmerge1].
       pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
-      apply program_runs with (s := merge_states ic ip s1 s1'');
+      apply program_runs with (s := merge_states p c s1 s1'');
         first assumption.
-      apply state_goes_wrong with (s' := merge_states ic ip s2 s2'');
+      apply state_goes_wrong with (s' := merge_states p c s2 s2'');
         first assumption.
       + now apply match_nostep.
       + now apply match_nofinal.
