@@ -455,7 +455,8 @@ Section MergeSym.
 End MergeSym.
 
 Section PS.
-  (* RB: TODO: Add hypotheses to section. *)
+  (* RB: TODO: Add hypotheses to section and/or theorems as needed. Currently
+     this make proof application lightweight. *)
 
 
   (* Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 : *)
@@ -486,6 +487,12 @@ Section PS.
     Star (CS.sem (program_link p  c'))
          (merge_states p c s s1) E0
          (merge_states p c s s2).
+  Admitted.
+
+  Lemma epsilon_star_preserves_program_component p c s1 s2 :
+    CS.is_program_component s1 (prog_interface c) ->
+    Star (CS.sem (program_link p c)) s1 E0 s2 ->
+    CS.is_program_component s2 (prog_interface c).
   Admitted.
 End PS.
 
@@ -616,12 +623,50 @@ Section ThreewayMultisem1.
   Proof.
   Admitted. (* RB: NOTE: JT will fill it in. *)
 
+  Lemma threeway_multisem_step_E0 s1 s2 s1'' :
+    CS.is_program_component s1 ic ->
+    mergeable_states p c p' c' s1 s1'' ->
+    Step sem  s1 E0 s2 ->
+    Step sem' (merge_states p c s1 s1'') E0 (merge_states p c s2 s1'').
+  Admitted.
+
+  (* Compose two stars into a merged star. The "program" side drives both stars
+     and performs all steps without interruption, the "context" side remains
+     unaltered in both stars. *)
   Theorem threeway_multisem_star_E0_program s1 s1'' s2 s2'':
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
     Star sem   s1   E0 s2   ->
     Star sem'' s1'' E0 s2'' ->
     Star sem'  (merge_states p c s1 s1'') E0 (merge_states p c s2 s2'').
+  Proof.
+    intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
+    pose proof mergeable_states_program_to_program
+         Hmergeable_ifaces Hifacep Hifacec Hmerge1 Hcomp1 as Hcomp1'.
+    rewrite Hifacec in Hcomp1'.
+    pose proof context_epsilon_star_is_silent Hcomp1' Hstar12'' as Hs2'.
+    remember E0 as t eqn:Ht.
+    revert Ht Hmerge1 Hcomp1 Hcomp1' Hstar12''.
+    apply star_iff_starR in Hstar12.
+    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
+      intros Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'.
+    - (* RB: TODO: Follows from Hs2', ideally via a recurring lemma. Compare with
+         its role in the inductive step. *)
+      (* now apply star_refl. *)
+      admit.
+    - apply Eapp_E0_inv in Ht. destruct Ht; subst.
+      specialize (IHstar (eq_refl _) Hmerge1 Hcomp1 Hcomp1' Hstar12').
+      apply star_trans with (t1 := E0) (s2 := merge_states p c s2 s2'') (t2 := E0);
+        [assumption | | reflexivity].
+      apply star_step with (t1 := E0) (s2 := merge_states p c s3 s2'') (t2 := E0).
+      + apply star_iff_starR in Hstar12.
+        pose proof threeway_multisem_mergeable_program Hcomp1 Hmerge1 Hstar12 Hstar12'
+          as Hmerge2.
+        pose proof epsilon_star_preserves_program_component Hcomp1 Hstar12
+          as Hcomp2.
+        exact (threeway_multisem_step_E0 Hcomp2 Hmerge2 Hstep23).
+      + now constructor.
+      + reflexivity.
   Admitted.
 End ThreewayMultisem1.
 
