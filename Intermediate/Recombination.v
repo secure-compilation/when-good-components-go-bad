@@ -204,6 +204,10 @@ End Merge.
    to those modules can be added here. Note that, in principle, the role of PS
    will be assimilated by Recombination or become very reduced. *)
 
+(* RB: TODO: Relocate to CS. *)
+Definition state_regs (s : CS.state) : Register.t :=
+  let '(_, _, regs, _) := s in regs.
+
 (* RB: TODO: Harmonize naming conventions. *)
 Section Merge.
   Variables p c p' c' : program.
@@ -364,6 +368,53 @@ Section Merge.
     PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
                                              (PS.partialize s'' ip)).
 
+  (* Composition of mergeable states. *)
+
+  (* The following definitions are meant to manipulate pairs of mergeable states
+     piecemeal. If the states are indeed mergeable, no error conditions (treated
+     silently by the definitions, for now) occur. Moreover, they result in stacks
+     and memories "without holes" w.r.t. to the generating states and interfaces,
+     provided that the mergeability assumptions is present. *)
+
+  Definition mergeable_states_stack (s s'' : CS.state) : CS.stack :=
+    PS.unpartialize_stack
+      (PS.merge_stacks
+         (PS.to_partial_stack (CS.state_stack s  ) (domm ic))
+         (PS.to_partial_stack (CS.state_stack s'') (domm ip))).
+
+  Definition mergeable_states_memory (s s'' : CS.state) : Memory.t :=
+    PS.merge_memories
+      (PS.to_partial_memory (CS.state_mem s  ) (domm ic))
+      (PS.to_partial_memory (CS.state_mem s'') (domm ip)).
+
+  Definition mergeable_states_regs (s s'' : CS.state) : Register.t :=
+    if Pointer.component (CS.state_pc s) \in domm ic then
+      state_regs s
+    else
+      state_regs s''.
+
+  (* RB: TODO: Observe that stack frames are actually pointers, and also useful
+     in the context of PC. Adjust naming. *)
+  Definition mergeable_states_pc (s s'' : CS.state) : Pointer.t :=
+    PS.unpartialize_stack_frame
+      (PS.merge_stack_frames
+         (PS.to_partial_frame (domm ic) (CS.state_pc s  ),
+          PS.to_partial_frame (domm ip) (CS.state_pc s''))).
+
+  Definition mergeable_states_state (s s'' : CS.state) : CS.state :=
+    (mergeable_states_stack  s s'',
+     mergeable_states_memory s s'',
+     mergeable_states_regs   s s'',
+     mergeable_states_pc     s s'').
+
+  (* RB: TODO: Add side conditions (well-formed programs, linkable interfaces,
+     etc. *)
+  Lemma mergeable_states_merge s s'' :
+    mergeable_states s s'' ->
+    merge_states s s'' =
+    mergeable_states_state s s''.
+  Admitted.
+
   Lemma mergeable_states_pc_same_component s s'' :
     mergeable_states s s'' ->
     Pointer.component (CS.state_pc s) = Pointer.component (CS.state_pc s'').
@@ -457,7 +508,6 @@ End MergeSym.
 Section PS.
   (* RB: TODO: Add hypotheses to section and/or theorems as needed. Currently
      this make proof application lightweight. *)
-
 
   (* Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 : *)
   (*   mergeable_states ctx1 ctx2 s1 s2 -> *)
