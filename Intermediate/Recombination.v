@@ -626,6 +626,24 @@ Section ThreewayMultisem1.
   Let sem'' := CS.sem prog''.
   Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
+
+  Lemma is_prg_component_silent_step : forall s1 s2 i,
+      Step sem s1 E0 s2 ->
+      CS.is_program_component s2 i ->
+      CS.is_program_component s1 i.
+  Proof.
+    clear.
+    intros s1 s2 i Hstep.
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
+    intros Hnotin.
+    inversion Hstep; subst; try now (destruct pc as [[C b] o]; eauto).
+    + simpl in *.
+      apply find_label_in_component_1 in H0. now rewrite H0.
+    + simpl in *. now rewrite <- H1.
+    + simpl in *.
+      apply find_label_in_procedure_1 in H2. now rewrite H2.
+  Qed.
+  
   (* RB: NOTE: The structure follows closely that of
      threeway_multisem_star_program. *)
   Theorem threeway_multisem_mergeable_program s1 s1'' t s2 s2'' :
