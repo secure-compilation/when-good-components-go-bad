@@ -415,6 +415,16 @@ Section Merge.
     mergeable_states_state s s''.
   Admitted.
 
+  Lemma mergeable_states_merge_program s s'' :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    merge_states s s'' =
+    (mergeable_states_stack s s'',
+     mergeable_states_memory s s'',
+     state_regs s,
+     CS.state_pc s).
+  Admitted.
+
   Lemma mergeable_states_pc_same_component s s'' :
     mergeable_states s s'' ->
     Pointer.component (CS.state_pc s) = Pointer.component (CS.state_pc s'').
