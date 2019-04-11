@@ -93,7 +93,7 @@ Section Merge.
 
 
   (* Definition of the function to merge two states *)
-  Definition merge_frames (f f'' : Pointer.t) :=
+  Definition merge_frames (f f''   : Pointer.t) :=
     if Nat.eqb (Pointer.component f) (Pointer.component f'') then
       if Pointer.component f \in domm (prog_interface p) then
         Some f
@@ -376,6 +376,7 @@ Section Merge.
      and memories "without holes" w.r.t. to the generating states and interfaces,
      provided that the mergeability assumptions is present. *)
 
+  (* RB: TODO: Rename these definitions to merge_states_. *)
   Definition mergeable_states_stack (s s'' : CS.state) : CS.stack :=
     PS.unpartialize_stack
       (PS.merge_stacks
@@ -688,6 +689,29 @@ Section ThreewayMultisem1.
     mergeable_states p c p' c' s1 s1'' ->
     Step sem  s1 E0 s2 ->
     Step sem' (merge_states p c s1 s1'') E0 (merge_states p c s2 s1'').
+  Proof.
+    intros Hcomp1 Hmerge1 Hstep12.
+    (* Derive some useful facts from mergeable_states, expose state structure. *)
+    rewrite (mergeable_states_merge_program
+               Hmergeable_ifaces Hifacep Hifacec Hcomp1 Hmerge1).
+    assert (Hcomp2 : CS.is_program_component s2 ic) by admit.
+    assert (Hmerge2 : mergeable_states p c p' c' s2 s1'') by admit.
+    rewrite (mergeable_states_merge_program
+               Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2).
+    destruct s1 as [[[gps1 mem1] regs1] pc1].
+    destruct s2 as [[[gps2 mem2] regs2] pc2].
+    destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
+    (* Case analysis on step. *)
+    inversion Hstep12; subst.
+
+    1:{
+      (*[*)Composition.CS_step_of_executing(*]*);
+        try eassumption; try reflexivity.
+
+      eapply execution_invariant_to_linking; try eassumption.
+      admit.
+    }
+
   Admitted.
 
   (* Compose two stars into a merged star. The "program" side drives both stars
