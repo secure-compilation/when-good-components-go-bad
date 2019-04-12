@@ -854,6 +854,58 @@ Section ThreewayMultisem1.
       + now constructor.
       + reflexivity.
   Admitted.
+
+  Lemma threeway_multisem_event_lockstep_program_mergeable s1 s1'' e s2 s2'' :
+    CS.is_program_component s1 ic ->
+    mergeable_states p c p' c' s1 s1'' ->
+    Step sem   s1   [e] s2   ->
+    Step sem'' s1'' [e] s2'' ->
+    mergeable_states p c p' c' s2 s2''.
+  Proof.
+    intros Hcomp1 Hmerge1 Hstep12 Hstep12''.
+    inversion Hmerge1 as [s0 s0'' t Hini0 Hini0'' Hstar01 Hstar01''].
+    apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := t ** [e]).
+    - assumption.
+    - assumption.
+    - eapply star_right; try eassumption; reflexivity.
+    - eapply star_right; try eassumption; reflexivity.
+  Qed.
+
+  Lemma threeway_multisem_event_lockstep_program_step s1 s1'' e s2 s2'' :
+    CS.is_program_component s1 ic ->
+    mergeable_states p c p' c' s1 s1'' ->
+    Step sem   s1   [e] s2   ->
+    Step sem'' s1'' [e] s2'' ->
+    Step sem'  (merge_states p c s1 s1'') [e] (merge_states p c s2 s2'').
+  Proof.
+    intros Hcomp1 Hmerge1 Hstep12 Hstep12''.
+    (* ... *)
+    (* rewrite (mergeable_states_merge_program *)
+    (*            Hmergeable_ifaces Hifacep Hifacec Hcomp1 Hmerge1). *)
+    (* pose proof threeway_multisem_event_lockstep_program_mergeable *)
+    (*      Hcomp1 Hmerge1 Hstep12 Hstep12'' as Hmerge2. *)
+    (* rewrite (mergeable_states_merge_program *)
+    (*   Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2). *)
+    destruct s1 as [[[gps1 mem1] regs1] pc1].
+    destruct s2 as [[[gps2 mem2] regs2] pc2].
+    destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
+    destruct s2'' as [[[gps2'' mem2''] regs2''] pc2''].
+    inversion Hstep12; subst;
+      inversion Hstep12''; subst.
+  Admitted.
+
+  Lemma threeway_multisem_event_lockstep_program s1 s1'' e s2 s2'' :
+    CS.is_program_component s1 ic ->
+    mergeable_states p c p' c' s1 s1'' ->
+    Step sem   s1   [e] s2   ->
+    Step sem'' s1'' [e] s2'' ->
+    Step sem'  (merge_states p c s1 s1'') [e] (merge_states p c s2 s2'') /\
+    mergeable_states p c p' c' s2 s2''.
+  Proof.
+    split.
+    - now apply threeway_multisem_event_lockstep_program_step.
+    - eapply threeway_multisem_event_lockstep_program_mergeable; eassumption.
+  Qed.
 End ThreewayMultisem1.
 
 Section ThreewayMultisem2.
@@ -910,7 +962,7 @@ Section ThreewayMultisem2.
     inversion Hmerg
       as [? ? ? Hini Hini'' Hstar Hstar'']; subst.
     (* induction *)
-  Admitted. (* Grade 1. *)
+  Admitted. (* RB: NOTE: JT will fill this in. *)
 
   (* A restricted version of the lockstep simulation on event-producing steps.
      RB: NOTE: Here is where we depart from the multi-semantics and need to
@@ -926,7 +978,12 @@ Section ThreewayMultisem2.
     Step sem'' s1'' [e] s2'' ->
     Step sem'  (merge_states p c s1 s1'') [e] (merge_states p c s2 s2'') /\
     mergeable_states p c p' c' s2 s2''.
-  Admitted.
+  Proof.
+    intros Hmerge1 Hstep12 Hstep12''.
+    destruct (CS.is_program_component s1 ic) eqn:Hcase.
+    - now apply threeway_multisem_event_lockstep_program.
+    - admit. (* Symmetric case. *)
+  Admitted. (* RB: TODO: JT will factor the symmetric proofs. *)
 
   Theorem threeway_multisem_star_program s1 s1'' t s2 s2'' :
     CS.is_program_component s1 ic ->
@@ -1029,13 +1086,16 @@ Section ThreewayMultisem3.
         in Hcomp1.
       assert (Hmerge2: mergeable_states p c p' c' s2 s2'')
         by (eapply threeway_multisem_mergeable; eassumption).
+      rewrite program_linkC in Hstar12; try assumption;
+        last admit. (* Easy. *)
+      rewrite program_linkC in Hstar12''; try assumption;
+        last admit. (* Easy. *)
       rewrite program_linkC; try assumption;
         last admit. (* Easy. *)
       setoid_rewrite merge_states_sym at 1 2; try eassumption.
-      (* unfold ip, ic; rewrite -> Hifacep, -> Hifacec. *)
-      (* apply threeway_multisem_star_program with (p' := c); *)
-      (*   admit. (* Easy. *) *)
-  Admitted. (* Grade 1. *)
+      unfold merge_states. rewrite Hifacep Hifacec.
+      apply threeway_multisem_star_program with (p' := c).
+  Admitted. (* RB: NOTE: Assigned to JT. *)
 End ThreewayMultisem3.
 
 (* Section ThreewayMultisem. *)
