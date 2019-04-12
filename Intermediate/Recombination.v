@@ -523,6 +523,20 @@ Section MergeSym.
   Lemma merge_states_sym p c p' c' s s'' :
     mergeable_states p c p' c' s s'' ->
     merge_states p c s s'' = merge_states c p s'' s.
+  Proof.
+    (* rewrite (@PS.merge_partial_states_sym ic ip). *)
+    (*   2: { simpl. inversion H; subst. *)
+    (*        econstructor; eauto. Search _ PS.partial_state PS.partialize. *)
+    (*        admit. *)
+    (*        unfold CS.comes_from_initial_state. *)
+    (*        destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]]. *)
+    (*        exists prog, i, s0, t. *)
+    (*        split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness). *)
+    (*        repeat split; eauto. admit. *)
+    (*        apply PS.partialized_state_is_partial. apply PS.partialized_state_is_partial. *)
+    (*        unfold CS.is_program_component in Hprg_component. *)
+    (*        apply negbFE in Hprg_component. *)
+    (*        } *)
   Admitted.
 End MergeSym.
 
@@ -855,34 +869,35 @@ Section ThreewayMultisem1.
     Star sem'' s1'' E0 s2'' ->
     Star sem'  (merge_states p c s1 s1'') E0 (merge_states p c s2 s2'').
   Proof.
-    intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
-    pose proof mergeable_states_program_to_program
-         Hmergeable_ifaces Hifacep Hifacec Hmerge1 Hcomp1 as Hcomp1'.
-    rewrite Hifacec in Hcomp1'.
-    pose proof context_epsilon_star_is_silent Hcomp1' Hstar12'' as Hs2'.
-    remember E0 as t eqn:Ht.
-    revert Ht Hmerge1 Hcomp1 Hcomp1' Hstar12''.
-    apply star_iff_starR in Hstar12.
-    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
-      intros Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'.
-    - (* RB: TODO: Follows from Hs2', ideally via a recurring lemma. Compare with
-         its role in the inductive step. *)
-      (* now apply star_refl. *)
-      admit.
-    - apply Eapp_E0_inv in Ht. destruct Ht; subst.
-      specialize (IHstar (eq_refl _) Hmerge1 Hcomp1 Hcomp1' Hstar12').
-      apply star_trans with (t1 := E0) (s2 := merge_states p c s2 s2'') (t2 := E0);
-        [assumption | | reflexivity].
-      apply star_step with (t1 := E0) (s2 := merge_states p c s3 s2'') (t2 := E0).
-      + apply star_iff_starR in Hstar12.
-        pose proof threeway_multisem_mergeable_program Hcomp1 Hmerge1 Hstar12 Hstar12'
-          as Hmerge2.
-        pose proof epsilon_star_preserves_program_component Hcomp1 Hstar12
-          as Hcomp2.
-        exact (threeway_multisem_step_E0 Hcomp2 Hmerge2 Hstep23).
-      + now constructor.
-      + reflexivity.
-  Admitted.
+    Admitted.
+  (*   intros Hcomp1 Hmerge1 Hstar12 Hstar12''. *)
+  (*   pose proof mergeable_states_program_to_program *)
+  (*        Hmergeable_ifaces Hifacep Hifacec Hmerge1 Hcomp1 as Hcomp1'. *)
+  (*   rewrite Hifacec in Hcomp1'. *)
+  (*   pose proof context_epsilon_star_is_silent Hcomp1' Hstar12'' as Hs2'. *)
+  (*   remember E0 as t eqn:Ht. *)
+  (*   revert Ht Hmerge1 Hcomp1 Hcomp1' Hstar12''. *)
+  (*   apply star_iff_starR in Hstar12. *)
+  (*   induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst; *)
+  (*     intros Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'. *)
+  (*   - (* RB: TODO: Follows from Hs2', ideally via a recurring lemma. Compare with *)
+  (*        its role in the inductive step. *) *)
+  (*     (* now apply star_refl. *) *)
+  (*     admit. *)
+  (*   - apply Eapp_E0_inv in Ht. destruct Ht; subst. *)
+  (*     specialize (IHstar (eq_refl _) Hmerge1 Hcomp1 Hcomp1' Hstar12'). *)
+  (*     apply star_trans with (t1 := E0) (s2 := merge_states p c s2 s2'') (t2 := E0); *)
+  (*       [assumption | | reflexivity]. *)
+  (*     apply star_step with (t1 := E0) (s2 := merge_states p c s3 s2'') (t2 := E0). *)
+  (*     + apply star_iff_starR in Hstar12. *)
+  (*       pose proof threeway_multisem_mergeable_program Hcomp1 Hmerge1 Hstar12 Hstar12' *)
+  (*         as Hmerge2. *)
+  (*       pose proof epsilon_star_preserves_program_component Hcomp1 Hstar12 *)
+  (*         as Hcomp2. *)
+  (*       exact (threeway_multisem_step_E0 Hcomp2 Hmerge2 Hstep23). *)
+  (*     + now constructor. *)
+  (*     + reflexivity. *)
+  (* Admitted. *)
   
 End ThreewayMultisem1.
 
@@ -940,11 +955,11 @@ Section ThreewayMultisem2.
   (*   - constructor. *)
   (*   - assert (Step sem' (merge_states p c s1 s1'') t1 (merge_states p c s2 s1'')). *)
 
-  Lemma star_E0_preserves_component : forall s1 s2,
-      Star sem s1 E0 s2 ->
-      CS.is_context_component s1 ip = CS.is_context_component s2 ip.
-  Proof.
-    intros s1 s2 H.
+  (* Lemma star_E0_preserves_component : forall s1 s2, *)
+  (*     Star sem s1 E0 s2 -> *)
+  (*     CS.is_context_component s1 ip = CS.is_context_component s2 ip. *)
+  (* Proof. *)
+  (*   intros s1 s2 H. *)
 
   
   Lemma threeway_multisem_star_E0 s1 s1'' s2 s2'':
@@ -956,20 +971,12 @@ Section ThreewayMultisem2.
     intros H H0 H1.
     destruct (CS.is_program_component s1 ic) eqn:Hprg_component.
     - now apply threeway_multisem_star_E0_program.
-    - unfold merge_states.
-      rewrite (@PS.merge_partial_states_sym ip ic).
-      2: { simpl. inversion H; subst.
-           econstructor; eauto.
-           unfold CS.comes_from_initial_state.
-           destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
-           exists prog, i, s0, t.
-           split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
-           repeat split; eauto.
-           unfold CS.is_program_component in Hprg_component.
-           apply negbFE in Hprg_component.
-           }
-      fold (merge_states c p s1'' s1).
-      erewrite PS.merge_partial_states_sym. fold (merge_states c p s2'' s2).
+    - Check merge_states_sym.
+      rewrite (merge_states_sym H).
+      rewrite (merge_states_sym (threeway_multisem_mergeable H H0 H1)). 
+      (* unfold merge_states. *)
+      (* fold (merge_states c p s1'' s1). *)
+      (* erewrite PS.merge_partial_states_sym. fold (merge_states c p s2'' s2). *)
       assert (Hlinkable : linkable ip ic) by now destruct Hmergeable_ifaces.
       unfold ic in Hlinkable. rewrite Hifacec in Hlinkable.
       pose proof (program_linkC Hwfp Hwfc' Hlinkable) as Hprg_linkC'.
@@ -1020,6 +1027,8 @@ Section ThreewayMultisem2.
 
       rewrite <- Hmerg_eq1, <- Hmerg_eq2. 
       assumption.
+  Qed.
+  
       (* inversion H should do the work *)
       inversion H. econstructor; eauto.
       + unfold CS.comes_from_initial_state.
