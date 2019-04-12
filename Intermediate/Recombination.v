@@ -93,7 +93,7 @@ Section Merge.
 
 
   (* Definition of the function to merge two states *)
-  Definition merge_frames (f f'' : Pointer.t) :=
+  Definition merge_frames (f f''   : Pointer.t) :=
     if Nat.eqb (Pointer.component f) (Pointer.component f'') then
       if Pointer.component f \in domm (prog_interface p) then
         Some f
@@ -386,16 +386,20 @@ Section Merge.
      and memories "without holes" w.r.t. to the generating states and interfaces,
      provided that the mergeability assumptions is present. *)
 
+  (* RB: TODO: Rename these definitions to merge_states_. *)
   Definition mergeable_states_stack (s s'' : CS.state) : CS.stack :=
     PS.unpartialize_stack
       (PS.merge_stacks
          (PS.to_partial_stack (CS.state_stack s  ) (domm ic))
          (PS.to_partial_stack (CS.state_stack s'') (domm ip))).
 
-  Definition mergeable_states_memory (s s'' : CS.state) : Memory.t :=
+  Definition merge_memories (mem mem'' : Memory.t) : Memory.t :=
     PS.merge_memories
-      (PS.to_partial_memory (CS.state_mem s  ) (domm ic))
-      (PS.to_partial_memory (CS.state_mem s'') (domm ip)).
+      (PS.to_partial_memory mem   (domm ic))
+      (PS.to_partial_memory mem'' (domm ip)).
+
+  Definition mergeable_states_memory (s s'' : CS.state) : Memory.t :=
+    merge_memories (CS.state_mem s) (CS.state_mem s'').
 
   Definition mergeable_states_regs (s s'' : CS.state) : Register.t :=
     if Pointer.component (CS.state_pc s) \in domm ic then
@@ -423,6 +427,16 @@ Section Merge.
     mergeable_states s s'' ->
     merge_states s s'' =
     mergeable_states_state s s''.
+  Admitted.
+
+  Lemma mergeable_states_merge_program s s'' :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    merge_states s s'' =
+    (mergeable_states_stack s s'',
+     mergeable_states_memory s s'',
+     state_regs s,
+     CS.state_pc s).
   Admitted.
 
   Lemma mergeable_states_pc_same_component s s'' :
@@ -852,11 +866,91 @@ Section ThreewayMultisem1.
              eapply Hind_step with (t := [ev']); eauto. unfold E0. congruence.
   Qed.
 
+  (* RB: TODO: More the following few helper lemmas to their appropriate
+     location. Consider changing the naming conventions from
+     "partialized" to "recombined" or similar. Exposing the innards of the
+     memory merge operation is not pretty; sealing them would require to
+     add the program step from s to the lemmas. *)
+  Lemma program_load_to_partialized_memory s s'' ptr v :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.load (CS.state_mem s) ptr = Some v ->
+    Memory.load (merge_memories p c (CS.state_mem s) (CS.state_mem s'')) ptr =
+    Some v.
+  Admitted.
+
+  Lemma program_store_to_partialized_memory s s'' ptr v mem :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.store (CS.state_mem s) ptr v = Some mem ->
+    Memory.store (merge_memories p c (CS.state_mem s) (CS.state_mem s'')) ptr v =
+    Some (merge_memories p c mem (CS.state_mem s'')).
+  Admitted.
+
+  Lemma program_alloc_to_partialized_memory s s'' mem ptr size :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    Memory.alloc (CS.state_mem s) (CS.state_component s) size = Some (mem, ptr) ->
+    Memory.alloc (merge_memories p c (CS.state_mem s) (CS.state_mem s''))
+                 (CS.state_component s) size =
+    Some (merge_memories p c mem (CS.state_mem s''), ptr).
+  Admitted.
+
+  Lemma find_label_in_component_recombination s s'' l pc :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    find_label_in_component (globalenv sem) (CS.state_pc s) l = Some pc ->
+    find_label_in_component (globalenv sem') (CS.state_pc s) l = Some pc.
+  Admitted.
+
+  Lemma find_label_in_procedure_recombination s s'' l pc :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    find_label_in_procedure (globalenv sem) (CS.state_pc s) l = Some pc ->
+    find_label_in_procedure (globalenv sem') (CS.state_pc s) l = Some pc.
+  Admitted.
+
   Lemma threeway_multisem_step_E0 s1 s2 s1'' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
     Step sem  s1 E0 s2 ->
     Step sem' (merge_states p c s1 s1'') E0 (merge_states p c s2 s1'').
+  Proof.
+    intros Hcomp1 Hmerge1 Hstep12.
+    (* Derive some useful facts from mergeable_states, expose state structure. *)
+    rewrite (mergeable_states_merge_program
+               Hmergeable_ifaces Hifacep Hifacec Hcomp1 Hmerge1).
+    assert (Hcomp2 : CS.is_program_component s2 ic) by admit.
+    assert (Hmerge2 : mergeable_states p c p' c' s2 s1'') by admit.
+    rewrite (mergeable_states_merge_program
+               Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2).
+    destruct s1 as [[[gps1 mem1] regs1] pc1].
+    destruct s2 as [[[gps2 mem2] regs2] pc2].
+    destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
+    (* Case analysis on step. *)
+    inversion Hstep12; subst;
+      (*[*)Composition.CS_step_of_executing(*]*);
+      try eassumption; try reflexivity;
+      (* Solve side goals for CS step. *)
+      match goal with
+      | |- Memory.load _ _ = _ =>
+        apply program_load_to_partialized_memory;
+          try assumption; [now rewrite Pointer.inc_preserves_component]
+      | |- Memory.store _ _ _ = _ =>
+        apply program_store_to_partialized_memory; eassumption
+      | |- find_label_in_component _ _ _ = _ =>
+        eapply find_label_in_component_recombination; eassumption
+      | |- find_label_in_procedure _ _ _ = _ =>
+        eapply find_label_in_procedure_recombination; eassumption
+      | |- Memory.alloc _ _ _ = _ =>
+        now apply program_alloc_to_partialized_memory
+      | _ => idtac
+      end;
+      (* Apply linking invariance and solve side goals. *)
+      eapply execution_invariant_to_linking; try eassumption.
+    (* CS.silent_step_preserves_component *)
   Admitted.
 
   (* Compose two stars into a merged star. The "program" side drives both stars
