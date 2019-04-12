@@ -383,10 +383,13 @@ Section Merge.
          (PS.to_partial_stack (CS.state_stack s  ) (domm ic))
          (PS.to_partial_stack (CS.state_stack s'') (domm ip))).
 
-  Definition mergeable_states_memory (s s'' : CS.state) : Memory.t :=
+  Definition merge_memories (mem mem'' : Memory.t) : Memory.t :=
     PS.merge_memories
-      (PS.to_partial_memory (CS.state_mem s  ) (domm ic))
-      (PS.to_partial_memory (CS.state_mem s'') (domm ip)).
+      (PS.to_partial_memory mem   (domm ic))
+      (PS.to_partial_memory mem'' (domm ip)).
+
+  Definition mergeable_states_memory (s s'' : CS.state) : Memory.t :=
+    merge_memories (CS.state_mem s) (CS.state_mem s'').
 
   Definition mergeable_states_regs (s s'' : CS.state) : Register.t :=
     if Pointer.component (CS.state_pc s) \in domm ic then
@@ -684,6 +687,52 @@ Section ThreewayMultisem1.
   Proof.
   Admitted. (* RB: NOTE: JT will fill it in. *)
 
+  (* RB: TODO: More the following few helper lemmas to their appropriate
+     location. Consider changing the naming conventions from
+     "partialized" to "recombined" or similar. Exposing the innards of the
+     memory merge operation is not pretty; sealing them would require to
+     add the program step from s to the lemmas. *)
+  Lemma program_load_to_partialized_memory s s'' ptr v :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.load (CS.state_mem s) ptr = Some v ->
+    Memory.load (merge_memories p c (CS.state_mem s) (CS.state_mem s'')) ptr =
+    Some v.
+  Admitted.
+
+  Lemma program_store_to_partialized_memory s s'' ptr v mem :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.store (CS.state_mem s) ptr v = Some mem ->
+    Memory.store (merge_memories p c (CS.state_mem s) (CS.state_mem s'')) ptr v =
+    Some (merge_memories p c mem (CS.state_mem s'')).
+  Admitted.
+
+  Lemma program_alloc_to_partialized_memory s s'' mem ptr size :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    Memory.alloc (CS.state_mem s) (CS.state_component s) size = Some (mem, ptr) ->
+    Memory.alloc (merge_memories p c (CS.state_mem s) (CS.state_mem s''))
+                 (CS.state_component s) size =
+    Some (merge_memories p c mem (CS.state_mem s''), ptr).
+  Admitted.
+
+  Lemma find_label_in_component_recombination s s'' l pc :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    find_label_in_component (globalenv sem) (CS.state_pc s) l = Some pc ->
+    find_label_in_component (globalenv sem') (CS.state_pc s) l = Some pc.
+  Admitted.
+
+  Lemma find_label_in_procedure_recombination s s'' l pc :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    find_label_in_procedure (globalenv sem) (CS.state_pc s) l = Some pc ->
+    find_label_in_procedure (globalenv sem') (CS.state_pc s) l = Some pc.
+  Admitted.
+
   Lemma threeway_multisem_step_E0 s1 s2 s1'' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
@@ -702,16 +751,27 @@ Section ThreewayMultisem1.
     destruct s2 as [[[gps2 mem2] regs2] pc2].
     destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
     (* Case analysis on step. *)
-    inversion Hstep12; subst.
-
-    1:{
+    inversion Hstep12; subst;
       (*[*)Composition.CS_step_of_executing(*]*);
-        try eassumption; try reflexivity.
-
+      try eassumption; try reflexivity;
+      (* Solve side goals for CS step. *)
+      match goal with
+      | |- Memory.load _ _ = _ =>
+        apply program_load_to_partialized_memory;
+          try assumption; [now rewrite Pointer.inc_preserves_component]
+      | |- Memory.store _ _ _ = _ =>
+        apply program_store_to_partialized_memory; eassumption
+      | |- find_label_in_component _ _ _ = _ =>
+        eapply find_label_in_component_recombination; eassumption
+      | |- find_label_in_procedure _ _ _ = _ =>
+        eapply find_label_in_procedure_recombination; eassumption
+      | |- Memory.alloc _ _ _ = _ =>
+        now apply program_alloc_to_partialized_memory
+      | _ => idtac
+      end;
+      (* Apply linking invariance and solve side goals. *)
       eapply execution_invariant_to_linking; try eassumption.
-      admit.
-    }
-
+    (* CS.silent_step_preserves_component *)
   Admitted.
 
   (* Compose two stars into a merged star. The "program" side drives both stars
