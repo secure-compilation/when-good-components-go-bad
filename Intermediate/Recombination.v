@@ -376,12 +376,15 @@ Section Merge.
      and memories "without holes" w.r.t. to the generating states and interfaces,
      provided that the mergeability assumptions is present. *)
 
-  (* RB: TODO: Rename these definitions to merge_states_. *)
-  Definition mergeable_states_stack (s s'' : CS.state) : CS.stack :=
+  Definition merge_stacks (gps gps'' : CS.stack) : CS.stack :=
     PS.unpartialize_stack
       (PS.merge_stacks
-         (PS.to_partial_stack (CS.state_stack s  ) (domm ic))
-         (PS.to_partial_stack (CS.state_stack s'') (domm ip))).
+         (PS.to_partial_stack gps (domm ic))
+         (PS.to_partial_stack gps'' (domm ip))).
+
+  (* RB: TODO: Rename these definitions to merge_states_. *)
+  Definition mergeable_states_stack (s s'' : CS.state) : CS.stack :=
+    merge_stacks (CS.state_stack s) (CS.state_stack s'').
 
   Definition merge_memories (mem mem'' : Memory.t) : Memory.t :=
     PS.merge_memories
@@ -413,6 +416,18 @@ Section Merge.
 
   (* RB: TODO: Add side conditions (well-formed programs, linkable interfaces,
      etc. *)
+  Lemma merge_stacks_cons_program frame gps frame'' gps'' :
+    Pointer.component frame \in domm ip ->
+    merge_stacks (frame :: gps) (frame'' :: gps'') =
+    frame :: merge_stacks gps gps''.
+  Admitted.
+
+  Lemma merge_stacks_cons_context frame gps frame'' gps'' :
+    Pointer.component frame \in domm ic ->
+    merge_stacks (frame :: gps) (frame'' :: gps'') =
+    frame'' :: merge_stacks gps gps''.
+  Admitted.
+
   Lemma mergeable_states_merge s s'' :
     mergeable_states s s'' ->
     merge_states s s'' =
@@ -427,6 +442,16 @@ Section Merge.
      mergeable_states_memory s s'',
      state_regs s,
      CS.state_pc s).
+  Admitted.
+
+  Lemma mergeable_states_merge_context s s'' :
+    CS.is_context_component s ic ->
+    mergeable_states s s'' ->
+    merge_states s s'' =
+    (mergeable_states_stack s s'',
+     mergeable_states_memory s s'',
+     state_regs s'',
+     CS.state_pc s'').
   Admitted.
 
   Lemma mergeable_states_pc_same_component s s'' :
