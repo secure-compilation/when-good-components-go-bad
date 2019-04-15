@@ -938,6 +938,16 @@ Section ThreewayMultisem1.
       ]
     ].
 
+  Ltac t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1 :=
+    apply CS.Return; try congruence; (* [congruence] to cover context case. *)
+    eapply execution_invariant_to_linking; try eassumption;
+    [ congruence
+    | apply linkable_implies_linkable_mains; congruence
+    | exact (is_program_component_in_domm Hcomp1 Hmerge1)
+    ].
+
+  (* RB: TODO: Does it make sense to compact calls and returns into a unified
+     solve tactic? *)
   Lemma threeway_multisem_event_lockstep_program_step s1 s1'' e s2 s2'' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
@@ -966,7 +976,7 @@ Section ThreewayMultisem1.
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
         [ pose proof mergeable_states_program_to_context
                Hmergeable_ifaces Hifacep Hifacec Hmerge2 Hcomp2 as Hcomp2''
-        | apply negb_false_iff in Hcomp2];
+        | apply negb_false_iff in Hcomp2 ];
         [ erewrite mergeable_states_merge_program
         | erewrite mergeable_states_merge_context ]; try eassumption;
         unfold mergeable_states_memory, mergeable_states_stack; simpl;
@@ -978,43 +988,25 @@ Section ThreewayMultisem1.
         [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
         t_threeway_multisem_event_lockstep_program_step_call Hcomp1 Hmerge1.
     - (* Return: case analysis on return point. *)
-      destruct (CS.is_program_component s2copy ic) eqn:Hcomp2.
-      + rewrite (mergeable_states_merge_program
-                   Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2).
-        unfold mergeable_states_memory, mergeable_states_stack; simpl.
-        assert (Hdomm : Pointer.component pc2 \in domm ip) by admit.
-        rewrite (merge_stacks_cons_program
-                   Hmergeable_ifaces Hifacep Hifacec _ _ _ Hdomm).
-        match goal with
-        | Heq1 : Pointer.component pc1'' = Pointer.component pc1,
-          Heq2 : Pointer.component pc2'' = Pointer.component pc2 |- _ =>
-          rewrite Heq1 Heq2
-        end.
-        apply CS.Return; try congruence. (* [congruence] to cover context case. *)
-        eapply execution_invariant_to_linking; try eassumption;
-          [ congruence
-          | apply linkable_implies_linkable_mains; congruence
-          | exact (is_program_component_in_domm Hcomp1 Hmerge1)
-          ].
-      + apply negb_false_iff in Hcomp2.
-        rewrite (mergeable_states_merge_context
-                   Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2).
-        unfold mergeable_states_memory, mergeable_states_stack; simpl.
-        assert (Hdomm : Pointer.component pc2 \in domm ic) by admit.
-        rewrite (merge_stacks_cons_context
-                   Hmergeable_ifaces Hifacep Hifacec _ _ _ Hdomm).
-        match goal with
-        | Heq : Pointer.component pc1'' = Pointer.component pc1 |- _ =>
-          rewrite Heq
-        end.
-        erewrite Register.invalidate_eq with (regs2 := regs1); last congruence.
-        apply CS.Return; try congruence.
-        eapply execution_invariant_to_linking; try eassumption;
-          [ congruence
-          | apply linkable_implies_linkable_mains; congruence
-          | exact (is_program_component_in_domm Hcomp1 Hmerge1)
-          ].
-  Admitted.
+      match goal with
+      | H1 : Pointer.component pc1'' = Pointer.component pc1,
+        H2 : Pointer.component pc2'' = Pointer.component pc2 |- _ =>
+        rename H1 into Heq1; rename H2 into Heq2
+      end.
+      destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
+        [| apply negb_false_iff in Hcomp2];
+        [ rewrite (mergeable_states_merge_program
+                     Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2)
+        | rewrite (mergeable_states_merge_context
+            Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2) ];
+        unfold mergeable_states_memory, mergeable_states_stack; simpl;
+        [ pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2'';
+          rewrite (merge_stacks_cons_program Hmergeable_ifaces Hifacep Hifacec); try assumption
+        | rewrite (merge_stacks_cons_context Hmergeable_ifaces Hifacep Hifacec); try assumption ];
+        [ rewrite Heq1 Heq2 | rewrite Heq1 ];
+        [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
+        t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
+  Qed.
 
   Lemma threeway_multisem_event_lockstep_program s1 s1'' e s2 s2'' :
     CS.is_program_component s1 ic ->
