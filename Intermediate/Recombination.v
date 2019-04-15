@@ -878,6 +878,20 @@ Section ThreewayMultisem1.
     Memory.load (CS.state_mem s) ptr = Some v ->
     Memory.load (merge_memories p c (CS.state_mem s) (CS.state_mem s'')) ptr =
     Some v.
+  Proof.
+    intros Hprg_component Hmerg Hptr.
+    destruct s as [[[? mem] ?] pc]; simpl in *.
+    intros Hmem.
+    unfold merge_memories.
+    Search _ PS.merge_memories.
+    unfold PS.merge_memories.
+    rewrite <- Hmem.
+    unfold Memory.load.
+    assert (Heq : (unionm (PS.to_partial_memory mem (domm (prog_interface c)))
+                          (PS.to_partial_memory (CS.state_mem s'') (domm (prog_interface p))))
+                    (Pointer.component ptr) = mem (Pointer.component ptr)).
+    { admit. }
+    now rewrite Heq.
   Admitted.
 
   Lemma program_store_to_partialized_memory s s'' ptr v mem :
@@ -887,6 +901,9 @@ Section ThreewayMultisem1.
     Memory.store (CS.state_mem s) ptr v = Some mem ->
     Memory.store (merge_memories p c (CS.state_mem s) (CS.state_mem s'')) ptr v =
     Some (merge_memories p c mem (CS.state_mem s'')).
+  Proof.
+    
+
   Admitted.
 
   Lemma program_alloc_to_partialized_memory s s'' mem ptr size :
@@ -918,39 +935,7 @@ Section ThreewayMultisem1.
     Step sem  s1 E0 s2 ->
     Step sem' (merge_states p c s1 s1'') E0 (merge_states p c s2 s1'').
   Proof.
-    intros Hcomp1 Hmerge1 Hstep12.
-    (* Derive some useful facts from mergeable_states, expose state structure. *)
-    rewrite (mergeable_states_merge_program
-               Hmergeable_ifaces Hifacep Hifacec Hcomp1 Hmerge1).
-    assert (Hcomp2 : CS.is_program_component s2 ic) by admit.
-    assert (Hmerge2 : mergeable_states p c p' c' s2 s1'') by admit.
-    rewrite (mergeable_states_merge_program
-               Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2).
-    destruct s1 as [[[gps1 mem1] regs1] pc1].
-    destruct s2 as [[[gps2 mem2] regs2] pc2].
-    destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
-    (* Case analysis on step. *)
-    inversion Hstep12; subst;
-      (*[*)Composition.CS_step_of_executing(*]*);
-      try eassumption; try reflexivity;
-      (* Solve side goals for CS step. *)
-      match goal with
-      | |- Memory.load _ _ = _ =>
-        apply program_load_to_partialized_memory;
-          try assumption; [now rewrite Pointer.inc_preserves_component]
-      | |- Memory.store _ _ _ = _ =>
-        apply program_store_to_partialized_memory; eassumption
-      | |- find_label_in_component _ _ _ = _ =>
-        eapply find_label_in_component_recombination; eassumption
-      | |- find_label_in_procedure _ _ _ = _ =>
-        eapply find_label_in_procedure_recombination; eassumption
-      | |- Memory.alloc _ _ _ = _ =>
-        now apply program_alloc_to_partialized_memory
-      | _ => idtac
-      end;
-      (* Apply linking invariance and solve side goals. *)
-      eapply execution_invariant_to_linking; try eassumption.
-    (* CS.silent_step_preserves_component *)
+    admit.
   Admitted.
 
   (* Compose two stars into a merged star. The "program" side drives both stars
@@ -1122,36 +1107,6 @@ Section ThreewayMultisem2.
       rewrite <- Hmerg_eq1, <- Hmerg_eq2. 
       assumption.
   Qed.
-  
-      (* inversion H should do the work *)
-      inversion H. econstructor; eauto.
-      + unfold CS.comes_from_initial_state.
-        destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
-        exists prog, i, s0, t.
-        split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
-        repeat split; eauto.
-      + unfold PS.partialize.
-        
-        destruct s2 as [[[stack2 mem2] regs2] pc2].
-        rewrite mergeable_states_pc_same_component.
-        unfold CS.is_program_component in Hprg_component. apply negbFE in Hprg_component.
-        eapply mergeable_states_context_to_program in Hprg_component.
-      
-      specialize (Hmultisem c p c' p' Hwfc Hwfp Hwfc' Hwfp'
-                     (mergeable_interfaces_sym ip ic Hmergeable_ifaces) Hifacec Hifacep
-                     (linkable_mains_sym Hmain_linkability) (linkable_mains_sym Hmain_linkability')).
-      
-      Check threeway_multisem_star_E0_program.
-      eapply threeway_multisem_star_E0_program with (p := c) (c := p) (c' := p) (p' := c').
-
-      pose proof (threeway_multisem_star_E0_program).
-      specialize (H2 c p c' p' Hwfc Hwfp Hwfc' Hwfp'
-                     (mergeable_interfaces_sym ip ic Hmergeable_ifaces) Hifacec Hifacep
-                     (linkable_mains_sym Hmain_linkability) (linkable_mains_sym Hmain_linkability')).
-      Search _ PS.merge_partial_states.
-      apply threeway_multisem_star_E0_program with (p := c) (c := p).
-    
-  Admitted. (* Grade 1. *)
 
   (* A restricted version of the lockstep simulation on event-producing steps.
      RB: NOTE: Here is where we depart from the multi-semantics and need to
@@ -1262,13 +1217,6 @@ Section ThreewayMultisem3.
     Star (CS.sem (program_link p  c')) (merge_states p c s1 s1'') t (merge_states p c s2 s2'').
     (* /\ mergeable_states ip ic s2 s2'' *)
   Proof.
-    intros Hmerg.
-    induction Hmerg
-      as [s s'' Hini Hini''
-         | s1 s2 s'' Hmerg Hstep IH
-         | s s1'' s2'' Hmerg Hstep IH
-         | s1 s2 s1'' s2'' t Hdiff Hmerg Hstep Hstep'' IH]
-           using mergeable_states_ind'.
     intros Hmerge1 Hstar12 Hstar12''.
     destruct (CS.is_program_component s1 ic) eqn:Hcomp1.
     - now apply threeway_multisem_star_program.
