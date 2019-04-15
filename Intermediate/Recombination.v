@@ -376,6 +376,13 @@ Section Merge.
      and memories "without holes" w.r.t. to the generating states and interfaces,
      provided that the mergeability assumptions is present. *)
 
+  (* RB: TODO: Reduce the complexity of these definitions where possible. At the
+     moment there are two sets: "easy to define" and "easy to use", and since we
+     are always employing the latter we should question the presence of the
+     former, inherited from Composition, here.
+
+     In addition, improve names of some of these results. *)
+
   Definition merge_stacks (gps gps'' : CS.stack) : CS.stack :=
     PS.unpartialize_stack
       (PS.merge_stacks
@@ -736,7 +743,11 @@ Section ThreewayMultisem1.
      "partialized" to "recombined" or similar. Exposing the innards of the
      memory merge operation is not pretty; sealing them would require to
      add the program step from s to the lemmas. In this block, mergeable_states
-     may be too strong and could be weakened if it were interesting to do so. *)
+     may be too strong and could be weakened if it were interesting to do so.
+
+     See comments for pointers to existing related lemmas. *)
+
+  (* Search _ Memory.load filterm. *)
   Lemma program_load_to_partialized_memory s s'' ptr v :
     CS.is_program_component s ic ->
     mergeable_states p c p' c' s s'' ->
@@ -746,6 +757,9 @@ Section ThreewayMultisem1.
     Some v.
   Admitted.
 
+  (* Search _ Memory.store filterm. *)
+  (* Search _ Memory.store PS.to_partial_memory. *)
+  (* Search _ Memory.store PS.merge_memories. *)
   Lemma program_store_to_partialized_memory s s'' ptr v mem :
     CS.is_program_component s ic ->
     mergeable_states p c p' c' s s'' ->
@@ -755,6 +769,9 @@ Section ThreewayMultisem1.
     Some (merge_memories p c mem (CS.state_mem s'')).
   Admitted.
 
+  (* Search _ Memory.alloc filterm. *)
+  (* Search _ Memory.alloc PS.to_partial_memory. *)
+  (* Search _ Memory.alloc PS.merge_memories. *)
   Lemma program_alloc_to_partialized_memory s s'' mem ptr size :
     CS.is_program_component s ic ->
     mergeable_states p c p' c' s s'' ->
@@ -764,6 +781,7 @@ Section ThreewayMultisem1.
     Some (merge_memories p c mem (CS.state_mem s''), ptr).
   Admitted.
 
+  (* Search _ find_label_in_component. *)
   Lemma find_label_in_component_recombination s s'' l pc :
     CS.is_program_component s ic ->
     mergeable_states p c p' c' s s'' ->
@@ -771,6 +789,7 @@ Section ThreewayMultisem1.
     find_label_in_component (globalenv sem') (CS.state_pc s) l = Some pc.
   Admitted.
 
+  (* Search _ find_label_in_procedure. *)
   Lemma find_label_in_procedure_recombination s s'' l pc :
     CS.is_program_component s ic ->
     mergeable_states p c p' c' s s'' ->
@@ -778,6 +797,7 @@ Section ThreewayMultisem1.
     find_label_in_procedure (globalenv sem') (CS.state_pc s) l = Some pc.
   Admitted.
 
+  (* Search _ PS.is_program_component Pointer.component. *)
   Lemma is_program_component_in_domm s s'' :
     CS.is_program_component s ic ->
     mergeable_states p c p' c' s s'' ->
@@ -798,6 +818,7 @@ Section ThreewayMultisem1.
     now rewrite <- Heq.
   Qed.
 
+  (* Search _ imported_procedure. *)
   Lemma imported_procedure_recombination s C P :
     CS.is_program_component s ic ->
     imported_procedure
