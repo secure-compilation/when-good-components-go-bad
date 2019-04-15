@@ -792,6 +792,32 @@ Section ThreewayMultisem1.
     now rewrite <- Heq.
   Qed.
 
+  Lemma imported_procedure_recombination s C P :
+    CS.is_program_component s ic ->
+    imported_procedure
+      (genv_interface (globalenv sem )) (CS.state_component s) C P ->
+    imported_procedure
+      (genv_interface (globalenv sem')) (CS.state_component s) C P.
+  Admitted.
+
+  (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
+     operating on an explicit program link, one then being the exact symmetric of
+     the other, i.e., its application after communativity of linking. There is a
+     choice of encoding of component membership in both cases. *)
+
+  (* Search _ EntryPoint.get. *)
+  Lemma genv_entrypoints_recombination_left C P b :
+    C \in domm ip ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem )) = Some b ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem')) = Some b.
+  Admitted.
+
+  Lemma genv_entrypoints_recombination_right C P b :
+    C \in domm ic ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem'')) = Some b ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem' )) = Some b.
+  Admitted.
+
   Ltac t_threeway_multisem_step_E0 :=
     Composition.CS_step_of_executing;
     try eassumption; try reflexivity;
