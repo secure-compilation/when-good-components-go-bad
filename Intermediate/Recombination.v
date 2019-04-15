@@ -714,30 +714,6 @@ Section ThreewayMultisem1.
   Let sem'' := CS.sem prog''.
   Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
-  Lemma threeway_multisem_mergeable_step_E0 s1 s2 s1'' :
-    CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' s1 s1'' ->
-    Step sem s1 E0 s2 ->
-    mergeable_states p c p' c' s2 s1''.
-  Proof.
-    intros Hcomp1 Hmerge1 Hstep12.
-    inversion Hmerge1 as [s0 s0'' t Hini1 Hini2 Hstar01 Hstar01''].
-    apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := t);
-      try assumption.
-    eapply star_right; try eassumption; now rewrite E0_right.
-  Qed.
-
-  (* RB: NOTE: The structure follows closely that of
-     threeway_multisem_star_program. *)
-  Theorem threeway_multisem_mergeable_program s1 s1'' t s2 s2'' :
-    CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' s1 s1'' ->
-    Star sem   s1   t s2   ->
-    Star sem'' s1'' t s2'' ->
-    mergeable_states p c p' c' s2 s2''.
-  Proof.
-  Admitted. (* RB: NOTE: JT will fill it in. *)
-
   (* RB: TODO: More the following few helper lemmas to their appropriate
      location. Consider changing the naming conventions from
      "partialized" to "recombined" or similar. Exposing the innards of the
@@ -844,6 +820,32 @@ Section ThreewayMultisem1.
     EntryPoint.get C P (genv_entrypoints (globalenv sem'')) = Some b ->
     EntryPoint.get C P (genv_entrypoints (globalenv sem' )) = Some b.
   Admitted.
+
+  (* RB: NOTE: The regular, non-helper contents of the section start here. *)
+
+  Lemma threeway_multisem_mergeable_step_E0 s1 s2 s1'' :
+    CS.is_program_component s1 ic ->
+    mergeable_states p c p' c' s1 s1'' ->
+    Step sem s1 E0 s2 ->
+    mergeable_states p c p' c' s2 s1''.
+  Proof.
+    intros Hcomp1 Hmerge1 Hstep12.
+    inversion Hmerge1 as [s0 s0'' t Hini1 Hini2 Hstar01 Hstar01''].
+    apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := t);
+      try assumption.
+    eapply star_right; try eassumption; now rewrite E0_right.
+  Qed.
+
+  (* RB: NOTE: The structure follows closely that of
+     threeway_multisem_star_program. *)
+  Theorem threeway_multisem_mergeable_program s1 s1'' t s2 s2'' :
+    CS.is_program_component s1 ic ->
+    mergeable_states p c p' c' s1 s1'' ->
+    Star sem   s1   t s2   ->
+    Star sem'' s1'' t s2'' ->
+    mergeable_states p c p' c' s2 s2''.
+  Proof.
+  Admitted. (* RB: NOTE: JT will fill it in. *)
 
   Ltac t_threeway_multisem_step_E0 :=
     Composition.CS_step_of_executing;
