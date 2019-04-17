@@ -24,7 +24,7 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Import Intermediate. 
+Import Intermediate.
 
 (*
 Section Merge.
@@ -61,7 +61,7 @@ Section Merge.
   Inductive mergeable_frames : Pointer.t -> Pointer.t -> Prop :=
   | mergeable_frames_same_component : forall c c'' b b'' o o'',
       c = c'' ->
-      c \in domm (prog_interface prog) -> 
+      c \in domm (prog_interface prog) ->
       mergeable_frames (c, b, o) (c'', b'', o'')
   .
 
@@ -89,7 +89,7 @@ Section Merge.
       Pointer.component pc \in domm (prog_interface prog) ->
       mergeable_states (s, m, r, pc) (s'', m'', r'', pc'')
   .
- 
+
 
 
   (* Definition of the function to merge two states *)
@@ -102,7 +102,7 @@ Section Merge.
         else
           None
     else None.
-  
+
   Fixpoint merge_stacks (s s'' : CS.stack) : option CS.stack :=
     match s, s'' with
     | [], [] => Some []
@@ -113,7 +113,7 @@ Section Merge.
       end
     | _, _ => None
     end.
-  
+
   Definition merge_memories (m m'' : Memory.t) :=
     unionm (PS.to_partial_memory m (domm (prog_interface p)))
            (PS.to_partial_memory m'' (domm (prog_interface c'))).
@@ -194,7 +194,7 @@ Section Merge.
     }
     destruct Hstacks' as [s' Hs']; simpl; rewrite Hs' Hpc' Hr'; eauto.
   Qed.
-  
+
 End Merge.
 *)
 
@@ -236,7 +236,7 @@ Section Merge.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
   Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
-  
+
   (* An "extensional" reading of program states a la Composition, depending
      directly on the partial programs concerned (implicitly through the section
      mechanism. *)
@@ -372,7 +372,7 @@ Section Merge.
              specialize (IHHstar H1 Hstar'').
              eapply Hindstep with (t := [ev']); eauto. unfold E0. congruence.
   Qed.
-   
+
   Definition merge_states (s s'' : CS.state)
     : CS.state :=
     PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic)
@@ -535,7 +535,7 @@ Section Merge.
         inversion Hstep''; reflexivity.
   Qed.
 
-  
+
   Lemma mergeable_states_merge s s'' :
     mergeable_states s s'' ->
     merge_states s s'' =
@@ -565,7 +565,7 @@ Section Merge.
       unfold PS.to_partial_frame.
       rewrite Hpc Hpc''. simpl.
       (* Contradiction ??? *)
-        
+
   Admitted.
 
   Lemma mergeable_states_merge_program s s'' :
@@ -614,7 +614,7 @@ Section Merge.
     rewrite fdisjointC => /fdisjointP Hdisj.
     now auto.
   Qed.
-  
+
   Lemma mergeable_states_program_to_context s s'' :
     mergeable_states s s'' ->
     CS.is_program_component s ic ->
@@ -700,7 +700,7 @@ Section PS.
       + now rewrite H2.
       + erewrite <- find_label_in_procedure_1; eassumption.
   Qed.
-  
+
   (* Given a silent star driven by the "program" side p, the "context" side c
      remains unaltered. *)
   Lemma context_epsilon_star_is_silent p c s1 s2 :
@@ -887,7 +887,7 @@ Section ThreewayMultisem1.
     Memory.store (merge_memories p c (CS.state_mem s) (CS.state_mem s'')) ptr v =
     Some (merge_memories p c mem (CS.state_mem s'')).
   Proof.
-    
+
 
   Admitted.
 
@@ -1264,7 +1264,7 @@ Section ThreewayMultisem2.
   (* Proof. *)
   (*   intros s1 s2 H. *)
 
-  
+
   Lemma threeway_multisem_star_E0 s1 s1'' s2 s2'':
     mergeable_states p c p' c' s1 s1'' ->
     Star sem   s1   E0 s2   ->
@@ -1276,7 +1276,7 @@ Section ThreewayMultisem2.
     - now apply threeway_multisem_star_E0_program.
     - Check merge_states_sym.
       rewrite (merge_states_sym H).
-      rewrite (merge_states_sym (threeway_multisem_mergeable H H0 H1)). 
+      rewrite (merge_states_sym (threeway_multisem_mergeable H H0 H1)).
       (* unfold merge_states. *)
       (* fold (merge_states c p s1'' s1). *)
       (* erewrite PS.merge_partial_states_sym. fold (merge_states c p s2'' s2). *)
@@ -1285,14 +1285,14 @@ Section ThreewayMultisem2.
       pose proof (program_linkC Hwfp Hwfc' Hlinkable) as Hprg_linkC'.
       unfold sem', prog'.
       rewrite Hprg_linkC'.
-      
+
       pose proof (program_linkC Hwfp' Hwfc') as Hprg_linkC''; rewrite <- Hifacep in Hprg_linkC''.
       unfold sem'', prog'' in H1.
       rewrite (Hprg_linkC'' Hlinkable) in H1.
       pose proof (program_linkC Hwfp Hwfc) as Hprg_linkC; rewrite Hifacec in Hprg_linkC.
-      unfold sem, prog in H0. 
+      unfold sem, prog in H0.
       rewrite (Hprg_linkC Hlinkable) in H0.
-      
+
       pose proof (threeway_multisem_star_E0_program) as Hmultisem.
 
       specialize (Hmultisem c' p' c p).
@@ -1328,7 +1328,7 @@ Section ThreewayMultisem2.
       assert (Hmerg_eq2 : merge_states c' p' s2'' s2 = merge_states c p s2'' s2)
         by (now unfold merge_states; rewrite Hifacep Hifacec; reflexivity).
 
-      rewrite <- Hmerg_eq1, <- Hmerg_eq2. 
+      rewrite <- Hmerg_eq1, <- Hmerg_eq2.
       assumption.
   Qed.
 
