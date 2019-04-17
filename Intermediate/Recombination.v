@@ -224,9 +224,6 @@ Section Merge.
 
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
 
-
-
-
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
@@ -248,30 +245,6 @@ Section Merge.
       Star (CS.sem (program_link p  c )) s0   t s   ->
       Star (CS.sem (program_link p' c')) s0'' t s'' ->
       mergeable_states s s''.
-
-  Inductive mergeable_states' (s s'' : CS.state)
-    : Prop :=
-  | mergeable_ini :
-      initial_state (CS.sem (program_link p  c )) s   ->
-      initial_state (CS.sem (program_link p' c')) s'' ->
-      mergeable_states' s s''
-  | mergeable_trace : forall t s0 s0'',
-      mergeable_states' s0 s0'' ->
-      Star (CS.sem (program_link p  c )) s0   t s   ->
-      Star (CS.sem (program_link p' c')) s0'' t s'' ->
-      mergeable_states' s s''.
-
-  Lemma mergeable_states_equiv : forall s s'',
-      mergeable_states s s'' <-> mergeable_states' s s''.
-  Proof.
-    intros s s''; split; intros H.
-    - inversion H; subst.
-      eapply mergeable_trace; eauto. now apply mergeable_ini.
-    - induction H.
-      + econstructor; now eauto using star_refl.
-      + inversion IHmergeable_states'.
-        econstructor; now eauto using star_trans.
-  Qed.
 
   Lemma mergeable_states_ind' : forall P : CS.state -> CS.state -> Prop,
       (forall (s s'' : CS.state),
@@ -991,7 +964,13 @@ Section ThreewayMultisem1.
     Star sem'' s1'' t s2'' ->
     mergeable_states p c p' c' s2 s2''.
   Proof.
-  Admitted. (* RB: NOTE: JT will fill it in. *)
+    intros _ Hmerg Hstar Hstar''.
+    inversion Hmerg as [s0 s0'' t0 Hini Hini'' Hstar0 Hstar0''].
+    econstructor.
+    apply Hini. apply Hini''.
+    eapply star_trans; try eassumption; reflexivity.
+    eapply star_trans; try eassumption; reflexivity.
+  Qed.
 
   Ltac t_threeway_multisem_step_E0 :=
     Composition.CS_step_of_executing;
