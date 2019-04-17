@@ -474,40 +474,26 @@ Section Merge.
     apply pointer_component_in_ip_notin_ic in Hpc.
     move: Hpc => /negP H. now apply /idP.
   Qed.
-  
+
+  (* merge_stacks is not symmetric, so we use this stronger condition *)
   Lemma merge_stacks_cons_context frame gps frame'' gps'' :
     Pointer.component frame \in domm ic ->
+    Pointer.component frame'' = Pointer.component frame ->
     merge_stacks (frame :: gps) (frame'' :: gps'') =
     frame'' :: merge_stacks gps gps''.
-  Admitted.
+  Proof.
+    intros Hpc Hpc''.
+    unfold merge_stacks.
+    simpl.
+    rewrite PS.ptr_within_partial_frame_1.
+    rewrite PS.ptr_within_partial_frame_2. simpl.
+    simpl; rewrite -Hpc''; now rewrite Pointer.compose.
+    apply pointer_component_in_ic_notin_ip in Hpc.
+    move: Hpc => /negP H. rewrite Hpc''. now apply /idP.
+    assumption.
+  Qed.
 
-  Lemma mergeable_states_merge s s'' :
-    mergeable_states s s'' ->
-    merge_states s s'' =
-    mergeable_states_state s s''.
-  Admitted.
-
-  Lemma mergeable_states_merge_program s s'' :
-    CS.is_program_component s ic ->
-    mergeable_states s s'' ->
-    merge_states s s'' =
-    (mergeable_states_stack s s'',
-     mergeable_states_memory s s'',
-     state_regs s,
-     CS.state_pc s).
-  Admitted.
-
-  Lemma mergeable_states_merge_context s s'' :
-    CS.is_context_component s ic ->
-    mergeable_states s s'' ->
-    merge_states s s'' =
-    (mergeable_states_stack s s'',
-     mergeable_states_memory s s'',
-     state_regs s'',
-     CS.state_pc s'').
-  Admitted.
-
-  Lemma mergeable_states_pc_same_component s s'' :
+    Lemma mergeable_states_pc_same_component s s'' :
     mergeable_states s s'' ->
     Pointer.component (CS.state_pc s) = Pointer.component (CS.state_pc s'').
   Proof.
@@ -1140,12 +1126,15 @@ Section ThreewayMultisem1.
         | rewrite (mergeable_states_merge_context
             Hmergeable_ifaces Hifacep Hifacec Hwfp Hwfc Hwfp' Hwfc' Hprog_is_closed Hcomp2 Hmerge2) ];
         unfold mergeable_states_memory, mergeable_states_stack; simpl;
-        [ pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2'';
-          rewrite (merge_stacks_cons_program Hmergeable_ifaces Hifacep Hifacec); try assumption
-        | rewrite (merge_stacks_cons_context Hmergeable_ifaces Hifacep Hifacec); try assumption ];
-        [ rewrite Heq1 Heq2 | rewrite Heq1 ];
-        [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
-        t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
+          [ pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2'';
+            unfold CS.state_component in Hcomp2'';
+            rewrite (merge_stacks_cons_program Hmergeable_ifaces (* _ _ _ Hifacep Hifacec *));
+            try assumption;
+            try (now rewrite Heq2)
+          | rewrite (merge_stacks_cons_context Hmergeable_ifaces Hifacep Hifacec); try assumption ];
+          [ rewrite Heq1 Heq2 | rewrite Heq1 ];
+          [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
+          t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
   Qed.
 
   Lemma threeway_multisem_event_lockstep_program s1 s1'' e s2 s2'' :
