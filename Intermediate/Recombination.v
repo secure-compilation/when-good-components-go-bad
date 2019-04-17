@@ -211,11 +211,24 @@ Definition state_regs (s : CS.state) : Register.t :=
 (* RB: TODO: Harmonize naming conventions. *)
 Section Merge.
   Variables p c p' c' : program.
+
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
+
   Hypothesis Hmergeable_ifaces :
     mergeable_interfaces (prog_interface p) (prog_interface c).
 
   Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
   Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+
+  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
+  Hypothesis Hmain_linkability  : linkable_mains p  c.
+  Hypothesis Hmain_linkability' : linkable_mains p' c'.
+
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -503,11 +516,18 @@ Section Merge.
         inversion Hstep''; reflexivity.
   Qed.
 
-  Lemma mergeable_states_program_to_program s1 s2 :
-    mergeable_states s1 s2 ->
-    CS.is_program_component s1 ic ->
-    CS.is_program_component s2 ic.
-  Admitted.
+  Lemma mergeable_states_program_to_program s s'' :
+    mergeable_states s s'' ->
+    CS.is_program_component s   ic ->
+    CS.is_program_component s'' ic.
+  Proof.
+    destruct s   as [[[? ?] ?] pc  ].
+    destruct s'' as [[[? ?] ?] pc''].
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
+    intros Hmerge Hpc.
+    pose proof mergeable_states_pc_same_component Hmerge as Hcomp. simpl in Hcomp.
+    congruence.
+  Qed.
 
   Lemma mergeable_states_context_to_program s1 s2 :
     mergeable_states s1 s2 ->
@@ -535,12 +555,29 @@ Section Merge.
     CS.is_program_component s ic ->
     CS.is_context_component s'' ip.
   Proof.
-    (* Related to PS.domm_partition? The proof is scary. *)
-    intros Hmerg.
-    inversion Hmerg as [? ? ? Hini Hini'' Hstar Hstar'']; subst.
-    apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''.
-    induction Hstar.    
-  Admitted.
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
+    intros Hmerge Hpc_not_ic.
+    pose proof mergeable_states_pc_same_component Hmerge as Hcomp. simpl in Hcomp.
+    (* RB: TODO: We may want to rephrase the lemma above, as we no longer appeal
+       directly to the definition of CS.comes_from_initial_state here, or vice
+       versa. *)
+    assert (Hpc_ip_ic : Pointer.component (CS.state_pc s) \in domm (unionm ip ic)).
+    {
+      apply CS.comes_from_initial_state_pc_domm.
+      inversion Hmerge as [s0 _ t Hini _ Hstar _].
+      destruct (cprog_main_existence Hprog_is_closed) as [main [_ [Hmain _]]].
+      exists prog, main, s0, t.
+      split; [| split; [| split; [| split]]]; try easy.
+      apply linking_well_formedness; try assumption.
+      now inversion Hmergeable_ifaces.
+    }
+    destruct s   as [[[? ?] ?] pc  ].
+    destruct s'' as [[[? ?] ?] pc''].
+    simpl in *. rewrite <- Hcomp.
+    destruct (MultiSem.in_domm_unionm Hpc_ip_ic) as [Hip | Hic];
+      first assumption.
+    now destruct (PS.domm_partition_in_notin Hic Hpc_not_ic).
+  Qed.
 
 End Merge.
 
