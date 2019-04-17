@@ -535,6 +535,59 @@ Section Merge.
         inversion Hstep''; reflexivity.
   Qed.
 
+  
+  Lemma mergeable_states_merge s s'' :
+    mergeable_states s s'' ->
+    merge_states s s'' =
+    mergeable_states_state s s''.
+  Proof.
+    intros Hmerg.
+    unfold merge_states.
+    unfold mergeable_states_state.
+    unfold mergeable_states_stack, mergeable_states_memory, mergeable_states_regs.
+    destruct (Pointer.component (CS.state_pc s) \in domm ic) eqn:Hpc.
+    - unfold PS.unpartialize.
+      destruct s as [[[pgps mem] regs] pc].
+      destruct s'' as [[[pgps'' mem''] regs''] pc''].
+      simpl.
+      rewrite Hpc.
+      assert (Hpc'' : Pointer.component pc'' \in domm ip = false).
+      { erewrite mergeable_states_pc_same_component in Hpc; try eassumption.
+        simpl in Hpc.
+        apply /idP. intros Hpc''.
+        apply pointer_component_in_ip_notin_ic in Hpc''.
+        move: Hpc''. now apply /idP.
+      }
+      rewrite Hpc''. simpl.
+      fold (merge_stacks pgps pgps'').
+      fold (merge_memories mem mem'').
+      unfold mergeable_states_pc.
+      unfold PS.to_partial_frame.
+      rewrite Hpc Hpc''. simpl.
+      (* Contradiction ??? *)
+        
+  Admitted.
+
+  Lemma mergeable_states_merge_program s s'' :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    merge_states s s'' =
+    (mergeable_states_stack s s'',
+     mergeable_states_memory s s'',
+     state_regs s,
+     CS.state_pc s).
+  Admitted.
+
+  Lemma mergeable_states_merge_context s s'' :
+    CS.is_context_component s ic ->
+    mergeable_states s s'' ->
+    merge_states s s'' =
+    (mergeable_states_stack s s'',
+     mergeable_states_memory s s'',
+     state_regs s'',
+     CS.state_pc s'').
+  Admitted.
+
   Lemma mergeable_states_program_to_program s1 s2 :
     mergeable_states s1 s2 ->
     CS.is_program_component s1 ic ->
