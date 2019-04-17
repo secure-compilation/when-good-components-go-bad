@@ -1163,7 +1163,7 @@ Section ThreewayMultisem1.
             rewrite (merge_stacks_cons_program Hmergeable_ifaces (* _ _ _ Hifacep Hifacec *));
             try assumption;
             try (now rewrite Heq2)
-          | rewrite (merge_stacks_cons_context Hmergeable_ifaces Hifacep Hifacec); try assumption ];
+          | rewrite (merge_stacks_cons_context Hmergeable_ifaces); try assumption ];
           [ rewrite Heq1 Heq2 | rewrite Heq1 ];
           [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
           t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
