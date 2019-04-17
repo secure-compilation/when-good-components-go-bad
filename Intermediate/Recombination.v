@@ -24,7 +24,7 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Import Intermediate.
+Import Intermediate. 
 
 (*
 Section Merge.
@@ -431,14 +431,50 @@ Section Merge.
      mergeable_states_regs   s s'',
      mergeable_states_pc     s s'').
 
+  Lemma pointer_component_in_ip_notin_ic ptr :
+    Pointer.component ptr \in domm ip ->
+    Pointer.component ptr \notin domm ic.
+  Proof.
+    intros Hptr.
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    inversion Hlinkable as [_ Hdisj].
+    move: Hdisj => /fdisjointP.
+    intros H.
+    now apply H.
+  Qed.
+
+  Lemma pointer_component_in_ic_notin_ip ptr :
+    Pointer.component ptr \in domm ic ->
+    Pointer.component ptr \notin domm ip.
+  Proof.
+    intros Hptr.
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    inversion Hlinkable as [_ Hdisj].
+    move: Hdisj.
+    rewrite fdisjointC => /fdisjointP.
+    intros H.
+    now apply H.
+  Qed.
+
   (* RB: TODO: Add side conditions (well-formed programs, linkable interfaces,
      etc. *)
   Lemma merge_stacks_cons_program frame gps frame'' gps'' :
     Pointer.component frame \in domm ip ->
+    Pointer.component frame'' \in domm ip ->
     merge_stacks (frame :: gps) (frame'' :: gps'') =
     frame :: merge_stacks gps gps''.
-  Admitted.
-
+  Proof.
+    intros Hpc Hpc''.
+    unfold merge_stacks.
+    simpl.
+    rewrite PS.ptr_within_partial_frame_2.
+    rewrite PS.ptr_within_partial_frame_1. simpl.
+    simpl; now rewrite Pointer.compose.
+    assumption.
+    apply pointer_component_in_ip_notin_ic in Hpc.
+    move: Hpc => /negP H. now apply /idP.
+  Qed.
+  
   Lemma merge_stacks_cons_context frame gps frame'' gps'' :
     Pointer.component frame \in domm ic ->
     merge_stacks (frame :: gps) (frame'' :: gps'') =
@@ -602,6 +638,30 @@ Section PS.
   (*   CS.is_context_component s2 ctx2. *)
   (* Admitted. *)
 
+  Lemma epsilon_star_preserves_program_component p c s1 s2 :
+    CS.is_program_component s1 (prog_interface c) ->
+    Star (CS.sem (program_link p c)) s1 E0 s2 ->
+    CS.is_program_component s2 (prog_interface c).
+  Proof.
+    intros Hprg_component Hstar.
+    remember E0 as t.
+    induction Hstar.
+    - assumption.
+    - subst; assert (t1 = E0) by now induction t1.
+      assert (t2 = E0) by now induction t1. subst.
+      apply IHHstar; try assumption.
+      clear H0 IHHstar Hstar.
+      unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in *.
+      inversion H;
+        try (match goal with
+            | Heq : (_, _, _, _) = s1 |- _ => rewrite -Heq in Hprg_component
+            end);
+        try now rewrite Pointer.inc_preserves_component.
+      + erewrite <- find_label_in_component_1; eassumption.
+      + now rewrite H2.
+      + erewrite <- find_label_in_procedure_1; eassumption.
+  Qed.
+  
   (* Given a silent star driven by the "program" side p, the "context" side c
      remains unaltered. *)
   Lemma context_epsilon_star_is_silent p c s1 s2 :
@@ -626,11 +686,6 @@ Section PS.
          (merge_states p c s s2).
   Admitted.
 
-  Lemma epsilon_star_preserves_program_component p c s1 s2 :
-    CS.is_program_component s1 (prog_interface c) ->
-    Star (CS.sem (program_link p c)) s1 E0 s2 ->
-    CS.is_program_component s2 (prog_interface c).
-  Admitted.
 End PS.
 
 Section BehaviorStar.
@@ -1001,6 +1056,8 @@ Section ThreewayMultisem1.
     - eapply star_right; try eassumption; reflexivity.
   Qed.
 
+  Check mergeable_states_merge_program.
+
   Ltac t_threeway_multisem_event_lockstep_program_step_call Hcomp1 Hmerge1 :=
     apply CS.Call; try assumption;
     [
@@ -1051,7 +1108,7 @@ Section ThreewayMultisem1.
     - (* Call: case analysis on call point. *)
       pose proof is_program_component_in_domm Hcomp1 Hmerge1 as Hdomm;
         unfold CS.state_component in Hdomm; simpl in Hdomm;
-        rewrite <- Pointer.inc_preserves_component in Hdomm.
+          rewrite <- Pointer.inc_preserves_component in Hdomm.
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
         [ pose proof mergeable_states_program_to_context
                Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed (* Hifacep Hifacec *) Hmerge2 Hcomp2 as Hcomp2''
@@ -1059,13 +1116,17 @@ Section ThreewayMultisem1.
         [ erewrite mergeable_states_merge_program
         | erewrite mergeable_states_merge_context ]; try eassumption;
         unfold mergeable_states_memory, mergeable_states_stack; simpl;
-        erewrite merge_stacks_cons_program; try eassumption;
-        match goal with
-        | Heq : Pointer.component pc1'' = Pointer.component pc1 |- _ =>
-          rewrite Heq
-        end;
-        [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
-        t_threeway_multisem_event_lockstep_program_step_call Hcomp1 Hmerge1.
+          erewrite merge_stacks_cons_program; try eassumption;
+            try (now match goal with
+                     | Heq : Pointer.component pc1'' = Pointer.component pc1 |- _ =>
+                       rewrite Pointer.inc_preserves_component Heq -Pointer.inc_preserves_component
+                     end);
+            match goal with
+            | Heq : Pointer.component pc1'' = Pointer.component pc1 |- _ =>
+              rewrite Heq
+            end;
+            [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
+            t_threeway_multisem_event_lockstep_program_step_call Hcomp1 Hmerge1.
     - (* Return: case analysis on return point. *)
       match goal with
       | H1 : Pointer.component pc1'' = Pointer.component pc1,
