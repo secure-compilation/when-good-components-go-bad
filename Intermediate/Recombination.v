@@ -290,9 +290,9 @@ Section Merge.
 
   (* These definitions give an explicit definition of state merging, without relying
      on partial states.
-     
+
      All these functions are total, and return a dummy value in cases where it does not
-     make sens. *) 
+     make sens. *)
 
   Definition merge_frames (f f''   : Pointer.t) : Pointer.t :=
     if Pointer.component f \in domm (prog_interface p) then f else f''.
@@ -324,7 +324,7 @@ Section Merge.
     let '(s'', m'', r'', pc'') := state'' in
     (merge_stacks s s'', merge_memories m m'', merge_registers r r'' pc, merge_pcs pc pc'').
 
-  
+
   (* Definition merge_states (s s'' : CS.state) *)
   (*   : CS.state := *)
   (*   PS.unpartialize (PS.merge_partial_states (PS.partialize s   ic) *)
@@ -491,7 +491,7 @@ Section Merge.
       CS.state_pc s
     else
       CS.state_pc s''.
-  
+
   Remark merge_states_unfold s s'' :
     merge_states s s'' =
     (merge_states_stack s s'',
@@ -503,7 +503,24 @@ Section Merge.
     unfold merge_states_stack, merge_states_mem, merge_states_regs, merge_states_pc.
     now simpl.
   Qed.
-  
+
+  (* TODO: move to CS.v *)
+  Lemma pc_component_in_ip_or_ic : forall s st mem reg pc t,
+      initial_state sem s ->
+      Star sem s t (st, mem, reg, pc) ->
+      Pointer.component pc \in domm ip \/ Pointer.component pc \in domm ic.
+  Proof.
+    intros s st mem reg pc t Hini Hstar.
+    assert (H : Pointer.component pc \in domm (prog_interface prog)).
+    { replace pc with (CS.state_pc (st, mem, reg, pc)); try reflexivity.
+      apply CS.comes_from_initial_state_pc_domm.
+      destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
+      exists prog, i, s, t.
+      split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
+      repeat split; eauto. }
+    move: H. simpl. rewrite domm_union. now apply /fsetUP.
+  Qed.
+
   Lemma merge_mergeable_states_regs_program s s'' :
     CS.is_program_component s ic ->
     mergeable_states s s'' ->
@@ -514,8 +531,11 @@ Section Merge.
     unfold merge_states_regs. simpl.
     unfold merge_registers.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
-    admit.
-  Admitted.
+    inversion Hmerg as [s0 s0'' t  Hini Hini'' Hstar Hstar''].
+    destruct (pc_component_in_ip_or_ic Hini Hstar) as [H | H].
+    - now rewrite H.
+    - now rewrite H in Hcomp.
+  Qed.
 
   Lemma merge_mergeable_states_pc_program s s'' :
     CS.is_program_component s ic ->
@@ -527,8 +547,49 @@ Section Merge.
     unfold merge_states_pc. simpl.
     unfold merge_pcs.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
-    admit.
-  Admitted.
+    inversion Hmerg as [s0 s0'' t  Hini Hini'' Hstar Hstar''].
+    destruct (pc_component_in_ip_or_ic Hini Hstar) as [H | H].
+    - now rewrite H.
+    - now rewrite H in Hcomp.
+  Qed.
+
+  Lemma merge_mergeable_states_regs_context s s'' :
+    CS.is_context_component s ic ->
+    mergeable_states s s'' ->
+    merge_states_regs s s'' = state_regs s''.
+  Proof.
+    intros Hcomp Hmerg.
+    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    unfold merge_states_regs. simpl.
+    unfold merge_registers.
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    destruct Hlinkable as [_ Hdisj].
+    move: Hdisj.
+    rewrite fdisjointC => /fdisjointP Hdisj.
+    specialize (Hdisj (Pointer.component pc) Hcomp).
+    move: Hdisj => /negP => Hdisj.
+    destruct (Pointer.component pc \in domm ip) eqn:Heq; now rewrite Heq.
+  Qed.
+
+  Lemma merge_mergeable_states_pc_context s s'' :
+    CS.is_context_component s ic ->
+    mergeable_states s s'' ->
+    merge_states_pc s s'' = CS.state_pc s''.
+  Proof.
+    intros Hcomp Hmerg.
+    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    unfold merge_states_pc. simpl.
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    destruct Hlinkable as [_ Hdisj].
+    move: Hdisj.
+    rewrite fdisjointC => /fdisjointP Hdisj.
+    specialize (Hdisj (Pointer.component pc) Hcomp).
+    move: Hdisj => /negP => Hdisj.
+    destruct (Pointer.component pc \in domm ip) eqn:Heq; now rewrite Heq.
+  Qed.
+
 
   Lemma mergeable_states_merge_program s s'' :
     CS.is_program_component s ic ->
@@ -555,13 +616,27 @@ Section Merge.
      state_regs s'',
      CS.state_pc s'').
   Proof.
-  Admitted.
+    intros Hcomp Hmerg.
+    rewrite merge_states_unfold.
+    rewrite merge_mergeable_states_pc_context; try assumption.
+    rewrite merge_mergeable_states_regs_context; try assumption.
+    reflexivity.
+  Qed.
 
   Lemma mergeable_states_program_to_program s1 s2 :
     mergeable_states s1 s2 ->
     CS.is_program_component s1 ic ->
     CS.is_program_component s2 ic.
-  Admitted.
+  Proof.
+    intros Hmerg.
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
+    destruct s1 as [[[s1 m1] r1] pc1].
+    destruct s2 as [[[s2 m2] r2] pc2].
+    replace (Pointer.component pc1) with (Pointer.component (CS.state_pc (s1, m1, r1, pc1))); try reflexivity.
+    replace (Pointer.component pc2) with (Pointer.component (CS.state_pc (s2, m2, r2, pc2))); try reflexivity.
+    erewrite mergeable_states_pc_same_component; now (intros; eassumption).
+  Qed.
+
 
   Lemma mergeable_states_context_to_program s1 s2 :
     mergeable_states s1 s2 ->
@@ -999,7 +1074,7 @@ Section ThreewayMultisem1.
   Proof.
     intros Hcomp1 Hmerge1 Hstep12.
     (* Derive some useful facts and begin to expose state structure. *)
-    
+
     inversion Hmergeable_ifaces as [Hlinkable _].
     Check mergeable_states_merge_program.
     rewrite (mergeable_states_merge_program
@@ -1012,7 +1087,7 @@ Section ThreewayMultisem1.
     destruct s1 as [[[gps1 mem1] regs1] pc1].
     destruct s2 as [[[gps2 mem2] regs2] pc2].
     destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
-    (* Case analysis on step. *) 
+    (* Case analysis on step. *)
     inversion Hstep12; subst;
       t_threeway_multisem_step_E0.
   Qed.
