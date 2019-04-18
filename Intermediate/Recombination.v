@@ -684,24 +684,15 @@ Section Merge.
 
 End Merge.
 
-Section MergeSym.
+Section MergeSym.  
   Lemma merge_states_sym p c p' c' s s'' :
     mergeable_states p c p' c' s s'' ->
     merge_states p c s s'' = merge_states c p s'' s.
   Proof.
-    (* rewrite (@PS.merge_partial_states_sym ic ip). *)
-    (*   2: { simpl. inversion H; subst. *)
-    (*        econstructor; eauto. Search _ PS.partial_state PS.partialize. *)
-    (*        admit. *)
-    (*        unfold CS.comes_from_initial_state. *)
-    (*        destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]]. *)
-    (*        exists prog, i, s0, t. *)
-    (*        split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness). *)
-    (*        repeat split; eauto. admit. *)
-    (*        apply PS.partialized_state_is_partial. apply PS.partialized_state_is_partial. *)
-    (*        unfold CS.is_program_component in Hprg_component. *)
-    (*        apply negbFE in Hprg_component. *)
-    (*        } *)
+    intros Hmerg.
+    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    unfold merge_states.
+    (* TODO: state the symmetry lemma for each of the element. *)
   Admitted.
 End MergeSym.
 
@@ -756,6 +747,14 @@ Section PS.
   Lemma merge_states_partialize p c p' c' s s1'' s2'' :
     mergeable_states p c p' c' s s1'' ->
     PS.partialize s1'' (prog_interface p) = PS.partialize s2'' (prog_interface p) ->
+    merge_states p c s s1'' = merge_states p c s s2''.
+  Admitted.
+
+  (* JT: I think this lemma could replace the two above lemmas *)
+  Lemma merge_states_silent_star p c p' c' s s1'' s2'' :
+    mergeable_states p c p' c' s s1'' ->
+    CS.is_program_component s1'' (prog_interface c) ->
+    Star (CS.sem (program_link p c)) s1'' E0 s2'' ->
     merge_states p c s s1'' = merge_states p c s s2''.
   Admitted.
 
@@ -909,14 +908,13 @@ Section ThreewayMultisem1.
     destruct s as [[[? mem] ?] pc]; simpl in *.
     intros Hmem.
     unfold merge_memories.
-    Search _ PS.merge_memories.
-    unfold PS.merge_memories.
     rewrite <- Hmem.
     unfold Memory.load.
     assert (Heq : (unionm (to_partial_memory mem (domm (prog_interface p)))
                           (to_partial_memory (CS.state_mem s'') (domm (prog_interface c))))
                     (Pointer.component ptr) = mem (Pointer.component ptr)).
-    { admit. }
+    { admit.
+    }
     now rewrite Heq.
   Admitted.
 
@@ -1078,12 +1076,12 @@ Section ThreewayMultisem1.
     inversion Hmergeable_ifaces as [Hlinkable _].
     Check mergeable_states_merge_program.
     rewrite (mergeable_states_merge_program
-               Hmergeable_ifaces Hifacep Hifacec Hwfp Hwfc Hwfp' Hwfc' Hprog_is_closed Hcomp1 Hmerge1).
+               Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed Hcomp1 Hmerge1).
     pose proof silent_step_preserves_program_component Hcomp1 Hstep12 as Hcomp2.
     pose proof threeway_multisem_mergeable_step_E0 Hcomp1 Hmerge1 Hstep12
       as Hmerge2.
     rewrite (mergeable_states_merge_program
-               Hmergeable_ifaces Hifacep Hifacec Hwfp Hwfc Hwfp' Hwfc' Hprog_is_closed Hcomp2 Hmerge2).
+               Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed Hcomp2 Hmerge2).
     destruct s1 as [[[gps1 mem1] regs1] pc1].
     destruct s2 as [[[gps2 mem2] regs2] pc2].
     destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
@@ -1103,8 +1101,7 @@ Section ThreewayMultisem1.
     Star sem'  (merge_states p c s1 s1'') E0 (merge_states p c s2 s2'').
   Proof.
     intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
-    pose proof mergeable_states_program_to_program
-         Hmergeable_ifaces Hifacep Hifacec Hwfp Hwfc Hwfp' Hwfc' Hprog_is_closed Hmerge1 Hcomp1 as Hcomp1'.
+    pose proof mergeable_states_program_to_program Hmerge1 Hcomp1 as Hcomp1'.
     rewrite Hifacec in Hcomp1'.
     pose proof context_epsilon_star_is_silent Hcomp1' Hstar12'' as Hs2'.
     remember E0 as t eqn:Ht.
@@ -1184,7 +1181,7 @@ Section ThreewayMultisem1.
     (* Derive some useful facts and begin to expose state structure. *)
     inversion Hmergeable_ifaces as [Hlinkable _].
     rewrite (mergeable_states_merge_program
-               Hmergeable_ifaces Hifacep Hifacec Hwfp Hwfc Hwfp' Hwfc' Hprog_is_closed Hcomp1 Hmerge1).
+               Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed Hcomp1 Hmerge1).
     pose proof threeway_multisem_event_lockstep_program_mergeable
          Hcomp1 Hmerge1 Hstep12 Hstep12'' as Hmerge2.
     set s1copy := s1. destruct s1 as [[[gps1 mem1] regs1] pc1].
@@ -1225,9 +1222,9 @@ Section ThreewayMultisem1.
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
         [| apply negb_false_iff in Hcomp2];
         [ rewrite (mergeable_states_merge_program
-                     Hmergeable_ifaces Hifacep Hifacec Hwfp Hwfc Hwfp' Hwfc' Hprog_is_closed Hcomp2 Hmerge2)
+                     Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed Hcomp2 Hmerge2)
         | rewrite (mergeable_states_merge_context
-            Hmergeable_ifaces Hifacep Hifacec Hwfp Hwfc Hwfp' Hwfc' Hprog_is_closed Hcomp2 Hmerge2) ];
+            Hmergeable_ifaces Hcomp2 Hmerge2) ];
         unfold merge_states_mem, merge_states_stack;
           [ pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2'';
             unfold CS.state_component in Hcomp2'';
