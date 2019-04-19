@@ -43,32 +43,29 @@ Definition state_regs (s : CS.state) : Register.t :=
    other sections. *)
 Section Prelim.
 
-  (* Standard assumptions for all our theorems *)
-  Variables p c p' c' : program.
-  Hypothesis Hmergeable_ifaces :
-    mergeable_interfaces (prog_interface p) (prog_interface c).
-
-  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
-  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
-
-  Hypothesis Hwfp  : well_formed_program p.
-  Hypothesis Hwfc  : well_formed_program c.
-  Hypothesis Hwfp' : well_formed_program p'.
-  Hypothesis Hwfc' : well_formed_program c'.
-
-  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
-
-  Let ip := prog_interface p.
-  Let ic := prog_interface c.
-  Let prog   := program_link p  c.
-  Let prog'  := program_link p  c'.
-  Let prog'' := program_link p' c'.
-  Let sem   := CS.sem prog.
-  Let sem'  := CS.sem prog'.
-  Let sem'' := CS.sem prog''.
-  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
-  (* End of assumptions *)
-
+  Lemma epsilon_star_preserves_program_component p c s1 s2 :
+    CS.is_program_component s1 (prog_interface c) ->
+    Star (CS.sem (program_link p c)) s1 E0 s2 ->
+    CS.is_program_component s2 (prog_interface c).
+  Proof.
+    intros Hprg_component Hstar.
+    remember E0 as t.
+    induction Hstar.
+    - assumption.
+    - subst; assert (t1 = E0) by now induction t1.
+      assert (t2 = E0) by now induction t1. subst.
+      apply IHHstar; try assumption.
+      clear H0 IHHstar Hstar.
+      unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in *.
+      inversion H;
+        try (match goal with
+            | Heq : (_, _, _, _) = s1 |- _ => rewrite -Heq in Hprg_component
+            end);
+        try now rewrite Pointer.inc_preserves_component.
+      + erewrite <- find_label_in_component_1; eassumption.
+      + now rewrite H2.
+      + erewrite <- find_label_in_procedure_1; eassumption.
+  Qed.
 
 End Prelim.
 
@@ -168,8 +165,33 @@ Section Merge.
   Definition merge_states_stack s s'' :=
     merge_stacks (CS.state_stack s) (CS.state_stack s'').
 
+  Lemma merge_states_stack_pc_independent_right s1 stack2 mem2 regs2 pc2 pc2' :
+    merge_states_stack s1 (stack2, mem2, regs2, pc2) = merge_states_stack s1 (stack2, mem2, regs2, pc2').
+  Proof.
+    destruct s1 as [[[gps1 mem1] regs1] pc1].
+    unfold merge_states_stack.
+    reflexivity.
+  Qed.
+
+  Definition merge_states_stack_mem_independent_right s1 stack2 mem2 mem2' regs2 pc2 :
+    merge_states_stack s1 (stack2, mem2, regs2, pc2) = merge_states_stack s1 (stack2, mem2', regs2, pc2).
+  Proof.
+    destruct s1 as [[[gps1 mem1] regs1] pc1].
+    unfold merge_states_stack.
+    reflexivity.
+  Qed.
+  
+
   Definition merge_states_mem s s'' :=
     merge_memories (CS.state_mem s) (CS.state_mem s'').
+
+  Lemma merge_states_mem_pc_independent_right s1 stack2 mem2 regs2 pc2 pc2' :
+    merge_states_mem s1 (stack2, mem2, regs2, pc2) = merge_states_mem s1 (stack2, mem2, regs2, pc2').
+  Proof.
+    destruct s1 as [[[stack1 mem1] regs1] pc1].
+    unfold merge_states_mem.
+    reflexivity.
+  Qed.
 
   Definition merge_states_regs s s'' :=
     if Pointer.component (CS.state_pc s) \in domm ip then
@@ -598,66 +620,109 @@ Section MergeSym.
 End MergeSym.
 
 Section PS.
-  (* RB: TODO: Add hypotheses to section and/or theorems as needed. Currently
-     this make proof application lightweight. *)
 
-  (* Lemma mergeable_states_context_to_program ctx1 ctx2 s1 s2 : *)
-  (*   mergeable_states ctx1 ctx2 s1 s2 -> *)
-  (*   CS.is_context_component s1 ctx1 -> *)
-  (*   CS.is_program_component s2 ctx2. *)
-  (* Admitted. *)
+  Variables p c p' c' : program.
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
 
-  (* Lemma mergeable_states_program_to_context ctx1 ctx2 s1 s2 : *)
-  (*   mergeable_states ctx1 ctx2 s1 s2 -> *)
-  (*   CS.is_program_component s1 ctx1 -> *)
-  (*   CS.is_context_component s2 ctx2. *)
-  (* Admitted. *)
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
 
-  Lemma epsilon_star_preserves_program_component p c s1 s2 :
-    CS.is_program_component s1 (prog_interface c) ->
-    Star (CS.sem (program_link p c)) s1 E0 s2 ->
-    CS.is_program_component s2 (prog_interface c).
-  Proof.
-    intros Hprg_component Hstar.
-    remember E0 as t.
-    induction Hstar.
-    - assumption.
-    - subst; assert (t1 = E0) by now induction t1.
-      assert (t2 = E0) by now induction t1. subst.
-      apply IHHstar; try assumption.
-      clear H0 IHHstar Hstar.
-      unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in *.
-      inversion H;
-        try (match goal with
-            | Heq : (_, _, _, _) = s1 |- _ => rewrite -Heq in Hprg_component
-            end);
-        try now rewrite Pointer.inc_preserves_component.
-      + erewrite <- find_label_in_component_1; eassumption.
-      + now rewrite H2.
-      + erewrite <- find_label_in_procedure_1; eassumption.
-  Qed.
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
 
-  (* Given a silent star driven by the "program" side p, the "context" side c
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+
+  Let ip := prog_interface p.
+  Let ic := prog_interface c.
+  Let prog   := program_link p  c.
+  Let prog'  := program_link p  c'.
+  Let prog'' := program_link p' c'.
+  Let sem   := CS.sem prog.
+  Let sem'  := CS.sem prog'.
+  Let sem'' := CS.sem prog''.
+  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
+
+    (* Given a silent star driven by the "program" side p, the "context" side c
      remains unaltered. *)
-  Lemma context_epsilon_star_is_silent p c s1 s2 :
+  Lemma context_epsilon_star_is_silent s1 s2 :
     CS.is_program_component s1 (prog_interface c) ->
     Star (CS.sem (program_link p c)) s1 E0 s2 ->
     PS.partialize s1 (prog_interface p) = PS.partialize s2 (prog_interface p).
   Admitted.
 
-  Lemma merge_states_partialize p c p' c' s s1'' s2'' :
+  Lemma merge_states_partialize s s1'' s2'' :
     mergeable_states p c p' c' s s1'' ->
     PS.partialize s1'' (prog_interface p) = PS.partialize s2'' (prog_interface p) ->
     merge_states (prog_interface p) (prog_interface c) s s1'' =
     merge_states (prog_interface p) (prog_interface c) s s2''.
   Admitted.
 
+  Ltac t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar :=
+    match goal with
+      | |- mergeable_states _ _ _ _ _ (_, _, _, Pointer.inc _) =>
+        eapply (mergeable_states_intro Hini Hini'' Hstar0);
+          apply (star_trans Hstar0'') with (t2 := E0);
+          [ eapply (star_trans Hstar); last reflexivity;
+            eapply star_step;
+            [ eassumption | apply star_refl | reflexivity]
+          | unfold "**"; now rewrite app_nil_r
+          ]
+      | |- mergeable_states _ _ _ _ _ (_, _, _, _) =>
+        eapply (mergeable_states_intro Hini Hini'' Hstar0);
+          apply (star_trans Hstar0'') with (t2 := E0);
+          [ eapply (star_trans Hstar); last reflexivity;
+            eapply star_refl
+          | unfold "**"; now rewrite app_nil_r
+          ]
+    end.
+
+  Ltac t_merge_states_silent_star Hini Hini'' Hstar0 Hstar0'' Hstar :=
+    erewrite !mergeable_states_merge_program;
+        first erewrite merge_states_stack_pc_independent_right;
+        first erewrite merge_states_mem_pc_independent_right;
+        first reflexivity; try eassumption;
+          t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
+
   (* JT: I think this lemma could replace the two above lemmas *)
-  Lemma merge_states_silent_star p c p' c' s s1'' s2'' :
+  Lemma merge_states_silent_star s s1'' s2'' :
     mergeable_states p c p' c' s s1'' ->
     CS.is_program_component s1'' (prog_interface c) ->
-    Star (CS.sem (program_link p c)) s1'' E0 s2'' ->
-    merge_states (prog_interface p) (prog_interface c) s s1'' = merge_states (prog_interface p) (prog_interface c) s s2''.
+    Star (CS.sem (program_link p' c')) s1'' E0 s2'' ->
+    merge_states (prog_interface p) (prog_interface c) s s1'' =
+    merge_states (prog_interface p) (prog_interface c) s s2''.
+  Proof.
+    intros Hmerg Hcomp Hstar.
+    remember E0 as t.
+    apply star_iff_starR in Hstar.
+    induction Hstar.
+    - reflexivity.
+    - subst.
+      assert (H1 : t1 = E0) by now destruct t1.
+      assert (H2 : t2 = E0) by now destruct t1.
+      subst; clear H0.
+      specialize (IHHstar Hmerg Hcomp eq_refl).
+      apply star_iff_starR in Hstar.
+      assert (Hcomp2 : CS.is_program_component s2 (prog_interface c'))
+       by now (eapply epsilon_star_preserves_program_component; try rewrite -Hifacec; eauto).
+      rewrite IHHstar; clear IHHstar.
+      assert (Hcomps : CS.is_program_component s (prog_interface c))
+        by admit.
+      inversion Hmerg as [s0 s0'' t Hini Hini'' Hstar0 Hstar0''].
+      inversion H; subst; try now t_merge_states_silent_star Hini Hini'' Hstar0 Hstar0'' Hstar.
+      + erewrite !mergeable_states_merge_program; try eassumption.
+        erewrite merge_states_stack_pc_independent_right with (pc2' := Pointer.inc pc); try eassumption.
+        erewrite merge_states_mem_pc_independent_right with (pc2' := Pointer.inc pc); try eassumption.
+        erewrite merge_states_stack_mem_independent_right with (mem2' := mem'); try eassumption.
+        assert (Heq: merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem, regs, Pointer.inc pc) =
+                     merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem', regs, Pointer.inc pc)).
+        { unfold merge_states_mem, merge_memories, to_partial_memory; simpl.
+          (* this seems complicated to prove :( *) admit. }
+        now rewrite Heq.
+        t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
+        t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
   Admitted.
 
   (* The following should be an easy corollary of the _is_silent lemma. *)
