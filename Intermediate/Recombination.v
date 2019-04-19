@@ -9,7 +9,7 @@ Require Import CompCert.Behaviors.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
-Require Import Intermediate.PS.
+(* Require Import Intermediate.PS. *)
 Require Import Intermediate.Decomposition.
 Require Import Intermediate.Composition.
 
@@ -571,13 +571,11 @@ Section Mergeable.
       eassumption. }
     rewrite <- Hpc.
 
-    (* Now, this is an application of PS.domm_partition. *)
     inversion Hmerg as [s0 _ t Hini _ Hstar _].
-    apply (PS.domm_partition Hmergeable_ifaces) with (gps := stack) (mem0 := mem) (regs := reg).
-    destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
-    exists prog, i, s0, t.
-    split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
-    repeat split; eauto.
+    pose proof (pc_component_in_ip_or_ic Hini Hstar).
+    intros Hn; destruct H.
+    assumption.
+    rewrite H in Hn. inversion Hn.
   Qed.
 
 End Mergeable.
@@ -647,18 +645,18 @@ Section PS.
 
     (* Given a silent star driven by the "program" side p, the "context" side c
      remains unaltered. *)
-  Lemma context_epsilon_star_is_silent s1 s2 :
-    CS.is_program_component s1 (prog_interface c) ->
-    Star (CS.sem (program_link p c)) s1 E0 s2 ->
-    PS.partialize s1 (prog_interface p) = PS.partialize s2 (prog_interface p).
-  Admitted.
+  (* Lemma context_epsilon_star_is_silent s1 s2 : *)
+  (*   CS.is_program_component s1 (prog_interface c) -> *)
+  (*   Star (CS.sem (program_link p c)) s1 E0 s2 -> *)
+  (*   PS.partialize s1 (prog_interface p) = PS.partialize s2 (prog_interface p). *)
+  (* Admitted. *)
 
-  Lemma merge_states_partialize s s1'' s2'' :
-    mergeable_states p c p' c' s s1'' ->
-    PS.partialize s1'' (prog_interface p) = PS.partialize s2'' (prog_interface p) ->
-    merge_states (prog_interface p) (prog_interface c) s s1'' =
-    merge_states (prog_interface p) (prog_interface c) s s2''.
-  Admitted.
+  (* Lemma merge_states_partialize s s1'' s2'' : *)
+  (*   mergeable_states p c p' c' s s1'' -> *)
+  (*   PS.partialize s1'' (prog_interface p) = PS.partialize s2'' (prog_interface p) -> *)
+  (*   merge_states (prog_interface p) (prog_interface c) s s1'' = *)
+  (*   merge_states (prog_interface p) (prog_interface c) s s2''. *)
+  (* Admitted. *)
 
   Ltac t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar :=
     match goal with
@@ -726,7 +724,7 @@ Section PS.
   Admitted.
 
   (* The following should be an easy corollary of the _is_silent lemma. *)
-  Lemma context_epsilon_star_merge_states p c p' c' s s1 s2 :
+  Lemma context_epsilon_star_merge_states s s1 s2 :
     mergeable_states p c p' c' s s1 ->
     CS.is_program_component s (prog_interface c) ->
     Star (CS.sem (program_link p' c')) s1 E0 s2 ->
@@ -1070,13 +1068,13 @@ Section ThreewayMultisem1.
     intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
     pose proof mergeable_states_program_to_program Hmerge1 Hcomp1 as Hcomp1'.
     rewrite Hifacec in Hcomp1'.
-    pose proof context_epsilon_star_is_silent Hcomp1' Hstar12'' as Hs2'.
     remember E0 as t eqn:Ht.
     revert Ht Hmerge1 Hcomp1 Hcomp1' Hstar12''.
     apply star_iff_starR in Hstar12.
     induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
       intros Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'.
-    - rewrite <- Hifacep in Hs2'. rewrite (merge_states_partialize Hmerge1 Hs2').
+    - rewrite -Hifacec in Hcomp1'.
+      unfold ip, ic; erewrite merge_states_silent_star; try eassumption.
       now apply star_refl.
     - apply Eapp_E0_inv in Ht. destruct Ht; subst.
       specialize (IHstar (eq_refl _) Hmerge1 Hcomp1 Hcomp1' Hstar12').
@@ -1373,7 +1371,7 @@ Section ThreewayMultisem2.
     apply star_iff_starR in Hstar12.
     induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar12' Hstep23]; subst;
       intros s1'' s2'' Hcomp1 Hmerge1 Hstar12''.
-    - exact (context_epsilon_star_merge_states Hmerge1 Hcomp1 Hstar12'').
+    - exact (context_epsilon_star_merge_states Hmergeable_ifaces Hifacep Hifacec Hwfp Hwfc Hwfp' Hwfc' Hprog_is_closed Hmerge1 Hcomp1 Hstar12'').
     - rename s2'' into s3''. rename Hstar12'' into Hstar13''.
       apply (star_app_inv (@CS.singleton_traces _)) in Hstar13''
         as [s2'' [Hstar12'' Hstar23'']].
