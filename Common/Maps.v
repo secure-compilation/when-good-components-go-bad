@@ -152,6 +152,23 @@ Proof.
   - by reflexivity.
 Qed.
 
+(* CA: not really needed *) 
+Lemma mapm_id : forall (T : Type) (i: NMap T), mapm id i = i.
+Proof.
+  move=> T i. apply /eq_fmap => n.
+  Search _ mapm.
+  rewrite mapmE. unfold omap, obind, oapp.
+  remember (i n) as v; simpl in *; rewrite <- Heqv.
+  now destruct v.
+Qed.
+  
+(* needed in the proof of domm_filterm_fdisjoint_unionm *)
+Lemma filterm_id : forall (T : Type) (i : NMap T) p,
+       
+                   domm (filterm p i) = domm (filterm p (mapm id i)).
+Proof.
+  move => T i. by rewrite mapm_id. 
+Qed.
 
 Lemma domm_filterm_fdisjoint_unionm
       (T T' : Type) (i1 i2 : NMap T) (m : NMap T') :
@@ -159,7 +176,39 @@ Lemma domm_filterm_fdisjoint_unionm
   domm m = domm (unionm i1 i2) ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) = domm i1.
 Proof.
+  rewrite domm_union => Hdisjoint Hunion.
+  have HH: domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) =
+           domm (filterm (fun (k : nat) (_ : T) => k \notin domm i2) (unionm i1 i2))
+  by admit.
+  rewrite HH filterm_id fdisjoint_filterm_mapm_unionm; auto. 
+  rewrite -filterm_id fdisjoint_filterm_full; auto.
+  Grab Existential Variables.
+  (* have HHH: domm m = (domm i1 :|: domm i2)%fset -> exists m1 m2, m = unionm m1 m2 /\ *)
+  (*                                                          domm m1 = domm i1 /\ domm m2 = domm i2 *)
+  (*       by admit. *)
+  (* specialize (HHH Hunion). destruct HHH as [m1 [m2 [Hu [H1 H2]]]]. *)
+  (* subst. Search _ domm filterm unionm. *)
+  rewrite filterm_union.
+  Search _ filterm "\notin".
+  rewrite (@fdisjoint_filterm_empty T i2 i2). rewrite unionm0.
+  rewrite (@fdisjoint_filterm_full T T).
+  have HHH: exists m1 m2, m = unionm m1 m2 /\ domm m1 = domm i1 /\ domm m2 = domm i2 by admit.
+  destruct HHH as [m1 [m2 [Hu [H1 H2]]]].
+  rewrite Hu. rewrite <- H2. Search _ filterm "\notin" unionm.
+  rewrite filterm_id.
+  rewrite fdisjoint_filterm_mapm_unionm. rewrite <- filterm_id.
+  rewrite fdisjoint_filterm_full.
+  
+  assumption. rewrite H1 H2; assumption. rewrite H1 H2; assumption.
+  assumption.
+  reflexivity. assumption.
+  Grab Existential Variables.
+  exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i1))) m).
+  exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i2))) m).
+  (* exists (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m). *)
+  split; try split.  
 Admitted. 
+    
 
 Lemma domm_filterm_partial_memory
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
@@ -169,8 +218,10 @@ Lemma domm_filterm_partial_memory
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m0 =
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) = domm i2.
-Admitted.
+Proof.
+Admitted. 
 
+  
 Lemma filterm_partial_memory_fsubset
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
   fdisjoint (domm i1) (domm i2) ->
@@ -184,14 +235,23 @@ Proof.
   rewrite m2_eq_union -m0_eq_m2 domm_union.    
   apply (* /fsubsetU /orP. *) /fsubsetP => x Hx. 
   assert (x \in (domm i1) \/ x \notin (domm i1)).
-  { admit. }    
+  { apply /orP. by destruct (x \in domm i1). } (* CA: do we have classical reasoning? *)   
   case: H => H.  
-      move: H. apply /fsubsetP /fsubsetU /orP. 
-      left. by apply: fsubsetxx.
+  move: H. apply /fsubsetP /fsubsetU /orP. 
+  left. by apply: fsubsetxx.
       
-  have x_in_i2 : x \in domm i2. { admit. }
+  have x_in_i2 : x \in domm i2.
+  { have x_in_m2 : x\in domm m2 by admit.
+    move: x_in_m2.
+    rewrite m2_eq_union domm_union.
+    case /fsetUP => [| //].
+    move: H => /negP //. 
+  } (*CA: by Hfilter deduce x \in domm m2
+               then by m2_eq_union, x \in domm i1 \/x \in domm i2 
+               together with H we get x \in domm i2
+              *)
    move: x_in_i2. apply /fsubsetP /fsubsetU /orP.    
-   right. by apply: fsubsetxx. 
+   right. by apply: fsubsetxx.
 Admitted.     
     
 (* RB: NOTE: This is not a map lemma proper. More generally, absorption on
@@ -208,4 +268,15 @@ Proof.
   destruct (eqtype.eq_op x0 x) eqn: Hx0_x; auto. 
     rewrite -(eqtype.eqP Hx0_x) in x_in_s.  
     now inversion x_in_s.
+Qed.
+
+(* notation filtermI isn't quite right since idempotent (in SSReflect
+   conventions) applies to binary operators *)
+(* Since a function is pure in coq, this should hold *)
+Lemma filtermIdempotent (T : ordType) (S : Type) p (m : {fmap T -> S}) :
+  filterm p (filterm p m) = filterm p m.
+Proof.
+  apply/eq_fmap=> k; rewrite !filtermE.
+  case get_k: (m k)=> [v|] //=.
+  case: ifP => //= pkv ; by rewrite pkv.
 Qed.
