@@ -28,7 +28,6 @@ Import Intermediate.
 
 (* JT: Removed the big block of commented definitions, because they are not useful anymore *)
 
-
 (* RB: NOTE: The current build depends on PS and Composition, both taking a
    relatively long time to compile, but it may still be desirable to consult
    them interactively. To speed up the build process, small, tentative additions
@@ -42,7 +41,8 @@ Definition state_regs (s : CS.state) : Register.t :=
 (* This section will be used to state various preliminary lemma without having to pollute
    other sections. *)
 Section Prelim.
-
+  (* RB: TODO: Remove reliance on auto-names. Also note that this follows from
+     silent_step_preserves_program_component, posed below. *)
   Lemma epsilon_star_preserves_program_component p c s1 s2 :
     CS.is_program_component s1 (prog_interface c) ->
     Star (CS.sem (program_link p c)) s1 E0 s2 ->
@@ -66,12 +66,7 @@ Section Prelim.
       + now rewrite H2.
       + erewrite <- find_label_in_procedure_1; eassumption.
   Qed.
-
 End Prelim.
-
-  Hypothesis prog_is_closed : closed_program prog.
-  Hypothesis prog''_is_closed : closed_program prog''.
-
 
 (* The merge functions only depend on the interfaces that are considered. *)
 Section Merge.
@@ -142,26 +137,31 @@ Section Merge.
   (* RB: TODO: Add side conditions (well-formed programs, linkable interfaces,
      etc. *)
   (* JT: I don't think we need any more side condition here *)
+  Lemma merge_frames_program frame frame'' :
+    Pointer.component frame \in domm ip ->
+    merge_frames frame frame'' = frame.
+  Proof.
+    intros Hpc. unfold merge_frames. now rewrite Hpc.
+  Qed.
+
   Lemma merge_stacks_cons_program frame gps frame'' gps'' :
     Pointer.component frame \in domm ip ->
-    merge_stacks (frame :: gps) (frame'' :: gps'') =
-    frame :: merge_stacks gps gps''.
+    merge_stacks (frame :: gps) (frame'' :: gps'') = frame :: merge_stacks gps gps''.
   Proof.
-    intros Hpc. simpl.
-    unfold merge_frames. now rewrite Hpc.
+    intros Hpc. simpl. now rewrite merge_frames_program.
   Qed.
+
+  Lemma merge_frames_context frame frame'' :
+    Pointer.component frame \in domm ic ->
+    merge_frames frame frame'' = frame''.
+  Admitted.
 
   Lemma merge_stacks_cons_context frame gps frame'' gps'' :
     Pointer.component frame \in domm ic ->
     merge_stacks (frame :: gps) (frame'' :: gps'') =
     frame'' :: merge_stacks gps gps''.
   Proof.
-    intros Hpc. simpl.
-    unfold merge_frames.
-    apply pointer_component_in_ic_notin_ip in Hpc.
-    assert (Hpc_false : Pointer.component frame \in domm ip = false)
-      by now destruct (Pointer.component frame \in domm ip).
-    now rewrite Hpc_false.
+    intros Hpc. simpl. now rewrite merge_frames_context.
   Qed.
 
   Definition merge_states_stack s s'' :=
@@ -218,18 +218,7 @@ Section Merge.
     unfold merge_states_stack, merge_states_mem, merge_states_regs, merge_states_pc.
     now simpl.
   Qed.
-
 End Merge.
-
-(* RB: NOTE: The current build depends on PS and Composition, both taking a
-   relatively long time to compile, but it may still be desirable to consult
-   them interactively. To speed up the build process, small, tentative additions
-   to those modules can be added here. Note that, in principle, the role of PS
-   will be assimilated by Recombination or become very reduced. *)
-
-(* RB: TODO: Relocate to CS. *)
-Definition state_regs (s : CS.state) : Register.t :=
-  let '(_, _, regs, _) := s in regs.
 
 (* RB: TODO: Harmonize naming conventions. *)
 Section Mergeable.
@@ -247,8 +236,8 @@ Section Mergeable.
   Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
 
   (* RB: TODO: Simplify redundancies in standard hypotheses. *)
-  Hypothesis Hmain_linkability  : linkable_mains p  c.
-  Hypothesis Hmain_linkability' : linkable_mains p' c'.
+  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
+  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
 
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
   Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
@@ -419,8 +408,8 @@ Section Mergeable.
         inversion Hstep''; reflexivity.
   Qed.
 
-(*
-  (* TODO: move to CS.v *)
+  (* TODO: move to CS.v
+     RB: NOTE: Substitute for existing results. *)
   Lemma pc_component_in_ip_or_ic : forall s st mem reg pc t,
       initial_state sem s ->
       Star sem s t (st, mem, reg, pc) ->
@@ -437,6 +426,7 @@ Section Mergeable.
     move: H. simpl. rewrite domm_union. now apply /fsetUP.
   Qed.
 
+(**)
   Lemma merge_mergeable_states_regs_program s s'' :
     CS.is_program_component s ic ->
     mergeable_states s s'' ->
@@ -506,7 +496,6 @@ Section Mergeable.
     destruct (Pointer.component pc \in domm ip) eqn:Heq; now rewrite Heq.
   Qed.
 
-
   Lemma mergeable_states_merge_program s s'' :
     CS.is_program_component s ic ->
     mergeable_states s s'' ->
@@ -538,7 +527,7 @@ Section Mergeable.
     rewrite merge_mergeable_states_regs_context; try assumption.
     reflexivity.
   Qed.
-*)
+(**)
 
   Lemma mergeable_states_program_to_program s s'' :
     mergeable_states s s'' ->
@@ -1056,12 +1045,12 @@ Section ThreewayMultisem1.
     (* Derive some useful facts and begin to expose state structure. *)
     inversion Hmergeable_ifaces as [Hlinkable _].
     rewrite (mergeable_states_merge_program
-               Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed Hcomp1 Hmerge1).
+               Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hcomp1 Hmerge1).
     pose proof silent_step_preserves_program_component Hcomp1 Hstep12 as Hcomp2.
     pose proof threeway_multisem_mergeable_step_E0 Hcomp1 Hmerge1 Hstep12
       as Hmerge2.
     rewrite (mergeable_states_merge_program
-               Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed Hcomp2 Hmerge2).
+               Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hcomp2 Hmerge2).
     destruct s1 as [[[gps1 mem1] regs1] pc1].
     destruct s2 as [[[gps2 mem2] regs2] pc2].
     destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
@@ -1160,7 +1149,7 @@ Section ThreewayMultisem1.
     (* Derive some useful facts and begin to expose state structure. *)
     inversion Hmergeable_ifaces as [Hlinkable _].
     rewrite (mergeable_states_merge_program
-               Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed Hcomp1 Hmerge1).
+               Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hcomp1 Hmerge1).
     pose proof threeway_multisem_event_lockstep_program_mergeable
          Hcomp1 Hmerge1 Hstep12 Hstep12'' as Hmerge2.
     set s1copy := s1. destruct s1 as [[[gps1 mem1] regs1] pc1].
@@ -1176,7 +1165,7 @@ Section ThreewayMultisem1.
         rewrite <- Pointer.inc_preserves_component in Hdomm.
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
         [ pose proof mergeable_states_program_to_context
-               Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed (* Hifacep Hifacec *) Hmerge2 Hcomp2 as Hcomp2''
+               Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hmerge2 Hcomp2 as Hcomp2''
         | apply negb_false_iff in Hcomp2 ];
         [ unfold ic, ip; erewrite mergeable_states_merge_program
         | unfold ic, ip; erewrite mergeable_states_merge_context ]; try eassumption;
@@ -1201,13 +1190,13 @@ Section ThreewayMultisem1.
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
         [| apply negb_false_iff in Hcomp2];
         [ rewrite (mergeable_states_merge_program
-                     Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2)
+                     Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hcomp2 Hmerge2)
         | rewrite (mergeable_states_merge_context
-            Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2) ];
-        unfold mergeable_states_memory, mergeable_states_stack; simpl;
+                     Hmergeable_ifaces Hcomp2 Hmerge2) ];
+        unfold merge_states_mem, merge_states_stack; simpl;
         [ pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2'';
-          rewrite (merge_stacks_cons_program Hmergeable_ifaces Hifacep Hifacec); try assumption
-        | rewrite (merge_stacks_cons_context Hmergeable_ifaces Hifacep Hifacec); try assumption ];
+          erewrite merge_frames_program; try eassumption
+        | erewrite merge_frames_context; try eassumption ];
         [ rewrite Heq1 Heq2 | rewrite Heq1 ];
         [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
         t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
