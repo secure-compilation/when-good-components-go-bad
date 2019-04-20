@@ -69,6 +69,8 @@ Section Prelim.
 
 End Prelim.
 
+  Hypothesis prog_is_closed : closed_program prog.
+  Hypothesis prog''_is_closed : closed_program prog''.
 
 
 (* The merge functions only depend on the interfaces that are considered. *)
@@ -219,22 +221,37 @@ Section Merge.
 
 End Merge.
 
+(* RB: NOTE: The current build depends on PS and Composition, both taking a
+   relatively long time to compile, but it may still be desirable to consult
+   them interactively. To speed up the build process, small, tentative additions
+   to those modules can be added here. Note that, in principle, the role of PS
+   will be assimilated by Recombination or become very reduced. *)
+
+(* RB: TODO: Relocate to CS. *)
+Definition state_regs (s : CS.state) : Register.t :=
+  let '(_, _, regs, _) := s in regs.
 
 (* RB: TODO: Harmonize naming conventions. *)
 Section Mergeable.
   Variables p c p' c' : program.
-  Hypothesis Hmergeable_ifaces :
-    mergeable_interfaces (prog_interface p) (prog_interface c).
-
-  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
-  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
 
   Hypothesis Hwfp  : well_formed_program p.
   Hypothesis Hwfc  : well_formed_program c.
   Hypothesis Hwfp' : well_formed_program p'.
   Hypothesis Hwfc' : well_formed_program c'.
 
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+
+  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
+  Hypothesis Hmain_linkability  : linkable_mains p  c.
+  Hypothesis Hmain_linkability' : linkable_mains p' c'.
+
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -402,6 +419,7 @@ Section Mergeable.
         inversion Hstep''; reflexivity.
   Qed.
 
+(*
   (* TODO: move to CS.v *)
   Lemma pc_component_in_ip_or_ic : forall s st mem reg pc t,
       initial_state sem s ->
@@ -520,21 +538,20 @@ Section Mergeable.
     rewrite merge_mergeable_states_regs_context; try assumption.
     reflexivity.
   Qed.
+*)
 
-  Lemma mergeable_states_program_to_program s1 s2 :
-    mergeable_states s1 s2 ->
-    CS.is_program_component s1 ic ->
-    CS.is_program_component s2 ic.
+  Lemma mergeable_states_program_to_program s s'' :
+    mergeable_states s s'' ->
+    CS.is_program_component s   ic ->
+    CS.is_program_component s'' ic.
   Proof.
-    intros Hmerg.
+    destruct s   as [[[? ?] ?] pc  ].
+    destruct s'' as [[[? ?] ?] pc''].
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
-    destruct s1 as [[[s1 m1] r1] pc1].
-    destruct s2 as [[[s2 m2] r2] pc2].
-    replace (Pointer.component pc1) with (Pointer.component (CS.state_pc (s1, m1, r1, pc1))); try reflexivity.
-    replace (Pointer.component pc2) with (Pointer.component (CS.state_pc (s2, m2, r2, pc2))); try reflexivity.
-    erewrite mergeable_states_pc_same_component; now (intros; eassumption).
+    intros Hmerge Hpc.
+    pose proof mergeable_states_pc_same_component Hmerge as Hcomp. simpl in Hcomp.
+    congruence.
   Qed.
-
 
   Lemma mergeable_states_context_to_program s1 s2 :
     mergeable_states s1 s2 ->
@@ -618,7 +635,6 @@ Section MergeSym.
 End MergeSym.
 
 Section PS.
-
   Variables p c p' c' : program.
   Hypothesis Hmergeable_ifaces :
     mergeable_interfaces (prog_interface p) (prog_interface c).
@@ -988,7 +1004,8 @@ Section ThreewayMultisem1.
   Qed.
 
   (* RB: NOTE: The structure follows closely that of
-     threeway_multisem_star_program. *)
+     threeway_multisem_star_program.
+     Bullet structure? *)
   Theorem threeway_multisem_mergeable_program s1 s1'' t s2 s2'' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
@@ -1023,7 +1040,7 @@ Section ThreewayMultisem1.
     | _ => idtac
     end;
     (* Apply linking invariance and solve side goals. *)
-    try (eapply execution_invariant_to_linking; try eassumption;
+    try (**) (eapply execution_invariant_to_linking; try eassumption;
     [ congruence
     | apply linkable_implies_linkable_mains; congruence
     | eapply is_program_component_in_domm; eassumption
@@ -1037,9 +1054,7 @@ Section ThreewayMultisem1.
   Proof.
     intros Hcomp1 Hmerge1 Hstep12.
     (* Derive some useful facts and begin to expose state structure. *)
-
     inversion Hmergeable_ifaces as [Hlinkable _].
-    Check mergeable_states_merge_program.
     rewrite (mergeable_states_merge_program
                Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed Hcomp1 Hmerge1).
     pose proof silent_step_preserves_program_component Hcomp1 Hstep12 as Hcomp2.
@@ -1073,7 +1088,7 @@ Section ThreewayMultisem1.
     apply star_iff_starR in Hstar12.
     induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
       intros Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'.
-    - rewrite -Hifacec in Hcomp1'.
+    - rewrite -Hifacec in Hcomp1'. (**)
       unfold ip, ic; erewrite merge_states_silent_star; try eassumption.
       now apply star_refl.
     - apply Eapp_E0_inv in Ht. destruct Ht; subst.
@@ -1107,8 +1122,6 @@ Section ThreewayMultisem1.
     - eapply star_right; try eassumption; reflexivity.
   Qed.
 
-  Check mergeable_states_merge_program.
-
   Ltac t_threeway_multisem_event_lockstep_program_step_call Hcomp1 Hmerge1 :=
     apply CS.Call; try assumption;
     [
@@ -1134,7 +1147,8 @@ Section ThreewayMultisem1.
     ].
 
   (* RB: TODO: Does it make sense to compact calls and returns into a unified
-     solve tactic? *)
+     solve tactic?
+     NOTE: Revised tactic blocks and branch discipline. *)
   Lemma threeway_multisem_event_lockstep_program_step s1 s1'' e s2 s2'' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
@@ -1159,7 +1173,7 @@ Section ThreewayMultisem1.
     - (* Call: case analysis on call point. *)
       pose proof is_program_component_in_domm Hcomp1 Hmerge1 as Hdomm;
         unfold CS.state_component in Hdomm; simpl in Hdomm;
-          rewrite <- Pointer.inc_preserves_component in Hdomm.
+        rewrite <- Pointer.inc_preserves_component in Hdomm.
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
         [ pose proof mergeable_states_program_to_context
                Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed (* Hifacep Hifacec *) Hmerge2 Hcomp2 as Hcomp2''
@@ -1187,20 +1201,16 @@ Section ThreewayMultisem1.
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
         [| apply negb_false_iff in Hcomp2];
         [ rewrite (mergeable_states_merge_program
-                     Hmergeable_ifaces Hwfp Hwfc Hprog_is_closed Hcomp2 Hmerge2)
+                     Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2)
         | rewrite (mergeable_states_merge_context
-            Hmergeable_ifaces Hcomp2 Hmerge2) ];
-        unfold merge_states_mem, merge_states_stack;
-          [ pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2'';
-            unfold CS.state_component in Hcomp2'';
-            rewrite merge_stacks_cons_program;
-            try assumption;
-            try (now rewrite Heq2)
-          | rewrite (merge_stacks_cons_context Hmergeable_ifaces); try assumption ];
-          [ rewrite Heq1 Heq2 | rewrite Heq1 ];
-          [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
-          simpl;
-          t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
+            Hmergeable_ifaces Hifacep Hifacec Hcomp2 Hmerge2) ];
+        unfold mergeable_states_memory, mergeable_states_stack; simpl;
+        [ pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2'';
+          rewrite (merge_stacks_cons_program Hmergeable_ifaces Hifacep Hifacec); try assumption
+        | rewrite (merge_stacks_cons_context Hmergeable_ifaces Hifacep Hifacec); try assumption ];
+        [ rewrite Heq1 Heq2 | rewrite Heq1 ];
+        [| erewrite Register.invalidate_eq with (regs2 := regs1); [| congruence]];
+        t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
   Qed.
 
   Lemma threeway_multisem_event_lockstep_program s1 s1'' e s2 s2'' :
@@ -1277,7 +1287,7 @@ Section ThreewayMultisem2.
   (* Proof. *)
   (*   intros s1 s2 H. *)
 
-
+  (**)
   Lemma threeway_multisem_star_E0 s1 s1'' s2 s2'':
     mergeable_states p c p' c' s1 s1'' ->
     Star sem   s1   E0 s2   ->
