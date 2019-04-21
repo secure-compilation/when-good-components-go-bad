@@ -863,6 +863,19 @@ Section ThreewayMultisem1.
 
      See comments for pointers to existing related lemmas. *)
 
+  Lemma is_program_component_pc_notin_domm s :
+    CS.is_program_component s ic ->
+    Pointer.component (CS.state_pc s) \notin domm ic.
+  Proof.
+    now destruct s as [[[? ?] ?] ?].
+  Qed.
+
+  Lemma to_partial_memory_merge_memories_left s s'' :
+    mergeable_states p c p' c' s s'' ->
+    to_partial_memory                       (CS.state_mem s)                     (domm ic) =
+    to_partial_memory (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) (domm ic).
+  Admitted.
+
   (* Search _ Memory.load filterm. *)
   Lemma program_load_to_partialized_memory s s'' ptr v :
     CS.is_program_component s ic ->
@@ -872,19 +885,12 @@ Section ThreewayMultisem1.
     Memory.load (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr =
     Some v.
   Proof.
-    intros Hprg_component Hmerg Hptr.
-    destruct s as [[[? mem] ?] pc]; simpl in *.
-    intros Hmem.
-    unfold merge_memories.
-    rewrite <- Hmem.
-    unfold Memory.load.
-    assert (Heq : (unionm (to_partial_memory mem (domm (prog_interface p)))
-                          (to_partial_memory (CS.state_mem s'') (domm (prog_interface c))))
-                    (Pointer.component ptr) = mem (Pointer.component ptr)).
-    { admit.
-    }
-    now rewrite Heq.
-  Admitted.
+    intros Hpc Hmerge Hptr Hload.
+    destruct s as [[[gps mem] regs] pc]. destruct ptr as [[C b] o]. simpl in *. subst.
+    pose proof is_program_component_pc_notin_domm Hpc as Hdomm.
+    pose proof to_partial_memory_merge_memories_left Hmerge as Hmem.
+    now erewrite <- (program_load_in_partialized_memory_strong Hmem Hdomm).
+  Qed.
 
   (* Search _ Memory.store filterm. *)
   (* Search _ Memory.store PS.to_partial_memory. *)
