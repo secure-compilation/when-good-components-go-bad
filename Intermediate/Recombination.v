@@ -9,7 +9,7 @@ Require Import CompCert.Behaviors.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
-(* Require Import Intermediate.PS. *)
+Require Import Intermediate.PS.
 Require Import Intermediate.Decomposition.
 Require Import Intermediate.Composition.
 
@@ -967,18 +967,25 @@ Section ThreewayMultisem1.
     destruct s2 as [[[? ?] ?] pc2].
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
     pose proof CS.silent_step_preserves_component _ _ _ Hstep12 as Heq.
-    simpl in Heq.
-    now rewrite <- Heq.
+    simpl in Heq. now rewrite <- Heq.
   Qed.
 
   (* Search _ imported_procedure. *)
+  (* RB: NOTE: This kind of lemma is usually the composition of two unions, one
+     of which is generally extant. *)
   Lemma imported_procedure_recombination s C P :
     CS.is_program_component s ic ->
     imported_procedure
       (genv_interface (globalenv sem )) (CS.state_component s) C P ->
     imported_procedure
       (genv_interface (globalenv sem')) (CS.state_component s) C P.
-  Admitted.
+  Proof.
+    intros Hpc Himp.
+    pose proof is_program_component_pc_notin_domm Hpc as Hdomm; simpl in Hdomm.
+    rewrite (imported_procedure_unionm_left Hdomm) in Himp.
+    destruct Himp as [CI [Hcomp Himp]]. exists CI. split; [| assumption].
+    unfold Program.has_component. rewrite unionmE. now rewrite Hcomp.
+  Qed.
 
   (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
      operating on an explicit program link, one then being the exact symmetric of
@@ -990,12 +997,27 @@ Section ThreewayMultisem1.
     C \in domm ip ->
     EntryPoint.get C P (genv_entrypoints (globalenv sem )) = Some b ->
     EntryPoint.get C P (genv_entrypoints (globalenv sem')) = Some b.
-  Admitted.
+  Proof.
+    intros Hdomm Hentry.
+    pose proof proj1 Hmergeable_ifaces as Hlinkable.
+    eapply (PS.domm_partition_notin (mergeable_interfaces_sym _ _ Hmergeable_ifaces)) in Hdomm.
+    rewrite genv_entrypoints_program_link_left in Hentry; try assumption.
+    unfold ic in Hdomm; rewrite Hifacec in Hlinkable, Hdomm.
+    rewrite genv_entrypoints_program_link_left; try assumption.
+    now apply linkable_implies_linkable_mains.
+  Qed.
 
   Lemma genv_entrypoints_recombination_right C P b :
     C \in domm ic ->
     EntryPoint.get C P (genv_entrypoints (globalenv sem'')) = Some b ->
     EntryPoint.get C P (genv_entrypoints (globalenv sem' )) = Some b.
+  Proof.
+    unfold sem'', sem', prog'', prog'. intros Hdomm Hentry.
+    pose proof proj1 Hmergeable_ifaces as Hlinkable.
+    rewrite program_linkC in Hentry; try congruence.
+    rewrite program_linkC; try congruence.
+    (* RB: TODO: Apply symmetry after making independent from sectioning. *)
+    (* apply genv_entrypoints_recombination_left. *)
   Admitted.
 
   (* RB: NOTE: The regular, non-helper contents of the section start here. *)
