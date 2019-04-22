@@ -582,6 +582,13 @@ Section Mergeable.
     rewrite H in Hn. inversion Hn.
   Qed.
 
+  (* RB: NOTE: Try to phrase everything either as CS.is_XXX_component, or as
+     \[not]in. *)
+  Lemma mergeable_states_notin_to_in s s'' :
+    mergeable_states s s'' ->
+    Pointer.component (CS.state_pc s) \notin domm ip ->
+    Pointer.component (CS.state_pc s) \in domm ic.
+  Admitted.
 End Mergeable.
 
 Section MergeSym.
@@ -1544,12 +1551,42 @@ Section Recombination.
     mergeable_states p c p' c' s s''.
   Admitted.
 
+  (* RB: NOTE: Consider execution invariance and similar lemmas on the right as
+     well, as symmetry arguments reoccur all the time.
+     TODO: Observe the proof of match_nostep is almost identical, and refactor
+     accordingly. *)
   Theorem match_final_states s s'' :
     mergeable_states p c p' c' s s'' ->
     final_state sem   s   ->
     final_state sem'' s'' ->
     final_state sem'  (merge_states ip ic s s'').
-  Admitted.
+  Proof.
+    destruct s as [[[gps mem] regs] pc].
+    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    unfold final_state. simpl. unfold merge_pcs.
+    intros Hmerge Hfinal Hfinal''.
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    destruct (Pointer.component pc \in domm ip) eqn:Hcase.
+    - apply execution_invariant_to_linking with (c1 := c); try easy.
+      + congruence.
+      + apply linkable_implies_linkable_mains; congruence.
+    - (* Symmetric case. *)
+      unfold prog', prog'' in *.
+      rewrite program_linkC in Hfinal''; try congruence.
+      rewrite program_linkC; try congruence.
+      apply linkable_sym in Hlinkable.
+      apply linkable_mains_sym in Hmain_linkability.
+      apply linkable_mains_sym in Hmain_linkability'.
+      apply execution_invariant_to_linking with (c1 := p'); try congruence.
+      + apply linkable_implies_linkable_mains; congruence.
+      + setoid_rewrite <- (mergeable_states_pc_same_component Hmerge).
+        rewrite <- Hifacec.
+        apply negb_true_iff in Hcase.
+        now eapply (mergeable_states_notin_to_in _ _ _ _ _ _ _ _ _ Hmerge).
+        (* RB: TODO: After lemma is proved, simplify lemma application and remove
+           shelved goals. *)
+        Unshelve. all:assumption.
+  Qed.
 
   Theorem star_simulation s1 s1'' t s2 s2'' :
     mergeable_states p c p' c' s1 s1'' ->
@@ -1575,7 +1612,33 @@ Section Recombination.
     ~ final_state sem   s   ->
     ~ final_state sem'' s'' ->
     ~ final_state sem'  (merge_states ip ic s s'').
-  Admitted.
+  Proof.
+    destruct s as [[[gps mem] regs] pc].
+    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    unfold final_state. simpl. unfold merge_pcs.
+    intros Hmerge Hfinal Hfinal'' Hfinal'.
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    destruct (Pointer.component pc \in domm ip) eqn:Hcase.
+    - apply execution_invariant_to_linking with (c2 := c) in Hfinal'; try easy.
+      + congruence.
+      + apply linkable_implies_linkable_mains; congruence.
+    - (* Symmetric case. *)
+      unfold prog', prog'' in *.
+      rewrite program_linkC in Hfinal'; try congruence.
+      rewrite program_linkC in Hfinal''; try congruence.
+      apply execution_invariant_to_linking with (c2 := p') in Hfinal'; try easy.
+      + apply linkable_sym; congruence.
+      + apply linkable_sym; congruence.
+      + apply linkable_mains_sym, linkable_implies_linkable_mains; congruence.
+      + apply linkable_mains_sym, linkable_implies_linkable_mains; congruence.
+      + setoid_rewrite <- (mergeable_states_pc_same_component Hmerge).
+        rewrite <- Hifacec.
+        apply negb_true_iff in Hcase.
+        now eapply (mergeable_states_notin_to_in _ _ _ _ _ _ _ _ _ Hmerge).
+        (* RB: TODO: After lemma is proved, simplify lemma application and remove
+           shelved goals. *)
+        Unshelve. all:assumption.
+  Qed.
 (* End ThreewayMultisem. *)
 
 (* Section Recombination. *)
