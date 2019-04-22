@@ -1540,7 +1540,12 @@ Section Recombination.
     initial_state sem   s   ->
     initial_state sem'' s'' ->
     mergeable_states p c p' c' s s''.
-  Admitted.
+  Proof.
+    simpl. unfold CS.initial_state.
+    intros Hini Hini''.
+    apply mergeable_states_intro with (s0 := s) (s0'' := s'') (t := E0); subst;
+      reflexivity || now apply star_refl.
+  Qed.
 
   (* RB: NOTE: Here, the existential is explicitly instantiated; the mergeability
      relation is also different than in standard "two-way" simulations. *)
