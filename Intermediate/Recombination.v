@@ -106,9 +106,9 @@ Section Merge.
   (* Various lemmas about these functions *)
 
   (* JT: TODO: Move this lemma to another section *)
-  Lemma pointer_component_in_ip_notin_ic ptr :
-    Pointer.component ptr \in domm ip ->
-    Pointer.component ptr \notin domm ic.
+  Lemma component_in_ip_notin_ic C :
+    C \in domm ip ->
+    C \notin domm ic.
   Proof.
     intros Hptr.
     inversion Hmergeable_ifaces as [Hlinkable _].
@@ -119,9 +119,9 @@ Section Merge.
   Qed.
 
   (* JT: TODO: Move this lemma to another section *)
-  Lemma pointer_component_in_ic_notin_ip ptr :
-    Pointer.component ptr \in domm ic ->
-    Pointer.component ptr \notin domm ip.
+  Lemma component_in_ic_notin_ip C :
+    C \in domm ic ->
+    C \notin domm ip.
   Proof.
     intros Hptr.
     inversion Hmergeable_ifaces as [Hlinkable _].
