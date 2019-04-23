@@ -89,8 +89,8 @@ Section Merge.
   filterm (fun k _ => negb (k \in ctx)) mem.
 
   Definition merge_memories (m m'' : Memory.t) : Memory.t :=
-    unionm (to_partial_memory m (domm ip))
-           (to_partial_memory m'' (domm ic)). (* Note that prog_interface c = prog_interface c' *)
+    unionm (to_partial_memory m   (domm ic))
+           (to_partial_memory m'' (domm ip)). (* Note that prog_interface c = prog_interface c' *)
 
   Definition merge_registers (r r'' : Register.t) (pc : Pointer.t) : Register.t :=
     if Pointer.component pc \in domm ip then r else r''.
