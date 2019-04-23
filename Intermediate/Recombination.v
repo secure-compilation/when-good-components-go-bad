@@ -1572,6 +1572,28 @@ Section Recombination.
     initial_state sem'' s'' ->
     initial_state sem'  (merge_states ip ic s s'') /\
     mergeable_states p c p' c' s s''.
+  Proof.
+    intros Hini Hini''.
+    pose proof initial_states_mergeability Hini Hini'' as Hmerge.
+    simpl in *. unfold CS.initial_state in *. subst.
+    split; last assumption.
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    (* Expose structure of initial states. *)
+    rewrite !CS.initial_machine_state_after_linking; try congruence;
+      last (apply interface_preserves_closedness_r with (p2 := c); try assumption;
+            now apply interface_implies_matching_mains).
+    unfold merge_states, merge_memories, merge_registers, merge_pcs; simpl.
+    (* Memory simplifictions. *)
+    rewrite (prepare_procedures_memory_left Hlinkable).
+    unfold ip. erewrite Hifacep at 1. rewrite Hifacep Hifacec in Hlinkable.
+    rewrite (prepare_procedures_memory_right Hlinkable).
+    (* Case analysis on main and related simplifications. *)
+    destruct (Component.main \in domm ip) eqn:Hcase;
+      rewrite Hcase.
+    - pose proof component_in_ip_notin_ic Hmergeable_ifaces Hcase as Hnotin.
+      rewrite (CS.prog_main_block_no_main _ Hwfc Hnotin).
+      rewrite Hifacec in Hnotin. now rewrite (CS.prog_main_block_no_main _ Hwfc' Hnotin).
+    - (* Symmetric case. *)
   Admitted.
 
   (* RB: NOTE: Consider execution invariance and similar lemmas on the right as
