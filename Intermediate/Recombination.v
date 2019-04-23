@@ -89,8 +89,8 @@ Section Merge.
   filterm (fun k _ => negb (k \in ctx)) mem.
 
   Definition merge_memories (m m'' : Memory.t) : Memory.t :=
-    unionm (to_partial_memory m (domm ip))
-           (to_partial_memory m'' (domm ic)). (* Note that prog_interface c = prog_interface c' *)
+    unionm (to_partial_memory m   (domm ic))
+           (to_partial_memory m'' (domm ip)). (* Note that prog_interface c = prog_interface c' *)
 
   Definition merge_registers (r r'' : Register.t) (pc : Pointer.t) : Register.t :=
     if Pointer.component pc \in domm ip then r else r''.
@@ -793,6 +793,24 @@ Section PS.
   Qed.
 
 End PS.
+
+  (* Search _ prepare_procedures_memory. *)
+  (* Search _ PS.to_partial_memory unionm. *)
+  Lemma prepare_procedures_memory_left p c :
+    linkable (prog_interface p) (prog_interface c) ->
+    to_partial_memory
+      (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+      (domm (prog_interface c)) =
+    prepare_procedures_memory p.
+  Admitted.
+
+  Lemma prepare_procedures_memory_right p c :
+    linkable (prog_interface p) (prog_interface c) ->
+    to_partial_memory
+      (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+      (domm (prog_interface p)) =
+    prepare_procedures_memory c.
+  Admitted.
 
 Section BehaviorStar.
   Variables p c: program.
@@ -1650,6 +1668,28 @@ Section Recombination.
     initial_state sem'' s'' ->
     initial_state sem'  (merge_states ip ic s s'') /\
     mergeable_states p c p' c' s s''.
+  Proof.
+    intros Hini Hini''.
+    pose proof initial_states_mergeability Hini Hini'' as Hmerge.
+    simpl in *. unfold CS.initial_state in *. subst.
+    split; last assumption.
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    (* Expose structure of initial states. *)
+    rewrite !CS.initial_machine_state_after_linking; try congruence;
+      last (apply interface_preserves_closedness_r with (p2 := c); try assumption;
+            now apply interface_implies_matching_mains).
+    unfold merge_states, merge_memories, merge_registers, merge_pcs; simpl.
+    (* Memory simplifictions. *)
+    rewrite (prepare_procedures_memory_left Hlinkable).
+    unfold ip. erewrite Hifacep at 1. rewrite Hifacep Hifacec in Hlinkable.
+    rewrite (prepare_procedures_memory_right Hlinkable).
+    (* Case analysis on main and related simplifications. *)
+    destruct (Component.main \in domm ip) eqn:Hcase;
+      rewrite Hcase.
+    - pose proof component_in_ip_notin_ic Hmergeable_ifaces Hcase as Hnotin.
+      rewrite (CS.prog_main_block_no_main _ Hwfc Hnotin).
+      rewrite Hifacec in Hnotin. now rewrite (CS.prog_main_block_no_main _ Hwfc' Hnotin).
+    - (* Symmetric case. *)
   Admitted.
 
   (* RB: NOTE: Consider execution invariance and similar lemmas on the right as
