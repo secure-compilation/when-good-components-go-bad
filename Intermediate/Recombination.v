@@ -152,7 +152,14 @@ Section Merge.
   Lemma merge_frames_context frame frame'' :
     Pointer.component frame \in domm ic ->
     merge_frames frame frame'' = frame''.
-  Admitted.
+  Proof.
+    intros Hpc.
+    apply component_in_ic_notin_ip in Hpc.
+    unfold merge_frames.
+    move: Hpc => /negP Hpc.
+    now destruct (Pointer.component frame \in domm ip) eqn:Heq.
+  Qed.
+  
 
   Lemma merge_stacks_cons_context frame gps frame'' gps'' :
     Pointer.component frame \in domm ic ->
@@ -588,7 +595,16 @@ Section Mergeable.
     mergeable_states s s'' ->
     Pointer.component (CS.state_pc s) \notin domm ip ->
     Pointer.component (CS.state_pc s) \in domm ic.
-  Admitted.
+  Proof.
+    intros Hmerg Hpc_notin.
+    inversion Hmerg as [? ? ? Hini ? Hstar ?].
+    destruct s as [[[? ?] ?] pc].
+    pose proof (pc_component_in_ip_or_ic Hini Hstar) as Hpc.
+    destruct Hpc.
+    - now rewrite H1 in Hpc_notin.
+    - now assumption.
+  Qed.
+
 End Mergeable.
 
 Section MergeSym.
