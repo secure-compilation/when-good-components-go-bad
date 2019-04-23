@@ -745,6 +745,24 @@ Section PS.
 
 End PS.
 
+  (* Search _ prepare_procedures_memory. *)
+  (* Search _ PS.to_partial_memory unionm. *)
+  Lemma prepare_procedures_memory_left p c :
+    linkable (prog_interface p) (prog_interface c) ->
+    to_partial_memory
+      (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+      (domm (prog_interface c)) =
+    prepare_procedures_memory p.
+  Admitted.
+
+  Lemma prepare_procedures_memory_right p c :
+    linkable (prog_interface p) (prog_interface c) ->
+    to_partial_memory
+      (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+      (domm (prog_interface p)) =
+    prepare_procedures_memory c.
+  Admitted.
+
 Section BehaviorStar.
   Variables p c: program.
 
