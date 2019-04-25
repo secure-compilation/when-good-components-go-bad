@@ -994,7 +994,14 @@ Section ThreewayMultisem1.
     Memory.store (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr v =
     Some (merge_memories ip ic mem (CS.state_mem s'')).
   Proof.
-  Admitted.
+    intros Hpc Hmerge Hptr Hstore.
+    pose proof is_program_component_pc_notin_domm Hpc as Hnotin.
+    rewrite <- Hptr in Hnotin.
+    pose proof PS.partialize_program_store Hnotin Hstore as Hstore'.
+    pose proof PS.unpartialize_program_store
+         (PS.to_partial_memory (CS.state_mem s'') (domm ip)) Hstore' as Hstore''.
+    done.
+  Qed.
 
   (* Search _ Memory.alloc filterm. *)
   (* Search _ Memory.alloc PS.to_partial_memory. *)
@@ -1006,7 +1013,14 @@ Section ThreewayMultisem1.
     Memory.alloc (merge_memories ip ic (CS.state_mem s) (CS.state_mem s''))
                  (CS.state_component s) size =
     Some (merge_memories ip ic mem (CS.state_mem s''), ptr).
-  Admitted.
+  Proof.
+    intros Hpc Hmerge Halloc.
+    pose proof is_program_component_pc_notin_domm Hpc as Hnotin.
+    pose proof PS.partialize_program_alloc Hnotin Halloc as Halloc'.
+    pose proof PS.unpartialize_program_alloc
+         (PS.to_partial_memory (CS.state_mem s'') (domm ip)) Halloc' as Halloc''.
+    done.
+  Qed.
 
   (* Search _ find_label_in_component. *)
   Lemma find_label_in_component_recombination s s'' l pc :
