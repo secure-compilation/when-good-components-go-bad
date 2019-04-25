@@ -1028,7 +1028,20 @@ Section ThreewayMultisem1.
     mergeable_states p c p' c' s s'' ->
     find_label_in_component (globalenv sem) (CS.state_pc s) l = Some pc ->
     find_label_in_component (globalenv sem') (CS.state_pc s) l = Some pc.
-  Admitted.
+  Proof.
+    destruct s as [[[? ?] ?] pc_]. simpl.
+    intros Hpc Hmerge Hlabel.
+    pose proof proj1 Hmergeable_ifaces as Hlinkable.
+    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
+    pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hpc_.
+    pose proof is_program_component_pc_notin_domm Hpc as Hdomm; simpl in Hdomm.
+    rewrite (find_label_in_component_program_link_left _ _ _ _ Hmains) in Hlabel;
+      try assumption.
+    unfold ic in Hdomm; rewrite Hifacec in Hdomm.
+    rewrite (find_label_in_component_program_link_left Hdomm Hwfp);
+      try congruence.
+    apply linkable_implies_linkable_mains; congruence.
+  Qed.
 
   (* Search _ find_label_in_procedure. *)
   Lemma find_label_in_procedure_recombination s s'' l pc :
