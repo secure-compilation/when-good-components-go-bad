@@ -937,6 +937,19 @@ Section ThreewayMultisem1.
 
      See comments for pointers to existing related lemmas. *)
 
+  Lemma is_program_component_pc_in_domm s s'' :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    Pointer.component (CS.state_pc s) \in domm ip.
+  Proof.
+    intros Hpc Hmerge.
+    assert (Hcc := Hmerge);
+      apply mergeable_states_program_to_context in Hcc; try assumption.
+    unfold CS.is_context_component, turn_of, CS.state_turn in Hcc.
+    rewrite (mergeable_states_pc_same_component Hmerge).
+    now destruct s'' as [[[? ?] ?] ?].
+  Qed.
+
   Lemma is_program_component_pc_notin_domm s :
     CS.is_program_component s ic ->
     Pointer.component (CS.state_pc s) \notin domm ic.
