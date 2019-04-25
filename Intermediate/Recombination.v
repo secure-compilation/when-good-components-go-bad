@@ -802,7 +802,16 @@ End PS.
       (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
       (domm (prog_interface c)) =
     prepare_procedures_memory p.
-  Admitted.
+  Proof.
+    intros [_ Hdisjoint].
+    unfold to_partial_memory, merge_memories.
+    rewrite <- domm_prepare_procedures_memory,
+          -> filterm_union,
+          -> fdisjoint_filterm_full,
+          -> fdisjoint_filterm_empty, -> unionm0;
+      first reflexivity;
+      try rewrite -> !domm_prepare_procedures_memory; congruence.
+  Qed.
 
   Lemma prepare_procedures_memory_right p c :
     linkable (prog_interface p) (prog_interface c) ->
@@ -810,8 +819,15 @@ End PS.
       (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
       (domm (prog_interface p)) =
     prepare_procedures_memory c.
-  Admitted.
-
+  Proof.
+    intros Hlinkable.
+    rewrite unionmC; try assumption.
+    apply prepare_procedures_memory_left with (c := p) (p := c).
+    now apply linkable_sym.
+    inversion Hlinkable. 
+    now rewrite !domm_prepare_procedures_memory.
+  Qed.
+  
 Section BehaviorStar.
   Variables p c: program.
 
