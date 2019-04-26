@@ -106,6 +106,7 @@ Section Merge.
   (* Various lemmas about these functions *)
 
   (* JT: TODO: Move this lemma to another section *)
+  (**)
   Lemma component_in_ip_notin_ic C :
     C \in domm ip ->
     C \notin domm ic.
@@ -590,7 +591,7 @@ Section Mergeable.
   Qed.
 
   (* RB: NOTE: Try to phrase everything either as CS.is_XXX_component, or as
-     \[not]in. *)
+     \[not]in. This is the equivalent of the old [PS.domm_partition]. *)
   Lemma mergeable_states_notin_to_in s s'' :
     mergeable_states s s'' ->
     Pointer.component (CS.state_pc s) \notin domm ip ->
@@ -605,6 +606,13 @@ Section Mergeable.
     - now assumption.
   Qed.
 
+  Lemma mergeable_states_cons_domm
+        frame1   gps1   mem1   regs1   pc1
+        frame1'' gps1'' mem1'' regs1'' pc1'' :
+    mergeable_states (frame1   :: gps1  , mem1  , regs1  , pc1  )
+                     (frame1'' :: gps1'', mem1'', regs1'', pc1'') ->
+    Pointer.component frame1 = Pointer.component frame1''.
+  Admitted.
 End Mergeable.
 
 Section MergeSym.
@@ -1790,6 +1798,7 @@ Section Recombination.
   Proof.
     intros Hpc Hmerge Hstep.
     destruct s1 as [[[gps1 mem1] regs1] pc1].
+    destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
     inversion Hmergeable_ifaces as [Hlinkable _].
     pose proof is_program_component_pc_in_domm
          Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hpc Hmerge as Hdomm.
@@ -1799,14 +1808,48 @@ Section Recombination.
       try assumption.
     inversion Hstep; subst.
 
-    (* 6, 7, 8, 10, 12, 13, 14  *)
+    (* 6, 7, 8, 10, 12, 13 *)
 
     1:{
+
+      match goal with
+      (* Returns. *)
+      | Hcons : ?PC' :: ?GPS' = ?GPS (* merge_states_stack *) |- _ =>
+        destruct GPS as [| frame1' gps1'] eqn:Hgps; [discriminate |];
+        destruct gps1 as [| frame1 gps1]; [now destruct gps1'' |];
+        destruct gps1'' as [| frame1'' gps1'']; [easy |];
+        inversion Hcons; subst PC' GPS';
+        assert (Heq : Pointer.component frame1 = Pointer.component frame1')
+          by (unfold merge_states_stack in Hgps;
+              inversion Hgps as [[Hframe Hdummy]];
+              unfold merge_frames;
+              destruct (Pointer.component frame1 \in domm ip) eqn:Hcase; rewrite Hcase;
+              [ reflexivity
+              | eapply mergeable_states_cons_domm; last exact Hmerge; eassumption]);
+        rewrite <- Heq
+      | _ => idtac
+      end.
       eexists.
       Composition.CS_step_of_executing;
-        try eassumption; try reflexivity.
+        try eassumption; try congruence; try reflexivity;
+        match goal with
+        (* Memory operations. *)
+        | |- Memory.load _ _ = _ => fail
+        | |- Memory.store _ _ _ = _ => fail
+        | |- Memory.alloc _ _ _ = _ => fail
+        (* Calls. *)
+        | |- imported_procedure _ _ _ _ => fail
+        | |- EntryPoint.get _ _ _ = _ => fail
+        | _ => idtac
+        end.
       apply execution_invariant_to_linking with (c1 := c');
-        try eassumption; [congruence].
+        try eassumption; [congruence];
+        match goal with
+        (* Jumps. *)
+        | |- find_label_in_component _ _ _ = _ => fail
+        | |- find_label_in_procedure _ _ _ = _ => fail
+        end.
+
     }
 
   Admitted.
