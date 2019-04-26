@@ -1781,11 +1781,51 @@ Section Recombination.
     - eapply threeway_multisem_mergeable; eassumption.
   Qed.
 
+  Theorem threeway_multisem_step_inv_program s1 s1'' t s2' :
+    CS.is_program_component s1 ic ->
+    mergeable_states p c p' c' s1 s1'' ->
+    Step sem' (merge_states ip ic s1 s1'') t s2' ->
+  exists s2,
+    Step sem                      s1       t s2.
+  Proof.
+    intros Hpc Hmerge Hstep.
+    destruct s1 as [[[gps1 mem1] regs1] pc1].
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    pose proof is_program_component_pc_in_domm
+         Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hpc Hmerge as Hdomm.
+    assert (Hmains : linkable_mains p c')
+      by (apply linkable_implies_linkable_mains; congruence).
+    rewrite (mergeable_states_merge_program _ _ _ _ _ Hmerge) in Hstep;
+      try assumption.
+    inversion Hstep; subst.
+
+    (* 6, 7, 8, 10, 12, 13, 14  *)
+
+    1:{
+      eexists.
+      Composition.CS_step_of_executing;
+        try eassumption; try reflexivity.
+      apply execution_invariant_to_linking with (c1 := c');
+        try eassumption; [congruence].
+    }
+
+  Admitted.
+
   Corollary match_nostep s s'' :
     mergeable_states p c p' c' s s'' ->
     Nostep sem   s   ->
     Nostep sem'' s'' ->
     Nostep sem'  (merge_states ip ic s s'').
+  Proof.
+    rename s into s1. rename s'' into s1''.
+    (* destruct s as [[[gps mem] regs] pc]. *)
+    (* destruct s'' as [[[gps'' mem''] regs''] pc'']. *)
+    intros Hmerge Hstep Hstep'' t s2' Hstep'.
+    destruct (CS.is_program_component s1 ic) eqn:Hcase.
+    - pose proof threeway_multisem_step_inv_program Hcase Hmerge Hstep'
+        as [s2 Hcontra].
+      specialize (Hstep t s2). contradiction.
+    - (* Symmetric case. *)
   Admitted.
 
   Corollary match_nofinal s s'' :
