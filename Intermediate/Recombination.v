@@ -1668,9 +1668,32 @@ Section ThreewayMultisem3.
         last admit. (* Easy. *)
       unfold ip, ic.
       setoid_rewrite merge_states_sym at 1 2; try eassumption.
-      (* apply threeway_multisem_star_program. *)
-      (* apply threeway_multisem_star_program with (p' := c). *)
-  Admitted. (* RB: NOTE: Assigned to JT. *)
+      pose proof threeway_multisem_star_program as H.
+
+      specialize (H c' p' c p).
+      specialize (H Hwfc' Hwfp' Hwfc Hwfp).
+      rewrite <- Hifacep, <- Hifacec in H.
+      specialize (H (mergeable_interfaces_sym ip ic Hmergeable_ifaces) eq_refl eq_refl).
+      specialize (H (linkable_mains_sym Hmain_linkability') (linkable_mains_sym Hmain_linkability)).
+      pose proof (program_linkC Hwfp' Hwfc') as Hprg_linkC''; rewrite <- Hifacep in Hprg_linkC''.
+      inversion Hmergeable_ifaces as [Hlinkable _].
+      rewrite Hifacec in Hlinkable.
+      pose proof (program_linkC Hwfp Hwfc) as Hprg_linkC; rewrite Hifacep in Hprg_linkC.
+      assert (Hclosed'' : closed_program (program_link c' p')) by now rewrite <- (Hprg_linkC'' Hlinkable).
+      rewrite -> Hifacep, <- Hifacec in Hlinkable.
+      assert (Hclosed : closed_program (program_link c p)) by now rewrite <- (Hprg_linkC Hlinkable).
+      specialize (H Hclosed'' Hclosed).
+      specialize (H s1'' s1 t s2'' s2).
+      apply H; try assumption.
+      apply mergeable_states_sym in Hmerge1; try assumption;
+        try rewrite -Hifacec; try rewrite -Hifacep; try apply mergeable_interfaces_sym;
+          now auto.
+      Grab Existential Variables.
+      destruct Hmergeable_ifaces; now rewrite -Hifacec.
+      destruct Hmergeable_ifaces; now rewrite -Hifacec -Hifacep.
+      now destruct Hmergeable_ifaces.
+  Qed.
+  (* JT: TODO: improve this proof *)
 End ThreewayMultisem3.
 
 (* Section ThreewayMultisem. *)
