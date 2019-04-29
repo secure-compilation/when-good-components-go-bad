@@ -802,6 +802,18 @@ Section PS.
 
 End PS.
 
+  Lemma to_partial_memory_in ip ic mem ptr :
+    mergeable_interfaces ip ic ->
+    ptr \in domm ip ->
+    (to_partial_memory mem (domm ic)) ptr = mem ptr.
+  Admitted.
+
+  Lemma to_partial_memory_notin ip ic mem ptr :
+    mergeable_interfaces ip ic ->
+    ptr \in domm ic ->
+    (to_partial_memory mem (domm ic)) ptr = None.
+  Admitted.
+
   (* Search _ prepare_procedures_memory. *)
   (* Search _ PS.to_partial_memory unionm. *)
   Lemma prepare_procedures_memory_left p c :
