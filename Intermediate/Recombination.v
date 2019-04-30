@@ -955,13 +955,28 @@ End PS.
     mergeable_interfaces ip ic ->
     ptr \in domm ip ->
     (to_partial_memory mem (domm ic)) ptr = mem ptr.
-  Admitted.
+  Proof.
+    intros Hmerge Hptr.
+    unfold to_partial_memory.
+    apply getm_filterm_notin_domm.
+    eapply component_in_ip_notin_ic; eassumption.
+  Qed.
+  
 
   Lemma to_partial_memory_notin ip ic mem ptr :
     mergeable_interfaces ip ic ->
     ptr \in domm ic ->
-    (to_partial_memory mem (domm ic)) ptr = None.
-  Admitted.
+            (to_partial_memory mem (domm ic)) ptr = None.
+  Proof.
+    intros Hmerge Hptr.
+    unfold to_partial_memory.
+    rewrite filtermE.
+    unfold obind, oapp.
+    destruct (mem ptr) eqn:Hmem; rewrite Hmem.
+    now rewrite Hptr.
+    now reflexivity.
+  Qed.
+  
 
   (* Search _ prepare_procedures_memory. *)
   (* Search _ PS.to_partial_memory unionm. *)
