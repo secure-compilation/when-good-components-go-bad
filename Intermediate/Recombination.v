@@ -1019,6 +1019,27 @@ Section ThreewayMultisem1.
     now erewrite <- (program_load_in_partialized_memory_strong Hmem Hdomm).
   Qed.
 
+  (* RB: NOTE: Consider removing weaker version of lemma above. *)
+  Lemma program_load_to_partialized_memory_strong s s'' ptr :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.load (CS.state_mem s) ptr =
+    Memory.load (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr.
+  Proof.
+    destruct (Memory.load (CS.state_mem s) ptr) as [v |] eqn:Hcase1;
+      first (symmetry; now apply program_load_to_partialized_memory).
+    (* The new part is the None case. *)
+    intros Hpc Hmerge Hptr.
+    destruct s as [[[gps mem] regs] pc]; destruct ptr as [[C b] o];
+      unfold Memory.load, merge_memories in *; simpl in *; subst.
+    eapply is_program_component_pc_in_domm in Hpc; try eassumption.
+    erewrite unionmE, to_partial_memory_in, to_partial_memory_notin;
+      try eassumption;
+      [| apply mergeable_interfaces_sym; eassumption].
+    now destruct (mem (Pointer.component pc)).
+  Qed.
+
   (* Search _ Memory.store filterm. *)
   (* Search _ Memory.store PS.to_partial_memory. *)
   (* Search _ Memory.store PS.merge_memories. *)
