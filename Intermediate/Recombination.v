@@ -1838,6 +1838,56 @@ Section Recombination.
     - eapply threeway_multisem_mergeable; eassumption.
   Qed.
 
+  (* RB: TODO: Move when finished. In the current form, these lemmas are
+     sufficient if unsatisfying in that only an imprecise existential is
+     offered. *)
+  Lemma program_store_from_partialized_memory s s'' ptr v mem' :
+    Pointer.component (CS.state_pc s) \in domm ip ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.store (merge_states_mem ip ic s s'') ptr v = Some mem' ->
+  exists mem,
+    Memory.store (CS.state_mem s) ptr v = Some mem.
+  Proof.
+    destruct s as [[[gps mem] regs] pc].
+    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    destruct ptr as [[C b] o].
+    unfold Memory.store, merge_states, merge_states_mem, merge_memories.
+    intros Hdomm Hcomp.
+    rewrite unionmE Hcomp.
+    erewrite to_partial_memory_in; try eassumption.
+    erewrite to_partial_memory_notin;
+      try eassumption; [| apply mergeable_interfaces_sym; eassumption].
+    simpl.
+    destruct (mem (Pointer.component pc)) as [memC |] eqn:Hcase1;
+      last discriminate.
+    simpl.
+    destruct (ComponentMemory.store memC b o v) as [memC' |] eqn:Hcase2;
+      last discriminate.
+    now eauto.
+  Qed.
+
+  Lemma program_alloc_from_partialized_memory s s'' size mem' ptr' :
+    Pointer.component (CS.state_pc s) \in domm ip ->
+    Memory.alloc (merge_states_mem ip ic s s'') (CS.state_component s) size =  Some (mem', ptr') ->
+  exists mem ptr,
+    Memory.alloc (CS.state_mem s) (CS.state_component s) size = Some (mem, ptr).
+  Proof.
+    destruct s as [[[gps mem] regs] pc].
+    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    unfold Memory.alloc, merge_states, merge_states_mem, merge_memories, CS.state_component.
+    intros Hdomm.
+    rewrite unionmE.
+    erewrite to_partial_memory_in; try eassumption.
+    erewrite to_partial_memory_notin;
+      try eassumption; [| apply mergeable_interfaces_sym; eassumption].
+    simpl.
+    destruct (mem (Pointer.component pc)) as [memC |] eqn:Hcase1;
+      last discriminate.
+    simpl.
+    destruct (ComponentMemory.alloc memC size) as [memC' b].
+    now eauto.
+  Qed.
+
   Theorem threeway_multisem_step_inv_program s1 s1'' t s2' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
