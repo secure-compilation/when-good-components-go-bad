@@ -1910,11 +1910,15 @@ Section Recombination.
       try assumption.
     inversion Hstep; subst.
 
-    (* 7, 12 *)
-
     1:{
-
       match goal with
+      (* Memory operations. *)
+      | Hstore : Memory.store _ _ _ = _ |- _ =>
+        apply program_store_from_partialized_memory in Hstore as [mem1_ Hstore];
+          try eassumption
+      | Halloc : Memory.alloc _ _ _ = _ |- _ =>
+        apply program_alloc_from_partialized_memory in Halloc as [mem1_ [ptr_ Halloc]];
+          try assumption
       (* Calls. *)
       | Hget : EntryPoint.get _ _ _ = _ |- _ =>
         apply genv_entrypoints_interface_some with (p' := prog) in Hget as [b' Hget];
@@ -1934,9 +1938,9 @@ Section Recombination.
               | eapply mergeable_states_cons_domm; last exact Hmerge; eassumption]);
         rewrite <- Heq
       | _ => idtac
-      end.
+      end;
       eexists;
-      Composition.CS_step_of_executing;
+      [Composition.CS_step_of_executing];
         try eassumption; try congruence; try reflexivity;
         match goal with
         (* Memory operations. *)
@@ -1944,8 +1948,6 @@ Section Recombination.
           unfold merge_states_mem in Hload;
           erewrite <- program_load_to_partialized_memory_strong in Hload;
           try exact Hmerge; eassumption
-        | |- Memory.store _ _ _ = _ => fail
-        | |- Memory.alloc _ _ _ = _ => fail
         (* Jumps. *)
         | Hlabel : find_label_in_component _ _ _ = _ |- find_label_in_component _ _ _ = _ =>
           rewrite find_label_in_component_program_link_left;
@@ -1961,9 +1963,8 @@ Section Recombination.
           rewrite Hifacec in Hnotin; now rewrite imported_procedure_unionm_left in Himp
         | _ => idtac
         end;
-      apply execution_invariant_to_linking with (c1 := c');
+      [apply execution_invariant_to_linking with (c1 := c')];
         try eassumption; [congruence].
-
     }
 
   Admitted.
