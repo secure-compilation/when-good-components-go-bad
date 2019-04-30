@@ -951,6 +951,18 @@ Section PS.
 
 End PS.
 
+  Lemma to_partial_memory_in ip ic mem ptr :
+    mergeable_interfaces ip ic ->
+    ptr \in domm ip ->
+    (to_partial_memory mem (domm ic)) ptr = mem ptr.
+  Admitted.
+
+  Lemma to_partial_memory_notin ip ic mem ptr :
+    mergeable_interfaces ip ic ->
+    ptr \in domm ic ->
+    (to_partial_memory mem (domm ic)) ptr = None.
+  Admitted.
+
   (* Search _ prepare_procedures_memory. *)
   (* Search _ PS.to_partial_memory unionm. *)
   Lemma prepare_procedures_memory_left p c :
@@ -1154,6 +1166,27 @@ Section ThreewayMultisem1.
     pose proof is_program_component_pc_notin_domm Hpc as Hdomm.
     pose proof to_partial_memory_merge_memories_left Hmerge as Hmem.
     now erewrite <- (program_load_in_partialized_memory_strong Hmem Hdomm).
+  Qed.
+
+  (* RB: NOTE: Consider removing weaker version of lemma above. *)
+  Lemma program_load_to_partialized_memory_strong s s'' ptr :
+    CS.is_program_component s ic ->
+    mergeable_states p c p' c' s s'' ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.load (CS.state_mem s) ptr =
+    Memory.load (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr.
+  Proof.
+    destruct (Memory.load (CS.state_mem s) ptr) as [v |] eqn:Hcase1;
+      first (symmetry; now apply program_load_to_partialized_memory).
+    (* The new part is the None case. *)
+    intros Hpc Hmerge Hptr.
+    destruct s as [[[gps mem] regs] pc]; destruct ptr as [[C b] o];
+      unfold Memory.load, merge_memories in *; simpl in *; subst.
+    eapply is_program_component_pc_in_domm in Hpc; try eassumption.
+    erewrite unionmE, to_partial_memory_in, to_partial_memory_notin;
+      try eassumption;
+      [| apply mergeable_interfaces_sym; eassumption].
+    now destruct (mem (Pointer.component pc)).
   Qed.
 
   (* Search _ Memory.store filterm. *)
@@ -1977,6 +2010,112 @@ Section Recombination.
     - eapply threeway_multisem_mergeable; eassumption.
   Qed.
 
+  (* RB: TODO: Move when finished. In the current form, these lemmas are
+     sufficient if unsatisfying in that only an imprecise existential is
+     offered. *)
+  Lemma program_store_from_partialized_memory s s'' ptr v mem' :
+    Pointer.component (CS.state_pc s) \in domm ip ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.store (merge_states_mem ip ic s s'') ptr v = Some mem' ->
+  exists mem,
+    Memory.store (CS.state_mem s) ptr v = Some mem.
+  Proof.
+    destruct s as [[[gps mem] regs] pc].
+    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    destruct ptr as [[C b] o].
+    unfold Memory.store, merge_states, merge_states_mem, merge_memories.
+    intros Hdomm Hcomp.
+    rewrite unionmE Hcomp.
+    erewrite to_partial_memory_in; try eassumption.
+    erewrite to_partial_memory_notin;
+      try eassumption; [| apply mergeable_interfaces_sym; eassumption].
+    simpl.
+    destruct (mem (Pointer.component pc)) as [memC |] eqn:Hcase1;
+      last discriminate.
+    simpl.
+    destruct (ComponentMemory.store memC b o v) as [memC' |] eqn:Hcase2;
+      last discriminate.
+    now eauto.
+  Qed.
+
+  Lemma program_alloc_from_partialized_memory s s'' size mem' ptr' :
+    Pointer.component (CS.state_pc s) \in domm ip ->
+    Memory.alloc (merge_states_mem ip ic s s'') (CS.state_component s) size =  Some (mem', ptr') ->
+  exists mem ptr,
+    Memory.alloc (CS.state_mem s) (CS.state_component s) size = Some (mem, ptr).
+  Proof.
+    destruct s as [[[gps mem] regs] pc].
+    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    unfold Memory.alloc, merge_states, merge_states_mem, merge_memories, CS.state_component.
+    intros Hdomm.
+    rewrite unionmE.
+    erewrite to_partial_memory_in; try eassumption.
+    erewrite to_partial_memory_notin;
+      try eassumption; [| apply mergeable_interfaces_sym; eassumption].
+    simpl.
+    destruct (mem (Pointer.component pc)) as [memC |] eqn:Hcase1;
+      last discriminate.
+    simpl.
+    destruct (ComponentMemory.alloc memC size) as [memC' b].
+    now eauto.
+  Qed.
+
+  Ltac t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin :=
+    match goal with
+    (* Memory operations. *)
+    | Hstore : Memory.store _ _ _ = _ |- _ =>
+      apply program_store_from_partialized_memory in Hstore as [mem1_ Hstore];
+        try eassumption
+    | Halloc : Memory.alloc _ _ _ = _ |- _ =>
+      apply program_alloc_from_partialized_memory in Halloc as [mem1_ [ptr_ Halloc]];
+        try assumption
+    (* Calls. *)
+    | Hget : EntryPoint.get _ _ _ = _ |- _ =>
+      apply genv_entrypoints_interface_some with (p' := prog) in Hget as [b' Hget];
+        [| simpl; congruence]
+    (* Returns. *)
+    | Hcons : ?PC' :: ?GPS' = ?GPS (* merge_states_stack *) |- _ =>
+      destruct GPS as [| frame1' gps1'] eqn:Hgps; [discriminate |];
+      destruct gps1 as [| frame1 gps1]; [now destruct gps1'' |];
+      destruct gps1'' as [| frame1'' gps1'']; [easy |];
+      inversion Hcons; subst PC' GPS';
+      assert (Heq : Pointer.component frame1 = Pointer.component frame1')
+        by (unfold merge_states_stack in Hgps;
+            inversion Hgps as [[Hframe Hdummy]];
+            unfold merge_frames;
+            destruct (Pointer.component frame1 \in domm ip) eqn:Hcase; rewrite Hcase;
+            [ reflexivity
+            | eapply mergeable_states_cons_domm; last exact Hmerge; eassumption]);
+      rewrite <- Heq
+    | _ => idtac
+    end;
+    eexists;
+    [Composition.CS_step_of_executing];
+      try eassumption; try congruence; try reflexivity;
+      match goal with
+      (* Memory operations. *)
+      | Hload : Memory.load _ _ = _ |- Memory.load _ _ = _ =>
+        unfold merge_states_mem in Hload;
+        erewrite <- program_load_to_partialized_memory_strong in Hload;
+        try exact Hmerge; eassumption
+      (* Jumps. *)
+      | Hlabel : find_label_in_component _ _ _ = _ |- find_label_in_component _ _ _ = _ =>
+        rewrite find_label_in_component_program_link_left;
+        rewrite find_label_in_component_program_link_left in Hlabel;
+        try eassumption; simpl in *; congruence
+      | Hlabel : find_label_in_procedure _ _ _ = _ |- find_label_in_procedure _ _ _ = _ =>
+        rewrite find_label_in_procedure_program_link_left;
+        rewrite find_label_in_procedure_program_link_left in Hlabel;
+        try eassumption; simpl in *; congruence
+      (* Calls. *)
+      | Himp : imported_procedure _ _ _ _ |- imported_procedure _ _ _ _ =>
+        rewrite imported_procedure_unionm_left; [| assumption];
+        rewrite Hifacec in Hnotin; now rewrite imported_procedure_unionm_left in Himp
+      | _ => idtac
+      end;
+    [apply execution_invariant_to_linking with (c1 := c')];
+      try eassumption; [congruence].
+
   Theorem threeway_multisem_step_inv_program s1 s1'' t s2' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
@@ -1990,57 +2129,16 @@ Section Recombination.
     inversion Hmergeable_ifaces as [Hlinkable _].
     pose proof is_program_component_pc_in_domm
          Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hpc Hmerge as Hdomm.
+    pose proof is_program_component_pc_in_domm
+         Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hpc Hmerge as Hdomm'.
+    pose proof is_program_component_pc_notin_domm Hpc as Hnotin.
     assert (Hmains : linkable_mains p c')
       by (apply linkable_implies_linkable_mains; congruence).
     rewrite (mergeable_states_merge_program _ _ _ _ _ Hmerge) in Hstep;
       try assumption.
-    inversion Hstep; subst.
-
-    (* 6, 7, 8, 10, 12, 13 *)
-
-    1:{
-
-      match goal with
-      (* Returns. *)
-      | Hcons : ?PC' :: ?GPS' = ?GPS (* merge_states_stack *) |- _ =>
-        destruct GPS as [| frame1' gps1'] eqn:Hgps; [discriminate |];
-        destruct gps1 as [| frame1 gps1]; [now destruct gps1'' |];
-        destruct gps1'' as [| frame1'' gps1'']; [easy |];
-        inversion Hcons; subst PC' GPS';
-        assert (Heq : Pointer.component frame1 = Pointer.component frame1')
-          by (unfold merge_states_stack in Hgps;
-              inversion Hgps as [[Hframe Hdummy]];
-              unfold merge_frames;
-              destruct (Pointer.component frame1 \in domm ip) eqn:Hcase; rewrite Hcase;
-              [ reflexivity
-              | eapply mergeable_states_cons_domm; last exact Hmerge; eassumption]);
-        rewrite <- Heq
-      | _ => idtac
-      end.
-      eexists.
-      Composition.CS_step_of_executing;
-        try eassumption; try congruence; try reflexivity;
-        match goal with
-        (* Memory operations. *)
-        | |- Memory.load _ _ = _ => fail
-        | |- Memory.store _ _ _ = _ => fail
-        | |- Memory.alloc _ _ _ = _ => fail
-        (* Calls. *)
-        | |- imported_procedure _ _ _ _ => fail
-        | |- EntryPoint.get _ _ _ = _ => fail
-        | _ => idtac
-        end.
-      apply execution_invariant_to_linking with (c1 := c');
-        try eassumption; [congruence];
-        match goal with
-        (* Jumps. *)
-        | |- find_label_in_component _ _ _ = _ => fail
-        | |- find_label_in_procedure _ _ _ = _ => fail
-        end.
-
-    }
-
-  Admitted.
+    inversion Hstep; subst;
+      t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin.
+  Qed.
 
   Corollary match_nostep s s'' :
     mergeable_states p c p' c' s s'' ->
