@@ -1851,17 +1851,24 @@ Section Recombination.
     inversion Hmergeable_ifaces as [Hlinkable _].
     pose proof is_program_component_pc_in_domm
          Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hpc Hmerge as Hdomm.
+    pose proof is_program_component_pc_in_domm
+         Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hpc Hmerge as Hdomm'.
+    pose proof is_program_component_pc_notin_domm Hpc as Hnotin.
     assert (Hmains : linkable_mains p c')
       by (apply linkable_implies_linkable_mains; congruence).
     rewrite (mergeable_states_merge_program _ _ _ _ _ Hmerge) in Hstep;
       try assumption.
     inversion Hstep; subst.
 
-    (* 6, 7, 8, 10, 12, 13 *)
+    (* 7, 12 *)
 
     1:{
 
       match goal with
+      (* Calls. *)
+      | Hget : EntryPoint.get _ _ _ = _ |- _ =>
+        apply genv_entrypoints_interface_some with (p' := prog) in Hget as [b' Hget];
+          [| simpl; congruence]
       (* Returns. *)
       | Hcons : ?PC' :: ?GPS' = ?GPS (* merge_states_stack *) |- _ =>
         destruct GPS as [| frame1' gps1'] eqn:Hgps; [discriminate |];
@@ -1878,26 +1885,34 @@ Section Recombination.
         rewrite <- Heq
       | _ => idtac
       end.
-      eexists.
+      eexists;
       Composition.CS_step_of_executing;
         try eassumption; try congruence; try reflexivity;
         match goal with
         (* Memory operations. *)
-        | |- Memory.load _ _ = _ => fail
+        | Hload : Memory.load _ _ = _ |- Memory.load _ _ = _ =>
+          unfold merge_states_mem in Hload;
+          erewrite <- program_load_to_partialized_memory_strong in Hload;
+          try exact Hmerge; eassumption
         | |- Memory.store _ _ _ = _ => fail
         | |- Memory.alloc _ _ _ = _ => fail
-        (* Calls. *)
-        | |- imported_procedure _ _ _ _ => fail
-        | |- EntryPoint.get _ _ _ = _ => fail
-        | _ => idtac
-        end.
-      apply execution_invariant_to_linking with (c1 := c');
-        try eassumption; [congruence];
-        match goal with
         (* Jumps. *)
-        | |- find_label_in_component _ _ _ = _ => fail
-        | |- find_label_in_procedure _ _ _ = _ => fail
-        end.
+        | Hlabel : find_label_in_component _ _ _ = _ |- find_label_in_component _ _ _ = _ =>
+          rewrite find_label_in_component_program_link_left;
+          rewrite find_label_in_component_program_link_left in Hlabel;
+          try eassumption; simpl in *; congruence
+        | Hlabel : find_label_in_procedure _ _ _ = _ |- find_label_in_procedure _ _ _ = _ =>
+          rewrite find_label_in_procedure_program_link_left;
+          rewrite find_label_in_procedure_program_link_left in Hlabel;
+          try eassumption; simpl in *; congruence
+        (* Calls. *)
+        | Himp : imported_procedure _ _ _ _ |- imported_procedure _ _ _ _ =>
+          rewrite imported_procedure_unionm_left; [| assumption];
+          rewrite Hifacec in Hnotin; now rewrite imported_procedure_unionm_left in Himp
+        | _ => idtac
+        end;
+      apply execution_invariant_to_linking with (c1 := c');
+        try eassumption; [congruence].
 
     }
 
