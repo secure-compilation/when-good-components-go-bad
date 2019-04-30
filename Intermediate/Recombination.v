@@ -1888,6 +1888,62 @@ Section Recombination.
     now eauto.
   Qed.
 
+  Ltac t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin :=
+    match goal with
+    (* Memory operations. *)
+    | Hstore : Memory.store _ _ _ = _ |- _ =>
+      apply program_store_from_partialized_memory in Hstore as [mem1_ Hstore];
+        try eassumption
+    | Halloc : Memory.alloc _ _ _ = _ |- _ =>
+      apply program_alloc_from_partialized_memory in Halloc as [mem1_ [ptr_ Halloc]];
+        try assumption
+    (* Calls. *)
+    | Hget : EntryPoint.get _ _ _ = _ |- _ =>
+      apply genv_entrypoints_interface_some with (p' := prog) in Hget as [b' Hget];
+        [| simpl; congruence]
+    (* Returns. *)
+    | Hcons : ?PC' :: ?GPS' = ?GPS (* merge_states_stack *) |- _ =>
+      destruct GPS as [| frame1' gps1'] eqn:Hgps; [discriminate |];
+      destruct gps1 as [| frame1 gps1]; [now destruct gps1'' |];
+      destruct gps1'' as [| frame1'' gps1'']; [easy |];
+      inversion Hcons; subst PC' GPS';
+      assert (Heq : Pointer.component frame1 = Pointer.component frame1')
+        by (unfold merge_states_stack in Hgps;
+            inversion Hgps as [[Hframe Hdummy]];
+            unfold merge_frames;
+            destruct (Pointer.component frame1 \in domm ip) eqn:Hcase; rewrite Hcase;
+            [ reflexivity
+            | eapply mergeable_states_cons_domm; last exact Hmerge; eassumption]);
+      rewrite <- Heq
+    | _ => idtac
+    end;
+    eexists;
+    [Composition.CS_step_of_executing];
+      try eassumption; try congruence; try reflexivity;
+      match goal with
+      (* Memory operations. *)
+      | Hload : Memory.load _ _ = _ |- Memory.load _ _ = _ =>
+        unfold merge_states_mem in Hload;
+        erewrite <- program_load_to_partialized_memory_strong in Hload;
+        try exact Hmerge; eassumption
+      (* Jumps. *)
+      | Hlabel : find_label_in_component _ _ _ = _ |- find_label_in_component _ _ _ = _ =>
+        rewrite find_label_in_component_program_link_left;
+        rewrite find_label_in_component_program_link_left in Hlabel;
+        try eassumption; simpl in *; congruence
+      | Hlabel : find_label_in_procedure _ _ _ = _ |- find_label_in_procedure _ _ _ = _ =>
+        rewrite find_label_in_procedure_program_link_left;
+        rewrite find_label_in_procedure_program_link_left in Hlabel;
+        try eassumption; simpl in *; congruence
+      (* Calls. *)
+      | Himp : imported_procedure _ _ _ _ |- imported_procedure _ _ _ _ =>
+        rewrite imported_procedure_unionm_left; [| assumption];
+        rewrite Hifacec in Hnotin; now rewrite imported_procedure_unionm_left in Himp
+      | _ => idtac
+      end;
+    [apply execution_invariant_to_linking with (c1 := c')];
+      try eassumption; [congruence].
+
   Theorem threeway_multisem_step_inv_program s1 s1'' t s2' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
@@ -1908,66 +1964,9 @@ Section Recombination.
       by (apply linkable_implies_linkable_mains; congruence).
     rewrite (mergeable_states_merge_program _ _ _ _ _ Hmerge) in Hstep;
       try assumption.
-    inversion Hstep; subst.
-
-    1:{
-      match goal with
-      (* Memory operations. *)
-      | Hstore : Memory.store _ _ _ = _ |- _ =>
-        apply program_store_from_partialized_memory in Hstore as [mem1_ Hstore];
-          try eassumption
-      | Halloc : Memory.alloc _ _ _ = _ |- _ =>
-        apply program_alloc_from_partialized_memory in Halloc as [mem1_ [ptr_ Halloc]];
-          try assumption
-      (* Calls. *)
-      | Hget : EntryPoint.get _ _ _ = _ |- _ =>
-        apply genv_entrypoints_interface_some with (p' := prog) in Hget as [b' Hget];
-          [| simpl; congruence]
-      (* Returns. *)
-      | Hcons : ?PC' :: ?GPS' = ?GPS (* merge_states_stack *) |- _ =>
-        destruct GPS as [| frame1' gps1'] eqn:Hgps; [discriminate |];
-        destruct gps1 as [| frame1 gps1]; [now destruct gps1'' |];
-        destruct gps1'' as [| frame1'' gps1'']; [easy |];
-        inversion Hcons; subst PC' GPS';
-        assert (Heq : Pointer.component frame1 = Pointer.component frame1')
-          by (unfold merge_states_stack in Hgps;
-              inversion Hgps as [[Hframe Hdummy]];
-              unfold merge_frames;
-              destruct (Pointer.component frame1 \in domm ip) eqn:Hcase; rewrite Hcase;
-              [ reflexivity
-              | eapply mergeable_states_cons_domm; last exact Hmerge; eassumption]);
-        rewrite <- Heq
-      | _ => idtac
-      end;
-      eexists;
-      [Composition.CS_step_of_executing];
-        try eassumption; try congruence; try reflexivity;
-        match goal with
-        (* Memory operations. *)
-        | Hload : Memory.load _ _ = _ |- Memory.load _ _ = _ =>
-          unfold merge_states_mem in Hload;
-          erewrite <- program_load_to_partialized_memory_strong in Hload;
-          try exact Hmerge; eassumption
-        (* Jumps. *)
-        | Hlabel : find_label_in_component _ _ _ = _ |- find_label_in_component _ _ _ = _ =>
-          rewrite find_label_in_component_program_link_left;
-          rewrite find_label_in_component_program_link_left in Hlabel;
-          try eassumption; simpl in *; congruence
-        | Hlabel : find_label_in_procedure _ _ _ = _ |- find_label_in_procedure _ _ _ = _ =>
-          rewrite find_label_in_procedure_program_link_left;
-          rewrite find_label_in_procedure_program_link_left in Hlabel;
-          try eassumption; simpl in *; congruence
-        (* Calls. *)
-        | Himp : imported_procedure _ _ _ _ |- imported_procedure _ _ _ _ =>
-          rewrite imported_procedure_unionm_left; [| assumption];
-          rewrite Hifacec in Hnotin; now rewrite imported_procedure_unionm_left in Himp
-        | _ => idtac
-        end;
-      [apply execution_invariant_to_linking with (c1 := c')];
-        try eassumption; [congruence].
-    }
-
-  Admitted.
+    inversion Hstep; subst;
+      t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin.
+  Qed.
 
   Corollary match_nostep s s'' :
     mergeable_states p c p' c' s s'' ->
