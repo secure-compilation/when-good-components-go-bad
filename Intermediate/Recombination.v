@@ -831,28 +831,44 @@ Section MergeSym.
 
 End MergeSym.
 
-  Lemma to_partial_memory_in ip ic mem ptr :
+  Lemma to_partial_memory_in ip ic mem Cid :
     mergeable_interfaces ip ic ->
-    ptr \in domm ip ->
-    (to_partial_memory mem (domm ic)) ptr = mem ptr.
+    Cid \in domm ip ->
+    (to_partial_memory mem (domm ic)) Cid = mem Cid.
   Proof.
-    intros Hmerge Hptr.
+    intros Hmerge HCid.
     unfold to_partial_memory.
     apply getm_filterm_notin_domm.
     eapply component_in_ip_notin_ic; eassumption.
   Qed.
 
-  Lemma to_partial_memory_notin ip ic mem ptr :
+  Lemma to_partial_memory_notin ip ic mem Cid :
     mergeable_interfaces ip ic ->
-    ptr \in domm ic ->
-            (to_partial_memory mem (domm ic)) ptr = None.
+    Cid \in domm ic ->
+    (to_partial_memory mem (domm ic)) Cid = None.
   Proof.
-    intros Hmerge Hptr.
+    intros Hmerge HCid.
     unfold to_partial_memory.
     rewrite filtermE.
     unfold obind, oapp.
-    destruct (mem ptr) eqn:Hmem; rewrite Hmem.
-    now rewrite Hptr.
+    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    now rewrite HCid.
+    now reflexivity.
+  Qed.
+
+  (* RB: NOTE: We should rename these, and probably use this instead of the
+     weaker version (currently, [in], confusingly). *)
+  Lemma to_partial_memory_notin_strong ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \notin domm ic ->
+    (to_partial_memory mem (domm ic)) Cid = mem Cid.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    rewrite filtermE.
+    unfold obind, oapp.
+    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    now rewrite HCid.
     now reflexivity.
   Qed.
 
