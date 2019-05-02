@@ -847,7 +847,15 @@ End PS.
     inversion Hlinkable. 
     now rewrite !domm_prepare_procedures_memory.
   Qed.
-  
+
+  (* RB: NOTE: Add program well-formedness if needed. *)
+  Lemma genv_entrypoints_interface_some p p' C P b :
+    prog_interface p = prog_interface p' ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
+  exists b',
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
+  Admitted.
+
 Section BehaviorStar.
   Variables p c: program.
 
