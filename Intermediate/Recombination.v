@@ -848,6 +848,47 @@ Section MergeSym.
 
 End MergeSym.
 
+  Lemma to_partial_memory_in ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \in domm ip ->
+    (to_partial_memory mem (domm ic)) Cid = mem Cid.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    apply getm_filterm_notin_domm.
+    eapply component_in_ip_notin_ic; eassumption.
+  Qed.
+
+  Lemma to_partial_memory_notin ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \in domm ic ->
+    (to_partial_memory mem (domm ic)) Cid = None.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    rewrite filtermE.
+    unfold obind, oapp.
+    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    now rewrite HCid.
+    now reflexivity.
+  Qed.
+
+  (* RB: NOTE: We should rename these, and probably use this instead of the
+     weaker version (currently, [in], confusingly). *)
+  Lemma to_partial_memory_notin_strong ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \notin domm ic ->
+    (to_partial_memory mem (domm ic)) Cid = mem Cid.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    rewrite filtermE.
+    unfold obind, oapp.
+    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    now rewrite HCid.
+    now reflexivity.
+  Qed.
+
 Section PS.
   Variables p c p' c' : program.
   Hypothesis Hmergeable_ifaces :
@@ -957,8 +998,23 @@ Section PS.
         erewrite merge_states_stack_mem_independent_right with (mem2' := mem'); try eassumption.
         assert (Heq: merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem, regs, Pointer.inc pc) =
                      merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem', regs, Pointer.inc pc)).
-        { unfold merge_states_mem, merge_memories, to_partial_memory; simpl.
-          (* this seems complicated to prove :( *) admit. }
+        {
+          unfold merge_states_mem, merge_memories.
+          apply /eq_fmap => Cid. rewrite 2!unionmE.
+          pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
+            as Hmergeable_ifaces_sym.
+          destruct (Cid \in domm ip) eqn:Hdommp;
+            destruct (Cid \in domm ic) eqn:Hdommc.
+          - exfalso. admit. (* Contra on case analysis. *)
+          - erewrite to_partial_memory_in; try eassumption.
+            erewrite to_partial_memory_notin; try eassumption.
+            erewrite to_partial_memory_notin; try eassumption.
+            reflexivity.
+          - admit. (* Symmetric case. *)
+          - (* Similar sequence simplifications with the fact that the domains of
+               the involved memories is exactly that of the interfaces. *)
+            admit.
+        }
         now rewrite Heq.
         t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
         t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
@@ -979,33 +1035,6 @@ Section PS.
   Qed.
 
 End PS.
-
-  Lemma to_partial_memory_in ip ic mem ptr :
-    mergeable_interfaces ip ic ->
-    ptr \in domm ip ->
-    (to_partial_memory mem (domm ic)) ptr = mem ptr.
-  Proof.
-    intros Hmerge Hptr.
-    unfold to_partial_memory.
-    apply getm_filterm_notin_domm.
-    eapply component_in_ip_notin_ic; eassumption.
-  Qed.
-  
-
-  Lemma to_partial_memory_notin ip ic mem ptr :
-    mergeable_interfaces ip ic ->
-    ptr \in domm ic ->
-            (to_partial_memory mem (domm ic)) ptr = None.
-  Proof.
-    intros Hmerge Hptr.
-    unfold to_partial_memory.
-    rewrite filtermE.
-    unfold obind, oapp.
-    destruct (mem ptr) eqn:Hmem; rewrite Hmem.
-    now rewrite Hptr.
-    now reflexivity.
-  Qed.
-  
 
   (* Search _ prepare_procedures_memory. *)
   (* Search _ PS.to_partial_memory unionm. *)
@@ -1040,7 +1069,15 @@ End PS.
     inversion Hlinkable. 
     now rewrite !domm_prepare_procedures_memory.
   Qed.
-  
+
+  (* RB: NOTE: Add program well-formedness if needed. *)
+  Lemma genv_entrypoints_interface_some p p' C P b :
+    prog_interface p = prog_interface p' ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
+  exists b',
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
+  Admitted.
+
 Section BehaviorStar.
   Variables p c: program.
 
