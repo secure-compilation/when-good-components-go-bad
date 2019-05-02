@@ -1126,6 +1126,64 @@ Section BehaviorStar.
   Qed.
 End BehaviorStar.
 
+
+(* Dirty sectioning to solve another symmetry problem *)
+Section ThreewayMultisemHelper.
+
+  Variables p c p' c' : program.
+
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
+
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+
+  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
+  Hypothesis Hmain_linkability  : linkable_mains p  c.
+  Hypothesis Hmain_linkability' : linkable_mains p' c'.
+
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+
+  Let ip := prog_interface p.
+  Let ic := prog_interface c.
+  Let prog   := program_link p  c.
+  Let prog'  := program_link p  c'.
+  Let prog'' := program_link p' c'.
+  Let sem   := CS.sem prog.
+  Let sem'  := CS.sem prog'.
+  Let sem'' := CS.sem prog''.
+  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
+
+  
+  (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
+     operating on an explicit program link, one then being the exact symmetric of
+     the other, i.e., its application after communativity of linking. There is a
+     choice of encoding of component membership in both cases. *)
+
+  (* Search _ EntryPoint.get. *)
+  Lemma genv_entrypoints_recombination_left' C P b :
+    C \in domm ip ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem )) = Some b ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem')) = Some b.
+  Proof.
+    intros Hdomm Hentry.
+    pose proof proj1 Hmergeable_ifaces as Hlinkable.
+    eapply (PS.domm_partition_notin (mergeable_interfaces_sym _ _ Hmergeable_ifaces)) in Hdomm.
+    rewrite genv_entrypoints_program_link_left in Hentry; try assumption.
+    unfold ic in Hdomm; rewrite Hifacec in Hlinkable, Hdomm.
+    rewrite genv_entrypoints_program_link_left; try assumption.
+    now apply linkable_implies_linkable_mains.
+  Qed.
+
+End ThreewayMultisemHelper.
+
+
 Section ThreewayMultisem1.
   Variables p c p' c' : program.
 
@@ -1157,6 +1215,35 @@ Section ThreewayMultisem1.
   Let sem'' := CS.sem prog''.
   Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
+  (* JT: Copy-pasting the previous theorem just to not break
+     the tactics *)
+  Lemma genv_entrypoints_recombination_left C P b :
+    C \in domm ip ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem )) = Some b ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem')) = Some b.
+  Proof.
+    now apply genv_entrypoints_recombination_left'.
+  Qed.
+  
+
+  (* JT: TODO: move this lemma somewhere else. This is not clean at
+     all, but at least it solves the problem of proving results. *)
+  Lemma genv_entrypoints_recombination_right C P b :
+    C \in domm ic ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem'')) = Some b ->
+    EntryPoint.get C P (genv_entrypoints (globalenv sem' )) = Some b.
+  Proof.    
+    unfold sem'', sem', prog'', prog'. intros Hdomm Hentry.
+    pose proof proj1 Hmergeable_ifaces as Hlinkable.
+    rewrite program_linkC in Hentry; try congruence.
+    rewrite program_linkC; try congruence.
+    eapply genv_entrypoints_recombination_left' with (c := p'); try assumption; try congruence;
+      try rewrite -Hifacec; try rewrite -Hifacep.
+    now apply mergeable_interfaces_sym.
+    now apply linkable_mains_sym.
+    now apply Hdomm.
+  Qed.
+  
   (* RB: TODO: More the following few helper lemmas to their appropriate
      location. Consider changing the naming conventions from
      "partialized" to "recombined" or similar. Exposing the innards of the
@@ -1362,39 +1449,6 @@ Section ThreewayMultisem1.
     destruct Himp as [CI [Hcomp Himp]]. exists CI. split; [| assumption].
     unfold Program.has_component. rewrite unionmE. now rewrite Hcomp.
   Qed.
-
-  (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
-     operating on an explicit program link, one then being the exact symmetric of
-     the other, i.e., its application after communativity of linking. There is a
-     choice of encoding of component membership in both cases. *)
-
-  (* Search _ EntryPoint.get. *)
-  Lemma genv_entrypoints_recombination_left C P b :
-    C \in domm ip ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem )) = Some b ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem')) = Some b.
-  Proof.
-    intros Hdomm Hentry.
-    pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    eapply (PS.domm_partition_notin (mergeable_interfaces_sym _ _ Hmergeable_ifaces)) in Hdomm.
-    rewrite genv_entrypoints_program_link_left in Hentry; try assumption.
-    unfold ic in Hdomm; rewrite Hifacec in Hlinkable, Hdomm.
-    rewrite genv_entrypoints_program_link_left; try assumption.
-    now apply linkable_implies_linkable_mains.
-  Qed.
-
-  Lemma genv_entrypoints_recombination_right C P b :
-    C \in domm ic ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem'')) = Some b ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem' )) = Some b.
-  Proof.
-    unfold sem'', sem', prog'', prog'. intros Hdomm Hentry.
-    pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    rewrite program_linkC in Hentry; try congruence.
-    rewrite program_linkC; try congruence.
-    (* RB: TODO: Apply symmetry after making independent from sectioning. *)
-    (* apply genv_entrypoints_recombination_left. *)
-  Admitted.
 
   (* RB: NOTE: The regular, non-helper contents of the section start here. *)
 
@@ -1761,10 +1815,10 @@ Section ThreewayMultisem2.
       rewrite <- Hifacec, <- Hifacep in H.
       specialize (H (mergeable_interfaces_sym _ _ Hmergeable_ifaces) eq_refl eq_refl
                  (linkable_mains_sym Hmain_linkability') (linkable_mains_sym Hmain_linkability)).
-      rewrite (closed_program_link_sym Hwfc Hwfp (linkable_sym Hlinkable)) in H.
+      (* rewrite (closed_program_link_sym Hwfc Hwfp (linkable_sym Hlinkable)) in H. *)
       rewrite Hifacec Hifacep in Hlinkable;
         rewrite (closed_program_link_sym Hwfc' Hwfp' (linkable_sym Hlinkable)) in H.
-      specialize (H Hprog_is_closed' Hprog_is_closed).
+      specialize (H Hprog_is_closed').
       specialize (H s1'' s1 e s2'' s2).
 
       assert (Hmerge11 := Hmerge1).
