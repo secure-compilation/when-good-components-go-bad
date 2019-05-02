@@ -969,8 +969,23 @@ Section PS.
         erewrite merge_states_stack_mem_independent_right with (mem2' := mem'); try eassumption.
         assert (Heq: merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem, regs, Pointer.inc pc) =
                      merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem', regs, Pointer.inc pc)).
-        { unfold merge_states_mem, merge_memories, to_partial_memory; simpl.
-          (* this seems complicated to prove :( *) admit. }
+        {
+          unfold merge_states_mem, merge_memories.
+          apply /eq_fmap => Cid. rewrite 2!unionmE.
+          pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
+            as Hmergeable_ifaces_sym.
+          destruct (Cid \in domm ip) eqn:Hdommp;
+            destruct (Cid \in domm ic) eqn:Hdommc.
+          - exfalso. admit. (* Contra on case analysis. *)
+          - erewrite to_partial_memory_in; try eassumption.
+            erewrite to_partial_memory_notin; try eassumption.
+            erewrite to_partial_memory_notin; try eassumption.
+            reflexivity.
+          - admit. (* Symmetric case. *)
+          - (* Similar sequence simplifications with the fact that the domains of
+               the involved memories is exactly that of the interfaces. *)
+            admit.
+        }
         now rewrite Heq.
         t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
         t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
