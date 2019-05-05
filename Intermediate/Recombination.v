@@ -446,6 +446,67 @@ Section Mergeable.
       repeat split; eauto. }
     move: H. simpl. rewrite domm_union. now apply /fsetUP.
   Qed.
+
+  (* TODO: clean *)
+  Lemma star_mem_well_formed s1 t gps2 mem2 regs2 pc2 :
+    initial_state sem s1 ->
+    Star sem s1 t (gps2, mem2, regs2, pc2) ->
+    fsubset (domm mem2) (domm (unionm ip ic)).
+  Proof.
+    intros Hini Hstar.
+    remember (gps2, mem2, regs2, pc2) as s2.
+    revert gps2 mem2 regs2 pc2 Heqs2.
+    apply star_iff_starR in Hstar.
+    induction Hstar as [|? ? ? ? ? ? ? IH].
+    - intros gps mem regs pc Heqs.
+      simpl in Hini; unfold CS.initial_state in Hini.
+      rewrite CS.initial_machine_state_after_linking in Hini; try assumption;
+        last by destruct Hmergeable_ifaces.
+      subst; inversion Hini; subst.
+      rewrite domm_union 2!domm_prepare_procedures_memory -domm_union.
+      now apply fsubsetxx.
+    - intros gps3 mem3 regs3 pc3 Heqs3; subst.
+      destruct s2 as [[[gps2 mem2] regs2] pc2].
+      specialize (IH Hini gps2 mem2 regs2 pc2 eq_refl).
+      inversion H; subst; try assumption.
+      + unfold Memory.store in H12.
+        destruct (mem2 (Pointer.component ptr));
+          try destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) (Register.get r2 regs3));
+          try match goal with
+              | Heq: Some _ = Some _ |- _ => inversion Heq; subst
+              | Heq: None = Some _ |- _ => now inversion Heq
+              | Heq: Some = None _ |- _ => now inversion Heq
+              end.
+        assert (Hin : Pointer.component ptr \in domm (unionm ip ic)).
+        { rewrite H11.
+          rewrite domm_union. Search _ "\in" ":|:".
+          rewrite in_fsetU. apply /orP.
+          apply star_iff_starR in Hstar.
+          eapply pc_component_in_ip_or_ic; eassumption.
+        }
+        rewrite domm_set.
+        rewrite fsubU1set.
+        apply /andP. now split.
+      + unfold Memory.alloc in H12.
+        destruct (mem2 (Pointer.component pc2));
+          try destruct (ComponentMemory.alloc t (Z.to_nat size));
+          try match goal with
+              | Heq: Some _ = Some _ |- _ => inversion Heq; subst
+              | Heq: None = Some _ |- _ => now inversion Heq
+              | Heq: Some = None _ |- _ => now inversion Heq
+              end.
+        assert (Hin : Pointer.component pc2 \in domm (unionm ip ic)).
+        { rewrite domm_union. Search _ "\in" ":|:".
+          rewrite in_fsetU. apply /orP.
+          apply star_iff_starR in Hstar.
+          eapply pc_component_in_ip_or_ic; eassumption.
+        }
+        rewrite domm_set.
+        rewrite fsubU1set.
+        apply /andP. now split.
+  Qed.
+  
+
   
 (**)
   Lemma merge_mergeable_states_regs_program s s'' :
@@ -745,13 +806,23 @@ Section MergeSym.
   Qed.
 
   Lemma merge_memories_sym mem mem'' :
+    fsubset (domm mem) (domm (unionm ip ic)) ->
+    fsubset (domm mem'') (domm (unionm ip ic)) ->
     merge_memories ip ic mem mem'' = merge_memories ic ip mem'' mem.
   Proof.
+    intros Hmem Hmem''.
     unfold merge_memories.
     rewrite unionmC.
     reflexivity.
-    unfold to_partial_memory.
-    admit.
+    Search fdisjoint.
+    apply fdisjoint_trans with (s2 := domm ip).
+    - unfold to_partial_memory.
+      remember (fun (k : nat_ordType) (_ : ComponentMemory.t) => k \notin domm ic) as f.
+      admit.
+    - rewrite fdisjointC.
+      apply fdisjoint_trans with (s2 := domm ic).
+      + admit.
+      + now rewrite fdisjointC; destruct Hmergeable_ifaces as [[] ].
   Admitted.
 
   Lemma merge_registers_sym reg reg'' pc pc'' :
@@ -820,7 +891,13 @@ Section MergeSym.
     replace pc with (CS.state_pc (stack, mem, reg, pc)); try reflexivity.
     replace pc'' with (CS.state_pc (stack'', mem'', reg'', pc'')); try reflexivity.
     eapply mergeable_states_pc_same_component; eassumption.
-    eapply mergeable_states_mergeable_stack with (p' := p') (c' := c'); try eassumption.
+    inversion Hmerg as [s s'' t Hini Hini'' Hstar Hstar''].
+    eapply star_mem_well_formed; eassumption.
+    inversion Hmerg as [s s'' t Hini Hini'' Hstar Hstar''].
+    unfold ip, ic; rewrite Hifacec Hifacep.
+    eapply star_mem_well_formed; try eassumption;
+      now rewrite -Hifacec -Hifacep.
+    eapply mergeable_states_mergeable_stack with (p' := p') (c' := c'); eassumption.
   Qed.
 
   Lemma mergeable_states_sym s1 s1'' : mergeable_states p c p' c' s1 s1'' <-> mergeable_states c' p' c p s1'' s1.
