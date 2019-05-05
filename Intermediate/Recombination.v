@@ -1082,7 +1082,10 @@ Section PS.
             as Hmergeable_ifaces_sym.
           destruct (Cid \in domm ip) eqn:Hdommp;
             destruct (Cid \in domm ic) eqn:Hdommc.
-          - exfalso. admit. (* Contra on case analysis. *)
+          - exfalso.
+            apply component_in_ic_notin_ip with (ip := ip) in Hdommc.
+            now rewrite Hdommp in Hdommc.
+            assumption.
           - erewrite to_partial_memory_in; try eassumption.
             erewrite to_partial_memory_notin; try eassumption.
             erewrite to_partial_memory_notin; try eassumption.
@@ -1393,8 +1396,9 @@ Section ThreewayMultisem1.
     to_partial_memory (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) (domm ic).
   Proof.
     intros Hmerg.
-    unfold to_partial_memory.
-    simpl.
+    Search _ to_partial_memory.
+    apply /eq_fmap => Cid.
+    
   Admitted.
 
   (* Search _ Memory.load filterm. *)
