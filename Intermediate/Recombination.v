@@ -1032,6 +1032,33 @@ Section PS.
         first reflexivity; try eassumption;
           t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
 
+  (* JT: TODO: Move to CS + clean proof *)
+  Lemma mem_store_different_component : forall mem mem' C b o val Cid,
+                Memory.store mem (C, b, o) val = Some mem' ->
+                Cid <> C ->
+                mem Cid = mem' Cid.
+  Proof.
+    intros mem mem' C b o val Cid Hmem Hneq.
+    unfold Memory.store in Hmem.
+    simpl in *.
+    destruct (mem C) eqn:HmemC.
+    - destruct (ComponentMemory.store t b o val).
+      + inversion Hmem; subst.
+        rewrite setmE.
+        rewrite eqtype.eqE. simpl.
+        destruct (ssrnat.eqn Cid C) eqn:Heq;
+          last reflexivity.
+        assert (Cid = C).
+        { clear -Heq. revert C Heq.
+          induction Cid; intros C Heq; destruct C; eauto;
+            inversion Heq.
+        }
+        contradiction.
+      + inversion Hmem.
+    - inversion Hmem.
+  Qed.
+  
+  
   (* JT: I think this lemma could replace the two above lemmas *)
   (* JT: TODO: Clean this proof *)
   Lemma merge_states_silent_star s s1'' s2'' :
@@ -1099,9 +1126,15 @@ Section PS.
                2) Pointer.component ptr = Pointer.component pc \notin domm ic
                3) Memory.store mem ptr (Register.get r2 regs) = Some mem'
              *)
-            unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp.
-            destruct s as [[[? ?] ?] pc__s].
-            admit. 
+            unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp2.
+            (* destruct s as [[[? ?] ?] pc__s]. *)
+            (* Search _ Memory.store. *)
+            erewrite mem_store_different_component.
+            reflexivity.
+            apply H3.
+            intros Hn; subst.
+            rewrite -H2 -Hifacec in Hcomp2.
+            now rewrite Hdommc in Hcomp2.
           - erewrite !to_partial_memory_notin_strong; try eassumption;
               try now apply negb_true_iff in Hdommc;
               try now apply negb_true_iff in Hdommp.
