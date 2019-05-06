@@ -513,31 +513,6 @@ Lemma step_E0_same_turn:
     end.
 Qed.
 
-Ltac CS_step_of_executing :=
-  match goal with
-  | H : executing _ _ ?INSTR |- _ =>
-    match INSTR with
-    | INop           => eapply CS.Nop
-    | ILabel _       => eapply CS.Label
-    | IConst _ _     => eapply CS.Const
-    | IMov _ _       => eapply CS.Mov
-    | IBinOp _ _ _ _ => eapply CS.BinOp
-    | ILoad _ _      => eapply CS.Load
-    | IStore _ _     => eapply CS.Store
-    | IAlloc _ _     => eapply CS.Alloc
-    | IBnz _ _       =>
-      match goal with
-      | H : Register.get _ _ = Int 0 |- _ => eapply CS.BnzZ
-      | _                                 => eapply CS.BnzNZ
-      end
-    | IJump _        => eapply CS.Jump
-    | IJal _         => eapply CS.Jal
-    | ICall _ _      => eapply CS.Call
-    | IReturn        => eapply CS.Return
-    | IHalt          => fail
-    end
-  end.
-
 (* RB: TODO: Rename. *)
 Ltac rewrite_if_then :=
   match goal with
@@ -2683,7 +2658,7 @@ Section ThreewayMultisemProgram.
           first (exfalso;
                  PS.simplify_turn; eapply PS.domm_partition_in_neither; eassumption);
 
-        [CS_step_of_executing];
+        [CS.step_of_executing];
           try eassumption; try reflexivity;
           try match goal with
           | Hstore : Memory.store mem ?PTR _ = Some _,

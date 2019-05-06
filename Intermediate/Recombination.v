@@ -11,7 +11,7 @@ Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
 Require Import Intermediate.PS.
 Require Import Intermediate.Decomposition.
-Require Import Intermediate.Composition.
+(* Require Import Intermediate.Composition. *)
 
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
@@ -1625,7 +1625,7 @@ Section ThreewayMultisem1.
   Qed.
 
   Ltac t_threeway_multisem_step_E0 :=
-    Composition.CS_step_of_executing;
+    CS.step_of_executing;
     try eassumption; try reflexivity;
     (* Solve side goals for CS step. *)
     match goal with
@@ -2344,7 +2344,7 @@ Section Recombination1.
     | _ => idtac
     end;
     eexists;
-    [Composition.CS_step_of_executing];
+    [CS.step_of_executing];
       try eassumption; try congruence; try reflexivity;
       match goal with
       (* Memory operations. *)
