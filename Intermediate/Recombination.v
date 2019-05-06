@@ -1090,10 +1090,33 @@ Section PS.
             erewrite to_partial_memory_notin; try eassumption.
             erewrite to_partial_memory_notin; try eassumption.
             reflexivity.
-          - admit. (* Symmetric case. *)
-          - (* Similar sequence simplifications with the fact that the domains of
-               the involved memories is exactly that of the interfaces. *)
-            admit.
+          - erewrite to_partial_memory_notin; try eassumption.
+            simpl.
+            erewrite to_partial_memory_in; try eassumption.
+            erewrite to_partial_memory_in; try eassumption.
+            (* Now, why are they equal?
+               1) Cid \in domm ic.
+               2) Pointer.component ptr = Pointer.component pc \notin domm ic
+               3) Memory.store mem ptr (Register.get r2 regs) = Some mem'
+             *)
+            unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp.
+            destruct s as [[[? ?] ?] pc__s].
+            admit. 
+          - erewrite !to_partial_memory_notin_strong; try eassumption;
+              try now apply negb_true_iff in Hdommc;
+              try now apply negb_true_iff in Hdommp.
+            destruct (isSome ((CS.state_mem s) Cid)) eqn:HisSome; try reflexivity.
+            simpl.
+            (* Might want to use star_mem_well_formed to prove these subgoals. *)
+            assert (Hmem: mem Cid = None).
+            { apply /dommPn.
+              admit.
+            }
+            assert (Hmem': mem' Cid = None).
+            { apply /dommPn.
+              admit.
+            }
+            now rewrite Hmem Hmem'.
         }
         now rewrite Heq.
         t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
