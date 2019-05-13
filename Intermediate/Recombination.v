@@ -11,7 +11,7 @@ Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
 Require Import Intermediate.PS.
 Require Import Intermediate.Decomposition.
-Require Import Intermediate.Composition.
+(* Require Import Intermediate.Composition. *)
 
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
@@ -447,7 +447,9 @@ Section Mergeable.
     move: H. simpl. rewrite domm_union. now apply /fsetUP.
   Qed.
 
-  (* TODO: clean *)
+  (* TODO: clean
+     RB: NOTE: This is no longer needed. A stronger result is obtained from
+     existing lemmas and use in place. *)
   Lemma star_mem_well_formed s1 t gps2 mem2 regs2 pc2 :
     initial_state sem s1 ->
     Star sem s1 t (gps2, mem2, regs2, pc2) ->
@@ -805,25 +807,32 @@ Section MergeSym.
       assumption.
   Qed.
 
+  (* The necessary disjointness of the partializations is obtained from the fact
+     that the memories belong to a pair of mergeable states (i.e., their domains
+     coincide). *)
   Lemma merge_memories_sym mem mem'' :
-    fsubset (domm mem) (domm (unionm ip ic)) ->
-    fsubset (domm mem'') (domm (unionm ip ic)) ->
+    domm mem   = domm (unionm ip ic) ->
+    domm mem'' = domm (unionm ip ic) ->
     merge_memories ip ic mem mem'' = merge_memories ic ip mem'' mem.
   Proof.
+    (* Reduces to a problem on disjointness. *)
     intros Hmem Hmem''.
     unfold merge_memories.
-    rewrite unionmC.
-    reflexivity.
-    Search fdisjoint.
-    apply fdisjoint_trans with (s2 := domm ip).
-    - unfold to_partial_memory.
-      remember (fun (k : nat_ordType) (_ : ComponentMemory.t) => k \notin domm ic) as f.
-      admit.
-    - rewrite fdisjointC.
-      apply fdisjoint_trans with (s2 := domm ic).
-      + admit.
-      + now rewrite fdisjointC; destruct Hmergeable_ifaces as [[] ].
-  Admitted.
+    rewrite unionmC;
+      first reflexivity.
+    apply /fdisjointP => Cid Hin.
+    unfold to_partial_memory in *.
+    (* Expose some basic facts and their symmetries. *)
+    inversion Hmergeable_ifaces as [[_ Hdisjoint] _].
+    assert (HdisjointC := Hdisjoint); rewrite fdisjointC in HdisjointC.
+    assert (HmemC := Hmem); assert (HmemC'' := Hmem'');
+      rewrite unionmC in HmemC, HmemC''; try assumption.
+    (* Specialized simplifications from a more general result. *)
+    erewrite domm_filterm_partial_memory with (i2 := ic) (m0 := mem'') (m2 := mem'');
+      erewrite domm_filterm_partial_memory with (i2 := ip) (m0 := mem) (m2 := mem) in Hin;
+      try reflexivity || assumption.
+    eapply component_in_ip_notin_ic; eassumption.
+  Qed.
 
   Lemma merge_registers_sym reg reg'' pc pc'' :
     Pointer.component pc \in (domm (prog_interface prog)) ->
@@ -869,11 +878,31 @@ Section MergeSym.
     merge_states ip ic s s'' = merge_states ic ip s'' s.
   Proof.
     intros Hmerg.
-    (* inversion Hmerg as [s0 s0'' t Hini Hini'' Hstar Hstar'']. *)
+    (* RB: NOTE: As elsewhere, clean CS.comes_from_initial state. This is done up
+       front for syntactic economy. Simplify if possible. *)
+    assert (Hmem : domm (CS.state_mem s) = domm (unionm ip ic)).
+    {
+      apply CS.comes_from_initial_state_mem_domm.
+      inversion Hmerg as [s0 _ t Hini _ Hstar _].
+      inversion Hprog_is_closed as [_ [main [_ [Hmain _]]]].
+      pose proof linking_well_formedness Hwfp Hwfc (proj1 Hmergeable_ifaces) as Hwf.
+      now exists prog, main, s0, t.
+    }
+    assert (Hmem'' : domm (CS.state_mem s'') = domm (unionm ip ic)).
+    {
+      unfold ip, ic. rewrite Hifacep Hifacec.
+      apply CS.comes_from_initial_state_mem_domm.
+      inversion Hmerg as [_ s0'' t _ Hini'' _ Hstar''].
+      inversion Hprog_is_closed'' as [_ [main [_ [Hmain _]]]].
+      assert (Hmergeable_ifacesC := Hmergeable_ifaces);
+        rewrite Hifacep Hifacec in Hmergeable_ifacesC.
+      pose proof linking_well_formedness Hwfp' Hwfc' (proj1 Hmergeable_ifacesC) as Hwf''.
+      now exists prog'', main, s0'', t.
+    }
     destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
     unfold merge_states.
     rewrite merge_stacks_sym.
-    rewrite merge_memories_sym.
+    rewrite (merge_memories_sym Hmem Hmem'').
     erewrite (merge_registers_sym _ _).
     rewrite merge_pc_sym.
     reflexivity.
@@ -892,11 +921,6 @@ Section MergeSym.
     replace pc'' with (CS.state_pc (stack'', mem'', reg'', pc'')); try reflexivity.
     eapply mergeable_states_pc_same_component; eassumption.
     inversion Hmerg as [s s'' t Hini Hini'' Hstar Hstar''].
-    eapply star_mem_well_formed; eassumption.
-    inversion Hmerg as [s s'' t Hini Hini'' Hstar Hstar''].
-    unfold ip, ic; rewrite Hifacec Hifacep.
-    eapply star_mem_well_formed; try eassumption;
-      now rewrite -Hifacec -Hifacep.
     eapply mergeable_states_mergeable_stack with (p' := p') (c' := c'); eassumption.
   Qed.
 
@@ -1658,7 +1682,7 @@ Section ThreewayMultisem1.
   Qed.
 
   Ltac t_threeway_multisem_step_E0 :=
-    Composition.CS_step_of_executing;
+    CS.step_of_executing;
     try eassumption; try reflexivity;
     (* Solve side goals for CS step. *)
     match goal with
@@ -2377,7 +2401,7 @@ Section Recombination1.
     | _ => idtac
     end;
     eexists;
-    [Composition.CS_step_of_executing];
+    [CS.step_of_executing];
       try eassumption; try congruence; try reflexivity;
       match goal with
       (* Memory operations. *)

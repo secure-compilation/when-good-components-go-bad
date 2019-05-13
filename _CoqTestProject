@@ -55,7 +55,6 @@ Intermediate/GlobalEnv.v
 Intermediate/CS.v
 Intermediate/PS.v
 Intermediate/Decomposition.v
-Intermediate/Composition.v
 Intermediate/Recombination.v
 
 RSC_DC_MD.v

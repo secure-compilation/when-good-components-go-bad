@@ -289,6 +289,31 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
            [ERet (Pointer.component pc) ret_arg (Pointer.component pc')]
            (gps', mem, Register.invalidate regs, pc').
 
+Ltac step_of_executing :=
+  match goal with
+  | H : executing _ _ ?INSTR |- _ =>
+    match INSTR with
+    | INop           => eapply Nop
+    | ILabel _       => eapply Label
+    | IConst _ _     => eapply Const
+    | IMov _ _       => eapply Mov
+    | IBinOp _ _ _ _ => eapply BinOp
+    | ILoad _ _      => eapply Load
+    | IStore _ _     => eapply Store
+    | IAlloc _ _     => eapply Alloc
+    | IBnz _ _       =>
+      match goal with
+      | H : Register.get _ _ = Int 0 |- _ => eapply BnzZ
+      | _                                 => eapply BnzNZ
+      end
+    | IJump _        => eapply Jump
+    | IJal _         => eapply Jal
+    | ICall _ _      => eapply Call
+    | IReturn        => eapply Return
+    | IHalt          => fail
+    end
+  end.
+
 (* executable specification *)
 
 Import MonadNotations.
