@@ -1004,6 +1004,8 @@ Section PS.
   Hypothesis Hwfc' : well_formed_program c'.
 
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -1167,11 +1169,50 @@ Section PS.
             (* Might want to use star_mem_well_formed to prove these subgoals. *)
             assert (Hmem: mem Cid = None).
             { apply /dommPn.
-              admit.
+              apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
+              assert (Hmem : domm mem = domm (unionm ip ic)).
+              { replace mem with (CS.state_mem (gps, mem, regs, pc)).
+                apply CS.comes_from_initial_state_mem_domm.
+                inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
+                rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
+                pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
+                exists prog'', main, s0'', t.
+                unfold ip, ic; rewrite Hifacec Hifacep.
+                repeat (split; eauto).
+                eapply star_trans; eauto.
+                clear; induction t; first reflexivity.
+                simpl; now rewrite -IHt.
+                reflexivity.
+              }
+              rewrite Hmem.
+              rewrite domm_union. apply /fsetUP.
+              intros Hn; destruct Hn as [Hn | Hn].
+              now rewrite Hn in Hdommp.
+              now rewrite Hn in Hdommc.
             }
             assert (Hmem': mem' Cid = None).
             { apply /dommPn.
-              admit.
+              apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
+              assert (Hmem'' : domm mem' = domm (unionm ip ic)).
+              { replace mem' with (CS.state_mem (gps, mem', regs, Pointer.inc pc)).
+                apply CS.comes_from_initial_state_mem_domm.
+                inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
+                rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
+                pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
+                exists prog'', main, s0'', t.
+                unfold ip, ic; rewrite Hifacec Hifacep.
+                repeat (split; eauto).
+                eapply star_trans; eauto.
+                apply star_iff_starR. eapply starR_step; try apply star_iff_starR; eauto.
+                clear; induction t; first reflexivity.
+                simpl; now rewrite -IHt.
+                reflexivity.
+              }
+              rewrite Hmem''.
+              rewrite domm_union. apply /fsetUP.
+              intros Hn; destruct Hn as [Hn | Hn].
+              now rewrite Hn in Hdommp.
+              now rewrite Hn in Hdommc.
             }
             now rewrite Hmem Hmem'.
         }
@@ -1478,8 +1519,73 @@ Section ThreewayMultisem1.
     intros Hmerg.
     Search _ to_partial_memory.
     apply /eq_fmap => Cid.
-    
-  Admitted.
+    pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
+      as Hmergeable_ifaces_sym.
+
+    assert (Hmem : domm (CS.state_mem s) = domm (unionm ip ic)).
+    {
+      apply CS.comes_from_initial_state_mem_domm.
+      inversion Hmerg as [s0 _ t Hini _ Hstar _].
+      inversion Hprog_is_closed as [_ [main [_ [Hmain _]]]].
+      pose proof linking_well_formedness Hwfp Hwfc (proj1 Hmergeable_ifaces) as Hwf.
+      now exists prog, main, s0, t.
+    }
+    assert (Hmem'' : domm (CS.state_mem s'') = domm (unionm ip ic)).
+    {
+      apply CS.comes_from_initial_state_mem_domm.
+      inversion Hmerg as [_ s0'' t _ Hini'' _ Hstar''].
+      inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
+      rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
+      pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
+      apply mergeable_interfaces_sym in Hmergeable_ifaces_sym.
+      exists prog'', main, s0'', t.
+      repeat (split; eauto). unfold ip, ic; now rewrite Hifacec Hifacep.
+    }
+    unfold merge_memories.
+    destruct (Cid \in domm ip) eqn:Hdommp;
+      destruct (Cid \in domm ic) eqn:Hdommc.
+    - exfalso.
+      apply component_in_ic_notin_ip with (ip := ip) in Hdommc.
+      now rewrite Hdommp in Hdommc.
+      assumption.
+    - erewrite to_partial_memory_in; try eassumption.
+      erewrite to_partial_memory_in; try eassumption.
+      rewrite unionmE.
+      erewrite to_partial_memory_in; try eassumption.
+      erewrite to_partial_memory_notin; try eassumption.
+      now destruct ((CS.state_mem s) Cid).
+    - erewrite to_partial_memory_notin; try eassumption.
+      erewrite to_partial_memory_notin; try eassumption.
+      reflexivity.
+    - erewrite !to_partial_memory_notin_strong; try eassumption;
+        try now apply negb_true_iff in Hdommc;
+        try now apply negb_true_iff in Hdommp.
+      rewrite unionmE.
+      erewrite !to_partial_memory_notin_strong; try eassumption;
+        try now apply negb_true_iff in Hdommc;
+        try now apply negb_true_iff in Hdommp.
+      destruct (isSome ((CS.state_mem s) Cid)) eqn:HisSome; try reflexivity.
+      (* Might want to use star_mem_well_formed to prove these subgoals. *)
+      assert (Hmem_Cid: (CS.state_mem s) Cid = None).
+      { apply /dommPn.
+        apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
+        rewrite Hmem.
+        rewrite domm_union. apply /fsetUP.
+        intros Hn; destruct Hn as [Hn | Hn].
+        now rewrite Hn in Hdommp.
+        now rewrite Hn in Hdommc.
+      }
+      assert (Hmem''_Cid: (CS.state_mem s'') Cid = None).
+      { apply /dommPn.
+        apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
+        rewrite Hmem''.
+        rewrite domm_union. apply /fsetUP.
+        intros Hn; destruct Hn as [Hn | Hn].
+        now rewrite Hn in Hdommp.
+        now rewrite Hn in Hdommc.
+      }
+      now rewrite Hmem_Cid Hmem''_Cid.
+  Qed.
 
   (* Search _ Memory.load filterm. *)
   Lemma program_load_to_partialized_memory s s'' ptr v :
@@ -1962,7 +2068,7 @@ Section ThreewayMultisem2.
       specialize (Hmultisem Hwfc' Hwfp' Hwfc Hwfp).
       rewrite <- Hifacep, <- Hifacec in Hmultisem.
       specialize (Hmultisem (mergeable_interfaces_sym ip ic Hmergeable_ifaces) eq_refl eq_refl).
-      specialize (Hmultisem (linkable_mains_sym Hmain_linkability') (linkable_mains_sym Hmain_linkability)).
+      specialize (Hmultisem (linkable_mains_sym Hmain_linkability')).
       assert (Hclosed'' : closed_program (program_link c' p')) by now rewrite <- (Hprg_linkC'' Hlinkable).
       assert (Hclosed : closed_program (program_link c p)) by now rewrite <- (Hprg_linkC Hlinkable).
       specialize (Hmultisem Hclosed'' Hclosed).
