@@ -2612,8 +2612,14 @@ Section Recombination.
       inversion Hmergeable_ifaces as [Hlinkable _];
         inversion Hmergeable_ifaces as [Hlinkable'' _];
         rewrite Hifacec Hifacep in Hlinkable''.
-      assert (Hcase' : CS.is_program_component s1'' ip) by admit.
-      assert (Hmerge' : mergeable_states c' p' c p s1'' s1) by admit.
+      assert (Hcase' : CS.is_program_component s1'' ip). {
+        apply negb_false_iff in Hcase.
+        eapply mergeable_states_context_to_program; eassumption.
+      }
+      assert (Hmerge' : mergeable_states c' p' c p s1'' s1). {
+        apply mergeable_states_sym; try congruence.
+        apply mergeable_interfaces_sym; congruence.
+      }
       pose proof (threeway_multisem_step_inv_program Hwfc' Hwfp' Hwfc Hwfp) as H.
       rewrite -Hifacec -Hifacep in H.
       specialize (H (mergeable_interfaces_sym _ _ Hmergeable_ifaces) eq_refl eq_refl
@@ -2639,8 +2645,7 @@ Section Recombination.
       rewrite -Hifacec; now apply linkable_sym.
       now apply linkable_sym.
       now apply linkable_sym.
-  Admitted.
-  
+  Qed.
 
   Corollary match_nofinal s s'' :
     mergeable_states p c p' c' s s'' ->

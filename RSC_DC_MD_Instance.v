@@ -7,7 +7,6 @@ Require Import Source.PS.
 Require Import Intermediate.Machine.
 Require Import Intermediate.PS.
 Require Import Intermediate.Decomposition.
-Require Import Intermediate.Composition.
 Require Import Intermediate.Recombination.
 Require Import S2I.Compiler.
 Require Import S2I.Definitions.
