@@ -1,7 +1,7 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Lib.Extra.
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 
 Module Type AbstractComponentMemory.
   Parameter t : Type.
@@ -184,6 +184,17 @@ Module ComponentMemory : AbstractComponentMemory.
   Qed.
 
 End ComponentMemory.
+
+Module ComponentMemoryExtra.
+  Import ComponentMemory.
+  (* RB: NOTE: Prove composition as needed. Blocks are emitted in the same order
+     as the sequence of single calls. *)
+  Fixpoint reserve_blocks (mem : t) (n : nat) : t * list Block.id :=
+    let acc '(mem, bs) :=
+        let '(mem', b) := reserve_block mem in
+        (mem', bs ++ [b]) in
+    iter n acc (mem, []).
+End ComponentMemoryExtra.
 
 Module Memory.
   Definition t := NMap ComponentMemory.t.
