@@ -1272,14 +1272,30 @@ End PS.
   Qed.
 
   (* RB: NOTE: Add program well-formedness if needed. *)
-  Lemma genv_entrypoints_interface_some p p' C P b :
+  Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
+    (* Pointer.component pc \in domm (prog_interface p) -> *)
+    (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *)
     prog_interface p = prog_interface p' ->
     EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
   exists b',
     EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
+  Proof.
+    move=> Hiface.
+    unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
+    move=> H; exists b; rewrite -H; clear H.
+    unfold prepare_procedures_initial_memory_aux.
+    unfold elementsm, odflt, oapp.
+    rewrite 2!mapmE.
+    unfold omap, obind, oapp; simpl.
+    rewrite 2!mkfmapfE.
+    rewrite -Hiface.
+    destruct (C \in domm (prog_interface p)) eqn:HC.
+    - rewrite HC.
+      admit.
+    - now rewrite HC.
   Admitted.
 
-Section BehaviorStar.
+  Section BehaviorStar.
   Variables p c: program.
 
   (* RB: Could be phrased in terms of does_prefix. *)
