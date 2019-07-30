@@ -101,6 +101,10 @@ Section Definability.
   Hint Unfold increment counter_idx counter_loc.
   Hint Transparent increment counter_idx counter_loc.
 
+  (** Simple clause for switching on the different events. Gives an if
+      expression that branches on the given expressions, depending on the value
+      of the private local counter. This counter, initialized at 0, is
+      incremented when the 'then' branch is taken. *)
   Definition switch_clause n e_then e_else :=
     E_if (E_binop Eq (E_deref (E_local Block.priv)) (E_val (Int n)))
          (E_seq (E_assign (E_local Block.priv)
@@ -113,6 +117,8 @@ Section Definability.
       eapply (@star_step _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
     end.
 
+  (** States which branch is taken wrt. the incrementation of the counter in the
+      semantics (on a single switch clause) *)
   Lemma switch_clause_spec p' C stk mem n n' e_then e_else arg :
     Memory.load mem (C, Block.private, counter_idx) = Some (Int n) ->
     if (n =? n') % Z then
@@ -155,6 +161,9 @@ Section Definability.
   Definition switch_add_expr e res :=
     (Nat.pred (fst res), switch_clause (Z.of_nat (Nat.pred (fst res))) e (snd res)).
 
+  (** Constructs the full switch expression branching on the different
+      expressions of the 'es' argument, with the last branch being the 'e_else'.
+      *)
   Definition switch (es: list expr) (e_else: expr) : expr :=
     snd (fold_right switch_add_expr (length es, e_else) es).
 
@@ -165,6 +174,10 @@ Section Definability.
     simpl. now rewrite IH Nat.sub_succ_r.
   Qed.
 
+  (** States that the final else branch is taken if the number of remaining
+      'then' expressions (those of 'es') is inferior to the current value of the
+      counter (in a potentially full switch expression), allowing us to not
+      evaluate these *)
   Lemma switch_spec_else p' C stk mem n es e_else arg :
     Memory.load mem (C, Block.private, counter_idx) = Some (Int (Z.of_nat n)) ->
     (length es <= n)%nat ->
