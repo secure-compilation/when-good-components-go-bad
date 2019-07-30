@@ -291,50 +291,34 @@ Section Definability.
 
   (** Gives a map of the different indexes of a component's public memory to
       bool, all initialized at false *)
-  Definition indexes_read_init (comp: Component.interface) :  NMap bool :=
-    let size_buf :=
-        Component.public_buffer_size comp in
-    mkfmap (combine (iota 0 size_buf) (nseq size_buf false)).
+  (* Definition indexes_read_init (comp: Component.interface) :  NMap bool := *)
+  (*   let size_buf := *)
+  (*       Component.public_buffer_size comp in *)
+  (*   mkfmap (combine (iota 0 size_buf) (nseq size_buf false)). *)
 
-  Lemma indexes_read_init_correct (comp: Component.interface) :
-    all (fun b:bool => b == false) (codomm (indexes_read_init comp)) /\
-    domm (indexes_read_init comp) = fset (iota 0 (Component.public_buffer_size comp)).
-  Proof.
-    split.
-  (*   (* all at false *) *)
-  (*   - rewrite /indexes_read_init/codomm/invm domm_mkfmap'. *)
-  (*     admit. *)
-  (*   (* Correct indexing *) *)
-  (*   - admit. *)
-  (* Admitted. *)
 
-    - rewrite /indexes_read_init.
-      set (size_buf := Component.public_buffer_size comp). induction size_buf.
-      + move => /=. rewrite codomm0. apply all_nil.
-      + move: IHsize_buf.
-        rewrite /codomm/invm !domm_mkfmap'.
-        have:iota 0 (S size_buf) = iota 0 (size_buf) ++ [size_buf]
-          by rewrite -ssrnat.addn1 iota_add.
-        move => -> IHsize_buf.
-        have:nseq (S size_buf) false = nseq size_buf false ++ [false]
-          by rewrite -ssrnat.addn1 nseq_add.
-        move => -> ; rewrite combine_cat ; last by rewrite size_iota size_nseq.
-        (* rewrite mkfmap_cat. *)
+  (* Would be nicer to use an empty map indexed by integers, so that we don't
+     have a useless double check :
+     if empty, we can just state that (getm indexes i) = None <-> ...= Some false
+     (for the previous definition). That way we don't even have to worry about
+     out of bounds since this would be insured by the well-formedness of events *)
+  Fail Definition indexes (* : {fmap Z -> bool} *) := @emptym Z unit.
+  (* Fails since Z isn't yet an ordType *)
 
-        admit.
+  (* In fact, we don't even have to have a map, just a set or a list containing the
+     indexes that we read would be enough, and checking for membership and cons-ing
+     the list would suffice *)
+  (* The only issue would be that we won't be terminating as early as we could
+     (since prefill_read_aux can stop when all indexes have been read), but that's
+     not too bad *)
+  (* Z is not an ordType could be changed in extructures but not worth it for this *)
+  Fail Definition indexes (* : {fset Z} *) := @fset0 Z.
+  Definition indexes := seq Z.
 
-    (* domm_union:
-       forall (T : ordType) (S : Type) (m1 m2 : {fmap T -> S}),
-       domm (unionm m1 m2) = domm m1 :|: domm m2 *)
-    (* How does it goes with codomm ? *)
+  Definition indexes_read_init : indexes := nil.
 
-        (* rewrite mapm_unionm. *)
-
-        (* rewrite map_cat. *)
-
-        (* rewrite /nseq/ncons ssrnat.iterSr. rewrite cats1/rcons. *)
-     - admit.
-  Admitted.
+  Definition lookup_index (ind:indexes) (i:Z) : bool := i \in ind.
+  Definition add_index (ind:indexes) (i:Z) : indexes := i::ind.
 
   (** Flattens a list of expr into a single E_seq expr. *)
   Local Definition E_seq_of_exprs_right (ex : expr) (exprs : list expr) : expr :=
@@ -385,84 +369,54 @@ Section Definability.
            (C: Component.id)
            (suffix: trace)
            (acc:list expr)
-           (indexes_read:NMap bool) : list expr:=
+           (indexes_read:indexes) : list expr:=
 
     let stop := acc in
-    (* Maybe express it in an other way than membership of codomain *)
-    if (false \in codomm indexes_read)
-    then                        (* a read is still possible *)
-      match suffix with
-      | [] => stop            (* if no further events, give back exprs created *)
-      | ev :: suffix' =>
-        let keep_on :=  (prefill_read_aux C suffix' acc indexes_read) in
-        match ev with
-        | ELoad Cdrf off val Cown =>   (* component is read *)
-          (* kinda useless check since the trace is well formed, we shouldn't
+    match suffix with
+    | [] => stop            (* if no further events, give back exprs created *)
+    | ev :: suffix' =>
+      let keep_on := (prefill_read_aux C suffix' acc indexes_read) in
+      match ev with
+      | ELoad Cdrf off val Cown =>   (* component is read *)
+        (* kinda useless check since the trace is well formed, we shouldn't
              have "wild" ELoad events *)
-          if Cown == C then
-            (* TODO fix this Z.to_nat, too permissive *)
-            (* Do Memory.load ? Check if positive ? *)
-            match indexes_read (Z.to_nat off) with
-            | None => []           (* Never happens *)
-            | Some true => keep_on (* already read so go on *)
-            | Some false => prefill_read_aux C
-                                            suffix'
-                                            ((assign_public off val) :: acc)
-                                            (* TODO fix this Z.to_nat, too permissive *)
-                                            (* TODO should use updm but knowing
-                                               that it would return (Some _)
-                                               each time *)
-                                            (setm indexes_read (Z.to_nat off) true)
-
-
-            end
-          else keep_on
-        (* if the component is given turn again, give back exprs created *)
-        | ERet _(* C *) _ _  | ECall _(* C *) _ _ _  => stop
-        end
+        if Cown == C then
+          if (lookup_index indexes_read off)
+          then keep_on (* already read so go on *)
+          else prefill_read_aux C suffix' ((assign_public off val) :: acc)
+                                (add_index indexes_read off)
+        else keep_on
+      (* if the component is given turn again, give back exprs created *)
+      | ERet _(* C *) _ _  | ECall _(* C *) _ _ _  => stop
       end
-    else stop.     (* if all offset have been read, give back exprs created *)
+    end.
 
-   Fixpoint prefill_read_aux_ntr
+  Fixpoint prefill_read_aux_ntr
            (C: Component.id)
            (suffix: trace)
-           (indexes_read:NMap bool) : list expr:=
+           (indexes_read:indexes) : list expr:=
     let stop := [] in
-    (* Maybe express it in an other way than membership of codomain *)
-    if (false \in codomm indexes_read)
-    then                        (* a read is still possible *)
-      match suffix with
-      | [] => stop            (* if no further events, give back exprs created *)
-      | ev :: suffix' =>
-        let keep_on :=  (prefill_read_aux_ntr C suffix' indexes_read) in
-        match ev with
-        | ELoad Cdrf off val Cown =>   (* component is read *)
-          (* kinda useless check since the trace is well formed, we shouldn't
+    match suffix with
+    | [] => stop            (* if no further events, give back exprs created *)
+    | ev :: suffix' =>
+      let keep_on :=  (prefill_read_aux_ntr C suffix' indexes_read) in
+      match ev with
+      | ELoad Cdrf off val Cown =>   (* component is read *)
+        (* kinda useless check since the trace is well formed, we shouldn't
              have "wild" ELoad events *)
-          if Cown == C then
-            (* TODO fix this Z.to_nat, too permissive *)
-            (* Do Memory.load ? Check if positive ? *)
-            match indexes_read (Z.to_nat off) with
-            | None => []           (* Never happens in a well-formed program, if
-              a ELoad event occurs out of bounds, causes undef to the component
-              that tries to load, so no issue for the component owning memory *)
-            | Some true => keep_on (* already read so go on *)
-            | Some false =>
-              (assign_public off val)
-                ::(prefill_read_aux_ntr C
+        if Cown == C then
+          if (lookup_index indexes_read off)
+          then keep_on (* already read so go on *)
+          else
+            cons (assign_public off val)
+                 (prefill_read_aux_ntr C
                                        suffix'
-                                       (* TODO fix this Z.to_nat, too permissive *)
-                                       (setm indexes_read (Z.to_nat off) true))
-
-
-            end
-          else keep_on
-        (* if the component is given turn again, give back exprs created *)
-        | ERet _(* C *) _ _  | ECall _(* C *) _ _ _  => stop
-        end
+                                       (add_index indexes_read off))
+        else keep_on
+      (* if the component is given turn again, give back exprs created *)
+      | ERet _(* C *) _ _  | ECall _(* C *) _ _ _  => stop
       end
-    else stop.     (* if all offset have been read, give back exprs created *)
-
+    end.
 
 
   (* I find that checking fmap membership, even for map with given static data,
@@ -521,11 +475,11 @@ Section Definability.
     let ev3 := ELoad Component.main off1 load1 C1 in
     let ev4 := ELoad Component.main off2 load2 C1 in
     let acc := [] in
-    let offsets := mkfmap[(0,false);(1,false);(2,false)] in
+    let offsets := indexes_read_init in
     prefill_read_aux Component.main [  ev1'; ev2;  ev3 ; ev4 ] acc offsets  = [(assign_public off0 load0)] /\
     prefill_read_aux_ntr Component.main [  ev1'; ev2;  ev3 ; ev4 ] offsets  = [(assign_public off0 load0)]
   .
-  Proof. split ; by repeat (find_in_codomm ; simpl). Qed.
+  Proof. by []. Qed.
 
   Example test_prefill_read_aux1 :
     let '(C1,P1) := (1,1) in
@@ -537,10 +491,10 @@ Section Definability.
     let ev3 := ELoad Component.main off1 load1 C1 in
     let ev4 := ELoad Component.main off2 load2 C1 in
     let acc := [] in
-    let offsets := emptym in
+    let offsets := indexes_read_init in
     prefill_read_aux Component.main [  ev3 ; ev4 ] acc offsets  = []
   /\ prefill_read_aux_ntr Component.main [  ev3 ; ev4 ] offsets  = [].
-  Proof. split ; by simpl ; rewrite codomm0. Qed.
+  Proof. by []. Qed.
 
   Example test_prefill_read_aux2 :
     let '(C1,P1) := (1,1) in
@@ -551,10 +505,10 @@ Section Definability.
     let ev3 := ELoad Component.main off1 load1 C1 in
     let ev4 := ELoad Component.main off2 load2 C1 in
     let acc := [] in
-    let offsets := mkfmap[(0,false);(1,false);(2,false)] in
+    let offsets := indexes_read_init in
     prefill_read_aux C1 [ ev3 ; ev4 ] acc offsets = [(assign_public 2 (Int 1337)); (assign_public 1 (Int 420))] /\
   prefill_read_aux_ntr C1 [ ev3 ; ev4 ] offsets = [ (assign_public 1 (Int 420)); (assign_public 2 (Int 1337))].
-  Proof. split ; by repeat (find_in_codomm ; simpl). Qed.
+  Proof. by []. Qed.
 
   Example test_prefill_read_tricky :
     let '(C1,P1,C2,P2) := (1,1,2,2) in
@@ -606,7 +560,7 @@ Section Definability.
     let load_ev14:= ELoad Component.main off14 load14 C2 in
 
     let acc := [::] in
-    let offsets := mkfmap[(0,false);(1,false);(2,false)] in
+    let offsets := indexes_read_init in
     let cst :=  fun (C: Component.id) (t: trace) =>
                             filter (fun e => (C == cur_comp_of_event e) ||
                                           match e with
@@ -679,12 +633,9 @@ Section Definability.
        [(assign_public off13 load13)]).
   Proof.
     (* well formed events sanity check *)
-    simpl ; rewrite /imported_procedure_b ; simpl. split.
-    find_in_fset ; done.
-
-    (* getting rid of the membership tests *)
-    repeat (find_in_codomm ; simpl).
-    by repeat (split ; first reflexivity).
+    simpl ; rewrite /imported_procedure_b ; simpl.
+    split ; first by find_in_fset.
+    done.
  Qed.
 
   Lemma prefill_read_aux_invar : forall suffix C comp acc indexes res ,
