@@ -638,7 +638,27 @@ Section Definability.
     done.
  Qed.
 
-  Lemma prefill_read_aux_invar : forall suffix C comp acc indexes res ,
+  (** Can be used to simplify (or even solve) a goal consisting of a (boolean)
+      property on a prefill_read_aux(_ntr)-constructed expression *)
+
+  Tactic Notation "destruct_and_simpl" constr(term) := destruct term eqn:?; simpl ; subst ; try done.
+  Ltac simplify_prefill_read_aux :=
+    repeat
+      match goal with
+      | |- is_true
+            (_ match ?term with | _ => _
+               end
+            )
+        => match type of term with
+          | event => destruct_and_simpl term
+          | option bool => destruct_and_simpl term
+          | bool => destruct_and_simpl term
+          end
+      | _ => fail
+      end.
+
+
+  Lemma prefill_read_aux_invar : forall suffix C comp acc indexes res,
       intf C = Some comp ->
       (* Add a restriction on the indexes wrt comp.public_buffer_size ? case
          analysis on indexes_read_init comp should suffice *)
@@ -647,22 +667,30 @@ Section Definability.
               res = rev res' ++ acc.
   Proof.
     induction suffix as [| ev suffix IHsuffix] ; intros C comp acc indexes res Hintf.
-    - simpl. case : (_ \in _) ; exists [] ; subst ;  split ; done.
-    - generalize dependent C ; generalize dependent comp ; generalize dependent acc ;
-      generalize dependent indexes ; generalize dependent res.
-      rewrite /prefill_read_aux/prefill_read_aux_ntr ;
+    - simpl.  exists [] ; subst ;  split ; done.
+    - rewrite /prefill_read_aux/prefill_read_aux_ntr ;
         elim: ev => [ Ccur proc arg Cnext | Cret ret Cnext  | CSrc o v CTrg ] ;
-                     intros res indexes acc comp C Hintf ;
-      case: (_ \in _) => <- ; try (exists [] ; split ; done).
+                     subst ; try (exists [] ; split ; done).
       rewrite -/prefill_read_aux -/prefill_read_aux_ntr.
+      (* simplify_prefill_read_aux. *)
+      (* repeat match goal with *)
+      (*        | |- _ -> match ?term with | _ => _ *)
+      (*               end *)
+      (*               = _ *)
+      (*          => match type of term with *)
+      (*            | event => destruct_and_simpl term *)
+      (*            (* | option bool => destruct_and_simpl term *) *)
+      (*            | bool => destruct_and_simpl term *)
+      (*            end *)
+      (*        | _ => fail *)
+      (*        end. *)
       (* Load event *)
-      destruct (CTrg == C) eqn:WhichTrgComp => // ;
-      (* Case analysis on presence of the index in the map,
-         case None never happens, how to avoid it ? *)
-        case: (indexes (Z.to_nat o)) => // ;
-          try case  ; (* if the index is present, trivial  *)
+      destruct (CTrg == C) eqn:WhichTrgComp => //;
+      (* Case analysis on presence of the index in the map *)
+        case: (lookup_index indexes o) => //;
           try by apply (IHsuffix C comp).
-      + set indexes_upd := setm indexes (Z.to_nat o) true.
+      + (* TODO surely can be simplified *)
+        set indexes_upd := add_index indexes o.
         set res_IH :=prefill_read_aux C suffix (assign_public o v :: acc) indexes_upd.
         set res'_IH := prefill_read_aux_ntr C suffix indexes_upd.
         set acc_IH := (assign_public o v :: acc).
@@ -673,20 +701,17 @@ Section Definability.
         (* exists (assign_public o v :: prefill_read_aux_ntr C suffix indexes_upd). *)
         rewrite rev_cons cat_rcons.
         split ; done.
-       + (* ELoad event with index out of bounds... *)
-         admit.
-  Admitted.
+  Qed.
 
   Lemma prefill_read_aux_equiv : forall suffix C comp,
       intf C = Some comp ->
-      prefill_read_aux_ntr C suffix (indexes_read_init comp) =
-      rev (prefill_read_aux C suffix [] (indexes_read_init comp)).
+      prefill_read_aux_ntr C suffix indexes_read_init =
+      rev (prefill_read_aux C suffix [] indexes_read_init).
   Proof.
     intros suffix C comp Hintf.
-    set indexes := indexes_read_init comp.
       by apply prefill_read_aux_invar with (suffix := suffix)
-                                           (indexes := indexes)
-                                           (res := prefill_read_aux C suffix [] indexes)
+                                           (indexes := indexes_read_init)
+                                           (res := prefill_read_aux C suffix [] indexes_read_init)
                                            (acc := []) in Hintf ;
         first destruct Hintf as [? [? H]] ; subst ; [by rewrite H cats0 revK | done].
   Qed.
@@ -694,10 +719,11 @@ Section Definability.
   (* Since we only backtranslate, and we got a well-formed program if the events
      are well-formed, we can just assign any value transmitted in the load
      events (if it's a pointer or an undef, the event is not well-formed) *)
-  Definition expr_assign_public (e:expr) :=
+  Definition expr_assign_public (C:Component.id) (e:expr) :=
     match e with
-    | E_assign (E_binop Add (E_local Block.pub) (E_val (Int _(* index *))))
-               (E_val  _ (* value *)) => true
+    | E_assign (E_binop Add (E_local Block.pub)
+                        (E_val (Int index)))
+               (E_val  _ (* value *)) => in_bounds intf C index
     | _ => false
     end.
 
@@ -705,24 +731,58 @@ Section Definability.
   Lemma rev_inj {T:Type} : injective (@rev T).
   Proof. by apply (can_inj revK). Qed.
 
-  Lemma prefill_read_aux_only_assign (suffix : trace) (C : Component.id) (comp : Component.interface) :
+  Lemma prefill_read_aux_only_assign (C : Component.id) (comp : Component.interface) (suffix : trace):
+    all (well_formed_event intf) suffix ->
     (intf C = Some comp) ->
-    all expr_assign_public (prefill_read_aux C suffix [] (indexes_read_init comp)).
+    all (expr_assign_public C) (prefill_read_aux C suffix [] indexes_read_init).
   Proof.
-    intro Hintf.
+    intros (* Hwf_p *) Hwf_evs Hintf.
     (* translating to non-tail-recursive function *)
-    have : prefill_read_aux_ntr C suffix (indexes_read_init comp) =
-           rev (prefill_read_aux C suffix [] (indexes_read_init comp)) by apply (@prefill_read_aux_equiv suffix C comp Hintf).
-    rewrite -[prefill_read_aux_ntr C suffix (indexes_read_init comp)]revK.
+    have : prefill_read_aux_ntr C suffix indexes_read_init =
+           rev (prefill_read_aux C suffix [] indexes_read_init) by apply (@prefill_read_aux_equiv suffix C comp Hintf).
+    rewrite -[prefill_read_aux_ntr C suffix indexes_read_init]revK.
     move => Hequiv ; apply rev_inj in Hequiv.
     rewrite -Hequiv all_rev ; clear Hequiv.
 
-    generalize dependent (indexes_read_init comp).
-    induction suffix  as [| ev suffix IHsuffix ] ; rewrite /prefill_read_aux_ntr => indexes ; case: (_ \in _) => //.
-    (* generalize dependent C ; generalize dependent comp. *)
-    elim: ev => [ Ccur proc arg Cnext | Cret ret Cnext  | CSrc o v CTrg ] => //.
-    case: (CTrg == C) => // ; case: (indexes (Z.to_nat o)) => // is_in_offs.
-    case: is_in_offs => //=.
+    generalize dependent indexes_read_init.
+    (* move => indexes ; elim:suffix => [|ev suffix] //=. *)
+    generalize dependent C ; generalize dependent comp.
+    induction suffix  as [| ev suffix IHsuffix ] => comp C Hintf indexes //=.
+
+    case: ev Hwf_evs => [ Ccur proc arg Cnext | Cret ret Cnext  | CSrc o v CTrg ] => //.
+    move => /= /andP[] /andP[] /andP[] Hcomps_diff Htransf Hbounds Hsuffix.
+    simplify_prefill_read_aux ; try by apply (@IHsuffix Hsuffix comp C Hintf indexes).
+    (* bit dangerous since no control on naming of equations generated by
+       simplify_prefill_read_aux *)
+    move:Heqb => /eqP ? ; subst.
+    apply/andP ; split => //.
+      by apply (IHsuffix Hsuffix comp C Hintf (add_index indexes o)).
+  Qed.
+
+
+
+  Lemma prefill_read_aux_ntr_only_assign (C : Component.id) (comp : Component.interface) indexes (suffix : trace) :
+    all (well_formed_event intf) suffix ->
+    (intf C = Some comp) ->
+    all (expr_assign_public C) (prefill_read_aux_ntr C suffix indexes).
+  Proof.
+    intros Hwf_evs Hintf.
+    (* 1st attempt with induction principle *)
+    (* elim/prefill_read_aux_ntr_last_ind: *)
+    (*   (prefill_read_aux_ntr C suffix indexes) => [| suffix' last_ev ] //. *)
+    (* rewrite -cats1. rewrite /prefill_read_aux_ntr /=. case:suffix' Hsuffix' => //=. *)
+
+    (* 2nd attempt *)
+    (* elim/prefill_read_aux_ntr_ind:(prefill_read_aux_ntr C suffix indexes) => *)
+    (* [| new_ev suffix' IHsuffix] //=. *)
+
+    elim:suffix indexes Hwf_evs =>
+    [| new_ev suffix IHsuffix] indexes //=.
+    move => /= /andP[] Hwf_e Hsuffix.
+    simplify_prefill_read_aux ; try by eapply IHsuffix.
+    move:Heqb => /eqP ? ; subst.
+    move:Hwf_e => /andP[_ ?]. apply/andP ; split ; first done.
+      by apply (IHsuffix (add_index indexes o)).
   Qed.
 
   (* Should we use well_formed_event instead ? (We would need the program interface) *)
@@ -735,50 +795,65 @@ Section Definability.
 
   Remark wf_event_implies_transf :
     subpred (well_formed_event intf) only_transferable_values_in_ELoad.
-  Proof. by case => [_ _ _ _|_ _ _|_ _ ? _] //= /andP [_ ?]. Qed.
+  Proof. move => ev ; by case:ev => [????|???|????] //= /andP[] /andP[] ???. Qed.
 
   (* This might be silly to not use well_formed_event instead of
      only_transferable since we have access to the program interface *)
 
-  Lemma prefill_read_aux_only_values_integers (suffix : trace) (C : Component.id) (comp : Component.interface) :
+  Lemma prefill_read_aux_only_values_integers (C : Component.id) (comp : Component.interface) (suffix : trace):
+    all (well_formed_event intf) suffix ->
     (intf C = Some comp) ->
     all only_transferable_values_in_ELoad suffix ->
     (* all (well_formed_event intf) suffix -> *)
-    all values_are_integers (prefill_read_aux C suffix [] (indexes_read_init comp)).
+    all values_are_integers (prefill_read_aux C suffix [] indexes_read_init).
   Proof.
 
-    intros Hintf Htransf_sfx.
-    have Hassign: all expr_assign_public (prefill_read_aux C suffix [] (indexes_read_init comp))
-       by apply (prefill_read_aux_only_assign suffix Hintf).
+    intros Hwf_evs Hintf Htransf_sfx.
+    have Hassign: all (expr_assign_public C) (prefill_read_aux C suffix [] indexes_read_init)
+       by apply (prefill_read_aux_only_assign Hwf_evs Hintf).
     (* would be nice to prove the goal almost directly from this *)
 
     (* In the meantime... *)
     (* translating to non-tail-recursive function *)
-    have : prefill_read_aux_ntr C suffix (indexes_read_init comp) =
-           rev (prefill_read_aux C suffix [] (indexes_read_init comp)) by apply (@prefill_read_aux_equiv suffix C comp Hintf).
-    rewrite -[prefill_read_aux_ntr C suffix (indexes_read_init comp)]revK.
+    have : prefill_read_aux_ntr C suffix indexes_read_init =
+           rev (prefill_read_aux C suffix [] indexes_read_init ) by apply (@prefill_read_aux_equiv suffix C comp Hintf).
+    rewrite -[prefill_read_aux_ntr C suffix indexes_read_init]revK.
     move => Hequiv ; apply rev_inj in Hequiv.
     rewrite -Hequiv all_rev ; rewrite -Hequiv in Hassign ; clear Hequiv.
 
-    generalize dependent (indexes_read_init comp).
-    induction suffix as [| ev sfx IHsfx] ; rewrite (* /values_are_integers *)/prefill_read_aux_ntr ; intro indexes.
-    - by case:(_ \in _).
-    - (* rewrite -/prefill_read_aux_ntr. *) (* more clear now *)
-      induction ev as [ | | CSrc o v CTrg ]; case: (_ \in _) => //. rewrite -/prefill_read_aux_ntr.
-      (* Load event *)
-      (* Getting rid of the trivial cases *)
-      case: (CTrg == C) => // ; case: (indexes (Z.to_nat o)) => // is_in_offs ;
-      (* TODO change this bit, is_in_offs is not binded to a boolean in the last case *)
-      case: is_in_offs => //= ;  move: Htransf_sfx ; simpl ; move => /andP => [ [Htransf_v Htransf_sfx ] ].
-        all: try apply (IHsfx Htransf_sfx indexes).
+    generalize dependent indexes_read_init.
+    induction suffix as [| ev sfx IHsfx] ; rewrite (* /values_are_integers *)/prefill_read_aux_ntr ; intro indexes => //.
+    (* rewrite -/prefill_read_aux_ntr. *) (* more clear now *)
+    destruct ev as [ | | CSrc o v CTrg ] => //. rewrite -/prefill_read_aux_ntr.
+    (* Load event *)
+    (* Getting rid of the trivial cases *)
+    case: (CTrg == C) => // ; case: (lookup_index indexes o) => // ;
+        move: Htransf_sfx Hwf_evs => /= /andP[Htransf_v Htransf_sfx] /andP[Hwf_e Hwf_evs] ;
+        try by apply (IHsfx Hwf_evs Htransf_sfx indexes).
 
-      (* Case in which we produce an assignement and the indexes_map is updated *)
-      set indexes_upd := (setm indexes (Z.to_nat o) true).
-      move => Hassign ; apply /andP. split.
+    (* Case in which we produce an assignement and the indexes_map is updated *)
+    set indexes_upd := add_index indexes o.
+    move => Hassign ; apply /andP. split.
 
-      move : Htransf_v ; rewrite /is_transferable_value. done.
-      apply (IHsfx Htransf_sfx indexes_upd).
-        by move: Hassign ; rewrite !all_rev.
+    move : Htransf_v ; rewrite /is_transferable_value. done.
+    apply (IHsfx Hwf_evs Htransf_sfx indexes_upd).
+       move: Hassign ; rewrite !all_rev /=. by move =>/andP[].
+  Qed.
+
+  Lemma prefill_read_aux_ntr_only_values_integers (suffix : trace) (C : Component.id) (comp : Component.interface) :
+    (intf C = Some comp) ->
+    all only_transferable_values_in_ELoad suffix ->
+    (* all (well_formed_event intf) suffix -> *)
+    all values_are_integers (prefill_read_aux_ntr C suffix indexes_read_init).
+  Proof.
+    intros Hintf Htransf_sfx.
+    generalize dependent indexes_read_init ;
+      induction suffix ; intro indexes ; first (by []).
+    move:Htransf_sfx => /andP[Htransf_a Htransf_sfx] /=.
+    (* apply IHsuffix in Htransf_sfx. *)
+    simplify_prefill_read_aux ; try by apply (IHsuffix Htransf_sfx).
+    simpl in Htransf_a. apply/andP ; split ; first now apply Htransf_a.
+      by apply (IHsuffix Htransf_sfx).
   Qed.
 
 
@@ -793,65 +868,92 @@ Section Definability.
                                                   C
                                                   suffix
                                                   []
-                                                  (indexes_read_init comp)))
+                                                  indexes_read_init))
     | None => None
     end.
 
-  Fixpoint e_seq_right_assign_public (e:expr) :=
-    expr_assign_public e
+  Fixpoint e_seq_right_assign_public (C:Component.id) (e:expr) : bool :=
+    let exp_ass := (expr_assign_public C) in
+    exp_ass e
     || match e with
       | E_seq e1 e2 =>
-        expr_assign_public e1 && e_seq_right_assign_public e2
+        exp_ass e1 && (e_seq_right_assign_public C) e2
       | _ => false
       end.
 
-  Lemma prefill_read_only_seq_assign (suffix : trace) (C : Component.id) (comp : Component.interface) (expr_seq : expr) :
+  Fixpoint e_seq_right_assign_public_prop (C:Component.id) (e:expr) :=
+    let exp_ass := (expr_assign_public C) in
+    exp_ass e
+    \/ match e with
+      | E_seq e1 e2 =>
+        exp_ass e1 /\ (e_seq_right_assign_public_prop C) e2
+      | _ => False
+      end.
+
+  Remark e_seq_subpred C :
+    subpred (expr_assign_public C) (e_seq_right_assign_public C).
+  Proof. move => e. case:e => // e_ptr e_val (* => /eqP/eqP *). by rewrite /= orbF.
+  Qed.
+
+  Lemma prefill_read_only_seq_assign (C : Component.id) (comp : Component.interface) (expr_seq : expr) (suffix : trace) :
+    all (well_formed_event intf) suffix ->
     (intf C = Some comp) ->
     prefill_read C suffix = Some expr_seq ->
-    e_seq_right_assign_public expr_seq.
+    e_seq_right_assign_public C expr_seq.
   Proof.
     rewrite /prefill_read.
-    move => Hcomp ; rewrite Hcomp.
-    have: prefill_read_aux_ntr C suffix (indexes_read_init comp) =
-          rev (prefill_read_aux C suffix [::] (indexes_read_init comp))
-      by apply prefill_read_aux_equiv, Hcomp.
+    move => Hwf_evs Hcomp ; rewrite Hcomp.
+    have: prefill_read_aux_ntr C suffix indexes_read_init =
+          rev (prefill_read_aux C suffix [::] indexes_read_init)
+      by apply prefill_read_aux_equiv with (comp:=comp), Hcomp.
     move => <- .
-    set prefill := prefill_read_aux_ntr C suffix (indexes_read_init comp).
-    have: all expr_assign_public prefill
-      by rewrite /prefill prefill_read_aux_equiv ; last done ;
-      rewrite all_rev ; apply prefill_read_aux_only_assign, Hcomp.
+    set prefill := prefill_read_aux_ntr C suffix indexes_read_init.
+    have: all (expr_assign_public C) prefill by
+        rewrite /prefill ; rewrite -> prefill_read_aux_equiv with (comp:=comp) => // ;
+      rewrite all_rev ; apply prefill_read_aux_only_assign with (comp:=comp), Hcomp.
     generalize dependent expr_seq.
     rewrite/E_seq_of_list_expr/E_seq_of_exprs_right.
     case: prefill (* eqn:pref *)  => //= e prefill.
     elim: prefill e => //= e.
-    - move => expr_seq /andP[Hass_e _] Hsome ; inversion Hsome as [H] ; subst.
-      rewrite/e_seq_right_assign_public ; destruct expr_seq => //. by rewrite orbF.
+    - move => expr_seq /andP[Hass_e _] Hsome ;
+               inversion Hsome as [H] ; subst ; clear Hsome.
+      destruct expr_seq eqn:Hexpr_seq => //=. rewrite/e_seq_right_assign_public ;
+       by rewrite orbF.
     - move => prefill IH a expr_seq /andP[Hass_a] /andP[Hass_e Hass_prefill] Hsome ;
                inversion Hsome as [H] ; subst ; clear Hsome => /=.
       apply /andP ; split ; first done.
       by apply IH with (e := e) ; first by apply /andP.
   Qed.
 
-  Lemma prefill_read_only_values_integers (suffix : trace) (C : Component.id) (comp : Component.interface) (e:expr):
+  Lemma prefill_read_only_values_integers (C : Component.id) (comp : Component.interface) (e:expr) (suffix : trace) :
+    all (well_formed_event intf) suffix ->
     (intf C = Some comp) ->
-    all only_transferable_values_in_ELoad suffix ->
     prefill_read C suffix = Some e ->
     values_are_integers e.
   Proof.
-    rewrite /prefill_read. move => Hcomp ; rewrite Hcomp => Hpref.
-    have: all values_are_integers (rev' (prefill_read_aux C suffix [::] (indexes_read_init comp)))
-      by apply prefill_read_aux_only_values_integers with (C:=C) (comp:= comp)
-      in Hpref => // ; rewrite all_rev.
+    rewrite /prefill_read. move => Hwf Hcomp ; rewrite Hcomp.
+    have Honly: all only_transferable_values_in_ELoad suffix
+      by apply (sub_all wf_event_implies_transf Hwf).
+    have: all values_are_integers (rev' (prefill_read_aux C suffix [::] indexes_read_init)).
+       apply (@prefill_read_aux_only_values_integers C comp)
+      in Honly => // ; by rewrite all_rev.
     by apply E_seq_of_list_expr_integers.
   Qed.
 
-  Lemma prefill_read_no_calls (suffix : trace) (C : Component.id) (comp : Component.interface) (e:expr) :
+  Remark expr_assign_public_implies_e_seq_right_assign_public C:
+    subpred (expr_assign_public C) (e_seq_right_assign_public C).
+  Proof.
+    by case => //= ?? ; rewrite orbF.
+  Qed.
+
+  Lemma prefill_read_no_calls (C : Component.id) (comp : Component.interface) (e:expr) (suffix : trace):
+    all (well_formed_event intf) suffix ->
     (intf C = Some comp) ->
     prefill_read C suffix = Some e ->
     called_procedures e = fset0.
   Proof.
-    move => Hcomp Hpref.
-    have: e_seq_right_assign_public e by apply (prefill_read_only_seq_assign Hcomp Hpref).
+    move => Hwf Hcomp Hpref.
+    have: (e_seq_right_assign_public C) e by apply (prefill_read_only_seq_assign Hwf Hcomp Hpref).
     elim: e {Hpref} => // e IH_e e_seq IH_e_seq ; first last.
     - (* Attempt to avoid the case analysis *)
       (* move: IH_e IH_e_seq ; rewrite /e_seq_right_assign_public orbF. *)
@@ -864,14 +966,10 @@ Section Definability.
       case: val_int => // i.
       case: e_seq => // val. case: val => // [z|t|] /= ; by rewrite !fset0U.
     - (* Real part of the induction *)
-      move => /andP[Hass_e Hass_seq_right]. rewrite -/e_seq_right_assign_public in Hass_seq_right. apply IH_e_seq in Hass_seq_right. rewrite /= Hass_seq_right fsetU0.
-      (* Back to silly case analysis *)
-      case: e IH_e Hass_e => // e_ass e_val.
-      case: e_ass => // bin_add e_loc e_index.
-      case: bin_add => //. case: e_loc => // bk_pub.
-      case: bk_pub => //. case:e_index => // val_int.
-      case: val_int => // i.
-      case: e_val => // val.
+      move => /andP[Hass_e Hass_seq_right].
+      rewrite -/e_seq_right_assign_public in Hass_seq_right.
+      apply IH_e_seq in Hass_seq_right. rewrite /= Hass_seq_right fsetU0.
+      case: e IH_e Hass_e => //= e_ass e_val. by rewrite orbF.
   Qed.
 
   (** We use [switch] to define the following function [expr_of_trace], which
@@ -931,6 +1029,14 @@ Section Definability.
   Definition comp_subtrace (C: Component.id) (t: trace) :=
     filter (filter_comp_subtrace C) t.
 
+  Lemma expr_of_event_cases C P suf ev :
+    C == cur_comp_of_event ev ->
+    exists exp, expr_of_event C P (ev::suf) = Some exp.
+  Proof.
+    intros. subst. case: ev H => [????|??? |??? Cown] /=; last by move => -> ; eexists.
+    all : case: (prefill_read _ _ ) => [exp_trig|] ; by eexists.
+  Qed.
+
   Remark subseq_comp_subtrace C t : subseq (comp_subtrace C t) t.
   Proof. by apply filter_subseq. Qed.
 
@@ -980,7 +1086,6 @@ Section Definability.
   Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace) :
     comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
   Proof. apply: filter_cat. Qed.
-
   Definition procedure_of_trace C P t :=
     expr_of_trace C P (comp_subtrace C t).
 
@@ -1086,7 +1191,7 @@ Section Definability.
         elim: {t Ht} (comp_subtrace C t) (length _) Hwf_sbt => [| e t IH] //= n /andP [_ Ht].
         have Hpref: forall expr, prefill_read C t = Some expr ->
                             values_are_integers expr
-            by move => ? ; apply (prefill_read_only_values_integers intf_C) ;
+            by move => ? ; apply (prefill_read_only_values_integers Ht intf_C) ;
                         apply (sub_all wf_event_implies_transf Ht).
         move: IH ; rewrite !suffixes_of_seq_equiv => IH.
         specialize (IH n Ht).
@@ -1106,7 +1211,7 @@ Section Definability.
           move:Ht => /andP[_ Ht].
           have Hpref: forall expr, prefill_read C t = Some expr ->
                               called_procedures expr = fset0
-              by move => ? ; apply (prefill_read_no_calls intf_C).
+              by move => ? ; apply (prefill_read_no_calls Ht intf_C).
           specialize (IH n Ht).
           case: e => [C' P' arg C''| C' ret C'' | C' i v C''] ;
                       last by (case: (C== _) => /= ; first rewrite !fset0U).
