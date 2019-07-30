@@ -664,11 +664,13 @@ Section Semantics.
       destruct (C == C_) eqn: HCC_ ; move:HCC_ => /eqP HCC_ ; first subst C_.
       + destruct (mem C) eqn:C_in_mem => //.
 
-        rewrite setmE.
+        (* rewrite setmE. *)
+
       (* case:(mem C) => //= memC Hload. case: (mem C_) => //= memC_ Halloc. *)
       (* rewrite -Hload. case: (mem' C) => // [mem'C|]. *)
       (* eapply ComponentMemory.load_after_alloc. *)
       (* rewrite /Memory.load/= in Hload, IHstar. rewrite /Memory.alloc in Halloc. case (mem C) => //. *)
+  Admitted.
 
 
   Lemma memory_reachable cs_i t_i C s (mem : Memory.t) (t : ComponentMemory.t) bufs k e arg Cmem Omem v :
