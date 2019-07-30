@@ -34,6 +34,8 @@ Inductive cont : Type :=
 | Kif (e1: expr) (e2: expr) (k: cont)
 | Kalloc (k: cont)
 | Kderef (k: cont)
+(* Seems not possible to use *)
+(* | KderefExt (k: cont) *)
 | Kassign1 (e: expr) (k: cont)
 | Kassign2 (v: value) (k: cont)
 | Kcall (C: Component.id) (P: Procedure.id) (k: cont).
@@ -149,6 +151,11 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
     Memory.load mem (C',b',o') = Some v ->
     kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o')), arg] E0
             [State C, s, mem, k, E_val v, arg]
+(* If done automatically via take_step, the rule above is chosen instead of this
+   one *)
+(* Should we have another continuation for dereferencing a foreign pointer ?
+   Since e is not evaluated at the point where we create the continuation, I
+   guess it's not possible *)
 | KS_DerefComponentEval : forall C s mem k C' b' o' v arg,
     C <> C' ->
     b' = Block.public -> (* for now, only allowing the preallocated public buffer *)
@@ -551,21 +558,42 @@ Section Semantics.
     Star sem st t st' ->
     all (well_formed_event (prog_interface p)) t.
   Proof.
-  elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
-  rewrite all_cat; case: st1 t1 st2 / Hstep {Hstar} => //=.
-  - move=> ????????? /eqP -> -> => ? transf. by rewrite transf IH.
-  - by move=> ????????? /eqP -> /imported_procedure_iff ->.
-  - by move=> ????????  /eqP ->.
-  Qed.
+    (* have valid_program explicit in signature so that we don't have to use
+       closed_program *)
+    clear complete_program.
+    elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
+    rewrite all_cat; case: st1 t1 st2 / Hstep {Hstar} => //=.
+    - move=> ?? mem ? C' ? o' ?? /eqP -> -> => mem_load transf. rewrite transf IH /= !andbT.
+      move: mem_load ; rewrite /Memory.load/in_bounds/=.
+      inversion valid_program as
+          [ _ _ _ _ wf_defined_buffers [wf_valid_buffers wf_has_req_buffers] _].
+      move: wf_defined_buffers ; rewrite -eq_fset.
+      rewrite /valid_buffers in wf_valid_buffers.
+      destruct (mem C') eqn:memC => //.
+      (* rewrite /ComponentMemory.load. *) (* opaque here *)
+      move => wf_defined_buffers Comp_load.
+
+      (* we have pretty much everything, we just need to plug things from here : *)
+      (* show that the size of the content of the component's memory is the same as the public_buffer_size in the program interface,
+          or the size of the buffers in the program buffers *)
+      (* explicit the link between the buffers and the memory content, ...*)
+      (* eapply load_in_bounds *)
+      (* rewrite -mem_domm in wf_defined_buffers. *)
+
+      (* rewrite /prepare_global_env in G. *)
+      (* Maybe use initial_state to get prepare_buffers, which could allow us to link the buffers and the memory *)
+      admit.
+    - by move=> ????????? /eqP -> /imported_procedure_iff ->.
+    - by move=> ????????  /eqP ->.
+  Admitted.
 
   Lemma trace_wf mainP t cs cs' :
     Star sem cs t cs' ->
     initial_state p cs ->
     prog_main p = Some mainP ->
-    well_formed_program p ->
     well_formed_trace (prog_interface p) t.
   Proof.
-    move=> Hstar Hinitial Hmain Hwf; rewrite /well_formed_trace.
+    move=> Hstar Hinitial Hmain; rewrite /well_formed_trace.
     rewrite (events_wf Hstar) andbT.
     suffices <- : stack_state_of cs = stack_state0 by apply: trace_wb; eauto.
     by move: Hinitial; rewrite /initial_state /initial_machine_state Hmain => ->.
@@ -611,6 +639,59 @@ Section Semantics.
     unfold initial_state, initial_machine_state;
       by eauto.
   Qed.
+  Lemma memory_linked mem :
+    prepare_buffers p = mem ->
+    domm mem = domm (prog_interface p).
+  Proof.
+    rewrite /prepare_buffers.
+    inversion valid_program as [_ _ _ _ def_bufs wf_bufs _]. rewrite def_bufs. move => <-. by apply domm_map.
+  Qed.
+
+  Lemma memory_linked_star cs_i t cs_f ptr v :
+    Star sem cs_i t cs_f ->
+    Memory.load (s_memory cs_i) ptr = Some v ->
+    exists v', Memory.load (s_memory cs_f) ptr = Some v'.
+  Proof.
+    destruct ptr as [[C b] o].
+    move => Hstar Hload.
+    induction Hstar as [|cs_i t1 cs_int t2 cs_f t Hstep Hstar IHstar Htrace] ;
+      first (by exists v).
+    induction Hstep as [ |  | | | | | | | | | | |
+                         C_ s mem mem' k size [[C' b'] o'] arg Hsize Halloc | | | | | |
+                         C_ s mem mem' k v' C' b' o' arg HCC' Hstore | | | | | ] ;
+      subst ; try (simpl in Hload, IHstar ; by apply (IHstar Hload)) ; apply IHstar ; clear IHstar.
+    - move: Hload Halloc. rewrite /Memory.load/Memory.alloc/=.
+      destruct (C == C_) eqn: HCC_ ; move:HCC_ => /eqP HCC_ ; first subst C_.
+      + destruct (mem C) eqn:C_in_mem => //.
+
+        rewrite setmE.
+      (* case:(mem C) => //= memC Hload. case: (mem C_) => //= memC_ Halloc. *)
+      (* rewrite -Hload. case: (mem' C) => // [mem'C|]. *)
+      (* eapply ComponentMemory.load_after_alloc. *)
+      (* rewrite /Memory.load/= in Hload, IHstar. rewrite /Memory.alloc in Halloc. case (mem C) => //. *)
+
+
+  Lemma memory_reachable cs_i t_i C s (mem : Memory.t) (t : ComponentMemory.t) bufs k e arg Cmem Omem v :
+    prog_main p ->
+    initial_state p cs_i -> (* necessary ? *)
+
+    (* Component existing statically and dynamically, better way to enforce ? *)
+    mem Cmem = Some t ->
+    (prog_buffers p) Cmem = Some bufs ->
+
+    Star sem cs_i t_i [State C, s, mem, k, e, arg] ->
+    Z.to_nat Omem < buffer_size (get_buffer bufs Block.pub)
+    <->  ComponentMemory.load t Block.public Omem = Some v.
+  (* wow, such tedious *)
+  Proof.
+    rewrite /initial_state/initial_machine_state/=.
+    case (prog_main p) => // main_expr.
+    move => _ init Hmem Hbufs. subst => Hstar.
+    split => [Hstat | Hdyn].
+
+
+  Admitted.
+
 End Semantics.
 
 End CS.

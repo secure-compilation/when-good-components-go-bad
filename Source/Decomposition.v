@@ -573,8 +573,8 @@ Section Decomposition.
     move=> sini t sfin Hinitial Hstar e /In_in in_t.
     move: (cprog_main_existence closedness_after_linking).
     case e_main: (prog_main _)=> [mainP|] //= _.
-    have := linking_well_formedness wf1 wf2 linkability.
-    move/(CS.trace_wf Hstar Hinitial e_main)=> trace_wf.
+    have Hwf := linking_well_formedness wf1 wf2 linkability.
+    move/(CS.trace_wf Hwf Hstar Hinitial) : e_main => trace_wf.
     have := cprog_closed_interface closedness_after_linking.
     move/(well_formed_trace_int trace_wf)/seq.allP/(_ _ in_t).
     rewrite /declared_event_comps.
