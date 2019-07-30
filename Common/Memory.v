@@ -183,6 +183,22 @@ Module ComponentMemory : AbstractComponentMemory.
     - by move=> /IH [chunk' ->]; eauto.
   Qed.
 
+  (* Added here since ComponentMemory.load is opaque *)
+  (* not sufficient though *)
+  Lemma load_in_bounds:
+    forall m b i chunk v,
+      (* pretty useless bit since implied by succesful load *)
+      (getm (content m) b) = Some chunk ->
+      load m b i = Some v ->
+      (0 <=? i)%Z /\ (* (i <? Z.of_nat(length (chunk)))%Z *)
+      ((Z.to_nat i) <? length (chunk)).
+  Proof.
+    move => m b i chunk v Hchunk.
+    rewrite /load Hchunk. case : (0 <=? i)%Z => // Hload ; split ; first done.
+    have: nth_error chunk (Z.to_nat i) <> None by move: Hload => -> .
+    rewrite nth_error_Some. by move => /Nat.ltb_spec0.
+  Qed.
+
 End ComponentMemory.
 
 Module Memory.

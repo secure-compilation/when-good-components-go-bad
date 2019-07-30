@@ -178,6 +178,15 @@ Definition stack_state0 := StackState Component.main [::].
 
 Implicit Types (t : trace) (C : Component.id) (s : stack_state) (intf : Program.interface).
 
+(* Definition public_buffer (size:nat): nat * (NMap value) := (size, emptym). *)
+Definition public_buffer : NMap value := emptym.
+
+(* Definition program_public_buffers intf := *)
+(*   mkfmapf (fun Cid => public_buffer (Component.public_buffer_size (intf Cid))) *)
+(*           (domm intf). *)
+Definition program_public_buffers intf :=
+  mkfmapf (fun _ => public_buffer)
+          (domm intf).
 Fixpoint well_bracketed_trace s t : bool :=
   match t with
   | [::] => true
@@ -186,21 +195,54 @@ Fixpoint well_bracketed_trace s t : bool :=
     match e with
     | ECall C _ _ C' =>
       well_bracketed_trace (StackState C' (C :: callers s)) t'
-    | ERet C _ C' =>
+    | ERet _ _ C' =>
       match callers s with
       | [] => false
       | head :: tail =>
         (head == C') && well_bracketed_trace (StackState C' tail) t'
       end
-    | ELoad C _ _ _ => well_bracketed_trace s t' (* since we're not giving turn, this doesn't change the stack state and we go on *)
+    | ELoad _ _ _ _ => well_bracketed_trace s t'
+    (* since we're not giving turn, this doesn't change the stack state and we go on *)
+    end
+  end.
+
+(* maybe we should check if the loads still consists of the same value (with a map describing (indexes->values) and reset when given turn back)  *)
+(* variant of wb_trace with check of the consistency of the values of load *)
+(** TODO check consistency of components IDs *)
+Fixpoint well_bracketed_trace_with_load intf (buffers : NMap (NMap value)) s t : bool :=
+  match t with
+  | [::] => true
+  | e :: t' =>
+    (cur_comp s == cur_comp_of_event e) &&
+    match e with
+    | ECall C _ _ C' =>
+      well_bracketed_trace_with_load intf (setm buffers C' public_buffer)
+                                     (StackState C' (C :: callers s)) t'
+    | ERet _ _ C' =>
+      match callers s with
+      | [] => false
+      | head :: tail =>
+        (head == C')
+          && well_bracketed_trace_with_load intf (setm buffers C' public_buffer)
+                                            (StackState C' tail) t'
+      end
+    | ELoad C o v C' =>
+      if (buffers C') is Some bufs then
+        match (bufs (Z.to_nat o)) with (* Safe to use since we check bounds with well_formed_event *)
+        | Some v' => (v == v') (* we could stop here early (same goes for the test head == C' in ERet case) *)
+                      && well_bracketed_trace_with_load intf buffers s t'
+        | None => well_bracketed_trace_with_load
+                   intf (setm buffers C' (setm bufs (Z.to_nat o) v)) s t'
+        end
+      else false
     end
   end.
 
 Definition run_event s e :=
   match e with
   | ECall C _ _ C' => StackState C' (C :: callers s)
-  | ERet  C _   C' => StackState C' (tail (callers s))
-  | ELoad C _ _ _  => s
+  | ERet  _ _   C' => StackState C' (tail (callers s))
+  | ELoad _ _ _ _  => s
   end.
 
 Definition run_trace s t := foldl run_event s t.
@@ -279,11 +321,83 @@ have : suffix [:: C, C' & tail (callers (run_trace stack_state0 pre))]
 exact: well_bracketed_trace_suffix=> //.
 Qed.
 
+(* Similar inversion as the previous one but for ELoads *)
+(** When we have an ELoad event, either we have an ECall that gave turn or it's
+    the main component that's loading memory *)
+(* We can have this kind with an empty stack trace, but do we need the other cases ? *)
+Lemma well_bracketed_trace_load_inv t C i v C' C'':
+  well_bracketed_trace stack_state0 (t ++ [:: ELoad C i v C'']) ->
+  let loads_from c := fun e => if e is ELoad c' _ _ _ then c == c' else false in
+  (exists t1 P arg t2, t = t1 ++ ECall C' P arg C :: t2 /\ all (loads_from C) t2 (* restrictions on t2 ? Only ELoads from the same C ? *) )
+  \/ (* maybe too restrictive? Or we can state this about a subtrace of t ? (if we fill the call stack then empty it, we cannot state this) *)
+  (C = Component.main /\ all (loads_from Component.main) t).
+Proof.
+(* rewrite -[t]cat0s. *)
+(* elim: t {1 3}nil=> [|e t IH] pre //; last first. *)
+(* { rewrite -cat1s [pre ++ _]catA. specialize (IH (pre ++ [e])). *)
+(*   intro Hwb'. inversion Hwb' as [Hwb]. apply IH in Hwb'. destruct Hwb' as [Hinv | Hmain] ; first by left. *)
+(*   right. simpl. destruct Hmain as [? Htrace]. split ; first assumption. *)
+(*   apply/andP ; split ; last assumption. *)
+(*   rewrite well_bracketed_trace_cat in Hwb. *)
+(*   move:Hwb => /= /andP[Hwb] /andP[(* Hcur_comp Hcallers *)]. *)
+(*   move:Hwb. rewrite -catA cat1s well_bracketed_trace_cat => /andP[]. *)
+(*   case:e IH => /= [????|???|????] IH ; *)
+(*                 (* Well, maybe a bit too general *) *)
+(*                 admit. *)
+(* } *)
+
+
+(* rewrite cats0 well_bracketed_trace_cat /=. *)
+(* case/and3P=> wb_t /eqP e_C e_C'. *)
+(* have : suffix [:: C & tail (callers (run_trace stack_state0 pre))] *)
+(*               (run_trace stack_state0 pre). *)
+(* { *)
+(*   case: run_trace e_C e_C'=> [? [|??]] //=; rewrite andbT. *)
+(*     by move=> -> /eqP -> ; rewrite suffix_refl. *)
+(*     by move=> -> /eqP -> ; apply suffix_prepended ; rewrite suffix_refl. *)
+(* } *)
+
+  (* We're better off starting from scratch this proof *)
+rewrite -[t]cat0s.
+elim: t {1 3}nil=> [|e t IH] pre //; last first.
+{ rewrite -cat1s [pre ++ _]catA. specialize (IH (pre ++ [e])).
+  intro Hwb'. inversion Hwb' as [Hwb]. apply IH in Hwb'. destruct Hwb' as [Hinv | Hmain] ; first by left.
+  right. simpl. destruct Hmain as [? Htrace]. split ; first assumption.
+  apply/andP ; split ; last assumption.
+  rewrite well_bracketed_trace_cat in Hwb.
+  move:Hwb => /= /andP[Hwb] /andP[Hcur_comp _].
+  move:Hwb. rewrite -catA cat1s well_bracketed_trace_cat => /andP[].
+  case:e IH Hcur_comp => /= [????|???|????] IH ;
+                (* Well, maybe a bit too general *)
+                admit.
+}
+
+
+rewrite cats0 well_bracketed_trace_cat /=.
+case/and3P=> wb_t /eqP e_C e_C'.
+have : suffix [:: C & tail (callers (run_trace stack_state0 pre))]
+              (run_trace stack_state0 pre).
+{ admit.
+  (* case: run_trace e_C e_C'=> [? [|??]] //=; rewrite andbT. *)
+  (*   by move=> -> /eqP -> ; rewrite suffix_refl. *)
+  (*   by move=> -> /eqP -> ; apply suffix_prepended ; rewrite suffix_refl. *)
+}
+
+Admitted.
+
+Definition in_bounds intf C index : bool :=
+  match (intf C) with
+  | Some comp_intf =>
+    let size := (Component.public_buffer_size comp_intf) in
+    ( Z.leb 0%Z index) && (Nat.ltb (Z.to_nat index) size)
+  | _ => false
+  end.
+
 Definition well_formed_event intf (e: event) : bool :=
   match e with
   | ECall C P _ C' => (C != C') && imported_procedure_b intf C C' P
   | ERet  C _   C' => (C != C')
-  | ELoad C _ v C' => (C != C') && (is_transferable_value v)
+  | ELoad C o v C' => (C != C') && (is_transferable_value v) && (in_bounds intf C' o)
   end.
 
 Definition well_formed_trace intf (t: trace) : bool :=
@@ -314,9 +428,18 @@ apply/allP; case=> [C P v C'|C v C' | C off v C'] /=; unfold Program.has_compone
     by move/allP: wf; apply; rewrite !mem_cat inE eqxx /= orbT.
   case/andP=> _ imp.
   case/imported_procedure_iff/clos: (imp)=> ? [-> _] /=.
-  by move: imp; rewrite /imported_procedure_b; case: getm.
+    by move: imp; rewrite /imported_procedure_b; case: getm.
+- move=> in_p; case/path.splitP: in_p wb wf => {t} t1 t2.
+  rewrite -cats1 /= well_bracketed_trace_cat.
+  case/andP => /well_bracketed_trace_load_inv [[t11 [P [v' [t12 ->]]]] ?]_ wf.
+
+  move/(allP wf)=> /andP[]/andP[] /eqP CC' transf.
+  rewrite/in_bounds ; destruct (intf C') as [Cintf|] eqn:hasCintf => // /andP[b1 b2].
+  apply/andP ; split ; first last.
+  rewrite -mem_domm. apply/dommP. by exists Cintf.
+(* To prove intf C, I guess we should add an evidence in well_formed_event *)
+(* Or have a similar kind of inversion as with the return events since we should load a component only if this component has been given turn *)
   admit.
 Admitted.
-(* Qed. *)
 
 End Traces.
