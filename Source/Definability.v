@@ -332,6 +332,13 @@ Section Definability.
     | expr :: exprs' => Some (E_seq_of_exprs_right expr exprs')
     end.
 
+  Definition E_seq_of_list_expr' (exprs : list expr) : option expr :=
+    match exprs with
+    | [] => None
+    | expr :: exprs' => Some (fold_left (fun exp1 exp__added => E_seq exp1 exp__added)
+                                      exprs' expr)
+    end.
+
   Lemma E_seq_of_list_expr_integers (exprs : list expr) : forall (e : expr),
     all (values_are_integers) exprs ->
     E_seq_of_list_expr exprs = Some e ->
@@ -356,6 +363,34 @@ Section Definability.
                                   (E_val (Int 2))) in
     E_seq_of_list_expr list_expr = Some seq_expr.
   Proof. reflexivity. Qed.
+
+  Example test_E_seq_of_list_expr' :
+    let list_expr := [E_val (Int 0); E_val (Int 1); E_val (Int 2)] in
+    let seq_expr  := E_seq (E_seq (E_val (Int 0))
+                                  (E_val (Int 1)))
+                           (E_val (Int 2)) in
+    E_seq_of_list_expr' list_expr = Some seq_expr.
+  Proof. reflexivity. Qed.
+
+  Lemma e_seq_assoc p exprs exp_prefill exp_prefill' C s mem mem' k arg evs last_e:
+    E_seq_of_list_expr  (rcons exprs last_e) = Some exp_prefill  ->
+    E_seq_of_list_expr' (rcons exprs last_e) = Some exp_prefill' ->
+    Plus (CS.sem p)
+         [CState C, s, mem,  k, exp_prefill, arg] evs
+         [CState C, s, mem', k, last_e, arg] <->
+    Plus (CS.sem p)
+         [CState C, s, mem,  k, exp_prefill', arg] evs
+         [CState C, s, mem', k, last_e, arg].
+  Proof.
+    case: exprs => [|first_e exprs] ; rewrite /E_seq_of_exprs_right/= => Hexp Hexp';
+      inversion Hexp ; inversion Hexp' ; subst ; clear Hexp Hexp' ; first reflexivity.
+    move: first_e last_e C s mem mem' k arg evs. rewrite /E_seq_of_exprs_right /=.
+    induction exprs as [| second_e exprs IHexprs] => //= ; split (* => [ Hfoldr | Hfoldl ] *).
+    - move => Hfoldr. apply IHexprs.
+      move: Hfoldr; rewrite !last_rcons !belast_rcons /= => Hfoldr.
+      inversion Hfoldr as [? ? ? ? ? ? Hstep Hstar] ; subst.
+      (* erewrite CS.seq_assoc_in_CS. *)
+  Admitted.
 
   (** Gives an assignement expression of the public memory (at index off) to val *)
   Definition assign_public off val :=
