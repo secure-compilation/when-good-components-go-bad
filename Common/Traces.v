@@ -431,12 +431,12 @@ apply/allP; case=> [C P v C'|C v C' | C off v C'] /=; unfold Program.has_compone
     by move: imp; rewrite /imported_procedure_b; case: getm.
 - move=> in_p; case/path.splitP: in_p wb wf => {t} t1 t2.
   rewrite -cats1 /= well_bracketed_trace_cat.
-  case/andP => /well_bracketed_trace_load_inv [[t11 [P [v' [t12 ->]]]] ?]_ wf.
+  (* case/andP => /well_bracketed_trace_load_inv [[t11 [P [v' [t12 ->]]]] ?]_ wf. *)
 
-  move/(allP wf)=> /andP[]/andP[] /eqP CC' transf.
-  rewrite/in_bounds ; destruct (intf C') as [Cintf|] eqn:hasCintf => // /andP[b1 b2].
-  apply/andP ; split ; first last.
-  rewrite -mem_domm. apply/dommP. by exists Cintf.
+  (* move/(allP wf)=> /andP[]/andP[] /eqP CC' transf. *)
+  (* rewrite/in_bounds ; destruct (intf C') as [Cintf|] eqn:hasCintf => // /andP[b1 b2]. *)
+  (* apply/andP ; split ; first last. *)
+  (* rewrite -mem_domm. apply/dommP. by exists Cintf. *)
 (* To prove intf C, I guess we should add an evidence in well_formed_event *)
 (* Or have a similar kind of inversion as with the return events since we should load a component only if this component has been given turn *)
   admit.

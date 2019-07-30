@@ -268,6 +268,18 @@ Module Memory.
     by eauto.
   Qed.
 
+  Lemma load_after_alloc mem mem' n C b i:
+      alloc mem C n = Some (mem', (C,b,i)) ->
+    forall b',
+      b' <> b -> load mem' (C, b', i) = load mem (C, b', i).
+  Proof.
+    rewrite /load/alloc/=. case mem_C: (mem C)=> [Cmem|] //= Halloc b'.
+    destruct (ComponentMemory.alloc Cmem n) as [Cmem' ?] eqn:CompAlloc.
+    inversion Halloc ; subst ; clear Halloc.
+    have -> : (setm mem C Cmem') C = Some Cmem' by rewrite setmE eqxx.
+    by apply (ComponentMemory.load_after_alloc Cmem Cmem' n b CompAlloc).
+  Qed.
+
 End Memory.
 
 Set Implicit Arguments.
