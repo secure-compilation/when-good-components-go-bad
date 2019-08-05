@@ -481,7 +481,7 @@ Section Mergeable.
               end.
         assert (Hin : Pointer.component ptr \in domm (unionm ip ic)).
         { rewrite H11.
-          rewrite domm_union. Search _ "\in" ":|:".
+          rewrite domm_union.
           rewrite in_fsetU. apply /orP.
           apply star_iff_starR in Hstar.
           eapply pc_component_in_ip_or_ic; eassumption.
@@ -498,7 +498,7 @@ Section Mergeable.
               | Heq: Some = None _ |- _ => now inversion Heq
               end.
         assert (Hin : Pointer.component pc2 \in domm (unionm ip ic)).
-        { rewrite domm_union. Search _ "\in" ":|:".
+        { rewrite domm_union.
           rewrite in_fsetU. apply /orP.
           apply star_iff_starR in Hstar.
           eapply pc_component_in_ip_or_ic; eassumption.
@@ -1084,7 +1084,6 @@ Section PS.
     - inversion Hmem.
   Qed.
   
-  
   (* JT: I think this lemma could replace the two above lemmas *)
   (* JT: TODO: Clean this proof *)
   Lemma merge_states_silent_star s s1'' s2'' :
@@ -1533,7 +1532,6 @@ Section ThreewayMultisem1.
     to_partial_memory (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) (domm ic).
   Proof.
     intros Hmerg.
-    Search _ to_partial_memory.
     apply /eq_fmap => Cid.
     pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
       as Hmergeable_ifaces_sym.
@@ -2059,8 +2057,7 @@ Section ThreewayMultisem2.
     intros H H0 H1.
     destruct (CS.is_program_component s1 ic) eqn:Hprg_component.
     - now apply threeway_multisem_star_E0_program.
-    - Check merge_states_sym.
-      rewrite (merge_states_sym _ _ _ _ _ _ _ _ _ H); try assumption.
+    - rewrite (merge_states_sym _ _ _ _ _ _ _ _ _ H); try assumption.
       rewrite (merge_states_sym _ _ _ _ _ _ _ _ _ (threeway_multisem_mergeable H H0 H1)); try assumption.
       (* unfold merge_states. *)
       (* fold (merge_states c p s1'' s1). *)
