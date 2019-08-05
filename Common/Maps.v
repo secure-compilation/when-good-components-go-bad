@@ -214,7 +214,10 @@ Lemma domm_eq_filterm (T T' T'' : Type) (i1 : NMap T) (m1 : NMap T') (m2 : NMap 
     domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) =
     domm (filterm (fun (k : nat) (_ : T'') => k \notin domm i1) m2).
 Proof.
-  unfold filterm. 
+  move=> H.
+  apply /eq_fset => k.
+  set (fn := fun (k0 : nat) (_ : T') => k0 \notin domm i1) in *.
+  set (fn' := fun (k0 : nat) (_ : T'') => k0 \notin domm i1) in *.
 Admitted.
 
 
