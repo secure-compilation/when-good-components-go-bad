@@ -1083,7 +1083,15 @@ Section PS.
       + inversion Hmem.
     - inversion Hmem.
   Qed.
-  
+
+  (* RB: NOTE: Pretty sure we have proved many similar results several times
+     by now... *)
+  Lemma mergeable_states_program_component_domm mem gps regs pc s'' :
+    mergeable_states p c p' c' (mem, gps, regs, pc) s'' ->
+    CS.is_program_component (mem, gps, regs, pc) (prog_interface c) ->
+    Pointer.component pc \in domm (prog_interface p).
+  Admitted.
+
   (* JT: I think this lemma could replace the two above lemmas *)
   (* JT: TODO: Clean this proof *)
   Lemma merge_states_silent_star s s1'' s2'' :
@@ -1093,131 +1101,146 @@ Section PS.
     merge_states (prog_interface p) (prog_interface c) s s1'' =
     merge_states (prog_interface p) (prog_interface c) s s2''.
   Proof.
-    intros Hmerg Hcomp Hstar.
+    intros Hmerge1 Hcomp Hstar12''.
     remember E0 as t.
-    apply star_iff_starR in Hstar.
-    induction Hstar.
+    apply star_iff_starR in Hstar12''.
+    induction Hstar12''
+      as [s'' | s1'' t1 s2'' t2 s3'' ? Hstar12'' IHstar'' Hstep23'' Ht12]; subst.
     - reflexivity.
-    - subst.
-      assert (H1 : t1 = E0) by now destruct t1.
-      assert (H2 : t2 = E0) by now destruct t1.
-      subst; clear H0.
-      assert (Hcomp1 : CS.is_program_component s1 (prog_interface c)).
-      { destruct s as [[[gps mem] regs] pc]; destruct s1 as [[[gps1 mem1] regs1] pc1].
-        unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in *.
-        replace pc with (CS.state_pc (gps, mem, regs, pc)); try reflexivity.
-        replace pc1 with (CS.state_pc (gps1, mem1, regs1, pc1)); try reflexivity.
-        erewrite mergeable_states_pc_same_component with (s'' := (gps, mem, regs, pc))
-                                                         (p := c') (c := p') (c' := p) (p' := c).
-        apply Hcomp.
-        apply mergeable_states_sym; try eassumption; try congruence.
-        rewrite -Hifacec -Hifacep.
-        now apply mergeable_interfaces_sym.
+    - symmetry in Ht12; apply Eapp_E0_inv in Ht12 as [? ?]; subst.
+      specialize (IHstar'' Hmerge1 eq_refl).
+      rewrite IHstar''.
+      inversion Hstep23'';
+        match goal with
+        | H2 : _ = s2'',
+          H3 : _ = s3'' |- _ =>
+          destruct s2'' as [[[gps2'' mem2''] regs2''] pc2'']; inversion H2;
+          destruct s3'' as [[[gps3'' mem3''] regs3''] pc3'']; inversion H3;
+          subst; clear H2; clear H3
+        end.
+
+      1:{
+        destruct s as [[[gps mem] regs] pc].
+        unfold merge_states, merge_registers, merge_pcs.
+        erewrite mergeable_states_program_component_domm; try eassumption.
+        reflexivity.
       }
-      specialize (IHHstar Hmerg eq_refl).
-      apply star_iff_starR in Hstar.
-      assert (Hcomp2 : CS.is_program_component s2 (prog_interface c'))
-       by now (eapply epsilon_star_preserves_program_component; try rewrite -Hifacec; eauto).
-      rewrite IHHstar; clear IHHstar.
-      inversion Hmerg as [s0 s0'' t Hini Hini'' Hstar0 Hstar0''].
-      inversion H; subst; try now t_merge_states_silent_star Hini Hini'' Hstar0 Hstar0'' Hstar.
-      + erewrite !mergeable_states_merge_program; try eassumption.
-        erewrite merge_states_stack_pc_independent_right with (pc2' := Pointer.inc pc); try eassumption.
-        erewrite merge_states_mem_pc_independent_right with (pc2' := Pointer.inc pc); try eassumption.
-        erewrite merge_states_stack_mem_independent_right with (mem2' := mem'); try eassumption.
-        assert (Heq: merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem, regs, Pointer.inc pc) =
-                     merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem', regs, Pointer.inc pc)).
-        {
-          unfold merge_states_mem, merge_memories.
-          apply /eq_fmap => Cid. rewrite 2!unionmE.
-          pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
-            as Hmergeable_ifaces_sym.
-          destruct (Cid \in domm ip) eqn:Hdommp;
-            destruct (Cid \in domm ic) eqn:Hdommc.
-          - exfalso.
-            apply component_in_ic_notin_ip with (ip := ip) in Hdommc.
-            now rewrite Hdommp in Hdommc.
-            assumption.
-          - erewrite to_partial_memory_in; try eassumption.
-            erewrite to_partial_memory_notin; try eassumption.
-            erewrite to_partial_memory_notin; try eassumption.
-            reflexivity.
-          - erewrite to_partial_memory_notin; try eassumption.
-            simpl.
-            erewrite to_partial_memory_in; try eassumption.
-            erewrite to_partial_memory_in; try eassumption.
-            (* Now, why are they equal?
-               1) Cid \in domm ic.
-               2) Pointer.component ptr = Pointer.component pc \notin domm ic
-               3) Memory.store mem ptr (Register.get r2 regs) = Some mem'
-             *)
-            unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp2.
-            (* destruct s as [[[? ?] ?] pc__s]. *)
-            (* Search _ Memory.store. *)
-            erewrite mem_store_different_component.
-            reflexivity.
-            apply H3.
-            intros Hn; subst.
-            rewrite -H2 -Hifacec in Hcomp2.
-            now rewrite Hdommc in Hcomp2.
-          - erewrite !to_partial_memory_notin_strong; try eassumption;
-              try now apply negb_true_iff in Hdommc;
-              try now apply negb_true_iff in Hdommp.
-            destruct (isSome ((CS.state_mem s) Cid)) eqn:HisSome; try reflexivity.
-            simpl.
-            (* Might want to use star_mem_well_formed to prove these subgoals. *)
-            assert (Hmem: mem Cid = None).
-            { apply /dommPn.
-              apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
-              assert (Hmem : domm mem = domm (unionm ip ic)).
-              { replace mem with (CS.state_mem (gps, mem, regs, pc)).
-                apply CS.comes_from_initial_state_mem_domm.
-                inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
-                rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
-                pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
-                exists prog'', main, s0'', t.
-                unfold ip, ic; rewrite Hifacec Hifacep.
-                repeat (split; eauto).
-                eapply star_trans; eauto.
-                clear; induction t; first reflexivity.
-                simpl; now rewrite -IHt.
-                reflexivity.
-              }
-              rewrite Hmem.
-              rewrite domm_union. apply /fsetUP.
-              intros Hn; destruct Hn as [Hn | Hn].
-              now rewrite Hn in Hdommp.
-              now rewrite Hn in Hdommc.
-            }
-            assert (Hmem': mem' Cid = None).
-            { apply /dommPn.
-              apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
-              assert (Hmem'' : domm mem' = domm (unionm ip ic)).
-              { replace mem' with (CS.state_mem (gps, mem', regs, Pointer.inc pc)).
-                apply CS.comes_from_initial_state_mem_domm.
-                inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
-                rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
-                pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
-                exists prog'', main, s0'', t.
-                unfold ip, ic; rewrite Hifacec Hifacep.
-                repeat (split; eauto).
-                eapply star_trans; eauto.
-                apply star_iff_starR. eapply starR_step; try apply star_iff_starR; eauto.
-                clear; induction t; first reflexivity.
-                simpl; now rewrite -IHt.
-                reflexivity.
-              }
-              rewrite Hmem''.
-              rewrite domm_union. apply /fsetUP.
-              intros Hn; destruct Hn as [Hn | Hn].
-              now rewrite Hn in Hdommp.
-              now rewrite Hn in Hdommc.
-            }
-            now rewrite Hmem Hmem'.
-        }
-        now rewrite Heq.
-        t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
-        t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
+
+    (*   assert (Hcomp1 : CS.is_program_component s1'' (prog_interface c)). *)
+    (*   { destruct s as [[[gps mem] regs] pc]; destruct s1'' as [[[gps1 mem1] regs1] pc1]. *)
+    (*     unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in *. *)
+    (*     replace pc with (CS.state_pc (gps, mem, regs, pc)); try reflexivity. *)
+    (*     replace pc1 with (CS.state_pc (gps1, mem1, regs1, pc1)); try reflexivity. *)
+    (*     erewrite mergeable_states_pc_same_component with (s'' := (gps, mem, regs, pc)) *)
+    (*                                                      (p := c') (c := p') (c' := p) (p' := c). *)
+    (*     apply Hcomp. *)
+    (*     apply mergeable_states_sym; try eassumption; try congruence. *)
+    (*     rewrite -Hifacec -Hifacep. *)
+    (*     now apply mergeable_interfaces_sym. *)
+    (*   } *)
+    (*   apply star_iff_starR in Hstar12''. *)
+    (*   assert (Hcomp2 : CS.is_program_component s2'' (prog_interface c')) *)
+    (*    by now (eapply epsilon_star_preserves_program_component; try rewrite -Hifacec; eauto). *)
+    (*   rewrite IHHstar; clear IHHstar. *)
+    (*   inversion Hmerg as [s0 s0'' t Hini Hini'' Hstar0 Hstar0'']. *)
+    (*   inversion H; subst; try now t_merge_states_silent_star Hini Hini'' Hstar0 Hstar0'' Hstar. *)
+    (*   + erewrite !mergeable_states_merge_program; try eassumption. *)
+    (*     erewrite merge_states_stack_pc_independent_right with (pc2' := Pointer.inc pc); try eassumption. *)
+    (*     erewrite merge_states_mem_pc_independent_right with (pc2' := Pointer.inc pc); try eassumption. *)
+    (*     erewrite merge_states_stack_mem_independent_right with (mem2' := mem'); try eassumption. *)
+    (*     assert (Heq: merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem, regs, Pointer.inc pc) = *)
+    (*                  merge_states_mem (prog_interface p) (prog_interface c) s (gps, mem', regs, Pointer.inc pc)). *)
+    (*     { *)
+    (*       unfold merge_states_mem, merge_memories. *)
+    (*       apply /eq_fmap => Cid. rewrite 2!unionmE. *)
+    (*       pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces *)
+    (*         as Hmergeable_ifaces_sym. *)
+    (*       destruct (Cid \in domm ip) eqn:Hdommp; *)
+    (*         destruct (Cid \in domm ic) eqn:Hdommc. *)
+    (*       - exfalso. *)
+    (*         apply component_in_ic_notin_ip with (ip := ip) in Hdommc. *)
+    (*         now rewrite Hdommp in Hdommc. *)
+    (*         assumption. *)
+    (*       - erewrite to_partial_memory_in; try eassumption. *)
+    (*         erewrite to_partial_memory_notin; try eassumption. *)
+    (*         erewrite to_partial_memory_notin; try eassumption. *)
+    (*         reflexivity. *)
+    (*       - erewrite to_partial_memory_notin; try eassumption. *)
+    (*         simpl. *)
+    (*         erewrite to_partial_memory_in; try eassumption. *)
+    (*         erewrite to_partial_memory_in; try eassumption. *)
+    (*         (* Now, why are they equal? *) *)
+    (* (*            1) Cid \in domm ic. *) *)
+    (* (*            2) Pointer.component ptr = Pointer.component pc \notin domm ic *) *)
+    (* (*            3) Memory.store mem ptr (Register.get r2 regs) = Some mem' *) *)
+    (* (*          *) *)
+    (*         unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp2. *)
+    (*         (* destruct s as [[[? ?] ?] pc__s]. *) *)
+    (*         (* Search _ Memory.store. *) *)
+    (*         erewrite mem_store_different_component. *)
+    (*         reflexivity. *)
+    (*         apply H3. *)
+    (*         intros Hn; subst. *)
+    (*         rewrite -H2 -Hifacec in Hcomp2. *)
+    (*         now rewrite Hdommc in Hcomp2. *)
+    (*       - erewrite !to_partial_memory_notin_strong; try eassumption; *)
+    (*           try now apply negb_true_iff in Hdommc; *)
+    (*           try now apply negb_true_iff in Hdommp. *)
+    (*         destruct (isSome ((CS.state_mem s) Cid)) eqn:HisSome; try reflexivity. *)
+    (*         simpl. *)
+    (*         (* Might want to use star_mem_well_formed to prove these subgoals. *) *)
+    (*         assert (Hmem: mem Cid = None). *)
+    (*         { apply /dommPn. *)
+    (*           apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc. *)
+    (*           assert (Hmem : domm mem = domm (unionm ip ic)). *)
+    (*           { replace mem with (CS.state_mem (gps, mem, regs, pc)). *)
+    (*             apply CS.comes_from_initial_state_mem_domm. *)
+    (*             inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]]. *)
+    (*             rewrite Hifacec Hifacep in Hmergeable_ifaces_sym. *)
+    (*             pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf. *)
+    (*             exists prog'', main, s0'', t. *)
+    (*             unfold ip, ic; rewrite Hifacec Hifacep. *)
+    (*             repeat (split; eauto). *)
+    (*             eapply star_trans; eauto. *)
+    (*             clear; induction t; first reflexivity. *)
+    (*             simpl; now rewrite -IHt. *)
+    (*             reflexivity. *)
+    (*           } *)
+    (*           rewrite Hmem. *)
+    (*           rewrite domm_union. apply /fsetUP. *)
+    (*           intros Hn; destruct Hn as [Hn | Hn]. *)
+    (*           now rewrite Hn in Hdommp. *)
+    (*           now rewrite Hn in Hdommc. *)
+    (*         } *)
+    (*         assert (Hmem': mem' Cid = None). *)
+    (*         { apply /dommPn. *)
+    (*           apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc. *)
+    (*           assert (Hmem'' : domm mem' = domm (unionm ip ic)). *)
+    (*           { replace mem' with (CS.state_mem (gps, mem', regs, Pointer.inc pc)). *)
+    (*             apply CS.comes_from_initial_state_mem_domm. *)
+    (*             inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]]. *)
+    (*             rewrite Hifacec Hifacep in Hmergeable_ifaces_sym. *)
+    (*             pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf. *)
+    (*             exists prog'', main, s0'', t. *)
+    (*             unfold ip, ic; rewrite Hifacec Hifacep. *)
+    (*             repeat (split; eauto). *)
+    (*             eapply star_trans; eauto. *)
+    (*             apply star_iff_starR. eapply starR_step; try apply star_iff_starR; eauto. *)
+    (*             clear; induction t; first reflexivity. *)
+    (*             simpl; now rewrite -IHt. *)
+    (*             reflexivity. *)
+    (*           } *)
+    (*           rewrite Hmem''. *)
+    (*           rewrite domm_union. apply /fsetUP. *)
+    (*           intros Hn; destruct Hn as [Hn | Hn]. *)
+    (*           now rewrite Hn in Hdommp. *)
+    (*           now rewrite Hn in Hdommc. *)
+    (*         } *)
+    (*         now rewrite Hmem Hmem'. *)
+    (*     } *)
+    (*     now rewrite Heq. *)
+    (*     t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar. *)
+    (*     t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar. *)
   Admitted.
 
   (* The following should be an easy corollary of the _is_silent lemma. *)
