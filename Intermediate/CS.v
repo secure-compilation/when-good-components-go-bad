@@ -45,6 +45,11 @@ Instance state_turn : HasTurn state := {
 Definition is_context_component (st: state) ctx := turn_of st ctx.
 Definition is_program_component (st: state) ctx := negb (is_context_component st ctx).
 
+Ltac simplify_turn :=
+  unfold is_program_component, is_context_component in *;
+  unfold turn_of, state_turn in *;
+  simpl in *.
+
 Definition state_stack (st : state) : stack :=
   let '(gps, _, _, _) := st in gps.
 
