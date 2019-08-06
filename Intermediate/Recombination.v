@@ -1032,57 +1032,31 @@ Section PS.
   (*   merge_states (prog_interface p) (prog_interface c) s s2''. *)
   (* Admitted. *)
 
-  Ltac t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar :=
-    match goal with
-      | |- mergeable_states _ _ _ _ _ (_, _, _, Pointer.inc _) =>
-        eapply (mergeable_states_intro Hini Hini'' Hstar0);
-          apply (star_trans Hstar0'') with (t2 := E0);
-          [ eapply (star_trans Hstar); last reflexivity;
-            eapply star_step;
-            [ eassumption | apply star_refl | reflexivity]
-          | unfold "**"; now rewrite app_nil_r
-          ]
-      | |- mergeable_states _ _ _ _ _ (_, _, _, _) =>
-        eapply (mergeable_states_intro Hini Hini'' Hstar0);
-          apply (star_trans Hstar0'') with (t2 := E0);
-          [ eapply (star_trans Hstar); last reflexivity;
-            eapply star_refl
-          | unfold "**"; now rewrite app_nil_r
-          ]
-    end.
-
-  Ltac t_merge_states_silent_star Hini Hini'' Hstar0 Hstar0'' Hstar :=
-    erewrite !mergeable_states_merge_program;
-        first erewrite merge_states_stack_pc_independent_right;
-        first erewrite merge_states_mem_pc_independent_right;
-        first reflexivity; try eassumption;
-          t_merge_states_silent_star_mergeable Hini Hini'' Hstar0 Hstar0'' Hstar.
-
-  (* JT: TODO: Move to CS + clean proof *)
-  Lemma mem_store_different_component : forall mem mem' C b o val Cid,
-                Memory.store mem (C, b, o) val = Some mem' ->
-                Cid <> C ->
-                mem Cid = mem' Cid.
-  Proof.
-    intros mem mem' C b o val Cid Hmem Hneq.
-    unfold Memory.store in Hmem.
-    simpl in *.
-    destruct (mem C) eqn:HmemC.
-    - destruct (ComponentMemory.store t b o val).
-      + inversion Hmem; subst.
-        rewrite setmE.
-        rewrite eqtype.eqE. simpl.
-        destruct (ssrnat.eqn Cid C) eqn:Heq;
-          last reflexivity.
-        assert (Cid = C).
-        { clear -Heq. revert C Heq.
-          induction Cid; intros C Heq; destruct C; eauto;
-            inversion Heq.
-        }
-        contradiction.
-      + inversion Hmem.
-    - inversion Hmem.
-  Qed.
+  (* (* JT: TODO: Move to CS + clean proof *) *)
+  (* Lemma mem_store_different_component : forall mem mem' C b o val Cid, *)
+  (*               Memory.store mem (C, b, o) val = Some mem' -> *)
+  (*               Cid <> C -> *)
+  (*               mem Cid = mem' Cid. *)
+  (* Proof. *)
+  (*   intros mem mem' C b o val Cid Hmem Hneq. *)
+  (*   unfold Memory.store in Hmem. *)
+  (*   simpl in *. *)
+  (*   destruct (mem C) eqn:HmemC. *)
+  (*   - destruct (ComponentMemory.store t b o val). *)
+  (*     + inversion Hmem; subst. *)
+  (*       rewrite setmE. *)
+  (*       rewrite eqtype.eqE. simpl. *)
+  (*       destruct (ssrnat.eqn Cid C) eqn:Heq; *)
+  (*         last reflexivity. *)
+  (*       assert (Cid = C). *)
+  (*       { clear -Heq. revert C Heq. *)
+  (*         induction Cid; intros C Heq; destruct C; eauto; *)
+  (*           inversion Heq. *)
+  (*       } *)
+  (*       contradiction. *)
+  (*     + inversion Hmem. *)
+  (*   - inversion Hmem. *)
+  (* Qed. *)
 
   (* RB: NOTE: Pretty sure we have proved many similar results several times
      by now... *)
