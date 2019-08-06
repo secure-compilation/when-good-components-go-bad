@@ -209,16 +209,48 @@ Proof.
   split; try split.
 Admitted.
 
-Lemma domm_eq_filterm (T T' T'' : Type) (i1 : NMap T) (m1 : NMap T') (m2 : NMap T'') : 
+Lemma domm_eq_filterm (T T' T'' : Type) (i1 : NMap T) (m1 : NMap T') (m2 : NMap T''):
     domm m1 = domm m2 ->
     domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) =
     domm (filterm (fun (k : nat) (_ : T'') => k \notin domm i1) m2).
 Proof.
   move=> H.
-  apply /eq_fset => k.
   set (fn := fun (k0 : nat) (_ : T') => k0 \notin domm i1) in *.
   set (fn' := fun (k0 : nat) (_ : T'') => k0 \notin domm i1) in *.
-Admitted.
+
+  (* Attempt *)
+  apply /eq_fset => k.
+  (* subst fn. *)
+  destruct (k \notin domm i1) eqn:Heq;
+    destruct (k \in domm (filterm fn m1)) eqn:Heq1;
+    destruct (k \in domm (filterm fn' m2)) eqn:Heq2;
+    try now auto.
+  - subst fn fn'.
+    rewrite mem_domm in Heq1.
+    erewrite getm_filterm_notin_domm in Heq1; last eauto.
+    rewrite mem_domm in Heq2.
+    erewrite getm_filterm_notin_domm in Heq2; last eauto.
+    (* contradiction: the domain of m1 and m2 is the same *)
+    move: Heq1 Heq2.
+    rewrite -2!mem_domm.
+    rewrite H; move=> ? ?; eauto.
+  - subst fn fn'.
+    rewrite mem_domm in Heq1.
+    erewrite getm_filterm_notin_domm in Heq1; last eauto.
+    rewrite mem_domm in Heq2.
+    erewrite getm_filterm_notin_domm in Heq2; last eauto.
+    move: Heq1 Heq2; rewrite -2!mem_domm H => ? ?; eauto.
+  - subst fn fn'.
+    rewrite mem_domm in Heq1; rewrite mem_domm in Heq2.
+    move: Heq1 Heq2. rewrite 2!filtermE. unfold obind. unfold oapp.
+    destruct (m1 k) eqn:H';
+      rewrite H' Heq => //=. 
+  - subst fn fn'.
+    rewrite mem_domm in Heq1; rewrite mem_domm in Heq2.
+    move: Heq1 Heq2. rewrite 2!filtermE. unfold obind. unfold oapp.
+    destruct (m2 k) eqn:H';
+      rewrite H' Heq => //=. 
+Qed.
 
 
 Lemma domm_filterm_partial_memory
