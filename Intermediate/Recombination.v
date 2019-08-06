@@ -161,7 +161,6 @@ Section Merge.
     now destruct (Pointer.component frame \in domm ip) eqn:Heq.
   Qed.
 
-
   Lemma merge_stacks_cons_context frame gps frame'' gps'' :
     Pointer.component frame \in domm ic ->
     merge_stacks (frame :: gps) (frame'' :: gps'') =
@@ -188,7 +187,6 @@ Section Merge.
     unfold merge_states_stack.
     reflexivity.
   Qed.
-
 
   Definition merge_states_mem s s'' :=
     merge_memories (CS.state_mem s) (CS.state_mem s'').
@@ -507,9 +505,7 @@ Section Mergeable.
         rewrite fsubU1set.
         apply /andP. now split.
   Qed.
-  
 
-  
 (**)
   Lemma merge_mergeable_states_regs_program s s'' :
     CS.is_program_component s ic ->
@@ -682,6 +678,26 @@ Section Mergeable.
     destruct Hpc.
     - now rewrite H1 in Hpc_notin.
     - now assumption.
+  Qed.
+
+  Lemma is_program_component_pc_in_domm s s'' :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    Pointer.component (CS.state_pc s) \in domm ip.
+  Proof.
+    intros Hpc Hmerge.
+    assert (Hcc := Hmerge);
+      apply mergeable_states_program_to_context in Hcc; try assumption.
+    unfold CS.is_context_component, turn_of, CS.state_turn in Hcc.
+    rewrite (mergeable_states_pc_same_component Hmerge).
+    now destruct s'' as [[[? ?] ?] ?].
+  Qed.
+
+  Lemma is_program_component_pc_notin_domm s :
+    CS.is_program_component s ic ->
+    Pointer.component (CS.state_pc s) \notin domm ic.
+  Proof.
+    now destruct s as [[[? ?] ?] ?].
   Qed.
 
   Inductive mergeable_stack : CS.stack -> CS.stack -> Prop :=
@@ -1058,13 +1074,15 @@ Section PS.
   (*   - inversion Hmem. *)
   (* Qed. *)
 
-  (* RB: NOTE: Pretty sure we have proved many similar results several times
-     by now... *)
-  Lemma mergeable_states_program_component_domm mem gps regs pc s'' :
+  Remark mergeable_states_program_component_domm mem gps regs pc s'' :
     mergeable_states p c p' c' (mem, gps, regs, pc) s'' ->
     CS.is_program_component (mem, gps, regs, pc) (prog_interface c) ->
     Pointer.component pc \in domm (prog_interface p).
-  Admitted.
+  Proof.
+    intros Hmerge Hcomp.
+    change pc with (CS.state_pc (mem, gps, regs, pc)).
+    eapply is_program_component_pc_in_domm; last eassumption; assumption.
+  Qed.
 
   Ltac t_to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12'' :=
     pose proof mergeable_states_program_to_program Hmerge1 Hcomp as Hcomp1'';
@@ -1107,7 +1125,6 @@ Section PS.
   Qed.
 
   (* JT: I think this lemma could replace the two above lemmas *)
-  (* JT: TODO: Clean this proof *)
   Lemma merge_states_silent_star s s1'' s2'' :
     mergeable_states p c p' c' s s1'' ->
     CS.is_program_component s (prog_interface c) ->
@@ -1424,26 +1441,6 @@ Section ThreewayMultisem1.
 
      See comments for pointers to existing related lemmas. *)
 
-  Lemma is_program_component_pc_in_domm s s'' :
-    CS.is_program_component s ic ->
-    mergeable_states p c p' c' s s'' ->
-    Pointer.component (CS.state_pc s) \in domm ip.
-  Proof.
-    intros Hpc Hmerge.
-    assert (Hcc := Hmerge);
-      apply mergeable_states_program_to_context in Hcc; try assumption.
-    unfold CS.is_context_component, turn_of, CS.state_turn in Hcc.
-    rewrite (mergeable_states_pc_same_component Hmerge).
-    now destruct s'' as [[[? ?] ?] ?].
-  Qed.
-
-  Lemma is_program_component_pc_notin_domm s :
-    CS.is_program_component s ic ->
-    Pointer.component (CS.state_pc s) \notin domm ic.
-  Proof.
-    now destruct s as [[[? ?] ?] ?].
-  Qed.
-
   Lemma to_partial_memory_merge_memories_left s s'' :
     mergeable_states p c p' c' s s'' ->
     to_partial_memory                       (CS.state_mem s)                     (domm ic) =
@@ -1549,7 +1546,7 @@ Section ThreewayMultisem1.
     intros Hpc Hmerge Hptr.
     destruct s as [[[gps mem] regs] pc]; destruct ptr as [[C b] o];
       unfold Memory.load, merge_memories in *; simpl in *; subst.
-    eapply is_program_component_pc_in_domm in Hpc; try eassumption.
+    eapply is_program_component_pc_in_domm in Hpc; last eassumption; try assumption.
     erewrite unionmE, to_partial_memory_in, to_partial_memory_notin;
       try eassumption;
       [| apply mergeable_interfaces_sym; eassumption].
