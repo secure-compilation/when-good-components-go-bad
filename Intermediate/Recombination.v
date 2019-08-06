@@ -1198,7 +1198,7 @@ End PS.
   Proof.
     move=> Hiface.
     unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
-    move=> H; exists b; rewrite -H; clear H.
+    (* move=> H; exists b; rewrite -H; clear H. *)
     unfold prepare_procedures_initial_memory_aux.
     unfold elementsm, odflt, oapp.
     rewrite 2!mapmE.
@@ -1207,6 +1207,7 @@ End PS.
     rewrite -Hiface.
     destruct (C \in domm (prog_interface p)) eqn:HC.
     - rewrite HC.
+      
       admit.
     - now rewrite HC.
   Admitted.

@@ -726,6 +726,7 @@ Definition prepare_procedures_initial_memory_aux (p: program) :=
 Theorem prepare_procedures_initial_memory_aux_equiv (p: program) :
   prepare_procedures_initial_memory_aux p = (* New version. *)
   prepare_procedures_initial_memory_aux' p. (* Old version. *)
+Proof.
 Admitted.
 
 (* Decompose the results of the auxiliary call, composed as a whole in the
