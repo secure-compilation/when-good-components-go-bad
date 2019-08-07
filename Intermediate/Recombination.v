@@ -708,10 +708,10 @@ Section MergeSym.
       rewrite Hframe IH; rewrite Hframe in Hdomm.
       destruct Hdomm as [Hdomm | Hdomm].
       rewrite Hdomm; apply component_in_ic_notin_ip with (ip := ip) in Hdomm.
-      now rewrite PS.notin_to_in_false.
+      now rewrite notin_to_in_false.
       assumption.
       rewrite Hdomm; apply component_in_ip_notin_ic with (ic := ic) in Hdomm.
-      now rewrite PS.notin_to_in_false.
+      now rewrite notin_to_in_false.
       assumption.
   Qed.
 
@@ -754,10 +754,10 @@ Section MergeSym.
     rewrite domm_union in Hdomm.
     move: Hdomm => /fsetUP [Hip | Hic].
     - rewrite Hip; apply component_in_ip_notin_ic with (ic := ic) in Hip.
-      now rewrite PS.notin_to_in_false.
+      now rewrite notin_to_in_false.
       assumption.
     - rewrite Hic; apply component_in_ic_notin_ip with (ip := ip) in Hic.
-      now rewrite PS.notin_to_in_false.
+      now rewrite notin_to_in_false.
       assumption.
   Qed.
 
@@ -773,10 +773,10 @@ Section MergeSym.
     rewrite domm_union in Hdomm.
     move: Hdomm => /fsetUP [Hip | Hic].
     - rewrite Hip; apply component_in_ip_notin_ic with (ic := ic) in Hip.
-      now rewrite PS.notin_to_in_false.
+      now rewrite notin_to_in_false.
       assumption.
     - rewrite Hic; apply component_in_ic_notin_ip with (ip := ip) in Hic.
-      now rewrite PS.notin_to_in_false.
+      now rewrite notin_to_in_false.
       assumption.
   Qed.   
 

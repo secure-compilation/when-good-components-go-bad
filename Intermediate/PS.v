@@ -1970,16 +1970,6 @@ Ltac analyze_stack p1 pc1 pc2 Hhead :=
     ]
   end.
 
-(* RB: Where to put this? Is it direct from CoqUtils?
-   As it is, just a convenience to make tactics more readable. *)
-Remark notin_to_in_false : forall (Cid : Component.id) (iface : Program.interface),
-  Cid \notin domm iface -> Cid \in domm iface = false.
-Proof.
-  intros Cid iface Hnotin.
-  destruct (Cid \in domm iface) eqn:Heq;
-    easy.
-Qed.
-
 (* we can prove a strong form of state determinism when the program is in control *)
 Lemma state_determinism_program' p ctx G sps t1 t2 sps' :
   is_program_component sps ctx ->
