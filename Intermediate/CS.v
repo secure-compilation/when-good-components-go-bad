@@ -56,6 +56,9 @@ Definition state_stack (st : state) : stack :=
 Definition state_mem (st : state) : Memory.t :=
   let '(_, mem, _, _) := st in mem.
 
+Definition state_regs (s : CS.state) : Register.t :=
+  let '(_, _, regs, _) := s in regs.
+
 Definition state_pc (st : state) : Pointer.t :=
   let '(_, _, _, pc) := st in pc.
 
@@ -1191,6 +1194,32 @@ Proof.
   - erewrite find_label_in_component_1; try eassumption. reflexivity.
   - congruence.
   - erewrite find_label_in_procedure_1; try eassumption. reflexivity.
+Qed.
+
+(* RB: TODO: Remove reliance on auto-names. Also note that this follows from
+   silent_step_preserves_program_component, posed below. *)
+Lemma epsilon_star_preserves_program_component p c s1 s2 :
+  CS.is_program_component s1 (prog_interface c) ->
+  Star (CS.sem (program_link p c)) s1 E0 s2 ->
+  CS.is_program_component s2 (prog_interface c).
+Proof.
+  intros Hprg_component Hstar.
+  remember E0 as t.
+  induction Hstar.
+  - assumption.
+  - subst; assert (t1 = E0) by now induction t1.
+    assert (t2 = E0) by now induction t1. subst.
+    apply IHHstar; try assumption.
+    clear H0 IHHstar Hstar.
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in *.
+    inversion H;
+      try (match goal with
+           | Heq : (_, _, _, _) = s1 |- _ => rewrite -Heq in Hprg_component
+           end);
+      try now rewrite Pointer.inc_preserves_component.
+    + erewrite <- find_label_in_component_1; eassumption.
+    + now rewrite H2.
+    + erewrite <- find_label_in_procedure_1; eassumption.
 Qed.
 
 End CS.

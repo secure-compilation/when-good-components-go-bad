@@ -12,6 +12,7 @@ Require Import Intermediate.CS.
 Require Import Intermediate.PS.
 Require Import Intermediate.Decomposition.
 Require Import Intermediate.Composition.
+Require Import Intermediate.Recombination.
 
 Require Import Coq.Program.Equality.
 
@@ -3179,3 +3180,102 @@ Section Composition.
     - apply partial_programs_composition; auto.
   Qed.
 End Composition.
+
+Section Recombination.
+
+  Section Mergeable.
+
+  Variables p c p' c' : program.
+
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hwfp' : well_formed_program p'.
+  Hypothesis Hwfc' : well_formed_program c'.
+
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
+  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+
+  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
+  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
+  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
+
+  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
+  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+
+  Let ip := prog_interface p.
+  Let ic := prog_interface c.
+  Let prog   := program_link p  c.
+  Let prog'  := program_link p  c'.
+  Let prog'' := program_link p' c'.
+  Let sem   := CS.sem prog.
+  Let sem'  := CS.sem prog'.
+  Let sem'' := CS.sem prog''.
+  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
+
+  (* TODO: clean
+     RB: NOTE: This is no longer needed. A stronger result is obtained from
+     existing lemmas and use in place. *)
+  Lemma star_mem_well_formed s1 t gps2 mem2 regs2 pc2 :
+    initial_state sem s1 ->
+    Star sem s1 t (gps2, mem2, regs2, pc2) ->
+    fsubset (domm mem2) (domm (unionm ip ic)).
+  Proof.
+    intros Hini Hstar.
+    remember (gps2, mem2, regs2, pc2) as s2.
+    revert gps2 mem2 regs2 pc2 Heqs2.
+    apply star_iff_starR in Hstar.
+    induction Hstar as [|? ? ? ? ? ? ? IH].
+    - intros gps mem regs pc Heqs.
+      simpl in Hini; unfold CS.initial_state in Hini.
+      rewrite CS.initial_machine_state_after_linking in Hini; try assumption;
+        last by destruct Hmergeable_ifaces.
+      subst; inversion Hini; subst.
+      rewrite domm_union 2!domm_prepare_procedures_memory -domm_union.
+      now apply fsubsetxx.
+    - intros gps3 mem3 regs3 pc3 Heqs3; subst.
+      destruct s2 as [[[gps2 mem2] regs2] pc2].
+      specialize (IH Hini gps2 mem2 regs2 pc2 eq_refl).
+      inversion H; subst; try assumption.
+      + unfold Memory.store in H12.
+        destruct (mem2 (Pointer.component ptr));
+          try destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) (Register.get r2 regs3));
+          try match goal with
+              | Heq: Some _ = Some _ |- _ => inversion Heq; subst
+              | Heq: None = Some _ |- _ => now inversion Heq
+              | Heq: Some = None _ |- _ => now inversion Heq
+              end.
+        assert (Hin : Pointer.component ptr \in domm (unionm ip ic)).
+        { rewrite H11.
+          rewrite domm_union.
+          rewrite in_fsetU. apply /orP.
+          apply star_iff_starR in Hstar.
+          eapply pc_component_in_ip_or_ic; eassumption.
+        }
+        rewrite domm_set.
+        rewrite fsubU1set.
+        apply /andP. now split.
+      + unfold Memory.alloc in H12.
+        destruct (mem2 (Pointer.component pc2));
+          try destruct (ComponentMemory.alloc t (Z.to_nat size));
+          try match goal with
+              | Heq: Some _ = Some _ |- _ => inversion Heq; subst
+              | Heq: None = Some _ |- _ => now inversion Heq
+              | Heq: Some = None _ |- _ => now inversion Heq
+              end.
+        assert (Hin : Pointer.component pc2 \in domm (unionm ip ic)).
+        { rewrite domm_union.
+          rewrite in_fsetU. apply /orP.
+          apply star_iff_starR in Hstar.
+          eapply pc_component_in_ip_or_ic; eassumption.
+        }
+        rewrite domm_set.
+        rewrite fsubU1set.
+        apply /andP. now split.
+  Qed.
+
+  End Mergeable.
+
+End Recombination.
