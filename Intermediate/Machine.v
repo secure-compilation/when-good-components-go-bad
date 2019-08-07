@@ -910,6 +910,30 @@ Proof.
   assumption.
 Qed.
 
+Lemma domm_partition_program_link_in_neither p c :
+  well_formed_program p ->
+  well_formed_program c ->
+  closed_program (program_link p c) ->
+  Component.main \notin domm (prog_interface p) ->
+  Component.main \notin domm (prog_interface c) ->
+  False.
+Proof.
+  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
+         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
+  destruct (prog_main p) as [mainp |] eqn:Hcasep.
+  - Search is_true.
+    specialize (Hmainp is_true_true).
+    rewrite Hmainp in Hmainp'.
+    discriminate.
+  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
+    +  specialize (Hmainc is_true_true).
+       rewrite Hmainc in Hmainc'.
+       discriminate.
+    + simpl in Hmain.
+      rewrite Hcasep Hcasec in Hmain.
+      discriminate.
+Qed.
+
 Lemma fsetid (T : ordType) (s: seq.seq T) :
   fset (fset s) = fset s.
 Proof. by apply /eq_fset => x; rewrite in_fset. Qed.

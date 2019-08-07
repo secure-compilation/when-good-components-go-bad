@@ -67,3 +67,13 @@ Proof.
   case=> [[Hsound Hdis] Hclosed].
   by do 2?split; rewrite -1?unionmC // fdisjointC.
 Qed.
+
+Lemma domm_partition_notin :
+  forall ctx1 ctx2,
+    mergeable_interfaces ctx1 ctx2 ->
+  forall C,
+    C \in domm ctx2 ->
+    C \notin domm ctx1.
+Proof.
+by move=> ctx1 ctx2 [[_]]; rewrite fdisjointC=> /fdisjointP.
+Qed.

@@ -9,7 +9,6 @@ Require Import CompCert.Behaviors.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
-Require Import Intermediate.PS.
 Require Import Intermediate.Decomposition.
 
 Require Import Coq.Program.Equality.
@@ -1249,7 +1248,7 @@ Section ThreewayMultisemHelper.
   Proof.
     intros Hdomm Hentry.
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    eapply (PS.domm_partition_notin (mergeable_interfaces_sym _ _ Hmergeable_ifaces)) in Hdomm.
+    eapply (domm_partition_notin _ _ (mergeable_interfaces_sym _ _ Hmergeable_ifaces)) in Hdomm.
     rewrite genv_entrypoints_program_link_left in Hentry; try assumption.
     unfold ic in Hdomm; rewrite Hifacec in Hlinkable, Hdomm.
     rewrite genv_entrypoints_program_link_left; try assumption.
@@ -2181,7 +2180,7 @@ Section ThreewayMultisem.
       rewrite Hifacec in Hnotin. now rewrite (CS.prog_main_block_no_main _ Hwfc' Hnotin).
     - (* Symmetric case. *)
       assert (Hcase' : Component.main \in domm ic).
-      { pose proof PS.domm_partition_program_link_in_neither Hwfp Hwfc Hprog_is_closed as H.
+      { pose proof domm_partition_program_link_in_neither Hwfp Hwfc Hprog_is_closed as H.
         rewrite Hcase in H.
         destruct (Component.main \in domm ic) eqn:Hcase''.
         - reflexivity.

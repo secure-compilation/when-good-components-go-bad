@@ -569,16 +569,6 @@ Proof.
         rewrite Hcontra in Hhas_comp. discriminate.
 Qed.
 
-Lemma domm_partition_notin :
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall C,
-    C \in domm ctx2 ->
-    C \notin domm ctx1.
-Proof.
-by move=> ctx1 ctx2 [[_]]; rewrite fdisjointC=> /fdisjointP.
-Qed.
-
 (* RB: TODO: Complete assumptions, possibly rephrase in terms of _neither. *)
 Lemma domm_partition_in_both ctx1 ctx2 C :
   mergeable_interfaces ctx1 ctx2 ->
@@ -586,7 +576,7 @@ Lemma domm_partition_in_both ctx1 ctx2 C :
   C \in domm ctx2 ->
   False.
 Proof.
-  intros H H0 H1. apply (domm_partition_notin H) in H1.
+  intros H H0 H1. apply (domm_partition_notin _ _ H) in H1.
   now rewrite H0 in H1.
 Qed.
 
@@ -611,29 +601,6 @@ Lemma domm_partition_in_notin (ctx1 : Program.interface) C :
   False.
 Proof.
   intros Hin Hnotin. now rewrite Hin in Hnotin.
-Qed.
-
-Lemma domm_partition_program_link_in_neither p c :
-  well_formed_program p ->
-  well_formed_program c ->
-  closed_program (program_link p c) ->
-  Component.main \notin domm (prog_interface p) ->
-  Component.main \notin domm (prog_interface c) ->
-  False.
-Proof.
-  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
-         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
-  destruct (prog_main p) as [mainp |] eqn:Hcasep.
-  - specialize (Hmainp (eq_refl _)).
-    rewrite Hmainp in Hmainp'.
-    discriminate.
-  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
-    +  specialize (Hmainc (eq_refl _)).
-       rewrite Hmainc in Hmainc'.
-       discriminate.
-    + simpl in Hmain.
-      rewrite Hcasep Hcasec in Hmain.
-      discriminate.
 Qed.
 
 Lemma domm_partition_in_union_in_neither (ctx1 ctx2 : Program.interface) C :
@@ -746,7 +713,7 @@ Proof.
         -- assert (Hdomm' : Pointer.component (Pointer.inc pc2) \in domm ctx2 = false).
            {
              apply mergeable_interfaces_sym in Hmerge.
-             pose proof domm_partition_notin Hmerge Hdomm as Hdomm'.
+             pose proof domm_partition_notin _ _ Hmerge _ Hdomm as Hdomm'.
              (* TODO: There are probably more succinct ways to do this. *)
              destruct (Pointer.component (Pointer.inc pc2) \in domm ctx2) eqn:Hcase.
              - rewrite Hcase in Hdomm'. discriminate.
@@ -757,7 +724,7 @@ Proof.
            now constructor.
         -- assert (Hdomm' : Pointer.component (Pointer.inc pc2) \in domm ctx1 = false).
            {
-             pose proof domm_partition_notin Hmerge Hdomm as Hdomm'.
+             pose proof domm_partition_notin _ _ Hmerge _ Hdomm as Hdomm'.
              (* TODO: There are probably more succinct ways to do this. *)
              destruct (Pointer.component (Pointer.inc pc2) \in domm ctx1) eqn:Hcase.
              - rewrite Hcase in Hdomm'. discriminate.
