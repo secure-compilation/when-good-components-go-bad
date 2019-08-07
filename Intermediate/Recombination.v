@@ -99,11 +99,7 @@ Section Merge.
     | _, _ => [] (* Should not happen *)
     end.
 
-  (* Copy-pasted straight from PS.v *)
   (* RB: TODO: Here and above, Program.interface vs. fset. *)
-  Definition to_partial_memory (mem : Memory.t) (ctx : {fset Component.id}) :=
-    filterm (fun k _ => negb (k \in ctx)) mem.
-
   Definition merge_memories (m m'' : Memory.t) : Memory.t :=
     unionm (to_partial_memory m   (domm ic))
            (to_partial_memory m'' (domm ip)). (* Note that prog_interface c = prog_interface c' *)
@@ -1009,9 +1005,9 @@ Section PS.
       match goal with
       | Hstore : Memory.store _ _ _ = _,
         Heq : Pointer.component _ = Pointer.component _ |- _ =>
-        erewrite PS.program_store_to_partialized_memory; eauto 1; rewrite Heq
+        erewrite program_store_to_partialized_memory; eauto 1; rewrite Heq
       | Halloc : Memory.alloc _ _ _ = _ |- _ =>
-        erewrite PS.program_allocation_to_partialized_memory; eauto 1
+        erewrite program_allocation_to_partialized_memory; eauto 1
       end;
       (* Prove the PC is in the program in both cases. *)
       t_to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12''.
@@ -1442,6 +1438,9 @@ Section ThreewayMultisem1.
     now destruct (mem (Pointer.component pc)).
   Qed.
 
+  (* RB: NOTE: Could the following lemmas be moved to memory without relying on
+     mergeable_states? *)
+
   (* Search _ Memory.store filterm. *)
   (* Search _ Memory.store PS.to_partial_memory. *)
   (* Search _ Memory.store PS.merge_memories. *)
@@ -1456,9 +1455,9 @@ Section ThreewayMultisem1.
     intros Hpc Hmerge Hptr Hstore.
     pose proof is_program_component_pc_notin_domm Hpc as Hnotin.
     rewrite <- Hptr in Hnotin.
-    pose proof PS.partialize_program_store Hnotin Hstore as Hstore'.
-    pose proof PS.unpartialize_program_store
-         (PS.to_partial_memory (CS.state_mem s'') (domm ip)) Hstore' as Hstore''.
+    pose proof partialize_program_store Hnotin Hstore as Hstore'.
+    pose proof unpartialize_program_store
+         (to_partial_memory (CS.state_mem s'') (domm ip)) Hstore' as Hstore''.
     done.
   Qed.
 
@@ -1475,9 +1474,9 @@ Section ThreewayMultisem1.
   Proof.
     intros Hpc Hmerge Halloc.
     pose proof is_program_component_pc_notin_domm Hpc as Hnotin.
-    pose proof PS.partialize_program_alloc Hnotin Halloc as Halloc'.
-    pose proof PS.unpartialize_program_alloc
-         (PS.to_partial_memory (CS.state_mem s'') (domm ip)) Halloc' as Halloc''.
+    pose proof partialize_program_alloc Hnotin Halloc as Halloc'.
+    pose proof unpartialize_program_alloc
+         (to_partial_memory (CS.state_mem s'') (domm ip)) Halloc' as Halloc''.
     done.
   Qed.
 
