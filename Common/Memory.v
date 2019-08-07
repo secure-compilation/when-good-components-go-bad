@@ -277,17 +277,18 @@ Definition to_partial_memory (mem : Memory.t) (ctx : {fset Component.id}) :=
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
   unionm mem1 mem2.
 
+(* RB: NOTE: An equality relation could be used to contain the usual partial
+   equality. *)
+
 Lemma program_allocation_in_partialized_memory_strong :
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C size mem1' ptr,
     C \notin ctx ->
     Memory.alloc mem1 C size = Some (mem1', ptr) ->
   exists2 mem2',
     Memory.alloc mem2 C size = Some (mem2', ptr) &
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
+    to_partial_memory mem1' ctx = to_partial_memory mem2' ctx.
 Proof.
 move=> ctx mem1 mem2 /eq_fmap Hfilter C size mem1' ptr nin_ctx.
 rewrite /Memory.alloc; move/(_ C): (Hfilter); rewrite !filtermE nin_ctx.
@@ -300,15 +301,13 @@ Qed.
 
 Lemma program_allocation_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C size mem1' mem2' ptr1 ptr2,
     C \notin ctx ->
     Memory.alloc mem1 C size = Some (mem1', ptr1) ->
     Memory.alloc mem2 C size = Some (mem2', ptr2) ->
     ptr1 = ptr2 /\
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
+    to_partial_memory mem1' ctx = to_partial_memory mem2' ctx.
 Proof.
 move=> ctx mem1 mem2 Hfilter C size mem1' mem2' ptr1 ptr2 nin_ctx e_mem1.
 case: (program_allocation_in_partialized_memory_strong Hfilter nin_ctx e_mem1).
@@ -317,8 +316,7 @@ Qed.
 
 Lemma program_load_in_partialized_memory_strong:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C b o v,
     C \notin ctx ->
     Memory.load mem1 (C, b, o) = Some v ->
@@ -331,8 +329,7 @@ Qed.
 
 Lemma program_load_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C b o v1 v2,
     C \notin ctx ->
     Memory.load mem1 (C, b, o) = Some v1 ->
@@ -346,15 +343,13 @@ Qed.
 
 Lemma program_store_in_partialized_memory_strong:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C b o v mem1',
     C \notin ctx ->
     Memory.store mem1 (C, b, o) v = Some mem1' ->
   exists2 mem2',
     Memory.store mem2 (C, b, o) v = Some mem2' &
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
+    to_partial_memory mem1' ctx = to_partial_memory mem2' ctx.
 Proof.
 move=> ctx mem1 mem2 /eq_fmap Hfilter C b o v mem1' nin_ctx.
 rewrite /Memory.store /=; move/(_ C): (Hfilter); rewrite !filtermE nin_ctx.
@@ -367,14 +362,12 @@ Qed.
 
 Lemma program_store_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C b o v mem1' mem2',
     C \notin ctx ->
     Memory.store mem1 (C, b, o) v = Some mem1' ->
     Memory.store mem2 (C, b, o) v = Some mem2' ->
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
+    to_partial_memory mem1' ctx = to_partial_memory mem2' ctx.
 Proof.
 move=> ctx mem1 mem2 Hfilter C b o v mem1' mem2' nin_ctx e_mem.
 case: (program_store_in_partialized_memory_strong Hfilter nin_ctx e_mem).
@@ -385,8 +378,7 @@ Lemma context_allocation_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem C size mem' ptr,
     C \in ctx ->
     Memory.alloc mem C size = Some (mem', ptr) ->
-    filterm (fun k _ => k \notin ctx) mem' =
-    filterm (fun k _ => k \notin ctx) mem.
+    to_partial_memory mem' ctx = to_partial_memory mem ctx.
 Proof.
   move=> ctx mem C size mem' ptr HC_in_ctx.
   rewrite /Memory.alloc => Halloc.
@@ -406,8 +398,7 @@ Lemma context_store_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem C b o v mem',
     C \in ctx ->
     Memory.store mem (C, b, o) v = Some mem' ->
-    filterm (fun k _ => k \notin ctx) mem' =
-    filterm (fun k _ => k \notin ctx) mem.
+    to_partial_memory mem' ctx = to_partial_memory mem ctx.
 Proof.
   move=> ctx mem C b o v mem' C_in_ctx.
   rewrite /Memory.store /= => Hstore.

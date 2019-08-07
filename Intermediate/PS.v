@@ -1649,14 +1649,14 @@ Proof.
       try (symmetry; assumption).
     + rewrite Pointer.inc_preserves_component.
       destruct ptr as [[]].
-      unfold to_partial_memory. erewrite context_store_in_partialized_memory; eauto.
+      erewrite context_store_in_partialized_memory; eauto.
       * rewrite Pointer.inc_preserves_component.
         rewrite <- H18. eassumption.
     + erewrite find_label_in_component_1 with (pc:=pc); eauto.
     + rewrite H18. reflexivity.
     + erewrite find_label_in_procedure_1 with (pc:=pc); eauto.
     + rewrite Pointer.inc_preserves_component.
-      unfold to_partial_memory. erewrite context_allocation_in_partialized_memory; eauto.
+      erewrite context_allocation_in_partialized_memory; eauto.
       * rewrite Pointer.inc_preserves_component.
         eassumption.
 Qed.
@@ -1903,7 +1903,6 @@ Proof.
       as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
       subst;
     (* (Now that we are done inverting, expose this definition.) *)
-    unfold to_partial_memory in *;
     try discharge_pc_cc Hcomp Hcc1';
     try discharge_pc_cc Hcomp Hcc2';
     (* For the remaining goals, unify components of their matching opcodes and their
