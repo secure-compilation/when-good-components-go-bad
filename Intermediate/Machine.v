@@ -1128,6 +1128,40 @@ Proof.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
 Qed.
 
+(* Search _ prepare_procedures_memory. *)
+(* Search _ PS.to_partial_memory unionm. *)
+Lemma prepare_procedures_memory_left p c :
+  linkable (prog_interface p) (prog_interface c) ->
+  to_partial_memory
+    (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+    (domm (prog_interface c)) =
+  prepare_procedures_memory p.
+Proof.
+  intros [_ Hdisjoint].
+  unfold to_partial_memory, merge_memories.
+  rewrite <- domm_prepare_procedures_memory,
+         -> filterm_union,
+         -> fdisjoint_filterm_full,
+         -> fdisjoint_filterm_empty, -> unionm0;
+    first reflexivity;
+    try rewrite -> !domm_prepare_procedures_memory; congruence.
+Qed.
+
+Lemma prepare_procedures_memory_right p c :
+  linkable (prog_interface p) (prog_interface c) ->
+  to_partial_memory
+    (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+    (domm (prog_interface p)) =
+  prepare_procedures_memory c.
+Proof.
+  intros Hlinkable.
+  rewrite unionmC; try assumption.
+  apply prepare_procedures_memory_left with (c := p) (p := c).
+  now apply linkable_sym.
+  inversion Hlinkable.
+  now rewrite !domm_prepare_procedures_memory.
+Qed.
+
 Definition prepare_procedures_procs (p: program) : NMap (NMap code) :=
   let '(_, procs, _) := prepare_procedures_initial_memory p in
   procs.

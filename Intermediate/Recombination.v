@@ -936,32 +936,6 @@ Section PS.
   (*   merge_states (prog_interface p) (prog_interface c) s s2''. *)
   (* Admitted. *)
 
-  (* (* JT: TODO: Move to CS + clean proof *) *)
-  (* Lemma mem_store_different_component : forall mem mem' C b o val Cid, *)
-  (*               Memory.store mem (C, b, o) val = Some mem' -> *)
-  (*               Cid <> C -> *)
-  (*               mem Cid = mem' Cid. *)
-  (* Proof. *)
-  (*   intros mem mem' C b o val Cid Hmem Hneq. *)
-  (*   unfold Memory.store in Hmem. *)
-  (*   simpl in *. *)
-  (*   destruct (mem C) eqn:HmemC. *)
-  (*   - destruct (ComponentMemory.store t b o val). *)
-  (*     + inversion Hmem; subst. *)
-  (*       rewrite setmE. *)
-  (*       rewrite eqtype.eqE. simpl. *)
-  (*       destruct (ssrnat.eqn Cid C) eqn:Heq; *)
-  (*         last reflexivity. *)
-  (*       assert (Cid = C). *)
-  (*       { clear -Heq. revert C Heq. *)
-  (*         induction Cid; intros C Heq; destruct C; eauto; *)
-  (*           inversion Heq. *)
-  (*       } *)
-  (*       contradiction. *)
-  (*     + inversion Hmem. *)
-  (*   - inversion Hmem. *)
-  (* Qed. *)
-
   Remark mergeable_states_program_component_domm mem gps regs pc s'' :
     mergeable_states p c p' c' (mem, gps, regs, pc) s'' ->
     CS.is_program_component (mem, gps, regs, pc) (prog_interface c) ->
@@ -1057,40 +1031,6 @@ Section PS.
   Qed.
 
 End PS.
-
-  (* Search _ prepare_procedures_memory. *)
-  (* Search _ PS.to_partial_memory unionm. *)
-  Lemma prepare_procedures_memory_left p c :
-    linkable (prog_interface p) (prog_interface c) ->
-    to_partial_memory
-      (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
-      (domm (prog_interface c)) =
-    prepare_procedures_memory p.
-  Proof.
-    intros [_ Hdisjoint].
-    unfold to_partial_memory, merge_memories.
-    rewrite <- domm_prepare_procedures_memory,
-          -> filterm_union,
-          -> fdisjoint_filterm_full,
-          -> fdisjoint_filterm_empty, -> unionm0;
-      first reflexivity;
-      try rewrite -> !domm_prepare_procedures_memory; congruence.
-  Qed.
-
-  Lemma prepare_procedures_memory_right p c :
-    linkable (prog_interface p) (prog_interface c) ->
-    to_partial_memory
-      (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
-      (domm (prog_interface p)) =
-    prepare_procedures_memory c.
-  Proof.
-    intros Hlinkable.
-    rewrite unionmC; try assumption.
-    apply prepare_procedures_memory_left with (c := p) (p := c).
-    now apply linkable_sym.
-    inversion Hlinkable. 
-    now rewrite !domm_prepare_procedures_memory.
-  Qed.
 
   (* RB: NOTE: Add program well-formedness if needed. *)
   Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
@@ -1540,19 +1480,6 @@ Section ThreewayMultisem1.
     - now rewrite Hic in Hcomp.
   Qed.
 
-  Lemma silent_step_preserves_program_component s1 s2 :
-    CS.is_program_component s1 ic ->
-    Step sem s1 E0 s2 ->
-    CS.is_program_component s2 ic.
-  Proof.
-    intros Hcomp1 Hstep12.
-    destruct s1 as [[[? ?] ?] pc1].
-    destruct s2 as [[[? ?] ?] pc2].
-    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
-    pose proof CS.silent_step_preserves_component _ _ _ Hstep12 as Heq.
-    simpl in Heq. now rewrite <- Heq.
-  Qed.
-
   (* Search _ imported_procedure. *)
   (* RB: NOTE: This kind of lemma is usually the composition of two unions, one
      of which is generally extant. *)
@@ -1639,7 +1566,7 @@ Section ThreewayMultisem1.
     inversion Hmergeable_ifaces as [Hlinkable _].
     rewrite (mergeable_states_merge_program
                Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hcomp1 Hmerge1).
-    pose proof silent_step_preserves_program_component Hcomp1 Hstep12 as Hcomp2.
+    pose proof CS.silent_step_preserves_program_component _ _ _ _ Hcomp1 Hstep12 as Hcomp2.
     pose proof threeway_multisem_mergeable_step_E0 Hcomp1 Hmerge1 Hstep12
       as Hmerge2.
     rewrite (mergeable_states_merge_program

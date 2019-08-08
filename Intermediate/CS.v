@@ -1196,6 +1196,16 @@ Proof.
   - erewrite find_label_in_procedure_1; try eassumption. reflexivity.
 Qed.
 
+Lemma silent_step_preserves_program_component : forall s1 s2 G ctx,
+  CS.is_program_component s1 ctx ->
+  CS.step G s1 E0 s2 ->
+  CS.is_program_component s2 ctx.
+Proof.
+  intros [[[? ?] ?] pc1] [[[? ?] ?] pc2] G ctx Hcomp1 Hstep12.
+  pose proof CS.silent_step_preserves_component _ _ _ Hstep12 as Heq.
+  simplify_turn. now rewrite <- Heq.
+Qed.
+
 (* RB: TODO: Remove reliance on auto-names. Also note that this follows from
    silent_step_preserves_program_component, posed below. *)
 Lemma epsilon_star_preserves_program_component p c s1 s2 :
