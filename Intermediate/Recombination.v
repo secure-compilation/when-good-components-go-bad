@@ -114,34 +114,6 @@ Section Merge.
     let '(s'', m'', r'', pc'') := state'' in
     (merge_stacks s s'', merge_memories m m'', merge_registers r r'' pc, merge_pcs pc pc'').
 
-  (* JT: TODO: Move this lemma to another section *)
-  (**)
-  Lemma component_in_ip_notin_ic C :
-    C \in domm ip ->
-    C \notin domm ic.
-  Proof.
-    intros Hptr.
-    inversion Hmergeable_ifaces as [Hlinkable _].
-    inversion Hlinkable as [_ Hdisj].
-    move: Hdisj => /fdisjointP.
-    intros H.
-    now apply H.
-  Qed.
-
-  (* JT: TODO: Move this lemma to another section *)
-  Lemma component_in_ic_notin_ip C :
-    C \in domm ic ->
-    C \notin domm ip.
-  Proof.
-    intros Hptr.
-    inversion Hmergeable_ifaces as [Hlinkable _].
-    inversion Hlinkable as [_ Hdisj].
-    move: Hdisj.
-    rewrite fdisjointC => /fdisjointP.
-    intros H.
-    now apply H.
-  Qed.
-
   Lemma merge_frames_program frame frame'' :
     Pointer.component frame \in domm ip ->
     merge_frames frame frame'' = frame.
@@ -161,7 +133,7 @@ Section Merge.
     merge_frames frame frame'' = frame''.
   Proof.
     intros Hpc.
-    apply component_in_ic_notin_ip in Hpc.
+    eapply (domm_partition_notin _ _ Hmergeable_ifaces) in Hpc.
     unfold merge_frames.
     move: Hpc => /negP Hpc.
     now destruct (Pointer.component frame \in domm ip) eqn:Heq.
@@ -680,7 +652,6 @@ Section MergeSym.
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
   Hypothesis Hprog_is_closed''  : closed_program (program_link p'  c' ).
 
-
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
@@ -702,10 +673,10 @@ Section MergeSym.
       unfold merge_frames.
       rewrite Hframe IH; rewrite Hframe in Hdomm.
       destruct Hdomm as [Hdomm | Hdomm].
-      rewrite Hdomm; apply component_in_ic_notin_ip with (ip := ip) in Hdomm.
+      rewrite Hdomm; apply domm_partition_notin with (ctx1 := ip) in Hdomm.
       now rewrite notin_to_in_false.
       assumption.
-      rewrite Hdomm; apply component_in_ip_notin_ic with (ic := ic) in Hdomm.
+      rewrite Hdomm; apply domm_partition_notin_r with (ctx2 := ic) in Hdomm.
       now rewrite notin_to_in_false.
       assumption.
   Qed.
@@ -734,7 +705,7 @@ Section MergeSym.
     erewrite domm_filterm_partial_memory with (i2 := ic) (m0 := mem'') (m2 := mem'');
       erewrite domm_filterm_partial_memory with (i2 := ip) (m0 := mem) (m2 := mem) in Hin;
       try reflexivity || assumption.
-    eapply component_in_ip_notin_ic; eassumption.
+    eapply domm_partition_notin_r; eassumption.
   Qed.
 
   Lemma merge_registers_sym reg reg'' pc pc'' :
@@ -748,10 +719,10 @@ Section MergeSym.
     simpl in Hdomm.
     rewrite domm_union in Hdomm.
     move: Hdomm => /fsetUP [Hip | Hic].
-    - rewrite Hip; apply component_in_ip_notin_ic with (ic := ic) in Hip.
+    - rewrite Hip; apply domm_partition_notin_r with (ctx2 := ic) in Hip.
       now rewrite notin_to_in_false.
       assumption.
-    - rewrite Hic; apply component_in_ic_notin_ip with (ip := ip) in Hic.
+    - rewrite Hic; apply domm_partition_notin with (ctx1 := ip) in Hic.
       now rewrite notin_to_in_false.
       assumption.
   Qed.
@@ -767,10 +738,10 @@ Section MergeSym.
     simpl in Hdomm.
     rewrite domm_union in Hdomm.
     move: Hdomm => /fsetUP [Hip | Hic].
-    - rewrite Hip; apply component_in_ip_notin_ic with (ic := ic) in Hip.
+    - rewrite Hip; apply domm_partition_notin_r with (ctx2 := ic) in Hip.
       now rewrite notin_to_in_false.
       assumption.
-    - rewrite Hic; apply component_in_ic_notin_ip with (ip := ip) in Hic.
+    - rewrite Hic; apply domm_partition_notin with (ctx1 := ip) in Hic.
       now rewrite notin_to_in_false.
       assumption.
   Qed.   
@@ -861,7 +832,7 @@ End MergeSym.
     intros Hmerge HCid.
     unfold to_partial_memory.
     apply getm_filterm_notin_domm.
-    eapply component_in_ip_notin_ic; eassumption.
+    eapply domm_partition_notin_r; eassumption.
   Qed.
 
   Lemma to_partial_memory_notin ip ic mem Cid :
@@ -1298,7 +1269,7 @@ Section ThreewayMultisem1.
     destruct (Cid \in domm ip) eqn:Hdommp;
       destruct (Cid \in domm ic) eqn:Hdommc.
     - exfalso.
-      apply component_in_ic_notin_ip with (ip := ip) in Hdommc.
+      apply domm_partition_notin with (ctx1 := ip) in Hdommc.
       now rewrite Hdommp in Hdommc.
       assumption.
     - erewrite to_partial_memory_in; try eassumption.
@@ -1889,9 +1860,9 @@ Section ThreewayMultisem2.
         unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcase.
         inversion Hmerge1 as [? ? ? Hini ? Hstar ?].
         destruct (star_pc_domm Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar).
-        apply component_in_ip_notin_ic with (ic := ic) in H2.
+        apply domm_partition_notin_r with (ctx2 := ic) in H2.
         move: Hcase => /idP Hcase. rewrite H2 in Hcase. congruence. assumption.
-        now apply component_in_ic_notin_ip with (ip := ip) in H2.
+        now apply domm_partition_notin with (ctx1 := ip) in H2.
       + rewrite program_linkC; try assumption.
         now apply linkable_sym in Hlinkable.
       + rewrite program_linkC; try assumption.
@@ -2102,7 +2073,7 @@ Section ThreewayMultisem.
     (* Case analysis on main and related simplifications. *)
     destruct (Component.main \in domm ip) eqn:Hcase;
       rewrite Hcase.
-    - pose proof component_in_ip_notin_ic Hmergeable_ifaces Hcase as Hnotin.
+    - pose proof domm_partition_notin_r Hmergeable_ifaces Hcase as Hnotin.
       rewrite (CS.prog_main_block_no_main _ Hwfc Hnotin).
       rewrite Hifacec in Hnotin. now rewrite (CS.prog_main_block_no_main _ Hwfc' Hnotin).
     - (* Symmetric case. *)
@@ -2114,7 +2085,7 @@ Section ThreewayMultisem.
         - rewrite Hcase'' in H.
           exfalso; now apply H.
       }
-      pose proof component_in_ic_notin_ip Hmergeable_ifaces Hcase' as Hnotin.
+      pose proof domm_partition_notin _ _ Hmergeable_ifaces _ Hcase' as Hnotin.
       rewrite (CS.prog_main_block_no_main _ Hwfp Hnotin).
       rewrite Hifacep in Hnotin. now rewrite (CS.prog_main_block_no_main _ Hwfp' Hnotin).
   Qed.
