@@ -65,6 +65,13 @@ Definition state_pc (st : state) : Pointer.t :=
 Definition state_component (st : CS.state) : Component.id :=
   Pointer.component (state_pc st).
 
+Lemma is_program_component_pc_notin_domm s ctx :
+  is_program_component s ctx ->
+  Pointer.component (CS.state_pc s) \notin domm ctx.
+Proof.
+  now destruct s as [[[? ?] ?] ?].
+Qed.
+
 (* preparing the machine for running a program *)
 
 Definition initial_machine_state (p: program) : state :=
@@ -1151,8 +1158,6 @@ Proof.
     intros main Hwf Hmain Hctx Hinitial.
   - unfold initial_state, initial_machine_state in Hinitial; subst.
     rewrite Hmain.
-    destruct (prepare_procedures p (prepare_initial_memory p))
-      as [[mem _] entrypoints].
     apply (wfprog_main_component Hwf). now rewrite Hmain.
   - specialize (IHHstar main Hwf Hmain Hctx Hinitial).
     inversion Hstep23; subst; simpl;
