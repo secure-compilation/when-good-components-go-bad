@@ -246,6 +246,8 @@ Section Mergeable.
 
   (* An "extensional" reading of compatible states that depends directly on the
      partial programs concerned (implicitly through the section mechanism). *)
+  (* RB: TODO: Consider building in as many well-formedness conditions as
+     possible inside the definition. *)
   Inductive mergeable_states (s s'' : CS.state) : Prop :=
     mergeable_states_intro : forall s0 s0'' t,
       initial_state sem   s0   ->
