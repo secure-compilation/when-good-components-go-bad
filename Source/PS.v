@@ -1491,6 +1491,7 @@ Proof.
 Qed.
 
 (* RB: TODO: Source prefixes no longer needed: clean proof. *)
+(* RB: TODO: Can we separate this from PS? *)
 Lemma blame_program:
   forall
     p Cs t' P' m

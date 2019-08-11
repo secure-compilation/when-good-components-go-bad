@@ -134,10 +134,6 @@ Module Type Intermediate_Sig.
     Parameter sem : program -> semantics.
   End CS.
 
-  Module PS.
-    Parameter sem : program -> Program.interface -> semantics.
-  End PS.
-
   (* Hypothesis decomposition_with_refinement : *)
   (*   forall p c, *)
   (*     well_formed_program p -> *)

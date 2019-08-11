@@ -9,7 +9,6 @@ Require Import CompCert.Behaviors.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
-Require Import Intermediate.Decomposition.
 
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
