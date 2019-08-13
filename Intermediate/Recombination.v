@@ -216,23 +216,23 @@ End Merge.
 Section Mergeable.
   Variables p c p' c' : program.
 
-  Hypothesis Hwfp  : well_formed_program p.
-  Hypothesis Hwfc  : well_formed_program c.
-  Hypothesis Hwfp' : well_formed_program p'.
-  Hypothesis Hwfc' : well_formed_program c'.
+  (* Hypothesis Hwfp  : well_formed_program p. *)
+  (* Hypothesis Hwfc  : well_formed_program c. *)
+  (* Hypothesis Hwfp' : well_formed_program p'. *)
+  (* Hypothesis Hwfc' : well_formed_program c'. *)
 
-  Hypothesis Hmergeable_ifaces :
-    mergeable_interfaces (prog_interface p) (prog_interface c).
+  (* Hypothesis Hmergeable_ifaces : *)
+  (*   mergeable_interfaces (prog_interface p) (prog_interface c). *)
 
-  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
-  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
+  (* Hypothesis Hifacep  : prog_interface p  = prog_interface p'. *)
+  (* Hypothesis Hifacec  : prog_interface c  = prog_interface c'. *)
 
-  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
-  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
-  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
+  (* (* RB: TODO: Simplify redundancies in standard hypotheses. *) *)
+  (* (* Hypothesis Hmain_linkability  : linkable_mains p  c. *) *)
+  (* (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *) *)
 
-  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
-  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+  (* Hypothesis Hprog_is_closed  : closed_program (program_link p  c ). *)
+  (* Hypothesis Hprog_is_closed' : closed_program (program_link p' c'). *)
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -250,6 +250,19 @@ Section Mergeable.
      possible inside the definition. *)
   Inductive mergeable_states (s s'' : CS.state) : Prop :=
     mergeable_states_intro : forall s0 s0'' t,
+      (* Well-formedness conditions. *)
+      well_formed_program p ->
+      well_formed_program c ->
+      well_formed_program p' ->
+      well_formed_program c' ->
+      mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      prog_interface p  = prog_interface p' ->
+      prog_interface c  = prog_interface c' ->
+      (* linkable_mains p  c -> *)
+      (* linkable_mains p' c' -> *)
+      closed_program (program_link p  c ) ->
+      closed_program (program_link p' c') ->
+      (* Definition. *)
       initial_state sem   s0   ->
       initial_state sem'' s0'' ->
       Star sem   s0   t s   ->
@@ -259,7 +272,8 @@ Section Mergeable.
   (* RB: NOTE: This induction principle is currently used only in the proofs of
      mergeable_states_pc_same_component and mergeable_states_mergeable_stack. It
      would be interesting to see if (other) proofs benefit from its use, or what
-     a conventional star induction does to the lone proof. *)
+     a conventional star induction does to the lone proof.
+     TODO: Remove automatic names, refactor symmetries. *)
   Lemma mergeable_states_ind' : forall P : CS.state -> CS.state -> Prop,
       (forall (s s'' : CS.state),
           initial_state (CS.sem (program_link p c)) s ->
@@ -287,40 +301,40 @@ Section Mergeable.
     intros P.
     intros Hindini HindE0l HindE0r Hindstep.
     intros s s'' Hmerg.
-    inversion Hmerg as
-        [s0 s0'' t Hini Hini'' Hstar Hstar''].
+    inversion Hmerg
+      as [s0 s0'' t ? ? ? ? ? ? ? ? ? Hini Hini'' Hstar Hstar''].
     apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''.
     generalize dependent s''.
-    induction Hstar; intros s'' Hmerg Hstar''.
+    induction Hstar
+      as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23 Ht12];
+      intros s'' Hmerg Hstar''.
     - remember E0 as t.
       induction Hstar''.
       + now apply Hindini.
       + subst.
         assert (Ht1 : t1 = E0) by now destruct t1.
         assert (Ht2 : t2 = E0) by now destruct t1.
-        subst; clear H0.
+        subst.
         specialize (IHHstar'' eq_refl HindE0l HindE0r Hindstep).
         assert (Hmergss2 : mergeable_states s s2).
         { apply star_iff_starR in Hstar''.
-          econstructor. apply Hini. apply Hini''. apply star_refl.
-          assumption. }
+          econstructor; try eassumption. now apply star_refl. }
         specialize (IHHstar'' Hini'' Hmergss2). eapply HindE0r; eauto.
-    - pose proof (CS.singleton_traces (program_link p c) _ _ _ H).
-      assert (t2 = E0 \/ exists ev, t2 = [ev]).
-      { clear -H1.
-        inversion H1.
-        - right. destruct t2. simpl in *; congruence.
+    - pose proof (CS.singleton_traces (program_link p c) _ _ _ Hstep23) as Hlen.
+      assert (t2 = E0 \/ exists ev, t2 = [ev]) as [Ht2E0 | [ev Ht2ev]].
+      { clear -Hlen.
+        inversion Hlen.
+        - right. destruct t2. simpl in *. congruence.
           simpl in *. destruct t2; eauto. simpl in *. congruence.
-        - left. inversion H0. destruct t2; simpl in *. reflexivity.
-          congruence. }
-      destruct H2 as [Ht2E0 | [ev Ht2ev]].
+        - left. subst. destruct t2; simpl in *. reflexivity.
+          omega. }
       + subst.
-        unfold "**" in Hstar''; rewrite app_nil_r in Hstar''.
+        unfold Eapp in Hstar''; rewrite app_nil_r in Hstar''.
         assert (Hmergs2s'' : mergeable_states s2 s'').
-        { econstructor. eauto. eauto.
-          apply star_iff_starR in Hstar. apply Hstar.
+        { econstructor; try eassumption.
+          apply star_iff_starR in Hstar12. apply Hstar12.
           apply star_iff_starR in Hstar''. apply Hstar''. }
-        specialize (IHHstar Hini s'' Hmergs2s'' Hstar'').
+        specialize (IHstar Hini s'' Hmergs2s'' Hstar'').
         eapply HindE0l; eauto.
       + subst.
         remember (t1 ** [ev]) as t.
@@ -328,35 +342,34 @@ Section Mergeable.
         * (* contradiction *)
           assert (E0 <> t1 ** [ev]) by now induction t1. contradiction.
         * subst.
-          specialize (IHHstar'' Hini'' IHHstar).
-          pose proof (CS.singleton_traces (program_link p' c') _ _ _ H0) as H4.
-          assert (H5: t2 = E0 \/ exists ev, t2 = [ev]).
-          { clear -H4.
-            inversion H4.
+          specialize (IHHstar'' Hini'' IHstar).
+          pose proof (CS.singleton_traces (program_link p' c') _ _ _ H8) as Hlen2.
+          assert (t2 = E0 \/ exists ev, t2 = [ev]) as [ht2E0 | [ev' Ht2ev']].
+          { clear -Hlen2.
+            inversion Hlen2.
             - right. destruct t2. simpl in *; congruence.
               simpl in *. destruct t2; eauto. simpl in *. congruence.
             - left. inversion H0. destruct t2; simpl in *. reflexivity.
               congruence. }
-          destruct H5 as [ht2E0 | [ev' Ht2ev']].
           ** subst.
-             unfold "**" in H2; rewrite app_nil_r in H2; subst.
+             unfold Eapp in H9; rewrite app_nil_r in H9; subst.
              assert (Hmergs3s4 : mergeable_states s3 s4).
              { econstructor; eauto.
                apply star_iff_starR.
                eapply starR_step.
-               apply Hstar.
+               apply Hstar12.
                eauto. reflexivity.
                apply star_iff_starR in Hstar''; apply Hstar''. }
              specialize (IHHstar'' Hmergs3s4 eq_refl).
              eapply HindE0r; eauto.
           ** subst.
              assert (t1 = t0 /\ ev = ev') as [Ht1t0 Hevev'] by now apply app_inj_tail.
-             subst. clear H4 IHHstar'' H1 H2.
-             specialize (IHHstar Hini s4).
-             assert (mergeable_states s2 s4).
-             { econstructor; eauto. apply star_iff_starR in Hstar; apply Hstar.
+             subst. clear IHHstar''.
+             specialize (IHstar Hini s4).
+             assert (Hmerge : mergeable_states s2 s4).
+             { econstructor; try eassumption. apply star_iff_starR in Hstar12; apply Hstar12.
                apply star_iff_starR in Hstar''; apply Hstar''. }
-             specialize (IHHstar H1 Hstar'').
+             specialize (IHstar Hmerge Hstar'').
              eapply Hindstep with (t := [ev']); eauto. unfold E0. congruence.
   Qed.
 
@@ -412,7 +425,9 @@ Section Mergeable.
     unfold merge_states_regs. simpl.
     unfold merge_registers.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
-    inversion Hmerg as [s0 s0'' t  Hini Hini'' Hstar Hstar''].
+    inversion Hmerg as [s0 s0'' t
+                        Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
+                        Hini Hini'' Hstar Hstar''].
     destruct (star_pc_domm Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [H | H].
     - now rewrite H.
     - now rewrite H in Hcomp.
@@ -428,7 +443,9 @@ Section Mergeable.
     unfold merge_states_pc. simpl.
     unfold merge_pcs.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
-    inversion Hmerg as [s0 s0'' t  Hini Hini'' Hstar Hstar''].
+    inversion Hmerg as [s0 s0'' t
+                        Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
+                        Hini Hini'' Hstar Hstar''].
     destruct (star_pc_domm Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [H | H].
     - now rewrite H.
     - now rewrite H in Hcomp.
@@ -444,6 +461,7 @@ Section Mergeable.
     unfold merge_states_regs. simpl.
     unfold merge_registers.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
+    inversion Hmerg as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
     inversion Hmergeable_ifaces as [Hlinkable _].
     destruct Hlinkable as [_ Hdisj].
     move: Hdisj.
@@ -462,6 +480,7 @@ Section Mergeable.
     destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
     unfold merge_states_pc. simpl.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
+    inversion Hmerg as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
     inversion Hmergeable_ifaces as [Hlinkable _].
     destruct Hlinkable as [_ Hdisj].
     move: Hdisj.
@@ -521,8 +540,7 @@ Section Mergeable.
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc; clear Hpc.
     inversion Hmerg
-      as [? ? ? Hini Hini'' Hstar Hstar'']; subst.
-    destruct Hmergeable_ifaces as [[_ Hdisj] _].
+      as [? ? ? _ _ _ _ [[_ Hdisj] _] _ _ _ _ Hini Hini'' Hstar Hstar''].
     move: Hdisj.
     rewrite fdisjointC => /fdisjointP Hdisj.
     now auto.
@@ -538,7 +556,9 @@ Section Mergeable.
     destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc.
-    inversion Hmerg as [s0 _ t Hini _ Hstar _].
+    inversion Hmerg as [s0 _ t
+                        Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
+                        Hini _ Hstar _].
     pose proof (star_pc_domm Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar).
     intros Hn; destruct H.
     assumption.
@@ -553,11 +573,13 @@ Section Mergeable.
     Pointer.component (CS.state_pc s) \in domm ic.
   Proof.
     intros Hmerg Hpc_notin.
-    inversion Hmerg as [? ? ? Hini ? Hstar ?].
-    destruct s as [[[? ?] ?] pc].
+    inversion Hmerg as [[[[? ?] ?] pc] ? ?
+                        Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
+                        Hini _ Hstar _].
+    CS.unfold_states.
     pose proof (star_pc_domm Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as Hpc.
-    destruct Hpc.
-    - now rewrite H1 in Hpc_notin.
+    destruct Hpc as [Hprg | Hctx].
+    - now rewrite Hprg in Hpc_notin.
     - now assumption.
   Qed.
 
@@ -596,6 +618,9 @@ Section Mergeable.
     mergeable_stack gps1 gps1''.
   Proof.
     intros Hmerg.
+    inversion Hmerg
+      as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces
+          Hifacep Hifacec Hprog_is_closed Hprog_is_closed' _ _ _ _].
     remember (gps1, mem1, regs1, pc1) as s1.
     remember (gps1'', mem1'', regs1'', pc1'') as s1''.
     revert gps1 mem1 regs1 pc1 gps1'' mem1'' regs1'' pc1'' Heqs1 Heqs1''.
