@@ -755,11 +755,12 @@ Section MergeSym.
   Qed.
 
   Lemma merge_registers_sym reg reg'' pc pc'' :
+    mergeable_interfaces ip ic ->
     Pointer.component pc \in (domm (prog_interface prog)) ->
     Pointer.component pc = Pointer.component pc'' ->
     merge_registers ip reg reg'' pc = merge_registers ic reg'' reg pc''.
   Proof.
-    intros Hdomm Heq.
+    intros Hmergeable_ifaces Hdomm Heq.
     unfold merge_registers.
     rewrite -Heq.
     simpl in Hdomm.
@@ -1129,62 +1130,38 @@ Section BehaviorStar.
   Qed.
 End BehaviorStar.
 
-(* Dirty sectioning to solve another symmetry problem *)
-(* RB: TODO: Get rid of this artificial section ASAP. *)
-Section ThreewayMultisemHelper.
-  Variables p c p' c' : program.
-
-  Hypothesis Hwfp  : well_formed_program p.
-  Hypothesis Hwfc  : well_formed_program c.
-  Hypothesis Hwfp' : well_formed_program p'.
-  Hypothesis Hwfc' : well_formed_program c'.
-
-  Hypothesis Hmergeable_ifaces :
-    mergeable_interfaces (prog_interface p) (prog_interface c).
-
-  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
-  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
-
-  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
-  Hypothesis Hmain_linkability  : linkable_mains p  c.
-  Hypothesis Hmain_linkability' : linkable_mains p' c'.
-
-  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
-  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
-
-  Let ip := prog_interface p.
-  Let ic := prog_interface c.
-  Let prog   := program_link p  c.
-  Let prog'  := program_link p  c'.
-  Let prog'' := program_link p' c'.
-  Let sem   := CS.sem prog.
-  Let sem'  := CS.sem prog'.
-  Let sem'' := CS.sem prog''.
-  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
-
-  
   (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
      operating on an explicit program link, one then being the exact symmetric of
      the other, i.e., its application after communativity of linking. There is a
      choice of encoding of component membership in both cases. *)
 
+  (* RB: TODO: Rephrase goal as simple equality? *)
   (* Search _ EntryPoint.get. *)
-  Lemma genv_entrypoints_recombination_left' C P b :
-    C \in domm ip ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem )) = Some b ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem')) = Some b.
+  Lemma genv_entrypoints_recombination_left' :
+    forall p c c',
+      well_formed_program p ->
+      well_formed_program c ->
+      well_formed_program c' ->
+      mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      prog_interface c = prog_interface c' ->
+      linkable_mains p c ->
+    forall C P b,
+      C \in domm (prog_interface p) ->
+      EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c ))) = Some b ->
+      EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c'))) = Some b.
   Proof.
-    intros Hdomm Hentry.
+    intros p c c' Hwfp Hwfc Hwfc' Hmergeable_ifaces Hifacec Hlinkable_mains C P b Hdomm Hentry.
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     eapply (domm_partition_notin _ _ (mergeable_interfaces_sym _ _ Hmergeable_ifaces)) in Hdomm.
     rewrite genv_entrypoints_program_link_left in Hentry; try assumption.
-    unfold ic in Hdomm; rewrite Hifacec in Hlinkable, Hdomm.
+    rewrite Hifacec in Hlinkable, Hdomm.
     rewrite genv_entrypoints_program_link_left; try assumption.
     now apply linkable_implies_linkable_mains.
   Qed.
-End ThreewayMultisemHelper.
 
-Section ThreewayMultisem1.
+(* Dirty sectioning to solve another symmetry problem *)
+(* RB: TODO: Get rid of this artificial section ASAP. *)
+Section ThreewayMultisemHelper.
   Variables p c p' c' : program.
 
   Hypothesis Hwfp  : well_formed_program p.
@@ -1231,7 +1208,7 @@ Section ThreewayMultisem1.
     C \in domm ic ->
     EntryPoint.get C P (genv_entrypoints (globalenv sem'')) = Some b ->
     EntryPoint.get C P (genv_entrypoints (globalenv sem' )) = Some b.
-  Proof.    
+  Proof.
     unfold sem'', sem', prog'', prog'. intros Hdomm Hentry.
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     rewrite program_linkC in Hentry; try congruence.
@@ -1242,7 +1219,39 @@ Section ThreewayMultisem1.
     now apply linkable_mains_sym.
     now apply Hdomm.
   Qed.
-  
+End ThreewayMultisemHelper.
+
+Section ThreewayMultisem1.
+  Variables p c p' c' : program.
+
+  (* Hypothesis Hwfp  : well_formed_program p. *)
+  (* Hypothesis Hwfc  : well_formed_program c. *)
+  (* Hypothesis Hwfp' : well_formed_program p'. *)
+  (* Hypothesis Hwfc' : well_formed_program c'. *)
+
+  (* Hypothesis Hmergeable_ifaces : *)
+  (*   mergeable_interfaces (prog_interface p) (prog_interface c). *)
+
+  (* Hypothesis Hifacep  : prog_interface p  = prog_interface p'. *)
+  (* Hypothesis Hifacec  : prog_interface c  = prog_interface c'. *)
+
+  (* (* RB: TODO: Simplify redundancies in standard hypotheses. *) *)
+  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
+  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
+
+  (* Hypothesis Hprog_is_closed  : closed_program (program_link p  c ). *)
+  (* Hypothesis Hprog_is_closed' : closed_program (program_link p' c'). *)
+
+  Let ip := prog_interface p.
+  Let ic := prog_interface c.
+  Let prog   := program_link p  c.
+  Let prog'  := program_link p  c'.
+  Let prog'' := program_link p' c'.
+  Let sem   := CS.sem prog.
+  Let sem'  := CS.sem prog'.
+  Let sem'' := CS.sem prog''.
+  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
+
   (* RB: TODO: More the following few helper lemmas to their appropriate
      location. Consider changing the naming conventions from
      "partialized" to "recombined" or similar. Exposing the innards of the
@@ -1258,6 +1267,10 @@ Section ThreewayMultisem1.
     to_partial_memory (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) (domm ic).
   Proof.
     intros Hmerg.
+
+    inversion Hmerg
+      as [s0 s0'' t Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
+          Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar''].
     apply /eq_fmap => Cid.
     pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
       as Hmergeable_ifaces_sym.
@@ -1265,7 +1278,6 @@ Section ThreewayMultisem1.
     assert (Hmem : domm (CS.state_mem s) = domm (unionm ip ic)).
     {
       apply CS.comes_from_initial_state_mem_domm.
-      inversion Hmerg as [s0 _ t Hini _ Hstar _].
       inversion Hprog_is_closed as [_ [main [_ [Hmain _]]]].
       pose proof linking_well_formedness Hwfp Hwfc (proj1 Hmergeable_ifaces) as Hwf.
       now exists prog, main, s0, t.
@@ -1273,7 +1285,6 @@ Section ThreewayMultisem1.
     assert (Hmem'' : domm (CS.state_mem s'') = domm (unionm ip ic)).
     {
       apply CS.comes_from_initial_state_mem_domm.
-      inversion Hmerg as [_ s0'' t _ Hini'' _ Hstar''].
       inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
       rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
       pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
@@ -1358,6 +1369,7 @@ Section ThreewayMultisem1.
     destruct s as [[[gps mem] regs] pc]; destruct ptr as [[C b] o];
       unfold Memory.load, merge_memories in *; simpl in *; subst.
     eapply is_program_component_pc_in_domm in Hpc; last eassumption; try assumption.
+    inversion Hmerge as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
     erewrite unionmE, to_partial_memory_in, to_partial_memory_notin;
       try eassumption;
       [| apply mergeable_interfaces_sym; eassumption].
@@ -1365,7 +1377,12 @@ Section ThreewayMultisem1.
   Qed.
 
   (* RB: NOTE: Could the following lemmas be moved to memory without relying on
-     mergeable_states? *)
+     mergeable_states?
+
+     Indeed, now that we have distilled well-formedness conditions, it is clear
+     that in many cases they are overkill -- though they can be convenient.
+     Conversely, one could phrase the previous genv_* lemmas in terms of
+     mergeable_states as well. *)
 
   (* Search _ Memory.store filterm. *)
   (* Search _ Memory.store PS.to_partial_memory. *)
