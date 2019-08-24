@@ -1432,6 +1432,7 @@ Section ThreewayMultisem1.
   Proof.
     destruct s as [[[? ?] ?] pc_]. simpl.
     intros Hpc Hmerge Hlabel.
+    inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hpc_.
@@ -1453,6 +1454,7 @@ Section ThreewayMultisem1.
   Proof.
     destruct s as [[[? ?] ?] pc_]. simpl.
     intros Hpc Hmerge Hlabel.
+    inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hpc_.
@@ -1478,7 +1480,7 @@ Section ThreewayMultisem1.
     intros Hcomp Hmerge.
     unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp.
     destruct s as [[[gps1 mem1] regs1] pc1].
-    inversion Hmerge as [s0 _ t Hini _ Hstar _].
+    inversion Hmerge as [s0 _ t Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ Hstar _].
     destruct (star_pc_domm Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [Hip | Hic].
     - assumption.
     - now rewrite Hic in Hcomp.
@@ -1525,11 +1527,8 @@ Section ThreewayMultisem1.
     Star sem'' s1'' t s2'' ->
     mergeable_states p c p' c' s2 s2''.
   Proof.
-    intros _ Hmerg Hstar Hstar''.
-    inversion Hmerg as [s0 s0'' t0 Hini Hini'' Hstar0 Hstar0''].
-    econstructor.
-    - eassumption.
-    - eassumption.
+    intros _ Hmerg Hstar Hstar''. inversion Hmerg.
+    econstructor; try eassumption.
     - eapply star_trans; try eassumption; reflexivity.
     - eapply star_trans; try eassumption; reflexivity.
   Qed.
@@ -1556,6 +1555,7 @@ Section ThreewayMultisem1.
     eapply execution_invariant_to_linking; try eassumption;
     [ congruence
     | apply linkable_implies_linkable_mains; congruence
+    | apply linkable_implies_linkable_mains; congruence
     | eapply is_program_component_in_domm; eassumption
     ].
 
@@ -1566,15 +1566,14 @@ Section ThreewayMultisem1.
     Step sem' (merge_states ip ic s1 s1'') E0 (merge_states ip ic s2 s1'').
   Proof.
     intros Hcomp1 Hmerge1 Hstep12.
+    inversion Hmerge1 as [??????? Hmergeable_ifaces ????????].
     (* Derive some useful facts and begin to expose state structure. *)
     inversion Hmergeable_ifaces as [Hlinkable _].
-    rewrite (mergeable_states_merge_program
-               Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hcomp1 Hmerge1).
+    rewrite (mergeable_states_merge_program Hcomp1 Hmerge1).
     pose proof CS.silent_step_preserves_program_component _ _ _ _ Hcomp1 Hstep12 as Hcomp2.
     pose proof threeway_multisem_mergeable_step_E0 Hcomp1 Hmerge1 Hstep12
       as Hmerge2.
-    rewrite (mergeable_states_merge_program
-               Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hcomp2 Hmerge2).
+    rewrite (mergeable_states_merge_program Hcomp2 Hmerge2).
     destruct s1 as [[[gps1 mem1] regs1] pc1].
     destruct s2 as [[[gps2 mem2] regs2] pc2].
     destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
@@ -1594,6 +1593,7 @@ Section ThreewayMultisem1.
     Star sem'  (merge_states ip ic s1 s1'') E0 (merge_states ip ic s2 s2'').
   Proof.
     intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
+    inversion Hmerge1 as [?? t0 ???? Hmergeable_ifaces ? Hifacec ???? Hstar ?].
     pose proof mergeable_states_program_to_program Hmerge1 Hcomp1 as Hcomp1'.
     rewrite Hifacec in Hcomp1'.
     remember E0 as t eqn:Ht.
@@ -1605,7 +1605,7 @@ Section ThreewayMultisem1.
       unfold ip, ic; erewrite merge_states_silent_star; try eassumption.
       now apply star_refl.
     - apply Eapp_E0_inv in Ht. destruct Ht; subst.
-      specialize (IHstar (eq_refl _) Hmerge1 Hcomp1 Hcomp1' Hstar12').
+      specialize (IHstar Hstar eq_refl Hmerge1 Hcomp1 Hcomp1' Hstar12').
       apply star_trans with (t1 := E0) (s2 := merge_states ip ic s2 s2'') (t2 := E0);
         [assumption | | reflexivity].
       apply star_step with (t1 := E0) (s2 := merge_states ip ic s3 s2'') (t2 := E0).
@@ -1628,11 +1628,9 @@ Section ThreewayMultisem1.
     Step sem'' s1'' [e] s2'' ->
     mergeable_states p c p' c' s2 s2''.
   Proof.
-    intros Hcomp1 Hmerge1 Hstep12 Hstep12''.
-    inversion Hmerge1 as [s0 s0'' t Hini0 Hini0'' Hstar01 Hstar01''].
-    apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := t ** [e]).
-    - assumption.
-    - assumption.
+    intros Hcomp1 Hmerge1 Hstep12 Hstep12''. inversion Hmerge1.
+    apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := t ** [e]);
+      try assumption.
     - eapply star_right; try eassumption; reflexivity.
     - eapply star_right; try eassumption; reflexivity.
   Qed.
@@ -1641,13 +1639,15 @@ Section ThreewayMultisem1.
     apply CS.Call; try assumption;
     [
     | now apply (imported_procedure_recombination Hcomp1)
-    |    (now apply genv_entrypoints_recombination_left)
-      || (now apply genv_entrypoints_recombination_right)
+    | (   (eapply genv_entrypoints_recombination_left; last eassumption)
+       || (eapply genv_entrypoints_recombination_right; last eassumption));
+      try eassumption; [apply linkable_implies_linkable_mains]; congruence
     ];
     (* Apply linking invariance and solve side goals (very similar to the
        silent case, but slightly different setup). *)
     [eapply execution_invariant_to_linking; try eassumption;
       [ congruence
+      | apply linkable_implies_linkable_mains; congruence
       | apply linkable_implies_linkable_mains; congruence
       | exact (is_program_component_in_domm Hcomp1 Hmerge1)
       ]
@@ -1657,6 +1657,7 @@ Section ThreewayMultisem1.
     apply CS.Return; try congruence; (* [congruence] to cover context case. *)
     eapply execution_invariant_to_linking; try eassumption;
     [ congruence
+    | apply linkable_implies_linkable_mains; congruence
     | apply linkable_implies_linkable_mains; congruence
     | exact (is_program_component_in_domm Hcomp1 Hmerge1)
     ].
@@ -1671,10 +1672,10 @@ Section ThreewayMultisem1.
     Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2'').
   Proof.
     intros Hcomp1 Hmerge1 Hstep12 Hstep12''.
+    inversion Hmerge1 as [??????? Hmergeable_ifaces ????????].
     (* Derive some useful facts and begin to expose state structure. *)
     inversion Hmergeable_ifaces as [Hlinkable _].
-    rewrite (mergeable_states_merge_program
-               Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hcomp1 Hmerge1).
+    rewrite (mergeable_states_merge_program Hcomp1 Hmerge1).
     pose proof threeway_multisem_event_lockstep_program_mergeable
          Hcomp1 Hmerge1 Hstep12 Hstep12'' as Hmerge2.
     set s1copy := s1. destruct s1 as [[[gps1 mem1] regs1] pc1].
@@ -1689,8 +1690,7 @@ Section ThreewayMultisem1.
       unfold CS.state_component in Hdomm; simpl in Hdomm. unfold ip, ic.
       rewrite <- Pointer.inc_preserves_component in Hdomm.
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
-        [ pose proof mergeable_states_program_to_context
-               Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hmerge2 Hcomp2 as Hcomp2''
+        [ pose proof mergeable_states_program_to_context Hmerge2 Hcomp2 as Hcomp2''
         | apply negb_false_iff in Hcomp2 ];
         [ erewrite mergeable_states_merge_program
         | erewrite mergeable_states_merge_context ]; try eassumption;
@@ -1710,8 +1710,8 @@ Section ThreewayMultisem1.
       end.
       destruct (CS.is_program_component s2copy ic) eqn:Hcomp2;
         [| apply negb_false_iff in Hcomp2];
-        [ rewrite (mergeable_states_merge_program _ _ _ _ _ Hmerge2); try assumption
-        | rewrite (mergeable_states_merge_context _ _ Hmerge2); try assumption ];
+        [ rewrite (mergeable_states_merge_program _ Hmerge2); try assumption
+        | rewrite (mergeable_states_merge_context _ Hmerge2); try assumption ];
         unfold merge_states_mem, merge_states_stack; simpl;
         [ pose proof is_program_component_in_domm Hcomp2 Hmerge2 as Hcomp2'';
           erewrite merge_frames_program; try eassumption
