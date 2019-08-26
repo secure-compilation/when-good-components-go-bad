@@ -2044,6 +2044,7 @@ Section ThreewayMultisem.
     simpl. unfold CS.initial_state.
     intros Hini Hini''.
     apply mergeable_states_intro with (s0 := s) (s0'' := s'') (t := E0); subst;
+      try assumption;
       reflexivity || now apply star_refl.
   Qed.
 
@@ -2120,7 +2121,7 @@ Section ThreewayMultisem.
       + setoid_rewrite <- (mergeable_states_pc_same_component Hmerge).
         rewrite <- Hifacec.
         apply negb_true_iff in Hcase.
-        eapply (mergeable_states_notin_to_in _ _ _ _ Hmerge); try eassumption.
+        eapply (mergeable_states_notin_to_in Hmerge); try eassumption.
         (* RB: TODO: After lemma is proved, simplify lemma application and remove
            shelved goals. *)
         Unshelve. all:assumption.
@@ -2255,14 +2256,12 @@ Section ThreewayMultisem.
     destruct s1 as [[[gps1 mem1] regs1] pc1].
     destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
     inversion Hmergeable_ifaces as [Hlinkable _].
-    pose proof is_program_component_pc_in_domm
-         Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hpc Hmerge as Hdomm.
-    pose proof is_program_component_pc_in_domm
-         Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hpc Hmerge as Hdomm'.
+    pose proof is_program_component_pc_in_domm Hpc Hmerge as Hdomm.
+    pose proof is_program_component_pc_in_domm Hpc Hmerge as Hdomm'.
     pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hnotin; unfold ic in Hnotin;
     assert (Hmains : linkable_mains p c')
       by (apply linkable_implies_linkable_mains; congruence).
-    rewrite (mergeable_states_merge_program _ _ _ _ _ Hmerge) in Hstep;
+    rewrite (mergeable_states_merge_program _ Hmerge) in Hstep;
       try assumption.
     inversion Hstep; subst;
       t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin.
@@ -2309,32 +2308,30 @@ Section Recombination.
   Proof.
     rename s into s1. rename s'' into s1''.
     intros Hmerge Hstep Hstep'' t s2' Hstep'.
+    (* inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _]. *)
+    inversion Hmergeable_ifaces as [Hlinkable _].
+    inversion Hmergeable_ifaces as [Hlinkable' _]; rewrite Hifacep Hifacec in Hlinkable'.
+    (* pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability. *)
+    (* pose proof linkable_implies_linkable_mains Hwfp' Hwfc' Hlinkable' as Hmain_linkability'. *)
     destruct (CS.is_program_component s1 ic) eqn:Hcase.
-    - pose proof threeway_multisem_step_inv_program Hwfp Hwfc Hwfp' Hwfc'
-           Hmergeable_ifaces Hifacep Hifacec Hmain_linkability Hmain_linkability'
-           Hprog_is_closed Hprog_is_closed' Hcase Hmerge Hstep'
+    - pose proof threeway_multisem_step_inv_program Hwfp Hwfc Hwfc' Hmergeable_ifaces
+           Hifacec Hmain_linkability Hmain_linkability' Hcase Hmerge Hstep'
         as [s2 Hcontra].
       specialize (Hstep t s2). contradiction.
     - (* Symmetric case. *)
-      inversion Hmergeable_ifaces as [Hlinkable _];
-        inversion Hmergeable_ifaces as [Hlinkable'' _];
-        rewrite Hifacec Hifacep in Hlinkable''.
       assert (Hcase' : CS.is_program_component s1'' ip). {
         apply negb_false_iff in Hcase.
         eapply mergeable_states_context_to_program; eassumption.
       }
       assert (Hmerge' : mergeable_states c' p' c p s1'' s1). {
-        apply mergeable_states_sym; try congruence.
-        apply mergeable_interfaces_sym; congruence.
+        now apply mergeable_states_sym.
       }
-      pose proof threeway_multisem_step_inv_program Hwfc' Hwfp' Hwfc Hwfp as H.
+      pose proof @threeway_multisem_step_inv_program c' p' c p Hwfc' Hwfp' Hwfp as H.
       rewrite -Hifacec -Hifacep in H.
-      specialize (H (mergeable_interfaces_sym _ _ Hmergeable_ifaces) eq_refl eq_refl
+      specialize (H (mergeable_interfaces_sym _ _ Hmergeable_ifaces) eq_refl
                     (linkable_mains_sym Hmain_linkability') (linkable_mains_sym Hmain_linkability)).
-      rewrite program_linkC in H; try assumption. specialize (H Hprog_is_closed').
-      rewrite program_linkC in H; try assumption. specialize (H Hprog_is_closed).
       specialize (H s1'' s1 t s2' Hcase' Hmerge').
-      rewrite program_linkC in H; try assumption.
+      rewrite program_linkC in H; try assumption; [| apply linkable_sym; congruence].
       rewrite Hifacec Hifacep in H.
       erewrite merge_states_sym with (p := c') (c := p') (p' := c) (c' := p) in H;
         try eassumption; try now symmetry.
@@ -2342,16 +2339,8 @@ Section Recombination.
       specialize (H Hstep').
       destruct H as [s2'' Hcontra].
       specialize (Hstep'' t s2'').
+      unfold sem'', prog'' in Hstep''; rewrite program_linkC in Hstep''; try assumption.
       contradiction.
-      rewrite -Hifacec -Hifacep;
-        now apply mergeable_interfaces_sym.
-      rewrite program_linkC; try assumption;
-        now apply linkable_sym.
-      rewrite program_linkC; try assumption;
-        now apply linkable_sym.
-      rewrite -Hifacec; now apply linkable_sym.
-      now apply linkable_sym.
-      now apply linkable_sym.
   Qed.
 
   Lemma match_nofinal s s'' :
@@ -2364,7 +2353,9 @@ Section Recombination.
     destruct s'' as [[[gps'' mem''] regs''] pc''].
     unfold final_state. simpl. unfold merge_pcs.
     intros Hmerge Hfinal Hfinal'' Hfinal'.
+    (* inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _ ]. *)
     inversion Hmergeable_ifaces as [Hlinkable _].
+    (* pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability. *)
     destruct (Pointer.component pc \in domm ip) eqn:Hcase.
     - apply execution_invariant_to_linking with (c2 := c) in Hfinal'; try easy.
       + congruence.
@@ -2381,10 +2372,7 @@ Section Recombination.
       + setoid_rewrite <- (mergeable_states_pc_same_component Hmerge).
         rewrite <- Hifacec.
         apply negb_true_iff in Hcase.
-        now eapply (mergeable_states_notin_to_in _ _ _ _ Hmerge).
-        (* RB: TODO: After lemma is proved, simplify lemma application and remove
-           shelved goals. *)
-        Unshelve. all:assumption.
+        now eapply (mergeable_states_notin_to_in Hmerge).
   Qed.
 
   (* RB: NOTE: Possible improvements:
@@ -2412,9 +2400,7 @@ Section Recombination.
       exists (Terminates tm). split; last reflexivity.
       pose proof match_initial_states Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
            Hmain_linkability Hprog_is_closed Hprog_is_closed' Hini1 Hini1'' as [Hini1' Hmerge1].
-      pose proof star_simulation Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-           Hmain_linkability Hmain_linkability' Hprog_is_closed Hprog_is_closed'
-           Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
+      pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
       apply program_runs with (s := merge_states ip ic s1 s1'');
         first assumption.
       apply state_terminates with (s' := merge_states ip ic s2 s2'');
@@ -2428,9 +2414,7 @@ Section Recombination.
       exists (Goes_wrong tm). split; last reflexivity.
       pose proof match_initial_states Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
            Hmain_linkability Hprog_is_closed Hprog_is_closed' Hini1 Hini1'' as [Hini' Hmerge1].
-      pose proof star_simulation Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-           Hmain_linkability Hmain_linkability' Hprog_is_closed Hprog_is_closed'
-           Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
+      pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
       apply program_runs with (s := merge_states ip ic s1 s1'');
         first assumption.
       apply state_goes_wrong with (s' := merge_states ip ic s2 s2'');
@@ -2465,9 +2449,7 @@ Section Recombination.
       }
       pose proof match_initial_states Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
            Hmain_linkability Hprog_is_closed Hprog_is_closed' Hini1_ Hini1''_ as [Hini1' Hmerge1].
-      pose proof star_simulation Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-           Hmain_linkability Hmain_linkability' Hprog_is_closed Hprog_is_closed'
-           Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
+      pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
       eapply program_behaves_finpref_exists;
         last now apply Hstar12'.
       assumption.
