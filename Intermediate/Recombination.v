@@ -1137,23 +1137,23 @@ End BehaviorStar.
 
   (* RB: TODO: Rephrase goal as simple equality? *)
   (* Search _ EntryPoint.get. *)
-  Lemma genv_entrypoints_recombination_left' :
+  Lemma genv_entrypoints_recombination_left :
     forall p c c',
       well_formed_program p ->
       well_formed_program c ->
       well_formed_program c' ->
       mergeable_interfaces (prog_interface p) (prog_interface c) ->
       prog_interface c = prog_interface c' ->
-      linkable_mains p c ->
     forall C P b,
       C \in domm (prog_interface p) ->
       EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c ))) = Some b ->
       EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c'))) = Some b.
   Proof.
-    intros p c c' Hwfp Hwfc Hwfc' Hmergeable_ifaces Hifacec Hlinkable_mains C P b Hdomm Hentry.
+    intros p c c' Hwfp Hwfc Hwfc' Hmergeable_ifaces Hifacec C P b Hdomm Hentry.
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     eapply (domm_partition_notin _ _ (mergeable_interfaces_sym _ _ Hmergeable_ifaces)) in Hdomm.
-    rewrite genv_entrypoints_program_link_left in Hentry; try assumption.
+    rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
+      [| now apply linkable_implies_linkable_mains].
     rewrite Hifacec in Hlinkable, Hdomm.
     rewrite genv_entrypoints_program_link_left; try assumption.
     now apply linkable_implies_linkable_mains.
@@ -1192,17 +1192,6 @@ Section ThreewayMultisemHelper.
   Let sem'' := CS.sem prog''.
   Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
-  (* JT: Copy-pasting the previous theorem just to not break
-     the tactics *)
-  Lemma genv_entrypoints_recombination_left C P b :
-    C \in domm ip ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem )) = Some b ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem')) = Some b.
-  Proof.
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc (proj1 Hmergeable_ifaces) as Hmains.
-    now apply genv_entrypoints_recombination_left'.
-  Qed.
-
   (* JT: TODO: move this lemma somewhere else. This is not clean at
      all, but at least it solves the problem of proving results. *)
   Lemma genv_entrypoints_recombination_right C P b :
@@ -1214,10 +1203,9 @@ Section ThreewayMultisemHelper.
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     rewrite program_linkC in Hentry; try congruence.
     rewrite program_linkC; try congruence.
-    eapply genv_entrypoints_recombination_left' with (c := p'); try assumption; try congruence;
+    eapply genv_entrypoints_recombination_left with (c := p'); try assumption; try congruence;
       try rewrite -Hifacec; try rewrite -Hifacep.
     - now apply mergeable_interfaces_sym.
-    - apply linkable_mains_sym; apply linkable_implies_linkable_mains; congruence.
     - now apply Hdomm.
   Qed.
 End ThreewayMultisemHelper.
@@ -1640,9 +1628,8 @@ Section ThreewayMultisem1.
     apply CS.Call; try assumption;
     [
     | now apply (imported_procedure_recombination Hcomp1)
-    | (   (eapply genv_entrypoints_recombination_left; last eassumption)
-       || (eapply genv_entrypoints_recombination_right; last eassumption));
-      try eassumption
+    | (   (now apply (@genv_entrypoints_recombination_left _ c))
+       || (now eapply (@genv_entrypoints_recombination_right _ c p')))
     ];
     (* Apply linking invariance and solve side goals (very similar to the
        silent case, but slightly different setup). *)
