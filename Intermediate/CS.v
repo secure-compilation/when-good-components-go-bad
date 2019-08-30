@@ -1237,4 +1237,51 @@ Proof.
     + erewrite <- find_label_in_procedure_1; eassumption.
 Qed.
 
+(* RB: TODO: These domain lemmas should now be renamed to reflect their
+   operation on linked programs. *)
+Section ProgramLink.
+  Variables p c : program.
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+  Hypothesis Hprog_is_closed  : closed_program (program_link p c).
+
+  (* RB: NOTE: Check with existing results.
+     Possibly rewrite in terms of state_pc. *)
+  Lemma star_pc_domm : forall {s st mem reg pc t},
+    initial_state (program_link p c) s ->
+    Star (sem (program_link p c)) s t (st, mem, reg, pc) ->
+    Pointer.component pc \in domm (prog_interface p) \/
+    Pointer.component pc \in domm (prog_interface c).
+  Proof.
+    intros s st mem reg pc t Hini Hstar.
+    assert (H : Pointer.component pc \in domm (prog_interface (program_link p c))).
+    { replace pc with (CS.state_pc (st, mem, reg, pc)); try reflexivity.
+      apply CS.comes_from_initial_state_pc_domm.
+      destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
+      exists (program_link p c), i, s, t.
+      split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
+      repeat split; eauto. }
+    move: H. simpl. rewrite domm_union. now apply /fsetUP.
+  Qed.
+
+  (* RB: NOTE: Check with existing results (though currently unused). *)
+  Lemma star_stack_cons_domm {s frame gps mem regs pc t} :
+    initial_state (program_link p c) s ->
+    Star (sem (program_link p c)) s t (frame :: gps, mem, regs, pc) ->
+    Pointer.component frame \in domm (prog_interface p) \/
+    Pointer.component frame \in domm (prog_interface c).
+  Proof.
+    intros Hini Hstar.
+    assert (H : Pointer.component frame \in domm (prog_interface (program_link p c))).
+    { eapply CS.comes_from_initial_state_stack_cons_domm.
+      destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
+      exists (program_link p c), i, s, t.
+      split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
+      repeat split; eauto. }
+    move: H. simpl. rewrite domm_union. now apply /fsetUP.
+  Qed.
+End ProgramLink.
+
 End CS.

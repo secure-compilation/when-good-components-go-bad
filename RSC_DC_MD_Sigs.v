@@ -182,8 +182,6 @@ Module Type Intermediate_Sig.
       mergeable_interfaces (prog_interface p) (prog_interface c) ->
       prog_interface p = prog_interface p' ->
       prog_interface c = prog_interface c' ->
-      linkable_mains p c ->
-      linkable_mains p' c' ->
       closed_program (program_link p c) ->
       closed_program (program_link p' c') ->
     forall m,

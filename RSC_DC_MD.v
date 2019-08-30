@@ -45,7 +45,7 @@ Section RSC_DC_MD_Section.
   Theorem RSC_DC_MD:
     forall m,
       does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m ->
-      not_wrong_finpref m -> 
+      not_wrong_finpref m ->
     exists Cs beh,
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
@@ -119,11 +119,6 @@ Section RSC_DC_MD_Section.
       rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
       apply linkability_pcomp_Ct.
     }
-    pose proof
-      Intermediate.linkable_mains_sym
-        (Compiler.compilation_preserves_linkable_mains
-          well_formed_P' well_formed_Cs HP'Cs_mains HP'_compiles HCs_compiles)
-      as mains'.
     assert (exists P'_Cs_compiled,
               Compiler.compile_program (Source.program_link P' Cs) = Some P'_Cs_compiled)
       as [P'_Cs_compiled HP'_Cs_compiles]. {
@@ -148,8 +143,6 @@ Section RSC_DC_MD_Section.
     (* pose proof (Intermediate.decomposition_prefix *)
     (*        well_formed_Cs_compiled well_formed_P'_compiled *)
     (*        linkability' mains' Hsafe_pref HP'_Cs_compiled_doesm) as HCs_decomp. *)
-
-    apply Intermediate.linkable_mains_sym in mains'.
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
@@ -242,7 +235,7 @@ Section RSC_DC_MD_Section.
     pose proof Intermediate.recombination_prefix
          well_formed_p_compiled well_formed_Ct well_formed_P'_compiled well_formed_Cs_compiled
          Hmergeable_ifaces Hprog_same_iface Hctx_same_iface
-         mains mains' closedness HP'Cs_compiled_closed
+         closedness HP'Cs_compiled_closed
          H_doesm HP'_Cs_compiled_doesm
          as HpCs_compiled_beh.
 
