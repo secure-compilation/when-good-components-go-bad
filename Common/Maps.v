@@ -156,7 +156,6 @@ Qed.
 Lemma mapm_id : forall (T : Type) (i: NMap T), mapm id i = i.
 Proof.
   move=> T i. apply /eq_fmap => n.
-  Search _ mapm.
   rewrite mapmE. unfold omap, obind, oapp.
   remember (i n) as v; simpl in *; rewrite <- Heqv.
   now destruct v.
@@ -189,12 +188,11 @@ Proof.
   (* specialize (HHH Hunion). destruct HHH as [m1 [m2 [Hu [H1 H2]]]]. *)
   (* subst. Search _ domm filterm unionm. *)
   rewrite filterm_union.
-  Search _ filterm "\notin".
   rewrite (@fdisjoint_filterm_empty T i2 i2). rewrite unionm0.
   rewrite (@fdisjoint_filterm_full T T).
   have HHH: exists m1 m2, m = unionm m1 m2 /\ domm m1 = domm i1 /\ domm m2 = domm i2 by admit.
   destruct HHH as [m1 [m2 [Hu [H1 H2]]]].
-  rewrite Hu. rewrite <- H2. Search _ filterm "\notin" unionm.
+  rewrite Hu. rewrite <- H2.
   rewrite filterm_id.
   rewrite fdisjoint_filterm_mapm_unionm. rewrite <- filterm_id.
   rewrite fdisjoint_filterm_full.

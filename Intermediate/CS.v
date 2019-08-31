@@ -1151,7 +1151,7 @@ Lemma comes_from_initial_state_pc_domm s ctx :
   Pointer.component (state_pc s) \in domm ctx.
 Proof.
   intros [p [main [s0 [t [Hwf [Hmain [Hctx [Hinitial Hstar]]]]]]]].
-  revert main Hwf Hmain Hctx Hinitial. Search _ closed_program.
+  revert main Hwf Hmain Hctx Hinitial.
   apply star_iff_starR in Hstar.
   induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
     subst;

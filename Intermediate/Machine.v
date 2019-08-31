@@ -921,8 +921,7 @@ Proof.
   intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
          [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
   destruct (prog_main p) as [mainp |] eqn:Hcasep.
-  - Search is_true.
-    specialize (Hmainp is_true_true).
+  - specialize (Hmainp is_true_true).
     rewrite Hmainp in Hmainp'.
     discriminate.
   - destruct (prog_main c) as [mainc |] eqn:Hcasec.
