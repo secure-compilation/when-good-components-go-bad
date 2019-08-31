@@ -29,48 +29,6 @@ Import Intermediate.
    to those modules can be added here. Note that, in principle, the role of PS
    will be assimilated by Recombination or become very reduced. *)
 
-(* Where? Common? Memory? None are mutually dependent! *)
-  Lemma to_partial_memory_in ip ic mem Cid :
-    mergeable_interfaces ip ic ->
-    Cid \in domm ip ->
-    (to_partial_memory mem (domm ic)) Cid = mem Cid.
-  Proof.
-    intros Hmerge HCid.
-    unfold to_partial_memory.
-    apply getm_filterm_notin_domm.
-    eapply domm_partition_notin_r; eassumption.
-  Qed.
-
-  Lemma to_partial_memory_notin ip ic mem Cid :
-    mergeable_interfaces ip ic ->
-    Cid \in domm ic ->
-    (to_partial_memory mem (domm ic)) Cid = None.
-  Proof.
-    intros Hmerge HCid.
-    unfold to_partial_memory.
-    rewrite filtermE.
-    unfold obind, oapp.
-    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
-    now rewrite HCid.
-    now reflexivity.
-  Qed.
-
-  (* RB: NOTE: We should rename these, and probably use this instead of the
-     weaker version (currently, [in], confusingly). *)
-  Lemma to_partial_memory_notin_strong ip ic mem Cid :
-    mergeable_interfaces ip ic ->
-    Cid \notin domm ic ->
-    (to_partial_memory mem (domm ic)) Cid = mem Cid.
-  Proof.
-    intros Hmerge HCid.
-    unfold to_partial_memory.
-    rewrite filtermE.
-    unfold obind, oapp.
-    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
-    now rewrite HCid.
-    now reflexivity.
-  Qed.
-
 (* The merge functions only depend on the interfaces that are considered. *)
 Section Merge.
   Variable ip ic : Program.interface.

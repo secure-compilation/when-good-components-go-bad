@@ -1,5 +1,6 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
+Require Import Common.Linking.
 Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 
@@ -547,3 +548,46 @@ Qed.
 (*     + inversion Hmem. *)
 (*   - inversion Hmem. *)
 (* Qed. *)
+
+Section Partial.
+  Lemma to_partial_memory_in ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \in domm ip ->
+    (to_partial_memory mem (domm ic)) Cid = mem Cid.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    apply getm_filterm_notin_domm.
+    eapply domm_partition_notin_r; eassumption.
+  Qed.
+
+  Lemma to_partial_memory_notin ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \in domm ic ->
+    (to_partial_memory mem (domm ic)) Cid = None.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    rewrite filtermE.
+    unfold obind, oapp.
+    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    now rewrite HCid.
+    now reflexivity.
+  Qed.
+
+  (* RB: NOTE: We should rename these, and probably use this instead of the
+     weaker version (currently, [in], confusingly). *)
+  Lemma to_partial_memory_notin_strong ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \notin domm ic ->
+    (to_partial_memory mem (domm ic)) Cid = mem Cid.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    rewrite filtermE.
+    unfold obind, oapp.
+    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    now rewrite HCid.
+    now reflexivity.
+  Qed.
+End Partial.
