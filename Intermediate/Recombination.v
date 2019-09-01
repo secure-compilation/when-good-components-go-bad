@@ -122,24 +122,6 @@ End Merge.
 Section Mergeable.
   Variables p c p' c' : program.
 
-  (* Hypothesis Hwfp  : well_formed_program p. *)
-  (* Hypothesis Hwfc  : well_formed_program c. *)
-  (* Hypothesis Hwfp' : well_formed_program p'. *)
-  (* Hypothesis Hwfc' : well_formed_program c'. *)
-
-  (* Hypothesis Hmergeable_ifaces : *)
-  (*   mergeable_interfaces (prog_interface p) (prog_interface c). *)
-
-  (* Hypothesis Hifacep  : prog_interface p  = prog_interface p'. *)
-  (* Hypothesis Hifacec  : prog_interface c  = prog_interface c'. *)
-
-  (* (* RB: TODO: Simplify redundancies in standard hypotheses. *) *)
-  (* (* Hypothesis Hmain_linkability  : linkable_mains p  c. *) *)
-  (* (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *) *)
-
-  (* Hypothesis Hprog_is_closed  : closed_program (program_link p  c ). *)
-  (* Hypothesis Hprog_is_closed' : closed_program (program_link p' c'). *)
-
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
@@ -588,19 +570,6 @@ End Mergeable.
 
 Section MergeSym.
   Variables p c p' c' : program.
-  (* Hypothesis Hmergeable_ifaces : *)
-  (*   mergeable_interfaces (prog_interface p) (prog_interface c). *)
-
-  (* Hypothesis Hifacep  : prog_interface p  = prog_interface p'. *)
-  (* Hypothesis Hifacec  : prog_interface c  = prog_interface c'. *)
-
-  (* Hypothesis Hwfp  : well_formed_program p. *)
-  (* Hypothesis Hwfc  : well_formed_program c. *)
-  (* Hypothesis Hwfp' : well_formed_program p'. *)
-  (* Hypothesis Hwfc' : well_formed_program c'. *)
-
-  (* Hypothesis Hprog_is_closed  : closed_program (program_link p  c ). *)
-  (* Hypothesis Hprog_is_closed''  : closed_program (program_link p'  c' ). *)
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -698,7 +667,7 @@ Section MergeSym.
     - rewrite Hic; apply domm_partition_notin with (ctx1 := ip) in Hic.
       now rewrite notin_to_in_false.
       assumption.
-  Qed.   
+  Qed.
 
   (* JT: TODO: Clean this proof (RB: agreed). *)
   Theorem merge_states_sym s s'' :
@@ -789,19 +758,6 @@ End MergeSym.
 
 Section PS.
   Variables p c p' c' : program.
-  (* Hypothesis Hmergeable_ifaces : *)
-  (*   mergeable_interfaces (prog_interface p) (prog_interface c). *)
-
-  (* Hypothesis Hifacep  : prog_interface p  = prog_interface p'. *)
-  (* Hypothesis Hifacec  : prog_interface c  = prog_interface c'. *)
-
-  (* Hypothesis Hwfp  : well_formed_program p. *)
-  (* Hypothesis Hwfc  : well_formed_program c. *)
-  (* Hypothesis Hwfp' : well_formed_program p'. *)
-  (* Hypothesis Hwfc' : well_formed_program c'. *)
-
-  (* Hypothesis Hprog_is_closed  : closed_program (program_link p  c ). *)
-  (* Hypothesis Hprog_is_closed' : closed_program (program_link p' c'). *)
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -1081,10 +1037,6 @@ Section ThreewayMultisemHelper.
   Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
   Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
 
-  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
-  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
-  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
-
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
   Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
 
@@ -1118,24 +1070,6 @@ End ThreewayMultisemHelper.
 
 Section ThreewayMultisem1.
   Variables p c p' c' : program.
-
-  (* Hypothesis Hwfp  : well_formed_program p. *)
-  (* Hypothesis Hwfc  : well_formed_program c. *)
-  (* Hypothesis Hwfp' : well_formed_program p'. *)
-  (* Hypothesis Hwfc' : well_formed_program c'. *)
-
-  (* Hypothesis Hmergeable_ifaces : *)
-  (*   mergeable_interfaces (prog_interface p) (prog_interface c). *)
-
-  (* Hypothesis Hifacep  : prog_interface p  = prog_interface p'. *)
-  (* Hypothesis Hifacec  : prog_interface c  = prog_interface cbn'. *)
-
-  (* (* RB: TODO: Simplify redundancies in standard hypotheses. *) *)
-  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
-  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
-
-  (* Hypothesis Hprog_is_closed  : closed_program (program_link p  c ). *)
-  (* Hypothesis Hprog_is_closed' : closed_program (program_link p' c'). *)
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -1633,24 +1567,6 @@ End ThreewayMultisem1.
 Section ThreewayMultisem2.
   Variables p c p' c' : program.
 
-  (* Hypothesis Hwfp  : well_formed_program p. *)
-  (* Hypothesis Hwfc  : well_formed_program c. *)
-  (* Hypothesis Hwfp' : well_formed_program p'. *)
-  (* Hypothesis Hwfc' : well_formed_program c'. *)
-
-  (* Hypothesis Hmergeable_ifaces : *)
-  (*   mergeable_interfaces (prog_interface p) (prog_interface c). *)
-
-  (* Hypothesis Hifacep  : prog_interface p  = prog_interface p'. *)
-  (* Hypothesis Hifacec  : prog_interface c  = prog_interface c'. *)
-
-  (* (* RB: TODO: Simplify redundancies in standard hypotheses. *) *)
-  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
-  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
-
-  (* Hypothesis Hprog_is_closed  : closed_program (program_link p  c ). *)
-  (* Hypothesis Hprog_is_closed' : closed_program (program_link p' c'). *)
-
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
@@ -1835,24 +1751,6 @@ End ThreewayMultisem2.
 Section ThreewayMultisem3.
   Variables p c p' c' : program.
 
-  (* Hypothesis Hwfp  : well_formed_program p. *)
-  (* Hypothesis Hwfc  : well_formed_program c. *)
-  (* Hypothesis Hwfp' : well_formed_program p'. *)
-  (* Hypothesis Hwfc' : well_formed_program c'. *)
-
-  (* Hypothesis Hmergeable_ifaces : *)
-  (*   mergeable_interfaces (prog_interface p) (prog_interface c). *)
-
-  (* Hypothesis Hifacep  : prog_interface p  = prog_interface p'. *)
-  (* Hypothesis Hifacec  : prog_interface c  = prog_interface c'. *)
-
-  (* (* RB: TODO: Simplify redundancies in standard hypotheses. *) *)
-  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
-  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
-
-  (* Hypothesis Hprog_is_closed  : closed_program (program_link p  c ). *)
-  (* Hypothesis Hprog_is_closed' : closed_program (program_link p' c'). *)
-
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
@@ -1912,10 +1810,6 @@ Section ThreewayMultisem.
 
   Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
   Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
-
-  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
-  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
-  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
 
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
   Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
@@ -2184,10 +2078,6 @@ Section Recombination.
 
   Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
   Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
-
-  (* RB: TODO: Simplify redundancies in standard hypotheses. *)
-  (* Hypothesis Hmain_linkability  : linkable_mains p  c. *)
-  (* Hypothesis Hmain_linkability' : linkable_mains p' c'. *)
 
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
   Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
