@@ -353,8 +353,8 @@ Proof.
     as [[code cenv2]|] eqn:Hcompiled_comps;
     try discriminate.
   simpl in Hcompile.
-  destruct (lift ((mkfmap (T:=nat_ordType) code) Component.main) cenv2) as [[]|] eqn:Hlift_mkfmap;
-    simpl in *; rewrite Hlift_mkfmap in Hcompile; try discriminate.
+  destruct (lift ((mkfmap code) Component.main) cenv2) as [[]|] eqn:Hlift_mkfmap;
+    simpl in *; try discriminate.
   destruct (lift (labels Component.main) c) as [[main_label cenv3]|] eqn:Hlift_main_label_C;
     try discriminate.
   destruct (lift (main_label Procedure.main) cenv3) as [[]|] eqn:Hlift_main_label_P;

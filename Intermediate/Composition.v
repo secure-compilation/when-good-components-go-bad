@@ -2172,7 +2172,7 @@ Section MultiSemantics.
       by now apply /dommP.
     rewrite unionmE in HSome.
     destruct (isSome (ctx1 ptr)) eqn:Hcase;
-      rewrite Hcase in HSome.
+      simpl in HSome.
     - left. apply /dommP. now eauto.
     - right. apply /dommP. now eauto.
   Qed.

@@ -114,8 +114,7 @@ Proof.
   assert (HNone : Ciface C = None).
   { by apply /dommPn. }
   rewrite HNone.
-  destruct (Piface C) eqn:Hcase;
-    by rewrite Hcase.
+  by destruct (Piface C) eqn:Hcase.
 Qed.
 
 Class HasTurn A := {

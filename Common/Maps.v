@@ -11,7 +11,7 @@ Set Bullet Behavior "Strict Subproofs".
 
 Definition NMap T := {fmap nat -> T}.
 
-Definition elementsm {A: Type} : NMap A -> list (nat * A) := @FMap.fmval nat_ordType A _.
+Definition elementsm {A: Type} : NMap A -> list (nat * A) := @FMap.fmval nat_ordType A.
 
 (* RB: TODO: These lemmas, with their clean proofs, probably belong in CoqUtils. *)
 
@@ -99,7 +99,7 @@ Lemma getm_filterm_notin_domm :
 Proof.
   intros T T' m1 m2 k Hnotin.
   rewrite filtermE Hnotin.
-  destruct (m2 k) as [v |] eqn:Hcase; now rewrite Hcase.
+  by destruct (m2 k) as [v |] eqn:Hcase.
 Qed.
 
 (* Set and filter commute if the key is outside the domain of filter. *)
@@ -128,7 +128,7 @@ Proof.
   apply /eq_fmap => n.
   rewrite !filtermE.
   unfold obind. unfold oapp.
-  destruct (m n) eqn:Hcase; rewrite Hcase.
+  destruct (m n) eqn:Hcase; simpl.
   -  destruct (n \notin domm m2) eqn:Hcase'; rewrite Hcase'.
      + destruct (n \notin domm m1) eqn:Hcase''; rewrite Hcase''.
        ++ assert (n \notin domm (unionm m1 m2)).
@@ -152,22 +152,22 @@ Proof.
   - by reflexivity.
 Qed.
 
-(* CA: not really needed *) 
+(* CA: not really needed *)
 Lemma mapm_id : forall (T : Type) (i: NMap T), mapm id i = i.
 Proof.
   move=> T i. apply /eq_fmap => n.
   Search _ mapm.
-  rewrite mapmE. unfold omap, obind, oapp.
-  remember (i n) as v; simpl in *; rewrite <- Heqv.
+  rewrite mapmE. unfold omap, obind, oapp. simpl.
+  remember (i n) as v; simpl in *.
   now destruct v.
 Qed.
-  
+
 (* needed in the proof of domm_filterm_fdisjoint_unionm *)
 Lemma filterm_id : forall (T : Type) (i : NMap T) p,
-       
+
                    domm (filterm p i) = domm (filterm p (mapm id i)).
 Proof.
-  move => T i. by rewrite mapm_id. 
+  move => T i. by rewrite mapm_id.
 Qed.
 
 Lemma domm_filterm_fdisjoint_unionm
@@ -180,7 +180,7 @@ Proof.
   have HH: domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) =
            domm (filterm (fun (k : nat) (_ : T) => k \notin domm i2) (unionm i1 i2))
   by admit.
-  rewrite HH filterm_id fdisjoint_filterm_mapm_unionm; auto. 
+  rewrite HH filterm_id fdisjoint_filterm_mapm_unionm; auto.
   rewrite -filterm_id fdisjoint_filterm_full; auto.
   Grab Existential Variables.
   (* have HHH: domm m = (domm i1 :|: domm i2)%fset -> exists m1 m2, m = unionm m1 m2 /\ *)
@@ -198,7 +198,7 @@ Proof.
   rewrite filterm_id.
   rewrite fdisjoint_filterm_mapm_unionm. rewrite <- filterm_id.
   rewrite fdisjoint_filterm_full.
-  
+
   assumption. rewrite H1 H2; assumption. rewrite H1 H2; assumption.
   assumption.
   reflexivity. assumption.
@@ -206,9 +206,9 @@ Proof.
   exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i1))) m).
   exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i2))) m).
   (* exists (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m). *)
-  split; try split.  
-Admitted. 
-    
+  split; try split.
+Admitted.
+
 
 Lemma domm_filterm_partial_memory
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
@@ -219,9 +219,9 @@ Lemma domm_filterm_partial_memory
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) = domm i2.
 Proof.
-Admitted. 
+Admitted.
 
-  
+
 Lemma filterm_partial_memory_fsubset
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
   fdisjoint (domm i1) (domm i2) ->
@@ -230,30 +230,30 @@ Lemma filterm_partial_memory_fsubset
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m0 =
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   fsubset (domm m1) (domm m2).
-Proof. 
+Proof.
   move => disj_i1_i2 m0_eq_m2 m2_eq_union Hfilter.
-  rewrite m2_eq_union -m0_eq_m2 domm_union.    
-  apply (* /fsubsetU /orP. *) /fsubsetP => x Hx. 
+  rewrite m2_eq_union -m0_eq_m2 domm_union.
+  apply (* /fsubsetU /orP. *) /fsubsetP => x Hx.
   assert (x \in (domm i1) \/ x \notin (domm i1)).
-  { apply /orP. by destruct (x \in domm i1). } (* CA: do we have classical reasoning? *)   
-  case: H => H.  
-  move: H. apply /fsubsetP /fsubsetU /orP. 
+  { apply /orP. by destruct (x \in domm i1). } (* CA: do we have classical reasoning? *)
+  case: H => H.
+  move: H. apply /fsubsetP /fsubsetU /orP.
   left. by apply: fsubsetxx.
-      
+
   have x_in_i2 : x \in domm i2.
   { have x_in_m2 : x\in domm m2 by admit.
     move: x_in_m2.
     rewrite m2_eq_union domm_union.
     case /fsetUP => [| //].
-    move: H => /negP //. 
+    move: H => /negP //.
   } (*CA: by Hfilter deduce x \in domm m2
-               then by m2_eq_union, x \in domm i1 \/x \in domm i2 
+               then by m2_eq_union, x \in domm i1 \/x \in domm i2
                together with H we get x \in domm i2
               *)
-   move: x_in_i2. apply /fsubsetP /fsubsetU /orP.    
+   move: x_in_i2. apply /fsubsetP /fsubsetU /orP.
    right. by apply: fsubsetxx.
-Admitted.     
-    
+Admitted.
+
 (* RB: NOTE: This is not a map lemma proper. More generally, absorption on
    arbitrary subsets. *)
 Lemma fsetU1in (T : ordType) (x : T) (s : {fset T}) :
@@ -261,12 +261,12 @@ Lemma fsetU1in (T : ordType) (x : T) (s : {fset T}) :
 Proof.
   rewrite -eq_fset.
   move => x_in_s x0.
-  case: (@in_fsetU1 T x0 x s) => H0. 
+  case: (@in_fsetU1 T x0 x s) => H0.
   destruct (x0 \in s) eqn: Hx0.
-     by rewrite H0 orbT. 
-  rewrite H0 orbF.     
-  destruct (eqtype.eq_op x0 x) eqn: Hx0_x; auto. 
-    rewrite -(eqtype.eqP Hx0_x) in x_in_s.  
+     by rewrite H0 orbT.
+  rewrite H0 orbF.
+  destruct (eqtype.eq_op x0 x) eqn: Hx0_x; auto.
+    rewrite -(eqtype.eqP Hx0_x) in x_in_s.
     now inversion x_in_s.
 Qed.
 

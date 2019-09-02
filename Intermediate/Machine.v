@@ -521,22 +521,22 @@ Proof.
         -- apply proj1 in Hmain_comp2.
            specialize (Hmain_comp2 Hcase2). assumption.
       * (* Contra. *)
-        destruct (dommP _ _ Hprog_main1) as [CI HCI]. rewrite unionmE in HCI.
+        destruct (dommP Hprog_main1) as [CI HCI]. rewrite unionmE in HCI.
         apply negb_true_iff in Hcase1. apply negb_true_iff in Hcase2.
-        now rewrite (dommPn _ _ Hcase1) (dommPn _ _ Hcase2) in HCI.
+        now rewrite (dommPn Hcase1) (dommPn Hcase2) in HCI.
     + inversion Hprog_main1 as [Hmain].
       destruct (prog_main p1) as [main1 |] eqn:Hcase1;
         destruct (prog_main p2) as [main2 |] eqn:Hcase2.
       * (* Contra/easy. RB: NOTE: Three cases can be solved as instances of a
            little lemma, or a tactic. Is it useful elsewhere? *)
         apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
-        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        destruct (dommP Hmain_comp1) as [CI HCI].
         apply /dommP. exists CI. now rewrite unionmE HCI.
       * apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
-        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        destruct (dommP Hmain_comp1) as [CI HCI].
         apply /dommP. exists CI. now rewrite unionmE HCI.
       * apply proj2 in Hmain_comp2. specialize (Hmain_comp2 isT).
-        destruct (dommP _ _ Hmain_comp2) as [CI HCI].
+        destruct (dommP Hmain_comp2) as [CI HCI].
         apply /dommP. exists CI. simpl. now rewrite (unionmC Hdis_i) unionmE HCI.
       * discriminate.
 Qed.
