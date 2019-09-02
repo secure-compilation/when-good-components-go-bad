@@ -124,9 +124,10 @@ Module Source.
     wfprog_well_formed_buffers:
       forall C, prog_interface p C ->
                 has_required_local_buffers p C;
-    (* if the main component is defined, so is the main procedure *)
+    (* iff the main component is defined, so is the main procedure
+       RB: Changed from a simple conditional. *)
     wfprog_main_existence:
-      Component.main \in domm (prog_interface p) -> prog_main p
+      Component.main \in domm (prog_interface p) <-> prog_main p
   }.
 
   (* a closed program is a program with a closed interface and an existing main
@@ -324,13 +325,15 @@ Module Source.
       move/wfprog_well_formed_buffers/(_ C): wf=> /=.
       rewrite pi_C=> /(_ erefl) [bufs /= pb_C ?].
       by exists bufs => //=; rewrite filtermE pb_C /= C_Cs.
-    - have /= /implyP := wfprog_main_existence wf.
+    - have /= /implyP := proj1 (wfprog_main_existence wf).
+      have /= /implyP := proj2 (wfprog_main_existence wf).
       rewrite /prog_main /find_procedure !mem_domm !filtermE.
       have : pi Component.main = pp Component.main :> bool.
         by rewrite -!mem_domm (wfprog_defined_procedures wf).
       case: (pi Component.main)=> [CI|] //=.
-      case: (pp Component.main)=> [C_procs|] //= _.
-      by case: (Component.main \in Cs).
+      + case: (pp Component.main)=> [C_procs|] //= _.
+        by case: (Component.main \in Cs).
+      + case: (pp Component.main)=> [C_procs|] //= _.
   Qed.
 
   Lemma linkable_programs_has_component p1 p2 :
@@ -448,13 +451,22 @@ Module Source.
       rewrite -mem_domm domm_union in_fsetU; case/orP; last rewrite unionmC //; rewrite unionmE.
         by rewrite mem_domm; case/wf1=> [? ->] /=; eauto.
       by rewrite mem_domm; case/wf2=> [? ->] /=; eauto.
-    - have /implyP := wfprog_main_existence wf1.
-      have /implyP := wfprog_main_existence wf2.
-      rewrite /= /prog_main /find_procedure !mem_domm !unionmE.
-      rewrite -[isSome (prog_procedures p1 Component.main)]mem_domm.
-      rewrite -(wfprog_defined_procedures wf1) mem_domm.
-      case: (prog_interface p1 Component.main)=> [CI|] //=.
-      by case: (prog_interface p2 Component.main)=> [CI|] //=.
+    - split.
+      + have /implyP := proj1 (wfprog_main_existence wf1).
+        have /implyP := proj1 (wfprog_main_existence wf2).
+        rewrite /= /prog_main /find_procedure !mem_domm !unionmE.
+        rewrite -[isSome (prog_procedures p1 Component.main)]mem_domm.
+        rewrite -(wfprog_defined_procedures wf1) mem_domm.
+        case: (prog_interface p1 Component.main)=> [CI|] //=.
+        by case: (prog_interface p2 Component.main)=> [CI|] //=.
+      + have /implyP := proj2 (wfprog_main_existence wf1).
+        have /implyP := proj2 (wfprog_main_existence wf2).
+        rewrite /= /prog_main /find_procedure !mem_domm !unionmE.
+        rewrite -[isSome (prog_procedures p1 Component.main)]mem_domm.
+        rewrite -(wfprog_defined_procedures wf1) mem_domm.
+        case: (prog_interface p1 Component.main)=> [CI|] //=.
+        case: ((prog_procedures p2) Component.main)=> [CI|] //=.
+        intros H1 H2 H3. by rewrite H3 in H1.
   Qed.
 
   Lemma linked_programs_main_component_origin:
@@ -482,8 +494,8 @@ Module Source.
     closed_program (program_link p1' p2).
   Proof.
     move=> [H1 H2] Hint wf1 wf1'; split; first by rewrite /= -Hint.
-    move/implyP: (wfprog_main_existence wf1).
-    move/implyP: (wfprog_main_existence wf1').
+    move/implyP: (proj1 (wfprog_main_existence wf1)).
+    move/implyP: (proj1 (wfprog_main_existence wf1')).
     move: H2; rewrite /prog_main /find_procedure /= !unionmE -!mem_domm.
     rewrite -(wfprog_defined_procedures wf1') -Hint (wfprog_defined_procedures wf1).
     by case: ifP=> //=.

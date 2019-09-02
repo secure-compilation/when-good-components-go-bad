@@ -177,7 +177,7 @@ Definition finpref_trace_prefix (m : finpref_behavior) (t : trace) : Prop :=
   | FTbc t' => trace_prefix t' t
   end.
 
-Definition behavior_improves_finpref b m :=
+Definition behavior_improves_finpref (b:program_behavior) (m:finpref_behavior) :=
   exists t, b = Goes_wrong t /\ trace_finpref_prefix t m.
 
 (* CH: Introduce a definition for
@@ -338,4 +338,30 @@ Proof.
     unfold behavior_app in Hwrongb1. destruct b3; try (inversion Hwrongb1; fail).
     + inversion Hwrongb1 as [Heqt2].
       exists (behavior_app t b4). now rewrite <- behavior_app_assoc.
+Qed.
+
+Lemma behavior_prefix_app_inv : forall t1 t2 b,
+  behavior_prefix (t1 ++ t2) b ->
+  behavior_prefix t1 b.
+Proof.
+  intros t1 t2 ? [b ?]; subst.
+  exists (behavior_app t2 b).
+  rewrite behavior_app_assoc.
+  reflexivity.
+Qed.
+
+Lemma program_behaves_finpref_exists :
+  forall L s t s',
+    initial_state L s ->
+    Star L s t s' ->
+  exists beh,
+    program_behaves L beh /\
+    prefix (FTbc t) beh.
+Proof.
+  intros L s t s' Hini HStar.
+  destruct (state_behaves_exists L s') as [beh_s' Hbeh_s'].
+  pose proof program_runs Hini (state_behaves_app HStar Hbeh_s') as Hbeh.
+  eexists. split.
+  - exact Hbeh.
+  - simpl. exists beh_s'. reflexivity.
 Qed.

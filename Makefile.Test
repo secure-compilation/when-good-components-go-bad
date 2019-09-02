@@ -1,7 +1,7 @@
 %: MakefileTest.coq phony
 	+make -f MakefileTest.coq $@
 
-all: all_coq sfi_safety_properties.exe mp.exe
+all: all_coq sfi_safety_properties.exe
 
 all_coq: MakefileTest.coq 
 	+make -f MakefileTest.coq all

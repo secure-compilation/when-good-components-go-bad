@@ -5,6 +5,7 @@ Require Import Coq.ZArith.ZArith.
 Require Import Coq.Lists.List.
 Require Import Coq.Init.Logic.
 Require Import Coq.Structures.Equalities.
+Require Import String.
 
 From mathcomp.ssreflect Require Import ssreflect ssrbool eqtype.
 

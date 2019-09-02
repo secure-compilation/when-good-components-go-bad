@@ -555,9 +555,9 @@ Section Decomposition.
          obtaining it for our instance is not an issue. *)
   Lemma decomposition_prefix :
     forall m,
-      not_wrong_finpref m -> (* needed here, and will have it in main proof *)
+      not_wrong_finpref m ->
       does_prefix (CS.sem (program_link p c)) m ->
-      does_prefix (PS.sem p (Intermediate.prog_interface c)) m.
+      does_prefix (PS.sem p (prog_interface c)) m.
   Proof.
     intros m Hmsafe [b1 [Hb1 Hm]].
     destruct (decomposition_with_refinement Hb1)

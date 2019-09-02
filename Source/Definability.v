@@ -26,6 +26,8 @@ Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Section Definability.
   Local Open Scope fset_scope.
 
@@ -368,7 +370,13 @@ Section Definability.
     - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
       rewrite /has_required_local_buffers /= mapmE C_CI /=.
       eexists; eauto=> /=; omega.
-    - by rewrite /prog_main find_procedures_of_trace //=; left.
+    - rewrite /prog_main find_procedures_of_trace //=.
+      + split; first reflexivity.
+        intros _.
+        destruct (intf Component.main) as [mainP |] eqn:Hcase.
+        * apply /dommP. exists mainP. assumption.
+        * discriminate.
+      + by left.
   Qed.
 
   Lemma closed_program_of_trace t :
@@ -629,8 +637,11 @@ Proof.
     unfold prog_main, program_unlink. simpl.
     rewrite find_procedure_filter_comp.
     move => Hinterm.
-    apply (Intermediate.wfprog_main_component wf_p), negbTE in Hinterm.
-    rewrite Hinterm. done.
+    destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hcase.
+    + inversion wf_p as [_ _ _ _ _ _ Hmain_component].
+      pose proof (proj1 (Intermediate.wfprog_main_component wf_p) Hcase) as Hmainp.
+      inversion Hmainp as [Hmainp']. rewrite Hinterm in Hmainp'. discriminate.
+    + rewrite Hcase. done.
 Qed.
 
 (* Definability *)
@@ -654,8 +665,7 @@ Lemma definability_with_linking:
     Source.well_formed_program p' /\
     Source.well_formed_program c' /\
     Source.closed_program (Source.program_link p' c') /\
-    program_behaves (S.CS.sem (Source.program_link p' c')) (Terminates (finpref_trace m)) /\
-    prefix m (Terminates (finpref_trace m)).
+    does_prefix (S.CS.sem (Source.program_link p' c')) m.
 Proof.
   move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre Hnot_wrong.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
@@ -686,6 +696,7 @@ Proof.
         by case: m.
       do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
       split; try reflexivity; exact: star_refl.
+  -
   have wf_events : all (well_formed_event intf) m'.
     by apply: CS.intermediate_well_formed_events Hstar.
   have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m'.
@@ -711,6 +722,7 @@ Proof.
   split; first exact: well_formed_program_unlink.
   split; first exact: well_formed_program_unlink.
   rewrite program_unlinkK //; split; first exact: closed_program_of_trace.
+  exists (Terminates m').
   split=> // {wf_events back Hback wf_back wf_m}.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
   by exists (Terminates nil); rewrite /= E0_right.

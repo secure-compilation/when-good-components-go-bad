@@ -53,6 +53,7 @@ Module ListUtil.
 
 End ListUtil.
 
+Require Import Ascii.
 
 Module Log.
 

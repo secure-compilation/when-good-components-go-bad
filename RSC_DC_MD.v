@@ -91,11 +91,7 @@ Section RSC_DC_MD_Section.
       as [P' [Cs
          [Hsame_iface1 [Hsame_iface2
          [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
-         [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_beh Hprefix1]]]]]]]]]].
-
-    move: HP'_Cs_beh Hprefix1.
-    set beh := Terminates _.
-    move=> HP'_Cs_beh Hprefix1.
+         [well_formed_P' [well_formed_Cs [HP'Cs_closed HP'_Cs_m]]]]]]]]].
 
     assert (Source.linkable_mains P' Cs) as HP'Cs_mains.
     { apply Source.linkable_disjoint_mains; trivial; congruence. }
@@ -119,8 +115,6 @@ Section RSC_DC_MD_Section.
       as linkability'. {
       eapply @Compiler.compilation_preserves_linkability with (p:=Cs) (c:=P'); eauto.
       apply linkable_sym.
-      (* RB: If [linkability] is not used for anything else, refactor these
-         rewrites with the instance above, or craft a separate assumption. *)
       rewrite <- Hsame_iface1 in linkability_pcomp_Ct.
       rewrite <- Hsame_iface2 in linkability_pcomp_Ct.
       apply linkability_pcomp_Ct.
@@ -140,37 +134,22 @@ Section RSC_DC_MD_Section.
       apply Compiler.well_formed_compilable; assumption.
     }
 
-    assert (forall b, program_behaves (Intermediate.CS.sem P'_Cs_compiled) b <->
-                      program_behaves (Intermediate.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) b)
-      as HP'_Cs_behaves. {
-      apply Compiler.separate_compilation_weaker with (p:=P') (c:=Cs);
-        try assumption;
-        [congruence].
-    }
     have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
-      have HP'_Cs_compiled_doesm : does_prefix (Intermediate.CS.sem P'_Cs_compiled) m.
+      have HP'_Cs_compiled_doesm : does_prefix (Intermediate.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) m.
       {
-        eapply Compiler.forward_simulation_same_safe_prefix; try eassumption.
-        exists beh. auto.
+        eapply Compiler.forward_simulation_same_safe_prefix; try eassumption. congruence.
       }
 
     (* intermediate decomposition (for Cs_compiled) *)
-
-    destruct HP'_Cs_compiled_doesm as [beh1 [HP'_Cs_compiled_beh1 Hprefix2]].
-
-    apply HP'_Cs_behaves in HP'_Cs_compiled_beh1.
-    apply Source.linkable_mains_sym in HP'Cs_mains. (* TODO: Check if this is used later. *)
-    rewrite <- Intermediate.program_linkC in HP'_Cs_compiled_beh1;
-      [| (apply (Compiler.compilation_preserves_well_formedness well_formed_Cs HCs_compiles))
-       | (apply (Compiler.compilation_preserves_well_formedness well_formed_P' HP'_compiles))
-       | assumption ].
-
-    have [beh2 [HCs_decomp HCs_beh_improves]] :=
-         Intermediate.decomposition_with_refinement
+    rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm;
+       [| assumption |assumption | apply linkable_sym in linkability'; assumption].
+    pose proof (Intermediate.decomposition_prefix
            well_formed_Cs_compiled well_formed_P'_compiled
-           linkability' mains' HP'_Cs_compiled_beh1.
+           linkability' mains' Hsafe_pref HP'_Cs_compiled_doesm) as HCs_decomp.
+
+    apply Intermediate.linkable_mains_sym in mains'.
 
     (* intermediate composition *)
     assert (Intermediate.prog_interface Ct = Intermediate.prog_interface Cs_compiled)
@@ -221,27 +200,12 @@ Section RSC_DC_MD_Section.
       as Hmergeable_ifaces.
       by apply Intermediate.compose_mergeable_interfaces.
 
-    destruct HP_decomp as [b1 [Hbehvesb1 Hprefixb1]].
-
-    assert (Hprefix_m_beh2 : prefix m beh2). (* beh2 improves beh1 and m < beh1 *)
-    {
-      inversion HCs_beh_improves as [| [t' [? Hbeh_prefix']]]; subst.
-      - assumption.
-      - eapply trace_behavior_prefix_trans; [| now eapply Hbeh_prefix'].
-        destruct m; try contradiction.
-        inversion Hprefix2 as [x H].
-        unfold behavior_app in H. destruct x; try inversion H.
-        subst. simpl. unfold Events.trace_prefix. eauto.
-    }
-
     pose proof Intermediate.composition_prefix
          well_formed_p_compiled well_formed_Cs_compiled
          linkable_mains HpCs_compiled_closed
          Hmergeable_ifaces
-         Hbehvesb1 HCs_decomp
-         Hprefixb1 Hprefix_m_beh2
+         HP_decomp HCs_decomp
       as HpCs_compiled_beh.
-    destruct HpCs_compiled_beh as [b3 [HpCs_compiled_beh HpCs_compiled_prefix]].
     assert (Source.closed_program (Source.program_link p Cs)) as Hclosed_p_Cs. {
       apply (Source.interface_preserves_closedness_l HP'Cs_closed); trivial.
       apply Compiler.compilation_preserves_interface in HP'_compiles.
@@ -265,65 +229,31 @@ Section RSC_DC_MD_Section.
                Compiler.compile_program (Source.program_link p Cs) = Some pCs_compiled)
       as [pCs_compiled HpCs_compiles]
       by now apply Compiler.well_formed_compilable.
-    assert (forall b, program_behaves (Intermediate.CS.sem pCs_compiled) b <->
-                      program_behaves (Intermediate.CS.sem (Intermediate.program_link p_compiled Cs_compiled)) b)
-      as HpCs_compiled_behaves
-      by now apply Compiler.separate_compilation_weaker with (p:=p) (c:=Cs).
-    apply HpCs_compiled_behaves in HpCs_compiled_beh.
     assert (exists beh1,
                program_behaves (Source.CS.sem (Source.program_link p Cs)) beh1 /\
-               behavior_improves beh1 b3) as HpCs_beh. {
-      apply backward_simulation_behavior_improves
-        with (L1:=Source.CS.sem (Source.program_link p Cs)) in HpCs_compiled_beh; auto.
-      apply Compiler.S_simulates_I; assumption.
+               (prefix m beh1 \/ behavior_improves_finpref beh1 m)) as HpCs_beh. {
+      eapply Compiler.backward_simulation_behavior_improves_prefix in HpCs_compiled_beh; eassumption.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
 
-    (* At this point we know:
-
-       1. (HP'_Cs_beh) P' `union` Cs goes from s_i to s_f producing
-          finpref_trace m, s_f is stuck and final.
-
-       2. Either
-
-          a. p `union` Cs goes from s_i' to s_f' producing a proper prefix of
-             finpref_trace m, and s_f' is stuck and not final.
-
-          b. p `union` Cs goes from s_i' to s_f' producing a super sequence of
-             finpref_trace m.
-
-       In (2.a), we should be able to conclude with parallel_exec.  This
-       corresponds to the right side of the disjunction.
-
-       In (2.b), we are in the left side of the disjunction.
-
-     *)
-
+    (* Instantiate behavior, case analysis on improvement. *)
+    exists Cs, pCs_beh.
     destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
-    + subst. exists Cs, b3.
+    + repeat (split; try now auto).
+    + subst pCs_beh.
       repeat (split; try now auto).
-    + assert(finpref_trace_prefix m t' \/ trace_finpref_prefix t' m) as H
-          by (eapply behavior_prefix_comp'; eauto).
-      destruct H as [K | K].
-      * exists Cs, pCs_beh. repeat (split; try now auto). left.
-        subst. destruct m;
-        inversion K. exists (Goes_wrong x). simpl. now rewrite H.
-      * exists Cs, pCs_beh. repeat (split; try now auto).
-        right. exists t'. repeat (split; try now auto).
-        subst pCs_beh.
-        unfold beh in HP'_Cs_beh.
-        (* Close the diagram. *)
-        assert (Hsame_iface3 : Source.prog_interface P' = Source.prog_interface p).
-        {
-          pose proof Compiler.compilation_preserves_interface successful_compilation
-            as Hsame_iface3.
-          congruence.
-        }
-        unfold behavior_improves_blame.
-        exact (Source.blame_program well_formed_p well_formed_Cs
-                                Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
-                                well_formed_P' Hsame_iface3 HP'Cs_closed
-                                HP'_Cs_beh Hsafe_pref K).
+      (* Blame the program and close the diagram. *)
+      assert (Hsame_iface3 : Source.prog_interface P' = Source.prog_interface p).
+      {
+        pose proof Compiler.compilation_preserves_interface successful_compilation
+          as Hsame_iface3.
+        congruence.
+      }
+      unfold behavior_improves_blame.
+      destruct (Source.blame_program well_formed_p well_formed_Cs
+                              Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
+                              well_formed_P' Hsame_iface3 HP'Cs_closed
+                              HP'_Cs_m Hsafe_pref Klonger) as [H|H]; by eauto.
   Qed.
 
 End RSC_DC_MD_Section.
@@ -339,3 +269,5 @@ Module RSC_DC_MD_Instance :=
 
 Definition RSC_DC_MD :=
   RSC_DC_MD_Instance.RSC_DC_MD.
+
+Print Assumptions RSC_DC_MD.

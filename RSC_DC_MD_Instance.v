@@ -12,6 +12,8 @@ Require Import S2I.Compiler.
 Require Import S2I.Definitions.
 Require Import Definability.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Module Source_Instance <: Source_Sig.
   Definition program :=
     @Source.program.
@@ -100,11 +102,36 @@ Module Intermediate_Instance <: Intermediate_Sig.
   Definition decomposition_with_refinement :=
     @Intermediate.Decomposition.decomposition_with_refinement.
 
-  Definition decomposition_prefix :=
-    @Intermediate.Decomposition.decomposition_prefix.
+  Theorem decomposition_prefix :
+    forall p c m,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable (prog_interface p) (prog_interface c) ->
+      linkable_mains p c ->
+      CompCertExtensions.not_wrong_finpref m ->
+      CompCertExtensions.does_prefix (CS.sem (program_link p c)) m ->
+      CompCertExtensions.does_prefix (PS.sem p (prog_interface c)) m.
+  Proof.
+    (* We need some trivial reordering to match instance and interface. *)
+    intros.
+    now apply Intermediate.Decomposition.decomposition_prefix.
+  Qed.
 
-  Definition composition_prefix :=
-    @Intermediate.Composition.composition_prefix.
+  Theorem composition_prefix :
+    forall p c m,
+      well_formed_program p ->
+      well_formed_program c ->
+      linkable_mains p c ->
+      closed_program (program_link p c) ->
+      mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      CompCertExtensions.does_prefix (PS.sem p (prog_interface c)) m ->
+      CompCertExtensions.does_prefix (PS.sem c (prog_interface p)) m ->
+      CompCertExtensions.does_prefix (CS.sem (program_link p c)) m.
+  Proof.
+    (* We need some trivial reordering to match instance and interface. *)
+    intros.
+    now apply Intermediate.Composition.composition_prefix.
+  Qed.
 
   Definition compose_mergeable_interfaces :=
     @Intermediate.compose_mergeable_interfaces.
@@ -158,12 +185,62 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance
   Definition separate_compilation_weaker :=
     @Compiler.separate_compilation_weaker.
 
-  Definition S_simulates_I :=
-    @Compiler.S_simulates_I.
+  (* Definition S_simulates_I := *)
+  (*   @Compiler.S_simulates_I. *)
 
-  Definition forward_simulation_same_safe_prefix :=
-    @Compiler.forward_simulation_same_safe_prefix.
-
-  Definition backward_simulation_behavior_improves_prefix :=
-    @Compiler.backward_simulation_behavior_improves_prefix.
+  Theorem forward_simulation_same_safe_prefix:
+    forall p p_compiled c c_compiled m,
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      Source.closed_program (Source.program_link p c) ->
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      CompCertExtensions.does_prefix (Source_Instance.CS.sem (Source.program_link p c)) m ->
+      CompCertExtensions.not_wrong_finpref m ->
+      compile_program p = Some p_compiled ->
+      compile_program c = Some c_compiled ->
+      CompCertExtensions.does_prefix (Intermediate_Instance.CS.sem (Intermediate.program_link p_compiled c_compiled)) m.
+  Proof.
+    intros p p_compiled c c_compiled m
+           Hlinkable Hclosed Hwfp Hwfc Hprefix Hnot_wrong Hcompp Hcompc.
+    pose proof Source.linking_well_formedness Hwfp Hwfc Hlinkable as Hwfpc.
+    destruct (Compiler.well_formed_compilable _ Hwfpc) as [pc_compiled Hcomppc].
+    pose proof Compiler.forward_simulation_same_safe_prefix _ _ _
+         Hclosed Hwfpc Hprefix Hnot_wrong Hcomppc
+      as [beh [Hbeh Hprefix_beh]].
+    pose proof Compiler.separate_compilation_weaker _ _ _ _ _
+         Hwfp Hwfc Hlinkable Hcompp Hcompc Hcomppc
+      as Hsc.
+    exists beh. split.
+    - apply Hsc. exact Hbeh.
+    - exact Hprefix_beh.
+  Qed.
+  
+  Theorem backward_simulation_behavior_improves_prefix :
+    forall p p_compiled c c_compiled m,
+      linkable (Source.prog_interface p) (Source.prog_interface c) ->
+      Source.closed_program (Source.program_link p c) ->
+      Source.well_formed_program p ->
+      Source.well_formed_program c ->
+      compile_program p = Some p_compiled ->
+      compile_program c = Some c_compiled ->
+      CompCertExtensions.does_prefix (Intermediate_Instance.CS.sem (Intermediate.program_link p_compiled c_compiled)) m ->
+    exists b,
+      Behaviors.program_behaves (Source_Instance.CS.sem (Source.program_link p c)) b /\
+      (CompCertExtensions.prefix m b \/ CompCertExtensions.behavior_improves_finpref b m).
+  Proof.
+    intros p p_compiled c c_compiled m
+           Hlinkable Hclosed Hwfp Hwfc Hcompp Hcompc Hprefix.
+    (* Auxiliary results, some used multiple times, some need to be in scope. *)
+    pose proof Source.linking_well_formedness Hwfp Hwfc Hlinkable as Hwfpc.
+    destruct (Compiler.well_formed_compilable _ Hwfpc) as [pc_compiled Hcomppc].
+    pose proof Compiler.separate_compilation_weaker _ _ _ _ _
+         Hwfp Hwfc Hlinkable Hcompp Hcompc Hcomppc
+      as Hsc.
+    eapply Compiler.backward_simulation_behavior_improves_prefix;
+      try eassumption.
+    - destruct Hprefix as [beh [Hbeh Hprefix_beh]].
+      exists beh. split.
+      + apply Hsc. exact Hbeh.
+      + exact Hprefix_beh.
+  Qed.
 End Compiler_Instance.

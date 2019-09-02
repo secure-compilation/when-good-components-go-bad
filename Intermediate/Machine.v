@@ -122,6 +122,13 @@ Module EntryPoint.
     | Some addrs => getm addrs P
     | None => None
     end.
+
+  Lemma get_some C P E b : get C P E = Some b -> C \in domm E.
+  Proof.
+    unfold get. intros Hget.
+    destruct (E C) as [M |] eqn:Hcase; last discriminate.
+    apply /dommP. eauto.
+  Qed.
 End EntryPoint.
 
 (* programs *)
@@ -205,10 +212,13 @@ Record well_formed_program (p: program) := {
       prog_main p = Some mainP ->
     exists main_procs,
       getm (prog_procedures p) Component.main = Some main_procs /\ mainP \in domm main_procs;
-  (* The main component is not in the interface if no main procedure is given. *)
+  (* Iff the main component is in the interface, a main procedure is given. *)
   wfprog_main_component:
-    prog_main p = None ->
-    Component.main \notin domm (prog_interface p)
+    (* (RB: Old-style fix, later changed from a simple implication.) *)
+    (* prog_main p = None -> *)
+    (* Component.main \notin domm (prog_interface p) *)
+    Component.main \in domm (prog_interface p) <->
+    prog_main p
 }.
 
 (* a closed program is a program with a closed interface and an existing main
@@ -287,6 +297,28 @@ Proof.
   destruct (isSome (prog_main prog1));
     destruct (isSome (prog_main prog2));
     intuition.
+Qed.
+
+(* RB: TODO: Remove superfluous linkable_main assumptions from development.
+   Observe the relation to PS.domm_partition_in_union_in_neither. *)
+Theorem linkable_implies_linkable_mains : forall (p1 p2 : program),
+  well_formed_program p1 ->
+  well_formed_program p2 ->
+  linkable (prog_interface p1) (prog_interface p2) ->
+  linkable_mains p1 p2.
+Proof.
+  intros p1 p2 Hwf1 Hwf2 [_ Hdisjoint].
+  unfold linkable_mains.
+  destruct (prog_main p1) as [main1 |] eqn:Hmain1;
+    destruct (prog_main p2) as [main2 |] eqn:Hmain2;
+    try reflexivity.
+  (* All that remains is the contradictory case. *)
+  pose proof (proj2 (wfprog_main_component Hwf1)) as Hdomm1.
+  rewrite Hmain1 in Hdomm1. specialize (Hdomm1 isT).
+  pose proof (proj2 (wfprog_main_component Hwf2)) as Hdomm2.
+  rewrite Hmain2 in Hdomm2. specialize (Hdomm2 isT).
+  pose proof fdisjointP _ _ Hdisjoint _ Hdomm1 as Hcontra.
+  now rewrite Hdomm2 in Hcontra.
 Qed.
 
 Definition matching_mains (prog1 prog2 : program) : Prop :=
@@ -474,15 +506,39 @@ Proof.
     by rewrite -(wfprog_defined_procedures Hwf1) -(wfprog_defined_procedures Hwf2).
   - inversion Hwf1 as [_ _ _ _ _ _ Hmain_comp1].
     inversion Hwf2 as [_ _ _ _ _ _ Hmain_comp2].
-    intros Hprog_main1.
-    assert (Hprog_main2 := Hprog_main1).
-    apply prog_main_link_none_left in Hprog_main1.
-    apply prog_main_link_none_right in Hprog_main2.
-    specialize (Hmain_comp1 Hprog_main1).
-    specialize (Hmain_comp2 Hprog_main2).
-    rewrite domm_union in_fsetU.
-    rewrite negb_or Hmain_comp1 Hmain_comp2.
-    reflexivity.
+    split;
+      intros Hprog_main1.
+    + assert (Hprog_main2 := Hprog_main1).
+      simpl in *.
+      destruct (Component.main \in domm (prog_interface p1)) eqn:Hcase1;
+        destruct (Component.main \in domm (prog_interface p2)) eqn:Hcase2.
+      * (* Contra/easy. *)
+        pose proof (proj1 Hmain_comp1 Hcase1) as Hmain1. now rewrite Hmain1.
+      * apply proj1 in Hmain_comp1.
+        specialize (Hmain_comp1 Hcase1). rewrite Hmain_comp1. assumption.
+      * destruct (prog_main p1) as [main1 |] eqn:Hmain1.
+        -- reflexivity.
+        -- apply proj1 in Hmain_comp2.
+           specialize (Hmain_comp2 Hcase2). assumption.
+      * (* Contra. *)
+        destruct (dommP _ _ Hprog_main1) as [CI HCI]. rewrite unionmE in HCI.
+        apply negb_true_iff in Hcase1. apply negb_true_iff in Hcase2.
+        now rewrite (dommPn _ _ Hcase1) (dommPn _ _ Hcase2) in HCI.
+    + inversion Hprog_main1 as [Hmain].
+      destruct (prog_main p1) as [main1 |] eqn:Hcase1;
+        destruct (prog_main p2) as [main2 |] eqn:Hcase2.
+      * (* Contra/easy. RB: NOTE: Three cases can be solved as instances of a
+           little lemma, or a tactic. Is it useful elsewhere? *)
+        apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
+        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        apply /dommP. exists CI. now rewrite unionmE HCI.
+      * apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
+        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        apply /dommP. exists CI. now rewrite unionmE HCI.
+      * apply proj2 in Hmain_comp2. specialize (Hmain_comp2 isT).
+        destruct (dommP _ _ Hmain_comp2) as [CI HCI].
+        apply /dommP. exists CI. simpl. now rewrite (unionmC Hdis_i) unionmE HCI.
+      * discriminate.
 Qed.
 
 (* Given a list of components, create the map that associates to
@@ -579,6 +635,11 @@ Definition prepare_procedures_initial_memory (p: program)
        forall p, prepare_procedures_initial_memory p =
                  prepare_procedures p (prepare_initial_memory p).
   Possibly assuming the well-formedness of the program. *)
+Theorem prepare_procedures_initial_memory_equiv :
+  forall p,
+    prepare_procedures_initial_memory p =
+    prepare_procedures p (prepare_initial_memory p).
+Admitted.
 
 (* initialization of the empty program *)
 
@@ -713,12 +774,6 @@ Proof.
   apply alloc_static_buffers_after_linking; auto.
 Qed.
 
-(*
-Definition prepare_procedures_memory (p: program) (mem: Memory.t) : Memory.t :=
-  let '(mem, _, _) := prepare_procedures p mem in
-  mem.
-*)
-
 Definition prepare_procedures_memory (p: program) : Memory.t :=
   let '(mem, _, _) := prepare_procedures_initial_memory p in
   mem.
@@ -793,7 +848,6 @@ Proof.
   rewrite Hproc in Hp. rewrite Hp. reflexivity.
 Qed.
 
-
 (* maybe write a tactic that does the core except the inversion ... ? *)
 (* or suppress the prog_smth part and keep it generic for all types of program_link ? *)
 Lemma prog_link_buffers_unionm :
@@ -808,7 +862,6 @@ Proof.
   rewrite unionmE. rewrite <- mem_domm. inversion Hwfp as [? _ _ _ Hbuf _ _]. (* if no binding of 1st hypothesis : anomaly : "make_elim_branch_assumptions" *)
   rewrite Hbuf in Hp. rewrite Hp. reflexivity.
 Qed.
-
 
 (* RB: TODO: Simplify hypotheses if possible. *)
 Lemma prepare_procedures_initial_memory_aux_after_linking:
@@ -859,9 +912,12 @@ Proof.
     + destruct Cid as [| n].
       * (* Contra. *)
         inversion Hwfp as [_ _ _ _ _ _ Hmain_compp].
-        specialize (Hmain_compp Hmainp).
-        have Hp'' : (prog_interface p) 0 = None by apply /dommPn.
-        rewrite Hp'' in Hp'.
+        (* specialize (Hmain_compp Hmainp). *)
+        (* have Hp'' : (prog_interface p) 0 = None by apply /dommPn. *)
+        (* rewrite Hp'' in Hp'. *)
+        apply proj1 in Hmain_compp.
+        specialize (Hmain_compp Hp).
+        rewrite Hmainp in Hmain_compp.
         discriminate.
       * reflexivity.
     + reflexivity. (* Easy case. *)
@@ -900,9 +956,12 @@ Proof.
       destruct Cid as [| n].
       * (* Contra, *)
         inversion Hwfc as [_ _ _ _ _ _ Hmain_compc].
-        specialize (Hmain_compc Hmainc).
-        have Hc'' : (prog_interface c) 0 = None by apply /dommPn.
-        rewrite Hc'' in Hc'.
+        (* specialize (Hmain_compc Hmainc). *)
+        (* have Hc'' : (prog_interface c) 0 = None by apply /dommPn. *)
+        (* rewrite Hc'' in Hc'. *)
+        apply proj1 in Hmain_compc.
+        specialize (Hmain_compc Hc).
+        rewrite Hmainc in Hmain_compc.
         discriminate.
       * reflexivity.
     + simpl. rewrite Hmainp Hmainc. reflexivity.
@@ -938,15 +997,39 @@ Proof.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
 Qed.
 
-(*
-Definition prepare_procedures_entrypoints (p: program) (mem: Memory.t) : EntryPoint.t :=
-  let '(_, _, entrypoints) := prepare_procedures p mem in
-  entrypoints.
-*)
+Definition prepare_procedures_procs (p: program) : NMap (NMap code) :=
+  let '(_, procs, _) := prepare_procedures_initial_memory p in
+  procs.
+
+Theorem prepare_procedures_procs_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
+    prepare_procedures_procs (program_link p c) =
+    unionm (prepare_procedures_procs p) (prepare_procedures_procs c).
+Proof.
+  intros p c Hwfp Hwfc Hlinkable Hmains.
+  unfold prepare_procedures_procs,
+         prepare_procedures_initial_memory, prepare_procedures_initial_memory_aux.
+  rewrite <- mapm_unionm. apply mapm_eq.
+  apply prepare_procedures_initial_memory_aux_after_linking; assumption.
+Qed.
 
 Definition prepare_procedures_entrypoints (p: program) : EntryPoint.t :=
   let '(_, _, entrypoints) := prepare_procedures_initial_memory p in
   entrypoints.
+
+Lemma domm_prepare_procedures_entrypoints: forall p,
+  domm (prepare_procedures_entrypoints p) = domm (prog_interface p).
+Proof.
+  intros p.
+  unfold prepare_procedures_entrypoints, prepare_procedures_initial_memory.
+  rewrite domm_map.
+  rewrite domm_prepare_procedures_initial_memory_aux.
+  reflexivity.
+Qed.
 
 Theorem prepare_procedures_entrypoints_after_linking:
   forall p c,
@@ -963,6 +1046,37 @@ Proof.
          prepare_procedures_initial_memory, prepare_procedures_initial_memory_aux.
   rewrite <- mapm_unionm. apply mapm_eq.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
+Qed.
+
+Corollary prepare_procedures_initial_memory_after_linking:
+  forall p c,
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    linkable_mains p c ->
+    prepare_procedures_initial_memory (program_link p c) =
+    (unionm (prepare_procedures_memory p)
+            (prepare_procedures_memory c),
+     unionm (prepare_procedures_procs p)
+            (prepare_procedures_procs c),
+     unionm (prepare_procedures_entrypoints p)
+            (prepare_procedures_entrypoints c)).
+Proof.
+  intros p c Hwfp Hwfc Hlinkable Hmains.
+  rewrite <- prepare_procedures_memory_after_linking; try assumption.
+  rewrite <- prepare_procedures_procs_after_linking; try assumption.
+  rewrite <- prepare_procedures_entrypoints_after_linking; try assumption.
+  reflexivity.
+Qed.
+
+Remark prepare_procedures_initial_memory_decompose:
+  forall p,
+    prepare_procedures_initial_memory p =
+    (prepare_procedures_memory p,
+     prepare_procedures_procs p,
+     prepare_procedures_entrypoints p).
+Proof.
+  reflexivity.
 Qed.
 
 (* RB: Slight "misnomer" because of the presence of matching_mains.
@@ -1038,6 +1152,74 @@ Proof.
       discriminate.
 Qed.
 
+(* A more lightweight variation on the above lemma.
+   RB: NOTE: is_true_true replaces eq_refl on specializations, as eqtype is
+   imported. *)
+Lemma interface_preserves_closedness_r' :
+  forall p1 p2 p2',
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    closed_program (program_link p1 p2) ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    linkable_mains p1 p2 ->
+    well_formed_program p2' ->
+    prog_interface p2 = prog_interface p2' ->
+    closed_program (program_link p1 p2').
+Proof.
+  intros p c c' Hwfp Hwfc Hclosed Hlinkable Hmains Hwfc' Hifaces.
+  apply interface_preserves_closedness_r with (p2 := c);
+    try assumption.
+  - (* RB: TODO: Extract lemma from here. The stronger relation between
+       interfaces and main procedures essentially renders matching_mains
+       superfluous, trivially derivable. *)
+    inversion Hwfc as [_ _ _ _ _ _ [Hmainc Hmainc']].
+    inversion Hwfc' as [_ _ _ _ _ _ [Hmainc1 Hmainc1']].
+    rewrite <- Hifaces in Hmainc1, Hmainc1'.
+    destruct (Component.main \in domm (prog_interface c)) eqn:Hcase1.
+    + specialize (Hmainc is_true_true). specialize (Hmainc1 is_true_true).
+      unfold matching_mains.
+      destruct (prog_main c) as [mainc |] eqn:Hcase2;
+        destruct (prog_main c') as [mainc' |] eqn:Hcase3;
+        done.
+    + destruct (prog_main c) as [mainc |] eqn:Hcase2.
+      * now specialize (Hmainc' is_true_true).
+      * destruct (prog_main c') as [mainc' |] eqn:Hcase3;
+          last done.
+        now specialize (Hmainc1' is_true_true).
+Qed.
+
+(* RB: TODO: Revisit uses of matching_mains as hypotheses and see when they can
+   be removed due to their being derivable from this result. *)
+Lemma interface_implies_matching_mains :
+  forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    prog_interface p1 = prog_interface p2 ->
+    matching_mains p1 p2.
+Proof.
+  intros p1 p2 Hwf1 Hwf2 Hiface.
+  unfold matching_mains.
+  destruct (prog_main p1) as [main1 |] eqn:Hcase1;
+    destruct (prog_main p2) as [main2 |] eqn:Hcase2.
+  - easy.
+  - split; first easy.
+    exfalso.
+    exfalso.
+    inversion Hwf2 as [_ _ _ _ _ _ [Hmain2' _]].
+    inversion Hwf1 as [_ _ _ _ _ _ [_ Hmain1']].
+    rewrite Hcase1 in Hmain1'. specialize (Hmain1' is_true_true).
+    rewrite -> Hcase2, <- Hiface in Hmain2'. apply Hmain2' in  Hmain1'.
+    discriminate.
+  - split; last easy.
+    exfalso.
+    inversion Hwf1 as [_ _ _ _ _ _ [Hmain1' _]].
+    inversion Hwf2 as [_ _ _ _ _ _ [_ Hmain2']].
+    rewrite Hcase2 in Hmain2'. specialize (Hmain2' is_true_true).
+    rewrite -> Hcase1, -> Hiface in Hmain1'. apply Hmain1' in  Hmain2'.
+    discriminate.
+  - easy.
+Qed.
+
 Lemma closed_program_link_sym p1 p2 :
   well_formed_program p1 ->
   well_formed_program p2 ->
@@ -1067,6 +1249,27 @@ Proof.
   - inversion Hclosed as [Hclosed_iface _].
     rewrite closed_interface_union in Hclosed_iface.
     assumption.
+Qed.
+
+Remark prog_main_none_same_interface :
+  forall p1 p2,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    prog_interface p1 = prog_interface p2 ->
+    prog_main p1 = None ->
+    prog_main p2 = None.
+Proof.
+  intros p1 p2 Hwf1 Hwf2 Hiface Hnone.
+  inversion Hwf1 as [_ _ _ _ _ _ [Hmain1 Hmain1']].
+  inversion Hwf2 as [_ _ _ _ _ _ [Hmain2 Hmain2']].
+  destruct p1 as [iface1 procs1 bufs1 main1];
+    destruct p2 as [iface2 procs2 bufs2 main2];
+    simpl in *.
+  destruct main2 as [main2P |] eqn:Hcase1;
+    last reflexivity.
+  subst.
+  specialize (Hmain1 (Hmain2' isT)).
+  discriminate.
 Qed.
 
 End Intermediate.
