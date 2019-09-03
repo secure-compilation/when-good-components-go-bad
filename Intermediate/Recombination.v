@@ -125,7 +125,6 @@ Section Mergeable.
   Let sem   := CS.sem prog.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
-  Hint Unfold ip ic.
 
   (* This "extensional" reading of compatible states depends directly on the
      partial programs concerned (implicitly through the section mechanism) and
@@ -481,6 +480,16 @@ Section Mergeable.
     unfold CS.is_context_component, turn_of, CS.state_turn in Hcc.
     rewrite (mergeable_states_pc_same_component Hmerge).
     now destruct s'' as [[[? ?] ?] ?].
+  Qed.
+
+  Lemma mergeable_states_program_component_domm mem gps regs pc s'' :
+    mergeable_states (mem, gps, regs, pc) s'' ->
+    CS.is_program_component (mem, gps, regs, pc) ic ->
+    Pointer.component pc \in domm ip.
+  Proof.
+    intros Hmerge Hcomp.
+    change pc with (CS.state_pc (mem, gps, regs, pc)).
+    eapply is_program_component_pc_in_domm; last eassumption; assumption.
   Qed.
 
   (* TODO: Explain the interest of this construct, as it is only used as a proxy
@@ -1048,16 +1057,6 @@ Section PS.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
 
-  Remark mergeable_states_program_component_domm mem gps regs pc s'' :
-    mergeable_states p c p' c' (mem, gps, regs, pc) s'' ->
-    CS.is_program_component (mem, gps, regs, pc) ic ->
-    Pointer.component pc \in domm ip.
-  Proof.
-    intros Hmerge Hcomp.
-    change pc with (CS.state_pc (mem, gps, regs, pc)).
-    eapply is_program_component_pc_in_domm; last eassumption; assumption.
-  Qed.
-
   Ltac t_to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12'' :=
     inversion Hmerge1
       as [_ s0'' t01'' _ _ Hwfp' Hwfc' Hmergeable_ifaces
@@ -1122,7 +1121,7 @@ Section PS.
       destruct s3'' as [[[gps3'' mem3''] regs3''] pc3''].
       inversion Hstep23''; subst;
         (* Unfold, common rewrite on PC, memory rewrite for memory goals and done. *)
-        unfold merge_states, merge_registers, merge_pcs, merge_memories;
+        unfold merge_states, merge_registers, merge_pcs, merge_memories, ip;
         erewrite mergeable_states_program_component_domm; try eassumption;
         try (pose proof to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12'' Hstep23'' as Hmem23'';
              simpl in Hmem23''; rewrite Hmem23'');
@@ -1577,7 +1576,6 @@ Section ThreewayMultisem3.
   Let sem   := CS.sem prog.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
-  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
   Theorem threeway_multisem_star s1 s1'' t s2 s2'' :
     mergeable_states p c p' c' s1 s1'' ->
