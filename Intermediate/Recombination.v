@@ -120,9 +120,12 @@ Section Mergeable.
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
+  Let prog'  := program_link p  c'.
   Let prog'' := program_link p' c'.
   Let sem   := CS.sem prog.
+  Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
+  Hint Unfold ip ic.
 
   (* This "extensional" reading of compatible states depends directly on the
      partial programs concerned (implicitly through the section mechanism) and
@@ -612,6 +615,240 @@ Section Mergeable.
     destruct (ComponentMemory.alloc memC size) as [memC' b].
     now eauto.
   Qed.
+
+  (* RB: TODO: More the following few helper lemmas to their appropriate
+     location. Consider changing the naming conventions from
+     "partialized" to "recombined" or similar. Exposing the innards of the
+     memory merge operation is not pretty; sealing them would require to
+     add the program step from s to the lemmas. In this block, mergeable_states
+     may be too strong and could be weakened if it were interesting to do so.
+
+     See comments for pointers to existing related lemmas. *)
+
+  Lemma to_partial_memory_merge_memories_left s s'' :
+    mergeable_states s s'' ->
+    to_partial_memory                       (CS.state_mem s)                     (domm ic) =
+    to_partial_memory (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) (domm ic).
+  Proof.
+    intros Hmerg.
+    inversion Hmerg
+      as [s0 s0'' t Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
+          Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar''].
+    apply /eq_fmap => Cid.
+    pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
+      as Hmergeable_ifaces_sym.
+    assert (Hmem : domm (CS.state_mem s) = domm (unionm ip ic)).
+    {
+      apply CS.comes_from_initial_state_mem_domm.
+      inversion Hprog_is_closed as [_ [main [_ [Hmain _]]]].
+      pose proof linking_well_formedness Hwfp Hwfc (proj1 Hmergeable_ifaces) as Hwf.
+      now exists prog, main, s0, t.
+    }
+    assert (Hmem'' : domm (CS.state_mem s'') = domm (unionm ip ic)).
+    {
+      apply CS.comes_from_initial_state_mem_domm.
+      inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
+      unfold ip, ic in Hmergeable_ifaces_sym. rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
+      pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
+      apply mergeable_interfaces_sym in Hmergeable_ifaces_sym.
+      exists prog'', main, s0'', t.
+      repeat (split; eauto). unfold ip, ic; now rewrite Hifacec Hifacep.
+    }
+    unfold merge_memories.
+    destruct (Cid \in domm ip) eqn:Hdommp;
+      destruct (Cid \in domm ic) eqn:Hdommc.
+    - exfalso.
+      apply domm_partition_notin with (ctx1 := ip) in Hdommc.
+      now rewrite Hdommp in Hdommc.
+      assumption.
+    - erewrite to_partial_memory_in; try eassumption.
+      erewrite to_partial_memory_in; try eassumption.
+      rewrite unionmE.
+      erewrite to_partial_memory_in; try eassumption.
+      erewrite to_partial_memory_notin; try eassumption.
+      now destruct ((CS.state_mem s) Cid).
+    - erewrite to_partial_memory_notin; try eassumption.
+      erewrite to_partial_memory_notin; try eassumption.
+      reflexivity.
+    - erewrite !to_partial_memory_notin_strong; try eassumption;
+        try now apply negb_true_iff in Hdommc;
+        try now apply negb_true_iff in Hdommp.
+      rewrite unionmE.
+      erewrite !to_partial_memory_notin_strong; try eassumption;
+        try now apply negb_true_iff in Hdommc;
+        try now apply negb_true_iff in Hdommp.
+      destruct (isSome ((CS.state_mem s) Cid)) eqn:HisSome; try reflexivity.
+      (* Might want to use star_mem_well_formed to prove these subgoals. *)
+      assert (Hmem_Cid: (CS.state_mem s) Cid = None).
+      { apply /dommPn.
+        apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
+        rewrite Hmem.
+        rewrite domm_union. apply /fsetUP.
+        intros Hn; destruct Hn as [Hn | Hn].
+        now rewrite Hn in Hdommp.
+        now rewrite Hn in Hdommc.
+      }
+      assert (Hmem''_Cid: (CS.state_mem s'') Cid = None).
+      { apply /dommPn.
+        apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
+        rewrite Hmem''.
+        rewrite domm_union. apply /fsetUP.
+        intros Hn; destruct Hn as [Hn | Hn].
+        now rewrite Hn in Hdommp.
+        now rewrite Hn in Hdommc.
+      }
+      now rewrite Hmem_Cid Hmem''_Cid.
+  Qed.
+
+  (* Search _ Memory.load filterm. *)
+  Lemma program_load_to_partialized_memory s s'' ptr v :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.load (CS.state_mem s) ptr = Some v ->
+    Memory.load (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr =
+    Some v.
+  Proof.
+    intros Hpc Hmerge Hptr Hload.
+    destruct s as [[[gps mem] regs] pc]. destruct ptr as [[C b] o]. simpl in *. subst.
+    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm.
+    pose proof to_partial_memory_merge_memories_left Hmerge as Hmem.
+    now erewrite <- (program_load_in_partialized_memory_strong Hmem Hdomm).
+  Qed.
+
+  (* RB: NOTE: Consider removing weaker version of lemma above. *)
+  Lemma program_load_to_partialized_memory_strong s s'' ptr :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.load (CS.state_mem s) ptr =
+    Memory.load (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr.
+  Proof.
+    destruct (Memory.load (CS.state_mem s) ptr) as [v |] eqn:Hcase1;
+      first (symmetry; now apply program_load_to_partialized_memory).
+    (* The new part is the None case. *)
+    intros Hpc Hmerge Hptr.
+    destruct s as [[[gps mem] regs] pc]; destruct ptr as [[C b] o];
+      unfold Memory.load, merge_memories in *; simpl in *; subst.
+    eapply is_program_component_pc_in_domm in Hpc; last eassumption; try assumption.
+    inversion Hmerge as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
+    erewrite unionmE, to_partial_memory_in, to_partial_memory_notin;
+      try eassumption;
+      [| apply mergeable_interfaces_sym; eassumption].
+    now destruct (mem (Pointer.component pc)).
+  Qed.
+
+  (* RB: NOTE: Could the following lemmas be moved to memory without relying on
+     mergeable_states?
+
+     Indeed, now that we have distilled well-formedness conditions, it is clear
+     that in many cases they are overkill -- though they can be convenient.
+     Conversely, one could phrase the previous genv_* lemmas in terms of
+     mergeable_states as well. *)
+
+  (* Search _ Memory.store filterm. *)
+  (* Search _ Memory.store PS.to_partial_memory. *)
+  (* Search _ Memory.store PS.merge_memories. *)
+  (* RB: TODO: Resolve name clash with theorem in Memory. *)
+  Lemma program_store_to_partialized_memory s s'' ptr v mem :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
+    Memory.store (CS.state_mem s) ptr v = Some mem ->
+    Memory.store (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr v =
+    Some (merge_memories ip ic mem (CS.state_mem s'')).
+  Proof.
+    intros Hpc Hmerge Hptr Hstore.
+    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hnotin.
+    rewrite <- Hptr in Hnotin.
+    pose proof partialize_program_store Hnotin Hstore as Hstore'.
+    pose proof unpartialize_program_store
+         (to_partial_memory (CS.state_mem s'') (domm ip)) Hstore' as Hstore''.
+    done.
+  Qed.
+
+  (* Search _ Memory.alloc filterm. *)
+  (* Search _ Memory.alloc PS.to_partial_memory. *)
+  (* Search _ Memory.alloc PS.merge_memories. *)
+  Lemma program_alloc_to_partialized_memory s s'' mem ptr size :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    Memory.alloc (CS.state_mem s) (CS.state_component s) size = Some (mem, ptr) ->
+    Memory.alloc (merge_memories ip ic (CS.state_mem s) (CS.state_mem s''))
+                 (CS.state_component s) size =
+    Some (merge_memories ip ic mem (CS.state_mem s''), ptr).
+  Proof.
+    intros Hpc Hmerge Halloc.
+    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hnotin.
+    pose proof partialize_program_alloc Hnotin Halloc as Halloc'.
+    pose proof unpartialize_program_alloc
+         (to_partial_memory (CS.state_mem s'') (domm ip)) Halloc' as Halloc''.
+    done.
+  Qed.
+
+  (* Search _ find_label_in_component. *)
+  Lemma find_label_in_component_recombination s s'' l pc :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    find_label_in_component (globalenv sem) (CS.state_pc s) l = Some pc ->
+    find_label_in_component (globalenv sem') (CS.state_pc s) l = Some pc.
+  Proof.
+    destruct s as [[[? ?] ?] pc_]. simpl.
+    intros Hpc Hmerge Hlabel.
+    inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
+    pose proof proj1 Hmergeable_ifaces as Hlinkable.
+    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
+    pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hpc_.
+    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
+    rewrite (find_label_in_component_program_link_left _ _ _ _ Hmains) in Hlabel;
+      try assumption.
+    unfold ic in Hdomm; rewrite Hifacec in Hdomm.
+    unfold ip, ic in Hlinkable.
+    rewrite (find_label_in_component_program_link_left Hdomm Hwfp);
+      try congruence.
+    apply linkable_implies_linkable_mains; congruence.
+  Qed.
+
+  (* Search _ find_label_in_procedure. *)
+  Lemma find_label_in_procedure_recombination s s'' l pc :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    find_label_in_procedure (globalenv sem) (CS.state_pc s) l = Some pc ->
+    find_label_in_procedure (globalenv sem') (CS.state_pc s) l = Some pc.
+  Proof.
+    destruct s as [[[? ?] ?] pc_]. simpl.
+    intros Hpc Hmerge Hlabel.
+    inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
+    pose proof proj1 Hmergeable_ifaces as Hlinkable.
+    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
+    pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hpc_.
+    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
+    rewrite (find_label_in_procedure_program_link_left _ _ _ _ Hmains) in Hlabel;
+      try assumption.
+    unfold find_label_in_procedure in *.
+    destruct ((genv_procedures (prepare_global_env p)) (Pointer.component pc_))
+      as [C_procs |] eqn:Hcase; last discriminate.
+    unfold ic in Hlinkable. rewrite Hifacec in Hlinkable. unfold ic in Hdomm; rewrite Hifacec in Hdomm.
+    pose proof linkable_implies_linkable_mains Hwfp Hwfc' Hlinkable as Hmains'.
+    rewrite (genv_procedures_program_link_left_notin _ _ _ _ Hmains');
+      try assumption.
+    now rewrite Hcase.
+  Qed.
+
+  (* Search _ PS.is_program_component Pointer.component. *)
+  Lemma is_program_component_in_domm s s'' :
+    CS.is_program_component s ic ->
+    mergeable_states s s'' ->
+    CS.state_component s \in domm (prog_interface p).
+  Proof.
+    intros Hcomp Hmerge.
+    unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp.
+    destruct s as [[[gps1 mem1] regs1] pc1].
+    inversion Hmerge as [s0 _ t Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ Hstar _].
+    destruct (CS.star_pc_domm _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [Hip | Hic].
+    - assumption.
+    - now rewrite Hic in Hcomp.
+  Qed.
 End Mergeable.
 
 Section MergeSym.
@@ -855,7 +1092,7 @@ Section PS.
       match goal with
       | Hstore : Memory.store _ _ _ = _,
         Heq : Pointer.component _ = Pointer.component _ |- _ =>
-        erewrite program_store_to_partialized_memory; eauto 1; rewrite Heq
+        erewrite Memory.program_store_to_partialized_memory; eauto 1; rewrite Heq
       | Halloc : Memory.alloc _ _ _ = _ |- _ =>
         erewrite program_allocation_to_partialized_memory; eauto 1
       end;
@@ -1014,6 +1251,23 @@ Section BehaviorStar.
   Qed.
 End BehaviorStar.
 
+  (* Search _ imported_procedure. *)
+  (* RB: NOTE: This kind of lemma is usually the composition of two unions, one
+     of which is generally extant. *)
+  Lemma imported_procedure_recombination p c c' s C P :
+    CS.is_program_component s (prog_interface c) ->
+    imported_procedure
+      (genv_interface (globalenv (CS.sem (program_link p c )))) (CS.state_component s) C P ->
+    imported_procedure
+      (genv_interface (globalenv (CS.sem (program_link p c')))) (CS.state_component s) C P.
+  Proof.
+    intros Hpc Himp.
+    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
+    rewrite (imported_procedure_unionm_left Hdomm) in Himp.
+    destruct Himp as [CI [Hcomp Himp]]. exists CI. split; [| assumption].
+    unfold Program.has_component. rewrite unionmE. now rewrite Hcomp.
+  Qed.
+
   (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
      operating on an explicit program link, one then being the exact symmetric of
      the other, i.e., its application after communativity of linking. There is a
@@ -1092,257 +1346,6 @@ Section ThreewayMultisem1.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
 
-  (* RB: TODO: More the following few helper lemmas to their appropriate
-     location. Consider changing the naming conventions from
-     "partialized" to "recombined" or similar. Exposing the innards of the
-     memory merge operation is not pretty; sealing them would require to
-     add the program step from s to the lemmas. In this block, mergeable_states
-     may be too strong and could be weakened if it were interesting to do so.
-
-     See comments for pointers to existing related lemmas. *)
-
-  Lemma to_partial_memory_merge_memories_left s s'' :
-    mergeable_states p c p' c' s s'' ->
-    to_partial_memory                       (CS.state_mem s)                     (domm ic) =
-    to_partial_memory (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) (domm ic).
-  Proof.
-    intros Hmerg.
-    inversion Hmerg
-      as [s0 s0'' t Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-          Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar''].
-    apply /eq_fmap => Cid.
-    pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
-      as Hmergeable_ifaces_sym.
-    assert (Hmem : domm (CS.state_mem s) = domm (unionm ip ic)).
-    {
-      apply CS.comes_from_initial_state_mem_domm.
-      inversion Hprog_is_closed as [_ [main [_ [Hmain _]]]].
-      pose proof linking_well_formedness Hwfp Hwfc (proj1 Hmergeable_ifaces) as Hwf.
-      now exists prog, main, s0, t.
-    }
-    assert (Hmem'' : domm (CS.state_mem s'') = domm (unionm ip ic)).
-    {
-      apply CS.comes_from_initial_state_mem_domm.
-      inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
-      rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
-      pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
-      apply mergeable_interfaces_sym in Hmergeable_ifaces_sym.
-      exists prog'', main, s0'', t.
-      repeat (split; eauto). unfold ip, ic; now rewrite Hifacec Hifacep.
-    }
-    unfold merge_memories.
-    destruct (Cid \in domm ip) eqn:Hdommp;
-      destruct (Cid \in domm ic) eqn:Hdommc.
-    - exfalso.
-      apply domm_partition_notin with (ctx1 := ip) in Hdommc.
-      now rewrite Hdommp in Hdommc.
-      assumption.
-    - erewrite to_partial_memory_in; try eassumption.
-      erewrite to_partial_memory_in; try eassumption.
-      rewrite unionmE.
-      erewrite to_partial_memory_in; try eassumption.
-      erewrite to_partial_memory_notin; try eassumption.
-      now destruct ((CS.state_mem s) Cid).
-    - erewrite to_partial_memory_notin; try eassumption.
-      erewrite to_partial_memory_notin; try eassumption.
-      reflexivity.
-    - erewrite !to_partial_memory_notin_strong; try eassumption;
-        try now apply negb_true_iff in Hdommc;
-        try now apply negb_true_iff in Hdommp.
-      rewrite unionmE.
-      erewrite !to_partial_memory_notin_strong; try eassumption;
-        try now apply negb_true_iff in Hdommc;
-        try now apply negb_true_iff in Hdommp.
-      destruct (isSome ((CS.state_mem s) Cid)) eqn:HisSome; try reflexivity.
-      (* Might want to use star_mem_well_formed to prove these subgoals. *)
-      assert (Hmem_Cid: (CS.state_mem s) Cid = None).
-      { apply /dommPn.
-        apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
-        rewrite Hmem.
-        rewrite domm_union. apply /fsetUP.
-        intros Hn; destruct Hn as [Hn | Hn].
-        now rewrite Hn in Hdommp.
-        now rewrite Hn in Hdommc.
-      }
-      assert (Hmem''_Cid: (CS.state_mem s'') Cid = None).
-      { apply /dommPn.
-        apply negb_true_iff in Hdommp; apply negb_true_iff in Hdommc.
-        rewrite Hmem''.
-        rewrite domm_union. apply /fsetUP.
-        intros Hn; destruct Hn as [Hn | Hn].
-        now rewrite Hn in Hdommp.
-        now rewrite Hn in Hdommc.
-      }
-      now rewrite Hmem_Cid Hmem''_Cid.
-  Qed.
-
-  (* Search _ Memory.load filterm. *)
-  Lemma program_load_to_partialized_memory s s'' ptr v :
-    CS.is_program_component s ic ->
-    mergeable_states p c p' c' s s'' ->
-    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
-    Memory.load (CS.state_mem s) ptr = Some v ->
-    Memory.load (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr =
-    Some v.
-  Proof.
-    intros Hpc Hmerge Hptr Hload.
-    destruct s as [[[gps mem] regs] pc]. destruct ptr as [[C b] o]. simpl in *. subst.
-    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm.
-    pose proof to_partial_memory_merge_memories_left Hmerge as Hmem.
-    now erewrite <- (program_load_in_partialized_memory_strong Hmem Hdomm).
-  Qed.
-
-  (* RB: NOTE: Consider removing weaker version of lemma above. *)
-  Lemma program_load_to_partialized_memory_strong s s'' ptr :
-    CS.is_program_component s ic ->
-    mergeable_states p c p' c' s s'' ->
-    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
-    Memory.load (CS.state_mem s) ptr =
-    Memory.load (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr.
-  Proof.
-    destruct (Memory.load (CS.state_mem s) ptr) as [v |] eqn:Hcase1;
-      first (symmetry; now apply program_load_to_partialized_memory).
-    (* The new part is the None case. *)
-    intros Hpc Hmerge Hptr.
-    destruct s as [[[gps mem] regs] pc]; destruct ptr as [[C b] o];
-      unfold Memory.load, merge_memories in *; simpl in *; subst.
-    eapply is_program_component_pc_in_domm in Hpc; last eassumption; try assumption.
-    inversion Hmerge as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
-    erewrite unionmE, to_partial_memory_in, to_partial_memory_notin;
-      try eassumption;
-      [| apply mergeable_interfaces_sym; eassumption].
-    now destruct (mem (Pointer.component pc)).
-  Qed.
-
-  (* RB: NOTE: Could the following lemmas be moved to memory without relying on
-     mergeable_states?
-
-     Indeed, now that we have distilled well-formedness conditions, it is clear
-     that in many cases they are overkill -- though they can be convenient.
-     Conversely, one could phrase the previous genv_* lemmas in terms of
-     mergeable_states as well. *)
-
-  (* Search _ Memory.store filterm. *)
-  (* Search _ Memory.store PS.to_partial_memory. *)
-  (* Search _ Memory.store PS.merge_memories. *)
-  Lemma program_store_to_partialized_memory s s'' ptr v mem :
-    CS.is_program_component s ic ->
-    mergeable_states p c p' c' s s'' ->
-    Pointer.component ptr = Pointer.component (CS.state_pc s) ->
-    Memory.store (CS.state_mem s) ptr v = Some mem ->
-    Memory.store (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) ptr v =
-    Some (merge_memories ip ic mem (CS.state_mem s'')).
-  Proof.
-    intros Hpc Hmerge Hptr Hstore.
-    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hnotin.
-    rewrite <- Hptr in Hnotin.
-    pose proof partialize_program_store Hnotin Hstore as Hstore'.
-    pose proof unpartialize_program_store
-         (to_partial_memory (CS.state_mem s'') (domm ip)) Hstore' as Hstore''.
-    done.
-  Qed.
-
-  (* Search _ Memory.alloc filterm. *)
-  (* Search _ Memory.alloc PS.to_partial_memory. *)
-  (* Search _ Memory.alloc PS.merge_memories. *)
-  Lemma program_alloc_to_partialized_memory s s'' mem ptr size :
-    CS.is_program_component s ic ->
-    mergeable_states p c p' c' s s'' ->
-    Memory.alloc (CS.state_mem s) (CS.state_component s) size = Some (mem, ptr) ->
-    Memory.alloc (merge_memories ip ic (CS.state_mem s) (CS.state_mem s''))
-                 (CS.state_component s) size =
-    Some (merge_memories ip ic mem (CS.state_mem s''), ptr).
-  Proof.
-    intros Hpc Hmerge Halloc.
-    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hnotin.
-    pose proof partialize_program_alloc Hnotin Halloc as Halloc'.
-    pose proof unpartialize_program_alloc
-         (to_partial_memory (CS.state_mem s'') (domm ip)) Halloc' as Halloc''.
-    done.
-  Qed.
-
-  (* Search _ find_label_in_component. *)
-  Lemma find_label_in_component_recombination s s'' l pc :
-    CS.is_program_component s ic ->
-    mergeable_states p c p' c' s s'' ->
-    find_label_in_component (globalenv sem) (CS.state_pc s) l = Some pc ->
-    find_label_in_component (globalenv sem') (CS.state_pc s) l = Some pc.
-  Proof.
-    destruct s as [[[? ?] ?] pc_]. simpl.
-    intros Hpc Hmerge Hlabel.
-    inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
-    pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
-    pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hpc_.
-    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
-    rewrite (find_label_in_component_program_link_left _ _ _ _ Hmains) in Hlabel;
-      try assumption.
-    unfold ic in Hdomm; rewrite Hifacec in Hdomm.
-    rewrite (find_label_in_component_program_link_left Hdomm Hwfp);
-      try congruence.
-    apply linkable_implies_linkable_mains; congruence.
-  Qed.
-
-  (* Search _ find_label_in_procedure. *)
-  Lemma find_label_in_procedure_recombination s s'' l pc :
-    CS.is_program_component s ic ->
-    mergeable_states p c p' c' s s'' ->
-    find_label_in_procedure (globalenv sem) (CS.state_pc s) l = Some pc ->
-    find_label_in_procedure (globalenv sem') (CS.state_pc s) l = Some pc.
-  Proof.
-    destruct s as [[[? ?] ?] pc_]. simpl.
-    intros Hpc Hmerge Hlabel.
-    inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
-    pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
-    pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hpc_.
-    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
-    rewrite (find_label_in_procedure_program_link_left _ _ _ _ Hmains) in Hlabel;
-      try assumption.
-    unfold find_label_in_procedure in *.
-    destruct ((genv_procedures (prepare_global_env p)) (Pointer.component pc_))
-      as [C_procs |] eqn:Hcase; last discriminate.
-    rewrite Hifacec in Hlinkable. unfold ic in Hdomm; rewrite Hifacec in Hdomm.
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc' Hlinkable as Hmains'.
-    rewrite (genv_procedures_program_link_left_notin _ _ _ _ Hmains');
-      try assumption.
-    now rewrite Hcase.
-  Qed.
-
-  (* Search _ PS.is_program_component Pointer.component. *)
-  Lemma is_program_component_in_domm s s'' :
-    CS.is_program_component s ic ->
-    mergeable_states p c p' c' s s'' ->
-    CS.state_component s \in domm (prog_interface p).
-  Proof.
-    intros Hcomp Hmerge.
-    unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp.
-    destruct s as [[[gps1 mem1] regs1] pc1].
-    inversion Hmerge as [s0 _ t Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ Hstar _].
-    destruct (CS.star_pc_domm _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [Hip | Hic].
-    - assumption.
-    - now rewrite Hic in Hcomp.
-  Qed.
-
-  (* Search _ imported_procedure. *)
-  (* RB: NOTE: This kind of lemma is usually the composition of two unions, one
-     of which is generally extant. *)
-  Lemma imported_procedure_recombination s C P :
-    CS.is_program_component s ic ->
-    imported_procedure
-      (genv_interface (globalenv sem )) (CS.state_component s) C P ->
-    imported_procedure
-      (genv_interface (globalenv sem')) (CS.state_component s) C P.
-  Proof.
-    intros Hpc Himp.
-    pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
-    rewrite (imported_procedure_unionm_left Hdomm) in Himp.
-    destruct Himp as [CI [Hcomp Himp]]. exists CI. split; [| assumption].
-    unfold Program.has_component. rewrite unionmE. now rewrite Hcomp.
-  Qed.
-
-  (* RB: NOTE: The regular, non-helper contents of the section start here. *)
-
   Lemma threeway_multisem_mergeable_step_E0 s1 s2 s1'' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
@@ -1377,16 +1380,16 @@ Section ThreewayMultisem1.
     (* Solve side goals for CS step. *)
     match goal with
     | |- Memory.load _ _ = _ =>
-      apply program_load_to_partialized_memory;
-      try assumption; [now rewrite Pointer.inc_preserves_component]
+      eapply program_load_to_partialized_memory;
+      try eassumption; [now rewrite Pointer.inc_preserves_component]
     | |- Memory.store _ _ _ = _ =>
-      apply program_store_to_partialized_memory; eassumption
+      eapply program_store_to_partialized_memory; eassumption
     | |- find_label_in_component _ _ _ = _ =>
       eapply find_label_in_component_recombination; eassumption
     | |- find_label_in_procedure _ _ _ = _ =>
       eapply find_label_in_procedure_recombination; eassumption
     | |- Memory.alloc _ _ _ = _ =>
-      now apply program_alloc_to_partialized_memory
+      eapply program_alloc_to_partialized_memory; eassumption
     | _ => idtac
     end;
     (* Apply linking invariance and solve side goals. *)
@@ -1476,7 +1479,7 @@ Section ThreewayMultisem1.
   Ltac t_threeway_multisem_event_lockstep_program_step_call Hcomp1 Hmerge1 :=
     apply CS.Call; try assumption;
     [
-    | now apply (imported_procedure_recombination Hcomp1)
+    | now apply (imported_procedure_recombination _ Hcomp1)
     | (   (now apply (@genv_entrypoints_recombination_left _ c))
        || (now eapply (@genv_entrypoints_recombination_right _ c p')))
     ];
