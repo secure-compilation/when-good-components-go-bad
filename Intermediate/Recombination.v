@@ -1937,7 +1937,6 @@ Section Recombination.
   Let sem'' := CS.sem prog''.
 
   (* RB: NOTE: Possible improvements:
-      - Get rid of assert idioms in FTbc case. RB: TODO: Assigned to JT.
       - Try to refactor case analysis in proof.
      This result is currently doing the legwork of going from a simulation on
      stars to one on program behaviors without direct mediation from the CompCert
@@ -1983,31 +1982,9 @@ Section Recombination.
       + eapply match_nostep; eassumption.
       + eapply match_nofinal; eassumption.
     - (* Here we talk about the stars associated to the behaviors, without
-         worrying now about connecting them to the existing initial states.
-         RB: TODO: Remove asserts, phrase in terms of the instances of
-         behavior_prefix_star directly. *)
-      assert
-        (exists s s',
-            initial_state (CS.sem (program_link p c)) s /\
-            Star (CS.sem (program_link p c)) s tm s')
-        as [s1_ [s2 [Hini1_ Hstar12]]].
-      {
-        inversion Hmergeable_ifaces as [Hlinkable _].
-        destruct (CS.behavior_prefix_star Hbeh Hprefix)
-          as [s1_ [s2 [Hini1_ Hstar12]]].
-        now exists s1_, s2.
-      }
-      assert
-        (exists s s',
-            initial_state (CS.sem (program_link p' c')) s /\
-            Star (CS.sem (program_link p' c')) s tm s')
-        as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
-      {
-        rewrite -> Hifacep, -> Hifacec in Hmergeable_ifaces.
-        destruct (CS.behavior_prefix_star Hbeh'' Hprefix'')
-          as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
-        now exists s1''_, s2''.
-      }
+         worrying now about connecting them to the existing initial states. *)
+      destruct (CS.behavior_prefix_star Hbeh Hprefix) as [s1_ [s2 [Hini1_ Hstar12]]].
+      destruct (CS.behavior_prefix_star Hbeh'' Hprefix'') as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
       pose proof match_initial_states Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
            Hprog_is_closed Hprog_is_closed' Hini1_ Hini1''_ as [Hini1' Hmerge1].
       pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
