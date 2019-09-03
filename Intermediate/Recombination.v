@@ -1167,15 +1167,13 @@ End PS.
   Admitted.
 
 Section BehaviorStar.
-  Variables p c: program.
-
   (* RB: Could be phrased in terms of does_prefix. *)
-  Theorem behavior_prefix_star b m :
-    program_behaves (CS.sem (program_link p c)) b ->
+  Theorem behavior_prefix_star p b m :
+    program_behaves (CS.sem p) b ->
     prefix m b ->
   exists s1 s2,
-    CS.initial_state (program_link p c) s1 /\
-    Star (CS.sem (program_link p c)) s1 (finpref_trace m) s2.
+    CS.initial_state p s1 /\
+    Star (CS.sem p) s1 (finpref_trace m) s2.
   Proof.
     destruct m as [tm | tm | tm].
     - intros Hb Hm.
@@ -1192,13 +1190,13 @@ Section BehaviorStar.
       inversion Hb as [s1 ? Hini Hbeh | Hini]; subst.
       + inversion Hbeh as [| | | ? s2 Hstar Hnostep Hfinal]; subst.
         eexists; eexists; split; now eauto.
-      + specialize (Hini (CS.initial_machine_state (program_link p c))).
+      + specialize (Hini (CS.initial_machine_state p)).
         congruence.
     - revert b.
       induction tm as [| e t IHt] using rev_ind;
         intros b Hb Hm;
         simpl in *.
-      + exists (CS.initial_machine_state (program_link p c)), (CS.initial_machine_state (program_link p c)).
+      + exists (CS.initial_machine_state p), (CS.initial_machine_state p).
         split; [congruence | now apply star_refl].
       + pose proof behavior_prefix_app_inv Hm as Hprefix.
         specialize (IHt _ Hb Hprefix).
@@ -1218,7 +1216,7 @@ Section BehaviorStar.
                simpl in Heq;
                try discriminate.
              inversion Heq; subst t'; clear Heq.
-             destruct (star_app_inv (CS.singleton_traces (program_link p c)) _ _ Hstar')
+             destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
                as [s' [Hstar'1 Hstar'2]].
              now eauto.
           -- (* Same as Terminates case. *)
@@ -1226,7 +1224,7 @@ Section BehaviorStar.
                simpl in Heq;
                try discriminate.
              inversion Heq; subst t'; clear Heq.
-             destruct (star_app_inv (CS.singleton_traces (program_link p c)) _ _ Hstar')
+             destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
                as [s' [Hstar'1 Hstar'2]].
              now eauto.
           -- (* Similar to Terminates and Diverges, but on an infinite trace.
@@ -1235,7 +1233,7 @@ Section BehaviorStar.
                simpl in Heq;
                try discriminate.
              inversion Heq; subst T'; clear Heq.
-             destruct (forever_reactive_app_inv (CS.singleton_traces (program_link p c)) _ _ Hreact')
+             destruct (forever_reactive_app_inv (CS.singleton_traces p) _ _ Hreact')
                as [s' [Hstar'1 Hreact'2]].
              now eauto.
           -- (* Same as Terminate and Diverges. *)
@@ -1243,10 +1241,10 @@ Section BehaviorStar.
                simpl in Heq;
                try discriminate.
              inversion Heq; subst t'; clear Heq.
-             destruct (star_app_inv (CS.singleton_traces (program_link p c)) _ _ Hstar')
+             destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
                as [s' [Hstar'1 Hstar'2]].
              now eauto.
-        * specialize (Hini' (CS.initial_machine_state (program_link p c))).
+        * specialize (Hini' (CS.initial_machine_state p)).
           congruence.
   Qed.
 End BehaviorStar.
