@@ -125,12 +125,9 @@ Section Mergeable.
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
-  Let prog'  := program_link p  c'.
   Let prog'' := program_link p' c'.
   Let sem   := CS.sem prog.
-  Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
-  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
   (* An "extensional" reading of compatible states that depends directly on the
      partial programs concerned (implicitly through the section mechanism). *)
@@ -143,13 +140,11 @@ Section Mergeable.
       well_formed_program c ->
       well_formed_program p' ->
       well_formed_program c' ->
-      mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      mergeable_interfaces ip ic ->
       prog_interface p  = prog_interface p' ->
       prog_interface c  = prog_interface c' ->
-      (* linkable_mains p  c -> *)
-      (* linkable_mains p' c' -> *)
-      closed_program (program_link p  c ) ->
-      closed_program (program_link p' c') ->
+      closed_program prog   ->
+      closed_program prog'' ->
       (* Definition. *)
       initial_state sem   s0   ->
       initial_state sem'' s0'' ->
@@ -574,12 +569,9 @@ Section MergeSym.
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
-  Let prog'  := program_link p  c'.
   Let prog'' := program_link p' c'.
   Let sem   := CS.sem prog.
-  Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
-  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
   Lemma merge_stacks_sym gps gps'' :
     mergeable_interfaces ip ic ->
@@ -756,38 +748,22 @@ Section MergeSym.
   Qed.
 End MergeSym.
 
+(* Given a silent star driven by the "program" side p, the "context" side c
+   remains unaltered. *)
 Section PS.
   Variables p c p' c' : program.
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
-  Let prog   := program_link p  c.
   Let prog'  := program_link p  c'.
   Let prog'' := program_link p' c'.
-  Let sem   := CS.sem prog.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
-  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
-
-    (* Given a silent star driven by the "program" side p, the "context" side c
-     remains unaltered. *)
-  (* Lemma context_epsilon_star_is_silent s1 s2 : *)
-  (*   CS.is_program_component s1 (prog_interface c) -> *)
-  (*   Star (CS.sem (program_link p c)) s1 E0 s2 -> *)
-  (*   PS.partialize s1 (prog_interface p) = PS.partialize s2 (prog_interface p). *)
-  (* Admitted. *)
-
-  (* Lemma merge_states_partialize s s1'' s2'' : *)
-  (*   mergeable_states p c p' c' s s1'' -> *)
-  (*   PS.partialize s1'' (prog_interface p) = PS.partialize s2'' (prog_interface p) -> *)
-  (*   merge_states (prog_interface p) (prog_interface c) s s1'' = *)
-  (*   merge_states (prog_interface p) (prog_interface c) s s2''. *)
-  (* Admitted. *)
 
   Remark mergeable_states_program_component_domm mem gps regs pc s'' :
     mergeable_states p c p' c' (mem, gps, regs, pc) s'' ->
-    CS.is_program_component (mem, gps, regs, pc) (prog_interface c) ->
-    Pointer.component pc \in domm (prog_interface p).
+    CS.is_program_component (mem, gps, regs, pc) ic ->
+    Pointer.component pc \in domm ip.
   Proof.
     intros Hmerge Hcomp.
     change pc with (CS.state_pc (mem, gps, regs, pc)).
@@ -812,11 +788,11 @@ Section PS.
 
   Lemma to_partial_memory_epsilon_star s s1'' s2'' s3'' :
     mergeable_states p c p' c' s s1'' ->
-    CS.is_program_component s (prog_interface c) ->
+    CS.is_program_component s ic ->
     Star sem'' s1'' E0 s2'' ->
     Step sem'' s2'' E0 s3'' ->
-    to_partial_memory (CS.state_mem s2'') (domm (prog_interface p)) =
-    to_partial_memory (CS.state_mem s3'') (domm (prog_interface p)).
+    to_partial_memory (CS.state_mem s2'') (domm ip) =
+    to_partial_memory (CS.state_mem s3'') (domm ip).
   Proof.
     intros Hmerge1 Hcomp Hstar12'' Hstep23''.
     destruct s2'' as [[[gps2'' mem2''] regs2''] pc2''].
@@ -833,16 +809,15 @@ Section PS.
         erewrite program_allocation_to_partialized_memory; eauto 1
       end;
       (* Prove the PC is in the program in both cases. *)
+      unfold ip;
       t_to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12''.
   Qed.
 
-  (* JT: I think this lemma could replace the two above lemmas *)
   Lemma merge_states_silent_star s s1'' s2'' :
     mergeable_states p c p' c' s s1'' ->
-    CS.is_program_component s (prog_interface c) ->
-    Star (CS.sem (program_link p' c')) s1'' E0 s2'' ->
-    merge_states (prog_interface p) (prog_interface c) s s1'' =
-    merge_states (prog_interface p) (prog_interface c) s s2''.
+    CS.is_program_component s ic ->
+    Star sem'' s1'' E0 s2'' ->
+    merge_states ip ic s s1'' = merge_states ip ic s s2''.
   Proof.
     intros Hmerge1 Hcomp Hstar12''.
     remember E0 as t.
@@ -866,20 +841,16 @@ Section PS.
         reflexivity.
   Qed.
 
-  (* The following should be an easy corollary of the _is_silent lemma. *)
   Lemma context_epsilon_star_merge_states s s1 s2 :
     mergeable_states p c p' c' s s1 ->
-    CS.is_program_component s (prog_interface c) ->
-    Star (CS.sem (program_link p' c')) s1 E0 s2 ->
-    Star (CS.sem (program_link p  c'))
-         (merge_states (prog_interface p) (prog_interface c) s s1) E0
-         (merge_states (prog_interface p) (prog_interface c) s s2).
+    CS.is_program_component s ic ->
+    Star sem'' s1 E0 s2 ->
+    Star sem' (merge_states ip ic s s1) E0 (merge_states ip ic s s2).
   Proof.
     intros Hmerg Hcomp Hstar.
     rewrite (merge_states_silent_star Hmerg Hcomp Hstar).
     apply star_refl.
   Qed.
-
 End PS.
 
   (* RB: NOTE: Add program well-formedness if needed. *)
@@ -1027,28 +998,18 @@ Section ThreewayMultisemHelper.
   Variables p c p' c' : program.
 
   Hypothesis Hwfp  : well_formed_program p.
-  Hypothesis Hwfc  : well_formed_program c.
   Hypothesis Hwfp' : well_formed_program p'.
   Hypothesis Hwfc' : well_formed_program c'.
-
   Hypothesis Hmergeable_ifaces :
     mergeable_interfaces (prog_interface p) (prog_interface c).
-
   Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
   Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
 
-  Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
-  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
-
-  Let ip := prog_interface p.
   Let ic := prog_interface c.
-  Let prog   := program_link p  c.
   Let prog'  := program_link p  c'.
   Let prog'' := program_link p' c'.
-  Let sem   := CS.sem prog.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
-  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
   (* JT: TODO: move this lemma somewhere else. This is not clean at
      all, but at least it solves the problem of proving results. *)
@@ -1079,7 +1040,6 @@ Section ThreewayMultisem1.
   Let sem   := CS.sem prog.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
-  Hint Unfold ip ic prog prog' prog'' sem sem' sem''.
 
   (* RB: TODO: More the following few helper lemmas to their appropriate
      location. Consider changing the naming conventions from
@@ -1096,14 +1056,12 @@ Section ThreewayMultisem1.
     to_partial_memory (merge_memories ip ic (CS.state_mem s) (CS.state_mem s'')) (domm ic).
   Proof.
     intros Hmerg.
-
     inversion Hmerg
       as [s0 s0'' t Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
           Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar''].
     apply /eq_fmap => Cid.
     pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
       as Hmergeable_ifaces_sym.
-
     assert (Hmem : domm (CS.state_mem s) = domm (unionm ip ic)).
     {
       apply CS.comes_from_initial_state_mem_domm.
