@@ -1141,31 +1141,6 @@ Section PS.
   Qed.
 End PS.
 
-  (* RB: NOTE: Add program well-formedness if needed. *)
-  Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
-    (* Pointer.component pc \in domm (prog_interface p) -> *)
-    (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *)
-    prog_interface p = prog_interface p' ->
-    EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
-  exists b',
-    EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
-  Proof.
-    move=> Hiface.
-    unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
-    (* move=> H; exists b; rewrite -H; clear H. *)
-    unfold prepare_procedures_initial_memory_aux.
-    unfold elementsm, odflt, oapp.
-    rewrite 2!mapmE.
-    unfold omap, obind, oapp; simpl.
-    rewrite 2!mkfmapfE.
-    rewrite -Hiface.
-    destruct (C \in domm (prog_interface p)) eqn:HC.
-    - rewrite HC.
-      
-      admit.
-    - now rewrite HC.
-  Admitted.
-
   (* Search _ imported_procedure. *)
   (* RB: NOTE: This kind of lemma is usually the composition of two unions, one
      of which is generally extant. *)
@@ -1182,72 +1157,6 @@ End PS.
     destruct Himp as [CI [Hcomp Himp]]. exists CI. split; [| assumption].
     unfold Program.has_component. rewrite unionmE. now rewrite Hcomp.
   Qed.
-
-  (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
-     operating on an explicit program link, one then being the exact symmetric of
-     the other, i.e., its application after communativity of linking. There is a
-     choice of encoding of component membership in both cases. *)
-
-  (* RB: TODO: Rephrase goal as simple equality? *)
-  (* Search _ EntryPoint.get. *)
-  Lemma genv_entrypoints_recombination_left :
-    forall p c c',
-      well_formed_program p ->
-      well_formed_program c ->
-      well_formed_program c' ->
-      mergeable_interfaces (prog_interface p) (prog_interface c) ->
-      prog_interface c = prog_interface c' ->
-    forall C P b,
-      C \in domm (prog_interface p) ->
-      EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c ))) = Some b ->
-      EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c'))) = Some b.
-  Proof.
-    intros p c c' Hwfp Hwfc Hwfc' Hmergeable_ifaces Hifacec C P b Hdomm Hentry.
-    pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    eapply (domm_partition_notin _ _ (mergeable_interfaces_sym _ _ Hmergeable_ifaces)) in Hdomm.
-    rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
-      [| now apply linkable_implies_linkable_mains].
-    rewrite Hifacec in Hlinkable, Hdomm.
-    rewrite genv_entrypoints_program_link_left; try assumption.
-    now apply linkable_implies_linkable_mains.
-  Qed.
-
-(* Dirty sectioning to solve another symmetry problem *)
-(* RB: TODO: Get rid of this artificial section ASAP. *)
-Section ThreewayMultisemHelper.
-  Variables p c p' c' : program.
-
-  Hypothesis Hwfp  : well_formed_program p.
-  Hypothesis Hwfp' : well_formed_program p'.
-  Hypothesis Hwfc' : well_formed_program c'.
-  Hypothesis Hmergeable_ifaces :
-    mergeable_interfaces (prog_interface p) (prog_interface c).
-  Hypothesis Hifacep  : prog_interface p  = prog_interface p'.
-  Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
-
-  Let ic := prog_interface c.
-  Let prog'  := program_link p  c'.
-  Let prog'' := program_link p' c'.
-  Let sem'  := CS.sem prog'.
-  Let sem'' := CS.sem prog''.
-
-  (* JT: TODO: move this lemma somewhere else. This is not clean at
-     all, but at least it solves the problem of proving results. *)
-  Lemma genv_entrypoints_recombination_right C P b :
-    C \in domm ic ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem'')) = Some b ->
-    EntryPoint.get C P (genv_entrypoints (globalenv sem' )) = Some b.
-  Proof.
-    unfold sem'', sem', prog'', prog'. intros Hdomm Hentry.
-    pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    rewrite program_linkC in Hentry; try congruence.
-    rewrite program_linkC; try congruence.
-    eapply genv_entrypoints_recombination_left with (c := p'); try assumption; try congruence;
-      try rewrite -Hifacec; try rewrite -Hifacep.
-    - now apply mergeable_interfaces_sym.
-    - now apply Hdomm.
-  Qed.
-End ThreewayMultisemHelper.
 
 Section ThreewayMultisem1.
   Variables p c p' c' : program.
