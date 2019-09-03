@@ -1237,6 +1237,87 @@ Proof.
     + erewrite <- find_label_in_procedure_1; eassumption.
 Qed.
 
+(* RB: Could be phrased in terms of does_prefix. *)
+Theorem behavior_prefix_star {p b m} :
+  program_behaves (CS.sem p) b ->
+  prefix m b ->
+exists s1 s2,
+  CS.initial_state p s1 /\
+  Star (CS.sem p) s1 (finpref_trace m) s2.
+Proof.
+  destruct m as [tm | tm | tm].
+  - intros Hb Hm.
+    destruct b as [t | ? | ? | ?];
+      simpl in Hm; try contradiction;
+      subst t.
+    inversion Hb as [s1 ? Hini Hbeh |]; subst.
+    inversion Hbeh as [? s2 Hstar Hfinal | | |]; subst.
+    eexists; eexists; split; now eauto.
+  - intros Hb Hm.
+    destruct b as [? | ? | ? | t];
+      simpl in Hm; try contradiction;
+      subst t.
+    inversion Hb as [s1 ? Hini Hbeh | Hini]; subst.
+    + inversion Hbeh as [| | | ? s2 Hstar Hnostep Hfinal]; subst.
+      eexists; eexists; split; now eauto.
+    + specialize (Hini (CS.initial_machine_state p)).
+      congruence.
+  - revert b.
+    induction tm as [| e t IHt] using rev_ind;
+      intros b Hb Hm;
+      simpl in *.
+    + exists (CS.initial_machine_state p), (CS.initial_machine_state p).
+      split; [congruence | now apply star_refl].
+    + pose proof behavior_prefix_app_inv Hm as Hprefix.
+      specialize (IHt _ Hb Hprefix).
+      destruct IHt as [s1 [s2 [Hini Hstar]]].
+      inversion Hm as [b']; subst.
+      inversion Hb as [s1' ? Hini' Hbeh' | Hini' Hbeh']; subst.
+      * assert (Heq : s1 = s1')
+          by now (inversion Hini; inversion Hini').
+        subst s1'.
+        inversion Hbeh' as [ t' s2' Hstar' Hfinal' Heq
+                           | t' s2' Hstar' Hsilent' Heq
+                           | T' Hreact' Heq
+                           | t' s2' Hstar' Hstep' Hfinal' Heq];
+          subst.
+        (* RB: TODO: Refactor block. *)
+        -- destruct b' as [tb' | ? | ? | ?];
+             simpl in Heq;
+             try discriminate.
+           inversion Heq; subst t'; clear Heq.
+           destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
+             as [s' [Hstar'1 Hstar'2]].
+           now eauto.
+        -- (* Same as Terminates case. *)
+          destruct b' as [? | tb' | ? | ?];
+            simpl in Heq;
+            try discriminate.
+          inversion Heq; subst t'; clear Heq.
+          destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
+            as [s' [Hstar'1 Hstar'2]].
+          now eauto.
+        -- (* Similar to Terminates and Diverges, but on an infinite trace.
+              Ltac can easily take care of these commonalities. *)
+          destruct b' as [? | ? | Tb' | ?];
+            simpl in Heq;
+            try discriminate.
+          inversion Heq; subst T'; clear Heq.
+          destruct (forever_reactive_app_inv (CS.singleton_traces p) _ _ Hreact')
+            as [s' [Hstar'1 Hreact'2]].
+          now eauto.
+        -- (* Same as Terminate and Diverges. *)
+          destruct b' as [? | ? | ? | tb'];
+            simpl in Heq;
+            try discriminate.
+          inversion Heq; subst t'; clear Heq.
+          destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
+            as [s' [Hstar'1 Hstar'2]].
+          now eauto.
+      * specialize (Hini' (CS.initial_machine_state p)).
+        congruence.
+Qed.
+
 (* RB: TODO: These domain lemmas should now be renamed to reflect their
    operation on linked programs. *)
 Section ProgramLink.
