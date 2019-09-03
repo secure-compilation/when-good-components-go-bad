@@ -87,6 +87,19 @@ Proof.
   reflexivity.
 Qed.
 
+(* RB: NOTE: This kind of lemma is usually the composition of two unions, one
+   of which is generally extant. Compare with "after_linking" lemmas. *)
+Lemma imported_procedure_recombination {p c c' Cid C P} :
+  Cid \notin domm (prog_interface c) ->
+  imported_procedure (genv_interface (prepare_global_env (program_link p c ))) Cid C P ->
+  imported_procedure (genv_interface (prepare_global_env (program_link p c'))) Cid C P.
+Proof.
+  intros Hdomm Himp.
+  rewrite (imported_procedure_unionm_left Hdomm) in Himp.
+  destruct Himp as [CI [Hcomp Himp]]. exists CI. split; [| assumption].
+  unfold Program.has_component. rewrite unionmE. now rewrite Hcomp.
+Qed.
+
 Lemma genv_procedures_program_link_left_notin :
   forall {c Cid},
     Cid \notin domm (prog_interface c) ->
