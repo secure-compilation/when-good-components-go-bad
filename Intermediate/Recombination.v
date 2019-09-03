@@ -1805,8 +1805,8 @@ Section ThreewayMultisem3.
   (* JT: TODO: improve this proof *)
 End ThreewayMultisem3.
 
-(* Three-way simulation and its inversion. *)
-Section ThreewayMultisem.
+(* Helpers for the initial states of the three-way simulation. *)
+Section ThreewayMultisem4.
   Variables p c p' c' : program.
 
   Hypothesis Hwfp  : well_formed_program p.
@@ -1887,6 +1887,20 @@ Section ThreewayMultisem.
       rewrite (CS.prog_main_block_no_main _ Hwfp Hnotin).
       rewrite Hifacep in Hnotin. now rewrite (CS.prog_main_block_no_main _ Hwfp' Hnotin).
   Qed.
+End ThreewayMultisem4.
+
+(* Three-way simulation and its inversion. *)
+Section ThreewayMultisem.
+  Variables p c p' c' : program.
+
+  Let ip := prog_interface p.
+  Let ic := prog_interface c.
+  Let prog   := program_link p  c.
+  Let prog'  := program_link p  c'.
+  Let prog'' := program_link p' c'.
+  Let sem   := CS.sem prog.
+  Let sem'  := CS.sem prog'.
+  Let sem'' := CS.sem prog''.
 
   (* RB: NOTE: Consider execution invariance and similar lemmas on the right as
      well, as symmetry arguments reoccur all the time.
@@ -1902,6 +1916,7 @@ Section ThreewayMultisem.
     destruct s'' as [[[gps'' mem''] regs''] pc''].
     unfold final_state. simpl. unfold merge_pcs.
     intros Hmerge Hfinal Hfinal''.
+    inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _].
     inversion Hmergeable_ifaces as [Hlinkable _].
     pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability.
     assert (Hlinkable' := Hlinkable); rewrite Hifacep Hifacec in Hlinkable'.
@@ -1937,7 +1952,7 @@ Section ThreewayMultisem.
     - eapply threeway_multisem_mergeable; eassumption.
   Qed.
 
-  Ltac t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin :=
+  Ltac t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec :=
     match goal with
     (* Memory operations. *)
     | Hstore : Memory.store _ _ _ = _ |- _ =>
@@ -2001,6 +2016,7 @@ Section ThreewayMultisem.
     Step sem                      s1       t s2.
   Proof.
     intros Hpc Hmerge Hstep.
+    inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _].
     destruct s1 as [[[gps1 mem1] regs1] pc1].
     destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
     inversion Hmergeable_ifaces as [Hlinkable _].
@@ -2015,7 +2031,7 @@ Section ThreewayMultisem.
     rewrite (mergeable_states_merge_program _ Hmerge) in Hstep;
       try assumption.
     inversion Hstep; subst;
-      t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin.
+      t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec.
   Qed.
 End ThreewayMultisem.
 
@@ -2054,14 +2070,12 @@ Section Recombination.
   Proof.
     rename s into s1. rename s'' into s1''.
     intros Hmerge Hstep Hstep'' t s2' Hstep'.
-    (* inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _]. *)
     inversion Hmergeable_ifaces as [Hlinkable _].
     inversion Hmergeable_ifaces as [Hlinkable' _]; rewrite Hifacep Hifacec in Hlinkable'.
     pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability.
     pose proof linkable_implies_linkable_mains Hwfp' Hwfc' Hlinkable' as Hmain_linkability'.
     destruct (CS.is_program_component s1 ic) eqn:Hcase.
-    - pose proof threeway_multisem_step_inv_program Hwfp Hwfc Hwfp' Hwfc'
-           Hmergeable_ifaces Hifacep Hifacec Hcase Hmerge Hstep'
+    - pose proof threeway_multisem_step_inv_program Hcase Hmerge Hstep'
         as [s2 Hcontra].
       specialize (Hstep t s2). contradiction.
     - (* Symmetric case. *)
@@ -2072,9 +2086,8 @@ Section Recombination.
       assert (Hmerge' : mergeable_states c' p' c p s1'' s1). {
         now apply mergeable_states_sym.
       }
-      pose proof @threeway_multisem_step_inv_program c' p' c p Hwfc' Hwfp' Hwfc Hwfp as H.
+      pose proof @threeway_multisem_step_inv_program c' p' c p as H.
       rewrite -Hifacec -Hifacep in H.
-      specialize (H (mergeable_interfaces_sym _ _ Hmergeable_ifaces) eq_refl eq_refl).
       specialize (H s1'' s1 t s2' Hcase' Hmerge').
       rewrite program_linkC in H; try assumption; [| apply linkable_sym; congruence].
       rewrite Hifacec Hifacep in H.
