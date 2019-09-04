@@ -1847,7 +1847,6 @@ Section ThreewayMultisem5.
     intros Hmerge Hfinal Hfinal'' Hfinal'.
     inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _ ].
     inversion Hmergeable_ifaces as [Hlinkable _].
-    (* pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability. *)
     destruct (Pointer.component pc \in domm ip) eqn:Hcase.
     - apply execution_invariant_to_linking with (c2 := c) in Hfinal'; try easy.
       + congruence.
@@ -1886,13 +1885,9 @@ Section ThreewayMultisem5.
         as [s2 Hcontra].
       specialize (Hstep t s2). contradiction.
     - (* Symmetric case. *)
-      assert (Hcase' : CS.is_program_component s1'' ip). {
-        apply negb_false_iff in Hcase.
-        eapply mergeable_states_context_to_program; eassumption.
-      }
-      assert (Hmerge' : mergeable_states c' p' c p s1'' s1). {
-        now apply mergeable_states_sym.
-      }
+      apply negb_false_iff in Hcase.
+      pose proof mergeable_states_context_to_program Hmerge Hcase as Hcase'.
+      pose proof proj1 (mergeable_states_sym _ _ _ _ _ _) Hmerge as Hmerge'.
       pose proof @threeway_multisem_step_inv_program c' p' c p as H.
       rewrite -Hifacec -Hifacep in H.
       specialize (H s1'' s1 t s2' Hcase' Hmerge').
@@ -1938,6 +1933,7 @@ Section Recombination.
 
   (* RB: NOTE: Possible improvements:
       - Try to refactor case analysis in proof.
+      - Try to derive well-formedness, etc., from semantics.
      This result is currently doing the legwork of going from a simulation on
      stars to one on program behaviors without direct mediation from the CompCert
      framework. *)
