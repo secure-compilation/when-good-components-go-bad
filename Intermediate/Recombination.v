@@ -42,7 +42,7 @@ Section Merge.
   (* RB: TODO: Here and above, Program.interface vs. fset. *)
   Definition merge_memories (m m'' : Memory.t) : Memory.t :=
     unionm (to_partial_memory m   (domm ic))
-           (to_partial_memory m'' (domm ip)). (* Note that prog_interface c = prog_interface c' *)
+           (to_partial_memory m'' (domm ip)).
 
   Definition merge_registers (r r'' : Register.t) (pc : Pointer.t) : Register.t :=
     if Pointer.component pc \in domm ip then r else r''.
@@ -142,7 +142,7 @@ Section Mergeable.
       prog_interface c  = prog_interface c' ->
       closed_program prog   ->
       closed_program prog'' ->
-      (* Definition. *)
+      (* "Proper" definition. *)
       initial_state sem   s0   ->
       initial_state sem'' s0'' ->
       Star sem   s0   t s   ->
@@ -219,8 +219,7 @@ Section Mergeable.
       + subst.
         remember (t1 ** [ev]) as t.
         induction Hstar''; subst.
-        * (* contradiction *)
-          assert (E0 <> t1 ** [ev]) by now induction t1. contradiction.
+        * assert (E0 <> t1 ** [ev]) by now induction t1. contradiction.
         * subst.
           specialize (IHHstar'' Hini'' IHstar).
           pose proof (CS.singleton_traces (program_link p' c') _ _ _ H8) as Hlen2.
@@ -264,8 +263,7 @@ Section Mergeable.
     destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
     unfold merge_states_regs. simpl.
     unfold merge_registers.
-    (* RB: TODO: Simplify this tactic. *)
-    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
+    CS.simplify_turn.
     inversion Hmerg as [s0 s0'' t
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
                         Hini Hini'' Hstar Hstar''].
@@ -408,8 +406,7 @@ Section Mergeable.
     destruct s1 as [[[stack1 mem1] reg1] pc1]; destruct s2 as [[[stack2 mem2] reg2] pc2].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc; clear Hpc.
-    inversion Hmerg
-      as [? ? ? _ _ _ _ [[_ Hdisj] _] _ _ _ _ Hini Hini'' Hstar Hstar''].
+    inversion Hmerg as [? ? ? _ _ _ _ [[_ Hdisj] _] _ _ _ _ Hini Hini'' Hstar Hstar''].
     move: Hdisj.
     rewrite fdisjointC => /fdisjointP Hdisj.
     now auto.
@@ -558,9 +555,8 @@ Section Mergeable.
   Qed.
 
   (* Memory lemmas on mergeable states. *)
-  (* RB: TODO: Move when finished. In the current form, these lemmas are
-     sufficient if unsatisfying in that only an imprecise existential is
-     offered. *)
+  (* RB: NOTE: In the current form, these lemmas are sufficient if unsatisfying
+     in that only an imprecise existential intros offered. *)
   Lemma program_store_from_partialized_memory s s'' ptr v mem' :
     mergeable_interfaces ip ic ->
     Pointer.component (CS.state_pc s) \in domm ip ->
@@ -610,14 +606,12 @@ Section Mergeable.
     now eauto.
   Qed.
 
-  (* RB: TODO: More the following few helper lemmas to their appropriate
-     location. Consider changing the naming conventions from
-     "partialized" to "recombined" or similar. Exposing the innards of the
-     memory merge operation is not pretty; sealing them would require to
-     add the program step from s to the lemmas. In this block, mergeable_states
-     may be too strong and could be weakened if it were interesting to do so.
-
-     See comments for pointers to existing related lemmas. *)
+  (* RB: NOTE: Consider changing the naming conventions from "partialized" to
+     "recombined" or similar. Exposing the innards of the memory merge operation
+     is not pretty; sealing them would require to add the program step from s to
+     the lemmas. In this block, mergeable_states may be too strong and could be
+     weakened if it were interesting to do so. See comments for pointers to
+     existing related lemmas. *)
 
   Lemma to_partial_memory_merge_memories_left s s'' :
     mergeable_states s s'' ->
@@ -720,7 +714,6 @@ Section Mergeable.
   Proof.
     destruct (Memory.load (CS.state_mem s) ptr) as [v |] eqn:Hcase1;
       first (symmetry; now apply program_load_to_partialized_memory).
-    (* The new part is the None case. *)
     intros Hpc Hmerge Hptr.
     destruct s as [[[gps mem] regs] pc]; destruct ptr as [[C b] o];
       unfold Memory.load, merge_memories in *; simpl in *; subst.
@@ -1396,9 +1389,6 @@ Section ThreewayMultisem2.
     - now apply threeway_multisem_star_E0_program.
     - rewrite (merge_states_sym H); try assumption.
       rewrite (merge_states_sym (threeway_multisem_mergeable H H0 H1)); try assumption.
-      (* unfold merge_states. *)
-      (* fold (merge_states c p s1'' s1). *)
-      (* erewrite PS.merge_partial_states_sym. fold (merge_states c p s2'' s2). *)
       assert (Hlinkable : linkable ip ic) by now destruct Hmergeable_ifaces.
       unfold ic in Hlinkable. rewrite Hifacec in Hlinkable.
       pose proof (program_linkC Hwfp Hwfc' Hlinkable) as Hprg_linkC'.
@@ -1410,9 +1400,7 @@ Section ThreewayMultisem2.
       pose proof (program_linkC Hwfp Hwfc) as Hprg_linkC; rewrite Hifacec in Hprg_linkC.
       unfold sem, prog in H0.
       rewrite (Hprg_linkC Hlinkable) in H0.
-
       pose proof (threeway_multisem_star_E0_program) as Hmultisem.
-
       specialize (Hmultisem c' p' c p).
       rewrite <- Hifacep, <- Hifacec in Hmultisem.
       specialize (Hmultisem s1'' s1 s2'' s2).
@@ -1435,11 +1423,7 @@ Section ThreewayMultisem2.
   (* A restricted version of the lockstep simulation on event-producing steps.
      RB: NOTE: Here is where we depart from the multi-semantics and need to
      furnish our own version. We may save effort if, as is the case here, we only
-     need to concern ourselves with visible steps.
-
-     This replaces the following two steps below:
-      - MultiSem.multi_step
-      - MultiSem.mergeable_states_step_trans *)
+     need to concern ourselves with visible steps. *)
   Lemma threeway_multisem_event_lockstep s1 s1'' e s2 s2'' :
     mergeable_states p c p' c' s1 s1'' ->
     Step sem   s1   [e] s2   ->
@@ -1484,7 +1468,6 @@ Section ThreewayMultisem2.
       + rewrite program_linkC; try assumption.
         now apply linkable_sym.
   Qed.
-  (* RB: TODO: JT will factor the symmetric proofs. *)
   (* JT: TODO: clean this proof. *)
 
   Theorem threeway_multisem_star_program s1 s1'' t s2 s2'' :
@@ -1712,7 +1695,6 @@ Section ThreewayMultisem4.
   Let sem'  := CS.sem prog'.
   Let sem'' := CS.sem prog''.
 
-  (* RB: NOTE: Relocate lemmas on initial states when ready. *)
   Lemma initial_states_mergeability s s'' :
     initial_state sem   s   ->
     initial_state sem'' s'' ->
@@ -1725,8 +1707,6 @@ Section ThreewayMultisem4.
       reflexivity || now apply star_refl.
   Qed.
 
-  (* RB: NOTE: Here, the existential is explicitly instantiated; the mergeability
-     relation is also different than in standard "two-way" simulations. *)
   Lemma match_initial_states s s'' :
     initial_state sem   s   ->
     initial_state sem'' s'' ->
