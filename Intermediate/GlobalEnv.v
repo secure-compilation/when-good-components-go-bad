@@ -5,7 +5,7 @@ Require Import Lib.Monads.
 
 Import Intermediate.
 
-From mathcomp Require Import ssreflect.
+From mathcomp Require Import ssreflect ssrfun.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -87,6 +87,19 @@ Proof.
   reflexivity.
 Qed.
 
+(* RB: NOTE: This kind of lemma is usually the composition of two unions, one
+   of which is generally extant. Compare with "after_linking" lemmas. *)
+Lemma imported_procedure_recombination {p c c' Cid C P} :
+  Cid \notin domm (prog_interface c) ->
+  imported_procedure (genv_interface (prepare_global_env (program_link p c ))) Cid C P ->
+  imported_procedure (genv_interface (prepare_global_env (program_link p c'))) Cid C P.
+Proof.
+  intros Hdomm Himp.
+  rewrite (imported_procedure_unionm_left Hdomm) in Himp.
+  destruct Himp as [CI [Hcomp Himp]]. exists CI. split; [| assumption].
+  unfold Program.has_component. rewrite unionmE. now rewrite Hcomp.
+Qed.
+
 Lemma genv_procedures_program_link_left_notin :
   forall {c Cid},
     Cid \notin domm (prog_interface c) ->
@@ -153,6 +166,80 @@ Proof.
   rewrite HNone.
   destruct ((genv_entrypoints (prepare_global_env p)) C) eqn:Hcase;
     by rewrite Hcase.
+Qed.
+
+(* RB: NOTE: Add program well-formedness if needed. *)
+Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
+  (* Pointer.component pc \in domm (prog_interface p) -> *)
+  (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *)
+  prog_interface p = prog_interface p' ->
+  EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
+exists b',
+  EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
+Proof.
+  move=> Hiface.
+  unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
+  (* move=> H; exists b; rewrite -H; clear H. *)
+  unfold prepare_procedures_initial_memory_aux.
+  unfold elementsm, odflt, oapp.
+  rewrite 2!mapmE.
+  unfold omap, obind, oapp; simpl.
+  rewrite 2!mkfmapfE.
+  rewrite -Hiface.
+  destruct (C \in domm (prog_interface p)) eqn:HC.
+  - rewrite HC.
+    admit.
+  - now rewrite HC.
+Admitted.
+
+(* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
+   operating on an explicit program link, one then being the exact symmetric of
+   the other, i.e., its application after communativity of linking. There is a
+   choice of encoding of component membership in both cases. *)
+
+(* RB: TODO: Rephrase goal as simple equality? *)
+(* Search _ EntryPoint.get. *)
+Lemma genv_entrypoints_recombination_left :
+  forall p c c',
+    well_formed_program p ->
+    well_formed_program c ->
+    well_formed_program c' ->
+    mergeable_interfaces (prog_interface p) (prog_interface c) ->
+    prog_interface c = prog_interface c' ->
+  forall C P b,
+    C \in domm (prog_interface p) ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c ))) = Some b ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p c'))) = Some b.
+Proof.
+  intros p c c' Hwfp Hwfc Hwfc' Hmergeable_ifaces Hifacec C P b Hdomm Hentry.
+  pose proof proj1 Hmergeable_ifaces as Hlinkable.
+  eapply (domm_partition_notin _ _ (mergeable_interfaces_sym _ _ Hmergeable_ifaces)) in Hdomm.
+  rewrite genv_entrypoints_program_link_left in Hentry; try assumption;
+    [| now apply linkable_implies_linkable_mains].
+  rewrite Hifacec in Hlinkable, Hdomm.
+  rewrite genv_entrypoints_program_link_left; try assumption.
+  now apply linkable_implies_linkable_mains.
+Qed.
+
+Lemma genv_entrypoints_recombination_right :
+  forall p c p' c',
+    well_formed_program p ->
+    well_formed_program p' ->
+    well_formed_program c' ->
+    mergeable_interfaces (prog_interface p) (prog_interface c) ->
+    prog_interface p = prog_interface p' ->
+    prog_interface c = prog_interface c' ->
+  forall C P b,
+    C \in domm (prog_interface c) ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p' c'))) = Some b ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env (program_link p  c'))) = Some b.
+Proof.
+  intros p c p' c' Hwfp Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec C P b Hdomm Hentry.
+  pose proof proj1 Hmergeable_ifaces as Hlinkable.
+  rewrite program_linkC in Hentry; try congruence.
+  rewrite program_linkC; try congruence.
+  eapply genv_entrypoints_recombination_left with (c := p'); try assumption; try congruence.
+  rewrite -Hifacec -Hifacep. now apply mergeable_interfaces_sym.
 Qed.
 
 Fixpoint find_label (c : code) (l : label) : option Z :=

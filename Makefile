@@ -11,6 +11,9 @@ clean: Makefile.coq
 Makefile.coq: _CoqProject Makefile
 	coq_makefile -f _CoqProject | sed 's/$$(COQCHK) $$(COQCHKFLAGS) $$(COQLIBS)/$$(COQCHK) $$(COQCHKFLAGS) $$(subst -Q,-R,$$(COQLIBS))/' > Makefile.coq
 
+beancount:
+	coqwc `find . -name "*.v" -not -path "./CompCert/*" -not -path ./Intermediate/Decomposition.v -not -path ./Intermediate/Composition.v -not -path ./Intermediate/PS.v -not -path ./Intermediate/Extra.v`
+
 _CoqProject: ;
 
 Makefile: ;
