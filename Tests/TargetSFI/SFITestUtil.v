@@ -57,7 +57,7 @@ Definition hex2N (s : string) : N :=
   
 Definition show_pos (p : positive) := show_nat (Pos.to_nat p).
 
-Definition show_value (v : RiscMachine.value) := show_int v.
+Definition show_value (v : RiscMachine.value) := show_Z v.
 
 Definition show_N ( n : N ) := show_nat (N.to_nat n).
 
@@ -100,10 +100,10 @@ Instance show_event : Show event :=
               match e with
               | ECall c1 pid arg c2 => "[ECall " ++ (show c1) ++ " "
                                                  ++ (show pid) ++ " "
-                                                 ++ (show_int arg) ++ " "
+                                                 ++ (show_Z arg) ++ " "
                                                  ++ (show c2) ++ "]"
               |  ERet c1 arg c2 => "[ERet " ++ (show c1) ++ " "
-                                                 ++ (show_int arg) ++ " "
+                                                 ++ (show_Z arg) ++ " "
                                                  ++ (show c2) ++ "]"
               end
   |}.

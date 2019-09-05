@@ -152,22 +152,21 @@ Proof.
   - by reflexivity.
 Qed.
 
-(* CA: not really needed *) 
+(* CA: not really needed *)
 Lemma mapm_id : forall (T : Type) (i: NMap T), mapm id i = i.
 Proof.
   move=> T i. apply /eq_fmap => n.
-  Search _ mapm.
   rewrite mapmE. unfold omap, obind, oapp.
   remember (i n) as v; simpl in *; rewrite <- Heqv.
   now destruct v.
 Qed.
-  
+
 (* needed in the proof of domm_filterm_fdisjoint_unionm *)
 Lemma filterm_id : forall (T : Type) (i : NMap T) p,
-       
-                   domm (filterm p i) = domm (filterm p (mapm id i)).
+
+    domm (filterm p i) = domm (filterm p (mapm id i)).
 Proof.
-  move => T i. by rewrite mapm_id. 
+  move => T i. by rewrite mapm_id.
 Qed.
 
 Lemma domm_filterm_fdisjoint_unionm
@@ -180,7 +179,7 @@ Proof.
   have HH: domm (filterm (fun (k : nat) (_ : T') => k \notin domm i2) m) =
            domm (filterm (fun (k : nat) (_ : T) => k \notin domm i2) (unionm i1 i2))
   by admit.
-  rewrite HH filterm_id fdisjoint_filterm_mapm_unionm; auto. 
+  rewrite HH filterm_id fdisjoint_filterm_mapm_unionm; auto.
   rewrite -filterm_id fdisjoint_filterm_full; auto.
   Grab Existential Variables.
   (* have HHH: domm m = (domm i1 :|: domm i2)%fset -> exists m1 m2, m = unionm m1 m2 /\ *)
@@ -189,16 +188,15 @@ Proof.
   (* specialize (HHH Hunion). destruct HHH as [m1 [m2 [Hu [H1 H2]]]]. *)
   (* subst. Search _ domm filterm unionm. *)
   rewrite filterm_union.
-  Search _ filterm "\notin".
   rewrite (@fdisjoint_filterm_empty T i2 i2). rewrite unionm0.
   rewrite (@fdisjoint_filterm_full T T).
   have HHH: exists m1 m2, m = unionm m1 m2 /\ domm m1 = domm i1 /\ domm m2 = domm i2 by admit.
   destruct HHH as [m1 [m2 [Hu [H1 H2]]]].
-  rewrite Hu. rewrite <- H2. Search _ filterm "\notin" unionm.
+  rewrite Hu. rewrite <- H2.
   rewrite filterm_id.
   rewrite fdisjoint_filterm_mapm_unionm. rewrite <- filterm_id.
   rewrite fdisjoint_filterm_full.
-  
+
   assumption. rewrite H1 H2; assumption. rewrite H1 H2; assumption.
   assumption.
   reflexivity. assumption.
@@ -206,9 +204,52 @@ Proof.
   exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i1))) m).
   exists (filterm (fun (k : nat) (_ : T') => in_mem k (mem (domm i2))) m).
   (* exists (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m). *)
-  split; try split.  
-Admitted. 
-    
+  split; try split.
+Admitted.
+
+Lemma domm_eq_filterm (T T' T'' : Type) (i1 : NMap T) (m1 : NMap T') (m2 : NMap T''):
+    domm m1 = domm m2 ->
+    domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) =
+    domm (filterm (fun (k : nat) (_ : T'') => k \notin domm i1) m2).
+Proof.
+  move=> H.
+  set (fn := fun (k0 : nat) (_ : T') => k0 \notin domm i1) in *.
+  set (fn' := fun (k0 : nat) (_ : T'') => k0 \notin domm i1) in *.
+
+  (* Attempt *)
+  apply /eq_fset => k.
+  (* subst fn. *)
+  destruct (k \notin domm i1) eqn:Heq;
+    destruct (k \in domm (filterm fn m1)) eqn:Heq1;
+    destruct (k \in domm (filterm fn' m2)) eqn:Heq2;
+    try now auto.
+  - subst fn fn'.
+    rewrite mem_domm in Heq1.
+    erewrite getm_filterm_notin_domm in Heq1; last eauto.
+    rewrite mem_domm in Heq2.
+    erewrite getm_filterm_notin_domm in Heq2; last eauto.
+    (* contradiction: the domain of m1 and m2 is the same *)
+    move: Heq1 Heq2.
+    rewrite -2!mem_domm.
+    rewrite H; move=> ? ?; eauto.
+  - subst fn fn'.
+    rewrite mem_domm in Heq1.
+    erewrite getm_filterm_notin_domm in Heq1; last eauto.
+    rewrite mem_domm in Heq2.
+    erewrite getm_filterm_notin_domm in Heq2; last eauto.
+    move: Heq1 Heq2; rewrite -2!mem_domm H => ? ?; eauto.
+  - subst fn fn'.
+    rewrite mem_domm in Heq1; rewrite mem_domm in Heq2.
+    move: Heq1 Heq2. rewrite 2!filtermE. unfold obind. unfold oapp.
+    destruct (m1 k) eqn:H';
+      rewrite H' Heq => //=. 
+  - subst fn fn'.
+    rewrite mem_domm in Heq1; rewrite mem_domm in Heq2.
+    move: Heq1 Heq2. rewrite 2!filtermE. unfold obind. unfold oapp.
+    destruct (m2 k) eqn:H';
+      rewrite H' Heq => //=. 
+Qed.
+
 
 Lemma domm_filterm_partial_memory
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
@@ -219,9 +260,18 @@ Lemma domm_filterm_partial_memory
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   domm (filterm (fun (k : nat) (_ : T') => k \notin domm i1) m1) = domm i2.
 Proof.
-Admitted. 
+  move=> H H0 H1 H2.
+  symmetry in H0.
+  rewrite (domm_eq_filterm _ H0).
+  rewrite H2.
+  rewrite (domm_eq_filterm _ H1).
+  rewrite filterm_union; last assumption.
+  rewrite fdisjoint_filterm_empty; last reflexivity.
+  rewrite fdisjoint_filterm_full. reflexivity.
+  now rewrite fdisjointC.
+Qed.
 
-  
+
 Lemma filterm_partial_memory_fsubset
       (T T' : Type) (i1 i2 : NMap T) (m0 m1 m2 : NMap T') :
   fdisjoint (domm i1) (domm i2) ->
@@ -230,10 +280,10 @@ Lemma filterm_partial_memory_fsubset
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m0 =
   filterm (fun (k : nat) (_ : T') => k \notin domm i1) m2 ->
   fsubset (domm m1) (domm m2).
-Proof. 
+Proof.
   move => disj_i1_i2 m0_eq_m2 m2_eq_union Hfilter.
-  rewrite m2_eq_union -m0_eq_m2 domm_union.    
-  apply (* /fsubsetU /orP. *) /fsubsetP => x Hx. 
+  rewrite m2_eq_union -m0_eq_m2 domm_union.
+  apply (* /fsubsetU /orP. *) /fsubsetP => x Hx.
   assert (x \in (domm i1) \/ x \notin (domm i1)).
   { apply /orP. by destruct (x \in domm i1). } (* CA: do we have classical reasoning? *)   
   case: H => H.  
@@ -251,7 +301,7 @@ Proof.
                together with H we get x \in domm i2
               *)
    move: x_in_i2. apply /fsubsetP /fsubsetU /orP.    
-   right. by apply: fsubsetxx.
+   right. by apply: fsubsetxx. 
 Admitted.     
     
 (* RB: NOTE: This is not a map lemma proper. More generally, absorption on
@@ -261,12 +311,12 @@ Lemma fsetU1in (T : ordType) (x : T) (s : {fset T}) :
 Proof.
   rewrite -eq_fset.
   move => x_in_s x0.
-  case: (@in_fsetU1 T x0 x s) => H0. 
+  case: (@in_fsetU1 T x0 x s) => H0.
   destruct (x0 \in s) eqn: Hx0.
-     by rewrite H0 orbT. 
-  rewrite H0 orbF.     
-  destruct (eqtype.eq_op x0 x) eqn: Hx0_x; auto. 
-    rewrite -(eqtype.eqP Hx0_x) in x_in_s.  
+     by rewrite H0 orbT.
+  rewrite H0 orbF.
+  destruct (eqtype.eq_op x0 x) eqn: Hx0_x; auto.
+    rewrite -(eqtype.eqP Hx0_x) in x_in_s.
     now inversion x_in_s.
 Qed.
 

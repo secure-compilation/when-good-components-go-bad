@@ -197,44 +197,6 @@ Qed.
 (* Memory partialization. *)
 
 (* RB: TODO: Here and above, Program.interface vs. fset. *)
-Definition to_partial_memory (mem : Memory.t) (ctx : {fset Component.id}) :=
-  filterm (fun k _ => negb (k \in ctx)) mem.
-
-(* RB: TODO: More properly, this seems to belong in Machine.Memory. However, it
-   is natural to resort to a notion of partial memory that seems logically
-   related to the supporting components of PS. Again, note, however, that this
-   notion of partial memory is already used in the Memory module, and it may be
-   a good idea to relocate our compact definitions there.
-
-   Otherwise, this is a more convenient wrapper for
-   context_store_in_partialized_memory which does not require the destruction of
-   pointers, and could conceivably replace the wrappee throughout the
-   development. *)
-Lemma program_store_to_partialized_memory
-      ptr (iface : Program.interface) mem mem' v :
-  Pointer.component ptr \in domm iface ->
-  Memory.store mem ptr v = Some mem' ->
-  to_partial_memory mem (domm iface) = to_partial_memory mem' (domm iface).
-Proof.
-  destruct ptr as [[C b] o]. simpl.
-  intros Hdome Hsome.
-  unfold to_partial_memory. symmetry.
-  eapply context_store_in_partialized_memory; eassumption.
-Qed.
-
-(* RB: TODO: Same notes as above.
-   Cf.  program_allocation_in_partialized_memory_strong. *)
-Lemma program_allocation_to_partialized_memory
-      C (iface : Program.interface) size mem mem' ptr :
-  C \in domm iface ->
-  Memory.alloc mem C size = Some (mem', ptr) ->
-  to_partial_memory mem (domm iface) = to_partial_memory mem' (domm iface).
-Proof.
-  destruct ptr as [[C' b] o]. simpl.
-  intros Hdome Hsome.
-  unfold to_partial_memory. symmetry.
-  eapply context_allocation_in_partialized_memory; eassumption.
-Qed.
 
 (* RB: TODO: On a related note to that above, consider using [Pointer.component]
    in results such as [program_store_in_partialized_memory]. This will save us
@@ -607,16 +569,6 @@ Proof.
         rewrite Hcontra in Hhas_comp. discriminate.
 Qed.
 
-Lemma domm_partition_notin :
-  forall ctx1 ctx2,
-    mergeable_interfaces ctx1 ctx2 ->
-  forall C,
-    C \in domm ctx2 ->
-    C \notin domm ctx1.
-Proof.
-by move=> ctx1 ctx2 [[_]]; rewrite fdisjointC=> /fdisjointP.
-Qed.
-
 (* RB: TODO: Complete assumptions, possibly rephrase in terms of _neither. *)
 Lemma domm_partition_in_both ctx1 ctx2 C :
   mergeable_interfaces ctx1 ctx2 ->
@@ -624,7 +576,7 @@ Lemma domm_partition_in_both ctx1 ctx2 C :
   C \in domm ctx2 ->
   False.
 Proof.
-  intros H H0 H1. apply (domm_partition_notin H) in H1.
+  intros H H0 H1. apply (domm_partition_notin _ _ H) in H1.
   now rewrite H0 in H1.
 Qed.
 
@@ -649,29 +601,6 @@ Lemma domm_partition_in_notin (ctx1 : Program.interface) C :
   False.
 Proof.
   intros Hin Hnotin. now rewrite Hin in Hnotin.
-Qed.
-
-Lemma domm_partition_program_link_in_neither p c :
-  well_formed_program p ->
-  well_formed_program c ->
-  closed_program (program_link p c) ->
-  Component.main \notin domm (prog_interface p) ->
-  Component.main \notin domm (prog_interface c) ->
-  False.
-Proof.
-  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
-         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
-  destruct (prog_main p) as [mainp |] eqn:Hcasep.
-  - specialize (Hmainp (eq_refl _)).
-    rewrite Hmainp in Hmainp'.
-    discriminate.
-  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
-    +  specialize (Hmainc (eq_refl _)).
-       rewrite Hmainc in Hmainc'.
-       discriminate.
-    + simpl in Hmain.
-      rewrite Hcasep Hcasec in Hmain.
-      discriminate.
 Qed.
 
 Lemma domm_partition_in_union_in_neither (ctx1 ctx2 : Program.interface) C :
@@ -784,7 +713,7 @@ Proof.
         -- assert (Hdomm' : Pointer.component (Pointer.inc pc2) \in domm ctx2 = false).
            {
              apply mergeable_interfaces_sym in Hmerge.
-             pose proof domm_partition_notin Hmerge Hdomm as Hdomm'.
+             pose proof domm_partition_notin _ _ Hmerge _ Hdomm as Hdomm'.
              (* TODO: There are probably more succinct ways to do this. *)
              destruct (Pointer.component (Pointer.inc pc2) \in domm ctx2) eqn:Hcase.
              - rewrite Hcase in Hdomm'. discriminate.
@@ -795,7 +724,7 @@ Proof.
            now constructor.
         -- assert (Hdomm' : Pointer.component (Pointer.inc pc2) \in domm ctx1 = false).
            {
-             pose proof domm_partition_notin Hmerge Hdomm as Hdomm'.
+             pose proof domm_partition_notin _ _ Hmerge _ Hdomm as Hdomm'.
              (* TODO: There are probably more succinct ways to do this. *)
              destruct (Pointer.component (Pointer.inc pc2) \in domm ctx1) eqn:Hcase.
              - rewrite Hcase in Hdomm'. discriminate.
@@ -1201,9 +1130,6 @@ Qed.
 
 (* Merged memories and their properties. *)
 
-Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
-  unionm mem1 mem2.
-
 Lemma merge_memories_partition:
   forall ctx1 ctx2,
     mergeable_interfaces ctx1 ctx2 ->
@@ -1482,78 +1408,6 @@ Proof.
   now rewrite fdisjointC.
 Qed.
 
-(* The following two lemmas manipulate memory stores and partialized memories
-   more conveniently than the full-fledged "partialized" results. Note naming
-   conventions for some of those are currently somewhat confusing.  *)
-Lemma partialize_program_store :
-  forall mem mem' (ctx : Program.interface) ptr v,
-    Pointer.component ptr \notin domm ctx ->
-    Memory.store mem ptr v = Some mem' ->
-    Memory.store (PS.to_partial_memory mem (domm ctx)) ptr v =
-    Some (PS.to_partial_memory mem' (domm ctx)).
-Proof.
-  unfold Memory.store, to_partial_memory.
-  intros mem mem' ctx ptr v Hnotin Hstore.
-  destruct (mem (Pointer.component ptr)) as [memC |] eqn:HmemC;
-    last discriminate.
-  destruct (ComponentMemory.store memC (Pointer.block ptr) (Pointer.offset ptr) v)
-    as [memC' |] eqn:HmemC';
-    last discriminate.
-  inversion Hstore as [[Hstore']].
-  now rewrite (getm_filterm_notin_domm _ Hnotin) HmemC HmemC'
-      (setm_filterm_notin_domm _ _ Hnotin).
-Qed.
-
-Lemma unpartialize_program_store :
-  forall mem1 mem1' mem2 ptr v,
-    Memory.store mem1 ptr v = Some mem1' ->
-    Memory.store (merge_memories mem1 mem2) ptr v =
-    Some (merge_memories mem1' mem2).
-Proof.
-  unfold Memory.store.
-  intros mem1 mem1' mem2 ptr v Hstore.
-  unfold merge_memories. rewrite unionmE.
-  destruct (mem1 (Pointer.component ptr)) eqn:Hcase1; rewrite Hcase1;
-    last discriminate.
-  simpl.
-  destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) v) eqn:Hcase2;
-    last discriminate.
-  rewrite setm_union. now inversion Hstore.
-Qed.
-
-Lemma partialize_program_alloc :
-  forall mem mem' (ctx : Program.interface) C ptr size,
-    C \notin domm ctx ->
-    Memory.alloc mem C size = Some (mem', ptr) ->
-    Memory.alloc (to_partial_memory mem (domm ctx)) C size =
-    Some (to_partial_memory mem' (domm ctx), ptr).
-Proof.
-  unfold Memory.alloc, to_partial_memory.
-  intros mem mem' ctx C ptr size Hnotin Halloc.
-  destruct (mem C) as [memC |] eqn:HmemC;
-    last discriminate.
-  destruct (ComponentMemory.alloc memC size) as [memC' b] eqn:HmemC'.
-  inversion Halloc; subst.
-  now rewrite (getm_filterm_notin_domm _ Hnotin) HmemC HmemC'
-      (setm_filterm_notin_domm _ _ Hnotin).
-Qed.
-
-Lemma unpartialize_program_alloc :
-  forall mem1 mem1' mem2 C ptr size,
-    Memory.alloc mem1 C size = Some (mem1', ptr) ->
-    Memory.alloc (merge_memories mem1 mem2) C size =
-    Some (merge_memories mem1' mem2, ptr).
-Proof.
-  unfold Memory.alloc.
-  intros mem1 mem1' mem2 C ptr size Halloc.
-  unfold merge_memories. rewrite unionmE.
-  destruct (mem1 C) as [memC |] eqn:Hcase1; rewrite Hcase1;
-    last discriminate.
-  simpl.
-  destruct (ComponentMemory.alloc memC size) as [memC' b].
-  rewrite setm_union. now inversion Halloc.
-Qed.
-
 Definition merge_partial_states (ips1 ips2: state) : state :=
   match ips1 with
   | PC (gps1, mem1, regs, pc) =>
@@ -1762,14 +1616,14 @@ Proof.
       try (symmetry; assumption).
     + rewrite Pointer.inc_preserves_component.
       destruct ptr as [[]].
-      unfold to_partial_memory. erewrite context_store_in_partialized_memory; eauto.
+      erewrite context_store_in_partialized_memory; eauto.
       * rewrite Pointer.inc_preserves_component.
         rewrite <- H18. eassumption.
     + erewrite find_label_in_component_1 with (pc:=pc); eauto.
     + rewrite H18. reflexivity.
     + erewrite find_label_in_procedure_1 with (pc:=pc); eauto.
     + rewrite Pointer.inc_preserves_component.
-      unfold to_partial_memory. erewrite context_allocation_in_partialized_memory; eauto.
+      erewrite context_allocation_in_partialized_memory; eauto.
       * rewrite Pointer.inc_preserves_component.
         eassumption.
 Qed.
@@ -1970,16 +1824,6 @@ Ltac analyze_stack p1 pc1 pc2 Hhead :=
     ]
   end.
 
-(* RB: Where to put this? Is it direct from CoqUtils?
-   As it is, just a convenience to make tactics more readable. *)
-Remark notin_to_in_false : forall (Cid : Component.id) (iface : Program.interface),
-  Cid \notin domm iface -> Cid \in domm iface = false.
-Proof.
-  intros Cid iface Hnotin.
-  destruct (Cid \in domm iface) eqn:Heq;
-    easy.
-Qed.
-
 (* we can prove a strong form of state determinism when the program is in control *)
 Lemma state_determinism_program' p ctx G sps t1 t2 sps' :
   is_program_component sps ctx ->
@@ -2026,7 +1870,6 @@ Proof.
       as [cstk2' ? cmem2' ? regs2' pc2' Hpc2' | cstk2' ? cmem2' ? regs2' pc2' Hcc2'];
       subst;
     (* (Now that we are done inverting, expose this definition.) *)
-    unfold to_partial_memory in *;
     try discharge_pc_cc Hcomp Hcc1';
     try discharge_pc_cc Hcomp Hcc2';
     (* For the remaining goals, unify components of their matching opcodes and their
