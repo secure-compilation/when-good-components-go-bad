@@ -374,24 +374,9 @@ Section Mergeable.
       unfold CS.state_pc. unfold CS.initial_machine_state.
       destruct (prog_main (program_link p c)); destruct (prog_main (program_link p' c')); eauto.
     - (* Silent step on the left *)
-      rewrite <- IH.
-      (* Now, the only result to prove is that stepping silently doesn't modify the
-         component we're executing. Most of the cases are solvable trivially.
-         The two other cases are solved by applying lemmas proved previously.
-       *)
-      inversion Hstep; subst; try now (destruct pc as [[C b] o]; eauto).
-      + simpl in *.
-        now apply find_label_in_component_1 in H0.
-      + simpl in *.
-        now apply find_label_in_procedure_1 in H2.
+      now rewrite <- IH, (CS.silent_step_preserves_component _ _ _ Hstep).
     - (* Silent step on the right *)
-      rewrite IH.
-      (* Same as above *)
-      inversion Hstep; subst; try now (destruct pc as [[C b] o]; eauto).
-      + simpl in *.
-        now apply find_label_in_component_1 in H0.
-      + simpl in *.
-        now apply find_label_in_procedure_1 in H2.
+      now rewrite -> IH, (CS.silent_step_preserves_component _ _ _ Hstep).
     - (* Non-silent step *)
       inversion Hstep; subst; try contradiction.
       inversion Hstep''; subst; try contradiction.
