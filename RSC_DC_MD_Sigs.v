@@ -134,10 +134,6 @@ Module Type Intermediate_Sig.
     Parameter sem : program -> semantics.
   End CS.
 
-  Module PS.
-    Parameter sem : program -> Program.interface -> semantics.
-  End PS.
-
   (* Hypothesis decomposition_with_refinement : *)
   (*   forall p c, *)
   (*     well_formed_program p -> *)
@@ -150,32 +146,48 @@ Module Type Intermediate_Sig.
   (*     program_behaves (PS.sem p (prog_interface c)) beh2 /\ *)
   (*     behavior_improves beh1 beh2. *)
 
-  Hypothesis decomposition_prefix :
-    forall p c m,
-      well_formed_program p ->
-      well_formed_program c ->
-      linkable (prog_interface p) (prog_interface c) ->
-      linkable_mains p c ->
-      not_wrong_finpref m -> (* needed here, and will have it in main proof *)
-      does_prefix (CS.sem (program_link p c)) m ->
-      does_prefix (PS.sem p (prog_interface c)) m.
+  (* Hypothesis decomposition_prefix : *)
+  (*   forall p c m, *)
+  (*     well_formed_program p -> *)
+  (*     well_formed_program c -> *)
+  (*     linkable (prog_interface p) (prog_interface c) -> *)
+  (*     linkable_mains p c -> *)
+  (*     not_wrong_finpref m -> (* needed here, and will have it in main proof *) *)
+  (*     does_prefix (CS.sem (program_link p c)) m -> *)
+  (*     does_prefix (PS.sem p (prog_interface c)) m. *)
 
-  Hypothesis composition_prefix :
-    forall p c m,
-      well_formed_program p ->
-      well_formed_program c ->
-      linkable_mains p c ->
-      closed_program (program_link p c) ->
-      mergeable_interfaces (prog_interface p) (prog_interface c) ->
-      does_prefix (PS.sem p (prog_interface c)) m ->
-      does_prefix (PS.sem c (prog_interface p)) m ->
-      does_prefix (CS.sem (program_link p c)) m.
+  (* Hypothesis composition_prefix : *)
+  (*   forall p c m, *)
+  (*     well_formed_program p -> *)
+  (*     well_formed_program c -> *)
+  (*     linkable_mains p c -> *)
+  (*     closed_program (program_link p c) -> *)
+  (*     mergeable_interfaces (prog_interface p) (prog_interface c) -> *)
+  (*     does_prefix (PS.sem p (prog_interface c)) m -> *)
+  (*     does_prefix (PS.sem c (prog_interface p)) m -> *)
+  (*     does_prefix (CS.sem (program_link p c)) m. *)
 
   Hypothesis compose_mergeable_interfaces :
     forall p c,
       linkable (prog_interface p) (prog_interface c) ->
       closed_program (program_link p c) ->
       mergeable_interfaces (prog_interface p) (prog_interface c).
+
+  Hypothesis recombination_prefix :
+    forall p c p' c',
+      well_formed_program p ->
+      well_formed_program c ->
+      well_formed_program p' ->
+      well_formed_program c' ->
+      mergeable_interfaces (prog_interface p) (prog_interface c) ->
+      prog_interface p = prog_interface p' ->
+      prog_interface c = prog_interface c' ->
+      closed_program (program_link p c) ->
+      closed_program (program_link p' c') ->
+    forall m,
+      does_prefix (CS.sem (program_link p c)) m ->
+      does_prefix (CS.sem (program_link p' c')) m ->
+      does_prefix (CS.sem (program_link p c')) m.
 End Intermediate_Sig.
 
 Module Type S2I_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).

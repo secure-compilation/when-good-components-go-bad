@@ -400,9 +400,19 @@ Section Decomposition.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
           ** PS.simplify_turn.
+             match goal with (* TODO: clean up. *)
+             | |- ?FMEM = ?FMEM' =>
+               change FMEM with (to_partial_memory mem (domm (prog_interface c)));
+               change FMEM' with (to_partial_memory mem' (domm (prog_interface c)))
+             end.
              erewrite <- context_allocation_in_partialized_memory; eauto.
       + eapply PS.ContextControl; eauto.
         * PS.simplify_turn.
+          match goal with (* TODO: clean up. *)
+          | |- ?FMEM = ?FMEM' =>
+            change FMEM with (to_partial_memory mem (domm (prog_interface c)));
+            change FMEM' with (to_partial_memory mem' (domm (prog_interface c)))
+          end.
           erewrite <- context_allocation_in_partialized_memory; eauto.
 
     - (* KS_Deref1 *)
@@ -440,9 +450,19 @@ Section Decomposition.
       + eapply PS.partial_step with (p':=c); eauto.
         * eapply PS.ContextControl; eauto.
           ** PS.simplify_turn.
+             match goal with (* TODO: clean up. *)
+             | |- ?FMEM = ?FMEM' =>
+               change FMEM with (to_partial_memory mem (domm (prog_interface c)));
+               change FMEM' with (to_partial_memory mem' (domm (prog_interface c)))
+             end.
              erewrite <- context_store_in_partialized_memory; eauto.
       + eapply PS.ContextControl; eauto.
         * PS.simplify_turn.
+          match goal with (* TODO: clean up. *)
+          | |- ?FMEM = ?FMEM' =>
+            change FMEM with (to_partial_memory mem (domm (prog_interface c)));
+            change FMEM' with (to_partial_memory mem' (domm (prog_interface c)))
+          end.
           erewrite <- context_store_in_partialized_memory; eauto.
 
     - (* KS_InitCall *)

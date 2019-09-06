@@ -635,7 +635,7 @@ Module Source.
     rewrite mem_domm in Hnotin.
     rewrite Hnotin in Hfind.
     destruct (procs2 cid) as [C_procs |] eqn:Hprocs;
-      rewrite Hprocs in Hfind.
+      simpl.
     - unfold find_procedure.
       by rewrite Hprocs.
     - by inversion Hfind.

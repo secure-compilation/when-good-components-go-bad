@@ -12,7 +12,6 @@ Require Import Common.Traces.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
-Require Import Source.PS.
 
 From Coq Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import eqtype seq.

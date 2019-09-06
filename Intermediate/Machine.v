@@ -6,7 +6,7 @@ Require Import Common.Memory.
 Require Import Lib.Monads.
 Require Import Lib.Extra.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool seq eqtype.
 From extructures Require Import fmap.
 
 Set Implicit Arguments.
@@ -521,22 +521,22 @@ Proof.
         -- apply proj1 in Hmain_comp2.
            specialize (Hmain_comp2 Hcase2). assumption.
       * (* Contra. *)
-        destruct (dommP _ _ Hprog_main1) as [CI HCI]. rewrite unionmE in HCI.
+        destruct (dommP Hprog_main1) as [CI HCI]. rewrite unionmE in HCI.
         apply negb_true_iff in Hcase1. apply negb_true_iff in Hcase2.
-        now rewrite (dommPn _ _ Hcase1) (dommPn _ _ Hcase2) in HCI.
+        now rewrite (dommPn Hcase1) (dommPn Hcase2) in HCI.
     + inversion Hprog_main1 as [Hmain].
       destruct (prog_main p1) as [main1 |] eqn:Hcase1;
         destruct (prog_main p2) as [main2 |] eqn:Hcase2.
       * (* Contra/easy. RB: NOTE: Three cases can be solved as instances of a
            little lemma, or a tactic. Is it useful elsewhere? *)
         apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
-        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        destruct (dommP Hmain_comp1) as [CI HCI].
         apply /dommP. exists CI. now rewrite unionmE HCI.
       * apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
-        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        destruct (dommP Hmain_comp1) as [CI HCI].
         apply /dommP. exists CI. now rewrite unionmE HCI.
       * apply proj2 in Hmain_comp2. specialize (Hmain_comp2 isT).
-        destruct (dommP _ _ Hmain_comp2) as [CI HCI].
+        destruct (dommP Hmain_comp2) as [CI HCI].
         apply /dommP. exists CI. simpl. now rewrite (unionmC Hdis_i) unionmE HCI.
       * discriminate.
 Qed.
@@ -553,7 +553,18 @@ Definition prepare_initial_memory (p: program) : Memory.t :=
   alloc_static_buffers p (domm (prog_interface p)).
 
 (* RB: Are the names of reserve_[component|procedure]_blocks swapped? *)
-Definition reserve_component_blocks p C acc procs_code
+(* For each pair of procedure id and code in procs_code, build the triad of
+   component memory, procedure code map and component entry point map by
+   folding over them:
+    - Reserve a new block id in the component memory.
+    - Map that block id to the procedure code in the procedure block map.
+    - If the procedure is public, map the procedure id to the memory block id
+      in the component entry point map.
+   From the calling point, observe on the one hand that the initial values of
+   the accumulators are the existing component memory and two empty maps. On the
+   other hand, observe also that procs_code are the contents of a map in
+   associative list form, and each procedure is is therefore unique. *)
+Definition reserve_component_blocks' p C acc procs_code
   : ComponentMemory.t * NMap code * NMap Block.id :=
   let is_main_proc comp_id proc_id :=
       match prog_main p with
@@ -580,12 +591,55 @@ Definition reserve_component_blocks p C acc procs_code
     end
   in fold_left aux procs_code acc.
 
+(* The simplified version substitutes the accumulator for the component memory.
+   It reserves as many new memory blocks as needed at once (one for each item in
+   procs_code) and in the process obtains the new component memory, exploiting
+   the independence of the operations on each item in procs_code in what follows.
+    - Zip the list of new blocks matching the list of procedure code and create a
+      new piecewise map from it.
+    - Zip the list of procedure ids and the list of new block ids and create a
+      partial map from it, refactoring the code handling entry points in the old
+      function.
+   If the new function to reserve a number of blocks does not present new blocks
+   in the same order as the sequential run, slightly different, but isomorphic,
+   maps may be produced. *)
+Definition reserve_component_blocks p C Cmem procs_code
+  : ComponentMemory.t * NMap code * NMap Block.id :=
+  let is_main_proc comp_id proc_id :=
+      match prog_main p with
+      | Some main_proc_id =>
+        (Component.main =? comp_id) && (main_proc_id =? proc_id)
+      | None => false
+      end in
+  (* if P is exported or is the main procedure, add an external entrypoint *)
+  let map_entrypoint '(P, b) :=
+      match getm (prog_interface p) C with
+      | Some Ciface =>
+        if (P \in Component.export Ciface) || is_main_proc C P then Some (P, b)
+        else None
+      | None => None (* this case shouldn't happen for well formed p *)
+      end in
+  let (Cmem', bs) := ComponentMemoryExtra.reserve_blocks Cmem (length procs_code) in
+  let (procs, code) := (unzip1 procs_code, unzip2 procs_code) in
+  let Cprocs := mkfmap (zip bs code) in
+  let Centrypoints := mkfmap (pmap map_entrypoint (zip procs bs)) in
+  (Cmem', Cprocs, Centrypoints).
+
 (* In the foreseen, controlled use of this function, we always go on the Some
    branch. For each component C, we read its (initial) memory and use it to
    construct the initial state of C, recursing after we update its maps. Given
    identical inputs (component memories, which we have by compositionality of
    that piece of code) the outputs will be identical. *)
-Fixpoint reserve_procedure_blocks p acc comps_code
+(* For each pair of component id and component procedures in comps_code, build
+   the triad of program memory memory, component code map and entry point map by
+   folding over them. For each pair, reserve component blocks and update the maps
+   for the current component.
+     As in the function to reserve component blocks, from the calling point,
+   observe that the initial values of the accumulators are, again, the existing
+   memory, partially initialized, and two empty maps; and that, again, comps_proc
+   is an alternative representation of a map, and the procedure on each pair is
+   independent from all others. *)
+Fixpoint reserve_procedure_blocks' p acc comps_code
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
   let aux acc comps_code :=
       let '(mem, procs, entrypoints) := acc in
@@ -593,7 +647,7 @@ Fixpoint reserve_procedure_blocks p acc comps_code
     match getm mem C with
     | Some Cmem =>
       let '(Cmem', Cprocs, Centrypoints) :=
-          reserve_component_blocks p C (Cmem, emptym, emptym) (elementsm Cprocs) in
+          reserve_component_blocks' p C (Cmem, emptym, emptym) (elementsm Cprocs) in
       let mem' := setm mem C Cmem' in
       let procs' := setm procs C Cprocs in
       let entrypoints' := setm entrypoints C Centrypoints in
@@ -605,22 +659,75 @@ Fixpoint reserve_procedure_blocks p acc comps_code
     end
   in fold_left aux comps_code acc.
 
+(* The simplified function builds a partial map by applying the refactored
+   per-component process over each pair, noting that in some cases (which should
+   never occur!) initialization is skipped, then unpack the parts and repack them
+   in the expected map formats.
+     Note that we are creating a new memory instead of explicitly updating the
+   old memory. Both processes should be equivalent if the map is actually total,
+   as is expected. *)
+Fixpoint reserve_procedure_blocks p (mem : Memory.t) comps_code
+  : Memory.t * NMap (NMap code) * EntryPoint.t :=
+  let map_component_memory '(C, Cprocs) :=
+    match getm mem C with
+    | Some Cmem => Some (C, reserve_component_blocks p C Cmem (elementsm Cprocs))
+      (* this shouldn't happen if memory was initialized before the call *)
+      (* we just skip initialization for this component *)
+    | None => None
+    end in
+  let acc := pmap map_component_memory comps_code in
+  let '(comps', mems, procs, eps) := (unzip1 acc, unzip1 (unzip1 (unzip2 acc)),
+                                      unzip2 (unzip1 (unzip2 acc)), unzip2 (unzip2 acc)) in
+  (mkfmap (zip comps' mems), mkfmap (zip comps' procs), mkfmap (zip comps' eps)).
+
+(* RB: TODO: Make sure these functions are only used with initial memories. *)
+Definition prepare_procedures' (p: program) (mem: Memory.t)
+  : Memory.t * NMap (NMap code) * EntryPoint.t :=
+  reserve_procedure_blocks' p (mem, emptym, emptym) (elementsm (prog_procedures p)).
+
+(* The main function to prepare the procedures of a program from a memory simply
+   calls the helper, now without a trivial accumulator. *)
 Definition prepare_procedures (p: program) (mem: Memory.t)
   : Memory.t * NMap (NMap code) * EntryPoint.t :=
-  reserve_procedure_blocks p (mem, emptym, emptym) (elementsm (prog_procedures p)).
+  reserve_procedure_blocks p mem (elementsm (prog_procedures p)).
 
 (* For each component, integrate the (now separate) fetching of its procedures,
    obtention of its initial component memory and then reserve_component_blocks.
    The logic of reserve_procedure_blocks is implicit in the map-like nature of
    its results. (By splitting the definition and proving some intermediate
    results on the auxiliary, the composition of the parts will be easier.) *)
+(* Definition prepare_procedures_initial_memory_aux (p: program) := *)
+(*   mkfmapf *)
+(*     (fun C => *)
+(*        let Cprocs := odflt emptym ((prog_procedures p) C) in *)
+(*        let Cmem := ComponentMemory.prealloc (odflt emptym ((prog_buffers p) C)) in *)
+(*        reserve_component_blocks p C (Cmem, emptym, emptym) (elementsm Cprocs)) *)
+(*     (domm (prog_interface p)). *)
+
+Definition prepare_procedures_initial_memory_aux' (p: program) :=
+  mkfmapf
+    (fun C =>
+       let Cprocs := odflt emptym ((prog_procedures p) C) in
+       let Cmem := ComponentMemory.prealloc (odflt emptym ((prog_buffers p) C)) in
+       reserve_component_blocks' p C (Cmem, emptym, emptym) (elementsm Cprocs))
+    (domm (prog_interface p)).
+
+(* As above, replace the old function with the new, and remove accumulators. *)
 Definition prepare_procedures_initial_memory_aux (p: program) :=
   mkfmapf
     (fun C =>
        let Cprocs := odflt emptym ((prog_procedures p) C) in
        let Cmem := ComponentMemory.prealloc (odflt emptym ((prog_buffers p) C)) in
-       reserve_component_blocks p C (Cmem, emptym, emptym) (elementsm Cprocs))
+       reserve_component_blocks p C Cmem (elementsm Cprocs))
     (domm (prog_interface p)).
+
+(* Ultimately, we want this equivalence -- possibly modulo an isomorphism on
+   concrete block id values -- to hold. *)
+Theorem prepare_procedures_initial_memory_aux_equiv (p: program) :
+  prepare_procedures_initial_memory_aux p = (* New version. *)
+  prepare_procedures_initial_memory_aux' p. (* Old version. *)
+Proof.
+Admitted.
 
 (* Decompose the results of the auxiliary call, composed as a whole in the
    result of reserving component blocks, turning a map of triples into a triple
@@ -801,6 +908,29 @@ Proof.
   rewrite unionmE.
   rewrite Hin.
   assumption.
+Qed.
+
+Lemma domm_partition_program_link_in_neither p c :
+  well_formed_program p ->
+  well_formed_program c ->
+  closed_program (program_link p c) ->
+  Component.main \notin domm (prog_interface p) ->
+  Component.main \notin domm (prog_interface c) ->
+  False.
+Proof.
+  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
+         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
+  destruct (prog_main p) as [mainp |] eqn:Hcasep.
+  - specialize (Hmainp is_true_true).
+    rewrite Hmainp in Hmainp'.
+    discriminate.
+  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
+    +  specialize (Hmainc is_true_true).
+       rewrite Hmainc in Hmainc'.
+       discriminate.
+    + simpl in Hmain.
+      rewrite Hcasep Hcasec in Hmain.
+      discriminate.
 Qed.
 
 Lemma fsetid (T : ordType) (s: seq.seq T) :
@@ -995,6 +1125,40 @@ Proof.
          prepare_procedures_initial_memory, prepare_procedures_initial_memory_aux.
   rewrite <- mapm_unionm. apply mapm_eq.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
+Qed.
+
+(* Search _ prepare_procedures_memory. *)
+(* Search _ PS.to_partial_memory unionm. *)
+Lemma prepare_procedures_memory_left p c :
+  linkable (prog_interface p) (prog_interface c) ->
+  to_partial_memory
+    (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+    (domm (prog_interface c)) =
+  prepare_procedures_memory p.
+Proof.
+  intros [_ Hdisjoint].
+  unfold to_partial_memory, merge_memories.
+  rewrite <- domm_prepare_procedures_memory,
+         -> filterm_union,
+         -> fdisjoint_filterm_full,
+         -> fdisjoint_filterm_empty, -> unionm0;
+    first reflexivity;
+    try rewrite -> !domm_prepare_procedures_memory; congruence.
+Qed.
+
+Lemma prepare_procedures_memory_right p c :
+  linkable (prog_interface p) (prog_interface c) ->
+  to_partial_memory
+    (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+    (domm (prog_interface p)) =
+  prepare_procedures_memory c.
+Proof.
+  intros Hlinkable.
+  rewrite unionmC; try assumption.
+  apply prepare_procedures_memory_left with (c := p) (p := c).
+  now apply linkable_sym.
+  inversion Hlinkable.
+  now rewrite !domm_prepare_procedures_memory.
 Qed.
 
 Definition prepare_procedures_procs (p: program) : NMap (NMap code) :=

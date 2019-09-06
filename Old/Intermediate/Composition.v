@@ -513,31 +513,6 @@ Lemma step_E0_same_turn:
     end.
 Qed.
 
-Ltac CS_step_of_executing :=
-  match goal with
-  | H : executing _ _ ?INSTR |- _ =>
-    match INSTR with
-    | INop           => eapply CS.Nop
-    | ILabel _       => eapply CS.Label
-    | IConst _ _     => eapply CS.Const
-    | IMov _ _       => eapply CS.Mov
-    | IBinOp _ _ _ _ => eapply CS.BinOp
-    | ILoad _ _      => eapply CS.Load
-    | IStore _ _     => eapply CS.Store
-    | IAlloc _ _     => eapply CS.Alloc
-    | IBnz _ _       =>
-      match goal with
-      | H : Register.get _ _ = Int 0 |- _ => eapply CS.BnzZ
-      | _                                 => eapply CS.BnzNZ
-      end
-    | IJump _        => eapply CS.Jump
-    | IJal _         => eapply CS.Jal
-    | ICall _ _      => eapply CS.Call
-    | IReturn        => eapply CS.Return
-    | IHalt          => fail
-    end
-  end.
-
 (* RB: TODO: Rename. *)
 Ltac rewrite_if_then :=
   match goal with
@@ -604,6 +579,42 @@ Section MergeableStatesProgram.
       | IHalt          => fail
       end
     end.
+
+  Ltac t_mergeable_states_step_intros :=
+    intros s1 s1' s2 s2' t Hpcomp Hmergeable Hstep Hstep';
+    (* Top-level case analysis. *)
+    inversion Hmergeable
+      as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial_ics1 Hpartial_ics1'];
+      subst;
+rename Hmergeable into _Hmergeable;
+    inversion Hstep
+      as [c' ? ? ? ics1 ics2
+          Hsame_iface1 _ Hwf1 Hlinkable Hmains Hstep_cs Hpartial1 Hpartial2];
+      subst;
+rename Hstep into _Hstep;
+    inversion Hstep'
+      as [p' ? ? ? ics1' ics2'
+          Hsame_iface2 _ Hwf2 Hlinkable' Hmains' Hstep_cs' Hpartial1' Hpartial2'];
+      subst;
+rename Hstep' into _Hstep';
+    inversion Hpartial_ics1
+      as [gps1 ? mem1 ? regs1 pc1 Hpc1 | gps1 ? mem1 ? ? pc1 Hcc1]; subst;
+      [| exfalso; PS.simplify_turn; eapply PS.domm_partition_in_notin; eassumption];
+rename Hpartial_ics1 into _Hpartial_ics1;
+    (* p has control. *)
+    inversion Hpartial_ics1'
+      as [? | gps1' ? mem1' ? ? pc1' Hcc1']; subst;
+      [exfalso; eapply PS.domm_partition_in_neither; eassumption |];
+rename Hpartial_ics1' into _Hpartial_ics1';
+      inversion Hpartial1
+        as [ics_gps1 ? ics_mem1 ? ics_regs1 ics_pc1 Hics_pc1 Hmem1 Hstack1 |];
+        subst;
+rename Hpartial1 into _Hpartial1;
+      inversion Hpartial1'
+        as [| ics_gps1' ? ics_mem1' ? ics_regs1' ics_pc1' Hics_pc1' Hmem1' Hstack1' dummy Hcomp1'];
+        subst;
+rename Hpartial1' into _Hpartial1';
+      PS.simplify_turn.
 
   (* RB: TODO: In this set of tactics, replace [try match goal] constructs by a
      [match goal] with an [idtac] default case, so that instructions are mandated
@@ -936,60 +947,25 @@ rename Hpartial2' into _Hpartial2';
     PS.step c (prog_interface p) (prepare_global_env c) s1' t s2' ->
     PS.mergeable_states (prog_interface c) (prog_interface p) s2 s2'.
   Proof.
-    intros s1 s1' s2 s2' t Hpcomp Hmergeable Hstep Hstep'.
-    pose proof mergeable_interfaces_sym _ _ mergeable_interfaces
-      as Hmergeable_interfaces.
-    (* Top-level case analysis. *)
-    inversion Hmergeable
-      as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial_ics1 Hpartial_ics1'];
-      subst.
-rename Hmergeable into _Hmergeable.
-    inversion Hstep
-      as [c' ? ? ? ics1 ics2
-          Hsame_iface1 _ Hwf1 Hlinkable Hmains Hstep_cs Hpartial1 Hpartial2];
-      subst.
-rename Hstep into _Hstep.
-    inversion Hstep'
-      as [p' ? ? ? ics1' ics2'
-          Hsame_iface2 _ Hwf2 Hlinkable' Hmains' Hstep_cs' Hpartial1' Hpartial2'];
-      subst.
-rename Hstep' into _Hstep'.
-    inversion Hpartial_ics1
-      as [gps1 ? mem1 ? regs1 pc1 Hpc1 | gps1 ? mem1 ? ? pc1 Hcc1]; subst;
-      last (exfalso; PS.simplify_turn; eapply PS.domm_partition_in_notin; eassumption).
-rename Hpartial_ics1 into _Hpartial_ics1.
-    - (* p has control. *)
-      inversion Hpartial_ics1'
-        as [? | gps1' ? mem1' ? ? pc1' Hcc1']; subst;
-        first (exfalso; eapply PS.domm_partition_in_neither; eassumption).
-rename Hpartial_ics1' into _Hpartial_ics1'.
-      inversion Hpartial1
-        as [ics_gps1 ? ics_mem1 ? ics_regs1 ics_pc1 Hics_pc1 Hmem1 Hstack1 |];
-        subst.
-rename Hpartial1 into _Hpartial1.
-      inversion Hpartial1'
-        as [| ics_gps1' ? ics_mem1' ? ics_regs1' ics_pc1' Hics_pc1' Hmem1' Hstack1' dummy Hcomp1'];
-        subst.
-rename Hpartial1' into _Hpartial1'.
-      PS.simplify_turn.
-      (* Case analysis on p's step. *)
-      inversion Hstep_cs; subst;
+    t_mergeable_states_step_intros.
+    (* Case analysis on p's step. *)
+    inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs;
-        (* Invert first final partial step. *)
-        t_mergeable_states_step_partial2 Hpartial2 _Hstep_cs;
-        PS.simplify_turn;
-        (* Synchronize with c's step. *)
-        inversion Hstep_cs'; subst;
+      (* Invert first final partial step. *)
+      t_mergeable_states_step_partial2 Hpartial2 _Hstep_cs;
+      PS.simplify_turn;
+      (* Synchronize with c's step. *)
+      inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs';
-        (* Invert second final partial step, remove contradictions. *)
-        t_mergeable_states_step_partial2'
-          Hpartial2' _Hstep_cs' Hsame_iface1 gps1 Hstack1 Hstack1' Hcomes_from Hics_pc2 Hics_pc2'
-          Hstack1_hd Hcase1 gps1_hd; (* Hack variables introduced by the tactic. *)
-        (* Solve legitimate goals. *)
-        t_mergeable_states_step_trans_solve
-          pc1 gps1 Hstack1 Hstack1' Hmem1 Hics_pc1' Hmem1' ics_pc1' Hcomp1'
-          Hics_pc2' Hcomes_from Hmergeable_ifaces Hcc1' Hpc1 Hpc1c' Hpc1p
-          HBnz1 HJal1 HJump1. (* Hack variables. *)
+      (* Invert second final partial step, remove contradictions. *)
+      t_mergeable_states_step_partial2'
+        Hpartial2' _Hstep_cs' Hsame_iface1 gps1 Hstack1 Hstack1' Hcomes_from Hics_pc2 Hics_pc2'
+        Hstack1_hd Hcase1 gps1_hd; (* Hack variables introduced by the tactic. *)
+      (* Solve legitimate goals. *)
+      t_mergeable_states_step_trans_solve
+        pc1 gps1 Hstack1 Hstack1' Hmem1 Hics_pc1' Hmem1' ics_pc1' Hcomp1'
+        Hics_pc2' Hcomes_from Hmergeable_ifaces Hcc1' Hpc1 Hpc1c' Hpc1p
+        HBnz1 HJal1 HJump1. (* Hack variables. *)
   Qed.
 
   Ltac t_mergeable_states_step_CS_solve
@@ -1169,58 +1145,25 @@ rename Hstep_cs' into _Hstep_cs';
             (PS.unpartialize (PS.merge_partial_states s1 s1')) t
             (PS.unpartialize (PS.merge_partial_states s2 s2')).
   Proof.
-    intros s1 s1' s2 s2' t Hpcomp Hmergeable Hstep Hstep'.
-    (* Top-level case analysis. *)
-    inversion Hmergeable
-      as [ics ? ? Hmergeable_ifaces Hcomes_from Hpartial_ics1 Hpartial_ics1'];
-      subst.
-rename Hmergeable into _Hmergeable.
-    inversion Hstep
-      as [c' ? ? ? ics1 ics2
-          Hsame_iface1 _ Hwf1 Hlinkable Hmains Hstep_cs Hpartial1 Hpartial2];
-      subst.
-rename Hstep into _Hstep.
-    inversion Hstep'
-      as [p' ? ? ? ics1' ics2'
-          Hsame_iface2 _ Hwf2 Hlinkable' Hmains' Hstep_cs' Hpartial1' Hpartial2'];
-      subst.
-rename Hstep' into _Hstep'.
-    inversion Hpartial_ics1
-      as [gps1 ? mem1 ? regs1 pc1 Hpc1 | gps1 ? mem1 ? ? pc1 Hcc1]; subst;
-      last (exfalso; PS.simplify_turn; eapply PS.domm_partition_in_notin; eassumption).
-rename Hpartial_ics1 into _Hpartial_ics1.
-    - (* p has control. *)
-      inversion Hpartial_ics1'
-        as [? | gps1' ? mem1' ? ? pc1' Hcc1']; subst;
-        first (exfalso; eapply PS.domm_partition_in_neither; eassumption).
-rename Hpartial_ics1' into _Hpartial_ics1'.
-      inversion Hpartial1
-        as [ics_gps1 ? ics_mem1 ? ics_regs1 ics_pc1 Hics_pc1 Hmem1 Hstack1 |];
-        subst.
-rename Hpartial1 into _Hpartial1.
-      inversion Hpartial1'
-        as [| ics_gps1' ? ics_mem1' ? ics_regs1' ics_pc1' Hics_pc1' Hmem1' Hstack1' dummy Hcomp1'];
-        subst.
-rename Hpartial1' into _Hpartial1'.
-      PS.simplify_turn.
-      (* Case analysis on p's step. *)
-      inversion Hstep_cs; subst;
+    t_mergeable_states_step_intros.
+    (* Case analysis on p's step. *)
+    inversion Hstep_cs; subst;
 rename Hstep_cs into _Hstep_cs;
-        (* Invert first final partial step. *)
-        t_mergeable_states_step_partial2 Hpartial2 _Hstep_cs;
-        PS.simplify_turn;
-        (* Synchronize with c's step. *)
-        inversion Hstep_cs'; subst;
+      (* Invert first final partial step. *)
+      t_mergeable_states_step_partial2 Hpartial2 _Hstep_cs;
+      PS.simplify_turn;
+      (* Synchronize with c's step. *)
+      inversion Hstep_cs'; subst;
 rename Hstep_cs' into _Hstep_cs';
-        (* Invert second final partial step, remove contradictions. *)
-        t_mergeable_states_step_partial2'
-          Hpartial2' _Hstep_cs' Hsame_iface1 gps1 Hstack1 Hstack1' Hcomes_from Hics_pc2 Hics_pc2'
-          Hstack1_hd Hcase1 gps1_hd; (* Hack variables introduced by the tactic. *)
-        (* Solve legitimate goals. *)
-        t_mergeable_states_step_CS_solve
-          Hmem1 Hstack1 Hcomes_from Hics_pc1' Hmem1' ics_pc1' pc1 Hpc1 Hcc1' Hcomp1'
-          gps1 Hstack1' Hics_pc2' Hics_pc2 ics_regs1' regs1 c' Hsame_iface1 ics_mem1
-          mem1 Hsame_iface2.
+      (* Invert second final partial step, remove contradictions. *)
+      t_mergeable_states_step_partial2'
+        Hpartial2' _Hstep_cs' Hsame_iface1 gps1 Hstack1 Hstack1' Hcomes_from Hics_pc2 Hics_pc2'
+        Hstack1_hd Hcase1 gps1_hd; (* Hack variables introduced by the tactic. *)
+      (* Solve legitimate goals. *)
+      t_mergeable_states_step_CS_solve
+        Hmem1 Hstack1 Hcomes_from Hics_pc1' Hmem1' ics_pc1' pc1 Hpc1 Hcc1' Hcomp1'
+        gps1 Hstack1' Hics_pc2' Hics_pc2 ics_regs1' regs1 c' Hsame_iface1 ics_mem1
+        mem1 Hsame_iface2.
   Qed.
 End MergeableStatesProgram.
 
@@ -2172,7 +2115,7 @@ Section MultiSemantics.
       by now apply /dommP.
     rewrite unionmE in HSome.
     destruct (isSome (ctx1 ptr)) eqn:Hcase;
-      rewrite Hcase in HSome.
+      simpl in HSome.
     - left. apply /dommP. now eauto.
     - right. apply /dommP. now eauto.
   Qed.
@@ -2683,7 +2626,7 @@ Section ThreewayMultisemProgram.
           first (exfalso;
                  PS.simplify_turn; eapply PS.domm_partition_in_neither; eassumption);
 
-        [CS_step_of_executing];
+        [CS.step_of_executing];
           try eassumption; try reflexivity;
           try match goal with
           | Hstore : Memory.store mem ?PTR _ = Some _,

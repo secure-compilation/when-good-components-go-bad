@@ -36,7 +36,7 @@ Lemma emptymP m : reflect (m = emptym) (domm m == fset0).
 Proof.
 apply/(iffP eqP); last by move=> ->; rewrite domm0.
 move=> e; apply/eq_fmap => x; rewrite emptymE.
-by case: (altP (dommPn m x))=> //; rewrite e.
+by case: (altP (@dommPn T S m x))=> //; rewrite e.
 Qed.
 
 Lemma domm_mkfmap' (kvs : seq (T * S)) : domm (mkfmap kvs) = fset (unzip1 kvs).

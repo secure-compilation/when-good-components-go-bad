@@ -1,7 +1,8 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
+Require Import Common.Linking.
 Require Import Lib.Extra.
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 
 Module Type AbstractComponentMemory.
   Parameter t : Type.
@@ -201,6 +202,17 @@ Module ComponentMemory : AbstractComponentMemory.
 
 End ComponentMemory.
 
+Module ComponentMemoryExtra.
+  Import ComponentMemory.
+  (* RB: NOTE: Prove composition as needed. Blocks are emitted in the same order
+     as the sequence of single calls. *)
+  Fixpoint reserve_blocks (mem : t) (n : nat) : t * list Block.id :=
+    let acc '(mem, bs) :=
+        let '(mem', b) := reserve_block mem in
+        (mem', bs ++ [b]) in
+    iter n acc (mem, []).
+End ComponentMemoryExtra.
+
 Module Memory.
   Definition t := NMap ComponentMemory.t.
 
@@ -288,17 +300,24 @@ Unset Printing Implicit Defensive.
 
 (* TODO: Clean these lemmas and their weak variants *)
 
+Definition to_partial_memory (mem : Memory.t) (ctx : {fset Component.id}) :=
+  filterm (fun k _ => negb (k \in ctx)) mem.
+
+Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
+  unionm mem1 mem2.
+
+(* RB: NOTE: An equality relation could be used to contain the usual partial
+   equality. *)
+
 Lemma program_allocation_in_partialized_memory_strong :
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C size mem1' ptr,
     C \notin ctx ->
     Memory.alloc mem1 C size = Some (mem1', ptr) ->
   exists2 mem2',
     Memory.alloc mem2 C size = Some (mem2', ptr) &
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
+    to_partial_memory mem1' ctx = to_partial_memory mem2' ctx.
 Proof.
 move=> ctx mem1 mem2 /eq_fmap Hfilter C size mem1' ptr nin_ctx.
 rewrite /Memory.alloc; move/(_ C): (Hfilter); rewrite !filtermE nin_ctx.
@@ -309,18 +328,15 @@ case: eqP=> [-> {C'}|_] //=.
 by move/(_ C'): Hfilter; rewrite !filtermE.
 Qed.
 
-
 Lemma program_allocation_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C size mem1' mem2' ptr1 ptr2,
     C \notin ctx ->
     Memory.alloc mem1 C size = Some (mem1', ptr1) ->
     Memory.alloc mem2 C size = Some (mem2', ptr2) ->
     ptr1 = ptr2 /\
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
+    to_partial_memory mem1' ctx = to_partial_memory mem2' ctx.
 Proof.
 move=> ctx mem1 mem2 Hfilter C size mem1' mem2' ptr1 ptr2 nin_ctx e_mem1.
 case: (program_allocation_in_partialized_memory_strong Hfilter nin_ctx e_mem1).
@@ -329,8 +345,7 @@ Qed.
 
 Lemma program_load_in_partialized_memory_strong:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C b o v,
     C \notin ctx ->
     Memory.load mem1 (C, b, o) = Some v ->
@@ -343,8 +358,7 @@ Qed.
 
 Lemma program_load_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C b o v1 v2,
     C \notin ctx ->
     Memory.load mem1 (C, b, o) = Some v1 ->
@@ -358,15 +372,13 @@ Qed.
 
 Lemma program_store_in_partialized_memory_strong:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C b o v mem1',
     C \notin ctx ->
     Memory.store mem1 (C, b, o) v = Some mem1' ->
   exists2 mem2',
     Memory.store mem2 (C, b, o) v = Some mem2' &
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
+    to_partial_memory mem1' ctx = to_partial_memory mem2' ctx.
 Proof.
 move=> ctx mem1 mem2 /eq_fmap Hfilter C b o v mem1' nin_ctx.
 rewrite /Memory.store /=; move/(_ C): (Hfilter); rewrite !filtermE nin_ctx.
@@ -379,14 +391,12 @@ Qed.
 
 Lemma program_store_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem1 mem2,
-    filterm (fun k _ => k \notin ctx) mem1 =
-    filterm (fun k _ => k \notin ctx) mem2 ->
+    to_partial_memory mem1 ctx = to_partial_memory mem2 ctx ->
   forall C b o v mem1' mem2',
     C \notin ctx ->
     Memory.store mem1 (C, b, o) v = Some mem1' ->
     Memory.store mem2 (C, b, o) v = Some mem2' ->
-    filterm (fun k _ => k \notin ctx) mem1' =
-    filterm (fun k _ => k \notin ctx) mem2'.
+    to_partial_memory mem1' ctx = to_partial_memory mem2' ctx.
 Proof.
 move=> ctx mem1 mem2 Hfilter C b o v mem1' mem2' nin_ctx e_mem.
 case: (program_store_in_partialized_memory_strong Hfilter nin_ctx e_mem).
@@ -397,8 +407,7 @@ Lemma context_allocation_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem C size mem' ptr,
     C \in ctx ->
     Memory.alloc mem C size = Some (mem', ptr) ->
-    filterm (fun k _ => k \notin ctx) mem' =
-    filterm (fun k _ => k \notin ctx) mem.
+    to_partial_memory mem' ctx = to_partial_memory mem ctx.
 Proof.
   move=> ctx mem C size mem' ptr HC_in_ctx.
   rewrite /Memory.alloc => Halloc.
@@ -418,8 +427,7 @@ Lemma context_store_in_partialized_memory:
   forall (ctx: {fset Component.id}) mem C b o v mem',
     C \in ctx ->
     Memory.store mem (C, b, o) v = Some mem' ->
-    filterm (fun k _ => k \notin ctx) mem' =
-    filterm (fun k _ => k \notin ctx) mem.
+    to_partial_memory mem' ctx = to_partial_memory mem ctx.
 Proof.
   move=> ctx mem C b o v mem' C_in_ctx.
   rewrite /Memory.store /= => Hstore.
@@ -434,3 +442,180 @@ Proof.
   case: (@eqP _ C' C) => [-> | _] //.
   by rewrite C_in_ctx mem_C /=.
 Qed.
+
+(* RB: TODO: More properly, this seems to belong in Machine.Memory. However, it
+   is natural to resort to a notion of partial memory that seems logically
+   related to the supporting components of PS. Again, note, however, that this
+   notion of partial memory is already used in the Memory module, and it may be
+   a good idea to relocate our compact definitions there.
+
+   Otherwise, this is a more convenient wrapper for
+   context_store_in_partialized_memory which does not require the destruction of
+   pointers, and could conceivably replace the wrappee throughout the
+   development. *)
+Lemma program_store_to_partialized_memory
+      ptr (iface : Program.interface) mem mem' v :
+  Pointer.component ptr \in domm iface ->
+  Memory.store mem ptr v = Some mem' ->
+  to_partial_memory mem (domm iface) = to_partial_memory mem' (domm iface).
+Proof.
+  destruct ptr as [[C b] o]. simpl.
+  intros Hdome Hsome.
+  unfold to_partial_memory. symmetry.
+  eapply context_store_in_partialized_memory; eassumption.
+Qed.
+
+(* RB: TODO: Same notes as above.
+   Cf.  program_allocation_in_partialized_memory_strong. *)
+Lemma program_allocation_to_partialized_memory
+      C (iface : Program.interface) size mem mem' ptr :
+  C \in domm iface ->
+  Memory.alloc mem C size = Some (mem', ptr) ->
+  to_partial_memory mem (domm iface) = to_partial_memory mem' (domm iface).
+Proof.
+  destruct ptr as [[C' b] o]. simpl.
+  intros Hdome Hsome.
+  unfold to_partial_memory. symmetry.
+  eapply context_allocation_in_partialized_memory; eassumption.
+Qed.
+
+(* The following two lemmas manipulate memory stores and partialized memories
+   more conveniently than the full-fledged "partialized" results. Note naming
+   conventions for some of those are currently somewhat confusing.  *)
+Lemma partialize_program_store :
+  forall mem mem' (ctx : Program.interface) ptr v,
+    Pointer.component ptr \notin domm ctx ->
+    Memory.store mem ptr v = Some mem' ->
+    Memory.store (to_partial_memory mem (domm ctx)) ptr v =
+    Some (to_partial_memory mem' (domm ctx)).
+Proof.
+  unfold Memory.store, to_partial_memory.
+  intros mem mem' ctx ptr v Hnotin Hstore.
+  destruct (mem (Pointer.component ptr)) as [memC |] eqn:HmemC;
+    last discriminate.
+  destruct (ComponentMemory.store memC (Pointer.block ptr) (Pointer.offset ptr) v)
+    as [memC' |] eqn:HmemC';
+    last discriminate.
+  inversion Hstore as [[Hstore']].
+  now rewrite (getm_filterm_notin_domm _ Hnotin) HmemC HmemC'
+      (setm_filterm_notin_domm _ _ Hnotin).
+Qed.
+
+Lemma unpartialize_program_store :
+  forall mem1 mem1' mem2 ptr v,
+    Memory.store mem1 ptr v = Some mem1' ->
+    Memory.store (merge_memories mem1 mem2) ptr v =
+    Some (merge_memories mem1' mem2).
+Proof.
+  unfold Memory.store.
+  intros mem1 mem1' mem2 ptr v Hstore.
+  unfold merge_memories. rewrite unionmE.
+  destruct (mem1 (Pointer.component ptr)) eqn:Hcase1;
+    last discriminate.
+  simpl.
+  destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) v) eqn:Hcase2;
+    last discriminate.
+  rewrite setm_union. now inversion Hstore.
+Qed.
+
+Lemma partialize_program_alloc :
+  forall mem mem' (ctx : Program.interface) C ptr size,
+    C \notin domm ctx ->
+    Memory.alloc mem C size = Some (mem', ptr) ->
+    Memory.alloc (to_partial_memory mem (domm ctx)) C size =
+    Some (to_partial_memory mem' (domm ctx), ptr).
+Proof.
+  unfold Memory.alloc, to_partial_memory.
+  intros mem mem' ctx C ptr size Hnotin Halloc.
+  destruct (mem C) as [memC |] eqn:HmemC;
+    last discriminate.
+  destruct (ComponentMemory.alloc memC size) as [memC' b] eqn:HmemC'.
+  inversion Halloc; subst.
+  now rewrite (getm_filterm_notin_domm _ Hnotin) HmemC HmemC'
+      (setm_filterm_notin_domm _ _ Hnotin).
+Qed.
+
+Lemma unpartialize_program_alloc :
+  forall mem1 mem1' mem2 C ptr size,
+    Memory.alloc mem1 C size = Some (mem1', ptr) ->
+    Memory.alloc (merge_memories mem1 mem2) C size =
+    Some (merge_memories mem1' mem2, ptr).
+Proof.
+  unfold Memory.alloc.
+  intros mem1 mem1' mem2 C ptr size Halloc.
+  unfold merge_memories. rewrite unionmE.
+  destruct (mem1 C) as [memC |] eqn:Hcase1;
+    last discriminate.
+  simpl.
+  destruct (ComponentMemory.alloc memC size) as [memC' b].
+  rewrite setm_union. now inversion Halloc.
+Qed.
+
+(* (* JT: TODO: clean proof *) *)
+(* Lemma mem_store_different_component : forall mem mem' C b o val Cid, *)
+(*               Memory.store mem (C, b, o) val = Some mem' -> *)
+(*               Cid <> C -> *)
+(*               mem Cid = mem' Cid. *)
+(* Proof. *)
+(*   intros mem mem' C b o val Cid Hmem Hneq. *)
+(*   unfold Memory.store in Hmem. *)
+(*   simpl in *. *)
+(*   destruct (mem C) eqn:HmemC. *)
+(*   - destruct (ComponentMemory.store t b o val). *)
+(*     + inversion Hmem; subst. *)
+(*       rewrite setmE. *)
+(*       rewrite eqtype.eqE. simpl. *)
+(*       destruct (ssrnat.eqn Cid C) eqn:Heq; *)
+(*         last reflexivity. *)
+(*       assert (Cid = C). *)
+(*       { clear -Heq. revert C Heq. *)
+(*         induction Cid; intros C Heq; destruct C; eauto; *)
+(*           inversion Heq. *)
+(*       } *)
+(*       contradiction. *)
+(*     + inversion Hmem. *)
+(*   - inversion Hmem. *)
+(* Qed. *)
+
+Section Partial.
+  Lemma to_partial_memory_in ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \in domm ip ->
+    (to_partial_memory mem (domm ic)) Cid = mem Cid.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    apply getm_filterm_notin_domm.
+    eapply domm_partition_notin_r; eassumption.
+  Qed.
+
+  Lemma to_partial_memory_notin ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \in domm ic ->
+    (to_partial_memory mem (domm ic)) Cid = None.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    rewrite filtermE.
+    unfold obind, oapp.
+    destruct (mem Cid) eqn:Hmem.
+    now rewrite HCid.
+    now reflexivity.
+  Qed.
+
+  (* RB: NOTE: We should rename these, and probably use this instead of the
+     weaker version (currently, [in], confusingly). *)
+  Lemma to_partial_memory_notin_strong ip ic mem Cid :
+    mergeable_interfaces ip ic ->
+    Cid \notin domm ic ->
+    (to_partial_memory mem (domm ic)) Cid = mem Cid.
+  Proof.
+    intros Hmerge HCid.
+    unfold to_partial_memory.
+    rewrite filtermE.
+    unfold obind, oapp.
+    destruct (mem Cid) eqn:Hmem.
+    now rewrite HCid.
+    now reflexivity.
+  Qed.
+End Partial.

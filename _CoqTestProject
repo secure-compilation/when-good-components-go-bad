@@ -31,7 +31,6 @@ Source/Language.v
 Source/GlobalEnv.v
 Source/CS.v
 Source/PS.v
-Source/Decomposition.v
 Source/Definability.v
 Source/Examples/Helper.v
 Source/Examples/Identity.v
@@ -53,10 +52,10 @@ S2I/Examples/Factorial.v
 Intermediate/Machine.v
 Intermediate/GlobalEnv.v
 Intermediate/CS.v
-Intermediate/PS.v
-Intermediate/Decomposition.v
-Intermediate/Composition.v
+Intermediate/Recombination.v
 
+RSC_DC_MD_Sigs.v
+RSC_DC_MD_Instance.v
 RSC_DC_MD.v
 
 TargetSFI/StateMonad.v
