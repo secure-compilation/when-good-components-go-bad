@@ -83,3 +83,7 @@ I2MP/Linearize.v
 I2MP/Encode.v
 
 Old/Source/Language.v
+Old/Source/CS.v
+Old/Source/Definability.v
+Old/Source/PS.v
+Old/Source/Decomposition.v
