@@ -19,6 +19,21 @@ Set Bullet Behavior "Strict Subproofs".
 
 Module Source.
 
+  Lemma program_linkKL p1 p2 :
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    linkable (prog_interface p1) (prog_interface p2) ->
+    program_unlink (domm (prog_interface p1)) (program_link p1 p2) = p1.
+  Proof.
+    case: p1 p2 => [i1 p1 b1] [i2 p2 b2] wf1 wf2 l12.
+    rewrite /program_unlink /program_link /=; congr mkProg.
+    - by rewrite -[RHS](unionmK i1 i2); apply/eq_filterm=> ??; rewrite mem_domm.
+    - rewrite -[RHS](unionmK p1 p2); apply/eq_filterm=> ??.
+      by rewrite (wfprog_defined_procedures wf1) /= mem_domm.
+    - rewrite -[RHS](unionmK b1 b2); apply/eq_filterm=> ??.
+      by rewrite (wfprog_defined_buffers wf1) /= mem_domm.
+  Qed.
+
   Lemma program_linkKR p1 p2 :
     well_formed_program p1 ->
     well_formed_program p2 ->
