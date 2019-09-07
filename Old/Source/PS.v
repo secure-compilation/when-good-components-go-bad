@@ -33,6 +33,90 @@ Import Source.
 Import Source.PS.
 Import Source.PS.PS.
 
+Module PS.
+
+Definition s_stack (sps: state) : stack :=
+  match sps with
+  | PC (_, stk, _, _, _, _) => stk
+  | CC (_, stk, _)          => stk
+  end.
+
+(* transition system *)
+
+Inductive initial_state (p: program) (ctx: Program.interface) : state -> Prop :=
+| initial_state_intro: forall p' scs sps,
+    prog_interface p' = ctx ->
+    well_formed_program p ->
+    well_formed_program p' ->
+    linkable (prog_interface p) (prog_interface p') ->
+    closed_program (program_link p p') ->
+    partial_state ctx scs sps ->
+    CS.initial_state (program_link p p') scs ->
+    initial_state p ctx sps.
+
+Inductive final_state (p: program) (ctx: Program.interface) (sps: state) : Prop :=
+| final_state_program: forall p' scs,
+    prog_interface p' = ctx ->
+    well_formed_program p ->
+    well_formed_program p' ->
+    linkable (prog_interface p) (prog_interface p') ->
+    ~ turn_of sps ctx ->
+    partial_state ctx scs sps ->
+    CS.final_state scs ->
+    final_state p ctx sps
+| final_state_context:
+    turn_of sps ctx ->
+    final_state p ctx sps.
+
+(* FIXME: This is subsumed by s_component_partialize *)
+
+Lemma partial_state_component ctx scs sps :
+  partial_state ctx scs sps ->
+  s_component sps = CS.s_component scs.
+Proof. by case: scs sps /. Qed.
+
+Lemma kstep_component p ctx G s t s' :
+  kstep p ctx G s t s' ->
+  s_component s' =
+  if t is e :: _ then next_comp_of_event e
+  else s_component s.
+Proof.
+case=> p' scs scs' p'_ctx wf_p wf_p' Hlink _ Hstep.
+move=> /partial_state_component -> /partial_state_component ->.
+by rewrite (CS.kstep_component Hstep).
+Qed.
+
+Lemma partial_stack_outside_context_preserves_top :
+  forall C C' v k s ctx,
+    C' \in ctx = false ->
+  exists frame rest,
+    to_partial_stack (CS.Frame C' v k :: s) ctx C = (C', frame) :: rest.
+Proof.
+move=> C C' v k stk ctx in_prog.
+rewrite to_partial_stackE /=; case: eqP in_prog=> [-> {C'}|ne] in_prog.
+  by rewrite in_prog /= in_prog; eauto.
+by rewrite if_same /= in_prog; eauto.
+Qed.
+
+Lemma partial_stack_outside_control_preserves_top :
+  forall C C' v k s ctx,
+    C <> C' ->
+  exists frame rest,
+    to_partial_stack (CS.Frame C' v k :: s) ctx C = (C', frame) :: rest.
+Proof.
+move=> C C' v k s ctx /eqP ne.
+by rewrite to_partial_stackE /= eq_sym (negbTE ne) if_same /=; eauto.
+Qed.
+
+Lemma to_partial_stack_helper_nonempty:
+  forall ctx gps frame,
+    to_partial_stack_helper ctx gps frame <> [].
+Proof.
+  move=> ctx gps [C v k].
+  elim: gps => [|[C' v' k'] gps' IH] //=.
+  by case: ifP.
+Qed.
+
 Example to_partial_stack_empty_context:
   let in_s := [CS.Frame 1 (Int 1) Kstop;
                CS.Frame 0 (Int 0) Kstop] in
@@ -239,8 +323,7 @@ by case: eqP=> //= [->|_]; first rewrite (negbTE notin);
 move=> /to_partial_stack_helper_nonempty.
 Qed.
 
-Module PS.
-
+(* partial semantics *)
 Section Semantics.
   Variable p: program.
   Variable ctx: Program.interface.
@@ -254,7 +337,79 @@ Section Semantics.
   Hypothesis merged_interface_is_closed:
     closed_interface (unionm (prog_interface p) ctx).
 
-  Let sem := PS.sem p ctx.
+  Local Open Scope fset_scope.
+
+  Definition sem :=
+    @Semantics_gen state global_env (kstep p ctx)
+                   (initial_state p ctx)
+                   (final_state p ctx) (prepare_global_env p).
+
+  Definition stack_components (ps : state) :=
+    s_component ps |: fset [seq f.1 | f <- s_stack ps].
+
+  Lemma singleton_traces:
+    single_events sem.
+  Proof.
+    unfold single_events.
+    intros s t s' Hstep.
+    inversion Hstep; simpl;
+      match goal with
+      | Hcs_step: CS.kstep _ _ _ _ |- _ =>
+        apply CS.singleton_traces in Hcs_step
+      end; auto.
+  Qed.
+
+  Lemma star_component s1 t s2 :
+    Star sem s1 t s2 ->
+    s_component s2 =
+    last (s_component s1) [seq next_comp_of_event e | e <- t].
+  Proof.
+    elim: s1 t s2 / => //= s1 t1 s2 t2 s3 _ Hstep _ -> ->.
+    rewrite map_cat last_cat (kstep_component Hstep).
+    move/singleton_traces: Hstep.
+    by case: t1=> [|e [|e' t1]] //= *; omega.
+  Qed.
+
+  Lemma stack_components_partialize scs :
+    stack_components (partialize ctx scs) = CS.stack_components scs.
+  Proof.
+  rewrite /stack_components /CS.stack_components.
+  case: scs=> C stk mem k e arg; do 2![rewrite fun_if /= if_same].
+  elim: stk C {mem k e arg} => [//|[C' v k] stk IH] C /=.
+  rewrite to_partial_stackE /=; case: eqP=> [-> {C'}|_]; last first.
+    by rewrite if_same /= 2!fset_cons IH.
+  case: ifP=> [Cin|] /=; last by rewrite 2!fset_cons IH.
+  by rewrite fset_cons fsetUA fsetUid -IH // to_partial_stackE Cin.
+  Qed.
+
+  Lemma stack_components_step ps t ps' :
+    Step sem ps t ps' ->
+    fsubset (stack_components ps) (domm (unionm (prog_interface p) ctx)) ->
+    fsubset (stack_components ps') (domm (unionm (prog_interface p) ctx)).
+  Proof.
+  case=> p' cs cs' e_ctx wf wf' link clos step.
+  do 2![move=> /partialize_correct <-]; rewrite !stack_components_partialize.
+  by rewrite -e_ctx; apply: CS.stack_components_step step.
+  Qed.
+
+  Lemma stack_components_star ps t ps' :
+    initial_state p ctx ps ->
+    Star sem ps t ps' ->
+    fsubset (stack_components ps') (domm (unionm (prog_interface p) ctx)).
+  Proof.
+  move=> init star.
+  set S := domm (unionm (prog_interface p) ctx).
+  have {init} ps_ok : fsubset (stack_components ps) S.
+    case: ps / init {star}=> p' cs ps e_p' wf wf' link clos.
+    move=> /partialize_correct <- ->; rewrite stack_components_partialize.
+    rewrite /S -e_p'.
+    have {wf wf'} wf : well_formed_program (program_link p p').
+      exact: linking_well_formedness.
+    apply: (CS.stack_components_star wf clos)=> //.
+    exact: star_refl.
+  elim: ps t ps' / star ps_ok=> // ps1 t1 ps2 t2 ps3 _ step _ IH _ ps1_ok.
+  by apply: IH; apply: stack_components_step ps1_ok; eauto.
+  Qed.
 
   Lemma undef_in_program s1 t s2 :
     initial_state p ctx s1 ->
@@ -392,6 +547,76 @@ Proof.
     rewrite <- Hpartial1.
     rewrite <- Hpartial2.
     reflexivity.
+Qed.
+
+Lemma context_epsilon_star_is_silent:
+  forall p ctx G sps sps',
+    is_context_component sps ctx ->
+    star (kstep p ctx) G sps E0 sps' ->
+    sps = sps'.
+Proof.
+  intros p ctx G sps sps' Hcontrol Hstar.
+  dependent induction Hstar; subst.
+  - reflexivity.
+  - symmetry in H0. apply Eapp_E0_inv in H0.
+    destruct H0 as []. subst.
+    apply context_epsilon_step_is_silent in H; auto. subst.
+    apply IHHstar; auto.
+Qed.
+
+(* If a state s leads to two states s1 and s2 with the same trace t, it must
+   be the case that s1 and s2 are connected. We arrive at s1 and s2 after a
+   series of coordinated and identical alternations between program and
+   context. Both s1 and s2 are either in the program or in the context. From
+   the common starting state, observe the following facts about the sequence
+   of phases.
+
+    - A program phase starting from the same state is deterministic until
+      the end of the execution or a change of control.
+
+    - A context phase from the same state is silent until the end of the
+      execution or a change of control.
+
+   Note moreover that the shared trace preserves the state across turn
+   boundaries. In the final phase, i.e., that of s1 and s2, we stop at two
+   points in the deterministic execution of the program (in which case one
+   of the two may always catch up to the other if needed), or at two
+   indistinguishable states of the context. *)
+Lemma state_determinism_star_E0 p ctx s s1 s2 :
+  star (PS.kstep p ctx) (prepare_global_env p) s E0 s1 ->
+  star (PS.kstep p ctx) (prepare_global_env p) s E0 s2 ->
+  star (PS.kstep p ctx) (prepare_global_env p) s1 E0 s2 \/
+  star (PS.kstep p ctx) (prepare_global_env p) s2 E0 s1.
+Proof.
+move=> Hstar1.
+elim/star_E0_ind': s s1 / Hstar1 s2=> [s|s s1 s1' Hstep1 Hstar1 IH] s2; eauto.
+move=> Hstar2; elim/star_E0_ind': s s2 / Hstar2 Hstep1.
+  by move=> s Hstep1; right; apply: star_step; eauto.
+move=> s s2 s2' Hstep2 Hstar2 _ Hstep1; apply: IH.
+suffices -> : s1 = s2 by [].
+by apply: state_determinism Hstep2.
+Qed.
+
+Lemma state_determinism_star_same_trace p ctx s t s1 s2 :
+  star (PS.kstep p ctx) (prepare_global_env p) s t s1 ->
+  star (PS.kstep p ctx) (prepare_global_env p) s t s2 ->
+  star (PS.kstep p ctx) (prepare_global_env p) s1 E0 s2 \/
+  star (PS.kstep p ctx) (prepare_global_env p) s2 E0 s1.
+Proof.
+elim: t s => [|e t IH] s; first exact: state_determinism_star_E0.
+case/(star_cons_inv (@singleton_traces p ctx)) => [s' [s1' [e_01 [e_11 e_t1]]]].
+case/(star_cons_inv (@singleton_traces p ctx)) => [s'_ [s2' [e_02 [e_12]]]].
+have {e_01 e_02} e_s : s' = s'_.
+  have {e_t1 IH} H := state_determinism_star_E0 e_01 e_02.
+  without loss H : s' s'_ s1' s2' e_11 e_12 {H e_01 e_02} / Star (sem p ctx) s' E0 s'_.
+    by case: H; eauto=> H1 H2; apply: esym; eauto.
+  have [in_c|in_p] := boolP (is_context_component s' ctx).
+    exact: context_epsilon_star_is_silent in_c H.
+  elim/star_E0_ind: s' s'_ / H in_p e_11 {e_12} => //.
+  move=> s' s'm s'_ Hstep1 _ in_p Hstep2.
+  by have [] := state_determinism_program' in_p Hstep1 Hstep2.
+move: e_s e_12 => <- {s'_} e_12.
+by have {s2' e_12} <- := state_determinism e_11 e_12; eauto.
 Qed.
 
 Lemma star_prefix p ctx s t t' s' s'' :
