@@ -99,3 +99,13 @@ Proof.
 by elim: s=> //= x' s <-; rewrite inE; split => [/orP [/eqP ->|]|[->|->]];
 eauto; rewrite ?eqxx ?orbT.
 Qed.
+
+(* FIXME: This can be expressed in terms of drop and find. *)
+Fixpoint drop_while {T : Type} (a : pred T) (s : seq T) :=
+  if s is x :: s' then
+    if a x then drop_while a s' else s
+  else [::].
+
+Lemma eq_drop_while T (a1 a2 : T -> bool) :
+  a1 =1 a2 -> drop_while a1 =1 drop_while a2.
+Proof. by move=> e_a; elim=> [//|x s /= ->]; rewrite e_a. Qed.

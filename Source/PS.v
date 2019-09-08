@@ -79,16 +79,6 @@ Definition to_partial_frame (ctx: {fset Component.id}) frame : Component.id * op
   let: CS.Frame C v k := frame in
   (C, if C \in ctx then None else Some (v, k)).
 
-(* FIXME: This can be expressed in terms of drop and find. *)
-Fixpoint drop_while {T : Type} (a : pred T) (s : seq T) :=
-  if s is x :: s' then
-    if a x then drop_while a s' else s
-  else [::].
-
-Lemma eq_drop_while T (a1 a2 : T -> bool) :
-  a1 =1 a2 -> drop_while a1 =1 drop_while a2.
-Proof. by move=> e_a; elim=> [//|x s /= ->]; rewrite e_a. Qed.
-
 (** FIXME: This function could probably be simplified if we replaced
     [last_frame] with the component of the last frame, and changed the
     definition of [to_partial_stack] so that it always put the last frame at the
