@@ -13,6 +13,7 @@ Module Type AbstractComponentMemory.
   Parameter alloc : t -> nat -> t * Block.id.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
+  Parameter domm : t -> {fset Block.id}.
 
   Axiom load_prealloc:
     forall bufs b i,
@@ -45,6 +46,15 @@ Module Type AbstractComponentMemory.
       exists m',
         store m b i v' = Some m'.
 
+  Axiom domm_prealloc :
+    forall bufs m,
+      prealloc bufs = m ->
+      size (domm m) = size bufs.
+
+  Axiom domm_alloc :
+    forall m m' n b,
+      alloc m n = (m', b) ->
+      size (domm m') = size (domm m) + 1.
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -101,6 +111,8 @@ Module ComponentMemory : AbstractComponentMemory.
       else None
     | None => None
     end.
+
+  Definition domm (m : t) := @domm nat_ordType block (content m).
 
   Lemma load_prealloc:
     forall bufs b i,
@@ -184,6 +196,17 @@ Module ComponentMemory : AbstractComponentMemory.
     - by move=> /IH [chunk' ->]; eauto.
   Qed.
 
+  Lemma domm_prealloc :
+    forall bufs m,
+      prealloc bufs = m ->
+      size (domm m) = size bufs.
+  Admitted.
+
+  Lemma domm_alloc :
+    forall m m' n b,
+      alloc m n = (m', b) ->
+      size (domm m') = size (domm m) + 1.
+  Admitted.
 End ComponentMemory.
 
 Module ComponentMemoryExtra.
