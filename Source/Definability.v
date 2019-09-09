@@ -409,14 +409,6 @@ Section Definability.
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
 
-    Lemma counter_value_app C prefix1 prefix2 :
-      counter_value C (prefix1 ++ prefix2)
-      = (counter_value C prefix1 + counter_value C prefix2) % Z.
-    Proof.
-      unfold counter_value.
-      now rewrite comp_subtrace_app app_length Nat2Z.inj_add.
-    Qed.
-
     Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
       forall C,
         component_buffer C ->
