@@ -208,32 +208,6 @@ Module Source.
        prog_procedures := filterm (fun C _ => C \in Cs) (prog_procedures p);
        prog_buffers    := filterm (fun C _ => C \in Cs) (prog_buffers p) |}.
 
-  Lemma program_linkKL p1 p2 :
-    well_formed_program p1 ->
-    well_formed_program p2 ->
-    linkable (prog_interface p1) (prog_interface p2) ->
-    program_unlink (domm (prog_interface p1)) (program_link p1 p2) = p1.
-  Proof.
-    case: p1 p2 => [i1 p1 b1] [i2 p2 b2] wf1 wf2 l12.
-    rewrite /program_unlink /program_link /=; congr mkProg.
-    - by rewrite -[RHS](unionmK i1 i2); apply/eq_filterm=> ??; rewrite mem_domm.
-    - rewrite -[RHS](unionmK p1 p2); apply/eq_filterm=> ??.
-      by rewrite (wfprog_defined_procedures wf1) /= mem_domm.
-    - rewrite -[RHS](unionmK b1 b2); apply/eq_filterm=> ??.
-      by rewrite (wfprog_defined_buffers wf1) /= mem_domm.
-  Qed.
-
-  Lemma program_linkKR p1 p2 :
-    well_formed_program p1 ->
-    well_formed_program p2 ->
-    linkable (prog_interface p1) (prog_interface p2) ->
-    program_unlink (domm (prog_interface p2)) (program_link p1 p2) = p2.
-  Proof.
-    move=> wf1 wf2 l12.
-    rewrite link_sym // program_linkKL //.
-    exact: linkable_sym.
-  Qed.
-
   Lemma program_unlinkK i1 i2 p :
     prog_interface p = unionm i1 i2 ->
     well_formed_program p ->
@@ -469,23 +443,6 @@ Module Source.
         intros H1 H2 H3. by rewrite H3 in H1.
   Qed.
 
-  Lemma linked_programs_main_component_origin:
-    forall p1 p2,
-      well_formed_program p1 ->
-      well_formed_program p2 ->
-      linkable (prog_interface p1) (prog_interface p2) ->
-      closed_program (program_link p1 p2) ->
-      Component.main \in domm (prog_interface p1) \/
-      Component.main \in domm (prog_interface p2).
-  Proof.
-    move=> p1 p2 wf1 wf2 [_ Hdis] Hclosed.
-    have := cprog_main_existence Hclosed.
-    rewrite /prog_main /find_procedure /= unionmE -!mem_domm.
-    rewrite !wfprog_defined_procedures // !mem_domm.
-    case: (prog_procedures p1 Component.main)=> [main_procs'|] //=; eauto.
-    by case: (prog_procedures p2 Component.main)=> [main_procs'|] //=; eauto.
-  Qed.
-
   Lemma interface_preserves_closedness_l p1 p2 p1' :
     closed_program (program_link p1 p2) ->
     prog_interface p1 = prog_interface p1' ->
@@ -511,23 +468,6 @@ Module Source.
     rewrite (link_sym Hwf1 Hwf2 Hlinkable).
     reflexivity.
   Qed.
-
-  Fixpoint initialize_buffer
-           (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)
-    : ComponentMemory.t :=
-    let fix init m vs i :=
-        match vs with
-        | [] => m
-        | v :: vs' =>
-          match ComponentMemory.store m b i v with
-          | Some m' =>
-            init m' vs' (1+i)%Z
-          | None =>
-            (* bad case that shouldn't happen, just return memory *)
-            init m vs' (1+i)%Z
-          end
-        end
-    in init Cmem values 0%Z.
 
   Definition prepare_buffers (p: program) : Memory.t :=
     mapm (fun initial_buffer =>
