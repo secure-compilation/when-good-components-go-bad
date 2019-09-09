@@ -625,6 +625,138 @@ Definition reserve_component_blocks p C Cmem procs_code
   let Centrypoints := mkfmap (pmap map_entrypoint (zip procs bs)) in
   (Cmem', Cprocs, Centrypoints).
 
+Lemma reserve_component_blocks_lemma p p' C Cmem Cmem' procs_code procs_code' :
+  well_formed_program p ->
+  well_formed_program p' ->
+  prog_interface p = prog_interface p' ->
+  domm (reserve_component_blocks p C Cmem procs_code).2 = domm (reserve_component_blocks p' C Cmem' procs_code').2.
+Proof.
+  move=> Hwf Hwf' Hiface.
+  assert (Hmain: prog_main p <-> prog_main p').
+  {
+    clear -Hwf Hwf' Hiface.
+    apply wfprog_main_component in Hwf.
+    apply wfprog_main_component in Hwf'.
+    intuition.
+    - now rewrite <- Hiface in *; auto.
+    - now rewrite <- Hiface in *; auto.
+  }
+  assert (Hunzip: unzip1 procs_code = unzip1 procs_code').
+  {
+    admit.
+  }
+  
+  assert (Hlen: length procs_code = length procs_code').
+  { clear -Hunzip.
+    generalize dependent procs_code'.
+    induction procs_code as [|? ? IH]; destruct procs_code'; try now auto.
+    intros Hunzip. inversion Hunzip. simpl.
+    now rewrite (IH procs_code').
+  }
+
+  unfold reserve_component_blocks.
+  
+  rewrite -Hiface -Hlen -Hunzip.
+  simpl.
+
+  destruct (ComponentMemoryExtra.reserve_blocks Cmem (length procs_code)) as [t l] eqn:H1;
+    destruct (ComponentMemoryExtra.reserve_blocks Cmem' (length procs_code)) as [t' l'] eqn:H2;
+    rewrite H1 H2.
+
+  (* before simplifying, I need to state something about the relation between l and l' *)
+  (* assert (Hll' : l = l'). *)
+  (* { remember (length procs_code) as n. *)
+  (*   clear -H1 H2. *)
+  (*   generalize dependent l'. *)
+  (*   generalize dependent l. *)
+  (*   induction n. *)
+  (*   - now destruct l, l'. *)
+  (*   - intros l H1 l' H2. *)
+  (*     destruct l as [| b l]. *)
+  (*     + Check ComponentMemoryExtra.reserve_blocks. *)
+  (*       From Hammer Require Import Hammer Reconstr. *)
+  (*       ycrush. *)
+  (*     + sauto. rewrite -H. *)
+  (*       admit. *)
+  (* } *)
+  assert (Hll' : length l = length l') by admit.
+
+
+  assert (Hsimpl: forall A B C (x : A) (y : B) (z : C), (x, y, z).2 = z) by auto.
+  rewrite 2!Hsimpl; clear Hsimpl.
+  clear H1 H2.
+  
+  destruct (prog_main p) eqn:Hmainp; destruct (prog_main p') eqn:Hmainp'; simpl.
+  assert (Hii0 : i = i0) by admit.
+  (* twice the same proof *)
+  - (* rewrite Hll'. assert (i = i0) by admit. *)
+    (* now subst. *)
+    subst.
+    set f := (fun '(P, b) =>
+                match (prog_interface p) C with
+                | Some Ciface => if (P \in Component.export Ciface) ||
+                                   match C with
+                                     | 0 => true
+                                     | S _ => false
+                                     end && (i0 =? P) then Some (P, b) else None
+                | None => None
+                end).
+    clear -Hll' Hiface.
+    revert l l' Hll'.
+    induction procs_code.
+    + now destruct l, l'.
+    + destruct l, l'; try now auto.
+      intros Hll'.
+      simpl. unfold oapp.
+      destruct (prog_interface p C); simpl.
+      * destruct (a.1 \in Component.export i2) eqn:Heq; rewrite Heq; clear Heq; simpl.
+        -- apply /eq_fset => k.
+           rewrite 2!mem_domm 2!setmE.
+           destruct (k == a.1) eqn:Heq; rewrite Heq; clear Heq. reflexivity.
+           rewrite -2!mem_domm. move: k. apply /eq_fset.
+           apply IHprocs_code. auto.
+        -- destruct C; destruct (i0 =? a.1) eqn:Heq; rewrite Heq; clear Heq; simpl.
+           ++ apply /eq_fset => k.
+              rewrite 2!mem_domm 2!setmE.
+              destruct (k == a.1) eqn:Heq; rewrite Heq; clear Heq. reflexivity.
+              rewrite -2!mem_domm. move: k. apply /eq_fset.
+              apply IHprocs_code. auto.
+           ++ apply IHprocs_code. auto.
+           ++ apply IHprocs_code. auto.
+           ++ apply IHprocs_code. auto.
+      * apply IHprocs_code. auto.
+  - inversion Hmain. exfalso.
+    unfold is_true in H. simpl in H.
+    apply diff_true_false. symmetry.
+    apply H. reflexivity.
+  - inversion Hmain. exfalso.
+    unfold is_true in H0. simpl in H0.
+    apply diff_true_false. symmetry.
+    apply H0. reflexivity.
+  - set f := (fun '(P, b) =>
+                match (prog_interface p) C with
+                | Some Ciface => if (P \in Component.export Ciface) || false then Some (P, b) else None
+                | None => None
+                end).
+    clear -Hll' Hiface.
+    revert l l' Hll'.
+    induction procs_code.
+    + now destruct l, l'.
+    + destruct l, l'; try now auto.
+      intros Hll'.
+      simpl. unfold oapp.
+      destruct (prog_interface p C); simpl.
+      * destruct (a.1 \in Component.export i1) eqn:Heq; rewrite Heq; clear Heq; simpl.
+        -- apply /eq_fset => k.
+           rewrite 2!mem_domm 2!setmE.
+           destruct (k == a.1) eqn:Heq; rewrite Heq; clear Heq. reflexivity.
+           rewrite -2!mem_domm. move: k. apply /eq_fset.
+           apply IHprocs_code. auto.
+        -- apply IHprocs_code. auto.
+      * apply IHprocs_code. auto.
+Admitted.
+
+
 (* In the foreseen, controlled use of this function, we always go on the Some
    branch. For each component C, we read its (initial) memory and use it to
    construct the initial state of C, recursing after we update its maps. Given
