@@ -1042,6 +1042,29 @@ Proof.
   assumption.
 Qed.
 
+Lemma domm_partition_program_link_in_neither p c :
+  well_formed_program p ->
+  well_formed_program c ->
+  closed_program (program_link p c) ->
+  Component.main \notin domm (prog_interface p) ->
+  Component.main \notin domm (prog_interface c) ->
+  False.
+Proof.
+  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
+         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
+  destruct (prog_main p) as [mainp |] eqn:Hcasep.
+  - specialize (Hmainp is_true_true).
+    rewrite Hmainp in Hmainp'.
+    discriminate.
+  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
+    +  specialize (Hmainc is_true_true).
+       rewrite Hmainc in Hmainc'.
+       discriminate.
+    + simpl in Hmain.
+      rewrite Hcasep Hcasec in Hmain.
+      discriminate.
+Qed.
+
 Lemma fsetid (T : ordType) (s: seq.seq T) :
   fset (fset s) = fset s.
 Proof. by apply /eq_fset => x; rewrite in_fset. Qed.
@@ -1234,6 +1257,40 @@ Proof.
          prepare_procedures_initial_memory, prepare_procedures_initial_memory_aux.
   rewrite <- mapm_unionm. apply mapm_eq.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
+Qed.
+
+(* Search _ prepare_procedures_memory. *)
+(* Search _ PS.to_partial_memory unionm. *)
+Lemma prepare_procedures_memory_left p c :
+  linkable (prog_interface p) (prog_interface c) ->
+  to_partial_memory
+    (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+    (domm (prog_interface c)) =
+  prepare_procedures_memory p.
+Proof.
+  intros [_ Hdisjoint].
+  unfold to_partial_memory, merge_memories.
+  rewrite <- domm_prepare_procedures_memory,
+         -> filterm_union,
+         -> fdisjoint_filterm_full,
+         -> fdisjoint_filterm_empty, -> unionm0;
+    first reflexivity;
+    try rewrite -> !domm_prepare_procedures_memory; congruence.
+Qed.
+
+Lemma prepare_procedures_memory_right p c :
+  linkable (prog_interface p) (prog_interface c) ->
+  to_partial_memory
+    (unionm (prepare_procedures_memory p) (prepare_procedures_memory c))
+    (domm (prog_interface p)) =
+  prepare_procedures_memory c.
+Proof.
+  intros Hlinkable.
+  rewrite unionmC; try assumption.
+  apply prepare_procedures_memory_left with (c := p) (p := c).
+  now apply linkable_sym.
+  inversion Hlinkable.
+  now rewrite !domm_prepare_procedures_memory.
 Qed.
 
 Definition prepare_procedures_procs (p: program) : NMap (NMap code) :=

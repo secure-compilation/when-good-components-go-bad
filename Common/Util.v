@@ -23,3 +23,15 @@ Module Util.
       if b then 1%Z else 0%Z.
   End Z.
 End Util.
+
+Section Domm.
+
+Remark notin_to_in_false : forall (Cid : Component.id) (iface : Program.interface),
+  Cid \notin domm iface -> Cid \in domm iface = false.
+Proof.
+  intros Cid iface Hnotin.
+  destruct (Cid \in domm iface) eqn:Heq;
+    easy.
+Qed.
+
+End Domm.

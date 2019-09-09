@@ -134,10 +134,6 @@ Module Type Intermediate_Sig.
     Parameter sem : program -> semantics.
   End CS.
 
-  Module PS.
-    Parameter sem : program -> Program.interface -> semantics.
-  End PS.
-
   (* Hypothesis decomposition_with_refinement : *)
   (*   forall p c, *)
   (*     well_formed_program p -> *)
@@ -186,8 +182,6 @@ Module Type Intermediate_Sig.
       mergeable_interfaces (prog_interface p) (prog_interface c) ->
       prog_interface p = prog_interface p' ->
       prog_interface c = prog_interface c' ->
-      linkable_mains p c ->
-      linkable_mains p' c' ->
       closed_program (program_link p c) ->
       closed_program (program_link p' c') ->
     forall m,

@@ -5,8 +5,6 @@ Require Import Source.GlobalEnv.
 Require Import Source.CS.
 Require Import Source.PS.
 Require Import Intermediate.Machine.
-Require Import Intermediate.PS.
-Require Import Intermediate.Decomposition.
 Require Import Intermediate.Recombination.
 Require Import S2I.Compiler.
 Require Import S2I.Definitions.
@@ -93,14 +91,6 @@ Module Intermediate_Instance <: Intermediate_Sig.
     Definition sem :=
       @Intermediate.CS.CS.sem.
   End CS.
-
-  Module PS.
-    Definition sem :=
-      @Intermediate.PS.PS.sem.
-    End PS.
-
-  Definition decomposition_with_refinement :=
-    @Intermediate.Decomposition.decomposition_with_refinement.
 
   Definition compose_mergeable_interfaces :=
     @Intermediate.compose_mergeable_interfaces.

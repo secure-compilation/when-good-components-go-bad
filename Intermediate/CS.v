@@ -56,11 +56,21 @@ Definition state_stack (st : state) : stack :=
 Definition state_mem (st : state) : Memory.t :=
   let '(_, mem, _, _) := st in mem.
 
+Definition state_regs (s : CS.state) : Register.t :=
+  let '(_, _, regs, _) := s in regs.
+
 Definition state_pc (st : state) : Pointer.t :=
   let '(_, _, _, pc) := st in pc.
 
 Definition state_component (st : CS.state) : Component.id :=
   Pointer.component (state_pc st).
+
+Lemma is_program_component_pc_notin_domm s ctx :
+  is_program_component s ctx ->
+  Pointer.component (CS.state_pc s) \notin domm ctx.
+Proof.
+  now destruct s as [[[? ?] ?] ?].
+Qed.
 
 (* preparing the machine for running a program *)
 
@@ -1148,8 +1158,6 @@ Proof.
     intros main Hwf Hmain Hctx Hinitial.
   - unfold initial_state, initial_machine_state in Hinitial; subst.
     rewrite Hmain.
-    destruct (prepare_procedures p (prepare_initial_memory p))
-      as [[mem _] entrypoints].
     apply (wfprog_main_component Hwf). now rewrite Hmain.
   - specialize (IHHstar main Hwf Hmain Hctx Hinitial).
     inversion Hstep23; subst; simpl;
@@ -1192,5 +1200,169 @@ Proof.
   - congruence.
   - erewrite find_label_in_procedure_1; try eassumption. reflexivity.
 Qed.
+
+Lemma silent_step_preserves_program_component : forall s1 s2 G ctx,
+  CS.is_program_component s1 ctx ->
+  CS.step G s1 E0 s2 ->
+  CS.is_program_component s2 ctx.
+Proof.
+  intros [[[? ?] ?] pc1] [[[? ?] ?] pc2] G ctx Hcomp1 Hstep12.
+  pose proof CS.silent_step_preserves_component _ _ _ Hstep12 as Heq.
+  simplify_turn. now rewrite <- Heq.
+Qed.
+
+(* RB: TODO: Remove reliance on auto-names. Also note that this follows from
+   silent_step_preserves_program_component, posed below. *)
+Lemma epsilon_star_preserves_program_component p c s1 s2 :
+  CS.is_program_component s1 (prog_interface c) ->
+  Star (CS.sem (program_link p c)) s1 E0 s2 ->
+  CS.is_program_component s2 (prog_interface c).
+Proof.
+  intros Hprg_component Hstar.
+  remember E0 as t.
+  induction Hstar.
+  - assumption.
+  - subst; assert (t1 = E0) by now induction t1.
+    assert (t2 = E0) by now induction t1. subst.
+    apply IHHstar; try assumption.
+    clear H0 IHHstar Hstar.
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in *.
+    inversion H;
+      try (match goal with
+           | Heq : (_, _, _, _) = s1 |- _ => rewrite -Heq in Hprg_component
+           end);
+      try now rewrite Pointer.inc_preserves_component.
+    + erewrite <- find_label_in_component_1; eassumption.
+    + now rewrite H2.
+    + erewrite <- find_label_in_procedure_1; eassumption.
+Qed.
+
+(* RB: Could be phrased in terms of does_prefix. *)
+Theorem behavior_prefix_star {p b m} :
+  program_behaves (CS.sem p) b ->
+  prefix m b ->
+exists s1 s2,
+  CS.initial_state p s1 /\
+  Star (CS.sem p) s1 (finpref_trace m) s2.
+Proof.
+  destruct m as [tm | tm | tm].
+  - intros Hb Hm.
+    destruct b as [t | ? | ? | ?];
+      simpl in Hm; try contradiction;
+      subst t.
+    inversion Hb as [s1 ? Hini Hbeh |]; subst.
+    inversion Hbeh as [? s2 Hstar Hfinal | | |]; subst.
+    eexists; eexists; split; now eauto.
+  - intros Hb Hm.
+    destruct b as [? | ? | ? | t];
+      simpl in Hm; try contradiction;
+      subst t.
+    inversion Hb as [s1 ? Hini Hbeh | Hini]; subst.
+    + inversion Hbeh as [| | | ? s2 Hstar Hnostep Hfinal]; subst.
+      eexists; eexists; split; now eauto.
+    + specialize (Hini (CS.initial_machine_state p)).
+      congruence.
+  - revert b.
+    induction tm as [| e t IHt] using rev_ind;
+      intros b Hb Hm;
+      simpl in *.
+    + exists (CS.initial_machine_state p), (CS.initial_machine_state p).
+      split; [congruence | now apply star_refl].
+    + pose proof behavior_prefix_app_inv Hm as Hprefix.
+      specialize (IHt _ Hb Hprefix).
+      destruct IHt as [s1 [s2 [Hini Hstar]]].
+      inversion Hm as [b']; subst.
+      inversion Hb as [s1' ? Hini' Hbeh' | Hini' Hbeh']; subst.
+      * assert (Heq : s1 = s1')
+          by now (inversion Hini; inversion Hini').
+        subst s1'.
+        inversion Hbeh' as [ t' s2' Hstar' Hfinal' Heq
+                           | t' s2' Hstar' Hsilent' Heq
+                           | T' Hreact' Heq
+                           | t' s2' Hstar' Hstep' Hfinal' Heq];
+          subst.
+        (* RB: TODO: Refactor block. *)
+        -- destruct b' as [tb' | ? | ? | ?];
+             simpl in Heq;
+             try discriminate.
+           inversion Heq; subst t'; clear Heq.
+           destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
+             as [s' [Hstar'1 Hstar'2]].
+           now eauto.
+        -- (* Same as Terminates case. *)
+          destruct b' as [? | tb' | ? | ?];
+            simpl in Heq;
+            try discriminate.
+          inversion Heq; subst t'; clear Heq.
+          destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
+            as [s' [Hstar'1 Hstar'2]].
+          now eauto.
+        -- (* Similar to Terminates and Diverges, but on an infinite trace.
+              Ltac can easily take care of these commonalities. *)
+          destruct b' as [? | ? | Tb' | ?];
+            simpl in Heq;
+            try discriminate.
+          inversion Heq; subst T'; clear Heq.
+          destruct (forever_reactive_app_inv (CS.singleton_traces p) _ _ Hreact')
+            as [s' [Hstar'1 Hreact'2]].
+          now eauto.
+        -- (* Same as Terminate and Diverges. *)
+          destruct b' as [? | ? | ? | tb'];
+            simpl in Heq;
+            try discriminate.
+          inversion Heq; subst t'; clear Heq.
+          destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
+            as [s' [Hstar'1 Hstar'2]].
+          now eauto.
+      * specialize (Hini' (CS.initial_machine_state p)).
+        congruence.
+Qed.
+
+(* RB: TODO: These domain lemmas should now be renamed to reflect their
+   operation on linked programs. *)
+Section ProgramLink.
+  Variables p c : program.
+  Hypothesis Hwfp  : well_formed_program p.
+  Hypothesis Hwfc  : well_formed_program c.
+  Hypothesis Hmergeable_ifaces :
+    mergeable_interfaces (prog_interface p) (prog_interface c).
+  Hypothesis Hprog_is_closed  : closed_program (program_link p c).
+
+  (* RB: NOTE: Check with existing results.
+     Possibly rewrite in terms of state_pc. *)
+  Lemma star_pc_domm : forall {s st mem reg pc t},
+    initial_state (program_link p c) s ->
+    Star (sem (program_link p c)) s t (st, mem, reg, pc) ->
+    Pointer.component pc \in domm (prog_interface p) \/
+    Pointer.component pc \in domm (prog_interface c).
+  Proof.
+    intros s st mem reg pc t Hini Hstar.
+    assert (H : Pointer.component pc \in domm (prog_interface (program_link p c))).
+    { replace pc with (CS.state_pc (st, mem, reg, pc)); try reflexivity.
+      apply CS.comes_from_initial_state_pc_domm.
+      destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
+      exists (program_link p c), i, s, t.
+      split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
+      repeat split; eauto. }
+    move: H. simpl. rewrite domm_union. now apply /fsetUP.
+  Qed.
+
+  (* RB: NOTE: Check with existing results (though currently unused). *)
+  Lemma star_stack_cons_domm {s frame gps mem regs pc t} :
+    initial_state (program_link p c) s ->
+    Star (sem (program_link p c)) s t (frame :: gps, mem, regs, pc) ->
+    Pointer.component frame \in domm (prog_interface p) \/
+    Pointer.component frame \in domm (prog_interface c).
+  Proof.
+    intros Hini Hstar.
+    assert (H : Pointer.component frame \in domm (prog_interface (program_link p c))).
+    { eapply CS.comes_from_initial_state_stack_cons_domm.
+      destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
+      exists (program_link p c), i, s, t.
+      split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
+      repeat split; eauto. }
+    move: H. simpl. rewrite domm_union. now apply /fsetUP.
+  Qed.
+End ProgramLink.
 
 End CS.

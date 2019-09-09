@@ -407,6 +407,7 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
 
     (* we forget about context memories *)
     pmem = filterm (fun k _ => negb (k \in domm ctx)) mem ->
+    (* pmem = to_partial_memory mem (domm ctx) -> *) (* TODO *)
 
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (domm ctx) C ->
@@ -419,6 +420,7 @@ Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop 
 
     (* we forget about context memories *)
     pmem = filterm (fun k _ => negb (k \in domm ctx)) mem ->
+    (* pmem = to_partial_memory mem (domm ctx) -> *) (* TODO *)
 
     (* we put holes in place of context information in the stack *)
     pgps = to_partial_stack gps (domm ctx) C ->
@@ -429,6 +431,7 @@ Definition partialize (ctx: Program.interface) (scs: CS.state) : PS.state :=
   let: CS.State C gps mem k e arg := scs in
   let pgps := to_partial_stack gps (domm ctx) C in
   let pmem := filterm (fun k _ => negb (k \in domm ctx)) mem in
+  (* let pmem := to_partial_memory mem (domm ctx) in *) (* TODO *)
   if C \in domm ctx then CC (C, pgps, pmem)
   else PC (C, pgps, pmem, k, e, arg).
 
@@ -507,6 +510,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
   move=> {C' k' e' arg'} <- e_stk e_mem <- <- <-.
   rewrite -lock /= size_pos.
   case: (program_allocation_in_partialized_memory_strong e_mem in_prog e_mem1).
+  rewrite /to_partial_memory. (* TODO *)
   by move=> mem2' e_mem2 e_mem'; rewrite e_mem2 /= (negbTE in_prog) e_stk e_mem'.
 - (* Load *)
   move=> C stk1 mem1 k _ b' o' v arg <- e_v in_prog.
@@ -526,6 +530,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
   rewrite -lock /= eqxx.
   case: (program_store_in_partialized_memory_strong e_mem in_prog e_mem1).
   move=> mem2' e_mem2 e_mem'; rewrite e_mem2 /=.
+  rewrite /to_partial_memory in e_mem'. (* TODO *)
   by rewrite (negbTE in_prog) e_stk e_mem'.
 - (* Internal Call *)
   move=> C stk1 mem1 k _ P v P_expr old <- e_P in_prog.
@@ -1048,12 +1053,17 @@ Proof.
              rewrite Hin in Hnotin; discriminate
            end);
       try reflexivity.
+    (* TODO: clean up rewrite rules. *)
 
     (* alloc *)
-    + erewrite context_allocation_in_partialized_memory with (mem':=mem'); eauto.
+    + pose proof context_allocation_in_partialized_memory as Hrewrite.
+      unfold to_partial_memory in Hrewrite.
+      erewrite Hrewrite with (mem':=mem'); eauto.
 
     (* assign *)
-    + erewrite context_store_in_partialized_memory with (mem':=mem'); eauto.
+    + pose proof context_store_in_partialized_memory as Hrewrite.
+      unfold to_partial_memory in Hrewrite.
+      erewrite Hrewrite with (mem':=mem'); eauto.
 
     (* same component call *)
     + rewrite partial_stack_ignores_change_by_context_with_control; auto.
@@ -1481,6 +1491,7 @@ Proof.
 Qed.
 
 (* RB: TODO: Source prefixes no longer needed: clean proof. *)
+(* RB: TODO: Can we separate this from PS? *)
 Lemma blame_program:
   forall
     p Cs t' P' m
