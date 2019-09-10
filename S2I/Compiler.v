@@ -285,10 +285,11 @@ Definition compile_components
       match cs with
       | [] => ret acc
       | (C,procs) :: cs' =>
-        do blocks <- lift (getm local_buffers C);
-        do local_buf <- lift (nth_error blocks 0);
-        do P_labels <- lift (getm procs_labels C);
-        do procs_code <- compile_procedures C (C, fst local_buf, 0%Z) P_labels
+        let local_buffer_block_id := 0 in
+        do blocks <- lift (local_buffers C);
+        do _ <- lift (blocks local_buffer_block_id );
+        do P_labels <- lift (procs_labels C);
+        do procs_code <- compile_procedures C (C, local_buffer_block_id, 0%Z) P_labels
                                             (elementsm procs);
         let acc' := (C, mkfmap procs_code) :: acc in
         compile acc' cs'

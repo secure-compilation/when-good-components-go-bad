@@ -15,11 +15,6 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-(* Pondering : E_seq (e1) (E_seq e2 e3) should be the same as E_seq (E_seq e1 e2) e3 *)
-(* or more more naturally : e1; (e2; e3) = (e1; e2); e3 *)
-(* sequence should be associative ?*)
-(* or maybe we just stick to one of the representation since this could
-   complicate things in the semantics / during the compilaiton *)
 Inductive expr : Type :=
 | E_val : value -> expr
 | E_arg : expr
@@ -262,32 +257,6 @@ Module Source.
     {| prog_interface  := filterm (fun C _ => C \in Cs) (prog_interface p);
        prog_procedures := filterm (fun C _ => C \in Cs) (prog_procedures p);
        prog_buffers    := filterm (fun C _ => C \in Cs) (prog_buffers p) |}.
-
-  Lemma program_linkKL p1 p2 :
-    well_formed_program p1 ->
-    well_formed_program p2 ->
-    linkable (prog_interface p1) (prog_interface p2) ->
-    program_unlink (domm (prog_interface p1)) (program_link p1 p2) = p1.
-  Proof.
-    case: p1 p2 => [i1 p1 b1] [i2 p2 b2] wf1 wf2 l12.
-    rewrite /program_unlink /program_link /=; congr mkProg.
-    - by rewrite -[RHS](unionmK i1 i2); apply/eq_filterm=> ??; rewrite mem_domm.
-    - rewrite -[RHS](unionmK p1 p2); apply/eq_filterm=> ??.
-      by rewrite (wfprog_defined_procedures wf1) /= mem_domm.
-    - rewrite -[RHS](unionmK b1 b2); apply/eq_filterm=> ??.
-      by rewrite (wfprog_defined_buffers wf1) /= mem_domm.
-  Qed.
-
-  Lemma program_linkKR p1 p2 :
-    well_formed_program p1 ->
-    well_formed_program p2 ->
-    linkable (prog_interface p1) (prog_interface p2) ->
-    program_unlink (domm (prog_interface p2)) (program_link p1 p2) = p2.
-  Proof.
-    move=> wf1 wf2 l12.
-    rewrite link_sym // program_linkKL //.
-    exact: linkable_sym.
-  Qed.
 
   Lemma program_unlinkK i1 i2 p :
     prog_interface p = unionm i1 i2 ->
@@ -583,24 +552,6 @@ Module Source.
     reflexivity.
   Qed.
 
-  Fixpoint initialize_buffer
-           (Cmem: ComponentMemory.t) (b: Block.id) (values: list value)
-    : ComponentMemory.t :=
-    let fix init m vs i :=
-        match vs with
-        | [] => m
-        | v :: vs' =>
-          match ComponentMemory.store m b i v with
-          | Some m' =>
-            init m' vs' (1+i)%Z
-          | None =>
-            (* bad case that shouldn't happen, just return memory *)
-            init m vs' (1+i)%Z
-          end
-        end
-    in init Cmem values 0%Z.
-
-  (* Prealloc the public part and the private part "flatly" *)
   Definition prepare_buffers (p: program) : Memory.t :=
     mapm (fun bufs =>
             ComponentMemory.prealloc (get_buffers_as_map bufs))

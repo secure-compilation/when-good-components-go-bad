@@ -1120,10 +1120,9 @@ Section Definability.
   Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace) :
     comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
   Proof. apply: filter_cat. Qed.
+
   Definition procedure_of_trace C P t :=
     expr_of_trace C P (comp_subtrace C t).
-
-  (* Lemma procedure_of_trace_correct *)
 
   Definition procedures_of_trace (t: trace) : NMap (NMap expr) :=
     mapim (fun C Ciface =>
@@ -1169,7 +1168,7 @@ Section Definability.
     [apply: find_procedures_of_trace_main|apply: find_procedures_of_trace_exp].
   Qed.
 
-  (* TODO modify to accomodate to public buffers (plus, what is happening ? no static buffer is allocated ? where is the counter stored ???) *)
+  (* TODO modify to accomodate to public buffers (plus, what is happening ? no static buffer is allocated ? where is the counter stored ?) *)
   Definition program_of_trace (t: trace) : program :=
     {| prog_interface  := intf;
        prog_procedures := procedures_of_trace t;
@@ -1324,11 +1323,6 @@ Section Definability.
      *)
     Local Definition counter_value C prefix :=
       Z.of_nat (length (filter (fun ev => C == cur_comp_of_event ev) prefix)).
-
-    Lemma counter_value_app C prefix1 prefix2 :
-      counter_value C (prefix1 ++ prefix2)
-      = (counter_value C prefix1 + counter_value C prefix2) % Z.
-    Proof. by rewrite /counter_value filter_cat app_length Nat2Z.inj_add. Qed.
 
     Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
       forall C,
