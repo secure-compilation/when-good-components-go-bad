@@ -464,7 +464,7 @@ Lemma compilation_has_matching_mains :
     matching_mains p p_compiled.
 Admitted.
 
-(* Hypothesis separate_compilation: *)
+(* Local Axiom separate_compilation: *)
 (*   forall p c p_comp c_comp, *)
 (*     Source.well_formed_program p -> *)
 (*     Source.well_formed_program c -> *)
@@ -475,7 +475,7 @@ Admitted.
 (*     = Some (Intermediate.program_link p_comp c_comp). *)
 
 (* We can currently do with a weaker notion of separate compilation *)
-Hypothesis separate_compilation_weaker:
+Local Axiom separate_compilation_weaker:
   forall p c pc_comp p_comp c_comp,
     Source.well_formed_program p ->
     Source.well_formed_program c ->
@@ -493,14 +493,14 @@ Hypothesis separate_compilation_weaker:
 (*   now rewrite Heq. *)
 (* Qed. *)
 
-Hypothesis compilation_preserves_well_formedness:
+Local Axiom compilation_preserves_well_formedness:
   forall {p p_compiled},
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
     Intermediate.well_formed_program p_compiled.
 
 (* FCC *)
-Hypothesis I_simulates_S:
+Local Axiom I_simulates_S:
   forall {p},
     Source.closed_program p ->
     Source.well_formed_program p ->

@@ -22,4 +22,6 @@ Definition identity : program := {|
 Definition fuel := 1000.
 Definition to_run := run identity fuel.
 
+(* Unset Extraction AccessOpaque. *)
+Set Warnings "-extraction-reserved-identifier".
 Extraction "/tmp/run_source_identity.ml" to_run.
