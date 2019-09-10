@@ -1,8 +1,8 @@
 (** In this file we create our model
-    of traces. 
-    In RSC_DC_4_compcert.v you can 
-    find the same results proved for 
-    the Compcert model of traces    
+    of traces.
+    In RSC_DC_4_compcert.v you can
+    find the same results proved for
+    the Compcert model of traces
 *)
 
 Require Import Classical.
@@ -84,7 +84,7 @@ Qed.
 
 (*********************************************************)
 
-Variable prg prg' ctx ctx' event : Set.
+Local Parameter prg prg' ctx ctx' event : Set.
 
 CoInductive trace : Set :=
 | tnil : trace
@@ -183,7 +183,7 @@ Proof. intros t H. induction H; now constructor. Qed.
 CoFixpoint Undef (P:prg) (t:trace) : trace :=
   match t with
   | tnil => tundef P
-  | tundef Q => tundef P 
+  | tundef Q => tundef P
   | tcons x xs => tcons x (Undef P xs)
   end.
 
@@ -314,7 +314,7 @@ Proof. intros P t t' [m H] H0. subst t. now apply u_end'. Qed.
 
 (*
   not used
-*) 
+*)
 Lemma no_nested_u : forall (P Q : prg) (m1 m2: trace),
   fin_no_undef m1 -> fin_no_undef m2 ->
   prefix (Undef P m1) (Undef Q m2) -> m1 = m2 /\ P = Q.
@@ -376,11 +376,11 @@ Qed.
 (* properties *)
 Definition prop := trace -> Prop.
 
-Variable plug : prg -> ctx -> prg.
-Variable plug': prg' -> ctx' -> prg'.
-Variable sem : prg -> prop.
-Variable sem': prg' -> prop.
-Variable compile : prg -> prg'.
+Local Parameter plug : prg -> ctx -> prg.
+Local Parameter plug': prg' -> ctx' -> prg'.
+Local Parameter sem : prg -> prop.
+Local Parameter sem': prg' -> prop.
+Local Parameter compile : prg -> prg'.
 
 (* program P *satisfies* property π *)
 Definition sat (P:prg) (π:prop) : Prop :=
@@ -452,7 +452,7 @@ Qed.
 
 Definition RSC_dc (P : prg) : Prop :=
   forall (C' : ctx') (t : trace), sem' (plug' (compile P) C') t ->
-   (forall m : trace, prefix m t ->  
+   (forall m : trace, prefix m t ->
       exists (C : ctx) (t' : trace), sem (plug P C) t' /\
             (prefix m t' \/ u_prefix P t' m)).
 
@@ -482,7 +482,7 @@ Proof.
   assert (K : Z_class P (fun b => ~ (prefix m b \/ u_prefix P b m))).
   { unfold Z_class. intros b hb. rewrite <- dne in hb.
     destruct hb as [pmb | ub].
-    + exists m. split. assumption. 
+    + exists m. split. assumption.
       intros b' [b1 | b2]; rewrite <- dne. left. assumption.
       right. assumption.
     + assert (fb : fin b). { apply (u_imp_fin P b m ub). }
@@ -516,8 +516,8 @@ Qed.
 
 Corollary main_thm' :
     (forall P, RSC_dc P) <-> (forall P pi, Z_class P pi -> RP P pi).
-   (* ^^^^^^^^^^^^^^^^ *)    
-   (*      RSC^DC      *)    
+   (* ^^^^^^^^^^^^^^^^ *)
+   (*      RSC^DC      *)
 Proof.
   split. - intros H P. now apply RSC_dc_RZP.
          - intros H P. apply RZP_RSC_dc. now apply H.
@@ -568,15 +568,15 @@ Proof.
   destruct u12 as [mm [fmm [pmm2 u1]]].
   assert (foo : prefix m mm \/ prefix mm m).
   { eapply (prefix_comp t2); assumption. }
-  destruct foo as [k0 | k1].    
-  + left. assert (foo : prefix mm t1). 
+  destruct foo as [k0 | k1].
+  + left. assert (foo : prefix mm t1).
     { rewrite <- u1.
       apply u_fin_no_undef_prefix. assumption. }
     apply (prefix_trans m mm t1 k0 foo).
   + right. unfold u_prefix.
     exists mm. split. assumption.
     split; assumption.
-Qed. 
+Qed.
 
 Lemma Z_p_equivalent : forall (P : prg) (pi : prop),
     Z_class P pi <-> Safety pi /\ ref_cl P pi.
@@ -588,7 +588,7 @@ Proof.
       destruct (z t' nt') as [m [pmt zz]].
       assert (prefix m t \/ u_prefix P t m) as use_me by
       apply (U_general P t t' utt' m pmt).
-      apply (zz t use_me).      
+      apply (zz t use_me).
   -  intros [s r]. unfold Z_class.
      intros t nt. destruct (s t nt) as [m [pmt H]].
      exists m. split. assumption.
@@ -597,7 +597,7 @@ Proof.
      { unfold u_prefix. destruct k1 as [m0 [f0 [p0 u0]]].
        exists m0. split. assumption. split.
        apply (prefix_trans m0 m t p0 pmt).
-       assumption. }       
+       assumption. }
      rewrite ref_cl' in r. apply (r t nt t' use_me).
 Qed.
 
@@ -619,12 +619,12 @@ Proof.
   intros P. split.
   - intros L pi H. rewrite <- (Z_p_equivalent P pi) in H.
     apply (L pi H).
-  - intros R pi H. rewrite (Z_p_equivalent P pi) in H.    
+  - intros R pi H. rewrite (Z_p_equivalent P pi) in H.
     apply (R pi H).
 Qed.
 
 (* theorem in the paper *)
-Corollary main_thm : 
+Corollary main_thm :
   (forall P : prg, RSC_dc P) <->
   (forall P pi, (Safety pi /\ ref_cl P pi) -> RP P pi).
 Proof. rewrite <- easy_lemma0. apply main_thm'. Qed.
@@ -655,7 +655,7 @@ Proof. intros pi S P b [h0 h1]; assumption. Qed.
 Lemma sub' : forall (pi : prop) (S : Safety pi)
                     (P : prg) (b : trace),
                      ~ pi b -> ~ (z_plus pi S P b).
-Proof. intros pi S P b. rewrite <- contra.  
+Proof. intros pi S P b. rewrite <- contra.
        apply (sub pi S P).
 Qed.
 
@@ -669,7 +669,7 @@ Proof.
     unfold z_plus in nt. rewrite de_morgan1 in nt.
     destruct nt as [k0 | k1].
     + destruct (s t k0) as [m [a1 a2]].
-      exists m. split. assumption. 
+      exists m. split. assumption.
       intros t' H. specialize (a2 t' H).
       apply (sub' pi s P t' a2).
     + rewrite not_forall_ex_not in k1.
@@ -727,7 +727,7 @@ Definition z_minus (P : prg) (pi : prop) : prop :=
 (* pi is included in z_minus *)
 Lemma sub_minus : forall (P : prg) (pi : prop) (b : trace),
                   pi b -> (z_minus P pi) b.
-Proof. intros P pi b H.  unfold z_minus. left. apply H. Qed.    
+Proof. intros P pi b H.  unfold z_minus. left. apply H. Qed.
 
 (* z_minus is in Z_p *)
 Lemma growth_lemma : forall (P : prg) (pi : prop) (S : Safety pi),
@@ -737,7 +737,7 @@ Proof.
   - unfold Safety. intros b nb. unfold z_minus in nb.
     rewrite de_morgan2 in nb. destruct nb as [npib nn].
     destruct (S b npib) as [m [pmb H]].
-    exists m. split. assumption. 
+    exists m. split. assumption.
     intros  b' pmb'. unfold z_minus. rewrite de_morgan2. split.
     + apply (H b' pmb').
     + intros [t [pit [k0 | k1]]].

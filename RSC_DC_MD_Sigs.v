@@ -34,11 +34,11 @@ Module Type Source_Sig.
 
   Parameter linkable_mains : program -> program -> Prop.
 
-  Hypothesis linkable_mains_sym : forall prog1 prog2,
+  Local Axiom linkable_mains_sym : forall prog1 prog2,
     linkable_mains prog1 prog2 ->
     linkable_mains prog2 prog1.
 
-  Hypothesis linkable_disjoint_mains: forall prog1 prog2,
+  Local Axiom linkable_disjoint_mains: forall prog1 prog2,
     well_formed_program prog1 ->
     well_formed_program prog2 ->
     linkable (prog_interface prog1) (prog_interface prog2) ->
@@ -46,13 +46,13 @@ Module Type Source_Sig.
 
   Parameter program_link : program -> program -> program.
 
-  Hypothesis linking_well_formedness : forall p1 p2,
+  Local Axiom linking_well_formedness : forall p1 p2,
     well_formed_program p1 ->
     well_formed_program p2 ->
     linkable (prog_interface p1) (prog_interface p2) ->
     well_formed_program (program_link p1 p2).
 
-  Hypothesis interface_preserves_closedness_l : forall p1 p2 p1',
+  Local Axiom interface_preserves_closedness_l : forall p1 p2 p1',
     closed_program (program_link p1 p2) ->
     prog_interface p1 = prog_interface p1' ->
     well_formed_program p1 ->
@@ -71,7 +71,7 @@ Module Type Source_Sig.
          t ≺P m = exists m' <= m. t = Goes_wrong m' /\ undef_in t (prog_interface P)
        + this means that t' plays below the role of m' above
   *)
-  Hypothesis blame_program : forall p Cs t' P' m,
+  Local Axiom blame_program : forall p Cs t' P' m,
     well_formed_program p ->
     well_formed_program Cs ->
     linkable (prog_interface p) (prog_interface Cs) ->
@@ -105,22 +105,22 @@ Module Type Intermediate_Sig.
 
   Parameter program_link : program -> program -> program.
 
-  Hypothesis linkable_mains_sym : forall p1 p2,
+  Local Axiom linkable_mains_sym : forall p1 p2,
     linkable_mains p1 p2 -> linkable_mains p2 p1.
 
-  Hypothesis program_linkC : forall p1 p2,
+  Local Axiom program_linkC : forall p1 p2,
     well_formed_program p1 ->
     well_formed_program p2 ->
     linkable (prog_interface p1) (prog_interface p2) ->
     program_link p1 p2 = program_link p2 p1.
 
-  Hypothesis linking_well_formedness : forall p1 p2,
+  Local Axiom linking_well_formedness : forall p1 p2,
     well_formed_program p1 ->
     well_formed_program p2 ->
     linkable (prog_interface p1) (prog_interface p2) ->
     well_formed_program (program_link p1 p2).
 
-  Hypothesis interface_preserves_closedness_r : forall p1 p2 p2',
+  Local Axiom interface_preserves_closedness_r : forall p1 p2 p2',
     well_formed_program p1 ->
     well_formed_program p2' ->
     prog_interface p2 = prog_interface p2' ->
@@ -134,7 +134,7 @@ Module Type Intermediate_Sig.
     Parameter sem : program -> semantics.
   End CS.
 
-  (* Hypothesis decomposition_with_refinement : *)
+  (* Local Axiom decomposition_with_refinement : *)
   (*   forall p c, *)
   (*     well_formed_program p -> *)
   (*     well_formed_program c -> *)
@@ -146,7 +146,7 @@ Module Type Intermediate_Sig.
   (*     program_behaves (PS.sem p (prog_interface c)) beh2 /\ *)
   (*     behavior_improves beh1 beh2. *)
 
-  (* Hypothesis decomposition_prefix : *)
+  (* Local Axiom decomposition_prefix : *)
   (*   forall p c m, *)
   (*     well_formed_program p -> *)
   (*     well_formed_program c -> *)
@@ -156,7 +156,7 @@ Module Type Intermediate_Sig.
   (*     does_prefix (CS.sem (program_link p c)) m -> *)
   (*     does_prefix (PS.sem p (prog_interface c)) m. *)
 
-  (* Hypothesis composition_prefix : *)
+  (* Local Axiom composition_prefix : *)
   (*   forall p c m, *)
   (*     well_formed_program p -> *)
   (*     well_formed_program c -> *)
@@ -167,13 +167,13 @@ Module Type Intermediate_Sig.
   (*     does_prefix (PS.sem c (prog_interface p)) m -> *)
   (*     does_prefix (CS.sem (program_link p c)) m. *)
 
-  Hypothesis compose_mergeable_interfaces :
+  Local Axiom compose_mergeable_interfaces :
     forall p c,
       linkable (prog_interface p) (prog_interface c) ->
       closed_program (program_link p c) ->
       mergeable_interfaces (prog_interface p) (prog_interface c).
 
-  Hypothesis recombination_prefix :
+  Local Axiom recombination_prefix :
     forall p c p' c',
       well_formed_program p ->
       well_formed_program c ->
@@ -193,7 +193,7 @@ End Intermediate_Sig.
 Module Type S2I_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
   Parameter matching_mains : Source.program -> Intermediate.program -> Prop.
 
-  Hypothesis matching_mains_equiv : forall p1 p2 p3,
+  Local Axiom matching_mains_equiv : forall p1 p2 p3,
     matching_mains p1 p2 ->
     matching_mains p1 p3 ->
     Intermediate.matching_mains p2 p3.
@@ -203,7 +203,7 @@ Module Type Linker_Sig
        (Source : Source_Sig)
        (Intermediate : Intermediate_Sig)
        (S2I : S2I_Sig Source Intermediate).
-  Hypothesis definability_with_linking :
+  Local Axiom definability_with_linking :
     forall p c b m,
       Intermediate.well_formed_program p ->
       Intermediate.well_formed_program c ->
@@ -225,7 +225,7 @@ Module Type Linker_Sig
 (* TODO: split definability_with_linking into a more standard
          definability + a "unlinking" lemma *)
 
-  (* Hypothesis definability : *)
+  (* Local Axiom definability : *)
   (*   forall p m, *)
   (*     Intermediate.well_formed_program p -> *)
   (*     Intermediate.closed_program p -> *)
@@ -238,7 +238,7 @@ Module Type Linker_Sig
   (*     Source.closed_program p' /\ *)
   (*     does_prefix (Source.CS.sem p') m. *)
 
-  (* Hypothesis unlinking : forall p i1 i2, *)
+  (* Local Axiom unlinking : forall p i1 i2, *)
   (*   Source.prog_interface p = unionm i1 i2 -> *)
   (*   Source.well_formed_program p -> *)
   (*   linkable i1 i2 -> *)
@@ -254,22 +254,22 @@ Module Type Compiler_Sig
        (S2I : S2I_Sig Source Intermediate).
   Parameter compile_program : Source.program -> option Intermediate.program.
 
-  Hypothesis well_formed_compilable :
+  Local Axiom well_formed_compilable :
     forall p,
       Source.well_formed_program p ->
     exists pc,
       compile_program p = Some pc.
 
-  Hypothesis compilation_preserves_well_formedness : forall p p_compiled,
+  Local Axiom compilation_preserves_well_formedness : forall p p_compiled,
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
     Intermediate.well_formed_program p_compiled.
 
-  Hypothesis compilation_preserves_interface : forall p p_compiled,
+  Local Axiom compilation_preserves_interface : forall p p_compiled,
     compile_program p = Some p_compiled ->
     Intermediate.prog_interface p_compiled = Source.prog_interface p.
 
-  Hypothesis compilation_preserves_linkability : forall p p_compiled c c_compiled,
+  Local Axiom compilation_preserves_linkability : forall p p_compiled c c_compiled,
     Source.well_formed_program p ->
     Source.well_formed_program c ->
     linkable (Source.prog_interface p) (Source.prog_interface c) ->
@@ -277,7 +277,7 @@ Module Type Compiler_Sig
     compile_program c = Some c_compiled ->
     linkable (Intermediate.prog_interface p_compiled) (Intermediate.prog_interface c_compiled).
 
-  Hypothesis compilation_preserves_linkable_mains : forall p1 p1' p2 p2',
+  Local Axiom compilation_preserves_linkable_mains : forall p1 p1' p2 p2',
     Source.well_formed_program p1 ->
     Source.well_formed_program p2 ->
     Source.linkable_mains p1 p2 ->
@@ -285,13 +285,13 @@ Module Type Compiler_Sig
     compile_program p2 = Some p2' ->
     Intermediate.linkable_mains p1' p2'.
 
-  Hypothesis compilation_has_matching_mains : forall p p_compiled,
+  Local Axiom compilation_has_matching_mains : forall p p_compiled,
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
     S2I.matching_mains p p_compiled.
 
   (* CH: To match the paper this should be weakened even more to work with prefixes *)
-  (* Hypothesis separate_compilation_weaker : *)
+  (* Local Axiom separate_compilation_weaker : *)
   (*   forall p c pc_comp p_comp c_comp, *)
   (*     Source.well_formed_program p -> *)
   (*     Source.well_formed_program c -> *)
@@ -303,7 +303,7 @@ Module Type Compiler_Sig
   (*     program_behaves (Intermediate.CS.sem pc_comp) b <-> *)
   (*     program_behaves (Intermediate.CS.sem (Intermediate.program_link p_comp c_comp)) b. *)
 
-  (* Hypothesis S_simulates_I: *)
+  (* Local Axiom S_simulates_I: *)
   (*   forall p, *)
   (*     Source.closed_program p -> *)
   (*     Source.well_formed_program p -> *)
@@ -311,7 +311,7 @@ Module Type Compiler_Sig
   (*     compile_program p = Some tp -> *)
   (*     backward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp). *)
 
-  Hypothesis forward_simulation_same_safe_prefix:
+  Local Axiom forward_simulation_same_safe_prefix:
     forall p p_compiled c c_compiled m,
       linkable (Source.prog_interface p) (Source.prog_interface c) ->
       Source.closed_program (Source.program_link p c) ->
@@ -323,7 +323,7 @@ Module Type Compiler_Sig
       compile_program c = Some c_compiled ->
       does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled c_compiled)) m.
 
-  Hypothesis backward_simulation_behavior_improves_prefix :
+  Local Axiom backward_simulation_behavior_improves_prefix :
     forall p p_compiled c c_compiled m,
       linkable (Source.prog_interface p) (Source.prog_interface c) ->
       Source.closed_program (Source.program_link p c) ->

@@ -20,8 +20,6 @@ From Coq Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import eqtype seq.
 From mathcomp Require ssrnat.
 
-Canonical ssrnat.nat_eqType.
-
 Import Source.
 
 Set Implicit Arguments.
