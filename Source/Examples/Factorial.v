@@ -32,4 +32,5 @@ Definition factorial : program := {|
 Definition fuel := 1000.
 Definition to_run := run factorial fuel.
 
+Set Warnings "-extraction-reserved-identifier".
 Extraction "/tmp/run_source_factorial.ml" to_run.

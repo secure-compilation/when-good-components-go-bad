@@ -18,8 +18,6 @@ Import Source.CS.CS.
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype seq.
 From mathcomp Require ssrnat.
 
-Canonical ssrnat.nat_eqType.
-
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
