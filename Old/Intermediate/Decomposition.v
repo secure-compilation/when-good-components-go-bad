@@ -9,7 +9,7 @@ Require Import CompCert.Behaviors.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
-Require Import Old.Intermediate.PS.
+Require Import Old.Intermediate.PSExtra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 

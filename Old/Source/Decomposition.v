@@ -13,8 +13,8 @@ Require Import Source.GlobalEnv.
 Require Import Source.CS.
 Require Import Source.PS.
 Require Import Lib.Extra.
-Require Import Old.Source.CS.
-Require Import Old.Source.PS.
+Require Import Old.Source.CSExtra.
+Require Import Old.Source.PSExtra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 
