@@ -116,11 +116,45 @@ Definition store_arg (buf: Pointer.t) (r rtemp: register) : code :=
 Section WithComponent.
 
 Variable C: Component.id. (* the current component *)
-Variable local_buf_ptr : Pointer.t. (* pointer to the local buffer for current component *)
+Variable public_local_buf_ptr : Pointer.t. (* pointer to the public local buffer for current component (RW) *)
+Variable private_local_buf_ptr : Pointer.t. (* pointer to the private local buffer for current component (RW) *)
+Variable public_program_memory : ({fmap Component.id -> Pointer.t}). (* pointer to the whole public memory (RO) *)
 Variable P_labels : NMap label.  (* map from procedure id's to start labels for current component *)
 
 Definition find_proc_label P : COMP label :=
   lift (getm P_labels P).
+
+
+(* Maybe put it somewhere else where it makes more sense, in Source.Language or
+   CS ? *)
+(* We follow strictly the semantincs of the source language to decide if a
+   pointer to a buffer could be present *)
+Local Definition contains_allowed_buffer (with_foreign_buffers : bool) (e:expr) : bool :=
+  let fix ctn ex :=
+      match ex with
+      | E_val (Ptr (C',b',o')) => (* Allow this kind of raw pointer ? *)
+         (C =? C') || ((b' =? Block.public) && with_foreign_buffers)
+      | E_val _ => false
+      | E_local bk => true
+      | E_component_buf C' => with_foreign_buffers
+      | E_binop bin e1 e2 =>
+        match bin with
+        | Add | Minus => (ctn e1) || (ctn e2)
+        | Mul | Eq | Leq => false
+        end
+      | E_seq _ e => ctn e
+      | E_if _ e1 e2 => (ctn e1) && (ctn e2)
+      | E_alloc e => false (* ctn e *)      (* Always gives a new pointer, to change in the future *)
+      | E_deref e => ctn e           (* Either allow storing of pointer (not in public, so check that in the parameter) or not *)
+      | E_assign _ e => ctn e (* It looks like chained assignments are allowed in CS *)
+      | E_call _ _ _         (* returned value is handled with E_val directly *)
+      | E_arg                (* No pointer in arg for now *)
+      | E_exit => false
+      end
+  in ctn e.
+
+Local Definition contains_foreign_buffers := contains_allowed_buffer true.
+Local Definition contains_local_buffers := contains_allowed_buffer false.
 
 Fixpoint compile_expr (e: expr) : COMP code :=
   match e with
@@ -131,18 +165,13 @@ Fixpoint compile_expr (e: expr) : COMP code :=
   | E_val Undef => fail (* we don't compile undef *)
   | E_arg =>
     ret [IMov R_ARG R_COM]
-  (* RB: STATIC_READ: For now, insert the new parameter as a don't-care to make
-     the compiler typecheck. This needs to be tweaked. *)
-  | E_local _ =>
-    ret [IConst (IPtr local_buf_ptr) R_COM]
-
-  (* should be pretty much the same thing as above
-     but pointing outside of the component...
-   *)
-  | E_component_buf C =>
-    (* RB: STATIC_READ: This line was commented out, invalidating the definition.
-       For now it is restored. See rationale above and correct. *)
-    ret [IConst (IPtr (* not *) local_buf_ptr) R_COM]
+  | E_local Block.pub =>
+    ret [IConst (IPtr public_local_buf_ptr) R_COM]
+  | E_local Block.priv =>
+    ret [IConst (IPtr private_local_buf_ptr) R_COM]
+  | E_component_buf C' =>
+    do ptr <- lift (public_program_memory C');
+    ret [IConst (IPtr ptr) R_COM]
   | E_binop bop e1 e2 =>
     do c1 <- compile_expr e1;
     do c2 <- compile_expr e2;
@@ -173,17 +202,25 @@ Fixpoint compile_expr (e: expr) : COMP code :=
     ret (c ++
          IAlloc R_COM R_COM :: nil)
   | E_deref e =>
-    do c <- compile_expr e;
-    ret (c ++
-         ILoad R_COM R_COM :: nil)
+    (* test for right kind of buffer wrt to component id, fail in case of
+         dereferencing a private foreign buffer *)
+    if (contains_foreign_buffers e) then
+      do c <- compile_expr e;
+        ret (c ++
+               ILoad R_COM R_COM :: nil)
+    else fail
   | E_assign e1 e2 =>
-    do c1 <- compile_expr e1;
-    do c2 <- compile_expr e2;
-    ret (c1 ++
-         push R_COM ++
-         c2 ++
-         pop R_AUX1 ++
-         IStore R_COM R_AUX1 :: nil)
+        (* test for right kind of buffer wrt to component id, fail in case of
+         assigning to a foreign buffer *)
+    if (contains_local_buffers e1) then
+      do c1 <- compile_expr e1;
+      do c2 <- compile_expr e2;
+        ret (c1 ++
+                push R_COM ++
+                c2 ++
+                pop R_AUX1 ++
+                IStore R_COM R_AUX1 :: nil)
+    else fail
   | E_call C' P' e =>
     do call_arg_code <- compile_expr e;
     if Component.eqb C' C then
@@ -196,10 +233,10 @@ Fixpoint compile_expr (e: expr) : COMP code :=
       ret (call_arg_code ++
            push R_RA ++
            push R_ARG ++
-           store_arg local_buf_ptr R_SP R_AUX2 ++
+           store_arg private_local_buf_ptr R_SP R_AUX2 ++
            [ICall C' P'] ++
            [IConst (IInt 1) R_ONE] ++
-           load_arg local_buf_ptr R_SP ++
+           load_arg private_local_buf_ptr R_SP ++
            pop R_ARG ++
            pop R_RA
            )
@@ -221,14 +258,14 @@ Definition compile_proc (P: Procedure.id) (e: expr)
         IConst (IInt stack_frame_size) R_SP;
         IAlloc R_SP R_SP] ++
         push R_AUX1 ++
-        load_arg local_buf_ptr R_AUX1 ++
+        load_arg private_local_buf_ptr R_AUX1 ++
         push R_AUX1 ++
         push R_ARG ++
         [IMov R_COM R_ARG] ++
         proc_code ++
         pop R_ARG ++
         pop R_AUX1 ++
-        store_arg local_buf_ptr R_AUX1 R_AUX2 ++
+        store_arg private_local_buf_ptr R_AUX1 R_AUX2 ++
         pop R_SP ++
         [IJump R_RA]).
 
@@ -272,25 +309,37 @@ Definition gen_all_procedures_labels
   in gen emptym procs.
 
 Definition gen_buffers
-         (bufs: {fmap Component.id -> nat + list value})
+         (bufs: {fmap Component.id -> Source.component_buffers})
   : NMap {fmap Block.id -> nat + list value} :=
-  mapm (fun init_info => mkfmap [(0, init_info)]) bufs.
+  mapm (fun comp_bufs =>  mkfmap [(Block.public, Source.get_buffer comp_bufs Block.pub);
+                                 (Block.private, Source.get_buffer comp_bufs Block.priv)
+       ]) bufs.
+
+Definition gen_public_static_memory
+           (bufs: {fmap Component.id -> Source.component_buffers})
+  : {fmap Component.id -> Pointer.t} :=
+  mapim (fun C' _ => (C', Block.public, 0%Z)) bufs.
 
 Definition compile_components
-         (local_buffers : NMap {fmap Block.id -> nat + list value})
-         (procs_labels : NMap (NMap label))
-         (comps: list (Component.id * NMap expr))
+           (local_buffers : {fmap Component.id -> Source.component_buffers})
+           (public_memory : {fmap Component.id -> Pointer.t})
+           (procs_labels : NMap (NMap label))
+           (comps: list (Component.id * NMap expr))
   : COMP (list (Component.id * NMap code)) :=
   let fix compile acc cs :=
       match cs with
       | [] => ret acc
       | (C,procs) :: cs' =>
-        let local_buffer_block_id := 0 in
-        do blocks <- lift (local_buffers C);
-        do _ <- lift (blocks local_buffer_block_id );
+        do! (* pub_x_priv <- *) lift (local_buffers C);
+          (* Not even useful to check presence of public/private blocks since a
+             program has to have public and private buffers *)
         do P_labels <- lift (procs_labels C);
-        do procs_code <- compile_procedures C (C, local_buffer_block_id, 0%Z) P_labels
-                                            (elementsm procs);
+        do procs_code <- compile_procedures C
+                                           (C, Block.public, 0%Z)
+                                           (C, Block.private, 0%Z)
+                                           public_memory
+                                           P_labels
+                                           (elementsm procs);
         let acc' := (C, mkfmap procs_code) :: acc in
         compile acc' cs'
       end
@@ -336,12 +385,11 @@ Definition compile_program
            (p: Source.program) : option Intermediate.program :=
   let comps := elementsm (Source.prog_procedures p) in
   let bufs := Source.prog_buffers p in
-  (* RB: STATIC_READ: Here, temporarily, pick the private buffers instead of the
-     pair, resembling what would have been there before. This needs to change. *)
-  let local_buffers := gen_buffers (mapm fst bufs) in
+  let public_mem := gen_public_static_memory bufs in
+  let local_buffers := gen_buffers  bufs in
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;
-    do code <- compile_components local_buffers procs_labels comps;
+    do code <- compile_components bufs public_mem procs_labels comps;
     let p :=
         {| Intermediate.prog_interface := Source.prog_interface p;
            Intermediate.prog_procedures := mkfmap code;
