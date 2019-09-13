@@ -174,7 +174,8 @@ Definition well_formed_instruction
   end.
 
 Record well_formed_program (p: program) := {
-  (* the interface is sound (but maybe not closed) *)
+  (* the interface is sound (but maybe not closed)
+     RB: Currently not used in the proofs. *)
   wfprog_interface_soundness:
     sound_interface (prog_interface p);
   (* there are procedures only for the declared components *)
