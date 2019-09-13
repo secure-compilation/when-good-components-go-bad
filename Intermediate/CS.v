@@ -1007,22 +1007,6 @@ Qed.
 
 End Semantics.
 
-(* A similar result is used above. Here is a weaker formulation. *)
-Lemma initial_state_stack_state0 p s :
-  initial_state p s ->
-  stack_state_of s = Traces.stack_state0.
-Proof.
-  intros Hini.
-  unfold initial_state, initial_machine_state in Hini.
-  destruct (prog_main p) as [mainP |]; simpl in Hini.
-  - destruct (prepare_procedures p (prepare_initial_memory p))
-      as [[mem dummy] entrypoints].
-    destruct (EntryPoint.get Component.main mainP entrypoints).
-    + subst. reflexivity.
-    + subst. reflexivity.
-  - subst. reflexivity.
-Qed.
-
 (* RB: TODO: Use SSR imports consistently (we use SSR exclusively for the next
    lemma). *)
 Import ssreflect.
@@ -1069,17 +1053,6 @@ Definition comes_from_initial_state (s: state) (iface : Program.interface) : Pro
     initial_state p s0 /\
     Star (sem p) s0 t s.
 
-Lemma comes_from_initial_state_mergeable_sym :
-  forall s iface1 iface2,
-    Linking.mergeable_interfaces iface1 iface2 ->
-    comes_from_initial_state s (unionm iface1 iface2) ->
-    comes_from_initial_state s (unionm iface2 iface1).
-Proof.
-  intros s iface1 iface2 [[_ Hdisjoint] _] Hfrom_initial.
-  rewrite <- (unionmC Hdisjoint).
-  exact Hfrom_initial.
-Qed.
-
 Remark comes_from_initial_state_mem_domm s ctx :
   comes_from_initial_state s ctx ->
   domm (state_mem s) = domm ctx.
@@ -1096,15 +1069,6 @@ Proof.
   - specialize (IHHstar _ _ Hwf Hmain Hiface Hini).
     apply step_preserves_mem_domm in Hstep23. congruence.
 Qed.
-
-(* RB: NOTE: Consider possible alternatives on [CS.comes_from_initial_state]
-   complemented instead by, say, [PS.step] based on what we usually have in
-   the context, making for more direct routes. *)
-Lemma comes_from_initial_state_step_trans p s t s' :
-  CS.comes_from_initial_state s (prog_interface p) ->
-  CS.step (prepare_global_env p) s t s' ->
-  CS.comes_from_initial_state s' (prog_interface p).
-Admitted. (* Grade 2. *)
 
 Lemma comes_from_initial_state_stack_domm s ctx :
   comes_from_initial_state s ctx ->
@@ -1340,23 +1304,6 @@ Section ProgramLink.
     assert (H : Pointer.component pc \in domm (prog_interface (program_link p c))).
     { replace pc with (CS.state_pc (st, mem, reg, pc)); try reflexivity.
       apply CS.comes_from_initial_state_pc_domm.
-      destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
-      exists (program_link p c), i, s, t.
-      split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
-      repeat split; eauto. }
-    move: H. simpl. rewrite domm_union. now apply /fsetUP.
-  Qed.
-
-  (* RB: NOTE: Check with existing results (though currently unused). *)
-  Lemma star_stack_cons_domm {s frame gps mem regs pc t} :
-    initial_state (program_link p c) s ->
-    Star (sem (program_link p c)) s t (frame :: gps, mem, regs, pc) ->
-    Pointer.component frame \in domm (prog_interface p) \/
-    Pointer.component frame \in domm (prog_interface c).
-  Proof.
-    intros Hini Hstar.
-    assert (H : Pointer.component frame \in domm (prog_interface (program_link p c))).
-    { eapply CS.comes_from_initial_state_stack_cons_domm.
       destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
       exists (program_link p c), i, s, t.
       split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).

@@ -9,6 +9,7 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
 Require Import Old.Intermediate.MachineExtra.
+Require Import Old.Intermediate.CSExtra.
 Import Machine.Intermediate.
 
 Require Import Coq.Program.Equality.
