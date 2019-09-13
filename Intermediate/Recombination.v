@@ -1629,7 +1629,7 @@ Section ThreewayMultisem3.
     (* Calls. *)
     | Hget : EntryPoint.get _ _ _ = _ |- _ =>
       apply genv_entrypoints_interface_some with (p' := prog) in Hget as [b' Hget];
-        [| simpl; congruence]
+      try (simpl; congruence)
     (* Returns. *)
     | Hcons : ?PC' :: ?GPS' = ?GPS (* merge_states_stack *) |- _ =>
       destruct GPS as [| frame1' gps1'] eqn:Hgps; [discriminate |];
@@ -1695,9 +1695,14 @@ Section ThreewayMultisem3.
       by (apply linkable_implies_linkable_mains; congruence).
     rewrite (mergeable_states_merge_program _ Hmerge) in Hstep;
       try assumption.
+
+    assert (Hwfprog: well_formed_program prog) by admit.
+    assert (Hwfprog': well_formed_program prog') by admit.
+    assert (Hiface_link: prog_interface prog' = prog_interface prog) by admit.
+
     inversion Hstep; subst;
       t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec.
-  Qed.
+  Admitted.
 End ThreewayMultisem3.
 
 (* Theorems on initial states for main simulation. *)

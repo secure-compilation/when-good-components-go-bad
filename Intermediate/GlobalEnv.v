@@ -168,29 +168,100 @@ Proof.
     by rewrite Hcase.
 Qed.
 
-(* RB: NOTE: Add program well-formedness if needed. *)
-Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
-  (* Pointer.component pc \in domm (prog_interface p) -> *)
-  (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *)
-  prog_interface p = prog_interface p' ->
-  EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
-exists b',
-  EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
-Proof.
-  move=> Hiface.
-  unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
-  (* move=> H; exists b; rewrite -H; clear H. *)
-  unfold prepare_procedures_initial_memory_aux.
-  unfold elementsm, odflt, oapp.
-  rewrite 2!mapmE.
-  unfold omap, obind, oapp; simpl.
-  rewrite 2!mkfmapfE.
-  rewrite -Hiface.
-  destruct (C \in domm (prog_interface p)) eqn:HC.
-  - rewrite HC.
-    admit.
-  - now rewrite HC.
-Admitted.
+  Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
+    (* Pointer.component pc \in domm (prog_interface p) -> *)
+    (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *)
+    well_formed_program p ->
+    well_formed_program p' ->
+    prog_interface p = prog_interface p' ->
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
+  exists b',
+    EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
+  Proof.
+    move=> Hwf Hwf' Hiface.
+    unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
+    (* move=> H; exists b; rewrite -H; clear H. *)
+    unfold prepare_procedures_initial_memory_aux.
+    unfold elementsm, odflt, oapp.
+    rewrite 2!mapmE.
+    unfold omap, obind, oapp; simpl.
+    rewrite 2!mkfmapfE.
+    rewrite -Hiface.
+    destruct (C \in domm (prog_interface p)) eqn:HC.
+    - rewrite HC.
+      assert (HC': (C \in domm (prog_interface p')) = true) by now rewrite -Hiface.
+      inversion Hwf as [_ Hproc _ _ Hbuf _ _].
+      inversion Hwf' as [_ Hproc' _ _ Hbuf' _ _].
+      assert (Heq1: prog_buffers p C <-> prog_buffers p' C).
+      {
+        rewrite -2!mem_domm.
+        now rewrite -Hbuf Hiface Hbuf'.
+      }
+      destruct (prog_buffers p C) eqn:H1.
+      + assert (H1': prog_buffers p' C) by now apply Heq1.
+        destruct (prog_buffers p' C) eqn:H1''; try now auto.
+        assert (Heq2: prog_procedures p C <-> prog_procedures p' C).
+        {
+          rewrite -2!mem_domm.
+          now rewrite -Hproc Hiface Hproc'.
+        }
+        destruct (prog_procedures p C) eqn:H2.
+        * assert (H2': prog_procedures p' C) by now apply Heq2.
+          destruct (prog_procedures p' C); try now auto.
+          simpl in *.
+          move=> Hreserve.
+          apply /dommP.
+          erewrite reserve_component_blocks_lemma with (p' := p); eauto.
+          apply /dommP. eexists; eauto.
+        * move=> ?. by [].
+      + assert (H1': prog_buffers p' C = None).
+        {
+          destruct (prog_buffers p' C); simpl in *.
+          clear -Heq1 H1.
+          inversion Heq1; try (exfalso; firstorder).
+          eauto.
+        }
+        rewrite H1'; simpl in *.
+        assert (Heq2: prog_procedures p C <-> prog_procedures p' C).
+        {
+          rewrite -2!mem_domm.
+          now rewrite -Hproc Hiface Hproc'.
+        }
+        destruct (prog_procedures p C) eqn:H2.
+        * assert (H2': prog_procedures p' C) by now apply Heq2.
+          destruct (prog_procedures p' C); try now auto.
+          simpl in *.
+          move=> Hreserve.
+          apply /dommP.
+          erewrite reserve_component_blocks_lemma with (p' := p); eauto.
+          apply /dommP. eexists; eauto.
+        * move=> ?. by [].
+    - now rewrite HC.
+  Qed.
+
+(* (* RB: NOTE: Add program well-formedness if needed. *) *)
+(* Lemma genv_entrypoints_interface_some p p' C P b (* pc *) : *)
+(*   (* Pointer.component pc \in domm (prog_interface p) -> *) *)
+(*   (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *) *)
+(*   prog_interface p = prog_interface p' -> *)
+(*   EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b -> *)
+(* exists b', *)
+(*   EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'. *)
+(* Proof. *)
+(*   move=> Hiface. *)
+(*   unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl. *)
+(*   (* move=> H; exists b; rewrite -H; clear H. *) *)
+(*   unfold prepare_procedures_initial_memory_aux. *)
+(*   unfold elementsm, odflt, oapp. *)
+(*   rewrite 2!mapmE. *)
+(*   unfold omap, obind, oapp; simpl. *)
+(*   rewrite 2!mkfmapfE. *)
+(*   rewrite -Hiface. *)
+(*   destruct (C \in domm (prog_interface p)) eqn:HC. *)
+(*   - rewrite HC. *)
+(*     admit. *)
+(*   - now rewrite HC. *)
+(* Admitted. *)
 
 (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
    operating on an explicit program link, one then being the exact symmetric of
