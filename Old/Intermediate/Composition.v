@@ -10,7 +10,7 @@ Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
 Require Import Old.Intermediate.MachineExtra.
-Require Import Old.Intermediate.PSExtra.
+Require Import Old.Intermediate.PS.
 Require Import Old.Intermediate.Decomposition.
 Require Import Intermediate.Machine.
 Import MachineExtra.Intermediate.
