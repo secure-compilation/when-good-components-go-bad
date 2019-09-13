@@ -611,13 +611,6 @@ Theorem prepare_procedures_initial_memory_equiv :
     prepare_procedures p (prepare_initial_memory p).
 Admitted.
 
-(* Maybe can be pushed in Arthur's extructures *)
-Lemma mapm_empty: forall (T : ordType) (S S' : Type) (f : S -> S'),
-  mapm f (@emptym T S) = emptym.
-Proof.
-    by move => T S S' f; apply /eq_fmap => n; rewrite emptymE.
-Qed.
-
 (* initialization of a linked program *)
 
 Definition prepare_procedures_memory (p: program) : Memory.t :=

@@ -1,5 +1,6 @@
 Require Import Common.Definitions.
 Require Import Common.Util.
+Require Import Common.Maps.
 Require Export Common.Values.
 Require Export Common.Linking.
 Require Import Common.Memory.
