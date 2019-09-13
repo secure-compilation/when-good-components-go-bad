@@ -3,8 +3,11 @@ Require Import Common.Memory.
 Require Import Intermediate.Machine.
 Require Import Lib.Monads.
 Require Import Intermediate.GlobalEnv.
+Require Import Old.Intermediate.MachineExtra.
 
 Import Intermediate.
+Import Machine.Intermediate.
+Import MachineExtra.Intermediate.
 
 From mathcomp Require Import ssreflect ssrfun.
 
