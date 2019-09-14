@@ -39,20 +39,6 @@ Inductive state : Type :=
 | PC : program_state -> state
 | CC : context_state -> state.
 
-Ltac unfold_state st :=
-  let C := fresh "C" in
-  let pgps := fresh "pgps" in
-  let pmem := fresh "pmem" in
-  let k := fresh "k" in
-  let e := fresh "e" in
-  let arg := fresh "arg" in
-  destruct st as [[[[[[C pgps] pmem] k] e] arg] | [[C pgps] pmem]].
-
-Ltac unfold_states :=
-  repeat match goal with
-         | st: state |- _ => unfold_state st
-         end.
-
 Definition s_component (sps: state) : Component.id :=
   match sps with
   | PC (C, _, _, _, _, _) => C
