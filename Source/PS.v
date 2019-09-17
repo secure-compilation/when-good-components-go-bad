@@ -35,7 +35,7 @@ Definition stack : Type := list (Component.id * option (value * CS.cont)).
 Definition program_state : Type := Component.id * stack * Memory.t * CS.cont * expr * value.
 Definition context_state : Type := Component.id * stack * Memory.t.
 
-Inductive state : Type :=
+Variant state : Type :=
 | PC : program_state -> state
 | CC : context_state -> state.
 
@@ -194,7 +194,7 @@ move=> ????????? /eqP ne in_ctx; rewrite !(to_partial_stackE (_ :: _)) /=.
 by rewrite eq_sym (negbTE ne) !if_same /= in_ctx; case.
 Qed.
 
-Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
+Variant partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
 | ProgramControl: forall C gps pgps mem pmem k e arg,
     (* program has control *)
     is_program_component (PC (C, pgps, pmem, k, e, arg)) ctx ->

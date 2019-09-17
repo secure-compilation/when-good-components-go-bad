@@ -447,7 +447,7 @@ Section Definability.
         now rewrite Z.add_0_r.
     Qed.
 
-    CoInductive well_formed_state (s: stack_state) (prefix suffix: trace) : CS.state -> Prop :=
+    Variant well_formed_state (s: stack_state) (prefix suffix: trace) : CS.state -> Prop :=
     | WellFormedState C stk mem k exp arg P
       of C = cur_comp s
       &  k = Kstop

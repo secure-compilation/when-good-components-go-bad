@@ -40,7 +40,7 @@ Inductive cont : Type :=
 
 Module CS.
 
-CoInductive frame : Type := Frame {
+Record frame : Type := Frame {
   f_component : Component.id;
   f_arg       : value;
   f_cont      : cont
@@ -48,7 +48,7 @@ CoInductive frame : Type := Frame {
 
 Definition stack : Type := list frame.
 
-CoInductive state : Type := State {
+Record state : Type := State {
   s_component : Component.id;
   s_stack     : stack;
   s_memory    : Memory.t;

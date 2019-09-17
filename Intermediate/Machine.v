@@ -15,12 +15,12 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Inductive register : Type :=
+Variant register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP | R_ARG.
 
 Definition label := nat.
 
-Inductive imvalue : Type :=
+Variant imvalue : Type :=
 | IInt : Z -> imvalue
 | IPtr : Pointer.t -> imvalue.
 
@@ -30,7 +30,7 @@ Definition imm_to_val (im : imvalue) : value :=
   | IPtr p => Ptr p
   end.
 
-Inductive instr :=
+Variant instr :=
 | INop : instr
 | ILabel : label -> instr
 (* register operations *)
