@@ -1696,13 +1696,13 @@ Section ThreewayMultisem3.
     rewrite (mergeable_states_merge_program _ Hmerge) in Hstep;
       try assumption.
 
-    assert (Hwfprog: well_formed_program prog) by admit.
-    assert (Hwfprog': well_formed_program prog') by admit.
-    assert (Hiface_link: prog_interface prog' = prog_interface prog) by admit.
+    assert (Hwfprog: well_formed_program prog) by now apply linking_well_formedness.
+    assert (Hwfprog': well_formed_program prog') by now apply linking_well_formedness; try rewrite -Hifacec.
+    assert (Hiface_link: prog_interface prog' = prog_interface prog) by now simpl; rewrite -Hifacec.
 
     inversion Hstep; subst;
       t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec.
-  Admitted.
+  Qed.
 End ThreewayMultisem3.
 
 (* Theorems on initial states for main simulation. *)
