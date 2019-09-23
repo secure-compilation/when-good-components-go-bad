@@ -330,3 +330,48 @@ Proof.
   case get_k: (m k)=> [v|] //=.
   case: ifP => //= pkv ; by rewrite pkv.
 Qed.
+
+Lemma mkfmap_cat {T:ordType} (S:Type) (s1 s2:seq (T*S)) :
+  (* Is it necessary ? *)
+  (* all (fun x => (mkfmap s1) x) (split s2).1  -> *)
+  (* Or *)
+  (* fdisjoint (mkfmap s1) (mkfmap s2) -> *)
+  mkfmap (s1 ++ s2) = unionm (mkfmap s1) (mkfmap s2).
+Proof.
+  (*     generalize dependent s2. *)
+  (*     induction s1 as [| a1 s1 IHs1] ; first done. *)
+
+  (*   (*   setm_union: *) *)
+  (*   (* forall (T : ordType) (S : Type) (m1 m2 : {fmap T -> S}) (k : T) (v : S), *) *)
+  (*   (* setm (unionm m1 m2) k v = unionm (setm m1 k v) m2 *) *)
+
+  (* rewrite /unionm/mkfmap.  *)
+  rewrite /unionm/mkfmap. rewrite -foldr_cat. rewrite-/mkfmap.
+  generalize dependent s2 ; induction s1 ; first done.
+  move => s2. simpl. rewrite /setm.
+  rewrite -/mkfmap.
+  (* rewrite (IHs1 s2). *)
+  (* rewrite -/setm_subproof. *)
+
+  (* rewrite -(foldr _ (foldr _ (_++_))/[mkfmap _++_]. *)
+Admitted.
+
+Lemma pmapS_filter_map : forall {aT rT: Type} (f:aT -> option rT) (s : seq aT)
+                           (default: rT), (* Not used, just here so that f is total *)
+    pmap f s = map (odflt default)
+                   (filter isSome (map f s)).
+Proof.
+  intros aT rT f s def. rewrite /pmap/odflt/oapp.
+  elim: s => //= h s IHs. case: (f h) => //= ; by rewrite IHs.
+Qed.
+
+Lemma pmap_cat : forall {aT rT: Type} (f:aT -> option rT) (s1 s2: seq aT),
+    pmap f (s1 ++ s2) = (pmap f s1) ++ (pmap f s2).
+Proof. induction s1 => s2 //=. case: (f a) => //=. by rewrite IHs1. Qed.
+
+(* Used only because simpl simplifies too much, without possibility of
+       folding back *)
+Remark pmap_cons : forall {aT rT: Type} (f:aT -> option rT) (x: aT) (s: seq aT),
+    pmap f (x::s) = oapp (cons ^~ [::]) [::] (f x)
+                        ++ pmap f s.
+Proof. intros. by rewrite -cat1s pmap_cat. Qed.

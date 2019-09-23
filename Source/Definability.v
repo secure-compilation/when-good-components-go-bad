@@ -232,60 +232,6 @@ Section Definability.
     reflexivity.
   Qed.
 
-  (* TODO relocate *)
-  Lemma nseq_add {T:Type} (n1 n2:nat) (x:T) : nseq (n1+n2) x = nseq n1 x ++ nseq n2 x.
-  Proof.
-    by elim: n1 => //= n1 IHn1 ; rewrite IHn1.
-  Qed.
-
-  (* TODO relocate *)
-  Lemma cat_app {T:Type} (l1 l2:list T) :
-    app l1 l2 = cat l1 l2.
-  Proof. by elim: l1. Qed.
-
-  (* TODO relocate *)
-  (* Coq or ssr conventions (cat/app, length/size) ? *)
-  Lemma combine_cat {A B : Type} : forall (beg1 end1:list A), forall (beg2 end2:list B),
-    size beg1 = size beg2 ->
-    (* Not useful *)
-    (* size end1 = size end2 -> *)
-    combine (beg1 ++ end1) (beg2 ++ end2) = combine beg1 beg2 ++ combine end1 end2.
-  Proof.
-    induction beg1 as [|a1 beg1' IHbeg1'] => end1 beg2 end2 Hbeg.
-    - by inversion Hbeg as [Hsize0] ; symmetry in Hsize0 ;
-        apply size0nil in Hsize0 ; subst.
-    - destruct beg2 as [| a2 beg2'] => //.
-      inversion Hbeg as [Hsize]. apply (IHbeg1' end1 _ end2) in Hsize => /=.
-        by rewrite Hsize.
-  Qed.
-
-  (* TODO relocate *)
-  Lemma mkfmap_cat {T:ordType} (S:Type) (s1 s2:seq (T*S)) :
-    (* Is it necessary ? *)
-    (* all (fun x => (mkfmap s1) x) (split s2).1  -> *)
-    (* Or *)
-    (* fdisjoint (mkfmap s1) (mkfmap s2) -> *)
-    mkfmap (s1 ++ s2) = unionm (mkfmap s1) (mkfmap s2).
-  Proof.
-(*     generalize dependent s2. *)
-(*     induction s1 as [| a1 s1 IHs1] ; first done. *)
-
-(*   (*   setm_union: *) *)
-(*   (* forall (T : ordType) (S : Type) (m1 m2 : {fmap T -> S}) (k : T) (v : S), *) *)
-(*   (* setm (unionm m1 m2) k v = unionm (setm m1 k v) m2 *) *)
-
-(* rewrite /unionm/mkfmap.  *)
-    rewrite /unionm/mkfmap. rewrite -foldr_cat. rewrite-/mkfmap.
-    generalize dependent s2 ; induction s1 ; first done.
-    move => s2. simpl. rewrite /setm.
-    rewrite -/mkfmap.
-    (* rewrite (IHs1 s2). *)
-    (* rewrite -/setm_subproof. *)
-
-    (* rewrite -(foldr _ (foldr _ (_++_))/[mkfmap _++_]. *)
-    Admitted.
-
-
   (** Gives a map of the different indexes of a component's public memory to
       bool, all initialized at false *)
   (* Definition indexes_read_init (comp: Component.interface) :  NMap bool := *)
@@ -522,10 +468,6 @@ Section Definability.
                (E_val  _ (* value *)) => in_bounds intf C index
     | _ => false
     end.
-
-  (* To relocate *)
-  Lemma rev_inj {T:Type} : injective (@rev T).
-  Proof. by apply (can_inj revK). Qed.
 
   Lemma prefill_read_aux_only_assign (C : Component.id) (comp : Component.interface) (suffix : trace):
     all (well_formed_event intf) suffix ->
@@ -848,13 +790,6 @@ Section Definability.
     by rewrite suffixes_of_seq_cons /= IHt Ceq.
   Qed.
 
-  (* To relocate *)
-  Lemma all_subseq {T:eqType} (s ss : seq T) (a : pred T) :
-    all a s -> subseq ss s -> all a ss.
-  Proof.
-    by move => /all_filterP <- ; rewrite subseq_filter => /andP [? _].
-  Qed.
-
   Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace) :
     comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
   Proof. apply: filter_cat. Qed.
@@ -1087,7 +1022,7 @@ Section Definability.
          + if C == cur_comp_of_event e
            then 1 else 0) % Z.
     Proof.
-      Print counter_value. rewrite /counter_value.
+      rewrite /counter_value.
       rewrite filter_cat app_length. simpl.
       rewrite Nat2Z.inj_add.
       now destruct (_ == _) ; destruct e as [| |? ? ? C' ]=> //= ; case: (_ == _) => //.
@@ -1134,27 +1069,6 @@ Section Definability.
       &  well_formed_memory prefix mem
       &  valid_procedure C P
       :  well_formed_state s prefix suffix [CState C, stk, mem, k, exp, arg].
-
-    (* FG : TODO relocate *)
-    Lemma pmapS_filter_map : forall {aT rT: Type} (f:aT -> option rT) (s : seq aT)
-                               (default: rT), (* Not used, just here so that f is total *)
-        pmap f s = map (odflt default)
-                       (filter isSome (map f s)).
-    Proof.
-      intros aT rT f s def. rewrite /pmap/odflt/oapp.
-      elim: s => //= h s IHs. case: (f h) => //= ; by rewrite IHs.
-    Qed.
-
-    Lemma pmap_cat : forall {aT rT: Type} (f:aT -> option rT) (s1 s2: seq aT),
-        pmap f (s1 ++ s2) = (pmap f s1) ++ (pmap f s2).
-    Proof. induction s1 => s2 //=. case: (f a) => //=. by rewrite IHs1. Qed.
-
-    (* Used only because simpl simplifies too much, without possibility of
-       folding back *)
-    Remark pmap_cons : forall {aT rT: Type} (f:aT -> option rT) (x: aT) (s: seq aT),
-        pmap f (x::s) = oapp (cons ^~ []) [] (f x)
-                            ++ pmap f s.
-    Proof. intros. by rewrite -cat1s pmap_cat. Qed.
 
     (* Maybe polish a bit the definition of the lemma to have more implicit arguments : *)
     (* Arguments C, comp, sub_suffix, exp_prefill are implicit *)
