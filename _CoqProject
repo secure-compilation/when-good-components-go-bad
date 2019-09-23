@@ -32,6 +32,7 @@ Source/GlobalEnv.v
 Source/CS.v
 Source/PS.v
 Source/Definability.v
+Source/DefinabilityExamples.v
 Source/Examples/Helper.v
 Source/Examples/Identity.v
 Source/Examples/Increment.v
