@@ -462,7 +462,7 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
 
 Close Scope monad_scope.
 
-(* equivalance between relational and executable specification *)
+(* equivalence between relational and executable specification *)
 
 Theorem eval_step_complete:
   forall G st t st',
