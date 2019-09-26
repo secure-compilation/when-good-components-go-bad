@@ -625,6 +625,46 @@ Definition reserve_component_blocks p C Cmem procs_code
   let Centrypoints := mkfmap (pmap map_entrypoint (zip procs bs)) in
   (Cmem', Cprocs, Centrypoints).
 
+Definition is_main_proc p comp_id proc_id :=
+  match prog_main p with
+  | Some main_proc_id =>
+    (Component.main =? comp_id) && (main_proc_id =? proc_id)
+  | None => false
+  end.
+
+(* Lemma is_main_proc_same_interface p p' comp_id proc_id : *)
+(*   well_formed_program p -> *)
+(*   well_formed_program p' -> *)
+(*   prog_interface p = prog_interface p' -> *)
+(*   is_main_proc p comp_id proc_id = is_main_proc p' comp_id proc_id. *)
+(* Proof. *)
+(*   intros Hwfp Hwfp' Hiface. *)
+(*   assert (prog_main p <-> prog_main p'). *)
+(*   { *)
+(*     split; intros H. *)
+(*     - apply wfprog_main_component. *)
+(*       assumption. *)
+(*       apply wfprog_main_component in Hwfp. *)
+(*       rewrite Hiface in Hwfp. *)
+(*       now apply Hwfp in H. *)
+(*     - apply wfprog_main_component. *)
+(*       assumption. *)
+(*       apply wfprog_main_component in Hwfp'. *)
+(*       rewrite -Hiface in Hwfp'. *)
+(*       now apply Hwfp' in H. *)
+(*   } *)
+
+(*   unfold is_main_proc. *)
+(*   destruct (prog_main p) eqn:Hmain, (prog_main p') eqn:Hmain'; *)
+(*     destruct Hwfp as [_ _ _ _ _ Hex _]; *)
+(*     destruct Hwfp' as [_ _ _ _ _ Hex' _]; *)
+(*     try now destruct (Hex _ Hmain); destruct (Hex' _ Hmain'); subst. *)
+  
+(*     try now auto. *)
+
+
+
+
 Lemma reserve_component_blocks_lemma p p' C Cmem Cmem' procs_code procs_code' :
   well_formed_program p ->
   well_formed_program p' ->
@@ -646,41 +686,25 @@ Proof.
     admit.
   }
   
-  assert (Hlen: length procs_code = length procs_code').
-  { clear -Hunzip.
-    generalize dependent procs_code'.
-    induction procs_code as [|? ? IH]; destruct procs_code'; try now auto.
-    intros Hunzip. inversion Hunzip. simpl.
-    now rewrite (IH procs_code').
-  }
+  (* assert (Hlen: length procs_code = length procs_code'). *)
+  (* { clear -Hunzip. *)
+  (*   generalize dependent procs_code'. *)
+  (*   induction procs_code as [|? ? IH]; destruct procs_code'; try now auto. *)
+  (*   intros Hunzip. inversion Hunzip. simpl. *)
+  (*   now rewrite (IH procs_code'). *)
+  (* } *)
 
   unfold reserve_component_blocks.
+          unfold ComponentMemory.prealloc.
   
-  rewrite -Hiface -Hlen -Hunzip.
+  rewrite -Hiface (* -Hlen *) (* -Hunzip *).
   simpl.
 
   destruct (ComponentMemoryExtra.reserve_blocks Cmem (length procs_code)) as [t l] eqn:H1;
-    destruct (ComponentMemoryExtra.reserve_blocks Cmem' (length procs_code)) as [t' l'] eqn:H2;
+    destruct (ComponentMemoryExtra.reserve_blocks Cmem' (length procs_code')) as [t' l'] eqn:H2;
     rewrite H1 H2.
 
-  (* before simplifying, I need to state something about the relation between l and l' *)
-  (* assert (Hll' : l = l'). *)
-  (* { remember (length procs_code) as n. *)
-  (*   clear -H1 H2. *)
-  (*   generalize dependent l'. *)
-  (*   generalize dependent l. *)
-  (*   induction n. *)
-  (*   - now destruct l, l'. *)
-  (*   - intros l H1 l' H2. *)
-  (*     destruct l as [| b l]. *)
-  (*     + Check ComponentMemoryExtra.reserve_blocks. *)
-  (*       From Hammer Require Import Hammer Reconstr. *)
-  (*       ycrush. *)
-  (*     + sauto. rewrite -H. *)
-  (*       admit. *)
-  (* } *)
-  assert (Hll' : length l = length l') by admit.
-
+  (* assert (Hll' : length l = length l') by admit. *)
 
   assert (Hsimpl: forall A B C (x : A) (y : B) (z : C), (x, y, z).2 = z) by auto.
   rewrite 2!Hsimpl; clear Hsimpl.
@@ -701,10 +725,13 @@ Proof.
                                      end && (i0 =? P) then Some (P, b) else None
                 | None => None
                 end).
-    clear -Hll' Hiface.
-    revert l l' Hll'.
+    clear (* -Hll' *) Hiface.
+    revert l l' (* Hll' *).
     induction procs_code.
-    + now destruct l, l'.
+    + destruct l, l';
+        try now destruct procs_code'.
+      * simpl. destruct procs_code'. reflexivity.
+        destruct p0.
     + destruct l, l'; try now auto.
       intros Hll'.
       simpl. unfold oapp.

@@ -5,7 +5,7 @@ Require Import Lib.Monads.
 
 Import Intermediate.
 
-From mathcomp Require Import ssreflect ssrfun.
+From mathcomp Require Import ssreflect ssrfun seq.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -168,17 +168,42 @@ Proof.
     by rewrite Hcase.
 Qed.
 
-  Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
+  Lemma genv_entrypoints_interface_some p p' C P b pc :
     (* Pointer.component pc \in domm (prog_interface p) -> *)
     (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *)
+    Pointer.component pc <> C ->
+    imported_procedure (genv_interface (prepare_global_env p')) (Pointer.component pc) C P ->
     well_formed_program p ->
     well_formed_program p' ->
+    closed_program p ->
+    closed_program p' ->
     prog_interface p = prog_interface p' ->
     EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
   exists b',
     EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
   Proof.
-    move=> Hwf Hwf' Hiface.
+    move=> Hpc Himported Hwf Hwf' Hclosed Hclosed' Hiface.
+
+    destruct Hclosed' as [? _].
+    unfold closed_interface in cprog_closed_interface0.
+    apply cprog_closed_interface0 in Himported.
+    unfold exported_procedure in Himported.
+    destruct Himported as [CI [H1 H2]].
+    assert (H4 := H2).
+    apply wfprog_exported_procedures_existence with (C := C) (p := p) in H2.
+    destruct H2 as [Cprocs [Pcode [H2 H3]]].
+    apply wfprog_exported_procedures_existence with (C := C) (p := p') in H4.
+    destruct H4 as [Cprocs' [Pcode' [H2' H3']]].
+
+    (* destruct Himported as [[exp imp] [Himp1 Himp2]]. *)
+    (* destruct pc as [[cid bid] off]. *)
+    (* simpl in *. *)
+    (* unfold Component.is_importing in Himp2. simpl in Himp2. *)
+    (* unfold Program.has_component in Himp1. *)
+    (* pose proof (has_component_in_domm_prog_interface Himp1) as Hhas_comp. *)
+    (* assert (prog_interface p cid = prog_interface p' cid) by congruence. *)
+    (* rewrite Himp1 in H. *)
+
     unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
     (* move=> H; exists b; rewrite -H; clear H. *)
     unfold prepare_procedures_initial_memory_aux.
@@ -197,23 +222,15 @@ Qed.
         rewrite -2!mem_domm.
         now rewrite -Hbuf Hiface Hbuf'.
       }
-      destruct (prog_buffers p C) eqn:H1.
+      destruct (prog_buffers p C) eqn:H8.
       + assert (H1': prog_buffers p' C) by now apply Heq1.
-        destruct (prog_buffers p' C) eqn:H1''; try now auto.
-        assert (Heq2: prog_procedures p C <-> prog_procedures p' C).
-        {
-          rewrite -2!mem_domm.
-          now rewrite -Hproc Hiface Hproc'.
-        }
-        destruct (prog_procedures p C) eqn:H2.
-        * assert (H2': prog_procedures p' C) by now apply Heq2.
-          destruct (prog_procedures p' C); try now auto.
-          simpl in *.
+        destruct (prog_buffers p' C) eqn:H8''; try now auto.
+        rewrite H2. rewrite H2'. simpl.
           move=> Hreserve.
           apply /dommP.
+          unfold reserve_component_blocks in Hreserve.
           erewrite reserve_component_blocks_lemma with (p' := p); eauto.
           apply /dommP. eexists; eauto.
-        * move=> ?. by [].
       + assert (H1': prog_buffers p' C = None).
         {
           destruct (prog_buffers p' C); simpl in *.
