@@ -110,10 +110,7 @@ Proof.
   intros p Hwf Hdomm.
   unfold prog_main_block. (* Enable automatic rewrite on destruct. *)
   destruct (prog_main p) as [main |] eqn:Hmain'.
-  - (* RB: TODO: Report bug.
-       Below, replacing BUGGY with an anonymous pattern triggers:
-       Error: Anomaly "make_elim_branch_assumptions." Please report at http://coq.inria.fr/bugs/.
-       This does not happen in other places. *)
+  - (* https://github.com/coq/coq/issues/5129 *)
     inversion Hwf as [BUGGY _ _ _ _ _ [_ Hcontra]]; clear BUGGY.
     rewrite Hmain' in Hcontra. specialize (Hcontra (eq_refl _)).
     rewrite Hcontra in Hdomm.
