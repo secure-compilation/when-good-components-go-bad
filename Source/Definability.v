@@ -14,7 +14,7 @@ Require Import Source.GlobalEnv.
 Require Import Source.CS.
 
 From Coq Require Import ssreflect ssrfun ssrbool.
-From mathcomp Require Import eqtype seq.
+From mathcomp Require Import eqtype seq path.
 From mathcomp Require ssrnat.
 
 Import Source.
@@ -232,6 +232,24 @@ Section Definability.
     reflexivity.
   Qed.
 
+  (** Before back-translating the events themselves directly into expressions,
+      we may need to add assignments expressions.
+
+      When a call or a return is encountered in the program, this means that the
+      component is giving its turn to another one, so recreating the fitting
+      expression can be done with only the corresponding event and its data.
+
+      This is not as simple when dereferencing another component's memory.
+      Indeed, recreating directly an expression triggering a load event would
+      dereference a part of memory that has not necessarily been set to the
+      right value beforehand and the load events would generally yield an
+      undefined value.
+
+      Thus, we need to initialize the public memory ahead of time, while it's
+      still the turn of the component owning memory. This is done by inserting a
+
+   *)
+
   (** Gives a map of the different indexes of a component's public memory to
       bool, all initialized at false *)
   (* Definition indexes_read_init (comp: Component.interface) :  NMap bool := *)
@@ -323,21 +341,25 @@ Section Definability.
   Definition assign_public off val :=
     E_assign (E_binop Add (E_local Block.pub) (E_val (Int off))) (E_val val).
 
-  (** Gives a list of assignement depending on the ELoad events in the future of
+    (** Gives a list of assignement depending on the ELoad events in the future of
       the trace (accumulated)
       This list is in reverse order since append costs more than cons
+      (actually the order doesn't matter since we just want to initialize memory
+      with all these expressions)
+      (well maybe this matters because we may have some malformed events, so we
+      want to still have the well-formed before these)
    *)
-  Fixpoint prefill_read_aux
+  Fixpoint assignment_values_fun
+           {T:Type} (f: (Block.offset * value) -> T)
            (C: Component.id)
            (suffix: trace)
-           (acc:list expr)
-           (indexes_read:indexes) : list expr:=
-
+           (acc :list T)
+           (indexes_read:indexes) : list T :=
     let stop := acc in
     match suffix with
     | [] => stop            (* if no further events, give back exprs created *)
     | ev :: suffix' =>
-      let keep_on := (prefill_read_aux C suffix' acc indexes_read) in
+      let keep_on := (assignment_values_fun f C suffix' acc indexes_read) in
       match ev with
       | ELoad Cdrf off val Cown =>   (* component is read *)
         (* kinda useless check since the trace is well formed, we shouldn't
@@ -345,23 +367,24 @@ Section Definability.
         if Cown == C then
           if (lookup_index indexes_read off)
           then keep_on (* already read so go on *)
-          else prefill_read_aux C suffix' ((assign_public off val) :: acc)
-                                (add_index indexes_read off)
+          else assignment_values_fun f C suffix' ((f(off, val)) :: acc)
+                                     (add_index indexes_read off)
         else keep_on
       (* if the component is given turn again, give back exprs created *)
       | ERet _(* C *) _ _  | ECall _(* C *) _ _ _  => stop
       end
     end.
 
-  Fixpoint prefill_read_aux_ntr
+  Fixpoint assignment_values_fun_ntr
+           {T:Type} (f: (Block.offset * value) -> T )
            (C: Component.id)
            (suffix: trace)
-           (indexes_read:indexes) : list expr:=
+           (indexes_read:indexes) : list T :=
     let stop := [] in
     match suffix with
     | [] => stop            (* if no further events, give back exprs created *)
     | ev :: suffix' =>
-      let keep_on :=  (prefill_read_aux_ntr C suffix' indexes_read) in
+      let keep_on :=  (assignment_values_fun_ntr f C suffix' indexes_read) in
       match ev with
       | ELoad Cdrf off val Cown =>   (* component is read *)
         (* kinda useless check since the trace is well formed, we shouldn't
@@ -369,11 +392,10 @@ Section Definability.
         if Cown == C then
           if (lookup_index indexes_read off)
           then keep_on (* already read so go on *)
-          else
-            cons (assign_public off val)
-                 (prefill_read_aux_ntr C
-                                       suffix'
-                                       (add_index indexes_read off))
+          else (f (off, val)) ::
+                              (assignment_values_fun_ntr f C
+                                                     suffix'
+                                                     (add_index indexes_read off))
         else keep_on
       (* if the component is given turn again, give back exprs created *)
       | ERet _(* C *) _ _  | ECall _(* C *) _ _ _  => stop
@@ -381,6 +403,10 @@ Section Definability.
     end.
 
 
+  Definition prefill_read_aux := assignment_values_fun (prod_curry assign_public).
+  Definition prefill_read_aux_ntr := assignment_values_fun_ntr (prod_curry assign_public).
+
+  Definition values_read_of_trace := assignment_values_fun (fun x => x).
   (** Can be used to simplify (or even solve) a goal consisting of a (boolean)
       property on a prefill_read_aux(_ntr)-constructed expression *)
   Tactic Notation "destruct_and_simpl" constr(term) := destruct term eqn:?; simpl ; subst ; try done.
@@ -410,10 +436,10 @@ Section Definability.
   Proof.
     induction suffix as [| ev suffix IHsuffix] ; intros C comp acc indexes res Hintf.
     - simpl.  exists [] ; subst ;  split ; done.
-    - rewrite /prefill_read_aux/prefill_read_aux_ntr ;
-        elim: ev => [ Ccur proc arg Cnext | Cret ret Cnext  | CSrc o v CTrg ] ;
-                     subst ; try (exists [] ; split ; done).
-      rewrite -/prefill_read_aux -/prefill_read_aux_ntr.
+    - elim: ev => [ Ccur proc arg Cnext | Cret ret Cnext  | CSrc o v CTrg ] ;
+                   subst ; try (exists [] ; split ; done).
+      rewrite/prefill_read_aux/prefill_read_aux_ntr/=.
+
       (* simplify_prefill_read_aux. *)
       (* repeat match goal with *)
       (*        | |- _ -> match ?term with | _ => _ *)
@@ -433,7 +459,7 @@ Section Definability.
           try by apply (IHsuffix C comp).
       + (* TODO surely can be simplified *)
         set indexes_upd := add_index indexes o.
-        set res_IH :=prefill_read_aux C suffix (assign_public o v :: acc) indexes_upd.
+        set res_IH := prefill_read_aux C suffix (assign_public o v :: acc) indexes_upd.
         set res'_IH := prefill_read_aux_ntr C suffix indexes_upd.
         set acc_IH := (assign_public o v :: acc).
         specialize (IHsuffix C comp acc_IH indexes_upd res_IH Hintf).
@@ -485,7 +511,8 @@ Section Definability.
     generalize dependent indexes_read_init.
     (* move => indexes ; elim:suffix => [|ev suffix] //=. *)
     generalize dependent C ; generalize dependent comp.
-    induction suffix  as [| ev suffix IHsuffix ] => comp C Hintf indexes //=.
+    induction suffix  as [| ev suffix IHsuffix ] => comp C Hintf indexes //.
+    rewrite /prefill_read_aux_ntr/=.
 
     case: ev Hwf_evs => [ Ccur proc arg Cnext | Cret ret Cnext  | CSrc o v CTrg ] => //.
     move => /= /andP[] /andP[] /andP[] Hcomps_diff Htransf Hbounds Hsuffix.
@@ -514,8 +541,8 @@ Section Definability.
     (* elim/prefill_read_aux_ntr_ind:(prefill_read_aux_ntr C suffix indexes) => *)
     (* [| new_ev suffix' IHsuffix] //=. *)
 
-    elim:suffix indexes Hwf_evs =>
-    [| new_ev suffix IHsuffix] indexes //=.
+    elim:suffix indexes Hwf_evs => [| new_ev suffix IHsuffix] indexes //.
+    rewrite /prefill_read_aux_ntr/=.
     move => /= /andP[] Hwf_e Hsuffix.
     simplify_prefill_read_aux ; try by eapply IHsuffix.
     move:Heqb => /eqP ? ; subst.
@@ -560,8 +587,8 @@ Section Definability.
     rewrite -Hequiv all_rev ; rewrite -Hequiv in Hassign ; clear Hequiv.
 
     generalize dependent indexes_read_init.
-    induction suffix as [| ev sfx IHsfx] ; rewrite (* /values_are_integers *)/prefill_read_aux_ntr ; intro indexes => //.
-    (* rewrite -/prefill_read_aux_ntr. *) (* more clear now *)
+    induction suffix as [| ev sfx IHsfx] => // indexes ;
+      rewrite /prefill_read_aux_ntr/=.
     destruct ev as [ | | CSrc o v CTrg ] => //. rewrite -/prefill_read_aux_ntr.
     (* Load event *)
     (* Getting rid of the trivial cases *)
@@ -588,7 +615,7 @@ Section Definability.
     generalize dependent indexes_read_init ;
       induction suffix ; intro indexes ; first (by []).
     move:Htransf_sfx => /andP[Htransf_a Htransf_sfx] /=.
-    (* apply IHsuffix in Htransf_sfx. *)
+    (* apply IHsuffix in Htransf_sfx. *) rewrite /prefill_read_aux_ntr/=.
     simplify_prefill_read_aux ; try by apply (IHsuffix Htransf_sfx).
     simpl in Htransf_a. apply/andP ; split ; first now apply Htransf_a.
       by apply (IHsuffix Htransf_sfx).
@@ -602,11 +629,11 @@ Section Definability.
        None is never returned by this match, but can be returned by
        E_seq_of_list_expr on an empty list of expressions. *)
     match intf C with
-    | Some comp => E_seq_of_list_expr (rev (prefill_read_aux
-                                                  C
-                                                  suffix
-                                                  []
-                                                  indexes_read_init))
+    | Some _ => E_seq_of_list_expr (rev (prefill_read_aux
+                                          C
+                                          suffix
+                                          []
+                                          indexes_read_init))
     | None => None
     end.
 
@@ -841,11 +868,34 @@ Section Definability.
     [apply: find_procedures_of_trace_main|apply: find_procedures_of_trace_exp].
   Qed.
 
-  (* TODO modify to accomodate to public buffers (plus, what is happening ? no static buffer is allocated ? where is the counter stored ?) *)
+  Definition public_buffer_of_trace C Cintf t: (* mapm *) seq (Block.offset * value) :=
+    let rel_indexes := (fun (p1:(Z*_)) (p2:(Z*_)) => Z.leb (fst p1) (fst p2)) in
+    let loaded_values := sort rel_indexes
+                           (values_read_of_trace
+                                   C (comp_subtrace C t) [::] indexes_read_init) in
+    let buffer_size := Component.public_buffer_size Cintf in
+    let values := (repeat Undef buffer_size) in
+    let indexes := map Z.of_nat (iota 0 buffer_size) in
+    (* let pub_buffer := mkfmapf (fun _ => Undef) indexes in *)
+    let pub_buffer := zip indexes values in
+
+(*   set_nth x0 s i y == s where item i has been changed to y; if s does not  *)
+(*                       have an item i, it is first padded with copies of x0 *)
+(*                       to size i+1.                                         *)
+
+  (* foldr (fun kv m => setm m kv.1 kv.2) pub_buffer loaded_values *)
+    foldr (fun kv m => set_nth (kv.1(* don't really know how to put right indexes but it doesn't matter since the default isn't supposed to be used *),
+                             Undef) m (Z.to_nat kv.1) kv) pub_buffer loaded_values
+  .
+
   Definition program_of_trace (t: trace) : program :=
     {| prog_interface  := intf;
        prog_procedures := procedures_of_trace t;
-       prog_buffers    := mapm (fun Cintf => (inl (Component.public_buffer_size Cintf) , inr [Int 0])) intf |}.
+       prog_buffers    := mapim (fun Cid Cintf => (
+                                     (* public buffer *)
+                                     inr (unzip2 (public_buffer_of_trace Cid Cintf t)),
+                                     (* private buffer *)
+                                     inr [Int 0])) intf |}.
 
   (** To prove that [program_of_trace] is correct, we need to describe how the
       state of the program evolves as it emits events from the translated trace.
@@ -946,15 +996,17 @@ Section Definability.
       case: e He => [ ? ? ? ? | ? ? ? | ? ? ? ?] ; try by eauto.
       move => /andP => [[? ?]] ;
       case: (_==_) ; by eauto.
-    - by rewrite domm_map.
+    - (* by rewrite domm_map. *) admit.
     - split; first last.
       (* Required local buffers *)
       move=> C; rewrite -mem_domm => /dommP [CI C_CI].
-      rewrite /has_required_local_buffers /= mapmE C_CI /=.
-      eexists; eauto=> /=; omega.
-      (* valid_buffers *)
-      rewrite/valid_buffers/program_of_trace -eq_fmap /= => Cid ; rewrite !mapmE.
-        by case: (intf Cid) => //.
+      rewrite /has_required_local_buffers /= (* mapmE C_CI /= *).
+      (* eexists; eauto=> /=; omega. *)
+      (* (* valid_buffers *) *)
+      (* rewrite/valid_buffers/program_of_trace -eq_fmap /= => Cid ; rewrite !mapmE. *)
+      (*   by case: (intf Cid) => //. *)
+      + admit.
+      + admit.
     - rewrite /prog_main find_procedures_of_trace //=.
       + split; first reflexivity.
         intros _.
@@ -962,7 +1014,7 @@ Section Definability.
         * apply /dommP. exists mainP. assumption.
         * discriminate.
       + by left.
-  Qed.
+  Admitted.
 
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).
@@ -1472,8 +1524,9 @@ Section Definability.
       unfold component_buffer, Memory.load.
       simpl. repeat (rewrite mapmE; simpl); rewrite mem_domm.
       case HCint: (intf C) => [Cint|] //=.
-      by rewrite ComponentMemory.load_prealloc /=.
-    Qed.
+      (* by rewrite ComponentMemory.load_prealloc /=. *)
+      admit.
+    Admitted.
 
 End WithTrace.
 End Definability.
