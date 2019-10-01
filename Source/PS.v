@@ -713,6 +713,7 @@ move=> {IH} scs1 scs1a scs1a' step1a IH scs2 star2a part step1a' in_prog1.
 case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
 move=> scs2a' step2a' part'.
 have star2a' : Star (CS.sem (program_link p p2)) scs2a' E0 scs2a.
+  (* Case analysis. *)
   elim/star_E0_ind': scs2 scs2a / star2a step2b {IH part} step2a'.
     move=> ? /CS.eval_kstep_correct H.
     by move/CS.eval_kstep_correct; rewrite H.
