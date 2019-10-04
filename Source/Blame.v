@@ -26,9 +26,11 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Module PS.
+Module Blame.
 
 Import Source.
+
+Section PS.
 
 Definition stack : Type := list (Component.id * option (value * CS.cont)).
 
@@ -982,7 +984,7 @@ Proof.
       in Hini1.
     rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
       in Hini2.
-    pose proof PS.partialize_partition
+    pose proof partialize_partition
          well_formed_Cs well_formed_P' well_formed_p
          Hsame_iface1 (linkable_sym Hlinkable_P'_Cs) HP'Cs_closed Hclosed_p_Cs
          Hini1 Hini2.
@@ -1017,7 +1019,7 @@ Proof.
     rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
       in HNostep1 Hfinal1.
 
-     pose proof PS.parallel_exec
+     pose proof parallel_exec
        well_formed_Cs well_formed_P' well_formed_p
        (linkable_sym Hlinkable_p_Cs)
        HP'Cs_closed Hclosed_p_Cs
@@ -1028,13 +1030,13 @@ Proof.
      case: (boolP (CS.s_component sfin2 \in domm (Source.prog_interface p)))=> [Hparallel1|/Hparallel Hparallel2];
        [ rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
            in Hini2;
-         exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1)
+         exact (blame_last_comp_star Hini2 HStar2 Hparallel1)
        | easy ].
   - simpl in Hnot_wrong'. tauto.
   - simpl. destruct tm'.
     + left. exists (Goes_wrong []). simpl. repeat rewrite E0_right. reflexivity.
     + right.
-     pose proof PS.parallel_exec'
+     pose proof parallel_exec'
        well_formed_Cs well_formed_P' well_formed_p
        (linkable_sym Hlinkable_p_Cs)
        HP'Cs_closed Hclosed_p_Cs
@@ -1043,7 +1045,9 @@ Proof.
        HStar1 HStar2 HNostep2
        as Hparallel. unfold undef_in.
        rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs) in Hini2;
-       eapply PS.blame_last_comp_star; try eassumption. exact Hini2.
+       eapply blame_last_comp_star; try eassumption. exact Hini2.
 Qed.
 
 End PS.
+
+End Blame.

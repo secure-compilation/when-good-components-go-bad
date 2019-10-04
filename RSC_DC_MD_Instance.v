@@ -3,7 +3,7 @@ Require Import RSC_DC_MD_Sigs.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
-Require Import Source.PS.
+Require Import Source.Blame.
 Require Import Intermediate.Machine.
 Require Import Intermediate.Recombination.
 Require Import S2I.Compiler.
@@ -49,7 +49,7 @@ Module Source_Instance <: Source_Sig.
   End CS.
 
   Definition blame_program :=
-    @Source.PS.PS.blame_program.
+    @Source.Blame.Blame.blame_program.
 
 End Source_Instance.
 

@@ -30,7 +30,7 @@ Extraction/Definitions.v
 Source/Language.v
 Source/GlobalEnv.v
 Source/CS.v
-Source/PS.v
+Source/Blame.v
 Source/Definability.v
 Source/Examples/Helper.v
 Source/Examples/Identity.v
