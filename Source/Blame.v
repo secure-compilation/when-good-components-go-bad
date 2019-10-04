@@ -26,6 +26,25 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
+(* The proof of the blame theorem relies principally on a number of auxiliary
+   "parallel execution" results, which spell out some properties of interest
+   that relate two separate executions that produce the same trace (at least up
+   to a given point). The two programs that produce the pairs of executions use
+   a single "program", shared between the two; each has its own "context". The
+   results or interest are based on mostly standard simulation techniques, and
+   are largely language-independent for a large class of reasonable languages.
+   As a technical device, these proofs observe partial execution in terms of a
+   "partial semantics" which hides the context part of the complete program and
+   allows more local reasoning.
+
+   There are many parallels between the kind of simulations used here and those
+   employed to prove the "recombination" of two programs with related executions
+   into a third, also related execution at the intermediate level. The use of a
+   partial semantics in this proof is not essential and actually complicates
+   reasoning, even though redoing the proof in a style closer to the proofs on
+   the intermediate language would not be particularly advantageous at the
+   moment. *)
+
 Module Blame.
 
 Import Source.
