@@ -15,7 +15,7 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Variant register : Type :=
+Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP | R_ARG.
 
 Definition label := nat.
