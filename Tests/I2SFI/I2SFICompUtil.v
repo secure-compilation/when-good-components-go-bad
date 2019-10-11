@@ -7,7 +7,9 @@ Require Import Tests.CompTestUtil.
 Require Import Tests.TargetSFI.SFITestUtil.
 
 From QuickChick Require Import QuickChick.
-Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
+Import QcDefaultNotation QcNotation.
+Open Scope qc_scope.
+Open Scope string_scope.
 
 Instance show_albl : Show AbstractMachine.label :=
   {|

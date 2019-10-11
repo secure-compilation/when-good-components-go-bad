@@ -21,7 +21,9 @@ Require Import extructures.ord.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 
 From QuickChick Require Import QuickChick.
-Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
+Import QcDefaultNotation QcNotation.
+Open Scope qc_scope.
+Open Scope string_scope.
 
 Definition newline := String "010" ""%string.
 
@@ -227,4 +229,3 @@ Fixpoint sublist (l1 l2 : CompCert.Events.trace) : bool :=
          else false
        end
     end.
-
