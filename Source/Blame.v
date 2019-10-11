@@ -26,32 +26,39 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Module PS.
+(* The proof of the blame theorem relies principally on a number of auxiliary
+   "parallel execution" results, which spell out some properties of interest
+   that relate two separate executions that produce the same trace (at least up
+   to a given point). The two programs that produce the pairs of executions use
+   a single "program", shared between the two; each has its own "context". The
+   results or interest are based on mostly standard simulation techniques, and
+   are largely language-independent for a large class of reasonable languages.
+   As a technical device, these proofs observe partial execution in terms of a
+   "partial semantics" which hides the context part of the complete program and
+   allows more local reasoning.
+
+   There are many parallels between the kind of simulations used here and those
+   employed to prove the "recombination" of two programs with related executions
+   into a third, also related execution at the intermediate level. The use of a
+   partial semantics in this proof is not essential and actually complicates
+   reasoning, even though redoing the proof in a style closer to the proofs on
+   the intermediate language would not be particularly advantageous at the
+   moment. *)
+
+Module Blame.
 
 Import Source.
+
+Section PS.
 
 Definition stack : Type := list (Component.id * option (value * CS.cont)).
 
 Definition program_state : Type := Component.id * stack * Memory.t * CS.cont * expr * value.
 Definition context_state : Type := Component.id * stack * Memory.t.
 
-Inductive state : Type :=
+Variant state : Type :=
 | PC : program_state -> state
 | CC : context_state -> state.
-
-Ltac unfold_state st :=
-  let C := fresh "C" in
-  let pgps := fresh "pgps" in
-  let pmem := fresh "pmem" in
-  let k := fresh "k" in
-  let e := fresh "e" in
-  let arg := fresh "arg" in
-  destruct st as [[[[[[C pgps] pmem] k] e] arg] | [[C pgps] pmem]].
-
-Ltac unfold_states :=
-  repeat match goal with
-         | st: state |- _ => unfold_state st
-         end.
 
 Definition s_component (sps: state) : Component.id :=
   match sps with
@@ -208,7 +215,7 @@ move=> ????????? /eqP ne in_ctx; rewrite !(to_partial_stackE (_ :: _)) /=.
 by rewrite eq_sym (negbTE ne) !if_same /= in_ctx; case.
 Qed.
 
-Inductive partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
+Variant partial_state (ctx: Program.interface) : CS.state -> PS.state -> Prop :=
 | ProgramControl: forall C gps pgps mem pmem k e arg,
     (* program has control *)
     is_program_component (PC (C, pgps, pmem, k, e, arg)) ctx ->
@@ -727,6 +734,7 @@ move=> {IH} scs1 scs1a scs1a' step1a IH scs2 star2a part step1a' in_prog1.
 case: (parallel_concrete wf wf1 wf2 link clos int1 int2 part in_prog1 step1a).
 move=> scs2a' step2a' part'.
 have star2a' : Star (CS.sem (program_link p p2)) scs2a' E0 scs2a.
+  (* Case analysis. *)
   elim/star_E0_ind': scs2 scs2a / star2a step2b {IH part} step2a'.
     move=> ? /CS.eval_kstep_correct H.
     by move/CS.eval_kstep_correct; rewrite H.
@@ -995,7 +1003,7 @@ Proof.
       in Hini1.
     rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
       in Hini2.
-    pose proof PS.partialize_partition
+    pose proof partialize_partition
          well_formed_Cs well_formed_P' well_formed_p
          Hsame_iface1 (linkable_sym Hlinkable_P'_Cs) HP'Cs_closed Hclosed_p_Cs
          Hini1 Hini2.
@@ -1030,7 +1038,7 @@ Proof.
     rewrite (Source.link_sym well_formed_P' well_formed_Cs Hlinkable_P'_Cs)
       in HNostep1 Hfinal1.
 
-     pose proof PS.parallel_exec
+     pose proof parallel_exec
        well_formed_Cs well_formed_P' well_formed_p
        (linkable_sym Hlinkable_p_Cs)
        HP'Cs_closed Hclosed_p_Cs
@@ -1041,13 +1049,13 @@ Proof.
      case: (boolP (CS.s_component sfin2 \in domm (Source.prog_interface p)))=> [Hparallel1|/Hparallel Hparallel2];
        [ rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs)
            in Hini2;
-         exact (PS.blame_last_comp_star Hini2 HStar2 Hparallel1)
+         exact (blame_last_comp_star Hini2 HStar2 Hparallel1)
        | easy ].
   - simpl in Hnot_wrong'. tauto.
   - simpl. destruct tm'.
     + left. exists (Goes_wrong []). simpl. repeat rewrite E0_right. reflexivity.
     + right.
-     pose proof PS.parallel_exec'
+     pose proof parallel_exec'
        well_formed_Cs well_formed_P' well_formed_p
        (linkable_sym Hlinkable_p_Cs)
        HP'Cs_closed Hclosed_p_Cs
@@ -1056,7 +1064,9 @@ Proof.
        HStar1 HStar2 HNostep2
        as Hparallel. unfold undef_in.
        rewrite (Source.link_sym well_formed_p well_formed_Cs Hlinkable_p_Cs) in Hini2;
-       eapply PS.blame_last_comp_star; try eassumption. exact Hini2.
+       eapply blame_last_comp_star; try eassumption. exact Hini2.
 Qed.
 
 End PS.
+
+End Blame.

@@ -15,6 +15,12 @@ Definition elementsm {A: Type} : NMap A -> list (nat * A) := @FMap.fmval nat_ord
 
 (* RB: TODO: These lemmas, with their clean proofs, probably belong in CoqUtils. *)
 
+Lemma mapm_empty: forall (T : ordType) (S S' : Type) (f : S -> S'),
+  mapm f (@emptym T S) = emptym.
+Proof.
+    by move => T S S' f; apply /eq_fmap => n; rewrite emptymE.
+Qed.
+
 Lemma mapm_unionm (T T' : Type) (m1 m2 : NMap T) (f : T -> T') :
   mapm f (unionm m1 m2) = unionm (mapm f m1) (mapm f m2).
 Proof.
