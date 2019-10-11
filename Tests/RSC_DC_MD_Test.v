@@ -26,7 +26,9 @@ Require Import extructures.ord.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 
 From QuickChick Require Import QuickChick.
-Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
+Import QcDefaultNotation QcNotation.
+Open Scope qc_scope.
+(* Open Scope string_scope. *)
 Import GenLow GenHigh.
 
 
@@ -53,11 +55,11 @@ Definition get_freq_instr i :=
 (* TODO decide on statistics *)
 
 (* ip intermediate program
-   ctx_id the component id that must be defined 
+   ctx_id the component id that must be defined
    tr the trace to match
 Returns: None if the definition is not possible
-         (Some new_ip) intermediate program with same components, 
-                       except ctx_id. ip and new_ip have the same 
+         (Some new_ip) intermediate program with same components,
+                       except ctx_id. ip and new_ip have the same
                        interface
  *)
 
@@ -94,7 +96,7 @@ Definition generate_procedure_code ctx_cid pid (pmap : NMap code) (fst_lbl:nat)
 .
 
 Definition generate_ctx_component ctx_id main_pid tr export: NMap code :=
-  let acc : (list (nat*nat*nat*nat))*(NMap nat) * (NMap (NMap code)) := 
+  let acc : (list (nat*nat*nat*nat))*(NMap nat) * (NMap (NMap code)) :=
       if (Nat.eqb ctx_id Component.main)
       then ([(Component.main,Component.main,main_pid,1%nat)],
             (mkfmap [(main_pid,1%nat)]),
@@ -110,7 +112,7 @@ Definition generate_ctx_component ctx_id main_pid tr export: NMap code :=
              (* generate Call instruction if necessary *)
              let new_cmap :=
                  match call_stack with
-                 | nil => cmap 
+                 | nil => cmap
                  | (_,_,ppid,pcn)::xs =>
                    if (Nat.eqb caller_cid ctx_id)
                    then
@@ -140,7 +142,7 @@ Definition generate_ctx_component ctx_id main_pid tr export: NMap code :=
                    | Some n => n
                    end
                in
-               let new_call_nos := (setm call_nos pid (cn+1)%nat) in               
+               let new_call_nos := (setm call_nos pid (cn+1)%nat) in
                ((caller_cid,callee_cid,pid,(cn+1)%nat)::call_stack,
                 new_call_nos, new_cmap)
              else
@@ -187,7 +189,7 @@ Definition  get_interm_program
   | Some ctx_interface =>
     let export := (val (Component.export ctx_interface)) in
     let import := (val (Component.import ctx_interface)) in
-    
+
     let pid_main :=  (match (Intermediate.prog_main ip) with
                       | None => Procedure.main
                       | Some pid => pid
@@ -266,13 +268,13 @@ Definition get_trace
   end.
 
 Definition try_all_components_one_by_one
-           (ip : Intermediate.program)           
+           (ip : Intermediate.program)
            (t_t : CompCert.Events.trace)
            cids
            fuel
   : Checker :=
   (* try all components from the trace as context *)
-  conjoin 
+  conjoin
     (List.map
        (fun ctx_cid =>
           (* generate c_s *)
@@ -284,11 +286,13 @@ Definition try_all_components_one_by_one
             let interm_res := runp (10*fuel)%nat newip in
             match interm_res with
             | Wrong t_s cid msg _ => (* t_s <= t_t undef not in ctx_cid *)
-              whenFail 
+              whenFail
                 (error1 ip newip t_t t_s (ctx_cid::nil) msg)
                 (checker
                    ((sublist t_t t_s) ||
-                     ((sublist t_s t_t) && (negb (cid =? ctx_cid)))))
+                    ((sublist t_s t_t) && (negb
+                                             (* TODO change *)
+                                             (unit_digit cid =? unit_digit ctx_cid)))))
             | _ => (* t_t <= t_s *)
               let t_s := get_trace interm_res in
               whenFail
@@ -300,7 +304,7 @@ Definition try_all_components_one_by_one
 
 
 Definition try_all_components_with_undef
-           (ip : Intermediate.program)           
+           (ip : Intermediate.program)
            (t_t : CompCert.Events.trace)
            cids
            fuel
@@ -324,7 +328,7 @@ Definition try_all_components_with_undef
             (Some ip,nil)
         | _ => (Some ip,nil)
         end
-      end in  
+      end in
   match get_ip ip (List.length cids) with
   | (None,_) =>
     whenFail "Can not define source component" (checker false)
@@ -336,7 +340,7 @@ Definition try_all_components_with_undef
       let interm_res := runp (10*fuel)%nat newip in
       match interm_res with
       | Wrong t_s cid msg _ => (* t_s <= t_t undef not in ctx_cid *)
-        whenFail 
+        whenFail
           (error1 ip newip t_t t_s ctx_cids msg)
           (collect
              ((List.length t_t),(List.length t_s),(List.length ctx_cids))
@@ -360,7 +364,7 @@ Definition rsc_correct
            {CompilerErrorType:Type}
            {TargetProgramType:Type}
            {ExecutionResult:Type} {ExecutionError:Type}
-           `{Show CompilerErrorType}           
+           `{Show CompilerErrorType}
            (cag : code_address_const_instr)
            (dag : data_address_const_instr)
            (min_components : nat)
@@ -373,7 +377,7 @@ Definition rsc_correct
   forAll
     (
       genIntermediateProgram
-      (* genRSCIntermediateProgram *) 
+      (* genRSCIntermediateProgram *)
        NoUndef
        get_freq_instr
        cag
@@ -413,7 +417,7 @@ Definition rsc_correct
             (* try_all_components_one_by_one ip t_t cids fuel *)
             conjoin
               (List.map
-              (fun i =>                 
+              (fun i =>
                  try_all_components_with_undef
                    ip
                    (List.firstn i t_t)
