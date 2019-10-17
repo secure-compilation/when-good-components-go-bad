@@ -49,7 +49,8 @@ for example in $TARGET_PREFIX*.ml; do
     # prepend big int import to each example
     echo -e "open Big_int;;\n$(cat $example)" > $example
     echo "Output of $example:"
-    ocaml nums.cma big.cma $example
+    # have to silence the deprecation warning for the use of Pervasives library on OCaml >= 4.08.0
+    ocaml -w -3 nums.cma big.cma $example
 done
 
 # # run compiled examples at the micro-policy level

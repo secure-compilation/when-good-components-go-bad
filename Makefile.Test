@@ -9,7 +9,7 @@ all_coq: MakefileTest.coq
 	rm -f /tmp/tl_quickchick_test.mli
 
 sfi_safety_properties.exe: all_coq
-	ocamlopt -I /tmp -o sfi_safety_properties.exe /tmp/run_test.ml Tests/I2SFI/main.ml
+	ocamlopt -w -3 -I /tmp -o sfi_safety_properties.exe /tmp/run_test.ml Tests/I2SFI/main.ml
 
 mp.exe: all_coq
 	echo "open Big_int;;" > /tmp/tl_quickchick_test_1.ml
@@ -20,12 +20,15 @@ clean: MakefileTest.coq
 	+make -f MakefileTest.coq clean
 	rm -f MakefileTest.coq
 	rm -f /tmp/run*test.* 
+	rm -f /tmp/run*.ml 
+	rm -f /tmp/run*.native
+	rm -f /tmp/big.*
 	rm -f /tmp/tl_quickchick_test.ml*
 	rm -f sfi_safety_properties.exe
 	rm -f mp.exe
 
 MakefileTest.coq: _CoqTestProject MakefileTest
-	coq_makefile -f _CoqTestProject | sed 's/$$(COQCHK) $$(COQCHKFLAGS) $$(COQLIBS)/$$(COQCHK) $$(COQCHKFLAGS) $$(subst -Q,-R,$$(COQLIBS))/' > MakefileTest.coq
+	coq_makefile -f _CoqTestProject -o MakefileTest.coq
 
 _CoqTestProject: ;
 
