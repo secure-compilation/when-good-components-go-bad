@@ -12,8 +12,7 @@ This repository contains the Coq development of the paper:
 ### Prerequisites ###
 
 This development requires Coq v8.9.1 to work, as well as the following libraries:
-- [Mathematical Components](https://math-comp.github.io/math-comp/) 1.9.0 or dev / on branch master
-- [CoqUtils](https://github.com/arthuraa/coq-utils) on branch master (tested with commit [54c1269](https://github.com/arthuraa/coq-utils/commit/54c1269e1e85e14404e9dab3805e9db448f419f0)),
+- [Mathematical Components](https://math-comp.github.io/math-comp/) 1.9.0 or dev / on branch master,
 - [Coq Void](https://github.com/arthuraa/coq-void) v0.1.0 or dev / on branch master
   (tested with commit
   [4a88dcd](https://github.com/arthuraa/coq-void/commit/4a88dcd55421c356e8930a4a62de1682d1bb3fa4)),
@@ -23,6 +22,9 @@ This development requires Coq v8.9.1 to work, as well as the following libraries
 - [Extensional Structures](https://github.com/arthuraa/extructures) on
   branch master (tested with commit
   [c2d88c2](https://github.com/arthuraa/extructures/commit/c2d88c2bad3b02f78ca25c41b4cb59251ae4f702)),
+- [CoqUtils](https://github.com/arthuraa/coq-utils) on branch master
+  (tested with commit
+  [54c1269](https://github.com/arthuraa/coq-utils/commit/54c1269e1e85e14404e9dab3805e9db448f419f0)),
 - [QuickChick](https://github.com/QuickChick/QuickChick) v1.1.0 or 8.9.dev for the testing (see below).
 
 For convenience, you can install all the dependencies on opam (with
@@ -51,7 +53,7 @@ want to pin some packages to a specific version with `opam pin
 ### Running the tests ###
 
 Our tests are known to work with [QuickChick](https://github.com/QuickChick/QuickChick) branch 8.9 and
-OCaml from 4.02.3 to 4.06.
+OCaml from 4.02.3 to 4.09.0.
 
 Running the tests (to be simplified):
 
