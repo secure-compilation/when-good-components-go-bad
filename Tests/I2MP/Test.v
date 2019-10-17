@@ -226,4 +226,5 @@ Extract Constant map =>
 see [https://github.com/coq/coq/issues/4875] and [https://github.com/coq/coq/issues/6614] *)
 Extraction Inline SimplPred.
 
+Set Warnings "-extraction-reserved-identifier -extraction-opaque-accessed".
 Extraction "/tmp/tl_quickchick_test.ml" coqstring_of_state mp_rsc_correct.

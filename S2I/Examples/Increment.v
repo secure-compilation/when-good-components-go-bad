@@ -6,5 +6,5 @@ Require Import Source.Examples.Increment.
 Definition fuel := 1000%nat.
 Definition to_run := compile_and_run increment fuel.
 
-Set Warnings "-extraction-reserved-identifier".
+Set Warnings "-extraction-reserved-identifier -extraction-opaque-accessed".
 Extraction "/tmp/run_intermediate_compiled_increment.ml" to_run.

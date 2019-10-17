@@ -28,5 +28,5 @@ Definition nested_calls : program := {|
 Definition fuel := 1000.
 Definition to_run := run nested_calls fuel.
 
-Set Warnings "-extraction-reserved-identifier".
+Set Warnings "-extraction-reserved-identifier -extraction-opaque-accessed".
 Extraction "/tmp/run_source_nested_calls.ml" to_run.

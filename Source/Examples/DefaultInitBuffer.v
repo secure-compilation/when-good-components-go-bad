@@ -21,5 +21,5 @@ Definition default_init_buffer: program := {|
 Definition fuel := 1000.
 Definition to_run := run default_init_buffer fuel.
 
-Set Warnings "-extraction-reserved-identifier".
+Set Warnings "-extraction-reserved-identifier -extraction-opaque-accessed".
 Extraction "/tmp/run_source_default_init_buffer.ml" to_run.
