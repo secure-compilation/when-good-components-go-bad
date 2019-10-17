@@ -34,8 +34,8 @@ Import RiscMachine.
 Import RiscMachine.ISA.
 
 
-Instance executing_dec (mem : RiscMachine.Memory.t) (pc : RiscMachine.address)
-         ( i : RiscMachine.ISA.instr) : Dec (executing mem pc i).
+Instance executing_dec (mem : RiscMachine.Memory.t) (pc0 : RiscMachine.address)
+         ( i : RiscMachine.ISA.instr) : Dec (executing mem pc0 i).
 Proof.
   apply Build_Dec. unfold ssrbool.decidable.
   unfold executing.
@@ -49,7 +49,7 @@ Defined.
 Ltac rewrite_some v :=
   try (match goal with
        | H' : Some v = _ |- _ => rewrite H'
-       | H' : _ = Some v |- _ => rewrite <- H'        
+       | H' : _ = Some v |- _ => rewrite <- H'
        end).
 
 Theorem step_Equal_1:
@@ -67,13 +67,13 @@ Proof.
     try (match goal with
          | H' : executing _ _ _ |- _ =>
            apply executing_equal with (m1:=mem1) (m2:=mem2) in H'
-         end);         
+         end);
     try ( match goal with
           | H' :  Memory.Equal mem1 _ |- _ =>
             apply Memory.Equal_trans with (m1:=mem2) (m2:=mem1) (m3:=mem') in H'
           end
         );
-    try assumption; try (apply Memory.Equal_sym in Hmem1; assumption); 
+    try assumption; try (apply Memory.Equal_sym in Hmem1; assumption);
   [apply Nop
   | apply Const with (val:=val) (reg:=reg)
   | apply Mov with (reg_src:=reg_src) (reg_dst:=reg_dst) (val:=val)
@@ -88,10 +88,10 @@ Proof.
   | apply Jal
   | apply Call
   ];
-  try assumption; try reflexivity. 
+  try assumption; try reflexivity.
 
   rewrite_some val.
-  apply Memory.get_value_Equal. apply Memory.Equal_sym in Hmem1; assumption. 
+  apply Memory.get_value_Equal. apply Memory.Equal_sym in Hmem1; assumption.
 
   subst.
   apply Memory.Equal_trans with (m1:=(Memory.set_value mem2 (Memory.to_address ptr) val))
@@ -100,10 +100,10 @@ Proof.
 
   apply Memory.set_value_Equal with (m1:=mem2) (m2:=mem1)
                                     (ptr:=(Memory.to_address ptr)) (val:=val).
-  assumption.  assumption. 
-  
+  assumption.  assumption.
+
 Qed.
-  
+
 Theorem step_Equal_2:
   forall (g : Env.t) (mem mem1 mem2 : Memory.t)
          (pc pc': RiscMachine.pc)
@@ -158,7 +158,7 @@ Ltac unify_options := repeat
     assert (y = x) by congruence; clear H2; subst
   | H1 : ?o = Some ?x , H2 : ?o = Some ?y |- _ =>
     assert (y = x) by congruence; clear H2; subst
-                                              
+
   | H1 : Some _ = ?o , H2 : None = ?o |- _ => congruence
   | H1 : Some _ = ?o , H2 : ?o = None |- _ => congruence
   | H1 : ?o = Some _ , H2 : None = ?o |- _ => congruence
@@ -172,7 +172,7 @@ Ltac inc_pc_contra H Hpc :=
   try (rewrite N.eqb_refl in Hpc; inversion Hpc);
   exec_contra H.
 
-Ltac regs_contra := 
+Ltac regs_contra :=
   match goal with
   | H : RegisterFile.eqb ?r ?r = false |- _ =>
     rewrite RegisterFile.eqb_refl with
@@ -202,15 +202,15 @@ Ltac sfi_contra :=
          H2 : SFI.is_same_component_bool ?pc ?mem = true |- False =>
     apply H1; unfold SFI.is_same_component_bool in H2;
     apply N.eqb_eq in H2; apply H2
-                                
+
  |  H' : SFI.is_same_component  _ _,
-         H'' : SFI.is_same_component_bool  _ _ = _ 
+         H'' : SFI.is_same_component_bool  _ _ = _
     |- _ =>
     unfold SFI.is_same_component in H';
     unfold SFI.is_same_component_bool in H'';
     rewrite H' in H''; rewrite N.eqb_refl in H'';
     inversion H''
-  
+
   end.
 
 Ltac unfold_ret_trace :=
@@ -271,7 +271,7 @@ Ltac ret_comp_contra pc' H :=
 
 Ltac call_ids_contra H pc'0 pc'1 ra:=
   right; intro contra; inversion contra; exec_contra H;
-  subst pc'0; subst pc'1; subst ra; 
+  subst pc'0; subst pc'1; subst ra;
   subst; unify_options;
   unfold_call_trace; subst; simplify_equality;
   match goal with
@@ -295,8 +295,8 @@ Ltac call_env_contra H pc'0 pc'1 ra:=
   unfold_call_trace; subst; simplify_equality.
 
 
-Instance step_dec(g : Env.t) (st : MachineState.t) (t : trace)
-         (st' : MachineState.t): Dec (step g st t st'). 
+Instance step_dec(g : Env.t) (st : MachineState.t) (t0 : trace)
+         (st' : MachineState.t): Dec (step g st t0 st').
 Proof.
   apply Build_Dec. unfold ssrbool.decidable.
   destruct st as [[mem pc] gen_regs].
@@ -324,7 +324,7 @@ Proof.
               { (* regs=regs'*)
                 apply RegisterFile.eqb_eq in Hregs. rewrite Hregs.
                 left. subst. apply Nop.
-                unfold executing. rewrite H. reflexivity. assumption. 
+                unfold executing. rewrite H. reflexivity. assumption.
               }
               { (* regs <> regs' *)
                 right_inv;
@@ -350,19 +350,19 @@ Proof.
               destruct (RegisterFile.eqb
                           (RegisterFile.set_register reg val gen_regs)
                           gen_regs') eqn:Hregs.
-              { (* regs[r<reg-val]=regs'*)                
+              { (* regs[r<reg-val]=regs'*)
                 left. apply Const with (val:=val) (reg:=reg).
                 unfold executing. rewrite H. auto.
-                apply RegisterFile.eqb_eq. assumption. assumption. 
+                apply RegisterFile.eqb_eq. assumption. assumption.
               }
               { (* regs[r<reg-val] <> regs' *)
                 right_inv; try (exec_contra H);
                 try ( apply RegisterFile.neqb_neq in Hregs;
                       apply Hregs; reflexivity).
-                subst. 
+                subst.
                 rewrite RegisterFile.eqb_refl with
                     (regs:=(RegisterFile.set_register reg val gen_regs)) in Hregs.
-                inversion Hregs. 
+                inversion Hregs.
               }
             }
             {  inc_pc_contra H Hpc. }
@@ -381,24 +381,24 @@ Proof.
             { (* pc' = pc+1 *)
               rewrite N.eqb_eq in Hpc. rewrite Hpc.
               destruct (RegisterFile.get_register rs gen_regs) eqn:Hval.
-              { (* RegisterFile.get_register rs gen_regs = Some v *)               
+              { (* RegisterFile.get_register rs gen_regs = Some v *)
                 destruct (RegisterFile.eqb
                             (RegisterFile.set_register rd v gen_regs)
                             gen_regs') eqn:Hregs.
-                { (* regs[rd<-v]=regs'*)                
+                { (* regs[rd<-v]=regs'*)
                   left.
-                  apply Mov with (reg_src:=rs) (reg_dst:=rd) (val:=v). 
+                  apply Mov with (reg_src:=rs) (reg_dst:=rd) (val:=v).
                   unfold executing. rewrite H. auto.
-                  symmetry. assumption. 
-                  apply RegisterFile.eqb_eq. assumption. assumption. 
+                  symmetry. assumption.
+                  apply RegisterFile.eqb_eq. assumption. assumption.
                 }
                 { (* regs[rd<-d] <> regs' *)
                   right_inv; try (exec_contra H).
-                  subst. unify_options. regs_contra.                  
-                }                
+                  subst. unify_options. regs_contra.
+                }
               }
               { (* RegisterFile.get_register rs gen_regs = None *)
-                right_inv; try(exec_contra H); subst. unify_options. 
+                right_inv; try(exec_contra H); subst. unify_options.
               }
             }
             { (* pc' <> pc+1 *)  inc_pc_contra H Hpc. }
@@ -406,7 +406,7 @@ Proof.
           { (* non empty trace *) right_inv; exec_contra H. }
         }
         { (* mem <> mem' *)  right_inv; try (mem_contra); exec_contra H. }
-        
+
       *  (* IBinOp *)
         destruct (Memory.eqb mem mem') eqn:Hmem.
         { (* mem = mem' *)
@@ -423,27 +423,27 @@ Proof.
                   destruct (RegisterFile.eqb
                             (RegisterFile.set_register rd (eval_binop op v1 v2) gen_regs)
                             gen_regs') eqn:Hregs.
-                  { (* regs[rd<-v1 binop v2]=regs'*)                
+                  { (* regs[rd<-v1 binop v2]=regs'*)
                     left.
                     apply BinOp with (op:=op) (reg_src1:=rs1) (reg_src2:=rs2)
                                      (reg_dst:=rd) (val1:=v1) (val2:=v2).
                     unfold executing. rewrite H. reflexivity.
-                    symmetry. assumption. symmetry. assumption. 
-                    apply RegisterFile.eqb_eq. assumption. assumption. 
+                    symmetry. assumption. symmetry. assumption.
+                    apply RegisterFile.eqb_eq. assumption. assumption.
                   }
                   { (* regs[rd<-v1 binop v2]<>regs' *)
                     right_inv; try (exec_contra H).
-                    subst. unify_options. 
-                    subst result. 
+                    subst. unify_options.
+                    subst result.
                     regs_contra.
-                  }                
+                  }
                 }
                 { (* RegisterFile.get_register rs2 gen_regs = None *)
-                  right_inv; try(exec_contra H). subst. unify_options.  
+                  right_inv; try(exec_contra H). subst. unify_options.
                 }
               }
               { (* RegisterFile.get_register rs1 gen_regs = None *)
-                right_inv; try(exec_contra H). subst. unify_options. 
+                right_inv; try(exec_contra H). subst. unify_options.
               }
             }
             { (* pc' <> pc+1 *)  inc_pc_contra H Hpc. }
@@ -452,7 +452,7 @@ Proof.
         }
         { (* mem <> mem' *)  right_inv; try (mem_contra); exec_contra H. }
 
-      * (* ILoad *) 
+      * (* ILoad *)
         destruct (Memory.eqb mem mem') eqn:Hmem.
         { (* mem = mem' *)
           apply Memory.eqb_Equal in Hmem.
@@ -461,30 +461,30 @@ Proof.
             destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
             { (* pc' = pc+1 *)
               rewrite N.eqb_eq in Hpc. rewrite Hpc.
-              destruct (RegisterFile.get_register rptr gen_regs) eqn:Hptr.  
+              destruct (RegisterFile.get_register rptr gen_regs) eqn:Hptr.
               { (* RegisterFile.get_register rd gen_regs = Some ptr *)
                 rename v into ptr.
                 destruct (Memory.get_value mem (Memory.to_address ptr)) eqn:Hval.
                 { (* Memory.get_value mem (Memory.to_address ptr) = Some val *)
-                  rename v into val. 
+                  rename v into val.
                   destruct (RegisterFile.eqb
                             (RegisterFile.set_register rd val gen_regs)
                             gen_regs') eqn:Hregs.
-                  { (* regs[rd<-val]=regs'*)                
+                  { (* regs[rd<-val]=regs'*)
                     left.
                     apply Load with (rptr:=rptr) (rd:=rd) (ptr:=ptr) (val:=val).
                     unfold executing. rewrite H. auto.
-                    symmetry. assumption. symmetry. assumption.  
-                    apply RegisterFile.eqb_eq. assumption. assumption. 
+                    symmetry. assumption. symmetry. assumption.
+                    apply RegisterFile.eqb_eq. assumption. assumption.
                   }
                   { (* regs[rd<-d] <> regs' *)
                     right_inv; try (exec_contra H).
                     subst.
                     subst addr.  unify_options. regs_contra.
-                  }                
+                  }
                 }
                 { (* Memory.get_value mem (Memory.to_address ptr) = None *)
-                  right_inv; try(exec_contra H). subst. subst addr. unify_options. 
+                  right_inv; try(exec_contra H). subst. subst addr. unify_options.
                 }
               }
               { (* RegisterFile.get_register rd gen_regs = None *)
@@ -503,40 +503,40 @@ Proof.
           destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
           { (* pc' = pc+1 *)
             rewrite N.eqb_eq in Hpc. rewrite Hpc.
-            destruct (RegisterFile.get_register rptr gen_regs) eqn:Hptr.  
+            destruct (RegisterFile.get_register rptr gen_regs) eqn:Hptr.
             { (* RegisterFile.get_register rd gen_regs = Some ptr *)
               rename v into ptr.
               destruct (RegisterFile.get_register rs gen_regs) eqn:Hval.
               { (*RegisterFile.get_register rs gen_regs = Some val *)
-                rename v into val.                  
+                rename v into val.
                 destruct (RegisterFile.eqb gen_regs gen_regs') eqn:Hregs.
                 { (* gen_regs = gen_regs' *)
                   apply RegisterFile.eqb_eq in Hregs. subst gen_regs'.
                   destruct (Memory.eqb
                               (Memory.set_value mem (Memory.to_address ptr) val)
                               mem') eqn:Hmem1.
-                  { (*(Memory.set_value mem (Memory.to_address ptr) val)=mem'*)                
+                  { (*(Memory.set_value mem (Memory.to_address ptr) val)=mem'*)
                     left.
                     apply Store with (rptr:=rptr) (rs:=rs) (ptr:=ptr) (val:=val).
                     unfold executing. rewrite H. auto.
-                    symmetry. assumption. symmetry. assumption.  
-                    apply Memory.eqb_Equal. assumption. 
+                    symmetry. assumption. symmetry. assumption.
+                    apply Memory.eqb_Equal. assumption.
                   }
                   { (*(Memory.set_value mem (Memory.to_address ptr) val)<>mem' *)
                     right_inv; try (exec_contra H).
-                    subst. unify_options. mem_contra. 
+                    subst. unify_options. mem_contra.
                   }
                 }
                 { (* gen_regs <> gen_regs' *)
                   right_inv; try (exec_contra H). regs_contra.
                 }
-              }                
+              }
               { (*RegisterFile.get_register rs gen_regs = Some val *)
-                right_inv; try(exec_contra H). subst. unify_options. 
+                right_inv; try(exec_contra H). subst. unify_options.
               }
             }
             { (* RegisterFile.get_register rd gen_regs = None *)
-              right_inv; try(exec_contra H). subst. unify_options. 
+              right_inv; try(exec_contra H). subst. unify_options.
             }
           }
           { (* pc' <> pc+1 *)  inc_pc_contra H Hpc. }
@@ -563,19 +563,19 @@ Proof.
                     left. apply BnzZ with (reg:=r) (offset:=im).
                     unfold executing. rewrite H. reflexivity.
                     apply Z.eqb_eq in Hzero. subst val. symmetry. assumption.
-                    assumption. 
+                    assumption.
                   }
                   {
                     (* pc' <> pc+1 *)
-                    inc_pc_contra H Hpc. subst. unify_options. 
+                    inc_pc_contra H Hpc. subst. unify_options.
                     apply Z.eqb_eq in Hzero.
-                    zero_contra. 
+                    zero_contra.
                   }
                 }
                 { (* r <> 0 *)
                   destruct (N.eqb pc' (Z.to_N( Z.add (Z.of_N pc) im )) ) eqn:Hpc.
                   { (* pc' = pc + offset *)
-                     left. rewrite N.eqb_eq in Hpc. rewrite Hpc. 
+                     left. rewrite N.eqb_eq in Hpc. rewrite Hpc.
                     apply BnzNZ with (offset:=im) (G:=g)
                                            (mem:=mem) (mem':=mem')
                                            (pc:=pc) (gen_regs:=gen_regs)
@@ -583,22 +583,22 @@ Proof.
                     unfold executing. rewrite H. reflexivity.
                     symmetry. assumption.
                     intro Hzero'. subst val. inversion Hzero.
-                    assumption. 
+                    assumption.
                   }
                   {  (* pc' <> pc + offset *)
                     inc_pc_contra H Hpc; subst. subst pc'0.
                     rewrite N.eqb_refl in Hpc. inversion Hpc.
-                    unify_options. inversion Hzero. 
+                    unify_options. inversion Hzero.
                   }
-                }                
+                }
               }
               { (* RegisterFile.get_register r gen_regs = None *)
-                right_inv; try(exec_contra H); subst; unify_options. 
+                right_inv; try(exec_contra H); subst; unify_options.
               }
             }
             {  (* gen_regs <> gen_regs' *)
               right_inv; try (exec_contra H);
-              rewrite RegisterFile.eqb_refl in Hregs; inversion Hregs. 
+              rewrite RegisterFile.eqb_refl in Hregs; inversion Hregs.
             }
           }
           { (* non empty trace *) right_inv; exec_contra H. }
@@ -616,7 +616,7 @@ Proof.
             { (* RegisterFile.get_register reg gen_regs = Some val *)
               rename v into cptr.
               destruct (N.eqb pc' (Memory.to_address cptr)) eqn:Hpc.
-              apply N.eqb_eq in Hpc. subst pc'. 
+              apply N.eqb_eq in Hpc. subst pc'.
               { (* pc' = [r] *)
                   destruct(SFI.is_same_component_bool pc (Memory.to_address cptr)) eqn:Hsfi.
                   { (* SFI.is_same_component pc pc' *)
@@ -630,7 +630,7 @@ Proof.
                       unfold SFI.is_same_component_bool in Hsfi.
                       unfold SFI.is_same_component. rewrite N.eqb_eq in Hsfi.
                       left. apply Hsfi.
-                      assumption. 
+                      assumption.
                     }
                     { (* not empty *) (* contradiction *)
                       right_inv; exec_contra H. subst. subst pc'. unify_options.
@@ -660,12 +660,12 @@ Proof.
                         sfi_contra.
                       }
                     }
-                    {                    
+                    {
                       destruct t0 as [|e xt].
                       { (* empty *) (* contradiction *)
                         right_inv; exec_contra H; subst.
                         unfold_ret_trace. subst pc'.
-                        destruct H7. 
+                        destruct H7.
                         unify_options.
                         sfi_contra.
                         unify_options. sfi_contra.
@@ -676,10 +676,10 @@ Proof.
                           destruct e.
                           { (* ECall *)
                             right; intro contra; inversion contra; subst.
-                            unfold_ret_trace. exec_contra H. 
+                            unfold_ret_trace. exec_contra H.
                           }
                           { (* ERet *)
-                            rename i into c. rename z into rcom. rename i0 into c'. 
+                            rename i into c. rename z into rcom. rename i0 into c'.
                             destruct (RegisterFile.get_register Register.R_COM gen_regs)
                                      eqn:Hrcom.
                             rename v into rcom1.
@@ -695,7 +695,7 @@ Proof.
                             rewrite Nat.eqb_eq in Haux. subst c1'.
                             destruct (Z.eqb rcom rcom1) eqn:Haux.
                             rewrite Z.eqb_eq in Haux. subst rcom1.
-                          
+
                             left. apply Return with (reg:=r).
                             unfold executing. rewrite H. auto.
                             symmetry. assumption.
@@ -707,29 +707,29 @@ Proof.
                             assumption.
 
                             (* rcom does not match *)
-                            ret_com_contra Z.eqb_refl H. 
-                         
+                            ret_com_contra Z.eqb_refl H.
+
                             (* c' does not match *)
-                            ret_comp_contra pc' H. 
-                          
+                            ret_comp_contra pc' H.
+
                             (* c does not match *)
                             ret_comp_contra pc' H.
-                          
+
                             (* Hc' failed *)
                             ret_env_contra pc' H.
 
                             (* Hc failed *)
                             ret_env_contra pc' H.
                             (* Hrcom failed *)
-                            ret_env_contra pc' H.                          
+                            ret_env_contra pc' H.
                           }
-                        }                                              
+                        }
                         { (* trace [e;e';...] *)
                           right. intro contra.
-                          inversion contra; clear contra; 
+                          inversion contra; clear contra;
                             subst; exec_contra H; subst pc'; subst.
                           simplify_equality.
-                          unfold_ret_trace. 
+                          unfold_ret_trace.
                         }
                       }
                     }
@@ -739,16 +739,16 @@ Proof.
                 right; intro contra;
                 inversion contra; clear contra; subst; exec_contra H; subst pc'0;
                   subst; simplify_equality; unify_options;
-                rewrite N.eqb_refl in Hpc; inversion Hpc.                
+                rewrite N.eqb_refl in Hpc; inversion Hpc.
               }
             }
             { (* RegisterFile.get_register reg gen_regs = None *)
-              right_inv; try(exec_contra H); subst; unify_options. 
+              right_inv; try(exec_contra H); subst; unify_options.
             }
           }
           { (* gen_regs <> gen_regs' *)
             right_inv; try (exec_contra H);
-              rewrite RegisterFile.eqb_refl in Hregs; inversion Hregs. 
+              rewrite RegisterFile.eqb_refl in Hregs; inversion Hregs.
           }
         }
         { (* mem <> mem' *)  right_inv; try (mem_contra Hmem); exec_contra H. }
@@ -764,13 +764,13 @@ Proof.
                       gen_regs') eqn:Hregs.
           { (* gen_regs' okay *)
             destruct (N.eqb pc' addr) eqn:Hpc.
-            apply N.eqb_eq in Hpc. subst addr. 
+            apply N.eqb_eq in Hpc. subst addr.
             { (* pc' = addr *)
               destruct(SFI.is_same_component_bool pc pc') eqn:Hsfi.
-              { (* SFI.is_same_component pc pc' *)                
+              { (* SFI.is_same_component pc pc' *)
                 destruct t0.
                 { (* empty *) (* this is a Jal *)
-                  left. apply Jal. 
+                  left. apply Jal.
                   unfold executing. rewrite H. auto.
                   apply RegisterFile.eqb_eq in Hregs. apply Hregs.
                   unfold  SFI.is_same_component_bool in Hsfi.
@@ -792,47 +792,47 @@ Proof.
                 {
                   destruct t0 as [|e xt].
                   {  (* empty *) (* IJal from comp zero *)
-                    left. apply Jal. 
+                    left. apply Jal.
                      unfold executing. rewrite H. auto.
                      apply RegisterFile.eqb_eq in Hregs. apply Hregs.
                      unfold  SFI.is_same_component_bool in Hsfi_zero.
                      unfold  SFI.is_same_component.
-                     right.  
-                     apply N.eqb_eq in Hsfi_zero.              
+                     right.
+                     apply N.eqb_eq in Hsfi_zero.
                      assumption.
-                     assumption. 
+                     assumption.
                   }
                   { (* trace [e;e';...] *)
                     right. intro contra.
-                    inversion contra; clear contra; 
+                    inversion contra; clear contra;
                       subst; exec_contra H;
                         subst pc'0; subst pc'1; subst ra; subst;
                           simplify_equality.
                         sfi_contra.
                   }
                 }
-                {                                                         
-                  destruct t0 as [|e xt].                  
+                {
+                  destruct t0 as [|e xt].
                   { (* empty *) (* IJal contradiction *)
                     right_inv; exec_contra H; subst.
 
                     subst pc'0. subst pc'1. subst ra. simplify_equality.
 
                     destruct H8.
-                    
-                    sfi_contra. sfi_contra. 
+
+                    sfi_contra. sfi_contra.
 
                     unfold_call_trace.
-                    
+
                   }
                   { (* not empty *) (* this should be a return *)
                     destruct xt.
                     { (* trace [e] *)
                       destruct e.
                       { (* ECall *)
-                        
+
                         rename i into c. rename i0 into p.
-                        rename z into rcom. rename i1 into c'. 
+                        rename z into rcom. rename i1 into c'.
                         destruct (RegisterFile.get_register Register.R_COM gen_regs) eqn:Hrcom.
                         rename v into rcom1.
                         destruct (get_component_name_from_id (SFI.C_SFI pc) g) eqn:Hc.
@@ -841,24 +841,24 @@ Proof.
                         rename i into c1'.
                         destruct (get_procedure pc' g) eqn:Hp.
                         rename i into p1.
-                        
+
                         destruct (Nat.eqb c c1) eqn:Haux. rewrite Nat.eqb_eq in Haux. subst c1.
                         destruct (Nat.eqb c' c1') eqn:Haux. rewrite Nat.eqb_eq in Haux. subst c1'.
                         destruct (Nat.eqb p p1) eqn:Haux. rewrite Nat.eqb_eq in Haux. subst p1.
                         destruct (Z.eqb rcom rcom1) eqn:Haux. rewrite Z.eqb_eq in Haux. subst rcom1.
-                        
+
                         left. apply Call.
                         unfold executing. rewrite H. auto.
-                        apply RegisterFile.eqb_eq in Hregs. apply Hregs. 
+                        apply RegisterFile.eqb_eq in Hregs. apply Hregs.
                         unfold call_trace.
                         rewrite Hrcom. rewrite Hc. rewrite Hc'. rewrite Hp. simpl. reflexivity.
 
-                        intro. sfi_contra. intro. sfi_contra. 
+                        intro. sfi_contra. intro. sfi_contra.
                         assumption.
 
                         (* rcom does not match *)
                         right; intro contra; inversion contra; exec_contra H;
-                          subst pc'0; subst pc'1; subst ra; 
+                          subst pc'0; subst pc'1; subst ra;
                             subst; unify_options.
                         unfold_call_trace. subst; simplify_equality;
                                              unify_options.
@@ -868,9 +868,9 @@ Proof.
                         end.
 
                         (* p des not match *)
-                        call_ids_contra H pc'0 pc'1 ra.                         
+                        call_ids_contra H pc'0 pc'1 ra.
                         (* c' does not match *)
-                        call_ids_contra H pc'0 pc'1 ra.                           
+                        call_ids_contra H pc'0 pc'1 ra.
                         (* c does not match *)
                         call_ids_contra H pc'0 pc'1 ra.
                         (* Hp failed *)
@@ -878,24 +878,24 @@ Proof.
                         (* Hc' failed *)
                         call_env_contra H pc'0 pc'1 ra.
                         (* Hc failed *)
-                        call_env_contra H pc'0 pc'1 ra.             
+                        call_env_contra H pc'0 pc'1 ra.
                         (* Hrcom failed *)
                         call_env_contra H pc'0 pc'1 ra.
                       }
                       { (* ERet *)
                         right; intro contra; inversion contra; exec_contra H;
                           subst pc'0; subst;
-                            unify_options; simplify_equality. 
+                            unify_options; simplify_equality.
                         unfold_call_trace.
                       }
                     }
                     { (* trace [e;e';...] *)
                       right. intro contra.
-                      inversion contra; clear contra; 
+                      inversion contra; clear contra;
                         subst; exec_contra H;
                           subst pc'0; subst pc'1; subst ra; subst;
                             simplify_equality.
-                      unfold_call_trace. 
+                      unfold_call_trace.
                     }
                   }
                 }
@@ -906,19 +906,19 @@ Proof.
                 inversion contra; clear contra; subst; exec_contra H;
                   subst pc'0; subst pc'1; subst ra; subst;
                     simplify_equality; unify_options;
-                      rewrite N.eqb_refl in Hpc; inversion Hpc.                
+                      rewrite N.eqb_refl in Hpc; inversion Hpc.
             }
           }
 
           { (* gen_regs' not okay *)
             right_inv; try (exec_contra H);
-              rewrite RegisterFile.eqb_refl in Hregs; inversion Hregs. 
+              rewrite RegisterFile.eqb_refl in Hregs; inversion Hregs.
           }
         }
         { (* mem <> mem' *)  right_inv; try (mem_contra Hmem); exec_contra H. }
       * (* Halt *)
         right.  intro contra; inversion contra; exec_contra H.
-  - right. intro contra; inversion contra; exec_contra H.    
+  - right. intro contra; inversion contra; exec_contra H.
 Qed.
 
 
@@ -968,7 +968,7 @@ Definition eval_step_complete_exec : Checker :=
               end
             else checker true (* at some point I want to have some incorrect cases to test *)
          )))).
-              
+
 Definition eval_step_sound : Checker :=
   forAll genEnv
          (fun g =>
@@ -977,7 +977,7 @@ Definition eval_step_sound : Checker :=
                       match eval_step g st with
                       | Either.Left msg err =>
                       (* TODO check this again *)
-                        whenFail ("eval_step failed" ++(show  err))%string 
+                        whenFail ("eval_step failed" ++(show  err))%string
                                  (negb ((step g st E0 st)?))
                       | Either.Right (t,st') =>
                         if (RiscMachine.is_executing (MachineState.getMemory st)
@@ -1000,4 +1000,3 @@ Definition eval_step_sound : Checker :=
 (* This is a first test I tried, it's not included in the main tests. *)
 (* QuickChick eval_step_complete_exec. *)
 (* QuickChick eval_step_sound. *)
-  
