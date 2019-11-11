@@ -14,7 +14,8 @@ Module Type AbstractComponentMemory.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
   Parameter domm : t -> {fset Block.id}.
-
+  Parameter reachable_blocks : t -> {fset Block.id} -> {fset Block.id}.
+  
   Axiom load_prealloc:
     forall bufs b i,
       load (prealloc bufs) b i =
@@ -55,6 +56,35 @@ Module Type AbstractComponentMemory.
     forall m m' n b,
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
+
+  Axiom reachable_blocks_expansive:
+    forall m bs bs',
+      reachable_blocks m bs = bs' ->
+      fsubset bs bs'.
+
+  Axiom reachable_blocks_maximal:
+    forall m bs bs',
+      reachable_blocks m bs = bs' ->
+      reachable_blocks m bs' = bs'.
+
+  Axiom reachable_blocks_additive:
+    forall m bs1 bs1' bs2 bs2',
+      reachable_blocks m bs1 = bs1' ->
+      reachable_blocks m bs2 = bs2' ->
+      reachable_blocks m (fsetU bs1 bs2) = fsetU bs1' bs2'.
+  
+  Axiom reachable_blocks_invariant_to_unreachable_store:
+    forall m m' bs bs' b i v,
+      reachable_blocks m bs = bs' ->
+      b \notin bs' ->
+      store m b i v = Some m' ->
+      reachable_blocks m' bs = bs'.
+
+  Axiom stores_to_block_does_not_affect_its_own_reachability:
+    forall m m' bs b i v,
+      b \in reachable_blocks m bs ->
+      store m b i v = Some m' ->
+      b \in reachable_blocks m' bs.
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -113,6 +143,40 @@ Module ComponentMemory : AbstractComponentMemory.
     end.
 
   Definition domm (m : t) := @domm nat_ordType block (content m).
+
+  Fixpoint block_ids_in_chunk chunk : list Block.id :=
+    match chunk with
+    | nil => nil
+    | v :: vs => match v with
+                 | Ptr p => [Pointer.block p] ++ block_ids_in_chunk vs
+                 | _ => block_ids_in_chunk vs
+                 end
+    end.
+  
+  Definition load_block (m: t) (b: Block.id) : list Block.id :=
+    match getm (content m) b with
+    | Some chunk => block_ids_in_chunk chunk
+    | None => nil
+    end.
+
+  (* Definition access_step (m: t) (bs: list Block.id) : list Block.id :=
+    concat (map (load_block m) bs).
+  *)
+  (* TODO: This is a bad definition. It should be done in terms of sets, not lists *)
+
+  (* TODO: FIXME to actually make an access by relying on block_ids_in_chunk.
+     Currently don't know how to iterate over the set bs.
+     Want to use the map notation @: then the \bigcup notation. *)
+  Definition access_step (m: t) (bs: {fset Block.id}) := bs.
+  
+  Fixpoint reachable_blocks_with_fuel (m: t) (bs: {fset Block.id}) (n: nat) :=
+    match n with
+    | 0 => bs
+    | S n => reachable_blocks_with_fuel m (access_step m bs) n
+    end.
+  
+  Definition reachable_blocks (m : t) (bs: {fset Block.id}) :=
+    reachable_blocks_with_fuel m bs (size (domm m)).
 
   Lemma load_prealloc:
     forall bufs b i,
@@ -207,6 +271,41 @@ Module ComponentMemory : AbstractComponentMemory.
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
   Admitted.
+
+  Lemma reachable_blocks_expansive:
+    forall m bs bs',
+      reachable_blocks m bs = bs' ->
+      fsubset bs bs'.
+  Admitted.
+
+  Lemma reachable_blocks_maximal:
+    forall m bs bs',
+      reachable_blocks m bs = bs' ->
+      reachable_blocks m bs' = bs'.
+  Admitted.
+
+  Lemma reachable_blocks_additive:
+    forall m bs1 bs1' bs2 bs2',
+      reachable_blocks m bs1 = bs1' ->
+      reachable_blocks m bs2 = bs2' ->
+      reachable_blocks m (fsetU bs1 bs2) = fsetU bs1' bs2'.
+  Admitted.
+  
+  Lemma reachable_blocks_invariant_to_unreachable_store:
+    forall m m' bs bs' b i v,
+      reachable_blocks m bs = bs' ->
+      b \notin bs' ->
+      store m b i v = Some m' ->
+      reachable_blocks m' bs = bs'.
+  Admitted.
+
+  Lemma stores_to_block_does_not_affect_its_own_reachability:
+    forall m m' bs b i v,
+      b \in reachable_blocks m bs ->
+      store m b i v = Some m' ->
+      b \in reachable_blocks m' bs.
+  Admitted.
+  
 End ComponentMemory.
 
 Module ComponentMemoryExtra.
