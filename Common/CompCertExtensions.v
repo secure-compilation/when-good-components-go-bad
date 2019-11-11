@@ -6,6 +6,8 @@ Require Import Lib.Extra.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype seq.
 
+(* Define a canonical structure on event equality. If needed, richer event types
+   can extend the encoding by using nested sums. *)
 Definition sum_of_event (e : event) :=
   match e with
   | ERet C v C' => inl (C, v, C')
