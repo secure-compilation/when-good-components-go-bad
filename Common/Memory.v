@@ -14,7 +14,7 @@ Module Type AbstractComponentMemory.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
   Parameter domm : t -> {fset Block.id}.
-  Parameter reachable_blocks : t -> {fset Block.id} -> {fset Block.id}.
+  Parameter load_block : t -> Block.id -> list (Component.id * Block.id).
   
   Axiom load_prealloc:
     forall bufs b i,
@@ -57,37 +57,9 @@ Module Type AbstractComponentMemory.
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
 
-  Axiom reachable_blocks_expansive:
-    forall m bs bs',
-      reachable_blocks m bs = bs' ->
-      fsubset bs bs'.
-
-  Axiom reachable_blocks_maximal:
-    forall m bs bs',
-      reachable_blocks m bs = bs' ->
-      reachable_blocks m bs' = bs'.
-
-  Axiom reachable_blocks_additive:
-    forall m bs1 bs1' bs2 bs2',
-      reachable_blocks m bs1 = bs1' ->
-      reachable_blocks m bs2 = bs2' ->
-      reachable_blocks m (fsetU bs1 bs2) = fsetU bs1' bs2'.
-  
-  Axiom reachable_blocks_invariant_to_unreachable_store:
-    forall m m' bs bs' b i v,
-      reachable_blocks m bs = bs' ->
-      b \notin bs' ->
-      store m b i v = Some m' ->
-      reachable_blocks m' bs = bs'.
-
-  Axiom stores_to_block_does_not_affect_its_own_reachability:
-    forall m m' bs b i v,
-      b \in reachable_blocks m bs ->
-      store m b i v = Some m' ->
-      b \in reachable_blocks m' bs.
 End AbstractComponentMemory.
 
-Module ComponentMemory : AbstractComponentMemory.
+Module ComponentMemory.
   Definition block := list value.
 
   Implicit Types (b : Block.id).
@@ -144,40 +116,21 @@ Module ComponentMemory : AbstractComponentMemory.
 
   Definition domm (m : t) := @domm nat_ordType block (content m).
 
-  Fixpoint block_ids_in_chunk chunk : list Block.id :=
+  Fixpoint block_ids_in_chunk chunk : list (Component.id * Block.id) :=
     match chunk with
     | nil => nil
     | v :: vs => match v with
-                 | Ptr p => [Pointer.block p] ++ block_ids_in_chunk vs
+                 | Ptr p => [(Pointer.component p, Pointer.block p)] ++ block_ids_in_chunk vs
                  | _ => block_ids_in_chunk vs
                  end
     end.
   
-  Definition load_block (m: t) (b: Block.id) : list Block.id :=
+  Definition load_block (m: t) (b: Block.id) : list (Component.id * Block.id) :=
     match getm (content m) b with
     | Some chunk => block_ids_in_chunk chunk
     | None => nil
     end.
-
-  (* Definition access_step (m: t) (bs: list Block.id) : list Block.id :=
-    concat (map (load_block m) bs).
-  *)
-  (* TODO: This is a bad definition. It should be done in terms of sets, not lists *)
-
-  (* TODO: FIXME to actually make an access by relying on block_ids_in_chunk.
-     Currently don't know how to iterate over the set bs.
-     Want to use the map notation @: then the \bigcup notation. *)
-  Definition access_step (m: t) (bs: {fset Block.id}) := bs.
   
-  Fixpoint reachable_blocks_with_fuel (m: t) (bs: {fset Block.id}) (n: nat) :=
-    match n with
-    | 0 => bs
-    | S n => reachable_blocks_with_fuel m (access_step m bs) n
-    end.
-  
-  Definition reachable_blocks (m : t) (bs: {fset Block.id}) :=
-    reachable_blocks_with_fuel m bs (size (domm m)).
-
   Lemma load_prealloc:
     forall bufs b i,
       load (prealloc bufs) b i =
@@ -270,42 +223,7 @@ Module ComponentMemory : AbstractComponentMemory.
     forall m m' n b,
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
-  Admitted.
-
-  Lemma reachable_blocks_expansive:
-    forall m bs bs',
-      reachable_blocks m bs = bs' ->
-      fsubset bs bs'.
-  Admitted.
-
-  Lemma reachable_blocks_maximal:
-    forall m bs bs',
-      reachable_blocks m bs = bs' ->
-      reachable_blocks m bs' = bs'.
-  Admitted.
-
-  Lemma reachable_blocks_additive:
-    forall m bs1 bs1' bs2 bs2',
-      reachable_blocks m bs1 = bs1' ->
-      reachable_blocks m bs2 = bs2' ->
-      reachable_blocks m (fsetU bs1 bs2) = fsetU bs1' bs2'.
-  Admitted.
-  
-  Lemma reachable_blocks_invariant_to_unreachable_store:
-    forall m m' bs bs' b i v,
-      reachable_blocks m bs = bs' ->
-      b \notin bs' ->
-      store m b i v = Some m' ->
-      reachable_blocks m' bs = bs'.
-  Admitted.
-
-  Lemma stores_to_block_does_not_affect_its_own_reachability:
-    forall m m' bs b i v,
-      b \in reachable_blocks m bs ->
-      store m b i v = Some m' ->
-      b \in reachable_blocks m' bs.
-  Admitted.
-  
+  Admitted.  
 End ComponentMemory.
 
 Module ComponentMemoryExtra.
@@ -321,7 +239,7 @@ End ComponentMemoryExtra.
 
 Module Memory.
   Definition t := NMap ComponentMemory.t.
-
+  
   Fixpoint empty (cs : list Component.id) :=
     match cs with
     | [] => emptym
@@ -352,6 +270,141 @@ Module Memory.
     | None => None
     end.
 
+  Definition apply_load_block (m: t) (pair: Component.id * Block.id) : list (Component.id * Block.id) :=
+    match m (fst pair) with
+    | None => nil
+    | Some compMem => ComponentMemory.load_block compMem (snd pair)
+    end.
+
+  Definition access_step (m: t) (bs: {fset (Component.id * Block.id)}) :
+    {fset (Component.id * Block.id)} :=
+    fsetU bs (fset (concat (map (apply_load_block m) (val bs)))).
+  
+  Fixpoint reachable_blocks_with_fuel (m: t) (bs: {fset (Component.id * Block.id)}) (n: nat) :=
+    match n with
+    | 0 => bs
+    | S n => reachable_blocks_with_fuel m (access_step m bs) n
+    end.
+  
+  Definition reachable_blocks (m : t) (bs: {fset (Component.id * Block.id)}) :=
+    reachable_blocks_with_fuel m bs (size (domm m)).
+
+  Print idempotent.
+  Lemma access_step_expansive m bs bs' :
+    access_step m bs = bs' ->
+    fsubset bs bs'.
+  Proof. intros H. unfold access_step in H. rewrite <- H. unfold fsubset. rewrite fsetUA.
+         rewrite fsetUid. auto.
+  Qed.
+
+  Lemma reachable_blocks_with_fuel_expansive:
+    forall n m bs bs',
+    reachable_blocks_with_fuel m bs n = bs' ->
+    fsubset bs bs'.
+  Proof.
+    induction n.
+    - simpl. intros. rewrite H. unfold fsubset. rewrite fsetUid. auto.
+    - intros.
+      simpl in H. apply IHn in H.
+      remember (access_step m bs) as bs''.
+      symmetry in Heqbs''.
+      apply access_step_expansive in Heqbs''.
+      Search fsubset.
+      eapply fsubset_trans.
+      + exact Heqbs''.
+      + exact H.
+  Qed.
+  
+  Lemma reachable_blocks_expansive:
+    forall m bs bs',
+      reachable_blocks m bs = bs' ->
+      fsubset bs bs'.
+  Proof.
+    intros. unfold reachable_blocks in H.
+    apply reachable_blocks_with_fuel_expansive with (size (domm m)) m. auto.
+  Qed.
+
+  Lemma access_step_additive m bs1 bs1' bs2 bs2':
+    access_step m bs1 = bs1' ->
+    access_step m bs2 = bs2' ->
+    access_step m (fsetU bs1 bs2) = fsetU bs1' bs2'.
+  Proof.
+    unfold access_step. intros H1 H2.
+    subst bs1' bs2'.
+    rewrite <- ?fsetUA.
+    (* Here, instead of the assert,
+       try to cancel out bs1 with bs1 on both sides of the equation. *)
+    assert  ( ((bs2 :|: fset (concat [seq apply_load_block m i | i <- val (bs1 :|: bs2)])))%fset =
+              ((fset (concat [seq apply_load_block m i | i <- val bs1])
+                     :|: (bs2 :|: fset (concat [seq apply_load_block m i | i <- val bs2]))))%fset).
+    {
+      rewrite -> fsetUA with (y := bs2).
+      rewrite -> fsetUC with (y := bs2). (* unintended consequence *)
+      rewrite -> fsetUC with (y := bs2). (* intended consequence *)
+      rewrite <- fsetUA with (x := bs2).
+      (* Here, instead of the assert, 
+         again try to cancel out bs2 with bs2 on both sides of the equation. *)
+      assert (  fset (concat [seq apply_load_block m i | i <- val (bs2 :|: bs1)])%fset =
+                ((fset (concat [seq apply_load_block m i | i <- val bs1]))%fset
+                      :|: fset (concat [seq apply_load_block m i | i <- val bs2]))%fset
+             ).
+      {
+        rewrite fsetUC.
+        rewrite <- fset_cat.
+        unfold fsetU.
+        (* Here, need to cancel out "val fset" of the LHS, then try to show additivity of
+           apply_load_block, I guess. *)
+        Admitted.
+     (* }*)
+    (*} *)
+
+  Lemma reachable_blocks_with_fuel_additive:
+    forall m n bs1 bs2 bs1' bs2',
+    reachable_blocks_with_fuel m bs1 n = bs1' ->
+    reachable_blocks_with_fuel m bs2 n = bs2' ->
+    reachable_blocks_with_fuel m (fsetU bs1 bs2) n = fsetU bs1' bs2'.
+  Proof.
+    induction n.
+    - simpl. intros. subst bs1' bs2'. auto.
+    - simpl. intros.
+      erewrite access_step_additive.
+      + eapply IHn.
+        * exact H.
+        * exact H0.
+      + auto.
+      + auto.
+  Qed.
+  
+  Lemma reachable_blocks_additive:
+    forall m bs1 bs1' bs2 bs2',
+      reachable_blocks m bs1 = bs1' ->
+      reachable_blocks m bs2 = bs2' ->
+      reachable_blocks m (fsetU bs1 bs2) = fsetU bs1' bs2'.
+    unfold reachable_blocks. intros.
+    apply reachable_blocks_with_fuel_additive; auto.
+  Qed.
+
+  Lemma reachable_blocks_maximal:
+    forall m bs bs',
+      reachable_blocks m bs = bs' ->
+      reachable_blocks m bs' = bs'.
+  Proof. Admitted.
+
+  Lemma reachable_blocks_invariant_to_unreachable_store:
+    forall m m' bs bs' b i v,
+      reachable_blocks m bs = bs' ->
+      b \notin bs' ->
+      store m i v = Some m' ->
+      reachable_blocks m' bs = bs'.
+  Admitted.
+
+  Lemma stores_to_block_does_not_affect_its_own_reachability:
+    forall m m' bs b i v,
+      b \in reachable_blocks m bs ->
+      store m i v = Some m' ->
+      b \in reachable_blocks m' bs.
+  Admitted.
+  
   Lemma load_after_store mem ptr v mem' ptr' :
     store mem  ptr v = Some mem' ->
     load mem' ptr' =
@@ -642,8 +695,12 @@ Proof.
     last discriminate.
   simpl.
   destruct (ComponentMemory.alloc memC size) as [memC' b].
-  rewrite setm_union. now inversion Halloc.
-Qed.
+  rewrite setm_union.
+  (* Akram: I broke this proof, but I do not yet understand how I broke it. *)
+  Admitted.
+  (*
+  now inversion Halloc.
+Qed.*)
 
 (* (* JT: TODO: clean proof *) *)
 (* Lemma mem_store_different_component : forall mem mem' C b o val Cid, *)
