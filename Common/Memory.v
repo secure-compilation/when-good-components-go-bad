@@ -59,7 +59,7 @@ Module Type AbstractComponentMemory.
 
 End AbstractComponentMemory.
 
-Module ComponentMemory.
+Module ComponentMemory : AbstractComponentMemory.
   Definition block := list value.
 
   Implicit Types (b : Block.id).
@@ -349,7 +349,7 @@ Module Memory.
                       :|: fset (concat [seq apply_load_block m i | i <- val bs2]))%fset
              ).
       {
-        rewrite fsetUC.
+        rewrite fsetUC. (* fix the unintended consequence *)
         rewrite <- fset_cat.
         unfold fsetU.
         (* Here, need to cancel out "val fset" of the LHS, then try to show additivity of
@@ -695,12 +695,8 @@ Proof.
     last discriminate.
   simpl.
   destruct (ComponentMemory.alloc memC size) as [memC' b].
-  rewrite setm_union.
-  (* Akram: I broke this proof, but I do not yet understand how I broke it. *)
-  Admitted.
-  (*
-  now inversion Halloc.
-Qed.*)
+  rewrite setm_union. now inversion Halloc.
+Qed.
 
 (* (* JT: TODO: clean proof *) *)
 (* Lemma mem_store_different_component : forall mem mem' C b o val Cid, *)
