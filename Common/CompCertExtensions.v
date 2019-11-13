@@ -1,4 +1,5 @@
 Require Import Common.Definitions.
+Require Import Common.Values.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -10,13 +11,15 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype seq.
    can extend the encoding by using nested sums. *)
 Definition sum_of_event (e : event) :=
   match e with
-  | ERet C v C' => inl (C, v, C')
-  | ECall C P v C' => inr (C, P, v, C')
+  | ERet C v C' => inl (inl (C, v, C'))
+  | ECall C P v C' => inl (inr (C, P, v, C'))
+  | ERead C p v => inr (inl (C, p, v))
+  | EWrite C p v => inr (inr (C, p, v))
   end.
 
 Lemma sum_of_event_inj : injective sum_of_event.
 Proof.
-by case=> [????|???] [????|???] //= => [[-> -> -> ->]|[-> -> ->]].
+by case=> [????|???|???|???] [????|???|???|???] //= => [[-> -> -> ->]|[-> -> ->]|[-> -> ->]|[-> -> ->]].
 Qed.
 
 Definition event_eqMixin := InjEqMixin sum_of_event_inj.
