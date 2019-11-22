@@ -1,20 +1,29 @@
 Require Import Common.Definitions.
+Require Import Common.Values.
 Require Import CompCert.Coqlib.
 
 Inductive event :=
 | ECall : Component.id -> Procedure.id -> Z -> Component.id -> event
-| ERet : Component.id -> Z -> Component.id -> event.
+| ERet : Component.id -> Z -> Component.id -> event
+| ERead : Component.id -> Pointer.t -> value -> event
+| EWrite : Component.id -> Pointer.t -> value -> event.
 
 Definition cur_comp_of_event (e: event) : Component.id :=
   match e with
-  | ECall C _ _ _ => C
-  | ERet  C _ _   => C
+  | ECall  C _ _ _ => C
+  | ERet   C _ _   => C
+  | ERead  C _ _   => C
+  | EWrite C _ _   => C
   end.
 
 Definition next_comp_of_event (e: event) : Component.id :=
   match e with
-  | ECall _ _ _ C => C
-  | ERet  _ _   C => C
+  (* Calls and returns yield control. *)
+  | ECall  _ _ _ C => C
+  | ERet   _ _   C => C
+  (* Reads and writes retain control. *)
+  | ERead  C _ _   => C
+  | EWrite C _ _   => C
   end.
 
 Definition trace := list event.
@@ -212,4 +221,10 @@ Inductive match_traces: trace -> trace -> Prop :=
                    (ECall C P arg C' :: nil)
   | match_traces_ret: forall C retval C',
       match_traces (ERet C retval C' :: nil)
-                   (ERet C retval C' :: nil).
+                   (ERet C retval C' :: nil)
+  | match_traces_read: forall C ptr v,
+      match_traces (ERead C ptr v :: nil)
+                   (ERead C ptr v :: nil)
+  | match_traces_write: forall C ptr v,
+      match_traces (EWrite C ptr v :: nil)
+                   (EWrite C ptr v :: nil).

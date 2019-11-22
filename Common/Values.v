@@ -1,6 +1,9 @@
 Require Import Common.Definitions.
 Require Import Common.Util.
 
+Require Import Lib.Extra.
+From mathcomp Require Import ssreflect ssrnat eqtype.
+
 Module Block.
   Definition id := nat.
   Definition offset := Z.
@@ -80,11 +83,35 @@ Module Pointer.
   Qed.
 End Pointer.
 
+(* Values. *)
 Inductive value : Type :=
 | Int : Z -> value
 | Ptr : Pointer.t -> value
 | Undef : value.
 
+Definition eqvalue v1 v2 :=
+  match v1, v2 with
+  | Int z1, Int z2 => z1 == z2
+  | Ptr p1, Ptr p2 => p1 == p2
+  (* RB: TODO: From FG, however should Undef be equal to itself? *)
+  | Undef, Undef => true
+  | _, _ => false
+  end.
+
+Lemma eqvalueP : Equality.axiom eqvalue.
+Proof.
+  move; elim => [z1 | p1 |] [z2 | p2|]//= ;
+                 apply: (iffP idP); move => H; inversion H ; try constructor.
+  by move: H => /Z.eqb_spec => H; rewrite H.
+  done.
+  by move: H => /pair_eqP => H; rewrite H.
+  done.
+Qed.
+
+Definition value_eqMixin: Equality.mixin_of value := EqMixin eqvalueP.
+Canonical value_eqType := Eval hnf in EqType value value_eqMixin.
+
+(* Binary operations. *)
 Inductive binop := Add | Minus | Mul | Eq | Leq.
 
 Definition eval_binop (op : binop) (v1 v2 : value) : value :=

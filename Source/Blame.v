@@ -452,6 +452,7 @@ case=> scs2'' /CS.eval_kstep_complete step2' ->; split; congruence.
 Qed.
 
 (* FIXME: The global environment is not serving any purpose right now. *)
+(* NOTE: Auxiliary semantics in Akram's development. *)
 Inductive kstep
           (p: program) (ctx: Program.interface) (G : global_env)
           (sps : state) (t : trace) (sps' : state) : Prop :=
@@ -959,6 +960,7 @@ Qed.
 
 (* RB: TODO: Source prefixes no longer needed: clean proof. *)
 (* RB: TODO: Can we separate this from PS? *)
+(* RB: TODO: Rephrase theorem to better match top-level proof? *)
 Lemma blame_program:
   forall
     p Cs t' P' m
