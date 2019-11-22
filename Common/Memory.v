@@ -276,6 +276,126 @@ Module Memory.
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
     end.
 
+  (* Have path be the type of non-empty sequences? *)
+  Definition path := (seq (Component.id * Block.id)).
+  SearchAbout seq.
+
+  Check last.
+  Check last fsetU.
+  Definition a : path := nil.
+  Check last (1,2).
+  Definition b := (nth_error (1::(2::3::[])) (size (1::(2::3::[])) - 1)).
+  Compute b.
+
+  (* Given a path p to a block cb (a block that is represented by the head of p),
+     find all pointer values that live in cb, and use each pointer value to create a new path that is
+     the extension of p with the block id of this pointer value. Return the list of all such new
+     extended paths. *)
+  Definition extend_path (m: t) (p: path) : list path :=
+    match p with
+    | []      => [] (* this case should not be dealt with because an empty path should never arise. *)
+    | cb :: _ => map (fun x => cons x p) (apply_load_block m cb)
+    end.
+
+  Definition access_step_paths (m: t) (bs: {fset path}) : {fset path} :=
+    fsetU bs (fset (concat (map (extend_path m) (val bs)))).
+
+  Fixpoint reachable_paths_with_fuel (m: t) (bs: {fset path}) (n: nat) : {fset path} :=
+    match n with
+    | 0 => bs
+    | S n => reachable_paths_with_fuel m (access_step_paths m bs) n
+    end.
+
+(*  Check domm.
+  Print Module FSet.
+  Check size fset0.
+  Check map size [fset0].
+  Definition number_of_allocated_blocks (m: t) :=
+    map size (map ComponentMemory.domm (map snd (elementsm m))).
+  Check number_of_allocated_blocks.
+  Check elementsm.*)
+
+  (* This definition is wrong. Instead need to properly count the blocks. Now we're counting 
+   the number of component memories.*)
+  Definition reachable_paths (m: t) (bs: {fset path}) :=
+    reachable_paths_with_fuel m bs (size (domm m)).
+
+  Check maxn.
+  Check foldl.
+  Definition max_path_size_in_set (bs : {fset path}) : nat := foldl max 0 (map size (val bs)).
+
+  Lemma max_path_size_in_set_distributes :
+    forall bs bs',
+      max_path_size_in_set (bs :|: bs')%fset = max (max_path_size_in_set bs) (max_path_size_in_set bs').
+  Proof.
+  Admitted.
+
+
+  (* Not sure if needed. *)
+  Lemma max_path_size_in_set_seq :
+    forall bs,
+      max_path_size_in_set (fset (val bs)) = max_path_size_in_set bs.
+  Proof.
+    unfold max_path_size_in_set.
+    (* Here, need to cancel out "val fset val" *)
+  Admitted.
+
+  Lemma extend_path_increases_length :
+    forall m p lp,
+      extend_path m p = lp ->
+      all (fun x => size x =? size p + 1) lp.
+  Proof.
+    intros.
+    subst lp.
+    unfold extend_path.
+    SearchAbout all.
+    destruct p.
+    - apply all_nil.
+    - SearchAbout all.
+      rewrite all_map. simpl.
+      Check preim.
+      SearchAbout preim.
+      SearchAbout all.
+      unfold preim.
+      SearchAbout size.
+      simpl.
+      induction (size p0).
+      + simpl.
+        SearchAbout all.
+        apply all_predT.
+      + simpl. exact IHn.
+  Qed.
+  
+  (* Not sure if needed. *)
+  Lemma access_step_does_not_decrease_path_length :
+    forall m ps ps',
+      access_step_paths m ps = ps' ->
+      max_path_size_in_set ps' >= max_path_size_in_set ps.
+  Proof.
+    unfold access_step_paths.
+    intros. subst ps'.
+    rewrite max_path_size_in_set_distributes.
+    SearchAbout Init.Nat.max.
+  Admitted.
+
+  Lemma reachable_paths_with_fuel_increases_max_path_by_fuel :
+    forall mem ps ps' fuel,
+      reachable_paths_with_fuel mem ps fuel = ps' ->
+      max_path_size_in_set ps' <= fuel + max_path_size_in_set ps.
+  Proof.
+    unfold reachable_paths_with_fuel.
+    intros.
+    induction fuel.
+    - subst ps'.
+      induction (max_path_size_in_set ps); auto.
+    - subst ps'.
+    Admitted.
+  (*
+    Definition extend_set_of_paths_one_step (m: t) (ps: {fset path}) : {fset path} :=
+    fsetU ps (fset ).
+   *)
+
+  (* NO PATHS YET *)
   Definition access_step (m: t) (bs: {fset (Component.id * Block.id)}) :
     {fset (Component.id * Block.id)} :=
     fsetU bs (fset (concat (map (apply_load_block m) (val bs)))).
