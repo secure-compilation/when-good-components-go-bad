@@ -294,7 +294,7 @@ Module Memory.
   Definition extend_path (m: t) (p: path) : list path :=
     match p with
     | []      => [] (* this case should not be dealt with because an empty path should never arise. *)
-    | cb :: _ => map (fun x => cons x p) (apply_load_block m cb)
+    | cb :: _ => map (fun x => cons x p) (filter (fun x => x \notin p) (apply_load_block m cb))
     end.
 
   Definition access_step_paths (m: t) (bs: {fset path}) : {fset path} :=
@@ -365,6 +365,27 @@ Module Memory.
         apply all_predT.
       + simpl. exact IHn.
   Qed.
+
+  SearchAbout seq.
+  Lemma extend_path_never_produces_cycles :
+    forall m p lp,
+      uniq p ->
+      extend_path m p = lp ->
+      all uniq lp.
+  Proof.
+    unfold extend_path.
+    intros.
+    subst lp.
+    induction p.
+    - apply all_nil.
+    - rewrite all_map. unfold preim. simpl.  
+      SearchAbout all.
+      SearchAbout uniq.
+      SearchAbout path.ucycle.
+      Print path.ucycle.
+      Print path.cycle.
+      Print path.path.
+    Admitted.
   
   (* Not sure if needed. *)
   Lemma access_step_does_not_decrease_path_length :
@@ -406,7 +427,8 @@ Module Memory.
     | S n => reachable_blocks_with_fuel m (access_step m bs) n
     end.
   
-  Definition reachable_blocks (m : t) (bs: {fset (Component.id * Block.id)}) :=
+  Definition reachable_blocks (m : t) (bs: {fset (Component.id * Block.id)}) :
+    {fset (Component.id * Block.id)} :=
     reachable_blocks_with_fuel m bs (size (domm m)).
 
   Print idempotent.
