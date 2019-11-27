@@ -386,17 +386,64 @@ Module Memory.
       Print path.cycle.
       Print path.path.
     Admitted.
+
+  Lemma access_step_paths_expansive :
+    forall m ps,
+      fsubset ps (access_step_paths m ps).
+  Proof.
+    intros. unfold access_step_paths. apply fsubsetUl.
+  Qed.
   
   (* Not sure if needed. *)
   Lemma access_step_does_not_decrease_path_length :
     forall m ps ps',
       access_step_paths m ps = ps' ->
-      max_path_size_in_set ps' >= max_path_size_in_set ps.
+      (ps = ps' /\
+       max_path_size_in_set ps' = max_path_size_in_set ps)
+      \/
+      max_path_size_in_set ps' = max_path_size_in_set ps + 1.
   Proof.
-    unfold access_step_paths.
-    intros. subst ps'.
-    rewrite max_path_size_in_set_distributes.
-    SearchAbout Init.Nat.max.
+    intros.
+    destruct (fsubset ps' ps) eqn:e.
+    - left. split.
+      + apply: fsubset_sizeP.
+        * pose (e1 := access_step_paths_expansive m ps).
+          erewrite H in e1.
+          pose (e1size := fsubset_leq_size e1).
+          pose (esize := fsubset_leq_size e).
+          SearchAbout "<=".
+          apply anti_leq.
+          SearchAbout "<=".
+          Print antisymmetric.
+          SearchAbout "&&".
+          SearchAbout is_true.
+          unfold is_true in e1size.
+          unfold is_true in esize.
+          rewrite e1size. rewrite esize. auto.
+        * pose (e1 := access_step_paths_expansive m ps).
+          erewrite H in e1. trivial.
+      + (* Here, want to reuse the sibling goal. How to do that without re-proving it? *)
+        assert (pseqps': ps = ps').
+        apply: fsubset_sizeP.
+        * pose (e1 := access_step_paths_expansive m ps).
+          erewrite H in e1.
+          pose (e1size := fsubset_leq_size e1).
+          pose (esize := fsubset_leq_size e).
+          SearchAbout "<=".
+          apply anti_leq.
+          SearchAbout "<=".
+          Print antisymmetric.
+          SearchAbout "&&".
+          SearchAbout is_true.
+          unfold is_true in e1size.
+          unfold is_true in esize.
+          rewrite e1size. rewrite esize. auto.
+        * pose (e1 := access_step_paths_expansive m ps).
+          erewrite H in e1. trivial.
+          rewrite pseqps'. trivial.
+    - right.
+      
+      SearchAbout Init.Nat.max.
   Admitted.
 
   Lemma reachable_paths_with_fuel_increases_max_path_by_fuel :
