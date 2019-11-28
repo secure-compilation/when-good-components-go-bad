@@ -145,14 +145,12 @@ have : suffix [:: C, C' & tail (callers (run_trace stack_state0 pre))]
 exact: well_bracketed_trace_suffix=> //.
 Qed.
 
-(* TODO: Here, this is an important definition. Need to understand whether
-   the interface gives the addresses of the static memory. It probably doesn't.
-   In the case that it doesn't, then in order to know whether a read/write event
-   is well formed, we will need an extra argument that gives us the necessary
-   load-time information about the locations of the static memory of each component.
-   Only then can we use block reachability to compute the views of each component.
-   Based on the view of a component, we can judge whether an ERead/EWrite that it
-   performs is well formedl.  *)
+(* TODO: Here, this is an important definition.
+   Need as an extra argument the status of the (shared?) memory at the program state in which
+   the event was emitted.
+   Only then can we use reachability to compute the views of each component.
+   Based on the view of a component memory, we can judge whether an ERead/EWrite that it
+   performs is a possible read/write.  *)
 Definition well_formed_event intf (e: event) : bool :=
   match e with
   | ECall C P _ C' => (C != C') && imported_procedure_b intf C C' P
