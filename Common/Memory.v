@@ -442,6 +442,17 @@ Module Memory.
           erewrite H in e1. trivial.
           rewrite pseqps'. trivial.
     - right.
+      pose (e1 := access_step_paths_expansive m ps).
+      erewrite H in e1.
+      SearchAbout fsubset.
+      pose (eqn := eqEfsubset ps ps').
+      erewrite e in eqn.
+      SearchAbout andb.
+      erewrite andb_false_r in eqn.
+      subst ps'.
+      unfold access_step_paths in eqn.
+      SearchAbout fsubset.
+      unfold max_path_size_in_set.
       
       SearchAbout Init.Nat.max.
   Admitted.
