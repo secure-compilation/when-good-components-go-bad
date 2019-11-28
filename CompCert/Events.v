@@ -57,7 +57,9 @@ Lemma Eapp_assoc: forall t1 t2 t3, (t1 ** t2) ** t3 = t1 ** (t2 ** t3).
 Proof. intros. unfold Eapp, trace. apply app_ass. Qed.
 
 Lemma Eapp_E0_inv: forall t1 t2, t1 ** t2 = E0 -> t1 = E0 /\ t2 = E0.
-Proof (@app_eq_nil event).
+Proof.
+  intros. apply app_eq_nil. auto.
+Qed.
 
 Lemma E0_left_inf: forall T, E0 *** T = T.
 Proof. auto. Qed.
@@ -213,6 +215,9 @@ Qed.
 
 Set Implicit Arguments.
 
+(* TODO: What does match_traces mean? How should it be updated now
+   that we have ERead and EWrite?
+ *)
 Inductive match_traces: trace -> trace -> Prop :=
   | match_traces_E0:
       match_traces nil nil

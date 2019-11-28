@@ -63,6 +63,7 @@ Fixpoint well_bracketed_trace s t : bool :=
       | head :: tail =>
         (head == C') && well_bracketed_trace (StackState C' tail) t'
       end
+    | _ => well_bracketed_trace s t'
     end
   end.
 
@@ -70,6 +71,7 @@ Definition run_event s e :=
   match e with
   | ECall C _ _ C' => StackState C' (C :: callers s)
   | ERet  C _   C' => StackState C' (tail (callers s))
+  | _ => s
   end.
 
 Definition run_trace s t := foldl run_event s t.
@@ -81,12 +83,13 @@ Lemma well_bracketed_trace_cat s t1 t2 :
   well_bracketed_trace s (t1 ++ t2) =
   well_bracketed_trace s t1 &&
   well_bracketed_trace (run_trace s t1) t2.
-Proof.
-elim: t1 s=> [//|[C ? ? C'|C ? C'] t1 IH] [Ccur callers] /=.
+Proof.  
+(* TODO: Try to understand and fix the proof. *)
+elim: t1 s=> [//|[C ? ? C'|C ? C'|? ? ?|? ? ?] t1 IH] [Ccur callers] /=.
   by rewrite IH andbA.
 case: eqP callers => [_ {Ccur}|_] //= [|top callers] //=.
-by rewrite IH andbA.
-Qed.
+  by rewrite IH andbA.
+Admitted.
 
 Definition seq_of_stack_state s := cur_comp s :: callers s.
 
@@ -100,6 +103,7 @@ Lemma well_bracketed_trace_suffix t C C' Cs :
   suffix [:: C, C' & Cs] (run_trace stack_state0 t) ->
   exists t1 P arg t2, t = t1 ++ ECall C' P arg C :: t2.
 Proof.
+(* TODO: Try to understand and fix the proof. *)
 set s0 := stack_state0.
 elim/last_ind: t=> [|t e IH] //=.
   by rewrite suffix_cons suffix_nil /= orbF => _ /eqP.
@@ -107,7 +111,7 @@ have -> : well_bracketed_trace s0 (rcons t e) =
           well_bracketed_trace s0 t &&
           well_bracketed_trace (run_trace s0 t) [:: e].
   by rewrite -cats1 well_bracketed_trace_cat andbC.
-rewrite run_trace1; case: e => [C1 P arg C2|C1 ? C2] /=.
+rewrite run_trace1; case: e => [C1 P arg C2|C1 ? C2|? ? ?|? ? ?] /=.
   rewrite andbT; case/andP=> wb_t /eqP <- {C1} /=.
   rewrite -[_ :: callers _]/(run_trace s0 t : seq _) suffix_cons /=.
   case/orP=> [/eqP|Hsuff].
@@ -122,8 +126,8 @@ have -> : StackState C2 (tl (callers (run_trace s0 t))) =
 move=> Hsuff; have {Hsuff} Hsuff: suffix [:: C, C' & Cs] (run_trace s0 t).
   by rewrite suffix_cons Hsuff orbT.
 case/(_ wb_t Hsuff): IH=> [t1 [P [arg [t2 ->]]]].
-by eexists t1, P, arg, (rcons _ _); rewrite rcons_cat.
-Qed.
+  by eexists t1, P, arg, (rcons _ _); rewrite rcons_cat.
+Admitted.
 
 Lemma well_bracketed_trace_inv t C res C' :
   well_bracketed_trace stack_state0 (t ++ [:: ERet C res C']) ->
@@ -141,10 +145,20 @@ have : suffix [:: C, C' & tail (callers (run_trace stack_state0 pre))]
 exact: well_bracketed_trace_suffix=> //.
 Qed.
 
+(* TODO: Here, this is an important definition. Need to understand whether
+   the interface gives the addresses of the static memory. It probably doesn't.
+   In the case that it doesn't, then in order to know whether a read/write event
+   is well formed, we will need an extra argument that gives us the necessary
+   load-time information about the locations of the static memory of each component.
+   Only then can we use block reachability to compute the views of each component.
+   Based on the view of a component, we can judge whether an ERead/EWrite that it
+   performs is well formedl.  *)
 Definition well_formed_event intf (e: event) : bool :=
   match e with
   | ECall C P _ C' => (C != C') && imported_procedure_b intf C C' P
   | ERet  C _   C' => (C != C')
+  | ERead _ _ _ => false
+  | EWrite _ _ _ => false
   end.
 
 Definition well_formed_trace intf (t: trace) : bool :=
@@ -160,6 +174,8 @@ Lemma well_formed_trace_int intf t :
   closed_interface intf ->
   all (declared_event_comps intf) t.
 Proof.
+Admitted.
+(*
 case/andP=> wb wf clos; rewrite /declared_event_comps.
 apply/allP; case=> [C P v C'|C v C'] /=; rewrite !mem_domm.
 - move/(allP wf)=> /andP [_ imp].
@@ -174,5 +190,5 @@ apply/allP; case=> [C P v C'|C v C'] /=; rewrite !mem_domm.
   case/imported_procedure_iff/clos: (imp)=> ? [-> _] /=.
   by move: imp; rewrite /imported_procedure_b; case: getm.
 Qed.
-
+*)
 End Traces.
