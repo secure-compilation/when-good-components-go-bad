@@ -24,6 +24,20 @@ Definition stack : Type := list Pointer.t.
 
 Definition state : Type := stack * Memory.t * Register.t * Pointer.t.
 
+Definition reach_addr : Type := {fmap (Component.id -> {fset (Component.id * Block.id)})}.
+
+Definition update_reachability_of_component_with_value : value -> Component.id -> reach_addr -> reach_addr.
+  Admitted.
+
+Definition compute_trace_for_load_by_component : Component.id -> Pointer.t -> reach_addr -> trace.
+  Admitted.
+
+Definition compute_trace_for_store_by_component : Component.id -> Pointer.t -> reach_addr -> trace.
+  Admitted.
+
+Definition propagate_store_to_all_components_reach : Pointer.t -> value -> reach_addr -> reach_addr.
+  Admitted.
+
 Ltac unfold_state st :=
   let gps := fresh "gps" in
   let mem := fresh "mem" in
@@ -199,107 +213,114 @@ Definition final_state (G: global_env) (s: state) : Prop :=
 
 (* relational specification *)
 
-Inductive step (G : global_env) : state -> trace -> state -> Prop :=
-| Nop: forall gps mem regs pc,
+Inductive step (G : global_env) : state -> reach_addr -> trace -> state -> reach_addr -> Prop :=
+| Nop: forall gps mem regs pc reach,
     executing G pc INop ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs, Pointer.inc pc)
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem, regs, Pointer.inc pc) reach
 
-| Label: forall gps mem regs pc l,
+| Label: forall gps mem regs pc l reach,
     executing G pc (ILabel l) ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs, Pointer.inc pc)
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem, regs, Pointer.inc pc) reach
 
-| Const: forall gps mem regs regs' pc r v,
+| Const: forall gps mem regs regs' pc r v reach,
     executing G pc (IConst v r) ->
     Register.set r (imm_to_val v) regs = regs' ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs', Pointer.inc pc)
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem, regs', Pointer.inc pc) reach
 
-| Mov: forall gps mem regs regs' pc r1 r2,
+| Mov: forall gps mem regs regs' pc r1 r2 reach,
     executing G pc (IMov r1 r2) ->
     Register.set r2 (Register.get r1 regs) regs = regs' ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs', Pointer.inc pc)
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem, regs', Pointer.inc pc) reach
 
-| BinOp: forall gps mem regs regs' pc r1 r2 r3 op,
+| BinOp: forall gps mem regs regs' pc r1 r2 r3 op reach,
     executing G pc (IBinOp op r1 r2 r3) ->
     let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
     Register.set r3 result regs = regs' ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs', Pointer.inc pc)
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem, regs', Pointer.inc pc) reach
 
-| Load: forall gps mem regs regs' pc r1 r2 ptr v,
+| Load: forall gps mem regs regs' pc r1 r2 ptr v reach e,
     executing G pc (ILoad r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
-    Pointer.component ptr = Pointer.component pc ->
+    (* Pointer.component ptr = Pointer.component pc -> *) (* Shared memory prohibition removed *)
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs', Pointer.inc pc)
+    compute_trace_for_load_by_component (Pointer.component pc) ptr reach = e ->
+    step G (gps, mem, regs, pc) reach e
+           (gps, mem, regs', Pointer.inc pc) reach
 
-| Store: forall gps mem mem' regs pc ptr r1 r2,
+| Store: forall gps mem mem' regs pc ptr r1 r2 v reach reach' e,
     executing G pc (IStore r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
-    Pointer.component ptr = Pointer.component pc ->
-    Memory.store mem ptr (Register.get r2 regs) = Some mem' ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem', regs, Pointer.inc pc)
+    (* Pointer.component ptr = Pointer.component pc ->*)
+    Register.get r2 regs = v ->
+    Memory.store mem ptr v = Some mem' ->
+    compute_trace_for_store_by_component (Pointer.component pc) ptr reach = e ->
+    propagate_store_to_all_components_reach ptr v reach = reach' ->
+    step G (gps, mem, regs, pc) reach e
+           (gps, mem', regs, Pointer.inc pc) reach'
 
-| Jal: forall gps mem regs regs' pc pc' l,
+| Jal: forall gps mem regs regs' pc pc' l reach,
     executing G pc (IJal l) ->
     find_label_in_component G pc l = Some pc' ->
     Register.set R_RA (Ptr (Pointer.inc pc)) regs = regs' ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs', pc')
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem, regs', pc') reach
 
-| Jump: forall gps mem regs pc pc' r,
+| Jump: forall gps mem regs pc pc' r reach,
     executing G pc (IJump r) ->
     Register.get r regs = Ptr pc' ->
     Pointer.component pc' = Pointer.component pc ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs, pc')
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem, regs, pc') reach
 
-| BnzNZ: forall gps mem regs pc pc' r l val,
+| BnzNZ: forall gps mem regs pc pc' r l val reach,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int val ->
     (val <> 0) % Z ->
     find_label_in_procedure G pc l = Some pc' ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs, pc')
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem, regs, pc') reach
 
-| BnzZ: forall gps mem regs pc r l,
+| BnzZ: forall gps mem regs pc r l reach,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int 0 ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem, regs, Pointer.inc pc)
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem, regs, Pointer.inc pc) reach
 
-| Alloc: forall gps mem mem' regs regs' pc rsize rptr size ptr,
+| Alloc: forall gps mem mem' regs regs' pc rsize rptr size ptr reach reach',
     executing G pc (IAlloc rptr rsize) ->
     Register.get rsize regs = Int size ->
     (size > 0) % Z ->
     Memory.alloc mem (Pointer.component pc) (Z.to_nat size) = Some (mem', ptr) ->
     Register.set rptr (Ptr ptr) regs = regs' ->
-    step G (gps, mem, regs, pc) E0
-           (gps, mem', regs', Pointer.inc pc)
+    update_reachability_of_component_with_value (Ptr ptr) (Pointer.component pc) reach = reach' ->
+    step G (gps, mem, regs, pc) reach E0
+           (gps, mem', regs', Pointer.inc pc) reach'
 
-| Call: forall gps mem regs pc b C' P call_arg,
+| Call: forall gps mem regs pc b C' P call_arg reach reach',
     executing G pc (ICall C' P) ->
     Pointer.component pc <> C' ->
     imported_procedure (genv_interface G) (Pointer.component pc) C' P ->
     EntryPoint.get C' P (genv_entrypoints G) = Some b ->
-    Register.get R_COM regs = Int call_arg ->
-    step G (gps, mem, regs, pc)
+    Register.get R_COM regs = call_arg ->
+    update_reachability_of_component_with_value call_arg C' reach = reach' ->
+    step G (gps, mem, regs, pc) reach
            [ECall (Pointer.component pc) P call_arg C']
-           (Pointer.inc pc :: gps, mem, Register.invalidate regs, (C', b, 0%Z))
+           (Pointer.inc pc :: gps, mem, Register.invalidate regs, (C', b, 0%Z)) reach'
 
-| Return: forall gps' mem regs pc pc' ret_arg,
+| Return: forall gps' mem regs pc pc' ret_arg reach reach',
     executing G pc IReturn ->
     Pointer.component pc <> Pointer.component pc' ->
-    Register.get R_COM regs = Int ret_arg ->
-    step G (pc' :: gps', mem, regs, pc)
+    Register.get R_COM regs = ret_arg ->
+    update_reachability_of_component_with_value ret_arg (Pointer.component pc') reach = reach' ->
+    step G (pc' :: gps', mem, regs, pc) reach
            [ERet (Pointer.component pc) ret_arg (Pointer.component pc')]
-           (gps', mem, Register.invalidate regs, pc').
+           (gps', mem, Register.invalidate regs, pc') reach'.
 
 Ltac step_of_executing :=
   match goal with

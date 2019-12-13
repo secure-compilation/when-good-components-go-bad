@@ -3,8 +3,8 @@ Require Import Common.Values.
 Require Import CompCert.Coqlib.
 
 Inductive event :=
-| ECall : Component.id -> Procedure.id -> Z -> Component.id -> event
-| ERet : Component.id -> Z -> Component.id -> event
+| ECall : Component.id -> Procedure.id -> value -> Component.id -> event
+| ERet : Component.id -> value -> Component.id -> event
 | ERead : Component.id -> Pointer.t -> value -> event
 | EWrite : Component.id -> Pointer.t -> value -> event.
 
