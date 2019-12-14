@@ -2,9 +2,15 @@ Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import CompCert.Coqlib.
 
+(* RB: TODO: RW: Allowing arbitrary values to appear in events does not preclude
+   the possibility of nonsensical values appearing in traces, notably Undef
+   values. We have two basic alternatives:
+    1. Rule out Undef values in the semantics.
+    2. Refine the definition of defined and undefined values at the type level.
+*)
 Inductive event :=
-| ECall : Component.id -> Procedure.id -> value -> Component.id -> event
-| ERet : Component.id -> value -> Component.id -> event
+| ECall : Component.id -> Procedure.id -> value (* Z *) -> Component.id -> event
+| ERet : Component.id -> value (* Z *) -> Component.id -> event
 | ERead : Component.id -> Pointer.t -> value -> event
 | EWrite : Component.id -> Pointer.t -> value -> event.
 
