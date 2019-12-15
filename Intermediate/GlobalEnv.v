@@ -151,6 +151,16 @@ Proof.
   rewrite -Hiface.
   destruct (C \in domm (prog_interface p)) eqn:HC.
   - rewrite HC.
+    intro HSome.
+    destruct ((prog_procedures p) C) as [procs |] eqn:Hcase1;
+      last discriminate.
+    assert (exists procs', (prog_procedures p') C = Some procs') as [procs' Hcase1']
+      by admit. (* Follows from program well-formedness. *)
+    destruct ((prog_buffers p) C) as [bufs |] eqn:Hcase2;
+      last admit. (* Program well-formedness leads to contradiction. *)
+    assert (exists bufs', (prog_buffers p') C = Some bufs') as [bufs' Hcase2']
+      by admit. (* Follows from program well-formedness. *)
+    rewrite -> Hcase1', Hcase2'.
     admit.
   - now rewrite HC.
 Admitted.
