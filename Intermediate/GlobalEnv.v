@@ -161,7 +161,28 @@ Proof.
     assert (exists bufs', (prog_buffers p') C = Some bufs') as [bufs' Hcase2']
       by admit. (* Follows from program well-formedness. *)
     rewrite -> Hcase1', Hcase2'.
-    admit.
+    (* RB: NOTE: For now, phrase in terms of domains. *)
+    assert (P \in domm (reserve_component_blocks p C (ComponentMemory.prealloc bufs) procs).2) as Hdomm.
+    {
+      apply /dommP. eauto. (* RB: TODO: Clean up this step. *)
+    }
+    apply /dommP.
+    (* Continue to case analyze both machines in sync. *)
+    unfold reserve_component_blocks. unfold reserve_component_blocks in Hdomm.
+    destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs) (length procs))
+      as [Cmem bs].
+    destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs') (length procs'))
+      as [Cmem' bs'].
+    rewrite domm_mkfmap. rewrite domm_mkfmap in Hdomm.
+    rewrite <- Hiface.
+    assert (Hmain : matching_mains p p')
+      by admit. (* Follows from program well-formedness and interfaces. *)
+    destruct (prog_main p) as [mainP |] eqn:Hcase3;
+      destruct (prog_main p') as [mainP' |] eqn:Hcase4.
+    + admit.
+    + now rewrite -> (proj2 Hmain Hcase4) in Hcase3. (* Contra. *)
+    + now rewrite -> (proj1 Hmain Hcase3) in Hcase4. (* Contra. *)
+    + admit.
   - now rewrite HC.
 Admitted.
 
