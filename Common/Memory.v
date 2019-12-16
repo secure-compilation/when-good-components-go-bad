@@ -49,7 +49,7 @@ Module Type AbstractComponentMemory.
   Axiom domm_prealloc :
     forall bufs m,
       prealloc bufs = m ->
-      size (domm m) = size bufs.
+      domm m = fmap.domm bufs.
 
   Axiom domm_alloc :
     forall m m' n b,
@@ -199,7 +199,7 @@ Module ComponentMemory : AbstractComponentMemory.
   Lemma domm_prealloc :
     forall bufs m,
       prealloc bufs = m ->
-      size (domm m) = size bufs.
+      domm m = fmap.domm bufs.
   Admitted.
 
   Lemma domm_alloc :
