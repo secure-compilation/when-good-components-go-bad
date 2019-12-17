@@ -9,8 +9,8 @@ Require Import CompCert.Coqlib.
     2. Refine the definition of defined and undefined values at the type level.
 *)
 Inductive event :=
-| ECall : Component.id -> Procedure.id -> value (* Z *) -> Component.id -> event
-| ERet : Component.id -> value (* Z *) -> Component.id -> event
+| ECall : Component.id -> Procedure.id -> Z (* value *) -> Component.id -> event
+| ERet : Component.id -> Z (* value *) -> Component.id -> event
 | ERead : Component.id -> Pointer.t -> value -> event
 | EWrite : Component.id -> Pointer.t -> value -> event.
 
