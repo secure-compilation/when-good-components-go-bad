@@ -326,7 +326,8 @@ Module Memory.
 
   Lemma max_path_size_in_set_distributes :
     forall bs bs',
-      max_path_size_in_set (bs :|: bs')%fset = max (max_path_size_in_set bs) (max_path_size_in_set bs').
+      max_path_size_in_set (bs :|: bs')%fset =
+      max (max_path_size_in_set bs) (max_path_size_in_set bs').
   Proof.
   Admitted.
 
@@ -340,6 +341,35 @@ Module Memory.
     (* Here, need to cancel out "val fset val" *)
   Admitted.
 
+  Lemma extend_path_returns_extensions :
+    forall m p lp,
+      extend_path m p = lp ->
+      all (fun x => tl x == p) lp.
+  Proof.
+    intros.
+    subst lp.
+    unfold extend_path.
+    destruct p.
+    - auto. (* apply all_nil. *)
+    - rewrite all_map. simpl. unfold preim. simpl. (* SearchAbout "==" *)
+      rewrite eq_refl.
+      apply all_predT.
+  Qed.
+    
+  Corollary extend_path_increases_length_by_one :
+    forall m p lp,
+      extend_path m p = lp ->
+      all (fun x => size x =? size p + 1) lp.
+  Proof.
+    intros.
+    pose (all_extensions := extend_path_returns_extensions m p lp H).
+    SearchAbout all.
+    apply/sub_all. (* How to substitute for ?Goal here? *)
+  Admitted.
+
+  (* If the corollary above can be proved more easily, then there is no need for this
+     identical lemma here.
+  *)
   Lemma extend_path_increases_length :
     forall m p lp,
       extend_path m p = lp ->
@@ -366,6 +396,25 @@ Module Memory.
       + simpl. exact IHn.
   Qed.
 
+  Lemma extend_path_never_reappends_blocks_in_the_path :
+    forall m p new_p existing_block lp,
+      extend_path m p = lp ->
+      existing_block \in p ->
+      new_p \in lp ->
+      existing_block \notin new_p.
+  Proof.
+    unfold extend_path.
+    intros.
+    subst lp.
+    induction new_p.
+    - auto.
+    - destruct p as [| first_block tail_p] eqn:e.
+      + auto.
+        apply/nthP.
+        (* Used the above to apply a "view", i.e., a lemma that states a reflect instance. *)
+  Admitted.
+      
+
   SearchAbout seq.
   Lemma extend_path_never_produces_cycles :
     forall m p lp,
@@ -373,6 +422,18 @@ Module Memory.
       extend_path m p = lp ->
       all uniq lp.
   Proof.
+    intros.
+    induction lp.
+    - auto.
+    - SearchAbout all cons.
+      SearchAbout all.
+      unfold all.
+      apply/andP.
+      split.
+      - unfold uniq.
+      SearchAbout "&&".
+    (* Start Proof attempt *)
+    (*
     unfold extend_path.
     intros.
     subst lp.
@@ -385,8 +446,22 @@ Module Memory.
       Print path.ucycle.
       Print path.cycle.
       Print path.path.
-    Admitted.
+    *)
+  Admitted.
 
+  SearchAbout fset seq.
+  Corollary access_step_paths_never_produces_cycles :
+    forall m ps,
+      all uniq (val ps) ->
+      all uniq (val (access_step_paths m ps)).
+  Proof.
+    intros.
+    unfold access_step_paths.
+    SearchAbout val.
+    SearchAbout all.
+    (* Should follow from extend_path_never_produces_cycles. *)
+  Admitted.
+  
   Lemma access_step_paths_expansive :
     forall m ps,
       fsubset ps (access_step_paths m ps).
@@ -395,7 +470,7 @@ Module Memory.
   Qed.
   
   (* Not sure if needed. *)
-  Lemma access_step_does_not_decrease_path_length :
+  Lemma access_step_never_decreases_path_length :
     forall m ps ps',
       access_step_paths m ps = ps' ->
       (ps = ps' /\
@@ -405,42 +480,27 @@ Module Memory.
   Proof.
     intros.
     destruct (fsubset ps' ps) eqn:e.
-    - left. split.
-      + apply: fsubset_sizeP.
-        * pose (e1 := access_step_paths_expansive m ps).
-          erewrite H in e1.
-          pose (e1size := fsubset_leq_size e1).
-          pose (esize := fsubset_leq_size e).
-          SearchAbout "<=".
-          apply anti_leq.
-          SearchAbout "<=".
-          Print antisymmetric.
-          SearchAbout "&&".
-          SearchAbout is_true.
-          unfold is_true in e1size.
-          unfold is_true in esize.
-          rewrite e1size. rewrite esize. auto.
-        * pose (e1 := access_step_paths_expansive m ps).
-          erewrite H in e1. trivial.
-      + (* Here, want to reuse the sibling goal. How to do that without re-proving it? *)
-        assert (pseqps': ps = ps').
-        apply: fsubset_sizeP.
-        * pose (e1 := access_step_paths_expansive m ps).
-          erewrite H in e1.
-          pose (e1size := fsubset_leq_size e1).
-          pose (esize := fsubset_leq_size e).
-          SearchAbout "<=".
-          apply anti_leq.
-          SearchAbout "<=".
-          Print antisymmetric.
-          SearchAbout "&&".
-          SearchAbout is_true.
-          unfold is_true in e1size.
-          unfold is_true in esize.
-          rewrite e1size. rewrite esize. auto.
-        * pose (e1 := access_step_paths_expansive m ps).
-          erewrite H in e1. trivial.
-          rewrite pseqps'. trivial.
+    - left.
+      assert (pseqps': ps = ps').
+      apply: fsubset_sizeP.
+      * pose (e1 := access_step_paths_expansive m ps).
+        erewrite H in e1.
+        pose (e1size := fsubset_leq_size e1).
+        pose (esize := fsubset_leq_size e).
+        SearchAbout "<=".
+        apply anti_leq.
+        SearchAbout "<=".
+        Print antisymmetric.
+        SearchAbout "&&".
+        SearchAbout is_true.
+        unfold is_true in e1size.
+        unfold is_true in esize.
+        rewrite e1size. rewrite esize. auto.
+      * pose (e1 := access_step_paths_expansive m ps).
+        erewrite H in e1. trivial.
+        split.
+      + trivial.
+      + rewrite pseqps'. trivial.
     - right.
       pose (e1 := access_step_paths_expansive m ps).
       erewrite H in e1.
@@ -451,6 +511,10 @@ Module Memory.
       erewrite andb_false_r in eqn.
       subst ps'.
       unfold access_step_paths in eqn.
+      SearchAbout fset.
+      (* Attempting to prove that the RHS of the union is not empty *)
+      destruct (size(fset (concat [seq extend_path m i | i <- val ps])%fset)) eqn:isEmpty.
+      SearchAbout size fset.
       SearchAbout fsubset.
       unfold max_path_size_in_set.
       
