@@ -213,6 +213,7 @@ Definition final_state (G: global_env) (s: state) : Prop :=
 
 (* relational specification *)
 
+(* RB: TODO: *)
 Inductive step (G : global_env) : state -> reach_addr -> trace -> state -> reach_addr -> Prop :=
 | Nop: forall gps mem regs pc reach,
     executing G pc INop ->
