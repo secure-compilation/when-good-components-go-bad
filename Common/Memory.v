@@ -344,7 +344,7 @@ Module Memory.
   Lemma extend_path_returns_extensions :
     forall m p lp,
       extend_path m p = lp ->
-      all (fun x => tl x == p) lp.
+      all (fun x => behead x == p) lp.
   Proof.
     intros.
     subst lp.
@@ -396,13 +396,14 @@ Module Memory.
       + simpl. exact IHn.
   Qed.
 
+  Check extend_path.
+  Check mem.
   Lemma extend_path_never_reappends_blocks_in_the_path :
-    forall m p new_p existing_block lp,
+    forall m p lp,
       extend_path m p = lp ->
-      existing_block \in p ->
-      new_p \in lp ->
-      existing_block \notin new_p.
+      all (fun p' => if hd_error p' is Some b then b \notin p else true) lp.
   Proof.
+    (*
     unfold extend_path.
     intros.
     subst lp.
@@ -412,6 +413,7 @@ Module Memory.
       + auto.
         apply/nthP.
         (* Used the above to apply a "view", i.e., a lemma that states a reflect instance. *)
+     *)
   Admitted.
       
 
@@ -423,6 +425,30 @@ Module Memory.
       all uniq lp.
   Proof.
     intros.
+    induction p.
+    - simpl in H0. subst lp. auto.
+    - pose (never_reappends :=
+              extend_path_never_reappends_blocks_in_the_path m (a0 :: p) lp H0).
+      simpl in never_reappends.
+      pose (all_extenstions_of_a0p :=
+              extend_path_returns_extensions m (a0 :: p) lp H0).
+      SearchAbout hd_error.
+      SearchAbout seq tl.
+      SearchAbout behead.
+      SearchAbout uniq.
+      About path.cycle_next.
+      About mathcomp.ssreflect.path. (* TODO: It may be worth it to use this path instead of
+                                        defining a path of blocks as just a seq of blocks. *)
+
+      (* Need to use something like hd_error_tl_repr for behead
+         (after having shown that sizes are not-zero.)
+         By using hd_error_tl_repr, we can combine never_reappends with H
+         to obtain our goal.
+       *)
+      Search tl.
+    SearchAbout all.
+    unfold uniq.
+    (*pose (all (fun x))
     induction lp.
     - auto.
     - SearchAbout all cons.
@@ -432,6 +458,8 @@ Module Memory.
       split.
       - unfold uniq.
       SearchAbout "&&".
+     *)
+
     (* Start Proof attempt *)
     (*
     unfold extend_path.
