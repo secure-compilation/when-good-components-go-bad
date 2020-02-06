@@ -170,9 +170,9 @@ Proof.
     (* Continue to case analyze both machines in sync. *)
     unfold reserve_component_blocks. unfold reserve_component_blocks in Hdomm.
     destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs) (length procs))
-      as [Cmem bs].
+      as [Cmem bs] eqn:Hblocks.
     destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs') (length procs'))
-      as [Cmem' bs'].
+      as [Cmem' bs'] eqn:Hblocks'.
     rewrite domm_mkfmap. rewrite domm_mkfmap in Hdomm.
     rewrite <- Hiface.
     assert (Hmain : matching_mains p p')
@@ -182,7 +182,13 @@ Proof.
     + admit.
     + now rewrite -> (proj2 Hmain Hcase4) in Hcase3. (* Contra. *)
     + now rewrite -> (proj1 Hmain Hcase3) in Hcase4. (* Contra. *)
-    + admit.
+    + (* Finish synchronizing both runs. Refer to first case as needed. Since
+         there are no main procedures, the complications of that case are
+         avoided here. *)
+      match goal with
+      | |- is_true (P \in seq.unzip1 (seq.pmap ?F ?L)) => remember F as fmap eqn:Hfmap
+      end.
+      admit.
   - now rewrite HC.
 Admitted.
 
