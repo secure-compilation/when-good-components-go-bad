@@ -1585,7 +1585,7 @@ Section ThreewayMultisem3.
     - eapply threeway_multisem_mergeable; eassumption.
   Qed.
 
-  Ltac t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec :=
+  Ltac t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec:=
     match goal with
     (* Memory operations. *)
     | Hstore : Memory.store _ _ _ = _ |- _ =>
@@ -1596,8 +1596,9 @@ Section ThreewayMultisem3.
         try assumption
     (* Calls. *)
     | Hget : EntryPoint.get _ _ _ = _ |- _ =>
-      apply genv_entrypoints_interface_some with (p' := prog) in Hget as [b' Hget];
-        [| simpl; congruence]
+      apply (genv_entrypoints_interface_some) with (p' := prog) in Hget as [b' Hget];
+      last (simpl; congruence);
+      try assumption
     (* Returns. *)
     | Hcons : ?PC' :: ?GPS' = ?GPS (* merge_states_stack *) |- _ =>
       destruct GPS as [| frame1' gps1'] eqn:Hgps; [discriminate |];
@@ -1617,6 +1618,7 @@ Section ThreewayMultisem3.
     eexists;
     [CS.step_of_executing];
       try eassumption; try congruence; try reflexivity;
+      try (simpl; rewrite Hifacec; eassumption);
       match goal with
       (* Memory operations. *)
       | Hload : Memory.load _ _ = _ |- Memory.load _ _ = _ =>
@@ -1639,7 +1641,9 @@ Section ThreewayMultisem3.
       | _ => idtac
       end;
     [apply execution_invariant_to_linking with (c1 := c')];
-      try eassumption; [congruence].
+    try congruence;
+    try eassumption.
+      (* try eassumption; [congruence]. *)
 
   Theorem threeway_multisem_step_inv_program s1 s1'' t s2' :
     CS.is_program_component s1 ic ->
@@ -1663,6 +1667,10 @@ Section ThreewayMultisem3.
       by (apply linkable_implies_linkable_mains; congruence).
     rewrite (mergeable_states_merge_program _ Hmerge) in Hstep;
       try assumption.
+    pose proof linking_well_formedness Hwfp Hwfc Hlinkable as Hwfprog.
+    pose proof linking_well_formedness Hwfp' Hwfc' Hlinkable' as Hwfprog'.
+    assert (Hlinkable'' := Hlinkable); rewrite Hifacec in Hlinkable''.
+    pose proof linking_well_formedness Hwfp Hwfc' Hlinkable'' as Hwfprog''.
     inversion Hstep; subst;
       t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec.
   Qed.

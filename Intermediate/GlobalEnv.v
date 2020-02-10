@@ -135,12 +135,14 @@ Qed.
 Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
   (* Pointer.component pc \in domm (prog_interface p) -> *)
   (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *)
+  well_formed_program p ->
+  well_formed_program p' ->
   prog_interface p = prog_interface p' ->
   EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
 exists b',
   EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
 Proof.
-  move=> Hiface.
+  move=> Hwf Hwf' Hiface.
   unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
   (* move=> H; exists b; rewrite -H; clear H. *)
   unfold prepare_procedures_initial_memory_aux.
@@ -154,12 +156,25 @@ Proof.
     intro HSome.
     destruct ((prog_procedures p) C) as [procs |] eqn:Hcase1;
       last discriminate.
-    assert (exists procs', (prog_procedures p') C = Some procs') as [procs' Hcase1']
-      by admit. (* Follows from program well-formedness. *)
+    assert (exists procs', (prog_procedures p') C = Some procs') as [procs' Hcase1'].
+    { apply /dommP.
+      rewrite -(wfprog_defined_procedures Hwf') -Hiface (wfprog_defined_procedures Hwf).
+      apply /dommP. now exists procs. }
+    (* JT: TODO: Clean up this step *)
+    assert (Hbufs: prog_buffers p C <> None).
+    { intros Hn.
+      have: (exists procs, prog_procedures p C = Some procs) by (now exists procs).
+      move=> /dommP[H].
+      move: Hn => /dommPn[H'].
+      move: H H'.
+      rewrite -(wfprog_defined_buffers Hwf) -(wfprog_defined_procedures Hwf) => H1 H2.
+      exfalso. move: H2 => /negP. by []. }
     destruct ((prog_buffers p) C) as [bufs |] eqn:Hcase2;
-      last admit. (* Program well-formedness leads to contradiction. *)
-    assert (exists bufs', (prog_buffers p') C = Some bufs') as [bufs' Hcase2']
-      by admit. (* Follows from program well-formedness. *)
+      last contradiction.
+    assert (exists bufs', (prog_buffers p') C = Some bufs') as [bufs' Hcase2'].
+    { apply /dommP.
+      rewrite -(wfprog_defined_buffers Hwf') -Hiface (wfprog_defined_buffers Hwf).
+      apply /dommP. now exists bufs. }
     rewrite -> Hcase1', Hcase2'.
     (* RB: NOTE: For now, phrase in terms of domains. *)
     assert (P \in domm (reserve_component_blocks p C (ComponentMemory.prealloc bufs) procs).2) as Hdomm.
@@ -175,8 +190,7 @@ Proof.
       as [Cmem' bs'] eqn:Hblocks'.
     rewrite domm_mkfmap. rewrite domm_mkfmap in Hdomm.
     rewrite <- Hiface.
-    assert (Hmain : matching_mains p p')
-      by admit. (* Follows from program well-formedness and interfaces. *)
+    assert (Hmain : matching_mains p p') by now apply interface_implies_matching_mains.
     destruct (prog_main p) as [mainP |] eqn:Hcase3;
       destruct (prog_main p') as [mainP' |] eqn:Hcase4.
     + admit.
