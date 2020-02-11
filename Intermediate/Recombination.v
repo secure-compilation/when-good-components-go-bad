@@ -1615,8 +1615,8 @@ Section ThreewayMultisem3.
       rewrite <- Heq
     | _ => idtac
     end;
-    eexists;
-    [CS.step_of_executing];
+    [eexists;
+    CS.step_of_executing];
       try eassumption; try congruence; try reflexivity;
       try (simpl; rewrite Hifacec; eassumption);
       match goal with
@@ -1671,6 +1671,7 @@ Section ThreewayMultisem3.
     pose proof linking_well_formedness Hwfp' Hwfc' Hlinkable' as Hwfprog'.
     assert (Hlinkable'' := Hlinkable); rewrite Hifacec in Hlinkable''.
     pose proof linking_well_formedness Hwfp Hwfc' Hlinkable'' as Hwfprog''.
+
     inversion Hstep; subst;
       t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec.
   Qed.

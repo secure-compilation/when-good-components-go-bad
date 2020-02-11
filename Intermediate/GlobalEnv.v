@@ -143,7 +143,7 @@ exists b',
   EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
 Proof.
   move=> Hwf Hwf' Hiface.
-  unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
+  unfold EntryPoint.get (*, prepare_global_env *) (*, genv_entrypoints *); simpl.
   (* move=> H; exists b; rewrite -H; clear H. *)
   unfold prepare_procedures_initial_memory_aux.
   unfold elementsm, odflt, oapp.
@@ -202,7 +202,74 @@ Proof.
       match goal with
       | |- is_true (P \in seq.unzip1 (seq.pmap ?F ?L)) => remember F as fmap eqn:Hfmap
       end.
-      admit.
+
+      (* First attempt *)
+      rewrite -domm_mkfmap. rewrite -domm_mkfmap in Hdomm.
+      remember (seq.zip (seq.unzip1 procs') bs') as l' eqn:Hl'.
+      remember (seq.zip (seq.unzip1 procs) bs) as l eqn:Hl.
+      destruct (prog_interface p C) as [iface |].
+      * (* this assert helps simplify the expression *)
+        assert (Hin : forall l,
+                   P \in domm (mkfmap (seq.pmap fmap l)) <->
+                         (P \in Component.export iface /\ P \in domm (mkfmap l))).
+        { clear -Hfmap.
+          intros l.
+          subst.
+          split.
+          - intros H.
+            induction l.
+            + move: H => /dommP [v Hv]; case: Hv. by [].
+            + simpl in H; unfold oapp in H.
+              destruct a as [P' b']; destruct (P' \in Component.export iface) eqn:HP';
+                rewrite HP' in H; simpl in H.
+              * move: H; rewrite domm_set => /fsetU1P.
+                move=> [Heq | Hdomm]; subst.
+                -- split; first assumption.
+                   rewrite domm_set.
+                   simpl; apply /fsetU1P; now left.
+                -- specialize (IHl Hdomm) as [IH1 IH2].
+                   split; try assumption.
+                   rewrite domm_set; apply /fsetU1P; now right.
+              * simpl in *.
+                specialize (IHl H) as [IH1 IH2].
+                split; first assumption.
+                rewrite domm_set. rewrite in_fsetU.
+                apply /orP. now right.
+          - move=> [H1 H2].
+            induction l.
+            + case: H2. by [].
+            + simpl; unfold oapp.
+              destruct a as [P' b']; destruct (P' \in Component.export iface) eqn:HP';
+                rewrite HP'; simpl.
+              * simpl in *.
+                move: H2. rewrite domm_set in_fsetU => /orP. move => [H2 | H2].
+                move: H2 => /fset1P Heq; subst.
+                rewrite domm_set; apply /fsetU1P; now left.
+                rewrite domm_set; apply /fsetU1P; right.
+                now apply IHl.
+              * simpl in *.
+                apply IHl.
+                move: H2. rewrite domm_set in_fsetU => /orP. move=> [H2 | H3]; last assumption.
+                move: H2; rewrite in_fset1.
+                rewrite eqtype.eqE. simpl.
+                intros H. assert (Heq: P = P') by now apply /ssrnat.eqnP.
+                rewrite Heq in H1. rewrite HP' in H1. inversion H1.
+        }
+        
+        apply Hin in Hdomm as [Hdomm1 Hdomm2].
+        apply Hin; split; try assumption. simpl in *.
+        (* now we are left to prove that domm (mkfmap l') ⊆ domm (mkfmap l) *)
+        admit.
+      * assert (H: seq.pmap fmap l = []).
+        {
+          clear -Hfmap.
+          subst.
+          induction l. by [].
+          rewrite //= /oapp; now destruct a.
+        }
+        rewrite H in Hdomm; clear -Hdomm; exfalso.
+        move: Hdomm => //=. apply /negP.
+        now rewrite domm0.
   - now rewrite HC.
 Admitted.
 
