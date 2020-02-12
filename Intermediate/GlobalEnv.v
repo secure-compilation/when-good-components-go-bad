@@ -207,7 +207,7 @@ Proof.
       rewrite -domm_mkfmap. rewrite -domm_mkfmap in Hdomm.
       remember (seq.zip (seq.unzip1 procs') bs') as l' eqn:Hl'.
       remember (seq.zip (seq.unzip1 procs) bs) as l eqn:Hl.
-      destruct (prog_interface p C) as [iface |].
+      destruct (prog_interface p C) as [iface |] eqn:Hiface_eq.
       * (* this assert helps simplify the expression *)
         assert (Hin : forall l,
                    P \in domm (mkfmap (seq.pmap fmap l)) <->
@@ -259,12 +259,20 @@ Proof.
         apply Hin; split; try assumption. simpl in *.
         (* now we are left to prove that domm (mkfmap l') ⊆ domm (mkfmap l) *)
         subst l l'.
-        rewrite domm_map_zip_unzip_same_length_is_equal.
-        rewrite domm_map_zip_unzip_same_length_is_equal in Hdomm2.
-        admit.
+        rewrite domm_map_zip_unzip_same_length_is_equal;
+          last (symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks')).
+        rewrite domm_map_zip_unzip_same_length_is_equal in Hdomm2;
+          last (symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks)).
 
-        symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks).
-        symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks').
+        (* Now we can conclude by well-formedness of p' *)
+        clear -Hiface_eq Hdomm2 Hdomm1 Hiface Hcase1 Hcase1' Hwf Hwf'.
+        assert (Hiface_eq': prog_interface p' C = Some iface) by now rewrite -Hiface.
+        assert (His_exporting': Component.is_exporting iface P) by assumption.
+        pose proof wfprog_exported_procedures_existence Hwf' Hiface_eq' His_exporting'
+          as [procs'' [? [? ?]]].
+        assert (procs' = procs'') by congruence; subst procs''.
+        apply /dommP. exists x.
+        rewrite mkfmapE. assumption.
       * assert (H: seq.pmap fmap l = []).
         {
           clear -Hfmap.
