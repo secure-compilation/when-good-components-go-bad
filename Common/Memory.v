@@ -306,19 +306,21 @@ Module Memory.
     | S n => reachable_paths_with_fuel m (access_step_paths m bs) n
     end.
 
-(*  Check domm.
-  Print Module FSet.
-  Check size fset0.
-  Check map size [fset0].
-  Definition number_of_allocated_blocks (m: t) :=
-    map size (map ComponentMemory.domm (map snd (elementsm m))).
-  Check number_of_allocated_blocks.
-  Check elementsm.*)
+
+  Definition component_memories_of_memory (m: t) : seq ComponentMemory.t :=
+    map snd (elementsm m).
+
+  Definition all_block_ids_of_memory (m: t) : {fset Block.id} :=
+    fold_left fsetU (map ComponentMemory.domm(component_memories_of_memory m)) fset0.
+
+  Definition number_of_allocated_blocks_of_memory (m: t) : nat :=
+    size (all_block_ids_of_memory m).
+
 
   (* This definition is wrong. Instead need to properly count the blocks. Now we're counting 
    the number of component memories.*)
   Definition reachable_paths (m: t) (bs: {fset path}) :=
-    reachable_paths_with_fuel m bs (size (domm m)).
+    reachable_paths_with_fuel m bs (number_of_allocated_blocks_of_memory m).
 
   Check maxn.
   Check foldl.
