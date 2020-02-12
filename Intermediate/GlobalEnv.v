@@ -255,11 +255,16 @@ Proof.
                 intros H. assert (Heq: P = P') by now apply /ssrnat.eqnP.
                 rewrite Heq in H1. rewrite HP' in H1. inversion H1.
         }
-        
         apply Hin in Hdomm as [Hdomm1 Hdomm2].
         apply Hin; split; try assumption. simpl in *.
         (* now we are left to prove that domm (mkfmap l') ⊆ domm (mkfmap l) *)
+        subst l l'.
+        rewrite domm_map_zip_unzip_same_length_is_equal.
+        rewrite domm_map_zip_unzip_same_length_is_equal in Hdomm2.
         admit.
+
+        symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks).
+        symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks').
       * assert (H: seq.pmap fmap l = []).
         {
           clear -Hfmap.

@@ -336,3 +336,16 @@ Proof.
   case get_k: (m k)=> [v|] //=.
   case: ifP => //= pkv ; by rewrite pkv.
 Qed.
+
+Lemma domm_map_zip_unzip_same_length_is_equal (T : ordType) (U V : Type) (l : list (T * U)) (l' : list V) :
+  length l = length l' ->
+  domm (mkfmap (T := T) (seq.zip (seq.unzip1 l) l')) = domm (mkfmap (T := T) l).
+Proof.
+  generalize dependent l'.
+  induction l; intros l' H.
+  - now destruct l'.
+  - destruct l'; inversion H.
+    simpl.
+    rewrite 2!domm_set. rewrite IHl. reflexivity.
+    assumption.
+Qed.

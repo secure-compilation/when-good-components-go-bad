@@ -213,11 +213,49 @@ Module ComponentMemoryExtra.
   Import ComponentMemory.
   (* RB: NOTE: Prove composition as needed. Blocks are emitted in the same order
      as the sequence of single calls. *)
-  Fixpoint reserve_blocks (mem : t) (n : nat) : t * list Block.id :=
+  Definition reserve_blocks (mem : t) (n : nat) : t * list Block.id :=
     let acc '(mem, bs) :=
         let '(mem', b) := reserve_block mem in
         (mem', bs ++ [b]) in
     iter n acc (mem, []).
+
+  Lemma reserve_blocks_length (mem mem' : t) (n : nat) (bs : list Block.id) :
+    ComponentMemoryExtra.reserve_blocks mem n = (mem', bs) ->
+    length bs = n.
+  Proof.
+    generalize dependent mem'. generalize dependent n.
+    induction bs using rev_ind.
+    - intros n mem' H.
+      destruct n; auto.
+      unfold reserve_blocks in H.
+      simpl in H.
+      destruct (iter n (fun '(mem, bs) => let '(mem', b) := reserve_block mem in (mem', bs ++ [b])) (mem, [])).
+      destruct (reserve_block t0).
+      inversion H. symmetry in H2; now apply app_cons_not_nil in H2.
+    - intros n mem' H.
+      destruct n; auto.
+      + simpl in *. inversion H. now apply app_cons_not_nil in H2.
+      + rewrite app_length plus_comm. simpl.
+        unfold reserve_blocks in H.
+        simpl in H.
+        destruct (iter n (fun '(mem, bs) => let '(mem', b) := reserve_block mem in (mem', bs ++ [b])) (mem, []))
+          as [mem'' bs'] eqn:Hiter.
+        rewrite (IHbs n mem'').
+        reflexivity.
+        destruct (reserve_block mem''). simpl in H.
+        inversion H.
+        assert (bs' = bs).
+        {
+          clear -H2. generalize dependent bs'.
+          induction bs; destruct bs'; intros H; auto.
+          - inversion H. symmetry in H2; now apply app_cons_not_nil in H2.
+          - inversion H; subst; now apply app_cons_not_nil in H2.
+          - inversion H; subst. simpl in *. rewrite (IHbs _ H2); reflexivity.
+        }
+        subst bs'.
+        rewrite -Hiter. reflexivity.
+  Qed.
+
 End ComponentMemoryExtra.
 
 Module Memory.
