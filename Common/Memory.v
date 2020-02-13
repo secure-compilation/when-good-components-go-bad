@@ -276,7 +276,53 @@ Module Memory.
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
     end.
 
+  
+
   (* Have path be the type of non-empty sequences? *)
+  Definition node_t : Type := Component.id * Block.id.
+
+  (* Taking inspiration from mathcomp.ssreflect.path, make path be the type of
+     non-empty sequences.
+     A path is thus a head and a tail. The head is of type node_t, and the tail of type
+     seq node_t.
+     Our path is also uniq, i.e., no cycles.
+   *)
+  Definition path_t : Type := node_t * (seq node_t).
+  Definition uniq_path_t (p : path_t) : bool := uniq (p.1 :: p.2).
+
+  Definition extend_path' (m : t) (p : path_t) : list path_t :=
+    map (fun x => (x, p.1 :: p.2))
+        (filter (fun x => (x \notin p.2) && (x != p.1)) (apply_load_block m p.1)).
+
+  Lemma extend_path'_returns_extensions :
+    forall m p0 ps,
+      extend_path' m p0 = ps -> all (fun p => (p.2 == p0.1 :: p0.2)) ps.
+  Proof.
+    intros. subst ps. unfold extend_path'.
+    rewrite all_map. simpl.
+    unfold preim. simpl.
+    rewrite eq_refl.
+    apply all_predT.
+  Qed.
+      
+  Lemma extend_path'_preserves_uniq :
+    forall m p0 ps,
+      uniq_path_t p0 -> extend_path' m p0 = ps -> all (fun p => uniq_path_t p) ps.
+  Proof.
+    intros. subst ps. unfold extend_path'.
+    rewrite all_map. simpl.
+    unfold preim. simpl.
+    apply/allP.
+    intros. simpl. unfold uniq_path_t. rewrite cons_uniq. simpl. unfold uniq_path_t in H.
+    rewrite cons_uniq in H.
+    rewrite mem_filter in H0.
+    apply/and3P.
+    pose (Hprop := andb_prop _ _ H).
+    destruct Hprop as [G1 G2].
+    split; auto.
+    Admitted.
+    
+  
   Definition path := (seq (Component.id * Block.id)).
   SearchAbout seq.
 
@@ -309,18 +355,23 @@ Module Memory.
 
   Definition component_memories_of_memory (m: t) : seq ComponentMemory.t :=
     map snd (elementsm m).
+  
+  Definition list_of_per_component_set_of_block_ids (m: t) : seq {fset Block.id} :=
+    map ComponentMemory.domm (component_memories_of_memory m).
+  
+  (* I expect that the use of "val" that converts a set to a sequence can be problematic
+     because there aren't really useful lemmas about size and val.
+     
+     However, I don't know for now how to "map size" to a seq of "fset"s.
 
-  Definition all_block_ids_of_memory (m: t) : {fset Block.id} :=
-    fold_left fsetU (map ComponentMemory.domm(component_memories_of_memory m)) fset0.
+     I do not even know if the seq that val returns contains any duplicates.
+     I assume it doesn't.
+   *)
+  Definition count_of_allocated_blocks_of_memory (m: t) : nat :=
+    sumn (map (fun x => size (val x)) (list_of_per_component_set_of_block_ids m)).
 
-  Definition number_of_allocated_blocks_of_memory (m: t) : nat :=
-    size (all_block_ids_of_memory m).
-
-
-  (* This definition is wrong. Instead need to properly count the blocks. Now we're counting 
-   the number of component memories.*)
   Definition reachable_paths (m: t) (bs: {fset path}) :=
-    reachable_paths_with_fuel m bs (number_of_allocated_blocks_of_memory m).
+    reachable_paths_with_fuel m bs (count_of_allocated_blocks_of_memory m).
 
   Check maxn.
   Check foldl.
@@ -421,7 +472,7 @@ Module Memory.
 
   SearchAbout seq.
   Lemma extend_path_never_produces_cycles :
-    forall m p lp,
+    forall m (p : path) lp,
       uniq p ->
       extend_path m p = lp ->
       all uniq lp.
