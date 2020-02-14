@@ -309,19 +309,18 @@ Module Memory.
     forall m p0 ps,
       uniq_path_t p0 -> extend_path' m p0 = ps -> all (fun p => uniq_path_t p) ps.
   Proof.
-    intros. subst ps. unfold extend_path'.
+    move => m p0 ps. rewrite /uniq_path_t cons_uniq => /andP[??] <-.
+    unfold extend_path'.
     rewrite all_map. simpl.
     unfold preim. simpl.
-    apply/allP.
-    intros. simpl. unfold uniq_path_t. rewrite cons_uniq. simpl. unfold uniq_path_t in H.
-    rewrite cons_uniq in H.
-    rewrite mem_filter in H0.
-    apply/and3P.
-    pose (Hprop := andb_prop _ _ H).
-    destruct Hprop as [G1 G2].
-    split; auto.
-    Admitted.
     
+    apply/allP => x /=. rewrite mem_filter.
+    move => /andP [/andP[/negP H1 /negP H2] H3].
+    apply/and3P. split; auto.
+    (* Search "" "\in" cons. *)
+    apply/memPn => y Hnotin. apply/negP => /eqP?. subst y.
+    move: Hnotin. rewrite in_cons => /orP[?|]; auto.
+  Qed.    
   
   Definition path := (seq (Component.id * Block.id)).
   SearchAbout seq.
