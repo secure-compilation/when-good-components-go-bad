@@ -307,7 +307,9 @@ Module Memory.
       
   Lemma extend_path'_preserves_uniq :
     forall m p0 ps,
-      uniq_path_t p0 -> extend_path' m p0 = ps -> all (fun p => uniq_path_t p) ps.
+      uniq_path_t p0 ->
+      extend_path' m p0 = ps ->
+      all uniq_path_t ps.
   Proof.
     move => m p0 ps. rewrite /uniq_path_t cons_uniq => /andP[??] <-.
     unfold extend_path'.
@@ -320,7 +322,44 @@ Module Memory.
     (* Search "" "\in" cons. *)
     apply/memPn => y Hnotin. apply/negP => /eqP?. subst y.
     move: Hnotin. rewrite in_cons => /orP[?|]; auto.
-  Qed.    
+  Qed.
+
+  Definition access_step_paths' (m: t) (ps: {fset path_t}) : {fset path_t} :=
+    fsetU ps (fset (concat (List.map (extend_path' m) ps))).
+  
+  Corollary access_step_paths'_never_produces_cycles :
+  forall m (ps: {fset path_t}),
+    all uniq_path_t (val ps) ->
+    all uniq_path_t (val (access_step_paths' m ps)).
+  Proof.
+    move => m ps H.
+    apply/allP => p.
+    rewrite /access_step_paths' in_fsetU => pHyp.
+    pose (pHypProp := orb_prop _ _ pHyp).
+    destruct pHypProp as [inPs | inExtend].
+    - move: inPs.
+      apply/allP; auto.
+    - Search "" "concat".
+      rewrite <- flat_map_concat_map in inExtend.
+      Search "" "flat_map".
+      (* Want to use in_flat_map. Wanted: In p (flat_map (exte..) ps) *)
+      Search "" "\in" "fset".
+      rewrite in_fset in inExtend.
+      apply In_in in inExtend.
+      apply in_flat_map in inExtend.
+      destruct inExtend as [p0 [p0InPs pInExtendPs]].
+      Search "" "\in" "In".
+      rewrite <- (In_in p0) in p0InPs.
+      Search "" "all" "\in".
+      apply/allP.
+      apply (extend_path'_preserves_uniq m p0).
+      apply/allP.
+      exact H.
+      auto.
+      reflexivity.
+      rewrite <- (In_in p) in pInExtendPs.
+      exact pInExtendPs.
+  Qed.
   
   Definition path := (seq (Component.id * Block.id)).
   SearchAbout seq.
@@ -381,6 +420,10 @@ Module Memory.
       max_path_size_in_set (bs :|: bs')%fset =
       max (max_path_size_in_set bs) (max_path_size_in_set bs').
   Proof.
+    move => bs bs'.
+    rewrite /max_path_size_in_set.
+    Search "" "fsetU".
+    Search "" "map".
   Admitted.
 
 
