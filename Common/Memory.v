@@ -312,8 +312,8 @@ Module Memory.
         (filter (fun x => (x \notin p.2) && (x != p.1)) (apply_load_block m p.1)).
 
   Lemma extend_path'_returns_extensions :
-    forall m p0 ps,
-      extend_path' m p0 = ps -> all (fun p => (p.2 == p0.1 :: p0.2)) ps.
+    forall m p ps,
+      extend_path' m p = ps -> all (fun x => (x.2 == p.1 :: p.2)) ps.
   Proof.
     intros. subst ps. unfold extend_path'.
     rewrite all_map. simpl.
@@ -322,36 +322,39 @@ Module Memory.
     apply all_predT.
   Qed.
 
-  (* 
-     The following lemma might be provable more easily as a corollary of the previous lemma.
-  *)
+  Lemma extension_of_path_increases_its_size_by_one :
+    forall x p,
+      x.2 == p.1 :: p.2 ->
+      size_of_path x =? size_of_path p + 1.
+  Proof.
+    intros x p H.
+    pose (H' := eqP H).
+    unfold size_of_path.
+    rewrite H'.
+    Search "" "eqb".
+    apply/Nat.eqb_spec.
+    assert (size (p.1 :: p.2) = size p.2 + 1).
+    {
+      admit.
+    }
+    rewrite H0.
+    reflexivity.
+  Admitted.
+
   Lemma extend_path'_increases_length :
     forall m p lp,
       extend_path' m p = lp ->
       all (fun x => size_of_path x =? size_of_path p + 1) lp.
   Proof.
-    intros.
-    subst lp.
-    unfold extend_path'.
-    SearchAbout all.
-    destruct p.
-(*    - apply all_nil.
-    - SearchAbout all.
-      rewrite all_map. simpl.
-      Check preim.
-      SearchAbout preim.
-      SearchAbout all.
-      unfold preim.
-      SearchAbout size.
-      simpl.
-      induction (size p0).
-      + simpl.
-        SearchAbout all.
-        apply all_predT.
-      + simpl. exact IHn.
+    intros m p lp H.
+    pose (H' := extend_path'_returns_extensions m p lp H).
+    eapply sub_all with
+        (a1 := fun x : node_t * seq_eqType (prod_eqType nat_eqType nat_eqType) => x.2 == p.1 :: p.2).
+    unfold subpred.
+    intros x.
+    apply extension_of_path_increases_its_size_by_one.
+    apply H'.
   Qed.
- *)
-    Admitted.
       
   Lemma extend_path'_preserves_uniq :
     forall m p0 ps,
