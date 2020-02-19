@@ -331,15 +331,27 @@ Module Memory.
     pose (H' := eqP H).
     unfold size_of_path.
     rewrite H'.
-    Search "" "eqb".
     apply/Nat.eqb_spec.
     assert (size (p.1 :: p.2) = size p.2 + 1).
     {
-      admit.
+      destruct (p.1 :: p.2) eqn:e.
+      - discriminate e.
+      - simpl.
+        assert (s :: l == p.1 :: p.2).
+        {
+          rewrite e. apply eq_refl. 
+        }
+        rewrite eqseq_cons in H0.
+        pose (H1 := andP H0).
+        destruct H1 as [_ H2].
+        pose (H3 := eqP H2).
+        rewrite H3.
+        rewrite addn1.
+        reflexivity.
     }
     rewrite H0.
     reflexivity.
-  Admitted.
+  Qed.
 
   Lemma extend_path'_increases_length :
     forall m p lp,
