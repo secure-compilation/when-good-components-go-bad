@@ -276,7 +276,7 @@ Module Memory.
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
     end.
 
-  
+  Print domm.
 
   (* Have path be the type of non-empty sequences? *)
   Definition node_t : Type := Component.id * Block.id.
@@ -289,6 +289,23 @@ Module Memory.
    *)
   Definition path_t : Type := node_t * (seq node_t).
   Definition uniq_path_t (p : path_t) : bool := uniq (p.1 :: p.2).
+  Definition size_of_path (p : path_t) : nat := (size p.2) + 1.
+
+  Lemma count_of_distinct_blocks_in_uniq_path_is_same_as_its_size :
+    forall p : path_t,
+      uniq_path_t p ->
+      size (fset (p.1 :: p.2)) = size_of_path p.
+  Proof.
+    rewrite /uniq_path_t /size_of_path.
+    move => p.
+    rewrite (uniq_size_fset (p.1 :: p.2)).
+    rewrite eqE => H.
+    pose (H' := eqnP H).
+    erewrite <- H'.
+    simpl.
+    rewrite addn1.
+    reflexivity.
+  Qed.
 
   Definition extend_path' (m : t) (p : path_t) : list path_t :=
     map (fun x => (x, p.1 :: p.2))
@@ -304,6 +321,37 @@ Module Memory.
     rewrite eq_refl.
     apply all_predT.
   Qed.
+
+  (* 
+     The following lemma might be provable more easily as a corollary of the previous lemma.
+  *)
+  Lemma extend_path'_increases_length :
+    forall m p lp,
+      extend_path' m p = lp ->
+      all (fun x => size_of_path x =? size_of_path p + 1) lp.
+  Proof.
+    intros.
+    subst lp.
+    unfold extend_path'.
+    SearchAbout all.
+    destruct p.
+(*    - apply all_nil.
+    - SearchAbout all.
+      rewrite all_map. simpl.
+      Check preim.
+      SearchAbout preim.
+      SearchAbout all.
+      unfold preim.
+      SearchAbout size.
+      simpl.
+      induction (size p0).
+      + simpl.
+        SearchAbout all.
+        apply all_predT.
+      + simpl. exact IHn.
+  Qed.
+ *)
+    Admitted.
       
   Lemma extend_path'_preserves_uniq :
     forall m p0 ps,
@@ -326,7 +374,14 @@ Module Memory.
 
   Definition access_step_paths' (m: t) (ps: {fset path_t}) : {fset path_t} :=
     fsetU ps (fset (concat (List.map (extend_path' m) ps))).
-  
+
+  Lemma access_step_paths'_expansive :
+  forall m ps,
+    fsubset ps (access_step_paths' m ps).
+  Proof.
+    intros. unfold access_step_paths'. apply fsubsetUl.
+  Qed.
+
   Corollary access_step_paths'_never_produces_cycles :
   forall m (ps: {fset path_t}),
     all uniq_path_t (val ps) ->
@@ -361,53 +416,11 @@ Module Memory.
       exact pInExtendPs.
   Qed.
 
-  Definition size_of_path (p : path_t) : nat := (size p.2) + 1.
-
-  Corollary count_of_distinct_blocks_in_uniq_path_is_same_as_its_size :
-    forall p : path_t,
-      uniq_path_t p ->
-      size (fset (p.1 :: p.2)) = size_of_path p.
-  Proof.
-    rewrite /uniq_path_t /size_of_path.
-    move => p.
-    rewrite (uniq_size_fset (p.1 :: p.2)).
-    rewrite eqE => H.
-    pose (H' := eqnP H).
-    erewrite <- H'.
-    simpl.
-    rewrite addn1.
-    reflexivity.
-  Qed.
-      
-  Definition path := (seq (Component.id * Block.id)).
-  SearchAbout seq.
-
-  Check last.
-  Check last fsetU.
-  Definition a : path := nil.
-  Check last (1,2).
-  Definition b := (nth_error (1::(2::3::[])) (size (1::(2::3::[])) - 1)).
-  Compute b.
-
-  (* Given a path p to a block cb (a block that is represented by the head of p),
-     find all pointer values that live in cb, and use each pointer value to create a new path that is
-     the extension of p with the block id of this pointer value. Return the list of all such new
-     extended paths. *)
-  Definition extend_path (m: t) (p: path) : list path :=
-    match p with
-    | []      => [] (* this case should not be dealt with because an empty path should never arise. *)
-    | cb :: _ => map (fun x => cons x p) (filter (fun x => x \notin p) (apply_load_block m cb))
-    end.
-
-  Definition access_step_paths (m: t) (bs: {fset path}) : {fset path} :=
-    fsetU bs (fset (concat (map (extend_path m) (val bs)))).
-
-  Fixpoint reachable_paths_with_fuel (m: t) (bs: {fset path}) (n: nat) : {fset path} :=
-    match n with
-    | 0 => bs
-    | S n => reachable_paths_with_fuel m (access_step_paths m bs) n
-    end.
-
+  Fixpoint reachable_paths_with_fuel' (m: t) (bs: {fset path_t}) (n: nat) : {fset path_t} :=
+  match n with
+  | 0 => bs
+  | S n => reachable_paths_with_fuel' m (access_step_paths' m bs) n
+  end.
 
   Definition component_memories_of_memory (m: t) : seq ComponentMemory.t :=
     map snd (elementsm m).
@@ -415,23 +428,14 @@ Module Memory.
   Definition list_of_per_component_set_of_block_ids (m: t) : seq {fset Block.id} :=
     map ComponentMemory.domm (component_memories_of_memory m).
   
-  (* I expect that the use of "val" that converts a set to a sequence can be problematic
-     because there aren't really useful lemmas about size and val.
-     
-     However, I don't know for now how to "map size" to a seq of "fset"s.
-
-     I do not even know if the seq that val returns contains any duplicates.
-     I assume it doesn't.
-   *)
   Definition count_of_allocated_blocks_of_memory (m: t) : nat :=
-    sumn (map (fun x => size (val x)) (list_of_per_component_set_of_block_ids m)).
+    sumn (map (fun (x:{fset Block.id}) => size x) (list_of_per_component_set_of_block_ids m)).
 
-  Definition reachable_paths (m: t) (bs: {fset path}) :=
-    reachable_paths_with_fuel m bs (count_of_allocated_blocks_of_memory m).
+  Definition reachable_paths' (m: t) (bs: {fset path_t}) :=
+    reachable_paths_with_fuel' m bs (count_of_allocated_blocks_of_memory m).
 
-  Check maxn.
-  Check foldl.
-  Definition max_path_size_in_set (bs : {fset path}) : nat := foldl max 0 (map size (val bs)).
+  Definition max_path_size_in_set (bs : {fset path_t}) : nat :=
+    foldl max 0 (map size_of_path (val bs)).
 
   Lemma max_path_size_in_set_distributes :
     forall bs bs',
@@ -454,166 +458,14 @@ Module Memory.
     (* Here, need to cancel out "val fset val" *)
   Admitted.
 
-  Lemma extend_path_returns_extensions :
-    forall m p lp,
-      extend_path m p = lp ->
-      all (fun x => behead x == p) lp.
-  Proof.
-    intros.
-    subst lp.
-    unfold extend_path.
-    destruct p.
-    - auto. (* apply all_nil. *)
-    - rewrite all_map. simpl. unfold preim. simpl. (* SearchAbout "==" *)
-      rewrite eq_refl.
-      apply all_predT.
-  Qed.
-    
-  Corollary extend_path_increases_length_by_one :
-    forall m p lp,
-      extend_path m p = lp ->
-      all (fun x => size x =? size p + 1) lp.
-  Proof.
-    intros.
-    pose (all_extensions := extend_path_returns_extensions m p lp H).
-    SearchAbout all.
-    apply/sub_all. (* How to substitute for ?Goal here? *)
-  Admitted.
-
-  (* If the corollary above can be proved more easily, then there is no need for this
-     identical lemma here.
+  
+  (* The following lemma is needed because max_path_size_in_set is the metric for progress.
+     It is important to show that this metric never decreases by making a step.
+     This lemma asserts this fact.
   *)
-  Lemma extend_path_increases_length :
-    forall m p lp,
-      extend_path m p = lp ->
-      all (fun x => size x =? size p + 1) lp.
-  Proof.
-    intros.
-    subst lp.
-    unfold extend_path.
-    SearchAbout all.
-    destruct p.
-    - apply all_nil.
-    - SearchAbout all.
-      rewrite all_map. simpl.
-      Check preim.
-      SearchAbout preim.
-      SearchAbout all.
-      unfold preim.
-      SearchAbout size.
-      simpl.
-      induction (size p0).
-      + simpl.
-        SearchAbout all.
-        apply all_predT.
-      + simpl. exact IHn.
-  Qed.
-
-  Check extend_path.
-  Check mem.
-  Lemma extend_path_never_reappends_blocks_in_the_path :
-    forall m p lp,
-      extend_path m p = lp ->
-      all (fun p' => if hd_error p' is Some b then b \notin p else true) lp.
-  Proof.
-    (*
-    unfold extend_path.
-    intros.
-    subst lp.
-    induction new_p.
-    - auto.
-    - destruct p as [| first_block tail_p] eqn:e.
-      + auto.
-        apply/nthP.
-        (* Used the above to apply a "view", i.e., a lemma that states a reflect instance. *)
-     *)
-  Admitted.
-      
-
-  SearchAbout seq.
-  Lemma extend_path_never_produces_cycles :
-    forall m (p : path) lp,
-      uniq p ->
-      extend_path m p = lp ->
-      all uniq lp.
-  Proof.
-    intros.
-    induction p.
-    - simpl in H0. subst lp. auto.
-    - pose (never_reappends :=
-              extend_path_never_reappends_blocks_in_the_path m (a0 :: p) lp H0).
-      simpl in never_reappends.
-      pose (all_extenstions_of_a0p :=
-              extend_path_returns_extensions m (a0 :: p) lp H0).
-      SearchAbout hd_error.
-      SearchAbout seq tl.
-      SearchAbout behead.
-      SearchAbout uniq.
-      About path.cycle_next.
-      About mathcomp.ssreflect.path. (* TODO: It may be worth it to use this path instead of
-                                        defining a path of blocks as just a seq of blocks. *)
-
-      (* Need to use something like hd_error_tl_repr for behead
-         (after having shown that sizes are not-zero.)
-         By using hd_error_tl_repr, we can combine never_reappends with H
-         to obtain our goal.
-       *)
-      Search tl.
-    SearchAbout all.
-    unfold uniq.
-    (*pose (all (fun x))
-    induction lp.
-    - auto.
-    - SearchAbout all cons.
-      SearchAbout all.
-      unfold all.
-      apply/andP.
-      split.
-      - unfold uniq.
-      SearchAbout "&&".
-     *)
-
-    (* Start Proof attempt *)
-    (*
-    unfold extend_path.
-    intros.
-    subst lp.
-    induction p.
-    - apply all_nil.
-    - rewrite all_map. unfold preim. simpl.  
-      SearchAbout all.
-      SearchAbout uniq.
-      SearchAbout path.ucycle.
-      Print path.ucycle.
-      Print path.cycle.
-      Print path.path.
-    *)
-  Admitted.
-
-  SearchAbout fset seq.
-  Corollary access_step_paths_never_produces_cycles :
-    forall m ps,
-      all uniq (val ps) ->
-      all uniq (val (access_step_paths m ps)).
-  Proof.
-    intros.
-    unfold access_step_paths.
-    SearchAbout val.
-    SearchAbout all.
-    (* Should follow from extend_path_never_produces_cycles. *)
-  Admitted.
-  
-  Lemma access_step_paths_expansive :
-    forall m ps,
-      fsubset ps (access_step_paths m ps).
-  Proof.
-    intros. unfold access_step_paths. apply fsubsetUl.
-  Qed.
-  
-  (* Not sure if needed. *)
   Lemma access_step_never_decreases_path_length :
     forall m ps ps',
-      access_step_paths m ps = ps' ->
+      access_step_paths' m ps = ps' ->
       (ps = ps' /\
        max_path_size_in_set ps' = max_path_size_in_set ps)
       \/
@@ -624,7 +476,7 @@ Module Memory.
     - left.
       assert (pseqps': ps = ps').
       apply: fsubset_sizeP.
-      * pose (e1 := access_step_paths_expansive m ps).
+      * pose (e1 := access_step_paths'_expansive m ps).
         erewrite H in e1.
         pose (e1size := fsubset_leq_size e1).
         pose (esize := fsubset_leq_size e).
@@ -637,13 +489,13 @@ Module Memory.
         unfold is_true in e1size.
         unfold is_true in esize.
         rewrite e1size. rewrite esize. auto.
-      * pose (e1 := access_step_paths_expansive m ps).
+      * pose (e1 := access_step_paths'_expansive m ps).
         erewrite H in e1. trivial.
         split.
       + trivial.
       + rewrite pseqps'. trivial.
     - right.
-      pose (e1 := access_step_paths_expansive m ps).
+      pose (e1 := access_step_paths'_expansive m ps).
       erewrite H in e1.
       SearchAbout fsubset.
       pose (eqn := eqEfsubset ps ps').
@@ -651,10 +503,10 @@ Module Memory.
       SearchAbout andb.
       erewrite andb_false_r in eqn.
       subst ps'.
-      unfold access_step_paths in eqn.
+      unfold access_step_paths' in eqn.
       SearchAbout fset.
       (* Attempting to prove that the RHS of the union is not empty *)
-      destruct (size(fset (concat [seq extend_path m i | i <- val ps])%fset)) eqn:isEmpty.
+      destruct (size(fset (concat [seq extend_path' m i | i <- val ps])%fset)) eqn:isEmpty.
       SearchAbout size fset.
       SearchAbout fsubset.
       unfold max_path_size_in_set.
@@ -664,10 +516,10 @@ Module Memory.
 
   Lemma reachable_paths_with_fuel_increases_max_path_by_fuel :
     forall mem ps ps' fuel,
-      reachable_paths_with_fuel mem ps fuel = ps' ->
+      reachable_paths_with_fuel' mem ps fuel = ps' ->
       max_path_size_in_set ps' <= fuel + max_path_size_in_set ps.
   Proof.
-    unfold reachable_paths_with_fuel.
+    unfold reachable_paths_with_fuel'.
     intros.
     induction fuel.
     - subst ps'.
