@@ -360,7 +360,25 @@ Module Memory.
       rewrite <- (In_in p) in pInExtendPs.
       exact pInExtendPs.
   Qed.
-  
+
+  Definition size_of_path (p : path_t) : nat := (size p.2) + 1.
+
+  Corollary count_of_distinct_blocks_in_uniq_path_is_same_as_its_size :
+    forall p : path_t,
+      uniq_path_t p ->
+      size (fset (p.1 :: p.2)) = size_of_path p.
+  Proof.
+    rewrite /uniq_path_t /size_of_path.
+    move => p.
+    rewrite (uniq_size_fset (p.1 :: p.2)).
+    rewrite eqE => H.
+    pose (H' := eqnP H).
+    erewrite <- H'.
+    simpl.
+    rewrite addn1.
+    reflexivity.
+  Qed.
+      
   Definition path := (seq (Component.id * Block.id)).
   SearchAbout seq.
 
