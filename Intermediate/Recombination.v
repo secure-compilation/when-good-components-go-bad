@@ -628,18 +628,18 @@ Section Mergeable.
     assert (Hmem : domm (CS.state_mem s) = domm (unionm ip ic)).
     {
       apply CS.comes_from_initial_state_mem_domm.
-      inversion Hprog_is_closed as [_ [main [_ [Hmain _]]]].
+      inversion Hprog_is_closed as [_ [main [Hmain _]]].
       pose proof linking_well_formedness Hwfp Hwfc (proj1 Hmergeable_ifaces) as Hwf.
-      now exists prog, main, s0, t.
+      now exists prog, s0, t.
     }
     assert (Hmem'' : domm (CS.state_mem s'') = domm (unionm ip ic)).
     {
       apply CS.comes_from_initial_state_mem_domm.
-      inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
+      inversion Hprog_is_closed' as [_ [main [Hmain _]]].
       unfold ip, ic in Hmergeable_ifaces_sym. rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
       pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
       apply mergeable_interfaces_sym in Hmergeable_ifaces_sym.
-      exists prog'', main, s0'', t.
+      exists prog'', s0'', t.
       repeat (split; eauto). unfold ip, ic; now rewrite Hifacec Hifacep.
     }
     unfold merge_memories.
@@ -950,19 +950,19 @@ Section MergeSym.
     assert (Hmem : domm (CS.state_mem s) = domm (unionm ip ic)).
     {
       apply CS.comes_from_initial_state_mem_domm.
-      inversion Hprog_is_closed as [_ [main [_ [Hmain _]]]].
+      inversion Hprog_is_closed as [_ [main [Hmain _]]].
       pose proof linking_well_formedness Hwfp Hwfc (proj1 Hmergeable_ifaces) as Hwf.
-      now exists prog, main, s0, t.
+      now exists prog, s0, t.
     }
     assert (Hmem'' : domm (CS.state_mem s'') = domm (unionm ip ic)).
     {
       unfold ip, ic. rewrite Hifacep Hifacec.
       apply CS.comes_from_initial_state_mem_domm.
-      inversion Hprog_is_closed' as [_ [main [_ [Hmain _]]]].
+      inversion Hprog_is_closed' as [_ [main [Hmain _]]].
       assert (Hmergeable_ifacesC := Hmergeable_ifaces);
         rewrite Hifacep Hifacec in Hmergeable_ifacesC.
       pose proof linking_well_formedness Hwfp' Hwfc' (proj1 Hmergeable_ifacesC) as Hwf''.
-      now exists prog'', main, s0'', t.
+      now exists prog'', s0'', t.
     }
     destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
     unfold merge_states.

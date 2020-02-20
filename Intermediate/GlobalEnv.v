@@ -191,11 +191,14 @@ Proof.
     rewrite domm_mkfmap. rewrite domm_mkfmap in Hdomm.
     rewrite <- Hiface.
     assert (Hmain : matching_mains p p') by now apply interface_implies_matching_mains.
-    destruct (prog_main p) as [mainP |] eqn:Hcase3;
-      destruct (prog_main p') as [mainP' |] eqn:Hcase4.
-    + admit.
-    + now rewrite -> (proj2 Hmain Hcase4) in Hcase3. (* Contra. *)
+    destruct (prog_main p) as [|] eqn:Hcase3;
+      destruct (prog_main p') as [|] eqn:Hcase4.
+    + unfold Component.main in *.
+      Eval compute in (true || false && false).
+
+      admit.
     + now rewrite -> (proj1 Hmain Hcase3) in Hcase4. (* Contra. *)
+    + now rewrite -> (proj2 Hmain Hcase4) in Hcase3. (* Contra. *)
     + (* Finish synchronizing both runs. Refer to first case as needed. Since
          there are no main procedures, the complications of that case are
          avoided here. *)
