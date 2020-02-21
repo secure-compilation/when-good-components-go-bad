@@ -278,7 +278,14 @@ Proof.
            apply /dommP. exists x.
            rewrite mkfmapE. assumption.
         -- destruct Hdomm1; subst.
-           apply /dommP. admit.
+           pose proof (wfprog_main_existence Hwf').
+           destruct H as [main_procs [H1 H2]]. apply (wfprog_main_component Hwf').
+           apply /dommP; exists iface; unfold Component.main; auto.
+           unfold Component.main in *; unfold Procedure.main in *.
+           assert (main_procs = procs') by congruence.
+           subst; auto. rewrite domm_mkfmap.
+           unfold domm in *. (* ... *)
+           rewrite in_fset in H2. assumption.
       * assert (H: seq.pmap fmap l = []).
         {
           clear -Hfmap.
@@ -379,7 +386,7 @@ Proof.
         move: Hdomm => //=. apply /negP.
         now rewrite domm0.
   - now rewrite HC.
-Admitted.
+Qed.
 
 (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
    operating on an explicit program link, one then being the exact symmetric of
