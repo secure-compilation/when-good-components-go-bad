@@ -281,6 +281,17 @@ Module Memory.
   (* Have path be the type of non-empty sequences? *)
   Definition node_t : Type := Component.id * Block.id.
 
+  (* START DEFINING REACHABILITY INDUCTIVELY *)
+  Inductive Reachable (m: t) (bs : {fset node_t}) : node_t -> Prop :=
+  | Reachable_refl : forall b, b \in bs -> Reachable m bs b
+  | Reachable_step : forall cid bid b' compMem,
+      Reachable m bs (cid, bid) -> 
+      m (cid) = Some compMem ->
+      b' \in ComponentMemory.load_block compMem bid ->
+      Reachable m bs b'.
+                            
+  (* END DEFINING REACHABILITY INDUCTIVELY *)
+
   (* Taking inspiration from mathcomp.ssreflect.path, make path be the type of
      non-empty sequences.
      A path is thus a head and a tail. The head is of type node_t, and the tail of type
@@ -288,8 +299,10 @@ Module Memory.
      Our path is also uniq, i.e., no cycles.
    *)
   Definition path_t : Type := node_t * (seq node_t).
+  (* uniq means that it does not contain cycles. *)
   Definition uniq_path_t (p : path_t) : bool := uniq (p.1 :: p.2).
   Definition size_of_path (p : path_t) : nat := (size p.2) + 1.
+  Hint Unfold size_of_path.
 
   Lemma count_of_distinct_blocks_in_uniq_path_is_same_as_its_size :
     forall p : path_t,
@@ -328,6 +341,7 @@ Module Memory.
       size_of_path x =? size_of_path p + 1.
   Proof.
     intros x p H.
+    simpl.
     pose (H' := eqP H).
     unfold size_of_path.
     rewrite H'.
