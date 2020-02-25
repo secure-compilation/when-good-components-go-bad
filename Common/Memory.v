@@ -382,7 +382,6 @@ Module Memory.
     apply/allP => x /=. rewrite mem_filter.
     move => /andP [/andP[/negP H1 /negP H2] H3].
     apply/and3P. split; auto.
-    (* Search "" "\in" cons. *)
     apply/memPn => y Hnotin. apply/negP => /eqP?. subst y.
     move: Hnotin. rewrite in_cons => /orP[?|]; auto.
   Qed.
@@ -414,23 +413,16 @@ Module Memory.
     destruct pHypProp as [inPs | inExtend].
     - move: inPs.
       apply/allP; auto.
-    - Search "" "concat".
-      rewrite <- flat_map_concat_map in inExtend.
-      Search "" "flat_map".
+    - rewrite <- flat_map_concat_map in inExtend.
       (* Want to use in_flat_map. Wanted: In p (flat_map (exte..) ps) *)
-      Search "" "\in" "fset".
       rewrite in_fset in inExtend.
       apply In_in in inExtend.
       apply in_flat_map in inExtend.
       destruct inExtend as [p0 [p0InPs pInExtendPs]].
-      Search "" "\in" "In".
       rewrite <- (In_in p0) in p0InPs.
-      Search "" "\in" "filter".
       rewrite mem_filter in p0InPs.
-      Search "" "_ && _".
       pose (p0InPs' := andb_prop _ _ p0InPs).
       destruct p0InPs' as [_ p0InPs''].
-      Search "" "all" "\in".
       apply/allP.
       apply (extend_path'_preserves_uniq m p0).
       apply/allP.
