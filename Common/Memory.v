@@ -281,6 +281,17 @@ Module Memory.
   (* Have path be the type of non-empty sequences? *)
   Definition node_t : Type := Component.id * Block.id.
 
+  (* START DEFINING REACHABILITY INDUCTIVELY *)
+  Inductive Reachable (m: t) (bs : {fset node_t}) : node_t -> Prop :=
+  | Reachable_refl : forall b, b \in bs -> Reachable m bs b
+  | Reachable_step : forall cid bid b' compMem,
+      Reachable m bs (cid, bid) -> 
+      m (cid) = Some compMem ->
+      b' \in ComponentMemory.load_block compMem bid ->
+      Reachable m bs b'.
+                            
+  (* END DEFINING REACHABILITY INDUCTIVELY *)
+
   (* Taking inspiration from mathcomp.ssreflect.path, make path be the type of
      non-empty sequences.
      A path is thus a head and a tail. The head is of type node_t, and the tail of type
@@ -288,8 +299,10 @@ Module Memory.
      Our path is also uniq, i.e., no cycles.
    *)
   Definition path_t : Type := node_t * (seq node_t).
+  (* uniq means that it does not contain cycles. *)
   Definition uniq_path_t (p : path_t) : bool := uniq (p.1 :: p.2).
   Definition size_of_path (p : path_t) : nat := (size p.2) + 1.
+  Hint Unfold size_of_path.
 
   Lemma count_of_distinct_blocks_in_uniq_path_is_same_as_its_size :
     forall p : path_t,
@@ -328,6 +341,7 @@ Module Memory.
       size_of_path x =? size_of_path p + 1.
   Proof.
     intros x p H.
+    simpl.
     pose (H' := eqP H).
     unfold size_of_path.
     rewrite H'.
@@ -382,45 +396,47 @@ Module Memory.
     apply/allP => x /=. rewrite mem_filter.
     move => /andP [/andP[/negP H1 /negP H2] H3].
     apply/and3P. split; auto.
-    (* Search "" "\in" cons. *)
     apply/memPn => y Hnotin. apply/negP => /eqP?. subst y.
     move: Hnotin. rewrite in_cons => /orP[?|]; auto.
   Qed.
 
-  Definition access_step_paths' (m: t) (ps: {fset path_t}) : {fset path_t} :=
-    fsetU ps (fset (concat (List.map (extend_path' m) ps))).
+  Definition access_step_paths' (m: t) (ps: {fset path_t}) (cur_path_size: nat) : {fset path_t} :=
+    fsetU ps (fset
+                (concat (List.map (extend_path' m)
+                                  (filter (fun p => size_of_path p =? cur_path_size) ps)
+                        )
+                )
+             ).
 
   Lemma access_step_paths'_expansive :
-  forall m ps,
-    fsubset ps (access_step_paths' m ps).
+  forall m ps sz,
+    fsubset ps (access_step_paths' m ps sz).
   Proof.
     intros. unfold access_step_paths'. apply fsubsetUl.
   Qed.
 
   Corollary access_step_paths'_never_produces_cycles :
-  forall m (ps: {fset path_t}),
+  forall m (ps: {fset path_t}) (sz: nat),
     all uniq_path_t (val ps) ->
-    all uniq_path_t (val (access_step_paths' m ps)).
+    all uniq_path_t (val (access_step_paths' m ps sz)).
   Proof.
-    move => m ps H.
+    move => m ps sz H.
     apply/allP => p.
     rewrite /access_step_paths' in_fsetU => pHyp.
     pose (pHypProp := orb_prop _ _ pHyp).
     destruct pHypProp as [inPs | inExtend].
     - move: inPs.
       apply/allP; auto.
-    - Search "" "concat".
-      rewrite <- flat_map_concat_map in inExtend.
-      Search "" "flat_map".
+    - rewrite <- flat_map_concat_map in inExtend.
       (* Want to use in_flat_map. Wanted: In p (flat_map (exte..) ps) *)
-      Search "" "\in" "fset".
       rewrite in_fset in inExtend.
       apply In_in in inExtend.
       apply in_flat_map in inExtend.
       destruct inExtend as [p0 [p0InPs pInExtendPs]].
-      Search "" "\in" "In".
       rewrite <- (In_in p0) in p0InPs.
-      Search "" "all" "\in".
+      rewrite mem_filter in p0InPs.
+      pose (p0InPs' := andb_prop _ _ p0InPs).
+      destruct p0InPs' as [_ p0InPs''].
       apply/allP.
       apply (extend_path'_preserves_uniq m p0).
       apply/allP.
@@ -431,11 +447,17 @@ Module Memory.
       exact pInExtendPs.
   Qed.
 
+  (* This definition will need to be fixed. Currently, the fuel is decreasing, which is fine.
+     But we need also to count the steps (starting from 1) because access_step_paths'
+     expects an explicit step index as an argument.
+  *)
+  (*
   Fixpoint reachable_paths_with_fuel' (m: t) (bs: {fset path_t}) (n: nat) : {fset path_t} :=
   match n with
   | 0 => bs
   | S n => reachable_paths_with_fuel' m (access_step_paths' m bs) n
   end.
+  *)
 
   Definition component_memories_of_memory (m: t) : seq ComponentMemory.t :=
     map snd (elementsm m).
@@ -446,11 +468,22 @@ Module Memory.
   Definition count_of_allocated_blocks_of_memory (m: t) : nat :=
     sumn (map (fun (x:{fset Block.id}) => size x) (list_of_per_component_set_of_block_ids m)).
 
+  (*
   Definition reachable_paths' (m: t) (bs: {fset path_t}) :=
     reachable_paths_with_fuel' m bs (count_of_allocated_blocks_of_memory m).
-
+  *)
+ 
   Definition max_path_size_in_set (bs : {fset path_t}) : nat :=
     foldl max 0 (map size_of_path (val bs)).
+
+  Lemma max_path_size_in_set_exists :
+    forall ps sz,
+      sz != 0 ->
+      max_path_size_in_set ps = sz ->
+      exists p, p \in ps /\ size_of_path p = sz.
+  Proof.
+    intros.
+  Admitted.
 
   Lemma max_path_size_in_set_distributes :
     forall bs bs',
@@ -477,16 +510,52 @@ Module Memory.
   (* The following lemma is needed because max_path_size_in_set is the metric for progress.
      It is important to show that this metric never decreases by making a step.
      This lemma asserts this fact.
-  *)
+   *)
   Lemma access_step_never_decreases_path_length :
-    forall m ps ps',
-      access_step_paths' m ps = ps' ->
+    forall m ps ps' sz,
+      max_path_size_in_set ps = sz ->
+      access_step_paths' m ps sz = ps' ->
       (ps = ps' /\
-       max_path_size_in_set ps' = max_path_size_in_set ps)
+       max_path_size_in_set ps' = sz)
       \/
-      max_path_size_in_set ps' = max_path_size_in_set ps + 1.
+      max_path_size_in_set ps' = sz + 1.
   Proof.
-    intros.
+    intros m ps ps' sz H H0.
+    destruct (ps == ps') eqn:e.
+    - pose (e' := eqP e).
+      left. split. trivial. rewrite <- H. rewrite e'. trivial.
+    - right.
+      rewrite eqEfsubset in e.
+      pose (e1 := access_step_paths'_expansive m ps sz).
+      erewrite H0 in e1.
+      pose (subOrsub := andb_false_iff (fsubset ps ps') (fsubset ps' ps)).
+      edestruct subOrsub as [H1 _].
+      pose (subOrsubConc := H1 e).
+      destruct subOrsubConc as [psSubps'f | ps'Subpsf].
+    - pose (F := eq_true_false_abs (fsubset ps ps') e1 psSubps'f).
+      contradiction.
+      subst ps'.
+      (* Here, there are two reasons why this goal is true.
+         The first reason is extend_path'_increases_length.
+         The second reason is H. 
+       *)
+      assert (exists p, p \in ps /\ size_of_path p = sz).
+      {
+        (* This should follow from H. *)
+        -admit.
+      }
+      Search "" "max".
+      
+      (*rewrite (andb_false_iff (fsubset ps ps') (fsubset ps' ps)) in e.
+      rewrite <- negb_true_iff in e.
+      unfold negb.
+      Search "" "fsubset".
+      assert (ps <> ps)
+      Search "" "_ != _".
+      pose (e' := eqP e).
+
+      
+    
     destruct (fsubset ps' ps) eqn:e.
     - left.
       assert (pseqps': ps = ps').
@@ -526,9 +595,10 @@ Module Memory.
       SearchAbout fsubset.
       unfold max_path_size_in_set.
       
-      SearchAbout Init.Nat.max.
+      SearchAbout Init.Nat.max.*)
   Admitted.
 
+  (*
   Lemma reachable_paths_with_fuel_increases_max_path_by_fuel :
     forall mem ps ps' fuel,
       reachable_paths_with_fuel' mem ps fuel = ps' ->
@@ -541,6 +611,7 @@ Module Memory.
       induction (max_path_size_in_set ps); auto.
     - subst ps'.
     Admitted.
+  *)
   (*
     Definition extend_set_of_paths_one_step (m: t) (ps: {fset path}) : {fset path} :=
     fsetU ps (fset ).
