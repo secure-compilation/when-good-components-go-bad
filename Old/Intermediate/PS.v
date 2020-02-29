@@ -452,8 +452,7 @@ Proof.
     assert (Hctx2 : ctx2 Component.main = None)
       by (apply /dommPn; assumption).
     rewrite unionmE in Hctx12.
-    destruct (ctx1 Component.main) as [main1 |] eqn:Hcase1;
-      rewrite Hcase1 in Hctx12;
+    destruct (ctx1 Component.main) as [main1 |] eqn:Hcase1; simpl;
       simpl in Hctx12.
     + apply /dommP. now eauto.
     + congruence.
@@ -525,7 +524,7 @@ Proof.
       rewrite Hiface unionmE in HCI'.
       destruct (ctx1 C') as [CI'' |] eqn:Hcase.
       * apply /dommP. now eauto.
-      * rewrite Hcase in HCI'. simpl in HCI'.
+      * simpl in HCI'.
         (* TODO: Same artifact on dommP as above. *)
         assert (Hcontra : C' \in domm ctx2) by (apply /dommP; eauto).
         rewrite Hcontra in Hpc2.
@@ -563,7 +562,6 @@ Proof.
       unfold Program.has_component in Hhas_comp.
       rewrite Hiface unionmE in Hhas_comp.
       destruct (ctx1 (Pointer.component pc)) as [CI' |] eqn:Hcase;
-        rewrite Hcase in Hhas_comp;
         simpl in Hhas_comp.
       * apply /dommP. now eauto.
       * assert (Hcontra : ctx2 (Pointer.component pc) = None)
@@ -1153,7 +1151,7 @@ Proof.
   rewrite unionmE 2!filtermE.
   destruct (C \notin domm ctx1) eqn:Hdomm1;
     destruct (C \notin domm ctx2) eqn:Hdomm2;
-    destruct (mem C) as [memC |] eqn:Hmem; rewrite Hmem;
+    destruct (mem C) as [memC |] eqn:Hmem; simpl;
     try reflexivity.
   (* A single contradictory case is left. *)
   - exfalso.

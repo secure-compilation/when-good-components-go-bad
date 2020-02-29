@@ -17,7 +17,9 @@ Require Import Tests.CompilerPBTests.
 Require Import Tests.I2SFI.SFIPBTests.
 
 From QuickChick Require Import QuickChick.
-Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
+Import QcDefaultNotation QcNotation.
+Open Scope qc_scope.
+Open Scope string_scope.
 Import GenLow GenHigh.
 
 Inductive stack_op := Push | Pop.
@@ -37,7 +39,7 @@ Definition show_stack_log_entry (entry : stack_log_entry) : string :=
           ++ " ptr: "
           ++ (show_addr addr)
           ++ " stack op: " ++ (show_op t)
-          ++ "instr " ++ (show instr). 
+          ++ "instr " ++ (show instr).
 
 Instance show_cs_log_entry_i : Show stack_log_entry :=
   {| show := show_stack_log_entry |}.
@@ -74,7 +76,7 @@ Definition update_stack_log
                          ((cs_log ++ (pc, addr, Pop, instr)::nil)%list,nlog)
         | _ => (cs_log,nlog)
         end
-          
+
     | RiscMachine.ISA.IJal addr =>
       if SFI.is_same_component_bool pc addr
       then (cs_log,nlog)
@@ -92,15 +94,15 @@ Definition update_stack_log
   | _ => (cs_log,nlog)
   end.
 
-(* 1. number of instr exec, 
-   2. number of internal jump, 
-   3. number of cross component jumps 
+(* 1. number of instr exec,
+   2. number of internal jump,
+   3. number of cross component jumps
    5. number of static instructions executed
 *)
 Definition stack_stat := (nat * nat * nat)%type.
 
-(* dynamic instr, static instr, 
-   # of operations, 
+(* dynamic instr, static instr,
+   # of operations,
    intermediate execution result *)
 Instance show_stack_stat : Show stack_stat :=
   {|
@@ -126,7 +128,7 @@ Fixpoint stack_mem_checker s mem : Checker :=
                                         0%N
     in
     match RiscMachine.Memory.get_word mem stack_address with
-    | Some (RiscMachine.Data v) => 
+    | Some (RiscMachine.Data v) =>
       if (N.eqb addr (Z.to_N v))
       then stack_mem_checker xs mem
       else whenFail ("stack_mem_checker s=" ++ (show s))%string (checker false)
@@ -140,7 +142,7 @@ Fixpoint stack_step_checker (l : list stack_log_entry) s  mem :=
   match l with
   | nil => (* check s against memory *)
     stack_mem_checker s mem
-  | (pc,addr,op,instr)::xs => 
+  | (pc,addr,op,instr)::xs =>
     match op with
     | Push => stack_step_checker xs (addr::s) mem
     | Pop =>
@@ -190,13 +192,13 @@ Definition stack_log_checker (log : (log_type stack_log_entry))
                      match op with
                      | Push => Some (addr::s)
                      | Pop =>
-                       match s with 
+                       match s with
                        | nil => None
                        | a::s' =>
                          if (N.eqb a addr)
                          then Some s'
                          else None
-                       end             
+                       end
                      end
                    end
                 ) l1 (Some nil) in
@@ -204,7 +206,7 @@ Definition stack_log_checker (log : (log_type stack_log_entry))
           | None => whenFail
                      ( "Address didn't match: log=" ++ (show l1) )
                      (checker false)
-          | Some stack =>           
+          | Some stack =>
               (* the last address may have not yet been written in memory *)
               (* I record the log entry at Jal *)
               (* the memory is updated at push_sfi *)

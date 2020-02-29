@@ -16,7 +16,9 @@ Require Import Tests.CompilerPBTests.
 Require Import Tests.I2SFI.SFIPBTests.
 
 From QuickChick Require Import QuickChick.
-Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
+Import QcDefaultNotation QcNotation.
+Open Scope qc_scope.
+Open Scope string_scope.
 Import GenLow GenHigh.
 
 Inductive jump_type :=
@@ -80,16 +82,16 @@ Definition update_jump_log
   | _ => (j_log,nlog)
   end.
 
-(* 1. number of instr exec, 
-   2. number of internal jumps, 
-   3. number of cross component jumps 
+(* 1. number of instr exec,
+   2. number of internal jumps,
+   3. number of cross component jumps
    5. number of static instructions executed
 *)
 Definition jump_stat := (nat * nat * nat * nat)%type.
 
-(* dynamic instr, static instr, 
-   # of internal jump instr executed, 
-   # of cross-component jumps, 
+(* dynamic instr, static instr,
+   # of internal jump instr executed,
+   # of cross-component jumps,
  *)
 Instance show_jump_stat : Show jump_stat :=
   {|
@@ -108,10 +110,10 @@ Definition jump_stats
   let '(l1,l2) := log in
   let i := (List.length
               (List.filter
-                 (fun '(pc,addr,type,t) =>                  
+                 (fun '(pc,addr,type,t) =>
                     (SFI.is_same_component_bool pc addr)
                     || (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
-                    || (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID) 
+                    || (N.eqb (SFI.C_SFI pc) SFI.MONITOR_COMPONENT_ID)
                  ) l1
               )
            ) in
@@ -130,7 +132,7 @@ Definition jump_stats
 
 Definition entry_checker (entry : jump_log_entry) : Checker :=
   let '(pc,addr,type,t) := entry in
-  if (SFI.is_same_component_bool pc addr)                      
+  if (SFI.is_same_component_bool pc addr)
   then
     match t with
     | nil =>  whenFail (  "Register R_T expected in internal jumps "
@@ -139,7 +141,7 @@ Definition entry_checker (entry : jump_log_entry) : Checker :=
                        | Indirect r => RiscMachine.Register.eqb
                                         RiscMachine.Register.R_T r
                        | Direct => true
-                       end)     
+                       end)
     | _ => whenFail (  "Unexpectected event at log entry:"
                         ++ (show_jump_log_entry (pc,addr,type,t)))
                    false
@@ -162,7 +164,7 @@ Definition entry_checker (entry : jump_log_entry) : Checker :=
 Fixpoint entries_checker (l : list jump_log_entry) : Checker :=
   match l with
   | nil => checker true
-  | (pc,addr,type,t)::nil =>   
+  | (pc,addr,type,t)::nil =>
     if (N.eqb (SFI.C_SFI addr) SFI.MONITOR_COMPONENT_ID)
     then checker true
     else entry_checker (pc,addr,type,t)
@@ -185,7 +187,7 @@ Definition jump_log_checker
       else
         whenFail "jump_checker:"
                  (checker false)
-    end. 
+    end.
 
 Definition jump_log_checker_error
            (log : log_type jump_log_entry) err :=

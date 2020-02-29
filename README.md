@@ -11,10 +11,40 @@ This repository contains the Coq development of the paper:
 
 ### Prerequisites ###
 
-This development requires Coq v8.7.1 to work, as well as the following libraries:
-- [Mathematical Components](https://math-comp.github.io/math-comp/) 1.6.4
-- [Extensional Structures](https://github.com/arthuraa/extructures) 0.1
-- [CoqUtils](https://github.com/arthuraa/coq-utils/releases/tag/v0.1) 0.1
+This development requires Coq v8.9.1 to work, as well as the following libraries:
+- [Mathematical Components](https://math-comp.github.io/math-comp/) 1.9.0 or dev / on branch master,
+- [Coq Void](https://github.com/arthuraa/coq-void) v0.1.0 or dev / on branch master
+  (tested with commit
+  [4a88dcd](https://github.com/arthuraa/coq-void/commit/4a88dcd55421c356e8930a4a62de1682d1bb3fa4)),
+- [Deriving](https://github.com/arthuraa/deriving) dev / on branch master
+  (tested with commit
+  [82ed345](https://github.com/arthuraa/deriving/commit/82ed3450039f51ce36833cc447be24c39dc9ef65)),
+- [Extensional Structures](https://github.com/arthuraa/extructures) on
+  branch master (tested with commit
+  [c2d88c2](https://github.com/arthuraa/extructures/commit/c2d88c2bad3b02f78ca25c41b4cb59251ae4f702)),
+- [CoqUtils](https://github.com/arthuraa/coq-utils) on branch master
+  (tested with commit
+  [54c1269](https://github.com/arthuraa/coq-utils/commit/54c1269e1e85e14404e9dab3805e9db448f419f0)),
+- [QuickChick](https://github.com/QuickChick/QuickChick) v1.1.0 or 8.9.dev for the testing (see below).
+
+For convenience, you can install all the dependencies on opam (with
+the repo coq-released and coq-extra-dev) with
+
+```bash
+opam repo add coq-released https://coq.inria.fr/opam/released
+$ opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+
+# if you didn't clone with --recurse-submodules
+$ git submodule init
+$ git submodule update
+
+$ opam pin add coq-utils ./coq-utils
+$ opam install coq-quickchick
+```
+
+Note that this will activate the development repositories for many coq projects. You may
+want to pin some packages to a specific version with `opam pin
+<coq-package> <version>`
 
 ### Replaying the proofs ###
 
@@ -22,13 +52,13 @@ This development requires Coq v8.7.1 to work, as well as the following libraries
 
 ### Running the tests ###
 
-Our tests are known to work with [QuickChick](https://github.com/QuickChick/QuickChick) branch 8.7 and
-OCaml from 4.02.3 to 4.06.
+Our tests are known to work with [QuickChick](https://github.com/QuickChick/QuickChick) branch 8.9 and
+OCaml from 4.02.3 to 4.09.0.
 
 Running the tests (to be simplified):
 
-    $ make clean
-    $ make -j4
+    $ make -f Makefile.Test clean
+    $ make -f Makefile.Test -j4
     $ ./run_extracted_examples.sh --force-extraction
     $ rm sfi_safety_properties.exe
     $ ./run_sfi_tests.sh

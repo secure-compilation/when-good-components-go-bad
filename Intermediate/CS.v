@@ -159,7 +159,7 @@ Proof.
     destruct (Component.main \in domm (prog_interface c)) eqn:Hcase;
       first (specialize (Hdommc isT); now rewrite Hmainc in Hdommc).
     rewrite <- domm_prepare_procedures_entrypoints in Hdommp, Hcase.
-    destruct (dommP _ _ Hdommp) as [entrypointsp Hentrypointsp].
+    destruct (dommP Hdommp) as [entrypointsp Hentrypointsp].
     do 2 setoid_rewrite Hentrypointsp.
     now rewrite Nat.add_0_r.
   - (* Deal with the symmetries upfront; because of disjointness it is also
@@ -178,7 +178,7 @@ Proof.
     destruct (Component.main \in domm (prog_interface p)) eqn:Hcase;
       first (specialize (Hdommp isT); now rewrite Hmainp in Hdommp).
     rewrite <- domm_prepare_procedures_entrypoints in Hdommc, Hcase.
-    destruct (dommP _ _ Hdommc) as [entrypointsc Hentrypointsc].
+    destruct (dommP Hdommc) as [entrypointsc Hentrypointsc].
     do 2 setoid_rewrite Hentrypointsc.
     reflexivity.
   - (* Another easy/contra goal. *)

@@ -11,7 +11,7 @@ Set Bullet Behavior "Strict Subproofs".
 
 Definition NMap T := {fmap nat -> T}.
 
-Definition elementsm {A: Type} : NMap A -> list (nat * A) := @FMap.fmval nat_ordType A _.
+Definition elementsm {A: Type} : NMap A -> list (nat * A) := @FMap.fmval nat_ordType A.
 
 (* RB: TODO: These lemmas, with their clean proofs, probably belong in CoqUtils. *)
 
@@ -105,7 +105,7 @@ Lemma getm_filterm_notin_domm :
 Proof.
   intros T T' m1 m2 k Hnotin.
   rewrite filtermE Hnotin.
-  destruct (m2 k) as [v |] eqn:Hcase; now rewrite Hcase.
+  by destruct (m2 k) as [v |] eqn:Hcase.
 Qed.
 
 (* Set and filter commute if the key is outside the domain of filter. *)
@@ -134,7 +134,7 @@ Proof.
   apply /eq_fmap => n.
   rewrite !filtermE.
   unfold obind. unfold oapp.
-  destruct (m n) eqn:Hcase; rewrite Hcase.
+  destruct (m n) eqn:Hcase; simpl.
   -  destruct (n \notin domm m2) eqn:Hcase'; rewrite Hcase'.
      + destruct (n \notin domm m1) eqn:Hcase''; rewrite Hcase''.
        ++ assert (n \notin domm (unionm m1 m2)).
@@ -162,8 +162,8 @@ Qed.
 Lemma mapm_id : forall (T : Type) (i: NMap T), mapm id i = i.
 Proof.
   move=> T i. apply /eq_fmap => n.
-  rewrite mapmE. unfold omap, obind, oapp.
-  remember (i n) as v; simpl in *; rewrite <- Heqv.
+  rewrite mapmE. unfold omap, obind, oapp. simpl.
+  remember (i n) as v; simpl in *.
   now destruct v.
 Qed.
 
@@ -248,12 +248,12 @@ Proof.
     rewrite mem_domm in Heq1; rewrite mem_domm in Heq2.
     move: Heq1 Heq2. rewrite 2!filtermE. unfold obind. unfold oapp.
     destruct (m1 k) eqn:H';
-      rewrite H' Heq => //=. 
+      rewrite Heq => //=.
   - subst fn fn'.
     rewrite mem_domm in Heq1; rewrite mem_domm in Heq2.
     move: Heq1 Heq2. rewrite 2!filtermE. unfold obind. unfold oapp.
     destruct (m2 k) eqn:H';
-      rewrite H' Heq => //=. 
+      rewrite Heq => //=.
 Qed.
 
 
@@ -291,25 +291,25 @@ Proof.
   rewrite m2_eq_union -m0_eq_m2 domm_union.
   apply (* /fsubsetU /orP. *) /fsubsetP => x Hx.
   assert (x \in (domm i1) \/ x \notin (domm i1)).
-  { apply /orP. by destruct (x \in domm i1). } (* CA: do we have classical reasoning? *)   
-  case: H => H.  
-  move: H. apply /fsubsetP /fsubsetU /orP. 
+  { apply /orP. by destruct (x \in domm i1). } (* CA: do we have classical reasoning? *)
+  case: H => H.
+  move: H. apply /fsubsetP /fsubsetU /orP.
   left. by apply: fsubsetxx.
-      
+
   have x_in_i2 : x \in domm i2.
   { have x_in_m2 : x\in domm m2 by admit.
     move: x_in_m2.
     rewrite m2_eq_union domm_union.
     case /fsetUP => [| //].
-    move: H => /negP //. 
+    move: H => /negP //.
   } (*CA: by Hfilter deduce x \in domm m2
-               then by m2_eq_union, x \in domm i1 \/x \in domm i2 
+               then by m2_eq_union, x \in domm i1 \/x \in domm i2
                together with H we get x \in domm i2
               *)
-   move: x_in_i2. apply /fsubsetP /fsubsetU /orP.    
-   right. by apply: fsubsetxx. 
-Admitted.     
-    
+   move: x_in_i2. apply /fsubsetP /fsubsetU /orP.
+   right. by apply: fsubsetxx.
+Admitted.
+
 (* RB: NOTE: This is not a map lemma proper. More generally, absorption on
    arbitrary subsets. *)
 Lemma fsetU1in (T : ordType) (x : T) (s : {fset T}) :

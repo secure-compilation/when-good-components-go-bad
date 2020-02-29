@@ -17,7 +17,9 @@ Require Import Tests.CompilerPBTests.
 Require Import Tests.I2SFI.SFIPBTests.
 
 From QuickChick Require Import QuickChick.
-Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
+Import QcDefaultNotation QcNotation.
+Open Scope qc_scope.
+Open Scope string_scope.
 Import GenLow GenHigh.
 
 Definition store_log_entry := (RiscMachine.pc * RiscMachine.address * RiscMachine.value)%type.
@@ -60,9 +62,9 @@ Definition update_store_log
   | _ => (st_log,nlog)
   end.
 
-(* 1. number of instr exec, 
-   2. number of internal writes, 
-   3. number of push sfi, 
+(* 1. number of instr exec,
+   2. number of internal writes,
+   3. number of push sfi,
    5. number of static instructions executed
 *)
 Definition store_stat := (nat * nat * nat * nat)%type.
@@ -122,7 +124,7 @@ Definition store_log_checker_error
   | CodeMemoryException _ _ _ =>
     whenFail "store_correct:CodeMemoryException"
              (checker false)
-  | _ => 
+  | _ =>
     whenFail
       ("TargetExecutionError:"++(show err))
       (store_log_checker log ((nil,get_state err),0%nat))

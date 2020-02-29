@@ -30,5 +30,6 @@ Definition run_stack_test :=
 Definition run_rsc_test :=
   show (quickCheck (sfi_rsc_correct FUEL)).
 
+Set Warnings "-extraction-reserved-identifier -extraction-opaque-accessed".
 Extraction "/tmp/run_test.ml" run_store_test run_jump_test  run_stack_test run_rsc_test.
 
