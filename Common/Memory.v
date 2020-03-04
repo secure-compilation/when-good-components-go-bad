@@ -543,7 +543,8 @@ Proof.
   unfold Memory.store.
   intros mem1 mem1' mem2 ptr v Hstore.
   unfold merge_memories. rewrite unionmE.
-  destruct (mem1 (Pointer.component ptr)) eqn:Hcase1; rewrite Hcase1;
+  destruct (mem1 (Pointer.component ptr)) eqn:Hcase1;
+    rewrite Hcase1 || idtac "ExStructures 0.1 legacy rewrite inactive";
     last discriminate.
   simpl.
   destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) v) eqn:Hcase2;
@@ -577,7 +578,8 @@ Proof.
   unfold Memory.alloc.
   intros mem1 mem1' mem2 C ptr size Halloc.
   unfold merge_memories. rewrite unionmE.
-  destruct (mem1 C) as [memC |] eqn:Hcase1; rewrite Hcase1;
+  destruct (mem1 C) as [memC |] eqn:Hcase1;
+    rewrite Hcase1 || idtac "ExStructures 0.1 legacy rewrite inactive";
     last discriminate.
   simpl.
   destruct (ComponentMemory.alloc memC size) as [memC' b].
@@ -631,7 +633,8 @@ Section Partial.
     unfold to_partial_memory.
     rewrite filtermE.
     unfold obind, oapp.
-    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    destruct (mem Cid) eqn:Hmem;
+      rewrite Hmem || idtac "ExStructures 0.1 legacy rewrite inactive".
     now rewrite HCid.
     now reflexivity.
   Qed.
@@ -647,7 +650,8 @@ Section Partial.
     unfold to_partial_memory.
     rewrite filtermE.
     unfold obind, oapp.
-    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    destruct (mem Cid) eqn:Hmem;
+      rewrite Hmem || idtac "ExStructures 0.1 legacy rewrite inactive".
     now rewrite HCid.
     now reflexivity.
   Qed.
