@@ -11,10 +11,22 @@ This repository contains the Coq development of the paper:
 
 ### Prerequisites ###
 
-This development requires Coq v8.7.1 to work, as well as the following libraries:
+This development has been built with the following combinations of Coq releases
+and versioned libraries:
+
+Coq 8.7.1
 - [Mathematical Components](https://math-comp.github.io/math-comp/) 1.6.4
-- [Extensional Structures](https://github.com/arthuraa/extructures) 0.1
+- [Extensional Structures](https://github.com/arthuraa/extructures) 0.1.0
 - [CoqUtils](https://github.com/arthuraa/coq-utils/releases/tag/v0.1) 0.1
+
+Coq 8.8.2
+- Mathematical Components 1.7.0
+- Extensional Structures 0.1.0
+- CoqUtils 0.1
+
+`coq`, `coq-mathcomp-ssreflect` and `coq-extructures` can be installed through
+the OCaml package manager, OPAM. CoqUtils needs to be built separately and, if
+necessary, its route added to the `_CoqProject` project description file.
 
 ### Replaying the proofs ###
 
