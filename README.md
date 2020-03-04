@@ -17,16 +17,29 @@ and versioned libraries:
 Coq 8.7.1
 - [Mathematical Components](https://math-comp.github.io/math-comp/) 1.6.4
 - [Extensional Structures](https://github.com/arthuraa/extructures) 0.1.0
-- [CoqUtils](https://github.com/arthuraa/coq-utils/releases/tag/v0.1) 0.1
+- [Coq Utils 0.1](https://github.com/arthuraa/coq-utils/releases/tag/v0.1)
 
 Coq 8.8.2
 - Mathematical Components 1.7.0
 - Extensional Structures 0.1.0
-- CoqUtils 0.1
+- Coq Utils 0.1
 
-`coq`, `coq-mathcomp-ssreflect` and `coq-extructures` can be installed through
-the OCaml package manager, OPAM. CoqUtils needs to be built separately and, if
-necessary, its route added to the `_CoqProject` project description file.
+Coq 8.9.1
+- Mathematical Components 1.9.0
+- Extensional Structures 0.2.0
+- [Coq Utils 6334def](https://github.com/arthuraa/coq-utils/tree/6334def1a259a3ce4285cc020f641298fc0c7420)
+
+Coq 8.10.2
+- Mathematical Components 1.9.0
+- Extensional Structures 0.2.1
+- Coq Void 0.1.0
+- Deriving dev
+- [Coq Utils 3a9406b](https://github.com/arthuraa/coq-utils/tree/3a9406b411fec0c1e0d175b05e363b9c0a2e4b03)
+
+`coq`, `coq-mathcomp-ssreflect`, `coq-mathcomp-algebra` and `coq-extructures`
+can be installed through the OCaml package manager, OPAM. Coq Utils needs to be
+built separately and, if necessary, its route added to the `_CoqProject`
+project description file.
 
 ### Replaying the proofs ###
 
