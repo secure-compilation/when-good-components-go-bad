@@ -36,10 +36,16 @@ Coq 8.10.2
 - Deriving dev
 - [Coq Utils 3a9406b](https://github.com/arthuraa/coq-utils/tree/3a9406b411fec0c1e0d175b05e363b9c0a2e4b03)
 
-`coq`, `coq-mathcomp-ssreflect`, `coq-mathcomp-algebra` and `coq-extructures`
-can be installed through the OCaml package manager, OPAM. Coq Utils needs to be
-built separately and, if necessary, its route added to the `_CoqProject`
-project description file.
+Most dependences can be installed through the OCaml package manager, OPAM.
+
+- `coq` is available through the standard OPAM repositories.
+- `coq-mathcomp-ssreflect`, `coq-mathcomp-algebra`, `coq-extructures` and
+  `coq-void` are available through the
+  [Coq OPAM repository](https://coq.inria.fr/opam/released/).
+- `coq-deriving` is available through the
+  [Coq OPAM development repository](https://coq.inria.fr/opam/extra-dev/).
+- Coq Utils needs to be built from source and, if necessary, its route added to
+  the `_CoqProject` project description file.
 
 ### Replaying the proofs ###
 
