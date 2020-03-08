@@ -36,7 +36,7 @@ Coq 8.10.2
 - Deriving dev
 - [Coq Utils 3a9406b](https://github.com/arthuraa/coq-utils/tree/3a9406b411fec0c1e0d175b05e363b9c0a2e4b03)
 
-Most dependences can be installed through the OCaml package manager, OPAM.
+Most dependencies can be installed through the OCaml package manager, OPAM.
 
 - `coq` is available through the standard OPAM repositories.
 - `coq-mathcomp-ssreflect`, `coq-mathcomp-algebra`, `coq-extructures` and
