@@ -2,6 +2,8 @@ Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Linking.
 Require Import Lib.Extra.
+Require Import Lia.
+Require Import Coq.Logic.ClassicalFacts.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 
 Module Type AbstractComponentMemory.
@@ -447,17 +449,16 @@ Module Memory.
       exact pInExtendPs.
   Qed.
 
-  (* This definition will need to be fixed. Currently, the fuel is decreasing, which is fine.
-     But we need also to count the steps (starting from 1) because access_step_paths'
-     expects an explicit step index as an argument.
+  (* 
+     The fuel decreases, and the count of steps increases.
   *)
-  (*
-  Fixpoint reachable_paths_with_fuel' (m: t) (bs: {fset path_t}) (n: nat) : {fset path_t} :=
-  match n with
-  | 0 => bs
-  | S n => reachable_paths_with_fuel' m (access_step_paths' m bs) n
+  Fixpoint reachable_paths_with_fuel' (m: t) (ps: {fset path_t})
+           (fuel: nat) (cur_path_length: nat) : {fset path_t} :=
+  match fuel with
+  | 0 => ps
+  | S fuel_1 => reachable_paths_with_fuel'
+                  m (access_step_paths' m ps cur_path_length) fuel_1 (S cur_path_length)
   end.
-  *)
 
   Definition component_memories_of_memory (m: t) : seq ComponentMemory.t :=
     map snd (elementsm m).
@@ -468,19 +469,131 @@ Module Memory.
   Definition count_of_allocated_blocks_of_memory (m: t) : nat :=
     sumn (map (fun (x:{fset Block.id}) => size x) (list_of_per_component_set_of_block_ids m)).
 
-  (*
-  Definition reachable_paths' (m: t) (bs: {fset path_t}) :=
-    reachable_paths_with_fuel' m bs (count_of_allocated_blocks_of_memory m).
-  *)
- 
-  Definition max_path_size_in_set (bs : {fset path_t}) : nat :=
-    foldl max 0 (map size_of_path (val bs)).
+  (* Presumably, the size of a path in ps is 1.*)
+  Definition reachable_paths' (m: t) (ps: {fset path_t}) :=
+    reachable_paths_with_fuel' m ps (count_of_allocated_blocks_of_memory m) 1.
 
-  Lemma max_path_size_in_set_exists :
+  Definition max_path_size_in_seq (s: seq path_t) : nat :=
+    foldl max 0 (map size_of_path s).
+  
+  Definition max_path_size_in_set (ps : {fset path_t}) : nat :=
+    max_path_size_in_seq (val ps).
+
+  Lemma foldl_max_default :
+    forall l mx d,
+      mx = foldl max d l -> max d mx = mx.
+  Proof.
+    intros l. induction l; simpl.
+    - intros mx d H. subst mx. rewrite Nat.max_idempotent. reflexivity.
+    - intros mx d H.
+      destruct (max d a =? d) eqn:da.
+      + move : da. rewrite Nat.eqb_eq. move => da. rewrite da in H.
+        apply IHl with (mx := mx) (d := d). exact H.
+      + move : da. rewrite Nat.eqb_neq. move => da.
+        pose (dec := Nat.max_dec d a).
+        destruct dec as [F | T].
+        * rewrite F in da. pose (contra := Nat.eq_refl d). pose (bot := da contra). contradiction.
+        * rewrite T in H.
+          destruct (max d mx =? a) eqn:dmx.
+          -- move : dmx. rewrite Nat.eqb_eq. move => dmx.
+             rewrite dmx.
+             pose (IHlinst := IHl mx a).
+             pose (IHlinst2 := IHlinst H).
+             assert (alemx : (a <= mx)%coq_nat).
+             {
+               ++ rewrite <- IHlinst2.
+                  apply Nat.le_max_l.
+             }
+             apply Nat.le_antisymm.
+             ++ exact alemx.
+             ++ rewrite <- dmx.
+                apply Nat.le_max_r.
+          -- pose (IHlinst := IHl mx a H).
+             apply Nat.max_r.
+             apply Nat.le_trans with (m := a).
+             ++ pose (dlea := Nat.le_max_l d a). erewrite T in dlea. exact dlea.
+             ++ pose (alemx := Nat.le_max_l a mx). erewrite IHlinst in alemx. exact alemx.
+  Qed.
+ (* 
+  Lemma foldl_max_cons_foldl :
+    forall a l d,
+      a = foldl max d (a :: l) ->
+      foldl max a l = a.
+  Proof.
+    unfold foldl. simpl
+    intros a l d H.
+    pose (maxda := foldl_max_default (a :: l) a d H).
+    unfold foldl in H.
+    erewrite maxda in H.
+    rewrite <- cat1s in H.
+    rewrite foldl_cat in H.
+    simpl in H.
+    SearchAbout foldl.
+    SearchAbout cons.
+  *)
+  Lemma max_in_seq_has :
+    forall l default mx,
+      mx = foldl max default l ->
+      mx != default ->
+      (has (fun x => x =? mx) l
+       /\ forall lelem, has (fun x => x =? lelem) l -> max lelem mx = mx).
+  Proof.
+    intros l. simpl. induction l.
+    - simpl. intros mx default Hmx Hmx0. rewrite Hmx in Hmx0.
+      (* Show false from Hmx0. Should be able to simplify this proof. *)
+      unfold is_true in Hmx0.
+      pose (iff := negb_true_iff (mx == mx)).
+      destruct iff as [Hif _].
+      pose (F:= eq_true_false_abs (mx == mx) (eq_refl mx) (Hif Hmx0)). contradiction.
+    - intros default mx Hmx Hmxdefault.
+      rewrite Hmx in Hmxdefault.
+      destruct (a =? mx) eqn:mxa.
+      + simpl. rewrite mxa. simpl. split.
+        * auto.
+        * intros lelem H.
+          apply Is_true_eq_left in H.
+          apply orb_prop_elim in H.
+          destruct H as [H1 | H2].
+          -- move : mxa.
+             rewrite Nat.eqb_eq.
+             apply Is_true_eq_true in H1.
+             move : H1.
+             rewrite Nat.eqb_eq.
+             intros H0 H1. subst a. rewrite H1.
+             apply Nat.max_idempotent.
+          -- move : mxa.
+             rewrite Nat.eqb_eq.
+             move => mxa.
+             rewrite <- mxa.
+             rewrite <- mxa in Hmx.
+             pose (IHlInst := IHl a a).
+             SearchAbout "max".
+  Admitted.
+
+
+  (* Use the lemma has_fset together with max_in_seq_has to prove "max_in_fset_has" *)
+      
+  Lemma foldl_max_property :
+    forall l n new_max mx_so_far,
+      foldl max n l = mx_so_far ->
+      new_max > mx_so_far ->
+      foldl max n (l ++ [new_max]) = new_max.
+  Proof.
+    intros l.
+    induction l.
+    - simpl. intros n new_max mx_so_far H Hnewmax. rewrite H.
+      pose (max_spec := Nat.max_spec mx_so_far new_max).
+      destruct max_spec as [[Truth Concl] | [Falsity _]]; auto.
+      + admit (* Here, derive false from Falsity and Hnewmax. *).
+      + unfold foldl. Search "" "foldl".
+    Admitted.
+  
+  Lemma max_path_size_in_set_spec :
     forall ps sz,
       sz != 0 ->
-      max_path_size_in_set ps = sz ->
-      exists p, p \in ps /\ size_of_path p = sz.
+      (max_path_size_in_set ps = sz <->
+       ((has (fun p => size_of_path p =? sz) ps) = true /\
+        (has (fun p => size_of_path p > sz) ps) = false)).
   Proof.
     intros.
   Admitted.
@@ -504,15 +617,87 @@ Module Memory.
   Proof.
     unfold max_path_size_in_set.
     (* Here, need to cancel out "val fset val" *)
+    SearchAbout fsubset.
   Admitted.
 
+  Lemma notsubset_exists_in :
+    forall (T:ordType) (s: {fset T}) (t: {fset T}),
+      ~~fsubset t s ->
+      exists x, x \in t /\ x \notin s.
+  Proof.
+    SearchAbout "fsubsetPn".
+    (* This is exactly what we need. Why is it not available in?
+       It is available here: https://github.com/math-comp/finmap/blob/48c1330c43194c566410bb1dcb1af623b679cc2e/finmap.v#L1834
+     *)
+    Admitted.
   
   (* The following lemma is needed because max_path_size_in_set is the metric for progress.
      It is important to show that this metric never decreases by making a step.
      This lemma asserts this fact.
    *)
+
   Lemma access_step_never_decreases_path_length :
+    forall m p ps ps' sz,
+      sz != 0 ->
+      access_step_paths' m ps sz = ps' ->
+      p \in ps' ->
+            (p \in ps \/ size_of_path p = sz + 1).
+  Proof.
+    intros m p ps ps' sz Hsz Hps' Hp.
+    destruct (size_of_path p =? sz + 1) eqn:sz_p.
+    - right.
+      apply/Nat.eqb_spec. auto.
+    - left.
+      subst ps'. unfold access_step_paths' in Hp.
+      (* move: Hp. *)
+      (* apply/fsetUP => Hp. *)
+      (* TODO: Cannot apply view fsetUP. Any idea how to deal with this error? *)
+      (* SearchAbout "fsetUP". *)
+      assert (Hp_fsetUP_applied : p \in ps \/
+                                         p \in fset (concat
+                                                       (List.map
+                                                          (extend_path' m)
+                                                          [seq p0 <- ps | size_of_path p0 =? sz]
+                                                       )
+                                                    )
+             ).
+      {
+        admit.
+      }
+      destruct Hp_fsetUP_applied.
+      + assumption.
+      + assert (all_sz1 : all (fun x => size_of_path x =? sz + 1)
+                              (concat
+                                 (List.map
+                                    (extend_path' m)
+                                    [seq p0 <- ps | size_of_path p0 =? sz]))).
+        {
+          * (* SearchAbout concat. *)
+            (* TODO: Don't know how to deal with concat. *)
+            admit.
+        }
+        (* erewrite <- all_fset in all_sz1. *)
+        (* Search "" "all_fset". *)
+        (* TODO: Found no subterm matching "all ?M1660 ?M1661" in all_sz1. Why?*)
+
+        (* TODO: Do not know how to write "all" for fset. It expects a seq. *)
+        (*
+        assert (all_sz1_rewritten: all (fun x => size_of_path x =? sz + 1)
+                                       fset (concat
+                                               (List.map
+                                                  (extend_path' m)
+                                                  [seq p0 <- ps | size_of_path p0 =? sz]
+                                               )
+                                            )
+               ).
+        *)
+        (*Use /allP*)
+
+        Admitted.
+  
+  Lemma access_step_never_decreases_max_path_length :
     forall m ps ps' sz,
+      sz != 0 ->
       max_path_size_in_set ps = sz ->
       access_step_paths' m ps sz = ps' ->
       (ps = ps' /\
@@ -520,7 +705,7 @@ Module Memory.
       \/
       max_path_size_in_set ps' = sz + 1.
   Proof.
-    intros m ps ps' sz H H0.
+    intros m ps ps' sz Hsz H H0.
     destruct (ps == ps') eqn:e.
     - pose (e' := eqP e).
       left. split. trivial. rewrite <- H. rewrite e'. trivial.
@@ -534,19 +719,98 @@ Module Memory.
       destruct subOrsubConc as [psSubps'f | ps'Subpsf].
     - pose (F := eq_true_false_abs (fsubset ps ps') e1 psSubps'f).
       contradiction.
-      subst ps'.
       (* Here, there are two reasons why this goal is true.
          The first reason is extend_path'_increases_length.
          The second reason is H. 
        *)
-      assert (exists p, p \in ps /\ size_of_path p = sz).
+
+      (* Use ps'Subpsf to obtain a path that is not in ps *)
+      assert (existsPath: exists p, p \in ps' /\ p \notin ps).
       {
-        (* This should follow from H. *)
-        -admit.
+        - apply notsubset_exists_in. apply eq_true_not_negb.
+          rewrite not_true_iff_false. exact ps'Subpsf.
       }
-      Search "" "max".
+      subst ps'.
+      unfold access_step_paths' in existsPath.
+      destruct existsPath as [p [pInU pNotin]].
+      rewrite in_fsetU in pInU.
+      apply orb_prop in pInU.
+      destruct pInU as [pInps | pInConcat].
+      + rewrite <- negb_false_iff in pInps.
+        unfold is_true in pNotin.
+        pose (F := eq_true_false_abs (p \notin ps) pNotin pInps).
+        contradiction.
+      + unfold access_step_paths'.
+        rewrite max_path_size_in_set_distributes.
+        pose (maxSpec := Max.max_spec
+                           (max_path_size_in_set ps)
+                           (max_path_size_in_set
+                              (fset (concat (List.map (extend_path' m) [seq p0 <- ps | size_of_path p0 =? sz]))))).
+        destruct maxSpec as [[TrueCond Rewr] | [Impossible _]].
+        * rewrite Rewr.
+          (* Search "" "map" "all". *)
+
+
+          (*
+          assert (all_all_size1:
+                    all (all (fun x => size_of_path x =? size_of_path p + 1))
+                        (List.map (extend_path' m) [seq p0 <- ps | size_of_path p0 =? sz])).
+                 {
+                   -- rewrite all_map.
+                      unfold preim.
+                      (* SearchAbout all. *)
+                      assert (HpredT:
+                                [pred x |
+                                 all
+                                   (fun x0 : path_t => size_of_path x0 =? size_of_path p + 1)
+                                   (extend_path' m x)
+                                ] = predT).
+                      unfold predT.
+                      assert (extIncLen:
+                                forall pth,
+                                  all
+                                    (fun x0 : path_t => size_of_path x0 =? size_of_path pth + 1)
+                                    (extend_path' m pth)
+                                = true).
+                      {
+                        ++ intros pth.
+                           pose (goal :=
+                                   extend_path'_increases_length m pth (extend_path' m pth)).
+                           unfold is_true in goal.
+                           eapply goal.
+                           reflexivity.
+                      }
+                      unfold simpl_pred.
+                     (*
+                      SearchAbout pred.
+                      rewrite extIncLen.
+                      SearchAbout pred.
+                      apply all_predT.
+                      Search "" "all" "filter".
+                      *)
+                 }
+           *)
+
+          
+          (* SearchAbout Init.Nat.max.*)
+          (* Probably do not need this assertion anymore. *)
+          assert (sizeOfFilter: size [seq p <- ps | size_of_path p =? sz] > 0).
+          {
+            - assert (existsPsz: exists p, p \in ps /\ size_of_path p = sz).
+              {
+                (* This should follow from H somehow. *)
+                - admit.
+              }
+              rewrite size_filter.
+              rewrite <- has_count.
+              apply/hasP.
+              destruct existsPsz as [pMx [pInps pSz]].
+              eexists pMx.
+              + exact pInps.
+              + apply/Nat.eqb_spec. exact pSz.
+          }
       
-      (*rewrite (andb_false_iff (fsubset ps ps') (fsubset ps' ps)) in e.
+  (*rewrite (andb_false_iff (fsubset ps ps') (fsubset ps' ps)) in e.
       rewrite <- negb_true_iff in e.
       unfold negb.
       Search "" "fsubset".
@@ -617,7 +881,10 @@ Module Memory.
     fsetU ps (fset ).
    *)
 
-  (* NO PATHS YET *)
+
+  
+  (* DEPRECATED: ACCESS WITHOUT PATHS *)
+
   Definition access_step (m: t) (bs: {fset (Component.id * Block.id)}) :
     {fset (Component.id * Block.id)} :=
     fsetU bs (fset (concat (map (apply_load_block m) (val bs)))).
