@@ -20,6 +20,8 @@ From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 Import GenLow GenHigh.
 
+Open Scope string.
+
 Definition store_log_entry := (RiscMachine.pc * RiscMachine.address * RiscMachine.value)%type.
 
 Definition show_log_entry (entry : store_log_entry) : string :=

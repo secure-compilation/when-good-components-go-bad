@@ -288,7 +288,7 @@ Definition try_all_components_one_by_one
                 (error1 ip newip t_t t_s (ctx_cid::nil) msg)
                 (checker
                    ((sublist t_t t_s) ||
-                     ((sublist t_s t_t) && (negb (cid =? ctx_cid)))))
+                     ((sublist t_s t_t) && (negb (cid =? ctx_cid)%nat))))
             | _ => (* t_t <= t_s *)
               let t_s := get_trace interm_res in
               whenFail
