@@ -15,7 +15,9 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Variant register : Type :=
+(* NOTE: Technically a [Variant], i.e., there is no use for the [Inductive]
+   principle in proofs, but it is required to derive a QuickChick generator. *)
+Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP | R_ARG.
 
 Definition label := nat.
