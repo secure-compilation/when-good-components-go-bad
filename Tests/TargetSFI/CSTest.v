@@ -37,9 +37,10 @@ Import RiscMachine.ISA.
 Instance executing_dec (mem : RiscMachine.Memory.t) (pc : RiscMachine.address)
          ( i : RiscMachine.ISA.instr) : Dec (executing mem pc i).
 Proof.
+  rename pc0 into pc || idtac "QuickChick legacy rewrite inactive".
   apply Build_Dec. unfold ssrbool.decidable.
   unfold executing.
-  destruct ( Memory.get_word mem pc0).
+  destruct ( Memory.get_word mem pc).
   - destruct w.
     + auto.
     + apply instr_eq_dec.
@@ -298,6 +299,7 @@ Ltac call_env_contra H pc'0 pc'1 ra:=
 Instance step_dec(g : Env.t) (st : MachineState.t) (t : trace)
          (st' : MachineState.t): Dec (step g st t st'). 
 Proof.
+  rename t0 into t || idtac "QuickChick legacy rewrite inactive".
   apply Build_Dec. unfold ssrbool.decidable.
   destruct st as [[mem pc] gen_regs].
   destruct st' as [[mem' pc'] gen_regs'].
@@ -315,7 +317,7 @@ Proof.
         destruct (Memory.eqb mem mem') eqn:Hmem.
         { (* mem = mem' *)
           apply Memory.eqb_Equal in Hmem.
-          destruct t0.
+          destruct t.
           { (* empty trace *)
             destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
             { (* pc' = pc+1 *)
@@ -342,7 +344,7 @@ Proof.
         destruct (Memory.eqb mem mem') eqn:Hmem.
         { (* mem = mem' *)
           apply Memory.eqb_Equal in Hmem.
-          destruct t0.
+          destruct t.
           { (* empty trace *)
             destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
             { (* pc' = pc+1 *)
@@ -375,7 +377,7 @@ Proof.
         destruct (Memory.eqb mem mem') eqn:Hmem.
         { (* mem = mem' *)
           apply Memory.eqb_Equal in Hmem.
-          destruct t0.
+          destruct t.
           { (* empty trace *)
             destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
             { (* pc' = pc+1 *)
@@ -411,7 +413,7 @@ Proof.
         destruct (Memory.eqb mem mem') eqn:Hmem.
         { (* mem = mem' *)
           apply Memory.eqb_Equal in Hmem.
-          destruct t0.
+          destruct t.
           { (* empty trace *)
             destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
             { (* pc' = pc+1 *)
@@ -456,7 +458,7 @@ Proof.
         destruct (Memory.eqb mem mem') eqn:Hmem.
         { (* mem = mem' *)
           apply Memory.eqb_Equal in Hmem.
-          destruct t0.
+          destruct t.
           { (* empty trace *)
             destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
             { (* pc' = pc+1 *)
@@ -498,7 +500,7 @@ Proof.
         { (* mem <> mem' *)  right_inv; try (mem_contra); exec_contra H. }
 
       * (* Store *)
-        destruct t0.
+        destruct t.
         { (* empty trace *)
           destruct (N.eqb pc' (inc_pc pc)) eqn:Hpc.
           { (* pc' = pc+1 *)
@@ -547,7 +549,7 @@ Proof.
         destruct (Memory.eqb mem mem') eqn:Hmem.
         { (* mem = mem' *)
           apply Memory.eqb_Equal in Hmem.
-          destruct t0.
+          destruct t.
           { (* empty trace *)
             destruct (RegisterFile.eqb gen_regs gen_regs') eqn:Hregs.
             { (* gen_regs = gen_regs' *)
@@ -620,7 +622,7 @@ Proof.
               { (* pc' = [r] *)
                   destruct(SFI.is_same_component_bool pc (Memory.to_address cptr)) eqn:Hsfi.
                   { (* SFI.is_same_component pc pc' *)
-                    destruct t0.
+                    destruct t.
                     { (* empty *) (* this is a Jump *)
                       left. apply Jump with (G:=g) (mem:=mem) (mem':=mem')
                                             (pc:=pc) (gen_regs:=gen_regs)
@@ -643,7 +645,7 @@ Proof.
                                 SFI.MONITOR_COMPONENT_ID)
                              eqn:Hsfi_zero.
                     {
-                      destruct t0.
+                      destruct t.
                       { (* empty *) (* return to component zero *)
                         left. apply Jump with (G:=g) (mem:=mem) (mem':=mem')
                                             (pc:=pc) (gen_regs:=gen_regs)
@@ -661,7 +663,7 @@ Proof.
                       }
                     }
                     {                    
-                      destruct t0 as [|e xt].
+                      destruct t as [|e xt].
                       { (* empty *) (* contradiction *)
                         right_inv; exec_contra H; subst.
                         unfold_ret_trace. subst pc'.
@@ -768,7 +770,7 @@ Proof.
             { (* pc' = addr *)
               destruct(SFI.is_same_component_bool pc pc') eqn:Hsfi.
               { (* SFI.is_same_component pc pc' *)                
-                destruct t0.
+                destruct t.
                 { (* empty *) (* this is a Jal *)
                   left. apply Jal. 
                   unfold executing. rewrite H. auto.
@@ -790,7 +792,7 @@ Proof.
                                 SFI.MONITOR_COMPONENT_ID)
                          eqn:Hsfi_zero.
                 {
-                  destruct t0 as [|e xt].
+                  destruct t as [|e xt].
                   {  (* empty *) (* IJal from comp zero *)
                     left. apply Jal. 
                      unfold executing. rewrite H. auto.
@@ -812,7 +814,7 @@ Proof.
                   }
                 }
                 {                                                         
-                  destruct t0 as [|e xt].                  
+                  destruct t as [|e xt].
                   { (* empty *) (* IJal contradiction *)
                     right_inv; exec_contra H; subst.
 
