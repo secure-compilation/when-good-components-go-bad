@@ -113,8 +113,8 @@ Definition buildCallGraph (ip : Intermediate.program) : CallGraph :=
         end
       end in
   match Intermediate.prog_main ip with
-  | None => nil
-  | Some p => worker [(Component.main,p,0%nat)] nil (size ip)
+  | false => nil
+  | true => worker [(Component.main,Procedure.main,0%nat)] nil (size ip)
   end.
 
 Definition  shrinkNode (pn:Node) : (list (list Procedure)) :=
@@ -377,14 +377,14 @@ Instance shrinkIntermediateProgram : Shrink Intermediate.program :=
     shrink :=
       fun ip =>
         match Intermediate.prog_main ip with
-        | None => nil
-        | Some mainP =>
+        | false => nil
+        | true =>
           (* must deal with the case the program represented by
              the call graph is already smallest and not the same
              as the original *)
           let cg := buildCallGraph ip in
           let newip := buildIntermediateProgram cg ip in
-          let newCallGraphs := shrinkCallGraph (Component.main, mainP) cg in
+          let newCallGraphs := shrinkCallGraph (Component.main, Procedure.main) cg in
           let shrinked := List.map (fun ncg => buildIntermediateProgram ncg ip) newCallGraphs in
           if interface_contained (Intermediate.prog_interface ip)
                (Intermediate.prog_interface newip)

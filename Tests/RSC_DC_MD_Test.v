@@ -187,10 +187,12 @@ Definition  get_interm_program
   | Some ctx_interface =>
     let export := (val (Component.export ctx_interface)) in
     let import := (val (Component.import ctx_interface)) in
-    
+
+    (* RB: NOTE: Both branches have become identical. Now perhaps more than
+       before, the "falsey" case may need proper justification. *)
     let pid_main :=  (match (Intermediate.prog_main ip) with
-                      | None => Procedure.main
-                      | Some pid => pid
+                      | false => Procedure.main
+                      | true => Procedure.main
                       end) in
 
     let buffer_ids := if (Nat.eqb Component.main ctx_cid)
