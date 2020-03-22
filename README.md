@@ -59,8 +59,13 @@ Most dependencies can be installed through the OCaml package manager, OPAM.
 
 ### Running the tests ###
 
-Our tests are known to work with [QuickChick](https://github.com/QuickChick/QuickChick) branch 8.7 and
-OCaml from 4.02.3 to 4.06.
+In order to run our tests, the following additional dependencies are needed:
+
+Coq 8.7.2
+- QuickChick 1.0.0
+
+Stable releases of QuickChick (package `coq-quickchick`) are available through
+the Coq OPAM repository.
 
 Running the tests (to be simplified):
 
