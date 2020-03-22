@@ -64,6 +64,12 @@ In order to run our tests, the following additional dependencies are needed:
 Coq 8.7.2
 - QuickChick 1.0.0
 
+Coq 8.8.2
+- QuickChick 1.0.2
+
+Coq 8.9.1
+- QuickChick 1.1.0
+
 Stable releases of QuickChick (package `coq-quickchick`) are available through
 the Coq OPAM repository.
 
