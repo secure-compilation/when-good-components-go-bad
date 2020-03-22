@@ -14,9 +14,9 @@ This repository contains the Coq development of the paper:
 This development has been built with the following combinations of Coq releases
 and versioned libraries:
 
-Coq 8.7.1
-- [Mathematical Components](https://math-comp.github.io/math-comp/) 1.6.4
-- [Extensional Structures](https://github.com/arthuraa/extructures) 0.1.0
+Coq 8.7.2
+- Mathematical Components 1.6.4
+- Extensional Structures 0.1.0
 - [Coq Utils 0.1](https://github.com/arthuraa/coq-utils/releases/tag/v0.1)
 
 Coq 8.8.2
