@@ -4,7 +4,7 @@ Require Import Common.Linking.
 Require Import Lib.Extra.
 Require Import Lia.
 Require Import Coq.Logic.ClassicalFacts.
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fingraph fintype.
 
 Module Type AbstractComponentMemory.
   Parameter t : Type.
@@ -17,6 +17,7 @@ Module Type AbstractComponentMemory.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
   Parameter domm : t -> {fset Block.id}.
   Parameter load_block : t -> Block.id -> list (Component.id * Block.id).
+  Parameter next_block : t -> Block.id.
   
   Axiom load_prealloc:
     forall bufs b i,
@@ -72,6 +73,8 @@ Module ComponentMemory : AbstractComponentMemory.
   }.
   Definition t := mem.
 
+  Definition next_block (m: t) := nextblock m.
+  
   Definition prealloc (bufs: {fmap Block.id -> nat + list value}) : t :=
     let init_block x := match x with
                         | inl size => repeat Undef size
@@ -272,17 +275,135 @@ Module Memory.
     | None => None
     end.
 
-  Definition apply_load_block (m: t) (pair: Component.id * Block.id) : list (Component.id * Block.id) :=
+  (* Define reachability using the ssreflect fingraph library. *)
+  Definition node_t : Type := Component.id * Block.id.
+
+  Definition apply_load_block_seq (m: t) (pair: node_t)
+    : seq node_t :=
+    match m (fst pair) with
+    | None => nil
+    | Some compMem => ComponentMemory.load_block compMem (snd pair)
+    end.
+  
+  Definition apply_load_block (m: t) (pair: node_t) : list (node_t) :=
     match m (fst pair) with
     | None => nil
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
     end.
 
-  Print domm.
+  Definition per_component_next_block (m: t) (cid: Component.id) : Block.id :=
+    match (m cid) with
+    | None => 0
+    | Some compMem => ComponentMemory.next_block compMem
+    end.
+  
+  Fixpoint max_next_block_helper (m: t) (max_so_far: Block.id) (l : seq Component.id) : Block.id :=
+    match l with
+    | nil => max_so_far
+    | c :: cs => max_next_block_helper m (max max_so_far (per_component_next_block m c)) cs
+    end.
 
-  (* Have path be the type of non-empty sequences? *)
-  Definition node_t : Type := Component.id * Block.id.
+  Definition max_next_block (m: t) : Block.id := (max_next_block_helper m 0 (domm m)) + 1.
 
+  Lemma per_component_next_block_max_next_block :
+    forall (m : t) (cid : Component.id),
+      per_component_next_block m cid < max_next_block m.
+  Admitted.
+  
+  Definition component_ptrs_upperbound (m: t) (cid: Component.id) (bid: Block.id) : Prop :=
+    forall (n1 n2 : node_t) (l : list node_t),
+      apply_load_block m n1 = l ->
+      n2 \in l ->
+      fst n2 = cid ->
+      snd n2 < bid.
+  
+  Definition component_ptrs_upper_next_block (m: t) (cid: Component.id) : Prop :=
+    component_ptrs_upperbound m cid (per_component_next_block m cid).
+
+  Definition component_ptrs_upper_max_next_block (m: t) (cid: Component.id) : Prop :=
+    component_ptrs_upperbound m cid (max_next_block m).
+  
+  Definition memory_upper_next_blocks (m: t) : Prop :=
+    forall (cid : Component.id),
+      cid \in domm m ->
+      component_ptrs_upper_next_block m cid.
+
+  Definition memory_upper_max_next_block (m: t) : Prop :=
+    forall (cid : Component.id),
+      cid \in domm m ->
+      component_ptrs_upper_max_next_block m cid.
+  
+  Lemma lt_upper_upper :
+    forall (m: t) (cid: Component.id) (b1 b2: Block.id),
+      b1 < b2 ->
+      component_ptrs_upperbound m cid b1 ->
+      component_ptrs_upperbound m cid b2.
+  Proof.
+    intros m cid b1 b2 Hlt.
+    unfold component_ptrs_upperbound.
+    intros Hupper n1 n2 l Happly Hin Hcid.
+    pose (HupperI := Hupper n1 n2 l Happly Hin Hcid).
+    apply leq_trans with (n := S n2.2).
+    - apply eq_leq.
+      reflexivity.
+    - apply leq_trans with (m := S n2.2) (n := b1).
+      + eapply HupperI.
+      + apply leq_trans with (n := S b1).
+        apply leqnSn.
+        exact Hlt.
+  Qed.    
+  
+  Lemma upper_next_block_upper_max_next_block :
+    forall (m: t) (cid: Component.id),
+      component_ptrs_upper_next_block m cid ->
+      component_ptrs_upper_max_next_block m cid.
+  Proof.
+    intros m cid.
+    unfold component_ptrs_upper_next_block, component_ptrs_upper_max_next_block.
+    apply lt_upper_upper.
+    apply per_component_next_block_max_next_block.
+  Qed.
+
+  Definition graph_of_mem (m: t) := apply_load_block_seq m.
+  Check graph_of_mem.
+
+  Definition finblockid (m: t) : Type := ordinal (max_next_block m).
+  Definition fincompid (ncomp: nat) : Type := ordinal ncomp.
+  Definition finnode_t (m: t) (ncomp: nat) : Type := (fincompid ncomp) * (finblockid m).
+
+  Check apply_load_block_seq.
+  
+  Lemma obviously_false : forall n m, n < max_next_block m. Admitted.
+  Lemma very_obviously_false : forall n m, n < m. Admitted.
+
+  Definition apply_load_block_seq_fin (m: t) (ncomp: nat) (pair : finnode_t m ncomp)
+    : seq (finnode_t m ncomp)
+    :=
+      match apply_load_block_seq m (nat_of_ord (fst pair), nat_of_ord (snd pair))
+      with
+      | nil => nil
+      | xs => map
+                (fun x => (Ordinal (very_obviously_false (fst x) ncomp),
+                           Ordinal (obviously_false (snd x) m)))
+                xs
+      end.
+  
+  Definition fingraph_of_mem (m: t) (ncomp: nat) := apply_load_block_seq_fin m ncomp.
+
+  Lemma proof_of_concept :
+    forall m ncomp x y,
+      reflect (dfs_path (fingraph_of_mem m ncomp) nil x y)
+              (y \in dfs (fingraph_of_mem m ncomp) (ncomp * (max_next_block m)) nil x).
+  Proof.
+    intros m ncomp x y.
+    apply dfs_pathP.
+    - simpl.
+      rewrite card_prod. rewrite card_ord. rewrite card_ord.
+      rewrite card0. rewrite add0n. apply leqnn.
+    - auto.
+  Qed.
+
+  
   (* START DEFINING REACHABILITY INDUCTIVELY *)
   Inductive Reachable (m: t) (bs : {fset node_t}) : node_t -> Prop :=
   | Reachable_refl : forall b, b \in bs -> Reachable m bs b
@@ -478,6 +599,13 @@ Module Memory.
   
   Definition max_path_size_in_set (ps : {fset path_t}) : nat :=
     max_path_size_in_seq (val ps).
+
+  (*Lemma reachable_paths_with_fuel'_expansive :
+    forall m ps fuel cur_path_length,
+      fsubset
+        reachable_paths_with_fuel' m () fuel_1 (S cur_path_length)
+        reachable_paths_with_fuel' m ps (S fuel1) cur_path_length
+  *)
 
   Lemma foldl_max_default :
     forall l mx d,
