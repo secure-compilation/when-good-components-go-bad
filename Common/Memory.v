@@ -18,7 +18,7 @@ Module Type AbstractComponentMemory.
   Parameter domm : t -> {fset Block.id}.
   Parameter load_block : t -> Block.id -> list (Component.id * Block.id).
   Parameter next_block : t -> Block.id.
-  
+
   Axiom load_prealloc:
     forall bufs b i,
       load (prealloc bufs) b i =
@@ -313,7 +313,7 @@ Module Memory.
   Definition component_ptrs_upperbound (m: t) (cid: Component.id) (bid: Block.id) : Prop :=
     forall (n1 n2 : node_t) (l : list node_t),
       apply_load_block m n1 = l ->
-      n2 \in l ->
+      In n2 l ->
       fst n2 = cid ->
       snd n2 < bid.
   
@@ -325,12 +325,12 @@ Module Memory.
   
   Definition memory_upper_next_blocks (m: t) : Prop :=
     forall (cid : Component.id),
-      cid \in domm m ->
+      In cid (domm m) ->
       component_ptrs_upper_next_block m cid.
 
   Definition memory_upper_max_next_block (m: t) : Prop :=
     forall (cid : Component.id),
-      cid \in domm m ->
+      In cid (domm m) ->
       component_ptrs_upper_max_next_block m cid.
   
   Lemma lt_upper_upper :
@@ -364,31 +364,199 @@ Module Memory.
     apply per_component_next_block_max_next_block.
   Qed.
 
-  Definition graph_of_mem (m: t) := apply_load_block_seq m.
-  Check graph_of_mem.
+  Definition load_block_valid_cid (m: t) : Prop :=
+    forall n nload,
+      In nload (apply_load_block_seq m n) ->
+      In (fst nload) (domm m).
+
+  Definition mem_ncomp (m: t) (ncomp: nat) : Prop :=
+    forall cid,
+      In cid (domm m) -> cid < ncomp.
+
+  (* Definition graph_of_mem (m: t) := apply_load_block_seq m. *)
 
   Definition finblockid (m: t) : Type := ordinal (max_next_block m).
   Definition fincompid (ncomp: nat) : Type := ordinal ncomp.
   Definition finnode_t (m: t) (ncomp: nat) : Type := (fincompid ncomp) * (finblockid m).
-
-  Check apply_load_block_seq.
   
   Lemma obviously_false : forall n m, n < max_next_block m. Admitted.
   Lemma very_obviously_false : forall n m, n < m. Admitted.
 
+  SearchAbout In.
+  Check List.in_cons.
+  Check sig.
+  Check exist.
+  
+  Fixpoint nth_default_or_In_proof T (x_default: T) s n : T + sig (fun (x:T) => In x s) :=
+    match s with
+    | nil => inl x_default
+    | x0 :: s' =>
+      match n with
+      | 0 => inr
+               (exist
+                  (fun x => In x (x0 :: s'))
+                  x0
+                  (in_eq x0 s')
+               )
+      | S n' =>
+        match nth_default_or_In_proof T x_default s' n' with
+        | inl x => inl x
+        | inr (exist x's' x'Ins') => inr
+                                       (exist
+                                          (fun x => In x (x0 :: s'))
+                                          x's'
+                                          (List.in_cons x0 x's' s' x'Ins')
+                                       )
+        end
+      end
+    end.
+
+  Lemma nlt0_False :
+    forall n, n < 0 -> False.
+  Proof.
+    intros n. induction n.
+    - intros nlt0. unfold is_true in nlt0.
+      pose (zeroeq1 := anti_leq (andb_true_intro (conj nlt0 (leqnSn 0)))).
+      discriminate.
+    - intros n1lt0. pose (nlt0 := leq_trans (leqnSn n.+1) n1lt0). auto.
+  Qed.
+
+  (* 
+     Here, we get rid of the default value 
+     (i.e., get rid of the left value of the return type of nth_default_or_In_proof) 
+     by passing a proof that n < length s, thus that n is a valid index.
+
+     So, let's define "nth with an In-proof" using the proof mode first.
+   *)
+  Fixpoint nth_In_proof T s n (pf_nlt : n < length s) : sig (fun (x:T) => In x s).
+  Proof.
+    induction s.
+    - simpl in pf_nlt.
+      exfalso.
+      apply nlt0_False with (n := n). auto.
+    - destruct (n < length s).
+      + assert (IHs' : {x : T | In x s}) by now auto.
+        destruct IHs' as [x' x'In].
+        exact (exist (fun x => In x (a :: s)) x' (List.in_cons a x' s x'In)).
+      + exact (exist
+                  (fun x => In x (a :: s))
+                  a
+                  (in_eq a s)).
+  Defined.
+
+  Print nth_In_proof.
+  
+  (* Next, this was an attempt to define nth_In_proof but WITHOUT using the proof mode.
+
+     The reason I wanted to do it without the proof mode is to have more control
+     over the term that is generated.
+
+     This control may be needed if we want to prove something about nth_In_proof.
+   *)
+
+  (*
+  Fixpoint nth_In_proof T (x_default: T) s n (pf_nlt : n < length s) : sig (fun (x:T) => In x s) :=
+    match s return sig (fun (x:T) => In x s) with
+    | nil => let x_pf := False_ind (In x_default nil) (nlt0_False n pf_nlt) in
+             (* x_pf does not type-check. In particular, the information that we are in
+                the nil case is not substituted in the type of pf_nlt.*)
+             exist (fun x => In x nil) x_default x_pf
+    | a :: s' => exist
+                   (fun x => In x (a :: s'))
+                   a
+                   (in_eq a s')
+                   (* This is the wrong return value, but it is here just to pass the syntax check. *)
+    end.
+  *)
+
+
+  Lemma nth_len_inr :
+    forall T x_default s n,
+      n < length s ->
+      exists pf, nth_default_or_In_proof T x_default s n = inr pf.
+  Proof.
+    induction s.
+    - simpl. intros n nlt0. pose (F := nlt0_False n nlt0). discriminate.
+    - intros n nlt.
+      destruct (n < length s) eqn:e.
+      + pose (pfIns := IHs n e).
+        destruct pfIns as [[memberS proofInS] pf_s_eq_inr].
+        SearchAbout In cons.
+        pose (proofInAS := List.in_cons a memberS s proofInS).
+        exists (exist (fun x => In x (a :: s)) memberS proofInAS).
+        unfold nth_default_or_In_proof.
+        simpl.
+        admit.
+      + admit.
+  Admitted.
+  
+  Definition nth_with_nth_proof T (x_default: T) s n : sig (fun (x:T) => x = nth x_default s n).
+  Proof.
+    eexists (nth x_default s n). auto.
+  Qed.
+
+  Print nth_with_nth_proof.
+
+  SearchAbout nth.
+
+  (*
+  Lemma graph_of_mem_exists :
+    forall (m: t) (ncomp: nat) (pf_mem_ncomp: mem_ncomp m ncomp)
+           (pf_load_valid_cid: load_block_valid_cid m),
+    exists graph_of_mem: (finnode_t m ncomp) -> (seq (finnode_t m ncomp)),
+    forall a,
+      map
+        (fun x => (nat_of_ord (fst x), nat_of_ord (snd x)))
+        (graph_of_mem a)
+      =
+      apply_load_block_seq m (nat_of_ord (fst a), nat_of_ord (snd a)).
+  Proof.
+    intros m ncomp pf_mem_ncomp pf_load_valid_cid.
+    eexists.
+    intros a.
+    induction (apply_load_block_seq m (nat_of_ord a.1, nat_of_ord a.2)).
+    - 
+   *)
+
+  
+  (*
+  Definition apply_load_block_seq_fin
+             (m: t)
+             (ncomp: nat)
+             (pf_mem_ncomp: mem_ncomp m ncomp)
+             (pf_load_valid_cid: load_block_valid_cid m)
+             (pair: finnode_t m ncomp)
+    : seq (finnode_t m ncomp).
+  Proof.
+    pose (conv_node := (nat_of_ord (fst pair), nat_of_ord (snd pair))).
+    pose (lblock := apply_load_block_seq m conv_node).
+    induction lblock.
+    - exact nil.
+    - assert (fst a \in domm m).
+      {
+        unfold load_block_valid_cid in pf_load_valid_cid.
+        eapply pf_load_valid_cid with (n := conv_node).
+        SearchAbout in_mem.
+        apply mem_head.
+        SearchAbout in_mem cons.
+        exact (a \in l).
+      }
+  *)
+
+  Check Ordinal.
+  Check obviously_false.
+  
   Definition apply_load_block_seq_fin (m: t) (ncomp: nat) (pair : finnode_t m ncomp)
-    : seq (finnode_t m ncomp)
-    :=
-      match apply_load_block_seq m (nat_of_ord (fst pair), nat_of_ord (snd pair))
-      with
-      | nil => nil
-      | xs => map
-                (fun x => (Ordinal (very_obviously_false (fst x) ncomp),
-                           Ordinal (obviously_false (snd x) m)))
-                xs
-      end.
+    : seq (finnode_t m ncomp) :=
+    map
+      (fun x => (Ordinal (very_obviously_false (fst x) ncomp),
+                 Ordinal (obviously_false (snd x) m)))
+      (apply_load_block_seq m (nat_of_ord (fst pair), nat_of_ord (snd pair)))
+  .
   
   Definition fingraph_of_mem (m: t) (ncomp: nat) := apply_load_block_seq_fin m ncomp.
+
+  Check fingraph_of_mem.
 
   Lemma proof_of_concept :
     forall m ncomp x y,
