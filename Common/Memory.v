@@ -311,9 +311,8 @@ Module Memory.
   Admitted.
   
   Definition component_ptrs_upperbound (m: t) (cid: Component.id) (bid: Block.id) : Prop :=
-    forall (n1 n2 : node_t) (l : list node_t),
-      apply_load_block m n1 = l ->
-      In n2 l ->
+    forall (n1 n2 : node_t) (l : seq node_t),
+      In n2 (apply_load_block_seq m n1) ->
       fst n2 = cid ->
       snd n2 < bid.
   
@@ -341,8 +340,8 @@ Module Memory.
   Proof.
     intros m cid b1 b2 Hlt.
     unfold component_ptrs_upperbound.
-    intros Hupper n1 n2 l Happly Hin Hcid.
-    pose (HupperI := Hupper n1 n2 l Happly Hin Hcid).
+    intros Hupper n1 n2 Happly Hin Hcid.
+    pose (HupperI := Hupper n1 n2 Happly Hin Hcid).
     apply leq_trans with (n := S n2.2).
     - apply eq_leq.
       reflexivity.
@@ -381,11 +380,6 @@ Module Memory.
   
   Lemma obviously_false : forall n m, n < max_next_block m. Admitted.
   Lemma very_obviously_false : forall n m, n < m. Admitted.
-
-  SearchAbout In.
-  Check List.in_cons.
-  Check sig.
-  Check exist.
   
   Fixpoint nth_default_or_In_proof T (x_default: T) s n : T + sig (fun (x:T) => In x s) :=
     match s with
@@ -444,7 +438,71 @@ Module Memory.
                   (in_eq a s)).
   Defined.
 
-  Print nth_In_proof.
+  Fixpoint construct_seq_using_nth_In_proof T s n (pf_nlt: n < length s) :
+    seq (sig (fun (x:T) => In x s)).
+  Proof.
+    induction n.
+    - exact [nth_In_proof T s 0 pf_nlt].
+    - assert (n_len_s: n < length s).
+      {
+        auto.
+      }
+      exact (cons (nth_In_proof T s (n.+1) pf_nlt) (IHn n_len_s)).
+  Defined.
+
+  Definition proofize_seq T s : seq (sig (fun (x:T) => In x s)).
+  Proof.
+    pose (n := length s).
+    destruct (length s) eqn:e.
+    - exact nil.
+    - apply construct_seq_using_nth_In_proof with (n := n0).
+      rewrite e. auto.
+  Defined.
+
+  Compute (proofize_seq nat (5 :: (6 :: (4 :: nil)))).
+
+  Lemma size_proofize_seq : forall T s, size (proofize_seq T s) = size s.
+  Proof.
+    intros.
+    induction s.
+    - auto.
+    - simpl.
+      unfold proofize_seq.
+      simpl.
+      SearchAbout nat_rect.
+  Admitted.
+
+  Definition deproofize_one T s (y: sig (fun (z:T) => In z s)) :=
+    match y with | exist x _ => x end.
+  
+  Lemma proofize_seq_spec :
+    forall T s spf,
+      spf = proofize_seq T s ->
+      map
+        (fun i : @sig T (fun z : T => @In T z s) =>
+           deproofize_one T s i)
+        spf
+      =
+      s.
+  Proof.
+    intros.
+    assert (A1: size [seq (deproofize_one T s) i | i <- spf] = size (spf)).
+    {
+      rewrite size_map. auto.
+    }
+
+    (* Using destruct and eqn, we're able to prove the base case. Try now to do it by induction. *)
+    induction s.
+    - assert (G: size [seq (deproofize_one T nil) i | i <- spf] = 0).
+      {
+        rewrite A1. rewrite H. rewrite size_proofize_seq. auto.
+      }
+      pose (mapnil := size0nil G).
+      erewrite mapnil.
+      auto.
+    - (* The induction hypothesis is now stated using the "tail" in the dependent type *)
+  Admitted.
+      
   
   (* Next, this was an attempt to define nth_In_proof but WITHOUT using the proof mode.
 
@@ -490,14 +548,14 @@ Module Memory.
       + admit.
   Admitted.
   
+  (*
   Definition nth_with_nth_proof T (x_default: T) s n : sig (fun (x:T) => x = nth x_default s n).
   Proof.
     eexists (nth x_default s n). auto.
   Qed.
 
   Print nth_with_nth_proof.
-
-  SearchAbout nth.
+  *)
 
   (*
   Lemma graph_of_mem_exists :
@@ -542,9 +600,6 @@ Module Memory.
         exact (a \in l).
       }
   *)
-
-  Check Ordinal.
-  Check obviously_false.
   
   Definition apply_load_block_seq_fin (m: t) (ncomp: nat) (pair : finnode_t m ncomp)
     : seq (finnode_t m ncomp) :=
@@ -555,8 +610,6 @@ Module Memory.
   .
   
   Definition fingraph_of_mem (m: t) (ncomp: nat) := apply_load_block_seq_fin m ncomp.
-
-  Check fingraph_of_mem.
 
   Lemma proof_of_concept :
     forall m ncomp x y,
@@ -570,7 +623,79 @@ Module Memory.
       rewrite card0. rewrite add0n. apply leqnn.
     - auto.
   Qed.
+  
+  Definition apply_load_block_seq_fin_inv
+             (m: t) (ncomp: nat)
+             (pf_loadblock: load_block_valid_cid m)
+             (pf_mem_ncomp: mem_ncomp m ncomp)
+             (pf_mem_max_next_block: memory_upper_max_next_block m)
+             (pair : finnode_t m ncomp)
+    : seq (finnode_t m ncomp) :=
+    map
+      (fun node_inPf =>
+         match node_inPf with | exist x In_x_applyloadblock =>
+                                let pf_In_domm_m := (pf_loadblock
+                                                       (nat_of_ord (fst pair), nat_of_ord (snd pair))
+                                                       x
+                                                       In_x_applyloadblock
+                                                    )
+                                in
+                                (Ordinal (
+                                     pf_mem_ncomp
+                                       (fst x)
+                                       pf_In_domm_m
+                                   ),
+                                 Ordinal
+                                   (
+                                     (
+                                       pf_mem_max_next_block
+                                         (fst x)
+                                         pf_In_domm_m
+                                     )
+                                       (nat_of_ord (fst pair), nat_of_ord (snd pair))
+                                       x
+                                       (apply_load_block_seq
+                                          m
+                                          (nat_of_ord (fst pair), nat_of_ord (snd pair))
+                                       )
+                                       In_x_applyloadblock
+                                       (erefl (fst x))
+                                   )
+                                )
+         end)
+      (proofize_seq node_t (apply_load_block_seq m (nat_of_ord (fst pair), nat_of_ord (snd pair))))
+  .
 
+  Definition fingraph_of_mem_inv
+             (m: t) (ncomp: nat)
+             (inv1: load_block_valid_cid m)
+             (inv2: mem_ncomp m ncomp)
+             (inv3: memory_upper_max_next_block m)
+    := apply_load_block_seq_fin_inv
+         m
+         ncomp
+         inv1
+         inv2
+         inv3.
+
+  Lemma dfs_path_fin_mem:
+    forall m ncomp inv1 inv2 inv3 x y,
+      reflect (dfs_path
+                 (fingraph_of_mem_inv m ncomp inv1 inv2 inv3)
+                 nil x y
+              )
+              (y \in dfs
+                       (fingraph_of_mem_inv m ncomp inv1 inv2 inv3)
+                       (ncomp * (max_next_block m)) nil x
+              ).
+  Proof.
+    intros m ncomp inv1 inv2 inv3 x y.
+    apply dfs_pathP.
+    - simpl.
+      rewrite card_prod. rewrite card_ord. rewrite card_ord.
+      rewrite card0. rewrite add0n. apply leqnn.
+    - auto.
+  Qed.
   
   (* START DEFINING REACHABILITY INDUCTIVELY *)
   Inductive Reachable (m: t) (bs : {fset node_t}) : node_t -> Prop :=
