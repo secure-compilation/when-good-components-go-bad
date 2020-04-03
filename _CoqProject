@@ -27,6 +27,11 @@ Lib/Extra.v
 
 Extraction/Definitions.v
 
+Intermediate/Machine.v
+Intermediate/GlobalEnv.v
+Intermediate/CS.v
+Intermediate/Recombination.v
+
 Source/Language.v
 Source/GlobalEnv.v
 Source/CS.v
@@ -48,11 +53,6 @@ S2I/Examples/Increment.v
 S2I/Examples/DefaultInitBuffer.v
 S2I/Examples/NestedCalls.v
 S2I/Examples/Factorial.v
-
-Intermediate/Machine.v
-Intermediate/GlobalEnv.v
-Intermediate/CS.v
-Intermediate/Recombination.v
 
 RSC_DC_MD_Sigs.v
 RSC_DC_MD_Instance.v
