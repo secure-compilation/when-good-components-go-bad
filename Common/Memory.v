@@ -6,6 +6,9 @@ Require Import Lia.
 Require Import Coq.Logic.ClassicalFacts.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fingraph fintype.
 
+Print size.
+Locate size.
+
 Module Type AbstractComponentMemory.
   Parameter t : Type.
 
@@ -500,7 +503,7 @@ Module Memory.
       pose (mapnil := size0nil G).
       erewrite mapnil.
       auto.
-    - (* The induction hypothesis is now stated using the "tail" in the dependent type *)
+    - (* PROBLEM: The induction hypothesis is now stated using the "tail" in the dependent type *)
   Admitted.
       
   
@@ -623,23 +626,81 @@ Module Memory.
       rewrite card0. rewrite add0n. apply leqnn.
     - auto.
   Qed.
-  
+
+  Definition finitize_ptr (ptr : Component.id * Block.id) :
+    ordinal (S (fst ptr)) * ordinal (S (snd ptr)).
+    assert (a : ssrnat.leq (S (fst ptr)) (S (fst ptr))).
+    {
+      apply ssrnat.leqnn.
+    }
+    assert (b : ssrnat.leq (S (snd ptr)) (S (snd ptr))).
+    {
+      apply ssrnat.leqnn.
+    }
+    exact (Ordinal a, Ordinal b).
+  Defined.
+
+  Definition cast_to_bigger_ordinal_right {l1 : nat} {r1 : nat} (l2: nat) (r2: nat)
+             (ptr : ordinal l1 * ordinal r1) :
+    (ordinal (ssrnat.maxn l1 l2) * ordinal (ssrnat.maxn r1 r2)).
+    destruct ptr as [l r].
+    destruct l. destruct r.
+    assert (lp: ssrnat.leq (S m) (ssrnat.maxn l1 l2)).
+    {
+      apply ssrnat.leq_trans with (n := l1).
+      - exact i.
+      - apply ssrnat.leq_maxl.
+    }
+    assert (rp: ssrnat.leq (S m0) (ssrnat.maxn r1 r2)).
+    {
+      apply ssrnat.leq_trans with (n := r1).
+      - exact i0.
+      - apply ssrnat.leq_maxl.
+    }
+    exact (Ordinal lp, Ordinal rp).
+  Defined.
+
+  Definition cast_to_bigger_ordinal_left {l2 : nat} {r2 : nat} (l1: nat) (r1: nat)
+             (ptr : ordinal l2 * ordinal r2) :
+    (ordinal (ssrnat.maxn l1 l2) * ordinal (ssrnat.maxn r1 r2)).
+    destruct ptr as [l r].
+    destruct l. destruct r.
+    assert (lp: ssrnat.leq (S m) (ssrnat.maxn l1 l2)).
+    {
+      apply ssrnat.leq_trans with (n := l2).
+      - exact i.
+      - apply ssrnat.leq_maxr.
+    }
+    assert (rp: ssrnat.leq (S m0) (ssrnat.maxn r1 r2)).
+    {
+      apply ssrnat.leq_trans with (n := r2).
+      - exact i0.
+      - apply ssrnat.leq_maxr.
+    }
+    exact (Ordinal lp, Ordinal rp).
+  Defined.
+
+
+  Check pair.
+  Print mem_ncomp.
   Definition apply_load_block_seq_fin_inv
              (m: t) (ncomp: nat)
              (pf_loadblock: load_block_valid_cid m)
              (pf_mem_ncomp: mem_ncomp m ncomp)
              (pf_mem_max_next_block: memory_upper_max_next_block m)
-             (pair : finnode_t m ncomp)
-    : seq (finnode_t m ncomp) :=
+             (nd1: nat) (nd2: nat)
+             (nd : ordinal (ssrnat.maxn ncomp nd1) * ordinal (ssrnat.maxn (max_next_block m) nd2))
+    : seq (ordinal (ssrnat.maxn ncomp nd1) * ordinal (ssrnat.maxn (max_next_block m) nd2)) :=
     map
       (fun node_inPf =>
          match node_inPf with | exist x In_x_applyloadblock =>
                                 let pf_In_domm_m := (pf_loadblock
-                                                       (nat_of_ord (fst pair), nat_of_ord (snd pair))
+                                                       (nat_of_ord nd.1, nat_of_ord nd.2)
                                                        x
                                                        In_x_applyloadblock
                                                     )
                                 in
+                                cast_to_bigger_ordinal_right nd1 nd2
                                 (Ordinal (
                                      pf_mem_ncomp
                                        (fst x)
@@ -652,18 +713,18 @@ Module Memory.
                                          (fst x)
                                          pf_In_domm_m
                                      )
-                                       (nat_of_ord (fst pair), nat_of_ord (snd pair))
+                                       (nat_of_ord nd.1, nat_of_ord nd.2)
                                        x
                                        (apply_load_block_seq
                                           m
-                                          (nat_of_ord (fst pair), nat_of_ord (snd pair))
+                                          (nat_of_ord nd.1, nat_of_ord nd.2)
                                        )
                                        In_x_applyloadblock
                                        (erefl (fst x))
                                    )
                                 )
          end)
-      (proofize_seq node_t (apply_load_block_seq m (nat_of_ord (fst pair), nat_of_ord (snd pair))))
+      (proofize_seq node_t (apply_load_block_seq m (nat_of_ord nd.1, nat_of_ord nd.2)))
   .
 
   Definition fingraph_of_mem_inv
@@ -671,31 +732,45 @@ Module Memory.
              (inv1: load_block_valid_cid m)
              (inv2: mem_ncomp m ncomp)
              (inv3: memory_upper_max_next_block m)
+             (nd1: nat) (nd2: nat)
     := apply_load_block_seq_fin_inv
          m
          ncomp
          inv1
          inv2
-         inv3.
-
+         inv3
+         nd1
+         nd2
+  .
+  
+  Check dfs.
+  Definition reachable_nodes m ncomp (x: Component.id * Block.id) inv1 inv2 inv3
+    := dfs
+                       (fingraph_of_mem_inv m ncomp inv1 inv2 inv3 (S x.1) (S x.2))
+                       ((maxn ncomp x.1) * (maxn (max_next_block m) x.2))
+                       nil
+                       (cast_to_bigger_ordinal_left ncomp (max_next_block m) (finitize_ptr x)).
+  
   Lemma dfs_path_fin_mem:
     forall m ncomp inv1 inv2 inv3 x y,
       reflect (dfs_path
-                 (fingraph_of_mem_inv m ncomp inv1 inv2 inv3)
-                 nil x y
+                 (fingraph_of_mem_inv m ncomp inv1 inv2 inv3 (S x.1) (S x.2))
+                 nil
+                 (cast_to_bigger_ordinal_left ncomp (max_next_block m) (finitize_ptr x))
+                 y
               )
-              (y \in dfs
-                       (fingraph_of_mem_inv m ncomp inv1 inv2 inv3)
-                       (ncomp * (max_next_block m)) nil x
+              (y \in reachable_nodes m ncomp x inv1 inv2 inv3
               ).
   Proof.
     intros m ncomp inv1 inv2 inv3 x y.
     apply dfs_pathP.
     - simpl.
       rewrite card_prod. rewrite card_ord. rewrite card_ord.
-      rewrite card0. rewrite add0n. apply leqnn.
+      rewrite card0. rewrite add0n.
+      admit. (* some arithmetic manipulation is needed here *)
+      (* apply leqnn. *)
     - auto.
-  Qed.
+  Admitted.
   
   (* START DEFINING REACHABILITY INDUCTIVELY *)
   Inductive Reachable (m: t) (bs : {fset node_t}) : node_t -> Prop :=
