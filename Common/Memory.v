@@ -6,8 +6,26 @@ Require Import Lia.
 Require Import Coq.Logic.ClassicalFacts.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fingraph fintype.
 
-Print size.
-Locate size.
+Fixpoint fold_max (l: list (Component.id * Block.id)) : Component.id * Block.id :=
+  match l with
+  | nil => (0, 0)
+  | x :: vs => let maxvs := fold_max vs in (maxn x.1 maxvs.1, maxn x.2 maxvs.2)
+  end.
+
+Lemma fold_max_In_leq :
+  forall l x,
+    In x l ->
+    (x.1 <= (fold_max l).1) /\ (x.2 <= (fold_max l).2).
+Proof.
+  induction l.
+  - intros x Hin. exfalso. apply (List.in_nil Hin).
+  - intros x Hin. simpl.
+    destruct (in_inv Hin) as [xEqa | xInl].
+    + subst x. split; apply leq_maxl.
+    + destruct (IHl x xInl) as [Ihll Ihlr].
+      split; match goal with |- is_true (leq _ (maxn _ ?y)) =>
+                             apply leq_trans with (n := y); auto; apply leq_maxr end.
+Qed.
 
 Module Type AbstractComponentMemory.
   Parameter t : Type.
@@ -21,6 +39,7 @@ Module Type AbstractComponentMemory.
   Parameter domm : t -> {fset Block.id}.
   Parameter load_block : t -> Block.id -> list (Component.id * Block.id).
   Parameter next_block : t -> Block.id.
+  Parameter max_ptr : t -> Component.id * Block.id.
 
   Axiom load_prealloc:
     forall bufs b i,
@@ -63,6 +82,11 @@ Module Type AbstractComponentMemory.
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
 
+  Axiom max_ptr_load_block_out :
+    forall m b x,
+      In x (load_block m b) ->
+      x.1 < S (max_ptr m).1 /\ x.2 < S (max_ptr m).2.
+      
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -138,7 +162,79 @@ Module ComponentMemory : AbstractComponentMemory.
     | Some chunk => block_ids_in_chunk chunk
     | None => nil
     end.
+
+  Definition max_ptr_of_block (m: t) (b: Block.id) : Component.id * Block.id :=
+    fold_max (load_block m b).
+
+  Definition max_ptr_per_block (m: t) := map (max_ptr_of_block m) (domm m).
   
+  Definition max_ptr (m: t) : Component.id * Block.id :=
+    fold_max (max_ptr_per_block m).
+    
+  Lemma max_ptr_of_block_In_leq :
+    forall m b x,
+      In x (load_block m b) ->
+      x.1 <= (max_ptr_of_block m b).1 /\ x.2 <= (max_ptr_of_block m b).2.
+  Proof.
+    unfold max_ptr_of_block.
+    intros m b x Hin. apply fold_max_In_leq. trivial.
+  Qed.
+
+  Lemma max_ptr_In_leq :
+    forall m x,
+      (In x (max_ptr_per_block m) \/
+       exists y, In y (max_ptr_per_block m) /\ x.1 <= y.1 /\ x.2 <= y.2)
+      ->
+      x.1 <= (max_ptr m).1 /\ x.2 <= (max_ptr m).2.
+  Proof.
+    unfold max_ptr.
+    intros m x [Hin | [y [Hin [H1 H2]]]].
+    - apply fold_max_In_leq. trivial.
+    - split.
+      + apply leq_trans with (n := y.1). trivial. apply fold_max_In_leq. trivial.
+      + apply leq_trans with (n := y.2). trivial. apply fold_max_In_leq. trivial.
+  Qed.
+
+  Lemma In_load_block_In_max_ptr_per_block_or_less :
+    forall m b x,
+      In x (load_block m b) ->
+      (
+        In x (max_ptr_per_block m) \/
+        exists y, In y (max_ptr_per_block m) /\ x.1 <= y.1 /\ x.2 <= y.2
+      ).
+  Proof.
+    intros m b x Hinload.
+    destruct (max_ptr_of_block_In_leq m b x Hinload) as [Hl Hr].
+    destruct (x.1 == (max_ptr_of_block m b).1) eqn:e1.
+    - destruct (x.2 == (max_ptr_of_block m b).2) eqn:e2.
+      + left. admit.
+      + admit.
+    - destruct (x.2 == (max_ptr_of_block m b).2) eqn:e2.
+      + admit.
+      + admit.
+  Admitted.
+
+  Lemma In_load_block_max_ptr :
+    forall m b x,
+      In x (load_block m b) ->
+      (x.1 <= (max_ptr m).1 /\ x.2 <= (max_ptr m).2).
+  Proof.
+    intros m b x Hloadblock.
+    apply max_ptr_In_leq.
+    apply In_load_block_In_max_ptr_per_block_or_less with (b := b). trivial.
+  Qed.
+
+  Lemma max_ptr_load_block_out :
+    forall m b x,
+      In x (load_block m b) ->
+      x.1 < S (max_ptr m).1 /\ x.2 < S (max_ptr m).2.
+  Proof.
+    intros m b x Hinload.
+    pose (Hleq := In_load_block_max_ptr m b x Hinload).
+    destruct Hleq as [H1 H2].
+    split; rewrite ltnS; trivial.
+  Qed.
+    
   Lemma load_prealloc:
     forall bufs b i,
       load (prealloc bufs) b i =
@@ -281,8 +377,7 @@ Module Memory.
   (* Define reachability using the ssreflect fingraph library. *)
   Definition node_t : Type := Component.id * Block.id.
 
-  Definition apply_load_block_seq (m: t) (pair: node_t)
-    : seq node_t :=
+  Definition apply_load_block_seq (m: t) (pair: node_t) : seq node_t :=
     match m (fst pair) with
     | None => nil
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
@@ -294,6 +389,64 @@ Module Memory.
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
     end.
 
+  Definition max_ptr_per_compMem (m: t) : seq (nat * node_t) :=
+    map (fun natNode => (natNode.1, ComponentMemory.max_ptr natNode.2)) (elementsm m).
+  
+  Definition max_ptr (m: t) : node_t :=
+    fold_max (map snd (max_ptr_per_compMem m)).
+
+  Lemma apply_load_block_max_ptr_per_compMem_or_less :
+    forall x x0 m,
+      In x (apply_load_block_seq m x0) ->
+      (In x (map snd (max_ptr_per_compMem m)) \/
+       exists n nd, In (n, nd) (max_ptr_per_compMem m) /\ x.1 <= nd.1 /\ x.2 <= nd.2).
+  Admitted.
+  
+  Lemma max_ptr_In_leq :
+    forall m x,
+      (In x (map snd (max_ptr_per_compMem m)) \/
+       exists n nd, In (n, nd) (max_ptr_per_compMem m) /\ x.1 <= nd.1 /\ x.2 <= nd.2)
+      ->
+      x.1 <= (max_ptr m).1 /\ x.2 <= (max_ptr m).2.
+  Proof.
+    unfold max_ptr.
+    intros m x [Hin | [n [nd [Hin [H1 H2]]]]].
+    - apply fold_max_In_leq. trivial.
+    - split.
+      + apply leq_trans with (n := nd.1). trivial. apply fold_max_In_leq.
+        (* SearchAbout In.*)
+        (* rewrite <- In_in. *)
+        (* Use mapP *)
+        admit.
+      + apply leq_trans with (n := nd.2). trivial. apply fold_max_In_leq.
+        (* SearchAbout In.*)
+        (* rewrite <- In_in. *)
+        (* Use mapP *)
+        admit.
+  Admitted.
+  
+  Lemma In_apply_load_block_seq_max_ptr :
+    forall x x0 m,
+      In x (apply_load_block_seq m x0) ->
+      x.1 <= (max_ptr m).1 /\ x.2 <= (max_ptr m).2.
+  Proof.
+    intros x x0 m Hin.
+    unfold max_ptr.
+    apply max_ptr_In_leq.
+    apply apply_load_block_max_ptr_per_compMem_or_less with (x0 := x0). trivial.
+  Qed.
+
+  Lemma In_apply_load_block_seq_max_ptr_less :
+    forall x x0 m,
+      In x (apply_load_block_seq m x0) ->
+      x.1 < S (max_ptr m).1 /\ x.2 < S (max_ptr m).2.
+  Proof.
+    intros x x0 m Hinload.
+    pose (Hleq := In_apply_load_block_seq_max_ptr x x0 m Hinload).
+    destruct Hleq as [H1 H2].
+    split; rewrite ltnS; trivial.
+  Qed.
+  
   Definition per_component_next_block (m: t) (cid: Component.id) : Block.id :=
     match (m cid) with
     | None => 0
@@ -680,9 +833,8 @@ Module Memory.
     exact (Ordinal lp, Ordinal rp).
   Defined.
 
+  (* TODO: FINITIZE MEMORY USING MAX_PTR *)
 
-  Check pair.
-  Print mem_ncomp.
   Definition apply_load_block_seq_fin_inv
              (m: t) (ncomp: nat)
              (pf_loadblock: load_block_valid_cid m)
