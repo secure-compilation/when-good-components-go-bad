@@ -747,7 +747,7 @@ Module Memory.
   Definition reachable_nodes m ncomp (x: Component.id * Block.id) inv1 inv2 inv3
     := dfs
                        (fingraph_of_mem_inv m ncomp inv1 inv2 inv3 (S x.1) (S x.2))
-                       ((maxn ncomp x.1) * (maxn (max_next_block m) x.2))
+                       ((maxn ncomp x.1.+1) * (maxn (max_next_block m) x.2.+1))
                        nil
                        (cast_to_bigger_ordinal_left ncomp (max_next_block m) (finitize_ptr x)).
   
@@ -766,11 +766,9 @@ Module Memory.
     apply dfs_pathP.
     - simpl.
       rewrite card_prod. rewrite card_ord. rewrite card_ord.
-      rewrite card0. rewrite add0n.
-      admit. (* some arithmetic manipulation is needed here *)
-      (* apply leqnn. *)
+      rewrite card0. rewrite add0n. auto.
     - auto.
-  Admitted.
+  Qed.
   
   (* START DEFINING REACHABILITY INDUCTIVELY *)
   Inductive Reachable (m: t) (bs : {fset node_t}) : node_t -> Prop :=
