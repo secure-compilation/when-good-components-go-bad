@@ -193,14 +193,12 @@ Module ComponentMemory : AbstractComponentMemory.
 
   Lemma max_ptr_In_leq :
     forall m x,
-      (In x (max_ptr_per_block m) \/
-       exists y, In y (max_ptr_per_block m) /\ x.1 <= y.1 /\ x.2 <= y.2)
-      ->
-      x.1 <= (max_ptr m).1 /\ x.2 <= (max_ptr m).2.
+    (exists y, In y (max_ptr_per_block m) /\ x.1 <= y.1 /\ x.2 <= y.2)
+    ->
+    x.1 <= (max_ptr m).1 /\ x.2 <= (max_ptr m).2.
   Proof.
     unfold max_ptr.
-    intros m x [Hin | [y [Hin [H1 H2]]]].
-    - apply fold_max_In_leq. trivial.
+    intros m x [y [Hin [H1 H2]]].
     - split.
       + apply leq_trans with (n := y.1). trivial. apply fold_max_In_leq. trivial.
       + apply leq_trans with (n := y.2). trivial. apply fold_max_In_leq. trivial.
@@ -221,17 +219,11 @@ Module ComponentMemory : AbstractComponentMemory.
   Lemma In_load_block_In_max_ptr_per_block_or_less :
     forall m b x,
       In x (load_block m b) ->
-      (
-        In x (max_ptr_per_block m) \/
-        exists y, In y (max_ptr_per_block m) /\ x.1 <= y.1 /\ x.2 <= y.2
-      ).
+      exists y, In y (max_ptr_per_block m) /\ x.1 <= y.1 /\ x.2 <= y.2.
   Proof.
     intros m b x Hinload.
     pose (bIndomm := In_load_block_block_in_domm m b x Hinload).
     destruct (max_ptr_of_block_In_leq m b x Hinload) as [Hl Hr].
-    right.
-    (* right is more general. Should be able to simplify away all the lefts from
-     the other lemmas.*)
     pose (Inyperblock := max_ptr_of_block_In_max_ptr_per_block m b bIndomm).
     exists (max_ptr_of_block m b). auto.
   Qed.
@@ -246,17 +238,6 @@ Module ComponentMemory : AbstractComponentMemory.
     apply In_load_block_In_max_ptr_per_block_or_less with (b := b). trivial.
   Qed.
 
-(*  Lemma max_ptr_load_block_out :
-    forall m b x,
-      In x (load_block m b) ->
-      x.1 < S (max_ptr m).1 /\ x.2 < S (max_ptr m).2.
-  Proof.
-    intros m b x Hinload.
-    pose (Hleq := In_load_block_max_ptr m b x Hinload).
-    destruct Hleq as [H1 H2].
-    split; rewrite ltnS; trivial.
-  Qed.
-*)    
   Lemma load_prealloc:
     forall bufs b i,
       load (prealloc bufs) b i =
@@ -410,22 +391,17 @@ Module Memory.
     | None => nil
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
     end.
-
-  Definition get_compMem_max_ptr comp_compMem :
-    (Equality.sort
-          (prod_eqType nat_eqType (prod_eqType nat_eqType nat_eqType))) :=
-    (comp_compMem.1, ComponentMemory.max_ptr comp_compMem.2).
   
   Definition max_ptr_per_compMem (m: t) :=
-    map get_compMem_max_ptr (elementsm m).
-  
+    mapm ComponentMemory.max_ptr m.
+
   Definition max_ptr (m: t) : node_t :=
     fold_max (map snd (max_ptr_per_compMem m)).
-  
+
   Lemma apply_load_block_max_ptr_per_compMem_or_less :
     forall x x0 m,
       In x (apply_load_block_seq m x0) ->
-      exists n nd, In (n, nd) (max_ptr_per_compMem m) /\ x.1 <= nd.1 /\ x.2 <= nd.2.
+      exists n nd, (max_ptr_per_compMem m) n = Some nd /\ x.1 <= nd.1 /\ x.2 <= nd.2.
   Proof.
     unfold apply_load_block_seq.
     intros x x0 m Hinloadblock.
@@ -434,48 +410,28 @@ Module Memory.
       exists (ComponentMemory.max_ptr t0).
       split.
       + unfold max_ptr_per_compMem.
-        pose (Inin' := In_in (x0.1, ComponentMemory.max_ptr t0)
-                             [seq get_compMem_max_ptr i | i <- elementsm m]
-             ).
-        rewrite <- Inin'.
-        assert (x0t0eq: (x0.1, ComponentMemory.max_ptr t0) =
-                        (fun i : prod (Equality.sort nat_eqType) ComponentMemory.t
-                         =>
-                           get_compMem_max_ptr i)
-                          (x0.1, t0)).
-        {
-          unfold get_compMem_max_ptr. auto.
-        }
-        rewrite x0t0eq.
-        remember ((x0.1, t0)) as p.
-        remember (elementsm m) as l.
-        Check mapP.
-        Check map_f.
-        (* The problem here is that ComponentMemory.t is not an equality type. *)
-        (* pose (map_f' := map_f get_compMem_max_ptr). *)
-        (* apply map_f. *)
-      (* SearchAbout map. *)
-         admit. 
+        unfold mapm. simpl. rewrite mapimE. rewrite e. auto.
       + apply ComponentMemory.max_ptr_load_block_out with (b := x0.2). auto.
     - exfalso. pose (List.in_nil Hinloadblock). auto.
-  Admitted.
+  Qed.
   
   Lemma max_ptr_In_leq :
     forall m x,
-      (exists n nd, In (n, nd) (max_ptr_per_compMem m) /\ x.1 <= nd.1 /\ x.2 <= nd.2) ->
+      (exists n nd, (max_ptr_per_compMem m) n = Some nd /\ x.1 <= nd.1 /\ x.2 <= nd.2) ->
       x.1 <= (max_ptr m).1 /\ x.2 <= (max_ptr m).2.
   Proof.
     unfold max_ptr.
     intros m x [n [nd [Hin [H1 H2]]]].
+    SearchAbout domm.
     - pose (In_innd := In_in nd (map snd (max_ptr_per_compMem m))).
       split.
       + apply leq_trans with (n := nd.1). trivial. apply fold_max_In_leq.
         erewrite <- In_innd. apply/mapP. exists (n, nd).
-        * erewrite In_in. exact Hin.
+        * apply/getmP. exact Hin.
         * auto.
       + apply leq_trans with (n := nd.2). trivial. apply fold_max_In_leq.
         erewrite <- In_innd. apply/mapP. exists (n, nd).
-        * erewrite In_in. exact Hin.
+        * apply/getmP. exact Hin.
         * auto.
   Qed.
   
