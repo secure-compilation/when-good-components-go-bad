@@ -70,6 +70,9 @@ Coq 8.8.2
 Coq 8.9.1
 - QuickChick 1.1.0
 
+Coq 8.10.2
+- QuickChick 1.2.0
+
 Stable releases of QuickChick (package `coq-quickchick`) are available through
 the Coq OPAM repository.
 
