@@ -86,7 +86,12 @@ Module Type AbstractComponentMemory.
     forall m b x,
       In x (load_block m b) ->
       (x.1 <= (max_ptr m).1 /\ x.2 <= (max_ptr m).2).
-      
+
+  Axiom load_block_load :
+    forall m b ptrc ptrb,
+      In (ptrc, ptrb) (load_block m b) <->
+      exists ptro i, load m b i = Some (Ptr (ptrc, ptrb, ptro)).
+  
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -238,6 +243,67 @@ Module ComponentMemory : AbstractComponentMemory.
     apply In_load_block_In_max_ptr_per_block_or_less with (b := b). trivial.
   Qed.
 
+  Lemma nth_error_block_ids_in_chunk :
+    forall ch c b off i,
+      nth_error ch i = Some (Ptr (c, b, off)) ->
+      In (c, b) (block_ids_in_chunk ch).
+  Proof.
+    intros ch c b off i Hnth.
+    apply nth_error_In in Hnth. induction ch as [| a ch' Ich]; simpl.
+    - apply (List.in_nil Hnth).
+    - destruct a as [v | p |]; destruct (in_inv Hnth) as [equu | Hch'].
+      + discriminate.
+      + exact (Ich Hch').
+      + inversion equu. simpl. left. reflexivity.
+      + apply List.in_cons. exact (Ich Hch').
+      + discriminate.
+      + exact (Ich Hch').
+  Qed.
+  
+  Lemma block_ids_in_chunk_nth_error :
+    forall ch c b,
+      In (c, b) (block_ids_in_chunk ch) ->
+      exists off i, nth_error ch i = Some (Ptr (c, b, off)).
+  Proof.
+    induction ch; simpl; intros c b H.
+    - exfalso. auto.
+    - destruct a.
+      + destruct (IHch c b H) as [off [i ntherrorEq]]. exists off.
+        apply In_nth_error. apply List.in_cons. apply nth_error_In with (n := i). auto.
+      + SearchAbout In cons.
+        apply in_inv in H. destruct H as [Heq | HIH].
+        * exists (Pointer.offset t0). exists 0.
+          destruct Heq. rewrite Pointer.compose. reflexivity.
+        * destruct (IHch c b HIH) as [off [i ntherrorEq]]. exists off.
+          apply In_nth_error. apply List.in_cons. apply nth_error_In with (n := i). auto.
+      + destruct (IHch c b H) as [off [i ntherrorEq]]. exists off.
+        apply In_nth_error. apply List.in_cons. apply nth_error_In with (n := i). auto.
+  Qed.
+  
+  Lemma load_block_load :
+    forall m b ptrc ptrb,
+      In (ptrc, ptrb) (load_block m b) <->
+      exists ptro i, load m b i = Some (Ptr (ptrc, ptrb, ptro)).
+  Proof.
+    intros m b ptrc ptrb. unfold load_block. unfold load.
+    split.
+    - intros Hin.
+      destruct (content m b) eqn:e.
+      + pose (exNat := block_ids_in_chunk_nth_error b0 ptrc ptrb Hin).
+        destruct exNat as [off [iNat g]].
+        pose (pfnonneg := N2Z.is_nonneg (N.of_nat iNat)).
+        exists off. exists (Z.of_N (N.of_nat iNat)).
+        destruct (0 <=? Z.of_N (N.of_nat iNat))%Z eqn:ee.
+        * rewrite nat_N_Z. rewrite Nat2Z.id. auto.
+        * erewrite <- Z.leb_le in pfnonneg. rewrite pfnonneg in ee. discriminate.
+      + exfalso. pose (F := List.in_nil Hin). auto.
+    - intros [ptro [i Hload]].
+      destruct (content m b) eqn:e.
+      + apply nth_error_block_ids_in_chunk with (off := ptro) (i := Z.to_nat i).
+        destruct ((0 <=? i)%Z); auto. discriminate.
+      + discriminate.
+  Qed.
+
   Lemma load_prealloc:
     forall bufs b i,
       load (prealloc bufs) b i =
@@ -385,7 +451,27 @@ Module Memory.
     | None => nil
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
     end.
-  
+
+  Lemma apply_load_block_load :
+    forall m nd ndres,
+      In ndres (apply_load_block_seq m nd) <->
+      exists ndresoff ndoff,
+        load m (nd.1, nd.2, ndoff) = Some (Ptr (ndres.1, ndres.2, ndresoff)).
+  Proof.
+    intros m nd ndres.
+    unfold apply_load_block_seq. unfold load. simpl.
+    split; destruct (m nd.1) as [compMem |].
+    - destruct (ComponentMemory.load_block_load compMem nd.2 ndres.1 ndres.2) as [l r].
+      rewrite <- surjective_pairing in l. rewrite <- surjective_pairing.
+      intros Hin. apply l. exact Hin.
+    - intros Hin. exfalso. apply (List.in_nil Hin).
+    - intros [ndresoff [ndoff Hload]].
+      destruct (ComponentMemory.load_block_load compMem nd.2 ndres.1 ndres.2) as [l r].
+      rewrite <- surjective_pairing in r. apply r.
+      rewrite <- surjective_pairing in Hload. exists ndresoff. exists ndoff. exact Hload.
+    - intros [ndresoff [_ contra]]. discriminate.
+  Qed.
+      
   Definition apply_load_block (m: t) (pair: node_t) : list (node_t) :=
     match m (fst pair) with
     | None => nil
@@ -548,35 +634,37 @@ Module Memory.
       SearchAbout nat_rect.
   Admitted.
 
-  Definition deproofize_one T s (y: sig (fun (z:T) => In z s)) :=
-    match y with | exist x _ => x end.
+  SearchAbout sig.
+  
+  Definition deproofize_one A P y := @proj1_sig A P y.
+
+  SearchAbout proj1_sig.
+  Check sval.
+
+  (*TODO: Check the lemmas about proj1_sig and sval. They may help in
+   proving a spec for proofize_seq. *)
+
+  Lemma proofize_seq_cons :
+    forall T a s,
+    exists ap sp, proofize_seq T (a :: s) = ap :: sp.
+  Proof.
+    intros T a s. simpl. eexists. eexists.
+    unfold proofize_seq.
+    (* destruct (length (a :: s)) *) (* Does not work. *)
+  Admitted.
   
   Lemma proofize_seq_spec :
     forall T s spf,
       spf = proofize_seq T s ->
-      map
-        (fun i : @sig T (fun z : T => @In T z s) =>
-           deproofize_one T s i)
-        spf
-      =
-      s.
+      map (@proj1_sig T _) spf = s.
   Proof.
-    intros.
-    assert (A1: size [seq (deproofize_one T s) i | i <- spf] = size (spf)).
-    {
-      rewrite size_map. auto.
-    }
-
-    (* Using destruct and eqn, we're able to prove the base case. Try now to do it by induction. *)
-    induction s.
-    - assert (G: size [seq (deproofize_one T nil) i | i <- spf] = 0).
-      {
-        rewrite A1. rewrite H. rewrite size_proofize_seq. auto.
-      }
-      pose (mapnil := size0nil G).
-      erewrite mapnil.
-      auto.
-    - (* PROBLEM: The induction hypothesis is now stated using the "tail" in the dependent type *)
+    induction s as [| a s IHs]; simpl; intros spf H.
+    - rewrite H. auto.
+    - (* PROBLEM: The induction hypothesis IHs expects a sequence with proofs of In x s
+       instead of proofs of In x (a :: s) *)
+      destruct (proofize_seq_cons T a s) as [ap [sp pr_eq]].
+      rewrite H. rewrite pr_eq.
+      rewrite map_cons.
   Admitted.
       
   
@@ -678,17 +766,8 @@ Module Memory.
   *)
   
   Definition finitize_ptr (ptr : Component.id * Block.id) :
-    ordinal (S (fst ptr)) * ordinal (S (snd ptr)).
-    assert (a : ssrnat.leq (S (fst ptr)) (S (fst ptr))).
-    {
-      apply ssrnat.leqnn.
-    }
-    assert (b : ssrnat.leq (S (snd ptr)) (S (snd ptr))).
-    {
-      apply ssrnat.leqnn.
-    }
-    exact (Ordinal a, Ordinal b).
-  Defined.
+    ordinal (S (fst ptr)) * ordinal (S (snd ptr)) :=
+    (inord (fst ptr), inord (snd ptr)).
 
   Definition cast_to_bigger_ordinal_right {l1 : nat} {r1 : nat} (l2: nat) (r2: nat)
              (ptr : ordinal l1 * ordinal r1) :
@@ -732,7 +811,7 @@ Module Memory.
 
   (* FINITIZE MEMORY USING MAX_PTR *)
 
-  Definition apply_load_block_seq_fin_inv
+  Definition apply_load_block_seq_fin
              (m: t) 
              (nd1: nat) (nd2: nat)
              (nd : ordinal (ssrnat.maxn (S (max_ptr m).1) nd1) *
@@ -749,7 +828,7 @@ Module Memory.
                                                        (nat_of_ord nd.1, nat_of_ord nd.2)
                                                        m
                                                        In_x_applyloadblock).1
-                                   ),
+                                                  ),
                                  Ordinal
                                    (
                                      (In_apply_load_block_seq_max_ptr_less
@@ -763,15 +842,14 @@ Module Memory.
       (proofize_seq node_t (apply_load_block_seq m (nat_of_ord nd.1, nat_of_ord nd.2)))
   .
 
-  Definition fingraph_of_mem_inv
+  Definition fingraph_of_mem
              (m: t)
              (nd1: nat) (nd2: nat)
-    := apply_load_block_seq_fin_inv m nd1 nd2.
+    := apply_load_block_seq_fin m nd1 nd2.
   
-  Check dfs.
   Definition reachable_nodes m (x: Component.id * Block.id)
     := dfs
-         (fingraph_of_mem_inv m (S x.1) (S x.2))
+         (fingraph_of_mem m (S x.1) (S x.2))
          ((maxn (S (max_ptr m).1) x.1.+1) * (maxn (S (max_ptr m).2) x.2.+1))
          nil
          (cast_to_bigger_ordinal_left
@@ -783,7 +861,7 @@ Module Memory.
   Lemma dfs_path_fin_mem:
     forall m x y,
       reflect (dfs_path
-                 (fingraph_of_mem_inv m (S x.1) (S x.2))
+                 (fingraph_of_mem m (S x.1) (S x.2))
                  nil
                  (cast_to_bigger_ordinal_left
                     (S (max_ptr m).1)
@@ -801,7 +879,95 @@ Module Memory.
       rewrite card0. rewrite add0n. auto.
     - auto.
   Qed.
+
+  Lemma dfs_path_fin_mem_iff:
+    forall m x y,
+      (dfs_path
+         (fingraph_of_mem m (S x.1) (S x.2))
+         nil
+         (cast_to_bigger_ordinal_left
+            (S (max_ptr m).1)
+            (S (max_ptr m).2)
+            (finitize_ptr x)
+         )
+         y
+      )
+      <->
+      (y \in reachable_nodes m x).
+  Proof.
+    split; intros H; apply/dfs_path_fin_mem; auto.
+  Qed.
+
+  Definition nat_node_of_ord_node {n: nat} {m: nat} (x: ordinal n * ordinal m) :=
+    let (cid, bid) := x in (nat_of_ord cid, nat_of_ord bid).
   
+  Definition reachable_nodes_nat m x := map nat_node_of_ord_node (reachable_nodes m x).
+
+  Lemma reachable_nodes_reachable_nodes_nat :
+    forall x m y,
+      y \in reachable_nodes m x ->
+      nat_node_of_ord_node y \in reachable_nodes_nat m x.
+  Proof.
+    intros. unfold reachable_nodes_nat. apply map_f. auto.
+  Qed.
+
+  Lemma reachable_nodes_nat_reachable_nodes :
+    forall x m y_nat,
+      y_nat \in reachable_nodes_nat m x ->
+      exists y, y \in reachable_nodes m x /\ nat_node_of_ord_node y = y_nat.
+  Proof.
+    unfold reachable_nodes_nat. intros x m y_nat Hreachnat.
+    destruct (mapP Hreachnat) as [x0 Hx0 Hx0nat].
+    exists x0. split; auto.
+  Qed.
+
+  (*Definition is_reachable_from m y x := y \in reachable_nodes_nat m x.
+
+  Lemma get_path_from_to m x y ()
+   *)
+  (*In order to write this lemma properly, one would need to rely on the
+   fact that the finitized graph and the original graph are equal.*)
+ 
+  Lemma eq_reachable_eq_path :
+    forall m m' x y,
+      (reachable_nodes_nat m x = reachable_nodes_nat m' x)
+      ->
+      dfs_path
+        (fingraph_of_mem m (S x.1) (S x.2))
+        nil
+        (cast_to_bigger_ordinal_left
+           (S (max_ptr m).1)
+           (S (max_ptr m).2)
+           (finitize_ptr x)
+        )
+        y
+      ->
+      exists y',
+        dfs_path
+          (fingraph_of_mem m' (S x.1) (S x.2))
+          nil
+          (cast_to_bigger_ordinal_left
+             (S (max_ptr m').1)
+             (S (max_ptr m').2)
+             (finitize_ptr x)
+          )
+          y'
+        /\
+        nat_node_of_ord_node y = nat_node_of_ord_node y'.
+  Proof.
+    intros m m' x y Hreacheq Hdfs_path.
+    apply dfs_path_fin_mem_iff in Hdfs_path.
+    apply reachable_nodes_reachable_nodes_nat in Hdfs_path.
+    rewrite Hreacheq in Hdfs_path.
+    remember (nat_node_of_ord_node y) as z.
+    destruct (reachable_nodes_nat_reachable_nodes x m' z  Hdfs_path) as [x0 [P H]].
+    exists x0.
+    split.
+    - apply/dfs_path_fin_mem. exact P.
+    - auto.
+  Qed.
+
+  (* START FOR-BACKUP-ONLY *)
   (* START DEFINING REACHABILITY INDUCTIVELY *)
   Inductive Reachable (m: t) (bs : {fset node_t}) : node_t -> Prop :=
   | Reachable_refl : forall b, b \in bs -> Reachable m bs b
@@ -1540,6 +1706,7 @@ Module Memory.
       store m i v = Some m' ->
       b \in reachable_blocks m' bs.
   Admitted.
+  (* END FOR-BACKUP-ONLY *)
   
   Lemma load_after_store mem ptr v mem' ptr' :
     store mem  ptr v = Some mem' ->
