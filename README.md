@@ -38,6 +38,15 @@ Coq 8.10.2
   [db78af07](https://github.com/arthuraa/deriving/tree/db78af0799aede75edb47c72114e91e5ef11f77b))
 - [Coq Utils 504aa42](https://github.com/arthuraa/coq-utils/tree/504aa4285d631b166ae36e0f40a3a8f77cbde224)
 
+Coq 8.11.1
+- Mathematical Components 1.9.0
+- Extensional Structures dev (source hash
+  [3bee8131](https://github.com/arthuraa/extructures/tree/3bee813159171eb54aefa7e8e220336b9ca11433))
+- Coq Void 0.1.0
+- Deriving dev (source hash
+  [db78af07](https://github.com/arthuraa/deriving/tree/db78af0799aede75edb47c72114e91e5ef11f77b))
+- [Coq Utils 504aa42](https://github.com/arthuraa/coq-utils/tree/504aa4285d631b166ae36e0f40a3a8f77cbde224)
+
 Most dependencies can be installed through the OCaml package manager, OPAM.
 
 - Coq (package `coq`) is available through the official
@@ -73,8 +82,14 @@ Coq 8.9.1
 Coq 8.10.2
 - QuickChick 1.2.1
 
+Coq 8.11.1
+- QuickChick 8.11.dev (source hash
+  [120e155c](https://github.com/QuickChick/QuickChick/tree/120e155c32e443e82a16a871706942231f60bfea))
+
 Stable releases of QuickChick (package `coq-quickchick`) are available through
-the Coq OPAM repository.
+the Coq OPAM repository. A development version, available through the Coq OPAM
+development repository, is required for Coq 8.11.1 until
+QuickChick/QuickChick#193 is addressed by a stable release.
 
 Running the tests (to be simplified):
 
