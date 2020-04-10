@@ -71,13 +71,10 @@ Coq 8.9.1
 - QuickChick 1.1.0
 
 Coq 8.10.2
-- QuickChick 8.10.dev (source hash
-  [5eadb287](https://github.com/QuickChick/QuickChick/commit/5eadb2870ffa4cf0a88d4c4bbd52e51c13866555))
+- QuickChick 1.2.1
 
 Stable releases of QuickChick (package `coq-quickchick`) are available through
-the Coq OPAM repository. A development version, available through the Coq OPAM
-development repository, is required for Coq 8.10.2 until
-QuickChick/QuickChick#193 is addressed by the release of QuickChick 1.2.1.
+the Coq OPAM repository.
 
 Running the tests (to be simplified):
 
