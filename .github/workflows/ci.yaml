@@ -30,7 +30,7 @@ jobs:
           ref: 504aa4285d631b166ae36e0f40a3a8f77cbde224
           path: coq-utils
       - name: Coq Utils build (Coq 8.11)
-        run:
+        run: |
           cd coq-utils
           make
           cd ..
