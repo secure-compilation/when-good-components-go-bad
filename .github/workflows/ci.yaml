@@ -5,7 +5,21 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Repository checkout
         uses: actions/checkout@v2
-      - name: Set up OCaml
+      - name: OCaml setup
         uses: avsm/setup-ocaml@v1.0
+      - name: OPAM dependencies (Coq 8.11)
+        run: >
+          opam repo add coq-released https://coq.inria.fr/opam/released
+        run: >
+          opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+        run: >
+          opam install --yes coq.8.11.1
+                             coq-mathcomp-ssreflect.1.9.0
+                             coq-mathcomp-fingroup.1.9.0
+                             coq-mathcomp-algebra.1.9.0
+                             coq-void.0.1.0
+                             coq-extructures.dev
+                             coq-deriving.dev
+                             coq-quickchick.8.11.dev
