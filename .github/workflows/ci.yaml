@@ -34,3 +34,7 @@ jobs:
           cd coq-utils
           make
           cd ..
+      - name: Base build
+        run: |
+          echo "-R coq-utils/theories CoqUtils" >> _CoqProject
+          make
