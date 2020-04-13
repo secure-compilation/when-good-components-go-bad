@@ -9,11 +9,11 @@ jobs:
         uses: actions/checkout@v2
       - name: OCaml setup
         uses: avsm/setup-ocaml@v1.0
-      - name: OPAM dependencies (Coq 8.11)
-        run: >
+      - name: OPAM repositories
+        run: |
           opam repo add coq-released https://coq.inria.fr/opam/released
-        run: >
           opam repo add coq-extra-dev https://coq.inria.fr/opam/extra-dev
+      - name: OPAM dependencies (Coq 8.11)
         run: >
           opam install --yes coq.8.11.1
                              coq-mathcomp-ssreflect.1.9.0
