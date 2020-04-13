@@ -23,3 +23,14 @@ jobs:
           opam install --yes coq-extructures.dev
           opam install --yes coq-deriving.dev
           opam install --yes coq-quickchick.8.11.dev
+      - name: Coq Utils checkout (Coq 8.11)
+        uses: actions/checkout@v2
+        with:
+          repository: arthuraa/coq-utils
+          ref: 504aa4285d631b166ae36e0f40a3a8f77cbde224
+          path: coq-utils
+      - name: Coq Utils build (Coq 8.11)
+        run:
+          cd coq-utils
+          make
+          cd ..
