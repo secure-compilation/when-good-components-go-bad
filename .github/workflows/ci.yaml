@@ -23,6 +23,7 @@ jobs:
           opam install --yes coq-extructures.dev
           opam install --yes coq-deriving.dev
           opam install --yes coq-quickchick.8.11.dev
+          eval $(opam env)
       - name: Coq Utils checkout (Coq 8.11)
         uses: actions/checkout@v2
         with:
