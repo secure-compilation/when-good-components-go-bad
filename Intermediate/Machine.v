@@ -15,7 +15,9 @@ Unset Printing Implicit Defensive.
 
 Set Bullet Behavior "Strict Subproofs".
 
-Variant register : Type :=
+(* NOTE: Technically a [Variant], i.e., there is no use for the [Inductive]
+   principle in proofs, but it is required to derive a QuickChick generator. *)
+Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP | R_ARG.
 
 Definition label := nat.
@@ -130,7 +132,7 @@ Record program := mkProg {
   prog_interface: Program.interface;
   prog_procedures: NMap (NMap code);
   prog_buffers: NMap {fmap Block.id -> nat + list value};
-  prog_main: option Procedure.id
+  prog_main: bool
 }.
 
 (* well-formedness of programs *)
@@ -202,17 +204,20 @@ Record well_formed_program (p: program) := {
     domm (prog_interface p) = domm (prog_buffers p);
   (* if the main component exists, then the main procedure must exist as well *)
   wfprog_main_existence:
-    forall mainP,
-      prog_main p = Some mainP ->
+      prog_main p ->
     exists main_procs,
-      getm (prog_procedures p) Component.main = Some main_procs /\ mainP \in domm main_procs;
+      getm (prog_procedures p) Component.main = Some main_procs /\ Procedure.main \in domm main_procs;
   (* Iff the main component is in the interface, a main procedure is given. *)
   wfprog_main_component:
     (* (RB: Old-style fix, later changed from a simple implication.) *)
     (* prog_main p = None -> *)
     (* Component.main \notin domm (prog_interface p) *)
     Component.main \in domm (prog_interface p) <->
-    prog_main p
+    prog_main p;
+  (* wfprog_main_id: *)
+  (*   forall mainP, *)
+  (*     prog_main p = Some mainP -> *)
+  (*     mainP = 0 *)
 }.
 
 (* a closed program is a program with a closed interface and an existing main
@@ -223,9 +228,9 @@ Record closed_program (p: program) := {
     closed_interface (prog_interface p);
   (* the main procedure must exist *)
   cprog_main_existence:
-    exists mainP main_procs,
-      prog_main p = Some mainP /\
-      getm (prog_procedures p) Component.main = Some main_procs /\ mainP \in domm main_procs
+    exists main_procs,
+      prog_main p /\
+      getm (prog_procedures p) Component.main = Some main_procs /\ 0 \in domm main_procs
 }.
 
 Definition linkable_mains (prog1 prog2 : program) : Prop :=
@@ -236,8 +241,8 @@ Lemma linkable_mains_sym : forall (prog1 prog2 : program),
 Proof.
   intros prog1 prog2.
   unfold linkable_mains, andb, negb.
-  destruct (isSome (prog_main prog1));
-    destruct (isSome (prog_main prog2));
+  destruct (prog_main prog1);
+    destruct (prog_main prog2);
     intuition.
 Qed.
 
@@ -251,8 +256,8 @@ Theorem linkable_implies_linkable_mains : forall (p1 p2 : program),
 Proof.
   intros p1 p2 Hwf1 Hwf2 [_ Hdisjoint].
   unfold linkable_mains.
-  destruct (prog_main p1) as [main1 |] eqn:Hmain1;
-    destruct (prog_main p2) as [main2 |] eqn:Hmain2;
+  destruct (prog_main p1) as [|] eqn:Hmain1;
+    destruct (prog_main p2) as [|] eqn:Hmain2;
     try reflexivity.
   (* All that remains is the contradictory case. *)
   pose proof (proj2 (wfprog_main_component Hwf1)) as Hdomm1.
@@ -264,13 +269,13 @@ Proof.
 Qed.
 
 Definition matching_mains (prog1 prog2 : program) : Prop :=
-  prog_main prog1 = None <-> prog_main prog2 = None.
+  prog_main prog1 <-> prog_main prog2.
 
 Definition program_link (p1 p2: program): program :=
   {| prog_interface := unionm (prog_interface p1) (prog_interface p2);
      prog_procedures := unionm (prog_procedures p1) (prog_procedures p2);
      prog_buffers := unionm (prog_buffers p1) (prog_buffers p2);
-     prog_main := if prog_main p1 then prog_main p1 else prog_main p2 |}.
+     prog_main := prog_main p1 || prog_main p2 |}.
 
 Lemma program_linkC p1 p2 :
   well_formed_program p1 ->
@@ -283,19 +288,7 @@ Proof.
     by rewrite -(wfprog_defined_procedures Hwf1) -(wfprog_defined_procedures Hwf2).
   congr mkProg=> /=; try rewrite unionmC //.
     by rewrite -(wfprog_defined_buffers Hwf1) -(wfprog_defined_buffers Hwf2).
-  have {Hwf1} /implyP Hm1 : m1 -> Component.main \in domm p1.
-    move/wfprog_main_existence: Hwf1 => /=.
-    case: m1 => [mainP|] //= /(_ mainP erefl) [main_procs [e _]].
-    by rewrite mem_domm e.
-  have {Hwf2} /implyP Hm2 : m2 -> Component.main \in domm p2.
-    move/wfprog_main_existence: Hwf2 => /=.
-    case: m2 => [mainP|] //= /(_ mainP erefl) [main_procs [e _]].
-    by rewrite mem_domm e.
-  case: m1 Hm1=> [mainP|] //=; last by case: m2 Hm2.
-  move=> in_p1.
-  move: Hm2; rewrite -implybNN.
-  move/fdisjointP/(_ Component.main in_p1): Hdis_p => -> /=.
-  by case: m2.
+      by rewrite orb_comm.
 Qed.
 
 Theorem linking_well_formedness:
@@ -359,15 +352,14 @@ Proof.
       by rewrite /Program.has_component unionmE p1_C.
   - rewrite /= !domm_union.
     by do 2![rewrite wfprog_defined_buffers //].
-  - move=> mainP /=.
-    have Hmain1 := @wfprog_main_existence _ Hwf1 mainP.
-    have Hmain2 := @wfprog_main_existence _ Hwf2 mainP.
-    case Hmain_p1: (prog_main p1) Hmain1=> [mainP'|] //=.
-      move=> H1; case/H1=> [main_procs [p1_main HmainP]].
-      by exists main_procs; rewrite unionmE p1_main.
-    move=> _ /Hmain2 [main_procs [p2_main HmainP]].
-    exists main_procs; rewrite unionmC 1?unionmE 1?p2_main //.
-    by rewrite -(wfprog_defined_procedures Hwf1) -(wfprog_defined_procedures Hwf2).
+  - rewrite /=. case /orP => [mainP | mainP].
+    + have Hmain1 := @wfprog_main_existence _ Hwf1 mainP.
+      case: Hmain1 => [main_procs [p1_main HmainP]] //=.
+        by exists main_procs; rewrite unionmE p1_main.
+    + have Hmain2 := @wfprog_main_existence _ Hwf2 mainP.
+      case: Hmain2 => [main_procs [p2_main HmainP]] //=.
+      exists main_procs; rewrite unionmC 1?unionmE 1?p2_main //.
+      by rewrite -(wfprog_defined_procedures Hwf1) -(wfprog_defined_procedures Hwf2).
   - inversion Hwf1 as [_ _ _ _ _ _ Hmain_comp1].
     inversion Hwf2 as [_ _ _ _ _ _ Hmain_comp2].
     split;
@@ -379,28 +371,28 @@ Proof.
       * (* Contra/easy. *)
         pose proof (proj1 Hmain_comp1 Hcase1) as Hmain1. now rewrite Hmain1.
       * apply proj1 in Hmain_comp1.
-        specialize (Hmain_comp1 Hcase1). rewrite Hmain_comp1. assumption.
+        specialize (Hmain_comp1 Hcase1). rewrite Hmain_comp1. by [].
       * destruct (prog_main p1) as [main1 |] eqn:Hmain1.
         -- reflexivity.
         -- apply proj1 in Hmain_comp2.
            specialize (Hmain_comp2 Hcase2). assumption.
       * (* Contra. *)
-        destruct (dommP _ _ Hprog_main1) as [CI HCI]. rewrite unionmE in HCI.
+        destruct (@dommP _ _ _ _ Hprog_main1) as [CI HCI]. rewrite unionmE in HCI.
         apply negb_true_iff in Hcase1. apply negb_true_iff in Hcase2.
-        now rewrite (dommPn _ _ Hcase1) (dommPn _ _ Hcase2) in HCI.
+        now rewrite (@dommPn _ _ _ _ Hcase1) (@dommPn _ _ _ _ Hcase2) in HCI.
     + inversion Hprog_main1 as [Hmain].
       destruct (prog_main p1) as [main1 |] eqn:Hcase1;
         destruct (prog_main p2) as [main2 |] eqn:Hcase2.
       * (* Contra/easy. RB: NOTE: Three cases can be solved as instances of a
            little lemma, or a tactic. Is it useful elsewhere? *)
         apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
-        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        destruct (@dommP _ _ _ _ Hmain_comp1) as [CI HCI].
         apply /dommP. exists CI. now rewrite unionmE HCI.
       * apply proj2 in Hmain_comp1. specialize (Hmain_comp1 isT).
-        destruct (dommP _ _ Hmain_comp1) as [CI HCI].
+        destruct (@dommP _ _ _ _ Hmain_comp1) as [CI HCI].
         apply /dommP. exists CI. now rewrite unionmE HCI.
       * apply proj2 in Hmain_comp2. specialize (Hmain_comp2 isT).
-        destruct (dommP _ _ Hmain_comp2) as [CI HCI].
+        destruct (@dommP _ _ _ _ Hmain_comp2) as [CI HCI].
         apply /dommP. exists CI. simpl. now rewrite (unionmC Hdis_i) unionmE HCI.
       * discriminate.
 Qed.
@@ -432,9 +424,9 @@ Definition reserve_component_blocks' p C acc procs_code
   : ComponentMemory.t * NMap code * NMap Block.id :=
   let is_main_proc comp_id proc_id :=
       match prog_main p with
-      | Some main_proc_id =>
-        (Component.main =? comp_id) && (main_proc_id =? proc_id)
-      | None => false
+      | true =>
+        (Component.main =? comp_id) && (Procedure.main =? proc_id)
+      | false => false
       end in
   let aux acc procs_code :=
       let '(Cmem, Cprocs, Centrypoints) := acc in
@@ -471,9 +463,9 @@ Definition reserve_component_blocks p C Cmem procs_code
   : ComponentMemory.t * NMap code * NMap Block.id :=
   let is_main_proc comp_id proc_id :=
       match prog_main p with
-      | Some main_proc_id =>
-        (Component.main =? comp_id) && (main_proc_id =? proc_id)
-      | None => false
+      | true =>
+        (Component.main =? comp_id) && (Procedure.main =? proc_id)
+      | false => false
       end in
   (* if P is exported or is the main procedure, add an external entrypoint *)
   let map_entrypoint '(P, b) :=
@@ -652,12 +644,12 @@ Lemma domm_partition_program_link_in_neither p c :
   False.
 Proof.
   intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
-         [_ [main [_ [Hmain _]]]] Hmainp' Hmainc'.
-  destruct (prog_main p) as [mainp |] eqn:Hcasep.
+         [_ [main [Hmain [_ _]]]] Hmainp' Hmainc'.
+  destruct (prog_main p) as [|] eqn:Hcasep.
   - specialize (Hmainp is_true_true).
     rewrite Hmainp in Hmainp'.
     discriminate.
-  - destruct (prog_main c) as [mainc |] eqn:Hcasec.
+  - destruct (prog_main c) as [|] eqn:Hcasec.
     +  specialize (Hmainc is_true_true).
        rewrite Hmainc in Hmainc'.
        discriminate.
@@ -768,8 +760,8 @@ Proof.
       by  apply /dommP.
     rewrite Hp'.
     simpl.
-    destruct (prog_main p) as [mainp |] eqn:Hmainp;
-      destruct (prog_main c) as [mainc |] eqn:Hmainc.
+    destruct (prog_main p) as [|] eqn:Hmainp;
+      destruct (prog_main c) as [|] eqn:Hmainc.
     + easy. (* Contra. *)
     + reflexivity.
     + destruct Cid as [| n].
@@ -809,8 +801,8 @@ Proof.
     have [Cid_int Hc'] : exists x, (prog_interface c) Cid = Some x
       by apply /dommP.
     rewrite Hc'.
-    destruct (prog_main p) as [mainp |] eqn:Hmainp;
-      destruct (prog_main c) as [mainc |] eqn:Hmainc.
+    destruct (prog_main p) as [|] eqn:Hmainp;
+      destruct (prog_main c) as [|] eqn:Hmainc.
     + (* Contra. *)
       unfold linkable_mains in Hmains.
       rewrite Hmainp Hmainc in Hmains.
@@ -982,30 +974,30 @@ Lemma interface_preserves_closedness_r :
 Proof.
   intros p1 p2 p2'
          Hwf1 Hwf2' Hsame_int Hlinkable
-         [Hclosed [mainP [main_procs [Hmain [Hprocs Hin]]]]]
+         [Hclosed [mainP [Hmain [Hprocs]]]]
          Hlinkable_mains Hmatching_mains.
   constructor.
   - simpl in Hclosed.
     rewrite Hsame_int in Hclosed.
     apply Hclosed.
-  - destruct (prog_main p1) as [main1 |] eqn:Hmain1;
-      destruct (prog_main p2) as [main2 |] eqn:Hmain2.
+  - destruct (prog_main p1) as [|] eqn:Hmain1;
+      destruct (prog_main p2) as [|] eqn:Hmain2.
     + unfold linkable_mains in Hlinkable_mains.
       rewrite Hmain1 Hmain2 in Hlinkable_mains.
       discriminate.
     + (* main is in p1.*)
-      unfold program_link in Hmain.
-      rewrite Hmain1 in Hmain.
-      simpl in Hmain.
-      inversion Hmain; subst mainP; clear Hmain.
+      (* unfold program_link in Hmain. *)
+      (* rewrite Hmain1 in Hmain. *)
+      (* simpl in Hmain. *)
+      (* inversion Hmain; subst mainP; clear Hmain. *)
       (* Likewise main_procs (used only in second sub-goal). *)
       unfold program_link in Hprocs; simpl in Hprocs.
       destruct (wfprog_main_existence Hwf1 Hmain1)
         as [main_procs1 [Hmain_procs1 Hin1]].
       rewrite unionmE Hmain_procs1 in Hprocs.
-      inversion Hprocs; subst main_procs; clear Hprocs.
+      (* inversion Hprocs; subst main_procs; clear Hprocs. *)
       (* Instantiate and solve. *)
-      exists main1, main_procs1. split; [| split].
+      exists main_procs1. split; [| split].
       * unfold program_link.
         rewrite Hmain1.
         reflexivity.
@@ -1014,14 +1006,15 @@ Proof.
         reflexivity.
       * assumption.
     + (* main is in p2'. *)
-      destruct (prog_main p2') as [main2' |] eqn:Hmain2';
-        last (apply Hmatching_mains in Hmain2';
-              rewrite Hmain2' in Hmain2;
-              inversion Hmain2).
+      destruct (prog_main p2') as [|] eqn:Hmain2';
+      last (destruct Hmatching_mains as [Hmatching_mains _];
+            rewrite Hmatching_mains in Hmain2';
+            last assumption;
+            inversion Hmain2').
       (* Likewise main_procs (used only in second sub-goal). *)
       destruct (wfprog_main_existence Hwf2' Hmain2')
         as [main_procs2' [Hmain_procs2' Hin2']].
-      exists main2', main_procs2'. split; [| split].
+      exists main_procs2'. split; [| split].
       * unfold program_link.
         rewrite Hmain1 Hmain2'.
         reflexivity.
@@ -1050,18 +1043,17 @@ Lemma interface_implies_matching_mains :
 Proof.
   intros p1 p2 Hwf1 Hwf2 Hiface.
   unfold matching_mains.
-  destruct (prog_main p1) as [main1 |] eqn:Hcase1;
-    destruct (prog_main p2) as [main2 |] eqn:Hcase2.
+  destruct (prog_main p1) as [|] eqn:Hcase1;
+    destruct (prog_main p2) as [|] eqn:Hcase2.
   - easy.
-  - split; first easy.
-    exfalso.
+  - split; last easy.
     exfalso.
     inversion Hwf2 as [_ _ _ _ _ _ [Hmain2' _]].
     inversion Hwf1 as [_ _ _ _ _ _ [_ Hmain1']].
     rewrite Hcase1 in Hmain1'. specialize (Hmain1' is_true_true).
     rewrite -> Hcase2, <- Hiface in Hmain2'. apply Hmain2' in  Hmain1'.
     discriminate.
-  - split; last easy.
+  - split; first easy.
     exfalso.
     inversion Hwf1 as [_ _ _ _ _ _ [Hmain1' _]].
     inversion Hwf2 as [_ _ _ _ _ _ [_ Hmain2']].

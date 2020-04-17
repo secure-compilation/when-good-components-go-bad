@@ -75,7 +75,7 @@ Module Type AbstractComponentMemory.
   Axiom domm_prealloc :
     forall bufs m,
       prealloc bufs = m ->
-      size (domm m) = size bufs.
+      domm m = fmap.domm bufs.
 
   Axiom domm_alloc :
     forall m m' n b,
@@ -389,7 +389,7 @@ Module ComponentMemory : AbstractComponentMemory.
   Lemma domm_prealloc :
     forall bufs m,
       prealloc bufs = m ->
-      size (domm m) = size bufs.
+      domm m = fmap.domm bufs.
   Admitted.
 
   Lemma domm_alloc :
@@ -403,11 +403,49 @@ Module ComponentMemoryExtra.
   Import ComponentMemory.
   (* RB: NOTE: Prove composition as needed. Blocks are emitted in the same order
      as the sequence of single calls. *)
-  Fixpoint reserve_blocks (mem : t) (n : nat) : t * list Block.id :=
+  Definition reserve_blocks (mem : t) (n : nat) : t * list Block.id :=
     let acc '(mem, bs) :=
         let '(mem', b) := reserve_block mem in
         (mem', bs ++ [b]) in
     iter n acc (mem, []).
+
+  Lemma reserve_blocks_length (mem mem' : t) (n : nat) (bs : list Block.id) :
+    ComponentMemoryExtra.reserve_blocks mem n = (mem', bs) ->
+    length bs = n.
+  Proof.
+    generalize dependent mem'. generalize dependent n.
+    induction bs using rev_ind.
+    - intros n mem' H.
+      destruct n; auto.
+      unfold reserve_blocks in H.
+      simpl in H.
+      destruct (iter n (fun '(mem, bs) => let '(mem', b) := reserve_block mem in (mem', bs ++ [b])) (mem, [])).
+      destruct (reserve_block t0).
+      inversion H. symmetry in H2; now apply app_cons_not_nil in H2.
+    - intros n mem' H.
+      destruct n; auto.
+      + simpl in *. inversion H. now apply app_cons_not_nil in H2.
+      + rewrite app_length plus_comm. simpl.
+        unfold reserve_blocks in H.
+        simpl in H.
+        destruct (iter n (fun '(mem, bs) => let '(mem', b) := reserve_block mem in (mem', bs ++ [b])) (mem, []))
+          as [mem'' bs'] eqn:Hiter.
+        rewrite (IHbs n mem'').
+        reflexivity.
+        destruct (reserve_block mem''). simpl in H.
+        inversion H.
+        assert (bs' = bs).
+        {
+          clear -H2. generalize dependent bs'.
+          induction bs; destruct bs'; intros H; auto.
+          - inversion H. symmetry in H2; now apply app_cons_not_nil in H2.
+          - inversion H; subst; now apply app_cons_not_nil in H2.
+          - inversion H; subst. simpl in *. rewrite (IHbs _ H2); reflexivity.
+        }
+        subst bs'.
+        rewrite -Hiter. reflexivity.
+  Qed.
+
 End ComponentMemoryExtra.
 
 Module Memory.
@@ -1960,7 +1998,8 @@ Proof.
   unfold Memory.store.
   intros mem1 mem1' mem2 ptr v Hstore.
   unfold merge_memories. rewrite unionmE.
-  destruct (mem1 (Pointer.component ptr)) eqn:Hcase1; rewrite Hcase1;
+  destruct (mem1 (Pointer.component ptr)) eqn:Hcase1;
+    rewrite Hcase1 || idtac "ExStructures 0.1 legacy rewrite inactive";
     last discriminate.
   simpl.
   destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) v) eqn:Hcase2;
@@ -1994,7 +2033,8 @@ Proof.
   unfold Memory.alloc.
   intros mem1 mem1' mem2 C ptr size Halloc.
   unfold merge_memories. rewrite unionmE.
-  destruct (mem1 C) as [memC |] eqn:Hcase1; rewrite Hcase1;
+  destruct (mem1 C) as [memC |] eqn:Hcase1;
+    rewrite Hcase1 || idtac "ExStructures 0.1 legacy rewrite inactive";
     last discriminate.
   simpl.
   destruct (ComponentMemory.alloc memC size) as [memC' b].
@@ -2048,7 +2088,8 @@ Section Partial.
     unfold to_partial_memory.
     rewrite filtermE.
     unfold obind, oapp.
-    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    destruct (mem Cid) eqn:Hmem;
+      rewrite Hmem || idtac "ExStructures 0.1 legacy rewrite inactive".
     now rewrite HCid.
     now reflexivity.
   Qed.
@@ -2064,7 +2105,8 @@ Section Partial.
     unfold to_partial_memory.
     rewrite filtermE.
     unfold obind, oapp.
-    destruct (mem Cid) eqn:Hmem; rewrite Hmem.
+    destruct (mem Cid) eqn:Hmem;
+      rewrite Hmem || idtac "ExStructures 0.1 legacy rewrite inactive".
     now rewrite HCid.
     now reflexivity.
   Qed.

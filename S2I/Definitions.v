@@ -17,8 +17,8 @@ End I.
 (* RB: The following should go into its own file. *)
 Definition matching_mains (p1 : Language.Source.program)
                           (p2 : Machine.Intermediate.program) : Prop :=
-  Language.Source.prog_main p1 = None <->
-  Machine.Intermediate.prog_main p2 = None.
+  Language.Source.prog_main p1 <->
+  Machine.Intermediate.prog_main p2.
 
 Require Import Intermediate.Machine.
 Lemma matching_mains_trans : forall p1 p2 p3,

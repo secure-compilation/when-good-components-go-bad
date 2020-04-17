@@ -605,23 +605,6 @@ Proof.
   move => wf_p wf_c (* intf' *) Hback intf_main (* wf_back *).
   unfold matching_mains.
   split.
-  - (* -> *) (* maybe can be done with more finesse *)
-    unfold prog_main. unfold program_unlink. rewrite Hback. simpl. rewrite find_procedure_filter_comp.
-    destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hmain_comp ; rewrite Hmain_comp.
-    + (* contra *)
-      rewrite (find_procedures_of_trace_main intf_main). intro contra. inversion contra.
-    + (*  *)
-      intro Htauto ; clear Htauto.
-      (* either contra or trivial case *)
-      destruct (Intermediate.prog_main p) as [ id | ] eqn: Hmain_prog; first exfalso ; last by [].
-      (* contra : Component.main is not in interface of p but is in its procedures *)
-      (* contradiction with wfprog_defined_procedures (Intermediate.well_formed_program p)  *)
-      apply (Intermediate.wfprog_main_existence wf_p) in Hmain_prog.
-      destruct Hmain_prog as [main_procs [Hcontra _]].
-      have Hcontra_def : domm (Intermediate.prog_interface p) = domm (Intermediate.prog_procedures p) by apply wf_p.
-      have Hcontra' : Component.main \in domm (Intermediate.prog_procedures p) by apply /dommP ; exists main_procs.
-      have Hmain_contra : Component.main \in domm (Intermediate.prog_interface p) by rewrite Hcontra_def.
-      rewrite Hmain_contra in Hmain_comp. inversion Hmain_comp.
   - (* <-, no main in intermediate implies no main in source bactkanslated *)
     unfold prog_main, program_unlink. simpl.
     rewrite find_procedure_filter_comp.
@@ -629,8 +612,17 @@ Proof.
     destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hcase.
     + inversion wf_p as [_ _ _ _ _ _ Hmain_component].
       pose proof (proj1 (Intermediate.wfprog_main_component wf_p) Hcase) as Hmainp.
-      inversion Hmainp as [Hmainp']. rewrite Hinterm in Hmainp'. discriminate.
-    + rewrite Hcase. done.
+      done.
+    + rewrite Hcase in Hinterm. done.
+  - (* -> *) (* maybe can be done with more finesse *)
+    unfold prog_main. unfold program_unlink. rewrite Hback. simpl. rewrite find_procedure_filter_comp.
+    destruct (Component.main \in domm (Intermediate.prog_interface p)) eqn:Hmain_comp ; rewrite Hmain_comp.
+    + intros Hprog_main.
+      rewrite find_procedures_of_trace_main. done.
+      assumption.
+    + intros Hcontra.
+      apply (Intermediate.wfprog_main_component wf_p) in Hcontra.
+      rewrite Hmain_comp in Hcontra. done.
 Qed.
 
 (* Definability *)
@@ -660,7 +652,7 @@ Proof.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
   have Hclosed_intf : closed_interface intf by case: Hclosed.
   have intf_main : intf Component.main.
-    case: Hclosed => _ [? [main_procs [? [/= e ?]]]].
+    case: Hclosed => [? [main_procs [? [/= e ?]]]].
     rewrite /intf -mem_domm domm_union.
     do 2![rewrite Intermediate.wfprog_defined_procedures //].
     by rewrite -domm_union mem_domm e.
@@ -689,7 +681,7 @@ Proof.
   have wf_events : all (well_formed_event intf) m'.
     by apply: CS.intermediate_well_formed_events Hstar.
   have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m'.
-    have [mainP [_ [HmainP _]]] := Intermediate.cprog_main_existence Hclosed.
+    have [mainP [HmainP _]] := Intermediate.cprog_main_existence Hclosed.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
     exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c.
   have := definability Hclosed_intf intf_main wf_m.

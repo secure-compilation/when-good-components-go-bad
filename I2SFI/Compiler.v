@@ -1196,8 +1196,8 @@ Definition compile_program (ip : Intermediate.program) :=
   let pr_progs := convert_prog_procs (Intermediate.prog_procedures ip) in
 
   let mpid := match (Intermediate.prog_main ip) with
-              | None => (N.of_nat Procedure.main)
-              | Some id => N.of_nat id
+              | false => (N.of_nat Procedure.main)
+              | true => N.of_nat Procedure.main
               end in
 
   let cn := gen_cn cip in

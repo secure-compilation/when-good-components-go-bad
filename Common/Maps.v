@@ -11,7 +11,13 @@ Set Bullet Behavior "Strict Subproofs".
 
 Definition NMap T := {fmap nat -> T}.
 
-Definition elementsm {A: Type} : NMap A -> list (nat * A) := @FMap.fmval nat_ordType A _.
+Definition elementsm {A: Type} : NMap A -> list (nat * A).
+Proof.
+     exact (@FMap.fmval nat_ordType A _)
+  ||
+     idtac "ExStructures 0.1 legacy definition inactive";
+     exact (@FMap.fmval nat_ordType A).
+Defined.
 
 (* RB: TODO: These lemmas, with their clean proofs, probably belong in CoqUtils. *)
 
@@ -105,7 +111,9 @@ Lemma getm_filterm_notin_domm :
 Proof.
   intros T T' m1 m2 k Hnotin.
   rewrite filtermE Hnotin.
-  destruct (m2 k) as [v |] eqn:Hcase; now rewrite Hcase.
+  destruct (m2 k) as [v |] eqn:Hcase;
+    rewrite Hcase || idtac "ExStructures 0.1 legacy rewrite inactive";
+    done.
 Qed.
 
 (* Set and filter commute if the key is outside the domain of filter. *)
@@ -134,7 +142,8 @@ Proof.
   apply /eq_fmap => n.
   rewrite !filtermE.
   unfold obind. unfold oapp.
-  destruct (m n) eqn:Hcase; rewrite Hcase.
+  destruct (m n) eqn:Hcase;
+    rewrite Hcase || idtac "ExStructures 0.1 legacy rewrite inactive".
   -  destruct (n \notin domm m2) eqn:Hcase'; rewrite Hcase'.
      + destruct (n \notin domm m1) eqn:Hcase''; rewrite Hcase''.
        ++ assert (n \notin domm (unionm m1 m2)).
@@ -163,7 +172,8 @@ Lemma mapm_id : forall (T : Type) (i: NMap T), mapm id i = i.
 Proof.
   move=> T i. apply /eq_fmap => n.
   rewrite mapmE. unfold omap, obind, oapp.
-  remember (i n) as v; simpl in *; rewrite <- Heqv.
+  remember (i n) as v; simpl in *;
+    rewrite <- Heqv || idtac "ExStructures 0.1 legacy rewrite inactive".
   now destruct v.
 Qed.
 
@@ -248,12 +258,14 @@ Proof.
     rewrite mem_domm in Heq1; rewrite mem_domm in Heq2.
     move: Heq1 Heq2. rewrite 2!filtermE. unfold obind. unfold oapp.
     destruct (m1 k) eqn:H';
-      rewrite H' Heq => //=. 
+      rewrite H' || idtac "ExStructures 0.1 legacy rewrite inactive";
+      rewrite Heq => //=.
   - subst fn fn'.
     rewrite mem_domm in Heq1; rewrite mem_domm in Heq2.
     move: Heq1 Heq2. rewrite 2!filtermE. unfold obind. unfold oapp.
     destruct (m2 k) eqn:H';
-      rewrite H' Heq => //=. 
+      rewrite H' || idtac "ExStructures 0.1 legacy rewrite inactive";
+      rewrite Heq => //=.
 Qed.
 
 
@@ -335,4 +347,17 @@ Proof.
   apply/eq_fmap=> k; rewrite !filtermE.
   case get_k: (m k)=> [v|] //=.
   case: ifP => //= pkv ; by rewrite pkv.
+Qed.
+
+Lemma domm_map_zip_unzip_same_length_is_equal (T : ordType) (U V : Type) (l : list (T * U)) (l' : list V) :
+  length l = length l' ->
+  domm (mkfmap (T := T) (seq.zip (seq.unzip1 l) l')) = domm (mkfmap (T := T) l).
+Proof.
+  generalize dependent l'.
+  induction l; intros l' H.
+  - now destruct l'.
+  - destruct l'; inversion H.
+    simpl.
+    rewrite 2!domm_set. rewrite IHl. reflexivity.
+    assumption.
 Qed.

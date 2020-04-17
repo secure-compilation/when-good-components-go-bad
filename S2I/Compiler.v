@@ -309,17 +309,17 @@ Admitted.
 
 Definition wrap_main (procs_labels: NMap (NMap label)) (p: Intermediate.program) : COMP Intermediate.program :=
   match p.(Intermediate.prog_main) with
-  | Some P =>
+  | true =>
     do procs <- lift (getm p.(Intermediate.prog_procedures) Component.main);
     do P_labels <- lift (getm procs_labels Component.main);
-    do lab <- lift (getm P_labels P);
+    do lab <- lift (getm P_labels Procedure.main);
     let P' := generate_fresh_procedure_id Component.main (p.(Intermediate.prog_procedures)) in
     let procs' := setm procs P' [IConst (IInt 1) R_ONE; IJal lab ; IHalt] in
     ret {| Intermediate.prog_interface := p.(Intermediate.prog_interface);
            Intermediate.prog_procedures := setm p.(Intermediate.prog_procedures) Component.main procs';
            Intermediate.prog_buffers := p.(Intermediate.prog_buffers);
            Intermediate.prog_main := Some P' |}
-  | None => ret p
+  | false => ret p
   end.
 
 Definition compile_program
@@ -355,7 +355,9 @@ Proof.
     try discriminate.
   simpl in Hcompile.
   destruct (lift ((mkfmap (T:=nat_ordType) code) Component.main) cenv2) as [[]|] eqn:Hlift_mkfmap;
-    simpl in *; rewrite Hlift_mkfmap in Hcompile; try discriminate.
+    simpl in *;
+    rewrite Hlift_mkfmap in Hcompile || idtac "ExStructures 0.1 legacy rewrite inactive";
+    try discriminate.
   destruct (lift (labels Component.main) c) as [[main_label cenv3]|] eqn:Hlift_main_label_C;
     try discriminate.
   destruct (lift (main_label Procedure.main) cenv3) as [[]|] eqn:Hlift_main_label_P;
@@ -384,10 +386,10 @@ Lemma compilation_preserves_main :
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
     (exists main, Source.prog_main p = Some main) <->
-    (exists main, Intermediate.prog_main p_compiled = Some main).
+    Intermediate.prog_main p_compiled.
 Proof.
   intros p p_compiled Hp_well_formed Hp_compiles.
-  split; intros [main Hmain].
+  split; intros [].
   - admit.
   - admit.
 Admitted.
@@ -406,17 +408,20 @@ Proof.
   pose proof compilation_preserves_main Hwf2 Hcomp2 as Hmain2.
   destruct (Source.prog_main p1) as [mainp1 |];
     destruct (Source.prog_main p2) as [mainp2 |];
-    destruct (Intermediate.prog_main p1') as [mainp1' |];
-    destruct (Intermediate.prog_main p2') as [mainp2' |];
+    destruct (Intermediate.prog_main p1') as [|];
+    destruct (Intermediate.prog_main p2') as [|];
     try reflexivity.
   - inversion Hmains.
     Ltac some_eq_none_contra Hcontra id :=
       destruct Hcontra as [_ Hcontra];
       specialize (Hcontra (ex_intro (fun x => Some id = Some x) id eq_refl));
       now destruct Hcontra.
-  - some_eq_none_contra Hmain2 mainp2'.
-  - some_eq_none_contra Hmain1 mainp1'.
-  - some_eq_none_contra Hmain1 mainp1'.
+  - destruct Hmain2 as [Hmain2 Hmain2'].
+    destruct (Hmain2' eq_refl) as [? Hcontra]; inversion Hcontra.
+  - destruct Hmain1 as [Hmain1 Hmain1'].
+    destruct (Hmain1' eq_refl) as [? Hcontra]; inversion Hcontra.
+  - destruct Hmain1 as [Hmain1 Hmain1'].
+    destruct (Hmain1' eq_refl) as [? Hcontra]; inversion Hcontra.
 Qed.
 
 Remark mains_without_source : forall p pc pc',
@@ -428,9 +433,8 @@ Proof.
   intros p pc pc' Hwf Hcomp Hmain.
   pose proof compilation_preserves_main Hwf Hcomp as [Hpreserve1 Hpreserve2].
   rewrite Hmain in Hpreserve2.
-  destruct (Intermediate.prog_main pc) as [pc'' |] eqn: Hpc.
-  - assert (exists main, Some pc'' = Some main) as Heq by now exists pc''.
-    specialize (Hpreserve2 Heq). inversion Hpreserve2. inversion H.
+  destruct (Intermediate.prog_main pc) as [|] eqn: Hpc.
+  - specialize (Hpreserve2 eq_refl) as [? Hcontra]; inversion Hcontra.
   - unfold Intermediate.linkable_mains. rewrite Hpc. reflexivity.
 Qed.
 

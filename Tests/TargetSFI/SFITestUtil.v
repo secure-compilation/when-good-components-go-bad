@@ -57,6 +57,12 @@ Definition hex2N (s : string) : N :=
   
 Definition show_pos (p : positive) := show_nat (Pos.to_nat p).
 
+Definition show_Z (n : Z) : string.
+     (exact (show_Z n); idtac "QuickChick 1.0.0 legacy definition inactive")
+  ||
+     exact (show_int n).
+Defined.
+
 Definition show_value (v : RiscMachine.value) := show_Z v.
 
 Definition show_N ( n : N ) := show_nat (N.to_nat n).

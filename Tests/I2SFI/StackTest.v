@@ -20,6 +20,8 @@ From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 Import GenLow GenHigh.
 
+Open Scope string.
+
 Inductive stack_op := Push | Pop.
 Definition stack_log_entry := (RiscMachine.pc
                            * RiscMachine.address

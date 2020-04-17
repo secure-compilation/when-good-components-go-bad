@@ -23,7 +23,9 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssreflect.eqtype.
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 
-Definition newline := String "010" ""%string.
+Open Scope string.
+
+Definition newline := String "010" "".
 
 Instance show_pos : Show positive :=
   {|

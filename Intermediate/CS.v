@@ -90,16 +90,16 @@ Qed.
 
 Definition initial_machine_state (p: program) : state :=
   match prog_main p with
-  | Some mainP =>
+  | true =>
     let '(mem, _, entrypoints) := prepare_procedures_initial_memory p in
     let regs := Register.init in
-    let b := match EntryPoint.get Component.main mainP entrypoints with
+    let b := match EntryPoint.get Component.main Procedure.main entrypoints with
              | Some b => b
              | None => 0 (* This case shouldn't happen for a well-formed p *)
              end in
     ([], mem, regs, (Component.main, b, 0%Z))
   (* this case shoudln't happen for a well-formed p *)
-  | None => ([], emptym, emptym, (Component.main, 0, 0%Z))
+  | false => ([], emptym, emptym, (Component.main, 0, 0%Z))
   end.
 
 (* A slightly hacky way to express the initial pc of a linked program as a
@@ -107,12 +107,12 @@ Definition initial_machine_state (p: program) : state :=
    following theorem. *)
 Definition prog_main_block (p : program) : Block.id :=
   match prog_main p with
-  | Some mainP =>
-    match EntryPoint.get Component.main mainP (prepare_procedures_entrypoints p) with
+  | true =>
+    match EntryPoint.get Component.main Procedure.main (prepare_procedures_entrypoints p) with
     | Some b => b
     | None => 0
     end
-  | None => 0
+  | false => 0
   end.
 
 Lemma prog_main_block_no_main:
@@ -125,7 +125,7 @@ Proof.
   unfold prog_main_block. (* Enable automatic rewrite on destruct. *)
   destruct (prog_main p) as [main |] eqn:Hmain'.
   - (* https://github.com/coq/coq/issues/5129 *)
-    inversion Hwf as [BUGGY _ _ _ _ _ [_ Hcontra]]; clear BUGGY.
+    inversion Hwf as [BUGGY _ _ _ _ _ [BUGGY' Hcontra]]; clear BUGGY BUGGY'.
     rewrite Hmain' in Hcontra. specialize (Hcontra (eq_refl _)).
     rewrite Hcontra in Hdomm.
     discriminate.
@@ -149,7 +149,7 @@ Theorem initial_machine_state_after_linking:
 Proof.
   intros p c Hwfp Hwfc Hlinkable Hclosed.
   unfold initial_machine_state.
-  inversion Hclosed as [_ [mainpc [procspc [Hmainpc [Hprocspc Hdommpc]]]]];
+  inversion Hclosed as [_ [mainpc [Hmainpc [Hprocspc Hdommpc]]]];
     rewrite Hmainpc.
   rewrite -> prepare_procedures_initial_memory_after_linking;
     try assumption;
@@ -164,8 +164,7 @@ Proof.
     inversion Hlinkable as [_ Hdisjoint].
     eapply fdisjoint_partition_notinboth; eassumption.
   - (* RB: NOTE: As usual, the following two cases are symmetric. *)
-    simpl in Hmainpc. rewrite Hmainp in Hmainpc.
-    inversion Hmainpc; subst mainpc.
+    simpl in Hmainpc. rewrite Hmainp in Hmainpc; simpl in Hmainpc.
     unfold prog_main_block, EntryPoint.get.
     rewrite Hmainp, Hmainc, unionmE.
     pose proof proj2 (wfprog_main_component Hwfp) as Hdommp.
@@ -174,7 +173,7 @@ Proof.
     destruct (Component.main \in domm (prog_interface c)) eqn:Hcase;
       first (specialize (Hdommc isT); now rewrite Hmainc in Hdommc).
     rewrite <- domm_prepare_procedures_entrypoints in Hdommp, Hcase.
-    destruct (dommP _ _ Hdommp) as [entrypointsp Hentrypointsp].
+    destruct (@dommP _ _ _ _ Hdommp) as [entrypointsp Hentrypointsp].
     do 2 setoid_rewrite Hentrypointsp.
     now rewrite Nat.add_0_r.
   - (* Deal with the symmetries upfront; because of disjointness it is also
@@ -184,8 +183,7 @@ Proof.
            try rewrite 2!domm_prepare_procedures_entrypoints;
            now inversion Hlinkable).
     (* Proceed (no symmetry on the hypothesis, here). *)
-    simpl in Hmainpc. rewrite Hmainp, Hmainc in Hmainpc.
-    inversion Hmainpc; subst mainpc.
+    simpl in Hmainpc. rewrite Hmainp, Hmainc in Hmainpc; simpl in Hmainpc.
     unfold prog_main_block, EntryPoint.get.
     rewrite Hmainp, Hmainc, unionmE.
     pose proof proj2 (wfprog_main_component Hwfc) as Hdommc.
@@ -194,7 +192,7 @@ Proof.
     destruct (Component.main \in domm (prog_interface p)) eqn:Hcase;
       first (specialize (Hdommp isT); now rewrite Hmainp in Hdommp).
     rewrite <- domm_prepare_procedures_entrypoints in Hdommc, Hcase.
-    destruct (dommP _ _ Hdommc) as [entrypointsc Hentrypointsc].
+    destruct (@dommP _ _ _ _ Hdommc) as [entrypointsc Hentrypointsc].
     do 2 setoid_rewrite Hentrypointsc.
     reflexivity.
   - (* Another easy/contra goal. *)
@@ -1009,14 +1007,14 @@ case: st1 t1 st2 / Hstep => //=.
 - by move=> ??????? /eqP ->.
 Qed.
 
-Lemma intermediate_well_formed_trace : forall mainP t cs cs',
+Lemma intermediate_well_formed_trace : forall t cs cs',
   Star sem cs t cs' ->
   CS.initial_state p cs ->
-  Intermediate.prog_main p = Some mainP ->
+  Intermediate.prog_main p ->
   Intermediate.well_formed_program p ->
   well_formed_trace (Intermediate.prog_interface p) t.
 Proof.
-  intros mainP t cs cs' H H' H'' H'''.
+  intros t cs cs' H H' H'' H'''.
   unfold well_formed_trace. apply/andP; split; last by apply: intermediate_well_formed_events H.
   apply intermediate_well_bracketed_trace in H.
   suffices <- : stack_state_of cs = stack_state0 by [].
@@ -1065,9 +1063,9 @@ Proof.
 Qed.
 
 Definition comes_from_initial_state (s: state) (iface : Program.interface) : Prop :=
-  exists p mainP s0 t,
+  exists p s0 t,
     well_formed_program p /\
-    prog_main p = Some mainP /\
+    prog_main p /\
     prog_interface p = iface /\
     initial_state p s0 /\
     Star (sem p) s0 t s.
@@ -1076,16 +1074,16 @@ Remark comes_from_initial_state_mem_domm s ctx :
   comes_from_initial_state s ctx ->
   domm (state_mem s) = domm ctx.
 Proof.
-  intros [p [main [s0 [t [Hwf [Hmain [Hiface [Hini Hstar]]]]]]]].
+  intros [p [s0 [t [Hwf [Hmain [Hiface [Hini Hstar]]]]]]].
   apply star_iff_starR in Hstar.
-  revert ctx main Hwf Hmain Hiface Hini.
+  revert ctx Hwf Hmain Hiface Hini.
   induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
     subst;
-    intros ctx main Hwf Hmain Hiface Hini.
+    intros ctx Hwf Hmain Hiface Hini.
   - unfold initial_state, initial_machine_state in Hini; subst s.
     rewrite Hmain. simpl.
     rewrite domm_map domm_prepare_procedures_initial_memory_aux. congruence.
-  - specialize (IHHstar _ _ Hwf Hmain Hiface Hini).
+  - specialize (IHHstar _ Hwf Hmain Hiface Hini).
     apply step_preserves_mem_domm in Hstep23. congruence.
 Qed.
 
@@ -1093,15 +1091,15 @@ Lemma comes_from_initial_state_stack_domm s ctx :
   comes_from_initial_state s ctx ->
   All (fun frame => Pointer.component frame \in domm ctx) (state_stack s).
 Proof.
-  intros [p [main [s0 [t [Hwf [Hmain [Hiface [Hini Hstar]]]]]]]].
+  intros [p [s0 [t [Hwf [Hmain [Hiface [Hini Hstar]]]]]]].
   apply star_iff_starR in Hstar.
-  revert ctx main Hwf Hmain Hiface Hini.
+  revert ctx Hwf Hmain Hiface Hini.
   induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
     subst;
-    intros ctx main Hwf Hmain Hiface Hini.
+    intros ctx Hwf Hmain Hiface Hini.
   - unfold initial_state, initial_machine_state in Hini; subst s.
     now rewrite Hmain.
-  - specialize (IHHstar _ _ Hwf Hmain Hiface Hini).
+  - specialize (IHHstar _ Hwf Hmain Hiface Hini).
     (* Case analysis on the step. Most operations do not modify the stack, and
        returns only pop. *)
     inversion Hstep23; subst;
@@ -1133,16 +1131,16 @@ Lemma comes_from_initial_state_pc_domm s ctx :
   comes_from_initial_state s ctx ->
   Pointer.component (state_pc s) \in domm ctx.
 Proof.
-  intros [p [main [s0 [t [Hwf [Hmain [Hctx [Hinitial Hstar]]]]]]]].
-  revert main Hwf Hmain Hctx Hinitial.
+  intros [p [s0 [t [Hwf [Hmain [Hctx [Hinitial Hstar]]]]]]].
+  revert Hwf Hmain Hctx Hinitial.
   apply star_iff_starR in Hstar.
   induction Hstar as [| s1 t1 s2 t2 s3 ? Hstar12 IHHstar Hstep23];
     subst;
-    intros main Hwf Hmain Hctx Hinitial.
+    intros Hwf Hmain Hctx Hinitial.
   - unfold initial_state, initial_machine_state in Hinitial; subst.
     rewrite Hmain.
     apply (wfprog_main_component Hwf). now rewrite Hmain.
-  - specialize (IHHstar main Hwf Hmain Hctx Hinitial).
+  - specialize (IHHstar Hwf Hmain Hctx Hinitial).
     inversion Hstep23; subst; simpl;
       match goal with
       | Hlabel : find_label_in_component _ _ _ = _
@@ -1323,8 +1321,8 @@ Section ProgramLink.
     assert (H : Pointer.component pc \in domm (prog_interface (program_link p c))).
     { replace pc with (CS.state_pc (st, mem, reg, pc)); try reflexivity.
       apply CS.comes_from_initial_state_pc_domm.
-      destruct (cprog_main_existence Hprog_is_closed) as [i [_ [? _]]].
-      exists (program_link p c), i, s, t.
+      destruct (cprog_main_existence Hprog_is_closed) as [_ [? _]].
+      exists (program_link p c), s, t.
       split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
       repeat split; eauto. }
     move: H. simpl. rewrite domm_union. now apply /fsetUP.

@@ -135,13 +135,15 @@ Qed.
 Lemma genv_entrypoints_interface_some p p' C P b (* pc *) :
   (* Pointer.component pc \in domm (prog_interface p) -> *)
   (* imported_procedure (genv_interface (globalenv sem')) (Pointer.component pc) C P -> *)
+  well_formed_program p ->
+  well_formed_program p' ->
   prog_interface p = prog_interface p' ->
   EntryPoint.get C P (genv_entrypoints (prepare_global_env p )) = Some b ->
 exists b',
   EntryPoint.get C P (genv_entrypoints (prepare_global_env p')) = Some b'.
 Proof.
-  move=> Hiface.
-  unfold EntryPoint.get, prepare_global_env, genv_entrypoints; simpl.
+  move=> Hwf Hwf' Hiface.
+  unfold EntryPoint.get (*, prepare_global_env *) (*, genv_entrypoints *); simpl.
   (* move=> H; exists b; rewrite -H; clear H. *)
   unfold prepare_procedures_initial_memory_aux.
   unfold elementsm, odflt, oapp.
@@ -151,9 +153,240 @@ Proof.
   rewrite -Hiface.
   destruct (C \in domm (prog_interface p)) eqn:HC.
   - rewrite HC.
-    admit.
+    intro HSome.
+    destruct ((prog_procedures p) C) as [procs |] eqn:Hcase1;
+      last discriminate.
+    assert (exists procs', (prog_procedures p') C = Some procs') as [procs' Hcase1'].
+    { apply /dommP.
+      rewrite -(wfprog_defined_procedures Hwf') -Hiface (wfprog_defined_procedures Hwf).
+      apply /dommP. now exists procs. }
+    (* JT: TODO: Clean up this step *)
+    assert (Hbufs: prog_buffers p C <> None).
+    { intros Hn.
+      have: (exists procs, prog_procedures p C = Some procs) by (now exists procs).
+      move=> /dommP[H].
+      move: Hn => /dommPn[H'].
+      move: H H'.
+      rewrite -(wfprog_defined_buffers Hwf) -(wfprog_defined_procedures Hwf) => H1 H2.
+      exfalso. move: H2 => /negP. by []. }
+    destruct ((prog_buffers p) C) as [bufs |] eqn:Hcase2;
+      last contradiction.
+    assert (exists bufs', (prog_buffers p') C = Some bufs') as [bufs' Hcase2'].
+    { apply /dommP.
+      rewrite -(wfprog_defined_buffers Hwf') -Hiface (wfprog_defined_buffers Hwf).
+      apply /dommP. now exists bufs. }
+    rewrite -> Hcase1', Hcase2'.
+    (* RB: NOTE: For now, phrase in terms of domains. *)
+    assert (P \in domm (reserve_component_blocks p C (ComponentMemory.prealloc bufs) procs).2) as Hdomm.
+    {
+      apply /dommP. eauto. (* RB: TODO: Clean up this step. *)
+    }
+    apply /dommP.
+    (* Continue to case analyze both machines in sync. *)
+    unfold reserve_component_blocks. unfold reserve_component_blocks in Hdomm.
+    destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs) (length procs))
+      as [Cmem bs] eqn:Hblocks.
+    destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs') (length procs'))
+      as [Cmem' bs'] eqn:Hblocks'.
+    rewrite domm_mkfmap. rewrite domm_mkfmap in Hdomm.
+    rewrite <- Hiface.
+    assert (Hmain : matching_mains p p') by now apply interface_implies_matching_mains.
+    destruct (prog_main p) as [|] eqn:Hcase3;
+      destruct (prog_main p') as [|] eqn:Hcase4.
+    + match goal with
+      | |- is_true (P \in seq.unzip1 (seq.pmap ?F ?L)) => remember F as fmap eqn:Hfmap
+      end.
+      simpl in Hfmap.
+      rewrite -domm_mkfmap. rewrite -domm_mkfmap in Hdomm.
+      remember (seq.zip (seq.unzip1 procs') bs') as l' eqn:Hl'.
+      remember (seq.zip (seq.unzip1 procs) bs) as l eqn:Hl.
+      destruct (prog_interface p C) as [iface |] eqn:Hiface_eq.
+      * assert (Hin: forall l,
+                   P \in domm (mkfmap (seq.pmap fmap l)) <->
+                         (P \in Component.export iface \/ (P = 0 /\ C = 0)) /\ P \in domm (mkfmap l)).
+        {
+          clear -Hfmap.
+          intros l; subst; split.
+          - intros H; induction l.
+            + move: H => /dommP [v Hv]; by [].
+            + simpl in H; unfold oapp in H.
+              destruct a as [P' b']; destruct (P' \in Component.export iface) eqn:HP';
+                rewrite HP' in H; simpl in H.
+              * move: H; rewrite domm_set => /fsetU1P.
+                move=> [Heq | Hdomm]; subst.
+                -- split; first now left.
+                   rewrite domm_set; simpl.
+                   apply /fsetU1P; now left.
+                -- specialize (IHl Hdomm) as [IH1 IH2].
+                   split; try assumption.
+                   rewrite domm_set; apply /fsetU1P; now right.
+              * destruct C eqn:HeqC; destruct P' eqn:HeqP'; simpl in *;
+                  try (specialize (IHl H) as [IH1 IH2]; split; first assumption;
+                       rewrite domm_set in_fsetU; apply /orP; now right).
+                move: H; rewrite domm_set => /fsetU1P [Heq | Hdomm]; subst.
+                -- split; first now right.
+                   rewrite domm_set; simpl. apply /fsetU1P; now left.
+                -- specialize (IHl Hdomm) as [IH1 IH2].
+                   split; first assumption.
+                   rewrite domm_set in_fsetU. apply /orP; now right.
+          - move=> [H1 H2].
+            induction l.
+            + case: H2. by [].
+            + simpl; unfold oapp.
+              destruct a as [P' b']; destruct (P' \in Component.export iface) eqn:HP';
+                rewrite HP'; simpl.
+              * simpl in *.
+                move: H2. rewrite domm_set in_fsetU => /orP. move => [H2 | H2].
+                move: H2 => /fset1P Heq; subst.
+                rewrite domm_set; apply /fsetU1P; now left.
+                rewrite domm_set; apply /fsetU1P; right.
+                now apply IHl.
+              * destruct C eqn:HeqC; destruct P' eqn:HeqP'; simpl in *;
+                  try (apply IHl;
+                       move: H2; rewrite domm_set in_fsetU => /orP [H2 | H2]; last assumption;
+                                                             move: H2; rewrite in_fset1; rewrite eqtype.eqE; simpl;
+                                                             intros H; assert (Heq: P = S s) by (now apply /ssrnat.eqnP); subst P;
+                                                             rewrite HP' in H1; destruct H1 as [? | [? ?]]; congruence).
+                -- rewrite domm_set in_fsetU; apply /orP.
+                   destruct P; first now left.
+                   right. apply IHl.
+                   move: H2; rewrite domm_set in_fsetU => /orP [H2 | H2]; last assumption.
+                   inversion H2.
+                -- apply IHl.
+                   destruct P. destruct H1. rewrite HP' in H. congruence.
+                   destruct H. congruence.
+                   move: H2; rewrite domm_set in_fsetU => /orP [H2 | H2]; last assumption.
+                   inversion H2.
+        }
+        apply Hin in Hdomm as [Hdomm1 Hdomm2].
+        apply Hin; split; try assumption. simpl in *.
+        (* now we are left to prove that domm (mkfmap l') ⊆ domm (mkfmap l) *)
+        subst l l'.
+        rewrite domm_map_zip_unzip_same_length_is_equal;
+          last (symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks')).
+        rewrite domm_map_zip_unzip_same_length_is_equal in Hdomm2;
+          last (symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks)).
+        
+        (* Now we can conclude by well-formedness of p' *)
+        clear -Hiface_eq Hdomm2 Hdomm1 Hiface Hcase1 Hcase1' Hwf Hwf'.
+        assert (Hiface_eq': prog_interface p' C = Some iface) by now rewrite -Hiface.
+        destruct Hdomm1 as [Hdomm1 | Hdomm1].
+        -- assert (His_exporting': Component.is_exporting iface P) by assumption.
+           pose proof wfprog_exported_procedures_existence Hwf' Hiface_eq' His_exporting'
+             as [procs'' [? [? ?]]].
+           assert (procs' = procs'') by congruence; subst procs''.
+           apply /dommP. exists x.
+           rewrite mkfmapE. assumption.
+        -- destruct Hdomm1; subst.
+           pose proof (wfprog_main_existence Hwf').
+           destruct H as [main_procs [H1 H2]]. apply (wfprog_main_component Hwf').
+           apply /dommP; exists iface; unfold Component.main; auto.
+           unfold Component.main in *; unfold Procedure.main in *.
+           assert (main_procs = procs') by congruence.
+           subst; auto. rewrite domm_mkfmap.
+           unfold domm in *. (* ... *)
+           rewrite in_fset in H2. assumption.
+      * assert (H: seq.pmap fmap l = []).
+        {
+          clear -Hfmap.
+          subst.
+          induction l. by [].
+          rewrite //= /oapp; now destruct a.
+        }
+        rewrite H in Hdomm; clear -Hdomm; exfalso.
+        move: Hdomm => //=. apply /negP.
+        now rewrite domm0.
+    + now rewrite -> (proj1 Hmain Hcase3) in Hcase4. (* Contra. *)
+    + now rewrite -> (proj2 Hmain Hcase4) in Hcase3. (* Contra. *)
+    + (* Finish synchronizing both runs. Refer to first case as needed. Since
+         there are no main procedures, the complications of that case are
+         avoided here. *)
+      match goal with
+      | |- is_true (P \in seq.unzip1 (seq.pmap ?F ?L)) => remember F as fmap eqn:Hfmap
+      end.
+
+      (* First attempt *)
+      rewrite -domm_mkfmap. rewrite -domm_mkfmap in Hdomm.
+      remember (seq.zip (seq.unzip1 procs') bs') as l' eqn:Hl'.
+      remember (seq.zip (seq.unzip1 procs) bs) as l eqn:Hl.
+      destruct (prog_interface p C) as [iface |] eqn:Hiface_eq.
+      * (* this assert helps simplify the expression *)
+        assert (Hin : forall l,
+                   P \in domm (mkfmap (seq.pmap fmap l)) <->
+                         (P \in Component.export iface /\ P \in domm (mkfmap l))).
+        { clear -Hfmap.
+          intros l.
+          subst.
+          split.
+          - intros H.
+            induction l.
+            + move: H => /dommP [v Hv]; case: Hv. by [].
+            + simpl in H; unfold oapp in H.
+              destruct a as [P' b']; destruct (P' \in Component.export iface) eqn:HP';
+                rewrite HP' in H; simpl in H.
+              * move: H; rewrite domm_set => /fsetU1P.
+                move=> [Heq | Hdomm]; subst.
+                -- split; first assumption.
+                   rewrite domm_set.
+                   simpl; apply /fsetU1P; now left.
+                -- specialize (IHl Hdomm) as [IH1 IH2].
+                   split; try assumption.
+                   rewrite domm_set; apply /fsetU1P; now right.
+              * simpl in *.
+                specialize (IHl H) as [IH1 IH2].
+                split; first assumption.
+                rewrite domm_set. rewrite in_fsetU.
+                apply /orP. now right.
+          - move=> [H1 H2].
+            induction l.
+            + case: H2. by [].
+            + simpl; unfold oapp.
+              destruct a as [P' b']; destruct (P' \in Component.export iface) eqn:HP';
+                rewrite HP'; simpl.
+              * simpl in *.
+                move: H2. rewrite domm_set in_fsetU => /orP. move => [H2 | H2].
+                move: H2 => /fset1P Heq; subst.
+                rewrite domm_set; apply /fsetU1P; now left.
+                rewrite domm_set; apply /fsetU1P; right.
+                now apply IHl.
+              * simpl in *.
+                apply IHl.
+                move: H2. rewrite domm_set in_fsetU => /orP. move=> [H2 | H3]; last assumption.
+                move: H2; rewrite in_fset1.
+                rewrite eqtype.eqE. simpl.
+                intros H. assert (Heq: P = P') by now apply /ssrnat.eqnP.
+                rewrite Heq in H1. rewrite HP' in H1. inversion H1.
+        }
+        apply Hin in Hdomm as [Hdomm1 Hdomm2].
+        apply Hin; split; try assumption. simpl in *.
+        (* now we are left to prove that domm (mkfmap l') ⊆ domm (mkfmap l) *)
+        subst l l'.
+        rewrite domm_map_zip_unzip_same_length_is_equal;
+          last (symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks')).
+        rewrite domm_map_zip_unzip_same_length_is_equal in Hdomm2;
+          last (symmetry; apply (ComponentMemoryExtra.reserve_blocks_length _ _ _ _ Hblocks)).
+
+        (* Now we can conclude by well-formedness of p' *)
+        clear -Hiface_eq Hdomm2 Hdomm1 Hiface Hcase1 Hcase1' Hwf Hwf'.
+        assert (Hiface_eq': prog_interface p' C = Some iface) by now rewrite -Hiface.
+        assert (His_exporting': Component.is_exporting iface P) by assumption.
+        pose proof wfprog_exported_procedures_existence Hwf' Hiface_eq' His_exporting'
+          as [procs'' [? [? ?]]].
+        assert (procs' = procs'') by congruence; subst procs''.
+        apply /dommP. exists x.
+        rewrite mkfmapE. assumption.
+      * assert (H: seq.pmap fmap l = []).
+        {
+          clear -Hfmap.
+          subst.
+          induction l. by [].
+          rewrite //= /oapp; now destruct a.
+        }
+        rewrite H in Hdomm; clear -Hdomm; exfalso.
+        move: Hdomm => //=. apply /negP.
+        now rewrite domm0.
   - now rewrite HC.
-Admitted.
+Qed.
 
 (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
    operating on an explicit program link, one then being the exact symmetric of

@@ -9,6 +9,8 @@ Require Import Tests.TargetSFI.SFITestUtil.
 From QuickChick Require Import QuickChick.
 Import QcDefaultNotation. Import QcNotation. Open Scope qc_scope.
 
+Open Scope string.
+
 Instance show_albl : Show AbstractMachine.label :=
   {|
     show := fun '(n1,n2) =>

@@ -187,10 +187,12 @@ Definition  get_interm_program
   | Some ctx_interface =>
     let export := (val (Component.export ctx_interface)) in
     let import := (val (Component.import ctx_interface)) in
-    
+
+    (* RB: NOTE: Both branches have become identical. Now perhaps more than
+       before, the "falsey" case may need proper justification. *)
     let pid_main :=  (match (Intermediate.prog_main ip) with
-                      | None => Procedure.main
-                      | Some pid => pid
+                      | false => Procedure.main
+                      | true => Procedure.main
                       end) in
 
     let buffer_ids := if (Nat.eqb Component.main ctx_cid)
@@ -288,7 +290,7 @@ Definition try_all_components_one_by_one
                 (error1 ip newip t_t t_s (ctx_cid::nil) msg)
                 (checker
                    ((sublist t_t t_s) ||
-                     ((sublist t_s t_t) && (negb (cid =? ctx_cid)))))
+                     ((sublist t_s t_t) && (negb (cid =? ctx_cid)%nat))))
             | _ => (* t_t <= t_s *)
               let t_s := get_trace interm_res in
               whenFail

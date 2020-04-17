@@ -115,7 +115,8 @@ Proof.
   { by apply /dommPn. }
   rewrite HNone.
   destruct (Piface C) eqn:Hcase;
-    by rewrite Hcase.
+    rewrite Hcase || idtac "ExStructures 0.1 legacy rewrite inactive";
+    done.
 Qed.
 
 Class HasTurn A := {

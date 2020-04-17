@@ -1,10 +1,13 @@
 *.vo
+*.vok
+*.vos
 *.glob
 *.v.d
 *.aux
 *.cmi
 *.cmx
 *.o
+.*.d
 .coqdeps.d
 Makefile.coq
 MakefileTest.coq
