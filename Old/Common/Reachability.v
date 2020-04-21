@@ -1,4 +1,73 @@
   (*
+  Definition nth_with_nth_proof T (x_default: T) s n : sig (fun (x:T) => x = nth x_default s n).
+  Proof.
+    eexists (nth x_default s n). auto.
+  Qed.
+
+  Print nth_with_nth_proof.
+  *)
+
+  (*
+  Lemma graph_of_mem_exists :
+    forall (m: t) (ncomp: nat) (pf_mem_ncomp: mem_ncomp m ncomp)
+           (pf_load_valid_cid: load_block_valid_cid m),
+    exists graph_of_mem: (finnode_t m ncomp) -> (seq (finnode_t m ncomp)),
+    forall a,
+      map
+        (fun x => (nat_of_ord (fst x), nat_of_ord (snd x)))
+        (graph_of_mem a)
+      =
+      apply_load_block_seq m (nat_of_ord (fst a), nat_of_ord (snd a)).
+  Proof.
+    intros m ncomp pf_mem_ncomp pf_load_valid_cid.
+    eexists.
+    intros a.
+    induction (apply_load_block_seq m (nat_of_ord a.1, nat_of_ord a.2)).
+    - 
+   *)
+
+  
+  (*
+  Definition apply_load_block_seq_fin
+             (m: t)
+             (ncomp: nat)
+             (pf_mem_ncomp: mem_ncomp m ncomp)
+             (pf_load_valid_cid: load_block_valid_cid m)
+             (pair: finnode_t m ncomp)
+    : seq (finnode_t m ncomp).
+  Proof.
+    pose (conv_node := (nat_of_ord (fst pair), nat_of_ord (snd pair))).
+    pose (lblock := apply_load_block_seq m conv_node).
+    induction lblock.
+    - exact nil.
+    - assert (fst a \in domm m).
+      {
+        unfold load_block_valid_cid in pf_load_valid_cid.
+        eapply pf_load_valid_cid with (n := conv_node).
+        SearchAbout in_mem.
+        apply mem_head.
+        SearchAbout in_mem cons.
+        exact (a \in l).
+      }
+  *)
+
+(******************************************************************************)
+
+  (* START FOR-BACKUP-ONLY *)
+  (* START DEFINING REACHABILITY INDUCTIVELY *)
+  Inductive Reachable (m: t) (bs : {fset node_t}) : node_t -> Prop :=
+  | Reachable_refl : forall b, b \in bs -> Reachable m bs b
+  | Reachable_step : forall cid bid b' compMem,
+      Reachable m bs (cid, bid) -> 
+      m (cid) = Some compMem ->
+      b' \in ComponentMemory.load_block compMem bid ->
+      Reachable m bs b'.
+
+  (* END DEFINING REACHABILITY INDUCTIVELY *)
+
+(******************************************************************************)
+
+  (*
   Lemma reachable_paths_with_fuel_increases_max_path_by_fuel :
     forall mem ps ps' fuel,
       reachable_paths_with_fuel' mem ps fuel = ps' ->
@@ -16,6 +85,8 @@
     Definition extend_set_of_paths_one_step (m: t) (ps: {fset path}) : {fset path} :=
     fsetU ps (fset ).
    *)
+
+(******************************************************************************)
 
   (* DEPRECATED: ACCESS WITHOUT PATHS *)
 
