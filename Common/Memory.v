@@ -2,9 +2,7 @@ Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import Common.Linking.
 Require Import Lib.Extra.
-Require Import Lia.
-Require Import Coq.Logic.ClassicalFacts.
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fingraph fintype.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 
 Fixpoint fold_max (l: list (Component.id * Block.id)) : Component.id * Block.id :=
   match l with

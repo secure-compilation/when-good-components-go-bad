@@ -1,7 +1,14 @@
+Require Import Common.Definitions.
+Require Import Common.Values.
+Require Import Common.Memory.
+Require Import Lib.Extra.
+Require Import Lia.
+From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fingraph fintype.
+
   (* Define reachability using the ssreflect fingraph library. *)
   Definition node_t : Type := Component.id * Block.id.
 
-  Definition apply_load_block_seq (m: t) (pair: node_t) : seq node_t :=
+  Definition apply_load_block_seq (m: Memory.t) (pair: node_t) : seq node_t :=
     match m (fst pair) with
     | None => nil
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
@@ -11,10 +18,10 @@
     forall m nd ndres,
       In ndres (apply_load_block_seq m nd) <->
       exists ndresoff ndoff,
-        load m (nd.1, nd.2, ndoff) = Some (Ptr (ndres.1, ndres.2, ndresoff)).
+        Memory.load m (nd.1, nd.2, ndoff) = Some (Ptr (ndres.1, ndres.2, ndresoff)).
   Proof.
     intros m nd ndres.
-    unfold apply_load_block_seq. unfold load. simpl.
+    unfold apply_load_block_seq. unfold Memory.load. simpl.
     split; destruct (m nd.1) as [compMem |].
     - destruct (ComponentMemory.load_block_load compMem nd.2 ndres.1 ndres.2) as [l r].
       rewrite <- surjective_pairing in l. rewrite <- surjective_pairing.
@@ -27,16 +34,16 @@
     - intros [ndresoff [_ contra]]. discriminate.
   Qed.
       
-  Definition apply_load_block (m: t) (pair: node_t) : list (node_t) :=
+  Definition apply_load_block (m: Memory.t) (pair: node_t) : list (node_t) :=
     match m (fst pair) with
     | None => nil
     | Some compMem => ComponentMemory.load_block compMem (snd pair)
     end.
   
-  Definition max_ptr_per_compMem (m: t) :=
+  Definition max_ptr_per_compMem (m: Memory.t) :=
     mapm ComponentMemory.max_ptr m.
 
-  Definition max_ptr (m: t) : node_t :=
+  Definition max_ptr (m: Memory.t) : node_t :=
     fold_max (map snd (max_ptr_per_compMem m)).
 
   Lemma apply_load_block_max_ptr_per_compMem_or_less :
@@ -46,9 +53,9 @@
   Proof.
     unfold apply_load_block_seq.
     intros x x0 m Hinloadblock.
-    destruct (m x0.1) eqn:e.
+    destruct (m x0.1) as [t |] eqn:e.
     - exists x0.1.
-      exists (ComponentMemory.max_ptr t0).
+      exists (ComponentMemory.max_ptr t).
       split.
       + unfold max_ptr_per_compMem.
         unfold mapm. simpl. rewrite mapimE. rewrite e. auto.
@@ -314,7 +321,7 @@
   (* FINITIZE MEMORY USING MAX_PTR *)
 
   Definition apply_load_block_seq_fin
-             (m: t) 
+             (m: Memory.t) 
              (nd1: nat) (nd2: nat)
              (nd : ordinal (ssrnat.maxn (S (max_ptr m).1) nd1) *
                    ordinal (ssrnat.maxn (S (max_ptr m).2) nd2))
@@ -345,7 +352,7 @@
   .
 
   Definition fingraph_of_mem
-             (m: t)
+             (m: Memory.t)
              (nd1: nat) (nd2: nat)
     := apply_load_block_seq_fin m nd1 nd2.
   
@@ -497,7 +504,7 @@
     reflexivity.
   Qed.
 
-  Definition extend_path' (m : t) (p : path_t) : list path_t :=
+  Definition extend_path' (m : Memory.t) (p : path_t) : list path_t :=
     map (fun x => (x, p.1 :: p.2))
         (filter (fun x => (x \notin p.2) && (x != p.1)) (apply_load_block m p.1)).
 
@@ -577,7 +584,7 @@
     move: Hnotin. rewrite in_cons => /orP[?|]; auto.
   Qed.
 
-  Definition access_step_paths' (m: t) (ps: {fset path_t}) (cur_path_size: nat) : {fset path_t} :=
+  Definition access_step_paths' (m: Memory.t) (ps: {fset path_t}) (cur_path_size: nat) : {fset path_t} :=
     fsetU ps (fset
                 (concat (List.map (extend_path' m)
                                   (filter (fun p => size_of_path p =? cur_path_size) ps)
@@ -627,7 +634,7 @@
   (* 
      The fuel decreases, and the count of steps increases.
   *)
-  Fixpoint reachable_paths_with_fuel' (m: t) (ps: {fset path_t})
+  Fixpoint reachable_paths_with_fuel' (m: Memory.t) (ps: {fset path_t})
            (fuel: nat) (cur_path_length: nat) : {fset path_t} :=
   match fuel with
   | 0 => ps
@@ -635,17 +642,17 @@
                   m (access_step_paths' m ps cur_path_length) fuel_1 (S cur_path_length)
   end.
 
-  Definition component_memories_of_memory (m: t) : seq ComponentMemory.t :=
+  Definition component_memories_of_memory (m: Memory.t) : seq ComponentMemory.t :=
     map snd (elementsm m).
   
-  Definition list_of_per_component_set_of_block_ids (m: t) : seq {fset Block.id} :=
+  Definition list_of_per_component_set_of_block_ids (m: Memory.t) : seq {fset Block.id} :=
     map ComponentMemory.domm (component_memories_of_memory m).
   
-  Definition count_of_allocated_blocks_of_memory (m: t) : nat :=
+  Definition count_of_allocated_blocks_of_memory (m: Memory.t) : nat :=
     sumn (map (fun (x:{fset Block.id}) => size x) (list_of_per_component_set_of_block_ids m)).
 
   (* Presumably, the size of a path in ps is 1.*)
-  Definition reachable_paths' (m: t) (ps: {fset path_t}) :=
+  Definition reachable_paths' (m: Memory.t) (ps: {fset path_t}) :=
     reachable_paths_with_fuel' m ps (count_of_allocated_blocks_of_memory m) 1.
 
   Definition max_path_size_in_seq (s: seq path_t) : nat :=

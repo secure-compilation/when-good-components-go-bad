@@ -9,6 +9,7 @@ Common/Values.v
 Common/Maps.v
 Common/Util.v
 Common/Memory.v
+Common/Reachability.v
 Common/Linking.v
 Common/Blame.v
 Common/CompCertExtensions.v
