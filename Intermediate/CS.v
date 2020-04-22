@@ -26,8 +26,10 @@ Definition stack : Type := list Pointer.t.
    conventions. *)
 Definition reach_addr : Type := {fmap (Component.id -> {fset (Component.id * Block.id)})}.
 
-(* RB: TODO: [DynShare] Uncomment reach_addr, fix breaks. *)
-Definition state : Type := stack * Memory.t * Register.t * Pointer.t (* * reach_addr *).
+(* NOTE: Consider parameterizing the semantics by a type of "additional state",
+   and instantiate the non-/informative semantics as specializations of the
+   parametric semantics. *)
+Definition state : Type := stack * Memory.t * Register.t * Pointer.t * reach_addr.
 
 Definition update_reachability_of_component_with_value : value -> Component.id -> reach_addr -> reach_addr.
   Admitted.
@@ -46,7 +48,8 @@ Ltac unfold_state st :=
   let mem := fresh "mem" in
   let regs := fresh "regs" in
   let pc := fresh "pc" in
-  destruct st as [[[gps mem] regs] pc].
+  let addrs := fresh "addrs" in
+  destruct st as [[[[gps mem] regs] pc] addrs].
 
 Ltac unfold_states :=
   repeat (match goal with
@@ -55,7 +58,7 @@ Ltac unfold_states :=
 
 Instance state_turn : HasTurn state := {
   turn_of s iface :=
-    let '(_, _, _, pc) := s in
+    let '(_, _, _, pc, _) := s in
     Pointer.component pc \in domm iface
 }.
 
@@ -68,16 +71,16 @@ Ltac simplify_turn :=
   simpl in *.
 
 Definition state_stack (st : state) : stack :=
-  let '(gps, _, _, _) := st in gps.
+  let '(gps, _, _, _, _) := st in gps.
 
 Definition state_mem (st : state) : Memory.t :=
-  let '(_, mem, _, _) := st in mem.
+  let '(_, mem, _, _, _) := st in mem.
 
 Definition state_regs (s : CS.state) : Register.t :=
-  let '(_, _, regs, _) := s in regs.
+  let '(_, _, regs, _, _) := s in regs.
 
 Definition state_pc (st : state) : Pointer.t :=
-  let '(_, _, _, pc) := st in pc.
+  let '(_, _, _, pc, _) := st in pc.
 
 Definition state_component (st : CS.state) : Component.id :=
   Pointer.component (state_pc st).
@@ -86,7 +89,7 @@ Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
   Pointer.component (CS.state_pc s) \notin domm ctx.
 Proof.
-  now destruct s as [[[? ?] ?] ?].
+  now destruct s as [[[[? ?] ?] ?] ?].
 Qed.
 
 (* preparing the machine for running a program *)
@@ -100,9 +103,9 @@ Definition initial_machine_state (p: program) : state :=
              | Some b => b
              | None => 0 (* This case shouldn't happen for a well-formed p *)
              end in
-    ([], mem, regs, (Component.main, b, 0%Z))
+    ([], mem, regs, (Component.main, b, 0%Z), emptym)
   (* this case shoudln't happen for a well-formed p *)
-  | false => ([], emptym, emptym, (Component.main, 0, 0%Z))
+  | false => ([], emptym, emptym, (Component.main, 0, 0%Z), emptym)
   end.
 
 (* A slightly hacky way to express the initial pc of a linked program as a
