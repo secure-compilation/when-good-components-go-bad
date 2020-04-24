@@ -1,0 +1,189 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage{mathtools,amsmath,amsfonts,amssymb,amsthm,bbm}
+\usepackage{amscd,xy}
+\usepackage{enumerate}
+\usepackage{color,graphicx,xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\newtheorem{lemma}{Lemma}
+
+\title{Notes from Hangouts call}
+\author{Adrien, Akram, Jeremy, Rob}
+\date{April 22nd, 2020}
+
+\newcommand{\todo}[1]{$\rightarrow$ \textcolor{red}{#1}}
+
+\newcommand{\Mem}{\text{Mem}}
+
+\begin{document}
+\maketitle
+\tableofcontents
+
+\section{Random notes while going through the code with Rob}
+
+\begin{itemize}
+\item In the file \texttt{Intermediate/Machine.v}, in the
+ \texttt{program} record definition, notice that the field 
+ \texttt{prog\_buffers} is a static description of the memory.
+ 
+The left \texttt{nat} option describes the \textit{size} of a buffer.
+The right \texttt{list value} option describes instead the
+initial \textit{contents}
+of the buffer directly.
+
+\item Although the 
+semantics of the intermediate language seems to \textit{not} prohibit
+forging pointers, forging pointers is still prohibited through
+the well-formedness conditions.
+
+In particular, if one looks at the syntax and semantics of
+\texttt{IConst v r}, one would think that \texttt{v} can be any
+pointer value.
+
+However, a program that uses \texttt{IConst} to forge
+pointers is not
+a well-formed program to begin with. In particular, in 
+\texttt{Intermediate/Machine.v}, the definition
+\texttt{well\_formed\_instruction} guarantees that 
+the use of \texttt{IConst} does not constitute forging of pointers.
+
+In fact, the condition on \texttt{IConst} was not complete. It allowed
+any component to access any other component's static buffer.
+We should add an extra conjunct that ensures 
+\texttt{Pointer.component ptr = C}. 
+\todo{Check that this conjunct is added.}
+
+Notice that this way of guaranteeing unforgeability is different
+from the way CHERI works.
+In CHERI, a pointer (read, capability) value is only a 
+\textit{runtime} value. The syntax of instructions (in CHERIExpress)
+does not even contain a base value for a capability.
+Instead, the way the program gets hold of capabilities is by looking them
+up in known registers (i.e., known by convention).
+The capability values are placed in these \textit{known registers}
+by the loader, not the compiler.
+
+\item In order for a component in CHERI to always have access
+(through the right capabilities) to its
+static memory even after it gets (back) control from another 
+component, the CHERI ISA 
+requires that the Call (and Return) instruction
+place the right capabilities in the known registers.
+This is typically done by means of a \textit{trusted call-stack}
+that the kernel maintains. A Call and a Return thus cause a trap
+that is handled by a kernel procedures that pushes/pops the
+trusted call stack and places the capabilities in the known
+registers.
+
+All of this trusted-call business is not needed in our intermediate
+language. Instead, the program text can hardcode the necessary
+pointers that point to the static buffers.
+And well-formedness guarantees that each component does not
+hardcode any more pointers than what it needs.
+
+\item Notice that in our intermediate language
+both the Call and Return instructions
+clear (invalidate) the registers.
+
+\item Having known that the initial access to memory (i.e., to
+the static buffers) is achieved by hardcoding pointer
+values in the program, one can now compute the \textbf{initial
+set of reachable blocks} per component \texttt{cid}
+of program \texttt{p} as follows:\\
+$\mathtt{cid} \mapsto \underset{\{\mathtt{ptr}
+	 ~\mid~ \mathtt{IConst ~(Pointer ~ptr)~ \_}~ \in
+	 \mathit{code}(\texttt{p}, \texttt{cid}) \}}{\bigcup} 
+ \mathit{reachable\_blocks}
+ (\texttt{ptr}, \mathit{init\_mem}(\texttt{p}))
+$
+
+\item \todo{In \texttt{Recombination.v}, we need to figure out
+what the right function \texttt{merge\_addrs} should look like.}
+
+
+\end{itemize}
+
+\section{Discussions about the trace models}
+
+This discussion started during the Hangouts call on Apr 22nd 2020,
+and then continued the day after during the all-hands Skype call
+on Apr 23rd 2020.
+
+\begin{itemize}
+\item Back in Saarbrucken (in January or February),
+ we had agreed that we would go for
+an informative trace model that unlike the model of CapablePtrs,
+records individual read/write events to the shared memory instead of
+only recording at border states a less
+informative snapshot of the shared memory.
+
+\item The motivation for going for this informative trace model
+was that it would make the \textbf{construction of lvalues}
+easier. In particular, we probably thought that when we have
+the read events to shared memory recorded, we will not need
+any \textbf{book-keeping} for holding pointers to the shared memory.
+This thought is wrong.
+
+\item Read events from only the shared memory are not sufficient
+for re-constructing the full access sequence that leads
+to a location in shared memory.
+To re-construct the full access sequence, one would also need
+to have recorded \textbf{all read/write events} including those
+on private memory.
+
+\item (Jeremy/Catalin:)
+In fact, even \textbf{all read/write events are not sufficient}.
+One would need to know what operations happened on registers.
+For example, one would need to know whether a pointer value
+loaded to register \texttt{r1} has been incremented, or moved to 
+another register, etc..
+Thus, in order to really re-construct the whole program as
+a function
+of just the trace,
+ one may need to go for a \textbf{code-based back-translation}, as
+ Catalin put it.
+
+\item (Akram:) Instead of going for this
+full-blown informative trace that indeed just mimics every instruction
+and models it as a trace event, the other approach is to 
+just stick with the model that
+\textbf{records all reads and writes to both shared and 
+	private memory}.
+And in this model, in order to
+\textbf{construct an expression that evaluates
+to a desired pointer value},
+one would rely on the following facts:
+
+\begin{enumerate}
+\item \textbf{Every pointer value} that appears on the trace
+\textbf{must be in the reachability set} that is computed from
+either:
+\begin{enumerate}
+\item an earlier pointer value that appeared on the trace, or
+\item a hardcoded constant
+\end{enumerate}
+
+\item The fact that
+a pointer value \texttt{(cid, bid)} is in the reachability set 
+computed from a location $\mathtt{(cid_0, bid_0)}$
+ implies the existence of a path
+from $\mathtt{(cid_0, bid_0)}$ to $\mathtt{(cid, bid)}$. (This is
+the lemma we get from ssreflect.fingraph.)
+\item The existence of a path from $\mathtt{(cid_0, bid_0)}$
+ to \texttt{(cid, bid)}
+ means the existence of an expression that evaluates to 
+ \texttt{(cid, bid, \_)}. Moreover, this expression is a sequence
+ of derefs that needs to start with an expression $\mathtt{e_0}$ that 
+ evaluates to $\mathtt{(cid_0, bid_0)}$.
+
+\item In order to preserve the first fact,
+ it is sufficient to mimic all the memory events that appear
+ on the trace. This preserves the equality relation between
+ the memory of the back-translated program and the given program.
+\end{enumerate}
+
+\end{itemize}
+
+
+\end{document}
