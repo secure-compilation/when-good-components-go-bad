@@ -5,12 +5,13 @@
 \usepackage{enumerate}
 \usepackage{color,graphicx,xcolor}
 \usepackage[hidelinks]{hyperref}
+\usepackage{soul}
 
 \newtheorem{lemma}{Lemma}
 
-\title{Notes from Hangouts call}
-\author{Adrien, Akram, Jeremy, Rob}
-\date{April 22nd, 2020}
+\title{Notes from Hangouts + Skype calls}
+\author{Adrien, Akram, Carmine, Catalin, Deepak, Jeremy, Rob}
+\date{April 22-24, 2020}
 
 \newcommand{\todo}[1]{$\rightarrow$ \textcolor{red}{#1}}
 
@@ -20,7 +21,8 @@
 \maketitle
 \tableofcontents
 
-\section{Random notes while going through the code with Rob}
+\section{Random notes while going through 
+	the code with Rob (Apr 22nd)}
 
 \begin{itemize}
 \item In the file \texttt{Intermediate/Machine.v}, in the
@@ -104,11 +106,12 @@ what the right function \texttt{merge\_addrs} should look like.}
 
 \end{itemize}
 
-\section{Discussions about the trace models}
+\section{Discussions about the trace models on 22nd-24th Apr}
 
-This discussion started during the Hangouts call on Apr 22nd 2020,
-and then continued the day after during the all-hands Skype call
-on Apr 23rd 2020.
+This discussion started during the Hangouts call on 
+\textbf{Apr 22nd 2020},
+and then continued the two days after during the all-hands Skype call
+on \textbf{Apr 23rd and Apr 24th}.
 
 \begin{itemize}
 \item Back in Saarbrucken (in January or February),
@@ -148,7 +151,7 @@ of just the trace,
 full-blown informative trace that indeed just mimics every instruction
 and models it as a trace event, the other approach is to 
 just stick with the model that
-\textbf{records all reads and writes to both shared and 
+\textbf{records all \st{reads and} writes to both shared and 
 	private memory}.
 And in this model, in order to
 \textbf{construct an expression that evaluates
@@ -160,7 +163,7 @@ one would rely on the following facts:
 \textbf{must be in the reachability set} that is computed from
 either:
 \begin{enumerate}
-\item an earlier pointer value that appeared on the trace, or
+\item \st{an earlier pointer value that appeared on the trace, or}
 \item a hardcoded constant
 \end{enumerate}
 
@@ -170,7 +173,8 @@ computed from a location $\mathtt{(cid_0, bid_0)}$
  implies the existence of a path
 from $\mathtt{(cid_0, bid_0)}$ to $\mathtt{(cid, bid)}$. (This is
 the lemma we get from ssreflect.fingraph.)
-\item The existence of a path from $\mathtt{(cid_0, bid_0)}$
+\item \label{path-expr}
+The existence of a path from $\mathtt{(cid_0, bid_0)}$
  to \texttt{(cid, bid)}
  means the existence of an expression that evaluates to 
  \texttt{(cid, bid, \_)}. Moreover, this expression is a sequence
@@ -183,7 +187,80 @@ the lemma we get from ssreflect.fingraph.)
  the memory of the back-translated program and the given program.
 \end{enumerate}
 
+\item We decided the trace will \textbf{not only record the writes, but
+additionally also the memory dump of the shared memory}.
+This trace is the one that is used for back-translation.
+
+\item This way, we should be able to prove that the back-translation
+produces the same trace, i.e., the same shared-memory dumps at
+border states, and also the same write events.
+
+\item The memory relation between the back-translated program and
+the given program is almost equality (equality 
+but excluding the part of memory that holds the book-keeping 
+counter(s)).
+
+\item Recording all the writes, not just the shared writes, is 
+necessary for preserving memory equality.
+Memory equality (not just shared-memory equality) is necessary
+for avoiding book-keeping.
+We are able to avoid book-keeping 
+because we can rely on memory equality to
+\textbf{translate a path in the target 
+	memory to a path in the source memory}.
+
+\item The existence of a path in the source memory then means the
+existence of an expression (fact \ref{path-expr} above).
+
+\item For the proof of Recombination, 
+we go to the uninformative trace,
+which is the fully-abstract trace (i.e., the one with only
+the memory dumps, after dropping the write events).
+
+\item \todo{(Akram:) It is not clear to me whether
+the decision to not put the reads on traces 
+(in the case of the robust safety proof)
+is compatible with the need
+for reads for the sake of the tree representation
+of a set of traces. (The reads to shared memory in 
+Jeremy's technique constitute
+nodes in the tree.)
+}
 \end{itemize}
 
+\section{More thoughts from the Apr 24th meeting}
+
+\begin{itemize}
+\item Deepak suggested that there may be a more general
+argument to be made about back-translation. The argument is one
+that follows from computability theory results.
+
+Deepak's idea is that one can view a context as a function
+from trace prefixes to trace actions (in case of robust safety), or
+to view the context as a function from sets of trace prefixes 
+to sets of trace actions (?) in other cases.
+
+Catalin mentioned that he saw somewhere in an FCS paper
+a connection between secure compilation and computability.
+
+(Akram:) My worry is that mechanizing such an argument
+(even if the argument is provided by a library of Turing machines
+in Coq) might involve the construction of a
+universal Turing machine
+as a program in our source language, which is probably a non-trivial
+construction.
+
+\item Catalin pointed out that emulating all the memory
+events (including private ones)
+ that happen in the target is in general not desirable,
+especially if the target can make out-of-bounds accesses
+and the source cannot.
+
+(Akram:) Not sure about all the details that would
+make this emulation not work.
+
+Anyways, as Catalin points out, it seems we should be able to
+get away with it in our models here.
+\end{itemize}
 
 \end{document}
