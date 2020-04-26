@@ -157,7 +157,19 @@ Definition well_formed_instruction
        interface is allowing it to happen *)
     C <> C' /\ imported_procedure (prog_interface p) C C' P'
   | IConst (IPtr ptr) r =>
-    (* static pointers refers to static buffers *)
+    (* static pointers refer to static buffers *)
+    (* [DynShare] NOTE: Pointers can (and need to) be forged as constant
+       expressions. The guarantee that these point only to static buffers is
+       obtained in tandem with a program semantics that disallows the use of bad
+       pointers, and a representation of the program as environment which maps
+       static buffers to runtime buffers with exactly the same buffer
+       identifiers. At the moment, no symbol substitution/concretization is
+       possible, i.e., runtime pointers are exactly those hardcoded in the
+       program. *)
+    (* [DynShare] Add the restriction that pointers can only be forged to point
+       to buffers in the same component. What were the implications of the
+       absence of this condition in the existing proof? *)
+    Pointer.component ptr = C /\
     exists bufs,
       getm (prog_buffers p) (Pointer.component ptr) = Some bufs /\
       In (Pointer.block ptr) (map fst bufs)
@@ -175,6 +187,9 @@ Definition well_formed_instruction
   | IHalt => True
   end.
 
+(* RB: TODO: Because program buffers can contain pointers as values, we need to
+   consider its impact in initial program state, global environments, and even
+   program well-formedness. *)
 Record well_formed_program (p: program) := {
   (* the interface is sound (but maybe not closed)
      RB: Currently not used in the proofs. *)
@@ -334,7 +349,8 @@ Proof.
     move: (wfprog_well_formed_instructions Hwf1 H H2 Hi).
     case: i Hi=> //=.
     + (* IConst *)
-      case=> // ptr r Hi [bufs [p1_bufs Hbufs]].
+      case=> // ptr r Hi [Hptr [bufs [p1_bufs Hbufs]]].
+      split; first assumption.
       by exists bufs; rewrite unionmE p1_bufs.
     + (* IBnz *)
       move=> r l Hi [Cprocs' [Pcode']].
