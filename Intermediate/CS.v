@@ -83,6 +83,9 @@ Definition state_regs (s : CS.state) : Register.t :=
 Definition state_pc (st : state) : Pointer.t :=
   let '(_, _, _, pc, _) := st in pc.
 
+Definition state_addrs (st : state) : reach_addr :=
+  let '(_, _, _, _, addrs) := st in addrs.
+
 Definition state_component (st : CS.state) : Component.id :=
   Pointer.component (state_pc st).
 
