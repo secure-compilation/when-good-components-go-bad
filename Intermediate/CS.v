@@ -23,7 +23,8 @@ Import Intermediate.
 Definition stack : Type := list Pointer.t.
 
 (* RB: TODO: [DynShare] Give names to recurring types, harmonize naming
-   conventions. *)
+   conventions.
+   This type should probably be defined elsewhere. *)
 Definition reach_addr : Type := {fmap (Component.id -> {fset (Component.id * Block.id)})}.
 
 (* NOTE: Consider parameterizing the semantics by a type of "additional state",
@@ -151,7 +152,8 @@ Theorem initial_machine_state_after_linking:
      Register.init,
      (Component.main,
       prog_main_block p + prog_main_block c,
-      0%Z)).
+      0%Z),
+     emptym).
 Proof.
   intros p c Hwfp Hwfc Hlinkable Hclosed.
   unfold initial_machine_state.
@@ -212,61 +214,65 @@ Definition initial_state (p: program) (ics: state) : Prop :=
   ics = initial_machine_state p.
 
 Definition final_state (G: global_env) (s: state) : Prop :=
-  let '(gsp, mem, regs, pc) := s in
+  let '(gsp, mem, regs, pc, addrs) := s in
   executing G pc IHalt.
 
 (* relational specification *)
 
 (* RB: TODO: [DynShare] Integrate reachability in states, semantics. *)
 Inductive step (G : global_env) : state -> trace -> state -> Prop :=
-| Nop: forall gps mem regs pc (* reach *),
+| Nop: forall gps mem regs pc addrs,
     executing G pc INop ->
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem, regs, Pointer.inc pc) (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem, regs, Pointer.inc pc, addrs)
 
-| Label: forall gps mem regs pc l (* reach *),
+| Label: forall gps mem regs pc l addrs,
     executing G pc (ILabel l) ->
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem, regs, Pointer.inc pc) (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem, regs, Pointer.inc pc, addrs)
 
-| Const: forall gps mem regs regs' pc r v (* reach *),
+| Const: forall gps mem regs regs' pc r v addrs,
     executing G pc (IConst v r) ->
     Register.set r (imm_to_val v) regs = regs' ->
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem, regs', Pointer.inc pc) (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem, regs', Pointer.inc pc, addrs)
 
-| Mov: forall gps mem regs regs' pc r1 r2 (* reach *),
+| Mov: forall gps mem regs regs' pc r1 r2 addrs,
     executing G pc (IMov r1 r2) ->
     Register.set r2 (Register.get r1 regs) regs = regs' ->
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem, regs', Pointer.inc pc) (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem, regs', Pointer.inc pc, addrs)
 
-| BinOp: forall gps mem regs regs' pc r1 r2 r3 op (* reach *),
+| BinOp: forall gps mem regs regs' pc r1 r2 r3 op addrs,
     executing G pc (IBinOp op r1 r2 r3) ->
     let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
     Register.set r3 result regs = regs' ->
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem, regs', Pointer.inc pc) (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem, regs', Pointer.inc pc, addrs)
 
-| Load: forall gps mem regs regs' pc r1 r2 ptr v (* reach e *),
+| Load: forall gps mem regs regs' pc r1 r2 ptr v addrs,
     executing G pc (ILoad r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
     (* RB: TODO [DynShare] Clarify new restriction and substitute once given a
-       computable definition. *)
+       computable definition.
+       NOTE: Even though cross-component pointer forging is possible at the
+       program level, it is detected and stopped here. *)
     Pointer.component ptr = Pointer.component pc -> (* Shared memory prohibition removed *)
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
     (* RB: TODO: [DynShare] Furnish computational definition. It may be preferable
        to inline the expression in the conclusion. *)
     (* compute_trace_for_load_by_component (Pointer.component pc) ptr reach = e -> *)
-    step G (gps, mem, regs, pc) (* reach *) E0 (* e *)
-           (gps, mem, regs', Pointer.inc pc) (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0 (* e *)
+           (gps, mem, regs', Pointer.inc pc, addrs)
 
-| Store: forall gps mem mem' regs pc ptr r1 r2 (* v reach reach' e *),
+| Store: forall gps mem mem' regs pc ptr r1 r2 addrs (* v reach' e *),
     executing G pc (IStore r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
     (* RB: TODO: [DynShare] Clarify new restriction and substitute once given a
-       computable definition. *)
+       computable definition.
+       NOTE: Even though cross-component pointer forging is possible at the
+       program level, it is detected and stopped here. *)
     Pointer.component ptr = Pointer.component pc ->
     (* RB: TODO: [DynShare] Uncomment refactoring below while fixing existing
        proofs. *)
@@ -274,38 +280,38 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     Memory.store mem ptr (* v *) (Register.get r2 regs) = Some mem' ->
     (* compute_trace_for_store_by_component (Pointer.component pc) ptr reach = e -> *)
     (* propagate_store_to_all_components_reach ptr v reach = reach' -> *)
-    step G (gps, mem, regs, pc) (* reach e *) E0
-           (gps, mem', regs, Pointer.inc pc) (* reach' *)
+    step G (gps, mem, regs, pc, addrs) (* e *) E0
+           (gps, mem', regs, Pointer.inc pc, addrs) (* reach', replace addrs *)
 
-| Jal: forall gps mem regs regs' pc pc' l (* reach *),
+| Jal: forall gps mem regs regs' pc pc' l addrs,
     executing G pc (IJal l) ->
     find_label_in_component G pc l = Some pc' ->
     Register.set R_RA (Ptr (Pointer.inc pc)) regs = regs' ->
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem, regs', pc') (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem, regs', pc', addrs)
 
-| Jump: forall gps mem regs pc pc' r (* reach *),
+| Jump: forall gps mem regs pc pc' r addrs,
     executing G pc (IJump r) ->
     Register.get r regs = Ptr pc' ->
     Pointer.component pc' = Pointer.component pc ->
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem, regs, pc') (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem, regs, pc', addrs)
 
-| BnzNZ: forall gps mem regs pc pc' r l val (* reach *),
+| BnzNZ: forall gps mem regs pc pc' r l val addrs,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int val ->
     (val <> 0) % Z ->
     find_label_in_procedure G pc l = Some pc' ->
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem, regs, pc') (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem, regs, pc', addrs)
 
-| BnzZ: forall gps mem regs pc r l (* reach *),
+| BnzZ: forall gps mem regs pc r l addrs,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int 0 ->
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem, regs, Pointer.inc pc) (* reach *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem, regs, Pointer.inc pc, addrs)
 
-| Alloc: forall gps mem mem' regs regs' pc rsize rptr size ptr (* reach reach' *),
+| Alloc: forall gps mem mem' regs regs' pc rsize rptr size ptr addrs (* reach' *),
     executing G pc (IAlloc rptr rsize) ->
     Register.get rsize regs = Int size ->
     (size > 0) % Z ->
@@ -313,10 +319,10 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     Register.set rptr (Ptr ptr) regs = regs' ->
     (* RB: TODO: [DynShare] Restore check after making it computational. *)
     (* update_reachability_of_component_with_value (Ptr ptr) (Pointer.component pc) reach = reach' -> *)
-    step G (gps, mem, regs, pc) (* reach *) E0
-           (gps, mem', regs', Pointer.inc pc) (* reach' *)
+    step G (gps, mem, regs, pc, addrs) E0
+           (gps, mem', regs', Pointer.inc pc, addrs) (* reach', replace addrs *)
 
-| Call: forall gps mem regs pc b C' P call_arg (* reach reach' *),
+| Call: forall gps mem regs pc b C' P call_arg addrs (* reach' *),
     executing G pc (ICall C' P) ->
     Pointer.component pc <> C' ->
     imported_procedure (genv_interface G) (Pointer.component pc) C' P ->
@@ -325,20 +331,20 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     Register.get R_COM regs = Int call_arg ->
     (* RB: TODO: [DynShare] Restore check after making it computational. *)
     (* update_reachability_of_component_with_value call_arg C' reach = reach' -> *)
-    step G (gps, mem, regs, pc) (* reach *)
+    step G (gps, mem, regs, pc, addrs)
            [ECall (Pointer.component pc) P call_arg C']
-           (Pointer.inc pc :: gps, mem, Register.invalidate regs, (C', b, 0%Z)) (* reach' *)
+           (Pointer.inc pc :: gps, mem, Register.invalidate regs, (C', b, 0%Z), addrs) (* reach', replace addrs *)
 
-| Return: forall gps' mem regs pc pc' ret_arg (* reach reach' *),
+| Return: forall gps' mem regs pc pc' ret_arg addrs (* reach' *),
     executing G pc IReturn ->
     Pointer.component pc <> Pointer.component pc' ->
     (* RB: TODO: [DynShare] Re-lift restriction to integer values. *)
     Register.get R_COM regs = Int ret_arg ->
     (* RB: TODO: [DynShare] Restore check after making it computational. *)
     (* update_reachability_of_component_with_value ret_arg (Pointer.component pc') reach = reach' -> *)
-    step G (pc' :: gps', mem, regs, pc) (* reach *)
+    step G (pc' :: gps', mem, regs, pc, addrs)
            [ERet (Pointer.component pc) ret_arg (Pointer.component pc')]
-           (gps', mem, Register.invalidate regs, pc') (* reach' *).
+           (gps', mem, Register.invalidate regs, pc', addrs) (* reach', replace addrs *).
 
 Ltac step_of_executing :=
   match goal with
@@ -371,7 +377,7 @@ Import MonadNotations.
 Open Scope monad_scope.
 
 Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
-  let '(gps, mem, regs, pc) := s in
+  let '(gps, mem, regs, pc, addrs) := s in
   (* fetch the next instruction to execute *)
   do C_procs <- getm (genv_procedures G) (Pointer.component pc);
   do P_code <- getm C_procs (Pointer.block pc);
@@ -382,26 +388,26 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
     (* decode and execute the instruction *)
     match instr with
     | ILabel l =>
-      ret (E0, (gps, mem, regs, Pointer.inc pc))
+      ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
     | INop =>
-      ret (E0, (gps, mem, regs, Pointer.inc pc))
+      ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
     | IConst v r =>
       let regs' := Register.set r (imm_to_val v) regs in
-      ret (E0, (gps, mem, regs', Pointer.inc pc))
+      ret (E0, (gps, mem, regs', Pointer.inc pc, addrs))
     | IMov r1 r2 =>
       let regs' := Register.set r2 (Register.get r1 regs) regs in
-      ret (E0, (gps, mem, regs', Pointer.inc pc))
+      ret (E0, (gps, mem, regs', Pointer.inc pc, addrs))
     | IBinOp op r1 r2 r3 =>
       let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
       let regs' := Register.set r3 result regs in
-      ret (E0, (gps, mem, regs', Pointer.inc pc))
+      ret (E0, (gps, mem, regs', Pointer.inc pc, addrs))
     | ILoad r1 r2 =>
       match Register.get r1 regs with
       | Ptr ptr =>
         if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
           do v <- Memory.load mem ptr;
           let regs' := Register.set r2 v regs in
-          ret (E0, (gps, mem, regs', Pointer.inc pc))
+          ret (E0, (gps, mem, regs', Pointer.inc pc, addrs))
         else
           None
       | _ => None
@@ -411,7 +417,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
       | Ptr ptr =>
         if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
           do mem' <- Memory.store mem ptr (Register.get r2 regs);
-          ret (E0, (gps, mem', regs, Pointer.inc pc))
+          ret (E0, (gps, mem', regs, Pointer.inc pc, addrs))
         else
           None
       | _ => None
@@ -419,12 +425,12 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
     | IJal l =>
       do pc' <- find_label_in_component G pc l;
       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-      ret (E0, (gps, mem, regs', pc'))
+      ret (E0, (gps, mem, regs', pc', addrs))
     | IJump r =>
       match Register.get r regs with
       | Ptr pc' =>
         if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-          ret (E0, (gps, mem, regs, pc'))
+          ret (E0, (gps, mem, regs, pc', addrs))
         else
           None
       | _ => None
@@ -432,10 +438,10 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
     | IBnz r l =>
       match Register.get r regs with
       | Int 0 =>
-        ret (E0, (gps, mem, regs, Pointer.inc pc))
+        ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
       | Int val =>
         do pc' <- find_label_in_procedure G pc l;
-        ret (E0, (gps, mem, regs, pc'))
+        ret (E0, (gps, mem, regs, pc', addrs))
       | _ => None
       end
     | IAlloc rptr rsize =>
@@ -446,7 +452,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
         else
           do (mem', ptr) <- Memory.alloc mem (Pointer.component pc) (Z.to_nat size);
           let regs' := Register.set rptr (Ptr ptr) regs in
-          ret (E0, (gps, mem', regs', Pointer.inc pc))
+          ret (E0, (gps, mem', regs', Pointer.inc pc, addrs))
       | _ => None
       end
     | ICall C' P =>
@@ -457,7 +463,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
           | Int rcomval =>
             let pc' := (C', b, 0%Z) in
             let t := [ECall (Pointer.component pc) P rcomval C'] in
-            ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc'))
+            ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc', addrs))
           | _ => None
           end
         else
@@ -471,7 +477,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
           match Register.get R_COM regs with
           | Int rcomval =>
             let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
-            ret (t, (gps', mem, Register.invalidate regs, pc'))
+            ret (t, (gps', mem, Register.invalidate regs, pc', addrs))
           | _ => None
           end
         else
@@ -487,7 +493,7 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
   | S n' =>
     match eval_step G st with
     | None =>
-      let '(_, _, regs, _) := st in
+      let '(_, _, regs, _, _) := st in
       match Register.get R_COM regs with
       | Int i => Some i
       | _ => None
@@ -993,7 +999,7 @@ Section Semantics.
 Import ssreflect eqtype.
 
 Definition stack_state_of (cs:CS.state) : stack_state :=
-  let '(gps, mem, regs, pc) := cs in
+  let '(gps, mem, regs, pc, addrs) := cs in
   StackState (Pointer.component pc) (List.map Pointer.component gps).
 
 Lemma intermediate_well_bracketed_trace t cs cs' :
@@ -1005,11 +1011,11 @@ case: cs1 t1 cs2 / Hstep IH => /=;
 try by move=> *; match goal with
 | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
         rewrite Pointer.inc_preserves_component in H end.
-- by move=> ???????? /find_label_in_component_1 ->.
-- by move=> ???????? ->.
-- by move=> ??????????? /find_label_in_procedure_1 ->.
-- by move=> ???????????; rewrite eqxx Pointer.inc_preserves_component.
-- by move=> ?????????; rewrite !eqxx.
+- by move=> ????????? /find_label_in_component_1 ->.
+- by move=> ????????? ->.
+- by move=> ???????????? /find_label_in_procedure_1 ->.
+- by move=> ????????????; rewrite eqxx Pointer.inc_preserves_component.
+- by move=> ??????????; rewrite !eqxx.
 Qed.
 
 Canonical ssrnat.nat_eqType.
@@ -1021,9 +1027,9 @@ Proof.
 elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
 rewrite seq.all_cat IH andbT {Hstar}.
 case: st1 t1 st2 / Hstep => //=.
-- move=> ????????? /eqP ->.
+- move=> ?????????? /eqP ->.
   by move=> /imported_procedure_iff /= ->.
-- by move=> ??????? /eqP ->.
+- by move=> ???????? /eqP ->.
 Qed.
 
 Lemma intermediate_well_formed_trace : forall t cs cs',
@@ -1137,8 +1143,8 @@ Qed.
 (* RB: TODO: This result admits more general formulations (see above).
    Replace this with those whenever convenient, including the "bootstrapping"
    on the stack in the result for the domain of the PC, just below. *)
-Corollary comes_from_initial_state_stack_cons_domm frame gps mem regs pc iface :
-  comes_from_initial_state (frame :: gps, mem, regs, pc) iface ->
+Corollary comes_from_initial_state_stack_cons_domm frame gps mem regs pc addrs iface :
+  comes_from_initial_state (frame :: gps, mem, regs, pc, addrs) iface ->
   Pointer.component frame \in domm iface.
 Proof.
   intros Hcomes_from.
@@ -1206,7 +1212,7 @@ Lemma silent_step_preserves_program_component : forall s1 s2 G ctx,
   CS.step G s1 E0 s2 ->
   CS.is_program_component s2 ctx.
 Proof.
-  intros [[[? ?] ?] pc1] [[[? ?] ?] pc2] G ctx Hcomp1 Hstep12.
+  intros [[[[? ?] ?] pc1] ?] [[[[? ?] ?] pc2] ?] G ctx Hcomp1 Hstep12.
   pose proof CS.silent_step_preserves_component _ _ _ Hstep12 as Heq.
   simplify_turn. now rewrite <- Heq.
 Qed.
@@ -1330,15 +1336,15 @@ Section ProgramLink.
 
   (* RB: NOTE: Check with existing results.
      Possibly rewrite in terms of state_pc. *)
-  Lemma star_pc_domm : forall {s st mem reg pc t},
+  Lemma star_pc_domm : forall {s st mem reg pc addrs t},
     initial_state (program_link p c) s ->
-    Star (sem (program_link p c)) s t (st, mem, reg, pc) ->
+    Star (sem (program_link p c)) s t (st, mem, reg, pc, addrs) ->
     Pointer.component pc \in domm (prog_interface p) \/
     Pointer.component pc \in domm (prog_interface c).
   Proof.
-    intros s st mem reg pc t Hini Hstar.
+    intros s st mem reg pc addrs t Hini Hstar.
     assert (H : Pointer.component pc \in domm (prog_interface (program_link p c))).
-    { replace pc with (CS.state_pc (st, mem, reg, pc)); try reflexivity.
+    { replace pc with (CS.state_pc (st, mem, reg, pc, addrs)); try reflexivity.
       apply CS.comes_from_initial_state_pc_domm.
       destruct (cprog_main_existence Hprog_is_closed) as [_ [? _]].
       exists (program_link p c), s, t.
