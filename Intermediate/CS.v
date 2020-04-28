@@ -5,6 +5,7 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Linking.
 Require Import Common.Memory.
+Require Import Common.Reachability.
 Require Import Common.Traces.
 Require Import Common.CompCertExtensions.
 Require Import Intermediate.Machine.
@@ -13,6 +14,7 @@ Require Import Lib.Extra.
 Require Import Lib.Monads.
 
 From mathcomp Require ssreflect ssrfun ssrbool eqtype.
+From extructures Require Import fmap fset.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -88,6 +90,39 @@ Definition state_addrs (st : state) : reach_addr :=
 
 Definition state_component (st : CS.state) : Component.id :=
   Pointer.component (state_pc st).
+
+
+(* [DynShare]: The assumption here is that prog_buffers themselves
+ do not contain any pointer values. So, the only thing that
+ counts as "program_ptrs" are the addresses of these buffers,
+ not their contents.*)
+
+Definition program_ptrs (p: program) : {fset (Component.id * Block.id)} :=
+  domm (uncurrym (prog_buffers p)).
+
+Print Register.t.
+Check codomm.
+Check filterm.
+Definition value_to_pointer_err v :=
+  match v with | Ptr (cid, bid, _) => Some (cid, bid)
+          | _ => None
+  end.
+
+Axiom vals_regs : Register.t -> {fset Component.id * Block.id}.
+Axiom vals_mem : Memory.t -> {fset Component.id * Block.id}.
+(*Definition vals_regs (regs : Register.t) := codomm
+                                              (filterm (fun x y => isSome y)
+                                                       (mapm value_to_pointer_err regs)).
+Check vals_regs.
+*)
+Definition vals_state (st: state) := fsetU (vals_regs (state_regs st))
+                                           (vals_mem (state_mem st)).
+
+Definition are_all_ptrs_in_reachable (st: state) (p: program)
+           (c: Component.id) :=
+  (fsubset (vals_state st)
+           (\bigcup_(i <- program_ptrs p) (fset (reachable_nodes_nat (state_mem st) i))))%fset.
+
 
 Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
@@ -1357,4 +1392,14 @@ Section ProgramLink.
   Qed.
 End ProgramLink.
 
+
+(* [DynShare] *)
+
+Check are_all_ptrs_in_reachable.
+Lemma are_all_ptrs_in_reachable_step :
+  forall G s t s' p cid,
+    are_all_ptrs_in_reachable s p cid ->
+    step G s t s' ->
+    are_all_ptrs_in_reachable s' p cid.
+Admitted.
 End CS.
