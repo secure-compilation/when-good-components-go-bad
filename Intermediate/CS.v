@@ -100,29 +100,36 @@ Definition state_component (st : CS.state) : Component.id :=
 Definition program_ptrs (p: program) : {fset (Component.id * Block.id)} :=
   domm (uncurrym (prog_buffers p)).
 
-Print Register.t.
-Check codomm.
-Check filterm.
-Definition value_to_pointer_err v :=
+Definition value_to_pointer_err v : option (Component.id * Block.id) :=
   match v with | Ptr (cid, bid, _) => Some (cid, bid)
           | _ => None
   end.
 
-Axiom vals_regs : Register.t -> {fset Component.id * Block.id}.
-Axiom vals_mem : Memory.t -> {fset Component.id * Block.id}.
-(*Definition vals_regs (regs : Register.t) := codomm
-                                              (filterm (fun x y => isSome y)
-                                                       (mapm value_to_pointer_err regs)).
-Check vals_regs.
-*)
-Definition vals_state (st: state) := fsetU (vals_regs (state_regs st))
-                                           (vals_mem (state_mem st)).
+Definition regs_ptrs (regs : Register.t) : {fset Component.id * Block.id} :=
+  fset(
+      seq.pmap
+        id
+        (codomm
+           (filterm (fun x y => isSome y)
+                    (mapm value_to_pointer_err regs))
+        )
+    ).
 
-Definition are_all_ptrs_in_reachable (st: state) (p: program)
-           (c: Component.id) :=
-  (fsubset (vals_state st)
-           (\bigcup_(i <- program_ptrs p) (fset (reachable_nodes_nat (state_mem st) i))))%fset.
+Definition compMem_ptrs (m : ComponentMemory.t) : {fset Component.id * Block.id} :=
+  fset (concat (map (ComponentMemory.load_block m) (ComponentMemory.domm m))).
 
+Definition mem_ptrs (m : Memory.t) : {fset Component.id * Block.id} :=
+  (\bigcup_(comp_mem_ptrs <- (codomm (mapm compMem_ptrs m))) comp_mem_ptrs)%fset.
+
+Definition state_ptrs (st: state) := fsetU (regs_ptrs (state_regs st))
+                                           (mem_ptrs (state_mem st)).
+
+Definition are_all_ptrs_in_reachable (st: state) (p: program) (c: Component.id) :=
+  (fsubset (state_ptrs st)
+           (\bigcup_(i <- program_ptrs p)
+             (fset (reachable_nodes_nat (state_mem st) i))
+           )
+  )%fset.
 
 Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
