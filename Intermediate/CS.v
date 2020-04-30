@@ -13,7 +13,8 @@ Require Import Intermediate.GlobalEnv.
 Require Import Lib.Extra.
 Require Import Lib.Monads.
 
-From mathcomp Require ssreflect ssrfun ssrbool eqtype.
+From mathcomp Require Import ssreflect eqtype ssrfun.
+From mathcomp Require ssrbool.
 From extructures Require Import fmap fset.
 
 Set Bullet Behavior "Strict Subproofs".
@@ -131,6 +132,159 @@ Definition are_all_ptrs_in_reachable (st: state) (p: program) (c: Component.id) 
            )
   )%fset.
 
+Lemma value_to_pointer_err_Ptr :
+  forall p, exists x, value_to_pointer_err (Ptr p) = Some x.
+Proof.
+  intros p. exists (Pointer.component p, Pointer.block p).
+  unfold value_to_pointer_err. rewrite <- (Pointer.compose p). auto.
+Qed.
+
+Lemma mem_codomm_setm :
+  forall (T S : ordType) (m : {fmap T -> S}) (k1 k2 : T) (v v' : S),
+    m k1 = Some v ->
+    v' \in codomm (setm m k2 v) ->
+    v' \in codomm m.
+Proof.
+  intros T S m k1 k2 v v' Hmem Hmemcodomm.
+  apply/codommP.
+  pose (H' := codommP (setm m k2 v) v' Hmemcodomm).
+  destruct H' as [kOfv' H'mem].
+  rewrite setmE in H'mem.
+  destruct (kOfv' == k2) eqn:k2kOfv'.
+  - eexists k1. rewrite <- H'mem. exact Hmem.
+  - eexists kOfv'. exact H'mem.
+Qed.
+
+Lemma in_fsubset :
+  forall (T : ordType) (s1 s2 : {fset T}),
+    (forall v, v \in s1 -> v \in s2) -> fsubset s1 s2.
+Proof.
+  intros ? ? ? Hinin.
+  apply/fsubsetP.
+  unfold sub_mem.
+  exact Hinin.
+Qed.
+
+Ltac unfold_Register_set e1 k'mem :=
+  unfold Register.set in k'mem; rewrite setmE in k'mem; rewrite e1 in k'mem;
+  simpl in k'mem.
+
+Lemma regs_ptrs_set_get_in :
+  forall (regs: Register.t) r1 r2 v,
+    v \in regs_ptrs (Register.set r2 (Register.get r1 regs) regs) ->
+    v \in regs_ptrs regs.
+Proof.
+  intros regs r1 r2 v.
+  do 2 (unfold regs_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id).
+  intros Hin.
+  apply/codommP.
+  destruct (codommP _ _ Hin) as [k' k'mem].
+  destruct (Some v == value_to_pointer_err (Register.get r1 regs)) eqn:copied;
+    destruct (k' == Register.to_nat r2) eqn:e1;
+    try (
+        exists k'; rewrite filtermE; rewrite filtermE in k'mem; simpl; simpl in k'mem;
+               rewrite mapmE; rewrite mapmE in k'mem;
+               unfold_Register_set e1 k'mem;
+               exact k'mem
+      ).
+  - pose (copied' := eqP copied); pose (e1' := eqP e1).
+    exists (Register.to_nat r1).
+    rewrite filtermE. rewrite filtermE in k'mem. simpl. simpl in k'mem.
+    rewrite mapmE. rewrite mapmE in k'mem.
+    destruct (regs (Register.to_nat r1)) as [vOfr1 |] eqn:e.
+    + rewrite e. simpl.
+      destruct vOfr1 as [| t |];
+        try (
+            simpl;
+            unfold Register.get in copied';
+            erewrite e in copied'; simpl in copied'; discriminate
+          ).
+      simpl.
+      unfold Register.get in k'mem. rewrite e in k'mem.
+      unfold_Register_set e1 k'mem. exact k'mem.
+    + unfold Register.get in k'mem.
+      rewrite e in k'mem.
+      unfold_Register_set e1 k'mem. discriminate.
+  - (* here, obtain a contradiction *)
+    rewrite filtermE in k'mem. simpl in k'mem.
+    rewrite mapmE in k'mem.
+    unfold_Register_set e1 k'mem.
+    pose (@negPf (Some v == value_to_pointer_err (Register.get r1 regs))) as n.
+    assert (ineq : Some v != value_to_pointer_err (Register.get r1 regs)).
+    {
+      apply/n. exact copied.
+    }
+    pose (negP ineq) as n0. exfalso. apply n0. apply/eqP.
+    destruct (value_to_pointer_err (Register.get r1 regs)).
+    + simpl in k'mem. apply Some_inj. symmetry. exact k'mem.
+    + simpl in k'mem. discriminate.
+Qed.
+
+Lemma regs_ptrs_set_get :
+  forall regs r1 r2,
+    fsubset (regs_ptrs (Register.set r2 (Register.get r1 regs) regs)) (regs_ptrs regs).
+Proof.
+  intros. apply in_fsubset. apply regs_ptrs_set_get_in.
+Qed.
+
+Lemma Pointer_add_c_b :
+  forall p z p', Pointer.add p z = p' ->
+                 Pointer.component p' = Pointer.component p /\
+                 Pointer.block p' = Pointer.block p.
+Proof.
+  intros p z p' Hadd.
+  destruct p as [[pc pb] po]. rewrite <- Hadd.
+  simpl. auto.
+Qed.
+
+Lemma Pointer_sub_c_b :
+  forall p z p', Pointer.sub p z = p' ->
+                 Pointer.component p' = Pointer.component p /\
+                 Pointer.block p' = Pointer.block p.
+Proof.
+  intros p z p' Hsub.
+  destruct p as [[pc pb] po]. rewrite <- Hsub.
+  simpl. auto.
+Qed.
+
+Lemma eval_binop_ptr :
+  forall op v1 v2 p,
+    eval_binop op v1 v2 = Ptr p ->
+    (exists p1, (v1 = Ptr p1 \/ v2 = Ptr p1)
+                /\
+                Pointer.component p = Pointer.component p1 /\
+                Pointer.block p = Pointer.block p1
+    ).
+  intros op v1 v2 p Heval.
+  unfold eval_binop in Heval.
+  destruct op eqn:eop; destruct v1 eqn:e1; destruct v2 eqn:e2;
+    try discriminate.
+  - exists t. split.
+    + right. trivial.
+    + inversion Heval. apply Pointer_add_c_b with (z := z). auto.
+  - exists t. split.
+    + left. trivial.
+    + inversion Heval. apply Pointer_add_c_b with (z := z). auto.
+  - exists t. split.
+    + left. trivial.
+    + inversion Heval. apply Pointer_sub_c_b with (z := z). auto.
+  - destruct t as [[tc tb] to].
+    destruct t0 as [[t0c t0b] t0o].
+    destruct ((tc =? t0c) && (tb =? t0b)); discriminate.
+  - destruct (Pointer.leq t t0); discriminate.
+Qed.    
+
+Lemma regs_ptrs_binop :
+  forall regs r1 op v1 v2,
+    regs_ptrs (Register.set r1 (eval_binop op v1 v2) regs) = (regs_ptrs regs).
+  (* This lemma is wrong.
+     One needs to know that v1 and v2 come from registers.
+     Also, because r1 is overwritten, the statement needs to be "fsubset" not "="
+     That r1 is being overwritten will lead to reasoning very similar to
+     regs_ptrs_set_get_in.
+  *)
+Admitted.
+
 Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
   Pointer.component (CS.state_pc s) \notin domm ctx.
@@ -178,7 +332,7 @@ Proof.
   destruct (prog_main p) as [main |] eqn:Hmain'.
   - (* https://github.com/coq/coq/issues/5129 *)
     inversion Hwf as [BUGGY _ _ _ _ _ [BUGGY' Hcontra]]; clear BUGGY BUGGY'.
-    rewrite Hmain' in Hcontra. specialize (Hcontra (eq_refl _)).
+    rewrite Hmain' in Hcontra. specialize (Hcontra (is_true_true)).
     rewrite Hcontra in Hdomm.
     discriminate.
   - reflexivity.
@@ -219,7 +373,7 @@ Proof.
   - (* RB: NOTE: As usual, the following two cases are symmetric. *)
     simpl in Hmainpc. rewrite Hmainp in Hmainpc; simpl in Hmainpc.
     unfold prog_main_block, EntryPoint.get.
-    rewrite Hmainp, Hmainc, unionmE.
+    rewrite Hmainp. rewrite Hmainc. rewrite unionmE.
     pose proof proj2 (wfprog_main_component Hwfp) as Hdommp.
     rewrite Hmainp in Hdommp. specialize (Hdommp isT).
     pose proof proj1 (wfprog_main_component Hwfc) as Hdommc.
@@ -236,9 +390,9 @@ Proof.
            try rewrite 2!domm_prepare_procedures_entrypoints;
            now inversion Hlinkable).
     (* Proceed (no symmetry on the hypothesis, here). *)
-    simpl in Hmainpc. rewrite Hmainp, Hmainc in Hmainpc; simpl in Hmainpc.
+    simpl in Hmainpc. rewrite Hmainp in Hmainpc; rewrite Hmainc in Hmainpc; simpl in Hmainpc.
     unfold prog_main_block, EntryPoint.get.
-    rewrite Hmainp, Hmainc, unionmE.
+    rewrite Hmainp. rewrite Hmainc. rewrite unionmE.
     pose proof proj2 (wfprog_main_component Hwfc) as Hdommc.
     rewrite Hmainc in Hdommc. specialize (Hdommc isT).
     pose proof proj1 (wfprog_main_component Hwfp) as Hdommp.
@@ -249,7 +403,7 @@ Proof.
     do 2 setoid_rewrite Hentrypointsc.
     reflexivity.
   - (* Another easy/contra goal. *)
-    simpl in Hmainpc. rewrite Hmainp, Hmainc in Hmainpc.
+    simpl in Hmainpc. rewrite Hmainp in Hmainpc. rewrite Hmainc in Hmainpc.
     now inversion Hmainpc.
 Qed.
 
@@ -670,30 +824,35 @@ Proof.
            }
            simpl in Heval_step. unfold code in *.
            rewrite -> HC_procs, HP_code, Hinstr in Heval_step.
-           destruct instr; inversion Heval_step; subst; clear Heval_step;
-             try (match goal with
+           destruct instr; inversion Heval_step; subst; clear Heval_step.
+             (*; try (match goal with
                   | Hpcfalse: (Pointer.offset ?PC <? 0) % Z = false,
                     Heq: (if (Pointer.offset ?PC <? 0) % Z then None else Some _) = Some _
                     |- _ =>
                     rewrite Hpcfalse in Heq; inversion Heq; subst; clear Heq Hpcfalse
                   end).
-
-           *** eapply Nop.
+              *)
+           *** rewrite H in H2; inversion H2; subst; clear H2 H.
+               eapply Nop.
                eexists. eexists. eauto.
 
-           *** eapply Label;
+           *** rewrite H in H2; inversion H2; subst; clear H2 H.
+               eapply Label;
                  try reflexivity;
                  try (eexists; eexists; eauto).
 
-           *** eapply Const;
+           *** rewrite H in H2; inversion H2; subst; clear H2 H.
+               eapply Const;
                  try reflexivity;
                  try (eexists; eexists; eauto).
 
-           *** eapply Mov;
+           *** rewrite H in H2; inversion H2; subst; clear H2 H.
+               eapply Mov;
                  try reflexivity;
                  try (eexists; eexists; eauto).
 
-           *** eapply BinOp;
+           *** rewrite H in H2; inversion H2; subst; clear H2 H.
+               eapply BinOp;
                  try reflexivity;
                  try (eexists; eexists; eauto).
 
@@ -808,10 +967,11 @@ Proof.
                **** assumption.
                **** apply Nat.eqb_eq. assumption.
 
-           *** match goal with
+           *** rewrite H in H2.
+               (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
                  rewrite Hpositive_offset in *
-               end.
+               end.*)
                destruct (find_label_in_component G pc0 l) eqn:Hlabel;
                  try discriminate.
                inversion H2; subst.
@@ -820,10 +980,11 @@ Proof.
                **** eexists. eexists. eauto.
                **** assumption.
 
-           *** match goal with
+           *** rewrite H in H2.
+               (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
                  rewrite Hpositive_offset in *
-               end.
+               end.*)
                destruct (Component.eqb (Pointer.component pc0) i) eqn:Hcomp;
                  try discriminate; simpl in *.
                destruct (imported_procedure_b (genv_interface G)
@@ -843,10 +1004,11 @@ Proof.
                **** assumption.
                **** assumption.
 
-           *** match goal with
+           *** rewrite H in H2.
+               (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
                  rewrite Hpositive_offset in *
-               end.
+               end.*)
                destruct gps0;
                  try discriminate.
                destruct (Component.eqb (Pointer.component pc0) (Pointer.component t0))
@@ -862,20 +1024,23 @@ Proof.
                **** apply Nat.eqb_neq. assumption.
                **** assumption.
 
-           *** match goal with
+           *** rewrite H in H2.
+               (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
                  rewrite Hpositive_offset in *
-               end.
+               end.*)
                discriminate.
 
         ** simpl in Heval_step. unfold code in *.
-           rewrite HC_procs, HP_code, Hinstr in Heval_step.
+           rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step.
+           rewrite Hinstr in Heval_step.
            destruct ((Pointer.offset pc0 <? 0) % Z); discriminate.
       * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
           as [instr | ] eqn:Hinstr.
         ** simpl in Heval_step.
            unfold code in *.
-           rewrite HC_procs, HP_code, Hinstr in Heval_step.
+           rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step.
+           rewrite Hinstr in Heval_step.
            destruct ((Pointer.offset pc0 <? 0) % Z) eqn:Hpc';
              try discriminate.
            exfalso. unfold Z.geb in Hpc.
@@ -883,11 +1048,12 @@ Proof.
              try discriminate.
         ** simpl in Heval_step.
            unfold code in *.
-           rewrite HC_procs, HP_code, Hinstr in Heval_step.
+           rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step.
+           rewrite Hinstr in Heval_step.
            destruct ((Pointer.offset pc0 <? 0) % Z); discriminate.
     + simpl in Heval_step.
       unfold code in *.
-      rewrite HC_procs, HP_code in Heval_step. discriminate.
+      rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step. discriminate.
   - simpl in Heval_step.
     unfold code in *.
     rewrite HC_procs in Heval_step.
@@ -1402,11 +1568,52 @@ End ProgramLink.
 
 (* [DynShare] *)
 
-Check are_all_ptrs_in_reachable.
 Lemma are_all_ptrs_in_reachable_step :
-  forall G s t s' p cid,
-    are_all_ptrs_in_reachable s p cid ->
-    step G s t s' ->
-    are_all_ptrs_in_reachable s' p cid.
+  forall G st t st' p cid,
+    are_all_ptrs_in_reachable st p cid ->
+    step G st t st' ->
+    are_all_ptrs_in_reachable st' p cid.
+Proof.
+  unfold are_all_ptrs_in_reachable, state_mem, state_ptrs.
+  intros G st t st' p cid.
+  do 2 rewrite fsubUset.
+  intros H_s_ptrs Hstep.
+  destruct (andP H_s_ptrs) as [Hsptrs_regs Hsptrs_mem].
+  inversion Hstep; subst; simpl; try auto;
+    (* extract information about the state *)
+    match goal with
+    | Hexec: executing _ _ _ |- _ =>
+      destruct Hexec as [procs [P_code [Hprocs [HP_code [? Hinstr]]]]]
+    end.
+  -  apply/andP. split.
+    + admit. (* Should follow from well_formed_instruction *)
+    + destruct (andP H_s_ptrs); trivial.
+  - apply/andP. split.
+    + apply (@fsubset_trans _
+                            (regs_ptrs regs)
+                            (regs_ptrs (Register.set r2 (Register.get r1 regs) regs))
+                            (\bigcup_(i <- program_ptrs p)
+                              fset (reachable_nodes_nat mem i)
+                            )%fset
+            ).
+      * apply regs_ptrs_set_get.
+      * assumption.
+    + assumption.
+  - SearchAbout eval_binop.
+    (* Need a lemma that ensures eval_binop does not change the bounds of a pointer *)
+
+    (*
+    (* simplify *)
+    simpl. repeat (exact H_s_ptrs). unfold code in *; rewrite -> Hprocs, HP_code, Hinstr;
+    (* the program counter is good *)
+    match goal with
+    | Hpc: (Pointer.offset _ >= 0) % Z |- _ =>
+      apply Z.ge_le in Hpc; apply Z.ltb_ge in Hpc;
+      rewrite Hpc
+    end;
+    (* solve simple cases *)
+    try reflexivity.
+    *)
+
 Admitted.
 End CS.
