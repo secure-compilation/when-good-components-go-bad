@@ -169,24 +169,23 @@ Ltac unfold_Register_set e1 k'mem :=
   unfold Register.set in k'mem; rewrite setmE in k'mem; rewrite e1 in k'mem;
   simpl in k'mem.
 
+Ltac unfold_regs_ptrs :=
+  do 2 (unfold regs_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id);
+  intros Hin; apply/codommP; destruct (codommP _ _ Hin) as [k' k'mem].
+
+Ltac solve_untouched_registers e1 k' k'mem :=
+  exists k'; rewrite filtermE; rewrite filtermE in k'mem; simpl; simpl in k'mem;
+         rewrite mapmE; rewrite mapmE in k'mem; unfold_Register_set e1 k'mem; exact k'mem.
+
 Lemma regs_ptrs_set_get_in :
   forall (regs: Register.t) r1 r2 v,
     v \in regs_ptrs (Register.set r2 (Register.get r1 regs) regs) ->
     v \in regs_ptrs regs.
 Proof.
   intros regs r1 r2 v.
-  do 2 (unfold regs_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id).
-  intros Hin.
-  apply/codommP.
-  destruct (codommP _ _ Hin) as [k' k'mem].
+  unfold_regs_ptrs.
   destruct (Some v == value_to_pointer_err (Register.get r1 regs)) eqn:copied;
-    destruct (k' == Register.to_nat r2) eqn:e1;
-    try (
-        exists k'; rewrite filtermE; rewrite filtermE in k'mem; simpl; simpl in k'mem;
-               rewrite mapmE; rewrite mapmE in k'mem;
-               unfold_Register_set e1 k'mem;
-               exact k'mem
-      ).
+    destruct (k' == Register.to_nat r2) eqn:e1; try solve_untouched_registers e1 k' k'mem.
   - pose (copied' := eqP copied); pose (e1' := eqP e1).
     exists (Register.to_nat r1).
     rewrite filtermE. rewrite filtermE in k'mem. simpl. simpl in k'mem.
@@ -275,15 +274,78 @@ Lemma eval_binop_ptr :
 Qed.    
 
 Lemma regs_ptrs_binop :
-  forall regs r1 op v1 v2,
-    regs_ptrs (Register.set r1 (eval_binop op v1 v2) regs) = (regs_ptrs regs).
-  (* This lemma is wrong.
-     One needs to know that v1 and v2 come from registers.
-     Also, because r1 is overwritten, the statement needs to be "fsubset" not "="
-     That r1 is being overwritten will lead to reasoning very similar to
-     regs_ptrs_set_get_in.
-  *)
-Admitted.
+  forall regs rdest op r1 r2,
+    fsubset (regs_ptrs
+               (Register.set rdest
+                             (eval_binop op
+                                         (Register.get r1 regs)
+                                         (Register.get r2 regs)
+                             )
+                             regs)
+            )
+            (regs_ptrs regs).
+Proof.
+  intros regs rdest op r1 r2. apply in_fsubset. intros v.
+  unfold_regs_ptrs.
+  destruct (Some v == value_to_pointer_err (eval_binop op
+                                         (Register.get r1 regs)
+                                         (Register.get r2 regs)
+           )) eqn:copied;
+    destruct (k' == Register.to_nat rdest) eqn:e1;
+    try solve_untouched_registers e1 k' k'mem.
+  - pose (copied' := eqP copied); pose (e1' := eqP e1).
+    destruct (eval_binop op (Register.get r1 regs) (Register.get r2 regs)) eqn:e.
+    + simpl in copied'. discriminate.
+    + destruct (eval_binop_ptr op (Register.get r1 regs) (Register.get r2 regs) t e)
+        as [ptr [[ptrr1 | ptrr2] [cmpeq blkeq]]];
+        eexists;
+        rewrite filtermE; rewrite filtermE in k'mem; simpl; simpl in k'mem;
+          rewrite mapmE; rewrite mapmE in k'mem;
+            destruct t eqn:et; destruct p eqn:ep; simpl in *; unfold_Register_set e1 k'mem.
+      * assert (g : obind (fun x : option (nat * nat) => if isSome x then Some x else None)
+                          (omap value_to_pointer_err
+                                (regs (Register.to_nat r1))) = Some (Some v)).
+        {
+          unfold Register.get in ptrr1.
+          destruct (regs (Register.to_nat r1)); try discriminate.
+          simpl. rewrite ptrr1. rewrite <- (Pointer.compose ptr). simpl.
+          rewrite <- k'mem, <- cmpeq, <- blkeq. reflexivity.
+        }
+        exact g.
+      * assert (g : obind (fun x : option (nat * nat) => if isSome x then Some x else None)
+                          (omap value_to_pointer_err
+                                (regs (Register.to_nat r2))) = Some (Some v)).
+        {
+          unfold Register.get in ptrr2.
+          destruct (regs (Register.to_nat r2)); try discriminate.
+          simpl. rewrite ptrr2. rewrite <- (Pointer.compose ptr). simpl.
+          rewrite <- k'mem, <- cmpeq, <- blkeq. reflexivity.
+        }
+        exact g.
+    + simpl in copied'. discriminate.
+  - pose (e1' := eqP e1).
+    rewrite filtermE in k'mem; simpl; simpl in k'mem; rewrite mapmE in k'mem.
+    unfold_Register_set e1 k'mem.
+    pose (@negPf (Some v == value_to_pointer_err
+                              (eval_binop op
+                                          (Register.get r1 regs)
+                                          (Register.get r2 regs)
+         ))) as n.
+    assert (ineq : Some v != value_to_pointer_err (eval_binop op
+                                          (Register.get r1 regs)
+                                          (Register.get r2 regs)
+           )).
+    {
+      apply/n. exact copied.
+    }
+    pose (negP ineq) as n0. exfalso. apply n0. apply/eqP.
+    destruct (value_to_pointer_err (eval_binop op
+                                               (Register.get r1 regs)
+                                               (Register.get r2 regs))).
+    + simpl in k'mem. apply Some_inj. symmetry. exact k'mem.
+    + simpl in k'mem. discriminate.
+Qed.
+
 
 Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
