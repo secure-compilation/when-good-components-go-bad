@@ -1696,22 +1696,5 @@ Proof.
     + admit. (* Need an easy lemma about invalidate.  *)
     + assumption.
 Abort.
-      
-    SearchAbout eval_binop.
-    (* Need a lemma that ensures eval_binop does not change the bounds of a pointer *)
 
-    (*
-    (* simplify *)
-    simpl. repeat (exact H_s_ptrs). unfold code in *; rewrite -> Hprocs, HP_code, Hinstr;
-    (* the program counter is good *)
-    match goal with
-    | Hpc: (Pointer.offset _ >= 0) % Z |- _ =>
-      apply Z.ge_le in Hpc; apply Z.ltb_ge in Hpc;
-      rewrite Hpc
-    end;
-    (* solve simple cases *)
-    try reflexivity.
-    *)
-
-Admitted.
 End CS.
