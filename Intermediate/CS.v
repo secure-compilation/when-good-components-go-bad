@@ -346,6 +346,86 @@ Proof.
     + simpl in k'mem. discriminate.
 Qed.
 
+Lemma regs_ptrs_invalidate :
+  forall regs, fsubset (regs_ptrs (Register.invalidate regs)) (regs_ptrs regs).
+Proof.
+  intros regs. unfold Register.invalidate. apply in_fsubset. intros v.
+  unfold_regs_ptrs.
+  destruct (Some v == value_to_pointer_err (Register.get R_COM regs)) eqn:R_COMptr;
+    destruct (k' == Register.to_nat R_COM) eqn:R_COMloc;
+    simpl in k'mem; simpl in R_COMloc; rewrite filtermE in k'mem; rewrite mapmE in k'mem.
+  - exists k'; rewrite filtermE; simpl; rewrite mapmE.
+    pose (loc := eqP R_COMloc).
+    rewrite loc. rewrite loc in k'mem. simpl in k'mem.
+    pose (R_COMptr' := eqP R_COMptr).
+    rewrite R_COMptr' in k'mem.
+    destruct (value_to_pointer_err (Register.get R_COM regs)) eqn:contra.
+    + simpl in k'mem. rewrite R_COMptr'.
+      unfold Register.get in contra. simpl in contra.
+      destruct (regs 1) eqn:e.
+      * rewrite e. simpl. rewrite contra. auto.
+      * simpl in contra. discriminate.
+    + discriminate.
+  - destruct (k' == 0) eqn:k'0.
+    + pose (k'0' := eqP k'0). rewrite k'0' in k'mem. simpl in k'mem. discriminate.
+    + destruct (k' == 1) eqn:k'1.
+      * discriminate.
+      * destruct (k' == 2) eqn:k'2.
+        -- pose (k'2' := eqP k'2). rewrite k'2' in k'mem. simpl in k'mem. discriminate.
+        -- destruct (k' == 3) eqn:k'3.
+           ++ pose (k'3' := eqP k'3). rewrite k'3' in k'mem. simpl in k'mem. discriminate.
+           ++ destruct (k' == 4) eqn:k'4.
+              ** pose (k'4' := eqP k'4). rewrite k'4' in k'mem. simpl in k'mem. discriminate.
+              ** destruct (k' == 5) eqn:k'5.
+                 --- pose (k'5' := eqP k'5). rewrite k'5' in k'mem. simpl in k'mem. discriminate.
+                 --- destruct (k' == 6) eqn:k'6.
+                     +++ pose (k'6' := eqP k'6). rewrite k'6' in k'mem. simpl in k'mem. discriminate.
+                     +++ rewrite setmE in k'mem. rewrite k'0 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'1 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'2 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'3 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'4 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'5 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'6 in k'mem.
+                         simpl in k'mem. discriminate.
+  - pose (loc := eqP R_COMloc). rewrite loc in k'mem. simpl in k'mem.
+    pose (@negPf (Some v == value_to_pointer_err (Register.get R_COM regs))) as n.
+    assert (ineq : Some v != value_to_pointer_err (Register.get R_COM regs)).
+    {
+      apply/n. exact R_COMptr.
+    }
+    destruct (value_to_pointer_err (Register.get R_COM regs)) eqn:contra.
+    + simpl in k'mem. apply Some_inj in k'mem. rewrite k'mem in ineq.
+      assert (f : false).
+      {
+        apply contra_eqT with (b := false) (x := Some v) (y := Some v); auto.
+      }
+      exfalso. apply notF. assumption.
+    + simpl in k'mem. discriminate.
+  - destruct (k' == 0) eqn:k'0.
+    + pose (k'0' := eqP k'0). rewrite k'0' in k'mem. simpl in k'mem. discriminate.
+    + destruct (k' == 1) eqn:k'1.
+      * discriminate.
+      * destruct (k' == 2) eqn:k'2.
+        -- pose (k'2' := eqP k'2). rewrite k'2' in k'mem. simpl in k'mem. discriminate.
+        -- destruct (k' == 3) eqn:k'3.
+           ++ pose (k'3' := eqP k'3). rewrite k'3' in k'mem. simpl in k'mem. discriminate.
+           ++ destruct (k' == 4) eqn:k'4.
+              ** pose (k'4' := eqP k'4). rewrite k'4' in k'mem. simpl in k'mem. discriminate.
+              ** destruct (k' == 5) eqn:k'5.
+                 --- pose (k'5' := eqP k'5). rewrite k'5' in k'mem. simpl in k'mem. discriminate.
+                 --- destruct (k' == 6) eqn:k'6.
+                     +++ pose (k'6' := eqP k'6). rewrite k'6' in k'mem. simpl in k'mem. discriminate.
+                     +++ rewrite setmE in k'mem. rewrite k'0 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'1 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'2 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'3 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'4 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'5 in k'mem.
+                         rewrite setmE in k'mem. rewrite k'6 in k'mem.
+                         simpl in k'mem. discriminate.
+Qed.
+  
 
 Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
@@ -1690,10 +1770,26 @@ Proof.
               use this lemma.*)
     + admit. (* Same as above *)
   - apply/andP. split. (* ICall *)
-    + admit. (* Need an easy lemma about invalidate.  *)
+    + apply (@fsubset_trans _
+                            (regs_ptrs regs)
+                            (regs_ptrs (Register.invalidate regs))
+                            (\bigcup_(i <- program_ptrs p)
+                              fset (reachable_nodes_nat mem i)
+                            )%fset
+            ).
+      * apply regs_ptrs_invalidate.
+      * assumption.
     + assumption.
   - apply/andP. split. (* IReturn *)
-    + admit. (* Need an easy lemma about invalidate.  *)
+    + apply (@fsubset_trans _
+                            (regs_ptrs regs)
+                            (regs_ptrs (Register.invalidate regs))
+                            (\bigcup_(i <- program_ptrs p)
+                              fset (reachable_nodes_nat mem i)
+                            )%fset
+            ).
+      * apply regs_ptrs_invalidate.
+      * assumption.
     + assumption.
 Abort.
 
