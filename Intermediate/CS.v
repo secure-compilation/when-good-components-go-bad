@@ -1661,7 +1661,43 @@ Proof.
       * apply regs_ptrs_set_get.
       * assumption.
     + assumption.
-  - SearchAbout eval_binop.
+  - apply/andP. split.
+    + apply (@fsubset_trans _
+                            (regs_ptrs regs)
+                            (regs_ptrs (Register.set r3 result regs))
+                            (\bigcup_(i <- program_ptrs p)
+                              fset (reachable_nodes_nat mem i)
+                            )%fset
+            ).
+      * apply regs_ptrs_binop.
+      * assumption.
+    + assumption.
+  - apply/andP. split.
+    + admit. (* load *)
+    + assumption.
+  - apply/andP. split. (* store: need fsubset (\bigcup reach mem') (\bigcup reach mem) *)
+    + admit.
+    + admit.
+  - apply/andP. split. (* IJal*)
+    + admit. (* Need an invariant about pc that ensures that pc does not point to
+              any component memory? But moreover, probably need to change the definition
+              of regs_ptrs and mem_ptrs to exclude code pointers?? *)
+    + assumption.
+  - apply/andP. split. (* IAlloc *)
+    + admit. (* Need to weaken the lemma. In particular, need to allow the reachable
+              pointers to include also allocations.. Not sure yet what is the right way
+              to specify this. The right way to specify it depends on how we want to
+              use this lemma.*)
+    + admit. (* Same as above *)
+  - apply/andP. split. (* ICall *)
+    + admit. (* Need an easy lemma about invalidate.  *)
+    + assumption.
+  - apply/andP. split. (* IReturn *)
+    + admit. (* Need an easy lemma about invalidate.  *)
+    + assumption.
+Abort.
+      
+    SearchAbout eval_binop.
     (* Need a lemma that ensures eval_binop does not change the bounds of a pointer *)
 
     (*
