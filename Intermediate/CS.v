@@ -165,6 +165,17 @@ Proof.
   exact Hinin.
 Qed.
 
+Lemma fsubset_in :
+  forall (T : ordType) (s1 s2 : {fset T}) v,
+    fsubset s1 s2 -> v \in s1 -> v \in s2.
+Proof.
+  intros ? ? ? ? Hsubset Hin.
+  pose (fsubsetP s1 s2 Hsubset) as Hsubset'.
+  unfold sub_mem in Hsubset'.
+  apply Hsubset'.
+  assumption.
+Qed.
+
 Ltac unfold_Register_set e1 k'mem :=
   unfold Register.set in k'mem; rewrite setmE in k'mem; rewrite e1 in k'mem;
   simpl in k'mem.
@@ -177,6 +188,20 @@ Ltac solve_untouched_registers e1 k' k'mem :=
   exists k'; rewrite filtermE; rewrite filtermE in k'mem; simpl; simpl in k'mem;
          rewrite mapmE; rewrite mapmE in k'mem; unfold_Register_set e1 k'mem; exact k'mem.
 
+Lemma Register_get_regs_ptrs :
+  forall r1 regs ptrC ptrB ptrO,
+    Register.get r1 regs = Ptr (ptrC, ptrB, ptrO) ->
+    (ptrC, ptrB) \in regs_ptrs regs.
+Proof.
+  intros r1 regs ptrC ptrB ptrO Hget.
+  unfold regs_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id. apply/codommP.
+  unfold Register.get in Hget.
+  destruct (regs (Register.to_nat r1)) as [v |] eqn:e.
+  - exists (Register.to_nat r1).
+    rewrite filtermE. rewrite mapmE. rewrite e. rewrite Hget. auto.
+  - discriminate.
+Qed.
+         
 Lemma regs_ptrs_set_get_in :
   forall (regs: Register.t) r1 r2 v,
     v \in regs_ptrs (Register.set r2 (Register.get r1 regs) regs) ->
@@ -425,7 +450,23 @@ Proof.
                          rewrite setmE in k'mem. rewrite k'6 in k'mem.
                          simpl in k'mem. discriminate.
 Qed.
-  
+
+Lemma regs_ptrs_set_Int_Undef :
+  forall r regs vNoPtr z,
+    ((vNoPtr = Int z) \/ vNoPtr = Undef) ->
+    fsubset (regs_ptrs (Register.set r vNoPtr regs)) (regs_ptrs regs).
+Proof.
+  intros r regs vNoPtr z HvNoPtr. apply in_fsubset. intros v.
+  unfold_regs_ptrs.
+  destruct (Some v == value_to_pointer_err vNoPtr) eqn:copied;
+    destruct (k' == Register.to_nat r) eqn:e1;
+    try solve_untouched_registers e1 k' k'mem.
+  - pose (copied' := eqP copied); pose (e1' := eqP e1).
+    destruct HvNoPtr as [H | H]; erewrite H in copied'; simpl in copied'; discriminate.
+  - rewrite filtermE in k'mem. rewrite mapmE in k'mem.
+    unfold_Register_set e1 k'mem.
+    destruct HvNoPtr as [H | H]; erewrite H in k'mem; discriminate.
+Qed.
 
 Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
@@ -1753,7 +1794,38 @@ Proof.
       * assumption.
     + assumption.
   - apply/andP. split.
-    + admit. (* load *)
+    + destruct ptr as [[ptrC ptrB] ptrO].
+      assert (addrInreach : (ptrC, ptrB) \in
+                 (\bigcup_(i <- program_ptrs p) fset (reachable_nodes_nat mem i))%fset).
+      {
+        apply fsubset_in with (s1 := regs_ptrs regs).
+        * assumption.
+        * apply Register_get_regs_ptrs with (r1 := r1) (ptrO := ptrO).
+          assumption.
+      }
+      destruct v as [z | [[vC vB] vO] |] eqn:ve.
+      * apply (@fsubset_trans _
+                              (regs_ptrs regs)
+                              (regs_ptrs (Register.set r2 (Int z) regs))
+                              (\bigcup_(i <- program_ptrs p)
+                                fset (reachable_nodes_nat mem i)
+                              )%fset
+              ).
+        -- apply regs_ptrs_set_Int_Undef with (z := z). auto.
+        -- assumption.
+      * admit.
+        (* Here, apply fsubset_in, then destruct (k' == Register.to_nat r2)
+           from the other case. *)
+        (* In case true, show that addrInreach -> H2 -> (vC, vB) \in mem_ptrs (state_mem..)  *)
+      * apply (@fsubset_trans _
+                              (regs_ptrs regs)
+                              (regs_ptrs (Register.set r2 Undef regs))
+                              (\bigcup_(i <- program_ptrs p)
+                                fset (reachable_nodes_nat mem i)
+                              )%fset
+              ).
+        -- apply regs_ptrs_set_Int_Undef with (z := 0%Z). auto.
+        -- assumption.
     + assumption.
   - apply/andP. split. (* store: need fsubset (\bigcup reach mem') (\bigcup reach mem) *)
     + admit.
