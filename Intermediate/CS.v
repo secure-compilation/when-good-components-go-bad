@@ -125,7 +125,7 @@ Definition mem_ptrs (m : Memory.t) : {fset Component.id * Block.id} :=
 Definition state_ptrs (st: state) := fsetU (regs_ptrs (state_regs st))
                                            (mem_ptrs (state_mem st)).
 
-Definition are_all_ptrs_in_reachable (st: state) (p: program) (c: Component.id) :=
+Definition are_all_ptrs_in_reachable (st: state) (p: program) :=
   (fsubset (state_ptrs st)
            (\bigcup_(i <- program_ptrs p)
              (fset (reachable_nodes_nat (state_mem st) i))
@@ -1750,119 +1750,210 @@ End ProgramLink.
 
 
 (* [DynShare] *)
+SearchAbout prepare_procedures_initial_memory_aux.
+Check prepare_procedures_initial_memory_aux.
+SearchAbout prog_procedures.
+SearchAbout program.
+Check mem_domm.
+Check getm.
+SearchAbout getm.
 
-Lemma are_all_ptrs_in_reachable_step :
-  forall G st t st' p cid,
-    are_all_ptrs_in_reachable st p cid ->
-    step G st t st' ->
-    are_all_ptrs_in_reachable st' p cid.
+Lemma genv_procedures_prog_procedures_in p cid fid instlst :
+  well_formed_program p ->
+  (omap (fun m => getm m fid)
+        ((genv_procedures (globalenv (sem p))) cid) = Some (Some instlst)
+   <->
+   omap (fun m => getm m fid) ((prog_procedures p) cid) = Some (Some instlst)).
+Proof.
+  intros Hwfp.
+  pose (domm_domm := wfprog_defined_procedures Hwfp).
+  pose (domm_domm1 := domm_prepare_procedures_initial_memory_aux p).
+  unfold sem. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
+  destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
+    simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e1 in e;
+      unfold isSome in e1;
+      destruct (@getm nat_ordType
+                      (NMap code)
+                      (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
+                      (prog_procedures p)
+                      cid) eqn:contra.
+  (* unable to use the destruct equation due to type inference problems. *)
+        (*erewrite contra in e1. try discriminate; split; auto; clear e1;
+          unfold reserve_component_blocks; intros H.*)
+
+  (*
+  - assert (etmp : is_true (cid \in domm (prog_interface p))).
+    { erewrite domm_domm; rewrite e; auto. }
+    pose (dommP (prog_interface p) cid etmp) as e0.
+    destruct ((prog_interface p) cid) eqn:e1;
+      try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
+    destruct (ComponentMemoryExtra.reserve_blocks
+         (ComponentMemory.prealloc (odflt emptym ((prog_buffers p) cid)))
+         (length (elementsm (odflt emptym (Some n)))))
+             as [compMem bs] eqn:rsvblk.
+    rewrite rsvblk in H.
+    simpl in H. rewrite <- H.
+   *)
+Admitted.
+Lemma genv_procedures_prog_procedures p cid proc :
+  well_formed_program p ->
+  (genv_procedures (globalenv (sem p))) cid = proc <-> (prog_procedures p) cid = proc.
+Proof.
+  intros Hwfp.
+  pose (domm_domm := wfprog_defined_procedures Hwfp).
+  pose (domm_domm1 := domm_prepare_procedures_initial_memory_aux p).
+  unfold sem. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
+  destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
+    simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e in e1;
+      unfold isSome in e1; destruct ((prog_procedures p) cid) eqn:contra; auto;
+        rewrite contra in e1; try discriminate; split; auto; clear e1;
+          unfold reserve_component_blocks; intros H.
+  - assert (etmp : is_true (cid \in domm (prog_interface p))).
+    { erewrite domm_domm; rewrite e; auto. }
+    pose (dommP (prog_interface p) cid etmp) as e0.
+    destruct ((prog_interface p) cid) eqn:e1;
+      try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
+    destruct (ComponentMemoryExtra.reserve_blocks
+         (ComponentMemory.prealloc (odflt emptym ((prog_buffers p) cid)))
+         (length (elementsm (odflt emptym (Some n)))))
+             as [compMem bs] eqn:rsvblk.
+    rewrite rsvblk in H.
+    simpl in H. rewrite <- H.
+    assert (g: n = mkfmap (T:=nat_ordType) (seq.zip bs (seq.unzip2 (elementsm n)))).
+    {
+      (* This goal is hard.
+         n is a map. So, it is better if the lemma were stated in terms of
+       equality of the contents rather than just equality.*)
+      admit.
+    }
+    rewrite <- g. auto.
+  - assert (etmp : is_true (cid \in domm (prog_interface p))).
+    { erewrite domm_domm; rewrite e; auto. }
+    pose (dommP (prog_interface p) cid etmp) as e0.
+    destruct ((prog_interface p) cid) eqn:e1;
+      try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
+
+Admitted.
+
+Lemma are_all_ptrs_in_reachable_star_step p st t st' :
+  Star (sem p) st t st' ->
+  well_formed_program p ->
+  are_all_ptrs_in_reachable st p ->
+  are_all_ptrs_in_reachable st' p.
 Proof.
   unfold are_all_ptrs_in_reachable, state_mem, state_ptrs.
-  intros G st t st' p cid.
+  intros Hstar Hwellformed.
   do 2 rewrite fsubUset.
-  intros H_s_ptrs Hstep.
-  destruct (andP H_s_ptrs) as [Hsptrs_regs Hsptrs_mem].
-  inversion Hstep; subst; simpl; try auto;
+  induction Hstar; auto.
+  unfold_state s1. unfold_state s2. unfold_state s3.
+  intros H_s_ptrs. destruct (andP H_s_ptrs) as [Hsptrs_regs Hsptrs_mem].
+  inversion H; subst; auto; apply IHHstar; clear IHHstar;
     (* extract information about the state *)
     match goal with
     | Hexec: executing _ _ _ |- _ =>
       destruct Hexec as [procs [P_code [Hprocs [HP_code [? Hinstr]]]]]
-    end.
-  -  apply/andP. split.
-    + admit. (* Should follow from well_formed_instruction *)
-    + destruct (andP H_s_ptrs); trivial.
-  - apply/andP. split.
-    + apply (@fsubset_trans _
+    end;
+    apply/andP; split; auto.
+  - (* Use Hwellformed, Hprocs, HP_code and Hinstr *)
+    destruct (genv_procedures_prog_procedures p
+                                          (Pointer.component pc)
+                                          (Some procs)) as [Hprocsif _].
+    inversion Hwellformed.
+    pose (wfprog_well_formed_instructions0
+            (Pointer.component pc) procs (Hprocsif Hprocs) (Pointer.block pc) P_code HP_code
+            (IConst v r)
+         ) as Hwfi.
+    pose (Hwfi (nth_error_In P_code (Z.to_nat (Pointer.offset pc)) Hinstr)) as Hwfi'.
+    unfold well_formed_instruction in Hwfi'.
+    destruct v as [vInt | vPtr].
+    + simpl.
+      apply (@fsubset_trans _
                             (regs_ptrs regs)
-                            (regs_ptrs (Register.set r2 (Register.get r1 regs) regs))
+                            (regs_ptrs (Register.set r (Int vInt) regs))
                             (\bigcup_(i <- program_ptrs p)
-                              fset (reachable_nodes_nat mem i)
+                              fset (reachable_nodes_nat mem0 i)
                             )%fset
             ).
-      * apply regs_ptrs_set_get.
+      * apply regs_ptrs_set_Int_Undef with (z := vInt). left. trivial.
       * assumption.
+    + simpl.
+      (* Here, assert that (value_to_pointer_err vPtr) is \in (program_ptrs p) *)
+      (* Then do a case distinction that is similar to all the reg_ptrs proofs. *)
+      admit.
+  - apply (@fsubset_trans _
+                          (regs_ptrs regs)
+                          (regs_ptrs (Register.set r2 (Register.get r1 regs) regs))
+                          (\bigcup_(i <- program_ptrs p)
+                            fset (reachable_nodes_nat mem0 i)
+                          )%fset
+          ).
+    + apply regs_ptrs_set_get.
     + assumption.
-  - apply/andP. split.
+  - apply (@fsubset_trans _
+                          (regs_ptrs regs)
+                          (regs_ptrs (Register.set r3 result regs))
+                          (\bigcup_(i <- program_ptrs p)
+                            fset (reachable_nodes_nat mem0 i)
+                          )%fset
+          ).
+    + apply regs_ptrs_binop.
+    + assumption.
+  - destruct ptr as [[ptrC ptrB] ptrO].
+    assert (addrInreach : (ptrC, ptrB) \in
+               (\bigcup_(i <- program_ptrs p) fset (reachable_nodes_nat mem0 i))%fset).
+    {
+      apply fsubset_in with (s1 := regs_ptrs regs).
+      + assumption.
+      + apply Register_get_regs_ptrs with (r1 := r1) (ptrO := ptrO).
+        assumption.
+    }
+    destruct v as [z | [[vC vB] vO] |] eqn:ve.
     + apply (@fsubset_trans _
                             (regs_ptrs regs)
-                            (regs_ptrs (Register.set r3 result regs))
+                            (regs_ptrs (Register.set r2 (Int z) regs))
                             (\bigcup_(i <- program_ptrs p)
-                              fset (reachable_nodes_nat mem i)
+                              fset (reachable_nodes_nat mem0 i)
                             )%fset
             ).
-      * apply regs_ptrs_binop.
+      -- apply regs_ptrs_set_Int_Undef with (z := z). auto.
+      -- assumption.
+    + admit.
+    (* Here, apply fsubset_in, then destruct (k' == Register.to_nat r2)
+       from the other case. *)
+    (* In case true, show that addrInreach -> H2 -> (vC, vB) \in mem_ptrs (state_mem..)  *)
+    + apply (@fsubset_trans _
+                            (regs_ptrs regs)
+                            (regs_ptrs (Register.set r2 Undef regs))
+                            (\bigcup_(i <- program_ptrs p)
+                              fset (reachable_nodes_nat mem0 i)
+                            )%fset
+            ).
+      * apply regs_ptrs_set_Int_Undef with (z := 0%Z). auto.
       * assumption.
-    + assumption.
-  - apply/andP. split.
-    + destruct ptr as [[ptrC ptrB] ptrO].
-      assert (addrInreach : (ptrC, ptrB) \in
-                 (\bigcup_(i <- program_ptrs p) fset (reachable_nodes_nat mem i))%fset).
-      {
-        apply fsubset_in with (s1 := regs_ptrs regs).
-        * assumption.
-        * apply Register_get_regs_ptrs with (r1 := r1) (ptrO := ptrO).
-          assumption.
-      }
-      destruct v as [z | [[vC vB] vO] |] eqn:ve.
-      * apply (@fsubset_trans _
-                              (regs_ptrs regs)
-                              (regs_ptrs (Register.set r2 (Int z) regs))
-                              (\bigcup_(i <- program_ptrs p)
-                                fset (reachable_nodes_nat mem i)
-                              )%fset
-              ).
-        -- apply regs_ptrs_set_Int_Undef with (z := z). auto.
-        -- assumption.
-      * admit.
-        (* Here, apply fsubset_in, then destruct (k' == Register.to_nat r2)
-           from the other case. *)
-        (* In case true, show that addrInreach -> H2 -> (vC, vB) \in mem_ptrs (state_mem..)  *)
-      * apply (@fsubset_trans _
-                              (regs_ptrs regs)
-                              (regs_ptrs (Register.set r2 Undef regs))
-                              (\bigcup_(i <- program_ptrs p)
-                                fset (reachable_nodes_nat mem i)
-                              )%fset
-              ).
-        -- apply regs_ptrs_set_Int_Undef with (z := 0%Z). auto.
-        -- assumption.
-    + assumption.
-  - apply/andP. split. (* store: need fsubset (\bigcup reach mem') (\bigcup reach mem) *)
-    + admit.
-    + admit.
-  - apply/andP. split. (* IJal*)
-    + admit. (* Need an invariant about pc that ensures that pc does not point to
+  - (* store*) admit.
+  - (* store*) admit.
+  - (* IJal*) admit. (* Need an invariant about pc that ensures that pc does not point to
               any component memory? But moreover, probably need to change the definition
               of regs_ptrs and mem_ptrs to exclude code pointers?? *)
-    + assumption.
-  - apply/andP. split. (* IAlloc *)
-    + admit. (* Need to weaken the lemma. In particular, need to allow the reachable
+  - (* IAlloc *) admit. (* Need to weaken the lemma. In particular, need to allow the reachable
               pointers to include also allocations.. Not sure yet what is the right way
               to specify this. The right way to specify it depends on how we want to
               use this lemma.*)
-    + admit. (* Same as above *)
-  - apply/andP. split. (* ICall *)
-    + apply (@fsubset_trans _
-                            (regs_ptrs regs)
-                            (regs_ptrs (Register.invalidate regs))
-                            (\bigcup_(i <- program_ptrs p)
-                              fset (reachable_nodes_nat mem i)
-                            )%fset
-            ).
-      * apply regs_ptrs_invalidate.
-      * assumption.
-    + assumption.
-  - apply/andP. split. (* IReturn *)
-    + apply (@fsubset_trans _
-                            (regs_ptrs regs)
-                            (regs_ptrs (Register.invalidate regs))
-                            (\bigcup_(i <- program_ptrs p)
-                              fset (reachable_nodes_nat mem i)
-                            )%fset
-            ).
-      * apply regs_ptrs_invalidate.
-      * assumption.
-    + assumption.
+  - (* IAlloc *) admit. (* Same as above *)
+  - apply (@fsubset_trans _
+                          (regs_ptrs regs)
+                          (regs_ptrs (Register.invalidate regs))
+                          (\bigcup_(i <- program_ptrs p)
+                            fset (reachable_nodes_nat mem0 i)
+                          )%fset);
+      auto; apply regs_ptrs_invalidate.
+  - apply (@fsubset_trans _
+                          (regs_ptrs regs)
+                          (regs_ptrs (Register.invalidate regs))
+                          (\bigcup_(i <- program_ptrs p)
+                            fset (reachable_nodes_nat mem0 i)
+                          )%fset);
+      auto; apply regs_ptrs_invalidate.
 Abort.
 
 End CS.
