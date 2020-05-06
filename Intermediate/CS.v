@@ -1857,7 +1857,9 @@ Proof.
   - (* Use Hwellformed, Hprocs, HP_code and Hinstr *)
     destruct (genv_procedures_prog_procedures p
                                           (Pointer.component pc)
-                                          (Some procs)) as [Hprocsif _].
+                                          (Some procs)
+                                          Hwellformed
+             ) as [Hprocsif _].
     inversion Hwellformed.
     pose (wfprog_well_formed_instructions0
             (Pointer.component pc) procs (Hprocsif Hprocs) (Pointer.block pc) P_code HP_code
