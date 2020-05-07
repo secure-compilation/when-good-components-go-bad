@@ -468,6 +468,29 @@ Proof.
     destruct HvNoPtr as [H | H]; erewrite H in k'mem; discriminate.
 Qed.
 
+Lemma regs_ptrs_set_Ptr :
+  forall r regs vCid vBid vOff,
+    fsubset (regs_ptrs (Register.set r (Ptr (vCid, vBid, vOff)) regs))
+            (fsetU (regs_ptrs regs) (fset1 (vCid, vBid))).
+Proof.
+  intros r regs vCid vBid vOff. apply in_fsubset. intros v.
+  intros Htmp. apply/fsetUP. move: Htmp.
+  do 2 (unfold regs_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id).
+  intros Hin; destruct (codommP _ _ Hin) as [k' k'mem].
+  destruct (Some v == value_to_pointer_err (Ptr (vCid, vBid, vOff))) eqn:copied;
+    destruct (k' == Register.to_nat r) eqn:e1;
+    try (left; apply/codommP; solve_untouched_registers e1 k' k'mem).
+  - right. simpl in copied. pose (eqP copied) as cpd. inversion cpd. apply/fset1P. auto.
+  - rewrite filtermE in k'mem. rewrite mapmE in k'mem. unfold_Register_set e1 k'mem.
+    inversion k'mem as [H0]. rewrite <- H0 in copied. simpl in copied.
+    pose (@negPf (Some v == Some v)) as negrule.
+    assert (Some v != Some v) as H.
+    { apply/negrule. rewrite <- H0. exact copied. }
+    assert ((Some v != Some v) = false) as H1.
+    { apply negbF. auto. }
+    exfalso. apply notF. rewrite <- H1. exact H.
+Qed.
+
 Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
   Pointer.component (CS.state_pc s) \notin domm ctx.
@@ -1855,6 +1878,7 @@ Proof.
     end;
     apply/andP; split; auto.
   - (* Use Hwellformed, Hprocs, HP_code and Hinstr *)
+    (* TODO: Replace genv_procedures_prog_procedures with the \in version of it *)
     destruct (genv_procedures_prog_procedures p
                                           (Pointer.component pc)
                                           (Some procs)
@@ -1879,9 +1903,44 @@ Proof.
       * apply regs_ptrs_set_Int_Undef with (z := vInt). left. trivial.
       * assumption.
     + simpl.
-      (* Here, assert that (value_to_pointer_err vPtr) is \in (program_ptrs p) *)
-      (* Then do a case distinction that is similar to all the reg_ptrs proofs. *)
-      admit.
+      assert (vPtrgood: forall cid bid, value_to_pointer_err (Ptr vPtr) = Some (cid, bid) ->
+                                        (cid, bid) \in (program_ptrs p)).
+      {
+        intros cid bid HvPtrSome. destruct vPtr as [[cidv bidv]?]. simpl in HvPtrSome.
+        inversion HvPtrSome. subst cid bid.
+        simpl in Hwfi'.
+        destruct Hwfi' as [_ [bufs [Hprog_buffers Hbidv]]].
+        unfold program_ptrs.
+        rewrite mem_domm. rewrite uncurrymE. simpl.
+        rewrite Hprog_buffers. simpl. rewrite <- mem_domm.
+        rewrite <- In_in with (s := (seq.map fst bufs)) in Hbidv.
+        unfold domm. unfold seq.unzip1. rewrite in_fset. exact Hbidv.
+      }
+      (* So far, we asserted that (value_to_pointer_err vPtr) is \in (program_ptrs p) *)
+      destruct vPtr as [[vPtrc vPtrb] vPtro].
+      pose (regs_ptrs_set_Ptr r regs vPtrc vPtrb vPtro) as l.
+      assert (rtrans:  (fsubset (regs_ptrs regs
+                                      :|:
+                                      fset1
+                                      (T:=prod_ordType nat_ordType nat_ordType)
+                                      (vPtrc, vPtrb))
+                           (\bigcup_(i <- program_ptrs p)
+                                     fset (reachable_nodes_nat mem0 i))%fset
+                       )%fset).
+      {
+        rewrite fsubUset. apply/andP. split; auto.
+        rewrite fsub1set.
+        apply/bigcupP. simpl.
+        assert (vPtr_program_ptrs: (vPtrc, vPtrb) \in program_ptrs p).
+        {
+          apply vPtrgood. auto.
+        }
+        apply BigCupSpec with (i := (vPtrc, vPtrb)); auto.
+        destruct (reachable_nodes_nat_expansive (vPtrc, vPtrb) mem0) as [x [x_in xeq]].
+        rewrite xeq in x_in. rewrite in_fset. exact x_in.
+      }
+      apply (@fsubset_trans _ (regs_ptrs regs
+      :|: fset1 (T:=prod_ordType nat_ordType nat_ordType) (vPtrc, vPtrb))%fset _ _); auto.
   - apply (@fsubset_trans _
                           (regs_ptrs regs)
                           (regs_ptrs (Register.set r2 (Register.get r1 regs) regs))

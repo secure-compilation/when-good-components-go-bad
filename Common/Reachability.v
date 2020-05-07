@@ -366,6 +366,8 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
             (S (max_ptr m).2)
             (finitize_ptr x)
          ).
+
+  Check reachable_nodes.
   
   Lemma dfs_path_fin_mem:
     forall m x y,
@@ -428,6 +430,58 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
     unfold reachable_nodes_nat. intros x m y_nat Hreachnat.
     destruct (mapP Hreachnat) as [x0 Hx0 Hx0nat].
     exists x0. split; auto.
+  Qed.
+
+  Lemma nat_node_of_ord_node_cast_to_bigger_ordinal:
+    forall l2 r2 l1 r1 x, nat_node_of_ord_node (cast_to_bigger_ordinal_left l1 r1 x) =
+                          @nat_node_of_ord_node l2 r2 x.
+  Proof.
+    intros l2 r2 l1 r1 x.
+    destruct x as [xl xr] eqn:ex.
+    unfold cast_to_bigger_ordinal_left.
+    simpl. destruct xl as [xlval xlpf] eqn:exl.
+    simpl. destruct xr as [xrval xrpf] eqn:exr.
+    auto.
+  Qed.
+
+  Lemma nat_node_of_ord_node_finitize_ptr:
+    forall x, nat_node_of_ord_node (finitize_ptr x) = x.
+  Proof. intros x. destruct x as [xl xr]. unfold finitize_ptr. simpl.
+         SearchAbout inord.
+         assert (xleq: (@nat_of_ord (S xl) (@inord xl xl)) = xl).
+         { apply inordK. auto. }
+         rewrite xleq.
+         assert (xreq: (@nat_of_ord (S xr) (@inord xr xr)) = xr).
+         { apply inordK. auto. }
+         rewrite xreq.
+         auto.
+  Qed.
+  
+  Lemma reachable_nodes_expansive:
+    forall m x, exists y, y \in reachable_nodes m x /\ nat_node_of_ord_node y = x.
+  Proof.
+    intros m x. eexists. split.
+    rewrite <- dfs_path_fin_mem_iff.
+    apply/dfs_pathP; auto.
+    Focus 2. apply/dfsP. exists nil. auto. reflexivity.
+    rewrite card0. auto. unfold last.
+    rewrite nat_node_of_ord_node_cast_to_bigger_ordinal.
+    rewrite nat_node_of_ord_node_finitize_ptr.
+    auto.
+  Qed.
+  
+  Lemma reachable_nodes_nat_expansive :
+    forall x m,
+    exists y,
+      (@nat_node_of_ord_node
+         (maxn (max_ptr m).1.+1 x.1.+1)
+         (maxn (max_ptr m).2.+1 x.2.+1)
+         y) \in
+        reachable_nodes_nat m x
+        /\ nat_node_of_ord_node y = x.
+  Proof. intros x m. unfold reachable_nodes_nat.
+         destruct (reachable_nodes_expansive m x) as [y [y_in yx]].
+         eexists y. rewrite map_f; auto.
   Qed.
 
   (*Definition is_reachable_from m y x := y \in reachable_nodes_nat m x.
