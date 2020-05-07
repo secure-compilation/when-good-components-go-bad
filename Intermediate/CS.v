@@ -132,6 +132,25 @@ Definition are_all_ptrs_in_reachable (st: state) (p: program) :=
            )
   )%fset.
 
+Lemma Memory_load_mem_ptrs :
+  forall m aC aB aO vC vB vO,
+    Memory.load m (aC, aB, aO) = Some (Ptr (vC, vB, vO)) ->
+    (vC, vB) \in mem_ptrs m.
+Proof.
+  intros ???????. unfold Memory.load. simpl.
+  destruct (m aC) eqn:eaC; intros Hload; try discriminate.
+  destruct (ComponentMemory.load_block_load t aB vC vB) as [_ Honlyif].
+  unfold mem_ptrs.
+  apply/bigcupP. simpl.
+  apply BigCupSpec with (i := compMem_ptrs t); auto.
+  - apply/codommP. exists aC. rewrite mapmE. rewrite eaC. auto.
+  - unfold compMem_ptrs. rewrite in_fset.
+    rewrite <- flat_map_concat_map. rewrite In_in. rewrite in_flat_map.
+    exists aB. split.
+    + apply ComponentMemory.load_domm with (i := aO) (v := Ptr (vC, vB, vO)). auto.
+    + apply Honlyif. exists vO. exists aO. exact Hload.
+Qed.
+
 Lemma value_to_pointer_err_Ptr :
   forall p, exists x, value_to_pointer_err (Ptr p) = Some x.
 Proof.
@@ -1916,7 +1935,6 @@ Proof.
         rewrite <- In_in with (s := (seq.map fst bufs)) in Hbidv.
         unfold domm. unfold seq.unzip1. rewrite in_fset. exact Hbidv.
       }
-      (* So far, we asserted that (value_to_pointer_err vPtr) is \in (program_ptrs p) *)
       destruct vPtr as [[vPtrc vPtrb] vPtro].
       pose (regs_ptrs_set_Ptr r regs vPtrc vPtrb vPtro) as l.
       assert (rtrans:  (fsubset (regs_ptrs regs
@@ -1978,10 +1996,16 @@ Proof.
             ).
       -- apply regs_ptrs_set_Int_Undef with (z := z). auto.
       -- assumption.
-    + admit.
-    (* Here, apply fsubset_in, then destruct (k' == Register.to_nat r2)
-       from the other case. *)
-    (* In case true, show that addrInreach -> H2 -> (vC, vB) \in mem_ptrs (state_mem..)  *)
+    + pose (regs_ptrs_set_Ptr r2 regs vC vB vO) as l.
+      apply (@fsubset_trans _
+                            (regs_ptrs regs
+                                       :|: fset1
+                                       (T:=prod_ordType nat_ordType nat_ordType)
+                                       (vC, vB))%fset _ _); auto.
+      rewrite fsubUset. apply/andP; split; auto.
+      apply (@fsubset_trans _ (mem_ptrs (state_mem (gps0, mem0, regs, pc, addrs0))) _ _); auto.
+      simpl. rewrite fsub1set.
+      apply Memory_load_mem_ptrs with (aC := ptrC) (aB := ptrB) (aO := ptrO) (vO := vO). auto.
     + apply (@fsubset_trans _
                             (regs_ptrs regs)
                             (regs_ptrs (Register.set r2 Undef regs))

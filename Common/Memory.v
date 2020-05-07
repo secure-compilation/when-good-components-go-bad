@@ -89,7 +89,11 @@ Module Type AbstractComponentMemory.
     forall m b ptrc ptrb,
       In (ptrc, ptrb) (load_block m b) <->
       exists ptro i, load m b i = Some (Ptr (ptrc, ptrb, ptro)).
-  
+
+  Axiom load_domm :
+    forall m b i v,
+      load m b i = Some v ->
+      In b (domm m).
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -302,6 +306,17 @@ Module ComponentMemory : AbstractComponentMemory.
       + discriminate.
   Qed.
 
+  Lemma load_domm :
+    forall m b i v,
+      load m b i = Some v ->
+      In b (domm m).
+  Proof.
+    intros m b i v Hload. unfold load in Hload. unfold domm.
+    destruct ((content m) b) eqn:e; try discriminate.
+    rewrite <- In_in with (s := fmap.domm (content m)).
+    apply/dommP. exists b0. auto.
+  Qed.
+  
   Lemma load_prealloc:
     forall bufs b i,
       load (prealloc bufs) b i =
