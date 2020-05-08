@@ -2015,8 +2015,20 @@ Proof.
             ).
       * apply regs_ptrs_set_Int_Undef with (z := 0%Z). auto.
       * assumption.
-  - (* store*) admit.
-  - (* store*) admit.
+  - simpl.
+    (* store*) (* The goal here is actually false. The store may destroy pointer values
+                that used to exist in the old memory mem, rendering mem0 free of
+                pointers, and thus rendering the set "regs_ptrs regs0" bigger than
+                the reachability set that starts from the program buffers. *)
+    admit.
+  - simpl.
+    (* store*) (* The goal here is also false. In particular, if the stored value clears
+                a pointer, and hence leads to two islands that are not connected.
+                One island, for example, would contain all pointers to the static buffers,
+                and another island would still contain some more (dynamically-allocated)
+                pointers that were (before the disconnection) reachable by the static
+                buffers. *)
+    admit.
   - (* IJal*) admit. (* Need an invariant about pc that ensures that pc does not point to
               any component memory? But moreover, probably need to change the definition
               of regs_ptrs and mem_ptrs to exclude code pointers?? *)
