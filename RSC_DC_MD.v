@@ -26,58 +26,115 @@ Definition behavior_improves_blame b m p :=
              undef_in t (Source.prog_interface p).
 
 Section RSC_DC_MD_Section.
-  Variable p: Source.program.
-  Variable p_compiled: Intermediate.program.
+  Variable k: nat. (* number of programs *)
+  Variable ps: list Source.program.
+  Hypothesis length_ps: length ps = k.
+  Variable ps_compiled: list Intermediate.program.
+  Hypothesis length_ps_compiled: length ps_compiled = k.
   Variable Ct: Intermediate.program.
+  Variable ms: list finpref_behavior.
+  Hypothesis length_ms: length ms = k.
+
+  (* Some assumptions about interfaces*)
+  Variable ifacep: Program.interface.
+  Hypothesis p_has_interface: forall p,
+      In p ps ->
+      Source.prog_interface p = ifacep.
 
   (* Some reasonable assumptions about our programs *)
 
-  Hypothesis well_formed_p : Source.well_formed_program p.
-  Hypothesis successful_compilation : Compiler.compile_program p = Some p_compiled.
+  Hypothesis well_formed_p : forall p,
+      In p ps ->
+      Source.well_formed_program p.
+  Hypothesis successful_compilation : forall n p p_compiled,
+      nth_error ps n = Some p ->
+      nth_error ps_compiled n = Some p_compiled ->
+      Compiler.compile_program p = Some p_compiled.
   Hypothesis well_formed_Ct : Intermediate.well_formed_program Ct.
-  Hypothesis linkability : linkable (Source.prog_interface p) (Intermediate.prog_interface Ct).
-  Hypothesis closedness :
-    Intermediate.closed_program (Intermediate.program_link p_compiled Ct).
-  Hypothesis mains : Intermediate.linkable_mains p_compiled Ct.
+  Hypothesis linkability : forall p,
+      In p ps ->
+      linkable (Source.prog_interface p) (Intermediate.prog_interface Ct).
+  Hypothesis closedness : forall p_compiled,
+      In p_compiled ps_compiled ->
+      Intermediate.closed_program (Intermediate.program_link p_compiled Ct).
+  Hypothesis mains : forall p_compiled,
+      In p_compiled ps_compiled ->
+      Intermediate.linkable_mains p_compiled Ct.
+
+  (* Some lemmas we get from these assumptions *)
+
+  Lemma compiled_to_source: forall p_compiled,
+      In p_compiled ps_compiled ->
+      exists p, In p ps /\ Compiler.compile_program p = Some p_compiled.
+  Proof.
+    intros p_compiled Hin_compiled.
+    apply In_nth_error in Hin_compiled as [n Hin_compiled].
+    assert (Hsmaller: n < length ps) by (rewrite length_ps -length_ps_compiled; apply nth_error_Some; congruence).
+    destruct (nth_error ps n) eqn:Hp.
+    - exists p; split.
+      + apply (nth_error_In _ _ Hp).
+      + apply (successful_compilation Hp Hin_compiled).
+    - apply nth_error_None in Hp. omega.
+  Qed.
+
+  Lemma p_compiled_has_interface: forall p_compiled,
+      In p_compiled ps_compiled ->
+      Intermediate.prog_interface p_compiled = ifacep.
+  Proof.
+    intros p_compiled Hin_compiled.
+    destruct (compiled_to_source Hin_compiled) as [p [Hin Hcomp]].
+    rewrite -(p_has_interface Hin).
+    now apply Compiler.compilation_preserves_interface.
+  Qed.
 
   (* Main Theorem *)
-
   Theorem RSC_DC_MD:
-    forall m,
-      does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m ->
-      not_wrong_finpref m ->
-    exists Cs beh,
-      Source.prog_interface Cs = Intermediate.prog_interface Ct /\
-      Source.well_formed_program Cs /\
-      linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
-      Source.closed_program (Source.program_link p Cs) /\
-      program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
-      (prefix m beh \/ behavior_improves_blame beh m p).
+    exists Cs,
+      forall n p p_compiled m,
+        nth_error ms n = Some m ->
+        nth_error ps n = Some p ->
+        nth_error ps_compiled n = Some p_compiled ->
+        does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m ->
+        not_wrong_finpref m ->
+        exists beh,
+          Source.prog_interface Cs = Intermediate.prog_interface Ct /\
+          Source.well_formed_program Cs /\
+          linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
+          Source.closed_program (Source.program_link p Cs) /\
+          program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
+          (prefix m beh \/ behavior_improves_blame beh m p).
   Proof.
-    intros m [t [Hbeh Hprefix0]] Hsafe_pref.
+    (* intros m [t [Hbeh Hprefix0]] Hsafe_pref. *)
 
     (* Some auxiliary results. *)
-    pose proof
-      Compiler.compilation_preserves_well_formedness well_formed_p successful_compilation
-      as well_formed_p_compiled.
+    (* pose proof *)
+    (*   Compiler.compilation_preserves_well_formedness well_formed_p successful_compilation *)
+    (*   as well_formed_p_compiled. *)
+    assert (well_formed_p_compiled: forall p_compiled,
+               In p_compiled ps_compiled ->
+               Intermediate.well_formed_program p_compiled).
+    { intros p_compiled Hin_compiled.
+      destruct (compiled_to_source Hin_compiled) as [p [Hin Hcomp]].
+      now apply (Compiler.compilation_preserves_well_formedness (well_formed_p Hin)). }
 
-    assert (linkability_pcomp_Ct :
-              linkable (Intermediate.prog_interface p_compiled)
-                       (Intermediate.prog_interface Ct)).
-    {
+    assert (linkability_pcomp_Ct: forall p_compiled,
+               In p_compiled ps_compiled ->
+               linkable (Intermediate.prog_interface p_compiled)
+                        (Intermediate.prog_interface Ct)).
+    { intros p_compiled Hin_compiled.
+      destruct (compiled_to_source Hin_compiled) as [p [Hin Hcomp]].
       assert (sound_interface_p_Ct : sound_interface (unionm (Source.prog_interface p)
                                                              (Intermediate.prog_interface Ct)))
-        by apply linkability.
+        by now apply linkability.
       assert (fdisjoint_p_Ct : fdisjoint (domm (Source.prog_interface p))
                                          (domm (Intermediate.prog_interface Ct)))
-        by apply linkability.
+        by now apply linkability.
       constructor;
-        apply Compiler.compilation_preserves_interface in successful_compilation;
-        now rewrite successful_compilation.
+        now rewrite (Compiler.compilation_preserves_interface Hcomp).
     }
 
-     assert (H_doesm: does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m)
-     by now exists t. 
+     (* assert (H_doesm: does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m) *)
+     (* by now exists t.  *)
 
     (* intermediate decomposition (for p_compiled) *)
     (* pose proof Intermediate.decomposition_prefix  *)
