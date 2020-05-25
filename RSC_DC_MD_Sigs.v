@@ -204,59 +204,61 @@ Module Type Linker_Sig
        (Intermediate : Intermediate_Sig)
        (S2I : S2I_Sig Source Intermediate).
 
-  Variable k: nat. (* number of programs *)
-  Variable ps: list Intermediate.program.
-  Hypothesis length_ps: length ps = k.
-  Variable c: Intermediate.program.
-  Variable ms: list finpref_behavior.
-  Hypothesis length_ms: length ms = k.
+  Section DefinabilityWithLinking.
+    Variable k: nat. (* number of programs *)
+    Variable ps: list Intermediate.program.
+    Hypothesis length_ps: length ps = k.
+    Variable c: Intermediate.program.
+    Variable ms: list finpref_behavior.
+    Hypothesis length_ms: length ms = k.
 
-  (* Some assumptions about interfaces*)
-  Variable ifacep: Program.interface.
-  Hypothesis p_has_interface: forall p,
-      In p ps ->
-      Intermediate.prog_interface p = ifacep.
+    (* Some assumptions about interfaces*)
+    Variable ifacep: Program.interface.
+    Hypothesis p_has_interface: forall p,
+        In p ps ->
+        Intermediate.prog_interface p = ifacep.
 
-  (* Some reasonable assumptions about our programs *)
+    (* Some reasonable assumptions about our programs *)
 
-  Hypothesis well_formed_p : forall p,
-      In p ps ->
-      Intermediate.well_formed_program p.
-  Hypothesis well_formed_Ct : Intermediate.well_formed_program c.
-  Hypothesis linkability : forall p,
-      In p ps ->
-      linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c).
-  Hypothesis closedness : forall p,
-      In p ps ->
-      Intermediate.closed_program (Intermediate.program_link p c).
+    Hypothesis well_formed_p : forall p,
+        In p ps ->
+        Intermediate.well_formed_program p.
+    Hypothesis well_formed_Ct : Intermediate.well_formed_program c.
+    Hypothesis linkability : forall p,
+        In p ps ->
+        linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c).
+    Hypothesis closedness : forall p,
+        In p ps ->
+        Intermediate.closed_program (Intermediate.program_link p c).
 
-  Local Axiom definability_with_linking :
-    (* forall p c b m, *)
+    Local Axiom definability_with_linking :
+      (* forall p c b m, *)
       (* Intermediate.well_formed_program p -> *) (* well_formed_p *)
       (* Intermediate.well_formed_program c -> *) (* well_formed_Ct *)
       (* linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) -> *) (* linkability *)
       (* Intermediate.closed_program (Intermediate.program_link p c) -> *) (* closedness *)
-    (forall b n p m,
-      nth_error ms n = Some m ->
-      nth_error ps n = Some p ->
-      program_behaves (Intermediate.CS.sem (Intermediate.program_link p c)) b ->
-      prefix m b ->
-      not_wrong_finpref m) ->
-    exists ps' c',
-      Source.prog_interface c' = Intermediate.prog_interface c /\
-      S2I.matching_mains c' c /\
-      Source.well_formed_program c' /\
-      (forall n p p' m,
+      (forall b n p m,
           nth_error ms n = Some m ->
           nth_error ps n = Some p ->
-          nth_error ps' n = Some p' ->
-          In p ps -> In p' ps' ->
-               Source.prog_interface p' = Intermediate.prog_interface p /\
-               S2I.matching_mains p' p /\
-               Source.well_formed_program p' /\
-               Source.closed_program (Source.program_link p' c') /\
-               does_prefix (Source.CS.sem (Source.program_link p' c')) m )
-  .
+          program_behaves (Intermediate.CS.sem (Intermediate.program_link p c)) b ->
+          prefix m b ->
+          not_wrong_finpref m) ->
+      exists ps' c',
+        Source.prog_interface c' = Intermediate.prog_interface c /\
+        S2I.matching_mains c' c /\
+        Source.well_formed_program c' /\
+        (forall n p p' m,
+            nth_error ms n = Some m ->
+            nth_error ps n = Some p ->
+            nth_error ps' n = Some p' ->
+            In p ps -> In p' ps' ->
+            Source.prog_interface p' = Intermediate.prog_interface p /\
+            S2I.matching_mains p' p /\
+            Source.well_formed_program p' /\
+            Source.closed_program (Source.program_link p' c') /\
+            does_prefix (Source.CS.sem (Source.program_link p' c')) m )
+    .
+  End DefinabilityWithLinking.
 
 (* TODO: split definability_with_linking into a more standard
          definability + a "unlinking" lemma *)

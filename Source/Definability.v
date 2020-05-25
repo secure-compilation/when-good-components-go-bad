@@ -708,3 +708,35 @@ Proof.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
   by exists (Terminates nil); rewrite /= E0_right.
 Qed.
+
+Lemma definability_with_linking':
+  forall ps c ms,
+    (forall (b : Behaviors.program_behavior) (n : nat)
+       (p : Intermediate.program)
+       (m : CompCertExtensions.finpref_behavior),
+        List.nth_error ms n = Some m ->
+        List.nth_error ps n = Some p ->
+        Behaviors.program_behaves
+          (CS.sem (Intermediate.program_link p c)) b ->
+        CompCertExtensions.prefix m b -> CompCertExtensions.not_wrong_finpref m) ->
+    exists (ps' : list program) (c' : program),
+      prog_interface c' = Intermediate.prog_interface c /\
+      matching_mains c' c /\
+      well_formed_program c' /\
+      (forall (n : nat) (p : Intermediate.program)
+         (p' : program)
+         (m : CompCertExtensions.finpref_behavior),
+          List.nth_error ms n = Some m ->
+          List.nth_error ps n = Some p ->
+          List.nth_error ps' n = Some p' ->
+          List.In p ps ->
+          List.In p' ps' ->
+          prog_interface p' = Intermediate.prog_interface p /\
+          matching_mains p' p /\
+          well_formed_program p' /\
+          closed_program (program_link p' c') /\
+          does_prefix (S.CS.sem (program_link p' c')) m)
+.
+Proof.
+Admitted.
+
