@@ -711,14 +711,12 @@ Qed.
 
 Lemma definability_with_linking':
   forall ps c ms,
-    (forall (b : Behaviors.program_behavior) (n : nat)
+    (forall (n : nat)
        (p : Intermediate.program)
        (m : CompCertExtensions.finpref_behavior),
         List.nth_error ms n = Some m ->
         List.nth_error ps n = Some p ->
-        Behaviors.program_behaves
-          (CS.sem (Intermediate.program_link p c)) b ->
-        CompCertExtensions.prefix m b -> CompCertExtensions.not_wrong_finpref m) ->
+        does_prefix (CS.sem (Intermediate.program_link p c)) m) ->
     exists (ps' : list program) (c' : program),
       prog_interface c' = Intermediate.prog_interface c /\
       matching_mains c' c /\

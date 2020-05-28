@@ -237,12 +237,10 @@ Module Type Linker_Sig
       (* Intermediate.well_formed_program c -> *) (* well_formed_Ct *)
       (* linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) -> *) (* linkability *)
       (* Intermediate.closed_program (Intermediate.program_link p c) -> *) (* closedness *)
-      (forall b n p m,
+      (forall n p m,
           nth_error ms n = Some m ->
           nth_error ps n = Some p ->
-          program_behaves (Intermediate.CS.sem (Intermediate.program_link p c)) b ->
-          prefix m b ->
-          not_wrong_finpref m) ->
+          does_prefix (Intermediate.CS.sem (Intermediate.program_link p c)) m) ->
       exists ps' c',
         Source.prog_interface c' = Intermediate.prog_interface c /\
         S2I.matching_mains c' c /\
