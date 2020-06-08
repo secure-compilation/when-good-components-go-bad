@@ -16,11 +16,13 @@ Common/CompCertExtensions.v
 Common/Either.v
 Common/CoqMaps.v
 Common/Traces.v
+Common/TracesInform.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
 CompCert/Smallstep.v
 CompCert/Events.v
+CompCert/EventsInform.v
 
 Lib/Tactics.v
 Lib/Monads.v
