@@ -108,7 +108,14 @@ Definition encode_code (eenv : encoder_env) (code : Linearize.code) : memory :=
 
 Definition alloc_buffers (eenv : encoder_env) (bufs : Linearize.bufs) : memory :=
   let f (x : nat * nat * nat) : mword mt :=
-      match x with (c, b, o) => word.as_word (concretize_pointer eenv (c, b, Z.of_nat o)) end
+      match x with (c, b, o) => word.as_word
+                                  (concretize_pointer
+                                     eenv
+                                     (Permission.data, c, b, Z.of_nat o)
+                                     (* Added Permission.data here.
+                                      Not sure whether it matters 
+                                      here which permission is used.*)
+                                  ) end
   in Tmp.mapk f (mapm (encode_memval eenv) bufs).
 
 Definition encode (prog : Linearize.prog) : {fmap mword mt -> matom}:=
@@ -127,7 +134,7 @@ Definition encode (prog : Linearize.prog) : {fmap mword mt -> matom}:=
                      (unzip1 (Linearize.buffers prog)))
   in
   let concretize := (fun p => match p with
-                              | (c, b, o) =>
+                              | (perm, c, b, o) =>
                                 (* TL TODO: I have add notation issues, hence intZmod.addz... *)
                                 intZmod.addz (encode_int o) (base_adress c b)
                               end)

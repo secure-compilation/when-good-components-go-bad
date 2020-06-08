@@ -103,11 +103,11 @@ Section Definability.
       eapply (@star_step _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
     end.
 
-  Lemma switch_clause_spec p' C stk mem n n' e_then e_else arg :
-    Memory.load mem (C, Block.local, 0%Z) = Some (Int n) ->
+  Lemma switch_clause_spec p' P C stk mem n n' e_then e_else arg :
+    Memory.load mem (P, C, Block.local, 0%Z) = Some (Int n) ->
     if (n =? n') % Z then
       exists mem',
-        Memory.store mem (C, Block.local, 0%Z) (Int (Z.succ n)) = Some mem' /\
+        Memory.store mem (P, C, Block.local, 0%Z) (Int (Z.succ n)) = Some mem' /\
         Star (CS.sem p')
              [CState C, stk, mem , Kstop, switch_clause n' e_then e_else, arg] E0
              [CState C, stk, mem', Kstop, e_then, arg]
@@ -123,23 +123,29 @@ Section Definability.
       unfold Memory.load in Hload'.
       unfold Memory.store.
       simpl in *.
+      destruct (P =? Permission.data) eqn:EpermData; try discriminate.
       destruct (getm mem C) as [memC|] eqn:EmemC; try discriminate.
       destruct (ComponentMemory.store_after_load _ _ _ _ (Int (Z.succ n)) Hload')
         as [memC' EmemC'].
       rewrite EmemC'.
       eexists; split; eauto.
       repeat take_step; trivial; try eassumption.
-      repeat take_step; trivial; try eassumption.
-      rewrite Z.eqb_refl -[_ != _]/(true) /=.
-      repeat take_step; trivial; try eassumption.
-      { unfold Memory.store. simpl. rewrite EmemC. simpl. now rewrite Z.add_1_r EmemC'. }
-      apply star_refl.
+      + unfold Memory.load. simpl. rewrite EmemC. eauto.
+      + repeat take_step; trivial; try eassumption.
+        rewrite Z.eqb_refl -[_ != _]/(true) /=.
+        repeat take_step; trivial; try eassumption.
+        * unfold Memory.load. simpl. rewrite EmemC. eauto.
+        * unfold Memory.store. simpl. rewrite EmemC. simpl. now rewrite Z.add_1_r EmemC'.
+        * apply star_refl.
     - unfold switch_clause.
       repeat take_step; trivial; try eassumption.
-      eapply (@star_step _ _ _ _ _ E0 _ E0 _ E0); trivial; simpl.
-      { rewrite <- Z.eqb_neq in n_n'. rewrite n_n'. simpl.
-        eapply CS.KS_If2. }
-      apply star_refl.
+      + unfold Memory.load in Hload. simpl in Hload.
+        destruct (P =? Permission.data); try discriminate.
+        unfold Memory.load. simpl. eauto.
+      + eapply (@star_step _ _ _ _ _ E0 _ E0 _ E0); trivial; simpl.
+        { rewrite <- Z.eqb_neq in n_n'. rewrite n_n'. simpl.
+          eapply CS.KS_If2. }
+        apply star_refl.
   Qed.
 
   Definition switch_add_expr e res :=
@@ -155,8 +161,8 @@ Section Definability.
     simpl. now rewrite IH Nat.sub_succ_r.
   Qed.
 
-  Lemma switch_spec_else p' C stk mem n es e_else arg :
-    Memory.load mem (C, Block.local, 0%Z) = Some (Int (Z.of_nat n)) ->
+  Lemma switch_spec_else p' P C stk mem n es e_else arg :
+    Memory.load mem (P, C, Block.local, 0%Z) = Some (Int (Z.of_nat n)) ->
     (length es <= n)%nat ->
     Star (CS.sem p')
          [CState C, stk, mem, Kstop, switch es e_else, arg] E0
@@ -174,19 +180,22 @@ Section Definability.
     induction es as [|e es IH]; try apply star_refl.
     unfold switch. simpl. simpl in es_le_n. rewrite fst_switch -Nat.sub_succ_r. simpl.
     do 5 take_step; [eauto|eauto|].
-    do 2 take_step.
-    eapply (@star_step _ _ _ _ _ E0); try now (simpl; reflexivity).
-    { apply CS.eval_kstep_sound. simpl.
-      destruct (Z.eqb_spec (Z.of_nat n) (Z.of_nat (m - S (length es)))) as [n_eq_0|?]; simpl.
-      - zify. omega.
-      - reflexivity. }
-    apply IH. omega.
+    - unfold Memory.load in C_local. simpl in C_local.
+      destruct (P =? Permission.data); try discriminate.
+      unfold Memory.load. simpl. eauto.
+    - do 2 take_step.
+      eapply (@star_step _ _ _ _ _ E0); try now (simpl; reflexivity).
+      { apply CS.eval_kstep_sound. simpl.
+        destruct (Z.eqb_spec (Z.of_nat n) (Z.of_nat (m - S (length es)))) as [n_eq_0|?]; simpl.
+        - zify. omega.
+        - reflexivity. }
+      apply IH. omega.
   Qed.
 
-  Lemma switch_spec p' C stk mem es e es' e_else arg :
-    Memory.load mem (C, Block.local, 0%Z) = Some (Int (Z.of_nat (length es))) ->
+  Lemma switch_spec p' P C stk mem es e es' e_else arg :
+    Memory.load mem (P, C, Block.local, 0%Z) = Some (Int (Z.of_nat (length es))) ->
     exists mem',
-      Memory.store mem (C, Block.local, 0%Z) (Int (Z.of_nat (S (length es)))) = Some mem' /\
+      Memory.store mem (P, C, Block.local, 0%Z) (Int (Z.of_nat (S (length es)))) = Some mem' /\
       Star (CS.sem p')
            [CState C, stk, mem , Kstop, switch (es ++ e :: es') e_else, arg] E0
            [CState C, stk, mem', Kstop, e, arg].
@@ -425,7 +434,8 @@ Section Definability.
     Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
       forall C,
         component_buffer C ->
-        Memory.load mem (C, Block.local, 0%Z) = Some (Int (counter_value C prefix)).
+        Memory.load mem (Permission.data, C, Block.local, 0%Z) =
+        Some (Int (counter_value C prefix)).
 
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
@@ -443,7 +453,8 @@ Section Definability.
       well_formed_memory prefix mem ->
       C = cur_comp_of_event e ->
       exists mem',
-        Memory.store mem (C, Block.local, 0%Z) (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
+        Memory.store mem (Permission.data, C, Block.local, 0%Z)
+                     (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
         well_formed_memory (prefix ++ [e]) mem'.
     Proof.
       move=> C_b wf_mem HC.
@@ -457,7 +468,8 @@ Section Definability.
       case: (altP (C' =P C)) => [?|C_neq_C'].
       - subst C'.
         by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem').
-      - have neq : (C, Block.local, 0%Z) <> (C', Block.local, 0%Z) by move/eqP in C_neq_C'; congruence.
+      - have neq : (Permission.data, C, Block.local, 0%Z) <>
+                   (Permission.data, C', Block.local, 0%Z) by move/eqP in C_neq_C'; congruence.
         rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
         now rewrite Z.add_0_r.
     Qed.
@@ -501,7 +513,7 @@ Section Definability.
                              [CState C, stk, mem', Kstop, expr_of_event C P e, arg]).
         { unfold expr_of_trace. rewrite Et comp_subtrace_app. simpl.
           rewrite <- wf_C, Nat.eqb_refl, map_app. simpl.
-          assert (H := @switch_spec p C  stk mem
+          assert (H := @switch_spec p Permission.data C  stk mem
                                     (map (expr_of_event C P) (comp_subtrace C prefix))
                                     (expr_of_event C P e)
                                     (map (expr_of_event C P) (comp_subtrace C suffix))

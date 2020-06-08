@@ -577,7 +577,7 @@ Section Mergeable.
   Proof.
     destruct s as [[[[gps mem] regs] pc] addrs].
     destruct s'' as [[[[gps'' mem''] regs''] pc''] addrs''].
-    destruct ptr as [[C b] o].
+    destruct ptr as [[[P C] b] o].
     unfold Memory.store, merge_states, merge_states_mem, merge_memories.
     intros Hmerge_ifaces Hdomm Hcomp.
     rewrite unionmE Hcomp.
@@ -585,6 +585,8 @@ Section Mergeable.
     erewrite to_partial_memory_notin;
       try eassumption; [| apply mergeable_interfaces_sym; eassumption].
     simpl.
+    destruct (P =? Permission.data) eqn:Hcase0;
+      last discriminate.
     destruct (mem (Pointer.component pc)) as [memC |] eqn:Hcase1;
       last discriminate.
     simpl.
@@ -708,7 +710,7 @@ Section Mergeable.
     Some v.
   Proof.
     intros Hpc Hmerge Hptr Hload.
-    destruct s as [[[gps mem] regs] pc]. destruct ptr as [[C b] o]. simpl in *. subst.
+    destruct s as [[[gps mem] regs] pc]. destruct ptr as [[[P C] b] o]. simpl in *. subst.
     pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm.
     pose proof to_partial_memory_merge_memories_left Hmerge as Hmem.
     now erewrite <- (program_load_in_partialized_memory_strong Hmem Hdomm).
@@ -725,7 +727,7 @@ Section Mergeable.
     destruct (Memory.load (CS.state_mem s) ptr) as [v |] eqn:Hcase1;
       first (symmetry; now apply program_load_to_partialized_memory).
     intros Hpc Hmerge Hptr.
-    destruct s as [[[[gps mem] regs] pc] addrs]; destruct ptr as [[C b] o];
+    destruct s as [[[[gps mem] regs] pc] addrs]; destruct ptr as [[[P C] b] o];
       unfold Memory.load, merge_memories in *; simpl in *; subst.
     eapply is_program_component_pc_in_domm in Hpc; last eassumption; try assumption.
     inversion Hmerge as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].

@@ -328,7 +328,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
   rewrite /to_partial_memory. (* TODO *)
   by move=> mem2' e_mem2 e_mem'; rewrite e_mem2 /= (negbTE in_prog) e_stk e_mem'.
 - (* Load *)
-  move=> C stk1 mem1 k _ b' o' v arg <- e_v in_prog.
+  move=> C stk1 mem1 k P' _ b' o' v arg <- e_v in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
   case: scs2=> [C' stk2 mem2 k' e' arg'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).
@@ -337,7 +337,7 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
   rewrite (program_load_in_partialized_memory_strong e_mem in_prog e_v) /=.
   by rewrite (negbTE in_prog) e_stk e_mem.
 - (* Store *)
-  move=> C stk mem1 mem1' k v _ b' o' arg <- e_mem1 in_prog.
+  move=> C stk mem1 mem1' k v P' _ b' o' arg <- e_mem1 in_prog.
   rewrite (negbTE in_prog) (lock CS.eval_kstep) (lock filterm).
   case: scs2=> [C' stk2 mem2 k' e' arg'] /=.
   case: ifP=> // _ []; rewrite -(lock filterm).

@@ -122,7 +122,7 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
             [State C, s, mem, k, E_val (Int i), Int i]
 | KS_LocalBuffer : forall C s mem k arg,
     kstep G [State C, s, mem, k, E_local, arg] E0
-            [State C, s, mem, k, E_val (Ptr (C,Block.local,0%Z)), arg]
+            [State C, s, mem, k, E_val (Ptr (Permission.data,C,Block.local,0%Z)), arg]
 | KS_Alloc1 : forall C s mem k e arg,
     kstep G [State C, s, mem, k, E_alloc e, arg] E0
             [State C, s, mem, Kalloc k, e, arg]
@@ -134,10 +134,10 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_Deref1 : forall C s mem k e arg,
     kstep G [State C, s, mem, k, E_deref e, arg] E0
             [State C, s, mem, Kderef k, e, arg]
-| KS_DerefEval : forall C s mem k C' b' o' v arg,
+| KS_DerefEval : forall C s mem k P' C' b' o' v arg,
     C = C' ->
-    Memory.load mem (C',b',o') = Some v ->
-    kstep G [State C, s, mem, Kderef k, E_val (Ptr (C',b',o')), arg] E0
+    Memory.load mem (P',C',b',o') = Some v ->
+    kstep G [State C, s, mem, Kderef k, E_val (Ptr (P',C',b',o')), arg] E0
             [State C, s, mem, k, E_val v, arg]
 | KS_Assign1 : forall C s mem k e1 e2 arg,
     kstep G [State C, s, mem, k, E_assign e1 e2, arg] E0
@@ -145,10 +145,10 @@ Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
 | KS_Assign2 : forall C s mem k v e1 arg,
     kstep G [State C, s, mem, Kassign1 e1 k, E_val v, arg] E0
             [State C, s, mem, Kassign2 v k, e1, arg]
-| KS_AssignEval : forall C s mem mem' k v C' b' o' arg,
+| KS_AssignEval : forall C s mem mem' k v P' C' b' o' arg,
     C = C' ->
-    Memory.store mem (C', b', o') v = Some mem' ->
-    kstep G [State C, s, mem, Kassign2 v k, E_val (Ptr (C', b', o')), arg] E0
+    Memory.store mem (P', C', b', o') v = Some mem' ->
+    kstep G [State C, s, mem, Kassign2 v k, E_val (Ptr (P', C', b', o')), arg] E0
             [State C, s, mem', k, E_val v, arg]
 | KS_InitCall : forall C s mem k C' P e arg,
     kstep G [State C, s, mem, k, E_call C' P e, arg] E0
@@ -215,7 +215,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       ret (E0, [State C, s, mem, k, E_val (Int v), arg])
     else None
   | E_local =>
-    ret (E0, [State C, s, mem, k, E_val (Ptr (C, Block.local, 0%Z)), arg])
+    ret (E0, [State C, s, mem, k, E_val (Ptr (Permission.data, C, Block.local, 0%Z)), arg])
   | E_alloc e =>
     ret (E0, [State C, s, mem, Kalloc k, e, arg])
   | E_deref e =>
@@ -250,9 +250,9 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       end
     | Kderef k' =>
       match v with
-      | Ptr (C',b',o') =>
+      | Ptr (P',C',b',o') =>
         if C == C' then
-          do v <- Memory.load mem (C',b',o');
+          do v <- Memory.load mem (P',C',b',o');
           ret (E0, [State C, s, mem, k', E_val v, arg])
         else
           None
@@ -262,9 +262,9 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
       ret (E0, [State C, s, mem, Kassign2 v k', e1, arg])
     | Kassign2 v' k' =>
       match v with
-      | Ptr (C',b',o') =>
+      | Ptr (P',C',b',o') =>
         if C == C' then
-          do mem' <- Memory.store mem (C',b',o') v';
+          do mem' <- Memory.store mem (P',C',b',o') v';
           ret (E0, [State C, s, mem', k', E_val v', arg])
         else
           None

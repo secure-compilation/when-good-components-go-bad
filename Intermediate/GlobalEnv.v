@@ -458,7 +458,8 @@ Definition find_label_in_procedure G (pc : Pointer.t) (l : label) : option Point
     match getm C_procs (Pointer.block pc) with
     | Some P_code =>
       match find_label P_code l with
-      | Some offset => Some (Pointer.component pc, Pointer.block pc, offset)
+      | Some offset => Some (Pointer.permission pc,
+                             Pointer.component pc, Pointer.block pc, offset)
       | None => None
       end
     | None => None
@@ -472,7 +473,8 @@ Fixpoint find_label_in_component_helper
   match procs with
   | [] => None
   | (p_block,p_code) :: procs' =>
-    match find_label_in_procedure G (Pointer.component pc, p_block, 0%Z) l with
+    match find_label_in_procedure G (Pointer.permission pc,
+                                     Pointer.component pc, p_block, 0%Z) l with
     | None => find_label_in_component_helper G procs' pc l
     | Some ptr => Some ptr
     end
@@ -488,6 +490,7 @@ Definition find_label_in_component G (pc : Pointer.t) (l : label) : option Point
 Lemma find_label_in_procedure_guarantees:
   forall G pc pc' l,
     find_label_in_procedure G pc l = Some pc' ->
+    Pointer.permission pc = Pointer.permission pc' /\
     Pointer.component pc = Pointer.component pc' /\
     Pointer.block pc = Pointer.block pc'.
 Proof.
@@ -499,9 +502,9 @@ Proof.
     try discriminate.
   destruct (find_label code l) as [offset|];
     try discriminate.
-  destruct pc'. destruct p.
+  destruct pc' as [[[pc'p pc'c] pc'b] pc'o].
   inversion Hfind. subst.
-  split; reflexivity.
+  split; auto; split; auto.
 Qed.
 
 Lemma find_label_in_procedure_1:
@@ -548,7 +551,7 @@ Proof.
   - simpl in *.
     destruct a.
     destruct (find_label_in_procedure
-                G (Pointer.component pc, i, 0%Z) l)
+                G (Pointer.permission pc, Pointer.component pc, i, 0%Z) l)
              eqn:Hfind'.
     + apply find_label_in_procedure_1 in Hfind'.
       simpl in *. inversion Hfind. subst. auto.
@@ -594,7 +597,8 @@ Proof.
     induction (elementsm procs) as [| [p_block code] elts IHelts];
       first reflexivity.
     unfold find_label_in_component_helper; simpl.
-    assert (Hnotin' : Pointer.component (Pointer.component pc, p_block, 0%Z)
+    assert (Hnotin' : Pointer.component
+                        (Pointer.permission pc, Pointer.component pc, p_block, 0%Z)
                       \notin domm (prog_interface c)).
       by done.
     rewrite <- (prepare_global_env_link Hwfp Hwfc Hlinkable Hmains).

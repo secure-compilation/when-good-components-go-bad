@@ -18,19 +18,20 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
     forall m nd ndres,
       In ndres (apply_load_block_seq m nd) <->
       exists ndresoff ndoff,
-        Memory.load m (nd.1, nd.2, ndoff) = Some (Ptr (ndres.1, ndres.2, ndresoff)).
+        Memory.load m (Permission.data, nd.1, nd.2, ndoff) =
+        Some (Ptr (Permission.data, ndres.1, ndres.2, ndresoff)).
   Proof.
     intros m nd ndres.
     unfold apply_load_block_seq. unfold Memory.load. simpl.
     split; destruct (m nd.1) as [compMem |].
     - destruct (ComponentMemory.load_block_load compMem nd.2 ndres.1 ndres.2) as [l r].
-      rewrite <- surjective_pairing in l. rewrite <- surjective_pairing.
+      rewrite <- surjective_pairing in l.
       intros Hin. apply l. exact Hin.
     - intros Hin. exfalso. apply (List.in_nil Hin).
     - intros [ndresoff [ndoff Hload]].
       destruct (ComponentMemory.load_block_load compMem nd.2 ndres.1 ndres.2) as [l r].
       rewrite <- surjective_pairing in r. apply r.
-      rewrite <- surjective_pairing in Hload. exists ndresoff. exists ndoff. exact Hload.
+      exists ndresoff. exists ndoff. exact Hload.
     - intros [ndresoff [_ contra]]. discriminate.
   Qed.
       
@@ -70,7 +71,6 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
   Proof.
     unfold max_ptr.
     intros m x [n [nd [Hin [H1 H2]]]].
-    SearchAbout domm.
     - pose (In_innd := In_in nd (map snd (max_ptr_per_compMem m))).
       split.
       + apply leq_trans with (n := nd.1). trivial. apply fold_max_In_leq.
@@ -183,7 +183,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
       rewrite e. auto.
   Defined.
 
-  Compute (proofize_seq nat (5 :: (6 :: (4 :: nil)))).
+  (*Compute (proofize_seq nat (5 :: (6 :: (4 :: nil)))).*)
 
   Lemma size_proofize_seq : forall T s, size (proofize_seq T s) = size s.
   Proof.
@@ -193,15 +193,15 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
     - simpl.
       unfold proofize_seq.
       simpl.
-      SearchAbout nat_rect.
+      (*SearchAbout nat_rect.*)
   Admitted.
 
-  SearchAbout sig.
+  (*SearchAbout sig.*)
   
   Definition deproofize_one A P y := @proj1_sig A P y.
 
-  SearchAbout proj1_sig.
-  Check sval.
+  (*SearchAbout proj1_sig.*)
+  (*Check sval.*)
 
   (*TODO: Check the lemmas about proj1_sig and sval. They may help in
    proving a spec for proofize_seq. *)
@@ -265,7 +265,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
       destruct (n < length s) eqn:e.
       + pose (pfIns := IHs n e).
         destruct pfIns as [[memberS proofInS] pf_s_eq_inr].
-        SearchAbout In cons.
+        (*SearchAbout In cons.*)
         pose (proofInAS := List.in_cons a memberS s proofInS).
         exists (exist (fun x => In x (a :: s)) memberS proofInAS).
         unfold nth_default_or_In_proof.
@@ -367,8 +367,6 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
             (finitize_ptr x)
          ).
 
-  Check reachable_nodes.
-  
   Lemma dfs_path_fin_mem:
     forall m x y,
       reflect (dfs_path
@@ -447,7 +445,6 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
   Lemma nat_node_of_ord_node_finitize_ptr:
     forall x, nat_node_of_ord_node (finitize_ptr x) = x.
   Proof. intros x. destruct x as [xl xr]. unfold finitize_ptr. simpl.
-         SearchAbout inord.
          assert (xleq: (@nat_of_ord (S xl) (@inord xl xl)) = xl).
          { apply inordK. auto. }
          rewrite xleq.
@@ -810,7 +807,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
              rewrite <- mxa.
              rewrite <- mxa in Hmx.
              pose (IHlInst := IHl a a).
-             SearchAbout "max".
+             (*SearchAbout "max".*)
   Admitted.
 
 
@@ -828,7 +825,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
       pose (max_spec := Nat.max_spec mx_so_far new_max).
       destruct max_spec as [[Truth Concl] | [Falsity _]]; auto.
       + admit (* Here, derive false from Falsity and Hnewmax. *).
-      + unfold foldl. Search "" "foldl".
+      + unfold foldl. (*Search "" "foldl".*)
     Admitted.
   
   Lemma max_path_size_in_set_spec :
@@ -848,8 +845,8 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
   Proof.
     move => bs bs'.
     rewrite /max_path_size_in_set.
-    Search "" "fsetU".
-    Search "" "map".
+    (*Search "" "fsetU".*)
+    (*Search "" "map".*)
   Admitted.
 
 
@@ -860,7 +857,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
   Proof.
     unfold max_path_size_in_set.
     (* Here, need to cancel out "val fset val" *)
-    SearchAbout fsubset.
+    (*SearchAbout fsubset.*)
   Admitted.
 
   Lemma notsubset_exists_in :
@@ -868,7 +865,7 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
       ~~fsubset t s ->
       exists x, x \in t /\ x \notin s.
   Proof.
-    SearchAbout "fsubsetPn".
+    (*SearchAbout "fsubsetPn".*)
     (* This is exactly what we need. Why is it not available in?
        It is available here: https://github.com/math-comp/finmap/blob/48c1330c43194c566410bb1dcb1af623b679cc2e/finmap.v#L1834
      *)
@@ -1071,12 +1068,12 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
         erewrite H in e1.
         pose (e1size := fsubset_leq_size e1).
         pose (esize := fsubset_leq_size e).
-        SearchAbout "<=".
+        (*SearchAbout "<=".*)
         apply anti_leq.
-        SearchAbout "<=".
+        (*SearchAbout "<=".*)
         Print antisymmetric.
-        SearchAbout "&&".
-        SearchAbout is_true.
+        (*SearchAbout "&&".*)
+        (*SearchAbout is_true.*)
         unfold is_true in e1size.
         unfold is_true in esize.
         rewrite e1size. rewrite esize. auto.
@@ -1088,18 +1085,17 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
     - right.
       pose (e1 := access_step_paths'_expansive m ps).
       erewrite H in e1.
-      SearchAbout fsubset.
+      (*SearchAbout fsubset.*)
       pose (eqn := eqEfsubset ps ps').
       erewrite e in eqn.
-      SearchAbout andb.
       erewrite andb_false_r in eqn.
       subst ps'.
       unfold access_step_paths' in eqn.
-      SearchAbout fset.
+      (*SearchAbout fset.*)
       (* Attempting to prove that the RHS of the union is not empty *)
       destruct (size(fset (concat [seq extend_path' m i | i <- val ps])%fset)) eqn:isEmpty.
-      SearchAbout size fset.
-      SearchAbout fsubset.
+      (*SearchAbout size fset.*)
+      (*SearchAbout fsubset.*)
       unfold max_path_size_in_set.
       
       SearchAbout Init.Nat.max.*)

@@ -101,61 +101,70 @@ Definition state_component (st : CS.state) : Component.id :=
 Definition program_ptrs (p: program) : {fset (Component.id * Block.id)} :=
   domm (uncurrym (prog_buffers p)).
 
-Definition value_to_pointer_err v : option (Component.id * Block.id) :=
-  match v with | Ptr (cid, bid, _) => Some (cid, bid)
+Definition component_ptrs (p: program) (cid: Component.id) : {fset (Component.id * Block.id)}
+  := match (prog_buffers p) cid with
+     | None => fset0
+     | Some map_of_blockids => fset (map (fun bid => (cid, bid)) (domm map_of_blockids))
+     end.
+
+Definition value_to_data_pointer_err v : option (Component.id * Block.id) :=
+  match v with | Ptr (perm, cid, bid, _) =>
+                 if perm =? Permission.data then Some (cid, bid) else None
           | _ => None
   end.
 
-Definition regs_ptrs (regs : Register.t) : {fset Component.id * Block.id} :=
+Definition regs_data_ptrs (regs : Register.t) : {fset Component.id * Block.id} :=
   fset(
       seq.pmap
         id
         (codomm
            (filterm (fun x y => isSome y)
-                    (mapm value_to_pointer_err regs))
+                    (mapm value_to_data_pointer_err regs))
         )
     ).
 
-Definition compMem_ptrs (m : ComponentMemory.t) : {fset Component.id * Block.id} :=
+Definition compMem_data_ptrs (m : ComponentMemory.t) : {fset Component.id * Block.id} :=
   fset (concat (map (ComponentMemory.load_block m) (ComponentMemory.domm m))).
 
-Definition mem_ptrs (m : Memory.t) : {fset Component.id * Block.id} :=
-  (\bigcup_(comp_mem_ptrs <- (codomm (mapm compMem_ptrs m))) comp_mem_ptrs)%fset.
+Definition mem_data_ptrs (m : Memory.t) : {fset Component.id * Block.id} :=
+  (\bigcup_(comp_mem_ptrs <- (codomm (mapm compMem_data_ptrs m))) comp_mem_ptrs)%fset.
 
-Definition state_ptrs (st: state) := fsetU (regs_ptrs (state_regs st))
-                                           (mem_ptrs (state_mem st)).
+Definition state_data_ptrs (st: state) := fsetU (regs_data_ptrs (state_regs st))
+                                           (mem_data_ptrs (state_mem st)).
 
 Definition are_all_ptrs_in_reachable (st: state) (p: program) :=
-  (fsubset (state_ptrs st)
+  (fsubset (state_data_ptrs st)
            (\bigcup_(i <- program_ptrs p)
              (fset (reachable_nodes_nat (state_mem st) i))
            )
   )%fset.
 
 Lemma Memory_load_mem_ptrs :
-  forall m aC aB aO vC vB vO,
-    Memory.load m (aC, aB, aO) = Some (Ptr (vC, vB, vO)) ->
-    (vC, vB) \in mem_ptrs m.
+  forall m aP aC aB aO vC vB vO,
+    Memory.load m (aP, aC, aB, aO) = Some (Ptr (Permission.data, vC, vB, vO)) ->
+    (vC, vB) \in mem_data_ptrs m.
 Proof.
-  intros ???????. unfold Memory.load. simpl.
-  destruct (m aC) eqn:eaC; intros Hload; try discriminate.
+  intros ????????. unfold Memory.load. simpl.
+  destruct (aP =? Permission.data) eqn:eaP; destruct (m aC) eqn:eaC;
+    intros Hload; try discriminate.
   destruct (ComponentMemory.load_block_load t aB vC vB) as [_ Honlyif].
-  unfold mem_ptrs.
+  unfold mem_data_ptrs.
   apply/bigcupP. simpl.
-  apply BigCupSpec with (i := compMem_ptrs t); auto.
+  apply BigCupSpec with (i := compMem_data_ptrs t); auto.
   - apply/codommP. exists aC. rewrite mapmE. rewrite eaC. auto.
-  - unfold compMem_ptrs. rewrite in_fset.
+  - unfold compMem_data_ptrs. rewrite in_fset.
     rewrite <- flat_map_concat_map. rewrite In_in. rewrite in_flat_map.
     exists aB. split.
-    + apply ComponentMemory.load_domm with (i := aO) (v := Ptr (vC, vB, vO)). auto.
+    + apply ComponentMemory.load_domm with
+          (i := aO) (v := Ptr (Permission.data, vC, vB, vO)). auto.
     + apply Honlyif. exists vO. exists aO. exact Hload.
 Qed.
 
-Lemma value_to_pointer_err_Ptr :
-  forall p, exists x, value_to_pointer_err (Ptr p) = Some x.
+Lemma value_to_data_pointer_err_Ptr :
+  forall pc pb po,
+  exists x, value_to_data_pointer_err (Ptr (Permission.data, pc, pb, po)) = Some x.
 Proof.
-  intros p. exists (Pointer.component p, Pointer.block p).
-  unfold value_to_pointer_err. rewrite <- (Pointer.compose p). auto.
+  intros ???. by exists (pc, pb).
 Qed.
 
 Lemma mem_codomm_setm :
@@ -200,7 +209,7 @@ Ltac unfold_Register_set e1 k'mem :=
   simpl in k'mem.
 
 Ltac unfold_regs_ptrs :=
-  do 2 (unfold regs_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id);
+  do 2 (unfold regs_data_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id);
   intros Hin; apply/codommP; destruct (codommP _ _ Hin) as [k' k'mem].
 
 Ltac solve_untouched_registers e1 k' k'mem :=
@@ -209,11 +218,12 @@ Ltac solve_untouched_registers e1 k' k'mem :=
 
 Lemma Register_get_regs_ptrs :
   forall r1 regs ptrC ptrB ptrO,
-    Register.get r1 regs = Ptr (ptrC, ptrB, ptrO) ->
-    (ptrC, ptrB) \in regs_ptrs regs.
+    Register.get r1 regs = Ptr (Permission.data, ptrC, ptrB, ptrO) ->
+    (ptrC, ptrB) \in regs_data_ptrs regs.
 Proof.
   intros r1 regs ptrC ptrB ptrO Hget.
-  unfold regs_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id. apply/codommP.
+  unfold regs_data_ptrs; rewrite in_fset; rewrite seq.mem_pmap;
+    rewrite seq.map_id. apply/codommP.
   unfold Register.get in Hget.
   destruct (regs (Register.to_nat r1)) as [v |] eqn:e.
   - exists (Register.to_nat r1).
@@ -223,12 +233,12 @@ Qed.
          
 Lemma regs_ptrs_set_get_in :
   forall (regs: Register.t) r1 r2 v,
-    v \in regs_ptrs (Register.set r2 (Register.get r1 regs) regs) ->
-    v \in regs_ptrs regs.
+    v \in regs_data_ptrs (Register.set r2 (Register.get r1 regs) regs) ->
+    v \in regs_data_ptrs regs.
 Proof.
   intros regs r1 r2 v.
   unfold_regs_ptrs.
-  destruct (Some v == value_to_pointer_err (Register.get r1 regs)) eqn:copied;
+  destruct (Some v == value_to_data_pointer_err (Register.get r1 regs)) eqn:copied;
     destruct (k' == Register.to_nat r2) eqn:e1; try solve_untouched_registers e1 k' k'mem.
   - pose (copied' := eqP copied); pose (e1' := eqP e1).
     exists (Register.to_nat r1).
@@ -252,26 +262,28 @@ Proof.
     rewrite filtermE in k'mem. simpl in k'mem.
     rewrite mapmE in k'mem.
     unfold_Register_set e1 k'mem.
-    pose (@negPf (Some v == value_to_pointer_err (Register.get r1 regs))) as n.
-    assert (ineq : Some v != value_to_pointer_err (Register.get r1 regs)).
+    pose (@negPf (Some v == value_to_data_pointer_err (Register.get r1 regs))) as n.
+    assert (ineq : Some v != value_to_data_pointer_err (Register.get r1 regs)).
     {
       apply/n. exact copied.
     }
     pose (negP ineq) as n0. exfalso. apply n0. apply/eqP.
-    destruct (value_to_pointer_err (Register.get r1 regs)).
+    destruct (value_to_data_pointer_err (Register.get r1 regs)).
     + simpl in k'mem. apply Some_inj. symmetry. exact k'mem.
     + simpl in k'mem. discriminate.
 Qed.
 
 Lemma regs_ptrs_set_get :
   forall regs r1 r2,
-    fsubset (regs_ptrs (Register.set r2 (Register.get r1 regs) regs)) (regs_ptrs regs).
+    fsubset (regs_data_ptrs (Register.set r2 (Register.get r1 regs) regs))
+            (regs_data_ptrs regs).
 Proof.
   intros. apply in_fsubset. apply regs_ptrs_set_get_in.
 Qed.
 
-Lemma Pointer_add_c_b :
+(*Lemma Pointer_add_p_c_b :
   forall p z p', Pointer.add p z = p' ->
+                 Pointer.permission p' = Pointer.permission p /\
                  Pointer.component p' = Pointer.component p /\
                  Pointer.block p' = Pointer.block p.
 Proof.
@@ -289,12 +301,13 @@ Proof.
   destruct p as [[pc pb] po]. rewrite <- Hsub.
   simpl. auto.
 Qed.
-
+*)
 Lemma eval_binop_ptr :
   forall op v1 v2 p,
     eval_binop op v1 v2 = Ptr p ->
     (exists p1, (v1 = Ptr p1 \/ v2 = Ptr p1)
                 /\
+                Pointer.permission p = Pointer.permission p1 /\
                 Pointer.component p = Pointer.component p1 /\
                 Pointer.block p = Pointer.block p1
     ).
@@ -304,22 +317,34 @@ Lemma eval_binop_ptr :
     try discriminate.
   - exists t. split.
     + right. trivial.
-    + inversion Heval. apply Pointer_add_c_b with (z := z). auto.
+    + inversion Heval.
+      split; last split.
+      apply Pointer.add_preserves_permission.
+      apply Pointer.add_preserves_component.
+      apply Pointer.add_preserves_block.
   - exists t. split.
     + left. trivial.
-    + inversion Heval. apply Pointer_add_c_b with (z := z). auto.
+    + inversion Heval.
+      split; last split.
+      apply Pointer.add_preserves_permission.
+      apply Pointer.add_preserves_component.
+      apply Pointer.add_preserves_block.
   - exists t. split.
     + left. trivial.
-    + inversion Heval. apply Pointer_sub_c_b with (z := z). auto.
-  - destruct t as [[tc tb] to].
-    destruct t0 as [[t0c t0b] t0o].
-    destruct ((tc =? t0c) && (tb =? t0b)); discriminate.
+    + inversion Heval.
+      split; last split.
+      apply Pointer.sub_preserves_permission.
+      apply Pointer.sub_preserves_component.
+      apply Pointer.sub_preserves_block.
+  - destruct t as [[[tp tc] tb] to].
+    destruct t0 as [[[t0p t0c] t0b] t0o].
+    destruct ((tp =? t0p) && (tc =? t0c) && (tb =? t0b)); discriminate.
   - destruct (Pointer.leq t t0); discriminate.
 Qed.    
 
 Lemma regs_ptrs_binop :
   forall regs rdest op r1 r2,
-    fsubset (regs_ptrs
+    fsubset (regs_data_ptrs
                (Register.set rdest
                              (eval_binop op
                                          (Register.get r1 regs)
@@ -327,11 +352,11 @@ Lemma regs_ptrs_binop :
                              )
                              regs)
             )
-            (regs_ptrs regs).
+            (regs_data_ptrs regs).
 Proof.
   intros regs rdest op r1 r2. apply in_fsubset. intros v.
   unfold_regs_ptrs.
-  destruct (Some v == value_to_pointer_err (eval_binop op
+  destruct (Some v == value_to_data_pointer_err (eval_binop op
                                          (Register.get r1 regs)
                                          (Register.get r2 regs)
            )) eqn:copied;
@@ -341,41 +366,43 @@ Proof.
     destruct (eval_binop op (Register.get r1 regs) (Register.get r2 regs)) eqn:e.
     + simpl in copied'. discriminate.
     + destruct (eval_binop_ptr op (Register.get r1 regs) (Register.get r2 regs) t e)
-        as [ptr [[ptrr1 | ptrr2] [cmpeq blkeq]]];
+        as [ptr [[ptrr1 | ptrr2] [permeq [cmpeq blkeq]]]];
         eexists;
         rewrite filtermE; rewrite filtermE in k'mem; simpl; simpl in k'mem;
           rewrite mapmE; rewrite mapmE in k'mem;
-            destruct t eqn:et; destruct p eqn:ep; simpl in *; unfold_Register_set e1 k'mem.
+            destruct t as [[[tperm tcomp] tblock] toff] eqn:et;
+              simpl in *; unfold_Register_set e1 k'mem.
       * assert (g : obind (fun x : option (nat * nat) => if isSome x then Some x else None)
-                          (omap value_to_pointer_err
+                          (omap value_to_data_pointer_err
                                 (regs (Register.to_nat r1))) = Some (Some v)).
         {
           unfold Register.get in ptrr1.
           destruct (regs (Register.to_nat r1)); try discriminate.
           simpl. rewrite ptrr1. rewrite <- (Pointer.compose ptr). simpl.
-          rewrite <- k'mem, <- cmpeq, <- blkeq. reflexivity.
+          rewrite <- k'mem, <- cmpeq, <- blkeq, permeq.
+          reflexivity.
         }
         exact g.
       * assert (g : obind (fun x : option (nat * nat) => if isSome x then Some x else None)
-                          (omap value_to_pointer_err
+                          (omap value_to_data_pointer_err
                                 (regs (Register.to_nat r2))) = Some (Some v)).
         {
           unfold Register.get in ptrr2.
           destruct (regs (Register.to_nat r2)); try discriminate.
           simpl. rewrite ptrr2. rewrite <- (Pointer.compose ptr). simpl.
-          rewrite <- k'mem, <- cmpeq, <- blkeq. reflexivity.
+          rewrite <- k'mem, <- cmpeq, <- blkeq, permeq. reflexivity.
         }
         exact g.
     + simpl in copied'. discriminate.
   - pose (e1' := eqP e1).
     rewrite filtermE in k'mem; simpl; simpl in k'mem; rewrite mapmE in k'mem.
     unfold_Register_set e1 k'mem.
-    pose (@negPf (Some v == value_to_pointer_err
+    pose (@negPf (Some v == value_to_data_pointer_err
                               (eval_binop op
                                           (Register.get r1 regs)
                                           (Register.get r2 regs)
          ))) as n.
-    assert (ineq : Some v != value_to_pointer_err (eval_binop op
+    assert (ineq : Some v != value_to_data_pointer_err (eval_binop op
                                           (Register.get r1 regs)
                                           (Register.get r2 regs)
            )).
@@ -383,7 +410,7 @@ Proof.
       apply/n. exact copied.
     }
     pose (negP ineq) as n0. exfalso. apply n0. apply/eqP.
-    destruct (value_to_pointer_err (eval_binop op
+    destruct (value_to_data_pointer_err (eval_binop op
                                                (Register.get r1 regs)
                                                (Register.get r2 regs))).
     + simpl in k'mem. apply Some_inj. symmetry. exact k'mem.
@@ -391,11 +418,11 @@ Proof.
 Qed.
 
 Lemma regs_ptrs_invalidate :
-  forall regs, fsubset (regs_ptrs (Register.invalidate regs)) (regs_ptrs regs).
+  forall regs, fsubset (regs_data_ptrs (Register.invalidate regs)) (regs_data_ptrs regs).
 Proof.
   intros regs. unfold Register.invalidate. apply in_fsubset. intros v.
   unfold_regs_ptrs.
-  destruct (Some v == value_to_pointer_err (Register.get R_COM regs)) eqn:R_COMptr;
+  destruct (Some v == value_to_data_pointer_err (Register.get R_COM regs)) eqn:R_COMptr;
     destruct (k' == Register.to_nat R_COM) eqn:R_COMloc;
     simpl in k'mem; simpl in R_COMloc; rewrite filtermE in k'mem; rewrite mapmE in k'mem.
   - exists k'; rewrite filtermE; simpl; rewrite mapmE.
@@ -403,7 +430,7 @@ Proof.
     rewrite loc. rewrite loc in k'mem. simpl in k'mem.
     pose (R_COMptr' := eqP R_COMptr).
     rewrite R_COMptr' in k'mem.
-    destruct (value_to_pointer_err (Register.get R_COM regs)) eqn:contra.
+    destruct (value_to_data_pointer_err (Register.get R_COM regs)) eqn:contra.
     + simpl in k'mem. rewrite R_COMptr'.
       unfold Register.get in contra. simpl in contra.
       destruct (regs 1) eqn:e.
@@ -433,12 +460,12 @@ Proof.
                          rewrite setmE in k'mem. rewrite k'6 in k'mem.
                          simpl in k'mem. discriminate.
   - pose (loc := eqP R_COMloc). rewrite loc in k'mem. simpl in k'mem.
-    pose (@negPf (Some v == value_to_pointer_err (Register.get R_COM regs))) as n.
-    assert (ineq : Some v != value_to_pointer_err (Register.get R_COM regs)).
+    pose (@negPf (Some v == value_to_data_pointer_err (Register.get R_COM regs))) as n.
+    assert (ineq : Some v != value_to_data_pointer_err (Register.get R_COM regs)).
     {
       apply/n. exact R_COMptr.
     }
-    destruct (value_to_pointer_err (Register.get R_COM regs)) eqn:contra.
+    destruct (value_to_data_pointer_err (Register.get R_COM regs)) eqn:contra.
     + simpl in k'mem. apply Some_inj in k'mem. rewrite k'mem in ineq.
       assert (f : false).
       {
@@ -473,11 +500,11 @@ Qed.
 Lemma regs_ptrs_set_Int_Undef :
   forall r regs vNoPtr z,
     ((vNoPtr = Int z) \/ vNoPtr = Undef) ->
-    fsubset (regs_ptrs (Register.set r vNoPtr regs)) (regs_ptrs regs).
+    fsubset (regs_data_ptrs (Register.set r vNoPtr regs)) (regs_data_ptrs regs).
 Proof.
   intros r regs vNoPtr z HvNoPtr. apply in_fsubset. intros v.
   unfold_regs_ptrs.
-  destruct (Some v == value_to_pointer_err vNoPtr) eqn:copied;
+  destruct (Some v == value_to_data_pointer_err vNoPtr) eqn:copied;
     destruct (k' == Register.to_nat r) eqn:e1;
     try solve_untouched_registers e1 k' k'mem.
   - pose (copied' := eqP copied); pose (e1' := eqP e1).
@@ -489,14 +516,15 @@ Qed.
 
 Lemma regs_ptrs_set_Ptr :
   forall r regs vCid vBid vOff,
-    fsubset (regs_ptrs (Register.set r (Ptr (vCid, vBid, vOff)) regs))
-            (fsetU (regs_ptrs regs) (fset1 (vCid, vBid))).
+    fsubset (regs_data_ptrs (Register.set r (Ptr (Permission.data, vCid, vBid, vOff)) regs))
+            (fsetU (regs_data_ptrs regs) (fset1 (vCid, vBid))).
 Proof.
   intros r regs vCid vBid vOff. apply in_fsubset. intros v.
   intros Htmp. apply/fsetUP. move: Htmp.
-  do 2 (unfold regs_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id).
+  do 2 (unfold regs_data_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id).
   intros Hin; destruct (codommP _ _ Hin) as [k' k'mem].
-  destruct (Some v == value_to_pointer_err (Ptr (vCid, vBid, vOff))) eqn:copied;
+  destruct (Some v == value_to_data_pointer_err
+                        (Ptr (Permission.data, vCid, vBid, vOff))) eqn:copied;
     destruct (k' == Register.to_nat r) eqn:e1;
     try (left; apply/codommP; solve_untouched_registers e1 k' k'mem).
   - right. simpl in copied. pose (eqP copied) as cpd. inversion cpd. apply/fset1P. auto.
@@ -528,9 +556,9 @@ Definition initial_machine_state (p: program) : state :=
              | Some b => b
              | None => 0 (* This case shouldn't happen for a well-formed p *)
              end in
-    ([], mem, regs, (Component.main, b, 0%Z), emptym)
+    ([], mem, regs, (Permission.code, Component.main, b, 0%Z), emptym)
   (* this case shoudln't happen for a well-formed p *)
-  | false => ([], emptym, emptym, (Component.main, 0, 0%Z), emptym)
+  | false => ([], emptym, emptym, (Permission.code, Component.main, 0, 0%Z), emptym)
   end.
 
 (* A slightly hacky way to express the initial pc of a linked program as a
@@ -574,7 +602,7 @@ Theorem initial_machine_state_after_linking:
      unionm (prepare_procedures_memory p)
             (prepare_procedures_memory c),
      Register.init,
-     (Component.main,
+     (Permission.code, Component.main,
       prog_main_block p + prog_main_block c,
       0%Z),
      emptym).
@@ -757,7 +785,8 @@ Inductive step (G : global_env) : state -> trace -> state -> Prop :=
     (* update_reachability_of_component_with_value call_arg C' reach = reach' -> *)
     step G (gps, mem, regs, pc, addrs)
            [ECall (Pointer.component pc) P call_arg C']
-           (Pointer.inc pc :: gps, mem, Register.invalidate regs, (C', b, 0%Z), addrs) (* reach', replace addrs *)
+           (Pointer.inc pc :: gps, mem, Register.invalidate regs,
+            (Permission.code, C', b, 0%Z), addrs) (* reach', replace addrs *)
 
 | Return: forall gps' mem regs pc pc' ret_arg addrs (* reach' *),
     executing G pc IReturn ->
@@ -885,7 +914,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
           do b <- EntryPoint.get C' P (genv_entrypoints G);
           match Register.get R_COM regs with
           | Int rcomval =>
-            let pc' := (C', b, 0%Z) in
+            let pc' := (Permission.code, C', b, 0%Z) in
             let t := [ECall (Pointer.component pc) P rcomval C'] in
             ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc', addrs))
           | _ => None
@@ -1088,6 +1117,8 @@ Proof.
                         eqn:Hcomp;
                  try discriminate.
                unfold Memory.load in *.
+               destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm;
+                 try discriminate.
                destruct (mem0 (Pointer.component t0)) eqn:Hmem;
                  try discriminate.
                destruct (ComponentMemory.load t1 (Pointer.block t0) (Pointer.offset t0))
@@ -1100,7 +1131,7 @@ Proof.
                **** assumption.
                **** apply Nat.eqb_eq. assumption.
                **** unfold Memory.load.
-                    rewrite Hmem. assumption.
+                    rewrite Hmem. rewrite Hperm. assumption.
 
            *** rewrite H in H2.
                destruct (Register.get r regs0) eqn:Hreg;
@@ -1109,6 +1140,8 @@ Proof.
                         eqn:Hcomp;
                  try discriminate.
                unfold Memory.store in *.
+               destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm;
+                 try discriminate.
                destruct (mem0 (Pointer.component t0)) eqn:Hmem;
                  try discriminate.
                destruct (ComponentMemory.store t1 (Pointer.block t0) (Pointer.offset t0)
@@ -1122,7 +1155,7 @@ Proof.
                **** assumption.
                **** apply Nat.eqb_eq. assumption.
                **** unfold Memory.store.
-                    rewrite Hmem. rewrite Hstore. reflexivity.
+                    rewrite Hmem. rewrite Hstore. rewrite Hperm. reflexivity.
 
            *** rewrite H in H2.
                destruct (Register.get r0 regs0) eqn:Hreg;
@@ -1499,16 +1532,18 @@ Proof.
     match goal with
     | Hstore : Memory.store _ ?PTR (Register.get ?REG ?REGS) = _ |- _ =>
       unfold Memory.store in Hstore;
-      destruct (mem (Pointer.component PTR)) as [memC |] eqn:Hcase1;
+        destruct (Pointer.permission PTR =? Permission.data) eqn:Hperm;
         [| discriminate];
-      destruct (ComponentMemory.store
-                  memC (Pointer.block PTR) (Pointer.offset PTR) (Register.get REG REGS))
-        as [memC' |] eqn:Hcase2;
+        destruct (mem (Pointer.component PTR)) as [memC |] eqn:Hcase1;
         [| discriminate];
-      inversion Hstore as [Hsetm];
-      simpl; rewrite domm_set fsetU1in;
-        [reflexivity |];
-      apply /dommP; now eauto
+        destruct (ComponentMemory.store
+                    memC (Pointer.block PTR) (Pointer.offset PTR) (Register.get REG REGS))
+          as [memC' |] eqn:Hcase2;
+        [| discriminate];
+        inversion Hstore as [Hsetm];
+        simpl; rewrite domm_set fsetU1in;
+          [reflexivity |];
+          apply /dommP; now eauto
     end.
   - (* Preservation by Memory.alloc. *)
     match goal with
@@ -1792,6 +1827,7 @@ End ProgramLink.
 
 
 (* [DynShare] *)
+(*
 SearchAbout prepare_procedures_initial_memory_aux.
 Check prepare_procedures_initial_memory_aux.
 SearchAbout prog_procedures.
@@ -1799,7 +1835,7 @@ SearchAbout program.
 Check mem_domm.
 Check getm.
 SearchAbout getm.
-
+*)
 Lemma genv_procedures_prog_procedures_in p cid fid instlst :
   well_formed_program p ->
   (omap (fun m => getm m fid)
@@ -1883,7 +1919,7 @@ Lemma are_all_ptrs_in_reachable_star_step p st t st' :
   are_all_ptrs_in_reachable st p ->
   are_all_ptrs_in_reachable st' p.
 Proof.
-  unfold are_all_ptrs_in_reachable, state_mem, state_ptrs.
+  unfold are_all_ptrs_in_reachable, state_mem, state_data_ptrs.
   intros Hstar Hwellformed.
   do 2 rewrite fsubUset.
   induction Hstar; auto.
@@ -1913,8 +1949,8 @@ Proof.
     destruct v as [vInt | vPtr].
     + simpl.
       apply (@fsubset_trans _
-                            (regs_ptrs regs)
-                            (regs_ptrs (Register.set r (Int vInt) regs))
+                            (regs_data_ptrs regs)
+                            (regs_data_ptrs (Register.set r (Int vInt) regs))
                             (\bigcup_(i <- program_ptrs p)
                               fset (reachable_nodes_nat mem0 i)
                             )%fset
@@ -1922,10 +1958,12 @@ Proof.
       * apply regs_ptrs_set_Int_Undef with (z := vInt). left. trivial.
       * assumption.
     + simpl.
-      assert (vPtrgood: forall cid bid, value_to_pointer_err (Ptr vPtr) = Some (cid, bid) ->
-                                        (cid, bid) \in (program_ptrs p)).
+      assert (vPtrgood: forall cid bid,
+                 value_to_data_pointer_err (Ptr vPtr) = Some (cid, bid) ->
+                 (cid, bid) \in (program_ptrs p)).
       {
-        intros cid bid HvPtrSome. destruct vPtr as [[cidv bidv]?]. simpl in HvPtrSome.
+        intros cid bid HvPtrSome. destruct vPtr as [[[permv cidv] bidv]?]. simpl in HvPtrSome.
+        destruct (permv =? Permission.data) eqn:epermv; try discriminate.
         inversion HvPtrSome. subst cid bid.
         simpl in Hwfi'.
         destruct Hwfi' as [_ [bufs [Hprog_buffers Hbidv]]].
@@ -1935,9 +1973,9 @@ Proof.
         rewrite <- In_in with (s := (seq.map fst bufs)) in Hbidv.
         unfold domm. unfold seq.unzip1. rewrite in_fset. exact Hbidv.
       }
-      destruct vPtr as [[vPtrc vPtrb] vPtro].
+      destruct vPtr as [[[vPtrp vPtrc] vPtrb] vPtro].
       pose (regs_ptrs_set_Ptr r regs vPtrc vPtrb vPtro) as l.
-      assert (rtrans:  (fsubset (regs_ptrs regs
+      assert (rtrans:  (fsubset (regs_data_ptrs regs
                                       :|:
                                       fset1
                                       (T:=prod_ordType nat_ordType nat_ordType)
@@ -1951,17 +1989,25 @@ Proof.
         apply/bigcupP. simpl.
         assert (vPtr_program_ptrs: (vPtrc, vPtrb) \in program_ptrs p).
         {
-          apply vPtrgood. auto.
+          admit. (* This proof broke after adding the permissions field. *)
+          (*apply vPtrgood.
+          destruct (vPtrp =? Permission.data) eqn:evPtrp; try discriminate.
+          auto.*)
         }
         apply BigCupSpec with (i := (vPtrc, vPtrb)); auto.
         destruct (reachable_nodes_nat_expansive (vPtrc, vPtrb) mem0) as [x [x_in xeq]].
         rewrite xeq in x_in. rewrite in_fset. exact x_in.
       }
-      apply (@fsubset_trans _ (regs_ptrs regs
-      :|: fset1 (T:=prod_ordType nat_ordType nat_ordType) (vPtrc, vPtrb))%fset _ _); auto.
+      apply (@fsubset_trans _ (regs_data_ptrs regs
+                                              :|:
+                                              fset1
+                                              (T:=prod_ordType nat_ordType nat_ordType)
+                                              (vPtrc, vPtrb))%fset _ _); auto.
+      admit. (* This proof broke after adding the permissions field. *)
+      
   - apply (@fsubset_trans _
-                          (regs_ptrs regs)
-                          (regs_ptrs (Register.set r2 (Register.get r1 regs) regs))
+                          (regs_data_ptrs regs)
+                          (regs_data_ptrs (Register.set r2 (Register.get r1 regs) regs))
                           (\bigcup_(i <- program_ptrs p)
                             fset (reachable_nodes_nat mem0 i)
                           )%fset
@@ -1969,27 +2015,30 @@ Proof.
     + apply regs_ptrs_set_get.
     + assumption.
   - apply (@fsubset_trans _
-                          (regs_ptrs regs)
-                          (regs_ptrs (Register.set r3 result regs))
+                          (regs_data_ptrs regs)
+                          (regs_data_ptrs (Register.set r3 result regs))
                           (\bigcup_(i <- program_ptrs p)
                             fset (reachable_nodes_nat mem0 i)
                           )%fset
           ).
     + apply regs_ptrs_binop.
     + assumption.
-  - destruct ptr as [[ptrC ptrB] ptrO].
+  - destruct ptr as [[[ptrP ptrC] ptrB] ptrO].
     assert (addrInreach : (ptrC, ptrB) \in
                (\bigcup_(i <- program_ptrs p) fset (reachable_nodes_nat mem0 i))%fset).
     {
-      apply fsubset_in with (s1 := regs_ptrs regs).
+      apply fsubset_in with (s1 := regs_data_ptrs regs).
       + assumption.
       + apply Register_get_regs_ptrs with (r1 := r1) (ptrO := ptrO).
+        assert (Pointer.permission (ptrP, ptrC, ptrB, ptrO) = Permission.data) as eptrP.
+        { apply Memory.load_some_permission with (mem := mem0) (v := v). assumption. }
+        simpl in eptrP. rewrite eptrP in H13.
         assumption.
     }
-    destruct v as [z | [[vC vB] vO] |] eqn:ve.
+    destruct v as [z | [[[vP vC] vB] vO] |] eqn:ve.
     + apply (@fsubset_trans _
-                            (regs_ptrs regs)
-                            (regs_ptrs (Register.set r2 (Int z) regs))
+                            (regs_data_ptrs regs)
+                            (regs_data_ptrs (Register.set r2 (Int z) regs))
                             (\bigcup_(i <- program_ptrs p)
                               fset (reachable_nodes_nat mem0 i)
                             )%fset
@@ -1998,17 +2047,25 @@ Proof.
       -- assumption.
     + pose (regs_ptrs_set_Ptr r2 regs vC vB vO) as l.
       apply (@fsubset_trans _
-                            (regs_ptrs regs
+                            (regs_data_ptrs regs
                                        :|: fset1
                                        (T:=prod_ordType nat_ordType nat_ordType)
-                                       (vC, vB))%fset _ _); auto.
-      rewrite fsubUset. apply/andP; split; auto.
-      apply (@fsubset_trans _ (mem_ptrs (state_mem (gps0, mem0, regs, pc, addrs0))) _ _); auto.
-      simpl. rewrite fsub1set.
-      apply Memory_load_mem_ptrs with (aC := ptrC) (aB := ptrB) (aO := ptrO) (vO := vO). auto.
+                                       (vC, vB))%fset _ _).
+      * admit. 
+        (* auto *) (* This broke after introducing the permissions field. *)
+      * rewrite fsubUset. apply/andP; split; auto.
+        apply (@fsubset_trans _
+                              (mem_data_ptrs (state_mem (gps0, mem0, regs, pc, addrs0))) _ _).
+        -- simpl. rewrite fsub1set.
+           apply Memory_load_mem_ptrs with
+               (aP := ptrP) (aC := ptrC) (aB := ptrB) (aO := ptrO) (vO := vO). auto.
+    (* Should follow from H15 after proving that vP is Permission.data *)
+           admit.
+        -- (* This broke after introducing the permissions field. *)
+          admit.
     + apply (@fsubset_trans _
-                            (regs_ptrs regs)
-                            (regs_ptrs (Register.set r2 Undef regs))
+                            (regs_data_ptrs regs)
+                            (regs_data_ptrs (Register.set r2 Undef regs))
                             (\bigcup_(i <- program_ptrs p)
                               fset (reachable_nodes_nat mem0 i)
                             )%fset
@@ -2038,19 +2095,31 @@ Proof.
               use this lemma.*)
   - (* IAlloc *) admit. (* Same as above *)
   - apply (@fsubset_trans _
-                          (regs_ptrs regs)
-                          (regs_ptrs (Register.invalidate regs))
+                          (regs_data_ptrs regs)
+                          (regs_data_ptrs (Register.invalidate regs))
                           (\bigcup_(i <- program_ptrs p)
                             fset (reachable_nodes_nat mem0 i)
                           )%fset);
       auto; apply regs_ptrs_invalidate.
   - apply (@fsubset_trans _
-                          (regs_ptrs regs)
-                          (regs_ptrs (Register.invalidate regs))
+                          (regs_data_ptrs regs)
+                          (regs_data_ptrs (Register.invalidate regs))
                           (\bigcup_(i <- program_ptrs p)
                             fset (reachable_nodes_nat mem0 i)
                           )%fset);
       auto; apply regs_ptrs_invalidate.
 Abort.
+
+Definition reachable_from_component_static_buffers
+           (ptr: Component.id * Block.id)
+           (mem_st: Memory.t)
+           (p: program) (c: Component.id) :=
+  ptr \in (\bigcup_(i <- component_ptrs p c) fset (reachable_nodes_nat mem_st i))%fset.
+
+Definition reachable_from_reg_file
+           (ptr: Component.id * Block.id)
+           (mem_st: Memory.t)
+           (regs: Register.t) :=
+  ptr \in (\bigcup_(i <- regs_data_ptrs regs) fset (reachable_nodes_nat mem_st i))%fset.
 
 End CS.
