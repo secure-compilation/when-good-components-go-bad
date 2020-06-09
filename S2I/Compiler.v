@@ -280,9 +280,11 @@ Definition compile_components
         do _ <- lift (blocks local_buffer_block_id );
         do P_labels <- lift (procs_labels C);
         do procs_code <- compile_procedures C
-           (Permission.code, C, local_buffer_block_id, 0%Z)
-           (* Used Permission.code here. 
-              Not sure though if it matters here which permission is used. *)
+           (Permission.data, C, local_buffer_block_id, 0%Z)
+           (* Used Permission.data here because this permission
+              is consistent with the way the local_buf_ptr
+              is used in section WithComponent.
+            *)
            P_labels
            (elementsm procs);
         let acc' := (C, mkfmap procs_code) :: acc in
