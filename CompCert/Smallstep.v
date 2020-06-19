@@ -14,6 +14,7 @@ Section CLOSURES.
 
 Variable genv: Type.
 Variable state: Type.
+Variable event: Type.
 
 (** A one-step transition relation has the following signature.
   It is parameterized by a global environment, which does not
@@ -22,7 +23,7 @@ Variable state: Type.
   captures the observable events possibly generated during the
   transition. *)
 
-Variable step: genv -> state -> trace -> state -> Prop.
+Variable step: genv -> state -> trace event -> state -> Prop.
 
 (** No transitions: stuck state *)
 
@@ -32,7 +33,7 @@ Definition nostep (ge: genv) (s: state) : Prop :=
 (** Zero, one or several transitions.  Also known as Kleene closure,
     or reflexive transitive closure. *)
 
-Inductive star (ge: genv): state -> trace -> state -> Prop :=
+Inductive star (ge: genv): state -> trace event -> state -> Prop :=
   | star_refl: forall s,
       star ge s E0 s
   | star_step: forall s1 t1 s2 t2 s3 t,
@@ -78,13 +79,13 @@ Proof.
   assert (forall s1 t s2, star ge s1 t s2 -> t = E0 -> P s1 s2).
     induction 1; intros; subst.
     auto.
-    destruct (Eapp_E0_inv _ _ H2). subst. eauto.
+    destruct (Eapp_E0_inv _ _ _ H2). subst. eauto.
   eauto.
 Qed.
 
 (** One or several transitions.  Also known as the transitive closure. *)
 
-Inductive plus (ge: genv): state -> trace -> state -> Prop :=
+Inductive plus (ge: genv): state -> trace event -> state -> Prop :=
   | plus_left: forall s1 t1 s2 t2 s3 t,
       step ge s1 t1 s2 -> star ge s2 t2 s3 -> t = t1 ** t2 ->
       plus ge s1 t s3.
@@ -176,7 +177,7 @@ Proof.
 Qed.
 
 Lemma plus_ind2:
-  forall ge (P: state -> trace -> state -> Prop),
+  forall ge (P: state -> trace event -> state -> Prop),
   (forall s1 t s2, step ge s1 t s2 -> P s1 t s2) ->
   (forall s1 t1 s2 t2 s3 t,
    step ge s1 t1 s2 -> plus ge s2 t2 s3 -> P s2 t2 s3 -> t = t1 ** t2 ->
@@ -204,7 +205,7 @@ Qed.
 
 (** Counted sequences of transitions *)
 
-Inductive starN (ge: genv): nat -> state -> trace -> state -> Prop :=
+Inductive starN (ge: genv): nat -> state -> trace event -> state -> Prop :=
   | starN_refl: forall s,
       starN ge O s E0 s
   | starN_step: forall n s t t1 s' t2 s'',
@@ -267,7 +268,7 @@ Qed.
 
 (** Infinitely many transitions *)
 
-CoInductive forever (ge: genv): state -> traceinf -> Prop :=
+CoInductive forever (ge: genv): state -> traceinf event -> Prop :=
   | forever_intro: forall s1 t s2 T,
       step ge s1 t s2 -> forever ge s2 T ->
       forever ge s1 (t *** T).
@@ -288,7 +289,7 @@ Qed.
 Variable A: Type.
 Variable order: A -> A -> Prop.
 
-CoInductive forever_N (ge: genv) : A -> state -> traceinf -> Prop :=
+CoInductive forever_N (ge: genv) : A -> state -> traceinf event -> Prop :=
   | forever_N_star: forall s1 t s2 a1 a2 T1 T2,
       star ge s1 t s2 ->
       order a2 a1 ->
@@ -339,7 +340,7 @@ Qed.
 
 (** Yet another alternative definition of [forever]. *)
 
-CoInductive forever_plus (ge: genv) : state -> traceinf -> Prop :=
+CoInductive forever_plus (ge: genv) : state -> traceinf event -> Prop :=
   | forever_plus_intro: forall s1 t s2 T1 T2,
       plus ge s1 t s2 ->
       forever_plus ge s2 T2 ->
@@ -421,7 +422,7 @@ Qed.
 
 (** Infinitely many non-silent transitions *)
 
-CoInductive forever_reactive (ge: genv): state -> traceinf -> Prop :=
+CoInductive forever_reactive (ge: genv): state -> traceinf event -> Prop :=
   | forever_reactive_intro: forall s1 s2 t T,
       star ge s1 t s2 -> t <> E0 -> forever_reactive ge s2 T ->
       forever_reactive ge s1 (t *** T).
@@ -443,10 +444,10 @@ End CLOSURES.
 
 (** The general form of a transition semantics. *)
 
-Record semantics : Type := Semantics_gen {
+Record semantics (event: Type) : Type := Semantics_gen {
   state: Type;
   genvtype: Type;
-  step : genvtype -> state -> trace -> state -> Prop;
+  step : genvtype -> state -> trace event -> state -> Prop;
   initial_state: state -> Prop;
   final_state: state (* -> int *) -> Prop;
   globalenv: genvtype;
@@ -465,7 +466,7 @@ Open Scope smallstep_scope.
 
 (** The general form of a forward simulation. *)
 
-Record fsim_properties (L1 L2: semantics) (index: Type)
+Record fsim_properties (event: Type) (L1 L2: semantics event) (index: Type)
                        (order: index -> index -> Prop)
                        (match_states: index -> state L1 -> state L2 -> Prop) : Prop := {
     fsim_order_wf: well_founded order;
@@ -485,18 +486,19 @@ Record fsim_properties (L1 L2: semantics) (index: Type)
 
 Arguments fsim_properties: clear implicits.
 
-Inductive forward_simulation (L1 L2: semantics) : Type :=
+Inductive forward_simulation (event: Type) (L1 L2: semantics event) : Type :=
   Forward_simulation (index: Type)
                      (order: index -> index -> Prop)
                      (match_states: index -> state L1 -> state L2 -> Prop)
-                     (props: fsim_properties L1 L2 index order match_states).
+                     (props: fsim_properties _ L1 L2 index order match_states).
 
-Arguments Forward_simulation {L1 L2 index} order match_states props.
+Arguments Forward_simulation _ {L1 L2 index} order match_states props.
 
 (** An alternate form of the simulation diagram *)
 
 Lemma fsim_simulation':
-  forall L1 L2 index order match_states, fsim_properties L1 L2 index order match_states ->
+  forall event L1 L2 index order match_states,
+    fsim_properties event L1 L2 index order match_states ->
   forall i s1 t s1', Step L1 s1 t s1' ->
   forall s2, match_states i s1 s2 ->
   (exists i', exists s2', Plus L2 s2 t s2' /\ match_states i' s1' s2')
@@ -516,8 +518,9 @@ Qed.
 
 Section FORWARD_SIMU_DIAGRAMS.
 
-Variable L1: semantics.
-Variable L2: semantics.
+Variable event: Type.
+Variable L1: semantics event.
+Variable L2: semantics event.
 
 Variable match_states: state L1 -> state L2 -> Prop.
 
@@ -555,7 +558,7 @@ Hypothesis simulation:
 
 Lemma forward_simulation_star_wf: forward_simulation L1 L2.
 Proof.
-  apply Forward_simulation with order (fun idx s1 s2 => idx = s1 /\ match_states s1 s2);
+  apply Forward_simulation with _ order (fun idx s1 s2 => idx = s1 /\ match_states s1 s2);
   constructor.
 - auto.
 - intros. exploit match_initial_states; eauto. intros [s2 [A B]].
@@ -661,7 +664,7 @@ End FORWARD_SIMU_DIAGRAMS.
 
 Section SIMULATION_SEQUENCES.
 
-Context L1 L2 index order match_states (S: fsim_properties L1 L2 index order match_states).
+Context event L1 L2 index order match_states (S: fsim_properties event L1 L2 index order match_states).
 
 Lemma simulation_star:
   forall s1 t s1', Star L1 s1 t s1' ->
@@ -730,7 +733,10 @@ End SIMULATION_SEQUENCES.
 (** ** Composing two forward simulations *)
 
 Lemma compose_forward_simulations:
-  forall L1 L2 L3, forward_simulation L1 L2 -> forward_simulation L2 L3 -> forward_simulation L1 L3.
+  forall L1 L2 L3,
+    forward_simulation L1 L2 ->
+    forward_simulation L2 L3 ->
+    @forward_simulation event L1 L3.
 Proof.
   intros L1 L2 L3 S12 S23.
   destruct S12 as [index order match_states props].
@@ -740,7 +746,7 @@ Proof.
   set (ff_order := lex_ord (clos_trans _ order') order).
   set (ff_match_states := fun (i: ff_index) (s1: state L1) (s3: state L3) =>
                              exists s2, match_states (snd i) s1 s2 /\ match_states' (fst i) s2 s3).
-  apply Forward_simulation with ff_order ff_match_states; constructor.
+  apply Forward_simulation with _ ff_order ff_match_states; constructor.
 - (* well founded *)
   unfold ff_order. apply wf_lex_ord. apply wf_clos_trans.
   eapply fsim_order_wf; eauto. eapply fsim_order_wf; eauto.
@@ -771,10 +777,10 @@ Qed.
 
 (** * Receptiveness and determinacy *)
 
-Definition single_events (L: semantics) : Prop :=
+Definition single_events {event : Type} (L: semantics event) : Prop :=
   forall s t s', Step L s t s' -> (length t <= 1)%nat.
 
-Lemma star_app_inv L :
+Lemma star_app_inv {event: Type} (L: semantics event) :
   single_events L ->
   forall s1 t1 t2 s2,
     Star L s1 (t1 ** t2) s2 ->
@@ -812,7 +818,7 @@ Proof.
         eapply star_step; eauto.
 Qed.
 
-Lemma forever_reactive_app_inv L :
+Lemma forever_reactive_app_inv {event: Type} (L: semantics event) :
   single_events L ->
   forall s1 t T,
     Forever_reactive L s1 (t *** T) ->
@@ -829,7 +835,7 @@ Proof.
     unfold E0 in NN.
     destruct t' as [|ev' t']; try congruence.
     clear NN. inv E.
-    destruct (@star_app_inv _ Hsingle s1 (ev :: nil) t' s2 Hstar) as [s' [Hstar1 Hstar2]].
+    destruct (@star_app_inv _ _ Hsingle s1 (ev :: nil) t' s2 Hstar) as [s' [Hstar1 Hstar2]].
     assert (Hforever' : Forever_reactive L s' (t' *** T')).
     { eapply star_forever_reactive; eauto. }
     destruct (IH _ _ H1 Hforever') as [s'' [Hstar3 Hforever'']].
@@ -837,7 +843,7 @@ Proof.
     eapply star_trans; eauto.
 Qed.
 
-Record receptive (L: semantics) : Prop :=
+Record receptive (L: semantics Events.event) : Prop :=
   Receptive {
     sr_receptive: forall s t1 s1 t2,
       Step L s t1 s1 -> match_traces t1 t2 -> exists s2, Step L s t2 s2;
@@ -845,7 +851,7 @@ Record receptive (L: semantics) : Prop :=
       single_events L
   }.
 
-Record determinate (L: semantics) : Prop :=
+Record determinate (L: semantics Events.event) : Prop :=
   Determinate {
     sd_determ: forall s t1 s1 t2 s2,
       Step L s t1 s1 -> Step L s t2 s2 ->
@@ -862,7 +868,7 @@ Record determinate (L: semantics) : Prop :=
 
 Section DETERMINACY.
 
-Variable L: semantics.
+Variable L: semantics Events.event.
 Hypothesis DET: determinate L.
 
 Lemma sd_determ_1:
@@ -904,23 +910,23 @@ End DETERMINACY.
 
 (** * Backward simulations between two transition semantics. *)
 
-Definition safe (L: semantics) (s: state L) : Prop :=
+Definition safe {event: Type} (L: semantics event) (s: state L) : Prop :=
   forall s',
   Star L s E0 s' ->
   (* (exists r, final_state L s' r) *)
   final_state L s'
   \/ (exists t, exists s'', Step L s' t s'').
 
-Lemma star_safe:
-  forall (L: semantics) s s',
-  Star L s E0 s' -> safe L s -> safe L s'.
+Lemma star_safe {event: Type}:
+  forall (L: semantics event) s s',
+  Star L s E0 s' -> safe L s  -> safe L s'.
 Proof.
   intros; red; intros. apply H0. eapply star_trans; eauto.
 Qed.
 
 (** The general form of a backward simulation. *)
 
-Record bsim_properties (L1 L2: semantics) (index: Type)
+Record bsim_properties {event: Type} (L1 L2: semantics event) (index: Type)
                        (order: index -> index -> Prop)
                        (match_states: index -> state L1 -> state L2 -> Prop) : Prop := {
     bsim_order_wf: well_founded order;
@@ -949,24 +955,25 @@ Record bsim_properties (L1 L2: semantics) (index: Type)
 
 Arguments bsim_properties: clear implicits.
 
-Inductive backward_simulation (L1 L2: semantics) : Prop :=
+Inductive backward_simulation (event: Type) (L1 L2: semantics event) : Prop :=
   Backward_simulation (index: Type)
                       (order: index -> index -> Prop)
                       (match_states: index -> state L1 -> state L2 -> Prop)
-                      (props: bsim_properties L1 L2 index order match_states).
+                      (props: bsim_properties _ L1 L2 index order match_states).
 
-Arguments Backward_simulation {L1 L2 index} order match_states props.
+Arguments Backward_simulation {event L1 L2 index} order match_states props.
 
 (** An alternate form of the simulation diagram *)
 
 Lemma bsim_simulation':
-  forall L1 L2 index order match_states, bsim_properties L1 L2 index order match_states ->
+  forall event L1 L2 index order match_states,
+    bsim_properties event L1 L2 index order match_states ->
   forall i s2 t s2', Step L2 s2 t s2' ->
   forall s1, match_states i s1 s2 -> safe L1 s1 ->
   (exists i', exists s1', Plus L1 s1 t s1' /\ match_states i' s1' s2')
   \/ (exists i', order i' i /\ t = E0 /\ match_states i' s1 s2').
 Proof.
-  intros. exploit bsim_simulation; eauto.
+  intros. exploit (@bsim_simulation event); eauto.
   intros [i' [s1' [A B]]]. intuition.
   left; exists i'; exists s1'; auto.
   inv H4.
@@ -980,8 +987,9 @@ Qed.
 
 Section BACKWARD_SIMU_DIAGRAMS.
 
-Variable L1: semantics.
-Variable L2: semantics.
+Variable event: Type.
+Variable L1: semantics event.
+Variable L2: semantics event.
 
 Variable match_states: state L1 -> state L2 -> Prop.
 
@@ -1031,7 +1039,7 @@ End BACKWARD_SIMU_DIAGRAMS.
 
 Section BACKWARD_SIMULATION_SEQUENCES.
 
-Context L1 L2 index order match_states (S: bsim_properties L1 L2 index order match_states).
+Context event L1 L2 index order match_states (S: bsim_properties event L1 L2 index order match_states).
 
 Lemma bsim_E0_star:
   forall s2 s2', Star L2 s2 E0 s2' ->
@@ -1042,7 +1050,7 @@ Proof.
 - (* base case *)
   intros. exists i; exists s1; split; auto. apply star_refl.
 - (* inductive case *)
-  intros. exploit bsim_simulation; eauto. intros [i' [s1' [A B]]].
+  intros. exploit (@bsim_simulation event); eauto. intros [i' [s1' [A B]]].
   assert (Star L1 s0 E0 s1'). intuition. apply plus_star; auto.
   exploit H0. eauto. eapply star_safe; eauto. intros [i'' [s1'' [C D]]].
   exists i''; exists s1''; split; auto. eapply star_trans; eauto.
@@ -1101,12 +1109,13 @@ End BACKWARD_SIMULATION_SEQUENCES.
 
 Section COMPOSE_BACKWARD_SIMULATIONS.
 
-Variable L1: semantics.
-Variable L2: semantics.
-Variable L3: semantics.
+Variable event: Type.
+Variable L1: semantics event.
+Variable L2: semantics event.
+Variable L3: semantics event.
 Hypothesis L3_single_events: single_events L3.
-Context index order match_states (S12: bsim_properties L1 L2 index order match_states).
-Context index' order' match_states' (S23: bsim_properties L2 L3 index' order' match_states').
+Context index order match_states (S12: bsim_properties event L1 L2 index order match_states).
+Context index' order' match_states' (S23: bsim_properties event L2 L3 index' order' match_states').
 
 Let bb_index : Type := (index * index')%type.
 
@@ -1195,11 +1204,11 @@ Qed.
 End COMPOSE_BACKWARD_SIMULATIONS.
 
 Lemma compose_backward_simulation:
-  forall L1 L2 L3,
+  forall event (L1: semantics event) L2 L3,
   single_events L3 -> backward_simulation L1 L2 -> backward_simulation L2 L3 ->
   backward_simulation L1 L3.
 Proof.
-  intros L1 L2 L3 L3single S12 S23.
+  intros event L1 L2 L3 L3single S12 S23.
   destruct S12 as [index order match_states props].
   destruct S23 as [index' order' match_states' props'].
   apply Backward_simulation with (bb_order order order') (bb_match_states L1 L2 L3 match_states match_states');
@@ -1236,7 +1245,7 @@ Qed.
 
 Section FORWARD_TO_BACKWARD.
 
-Context L1 L2 index order match_states (FS: fsim_properties L1 L2 index order match_states).
+Context L1 L2 index order match_states (FS: fsim_properties Events.event L1 L2 index order match_states).
 Hypothesis L1_receptive: receptive L1.
 Hypothesis L2_determinate: determinate L2.
 
@@ -1294,13 +1303,14 @@ Qed.
 (** Exploiting determinacy *)
 
 Remark silent_or_not_silent:
-  forall t, t = E0 \/ t <> E0.
+  forall {event: Type} (t: trace event), t = E0 \/ t <> E0.
 Proof.
   intros; unfold E0; destruct t; auto; right; congruence.
 Qed.
 
 Remark not_silent_length:
-  forall t1 t2, (length (t1 ** t2) <= 1)%nat -> t1 = E0 \/ t2 = E0.
+  forall {event: Type} (t1: trace event) t2,
+    (length (t1 ** t2) <= 1)%nat -> t1 = E0 \/ t2 = E0.
 Proof.
   unfold Eapp, E0; intros. rewrite app_length in H.
   destruct t1; destruct t2; auto. simpl in H. omegaContradiction.
@@ -1426,7 +1436,8 @@ Proof.
   right; split. auto. constructor.
   econstructor. eauto. auto. apply star_one; eauto. eauto. eauto.
 * (* 1.2.2 L2 makes a non-silent transition, and so does L1 *)
-  exploit not_silent_length. eapply (sr_traces L1_receptive); eauto. intros [EQ | EQ].
+  exploit (@not_silent_length Events.event).
+  eapply (sr_traces L1_receptive); eauto. intros [EQ | EQ].
   congruence.
   subst t2. rewrite E0_right in H1.
   (* Use receptiveness to equate the traces *)
@@ -1434,7 +1445,8 @@ Proof.
   exploit fsim_simulation_not_E0. eexact STEP1. auto. eauto.
   intros [i''' [s2''' [P Q]]]. inv P.
   (* Exploit determinacy *)
-  exploit not_silent_length. eapply (sr_traces L1_receptive); eauto. intros [EQ | EQ].
+  exploit (@not_silent_length Events.event).
+  eapply (sr_traces L1_receptive); eauto. intros [EQ | EQ].
   subst t0. simpl in *. exploit sd_determ_1. eauto. eexact STEP2. eexact H2.
   intros. elim NOT2. inv H8. auto.
   subst t2. rewrite E0_right in *.
@@ -1453,7 +1465,8 @@ Proof.
   right; split. apply star_refl. constructor. omega.
   econstructor; eauto. eapply star_right; eauto.
 + (* 2.2 L2 make a non-silent transition *)
-  exploit not_silent_length. eapply (sr_traces L1_receptive); eauto. intros [EQ | EQ].
+  exploit (@not_silent_length Events.event).
+  eapply (sr_traces L1_receptive); eauto. intros [EQ | EQ].
   congruence.
   subst. rewrite E0_right in *.
   (* Use receptiveness to equate the traces *)
@@ -1463,7 +1476,8 @@ Proof.
   (* Exploit determinacy *)
   exploit f2b_determinacy_star. eauto. eexact STEP2. auto. apply plus_star; eauto.
   intro R. inv R. congruence.
-  exploit not_silent_length. eapply (sr_traces L1_receptive); eauto. intros [EQ | EQ].
+  exploit (@not_silent_length Events.event).
+  eapply (sr_traces L1_receptive); eauto. intros [EQ | EQ].
   subst. simpl in *. exploit sd_determ_1. eauto. eexact STEP2. eexact H2.
   intros. elim NOT2. inv H7; auto.
   subst. rewrite E0_right in *.
