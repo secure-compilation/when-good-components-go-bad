@@ -91,7 +91,8 @@ Require Import Behaviors.
 
 (*********************************************************)
 
-Definition prop := program_behavior -> Prop.
+Local Parameter Ev : Type.
+Definition prop := @program_behavior Ev -> Prop.
 Local Parameter prg prg' ctx ctx' : Set.
 
 Local Parameter plug : prg -> ctx -> prg.
@@ -166,7 +167,7 @@ Qed.
 (*********************************************************)
 (* SNOC                                                  *)
 (*********************************************************)
-Fixpoint snoc m e : trace :=
+Fixpoint snoc m e : trace Ev :=
   match m with
   | nil => cons e nil
   | cons x xs => cons x (snoc xs e)
@@ -214,7 +215,7 @@ Proof.
     destruct IHm1 as [k1 k2]. rewrite k1. now auto.
 Qed.
 
-Lemma same_length : forall m1 m2 e1 e2,
+Lemma same_length : forall m1 m2 (e1: Ev) e2,
     m1 ** (cons e1 nil) = m2 ** (cons e2 nil) ->
     m1 = m2 /\ e1 = e2.
 Proof.
@@ -244,7 +245,7 @@ Qed.
 (*   RC_dc P  <-> Robust Preservation of Z_p             *)
 (*********************************************************)
 
-Local Parameter undef : prg -> event.
+Local Parameter undef : prg -> Ev.
 
 Axiom undef_no_extension_behavior : forall P b m,
     behavior_prefix (snoc m (undef P)) b -> b = Goes_wrong (snoc m (undef P)).
@@ -284,7 +285,7 @@ Definition u_prefix P b m: Prop :=
   exists mb,  trace_prefix mb m  /\
           b = Goes_wrong (snoc mb (undef P)).
 
-Lemma trace_prefix_trans : forall m1 m2 m,
+Lemma trace_prefix_trans : forall (m1: trace Ev) m2 m,
     trace_prefix m1 m2 -> trace_prefix m2 m ->
     trace_prefix m1 m.
 Proof.
@@ -292,10 +293,10 @@ Proof.
   rewrite Eapp_assoc in Hb2. now exists (b1 ** b2).
 Qed.
 
-Lemma trace_prefix_ref : forall m, trace_prefix m m.
+Lemma trace_prefix_ref : forall (m: trace Ev), trace_prefix m m.
 Proof. intros m. exists nil. now rewrite E0_right. Qed.
 
-Lemma behavior_prefix_pseudo_trans : forall m1 m2 b,
+Lemma behavior_prefix_pseudo_trans : forall (m1: trace Ev) m2 b,
     behavior_prefix m1 b -> trace_prefix m2 m1 ->
     behavior_prefix m2 b.
 Proof.
@@ -315,7 +316,7 @@ Proof.
   now exists (tt1 ** t1).
 Qed.
 
-Lemma same_extension_trace : forall m1 m2 t,
+Lemma same_extension_trace : forall (m1: trace Ev) m2 t,
     trace_prefix m1 t -> trace_prefix m2 t ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Proof.
@@ -329,7 +330,7 @@ Proof.
        +++ right; exists l. simpl. now rewrite Hl.
 Qed.
 
-Lemma same_extension_stream : forall m1 m2 t,
+Lemma same_extension_stream : forall (m1: trace Ev) m2 t,
     traceinf_prefix m1 t -> traceinf_prefix m2 t ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Proof.
@@ -343,7 +344,7 @@ Proof.
        +++ right; exists l. simpl. now rewrite Hl.
 Qed.
 
-Lemma same_extension : forall m1 m2 t,
+Lemma same_extension : forall (m1: trace Ev) m2 t,
     behavior_prefix m1 t -> behavior_prefix m2 t ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Proof.
@@ -663,7 +664,7 @@ Lemma sub_minus : forall (P : prg) (π : prop) (b : program_behavior),
 Proof. intros P π b H.  unfold z_minus. left. apply H. Qed.
 
 
-Lemma app_nil : forall m l,
+Lemma app_nil : forall (m: trace Ev) l,
     m = m ** l -> l = nil.
 Proof.
   intros m. induction m; intros l H.
@@ -671,7 +672,7 @@ Proof.
   + inversion H. now apply IHm.
 Qed.
 
-Lemma trace_prefix_asym : forall m1 m2,
+Lemma trace_prefix_asym : forall (m1: trace Ev) m2,
     trace_prefix m1 m2 -> trace_prefix m2 m1 -> m1 = m2.
 Proof.
   intros m1 m2 [l1 Hl1] [l2 Hl2]. rewrite Hl1 in Hl2.
