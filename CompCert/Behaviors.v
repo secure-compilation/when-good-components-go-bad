@@ -7,15 +7,15 @@ Require Import Coq.Logic.ClassicalEpsilon.
 
 Set Implicit Arguments.
 
-Inductive program_behavior: Type :=
-  | Terminates: trace -> program_behavior
-  | Diverges: trace -> program_behavior
-  | Reacts: traceinf -> program_behavior
-  | Goes_wrong: trace -> program_behavior.
+Inductive program_behavior {A: Type} : Type :=
+  | Terminates: trace A -> program_behavior
+  | Diverges: trace A -> program_behavior
+  | Reacts: traceinf A -> program_behavior
+  | Goes_wrong: trace A -> program_behavior.
 
 (** Operations and relations on behaviors *)
 
-Definition not_wrong (beh: program_behavior) : Prop :=
+Definition not_wrong {A: Type} (beh: @program_behavior A) : Prop :=
   match beh with
   | Terminates _ => True
   | Diverges _ => True
@@ -23,7 +23,8 @@ Definition not_wrong (beh: program_behavior) : Prop :=
   | Goes_wrong _ => False
   end.
 
-Definition behavior_app (t: trace) (beh: program_behavior): program_behavior :=
+Definition behavior_app {A: Type} (t: trace A) (beh: program_behavior):
+  program_behavior :=
   match beh with
   | Terminates t1 => Terminates (t ** t1)
   | Diverges t1 => Diverges (t ** t1)
@@ -31,34 +32,34 @@ Definition behavior_app (t: trace) (beh: program_behavior): program_behavior :=
   | Goes_wrong t1 => Goes_wrong (t ** t1)
   end.
 
-Lemma behavior_app_assoc:
-  forall t1 t2 beh,
+Lemma behavior_app_assoc {A: Type}:
+  forall (t1: trace A) t2 beh,
   behavior_app (t1 ** t2) beh = behavior_app t1 (behavior_app t2 beh).
 Proof.
   intros. destruct beh; simpl; f_equal; traceEq.
 Qed.
 
-Lemma behavior_app_E0:
-  forall beh, behavior_app E0 beh = beh.
+Lemma behavior_app_E0 {A: Type}:
+  forall beh, @behavior_app A E0 beh = beh.
 Proof.
   destruct beh; auto.
 Qed.
 
-Definition behavior_prefix (t: trace) (beh: program_behavior) : Prop :=
+Definition behavior_prefix {A: Type} (t: trace A) (beh: program_behavior) : Prop :=
   exists beh', beh = behavior_app t beh'.
 
-Definition behavior_improves (beh1 beh2: program_behavior) : Prop :=
+Definition behavior_improves {A: Type} (beh1 beh2: @program_behavior A) : Prop :=
   beh1 = beh2 \/ exists t, beh1 = Goes_wrong t /\ behavior_prefix t beh2.
 
-Lemma behavior_improves_refl:
-  forall beh, behavior_improves beh beh.
+Lemma behavior_improves_refl {A: Type}:
+  forall beh, @behavior_improves A beh beh.
 Proof.
   intros; red; auto.
 Qed.
 
-Lemma behavior_improves_trans:
+Lemma behavior_improves_trans {A: Type}:
   forall beh1 beh2 beh3,
-  behavior_improves beh1 beh2 -> behavior_improves beh2 beh3 ->
+  @behavior_improves A beh1 beh2 -> behavior_improves beh2 beh3 ->
   behavior_improves beh1 beh3.
 Proof.
   intros. red. destruct H; destruct H0; subst; auto.
@@ -68,15 +69,15 @@ Proof.
   right. exists t1; split; auto. exists (behavior_app t beh3'). apply behavior_app_assoc.
 Qed.
 
-Lemma behavior_improves_bot:
-  forall beh, behavior_improves (Goes_wrong E0) beh.
+Lemma behavior_improves_bot {A: Type}:
+  forall beh, @behavior_improves A (Goes_wrong E0) beh.
 Proof.
   intros. right. exists E0; split; auto. exists beh. rewrite behavior_app_E0; auto.
 Qed.
 
-Lemma behavior_improves_app:
+Lemma behavior_improves_app {E: Type}:
   forall t beh1 beh2,
-  behavior_improves beh1 beh2 ->
+  @behavior_improves E beh1 beh2 ->
   behavior_improves (behavior_app t beh1) (behavior_app t beh2).
 Proof.
   intros. red; destruct H. left; congruence.
@@ -88,7 +89,8 @@ Qed.
 
 Section PROGRAM_BEHAVIORS.
 
-Variable L: semantics.
+Variable Ev: Type.
+Variable L: semantics Ev.
 
 Inductive state_behaves (s: state L): program_behavior -> Prop :=
   | state_terminates: forall t s',
@@ -170,7 +172,7 @@ Hypothesis reacts:
 
 Lemma reacts':
   forall s1 t1, Star L s0 t1 s1 ->
-  { s2 : state L & { t2 : trace | Star L s1 t2 s2 /\ t2 <> E0 } }.
+  { s2 : state L & { t2 : trace Ev | Star L s1 t2 s2 /\ t2 <> E0 } }.
 Proof.
   intros.
   destruct (constructive_indefinite_description _ (reacts H)) as [s2 A].
@@ -178,12 +180,13 @@ Proof.
   exists s2; exists t2; auto.
 Qed.
 
-CoFixpoint build_traceinf' (s1: state L) (t1: trace) (ST: Star L s0 t1 s1) : traceinf' :=
+CoFixpoint build_traceinf' (s1: state L) (t1: trace Ev) (ST: Star L s0 t1 s1) : traceinf' Ev :=
   match reacts' ST with
   | existT s2 (exist t2 (conj A B)) =>
-      Econsinf' t2
-                (build_traceinf' (star_trans ST A (refl_equal _)))
-                B
+    Econsinf' Ev
+              t2
+              (build_traceinf' (star_trans ST A (refl_equal _)))
+              B
   end.
 
 Lemma reacts_forever_reactive_rec:
@@ -191,7 +194,7 @@ Lemma reacts_forever_reactive_rec:
   Forever_reactive L s1 (traceinf_of_traceinf' (build_traceinf' ST)).
 Proof.
   cofix COINDHYP; intros.
-  rewrite (unroll_traceinf' (build_traceinf' ST)). simpl.
+  rewrite (unroll_traceinf' Ev (build_traceinf' ST)). simpl.
   destruct (reacts' ST) as [s2 [t2 [A B]]].
   rewrite traceinf_traceinf'_app.
   econstructor. eexact A. auto. apply COINDHYP.
@@ -276,7 +279,7 @@ End PROGRAM_BEHAVIORS.
 
 Section FORWARD_SIMULATIONS.
 
-Context L1 L2 index order match_states (S: fsim_properties L1 L2 index order match_states).
+Context Ev L1 L2 index order match_states (S: fsim_properties Ev L1 L2 index order match_states).
 
 Lemma forward_simulation_state_behaves:
   forall i s1 s2 beh1,
@@ -310,10 +313,10 @@ Qed.
 
 End FORWARD_SIMULATIONS.
 
-Theorem forward_simulation_behavior_improves:
+Theorem forward_simulation_behavior_improves {Ev: Type}:
   forall L1 L2, forward_simulation L1 L2 ->
   forall beh1, program_behaves L1 beh1 ->
-  exists beh2, program_behaves L2 beh2 /\ behavior_improves beh1 beh2.
+  exists beh2, program_behaves L2 beh2 /\ @behavior_improves Ev beh1 beh2.
 Proof.
   intros L1 L2 FS. destruct FS as [init order match_states S]. intros. inv H.
 - (* initial state defined *)
@@ -331,13 +334,13 @@ Proof.
   apply behavior_improves_refl.
 Qed.
 
-Corollary forward_simulation_same_safe_behavior:
+Corollary forward_simulation_same_safe_behavior {Ev: Type}:
   forall L1 L2, forward_simulation L1 L2 ->
   forall beh,
   program_behaves L1 beh -> not_wrong beh ->
-  program_behaves L2 beh.
+  @program_behaves Ev L2 beh.
 Proof.
-  intros. exploit forward_simulation_behavior_improves; eauto.
+  intros. exploit (@forward_simulation_behavior_improves Ev); eauto.
   intros [beh' [A B]]. destruct B.
   congruence.
   destruct H1 as [t [C D]]. subst. contradiction.
@@ -347,7 +350,7 @@ Qed.
 
 Section BACKWARD_SIMULATIONS.
 
-Context L1 L2 index order match_states (S: bsim_properties L1 L2 index order match_states).
+Context Ev L1 L2 index order match_states (S: bsim_properties Ev L1 L2 index order match_states).
 
 Definition safe_along_behavior (s: state L1) (b: program_behavior) : Prop :=
   forall t1 s' b2, Star L1 s t1 s' -> b = behavior_app t1 b2 ->
@@ -488,11 +491,11 @@ Qed.
 End BACKWARD_SIMULATIONS.
 
 Theorem backward_simulation_behavior_improves:
-  forall L1 L2, backward_simulation L1 L2 ->
+  forall Ev L1 L2, @backward_simulation Ev L1 L2 ->
   forall beh2, program_behaves L2 beh2 ->
   exists beh1, program_behaves L1 beh1 /\ behavior_improves beh1 beh2.
 Proof.
-  intros L1 L2 S beh2 H. destruct S as [index order match_states S]. inv H.
+  intros Ev L1 L2 S beh2 H. destruct S as [index order match_states S]. inv H.
 - (* L2's initial state is defined. *)
   destruct (classic (exists s1, initial_state L1 s1)) as [[s1 INIT] | NOINIT].
 + (* L1's initial state is defined too. *)
@@ -514,7 +517,7 @@ Proof.
 Qed.
 
 Corollary backward_simulation_same_safe_behavior:
-  forall L1 L2, backward_simulation L1 L2 ->
+  forall Ev L1 L2, @backward_simulation Ev L1 L2 ->
   (forall beh, program_behaves L1 beh -> not_wrong beh) ->
   (forall beh, program_behaves L2 beh -> program_behaves L1 beh).
 Proof.
