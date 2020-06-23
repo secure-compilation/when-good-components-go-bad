@@ -4,6 +4,7 @@ Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
+Require Import CompCert.Events.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -60,7 +61,7 @@ Module Type Source_Sig.
     closed_program (program_link p1' p2).
 
   Module CS.
-    Parameter sem : program -> semantics.
+    Parameter sem : program -> @semantics event.
   End CS.
 
   (* Notes:
@@ -131,7 +132,7 @@ Module Type Intermediate_Sig.
     closed_program (program_link p1 p2').
 
   Module CS.
-    Parameter sem : program -> semantics.
+    Parameter sem : program -> @semantics event.
   End CS.
 
   (* Local Axiom decomposition_with_refinement : *)

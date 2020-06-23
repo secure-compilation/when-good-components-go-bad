@@ -95,7 +95,7 @@ Definition final_state (st: state) : Prop :=
   let: State C s mem k e arg := st in
   e = E_exit \/ (exists v, e = E_val v /\ k = Kstop /\ s = []).
 
-Inductive kstep (G: global_env) : state -> trace -> state -> Prop :=
+Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
 | KS_Binop1 : forall C s mem k op e1 e2 arg,
     kstep G [State C, s, mem, k, E_binop op e1 e2, arg] E0
             [State C, s, mem, Kbinop1 op e2 k, e1, arg]
@@ -200,7 +200,7 @@ Qed.
 
 (* functional kstep *)
 
-Definition eval_kstep (G : global_env) (st : state) : option (trace * state) :=
+Definition eval_kstep (G : global_env) (st : state) : option (trace event * state) :=
   let: State C s mem k e arg := st in
   match e with
   (* pushing a new continuation *)
@@ -390,7 +390,7 @@ Section Semantics.
   Let G := prepare_global_env p.
 
   Definition sem :=
-    @Semantics_gen state global_env kstep (initial_state p) final_state G.
+    @Semantics_gen event state global_env kstep (initial_state p) final_state G.
 
   Lemma receptiveness_step:
     forall s t1 s1 t2,

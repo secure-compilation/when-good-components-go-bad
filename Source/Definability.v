@@ -99,8 +99,8 @@ Section Definability.
 
   Ltac take_step :=
     match goal with
-    | |- @star _ _ _ _ _ ?t _ =>
-      eapply (@star_step _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
+    | |- @star _ _ _ _ _ _ ?t _ =>
+      eapply (@star_step _ _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
     end.
 
   Lemma switch_clause_spec p' P C stk mem n n' e_then e_else arg :
@@ -142,7 +142,7 @@ Section Definability.
       + unfold Memory.load in Hload. simpl in Hload.
         destruct (P =? Permission.data); try discriminate.
         unfold Memory.load. simpl. eauto.
-      + eapply (@star_step _ _ _ _ _ E0 _ E0 _ E0); trivial; simpl.
+      + eapply (@star_step _ _ _ _ _ _ E0 _ E0 _ E0); trivial; simpl.
         { rewrite <- Z.eqb_neq in n_n'. rewrite n_n'. simpl.
           eapply CS.KS_If2. }
         apply star_refl.
@@ -184,7 +184,7 @@ Section Definability.
       destruct (P =? Permission.data); try discriminate.
       unfold Memory.load. simpl. eauto.
     - do 2 take_step.
-      eapply (@star_step _ _ _ _ _ E0); try now (simpl; reflexivity).
+      eapply (@star_step _ _ _ _ _ _ E0); try now (simpl; reflexivity).
       { apply CS.eval_kstep_sound. simpl.
         destruct (Z.eqb_spec (Z.of_nat n) (Z.of_nat (m - S (length es)))) as [n_eq_0|?]; simpl.
         - zify. omega.
@@ -216,7 +216,7 @@ Section Definability.
     rewrite Z.eqb_refl in Hcont.
     destruct Hcont as (mem' & Hstore & Hstar2).
     exists mem'. rewrite Nat2Z.inj_succ. split; trivial.
-    apply (fun H => @star_trans _ _ _ _ _ E0 _ H E0 _ _ Hstar2); trivial.
+    apply (fun H => @star_trans _ _ _ _ _ _ E0 _ H E0 _ _ Hstar2); trivial.
     apply (switch_spec_else p' stk _ arg Hload).
     reflexivity.
   Qed.
@@ -239,7 +239,7 @@ Section Definability.
     | EWrite Cid ptr v => E_val (Int 0)
     end.
 
-  Definition expr_of_trace (C: Component.id) (P: Procedure.id) (t: trace) : expr :=
+  Definition expr_of_trace (C: Component.id) (P: Procedure.id) (t: trace event) : expr :=
     switch (map (expr_of_event C P) t) E_exit.
 
   (** To compile a complete trace mixing events from different components, we
@@ -247,17 +247,17 @@ Section Definability.
       [expr_of_trace] to each one of them.  We also initialize the memory of
       each component to hold 0 at the first local variable. *)
 
-  Definition comp_subtrace (C: Component.id) (t: trace) :=
+  Definition comp_subtrace (C: Component.id) (t: trace event) :=
     filter (fun e => C == cur_comp_of_event e) t.
 
-  Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace) :
+  Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace event) :
     comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
   Proof. apply: filter_cat. Qed.
 
   Definition procedure_of_trace C P t :=
     expr_of_trace C P (comp_subtrace C t).
 
-  Definition procedures_of_trace (t: trace) : NMap (NMap expr) :=
+  Definition procedures_of_trace (t: trace event) : NMap (NMap expr) :=
     mapim (fun C Ciface =>
              let procs :=
                  if C == Component.main then
@@ -270,7 +270,7 @@ Section Definability.
     C = Component.main /\ P = Procedure.main
     \/ exported_procedure intf C P.
 
-  Lemma find_procedures_of_trace_exp (t: trace) C P :
+  Lemma find_procedures_of_trace_exp (t: trace event) C P :
     exported_procedure intf C P ->
     find_procedure (procedures_of_trace t) C P
     = Some (procedure_of_trace C P t).
@@ -282,7 +282,7 @@ Section Definability.
     by rewrite in_fsetU1 CI_P orbT.
   Qed.
 
-  Lemma find_procedures_of_trace_main (t: trace) :
+  Lemma find_procedures_of_trace_main (t: trace event) :
     find_procedure (procedures_of_trace t) Component.main Procedure.main
     = Some (procedure_of_trace Component.main Procedure.main t).
   Proof.
@@ -292,7 +292,7 @@ Section Definability.
     by rewrite mkfmapfE in_fsetU1 eqxx.
   Qed.
 
-  Lemma find_procedures_of_trace (t: trace) C P :
+  Lemma find_procedures_of_trace (t: trace event) C P :
     valid_procedure C P ->
     find_procedure (procedures_of_trace t) C P
     = Some (procedure_of_trace C P t).
@@ -301,7 +301,7 @@ Section Definability.
     [apply: find_procedures_of_trace_main|apply: find_procedures_of_trace_exp].
   Qed.
 
-  Definition program_of_trace (t: trace) : program :=
+  Definition program_of_trace (t: trace event) : program :=
     {| prog_interface  := intf;
        prog_procedures := procedures_of_trace t;
        prog_buffers    := mapm (fun _ => inr [Int 0]) intf |}.
@@ -411,7 +411,7 @@ Section Definability.
 
   Section WithTrace.
 
-    Variable t : trace.
+    Variable t : trace event.
 
     Let p    := program_of_trace t.
     Let init := prepare_buffers p.
@@ -431,7 +431,7 @@ Section Definability.
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
 
-    Definition well_formed_memory (prefix: trace) (mem: Memory.t) : Prop :=
+    Definition well_formed_memory (prefix: trace event) (mem: Memory.t) : Prop :=
       forall C,
         component_buffer C ->
         Memory.load mem (Permission.data, C, Block.local, 0%Z) =
@@ -474,7 +474,7 @@ Section Definability.
         now rewrite Z.add_0_r.
     Qed.
 
-    Variant well_formed_state (s: stack_state) (prefix suffix: trace) : CS.state -> Prop :=
+    Variant well_formed_state (s: stack_state) (prefix suffix: trace event) : CS.state -> Prop :=
     | WellFormedState C stk mem k exp arg P
       of C = cur_comp s
       &  k = Kstop
@@ -521,7 +521,11 @@ Section Definability.
           rewrite map_length in H. specialize (H C_local).
           destruct H as [mem'' [Hmem'' Hstar]].
           enough (H : mem'' = mem') by (subst mem''; easy).
-          rewrite -> counter_value_snoc, <- wf_C, Nat.eqb_refl in Hmem'.
+          rewrite -> counter_value_snoc in Hmem'.
+          unfold cur_comp_of_event in Hmem'.
+          simpl in Hmem'.
+          rewrite <- wf_C in Hmem'.
+          rewrite eq_refl in Hmem'.
           rewrite <- Nat.add_1_r, Nat2Z.inj_add in Hmem''. simpl in Hmem''.
           unfold counter_value in *.
           unfold Memory.store in *. simpl in *.

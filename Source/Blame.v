@@ -455,7 +455,7 @@ Qed.
 (* NOTE: Auxiliary semantics in Akram's development. *)
 Inductive kstep
           (p: program) (ctx: Program.interface) (G : global_env)
-          (sps : state) (t : trace) (sps' : state) : Prop :=
+          (sps : state) (t : trace event) (sps' : state) : Prop :=
 | partial_step:
     forall p' scs scs',
       prog_interface p' = ctx ->

@@ -37,7 +37,7 @@ Module CS.
 
   
   Definition ret_trace (G : Env.t) (pc pc' : RiscMachine.pc)
-             (gen_regs : RiscMachine.RegisterFile.t) :option trace :=
+             (gen_regs : RiscMachine.RegisterFile.t) :option (trace event) :=
     do rcomval <- RegisterFile.get_register Register.R_COM gen_regs;
       do cpc <- Env.get_component_name_from_id (SFI.C_SFI pc) G;
       do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
@@ -45,7 +45,7 @@ Module CS.
 
   
   Definition call_trace (G : Env.t) (pc pc' : RiscMachine.pc)
-             (gen_regs : RiscMachine.RegisterFile.t) : option trace :=
+             (gen_regs : RiscMachine.RegisterFile.t) : option (trace event) :=
     do rcomval <- RegisterFile.get_register Register.R_COM gen_regs;
       do cpc <- Env.get_component_name_from_id (SFI.C_SFI pc) G;
       do cpc' <- Env.get_component_name_from_id (SFI.C_SFI pc') G;
@@ -54,7 +54,7 @@ Module CS.
 
   
   Inductive step (G : Env.t) :
-    MachineState.t -> trace-> MachineState.t -> Prop :=
+    MachineState.t -> trace event -> MachineState.t -> Prop :=
   | Nop : forall mem mem' pc gen_regs,      
       executing mem pc INop ->
       Memory.Equal mem mem' -> 
@@ -158,7 +158,7 @@ Module CS.
     Variable update_state_records :
       Env.t
       -> MachineState.t
-      -> trace
+      -> trace event
       -> MachineState.t
       -> state_records
       -> state_records.
@@ -174,7 +174,7 @@ Module CS.
     Definition DEBUG := false.
     
     Definition eval_step_with_state (G : Env.t) (s : MachineState.t)
-      : STATE (trace * MachineState.t) :=
+      : STATE (trace event * MachineState.t) :=
       
       let '(mem,pc,gen_regs) := s in
       let get_reg r := 
@@ -303,7 +303,7 @@ Module CS.
     Close Scope string_scope.
 
     Fixpoint eval_steps_with_state (n : nat) (G : Env.t) (s : MachineState.t)
-      : STATE (trace * MachineState.t * nat) :=
+      : STATE (trace event * MachineState.t * nat) :=
       match n with
       | O => ret (E0,s,0%nat)
       | S n' => do (t',s') <- eval_step_with_state G s;
@@ -330,7 +330,7 @@ Module CS.
 
     Definition eval_program_with_state (fuel : nat) (p : sfi_program)
              (regs : RegisterFile.t)
-      : STATE (trace * MachineState.t * nat) :=
+      : STATE (trace event * MachineState.t * nat) :=
       let st0 := ((TargetSFI.Machine.mem p), RiscMachine.PC0, regs) in
       let g := ((TargetSFI.Machine.cn p),(TargetSFI.Machine.e p)) in
       do res <- eval_steps_with_state fuel g st0;
@@ -340,16 +340,16 @@ Module CS.
 
   End FunctionalRepresentation.
 
-  Definition update_empty_records (_ : Env.t) (_ : MachineState.t) (_ : trace)
+  Definition update_empty_records (_ : Env.t) (_ : MachineState.t) (_ : trace event)
              (_ : MachineState.t) (_ : unit) : unit := tt.
   
   Definition eval_step (G : Env.t) (s : MachineState.t)
-    : @Either (trace * MachineState.t) ExecutionError :=
+    : @Either (trace event * MachineState.t) ExecutionError :=
     fst ((eval_step_with_state unit G s) tt).
 
   Definition eval_program (fuel : nat) (p : sfi_program)
              (regs : RegisterFile.t)
-      : @Either (trace * MachineState.t*nat) ExecutionError :=
+      : @Either (trace event * MachineState.t*nat) ExecutionError :=
      (fst ((eval_program_with_state
                       unit update_empty_records fuel p
                       regs) tt)).
@@ -365,12 +365,12 @@ Module CS.
     is_executing mem pc IHalt.
   
   Conjecture eval_step_complete :
-    forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
+    forall (G : Env.t)  (st : MachineState.t) (t : trace event) (st' : MachineState.t),
       (step G st t st') -> (eval_step G st = Right (t, st')).
   
   
   Conjecture eval_step_sound:
-    forall (G : Env.t)  (st : MachineState.t) (t : trace) (st' : MachineState.t),
+    forall (G : Env.t)  (st : MachineState.t) (t : trace event) (st' : MachineState.t),
       eval_step G st = Right (t, st') -> step G st t st'.
   
   Close Scope monad_scope.

@@ -2,6 +2,13 @@ Require Import Common.Definitions.
 Require Import Common.Values.
 Require Import CompCert.Coqlib.
 
+
+Class EventClass (A : Type) :=
+  { next_comp_of_event : A -> Component.id;
+    cur_comp_of_event : A -> Component.id
+  }.
+
+
 (* RB: TODO: RW: Allowing arbitrary values to appear in events does not preclude
    the possibility of nonsensical values appearing in traces, notably Undef
    values. We have two basic alternatives:
@@ -14,23 +21,25 @@ Inductive event :=
 | ERead : Component.id -> Pointer.t -> value -> event
 | EWrite : Component.id -> Pointer.t -> value -> event.
 
-Definition cur_comp_of_event (e: event) : Component.id :=
-  match e with
-  | ECall  C _ _ _ => C
-  | ERet   C _ _   => C
-  | ERead  C _ _   => C
-  | EWrite C _ _   => C
-  end.
-
-Definition next_comp_of_event (e: event) : Component.id :=
-  match e with
-  (* Calls and returns yield control. *)
-  | ECall  _ _ _ C => C
-  | ERet   _ _   C => C
-  (* Reads and writes retain control. *)
-  | ERead  C _ _   => C
-  | EWrite C _ _   => C
-  end.
+Instance event_EventClass : EventClass event :=
+  {
+    cur_comp_of_event e :=
+      match e with
+      | ECall  C _ _ _ => C
+      | ERet   C _ _   => C
+      | ERead  C _ _   => C
+      | EWrite C _ _   => C
+      end;
+    next_comp_of_event e :=
+      match e with
+      (* Calls and returns yield control. *)
+      | ECall  _ _ _ C => C
+      | ERet   _ _   C => C
+      (* Reads and writes retain control. *)
+      | ERead  C _ _   => C
+      | EWrite C _ _   => C
+      end
+  }.
 
 Definition trace (A : Type) := list A.
 
@@ -225,6 +234,10 @@ Set Implicit Arguments.
 (* TODO: What does match_traces mean? How should it be updated now
    that we have ERead and EWrite?
  *)
+(*
+  The name "match_traces" should be changed.
+  Maybe it should be "check_both_nil_or_singleton" or similar.
+*)
 Inductive match_traces: (@trace event) -> (@trace event) -> Prop :=
   | match_traces_E0:
       match_traces nil nil

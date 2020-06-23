@@ -32,7 +32,7 @@ Search InjEqMixin.
 Canonical event_eqType := Eval hnf in EqType event event_eqMixin.
 
 
-Definition empty_behavior (beh : program_behavior) :=
+Definition empty_behavior {Ev: Type} (beh : @program_behavior Ev) :=
   match beh with
   | Terminates t | Diverges t | Goes_wrong t =>
                                 match t with
@@ -42,9 +42,9 @@ Definition empty_behavior (beh : program_behavior) :=
   | Reacts _ => false
   end.
 
-Lemma empty_behaviorPn beh :
+Lemma empty_behaviorPn {Ev: Type} beh :
   reflect (exists e beh', beh = behavior_app [:: e] beh')
-          (~~ empty_behavior beh).
+          (~~ @empty_behavior Ev beh).
 Proof.
 case: beh=> [[|e t]|[|e t]|[e t]|[|e t]] /=; constructor;
 try by case=> [e [[|||]]].
@@ -64,10 +64,11 @@ Section CLOSURES.
 
 Variable genv: Type.
 Variable state: Type.
+Variable event: Type.
 
-Variable step: genv -> state -> trace -> state -> Prop.
+Variable step: genv -> state -> trace event -> state -> Prop.
 
-Inductive starR (ge: genv): state -> trace -> state -> Prop :=
+Inductive starR (ge: genv): state -> trace event -> state -> Prop :=
   | starR_refl: forall s,
       starR ge s E0 s
   | starR_step: forall s1 t1 s2 t2 s3 t,
@@ -132,7 +133,7 @@ End CLOSURES.
 
 Section Inversion.
 
-Variables (L : semantics) (Hsingle : single_events L).
+Variables (event: Type) (L : semantics event) (Hsingle : single_events L).
 
 Lemma star_cons_inv s1 e t s2 :
   Star L s1 (e :: t) s2 ->
@@ -158,18 +159,18 @@ End Inversion.
 
 (* Finite prefixes and behaviors. *)
 
-Inductive finpref_behavior : Type :=
-  | FTerminates: trace -> finpref_behavior
-  | FGoes_wrong: trace -> finpref_behavior
-  | FTbc : trace -> finpref_behavior.
+Inductive finpref_behavior {Ev: Type} : Type :=
+  | FTerminates: trace Ev -> finpref_behavior
+  | FGoes_wrong: trace Ev -> finpref_behavior
+  | FTbc : trace Ev -> finpref_behavior.
 
-Definition not_wrong_finpref (m:finpref_behavior) : Prop :=
+Definition not_wrong_finpref {Ev: Type} (m: @finpref_behavior Ev) : Prop :=
   match m with
   | FGoes_wrong _ => False
   | _             => True
   end.
 
-Definition prefix (m:finpref_behavior) (b:program_behavior) : Prop :=
+Definition prefix {Ev: Type} (m: @finpref_behavior Ev) (b:program_behavior) : Prop :=
   match m, b with
   | FTerminates t1, Terminates t2
   | FGoes_wrong t1, Goes_wrong t2 => t1 = t2
@@ -177,35 +178,35 @@ Definition prefix (m:finpref_behavior) (b:program_behavior) : Prop :=
   | _, _ => False
   end.
 
-Definition finpref_trace (m : finpref_behavior) : trace :=
+Definition finpref_trace {Ev: Type} (m : finpref_behavior) : trace Ev :=
   match m with
   | FTerminates t | FGoes_wrong t | FTbc t => t
   end.
 
-Definition trace_finpref_prefix (t : trace) (m : finpref_behavior) : Prop :=
+Definition trace_finpref_prefix {Ev: Type} (t : trace Ev) (m : finpref_behavior) : Prop :=
   match m with
   | FTerminates t' | FGoes_wrong t' | FTbc t' => trace_prefix t t'
   end.
 
-Definition finpref_trace_prefix (m : finpref_behavior) (t : trace) : Prop :=
+Definition finpref_trace_prefix {Ev: Type} (m : finpref_behavior) (t : trace Ev) : Prop :=
   match m with
   | FTerminates t' | FGoes_wrong t' => False
   | FTbc t' => trace_prefix t' t
   end.
 
-Definition behavior_improves_finpref (b:program_behavior) (m:finpref_behavior) :=
+Definition behavior_improves_finpref {Ev: Type} (b: @program_behavior Ev) (m:finpref_behavior) :=
   exists t, b = Goes_wrong t /\ trace_finpref_prefix t m.
 
 (* CH: Introduce a definition for
        does_prefix and use it everywhere where it's
        possible, instead of unfolding it everywhere. *)
-Definition does_prefix x m := exists b, program_behaves x b /\ prefix m b.
+Definition does_prefix  {Ev: Type} x (m: @finpref_behavior Ev) := exists b, program_behaves x b /\ prefix m b.
 (* CH: Alternatively could define this in terms of Star and prove the
        predicate above as an alternative characterization. *)
 
 (* Properties of prefixes. *)
 
-Lemma help : forall m1 m2 T,
+Lemma help {Ev: Type} : forall (m1: trace Ev) m2 T,
     trace_prefix m1 T -> trace_prefix m2 T ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Proof.
@@ -224,7 +225,7 @@ Proof.
      + right. rewrite k1. now exists (e :: m1).
 Qed.
 
-Lemma help_inf : forall m1 m2 T,
+Lemma help_inf {Ev: Type} : forall (m1: trace Ev) m2 T,
     traceinf_prefix m1 T -> traceinf_prefix m2 T ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
 Proof.
@@ -245,7 +246,7 @@ Qed.
 
 
 (* How to simplify this proof ? *)
-Lemma behavior_prefix_comp : forall m1 m2 b,
+Lemma behavior_prefix_comp {Ev: Type} : forall (m1: trace Ev) m2 b,
     behavior_prefix m1 b ->
     behavior_prefix m2 b ->
     (trace_prefix m1 m2 \/ trace_prefix m2 m1).
@@ -279,7 +280,7 @@ Proof.
   apply (help K1 K2).
 Qed.
 
-Lemma behavior_prefix_comp' : forall m1 m2 b,
+Lemma behavior_prefix_comp' {Ev: Type} : forall m1 m2 (b: @program_behavior Ev),
     prefix m1 b ->
     behavior_prefix m2 b ->
     (finpref_trace_prefix m1 m2 \/ trace_finpref_prefix m2 m1).
@@ -298,7 +299,7 @@ Proof.
       right; now exists t.
 Qed.
 
-Lemma trace_behavior_prefix_trans : forall m1 m2 b,
+Lemma trace_behavior_prefix_trans {Ev: Type} : forall m1 m2 (b: @program_behavior Ev),
     finpref_trace_prefix m1 m2 ->
     behavior_prefix m2 b ->
     prefix m1 b.
@@ -313,7 +314,7 @@ Proof.
     exists (behavior_app t b'). now rewrite <- behavior_app_assoc.
 Qed.
 
-Lemma trace_behavior_prefix_trans' : forall m1 m2 b,
+Lemma trace_behavior_prefix_trans' {Ev: Type} : forall m1 m2 (b: @program_behavior Ev),
   trace_finpref_prefix m1 m2 ->
   prefix m2 b ->
   behavior_prefix m1 b.
@@ -330,7 +331,7 @@ Proof.
     exists (behavior_app t2 b1). now rewrite <- behavior_app_assoc.
 Qed.
 
-Lemma behavior_prefix_goes_wrong_trans : forall t1 t2 b,
+Lemma behavior_prefix_goes_wrong_trans {Ev: Type} : forall (t1: trace Ev) t2 b,
   behavior_prefix t1 (Goes_wrong t2) ->
   behavior_prefix t2 b ->
   behavior_prefix t1 b.
@@ -342,7 +343,7 @@ Proof.
   - subst t2. exists (behavior_app t b2). now rewrite <- behavior_app_assoc.
 Qed.
 
-Lemma behavior_prefix_improves_trans' : forall t b m,
+Lemma behavior_prefix_improves_trans' {Ev: Type} : forall (t: @program_behavior Ev) b m,
   behavior_prefix m t ->
   behavior_improves t b ->
   behavior_prefix m b.
@@ -356,7 +357,7 @@ Proof.
       exists (behavior_app t b4). now rewrite <- behavior_app_assoc.
 Qed.
 
-Lemma behavior_prefix_app_inv : forall t1 t2 b,
+Lemma behavior_prefix_app_inv {Ev: Type} : forall t1 t2 (b: @program_behavior Ev),
   behavior_prefix (t1 ++ t2) b ->
   behavior_prefix t1 b.
 Proof.
@@ -366,8 +367,8 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma program_behaves_finpref_exists :
-  forall L s t s',
+Lemma program_behaves_finpref_exists {Ev: Type} :
+  forall L s (t: trace Ev) s',
     initial_state L s ->
     Star L s t s' ->
   exists beh,

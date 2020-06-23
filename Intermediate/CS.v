@@ -38,10 +38,10 @@ Definition state : Type := stack * Memory.t * Register.t * Pointer.t * reach_add
 Definition update_reachability_of_component_with_value : value -> Component.id -> reach_addr -> reach_addr.
   Admitted.
 
-Definition compute_trace_for_load_by_component : Component.id -> Pointer.t -> reach_addr -> trace.
+Definition compute_trace_for_load_by_component : Component.id -> Pointer.t -> reach_addr -> trace event.
   Admitted.
 
-Definition compute_trace_for_store_by_component : Component.id -> Pointer.t -> reach_addr -> trace.
+Definition compute_trace_for_store_by_component : Component.id -> Pointer.t -> reach_addr -> trace event.
   Admitted.
 
 Definition propagate_store_to_all_components_reach : Pointer.t -> value -> reach_addr -> reach_addr.
@@ -672,7 +672,7 @@ Definition final_state (G: global_env) (s: state) : Prop :=
 (* relational specification *)
 
 (* RB: TODO: [DynShare] Integrate reachability in states, semantics. *)
-Inductive step (G : global_env) : state -> trace -> state -> Prop :=
+Inductive step (G : global_env) : state -> trace event -> state -> Prop :=
 | Nop: forall gps mem regs pc addrs,
     executing G pc INop ->
     step G (gps, mem, regs, pc, addrs) E0
@@ -829,7 +829,7 @@ Ltac step_of_executing :=
 Import MonadNotations.
 Open Scope monad_scope.
 
-Definition eval_step (G: global_env) (s: state) : option (trace * state) :=
+Definition eval_step (G: global_env) (s: state) : option (trace event * state) :=
   let '(gps, mem, regs, pc, addrs) := s in
   (* fetch the next instruction to execute *)
   do C_procs <- getm (genv_procedures G) (Pointer.component pc);
@@ -1353,7 +1353,7 @@ Section Semantics.
   Let G := prepare_global_env p.
 
   Definition sem :=
-    @Semantics_gen state global_env step (initial_state p) (final_state G) G.
+    @Semantics_gen event state global_env step (initial_state p) (final_state G) G.
 
   Lemma determinate_step:
     forall s t1 s1 t2 s2,

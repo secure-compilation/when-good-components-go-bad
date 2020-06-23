@@ -179,7 +179,7 @@ Section Mergeable.
           Step (CS.sem (program_link p' c')) s1'' E0 s2'' ->
           P s s1'' ->
           P s s2'') ->
-      (forall (s1 s2 s1'' s2'' : CS.state) (t : trace),
+      (forall (s1 s2 s1'' s2'' : CS.state) (t : trace event),
           t <> E0 ->
           mergeable_states s1 s1'' ->
           Step (CS.sem (program_link p c)) s1 t s2 ->

@@ -36,7 +36,7 @@ Proof. by rewrite /suffix -lock /= orbF. Qed.
 End Suffix.
 
 Section Traces.
-
+  
 Inductive stack_state := StackState {
   (* The current running component.  *)
   cur_comp : Component.id;
@@ -47,7 +47,7 @@ Inductive stack_state := StackState {
 
 Definition stack_state0 := StackState Component.main [::].
 
-Implicit Types (t : trace) (C : Component.id) (s : stack_state) (intf : Program.interface).
+Implicit Types (t : trace event) (C : Component.id) (s : stack_state) (intf : Program.interface).
 
 Fixpoint well_bracketed_trace s t : bool :=
   match t with
@@ -159,7 +159,7 @@ Definition well_formed_event intf (e: event) : bool :=
   | EWrite _ _ _ => false
   end.
 
-Definition well_formed_trace intf (t: trace) : bool :=
+Definition well_formed_trace intf (t: trace event) : bool :=
   well_bracketed_trace stack_state0 t &&
   all (well_formed_event intf) t.
 
