@@ -818,7 +818,7 @@ Proof.
         eapply star_step; eauto.
 Qed.
 
-Lemma forever_reactive_app_inv {event: Type} (L: semantics event) :
+Lemma forever_reactive_app_inv {evt: Type} (L: semantics evt) :
   single_events L ->
   forall s1 t T,
     Forever_reactive L s1 (t *** T) ->
@@ -843,19 +843,19 @@ Proof.
     eapply star_trans; eauto.
 Qed.
 
-Record receptive (L: semantics Events.event) : Prop :=
+Record receptive {Ev} {evInst: EventClass Ev} (L: semantics Ev) : Prop :=
   Receptive {
     sr_receptive: forall s t1 s1 t2,
-      Step L s t1 s1 -> match_traces t1 t2 -> exists s2, Step L s t2 s2;
+      Step L s t1 s1 -> equal_and_nil_or_singleton t1 t2 -> exists s2, Step L s t2 s2;
     sr_traces:
       single_events L
   }.
 
-Record determinate (L: semantics Events.event) : Prop :=
+Record determinate {Ev} {evInst: EventClass Ev} (L: semantics Ev) : Prop :=
   Determinate {
     sd_determ: forall s t1 s1 t2 s2,
       Step L s t1 s1 -> Step L s t2 s2 ->
-      match_traces t1 t2 /\ (t1 = t2 -> s1 = s2);
+      equal_and_nil_or_singleton t1 t2 /\ (t1 = t2 -> s1 = s2);
     sd_traces:
       single_events L;
     sd_initial_determ: forall s1 s2,
@@ -868,12 +868,14 @@ Record determinate (L: semantics Events.event) : Prop :=
 
 Section DETERMINACY.
 
-Variable L: semantics Events.event.
+Variable Ev: Type.
+Variable evInst: EventClass Ev.  
+Variable L: semantics Ev.
 Hypothesis DET: determinate L.
 
 Lemma sd_determ_1:
   forall s t1 s1 t2 s2,
-  Step L s t1 s1 -> Step L s t2 s2 -> match_traces t1 t2.
+  Step L s t1 s1 -> Step L s t2 s2 -> equal_and_nil_or_singleton t1 t2.
 Proof.
   intros. eapply sd_determ; eauto.
 Qed.
@@ -1320,10 +1322,10 @@ Lemma f2b_determinacy_inv:
   forall s2 t' s2' t'' s2'',
   Step L2 s2 t' s2' -> Step L2 s2 t'' s2'' ->
   (t' = E0 /\ t'' = E0 /\ s2' = s2'')
-  \/ (t' <> E0 /\ t'' <> E0 /\ match_traces t' t'').
+  \/ (t' <> E0 /\ t'' <> E0 /\ equal_and_nil_or_singleton t' t'').
 Proof.
   intros.
-  assert (match_traces t' t'').
+  assert (equal_and_nil_or_singleton t' t'').
     eapply sd_determ_1; eauto.
   destruct (silent_or_not_silent t').
   subst. inv H1.

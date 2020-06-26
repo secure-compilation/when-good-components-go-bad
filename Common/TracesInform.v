@@ -17,7 +17,7 @@ Inductive Eregister : Type :=
   E_R_ONE | E_R_COM | E_R_AUX1 | E_R_AUX2 | E_R_RA | E_R_SP | E_R_ARG.
 
 Inductive Ebinop : Set :=
-  Add : Ebinop | Minus : Ebinop | Mul : Ebinop | Eq : Ebinop | Leq : Ebinop.
+  E_Add : Ebinop | E_Minus : Ebinop | E_Mul : Ebinop | E_Eq : Ebinop | E_Leq : Ebinop.
 
 Inductive event_inform :=
 | ECall : Component.id -> Procedure.id -> value -> Component.id -> event_inform
@@ -29,6 +29,36 @@ Inductive event_inform :=
 | EStore : Component.id -> Eregister -> Eregister -> event_inform
 | EAlloc : Component.id -> Eregister -> Eregister -> event_inform
 | EInvalidateRA : Component.id -> event_inform.
+
+Inductive match_event : event_inform -> event_inform -> Prop :=
+| match_events_ECall: forall C P arg C',
+    match_event (ECall C P arg C')
+                (ECall C P arg C')
+| match_events_ERet: forall C retval C',
+    match_event (ERet C retval C')
+                (ERet C retval C')
+| match_events_EConst: forall C v r,
+    match_event (EConst C v r)
+                (EConst C v r)
+| match_events_EMov: forall C r1 r2,
+    match_event (EMov C r1 r2)
+                (EMov C r1 r2)
+| match_events_EBinop: forall C op r1 r2 r3,
+    match_event (EBinop C op r1 r2 r3)
+                (EBinop C op r1 r2 r3)
+| match_events_ELoad: forall C r1 r2,
+    match_event (ELoad C r1 r2)
+                (ELoad C r1 r2)
+| match_events_EStore: forall C r1 r2,
+    match_event (EStore C r1 r2)
+                (EStore C r1 r2)
+| match_events_EAlloc: forall C r1 r2,
+    match_event (EAlloc C r1 r2)
+                (EAlloc C r1 r2)
+| match_events_EInvalidateRA: forall C,
+    match_event (EInvalidateRA C)
+                (EInvalidateRA C).
+
 
 Instance event_inform_EventClass : EventClass event_inform :=
   {
@@ -57,7 +87,8 @@ Instance event_inform_EventClass : EventClass event_inform :=
       | EStore  C _ _ => C
       | EAlloc  C _ _ => C
       | EInvalidateRA C => C
-      end
+      end;
+    event_equal := match_event
   }.
 
 Section Traces.

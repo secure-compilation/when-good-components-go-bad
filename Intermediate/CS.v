@@ -7,6 +7,7 @@ Require Import Common.Linking.
 Require Import Common.Memory.
 Require Import Common.Reachability.
 Require Import Common.Traces.
+Require Import Common.TracesInform.
 Require Import Common.CompCertExtensions.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
@@ -669,10 +670,29 @@ Definition final_state (G: global_env) (s: state) : Prop :=
   let '(gsp, mem, regs, pc, addrs) := s in
   executing G pc IHalt.
 
+Definition reg_to_Ereg r :=
+  match r with
+  | R_ONE => E_R_ONE
+  | R_COM => E_R_COM
+  | R_AUX1 => E_R_AUX1
+  | R_AUX2 => E_R_AUX2
+  | R_RA => E_R_RA
+  | R_SP => E_R_SP
+  | R_ARG => E_R_ARG
+  end.
+
+Definition binop_to_Ebinop op :=
+  match op with
+  | Add => E_Add
+  | Minus => E_Minus
+  | Mul => E_Mul
+  | Eq => E_Eq
+  | Leq => E_Leq
+  end.
 (* relational specification *)
 
 (* RB: TODO: [DynShare] Integrate reachability in states, semantics. *)
-Inductive step (G : global_env) : state -> trace event -> state -> Prop :=
+Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :=
 | Nop: forall gps mem regs pc addrs,
     executing G pc INop ->
     step G (gps, mem, regs, pc, addrs) E0
@@ -686,21 +706,28 @@ Inductive step (G : global_env) : state -> trace event -> state -> Prop :=
 | Const: forall gps mem regs regs' pc r v addrs,
     executing G pc (IConst v r) ->
     Register.set r (imm_to_val v) regs = regs' ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs', Pointer.inc pc, addrs)
+    step G
+         (gps, mem, regs, pc, addrs)
+         [EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)]
+         (gps, mem, regs', Pointer.inc pc, addrs)
 
 | Mov: forall gps mem regs regs' pc r1 r2 addrs,
     executing G pc (IMov r1 r2) ->
     Register.set r2 (Register.get r1 regs) regs = regs' ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs', Pointer.inc pc, addrs)
+    step G
+         (gps, mem, regs, pc, addrs)
+         [EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+         (gps, mem, regs', Pointer.inc pc, addrs)
 
 | BinOp: forall gps mem regs regs' pc r1 r2 r3 op addrs,
     executing G pc (IBinOp op r1 r2 r3) ->
     let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
     Register.set r3 result regs = regs' ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs', Pointer.inc pc, addrs)
+    step G
+         (gps, mem, regs, pc, addrs)
+         [EBinop (Pointer.component pc) (binop_to_Ebinop op)
+                 (reg_to_Ereg r1) (reg_to_Ereg r2) (reg_to_Ereg r3)]
+         (gps, mem, regs', Pointer.inc pc, addrs)
 
 | Load: forall gps mem regs regs' pc r1 r2 ptr v addrs,
     executing G pc (ILoad r1 r2) ->
@@ -715,8 +742,10 @@ Inductive step (G : global_env) : state -> trace event -> state -> Prop :=
     (* RB: TODO: [DynShare] Furnish computational definition. It may be preferable
        to inline the expression in the conclusion. *)
     (* compute_trace_for_load_by_component (Pointer.component pc) ptr reach = e -> *)
-    step G (gps, mem, regs, pc, addrs) E0 (* e *)
-           (gps, mem, regs', Pointer.inc pc, addrs)
+    step G
+         (gps, mem, regs, pc, addrs)
+         [ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)] (* e *)
+         (gps, mem, regs', Pointer.inc pc, addrs)
 
 | Store: forall gps mem mem' regs pc ptr r1 r2 addrs (* v reach' e *),
     executing G pc (IStore r1 r2) ->
@@ -732,15 +761,19 @@ Inductive step (G : global_env) : state -> trace event -> state -> Prop :=
     Memory.store mem ptr (* v *) (Register.get r2 regs) = Some mem' ->
     (* compute_trace_for_store_by_component (Pointer.component pc) ptr reach = e -> *)
     (* propagate_store_to_all_components_reach ptr v reach = reach' -> *)
-    step G (gps, mem, regs, pc, addrs) (* e *) E0
-           (gps, mem', regs, Pointer.inc pc, addrs) (* reach', replace addrs *)
+    step G
+         (gps, mem, regs, pc, addrs)
+         (* e *) [EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+         (gps, mem', regs, Pointer.inc pc, addrs) (* reach', replace addrs *)
 
 | Jal: forall gps mem regs regs' pc pc' l addrs,
     executing G pc (IJal l) ->
     find_label_in_component G pc l = Some pc' ->
     Register.set R_RA (Ptr (Pointer.inc pc)) regs = regs' ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs', pc', addrs)
+    step G
+         (gps, mem, regs, pc, addrs)
+         [EInvalidateRA (Pointer.component pc)]
+         (gps, mem, regs', pc', addrs)
 
 | Jump: forall gps mem regs pc pc' r addrs,
     executing G pc (IJump r) ->
@@ -771,8 +804,10 @@ Inductive step (G : global_env) : state -> trace event -> state -> Prop :=
     Register.set rptr (Ptr ptr) regs = regs' ->
     (* RB: TODO: [DynShare] Restore check after making it computational. *)
     (* update_reachability_of_component_with_value (Ptr ptr) (Pointer.component pc) reach = reach' -> *)
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem', regs', Pointer.inc pc, addrs) (* reach', replace addrs *)
+    step G
+         (gps, mem, regs, pc, addrs)
+         [EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)]
+         (gps, mem', regs', Pointer.inc pc, addrs) (* reach', replace addrs *)
 
 | Call: forall gps mem regs pc b C' P call_arg addrs (* reach' *),
     executing G pc (ICall C' P) ->
@@ -780,7 +815,7 @@ Inductive step (G : global_env) : state -> trace event -> state -> Prop :=
     imported_procedure (genv_interface G) (Pointer.component pc) C' P ->
     EntryPoint.get C' P (genv_entrypoints G) = Some b ->
     (* RB: TODO: [DynShare] Re-lift restriction to integer values. *)
-    Register.get R_COM regs = Int call_arg ->
+    Register.get R_COM regs = call_arg ->
     (* RB: TODO: [DynShare] Restore check after making it computational. *)
     (* update_reachability_of_component_with_value call_arg C' reach = reach' -> *)
     step G (gps, mem, regs, pc, addrs)
@@ -792,7 +827,7 @@ Inductive step (G : global_env) : state -> trace event -> state -> Prop :=
     executing G pc IReturn ->
     Pointer.component pc <> Pointer.component pc' ->
     (* RB: TODO: [DynShare] Re-lift restriction to integer values. *)
-    Register.get R_COM regs = Int ret_arg ->
+    Register.get R_COM regs = ret_arg ->
     (* RB: TODO: [DynShare] Restore check after making it computational. *)
     (* update_reachability_of_component_with_value ret_arg (Pointer.component pc') reach = reach' -> *)
     step G (pc' :: gps', mem, regs, pc, addrs)
@@ -829,7 +864,7 @@ Ltac step_of_executing :=
 Import MonadNotations.
 Open Scope monad_scope.
 
-Definition eval_step (G: global_env) (s: state) : option (trace event * state) :=
+Definition eval_step (G: global_env) (s: state) : option (trace event_inform * state) :=
   let '(gps, mem, regs, pc, addrs) := s in
   (* fetch the next instruction to execute *)
   do C_procs <- getm (genv_procedures G) (Pointer.component pc);
@@ -846,21 +881,26 @@ Definition eval_step (G: global_env) (s: state) : option (trace event * state) :
       ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
     | IConst v r =>
       let regs' := Register.set r (imm_to_val v) regs in
-      ret (E0, (gps, mem, regs', Pointer.inc pc, addrs))
+      ret ([EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)],
+           (gps, mem, regs', Pointer.inc pc, addrs))
     | IMov r1 r2 =>
       let regs' := Register.set r2 (Register.get r1 regs) regs in
-      ret (E0, (gps, mem, regs', Pointer.inc pc, addrs))
+      ret ([EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
+           (gps, mem, regs', Pointer.inc pc, addrs))
     | IBinOp op r1 r2 r3 =>
       let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
       let regs' := Register.set r3 result regs in
-      ret (E0, (gps, mem, regs', Pointer.inc pc, addrs))
+      ret ([EBinop (Pointer.component pc) (binop_to_Ebinop op) (reg_to_Ereg r1)
+                   (reg_to_Ereg r2) (reg_to_Ereg r3)],
+           (gps, mem, regs', Pointer.inc pc, addrs))
     | ILoad r1 r2 =>
       match Register.get r1 regs with
       | Ptr ptr =>
         if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
           do v <- Memory.load mem ptr;
           let regs' := Register.set r2 v regs in
-          ret (E0, (gps, mem, regs', Pointer.inc pc, addrs))
+          ret ([ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
+               (gps, mem, regs', Pointer.inc pc, addrs))
         else
           None
       | _ => None
@@ -870,7 +910,8 @@ Definition eval_step (G: global_env) (s: state) : option (trace event * state) :
       | Ptr ptr =>
         if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
           do mem' <- Memory.store mem ptr (Register.get r2 regs);
-          ret (E0, (gps, mem', regs, Pointer.inc pc, addrs))
+            ret ([EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
+                 (gps, mem', regs, Pointer.inc pc, addrs))
         else
           None
       | _ => None
@@ -878,7 +919,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event * state) :
     | IJal l =>
       do pc' <- find_label_in_component G pc l;
       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-      ret (E0, (gps, mem, regs', pc', addrs))
+      ret ([EInvalidateRA (Pointer.component pc)], (gps, mem, regs', pc', addrs))
     | IJump r =>
       match Register.get r regs with
       | Ptr pc' =>
@@ -905,20 +946,18 @@ Definition eval_step (G: global_env) (s: state) : option (trace event * state) :
         else
           do (mem', ptr) <- Memory.alloc mem (Pointer.component pc) (Z.to_nat size);
           let regs' := Register.set rptr (Ptr ptr) regs in
-          ret (E0, (gps, mem', regs', Pointer.inc pc, addrs))
+          ret ([EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)],
+               (gps, mem', regs', Pointer.inc pc, addrs))
       | _ => None
       end
     | ICall C' P =>
       if negb (Component.eqb (Pointer.component pc) C') then
         if imported_procedure_b (genv_interface G) (Pointer.component pc) C' P then
           do b <- EntryPoint.get C' P (genv_entrypoints G);
-          match Register.get R_COM regs with
-          | Int rcomval =>
-            let pc' := (Permission.code, C', b, 0%Z) in
-            let t := [ECall (Pointer.component pc) P rcomval C'] in
-            ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc', addrs))
-          | _ => None
-          end
+          let val := Register.get R_COM regs in
+          let pc' := (Permission.code, C', b, 0%Z) in
+          let t := [ECall (Pointer.component pc) P val C'] in
+          ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc', addrs))
         else
           None
       else
@@ -927,12 +966,9 @@ Definition eval_step (G: global_env) (s: state) : option (trace event * state) :
       match gps with
       | pc' :: gps' =>
         if negb (Component.eqb (Pointer.component pc) (Pointer.component pc')) then
-          match Register.get R_COM regs with
-          | Int rcomval =>
-            let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
-            ret (t, (gps', mem, Register.invalidate regs, pc', addrs))
-          | _ => None
-          end
+          let val := Register.get R_COM regs in
+          let t := [ERet (Pointer.component pc) val (Pointer.component pc')] in
+          ret (t, (gps', mem, Register.invalidate regs, pc', addrs))
         else
           None
       | _ => None
@@ -1038,9 +1074,8 @@ Proof.
     rewrite H2. reflexivity.
 
   - match goal with
-    | Hentrypoint: EntryPoint.get _ _ _ = _,
-      Hregs_value: Register.get _ _ = _ |- _ =>
-      rewrite -> Hentrypoint, Hregs_value
+    | Hentrypoint: EntryPoint.get _ _ _ = _ |- _ =>
+      rewrite -> Hentrypoint
     end.
     apply Nat.eqb_neq in H0. unfold Component.eqb. rewrite H0. simpl.
     apply imported_procedure_iff in H1. rewrite H1.
@@ -1048,10 +1083,8 @@ Proof.
 
   - unfold Component.eqb.
     match goal with
-    | Hdifferent_target: Pointer.component _ <> Pointer.component _,
-      Hregs_value: Register.get _ _ = _ |- _ =>
-      apply Nat.eqb_neq in Hdifferent_target; rewrite Hdifferent_target;
-      rewrite Hregs_value; simpl
+    | Hdifferent_target: Pointer.component _ <> Pointer.component _ |- _ =>
+      apply Nat.eqb_neq in Hdifferent_target; rewrite Hdifferent_target; simpl
     end.
     reflexivity.
 Qed.
@@ -1251,8 +1284,6 @@ Proof.
                  try discriminate.
                destruct (EntryPoint.get i i0 (genv_entrypoints G)) eqn:Hentrypoint;
                  try discriminate.
-               destruct (Register.get R_COM regs0) eqn:Hreg;
-                 try discriminate.
                simpl in *. inversion H2. subst.
                eapply Call;
                  try reflexivity.
@@ -1260,8 +1291,7 @@ Proof.
                **** apply Nat.eqb_neq. assumption.
                **** apply imported_procedure_iff. auto.
                **** assumption.
-               **** assumption.
-
+               
            *** rewrite H in H2.
                (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
@@ -1273,14 +1303,11 @@ Proof.
                         eqn:Hcomp;
                  try discriminate.
                simpl in *.
-               destruct (Register.get R_COM regs0) eqn:Hreg;
-                 try discriminate.
                inversion H2. subst.
                eapply Return;
                  try reflexivity.
                **** eexists. eexists. eauto.
                **** apply Nat.eqb_neq. assumption.
-               **** assumption.
 
            *** rewrite H in H2.
                (*match goal with
@@ -1353,13 +1380,13 @@ Section Semantics.
   Let G := prepare_global_env p.
 
   Definition sem :=
-    @Semantics_gen event state global_env step (initial_state p) (final_state G) G.
+    @Semantics_gen event_inform state global_env step (initial_state p) (final_state G) G.
 
   Lemma determinate_step:
     forall s t1 s1 t2 s2,
       step G s t1 s1 ->
       step G s t2 s2 ->
-      match_traces t1 t2 /\ (t1 = t2 -> s1 = s2).
+      equal_and_nil_or_singleton t1 t2 /\ (t1 = t2 -> s1 = s2).
   Proof.
     intros s t1 s21 t2 s2 Hstep1 Hstep2.
     inversion Hstep1; subst; inversion Hstep2; subst;
@@ -1376,29 +1403,15 @@ Section Semantics.
       (* solve simple cases *)
       try (split; [ constructor |
                     intro Hsame_trace; eapply step_deterministic; eauto ]).
-
-    (* external calls *)
-    - split.
-      + match goal with
-        | Hcall_arg1: Register.get R_COM regs = Int ?CALL_ARG1,
-          Hcall_arg2: Register.get R_COM regs = Int ?CALL_ARG2 |- _ =>
-          rewrite Hcall_arg1 in Hcall_arg2; inversion Hcall_arg2; subst
-        end; constructor.
-      + intros Hsame_trace.
-        match goal with
-        | Hentrypoint1: EntryPoint.get _ _ _ = Some ?B1,
-          Hentrypoint2: EntryPoint.get _ _ _ = Some ?B2 |- _ =>
-          rewrite Hentrypoint1 in Hentrypoint2; inversion Hentrypoint2; subst
-        end; reflexivity.
-
-    (* external return *)
-    - split.
-      + match goal with
-        | Hret_arg1: Register.get R_COM regs = Int ?RET_ARG1,
-          Hret_arg2: Register.get R_COM regs = Int ?RET_ARG2 |- _ =>
-          rewrite Hret_arg1 in Hret_arg2; inversion Hret_arg2; subst
-        end; constructor.
-      + intros Hsame_trace. reflexivity.
+    - apply match_events_EConst.
+    - apply match_events_EMov.
+    - apply match_events_EBinop.
+    - apply match_events_ELoad.
+    - apply match_events_EStore.
+    - apply match_events_EInvalidateRA.
+    - apply match_events_EAlloc.
+    - apply match_events_ECall.
+    - apply match_events_ERet.
   Qed.
 
   Lemma singleton_traces:
@@ -1478,13 +1491,32 @@ Proof.
 elim: cs t cs' / => [|cs1 t1 cs2 t2 cs3 t Hstep _ IH ->] //=.
 case: cs1 t1 cs2 / Hstep IH => /=;
 try by move=> *; match goal with
-| [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
-        rewrite Pointer.inc_preserves_component in H end.
-- by move=> ????????? /find_label_in_component_1 ->.
-- by move=> ????????? ->.
+                 | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+                   rewrite Pointer.inc_preserves_component in H end.
+- move=> *;
+           match goal with
+                 | [ IH : context[Pointer.component (Pointer.inc _)] |- _] =>
+           rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto end.
+- move=> ?????????? IH;
+           rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
+- move=> ???????????? IH.
+  rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
+- move=> ??????????????? IH.
+  rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
+- move=> ????????????? IH.
+  rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
+- move=> ???? pc pc' l ???? IH. rewrite eqxx.
+  assert (Pointer.component pc = Pointer.component pc') as pceq.
+  {
+    apply find_label_in_component_1 with (G := G) (l := l). assumption.
+  }
+  rewrite pceq. auto.
+- move=> ????????? pceq ?. rewrite <- pceq. auto.
 - by move=> ???????????? /find_label_in_procedure_1 ->.
 - by move=> ????????????; rewrite eqxx Pointer.inc_preserves_component.
-- by move=> ??????????; rewrite !eqxx.
+- move=> ?????????????? IH; rewrite !eqxx.
+  rewrite Pointer.inc_preserves_component in IH. auto.
+- move=> ???????????. rewrite !eqxx. auto.
 Qed.
 
 Canonical ssrnat.nat_eqType.
@@ -1673,8 +1705,9 @@ Proof.
   intros Hstep.
   inversion Hstep; subst; simpl;
     try now rewrite Pointer.inc_preserves_component.
-  - erewrite find_label_in_component_1; try eassumption. reflexivity.
-  - congruence.
+  - auto. 
+(*  - erewrite find_label_in_component_1; try eassumption. reflexivity.
+  - congruence.*)
   - erewrite find_label_in_procedure_1; try eassumption. reflexivity.
 Qed.
 
@@ -1709,7 +1742,7 @@ Proof.
            | Heq : (_, _, _, _) = s1 |- _ => rewrite -Heq in Hprg_component
            end);
       try now rewrite Pointer.inc_preserves_component.
-    + erewrite <- find_label_in_component_1; eassumption.
+    (*+ erewrite <- find_label_in_component_1; eassumption.*)
     + now rewrite H2.
     + erewrite <- find_label_in_procedure_1; eassumption.
 Qed.
