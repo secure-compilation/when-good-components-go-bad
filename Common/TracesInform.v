@@ -59,6 +59,24 @@ Inductive match_event : event_inform -> event_inform -> Prop :=
     match_event (EInvalidateRA C)
                 (EInvalidateRA C).
 
+Lemma match_event_equal:
+  forall e e', match_event e e' -> e = e'.
+Proof. intros e e' Hmatch. inversion Hmatch; auto.
+Qed.
+
+Lemma equal_match_event:
+  forall e e', e = e' -> match_event e e'.
+Proof. intros e e' Heq. rewrite Heq. destruct e'.
+       - apply match_events_ECall.
+       - apply match_events_ERet.
+       - apply match_events_EConst.
+       - apply match_events_EMov.
+       - apply match_events_EBinop.
+       - apply match_events_ELoad.
+       - apply match_events_EStore.
+       - apply match_events_EAlloc.
+       - apply match_events_EInvalidateRA.
+Qed.
 
 Instance event_inform_EventClass : EventClass event_inform :=
   {
@@ -88,7 +106,9 @@ Instance event_inform_EventClass : EventClass event_inform :=
       | EAlloc  C _ _ => C
       | EInvalidateRA C => C
       end;
-    event_equal := match_event
+    event_equal := match_event;
+    event_equal_equal := match_event_equal;
+    equal_event_equal := equal_match_event
   }.
 
 Section Traces.

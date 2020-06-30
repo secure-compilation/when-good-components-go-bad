@@ -6,7 +6,9 @@ Require Import CompCert.Coqlib.
 Class EventClass (A : Type) :=
   { next_comp_of_event : A -> Component.id;
     cur_comp_of_event : A -> Component.id;
-    event_equal : A -> A -> Prop
+    event_equal : A -> A -> Prop;
+    event_equal_equal : forall e e', event_equal e e' -> e = e';
+    equal_event_equal : forall e e', e = e' -> event_equal e e'
   }.
 
 
@@ -17,8 +19,8 @@ Class EventClass (A : Type) :=
     2. Refine the definition of defined and undefined values at the type level.
 *)
 Inductive event :=
-| ECall : Component.id -> Procedure.id -> Z (* value *) -> Component.id -> event
-| ERet : Component.id -> Z (* value *) -> Component.id -> event
+| ECall : Component.id -> Procedure.id -> value -> Component.id -> event
+| ERet : Component.id -> value -> Component.id -> event
 | ERead : Component.id -> Pointer.t -> value -> event
 | EWrite : Component.id -> Pointer.t -> value -> event.
 
@@ -35,6 +37,22 @@ Inductive match_event : event -> event -> Prop :=
 | match_events_write: forall C ptr v,
     match_event (EWrite C ptr v)
                 (EWrite C ptr v).
+
+Lemma match_event_equal:
+  forall e e', match_event e e' -> e = e'.
+Proof.
+  intros e e' Hmatch. inversion Hmatch; auto.
+Qed.
+
+Lemma equal_match_event:
+  forall e e', e = e' -> match_event e e'.
+Proof.
+  intros e e' Heq. rewrite Heq. destruct e'.
+  - apply match_events_call.
+  - apply match_events_ret.
+  - apply match_events_read.
+  - apply match_events_write.
+Qed.
 
 Instance event_EventClass : EventClass event :=
   {
@@ -54,7 +72,9 @@ Instance event_EventClass : EventClass event :=
       | ERead  C _ _   => C
       | EWrite C _ _   => C
       end;
-    event_equal := match_event
+    event_equal := match_event;
+    event_equal_equal := match_event_equal;
+    equal_event_equal := equal_match_event
   }.
 
 Definition trace (A : Type) := list A.

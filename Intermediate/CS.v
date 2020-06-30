@@ -859,6 +859,115 @@ Ltac step_of_executing :=
     end
   end.
 
+Definition event_non_inform_of (e: trace event_inform) : trace event :=
+  match e with
+  | [ECall C P call_arg C'] => [CompCert.Events.ECall C P call_arg C']
+  | [ERet C v C'] => [CompCert.Events.ERet C v C']
+  | _ => E0
+  end.
+
+Lemma event_non_inform_of_nil_or_singleton:
+  forall e, event_non_inform_of e = E0 \/ exists e', event_non_inform_of e = [e'].
+Proof.
+  intros e. destruct e as [| e0 t] eqn:eq.
+  - left. auto.
+  - destruct e0; destruct t; try (right; eexists; simpl; eauto; reflexivity); left; auto.
+Qed.
+
+Inductive step_non_inform (G : global_env) : state -> trace event -> state -> Prop :=
+| Nop_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs',
+    executing G pc INop ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+| Label_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' l,
+    executing G pc (ILabel l) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+
+| Const_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' v r,
+    executing G pc (IConst v r) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+
+| Mov_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r1 r2,
+    executing G pc (IMov r1 r2) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+| BinOp_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' op r1 r2 r3,
+    executing G pc (IBinOp op r1 r2 r3) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+| Load_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r1 r2,
+    executing G pc (ILoad r1 r2) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+| Store_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r1 r2,
+    executing G pc (IStore r1 r2) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+| Jal_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' l,
+    executing G pc (IJal l) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+| Jump_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r,
+    executing G pc (IJump r) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+| Bnz_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r l,
+    executing G pc (IBnz r l) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+| Alloc_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r1 r2,
+    executing G pc (IAlloc r1 r2) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) E0
+                    (gps, mem', regs', pc', addrs')
+
+| Call_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' C P,
+    executing G pc (ICall C P) ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) (event_non_inform_of e)
+                    (gps, mem', regs', pc', addrs')
+
+| Return_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs',
+    executing G pc IReturn ->
+    step G (gps, mem, regs, pc, addrs) e
+         (gps, mem', regs', pc', addrs') ->
+    step_non_inform G (gps, mem, regs, pc, addrs) (event_non_inform_of e)
+                    (gps, mem', regs', pc', addrs').
+
 (* executable specification *)
 
 Import MonadNotations.
@@ -1374,7 +1483,7 @@ Section Semantics.
   Let G := prepare_global_env p.
 
   Definition sem :=
-    @Semantics_gen event_inform state global_env step (initial_state p) (final_state G) G.
+    @Semantics_gen event state global_env step_non_inform (initial_state p) (final_state G) G.
 
   Lemma determinate_step:
     forall s t1 s1 t2 s2,
@@ -1408,12 +1517,78 @@ Section Semantics.
     - apply match_events_ERet.
   Qed.
 
+  Lemma executing_deterministic:
+    forall pc i i',
+      executing G pc i -> executing G pc i' -> i = i'.
+  Proof.
+    unfold executing. intros pc i i'
+                             [C_procs [P_code [memCprocs [memPcode [offsetCond memi]]]]]
+                             [C_procs' [P_code' [memCprocs' [memPcode' [offsetCond' memi']]]]].
+    rewrite memCprocs in memCprocs'.
+    inversion memCprocs'.
+    subst C_procs.
+    rewrite memPcode in memPcode'.
+    inversion memPcode'.
+    subst P_code.
+    rewrite memi in memi'.
+    inversion memi'.
+    auto.
+  Qed.
+
+  Lemma determinate_step_non_inform:
+    forall s t1 s1 t2 s2,
+      step_non_inform G s t1 s1 ->
+      step_non_inform G s t2 s2 ->
+      equal_and_nil_or_singleton t1 t2 /\ (t1 = t2 -> s1 = s2).
+  Proof.
+    intros s t1 s21 t2 s2 Hstep1 Hstep2.
+    inversion Hstep1; subst; inversion Hstep2; subst;
+      match goal with
+        Hstep1': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e
+                      (?gps, ?mem', ?regs', ?pc', ?addrs'),
+                 Hstep2': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e0
+                               (?gps, ?mem'0, ?regs'0, ?pc'0, ?addrs'0) |- _ =>
+        destruct (determinate_step
+                    (gps, mem, regs, pc, addrs)
+                    e
+                    (gps, mem', regs', pc', addrs')
+                    e0
+                    (gps, mem'0, regs'0, pc'0, addrs'0)
+                    Hstep1'
+                    Hstep2')
+          as [eqee0 teqSeq] end;
+      split; try (intros; apply teqSeq; auto); try apply match_traces_E0;
+      destruct eqee0; auto;
+        try match goal with Hee': event_equal ?e ?e' |- _ =>
+                        pose proof (@event_equal_equal
+                                      event_inform
+                                      event_inform_EventClass e e' Hee') as ee'eq;
+                          rewrite ee'eq; reflexivity end;
+        try (simpl; apply match_traces_E0);
+    match goal with Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
+                    pose proof executing_deterministic pc i i' Hexec Hexec' as cntr;
+                      try discriminate end;
+    match goal with H1: event_equal ?e ?e' |- _ =>
+                    pose proof (@event_equal_equal
+                                  event_inform
+                                  event_inform_EventClass e e' H1) as ee'eq;
+                      rewrite ee'eq;
+                      pose proof
+                           event_non_inform_of_nil_or_singleton [e']
+                        as [Hnil | [e0' Hsingleton]];
+                      try (rewrite Hnil; constructor);
+                      try (rewrite Hsingleton; constructor;
+                           apply equal_event_equal; reflexivity)
+    end.
+  Qed.
+  
   Lemma singleton_traces:
     single_events sem.
   Proof.
     unfold single_events.
     intros s t s' Hstep.
-    inversion Hstep; simpl; auto.
+    inversion Hstep; simpl; auto;
+      match goal with | Hstep': step _ _ _ _ |- _ => inversion Hstep' end; auto.
   Qed.
 
   Lemma determinate_initial_states:
@@ -1448,14 +1623,23 @@ Section Semantics.
          end).
   Qed.
 
+  Lemma no_step_no_step_non_inform:
+    forall s, nostep step G s -> nostep step_non_inform G s.
+  Proof.
+    unfold nostep. intros s Hnostep t s' Hstep_non_inform. unfold_state s.
+    inversion Hstep_non_inform;
+    match goal with Hstep: step G ?st ?t ?st' |- _ => apply (Hnostep t st'); assumption end.
+  Qed.
+
   Lemma determinacy:
     determinate sem.
   Proof.
     constructor.
-    - apply determinate_step.
+    - apply determinate_step_non_inform.
     - apply singleton_traces.
     - apply determinate_initial_states.
-    - apply final_states_stuckness.
+    - intros s Hfinal. pose proof final_states_stuckness s Hfinal as nostep_step.
+      apply (no_step_no_step_non_inform s). assumption.
   Qed.
 
   Lemma program_behaves_inv:
