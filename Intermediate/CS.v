@@ -736,7 +736,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
        computable definition.
        NOTE: Even though cross-component pointer forging is possible at the
        program level, it is detected and stopped here. *)
-    Pointer.component ptr = Pointer.component pc -> (* Shared memory prohibition removed *)
+    (*Pointer.component ptr = Pointer.component pc ->*) (* Shared memory prohibition removed *)
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
     (* RB: TODO: [DynShare] Furnish computational definition. It may be preferable
@@ -754,7 +754,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
        computable definition.
        NOTE: Even though cross-component pointer forging is possible at the
        program level, it is detected and stopped here. *)
-    Pointer.component ptr = Pointer.component pc ->
+    (* Pointer.component ptr = Pointer.component pc -> *)
     (* RB: TODO: [DynShare] Uncomment refactoring below while fixing existing
        proofs. *)
     (* Register.get r2 regs = v -> *)
@@ -896,24 +896,24 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
     | ILoad r1 r2 =>
       match Register.get r1 regs with
       | Ptr ptr =>
-        if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
-          do v <- Memory.load mem ptr;
+        (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
+        do v <- Memory.load mem ptr;
           let regs' := Register.set r2 v regs in
           ret ([ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
                (gps, mem, regs', Pointer.inc pc, addrs))
-        else
-          None
+      (*else
+        None*)
       | _ => None
       end
     | IStore r1 r2 =>
       match Register.get r1 regs with
       | Ptr ptr =>
-        if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
-          do mem' <- Memory.store mem ptr (Register.get r2 regs);
-            ret ([EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
-                 (gps, mem', regs, Pointer.inc pc, addrs))
-        else
-          None
+        (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
+        do mem' <- Memory.store mem ptr (Register.get r2 regs);
+          ret ([EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
+               (gps, mem', regs, Pointer.inc pc, addrs))
+      (*else
+        None*)
       | _ => None
       end
     | IJal l =>
@@ -1018,23 +1018,25 @@ Proof.
     try reflexivity.
 
   - match goal with
-    | Hregs_update: Register.get _ _ = _,
-      Hsame_component: Pointer.component _ = Pointer.component _ |- _ =>
-      rewrite -> Hregs_update, Hsame_component, Nat.eqb_refl
+    | Hregs_update: Register.get _ _ = _ |- _ =>
+      rewrite -> Hregs_update
     end.
     unfold Memory.load in *.
-    destruct ptr as [[C' b'] o'].
-    rewrite H2. reflexivity.
+    match goal with
+    | Hperm: (if _ then _ else _) = Some _ |- _ => rewrite Hperm
+    end.
+    reflexivity.
 
   - match goal with
-    | Hregs_value: Register.get _ _ = _,
-      Hsame_component: Pointer.component _ = Pointer.component _ |- _ =>
-      rewrite -> Hregs_value, Hsame_component, Nat.eqb_refl
+    | Hregs_value: Register.get _ _ = _ |- _ =>
+      rewrite -> Hregs_value
     end.
     unfold Memory.store in *.
-    destruct ptr as [[C' b'] o'].
-    rewrite H2. reflexivity.
-
+    match goal with
+    | Hperm: (if _ then _ else _) = Some _ |- _ => rewrite Hperm
+    end.
+    reflexivity.
+    
   - match goal with
     | Hfind: find_label_in_component _ _ _ = _ |- _ =>
       rewrite Hfind
@@ -1146,9 +1148,6 @@ Proof.
            *** rewrite H in H2.
                destruct (Register.get r regs0) eqn:Hreg;
                  try discriminate.
-               destruct (Component.eqb (Pointer.component t0) (Pointer.component pc0))
-                        eqn:Hcomp;
-                 try discriminate.
                unfold Memory.load in *.
                destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm;
                  try discriminate.
@@ -1162,15 +1161,11 @@ Proof.
                  try reflexivity;
                  try (eexists; eexists; eauto).
                **** assumption.
-               **** apply Nat.eqb_eq. assumption.
                **** unfold Memory.load.
                     rewrite Hmem. rewrite Hperm. assumption.
 
            *** rewrite H in H2.
                destruct (Register.get r regs0) eqn:Hreg;
-                 try discriminate.
-               destruct (Component.eqb (Pointer.component t0) (Pointer.component pc0))
-                        eqn:Hcomp;
                  try discriminate.
                unfold Memory.store in *.
                destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm;
@@ -1186,7 +1181,6 @@ Proof.
                  try reflexivity;
                  try (eexists; eexists; eauto).
                **** assumption.
-               **** apply Nat.eqb_eq. assumption.
                **** unfold Memory.store.
                     rewrite Hmem. rewrite Hstore. rewrite Hperm. reflexivity.
 
@@ -1501,9 +1495,9 @@ try by move=> *; match goal with
            rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
 - move=> ???????????? IH.
   rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
-- move=> ??????????????? IH.
+- move=> ?????????????? IH.
   rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
-- move=> ????????????? IH.
+- move=> ???????????? IH.
   rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
 - move=> ???? pc pc' l ???? IH. rewrite eqxx.
   assert (Pointer.component pc = Pointer.component pc') as pceq.
