@@ -1680,24 +1680,6 @@ Section SemanticsNonInform.
   Definition sem_non_inform :=
     @Semantics_gen event state global_env step_non_inform (initial_state p) (final_state G) G.
 
-  Lemma executing_deterministic:
-    forall pc i i',
-      executing G pc i -> executing G pc i' -> i = i'.
-  Proof.
-    unfold executing. intros pc i i'
-                             [C_procs [P_code [memCprocs [memPcode [offsetCond memi]]]]]
-                             [C_procs' [P_code' [memCprocs' [memPcode' [offsetCond' memi']]]]].
-    rewrite memCprocs in memCprocs'.
-    inversion memCprocs'.
-    subst C_procs.
-    rewrite memPcode in memPcode'.
-    inversion memPcode'.
-    subst P_code.
-    rewrite memi in memi'.
-    inversion memi'.
-    auto.
-  Qed.
-
   Lemma determinate_step_non_inform:
     forall s t1 s1 t2 s2,
       step_non_inform G s t1 s1 ->
@@ -1730,7 +1712,7 @@ Section SemanticsNonInform.
                           rewrite ee'eq; reflexivity end;
         try (simpl; apply match_traces_E0);
     match goal with Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
-                    pose proof executing_deterministic pc i i' Hexec Hexec' as cntr;
+                    pose proof executing_deterministic G pc i i' Hexec Hexec' as cntr;
                       try discriminate end;
     match goal with H1: event_equal ?e ?e' |- _ =>
                     pose proof (@event_equal_equal
@@ -1836,7 +1818,7 @@ Proof.
                     exists e; split; try exact Hstep; inversion Hstep;
                       match goal with
                         Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
-                        pose proof executing_deterministic pc i i' Hexec Hexec' as cntr;
+                        pose proof executing_deterministic G pc i i' Hexec Hexec' as cntr;
                           try discriminate
                       end; auto
     end.
@@ -2090,6 +2072,36 @@ Proof.
   - erewrite find_label_in_procedure_1; try eassumption. reflexivity.
 Qed.
 
+Lemma silent_step_non_inform_preserves_component G s s' :
+  CS.step_non_inform G s E0 s' ->
+  Pointer.component (state_pc s) = Pointer.component (state_pc s').
+Proof.
+  intros Hstep_non_inform.
+  inversion Hstep_non_inform; subst; simpl;
+    match goal with Hstep: step _ _ _ _ |- _ =>
+                    inversion Hstep; auto;
+                      match goal with
+                        Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
+                        pose proof executing_deterministic G pc i i' Hexec Hexec' as cntr;
+                          try discriminate
+                      end; auto
+    end;
+    try now rewrite Pointer.inc_preserves_component.
+  - match goal with Hfind: find_label_in_component _ ?pc ?l0 = Some ?pc' |- _ =>
+                    exact (find_label_in_component_1 G pc pc' l0 Hfind)
+    end.
+  - match goal with Hfind: find_label_in_procedure _ ?pc ?l0 = Some ?pc' |- _ =>
+                    exact (find_label_in_procedure_1 G pc pc' l0 Hfind)
+    end.
+  - match goal with Hnoninf: _ = E0, He: [ECall _ _ _ _] = _ |- _ =>
+                    rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
+    end.
+  - match goal with Hnoninf: _ = E0, He: [ERet _ _ _] = _ |- _ =>
+                    rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
+    end.
+Qed.
+                                               
+
 Lemma silent_step_preserves_program_component : forall s1 s2 G ctx,
   CS.is_program_component s1 ctx ->
   CS.step G s1 E0 s2 ->
@@ -2097,6 +2109,16 @@ Lemma silent_step_preserves_program_component : forall s1 s2 G ctx,
 Proof.
   intros [[[[? ?] ?] pc1] ?] [[[[? ?] ?] pc2] ?] G ctx Hcomp1 Hstep12.
   pose proof CS.silent_step_preserves_component _ _ _ Hstep12 as Heq.
+  simplify_turn. now rewrite <- Heq.
+Qed.
+
+Lemma silent_step_non_inform_preserves_program_component : forall s1 s2 G ctx,
+  CS.is_program_component s1 ctx ->
+  CS.step_non_inform G s1 E0 s2 ->
+  CS.is_program_component s2 ctx.
+Proof.
+  intros [[[[? ?] ?] pc1] ?] [[[[? ?] ?] pc2] ?] G ctx Hcomp1 Hstep12.
+  pose proof CS.silent_step_non_inform_preserves_component _ _ _ Hstep12 as Heq.
   simplify_turn. now rewrite <- Heq.
 Qed.
 
@@ -2113,7 +2135,7 @@ Proof.
   - assumption.
   - subst; assert (t1 = E0) by now induction t1.
     assert (t2 = E0) by now induction t1. subst.
-    apply IHHstar; try assumption.
+    apply IHHstar; auto.
     clear H0 IHHstar Hstar.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in *.
     inversion H;
@@ -2124,6 +2146,50 @@ Proof.
     (*+ erewrite <- find_label_in_component_1; eassumption.*)
     + now rewrite H2.
     + erewrite <- find_label_in_procedure_1; eassumption.
+Qed.
+
+Lemma epsilon_star_non_inform_preserves_program_component p c s1 s2 :
+  CS.is_program_component s1 (prog_interface c) ->
+  Star (CS.sem_non_inform (program_link p c)) s1 E0 s2 ->
+  CS.is_program_component s2 (prog_interface c).
+Proof.
+  intros Hprg_component Hstar.
+  remember E0 as t.
+  induction Hstar.
+  - assumption.
+  - subst; assert (t1 = E0) by now induction t1.
+    assert (t2 = E0) by now induction t1. subst.
+    apply IHHstar; auto.
+    clear H0 IHHstar Hstar.
+    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in *.
+    inversion H;
+      try (match goal with
+           | Heq : (_, _, _, _) = s1 |- _ => rewrite -Heq in Hprg_component
+           end);
+      match goal with Hstep: step _ _ _ _ |- _ =>
+                      inversion Hstep; auto;
+                        match goal with
+                          Hexec: executing _ ?pc ?i, Hexec': executing _ ?pc ?i' |- _ =>
+                          pose proof executing_deterministic
+                               (globalenv (sem_non_inform (program_link p c)))
+                               pc i i' Hexec Hexec' as cntr;
+                            try discriminate
+                        end; auto
+      end;
+      try (rewrite Pointer.inc_preserves_component; assumption).
+    + match goal with Hfind: find_label_in_component ?G ?pc ?l0 = Some ?pc' |- _ =>
+                      rewrite <- (find_label_in_component_1 G pc pc' l0 Hfind)
+      end. assumption.
+    + match goal with Heq : _ pc' = _ pc |- _ => rewrite Heq; assumption end.
+    + match goal with Hfind: find_label_in_procedure ?G ?pc ?l0 = Some ?pc' |- _ =>
+                      rewrite <- (find_label_in_procedure_1 G pc pc' l0 Hfind)
+      end. assumption.
+    + match goal with Hnoninf: _ = E0, He: [ECall _ _ _ _] = _ |- _ =>
+                      rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
+      end.
+    + match goal with Hnoninf: _ = E0, He: [ERet _ _ _] = _ |- _ =>
+                      rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
+      end.
 Qed.
 
 (* RB: Could be phrased in terms of does_prefix. *)
@@ -2234,6 +2300,21 @@ Section ProgramLink.
       split; first (destruct Hmergeable_ifaces; now apply linking_well_formedness).
       repeat split; eauto. }
     move: H. simpl. rewrite domm_union. now apply /fsetUP.
+  Qed.
+
+  Lemma star_pc_domm_non_inform : forall {s st mem reg pc addrs t},
+    initial_state (program_link p c) s ->
+    Star (sem_non_inform (program_link p c)) s t (st, mem, reg, pc, addrs) ->
+    Pointer.component pc \in domm (prog_interface p) \/
+                             Pointer.component pc \in domm (prog_interface c).
+  Proof.
+    intros s st mem reg pc addrs t Hini Hstar.
+    SearchAbout sem_non_inform sem_inform.
+    SearchAbout program_link.
+    pose proof star_sem_inform_star_sem_non_inform
+         (program_link p c) s t (st, mem, reg, pc, addrs) Hstar
+      as [t_inform [Hstar_inform Hproj]].
+    exact (star_pc_domm Hini Hstar_inform).
   Qed.
 End ProgramLink.
 

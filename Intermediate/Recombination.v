@@ -132,9 +132,9 @@ Section Mergeable.
   Let prog   := program_link p  c.
   Let prog'  := program_link p  c'.
   Let prog'' := program_link p' c'.
-  Let sem   := CS.sem prog.
-  Let sem'  := CS.sem prog'.
-  Let sem'' := CS.sem prog''.
+  Let sem   := CS.sem_non_inform prog.
+  Let sem'  := CS.sem_non_inform prog'.
+  Let sem'' := CS.sem_non_inform prog''.
 
   (* This "extensional" reading of compatible states depends directly on the
      partial programs concerned (implicitly through the section mechanism) and
@@ -166,24 +166,24 @@ Section Mergeable.
      TODO: Remove automatic names, refactor symmetries. *)
   Lemma mergeable_states_ind' : forall P : CS.state -> CS.state -> Prop,
       (forall (s s'' : CS.state),
-          initial_state (CS.sem (program_link p c)) s ->
-          initial_state (CS.sem (program_link p' c')) s'' ->
+          initial_state (CS.sem_non_inform (program_link p c)) s ->
+          initial_state (CS.sem_non_inform (program_link p' c')) s'' ->
           P s s'') ->
       (forall (s1 s2 s'' : CS.state),
           mergeable_states s1 s'' ->
-          Step (CS.sem (program_link p c)) s1 E0 s2 ->
+          Step (CS.sem_non_inform (program_link p c)) s1 E0 s2 ->
           P s1 s'' ->
           P s2 s'') ->
       (forall (s s1'' s2'' : CS.state),
           mergeable_states s s1'' ->
-          Step (CS.sem (program_link p' c')) s1'' E0 s2'' ->
+          Step (CS.sem_non_inform (program_link p' c')) s1'' E0 s2'' ->
           P s s1'' ->
           P s s2'') ->
-      (forall (s1 s2 s1'' s2'' : CS.state) (t : trace event),
+      (forall (s1 s2 s1'' s2'' : CS.state) (t : trace CompCert.Events.event),
           t <> E0 ->
           mergeable_states s1 s1'' ->
-          Step (CS.sem (program_link p c)) s1 t s2 ->
-          Step (CS.sem (program_link p' c')) s1'' t s2'' ->
+          Step (CS.sem_non_inform (program_link p c)) s1 t s2 ->
+          Step (CS.sem_non_inform (program_link p' c')) s1'' t s2'' ->
           P s1 s1'' ->
           P s2 s2'') ->
       forall (s s'' : CS.state), mergeable_states s s'' -> P s s''.
@@ -210,7 +210,7 @@ Section Mergeable.
         { apply star_iff_starR in Hstar''.
           econstructor; try eassumption. now apply star_refl. }
         specialize (IHHstar'' Hini'' Hmergss2). eapply HindE0r; eauto.
-    - pose proof (CS.singleton_traces (program_link p c) _ _ _ Hstep23) as Hlen.
+    - pose proof (CS.singleton_traces_non_inform (program_link p c) _ _ _ Hstep23) as Hlen.
       assert (t2 = E0 \/ exists ev, t2 = [ev]) as [Ht2E0 | [ev Ht2ev]].
       { clear -Hlen.
         inversion Hlen.
@@ -232,7 +232,7 @@ Section Mergeable.
         * assert (E0 <> t1 ** [ev]) by now induction t1. contradiction.
         * subst.
           specialize (IHHstar'' Hini'' IHstar).
-          pose proof (CS.singleton_traces (program_link p' c') _ _ _ H8) as Hlen2.
+          pose proof (CS.singleton_traces_non_inform (program_link p' c') _ _ _ H8) as Hlen2.
           assert (t2 = E0 \/ exists ev, t2 = [ev]) as [ht2E0 | [ev' Ht2ev']].
           { clear -Hlen2.
             inversion Hlen2.
@@ -277,7 +277,8 @@ Section Mergeable.
     inversion Hmerg as [s0 s0'' t
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
                         Hini Hini'' Hstar Hstar''].
-    destruct (CS.star_pc_domm _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [H | H].
+    destruct (CS.star_pc_domm_non_inform
+                _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [H | H].
     - now rewrite H.
     - now rewrite H in Hcomp.
   Qed.
@@ -315,7 +316,8 @@ Section Mergeable.
     inversion Hmerg as [s0 s0'' t
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
                         Hini Hini'' Hstar Hstar''].
-    destruct (CS.star_pc_domm _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [H | H].
+    destruct (CS.star_pc_domm_non_inform
+                _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [H | H].
     - now rewrite H.
     - now rewrite H in Hcomp.
   Qed.
@@ -382,15 +384,38 @@ Section Mergeable.
       unfold CS.state_pc. unfold CS.initial_machine_state.
       destruct (prog_main (program_link p c)); destruct (prog_main (program_link p' c')); eauto.
     - (* Silent step on the left *)
-      now rewrite <- IH, (CS.silent_step_preserves_component _ _ _ Hstep).
+      now rewrite <- IH, (CS.silent_step_non_inform_preserves_component _ _ _ Hstep).
     - (* Silent step on the right *)
-      now rewrite -> IH, (CS.silent_step_preserves_component _ _ _ Hstep).
+      now rewrite -> IH, (CS.silent_step_non_inform_preserves_component _ _ _ Hstep).
     - (* Non-silent step *)
-      inversion Hstep; subst; try contradiction.
-      inversion Hstep''; subst; try contradiction.
-      + reflexivity.
-      + simpl in *.
-        inversion Hstep''; reflexivity.
+      inversion Hstep; subst; try contradiction;
+        inversion Hstep''; subst; try contradiction;
+          try match goal with HE0: E0 = ?x, Hx: ?x <> E0 |- _ =>
+                              rewrite <- HE0 in Hx; contradiction
+              end;
+          match goal with Hstp : CS.step _ _ ?e _,
+                                 Hstp' : CS.step _ _ ?e0 _ |- _ =>
+                          inversion Hstp;
+                            match goal with Hexec: executing ?G ?pc ?i,
+                                                   Hexec': executing ?G ?pc ?i' |- _ =>
+                                            pose proof
+                                                 executing_deterministic
+                                                 G pc i i' Hexec Hexec' as cntr;
+                                              try discriminate
+                            end;
+                            inversion Hstp';
+                            match goal with Hexec: executing ?G ?pc ?i,
+                                                   Hexec': executing ?G ?pc ?i' |- _ =>
+                                            pose proof
+                                                 executing_deterministic
+                                                 G pc i i' Hexec Hexec' as cntra;
+                                              try discriminate
+                            end
+          end;
+          inversion cntra; inversion cntr; subst; simpl in *;
+            match goal with Heveq:
+                              [_] = [_] |- _ => inversion Heveq; subst; reflexivity
+            end.
   Qed.
 
   Lemma mergeable_states_program_to_program s s'' :
@@ -435,7 +460,8 @@ Section Mergeable.
     inversion Hmerg as [s0 _ t
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
                         Hini _ Hstar _].
-    pose proof (CS.star_pc_domm _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar).
+    pose proof (CS.star_pc_domm_non_inform
+                  _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar).
     intros Hn; destruct H.
     assumption.
     rewrite H in Hn. inversion Hn.
@@ -453,7 +479,8 @@ Section Mergeable.
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
                         Hini _ Hstar _].
     CS.unfold_states.
-    pose proof (CS.star_pc_domm _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as Hpc.
+    pose proof (CS.star_pc_domm_non_inform
+                  _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as Hpc.
     destruct Hpc as [Hprg | Hctx].
     - now rewrite Hprg in Hpc_notin.
     - now assumption.

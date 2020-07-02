@@ -22,6 +22,24 @@ Definition executing G (pc : Pointer.t) (i : instr) : Prop :=
     (Pointer.offset pc >= 0) % Z /\
     nth_error P_code (Z.to_nat (Pointer.offset pc)) = Some i.
 
+Lemma executing_deterministic:
+  forall G pc i i',
+    executing G pc i -> executing G pc i' -> i = i'.
+Proof.
+  unfold executing. intros G pc i i'
+                           [C_procs [P_code [memCprocs [memPcode [offsetCond memi]]]]]
+                           [C_procs' [P_code' [memCprocs' [memPcode' [offsetCond' memi']]]]].
+  rewrite memCprocs in memCprocs'.
+  inversion memCprocs'.
+  subst C_procs.
+  rewrite memPcode in memPcode'.
+  inversion memPcode'.
+  subst P_code.
+  rewrite memi in memi'.
+  inversion memi'.
+  auto.
+Qed.
+
 Definition prepare_global_env (p: program) : global_env :=
   let '(_, procs, entrypoints) := prepare_procedures_initial_memory p in
   {| genv_interface := prog_interface p;
