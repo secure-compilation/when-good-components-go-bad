@@ -1471,7 +1471,8 @@ Proof.
   reflexivity.
 Qed.
 
-Section Semantics.
+
+Section SemanticsInform.
   Variable p: program.
 
   Hypothesis valid_program:
@@ -1482,8 +1483,8 @@ Section Semantics.
 
   Let G := prepare_global_env p.
 
-  Definition sem :=
-    @Semantics_gen event state global_env step_non_inform (initial_state p) (final_state G) G.
+  Definition sem_inform :=
+    @Semantics_gen event_inform state global_env step (initial_state p) (final_state G) G.
 
   Lemma determinate_step:
     forall s t1 s1 t2 s2,
@@ -1517,6 +1518,168 @@ Section Semantics.
     - apply match_events_ERet.
   Qed.
 
+  Lemma singleton_traces_inform:
+    single_events sem_inform.
+  Proof.
+    unfold single_events.
+    intros s t s' Hstep.
+    inversion Hstep; simpl; auto.
+  Qed.
+
+  Lemma determinate_initial_states:
+    forall s1 s2,
+      initial_state p s1 -> initial_state p s2 ->
+      s1 = s2.
+  Proof.
+    intros s1 s2 Hs1_init Hs2_init.
+    unfold initial_state in *. subst.
+    reflexivity.
+  Qed.
+
+  Lemma final_states_stuckness_inform:
+    forall s,
+      final_state G s ->
+      nostep step G s.
+  Proof.
+    intros s Hs_final.
+    unfold nostep.
+    unfold_states.
+    unfold final_state in Hs_final.
+    intros t s'. unfold not. intro Hstep.
+    inversion Hstep; subst;
+    try (match goal with
+         | Hexec1: executing ?G ?PC ?INSTR1,
+           Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
+           destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code [? Hinstr]]]]];
+           destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' [? Hinstr']]]]];
+           rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
+           rewrite HP_code in HP_code'; inversion HP_code'; subst;
+           rewrite Hinstr in Hinstr'; inversion Hinstr'
+         end).
+  Qed.
+
+  Lemma determinacy_inform:
+    determinate sem_inform.
+  Proof.
+    constructor.
+    - apply determinate_step.
+    - apply singleton_traces_inform.
+    - apply determinate_initial_states.
+    - apply final_states_stuckness_inform.
+  Qed.
+
+  Lemma program_behaves_inv_inform:
+    forall b,
+      program_behaves sem_inform b ->
+    exists s,
+      initial_state p s /\ state_behaves sem_inform s b.
+  Proof.
+    intros b [s b' Hini Hbeh | Hini]; subst.
+    - now exists s.
+    - simpl in Hini.
+      specialize (Hini (initial_machine_state p)).
+      unfold initial_state in Hini.
+      contradiction.
+  Qed.
+
+Import ssreflect eqtype.
+
+Definition stack_state_of (cs:CS.state) : stack_state :=
+  let '(gps, mem, regs, pc, addrs) := cs in
+  StackState (Pointer.component pc) (List.map Pointer.component gps).
+
+Lemma intermediate_well_bracketed_trace t cs cs' :
+  Star sem_inform cs t cs' ->
+  well_bracketed_trace (stack_state_of cs) t.
+Proof.
+elim: cs t cs' / => [|cs1 t1 cs2 t2 cs3 t Hstep _ IH ->] //=.
+case: cs1 t1 cs2 / Hstep IH => /=;
+try by move=> *; match goal with
+| [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+  rewrite Pointer.inc_preserves_component in H end.
+- move=> *; rewrite eqxx; rewrite andTb;
+  match goal with
+| [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+  rewrite Pointer.inc_preserves_component in H; assumption
+  end.
+- move=> *. rewrite eqxx. rewrite andTb.
+  match goal with
+| [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+  rewrite Pointer.inc_preserves_component in H; assumption
+  end.
+- move=> *. rewrite eqxx. rewrite andTb.
+  match goal with
+| [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+  rewrite Pointer.inc_preserves_component in H; assumption
+  end.
+- move=> *. rewrite eqxx. rewrite andTb.
+  match goal with
+| [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+  rewrite Pointer.inc_preserves_component in H; assumption
+  end.
+- move=> *. rewrite eqxx. rewrite andTb.
+  match goal with
+| [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+  rewrite Pointer.inc_preserves_component in H; assumption
+  end.
+- move=> *. rewrite eqxx. rewrite andTb.
+  match goal with H: find_label_in_component _ _ _ = _ |- _ =>
+                  apply find_label_in_component_1 in H; rewrite H
+  end.
+  assumption.
+- by move=> ????????? ->.
+- by move=> ???????????? /find_label_in_procedure_1 ->.
+- by move=> ????????????; rewrite eqxx Pointer.inc_preserves_component.
+- move=> ???????????????. rewrite !eqxx. rewrite andTb.
+  rewrite <- Pointer.inc_preserves_component. assumption.
+- move=> ???????????. rewrite !eqxx. rewrite !andTb. assumption.
+Qed.
+
+Canonical ssrnat.nat_eqType.
+
+Lemma intermediate_well_formed_events st t st' :
+  Star sem_inform st t st' ->
+  seq.all (well_formed_event (Intermediate.prog_interface p)) t.
+Proof.
+elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
+rewrite seq.all_cat IH andbT {Hstar}.
+case: st1 t1 st2 / Hstep => //=.
+- move=> ?????????? /eqP ->.
+  by move=> /imported_procedure_iff /= ->.
+- by move=> ???????? /eqP ->.
+Qed.
+
+Lemma intermediate_well_formed_trace : forall t cs cs',
+  Star sem_inform cs t cs' ->
+  CS.initial_state p cs ->
+  Intermediate.prog_main p ->
+  Intermediate.well_formed_program p ->
+  well_formed_trace (Intermediate.prog_interface p) t.
+Proof.
+  intros t cs cs' H H' H'' H'''.
+  unfold well_formed_trace. apply/andP; split; last by apply: intermediate_well_formed_events H.
+  apply intermediate_well_bracketed_trace in H.
+  suffices <- : stack_state_of cs = stack_state0 by [].
+  rewrite /initial_state /initial_machine_state in H'.
+  by rewrite H' H''.
+Qed.
+
+End SemanticsInform.
+
+Section SemanticsNonInform.
+  Variable p: program.
+
+  Hypothesis valid_program:
+    well_formed_program p.
+
+  Hypothesis complete_program:
+    closed_program p.
+
+  Let G := prepare_global_env p.
+
+  Definition sem_non_inform :=
+    @Semantics_gen event state global_env step_non_inform (initial_state p) (final_state G) G.
+
   Lemma executing_deterministic:
     forall pc i i',
       executing G pc i -> executing G pc i' -> i = i'.
@@ -1542,13 +1705,14 @@ Section Semantics.
       equal_and_nil_or_singleton t1 t2 /\ (t1 = t2 -> s1 = s2).
   Proof.
     intros s t1 s21 t2 s2 Hstep1 Hstep2.
-    inversion Hstep1; subst; inversion Hstep2; subst;
+    inversion Hstep1; subst; inversion Hstep2; subst;    
       match goal with
         Hstep1': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e
                       (?gps, ?mem', ?regs', ?pc', ?addrs'),
                  Hstep2': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e0
                                (?gps, ?mem'0, ?regs'0, ?pc'0, ?addrs'0) |- _ =>
         destruct (determinate_step
+                    p
                     (gps, mem, regs, pc, addrs)
                     e
                     (gps, mem', regs', pc', addrs')
@@ -1582,8 +1746,8 @@ Section Semantics.
     end.
   Qed.
   
-  Lemma singleton_traces:
-    single_events sem.
+  Lemma singleton_traces_non_inform:
+    single_events sem_non_inform.
   Proof.
     unfold single_events.
     intros s t s' Hstep.
@@ -1591,62 +1755,39 @@ Section Semantics.
       match goal with | Hstep': step _ _ _ _ |- _ => inversion Hstep' end; auto.
   Qed.
 
-  Lemma determinate_initial_states:
-    forall s1 s2,
-      initial_state p s1 -> initial_state p s2 ->
-      s1 = s2.
-  Proof.
-    intros s1 s2 Hs1_init Hs2_init.
-    unfold initial_state in *. subst.
-    reflexivity.
-  Qed.
-
-  Lemma final_states_stuckness:
-    forall s,
-      final_state G s ->
-      nostep step G s.
-  Proof.
-    intros s Hs_final.
-    unfold nostep.
-    unfold_states.
-    unfold final_state in Hs_final.
-    intros t s'. unfold not. intro Hstep.
-    inversion Hstep; subst;
-    try (match goal with
-         | Hexec1: executing ?G ?PC ?INSTR1,
-           Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
-           destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code [? Hinstr]]]]];
-           destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' [? Hinstr']]]]];
-           rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
-           rewrite HP_code in HP_code'; inversion HP_code'; subst;
-           rewrite Hinstr in Hinstr'; inversion Hinstr'
-         end).
-  Qed.
-
   Lemma no_step_no_step_non_inform:
     forall s, nostep step G s -> nostep step_non_inform G s.
   Proof.
     unfold nostep. intros s Hnostep t s' Hstep_non_inform. unfold_state s.
     inversion Hstep_non_inform;
-    match goal with Hstep: step G ?st ?t ?st' |- _ => apply (Hnostep t st'); assumption end.
+      match goal with Hstep: step G ?st ?t ?st' |- _ => apply (Hnostep t st'); assumption end.
+  Qed.
+  
+  Lemma final_states_stuckness_non_inform:
+    forall s,
+      final_state G s ->
+      nostep step_non_inform G s.
+  Proof.
+    intros s Hs_final.
+    pose proof final_states_stuckness_inform p s Hs_final as no_step.
+    pose proof no_step_no_step_non_inform s no_step as g. exact g.
   Qed.
 
-  Lemma determinacy:
-    determinate sem.
+  Lemma determinacy_non_inform:
+    determinate sem_non_inform.
   Proof.
     constructor.
     - apply determinate_step_non_inform.
-    - apply singleton_traces.
+    - apply singleton_traces_non_inform.
     - apply determinate_initial_states.
-    - intros s Hfinal. pose proof final_states_stuckness s Hfinal as nostep_step.
-      apply (no_step_no_step_non_inform s). assumption.
+    - apply final_states_stuckness_non_inform.
   Qed.
 
-  Lemma program_behaves_inv:
+  Lemma program_behaves_inv_non_inform:
     forall b,
-      program_behaves sem b ->
+      program_behaves sem_non_inform b ->
     exists s,
-      initial_state p s /\ state_behaves sem s b.
+      initial_state p s /\ state_behaves sem_non_inform s b.
   Proof.
     intros b [s b' Hini Hbeh | Hini]; subst.
     - now exists s.
@@ -1658,75 +1799,135 @@ Section Semantics.
 
 Import ssreflect eqtype.
 
-Definition stack_state_of (cs:CS.state) : stack_state :=
-  let '(gps, mem, regs, pc, addrs) := cs in
-  StackState (Pointer.component pc) (List.map Pointer.component gps).
+Fixpoint project_non_inform t_inform :=
+  match t_inform with
+  | [] => []
+  | e :: es =>
+    match e with
+    | ECall C P call_arg C' => (CompCert.Events.ECall C P call_arg C') :: project_non_inform es
+    | ERet C v C' => (CompCert.Events.ERet C v C') :: project_non_inform es
+    | _ => project_non_inform es
+    end
+  end.
 
-Lemma intermediate_well_bracketed_trace t cs cs' :
-  Star sem cs t cs' ->
-  well_bracketed_trace (stack_state_of cs) t.
+Lemma project_non_inform_append t1 t2:
+  project_non_inform (t1 ** t2) = project_non_inform t1 ** project_non_inform t2.
 Proof.
-elim: cs t cs' / => [|cs1 t1 cs2 t2 cs3 t Hstep _ IH ->] //=.
-case: cs1 t1 cs2 / Hstep IH => /=;
-try by move=> *; match goal with
-                 | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
-                   rewrite Pointer.inc_preserves_component in H end.
-- move=> *;
-           match goal with
-                 | [ IH : context[Pointer.component (Pointer.inc _)] |- _] =>
-           rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto end.
-- move=> ?????????? IH;
-           rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
-- move=> ???????????? IH.
-  rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
-- move=> ?????????????? IH.
-  rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
-- move=> ???????????? IH.
-  rewrite Pointer.inc_preserves_component in IH; rewrite eqxx; rewrite IH; auto.
-- move=> ???? pc pc' l ???? IH. rewrite eqxx.
-  assert (Pointer.component pc = Pointer.component pc') as pceq.
-  {
-    apply find_label_in_component_1 with (G := G) (l := l). assumption.
-  }
-  rewrite pceq. auto.
-- move=> ????????? pceq ?. rewrite <- pceq. auto.
-- by move=> ???????????? /find_label_in_procedure_1 ->.
-- by move=> ????????????; rewrite eqxx Pointer.inc_preserves_component.
-- move=> ?????????????? IH; rewrite !eqxx.
-  rewrite Pointer.inc_preserves_component in IH. auto.
-- move=> ???????????. rewrite !eqxx. auto.
+  induction t1, t2.
+  - auto.
+  - auto.
+  - simpl.
+    match goal with IH: project_non_inform (t1 ** []) = _ |- _ => rewrite IH end.
+    simpl. rewrite !E0_right. reflexivity.
+  - simpl (project_non_inform (?a :: t1)).
+    destruct a;
+             simpl (project_non_inform ((_ :: t1) ** ?e :: t2));
+             match goal with IH: project_non_inform (t1 ** _) = _ |- _ => rewrite IH end;
+             reflexivity.
+Qed.
+
+Lemma step_non_inform_step_inform cs t cs':
+  step_non_inform G cs t cs' ->
+  exists t_inform, step G cs t_inform cs' /\ project_non_inform t_inform = t.
+Proof.
+  intros Hstep_noninform.
+  inversion Hstep_noninform;
+    match goal with Hstep : step _ _ ?e _ |- _ =>
+                    exists e; split; try exact Hstep; inversion Hstep;
+                      match goal with
+                        Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
+                        pose proof executing_deterministic pc i i' Hexec Hexec' as cntr;
+                          try discriminate
+                      end; auto
+    end.
+Qed.
+  
+Lemma star_sem_inform_star_sem_non_inform cs t cs' :
+  Star sem_non_inform cs t cs' ->
+  exists t_inform, Star (sem_inform p) cs t_inform cs' /\ project_non_inform t_inform = t.
+Proof.
+  intros Hstar. induction Hstar. exists E0. split. constructor. auto.
+  match goal with Hstep: Step _ ?s1 ?t1 ?s2 |- _ =>
+                  pose proof step_non_inform_step_inform s1 t1 s2 Hstep as Hexists;
+                    destruct Hexists as [t1_inform [Hstep_t1_inform Hproj_t1_inform]]
+  end.
+  match goal with IH: exists _, _ |- _ =>
+                             destruct IH as [t2_inform [Hstar_t2_inform Hproj_t2_inform]]
+  end.
+  exists (t1_inform ** t2_inform). split.
+  apply star_trans with (t1 := t1_inform) (s2 := s2) (t2 := t2_inform); auto.
+  - apply star_one. auto.
+  - rewrite project_non_inform_append. rewrite Hproj_t1_inform Hproj_t2_inform. auto.
+Qed.
+
+Definition stack_state_of_non_inform (cs:CS.state) : Traces.stack_state :=
+  let '(gps, mem, regs, pc, addrs) := cs in
+  Traces.StackState (Pointer.component pc) (List.map Pointer.component gps).
+
+
+Lemma well_bracketed_inform_well_bracketed_project_non_inform
+      s t_inform t_non_inform:
+  TracesInform.well_bracketed_trace (stack_state_of s) t_inform ->
+  project_non_inform t_inform = t_non_inform ->
+  Traces.well_bracketed_trace (stack_state_of_non_inform s) t_non_inform.
+Admitted.
+
+Lemma intermediate_well_bracketed_trace_non_inform t cs cs' :
+  Star sem_non_inform cs t cs' ->
+  Traces.well_bracketed_trace (stack_state_of_non_inform cs) t.
+Proof.
+  intros Hstar.
+  pose proof star_sem_inform_star_sem_non_inform cs t cs' Hstar
+    as [t_inform [Hstar_inform Hproj]].
+  pose proof intermediate_well_bracketed_trace p t_inform cs cs' Hstar_inform
+    as Hwbrack_inform.
+  exact (well_bracketed_inform_well_bracketed_project_non_inform
+           cs t_inform t Hwbrack_inform Hproj).
 Qed.
 
 Canonical ssrnat.nat_eqType.
 
-Lemma intermediate_well_formed_events st t st' :
-  Star sem st t st' ->
-  seq.all (well_formed_event (Intermediate.prog_interface p)) t.
+Lemma well_formed_event_inform_well_formed_event_project_non_inform t_inform t_non_inform:
+  seq.all (TracesInform.well_formed_event (Intermediate.prog_interface p)) t_inform ->
+  project_non_inform t_inform = t_non_inform ->
+  seq.all (Traces.well_formed_event (Intermediate.prog_interface p)) t_non_inform.
+Admitted.
+
+Lemma intermediate_well_formed_events_non_inform st t st' :
+  Star sem_non_inform st t st' ->
+  seq.all (Traces.well_formed_event (Intermediate.prog_interface p)) t.
 Proof.
-elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
-rewrite seq.all_cat IH andbT {Hstar}.
-case: st1 t1 st2 / Hstep => //=.
-- move=> ?????????? /eqP ->.
-  by move=> /imported_procedure_iff /= ->.
-- by move=> ???????? /eqP ->.
+  intros Hstar.
+  pose proof star_sem_inform_star_sem_non_inform st t st' Hstar
+    as [t_inform [Hstar_inform Hproj]].
+  pose proof intermediate_well_formed_events p st t_inform st' Hstar_inform as Hwf_inform.
+  exact (well_formed_event_inform_well_formed_event_project_non_inform
+           t_inform t Hwf_inform Hproj).
 Qed.
 
-Lemma intermediate_well_formed_trace : forall t cs cs',
-  Star sem cs t cs' ->
+Lemma well_formed_trace_inform_well_formed_trace_project_non_inform t_inform t_non_inform:
+  TracesInform.well_formed_trace (Intermediate.prog_interface p) t_inform ->
+  project_non_inform t_inform = t_non_inform ->
+  Traces.well_formed_trace (Intermediate.prog_interface p) t_non_inform.
+Admitted.
+
+Lemma intermediate_well_formed_trace_non_inform : forall t cs cs',
+  Star sem_non_inform cs t cs' ->
   CS.initial_state p cs ->
   Intermediate.prog_main p ->
   Intermediate.well_formed_program p ->
-  well_formed_trace (Intermediate.prog_interface p) t.
+  Traces.well_formed_trace (Intermediate.prog_interface p) t.
 Proof.
   intros t cs cs' H H' H'' H'''.
-  unfold well_formed_trace. apply/andP; split; last by apply: intermediate_well_formed_events H.
-  apply intermediate_well_bracketed_trace in H.
-  suffices <- : stack_state_of cs = stack_state0 by [].
-  rewrite /initial_state /initial_machine_state in H'.
-  by rewrite H' H''.
+  pose proof star_sem_inform_star_sem_non_inform cs t cs' H
+    as [t_inform [Hstar_inform Hproj]].
+  pose proof intermediate_well_formed_trace p t_inform cs cs' Hstar_inform H' H'' H'''
+    as Hwf_trace_inform.
+  exact (well_formed_trace_inform_well_formed_trace_project_non_inform
+           t_inform t Hwf_trace_inform Hproj).
 Qed.
 
-End Semantics.
+End SemanticsNonInform.
 
 (* RB: TODO: Use SSR imports consistently (we use SSR exclusively for the next
    lemma). *)
@@ -1774,7 +1975,7 @@ Definition comes_from_initial_state (s: state) (iface : Program.interface) : Pro
     prog_main p /\
     prog_interface p = iface /\
     initial_state p s0 /\
-    Star (sem p) s0 t s.
+    Star (sem_inform p) s0 t s.
 
 Remark comes_from_initial_state_mem_domm s ctx :
   comes_from_initial_state s ctx ->
@@ -1903,7 +2104,7 @@ Qed.
    silent_step_preserves_program_component, posed below. *)
 Lemma epsilon_star_preserves_program_component p c s1 s2 :
   CS.is_program_component s1 (prog_interface c) ->
-  Star (CS.sem (program_link p c)) s1 E0 s2 ->
+  Star (CS.sem_inform (program_link p c)) s1 E0 s2 ->
   CS.is_program_component s2 (prog_interface c).
 Proof.
   intros Hprg_component Hstar.
@@ -1927,11 +2128,11 @@ Qed.
 
 (* RB: Could be phrased in terms of does_prefix. *)
 Theorem behavior_prefix_star {p b m} :
-  program_behaves (CS.sem p) b ->
+  program_behaves (CS.sem_inform p) b ->
   prefix m b ->
 exists s1 s2,
   CS.initial_state p s1 /\
-  Star (CS.sem p) s1 (finpref_trace m) s2.
+  Star (CS.sem_inform p) s1 (finpref_trace m) s2.
 Proof.
   destruct m as [tm | tm | tm].
   - intros Hb Hm.
@@ -1974,7 +2175,7 @@ Proof.
              simpl in Heq;
              try discriminate.
            inversion Heq; subst t'; clear Heq.
-           destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
+           destruct (star_app_inv (CS.singleton_traces_inform p) _ _ Hstar')
              as [s' [Hstar'1 Hstar'2]].
            now eauto.
         -- (* Same as Terminates case. *)
@@ -1982,7 +2183,7 @@ Proof.
             simpl in Heq;
             try discriminate.
           inversion Heq; subst t'; clear Heq.
-          destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
+          destruct (star_app_inv (CS.singleton_traces_inform p) _ _ Hstar')
             as [s' [Hstar'1 Hstar'2]].
           now eauto.
         -- (* Similar to Terminates and Diverges, but on an infinite trace.
@@ -1991,7 +2192,7 @@ Proof.
             simpl in Heq;
             try discriminate.
           inversion Heq; subst T'; clear Heq.
-          destruct (forever_reactive_app_inv (CS.singleton_traces p) _ _ Hreact')
+          destruct (forever_reactive_app_inv (CS.singleton_traces_inform p) _ _ Hreact')
             as [s' [Hstar'1 Hreact'2]].
           now eauto.
         -- (* Same as Terminate and Diverges. *)
@@ -1999,7 +2200,7 @@ Proof.
             simpl in Heq;
             try discriminate.
           inversion Heq; subst t'; clear Heq.
-          destruct (star_app_inv (CS.singleton_traces p) _ _ Hstar')
+          destruct (star_app_inv (CS.singleton_traces_inform p) _ _ Hstar')
             as [s' [Hstar'1 Hstar'2]].
           now eauto.
       * specialize (Hini' (CS.initial_machine_state p)).
@@ -2020,7 +2221,7 @@ Section ProgramLink.
      Possibly rewrite in terms of state_pc. *)
   Lemma star_pc_domm : forall {s st mem reg pc addrs t},
     initial_state (program_link p c) s ->
-    Star (sem (program_link p c)) s t (st, mem, reg, pc, addrs) ->
+    Star (sem_inform (program_link p c)) s t (st, mem, reg, pc, addrs) ->
     Pointer.component pc \in domm (prog_interface p) \/
     Pointer.component pc \in domm (prog_interface c).
   Proof.
@@ -2050,14 +2251,14 @@ SearchAbout getm.
 Lemma genv_procedures_prog_procedures_in p cid fid instlst :
   well_formed_program p ->
   (omap (fun m => getm m fid)
-        ((genv_procedures (globalenv (sem p))) cid) = Some (Some instlst)
+        ((genv_procedures (globalenv (sem_inform p))) cid) = Some (Some instlst)
    <->
    omap (fun m => getm m fid) ((prog_procedures p) cid) = Some (Some instlst)).
 Proof.
   intros Hwfp.
   pose (domm_domm := wfprog_defined_procedures Hwfp).
   pose (domm_domm1 := domm_prepare_procedures_initial_memory_aux p).
-  unfold sem. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
+  unfold sem_inform. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
   destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
     simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e1 in e;
       unfold isSome in e1;
@@ -2086,12 +2287,12 @@ Proof.
 Admitted.
 Lemma genv_procedures_prog_procedures p cid proc :
   well_formed_program p ->
-  (genv_procedures (globalenv (sem p))) cid = proc <-> (prog_procedures p) cid = proc.
+  (genv_procedures (globalenv (sem_inform p))) cid = proc <-> (prog_procedures p) cid = proc.
 Proof.
   intros Hwfp.
   pose (domm_domm := wfprog_defined_procedures Hwfp).
   pose (domm_domm1 := domm_prepare_procedures_initial_memory_aux p).
-  unfold sem. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
+  unfold sem_inform. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
   destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
     simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e in e1;
       unfold isSome in e1; destruct ((prog_procedures p) cid) eqn:contra; auto;
@@ -2125,7 +2326,7 @@ Proof.
 Admitted.
 
 Lemma are_all_ptrs_in_reachable_star_step p st t st' :
-  Star (sem p) st t st' ->
+  Star (sem_inform p) st t st' ->
   well_formed_program p ->
   are_all_ptrs_in_reachable st p ->
   are_all_ptrs_in_reachable st' p.
