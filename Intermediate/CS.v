@@ -968,6 +968,32 @@ Inductive step_non_inform (G : global_env) : state -> trace event -> state -> Pr
     step_non_inform G (gps, mem, regs, pc, addrs) (event_non_inform_of e)
                     (gps, mem', regs', pc', addrs').
 
+Ltac step_of_executing_non_inform :=
+  match goal with
+  | H : executing _ _ ?INSTR |- _ =>
+    match INSTR with
+    | INop           => eapply Nop_non_inform; eapply Nop
+    | ILabel _       => eapply Label_non_inform; eapply Label
+    | IConst _ _     => eapply Const_non_inform; eapply Const
+    | IMov _ _       => eapply Mov_non_inform; eapply Mov
+    | IBinOp _ _ _ _ => eapply BinOp_non_inform; eapply BinOp
+    | ILoad _ _      => eapply Load_non_inform; eapply Load
+    | IStore _ _     => eapply Store_non_inform; eapply Store
+    | IAlloc _ _     => eapply Alloc_non_inform; eapply Alloc
+    | IBnz _ _       =>
+      match goal with
+      | H : Register.get _ _ = Int 0 |- _ => eapply Bnz_non_inform; eapply BnzZ
+      | _                                 => eapply Bnz_non_inform; eapply BnzNZ
+      end
+    | IJump _        => eapply Jump_non_inform; eapply Jump
+    | IJal _         => eapply Jal_non_inform; eapply Jal
+    | ICall _ _      => eapply Call_non_inform; eapply Call
+    | IReturn        => eapply Return_non_inform; eapply Return
+    | IHalt          => fail
+    end
+  end.
+
+
 (* executable specification *)
 
 Import MonadNotations.
