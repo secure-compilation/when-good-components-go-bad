@@ -122,7 +122,7 @@ Definition gen_sublist {A : Type} ( default : A ) ( all : list A ) : G (list A) 
   | [] => returnGen []
   | _ =>
     do! n <- (choose (1%nat,(List.length all)));
-      (vectorOf n (elements default all))
+      (vectorOf n (elems_ default all))
   end.
 
 Definition get_freq (wf : instr_weight) (i:instr_type) : nat :=
@@ -164,13 +164,13 @@ Definition gen_value
                   | nil => (do! i <- arbitrary; returnGen (Int i))
                   | p::xs =>
                     let (cid,blocks) := p in
-                    do! p' <- elements p xs;
+                    do! p' <- elems_ p xs;
                       let (cid',blocks') := p' in
                       (match blocks' with
                        | nil => (do! i <- arbitrary; returnGen (Int i))
                        | b::xs' =>
                          let (bid,s) := b in
-                         do! b' <- elements (bid,s) xs';
+                         do! b' <- elems_ (bid,s) xs';
                            let (bid',s') := b' in
                            do! off <- choose (0%nat, (s'-1)%nat);
                              returnGen (Ptr (N.to_nat cid'
@@ -228,7 +228,7 @@ Definition genPointer (cid : N)
     match lst with 
     | nil => returnGen None
     | b::xs =>
-      do! b' <- elements b xs;
+      do! b' <- elems_ b xs;
         let '(bid,bs) := b in
         let nat_bid := N.to_nat bid in
         match bs with
@@ -272,7 +272,7 @@ Definition genPtrImVal
     backtrack [
         ( 4%nat, (genPointer cid buffers) )
         ; ( 1%nat,
-            (do! id <- (elements (1%N) (List.map fst (BinNatMap.elements pi)));
+            (do! id <- (elems_ (1%N) (List.map fst (BinNatMap.elements pi)));
                (genPointer id buffers)))
       ].
 
@@ -397,7 +397,7 @@ Definition genICall
     match imports with
     | nil => returnGen [INop] (* no imports; can't generate ICall *)
     | (cid1,pid1)::xs =>
-      do! p <- elements (cid1,pid1) imports;
+      do! p <- elems_ (cid1,pid1) imports;
         do! v <- arbitrary;
         let (cid',pid') := p in
         let call_instr := ICall (N.to_nat cid') (N.to_nat pid') in
@@ -795,7 +795,7 @@ Fixpoint gen_ids size cids : G (list N) :=
   | O => returnGen ((N.of_nat Component.main)::nil)
   | S n =>
     do! prev <- gen_ids n cids;
-      do! cid <- elements (N.of_nat Component.main) cids;
+      do! cid <- elems_ (N.of_nat Component.main) cids;
       returnGen (cid::prev)
   end.
 
