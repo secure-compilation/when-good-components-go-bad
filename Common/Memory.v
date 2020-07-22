@@ -38,6 +38,7 @@ Module Type AbstractComponentMemory.
   Parameter load_block : t -> Block.id -> list (Component.id * Block.id).
   Parameter next_block : t -> Block.id.
   Parameter max_ptr : t -> Component.id * Block.id.
+  Parameter transfer_memory_block : t -> Block.id -> t -> Block.id -> t.
 
   Axiom load_prealloc:
     forall bufs b i,
@@ -63,6 +64,11 @@ Module Type AbstractComponentMemory.
     forall b' i',
       load m' b' i' =
       if (b', i') == (b, i) then Some v else load m b' i'.
+
+  Axiom load_after_transfer_memory_block:
+    forall m b m' b' mres i,
+      mres = transfer_memory_block m b m' b' ->
+      load m b i = load mres b' i.
 
   Axiom store_after_load:
     forall m b i v v',
@@ -317,6 +323,18 @@ Module ComponentMemory : AbstractComponentMemory.
       + discriminate.
   Qed.
 
+  Definition transfer_memory_block (src: t) (src_b: Block.id) (dst: t) (dst_b: Block.id) : t :=
+    match getm (content src) src_b with
+    | Some chunk =>
+      {| content := setm (content dst) dst_b chunk;
+         nextblock := nextblock dst (* What is the right value of nextblock? *)
+      |}
+    | None =>
+      {| content := remm (content dst) dst_b;
+         nextblock := nextblock dst (* What is the right value of nextblock? *)
+      |}
+    end.
+
   Lemma load_domm :
     forall m b i v,
       load m b i = Some v ->
@@ -394,6 +412,17 @@ Module ComponentMemory : AbstractComponentMemory.
       contradict i'_ne_i; symmetry; exact: Z2Nat.inj i'_ne_i.
   Qed.
 
+  Lemma load_after_transfer_memory_block:
+    forall m b m' b' mres i,
+      mres = transfer_memory_block m b m' b' ->
+      load m b i = load mres b' i.
+  Proof.
+    move=> m b m' b' mres i Hres. rewrite Hres /transfer_memory_block /setmE /load.
+    case m_b: (content m b)=> [chunk|] //.
+    - now rewrite setmE eq_refl.
+    - now rewrite remmE eq_refl.
+  Qed.
+      
   Lemma store_after_load:
     forall m b i v v',
       load m b i = Some v ->
@@ -579,6 +608,48 @@ Unset Printing Implicit Defensive.
 
 Definition to_partial_memory (mem : Memory.t) (ctx : {fset Component.id}) :=
   filterm (fun k _ => negb (k \in ctx)) mem.
+
+Definition transfer_memory_block (src: Memory.t) (src_addr: Component.id * Block.id)
+           (dst: Memory.t) (dst_addr: Component.id * Block.id) : Memory.t :=
+  match src (src_addr.1), dst (dst_addr.1) with
+  | Some src_cmem, Some dst_cmem =>
+    let res_cmem :=
+        ComponentMemory.transfer_memory_block src_cmem src_addr.2 dst_cmem dst_addr.2 in
+    (setm dst (dst_addr.1) res_cmem)
+  | _, _ => dst
+  end.
+
+Lemma transfer_memory_block_preserves_domm src srca dst dsta a:
+  a \in domm dst -> a \in domm (transfer_memory_block src srca dst dsta).
+Proof.
+  move=> Ha. rewrite /transfer_memory_block.
+  destruct (src srca.1) as [srcC|]; auto.
+  destruct (dst dsta.1) as [dstC|] eqn:ed; rewrite ed; auto.
+  rewrite domm_set in_fsetU1 Ha orbT. auto.
+Qed.
+
+Lemma load_after_transfer_memory_block src src_addr dst dst_addr i:
+  src_addr.1 \in domm src ->
+  dst_addr.1 \in domm dst ->
+                 Memory.load src (Permission.data, src_addr.1, src_addr.2, i) =
+                 Memory.load (transfer_memory_block src src_addr dst dst_addr)
+                             (Permission.data, dst_addr.1, dst_addr.2, i).
+Proof.
+  move=> Hs_in Hd_in.
+  pose proof (transfer_memory_block_preserves_domm src src_addr dst_addr Hd_in) as Htr_in.
+  rewrite /Memory.load. simpl.
+  unfold transfer_memory_block in *.
+  destruct (src src_addr.1) as [srcC|] eqn:es; rewrite es; rewrite es in Htr_in.
+  - destruct (dst dst_addr.1) as [dstC|] eqn:ed; rewrite ed; rewrite ed mem_domm in Htr_in.
+    + destruct ((setm dst dst_addr.1
+                     (ComponentMemory.transfer_memory_block srcC src_addr.2 dstC dst_addr.2))
+                  dst_addr.1) as [memC|] eqn:et; rewrite et in Htr_in; rewrite et.
+      * rewrite setmE eq_refl in et. inversion et.
+        now apply ComponentMemory.load_after_transfer_memory_block with (m' := dstC).
+      * simpl in Htr_in. easy.
+    + rewrite ed in Htr_in. easy.
+  - rewrite mem_domm es in Hs_in. easy.
+Qed.
 
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
   unionm mem1 mem2.
