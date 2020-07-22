@@ -954,19 +954,19 @@ Inductive step_non_inform (G : global_env) : state -> trace event -> state -> Pr
     step_non_inform G (gps, mem, regs, pc, addrs) E0
                     (gps, mem', regs', pc', addrs')
 
-| Call_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' C P,
+| Call_non_inform: forall gps gps' mem mem' regs regs' e pc pc' addrs addrs' C P,
     executing G pc (ICall C P) ->
     step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
+         (gps', mem', regs', pc', addrs') ->
     step_non_inform G (gps, mem, regs, pc, addrs) (event_non_inform_of e)
-                    (gps, mem', regs', pc', addrs')
+                    (gps', mem', regs', pc', addrs')
 
-| Return_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs',
+| Return_non_inform: forall gps gps' mem mem' regs regs' e pc pc' addrs addrs',
     executing G pc IReturn ->
     step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
+         (gps', mem', regs', pc', addrs') ->
     step_non_inform G (gps, mem, regs, pc, addrs) (event_non_inform_of e)
-                    (gps, mem', regs', pc', addrs').
+                    (gps', mem', regs', pc', addrs').
 
 Ltac step_of_executing_non_inform :=
   match goal with
@@ -1716,16 +1716,16 @@ Section SemanticsNonInform.
     inversion Hstep1; subst; inversion Hstep2; subst;    
       match goal with
         Hstep1': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e
-                      (?gps, ?mem', ?regs', ?pc', ?addrs'),
+                      (?gps', ?mem', ?regs', ?pc', ?addrs'),
                  Hstep2': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e0
-                               (?gps, ?mem'0, ?regs'0, ?pc'0, ?addrs'0) |- _ =>
+                               (?gps'0, ?mem'0, ?regs'0, ?pc'0, ?addrs'0) |- _ =>
         destruct (determinate_step
                     p
                     (gps, mem, regs, pc, addrs)
                     e
-                    (gps, mem', regs', pc', addrs')
+                    (gps', mem', regs', pc', addrs')
                     e0
-                    (gps, mem'0, regs'0, pc'0, addrs'0)
+                    (gps'0, mem'0, regs'0, pc'0, addrs'0)
                     Hstep1'
                     Hstep2')
           as [eqee0 teqSeq] end;
@@ -1849,8 +1849,79 @@ Proof.
                       end; auto
     end.
 Qed.
-  
-Lemma star_sem_inform_star_sem_non_inform cs t cs' :
+
+Lemma step_inform_step_non_inform cs t_inform cs':
+  step G cs t_inform cs' ->
+  step_non_inform G cs (project_non_inform t_inform) cs'.
+Proof.
+  intros Hstep_inform. remember Hstep_inform. inversion Hstep_inform.
+  - eapply Nop_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Label_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Const_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Mov_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply BinOp_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Load_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Store_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Jal_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Jump_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Bnz_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Bnz_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - eapply Alloc_non_inform; eauto.
+    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
+    exact Hstep_inform.
+  - simpl.
+    assert (step_non_inform G (gps, mem, regs, pc, addrs)
+                            (event_non_inform_of
+                               [ECall (Pointer.component pc) P call_arg C'])
+                            (Pointer.inc pc :: gps, mem,
+                             Register.invalidate regs,
+                             (Permission.code, C', b, 0%Z), addrs)
+           ) as gl.
+    {
+      eapply Call_non_inform; eauto.
+      match goal with Hcs: _ = cs, Hcs': _ = cs', Ht: _ = t_inform |- _ =>
+                      rewrite Hcs Hcs' Ht end.
+      exact Hstep_inform.
+    }
+    exact gl.
+  - simpl. 
+    assert (step_non_inform G (pc' :: gps', mem, regs, pc, addrs)
+                            (event_non_inform_of
+                               [ERet (Pointer.component pc) ret_arg (Pointer.component pc')])
+                            (gps', mem, Register.invalidate regs, pc', addrs)
+           ) as gl.
+    {
+      eapply Return_non_inform; eauto.
+      match goal with Hcs: _ = cs, Hcs': _ = cs', Ht: _ = t_inform |- _ =>
+                      rewrite Hcs Hcs' Ht end.
+      exact Hstep_inform.
+    }
+    exact gl.
+Qed.
+
+Lemma star_sem_non_inform_star_sem_inform cs t cs' :
   Star sem_non_inform cs t cs' ->
   exists t_inform, Star (sem_inform p) cs t_inform cs' /\ project_non_inform t_inform = t.
 Proof.
@@ -1866,6 +1937,22 @@ Proof.
   apply star_trans with (t1 := t1_inform) (s2 := s2) (t2 := t2_inform); auto.
   - apply star_one. auto.
   - rewrite project_non_inform_append. rewrite Hproj_t1_inform Hproj_t2_inform. auto.
+Qed.
+
+Lemma star_sem_inform_star_sem_non_inform cs t_inform cs' :
+  Star (sem_inform p) cs t_inform cs' ->
+  Star sem_non_inform cs (project_non_inform t_inform) cs'.
+Proof.
+  intros Hstar. induction Hstar.
+  - simpl. constructor.
+  - match goal with Hstep: Step _ ?s1 ?t1 ?s2 |- _ =>
+                    pose proof step_inform_step_non_inform s1 t1 s2 Hstep as Hstep_non_inform
+    end.
+    subst.
+    rewrite project_non_inform_append.
+    apply star_trans with (t1 := project_non_inform t1) (t2 := project_non_inform t2)
+                          (s2 := s2); auto.
+    apply star_one. auto.
 Qed.
 
 Definition stack_state_of_non_inform (cs:CS.state) : Traces.stack_state :=
@@ -1885,7 +1972,7 @@ Lemma intermediate_well_bracketed_trace_non_inform t cs cs' :
   Traces.well_bracketed_trace (stack_state_of_non_inform cs) t.
 Proof.
   intros Hstar.
-  pose proof star_sem_inform_star_sem_non_inform cs t cs' Hstar
+  pose proof star_sem_non_inform_star_sem_inform cs t cs' Hstar
     as [t_inform [Hstar_inform Hproj]].
   pose proof intermediate_well_bracketed_trace p t_inform cs cs' Hstar_inform
     as Hwbrack_inform.
@@ -1906,7 +1993,7 @@ Lemma intermediate_well_formed_events_non_inform st t st' :
   seq.all (Traces.well_formed_event (Intermediate.prog_interface p)) t.
 Proof.
   intros Hstar.
-  pose proof star_sem_inform_star_sem_non_inform st t st' Hstar
+  pose proof star_sem_non_inform_star_sem_inform st t st' Hstar
     as [t_inform [Hstar_inform Hproj]].
   pose proof intermediate_well_formed_events p st t_inform st' Hstar_inform as Hwf_inform.
   exact (well_formed_event_inform_well_formed_event_project_non_inform
@@ -1927,7 +2014,7 @@ Lemma intermediate_well_formed_trace_non_inform : forall t cs cs',
   Traces.well_formed_trace (Intermediate.prog_interface p) t.
 Proof.
   intros t cs cs' H H' H'' H'''.
-  pose proof star_sem_inform_star_sem_non_inform cs t cs' H
+  pose proof star_sem_non_inform_star_sem_inform cs t cs' H
     as [t_inform [Hstar_inform Hproj]].
   pose proof intermediate_well_formed_trace p t_inform cs cs' Hstar_inform H' H'' H'''
     as Hwf_trace_inform.
@@ -2299,6 +2386,127 @@ Proof.
         congruence.
 Qed.
 
+Theorem behavior_prefix_star_non_inform {p b m} :
+  program_behaves (CS.sem_non_inform p) b ->
+  prefix m b ->
+exists s1 s2,
+  CS.initial_state p s1 /\
+  Star (CS.sem_non_inform p) s1 (finpref_trace m) s2.
+Proof.
+  destruct m as [tm | tm | tm].
+  - intros Hb Hm.
+    destruct b as [t | ? | ? | ?];
+      simpl in Hm; try contradiction;
+      subst t.
+    inversion Hb as [s1 ? Hini Hbeh |]; subst.
+    inversion Hbeh as [? s2 Hstar Hfinal | | |]; subst.
+    eexists; eexists; split; now eauto.
+  - intros Hb Hm.
+    destruct b as [? | ? | ? | t];
+      simpl in Hm; try contradiction;
+      subst t.
+    inversion Hb as [s1 ? Hini Hbeh | Hini]; subst.
+    + inversion Hbeh as [| | | ? s2 Hstar Hnostep Hfinal]; subst.
+      eexists; eexists; split; now eauto.
+    + specialize (Hini (CS.initial_machine_state p)).
+      congruence.
+  - revert b.
+    induction tm as [| e t IHt] using rev_ind;
+      intros b Hb Hm;
+      simpl in *.
+    + exists (CS.initial_machine_state p), (CS.initial_machine_state p).
+      split; [congruence | now apply star_refl].
+    + pose proof behavior_prefix_app_inv Hm as Hprefix.
+      specialize (IHt _ Hb Hprefix).
+      destruct IHt as [s1 [s2 [Hini Hstar]]].
+      inversion Hm as [b']; subst.
+      inversion Hb as [s1' ? Hini' Hbeh' | Hini' Hbeh']; subst.
+      * assert (Heq : s1 = s1')
+          by now (inversion Hini; inversion Hini').
+        subst s1'.
+        inversion Hbeh' as [ t' s2' Hstar' Hfinal' Heq
+                           | t' s2' Hstar' Hsilent' Heq
+                           | T' Hreact' Heq
+                           | t' s2' Hstar' Hstep' Hfinal' Heq];
+          subst.
+        (* RB: TODO: Refactor block. *)
+        -- destruct b' as [tb' | ? | ? | ?];
+             simpl in Heq;
+             try discriminate.
+           inversion Heq; subst t'; clear Heq.
+           destruct (star_app_inv (CS.singleton_traces_non_inform p) _ _ Hstar')
+             as [s' [Hstar'1 Hstar'2]].
+           now eauto.
+        -- (* Same as Terminates case. *)
+          destruct b' as [? | tb' | ? | ?];
+            simpl in Heq;
+            try discriminate.
+          inversion Heq; subst t'; clear Heq.
+          destruct (star_app_inv (CS.singleton_traces_non_inform p) _ _ Hstar')
+            as [s' [Hstar'1 Hstar'2]].
+          now eauto.
+        -- (* Similar to Terminates and Diverges, but on an infinite trace.
+              Ltac can easily take care of these commonalities. *)
+          destruct b' as [? | ? | Tb' | ?];
+            simpl in Heq;
+            try discriminate.
+          inversion Heq; subst T'; clear Heq.
+          destruct (forever_reactive_app_inv (CS.singleton_traces_non_inform p) _ _ Hreact')
+            as [s' [Hstar'1 Hreact'2]].
+          now eauto.
+        -- (* Same as Terminate and Diverges. *)
+          destruct b' as [? | ? | ? | tb'];
+            simpl in Heq;
+            try discriminate.
+          inversion Heq; subst t'; clear Heq.
+          destruct (star_app_inv (CS.singleton_traces_non_inform p) _ _ Hstar')
+            as [s' [Hstar'1 Hstar'2]].
+          now eauto.
+      * specialize (Hini' (CS.initial_machine_state p)).
+        congruence.
+Qed.
+
+(*Print program_behavior.
+SearchAbout traceinf.
+Print project_non_inform.
+Print project_non_inform.
+
+CoFixpoint project_non_inform_traceinf (tinf: traceinf event_inform) :=
+  match tinf with
+  | Econsinf e_inform tinf' =>
+    match e_inform with
+    | ECall C P call_arg C' => Econsinf
+                                 _ (Events.ECall C P call_arg C')
+                                 (project_non_inform_traceinf tinf')
+    | ERet C v C' => Econsinf
+                       _ (Events.ERet C v C')
+                       (project_non_inform_traceinf tinf')
+    | _ => Eappinf E0 (project_non_inform_traceinf tinf')
+    end
+  end.
+
+Definition project_non_inform_program_behavior (b: @program_behavior event_inform) :=
+  match b with
+  | Terminates t -> Terminates (project_non_inform t)
+  | Diverges t -> Diverges (project_non_inform t)
+  | Reacts tinf
+
+Lemma program_behaves_non_inform_program_behaves_inform {p b} :
+  program_behaves (CS.sem_non_inform p) b ->
+  exists b_inform, program_behaves (CS.sem_inform p) b_inform /\
+.
+  
+
+Theorem behavior_prefix_star_non_inform {p b m} :
+  program_behaves (CS.sem_non_inform p) b ->
+  prefix m b ->
+exists s1 s2,
+  CS.initial_state p s1 /\
+  Star (CS.sem_non_inform p) s1 (finpref_trace m) s2.
+Proof.
+  intros Hbeh Hpref.
+  pose proof program_behaves_non_inform_program_behaves_inform
+*)
 (* RB: TODO: These domain lemmas should now be renamed to reflect their
    operation on linked programs. *)
 Section ProgramLink.
@@ -2335,9 +2543,7 @@ Section ProgramLink.
                              Pointer.component pc \in domm (prog_interface c).
   Proof.
     intros s st mem reg pc addrs t Hini Hstar.
-    SearchAbout sem_non_inform sem_inform.
-    SearchAbout program_link.
-    pose proof star_sem_inform_star_sem_non_inform
+    pose proof star_sem_non_inform_star_sem_inform
          (program_link p c) s t (st, mem, reg, pc, addrs) Hstar
       as [t_inform [Hstar_inform Hproj]].
     exact (star_pc_domm Hini Hstar_inform).
