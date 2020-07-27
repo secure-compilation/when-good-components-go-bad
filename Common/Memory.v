@@ -70,6 +70,12 @@ Module Type AbstractComponentMemory.
       mres = transfer_memory_block m b m' b' ->
       load m b i = load mres b' i.
 
+  Axiom load_unwritten_addr_after_transfer_memory_block:
+    forall m b m' b' bl i,
+      bl != b' ->
+      load m' bl i =
+      load (transfer_memory_block m b m' b') bl i.
+  
   Axiom store_after_load:
     forall m b i v v',
       load m b i = Some v ->
@@ -422,6 +428,27 @@ Module ComponentMemory : AbstractComponentMemory.
     - now rewrite setmE eq_refl.
     - now rewrite remmE eq_refl.
   Qed.
+
+  Lemma load_unwritten_addr_after_transfer_memory_block:
+    forall m b m' b' bl i,
+      bl != b' ->
+      load m' bl i =
+      load (transfer_memory_block m b m' b') bl i.
+  Proof.
+    move=> m b m' b' bl i Hneq. rewrite /transfer_memory_block /setmE /load.
+    case m_b: (content m b)=> [chunk|] //;
+                                       case m'bl: (content m' bl)=> [chunkbl|] //.
+    - simpl. rewrite setmE. case blb': (bl == b')=> //.
+      + rewrite blb' in Hneq. easy.
+      + rewrite m'bl //.
+    - simpl. rewrite setmE. case blb': (bl == b')=> //.
+      + rewrite blb' in Hneq. easy.
+      + rewrite m'bl //.
+    - simpl. rewrite remmE. case blb': (bl == b')=> //.
+      + rewrite blb' in Hneq. easy.
+      + rewrite m'bl //.
+    - simpl. rewrite remmE. case blb': (bl == b')=> //. rewrite m'bl //.
+  Qed.
       
   Lemma store_after_load:
     forall m b i v v',
@@ -619,13 +646,50 @@ Definition transfer_memory_block (src: Memory.t) (src_addr: Component.id * Block
   | _, _ => dst
   end.
 
-Lemma transfer_memory_block_preserves_domm src srca dst dsta a:
-  a \in domm dst -> a \in domm (transfer_memory_block src srca dst dsta).
+Fixpoint transfer_memory_blocks_helper (src: Memory.t) (dst: Memory.t)
+         (sdaddrs: seq ((Component.id * Block.id) * (Component.id * Block.id))) : Memory.t :=
+  match sdaddrs with
+  | nil => dst
+  | (sa, da) :: sdtl =>
+    transfer_memory_blocks_helper src (transfer_memory_block src sa dst da) sdtl
+  end.
+
+Definition transfer_memory_blocks (src: Memory.t) (src_addrs: seq (Component.id * Block.id))
+         (dst: Memory.t) (dst_addrs: seq (Component.id * Block.id)) : Memory.t :=
+  transfer_memory_blocks_helper src dst (zip src_addrs dst_addrs).
+
+Lemma transfer_memory_block_preserves_domm src srca (dst: Memory.t) dsta a:
+  a \in domm dst <-> a \in domm (transfer_memory_block src srca dst dsta).
 Proof.
-  move=> Ha. rewrite /transfer_memory_block.
-  destruct (src srca.1) as [srcC|]; auto.
-  destruct (dst dsta.1) as [dstC|] eqn:ed; rewrite ed; auto.
-  rewrite domm_set in_fsetU1 Ha orbT. auto.
+  split;
+    rewrite /transfer_memory_block;
+    destruct (src srca.1) as [srcC|]; auto;
+      destruct (dst dsta.1) as [dstC|] eqn:ed; auto;
+        rewrite domm_set in_fsetU1; move=> Ha.
+  - rewrite Ha orbT. auto.
+  - destruct (orP Ha) as [Hadsta | Hauto]; auto.
+    pose proof (eqP Hadsta) as H. rewrite <- H in ed.
+    apply/dommP. exists dstC. assumption.
+Qed.
+
+Lemma transfer_memory_blocks_helper_preserves_domm:
+  forall z src (dst: Memory.t) a,
+  a \in domm dst <-> a \in domm (transfer_memory_blocks_helper src dst z).
+Proof.
+  move=> z. induction z; simpl; auto; move => src dst a0.
+  - split; auto.
+  - destruct a as [sa da]. simpl.
+    pose proof transfer_memory_block_preserves_domm src sa as H.
+    pose proof IHz src (transfer_memory_block src sa dst da) a0 as [IHlr IHrl].
+    split.
+    + intros Ha0_dst. apply IHlr, H. auto.
+    + intros Ha0. apply IHrl in Ha0. rewrite H. auto.
+Qed.
+
+Lemma transfer_memory_blocks_preserves_domm src sas (dst: Memory.t) das a:
+  a \in domm dst <-> a \in domm (transfer_memory_blocks src sas dst das).
+Proof.
+  unfold transfer_memory_blocks. apply transfer_memory_blocks_helper_preserves_domm.
 Qed.
 
 Lemma load_after_transfer_memory_block src src_addr dst dst_addr i:
@@ -636,7 +700,9 @@ Lemma load_after_transfer_memory_block src src_addr dst dst_addr i:
                              (Permission.data, dst_addr.1, dst_addr.2, i).
 Proof.
   move=> Hs_in Hd_in.
-  pose proof (transfer_memory_block_preserves_domm src src_addr dst_addr Hd_in) as Htr_in.
+  pose proof (transfer_memory_block_preserves_domm src src_addr dst dst_addr dst_addr.1)
+    as [Hlr _].
+  pose proof Hlr Hd_in as Htr_in.
   rewrite /Memory.load. simpl.
   unfold transfer_memory_block in *.
   destruct (src src_addr.1) as [srcC|] eqn:es; rewrite es; rewrite es in Htr_in.
@@ -650,6 +716,153 @@ Proof.
     + rewrite ed in Htr_in. easy.
   - rewrite mem_domm es in Hs_in. easy.
 Qed.
+
+Lemma load_unwritten_addr_after_transfer_memory_block src src_addr dst dst_addr load_addr i:
+  src_addr.1 \in domm src ->
+  dst_addr.1 \in domm dst ->
+  load_addr.1 \in domm dst ->
+  load_addr != dst_addr ->                               
+  Memory.load dst (Permission.data, load_addr.1, load_addr.2, i) =
+  Memory.load (transfer_memory_block src src_addr dst dst_addr)
+              (Permission.data, load_addr.1, load_addr.2, i).
+Proof.
+  move=> Hs_in Hd_in Hl_in Hneq.
+  pose proof (transfer_memory_block_preserves_domm src src_addr dst dst_addr dst_addr.1)
+               as [Hlr Hrl].
+  pose proof Hlr Hd_in as Htr_in.
+  rewrite /Memory.load. simpl. unfold transfer_memory_block in *.
+  pose proof dommP _ _ Hs_in as [src_addrMem Hsrc_addr].
+  pose proof dommP _ _ Hd_in as [dst_addrMem Hdst_addr].
+  pose proof dommP _ _ Hl_in as [load_addrMem Hload_addr].
+  rewrite !Hsrc_addr !Hdst_addr !Hload_addr.
+  rewrite Hsrc_addr Hdst_addr in Htr_in.
+  rewrite setmE. unfold negb in Hneq.
+  destruct (load_addr.1 == dst_addr.1) eqn:e1; rewrite e1;
+    destruct (load_addr.2 == dst_addr.2) eqn:e2.
+  - (* derive a contradiction to Hneq. *)
+    destruct load_addr as [l1 l2], dst_addr as [d1 d2].
+    rewrite xpair_eqE in Hneq. simpl in *. rewrite e1 e2 in Hneq. easy.
+  - (* Here, use lemma ComponentMemory.load_different_addr_after_transfer_memory_block. *)
+    rewrite <- (ComponentMemory.load_unwritten_addr_after_transfer_memory_block
+                  src_addrMem src_addr.2 _ dst_addr.2).
+    + rewrite (eqP e1) in Hload_addr. rewrite Hload_addr in Hdst_addr.
+      inversion Hdst_addr. subst. reflexivity.
+    + unfold negb. rewrite e2. auto.
+  - rewrite Hload_addr. reflexivity.
+  - rewrite Hload_addr. reflexivity.
+Qed.
+
+Lemma transfer_memory_block_component_memory_transfer_memory_block_Some
+      (src: Memory.t) saddr (dst: Memory.t) daddr src_cmem dst_cmem:
+  src (saddr.1) = Some src_cmem ->
+  dst (daddr.1) = Some dst_cmem ->
+  (transfer_memory_block src saddr dst daddr) daddr.1 =
+  Some (ComponentMemory.transfer_memory_block src_cmem saddr.2 dst_cmem daddr.2).
+Proof.
+  intros Hsrc Hdst. unfold transfer_memory_block. rewrite Hsrc Hdst.
+  rewrite setmE. rewrite eq_refl. reflexivity.
+Qed.
+
+Lemma transfer_memory_block_component_memory_transfer_memory_block_None
+      (src: Memory.t) saddr (dst: Memory.t) daddr cid:
+  (src (saddr.1) = None \/ dst (daddr.1) = None) ->
+  (transfer_memory_block src saddr dst daddr) cid = dst cid.
+Proof.
+  intros [Hnone | Hnone]; unfold transfer_memory_block; rewrite Hnone; auto.
+  destruct (src saddr.1) eqn:e; rewrite e; reflexivity.
+Qed.
+  
+Lemma load_unwritten_addr_after_transfer_memory_blocks_helper
+      (sdaddrs: seq ((Component.id * Block.id) * (Component.id * Block.id))):
+  forall src (dst: Memory.t) load_addr i,
+    load_addr \notin (map snd sdaddrs) ->
+    Memory.load dst (Permission.data, load_addr.1, load_addr.2, i) =
+    Memory.load (transfer_memory_blocks_helper src dst sdaddrs)
+                             (Permission.data, load_addr.1, load_addr.2, i).
+Proof.
+  induction sdaddrs as [|[saddr daddr] sdrec IHsdrec]; auto.
+  intros src dst [ld1 ld2] i Hld. simpl in *. unfold Memory.load. simpl.
+  destruct (ld1 \in domm dst) eqn:Hld1.
+  - pose proof @transfer_memory_block_preserves_domm src saddr dst daddr ld1 as [Hlr Hrl];
+      pose proof Hlr Hld1 as Hdomm1;
+      pose proof transfer_memory_blocks_helper_preserves_domm sdrec src
+           (transfer_memory_block src saddr dst daddr) ld1 as [Hlr' Hrl'];
+      pose proof Hlr' Hdomm1 as Hdomm.
+    pose proof dommP _ _ Hld1 as [cMem HcMem].
+    pose proof dommP _ _ Hdomm as [cMem' HcMem'].
+    rewrite HcMem. rewrite HcMem'.
+    rewrite in_cons in Hld. rewrite negb_or in Hld.
+    destruct (andP Hld) as [Hneq_daddr Hnotin].
+    pose proof IHsdrec src (transfer_memory_block src saddr dst daddr) (ld1, ld2) i as IH'.
+    simpl in IH'.
+    pose proof IH' Hnotin as IH. unfold Memory.load in IH. simpl in IH.
+    pose proof dommP _ _ Hdomm1 as [cMem'' HcMem''].
+    rewrite HcMem'' in IH.
+    rewrite HcMem' in IH.
+    rewrite <- IH.
+    destruct (src saddr.1) eqn:Hsrc_saddr1;
+      destruct (dst daddr.1) eqn:Hdst_daddr1;
+      try (
+          (* This try block should leave us with one 
+             subgoal and should solve all remaining 3. 
+           *)
+          assert (src saddr.1 = None \/ dst daddr.1 = None) as H;
+          try (right; assumption); try (left; assumption);
+          pose proof transfer_memory_block_component_memory_transfer_memory_block_None
+               ld1 H as H';
+          rewrite H' HcMem in HcMem''; inversion HcMem''; reflexivity
+        ).
+    (* Just one subgoal remains: *)
+    pose proof transfer_memory_block_component_memory_transfer_memory_block_Some Hsrc_saddr1
+         Hdst_daddr1 as Htrans_comp_trans.
+    destruct (ld1 == daddr.1) eqn:Hld1_daddr1.
+    + pose proof (eqP Hld1_daddr1) as Hld1_daddr1'. subst.
+      rewrite HcMem'' in Htrans_comp_trans. inversion Htrans_comp_trans as [HcMem''eq]. subst.
+      rewrite HcMem in Hdst_daddr1. inversion Hdst_daddr1 as [HcMemeq]. subst.
+      destruct (ld2 == daddr.2) eqn:Hld2_daddr2.
+      * pose proof (eqP Hld2_daddr2) as Hld2_daddr2'. subst.
+        rewrite <- surjective_pairing in Hneq_daddr. rewrite eq_refl in Hneq_daddr. easy.
+      * apply ComponentMemory.load_unwritten_addr_after_transfer_memory_block.
+        unfold negb. rewrite Hld2_daddr2. easy.
+    + pose proof @load_unwritten_addr_after_transfer_memory_block
+           src saddr dst daddr (ld1, ld2) i as H. simpl in H.
+      unfold Memory.load in H. simpl in H.
+      rewrite !mem_domm Hsrc_saddr1 Hdst_daddr1 Hneq_daddr HcMem HcMem'' in H. simpl in H.
+      apply H; easy.
+  - assert (ld1 \notin domm dst) as H.
+    {
+      unfold negb. rewrite Hld1. easy.
+    }
+    pose proof dommPn _ _ H as Hnone. rewrite Hnone.
+    pose proof transfer_memory_blocks_helper_preserves_domm sdrec src
+         (transfer_memory_block src saddr dst daddr) ld1 as [_ Hrl'].
+    destruct (ld1
+           \in domm
+                 (transfer_memory_blocks_helper
+                    src (transfer_memory_block src saddr dst daddr) sdrec)) eqn:e.
+    + rewrite e in Hrl'.
+      assert (ld1 \in domm dst) as Hcntra.
+      {
+        rewrite transfer_memory_block_preserves_domm. apply Hrl'. easy.
+      }
+      rewrite Hcntra in H. easy.
+    + assert ((transfer_memory_blocks_helper
+                 src (transfer_memory_block src saddr dst daddr) sdrec) ld1 = None) as Hmatch.
+      {
+        apply/dommPn. unfold negb. rewrite e. easy.
+      }
+      rewrite Hmatch. reflexivity.
+Qed.
+    
+Lemma load_after_transfer_memory_blocks_helper
+      (sdaddrs: seq ((Component.id * Block.id) * (Component.id * Block.id))):
+  forall src dst saddr1 saddr2 ld1 ld2 i,
+    uniq (map snd sdaddrs) ->
+    ((saddr1, saddr2), (ld1, ld2)) \in sdaddrs ->
+    Memory.load (transfer_memory_blocks_helper src dst sdaddrs)
+                (Permission.data, ld1, ld2, i) =
+    Memory.load src (Permission.data, saddr1, saddr2, i).
+Admitted.
 
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
   unionm mem1 mem2.
