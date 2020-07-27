@@ -859,11 +859,68 @@ Lemma load_after_transfer_memory_blocks_helper
   forall src dst saddr1 saddr2 ld1 ld2 i,
     uniq (map snd sdaddrs) ->
     ((saddr1, saddr2), (ld1, ld2)) \in sdaddrs ->
+    saddr1 \in domm src ->
+    ld1 \in domm dst ->                                              
+    Memory.load src (Permission.data, saddr1, saddr2, i) =
     Memory.load (transfer_memory_blocks_helper src dst sdaddrs)
-                (Permission.data, ld1, ld2, i) =
-    Memory.load src (Permission.data, saddr1, saddr2, i).
-Admitted.
+                (Permission.data, ld1, ld2, i).
+Proof.
+  induction sdaddrs as [|sd sdrec IHsdrec];
+    intros src dst saddr1 saddr2 ld1 ld2 i Huniq Hin Hdomm_src Hdomm_dst.
+  - rewrite in_nil in Hin. easy.
+  - rewrite map_cons cons_uniq in Huniq.
+    destruct (andP Huniq) as [Hnotin Hsdrec_uniq].
+    destruct sd as [[saddr1' saddr2'] [ld1' ld2']]. simpl.
+    destruct ((saddr1, saddr2, (ld1, ld2)) \in sdrec) eqn:Htail.
+    + apply IHsdrec; auto.
+      apply transfer_memory_block_preserves_domm. auto.
+    + rewrite in_cons in Hin. remember Hin as Hin'.
+      destruct (orP Hin') as [Heq | Hauto].
+      * pose proof eqP Heq as Heq'. inversion Heq'. subst.
+        pose proof @load_unwritten_addr_after_transfer_memory_blocks_helper
+             sdrec src (transfer_memory_block src (saddr1', saddr2') dst (ld1', ld2'))
+             (ld1', ld2') i Hnotin as H.
+        simpl in H. rewrite <- H.
+        pose proof @load_after_transfer_memory_block
+             src (saddr1', saddr2') dst (ld1', ld2') i as Hsrc.
+        simpl in Hsrc. apply Hsrc; auto.
+      * rewrite Hauto in Htail; easy.
+Qed.
 
+Lemma load_unwritten_addr_after_transfer_memory_blocks
+      (src: Memory.t) (src_addrs: seq (Component.id * Block.id))
+      (dst: Memory.t) (dst_addrs: seq (Component.id * Block.id)):
+  forall load_addr i,
+    load_addr \notin dst_addrs ->
+    size dst_addrs <= size src_addrs ->
+    Memory.load dst (Permission.data, load_addr.1, load_addr.2, i) =
+    Memory.load (transfer_memory_blocks src src_addrs dst dst_addrs)
+                             (Permission.data, load_addr.1, load_addr.2, i).
+Proof.
+  unfold transfer_memory_blocks. intros ? ? Hnotin Hsize.
+  apply load_unwritten_addr_after_transfer_memory_blocks_helper.
+  pose proof unzip2_zip Hsize. unfold unzip2 in H. rewrite H. assumption.
+Qed.
+
+Lemma load_after_transfer_memory_blocks
+      (src: Memory.t) (src_addrs: seq (Component.id * Block.id))
+      (dst: Memory.t) (dst_addrs: seq (Component.id * Block.id)):
+  forall saddr1 saddr2 ld1 ld2 i,
+    uniq dst_addrs ->
+    size dst_addrs <= size src_addrs ->
+    ((saddr1, saddr2), (ld1, ld2)) \in zip src_addrs dst_addrs ->
+    saddr1 \in domm src ->
+    ld1 \in domm dst ->                                              
+    Memory.load src (Permission.data, saddr1, saddr2, i) =
+    Memory.load (transfer_memory_blocks src src_addrs dst dst_addrs)
+                (Permission.data, ld1, ld2, i).
+Proof.
+  intros ? ? ? ? ? Huniq Hsizelt Hinzip Hsrc Hdst.
+  unfold transfer_memory_blocks.
+  apply load_after_transfer_memory_blocks_helper; auto.
+  pose proof unzip2_zip Hsizelt. unfold unzip2 in H. rewrite H. assumption.
+Qed.
+  
 Definition merge_memories (mem1 mem2: Memory.t): Memory.t :=
   unionm mem1 mem2.
 
