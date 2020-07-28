@@ -98,9 +98,57 @@ Definition showMem {A : Type} `{Show A} (f : {fmap (mword mt) -> atom (mword mt)
                ++ (showAtom elt) (* ++ " " ++ (showAtom' elt) *) ++ newline)
         "" f.
 
+(* Inductive pc_tag : Type := Level : nat -> pc_tag. *)
+
+(* Module Import PCTagEq. *)
+(* Definition nat_of_pc_tag t := *)
+(*   match t with *)
+(*   | Level n => n *)
+(*   end. *)
+
+(* Definition pc_tag_of_nat n := Level n. *)
+
+(* Lemma nat_of_pc_tagK : cancel nat_of_pc_tag pc_tag_of_nat. *)
+(* Proof. by case. Qed. *)
+
+(* Definition pc_tag_eqMixin := CanEqMixin nat_of_pc_tagK. *)
+(* Canonical pc_tag_eqType := EqType pc_tag pc_tag_eqMixin. *)
+(* End PCTagEq. *)
+
+(* Record mem_tag : Type := MTag { *)
+(*   vtag   : [eqType of value_tag]; *)
+(*   color  : Component.id; *)
+(*   entry  : option (Procedure.id * list Component.id); *)
+(* }. *)
+
+
+(* Definition def_mem_tag (c : Component.id) : mem_tag := *)
+(*   {| vtag := Other ; *)
+(*      color := c ; *)
+(*      entry := None *)
+(*   |}. *)
+
 Instance showTag {tk : Symbolic.tag_kind} : Show (Symbolic.tag_type Symbolic.ttypes tk) :=
   {
-  show t := "tag"
+  show t := match tk, t as to return string with
+            | Symbolic.R, t => "Register tag: " ++ match t with
+                                                  | Ret n => "Ret " ++ show n
+                                                  | Other => "Other"
+                                                  end
+            | Symbolic.M, t => "Memory tag: (" ++
+                                             match vtag t with
+                                             | Ret n => "Ret " ++ show n
+                                             | Other => "Other"
+                                             end ++
+                                             ", " ++
+                                             match color t with
+                                             | n => "Component " ++ show n
+                                             end ++ ")"
+            | Symbolic.P, t => "PC tag: " ++
+                                      match t with
+                                      | Level n => "Level " ++ show n
+                                      end
+            end
   }.
 
 
@@ -136,7 +184,19 @@ Fixpoint execN (n: nat) (st: state) : option state :=
         end
       end
     end
-  | None => None
+  | None =>
+    match table pc with
+    | Some _ =>
+      match n with
+      | O => Some st
+      | S n' =>
+        match stepf st with
+        | None => None
+        | Some (st', _) => execN n' st'
+        end
+      end
+    | None => None
+    end
   end.
 
 Definition print_reg (st : state) (n : nat) : unit :=
