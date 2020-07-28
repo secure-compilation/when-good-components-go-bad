@@ -204,8 +204,8 @@ Definition compile_proc (P: Procedure.id) (e: expr)
   do proc_code <- compile_expr e;
   let stack_frame_size := 20%Z in
   ret ([IConst (IInt 1) R_ONE;
-        IJal proc_label;
-        IReturn;
+        (* IJal proc_label; *)
+        (* IReturn; *)
         ILabel proc_label;
         IMov R_SP R_AUX1;
         IConst (IInt stack_frame_size) R_SP;
