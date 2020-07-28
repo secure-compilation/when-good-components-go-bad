@@ -167,35 +167,27 @@ Instance showState : Show state :=
   }.
 
 
-Fixpoint execN (n: nat) (st: state) : option state :=
+Fixpoint execN (n: nat) (st: state) : (option state) * string :=
   let 'Symbolic.State mem reg pc@tpc extra := st in
-  match mem pc with
-  | Some iti =>
-    let: i@_ := iti in
-    match decode_instr i with
-    | Some Halt => Some st
-    | _ =>
-      match n with
-      | O => Some st
-      | S n' =>
-        match stepf st with
-        | None => None
-        | Some (st', _) => execN n' st'
-        end
-      end
-    end
-  | None =>
-    match table pc with
-    | Some _ =>
-      match n with
-      | O => Some st
-      | S n' =>
-        match stepf st with
-        | None => None
-        | Some (st', _) => execN n' st'
-        end
-      end
-    | None => None
+  match n with
+  | O => (Some st, "No more fuel in state:" ++ nl ++ show st)
+  | S n' =>
+    match mem pc with
+    | Some iti => let: i@_ := iti in
+                 match decode_instr i with
+                 | Some Halt => (Some st, "Halted in state:" ++ nl ++ show st)
+                 | _ => match stepf st with
+                       | None => (None, "Invalid step")
+                       | Some (st', _) => execN n' st'
+                       end
+                 end
+    | _ => match table pc with
+          | Some _ => match stepf st with
+                     | None => (None, "Invalid step")
+                     | Some (st', _) => execN n' st'
+                     end
+          | None => (None, "Invalid PC")
+          end
     end
   end.
 
@@ -219,16 +211,16 @@ Definition compile_and_run (p: Source.program) (fuel: nat) :=
       | Some inter_p =>
         let st := load (encode (linearize inter_p)) in
         match execN fuel st with
-        | None => "Execution failed"%string
-        | Some st => show st
+        | (None, str) => str
+        | (Some st, str) => str
         end
       end in
   print_string_ocaml str.
 
-Definition compile_and_run' (p: Intermediate.program) (fuel:nat) :=
-  let st := load (encode (linearize p)) in
-    match execN fuel st with
-    | None => print_error ocaml_int_1
-    | Some st' => fstate_to_unit (print_regs st' 6 fstate0)
-    end
-.
+(* Definition compile_and_run' (p: Intermediate.program) (fuel:nat) := *)
+(*   let st := load (encode (linearize p)) in *)
+(*     match execN fuel st with *)
+(*     | None => print_error ocaml_int_1 *)
+(*     | Some st' => fstate_to_unit (print_regs st' 6 fstate0) *)
+(*     end *)
+(* . *)
