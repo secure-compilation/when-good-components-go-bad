@@ -92,7 +92,7 @@ Definition encode_instr  (eenv : encoder_env) (x : sum Linearize.sp_instr Machin
                | IHalt             => encode_instr (Halt mt)
                end
              | inl i => match i with
-                        | Linearize.SJalAlloc => encode_instr (Jal (swcast alloc_addr))
+                        | Linearize.SJalAlloc => encode_instr (Jal (alloc_addr))
                         | Linearize.SSyscallSetArg1 r => encode_instr (Mov (encode_reg eenv r) syscall_arg1)
                         | Linearize.SSyscallSetArg3 r => encode_instr (Mov (encode_reg eenv r) syscall_arg3)
                         | Linearize.SSyscallGetArg3 r => encode_instr (Mov syscall_arg3 (encode_reg eenv r))
@@ -121,10 +121,10 @@ Definition encode (prog : Linearize.prog) : {fmap mword mt -> matom}:=
   (* Concretize pointers *)
   let base_adress c b :=
       length (Linearize.procedures prog) + 1 +
-      length (filter (fun x => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end)
+      length (domm (filterm (fun x _ => match x with (c', b', _) => (c' < c) || ((c' == c) && (b' < b)) end)
                      (* TL TODO codomm doesn't typecheck... *)
                      (* Invariant: Linearize.buffers is "continuous" *)
-                     (unzip1 (Linearize.buffers prog)))
+                     ((Linearize.buffers prog))))
   in
   let concretize := (fun p => match p with
                               | (c, b, o) =>
