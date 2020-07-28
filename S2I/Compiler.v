@@ -173,7 +173,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
          push R_COM ++
          c2 ++
          pop R_AUX1 ++
-         IStore R_COM R_AUX1 :: nil)
+         IStore R_AUX1 R_COM :: nil)
   | E_call C' P' e =>
     do call_arg_code <- compile_expr e;
     if Component.eqb C' C then

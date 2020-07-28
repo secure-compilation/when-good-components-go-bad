@@ -33,7 +33,9 @@ Source/CS.v
 Source/Blame.v
 Source/Definability.v
 Source/Examples/Helper.v
+Source/Examples/Empty.v
 Source/Examples/Identity.v
+Source/Examples/Assign.v
 Source/Examples/Increment.v
 Source/Examples/DefaultInitBuffer.v
 Source/Examples/NestedCalls.v
@@ -43,7 +45,9 @@ S2I/Definitions.v
 S2I/CompMonad.v
 S2I/Compiler.v
 S2I/Examples/Helper.v
+S2I/Examples/Empty.v
 S2I/Examples/Identity.v
+S2I/Examples/Assign.v
 S2I/Examples/Increment.v
 S2I/Examples/DefaultInitBuffer.v
 S2I/Examples/NestedCalls.v
@@ -83,7 +87,9 @@ I2MP/Linearize.v
 I2MP/Encode.v
 
 MicroPolicies/Examples/Helper.v
+MicroPolicies/Examples/Empty.v
 MicroPolicies/Examples/Identity.v
+MicroPolicies/Examples/Assign.v
 MicroPolicies/Examples/Increment.v
 MicroPolicies/Examples/DefaultInitBuffer.v
 MicroPolicies/Examples/NestedCalls.v
