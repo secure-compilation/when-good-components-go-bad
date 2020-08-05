@@ -143,7 +143,13 @@ Instance showTag {tk : Symbolic.tag_kind} : Show (Symbolic.tag_type Symbolic.tty
                                              ", " ++
                                              match color t with
                                              | n => "Component " ++ show n
-                                             end ++ ")"
+                                             end ++
+                                             ", " ++
+                                             match entry t with
+                                             | None => "Not an entry point"
+                                             | Some (pid, cids) => "Entry point for procedure " ++ show pid
+                                             end ++
+                                             ")"
             | Symbolic.P, t => "PC tag: " ++
                                       match t with
                                       | Level n => "Level " ++ show n
@@ -175,7 +181,7 @@ Fixpoint execN (n: nat) (st: state) : (option state) * string :=
     match mem pc with
     | Some iti => let: i@_ := iti in
                  match decode_instr i with
-                 | Some Halt => (Some st, "Halted in state:" ++ nl ++ show st)
+                 | Some Halt => (Some st, "Halted with registers:" ++ nl ++ showRegs (Symbolic.regs st))
                  | _ => match stepf st with
                        | None => (None, "Invalid step")
                        | Some (st', _) => execN n' st'
