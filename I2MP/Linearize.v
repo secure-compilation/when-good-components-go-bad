@@ -185,5 +185,3 @@ Definition linearize_IAlloc (i : instr) (mt : mem_tag) : code :=
   | _ => [:: (inr i, mt) ]
   end.
 
-
-

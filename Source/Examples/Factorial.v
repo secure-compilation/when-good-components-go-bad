@@ -20,11 +20,11 @@ Definition factorial : program := {|
       (Component.main, mkfmap [
         (Procedure.main, E_call 2 1 (E_val (Int 6)))]);
       (2, mkfmap [
-        (1, E_if (E_binop Leq (E_deref E_local) (E_val (Int 1)))
+        (1, E_if (E_binop Leq E_arg (E_val (Int 1)))
                  (E_val (Int 1))
                  (E_binop Mul
-                          (E_deref E_local)
-                          (E_call 2 1 (E_binop Minus (E_deref E_local) (E_val (Int 1))))))])]
+                          (E_arg)
+                          (E_call 2 1 (E_binop Minus E_arg (E_val (Int 1))))))])]
 |}.
 
 Definition fuel := 1000.

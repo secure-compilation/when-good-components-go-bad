@@ -19,10 +19,10 @@ Definition nested_calls : program := {|
     mkfmap [
       (Component.main, mkfmap [
         (Procedure.main, E_binop Add (E_val (Int 1)) (E_call 2 1 (E_val (Int 1))));
-        (2, E_deref E_local)]);
+        (2, E_arg)]);
       (2, mkfmap [
-        (1, E_binop Add (E_deref E_local) (E_call 2 2 (E_deref E_local)));
-        (2, E_binop Add (E_deref E_local) (E_call Component.main 2 (E_deref E_local)))])]
+        (1, E_binop Add (E_arg) (E_call 2 2 (E_arg)));
+        (2, E_binop Add (E_arg) (E_call Component.main 2 (E_arg)))])]
 |}.
 
 Definition fuel := 1000.

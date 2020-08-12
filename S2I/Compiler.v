@@ -29,7 +29,9 @@ External caller (between components):
 
 Code at external entry point:
   set R_ONE = 1
+  push R_RA
   IJal internal_entry_label
+  pop R_RA
   IReturn
 
 Code at internal entry label:
@@ -173,7 +175,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
          push R_COM ++
          c2 ++
          pop R_AUX1 ++
-         IStore R_COM R_AUX1 :: nil)
+         IStore R_AUX1 R_COM :: nil)
   | E_call C' P' e =>
     do call_arg_code <- compile_expr e;
     if Component.eqb C' C then
@@ -203,9 +205,16 @@ Definition compile_proc (P: Procedure.id) (e: expr)
   do lreturn <- fresh_label C;
   do proc_code <- compile_expr e;
   let stack_frame_size := 20%Z in
-  ret ([IConst (IInt 1) R_ONE;
-        IJal proc_label;
-        IReturn;
+  ret ([IConst (IInt 1) R_ONE] ++
+       [IMov R_SP R_AUX1;
+        IConst (IInt stack_frame_size) R_SP;
+        IAlloc R_SP R_SP] ++
+        push R_AUX1 ++
+        push R_RA ++
+       [IJal proc_label] ++
+        pop R_RA ++
+        pop R_SP ++
+       [IReturn;
         ILabel proc_label;
         IMov R_SP R_AUX1;
         IConst (IInt stack_frame_size) R_SP;

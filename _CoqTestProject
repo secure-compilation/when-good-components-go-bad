@@ -82,8 +82,16 @@ I2MP/Tmp.v
 I2MP/Linearize.v
 I2MP/Encode.v
 
+MicroPolicies/Examples/Helper.v
+MicroPolicies/Examples/Identity.v
+MicroPolicies/Examples/Increment.v
+MicroPolicies/Examples/DefaultInitBuffer.v
+MicroPolicies/Examples/NestedCalls.v
+MicroPolicies/Examples/Factorial.v
+
 Tests/TestIntermediate.v
 Tests/Shrinkers.v
+Tests/CompTestUtil.v
 Tests/RSC_DC_MD_Test.v
 Tests/IntermediateProgramGeneration.v
 Tests/TargetSFI/SFITestUtil.v
@@ -91,7 +99,6 @@ Tests/TargetSFI/MachineGen.v
 Tests/TargetSFI/CSTest.v
 Tests/TargetSFI/MachineFunctionalTests.v
 Tests/CompilerPBTests.v
-Tests/CompTestUtil.v
 Tests/I2SFI/JumpTest.v
 Tests/I2SFI/RCPBTests.v
 Tests/I2SFI/StackTest.v

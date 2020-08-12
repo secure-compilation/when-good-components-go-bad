@@ -39,6 +39,7 @@ Definition reg0 : {fmap reg mt -> ratom } :=
       ; (as_word 4, Atom (as_word 0) Other)
       ; (as_word 5, Atom (as_word 0) Other)
       ; (as_word 6, Atom (as_word 0) Other)
+      ; (as_word 7, Atom (as_word 0) Other)
       ; (as_word 16, Atom (as_word 0) Other)
       ; (as_word 17, Atom (as_word 0) Other)
       ; (as_word 18, Atom (as_word 0) Other)
