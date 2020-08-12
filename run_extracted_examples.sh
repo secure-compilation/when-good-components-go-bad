@@ -6,7 +6,7 @@ EXTRACTION_DIR=/tmp
 SOURCE_PREFIX="run_source_"
 INTERMEDIATE_PREFIX="run_intermediate_compiled_"
 TARGET_PREFIX="run_target_compiled_"
-MP_PREFIX="run_compiled_"
+MP_PREFIX="run_mp_compiled_"
 
 if (( $# == 1 )); then
     if [[ $1 = "--force-extraction" ]]; then
@@ -52,14 +52,14 @@ for example in $TARGET_PREFIX*.ml; do
     ocaml nums.cma big.cma $example
 done
 
-# # run compiled examples at the micro-policy level
-# echo "*** Examples compiled at the micro-policy level ***"
-# for example in $MP_PREFIX*.ml; do
-#     # prepend big int import to each example
-#     echo -e "open Big_int\n$(cat $example)" > $example
-#     echo "Output of $example:"
-#     ocaml nums.cma big.cma $example
-# done
+# run compiled examples at the micro-policy level
+echo "*** Examples compiled at the micro-policy level ***"
+for example in $MP_PREFIX*.ml; do
+     # prepend big int import to each example
+     echo -e "open Big_int\n$(cat $example)" > $example
+     echo "Output of $example:"
+     ocaml nums.cma big.cma $example
+ done
 
 
 

@@ -28,7 +28,19 @@ Inductive sp_instr :=
 
 Notation code := (seq (sum sp_instr instr * mem_tag)).
 
+Notation code_bis := (seq (instr * mem_tag)).
+
 (** Precompilation: translate call/ret, tag code and data, linearize code **)
+
+
+Definition linearize_instr_bis (cenv : compiler_env)
+           (c : Component.id) (i : instr) : code_bis :=
+  match i with
+  | ICall C P => [:: ((IJal (make_label cenv C P)), def_mem_tag c)]
+  | IReturn => [:: ((IJump R_RA), def_mem_tag c)]
+  | _ => [:: (i, def_mem_tag c) ]
+  end.
+
 
 Definition linearize_instr (cenv : compiler_env)
            (c : Component.id) (i : instr) : code :=
@@ -62,6 +74,14 @@ Definition linearize_proc (cenv : compiler_env)
                                     getm map p)
   in (inr (ILabel (make_label cenv c p)), head_tag cenv c p) :: flatten (map (linearize_instr cenv c) code).
 
+
+Definition linearize_proc_bis (cenv : compiler_env)
+           (c : Component.id) (p : Procedure.id) : code_bis :=
+  let code := Option.default [:: ] (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
+                                    getm map p)
+  in ((ILabel (make_label cenv c p)), head_tag cenv c p) :: flatten (map (linearize_instr_bis cenv c) code).
+
+
 Definition linearize_component (cenv : compiler_env) (c : Component.id) : code :=
   let procs : seq Procedure.id :=
       Option.default fset0 (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
@@ -69,12 +89,30 @@ Definition linearize_component (cenv : compiler_env) (c : Component.id) : code :
   flatten (map (linearize_proc cenv c) procs).
 
 
+
+Definition linearize_component_bis (cenv : compiler_env) (c : Component.id) : code_bis :=
+  let procs : seq Procedure.id :=
+      Option.default fset0 (do map <- getm (Intermediate.prog_procedures (program cenv)) c;
+                            Some (domm map)) in
+  flatten (map (linearize_proc_bis cenv c) procs).
+
 Definition linearize_code (cenv : compiler_env) : code :=
   let main_code :=
       [:: (inr (IJal (make_label cenv Component.main Procedure.main)), def_mem_tag Component.main) ; (inr IHalt, def_mem_tag Component.main)] in
 
   let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
   main_code ++ flatten (map (linearize_component cenv) components).
+
+
+Definition linearize_code_bis (cenv : compiler_env) : code_bis :=
+  let main_code :=
+      [:: ((IJal (make_label cenv Component.main Procedure.main)), def_mem_tag Component.main) ; (IHalt, def_mem_tag Component.main)] in
+
+  let components : seq Component.id := domm (Intermediate.prog_procedures (program cenv)) in
+  main_code ++ flatten (map (linearize_component_bis cenv) components).
+
+
+
 
 Notation bufs := {fmap (nat * nat * nat) -> (value * mem_tag)}.
 
@@ -93,10 +131,15 @@ Definition linearize_bufs (cenv : compiler_env) : bufs :=
   in Tmp.mapk (fun c => match c with (x, (y, z)) => (x, y, z) end)
               (uncurrym (mapm (fun m : NMap (NMap (value * mem_tag)) => uncurrym m) bufs')).
 
+
+(* Attention, change below *)
+
 Record prog :=
-  { procedures : code ;
+  { procedures : code_bis ;
     buffers : bufs ;
   }.
+
+
 
 Definition max_label (p : Intermediate.program) : nat :=
   let soup := (flatten (flatten (map codomm' (codomm' (Intermediate.prog_procedures p))))) in
@@ -117,5 +160,30 @@ Definition linearize (p : Intermediate.program) : prog :=
   let pmax := max_proc_id p in
   let cenv := {| program := p ;
                  make_label := (fun c p => lmax + c * pmax + p) |} in
-  {| procedures := linearize_code cenv ;
+  {| procedures := linearize_code_bis cenv ;
      buffers    := linearize_bufs cenv |}.
+
+
+Definition linearize_bis (p : Intermediate.program) : prog :=
+  let lmax := max_label p in
+  let pmax := max_proc_id p in
+  let cenv := {| program := p ;
+                 make_label := (fun c p => lmax + c * pmax + p) |} in
+  {| procedures := linearize_code_bis cenv ;
+     buffers    := linearize_bufs cenv |}.
+
+
+
+(* added for new compilation step *)
+Definition linearize_IAlloc (i : instr) (mt : mem_tag) : code :=
+  match i with
+  | IAlloc rptr rsize => [:: (inl (SSyscallSetArg1 rsize), mt) ;
+                             (inl (SSyscallSetArg3 R_RA), mt) ;
+                             (inl (SJalAlloc), mt) ;
+                             (inl (SSyscallGetArg3 R_RA), mt) ;
+                             (inl (SSyscallGetRet rptr), mt) ]
+  | _ => [:: (inr i, mt) ]
+  end.
+
+
+
