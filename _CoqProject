@@ -1,4 +1,4 @@
--arg "-w -parsing"
+
 -R . RobustImp
 
 RSC_DC.v
