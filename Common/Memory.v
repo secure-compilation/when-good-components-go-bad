@@ -34,12 +34,19 @@ Module Type AbstractComponentMemory.
   Parameter alloc : t -> nat -> t * Block.id.
   Parameter load : t -> Block.id -> Block.offset -> option value.
   Parameter store : t -> Block.id -> Block.offset -> value -> option t.
+  Parameter load_all : t -> Block.id -> option (list value).
+  Parameter store_all : t -> Block.id -> list value -> option t.
   Parameter domm : t -> {fset Block.id}.
   Parameter load_block : t -> Block.id -> list (Component.id * Block.id).
   Parameter next_block : t -> Block.id.
   Parameter max_ptr : t -> Component.id * Block.id.
   Parameter transfer_memory_block : t -> Block.id -> t -> Block.id -> t.
 
+  Axiom load_load_all:
+    forall m b i v,
+      load m b i = Some v ->
+      exists vs, load_all m b = Some vs /\ nth_error vs (Z.to_nat i) = Some v.
+  
   Axiom load_prealloc:
     forall bufs b i,
       load (prealloc bufs) b i =
@@ -55,8 +62,14 @@ Module Type AbstractComponentMemory.
   Axiom load_after_alloc:
     forall m m' n b,
       alloc m n = (m',b) ->
-    forall b' i,
-      b' <> b -> load m' b' i = load m b' i.
+      forall b' i,
+        b' <> b -> load m' b' i = load m b' i.
+
+  Axiom load_all_after_alloc:
+    forall m m' n b,
+      alloc m n = (m', b) ->
+      forall b',
+        b' <> b -> load_all m' b' = load_all m b'.
 
   Axiom load_after_store:
     forall m m' b i v,
@@ -65,10 +78,22 @@ Module Type AbstractComponentMemory.
       load m' b' i' =
       if (b', i') == (b, i) then Some v else load m b' i'.
 
+  Axiom load_all_after_store_all:
+    forall m m' b vs,
+      store_all m b vs = Some m' ->
+      forall b',
+      load_all m' b' =
+      if b' == b then Some vs else load_all m b'.
+  
   Axiom load_after_transfer_memory_block:
     forall m b m' b' mres i,
       mres = transfer_memory_block m b m' b' ->
       load m b i = load mres b' i.
+
+  Axiom load_all_after_transfer_memory_block:
+    forall m b m' b' mres,
+      mres = transfer_memory_block m b m' b' ->
+      load_all m b = load_all mres b'.
 
   Axiom load_unwritten_addr_after_transfer_memory_block:
     forall m b m' b' bl i,
@@ -76,12 +101,25 @@ Module Type AbstractComponentMemory.
       load m' bl i =
       load (transfer_memory_block m b m' b') bl i.
   
+  Axiom load_all_unwritten_addr_after_transfer_memory_block:
+    forall m b m' b' bl,
+      bl != b' ->
+      load_all m' bl =
+      load_all (transfer_memory_block m b m' b') bl.
+  
   Axiom store_after_load:
     forall m b i v v',
       load m b i = Some v ->
       exists m',
         store m b i v' = Some m'.
 
+  Axiom store_all_after_load_all:
+    forall m b vs vs',
+      load_all m b = Some vs ->
+      length vs = length vs' ->
+      exists m',
+        store_all m b vs' = Some m'.
+    
   Axiom domm_prealloc :
     forall bufs m,
       prealloc bufs = m ->
@@ -162,6 +200,17 @@ Module ComponentMemory : AbstractComponentMemory.
                   nextblock := nextblock m |}
         | _ => None
         end
+      else None
+    | None => None
+    end.
+
+  Definition load_all m b : option (list value) := getm (content m) b.
+
+  Definition store_all m b vs : option mem :=
+    match getm (content m) b with
+    | Some chunk =>
+      if length chunk == length vs then
+        Some {| content := setm (content m) b vs; nextblock := nextblock m |}
       else None
     | None => None
     end.
@@ -396,6 +445,53 @@ Module ComponentMemory : AbstractComponentMemory.
     now rewrite (introF (b' =P nextblock m :> nat) Hb').
   Qed.
 
+  Lemma load_load_all:
+    forall m b i v,
+      load m b i = Some v ->
+      exists vs, load_all m b = Some vs /\ nth_error vs (Z.to_nat i) = Some v.
+  Proof.
+    intros ? ? ? ?. unfold load, load_all.
+    destruct ((content m) b); intros Hload; try discriminate.
+    eexists. split; try reflexivity. rewrite <- Hload.
+    destruct (0 <=? i)%Z; auto. discriminate.
+  Qed.
+
+  Lemma load_all_after_alloc:
+    forall m m' n b,
+      alloc m n = (m', b) ->
+      forall b',
+        b' <> b -> load_all m' b' = load_all m b'.
+  Admitted.
+
+  Lemma load_all_after_store_all:
+    forall m m' b vs,
+      store_all m b vs = Some m' ->
+      forall b',
+      load_all m' b' =
+      if b' == b then Some vs else load_all m b'.
+  Admitted.
+  
+  Lemma load_all_after_transfer_memory_block:
+    forall m b m' b' mres,
+      mres = transfer_memory_block m b m' b' ->
+      load_all m b = load_all mres b'.
+  Admitted.
+    
+  Lemma load_all_unwritten_addr_after_transfer_memory_block:
+    forall m b m' b' bl,
+      bl != b' ->
+      load_all m' bl =
+      load_all (transfer_memory_block m b m' b') bl.
+  Admitted.
+  
+  Lemma store_all_after_load_all:
+    forall m b vs vs',
+      load_all m b = Some vs ->
+      length vs = length vs' ->
+      exists m',
+        store_all m b vs' = Some m'.
+  Admitted.
+
   Ltac inv H := (inversion H; subst; clear H).
 
   Lemma load_after_store:
@@ -565,6 +661,22 @@ Module Memory.
       end
     else None.
 
+  Definition load_all (mem: t) (addr: Component.id * Block.id) : option (list value) :=
+    match mem (addr.1) with
+    | Some memC => ComponentMemory.load_all memC addr.2
+    | None => None
+    end.
+
+  Definition store_all (mem: t) (addr: Component.id * Block.id) (vs: list value)
+    : option Memory.t :=
+    match mem (addr.1) with
+    | Some memC => match ComponentMemory.store_all memC addr.2 vs with
+                   | Some memC' => Some (setm mem (addr.1) memC')
+                   | None => None
+                   end
+    | None => None
+    end.
+
   Lemma load_after_store mem ptr v mem' ptr' :
     store mem  ptr v = Some mem' ->
     load mem' ptr' =
@@ -585,6 +697,11 @@ Module Memory.
       pose (eqP p'p) as e. inversion e as [pp'e]. rewrite pp'e in perm_data'.
       rewrite perm_data in perm_data'. discriminate.
   Qed.
+
+  Lemma load_all_after_store_all mem addr vs mem' addr' :
+    store_all mem addr vs = Some mem' ->
+    load_all mem' addr' = if addr' == addr then Some vs else load_all mem addr'.
+  Admitted.
 
   Lemma load_after_store_eq mem ptr v mem' :
     store mem  ptr v = Some mem' ->
