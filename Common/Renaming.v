@@ -135,7 +135,9 @@ Definition rename_memory_subgraph (m: Memory.t) (addrs: list (Component.id * Blo
    This lemma may be a bit too tedious to prove.
 
    Alternatively, I will experiment with representing the trace renaming
-   as a Prop. Such a Renames Prop will use the definitions of the following Prop's:
+   as a Prop. Such a Trace_Renames_Trace Prop 
+   will use the definitions of the following Prop's:
+   * Mem_Renames_Mem
    * Addr_shared_so_far, which itself will use the definition of
    * Reachable
 *)
