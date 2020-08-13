@@ -185,13 +185,54 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
 
   (*Compute (proofize_seq nat (5 :: (6 :: (4 :: nil)))).*)
 
-  Lemma size_proofize_seq : forall T s, size (proofize_seq T s) = size s.
+  Lemma construct_seq_using_nth_In_proof_0 T s (pf_nlt: 0 < length s) :
+    construct_seq_using_nth_In_proof T s 0 pf_nlt = [nth_In_proof T s 0 pf_nlt].
+  Proof.
+    (* compute. *)
+    unfold construct_seq_using_nth_In_proof.
+    (* unfold nat_rect. *)
+  Admitted.
+  
+  Lemma construct_seq_using_nth_In_proof_S T s n pf_nlt :
+    exists pf_n'lt,
+      construct_seq_using_nth_In_proof T s (S n) pf_nlt =
+      cons (nth_In_proof T s (n.+1) pf_nlt)
+           (construct_seq_using_nth_In_proof T s n pf_n'lt).
+  Proof.
+    eexists. unfold construct_seq_using_nth_In_proof.
+    (* Check ltnW. *)
+    (* SearchAbout nat_rect *)
+    (* compute. *)
+    (* rewrite nat_rect_succ_r. *)
+  Admitted.
+  
+  Lemma construct_seq_using_nth_In_proof_length T s n pf_nlt:
+    length (construct_seq_using_nth_In_proof T s n pf_nlt) = n.+1.
+  Proof.
+    induction n.
+    - rewrite construct_seq_using_nth_In_proof_0. auto.
+    - pose proof construct_seq_using_nth_In_proof_S T s n pf_nlt as [pf_n'lt IHeq].
+      rewrite IHeq. simpl.
+      rewrite (IHn pf_n'lt). reflexivity.
+  Qed.
+  
+  Lemma size_proofize_seq : forall T s, length (proofize_seq T s) = length s.
   Proof.
     intros.
     induction s.
     - auto.
     - simpl.
       unfold proofize_seq.
+      destruct (length (a :: s) == 0) eqn:Hlen_cons.
+      + rewrite eq_sym in Hlen_cons.
+        pose proof (eqP Hlen_cons) as Hlen0.
+        simpl in Hlen0.
+        apply O_S in Hlen0.
+        exfalso. assumption.
+      + (*SearchAbout eq 0 false.*)
+        apply neq0_lt0n in Hlen_cons.
+        (*SearchAbout 0 lt.*)
+        unfold length.
       simpl.
       (*SearchAbout nat_rect.*)
   Admitted.
@@ -526,6 +567,99 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
     - apply/dfs_path_fin_mem. exact P.
     - auto.
   Qed.
+
+  Inductive Reachable (m: Memory.t) (bs : {fset node_t}) : node_t -> Prop :=
+  | Reachable_refl : forall b, b \in bs -> Reachable m bs b
+  | Reachable_step : forall cid bid b' compMem,
+      Reachable m bs (cid, bid) -> 
+      m (cid) = Some compMem ->
+      b' \in ComponentMemory.load_block compMem bid ->
+             Reachable m bs b'.
+
+  Lemma Reachable_dfs_path m bs cid bid:
+    Reachable m bs (cid, bid) <->
+    (exists b n_f,
+        b \in bs
+              /\
+              dfs_path
+                (fingraph_of_mem m (S b.1) (S b.2))
+                nil (* Is nil here alright? *)
+                (cast_to_bigger_ordinal_left
+                   (S (max_ptr m).1)
+                   (S (max_ptr m).2)
+                   (finitize_ptr b)
+                )
+                n_f
+              /\
+              nat_node_of_ord_node n_f = (cid, bid)
+    ).
+  Proof.
+    split.
+    - intros Hreach. induction Hreach as
+          [b Hin|b4lastc b4lastb lastnode compMem Hreach IH HcompMem Hload_block].
+      + exists b. exists (cast_to_bigger_ordinal_left
+                            (S (max_ptr m).1)
+                            (S (max_ptr m).2)
+                            (finitize_ptr b)
+                         ).
+        split; auto. split.
+        * apply DfsPath with (p := nil); auto. rewrite disjoint_sym  disjoint0. auto.
+        * rewrite nat_node_of_ord_node_cast_to_bigger_ordinal
+                  nat_node_of_ord_node_finitize_ptr. reflexivity.
+      + destruct IH as [b [n_f [Hin [Hdfs Hn_f_b4last]]]].
+        pose proof (dfs_path_fin_mem_iff m b n_f) as [Hif _].
+        apply Hif in Hdfs.
+        unfold reachable_nodes in Hdfs.
+        exists b. eexists. split; auto.
+        split.
+        * apply/dfs_pathP; auto.
+          Focus 2.
+          apply/dfsP.
+          pose proof (@dfsP
+                     (prod_finType (ordinal_finType (maxn (max_ptr m).1.+1 b.1.+1))
+                                   (ordinal_finType (maxn (max_ptr m).2.+1 b.2.+1)))
+                     (fingraph_of_mem m b.1.+1 b.2.+1)
+                     (cast_to_bigger_ordinal_left
+                        (max_ptr m).1.+1 (max_ptr m).2.+1 (finitize_ptr b))
+                     n_f
+                     ) as pf.
+          rewrite card_prod !card_ord in pf.
+          pose proof (pf Hdfs) as [p Hp Hlast].
+          (*SearchAbout max_ptr.*)
+          assert (exists (lastnode_fin: ('I_(maxn (max_ptr m).1.+1 b.1.+1) *
+                                         'I_(maxn (max_ptr m).2.+1 b.2.+1))%type),
+                     nat_node_of_ord_node lastnode_fin = lastnode) as Hlastnode_fin.
+          {
+            admit.
+          }
+          destruct Hlastnode_fin as [lastnode_fin Hlastnode_fin_lastnode].
+          exists (rcons p lastnode_fin).
+          rewrite rcons_path Hp. unfold fingraph_of_mem.
+          (*SearchAbout apply_load_block_seq.*)
+          (*Locate apply_load_block_seq_fin.*)
+  Admitted.
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
 
   (* Taking inspiration from mathcomp.ssreflect.path, make path be the type of
      non-empty sequences.
