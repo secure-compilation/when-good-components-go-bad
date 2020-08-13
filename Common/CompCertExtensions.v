@@ -17,18 +17,12 @@ Definition sum_of_event (e : event) :=
   | EWrite C p v => inr (inr (C, p, v))
   end.
 
-Print event.
-Print sum_of_event.
-
 Lemma sum_of_event_inj : injective sum_of_event.
 Proof.
 by case=> [????|???|???|???] [????|???|???|???] //= => [[-> -> -> ->]|[-> -> ->]|[-> -> ->]|[-> -> ->]].
 Qed.
 
-Check InjEqMixin.
-Print InjEqMixin.
 Definition event_eqMixin := InjEqMixin sum_of_event_inj.
-Search InjEqMixin.
 Canonical event_eqType := Eval hnf in EqType event event_eqMixin.
 
 
