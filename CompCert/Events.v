@@ -20,19 +20,19 @@ Class EventClass (A : Type) :=
     2. Refine the definition of defined and undefined values at the type level.
 *)
 Inductive event :=
-| ECall : Component.id -> Procedure.id -> value -> Component.id -> event
-| ERet : Component.id -> value -> Component.id -> event
+| ECall : Component.id -> Procedure.id -> value -> Memory.t -> Component.id -> event
+| ERet : Component.id -> value -> Memory.t -> Component.id -> event
 (*| ERead : Component.id -> Pointer.t -> value -> event
 | EWrite : Component.id -> Pointer.t -> value -> event*)
 .
                                                     
 Inductive match_event : event -> event -> Prop :=
-| match_events_call: forall C P arg C',
-    match_event (ECall C P arg C')
-                (ECall C P arg C')
-| match_events_ret: forall C retval C',
-    match_event (ERet C retval C')
-                (ERet C retval C')
+| match_events_call: forall C P arg mem C',
+    match_event (ECall C P arg mem C')
+                (ECall C P arg mem C')
+| match_events_ret: forall C retval mem C',
+    match_event (ERet C retval mem C')
+                (ERet C retval mem C')
 (*| match_events_read: forall C ptr v,
     match_event (ERead C ptr v)
                 (ERead C ptr v)
@@ -61,16 +61,16 @@ Instance event_EventClass : EventClass event :=
   {
     cur_comp_of_event e :=
       match e with
-      | ECall  C _ _ _ => C
-      | ERet   C _ _   => C
+      | ECall  C _ _ _ _ => C
+      | ERet   C _ _ _  => C
       (*| ERead  C _ _   => C
       | EWrite C _ _   => C*)
       end;
     next_comp_of_event e :=
       match e with
       (* Calls and returns yield control. *)
-      | ECall  _ _ _ C => C
-      | ERet   _ _   C => C
+      | ECall  _ _ _ _ C => C
+      | ERet   _ _ _  C => C
       (* Reads and writes retain control. *)
       (*| ERead  C _ _   => C
       | EWrite C _ _   => C*)
