@@ -1,5 +1,6 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
+Require Import Common.Memory.
 Require Import CompCert.Coqlib.
 
 
@@ -21,9 +22,10 @@ Class EventClass (A : Type) :=
 Inductive event :=
 | ECall : Component.id -> Procedure.id -> value -> Component.id -> event
 | ERet : Component.id -> value -> Component.id -> event
-| ERead : Component.id -> Pointer.t -> value -> event
-| EWrite : Component.id -> Pointer.t -> value -> event.
-
+(*| ERead : Component.id -> Pointer.t -> value -> event
+| EWrite : Component.id -> Pointer.t -> value -> event*)
+.
+                                                    
 Inductive match_event : event -> event -> Prop :=
 | match_events_call: forall C P arg C',
     match_event (ECall C P arg C')
@@ -31,12 +33,13 @@ Inductive match_event : event -> event -> Prop :=
 | match_events_ret: forall C retval C',
     match_event (ERet C retval C')
                 (ERet C retval C')
-| match_events_read: forall C ptr v,
+(*| match_events_read: forall C ptr v,
     match_event (ERead C ptr v)
                 (ERead C ptr v)
 | match_events_write: forall C ptr v,
     match_event (EWrite C ptr v)
-                (EWrite C ptr v).
+                (EWrite C ptr v)*)
+.
 
 Lemma match_event_equal:
   forall e e', match_event e e' -> e = e'.
@@ -50,8 +53,8 @@ Proof.
   intros e e' Heq. rewrite Heq. destruct e'.
   - apply match_events_call.
   - apply match_events_ret.
-  - apply match_events_read.
-  - apply match_events_write.
+  (*- apply match_events_read.
+  - apply match_events_write.*)
 Qed.
 
 Instance event_EventClass : EventClass event :=
@@ -60,8 +63,8 @@ Instance event_EventClass : EventClass event :=
       match e with
       | ECall  C _ _ _ => C
       | ERet   C _ _   => C
-      | ERead  C _ _   => C
-      | EWrite C _ _   => C
+      (*| ERead  C _ _   => C
+      | EWrite C _ _   => C*)
       end;
     next_comp_of_event e :=
       match e with
@@ -69,8 +72,8 @@ Instance event_EventClass : EventClass event :=
       | ECall  _ _ _ C => C
       | ERet   _ _   C => C
       (* Reads and writes retain control. *)
-      | ERead  C _ _   => C
-      | EWrite C _ _   => C
+      (*| ERead  C _ _   => C
+      | EWrite C _ _   => C*)
       end;
     event_equal := match_event;
     event_equal_equal := match_event_equal;

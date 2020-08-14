@@ -63,7 +63,7 @@ Fixpoint well_bracketed_trace s t : bool :=
       | head :: tail =>
         (head == C') && well_bracketed_trace (StackState C' tail) t'
       end
-    | _ => well_bracketed_trace s t'
+  (*| _ => well_bracketed_trace s t'*)
     end
   end.
 
@@ -71,7 +71,7 @@ Definition run_event s e :=
   match e with
   | ECall C _ _ C' => StackState C' (C :: callers s)
   | ERet  C _   C' => StackState C' (tail (callers s))
-  | _ => s
+  (*| _ => s*)
   end.
 
 Definition run_trace s t := foldl run_event s t.
@@ -85,7 +85,7 @@ Lemma well_bracketed_trace_cat s t1 t2 :
   well_bracketed_trace (run_trace s t1) t2.
 Proof.  
 (* TODO: Try to understand and fix the proof. *)
-elim: t1 s=> [//|[C ? ? C'|C ? C'|? ? ?|? ? ?] t1 IH] [Ccur callers] /=.
+elim: t1 s=> [//|[C ? ? C'|C ? C'(*|? ? ?|? ? ?*)] t1 IH] [Ccur callers] /=.
   by rewrite IH andbA.
 case: eqP callers => [_ {Ccur}|_] //= [|top callers] //=.
   by rewrite IH andbA.
@@ -111,7 +111,7 @@ have -> : well_bracketed_trace s0 (rcons t e) =
           well_bracketed_trace s0 t &&
           well_bracketed_trace (run_trace s0 t) [:: e].
   by rewrite -cats1 well_bracketed_trace_cat andbC.
-rewrite run_trace1; case: e => [C1 P arg C2|C1 ? C2|? ? ?|? ? ?] /=.
+rewrite run_trace1; case: e => [C1 P arg C2|C1 ? C2(*|? ? ?|? ? ?*)] /=.
   rewrite andbT; case/andP=> wb_t /eqP <- {C1} /=.
   rewrite -[_ :: callers _]/(run_trace s0 t : seq _) suffix_cons /=.
   case/orP=> [/eqP|Hsuff].
@@ -155,8 +155,8 @@ Definition well_formed_event intf (e: event) : bool :=
   match e with
   | ECall C P _ C' => (C != C') && imported_procedure_b intf C C' P
   | ERet  C _   C' => (C != C')
-  | ERead _ _ _ => false
-  | EWrite _ _ _ => false
+  (*| ERead _ _ _ => false
+  | EWrite _ _ _ => false*)
   end.
 
 Definition well_formed_trace intf (t: trace event) : bool :=
