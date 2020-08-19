@@ -660,7 +660,7 @@ Section Mergeable.
         eapply mergeable_stack_cons; eauto.
         * inversion cntra. subst. simpl in *. 
           match goal with
-            H: [ECall (Pointer.component pc0) _ _ _] = [ECall (Pointer.component pc) _ _ _]
+            H: [ECall (Pointer.component pc0) _ _ _ _] = [ECall (Pointer.component pc) _ _ _ _]
             |- _ =>
             inversion H
           end.

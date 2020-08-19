@@ -5,6 +5,7 @@ Require Import Common.Linking.
 Require Import Common.CompCertExtensions.
 Require Import Common.Values.
 Require Import Common.Traces.
+Require Import Common.Memory.
 
 From mathcomp
   Require Import ssreflect ssrfun ssrbool eqtype ssrnat seq.
@@ -20,8 +21,8 @@ Inductive Ebinop : Set :=
   E_Add : Ebinop | E_Minus : Ebinop | E_Mul : Ebinop | E_Eq : Ebinop | E_Leq : Ebinop.
 
 Inductive event_inform :=
-| ECall : Component.id -> Procedure.id -> value -> Component.id -> event_inform
-| ERet : Component.id -> value -> Component.id -> event_inform
+| ECall : Component.id -> Procedure.id -> value -> Memory.t -> Component.id -> event_inform
+| ERet : Component.id -> value -> Memory.t -> Component.id -> event_inform
 | EConst : Component.id -> value -> Eregister -> event_inform
 | EMov : Component.id -> Eregister -> Eregister -> event_inform
 | EBinop : Component.id -> Ebinop -> Eregister -> Eregister -> Eregister -> event_inform
@@ -31,12 +32,12 @@ Inductive event_inform :=
 | EInvalidateRA : Component.id -> event_inform.
 
 Inductive match_event : event_inform -> event_inform -> Prop :=
-| match_events_ECall: forall C P arg C',
-    match_event (ECall C P arg C')
-                (ECall C P arg C')
-| match_events_ERet: forall C retval C',
-    match_event (ERet C retval C')
-                (ERet C retval C')
+| match_events_ECall: forall C P arg mem C',
+    match_event (ECall C P arg mem C')
+                (ECall C P arg mem C')
+| match_events_ERet: forall C retval mem C',
+    match_event (ERet C retval mem C')
+                (ERet C retval mem C')
 | match_events_EConst: forall C v r,
     match_event (EConst C v r)
                 (EConst C v r)
@@ -82,8 +83,8 @@ Instance event_inform_EventClass : EventClass event_inform :=
   {
     cur_comp_of_event e :=
       match e with
-      | ECall   C _ _ _ => C
-      | ERet    C _ _   => C
+      | ECall   C _ _ _ _ => C
+      | ERet    C _ _ _  => C
       | EConst  C _ _ => C
       | EMov    C _ _ => C
       | EBinop  C _ _ _ _ => C
@@ -95,8 +96,8 @@ Instance event_inform_EventClass : EventClass event_inform :=
     next_comp_of_event e :=
       match e with
       (* Calls and returns yield control. *)
-      | ECall  _ _ _ C => C
-      | ERet   _ _   C => C
+      | ECall  _ _ _ _ C => C
+      | ERet   _ _ _  C => C
       (* All the other events retain control. *)
       | EConst  C _ _ => C
       | EMov    C _ _ => C
@@ -132,9 +133,9 @@ Fixpoint well_bracketed_trace s t : bool :=
   | e :: t' =>
     (cur_comp s == cur_comp_of_event e) &&
     match e with
-    | ECall C _ _ C' =>
+    | ECall C _ _ _ C' =>
       well_bracketed_trace (StackState C' (C :: callers s)) t'
-    | ERet C _ C' =>
+    | ERet C _ _ C' =>
       match callers s with
       | [] => false
       | head :: tail =>
@@ -146,8 +147,8 @@ Fixpoint well_bracketed_trace s t : bool :=
 
 Definition run_event s e :=
   match e with
-  | ECall C _ _ C' => StackState C' (C :: callers s)
-  | ERet  C _   C' => StackState C' (tail (callers s))
+  | ECall C _ _ _ C' => StackState C' (C :: callers s)
+  | ERet  C _ _  C' => StackState C' (tail (callers s))
   | _ => s
   end.
 
@@ -161,7 +162,7 @@ Lemma well_bracketed_trace_cat s t1 t2 :
   well_bracketed_trace s t1 &&
   well_bracketed_trace (run_trace s t1) t2.
 Proof.
-  elim: t1 s=> [//|[C ? ? C'|C ? C'|? ? ?|? ? ?|? ? ? ? ?|? ? ?|? ? ?|? ? ?|?] t1 IH]
+  elim: t1 s=> [//|[C ? ? ? C'|C ? ? C'|? ? ?|? ? ?|? ? ? ? ?|? ? ?|? ? ?|? ? ?|?] t1 IH]
                  [Ccur callers] /=;
   try by rewrite IH andbA.
 case: eqP callers => [_ {Ccur}|_] //= [|top callers] //=;
@@ -178,7 +179,7 @@ Proof. by case=> [??] [??] [-> ->]. Qed.
 Lemma well_bracketed_trace_suffix t C C' Cs :
   well_bracketed_trace stack_state0 t ->
   suffix [:: C, C' & Cs] (run_trace stack_state0 t) ->
-  exists t1 P arg t2, t = t1 ++ ECall C' P arg C :: t2.
+  exists t1 P arg mem t2, t = t1 ++ ECall C' P arg mem C :: t2.
 Proof.
   set s0 := stack_state0.
   elim/last_ind: t=> [|t e IH] //=.
@@ -188,36 +189,36 @@ Proof.
                                    well_bracketed_trace (run_trace s0 t) [:: e].
       by rewrite -cats1 well_bracketed_trace_cat andbC.
       rewrite run_trace1;
-        case: e => [C1 P arg C2|C1 ? C2|C1 ? ?|C1 ? ?|C1 ? ? ? ?|C1 ? ?|C1 ? ?|C1 ? ?|C1]
+        case: e => [C1 P arg mem C2|C1 ? ? C2|C1 ? ?|C1 ? ?|C1 ? ? ? ?|C1 ? ?|C1 ? ?|C1 ? ?|C1]
                      /=;
                      try rewrite andbT;
                      try (case/andP=> wb_t /eqP <- {C1} /=;
                                            move => Hsuff;
                                                    case/(_ wb_t Hsuff):
-                                                     IH=> [t1 [P' [arg' [t2 ->]]]];
+                                                     IH=> [t1 [P' [arg' [mem' [t2 ->]]]]];
                                                             by eexists
-                                                                 t1, P', arg', (rcons t2 _);
+                                                                 t1, P', arg', mem', (rcons t2 _);
                                                             rewrite rcons_cat; split; eauto).
   - case/andP=> wb_t /eqP <- {C1} /=.
     rewrite -[_ :: callers _]/(run_trace s0 t : seq _) suffix_cons /=.
     case/orP=> [/eqP|Hsuff].
     + case: (run_trace _ _)=> [? ?] [<- <- <-] /=.
-        by eexists t, _, _, [::]; rewrite cats1.
-    + case/(_ wb_t Hsuff): IH=> [t1 [P' [arg' [t2 ->]]]].
-        by eexists t1, P', arg', (rcons t2 _); rewrite rcons_cat; split; eauto.
+        by eexists t, _, _, _, [::]; rewrite cats1.
+    + case/(_ wb_t Hsuff): IH=> [t1 [P' [arg' [mem' [t2 ->]]]]].
+        by eexists t1, P', arg', mem', (rcons t2 _); rewrite rcons_cat; split; eauto.
   - case/and3P=> wb_t /eqP e1 e2.
     have -> : StackState C2 (tl (callers (run_trace s0 t))) =
               callers (run_trace s0 t) :> seq _.
       by case: (callers _) e2=> [|e cs] //= /andP [/eqP ->].
       move=> Hsuff; have {Hsuff} Hsuff: suffix [:: C, C' & Cs] (run_trace s0 t).
         by rewrite suffix_cons Hsuff orbT.
-        case/(_ wb_t Hsuff): IH=> [t1 [P [arg [t2 ->]]]].
-          by eexists t1, P, arg, (rcons _ _); rewrite rcons_cat.
+        case/(_ wb_t Hsuff): IH=> [t1 [P [arg [mem [t2 ->]]]]].
+          by eexists t1, P, arg, mem, (rcons _ _); rewrite rcons_cat.
 Qed.
 
-Lemma well_bracketed_trace_inv t C res C' :
-  well_bracketed_trace stack_state0 (t ++ [:: ERet C res C']) ->
-  exists t1 P arg t2, t = t1 ++ ECall C' P arg C :: t2.
+Lemma well_bracketed_trace_inv t C res mem C' :
+  well_bracketed_trace stack_state0 (t ++ [:: ERet C res mem C']) ->
+  exists t1 P arg mem' t2, t = t1 ++ ECall C' P arg mem' C :: t2.
 Proof.
 rewrite -[t]cat0s.
 elim: t {1 3}nil=> [|e t IH] pre //=; last first.
@@ -239,8 +240,8 @@ Qed.
    performs is a possible read/write.  *)
 Definition well_formed_event intf (e: event_inform) : bool :=
   match e with
-  | ECall C P _ C' => (C != C') && imported_procedure_b intf C C' P
-  | ERet  C _   C' => (C != C')
+  | ECall C P _ _ C' => (C != C') && imported_procedure_b intf C C' P
+  | ERet  C _ _  C' => (C != C')
   | _ => true
   end.
 

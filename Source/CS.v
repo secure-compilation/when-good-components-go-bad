@@ -166,7 +166,7 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
     (* retrieve the procedure code *)
     find_procedure (genv_procedures G) C' P = Some P_expr ->
     kstep G [State C, s, mem, Kcall C' P k, E_val v, old_call_arg]
-            [:: ECall C P v C']
+            [:: ECall C P v mem C']
             [State C', Frame C old_call_arg k :: s, mem, Kstop, P_expr, v]
 | KS_InternalReturn: forall C s mem k v arg C' old_call_arg,
     C = C' ->
@@ -175,7 +175,7 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
 | KS_ExternalReturn: forall C s mem k v arg C' old_call_arg,
     C <> C' ->
     kstep G [State C, Frame C' old_call_arg k :: s, mem, Kstop, E_val v, arg]
-            [:: ERet C v C']
+            [:: ERet C v mem C']
             [State C', s, mem, k, E_val v, old_call_arg].
 
 Lemma kstep_component G s t s' :
@@ -280,7 +280,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
         else if imported_procedure_b (genv_interface G) C C' P then
           (* retrieve the procedure code *)
           do P_expr <- find_procedure (genv_procedures G) C' P;
-          ret ([ECall C P v C'], [State C', Frame C arg k' :: s, mem, Kstop, P_expr, v])
+          ret ([ECall C P v mem C'], [State C', Frame C arg k' :: s, mem, Kstop, P_expr, v])
         else
           None
       (*| _ => None
@@ -288,7 +288,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
     | Kstop =>
       match (*v,*) s with
       | (*Int i,*) Frame C' old_call_arg k' :: s' =>
-        let t := if C == C' then E0 else [:: ERet C v C'] in
+        let t := if C == C' then E0 else [:: ERet C v mem C'] in
         ret (t, [State C', s', mem, k', E_val v, old_call_arg])
       | (*_,*) _ => None
       end
