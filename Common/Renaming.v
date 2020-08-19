@@ -4,6 +4,7 @@ Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Traces.
 Require Import Common.Reachability.
+Require Import CompCert.Events.
 
 Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrnat eqtype path ssrfun seq fingraph fintype.
@@ -11,6 +12,7 @@ From mathcomp Require Import ssreflect ssrnat eqtype path ssrfun seq fingraph fi
 Section Renaming.
 
 Definition addr_t : Type := (Component.id * Block.id).
+  (* It seems only Block.id will need to be renamed *)
 Variable sigma: {fmap addr_t -> addr_t}.
 Hypothesis sigma_injective: injective sigma.
 
@@ -104,7 +106,12 @@ Proof.
     }
     apply H in contra. exfalso. assumption.
 Qed.
-
+(*Check Reachable.
+Inductive shared_so_far : addr_t -> trace event -> Prop :=
+| shared_by_call: forall cid bid t c1 p1 c2 o,
+    Reachable ... ->
+    shared_so_far (cid, bid) (rcons t ((ECall c1 p1 (Ptr (Permission.data, cid, bid, o)) c2))).
+*)
 Definition rename_memory_content_at_addr (m: Memory.t) (addr: Component.id * Block.id)
   : Memory.t :=
   match omap rename_list_values (Memory.load_all m addr) with
