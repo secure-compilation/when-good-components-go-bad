@@ -3,6 +3,7 @@ Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
 Require Import Common.Traces.
+Require Import Common.TracesInform.
 Require Import Common.Reachability.
 Require Import CompCert.Events.
 
@@ -105,7 +106,8 @@ Proof.
       + rewrite Haddr. auto.
     }
     apply H in contra. exfalso. assumption.
-Qed.
+Qed.  
+
 (*Check Reachable.
 Inductive shared_so_far : addr_t -> trace event -> Prop :=
 | shared_by_call: forall cid bid t c1 p1 c2 o,
@@ -173,3 +175,132 @@ Check traject.
 Check ssrfun.monomorphism_2.
 *)
 End Renaming.
+
+Definition mem_of_event (e: event) : Memory.t :=
+  match e with
+  | ECall _ _ _ mem _ => mem
+  | ERet _ _ mem _ => mem
+  end.
+
+Definition arg_of_event (e: event) : value :=
+  match e with
+  | ECall _ _ v _ _ => v
+  | ERet _ v _ _ => v
+  end.
+
+Definition addr_of_value (v: value) : {fset addr_t} :=
+  match v with
+  | Ptr (perm, cid, bid, _) =>
+    if perm =? Permission.data then fset1 (cid, bid) else fset0
+  | _ => fset0
+  end.
+
+Inductive addr_shared_so_far : addr_t -> trace event -> Prop :=
+| reachable_from_args_is_shared:
+    forall addr t e,
+      Reachable (mem_of_event e) (addr_of_value (arg_of_event e)) addr ->
+      addr_shared_so_far addr (rcons t e)
+| reachable_from_previously_shared:
+    forall addr addr' t e,
+      addr_shared_so_far addr' t ->
+      Reachable (mem_of_event e) (fset1 addr') addr ->
+      addr_shared_so_far addr (rcons t e).
+
+(* [DynShare] 
+   This definition is NOT needed when we define a trace relation that
+   (implicitly) specifies the shared part of the memory.
+   
+   It would be needed though if instead we define a trace semantics
+   that (explicitly) emits only the shared memory rather than the whole memory.
+*)
+Definition shared_part_of_memory
+           (mshr: Memory.t)
+           (m: Memory.t)
+           (t: trace event)
+  : Prop :=
+  forall addr offset, (addr_shared_so_far addr t ->
+                       Memory.load mshr (Permission.data, addr.1, addr.2, offset)
+                       =
+                       Memory.load m (Permission.data, addr.1, addr.2, offset)
+                      )
+                      /\
+                      (~ addr_shared_so_far addr t) ->
+                      Memory.load mshr (Permission.data, addr.1, addr.2, offset) = None.
+                                  
+Definition option_rename_value sigma option_v :=
+  match option_v with
+  | Some v => Some (rename_value sigma v)
+  | None => None
+  end.
+
+Definition option_inverse_rename_value sigma option_v :=
+  match option_v with
+  | Some v => Some (inverse_rename_value sigma v)
+  | None => None
+  end.
+
+Definition event_renames_event_at_addr sigma addr e e' : Prop :=
+  forall offset,
+  Memory.load (mem_of_event e')
+              (
+                Permission.data,
+                (rename_addr sigma addr).1,
+                (rename_addr sigma addr).2,
+                offset
+              )
+  =
+  option_rename_value sigma
+                      (
+                        Memory.load (mem_of_event e)
+                                    (Permission.data,
+                                     addr.1,
+                                     addr.2,
+                                     offset)
+                      ).
+
+Definition event_inverse_renames_event_at_addr sigma addr' e e' : Prop :=
+  forall offset,
+    option_inverse_rename_value sigma
+                                (
+                                  Memory.load (mem_of_event e')
+                                              (Permission.data,
+                                               addr'.1,
+                                               addr'.2,
+                                               offset
+                                              )
+                                )
+    =
+    Memory.load (mem_of_event e)
+                (Permission.data,
+                 (inverse_rename_addr sigma addr').1,
+                 (inverse_rename_addr sigma addr').2,
+                 offset
+                ).
+                      
+Inductive traces_rename_each_other
+          (sigma: {fmap addr_t -> addr_t}) :
+  trace event -> trace event -> Prop :=
+| nil_renames_nil: traces_rename_each_other sigma nil nil
+| rcons_renames_rcons:
+    forall tprefix e tprefix' e',
+      traces_rename_each_other sigma tprefix tprefix' ->
+      (
+        forall addr, addr_shared_so_far addr (rcons tprefix e) ->
+                     (
+                       event_renames_event_at_addr sigma addr e e'
+                       /\
+                       addr_shared_so_far (rename_addr sigma addr) (rcons tprefix' e')
+                     )
+      )
+      ->
+      (
+        forall addr', addr_shared_so_far addr' (rcons tprefix' e') ->
+                      (
+                        event_inverse_renames_event_at_addr sigma addr' e e'
+                        /\
+                        addr_shared_so_far (inverse_rename_addr sigma addr')
+                                           (rcons tprefix e)
+                      )
+      )
+      ->
+      traces_rename_each_other sigma (rcons tprefix e) (rcons tprefix' e').
