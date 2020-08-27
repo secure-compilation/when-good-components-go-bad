@@ -26,7 +26,7 @@ Proof.
 Qed.
 
 Module Type AbstractComponentMemory.
-  Parameter t : Type.
+  Parameter t : eqType.
 
   Parameter prealloc : {fmap Block.id -> nat + list value} -> t.
   Parameter empty : t.
@@ -41,6 +41,7 @@ Module Type AbstractComponentMemory.
   Parameter next_block : t -> Block.id.
   Parameter max_ptr : t -> Component.id * Block.id.
   Parameter transfer_memory_block : t -> Block.id -> t -> Block.id -> t.
+  (*Parameter mem_eqType : eqType.*)
 
   Axiom load_load_all:
     forall m b i v,
@@ -156,7 +157,22 @@ Module ComponentMemory : AbstractComponentMemory.
     content : NMap block;
     nextblock : Block.id;
   }.
-  Definition t := mem.
+  (*Definition t := mem.*)
+
+  Definition eqCompMem compMem1 compMem2 :=
+    (content compMem1 == content compMem2) && (nextblock compMem1 == nextblock compMem2).
+  
+  Lemma eqCompMemP : Equality.axiom eqCompMem.
+  Proof.
+    move. intros x y. apply iff_reflect. unfold eqCompMem. split.
+    - intros. subst. rewrite !eq_refl. auto.
+    - intros. pose proof (andP H) as [Hcontent Hnextblock].
+      destruct x, y. simpl in *.
+      pose proof (eqP Hcontent). pose proof (eqP Hnextblock). subst. reflexivity.
+  Qed.
+  
+  Definition compMem_eqMixin: Equality.mixin_of mem := EqMixin eqCompMemP.
+  Canonical t := Eval hnf in EqType mem compMem_eqMixin.
 
   Definition next_block (m: t) := nextblock m.
   
@@ -572,7 +588,8 @@ Module ComponentMemory : AbstractComponentMemory.
     forall m m' n b,
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
-  Admitted.  
+  Admitted.
+  
 End ComponentMemory.
 
 Module ComponentMemoryExtra.
@@ -596,7 +613,7 @@ Module ComponentMemoryExtra.
       unfold reserve_blocks in H.
       simpl in H.
       destruct (iter n (fun '(mem, bs) => let '(mem', b) := reserve_block mem in (mem', bs ++ [b])) (mem, [])).
-      destruct (reserve_block t0).
+      destruct (reserve_block s).
       inversion H. symmetry in H2; now apply app_cons_not_nil in H2.
     - intros n mem' H.
       destruct n; auto.
@@ -621,7 +638,7 @@ Module ComponentMemoryExtra.
         subst bs'.
         rewrite -Hiter. reflexivity.
   Qed.
-
+  
 End ComponentMemoryExtra.
 
 Module Memory.
@@ -742,6 +759,58 @@ Module Memory.
     intros ?. apply/eqP. auto.
   Qed.
 
+  Definition addresses_of_compMems mem : NMap {fset Block.id} :=
+    mapm ComponentMemory.domm mem.
+
+  Definition cid_blocks_to_seq_of_addresses (cid_blocks : Component.id * {fset Block.id})
+    : {fset (Component.id * Block.id)} :=
+    fset (map (fun bid => (cid_blocks.1, bid)) cid_blocks.2).
+
+  Definition addresses_of_mem mem : {fset (Component.id  * Block.id)} :=
+    (\bigcup_(cid_blocks <- (elementsm (addresses_of_compMems mem)))
+     cid_blocks_to_seq_of_addresses cid_blocks)%fset.
+
+  Lemma load_Some_addresses_of_compMems (mem: Memory.t) cid compMem bid off addresses_compMem:
+    mem cid = Some compMem ->
+    ComponentMemory.load compMem bid off ->
+    (addresses_of_compMems mem) cid = Some addresses_compMem ->
+    bid \in addresses_compMem.
+  Proof.
+    intros Hmem Hload Haddrs.
+    destruct (ComponentMemory.load compMem bid off) as [v|] eqn:Hv; try discriminate.
+    pose proof (ComponentMemory.load_domm _ _ _ _ Hv) as HIn.
+    pose proof (In_in bid (ComponentMemory.domm compMem)) as HIn_in.
+    rewrite <- HIn_in in HIn.
+    unfold addresses_of_compMems in Haddrs.
+    rewrite mapmE in Haddrs. unfold omap, obind, oapp in Haddrs.
+    rewrite Hmem in Haddrs. inversion Haddrs. subst. assumption.
+  Qed.
+  
+  Lemma load_Some_addresses_of_mem mem cid bid off:
+    load mem (Permission.data, cid, bid, off) ->
+    (cid, bid) \in addresses_of_mem mem.
+  Proof.
+    intros H_isSome. unfold load in *. simpl in H_isSome.
+    destruct (mem cid) as [compMem|] eqn:Hmem_cid; try discriminate.
+    unfold addresses_of_mem. apply/bigcupP.
+    destruct ((addresses_of_compMems mem) cid) as [addresses_cid|] eqn:e_addr_cid.
+    - apply BigCupSpec with (i := (cid, addresses_cid)); auto.
+      + simpl. unfold addresses_of_compMems in *.
+        rewrite mapmE in e_addr_cid.
+        unfold omap, obind, oapp in e_addr_cid. rewrite Hmem_cid in e_addr_cid.
+        inversion e_addr_cid. subst.
+        pose (f := fun (p: (Component.id * ComponentMemory.t)%type) =>
+                     (p.1, ComponentMemory.domm p.2)).
+        pose proof (@map_f _ _ f mem) as Hmap_f.
+        assert (f (cid, compMem) = (cid, ComponentMemory.domm compMem)) as Hfx by auto.
+        rewrite <- Hfx. apply Hmap_f. apply/getmP. assumption.
+      + unfold cid_blocks_to_seq_of_addresses. rewrite in_fset.
+        apply/mapP. eexists; auto. simpl.
+        apply (load_Some_addresses_of_compMems mem cid compMem bid off); assumption.
+    - unfold addresses_of_compMems in e_addr_cid. rewrite mapmE in e_addr_cid.
+      unfold omap, obind, oapp in e_addr_cid. rewrite Hmem_cid in e_addr_cid. discriminate.
+  Qed.        
+  
 End Memory.
 
 Set Implicit Arguments.
@@ -1256,7 +1325,7 @@ Proof.
     rewrite Hcase1 || idtac "ExStructures 0.1 legacy rewrite inactive";
     last discriminate.
   simpl.
-  destruct (ComponentMemory.store t (Pointer.block ptr) (Pointer.offset ptr) v) eqn:Hcase2;
+  destruct (ComponentMemory.store s (Pointer.block ptr) (Pointer.offset ptr) v) eqn:Hcase2;
     last discriminate.
   rewrite setm_union. now inversion Hstore.
 Qed.

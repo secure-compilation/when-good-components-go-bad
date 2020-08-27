@@ -13,21 +13,30 @@ From mathcomp Require Import ssreflect ssrnat eqtype path ssrfun seq fingraph fi
 Section Renaming.
 
 Definition addr_t : Type := (Component.id * Block.id).
-  (* It seems only Block.id will need to be renamed *)
-Variable sigma: {fmap addr_t -> addr_t}.
+  (* It seems only Block.id will need to be renamed.
+     However, to compute a renaming, we have to know which "component memory" we are
+     considering. To know the component memory, we need the Component.id.
+   *)
+Variable sigma: addr_t -> addr_t (*{fmap addr_t -> addr_t}*).
+Variable inverse_sigma: addr_t -> addr_t.
+
+Hypothesis cancel_inverse_sigma_sigma: cancel inverse_sigma sigma.
+Hypothesis cancel_sigma_inverse_sigma: cancel sigma inverse_sigma.
 Hypothesis sigma_injective: injective sigma.
 
-Definition inverse_sigma (addr: addr_t) : addr_t :=
+(*Definition inverse_sigma (addr: addr_t) : addr_t :=
   let dom_sigma := domm sigma in
   if has (fun y => sigma y == Some addr) dom_sigma
   then nth (0,0) dom_sigma (find (fun y => sigma y == Some addr) dom_sigma)
   else addr.
+ *)
 
-Definition rename_addr (addr: addr_t) : addr_t :=
-  match sigma addr with
+Definition rename_addr (addr: addr_t) : addr_t := sigma addr.
+(*  match sigma addr with
   | Some addr' => addr'
   | None => addr
   end.
+*)
 
 Definition inverse_rename_addr (addr: addr_t) := inverse_sigma addr.
 
@@ -48,6 +57,14 @@ Definition rename_list_values (s: list value) : list value := map rename_value s
 
 Definition inverse_rename_list_values (s: list value) : list value :=
   map inverse_rename_value s.
+
+Lemma inverse_rename_addr_left_inverse addr: inverse_rename_addr (rename_addr addr) = addr.
+Proof.
+  unfold inverse_rename_addr, rename_addr. pose proof (cancel_sigma_inverse_sigma addr). auto.
+Qed.
+
+(***************************** 
+    [DEPRECATED]: sigma was fmap.
 
 Lemma inverse_rename_addr_left_inverse addr:
   addr \in domm sigma -> (*Is this precondition ok?*)
@@ -88,6 +105,20 @@ Proof.
   - rewrite mem_domm in Haddr. rewrite e_sigma_addr in Haddr. easy.
 Qed.
 
+****************************************)
+
+
+Lemma inverse_rename_addr_right_inverse addr:
+  rename_addr (inverse_rename_addr addr) = addr.
+Proof.
+  unfold inverse_rename_addr, rename_addr. pose proof (cancel_inverse_sigma_sigma addr). auto.
+Qed.
+
+
+
+(**************************************
+    [DEPRECATED]: sigma was finmap      
+
 Lemma inverse_rename_addr_right_inverse addr_pre addr:
   sigma addr_pre = Some addr ->
   rename_addr (inverse_rename_addr addr) = addr.
@@ -108,12 +139,8 @@ Proof.
     apply H in contra. exfalso. assumption.
 Qed.  
 
-(*Check Reachable.
-Inductive shared_so_far : addr_t -> trace event -> Prop :=
-| shared_by_call: forall cid bid t c1 p1 c2 o,
-    Reachable ... ->
-    shared_so_far (cid, bid) (rcons t ((ECall c1 p1 (Ptr (Permission.data, cid, bid, o)) c2))).
-*)
+*********************************)
+
 Definition rename_memory_content_at_addr (m: Memory.t) (addr: Component.id * Block.id)
   : Memory.t :=
   match omap rename_list_values (Memory.load_all m addr) with
@@ -150,6 +177,7 @@ Definition rename_memory_subgraph (m: Memory.t) (addrs: list (Component.id * Blo
    * Addr_shared_so_far, which itself will use the definition of
    * Reachable
 *)
+
 Lemma reachable_nodes_nat_rename m start:
   fset (
       reachable_nodes_nat
@@ -160,20 +188,6 @@ Lemma reachable_nodes_nat_rename m start:
   fset (map rename_addr (reachable_nodes_nat m start)).
 Admitted.
 
-(*SearchAbout path. Check path.
-Check reachable_nodes_nat.
-Check dfs_path.
-SearchAbout dfs_path.
-SearchAbout path.
-
-SearchAbout injective.
-
-SearchAbout nth map.
-SearchAbout in_mem.
-Check iter.
-Check traject.
-Check ssrfun.monomorphism_2.
-*)
 End Renaming.
 
 Definition mem_of_event (e: event) : Memory.t :=
@@ -278,7 +292,7 @@ Definition event_inverse_renames_event_at_addr sigma addr' e e' : Prop :=
                 ).
                       
 Inductive traces_rename_each_other
-          (sigma: {fmap addr_t -> addr_t}) :
+          (sigma: addr_t -> addr_t (*{fmap addr_t -> addr_t}*)) :
   trace event -> trace event -> Prop :=
 | nil_renames_nil: traces_rename_each_other sigma nil nil
 | rcons_renames_rcons:
@@ -304,3 +318,4 @@ Inductive traces_rename_each_other
       )
       ->
       traces_rename_each_other sigma (rcons tprefix e) (rcons tprefix' e').
+
