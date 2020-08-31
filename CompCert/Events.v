@@ -18,10 +18,10 @@ Class EventClass (A : Type) :=
    values. We have two basic alternatives:
     1. Rule out Undef values in the semantics.
     2. Refine the definition of defined and undefined values at the type level.
-*)
+ *)
 Inductive event :=
-| ECall : Component.id -> Procedure.id -> value -> Memory.t -> Component.id -> event
-| ERet : Component.id -> value -> Memory.t -> Component.id -> event
+| ECall : Component.id -> Procedure.id -> value -> Memory.tt -> Component.id -> event
+| ERet : Component.id -> value -> Memory.tt -> Component.id -> event
 (*| ERead : Component.id -> Pointer.t -> value -> event
 | EWrite : Component.id -> Pointer.t -> value -> event*)
 .

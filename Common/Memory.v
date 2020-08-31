@@ -642,7 +642,16 @@ Module ComponentMemoryExtra.
 End ComponentMemoryExtra.
 
 Module Memory.
-  Definition t := NMap ComponentMemory.t.
+  
+    Definition tt := NMap ComponentMemory.t.
+  
+    Definition eqMem (m1 m2: tt) := m1 == m2.
+  
+    Lemma eqMemP : Equality.axiom eqMem.
+    Proof. move. intros x y. unfold eqMem. apply/eqP. Qed.
+  
+    Definition mem_eqMixin: Equality.mixin_of tt := EqMixin eqMemP.
+    Canonical t := Eval hnf in EqType tt mem_eqMixin.
   
   Fixpoint empty (cs : list Component.id) :=
     match cs with

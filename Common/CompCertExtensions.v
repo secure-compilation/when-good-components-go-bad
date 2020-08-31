@@ -24,8 +24,8 @@ Proof.
 by case=> [?????|????(*|???|???*)] [?????|????(*|???|???*)] //= => [[-> -> -> -> ->]|[-> -> -> ->](*|[-> -> ->]|[-> -> ->]*)].
 Qed.
 
-(*Definition event_eqMixin := @InjEqMixin _ _ sum_of_event sum_of_event_inj.
-Canonical event_eqType := Eval hnf in EqType event event_eqMixin.*)
+Definition event_eqMixin := @InjEqMixin _ _ sum_of_event sum_of_event_inj.
+Canonical event_eqType := Eval hnf in EqType event event_eqMixin.
 
 Definition empty_behavior {Ev: Type} (beh : @program_behavior Ev) :=
   match beh with

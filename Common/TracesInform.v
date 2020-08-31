@@ -21,8 +21,9 @@ Inductive Ebinop : Set :=
   E_Add : Ebinop | E_Minus : Ebinop | E_Mul : Ebinop | E_Eq : Ebinop | E_Leq : Ebinop.
 
 Inductive event_inform :=
-| ECall : Component.id -> Procedure.id -> value -> Memory.t -> Component.id -> event_inform
-| ERet : Component.id -> value -> Memory.t -> Component.id -> event_inform
+| ECallInform :
+    Component.id -> Procedure.id -> value -> Memory.t -> Component.id -> event_inform
+| ERetInform : Component.id -> value -> Memory.t -> Component.id -> event_inform
 | EConst : Component.id -> value -> Eregister -> event_inform
 | EMov : Component.id -> Eregister -> Eregister -> event_inform
 | EBinop : Component.id -> Ebinop -> Eregister -> Eregister -> Eregister -> event_inform
@@ -32,12 +33,12 @@ Inductive event_inform :=
 | EInvalidateRA : Component.id -> event_inform.
 
 Inductive match_event : event_inform -> event_inform -> Prop :=
-| match_events_ECall: forall C P arg mem C',
-    match_event (ECall C P arg mem C')
-                (ECall C P arg mem C')
-| match_events_ERet: forall C retval mem C',
-    match_event (ERet C retval mem C')
-                (ERet C retval mem C')
+| match_events_ECallInform: forall C P arg mem C',
+    match_event (ECallInform C P arg mem C')
+                (ECallInform C P arg mem C')
+| match_events_ERetInform: forall C retval mem C',
+    match_event (ERetInform C retval mem C')
+                (ERetInform C retval mem C')
 | match_events_EConst: forall C v r,
     match_event (EConst C v r)
                 (EConst C v r)
@@ -68,8 +69,8 @@ Qed.
 Lemma equal_match_event:
   forall e e', e = e' -> match_event e e'.
 Proof. intros e e' Heq. rewrite Heq. destruct e'.
-       - apply match_events_ECall.
-       - apply match_events_ERet.
+       - apply match_events_ECallInform.
+       - apply match_events_ERetInform.
        - apply match_events_EConst.
        - apply match_events_EMov.
        - apply match_events_EBinop.
@@ -83,8 +84,8 @@ Instance event_inform_EventClass : EventClass event_inform :=
   {
     cur_comp_of_event e :=
       match e with
-      | ECall   C _ _ _ _ => C
-      | ERet    C _ _ _  => C
+      | ECallInform   C _ _ _ _ => C
+      | ERetInform    C _ _ _  => C
       | EConst  C _ _ => C
       | EMov    C _ _ => C
       | EBinop  C _ _ _ _ => C
@@ -96,8 +97,8 @@ Instance event_inform_EventClass : EventClass event_inform :=
     next_comp_of_event e :=
       match e with
       (* Calls and returns yield control. *)
-      | ECall  _ _ _ _ C => C
-      | ERet   _ _ _  C => C
+      | ECallInform  _ _ _ _ C => C
+      | ERetInform   _ _ _  C => C
       (* All the other events retain control. *)
       | EConst  C _ _ => C
       | EMov    C _ _ => C
@@ -133,9 +134,9 @@ Fixpoint well_bracketed_trace s t : bool :=
   | e :: t' =>
     (cur_comp s == cur_comp_of_event e) &&
     match e with
-    | ECall C _ _ _ C' =>
+    | ECallInform C _ _ _ C' =>
       well_bracketed_trace (StackState C' (C :: callers s)) t'
-    | ERet C _ _ C' =>
+    | ERetInform C _ _ C' =>
       match callers s with
       | [] => false
       | head :: tail =>
@@ -147,8 +148,8 @@ Fixpoint well_bracketed_trace s t : bool :=
 
 Definition run_event s e :=
   match e with
-  | ECall C _ _ _ C' => StackState C' (C :: callers s)
-  | ERet  C _ _  C' => StackState C' (tail (callers s))
+  | ECallInform C _ _ _ C' => StackState C' (C :: callers s)
+  | ERetInform  C _ _  C' => StackState C' (tail (callers s))
   | _ => s
   end.
 
@@ -179,7 +180,7 @@ Proof. by case=> [??] [??] [-> ->]. Qed.
 Lemma well_bracketed_trace_suffix t C C' Cs :
   well_bracketed_trace stack_state0 t ->
   suffix [:: C, C' & Cs] (run_trace stack_state0 t) ->
-  exists t1 P arg mem t2, t = t1 ++ ECall C' P arg mem C :: t2.
+  exists t1 P arg mem t2, t = t1 ++ ECallInform C' P arg mem C :: t2.
 Proof.
   set s0 := stack_state0.
   elim/last_ind: t=> [|t e IH] //=.
@@ -217,8 +218,8 @@ Proof.
 Qed.
 
 Lemma well_bracketed_trace_inv t C res mem C' :
-  well_bracketed_trace stack_state0 (t ++ [:: ERet C res mem C']) ->
-  exists t1 P arg mem' t2, t = t1 ++ ECall C' P arg mem' C :: t2.
+  well_bracketed_trace stack_state0 (t ++ [:: ERetInform C res mem C']) ->
+  exists t1 P arg mem' t2, t = t1 ++ ECallInform C' P arg mem' C :: t2.
 Proof.
 rewrite -[t]cat0s.
 elim: t {1 3}nil=> [|e t IH] pre //=; last first.
@@ -240,8 +241,8 @@ Qed.
    performs is a possible read/write.  *)
 Definition well_formed_event intf (e: event_inform) : bool :=
   match e with
-  | ECall C P _ _ C' => (C != C') && imported_procedure_b intf C C' P
-  | ERet  C _ _  C' => (C != C')
+  | ECallInform C P _ _ C' => (C != C') && imported_procedure_b intf C C' P
+  | ERetInform  C _ _  C' => (C != C')
   | _ => true
   end.
 
