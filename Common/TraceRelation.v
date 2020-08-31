@@ -52,8 +52,7 @@ Inductive trace_memories_no_dealloc : trace event -> Prop :=
       trace_memories_no_dealloc (rcons tpref e).
 
 Definition traces_related t t' :=
-  exists sigma (*: {fmap addr_t -> addr_t}*),
-    injective sigma /\ traces_rename_each_other sigma t t'.
+  exists (sigma sigma_inv : addr_t -> addr_t), traces_rename_each_other sigma sigma_inv t t'.
 
 Lemma addr_shared_so_far_allocated addr t e:
   trace_pointers_are_allocated (rcons t e) ->
@@ -75,46 +74,43 @@ Section TraceRelationProperties.
   Hypothesis t3_memories_no_dealloc: trace_memories_no_dealloc t3.
     
   Definition id_sigma_of_trace (t: trace event) := @id addr_t.
-  (*mkfmap
-        (zip
-        (union_of_memory_domains_of_trace t)
-        (union_of_memory_domains_of_trace t)
-        ).
-   *)
-
-  (* [DynShare] Proving that the identity function that is constructed
-   using mkfmap is actually identity was a bit too difficult, so I decided
-   I would go for sigma being just a function rather than a fmap.
-   *)
 
   Lemma traces_related_reflexive t : traces_related t t.
   Proof.
-    unfold traces_related. eexists (id_sigma_of_trace t). split.
-    - unfold id_sigma_of_trace. apply inj_id.
-    - induction t using last_ind.
-      + apply nil_renames_nil.
-      + apply rcons_renames_rcons; auto.
-        * intros addr Hshrsfr. split.
-          -- unfold event_renames_event_at_addr. intros off.
-             unfold id_sigma_of_trace, rename_addr, option_rename_value, rename_value,
-             rename_value_template, rename_addr.
-             destruct (Memory.load (mem_of_event x) (Permission.data, addr.1, addr.2, off));
-               auto.
-             destruct v as [|ptr|]; auto. destruct ptr as [[[perm c] b] o]; auto.
-          -- unfold rename_addr, id_sigma_of_trace. assumption.
-        * intros addr Hshrsfr. split.
-          -- unfold event_renames_event_at_addr. intros off.
-             unfold id_sigma_of_trace, inverse_rename_addr,
-             option_inverse_rename_value, inverse_rename_value,
-             rename_value_template, inverse_rename_addr.
-             destruct (Memory.load (mem_of_event x) (Permission.data, addr.1, addr.2, off));
-               auto.
-             destruct v as [|ptr|]; auto. destruct ptr as [[[perm c] b] o]; auto.
-          -- unfold rename_addr, id_sigma_of_trace. assumption.
+    unfold traces_related. eexists (id_sigma_of_trace t). eexists (id_sigma_of_trace t).
+    induction t using last_ind.
+    + apply nil_renames_nil.
+    + apply rcons_renames_rcons; auto.
+      * intros addr Hshrsfr. split.
+        -- unfold event_renames_event_at_addr. intros off.
+           unfold id_sigma_of_trace, rename_addr, option_rename_value, rename_value,
+           rename_value_template, rename_addr.
+           destruct (Memory.load (mem_of_event x) (Permission.data, addr.1, addr.2, off));
+             auto.
+           destruct v as [|ptr|]; auto. destruct ptr as [[[perm c] b] o]; auto.
+        -- unfold rename_addr, id_sigma_of_trace. assumption.
+      * intros addr Hshrsfr. split.
+        -- unfold event_renames_event_at_addr. intros off.
+           unfold id_sigma_of_trace, inverse_rename_addr,
+           option_inverse_rename_value, inverse_rename_value,
+           rename_value_template, inverse_rename_addr.
+           destruct (Memory.load (mem_of_event x) (Permission.data, addr.1, addr.2, off));
+             auto.
+           destruct v as [|ptr|]; auto. destruct ptr as [[[perm c] b] o]; auto.
+        -- unfold rename_addr, id_sigma_of_trace. assumption.
   Qed.
 
+  (*
+  Variable memexample:Memory.t.
+  Variable sigmaexample:addr_t -> addr_t.
+  Definition T_memexampleAddr := adhoc_seq_sub_finType (Memory.addresses_of_mem memexample).
+  Definition sigma_fin (addrFin: T_memexampleAddr) : T_memexampleAddr.
+   *)
+   
   Lemma traces_related_symmetric : traces_related t1 t2 -> traces_related t2 t1.
-  Admitted.
+  Proof.
+    unfold traces_related. intros [sigma_t1_t2 [Hinj_sigma_t1_t2 Hrenmt1t2]].
+  Admitted.    
 
   Lemma traces_related_transitive :
     traces_related t1 t2 ->
