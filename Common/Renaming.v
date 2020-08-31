@@ -2,10 +2,11 @@ Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
 Require Import Common.Memory.
+Require Import CompCert.Events.
 Require Import Common.Traces.
 Require Import Common.TracesInform.
 Require Import Common.Reachability.
-Require Import CompCert.Events.
+Require Import Common.CompCertExtensions.
 
 Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrnat eqtype path ssrfun seq fingraph fintype.
@@ -140,6 +141,200 @@ Inductive addr_shared_so_far : addr_t -> trace event -> Prop :=
       addr_shared_so_far addr' t ->
       Reachable (mem_of_event e) (fset1 addr') addr ->
       addr_shared_so_far addr (rcons t e).
+
+Section PredicateOnReachableAddresses.
+
+  Variable good_addr: addr_t -> Prop.
+
+  Definition good_memory (m: Memory.t) : Prop :=
+    forall cid bid offset p cid_l bid_l o,
+      good_addr (cid, bid) ->
+      Memory.load m (Permission.data, cid, bid, offset) = Some (Ptr (p, cid_l, bid_l, o)) ->
+      good_addr (cid_l, bid_l).
+    
+  Variable mem: Memory.t.
+  
+  Hypothesis good_memory_mem: good_memory mem.
+
+  Lemma reachable_addresses_are_good a_set a':
+    Reachable mem a_set a' ->
+    (forall a, a \in a_set -> good_addr a) ->
+    good_addr a'.
+  Proof.
+    intros Hreach. induction Hreach as [x Hx|cid bid b compMem Hreach' H1 H2 H3].
+    - intros Hallgood. apply Hallgood in Hx. assumption.
+    - intros Hallgood. apply H1 in Hallgood. destruct b as [a'cid a'bid].
+      pose proof ComponentMemory.load_block_load compMem bid a'cid a'bid as [Hif Hiff].
+      pose proof (In_in (a'cid, a'bid) (ComponentMemory.load_block compMem bid)) as
+          [HinIn _].
+      unfold is_true in H3. rewrite H3 in HinIn.
+      assert (In (a'cid, a'bid) (ComponentMemory.load_block compMem bid)) as HIn.
+      { apply HinIn. trivial. }
+      destruct (Hif HIn) as [ptro [i Hload]].
+      apply good_memory_mem with (cid := cid) (bid := bid) (offset := i) (p := Permission.data)
+                                (o := ptro); auto.
+      unfold Memory.load. simpl. rewrite H2. assumption.
+  Qed.
+
+End PredicateOnReachableAddresses.
+
+Section PredicateOnSharedSoFar.
+
+  Variable good_addr: addr_t -> Prop.
+  
+  Inductive good_trace : trace event -> Prop :=
+  | nil_good_trace : good_trace nil
+  | rcons_good_trace :
+      forall tpref e,
+        good_trace tpref ->
+        good_memory good_addr (mem_of_event e) ->
+        (forall a, a \in addr_of_value (arg_of_event e) -> good_addr a) ->
+        good_trace (rcons tpref e).
+  
+  Variable t: trace event.
+
+  Hypothesis good_trace_t: good_trace t.
+
+  Lemma addr_shared_so_far_good_addr a:
+    addr_shared_so_far a t -> good_addr a.
+  Proof.
+    intros Hshsfr. induction Hshsfr as [a t e H|a a' t e Ha'shrsfr IH H].
+    - inversion good_trace_t as [H1|tpref e' Htpref Hgoodmem Hin Heq].
+      + pose proof size_rcons t e as Hcontra. rewrite <- H1 in Hcontra. discriminate.
+      + assert (rcons tpref e' == rcons t e) as Hrcons_eq.
+        { apply/eqP. assumption. }
+        pose proof eqseq_rcons tpref t e' e as Hinv. rewrite Hrcons_eq in Hinv.
+        destruct (andb_true_eq _ _ Hinv) as [Htpref_t He'e].
+        assert (tpref = t).
+        { apply/eqP. rewrite <- Htpref_t. trivial. }
+        assert (e' = e).
+        { apply/eqP. rewrite <- He'e. trivial. }
+        subst.
+        eapply reachable_addresses_are_good.
+        * exact Hgoodmem.
+        * exact H.
+        * exact Hin.
+    - inversion good_trace_t as [H1|tpref e' Htpref Hgoodmem Hin Heq].
+      + pose proof size_rcons t e as Hcontra. rewrite <- H1 in Hcontra. discriminate.
+      + assert (rcons tpref e' == rcons t e) as Hrcons_eq.
+        { apply/eqP. assumption. }
+        pose proof eqseq_rcons tpref t e' e as Hinv. rewrite Hrcons_eq in Hinv.
+        destruct (andb_true_eq _ _ Hinv) as [Htpref_t He'e].
+        assert (tpref = t).
+        { apply/eqP. rewrite <- Htpref_t. trivial. }
+        assert (e' = e).
+        { apply/eqP. rewrite <- He'e. trivial. }
+        subst.
+        eapply reachable_addresses_are_good.
+        * exact Hgoodmem.
+        * exact H.
+        * intros a0 Ha0. rewrite in_fset1 in Ha0. pose proof eqP Ha0. subst. apply IH.
+          exact Htpref.
+  Qed.        
+  
+End PredicateOnSharedSoFar.
+
+Section SigmaShifting.
+
+  Variable num_extra_blocks_of_lhs : Z.
+
+  Definition sigma_shifting :=
+    if (num_extra_blocks_of_lhs >=? 0)%Z
+    then (sigma_from_bigger_dom (Z.to_nat num_extra_blocks_of_lhs))
+    else (inv_sigma_from_bigger_dom (Z.to_nat (- num_extra_blocks_of_lhs))).
+
+  Definition inv_sigma_shifting :=
+    if (num_extra_blocks_of_lhs >=? 0)%Z
+    then (inv_sigma_from_bigger_dom (Z.to_nat num_extra_blocks_of_lhs))
+    else (sigma_from_bigger_dom (Z.to_nat (- num_extra_blocks_of_lhs))).
+
+  Lemma cancel_sigma_shifting_inv_sigma_shifting:
+    cancel sigma_shifting inv_sigma_shifting.
+  Proof.
+    unfold sigma_shifting, inv_sigma_shifting.
+    destruct (num_extra_blocks_of_lhs >=? 0)%Z.
+    - apply cancel_sigma_from_bigger_dom_inv_sigma_from_bigger_dom.
+    - apply cancel_inv_sigma_from_bigger_dom_sigma_from_bigger_dom.
+  Qed.
+
+  Lemma cancel_inv_sigma_shifting_sigma_shifting:
+    cancel inv_sigma_shifting sigma_shifting.
+  Proof.
+    unfold sigma_shifting, inv_sigma_shifting.
+    destruct (num_extra_blocks_of_lhs >=? 0)%Z.
+    - apply cancel_inv_sigma_from_bigger_dom_sigma_from_bigger_dom.
+    - apply cancel_sigma_from_bigger_dom_inv_sigma_from_bigger_dom.
+  Qed.
+
+  Lemma sigma_shifting_bijective : bijective sigma_shifting.
+  Proof. apply Bijective with (g := inv_sigma_shifting).
+         - exact cancel_sigma_shifting_inv_sigma_shifting.
+         - exact cancel_inv_sigma_shifting_sigma_shifting.
+  Qed.
+
+  Lemma inv_sigma_shifting_bijective : bijective inv_sigma_shifting.
+  Proof. apply Bijective with (g := sigma_shifting).
+         - exact cancel_inv_sigma_shifting_sigma_shifting.
+         - exact cancel_sigma_shifting_inv_sigma_shifting.
+  Qed.
+
+  Definition left_addr_good_for_shifting (left_addr: addr_t) : Prop :=
+    match left_addr with
+    | (_, bid) => ((num_extra_blocks_of_lhs >=? 0)%Z ->
+                   (bid >= Z.to_nat num_extra_blocks_of_lhs))
+    end.
+
+  Definition right_addr_good_for_shifting (right_addr: addr_t) : Prop :=
+    match right_addr with
+    | (_, bid) => ((~ (num_extra_blocks_of_lhs >=? 0)%Z) ->
+                   (bid >= Z.to_nat (- num_extra_blocks_of_lhs)))
+    end.
+
+  Lemma sigma_left_good_right_good left_addr:
+    left_addr_good_for_shifting left_addr ->
+    exists right_addr,
+    sigma_shifting (care, left_addr) = (care, right_addr) /\
+    right_addr_good_for_shifting right_addr.
+  Proof.
+    destruct left_addr as [lcid lbid].
+    unfold left_addr_good_for_shifting, sigma_shifting, right_addr_good_for_shifting.
+    intros Hleft_good.
+    destruct (num_extra_blocks_of_lhs >=? 0)%Z eqn:Hge0.
+    - eexists. simpl.
+      assert (lbid <? Z.to_nat num_extra_blocks_of_lhs = false) as Hcond.
+      { rewrite Nat.ltb_ge. apply/leP. apply Hleft_good. trivial. }
+      rewrite Hcond. split.
+      + reflexivity.
+      + simpl. intros H.
+        pose proof (@negP true) as H0. assert (~~ true) as H1. apply/H0. apply H.
+        simpl in H1. inversion H1.
+    - eexists. simpl. split.
+      + reflexivity.
+      + simpl. intros. apply leq_addl.
+  Qed.
+                                                
+  Lemma inv_sigma_right_good_left_good right_addr:
+    right_addr_good_for_shifting right_addr ->
+    exists left_addr,
+      inv_sigma_shifting (care, right_addr) = (care, left_addr) /\
+      left_addr_good_for_shifting left_addr.
+  Proof.
+    destruct right_addr as [rcid rbid].
+    unfold right_addr_good_for_shifting, inv_sigma_shifting, left_addr_good_for_shifting.
+    intros Hright_good.
+    destruct (num_extra_blocks_of_lhs >=? 0)%Z eqn:Hge0.
+    - eexists. simpl. split.
+      + reflexivity.
+      + simpl. intros. apply leq_addl.
+    - eexists. simpl.
+      assert (rbid <? Z.to_nat (- num_extra_blocks_of_lhs) = false) as Hcond.
+      { rewrite Nat.ltb_ge. apply/leP. apply Hright_good. trivial. }
+      rewrite Hcond. split.
+      + reflexivity.
+      + simpl. intros. inversion H.
+  Qed.
+    
+End SigmaShifting.
 
 Section Renaming.
 
@@ -334,8 +529,6 @@ Qed.
         )
         ->
         traces_rename_each_other (rcons tprefix e) (rcons tprefix' e').
-  
-
 
 
 
