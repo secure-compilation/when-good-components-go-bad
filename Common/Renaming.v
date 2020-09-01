@@ -333,17 +333,98 @@ Section SigmaShifting.
       + reflexivity.
       + simpl. intros. inversion H.
   Qed.
-    
+
 End SigmaShifting.
+
+Section SigmaShiftingProperties.
+
+  Lemma sigma_shifting_0_id:
+    forall x, sigma_shifting 0 x = x.
+  Proof.
+    intros [c_dc [cid bid]]. unfold sigma_shifting, sigma_from_bigger_dom. simpl.
+    destruct c_dc eqn:H; simpl.
+    - rewrite subn0. reflexivity.
+    - rewrite addn0. reflexivity.
+  Qed.
+
+  Lemma inv_sigma_shifting_0_id:
+    forall x, inv_sigma_shifting 0 x = x.
+  Proof.
+    intros [c_dc [cid bid]]. unfold inv_sigma_shifting, inv_sigma_from_bigger_dom. simpl.
+    destruct c_dc eqn:H; simpl.
+    - rewrite addn0. reflexivity.
+    - rewrite subn0. reflexivity.
+  Qed.
+
+  Lemma inv_sigma_shifting_n_sigma_shifting_minus_n:
+    forall n x,
+      inv_sigma_shifting n x = sigma_shifting (- n) x.
+  Proof.
+    intros n [cdc [cid bid]].
+    unfold inv_sigma_shifting, sigma_shifting,
+    sigma_from_bigger_dom, inv_sigma_from_bigger_dom.
+    destruct (n >=? 0)%Z eqn:Hn; destruct (- n >=? 0)%Z eqn:Hoppn;
+      destruct (cdc =? care) eqn:Hcdc; try reflexivity.
+    - (* Here, n = 0 *)
+      assert (Z.le n Z0) as Hn0.
+      { rewrite <- Z.opp_nonneg_nonpos. rewrite <- Z.geb_le. assumption. }
+      assert (Z.le Z0 n) as H0n.
+      { rewrite <- Z.geb_le. assumption. }
+      assert (n = Z0) as Hneq0.
+      { apply Z.le_antisymm; assumption. }
+      subst. simpl. rewrite addn0 subn0. reflexivity.
+    - (* Here, n = 0 *)
+      assert (Z.le n Z0) as Hn0.
+      { rewrite <- Z.opp_nonneg_nonpos. rewrite <- Z.geb_le. assumption. }
+      assert (Z.le Z0 n) as H0n.
+      { rewrite <- Z.geb_le. assumption. }
+      assert (n = Z0) as Hneq0.
+      { apply Z.le_antisymm; assumption. }
+      subst. simpl. rewrite addn0 subn0. reflexivity.
+    - rewrite Z.opp_involutive. reflexivity.
+    - rewrite Z.opp_involutive. reflexivity.
+    - (* This case is impossible. *)
+      assert ((Z.leb Z0 n) = false) as Hfalse.
+      { rewrite <- Z.geb_leb. assumption. }
+      assert ((Z.leb Z0 (Z.opp n)) = false) as Hfalse'.
+      { rewrite <- Z.geb_leb. assumption. }
+      assert (Z.ltb n Z0) as Hcontra.
+      { rewrite Z.ltb_antisym. rewrite Hfalse. simpl. auto. }
+      assert (Z.lt Z0 n) as Hcontra'.
+      { rewrite Z.opp_lt_mono. simpl. rewrite <- Z.nle_gt.
+        rewrite <- Z.leb_nle. exact Hfalse'. }
+      assert (not (Z.lt n Z0)) as Hnot.
+      { apply Z.lt_asymm. exact Hcontra'. }
+      assert (Z.ltb n Z0 = false) as Hfinally.
+      { rewrite Z.ltb_nlt. exact Hnot. }
+      rewrite Hfinally in Hcontra. inversion Hcontra.
+    - (* This case is impossible. *)
+      assert ((Z.leb Z0 n) = false) as Hfalse.
+      { rewrite <- Z.geb_leb. assumption. }
+      assert ((Z.leb Z0 (Z.opp n)) = false) as Hfalse'.
+      { rewrite <- Z.geb_leb. assumption. }
+      assert (Z.ltb n Z0) as Hcontra.
+      { rewrite Z.ltb_antisym. rewrite Hfalse. simpl. auto. }
+      assert (Z.lt Z0 n) as Hcontra'.
+      { rewrite Z.opp_lt_mono. simpl. rewrite <- Z.nle_gt.
+        rewrite <- Z.leb_nle. exact Hfalse'. }
+      assert (not (Z.lt n Z0)) as Hnot.
+      { apply Z.lt_asymm. exact Hcontra'. }
+      assert (Z.ltb n Z0 = false) as Hfinally.
+      { rewrite Z.ltb_nlt. exact Hnot. }
+      rewrite Hfinally in Hcontra. inversion Hcontra.
+  Qed.                         
+
+End SigmaShiftingProperties.
 
 Section Renaming.
 
   Variable sigma: addr_t -> addr_t (*{fmap addr_t -> addr_t}*).
   Variable inverse_sigma: addr_t -> addr_t.
 
-  Hypothesis cancel_inverse_sigma_sigma: cancel inverse_sigma sigma.
+  (*Hypothesis cancel_inverse_sigma_sigma: cancel inverse_sigma sigma.
   Hypothesis cancel_sigma_inverse_sigma: cancel sigma inverse_sigma.
-  Hypothesis sigma_injective: injective sigma.
+  Hypothesis sigma_injective: injective sigma.*)
 
   (*Definition inverse_sigma (addr: addr_t) : addr_t :=
   let dom_sigma := domm sigma in
@@ -379,10 +460,11 @@ Section Renaming.
   Definition inverse_rename_list_values (s: list value) : list value :=
     map inverse_rename_value s.
 
-  Lemma inverse_rename_addr_left_inverse addr: inverse_rename_addr (rename_addr addr) = addr.
+  (*Lemma inverse_rename_addr_left_inverse addr: inverse_rename_addr (rename_addr addr) = addr.
   Proof.
     unfold inverse_rename_addr, rename_addr. pose proof (cancel_sigma_inverse_sigma addr). auto.
-  Qed.
+  Qed.*)
+  
 
   (***************************** 
     [DEPRECATED]: sigma was fmap.
@@ -429,11 +511,11 @@ Qed.
    ****************************************)
 
 
-  Lemma inverse_rename_addr_right_inverse addr:
+  (*Lemma inverse_rename_addr_right_inverse addr:
     rename_addr (inverse_rename_addr addr) = addr.
   Proof.
     unfold inverse_rename_addr, rename_addr. pose proof (cancel_inverse_sigma_sigma addr). auto.
-  Qed.
+  Qed.*)
 
 
 
@@ -531,7 +613,29 @@ Qed.
         traces_rename_each_other (rcons tprefix e) (rcons tprefix' e').
 
 
+  Lemma traces_rename_each_other_nil_rcons t x:
+    traces_rename_each_other [::] (rcons t x) -> False.
+  Proof. intros H. inversion H as [y Hy|tp e ? ? ? ? ? Ha Hb].
+         - assert (0 = size (rcons t x)) as Hcontra.
+           { rewrite <- Hy. reflexivity. }
+           rewrite size_rcons in Hcontra. discriminate.
+         - assert (size (rcons tp e) = 0) as Hcontra.
+           { rewrite Ha. reflexivity. }
+           rewrite size_rcons in Hcontra. discriminate.
+  Qed.
 
+  Lemma traces_rename_each_other_rcons_nil t x:
+    traces_rename_each_other (rcons t x) [::] -> False.
+  Proof. intros H. inversion H as [y Hy|tp e tp' e' ? ? ? Ha Hb].
+         - assert (0 = size (rcons t x)) as Hcontra.
+           { rewrite <- y. reflexivity. }
+           rewrite size_rcons in Hcontra. discriminate.
+         - assert (size (rcons tp' e') = 0) as Hcontra.
+           { rewrite Hb. reflexivity. }
+           rewrite size_rcons in Hcontra. discriminate.
+  Qed.
+
+    
   (******************************************
      [DEPRECATED]: Memory renaming has now been defined as part of event renaming.
 
@@ -584,6 +688,172 @@ Qed.
    *********************************************)
 
 End Renaming.
+
+Section TheShiftRenaming.
+
+  Variable num_extra_blocks_of_lhs : Z.
+    
+  Definition sigma_shifting_addr (a: addr_t) : addr_t :=
+    match sigma_shifting num_extra_blocks_of_lhs (care, a) with
+    | (_, a') => a'
+    end.
+
+  Definition inv_sigma_shifting_addr (a: addr_t) : addr_t :=
+    match inv_sigma_shifting num_extra_blocks_of_lhs (care, a) with
+    | (_, a') => a'
+    end.
+
+  Inductive traces_shift_each_other : trace event -> trace event -> Prop :=
+  | shifting_is_special_case_of_renaming:
+      forall t t',
+        traces_rename_each_other sigma_shifting_addr inv_sigma_shifting_addr t t' ->
+        traces_shift_each_other t t'.
+  
+End TheShiftRenaming.
+
+Section PropertiesOfTheShiftRenaming.
+
+  Lemma rename_addr_inverse_rename_addr n a:
+    rename_addr (sigma_shifting_addr (- n)) a =
+    inverse_rename_addr (inv_sigma_shifting_addr n) a.
+  Proof.
+    unfold rename_addr, inverse_rename_addr, sigma_shifting_addr, inv_sigma_shifting_addr.
+    erewrite inv_sigma_shifting_n_sigma_shifting_minus_n. reflexivity.
+  Qed.
+
+  Lemma option_rename_value_option_inverse_rename_value n v:
+    option_inverse_rename_value (inv_sigma_shifting_addr n) v =
+    option_rename_value (sigma_shifting_addr (- n)) v.
+  Proof.
+    destruct v as [[ | [[[perm cid] bid] o] | ] | ]; auto. simpl.
+    rewrite rename_addr_inverse_rename_addr. reflexivity.
+  Qed.
+
+  Lemma event_rename_inverse_event_rename n addr' e e':
+    event_inverse_renames_event_at_addr (inv_sigma_shifting_addr n) addr' e e' <->
+    event_renames_event_at_addr (sigma_shifting_addr (- n)) addr' e' e.
+  Proof.
+    unfold event_inverse_renames_event_at_addr, event_renames_event_at_addr.
+    split; intros H offset; pose proof (H offset) as H'. clear H.
+    - rewrite <- option_rename_value_option_inverse_rename_value,
+      H', rename_addr_inverse_rename_addr. reflexivity.
+    - rewrite option_rename_value_option_inverse_rename_value.
+      rewrite <- H', rename_addr_inverse_rename_addr. reflexivity.
+  Qed.
+
+  Lemma traces_shift_each_other_reflexive t:
+    traces_shift_each_other 0 t t.
+  Proof.
+    apply shifting_is_special_case_of_renaming.
+    induction t using last_ind.
+    - apply nil_renames_nil.
+    - apply rcons_renames_rcons.
+      + assumption.
+      + intros addr Hshrsfr. split.
+        * unfold event_renames_event_at_addr, rename_addr, sigma_shifting_addr,
+          option_rename_value, omap, obind, oapp, rename_value, rename_value_template,
+          rename_addr. simpl.
+          intros. rewrite !sigma_shifting_0_id.
+          destruct (Memory.load (mem_of_event x) (Permission.data, addr.1, addr.2, offset));
+            auto.
+          destruct v as [| [[[perm cid] bid] o] |]; auto. rewrite subn0. reflexivity.
+        * unfold rename_addr, sigma_shifting_addr. rewrite sigma_shifting_0_id. assumption.
+      + intros addr' Hshrsfr. split.
+        * unfold event_inverse_renames_event_at_addr, inverse_rename_addr,
+          inv_sigma_shifting_addr,
+          option_inverse_rename_value, omap, obind, oapp, inverse_rename_value,
+          rename_value_template,
+          inverse_rename_addr. simpl.
+          intros. rewrite !inv_sigma_shifting_0_id.
+          destruct (Memory.load (mem_of_event x) (Permission.data, addr'.1, addr'.2, offset));
+            auto.
+          destruct v as [| [[[perm cid] bid] o] |]; auto. rewrite addn0. reflexivity.
+        * unfold inverse_rename_addr, inv_sigma_shifting_addr.
+          rewrite inv_sigma_shifting_0_id. assumption.
+  Qed.
+
+  Variable num_extra_blocks_t1_t2 : Z.
+  Variable t1: trace event.
+  Variable t2: trace event.
+
+  Lemma traces_shift_each_other_symmetric:
+    traces_shift_each_other num_extra_blocks_t1_t2 t1 t2 ->
+    traces_shift_each_other (- num_extra_blocks_t1_t2) t2 t1.
+  Proof.
+    intros Ht1t2. apply shifting_is_special_case_of_renaming.
+    inversion Ht1t2. subst. induction H as [|tprefix e tprefix' e' Hprefix_rename IH He He'].
+    - apply nil_renames_nil.
+    - apply rcons_renames_rcons.
+      + apply IH. apply shifting_is_special_case_of_renaming. exact Hprefix_rename.
+      + intros [cid bid] Hshrsfr. destruct (He' (cid, bid) Hshrsfr) as [G1 G2]. split.
+        * rewrite <- event_rename_inverse_event_rename. exact G1.
+        * rewrite rename_addr_inverse_rename_addr. exact G2.
+      + intros [cid bid] Hshrsfr. destruct (He (cid, bid) Hshrsfr) as [G1 G2]. split.
+        * rewrite event_rename_inverse_event_rename. rewrite Z.opp_involutive. exact G1.
+        * rewrite <- rename_addr_inverse_rename_addr. rewrite Z.opp_involutive. exact G2.
+  Qed.
+ 
+  Lemma traces_shift_each_other_transitive:
+    traces_shift_each_other num_extra_blocks_t1_t2 t1 t2 ->
+    (forall t3 num_extra_blocks_t2_t3,
+        traces_shift_each_other num_extra_blocks_t2_t3 t2 t3 ->
+        traces_shift_each_other (num_extra_blocks_t1_t2 + num_extra_blocks_t2_t3) t1 t3
+    ).
+  Proof.
+    intros H12. induction H12 (*as [H12'' H12''' H12']*).
+    intros ? ? H23. induction H23 (*as [H23'' H23''' H23']*).
+    apply shifting_is_special_case_of_renaming.
+    Abort.
+    (*
+    induction H12 (*as [|tprefix1 e1 tprefix2 e2 Hprefix_rename IH He1 He2]*);
+      induction H23' (*as [|tprefix2' e2' tprefix3 e3 Hprefix_rename' IH' He2' He3]*).
+    - apply nil_renames_nil.
+    - apply rcons_renames_rcons.
+      + apply IHH23'.
+    induction t1 using last_ind; induction t2 using last_ind; induction t3 using last_ind;
+      try apply nil_renames_nil.
+    - exfalso. exact (traces_rename_each_other_nil_rcons _ _ _ _ H23').
+    - exfalso. exact (traces_rename_each_other_nil_rcons _ _ _ _ H12').
+    - exfalso. exact (traces_rename_each_other_rcons_nil _ _ _ _ H12').
+    - exfalso. exact (traces_rename_each_other_rcons_nil _ _ _ _ H12').
+    - exfalso. exact (traces_rename_each_other_rcons_nil _ _ _ _ H23').
+    - apply IHt0.
+      + SearchAbout rcons t x t0.
+      + assert (0 = size (rcons t3 x)) as Hcontra.
+        { rewrite <- H. reflexivity. }
+        rewrite size_rcons in Hcontra. discriminate.
+      + assert (size (rcons tprefix e) = 0) as Hcontra.
+        { rewrite H. reflexivity. }
+        rewrite size_rcons in Hcontra. discriminate.
+    - inversion 
+    induction H12' as [|tprefix1 e1 tprefix2 e2 Hprefix_rename IH He1 He2];
+      intros ? ? H23; inversion H23 as [H23'' H23''' H23']; subst;
+        apply shifting_is_special_case_of_renaming.
+    - induction t3 using last_ind.
+      + apply nil_renames_nil. inversion H23'; try apply nil_renames_nil.
+        assert (size (rcons tprefix e) = 0) as Hcontra.
+        { rewrite H. reflexivity. }
+        rewrite size_rcons in Hcontra. discriminate.
+        induction H23' as [|tprefix2' e2' tprefix3 e3 Hprefix_rename' IH' He2' He3].
+      + inversion H12 as [x y H]. inversion H.
+        * assert (0 = size (rcons tprefix1 e1)) as Hcontra.
+          { rewrite <- H3. reflexivity.  }
+          rewrite size_rcons in Hcontra. discriminate.
+        * assert (size (rcons tprefix' e') = 0) as Hcontra.
+          { rewrite H3. reflexivity. }
+          rewrite size_rcons in Hcontra. discriminate.
+    - apply rcons_renames_rcons.
+        
+    - apply nil_renames_nil.
+    - admit. (* This should be an invalid case. *)
+    - admit. (* This should be an invalid case. *)
+    - 
+      apply rcons_renames_rcons.
+      + apply IH'. 
+        * apply traces_shift_each_other_reflexive.
+        *)
+End PropertiesOfTheShiftRenaming.
+
 
 (* [DynShare] 
    The following definition is NOT needed when we define a trace relation that
