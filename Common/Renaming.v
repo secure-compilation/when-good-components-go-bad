@@ -316,91 +316,67 @@ Section SigmaShifting.
     unfold num_extra_blocks_of_lhs.
     destruct (Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs >=? 0)%Z eqn:Hge0.
     - eexists. simpl.
+      assert (metadata_size_rhs <= metadata_size_lhs)%coq_nat as lhs_rhs.
+      { rewrite Nat2Z.inj_le. apply Zle_0_minus_le. rewrite <- Z.geb_le. exact Hge0. }
+      assert (Z.to_nat (Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs) =
+              (metadata_size_lhs - metadata_size_rhs)%coq_nat) as simplify_minus.
+      {
+        rewrite <- Nat2Z.inj_sub.
+        + rewrite Nat2Z.id. reflexivity.
+        + exact lhs_rhs.
+      }
       assert (lbid <? Z.to_nat (Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs)
               = false) as Hcond.
       {
-        rewrite Nat.ltb_ge. apply/leP. rewrite <- Nat2Z.inj_sub.
-        + rewrite Nat2Z.id.
-          apply leq_trans with (n := metadata_size_lhs).
-          * apply leq_subr.
-          * exact Hleft_good.
-        + rewrite Nat2Z.inj_le.
-          apply Zle_0_minus_le.
-          rewrite <- Z.geb_le. exact Hge0.
+        rewrite Nat.ltb_ge. apply/leP. rewrite simplify_minus.
+        apply leq_trans with (n := metadata_size_lhs).
+        + apply leq_subr.
+        + exact Hleft_good.
       }
-      rewrite Hcond. split.
+      rewrite Hcond. rewrite simplify_minus in Hcond.
+      assert ((metadata_size_lhs - metadata_size_rhs) <= lbid)%coq_nat as Hall.
+      { rewrite <- Nat.ltb_ge. exact Hcond. }
+      assert (metadata_size_rhs <= lbid) as rhs_lbid.
+      { apply leq_trans with (n := metadata_size_lhs); auto. apply/leP. auto. }
+      split.
       + reflexivity.
-      + simpl.
-  Admitted.
-(*      { rewrite Nat.ltb_ge. apply/leP. apply Hleft_good. trivial. }
-      rewrite Hcond. split.
-      + reflexivity.
-      + simpl. intros H.
-        pose proof (@negP true) as H0. assert (~~ true) as H1. apply/H0. apply H.
-        simpl in H1. inversion H1.
-    - eexists. simpl. split.
-      + reflexivity.
-      + simpl. intros. apply leq_addl.
-  Qed.*)
-
-  
-(*  Definition left_addr_good_for_shifting (left_addr: addr_t) : Prop :=
-    match left_addr with
-    | (_, bid) => ((num_extra_blocks_of_lhs >=? 0)%Z ->
-                   (bid >= Z.to_nat num_extra_blocks_of_lhs))
-    end.
-
-  Definition right_addr_good_for_shifting (right_addr: addr_t) : Prop :=
-    match right_addr with
-    | (_, bid) => ((~ (num_extra_blocks_of_lhs >=? 0)%Z) ->
-                   (bid >= Z.to_nat (- num_extra_blocks_of_lhs)))
-    end.
-*)
-(*  Lemma sigma_left_good_right_good left_addr:
-    left_addr_good_for_shifting left_addr ->
-    exists right_addr,
-    sigma_shifting (care, left_addr) = (care, right_addr) /\
-    right_addr_good_for_shifting right_addr.
-  Proof.
-    destruct left_addr as [lcid lbid].
-    unfold left_addr_good_for_shifting, sigma_shifting, right_addr_good_for_shifting.
-    intros Hleft_good.
-    destruct (num_extra_blocks_of_lhs >=? 0)%Z eqn:Hge0.
-    - eexists. simpl.
-      assert (lbid <? Z.to_nat num_extra_blocks_of_lhs = false) as Hcond.
-      { rewrite Nat.ltb_ge. apply/leP. apply Hleft_good. trivial. }
-      rewrite Hcond. split.
-      + reflexivity.
-      + simpl. intros H.
-        pose proof (@negP true) as H0. assert (~~ true) as H1. apply/H0. apply H.
-        simpl in H1. inversion H1.
-    - eexists. simpl. split.
-      + reflexivity.
-      + simpl. intros. apply leq_addl.
+      + simpl. rewrite simplify_minus. rewrite minusE.
+        destruct (metadata_size_lhs == lbid) eqn:Heq.
+        * assert (metadata_size_lhs = lbid) as Heq'.
+          { apply/eqP. rewrite Heq. auto. }
+          rewrite Heq'. rewrite <- minnE.
+          assert (minn lbid metadata_size_rhs = metadata_size_rhs) as Hrhs.
+          { apply/minn_idPr. assumption. }
+          rewrite Hrhs. auto.
+        * apply ltnW. rewrite ltn_subRL. rewrite subnK.
+          -- rewrite leq_eqVlt in Hleft_good.
+             pose proof orP Hleft_good as H. destruct H.
+             ++ rewrite H in Heq. discriminate.
+             ++ assumption.
+          -- apply/leP. assumption.
+    - eexists. simpl. split; try reflexivity. simpl.
+      assert (Z.of_nat metadata_size_lhs <= Z.of_nat metadata_size_rhs)%Z as lhs_rhs.
+      {
+        rewrite <- Z.le_sub_0. apply Znot_gt_le. rewrite neg_false.
+        split; try (intros; exfalso; auto).
+        rewrite Z.geb_leb in Hge0. apply Z.leb_gt in Hge0.
+        unfold Z.lt, Z.gt in *. rewrite H in Hge0. discriminate.
+      }
+      assert (metadata_size_lhs <= metadata_size_rhs) as lhs_rhs'.
+      { apply/leP. rewrite Nat2Z.inj_le. exact lhs_rhs. }
+      rewrite Z.opp_sub_distr Z.add_opp_l Z2Nat.inj_sub; try apply Nat2Z.is_nonneg.
+      rewrite !Nat2Z.id addnC. SearchAbout addn subn.
+      rewrite <- leq_subLR. SearchAbout subn subn.
+      rewrite subKn; assumption.
   Qed.
-*)                                                
+                                                
   Lemma inv_sigma_right_good_left_good right_addr:
     right_addr_good_for_shifting right_addr ->
     exists left_addr,
       inv_sigma_shifting (care, right_addr) = (care, left_addr) /\
       left_addr_good_for_shifting left_addr.
   Admitted.
-(*  Proof.
-    destruct right_addr as [rcid rbid].
-    unfold right_addr_good_for_shifting, inv_sigma_shifting, left_addr_good_for_shifting.
-    intros Hright_good.
-    destruct (num_extra_blocks_of_lhs >=? 0)%Z eqn:Hge0.
-    - eexists. simpl. split.
-      + reflexivity.
-      + simpl. intros. apply leq_addl.
-    - eexists. simpl.
-      assert (rbid <? Z.to_nat (- num_extra_blocks_of_lhs) = false) as Hcond.
-      { rewrite Nat.ltb_ge. apply/leP. apply Hright_good. trivial. }
-      rewrite Hcond. split.
-      + reflexivity.
-      + simpl. intros. inversion H.
-  Qed.
-*)
+
 End SigmaShifting.
 
 Section SigmaShiftingProperties.
