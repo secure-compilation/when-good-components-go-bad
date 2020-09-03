@@ -28,9 +28,7 @@ Definition behavior_improves_blame b (m: @finpref_behavior Events.event) p :=
 
 
 Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
-  : @finpref_behavior Events.event ->
-    @finpref_behavior Events.event ->
-    Prop :=
+  : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
 | Terminates_rel_Terminates:
     forall t1 t2,
       traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
