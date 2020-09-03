@@ -3,14 +3,15 @@ Require Import Common.Definitions.
 Require Import Common.Linking.
 Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
-
+Require Import Common.Renaming.
+  
 Require Import RSC_DC_MD_Sigs.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
-Unset Printing Implicit Defensive.
+Set Printing Implicit.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -21,9 +22,23 @@ Module RSC_DC_MD_Gen
        (Compiler : Compiler_Sig Source Intermediate S2I)
        (Linker : Linker_Sig Source Intermediate S2I).
 
-Definition behavior_improves_blame b m p :=
+Definition behavior_improves_blame b (m: @finpref_behavior Events.event) p :=
   exists t, b = Goes_wrong t /\ trace_finpref_prefix t m /\
-             undef_in t (Source.prog_interface p).
+            undef_in t (Source.prog_interface p).
+
+
+Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
+  : @finpref_behavior Events.event ->
+    @finpref_behavior Events.event ->
+    Prop :=
+| Terminates_rel_Terminates:
+    forall t1 t2,
+      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
+      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
+| Tbc_rel_Tbc:
+    forall t1 t2,
+      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
+      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
 
 Section RSC_DC_MD_Section.
   Variable p: Source.program.
@@ -43,16 +58,18 @@ Section RSC_DC_MD_Section.
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
-    forall m,
+    forall (m: @finpref_behavior Events.event),
       does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m ->
       not_wrong_finpref m ->
-    exists Cs beh,
+      exists Cs (beh: @program_behavior Events.event) m'
+             size_meta_m size_meta_m',
       Source.prog_interface Cs = Intermediate.prog_interface Ct /\
       Source.well_formed_program Cs /\
       linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (Source.program_link p Cs) /\
       program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
-      (prefix m beh \/ behavior_improves_blame beh m p).
+      (prefix m beh \/ behavior_improves_blame beh m p) /\
+      behavior_rel_behavior size_meta_m size_meta_m' m m'.
   Proof.
     intros m [t [Hbeh Hprefix0]] Hsafe_pref.
 
