@@ -309,6 +309,7 @@ Lemma parallel_concrete p ctx p1 p2 scs1 t scs1' scs2 :
     CS.kstep (prepare_global_env (program_link p p2)) scs2 t scs2' &
     partialize ctx scs1' = partialize ctx scs2'.
 Proof.
+(*
 move=> wf wf1 wf2 link clos int1 int2 e_part in_prog step.
 suffices : match CS.eval_kstep (prepare_global_env (program_link p p2)) scs2 return Prop with
            | Some (t', scs2') => t = t' /\ partialize ctx scs1' = partialize ctx scs2'
@@ -431,6 +432,8 @@ case: scs1 t scs1' / step in_prog e_part => /=; try parallel_concrete_easy.
     rewrite -lock /=; move/eqP/negbTE: ne=> ->.
     by rewrite (negbTE in_prog') e_stk e_mem.
 Qed.
+*)
+Admitted.
 
 Lemma parallel_concrete' p ctx p1 p2 scs1 t1 scs1' scs2 t2 scs2' :
   well_formed_program p ->
@@ -596,6 +599,7 @@ Lemma state_determinism_context:
     kstep p ctx G sps t sps'' ->
     sps' = sps''.
 Proof.
+(*
 move=> p ctx G sps t sps' in_ctx.
 have [-> {t}|ne] := altP (t =P E0).
   move/(context_epsilon_step_is_silent in_ctx) => <- ?.
@@ -637,6 +641,8 @@ case: scs1 t scs1' / kstep1 in_ctx ne part kstep2 => //=.
   case: (partial_stack_pop_to_program in_prog e_stk)=> <- [<- <-].
   by rewrite e_mem.
 Qed.
+*)
+Admitted.
 
 Theorem state_determinism:
   forall p ctx G sps t sps',

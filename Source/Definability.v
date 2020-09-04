@@ -696,8 +696,10 @@ Section Definability.
      *)
 End WithTrace.
 End Definability.
+
 Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
+Require Import S2I.Definitions.
 
 (*Section MainDefinability.*)
   Definition loc_of_reg : Eregister -> expr. Admitted.
@@ -745,8 +747,14 @@ Qed.*)
 
 (* RB: Relocate? As the S2I require above seems to indicate, this is not where
    this result belongs. *)
-Print Module Intermediate.
-Import Intermediate.CS.
+
+(* RB: [DynShare] NOTE: If this is what we want, move to its proper place. *)
+Definition project_finpref_behavior m :=
+  match m with
+  | FTerminates t => FTerminates (project_non_inform t)
+  | FGoes_wrong t => FGoes_wrong (project_non_inform t)
+  | FTbc t => FTbc (project_non_inform t)
+  end.
 
 Lemma definability_with_linking:
   forall p c b m,
@@ -754,7 +762,7 @@ Lemma definability_with_linking:
     Intermediate.well_formed_program c ->
     linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
     Intermediate.closed_program (Intermediate.program_link p c) ->
-    program_behaves (Intermediate.sem (Intermediate.program_link p c)) b ->
+    program_behaves (I.CS.sem_inform (Intermediate.program_link p c)) b ->
     prefix m b ->
     not_wrong_finpref m ->
   exists p' c',
@@ -765,8 +773,9 @@ Lemma definability_with_linking:
     Source.well_formed_program p' /\
     Source.well_formed_program c' /\
     Source.closed_program (Source.program_link p' c') /\
-    does_prefix (S.CS.sem (Source.program_link p' c')) m.
+    does_prefix (S.CS.sem (Source.program_link p' c')) (project_finpref_behavior m).
 Proof.
+(*
   move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre Hnot_wrong.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
   have Hclosed_intf : closed_interface intf by case: Hclosed.
@@ -827,5 +836,5 @@ Proof.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
   by exists (Terminates nil); rewrite /= E0_right.
 Qed.
-
-End MainDefinability.
+*)
+Admitted.
