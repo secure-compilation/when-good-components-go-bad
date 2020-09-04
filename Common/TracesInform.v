@@ -113,6 +113,34 @@ Instance event_inform_EventClass : EventClass event_inform :=
     equal_event_equal := equal_match_event
   }.
 
+
+Definition event_non_inform_of (e: trace event_inform) : trace event :=
+  match e with
+  | [ECallInform C P call_arg mem C'] => [CompCert.Events.ECall C P call_arg mem C']
+  | [ERetInform C v mem C'] => [CompCert.Events.ERet C v mem C']
+  | _ => E0
+  end.
+
+Lemma event_non_inform_of_nil_or_singleton:
+  forall e, event_non_inform_of e = E0 \/ exists e', event_non_inform_of e = [e'].
+Proof.
+  intros e. destruct e as [| e0 t] eqn:eq.
+  - left. auto.
+  - destruct e0; destruct t; try (right; eexists; simpl; eauto; reflexivity); left; auto.
+Qed.
+
+Fixpoint project_non_inform t_inform :=
+  match t_inform with
+  | [] => []
+  | e :: es =>
+    match e with
+    | ECallInform C P call_arg mem C' =>
+      (CompCert.Events.ECall C P call_arg mem C') :: project_non_inform es
+    | ERetInform C v mem C' => (CompCert.Events.ERet C v mem C') :: project_non_inform es
+    | _ => project_non_inform es
+    end
+  end.
+
 Section Traces.
 
 Inductive stack_state := StackState {

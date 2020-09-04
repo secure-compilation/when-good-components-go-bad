@@ -148,10 +148,10 @@ Proof.
   intros ????????. unfold Memory.load. simpl.
   destruct (aP =? Permission.data) eqn:eaP; destruct (m aC) eqn:eaC;
     intros Hload; try discriminate.
-  destruct (ComponentMemory.load_block_load t aB vC vB) as [_ Honlyif].
+  destruct (ComponentMemory.load_block_load s aB vC vB) as [_ Honlyif].
   unfold mem_data_ptrs.
   apply/bigcupP. simpl.
-  apply BigCupSpec with (i := compMem_data_ptrs t); auto.
+  apply BigCupSpec with (i := compMem_data_ptrs s); auto.
   - apply/codommP. exists aC. rewrite mapmE. rewrite eaC. auto.
   - unfold compMem_data_ptrs. rewrite in_fset.
     rewrite <- flat_map_concat_map. rewrite In_in. rewrite in_flat_map.
@@ -819,7 +819,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     (* RB: TODO: [DynShare] Restore check after making it computational. *)
     (* update_reachability_of_component_with_value call_arg C' reach = reach' -> *)
     step G (gps, mem, regs, pc, addrs)
-           [ECall (Pointer.component pc) P call_arg mem C']
+           [ECallInform (Pointer.component pc) P call_arg mem C']
            (Pointer.inc pc :: gps, mem, Register.invalidate regs,
             (Permission.code, C', b, 0%Z), addrs) (* reach', replace addrs *)
 
@@ -831,7 +831,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     (* RB: TODO: [DynShare] Restore check after making it computational. *)
     (* update_reachability_of_component_with_value ret_arg (Pointer.component pc') reach = reach' -> *)
     step G (pc' :: gps', mem, regs, pc, addrs)
-           [ERet (Pointer.component pc) ret_arg mem (Pointer.component pc')]
+           [ERetInform (Pointer.component pc) ret_arg mem (Pointer.component pc')]
            (gps', mem, Register.invalidate regs, pc', addrs) (* reach', replace addrs *).
 
 Ltac step_of_executing :=
@@ -858,21 +858,6 @@ Ltac step_of_executing :=
     | IHalt          => fail
     end
   end.
-
-Definition event_non_inform_of (e: trace event_inform) : trace event :=
-  match e with
-  | [ECall C P call_arg mem C'] => [CompCert.Events.ECall C P call_arg mem C']
-  | [ERet C v mem C'] => [CompCert.Events.ERet C v mem C']
-  | _ => E0
-  end.
-
-Lemma event_non_inform_of_nil_or_singleton:
-  forall e, event_non_inform_of e = E0 \/ exists e', event_non_inform_of e = [e'].
-Proof.
-  intros e. destruct e as [| e0 t] eqn:eq.
-  - left. auto.
-  - destruct e0; destruct t; try (right; eexists; simpl; eauto; reflexivity); left; auto.
-Qed.
 
 Inductive step_non_inform (G : global_env) : state -> trace event -> state -> Prop :=
 | Nop_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs',
@@ -1091,7 +1076,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
           do b <- EntryPoint.get C' P (genv_entrypoints G);
           let val := Register.get R_COM regs in
           let pc' := (Permission.code, C', b, 0%Z) in
-          let t := [ECall (Pointer.component pc) P val mem C'] in
+          let t := [ECallInform (Pointer.component pc) P val mem C'] in
           ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc', addrs))
         else
           None
@@ -1102,7 +1087,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
       | pc' :: gps' =>
         if negb (Component.eqb (Pointer.component pc) (Pointer.component pc')) then
           let val := Register.get R_COM regs in
-          let t := [ERet (Pointer.component pc) val mem (Pointer.component pc')] in
+          let t := [ERetInform (Pointer.component pc) val mem (Pointer.component pc')] in
           ret (t, (gps', mem, Register.invalidate regs, pc', addrs))
         else
           None
@@ -1288,7 +1273,7 @@ Proof.
                  try discriminate.
                destruct (mem0 (Pointer.component t0)) eqn:Hmem;
                  try discriminate.
-               destruct (ComponentMemory.load t1 (Pointer.block t0) (Pointer.offset t0))
+               destruct (ComponentMemory.load s (Pointer.block t0) (Pointer.offset t0))
                         eqn:Hload;
                  try discriminate.
                inversion H2; subst.
@@ -1307,7 +1292,7 @@ Proof.
                  try discriminate.
                destruct (mem0 (Pointer.component t0)) eqn:Hmem;
                  try discriminate.
-               destruct (ComponentMemory.store t1 (Pointer.block t0) (Pointer.offset t0)
+               destruct (ComponentMemory.store s (Pointer.block t0) (Pointer.offset t0)
                                                (Register.get r0 regs0))
                         eqn:Hstore;
                  try discriminate.
@@ -1327,7 +1312,7 @@ Proof.
                unfold Memory.alloc in *.
                destruct (mem0 (Pointer.component pc0)) eqn:Hmem;
                  try discriminate.
-               destruct (ComponentMemory.alloc t0 (Z.to_nat z)) eqn:Halloc;
+               destruct (ComponentMemory.alloc s (Z.to_nat z)) eqn:Halloc;
                  try discriminate.
                inversion H2; subst.
                eapply Alloc;
@@ -1540,8 +1525,8 @@ Section SemanticsInform.
     - apply match_events_EStore.
     - apply match_events_EInvalidateRA.
     - apply match_events_EAlloc.
-    - apply match_events_ECall.
-    - apply match_events_ERet.
+    - apply match_events_ECallInform.
+    - apply match_events_ERetInform.
   Qed.
 
   Lemma singleton_traces_inform:
@@ -1807,18 +1792,6 @@ Section SemanticsNonInform.
 
 Import ssreflect eqtype.
 
-Fixpoint project_non_inform t_inform :=
-  match t_inform with
-  | [] => []
-  | e :: es =>
-    match e with
-    | ECall C P call_arg mem C' =>
-      (CompCert.Events.ECall C P call_arg mem C') :: project_non_inform es
-    | ERet C v mem C' => (CompCert.Events.ERet C v mem C') :: project_non_inform es
-    | _ => project_non_inform es
-    end
-  end.
-
 Lemma project_non_inform_append t1 t2:
   project_non_inform (t1 ** t2) = project_non_inform t1 ** project_non_inform t2.
 Proof.
@@ -1895,7 +1868,7 @@ Proof.
   - simpl.
     assert (step_non_inform G (gps, mem, regs, pc, addrs)
                             (event_non_inform_of
-                               [ECall (Pointer.component pc) P call_arg mem C'])
+                               [ECallInform (Pointer.component pc) P call_arg mem C'])
                             (Pointer.inc pc :: gps, mem,
                              Register.invalidate regs,
                              (Permission.code, C', b, 0%Z), addrs)
@@ -1910,7 +1883,7 @@ Proof.
   - simpl. 
     assert (step_non_inform G (pc' :: gps', mem, regs, pc, addrs)
                             (event_non_inform_of
-                               [ERet (Pointer.component pc) ret_arg mem (Pointer.component pc')])
+                               [ERetInform (Pointer.component pc) ret_arg mem (Pointer.component pc')])
                             (gps', mem, Register.invalidate regs, pc', addrs)
            ) as gl.
     {
@@ -2207,10 +2180,10 @@ Proof.
   - match goal with Hfind: find_label_in_procedure _ ?pc ?l0 = Some ?pc' |- _ =>
                     exact (find_label_in_procedure_1 G pc pc' l0 Hfind)
     end.
-  - match goal with Hnoninf: _ = E0, He: [ECall _ _ _ _ _] = _ |- _ =>
+  - match goal with Hnoninf: _ = E0, He: [ECallInform _ _ _ _ _] = _ |- _ =>
                     rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
     end.
-  - match goal with Hnoninf: _ = E0, He: [ERet _ _ _ _] = _ |- _ =>
+  - match goal with Hnoninf: _ = E0, He: [ERetInform _ _ _ _] = _ |- _ =>
                     rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
     end.
 Qed.
@@ -2298,10 +2271,10 @@ Proof.
     + match goal with Hfind: find_label_in_procedure ?G ?pc ?l0 = Some ?pc' |- _ =>
                       rewrite <- (find_label_in_procedure_1 G pc pc' l0 Hfind)
       end. assumption.
-    + match goal with Hnoninf: _ = E0, He: [ECall _ _ _ _ _] = _ |- _ =>
+    + match goal with Hnoninf: _ = E0, He: [ECallInform _ _ _ _ _] = _ |- _ =>
                       rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
       end.
-    + match goal with Hnoninf: _ = E0, He: [ERet _ _ _ _] = _ |- _ =>
+    + match goal with Hnoninf: _ = E0, He: [ERetInform _ _ _ _] = _ |- _ =>
                       rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
       end.
 Qed.
