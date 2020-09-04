@@ -43,10 +43,11 @@ Section Merge.
      (by using ComponentMemory.load_block
      and/or by defining new functions in Common/Memory.v)
    *)
+  (*
   Definition transfer_contents_component_memory
              (m m'' : ComponentMemory.t) (a : Component.id * Block.id)
     : ComponentMemory.t := m.
-    
+   *)
   
   (* RB: TODO: Here and above, Program.interface vs. fset. *)
   (* [DynShare] 
@@ -63,7 +64,7 @@ Section Merge.
           else m''.(a) ++ m/m''.(b) ++ m.(c)
      
    *)
-  Definition merge_memories (m m'' : Memory.t) : Memory.t :=
+  Definition merge_memories (m m'' : Memory.tt) : Memory.tt :=
     unionm (to_partial_memory m   (domm ic))
            (to_partial_memory m'' (domm ip)).
 

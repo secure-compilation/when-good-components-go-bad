@@ -2,7 +2,7 @@ Require Import Common.Definitions.
 Require Import Source.CS.
 Require Import Intermediate.CS.
 
-Module S.
+(*Module S.
   Import Source.Language.
   Import Source.CS.
   Module CS := CS.
@@ -13,6 +13,7 @@ Module I.
   Import Intermediate.CS.
   Module CS := CS.
 End I.
+*)
 
 (* RB: The following should go into its own file. *)
 Definition matching_mains (p1 : Language.Source.program)
