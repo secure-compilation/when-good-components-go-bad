@@ -4,14 +4,14 @@ Require Import Common.Linking.
 Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
 Require Import Common.Renaming.
-  
+
 Require Import RSC_DC_MD_Sigs.
+Require Import Source.Definability.
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
-Set Printing Implicit.
 
 Set Bullet Behavior "Strict Subproofs".
 
@@ -56,8 +56,8 @@ Section RSC_DC_MD_Section.
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
-    forall (m: @finpref_behavior Events.event),
-      does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m ->
+    forall (m: @finpref_behavior TracesInform.event_inform),
+      does_prefix (Intermediate.CS.sem_inform (Intermediate.program_link p_compiled Ct)) m ->
       not_wrong_finpref m ->
       exists Cs (beh: @program_behavior Events.event) m'
              size_meta_m size_meta_m',
@@ -66,8 +66,10 @@ Section RSC_DC_MD_Section.
       linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (Source.program_link p Cs) /\
       program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
-      (prefix m beh \/ behavior_improves_blame beh m p) /\
-      behavior_rel_behavior size_meta_m size_meta_m' m m'.
+      (prefix (Definability.project_finpref_behavior m) beh \/
+       behavior_improves_blame beh (Definability.project_finpref_behavior m) p) /\
+      behavior_rel_behavior size_meta_m size_meta_m'
+                            (Definability.project_finpref_behavior m) m'.
   Proof.
     intros m [t [Hbeh Hprefix0]] Hsafe_pref.
 
@@ -91,7 +93,7 @@ Section RSC_DC_MD_Section.
         now rewrite successful_compilation.
     }
 
-     assert (H_doesm: does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled Ct)) m)
+     assert (H_doesm: does_prefix (Intermediate.CS.sem_inform (Intermediate.program_link p_compiled Ct)) m)
      by now exists t. 
 
     (* intermediate decomposition (for p_compiled) *)
@@ -103,10 +105,10 @@ Section RSC_DC_MD_Section.
     destruct (Linker.definability_with_linking
                 well_formed_p_compiled well_formed_Ct
                 linkability_pcomp_Ct closedness Hbeh Hprefix0 Hsafe_pref)
-      as [P' [Cs
+      as [P' [Cs [metadata_size [m'
          [Hsame_iface1 [Hsame_iface2
          [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
-         [well_formed_P' [well_formed_Cs [HP'Cs_closed HP'_Cs_m]]]]]]]]].
+         [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_m' Hbeh_rel_beh]]]]]]]]]]]].
 
     assert (Source.linkable_mains P' Cs) as HP'Cs_mains.
     { apply Source.linkable_disjoint_mains; trivial; congruence. }
@@ -147,9 +149,20 @@ Section RSC_DC_MD_Section.
     have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
-      have HP'_Cs_compiled_doesm : does_prefix (Intermediate.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) m.
+
+      have HP'_Cs_compiled_doesm : does_prefix
+                                     (Intermediate.CS.sem
+                                        (Intermediate.program_link P'_compiled Cs_compiled))
+                                     m'.
       {
         eapply Compiler.forward_simulation_same_safe_prefix; try eassumption. congruence.
+        (* [DynShare] The subgoal remaining here is "not_wrong_finpref m'". This subgoal
+         should follow from the fact that m' is produced by a back-translation.
+         A back-translation should not go wrong because it mimics well-defined events, 
+         and then directly terminates.
+         *)
+        (* However, right now it doesn't seem we have such a lemma? *)
+        admit.
       }
 
     (* intermediate decomposition (for Cs_compiled) *)
@@ -247,6 +260,11 @@ Section RSC_DC_MD_Section.
 
     rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm; try assumption.
     rewrite <- Hctx_same_iface in Hmergeable_ifaces.
+    (* [DynShare] In the next step, 
+       we should be able to solve it using a transfer lemma (meaning to obtain 
+       non-informative from informative). This transfer lemma will need to first be added
+       to the Intermediate Signature.
+     *)
     pose proof Intermediate.recombination_prefix
          well_formed_p_compiled well_formed_Ct well_formed_P'_compiled well_formed_Cs_compiled
          Hmergeable_ifaces Hprog_same_iface Hctx_same_iface
@@ -267,9 +285,11 @@ Section RSC_DC_MD_Section.
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
 
     (* Instantiate behavior, case analysis on improvement. *)
-    exists Cs, pCs_beh.
+    exists Cs. eexists. eexists. exists Source.Definability.metadata_size. exists 0.
     destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
-    + repeat (split; try now auto).
+                   + repeat (split; try now eauto).
+                     SearchAbout  
+                     
     + subst pCs_beh.
       repeat (split; try now auto).
       (* Blame the program and close the diagram. *)

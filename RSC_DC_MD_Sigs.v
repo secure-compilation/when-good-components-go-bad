@@ -2,6 +2,8 @@ Require Import Common.Definitions.
 Require Import Common.Linking.
 Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
+Require Import Common.TracesInform.
+Require Import Common.Renaming.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
 Require Import CompCert.Events.
@@ -133,6 +135,7 @@ Module Type Intermediate_Sig.
 
   Module CS.
     Parameter sem : program -> @semantics event.
+    Parameter sem_inform: program -> @semantics event_inform.
   End CS.
 
   (* Local Axiom decomposition_with_refinement : *)
@@ -204,16 +207,35 @@ Module Type Linker_Sig
        (Source : Source_Sig)
        (Intermediate : Intermediate_Sig)
        (S2I : S2I_Sig Source Intermediate).
+
+  Definition project_finpref_behavior m :=
+    match m with
+    | FTerminates t => FTerminates (project_non_inform t)
+    | FGoes_wrong t => FGoes_wrong (project_non_inform t)
+    | FTbc t => FTbc (project_non_inform t)
+    end.
+
+  Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
+    : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
+  | Terminates_rel_Terminates:
+      forall t1 t2,
+        traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
+        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
+  | Tbc_rel_Tbc:
+      forall t1 t2,
+        traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
+        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
+  
   Local Axiom definability_with_linking :
     forall p c b m,
       Intermediate.well_formed_program p ->
       Intermediate.well_formed_program c ->
       linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
       Intermediate.closed_program (Intermediate.program_link p c) ->
-      program_behaves (Intermediate.CS.sem (Intermediate.program_link p c)) b ->
+      program_behaves (Intermediate.CS.sem_inform (Intermediate.program_link p c)) b ->
       prefix m b ->
       not_wrong_finpref m ->
-    exists p' c',
+    exists p' c' metadata_size m',
       Source.prog_interface p' = Intermediate.prog_interface p /\
       Source.prog_interface c' = Intermediate.prog_interface c /\
       S2I.matching_mains p' p /\
@@ -221,7 +243,9 @@ Module Type Linker_Sig
       Source.well_formed_program p' /\
       Source.well_formed_program c' /\
       Source.closed_program (Source.program_link p' c') /\
-      does_prefix (Source.CS.sem (Source.program_link p' c')) m.
+      does_prefix (Source.CS.sem (Source.program_link p' c')) m' /\
+      behavior_rel_behavior metadata_size 0 m' (project_finpref_behavior m).
+
 
 (* TODO: split definability_with_linking into a more standard
          definability + a "unlinking" lemma *)

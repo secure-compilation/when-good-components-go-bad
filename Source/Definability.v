@@ -694,8 +694,11 @@ Section Definability.
       by rewrite ComponentMemory.load_prealloc /=.
     Qed.
      *)
+      
 End WithTrace.
 End Definability.
+
+Definition metadata_size : (* Component.id -> *) nat. Admitted.
 
 Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
@@ -756,6 +759,18 @@ Definition project_finpref_behavior m :=
   | FTbc t => FTbc (project_non_inform t)
   end.
 
+Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
+  : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
+| Terminates_rel_Terminates:
+    forall t1 t2,
+      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
+      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
+| Tbc_rel_Tbc:
+    forall t1 t2,
+      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
+      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
+
+
 Lemma definability_with_linking:
   forall p c b m,
     Intermediate.well_formed_program p ->
@@ -765,7 +780,7 @@ Lemma definability_with_linking:
     program_behaves (I.CS.sem_inform (Intermediate.program_link p c)) b ->
     prefix m b ->
     not_wrong_finpref m ->
-  exists p' c',
+  exists p' c' m' metadata_size,
     Source.prog_interface p' = Intermediate.prog_interface p /\
     Source.prog_interface c' = Intermediate.prog_interface c /\
     matching_mains p' p /\
@@ -773,7 +788,8 @@ Lemma definability_with_linking:
     Source.well_formed_program p' /\
     Source.well_formed_program c' /\
     Source.closed_program (Source.program_link p' c') /\
-    does_prefix (S.CS.sem (Source.program_link p' c')) (project_finpref_behavior m).
+    does_prefix (S.CS.sem (Source.program_link p' c')) m' /\
+    behavior_rel_behavior metadata_size 0 m' (project_finpref_behavior m).
 Proof.
 (*
   move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre Hnot_wrong.
