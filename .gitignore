@@ -9,6 +9,7 @@
 *.o
 .*.d
 .coqdeps.d
+*.crashcoqide
 Makefile.coq
 MakefileTest.coq
 I2SFI/*.cmi

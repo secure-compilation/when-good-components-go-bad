@@ -27,46 +27,30 @@ Import Transitional.
 
 Section BlockInterfaces.
 
+Print FSet.
+
 Definition block_interface:= list Component.id.
+Variable b : block_interface.
+
 
 Fixpoint is_in_interface (c0 : Component.id) (i : block_interface) := match i with
  | [] => false
  | c :: cs => beq_nat c c0 || is_in_interface c0 cs
 end.
 
-Definition in_interface (c0 : Component.id) (i : block_interface) : Prop := is_in_interface c0 i = true.
-
-Inductive disjoint_interfaces : block_interface -> block_interface -> Prop := 
- | disNil : forall i, disjoint_interfaces [] i
- | disCons : forall ic ip c, disjoint_interfaces ic ip -> ~ in_interface c ip -> disjoint_interfaces (c::ic) ip.
-
-Lemma disjoint_disjoint : forall c i i', disjoint_interfaces i i' -> ~ (in_interface c i /\ in_interface c i').
-Admitted.
-
-
-Definition link_code (cd cd' : code) := unionm cd cd'.
-
-LABEL_AGREEMENT
-
-
-Print to_partial_memory.
-Print Memory.t.
-
 End BlockInterfaces.
 
-Print to_partial_memory.
-Print mergeable_interfaces.
-Print linkable.
-Print closed_interface.
+
 
 (* State merging functions. *)
 Section Merge.
-  Variable ip ic : block_interface.
-  Hypothesis disjoint : disjoint_interfaces ip ic.
-
+  Variable i : block_interface.
+  Variable ip : Program.interface.
+Print to_partial_memory.
+Check domm.
 
   Definition merge_frames (f f''   : Pointer.t) : Pointer.t :=
-    if is_in_interface (Pointer.component f) ip then f else f''.
+    if Pointer.component f \in domm ip then f else f''.
 
   Fixpoint merge_stacks (s s'' : CS.stack) : CS.stack :=
     match s, s'' with

@@ -23,11 +23,25 @@ Import Intermediate.
 
 Require Import Source.Language.
 
+
+Record mem_tag : Type := MTag
+  { vtag : value_tag;
+    entry : option (Procedure.id * seq Component.id) }.
+
+
+
+Definition def_mem_tag (c : Component.id) := MTag Other None.
+
 Definition proc_label : Set := Component.id * Procedure.id.
 
 Definition plabel : Set := label * option proc_label.
 
 Definition label_of (pl : plabel) : label := let (n,_) := pl in n.
+
+Definition invalidate regs := 
+[fmap (Register.to_nat R_ONE, Undef);(Register.to_nat R_COM, Register.get R_COM regs);
+      (Register.to_nat R_AUX1, Undef);(Register.to_nat R_AUX2, Undef);(Register.to_nat R_RA, Register.get R_RA regs);
+      (Register.to_nat R_SP, Undef);(Register.to_nat R_ARG, Undef)].
 
 Variant instr :=
 | TrNop : instr
@@ -50,15 +64,9 @@ Variant instr :=
 
 
 
-Record mem_tag : Type := MTag
-  { vtag : value_tag;
-    entry : option (Procedure.id * seq Component.id) }.
-
-
-
 
 Definition code := NMap (seq (instr * mem_tag)).
-Definition def_mem_tag (c : Component.id) := MTag Other None.
+
 
 
 Record compiler_env :=
@@ -70,7 +78,7 @@ Record compiler_env :=
 Definition instr_to_transitional (cenv : compiler_env)
            (c : Component.id) (i : Machine.instr) : (instr * mem_tag) :=
   match i with
-  | ICall c' P => if beq_nat c c' then  ((TrJalNat (make_label cenv c' P)), def_mem_tag c)
+  | ICall c' P => if beq_nat c c' then ((TrJalProc (c',P)), def_mem_tag c) (* ((TrJalNat (make_label cenv c' P)), def_mem_tag c) *)
     else ((TrJalProc (c',P)), def_mem_tag c)
   | IReturn => ((TrJump R_RA), def_mem_tag c)
   | INop => (TrNop, def_mem_tag c)
@@ -172,7 +180,10 @@ Fixpoint find_label_in_code_helper
          (l: label) : option Pointer.t :=
   match comps with
    | [] => None
-   | (comp_id,comp_code) :: comps' => find_label_in_comp cde comp_id l
+   | (comp_id,comp_code) :: comps' => match find_label_in_comp cde comp_id l with
+      | None => find_label_in_code_helper cde comps' l
+      | x => x
+    end
   end.
 
 Definition find_label_in_code (cde : code) (l : label) : option Pointer.t :=
@@ -378,7 +389,7 @@ Inductive step (cde : code) : state -> trace -> state -> Prop :=
     Register.set R_RA (Ptr (Pointer.inc pc)) regs = regs' ->
     Register.get R_COM regs = Int call_arg ->
     step cde (st, mem, regs, pc, pct) [ECall c pid call_arg c']
-           (Pointer.inc pc :: st, mem, Register.invalidate regs', pc', inc_pc_tag pct).
+           (Pointer.inc pc :: st, mem, invalidate regs', pc', inc_pc_tag pct).
 
 
 
@@ -393,8 +404,8 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
   if (Pointer.offset pc <? 0) % Z then
     None
   else
-    do C_code <- cde (Pointer.component pc);
-    do (instr,tag) <- nth_error C_code (Z.to_nat (Pointer.offset pc));
+      do C_code <- cde (Pointer.component pc);
+      do (instr,tag) <- nth_error C_code (Z.to_nat (Pointer.offset pc));
     match instr with
     | TrLabel _ =>
       ret (E0, (mem, regs, Pointer.inc pc, pct))
@@ -423,12 +434,12 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
       end
     | TrStore r1 r2 =>
       match Register.get r1 regs with
-      | Ptr ptr =>
-        if Component.eqb (Pointer.component ptr) (Pointer.component pc) then
+      | Ptr ptr => (* CAREFUL, NO CHECK HERE ! TODO solve this *)
+    (*    if Component.eqb (Pointer.component ptr) (Pointer.component pc) then *)
           do mem' <- Memory.store mem ptr (Register.get r2 regs);
           ret (E0, (mem', regs, Pointer.inc pc, pct))
-        else
-          None
+    (*    else
+          None  *)
       | _ => None
       end
     | TrAlloc rptr rsize =>
@@ -456,7 +467,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
             match Register.get R_COM regs with
             | Int rcomval =>
               let t := [ERet (Pointer.component pc) rcomval (Pointer.component pc')] in
-              ret (t, (mem, Register.invalidate regs, pc', dec_pc_tag pct))
+              ret (t, (mem, invalidate regs, pc', dec_pc_tag pct))
             | _ => None
             end
             (* MISSING HERE : ENFORCEMENT ABOUT LEVEL OF RETURN AND RA (should be same level) *)
@@ -471,15 +482,17 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
         ret (E0, (mem, regs, pc', pct))
       | _ => None
       end
-    | TrJalNat l =>
-      do pc' <- find_label_in_code cde l;
+    | TrJalNat l => (* ADD CHECK THAT NO CROSS COMPARTMENT!!!!!!!!!!! *)
+(* remove locality of labels LATER *)
+      do pc' <- find_label_in_comp cde (Pointer.component pc) l;
       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
       ret (E0, (mem, regs', pc', pct))
     | TrJalProc (c',pid) =>
       match find_plabel_in_code cde c' pid with 
       | Some pc' => 
         if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-          ret (E0, (mem, regs, pc', pct))
+          let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
+          ret (E0, (mem, regs', pc', pct))
         else 
          if (Pointer.offset pc' <? 0) % Z then
             None
@@ -494,7 +507,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
                   | Int rcomval =>
                       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
                       let t := [ECall (Pointer.component pc) pid rcomval (Pointer.component pc')] in
-                      ret (t, (mem, Register.invalidate regs', pc', inc_pc_tag pct))
+                      ret (t, (mem, invalidate regs', pc', inc_pc_tag pct))
                   | _ => None
                   end
                 else None
@@ -507,16 +520,16 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
 end.
 
 
-Fixpoint execN (n: nat) (cde: code) (st: stackless) : option Z :=
+Fixpoint execN (n: nat) (cde: code) (st: stackless) : option Z + nat :=
   match n with
-  | O => None
+  | O => inr 3
   | S n' =>
     match eval_step cde st with
     | None =>
       let '(_, regs, _, _) := st in
       match Register.get R_COM regs with
-      | Int i => Some i
-      | _ => None
+      | Int i => inl (Some i)
+      | _ => inr 4
       end
     | Some (_, st') => execN n' cde st'
     end
@@ -533,7 +546,6 @@ Definition head_tag (cenv : compiler_env) (c : Component.id) (p : Procedure.id) 
   in {| vtag := Other ;
         entry := Some (p, filter allowed_call_by (domm I)) |}.
 
-Print getm.
 
 Definition linearize_proc (cenv : compiler_env)
            (c : Component.id) (p : Procedure.id) : seq (instr * mem_tag) :=
@@ -547,8 +559,6 @@ Definition linearize_component (cenv : compiler_env) (c : Component.id) : seq (i
                             Some (domm map)) in
   flatten (map (linearize_proc cenv c) procs).
 
-Check mapm.
-Print NMap.
 
 Fixpoint compile_component_list {T} cenv (l : list (Component.id * T)) :=
  match l with 
@@ -565,8 +575,11 @@ mkfmap (compile_component_list cenv (elementsm (Intermediate.prog_procedures (pr
 Definition pre_linearize (p : Intermediate.program) : code :=
   let lmax := max_label p in
   let pmax := max_proc_id p in
+ (*  let cmax := max_comp p in
   let cenv := {| program := p ;
-                 make_label := (fun c p => lmax + c * pmax + p) |} in
+                 make_label := (fun c p => lmax + c * pmax + p + pmax * cmax +1) |} in *)
+  let cenv := {| program := p ;
+                 make_label := (fun c p => lmax + c * pmax + p +1000) |} in 
  intermediate_to_transitional cenv.
 
 (* Record program : Type := mkProg
@@ -574,18 +587,17 @@ Definition pre_linearize (p : Intermediate.program) : code :=
     prog_buffers : NMap {fmap Block.id -> nat + seq value};
     prog_main : bool } *)
 
-
 Definition run_transitional cd fuel p :=
     let '(mem, _, entrypoints) := prepare_procedures_initial_memory p in
     let regs := Register.init in
     match (find_plabel_in_code cd Component.main Procedure.main) with
     | Some pc =>
       execN fuel cd (mem,regs, pc, Level 0)
-    | None => None
+    | None => inr 5
 end.
 
 Definition compile_run fuel (p : Intermediate.program) :=
-  run_transitional (pre_linearize p) fuel p.
+ run_transitional (pre_linearize p) fuel p.
 
 Close Scope monad_scope.
 
@@ -595,23 +607,21 @@ Require Import Compiler.
 Definition compile_and_run_from_source := 
 fun (p : Source.program) (fuel : nat) =>
 match Compiler.compile_program p with
-| Some compiled_p =>
-    match compile_run fuel compiled_p with
-    | Some n => Some n
-    | None => None
-    end
-| None => None
+| Some compiled_p => compile_run fuel compiled_p
+| None => inl None
 end.
 
 Require Export Extraction.Definitions.
+
 
 Definition compile_and_run_from_source_ex := 
 fun (p : Source.program) (fuel : nat) =>
 match Compiler.compile_program p with
 | Some compiled_p =>
     match compile_run fuel compiled_p with
-    | Some n => print_ocaml_int (z2int n)
-    | None => print_error ocaml_int_1
+    | inl (Some n) => print_ocaml_int (z2int n)
+    | inl None => print_error ocaml_int_1
+    | inr n => print_error (nat2int n)
     end
 | None => print_error ocaml_int_0
 end.
