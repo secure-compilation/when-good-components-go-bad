@@ -1,3 +1,5 @@
+Require Import Psatz.
+Require Import Lia.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -547,108 +549,257 @@ Section SigmaShiftingProperties.
       }
       rewrite Hcontra in n1n3. discriminate.
     - (* n1 >= n3, n2 >= n3, n1 ~>= n2, i.e., n2 > n1 *)
-  Admitted.
-(*    assert (right_addr_good_for_shifting n2 (sigma_shifting n1 n2 (care, a)).2) as lgood_a'.
-    assert (left_addr_good_for_shifting n2 (sigma_shifting n1 n2 (care, a)).2) as lgood_a'.
-    { unfold left}
-    
-    intros good_n12_bid good_n12_n23_bid good_n23_sigma_n12_a.
-    destruct (sigma_left_good_right_good _ _ good_n12_bid) as
-        [sigma_n12_a [Hsigma_n12_a H_good_sigma_n12_a]].
-    destruct (sigma_left_good_right_good _ _ good_n12_n23_bid) as
-        [sigma_n12_n23_a [Hsigma_n12_n23_a H_good_sigma_n12_n23_a]].
-    destruct (sigma_left_good_right_good _ _ good_n23_sigma_n12_a) as
-        [sigma_n23_sigma_n12_a [Hsigma_n23_sigma_n12_a H_good_sigma_n23_sigma_n12_a]].
-    destruct a as [cid bid].
-
-    rewrite Hsigma_n12_a in Hsigma_n23_sigma_n12_a. simpl in Hsigma_n23_sigma_n12_a.
-    rewrite Hsigma_n12_a. simpl.
-    destruct sigma_n12_a as [sigma_n12_a_cid sigma_n12_a_bid].
-    destruct sigma_n12_n23_a as [sigma_n12_n23_a_cid sigma_n12_n23_a_bid].
-    destruct sigma_n23_sigma_n12_a 
-      as [sigma_n23_sigma_n12_a_cid sigma_n23_sigma_n12_a_bid].
-    unfold sigma_shifting, left_addr_good_for_shifting, right_addr_good_for_shifting(*,
-      sigma_from_bigger_dom, inv_sigma_from_bigger_dom*) in *.
-    destruct (n23 >=? 0)%Z eqn:Hn23; simpl in *.
-    - destruct (sigma_n12_a_bid <? Z.to_nat n23) eqn:H_sigma_n12_a_bid_n23; simpl in *.
-      + unfold dontcare, care in Hsigma_n23_sigma_n12_a. discriminate.
-      + destruct (n12 + n23 >=? 0)%Z eqn:Hn12_n23; simpl in *.
-        assert (bid <? Z.to_nat (n12 + n23) = false) as Hnecessary.
-        {
-          rewrite Nat.ltb_antisym. unfold negb.
-          assert (Z.to_nat (n12 + n23) <=? bid = true) as Hnecessary'.
-          { apply leb_correct. apply/leP. apply good_n12_n23_bid. auto. }
-          rewrite Hnecessary'. auto.
-        }
-        rewrite Hnecessary.
-        SearchAbout sigma_n12_a_bid.
-        destruct (n12 >=? 0)%Z eqn:Hn12.
-        * SearchAbout sigma_n12_a_bid.
-          SearchAbout sigma_from_bigger_dom.
-        rewrite Hsigma_n23_sigma_n12_a.
-        SearchAbout sigma_n23_sigma_n12_a_bid.
-        assert (sigma_n12_a_cid = cid) as Hproperty_of_sigma.
-        { admit. (* Prove this as a property of any sigma. *) }
-        rewrite Hproperty_of_sigma.
-        
-        assert (bid <? Z.to_nat (n12 + n23)) as Hnecessary.
-    unfold right_addr_good_for_shifting in *.
-    clear good_n12_bid good_n12_n23_bid. simpl.
-    unfold sigma_shifting.
-    destruct (n23 >=? 0)%Z eqn:Hn23. simpl.
-    destruct (n23 >=? 0)%Z eqn:Hn23; destruct (n12 >=? 0)%Z eqn:Hn12.
-    - assert (n12 + n23 >=? 0)%Z as Hpos.
-      {
-        rewrite Z.geb_leb. unfold is_true.
-        rewrite <- Zle_bool_plus_mono with (n := Z0) (p := Z0) (m := n12) (q := n23).
-        + auto.
-        + rewrite <- Z.geb_leb. assumption.
-        + rewrite <- Z.geb_leb. assumption.
+      assert (n1n2': n1 <= n2).
+      { apply/leP.
+        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le. apply Z.lt_le_incl.
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n2) 0 as G. rewrite n1n2 in G.
+        apply Z.lt_sub_0. assumption.
       }
-      rewrite Hpos. unfold sigma_from_bigger_dom. simpl.
-      destruct (bid <? Z.to_nat n12) eqn:H_bid_n12; simpl.
-      + destruct (bid <? Z.to_nat n23) eqn:H_bid_n23.
-        * (* Here, know that bid <? Z.to_nat (n12 + n23) *)
-          (* First, show that Z.to_nat (n12 + n23) = Z.to_nat n12 + Z.to_nat n23 *)
-          (* Then, use some lemma about <? and +. *)
-          assert (bid <? Z.to_nat (n12 + n23)) as H_bid_n12_n23.
-          { admit. }
-          rewrite H_bid_n12_n23. reflexivity.
-        * (* Here, know that bid - Z.to_nat n23 must be 0 because of H_bid_n23. *)
-          assert (bid - Z.to_nat n23 = 0) as H_minus_0.
-          { admit. }
-          rewrite H_minus_0.
-          (* Also because of H_bid_n23, know that bid <? Z.to_nat (n12 + n23) can't hold. *)
-          assert (bid <? Z.to_nat (n12 + n23) = false) as H_bid_n12_n23.
-          { admit. }
-          rewrite H_bid_n12_n23.
-          (* As a consequence of H_bid_n12_n23, know that bid - Z.to_nat (n12 + n23) must
-           be 0. *)
-          assert (bid - Z.to_nat (n12 + n23) = 0) as H_minus_0'.
-          { admit. }
-          rewrite H_minus_0'. reflexivity.
-      + assert (0 <? Z.to_nat n23 = false) as Hn23'.
-        { admit. (* follows from Hn23 *) }
-        rewrite Hn23'.
-        assert (bid <? Z.to_nat (n12 + n23) = false) as Hnecessary.
+      assert (n1n3': n3 <= n1).
+      { apply/leP.
+        rewrite Nat2Z.inj_le. apply Z.geb_le. rewrite Z.geb_le.
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n3) 0 as G. rewrite n1n3 in G.
+        apply Zle_0_minus_le, Z.ge_le. assumption.
+      }
+      assert (n2n3': n3 <= n2).
+      { apply/leP.
+        rewrite Nat2Z.inj_le. apply Z.geb_le. rewrite Z.geb_le.
+        pose proof Zge_cases (Z.of_nat n2 - Z.of_nat n3) 0 as G. rewrite n2n3 in G.
+        apply Zle_0_minus_le, Z.ge_le. assumption.
+      }
+      move: Ha'1.
+      rewrite !Z.opp_sub_distr !Z.add_opp_l.
+      rewrite <- !Nat2Z.inj_sub;
+        try (rewrite Nat2Z.inj_le; apply Zle_0_minus_le, Z.geb_le; assumption);
+        try (apply/leP; auto).
+      rewrite !Nat2Z.id.
+      move=> Ha'1. rewrite Ha'1.
+      unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
+      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
+      inversion Ha'1. subst.
+      destruct (bid + (n2 - n1)%coq_nat <? (n2 - n3)%coq_nat) eqn:Hif.
+      + (* Here, contradiction *)
+        assert ((n2 - n3)%coq_nat <= n2) as Hfact.
+        { apply leq_subr. }
+        assert (n2 < (n2 - n3)%coq_nat) as Hcontra.
         {
-          SearchAbout Z.to_nat.
-          rewrite Z2Nat.inj_add.
-          * SearchAbout Nat.ltb.
-            rewrite Nat.ltb_antisym negb_false_iff.
-            SearchAbout Nat.ltb false.
-            assert (Z.to_nat n12 <= bid)%coq_nat as H_n12_bid.
-            { rewrite <- Nat.ltb_ge. assumption. }
-            SearchAbout le.
-            rewrite Nat.ltb_ge in H_bid_n12.
-            SearchAbout Init.Nat.add Init.Nat.sub.
-          * rewrite <- Z.geb_le. exact Hn12.
-          * rewrite <- Z.geb_le. exact Hn23.
+          apply/ltP.
+          apply Nat.le_lt_trans with (m := bid + (n2 - n1)%coq_nat).
+          * apply/leP. assumption.
+          * apply/Nat.ltb_spec0. assumption.
         }
-
-  Abort.
-      
- *)
+        assert (n2 < n2) as Hfalse.
+        { apply/ltP. apply Nat.lt_le_trans with (m := (n2 - n3)%coq_nat);
+                       try apply/leP; assumption. }
+        pose proof Nat.lt_irrefl n2 as H. pose proof @ltP _ _ Hfalse as H1.
+        exfalso. apply H. exact H1.
+      + destruct (bid <? (n1 - n3)%coq_nat) eqn:Hif'.
+        * (* Here, contradiction*)
+          assert ((n1 - n3)%coq_nat <= n1) as Hfact.
+          { apply leq_subr. }
+          assert (n1 < (n1 - n3)%coq_nat) as Hcontra.
+          {
+            apply/ltP.
+            apply Nat.le_lt_trans with (m := bid).
+            -- apply/leP. assumption.
+            -- apply/Nat.ltb_spec0. assumption.
+          }
+          assert (n1 < n1) as Hfalse.
+          { apply/ltP. apply Nat.lt_le_trans with (m := (n1 - n3)%coq_nat);
+                         try apply/leP; assumption. }
+          pose proof Nat.lt_irrefl n1 as H. pose proof @ltP _ _ Hfalse as H1.
+          exfalso. apply H. exact H1.
+        * rewrite <- subnBA; try (apply leq_sub2l; assumption).
+          assert ((n2 - n3)%coq_nat - (n2 - n1) = (n2 - n3) + n1 - n2) as Hdist.
+          { rewrite subnBA; auto. }
+          rewrite Hdist.
+          assert ((n2 - n3 + n1 - n2) = n1 - n3) as Hgoal.
+          { rewrite <- subnBA; auto. rewrite <- subnDA. rewrite addnC subnDA.
+            rewrite <- minnE.
+            assert (minn n2 n1 = n1) as Hmin.
+            { apply/minn_idPr. auto. }
+            rewrite Hmin. reflexivity.
+          }
+          rewrite Hgoal. reflexivity.
+    - (* n2 >= n3, n1 ~>= n3 ==> n1 < n3, n1 ~>= n2 ==> n1 < n2 *)
+      assert (n2n3': n3 <= n2).
+      { apply/leP.
+        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le. 
+        pose proof Zge_cases (Z.of_nat n2 - Z.of_nat n3) 0 as G. rewrite n2n3 in G.
+        apply Zle_0_minus_le, Z.ge_le. assumption.
+      }
+      assert (n1n3': n1 <= n3).
+      { apply/leP.
+        rewrite Nat2Z.inj_le. apply Z.geb_le. rewrite Z.geb_le. apply Z.lt_le_incl.
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n3) 0 as G. rewrite n1n3 in G.
+        apply Z.lt_sub_0. assumption.
+      }
+      assert (n1n2': n1 <= n2).
+      { apply leq_trans with (n := n3); assumption. }
+      move: Ha'1.
+      rewrite !Z.opp_sub_distr !Z.add_opp_l.
+      rewrite <- !Nat2Z.inj_sub;
+        try (rewrite Nat2Z.inj_le; apply Zle_0_minus_le, Z.geb_le; assumption);
+        try (apply/leP; auto).
+      rewrite !Nat2Z.id.
+      move=> Ha'1. rewrite Ha'1.
+      unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
+      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
+      inversion Ha'1. subst.
+      assert (Hnecessary: bid + (n2 - n1) <? (n2 - n3) = false).
+      { rewrite Nat.ltb_ge. apply/leP. apply leq_trans with (n := n1 + (n2 - n1)).
+        + rewrite <- maxnE.
+          assert (Hmax: maxn n1 n2 = n2).
+          { apply/maxn_idPr. assumption. }
+          rewrite Hmax. apply leq_subr.
+        + rewrite leq_add2r. assumption.
+      }
+      rewrite Hnecessary.
+      assert (Hgoal: bid + (n2 - n1) - (n2 - n3) = bid + (n3 - n1)).
+      {
+        rewrite subnBA; auto. rewrite <- (addnA bid (n2 - n1)).
+        rewrite <- addnBA.
+        + assert (G: n2 - n1 + n3 - n2 = n3 - n1).
+          { rewrite <- subnBA; auto. rewrite <- subnDA. rewrite addnC subnDA.
+            rewrite <- minnE.
+            assert (minn n2 n3 = n3) as Hmin.
+            { apply/minn_idPr. auto. }
+            rewrite Hmin. reflexivity.
+          }
+          rewrite G. reflexivity.
+        + rewrite <- leq_subLR. rewrite <- minnE.
+          assert (Hmin: minn n2 n1 = n1).
+          { apply/minn_idPr. auto. }
+          rewrite Hmin. auto.
+      }
+      rewrite Hgoal. reflexivity.
+    - (* n1 >= n2, n1 >= n3, n2 ~>= n3 ==> n3 >= n2 *)
+      assert (n1n2': n2 <= n1).
+      { apply/leP.
+        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le. 
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n2) 0 as G. rewrite n1n2 in G.
+        apply Zle_0_minus_le, Z.ge_le. assumption.
+      }
+      assert (n1n3': n3 <= n1).
+      { apply/leP.
+        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le. 
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n3) 0 as G. rewrite n1n3 in G.
+        apply Zle_0_minus_le, Z.ge_le. assumption.
+      }
+      assert (n2n3': n2 <= n3).
+      { apply/leP.
+        rewrite Nat2Z.inj_le. apply Z.geb_le. rewrite Z.geb_le. apply Z.lt_le_incl.
+        pose proof Zge_cases (Z.of_nat n2 - Z.of_nat n3) 0 as G. rewrite n2n3 in G.
+        apply Z.lt_sub_0. assumption.
+      }
+      move: Ha'1.
+      rewrite !Z.opp_sub_distr !Z.add_opp_l.
+      rewrite <- !Nat2Z.inj_sub;
+        try (rewrite Nat2Z.inj_le; apply Zle_0_minus_le, Z.geb_le; assumption);
+        try (apply/leP; auto).
+      rewrite !Nat2Z.id.
+      move=> Ha'1. rewrite Ha'1.
+      unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
+      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
+      destruct (bid <? (n1 - n2)%coq_nat) eqn:Hif; inversion Ha'1. subst.
+      assert (Hnecessary: bid <? (n1 - n3) = false).
+      { rewrite Nat.ltb_ge. apply/leP. apply leq_trans with n1; auto. apply leq_subr. }
+      rewrite Hnecessary.
+      assert (Hbid: n2 <= bid + n2 - n1).
+      { rewrite <- subnBA; auto. }
+      assert (Hgoal: bid - (n1 - n2) + (n3 - n2) = bid - (n1 - n3)).
+      {
+        rewrite !subnBA; auto. rewrite addnBA; auto.
+        rewrite <- (@subnBA bid n1); auto.
+        rewrite <- addnBA; auto. rewrite subnBA; auto.
+        rewrite addnBA; auto. rewrite addnC. rewrite <- addnBA; auto.
+        rewrite <- (@subnBA bid n1); auto.
+        rewrite <- subnDA. rewrite subnK; auto. rewrite addnC.
+        rewrite (addnC bid). rewrite <- addnBA; auto. rewrite addnC. reflexivity.
+      }
+      rewrite Hgoal. reflexivity.
+    - (* n2 <= n1, n2 !>= n3 ==> n2 <= n3, n1 !>= n3 ==> n1 <= n3 *)
+      assert (n1n2': n2 <= n1).
+      { apply/leP.
+        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le. 
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n2) 0 as G. rewrite n1n2 in G.
+        apply Zle_0_minus_le, Z.ge_le. assumption.
+      }
+      assert (n1n3': n1 <= n3).
+      { apply/leP.
+        rewrite Nat2Z.inj_le. apply Z.geb_le. rewrite Z.geb_le. apply Z.lt_le_incl.
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n3) 0 as G. rewrite n1n3 in G.
+        apply Z.lt_sub_0. assumption.
+      }
+      assert (n2n3': n2 <= n3).
+      { apply leq_trans with n1; auto. }
+      move: Ha'1.
+      rewrite !Z.opp_sub_distr !Z.add_opp_l.
+      rewrite <- !Nat2Z.inj_sub;
+        try (rewrite Nat2Z.inj_le; apply Zle_0_minus_le, Z.geb_le; assumption);
+        try (apply/leP; auto).
+      rewrite !Nat2Z.id.
+      move=> Ha'1. rewrite Ha'1.
+      unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
+      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
+      destruct (bid <? (n1 - n2)%coq_nat) eqn:Hif; inversion Ha'1. subst.
+      assert (Hbid: n2 <= bid + n2 - n1).
+      { rewrite <- subnBA; auto. }
+      assert (Hgoal: bid - (n1 - n2) + (n3 - n2) = bid + (n3 - n1)).
+      { rewrite addnBA; auto. rewrite addnC. rewrite <- addnBA; rewrite subnBA; auto.
+        rewrite <- subnDA. rewrite addnBA; try (rewrite leq_add2r; auto).
+        rewrite (addnC n1). rewrite subnDA. rewrite <- addnBA; try apply leq_addl.
+        rewrite <- (@subnBA bid n2); auto. rewrite subnn subn0 addnC addnBA; auto. 
+      }
+      rewrite Hgoal. reflexivity.
+    - (* n1 !>= n2 ==> n1 < n2, n2 !>= n3 ==> n2 < n3, n1 >= n3 *)
+      assert ((Z.of_nat n1 - Z.of_nat n3 >=? 0)%Z = false) as Hcontra.
+      {
+        rewrite Z.geb_leb Z.leb_gt Z.lt_sub_0.
+        apply Z.lt_trans with (Z.of_nat n2); rewrite <- Z.lt_sub_0.
+        + pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n2) 0 as H. rewrite n1n2 in H. auto.
+        + pose proof Zge_cases (Z.of_nat n2 - Z.of_nat n3) 0 as H. rewrite n2n3 in H. auto.
+      }
+      rewrite Hcontra in n1n3. discriminate.
+    - (* n1 !>= n2 ==> n1 < n2, n2 !>= n3 ==> n2 < n3, n1 !>= n3 ==> n1 < n3 *)
+      assert (n1n2': n1 <= n2).
+      { apply/leP.
+        rewrite Nat2Z.inj_le. apply Z.geb_le. rewrite Z.geb_le. apply Z.lt_le_incl.
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n2) 0 as G. rewrite n1n2 in G.
+        apply Z.lt_sub_0. assumption.
+      }
+      assert (n2n3': n2 <= n3).
+      { apply/leP.
+        rewrite Nat2Z.inj_le. apply Z.geb_le. rewrite Z.geb_le. apply Z.lt_le_incl.
+        pose proof Zge_cases (Z.of_nat n2 - Z.of_nat n3) 0 as G. rewrite n2n3 in G.
+        apply Z.lt_sub_0. assumption.
+      }
+      assert (n1n3': n1 <= n3).
+      { apply leq_trans with n2; auto. }
+      move: Ha'1.
+      rewrite !Z.opp_sub_distr !Z.add_opp_l.
+      rewrite <- !Nat2Z.inj_sub;
+        try (rewrite Nat2Z.inj_le; apply Zle_0_minus_le, Z.geb_le; assumption);
+        try (apply/leP; auto).
+      rewrite !Nat2Z.id.
+      move=> Ha'1. rewrite Ha'1.
+      unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
+      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
+      inversion Ha'1. subst.
+      assert (Hgoal: bid + (n2 - n1) + (n3 - n2) = bid + (n3 - n1)).
+      { rewrite <- addnA. apply/eqP. rewrite eqn_add2l. apply/eqP. rewrite addnBA; auto.
+        rewrite addnC. rewrite <- subnBA; try apply leq_subr. rewrite <- minnE.
+        assert (Hmin: minn n2 n1 = n1).
+        { apply/minn_idPr. auto. }
+        rewrite Hmin. auto.
+      }
+      rewrite Hgoal. reflexivity.
+  Qed.
 
 End SigmaShiftingProperties.
 
