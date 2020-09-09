@@ -188,10 +188,19 @@ Module Type Intermediate_Sig.
       prog_interface c = prog_interface c' ->
       closed_program (program_link p c) ->
       closed_program (program_link p' c') ->
-    forall m,
+    forall size_m size_m'' m m'',
       does_prefix (CS.sem (program_link p c)) m ->
-      does_prefix (CS.sem (program_link p' c')) m ->
-      does_prefix (CS.sem (program_link p c')) m.
+      does_prefix (CS.sem (program_link p' c')) m'' ->
+      behavior_rel_behavior size_m size_m'' m m'' ->
+      exists size_m' m',
+        does_prefix (CS.sem (program_link p c')) m' /\
+        behavior_rel_behavior size_m' size_m m' m.
+
+  Local Axiom does_prefix_inform_does_prefix_non_inform :
+    forall p m,
+      does_prefix (CS.sem_inform p) m ->
+      does_prefix (CS.sem p) (project_finpref_behavior m).
+  
 End Intermediate_Sig.
 
 Module Type S2I_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
@@ -207,24 +216,6 @@ Module Type Linker_Sig
        (Source : Source_Sig)
        (Intermediate : Intermediate_Sig)
        (S2I : S2I_Sig Source Intermediate).
-
-  Definition project_finpref_behavior m :=
-    match m with
-    | FTerminates t => FTerminates (project_non_inform t)
-    | FGoes_wrong t => FGoes_wrong (project_non_inform t)
-    | FTbc t => FTbc (project_non_inform t)
-    end.
-
-  Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
-    : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
-  | Terminates_rel_Terminates:
-      forall t1 t2,
-        traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
-        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
-  | Tbc_rel_Tbc:
-      forall t1 t2,
-        traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
-        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
   
   Local Axiom definability_with_linking :
     forall p c b m,

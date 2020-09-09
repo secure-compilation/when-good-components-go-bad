@@ -1,8 +1,8 @@
 Require Import Lib.Extra.
 Require Import CompCert.Events.
+Require Import Common.CompCertExtensions.
 Require Import Common.Definitions.
 Require Import Common.Linking.
-Require Import Common.CompCertExtensions.
 Require Import Common.Values.
 Require Import Common.Traces.
 Require Import Common.Memory.
@@ -139,6 +139,13 @@ Fixpoint project_non_inform t_inform :=
     | ERetInform C v mem C' => (CompCert.Events.ERet C v mem C') :: project_non_inform es
     | _ => project_non_inform es
     end
+  end.
+
+Definition project_finpref_behavior m :=
+  match m with
+  | FTerminates t => FTerminates (project_non_inform t)
+  | FGoes_wrong t => FGoes_wrong (project_non_inform t)
+  | FTbc t => FTbc (project_non_inform t)
   end.
 
 Section Traces.

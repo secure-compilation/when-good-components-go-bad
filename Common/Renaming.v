@@ -1131,6 +1131,22 @@ End TheShiftRenaming.
 
 Section PropertiesOfTheShiftRenaming.
 
+  Lemma rename_addr_reflexive n a:
+    rename_addr (sigma_shifting_addr n n) a = a.
+  Proof. unfold rename_addr, sigma_shifting_addr. rewrite sigma_shifting_n_n_id. auto. Qed.
+
+  Lemma rename_value_reflexive n v:
+    rename_value (sigma_shifting_addr n n) v = v.
+  Proof. unfold rename_value, rename_value_template.
+         destruct v as [ | [[[perm cid] bid] o] | ]; auto. rewrite rename_addr_reflexive. auto.
+  Qed.
+
+  Lemma option_rename_value_reflexive n ov:
+    option_rename_value (sigma_shifting_addr n n) ov = ov.
+  Proof. unfold option_rename_value, omap, obind, oapp. destruct ov as [ | ]; auto.
+         by rewrite rename_value_reflexive.
+  Qed.
+  
   Lemma rename_addr_inverse_rename_addr n1 n2 a:
     rename_addr (sigma_shifting_addr n1 n2) a =
     inverse_rename_addr (inv_sigma_shifting_addr n2 n1) a.
@@ -1189,6 +1205,12 @@ Section PropertiesOfTheShiftRenaming.
    rewrite rename_value_transitive; auto.
  Qed.
 
+ Lemma event_rename_reflexive n addr e:
+   event_renames_event_at_addr (sigma_shifting_addr n n) addr e e.
+ Proof. unfold event_renames_event_at_addr. rewrite !rename_addr_reflexive. intros.
+        rewrite option_rename_value_reflexive. auto.
+ Qed.
+ 
  Lemma event_rename_transitive n1 n2 n3 addr e1 e2 e3:
    left_addr_good_for_shifting n1 addr ->
    (forall offset, option_left_value_good_for_shifting n1
@@ -1211,36 +1233,16 @@ Section PropertiesOfTheShiftRenaming.
 
   Lemma traces_shift_each_other_reflexive n t:
     traces_shift_each_other n n t t.
-  Admitted.
-(*  Proof.
+  Proof.
     apply shifting_is_special_case_of_renaming.
     induction t using last_ind.
     - apply nil_renames_nil.
     - apply rcons_renames_rcons.
       + assumption.
       + intros addr Hshrsfr. split.
-        * unfold event_renames_event_at_addr, rename_addr, sigma_shifting_addr,
-          option_rename_value, omap, obind, oapp, rename_value, rename_value_template,
-          rename_addr. simpl.
-          intros. rewrite !sigma_shifting_0_id.
-          destruct (Memory.load (mem_of_event x) (Permission.data, addr.1, addr.2, offset));
-            auto.
-          destruct v as [| [[[perm cid] bid] o] |]; auto. rewrite subn0. reflexivity.
-        * unfold rename_addr, sigma_shifting_addr. rewrite sigma_shifting_0_id. assumption.
-      + intros addr' Hshrsfr. split.
-        * unfold event_inverse_renames_event_at_addr, inverse_rename_addr,
-          inv_sigma_shifting_addr,
-          option_inverse_rename_value, omap, obind, oapp, inverse_rename_value,
-          rename_value_template,
-          inverse_rename_addr. simpl.
-          intros. rewrite !inv_sigma_shifting_0_id.
-          destruct (Memory.load (mem_of_event x) (Permission.data, addr'.1, addr'.2, offset));
-            auto.
-          destruct v as [| [[[perm cid] bid] o] |]; auto. rewrite addn0. reflexivity.
-        * unfold inverse_rename_addr, inv_sigma_shifting_addr.
-          rewrite inv_sigma_shifting_0_id. assumption.
-  Qed.
-*)
+        * apply event_rename_reflexive.
+        * by rewrite rename_addr_reflexive.
+  Admitted.
 
   Lemma traces_shift_each_other_symmetric t1 t2 n1 n2:
     traces_shift_each_other n1 n2 t1 t2 ->
@@ -1499,6 +1501,21 @@ Section PropertiesOfTheShiftRenaming.
 
 *)
 End PropertiesOfTheShiftRenaming.
+
+Section BehaviorsRelated.
+
+Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
+  : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
+| Terminates_rel_Terminates:
+    forall t1 t2,
+      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
+      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
+| Tbc_rel_Tbc:
+    forall t1 t2,
+      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
+      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
+    
+End BehaviorsRelated.
 
 
 (* [DynShare] 

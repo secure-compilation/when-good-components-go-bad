@@ -751,26 +751,6 @@ Qed.*)
 (* RB: Relocate? As the S2I require above seems to indicate, this is not where
    this result belongs. *)
 
-(* RB: [DynShare] NOTE: If this is what we want, move to its proper place. *)
-Definition project_finpref_behavior m :=
-  match m with
-  | FTerminates t => FTerminates (project_non_inform t)
-  | FGoes_wrong t => FGoes_wrong (project_non_inform t)
-  | FTbc t => FTbc (project_non_inform t)
-  end.
-
-Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
-  : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
-| Terminates_rel_Terminates:
-    forall t1 t2,
-      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
-      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
-| Tbc_rel_Tbc:
-    forall t1 t2,
-      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
-      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
-
-
 Lemma definability_with_linking:
   forall p c b m,
     Intermediate.well_formed_program p ->

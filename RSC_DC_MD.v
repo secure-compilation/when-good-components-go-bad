@@ -3,6 +3,7 @@ Require Import Common.Definitions.
 Require Import Common.Linking.
 Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
+Require Import Common.TracesInform.
 Require Import Common.Renaming.
 
 Require Import RSC_DC_MD_Sigs.
@@ -26,18 +27,6 @@ Definition behavior_improves_blame b (m: @finpref_behavior Events.event) p :=
   exists t, b = Goes_wrong t /\ trace_finpref_prefix t m /\
             undef_in t (Source.prog_interface p).
 
-
-Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
-  : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
-| Terminates_rel_Terminates:
-    forall t1 t2,
-      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
-      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
-| Tbc_rel_Tbc:
-    forall t1 t2,
-      traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
-      behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
-
 Section RSC_DC_MD_Section.
   Variable p: Source.program.
   Variable p_compiled: Intermediate.program.
@@ -56,8 +45,9 @@ Section RSC_DC_MD_Section.
   (* Main Theorem *)
 
   Theorem RSC_DC_MD:
-    forall (m: @finpref_behavior TracesInform.event_inform),
-      does_prefix (Intermediate.CS.sem_inform (Intermediate.program_link p_compiled Ct)) m ->
+    forall (m: @finpref_behavior (*TracesInform.event_inform*) Events.event),
+      does_prefix (Intermediate.CS.sem(*_inform*)
+                     (Intermediate.program_link p_compiled Ct)) m ->
       not_wrong_finpref m ->
       exists Cs (beh: @program_behavior Events.event) m'
              size_meta_m size_meta_m',
@@ -66,10 +56,10 @@ Section RSC_DC_MD_Section.
       linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (Source.program_link p Cs) /\
       program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
-      (prefix (Definability.project_finpref_behavior m) beh \/
-       behavior_improves_blame beh (Definability.project_finpref_behavior m) p) /\
+      (prefix ((*Definability.project_finpref_behavior*) m') beh \/
+       behavior_improves_blame beh ((*Definability.project_finpref_behavior*) m') p) /\
       behavior_rel_behavior size_meta_m size_meta_m'
-                            (Definability.project_finpref_behavior m) m'.
+                            ((*Definability.project_finpref_behavior*) m) m'.
   Proof.
     intros m [t [Hbeh Hprefix0]] Hsafe_pref.
 
@@ -93,9 +83,40 @@ Section RSC_DC_MD_Section.
         now rewrite successful_compilation.
     }
 
-     assert (H_doesm: does_prefix (Intermediate.CS.sem_inform (Intermediate.program_link p_compiled Ct)) m)
-     by now exists t. 
+    assert (H_doesm_noninform: does_prefix
+                                 (Intermediate.CS.sem
+                                    (Intermediate.program_link p_compiled Ct)) m)
+      by (now exists t).
+                    
+    assert (H_doesm': exists m_inform,
+               does_prefix
+                 (Intermediate.CS.sem_inform
+                    (Intermediate.program_link p_compiled Ct)) m_inform).
+    { admit. }
 
+    destruct H_doesm' as [m_inform H_doesm].
+
+    assert (m_m_inform: m = project_finpref_behavior m_inform).
+    { admit. }
+
+    Check project_finpref_behavior.
+    Locate finpref_behavior.
+
+    assert (Hbeh_inform': exists t_inform,
+               program_behaves
+                 (Intermediate.CS.sem_inform
+                    (Intermediate.program_link p_compiled Ct)) t_inform
+           ).
+    { admit. }
+
+    destruct Hbeh_inform' as [t_inform Hbeh_inform].
+    
+    assert (Hprefix0_inform: prefix m_inform t_inform).
+    { admit. }
+
+    assert (Hsafe_pref_inform: not_wrong_finpref m_inform).
+    { admit. }
+    
     (* intermediate decomposition (for p_compiled) *)
     (* pose proof Intermediate.decomposition_prefix  *)
     (*   well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains *)
@@ -104,7 +125,7 @@ Section RSC_DC_MD_Section.
     (* definability *)
     destruct (Linker.definability_with_linking
                 well_formed_p_compiled well_formed_Ct
-                linkability_pcomp_Ct closedness Hbeh Hprefix0 Hsafe_pref)
+                linkability_pcomp_Ct closedness Hbeh_inform Hprefix0_inform Hsafe_pref_inform)
       as [P' [Cs [metadata_size [m'
          [Hsame_iface1 [Hsame_iface2
          [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
@@ -260,36 +281,41 @@ Section RSC_DC_MD_Section.
 
     rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm; try assumption.
     rewrite <- Hctx_same_iface in Hmergeable_ifaces.
-    (* [DynShare] In the next step, 
-       we should be able to solve it using a transfer lemma (meaning to obtain 
-       non-informative from informative). This transfer lemma will need to first be added
-       to the Intermediate Signature.
-     *)
+
+    assert (m_rel_m': behavior_rel_behavior 0 metadata_size m m').
+    { admit. }
+
     pose proof Intermediate.recombination_prefix
          well_formed_p_compiled well_formed_Ct well_formed_P'_compiled well_formed_Cs_compiled
          Hmergeable_ifaces Hprog_same_iface Hctx_same_iface
          closedness HP'Cs_compiled_closed
-         H_doesm HP'_Cs_compiled_doesm
-         as HpCs_compiled_beh.
-
+         H_doesm_noninform HP'_Cs_compiled_doesm m_rel_m'
+         as [size_m'' [m'' [HpCs_compiled_beh m''_rel_m]]].
+    
     (* BCC *)
     assert (exists pCs_compiled,
                Compiler.compile_program (Source.program_link p Cs) = Some pCs_compiled)
       as [pCs_compiled HpCs_compiles].
       by now apply Compiler.well_formed_compilable.
+
     assert (exists beh1,
                program_behaves (Source.CS.sem (Source.program_link p Cs)) beh1 /\
-               (prefix m beh1 \/ behavior_improves_finpref beh1 m)) as HpCs_beh. {
-      eapply Compiler.backward_simulation_behavior_improves_prefix in HpCs_compiled_beh; eassumption.
+               (prefix m'' beh1 \/ behavior_improves_finpref beh1 m'')) as HpCs_beh.
+    {
+      
+      eapply Compiler.backward_simulation_behavior_improves_prefix in HpCs_compiled_beh;
+        eauto.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
 
+    assert (m_rel_m'': behavior_rel_behavior 0 size_m'' m m'').
+    { (*[DynShare] This should follow from m''_rel_m *)
+      admit.
+    }
     (* Instantiate behavior, case analysis on improvement. *)
-    exists Cs. eexists. eexists. exists Source.Definability.metadata_size. exists 0.
+    exists Cs. eexists. eexists m''. eexists 0. eexists.
     destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
-                   + repeat (split; try now eauto).
-                     SearchAbout  
-                     
+    + repeat (split; try now eauto).
     + subst pCs_beh.
       repeat (split; try now auto).
       (* Blame the program and close the diagram. *)
@@ -300,12 +326,16 @@ Section RSC_DC_MD_Section.
         congruence.
       }
       unfold behavior_improves_blame.
-      destruct (Source.blame_program well_formed_p well_formed_Cs
+
+      (* [DynShare] Continue here. *)
+  Admitted.
+(*      destruct (Source.blame_program well_formed_p well_formed_Cs
                               Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
                               well_formed_P' Hsame_iface3 HP'Cs_closed
-                              HP'_Cs_m Hsafe_pref Klonger) as [H|H]; by eauto.
-  Qed.
+                             HP'_Cs_m' Hsafe_pref Klonger) as [H|H]; by eauto.
 
+  Qed.
+*)
 End RSC_DC_MD_Section.
 End RSC_DC_MD_Gen.
 
@@ -319,5 +349,3 @@ Module RSC_DC_MD_Instance :=
 
 Definition RSC_DC_MD :=
   RSC_DC_MD_Instance.RSC_DC_MD.
-
-Print Assumptions RSC_DC_MD.

@@ -159,6 +159,7 @@ Inductive finpref_behavior {Ev: Type} : Type :=
   | FGoes_wrong: trace Ev -> finpref_behavior
   | FTbc : trace Ev -> finpref_behavior.
 
+
 Definition not_wrong_finpref {Ev: Type} (m: @finpref_behavior Ev) : Prop :=
   match m with
   | FGoes_wrong _ => False
