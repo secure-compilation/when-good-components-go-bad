@@ -480,7 +480,7 @@ Section SigmaShiftingProperties.
     rewrite <- !Zminus_diag_reverse. simpl. apply inv_sigma_from_bigger_dom_0_id.
   Qed.
 
-  Lemma inv_sigma_shifting_n_sigma_shifting_minus_n:
+  Lemma inv_sigma_shifting_sigma_shifting:
     forall n1 n2 x,
       inv_sigma_shifting n1 n2 x = sigma_shifting n2 n1 x.
   Proof.
@@ -1080,15 +1080,12 @@ Qed.
 End Renaming.
 
 Section TheShiftRenaming.
-
   
   Variable metadata_size_lhs: nat.
   Variable metadata_size_rhs: nat.
 
   Let num_extra_blocks_of_lhs : Z :=
     Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs.
-
-  Check sigma_shifting.
     
   Definition sigma_shifting_addr (a: addr_t) : addr_t :=
     match sigma_shifting metadata_size_lhs metadata_size_rhs (care, a) with
@@ -1098,6 +1095,30 @@ Section TheShiftRenaming.
   Definition inv_sigma_shifting_addr (a: addr_t) : addr_t :=
     match inv_sigma_shifting metadata_size_lhs metadata_size_rhs (care, a) with
     | (_, a') => a'
+    end.
+
+  Definition left_value_good_for_shifting (v: value) : Prop :=
+    match v with
+    | Ptr (_, cid, bid, _) => left_addr_good_for_shifting metadata_size_lhs (cid, bid)
+    | _ => True
+    end.
+
+  Definition right_value_good_for_shifting (v: value) : Prop :=
+    match v with
+    | Ptr (_, cid, bid, _) => right_addr_good_for_shifting metadata_size_rhs (cid, bid)
+    | _ => True
+    end.
+
+  Definition option_left_value_good_for_shifting (ov: option value) : Prop :=
+    match ov with
+    | Some v => left_value_good_for_shifting v
+    | None => True
+    end.
+
+  Definition option_right_value_good_for_shifting (ov: option value) : Prop :=
+    match ov with
+    | Some v => right_value_good_for_shifting v
+    | None => True
     end.
 
   Inductive traces_shift_each_other : trace event -> trace event -> Prop :=
@@ -1113,21 +1134,18 @@ Section PropertiesOfTheShiftRenaming.
   Lemma rename_addr_inverse_rename_addr n1 n2 a:
     rename_addr (sigma_shifting_addr n1 n2) a =
     inverse_rename_addr (inv_sigma_shifting_addr n2 n1) a.
-  Admitted.
-(*  Proof.
-    unfold rename_addr, inverse_rename_addr, sigma_shifting_addr, inv_sigma_shifting_addr.
-    erewrite inv_sigma_shifting_n_sigma_shifting_minus_n. reflexivity.
+  Proof. unfold rename_addr, inverse_rename_addr, sigma_shifting_addr, inv_sigma_shifting_addr.
+         rewrite inv_sigma_shifting_sigma_shifting. auto.
   Qed.
-*)
+
   Lemma option_rename_value_option_inverse_rename_value n2 n1 v:
     option_inverse_rename_value (inv_sigma_shifting_addr n2 n1) v =
     option_rename_value (sigma_shifting_addr n1 n2) v.
-  Admitted.
-(*  Proof.
+  Proof.
     destruct v as [[ | [[[perm cid] bid] o] | ] | ]; auto. simpl.
     rewrite rename_addr_inverse_rename_addr. reflexivity.
-  Qed.*)
-
+  Qed.
+  
   Lemma event_rename_inverse_event_rename n1 n2 addr' e e':
     event_inverse_renames_event_at_addr (inv_sigma_shifting_addr n1 n2) addr' e e' <->
     event_renames_event_at_addr (sigma_shifting_addr n2 n1) addr' e' e.
@@ -1140,17 +1158,56 @@ Section PropertiesOfTheShiftRenaming.
       rewrite <- H', rename_addr_inverse_rename_addr. reflexivity.
   Qed.
 
-  Lemma rename_addr_transitive n1 n2 n3 addr:
-    rename_addr (sigma_shifting_addr n2 n3) (rename_addr (sigma_shifting_addr n1 n2) addr) =
-    rename_addr (sigma_shifting_addr n1 n3) addr.
-  Abort.
+ Lemma rename_addr_transitive n1 n2 n3 addr:
+   left_addr_good_for_shifting n1 addr ->
+   rename_addr (sigma_shifting_addr n2 n3) (rename_addr (sigma_shifting_addr n1 n2) addr) =
+   rename_addr (sigma_shifting_addr n1 n3) addr.
+ Proof. intros. unfold rename_addr, sigma_shifting_addr.
+        rewrite <- (sigma_shifting_transitive n1 n2 n3); auto.
+ Qed.
 
-  Lemma event_rename_transitive n1 n2 n3 addr e1 e2 e3:
-     event_renames_event_at_addr (sigma_shifting_addr n1 n2) addr e1 e2 ->
-     event_renames_event_at_addr (sigma_shifting_addr n2 n3)
-                                 (rename_addr (sigma_shifting_addr n1 n2) addr) e2 e3 ->
-     event_renames_event_at_addr (sigma_shifting_addr n1 n3) addr e1 e3.
-  Abort.
+ Lemma rename_value_transitive n1 n2 n3 v:
+   left_value_good_for_shifting n1 v ->
+   rename_value (sigma_shifting_addr n2 n3)
+                       (rename_value (sigma_shifting_addr n1 n2) v) =
+   rename_value (sigma_shifting_addr n1 n3) v.
+ Proof.
+   unfold left_value_good_for_shifting.
+   intros Hgood. destruct v as [ | [[[perm cid] bid] o] | ]; auto. simpl.
+   destruct (rename_addr (sigma_shifting_addr n1 n2) (cid, bid)) eqn:Hn1n2. simpl.
+   rewrite <- Hn1n2. rewrite rename_addr_transitive; auto.
+ Qed.
+
+ Lemma option_rename_value_transitive n1 n2 n3 v:
+   option_left_value_good_for_shifting n1 v ->
+   option_rename_value (sigma_shifting_addr n2 n3)
+                       (option_rename_value (sigma_shifting_addr n1 n2) v) =
+   option_rename_value (sigma_shifting_addr n1 n3) v.
+ Proof.
+   unfold option_left_value_good_for_shifting, option_rename_value.
+   intros Hgood. destruct v as [v' | ]; auto. simpl.
+   rewrite rename_value_transitive; auto.
+ Qed.
+
+ Lemma event_rename_transitive n1 n2 n3 addr e1 e2 e3:
+   left_addr_good_for_shifting n1 addr ->
+   (forall offset, option_left_value_good_for_shifting n1
+                                       (Memory.load
+                                          (mem_of_event e1)
+                                          (Permission.data, addr.1, addr.2, offset)
+                                       )
+   ) ->
+   event_renames_event_at_addr (sigma_shifting_addr n1 n2) addr e1 e2 ->
+   event_renames_event_at_addr (sigma_shifting_addr n2 n3)
+                               (rename_addr (sigma_shifting_addr n1 n2) addr) e2 e3 ->
+   event_renames_event_at_addr (sigma_shifting_addr n1 n3) addr e1 e3.
+  Proof.
+    intros Haddr_good Hloads_good.
+    unfold event_renames_event_at_addr. intros Hn1n2 Hn2n3 offset.
+    pose proof Hn2n3 offset as Hn2n3'.
+    erewrite rename_addr_transitive, (Hn1n2 offset) in Hn2n3'; auto. erewrite Hn2n3'.
+    apply option_rename_value_transitive; auto.
+  Qed.
 
   Lemma traces_shift_each_other_reflexive n t:
     traces_shift_each_other n n t t.
