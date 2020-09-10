@@ -576,6 +576,18 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
       b' \in ComponentMemory.load_block compMem bid ->
              Reachable m bs b'.
 
+  
+  Lemma Reachable_transitive mem addrs addr addr':
+    Reachable mem addrs addr ->
+    Reachable mem (fset1 addr) addr' ->
+    Reachable mem addrs addr'.
+  Proof.
+    intros Hreach Hreach1. induction Hreach1; subst.
+    - assert (b = addr). by (apply/fset1P). subst. auto.
+    - eapply Reachable_step; eauto.
+  Qed.
+
+
   Lemma Reachable_dfs_path m bs cid bid:
     Reachable m bs (cid, bid) <->
     (exists b n_f,
