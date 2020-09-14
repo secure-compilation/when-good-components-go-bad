@@ -30,7 +30,8 @@ Section ShiftingAsPartialBijection.
      Totalizing it enables us to reuse useful results about total bijections.
    *)
 
-  Variable count_blocks_to_shift_per_comp : nat.
+  Variable cid_with_shifting : Component.id.
+  Variable count_blocks_to_shift_for_cid : nat.
   
   Definition care := true.
   Definition dontcare := false.
@@ -38,61 +39,70 @@ Section ShiftingAsPartialBijection.
   Definition sigma_from_bigger_dom (x: bool * addr_t) : bool * addr_t :=
     match x with
     | (c, (cid, bid)) =>
-      if c =? care then
-        if bid <? count_blocks_to_shift_per_comp
-        then (dontcare, (cid, bid))
-        else (care, (cid, bid - count_blocks_to_shift_per_comp))
-      else (dontcare, (cid, bid + count_blocks_to_shift_per_comp))
+      if cid =? cid_with_shifting then
+        if c =? care then
+          if bid <? count_blocks_to_shift_for_cid
+          then (dontcare, (cid, bid))
+          else (care, (cid, bid - count_blocks_to_shift_for_cid))
+        else (dontcare, (cid, bid + count_blocks_to_shift_for_cid))
+      else (c, (cid, bid))
     end.
 
   Definition inv_sigma_from_bigger_dom (x: bool * addr_t) : bool * addr_t :=
     match x with
     | (c, (cid, bid)) =>
-      if c =? care then
-        (care, (cid, bid + count_blocks_to_shift_per_comp))
-      else if bid <? count_blocks_to_shift_per_comp
-           then (care, (cid, bid))
-           else (dontcare, (cid, bid - count_blocks_to_shift_per_comp))
+      if cid =? cid_with_shifting then
+        if c =? care then
+          (care, (cid, bid + count_blocks_to_shift_for_cid))
+        else if bid <? count_blocks_to_shift_for_cid
+             then (care, (cid, bid))
+             else (dontcare, (cid, bid - count_blocks_to_shift_for_cid))
+      else (c, (cid, bid))
     end.
 
   Lemma cancel_sigma_from_bigger_dom_inv_sigma_from_bigger_dom :
     cancel sigma_from_bigger_dom inv_sigma_from_bigger_dom.
   Proof.
     unfold cancel. intros [c [cid bid]].
-    destruct c; simpl.
-    - destruct (bid <? count_blocks_to_shift_per_comp) eqn:bid_lt; simpl.
-      + rewrite bid_lt. reflexivity.
-      + rewrite subnK; try reflexivity.
-        assert (le count_blocks_to_shift_per_comp bid) as Hle.
-        { rewrite <- Nat.ltb_ge. assumption. }
-        apply/leP. assumption.
-    - pose proof (leq_addl bid count_blocks_to_shift_per_comp) as H.
-      destruct (bid + count_blocks_to_shift_per_comp <? count_blocks_to_shift_per_comp)
-               eqn:bid_plus_lt; simpl.
-      + pose proof Nat.ltb_lt (addn bid count_blocks_to_shift_per_comp)
-             (count_blocks_to_shift_per_comp) as [Hif _].
-        rewrite bid_plus_lt in Hif. pose proof (Hif Logic.eq_refl) as Hlt. clear Hif.
-        assert (leq (S (addn bid count_blocks_to_shift_per_comp))
-                    count_blocks_to_shift_per_comp) as Hleq.
-        { apply/ltP. assumption. }
-        pose proof (leqP count_blocks_to_shift_per_comp
-                         (addn bid count_blocks_to_shift_per_comp)) as Hcontra.
-        rewrite H in Hcontra. rewrite Hleq in Hcontra.
-        inversion Hcontra.
-      + rewrite addnK. reflexivity.
+    destruct (cid =? cid_with_shifting) eqn:cid_shift; simpl; rewrite cid_shift.
+    - destruct c; simpl.
+      + destruct (bid <? count_blocks_to_shift_for_cid) eqn:bid_lt; simpl; rewrite cid_shift.
+        * rewrite bid_lt. reflexivity.
+        * rewrite subnK; try reflexivity.
+          assert (le count_blocks_to_shift_for_cid bid) as Hle.
+          { rewrite <- Nat.ltb_ge. assumption. }
+          apply/leP. assumption.
+      + pose proof (leq_addl bid count_blocks_to_shift_for_cid) as H.
+        destruct (bid + count_blocks_to_shift_for_cid <? count_blocks_to_shift_for_cid)
+                 eqn:bid_plus_lt; simpl; rewrite cid_shift.
+        * pose proof Nat.ltb_lt (addn bid count_blocks_to_shift_for_cid)
+               (count_blocks_to_shift_for_cid) as [Hif _].
+          rewrite bid_plus_lt in Hif. pose proof (Hif Logic.eq_refl) as Hlt. clear Hif.
+          assert (leq (S (addn bid count_blocks_to_shift_for_cid))
+                      count_blocks_to_shift_for_cid) as Hleq.
+          { apply/ltP. assumption. }
+          pose proof (leqP count_blocks_to_shift_for_cid
+                           (addn bid count_blocks_to_shift_for_cid)) as Hcontra.
+          rewrite H in Hcontra. rewrite Hleq in Hcontra.
+          inversion Hcontra.
+        * rewrite addnK. reflexivity.
+    - simpl. by rewrite cid_shift.
   Qed.
 
   Lemma cancel_inv_sigma_from_bigger_dom_sigma_from_bigger_dom :
     cancel inv_sigma_from_bigger_dom sigma_from_bigger_dom.
   Proof.
-    unfold cancel. intros [c [cid bid]]. destruct c; simpl.
-    - pose proof leq_addl bid count_blocks_to_shift_per_comp.
-      assert (bid + count_blocks_to_shift_per_comp <? count_blocks_to_shift_per_comp = false)
+    unfold cancel. intros [c [cid bid]].
+    destruct (cid =? cid_with_shifting) eqn:cid_shift; simpl; rewrite cid_shift; simpl;
+      try by rewrite cid_shift.
+    destruct c; simpl.
+    - pose proof leq_addl bid count_blocks_to_shift_for_cid.
+      assert (bid + count_blocks_to_shift_for_cid <? count_blocks_to_shift_for_cid = false)
         as Hfalse.
       { rewrite Nat.ltb_ge. apply/leP. assumption. }
-      rewrite Hfalse. rewrite addnK. reflexivity.
-    - destruct (bid <? count_blocks_to_shift_per_comp) eqn:HNatlt;
-        unfold sigma_from_bigger_dom; simpl.
+      rewrite cid_shift Hfalse. rewrite addnK. reflexivity.
+    - destruct (bid <? count_blocks_to_shift_for_cid) eqn:HNatlt;
+        unfold sigma_from_bigger_dom; simpl; rewrite cid_shift.
       + rewrite HNatlt. reflexivity.
       + rewrite subnK; try reflexivity.
         apply/leP. rewrite <- Nat.ltb_ge. assumption.
@@ -113,15 +123,19 @@ Section ShiftingAsPartialBijection.
   Lemma sigma_from_bigger_dom_cid_constant x:
     (sigma_from_bigger_dom x).2.1 = x.2.1.
   Proof.
-    destruct x as [c [cid bid]]. unfold sigma_from_bigger_dom.
-    destruct (c =? care); destruct (bid <? count_blocks_to_shift_per_comp); simpl; auto.
+    destruct x as [c [cid bid]].
+    destruct (cid =? cid_with_shifting) eqn:cid_shift; simpl; rewrite cid_shift; auto.
+    destruct (c =? care) eqn:c_care; rewrite c_care;
+      destruct (bid <? count_blocks_to_shift_for_cid); simpl; auto.
   Qed.
 
   Lemma inv_sigma_from_bigger_dom_cid_constant x:
     (inv_sigma_from_bigger_dom x).2.1 = x.2.1.
   Proof.
     destruct x as [c [cid bid]]. unfold inv_sigma_from_bigger_dom.
-    destruct (c =? care); destruct (bid <? count_blocks_to_shift_per_comp); simpl; auto.
+    destruct (cid =? cid_with_shifting) eqn:cid_shift; simpl; auto.
+    destruct (c =? care) eqn:c_care; rewrite c_care;
+      destruct (bid <? count_blocks_to_shift_for_cid); simpl; auto.
   Qed.
   
 End ShiftingAsPartialBijection.
@@ -278,6 +292,7 @@ End PredicateOnSharedSoFar.
 
 Section SigmaShifting.
 
+  Variable cid_with_shifting: Component.id.
   Variable metadata_size_lhs: nat.
   Variable metadata_size_rhs: nat.
   
@@ -286,13 +301,29 @@ Section SigmaShifting.
 
   Definition sigma_shifting :=
     if (num_extra_blocks_of_lhs >=? 0)%Z
-    then (sigma_from_bigger_dom (Z.to_nat num_extra_blocks_of_lhs))
-    else (inv_sigma_from_bigger_dom (Z.to_nat (- num_extra_blocks_of_lhs))).
+    then (sigma_from_bigger_dom cid_with_shifting (Z.to_nat num_extra_blocks_of_lhs))
+    else (inv_sigma_from_bigger_dom cid_with_shifting (Z.to_nat (- num_extra_blocks_of_lhs))).
 
   Definition inv_sigma_shifting :=
     if (num_extra_blocks_of_lhs >=? 0)%Z
-    then (inv_sigma_from_bigger_dom (Z.to_nat num_extra_blocks_of_lhs))
-    else (sigma_from_bigger_dom (Z.to_nat (- num_extra_blocks_of_lhs))).
+    then (inv_sigma_from_bigger_dom cid_with_shifting (Z.to_nat num_extra_blocks_of_lhs))
+    else (sigma_from_bigger_dom cid_with_shifting (Z.to_nat (- num_extra_blocks_of_lhs))).
+  
+  Lemma sigma_shifting_cid_constant x:
+    (sigma_shifting x).2.1 = x.2.1.
+  Proof. unfold sigma_shifting.
+         destruct ((num_extra_blocks_of_lhs >=? 0)%Z);
+           try apply sigma_from_bigger_dom_cid_constant;
+           apply inv_sigma_from_bigger_dom_cid_constant.
+  Qed.
+
+  Lemma inv_sigma_shifting_cid_constant x:
+    (inv_sigma_shifting x).2.1 = x.2.1.
+  Proof. unfold inv_sigma_shifting.
+         destruct ((num_extra_blocks_of_lhs >=? 0)%Z);
+           try apply sigma_from_bigger_dom_cid_constant;
+           apply inv_sigma_from_bigger_dom_cid_constant.
+  Qed.
 
   Lemma cancel_sigma_shifting_inv_sigma_shifting:
     cancel sigma_shifting inv_sigma_shifting.
@@ -326,12 +357,12 @@ Section SigmaShifting.
 
   Definition left_addr_good_for_shifting (left_addr: addr_t) : Prop :=
     match left_addr with
-    | (_, bid) => bid >= metadata_size_lhs
+    | (cid, bid) => if cid =? cid_with_shifting then bid >= metadata_size_lhs else true
     end.
 
   Definition right_addr_good_for_shifting (right_addr: addr_t) : Prop :=
     match right_addr with
-    | (_, bid) => bid >= metadata_size_rhs
+    | (cid, bid) => if cid =? cid_with_shifting then bid >= metadata_size_rhs else true
     end.
 
   Lemma sigma_left_good_right_good left_addr:
@@ -343,9 +374,11 @@ Section SigmaShifting.
     destruct left_addr as [lcid lbid].
     unfold left_addr_good_for_shifting, sigma_shifting, right_addr_good_for_shifting.
     intros Hleft_good.
-    unfold num_extra_blocks_of_lhs.
-    destruct (Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs >=? 0)%Z eqn:Hge0.
-    - eexists. simpl.
+    unfold num_extra_blocks_of_lhs in *.
+    destruct (Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs >=? 0)%Z eqn:Hge0;
+    simpl in *;
+      destruct (lcid =? cid_with_shifting) eqn:cid_shift.
+    - eexists.
       assert (metadata_size_rhs <= metadata_size_lhs)%coq_nat as lhs_rhs.
       { rewrite Nat2Z.inj_le. apply Zle_0_minus_le. rewrite <- Z.geb_le. exact Hge0. }
       assert (Z.to_nat (Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs) =
@@ -363,14 +396,14 @@ Section SigmaShifting.
         + apply leq_subr.
         + exact Hleft_good.
       }
-      rewrite Hcond. rewrite simplify_minus in Hcond.
+      rewrite !Hcond. rewrite simplify_minus in Hcond.
       assert ((metadata_size_lhs - metadata_size_rhs) <= lbid)%coq_nat as Hall.
       { rewrite <- Nat.ltb_ge. exact Hcond. }
       assert (metadata_size_rhs <= lbid) as rhs_lbid.
       { apply leq_trans with (n := metadata_size_lhs); auto. apply/leP. auto. }
       split.
       + reflexivity.
-      + simpl. rewrite simplify_minus. rewrite minusE.
+      + simpl. rewrite cid_shift. rewrite !simplify_minus. rewrite !minusE.
         destruct (metadata_size_lhs == lbid) eqn:Heq.
         * assert (metadata_size_lhs = lbid) as Heq'.
           { apply/eqP. rewrite Heq. auto. }
@@ -384,7 +417,9 @@ Section SigmaShifting.
              ++ rewrite H in Heq. discriminate.
              ++ assumption.
           -- apply/leP. assumption.
-    - eexists. simpl. split; try reflexivity. simpl.
+    - eexists. simpl. split; try reflexivity. simpl. by rewrite cid_shift.
+    - eexists.
+      split; try reflexivity. simpl. rewrite cid_shift.
       assert (Z.of_nat metadata_size_lhs <= Z.of_nat metadata_size_rhs)%Z as lhs_rhs.
       {
         rewrite <- Z.le_sub_0. apply Znot_gt_le. rewrite neg_false.
@@ -396,6 +431,7 @@ Section SigmaShifting.
       { apply/leP. rewrite Nat2Z.inj_le. exact lhs_rhs. }
       rewrite Z.opp_sub_distr Z.add_opp_l Z2Nat.inj_sub; try apply Nat2Z.is_nonneg.
       rewrite !Nat2Z.id addnC. rewrite <- leq_subLR. rewrite subKn; assumption.
+    - eexists. split; try reflexivity. simpl. by rewrite cid_shift.
   Qed.
                                                 
   Lemma inv_sigma_right_good_left_good right_addr:
@@ -408,8 +444,10 @@ Section SigmaShifting.
     unfold right_addr_good_for_shifting, inv_sigma_shifting, left_addr_good_for_shifting.
     intros Hright_good.
     unfold num_extra_blocks_of_lhs.
-    destruct (Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs >=? 0)%Z eqn:Hge0.
-    - eexists. simpl.
+    destruct (Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs >=? 0)%Z eqn:Hge0;
+      simpl in *;
+      destruct (lcid =? cid_with_shifting) eqn:cid_shift.
+    - eexists.
       assert (metadata_size_rhs <= metadata_size_lhs)%coq_nat as lhs_rhs.
       { rewrite Nat2Z.inj_le. apply Zle_0_minus_le. rewrite <- Z.geb_le. exact Hge0. }
       assert (Z.to_nat (Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs) =
@@ -419,8 +457,9 @@ Section SigmaShifting.
         + rewrite Nat2Z.id. reflexivity.
         + exact lhs_rhs.
       }
-      split; eauto. simpl. rewrite simplify_minus addnC. rewrite <- leq_subLR.
+      split; eauto. simpl. rewrite cid_shift simplify_minus addnC. rewrite <- leq_subLR.
       rewrite subKn; auto. apply/leP. auto.
+    - eexists. split; eauto. simpl. by rewrite cid_shift.
     - assert (Z.of_nat metadata_size_lhs <= Z.of_nat metadata_size_rhs)%Z as lhs_rhs.
       {
         rewrite <- Z.le_sub_0. apply Znot_gt_le. rewrite neg_false.
@@ -444,7 +483,7 @@ Section SigmaShifting.
         rewrite Nat.ltb_ge. apply/leP. apply leq_trans with (n := metadata_size_rhs); auto.
         apply leq_subr.
       }
-      rewrite Hnecessary. split; eauto. simpl.
+      rewrite Hnecessary. split; eauto. simpl. rewrite cid_shift.
       destruct (lbid == metadata_size_rhs) eqn:Heq.
       + assert (lbid = metadata_size_rhs) as Heq'.
         { apply/eqP. auto. }
@@ -458,51 +497,40 @@ Section SigmaShifting.
           -- rewrite eq_sym H in Heq. discriminate.
           -- assumption.
         * assumption.
+    - eexists; split; eauto. simpl. by rewrite cid_shift.
   Qed.
-    
+
 End SigmaShifting.
 
 Section SigmaShiftingProperties.
+
+  Variable cid_for_shift: Component.id.
   
-  Lemma sigma_shifting_cid_constant:
-    forall n1 n2 x, (sigma_shifting n1 n2 x).2.1 = x.2.1.
-  Proof. intros. unfold sigma_shifting.
-         destruct ((Z.of_nat n1 - Z.of_nat n2 >=? 0)%Z);
-           try apply sigma_from_bigger_dom_cid_constant;
-           apply inv_sigma_from_bigger_dom_cid_constant.
-  Qed.
-
-  Lemma inv_sigma_shifting_cid_constant:
-    forall n1 n2 x, (inv_sigma_shifting n1 n2 x).2.1 = x.2.1.
-  Proof. intros. unfold inv_sigma_shifting.
-         destruct ((Z.of_nat n1 - Z.of_nat n2 >=? 0)%Z);
-           try apply sigma_from_bigger_dom_cid_constant;
-           apply inv_sigma_from_bigger_dom_cid_constant.
-  Qed.
-
-  Lemma sigma_from_bigger_dom_0_id x: sigma_from_bigger_dom 0 x = x.
+  Lemma sigma_from_bigger_dom_0_id x: sigma_from_bigger_dom cid_for_shift 0 x = x.
   Proof. destruct x as [c [cid bid]]. unfold sigma_from_bigger_dom.
          assert (bid <? 0 = false) as Himposs.
          { rewrite Nat.ltb_ge. apply Nat.le_0_l. }
-         rewrite Himposs. rewrite subn0 addn0. destruct c; simpl; reflexivity.
+         rewrite Himposs. rewrite subn0 addn0.
+         destruct c; simpl; destruct (cid =? cid_for_shift); reflexivity.
   Qed.
 
-  Lemma inv_sigma_from_bigger_dom_0_id x: inv_sigma_from_bigger_dom 0 x = x.
+  Lemma inv_sigma_from_bigger_dom_0_id x: inv_sigma_from_bigger_dom cid_for_shift 0 x = x.
   Proof. destruct x as [c [cid bid]]. unfold inv_sigma_from_bigger_dom.
          assert (bid <? 0 = false) as Himposs.
          { rewrite Nat.ltb_ge. apply Nat.le_0_l. }
-         rewrite Himposs. rewrite subn0 addn0. destruct c; simpl; reflexivity.
+         rewrite Himposs. rewrite subn0 addn0.
+         destruct c; simpl; destruct (cid =? cid_for_shift); reflexivity.
   Qed.
   
   Lemma sigma_shifting_n_n_id:
-    forall n x, sigma_shifting n n x = x.
+    forall n x, sigma_shifting cid_for_shift n n x = x.
   Proof.
     intros n x. unfold sigma_shifting.
     rewrite <- !Zminus_diag_reverse. simpl. apply sigma_from_bigger_dom_0_id.
   Qed.
 
   Lemma inv_sigma_shifting_n_n_id:
-    forall n x, inv_sigma_shifting n n x = x.
+    forall n x, inv_sigma_shifting cid_for_shift n n x = x.
   Proof.
     intros n x. unfold inv_sigma_shifting.
     rewrite <- !Zminus_diag_reverse. simpl. apply inv_sigma_from_bigger_dom_0_id.
@@ -510,7 +538,7 @@ Section SigmaShiftingProperties.
 
   Lemma inv_sigma_shifting_sigma_shifting:
     forall n1 n2 x,
-      inv_sigma_shifting n1 n2 x = sigma_shifting n2 n1 x.
+      inv_sigma_shifting cid_for_shift n1 n2 x = sigma_shifting cid_for_shift n2 n1 x.
   Proof.
     intros n1 n2 [cdc [cid bid]].
     unfold inv_sigma_shifting, sigma_shifting.
@@ -532,15 +560,31 @@ Section SigmaShiftingProperties.
       pose proof @absurd (Z.lt (Z.of_nat n2) (Z.of_nat n1)) False n2n1 n1n2. exfalso. auto.
   Qed.
 
-  Lemma sigma_shifting_transitive n1 n2 n3 a:
-    left_addr_good_for_shifting n1 a ->
-    sigma_shifting n2 n3 (care, (sigma_shifting n1 n2 (care, a)).2) =
-    sigma_shifting n1 n3 (care, a).
+  Lemma sigma_shifting_not_cid_id a n1 n2 c:
+    a.1 =? cid_for_shift = false -> sigma_shifting cid_for_shift n1 n2 (c, a) = (c, a).
   Proof.
+    destruct a as [cid bid]. simpl.
+    intros Hfalse. unfold sigma_shifting, sigma_from_bigger_dom, inv_sigma_from_bigger_dom.
+    destruct (Z.of_nat n1 - Z.of_nat n2 >=? 0)%Z; simpl; rewrite Hfalse; auto.
+  Qed.
+
+  Lemma sigma_shifting_transitive n1 n2 n3 a:
+    left_addr_good_for_shifting cid_for_shift n1 a ->
+    sigma_shifting cid_for_shift n2 n3
+                   (care, (sigma_shifting cid_for_shift n1 n2 (care, a)).2) =
+    sigma_shifting cid_for_shift n1 n3 (care, a).
+  Proof.
+    destruct a as [cid bid].
+    destruct (cid =? cid_for_shift) eqn:cid_shift;
+      last rewrite !sigma_shifting_not_cid_id; auto.
     intros lgood_a.
-    destruct (sigma_left_good_right_good n1 n2 a lgood_a) as [a' [Ha'1 Ha'2]].
-    assert (left_addr_good_for_shifting n2 a') as lgood_a'.
+    destruct (sigma_left_good_right_good cid_for_shift n1 n2 (cid, bid) lgood_a)
+      as [a' [Ha'1 Ha'2]].
+    assert (left_addr_good_for_shifting cid_for_shift n2 a') as lgood_a'.
     { unfold left_addr_good_for_shifting. unfold right_addr_good_for_shifting in Ha'2. auto. }
+    destruct a' as [cid' bid']. simpl in *.
+    pose proof sigma_shifting_cid_constant cid_for_shift n1 n2 (care, (cid, bid)) as cid_cid'.
+    rewrite Ha'1 in cid_cid'. simpl in *. subst.
     unfold sigma_shifting in *.
     destruct (Z.of_nat n2 - Z.of_nat n3 >=? 0)%Z eqn:n2n3;
       destruct (Z.of_nat n1 - Z.of_nat n2 >=? 0)%Z eqn:n1n2;
@@ -552,7 +596,7 @@ Section SigmaShiftingProperties.
       rewrite !Nat2Z.id.
       move=> Ha'1. rewrite Ha'1.
       unfold sigma_from_bigger_dom in *. simpl in *.
-      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      rewrite !cid_shift. rewrite !cid_shift in lgood_a Ha'1 lgood_a' Ha'2.
       unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
       assert (bid' <? (n2 - n3)%coq_nat = false) as Hcond.
       { rewrite Nat.ltb_ge. apply/leP. apply leq_trans with (n := n2); auto. apply leq_subr. }
@@ -603,7 +647,7 @@ Section SigmaShiftingProperties.
       rewrite !Nat2Z.id.
       move=> Ha'1. rewrite Ha'1.
       unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
-      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      rewrite !cid_shift. rewrite !cid_shift in lgood_a Ha'1 lgood_a' Ha'2.
       unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
       inversion Ha'1. subst.
       destruct (bid + (n2 - n1)%coq_nat <? (n2 - n3)%coq_nat) eqn:Hif.
@@ -673,7 +717,7 @@ Section SigmaShiftingProperties.
       rewrite !Nat2Z.id.
       move=> Ha'1. rewrite Ha'1.
       unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
-      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      rewrite !cid_shift. rewrite !cid_shift in lgood_a Ha'1 lgood_a' Ha'2.
       unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
       inversion Ha'1. subst.
       assert (Hnecessary: bid + (n2 - n1) <? (n2 - n3) = false).
@@ -730,7 +774,7 @@ Section SigmaShiftingProperties.
       rewrite !Nat2Z.id.
       move=> Ha'1. rewrite Ha'1.
       unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
-      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      rewrite !cid_shift. rewrite !cid_shift in lgood_a Ha'1 lgood_a' Ha'2.
       unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
       destruct (bid <? (n1 - n2)%coq_nat) eqn:Hif; inversion Ha'1. subst.
       assert (Hnecessary: bid <? (n1 - n3) = false).
@@ -772,7 +816,7 @@ Section SigmaShiftingProperties.
       rewrite !Nat2Z.id.
       move=> Ha'1. rewrite Ha'1.
       unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
-      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      rewrite !cid_shift. rewrite !cid_shift in lgood_a Ha'1 lgood_a' Ha'2.
       unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
       destruct (bid <? (n1 - n2)%coq_nat) eqn:Hif; inversion Ha'1. subst.
       assert (Hbid: n2 <= bid + n2 - n1).
@@ -816,7 +860,7 @@ Section SigmaShiftingProperties.
       rewrite !Nat2Z.id.
       move=> Ha'1. rewrite Ha'1.
       unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *. simpl in *.
-      destruct a as [cid bid]. destruct a' as [cid' bid'].
+      rewrite !cid_shift. rewrite !cid_shift in lgood_a Ha'1 lgood_a' Ha'2.
       unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
       inversion Ha'1. subst.
       assert (Hgoal: bid + (n2 - n1) + (n3 - n2) = bid + (n3 - n1)).
@@ -829,6 +873,46 @@ Section SigmaShiftingProperties.
       rewrite Hgoal. reflexivity.
   Qed.
 
+  Lemma left_addr_good_for_shifting_0_true addr:
+    left_addr_good_for_shifting cid_for_shift 0 addr.
+  Proof. unfold left_addr_good_for_shifting. destruct addr as [cid bid].
+         destruct (cid =? cid_for_shift); auto.
+  Qed.
+  
+  Lemma good_memory_left_0_true mem:
+    good_memory (left_addr_good_for_shifting cid_for_shift 0) mem.
+  Proof. unfold good_memory. intros. apply left_addr_good_for_shifting_0_true. Qed.
+
+  Lemma trace_good_left_0_true t:
+    good_trace (left_addr_good_for_shifting cid_for_shift 0) t.
+  Proof.
+    induction t using last_ind.
+    - apply nil_good_trace.
+    - apply rcons_good_trace; auto.
+      + apply good_memory_left_0_true.
+      + intros. apply left_addr_good_for_shifting_0_true.
+  Qed.
+
+  Lemma right_addr_good_for_shifting_0_true addr:
+    right_addr_good_for_shifting cid_for_shift 0 addr.
+  Proof. unfold right_addr_good_for_shifting. destruct addr as [cid bid].
+         destruct (cid =? cid_for_shift); auto.
+  Qed.
+  
+  Lemma good_memory_right_0_true mem:
+    good_memory (right_addr_good_for_shifting cid_for_shift 0) mem.
+  Proof. unfold good_memory. intros. apply right_addr_good_for_shifting_0_true. Qed.
+
+  Lemma trace_good_right_0_true t:
+    good_trace (right_addr_good_for_shifting cid_for_shift 0) t.
+  Proof.
+    induction t using last_ind.
+    - apply nil_good_trace.
+    - apply rcons_good_trace; auto.
+      + apply good_memory_right_0_true.
+      + intros. apply right_addr_good_for_shifting_0_true.
+  Qed.
+
 End SigmaShiftingProperties.
 
 Section Renaming.
@@ -836,16 +920,6 @@ Section Renaming.
   Variable sigma: addr_t -> addr_t (*{fmap addr_t -> addr_t}*).
   Variable inverse_sigma: addr_t -> addr_t.
 
-  (*Hypothesis cancel_inverse_sigma_sigma: cancel inverse_sigma sigma.
-  Hypothesis cancel_sigma_inverse_sigma: cancel sigma inverse_sigma.
-  Hypothesis sigma_injective: injective sigma.*)
-
-  (*Definition inverse_sigma (addr: addr_t) : addr_t :=
-  let dom_sigma := domm sigma in
-  if has (fun y => sigma y == Some addr) dom_sigma
-  then nth (0,0) dom_sigma (find (fun y => sigma y == Some addr) dom_sigma)
-  else addr.
-   *)
 
   Definition rename_addr (addr: addr_t) : addr_t := sigma addr.
   (*  match sigma addr with
@@ -876,90 +950,6 @@ Section Renaming.
 
   Definition inverse_rename_list_values (s: list value) : list value :=
     map inverse_rename_value s.
-
-  (*Lemma inverse_rename_addr_left_inverse addr: inverse_rename_addr (rename_addr addr) = addr.
-  Proof.
-    unfold inverse_rename_addr, rename_addr. pose proof (cancel_sigma_inverse_sigma addr). auto.
-  Qed.*)
-  
-
-  (***************************** 
-    [DEPRECATED]: sigma was fmap.
-
-Lemma inverse_rename_addr_left_inverse addr:
-  addr \in domm sigma -> (*Is this precondition ok?*)
-  inverse_rename_addr (rename_addr addr) = addr.
-  (* This lemma 
-     without the precondition "addr \in domm sigma"
-     is not really provable because the rename_addr function can actually cause
-     two addresses addr1 and addr2 to clash at some addr' when still sigma itself is injective.
-
-    This lemma only holds for "addr \in domm sigma".
-
-    However, under the "addr \in domm sigma" precondition,
-    it is not very clear whether the lemma will be usable.
-    It will be comfortably usable when we have a "complete" sigma, i.e., when
-    we only call rename_addr on some addr \in sigma.
-   *)
-Proof.
-  intros Haddr.
-  unfold inverse_rename_addr, inverse_sigma. simpl.
-  unfold rename_addr.
-  destruct (sigma addr) as [addr'|] eqn:e_sigma_addr.
-  - destruct (has (fun y => sigma y == Some addr') (domm sigma)) eqn:e_has; rewrite e_has.
-    + pose proof (nth_find (0,0) e_has) as Hnth. simpl in Hnth.
-      apply/inj_eqAxiom.
-      * exact sigma_injective.
-      * rewrite e_sigma_addr. exact Hnth.
-    + pose proof (mem_domm sigma addr) as Hin_domm.
-      pose proof (@hasP _ (fun y => sigma y == Some addr') (domm sigma)) as H.
-      rewrite e_has in H.
-      apply elimF in H; auto.
-      assert (exists2 x, x \in domm sigma & sigma x == Some addr') as contra.
-      {
-        eexists addr.
-        * rewrite mem_domm e_sigma_addr. auto.
-        * rewrite e_sigma_addr. auto.
-      }
-      apply H in contra. exfalso. assumption.
-  - rewrite mem_domm in Haddr. rewrite e_sigma_addr in Haddr. easy.
-Qed.
-
-   ****************************************)
-
-
-  (*Lemma inverse_rename_addr_right_inverse addr:
-    rename_addr (inverse_rename_addr addr) = addr.
-  Proof.
-    unfold inverse_rename_addr, rename_addr. pose proof (cancel_inverse_sigma_sigma addr). auto.
-  Qed.*)
-
-
-
-  (**************************************
-    [DEPRECATED]: sigma was finmap      
-
-Lemma inverse_rename_addr_right_inverse addr_pre addr:
-  sigma addr_pre = Some addr ->
-  rename_addr (inverse_rename_addr addr) = addr.
-Proof.
-  intros Haddr.
-  unfold inverse_rename_addr, inverse_sigma. simpl. unfold rename_addr.
-  destruct (has (fun y : nat * nat => sigma y == Some addr) (domm sigma)) eqn:e_has.
-  - pose proof (nth_find (0,0) e_has) as H. simpl in H.
-    pose proof (@eqP _ _ _ H) as H'. rewrite H'. reflexivity.
-  - pose proof (@hasP _ (fun y => sigma y == Some addr) (domm sigma)) as H.
-    rewrite e_has in H. apply elimF in H; auto.
-    assert (exists2 x, x \in domm sigma & sigma x == Some addr) as contra.
-    {
-      eexists addr_pre.
-      + rewrite mem_domm Haddr. auto.
-      + rewrite Haddr. auto.
-    }
-    apply H in contra. exfalso. assumption.
-Qed.  
-
-   *********************************)
 
   Definition option_rename_value option_v := omap rename_value option_v.
   Definition option_inverse_rename_value option_v := omap inverse_rename_value option_v.
@@ -1059,6 +1049,610 @@ Qed.
       by rewrite !size_rcons IHtraces_rename_each_other.
   Qed.
 
+End Renaming.
+
+Section TheShiftRenaming.
+
+  Variable cid_for_shift: Component.id.
+  Variable metadata_size_lhs: nat.
+  Variable metadata_size_rhs: nat.
+
+  Let num_extra_blocks_of_lhs : Z :=
+    Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs.
+    
+  Definition sigma_shifting_addr (a: addr_t) : addr_t :=
+    match sigma_shifting cid_for_shift metadata_size_lhs metadata_size_rhs (care, a) with
+    | (_, a') => a'
+    end.
+
+  Definition inv_sigma_shifting_addr (a: addr_t) : addr_t :=
+    match inv_sigma_shifting cid_for_shift metadata_size_lhs metadata_size_rhs (care, a) with
+    | (_, a') => a'
+    end.
+
+  Definition left_value_good_for_shifting (v: value) : Prop :=
+    match v with
+    | Ptr (perm, cid, bid, _) =>
+      if perm =? Permission.data then
+        left_addr_good_for_shifting cid_for_shift metadata_size_lhs (cid, bid)
+      else True
+    | _ => True
+    end.
+
+  Definition right_value_good_for_shifting (v: value) : Prop :=
+    match v with
+    | Ptr (_, cid, bid, _) =>
+      right_addr_good_for_shifting cid_for_shift metadata_size_rhs (cid, bid)
+    | _ => True
+    end.
+
+  Definition option_left_value_good_for_shifting (ov: option value) : Prop :=
+    match ov with
+    | Some v => left_value_good_for_shifting v
+    | None => True
+    end.
+
+  Definition option_right_value_good_for_shifting (ov: option value) : Prop :=
+    match ov with
+    | Some v => right_value_good_for_shifting v
+    | None => True
+    end.
+
+  Inductive traces_shift_each_other : trace event -> trace event -> Prop :=
+  | shifting_is_special_case_of_renaming:
+      forall t t',
+        traces_rename_each_other sigma_shifting_addr inv_sigma_shifting_addr t t' ->
+        traces_shift_each_other t t'.
+  
+End TheShiftRenaming.
+
+Section PropertiesOfTheShiftRenaming.
+
+  Variable cid_for_shift: Component.id.
+  
+  Lemma rename_addr_reflexive n a:
+    rename_addr (sigma_shifting_addr cid_for_shift n n) a = a.
+  Proof. unfold rename_addr, sigma_shifting_addr. rewrite sigma_shifting_n_n_id. auto. Qed.
+
+  Lemma inverse_rename_addr_reflexive n a:
+    inverse_rename_addr (inv_sigma_shifting_addr cid_for_shift n n) a = a.
+  Proof. unfold inverse_rename_addr, inv_sigma_shifting_addr.
+         rewrite inv_sigma_shifting_n_n_id. auto.
+  Qed.
+
+  Lemma rename_value_reflexive n v:
+    rename_value (sigma_shifting_addr cid_for_shift n n) v = v.
+  Proof. unfold rename_value, rename_value_template.
+         destruct v as [ | [[[perm cid] bid] o] | ]; auto.
+         destruct (perm =? Permission.data); auto.
+         rewrite rename_addr_reflexive. auto.
+  Qed.
+
+  Lemma inverse_rename_value_reflexive n v:
+    inverse_rename_value (inv_sigma_shifting_addr cid_for_shift n n) v = v.
+  Proof. unfold inverse_rename_value, rename_value_template.
+         destruct v as [ | [[[perm cid] bid] o] | ]; auto.
+         destruct (perm =? Permission.data); auto.
+         rewrite inverse_rename_addr_reflexive. auto.
+  Qed.
+
+  Lemma option_rename_value_reflexive n ov:
+    option_rename_value (sigma_shifting_addr cid_for_shift n n) ov = ov.
+  Proof. unfold option_rename_value, omap, obind, oapp. destruct ov as [ | ]; auto.
+         by rewrite rename_value_reflexive.
+  Qed.
+
+  Lemma option_inverse_rename_value_reflexive n ov:
+    option_inverse_rename_value (inv_sigma_shifting_addr cid_for_shift n n) ov = ov.
+  Proof. unfold option_inverse_rename_value, omap, obind, oapp. destruct ov as [ | ]; auto.
+         by rewrite inverse_rename_value_reflexive.
+  Qed.
+    
+  Lemma rename_addr_inverse_rename_addr n1 n2 a:
+    rename_addr (sigma_shifting_addr cid_for_shift n1 n2) a =
+    inverse_rename_addr (inv_sigma_shifting_addr cid_for_shift n2 n1) a.
+  Proof. unfold rename_addr, inverse_rename_addr, sigma_shifting_addr, inv_sigma_shifting_addr.
+         rewrite inv_sigma_shifting_sigma_shifting. auto.
+  Qed.
+
+  Lemma option_rename_value_option_inverse_rename_value n2 n1 v:
+    option_inverse_rename_value (inv_sigma_shifting_addr cid_for_shift n2 n1) v =
+    option_rename_value (sigma_shifting_addr cid_for_shift n1 n2) v.
+  Proof.
+    destruct v as [[ | [[[perm cid] bid] o] | ] | ]; auto. simpl.
+    rewrite rename_addr_inverse_rename_addr. reflexivity.
+  Qed.
+  
+  Lemma event_rename_inverse_event_rename n1 n2 addr' e e':
+    event_inverse_renames_event_at_addr
+      (inv_sigma_shifting_addr cid_for_shift n1 n2) addr' e e' <->
+    event_renames_event_at_addr (sigma_shifting_addr cid_for_shift n2 n1) addr' e' e.
+  Proof.
+    unfold event_inverse_renames_event_at_addr, event_renames_event_at_addr.
+    split; intros H offset; pose proof (H offset) as H'. clear H.
+    - rewrite <- option_rename_value_option_inverse_rename_value,
+      H', rename_addr_inverse_rename_addr. reflexivity.
+    - rewrite option_rename_value_option_inverse_rename_value.
+      rewrite <- H', rename_addr_inverse_rename_addr. reflexivity.
+  Qed.
+
+  Lemma rename_addr_transitive n1 n2 n3 addr:
+    left_addr_good_for_shifting cid_for_shift n1 addr ->
+    rename_addr (sigma_shifting_addr cid_for_shift n2 n3)
+                (rename_addr (sigma_shifting_addr cid_for_shift n1 n2) addr) =
+    rename_addr (sigma_shifting_addr cid_for_shift n1 n3) addr.
+  Proof. intros. unfold rename_addr, sigma_shifting_addr.
+         rewrite <- (sigma_shifting_transitive cid_for_shift n1 n2 n3); auto.
+  Qed.
+
+  Lemma rename_value_transitive n1 n2 n3 v:
+    left_value_good_for_shifting cid_for_shift n1 v ->
+    rename_value (sigma_shifting_addr cid_for_shift n2 n3)
+                 (rename_value (sigma_shifting_addr cid_for_shift n1 n2) v) =
+    rename_value (sigma_shifting_addr cid_for_shift n1 n3) v.
+  Proof.
+    unfold left_value_good_for_shifting.
+    intros Hgood. destruct v as [ | [[[perm cid] bid] o] | ]; auto. simpl.
+    destruct (rename_addr (sigma_shifting_addr cid_for_shift n1 n2) (cid, bid)) eqn:Hn1n2.
+    simpl. destruct (perm =? Permission.data) eqn:Hperm; simpl; try rewrite Hperm; auto.
+    rewrite <- Hn1n2. rewrite rename_addr_transitive; auto.
+  Qed.
+
+  Lemma option_rename_value_transitive n1 n2 n3 v:
+    option_left_value_good_for_shifting cid_for_shift n1 v ->
+    option_rename_value (sigma_shifting_addr cid_for_shift n2 n3)
+                        (option_rename_value (sigma_shifting_addr cid_for_shift n1 n2) v) =
+    option_rename_value (sigma_shifting_addr cid_for_shift n1 n3) v.
+  Proof.
+    unfold option_left_value_good_for_shifting, option_rename_value.
+    intros Hgood. destruct v as [v' | ]; auto. simpl.
+    rewrite rename_value_transitive; auto.
+  Qed.
+
+  Lemma event_rename_reflexive n addr e:
+    event_renames_event_at_addr (sigma_shifting_addr cid_for_shift n n) addr e e.
+  Proof. unfold event_renames_event_at_addr. rewrite !rename_addr_reflexive. intros.
+         rewrite option_rename_value_reflexive. auto.
+  Qed.
+
+  Lemma event_inverse_rename_reflexive n addr e:
+    event_inverse_renames_event_at_addr (inv_sigma_shifting_addr cid_for_shift n n) addr e e.
+  Proof. unfold event_inverse_renames_event_at_addr.
+         rewrite !inverse_rename_addr_reflexive. intros.
+         rewrite option_inverse_rename_value_reflexive. auto.
+  Qed.
+
+  
+  Lemma event_rename_transitive n1 n2 n3 addr e1 e2 e3:
+    left_addr_good_for_shifting cid_for_shift n1 addr ->
+    (forall offset,
+        option_left_value_good_for_shifting cid_for_shift
+                                            n1
+                                            (Memory.load
+                                               (mem_of_event e1)
+                                               (Permission.data, addr.1, addr.2, offset)
+                                            )
+    ) ->
+    event_renames_event_at_addr (sigma_shifting_addr cid_for_shift n1 n2) addr e1 e2 ->
+    event_renames_event_at_addr (sigma_shifting_addr cid_for_shift n2 n3)
+                                (rename_addr (sigma_shifting_addr cid_for_shift n1 n2) addr)
+                                e2 e3 ->
+    event_renames_event_at_addr (sigma_shifting_addr cid_for_shift n1 n3) addr e1 e3.
+  Proof.
+    intros Haddr_good Hloads_good.
+    unfold event_renames_event_at_addr. intros Hn1n2 Hn2n3 offset.
+    pose proof Hn2n3 offset as Hn2n3'.
+    erewrite rename_addr_transitive, (Hn1n2 offset) in Hn2n3'; auto. erewrite Hn2n3'.
+    apply option_rename_value_transitive; auto.
+  Qed.
+
+  Lemma traces_shift_each_other_reflexive n t:
+    traces_shift_each_other cid_for_shift n n t t.
+  Proof.
+    apply shifting_is_special_case_of_renaming.
+    induction t using last_ind.
+    - apply nil_renames_nil.
+    - apply rcons_renames_rcons.
+      + assumption.
+      + intros addr Hshrsfr. split.
+        * apply event_rename_reflexive.
+        * by rewrite rename_addr_reflexive.
+      + intros addr Hshrsfr. split.
+        * apply event_inverse_rename_reflexive.
+        * by rewrite inverse_rename_addr_reflexive.
+  Qed.
+
+  Lemma traces_shift_each_other_symmetric t1 t2 n1 n2:
+    traces_shift_each_other cid_for_shift n1 n2 t1 t2 ->
+    traces_shift_each_other cid_for_shift n2 n1 t2 t1.
+  Proof.
+    intros Ht1t2. apply shifting_is_special_case_of_renaming.
+    inversion Ht1t2. subst. induction H as [|tprefix e tprefix' e' Hprefix_rename IH He He'].
+    - apply nil_renames_nil.
+    - apply rcons_renames_rcons.
+      + apply IH. apply shifting_is_special_case_of_renaming. exact Hprefix_rename.
+      + intros [cid bid] Hshrsfr. destruct (He' (cid, bid) Hshrsfr) as [G1 G2]. split.
+        * rewrite <- event_rename_inverse_event_rename. exact G1.
+        * rewrite rename_addr_inverse_rename_addr. exact G2.
+      + intros [cid bid] Hshrsfr. destruct (He (cid, bid) Hshrsfr) as [G1 G2]. split.
+        * rewrite event_rename_inverse_event_rename. exact G1.
+        * rewrite <- rename_addr_inverse_rename_addr. exact G2.
+  Qed.
+
+  Lemma rcons_trace_event_eq_inversion (tp1 tp2: trace event) (e1 e2: event):
+    rcons tp1 e1 = rcons tp2 e2 -> tp1 = tp2 /\ e1 = e2.
+  Proof.
+    intros rconseq. assert (rcons tp1 e1 == rcons tp2 e2) as rconseq'. apply/eqP. assumption.
+    rewrite eqseq_rcons in rconseq'. destruct (andP rconseq') as [G1 G2].
+    split; apply/eqP; assumption.
+  Qed.
+  
+  Lemma __traces_shift_each_other_transitive n1 n2 n3 sz:
+    forall t1 t2 t3,
+      size t1 = sz ->
+      good_trace (left_addr_good_for_shifting cid_for_shift n1) t1 ->
+      good_trace (left_addr_good_for_shifting cid_for_shift n3) t3 ->
+      traces_shift_each_other cid_for_shift n1 n2 t1 t2 ->
+      traces_shift_each_other cid_for_shift n2 n3 t2 t3 ->
+      traces_shift_each_other cid_for_shift n1 n3 t1 t3.
+  Proof.
+    induction sz as [ | sz IHsz]; intros t1 t2 t3 t1sz t1good t3good H12 H23.
+    - assert (t2sz: size t2 = 0).
+      { inversion H12. erewrite <- traces_rename_each_other_same_size; eauto. }
+      assert (t3sz: size t3 = 0).
+      { inversion H23. erewrite <- traces_rename_each_other_same_size; eauto. }
+      assert (t1nil: t1 = [::]). by (apply size0nil).
+      assert (t2nil: t2 = [::]). by (apply size0nil).
+      assert (t3nil: t3 = [::]). by (apply size0nil).
+      subst. apply shifting_is_special_case_of_renaming, nil_renames_nil.
+    - inversion H12 as [? ? H12']. inversion H23 as [? ? H23']. subst. clear H12 H23.
+      assert (size t2 = sz.+1) as Hsizet2.
+      {
+        symmetry. rewrite <- t1sz.
+        apply (traces_rename_each_other_same_size _ _ t1 t2 H12').
+      }
+      assert (size t3 = sz.+1) as Hsizet3.
+      {
+        symmetry. rewrite <- Hsizet2.
+        apply (traces_rename_each_other_same_size _ _ t2 t3 H23').
+      }
+      induction t1 as [ | t1 e1 IHt1] using last_ind; try discriminate.
+      induction t2 as [ | t2 e2 IHt2] using last_ind; try discriminate.
+      induction t3 as [ | t3 e3 IHt3] using last_ind; try discriminate.
+
+      assert (t1_tlsz: size t1 = sz). by (rewrite size_rcons in t1sz; inversion t1sz).
+      pose proof (IHsz t1 t2 t3 t1_tlsz) as IHsz'.
+
+      inversion H12' as [ | ? ? ? ? H12a H12b H12c Heq1 Heq2];
+        try by (rewrite <- H in t1sz; inversion t1sz).
+      destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq1) as [tmp1 tmp2]. subst. clear Heq1.
+      destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq2) as [tmp1 tmp2]. subst. clear Heq2.
+
+      inversion H23' as [ | ? ? ? ? H23a H23b H23c Heq1 Heq2];
+        try by (rewrite <- H in Hsizet2; inversion Hsizet2).
+      destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq1) as [tmp1 tmp2]. subst. clear Heq1.
+      destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq2) as [tmp1 tmp2]. subst. clear Heq2.
+
+      pose proof (shifting_is_special_case_of_renaming _ _ _ _ _ H12a) as H12a_shift.
+      pose proof (shifting_is_special_case_of_renaming _ _ _ _ _ H23a) as H23a_shift.
+
+      inversion t1good as [H | ? ? t1gooda t1goodb t1goodc Heq];
+        try by (rewrite <- H in t1sz; inversion t1sz).
+
+      destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq) as [tmp1 tmp2]. subst. clear Heq.
+      
+      inversion t3good as [H | ? ? t3gooda t3goodb t3goodc Heq];
+        try by (rewrite <- H in Hsizet3; inversion Hsizet3).
+      
+      destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq) as [tmp1 tmp2]. subst. clear Heq.
+      
+      pose proof (IHsz' t1gooda t3gooda H12a_shift H23a_shift) as H13a_shift.
+      apply shifting_is_special_case_of_renaming, rcons_renames_rcons.
+      + inversion H13a_shift; auto.
+      + intros addr Haddr.
+        assert (addr_n1_good: left_addr_good_for_shifting cid_for_shift n1 addr).
+        { eapply addr_shared_so_far_good_addr with (t := rcons t1 e1); eauto. }
+        pose proof H12b addr Haddr as [He1e2 Hshrsfr2].
+        pose proof H23b (rename_addr (sigma_shifting_addr cid_for_shift n1 n2) addr) Hshrsfr2
+          as [He2e3 Hshrsfr3].
+        split.
+        * eapply event_rename_transitive; eauto.
+          unfold option_left_value_good_for_shifting, left_value_good_for_shifting.
+          intros offset.
+          destruct (Memory.load (mem_of_event e1) (Permission.data, addr.1, addr.2, offset))
+            as [ [ | [[[perm cid] bid] off] | ] | ] eqn:Hload; eauto.
+          destruct (perm =? Permission.data) eqn:Hperm; auto.
+          assert (perm = Permission.data) by (apply Nat.eqb_eq; auto). subst.
+          assert (addr_shared_so_far (cid, bid) (rcons t1 e1)).
+          { eapply addr_shared_so_far_load_addr_shared_so_far; eauto. }
+          eapply addr_shared_so_far_good_addr with (t := rcons t1 e1); eauto.
+        * erewrite <- rename_addr_transitive; eauto.
+      + intros addr' Haddr'.
+        assert (addr_n3_good: left_addr_good_for_shifting cid_for_shift n3 addr').
+        { eapply addr_shared_so_far_good_addr with (t := rcons t3 e3); eauto. }
+        pose proof H23c addr' Haddr' as [He2e3 Hshrsfr2].
+        pose proof H12c
+             (inverse_rename_addr (inv_sigma_shifting_addr cid_for_shift n2 n3) addr') Hshrsfr2
+          as [He1e2 Hshrsfr1].
+        split.
+        * erewrite event_rename_inverse_event_rename.
+          erewrite event_rename_inverse_event_rename in He2e3, He1e2.
+          erewrite <- rename_addr_inverse_rename_addr in He1e2.
+          erewrite <- !rename_addr_inverse_rename_addr in Hshrsfr1.
+          eapply event_rename_transitive; eauto.
+          unfold option_left_value_good_for_shifting, left_value_good_for_shifting.
+          intros offset.
+          destruct (Memory.load (mem_of_event e3) (Permission.data, addr'.1, addr'.2, offset))
+            as [ [ | [[[perm cid] bid] off] | ] | ] eqn:Hload; eauto.
+          destruct (perm =? Permission.data) eqn:Hperm; auto.
+          assert (perm = Permission.data) by (apply Nat.eqb_eq; auto). subst.
+          assert (addr_shared_so_far (cid, bid) (rcons t3 e3)).
+          { eapply addr_shared_so_far_load_addr_shared_so_far; eauto. }
+          eapply addr_shared_so_far_good_addr with (t := rcons t3 e3); eauto.
+        * erewrite <- rename_addr_inverse_rename_addr.
+          erewrite <- !rename_addr_inverse_rename_addr in Hshrsfr1.
+          erewrite <- rename_addr_transitive; eauto.
+  Qed.
+
+  Lemma traces_shift_each_other_transitive n1 n2 n3 t1 t2 t3:
+      good_trace (left_addr_good_for_shifting cid_for_shift n1) t1 ->
+      good_trace (left_addr_good_for_shifting cid_for_shift n3) t3 ->
+      traces_shift_each_other cid_for_shift n1 n2 t1 t2 ->
+      traces_shift_each_other cid_for_shift n2 n3 t2 t3 ->
+      traces_shift_each_other cid_for_shift n1 n3 t1 t3.
+  Proof.
+    eapply __traces_shift_each_other_transitive. eauto.
+  Qed.
+        
+End PropertiesOfTheShiftRenaming.
+
+Section TheShiftRenamingAllCids.
+
+  Variable metadata_size_lhs: Component.id -> nat.
+  Variable metadata_size_rhs: Component.id -> nat.
+  
+  Definition traces_shift_each_other_all_cids t1 t2 : Prop :=
+    forall cid,
+      traces_shift_each_other cid (metadata_size_lhs cid) (metadata_size_rhs cid) t1 t2.
+  
+End TheShiftRenamingAllCids.
+
+Section PropertiesOfTheShiftRenamingAllCids.
+
+  Lemma traces_shift_each_other_all_cids_reflexive (n: Component.id -> nat) t:
+    traces_shift_each_other_all_cids n n t t.
+  Proof. intros cid. apply traces_shift_each_other_reflexive. Qed.
+
+  Lemma traces_shift_each_other_all_cids_symmetric (n1 n2: Component.id -> nat) t1 t2:
+    traces_shift_each_other_all_cids n1 n2 t1 t2 ->
+    traces_shift_each_other_all_cids n2 n1 t2 t1.
+  Proof.
+    unfold traces_shift_each_other_all_cids.
+    by intros; apply traces_shift_each_other_symmetric.
+  Qed.
+
+  Lemma traces_shift_each_other_all_cids_transitive (n1 n2 n3: Component.id -> nat) t1 t2 t3:
+    (forall cid, good_trace (left_addr_good_for_shifting cid (n1 cid)) t1) ->
+    (forall cid, good_trace (left_addr_good_for_shifting cid (n3 cid)) t3) ->
+    traces_shift_each_other_all_cids n1 n2 t1 t2 ->
+    traces_shift_each_other_all_cids n2 n3 t2 t3 ->
+    traces_shift_each_other_all_cids n1 n3 t1 t3.
+  Proof.
+    unfold traces_shift_each_other_all_cids. intros Hg1 Hg3 H12 H23 cid.
+    eapply traces_shift_each_other_transitive with (n2 cid) (t2); eauto.
+  Qed.
+
+End PropertiesOfTheShiftRenamingAllCids.
+
+Section BehaviorsRelated.
+
+  Variable cid_for_shift: Component.id.
+  
+  Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
+  : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
+  | Terminates_rel_Terminates:
+      forall t1 t2,
+        traces_shift_each_other cid_for_shift size_meta_t1 size_meta_t2 t1 t2 ->
+        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
+  | Tbc_rel_Tbc:
+      forall t1 t2,
+        traces_shift_each_other cid_for_shift size_meta_t1 size_meta_t2 t1 t2 ->
+        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
+
+  Lemma behavior_rel_behavior_reflexive b n:
+    not_wrong_finpref b ->
+    behavior_rel_behavior n n b b.
+  Proof. intros not_wrong. unfold not_wrong_finpref in *. destruct b; auto.
+         - apply Terminates_rel_Terminates. apply traces_shift_each_other_reflexive.
+         - exfalso. auto.
+         - apply Tbc_rel_Tbc. apply traces_shift_each_other_reflexive.
+  Qed.
+
+  Lemma behavior_rel_behavior_symmetric b1 b2 n1 n2:
+    behavior_rel_behavior n1 n2 b1 b2 -> behavior_rel_behavior n2 n1 b2 b1.
+  Proof. intros H. inversion H.
+         - apply Terminates_rel_Terminates. apply traces_shift_each_other_symmetric. auto.
+         - apply Tbc_rel_Tbc. apply traces_shift_each_other_symmetric. auto.
+  Qed.
+
+  Inductive good_behavior_left (size_meta_t: nat) : @finpref_behavior Events.event -> Prop :=
+  | good_trace_Terminates:
+      forall t,
+        good_trace (left_addr_good_for_shifting cid_for_shift size_meta_t) t ->
+        good_behavior_left size_meta_t (FTerminates t)
+  | good_trace_Tbc:
+      forall t,
+        good_trace (left_addr_good_for_shifting cid_for_shift size_meta_t) t ->
+        good_behavior_left size_meta_t (FTbc t).
+
+  Lemma behavior_rel_behavior_transitive b1 b2 b3 n1 n2 n3:
+    good_behavior_left n1 b1 ->
+    good_behavior_left n3 b3 ->
+    behavior_rel_behavior n1 n2 b1 b2 ->
+    behavior_rel_behavior n2 n3 b2 b3 ->
+    behavior_rel_behavior n1 n3 b1 b3.
+  Proof.
+    intros Hg1 Hg3 H12 H23.
+    inversion Hg1; subst; inversion Hg3; subst; inversion H12; subst; inversion H23; subst.
+    - eapply Terminates_rel_Terminates.
+      eapply traces_shift_each_other_transitive with n2 t2; eauto.
+    - eapply Tbc_rel_Tbc.
+      eapply traces_shift_each_other_transitive with n2 t2; eauto.
+  Qed.
+  
+End BehaviorsRelated.
+
+Section BehaviorsRelatedAllCids.
+
+  Definition behavior_rel_behavior_all_cids (n1 n2: Component.id -> nat) b1 b2 : Prop :=
+    forall cid, behavior_rel_behavior cid (n1 cid) (n2 cid) b1 b2.
+
+  Lemma behavior_rel_behavior_reflexive_all_cids b n:
+    not_wrong_finpref b -> behavior_rel_behavior_all_cids n n b b.
+  Proof. unfold behavior_rel_behavior_all_cids. intros.
+         by eapply behavior_rel_behavior_reflexive.
+  Qed.
+
+  Lemma behavior_rel_behavior_symmetric_all_cids b1 b2 n1 n2:
+    behavior_rel_behavior_all_cids n1 n2 b1 b2 -> behavior_rel_behavior_all_cids n2 n1 b2 b1.
+  Proof. unfold behavior_rel_behavior_all_cids. intros.
+         by eapply behavior_rel_behavior_symmetric.
+  Qed.
+
+  Definition good_behavior_left_all_cids (n: Component.id -> nat) b : Prop :=
+    forall cid, good_behavior_left cid (n cid) b.
+
+  Lemma behavior_rel_behavior_transitive_all_cids b1 b2 b3 n1 n2 n3:
+    good_behavior_left_all_cids n1 b1 ->
+    good_behavior_left_all_cids n3 b3 ->
+    behavior_rel_behavior_all_cids n1 n2 b1 b2 ->
+    behavior_rel_behavior_all_cids n2 n3 b2 b3 ->
+    behavior_rel_behavior_all_cids n1 n3 b1 b3.
+  Proof.
+    unfold good_behavior_left_all_cids, behavior_rel_behavior_all_cids. intros.
+    by eapply behavior_rel_behavior_transitive with b2 (n2 cid).
+  Qed.
+  
+End BehaviorsRelatedAllCids.
+
+(* [DynShare] 
+   The following definition is NOT needed when we define a trace relation that
+   (implicitly) specifies the shared part of the memory.
+   
+   It would be needed though if instead we define a trace semantics
+   that (explicitly) emits only the shared memory rather than the whole memory.
+*)
+Definition shared_part_of_memory
+           (mshr: Memory.t)
+           (m: Memory.t)
+           (t: trace event)
+  : Prop :=
+  forall addr offset, (addr_shared_so_far addr t ->
+                       Memory.load mshr (Permission.data, addr.1, addr.2, offset)
+                       =
+                       Memory.load m (Permission.data, addr.1, addr.2, offset)
+                      )
+                      /\
+                      (~ addr_shared_so_far addr t) ->
+                      Memory.load mshr (Permission.data, addr.1, addr.2, offset) = None.
+
+
+  (*Hypothesis cancel_inverse_sigma_sigma: cancel inverse_sigma sigma.
+  Hypothesis cancel_sigma_inverse_sigma: cancel sigma inverse_sigma.
+  Hypothesis sigma_injective: injective sigma.*)
+
+  (*Definition inverse_sigma (addr: addr_t) : addr_t :=
+  let dom_sigma := domm sigma in
+  if has (fun y => sigma y == Some addr) dom_sigma
+  then nth (0,0) dom_sigma (find (fun y => sigma y == Some addr) dom_sigma)
+  else addr.
+   *)
+
+
+  (*Lemma inverse_rename_addr_left_inverse addr: inverse_rename_addr (rename_addr addr) = addr.
+  Proof.
+    unfold inverse_rename_addr, rename_addr. pose proof (cancel_sigma_inverse_sigma addr). auto.
+  Qed.*)
+  
+
+  (***************************** 
+    [DEPRECATED]: sigma was fmap.
+
+Lemma inverse_rename_addr_left_inverse addr:
+  addr \in domm sigma -> (*Is this precondition ok?*)
+  inverse_rename_addr (rename_addr addr) = addr.
+  (* This lemma 
+     without the precondition "addr \in domm sigma"
+     is not really provable because the rename_addr function can actually cause
+     two addresses addr1 and addr2 to clash at some addr' when still sigma itself is injective.
+
+    This lemma only holds for "addr \in domm sigma".
+
+    However, under the "addr \in domm sigma" precondition,
+    it is not very clear whether the lemma will be usable.
+    It will be comfortably usable when we have a "complete" sigma, i.e., when
+    we only call rename_addr on some addr \in sigma.
+   *)
+Proof.
+  intros Haddr.
+  unfold inverse_rename_addr, inverse_sigma. simpl.
+  unfold rename_addr.
+  destruct (sigma addr) as [addr'|] eqn:e_sigma_addr.
+  - destruct (has (fun y => sigma y == Some addr') (domm sigma)) eqn:e_has; rewrite e_has.
+    + pose proof (nth_find (0,0) e_has) as Hnth. simpl in Hnth.
+      apply/inj_eqAxiom.
+      * exact sigma_injective.
+      * rewrite e_sigma_addr. exact Hnth.
+    + pose proof (mem_domm sigma addr) as Hin_domm.
+      pose proof (@hasP _ (fun y => sigma y == Some addr') (domm sigma)) as H.
+      rewrite e_has in H.
+      apply elimF in H; auto.
+      assert (exists2 x, x \in domm sigma & sigma x == Some addr') as contra.
+      {
+        eexists addr.
+        * rewrite mem_domm e_sigma_addr. auto.
+        * rewrite e_sigma_addr. auto.
+      }
+      apply H in contra. exfalso. assumption.
+  - rewrite mem_domm in Haddr. rewrite e_sigma_addr in Haddr. easy.
+Qed.
+
+   ****************************************)
+
+
+  (*Lemma inverse_rename_addr_right_inverse addr:
+    rename_addr (inverse_rename_addr addr) = addr.
+  Proof.
+    unfold inverse_rename_addr, rename_addr. pose proof (cancel_inverse_sigma_sigma addr). auto.
+  Qed.*)
+
+
+
+  (**************************************
+    [DEPRECATED]: sigma was finmap      
+
+Lemma inverse_rename_addr_right_inverse addr_pre addr:
+  sigma addr_pre = Some addr ->
+  rename_addr (inverse_rename_addr addr) = addr.
+Proof.
+  intros Haddr.
+  unfold inverse_rename_addr, inverse_sigma. simpl. unfold rename_addr.
+  destruct (has (fun y : nat * nat => sigma y == Some addr) (domm sigma)) eqn:e_has.
+  - pose proof (nth_find (0,0) e_has) as H. simpl in H.
+    pose proof (@eqP _ _ _ H) as H'. rewrite H'. reflexivity.
+  - pose proof (@hasP _ (fun y => sigma y == Some addr) (domm sigma)) as H.
+    rewrite e_has in H. apply elimF in H; auto.
+    assert (exists2 x, x \in domm sigma & sigma x == Some addr) as contra.
+    {
+      eexists addr_pre.
+      + rewrite mem_domm Haddr. auto.
+      + rewrite Haddr. auto.
+    }
+    apply H in contra. exfalso. assumption.
+Qed.  
+
+   *********************************)
+
     
   (******************************************
      [DEPRECATED]: Memory renaming has now been defined as part of event renaming.
@@ -1111,416 +1705,64 @@ Qed.
 
    *********************************************)
 
-End Renaming.
+(***********************************
 
-Section TheShiftRenaming.
+
+Section ShiftingAsPartialBijectionAllCids.
+
+  Variable count_blocks_to_shift_for_cid : Component.id -> nat.
   
-  Variable metadata_size_lhs: nat.
-  Variable metadata_size_rhs: nat.
+  Definition sigma_from_bigger_dom_all_cids (x: bool * addr_t) : bool * addr_t :=
+    sigma_from_bigger_dom x.2.1 (count_blocks_to_shift_for_cid x.2.1) x.
 
-  Let num_extra_blocks_of_lhs : Z :=
-    Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs.
-    
-  Definition sigma_shifting_addr (a: addr_t) : addr_t :=
-    match sigma_shifting metadata_size_lhs metadata_size_rhs (care, a) with
-    | (_, a') => a'
-    end.
+  Definition inv_sigma_from_bigger_dom_all_cids (x: bool * addr_t) : bool * addr_t :=
+    inv_sigma_from_bigger_dom x.2.1 (count_blocks_to_shift_for_cid x.2.1) x.
 
-  Definition inv_sigma_shifting_addr (a: addr_t) : addr_t :=
-    match inv_sigma_shifting metadata_size_lhs metadata_size_rhs (care, a) with
-    | (_, a') => a'
-    end.
-
-  Definition left_value_good_for_shifting (v: value) : Prop :=
-    match v with
-    | Ptr (perm, cid, bid, _) =>
-      if perm =? Permission.data then
-        left_addr_good_for_shifting metadata_size_lhs (cid, bid)
-      else True
-    | _ => True
-    end.
-
-  Definition right_value_good_for_shifting (v: value) : Prop :=
-    match v with
-    | Ptr (_, cid, bid, _) => right_addr_good_for_shifting metadata_size_rhs (cid, bid)
-    | _ => True
-    end.
-
-  Definition option_left_value_good_for_shifting (ov: option value) : Prop :=
-    match ov with
-    | Some v => left_value_good_for_shifting v
-    | None => True
-    end.
-
-  Definition option_right_value_good_for_shifting (ov: option value) : Prop :=
-    match ov with
-    | Some v => right_value_good_for_shifting v
-    | None => True
-    end.
-
-  Inductive traces_shift_each_other : trace event -> trace event -> Prop :=
-  | shifting_is_special_case_of_renaming:
-      forall t t',
-        traces_rename_each_other sigma_shifting_addr inv_sigma_shifting_addr t t' ->
-        traces_shift_each_other t t'.
-  
-End TheShiftRenaming.
-
-Section PropertiesOfTheShiftRenaming.
-
-  Lemma rename_addr_reflexive n a:
-    rename_addr (sigma_shifting_addr n n) a = a.
-  Proof. unfold rename_addr, sigma_shifting_addr. rewrite sigma_shifting_n_n_id. auto. Qed.
-
-  Lemma inverse_rename_addr_reflexive n a:
-    inverse_rename_addr (inv_sigma_shifting_addr n n) a = a.
-  Proof. unfold inverse_rename_addr, inv_sigma_shifting_addr.
-         rewrite inv_sigma_shifting_n_n_id. auto.
+  Lemma cancel_sigma_from_bigger_dom_inv_sigma_from_bigger_dom_all_cids :
+    cancel sigma_from_bigger_dom_all_cids inv_sigma_from_bigger_dom_all_cids.
+  Proof.
+    unfold sigma_from_bigger_dom_all_cids, inv_sigma_from_bigger_dom_all_cids.
+    intros x. rewrite sigma_from_bigger_dom_cid_constant.
+    eapply cancel_sigma_from_bigger_dom_inv_sigma_from_bigger_dom.
   Qed.
 
-  Lemma rename_value_reflexive n v:
-    rename_value (sigma_shifting_addr n n) v = v.
-  Proof. unfold rename_value, rename_value_template.
-         destruct v as [ | [[[perm cid] bid] o] | ]; auto.
-         destruct (perm =? Permission.data); auto.
-         rewrite rename_addr_reflexive. auto.
-  Qed.
-
-  Lemma inverse_rename_value_reflexive n v:
-    inverse_rename_value (inv_sigma_shifting_addr n n) v = v.
-  Proof. unfold inverse_rename_value, rename_value_template.
-         destruct v as [ | [[[perm cid] bid] o] | ]; auto.
-         destruct (perm =? Permission.data); auto.
-         rewrite inverse_rename_addr_reflexive. auto.
-  Qed.
-
-  Lemma option_rename_value_reflexive n ov:
-    option_rename_value (sigma_shifting_addr n n) ov = ov.
-  Proof. unfold option_rename_value, omap, obind, oapp. destruct ov as [ | ]; auto.
-         by rewrite rename_value_reflexive.
-  Qed.
-
-  Lemma option_inverse_rename_value_reflexive n ov:
-    option_inverse_rename_value (inv_sigma_shifting_addr n n) ov = ov.
-  Proof. unfold option_inverse_rename_value, omap, obind, oapp. destruct ov as [ | ]; auto.
-         by rewrite inverse_rename_value_reflexive.
+  Lemma cancel_inv_sigma_from_bigger_dom_sigma_from_bigger_dom_all_cids :
+    cancel inv_sigma_from_bigger_dom_all_cids sigma_from_bigger_dom_all_cids.
+  Proof.
+    unfold sigma_from_bigger_dom_all_cids, inv_sigma_from_bigger_dom_all_cids.
+    intros x. rewrite inv_sigma_from_bigger_dom_cid_constant.
+    eapply cancel_inv_sigma_from_bigger_dom_sigma_from_bigger_dom.
   Qed.
     
-  Lemma rename_addr_inverse_rename_addr n1 n2 a:
-    rename_addr (sigma_shifting_addr n1 n2) a =
-    inverse_rename_addr (inv_sigma_shifting_addr n2 n1) a.
-  Proof. unfold rename_addr, inverse_rename_addr, sigma_shifting_addr, inv_sigma_shifting_addr.
-         rewrite inv_sigma_shifting_sigma_shifting. auto.
+  Lemma sigma_from_bigger_dom_bijective_all_cids : bijective sigma_from_bigger_dom_all_cids.
+  Proof. apply Bijective with (g := inv_sigma_from_bigger_dom_all_cids).
+         - exact cancel_sigma_from_bigger_dom_inv_sigma_from_bigger_dom_all_cids.
+         - exact cancel_inv_sigma_from_bigger_dom_sigma_from_bigger_dom_all_cids.
   Qed.
 
-  Lemma option_rename_value_option_inverse_rename_value n2 n1 v:
-    option_inverse_rename_value (inv_sigma_shifting_addr n2 n1) v =
-    option_rename_value (sigma_shifting_addr n1 n2) v.
+  Lemma inv_sigma_from_bigger_dom_bijective_all_cids :
+    bijective inv_sigma_from_bigger_dom_all_cids.
+  Proof. apply Bijective with (g := sigma_from_bigger_dom_all_cids).
+         - exact cancel_inv_sigma_from_bigger_dom_sigma_from_bigger_dom_all_cids.
+         - exact cancel_sigma_from_bigger_dom_inv_sigma_from_bigger_dom_all_cids.
+  Qed.
+
+  Lemma sigma_from_bigger_dom_cid_constant_all_cids x:
+    (sigma_from_bigger_dom_all_cids x).2.1 = x.2.1.
   Proof.
-    destruct v as [[ | [[[perm cid] bid] o] | ] | ]; auto. simpl.
-    rewrite rename_addr_inverse_rename_addr. reflexivity.
+    unfold sigma_from_bigger_dom_all_cids.
+    by rewrite sigma_from_bigger_dom_cid_constant.
+  Qed.
+
+  Lemma inv_sigma_from_bigger_dom_cid_constant_all_cids x:
+    (inv_sigma_from_bigger_dom_all_cids x).2.1 = x.2.1.
+  Proof.
+    unfold inv_sigma_from_bigger_dom_all_cids.
+    by rewrite inv_sigma_from_bigger_dom_cid_constant.
   Qed.
   
-  Lemma event_rename_inverse_event_rename n1 n2 addr' e e':
-    event_inverse_renames_event_at_addr (inv_sigma_shifting_addr n1 n2) addr' e e' <->
-    event_renames_event_at_addr (sigma_shifting_addr n2 n1) addr' e' e.
-  Proof.
-    unfold event_inverse_renames_event_at_addr, event_renames_event_at_addr.
-    split; intros H offset; pose proof (H offset) as H'. clear H.
-    - rewrite <- option_rename_value_option_inverse_rename_value,
-      H', rename_addr_inverse_rename_addr. reflexivity.
-    - rewrite option_rename_value_option_inverse_rename_value.
-      rewrite <- H', rename_addr_inverse_rename_addr. reflexivity.
-  Qed.
-
-  Lemma rename_addr_transitive n1 n2 n3 addr:
-    left_addr_good_for_shifting n1 addr ->
-    rename_addr (sigma_shifting_addr n2 n3) (rename_addr (sigma_shifting_addr n1 n2) addr) =
-    rename_addr (sigma_shifting_addr n1 n3) addr.
-  Proof. intros. unfold rename_addr, sigma_shifting_addr.
-         rewrite <- (sigma_shifting_transitive n1 n2 n3); auto.
-  Qed.
-
-  Lemma rename_value_transitive n1 n2 n3 v:
-    left_value_good_for_shifting n1 v ->
-    rename_value (sigma_shifting_addr n2 n3)
-                 (rename_value (sigma_shifting_addr n1 n2) v) =
-    rename_value (sigma_shifting_addr n1 n3) v.
-  Proof.
-    unfold left_value_good_for_shifting.
-    intros Hgood. destruct v as [ | [[[perm cid] bid] o] | ]; auto. simpl.
-    destruct (rename_addr (sigma_shifting_addr n1 n2) (cid, bid)) eqn:Hn1n2. simpl.
-    destruct (perm =? Permission.data) eqn:Hperm; simpl; try rewrite Hperm; auto.
-    rewrite <- Hn1n2. rewrite rename_addr_transitive; auto.
-  Qed.
-
-  Lemma option_rename_value_transitive n1 n2 n3 v:
-    option_left_value_good_for_shifting n1 v ->
-    option_rename_value (sigma_shifting_addr n2 n3)
-                        (option_rename_value (sigma_shifting_addr n1 n2) v) =
-    option_rename_value (sigma_shifting_addr n1 n3) v.
-  Proof.
-    unfold option_left_value_good_for_shifting, option_rename_value.
-    intros Hgood. destruct v as [v' | ]; auto. simpl.
-    rewrite rename_value_transitive; auto.
-  Qed.
-
-  Lemma event_rename_reflexive n addr e:
-    event_renames_event_at_addr (sigma_shifting_addr n n) addr e e.
-  Proof. unfold event_renames_event_at_addr. rewrite !rename_addr_reflexive. intros.
-         rewrite option_rename_value_reflexive. auto.
-  Qed.
-
-  Lemma event_inverse_rename_reflexive n addr e:
-    event_inverse_renames_event_at_addr (inv_sigma_shifting_addr n n) addr e e.
-  Proof. unfold event_inverse_renames_event_at_addr.
-         rewrite !inverse_rename_addr_reflexive. intros.
-         rewrite option_inverse_rename_value_reflexive. auto.
-  Qed.
-
-  
-  Lemma event_rename_transitive n1 n2 n3 addr e1 e2 e3:
-    left_addr_good_for_shifting n1 addr ->
-    (forall offset,
-        option_left_value_good_for_shifting n1
-                                            (Memory.load
-                                               (mem_of_event e1)
-                                               (Permission.data, addr.1, addr.2, offset)
-                                            )
-    ) ->
-    event_renames_event_at_addr (sigma_shifting_addr n1 n2) addr e1 e2 ->
-    event_renames_event_at_addr (sigma_shifting_addr n2 n3)
-                                (rename_addr (sigma_shifting_addr n1 n2) addr) e2 e3 ->
-    event_renames_event_at_addr (sigma_shifting_addr n1 n3) addr e1 e3.
-  Proof.
-    intros Haddr_good Hloads_good.
-    unfold event_renames_event_at_addr. intros Hn1n2 Hn2n3 offset.
-    pose proof Hn2n3 offset as Hn2n3'.
-    erewrite rename_addr_transitive, (Hn1n2 offset) in Hn2n3'; auto. erewrite Hn2n3'.
-    apply option_rename_value_transitive; auto.
-  Qed.
-
-  Lemma traces_shift_each_other_reflexive n t:
-    traces_shift_each_other n n t t.
-  Proof.
-    apply shifting_is_special_case_of_renaming.
-    induction t using last_ind.
-    - apply nil_renames_nil.
-    - apply rcons_renames_rcons.
-      + assumption.
-      + intros addr Hshrsfr. split.
-        * apply event_rename_reflexive.
-        * by rewrite rename_addr_reflexive.
-      + intros addr Hshrsfr. split.
-        * apply event_inverse_rename_reflexive.
-        * by rewrite inverse_rename_addr_reflexive.
-  Qed.
-
-  Lemma traces_shift_each_other_symmetric t1 t2 n1 n2:
-    traces_shift_each_other n1 n2 t1 t2 ->
-    traces_shift_each_other n2 n1 t2 t1.
-  Proof.
-    intros Ht1t2. apply shifting_is_special_case_of_renaming.
-    inversion Ht1t2. subst. induction H as [|tprefix e tprefix' e' Hprefix_rename IH He He'].
-    - apply nil_renames_nil.
-    - apply rcons_renames_rcons.
-      + apply IH. apply shifting_is_special_case_of_renaming. exact Hprefix_rename.
-      + intros [cid bid] Hshrsfr. destruct (He' (cid, bid) Hshrsfr) as [G1 G2]. split.
-        * rewrite <- event_rename_inverse_event_rename. exact G1.
-        * rewrite rename_addr_inverse_rename_addr. exact G2.
-      + intros [cid bid] Hshrsfr. destruct (He (cid, bid) Hshrsfr) as [G1 G2]. split.
-        * rewrite event_rename_inverse_event_rename. exact G1.
-        * rewrite <- rename_addr_inverse_rename_addr. exact G2.
-  Qed.
-
-  Lemma rcons_trace_event_eq_inversion (tp1 tp2: trace event) (e1 e2: event):
-    rcons tp1 e1 = rcons tp2 e2 -> tp1 = tp2 /\ e1 = e2.
-  Proof.
-    intros rconseq. assert (rcons tp1 e1 == rcons tp2 e2) as rconseq'. apply/eqP. assumption.
-    rewrite eqseq_rcons in rconseq'. destruct (andP rconseq') as [G1 G2].
-    split; apply/eqP; assumption.
-  Qed.
-  
-  Lemma __traces_shift_each_other_transitive n1 n2 n3 sz:
-    forall t1 t2 t3,
-      size t1 = sz ->
-      good_trace (left_addr_good_for_shifting n1) t1 ->
-      good_trace (left_addr_good_for_shifting n3) t3 ->
-      traces_shift_each_other n1 n2 t1 t2 ->
-      traces_shift_each_other n2 n3 t2 t3 ->
-      traces_shift_each_other n1 n3 t1 t3.
-  Proof.
-    induction sz as [ | sz IHsz]; intros t1 t2 t3 t1sz t1good t3good H12 H23.
-    - assert (t2sz: size t2 = 0).
-      { inversion H12. erewrite <- traces_rename_each_other_same_size; eauto. }
-      assert (t3sz: size t3 = 0).
-      { inversion H23. erewrite <- traces_rename_each_other_same_size; eauto. }
-      assert (t1nil: t1 = [::]). by (apply size0nil).
-      assert (t2nil: t2 = [::]). by (apply size0nil).
-      assert (t3nil: t3 = [::]). by (apply size0nil).
-      subst. apply shifting_is_special_case_of_renaming, nil_renames_nil.
-    - inversion H12 as [? ? H12']. inversion H23 as [? ? H23']. subst. clear H12 H23.
-      assert (size t2 = sz.+1) as Hsizet2.
-      {
-        symmetry. rewrite <- t1sz.
-        apply (traces_rename_each_other_same_size _ _ t1 t2 H12').
-      }
-      assert (size t3 = sz.+1) as Hsizet3.
-      {
-        symmetry. rewrite <- Hsizet2.
-        apply (traces_rename_each_other_same_size _ _ t2 t3 H23').
-      }
-      induction t1 as [ | t1 e1 IHt1] using last_ind; try discriminate.
-      induction t2 as [ | t2 e2 IHt2] using last_ind; try discriminate.
-      induction t3 as [ | t3 e3 IHt3] using last_ind; try discriminate.
-
-      assert (t1_tlsz: size t1 = sz). by (rewrite size_rcons in t1sz; inversion t1sz).
-      pose proof (IHsz t1 t2 t3 t1_tlsz) as IHsz'.
-
-      inversion H12' as [ | ? ? ? ? H12a H12b H12c Heq1 Heq2];
-        try by (rewrite <- H in t1sz; inversion t1sz).
-      assert (Heq1': rcons tprefix e == rcons t1 e1). by apply/eqP.
-      assert (Heq2': rcons tprefix' e' == rcons t2 e2). by apply/eqP.
-      rewrite eqseq_rcons in Heq1'. pose proof (andb_prop _ _ Heq1') as [tmp1 tmp2].
-      pose proof eqP tmp1. pose proof eqP tmp2. subst. clear tmp1 tmp2 Heq1 Heq1'.
-      rewrite eqseq_rcons in Heq2'. pose proof (andb_prop _ _ Heq2') as [tmp1 tmp2].
-      pose proof eqP tmp1. pose proof eqP tmp2. subst. clear tmp1 tmp2 Heq2 Heq2'.
-
-      inversion H23' as [ | ? ? ? ? H23a H23b H23c Heq1 Heq2];
-        try by (rewrite <- H in Hsizet2; inversion Hsizet2).
-      assert (Heq1': rcons tprefix e == rcons t2 e2). by apply/eqP.
-      assert (Heq2': rcons tprefix' e' == rcons t3 e3). by apply/eqP.
-      rewrite eqseq_rcons in Heq1'. pose proof (andb_prop _ _ Heq1') as [tmp1 tmp2].
-      pose proof eqP tmp1. pose proof eqP tmp2. subst. clear tmp1 tmp2 Heq1 Heq1'.
-      rewrite eqseq_rcons in Heq2'. pose proof (andb_prop _ _ Heq2') as [tmp1 tmp2].
-      pose proof eqP tmp1. pose proof eqP tmp2. subst. clear tmp1 tmp2 Heq2 Heq2'.
-
-      pose proof (shifting_is_special_case_of_renaming _ _ _ _ H12a) as H12a_shift.
-      pose proof (shifting_is_special_case_of_renaming _ _ _ _ H23a) as H23a_shift.
-
-      inversion t1good as [H | ? ? t1gooda t1goodb t1goodc Heq];
-        try by (rewrite <- H in t1sz; inversion t1sz).
-
-      assert (Heq1': rcons tpref e == rcons t1 e1). by apply/eqP.
-      rewrite eqseq_rcons in Heq1'. pose proof (andb_prop _ _ Heq1') as [tmp1 tmp2].
-      pose proof eqP tmp1. pose proof eqP tmp2. subst. clear tmp1 tmp2 Heq Heq1'.
-      
-      inversion t3good as [H | ? ? t3gooda t3goodb t3goodc Heq];
-        try by (rewrite <- H in Hsizet3; inversion Hsizet3).
-
-      assert (Heq1': rcons tpref e == rcons t3 e3). by apply/eqP.
-      rewrite eqseq_rcons in Heq1'. pose proof (andb_prop _ _ Heq1') as [tmp1 tmp2].
-      pose proof eqP tmp1. pose proof eqP tmp2. subst. clear tmp1 tmp2 Heq Heq1'.
-      
-      pose proof (IHsz' t1gooda t3gooda H12a_shift H23a_shift) as H13a_shift.
-      apply shifting_is_special_case_of_renaming, rcons_renames_rcons.
-      + inversion H13a_shift; auto.
-      + intros addr Haddr.
-        assert (addr_n1_good: left_addr_good_for_shifting n1 addr).
-        { eapply addr_shared_so_far_good_addr with (t := rcons t1 e1); eauto. }
-        pose proof H12b addr Haddr as [He1e2 Hshrsfr2].
-        pose proof H23b (rename_addr (sigma_shifting_addr n1 n2) addr) Hshrsfr2
-          as [He2e3 Hshrsfr3].
-        split.
-        * eapply event_rename_transitive; eauto.
-          unfold option_left_value_good_for_shifting, left_value_good_for_shifting.
-          intros offset.
-          destruct (Memory.load (mem_of_event e1) (Permission.data, addr.1, addr.2, offset))
-            as [ [ | [[[perm cid] bid] off] | ] | ] eqn:Hload; eauto.
-          destruct (perm =? Permission.data) eqn:Hperm; auto.
-          assert (perm = Permission.data) by (apply Nat.eqb_eq; auto). subst.
-          assert (addr_shared_so_far (cid, bid) (rcons t1 e1)).
-          { eapply addr_shared_so_far_load_addr_shared_so_far; eauto. }
-          eapply addr_shared_so_far_good_addr with (t := rcons t1 e1); eauto.
-        * erewrite <- rename_addr_transitive; eauto.
-      + intros addr' Haddr'.
-        assert (addr_n3_good: left_addr_good_for_shifting n3 addr').
-        { eapply addr_shared_so_far_good_addr with (t := rcons t3 e3); eauto. }
-        pose proof H23c addr' Haddr' as [He2e3 Hshrsfr2].
-        pose proof H12c (inverse_rename_addr (inv_sigma_shifting_addr n2 n3) addr') Hshrsfr2
-          as [He1e2 Hshrsfr1].
-        split.
-        * erewrite event_rename_inverse_event_rename.
-          erewrite event_rename_inverse_event_rename in He2e3, He1e2.
-          erewrite <- rename_addr_inverse_rename_addr in He1e2.
-          erewrite <- !rename_addr_inverse_rename_addr in Hshrsfr1.
-          eapply event_rename_transitive; eauto.
-          unfold option_left_value_good_for_shifting, left_value_good_for_shifting.
-          intros offset.
-          destruct (Memory.load (mem_of_event e3) (Permission.data, addr'.1, addr'.2, offset))
-            as [ [ | [[[perm cid] bid] off] | ] | ] eqn:Hload; eauto.
-          destruct (perm =? Permission.data) eqn:Hperm; auto.
-          assert (perm = Permission.data) by (apply Nat.eqb_eq; auto). subst.
-          assert (addr_shared_so_far (cid, bid) (rcons t3 e3)).
-          { eapply addr_shared_so_far_load_addr_shared_so_far; eauto. }
-          eapply addr_shared_so_far_good_addr with (t := rcons t3 e3); eauto.
-        * erewrite <- rename_addr_inverse_rename_addr.
-          erewrite <- !rename_addr_inverse_rename_addr in Hshrsfr1.
-          erewrite <- rename_addr_transitive; eauto.
-  Qed.
-
-  Lemma traces_shift_each_other_transitive n1 n2 n3 t1 t2 t3:
-      good_trace (left_addr_good_for_shifting n1) t1 ->
-      good_trace (left_addr_good_for_shifting n3) t3 ->
-      traces_shift_each_other n1 n2 t1 t2 ->
-      traces_shift_each_other n2 n3 t2 t3 ->
-      traces_shift_each_other n1 n3 t1 t3.
-  Proof.
-    eapply __traces_shift_each_other_transitive. eauto.
-  Qed.
-        
-End PropertiesOfTheShiftRenaming.
-
-Section BehaviorsRelated.
-
-  Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
-  : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
-  | Terminates_rel_Terminates:
-      forall t1 t2,
-        traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
-        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
-  | Tbc_rel_Tbc:
-      forall t1 t2,
-        traces_shift_each_other size_meta_t1 size_meta_t2 t1 t2 ->
-        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
-
-  Lemma behavior_rel_behavior_reflexive b n:
-    not_wrong_finpref b ->
-    behavior_rel_behavior n n b b.
-  Proof. intros not_wrong. unfold not_wrong_finpref in *. destruct b; auto.
-         - apply Terminates_rel_Terminates. apply traces_shift_each_other_reflexive.
-         - exfalso. auto.
-         - apply Tbc_rel_Tbc. apply traces_shift_each_other_reflexive.
-  Qed.
-
-  Lemma behavior_rel_behavior_symmetric b1 b2 n1 n2:
-    behavior_rel_behavior n1 n2 b1 b2 -> behavior_rel_behavior n2 n1 b2 b1.
-  Proof. intros H. inversion H.
-         - apply Terminates_rel_Terminates. apply traces_shift_each_other_symmetric. auto.
-         - apply Tbc_rel_Tbc. apply traces_shift_each_other_symmetric. auto.
-  Qed.
-  
-End BehaviorsRelated.
+End ShiftingAsPartialBijectionAllCids.
 
 
-(* [DynShare] 
-   The following definition is NOT needed when we define a trace relation that
-   (implicitly) specifies the shared part of the memory.
-   
-   It would be needed though if instead we define a trace semantics
-   that (explicitly) emits only the shared memory rather than the whole memory.
-*)
-Definition shared_part_of_memory
-           (mshr: Memory.t)
-           (m: Memory.t)
-           (t: trace event)
-  : Prop :=
-  forall addr offset, (addr_shared_so_far addr t ->
-                       Memory.load mshr (Permission.data, addr.1, addr.2, offset)
-                       =
-                       Memory.load m (Permission.data, addr.1, addr.2, offset)
-                      )
-                      /\
-                      (~ addr_shared_so_far addr t) ->
-                      Memory.load mshr (Permission.data, addr.1, addr.2, offset) = None.
-                                
+
+*************************************)
