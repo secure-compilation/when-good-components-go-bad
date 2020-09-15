@@ -58,7 +58,7 @@ Section RSC_DC_MD_Section.
       program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
       (prefix ((*Definability.project_finpref_behavior*) m') beh \/
        behavior_improves_blame beh ((*Definability.project_finpref_behavior*) m') p) /\
-      behavior_rel_behavior size_meta_m size_meta_m'
+      behavior_rel_behavior_all_cids size_meta_m size_meta_m'
                             ((*Definability.project_finpref_behavior*) m) m'.
   Proof.
     intros m [t [Hbeh Hprefix0]] Hsafe_pref.
@@ -282,7 +282,7 @@ Section RSC_DC_MD_Section.
     rewrite Intermediate.program_linkC in HP'_Cs_compiled_doesm; try assumption.
     rewrite <- Hctx_same_iface in Hmergeable_ifaces.
 
-    assert (m_rel_m': behavior_rel_behavior 0 metadata_size m m').
+    assert (m_rel_m': behavior_rel_behavior_all_cids all_zeros_shift metadata_size m m').
     { admit. }
 
     pose proof Intermediate.recombination_prefix
@@ -308,12 +308,12 @@ Section RSC_DC_MD_Section.
     }
     destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
 
-    assert (m_rel_m'': behavior_rel_behavior 0 size_m'' m m'').
+    assert (m_rel_m'': behavior_rel_behavior_all_cids all_zeros_shift size_m'' m m'').
     { (*[DynShare] This should follow from m''_rel_m *)
       admit.
     }
     (* Instantiate behavior, case analysis on improvement. *)
-    exists Cs. eexists. eexists m''. eexists 0. eexists.
+    exists Cs. eexists. eexists m''. eexists all_zeros_shift. eexists.
     destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
     + repeat (split; try now eauto).
     + subst pCs_beh.

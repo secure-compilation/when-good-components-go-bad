@@ -1,5 +1,3 @@
-Require Import Psatz.
-Require Import Lia.
 Require Import Common.Definitions.
 Require Import Common.Util.
 Require Import Common.Values.
@@ -1534,6 +1532,33 @@ Section BehaviorsRelatedAllCids.
   Qed.
   
 End BehaviorsRelatedAllCids.
+
+Section ExampleShifts.
+
+  Definition uniform_shift (n: nat) : (Component.id -> nat) := fun (c: Component.id) => n.
+
+  Definition all_zeros_shift : (Component.id -> nat) := uniform_shift 0.
+
+  Definition fmap_extension_shift (m: {fmap Component.id -> nat}) : (Component.id -> nat) :=
+    fun (c: Component.id) =>
+      match m c with
+      | Some n => n
+      | None => 0
+      end.
+
+  Lemma fmap_extension_shift_Some cid (m: {fmap Component.id -> nat}) n:
+    m cid = Some n -> (fmap_extension_shift m) cid = n.
+  Proof. by move=> H; unfold fmap_extension_shift; rewrite H. Qed.
+  
+End ExampleShifts.
+
+
+
+
+
+
+
+
 
 (* [DynShare] 
    The following definition is NOT needed when we define a trace relation that

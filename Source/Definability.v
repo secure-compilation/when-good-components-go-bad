@@ -698,7 +698,8 @@ Section Definability.
 End WithTrace.
 End Definability.
 
-Definition metadata_size : (* Component.id -> *) nat. Admitted.
+Definition metadata_size : Component.id -> nat (* := uniform_shift metadata_size_per_cid*).
+Admitted.
 
 Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
@@ -769,7 +770,7 @@ Lemma definability_with_linking:
     Source.well_formed_program c' /\
     Source.closed_program (Source.program_link p' c') /\
     does_prefix (S.CS.sem (Source.program_link p' c')) m' /\
-    behavior_rel_behavior metadata_size 0 m' (project_finpref_behavior m).
+    behavior_rel_behavior_all_cids metadata_size all_zeros_shift m' (project_finpref_behavior m).
 Proof.
 (*
   move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre Hnot_wrong.
