@@ -44,6 +44,19 @@ Section RSC_DC_MD_Section.
 
   (* Main Theorem *)
 
+
+  (* [DynShare]
+     
+     - Maybe we can get rid of the disjunction "... \/ behavior_improves_blame beh".
+     - And also we should (instead of program_behaves) directly use 
+       does_prefix (Source.CS.sem (Source.program_link p Cs)) m' 
+       Notice that does_prefix is the "finite version" of "program_behaves", i.e., it still
+       contains the cases of FTerminates and FGoesWrong.
+
+     * Because our current S2I compiler does not seem to refine any undef behavior,
+       we should be able to get rid of the blame disjunct.
+
+   *)
   Theorem RSC_DC_MD:
     forall (m: @finpref_behavior (*TracesInform.event_inform*) Events.event),
       does_prefix (Intermediate.CS.sem(*_inform*)
