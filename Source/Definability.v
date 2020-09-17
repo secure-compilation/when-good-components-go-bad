@@ -393,40 +393,26 @@ Section Definability.
                     try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
                       try rewrite values_are_integers_expr_of_const_val; try apply IH.
         pose call_of_event e := if e is ECall _ P _ _ C then Some (C, P) else None.
-      (* have /fsubsetP sub : *)
-      (*     fsubset (called_procedures (procedure_of_trace C P t)) *)
-      (*             ((C, P) |: fset (pmap call_of_event (comp_subtrace C t))). *)
-      (* { *)
-      (*   rewrite /procedure_of_trace /expr_of_trace /switch. *)
-      (*   elim: {t Ht} (comp_subtrace C t) (length _)=> [|e t IH] n //=. *)
-      (*   exact: fsub0set. *)
-      (*   move/(_ n) in IH; rewrite !fset0U. *)
-      (*   case: e=> [C' P' v mem C''| | | | | | | |] *)
-      (*               //=; *)
-      (*               try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH. *)
-      (*   * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=. *)
-      (*     rewrite called_procedures_loc_of_reg fsub0set. *)
-      (*       by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT. *)
-      (*   * by move=> C' P' e; rewrite called_procedures_loc_of_reg *)
-      (*                                called_procedures_expr_of_const_val !fset0U IH. *)
-      (*   * by move=> C' e0 e1 e2 e; rewrite !called_procedures_loc_of_reg !fset0U IH. *)
-      (*   * by move=> C'; rewrite !called_procedures_loc_of_reg !fset0U IH. *)
-      (* } *)
-      (*unfold valid_calls. intros C0 P0 Hin.
-      destruct (C0 == C) eqn:C0_C.
-      SearchAbout find_procedure prog_procedures.
-      + apply wfprog_exported_procedures_existence.
-        SearchAbout well_formed_program program_of_trace
-      SearchAbout C.
-      Check find_procedures_of_trace.*)
-      (*Check find_procedures_of_trace_exp.
-      SearchAbout sub_mem fsubset.
-      SearchAbout fsubset in_mem.*)
-      (*unfold valid_calls.*)
-
-      (*[DynShare]: Why is sub useful? *)
-      
-      (*move=> /sub/fsetU1P [[-> ->]|] {sub}. 
+      have /fsubsetP sub :
+          fsubset (called_procedures (procedure_of_trace C P t))
+                  ((C, P) |: fset (pmap call_of_event (project_non_inform (comp_subtrace C t)))).
+      {
+        rewrite /procedure_of_trace /expr_of_trace /switch.
+        elim: {t Ht} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
+        exact: fsub0set.
+        move/(_ n) in IH; rewrite !fset0U.
+        case: e=> [C' P' v mem C''| | | | | | | |]
+                    //=;
+                    try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH.
+        * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
+          rewrite called_procedures_loc_of_reg fsub0set.
+            by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
+        * by move=> C' P' e; rewrite called_procedures_loc_of_reg
+                                     called_procedures_expr_of_const_val !fset0U IH.
+        * by move=> C' e0 e1 e2 e; rewrite !called_procedures_loc_of_reg !fset0U IH.
+        * by move=> C'; rewrite !called_procedures_loc_of_reg !fset0U IH.
+      }
+      move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
         rewrite eqxx find_procedures_of_trace //.
         move: P_CI; case: eqP intf_C=> [->|_] intf_C.
           rewrite /valid_procedure.
@@ -438,11 +424,9 @@ Section Definability.
         by case: eqP => [<-|] //; rewrite find_procedures_of_trace_exp; eauto.
       elim: {P P_CI} t Ht P' C'_P' => [|e t IH] //= /andP [He Ht] P.
       case: (C =P _) => [HC|]; last by eauto.
-      case: e HC He=> [_ P' v C'' /= <-| | |]; try by eauto.
+      case: e HC He=> [_ P' v _ C'' /= <-| | | | | | | |]; try by eauto.
       rewrite inE; case/andP=> [C_C'' /imported_procedure_iff imp_C''_P'].
       by case/orP=> [/eqP [-> ->] //|]; eauto.
-       *)
-      admit.
     - by rewrite domm_map.
     - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
       rewrite /Source.has_required_local_buffers /= mapmE C_CI /=.
@@ -454,7 +438,7 @@ Section Definability.
         * apply /dommP. exists mainP. assumption.
         * discriminate.
       + by left.
-  Admitted.
+  Qed.
 
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).
