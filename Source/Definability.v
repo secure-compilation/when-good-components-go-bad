@@ -542,27 +542,42 @@ Section Definability.
     Lemma definability_gen s prefix suffix cs :
       t = prefix ++ suffix ->
       well_formed_state s prefix suffix cs ->
-      exists2 cs', exists2 suffix_non_inform, Star (CS.sem p) cs suffix_non_inform cs' &
-                                     project_non_inform suffix = suffix_non_inform &
-                                     CS.final_state cs'.
+      exists2 cs',
+      exists2 suffix', Star (CS.sem p) cs suffix' cs' &
+                       project_non_inform suffix = suffix' &
+                       CS.final_state cs'.
     Proof.
       have Eintf : genv_interface (prepare_global_env p) = intf by [].
       have Eprocs : genv_procedures (prepare_global_env p) = Source.prog_procedures p by [].
+      (* Proof by induction on the trace suffix. *)
       elim: suffix s prefix cs=> [|e suffix IH] /= [C callers] prefix.
-      - rewrite cats0 => cs <- {prefix}.
+      - (* Base case: empty suffix. The proof is straightforward. *)
+        rewrite cats0 => cs <- {prefix}.
         case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk wf_mem P_exp.
         exists [CState C, stk, mem, Kstop, E_exit, arg]; last by left.
         have C_b := valid_procedure_has_block P_exp.
         have C_local := wf_mem _ C_b.
         rewrite /procedure_of_trace /expr_of_trace.
-        (* apply: switch_spec_else; eauto. *)
-        (* rewrite -> size_map; reflexivity. *)
-        admit.
-      - move=> cs Et /=.
+        eexists. apply: switch_spec_else; eauto.
+        rewrite -> size_map; reflexivity.
+        reflexivity.
+      - (* Inductive case: cons of a head event and a tail continuation for
+           the suffix. *)
+        move=> cs Et /=.
         case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
         have C_b := valid_procedure_has_block P_exp.
         have C_local := wf_mem _ C_b.
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
+        (* We can simulate the event-producing step as the concatenation of three
+           successive stars:
+            1. A silent star preceding the event.
+            2. A star that contains a step that produces the event (which at the
+               source level may now be silent).
+            3. By the IH, a final star that produces the tail of the suffix.
+
+           The first star, running up to the point where we are ready to execute
+           the expression associated with the event of interest, is fairly
+           simple to establish. *)
         assert (Star1 : Star (CS.sem p)
                              [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
                              [CState C, stk, mem', Kstop, expr_of_event C P e, arg]).
@@ -586,74 +601,107 @@ Section Definability.
           unfold Memory.store in *. simpl in *.
           rewrite Hmem' in Hmem''.
           congruence. }
-        (* assert (Star2 : exists s' cs', *)
-        (*            Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] [:: e] cs' /\ *)
-        (*            well_formed_state s' (prefix ++ [e]) suffix cs'). *)
-        (* { *)
-        (*   clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem. *)
-        (*   destruct e as [C_ P' new_arg C'|C_ ret_val C' |C_ ptr v |C_ ptr v]; *)
-        (*   simpl in wf_C, wf_e, wb_suffix; subst C_. *)
-        (*   - case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport. *)
-        (*     exists (StackState C' (C :: callers)). *)
-        (*     have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)). *)
-        (*     exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem, *)
-        (*             Kstop, procedure_of_trace C' P' t, Int new_arg]. *)
-        (*     split. *)
-        (*     + take_step. take_step. *)
-        (*       apply star_one. simpl. *)
-        (*       apply CS.eval_kstep_sound. simpl. *)
-        (*       rewrite (negbTE C_ne_C'). *)
-        (*       rewrite -> imported_procedure_iff in Himport. rewrite Himport. *)
-        (*       rewrite <- imported_procedure_iff in Himport. *)
-        (*       by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
-        (*     + econstructor; trivial. *)
-        (*       { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. *)
-        (*         eexists []; eexists; simpl; split; eauto. *)
-        (*         split; trivial. *)
-        (*         eexists arg, P, top, bot. *)
-        (*         by do 3 (split; trivial). } *)
-        (*       right. by apply: (closed_intf Himport). *)
-        (*   - move: wf_e=> /eqP C_ne_C'. *)
-        (*     destruct callers as [|C'_ callers]; try easy. *)
-        (*     case/andP: wb_suffix=> [/eqP HC' wb_suffix]. *)
-        (*     subst C'_. simpl. exists (StackState C' callers). *)
-        (*     destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot. *)
-        (*     revert mem wf_mem arg. *)
-        (*     induction top as [|[C_ saved k_] top IHtop]. *)
-        (*     + clear Htop. rename bot into bot'. *)
-        (*       destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot). *)
-        (*       subst bot'. simpl. *)
-        (*       have C'_b := valid_procedure_has_block P'_exp. *)
-        (*       intros mem wf_mem. *)
-        (*       exists [CState C', CS.Frame C' saved Kstop :: top ++ bot, mem, Kstop, procedure_of_trace C' P' t, Int 0]. *)
-        (*       split. *)
-        (*       * eapply star_step. *)
-        (*         -- now eapply CS.KS_ExternalReturn; eauto. *)
-        (*         -- take_step. take_step; eauto. *)
-        (*            apply star_one. apply CS.eval_kstep_sound. *)
-        (*            by rewrite /= eqxx (find_procedures_of_trace t P'_exp). *)
-        (*         -- now rewrite E0_right. *)
-        (*       * econstructor; trivial. *)
-        (*         exists (CS.Frame C' saved Kstop :: top), bot. simpl. eauto. *)
-        (*     + intros mem wf_mem arg. *)
-        (*       simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_. *)
-        (*       specialize (IHtop Htop). *)
-        (*       specialize (IHtop _ wf_mem saved). destruct IHtop as [cs' [StarRet wf_cs']]. *)
-        (*       exists cs'. split; trivial. *)
-        (*       eapply star_step; try eassumption. *)
-        (*       * by apply/CS.eval_kstep_sound; rewrite /= eqxx. *)
-        (*       * reflexivity. *)
-        (*   (* At the moment we might discharge these by noting that no such *)
-        (*      events are being generated. *) *)
-        (*   - admit. *)
-        (*   - admit. *)
-        (* } *)
-        (* destruct Star2 as (s' & cs' & Star2 & wf_cs'). *)
-        (* specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH. *)
-        (* specialize (IH Et wf_cs'). destruct IH as [cs'' Star3 final]. *)
-        (* exists cs''; trivial. *)
+        (* The second star "executes" the event proper. This part is more
+           interesting. *)
+        assert (Star2 : exists s' cs',
+                   Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] (event_non_inform_of [:: e]) cs' /\
+                   well_formed_state s' (prefix ++ [e]) suffix cs').
+        {
+          clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
+          (* Case analysis on observable events, which in this rich setting
+             extend to calls and returns and various memory accesses and related
+             manipulations, of which only calls and returns are observable at
+             both levels. *)
+          destruct e as [C_ P' new_arg mem' C'|C_ ret_val mem' C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_ |C_];
+          simpl in wf_C, wf_e, wb_suffix; subst C_.
+          - (* Event case: call. *)
+            case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
+            exists (StackState C' (C :: callers)).
+            have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
+            exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem,
+                    Kstop, procedure_of_trace C' P' t, new_arg].
+            split.
+            + take_step. take_step.
+              apply star_one. simpl.
+              apply CS.eval_kstep_sound. simpl.
+              (* rewrite (negbTE C_ne_C'). *)
+              (* rewrite -> imported_procedure_iff in Himport. rewrite Himport. *)
+              (* rewrite <- imported_procedure_iff in Himport. *)
+              (* by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
+              admit.
+            + econstructor; trivial.
+              { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
+                eexists []; eexists; simpl; split; eauto.
+                split; trivial.
+                eexists arg, P, top, bot.
+                by do 3 (split; trivial). }
+              right. by apply: (closed_intf Himport).
+          - (* Event case: return. *)
+            move: wf_e=> /eqP C_ne_C'.
+            destruct callers as [|C'_ callers]; try easy.
+            case/andP: wb_suffix=> [/eqP HC' wb_suffix].
+            subst C'_. simpl. exists (StackState C' callers).
+            destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
+            revert mem wf_mem arg.
+            induction top as [|[C_ saved k_] top IHtop].
+            + clear Htop. rename bot into bot'.
+              destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
+              subst bot'. simpl.
+              have C'_b := valid_procedure_has_block P'_exp.
+              intros mem wf_mem.
+              exists [CState C', CS.Frame C' saved Kstop :: top ++ bot, mem, Kstop, procedure_of_trace C' P' t, Int 0].
+              split.
+              * eapply star_step.
+                -- instantiate (2 := [:: ERet C ret_val mem' C']). (* RB: TODO: Remove later. *)
+                   admit. (* RB: Blocked because the rule expects a value and
+                             finds a dereference on loc_of_reg, which remains
+                             abstract. *)
+                   (* now eapply CS.KS_ExternalReturn; eauto. *)
+                -- instantiate (1 := E0). (* RB: TODO: Remove later. *)
+                   take_step. take_step; eauto.
+                   apply star_one. apply CS.eval_kstep_sound.
+                   admit. (* Fix admit above and return here. *)
+                   (* by rewrite /= eqxx (find_procedures_of_trace t P'_exp). *)
+                -- now rewrite E0_right.
+              * econstructor; trivial.
+                exists (CS.Frame C' saved Kstop :: top), bot. simpl. eauto.
+            + intros mem wf_mem arg.
+              simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
+              specialize (IHtop Htop).
+              specialize (IHtop _ wf_mem saved). destruct IHtop as [cs' [StarRet wf_cs']].
+              exists cs'. split; trivial.
+              eapply star_step; try eassumption.
+              * instantiate (1 := E0). (* RB: TODO: Remove later. *)
+                admit.
+                (* by apply/CS.eval_kstep_sound; rewrite /= eqxx. *)
+              * reflexivity.
+          (* The remaining events correspond to silent events in the
+             source. *)
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+        }
+        destruct Star2 as (s' & cs' & Star2 & wf_cs').
+        (* The third star is produced by the IH. *)
+        specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
+        specialize (IH Et wf_cs'). destruct IH as [cs'' [suffix' Star3 Hsuffix] final].
+        exists cs''; trivial.
+        (* At the end, we need to instantiate the suffix based on the target
+           event. *)
+        (* Before: *)
         (* eapply (star_trans Star1); simpl; eauto. *)
         (* now eapply (star_trans Star2); simpl; eauto. *)
+        rewrite Hsuffix.
+        destruct e.
+          (* This snippet works for all cases. *)
+          eexists; [| trivial];
+          eapply (star_trans Star1); simpl; [| eauto];
+          now eapply (star_trans Star2); simpl; eauto.
+          (* ... *)
     Admitted.
 
     Lemma definability :
