@@ -711,9 +711,8 @@ Section Definability.
       move=> wf_t; eapply program_runs=> /=; try reflexivity.
       pose cs := CS.initial_machine_state p.
       suffices H : well_formed_state (StackState Component.main [::]) [::] t cs.
-        have [cs' run_cs final_cs'] := @definability_gen _ [::] t _ erefl H.
-        (* by econstructor; eauto. *)
-        admit.
+        have [cs' [suffix' run_cs Hsuffix'] final_cs'] := @definability_gen _ [::] t _ erefl H.
+        subst suffix'. by econstructor; eauto.
       case/andP: wf_t => wb_t wf_t_events.
       rewrite /cs /CS.initial_machine_state /Source.prog_main /= find_procedures_of_trace_main //.
       econstructor; eauto; last by left; eauto.
