@@ -839,10 +839,13 @@ Proof.
   have := definability Hclosed_intf intf_main _ _ _ _ _ wf_m.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section admits? *)
   set back := (program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m') => Hback.
-    (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
+  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m')) (Terminates (project_non_inform m'))) by admit.
+    (* RB: TODO: [DynShare] Passing the section variables above should not be
+       needed, nor should the additional assumption. *)
   exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
   exists (Source.program_unlink (domm (Intermediate.prog_interface c)) back).
-  eexists. eexists. (* RB: TODO: [DynShare] Provide witnesses. *)
+  exists (project_finpref_behavior m).
+  eexists. (* RB: TODO: [DynShare] Provide witnesses. *)
   split=> /=.
     rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
@@ -851,21 +854,21 @@ Proof.
     rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
   (* have wf_back : Source.well_formed_program back by exact: well_formed_events_well_formed_program. *)
-  (* have Hback' : back = program_of_trace intf m' by []. *)
-  (* split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main. *)
-  (* split; first exact: matching_mains_backtranslated_program wf_c wf_p Hback' intf_main. *)
-  split; first admit.
-  split; first admit.
-  (* clear Hback'. *)
-  (* split; first exact: Source.well_formed_program_unlink. *)
-  (* split; first exact: Source.well_formed_program_unlink. *)
-  split; first admit.
-  split; first admit.
+  have wf_back : Source.well_formed_program back.
+    eapply well_formed_events_well_formed_program; admit.
+    (* by exact: well_formed_events_well_formed_program. *)
+  have Hback' : back = program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m' by [].
+    (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
+  split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main.
+  split; first exact: matching_mains_backtranslated_program wf_c wf_p Hback' intf_main.
+  clear Hback'.
+  split; first exact: Source.well_formed_program_unlink.
+  split; first exact: Source.well_formed_program_unlink.
   rewrite Source.program_unlinkK //; split; first exact: closed_program_of_trace.
   (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
-  (* exists (Terminates m'). *)
-  (* split=> // {wf_events back Hback wf_back wf_m}. *)
-  (* rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _. *)
-  (* by exists (Terminates nil); rewrite /= E0_right. *)
+  split.
+  exists (Terminates (project_non_inform m')).
+  split; first by assumption.
   admit.
+  admit. (* New subgoal: trace relation. *)
 Admitted.
