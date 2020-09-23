@@ -926,9 +926,9 @@ Proof.
                as [Hlr Hrl].
   pose proof Hlr Hd_in as Htr_in.
   rewrite /Memory.load. simpl. unfold transfer_memory_block in *.
-  pose proof dommP _ _ Hs_in as [src_addrMem Hsrc_addr].
-  pose proof dommP _ _ Hd_in as [dst_addrMem Hdst_addr].
-  pose proof dommP _ _ Hl_in as [load_addrMem Hload_addr].
+  pose proof @dommP _ _ _ _ Hs_in as [src_addrMem Hsrc_addr].
+  pose proof @dommP _ _ _ _ Hd_in as [dst_addrMem Hdst_addr].
+  pose proof @dommP _ _ _ _ Hl_in as [load_addrMem Hload_addr].
   rewrite !Hsrc_addr !Hdst_addr !Hload_addr.
   rewrite Hsrc_addr Hdst_addr in Htr_in.
   rewrite setmE. unfold negb in Hneq.
@@ -983,15 +983,15 @@ Proof.
       pose proof transfer_memory_blocks_helper_preserves_domm sdrec src
            (transfer_memory_block src saddr dst daddr) ld1 as [Hlr' Hrl'];
       pose proof Hlr' Hdomm1 as Hdomm.
-    pose proof dommP _ _ Hld1 as [cMem HcMem].
-    pose proof dommP _ _ Hdomm as [cMem' HcMem'].
+    pose proof @dommP _ _ _ _ Hld1 as [cMem HcMem].
+    pose proof @dommP _ _ _ _ Hdomm as [cMem' HcMem'].
     rewrite HcMem. rewrite HcMem'.
     rewrite in_cons in Hld. rewrite negb_or in Hld.
     destruct (andP Hld) as [Hneq_daddr Hnotin].
     pose proof IHsdrec src (transfer_memory_block src saddr dst daddr) (ld1, ld2) i as IH'.
     simpl in IH'.
     pose proof IH' Hnotin as IH. unfold Memory.load in IH. simpl in IH.
-    pose proof dommP _ _ Hdomm1 as [cMem'' HcMem''].
+    pose proof @dommP _ _ _ _ Hdomm1 as [cMem'' HcMem''].
     rewrite HcMem'' in IH.
     rewrite HcMem' in IH.
     rewrite <- IH.
@@ -1028,7 +1028,7 @@ Proof.
     {
       unfold negb. rewrite Hld1. easy.
     }
-    pose proof dommPn _ _ H as Hnone. rewrite Hnone.
+    pose proof @dommPn _ _ _ _ H as Hnone. rewrite Hnone.
     pose proof transfer_memory_blocks_helper_preserves_domm sdrec src
          (transfer_memory_block src saddr dst daddr) ld1 as [_ Hrl'].
     destruct (ld1
