@@ -39,6 +39,11 @@ Coq 8.11.2
 - Extensional Structures 0.2.2
 - [Coq Utils 504aa42](https://github.com/arthuraa/coq-utils/tree/504aa4285d631b166ae36e0f40a3a8f77cbde224)
 
+Coq 8.12.0
+- Mathematical Components 1.11.0
+- Extensional Structures 0.2.2
+- [Coq Utils 504aa42](https://github.com/arthuraa/coq-utils/tree/504aa4285d631b166ae36e0f40a3a8f77cbde224)
+
 Most dependencies can be installed through the OCaml package manager, OPAM.
 
 - Coq (package `coq`) is available through the official
