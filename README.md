@@ -22,7 +22,7 @@ Coq 8.7.2
 Coq 8.8.2
 - Mathematical Components 1.7.0
 - Extensional Structures 0.1.0
-- Coq Utils 0.1
+- [Coq Utils 0.1](https://github.com/arthuraa/coq-utils/releases/tag/v0.1)
 
 Coq 8.9.1
 - Mathematical Components 1.9.0
@@ -30,21 +30,13 @@ Coq 8.9.1
 - [Coq Utils 6334def](https://github.com/arthuraa/coq-utils/tree/6334def1a259a3ce4285cc020f641298fc0c7420)
 
 Coq 8.10.2
-- Mathematical Components 1.9.0
-- Extensional Structures dev (source hash
-  [adc14db3](https://github.com/arthuraa/extructures/tree/adc14db3757e373b73c2af0509c72871b6d0d57f))
-- Coq Void 0.1.0
-- Deriving dev (source hash
-  [db78af07](https://github.com/arthuraa/deriving/tree/db78af0799aede75edb47c72114e91e5ef11f77b))
+- Mathematical Components 1.11.0
+- Extensional Structures 0.2.2
 - [Coq Utils 504aa42](https://github.com/arthuraa/coq-utils/tree/504aa4285d631b166ae36e0f40a3a8f77cbde224)
 
-Coq 8.11.1
-- Mathematical Components 1.9.0
-- Extensional Structures dev (source hash
-  [3bee8131](https://github.com/arthuraa/extructures/tree/3bee813159171eb54aefa7e8e220336b9ca11433))
-- Coq Void 0.1.0
-- Deriving dev (source hash
-  [db78af07](https://github.com/arthuraa/deriving/tree/db78af0799aede75edb47c72114e91e5ef11f77b))
+Coq 8.11.2
+- Mathematical Components 1.11.0
+- Extensional Structures 0.2.2
 - [Coq Utils 504aa42](https://github.com/arthuraa/coq-utils/tree/504aa4285d631b166ae36e0f40a3a8f77cbde224)
 
 Most dependencies can be installed through the OCaml package manager, OPAM.
@@ -52,15 +44,16 @@ Most dependencies can be installed through the OCaml package manager, OPAM.
 - Coq (package `coq`) is available through the official
   [Ocaml OPAM repository](http://opam.ocaml.org/).
 - Stable releases of Mathematical Components (packages `coq-mathcomp-ssreflect`,
-  `coq-mathcomp-fingroup` and `coq-mathcomp-algebra`), Extensional Structures
-  (package `coq-extructures`) and Coq Void (package `coq-void`) are available
-  through the
+  `coq-mathcomp-fingroup` and `coq-mathcomp-algebra`) and Extensional Structures
+  (package `coq-extructures`) are available through the
   [Coq OPAM repository](https://coq.inria.fr/opam/released/).
-- Development versions of Extensional Structures (package `coq-extructures`) and
-  Deriving (package `coq-deriving`) are available through the
+- Development versions of Deriving (package `coq-deriving`) are available
+  through the
   [Coq OPAM development repository](https://coq.inria.fr/opam/extra-dev/).
-- Coq Utils needs to be built from source and, if necessary, its route added to
-  the `_CoqProject` project description file.
+  This package is required by some versions of Coq Utils.
+- Coq Utils has to be built from source and, if necessary, its route added to
+  the `_CoqProject` project description file. Small tweaks may be required to
+  sync up with the development versions of Deriving.
 
 ### Replaying the proofs ###
 
