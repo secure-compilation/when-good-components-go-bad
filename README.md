@@ -52,13 +52,13 @@ Most dependencies can be installed through the OCaml package manager, OPAM.
   `coq-mathcomp-fingroup` and `coq-mathcomp-algebra`) and Extensional Structures
   (package `coq-extructures`) are available through the
   [Coq OPAM repository](https://coq.inria.fr/opam/released/).
-- Development versions of Deriving (package `coq-deriving`) are available
-  through the
+- Development versions of Deriving (package `coq-deriving`) and Extensional
+  Structures (package `coq-extructures`) are available through the
   [Coq OPAM development repository](https://coq.inria.fr/opam/extra-dev/).
   This package is required by some versions of Coq Utils.
 - Coq Utils has to be built from source and, if necessary, its route added to
-  the `_CoqProject` project description file. Small tweaks may be required to
-  sync up with the development versions of Deriving.
+  the `_CoqProject` project description file. Note that it depends on the
+  development version of Extensional Structures, not the stable version.
 
 ### Replaying the proofs ###
 
