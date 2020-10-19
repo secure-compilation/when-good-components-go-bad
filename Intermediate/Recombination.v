@@ -398,11 +398,11 @@ Section Mergeable.
   Proof.
     intros Hmerg.
     induction Hmerg
-      as [s s'' Hini Hini''
+      as [ s s'' Hini Hini''
          | s1 s2 s'' Hmerg Hstep IH
          | s s1'' s2'' Hmerg Hstep IH
          | s1 s2 s1'' s2'' t Hdiff Hmerg Hstep Hstep'' IH]
-           using mergeable_states_ind'.
+      using mergeable_states_ind'.
     - (* Initial state *)
       inversion Hini; inversion Hini''; subst.
       unfold CS.state_pc. unfold CS.initial_machine_state.
@@ -414,32 +414,36 @@ Section Mergeable.
     - (* Non-silent step *)
       inversion Hstep; subst; try contradiction;
         inversion Hstep''; subst; try contradiction;
-          try match goal with HE0: E0 = ?x, Hx: ?x <> E0 |- _ =>
-                              rewrite <- HE0 in Hx; contradiction
-              end;
-          match goal with Hstp : CS.step _ _ ?e _,
-                                 Hstp' : CS.step _ _ ?e0 _ |- _ =>
-                          inversion Hstp;
-                            match goal with Hexec: executing ?G ?pc ?i,
-                                                   Hexec': executing ?G ?pc ?i' |- _ =>
-                                            pose proof
-                                                 executing_deterministic
-                                                 G pc i i' Hexec Hexec' as cntr;
-                                              try discriminate
-                            end;
-                            inversion Hstp';
-                            match goal with Hexec: executing ?G ?pc ?i,
-                                                   Hexec': executing ?G ?pc ?i' |- _ =>
-                                            pose proof
-                                                 executing_deterministic
-                                                 G pc i i' Hexec Hexec' as cntra;
-                                              try discriminate
-                            end
+        try match goal with
+          HE0: E0 = ?x, Hx: ?x <> E0 |- _ =>
+          rewrite <- HE0 in Hx; contradiction
+        end;
+        match goal with
+          Hstp : CS.step _ _ ?e _,
+          Hstp' : CS.step _ _ ?e0 _ |- _ =>
+          inversion Hstp;
+          match goal with
+            Hexec: executing ?G ?pc ?i,
+            Hexec': executing ?G ?pc ?i' |- _ =>
+            pose proof
+                 executing_deterministic
+                 G pc i i' Hexec Hexec' as cntr;
+            try discriminate
           end;
-          inversion cntra; inversion cntr; subst; simpl in *;
-            match goal with Heveq:
-                              [_] = [_] |- _ => inversion Heveq; subst; reflexivity
-            end.
+          inversion Hstp';
+          match goal with
+            Hexec: executing ?G ?pc ?i,
+            Hexec': executing ?G ?pc ?i' |- _ =>
+            pose proof
+                 executing_deterministic
+                 G pc i i' Hexec Hexec' as cntra;
+            try discriminate
+          end
+        end;
+        inversion cntra; inversion cntr; subst; simpl in *;
+        match goal with
+          Heveq: [_] = [_] |- _ => inversion Heveq; subst; reflexivity
+        end.
   Qed.
 
   Lemma mergeable_states_program_to_program s s'' :
@@ -565,8 +569,9 @@ Section Mergeable.
                        | s1 s2 s1'' Hmerg Hstep IH
                        | s1 s1'' s2'' Hmerg Hstep'' IH
                        | s1 s2 s1'' s2'' t Ht Hmerg Hstep Hstep'' IH]
-                         using mergeable_states_ind'.
-    - intros.
+      using mergeable_states_ind'.
+    - (* Initial state *)
+      intros.
       subst. inversion Hini as [Hini1]; inversion Hini'' as [Hini1''].
       destruct Hmergeable_ifaces.
       rewrite CS.initial_machine_state_after_linking in Hini1; try assumption.
@@ -678,22 +683,24 @@ Section Mergeable.
               pose proof CS.program_behaves_inv_non_inform prog beh Hbeh as [ee [Hee1 Hee2]].
               eexists.
             - inversion Hmerg; eauto.
-              match goal with Hstar_s0: Star sem ?s0 ?t ?s',
-                                        Hinit_s0: initial_state sem ?s0
-                              |- _ =>
-                              pose proof CS.star_sem_non_inform_star_sem_inform
-                                   prog s0 t s' Hstar_s0
-                                as [t_inform [gl _gl]];
-                                pose proof sd_initial_determ
-                                     (CS.determinacy_non_inform prog) s0
-                                     (CS.initial_machine_state (program_link p c))
-                                     Hinit_s0 as Hinit_eq
+              match goal with
+                Hstar_s0: Star sem ?s0 ?t ?s',
+                Hinit_s0: initial_state sem ?s0
+                |- _ =>
+                pose proof CS.star_sem_non_inform_star_sem_inform
+                     prog s0 t s' Hstar_s0
+                  as [t_inform [gl _gl]];
+                pose proof sd_initial_determ
+                     (CS.determinacy_non_inform prog) s0
+                     (CS.initial_machine_state (program_link p c))
+                     Hinit_s0 as Hinit_eq
               end.
               simpl in *. unfold CS.initial_state in *.
               unfold prog in *.
-              match goal with Hs0: ?s0 = CS.initial_machine_state (program_link p c)
-                              |- _ =>
-                              rewrite Hs0 in gl
+              match goal with
+                Hs0: ?s0 = CS.initial_machine_state (program_link p c)
+                |- _ =>
+                rewrite Hs0 in gl
               end.
               (* exact gl. *)
               admit.
@@ -1238,8 +1245,8 @@ Section ThreewayMultisem1.
     | CS.simplify_turn; now rewrite Hcontra in Hcomp2''
     ].
 
-  (* [DynShare] 
-     
+  (* [DynShare]
+
      This lemma is false in the existence of dynamic memory sharing.
      Instead, what remains untouched is *only* the part of the partial memory
      that *remains* private after considering (i.e., set-differencing) the set
@@ -1323,11 +1330,11 @@ Section ThreewayMultisem1.
      The current proof that is commented below relies on "to_partial_memory_epsilon_star",
      the lemma that does not hold any more in the [DynShare] world.
 
-     We should be able to find a weaker version of "to_partial_memory_epsilon_star" 
+     We should be able to find a weaker version of "to_partial_memory_epsilon_star"
      that will help us complete the proof of this lemma.
 
     *)
-  
+
     (*;
         try (pose proof to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12'' Hstep23'' as Hmem23'';
              simpl in Hmem23''; rewrite Hmem23'');
@@ -1419,7 +1426,7 @@ Section ThreewayMultisem1.
         end
       end
     end.
-        
+
   Theorem threeway_multisem_step_E0 s1 s2 s1'' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
@@ -1444,10 +1451,10 @@ Section ThreewayMultisem1.
          _ (gps1, mem1, regs1, pc1, addrs1) _ _ Hstep12 as [t_inform [Hstep12_inform Hrelt's]].
     simpl.
     (*[DynShare]
-      
+
       t_threeway_multisem_step_E0 uses CS.step_of_executing.
       Need to figure out how to use CS.step_of_executing_non_inform or similar.
-      
+
      *)
     assert (CS.step (prepare_global_env prog')
                     (
@@ -1956,7 +1963,7 @@ Section ThreewayMultisem3.
     - eapply threeway_multisem_mergeable; eassumption.
   Qed.
 
-  (* [DynShare] 
+  (* [DynShare]
      The following tactic applies program_store_from_partialized_memory
      and program_alloc_from_partialized_memory, which will both fail.
    *)
