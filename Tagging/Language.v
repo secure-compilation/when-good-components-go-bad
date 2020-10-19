@@ -196,6 +196,8 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
   else
       do C_code <- cde (Pointer.block pc);
       do (instr,tag) <- nth_error C_code (Z.to_nat (Pointer.offset pc));
+    (* HERE, are we ok enforcing this this way?*)
+    let comp := Pointer.block pc in
     match instr with
     | TrLabel _ =>
       ret (E0, (mem, regs, Pointer.inc pc, pct))
@@ -222,7 +224,7 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
       match (val tv, vtag tv) with
       | (Ptr ptr,Other) =>
           do (v,c) <- Memory.load mem ptr;
-        if Component.eqb c (Pointer.block pc) then
+        if Component.eqb c comp then
           match (vtag v) with
             | Other =>
               let regs' := Register.tset r2 v regs in
@@ -239,14 +241,15 @@ Definition eval_step (cde: code) (s: stackless) : option (trace * stackless) :=
     | TrStore r1 r2 => let tv := Register.get r1 regs in
       match (val tv,vtag tv) with
       | (Ptr ptr,Other) => 
-          if Component.eqb (Pointer.block ptr) (Pointer.block pc) then 
+          do (_,tag) <- Memory.load mem ptr;
+          if Component.eqb tag (Pointer.block pc) then 
             let tv2 := Register.get r2 regs in
             match (vtag tv2) with
             | Other =>
-              do mem' <- Memory.store mem ptr (Register.get r2 regs,Pointer.block pc);
+              do mem' <- Memory.store mem ptr (Register.get r2 regs,comp);
               ret (E0, (mem', regs, Pointer.inc pc, pct))
             | Ret n => 
-              do mem' <- Memory.store mem ptr (Register.get r2 regs,Pointer.block pc);
+              do mem' <- Memory.store mem ptr (Register.get r2 regs,comp);
               let regs' := Register.tset r2 tUndef regs in
               ret (E0, (mem', regs', Pointer.inc pc, pct))
             end
@@ -375,7 +378,12 @@ Record program : Type := mkProg {
 
 (* Compile buffers *)
 
-Definition tag_buffers (pb : NMap {fmap Block.id -> nat + seq value}) : NMap {fmap Block.id -> Component.id * (nat + seq value)}:=
+Definition old_val := Common.Values.value.
+
+Definition inter_bufs := NMap {fmap Block.id -> nat + seq old_val}.
+
+
+Definition tag_buffers (pb : NMap {fmap Block.id -> nat + seq old_val}) : NMap {fmap Block.id -> Component.id * (nat + seq old_val)}:=
  mapim (fun C f => mapim (fun b k => (C,k)) f) pb.
 
 Fixpoint clean_seq {T} (l : seq (option T)) : seq T := match l with
@@ -390,7 +398,7 @@ Definition fmap_rekeying {T : ordType} {T' : ordType} {S : Type} (f : {fmap T ->
  let fn := fun x => match ((invm r) x) with None => None | Some y => f y end in
 mkfmapfp fn dom.
 
-Definition re_block_id C (pb : NMap {fmap Block.id -> nat + seq value}) (block_renum : {fmap (Component.id * Block.id) -> Block.id})  : option {fmap Block.id -> nat + seq value}:= 
+Definition re_block_id C (pb : NMap {fmap Block.id -> Component.id * (nat + seq old_val)}) (block_renum : {fmap (Component.id * Block.id) -> Block.id})  : option {fmap Block.id -> Component.id * (nat + seq old_val)}:= 
 match pb C with
  | None => None
  | Some f => match ((currym block_renum) C) with None => None | Some g => Some (fmap_rekeying f g) end
@@ -402,7 +410,7 @@ match (f x) with None => (union_mem xs f)
  | Some y => unionm y (union_mem xs f) end
 end.
 
-Definition compile_buffs_renum (pb: NMap {fmap Block.id -> nat + seq value}) (block_renum : {fmap (Component.id * Block.id) -> Block.id}) :=
+Definition compile_buffs_renum (pb: NMap {fmap Block.id -> Component.id * (nat + seq old_val)}) (block_renum : {fmap (Component.id * Block.id) -> Block.id}) :=
 union_mem (extructures.fmap.domm pb) (fun C => re_block_id C pb block_renum).
 
 
@@ -410,24 +418,35 @@ Fixpoint add_key_aux {S} {T} (x : S) (l: seq T) : seq (S * T) := match l with []
 
 Definition domm_to_seq {S} {T : ordType} {T' : ordType} (f : {fmap T' -> {fmap T -> S}}) (x : T') : seq T := match (f x) with None => [] | Some g => extructures.fmap.domm g end.
 
-Definition make_block_renum_fmap (pb: NMap {fmap Block.id -> nat + seq value}) (block_renum : Component.id -> Block.id -> Block.id) :=
+Definition make_block_renum_fmap (pb: NMap {fmap Block.id -> nat + seq old_val}) (block_renum : Component.id -> Block.id -> Block.id) :=
 mkfmapf (fun x => match x with (C,b) => block_renum C b end) (foldr (fun C l => (add_key_aux C (domm_to_seq pb C)) ++ l) [] (extructures.fmap.domm pb)) .
 
 
-
-
-
-
-
-
-
-Definition max_block (m: NMap {fmap Block.id -> nat + seq value}) := let component_max_block map := foldl Nat.max 0 (extructures.fmap.domm map) in 
+Definition max_block (m: NMap {fmap Block.id -> nat + seq old_val}) := let component_max_block map := foldl Nat.max 0 (extructures.fmap.domm map) in 
  let max_block_ids := [seq component_max_block i | i <- codomm' m] in
 foldl Init.Nat.max 0 max_block_ids + 1.
 
-Definition fun_renum_block (m: NMap {fmap Block.id -> nat + seq value}) C b := C*(max_block m)+b.
 
-Definition compile_buffs (m: NMap {fmap Block.id -> nat + seq value}) := compile_buffs_renum m (make_block_renum_fmap m (fun_renum_block m)).
+
+Definition fun_renum_block (m: NMap {fmap Block.id -> nat + seq old_val}) C b := C*(max_block m)+b.
+
+
+
+
+Definition ptr_to_ptr (ptr : BigPointer) (block_renum : Component.id -> Block.id -> Block.id) : Pointer.t := let '(c,b,o) := ptr in (block_renum c b,o).
+
+Definition val_to_val m (v : Common.Values.value) : value := match v with
+  | Common.Values.Int z => Int z
+  | Common.Values.Ptr ptr => Ptr (ptr_to_ptr ptr ((fun_renum_block m)))
+  | Common.Values.Undef => Undef
+end.
+
+Definition compile_buffs_aux (m: NMap {fmap Block.id -> nat + seq old_val}) := compile_buffs_renum (tag_buffers m) (make_block_renum_fmap m (fun_renum_block m)).
+
+Definition compile_buffs (m: NMap {fmap Block.id -> nat + seq old_val}) := mapm (fun x => match x with
+ | (C,inl n) => (C,inl n)
+ | (C,inr l) => (C,inr (map (val_to_val m) l))
+  end) (compile_buffs_aux m).
 
 
 
@@ -438,6 +457,15 @@ Definition compile_buffs (m: NMap {fmap Block.id -> nat + seq value}) := compile
 
 Definition alloc_static_buffers p := prealloc (prog_buffers p).
 Definition prepare_initial_memory := alloc_static_buffers.
+
+Definition run_transitional fuel p :=
+    let mem := prepare_initial_memory p in
+    let regs := Register.init in
+    match (find_plabel_in_code (prog_code p) Component.main Procedure.main) with
+    | Some pc =>
+      execN fuel (prog_code p) (mem,regs, pc, Level 0)
+    | None => inr 5
+end.
 
 
 (* temporarily removed

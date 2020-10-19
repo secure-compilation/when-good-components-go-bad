@@ -1,6 +1,6 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
-Require Import Transitional.
+Require Import Tagging.Examples.Helper.
 Require Import Source.Examples.Empty.
 
 Definition fuel := 1000%nat.

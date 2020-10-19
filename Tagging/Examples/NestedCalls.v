@@ -1,7 +1,6 @@
 Require Import Common.Definitions.
 Require Import Common.Values.
-Require Import Transitional.
-Require Import I2MP.Examples.Helper.
+Require Import Tagging.Examples.Helper.
 Require Import Source.Examples.NestedCalls.
 
 Definition fuel := 1000%nat.

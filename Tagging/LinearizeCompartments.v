@@ -30,7 +30,7 @@ Record compiler_env :=
     block_renum : Component.id -> Block.id -> Block.id ;
   }.
 
-Definition ptr_to_ptr (ptr : BigPointer) (cenv : compiler_env) : Pointer.t := let '(c,b,o) := ptr in (block_renum cenv c b,o).
+
 
 Definition instr_to_transitional (cenv : compiler_env)
            (c : Component.id) (i : Machine.instr) : instr :=
@@ -44,7 +44,7 @@ Definition instr_to_transitional (cenv : compiler_env)
   | IConst v r =>  
     match v with 
       | IInt z => TrConst (Int z) r
-      | IPtr ptr => TrConst (Ptr (ptr_to_ptr ptr cenv)) r
+      | IPtr ptr => TrConst (Ptr (ptr_to_ptr ptr (block_renum cenv))) r
     end
   | IMov r r' => TrMov r r'
   | IBinOp op r r' r'' => TrBinOp op r r' r''
@@ -97,11 +97,23 @@ Definition pre_linearize_code (p : Intermediate.program) : code :=
   let pmax := max_proc_id p in
   let cmax := max_component p in
   let cenv := {| program := p ;
-                 make_label := (fun c p => lmax + c * pmax + p + pmax * cmax +1) |} in 
+                 make_label := (fun c p => lmax + c * pmax + p + pmax * cmax +1) ;
+                 block_renum := fun_renum_block (Intermediate.prog_buffers p) |} in 
  intermediate_to_transitional cenv.
 
-(*  *)
 
+Definition pre_linearize (p : Intermediate.program) : Language.program := 
+ {| prog_interface := Intermediate.prog_interface p;
+    prog_code := pre_linearize_code p;
+    prog_buffers := compile_buffs (Intermediate.prog_buffers p);
+    prog_main := Intermediate.prog_main p |}.
+
+Close Scope monad_scope.
+
+
+
+
+(*
 Print Intermediate.prepare_procedures_initial_memory_aux.
 
 Definition run_transitional cd fuel p :=
@@ -141,6 +153,6 @@ match Compiler.compile_program p with
     | inr n => print_error (nat2int n)
     end
 | None => print_error ocaml_int_0
-end.
+end. *)
 
 
