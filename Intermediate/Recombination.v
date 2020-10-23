@@ -3,6 +3,7 @@ Require Import Common.Util.
 Require Import Common.Memory.
 Require Import Common.Linking.
 Require Import Common.CompCertExtensions.
+Require Import Common.Renaming.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -2353,4 +2354,20 @@ Section Recombination.
         last now apply Hstar12'.
       assumption.
   Qed.
+
+  (* RB: NOTE: [DynShare] This definition may be used to expose a simpler
+     relation, which would still fit the theorem statement, though one of the
+     explicit connections would be lost. *)
+  (* Definition prefix_rel m m' := *)
+  (*   exists n n', behavior_rel_behavior_all_cids n n' m m'. *)
+
+  Theorem recombination_prefix_rel m m'' n n'' :
+    does_prefix sem   m ->
+    does_prefix sem'' m'' ->
+    behavior_rel_behavior_all_cids n  n'' m  m'' ->
+  exists m' n',
+    does_prefix sem'  m' /\
+    behavior_rel_behavior_all_cids n' n   m' m.
+  Admitted.
+
 End Recombination.

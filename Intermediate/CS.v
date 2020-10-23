@@ -1880,7 +1880,7 @@ Proof.
       exact Hstep_inform.
     }
     exact gl.
-  - simpl. 
+  - simpl.
     assert (step_non_inform G (pc' :: gps', mem, regs, pc, addrs)
                             (event_non_inform_of
                                [ERetInform (Pointer.component pc) ret_arg mem (Pointer.component pc')])
@@ -2153,7 +2153,7 @@ Proof.
   intros Hstep.
   inversion Hstep; subst; simpl;
     try now rewrite Pointer.inc_preserves_component.
-  - auto. 
+  - auto.
 (*  - erewrite find_label_in_component_1; try eassumption. reflexivity.
   - congruence.*)
   - erewrite find_label_in_procedure_1; try eassumption. reflexivity.
@@ -2187,7 +2187,6 @@ Proof.
                     rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
     end.
 Qed.
-                                               
 
 Lemma silent_step_preserves_program_component : forall s1 s2 G ctx,
   CS.is_program_component s1 ctx ->
@@ -2820,5 +2819,13 @@ Definition reachable_from_reg_file
            (mem_st: Memory.t)
            (regs: Register.t) :=
   ptr \in (\bigcup_(i <- regs_data_ptrs regs) fset (reachable_nodes_nat mem_st i))%fset.
+
+(* RB: TODO: [DynShare] This result may not be in standard form for this file,
+   adjust if needed ([does_prefix] not being used here, say). *)
+Theorem does_prefix_inform_non_inform :
+  forall p m,
+    does_prefix (sem_inform p) m ->
+    does_prefix (sem_non_inform p) (project_finpref_behavior m).
+Admitted.
 
 End CS.
