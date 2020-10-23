@@ -493,8 +493,8 @@ Local Axiom separate_compilation_weaker:
     compile_program p = Some p_comp ->
     compile_program c = Some c_comp ->
     compile_program (Source.program_link p c) = Some pc_comp ->
-    forall b, program_behaves (I.CS.sem pc_comp) b <->
-              program_behaves (I.CS.sem (Intermediate.program_link p_comp c_comp)) b.
+    forall b, program_behaves (I.CS.sem_non_inform pc_comp) b <->
+              program_behaves (I.CS.sem_non_inform (Intermediate.program_link p_comp c_comp)) b.
 (* Proof. *)
 (*   intros p c pc_comp p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c Hcomp_link b. *)
 (*   pose proof separate_compilation p c p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c as Hsc. *)
@@ -516,7 +516,7 @@ Local Axiom I_simulates_S:
     Source.well_formed_program p ->
   forall {tp},
     compile_program p = Some tp ->
-    forward_simulation (S.CS.sem p) (I.CS.sem tp).
+    forward_simulation (S.CS.sem p) (I.CS.sem_non_inform tp).
 
 (* BCC *)
 (* We derive BCC from FCC as in CompCert *)
@@ -526,13 +526,13 @@ Corollary S_simulates_I:
     Source.well_formed_program p ->
   forall {tp},
     compile_program p = Some tp ->
-    backward_simulation (S.CS.sem p) (I.CS.sem tp).
+    backward_simulation (S.CS.sem p) (I.CS.sem_non_inform tp).
 Proof.
   intros.
   apply forward_to_backward_simulation.
   - apply I_simulates_S; auto.
   - apply S.CS.receptiveness.
-  - apply I.CS.determinacy.
+  - apply I.CS.determinacy_non_inform.
 Qed.
 
 Theorem well_formed_compilable :
@@ -546,13 +546,13 @@ Lemma forward_simulation_same_safe_prefix:
   forall p p_compiled m,
     Source.closed_program p ->
     Source.well_formed_program p ->
-    does_prefix (Source.CS.CS.sem p) m ->
+    does_prefix (S.CS.sem p) m ->
     not_wrong_finpref m ->
     compile_program p = Some p_compiled ->
-    does_prefix (Intermediate.CS.CS.sem p_compiled) m.
+    does_prefix (I.CS.sem_non_inform p_compiled) m.
 Proof.
   intros p p_compiled m Hcp Hwfp [b [Hb Hmb]] Hsafem Hcmp.
-  assert(Hbs : forward_simulation (Source.CS.CS.sem p) (Intermediate.CS.CS.sem p_compiled)).
+  assert(Hbs : forward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
     apply I_simulates_S; assumption.
   apply (forward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
   destruct Hb as [b' [Hb' [Hbb' | [t [H1 H2]]]]]; unfold does_prefix.
@@ -567,13 +567,13 @@ Lemma backward_simulation_behavior_improves_prefix :
     Source.closed_program p ->
     Source.well_formed_program p ->
     compile_program p = Some p_compiled ->
-    does_prefix (Intermediate.CS.CS.sem p_compiled) m ->
+    does_prefix (I.CS.sem_non_inform p_compiled) m ->
   exists b,
-    program_behaves (Source.CS.CS.sem p) b /\
+    program_behaves (S.CS.sem p) b /\
     (prefix m b \/ behavior_improves_finpref b m).
 Proof.
   intros p p_compiled m Hcp Hwfp Hcmp [b [Hb Hmb]].
-  assert(Hbs : backward_simulation (Source.CS.CS.sem p) (Intermediate.CS.CS.sem p_compiled)).
+  assert(Hbs : backward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
     apply S_simulates_I; assumption.
   apply (backward_simulation_behavior_improves Hbs) in Hb. clear Hbs.
   destruct Hb as [b' [Hb' Hb'b]]. exists b'. split. assumption.
