@@ -166,7 +166,7 @@ Section Mergeable.
      two runs synchronized by their traces. It is a rather strong notion, easy
      to work with and well suited to the purposes of the proof. *)
   Inductive mergeable_states (s s'' : CS.state) : Prop :=
-    mergeable_states_intro : forall s0 s0'' t,
+    mergeable_states_intro : forall s0 s0'' t t'' n n'',
       (* Well-formedness conditions. *)
       well_formed_program p ->
       well_formed_program c ->
@@ -180,8 +180,9 @@ Section Mergeable.
       (* "Proper" definition. *)
       initial_state sem   s0   ->
       initial_state sem'' s0'' ->
-      Star sem   s0   t s   ->
-      Star sem'' s0'' t s'' ->
+      Star sem   s0   t   s   ->
+      Star sem'' s0'' t'' s'' ->
+      behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') ->
       mergeable_states s s''.
 
   (* RB: NOTE: This induction principle is currently used only in the proofs of
@@ -189,103 +190,105 @@ Section Mergeable.
      would be interesting to see if (other) proofs benefit from its use, or what
      a conventional star induction does to the lone proof.
      TODO: Remove automatic names, refactor symmetries. *)
-  Lemma mergeable_states_ind' : forall P : CS.state -> CS.state -> Prop,
-      (forall (s s'' : CS.state),
-          initial_state (CS.sem_non_inform (program_link p c)) s ->
-          initial_state (CS.sem_non_inform (program_link p' c')) s'' ->
-          P s s'') ->
-      (forall (s1 s2 s'' : CS.state),
-          mergeable_states s1 s'' ->
-          Step (CS.sem_non_inform (program_link p c)) s1 E0 s2 ->
-          P s1 s'' ->
-          P s2 s'') ->
-      (forall (s s1'' s2'' : CS.state),
-          mergeable_states s s1'' ->
-          Step (CS.sem_non_inform (program_link p' c')) s1'' E0 s2'' ->
-          P s s1'' ->
-          P s s2'') ->
-      (forall (s1 s2 s1'' s2'' : CS.state) (t : trace CompCert.Events.event),
-          t <> E0 ->
-          mergeable_states s1 s1'' ->
-          Step (CS.sem_non_inform (program_link p c)) s1 t s2 ->
-          Step (CS.sem_non_inform (program_link p' c')) s1'' t s2'' ->
-          P s1 s1'' ->
-          P s2 s2'') ->
-      forall (s s'' : CS.state), mergeable_states s s'' -> P s s''.
-  Proof.
-    intros P.
-    intros Hindini HindE0l HindE0r Hindstep.
-    intros s s'' Hmerg.
-    inversion Hmerg
-      as [s0 s0'' t ? ? ? ? ? ? ? ? ? Hini Hini'' Hstar Hstar''].
-    apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''.
-    generalize dependent s''.
-    induction Hstar
-      as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23 Ht12];
-      intros s'' Hmerg Hstar''.
-    - remember E0 as t.
-      induction Hstar''.
-      + now apply Hindini.
-      + subst.
-        assert (Ht1 : t1 = E0) by now destruct t1.
-        assert (Ht2 : t2 = E0) by now destruct t1.
-        subst.
-        specialize (IHHstar'' eq_refl HindE0l HindE0r Hindstep).
-        assert (Hmergss2 : mergeable_states s s2).
-        { apply star_iff_starR in Hstar''.
-          econstructor; try eassumption. now apply star_refl. }
-        specialize (IHHstar'' Hini'' Hmergss2). eapply HindE0r; eauto.
-    - pose proof (CS.singleton_traces_non_inform (program_link p c) _ _ _ Hstep23) as Hlen.
-      assert (t2 = E0 \/ exists ev, t2 = [ev]) as [Ht2E0 | [ev Ht2ev]].
-      { clear -Hlen.
-        inversion Hlen.
-        - right. destruct t2. simpl in *. congruence.
-          simpl in *. destruct t2; eauto. simpl in *. congruence.
-        - left. subst. destruct t2; simpl in *. reflexivity.
-          omega. }
-      + subst.
-        unfold Eapp in Hstar''; rewrite app_nil_r in Hstar''.
-        assert (Hmergs2s'' : mergeable_states s2 s'').
-        { econstructor; try eassumption.
-          apply star_iff_starR in Hstar12. apply Hstar12.
-          apply star_iff_starR in Hstar''. apply Hstar''. }
-        specialize (IHstar Hini s'' Hmergs2s'' Hstar'').
-        eapply HindE0l; eauto.
-      + subst.
-        remember (t1 ** [ev]) as t.
-        induction Hstar''; subst.
-        * assert (E0 <> t1 ** [ev]) by now induction t1. contradiction.
-        * subst.
-          specialize (IHHstar'' Hini'' IHstar).
-          pose proof (CS.singleton_traces_non_inform (program_link p' c') _ _ _ H8) as Hlen2.
-          assert (t2 = E0 \/ exists ev, t2 = [ev]) as [ht2E0 | [ev' Ht2ev']].
-          { clear -Hlen2.
-            inversion Hlen2.
-            - right. destruct t2. simpl in *; congruence.
-              simpl in *. destruct t2; eauto. simpl in *. congruence.
-            - left. inversion H0. destruct t2; simpl in *. reflexivity.
-              congruence. }
-          ** subst.
-             unfold Eapp in H9; rewrite app_nil_r in H9; subst.
-             assert (Hmergs3s4 : mergeable_states s3 s4).
-             { econstructor; eauto.
-               apply star_iff_starR.
-               eapply starR_step.
-               apply Hstar12.
-               eauto. reflexivity.
-               apply star_iff_starR in Hstar''; apply Hstar''. }
-             specialize (IHHstar'' Hmergs3s4 eq_refl).
-             eapply HindE0r; eauto.
-          ** subst.
-             assert (t1 = t0 /\ ev = ev') as [Ht1t0 Hevev'] by now apply app_inj_tail.
-             subst. clear IHHstar''.
-             specialize (IHstar Hini s4).
-             assert (Hmerge : mergeable_states s2 s4).
-             { econstructor; try eassumption. apply star_iff_starR in Hstar12; apply Hstar12.
-               apply star_iff_starR in Hstar''; apply Hstar''. }
-             specialize (IHstar Hmerge Hstar'').
-             eapply Hindstep with (t := [ev']); eauto. unfold E0. congruence.
-  Qed.
+  (* Lemma mergeable_states_ind' : forall P : CS.state -> CS.state -> Prop, *)
+  (*     (forall (s s'' : CS.state), *)
+  (*         initial_state (CS.sem_non_inform (program_link p c)) s -> *)
+  (*         initial_state (CS.sem_non_inform (program_link p' c')) s'' -> *)
+  (*         P s s'') -> *)
+  (*     (forall (s1 s2 s'' : CS.state), *)
+  (*         mergeable_states s1 s'' -> *)
+  (*         Step (CS.sem_non_inform (program_link p c)) s1 E0 s2 -> *)
+  (*         P s1 s'' -> *)
+  (*         P s2 s'') -> *)
+  (*     (forall (s s1'' s2'' : CS.state), *)
+  (*         mergeable_states s s1'' -> *)
+  (*         Step (CS.sem_non_inform (program_link p' c')) s1'' E0 s2'' -> *)
+  (*         P s s1'' -> *)
+  (*         P s s2'') -> *)
+  (*     (forall (s1 s2 s1'' s2'' : CS.state) (t : trace CompCert.Events.event), *)
+  (*         t <> E0 -> *)
+  (*         mergeable_states s1 s1'' -> *)
+  (*         Step (CS.sem_non_inform (program_link p c)) s1 t s2 -> *)
+  (*         Step (CS.sem_non_inform (program_link p' c')) s1'' t s2'' -> *)
+  (*         P s1 s1'' -> *)
+  (*         P s2 s2'') -> *)
+  (*     forall (s s'' : CS.state), mergeable_states s s'' -> P s simpl''. *)
+  (* Proof. *)
+  (*   intros P. *)
+  (*   intros Hindini HindE0l HindE0r Hindstep. *)
+  (*   intros s s'' Hmerg. *)
+  (*   inversion Hmerg *)
+  (*     as [s0 s0'' t t'' ? ? ? ? ? ? ? ? ? ? ? Hini Hini'' Hstar Hstar'']. *)
+  (*   apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''. *)
+  (*   generalize dependent s''. *)
+  (*   induction Hstar *)
+  (*     as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23 Ht12]; *)
+  (*     intros s'' Hmerg Hstar''. *)
+  (*   - remember E0 as t. *)
+  (*     induction Hstar''. *)
+  (*     + now apply Hindini. *)
+  (*     + subst. *)
+  (*       (* assert (Ht1 : t1 = E0) by now destruct t1. *) *)
+  (*       (* assert (Ht2 : t2 = E0) by now destruct t1. *) *)
+  (*       assert (Ht1 : t1 = E0) by admit. *)
+  (*       assert (Ht2 : t2 = E0) by admit. *)
+  (*       subst. *)
+  (*       specialize (IHHstar'' eq_refl HindE0l HindE0r Hindstep). *)
+  (*       assert (Hmergss2 : mergeable_states s s2). *)
+  (*       { apply star_iff_starR in Hstar''. *)
+  (*         econstructor; try eassumption. now apply star_refl. } *)
+  (*       specialize (IHHstar'' Hini'' Hmergss2). eapply HindE0r; eauto. *)
+  (*   - pose proof (CS.singleton_traces_non_inform (program_link p c) _ _ _ Hstep23) as Hlen. *)
+  (*     assert (t2 = E0 \/ exists ev, t2 = [ev]) as [Ht2E0 | [ev Ht2ev]]. *)
+  (*     { clear -Hlen. *)
+  (*       inversion Hlen. *)
+  (*       - right. destruct t2. simpl in *. congruence. *)
+  (*         simpl in *. destruct t2; eauto. simpl in *. congruence. *)
+  (*       - left. subst. destruct t2; simpl in *. reflexivity. *)
+  (*         omega. } *)
+  (*     + subst. *)
+  (*       unfold Eapp in Hstar''; rewrite app_nil_r in Hstar''. *)
+  (*       assert (Hmergs2s'' : mergeable_states s2 s''). *)
+  (*       { econstructor; try eassumption. *)
+  (*         apply star_iff_starR in Hstar12. apply Hstar12. *)
+  (*         apply star_iff_starR in Hstar''. apply Hstar''. } *)
+  (*       specialize (IHstar Hini s'' Hmergs2s'' Hstar''). *)
+  (*       eapply HindE0l; eauto. *)
+  (*     + subst. *)
+  (*       remember (t1 ** [ev]) as t. *)
+  (*       induction Hstar''; subst. *)
+  (*       * assert (E0 <> t1 ** [ev]) by now induction t1. contradiction. *)
+  (*       * subst. *)
+  (*         specialize (IHHstar'' Hini'' IHstar). *)
+  (*         pose proof (CS.singleton_traces_non_inform (program_link p' c') _ _ _ H8) as Hlen2. *)
+  (*         assert (t2 = E0 \/ exists ev, t2 = [ev]) as [ht2E0 | [ev' Ht2ev']]. *)
+  (*         { clear -Hlen2. *)
+  (*           inversion Hlen2. *)
+  (*           - right. destruct t2. simpl in *; congruence. *)
+  (*             simpl in *. destruct t2; eauto. simpl in *. congruence. *)
+  (*           - left. inversion H0. destruct t2; simpl in *. reflexivity. *)
+  (*             congruence. } *)
+  (*         ** subst. *)
+  (*            unfold Eapp in H9; rewrite app_nil_r in H9; subst. *)
+  (*            assert (Hmergs3s4 : mergeable_states s3 s4). *)
+  (*            { econstructor; eauto. *)
+  (*              apply star_iff_starR. *)
+  (*              eapply starR_step. *)
+  (*              apply Hstar12. *)
+  (*              eauto. reflexivity. *)
+  (*              apply star_iff_starR in Hstar''; apply Hstar''. } *)
+  (*            specialize (IHHstar'' Hmergs3s4 eq_refl). *)
+  (*            eapply HindE0r; eauto. *)
+  (*         ** subst. *)
+  (*            assert (t1 = t0 /\ ev = ev') as [Ht1t0 Hevev'] by now apply app_inj_tail. *)
+  (*            subst. clear IHHstar''. *)
+  (*            specialize (IHstar Hini s4). *)
+  (*            assert (Hmerge : mergeable_states s2 s4). *)
+  (*            { econstructor; try eassumption. apply star_iff_starR in Hstar12; apply Hstar12. *)
+  (*              apply star_iff_starR in Hstar''; apply Hstar''. } *)
+  (*            specialize (IHstar Hmerge Hstar''). *)
+  (*            eapply Hindstep with (t := [ev']); eauto. unfold E0. congruence. *)
+  (* Qed. *)
 
   (* The following lemmas establish the connection between the mergeability
      relation and the application of the state merging functions. *)
@@ -297,11 +300,10 @@ Section Mergeable.
     intros Hcomp Hmerg.
     destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
     unfold merge_states_regs. simpl.
-    unfold merge_registers.
     CS.simplify_turn.
-    inversion Hmerg as [s0 s0'' t
+    inversion Hmerg as [s0 s0'' t t'' _ _
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini Hini'' Hstar Hstar''].
+                        Hini Hini'' Hstar Hstar'' _].
     destruct (CS.star_pc_domm_non_inform
                 _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [H | H].
     - now rewrite H.
@@ -318,7 +320,7 @@ Section Mergeable.
     unfold merge_states_regs. simpl.
     unfold merge_registers.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
-    inversion Hmerg as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
+    inversion Hmerg as [_ _ _ _ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _ _].
     inversion Hmergeable_ifaces as [Hlinkable _].
     destruct Hlinkable as [_ Hdisj].
     move: Hdisj.
@@ -338,9 +340,9 @@ Section Mergeable.
     unfold merge_states_pc. simpl.
     unfold merge_pcs.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
-    inversion Hmerg as [s0 s0'' t
+    inversion Hmerg as [s0 s0'' t t'' _ _
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini Hini'' Hstar Hstar''].
+                        Hini Hini'' Hstar Hstar'' _].
     destruct (CS.star_pc_domm_non_inform
                 _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [H | H].
     - now rewrite H.
@@ -356,7 +358,7 @@ Section Mergeable.
     destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
     unfold merge_states_pc. simpl.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
-    inversion Hmerg as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
+    inversion Hmerg as [_ _ _ _ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _ _].
     inversion Hmergeable_ifaces as [Hlinkable _].
     destruct Hlinkable as [_ Hdisj].
     move: Hdisj.
@@ -396,56 +398,57 @@ Section Mergeable.
   Lemma mergeable_states_pc_same_component s s'' :
     mergeable_states s s'' ->
     Pointer.component (CS.state_pc s) = Pointer.component (CS.state_pc s'').
-  Proof.
-    intros Hmerg.
-    induction Hmerg
-      as [ s s'' Hini Hini''
-         | s1 s2 s'' Hmerg Hstep IH
-         | s s1'' s2'' Hmerg Hstep IH
-         | s1 s2 s1'' s2'' t Hdiff Hmerg Hstep Hstep'' IH]
-      using mergeable_states_ind'.
-    - (* Initial state *)
-      inversion Hini; inversion Hini''; subst.
-      unfold CS.state_pc. unfold CS.initial_machine_state.
-      destruct (prog_main (program_link p c)); destruct (prog_main (program_link p' c')); eauto.
-    - (* Silent step on the left *)
-      now rewrite <- IH, (CS.silent_step_non_inform_preserves_component _ _ _ Hstep).
-    - (* Silent step on the right *)
-      now rewrite -> IH, (CS.silent_step_non_inform_preserves_component _ _ _ Hstep).
-    - (* Non-silent step *)
-      inversion Hstep; subst; try contradiction;
-        inversion Hstep''; subst; try contradiction;
-        try match goal with
-          HE0: E0 = ?x, Hx: ?x <> E0 |- _ =>
-          rewrite <- HE0 in Hx; contradiction
-        end;
-        match goal with
-          Hstp : CS.step _ _ ?e _,
-          Hstp' : CS.step _ _ ?e0 _ |- _ =>
-          inversion Hstp;
-          match goal with
-            Hexec: executing ?G ?pc ?i,
-            Hexec': executing ?G ?pc ?i' |- _ =>
-            pose proof
-                 executing_deterministic
-                 G pc i i' Hexec Hexec' as cntr;
-            try discriminate
-          end;
-          inversion Hstp';
-          match goal with
-            Hexec: executing ?G ?pc ?i,
-            Hexec': executing ?G ?pc ?i' |- _ =>
-            pose proof
-                 executing_deterministic
-                 G pc i i' Hexec Hexec' as cntra;
-            try discriminate
-          end
-        end;
-        inversion cntra; inversion cntr; subst; simpl in *;
-        match goal with
-          Heveq: [_] = [_] |- _ => inversion Heveq; subst; reflexivity
-        end.
-  Qed.
+  (* Proof. *)
+  (*   intros Hmerg. *)
+  (*   induction Hmerg *)
+  (*     as [ s s'' Hini Hini'' *)
+  (*        | s1 s2 s'' Hmerg Hstep IH *)
+  (*        | s s1'' s2'' Hmerg Hstep IH *)
+  (*        | s1 s2 s1'' s2'' t Hdiff Hmerg Hstep Hstep'' IH] *)
+  (*     using mergeable_states_ind'. *)
+  (*   - (* Initial state *) *)
+  (*     inversion Hini; inversion Hini''; subst. *)
+  (*     unfold CS.state_pc. unfold CS.initial_machine_state. *)
+  (*     destruct (prog_main (program_link p c)); destruct (prog_main (program_link p' c')); eauto. *)
+  (*   - (* Silent step on the left *) *)
+  (*     now rewrite <- IH, (CS.silent_step_non_inform_preserves_component _ _ _ Hstep). *)
+  (*   - (* Silent step on the right *) *)
+  (*     now rewrite -> IH, (CS.silent_step_non_inform_preserves_component _ _ _ Hstep). *)
+  (*   - (* Non-silent step *) *)
+  (*     inversion Hstep; subst; try contradiction; *)
+  (*       inversion Hstep''; subst; try contradiction; *)
+  (*       try match goal with *)
+  (*         HE0: E0 = ?x, Hx: ?x <> E0 |- _ => *)
+  (*         rewrite <- HE0 in Hx; contradiction *)
+  (*       end; *)
+  (*       match goal with *)
+  (*         Hstp : CS.step _ _ ?e _, *)
+  (*         Hstp' : CS.step _ _ ?e0 _ |- _ => *)
+  (*         inversion Hstp; *)
+  (*         match goal with *)
+  (*           Hexec: executing ?G ?pc ?i, *)
+  (*           Hexec': executing ?G ?pc ?i' |- _ => *)
+  (*           pose proof *)
+  (*                executing_deterministic *)
+  (*                G pc i i' Hexec Hexec' as cntr; *)
+  (*           try discriminate *)
+  (*         end; *)
+  (*         inversion Hstp'; *)
+  (*         match goal with *)
+  (*           Hexec: executing ?G ?pc ?i, *)
+  (*           Hexec': executing ?G ?pc ?i' |- _ => *)
+  (*           pose proof *)
+  (*                executing_deterministic *)
+  (*                G pc i i' Hexec Hexec' as cntra; *)
+  (*           try discriminate *)
+  (*         end *)
+  (*       end; *)
+  (*       inversion cntra; inversion cntr; subst; simpl in *; *)
+  (*       match goal with *)
+  (*         Heveq: [_] = [_] |- _ => inversion Heveq; subst; reflexivity *)
+  (*       end. *)
+  (* Qed. *)
+  Admitted.
 
   Lemma mergeable_states_program_to_program s s'' :
     mergeable_states s s'' ->
@@ -470,7 +473,7 @@ Section Mergeable.
     destruct s1 as [[[[stack1 mem1] reg1] pc1] addrs1]; destruct s2 as [[[[stack2 mem2] reg2] pc2] addrs2].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc; clear Hpc.
-    inversion Hmerg as [? ? ? _ _ _ _ [[_ Hdisj] _] _ _ _ _ Hini Hini'' Hstar Hstar''].
+    inversion Hmerg as [? ? ? ? _ _ _ _ _ _ [[_ Hdisj] _] _ _ _ _ Hini Hini'' Hstar Hstar'' _].
     move: Hdisj.
     rewrite fdisjointC => /fdisjointP Hdisj.
     now auto.
@@ -486,9 +489,9 @@ Section Mergeable.
     destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc.
-    inversion Hmerg as [s0 _ t
+    inversion Hmerg as [s0 _ t _ _ _
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini _ Hstar _].
+                        Hini _ Hstar _ _].
     pose proof (CS.star_pc_domm_non_inform
                   _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar).
     intros Hn; destruct H.
@@ -504,9 +507,9 @@ Section Mergeable.
     Pointer.component (CS.state_pc s) \in domm ic.
   Proof.
     intros Hmerg Hpc_notin.
-    inversion Hmerg as [[[[? ?] ?] pc] ? ?
+    inversion Hmerg as [[[[? ?] ?] pc] ? ? ? _ _
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini _ Hstar _].
+                        Hini _ Hstar _ _].
     CS.unfold_states.
     pose proof (CS.star_pc_domm_non_inform
                   _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as Hpc.
@@ -558,162 +561,162 @@ Section Mergeable.
     mergeable_states (gps1  , mem1  , regs1  , pc1  , addrs1  )
                      (gps1'', mem1'', regs1'', pc1'', addrs1'') ->
     mergeable_stack gps1 gps1''.
-  Proof.
-    intros Hmerg.
-    inversion Hmerg
-      as [s_init s_init' t_init Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces
-          Hifacep Hifacec Hprog_is_closed Hprog_is_closed' Hinit Hinit' Hstar Hstar'].
-    remember (gps1, mem1, regs1, pc1, addrs1) as s1.
-    remember (gps1'', mem1'', regs1'', pc1'', addrs1'') as s1''.
-    revert gps1 mem1 regs1 pc1 addrs1 gps1'' mem1'' regs1'' pc1'' addrs1'' Heqs1 Heqs1''.
-    induction Hmerg as [ s1 s1'' Hini Hini''
-                       | s1 s2 s1'' Hmerg Hstep IH
-                       | s1 s1'' s2'' Hmerg Hstep'' IH
-                       | s1 s2 s1'' s2'' t Ht Hmerg Hstep Hstep'' IH]
-      using mergeable_states_ind'.
-    - (* Initial state *)
-      intros.
-      subst. inversion Hini as [Hini1]; inversion Hini'' as [Hini1''].
-      destruct Hmergeable_ifaces.
-      rewrite CS.initial_machine_state_after_linking in Hini1; try assumption.
-      rewrite CS.initial_machine_state_after_linking in Hini1''; try assumption.
-      inversion Hini1; inversion Hini1''. now constructor.
-      now rewrite -Hifacec -Hifacep.
-    - intros; inversion Hstep; subst; eapply IH; eauto;
-        try (
-            match goal with H: (?gps, _, _, _, _) = (?gps1, _, _, _, _) |-
-                            (?gps, _, _, _, _) = (?gps1, _, _, _, _) =>
-                            inversion H; reflexivity
-            end
-          ).
-      + (* Is this even provable? *)
-        inversion Hmerg.
-        match goal with Hinit: initial_state sem s_init, Hs0 : initial_state sem ?s0 |- _
-                        => pose proof sd_initial_determ
-                                (CS.determinacy_non_inform prog) s_init s0 Hinit Hs0 as
-                            Hsinit_s0
-        end.
-        subst.
-        admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-      + (* Derive a contradiction from the assumption:
-           CS.event_non_inform_of e = E0
-         *)
-        admit.
-      + (* Derive a contradiction from the assumption:
-           CS.event_non_inform_of e = E0
-         *)
-        admit.
-      + (* Derive a contradiction from the assumption:
-           CS.event_non_inform_of e = E0
-         *)
-        admit.
-    - admit.
-      (*
-      intros; inversion Hstep''; subst;
-        try match goal with
-        | Heq: _ = (_, _, _, _) |- _ => inversion Heq; subst; now eapply IH
-            end.
-      + (* Derive a contradiction from the assumption:
-           CS.event_non_inform_of e = E0
-         *)
-        admit.
-      + (* Derive a contradiction from the assumption:
-           CS.event_non_inform_of e = E0
-         *)
-        admit.
+  (* Proof. *)
+  (*   intros Hmerg. *)
+  (*   inversion Hmerg *)
+  (*     as [s_init s_init' t_init Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces *)
+  (*         Hifacep Hifacec Hprog_is_closed Hprog_is_closed' Hinit Hinit' Hstar Hstar']. *)
+  (*   remember (gps1, mem1, regs1, pc1, addrs1) as s1. *)
+  (*   remember (gps1'', mem1'', regs1'', pc1'', addrs1'') as s1''. *)
+  (*   revert gps1 mem1 regs1 pc1 addrs1 gps1'' mem1'' regs1'' pc1'' addrs1'' Heqs1 Heqs1''. *)
+  (*   induction Hmerg as [ s1 s1'' Hini Hini'' *)
+  (*                      | s1 s2 s1'' Hmerg Hstep IH *)
+  (*                      | s1 s1'' s2'' Hmerg Hstep'' IH *)
+  (*                      | s1 s2 s1'' s2'' t Ht Hmerg Hstep Hstep'' IH] *)
+  (*     using mergeable_states_ind'. *)
+  (*   - (* Initial state *) *)
+  (*     intros. *)
+  (*     subst. inversion Hini as [Hini1]; inversion Hini'' as [Hini1'']. *)
+  (*     destruct Hmergeable_ifaces. *)
+  (*     rewrite CS.initial_machine_state_after_linking in Hini1; try assumption. *)
+  (*     rewrite CS.initial_machine_state_after_linking in Hini1''; try assumption. *)
+  (*     inversion Hini1; inversion Hini1''. now constructor. *)
+  (*     now rewrite -Hifacec -Hifacep. *)
+  (*   - intros; inversion Hstep; subst; eapply IH; eauto; *)
+  (*       try ( *)
+  (*           match goal with H: (?gps, _, _, _, _) = (?gps1, _, _, _, _) |- *)
+  (*                           (?gps, _, _, _, _) = (?gps1, _, _, _, _) => *)
+  (*                           inversion H; reflexivity *)
+  (*           end *)
+  (*         ). *)
+  (*     + (* Is this even provable? *) *)
+  (*       inversion Hmerg. *)
+  (*       match goal with Hinit: initial_state sem s_init, Hs0 : initial_state sem ?s0 |- _ *)
+  (*                       => pose proof sd_initial_determ *)
+  (*                               (CS.determinacy_non_inform prog) s_init s0 Hinit Hs0 as *)
+  (*                           Hsinit_s0 *)
+  (*       end. *)
+  (*       subst. *)
+  (*       admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + (* Derive a contradiction from the assumption: *)
+  (*          CS.event_non_inform_of e = E0 *)
+  (*        *) *)
+  (*       admit. *)
+  (*     + (* Derive a contradiction from the assumption: *)
+  (*          CS.event_non_inform_of e = E0 *)
+  (*        *) *)
+  (*       admit. *)
+  (*     + (* Derive a contradiction from the assumption: *)
+  (*          CS.event_non_inform_of e = E0 *)
+  (*        *) *)
+  (*       admit. *)
+  (*   - admit. *)
+  (*     (* *)
+  (*     intros; inversion Hstep''; subst; *)
+  (*       try match goal with *)
+  (*       | Heq: _ = (_, _, _, _) |- _ => inversion Heq; subst; now eapply IH *)
+  (*           end. *)
+  (*     + (* Derive a contradiction from the assumption: *)
+  (*          CS.event_non_inform_of e = E0 *)
+  (*        *) *)
+  (*       admit. *)
+  (*     + (* Derive a contradiction from the assumption: *)
+  (*          CS.event_non_inform_of e = E0 *)
+  (*        *) *)
+  (*       admit. *)
 
-       *)
-    - intros gps2 mem2 regs2 pc2 addrs2 gps2'' mem2'' regs2'' pc2'' addrs2'' Heqs2 Heqs2''; subst.
-      (* Note: do not try to do:
-         inversion Hstep; inversion Hstep''; try congruence.
-         as it generates 13*13 = subgoals before discarding the
-         absurd ones. *)
-      inversion Hstep; subst; try contradiction;
-        inversion Hstep''; subst; try contradiction;
-          try match goal with HE0: E0 = ?x, Hx: ?x <> E0 |- _ =>
-                              rewrite <- HE0 in Hx; contradiction
-              end;
-          match goal with Hstp : CS.step _ _ ?e _,
-                                 Hstp' : CS.step _ _ ?e0 _ |- _ =>
-                          inversion Hstp;
-                            match goal with Hexec: executing ?G ?pc ?i,
-                                                   Hexec': executing ?G ?pc ?i' |- _ =>
-                                            pose proof
-                                                 executing_deterministic
-                                                 G pc i i' Hexec Hexec' as cntr;
-                                              try discriminate
-                            end;
-                            inversion Hstp';
-                            match goal with Hexec: executing ?G ?pc ?i,
-                                                   Hexec': executing ?G ?pc ?i' |- _ =>
-                                            pose proof
-                                                 executing_deterministic
-                                                 G pc i i' Hexec Hexec' as cntra;
-                                              try discriminate
-                            end
-          end.
-      + subst. inversion cntr. subst. inversion cntra. subst.
-        eapply mergeable_stack_cons; eauto.
-        * inversion cntra. subst. simpl in *. 
-          match goal with
-            H: [ECall (Pointer.component pc0) _ _ _ _] = [ECall (Pointer.component pc) _ _ _ _]
-            |- _ =>
-            inversion H
-          end.
-          now do 2 rewrite Pointer.inc_preserves_component.
-        * (* Shouldn't this somehow follow from 
-             "Hprog_is_closed" together
-             with  executing (globalenv (CS.sem_non_inform (program_link p c))) pc (ICall C P)?
-           *)
-          assert (Pointer.component pc \in domm ip \/
-                  Pointer.component pc \in domm ic) as gl.
-          {
-            eapply CS.star_pc_domm; eauto.
-            - pose proof program_behaves_exists sem as [beh Hbeh].
-              pose proof CS.program_behaves_inv_non_inform prog beh Hbeh as [ee [Hee1 Hee2]].
-              eexists.
-            - inversion Hmerg; eauto.
-              match goal with
-                Hstar_s0: Star sem ?s0 ?t ?s',
-                Hinit_s0: initial_state sem ?s0
-                |- _ =>
-                pose proof CS.star_sem_non_inform_star_sem_inform
-                     prog s0 t s' Hstar_s0
-                  as [t_inform [gl _gl]];
-                pose proof sd_initial_determ
-                     (CS.determinacy_non_inform prog) s0
-                     (CS.initial_machine_state (program_link p c))
-                     Hinit_s0 as Hinit_eq
-              end.
-              simpl in *. unfold CS.initial_state in *.
-              unfold prog in *.
-              match goal with
-                Hs0: ?s0 = CS.initial_machine_state (program_link p c)
-                |- _ =>
-                rewrite Hs0 in gl
-              end.
-              (* exact gl. *)
-              admit.
-          }
-          destruct gl as [l | r].
-          -- right. rewrite Pointer.inc_preserves_component. assumption.
-          -- left. rewrite Pointer.inc_preserves_component. assumption.
-        * admit.
-      + admit.
-      + admit.
-      + admit.
-  Admitted.
+  (*      *) *)
+  (*   - intros gps2 mem2 regs2 pc2 addrs2 gps2'' mem2'' regs2'' pc2'' addrs2'' Heqs2 Heqs2''; subst. *)
+  (*     (* Note: do not try to do: *)
+  (*        inversion Hstep; inversion Hstep''; try congruence. *)
+  (*        as it generates 13*13 = subgoals before discarding the *)
+  (*        absurd ones. *) *)
+  (*     inversion Hstep; subst; try contradiction; *)
+  (*       inversion Hstep''; subst; try contradiction; *)
+  (*         try match goal with HE0: E0 = ?x, Hx: ?x <> E0 |- _ => *)
+  (*                             rewrite <- HE0 in Hx; contradiction *)
+  (*             end; *)
+  (*         match goal with Hstp : CS.step _ _ ?e _, *)
+  (*                                Hstp' : CS.step _ _ ?e0 _ |- _ => *)
+  (*                         inversion Hstp; *)
+  (*                           match goal with Hexec: executing ?G ?pc ?i, *)
+  (*                                                  Hexec': executing ?G ?pc ?i' |- _ => *)
+  (*                                           pose proof *)
+  (*                                                executing_deterministic *)
+  (*                                                G pc i i' Hexec Hexec' as cntr; *)
+  (*                                             try discriminate *)
+  (*                           end; *)
+  (*                           inversion Hstp'; *)
+  (*                           match goal with Hexec: executing ?G ?pc ?i, *)
+  (*                                                  Hexec': executing ?G ?pc ?i' |- _ => *)
+  (*                                           pose proof *)
+  (*                                                executing_deterministic *)
+  (*                                                G pc i i' Hexec Hexec' as cntra; *)
+  (*                                             try discriminate *)
+  (*                           end *)
+  (*         end. *)
+  (*     + subst. inversion cntr. subst. inversion cntra. subst. *)
+  (*       eapply mergeable_stack_cons; eauto. *)
+  (*       * inversion cntra. subst. simpl in *.  *)
+  (*         match goal with *)
+  (*           H: [ECall (Pointer.component pc0) _ _ _ _] = [ECall (Pointer.component pc) _ _ _ _] *)
+  (*           |- _ => *)
+  (*           inversion H *)
+  (*         end. *)
+  (*         now do 2 rewrite Pointer.inc_preserves_component. *)
+  (*       * (* Shouldn't this somehow follow from  *)
+  (*            "Hprog_is_closed" together *)
+  (*            with  executing (globalenv (CS.sem_non_inform (program_link p c))) pc (ICall C P)? *)
+  (*          *) *)
+  (*         assert (Pointer.component pc \in domm ip \/ *)
+  (*                 Pointer.component pc \in domm ic) as gl. *)
+  (*         { *)
+  (*           eapply CS.star_pc_domm; eauto. *)
+  (*           - pose proof program_behaves_exists sem as [beh Hbeh]. *)
+  (*             pose proof CS.program_behaves_inv_non_inform prog beh Hbeh as [ee [Hee1 Hee2]]. *)
+  (*             eexists. *)
+  (*           - inversion Hmerg; eauto. *)
+  (*             match goal with *)
+  (*               Hstar_s0: Star sem ?s0 ?t ?s', *)
+  (*               Hinit_s0: initial_state sem ?s0 *)
+  (*               |- _ => *)
+  (*               pose proof CS.star_sem_non_inform_star_sem_inform *)
+  (*                    prog s0 t s' Hstar_s0 *)
+  (*                 as [t_inform [gl _gl]]; *)
+  (*               pose proof sd_initial_determ *)
+  (*                    (CS.determinacy_non_inform prog) s0 *)
+  (*                    (CS.initial_machine_state (program_link p c)) *)
+  (*                    Hinit_s0 as Hinit_eq *)
+  (*             end. *)
+  (*             simpl in *. unfold CS.initial_state in *. *)
+  (*             unfold prog in *. *)
+  (*             match goal with *)
+  (*               Hs0: ?s0 = CS.initial_machine_state (program_link p c) *)
+  (*               |- _ => *)
+  (*               rewrite Hs0 in gl *)
+  (*             end. *)
+  (*             (* exact gl. *) *)
+  (*             admit. *)
+  (*         } *)
+  (*         destruct gl as [l | r]. *)
+  (*         -- right. rewrite Pointer.inc_preserves_component. assumption. *)
+  (*         -- left. rewrite Pointer.inc_preserves_component. assumption. *)
+  (*       * admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  (*     + admit. *)
+  Admitted. (* RB: TODO: Check, repair induction principle.  *)
 
   Lemma mergeable_states_cons_domm
         frame1   gps1   mem1   regs1   pc1   addrs1
@@ -795,8 +798,8 @@ Section Mergeable.
   Proof.
     intros Hmerg.
     inversion Hmerg
-      as [s0 s0'' t Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-          Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar''].
+      as [s0 s0'' t t'' n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
+          Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar'' Hrel].
     apply /eq_fmap => Cid.
     pose proof mergeable_interfaces_sym _ _ Hmergeable_ifaces
       as Hmergeable_ifaces_sym.
@@ -816,7 +819,7 @@ Section Mergeable.
       unfold ip, ic in Hmergeable_ifaces_sym. rewrite Hifacec Hifacep in Hmergeable_ifaces_sym.
       pose proof linking_well_formedness Hwfp' Hwfc' (linkable_sym (proj1 Hmergeable_ifaces_sym)) as Hwf.
       apply mergeable_interfaces_sym in Hmergeable_ifaces_sym.
-      pose proof CS.star_sem_non_inform_star_sem_inform prog'' s0'' t _ Hstar'' as
+      pose proof CS.star_sem_non_inform_star_sem_inform prog'' s0'' t'' _ Hstar'' as
           [t_inform'' [Hstar_inform'' _]].
       exists prog'', s0'', t_inform''.
       repeat (split; eauto). unfold ip, ic; now rewrite Hifacec Hifacep.
@@ -897,7 +900,7 @@ Section Mergeable.
     destruct s as [[[[gps mem] regs] pc] addrs]; destruct ptr as [[[P C] b] o];
       unfold Memory.load, merge_memories in *; simpl in *; subst.
     eapply is_program_component_pc_in_domm in Hpc; last eassumption; try assumption.
-    inversion Hmerge as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
+    inversion Hmerge as [_ _ _ _ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _ _].
     erewrite unionmE, to_partial_memory_in, to_partial_memory_notin;
       try eassumption;
       [| apply mergeable_interfaces_sym; eassumption].
@@ -961,7 +964,7 @@ Section Mergeable.
   Proof.
     destruct s as [[[? ?] ?] pc_]. simpl.
     intros Hpc Hmerge Hlabel.
-    inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
+    inversion Hmerge as [_ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hpc_.
@@ -984,7 +987,7 @@ Section Mergeable.
   Proof.
     destruct s as [[[[? ?] ?] pc_] ?]. simpl.
     intros Hpc Hmerge Hlabel.
-    inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
+    inversion Hmerge as [_ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hpc_.
@@ -1010,7 +1013,7 @@ Section Mergeable.
     intros Hcomp Hmerge.
     unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp.
     destruct s as [[[[gps1 mem1] regs1] pc1] addrs1].
-    inversion Hmerge as [s0 _ t Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ Hstar _].
+    inversion Hmerge as [s0 _ t _ _ _ Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ Hstar _ _].
     destruct (CS.star_pc_domm_non_inform _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [Hip | Hic].
     - assumption.
     - now rewrite Hic in Hcomp.
@@ -1127,8 +1130,8 @@ Section MergeSym.
   Proof.
     intros Hmerg.
     inversion Hmerg
-      as [s0 s0'' t Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-          Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar''].
+      as [s0 s0'' t t'' n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
+          Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar'' Hrel].
     (* RB: NOTE: As elsewhere, clean CS.comes_from_initial state. This is done up
        front for syntactic economy. Simplify if possible. *)
     assert (Hmem : domm (CS.state_mem s) = domm (unionm ip ic)).
@@ -1148,7 +1151,7 @@ Section MergeSym.
       assert (Hmergeable_ifacesC := Hmergeable_ifaces);
         rewrite Hifacep Hifacec in Hmergeable_ifacesC.
       pose proof linking_well_formedness Hwfp' Hwfc' (proj1 Hmergeable_ifacesC) as Hwf''.
-      pose proof CS.star_sem_non_inform_star_sem_inform prog'' s0'' t _ Hstar'' as
+      pose proof CS.star_sem_non_inform_star_sem_inform prog'' s0'' t'' _ Hstar'' as
           [t_inform'' [Hstar_inform'' _]].
       now exists prog'', s0'', t_inform''.
     }
@@ -1184,34 +1187,38 @@ Section MergeSym.
     split.
     - intros Hmerg.
       inversion Hmerg
-        as [s0 s0'' t Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-            Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar''].
+        as [s0 s0'' t t'' n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
+            Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar'' Hrel].
       inversion Hmergeable_ifaces as [Hlinkable _].
       pose proof (program_linkC Hwfc Hwfp (linkable_sym Hlinkable)) as Hcp.
       rewrite Hifacec Hifacep in Hlinkable.
       pose proof (program_linkC Hwfc' Hwfp' (linkable_sym Hlinkable)) as Hc'p'.
-      apply mergeable_states_intro with (s0 := s0'') (s0'' := s0) (t := t);
+      apply mergeable_states_intro with s0'' s0 t'' t n'' n;
         try congruence;
         [ apply mergeable_interfaces_sym; congruence
         | now rewrite Hc'p'
         | now rewrite Hcp
+        | admit (* RB: TODO: Symmetry of trace relation. *)
         ].
     - intros Hmerg.
       inversion Hmerg
-        as [s0 s0'' t Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-               Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar''].
+        as [s0 s0'' t t'' n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
+               Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar'' Hrel].
       inversion Hmergeable_ifaces as [Hlinkable _].
       pose proof (program_linkC Hwfc Hwfp (linkable_sym Hlinkable)) as Hcp.
       rewrite Hifacec Hifacep in Hlinkable.
       pose proof (program_linkC Hwfc' Hwfp' (linkable_sym Hlinkable)) as Hc'p'.
-      apply mergeable_states_intro with (s0 := s0'') (s0'' := s0) (t := t);
+      apply mergeable_states_intro with s0'' s0 t'' t n'' n;
         try congruence.
       + apply mergeable_interfaces_sym; congruence.
       + rewrite program_linkC; try congruence.
         now apply linkable_sym.
       + rewrite program_linkC; try congruence.
         apply linkable_sym; congruence.
-  Qed.
+      + admit. (* RB: TODO: Symmetry of trace relation.
+                            Also write both splits similarly. *)
+  (* Qed. *)
+  Admitted.
 End MergeSym.
 
 (* Helpers, epsilon and lockstep versions of three-way simulation. *)
