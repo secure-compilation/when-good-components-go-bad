@@ -698,6 +698,13 @@ Section Definability.
 End WithTrace.
 End Definability.
 
+(* NOTE: [DynShare] Do we need the metadata size to range over components?
+   (Likely, for composition of partial programs.) We may not need the more
+   general setup in this particular setting of back-translation, however. *)
+(* NOTE: [DynShare] It is unlikely that we would ever need more than one block
+   of metadata per component. That is, metadata would be an optional block for
+   each component containing certain fixed data, such as the shift to apply to
+   block identifiers. *)
 Definition metadata_size : Component.id -> nat (* := uniform_shift metadata_size_per_cid*).
 Admitted.
 
@@ -706,12 +713,48 @@ Require Import Intermediate.CS.
 Require Import S2I.Definitions.
 
 (*Section MainDefinability.*)
-  Definition loc_of_reg : Eregister -> expr. Admitted.
-  
-  Definition binop_of_Ebinop : Ebinop -> binop. Admitted.
-  
-  Definition expr_of_const_val : value -> expr. Admitted.
 
+(* A simple scheme that maps registers to constant memory locations
+     immediately after the back-translation counter in position 0. *)
+  Definition loc_of_reg (reg : Eregister) : expr :=
+    match reg with
+    | E_R_ONE  => E_binop Add E_local (E_val (Int 1))
+    | E_R_COM  => E_binop Add E_local (E_val (Int 2))
+    | E_R_AUX1 => E_binop Add E_local (E_val (Int 3))
+    | E_R_AUX2 => E_binop Add E_local (E_val (Int 4))
+    | E_R_RA   => E_binop Add E_local (E_val (Int 5))
+    | E_R_SP   => E_binop Add E_local (E_val (Int 6))
+    | E_R_ARG  => E_binop Add E_local (E_val (Int 7))
+    end.
+
+  (* Straightforward correspondence between "event" operators and
+     regular operators. *)
+  Definition binop_of_Ebinop (op : Ebinop) : binop :=
+    match op with
+    | E_Add   => Add
+    | E_Minus => Minus
+    | E_Mul   => Mul
+    | E_Eq    => Eq
+    | E_Leq   => Leq
+    end.
+
+  (* Translation of constant values to expressions, with special attention
+     given to pointers. *)
+  Definition expr_of_const_val (v : value) : expr :=
+    match v with
+    (* Integer values are simple. *)
+    | Int n            => E_val (Int n)
+    (* Pointer values need to take into account some amount of shifting, here
+       corresponding to the counter and space reserved to locate register
+       values. We make the implicit assumption that all such values refer to
+       the local buffer, which should follow from well-formedness. *)
+    | Ptr (_, _, _, o) => E_binop Add E_local (E_val (Int (8 + omega)))
+    (* Undefined values are mapped to a well-formed but ill-typed expression
+       (instead of some arbitrary but well-typed value, so as to preserve
+       bad behavior). This choice might demand more work in some proofs,
+       while possibly making other goals distinctly provable. *)
+    | Undef            => E_binop Mul (E_val (Int 0)) E_local
+    end.
 
 (* FG : Put back some sanity checks ? some are present but commented in the premise and the move => *)
 Lemma matching_mains_backtranslated_program p c intf back m:
