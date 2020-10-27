@@ -1244,21 +1244,21 @@ Section ThreewayMultisem1.
   (* Given a silent star driven by the "program" side p, the "context" side c
      remains unaltered. *)
 
-  Ltac t_to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12'' :=
-    inversion Hmerge1
-      as [_ s0'' t01'' _ _ Hwfp' Hwfc' Hmergeable_ifaces
-          Hifacep Hifacec _ Hprog_is_closed' _ Hini0'' _ Hstar01''];
-    pose proof mergeable_states_program_to_program Hmerge1 Hcomp as Hcomp1'';
-    rewrite Hifacec in Hcomp1'';
-    assert (Hmergeable_ifaces' := Hmergeable_ifaces);
-      rewrite Hifacep Hifacec in Hmergeable_ifaces';
-    pose proof CS.epsilon_star_preserves_program_component _ _ _ _ Hcomp1'' Hstar12'' as Hcomp2'';
-    destruct (CS.star_pc_domm _ _
-                Hwfp' Hwfc' Hmergeable_ifaces' Hprog_is_closed' Hini0''
-                (star_trans Hstar01'' Hstar12'' eq_refl)) as [Hgoal | Hcontra];
-    [ now rewrite Hifacep
-    | CS.simplify_turn; now rewrite Hcontra in Hcomp2''
-    ].
+  (* Ltac t_to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12'' := *)
+  (*   inversion Hmerge1 *)
+  (*     as [_ s0'' t01'' _ _ Hwfp' Hwfc' Hmergeable_ifaces *)
+  (*         Hifacep Hifacec _ Hprog_is_closed' _ Hini0'' _ Hstar01'']; *)
+  (*   pose proof mergeable_states_program_to_program Hmerge1 Hcomp as Hcomp1''; *)
+  (*   rewrite Hifacec in Hcomp1''; *)
+  (*   assert (Hmergeable_ifaces' := Hmergeable_ifaces); *)
+  (*     rewrite Hifacep Hifacec in Hmergeable_ifaces'; *)
+  (*   pose proof CS.epsilon_star_preserves_program_component _ _ _ _ Hcomp1'' Hstar12'' as Hcomp2''; *)
+  (*   destruct (CS.star_pc_domm _ _ *)
+  (*               Hwfp' Hwfc' Hmergeable_ifaces' Hprog_is_closed' Hini0'' *)
+  (*               (star_trans Hstar01'' Hstar12'' eq_refl)) as [Hgoal | Hcontra]; *)
+  (*   [ now rewrite Hifacep *)
+  (*   | CS.simplify_turn; now rewrite Hcontra in Hcomp2'' *)
+  (*   ]. *)
 
   (* [DynShare]
 
@@ -1267,31 +1267,31 @@ Section ThreewayMultisem1.
      that *remains* private after considering (i.e., set-differencing) the set
      of shared addresses.
    *)
-  Lemma to_partial_memory_epsilon_star s s1'' s2'' s3'' :
-    mergeable_states p c p' c' s s1'' ->
-    CS.is_program_component s ic ->
-    Star sem'' s1'' E0 s2'' ->
-    Step sem'' s2'' E0 s3'' ->
-    to_partial_memory (CS.state_mem s2'') (domm ip) =
-    to_partial_memory (CS.state_mem s3'') (domm ip).
-  Proof.
-    intros Hmerge1 Hcomp Hstar12'' Hstep23''.
-    destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addr2''].
-    destruct s3'' as [[[[gps3'' mem3''] regs3''] pc3''] addr3''].
-    pose proof CS.step_non_inform_step_inform prog''
-         (gps2'', mem2'', regs2'', pc2'', addr2'') _ _ Hstep23'' as
-        [t_inform [Hstep_inform _]].
-    inversion Hstep_inform; subst;
-      (* Most cases do not touch the memory. *)
-      try reflexivity.
-      (*
-        [DynShare]
+  (* Lemma to_partial_memory_epsilon_star s s1'' s2'' s3'' : *)
+  (*   mergeable_states p c p' c' s s1'' -> *)
+  (*   CS.is_program_component s ic -> *)
+  (*   Star sem'' s1'' E0 s2'' -> *)
+  (*   Step sem'' s2'' E0 s3'' -> *)
+  (*   to_partial_memory (CS.state_mem s2'') (domm ip) = *)
+  (*   to_partial_memory (CS.state_mem s3'') (domm ip). *)
+  (* Proof. *)
+  (*   intros Hmerge1 Hcomp Hstar12'' Hstep23''. *)
+  (*   destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addr2'']. *)
+  (*   destruct s3'' as [[[[gps3'' mem3''] regs3''] pc3''] addr3'']. *)
+  (*   pose proof CS.step_non_inform_step_inform prog'' *)
+  (*        (gps2'', mem2'', regs2'', pc2'', addr2'') _ _ Hstep23'' as *)
+  (*       [t_inform [Hstep_inform _]]. *)
+  (*   inversion Hstep_inform; subst; *)
+  (*     (* Most cases do not touch the memory. *) *)
+  (*     try reflexivity. *)
+  (*     (* *)
+  (*       [DynShare] *)
 
-        The proof below no longer holds. The proof is looking for the assumption
-        Heq that ensures that the store is not touching any non-pc-owned memory.
-        However, no such assumption exists anymore for the store instruction.
-       *)
-  Abort.
+  (*       The proof below no longer holds. The proof is looking for the assumption *)
+  (*       Heq that ensures that the store is not touching any non-pc-owned memory. *)
+  (*       However, no such assumption exists anymore for the store instruction. *)
+  (*      *) *)
+  (* Abort. *)
 
   (* [DynShare] DEPRECATED ARGUMENT BELOW
 
@@ -1310,32 +1310,46 @@ Section ThreewayMultisem1.
 
    *)
 
-  Lemma merge_states_silent_star s s1'' s2'' :
-    mergeable_states p c p' c' s s1'' ->
-    CS.is_program_component s ic ->
+  Lemma merge_states_silent_star s1 s1' s1'' s2'' :
+    mergeable_states p c p' c' s1 s1' s1'' ->
+    CS.is_program_component s1 ic ->
     Star sem'' s1'' E0 s2'' ->
-    merge_states ip ic s s1'' = merge_states ip ic s s2''.
+    mergeable_states p c p' c' s1 s1' s2''.
   Proof.
     intros Hmerge1 Hcomp Hstar12''.
     remember E0 as t.
     apply star_iff_starR in Hstar12''.
     induction Hstar12''
       as [s'' | s1'' t1 s2'' t2 s3'' ? Hstar12'' IHstar'' Hstep23'' Ht12]; subst.
-    - reflexivity.
+    - assumption.
     - (* Simplify, apply IH and case analyze. *)
       symmetry in Ht12; apply Eapp_E0_inv in Ht12 as [? ?]; subst.
-      specialize (IHstar'' Hmerge1 eq_refl). rewrite IHstar''.
+      specialize (IHstar'' Hmerge1 eq_refl).
+      (* rewrite IHstar''. *)
       apply star_iff_starR in Hstar12''.
-      destruct s as [[[[gps mem] regs] pc] addrs].
+      destruct s1 as [[[[gps mem] regs] pc] addrs].
       destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addrs2''].
       destruct s3'' as [[[[gps3'' mem3''] regs3''] pc3''] addrs3''].
       pose proof CS.step_non_inform_step_inform prog''
            (gps2'', mem2'', regs2'', pc2'', addrs2'') _ _ Hstep23'' as
           [t_inform [Hstep_inform _]].
-    inversion Hstep_inform; subst;
-        (* Unfold, common rewrite on PC, memory rewrite for memory goals and done. *)
-        unfold merge_states, merge_registers, merge_pcs, merge_memories, ip;
-        erewrite mergeable_states_program_component_domm; try eassumption.
+      inversion Hstep_inform; subst.
+      + (* To solve the goal, we need to recompose the mergeability relation.
+           This is easy to see by decomposition. *)
+        inversion IHstar''; subst.
+        econstructor; try eassumption.
+        (* We are left with one sub-goal, which we solve by recomposing the
+           bigger star. *)
+        apply star_iff_starR. eapply starR_step.
+        * apply star_iff_starR. eassumption.
+        * eassumption.
+        * rewrite E0_right. reflexivity.
+        (* All other sub-goals admit the same proof, which differs from the old
+           one in that we work directly on the mergeability relation instead of
+           on concrete state manipulations. *)
+        (* (* Unfold, common rewrite on PC, memory rewrite for memory goals and done. *) *)
+        (* unfold merge_states, merge_registers, merge_pcs, merge_memories, ip; *)
+        (* erewrite mergeable_states_program_component_domm; try eassumption. *)
     Admitted.
    (*[DynShare]
 
@@ -1357,15 +1371,28 @@ Section ThreewayMultisem1.
   Qed.
      *)
 
-  Lemma context_epsilon_star_merge_states s s1 s2 :
-    mergeable_states p c p' c' s s1 ->
-    CS.is_program_component s ic ->
-    Star sem'' s1 E0 s2 ->
-    Star sem' (merge_states ip ic s s1) E0 (merge_states ip ic s s2).
+  Lemma context_epsilon_star_merge_states s1 s1' s1'' s2'' :
+    mergeable_states p c p' c' s1 s1' s1'' ->
+    CS.is_program_component s1 ic ->
+    Star sem'' s1'' E0 s2'' ->
+  exists s2',
+    Star sem' s1' E0 s2'.
   Proof.
-    intros Hmerg Hcomp Hstar.
-    rewrite (merge_states_silent_star Hmerg Hcomp Hstar).
-    apply star_refl.
+    intros Hmerge1 Hcomp1 Hstar12''.
+    remember E0 as t12'' eqn:Ht12''.
+    revert s1 s1' Hmerge1 Hcomp1 Ht12''.
+    induction Hstar12''; intros; subst.
+    - exists s1'. now apply star_refl.
+    - (* Fix some names quickly for now... *)
+      rename s1 into s1''. rename s2 into s2''. rename s3 into s3''. rename s0 into s1.
+      (* Back to the proof. *)
+      apply Eapp_E0_inv in Ht12'' as [? ?]; subst.
+      assert (Hmerge2 : mergeable_states p c p' c' s1 s1' s2'').
+      {
+        eapply merge_states_silent_star; try eassumption.
+        eapply star_step; [eassumption | eapply star_refl | reflexivity].
+      }
+      exact (IHHstar12'' _ _ Hmerge2 Hcomp1 eq_refl).
   Qed.
 
   Lemma threeway_multisem_mergeable_step_E0 s1 s2 s1'' :
