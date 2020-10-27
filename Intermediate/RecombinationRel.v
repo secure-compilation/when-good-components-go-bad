@@ -49,12 +49,12 @@ Section Merge.
              (m m'' : ComponentMemory.t) (a : Component.id * Block.id)
     : ComponentMemory.t := m.
    *)
-  
+
   (* RB: TODO: Here and above, Program.interface vs. fset. *)
-  (* [DynShare] 
+  (* [DynShare]
      1- Expect pc (?) --- similar to merge_registers
      2- Expect set of shared addresses (i.e., shared between ic and ip)
-     
+
      From this set of shared addresses, partition the memory (either m or m'') into
      three parts:
      (a) part that is shared (obvious)
@@ -63,7 +63,7 @@ Section Merge.
 
      Result := m.(a) ++ m/m''.(b) ++ m''.(c) if Pointer.component pc \in domm ip
           else m''.(a) ++ m/m''.(b) ++ m.(c)
-     
+
    *)
   Definition merge_memories (m m'' : Memory.tt) : Memory.tt :=
     unionm (to_partial_memory m   (domm ic))
@@ -165,8 +165,8 @@ Section Mergeable.
      partial programs concerned (implicitly through the section mechanism) and
      two runs synchronized by their traces. It is a rather strong notion, easy
      to work with and well suited to the purposes of the proof. *)
-  Inductive mergeable_states (s s'' : CS.state) : Prop :=
-    mergeable_states_intro : forall s0 s0'' t t'' n n'',
+  Inductive mergeable_states (s s' s'' : CS.state) : Prop :=
+    mergeable_states_intro : forall s0 s0' s0'' t t' t'' n n' n'',
       (* Well-formedness conditions. *)
       well_formed_program p ->
       well_formed_program c ->
@@ -179,12 +179,16 @@ Section Mergeable.
       closed_program prog'' ->
       (* "Proper" definition. *)
       initial_state sem   s0   ->
+      initial_state sem'  s0'  ->
       initial_state sem'' s0'' ->
       Star sem   s0   t   s   ->
+      Star sem   s0   t'  s'  ->
       Star sem'' s0'' t'' s'' ->
+      behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) ->
       behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') ->
-      mergeable_states s s''.
+      mergeable_states s s' s''.
 
+(*
   (* RB: NOTE: This induction principle is currently used only in the proofs of
      mergeable_states_pc_same_component and mergeable_states_mergeable_stack. It
      would be interesting to see if (other) proofs benefit from its use, or what
@@ -1018,8 +1022,10 @@ Section Mergeable.
     - assumption.
     - now rewrite Hic in Hcomp.
   Qed.
+*)
 End Mergeable.
 
+(*
 Section MergeSym.
   Variables p c p' c' : program.
 
@@ -1220,6 +1226,7 @@ Section MergeSym.
   (* Qed. *)
   Admitted.
 End MergeSym.
+*)
 
 (* Helpers, epsilon and lockstep versions of three-way simulation. *)
 Section ThreewayMultisem1.
