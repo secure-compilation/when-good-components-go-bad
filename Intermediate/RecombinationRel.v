@@ -182,7 +182,7 @@ Section Mergeable.
       initial_state sem'  s0'  ->
       initial_state sem'' s0'' ->
       Star sem   s0   t   s   ->
-      Star sem   s0   t'  s'  ->
+      Star sem'  s0'  t'  s'  ->
       Star sem'' s0'' t'' s'' ->
       behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) ->
       behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') ->
