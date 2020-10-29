@@ -1395,59 +1395,60 @@ Section ThreewayMultisem1.
       exact (IHHstar12'' _ _ Hmerge2 Hcomp1 eq_refl).
   Qed.
 
-  Lemma threeway_multisem_mergeable_step_E0 s1 s2 s1'' :
+  Lemma threeway_multisem_mergeable_step_E0 s1 s2 s1' s1'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' s1 s1'' ->
+    mergeable_states p c p' c' s1 s1' s1'' ->
     Step sem s1 E0 s2 ->
-    mergeable_states p c p' c' s2 s1''.
+    mergeable_states p c p' c' s2 s1' s1''.
   Proof.
     intros Hcomp1 Hmerge1 Hstep12.
-    inversion Hmerge1 as [s0 s0'' t Hini1 Hini2 Hstar01 Hstar01''].
-    apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := t);
+    inversion Hmerge1
+      as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc'
+          Hmergeable_ifaces Hifacep Hifacec Hprog_is_closed Hprog_is_closed'
+          Hini Hini' Hini'' Hstar01 Hstar01' Hstar01'' Hrel' Hrel''].
+    apply mergeable_states_intro with s0 s0' s0'' t t' t'' n n' n'';
       try assumption.
-    eapply star_right; try eassumption; now rewrite E0_right.
+    eapply (star_right _ _ Hstar01 Hstep12); try eassumption. now rewrite E0_right.
   Qed.
 
   (* RB: NOTE: The structure follows closely that of
      threeway_multisem_star_program. *)
-  Lemma threeway_multisem_mergeable_program s1 s1'' t s2 s2'' :
+  Lemma threeway_multisem_mergeable_program s1 s1' s1'' t2 t2'' n n'' s2 s2'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' s1 s1'' ->
-    Star sem   s1   t s2   ->
-    Star sem'' s1'' t s2'' ->
-    mergeable_states p c p' c' s2 s2''.
+    mergeable_states p c p' c' s1 s1' s1'' ->
+    Star sem   s1   t2   s2   ->
+    Star sem'' s1'' t2'' s2'' ->
+    behavior_rel_behavior_all_cids n n'' (FTbc t2) (FTbc t2'') ->
+  exists s2',
+    mergeable_states p c p' c' s2 s2' s2''.
   Proof.
-    intros _ Hmerg Hstar Hstar''. inversion Hmerg.
-    econstructor; try eassumption.
-    - eapply star_trans; try eassumption; reflexivity.
-    - eapply star_trans; try eassumption; reflexivity.
-  Qed.
-
-  Ltac t_threeway_multisem_step_E0 :=
-    CS.step_of_executing;
-    try eassumption; try reflexivity;
-    (* Solve side goals for CS step. *)
-    match goal with
-    | |- Memory.load _ _ = _ =>
-      eapply program_load_to_partialized_memory;
-      try eassumption; [now rewrite Pointer.inc_preserves_component]
-    | |- Memory.store _ _ _ = _ =>
-      eapply program_store_to_partialized_memory; eassumption
-    | |- find_label_in_component _ _ _ = _ =>
-      eapply find_label_in_component_recombination; eassumption
-    | |- find_label_in_procedure _ _ _ = _ =>
-      eapply find_label_in_procedure_recombination; eassumption
-    | |- Memory.alloc _ _ _ = _ =>
-      eapply program_alloc_to_partialized_memory; eassumption
-    | _ => idtac
-    end;
-    (* Apply linking invariance and solve side goals. *)
-    eapply execution_invariant_to_linking; try eassumption;
-    [ congruence
-    | apply linkable_implies_linkable_mains; congruence
-    | apply linkable_implies_linkable_mains; congruence
-    | eapply is_program_component_in_domm; eassumption
-    ].
+    intros Hcomp1 Hmerge1 Hstar12 Hstar12'' Hrel''.
+    inversion Hmerge1
+      as [s0 s0' s0'' t1 t1' t1'' ? n' ? Hwfp Hwfc Hwfp' Hwfc'
+          Hmergeable_ifaces Hifacep Hifacec Hprog_is_closed Hprog_is_closed'
+          Hini Hini' Hini'' Hstar01 Hstar01' Hstar01'' Hrel Hrel'].
+    (* Assume that we can not only execute the star in the recombined context,
+       but also establish the trace relation, here on partial traces. *)
+    assert (exists t2' s2',
+               Star sem' s1' t2' s2' /\
+               behavior_rel_behavior_all_cids n n' (FTbc t2) (FTbc t2'))
+      as [t2' [s2' [Hstar12' Hrel2']]]
+      by admit.
+    (* If we do so, we can begin to reconstruct the mergeability relation... *)
+    exists s2'.
+    eapply mergeable_states_intro; try assumption.
+    eassumption. eassumption. eassumption.
+    (* The various stars compose easily (and in the way the old proof was
+       written). *)
+    instantiate (1 := t1 ++ t2). eapply star_trans; try eassumption; reflexivity.
+    instantiate (1 := t1' ++ t2'). eapply star_trans; try eassumption; reflexivity.
+    instantiate (1 := t1'' ++ t2''). eapply star_trans; try eassumption; reflexivity.
+    (* And it should be possible to compose the relations, possibly using some
+       of the stars. *)
+    instantiate (1 := n'). instantiate (1 := n). admit.
+    instantiate (1 := n''). admit.
+  (* Qed. *)
+  Admitted.
 
   Ltac solve_executing_threeway_multisem_step_E0 Hlinkable pc1 :=
     eapply execution_invariant_to_linking with (c1 := c); eauto;
