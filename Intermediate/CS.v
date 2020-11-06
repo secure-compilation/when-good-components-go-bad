@@ -247,6 +247,8 @@ Proof.
     rewrite mapmE. rewrite mapmE in k'mem.
     destruct (regs (Register.to_nat r1)) as [vOfr1 |] eqn:e.
     + simpl.
+      (rewrite e; simpl)
+        || idtac "ExStructures 0.1 legacy rewrite".
       destruct vOfr1 as [| t |];
         try (
             simpl;
@@ -255,7 +257,7 @@ Proof.
           ).
       simpl.
       unfold Register.get in k'mem. rewrite e in k'mem.
-      unfold_Register_set e1 k'mem. exact k'mem.
+      unfold_Register_set e1 k'mem. simpl in k'mem. exact k'mem.
     + unfold Register.get in k'mem.
       rewrite e in k'mem.
       unfold_Register_set e1 k'mem. discriminate.
@@ -435,7 +437,10 @@ Proof.
     + simpl in k'mem. rewrite R_COMptr'.
       unfold Register.get in contra. simpl in contra.
       destruct (regs 1) eqn:e.
-      * simpl. rewrite contra. auto.
+      * simpl.
+        (rewrite e; simpl)
+          || idtac "ExStructures 0.1 legacy rewrite".
+        rewrite contra. auto.
       * simpl in contra. discriminate.
     + discriminate.
   - destruct (k' == 0) eqn:k'0.
@@ -2549,11 +2554,20 @@ Proof.
   destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
     simpl; pose proof (mem_domm (prog_procedures p) cid) as e1; erewrite e1 in e;
       unfold isSome in e1;
-      destruct (@getm nat_ordType
-                      (* (NMap code) *)
-                      (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
-                      (prog_procedures p)
-                      cid) eqn:contra.
+      (
+       destruct (@getm nat_ordType
+                        (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
+                        (prog_procedures p)
+                        cid) eqn:contra
+       ||
+       destruct (@getm nat_ordType
+                       (NMap code)
+                       (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
+                       (prog_procedures p)
+                       cid) eqn:contra;
+       idtac "ExStructures 0.1 legacy"
+      ).
+
   (* unable to use the destruct equation due to type inference problems. *)
         (*erewrite contra in e1. try discriminate; split; auto; clear e1;
           unfold reserve_component_blocks; intros H.*)
@@ -2590,7 +2604,9 @@ Proof.
     { erewrite domm_domm; rewrite e; auto. }
     pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
     destruct ((prog_interface p) cid) eqn:e1;
-      try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
+      try (destruct e0 as [x H0];
+           try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
+           discriminate).
     destruct (ComponentMemoryExtra.reserve_blocks
          (ComponentMemory.prealloc (odflt emptym ((prog_buffers p) cid)))
          (length (elementsm (odflt emptym (Some n)))))
@@ -2604,8 +2620,7 @@ Proof.
        equality of the contents rather than just equality.*)
       admit.
     }
-    rewrite <- g. auto.
-    admit.
+    rewrite <- g; auto.
   - assert (etmp : is_true (cid \in domm (prog_interface p))).
     { erewrite domm_domm; rewrite e; auto. }
     pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
