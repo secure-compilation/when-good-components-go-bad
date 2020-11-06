@@ -176,7 +176,7 @@ Lemma mem_codomm_setm :
 Proof.
   intros T S m k1 k2 v v' Hmem Hmemcodomm.
   apply/codommP.
-  pose (H' := codommP (setm m k2 v) v' Hmemcodomm).
+  pose (H' := @codommP _ _ (setm m k2 v) v' Hmemcodomm).
   destruct H' as [kOfv' H'mem].
   rewrite setmE in H'mem.
   destruct (kOfv' == k2) eqn:k2kOfv'.
@@ -199,7 +199,7 @@ Lemma fsubset_in :
     fsubset s1 s2 -> v \in s1 -> v \in s2.
 Proof.
   intros ? ? ? ? Hsubset Hin.
-  pose (fsubsetP s1 s2 Hsubset) as Hsubset'.
+  pose (@fsubsetP _ s1 s2 Hsubset) as Hsubset'.
   unfold sub_mem in Hsubset'.
   apply Hsubset'.
   assumption.
@@ -211,7 +211,7 @@ Ltac unfold_Register_set e1 k'mem :=
 
 Ltac unfold_regs_ptrs :=
   do 2 (unfold regs_data_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id);
-  intros Hin; apply/codommP; destruct (codommP _ _ Hin) as [k' k'mem].
+  intros Hin; apply/codommP; destruct (@codommP _ _ _ _ Hin) as [k' k'mem].
 
 Ltac solve_untouched_registers e1 k' k'mem :=
   exists k'; rewrite filtermE; rewrite filtermE in k'mem; simpl; simpl in k'mem;
@@ -231,7 +231,7 @@ Proof.
     rewrite filtermE. rewrite mapmE. rewrite e. rewrite Hget. auto.
   - discriminate.
 Qed.
-         
+
 Lemma regs_ptrs_set_get_in :
   forall (regs: Register.t) r1 r2 v,
     v \in regs_data_ptrs (Register.set r2 (Register.get r1 regs) regs) ->
@@ -246,7 +246,9 @@ Proof.
     rewrite filtermE. rewrite filtermE in k'mem. simpl. simpl in k'mem.
     rewrite mapmE. rewrite mapmE in k'mem.
     destruct (regs (Register.to_nat r1)) as [vOfr1 |] eqn:e.
-    + rewrite e. simpl.
+    + simpl.
+      (rewrite e; simpl)
+        || idtac "ExStructures 0.1 legacy rewrite".
       destruct vOfr1 as [| t |];
         try (
             simpl;
@@ -255,7 +257,7 @@ Proof.
           ).
       simpl.
       unfold Register.get in k'mem. rewrite e in k'mem.
-      unfold_Register_set e1 k'mem. exact k'mem.
+      unfold_Register_set e1 k'mem. simpl in k'mem. exact k'mem.
     + unfold Register.get in k'mem.
       rewrite e in k'mem.
       unfold_Register_set e1 k'mem. discriminate.
@@ -270,7 +272,7 @@ Proof.
     }
     pose (negP ineq) as n0. exfalso. apply n0. apply/eqP.
     destruct (value_to_data_pointer_err (Register.get r1 regs)).
-    + simpl in k'mem. apply Some_inj. symmetry. exact k'mem.
+    + simpl in k'mem. injection k'mem as eq. subst. reflexivity.
     + simpl in k'mem. discriminate.
 Qed.
 
@@ -414,7 +416,7 @@ Proof.
     destruct (value_to_data_pointer_err (eval_binop op
                                                (Register.get r1 regs)
                                                (Register.get r2 regs))).
-    + simpl in k'mem. apply Some_inj. symmetry. exact k'mem.
+    + simpl in k'mem. injection k'mem as eq. rewrite eq. reflexivity.
     + simpl in k'mem. discriminate.
 Qed.
 
@@ -435,7 +437,10 @@ Proof.
     + simpl in k'mem. rewrite R_COMptr'.
       unfold Register.get in contra. simpl in contra.
       destruct (regs 1) eqn:e.
-      * rewrite e. simpl. rewrite contra. auto.
+      * simpl.
+        (rewrite e; simpl)
+          || idtac "ExStructures 0.1 legacy rewrite".
+        rewrite contra. auto.
       * simpl in contra. discriminate.
     + discriminate.
   - destruct (k' == 0) eqn:k'0.
@@ -467,7 +472,7 @@ Proof.
       apply/n. exact R_COMptr.
     }
     destruct (value_to_data_pointer_err (Register.get R_COM regs)) eqn:contra.
-    + simpl in k'mem. apply Some_inj in k'mem. rewrite k'mem in ineq.
+    + simpl in k'mem. injection k'mem as k'mem. rewrite k'mem in ineq.
       assert (f : false).
       {
         apply contra_eqT with (b := false) (x := Some v) (y := Some v); auto.
@@ -523,7 +528,7 @@ Proof.
   intros r regs vCid vBid vOff. apply in_fsubset. intros v.
   intros Htmp. apply/fsetUP. move: Htmp.
   do 2 (unfold regs_data_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id).
-  intros Hin; destruct (codommP _ _ Hin) as [k' k'mem].
+  intros Hin; destruct (@codommP _ _ _ _ Hin) as [k' k'mem].
   destruct (Some v == value_to_data_pointer_err
                         (Ptr (Permission.data, vCid, vBid, vOff))) eqn:copied;
     destruct (k' == Register.to_nat r) eqn:e1;
@@ -2546,13 +2551,22 @@ Proof.
   pose (domm_domm1 := domm_prepare_procedures_initial_memory_aux p).
   unfold sem_inform. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
   destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
-    simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e1 in e;
+    simpl; pose proof (mem_domm (prog_procedures p) cid) as e1; erewrite e1 in e;
       unfold isSome in e1;
-      destruct (@getm nat_ordType
-                      (NMap code)
-                      (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
-                      (prog_procedures p)
-                      cid) eqn:contra.
+      (
+       destruct (@getm nat_ordType
+                        (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
+                        (prog_procedures p)
+                        cid) eqn:contra
+       ||
+       destruct (@getm nat_ordType
+                       (NMap code)
+                       (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
+                       (prog_procedures p)
+                       cid) eqn:contra;
+       idtac "ExStructures 0.1 legacy"
+      ).
+
   (* unable to use the destruct equation due to type inference problems. *)
         (*erewrite contra in e1. try discriminate; split; auto; clear e1;
           unfold reserve_component_blocks; intros H.*)
@@ -2582,13 +2596,16 @@ Proof.
   destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
     simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e in e1;
       unfold isSome in e1; destruct ((prog_procedures p) cid) eqn:contra; auto;
-        rewrite contra in e1; try discriminate; split; auto; clear e1;
+        (* rewrite contra in e1; *)
+        try discriminate; split; auto; clear e1;
           unfold reserve_component_blocks; intros H.
   - assert (etmp : is_true (cid \in domm (prog_interface p))).
     { erewrite domm_domm; rewrite e; auto. }
-    pose (dommP (prog_interface p) cid etmp) as e0.
+    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
     destruct ((prog_interface p) cid) eqn:e1;
-      try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
+      try (destruct e0 as [x H0];
+           try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
+           discriminate).
     destruct (ComponentMemoryExtra.reserve_blocks
          (ComponentMemory.prealloc (odflt emptym ((prog_buffers p) cid)))
          (length (elementsm (odflt emptym (Some n)))))
@@ -2602,10 +2619,10 @@ Proof.
        equality of the contents rather than just equality.*)
       admit.
     }
-    rewrite <- g. auto.
+    rewrite <- g; auto.
   - assert (etmp : is_true (cid \in domm (prog_interface p))).
     { erewrite domm_domm; rewrite e; auto. }
-    pose (dommP (prog_interface p) cid etmp) as e0.
+    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
     destruct ((prog_interface p) cid) eqn:e1;
       try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
 

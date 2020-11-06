@@ -493,8 +493,8 @@ Local Axiom separate_compilation_weaker:
     compile_program p = Some p_comp ->
     compile_program c = Some c_comp ->
     compile_program (Source.program_link p c) = Some pc_comp ->
-    forall b, program_behaves (I.CS.sem_non_inform pc_comp) b <->
-              program_behaves (I.CS.sem_non_inform (Intermediate.program_link p_comp c_comp)) b.
+    forall b, program_behaves (I.CS.sem_inform pc_comp) b <->
+              program_behaves (I.CS.sem_inform (Intermediate.program_link p_comp c_comp)) b.
 (* Proof. *)
 (*   intros p c pc_comp p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c Hcomp_link b. *)
 (*   pose proof separate_compilation p c p_comp c_comp Hwf_p Hwf_c Hlinkable Hcomp_p Hcomp_c as Hsc. *)
