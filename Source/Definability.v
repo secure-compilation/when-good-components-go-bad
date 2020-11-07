@@ -722,7 +722,7 @@ Section Definability.
       simpl. repeat (rewrite mapmE; simpl); rewrite mem_domm.
       case HCint: (intf C) => [Cint|] //=.
       by rewrite ComponentMemory.load_prealloc /=.
-    Admitted.
+    Qed.
 
 End WithTrace.
 End Definability.
