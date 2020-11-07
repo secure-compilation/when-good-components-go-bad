@@ -820,6 +820,26 @@ Qed.
 
 (* Definability *)
 
+(* RB: TODO: Refactor and relocate. *)
+Lemma prefix_project m :
+  not_wrong_finpref m ->
+  prefix (project_finpref_behavior m)
+         (Terminates (project_non_inform (finpref_trace m))).
+Proof.
+  unfold project_finpref_behavior, finpref_trace.
+  destruct m as [t | t | t]; simpl.
+  - reflexivity.
+  - done.
+  - intros _. exists (Terminates E0). simpl. rewrite E0_right. reflexivity.
+Qed.
+
+Lemma not_wrong_finpref_project m :
+ not_wrong_finpref m ->
+ not_wrong_finpref (project_finpref_behavior m).
+Proof.
+  now destruct m.
+Qed.
+
 (* RB: Relocate? As the S2I require above seems to indicate, this is not where
    this result belongs. *)
 
@@ -864,9 +884,8 @@ Proof.
       + case: beh / Hbeh Hpre=> //= t cs' Hstar Hfinal Ht -> {m}.
         by exists cs, cs'; split.
       + destruct Hpre as [beh' ?]; subst beh.
-        (* have [cs' [Hstar Hbehaves]] := state_behaves_app_inv (I.CS.singleton_traces _) m beh' Hbeh. *)
-        (* exists cs, cs'; split; assumption. *)
-        admit.
+        have [cs' [Hstar Hbehaves]] := state_behaves_app_inv (I.CS.singleton_traces_inform _) m beh' Hbeh.
+        exists cs, cs'; split; assumption.
     - move=> _ Hpre; rewrite {}/m'.
       have {Hpre m} -> : finpref_trace m = E0.
         case: m Hpre => //= m [[t|t|t|t] //=].
@@ -913,6 +932,8 @@ Proof.
   split.
   exists (Terminates (project_non_inform m')).
   split; first by assumption.
-  admit.
-  admit. (* New subgoal: trace relation. *)
+  unfold m'. apply prefix_project; assumption.
+  (* New subgoal: trace relation. *)
+  apply behavior_rel_behavior_reflexive_all_cids.
+  apply not_wrong_finpref_project; assumption.
 Admitted.
