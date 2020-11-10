@@ -1722,121 +1722,130 @@ Section ThreewayMultisem1.
   (* Compose two stars into a merged star. The "program" side drives both stars
      and performs all steps without interruption, the "context" side remains
      unaltered in both stars. *)
-  Theorem threeway_multisem_star_E0_program s1 s1'' s2 s2'':
+  Theorem threeway_multisem_star_E0_program s1 s1' s1'' s2 s2'':
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' s1 s1'' ->
+    mergeable_states p c p' c' s1 s1' s1'' ->
     Star sem   s1   E0 s2   ->
     Star sem'' s1'' E0 s2'' ->
-    Star sem'  (merge_states ip ic s1 s1'') E0 (merge_states ip ic s2 s2'').
-  Proof.
-    intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
-    inversion Hmerge1 as [?? t0 ???? Hmergeable_ifaces ? Hifacec ???? Hstar ?].
-    pose proof mergeable_states_program_to_program Hmerge1 Hcomp1 as Hcomp1'.
-    rewrite Hifacec in Hcomp1'.
-    remember E0 as t eqn:Ht.
-    revert Ht Hmerge1 Hcomp1 Hcomp1' Hstar12''.
-    apply star_iff_starR in Hstar12.
-    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
-      intros Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'.
-    - rewrite -Hifacec in Hcomp1'.
-      unfold ip, ic; erewrite merge_states_silent_star; try eassumption.
-      now apply star_refl.
-    - apply Eapp_E0_inv in Ht. destruct Ht; subst.
-      specialize (IHstar Hstar eq_refl Hmerge1 Hcomp1 Hcomp1' Hstar12').
-      apply star_trans with (t1 := E0) (s2 := merge_states ip ic s2 s2'') (t2 := E0);
-        [assumption | | reflexivity].
-      apply star_step with (t1 := E0) (s2 := merge_states ip ic s3 s2'') (t2 := E0).
-      + apply star_iff_starR in Hstar12.
-        pose proof threeway_multisem_mergeable_program Hcomp1 Hmerge1 Hstar12 Hstar12'
-          as Hmerge2.
-        pose proof CS.epsilon_star_non_inform_preserves_program_component
-             _ _ _ _ Hcomp1 Hstar12
-          as Hcomp2.
-        exact (threeway_multisem_step_E0 Hcomp2 Hmerge2 Hstep23).
-      + now constructor.
-      + reflexivity.
-  Qed.
+  exists s2',
+    Star sem'  s1'  E0 s2'.
+  (*   Star sem'  (merge_states ip ic s1 s1'') E0 (merge_states ip ic s2 s2''). *)
+  (* Proof. *)
+  (*   intros Hcomp1 Hmerge1 Hstar12 Hstar12''. *)
+  (*   inversion Hmerge1 as [?? t0 ???? Hmergeable_ifaces ? Hifacec ???? Hstar ?]. *)
+  (*   pose proof mergeable_states_program_to_program Hmerge1 Hcomp1 as Hcomp1'. *)
+  (*   rewrite Hifacec in Hcomp1'. *)
+  (*   remember E0 as t eqn:Ht. *)
+  (*   revert Ht Hmerge1 Hcomp1 Hcomp1' Hstar12''. *)
+  (*   apply star_iff_starR in Hstar12. *)
+  (*   induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst; *)
+  (*     intros Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'. *)
+  (*   - rewrite -Hifacec in Hcomp1'. *)
+  (*     unfold ip, ic; erewrite merge_states_silent_star; try eassumption. *)
+  (*     now apply star_refl. *)
+  (*   - apply Eapp_E0_inv in Ht. destruct Ht; subst. *)
+  (*     specialize (IHstar Hstar eq_refl Hmerge1 Hcomp1 Hcomp1' Hstar12'). *)
+  (*     apply star_trans with (t1 := E0) (s2 := merge_states ip ic s2 s2'') (t2 := E0); *)
+  (*       [assumption | | reflexivity]. *)
+  (*     apply star_step with (t1 := E0) (s2 := merge_states ip ic s3 s2'') (t2 := E0). *)
+  (*     + apply star_iff_starR in Hstar12. *)
+  (*       pose proof threeway_multisem_mergeable_program Hcomp1 Hmerge1 Hstar12 Hstar12' *)
+  (*         as Hmerge2. *)
+  (*       pose proof CS.epsilon_star_non_inform_preserves_program_component *)
+  (*            _ _ _ _ Hcomp1 Hstar12 *)
+  (*         as Hcomp2. *)
+  (*       exact (threeway_multisem_step_E0 Hcomp2 Hmerge2 Hstep23). *)
+  (*     + now constructor. *)
+  (*     + reflexivity. *)
+  (* Qed. *)
+  Admitted.
 
   (* RB: NOTE: Observe similarity with threeway_multisem_mergeable_program, use
      to replace this if possible. *)
-  Lemma threeway_multisem_event_lockstep_program_mergeable s1 s1'' e s2 s2'' :
+  (* RB: TODO: [DynShare] Events will need to be related instead of identical,
+     in addition to the usual existential trick we are using now. *)
+  Lemma threeway_multisem_event_lockstep_program_mergeable s1 s1' s1'' e s2 s2'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' s1 s1'' ->
+    mergeable_states p c p' c' s1 s1' s1'' ->
     Step sem   s1   [e] s2   ->
     Step sem'' s1'' [e] s2'' ->
-    mergeable_states p c p' c' s2 s2''.
-  Proof.
-    intros Hcomp1 Hmerge1 Hstep12 Hstep12''. inversion Hmerge1.
-    apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := t ** [e]);
-      try assumption.
-    - eapply star_right; try eassumption; reflexivity.
-    - eapply star_right; try eassumption; reflexivity.
-  Qed.
+  exists s2',
+    mergeable_states p c p' c' s2 s2' s2''.
+  (* Proof. *)
+  (*   intros Hcomp1 Hmerge1 Hstep12 Hstep12''. inversion Hmerge1. *)
+  (*   apply mergeable_states_intro with (s0 := s0) (s0'' := s0'') (t := t ** [e]); *)
+  (*     try assumption. *)
+  (*   - eapply star_right; try eassumption; reflexivity. *)
+  (*   - eapply star_right; try eassumption; reflexivity. *)
+  (* Qed. *)
+  Admitted.
 
-  Ltac t_threeway_multisem_event_lockstep_program_step_call Hcomp1 Hmerge1 :=
-    apply CS.Call; try assumption;
-    [
-    | now apply (imported_procedure_recombination Hcomp1)
-    | (   (now apply (@genv_entrypoints_recombination_left _ c))
-       || (now eapply (@genv_entrypoints_recombination_right _ c p')))
-    ];
-    (* Apply linking invariance and solve side goals (very similar to the
-       silent case, but slightly different setup). *)
-    [eapply execution_invariant_to_linking; try eassumption;
-      [ congruence
-      | apply linkable_implies_linkable_mains; congruence
-      | exact (is_program_component_in_domm Hcomp1 Hmerge1)
-      ]
-    ].
+  (* Ltac t_threeway_multisem_event_lockstep_program_step_call Hcomp1 Hmerge1 := *)
+  (*   apply CS.Call; try assumption; *)
+  (*   [ *)
+  (*   | now apply (imported_procedure_recombination Hcomp1) *)
+  (*   | (   (now apply (@genv_entrypoints_recombination_left _ c)) *)
+  (*      || (now eapply (@genv_entrypoints_recombination_right _ c p'))) *)
+  (*   ]; *)
+  (*   (* Apply linking invariance and solve side goals (very similar to the *)
+  (*      silent case, but slightly different setup). *) *)
+  (*   [eapply execution_invariant_to_linking; try eassumption; *)
+  (*     [ congruence *)
+  (*     | apply linkable_implies_linkable_mains; congruence *)
+  (*     | exact (is_program_component_in_domm Hcomp1 Hmerge1) *)
+  (*     ] *)
+  (*   ]. *)
 
-  Ltac t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1 :=
-    apply CS.Return; try congruence; (* [congruence] to cover context case. *)
-    eapply execution_invariant_to_linking; try eassumption;
-    [ congruence
-    | apply linkable_implies_linkable_mains; congruence
-    | exact (is_program_component_in_domm Hcomp1 Hmerge1)
-    ].
+  (* Ltac t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1 := *)
+  (*   apply CS.Return; try congruence; (* [congruence] to cover context case. *) *)
+  (*   eapply execution_invariant_to_linking; try eassumption; *)
+  (*   [ congruence *)
+  (*   | apply linkable_implies_linkable_mains; congruence *)
+  (*   | exact (is_program_component_in_domm Hcomp1 Hmerge1) *)
+  (*   ]. *)
 
   (* RB: TODO: Does it make sense to compact calls and returns into a unified
      solve tactic? *)
-  Theorem threeway_multisem_event_lockstep_program_step s1 s1'' e s2 s2'' :
+  Theorem threeway_multisem_event_lockstep_program_step s1 s1' s1'' e s2 s2'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' s1 s1'' ->
+    mergeable_states p c p' c' s1 s1' s1'' ->
     Step sem   s1   [e] s2   ->
     Step sem'' s1'' [e] s2'' ->
-    Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2'').
-  Proof.
-    intros Hcomp1 Hmerge1 Hstep12 Hstep12''.
-    (* Derive some useful facts and begin to expose state structure. *)
-    inversion Hmerge1 as [??? Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec ??????].
-    inversion Hmergeable_ifaces as [Hlinkable _].
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability.
-    assert (Hlinkable' := Hlinkable); rewrite Hifacep Hifacec in Hlinkable'.
-    pose proof linkable_implies_linkable_mains Hwfp' Hwfc' Hlinkable' as Hmain_linkability'.
-    rewrite (mergeable_states_merge_program Hcomp1 Hmerge1).
-    pose proof threeway_multisem_event_lockstep_program_mergeable
-         Hcomp1 Hmerge1 Hstep12 Hstep12'' as Hmerge2.
-    set s1copy := s1. destruct s1 as [[[[gps1 mem1] regs1] pc1] addrs1].
-    set s2copy := s2. destruct s2 as [[[[gps2 mem2] regs2] pc2] addrs2].
-    destruct s1'' as [[[[gps1'' mem1''] regs1''] pc1''] addrs1''].
-    destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addrs2''].
-    (* Case analysis on step. *)
-    inversion Hstep12; subst;
-      inversion Hstep12''; subst.
-    (* [DynShare] Instead of 2 subgoals, we now have 4: [ICall, IReturn] x [ICall, IReturn]
+  exists s2',
+    Step sem'  s1'  [e] s2'.
+    (* Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2''). *)
+  (* Proof. *)
+  (*   intros Hcomp1 Hmerge1 Hstep12 Hstep12''. *)
+  (*   (* Derive some useful facts and begin to expose state structure. *) *)
+  (*   inversion Hmerge1 as [??? Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec ??????]. *)
+  (*   inversion Hmergeable_ifaces as [Hlinkable _]. *)
+  (*   pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability. *)
+  (*   assert (Hlinkable' := Hlinkable); rewrite Hifacep Hifacec in Hlinkable'. *)
+  (*   pose proof linkable_implies_linkable_mains Hwfp' Hwfc' Hlinkable' as Hmain_linkability'. *)
+  (*   rewrite (mergeable_states_merge_program Hcomp1 Hmerge1). *)
+  (*   pose proof threeway_multisem_event_lockstep_program_mergeable *)
+  (*        Hcomp1 Hmerge1 Hstep12 Hstep12'' as Hmerge2. *)
+  (*   set s1copy := s1. destruct s1 as [[[[gps1 mem1] regs1] pc1] addrs1]. *)
+  (*   set s2copy := s2. destruct s2 as [[[[gps2 mem2] regs2] pc2] addrs2]. *)
+  (*   destruct s1'' as [[[[gps1'' mem1''] regs1''] pc1''] addrs1'']. *)
+  (*   destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addrs2'']. *)
+  (*   (* Case analysis on step. *) *)
+  (*   inversion Hstep12; subst; *)
+  (*     inversion Hstep12''; subst. *)
+  (*   (* [DynShare] Instead of 2 subgoals, we now have 4: [ICall, IReturn] x [ICall, IReturn] *)
        
-       That is a bit confusing. I do not understand why we used to have
-       only two subgoals.
-     *)
-    - admit.
+  (*      That is a bit confusing. I do not understand why we used to have *)
+  (*      only two subgoals. *)
+  (*    *) *)
+  (*   - admit. *)
       
-    - (* Here, ICall, IReturn. Derive a contradiction through [e] *)
-      admit.
+  (*   - (* Here, ICall, IReturn. Derive a contradiction through [e] *) *)
+  (*     admit. *)
       
-    - (* Here, IReturn, ICall. Derive a contradiction through [e] *)
-      admit.
+  (*   - (* Here, IReturn, ICall. Derive a contradiction through [e] *) *)
+  (*     admit. *)
       
-    - admit.
+  (*   - admit. *)
   Admitted.
 (*    - (* Call: case analysis on call point. *)
       pose proof is_program_component_in_domm Hcomp1 Hmerge1 as Hdomm.
@@ -1878,19 +1887,25 @@ Section ThreewayMultisem1.
         t_threeway_multisem_event_lockstep_program_step_return Hcomp1 Hmerge1.
   Qed.
 *)
- 
-  Corollary threeway_multisem_event_lockstep_program s1 s1'' e s2 s2'' :
+
+  (* RB: NOTE: [DynShare] Composing the two partial results above will not be
+     possible if we cannot show that the separately proved existentials
+     coincide, so modularity would decrease at this point.  *)
+  Corollary threeway_multisem_event_lockstep_program s1 s1' s1'' e s2 s2'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' s1 s1'' ->
+    mergeable_states p c p' c' s1 s1' s1'' ->
     Step sem   s1   [e] s2   ->
     Step sem'' s1'' [e] s2'' ->
-    Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2'') /\
-    mergeable_states p c p' c' s2 s2''.
-  Proof.
-    split.
-    - now apply threeway_multisem_event_lockstep_program_step.
-    - eapply threeway_multisem_event_lockstep_program_mergeable; eassumption.
-  Qed.
+  exists s2',
+    Step sem'  s1'  [e] s2' /\ mergeable_states p c p' c' s2 s2' s2''.
+    (* Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2'') /\ *)
+    (* mergeable_states p c p' c' s2 s2''. *)
+  (* Proof. *)
+  (*   split. *)
+  (*   - now apply threeway_multisem_event_lockstep_program_step. *)
+  (*   - eapply threeway_multisem_event_lockstep_program_mergeable; eassumption. *)
+  (* Qed. *)
+  Admitted.
 End ThreewayMultisem1.
 
 (* Helpers and symmetric version of three-way simulation. *)
@@ -1907,16 +1922,24 @@ Section ThreewayMultisem2.
   Let sem'' := CS.sem_non_inform prog''.
 
   (* RB: TODO: Rename, relocate. *)
-  Lemma threeway_multisem_mergeable s1 s1'' t s2 s2'' :
-    mergeable_states p c p' c' s1 s1'' ->
+  (* RB: NOTE: [DynShare] In this series of results, identical traces will need
+     to be replaced by related traces. We can expect similar complications as in
+     previous sections, especially in the need to produce explicit successor
+     states that continue to satisfy the mergeability relation. *)
+  Lemma threeway_multisem_mergeable s1 s1' s1'' t s2 s2'' :
+    mergeable_states p c p' c' s1 s1' s1'' ->
     Star sem   s1   t s2   ->
     Star sem'' s1'' t s2'' ->
-    mergeable_states p c p' c' s2 s2''.
-  Proof.
-    intros Hmerg Hstar12 Hstar12''. inversion Hmerg.
-    econstructor; try eassumption;
-      eapply star_trans; try eassumption; reflexivity.
-  Qed.
+  exists s2',
+    mergeable_states p c p' c' s2 s2' s2''.
+  (* Proof. *)
+  (*   intros Hmerg Hstar12 Hstar12''. inversion Hmerg. *)
+  (*   econstructor; try eassumption; *)
+  (*     eapply star_trans; try eassumption; reflexivity. *)
+  (* Qed. *)
+  Admitted.
+
+  (*** RB: NOTE: [DynShare] BROKEN AFTER THIS POINT ***)
 
   (* RB: TODO: Implicit parameters, compact if possible. *)
   Lemma threeway_multisem_star_E0 s1 s1'' s2 s2'':
