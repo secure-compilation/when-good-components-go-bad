@@ -2123,7 +2123,7 @@ Section ThreewayMultisem4.
       last (apply interface_preserves_closedness_r with (p2 := c); try assumption;
             now apply interface_implies_matching_mains).
     unfold merge_states, merge_memories, merge_registers, merge_pcs; simpl.
-    (* Memory simplifictions. *)
+    (* Memory simplifications. *)
     rewrite (prepare_procedures_memory_left Hlinkable).
     unfold ip. erewrite Hifacep at 1. rewrite Hifacep Hifacec in Hlinkable.
     rewrite (prepare_procedures_memory_right Hlinkable).

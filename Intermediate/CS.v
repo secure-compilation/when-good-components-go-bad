@@ -696,6 +696,7 @@ Definition binop_to_Ebinop op :=
   end.
 (* relational specification *)
 
+(* TODO: Remove shared_addr sets *)
 (* RB: TODO: [DynShare] Integrate reachability in states, semantics. *)
 Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :=
 | Nop: forall gps mem regs pc addrs,

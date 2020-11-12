@@ -4,6 +4,7 @@ Require Import Common.Memory.
 Require Import Common.Linking.
 Require Import Common.CompCertExtensions.
 Require Import Common.Renaming.
+Require Import Common.Reachability.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -30,6 +31,8 @@ Section Merge.
   Hypothesis Hmergeable_ifaces :
     mergeable_interfaces ip ic.
 
+  (* Return addresses are the sole responsibility of each side. No
+     cross-component interactions are possible. *)
   Definition merge_frames (f f''   : Pointer.t) : Pointer.t :=
     if Pointer.component f \in domm ip then f else f''.
 
@@ -165,6 +168,74 @@ Section Mergeable.
      partial programs concerned (implicitly through the section mechanism) and
      two runs synchronized by their traces. It is a rather strong notion, easy
      to work with and well suited to the purposes of the proof. *)
+  (* NOTE: [DynShare] Towards a more intensional definition of mergeable states.
+
+      - For three states, s (p, c), s' (p, c'), and s'' (p', c').
+
+      - Split (strong vs. weak) relation? Unlikely: there are no significant
+        asymmetries.
+
+      - Memories: starting from some @s, there is a reachable region of the
+        memory, which is a renaming of the corresponding reachable region:
+
+          @ <-> @' @'' <-> @'
+
+        (The third relation should be retrievable from the two given ones.)
+
+        Re: addr_shared_so_far (definitions should coincide, but note that at
+        the moment we do not have a trace in this relation; perhaps we should).
+
+        Adding the trace prefix as a parameter of the relation should not be a
+        problem; the prefix is or can easily be made available in the proofs.
+
+        Things reachable from local buffers AND from the addresses shared so
+        far. (I.e., from the POV of P, all the memory except the memory that is
+        still private to C).
+
+        Taking this set, loads can only evaluate from addresses in this set.
+
+        Moreover, if we load from s, we will be able to load from s'', and the
+        addresses will be renamings one of another.
+
+      - Stacks: ...
+
+      - Registers: ...
+
+      - PC: ...
+
+      - Role of the trace relation: at some points we will need to prove that
+        the state relation implies the trace relation.
+
+      *)
+
+  (* Inductive mem_rel (s s' s'' : CS.state) (t t' t'' : trace event) : Prop := *)
+  (* | mem_rel_intro : forall addr_0 addr_t addr, *)
+
+  (*     (* Some conditions to relate s and s' *) *)
+  (*     (forall addr_t, *)
+  (*         addrs_shared_so_far addr_t t -> *)
+  (*         memory_renames_memory_at_addr addr_t (CS.state_mem s) (CS.state_mem s')) -> *)
+  (*     (forall addr_t', *)
+  (*         addrs_shared_so_far addr_t' t' -> *)
+  (*         memory_inverse_renames_memory_at_addr addr_t' (CS.state_mem s) (CS.state_mem s')) -> *)
+  (*     (forall addr_0, *)
+  (*         addrs_from_local_buffers addr_0 p -> *)
+  (*         memory_renames_memory_at_addr addr_0 (CS.state_mem s) (CS.state_mem s')) -> *)
+  (*     (forall addr_0 addr_0, *)
+  (*         addrs_from_local_buffers addr_0 p -> *)
+  (*         renaming (* find relation, parameters, add to state relation *) addr_0 addr_0' -> *)
+  (*         memory_inverse_renames_memory_at_addr addr_0' (CS.state_mem s) (CS.state_mem s')) -> *)
+
+  (*     (* Similarly, to relate s' and s'' *) *)
+
+  (*     (* As a sort of conclusion... *) *)
+  (*     (* memory_renames_memory_at_addr addr (CS.state_mem s) (CS.state_mem s') *) *)
+
+  (*     (* Local buffers on P's side *) *)
+  (*     (* behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) -> *) *)
+  (*     (* behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') -> *) *)
+  (*     mem_rel s s' s'' t t' t''. *)
+
   Inductive mergeable_states (s s' s'' : CS.state) : Prop :=
     mergeable_states_intro : forall s0 s0' s0'' t t' t'' n n' n'',
       (* Well-formedness conditions. *)

@@ -1011,6 +1011,46 @@ Section Renaming.
       addresses in the second memory equal the lifted renaming of the loads on
       the original addresses in the first memory. *)
 
+  (* TODO: Refactor definitions below. *)
+  Definition memory_renames_memory_at_addr addr m m' : Prop :=
+    forall offset,
+      Memory.load m'
+                  (
+                    Permission.data,
+                    (rename_addr addr).1,
+                    (rename_addr addr).2,
+                    offset
+                  )
+      =
+      option_rename_value
+        (
+          Memory.load m
+                      (Permission.data,
+                       addr.1,
+                       addr.2,
+                       offset)
+        ).
+
+  (* NOTE: The inverse is probably needed as well. *)
+  Definition memory_inverse_renames_memory_at_addr addr' m m' : Prop :=
+    forall offset,
+      option_inverse_rename_value
+        (
+          Memory.load m'
+                      (Permission.data,
+                       addr'.1,
+                       addr'.2,
+                       offset
+                      )
+        )
+      =
+      Memory.load m
+                  (Permission.data,
+                   (inverse_rename_addr addr').1,
+                   (inverse_rename_addr addr').2,
+                   offset
+                  ).
+
   Definition event_renames_event_at_addr addr e e' : Prop :=
     forall offset,
       Memory.load (mem_of_event e')
