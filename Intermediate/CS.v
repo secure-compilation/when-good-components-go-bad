@@ -831,7 +831,7 @@ Import MonadNotations.
 Open Scope monad_scope.
 
 Definition eval_step (G: global_env) (s: state) : option (trace event_inform * state) :=
-  let '(gps, mem, regs, pc, addrs) := s in
+  let '(gps, mem, regs, pc) := s in
   (* fetch the next instruction to execute *)
   do C_procs <- getm (genv_procedures G) (Pointer.component pc);
   do P_code <- getm C_procs (Pointer.block pc);
@@ -842,23 +842,23 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
     (* decode and execute the instruction *)
     match instr with
     | ILabel l =>
-      ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
+      ret (E0, (gps, mem, regs, Pointer.inc pc))
     | INop =>
-      ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
+      ret (E0, (gps, mem, regs, Pointer.inc pc))
     | IConst v r =>
       let regs' := Register.set r (imm_to_val v) regs in
       ret ([EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)],
-           (gps, mem, regs', Pointer.inc pc, addrs))
+           (gps, mem, regs', Pointer.inc pc))
     | IMov r1 r2 =>
       let regs' := Register.set r2 (Register.get r1 regs) regs in
       ret ([EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
-           (gps, mem, regs', Pointer.inc pc, addrs))
+           (gps, mem, regs', Pointer.inc pc))
     | IBinOp op r1 r2 r3 =>
       let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
       let regs' := Register.set r3 result regs in
       ret ([EBinop (Pointer.component pc) (binop_to_Ebinop op) (reg_to_Ereg r1)
                    (reg_to_Ereg r2) (reg_to_Ereg r3)],
-           (gps, mem, regs', Pointer.inc pc, addrs))
+           (gps, mem, regs', Pointer.inc pc))
     | ILoad r1 r2 =>
       match Register.get r1 regs with
       | Ptr ptr =>
@@ -866,7 +866,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         do v <- Memory.load mem ptr;
           let regs' := Register.set r2 v regs in
           ret ([ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
-               (gps, mem, regs', Pointer.inc pc, addrs))
+               (gps, mem, regs', Pointer.inc pc))
       (*else
         None*)
       | _ => None
@@ -877,7 +877,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
         do mem' <- Memory.store mem ptr (Register.get r2 regs);
           ret ([EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
-               (gps, mem', regs, Pointer.inc pc, addrs))
+               (gps, mem', regs, Pointer.inc pc))
       (*else
         None*)
       | _ => None
@@ -885,12 +885,12 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
     | IJal l =>
       do pc' <- find_label_in_component G pc l;
       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-      ret ([EInvalidateRA (Pointer.component pc)], (gps, mem, regs', pc', addrs))
+      ret ([EInvalidateRA (Pointer.component pc)], (gps, mem, regs', pc'))
     | IJump r =>
       match Register.get r regs with
       | Ptr pc' =>
         if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-          ret (E0, (gps, mem, regs, pc', addrs))
+          ret (E0, (gps, mem, regs, pc'))
         else
           None
       | _ => None
@@ -898,10 +898,10 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
     | IBnz r l =>
       match Register.get r regs with
       | Int 0 =>
-        ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
+        ret (E0, (gps, mem, regs, Pointer.inc pc))
       | Int val =>
         do pc' <- find_label_in_procedure G pc l;
-        ret (E0, (gps, mem, regs, pc', addrs))
+        ret (E0, (gps, mem, regs, pc'))
       | _ => None
       end
     | IAlloc rptr rsize =>
@@ -913,7 +913,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
           do (mem', ptr) <- Memory.alloc mem (Pointer.component pc) (Z.to_nat size);
           let regs' := Register.set rptr (Ptr ptr) regs in
           ret ([EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)],
-               (gps, mem', regs', Pointer.inc pc, addrs))
+               (gps, mem', regs', Pointer.inc pc))
       | _ => None
       end
     | ICall C' P =>
@@ -923,7 +923,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
           let val := Register.get R_COM regs in
           let pc' := (Permission.code, C', b, 0%Z) in
           let t := [ECallInform (Pointer.component pc) P val mem C'] in
-          ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc', addrs))
+          ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc'))
         else
           None
       else
@@ -934,7 +934,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         if negb (Component.eqb (Pointer.component pc) (Pointer.component pc')) then
           let val := Register.get R_COM regs in
           let t := [ERetInform (Pointer.component pc) val mem (Pointer.component pc')] in
-          ret (t, (gps', mem, Register.invalidate regs, pc', addrs))
+          ret (t, (gps', mem, Register.invalidate regs, pc'))
         else
           None
       | _ => None
@@ -948,7 +948,7 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
   | S n' =>
     match eval_step G st with
     | None =>
-      let '(_, _, regs, _, _) := st in
+      let '(_, _, regs, _) := st in
       match Register.get R_COM regs with
       | Int i => Some i
       | _ => None
@@ -1002,7 +1002,7 @@ Proof.
     | Hperm: (if _ then _ else _) = Some _ |- _ => rewrite Hperm
     end.
     reflexivity.
-    
+
   - match goal with
     | Hfind: find_label_in_component _ _ _ = _ |- _ =>
       rewrite Hfind
@@ -1251,7 +1251,7 @@ Proof.
                **** apply Nat.eqb_neq. assumption.
                **** apply imported_procedure_iff. auto.
                **** assumption.
-               
+
            *** rewrite H in H2.
                (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
@@ -1442,7 +1442,7 @@ Section SemanticsInform.
 Import ssreflect eqtype.
 
 Definition stack_state_of (cs:CS.state) : stack_state :=
-  let '(gps, mem, regs, pc, addrs) := cs in
+  let '(gps, mem, regs, pc) := cs in
   StackState (Pointer.component pc) (List.map Pointer.component gps).
 
 Lemma intermediate_well_bracketed_trace t cs cs' :
@@ -1484,12 +1484,12 @@ try by move=> *; match goal with
                   apply find_label_in_component_1 in H; rewrite H
   end.
   assumption.
-- by move=> ????????? ->.
-- by move=> ???????????? /find_label_in_procedure_1 ->.
+- by move=> ???????? ->.
+- by move=> ??????????? /find_label_in_procedure_1 ->.
 - by move=> ????????????; rewrite eqxx Pointer.inc_preserves_component.
-- move=> ???????????????. rewrite !eqxx. rewrite andTb.
+- move=> ??????????????. rewrite !eqxx. rewrite andTb.
   rewrite <- Pointer.inc_preserves_component. assumption.
-- move=> ???????????. rewrite !eqxx. rewrite !andTb. assumption.
+- move=> ??????????. rewrite !eqxx. rewrite !andTb. assumption.
 Qed.
 
 Canonical ssrnat.nat_eqType.
@@ -1501,9 +1501,9 @@ Proof.
 elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
 rewrite seq.all_cat IH andbT {Hstar}.
 case: st1 t1 st2 / Hstep => //=.
-- move=> ?????????? /eqP ->.
+- move=> ????????? /eqP ->.
   by move=> /imported_procedure_iff /= ->.
-- by move=> ???????? /eqP ->.
+- by move=> ??????? /eqP ->.
 Qed.
 
 Lemma intermediate_well_formed_trace : forall t cs cs',
@@ -1776,7 +1776,7 @@ Proof.
 Qed.
 
 Definition stack_state_of_non_inform (cs:CS.state) : Traces.stack_state :=
-  let '(gps, mem, regs, pc, addrs) := cs in
+  let '(gps, mem, regs, pc) := cs in
   Traces.StackState (Pointer.component pc) (List.map Pointer.component gps).
 
 
@@ -1940,8 +1940,8 @@ Qed.
 (* RB: TODO: This result admits more general formulations (see above).
    Replace this with those whenever convenient, including the "bootstrapping"
    on the stack in the result for the domain of the PC, just below. *)
-Corollary comes_from_initial_state_stack_cons_domm frame gps mem regs pc addrs iface :
-  comes_from_initial_state (frame :: gps, mem, regs, pc, addrs) iface ->
+Corollary comes_from_initial_state_stack_cons_domm frame gps mem regs pc iface :
+  comes_from_initial_state (frame :: gps, mem, regs, pc) iface ->
   Pointer.component frame \in domm iface.
 Proof.
   intros Hcomes_from.
@@ -2039,7 +2039,7 @@ Lemma silent_step_preserves_program_component : forall s1 s2 G ctx,
   CS.step G s1 E0 s2 ->
   CS.is_program_component s2 ctx.
 Proof.
-  intros [[[[? ?] ?] pc1] ?] [[[[? ?] ?] pc2] ?] G ctx Hcomp1 Hstep12.
+  intros [[[? ?] ?] pc1] [[[? ?] ?] pc2] G ctx Hcomp1 Hstep12.
   pose proof CS.silent_step_preserves_component _ _ _ Hstep12 as Heq.
   simplify_turn. now rewrite <- Heq.
 Qed.
@@ -2049,7 +2049,7 @@ Lemma silent_step_non_inform_preserves_program_component : forall s1 s2 G ctx,
   CS.step_non_inform G s1 E0 s2 ->
   CS.is_program_component s2 ctx.
 Proof.
-  intros [[[[? ?] ?] pc1] ?] [[[[? ?] ?] pc2] ?] G ctx Hcomp1 Hstep12.
+  intros [[[? ?] ?] pc1] [[[? ?] ?] pc2] G ctx Hcomp1 Hstep12.
   pose proof CS.silent_step_non_inform_preserves_component _ _ _ Hstep12 as Heq.
   simplify_turn. now rewrite <- Heq.
 Qed.
@@ -2338,15 +2338,15 @@ Section ProgramLink.
 
   (* RB: NOTE: Check with existing results.
      Possibly rewrite in terms of state_pc. *)
-  Lemma star_pc_domm : forall {s st mem reg pc addrs t},
+  Lemma star_pc_domm : forall {s st mem reg pc t},
     initial_state (program_link p c) s ->
-    Star (sem_inform (program_link p c)) s t (st, mem, reg, pc, addrs) ->
+    Star (sem_inform (program_link p c)) s t (st, mem, reg, pc) ->
     Pointer.component pc \in domm (prog_interface p) \/
     Pointer.component pc \in domm (prog_interface c).
   Proof.
-    intros s st mem reg pc addrs t Hini Hstar.
+    intros s st mem reg pc t Hini Hstar.
     assert (H : Pointer.component pc \in domm (prog_interface (program_link p c))).
-    { replace pc with (CS.state_pc (st, mem, reg, pc, addrs)); try reflexivity.
+    { replace pc with (CS.state_pc (st, mem, reg, pc)); try reflexivity.
       apply CS.comes_from_initial_state_pc_domm.
       destruct (cprog_main_existence Hprog_is_closed) as [_ [? _]].
       exists (program_link p c), s, t.
@@ -2355,15 +2355,15 @@ Section ProgramLink.
     move: H. simpl. rewrite domm_union. now apply /fsetUP.
   Qed.
 
-  Lemma star_pc_domm_non_inform : forall {s st mem reg pc addrs t},
+  Lemma star_pc_domm_non_inform : forall {s st mem reg pc t},
     initial_state (program_link p c) s ->
-    Star (sem_non_inform (program_link p c)) s t (st, mem, reg, pc, addrs) ->
+    Star (sem_non_inform (program_link p c)) s t (st, mem, reg, pc) ->
     Pointer.component pc \in domm (prog_interface p) \/
                              Pointer.component pc \in domm (prog_interface c).
   Proof.
-    intros s st mem reg pc addrs t Hini Hstar.
+    intros s st mem reg pc t Hini Hstar.
     pose proof star_sem_non_inform_star_sem_inform
-         (program_link p c) s t (st, mem, reg, pc, addrs) Hstar
+         (program_link p c) s t (st, mem, reg, pc) Hstar
       as [t_inform [Hstar_inform Hproj]].
     exact (star_pc_domm Hini Hstar_inform).
   Qed.
@@ -2588,7 +2588,7 @@ Proof.
       + apply Register_get_regs_ptrs with (r1 := r1) (ptrO := ptrO).
         assert (Pointer.permission (ptrP, ptrC, ptrB, ptrO) = Permission.data) as eptrP.
         { apply Memory.load_some_permission with (mem := mem0) (v := v). assumption. }
-        simpl in eptrP. rewrite eptrP in H13.
+        simpl in eptrP. rewrite eptrP in H11.
         assumption.
     }
     destruct v as [z | [[[vP vC] vB] vO] |] eqn:ve.
@@ -2611,7 +2611,7 @@ Proof.
         (* auto *) (* This broke after introducing the permissions field. *)
       * rewrite fsubUset. apply/andP; split; auto.
         apply (@fsubset_trans _
-                              (mem_data_ptrs (state_mem (gps0, mem0, regs, pc, addrs0))) _ _).
+                              (mem_data_ptrs (state_mem (gps0, mem0, regs, pc))) _ _).
         -- simpl. rewrite fsub1set.
            apply Memory_load_mem_ptrs with
                (aP := ptrP) (aC := ptrC) (aB := ptrB) (aO := ptrO) (vO := vO). auto.
