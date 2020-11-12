@@ -26,35 +26,17 @@ Import Intermediate.
 
 Definition stack : Type := list Pointer.t.
 
-(* RB: TODO: [DynShare] Give names to recurring types, harmonize naming
-   conventions.
-   This type should probably be defined elsewhere. *)
-Definition reach_addr : Type := {fmap (Component.id -> {fset (Component.id * Block.id)})}.
-
 (* NOTE: Consider parameterizing the semantics by a type of "additional state",
    and instantiate the non-/informative semantics as specializations of the
    parametric semantics. *)
-Definition state : Type := stack * Memory.t * Register.t * Pointer.t * reach_addr.
-
-Definition update_reachability_of_component_with_value : value -> Component.id -> reach_addr -> reach_addr.
-  Admitted.
-
-Definition compute_trace_for_load_by_component : Component.id -> Pointer.t -> reach_addr -> trace event.
-  Admitted.
-
-Definition compute_trace_for_store_by_component : Component.id -> Pointer.t -> reach_addr -> trace event.
-  Admitted.
-
-Definition propagate_store_to_all_components_reach : Pointer.t -> value -> reach_addr -> reach_addr.
-  Admitted.
+Definition state : Type := stack * Memory.t * Register.t * Pointer.t.
 
 Ltac unfold_state st :=
   let gps := fresh "gps" in
   let mem := fresh "mem" in
   let regs := fresh "regs" in
   let pc := fresh "pc" in
-  let addrs := fresh "addrs" in
-  destruct st as [[[[gps mem] regs] pc] addrs].
+  destruct st as [[[gps mem] regs] pc].
 
 Ltac unfold_states :=
   repeat (match goal with
@@ -63,7 +45,7 @@ Ltac unfold_states :=
 
 Instance state_turn : HasTurn state := {
   turn_of s iface :=
-    let '(_, _, _, pc, _) := s in
+    let '(_, _, _, pc) := s in
     Pointer.component pc \in domm iface
 }.
 
@@ -76,19 +58,16 @@ Ltac simplify_turn :=
   simpl in *.
 
 Definition state_stack (st : state) : stack :=
-  let '(gps, _, _, _, _) := st in gps.
+  let '(gps, _, _, _) := st in gps.
 
 Definition state_mem (st : state) : Memory.t :=
-  let '(_, mem, _, _, _) := st in mem.
+  let '(_, mem, _, _) := st in mem.
 
 Definition state_regs (s : CS.state) : Register.t :=
-  let '(_, _, regs, _, _) := s in regs.
+  let '(_, _, regs, _) := s in regs.
 
 Definition state_pc (st : state) : Pointer.t :=
-  let '(_, _, _, pc, _) := st in pc.
-
-Definition state_addrs (st : state) : reach_addr :=
-  let '(_, _, _, _, addrs) := st in addrs.
+  let '(_, _, _, pc) := st in pc.
 
 Definition state_component (st : CS.state) : Component.id :=
   Pointer.component (state_pc st).
@@ -548,7 +527,7 @@ Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
   Pointer.component (CS.state_pc s) \notin domm ctx.
 Proof.
-  now destruct s as [[[[? ?] ?] ?] ?].
+  now destruct s as [[[? ?] ?] ?].
 Qed.
 
 (* preparing the machine for running a program *)
@@ -562,9 +541,9 @@ Definition initial_machine_state (p: program) : state :=
              | Some b => b
              | None => 0 (* This case shouldn't happen for a well-formed p *)
              end in
-    ([], mem, regs, (Permission.code, Component.main, b, 0%Z), emptym)
+    ([], mem, regs, (Permission.code, Component.main, b, 0%Z))
   (* this case shoudln't happen for a well-formed p *)
-  | false => ([], emptym, emptym, (Permission.code, Component.main, 0, 0%Z), emptym)
+  | false => ([], emptym, emptym, (Permission.code, Component.main, 0, 0%Z))
   end.
 
 (* A slightly hacky way to express the initial pc of a linked program as a
@@ -610,8 +589,7 @@ Theorem initial_machine_state_after_linking:
      Register.init,
      (Permission.code, Component.main,
       prog_main_block p + prog_main_block c,
-      0%Z),
-     emptym).
+      0%Z)).
 Proof.
   intros p c Hwfp Hwfc Hlinkable Hclosed.
   unfold initial_machine_state.
@@ -672,7 +650,7 @@ Definition initial_state (p: program) (ics: state) : Prop :=
   ics = initial_machine_state p.
 
 Definition final_state (G: global_env) (s: state) : Prop :=
-  let '(gsp, mem, regs, pc, addrs) := s in
+  let '(gsp, mem, regs, pc) := s in
   executing G pc IHalt.
 
 Definition reg_to_Ereg r :=
@@ -696,149 +674,126 @@ Definition binop_to_Ebinop op :=
   end.
 (* relational specification *)
 
-(* TODO: Remove shared_addr sets *)
-(* RB: TODO: [DynShare] Integrate reachability in states, semantics. *)
+(* RB: TODO: [DynShare] Do we need mappings like [imm_to_val] and [reg_to_Ereg],
+   can we do the plain types? *)
 Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :=
-| Nop: forall gps mem regs pc addrs,
+| Nop: forall gps mem regs pc,
     executing G pc INop ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, Pointer.inc pc)
 
-| Label: forall gps mem regs pc l addrs,
+| Label: forall gps mem regs pc l,
     executing G pc (ILabel l) ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, Pointer.inc pc)
 
-| Const: forall gps mem regs regs' pc r v addrs,
+| Const: forall gps mem regs regs' pc r v,
     executing G pc (IConst v r) ->
     Register.set r (imm_to_val v) regs = regs' ->
-    step G
-         (gps, mem, regs, pc, addrs)
-         [EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)]
-         (gps, mem, regs', Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc)
+           [EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)]
+           (gps, mem, regs', Pointer.inc pc)
 
-| Mov: forall gps mem regs regs' pc r1 r2 addrs,
+| Mov: forall gps mem regs regs' pc r1 r2,
     executing G pc (IMov r1 r2) ->
     Register.set r2 (Register.get r1 regs) regs = regs' ->
-    step G
-         (gps, mem, regs, pc, addrs)
-         [EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
-         (gps, mem, regs', Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc)
+           [EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+           (gps, mem, regs', Pointer.inc pc)
 
-| BinOp: forall gps mem regs regs' pc r1 r2 r3 op addrs,
+| BinOp: forall gps mem regs regs' pc r1 r2 r3 op,
     executing G pc (IBinOp op r1 r2 r3) ->
     let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
     Register.set r3 result regs = regs' ->
-    step G
-         (gps, mem, regs, pc, addrs)
-         [EBinop (Pointer.component pc) (binop_to_Ebinop op)
-                 (reg_to_Ereg r1) (reg_to_Ereg r2) (reg_to_Ereg r3)]
-         (gps, mem, regs', Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc)
+           [EBinop (Pointer.component pc) (binop_to_Ebinop op)
+                   (reg_to_Ereg r1) (reg_to_Ereg r2) (reg_to_Ereg r3)]
+           (gps, mem, regs', Pointer.inc pc)
 
-| Load: forall gps mem regs regs' pc r1 r2 ptr v addrs,
+| Load: forall gps mem regs regs' pc r1 r2 ptr v,
     executing G pc (ILoad r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
-    (* RB: TODO [DynShare] Clarify new restriction and substitute once given a
-       computable definition.
-       NOTE: Even though cross-component pointer forging is possible at the
-       program level, it is detected and stopped here. *)
-    (*Pointer.component ptr = Pointer.component pc ->*) (* Shared memory prohibition removed *)
+    (* RB: NOTE: [DynShare] Even though cross-component pointer forging is
+       possible at the program level, it WAS detected and stopped here. *)
+    (* Pointer.component ptr = Pointer.component pc -> *)
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
-    (* RB: TODO: [DynShare] Furnish computational definition. It may be preferable
-       to inline the expression in the conclusion. *)
-    (* compute_trace_for_load_by_component (Pointer.component pc) ptr reach = e -> *)
-    step G
-         (gps, mem, regs, pc, addrs)
-         [ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)] (* e *)
-         (gps, mem, regs', Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc)
+           [ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+           (gps, mem, regs', Pointer.inc pc)
 
-| Store: forall gps mem mem' regs pc ptr r1 r2 addrs (* v reach' e *),
+| Store: forall gps mem mem' regs pc ptr r1 r2 (* v reach' e *),
     executing G pc (IStore r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
-    (* RB: TODO: [DynShare] Clarify new restriction and substitute once given a
-       computable definition.
-       NOTE: Even though cross-component pointer forging is possible at the
-       program level, it is detected and stopped here. *)
+    (* RB: NOTE: [DynShare] Even though cross-component pointer forging is
+       possible at the program level, it WAS detected and stopped here. *)
     (* Pointer.component ptr = Pointer.component pc -> *)
-    (* RB: TODO: [DynShare] Uncomment refactoring below while fixing existing
-       proofs. *)
-    (* Register.get r2 regs = v -> *)
-    Memory.store mem ptr (* v *) (Register.get r2 regs) = Some mem' ->
-    (* compute_trace_for_store_by_component (Pointer.component pc) ptr reach = e -> *)
-    (* propagate_store_to_all_components_reach ptr v reach = reach' -> *)
-    step G
-         (gps, mem, regs, pc, addrs)
-         (* e *) [EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
-         (gps, mem', regs, Pointer.inc pc, addrs) (* reach', replace addrs *)
+    Memory.store mem ptr (Register.get r2 regs) = Some mem' ->
+    step G (gps, mem, regs, pc)
+           [EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+           (gps, mem', regs, Pointer.inc pc)
 
-| Jal: forall gps mem regs regs' pc pc' l addrs,
+| Jal: forall gps mem regs regs' pc pc' l,
     executing G pc (IJal l) ->
     find_label_in_component G pc l = Some pc' ->
     Register.set R_RA (Ptr (Pointer.inc pc)) regs = regs' ->
     step G
-         (gps, mem, regs, pc, addrs)
+         (gps, mem, regs, pc)
          [EInvalidateRA (Pointer.component pc)]
-         (gps, mem, regs', pc', addrs)
+         (gps, mem, regs', pc')
 
-| Jump: forall gps mem regs pc pc' r addrs,
+| Jump: forall gps mem regs pc pc' r,
     executing G pc (IJump r) ->
     Register.get r regs = Ptr pc' ->
     Pointer.component pc' = Pointer.component pc ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, pc', addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, pc')
 
-| BnzNZ: forall gps mem regs pc pc' r l val addrs,
+| BnzNZ: forall gps mem regs pc pc' r l val,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int val ->
     (val <> 0) % Z ->
     find_label_in_procedure G pc l = Some pc' ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, pc', addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, pc')
 
-| BnzZ: forall gps mem regs pc r l addrs,
+| BnzZ: forall gps mem regs pc r l,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int 0 ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, Pointer.inc pc)
 
-| Alloc: forall gps mem mem' regs regs' pc rsize rptr size ptr addrs (* reach' *),
+| Alloc: forall gps mem mem' regs regs' pc rsize rptr size ptr,
     executing G pc (IAlloc rptr rsize) ->
     Register.get rsize regs = Int size ->
     (size > 0) % Z ->
     Memory.alloc mem (Pointer.component pc) (Z.to_nat size) = Some (mem', ptr) ->
     Register.set rptr (Ptr ptr) regs = regs' ->
-    (* RB: TODO: [DynShare] Restore check after making it computational. *)
-    (* update_reachability_of_component_with_value (Ptr ptr) (Pointer.component pc) reach = reach' -> *)
-    step G
-         (gps, mem, regs, pc, addrs)
-         [EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)]
-         (gps, mem', regs', Pointer.inc pc, addrs) (* reach', replace addrs *)
+    step G (gps, mem, regs, pc)
+           [EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)]
+           (gps, mem', regs', Pointer.inc pc)
 
-| Call: forall gps mem regs pc b C' P call_arg addrs (* reach' *),
+| Call: forall gps mem regs pc b C' P call_arg,
     executing G pc (ICall C' P) ->
     Pointer.component pc <> C' ->
     imported_procedure (genv_interface G) (Pointer.component pc) C' P ->
     EntryPoint.get C' P (genv_entrypoints G) = Some b ->
-    (* RB: TODO: [DynShare] Re-lift restriction to integer values. *)
+    (* RB: TODO: [DynShare] Re-lift restriction to integer values.
+       -- Unnecessary? *)
     Register.get R_COM regs = call_arg ->
-    (* RB: TODO: [DynShare] Restore check after making it computational. *)
-    (* update_reachability_of_component_with_value call_arg C' reach = reach' -> *)
-    step G (gps, mem, regs, pc, addrs)
+    step G (gps, mem, regs, pc)
            [ECallInform (Pointer.component pc) P call_arg mem C']
-           (Pointer.inc pc :: gps, mem, Register.invalidate regs,
-            (Permission.code, C', b, 0%Z), addrs) (* reach', replace addrs *)
+           (Pointer.inc pc :: gps, mem, Register.invalidate regs, (Permission.code, C', b, 0%Z))
 
-| Return: forall gps' mem regs pc pc' ret_arg addrs (* reach' *),
+| Return: forall gps' mem regs pc pc' ret_arg,
     executing G pc IReturn ->
     Pointer.component pc <> Pointer.component pc' ->
-    (* RB: TODO: [DynShare] Re-lift restriction to integer values. *)
+    (* RB: TODO: [DynShare] Re-lift restriction to integer values.
+       -- Unnecessary? *)
     Register.get R_COM regs = ret_arg ->
-    (* RB: TODO: [DynShare] Restore check after making it computational. *)
-    (* update_reachability_of_component_with_value ret_arg (Pointer.component pc') reach = reach' -> *)
-    step G (pc' :: gps', mem, regs, pc, addrs)
+    step G (pc' :: gps', mem, regs, pc)
            [ERetInform (Pointer.component pc) ret_arg mem (Pointer.component pc')]
-           (gps', mem, Register.invalidate regs, pc', addrs) (* reach', replace addrs *).
+           (gps', mem, Register.invalidate regs, pc').
 
 Ltac step_of_executing :=
   match goal with
