@@ -1544,64 +1544,34 @@ Section SemanticsNonInform.
       equal_and_nil_or_singleton t1 t2 /\ (t1 = t2 -> s1 = s2).
   Proof.
     intros s t1 s21 t2 s2 Hstep1 Hstep2.
-    inversion Hstep1; subst; inversion Hstep2; subst;    
-      match goal with
-        Hstep1': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e
-                      (?gps', ?mem', ?regs', ?pc', ?addrs'),
-                 Hstep2': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e0
-                               (?gps'0, ?mem'0, ?regs'0, ?pc'0, ?addrs'0) |- _ =>
-        destruct (determinate_step
-                    p
-                    (gps, mem, regs, pc, addrs)
-                    e
-                    (gps', mem', regs', pc', addrs')
-                    e0
-                    (gps'0, mem'0, regs'0, pc'0, addrs'0)
-                    Hstep1'
-                    Hstep2')
-          as [eqee0 teqSeq] end;
-      split; try (intros; apply teqSeq; auto); try apply match_traces_E0;
-      destruct eqee0; auto;
-        try match goal with Hee': event_equal ?e ?e' |- _ =>
-                        pose proof (@event_equal_equal
-                                      event_inform
-                                      event_inform_EventClass e e' Hee') as ee'eq;
-                          rewrite ee'eq; reflexivity end;
-        try (simpl; apply match_traces_E0);
-    match goal with Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
-                    pose proof executing_deterministic G pc i i' Hexec Hexec' as cntr;
-                      try discriminate end;
-    match goal with H1: event_equal ?e ?e' |- _ =>
-                    pose proof (@event_equal_equal
-                                  event_inform
-                                  event_inform_EventClass e e' H1) as ee'eq;
-                      rewrite ee'eq;
-                      pose proof
-                           event_non_inform_of_nil_or_singleton [e']
-                        as [Hnil | [e0' Hsingleton]];
-                      try (rewrite Hnil; constructor);
-                      try (rewrite Hsingleton; constructor;
-                           apply equal_event_equal; reflexivity)
-    end.
+    inversion Hstep1 as [s'1 t1' s21' Hstep1'];
+      inversion Hstep2 as [s'2 t2' s2' Hstep2'];
+      subst.
+    pose proof determinate_step _ _ _ _ _ _ Hstep1' Hstep2' as [Heqnil Heq].
+    inversion Heqnil as [| e e' Heveq]; subst.
+    - split.
+      + now constructor.
+      + now auto.
+    - apply event_equal_equal in Heveq; subst e'. split.
+      + destruct e; now repeat constructor.
+      + now auto.
   Qed.
-  
+
   Lemma singleton_traces_non_inform:
     single_events sem_non_inform.
   Proof.
-    unfold single_events.
-    intros s t s' Hstep.
-    inversion Hstep; simpl; auto;
-      match goal with | Hstep': step _ _ _ _ |- _ => inversion Hstep' end; auto.
+    unfold single_events. intros s t s' Hstep.
+    inversion Hstep as [? t' ? Hstep']; inversion Hstep'; now auto.
   Qed.
 
   Lemma no_step_no_step_non_inform:
     forall s, nostep step G s -> nostep step_non_inform G s.
   Proof.
-    unfold nostep. intros s Hnostep t s' Hstep_non_inform. unfold_state s.
-    inversion Hstep_non_inform;
-      match goal with Hstep: step G ?st ?t ?st' |- _ => apply (Hnostep t st'); assumption end.
+    intros s Hnostep t s' Hstep.
+    inversion Hstep; subst.
+    eapply Hnostep; eassumption.
   Qed.
-  
+
   Lemma final_states_stuckness_non_inform:
     forall s,
       final_state G s ->
@@ -1645,113 +1615,64 @@ Proof.
   - auto.
   - auto.
   - simpl.
-    match goal with IH: project_non_inform (t1 ** []) = _ |- _ => rewrite IH end.
+    match goal with
+    | IH: project_non_inform (t1 ** []) = _ |- _ => rewrite IH
+    end.
     simpl. rewrite !E0_right. reflexivity.
   - simpl (project_non_inform (?a :: t1)).
     destruct a;
-             simpl (project_non_inform ((_ :: t1) ** ?e :: t2));
-             match goal with IH: project_non_inform (t1 ** _) = _ |- _ => rewrite IH end;
-             reflexivity.
+      simpl (project_non_inform ((_ :: t1) ** ?e :: t2));
+      match goal with
+      | IH: project_non_inform (t1 ** _) = _ |- _ => rewrite IH
+      end;
+      reflexivity.
+Qed.
+
+(* RB: TODO: Rename these two functions to make the difference between them
+   clear, at the moment it is rather confusing. This equivalence is of use
+   to simplify several subsequent results. *)
+Lemma project_event_non_inform s t s' :
+  step G s t s' ->
+  project_non_inform t = event_non_inform_of t.
+Proof.
+  intros Hstep.
+  pose proof singleton_traces_inform _ _ _ _ Hstep.
+  destruct t as [| e1 [| e2 t]]; easy.
 Qed.
 
 Lemma step_non_inform_step_inform cs t cs':
   step_non_inform G cs t cs' ->
   exists t_inform, step G cs t_inform cs' /\ project_non_inform t_inform = t.
 Proof.
-  intros Hstep_noninform.
-  inversion Hstep_noninform;
-    match goal with Hstep : step _ _ ?e _ |- _ =>
-                    exists e; split; try exact Hstep; inversion Hstep;
-                      match goal with
-                        Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
-                        pose proof executing_deterministic G pc i i' Hexec Hexec' as cntr;
-                          try discriminate
-                      end; auto
-    end.
+  intros Hstep.
+  inversion Hstep as [? t' ? Hstep']; subst.
+  exists t'. split; [assumption |].
+  eapply project_event_non_inform; eassumption.
 Qed.
 
 Lemma step_inform_step_non_inform cs t_inform cs':
   step G cs t_inform cs' ->
   step_non_inform G cs (project_non_inform t_inform) cs'.
 Proof.
-  intros Hstep_inform. remember Hstep_inform. inversion Hstep_inform.
-  - eapply Nop_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Label_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Const_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Mov_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply BinOp_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Load_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Store_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Jal_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Jump_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Bnz_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Bnz_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Alloc_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - simpl.
-    assert (step_non_inform G (gps, mem, regs, pc, addrs)
-                            (event_non_inform_of
-                               [ECallInform (Pointer.component pc) P call_arg mem C'])
-                            (Pointer.inc pc :: gps, mem,
-                             Register.invalidate regs,
-                             (Permission.code, C', b, 0%Z), addrs)
-           ) as gl.
-    {
-      eapply Call_non_inform; eauto.
-      match goal with Hcs: _ = cs, Hcs': _ = cs', Ht: _ = t_inform |- _ =>
-                      rewrite Hcs Hcs' Ht end.
-      exact Hstep_inform.
-    }
-    exact gl.
-  - simpl.
-    assert (step_non_inform G (pc' :: gps', mem, regs, pc, addrs)
-                            (event_non_inform_of
-                               [ERetInform (Pointer.component pc) ret_arg mem (Pointer.component pc')])
-                            (gps', mem, Register.invalidate regs, pc', addrs)
-           ) as gl.
-    {
-      eapply Return_non_inform; eauto.
-      match goal with Hcs: _ = cs, Hcs': _ = cs', Ht: _ = t_inform |- _ =>
-                      rewrite Hcs Hcs' Ht end.
-      exact Hstep_inform.
-    }
-    exact gl.
+  intros Hstep. rewrite (project_event_non_inform _ _ _ Hstep).
+  inversion Hstep; subst;
+    now constructor.
 Qed.
 
 Lemma star_sem_non_inform_star_sem_inform cs t cs' :
   Star sem_non_inform cs t cs' ->
-  exists t_inform, Star (sem_inform p) cs t_inform cs' /\ project_non_inform t_inform = t.
+exists t_inform,
+  Star (sem_inform p) cs t_inform cs' /\ project_non_inform t_inform = t.
 Proof.
   intros Hstar. induction Hstar. exists E0. split. constructor. auto.
-  match goal with Hstep: Step _ ?s1 ?t1 ?s2 |- _ =>
-                  pose proof step_non_inform_step_inform s1 t1 s2 Hstep as Hexists;
-                    destruct Hexists as [t1_inform [Hstep_t1_inform Hproj_t1_inform]]
+  match goal with
+  | Hstep: Step _ ?s1 ?t1 ?s2 |- _ =>
+    pose proof step_non_inform_step_inform s1 t1 s2 Hstep as Hexists;
+    destruct Hexists as [t1_inform [Hstep_t1_inform Hproj_t1_inform]]
   end.
-  match goal with IH: exists _, _ |- _ =>
-                             destruct IH as [t2_inform [Hstar_t2_inform Hproj_t2_inform]]
+  match goal with
+  | IH: exists _, _ |- _ =>
+    destruct IH as [t2_inform [Hstar_t2_inform Hproj_t2_inform]]
   end.
   exists (t1_inform ** t2_inform). split.
   apply star_trans with (t1 := t1_inform) (s2 := s2) (t2 := t2_inform); auto.
@@ -2009,29 +1930,14 @@ Lemma silent_step_non_inform_preserves_component G s s' :
   CS.step_non_inform G s E0 s' ->
   Pointer.component (state_pc s) = Pointer.component (state_pc s').
 Proof.
-  intros Hstep_non_inform.
-  inversion Hstep_non_inform; subst; simpl;
-    match goal with Hstep: step _ _ _ _ |- _ =>
-                    inversion Hstep; auto;
-                      match goal with
-                        Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
-                        pose proof executing_deterministic G pc i i' Hexec Hexec' as cntr;
-                          try discriminate
-                      end; auto
-    end;
-    try now rewrite Pointer.inc_preserves_component.
-  - match goal with Hfind: find_label_in_component _ ?pc ?l0 = Some ?pc' |- _ =>
-                    exact (find_label_in_component_1 G pc pc' l0 Hfind)
-    end.
-  - match goal with Hfind: find_label_in_procedure _ ?pc ?l0 = Some ?pc' |- _ =>
-                    exact (find_label_in_procedure_1 G pc pc' l0 Hfind)
-    end.
-  - match goal with Hnoninf: _ = E0, He: [ECallInform _ _ _ _ _] = _ |- _ =>
-                    rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
-    end.
-  - match goal with Hnoninf: _ = E0, He: [ERetInform _ _ _ _] = _ |- _ =>
-                    rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
-    end.
+  intros Hstep. inversion Hstep as [? t ? Hstep']; subst.
+  inversion Hstep'; subst;
+    try (now rewrite Pointer.inc_preserves_component).
+  - eapply find_label_in_component_1; now eauto.
+  - eapply silent_step_preserves_component; eassumption.
+  - eapply silent_step_preserves_component; eassumption.
+  - discriminate.
+  - discriminate.
 Qed.
 
 Lemma silent_step_preserves_program_component : forall s1 s2 G ctx,
@@ -2092,36 +1998,15 @@ Proof.
   - subst; assert (t1 = E0) by now induction t1.
     assert (t2 = E0) by now induction t1. subst.
     apply IHHstar; auto.
-    clear H0 IHHstar Hstar.
-    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in *.
-    inversion H;
-      try (match goal with
-           | Heq : (_, _, _, _) = s1 |- _ => rewrite -Heq in Hprg_component
-           end);
-      match goal with Hstep: step _ _ _ _ |- _ =>
-                      inversion Hstep; auto;
-                        match goal with
-                          Hexec: executing _ ?pc ?i, Hexec': executing _ ?pc ?i' |- _ =>
-                          pose proof executing_deterministic
-                               (globalenv (sem_non_inform (program_link p c)))
-                               pc i i' Hexec Hexec' as cntr;
-                            try discriminate
-                        end; auto
-      end;
-      try (rewrite Pointer.inc_preserves_component; assumption).
-    + match goal with Hfind: find_label_in_component ?G ?pc ?l0 = Some ?pc' |- _ =>
-                      rewrite <- (find_label_in_component_1 G pc pc' l0 Hfind)
-      end. assumption.
-    + match goal with Heq : _ pc' = _ pc |- _ => rewrite Heq; assumption end.
-    + match goal with Hfind: find_label_in_procedure ?G ?pc ?l0 = Some ?pc' |- _ =>
-                      rewrite <- (find_label_in_procedure_1 G pc pc' l0 Hfind)
-      end. assumption.
-    + match goal with Hnoninf: _ = E0, He: [ECallInform _ _ _ _ _] = _ |- _ =>
-                      rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
-      end.
-    + match goal with Hnoninf: _ = E0, He: [ERetInform _ _ _ _] = _ |- _ =>
-                      rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
-      end.
+    clear H0 IHHstar. simpl in H.
+    inversion H as [? t ? Hstep]; subst.
+    inversion Hstep; subst; CS.simplify_turn;
+      try (now rewrite Pointer.inc_preserves_component).
+    + erewrite <- find_label_in_component_1; eassumption.
+    + congruence.
+    + erewrite <- find_label_in_procedure_1; eassumption.
+    + discriminate.
+    + discriminate.
 Qed.
 
 (* RB: Could be phrased in terms of does_prefix. *)
