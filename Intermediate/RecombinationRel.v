@@ -213,10 +213,21 @@ Section Mergeable.
       addr_shared_so_far addrs t ->
       memory_inverse_renames_memory_at_addr sigma_inv addrs m m'.
 
-  (* Addresses found in a program's local buffers.
-     NOTE: Do we need to give [p] explicitly here? *)
+  (* An inductive definition to relate a program with the pointers found in its
+     buffers and procedures. A computational definition can be given as well. *)
   Inductive prog_addrs (p : program) (addrs : addr_t) : Prop :=
-  (* TODO *).
+  | prog_addrs_buffers : forall C b o perm C' b' bufs buf,
+      addrs = (C, b) ->
+      (prog_buffers p) C' = Some bufs ->
+      bufs b' = Some (inr buf) ->
+      In (Ptr (C, b, o, perm)) buf ->
+      prog_addrs p addrs
+  | prog_addrs_procedures : forall C b o perm r C' P procs proc,
+      addrs = (C, b) ->
+      (prog_procedures p) C' = Some procs ->
+      procs P = Some proc ->
+      In (IConst (IPtr (C, b, o, perm)) r) proc ->
+      prog_addrs p addrs.
 
   Definition prog_addrs_rel p m m' :=
     forall addrs,
