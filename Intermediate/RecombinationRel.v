@@ -253,7 +253,7 @@ Section Mergeable.
       (* trace_addrs_rel    t'  m'' m' -> *)
       (* prog_addrs_rel     p   m'' m' -> *)
       (* prog_addrs_rel_inv p   m'' m' -> *)
-      mem_rel2 m'' m' t'' t ->
+      mem_rel2 m'' m' t'' t' ->
 
       (* As a sort of conclusion... *)
       (* memory_renames_memory_at_addr addr (CS.state_mem s) (CS.state_mem s') *)
@@ -261,7 +261,7 @@ Section Mergeable.
       (* Local buffers on P's side *)
       (* behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) -> *)
       (* behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') -> *)
-      mem_rel3 m m' m'' t t' trivial''.
+      mem_rel3 m m' m'' t t' t''.
 
   (* This "extensional" reading of compatible states depends directly on the
      partial programs concerned (implicitly through the section mechanism) and
