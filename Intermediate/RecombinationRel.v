@@ -230,30 +230,23 @@ Section Mergeable.
       (* ... *)
       memory_inverse_renames_memory_at_addr sigma_inv addrs m m'.
 
-  Inductive mem_rel2 (m m' : eqtype.Equality.sort Memory.t) (t t' : trace event) : Prop :=
-  | mem_rel2_intro :
+  Definition memtrace : Type := eqtype.Equality.sort Memory.t * trace event.
+
+  Inductive mem_rel2 (mt mt' : memtrace) : Prop :=
+  | mem_rel2_intro : forall m t m' t',
+      mt  = (m , t ) ->
+      mt' = (m', t') ->
       trace_addrs_rel     t  m m' ->
       trace_addrs_rel_inv t' m m' ->
       prog_addrs_rel      p  m m' ->
       prog_addrs_rel_inv  p  m m' ->
-      mem_rel2 m m' t t'.
+      mem_rel2 mt mt'.
 
-  Inductive mem_rel3 (m m' m'' : eqtype.Equality.sort Memory.t) (t t' t'' : trace event) : Prop :=
+  Inductive mem_rel3 (mt mt' mt'' : memtrace) : Prop :=
   | mem_rel3_intro :
-
-      (* Some conditions to relate m and m' *)
-      (* trace_addrs_rel     t  m m' -> *)
-      (* trace_addrs_rel_inv t' m m' -> *)
-      (* prog_addrs_rel      p  m m' -> *)
-      (* prog_addrs_rel_inv  p  m m' -> *)
-      mem_rel2 m m' t t' ->
-
-      (* Similarly, to relate m'' and m' *)
-      (* trace_addrs_rel    t'' m'' m' -> *)
-      (* trace_addrs_rel    t'  m'' m' -> *)
-      (* prog_addrs_rel     p   m'' m' -> *)
-      (* prog_addrs_rel_inv p   m'' m' -> *)
-      mem_rel2 m'' m' t'' t' ->
+      (* Pairwise relations between the original runs and the combined run. *)
+      mem_rel2 mt   mt' ->
+      mem_rel2 mt'' mt' ->
 
       (* As a sort of conclusion... *)
       (* memory_renames_memory_at_addr addr (CS.state_mem s) (CS.state_mem s') *)
@@ -261,7 +254,7 @@ Section Mergeable.
       (* Local buffers on P's side *)
       (* behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) -> *)
       (* behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') -> *)
-      mem_rel3 m m' m'' t t' t''.
+      mem_rel3 mt mt' mt''.
 
   (* This "extensional" reading of compatible states depends directly on the
      partial programs concerned (implicitly through the section mechanism) and
