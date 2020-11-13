@@ -85,9 +85,9 @@ Section Merge.
     addrs.
 
   Definition merge_states (state state'' : CS.state) : CS.state :=
-    let '(s, m, r, pc, addrs) := state in
-    let '(s'', m'', r'', pc'', addrs'') := state'' in
-    (merge_stacks s s'', merge_memories m m'', merge_registers r r'' pc, merge_pcs pc pc'', merge_addrs addrs addrs'').
+    let '(s, m, r, pc) := state in
+    let '(s'', m'', r'', pc'') := state'' in
+    (merge_stacks s s'', merge_memories m m'', merge_registers r r'' pc, merge_pcs pc pc'').
 
   Lemma merge_frames_program frame frame'' :
     Pointer.component frame \in domm ip ->
@@ -140,13 +140,9 @@ Section Merge.
     else
       CS.state_pc s''.
 
-  (* TODO: [DynShare] *)
-  Definition merge_states_addrs s (s'' : CS.state) :=
-    CS.state_addrs s.
-
   Lemma merge_states_unfold s s'' :
     merge_states s s'' =
-    (merge_states_stack s s'', merge_states_mem s s'', merge_states_regs s s'', merge_states_pc s s'', merge_states_addrs s s'').
+    (merge_states_stack s s'', merge_states_mem s s'', merge_states_regs s s'', merge_states_pc s s'').
   Proof. now CS.unfold_states. Qed.
 End Merge.
 
@@ -164,10 +160,6 @@ Section Mergeable.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  (* This "extensional" reading of compatible states depends directly on the
-     partial programs concerned (implicitly through the section mechanism) and
-     two runs synchronized by their traces. It is a rather strong notion, easy
-     to work with and well suited to the purposes of the proof. *)
   (* NOTE: [DynShare] Towards a more intensional definition of mergeable states.
 
       - For three states, s (p, c), s' (p, c'), and s'' (p', c').
@@ -208,33 +200,73 @@ Section Mergeable.
 
       *)
 
-  (* Inductive mem_rel (s s' s'' : CS.state) (t t' t'' : trace event) : Prop := *)
-  (* | mem_rel_intro : forall addr_0 addr_t addr, *)
+  Variable sigma : addr_t -> addr_t.
+  Variable sigma_inv : addr_t -> addr_t.
 
-  (*     (* Some conditions to relate s and s' *) *)
-  (*     (forall addr_t, *)
-  (*         addrs_shared_so_far addr_t t -> *)
-  (*         memory_renames_memory_at_addr addr_t (CS.state_mem s) (CS.state_mem s')) -> *)
-  (*     (forall addr_t', *)
-  (*         addrs_shared_so_far addr_t' t' -> *)
-  (*         memory_inverse_renames_memory_at_addr addr_t' (CS.state_mem s) (CS.state_mem s')) -> *)
-  (*     (forall addr_0, *)
-  (*         addrs_from_local_buffers addr_0 p -> *)
-  (*         memory_renames_memory_at_addr addr_0 (CS.state_mem s) (CS.state_mem s')) -> *)
-  (*     (forall addr_0 addr_0, *)
-  (*         addrs_from_local_buffers addr_0 p -> *)
-  (*         renaming (* find relation, parameters, add to state relation *) addr_0 addr_0' -> *)
-  (*         memory_inverse_renames_memory_at_addr addr_0' (CS.state_mem s) (CS.state_mem s')) -> *)
+  Definition trace_addrs_rel t m m' :=
+    forall addrs,
+      addr_shared_so_far addrs t ->
+      memory_renames_memory_at_addr sigma addrs m m'.
 
-  (*     (* Similarly, to relate s' and s'' *) *)
+  Definition trace_addrs_rel_inv t m m' :=
+    forall addrs,
+      addr_shared_so_far addrs t ->
+      memory_inverse_renames_memory_at_addr sigma_inv addrs m m'.
 
-  (*     (* As a sort of conclusion... *) *)
-  (*     (* memory_renames_memory_at_addr addr (CS.state_mem s) (CS.state_mem s') *) *)
+  (* Addresses found in a program's local buffers.
+     NOTE: Do we need to give [p] explicitly here? *)
+  Inductive prog_addrs (p : program) (addrs : addr_t) : Prop :=
+  (* TODO *).
 
-  (*     (* Local buffers on P's side *) *)
-  (*     (* behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) -> *) *)
-  (*     (* behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') -> *) *)
-  (*     mem_rel s s' s'' t t' t''. *)
+  Definition prog_addrs_rel p m m' :=
+    forall addrs,
+      prog_addrs p addrs ->
+      (* XXX -> *) (* TODO: Find renaming relation, add parameters to state relation. *)
+      memory_renames_memory_at_addr sigma addrs m m'.
+
+  Definition prog_addrs_rel_inv p m m' :=
+    forall addrs,
+      prog_addrs p addrs ->
+      (* ... *)
+      memory_inverse_renames_memory_at_addr sigma_inv addrs m m'.
+
+  Inductive mem_rel2 (m m' : eqtype.Equality.sort Memory.t) (t t' : trace event) : Prop :=
+  | mem_rel2_intro :
+      trace_addrs_rel     t  m m' ->
+      trace_addrs_rel_inv t' m m' ->
+      prog_addrs_rel      p  m m' ->
+      prog_addrs_rel_inv  p  m m' ->
+      mem_rel2 m m' t t'.
+
+  Inductive mem_rel3 (m m' m'' : eqtype.Equality.sort Memory.t) (t t' t'' : trace event) : Prop :=
+  | mem_rel3_intro :
+
+      (* Some conditions to relate m and m' *)
+      (* trace_addrs_rel     t  m m' -> *)
+      (* trace_addrs_rel_inv t' m m' -> *)
+      (* prog_addrs_rel      p  m m' -> *)
+      (* prog_addrs_rel_inv  p  m m' -> *)
+      mem_rel2 m m' t t' ->
+
+      (* Similarly, to relate m'' and m' *)
+      (* trace_addrs_rel    t'' m'' m' -> *)
+      (* trace_addrs_rel    t'  m'' m' -> *)
+      (* prog_addrs_rel     p   m'' m' -> *)
+      (* prog_addrs_rel_inv p   m'' m' -> *)
+      mem_rel2 m'' m' t'' t ->
+
+      (* As a sort of conclusion... *)
+      (* memory_renames_memory_at_addr addr (CS.state_mem s) (CS.state_mem s') *)
+
+      (* Local buffers on P's side *)
+      (* behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) -> *)
+      (* behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') -> *)
+      mem_rel3 m m' m'' t t' trivial''.
+
+  (* This "extensional" reading of compatible states depends directly on the
+     partial programs concerned (implicitly through the section mechanism) and
+     two runs synchronized by their traces. It is a rather strong notion, easy
+     to work with and well suited to the purposes of the proof. *)
 
   Inductive mergeable_states (s s' s'' : CS.state) : Prop :=
     mergeable_states_intro : forall s0 s0' s0'' t t' t'' n n' n'',
