@@ -34,6 +34,7 @@ Intermediate/Machine.v
 Intermediate/GlobalEnv.v
 Intermediate/CS.v
 Intermediate/Recombination.v
+Intermediate/RecombinationRel.v
 
 Source/Language.v
 Source/GlobalEnv.v
