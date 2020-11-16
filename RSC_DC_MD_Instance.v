@@ -8,7 +8,7 @@ Require Import Source.CS.
 Require Import Source.Blame.
 Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
-Require Import Intermediate.Recombination.
+Require Import Intermediate.RecombinationRel.
 Require Import S2I.Compiler.
 Require Import S2I.Definitions.
 Require Import Definability.
@@ -102,7 +102,7 @@ Module Intermediate_Instance <: Intermediate_Sig.
     @Intermediate.compose_mergeable_interfaces.
 
   Definition recombination_prefix :=
-    @Intermediate.Recombination.recombination_prefix_rel.
+    @Intermediate.RecombinationRel.recombination_prefix_rel.
 
   Definition does_prefix_inform_non_inform :=
     @Intermediate.CS.CS.does_prefix_inform_non_inform.
