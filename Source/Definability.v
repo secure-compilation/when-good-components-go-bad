@@ -799,7 +799,7 @@ Lemma matching_mains_backtranslated_program p c intf back m:
   Intermediate.well_formed_program p ->
   Intermediate.well_formed_program c ->
   (* intf = unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c) -> *)
-  back = program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m ->
+  back = program_of_trace intf m ->
   intf Component.main ->
   (* well_formed_trace intf m -> *)
   matching_mains (Source.program_unlink (domm (Intermediate.prog_interface p)) back) p.
@@ -908,11 +908,12 @@ Proof.
     have [mainP [HmainP _]] := Intermediate.cprog_main_existence Hclosed.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
     exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c.
-  have := definability Hclosed_intf intf_main _ _ _ _ _ wf_m.
+  have := definability Hclosed_intf intf_main _ _ _ _ wf_m.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
-  set back := (program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m') => Hback.
-  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m')) (Terminates (project_non_inform m'))).
+  set back := (program_of_trace intf m') => Hback.
+  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf m'))
+                                   (Terminates (project_non_inform m'))).
   {
     (* This should follow from the definability lemma, provided that we can
        discharge its side conditions. *)
@@ -940,7 +941,7 @@ Proof.
     all:admit.
   }
     (* by exact: well_formed_events_well_formed_program. *)
-  have Hback' : back = program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m' by [].
+  have Hback' : back = program_of_trace intf m' by [].
     (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
   split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main.
   split; first exact: matching_mains_backtranslated_program wf_c wf_p Hback' intf_main.
