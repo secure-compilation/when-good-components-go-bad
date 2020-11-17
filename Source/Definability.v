@@ -229,15 +229,54 @@ Section Definability.
 
   (* RB: NOTE: Should we try to avoid writing [Source] qualifiers all over the
      place? We are working on the source after all. *)
-  Variable loc_of_reg : Eregister -> expr.
+
+  (* A simple scheme that maps registers to constant memory locations
+     immediately after the back-translation counter in position 0. *)
+  Definition loc_of_reg (reg : Eregister) : expr :=
+    match reg with
+    | E_R_ONE  => E_binop Add E_local (E_val (Int 1))
+    | E_R_COM  => E_binop Add E_local (E_val (Int 2))
+    | E_R_AUX1 => E_binop Add E_local (E_val (Int 3))
+    | E_R_AUX2 => E_binop Add E_local (E_val (Int 4))
+    | E_R_RA   => E_binop Add E_local (E_val (Int 5))
+    | E_R_SP   => E_binop Add E_local (E_val (Int 6))
+    | E_R_ARG  => E_binop Add E_local (E_val (Int 7))
+    end.
+
   Hypothesis values_are_integers_loc_of_reg:
     forall r, Source.values_are_integers (loc_of_reg r).
   Hypothesis called_procedures_loc_of_reg:
     forall r, called_procedures (loc_of_reg r) = fset0.
 
-  Variable binop_of_Ebinop : Ebinop -> binop.
+  (* Straightforward correspondence between "event" operators and
+     regular operators. *)
+  Definition binop_of_Ebinop (op : Ebinop) : binop :=
+    match op with
+    | E_Add   => Add
+    | E_Minus => Minus
+    | E_Mul   => Mul
+    | E_Eq    => Eq
+    | E_Leq   => Leq
+    end.
 
-  Variable expr_of_const_val : value -> expr.
+  (* Translation of constant values to expressions, with special attention
+     given to pointers. *)
+  Definition expr_of_const_val (v : value) : expr :=
+    match v with
+    (* Integer values are simple. *)
+    | Int n            => E_val (Int n)
+    (* Pointer values need to take into account some amount of shifting, here
+       corresponding to the counter and space reserved to locate register
+       values. We make the implicit assumption that all such values refer to
+       the local buffer, which should follow from well-formedness. *)
+    | Ptr (_, _, _, o) => E_binop Add E_local (E_val (Int (8 + o)))
+    (* Undefined values are mapped to a well-formed but ill-typed expression
+       (instead of some arbitrary but well-typed value, so as to preserve
+       bad behavior). This choice might demand more work in some proofs,
+       while possibly making other goals distinctly provable. *)
+    | Undef            => E_binop Mul (E_val (Int 0)) E_local
+    end.
+
   Hypothesis values_are_integers_expr_of_const_val:
     forall v, Source.values_are_integers (expr_of_const_val v).
   Hypothesis called_procedures_expr_of_const_val:
@@ -376,6 +415,7 @@ Section Definability.
     all (well_formed_event intf) t ->
     Source.well_formed_program (program_of_trace t).
   Proof.
+    Local Opaque loc_of_reg binop_of_Ebinop expr_of_const_val.
     move=> Ht; split=> //=.
     - exact: closed_interface_is_sound.
     - by rewrite /procedures_of_trace domm_mapi.
@@ -405,7 +445,7 @@ Section Definability.
                     //=;
                     try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH.
         * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
-          rewrite called_procedures_loc_of_reg fsub0set.
+          rewrite fsub0set.
             by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
         * by move=> C' P' e; rewrite called_procedures_loc_of_reg
                                      called_procedures_expr_of_const_val !fset0U IH.
@@ -742,48 +782,6 @@ Require Import Intermediate.CS.
 Require Import S2I.Definitions.
 
 (*Section MainDefinability.*)
-
-(* A simple scheme that maps registers to constant memory locations
-     immediately after the back-translation counter in position 0. *)
-  Definition loc_of_reg (reg : Eregister) : expr :=
-    match reg with
-    | E_R_ONE  => E_binop Add E_local (E_val (Int 1))
-    | E_R_COM  => E_binop Add E_local (E_val (Int 2))
-    | E_R_AUX1 => E_binop Add E_local (E_val (Int 3))
-    | E_R_AUX2 => E_binop Add E_local (E_val (Int 4))
-    | E_R_RA   => E_binop Add E_local (E_val (Int 5))
-    | E_R_SP   => E_binop Add E_local (E_val (Int 6))
-    | E_R_ARG  => E_binop Add E_local (E_val (Int 7))
-    end.
-
-  (* Straightforward correspondence between "event" operators and
-     regular operators. *)
-  Definition binop_of_Ebinop (op : Ebinop) : binop :=
-    match op with
-    | E_Add   => Add
-    | E_Minus => Minus
-    | E_Mul   => Mul
-    | E_Eq    => Eq
-    | E_Leq   => Leq
-    end.
-
-  (* Translation of constant values to expressions, with special attention
-     given to pointers. *)
-  Definition expr_of_const_val (v : value) : expr :=
-    match v with
-    (* Integer values are simple. *)
-    | Int n            => E_val (Int n)
-    (* Pointer values need to take into account some amount of shifting, here
-       corresponding to the counter and space reserved to locate register
-       values. We make the implicit assumption that all such values refer to
-       the local buffer, which should follow from well-formedness. *)
-    | Ptr (_, _, _, o) => E_binop Add E_local (E_val (Int (8 + o)))
-    (* Undefined values are mapped to a well-formed but ill-typed expression
-       (instead of some arbitrary but well-typed value, so as to preserve
-       bad behavior). This choice might demand more work in some proofs,
-       while possibly making other goals distinctly provable. *)
-    | Undef            => E_binop Mul (E_val (Int 0)) E_local
-    end.
 
 (* FG : Put back some sanity checks ? some are present but commented in the premise and the move => *)
 Lemma matching_mains_backtranslated_program p c intf back m:
