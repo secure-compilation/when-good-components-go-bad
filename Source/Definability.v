@@ -663,12 +663,20 @@ Section Definability.
             split.
             + take_step. take_step.
               apply star_one. simpl.
+              (* RB: TODO: [DynShare] For the proof to go through, we need to
+                 establish (i.e., evaluate) beforehand the fact that the COM
+                 register contains a values. This is probably what was intended
+                 by [values_are_integers_loc_of_reg], though it does not let
+                 us infer that. *)
+              assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
+                as [v Hregval]
+                by admit;
+                rewrite Hregval.
               apply CS.eval_kstep_sound. simpl.
-              (* rewrite (negbTE C_ne_C'). *)
-              (* rewrite -> imported_procedure_iff in Himport. rewrite Himport. *)
-              (* rewrite <- imported_procedure_iff in Himport. *)
-              (* by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
-              admit.
+              rewrite (negbTE C_ne_C').
+              rewrite -> imported_procedure_iff in Himport. rewrite Himport.
+              rewrite <- imported_procedure_iff in Himport.
+              by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
             + econstructor; trivial.
               { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
                 eexists []; eexists; simpl; split; eauto.
@@ -688,20 +696,20 @@ Section Definability.
               destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
               subst bot'. simpl.
               have C'_b := valid_procedure_has_block P'_exp.
-              intros mem wf_mem.
+              intros mem wf_mem arg.
               exists [CState C', CS.Frame C' saved Kstop :: top ++ bot, mem, Kstop, procedure_of_trace C' P' t, Int 0].
               split.
-              * eapply star_step.
-                -- instantiate (2 := [:: ERet C ret_val mem' C']). (* RB: TODO: Remove later. *)
-                   admit. (* RB: Blocked because the rule expects a value and
-                             finds a dereference on loc_of_reg, which remains
-                             abstract. *)
-                   (* now eapply CS.KS_ExternalReturn; eauto. *)
-                -- instantiate (1 := E0). (* RB: TODO: Remove later. *)
-                   take_step. take_step; eauto.
+              * (* RB: TODO: [DynShare] Similarly as above, but before we take
+                   step to have the result of the evaluation in scope. *)
+                assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
+                  as [v Hregval]
+                  by admit;
+                  rewrite Hregval.
+                eapply star_step.
+                -- eapply CS.KS_ExternalReturn; now eauto.
+                -- take_step. take_step; eauto.
                    apply star_one. apply CS.eval_kstep_sound.
-                   admit. (* Fix admit above and return here. *)
-                   (* by rewrite /= eqxx (find_procedures_of_trace t P'_exp). *)
+                   by rewrite /= eqxx (find_procedures_of_trace t P'_exp).
                 -- now rewrite E0_right.
               * econstructor; trivial.
                 exists (CS.Frame C' saved Kstop :: top), bot. simpl. eauto.
@@ -711,9 +719,12 @@ Section Definability.
               specialize (IHtop _ wf_mem saved). destruct IHtop as [cs' [StarRet wf_cs']].
               exists cs'. split; trivial.
               eapply star_step; try eassumption.
-              * instantiate (1 := E0). (* RB: TODO: Remove later. *)
-                admit.
-                (* by apply/CS.eval_kstep_sound; rewrite /= eqxx. *)
+              * (* RB: TODO: [DynShare] Same as above. *)
+                assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
+                  as [v Hregval]
+                  by admit;
+                  rewrite Hregval.
+                by apply/CS.eval_kstep_sound; rewrite /= eqxx.
               * reflexivity.
           (* The remaining events correspond to silent events in the
              source. *)
@@ -898,9 +909,16 @@ Proof.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
     exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c.
   have := definability Hclosed_intf intf_main _ _ _ _ _ wf_m.
-    (* RB: TODO: [DynShare] Check added assumptions in previous line. Section admits? *)
+    (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
+       admits? *)
   set back := (program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m') => Hback.
-  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m')) (Terminates (project_non_inform m'))) by admit.
+  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m')) (Terminates (project_non_inform m'))).
+  {
+    (* This should follow from the definability lemma, provided that we can
+       discharge its side conditions. *)
+    apply Hback.
+    all:admit.
+  }
     (* RB: TODO: [DynShare] Passing the section variables above should not be
        needed, nor should the additional assumption. *)
   exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
@@ -916,7 +934,11 @@ Proof.
     by apply/eq_filterm=> ??; rewrite mem_domm.
   (* have wf_back : Source.well_formed_program back by exact: well_formed_events_well_formed_program. *)
   have wf_back : Source.well_formed_program back.
-    eapply well_formed_events_well_formed_program; admit.
+  {
+    eapply well_formed_events_well_formed_program; auto.
+    (* The side conditions seen above reappear. *)
+    all:admit.
+  }
     (* by exact: well_formed_events_well_formed_program. *)
   have Hback' : back = program_of_trace intf loc_of_reg binop_of_Ebinop expr_of_const_val m' by [].
     (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
