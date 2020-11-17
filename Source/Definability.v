@@ -232,16 +232,19 @@ Section Definability.
 
   (* A simple scheme that maps registers to constant memory locations
      immediately after the back-translation counter in position 0. *)
-  Definition loc_of_reg (reg : Eregister) : expr :=
+  Definition reg_offset (reg : Eregister) : Z :=
     match reg with
-    | E_R_ONE  => E_binop Add E_local (E_val (Int 1))
-    | E_R_COM  => E_binop Add E_local (E_val (Int 2))
-    | E_R_AUX1 => E_binop Add E_local (E_val (Int 3))
-    | E_R_AUX2 => E_binop Add E_local (E_val (Int 4))
-    | E_R_RA   => E_binop Add E_local (E_val (Int 5))
-    | E_R_SP   => E_binop Add E_local (E_val (Int 6))
-    | E_R_ARG  => E_binop Add E_local (E_val (Int 7))
+    | E_R_ONE  => 1
+    | E_R_COM  => 2
+    | E_R_AUX1 => 3
+    | E_R_AUX2 => 4
+    | E_R_RA   => 5
+    | E_R_SP   => 6
+    | E_R_ARG  => 7
     end.
+
+  Definition loc_of_reg (reg : Eregister) : expr :=
+    E_binop Add E_local (E_val (Int (reg_offset reg))).
 
   Hypothesis values_are_integers_loc_of_reg:
     forall r, Source.values_are_integers (loc_of_reg r).
