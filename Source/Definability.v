@@ -711,7 +711,48 @@ Section Definability.
               right. by apply: (closed_intf Himport).
               (* NOTE: These snippets continue to work, though they may incur
                  modifications later on. *)
-          - admit.
+          - (* Event case: return. *)
+            move: wf_e=> /eqP C_ne_C'.
+            destruct callers as [|C'_ callers]; try easy.
+            case/andP: wb_suffix=> [/eqP HC' wb_suffix].
+            subst C'_. simpl. exists (StackState C' callers).
+            destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
+            revert mem wf_mem arg.
+            induction top as [|[C_ saved k_] top IHtop].
+            + clear Htop. rename bot into bot'.
+              destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
+              subst bot'. simpl.
+              have C'_b := valid_procedure_has_block P'_exp.
+              intros mem wf_mem arg.
+              exists [CState C', CS.Frame C' saved Kstop :: top ++ bot, mem, Kstop, procedure_of_trace C' P' t, Int 0].
+              split.
+              * (* RB: TODO: [DynShare] Similarly as above, but before we take
+                   step to have the result of the evaluation in scope. *)
+                assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
+                  as [v Hregval]
+                  by admit;
+                  rewrite Hregval.
+                eapply star_step.
+                -- eapply CS.KS_ExternalReturn; now eauto.
+                -- take_step. take_step; eauto.
+                   apply star_one. apply CS.eval_kstep_sound.
+                   by rewrite /= eqxx (find_procedures_of_trace t P'_exp).
+                -- now rewrite E0_right.
+              * econstructor; trivial.
+                exists (CS.Frame C' saved Kstop :: top), bot. simpl. eauto.
+            + intros mem wf_mem arg.
+              simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
+              specialize (IHtop Htop).
+              specialize (IHtop _ wf_mem saved). destruct IHtop as [cs' [StarRet wf_cs']].
+              exists cs'. split; trivial.
+              eapply star_step; try eassumption.
+              * (* RB: TODO: [DynShare] Same as above. *)
+                assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
+                  as [v Hregval]
+                  by admit;
+                  rewrite Hregval.
+                by apply/CS.eval_kstep_sound; rewrite /= eqxx.
+              * reflexivity.
           (* NOTE: ... And there is a series of new events to consider. *)
           - admit.
           - admit.
