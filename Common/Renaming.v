@@ -1669,6 +1669,8 @@ Section BehaviorsRelatedAllCids.
 
 End BehaviorsRelatedAllCids.
 
+(* TODO: Some of these shifting patterns may need to be redesigned to consider
+   Block.id vs. offset. *)
 Section ExampleShifts.
 
   Definition uniform_shift (n: nat) : (Component.id -> nat) := fun (c: Component.id) => n.

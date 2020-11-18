@@ -582,6 +582,184 @@ Section Definability.
     (* [DynShare] We will probably need a variant of well formedness that is defined
      on non-informative traces as well. *)
 
+    Variable metadata_size_lhs: Component.id -> nat.
+
+    (* TODO: [DynShare] Trace relation should appear here too!
+
+       Well-bracketedness, etc., probably need to be rewritten to operate "in
+       reverse", i.e., adding events at the end of the trace to match the
+       definition of the trace relation.
+
+       NOTE: Propositional and not boolean conjunction in the conclusion at the
+       moment. *)
+    Lemma definability_gen_rel s prefix suffix cs :
+      t = prefix ++ suffix ->
+      well_formed_state s prefix suffix cs ->
+    exists cs' suffix_inform suffix' const_map,
+      Star (CS.sem p) cs suffix' cs' /\
+      project_non_inform suffix_inform = suffix' /\
+      traces_shift_each_other_all_cids metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
+      CS.final_state cs'.
+    Proof.
+      (* NOTE: For now, trying to preserve the high-level structure of the
+         non-relational proof. *)
+      have Eintf : genv_interface (prepare_global_env p) = intf by [].
+      have Eprocs : genv_procedures (prepare_global_env p) = Source.prog_procedures p by [].
+      (* Proof by induction on the trace suffix. *)
+      elim: suffix s prefix cs=> [|e suffix IH] /= [C callers] prefix.
+      - (* Base case: empty suffix. The proof is straightforward. *)
+        rewrite cats0 => cs <- {prefix}.
+        case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk wf_mem P_exp.
+        exists [CState C, stk, mem, Kstop, E_exit, arg], E0, E0, (uniform_shift 8).
+        split; [| split; [| split]].
+        + have C_b := valid_procedure_has_block P_exp.
+          have C_local := wf_mem _ C_b.
+          rewrite /procedure_of_trace /expr_of_trace.
+          (* eexists. *)
+          apply: switch_spec_else; eauto.
+          rewrite -> size_map; reflexivity.
+        + reflexivity.
+        + now repeat constructor.
+        + now constructor.
+      - (* Inductive case: cons of a head event and a tail continuation for
+           the suffix. *)
+        move=> cs Et /=.
+        case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
+        have C_b := valid_procedure_has_block P_exp.
+        have C_local := wf_mem _ C_b.
+        destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
+        (* We can simulate the event-producing step as the concatenation of three
+           successive stars:
+            1. A silent star preceding the event.
+            2. A star that contains a step that produces the event (which at the
+               source level may now be silent).
+            3. By the IH, a final star that produces the tail of the suffix.
+
+           The first star, running up to the point where we are ready to execute
+           the expression associated with the event of interest, is fairly
+           simple to establish. *)
+        (* NOTE: The base case was simple, but complications arise in the
+           recursive case. The first star can be proved as before, but is it
+           exactly what we need? *)
+        assert (Star1 : Star (CS.sem p)
+                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
+                             [CState C, stk, mem', Kstop, expr_of_event C P e, arg]).
+        { unfold expr_of_trace. rewrite Et comp_subtrace_app. simpl.
+          rewrite <- wf_C, Nat.eqb_refl, map_app. simpl.
+          assert (H := @switch_spec p Permission.data C  stk mem
+                                    (map (expr_of_event C P) (comp_subtrace C prefix))
+                                    (expr_of_event C P e)
+                                    (map (expr_of_event C P) (comp_subtrace C suffix))
+                                    E_exit arg).
+          rewrite map_length in H. specialize (H C_local).
+          destruct H as [mem'' [Hmem'' Hstar]].
+          enough (H : mem'' = mem') by (subst mem''; easy).
+          rewrite -> counter_value_snoc in Hmem'.
+          unfold cur_comp_of_event in Hmem'.
+          simpl in Hmem'.
+          rewrite <- wf_C in Hmem'.
+          rewrite eq_refl in Hmem'.
+          rewrite <- Nat.add_1_r, Nat2Z.inj_add in Hmem''. simpl in Hmem''.
+          unfold counter_value in *.
+          unfold Memory.store in *. simpl in *.
+          rewrite Hmem' in Hmem''.
+          congruence. }
+        (* The second star "executes" the event proper. This part is more
+           interesting. *)
+        assert (Star2 : exists s' cs',
+                   Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] (event_non_inform_of [:: e]) cs' /\
+                   well_formed_state s' (prefix ++ [e]) suffix cs'
+               (* NOTE: Here, too, we may need additional conjuncts... *)
+               ).
+        {
+          clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
+          (* Case analysis on observable events, which in this rich setting
+             extend to calls and returns and various memory accesses and related
+             manipulations, of which only calls and returns are observable at
+             both levels. *)
+          destruct e as [C_ P' new_arg mem' C'|C_ ret_val mem' C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_ |C_];
+          simpl in wf_C, wf_e, wb_suffix; subst C_.
+          - (* Event case: call. *)
+            case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
+            exists (StackState C' (C :: callers)).
+            have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
+            exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem,
+                    Kstop, procedure_of_trace C' P' t, new_arg].
+            split.
+            + take_step. take_step.
+              apply star_one. simpl.
+              (* RB: TODO: [DynShare] For the proof to go through, we need to
+                 establish (i.e., evaluate) beforehand the fact that the COM
+                 register contains a values. This is probably what was intended
+                 by [values_are_integers_loc_of_reg], though it does not let
+                 us infer that. *)
+              assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
+                as [v Hregval]
+                by admit;
+                rewrite Hregval.
+              apply CS.eval_kstep_sound. simpl.
+              rewrite (negbTE C_ne_C').
+              rewrite -> imported_procedure_iff in Himport. rewrite Himport.
+              rewrite <- imported_procedure_iff in Himport.
+              by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+            + econstructor; trivial.
+              { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
+                eexists []; eexists; simpl; split; eauto.
+                split; trivial.
+                eexists arg, P, top, bot.
+                by do 3 (split; trivial). }
+              right. by apply: (closed_intf Himport).
+              (* NOTE: These snippets continue to work, though they may incur
+                 modifications later on. *)
+          - admit.
+          (* NOTE: ... And there is a series of new events to consider. *)
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+        }
+        destruct Star2 as (s' & cs' & Star2 & wf_cs').
+        (* The third star is produced by the IH. *)
+        specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
+        specialize (IH Et wf_cs').
+        destruct IH
+          as [cs'' [suffix_inform [suffix' [const_map [Star3 [Hsuffix [Hrel final]]]]]]].
+        (* NOTE: Now, case analysis on the event needs to take place early. *)
+        destruct e as [Ce Pe ve me Ce' | | | | | | | |].
+        + exists
+            cs'',
+            ((ECallInform Ce Pe ve me Ce') :: suffix_inform),
+            (ECall Ce Pe ve me Ce' :: suffix'),
+            const_map.
+          split; [| split; [| split]].
+          * eapply (star_trans Star1); simpl; eauto.
+            eapply (star_trans Star2); simpl; eauto.
+          * simpl. congruence.
+          * constructor.
+            (* NOTE: At this point we hit the problem: trace relations add
+               events at the end, whereas the current induction has them added
+               at the beginning. *)
+            admit.
+          * assumption.
+        + (* NOTE: Something similar probably happens on return. *)
+          admit.
+        + (* NOTE: Consider the case of an informative-only event now. This can
+             be solved as before. All remaining sub-goals follow the same
+             pattern.
+             TODO: Restore some of the comments in the older version of the
+             proof, if still relevant. *)
+          exists cs'', suffix_inform, suffix', const_map.
+          split; [| split; [| split]].
+          * eapply (star_trans Star1); simpl; eauto.
+            eapply (star_trans Star2); simpl; eauto.
+          * assumption.
+          * assumption.
+          * assumption.
+    Admitted.
+
     Lemma definability_gen s prefix suffix cs :
       t = prefix ++ suffix ->
       well_formed_state s prefix suffix cs ->
