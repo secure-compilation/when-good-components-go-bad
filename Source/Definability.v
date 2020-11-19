@@ -248,10 +248,18 @@ Section Definability.
   Definition loc_of_reg (reg : Eregister) : expr :=
     E_binop Add E_local (E_val (Int (reg_offset reg))).
 
-  Hypothesis values_are_integers_loc_of_reg:
+  Lemma values_are_integers_loc_of_reg:
     forall r, Source.values_are_integers (loc_of_reg r).
-  Hypothesis called_procedures_loc_of_reg:
+  Proof.
+    now destruct r.
+  Qed.
+
+  Lemma called_procedures_loc_of_reg:
     forall r, called_procedures (loc_of_reg r) = fset0.
+  Proof.
+    destruct r;
+      (simpl; unfold fsetU, val; simpl; rewrite fset0E; reflexivity).
+  Qed.
 
   (* Straightforward correspondence between "event" operators and
      regular operators. *)
@@ -282,10 +290,21 @@ Section Definability.
     | Undef            => E_binop Mul (E_val (Int 0)) E_local
     end.
 
-  Hypothesis values_are_integers_expr_of_const_val:
+  Lemma values_are_integers_expr_of_const_val:
     forall v, Source.values_are_integers (expr_of_const_val v).
-  Hypothesis called_procedures_expr_of_const_val:
+  Proof.
+    intros [n | [[[p C] b ] o] |];
+      reflexivity.
+  Qed.
+
+  Lemma called_procedures_expr_of_const_val:
     forall v, called_procedures (expr_of_const_val v) = fset0.
+  Proof.
+    intros [n | [[[p C] b ] o] |].
+    - reflexivity.
+    - simpl. unfold fsetU, val. simpl. rewrite fset0E. reflexivity.
+    - simpl. unfold fsetU, val. simpl. rewrite fset0E. reflexivity.
+  Qed.
 
   (** We use [switch] to define the following function [expr_of_trace], which
       converts a sequence of events to an expression that produces that sequence
@@ -1138,16 +1157,16 @@ Proof.
     have [mainP [HmainP _]] := Intermediate.cprog_main_existence Hclosed.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
     exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c.
-  have := definability Hclosed_intf intf_main _ _ _ _ wf_m.
+  have := definability Hclosed_intf intf_main _ wf_m.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
   set back := (program_of_trace intf m') => Hback.
   assert (Hback_ : program_behaves (CS.sem (program_of_trace intf m'))
                                    (Terminates (project_non_inform m'))).
   {
-    (* This should follow from the definability lemma, provided that we can
-       discharge its side conditions. *)
+    (* This should follow directly from the definability lemma. *)
     apply Hback.
+    (* All that is missing now is the metadata map. *)
     all:admit.
   }
     (* RB: TODO: [DynShare] Passing the section variables above should not be
@@ -1165,11 +1184,7 @@ Proof.
     by apply/eq_filterm=> ??; rewrite mem_domm.
   (* have wf_back : Source.well_formed_program back by exact: well_formed_events_well_formed_program. *)
   have wf_back : Source.well_formed_program back.
-  {
     eapply well_formed_events_well_formed_program; auto.
-    (* The side conditions seen above reappear. *)
-    all:admit.
-  }
     (* by exact: well_formed_events_well_formed_program. *)
   have Hback' : back = program_of_trace intf m' by [].
     (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
