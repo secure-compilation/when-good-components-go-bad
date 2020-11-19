@@ -91,7 +91,10 @@ Section Definability.
 
    *)
 
-  Definition switch_clause n e_then e_else :=
+  (* If the local counter (first position of the local buffer) contains the
+     value [n], increment it and execute [e_then], otherwise execute
+     [e_else]. *)
+  Definition switch_clause (n : Z) (e_then e_else : expr) : expr :=
     let one := E_val (Int 1%Z) in
     E_if (E_binop Eq (E_deref E_local) (E_val (Int n)))
          (E_seq (E_assign E_local (E_binop Add (E_deref E_local) one)) e_then)
@@ -148,9 +151,14 @@ Section Definability.
         apply star_refl.
   Qed.
 
-  Definition switch_add_expr e res :=
+  (* Given an indexed switch statement [res], add a new expression [e] at the
+     top. If the first available index for [res] is [n], this number is used
+     to check the execution of [e], and the first available index of the result
+     is [n - 1]. *)
+  Definition switch_add_expr (e : expr) (res : nat * expr) : (nat * expr) :=
     (Nat.pred (fst res), switch_clause (Z.of_nat (Nat.pred (fst res))) e (snd res)).
 
+  (* Create a base switch out of the list expressions [es ++ [e_else]]. *)
   Definition switch (es: list expr) (e_else: expr) : expr :=
     snd (fold_right switch_add_expr (length es, e_else) es).
 
@@ -221,12 +229,6 @@ Section Definability.
     reflexivity.
   Qed.
 
-  (** We use [switch] to define the following function [expr_of_trace], which
-      converts a sequence of events to an expression that produces that sequence
-      of events when run from the appropriate component.  We assume that all
-      events were produced from the same component.  The [C] and [P] arguments
-      are only needed to generate the recursive calls depicted above. *)
-
   (* RB: NOTE: Should we try to avoid writing [Source] qualifiers all over the
      place? We are working on the source after all. *)
 
@@ -284,6 +286,12 @@ Section Definability.
     forall v, Source.values_are_integers (expr_of_const_val v).
   Hypothesis called_procedures_expr_of_const_val:
     forall v, called_procedures (expr_of_const_val v) = fset0.
+
+  (** We use [switch] to define the following function [expr_of_trace], which
+      converts a sequence of events to an expression that produces that sequence
+      of events when run from the appropriate component.  We assume that all
+      events were produced from the same component.  The [C] and [P] arguments
+      are only needed to generate the recursive calls depicted above. *)
 
   (* We call this function when in component C executing P. *)
   Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event_inform) : expr :=
