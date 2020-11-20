@@ -178,7 +178,38 @@ Definition addr_of_value (v: value) : {fset addr_t} :=
 (** Given a trace, an address is reachable iff it is shared through the argument
     of the last event in the trace, or transitively through some previously
     shared address. Reachability operates on the memory contained in the last
-    event of the trace, which must subsume that in previous events. *)
+    event of the trace, which must subsume that in previous events.
+
+    This reachability property is monotonic: once shared, an address is
+    considered public forever.
+ *)
+
+(*
+   An attempt to simplify the phrasing of the property might divide it into
+   three cases:
+    1. Reachable from initial memory (given a fixed component, say)
+    2. Reachable from memory in current event in the trace
+    3. Reachable from some future event in the trace
+
+  This considers the POV of *shared* address sets, not *private* addresses.
+  Using shared addresses, it is possible to add incrementally to the set,
+  however with private addresses the set cannot be built recursively "on the
+  left".
+
+  Moreover, when thinking about private or "not shared" addresses, we cannot
+  constrain these considerations to the current domain of the memory, as
+  addresses beyond that range, i.e., not yet allocated, are also unshared.
+
+  No need to refer to components explicitly. The current trace relation does
+  not consider the POV of any particular component.
+
+   - Which addresses remain private to each component?
+   - Address states: already shared/still private
+   - Once an address has been shared, it does not matter with whom (why?
+     because we want per-component compositionality)
+   - Why is it simpler? At the very least it avoids parameterizing the trace
+     relation by an execution trace, i.e., only on a trace of addresses
+ *)
 
 Inductive addr_shared_so_far : addr_t -> trace event -> Prop :=
 | reachable_from_args_is_shared:
@@ -1572,6 +1603,9 @@ Section BehaviorsRelated.
      unfinished program executions or to a pair of successfully terminated
      program executions. *)
 
+  (* NOTE: The component variable has no effect on the computation of the trace
+     relation, it only expresses that there exists a renaming for this
+     component (all components are aggregated later). *)
   Variable cid_for_shift: Component.id.
 
   Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
