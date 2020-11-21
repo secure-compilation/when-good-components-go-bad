@@ -81,6 +81,39 @@ Section Definability.
           }
         } *)
 
+  (** TODO: [DynShare] Complete, relocate.
+
+      In the memory sharing case, back-translation will offset whole blocks to
+      make room for a certain amount of metadata, as appropriate. The choice of
+      shifting whole blocks somewhat complicates the trace relation (and the
+      notion of shared address in particular), but it is less disruptive than
+      performing shifting inside a block to reserve some space for
+      back-translation metadata. The issue is that metadata must never be
+      shared, but the block where it is contained may.
+
+      In general, whenever there is dynamic memory sharing, shared addresses
+      need to be unobservable. In this setting, the presence of metadata imposes
+      a need to hide said metadata.
+
+      In particular, if the granularity of address sharing is offset-based (not
+      block-based), it will be difficult to know if the behavior of the receiver
+      is influenced by those data.
+
+      However, we do know whether a given component was or not the result of
+      back-translation, so we could reserve a given block (say, block 0) for
+      metadata, and therefore make it private by construction. In this model,
+      the complexity of the back-translated code increases only moderately. The
+      idea is that a component may share its local buffer, but never its
+      metadata buffer, so the two need to be separate. One way to achieve this
+      is as follows:
+
+      When a component is called, it checks whether it is the first time that it
+      has been called. If this is the case, it allocates a new local buffer for
+      its private metadata, distinct from the "program-local" buffer. This is
+      combined with a simple constant shifting scheme in the trace relation.
+
+   *)
+
   (** If a component has multiple procedures, they can share the same
       code. Notice that each branch that performs call performs a recursive call
       at the end.  This is needed to trigger multiple events from a single
@@ -612,6 +645,38 @@ Section Definability.
      on non-informative traces as well. *)
 
     Variable metadata_size_lhs: Component.id -> nat.
+
+    (* NOTE: Could we dispense with complex well-formed states by looking only
+       at well-formedness of traces?
+
+    Definition well_formed_prefix_suffix
+               (prefix suffix : trace event_inform) : Prop.
+    Admitted.
+
+    Definition well_formed_trace (t : trace event_inform) : Prop :=
+      forall prefix suffix,
+        t = prefix ++ suffix ->
+        well_formed_prefix_suffix prefix suffix.
+
+    Lemma definability_gen_rel t_inform cs :
+      well_formed_trace t_inform ->
+      CS.initial_state p cs ->
+    exists cs' t_noninform const_map,
+      Star (CS.sem p) cs t_noninform cs' /\
+      traces_shift_each_other_all_cids metadata_size_lhs const_map (project_non_inform t_inform) t_noninform /\
+      CS.final_state cs'.
+
+       The point is that this is essentially the final definability lemma. The
+       predictable challenges would reappear in its proof:
+         - Would need to state a similar lemma without depending on an initial
+           state (unless inducting "on the right"?).
+         - Well-bracketedness would fail in the inductive case.
+
+       The possible solutions involve some kind of decomposition of the trace
+       into prefix and suffix, or directly relying on AAA's method.
+
+       In any case, well-bracketedness is important for the proof *)
+
 
     (* TODO: [DynShare] Trace relation should appear here too!
 
