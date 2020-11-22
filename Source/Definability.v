@@ -32,6 +32,8 @@ Section Definability.
   Variable closed_intf: closed_interface intf.
   Variable has_main: intf Component.main.
 
+  Variable prog_buffers : NMap (nat + list value).
+
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
       by keeping one counter for each component, and using that counter to track
@@ -112,7 +114,15 @@ Section Definability.
       its private metadata, distinct from the "program-local" buffer. This is
       combined with a simple constant shifting scheme in the trace relation.
 
-   *)
+      A program back-translation is parametric on the interface as well as the
+      static buffers of the program being back-translated, given that their
+      contents can affect execution in ways unaccounted for in the program
+      trace, in particular in the event of sharing of a component's local
+      buffer. A back-translated component must therefore initialize its
+      "program-local" buffer with the same contents in the original component
+      for their behaviors to match.
+
+      TODO Extend/adapt example *)
 
   (** If a component has multiple procedures, they can share the same
       code. Notice that each branch that performs call performs a recursive call
