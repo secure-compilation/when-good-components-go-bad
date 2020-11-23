@@ -33,6 +33,7 @@ Section Definability.
   Variable has_main: intf Component.main.
 
   Variable prog_buffers : NMap (nat + list value).
+  Hypothesis domm_intf_buffers : domm intf = domm prog_buffers.
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
@@ -276,7 +277,8 @@ Section Definability.
      place? We are working on the source after all. *)
 
   (* A simple scheme that maps registers to constant memory locations
-     immediately after the back-translation counter in position 0. *)
+     immediately after the back-translation counter in position 0.
+     RB: TODO: Phrase in terms of [Register.to_nat]. *)
   Definition reg_offset (reg : Eregister) : Z :=
     match reg with
     | E_R_ONE  => 1
@@ -445,10 +447,88 @@ Section Definability.
     [apply: find_procedures_of_trace_main|apply: find_procedures_of_trace_exp].
   Qed.
 
+  (* RB: TODO: Avoid possible duplication in [Language] and [Machine]. *)
+  Definition unfold_buffer (b : (nat + list value)%type) : list value :=
+    match b with
+    | inl n  => nseq n Undef
+    | inr vs => vs
+    end.
+
+  (* The local buffer of back-translated programs is dedicated to private
+     metadata: the trace step counter at position 0, followed by locations for
+     the simulated machine registers.
+     NOTE: Register indexes must match [loc_of_reg] and would ideally be defined
+     in terms of [Register.to_nat], and their initial values in terms of
+     [Register.init]. *)
+  Definition meta_buffer : list value :=
+    [Int 0; Undef; Undef; Undef; Undef; Undef; Undef; Undef].
+
+  (* Compute component buffer side, assuming argument [C] is in the domain of
+     [intf]. *)
+  Definition buffer_size (C : Component.id) : nat :=
+    match prog_buffers C with
+    | Some buf => size (unfold_buffer buf)
+    | None => 0 (* Should not happen *)
+    end.
+
+  (* Allocate a new buffer to serve as the local buffer of the back-translation.
+     By convention this will be created immediately after program initialization
+     and therefore its block identifier should be 1.
+
+     NOTE: We are relying on knowledge of the implementation and behavior of the
+     allocator. If these conditions are not satisfied, the offset shifting
+     necessary for the trace relation will be incorrect.
+
+     Note that buffers coming from well-formed program components must have size
+     strictly greater than zero, so the behavior of alloc() is defined. *)
+  Definition alloc_local_buffer_expr (C : Component.id) : expr :=
+    E_alloc (E_val (Int (Z.of_nat (buffer_size C)))).
+
+  (* Copy the [i]-th component of the original program buffer of [C] from its
+     temporary location in the local buffer of [C]'s back-translation (following
+     its private metadata) into the [i]-th component of the replacement local
+     buffer.
+
+     Initially, the back-translated component memory looks like this:
+       0: [M, M, M, M, M, M, M, M, D1, D2, ..., Di, ...]
+     where the first few positions of the local buffer are taken up by
+     (M)etadata, followed by the original component's (D)ata. During this
+     process, the local, unshareable data is transferred to the de facto,
+     shareable local buffer:
+       L: [D1, D2, ..., Di, ...]
+   *)
+  Definition copy_local_datum_expr (C : Component.id) (i : nat) : expr :=
+    E_assign
+      (E_binop Add (E_deref E_local)
+                   (E_val (Int (Z.of_nat i))))
+      (E_deref (E_binop Add E_local
+                            (E_val (Int (Z.of_nat (i + size meta_buffer)))))).
+
+  (* To initialize the acting local buffer from its temporary location in the
+     private local buffer, allocate a new block of adequate size in memory,
+     temporarily keeping its address in local[0]; use this convention to
+     initialize the public local buffer; and restore the temporary variable
+     to its proper value.
+
+     NOTE: This is not so nice as we are not using the definition of
+     [meta_buffer] to restore the initial value. In addition to this, using
+     the first position, which holds the program counter, while noting that
+     this instruction will be executed at the first value of the counter (and
+     prior to its increment), is rather ugly and brittle. *)
+  Definition init_local_buffer_expr (C : Component.id) : expr :=
+    (* [E_assign E_local (alloc_local_buffer_expr C)] ++ *)
+    (* map (copy_local_datum_expr C) (iota 0 (buffer_size C)) ++ *)
+    (* [E_assign E_local (E_val (Int 0))] *)
+    foldr (fun e acc => E_seq e acc)
+          (E_assign E_local (E_val (Int 0))) (* last instruction *)
+          ([E_assign E_local (alloc_local_buffer_expr C)] ++
+           map (copy_local_datum_expr C) (iota 0 (buffer_size C))).
+
   Definition program_of_trace (t: trace event_inform) : Source.program :=
     {| Source.prog_interface  := intf;
        Source.prog_procedures := procedures_of_trace t;
-       Source.prog_buffers    := mapm (fun _ => inr [Int 0]) intf |}.
+       Source.prog_buffers    :=
+         mapm (fun b => inr (meta_buffer ++ (unfold_buffer b))) prog_buffers |}.
 
   (** To prove that [program_of_trace] is correct, we need to describe how the
       state of the program evolves as it emits events from the translated trace.
