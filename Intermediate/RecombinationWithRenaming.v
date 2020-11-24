@@ -14,7 +14,7 @@ Require Import Intermediate.CS.
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype path seq fingraph fintype. 
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -75,10 +75,16 @@ Section Merge.
   Definition merge_pcs (pc pc'' : Pointer.t) : Pointer.t :=
     if Pointer.component pc \in domm ip then pc else pc''.
 
+  (* TODO: [DynShare] CS.reach_addr should probably live outside CS. The actual
+     definition is probably similar to those for the other components of the
+     program state. *)
+  Definition merge_addrs (addrs addrs'' : CS.reach_addr) : CS.reach_addr :=
+    addrs.
+
   Definition merge_states (state state'' : CS.state) : CS.state :=
-    let '(s, m, r, pc) := state in
-    let '(s'', m'', r'', pc'') := state'' in
-    (merge_stacks s s'', merge_memories m m'', merge_registers r r'' pc, merge_pcs pc pc'').
+    let '(s, m, r, pc, addrs) := state in
+    let '(s'', m'', r'', pc'', addrs'') := state'' in
+    (merge_stacks s s'', merge_memories m m'', merge_registers r r'' pc, merge_pcs pc pc'', merge_addrs addrs addrs'').
 
   Lemma merge_frames_program frame frame'' :
     Pointer.component frame \in domm ip ->
@@ -131,9 +137,13 @@ Section Merge.
     else
       CS.state_pc s''.
 
+  (* TODO: [DynShare] *)
+  Definition merge_states_addrs s (s'' : CS.state) :=
+    CS.state_addrs s.
+
   Lemma merge_states_unfold s s'' :
     merge_states s s'' =
-    (merge_states_stack s s'', merge_states_mem s s'', merge_states_regs s s'', merge_states_pc s s'').
+    (merge_states_stack s s'', merge_states_mem s s'', merge_states_regs s s'', merge_states_pc s s'', merge_states_addrs s s'').
   Proof. now CS.unfold_states. Qed.
 End Merge.
 
@@ -151,12 +161,18 @@ Section Mergeable.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
+  Definition merge_metadata_sizes (msize msize'': Component.id -> nat) (c: Component.id) : nat :=
+    if c \in domm ip then
+      msize c
+    else
+      msize'' c.
+
   (* This "extensional" reading of compatible states depends directly on the
      partial programs concerned (implicitly through the section mechanism) and
      two runs synchronized by their traces. It is a rather strong notion, easy
      to work with and well suited to the purposes of the proof. *)
-  Inductive mergeable_states (s s'' : CS.state) : Prop :=
-    mergeable_states_intro : forall s0 s0'' t,
+  Inductive mergeable_states (s s'' s': CS.state) : Prop :=
+    mergeable_states_intro : forall s0 s0'' s0' t t'' t' msize msize'',
       (* Well-formedness conditions. *)
       well_formed_program p ->
       well_formed_program c ->
@@ -170,52 +186,86 @@ Section Mergeable.
       (* "Proper" definition. *)
       initial_state sem   s0   ->
       initial_state sem'' s0'' ->
+      initial_state sem' s0' ->
       Star sem   s0   t s   ->
-      Star sem'' s0'' t s'' ->
-      mergeable_states s s''.
+      Star sem'' s0'' t'' s'' ->
+      Star sem' s0' t' s' ->     
+      traces_shift_each_other_all_cids msize msize'' t t'' ->
+      traces_shift_each_other_all_cids msize'' (merge_metadata_sizes msize msize'') t'' t' ->
+      mergeable_states s s'' s'.
 
   (* RB: NOTE: This induction principle is currently used only in the proofs of
      mergeable_states_pc_same_component and mergeable_states_mergeable_stack. It
      would be interesting to see if (other) proofs benefit from its use, or what
      a conventional star induction does to the lone proof.
      TODO: Remove automatic names, refactor symmetries. *)
-  Lemma mergeable_states_ind' : forall P : CS.state -> CS.state -> Prop,
-      (forall (s s'' : CS.state),
+  Lemma mergeable_states_ind' : forall P : CS.state -> CS.state -> CS.state -> Prop,
+      (forall (s s'' s' : CS.state),
           initial_state (CS.sem_non_inform (program_link p c)) s ->
           initial_state (CS.sem_non_inform (program_link p' c')) s'' ->
-          P s s'') ->
-      (forall (s1 s2 s'' : CS.state),
-          mergeable_states s1 s'' ->
+          initial_state (CS.sem_non_inform (program_link p c')) s' ->
+          P s s'' s') ->
+      (forall (s1 s2 s'' s' : CS.state),
+          mergeable_states s1 s'' s' ->
           Step (CS.sem_non_inform (program_link p c)) s1 E0 s2 ->
-          P s1 s'' ->
-          P s2 s'') ->
-      (forall (s s1'' s2'' : CS.state),
-          mergeable_states s s1'' ->
+          P s1 s'' s' ->
+          P s2 s'' s') ->
+      (forall (s s1'' s2'' s' : CS.state),
+          mergeable_states s s1'' s' ->
           Step (CS.sem_non_inform (program_link p' c')) s1'' E0 s2'' ->
-          P s s1'' ->
-          P s s2'') ->
-      (forall (s1 s2 s1'' s2'' : CS.state) (t : trace CompCert.Events.event),
+          P s s1'' s' ->
+          P s s2'' s') ->
+      (forall (s s'' s1' s2' : CS.state),
+          mergeable_states s s'' s1' ->
+          Step (CS.sem_non_inform (program_link p c')) s1' E0 s2' ->
+          P s s'' s1' ->
+          P s s'' s2') ->
+      (forall (s1 s2 s1'' s2'' s1' s2' : CS.state) (t t'' t' : trace CompCert.Events.event)
+        (msize msize'': Component.id -> nat),
           t <> E0 ->
-          mergeable_states s1 s1'' ->
+          t'' <> E0 ->
+          t' <> E0 ->
+          mergeable_states s1 s1'' s1' ->
           Step (CS.sem_non_inform (program_link p c)) s1 t s2 ->
-          Step (CS.sem_non_inform (program_link p' c')) s1'' t s2'' ->
-          P s1 s1'' ->
-          P s2 s2'') ->
-      forall (s s'' : CS.state), mergeable_states s s'' -> P s s''.
+          Step (CS.sem_non_inform (program_link p' c')) s1'' t'' s2'' ->
+          Step (CS.sem_non_inform (program_link p c')) s1' t' s2' ->
+          traces_shift_each_other_all_cids msize msize'' t t'' ->
+          traces_shift_each_other_all_cids msize'' (merge_metadata_sizes msize msize'') t'' t' ->
+          P s1 s1'' s1' ->
+          P s2 s2'' s2') ->
+      forall (s s'' s' : CS.state), mergeable_states s s'' s' -> P s s'' s'.
   Proof.
     intros P.
-    intros Hindini HindE0l HindE0r Hindstep.
-    intros s s'' Hmerg.
+    intros Hindini HindE0l HindE0r HindE0merge Hindstep.
+    intros s s'' s' Hmerg.
     inversion Hmerg
-      as [s0 s0'' t ? ? ? ? ? ? ? ? ? Hini Hini'' Hstar Hstar''].
-    apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''.
-    generalize dependent s''.
+      as [s0 s0'' s0' t t'' t' msize msize'' ? ? ? ? ? ? ? ? ? Hini Hini'' Hini'
+             Hstar Hstar'' Hstar' Htt'' Ht''t'].
+    apply star_iff_starR in Hstar. apply star_iff_starR in Hstar''. apply star_iff_starR in Hstar'.
+    generalize dependent s''. generalize dependent s'.
     induction Hstar
       as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23 Ht12];
-      intros s'' Hmerg Hstar''.
+      intros s' Hstar' s'' Hmerg Hstar''.
     - remember E0 as t.
       induction Hstar''.
-      + now apply Hindini.
+      + induction Hstar'.
+        * now apply Hindini.
+        * subst.
+          assert (t1 ** t2 = nil).
+            by now apply size0nil;
+              rewrite <- (traces_shift_each_other_all_cids_same_size _ _ _ _ Ht''t').
+          assert (Ht1 : t1 = E0). by now destruct t1.
+          assert (Ht2 : t2 = E0) by now destruct t1.
+          subst.
+          eapply HindE0merge. Focus 2. exact H8. SearchAbout s s0.
+          
+          specialize (IHHstar'' eq_refl HindE0l HindE0r Hindstep).
+          assert (Hmergss2 : mergeable_states s s2).
+          { apply star_iff_starR in Hstar''.
+            econstructor; try eassumption. now apply star_refl. }
+          specialize (IHHstar'' Hini'' Hmergss2). eapply HindE0r; eauto.
+          
+          
       + subst.
         assert (Ht1 : t1 = E0) by now destruct t1.
         assert (Ht2 : t2 = E0) by now destruct t1.
@@ -285,7 +335,7 @@ Section Mergeable.
     merge_states_regs ip s s'' = CS.state_regs s.
   Proof.
     intros Hcomp Hmerg.
-    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
     unfold merge_states_regs. simpl.
     unfold merge_registers.
     CS.simplify_turn.
@@ -304,7 +354,7 @@ Section Mergeable.
     merge_states_regs ip s s'' = CS.state_regs s''.
   Proof.
     intros Hcomp Hmerg.
-    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
     unfold merge_states_regs. simpl.
     unfold merge_registers.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
@@ -324,7 +374,7 @@ Section Mergeable.
     merge_states_pc ip s s'' = CS.state_pc s.
   Proof.
     intros Hcomp Hmerg.
-    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
     unfold merge_states_pc. simpl.
     unfold merge_pcs.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
@@ -343,7 +393,7 @@ Section Mergeable.
     merge_states_pc ip s s'' = CS.state_pc s''.
   Proof.
     intros Hcomp Hmerg.
-    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
     unfold merge_states_pc. simpl.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcomp.
     inversion Hmerg as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
@@ -360,7 +410,7 @@ Section Mergeable.
     CS.is_program_component s ic ->
     mergeable_states s s'' ->
     merge_states ip ic s s'' =
-    (merge_states_stack ip s s'', merge_states_mem ip ic s s'', CS.state_regs s, CS.state_pc s).
+    (merge_states_stack ip s s'', merge_states_mem ip ic s s'', CS.state_regs s, CS.state_pc s, CS.state_addrs s (* [DynShare] TODO *)).
   Proof.
     intros Hcomp Hmerg.
     rewrite merge_states_unfold.
@@ -373,7 +423,7 @@ Section Mergeable.
     CS.is_context_component s ic ->
     mergeable_states s s'' ->
     merge_states ip ic s s'' =
-    (merge_states_stack ip s s'', merge_states_mem ip ic s s'', CS.state_regs s'', CS.state_pc s'').
+    (merge_states_stack ip s s'', merge_states_mem ip ic s s'', CS.state_regs s'', CS.state_pc s'', CS.state_addrs s (* [DynShare] TODO *)).
   Proof.
     intros Hcomp Hmerg.
     rewrite merge_states_unfold.
@@ -389,11 +439,11 @@ Section Mergeable.
   Proof.
     intros Hmerg.
     induction Hmerg
-      as [ s s'' Hini Hini''
+      as [s s'' Hini Hini''
          | s1 s2 s'' Hmerg Hstep IH
          | s s1'' s2'' Hmerg Hstep IH
          | s1 s2 s1'' s2'' t Hdiff Hmerg Hstep Hstep'' IH]
-      using mergeable_states_ind'.
+           using mergeable_states_ind'.
     - (* Initial state *)
       inversion Hini; inversion Hini''; subst.
       unfold CS.state_pc. unfold CS.initial_machine_state.
@@ -403,11 +453,34 @@ Section Mergeable.
     - (* Silent step on the right *)
       now rewrite -> IH, (CS.silent_step_non_inform_preserves_component _ _ _ Hstep).
     - (* Non-silent step *)
-      inversion Hstep as [? tinf ? Hstepinf]; subst.
-      inversion Hstep'' as [? tinf' ? Hstepinf'' DUMMY Hteq]; subst.
-      inversion Hstepinf; subst; try contradiction;
-        inversion Hstepinf''; subst;
-        now inversion Hteq.
+      inversion Hstep; subst; try contradiction;
+        inversion Hstep''; subst; try contradiction;
+          try match goal with HE0: E0 = ?x, Hx: ?x <> E0 |- _ =>
+                              rewrite <- HE0 in Hx; contradiction
+              end;
+          match goal with Hstp : CS.step _ _ ?e _,
+                                 Hstp' : CS.step _ _ ?e0 _ |- _ =>
+                          inversion Hstp;
+                            match goal with Hexec: executing ?G ?pc ?i,
+                                                   Hexec': executing ?G ?pc ?i' |- _ =>
+                                            pose proof
+                                                 executing_deterministic
+                                                 G pc i i' Hexec Hexec' as cntr;
+                                              try discriminate
+                            end;
+                            inversion Hstp';
+                            match goal with Hexec: executing ?G ?pc ?i,
+                                                   Hexec': executing ?G ?pc ?i' |- _ =>
+                                            pose proof
+                                                 executing_deterministic
+                                                 G pc i i' Hexec Hexec' as cntra;
+                                              try discriminate
+                            end
+          end;
+          inversion cntra; inversion cntr; subst; simpl in *;
+            match goal with Heveq:
+                              [_] = [_] |- _ => inversion Heveq; subst; reflexivity
+            end.
   Qed.
 
   Lemma mergeable_states_program_to_program s s'' :
@@ -415,8 +488,8 @@ Section Mergeable.
     CS.is_program_component s   ic ->
     CS.is_program_component s'' ic.
   Proof.
-    destruct s   as [[[? ?] ?] pc  ].
-    destruct s'' as [[[? ?] ?] pc''].
+    destruct s   as [[[[? ?] ?] pc  ] ?].
+    destruct s'' as [[[[? ?] ?] pc''] ?].
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
     intros Hmerge Hpc.
     pose proof mergeable_states_pc_same_component Hmerge as Hcomp. simpl in Hcomp.
@@ -430,7 +503,7 @@ Section Mergeable.
   Proof.
     intros Hmerg.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
-    destruct s1 as [[[stack1 mem1] reg1] pc1]; destruct s2 as [[[stack2 mem2] reg2] pc2].
+    destruct s1 as [[[[stack1 mem1] reg1] pc1] addrs1]; destruct s2 as [[[[stack2 mem2] reg2] pc2] addrs2].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc; clear Hpc.
     inversion Hmerg as [? ? ? _ _ _ _ [[_ Hdisj] _] _ _ _ _ Hini Hini'' Hstar Hstar''].
@@ -446,7 +519,7 @@ Section Mergeable.
   Proof.
     intros Hmerg.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
-    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc.
     inversion Hmerg as [s0 _ t
@@ -490,16 +563,16 @@ Section Mergeable.
       apply mergeable_states_program_to_context in Hcc; try assumption.
     unfold CS.is_context_component, turn_of, CS.state_turn in Hcc.
     rewrite (mergeable_states_pc_same_component Hmerge).
-    now destruct s'' as [[[? ?] ?] ?].
+    now destruct s'' as [[[[? ?] ?] ?] ?].
   Qed.
 
-  Lemma mergeable_states_program_component_domm mem gps regs pc s'' :
-    mergeable_states (mem, gps, regs, pc) s'' ->
-    CS.is_program_component (mem, gps, regs, pc) ic ->
+  Lemma mergeable_states_program_component_domm mem gps regs pc addrs s'' :
+    mergeable_states (mem, gps, regs, pc, addrs) s'' ->
+    CS.is_program_component (mem, gps, regs, pc, addrs) ic ->
     Pointer.component pc \in domm ip.
   Proof.
     intros Hmerge Hcomp.
-    change pc with (CS.state_pc (mem, gps, regs, pc)).
+    change pc with (CS.state_pc (mem, gps, regs, pc, addrs)).
     eapply is_program_component_pc_in_domm; last eassumption; assumption.
   Qed.
 
@@ -516,40 +589,35 @@ Section Mergeable.
       mergeable_stack (frame :: gps) (frame'' :: gps'').
 
   Lemma mergeable_states_mergeable_stack
-        gps1   mem1   regs1   pc1
-        gps1'' mem1'' regs1'' pc1'' :
-    mergeable_states (gps1  , mem1  , regs1  , pc1  )
-                     (gps1'', mem1'', regs1'', pc1'') ->
+        gps1   mem1   regs1   pc1   addrs1
+        gps1'' mem1'' regs1'' pc1'' addrs1'' :
+    mergeable_states (gps1  , mem1  , regs1  , pc1  , addrs1  )
+                     (gps1'', mem1'', regs1'', pc1'', addrs1'') ->
     mergeable_stack gps1 gps1''.
   Proof.
     intros Hmerg.
     inversion Hmerg
       as [s_init s_init' t_init Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces
           Hifacep Hifacec Hprog_is_closed Hprog_is_closed' Hinit Hinit' Hstar Hstar'].
-    remember (gps1, mem1, regs1, pc1) as s1.
-    remember (gps1'', mem1'', regs1'', pc1'') as s1''.
-    revert gps1 mem1 regs1 pc1 gps1'' mem1'' regs1'' pc1'' Heqs1 Heqs1''.
+    remember (gps1, mem1, regs1, pc1, addrs1) as s1.
+    remember (gps1'', mem1'', regs1'', pc1'', addrs1'') as s1''.
+    revert gps1 mem1 regs1 pc1 addrs1 gps1'' mem1'' regs1'' pc1'' addrs1'' Heqs1 Heqs1''.
     induction Hmerg as [ s1 s1'' Hini Hini''
                        | s1 s2 s1'' Hmerg Hstep IH
                        | s1 s1'' s2'' Hmerg Hstep'' IH
                        | s1 s2 s1'' s2'' t Ht Hmerg Hstep Hstep'' IH]
-      using mergeable_states_ind'.
-    - (* Initial state *)
-      intros.
+                         using mergeable_states_ind'.
+    - intros.
       subst. inversion Hini as [Hini1]; inversion Hini'' as [Hini1''].
       destruct Hmergeable_ifaces.
       rewrite CS.initial_machine_state_after_linking in Hini1; try assumption.
       rewrite CS.initial_machine_state_after_linking in Hini1''; try assumption.
       inversion Hini1; inversion Hini1''. now constructor.
       now rewrite -Hifacec -Hifacep.
-    - intros;
-        inversion Hstep as [? t' ? Hstep' DUMMY Hteq]; subst;
-        inversion Hstep'; subst;
-        inversion Hteq; subst;
-        eapply IH; eauto;
+    - intros; inversion Hstep; subst; eapply IH; eauto;
         try (
-            match goal with H: (?gps, _, _, _) = (?gps1, _, _, _) |-
-                            (?gps, _, _, _) = (?gps1, _, _, _) =>
+            match goal with H: (?gps, _, _, _, _) = (?gps1, _, _, _, _) |-
+                            (?gps, _, _, _, _) = (?gps1, _, _, _, _) =>
                             inversion H; reflexivity
             end
           ).
@@ -573,6 +641,18 @@ Section Mergeable.
       + admit.
       + admit.
       + admit.
+      + (* Derive a contradiction from the assumption:
+           CS.event_non_inform_of e = E0
+         *)
+        admit.
+      + (* Derive a contradiction from the assumption:
+           CS.event_non_inform_of e = E0
+         *)
+        admit.
+      + (* Derive a contradiction from the assumption:
+           CS.event_non_inform_of e = E0
+         *)
+        admit.
     - admit.
       (*
       intros; inversion Hstep''; subst;
@@ -589,20 +669,44 @@ Section Mergeable.
         admit.
 
        *)
-    - intros gps2 mem2 regs2 pc2 gps2'' mem2'' regs2'' pc2'' Heqs2 Heqs2''; subst.
+    - intros gps2 mem2 regs2 pc2 addrs2 gps2'' mem2'' regs2'' pc2'' addrs2'' Heqs2 Heqs2''; subst.
       (* Note: do not try to do:
          inversion Hstep; inversion Hstep''; try congruence.
          as it generates 13*13 = subgoals before discarding the
          absurd ones. *)
-      inversion Hstep as [? ? ? Hstepinf]; subst;
-        inversion Hstep'' as [? ? ? Hstepinf'' DUMMY Hteq]; subst;
-        inversion Hstepinf; subst; try contradiction;
-        inversion Hstepinf''; subst;
-        inversion Hteq.
-      + subst.
-        (* inversion cntr. subst. inversion cntra. subst. *)
+      inversion Hstep; subst; try contradiction;
+        inversion Hstep''; subst; try contradiction;
+          try match goal with HE0: E0 = ?x, Hx: ?x <> E0 |- _ =>
+                              rewrite <- HE0 in Hx; contradiction
+              end;
+          match goal with Hstp : CS.step _ _ ?e _,
+                                 Hstp' : CS.step _ _ ?e0 _ |- _ =>
+                          inversion Hstp;
+                            match goal with Hexec: executing ?G ?pc ?i,
+                                                   Hexec': executing ?G ?pc ?i' |- _ =>
+                                            pose proof
+                                                 executing_deterministic
+                                                 G pc i i' Hexec Hexec' as cntr;
+                                              try discriminate
+                            end;
+                            inversion Hstp';
+                            match goal with Hexec: executing ?G ?pc ?i,
+                                                   Hexec': executing ?G ?pc ?i' |- _ =>
+                                            pose proof
+                                                 executing_deterministic
+                                                 G pc i i' Hexec Hexec' as cntra;
+                                              try discriminate
+                            end
+          end.
+      + subst. inversion cntr. subst. inversion cntra. subst.
         eapply mergeable_stack_cons; eauto.
-        * now do 2 rewrite Pointer.inc_preserves_component.
+        * inversion cntra. subst. simpl in *. 
+          match goal with
+            H: [ECall (Pointer.component pc0) _ _ _ _] = [ECall (Pointer.component pc) _ _ _ _]
+            |- _ =>
+            inversion H
+          end.
+          now do 2 rewrite Pointer.inc_preserves_component.
         * (* Shouldn't this somehow follow from 
              "Hprog_is_closed" together
              with  executing (globalenv (CS.sem_non_inform (program_link p c))) pc (ICall C P)?
@@ -615,24 +719,22 @@ Section Mergeable.
               pose proof CS.program_behaves_inv_non_inform prog beh Hbeh as [ee [Hee1 Hee2]].
               eexists.
             - inversion Hmerg; eauto.
-              match goal with
-                Hstar_s0: Star sem ?s0 ?t ?s',
-                Hinit_s0: initial_state sem ?s0
-                |- _ =>
-                pose proof CS.star_sem_non_inform_star_sem_inform
-                     prog s0 t s' Hstar_s0
-                  as [t_inform [gl _gl]];
-                pose proof sd_initial_determ
-                     (CS.determinacy_non_inform prog) s0
-                     (CS.initial_machine_state (program_link p c))
-                     Hinit_s0 as Hinit_eq
+              match goal with Hstar_s0: Star sem ?s0 ?t ?s',
+                                        Hinit_s0: initial_state sem ?s0
+                              |- _ =>
+                              pose proof CS.star_sem_non_inform_star_sem_inform
+                                   prog s0 t s' Hstar_s0
+                                as [t_inform [gl _gl]];
+                                pose proof sd_initial_determ
+                                     (CS.determinacy_non_inform prog) s0
+                                     (CS.initial_machine_state (program_link p c))
+                                     Hinit_s0 as Hinit_eq
               end.
               simpl in *. unfold CS.initial_state in *.
               unfold prog in *.
-              match goal with
-                Hs0: ?s0 = CS.initial_machine_state (program_link p c)
-                |- _ =>
-                rewrite Hs0 in gl
+              match goal with Hs0: ?s0 = CS.initial_machine_state (program_link p c)
+                              |- _ =>
+                              rewrite Hs0 in gl
               end.
               (* exact gl. *)
               admit.
@@ -642,13 +744,15 @@ Section Mergeable.
           -- left. rewrite Pointer.inc_preserves_component. assumption.
         * admit.
       + admit.
+      + admit.
+      + admit.
   Admitted.
 
   Lemma mergeable_states_cons_domm
-        frame1   gps1   mem1   regs1   pc1
-        frame1'' gps1'' mem1'' regs1'' pc1'' :
-    mergeable_states (frame1   :: gps1  , mem1  , regs1  , pc1  )
-                     (frame1'' :: gps1'', mem1'', regs1'', pc1'') ->
+        frame1   gps1   mem1   regs1   pc1   addrs1
+        frame1'' gps1'' mem1'' regs1'' pc1'' addrs1'' :
+    mergeable_states (frame1   :: gps1  , mem1  , regs1  , pc1  , addrs1  )
+                     (frame1'' :: gps1'', mem1'', regs1'', pc1'', addrs1'') ->
     Pointer.component frame1 = Pointer.component frame1''.
   Proof.
     intros Hmerge.
@@ -667,8 +771,8 @@ Section Mergeable.
   exists mem,
     Memory.store (CS.state_mem s) ptr v = Some mem.
   Proof.
-    destruct s as [[[gps mem] regs] pc].
-    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    destruct s as [[[[gps mem] regs] pc] addrs].
+    destruct s'' as [[[[gps'' mem''] regs''] pc''] addrs''].
     destruct ptr as [[[P C] b] o].
     unfold Memory.store, merge_states, merge_states_mem, merge_memories.
     intros Hmerge_ifaces Hdomm Hcomp.
@@ -694,8 +798,8 @@ Section Mergeable.
   exists mem ptr,
     Memory.alloc (CS.state_mem s) (CS.state_component s) size = Some (mem, ptr).
   Proof.
-    destruct s as [[[gps mem] regs] pc].
-    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    destruct s as [[[[gps mem] regs] pc] addrs].
+    destruct s'' as [[[[gps'' mem''] regs''] pc''] addrs''].
     unfold Memory.alloc, merge_states, merge_states_mem, merge_memories, CS.state_component.
     intros Hmerge_ifaces Hdomm.
     rewrite unionmE.
@@ -823,7 +927,7 @@ Section Mergeable.
     destruct (Memory.load (CS.state_mem s) ptr) as [v |] eqn:Hcase1;
       first (symmetry; now apply program_load_to_partialized_memory).
     intros Hpc Hmerge Hptr.
-    destruct s as [[[gps mem] regs] pc]; destruct ptr as [[[P C] b] o];
+    destruct s as [[[[gps mem] regs] pc] addrs]; destruct ptr as [[[P C] b] o];
       unfold Memory.load, merge_memories in *; simpl in *; subst.
     eapply is_program_component_pc_in_domm in Hpc; last eassumption; try assumption.
     inversion Hmerge as [_ _ _ _ _ _ _ Hmergeable_ifaces _ _ _ _ _ _ _ _].
@@ -911,7 +1015,7 @@ Section Mergeable.
     find_label_in_procedure (globalenv sem) (CS.state_pc s) l = Some pc ->
     find_label_in_procedure (globalenv sem') (CS.state_pc s) l = Some pc.
   Proof.
-    destruct s as [[[? ?] ?] pc_]. simpl.
+    destruct s as [[[[? ?] ?] pc_] ?]. simpl.
     intros Hpc Hmerge Hlabel.
     inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
@@ -938,7 +1042,7 @@ Section Mergeable.
   Proof.
     intros Hcomp Hmerge.
     unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp.
-    destruct s as [[[gps1 mem1] regs1] pc1].
+    destruct s as [[[[gps1 mem1] regs1] pc1] addrs1].
     inversion Hmerge as [s0 _ t Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ Hstar _].
     destruct (CS.star_pc_domm_non_inform _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [Hip | Hic].
     - assumption.
@@ -1044,6 +1148,11 @@ Section MergeSym.
       assumption.
   Qed.
 
+  Lemma merge_addrs_sym addrs addrs'' :
+    mergeable_interfaces ip ic ->
+    merge_addrs addrs addrs'' = merge_addrs addrs'' addrs.
+  Admitted.
+
   (* JT: TODO: Clean this proof (RB: agreed). *)
   Theorem merge_states_sym s s'' :
     mergeable_states p c p' c' s s'' ->
@@ -1076,26 +1185,27 @@ Section MergeSym.
           [t_inform'' [Hstar_inform'' _]].
       now exists prog'', s0'', t_inform''.
     }
-    destruct s as [[[stack mem] reg] pc]; destruct s'' as [[[stack'' mem''] reg''] pc''].
+    destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
     unfold merge_states.
     rewrite (merge_stacks_sym Hmergeable_ifaces).
     rewrite (merge_memories_sym Hmergeable_ifaces Hmem Hmem'').
     erewrite (merge_registers_sym _ _ Hmergeable_ifaces).
     rewrite (merge_pc_sym Hmergeable_ifaces).
+    rewrite (merge_addrs_sym _ _ Hmergeable_ifaces).
     reflexivity.
     simpl.
     pose proof CS.star_pc_domm_non_inform
          _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar as Hdomm.
     rewrite domm_union. now apply /fsetUP.
-    replace pc with (CS.state_pc (stack, mem, reg, pc)); try reflexivity.
-    replace pc'' with (CS.state_pc (stack'', mem'', reg'', pc'')); try reflexivity.
+    replace pc with (CS.state_pc (stack, mem, reg, pc, addrs)); try reflexivity.
+    replace pc'' with (CS.state_pc (stack'', mem'', reg'', pc'', addrs'')); try reflexivity.
     eapply mergeable_states_pc_same_component; eassumption.
     simpl.
     pose proof CS.star_pc_domm_non_inform
          _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar as Hdomm.
     rewrite domm_union. now apply /fsetUP.
-    replace pc with (CS.state_pc (stack, mem, reg, pc)); try reflexivity.
-    replace pc'' with (CS.state_pc (stack'', mem'', reg'', pc'')); try reflexivity.
+    replace pc with (CS.state_pc (stack, mem, reg, pc, addrs)); try reflexivity.
+    replace pc'' with (CS.state_pc (stack'', mem'', reg'', pc'', addrs'')); try reflexivity.
     eapply mergeable_states_pc_same_component; eassumption.
     eapply mergeable_states_mergeable_stack with (p' := p') (c' := c'); eassumption.
   Qed.
@@ -1169,8 +1279,8 @@ Section ThreewayMultisem1.
     | CS.simplify_turn; now rewrite Hcontra in Hcomp2''
     ].
 
-  (* [DynShare]
-
+  (* [DynShare] 
+     
      This lemma is false in the existence of dynamic memory sharing.
      Instead, what remains untouched is *only* the part of the partial memory
      that *remains* private after considering (i.e., set-differencing) the set
@@ -1185,10 +1295,10 @@ Section ThreewayMultisem1.
     to_partial_memory (CS.state_mem s3'') (domm ip).
   Proof.
     intros Hmerge1 Hcomp Hstar12'' Hstep23''.
-    destruct s2'' as [[[gps2'' mem2''] regs2''] pc2''].
-    destruct s3'' as [[[gps3'' mem3''] regs3''] pc3''].
+    destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addr2''].
+    destruct s3'' as [[[[gps3'' mem3''] regs3''] pc3''] addr3''].
     pose proof CS.step_non_inform_step_inform prog''
-         (gps2'', mem2'', regs2'', pc2'') _ _ Hstep23'' as
+         (gps2'', mem2'', regs2'', pc2'', addr2'') _ _ Hstep23'' as
         [t_inform [Hstep_inform _]].
     inversion Hstep_inform; subst;
       (* Most cases do not touch the memory. *)
@@ -1235,11 +1345,11 @@ Section ThreewayMultisem1.
       symmetry in Ht12; apply Eapp_E0_inv in Ht12 as [? ?]; subst.
       specialize (IHstar'' Hmerge1 eq_refl). rewrite IHstar''.
       apply star_iff_starR in Hstar12''.
-      destruct s as [[[gps mem] regs] pc].
-      destruct s2'' as [[[gps2'' mem2''] regs2''] pc2''].
-      destruct s3'' as [[[gps3'' mem3''] regs3''] pc3''].
+      destruct s as [[[[gps mem] regs] pc] addrs].
+      destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addrs2''].
+      destruct s3'' as [[[[gps3'' mem3''] regs3''] pc3''] addrs3''].
       pose proof CS.step_non_inform_step_inform prog''
-           (gps2'', mem2'', regs2'', pc2'') _ _ Hstep23'' as
+           (gps2'', mem2'', regs2'', pc2'', addrs2'') _ _ Hstep23'' as
           [t_inform [Hstep_inform _]].
     inversion Hstep_inform; subst;
         (* Unfold, common rewrite on PC, memory rewrite for memory goals and done. *)
@@ -1254,11 +1364,11 @@ Section ThreewayMultisem1.
      The current proof that is commented below relies on "to_partial_memory_epsilon_star",
      the lemma that does not hold any more in the [DynShare] world.
 
-     We should be able to find a weaker version of "to_partial_memory_epsilon_star"
+     We should be able to find a weaker version of "to_partial_memory_epsilon_star" 
      that will help us complete the proof of this lemma.
 
     *)
-
+  
     (*;
         try (pose proof to_partial_memory_epsilon_star Hmerge1 Hcomp Hstar12'' Hstep23'' as Hmem23'';
              simpl in Hmem23''; rewrite Hmem23'');
@@ -1336,7 +1446,7 @@ Section ThreewayMultisem1.
     match goal with
     | Hcc' : prog_interface c = _ |- _ =>
       match goal with
-        Hcomp1 : is_true (CS.is_program_component (?gps2, ?mem2, ?regs2, pc1) _)
+        Hcomp1 : is_true (CS.is_program_component (?gps2, ?mem2, ?regs2, pc1, ?addrs2) _)
         |- _ =>
         match goal with
         | |- linkable _ _ => rewrite Hcc' in Hlinkable; exact Hlinkable
@@ -1345,12 +1455,12 @@ Section ThreewayMultisem1.
                                     rewrite Hcc' in Hlinkable; exact Hlinkable
         | |- _ =>
           eapply is_program_component_pc_in_domm
-            with (s := (gps2, mem2, regs2, pc1))
+            with (s := (gps2, mem2, regs2, pc1, addrs2))
                  (c := c); eauto
         end
       end
     end.
-
+        
   Theorem threeway_multisem_step_E0 s1 s2 s1'' :
     CS.is_program_component s1 ic ->
     mergeable_states p c p' c' s1 s1'' ->
@@ -1367,37 +1477,37 @@ Section ThreewayMultisem1.
     pose proof threeway_multisem_mergeable_step_E0 Hcomp1 Hmerge1 Hstep12
       as Hmerge2.
     rewrite (mergeable_states_merge_program Hcomp2 Hmerge2).
-    destruct s1 as [[[gps1 mem1] regs1] pc1].
-    destruct s2 as [[[gps2 mem2] regs2] pc2].
-    destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
+    destruct s1 as [[[[gps1 mem1] regs1] pc1] addrs1].
+    destruct s2 as [[[[gps2 mem2] regs2] pc2] addrs2].
+    destruct s1'' as [[[[gps1'' mem1''] regs1''] pc1''] addrs1''].
     (* Case analysis on step. *)
     pose proof CS.step_non_inform_step_inform
-         _ (gps1, mem1, regs1, pc1) _ _ Hstep12 as [t_inform [Hstep12_inform Hrelt's]].
+         _ (gps1, mem1, regs1, pc1, addrs1) _ _ Hstep12 as [t_inform [Hstep12_inform Hrelt's]].
     simpl.
     (*[DynShare]
-
+      
       t_threeway_multisem_step_E0 uses CS.step_of_executing.
       Need to figure out how to use CS.step_of_executing_non_inform or similar.
-
+      
      *)
     assert (CS.step (prepare_global_env prog')
                     (
-                      merge_states_stack (prog_interface p) (gps1, mem1, regs1, pc1)
-                                         (gps1'', mem1'', regs1'', pc1''),
+                      merge_states_stack (prog_interface p) (gps1, mem1, regs1, pc1, addrs1)
+                                         (gps1'', mem1'', regs1'', pc1'', addrs1''),
                       merge_states_mem (prog_interface p) (prog_interface c)
-                                       (gps1, mem1, regs1, pc1)
-                                       (gps1'', mem1'', regs1'', pc1''),
-                      regs1, pc1
+                                       (gps1, mem1, regs1, pc1, addrs1)
+                                       (gps1'', mem1'', regs1'', pc1'', addrs1''),
+                      regs1, pc1, addrs1
                     )
                     t_inform
                     (
                       merge_states_stack (prog_interface p)
-                                         (gps2, mem2, regs2, pc2)
-                                         (gps1'', mem1'', regs1'', pc1''),
+                                         (gps2, mem2, regs2, pc2, addrs2)
+                                         (gps1'', mem1'', regs1'', pc1'', addrs1''),
                       merge_states_mem (prog_interface p) (prog_interface c)
-                                       (gps2, mem2, regs2, pc2)
-                                       (gps1'', mem1'', regs1'', pc1''),
-                      regs2, pc2
+                                       (gps2, mem2, regs2, pc2, addrs2)
+                                       (gps1'', mem1'', regs1'', pc1'', addrs1''),
+                      regs2, pc2, addrs2
                     )
            )
       as Hstep_inform.
@@ -1433,7 +1543,7 @@ Section ThreewayMultisem1.
               find_label_in_component (globalenv
                                          (CS.sem_non_inform (program_link p c'))
                                       )
-                                      (CS.state_pc (gps2, mem2, regs1, pc1))
+                                      (CS.state_pc (gps2, mem2, regs1, pc1, addrs2))
                                       l
               = Some pc2
             ) as gl.
@@ -1449,7 +1559,7 @@ Section ThreewayMultisem1.
               find_label_in_procedure (globalenv
                                          (CS.sem_non_inform (program_link p c'))
                                       )
-                                      (CS.state_pc (gps2, mem2, regs2, pc1))
+                                      (CS.state_pc (gps2, mem2, regs2, pc1, addrs2))
                                       l
               = Some pc2
             ) as gl.
@@ -1574,23 +1684,26 @@ Section ThreewayMultisem1.
     rewrite (mergeable_states_merge_program Hcomp1 Hmerge1).
     pose proof threeway_multisem_event_lockstep_program_mergeable
          Hcomp1 Hmerge1 Hstep12 Hstep12'' as Hmerge2.
-    set s1copy := s1. destruct s1 as [[[gps1 mem1] regs1] pc1].
-    set s2copy := s2. destruct s2 as [[[gps2 mem2] regs2] pc2].
-    destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
-    destruct s2'' as [[[gps2'' mem2''] regs2''] pc2''].
+    set s1copy := s1. destruct s1 as [[[[gps1 mem1] regs1] pc1] addrs1].
+    set s2copy := s2. destruct s2 as [[[[gps2 mem2] regs2] pc2] addrs2].
+    destruct s1'' as [[[[gps1'' mem1''] regs1''] pc1''] addrs1''].
+    destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addrs2''].
     (* Case analysis on step. *)
-    inversion Hstep12 as [? ? ? Hstepinf12 DUMMY Hteq]; subst;
-      inversion Hstep12'' as [? ? ? Hstepinf12'' DUMMY Hteq'']; subst;
-      inversion Hstepinf12; subst;
-      inversion Hteq; subst;
-      inversion Hstepinf12''; subst;
-      inversion Hteq''; subst.
+    inversion Hstep12; subst;
+      inversion Hstep12''; subst.
     (* [DynShare] Instead of 2 subgoals, we now have 4: [ICall, IReturn] x [ICall, IReturn]
-
+       
        That is a bit confusing. I do not understand why we used to have
        only two subgoals.
      *)
     - admit.
+      
+    - (* Here, ICall, IReturn. Derive a contradiction through [e] *)
+      admit.
+      
+    - (* Here, IReturn, ICall. Derive a contradiction through [e] *)
+      admit.
+      
     - admit.
   Admitted.
 (*    - (* Call: case analysis on call point. *)
@@ -1752,7 +1865,7 @@ Section ThreewayMultisem2.
       apply H; try assumption.
       + unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
         pose proof mergeable_states_pc_same_component Hmerge1 as Hpc.
-        destruct s1 as [[[? ?] ?] pc1]; destruct s1'' as [[[? ?] ?] pc1''].
+        destruct s1 as [[[[? ?] ?] pc1] ?]; destruct s1'' as [[[[? ?] ?] pc1''] ?].
         simpl in Hpc.
         rewrite -Hpc.
         unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in Hcase.
@@ -1884,7 +1997,7 @@ Section ThreewayMultisem3.
     - eapply threeway_multisem_mergeable; eassumption.
   Qed.
 
-  (* [DynShare]
+  (* [DynShare] 
      The following tactic applies program_store_from_partialized_memory
      and program_alloc_from_partialized_memory, which will both fail.
    *)
@@ -1957,8 +2070,8 @@ Section ThreewayMultisem3.
   Proof.
     intros Hpc Hmerge Hstep.
     inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _].
-    destruct s1 as [[[gps1 mem1] regs1] pc1].
-    destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
+    destruct s1 as [[[[gps1 mem1] regs1] pc1] addrs1].
+    destruct s1'' as [[[[gps1'' mem1''] regs1''] pc1''] addrs1''].
     inversion Hmergeable_ifaces as [Hlinkable _].
     pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability.
     assert (Hlinkable' := Hlinkable); rewrite Hifacep Hifacec in Hlinkable'.
@@ -2043,7 +2156,7 @@ Section ThreewayMultisem4.
       last (apply interface_preserves_closedness_r with (p2 := c); try assumption;
             now apply interface_implies_matching_mains).
     unfold merge_states, merge_memories, merge_registers, merge_pcs; simpl.
-    (* Memory simplifications. *)
+    (* Memory simplifictions. *)
     rewrite (prepare_procedures_memory_left Hlinkable).
     unfold ip. erewrite Hifacep at 1. rewrite Hifacep Hifacec in Hlinkable.
     rewrite (prepare_procedures_memory_right Hlinkable).
@@ -2091,8 +2204,8 @@ Section ThreewayMultisem5.
     final_state sem'' s'' ->
     final_state sem'  (merge_states ip ic s s'').
   Proof.
-    destruct s as [[[gps mem] regs] pc].
-    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    destruct s as [[[[gps mem] regs] pc] addrs].
+    destruct s'' as [[[[gps'' mem''] regs''] pc''] addrs''].
     unfold final_state. simpl. unfold merge_pcs.
     intros Hmerge Hfinal Hfinal''.
     inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _].
@@ -2125,8 +2238,8 @@ Section ThreewayMultisem5.
     ~ final_state sem'' s'' ->
     ~ final_state sem'  (merge_states ip ic s s'').
   Proof.
-    destruct s as [[[gps mem] regs] pc].
-    destruct s'' as [[[gps'' mem''] regs''] pc''].
+    destruct s as [[[[gps mem] regs] pc] addrs].
+    destruct s'' as [[[[gps'' mem''] regs''] pc''] addrs''].
     unfold final_state. simpl. unfold merge_pcs.
     intros Hmerge Hfinal Hfinal'' Hfinal'.
     inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _ ].
@@ -2215,6 +2328,50 @@ Section Recombination.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
+  (* [DynShare] [Compatible with RSC_DC_MD_Sigs.v] *)
+
+  Theorem recombination_prefix size_m size_m'' m m'':
+    does_prefix sem   m ->
+    does_prefix sem'' m'' ->
+    behavior_rel_behavior_all_cids size_m size_m'' m m'' ->
+    exists size_m' m',
+      does_prefix sem'  m' /\
+      behavior_rel_behavior_all_cids size_m' size_m m' m.
+  Proof.
+    unfold does_prefix.
+    intros [b [Hbeh Hprefix]] [b'' [Hbeh'' Hprefix'']] Hrelbb''.
+    assert (Hst_beh := Hbeh). assert (Hst_beh'' := Hbeh'').
+    apply CS.program_behaves_inv_non_inform in Hst_beh   as [s1   [Hini1   Hst_beh  ]].
+    apply CS.program_behaves_inv_non_inform in Hst_beh'' as [s1'' [Hini1'' Hst_beh'']].
+    unfold behavior_rel_behavior_all_cids in *.
+    pose proof Hrelbb'' 0 as Hdummy.
+    destruct m as [tm | tm | tm]; destruct m'' as [tm'' | tm'' | tm''];
+      try by inversion Hdummy.
+    - destruct b   as [t   | ? | ? | ?]; try contradiction.
+      destruct b'' as [t'' | ? | ? | ?]; try contradiction.
+      simpl in Hprefix, Hprefix''. subst t t''.
+      inversion Hst_beh   as [? s2   Hstar12   Hfinal2   | | |]; subst.
+      inversion Hst_beh'' as [? s2'' Hstar12'' Hfinal2'' | | |]; subst.
+      Check match_initial_states.
+      Print merge_states.
+      Print mergeable_states.
+      pose proof match_initial_states Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
+           Hprog_is_closed Hprog_is_closed' Hini1 Hini1'' as [Hini1' Hmerge1].
+  Admitted.
+  Check star_simulation.
+(*      Print mergeable_states.
+      Check star_simulation.
+      exists (Terminates tm). split; last reflexivity.
+      pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [Hstar12' Hmerge2].
+      apply program_runs with (s := merge_states ip ic s1 s1'');
+        first assumption.
+      apply state_terminates with (s' := merge_states ip ic s2 s2'');
+        first assumption.
+      now apply match_final_states with (p' := p').
+    - 
+*)
+
+
   (* RB: NOTE: Possible improvements:
       - Try to refactor case analysis in proof.
       - Try to derive well-formedness, etc., from semantics.
@@ -2274,20 +2431,4 @@ Section Recombination.
         last now apply Hstar12'.
       assumption.
   Qed.
-
-  (* RB: NOTE: [DynShare] This definition may be used to expose a simpler
-     relation, which would still fit the theorem statement, though one of the
-     explicit connections would be lost. *)
-  (* Definition prefix_rel m m' := *)
-  (*   exists n n', behavior_rel_behavior_all_cids n n' m m'. *)
-
-  Theorem recombination_prefix_rel m m'' n n'' :
-    does_prefix sem   m ->
-    does_prefix sem'' m'' ->
-    behavior_rel_behavior_all_cids n  n'' m  m'' ->
-  exists m' n',
-    does_prefix sem'  m' /\
-    behavior_rel_behavior_all_cids n' n   m' m.
-  Admitted.
-
 End Recombination.

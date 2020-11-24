@@ -100,7 +100,7 @@ Section RSC_DC_MD_Section.
                                  (Intermediate.CS.sem
                                     (Intermediate.program_link p_compiled Ct)) m)
       by (now exists t).
-                    
+
     assert (H_doesm': exists m_inform,
                does_prefix
                  (Intermediate.CS.sem_inform
@@ -123,13 +123,13 @@ Section RSC_DC_MD_Section.
     { admit. }
 
     destruct Hbeh_inform' as [t_inform Hbeh_inform].
-    
+
     assert (Hprefix0_inform: prefix m_inform t_inform).
     { admit. }
 
     assert (Hsafe_pref_inform: not_wrong_finpref m_inform).
     { admit. }
-    
+
     (* intermediate decomposition (for p_compiled) *)
     (* pose proof Intermediate.decomposition_prefix  *)
     (*   well_formed_p_compiled well_formed_Ct linkability_pcomp_Ct mains *)
@@ -139,7 +139,7 @@ Section RSC_DC_MD_Section.
     destruct (Linker.definability_with_linking
                 well_formed_p_compiled well_formed_Ct
                 linkability_pcomp_Ct closedness Hbeh_inform Hprefix0_inform Hsafe_pref_inform)
-      as [P' [Cs [metadata_size [m'
+      as [P' [Cs [m' [metadata_size
          [Hsame_iface1 [Hsame_iface2
          [Hmatching_mains_P'_p_compiled [Hmatching_mains_Cs_Ct
          [well_formed_P' [well_formed_Cs [HP'Cs_closed [HP'_Cs_m' Hbeh_rel_beh]]]]]]]]]]]].
@@ -183,11 +183,8 @@ Section RSC_DC_MD_Section.
     have well_formed_P'Cs : Source.well_formed_program (Source.program_link P' Cs).
       rewrite -Hsame_iface1 -Hsame_iface2 in linkability_pcomp_Ct.
       exact: Source.linking_well_formedness well_formed_P' well_formed_Cs linkability_pcomp_Ct.
-
-      have HP'_Cs_compiled_doesm : does_prefix
-                                     (Intermediate.CS.sem
-                                        (Intermediate.program_link P'_compiled Cs_compiled))
-                                     m'.
+      have HP'_Cs_compiled_doesm :
+        does_prefix (Intermediate.CS.sem (Intermediate.program_link P'_compiled Cs_compiled)) m'.
       {
         eapply Compiler.forward_simulation_same_safe_prefix; try eassumption. congruence.
         (* [DynShare] The subgoal remaining here is "not_wrong_finpref m'". This subgoal
@@ -303,8 +300,8 @@ Section RSC_DC_MD_Section.
          Hmergeable_ifaces Hprog_same_iface Hctx_same_iface
          closedness HP'Cs_compiled_closed
          H_doesm_noninform HP'_Cs_compiled_doesm m_rel_m'
-         as [size_m'' [m'' [HpCs_compiled_beh m''_rel_m]]].
-    
+         as [m'' [size_m'' [HpCs_compiled_beh m''_rel_m]]].
+
     (* BCC *)
     assert (exists pCs_compiled,
                Compiler.compile_program (Source.program_link p Cs) = Some pCs_compiled)
@@ -315,7 +312,6 @@ Section RSC_DC_MD_Section.
                program_behaves (Source.CS.sem (Source.program_link p Cs)) beh1 /\
                (prefix m'' beh1 \/ behavior_improves_finpref beh1 m'')) as HpCs_beh.
     {
-      
       eapply Compiler.backward_simulation_behavior_improves_prefix in HpCs_compiled_beh;
         eauto.
     }

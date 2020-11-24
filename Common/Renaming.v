@@ -11,6 +11,9 @@ Require Import Common.CompCertExtensions.
 Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrnat eqtype path ssrfun seq fingraph fintype.
 
+(* RB: NOTE: [DynShare] Later in the development the name "address" can become
+   confusing when offsets come into the picture. We should explain this model
+   carefully, and maybe find an alternative name if the confusion persists. *)
 Definition addr_t : Type := (Component.id * Block.id).
 (* It seems only Block.id will need to be renamed.
      However, to compute a renaming, we have to know which "component memory" we are
@@ -21,18 +24,29 @@ Section ShiftingAsPartialBijection.
   (* The following is a definition of a so-called "partial bijection", namely
      the bijection between the set [count_blocks_to_shift_per_comp, inf) and the set N
      of all the natural numbers.
-     However, I am defining this bijection 
+     However, I am defining this bijection
      (between [count_blocks_to_shift_per_comp, inf) and N)
      as a total bijection between
      {care, dontcare} x N and {care, dontcare} x N.
      Totalizing it enables us to reuse useful results about total bijections.
    *)
+  (* RB: NOTE: [DynShare] We should give a type declaration for this pair, either
+     as a definition or as a variant that clarifies the intent of the
+     pseudo-boolean. *)
 
   Variable cid_with_shifting : Component.id.
   Variable count_blocks_to_shift_for_cid : nat.
-  
+
   Definition care := true.
   Definition dontcare := false.
+
+  (** Obtain a new map as follows:
+      - Ignore blocks outside the component of interest.
+      - "Uninteresting" blocks are incremented by the set threshold.
+      - "Interesting" blocks below the threshold are left unchanged (and
+        declared uninteresting).
+      - "Interesting" blocks at the threshold and above are decremented by the
+        threshold. *)
 
   Definition sigma_from_bigger_dom (x: bool * addr_t) : bool * addr_t :=
     match x with
@@ -43,8 +57,10 @@ Section ShiftingAsPartialBijection.
           then (dontcare, (cid, bid))
           else (care, (cid, bid - count_blocks_to_shift_for_cid))
         else (dontcare, (cid, bid + count_blocks_to_shift_for_cid))
-      else (c, (cid, bid))
+      else x
     end.
+
+  (** Reverse previous changes. *)
 
   Definition inv_sigma_from_bigger_dom (x: bool * addr_t) : bool * addr_t :=
     match x with
@@ -55,7 +71,7 @@ Section ShiftingAsPartialBijection.
         else if bid <? count_blocks_to_shift_for_cid
              then (care, (cid, bid))
              else (dontcare, (cid, bid - count_blocks_to_shift_for_cid))
-      else (c, (cid, bid))
+      else x
     end.
 
   Lemma cancel_sigma_from_bigger_dom_inv_sigma_from_bigger_dom :
@@ -135,7 +151,7 @@ Section ShiftingAsPartialBijection.
     destruct (c =? care) eqn:c_care; rewrite c_care;
       destruct (bid <? count_blocks_to_shift_for_cid); simpl; auto.
   Qed.
-  
+
 End ShiftingAsPartialBijection.
 
 Definition mem_of_event (e: event) : Memory.t :=
@@ -150,12 +166,50 @@ Definition arg_of_event (e: event) : value :=
   | ERet _ v _ _ => v
   end.
 
+(* RB: NOTE: [DynShare] Using a set instead of an option type for easier
+   integration with reachability predicates later. *)
 Definition addr_of_value (v: value) : {fset addr_t} :=
   match v with
   | Ptr (perm, cid, bid, _) =>
     if perm =? Permission.data then fset1 (cid, bid) else fset0
   | _ => fset0
   end.
+
+(** Given a trace, an address is reachable iff it is shared through the argument
+    of the last event in the trace, or transitively through some previously
+    shared address. Reachability operates on the memory contained in the last
+    event of the trace, which must subsume that in previous events.
+
+    This reachability property is monotonic: once shared, an address is
+    considered public forever.
+ *)
+
+(*
+   An attempt to simplify the phrasing of the property might divide it into
+   three cases:
+    1. Reachable from initial memory (given a fixed component, say)
+    2. Reachable from memory in current event in the trace
+    3. Reachable from some future event in the trace
+
+  This considers the POV of *shared* address sets, not *private* addresses.
+  Using shared addresses, it is possible to add incrementally to the set,
+  however with private addresses the set cannot be built recursively "on the
+  left".
+
+  Moreover, when thinking about private or "not shared" addresses, we cannot
+  constrain these considerations to the current domain of the memory, as
+  addresses beyond that range, i.e., not yet allocated, are also unshared.
+
+  No need to refer to components explicitly. The current trace relation does
+  not consider the POV of any particular component.
+
+   - Which addresses remain private to each component?
+   - Address states: already shared/still private
+   - Once an address has been shared, it does not matter with whom (why?
+     because we want per-component compositionality)
+   - Why is it simpler? At the very least it avoids parameterizing the trace
+     relation by an execution trace, i.e., only on a trace of addresses
+ *)
 
 Inductive addr_shared_so_far : addr_t -> trace event -> Prop :=
 | reachable_from_args_is_shared:
@@ -194,9 +248,13 @@ Proof.
     eapply Reachable_transitive; eauto.
     eapply Reachable_step; eauto. rewrite <- surjective_pairing. eapply Reachable_refl.
     by rewrite in_fset1.
-Qed.    
+Qed.
 
 Section PredicateOnReachableAddresses.
+
+  (** Given a set of designated addresses, a memory is well-formed iff all
+      successful pointer loads from designated addresses in that memory refer to
+      addresses in the designated set. *)
 
   Variable good_addr: addr_t -> Prop.
 
@@ -205,9 +263,9 @@ Section PredicateOnReachableAddresses.
       good_addr (cid, bid) ->
       Memory.load m (Permission.data, cid, bid, offset) = Some (Ptr (p, cid_l, bid_l, o)) ->
       good_addr (cid_l, bid_l).
-    
+
   Variable mem: Memory.t.
-  
+
   Hypothesis good_memory_mem: good_memory mem.
 
   Lemma reachable_addresses_are_good a_set a':
@@ -234,8 +292,11 @@ End PredicateOnReachableAddresses.
 
 Section PredicateOnSharedSoFar.
 
+  (** A trace is well-formed iff for all events their memories are well-formed
+      and their arguments refer to addresses in the designated set. *)
+
   Variable good_addr: addr_t -> Prop.
-  
+
   Inductive good_trace : trace event -> Prop :=
   | nil_good_trace : good_trace nil
   | rcons_good_trace :
@@ -244,7 +305,7 @@ Section PredicateOnSharedSoFar.
         good_memory good_addr (mem_of_event e) ->
         (forall a, a \in addr_of_value (arg_of_event e) -> good_addr a) ->
         good_trace (rcons tpref e).
-  
+
   Variable t: trace event.
 
   Hypothesis good_trace_t: good_trace t.
@@ -285,17 +346,27 @@ Section PredicateOnSharedSoFar.
         * intros a0 Ha0. rewrite in_fset1 in Ha0. pose proof eqP Ha0. subst. apply IH.
           exact Htpref.
   Qed.
-  
+
 End PredicateOnSharedSoFar.
 
 Section SigmaShifting.
 
+  (** Shift renaming on a given component with given numbers of additional
+      metadata blocks on both sides. *)
+
   Variable cid_with_shifting: Component.id.
   Variable metadata_size_lhs: nat.
   Variable metadata_size_rhs: nat.
-  
+
+  (** The LHS has a given number of extra blocks (attention, this number can be
+      negative). *)
+
   Let num_extra_blocks_of_lhs : Z :=
     Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs.
+
+  (** To shift an address map, apply the direct mapping if the LHS requires as
+      much or more metadata, otherwise apply the inverse mapping (and vice
+      versa). *)
 
   Definition sigma_shifting :=
     if (num_extra_blocks_of_lhs >=? 0)%Z
@@ -306,7 +377,7 @@ Section SigmaShifting.
     if (num_extra_blocks_of_lhs >=? 0)%Z
     then (inv_sigma_from_bigger_dom cid_with_shifting (Z.to_nat num_extra_blocks_of_lhs))
     else (sigma_from_bigger_dom cid_with_shifting (Z.to_nat (- num_extra_blocks_of_lhs))).
-  
+
   Lemma sigma_shifting_cid_constant x:
     (sigma_shifting x).2.1 = x.2.1.
   Proof. unfold sigma_shifting.
@@ -352,6 +423,9 @@ Section SigmaShifting.
          - exact cancel_inv_sigma_shifting_sigma_shifting.
          - exact cancel_sigma_shifting_inv_sigma_shifting.
   Qed.
+
+  (** An address can be shifted iff it is outside the component of interest, or
+      otherwise is above the size of the metadata in the corresponding side. *)
 
   Definition left_addr_good_for_shifting (left_addr: addr_t) : Prop :=
     match left_addr with
@@ -431,7 +505,7 @@ Section SigmaShifting.
       rewrite !Nat2Z.id addnC. rewrite <- leq_subLR. rewrite subKn; assumption.
     - eexists. split; try reflexivity. simpl. by rewrite cid_shift.
   Qed.
-                                                
+
   Lemma inv_sigma_right_good_left_good right_addr:
     right_addr_good_for_shifting right_addr ->
     exists left_addr,
@@ -503,7 +577,7 @@ End SigmaShifting.
 Section SigmaShiftingProperties.
 
   Variable cid_for_shift: Component.id.
-  
+
   Lemma sigma_from_bigger_dom_0_id x: sigma_from_bigger_dom cid_for_shift 0 x = x.
   Proof. destruct x as [c [cid bid]]. unfold sigma_from_bigger_dom.
          assert (bid <? 0 = false) as Himposs.
@@ -519,7 +593,7 @@ Section SigmaShiftingProperties.
          rewrite Himposs. rewrite subn0 addn0.
          destruct c; simpl; destruct (cid =? cid_for_shift); reflexivity.
   Qed.
-  
+
   Lemma sigma_shifting_n_n_id:
     forall n x, sigma_shifting cid_for_shift n n x = x.
   Proof.
@@ -695,7 +769,7 @@ Section SigmaShiftingProperties.
     - (* n2 >= n3, n1 ~>= n3 ==> n1 < n3, n1 ~>= n2 ==> n1 < n2 *)
       assert (n2n3': n3 <= n2).
       { apply/leP.
-        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le. 
+        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le.
         pose proof Zge_cases (Z.of_nat n2 - Z.of_nat n3) 0 as G. rewrite n2n3 in G.
         apply Zle_0_minus_le, Z.ge_le. assumption.
       }
@@ -748,13 +822,13 @@ Section SigmaShiftingProperties.
     - (* n1 >= n2, n1 >= n3, n2 ~>= n3 ==> n3 >= n2 *)
       assert (n1n2': n2 <= n1).
       { apply/leP.
-        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le. 
+        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le.
         pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n2) 0 as G. rewrite n1n2 in G.
         apply Zle_0_minus_le, Z.ge_le. assumption.
       }
       assert (n1n3': n3 <= n1).
       { apply/leP.
-        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le. 
+        rewrite Nat2Z.inj_le; apply Z.geb_le. rewrite Z.geb_le.
         pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n3) 0 as G. rewrite n1n3 in G.
         apply Zle_0_minus_le, Z.ge_le. assumption.
       }
@@ -823,7 +897,7 @@ Section SigmaShiftingProperties.
       { rewrite addnBA; auto. rewrite addnC. rewrite <- addnBA; rewrite subnBA; auto.
         rewrite <- subnDA. rewrite addnBA; try (rewrite leq_add2r; auto).
         rewrite (addnC n1). rewrite subnDA. rewrite <- addnBA; try apply leq_addl.
-        rewrite <- (@subnBA bid n2); auto. rewrite subnn subn0 addnC addnBA; auto. 
+        rewrite <- (@subnBA bid n2); auto. rewrite subnn subn0 addnC addnBA; auto.
       }
       rewrite Hgoal. reflexivity.
     - (* n1 !>= n2 ==> n1 < n2, n2 !>= n3 ==> n2 < n3, n1 >= n3 *)
@@ -876,7 +950,7 @@ Section SigmaShiftingProperties.
   Proof. unfold left_addr_good_for_shifting. destruct addr as [cid bid].
          destruct (cid =? cid_for_shift); auto.
   Qed.
-  
+
   Lemma good_memory_left_0_true mem:
     good_memory (left_addr_good_for_shifting cid_for_shift 0) mem.
   Proof. unfold good_memory. intros. apply left_addr_good_for_shifting_0_true. Qed.
@@ -896,7 +970,7 @@ Section SigmaShiftingProperties.
   Proof. unfold right_addr_good_for_shifting. destruct addr as [cid bid].
          destruct (cid =? cid_for_shift); auto.
   Qed.
-  
+
   Lemma good_memory_right_0_true mem:
     good_memory (right_addr_good_for_shifting cid_for_shift 0) mem.
   Proof. unfold good_memory. intros. apply right_addr_good_for_shifting_0_true. Qed.
@@ -915,9 +989,10 @@ End SigmaShiftingProperties.
 
 Section Renaming.
 
+  (** Address renamings are simply applications of given address maps. *)
+
   Variable sigma: addr_t -> addr_t (*{fmap addr_t -> addr_t}*).
   Variable inverse_sigma: addr_t -> addr_t.
-
 
   Definition rename_addr (addr: addr_t) : addr_t := sigma addr.
   (*  match sigma addr with
@@ -928,6 +1003,9 @@ Section Renaming.
 
   Definition inverse_rename_addr (addr: addr_t) := inverse_sigma addr.
 
+  (** Value renamings apply address renamings to rich pointer values, leaving
+      all other values unchanged. *)
+
   Definition rename_value_template (rnm_addr : addr_t -> addr_t) (v: value) : value :=
     match v with
     | Ptr (perm, cid, bid, off) =>
@@ -935,22 +1013,74 @@ Section Renaming.
         let (cid', bid') := rnm_addr (cid, bid) in
         Ptr (perm, cid', bid', off)
       else
-        Ptr (perm, cid, bid, off)
+        v
     | _ => v
     end.
 
-  Definition rename_value (v: value) : value := rename_value_template rename_addr v.
-  
-  Definition inverse_rename_value (v: value) : value :=
-    rename_value_template inverse_rename_addr v.
+  Definition rename_value : value -> value :=
+    rename_value_template rename_addr.
 
-  Definition rename_list_values (s: list value) : list value := map rename_value s.
+  Definition inverse_rename_value : value -> value :=
+    rename_value_template inverse_rename_addr.
 
-  Definition inverse_rename_list_values (s: list value) : list value :=
-    map inverse_rename_value s.
+  (** Various liftings of value renamings. *)
 
-  Definition option_rename_value option_v := omap rename_value option_v.
-  Definition option_inverse_rename_value option_v := omap inverse_rename_value option_v.
+  Definition rename_list_values : list value -> list value :=
+    map rename_value.
+
+  Definition inverse_rename_list_values : list value -> list value :=
+    map inverse_rename_value.
+
+  Definition option_rename_value option_v :=
+    omap rename_value option_v.
+
+  Definition option_inverse_rename_value option_v :=
+    omap inverse_rename_value option_v.
+
+  (** Given the current state of the memory at two given events, these
+      properties are satisfied for a given memory block iff all loads on renamed
+      addresses in the second memory equal the lifted renaming of the loads on
+      the original addresses in the first memory. *)
+
+  (* TODO: Refactor definitions below. *)
+  Definition memory_renames_memory_at_addr addr m m' : Prop :=
+    forall offset,
+      Memory.load m'
+                  (
+                    Permission.data,
+                    (rename_addr addr).1,
+                    (rename_addr addr).2,
+                    offset
+                  )
+      =
+      option_rename_value
+        (
+          Memory.load m
+                      (Permission.data,
+                       addr.1,
+                       addr.2,
+                       offset)
+        ).
+
+  (* NOTE: The inverse is probably needed as well. *)
+  Definition memory_inverse_renames_memory_at_addr addr' m m' : Prop :=
+    forall offset,
+      option_inverse_rename_value
+        (
+          Memory.load m'
+                      (Permission.data,
+                       addr'.1,
+                       addr'.2,
+                       offset
+                      )
+        )
+      =
+      Memory.load m
+                  (Permission.data,
+                   (inverse_rename_addr addr').1,
+                   (inverse_rename_addr addr').2,
+                   offset
+                  ).
 
   Definition event_renames_event_at_addr addr e e' : Prop :=
     forall offset,
@@ -990,6 +1120,14 @@ Section Renaming.
                    offset
                   ).
 
+  (** Two traces are mutual renamings iff all pointwise event pairs satisfy the
+      event renaming property on shared addresses. The "forward" address map is
+      applied to the first trace and the inverse map is applied to the second
+      trace, and these maps preserve shared addresses on the traces. *)
+
+  (* RB: NOTE: [DynShare] Would it be useful to have a trace renaming relation
+     and use that to build a mutual relation? *)
+
   Inductive traces_rename_each_other :
     trace event -> trace event -> Prop :=
   | nil_renames_nil: traces_rename_each_other nil nil
@@ -1016,7 +1154,6 @@ Section Renaming.
         )
         ->
         traces_rename_each_other (rcons tprefix e) (rcons tprefix' e').
-
 
   Lemma traces_rename_each_other_nil_rcons t x:
     traces_rename_each_other [::] (rcons t x) -> False.
@@ -1103,13 +1240,22 @@ End Renaming.
 
 Section TheShiftRenaming.
 
+  (** Shift renaming on a given component with given numbers of additional
+      metadata blocks. *)
+
   Variable cid_for_shift: Component.id.
   Variable metadata_size_lhs: nat.
   Variable metadata_size_rhs: nat.
 
+  (** The LHS has a given number of extra blocks (attention, this number can be
+      negative). *)
+
+  (* RB: NOTE: [DynShare] Is there a reason this is not a definition? *)
   Let num_extra_blocks_of_lhs : Z :=
     Z.of_nat metadata_size_lhs - Z.of_nat metadata_size_rhs.
-    
+
+  (** Functions to return the block identifier after shifting. *)
+
   Definition sigma_shifting_addr (a: addr_t) : addr_t :=
     match sigma_shifting cid_for_shift metadata_size_lhs metadata_size_rhs (care, a) with
     | (_, a') => a'
@@ -1119,6 +1265,9 @@ Section TheShiftRenaming.
     match inv_sigma_shifting cid_for_shift metadata_size_lhs metadata_size_rhs (care, a) with
     | (_, a') => a'
     end.
+
+  (** Data pointer values can be shifted in previously specified conditions;
+      code pointers and non-pointer values can always be shifted. *)
 
   Definition left_value_good_for_shifting (v: value) : Prop :=
     match v with
@@ -1148,18 +1297,21 @@ Section TheShiftRenaming.
     | None => True
     end.
 
+  (** A pair of traces are mutual shiftings of one another if they are
+      renamings, as defined above. *)
+
   Inductive traces_shift_each_other : trace event -> trace event -> Prop :=
   | shifting_is_special_case_of_renaming:
       forall t t',
         traces_rename_each_other sigma_shifting_addr inv_sigma_shifting_addr t t' ->
         traces_shift_each_other t t'.
-  
+
 End TheShiftRenaming.
 
 Section PropertiesOfTheShiftRenaming.
 
   Variable cid_for_shift: Component.id.
-  
+
   Lemma rename_addr_reflexive n a:
     rename_addr (sigma_shifting_addr cid_for_shift n n) a = a.
   Proof. unfold rename_addr, sigma_shifting_addr. rewrite sigma_shifting_n_n_id. auto. Qed.
@@ -1197,7 +1349,7 @@ Section PropertiesOfTheShiftRenaming.
   Proof. unfold option_inverse_rename_value, omap, obind, oapp. destruct ov as [ | ]; auto.
          by rewrite inverse_rename_value_reflexive.
   Qed.
-    
+
   Lemma rename_addr_inverse_rename_addr n1 n2 a:
     rename_addr (sigma_shifting_addr cid_for_shift n1 n2) a =
     inverse_rename_addr (inv_sigma_shifting_addr cid_for_shift n2 n1) a.
@@ -1212,7 +1364,7 @@ Section PropertiesOfTheShiftRenaming.
     destruct v as [[ | [[[perm cid] bid] o] | ] | ]; auto. simpl.
     rewrite rename_addr_inverse_rename_addr. reflexivity.
   Qed.
-  
+
   Lemma event_rename_inverse_event_rename n1 n2 addr' e e':
     event_inverse_renames_event_at_addr
       (inv_sigma_shifting_addr cid_for_shift n1 n2) addr' e e' <->
@@ -1272,7 +1424,6 @@ Section PropertiesOfTheShiftRenaming.
          rewrite option_inverse_rename_value_reflexive. auto.
   Qed.
 
-  
   Lemma event_rename_transitive n1 n2 n3 addr e1 e2 e3:
     left_addr_good_for_shifting cid_for_shift n1 addr ->
     (forall offset,
@@ -1336,7 +1487,7 @@ Section PropertiesOfTheShiftRenaming.
     rewrite eqseq_rcons in rconseq'. destruct (andP rconseq') as [G1 G2].
     split; apply/eqP; assumption.
   Qed.
-  
+
   Lemma __traces_shift_each_other_transitive n1 n2 n3 sz:
     forall t1 t2 t3,
       size t1 = sz ->
@@ -1390,12 +1541,12 @@ Section PropertiesOfTheShiftRenaming.
         try by (rewrite <- H in t1sz; inversion t1sz).
 
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq) as [tmp1 tmp2]. subst. clear Heq.
-      
+
       inversion t3good as [H | ? ? t3gooda t3goodb t3goodc Heq];
         try by (rewrite <- H in Hsizet3; inversion Hsizet3).
-      
+
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq) as [tmp1 tmp2]. subst. clear Heq.
-      
+
       pose proof (IHsz' t1gooda t3gooda H12a_shift H23a_shift) as H13a_shift.
       apply shifting_is_special_case_of_renaming, rcons_renames_rcons.
       + inversion H13a_shift; auto.
@@ -1454,6 +1605,7 @@ Section PropertiesOfTheShiftRenaming.
     eapply __traces_shift_each_other_transitive. eauto.
   Qed.
 
+
   Lemma traces_shift_each_other_nil_rcons n1 n2 t x:
     traces_shift_each_other cid_for_shift n1 n2 [::] (rcons t x) -> False.
   Proof. intros H. inversion H. eapply traces_rename_each_other_nil_rcons. eauto. Qed.
@@ -1466,18 +1618,19 @@ Section PropertiesOfTheShiftRenaming.
     traces_shift_each_other cid_for_shift n1 n2 t1 t2 -> size t1 = size t2.
   Proof. intros H. inversion H. eapply traces_rename_each_other_same_size. eauto. Qed.
 
-        
 End PropertiesOfTheShiftRenaming.
 
 Section TheShiftRenamingAllCids.
 
+  (** Extension of renaming to all components. *)
+
   Variable metadata_size_lhs: Component.id -> nat.
   Variable metadata_size_rhs: Component.id -> nat.
-  
+
   Definition traces_shift_each_other_all_cids t1 t2 : Prop :=
     forall cid,
       traces_shift_each_other cid (metadata_size_lhs cid) (metadata_size_rhs cid) t1 t2.
-  
+
 End TheShiftRenamingAllCids.
 
 Section PropertiesOfTheShiftRenamingAllCids.
@@ -1527,8 +1680,17 @@ End PropertiesOfTheShiftRenamingAllCids.
 
 Section BehaviorsRelated.
 
+  (** Single-compartment trace relation (between finite trace prefixes),
+     parameterized by the size of the metadata of each trace. Two traces are
+     related iff they shift each other and correspond to either a pair of
+     unfinished program executions or to a pair of successfully terminated
+     program executions. *)
+
+  (* NOTE: The component variable has no effect on the computation of the trace
+     relation, it only expresses that there exists a renaming for this
+     component (all components are aggregated later). *)
   Variable cid_for_shift: Component.id.
-  
+
   Inductive behavior_rel_behavior (size_meta_t1: nat) (size_meta_t2: nat)
   : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
   | Terminates_rel_Terminates:
@@ -1556,6 +1718,10 @@ Section BehaviorsRelated.
          - apply Tbc_rel_Tbc. apply traces_shift_each_other_symmetric. auto.
   Qed.
 
+  (** well-formedness of finite program behaviors (on the left) lifts
+      well-formedness of traces to successfully terminating and unfinished
+      program behaviors. *)
+
   Inductive good_behavior_left (size_meta_t: nat) : @finpref_behavior Events.event -> Prop :=
   | good_trace_Terminates:
       forall t,
@@ -1580,10 +1746,12 @@ Section BehaviorsRelated.
     - eapply Tbc_rel_Tbc.
       eapply traces_shift_each_other_transitive with n2 t2; eauto.
   Qed.
-  
+
 End BehaviorsRelated.
 
 Section BehaviorsRelatedAllCids.
+
+  (** Extension of the property to all components. *)
 
   Definition behavior_rel_behavior_all_cids (n1 n2: Component.id -> nat) b1 b2 : Prop :=
     forall cid, behavior_rel_behavior cid (n1 cid) (n2 cid) b1 b2.
@@ -1600,6 +1768,8 @@ Section BehaviorsRelatedAllCids.
          by eapply behavior_rel_behavior_symmetric.
   Qed.
 
+  (** Extension of the behavior well-formedness to all components. *)
+
   Definition good_behavior_left_all_cids (n: Component.id -> nat) b : Prop :=
     forall cid, good_behavior_left cid (n cid) b.
 
@@ -1613,9 +1783,11 @@ Section BehaviorsRelatedAllCids.
     unfold good_behavior_left_all_cids, behavior_rel_behavior_all_cids. intros.
     by eapply behavior_rel_behavior_transitive with b2 (n2 cid).
   Qed.
-  
+
 End BehaviorsRelatedAllCids.
 
+(* TODO: Some of these shifting patterns may need to be redesigned to consider
+   Block.id vs. offset. *)
 Section ExampleShifts.
 
   Definition uniform_shift (n: nat) : (Component.id -> nat) := fun (c: Component.id) => n.
@@ -1632,21 +1804,13 @@ Section ExampleShifts.
   Lemma fmap_extension_shift_Some cid (m: {fmap Component.id -> nat}) n:
     m cid = Some n -> (fmap_extension_shift m) cid = n.
   Proof. by move=> H; unfold fmap_extension_shift; rewrite H. Qed.
-  
+
 End ExampleShifts.
 
-
-
-
-
-
-
-
-
-(* [DynShare] 
+(* [DynShare]
    The following definition is NOT needed when we define a trace relation that
    (implicitly) specifies the shared part of the memory.
-   
+
    It would be needed though if instead we define a trace semantics
    that (explicitly) emits only the shared memory rather than the whole memory.
 *)
@@ -1681,15 +1845,15 @@ Definition shared_part_of_memory
   Proof.
     unfold inverse_rename_addr, rename_addr. pose proof (cancel_sigma_inverse_sigma addr). auto.
   Qed.*)
-  
 
-  (***************************** 
+
+  (*****************************
     [DEPRECATED]: sigma was fmap.
 
 Lemma inverse_rename_addr_left_inverse addr:
   addr \in domm sigma -> (*Is this precondition ok?*)
   inverse_rename_addr (rename_addr addr) = addr.
-  (* This lemma 
+  (* This lemma
      without the precondition "addr \in domm sigma"
      is not really provable because the rename_addr function can actually cause
      two addresses addr1 and addr2 to clash at some addr' when still sigma itself is injective.
@@ -1737,7 +1901,7 @@ Qed.
 
 
   (**************************************
-    [DEPRECATED]: sigma was finmap      
+    [DEPRECATED]: sigma was finmap
 
 Lemma inverse_rename_addr_right_inverse addr_pre addr:
   sigma addr_pre = Some addr ->
@@ -1757,11 +1921,11 @@ Proof.
       + rewrite Haddr. auto.
     }
     apply H in contra. exfalso. assumption.
-Qed.  
+Qed.
 
    *********************************)
 
-    
+
   (******************************************
      [DEPRECATED]: Memory renaming has now been defined as part of event renaming.
 
@@ -1795,7 +1959,7 @@ Qed.
    This lemma may be a bit too tedious to prove.
 
    Alternatively, I will experiment with representing the trace renaming
-   as a Prop. Such a Trace_Renames_Trace Prop 
+   as a Prop. Such a Trace_Renames_Trace Prop
    will use the definitions of the following Prop's:
    * Mem_Renames_Mem
    * Addr_shared_so_far, which itself will use the definition of
@@ -1819,7 +1983,7 @@ Qed.
 Section ShiftingAsPartialBijectionAllCids.
 
   Variable count_blocks_to_shift_for_cid : Component.id -> nat.
-  
+
   Definition sigma_from_bigger_dom_all_cids (x: bool * addr_t) : bool * addr_t :=
     sigma_from_bigger_dom x.2.1 (count_blocks_to_shift_for_cid x.2.1) x.
 
@@ -1841,7 +2005,7 @@ Section ShiftingAsPartialBijectionAllCids.
     intros x. rewrite inv_sigma_from_bigger_dom_cid_constant.
     eapply cancel_inv_sigma_from_bigger_dom_sigma_from_bigger_dom.
   Qed.
-    
+
   Lemma sigma_from_bigger_dom_bijective_all_cids : bijective sigma_from_bigger_dom_all_cids.
   Proof. apply Bijective with (g := inv_sigma_from_bigger_dom_all_cids).
          - exact cancel_sigma_from_bigger_dom_inv_sigma_from_bigger_dom_all_cids.
@@ -1868,7 +2032,7 @@ Section ShiftingAsPartialBijectionAllCids.
     unfold inv_sigma_from_bigger_dom_all_cids.
     by rewrite inv_sigma_from_bigger_dom_cid_constant.
   Qed.
-  
+
 End ShiftingAsPartialBijectionAllCids.
 
 

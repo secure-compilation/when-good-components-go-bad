@@ -1,11 +1,14 @@
 Require Import RSC_DC_MD_Sigs.
 
+Require Import Common.CompCertExtensions.
+Require Import Common.TracesInform.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
 Require Import Source.Blame.
 Require Import Intermediate.Machine.
-Require Import Intermediate.Recombination.
+Require Import Intermediate.CS.
+Require Import Intermediate.RecombinationRel.
 Require Import S2I.Compiler.
 Require Import S2I.Definitions.
 Require Import Definability.
@@ -89,14 +92,20 @@ Module Intermediate_Instance <: Intermediate_Sig.
 
   Module CS.
     Definition sem :=
-      @Intermediate.CS.CS.sem.
+      @I.CS.sem_non_inform.
+
+    Definition sem_inform :=
+      @I.CS.sem_inform.
   End CS.
 
   Definition compose_mergeable_interfaces :=
     @Intermediate.compose_mergeable_interfaces.
 
   Definition recombination_prefix :=
-    @Intermediate.Recombination.recombination_prefix.
+    @Intermediate.RecombinationRel.recombination_prefix_rel.
+
+  Definition does_prefix_inform_non_inform :=
+    @Intermediate.CS.CS.does_prefix_inform_non_inform.
 End Intermediate_Instance.
 
 Module S2I_Instance <: S2I_Sig (Source_Instance) (Intermediate_Instance).
@@ -173,10 +182,13 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance
          Hwfp Hwfc Hlinkable Hcompp Hcompc Hcomppc
       as Hsc.
     exists beh. split.
-    - apply Hsc. exact Hbeh.
+    - (* RB: TODO: [DynShare] Needs to refer to non-informative projections. *)
+      (* apply Hsc. exact Hbeh. *)
+      admit.
     - exact Hprefix_beh.
-  Qed.
-  
+  Admitted.
+  (* Qed. *)
+
   Theorem backward_simulation_behavior_improves_prefix :
     forall p p_compiled c c_compiled m,
       linkable (Source.prog_interface p) (Source.prog_interface c) ->
@@ -202,7 +214,10 @@ Module Compiler_Instance <: Compiler_Sig Source_Instance
       try eassumption.
     - destruct Hprefix as [beh [Hbeh Hprefix_beh]].
       exists beh. split.
-      + apply Hsc. exact Hbeh.
+      + (* RB: TODO: [DynShare] Needs to refer to informative projections. *)
+        (* apply Hsc. exact Hbeh. *)
+        admit.
       + exact Hprefix_beh.
-  Qed.
+  Admitted.
+  (* Qed. *)
 End Compiler_Instance.

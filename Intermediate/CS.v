@@ -26,35 +26,17 @@ Import Intermediate.
 
 Definition stack : Type := list Pointer.t.
 
-(* RB: TODO: [DynShare] Give names to recurring types, harmonize naming
-   conventions.
-   This type should probably be defined elsewhere. *)
-Definition reach_addr : Type := {fmap (Component.id -> {fset (Component.id * Block.id)})}.
-
 (* NOTE: Consider parameterizing the semantics by a type of "additional state",
    and instantiate the non-/informative semantics as specializations of the
    parametric semantics. *)
-Definition state : Type := stack * Memory.t * Register.t * Pointer.t * reach_addr.
-
-Definition update_reachability_of_component_with_value : value -> Component.id -> reach_addr -> reach_addr.
-  Admitted.
-
-Definition compute_trace_for_load_by_component : Component.id -> Pointer.t -> reach_addr -> trace event.
-  Admitted.
-
-Definition compute_trace_for_store_by_component : Component.id -> Pointer.t -> reach_addr -> trace event.
-  Admitted.
-
-Definition propagate_store_to_all_components_reach : Pointer.t -> value -> reach_addr -> reach_addr.
-  Admitted.
+Definition state : Type := stack * Memory.t * Register.t * Pointer.t.
 
 Ltac unfold_state st :=
   let gps := fresh "gps" in
   let mem := fresh "mem" in
   let regs := fresh "regs" in
   let pc := fresh "pc" in
-  let addrs := fresh "addrs" in
-  destruct st as [[[[gps mem] regs] pc] addrs].
+  destruct st as [[[gps mem] regs] pc].
 
 Ltac unfold_states :=
   repeat (match goal with
@@ -63,7 +45,7 @@ Ltac unfold_states :=
 
 Instance state_turn : HasTurn state := {
   turn_of s iface :=
-    let '(_, _, _, pc, _) := s in
+    let '(_, _, _, pc) := s in
     Pointer.component pc \in domm iface
 }.
 
@@ -76,19 +58,16 @@ Ltac simplify_turn :=
   simpl in *.
 
 Definition state_stack (st : state) : stack :=
-  let '(gps, _, _, _, _) := st in gps.
+  let '(gps, _, _, _) := st in gps.
 
 Definition state_mem (st : state) : Memory.t :=
-  let '(_, mem, _, _, _) := st in mem.
+  let '(_, mem, _, _) := st in mem.
 
 Definition state_regs (s : CS.state) : Register.t :=
-  let '(_, _, regs, _, _) := s in regs.
+  let '(_, _, regs, _) := s in regs.
 
 Definition state_pc (st : state) : Pointer.t :=
-  let '(_, _, _, pc, _) := st in pc.
-
-Definition state_addrs (st : state) : reach_addr :=
-  let '(_, _, _, _, addrs) := st in addrs.
+  let '(_, _, _, pc) := st in pc.
 
 Definition state_component (st : CS.state) : Component.id :=
   Pointer.component (state_pc st).
@@ -176,7 +155,7 @@ Lemma mem_codomm_setm :
 Proof.
   intros T S m k1 k2 v v' Hmem Hmemcodomm.
   apply/codommP.
-  pose (H' := codommP (setm m k2 v) v' Hmemcodomm).
+  pose (H' := @codommP _ _ (setm m k2 v) v' Hmemcodomm).
   destruct H' as [kOfv' H'mem].
   rewrite setmE in H'mem.
   destruct (kOfv' == k2) eqn:k2kOfv'.
@@ -199,7 +178,7 @@ Lemma fsubset_in :
     fsubset s1 s2 -> v \in s1 -> v \in s2.
 Proof.
   intros ? ? ? ? Hsubset Hin.
-  pose (fsubsetP s1 s2 Hsubset) as Hsubset'.
+  pose (@fsubsetP _ s1 s2 Hsubset) as Hsubset'.
   unfold sub_mem in Hsubset'.
   apply Hsubset'.
   assumption.
@@ -211,7 +190,7 @@ Ltac unfold_Register_set e1 k'mem :=
 
 Ltac unfold_regs_ptrs :=
   do 2 (unfold regs_data_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id);
-  intros Hin; apply/codommP; destruct (codommP _ _ Hin) as [k' k'mem].
+  intros Hin; apply/codommP; destruct (@codommP _ _ _ _ Hin) as [k' k'mem].
 
 Ltac solve_untouched_registers e1 k' k'mem :=
   exists k'; rewrite filtermE; rewrite filtermE in k'mem; simpl; simpl in k'mem;
@@ -231,7 +210,7 @@ Proof.
     rewrite filtermE. rewrite mapmE. rewrite e. rewrite Hget. auto.
   - discriminate.
 Qed.
-         
+
 Lemma regs_ptrs_set_get_in :
   forall (regs: Register.t) r1 r2 v,
     v \in regs_data_ptrs (Register.set r2 (Register.get r1 regs) regs) ->
@@ -246,7 +225,9 @@ Proof.
     rewrite filtermE. rewrite filtermE in k'mem. simpl. simpl in k'mem.
     rewrite mapmE. rewrite mapmE in k'mem.
     destruct (regs (Register.to_nat r1)) as [vOfr1 |] eqn:e.
-    + rewrite e. simpl.
+    + simpl.
+      (rewrite e; simpl)
+        || idtac "ExStructures 0.1 legacy rewrite".
       destruct vOfr1 as [| t |];
         try (
             simpl;
@@ -255,7 +236,7 @@ Proof.
           ).
       simpl.
       unfold Register.get in k'mem. rewrite e in k'mem.
-      unfold_Register_set e1 k'mem. exact k'mem.
+      unfold_Register_set e1 k'mem. simpl in k'mem. exact k'mem.
     + unfold Register.get in k'mem.
       rewrite e in k'mem.
       unfold_Register_set e1 k'mem. discriminate.
@@ -270,7 +251,7 @@ Proof.
     }
     pose (negP ineq) as n0. exfalso. apply n0. apply/eqP.
     destruct (value_to_data_pointer_err (Register.get r1 regs)).
-    + simpl in k'mem. apply Some_inj. symmetry. exact k'mem.
+    + simpl in k'mem. injection k'mem as eq. subst. reflexivity.
     + simpl in k'mem. discriminate.
 Qed.
 
@@ -414,7 +395,7 @@ Proof.
     destruct (value_to_data_pointer_err (eval_binop op
                                                (Register.get r1 regs)
                                                (Register.get r2 regs))).
-    + simpl in k'mem. apply Some_inj. symmetry. exact k'mem.
+    + simpl in k'mem. injection k'mem as eq. rewrite eq. reflexivity.
     + simpl in k'mem. discriminate.
 Qed.
 
@@ -435,7 +416,10 @@ Proof.
     + simpl in k'mem. rewrite R_COMptr'.
       unfold Register.get in contra. simpl in contra.
       destruct (regs 1) eqn:e.
-      * rewrite e. simpl. rewrite contra. auto.
+      * simpl.
+        (rewrite e; simpl)
+          || idtac "ExStructures 0.1 legacy rewrite".
+        rewrite contra. auto.
       * simpl in contra. discriminate.
     + discriminate.
   - destruct (k' == 0) eqn:k'0.
@@ -467,7 +451,7 @@ Proof.
       apply/n. exact R_COMptr.
     }
     destruct (value_to_data_pointer_err (Register.get R_COM regs)) eqn:contra.
-    + simpl in k'mem. apply Some_inj in k'mem. rewrite k'mem in ineq.
+    + simpl in k'mem. injection k'mem as k'mem. rewrite k'mem in ineq.
       assert (f : false).
       {
         apply contra_eqT with (b := false) (x := Some v) (y := Some v); auto.
@@ -523,7 +507,7 @@ Proof.
   intros r regs vCid vBid vOff. apply in_fsubset. intros v.
   intros Htmp. apply/fsetUP. move: Htmp.
   do 2 (unfold regs_data_ptrs; rewrite in_fset; rewrite seq.mem_pmap; rewrite seq.map_id).
-  intros Hin; destruct (codommP _ _ Hin) as [k' k'mem].
+  intros Hin; destruct (@codommP _ _ _ _ Hin) as [k' k'mem].
   destruct (Some v == value_to_data_pointer_err
                         (Ptr (Permission.data, vCid, vBid, vOff))) eqn:copied;
     destruct (k' == Register.to_nat r) eqn:e1;
@@ -543,7 +527,7 @@ Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
   Pointer.component (CS.state_pc s) \notin domm ctx.
 Proof.
-  now destruct s as [[[[? ?] ?] ?] ?].
+  now destruct s as [[[? ?] ?] ?].
 Qed.
 
 (* preparing the machine for running a program *)
@@ -557,9 +541,9 @@ Definition initial_machine_state (p: program) : state :=
              | Some b => b
              | None => 0 (* This case shouldn't happen for a well-formed p *)
              end in
-    ([], mem, regs, (Permission.code, Component.main, b, 0%Z), emptym)
+    ([], mem, regs, (Permission.code, Component.main, b, 0%Z))
   (* this case shoudln't happen for a well-formed p *)
-  | false => ([], emptym, emptym, (Permission.code, Component.main, 0, 0%Z), emptym)
+  | false => ([], emptym, emptym, (Permission.code, Component.main, 0, 0%Z))
   end.
 
 (* A slightly hacky way to express the initial pc of a linked program as a
@@ -605,8 +589,7 @@ Theorem initial_machine_state_after_linking:
      Register.init,
      (Permission.code, Component.main,
       prog_main_block p + prog_main_block c,
-      0%Z),
-     emptym).
+      0%Z)).
 Proof.
   intros p c Hwfp Hwfc Hlinkable Hclosed.
   unfold initial_machine_state.
@@ -667,7 +650,7 @@ Definition initial_state (p: program) (ics: state) : Prop :=
   ics = initial_machine_state p.
 
 Definition final_state (G: global_env) (s: state) : Prop :=
-  let '(gsp, mem, regs, pc, addrs) := s in
+  let '(gsp, mem, regs, pc) := s in
   executing G pc IHalt.
 
 Definition reg_to_Ereg r :=
@@ -691,148 +674,126 @@ Definition binop_to_Ebinop op :=
   end.
 (* relational specification *)
 
-(* RB: TODO: [DynShare] Integrate reachability in states, semantics. *)
+(* RB: TODO: [DynShare] Do we need mappings like [imm_to_val] and [reg_to_Ereg],
+   can we do the plain types? *)
 Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :=
-| Nop: forall gps mem regs pc addrs,
+| Nop: forall gps mem regs pc,
     executing G pc INop ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, Pointer.inc pc)
 
-| Label: forall gps mem regs pc l addrs,
+| Label: forall gps mem regs pc l,
     executing G pc (ILabel l) ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, Pointer.inc pc)
 
-| Const: forall gps mem regs regs' pc r v addrs,
+| Const: forall gps mem regs regs' pc r v,
     executing G pc (IConst v r) ->
     Register.set r (imm_to_val v) regs = regs' ->
-    step G
-         (gps, mem, regs, pc, addrs)
-         [EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)]
-         (gps, mem, regs', Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc)
+           [EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)]
+           (gps, mem, regs', Pointer.inc pc)
 
-| Mov: forall gps mem regs regs' pc r1 r2 addrs,
+| Mov: forall gps mem regs regs' pc r1 r2,
     executing G pc (IMov r1 r2) ->
     Register.set r2 (Register.get r1 regs) regs = regs' ->
-    step G
-         (gps, mem, regs, pc, addrs)
-         [EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
-         (gps, mem, regs', Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc)
+           [EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+           (gps, mem, regs', Pointer.inc pc)
 
-| BinOp: forall gps mem regs regs' pc r1 r2 r3 op addrs,
+| BinOp: forall gps mem regs regs' pc r1 r2 r3 op,
     executing G pc (IBinOp op r1 r2 r3) ->
     let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
     Register.set r3 result regs = regs' ->
-    step G
-         (gps, mem, regs, pc, addrs)
-         [EBinop (Pointer.component pc) (binop_to_Ebinop op)
-                 (reg_to_Ereg r1) (reg_to_Ereg r2) (reg_to_Ereg r3)]
-         (gps, mem, regs', Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc)
+           [EBinop (Pointer.component pc) (binop_to_Ebinop op)
+                   (reg_to_Ereg r1) (reg_to_Ereg r2) (reg_to_Ereg r3)]
+           (gps, mem, regs', Pointer.inc pc)
 
-| Load: forall gps mem regs regs' pc r1 r2 ptr v addrs,
+| Load: forall gps mem regs regs' pc r1 r2 ptr v,
     executing G pc (ILoad r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
-    (* RB: TODO [DynShare] Clarify new restriction and substitute once given a
-       computable definition.
-       NOTE: Even though cross-component pointer forging is possible at the
-       program level, it is detected and stopped here. *)
-    (*Pointer.component ptr = Pointer.component pc ->*) (* Shared memory prohibition removed *)
+    (* RB: NOTE: [DynShare] Even though cross-component pointer forging is
+       possible at the program level, it WAS detected and stopped here. *)
+    (* Pointer.component ptr = Pointer.component pc -> *)
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
-    (* RB: TODO: [DynShare] Furnish computational definition. It may be preferable
-       to inline the expression in the conclusion. *)
-    (* compute_trace_for_load_by_component (Pointer.component pc) ptr reach = e -> *)
-    step G
-         (gps, mem, regs, pc, addrs)
-         [ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)] (* e *)
-         (gps, mem, regs', Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc)
+           [ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+           (gps, mem, regs', Pointer.inc pc)
 
-| Store: forall gps mem mem' regs pc ptr r1 r2 addrs (* v reach' e *),
+| Store: forall gps mem mem' regs pc ptr r1 r2 (* v reach' e *),
     executing G pc (IStore r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
-    (* RB: TODO: [DynShare] Clarify new restriction and substitute once given a
-       computable definition.
-       NOTE: Even though cross-component pointer forging is possible at the
-       program level, it is detected and stopped here. *)
+    (* RB: NOTE: [DynShare] Even though cross-component pointer forging is
+       possible at the program level, it WAS detected and stopped here. *)
     (* Pointer.component ptr = Pointer.component pc -> *)
-    (* RB: TODO: [DynShare] Uncomment refactoring below while fixing existing
-       proofs. *)
-    (* Register.get r2 regs = v -> *)
-    Memory.store mem ptr (* v *) (Register.get r2 regs) = Some mem' ->
-    (* compute_trace_for_store_by_component (Pointer.component pc) ptr reach = e -> *)
-    (* propagate_store_to_all_components_reach ptr v reach = reach' -> *)
-    step G
-         (gps, mem, regs, pc, addrs)
-         (* e *) [EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
-         (gps, mem', regs, Pointer.inc pc, addrs) (* reach', replace addrs *)
+    Memory.store mem ptr (Register.get r2 regs) = Some mem' ->
+    step G (gps, mem, regs, pc)
+           [EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+           (gps, mem', regs, Pointer.inc pc)
 
-| Jal: forall gps mem regs regs' pc pc' l addrs,
+| Jal: forall gps mem regs regs' pc pc' l,
     executing G pc (IJal l) ->
     find_label_in_component G pc l = Some pc' ->
     Register.set R_RA (Ptr (Pointer.inc pc)) regs = regs' ->
     step G
-         (gps, mem, regs, pc, addrs)
+         (gps, mem, regs, pc)
          [EInvalidateRA (Pointer.component pc)]
-         (gps, mem, regs', pc', addrs)
+         (gps, mem, regs', pc')
 
-| Jump: forall gps mem regs pc pc' r addrs,
+| Jump: forall gps mem regs pc pc' r,
     executing G pc (IJump r) ->
     Register.get r regs = Ptr pc' ->
     Pointer.component pc' = Pointer.component pc ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, pc', addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, pc')
 
-| BnzNZ: forall gps mem regs pc pc' r l val addrs,
+| BnzNZ: forall gps mem regs pc pc' r l val,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int val ->
     (val <> 0) % Z ->
     find_label_in_procedure G pc l = Some pc' ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, pc', addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, pc')
 
-| BnzZ: forall gps mem regs pc r l addrs,
+| BnzZ: forall gps mem regs pc r l,
     executing G pc (IBnz r l) ->
     Register.get r regs = Int 0 ->
-    step G (gps, mem, regs, pc, addrs) E0
-           (gps, mem, regs, Pointer.inc pc, addrs)
+    step G (gps, mem, regs, pc) E0
+           (gps, mem, regs, Pointer.inc pc)
 
-| Alloc: forall gps mem mem' regs regs' pc rsize rptr size ptr addrs (* reach' *),
+| Alloc: forall gps mem mem' regs regs' pc rsize rptr size ptr,
     executing G pc (IAlloc rptr rsize) ->
     Register.get rsize regs = Int size ->
     (size > 0) % Z ->
     Memory.alloc mem (Pointer.component pc) (Z.to_nat size) = Some (mem', ptr) ->
     Register.set rptr (Ptr ptr) regs = regs' ->
-    (* RB: TODO: [DynShare] Restore check after making it computational. *)
-    (* update_reachability_of_component_with_value (Ptr ptr) (Pointer.component pc) reach = reach' -> *)
-    step G
-         (gps, mem, regs, pc, addrs)
-         [EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)]
-         (gps, mem', regs', Pointer.inc pc, addrs) (* reach', replace addrs *)
+    step G (gps, mem, regs, pc)
+           [EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)]
+           (gps, mem', regs', Pointer.inc pc)
 
-| Call: forall gps mem regs pc b C' P call_arg addrs (* reach' *),
+| Call: forall gps mem regs pc b C' P call_arg,
     executing G pc (ICall C' P) ->
     Pointer.component pc <> C' ->
     imported_procedure (genv_interface G) (Pointer.component pc) C' P ->
     EntryPoint.get C' P (genv_entrypoints G) = Some b ->
-    (* RB: TODO: [DynShare] Re-lift restriction to integer values. *)
+    (* RB: TODO: [DynShare] Re-lift restriction to integer values.
+       -- Unnecessary? *)
     Register.get R_COM regs = call_arg ->
-    (* RB: TODO: [DynShare] Restore check after making it computational. *)
-    (* update_reachability_of_component_with_value call_arg C' reach = reach' -> *)
-    step G (gps, mem, regs, pc, addrs)
+    step G (gps, mem, regs, pc)
            [ECallInform (Pointer.component pc) P call_arg mem C']
-           (Pointer.inc pc :: gps, mem, Register.invalidate regs,
-            (Permission.code, C', b, 0%Z), addrs) (* reach', replace addrs *)
+           (Pointer.inc pc :: gps, mem, Register.invalidate regs, (Permission.code, C', b, 0%Z))
 
-| Return: forall gps' mem regs pc pc' ret_arg addrs (* reach' *),
+| Return: forall gps' mem regs pc pc' ret_arg,
     executing G pc IReturn ->
     Pointer.component pc <> Pointer.component pc' ->
-    (* RB: TODO: [DynShare] Re-lift restriction to integer values. *)
+    (* RB: TODO: [DynShare] Re-lift restriction to integer values.
+       -- Unnecessary? *)
     Register.get R_COM regs = ret_arg ->
-    (* RB: TODO: [DynShare] Restore check after making it computational. *)
-    (* update_reachability_of_component_with_value ret_arg (Pointer.component pc') reach = reach' -> *)
-    step G (pc' :: gps', mem, regs, pc, addrs)
+    step G (pc' :: gps', mem, regs, pc)
            [ERetInform (Pointer.component pc) ret_arg mem (Pointer.component pc')]
-           (gps', mem, Register.invalidate regs, pc', addrs) (* reach', replace addrs *).
+           (gps', mem, Register.invalidate regs, pc').
 
 Ltac step_of_executing :=
   match goal with
@@ -860,124 +821,9 @@ Ltac step_of_executing :=
   end.
 
 Inductive step_non_inform (G : global_env) : state -> trace event -> state -> Prop :=
-| Nop_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs',
-    executing G pc INop ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-| Label_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' l,
-    executing G pc (ILabel l) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-
-| Const_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' v r,
-    executing G pc (IConst v r) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-
-| Mov_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r1 r2,
-    executing G pc (IMov r1 r2) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-| BinOp_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' op r1 r2 r3,
-    executing G pc (IBinOp op r1 r2 r3) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-| Load_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r1 r2,
-    executing G pc (ILoad r1 r2) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-| Store_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r1 r2,
-    executing G pc (IStore r1 r2) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-| Jal_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' l,
-    executing G pc (IJal l) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-| Jump_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r,
-    executing G pc (IJump r) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-| Bnz_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r l,
-    executing G pc (IBnz r l) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-| Alloc_non_inform: forall gps mem mem' regs regs' e pc pc' addrs addrs' r1 r2,
-    executing G pc (IAlloc r1 r2) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps, mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) E0
-                    (gps, mem', regs', pc', addrs')
-
-| Call_non_inform: forall gps gps' mem mem' regs regs' e pc pc' addrs addrs' C P,
-    executing G pc (ICall C P) ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps', mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) (event_non_inform_of e)
-                    (gps', mem', regs', pc', addrs')
-
-| Return_non_inform: forall gps gps' mem mem' regs regs' e pc pc' addrs addrs',
-    executing G pc IReturn ->
-    step G (gps, mem, regs, pc, addrs) e
-         (gps', mem', regs', pc', addrs') ->
-    step_non_inform G (gps, mem, regs, pc, addrs) (event_non_inform_of e)
-                    (gps', mem', regs', pc', addrs').
-
-Ltac step_of_executing_non_inform :=
-  match goal with
-  | H : executing _ _ ?INSTR |- _ =>
-    match INSTR with
-    | INop           => eapply Nop_non_inform; eapply Nop
-    | ILabel _       => eapply Label_non_inform; eapply Label
-    | IConst _ _     => eapply Const_non_inform; eapply Const
-    | IMov _ _       => eapply Mov_non_inform; eapply Mov
-    | IBinOp _ _ _ _ => eapply BinOp_non_inform; eapply BinOp
-    | ILoad _ _      => eapply Load_non_inform; eapply Load
-    | IStore _ _     => eapply Store_non_inform; eapply Store
-    | IAlloc _ _     => eapply Alloc_non_inform; eapply Alloc
-    | IBnz _ _       =>
-      match goal with
-      | H : Register.get _ _ = Int 0 |- _ => eapply Bnz_non_inform; eapply BnzZ
-      | _                                 => eapply Bnz_non_inform; eapply BnzNZ
-      end
-    | IJump _        => eapply Jump_non_inform; eapply Jump
-    | IJal _         => eapply Jal_non_inform; eapply Jal
-    | ICall _ _      => eapply Call_non_inform; eapply Call
-    | IReturn        => eapply Return_non_inform; eapply Return
-    | IHalt          => fail
-    end
-  end.
-
+| Step_non_inform: forall s t s',
+    step G s t s' ->
+    step_non_inform G s (event_non_inform_of t) s'.
 
 (* executable specification *)
 
@@ -985,7 +831,7 @@ Import MonadNotations.
 Open Scope monad_scope.
 
 Definition eval_step (G: global_env) (s: state) : option (trace event_inform * state) :=
-  let '(gps, mem, regs, pc, addrs) := s in
+  let '(gps, mem, regs, pc) := s in
   (* fetch the next instruction to execute *)
   do C_procs <- getm (genv_procedures G) (Pointer.component pc);
   do P_code <- getm C_procs (Pointer.block pc);
@@ -996,23 +842,23 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
     (* decode and execute the instruction *)
     match instr with
     | ILabel l =>
-      ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
+      ret (E0, (gps, mem, regs, Pointer.inc pc))
     | INop =>
-      ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
+      ret (E0, (gps, mem, regs, Pointer.inc pc))
     | IConst v r =>
       let regs' := Register.set r (imm_to_val v) regs in
       ret ([EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)],
-           (gps, mem, regs', Pointer.inc pc, addrs))
+           (gps, mem, regs', Pointer.inc pc))
     | IMov r1 r2 =>
       let regs' := Register.set r2 (Register.get r1 regs) regs in
       ret ([EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
-           (gps, mem, regs', Pointer.inc pc, addrs))
+           (gps, mem, regs', Pointer.inc pc))
     | IBinOp op r1 r2 r3 =>
       let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
       let regs' := Register.set r3 result regs in
       ret ([EBinop (Pointer.component pc) (binop_to_Ebinop op) (reg_to_Ereg r1)
                    (reg_to_Ereg r2) (reg_to_Ereg r3)],
-           (gps, mem, regs', Pointer.inc pc, addrs))
+           (gps, mem, regs', Pointer.inc pc))
     | ILoad r1 r2 =>
       match Register.get r1 regs with
       | Ptr ptr =>
@@ -1020,7 +866,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         do v <- Memory.load mem ptr;
           let regs' := Register.set r2 v regs in
           ret ([ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
-               (gps, mem, regs', Pointer.inc pc, addrs))
+               (gps, mem, regs', Pointer.inc pc))
       (*else
         None*)
       | _ => None
@@ -1031,7 +877,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
         do mem' <- Memory.store mem ptr (Register.get r2 regs);
           ret ([EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
-               (gps, mem', regs, Pointer.inc pc, addrs))
+               (gps, mem', regs, Pointer.inc pc))
       (*else
         None*)
       | _ => None
@@ -1039,12 +885,12 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
     | IJal l =>
       do pc' <- find_label_in_component G pc l;
       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-      ret ([EInvalidateRA (Pointer.component pc)], (gps, mem, regs', pc', addrs))
+      ret ([EInvalidateRA (Pointer.component pc)], (gps, mem, regs', pc'))
     | IJump r =>
       match Register.get r regs with
       | Ptr pc' =>
         if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-          ret (E0, (gps, mem, regs, pc', addrs))
+          ret (E0, (gps, mem, regs, pc'))
         else
           None
       | _ => None
@@ -1052,10 +898,10 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
     | IBnz r l =>
       match Register.get r regs with
       | Int 0 =>
-        ret (E0, (gps, mem, regs, Pointer.inc pc, addrs))
+        ret (E0, (gps, mem, regs, Pointer.inc pc))
       | Int val =>
         do pc' <- find_label_in_procedure G pc l;
-        ret (E0, (gps, mem, regs, pc', addrs))
+        ret (E0, (gps, mem, regs, pc'))
       | _ => None
       end
     | IAlloc rptr rsize =>
@@ -1067,7 +913,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
           do (mem', ptr) <- Memory.alloc mem (Pointer.component pc) (Z.to_nat size);
           let regs' := Register.set rptr (Ptr ptr) regs in
           ret ([EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)],
-               (gps, mem', regs', Pointer.inc pc, addrs))
+               (gps, mem', regs', Pointer.inc pc))
       | _ => None
       end
     | ICall C' P =>
@@ -1077,7 +923,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
           let val := Register.get R_COM regs in
           let pc' := (Permission.code, C', b, 0%Z) in
           let t := [ECallInform (Pointer.component pc) P val mem C'] in
-          ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc', addrs))
+          ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc'))
         else
           None
       else
@@ -1088,7 +934,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         if negb (Component.eqb (Pointer.component pc) (Pointer.component pc')) then
           let val := Register.get R_COM regs in
           let t := [ERetInform (Pointer.component pc) val mem (Pointer.component pc')] in
-          ret (t, (gps', mem, Register.invalidate regs, pc', addrs))
+          ret (t, (gps', mem, Register.invalidate regs, pc'))
         else
           None
       | _ => None
@@ -1102,7 +948,7 @@ Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
   | S n' =>
     match eval_step G st with
     | None =>
-      let '(_, _, regs, _, _) := st in
+      let '(_, _, regs, _) := st in
       match Register.get R_COM regs with
       | Int i => Some i
       | _ => None
@@ -1156,7 +1002,7 @@ Proof.
     | Hperm: (if _ then _ else _) = Some _ |- _ => rewrite Hperm
     end.
     reflexivity.
-    
+
   - match goal with
     | Hfind: find_label_in_component _ _ _ = _ |- _ =>
       rewrite Hfind
@@ -1405,7 +1251,7 @@ Proof.
                **** apply Nat.eqb_neq. assumption.
                **** apply imported_procedure_iff. auto.
                **** assumption.
-               
+
            *** rewrite H in H2.
                (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
@@ -1596,7 +1442,7 @@ Section SemanticsInform.
 Import ssreflect eqtype.
 
 Definition stack_state_of (cs:CS.state) : stack_state :=
-  let '(gps, mem, regs, pc, addrs) := cs in
+  let '(gps, mem, regs, pc) := cs in
   StackState (Pointer.component pc) (List.map Pointer.component gps).
 
 Lemma intermediate_well_bracketed_trace t cs cs' :
@@ -1638,12 +1484,12 @@ try by move=> *; match goal with
                   apply find_label_in_component_1 in H; rewrite H
   end.
   assumption.
-- by move=> ????????? ->.
-- by move=> ???????????? /find_label_in_procedure_1 ->.
+- by move=> ???????? ->.
+- by move=> ??????????? /find_label_in_procedure_1 ->.
 - by move=> ????????????; rewrite eqxx Pointer.inc_preserves_component.
-- move=> ???????????????. rewrite !eqxx. rewrite andTb.
+- move=> ??????????????. rewrite !eqxx. rewrite andTb.
   rewrite <- Pointer.inc_preserves_component. assumption.
-- move=> ???????????. rewrite !eqxx. rewrite !andTb. assumption.
+- move=> ??????????. rewrite !eqxx. rewrite !andTb. assumption.
 Qed.
 
 Canonical ssrnat.nat_eqType.
@@ -1655,9 +1501,9 @@ Proof.
 elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
 rewrite seq.all_cat IH andbT {Hstar}.
 case: st1 t1 st2 / Hstep => //=.
-- move=> ?????????? /eqP ->.
+- move=> ????????? /eqP ->.
   by move=> /imported_procedure_iff /= ->.
-- by move=> ???????? /eqP ->.
+- by move=> ??????? /eqP ->.
 Qed.
 
 Lemma intermediate_well_formed_trace : forall t cs cs',
@@ -1698,64 +1544,34 @@ Section SemanticsNonInform.
       equal_and_nil_or_singleton t1 t2 /\ (t1 = t2 -> s1 = s2).
   Proof.
     intros s t1 s21 t2 s2 Hstep1 Hstep2.
-    inversion Hstep1; subst; inversion Hstep2; subst;    
-      match goal with
-        Hstep1': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e
-                      (?gps', ?mem', ?regs', ?pc', ?addrs'),
-                 Hstep2': step _ (?gps, ?mem, ?regs, ?pc, ?addrs) ?e0
-                               (?gps'0, ?mem'0, ?regs'0, ?pc'0, ?addrs'0) |- _ =>
-        destruct (determinate_step
-                    p
-                    (gps, mem, regs, pc, addrs)
-                    e
-                    (gps', mem', regs', pc', addrs')
-                    e0
-                    (gps'0, mem'0, regs'0, pc'0, addrs'0)
-                    Hstep1'
-                    Hstep2')
-          as [eqee0 teqSeq] end;
-      split; try (intros; apply teqSeq; auto); try apply match_traces_E0;
-      destruct eqee0; auto;
-        try match goal with Hee': event_equal ?e ?e' |- _ =>
-                        pose proof (@event_equal_equal
-                                      event_inform
-                                      event_inform_EventClass e e' Hee') as ee'eq;
-                          rewrite ee'eq; reflexivity end;
-        try (simpl; apply match_traces_E0);
-    match goal with Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
-                    pose proof executing_deterministic G pc i i' Hexec Hexec' as cntr;
-                      try discriminate end;
-    match goal with H1: event_equal ?e ?e' |- _ =>
-                    pose proof (@event_equal_equal
-                                  event_inform
-                                  event_inform_EventClass e e' H1) as ee'eq;
-                      rewrite ee'eq;
-                      pose proof
-                           event_non_inform_of_nil_or_singleton [e']
-                        as [Hnil | [e0' Hsingleton]];
-                      try (rewrite Hnil; constructor);
-                      try (rewrite Hsingleton; constructor;
-                           apply equal_event_equal; reflexivity)
-    end.
+    inversion Hstep1 as [s'1 t1' s21' Hstep1'];
+      inversion Hstep2 as [s'2 t2' s2' Hstep2'];
+      subst.
+    pose proof determinate_step _ _ _ _ _ _ Hstep1' Hstep2' as [Heqnil Heq].
+    inversion Heqnil as [| e e' Heveq]; subst.
+    - split.
+      + now constructor.
+      + now auto.
+    - apply event_equal_equal in Heveq; subst e'. split.
+      + destruct e; now repeat constructor.
+      + now auto.
   Qed.
-  
+
   Lemma singleton_traces_non_inform:
     single_events sem_non_inform.
   Proof.
-    unfold single_events.
-    intros s t s' Hstep.
-    inversion Hstep; simpl; auto;
-      match goal with | Hstep': step _ _ _ _ |- _ => inversion Hstep' end; auto.
+    unfold single_events. intros s t s' Hstep.
+    inversion Hstep as [? t' ? Hstep']; inversion Hstep'; now auto.
   Qed.
 
   Lemma no_step_no_step_non_inform:
     forall s, nostep step G s -> nostep step_non_inform G s.
   Proof.
-    unfold nostep. intros s Hnostep t s' Hstep_non_inform. unfold_state s.
-    inversion Hstep_non_inform;
-      match goal with Hstep: step G ?st ?t ?st' |- _ => apply (Hnostep t st'); assumption end.
+    intros s Hnostep t s' Hstep.
+    inversion Hstep; subst.
+    eapply Hnostep; eassumption.
   Qed.
-  
+
   Lemma final_states_stuckness_non_inform:
     forall s,
       final_state G s ->
@@ -1799,113 +1615,64 @@ Proof.
   - auto.
   - auto.
   - simpl.
-    match goal with IH: project_non_inform (t1 ** []) = _ |- _ => rewrite IH end.
+    match goal with
+    | IH: project_non_inform (t1 ** []) = _ |- _ => rewrite IH
+    end.
     simpl. rewrite !E0_right. reflexivity.
   - simpl (project_non_inform (?a :: t1)).
     destruct a;
-             simpl (project_non_inform ((_ :: t1) ** ?e :: t2));
-             match goal with IH: project_non_inform (t1 ** _) = _ |- _ => rewrite IH end;
-             reflexivity.
+      simpl (project_non_inform ((_ :: t1) ** ?e :: t2));
+      match goal with
+      | IH: project_non_inform (t1 ** _) = _ |- _ => rewrite IH
+      end;
+      reflexivity.
+Qed.
+
+(* RB: TODO: Rename these two functions to make the difference between them
+   clear, at the moment it is rather confusing. This equivalence is of use
+   to simplify several subsequent results. *)
+Lemma project_event_non_inform s t s' :
+  step G s t s' ->
+  project_non_inform t = event_non_inform_of t.
+Proof.
+  intros Hstep.
+  pose proof singleton_traces_inform _ _ _ _ Hstep.
+  destruct t as [| e1 [| e2 t]]; easy.
 Qed.
 
 Lemma step_non_inform_step_inform cs t cs':
   step_non_inform G cs t cs' ->
   exists t_inform, step G cs t_inform cs' /\ project_non_inform t_inform = t.
 Proof.
-  intros Hstep_noninform.
-  inversion Hstep_noninform;
-    match goal with Hstep : step _ _ ?e _ |- _ =>
-                    exists e; split; try exact Hstep; inversion Hstep;
-                      match goal with
-                        Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
-                        pose proof executing_deterministic G pc i i' Hexec Hexec' as cntr;
-                          try discriminate
-                      end; auto
-    end.
+  intros Hstep.
+  inversion Hstep as [? t' ? Hstep']; subst.
+  exists t'. split; [assumption |].
+  eapply project_event_non_inform; eassumption.
 Qed.
 
 Lemma step_inform_step_non_inform cs t_inform cs':
   step G cs t_inform cs' ->
   step_non_inform G cs (project_non_inform t_inform) cs'.
 Proof.
-  intros Hstep_inform. remember Hstep_inform. inversion Hstep_inform.
-  - eapply Nop_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Label_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Const_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Mov_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply BinOp_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Load_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Store_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Jal_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Jump_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Bnz_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Bnz_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - eapply Alloc_non_inform; eauto.
-    match goal with Hcs: _ = cs, Hcs': _ = cs' |- _ => rewrite Hcs Hcs' end.
-    exact Hstep_inform.
-  - simpl.
-    assert (step_non_inform G (gps, mem, regs, pc, addrs)
-                            (event_non_inform_of
-                               [ECallInform (Pointer.component pc) P call_arg mem C'])
-                            (Pointer.inc pc :: gps, mem,
-                             Register.invalidate regs,
-                             (Permission.code, C', b, 0%Z), addrs)
-           ) as gl.
-    {
-      eapply Call_non_inform; eauto.
-      match goal with Hcs: _ = cs, Hcs': _ = cs', Ht: _ = t_inform |- _ =>
-                      rewrite Hcs Hcs' Ht end.
-      exact Hstep_inform.
-    }
-    exact gl.
-  - simpl. 
-    assert (step_non_inform G (pc' :: gps', mem, regs, pc, addrs)
-                            (event_non_inform_of
-                               [ERetInform (Pointer.component pc) ret_arg mem (Pointer.component pc')])
-                            (gps', mem, Register.invalidate regs, pc', addrs)
-           ) as gl.
-    {
-      eapply Return_non_inform; eauto.
-      match goal with Hcs: _ = cs, Hcs': _ = cs', Ht: _ = t_inform |- _ =>
-                      rewrite Hcs Hcs' Ht end.
-      exact Hstep_inform.
-    }
-    exact gl.
+  intros Hstep. rewrite (project_event_non_inform _ _ _ Hstep).
+  inversion Hstep; subst;
+    now constructor.
 Qed.
 
 Lemma star_sem_non_inform_star_sem_inform cs t cs' :
   Star sem_non_inform cs t cs' ->
-  exists t_inform, Star (sem_inform p) cs t_inform cs' /\ project_non_inform t_inform = t.
+exists t_inform,
+  Star (sem_inform p) cs t_inform cs' /\ project_non_inform t_inform = t.
 Proof.
   intros Hstar. induction Hstar. exists E0. split. constructor. auto.
-  match goal with Hstep: Step _ ?s1 ?t1 ?s2 |- _ =>
-                  pose proof step_non_inform_step_inform s1 t1 s2 Hstep as Hexists;
-                    destruct Hexists as [t1_inform [Hstep_t1_inform Hproj_t1_inform]]
+  match goal with
+  | Hstep: Step _ ?s1 ?t1 ?s2 |- _ =>
+    pose proof step_non_inform_step_inform s1 t1 s2 Hstep as Hexists;
+    destruct Hexists as [t1_inform [Hstep_t1_inform Hproj_t1_inform]]
   end.
-  match goal with IH: exists _, _ |- _ =>
-                             destruct IH as [t2_inform [Hstar_t2_inform Hproj_t2_inform]]
+  match goal with
+  | IH: exists _, _ |- _ =>
+    destruct IH as [t2_inform [Hstar_t2_inform Hproj_t2_inform]]
   end.
   exists (t1_inform ** t2_inform). split.
   apply star_trans with (t1 := t1_inform) (s2 := s2) (t2 := t2_inform); auto.
@@ -1930,7 +1697,7 @@ Proof.
 Qed.
 
 Definition stack_state_of_non_inform (cs:CS.state) : Traces.stack_state :=
-  let '(gps, mem, regs, pc, addrs) := cs in
+  let '(gps, mem, regs, pc) := cs in
   Traces.StackState (Pointer.component pc) (List.map Pointer.component gps).
 
 
@@ -2094,8 +1861,8 @@ Qed.
 (* RB: TODO: This result admits more general formulations (see above).
    Replace this with those whenever convenient, including the "bootstrapping"
    on the stack in the result for the domain of the PC, just below. *)
-Corollary comes_from_initial_state_stack_cons_domm frame gps mem regs pc addrs iface :
-  comes_from_initial_state (frame :: gps, mem, regs, pc, addrs) iface ->
+Corollary comes_from_initial_state_stack_cons_domm frame gps mem regs pc iface :
+  comes_from_initial_state (frame :: gps, mem, regs, pc) iface ->
   Pointer.component frame \in domm iface.
 Proof.
   intros Hcomes_from.
@@ -2153,7 +1920,7 @@ Proof.
   intros Hstep.
   inversion Hstep; subst; simpl;
     try now rewrite Pointer.inc_preserves_component.
-  - auto. 
+  - auto.
 (*  - erewrite find_label_in_component_1; try eassumption. reflexivity.
   - congruence.*)
   - erewrite find_label_in_procedure_1; try eassumption. reflexivity.
@@ -2163,38 +1930,22 @@ Lemma silent_step_non_inform_preserves_component G s s' :
   CS.step_non_inform G s E0 s' ->
   Pointer.component (state_pc s) = Pointer.component (state_pc s').
 Proof.
-  intros Hstep_non_inform.
-  inversion Hstep_non_inform; subst; simpl;
-    match goal with Hstep: step _ _ _ _ |- _ =>
-                    inversion Hstep; auto;
-                      match goal with
-                        Hexec: executing G ?pc ?i, Hexec': executing G ?pc ?i' |- _ =>
-                        pose proof executing_deterministic G pc i i' Hexec Hexec' as cntr;
-                          try discriminate
-                      end; auto
-    end;
-    try now rewrite Pointer.inc_preserves_component.
-  - match goal with Hfind: find_label_in_component _ ?pc ?l0 = Some ?pc' |- _ =>
-                    exact (find_label_in_component_1 G pc pc' l0 Hfind)
-    end.
-  - match goal with Hfind: find_label_in_procedure _ ?pc ?l0 = Some ?pc' |- _ =>
-                    exact (find_label_in_procedure_1 G pc pc' l0 Hfind)
-    end.
-  - match goal with Hnoninf: _ = E0, He: [ECallInform _ _ _ _ _] = _ |- _ =>
-                    rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
-    end.
-  - match goal with Hnoninf: _ = E0, He: [ERetInform _ _ _ _] = _ |- _ =>
-                    rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
-    end.
+  intros Hstep. inversion Hstep as [? t ? Hstep']; subst.
+  inversion Hstep'; subst;
+    try (now rewrite Pointer.inc_preserves_component).
+  - eapply find_label_in_component_1; now eauto.
+  - eapply silent_step_preserves_component; eassumption.
+  - eapply silent_step_preserves_component; eassumption.
+  - discriminate.
+  - discriminate.
 Qed.
-                                               
 
 Lemma silent_step_preserves_program_component : forall s1 s2 G ctx,
   CS.is_program_component s1 ctx ->
   CS.step G s1 E0 s2 ->
   CS.is_program_component s2 ctx.
 Proof.
-  intros [[[[? ?] ?] pc1] ?] [[[[? ?] ?] pc2] ?] G ctx Hcomp1 Hstep12.
+  intros [[[? ?] ?] pc1] [[[? ?] ?] pc2] G ctx Hcomp1 Hstep12.
   pose proof CS.silent_step_preserves_component _ _ _ Hstep12 as Heq.
   simplify_turn. now rewrite <- Heq.
 Qed.
@@ -2204,7 +1955,7 @@ Lemma silent_step_non_inform_preserves_program_component : forall s1 s2 G ctx,
   CS.step_non_inform G s1 E0 s2 ->
   CS.is_program_component s2 ctx.
 Proof.
-  intros [[[[? ?] ?] pc1] ?] [[[[? ?] ?] pc2] ?] G ctx Hcomp1 Hstep12.
+  intros [[[? ?] ?] pc1] [[[? ?] ?] pc2] G ctx Hcomp1 Hstep12.
   pose proof CS.silent_step_non_inform_preserves_component _ _ _ Hstep12 as Heq.
   simplify_turn. now rewrite <- Heq.
 Qed.
@@ -2247,36 +1998,15 @@ Proof.
   - subst; assert (t1 = E0) by now induction t1.
     assert (t2 = E0) by now induction t1. subst.
     apply IHHstar; auto.
-    clear H0 IHHstar Hstar.
-    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn in *.
-    inversion H;
-      try (match goal with
-           | Heq : (_, _, _, _) = s1 |- _ => rewrite -Heq in Hprg_component
-           end);
-      match goal with Hstep: step _ _ _ _ |- _ =>
-                      inversion Hstep; auto;
-                        match goal with
-                          Hexec: executing _ ?pc ?i, Hexec': executing _ ?pc ?i' |- _ =>
-                          pose proof executing_deterministic
-                               (globalenv (sem_non_inform (program_link p c)))
-                               pc i i' Hexec Hexec' as cntr;
-                            try discriminate
-                        end; auto
-      end;
-      try (rewrite Pointer.inc_preserves_component; assumption).
-    + match goal with Hfind: find_label_in_component ?G ?pc ?l0 = Some ?pc' |- _ =>
-                      rewrite <- (find_label_in_component_1 G pc pc' l0 Hfind)
-      end. assumption.
-    + match goal with Heq : _ pc' = _ pc |- _ => rewrite Heq; assumption end.
-    + match goal with Hfind: find_label_in_procedure ?G ?pc ?l0 = Some ?pc' |- _ =>
-                      rewrite <- (find_label_in_procedure_1 G pc pc' l0 Hfind)
-      end. assumption.
-    + match goal with Hnoninf: _ = E0, He: [ECallInform _ _ _ _ _] = _ |- _ =>
-                      rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
-      end.
-    + match goal with Hnoninf: _ = E0, He: [ERetInform _ _ _ _] = _ |- _ =>
-                      rewrite <- He in Hnoninf; simpl in Hnoninf; discriminate
-      end.
+    clear H0 IHHstar. simpl in H.
+    inversion H as [? t ? Hstep]; subst.
+    inversion Hstep; subst; CS.simplify_turn;
+      try (now rewrite Pointer.inc_preserves_component).
+    + erewrite <- find_label_in_component_1; eassumption.
+    + congruence.
+    + erewrite <- find_label_in_procedure_1; eassumption.
+    + discriminate.
+    + discriminate.
 Qed.
 
 (* RB: Could be phrased in terms of does_prefix. *)
@@ -2493,15 +2223,15 @@ Section ProgramLink.
 
   (* RB: NOTE: Check with existing results.
      Possibly rewrite in terms of state_pc. *)
-  Lemma star_pc_domm : forall {s st mem reg pc addrs t},
+  Lemma star_pc_domm : forall {s st mem reg pc t},
     initial_state (program_link p c) s ->
-    Star (sem_inform (program_link p c)) s t (st, mem, reg, pc, addrs) ->
+    Star (sem_inform (program_link p c)) s t (st, mem, reg, pc) ->
     Pointer.component pc \in domm (prog_interface p) \/
     Pointer.component pc \in domm (prog_interface c).
   Proof.
-    intros s st mem reg pc addrs t Hini Hstar.
+    intros s st mem reg pc t Hini Hstar.
     assert (H : Pointer.component pc \in domm (prog_interface (program_link p c))).
-    { replace pc with (CS.state_pc (st, mem, reg, pc, addrs)); try reflexivity.
+    { replace pc with (CS.state_pc (st, mem, reg, pc)); try reflexivity.
       apply CS.comes_from_initial_state_pc_domm.
       destruct (cprog_main_existence Hprog_is_closed) as [_ [? _]].
       exists (program_link p c), s, t.
@@ -2510,15 +2240,15 @@ Section ProgramLink.
     move: H. simpl. rewrite domm_union. now apply /fsetUP.
   Qed.
 
-  Lemma star_pc_domm_non_inform : forall {s st mem reg pc addrs t},
+  Lemma star_pc_domm_non_inform : forall {s st mem reg pc t},
     initial_state (program_link p c) s ->
-    Star (sem_non_inform (program_link p c)) s t (st, mem, reg, pc, addrs) ->
+    Star (sem_non_inform (program_link p c)) s t (st, mem, reg, pc) ->
     Pointer.component pc \in domm (prog_interface p) \/
                              Pointer.component pc \in domm (prog_interface c).
   Proof.
-    intros s st mem reg pc addrs t Hini Hstar.
+    intros s st mem reg pc t Hini Hstar.
     pose proof star_sem_non_inform_star_sem_inform
-         (program_link p c) s t (st, mem, reg, pc, addrs) Hstar
+         (program_link p c) s t (st, mem, reg, pc) Hstar
       as [t_inform [Hstar_inform Hproj]].
     exact (star_pc_domm Hini Hstar_inform).
   Qed.
@@ -2547,13 +2277,22 @@ Proof.
   pose (domm_domm1 := domm_prepare_procedures_initial_memory_aux p).
   unfold sem_inform. simpl. rewrite mapmE. rewrite mkfmapfE. simpl.
   destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
-    simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e1 in e;
+    simpl; pose proof (mem_domm (prog_procedures p) cid) as e1; erewrite e1 in e;
       unfold isSome in e1;
-      destruct (@getm nat_ordType
-                      (NMap code)
-                      (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
-                      (prog_procedures p)
-                      cid) eqn:contra.
+      (
+       destruct (@getm nat_ordType
+                        (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
+                        (prog_procedures p)
+                        cid) eqn:contra
+       ||
+       destruct (@getm nat_ordType
+                       (NMap code)
+                       (*(Phant (forall _ : Ord.sort nat_ordType, NMap code))*) _
+                       (prog_procedures p)
+                       cid) eqn:contra;
+       idtac "ExStructures 0.1 legacy"
+      ).
+
   (* unable to use the destruct equation due to type inference problems. *)
         (*erewrite contra in e1. try discriminate; split; auto; clear e1;
           unfold reserve_component_blocks; intros H.*)
@@ -2583,13 +2322,16 @@ Proof.
   destruct (cid \in domm (prog_interface p)) eqn:e; rewrite e; erewrite domm_domm in e;
     simpl; pose (mem_domm (prog_procedures p) cid) as e1; erewrite e in e1;
       unfold isSome in e1; destruct ((prog_procedures p) cid) eqn:contra; auto;
-        rewrite contra in e1; try discriminate; split; auto; clear e1;
+        (* rewrite contra in e1; *)
+        try discriminate; split; auto; clear e1;
           unfold reserve_component_blocks; intros H.
   - assert (etmp : is_true (cid \in domm (prog_interface p))).
     { erewrite domm_domm; rewrite e; auto. }
-    pose (dommP (prog_interface p) cid etmp) as e0.
+    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
     destruct ((prog_interface p) cid) eqn:e1;
-      try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
+      try (destruct e0 as [x H0];
+           try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
+           discriminate).
     destruct (ComponentMemoryExtra.reserve_blocks
          (ComponentMemory.prealloc (odflt emptym ((prog_buffers p) cid)))
          (length (elementsm (odflt emptym (Some n)))))
@@ -2603,10 +2345,10 @@ Proof.
        equality of the contents rather than just equality.*)
       admit.
     }
-    rewrite <- g. auto.
+    rewrite <- g; auto.
   - assert (etmp : is_true (cid \in domm (prog_interface p))).
     { erewrite domm_domm; rewrite e; auto. }
-    pose (dommP (prog_interface p) cid etmp) as e0.
+    pose proof (@dommP _ _ (prog_interface p) cid etmp) as e0.
     destruct ((prog_interface p) cid) eqn:e1;
       try (destruct e0 as [x H0]; rewrite e1 in H0; discriminate).
 
@@ -2731,7 +2473,7 @@ Proof.
       + apply Register_get_regs_ptrs with (r1 := r1) (ptrO := ptrO).
         assert (Pointer.permission (ptrP, ptrC, ptrB, ptrO) = Permission.data) as eptrP.
         { apply Memory.load_some_permission with (mem := mem0) (v := v). assumption. }
-        simpl in eptrP. rewrite eptrP in H13.
+        simpl in eptrP. rewrite eptrP in H11.
         assumption.
     }
     destruct v as [z | [[[vP vC] vB] vO] |] eqn:ve.
@@ -2754,7 +2496,7 @@ Proof.
         (* auto *) (* This broke after introducing the permissions field. *)
       * rewrite fsubUset. apply/andP; split; auto.
         apply (@fsubset_trans _
-                              (mem_data_ptrs (state_mem (gps0, mem0, regs, pc, addrs0))) _ _).
+                              (mem_data_ptrs (state_mem (gps0, mem0, regs, pc))) _ _).
         -- simpl. rewrite fsub1set.
            apply Memory_load_mem_ptrs with
                (aP := ptrP) (aC := ptrC) (aB := ptrB) (aO := ptrO) (vO := vO). auto.
@@ -2820,5 +2562,13 @@ Definition reachable_from_reg_file
            (mem_st: Memory.t)
            (regs: Register.t) :=
   ptr \in (\bigcup_(i <- regs_data_ptrs regs) fset (reachable_nodes_nat mem_st i))%fset.
+
+(* RB: TODO: [DynShare] This result may not be in standard form for this file,
+   adjust if needed ([does_prefix] not being used here, say). *)
+Theorem does_prefix_inform_non_inform :
+  forall p m,
+    does_prefix (sem_inform p) m ->
+    does_prefix (sem_non_inform p) (project_finpref_behavior m).
+Admitted.
 
 End CS.

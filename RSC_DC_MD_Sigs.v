@@ -188,19 +188,19 @@ Module Type Intermediate_Sig.
       prog_interface c = prog_interface c' ->
       closed_program (program_link p c) ->
       closed_program (program_link p' c') ->
-    forall size_m size_m'' m m'',
+    forall m m'' size_m size_m'',
       does_prefix (CS.sem (program_link p c)) m ->
       does_prefix (CS.sem (program_link p' c')) m'' ->
       behavior_rel_behavior_all_cids size_m size_m'' m m'' ->
-      exists size_m' m',
+      exists m' size_m',
         does_prefix (CS.sem (program_link p c')) m' /\
         behavior_rel_behavior_all_cids size_m' size_m m' m.
 
-  Local Axiom does_prefix_inform_does_prefix_non_inform :
+  Local Axiom does_prefix_inform_non_inform :
     forall p m,
       does_prefix (CS.sem_inform p) m ->
       does_prefix (CS.sem p) (project_finpref_behavior m).
-  
+
 End Intermediate_Sig.
 
 Module Type S2I_Sig (Source : Source_Sig) (Intermediate : Intermediate_Sig).
@@ -216,7 +216,7 @@ Module Type Linker_Sig
        (Source : Source_Sig)
        (Intermediate : Intermediate_Sig)
        (S2I : S2I_Sig Source Intermediate).
-  
+
   Local Axiom definability_with_linking :
     forall p c b m,
       Intermediate.well_formed_program p ->
@@ -226,7 +226,7 @@ Module Type Linker_Sig
       program_behaves (Intermediate.CS.sem_inform (Intermediate.program_link p c)) b ->
       prefix m b ->
       not_wrong_finpref m ->
-    exists p' c' metadata_size m',
+    exists p' c' m' metadata_size,
       Source.prog_interface p' = Intermediate.prog_interface p /\
       Source.prog_interface c' = Intermediate.prog_interface c /\
       S2I.matching_mains p' p /\
@@ -237,7 +237,6 @@ Module Type Linker_Sig
       does_prefix (Source.CS.sem (Source.program_link p' c')) m' /\
       behavior_rel_behavior_all_cids metadata_size all_zeros_shift
                                      m' (project_finpref_behavior m).
-
 
 (* TODO: split definability_with_linking into a more standard
          definability + a "unlinking" lemma *)
