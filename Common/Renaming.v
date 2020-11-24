@@ -1047,6 +1047,58 @@ Section Renaming.
       by rewrite !size_rcons IHtraces_rename_each_other.
   Qed.
 
+  (* The following lemma "__traces_rename_each_other_append" is probably false.
+     The reason it is false is that we cannot be sure that the shared addresses
+     at the start of t1b are a continuation of the shared addresses at the end
+     of t1a (neither can we do so for t2b and t2a).
+   *)
+  Lemma __traces_rename_each_other_append sz:
+    forall t1a t1b t2a t2b,
+    length (t1a ** t1b) <= sz ->
+    traces_rename_each_other t1a t2a ->
+    traces_rename_each_other t1b t2b ->
+    traces_rename_each_other (t1a ** t1b) (t2a ** t2b).
+  Abort.
+  (*Proof.
+    unfold Eapp. induction sz; intros ? ? ? ?; intros Hsize Hta Htb;
+      assert (Hsza: length t1a = length t2a) by now apply traces_rename_each_other_same_size.
+    - assert (Hszb: length t1b = length t2b) by now apply traces_rename_each_other_same_size.
+      assert (Heq0: length (t1a ++ t1b)%list = 0) by now apply/eqP; rewrite <- leqn0.
+      assert (H: (t1a ++ t1b)%list = [::]) by now rewrite <- length_zero_iff_nil.
+      rewrite !H. pose proof app_eq_nil _ _ H as [a0 b0].
+      assert (t2a = [::])
+        by now rewrite <- length_zero_iff_nil; auto; rewrite <- Hsza; rewrite a0.
+      assert (t2b = [::])
+        by now rewrite <- length_zero_iff_nil; auto; rewrite <- Hszb; rewrite b0.
+        by subst.
+    - assert (Hszb: length t1b = length t2b) by now apply traces_rename_each_other_same_size.
+      remember (t1a ++ t1b)%list as t1.
+      induction t1 using last_ind;
+      try by now pose proof IHsz t1a t1b t2a t2b as g; rewrite <- Heqt1 in g; apply g.
+      remember (t2a ++ t2b)%list as t2.
+      induction t2 using last_ind.
+      + pose proof app_eq_nil _ _ (RelationClasses.eq_Symmetric _ _ Heqt2) as [a0 b0].
+        subst. simpl in *.
+        assert (t1a = [::]) by now rewrite <- length_zero_iff_nil.
+        assert (t1b = [::]) by now rewrite <- length_zero_iff_nil.
+        subst. simpl in *.  rewrite Heqt1. auto.
+      + assert (Hsize': size (rcons t1 x) <= sz.+1) by auto.
+        rewrite size_rcons in Hsize'. SearchAbout S leq.
+        assert (size t1 <= sz) by auto.
+        eapply rcons_renames_rcons.
+        pose proof IHsz t1 nil t2 nil
+        
+                   rewrite app_length in Hsize.
+      rewrite <- Heqt2. Heqt1.
+      pose proof length_zero_iff_nil _ Hsize as Hnil.
+    intros Hsize.
+    Hta Htb.
+    induction Hta as [ | atp ae atp' ae' ? ? ? aHa]; auto.
+    induction Htb as [ | btp be btp' be' ? ? ? bHa]; auto.
+    - rewrite !E0_right. rewrite !E0_right in IHHta. apply rcons_renames_rcons; auto.
+    - 
+   *)
+
 End Renaming.
 
 Section TheShiftRenaming.
@@ -1401,6 +1453,19 @@ Section PropertiesOfTheShiftRenaming.
   Proof.
     eapply __traces_shift_each_other_transitive. eauto.
   Qed.
+
+  Lemma traces_shift_each_other_nil_rcons n1 n2 t x:
+    traces_shift_each_other cid_for_shift n1 n2 [::] (rcons t x) -> False.
+  Proof. intros H. inversion H. eapply traces_rename_each_other_nil_rcons. eauto. Qed.
+
+  Lemma traces_shift_each_other_rcons_nil n1 n2 t x:
+    traces_shift_each_other cid_for_shift n1 n2 (rcons t x) [::] -> False.
+  Proof. intros H. inversion H. eapply traces_rename_each_other_rcons_nil. eauto. Qed.
+
+  Lemma traces_shift_each_other_same_size n1 n2 t1 t2:
+    traces_shift_each_other cid_for_shift n1 n2 t1 t2 -> size t1 = size t2.
+  Proof. intros H. inversion H. eapply traces_rename_each_other_same_size. eauto. Qed.
+
         
 End PropertiesOfTheShiftRenaming.
 
@@ -1438,6 +1503,24 @@ Section PropertiesOfTheShiftRenamingAllCids.
   Proof.
     unfold traces_shift_each_other_all_cids. intros Hg1 Hg3 H12 H23 cid.
     eapply traces_shift_each_other_transitive with (n2 cid) (t2); eauto.
+  Qed.
+
+  Lemma traces_shift_each_other_all_cids_nil_rcons n1 n2 t x:
+    traces_shift_each_other_all_cids n1 n2 [::] (rcons t x) -> False.
+  Proof. unfold traces_shift_each_other_all_cids. intros Hsh.
+         apply (traces_shift_each_other_nil_rcons _ _ _  _ _ (Hsh 0)).
+  Qed.
+
+  Lemma traces_shift_each_other_all_cids_rcons_nil n1 n2 t x:
+    traces_shift_each_other_all_cids n1 n2 (rcons t x) [::] -> False.
+  Proof. unfold traces_shift_each_other_all_cids. intros Hsh.
+         apply (traces_shift_each_other_rcons_nil _ _ _  _ _ (Hsh 0)).
+  Qed.
+  
+  Lemma traces_shift_each_other_all_cids_same_size n1 n2 t1 t2:
+    traces_shift_each_other_all_cids n1 n2 t1 t2 -> size t1 = size t2.
+  Proof. unfold traces_shift_each_other_all_cids. intros Hsh.
+         apply (traces_shift_each_other_same_size _ _ _  _ _ (Hsh 0)).
   Qed.
 
 End PropertiesOfTheShiftRenamingAllCids.
