@@ -436,6 +436,10 @@ Section Definability.
 
      Generated instruction:
        ( *(local[0]) )[i] = *( local[i + META_SIZE] )
+
+     NOTE: Because the local buffers contain no pointers, we could write
+     hardcoded initialization code instead of having a copy of the original
+     local buffer in the metadata buffer.
    *)
   Definition copy_local_datum_expr (C : Component.id) (i : nat) : expr :=
     E_assign
@@ -478,6 +482,11 @@ Section Definability.
     | _ => false
     end.
 
+  (* RB: TODO: Later in [definability_gen] there are explicit instances of
+     this function, which annoyingly will need an additional boolean
+     argument. Ideally this parameter would not appear explicitly, but at the
+     moment this is passed the [comp_subtrace] of the original trace, and so
+     the necessary events for the initialization check are not available. *)
   Definition expr_of_trace
              (C: Component.id) (P: Procedure.id) (t: trace event_inform)
              (init: bool)
@@ -646,7 +655,11 @@ Section Definability.
       by case/orP=> [/eqP [-> ->] //|]; eauto.
     - by rewrite domm_map.
     - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
-      rewrite /Source.has_required_local_buffers /= mapmE C_CI /=.
+      assert (exists buf, prog_buffers C = Some buf) as [buf C_buf].
+      {
+        apply /dommP. rewrite -domm_intf_buffers. apply /dommP. by eauto.
+      }
+      rewrite /Source.has_required_local_buffers /= mapmE C_buf /=.
       eexists; eauto=> /=; omega.
     - rewrite /Source.prog_main find_procedures_of_trace //=.
       + split; first reflexivity.
@@ -823,7 +836,7 @@ Section Definability.
           rewrite /procedure_of_trace /expr_of_trace.
           (* eexists. *)
           apply: switch_spec_else; eauto.
-          rewrite -> size_map; reflexivity.
+          simpl. rewrite -> size_map; reflexivity.
         + reflexivity.
         + now repeat constructor.
         + now constructor.
@@ -848,7 +861,7 @@ Section Definability.
            recursive case. The first star can be proved as before, but is it
            exactly what we need? *)
         assert (Star1 : Star (CS.sem p)
-                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
+                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t) false, arg] E0
                              [CState C, stk, mem', Kstop, expr_of_event C P e, arg]).
         { unfold expr_of_trace. rewrite Et comp_subtrace_app. simpl.
           rewrite <- wf_C, Nat.eqb_refl, map_app. simpl.
