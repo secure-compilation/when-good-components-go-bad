@@ -124,6 +124,8 @@ Module Source.
     wfprog_well_formed_buffers:
       forall C, prog_interface p C ->
                 has_required_local_buffers p C;
+    (* TODO: local buffers contain no pointer values *)
+    (* ... *)
     (* iff the main component is defined, so is the main procedure
        RB: Changed from a simple conditional. *)
     wfprog_main_existence:

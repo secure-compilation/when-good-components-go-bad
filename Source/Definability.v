@@ -365,23 +365,35 @@ Section Definability.
             (E_call C  P  (E_val (Int 0))) (* This is really (C,P) calling itself. *)
     | ERetInform  _ ret_val _ _ => E_deref (loc_of_reg E_R_COM)
     (* Other events generate corresponding expressions, even though these do not
-       generate any events in the source semantics. *)
-    | EConst _ val reg => E_assign (loc_of_reg reg) (expr_of_const_val val)
-    | EMov _ reg1 reg2 => E_assign (loc_of_reg reg1) (loc_of_reg reg2)
+       generate any events in the source semantics. Like calls (but unlike
+       returns), those "informative-only" events are followed by a recursive
+       call to the current procedure. *)
+    | EConst _ val reg =>
+      E_seq (E_assign (loc_of_reg reg) (expr_of_const_val val))
+            (E_call C P (E_val (Int 0)))
+    | EMov _ reg1 reg2 =>
+      E_seq (E_assign (loc_of_reg reg1) (loc_of_reg reg2))
+            (E_call C P (E_val (Int 0)))
     | EBinop _ op r1 r2 r3 =>
-      E_assign (loc_of_reg r3) (E_binop (binop_of_Ebinop op)
-                                        (E_deref (loc_of_reg r1))
-                                        (E_deref (loc_of_reg r2)))
+      E_seq (E_assign (loc_of_reg r3) (E_binop (binop_of_Ebinop op)
+                                               (E_deref (loc_of_reg r1))
+                                               (E_deref (loc_of_reg r2))))
+            (E_call C P (E_val (Int 0)))
     | ELoad _ r_dest r_src =>
-      E_assign (loc_of_reg r_dest)
-               (E_deref (loc_of_reg r_src))
+      E_seq (E_assign (loc_of_reg r_dest)
+                      (E_deref (loc_of_reg r_src)))
+            (E_call C P (E_val (Int 0)))
     | EStore _ r_dest r_src =>
-      E_assign (loc_of_reg r_dest)
-               (E_deref (loc_of_reg r_src))
+      E_seq (E_assign (loc_of_reg r_dest)
+                      (E_deref (loc_of_reg r_src)))
+            (E_call C P (E_val (Int 0)))
     | EAlloc _ r_size r_dest =>
-      E_assign (loc_of_reg r_dest)
-               (E_alloc (E_deref (loc_of_reg r_size)))
-    | EInvalidateRA cid => E_assign (loc_of_reg E_R_RA) (E_val (Int 0))
+      E_seq (E_assign (loc_of_reg r_dest)
+                      (E_alloc (E_deref (loc_of_reg r_size))))
+            (E_call C P (E_val (Int 0)))
+    | EInvalidateRA cid =>
+      E_seq (E_assign (loc_of_reg E_R_RA) (E_val (Int 0)))
+            (E_call C P (E_val (Int 0)))
     end.
 
   (* RB: TODO: Avoid possible duplication in [Language] and [Machine]. *)
@@ -475,6 +487,8 @@ Section Definability.
     end.
 
   (* RB: TODO: Treatment for [Component.main]. *)
+  (* TODO: Easier to add the prologue to all procedures and control its
+     execution through additional counter conditions. *)
   Definition first_proc_in_comp (C : Component.id) (P : Procedure.id)
                                 (t : trace event_inform) : bool :=
     match ohead (filter (comp_call C) t) with
@@ -829,7 +843,7 @@ Section Definability.
       - (* Base case: empty suffix. The proof is straightforward. *)
         rewrite cats0 => cs <- {prefix}.
         case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk wf_mem P_exp.
-        exists [CState C, stk, mem, Kstop, E_exit, arg], E0, E0, (uniform_shift 8).
+        exists [CState C, stk, mem, Kstop, E_exit, arg], E0, E0, (uniform_shift 1).
         split; [| split; [| split]].
         + have C_b := valid_procedure_has_block P_exp.
           have C_local := wf_mem _ C_b.
@@ -883,6 +897,9 @@ Section Definability.
           unfold Memory.store in *. simpl in *.
           rewrite Hmem' in Hmem''.
           congruence. }
+        (* NOTE: Try dividing into two:
+            - Star2: call (NOT cross-compartment call, then Star2 = Star3)
+            - Star3: event proper *)
         (* The second star "executes" the event proper. This part is more
            interesting. *)
         assert (Star2 : exists s' cs',
