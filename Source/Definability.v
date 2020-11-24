@@ -384,69 +384,6 @@ Section Definability.
     | EInvalidateRA cid => E_assign (loc_of_reg E_R_RA) (E_val (Int 0))
     end.
 
-  Definition expr_of_trace (C: Component.id) (P: Procedure.id) (t: trace event_inform)
-    : expr :=
-    switch (map (expr_of_event C P) t) E_exit.
-
-  (** To compile a complete trace mixing events from different components, we
-      split it into individual traces for each component and apply
-      [expr_of_trace] to each one of them.  We also initialize the memory of
-      each component to hold 0 at the first local variable. *)
-
-  Definition comp_subtrace (C: Component.id) (t: trace event_inform) :=
-    filter (fun e => C == cur_comp_of_event e) t.
-
-  Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace event_inform) :
-    comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
-  Proof. apply: filter_cat. Qed.
-
-  Definition procedure_of_trace C P t :=
-    expr_of_trace C P (comp_subtrace C t).
-
-  Definition procedures_of_trace (t: trace event_inform) : NMap (NMap expr) :=
-    mapim (fun C Ciface =>
-             let procs :=
-                 if C == Component.main then
-                   Procedure.main |: Component.export Ciface
-                 else Component.export Ciface in
-               mkfmapf (fun P => procedure_of_trace C P t) procs)
-          intf.
-
-  Definition valid_procedure C P :=
-    C = Component.main /\ P = Procedure.main
-    \/ exported_procedure intf C P.
-
-  Lemma find_procedures_of_trace_exp (t: trace event_inform) C P :
-    exported_procedure intf C P ->
-    Source.find_procedure (procedures_of_trace t) C P
-    = Some (procedure_of_trace C P t).
-  Proof.
-    intros [CI [C_CI CI_P]].
-    unfold Source.find_procedure, procedures_of_trace.
-    rewrite mapimE C_CI /= mkfmapfE.
-    case: eqP=> _; last by rewrite CI_P.
-    by rewrite in_fsetU1 CI_P orbT.
-  Qed.
-
-  Lemma find_procedures_of_trace_main (t: trace event_inform) :
-    Source.find_procedure (procedures_of_trace t) Component.main Procedure.main
-    = Some (procedure_of_trace Component.main Procedure.main t).
-  Proof.
-    rewrite /Source.find_procedure /procedures_of_trace.
-    rewrite mapimE eqxx.
-    case: (intf Component.main) (has_main)=> [Cint|] //= _.
-    by rewrite mkfmapfE in_fsetU1 eqxx.
-  Qed.
-
-  Lemma find_procedures_of_trace (t: trace event_inform) C P :
-    valid_procedure C P ->
-    Source.find_procedure (procedures_of_trace t) C P
-    = Some (procedure_of_trace C P t).
-  Proof.
-    by move=> [[-> ->]|?];
-    [apply: find_procedures_of_trace_main|apply: find_procedures_of_trace_exp].
-  Qed.
-
   (* RB: TODO: Avoid possible duplication in [Language] and [Machine]. *)
   Definition unfold_buffer (b : (nat + list value)%type) : list value :=
     match b with
@@ -496,6 +433,9 @@ Section Definability.
      process, the local, unshareable data is transferred to the de facto,
      shareable local buffer:
        L: [D1, D2, ..., Di, ...]
+
+     Generated instruction:
+       ( *(local[0]) )[i] = *( local[i + META_SIZE] )
    *)
   Definition copy_local_datum_expr (C : Component.id) (i : nat) : expr :=
     E_assign
@@ -523,6 +463,88 @@ Section Definability.
           (E_assign E_local (E_val (Int 0))) (* last instruction *)
           ([E_assign E_local (alloc_local_buffer_expr C)] ++
            map (copy_local_datum_expr C) (iota 0 (buffer_size C))).
+
+  Definition comp_call (C : Component.id) (e : event_inform) : bool :=
+    match e with
+    | ECallInform _ _ _ _ C' => C' == C
+    | _ => false
+    end.
+
+  (* RB: TODO: Treatment for [Component.main]. *)
+  Definition first_proc_in_comp (C : Component.id) (P : Procedure.id)
+                                (t : trace event_inform) : bool :=
+    match ohead (filter (comp_call C) t) with
+    | Some (ECallInform _ P' _ _ _) => P' == P
+    | _ => false
+    end.
+
+  Definition expr_of_trace
+             (C: Component.id) (P: Procedure.id) (t: trace event_inform)
+             (init: bool)
+    : expr :=
+    let init_expr := if init then [init_local_buffer_expr C] else [] in
+    switch (init_expr ++ map (expr_of_event C P) t) E_exit.
+
+  (** To compile a complete trace mixing events from different components, we
+      split it into individual traces for each component and apply
+      [expr_of_trace] to each one of them.  We also initialize the memory of
+      each component to hold 0 at the first local variable. *)
+
+  Definition comp_subtrace (C: Component.id) (t: trace event_inform) :=
+    filter (fun e => C == cur_comp_of_event e) t.
+
+  Lemma comp_subtrace_app (C: Component.id) (t1 t2: trace event_inform) :
+    comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
+  Proof. apply: filter_cat. Qed.
+
+  Definition procedure_of_trace
+             (C : Component.id) (P : Procedure.id) (t : trace event_inform)
+    : expr :=
+    expr_of_trace C P (comp_subtrace C t) false. (* RB: TODO: Substitute check. *)
+
+  Definition procedures_of_trace (t: trace event_inform) : NMap (NMap expr) :=
+    mapim (fun C Ciface =>
+             let procs :=
+                 if C == Component.main then
+                   Procedure.main |: Component.export Ciface
+                 else Component.export Ciface in
+               mkfmapf (fun P => procedure_of_trace C P t) procs)
+          intf.
+
+  Definition valid_procedure C P :=
+    C = Component.main /\ P = Procedure.main
+    \/ exported_procedure intf C P.
+
+  Lemma find_procedures_of_trace_exp (t: trace event_inform) C P :
+    exported_procedure intf C P ->
+    Source.find_procedure (procedures_of_trace t) C P
+    = Some (procedure_of_trace C P t).
+  Proof.
+    intros [CI [C_CI CI_P]].
+    unfold Source.find_procedure, procedures_of_trace.
+    rewrite mapimE C_CI /= mkfmapfE.
+    case: eqP=> _; last by rewrite CI_P.
+    by rewrite in_fsetU1 CI_P orbT.
+  Qed.
+
+  Lemma find_procedures_of_trace_main (t: trace event_inform) :
+    Source.find_procedure (procedures_of_trace t) Component.main Procedure.main
+    = Some (procedure_of_trace Component.main Procedure.main t).
+  Proof.
+    rewrite /Source.find_procedure /procedures_of_trace.
+    rewrite mapimE eqxx.
+    case: (intf Component.main) (has_main)=> [Cint|] //= _.
+    by rewrite mkfmapfE in_fsetU1 eqxx.
+  Qed.
+
+  Lemma find_procedures_of_trace (t: trace event_inform) C P :
+    valid_procedure C P ->
+    Source.find_procedure (procedures_of_trace t) C P
+    = Some (procedure_of_trace C P t).
+  Proof.
+    by move=> [[-> ->]|?];
+    [apply: find_procedures_of_trace_main|apply: find_procedures_of_trace_exp].
+  Qed.
 
   Definition program_of_trace (t: trace event_inform) : Source.program :=
     {| Source.prog_interface  := intf;
