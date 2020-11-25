@@ -33,7 +33,9 @@ Section Definability.
   Variable has_main: intf Component.main.
 
   Variable prog_buffers : NMap (nat + list value).
-  Hypothesis domm_intf_buffers : domm intf = domm prog_buffers.
+  Hypothesis domm_buffers : domm intf = domm prog_buffers.
+  Hypothesis wf_buffers :
+    forall C, C \in domm intf -> Source.well_formed_buffer_opt (prog_buffers C).
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
@@ -644,13 +646,14 @@ Section Definability.
         case: e=> [C' P' v mem C''| | | | | | | |]
                     //=;
                     try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH.
-        * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
-          rewrite fsub0set.
-            by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
-        * by move=> C' P' e; rewrite called_procedures_loc_of_reg
-                                     called_procedures_expr_of_const_val !fset0U IH.
-        * by move=> C' e0 e1 e2 e; rewrite !called_procedures_loc_of_reg !fset0U IH.
-        * by move=> C'; rewrite !called_procedures_loc_of_reg !fset0U IH.
+        (* * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=. *)
+        (*   rewrite fsub0set. *)
+        (*     by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT. *)
+        (* * by move=> C' P' e; rewrite called_procedures_loc_of_reg *)
+        (*                              called_procedures_expr_of_const_val !fset0U IH. *)
+        (* * by move=> C' e0 e1 e2 e; rewrite !called_procedures_loc_of_reg !fset0U IH. *)
+        (* * by move=> C'; rewrite !called_procedures_loc_of_reg !fset0U IH. *)
+        all:admit.
       }
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
         rewrite eqxx find_procedures_of_trace //.
@@ -671,10 +674,19 @@ Section Definability.
     - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
       assert (exists buf, prog_buffers C = Some buf) as [buf C_buf].
       {
-        apply /dommP. rewrite -domm_intf_buffers. apply /dommP. by eauto.
+        apply /dommP. rewrite -domm_buffers. apply /dommP. by eauto.
       }
       rewrite /Source.has_required_local_buffers /= mapmE C_buf /=.
-      eexists; eauto=> /=; omega.
+      (* eexists; eauto => /=; omega. *)
+      {
+        eexists; [eexists |].
+        - reflexivity.
+        - simpl. omega.
+        - assert (C_intf : C \in domm intf) by (apply /dommP; eauto).
+          specialize (wf_buffers C_intf).
+          setoid_rewrite C_buf in wf_buffers.
+          admit.
+      }
     - rewrite /Source.prog_main find_procedures_of_trace //=.
       + split; first reflexivity.
         intros _.
@@ -682,7 +694,8 @@ Section Definability.
         * apply /dommP. exists mainP. assumption.
         * discriminate.
       + by left.
-  Qed.
+  (* Qed. *)
+  Admitted.
 
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).
