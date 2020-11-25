@@ -329,6 +329,7 @@ Section Definability.
        corresponding to the counter and space reserved to locate register
        values. We make the implicit assumption that all such values refer to
        the local buffer, which should follow from well-formedness. *)
+    (* FIXME: Offset vs. block-based shifting *)
     | Ptr (_, _, _, o) => E_binop Add E_local (E_val (Int (8 + o)))
     (* Undefined values are mapped to a well-formed but ill-typed expression
        (instead of some arbitrary but well-typed value, so as to preserve
@@ -1003,8 +1004,47 @@ Section Definability.
                 by apply/CS.eval_kstep_sound; rewrite /= eqxx.
               * reflexivity.
           (* NOTE: ... And there is a series of new events to consider. *)
-          - admit.
-          - admit.
+          - (* EConst *)
+            (* Case analysis on concrete constant expression; all cases are
+               similar. *)
+            destruct ptr.
+            + exists (StackState C callers). eexists. split.
+            * (* Evaluate steps of back-translated event first. *)
+              Local Transparent expr_of_const_val loc_of_reg.
+              do 8 take_step.
+              -- reflexivity.
+              -- simpl. admit. (* Easy: metadata block. *)
+              -- (* Do recursive call. *)
+                  do 3 take_step.
+                  ++ reflexivity.
+                  ++ admit.
+                  ++ (* Now we are done with the event. *)
+                     apply star_refl.
+            * (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+            + admit. (* Similarly. *)
+            + admit. (* Similarly. *)
+          - (* EMov *)
+            exists (StackState C callers). eexists. split.
+            + (* Evaluate steps of back-translated event first. *)
+              Local Transparent loc_of_reg.
+              do 12 take_step.
+              * reflexivity.
+              * simpl. admit. (* Easy: metadata block. *)
+              * (* Do recursive call. *)
+                do 3 take_step.
+                -- reflexivity.
+                -- admit.
+                -- (* Now we are done with the event. *)
+                  apply star_refl.
+            + (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
           - admit.
           - admit.
           - admit.
