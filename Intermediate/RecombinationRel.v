@@ -78,12 +78,6 @@ Section Merge.
   Definition merge_pcs (pc pc'' : Pointer.t) : Pointer.t :=
     if Pointer.component pc \in domm ip then pc else pc''.
 
-  (* TODO: [DynShare] CS.reach_addr should probably live outside CS. The actual
-     definition is probably similar to those for the other components of the
-     program state. *)
-  Definition merge_addrs (addrs addrs'' : CS.reach_addr) : CS.reach_addr :=
-    addrs.
-
   Definition merge_states (state state'' : CS.state) : CS.state :=
     let '(s, m, r, pc) := state in
     let '(s'', m'', r'', pc'') := state'' in
