@@ -208,7 +208,8 @@ Section Mergeable.
       memory_inverse_renames_memory_at_addr sigma_inv addrs m m'.
 
   (* An inductive definition to relate a program with the pointers found in its
-     buffers and procedures. A computational definition can be given as well. *)
+     buffers and procedures. A computational definition can be given as well.
+     NOTE: Unnecessary? *)
   Inductive prog_addrs (p : program) (addrs : addr_t) : Prop :=
   | prog_addrs_buffers : forall C b o perm C' b' bufs buf,
       addrs = (C, b) ->
@@ -217,6 +218,9 @@ Section Mergeable.
       In (Ptr (C, b, o, perm)) buf ->
       prog_addrs p addrs
   | prog_addrs_procedures : forall C b o perm r C' P procs proc,
+      (* Pointers may appear encode, but point to local buffers?
+         Requires renaming in programs!
+         And in principle renaming should only affect shared addresses. *)
       addrs = (C, b) ->
       (prog_procedures p) C' = Some procs ->
       procs P = Some proc ->
@@ -252,6 +256,24 @@ Section Mergeable.
       (* Pairwise relations between the original runs and the combined run. *)
       mem_rel2 mt   mt' ->
       mem_rel2 mt'' mt' ->
+
+      (* (R1) m   \\ reach(p)  ~ m' \\ reach(p)
+         (R2) m'' \\ reach(c') ~ m' \\ reach(c')
+
+         Projection on reachability. Value-renaming "equality" relation.
+
+         These hold conditionally:
+
+         if pc \in domm p
+         then (R1) holds
+         else (R2) holds
+
+         + having the "same" event occur (modulo renaming)
+
+         => this will be a goal at some point in the proofs
+
+         The memory relations in the trace state the shared parts are equal.
+      *)
 
       (* As a sort of conclusion... *)
       (* memory_renames_memory_at_addr addr (CS.state_mem s) (CS.state_mem s') *)
@@ -2712,6 +2734,8 @@ Section Recombination.
       (* For this, however, we need to be able to establish the memory
          relation between the two, in principle starting from [Hmerge1] and
          [Hrel]. *)
+      (* NOTE: The memory relation is designed to hold at the boundaries!
+         vs. higher-level memory relation *)
       admit.
     }
     (* Actually, we need to ensure that the executed trace corresponds to a

@@ -217,6 +217,8 @@ Record well_formed_program (p: program) := {
   (* there are buffers only for the declared components *)
   wfprog_defined_buffers:
     domm (prog_interface p) = domm (prog_buffers p);
+    (* TODO: No pointer values in static buffers!
+       Re: code in memory? Code pointers, etc. *)
   (* if the main component exists, then the main procedure must exist as well *)
   wfprog_main_existence:
       prog_main p ->
