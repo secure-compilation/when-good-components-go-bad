@@ -21,7 +21,7 @@ Module Pointer.
 
   Definition permission (p : t) : Permission.id :=
     let '(P, _, _, _) := p in P.
-  
+
   Definition component (p : t) : Component.id :=
     let '(_, C, _, _) := p in C.
 
@@ -105,6 +105,12 @@ Inductive value : Type :=
 | Ptr : Pointer.t -> value
 | Undef : value.
 
+Definition is_ptr (v : value) : bool :=
+  match v with
+  | Ptr _ => true
+  | _ => false
+  end.
+
 Definition eqvalue v1 v2 :=
   match v1, v2 with
   | Int z1, Int z2 => z1 == z2
@@ -156,3 +162,20 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
   (* undefined operations *)
   | _,     _,       _       => Undef
   end.
+
+(* RB: TODO: Where should this go? Probably not values
+   NOTE: It may be good to give the buffer type an explicit definition. *)
+Module Buffer.
+
+  Definition well_formed_buffer (buf : (nat + list value)) : bool :=
+    match buf with
+    | inr vs => seq.all (fun v => ~~is_ptr v) vs
+    | _ => true
+    end.
+
+  Definition well_formed_buffer_opt (buf : option (nat + list value)) : bool :=
+    match buf with
+    | Some buf => well_formed_buffer buf
+    | _ => true
+    end.
+End Buffer.

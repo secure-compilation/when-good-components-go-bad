@@ -35,7 +35,7 @@ Section Definability.
   Variable prog_buffers : NMap (nat + list value).
   Hypothesis domm_buffers : domm intf = domm prog_buffers.
   Hypothesis wf_buffers :
-    forall C, C \in domm intf -> Source.well_formed_buffer_opt (prog_buffers C).
+    forall C, C \in domm intf -> Buffer.well_formed_buffer_opt (prog_buffers C).
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so

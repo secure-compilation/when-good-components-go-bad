@@ -103,24 +103,6 @@ Module Source.
                  | inr values => length values > 0
                  end%nat.
 
-  Definition is_ptr (v : value) : bool :=
-    match v with
-    | Ptr _ => true
-    | _ => false
-    end.
-
-  Definition well_formed_buffer (buf : (nat + list value)) : bool :=
-    match buf with
-    | inr vs => seq.all (fun v => ~~is_ptr v) vs
-    | _ => true
-    end.
-
-  Definition well_formed_buffer_opt (buf : option (nat + list value)) : bool :=
-    match buf with
-    | Some buf => well_formed_buffer buf
-    | _ => true
-    end.
-
   Record well_formed_program (p: program) := {
     (* the interface is sound (but maybe not closed) *)
     wfprog_interface_soundness:
@@ -143,7 +125,7 @@ Module Source.
       forall C, prog_interface p C ->
                 has_required_local_buffers p C /\
     (* buffers may not contain pointer values *)
-                well_formed_buffer_opt (prog_buffers p C);
+                Buffer.well_formed_buffer_opt (prog_buffers p C);
     (* wfprog_pointer_free_buffers: *)
       (* seq.all (fun '(_, buf) => well_formed_buffer buf) (prog_buffers p); *)
     (* iff the main component is defined, so is the main procedure
