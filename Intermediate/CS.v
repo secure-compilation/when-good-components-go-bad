@@ -569,7 +569,7 @@ Proof.
   unfold prog_main_block. (* Enable automatic rewrite on destruct. *)
   destruct (prog_main p) as [main |] eqn:Hmain'.
   - (* https://github.com/coq/coq/issues/5129 *)
-    inversion Hwf as [BUGGY _ _ _ _ _ [BUGGY' Hcontra]]; clear BUGGY BUGGY'.
+    inversion Hwf as [BUGGY1 _ _ _ _ _ BUGGY2 [BUGGY3 Hcontra]]; clear BUGGY1 BUGGY2 BUGGY3.
     rewrite Hmain' in Hcontra. specialize (Hcontra (is_true_true)).
     rewrite Hcontra in Hdomm.
     discriminate.

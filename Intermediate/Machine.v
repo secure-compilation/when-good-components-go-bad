@@ -217,8 +217,12 @@ Record well_formed_program (p: program) := {
   (* there are buffers only for the declared components *)
   wfprog_defined_buffers:
     domm (prog_interface p) = domm (prog_buffers p);
-    (* TODO: No pointer values in static buffers!
-       Re: code in memory? Code pointers, etc. *)
+  (* buffers may not contain pointer values *)
+  wfprog_well_formed_buffers:
+    forall C bufs b,
+      prog_buffers p C = Some bufs ->
+      b \in domm bufs ->
+      Buffer.well_formed_buffer_opt (bufs b);
   (* if the main component exists, then the main procedure must exist as well *)
   wfprog_main_existence:
       prog_main p ->
@@ -370,6 +374,31 @@ Proof.
       by rewrite /Program.has_component unionmE p1_C.
   - rewrite /= !domm_union.
     by do 2![rewrite wfprog_defined_buffers //].
+  - intros C bufs b Hbufs Hdomm.
+    destruct (C \in domm (prog_interface p1)) eqn:Hcase1;
+      destruct (C \in domm (prog_interface p2)) eqn:Hcase2.
+    + pose proof (fdisjointP _ _ Hdis_i) C Hcase1 as Hcontra.
+      now rewrite Hcase2 in Hcontra.
+    + apply wfprog_well_formed_buffers with p1 C; auto.
+      rewrite (wfprog_defined_buffers Hwf1) in Hcase1.
+      pose proof dommP Hcase1 as [bufs1 Hbufs1].
+      rewrite unionmE in Hbufs.
+      destruct (prog_buffers p1 C) eqn:Hcase; easy.
+    + apply wfprog_well_formed_buffers with p2 C; auto.
+      rewrite (wfprog_defined_buffers Hwf2) in Hcase2.
+      pose proof dommP Hcase2 as [bufs2 Hbufs2].
+      apply negb_true_iff in Hcase1.
+      rewrite (wfprog_defined_buffers Hwf1) in Hcase1.
+      pose proof dommPn Hcase1 as Hbufs1.
+      rewrite unionmE Hbufs1 in Hbufs.
+      destruct (prog_buffers p2 C) eqn:Hcase; easy.
+    + apply negb_true_iff in Hcase1.
+      apply negb_true_iff in Hcase2.
+      rewrite (wfprog_defined_buffers Hwf1) in Hcase1.
+      rewrite (wfprog_defined_buffers Hwf2) in Hcase2.
+      rewrite unionmE in Hbufs.
+      rewrite (dommPn Hcase1) (dommPn Hcase2) in Hbufs.
+      discriminate.
   - rewrite /=. case /orP => [mainP | mainP].
     + have Hmain1 := @wfprog_main_existence _ Hwf1 mainP.
       case: Hmain1 => [main_procs [p1_main HmainP]] //=.
@@ -378,8 +407,10 @@ Proof.
       case: Hmain2 => [main_procs [p2_main HmainP]] //=.
       exists main_procs; rewrite unionmC 1?unionmE 1?p2_main //.
       by rewrite -(wfprog_defined_procedures Hwf1) -(wfprog_defined_procedures Hwf2).
-  - inversion Hwf1 as [_ _ _ _ _ _ Hmain_comp1].
-    inversion Hwf2 as [_ _ _ _ _ _ Hmain_comp2].
+  - (* Coq 8.11.2: *)
+    (* Error: Anomaly "make_elim_branch_assumptions." Please report at http://coq.inria.fr/bugs/. *)
+    inversion Hwf1 as [_ _ _ _ _ _ DUMMY Hmain_comp1]; clear DUMMY.
+    inversion Hwf2 as [_ _ _ _ _ _ DUMMY Hmain_comp2]; clear DUMMY.
     split;
       intros Hprog_main1.
     + assert (Hprog_main2 := Hprog_main1).
@@ -661,7 +692,7 @@ Lemma domm_partition_program_link_in_neither p c :
   Component.main \notin domm (prog_interface c) ->
   False.
 Proof.
-  intros [_ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ [_ Hmainc]]
+  intros [_ _ _ _ _ _ _ [_ Hmainp]] [_ _ _ _ _ _ _ [_ Hmainc]]
          [_ [main [Hmain [_ _]]]] Hmainp' Hmainc'.
   destruct (prog_main p) as [|] eqn:Hcasep.
   - specialize (Hmainp is_true_true).
@@ -784,7 +815,7 @@ Proof.
     + reflexivity.
     + destruct Cid as [| n].
       * (* Contra. *)
-        inversion Hwfp as [_ _ _ _ _ _ Hmain_compp].
+        inversion Hwfp as [_ _ _ _ _ _ _ Hmain_compp].
         (* specialize (Hmain_compp Hmainp). *)
         (* have Hp'' : (prog_interface p) 0 = None by apply /dommPn. *)
         (* rewrite Hp'' in Hp'. *)
@@ -828,7 +859,7 @@ Proof.
     + simpl. rewrite Hmainp Hmainc.
       destruct Cid as [| n].
       * (* Contra, *)
-        inversion Hwfc as [_ _ _ _ _ _ Hmain_compc].
+        inversion Hwfc as [_ _ _ _ _ _ _ Hmain_compc].
         (* specialize (Hmain_compc Hmainc). *)
         (* have Hc'' : (prog_interface c) 0 = None by apply /dommPn. *)
         (* rewrite Hc'' in Hc'. *)
@@ -1066,15 +1097,15 @@ Proof.
   - easy.
   - split; last easy.
     exfalso.
-    inversion Hwf2 as [_ _ _ _ _ _ [Hmain2' _]].
-    inversion Hwf1 as [_ _ _ _ _ _ [_ Hmain1']].
+    inversion Hwf2 as [_ _ _ _ _ _ _ [Hmain2' _]].
+    inversion Hwf1 as [_ _ _ _ _ _ _ [_ Hmain1']].
     rewrite Hcase1 in Hmain1'. specialize (Hmain1' is_true_true).
     rewrite -> Hcase2, <- Hiface in Hmain2'. apply Hmain2' in  Hmain1'.
     discriminate.
   - split; first easy.
     exfalso.
-    inversion Hwf1 as [_ _ _ _ _ _ [Hmain1' _]].
-    inversion Hwf2 as [_ _ _ _ _ _ [_ Hmain2']].
+    inversion Hwf1 as [_ _ _ _ _ _ _ [Hmain1' _]].
+    inversion Hwf2 as [_ _ _ _ _ _ _ [_ Hmain2']].
     rewrite Hcase2 in Hmain2'. specialize (Hmain2' is_true_true).
     rewrite -> Hcase1, -> Hiface in Hmain1'. apply Hmain1' in  Hmain2'.
     discriminate.
