@@ -169,8 +169,8 @@ Module Buffer.
 
   Definition well_formed_buffer (buf : (nat + list value)) : bool :=
     match buf with
-    | inr vs => seq.all (fun v => ~~is_ptr v) vs
-    | _ => true
+    | inl n => 0 <? n
+    | inr vs => (0 <? seq.size vs) && seq.all (fun v => ~~is_ptr v) vs
     end.
 
   Definition well_formed_buffer_opt (buf : option (nat + list value)) : bool :=

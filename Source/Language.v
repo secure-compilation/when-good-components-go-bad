@@ -123,6 +123,8 @@ Module Source.
     (* each component's buffer is well formed *)
     wfprog_well_formed_buffers:
       forall C, prog_interface p C ->
+                (* TODO: RB: The extended definition of well-formed buffers
+                   allows us to simplify this condition. *)
                 has_required_local_buffers p C /\
     (* buffers may not contain pointer values *)
                 Buffer.well_formed_buffer_opt (prog_buffers p C);
