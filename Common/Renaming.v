@@ -11,6 +11,8 @@ Require Import Common.CompCertExtensions.
 Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrnat eqtype path ssrfun seq fingraph fintype.
 
+Set Bullet Behavior "Strict Subproofs".
+
 (* RB: NOTE: [DynShare] Later in the development the name "address" can become
    confusing when offsets come into the picture. We should explain this model
    carefully, and maybe find an alternative name if the confusion persists. *)
@@ -1120,6 +1122,17 @@ Section Renaming.
                    offset
                   ).
 
+  (** A pair of events is compatible when both instances correspond to the same
+      type of event and their involved components and procedures coincide. *)
+  Definition match_events (e1 e2 : event) : Prop :=
+    match e1, e2 with
+    | ECall C1 P1 _ _ C1', ECall C2 P2 _ _ C2' =>
+      C1 = C2 /\ P1 = P2 /\ C1' = C2'
+    | ERet C1 _ _ C1', ERet C2 _ _ C2' =>
+      C1 = C2 /\ C1' = C2'
+    | _, _ => False
+    end.
+
   (** Two traces are mutual renamings iff all pointwise event pairs satisfy the
       event renaming property on shared addresses. The "forward" address map is
       applied to the first trace and the inverse map is applied to the second
@@ -1153,11 +1166,12 @@ Section Renaming.
                         )
         )
         ->
+        match_events e e' ->
         traces_rename_each_other (rcons tprefix e) (rcons tprefix' e').
 
   Lemma traces_rename_each_other_nil_rcons t x:
     traces_rename_each_other [::] (rcons t x) -> False.
-  Proof. intros H. inversion H as [y Hy|tp e ? ? ? ? ? Ha Hb].
+  Proof. intros H. inversion H as [y Hy|tp e ? ? ? ? ? ? Ha Hb].
          - assert (0 = size (rcons t x)) as Hcontra.
            { rewrite <- Hy. reflexivity. }
            rewrite size_rcons in Hcontra. discriminate.
@@ -1168,7 +1182,7 @@ Section Renaming.
 
   Lemma traces_rename_each_other_rcons_nil t x:
     traces_rename_each_other (rcons t x) [::] -> False.
-  Proof. intros H. inversion H as [y Hy|tp e tp' e' ? ? ? Ha Hb].
+  Proof. intros H. inversion H as [y Hy|tp e tp' e' ? ? ? ? Ha Hb].
          - assert (0 = size (rcons t x)) as Hcontra.
            { rewrite <- y. reflexivity. }
            rewrite size_rcons in Hcontra. discriminate.
@@ -1447,6 +1461,32 @@ Section PropertiesOfTheShiftRenaming.
     apply option_rename_value_transitive; auto.
   Qed.
 
+  Lemma match_events_reflexive e:
+    match_events e e.
+  Proof.
+    now destruct e.
+  Qed.
+
+  Lemma match_events_sym e1 e2:
+    match_events e1 e2 ->
+    match_events e2 e1.
+  Proof.
+    destruct e1; destruct e2;
+      intros Hmatch; inversion Hmatch;
+      easy.
+  Qed.
+
+  Lemma match_events_trans e1 e2 e3:
+    match_events e1 e2 ->
+    match_events e2 e3 ->
+    match_events e1 e3.
+  Proof.
+    intros Hmatch1 Hmatch2.
+    destruct e1; destruct e2; destruct e3;
+      inversion Hmatch1; inversion Hmatch2;
+      intuition; subst; done.
+  Qed.
+
   Lemma traces_shift_each_other_reflexive n t:
     traces_shift_each_other cid_for_shift n n t t.
   Proof.
@@ -1461,6 +1501,7 @@ Section PropertiesOfTheShiftRenaming.
       + intros addr Hshrsfr. split.
         * apply event_inverse_rename_reflexive.
         * by rewrite inverse_rename_addr_reflexive.
+      + now apply match_events_reflexive.
   Qed.
 
   Lemma traces_shift_each_other_symmetric t1 t2 n1 n2:
@@ -1478,6 +1519,7 @@ Section PropertiesOfTheShiftRenaming.
       + intros [cid bid] Hshrsfr. destruct (He (cid, bid) Hshrsfr) as [G1 G2]. split.
         * rewrite event_rename_inverse_event_rename. exact G1.
         * rewrite <- rename_addr_inverse_rename_addr. exact G2.
+      + now apply match_events_sym.
   Qed.
 
   Lemma rcons_trace_event_eq_inversion (tp1 tp2: trace event) (e1 e2: event):
@@ -1524,12 +1566,12 @@ Section PropertiesOfTheShiftRenaming.
       assert (t1_tlsz: size t1 = sz). by (rewrite size_rcons in t1sz; inversion t1sz).
       pose proof (IHsz t1 t2 t3 t1_tlsz) as IHsz'.
 
-      inversion H12' as [ | ? ? ? ? H12a H12b H12c Heq1 Heq2];
+      inversion H12' as [ | ? ? ? ? H12a H12b H12c Hevsa Heq1 Heq2];
         try by (rewrite <- H in t1sz; inversion t1sz).
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq1) as [tmp1 tmp2]. subst. clear Heq1.
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq2) as [tmp1 tmp2]. subst. clear Heq2.
 
-      inversion H23' as [ | ? ? ? ? H23a H23b H23c Heq1 Heq2];
+      inversion H23' as [ | ? ? ? ? H23a H23b H23c Hevsb Heq1 Heq2];
         try by (rewrite <- H in Hsizet2; inversion Hsizet2).
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq1) as [tmp1 tmp2]. subst. clear Heq1.
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq2) as [tmp1 tmp2]. subst. clear Heq2.
@@ -1593,6 +1635,7 @@ Section PropertiesOfTheShiftRenaming.
         * erewrite <- rename_addr_inverse_rename_addr.
           erewrite <- !rename_addr_inverse_rename_addr in Hshrsfr1.
           erewrite <- rename_addr_transitive; eauto.
+      + eapply match_events_trans; eassumption.
   Qed.
 
   Lemma traces_shift_each_other_transitive n1 n2 n3 t1 t2 t3:
@@ -1604,7 +1647,6 @@ Section PropertiesOfTheShiftRenaming.
   Proof.
     eapply __traces_shift_each_other_transitive. eauto.
   Qed.
-
 
   Lemma traces_shift_each_other_nil_rcons n1 n2 t x:
     traces_shift_each_other cid_for_shift n1 n2 [::] (rcons t x) -> False.
