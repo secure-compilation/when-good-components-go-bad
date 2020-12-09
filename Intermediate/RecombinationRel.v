@@ -881,6 +881,7 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   (* Memory lemmas on mergeable states. *)
   (* RB: NOTE: In the current form, these lemmas are sufficient if unsatisfying
      in that only an imprecise existential intros offered. *)
+(*
   Lemma program_store_from_partialized_memory s s'' ptr v mem' :
     mergeable_interfaces ip ic ->
     Pointer.component (CS.state_pc s) \in domm ip ->
@@ -1102,17 +1103,18 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
          (to_partial_memory (CS.state_mem s'') (domm ip)) Halloc' as Halloc''.
     done.
   Qed.
+*)
 
   (* Search _ find_label_in_component. *)
-  Lemma find_label_in_component_recombination s s'' l pc :
+  Lemma find_label_in_component_recombination s s' s'' l pc :
     CS.is_program_component s ic ->
-    mergeable_states s s'' ->
+    mergeable_states s s' s'' ->
     find_label_in_component (globalenv sem) (CS.state_pc s) l = Some pc ->
     find_label_in_component (globalenv sem') (CS.state_pc s) l = Some pc.
   Proof.
     destruct s as [[[? ?] ?] pc_]. simpl.
     intros Hpc Hmerge Hlabel.
-    inversion Hmerge as [_ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _].
+    inversion Hmerge as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hpc_.
@@ -1127,15 +1129,15 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   Qed.
 
   (* Search _ find_label_in_procedure. *)
-  Lemma find_label_in_procedure_recombination s s'' l pc :
+  Lemma find_label_in_procedure_recombination s s' s'' l pc :
     CS.is_program_component s ic ->
-    mergeable_states s s'' ->
+    mergeable_states s s' s'' ->
     find_label_in_procedure (globalenv sem) (CS.state_pc s) l = Some pc ->
     find_label_in_procedure (globalenv sem') (CS.state_pc s) l = Some pc.
   Proof.
-    destruct s as [[[[? ?] ?] pc_] ?]. simpl.
+    destruct s as [[[? ?] ?] pc_]. simpl.
     intros Hpc Hmerge Hlabel.
-    inversion Hmerge as [_ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _].
+    inversion Hmerge as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hpc_.
@@ -1153,23 +1155,21 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   Qed.
 
   (* Search _ PS.is_program_component Pointer.component. *)
-  Lemma is_program_component_in_domm s s'' :
+  Lemma is_program_component_in_domm s s' s'' :
     CS.is_program_component s ic ->
-    mergeable_states s s'' ->
+    mergeable_states s s' s'' ->
     CS.state_component s \in domm (prog_interface p).
   Proof.
     intros Hcomp Hmerge.
     unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp.
-    destruct s as [[[[gps1 mem1] regs1] pc1] addrs1].
-    inversion Hmerge as [s0 _ t _ _ _ Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ Hstar _ _].
+    destruct s as [[[gps1 mem1] regs1] pc1].
+    inversion Hmerge as [s0 _ _ t _ _ _ _ _ Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ _ Hstar _ _ _ _ _].
     destruct (CS.star_pc_domm_non_inform _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [Hip | Hic].
     - assumption.
     - now rewrite Hic in Hcomp.
   Qed.
-*)
 End Mergeable.
 
-(*
 Section MergeSym.
   Variables p c p' c' : program.
 
@@ -1180,6 +1180,7 @@ Section MergeSym.
   Let sem   := CS.sem_non_inform prog.
   Let sem'' := CS.sem_non_inform prog''.
 
+(*
   Lemma merge_stacks_sym gps gps'' :
     mergeable_interfaces ip ic ->
     mergeable_stack p c gps gps'' ->
@@ -1329,46 +1330,47 @@ Section MergeSym.
     eapply mergeable_states_pc_same_component; eassumption.
     eapply mergeable_states_mergeable_stack with (p' := p') (c' := c'); eassumption.
   Qed.
+*)
 
   (* RB: NOTE: Now the two sub-goals look even more similar than before. *)
-  Lemma mergeable_states_sym s1 s1'' :
-    mergeable_states p c p' c' s1 s1'' <-> mergeable_states c' p' c p s1'' s1.
-  Proof.
-    split.
-    - intros Hmerg.
-      inversion Hmerg
-        as [s0 s0'' t t'' n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-            Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar'' Hrel].
-      inversion Hmergeable_ifaces as [Hlinkable _].
-      pose proof (program_linkC Hwfc Hwfp (linkable_sym Hlinkable)) as Hcp.
-      rewrite Hifacec Hifacep in Hlinkable.
-      pose proof (program_linkC Hwfc' Hwfp' (linkable_sym Hlinkable)) as Hc'p'.
-      apply mergeable_states_intro with s0'' s0 t'' t n'' n;
-        try congruence;
-        [ apply mergeable_interfaces_sym; congruence
-        | now rewrite Hc'p'
-        | now rewrite Hcp
-        | admit (* RB: TODO: Symmetry of trace relation. *)
-        ].
-    - intros Hmerg.
-      inversion Hmerg
-        as [s0 s0'' t t'' n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-               Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar'' Hrel].
-      inversion Hmergeable_ifaces as [Hlinkable _].
-      pose proof (program_linkC Hwfc Hwfp (linkable_sym Hlinkable)) as Hcp.
-      rewrite Hifacec Hifacep in Hlinkable.
-      pose proof (program_linkC Hwfc' Hwfp' (linkable_sym Hlinkable)) as Hc'p'.
-      apply mergeable_states_intro with s0'' s0 t'' t n'' n;
-        try congruence.
-      + apply mergeable_interfaces_sym; congruence.
-      + rewrite program_linkC; try congruence.
-        now apply linkable_sym.
-      + rewrite program_linkC; try congruence.
-        apply linkable_sym; congruence.
-      + admit. (* RB: TODO: Symmetry of trace relation.
-                            Also write both splits similarly. *)
-  (* Qed. *)
-  Admitted.
+  (* Lemma mergeable_states_sym s1 s1'' : *)
+  (*   mergeable_states p c p' c' s1 s1'' <-> mergeable_states c' p' c p s1'' s1. *)
+  (* Proof. *)
+  (*   split. *)
+  (*   - intros Hmerg. *)
+  (*     inversion Hmerg *)
+  (*       as [s0 s0'' t t'' n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec *)
+  (*           Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar'' Hrel]. *)
+  (*     inversion Hmergeable_ifaces as [Hlinkable _]. *)
+  (*     pose proof (program_linkC Hwfc Hwfp (linkable_sym Hlinkable)) as Hcp. *)
+  (*     rewrite Hifacec Hifacep in Hlinkable. *)
+  (*     pose proof (program_linkC Hwfc' Hwfp' (linkable_sym Hlinkable)) as Hc'p'. *)
+  (*     apply mergeable_states_intro with s0'' s0 t'' t n'' n; *)
+  (*       try congruence; *)
+  (*       [ apply mergeable_interfaces_sym; congruence *)
+  (*       | now rewrite Hc'p' *)
+  (*       | now rewrite Hcp *)
+  (*       | admit (* RB: TODO: Symmetry of trace relation. *) *)
+  (*       ]. *)
+  (*   - intros Hmerg. *)
+  (*     inversion Hmerg *)
+  (*       as [s0 s0'' t t'' n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec *)
+  (*              Hprog_is_closed Hprog_is_closed' Hini Hini'' Hstar Hstar'' Hrel]. *)
+  (*     inversion Hmergeable_ifaces as [Hlinkable _]. *)
+  (*     pose proof (program_linkC Hwfc Hwfp (linkable_sym Hlinkable)) as Hcp. *)
+  (*     rewrite Hifacec Hifacep in Hlinkable. *)
+  (*     pose proof (program_linkC Hwfc' Hwfp' (linkable_sym Hlinkable)) as Hc'p'. *)
+  (*     apply mergeable_states_intro with s0'' s0 t'' t n'' n; *)
+  (*       try congruence. *)
+  (*     + apply mergeable_interfaces_sym; congruence. *)
+  (*     + rewrite program_linkC; try congruence. *)
+  (*       now apply linkable_sym. *)
+  (*     + rewrite program_linkC; try congruence. *)
+  (*       apply linkable_sym; congruence. *)
+  (*     + admit. (* RB: TODO: Symmetry of trace relation. *)
+  (*                           Also write both splits similarly. *) *)
+  (* (* Qed. *) *)
+  (* Admitted. *)
 End MergeSym.
 
 (* Helpers, epsilon and lockstep versions of three-way simulation. *)
