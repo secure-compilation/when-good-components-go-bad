@@ -285,17 +285,16 @@ Section Mergeable.
 
   (* Sketch a simple state relation based on the memory-trace relation, for the
      sake of expediency. *)
-  Inductive mergeable_states (s s' s'' : CS.state) : Prop :=
-  | mergeable_states_intro : forall t t' t'',
-      mem_rel3 (CS.state_mem s, t) (CS.state_mem s', t') (CS.state_mem s'', t'') ->
-      mergeable_states s s' s''.
+  (* Inductive mergeable_states (s s' s'' : CS.state) : Prop := *)
+  (* | mergeable_states_intro : forall t t' t'', *)
+  (*     mem_rel3 (CS.state_mem s, t) (CS.state_mem s', t') (CS.state_mem s'', t'') -> *)
+  (*     mergeable_states s s' s''. *)
 
   (* This "extensional" reading of compatible states depends directly on the
      partial programs concerned (implicitly through the section mechanism) and
      two runs synchronized by their traces. It is a rather strong notion, easy
      to work with and well suited to the purposes of the proof. *)
 
-(*
   Inductive mergeable_states (s s' s'' : CS.state) : Prop :=
     mergeable_states_intro : forall s0 s0' s0'' t t' t'' n n' n'',
       (* Well-formedness conditions. *)
@@ -315,6 +314,9 @@ Section Mergeable.
       Star sem   s0   t   s   ->
       Star sem'  s0'  t'  s'  ->
       Star sem'' s0'' t'' s'' ->
+      (* Sharing conditions.
+         NOTE: Think about possible redundancies. *)
+      mem_rel3 (CS.state_mem s, t) (CS.state_mem s', t') (CS.state_mem s'', t'') ->
       behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) ->
       behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') ->
       mergeable_states s s' s''.
@@ -424,6 +426,7 @@ Section Mergeable.
   (*            eapply Hindstep with (t := [ev']); eauto. unfold E0. congruence. *)
   (* Qed. *)
 
+(*
   (* The following lemmas establish the connection between the mergeability
      relation and the application of the state merging functions. *)
   Lemma merge_mergeable_states_regs_program s s'' :
@@ -527,10 +530,15 @@ Section Mergeable.
     rewrite merge_mergeable_states_regs_context; try assumption.
     reflexivity.
   Qed.
+*)
+
+  (* Inversion pattern:
+inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' Hini Hini' Hini'' Hstar Hstar' Hstar'' Hmrel Htrel Htrel''].
+  *)
 
   (* Relations between mergeable states and program components. *)
-  Lemma mergeable_states_pc_same_component s s'' :
-    mergeable_states s s'' ->
+  Lemma mergeable_states_pc_same_component s s' s'' :
+    mergeable_states s s' s'' ->
     Pointer.component (CS.state_pc s) = Pointer.component (CS.state_pc s'').
   (* Proof. *)
   (*   intros Hmerg. *)
@@ -582,50 +590,53 @@ Section Mergeable.
   (*         Heveq: [_] = [_] |- _ => inversion Heveq; subst; reflexivity *)
   (*       end. *)
   (* Qed. *)
-  Admitted.
+  Admitted. (* RB: TODO: Should be fairly easy. *)
 
-  Lemma mergeable_states_program_to_program s s'' :
-    mergeable_states s s'' ->
+  Lemma mergeable_states_program_to_program s s' s'' :
+    mergeable_states s s' s'' ->
     CS.is_program_component s   ic ->
     CS.is_program_component s'' ic.
   Proof.
-    destruct s   as [[[[? ?] ?] pc  ] ?].
-    destruct s'' as [[[[? ?] ?] pc''] ?].
+    destruct s   as [[[? ?] ?] pc  ].
+    destruct s'' as [[[? ?] ?] pc''].
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
     intros Hmerge Hpc.
     pose proof mergeable_states_pc_same_component Hmerge as Hcomp. simpl in Hcomp.
     congruence.
   Qed.
 
-  Lemma mergeable_states_context_to_program s1 s2 :
-    mergeable_states s1 s2 ->
-    CS.is_context_component s1 ic ->
-    CS.is_program_component s2 ip.
+  Lemma mergeable_states_context_to_program s s' s'' :
+    mergeable_states s s' s'' ->
+    CS.is_context_component s ic ->
+    CS.is_program_component s'' ip.
   Proof.
     intros Hmerg.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
-    destruct s1 as [[[[stack1 mem1] reg1] pc1] addrs1]; destruct s2 as [[[[stack2 mem2] reg2] pc2] addrs2].
+    destruct s as [[[stack1 mem1] reg1] pc1];
+      destruct s'' as [[[stack2 mem2] reg2] pc2].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc; clear Hpc.
-    inversion Hmerg as [? ? ? ? _ _ _ _ _ _ [[_ Hdisj] _] _ _ _ _ Hini Hini'' Hstar Hstar'' _].
+    inversion Hmerg
+      as [? ? _ _ _ _ _ _ _ _ _ _ _ [[_ Hdisj] _] _ _ _ _ _ _ _ _ _ _ _ _ _].
     move: Hdisj.
     rewrite fdisjointC => /fdisjointP Hdisj.
     now auto.
   Qed.
 
-  Lemma mergeable_states_program_to_context s s'' :
-    mergeable_states s s'' ->
+  Lemma mergeable_states_program_to_context s s' s'' :
+    mergeable_states s s' s'' ->
     CS.is_program_component s ic ->
     CS.is_context_component s'' ip.
   Proof.
     intros Hmerg.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
-    destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
+    destruct s as [[[stack mem] reg] pc];
+      destruct s'' as [[[stack'' mem''] reg''] pc''].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc.
-    inversion Hmerg as [s0 _ t _ _ _
+    inversion Hmerg as [s0 _ _ t _ _ _ _ _
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini _ Hstar _ _].
+                        Hini _ _ Hstar _ _ _ _ _].
     pose proof (CS.star_pc_domm_non_inform
                   _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar).
     intros Hn; destruct H.
@@ -635,15 +646,15 @@ Section Mergeable.
 
   (* RB: NOTE: Try to phrase everything either as CS.is_XXX_component, or as
      \[not]in. This is the equivalent of the old [PS.domm_partition]. *)
-  Lemma mergeable_states_notin_to_in s s'' :
-    mergeable_states s s'' ->
+  Lemma mergeable_states_notin_to_in s s' s'' :
+    mergeable_states s s' s'' ->
     Pointer.component (CS.state_pc s) \notin domm ip ->
     Pointer.component (CS.state_pc s) \in domm ic.
   Proof.
     intros Hmerg Hpc_notin.
-    inversion Hmerg as [[[[? ?] ?] pc] ? ? ? _ _
+    inversion Hmerg as [[[[? ?] ?] ?] _ ? ? _ ? _ _ _
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini _ Hstar _ _].
+                        Hini _ _ Hstar _ _ _ _ _].
     CS.unfold_states.
     pose proof (CS.star_pc_domm_non_inform
                   _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as Hpc.
@@ -654,9 +665,9 @@ Section Mergeable.
 
   (* RB: NOTE: Consider if the core of the lemma could be moved to CS, as is the
      case of its simpler variant, is_program_component_pc_notin_domm. *)
-  Lemma is_program_component_pc_in_domm s s'' :
+  Lemma is_program_component_pc_in_domm s s' s'' :
     CS.is_program_component s ic ->
-    mergeable_states s s'' ->
+    mergeable_states s s' s'' ->
     Pointer.component (CS.state_pc s) \in domm ip.
   Proof.
     intros Hpc Hmerge.
@@ -664,16 +675,16 @@ Section Mergeable.
       apply mergeable_states_program_to_context in Hcc; try assumption.
     unfold CS.is_context_component, turn_of, CS.state_turn in Hcc.
     rewrite (mergeable_states_pc_same_component Hmerge).
-    now destruct s'' as [[[[? ?] ?] ?] ?].
+    now destruct s'' as [[[? ?] ?] ?].
   Qed.
 
-  Lemma mergeable_states_program_component_domm mem gps regs pc addrs s'' :
-    mergeable_states (mem, gps, regs, pc, addrs) s'' ->
-    CS.is_program_component (mem, gps, regs, pc, addrs) ic ->
+  Lemma mergeable_states_program_component_domm mem gps regs pc s' s'' :
+    mergeable_states (mem, gps, regs, pc) s' s'' ->
+    CS.is_program_component (mem, gps, regs, pc) ic ->
     Pointer.component pc \in domm ip.
   Proof.
     intros Hmerge Hcomp.
-    change pc with (CS.state_pc (mem, gps, regs, pc, addrs)).
+    change pc with (CS.state_pc (mem, gps, regs, pc)).
     eapply is_program_component_pc_in_domm; last eassumption; assumption.
   Qed.
 
@@ -690,10 +701,12 @@ Section Mergeable.
       mergeable_stack (frame :: gps) (frame'' :: gps'').
 
   Lemma mergeable_states_mergeable_stack
-        gps1   mem1   regs1   pc1   addrs1
-        gps1'' mem1'' regs1'' pc1'' addrs1'' :
-    mergeable_states (gps1  , mem1  , regs1  , pc1  , addrs1  )
-                     (gps1'', mem1'', regs1'', pc1'', addrs1'') ->
+        gps1   mem1   regs1   pc1
+        st1'
+        gps1'' mem1'' regs1'' pc1'' :
+    mergeable_states (gps1  , mem1  , regs1  , pc1  )
+                     st1'
+                     (gps1'', mem1'', regs1'', pc1'') ->
     mergeable_stack gps1 gps1''.
   (* Proof. *)
   (*   intros Hmerg. *)
@@ -850,13 +863,14 @@ Section Mergeable.
   (*     + admit. *)
   (*     + admit. *)
   (*     + admit. *)
-  Admitted. (* RB: TODO: Check, repair induction principle.  *)
+  Admitted. (* RB: TODO: Should not be provable. Repair induction principle? *)
 
   Lemma mergeable_states_cons_domm
-        frame1   gps1   mem1   regs1   pc1   addrs1
-        frame1'' gps1'' mem1'' regs1'' pc1'' addrs1'' :
-    mergeable_states (frame1   :: gps1  , mem1  , regs1  , pc1  , addrs1  )
-                     (frame1'' :: gps1'', mem1'', regs1'', pc1'', addrs1'') ->
+        frame1   gps1   mem1   regs1   pc1
+        st1'
+        frame1'' gps1'' mem1'' regs1'' pc1'' :
+    mergeable_states (frame1   :: gps1  , mem1  , regs1  , pc1  ) st1'
+                     (frame1'' :: gps1'', mem1'', regs1'', pc1'') ->
     Pointer.component frame1 = Pointer.component frame1''.
   Proof.
     intros Hmerge.
