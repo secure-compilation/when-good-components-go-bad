@@ -2254,44 +2254,60 @@ Section ThreewayMultisem2.
     (* Star sem'  (merge_states ip ic s1 s1'') t (merge_states ip ic s2 s2''). *)
   exists t' s2',
     Star sem'  s1'  t'  s2' /\
-  (* Proof. *)
-  (* (*   simpl in *. intros Hcomp1 Hmerge1 Hstar12. revert s1'' s2'' Hcomp1 Hmerge1. *) *)
-  (*   apply star_iff_starR in Hstar12. *)
-  (*   induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar12' Hstep23]; subst; *)
-  (*     intros s1'' s2'' Hcomp1 Hmerge1 Hstar12''. *)
-  (*   - eapply context_epsilon_star_merge_states; eassumption. *)
-  (*   - rename s2'' into s3''. rename Hstar12'' into Hstar13''. *)
-  (*     apply (star_app_inv (@CS.singleton_traces_non_inform _)) in Hstar13'' *)
-  (*       as [s2'' [Hstar12'' Hstar23'']]. *)
-  (*     specialize (IHstar12' _ _ Hcomp1 Hmerge1 Hstar12''). *)
-  (*     (* Apply instantiated IH and case analyze step trace. *) *)
-  (*     apply star_trans with (t1 := t1) (s2 := merge_states ip ic s2 s2'') (t2 := t2); *)
-  (*       [assumption | | reflexivity]. *)
-  (*     apply star_iff_starR in Hstar12. *)
-  (*     pose proof threeway_multisem_mergeable Hmerge1 Hstar12 Hstar12'' *)
-  (*       as Hmerge2. *)
-  (*     destruct t2 as [| e2 [| e2' t2]]. *)
-  (*     + (* An epsilon step and comparable epsilon star. One is in the context and *)
-  (*          therefore silent, the other executes and leads the MultiSem star. *) *)
-  (*       eapply star_step in Hstep23; [| now apply star_refl | now apply eq_refl]. *)
-  (*       exact (threeway_multisem_star_E0 Hmerge2 Hstep23 Hstar23''). *)
-  (*     + (* The step generates a trace event, mimicked on the other side (possibly *)
-  (*          between sequences of silent steps). *) *)
-  (*       change [e2] with (E0 ** e2 :: E0) in Hstar23''. *)
-  (*       apply (star_middle1_inv (@CS.singleton_traces_non_inform _)) in Hstar23'' *)
-  (*         as [s2''1 [s2''2 [Hstar2'' [Hstep23'' Hstar3'']]]]. *)
-  (*       (* Prefix star. *) *)
-  (*       pose proof star_refl CS.step (prepare_global_env (program_link p c)) s2 *)
-  (*         as Hstar2. *)
-  (*       pose proof CS.star_sem_inform_star_sem_non_inform _ _ _ _ Hstar2 as Hstar2_non_inform. *)
-  (*       pose proof threeway_multisem_star_E0 Hmerge2 Hstar2_non_inform Hstar2'' *)
-  (*         as Hstar2'. *)
-  (*       (* Propagate mergeability, step. *) *)
-  (*       pose proof threeway_multisem_mergeable Hmerge2 Hstar2_non_inform Hstar2'' as Hmerge21. *)
-  (*       pose proof threeway_multisem_event_lockstep Hmerge21 Hstep23 Hstep23'' *)
-  (*         as [Hstep23' Hmerge22]. *)
     (* mem_rel2 p α γ (CS.state_mem s2, t) (CS.state_mem s2',  t' ). *)
     mergeable_states p c p' c' α γ s2 s2' s2''.
+  Proof.
+    simpl in *. intros Hcomp1 Hmerge1 Hstar12. revert s1'' t'' s2'' Hcomp1 Hmerge1.
+    apply star_iff_starR in Hstar12.
+    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar12' Hstep23]; subst;
+      intros s1'' t'' s2'' Hcomp1 Hmerge1 Hstar12'' Hrel2.
+    - assert (t'' = E0) by admit; subst t''. (* By the relation. *)
+      exists E0, s1'. split.
+      + now apply star_refl.
+      + eapply merge_states_silent_star; eassumption.
+      (* eapply context_epsilon_star_merge_states. eassumption. *)
+    - rename s2'' into s3''. rename Hstar12'' into Hstar13''.
+      assert (exists t1'' t2'', t'' = t1'' ** t2'')
+        as [t1'' [t2'' ?]] by admit; subst t''. (* By pairwise events.
+                                                   More info? *)
+      assert (Hstar13''_ := Hstar13''). (* Which variants are needed? *)
+      apply (star_app_inv (@CS.singleton_traces_non_inform _)) in Hstar13''_
+        as [s2'' [Hstar12'' Hstar23'']].
+      assert (Hrel1 : mem_rel2 p α γ (CS.state_mem s2, t1) (CS.state_mem s2'', t1''))
+        by admit. (* Need to recompose memory relation based on executions. *)
+      specialize (IHstar12' _ _ _ Hcomp1 Hmerge1 Hstar12'' Hrel1)
+        as [t1' [s2' [Hstar12' Hmerge2]]].
+      destruct t2 as [| e2 [| e2' t2]].
+      + (* An epsilon step and comparable epsilon star. One is in the context and
+           therefore silent, the other executes and leads the MultiSem star.
+           eapply star_step in Hstep23; [| now apply star_refl | now apply eq_refl]. *)
+        assert (t2'' = E0) by admit; subst t2''.
+        (* exists t1'. *)
+        Check star_one _ _ _ _ _ Hstep23.
+        destruct (threeway_multisem_star_E0
+                    Hmerge2 (star_one _ _ _ _ _ Hstep23) Hstar23'')
+          as [s3' [Hstar23' Hmerge3]].
+        exists t1', s3'. split; [| assumption].
+        eapply star_trans; try eassumption.
+        now rewrite E0_right.
+      + (* The step generates a trace event, mimicked on the other side (possibly
+           between sequences of silent steps). *)
+        assert (exists e2'', t2'' = [e2'']) as [e2'' ?]
+            by admit; subst t2''. (* By one-to-one event correspondence. More? *)
+        change [e2''] with (E0 ** e2'' :: E0) in Hstar23''.
+        apply (star_middle1_inv (@CS.singleton_traces_non_inform _)) in Hstar23''
+          as [s2''1 [s2''2 [Hstar2'' [Hstep23'' Hstar3'']]]].
+        (* Prefix star. *)
+        pose proof star_refl CS.step (prepare_global_env (program_link p c)) s2
+          as Hstar2.
+        pose proof CS.star_sem_inform_star_sem_non_inform _ _ _ _ Hstar2 as Hstar2_non_inform.
+        pose proof threeway_multisem_star_E0 Hmerge2 Hstar2_non_inform Hstar2''
+          as Hstar2'.
+        (* Propagate mergeability, step. *)
+        pose proof threeway_multisem_mergeable Hmerge2 Hstar2_non_inform Hstar2'' as Hmerge21.
+        Fail pose proof threeway_multisem_event_lockstep Hmerge21 Hstep23 Hstep23''
+          as [Hstep23' Hmerge22].
+        admit.
   (*       (* Propagate mergeability, suffix star. *) *)
   (*       pose proof star_refl CS.step (prepare_global_env (program_link p c)) s3 *)
   (*         as Hstar3. *)
@@ -2301,9 +2317,9 @@ Section ThreewayMultisem2.
   (*       exact (star_trans *)
   (*                (star_right _ _ Hstar2' Hstep23' (eq_refl _)) *)
   (*                Hstar3' (eq_refl _)). *)
-  (*     + (* Contradiction: a step generates at most one event. *) *)
-  (*       pose proof @CS.singleton_traces_non_inform _ _ _ _ Hstep23 as Hcontra. *)
-  (*       simpl in Hcontra. omega. *)
+      + (* Contradiction: a step generates at most one event. *)
+        pose proof @CS.singleton_traces_non_inform _ _ _ _ Hstep23 as Hcontra.
+        simpl in Hcontra. omega.
   (* Qed. *)
   Admitted. (* RB: TODO: Tweak statement first, as needed. *)
 End ThreewayMultisem2.
