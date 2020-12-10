@@ -2137,7 +2137,7 @@ Section ThreewayMultisem2.
   exists s2',
     mergeable_states p c p' c' α γ s2 s2' s2''.
   (* Qed. *)
-  Admitted. (* RB: TODO: Add stepping of [s1']. *)
+  Admitted. (* RB: TODO: Add stepping of [s1']. Redundant? *)
 
   (* RB: TODO: Implicit parameters, compact if possible. *)
   (* RB: NOTE: Again, without mergeability, this lemma is trivial and
@@ -2148,7 +2148,8 @@ Section ThreewayMultisem2.
     Star sem'' s1'' E0 s2'' ->
     (* Star sem'  (merge_states ip ic s1 s1'') E0 (merge_states ip ic s2 s2''). *)
   exists s2',
-    Star sem'  s1'  E0 s2'.
+    Star sem'  s1'  E0 s2' /\
+    mergeable_states p c p' c' α γ s2 s2' s2''.
   Admitted. (* RB: TODO: Add mergeability. *)
   (* Proof. *)
   (*   intros H H0 H1. *)
@@ -2249,12 +2250,10 @@ Section ThreewayMultisem2.
     mergeable_states p c p' c' α γ s1 s1' s1'' ->
     Star sem   s1   t   s2   ->
     Star sem'' s1'' t'' s2'' ->
-    mem_rel2 p α γ (CS.state_mem s1, t) (CS.state_mem s1'', t'') ->
+    mem_rel2 p α γ (CS.state_mem s2, t) (CS.state_mem s2'', t'') ->
     (* Star sem'  (merge_states ip ic s1 s1'') t (merge_states ip ic s2 s2''). *)
   exists t' s2',
     Star sem'  s1'  t'  s2' /\
-    mem_rel2 p α γ (CS.state_mem s1, t) (CS.state_mem s1', t').
-  Admitted. (* RB: TODO: Tweak statement first, as needed. *)
   (* Proof. *)
   (* (*   simpl in *. intros Hcomp1 Hmerge1 Hstar12. revert s1'' s2'' Hcomp1 Hmerge1. *) *)
   (*   apply star_iff_starR in Hstar12. *)
@@ -2291,6 +2290,8 @@ Section ThreewayMultisem2.
   (*       pose proof threeway_multisem_mergeable Hmerge2 Hstar2_non_inform Hstar2'' as Hmerge21. *)
   (*       pose proof threeway_multisem_event_lockstep Hmerge21 Hstep23 Hstep23'' *)
   (*         as [Hstep23' Hmerge22]. *)
+    (* mem_rel2 p α γ (CS.state_mem s2, t) (CS.state_mem s2',  t' ). *)
+    mergeable_states p c p' c' α γ s2 s2' s2''.
   (*       (* Propagate mergeability, suffix star. *) *)
   (*       pose proof star_refl CS.step (prepare_global_env (program_link p c)) s3 *)
   (*         as Hstar3. *)
@@ -2304,6 +2305,7 @@ Section ThreewayMultisem2.
   (*       pose proof @CS.singleton_traces_non_inform _ _ _ _ Hstep23 as Hcontra. *)
   (*       simpl in Hcontra. omega. *)
   (* Qed. *)
+  Admitted. (* RB: TODO: Tweak statement first, as needed. *)
 End ThreewayMultisem2.
 
 (* Three-way simulation and its inversion. *)
@@ -2325,17 +2327,18 @@ Section ThreewayMultisem3.
     mergeable_states p c p' c' α γ s1 s1' s1'' ->
     Star sem   s1   t   s2   ->
     Star sem'' s1'' t'' s2'' ->
+    mem_rel2 p α γ (CS.state_mem s2, t) (CS.state_mem s2'', t'') ->
     (* Star (CS.sem_non_inform (program_link p  c')) (merge_states ip ic s1 s1'') t (merge_states ip ic s2 s2''). *)
     (* /\ mergeable_states ip ic s2 s2'' *)
   exists t' s2',
     Star sem'  s1'  t'  s2' /\
     mergeable_states p c p' c' α γ s2 s2' s2''.
-  Admitted. (* TODO: Proof of symmetry. Harmonize statemens as needed. Prove the easy direction quickly. *)
-  (* Proof. *)
-  (*   intros Hmerge1 Hstar12 Hstar12''. *)
+  Proof.
+    intros Hmerge1 Hstar12 Hstar12'' Hrel2.
   (*   inversion Hmerge1 as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _]. *)
-  (*   destruct (CS.is_program_component s1 ic) eqn:Hcomp1. *)
-  (*   - now apply threeway_multisem_star_program. *)
+    destruct (CS.is_program_component s1 ic) eqn:Hcomp1.
+    - eapply threeway_multisem_star_program; eassumption.
+  Admitted. (* TODO: Proof of symmetry. Harmonize statements as needed. *)
   (*   - apply negb_false_iff in Hcomp1. *)
   (*     apply (mergeable_states_context_to_program Hmerge1) *)
   (*       in Hcomp1. *)
@@ -2360,6 +2363,11 @@ Section ThreewayMultisem3.
   (* Qed. *)
   (* JT: TODO: improve this proof *)
 
+  (* RB: NOTE: With the added premises, this becomes simply the three-way
+     simulation lemma, and one of them ([threeway_multisem_mergeable]) becomes
+     redundant.
+     TODO: Possibly remove that lemma, and/or merge this with the main three-way
+     result. *)
   Corollary star_simulation s1 s1' s1'' t t'' s2 s2'' :
     mergeable_states p c p' c' α γ s1 s1' s1'' ->
     Star sem   s1   t   s2   ->
@@ -2368,12 +2376,9 @@ Section ThreewayMultisem3.
   exists t' s2',
     Star sem'  s1' t' s2' /\
     mergeable_states p c p' c' α γ s2 s2' s2''.
-  Admitted. (* RB: TODO: Likely redundant given newly introduced dependencies above. *)
-  (* Proof. *)
-  (*   intros. split. *)
-  (*   - now apply threeway_multisem_star. *)
-  (*   - eapply threeway_multisem_mergeable; eassumption. *)
-  (* Qed. *)
+  Proof.
+    now apply threeway_multisem_star.
+  Qed.
 
   (* [DynShare]
      The following tactic applies program_store_from_partialized_memory
