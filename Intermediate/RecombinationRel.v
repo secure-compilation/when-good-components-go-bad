@@ -1455,11 +1455,16 @@ Section ThreewayMultisem1.
 
    *)
 
+  Variables α γ : addr_t -> addr_t.
+
+  (* RB: NOTE: Likely provable: since we are on the program, we would not care
+     what changes the "other program" makes to its memory, only what "our
+     program" eventually will. *)
   Lemma merge_states_silent_star s1 s1' s1'' s2'' :
-    mergeable_states p c p' c' s1 s1' s1'' ->
+    mergeable_states p c p' c' α γ s1 s1' s1'' ->
     CS.is_program_component s1 ic ->
     Star sem'' s1'' E0 s2'' ->
-    mergeable_states p c p' c' s1 s1' s2''.
+    mergeable_states p c p' c' α γ s1 s1' s2''.
   Proof.
     intros Hmerge1 Hcomp Hstar12''.
     remember E0 as t.
@@ -1472,30 +1477,53 @@ Section ThreewayMultisem1.
       specialize (IHstar'' Hmerge1 eq_refl).
       (* rewrite IHstar''. *)
       apply star_iff_starR in Hstar12''.
-      destruct s1 as [[[[gps mem] regs] pc] addrs].
-      destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addrs2''].
-      destruct s3'' as [[[[gps3'' mem3''] regs3''] pc3''] addrs3''].
+      destruct s1 as [[[gps mem] regs] pc].
+      destruct s2'' as [[[gps2'' mem2''] regs2''] pc2''].
+      destruct s3'' as [[[gps3'' mem3''] regs3''] pc3''].
       pose proof CS.step_non_inform_step_inform prog''
-           (gps2'', mem2'', regs2'', pc2'', addrs2'') _ _ Hstep23'' as
+           (gps2'', mem2'', regs2'', pc2'') _ _ Hstep23'' as
           [t_inform [Hstep_inform _]].
       inversion Hstep_inform; subst.
-      + (* To solve the goal, we need to recompose the mergeability relation.
-           This is easy to see by decomposition. *)
+      (* For each sub-goal, we need to recompose the mergeability relation. *)
+      + inversion IHstar''; subst.
+        econstructor; try eassumption.
+        eapply star_right; try eassumption.
+        now rewrite E0_right.
+      (* The same proof works for all cases, except those that change the
+         memory. *)
+      + admit.
+      + admit.
+      + admit.
+      + admit.
+      + admit.
+      + (* Store *)
         inversion IHstar''; subst.
         econstructor; try eassumption.
-        (* We are left with one sub-goal, which we solve by recomposing the
-           bigger star. *)
-        apply star_iff_starR. eapply starR_step.
-        * apply star_iff_starR. eassumption.
-        * eassumption.
-        * rewrite E0_right. reflexivity.
-        (* All other sub-goals admit the same proof, which differs from the old
-           one in that we work directly on the mergeability relation instead of
-           on concrete state manipulations. *)
-        (* (* Unfold, common rewrite on PC, memory rewrite for memory goals and done. *) *)
-        (* unfold merge_states, merge_registers, merge_pcs, merge_memories, ip; *)
-        (* erewrite mergeable_states_program_component_domm; try eassumption. *)
-    Admitted.
+        eapply star_right; try eassumption.
+        now rewrite E0_right.
+        (* Not like this! This should hold trivially by our informal definition
+           of the memory relation conditions. *)
+        inversion H17; subst.
+        constructor; try assumption.
+        inversion H21; subst.
+        econstructor; try eassumption.
+        simpl. simpl in H22. rewrite <- H22.
+        admit.
+      + admit.
+      + admit.
+      + admit.
+      + admit.
+      + (* Alloc *)
+        inversion IHstar''; subst.
+        econstructor; try eassumption.
+        eapply star_right; try eassumption.
+        now rewrite E0_right.
+        (* Same as above, this should hold trivially. *)
+        admit.
+      + admit.
+      + admit.
+  Admitted. (* RB: TODO: Should not be too hard, may require tinkering with memrel. *)
+
    (*[DynShare]
 
      This lemma should intuitively continue to hold (under some weaker
