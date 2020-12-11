@@ -1930,35 +1930,33 @@ Section ThreewayMultisem1.
     Star sem'  s1'  E0 s2' /\
     mergeable_states p c p' c' α γ s2 s2' s2''.
   (*   Star sem'  (merge_states ip ic s1 s1'') E0 (merge_states ip ic s2 s2''). *)
-  (* Proof. *)
-  (*   intros Hcomp1 Hmerge1 Hstar12 Hstar12''. *)
-  (*   inversion Hmerge1 as [?? t0 ???? Hmergeable_ifaces ? Hifacec ???? Hstar ?]. *)
-  (*   pose proof mergeable_states_program_to_program Hmerge1 Hcomp1 as Hcomp1'. *)
-  (*   rewrite Hifacec in Hcomp1'. *)
-  (*   remember E0 as t eqn:Ht. *)
-  (*   revert Ht Hmerge1 Hcomp1 Hcomp1' Hstar12''. *)
-  (*   apply star_iff_starR in Hstar12. *)
-  (*   induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst; *)
-  (*     intros Ht Hmerge1 Hcomp1 Hcomp1' Hstar12'. *)
-  (*   - rewrite -Hifacec in Hcomp1'. *)
-  (*     unfold ip, ic; erewrite merge_states_silent_star; try eassumption. *)
-  (*     now apply star_refl. *)
-  (*   - apply Eapp_E0_inv in Ht. destruct Ht; subst. *)
-  (*     specialize (IHstar Hstar eq_refl Hmerge1 Hcomp1 Hcomp1' Hstar12'). *)
-  (*     apply star_trans with (t1 := E0) (s2 := merge_states ip ic s2 s2'') (t2 := E0); *)
-  (*       [assumption | | reflexivity]. *)
-  (*     apply star_step with (t1 := E0) (s2 := merge_states ip ic s3 s2'') (t2 := E0). *)
-  (*     + apply star_iff_starR in Hstar12. *)
-  (*       pose proof threeway_multisem_mergeable_program Hcomp1 Hmerge1 Hstar12 Hstar12' *)
-  (*         as Hmerge2. *)
-  (*       pose proof CS.epsilon_star_non_inform_preserves_program_component *)
-  (*            _ _ _ _ Hcomp1 Hstar12 *)
-  (*         as Hcomp2. *)
-  (*       exact (threeway_multisem_step_E0 Hcomp2 Hmerge2 Hstep23). *)
-  (*     + now constructor. *)
-  (*     + reflexivity. *)
-  (* Qed. *)
-  Admitted. (* RB: TODO: Likely doable now. *)
+  Proof.
+    intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
+    inversion Hmerge1 as [s0 _ _ t0 _ _ _ _ _ _ _ _ _
+                          Hmergeable_ifaces _ Hifacec _ _ _ _ _ Hstar _ _ _ _ _].
+    pose proof mergeable_states_program_to_program Hmerge1 Hcomp1 as Hcomp1'.
+    rewrite Hifacec in Hcomp1'.
+    remember E0 as t eqn:Ht.
+    revert Ht Hmerge1 Hcomp1 Hcomp1' Hstar12''.
+    apply star_iff_starR in Hstar12.
+    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar Hstep23]; subst;
+      intros Ht Hmerge1 Hcomp1 Hcomp1'' Hstar12''.
+    - exists s1'. split.
+      + now apply star_refl.
+      + eapply merge_states_silent_star; eassumption.
+    - apply Eapp_E0_inv in Ht. destruct Ht; subst.
+      specialize (IHstar Hstar eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
+        as [s2' [Hstar12' Hmerge2]].
+      pose proof CS.epsilon_star_non_inform_preserves_program_component _ _ _ _
+           Hcomp1 ((proj2 (star_iff_starR _ _ _ _ _)) Hstar12) as Hcomp2.
+      pose proof threeway_multisem_step_E0 Hcomp2 Hmerge2 Hstep23
+        as [s3' [Hstep23' Hmerge3]].
+      exists s3'. split.
+      + apply star_trans with (t1 := E0) (s2 := s2') (t2 := E0);
+          [assumption | | reflexivity].
+        now apply star_one.
+      + assumption.
+  Qed.
 
   (* RB: NOTE: Observe similarity with threeway_multisem_mergeable_program, use
      to replace this if possible. *)
