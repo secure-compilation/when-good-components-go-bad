@@ -1737,6 +1737,122 @@ Section ThreewayMultisem1.
           -- constructor. exact (CS.Nop _ _ _ _ _ Hex'). (* Make more implicit later. *)
           -- now rewrite E0_right.
 
+    - (* ILabel *)
+      destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+      assert (pc1' = pc) by admit; subst pc1'. (* PC lockstep. *)
+      assert (Hex' : executing (globalenv sem') pc (ILabel l)). {
+        inversion Hmerge1
+          as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+        apply execution_invariant_to_linking with c; try assumption.
+        - congruence.
+        - now apply linkable_implies_linkable_mains.
+        - apply linkable_implies_linkable_mains; congruence.
+        - admit. (* Apply appropriate lemma. *)
+      }
+      eexists. split.
+      + constructor. exact (CS.Label _ _ _ _ _ _ Hex'). (* Make more implicit later. *)
+      + inversion Hmerge1. econstructor; try eassumption.
+        * eapply star_right; try eassumption.
+          now rewrite E0_right.
+        * eapply star_right; first eassumption.
+          -- constructor. exact (CS.Label _ _ _ _ _ _ Hex'). (* Make more implicit later. *)
+          -- now rewrite E0_right.
+
+    - (* IConst *)
+      destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+      assert (pc1' = pc) by admit; subst pc1'. (* PC lockstep. *)
+      assert (Hex' : executing (globalenv sem') pc (IConst v r)). {
+        inversion Hmerge1
+          as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+        apply execution_invariant_to_linking with c; try assumption.
+        - congruence.
+        - now apply linkable_implies_linkable_mains.
+        - apply linkable_implies_linkable_mains; congruence.
+        - admit. (* Apply appropriate lemma. *)
+      }
+      eexists. split.
+      + (* RB: NOTE: [simpl] will prematurely block the application of the
+           constructor here. Nevertheless, we may need to use convertibility to
+           select the appropriate related values (not in this case). *)
+        constructor. exact (CS.Const _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more explicit later. *)
+      + inversion Hmerge1. econstructor; try eassumption.
+        * eapply star_right; try eassumption.
+          now rewrite E0_right.
+        * eapply star_right; first eassumption.
+          -- constructor. exact (CS.Const _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more implicit later. *)
+          -- now rewrite E0_right.
+
+    - (* IMov *)
+      destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+      assert (pc1' = pc) by admit; subst pc1'. (* PC lockstep. *)
+      assert (Hex' : executing (globalenv sem') pc (IMov r1 r2)). {
+        inversion Hmerge1
+          as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+        apply execution_invariant_to_linking with c; try assumption.
+        - congruence.
+        - now apply linkable_implies_linkable_mains.
+        - apply linkable_implies_linkable_mains; congruence.
+        - admit. (* Apply appropriate lemma. *)
+      }
+      eexists. split.
+      + constructor. exact (CS.Mov _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more explicit later. *)
+      + inversion Hmerge1. econstructor; try eassumption.
+        * eapply star_right; try eassumption.
+          now rewrite E0_right.
+        * eapply star_right; first eassumption.
+          -- constructor. exact (CS.Mov _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more implicit later. *)
+          -- now rewrite E0_right.
+
+    - (* IBinOp *)
+      destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+      assert (pc1' = pc) by admit; subst pc1'. (* PC lockstep. *)
+      assert (Hex' : executing (globalenv sem') pc (IBinOp op r1 r2 r3)). {
+        inversion Hmerge1
+          as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+        apply execution_invariant_to_linking with c; try assumption.
+        - congruence.
+        - now apply linkable_implies_linkable_mains.
+        - apply linkable_implies_linkable_mains; congruence.
+        - admit. (* Apply appropriate lemma. *)
+      }
+      eexists. split.
+      + constructor. exact (CS.BinOp _ _ _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more explicit later. *)
+      + inversion Hmerge1. econstructor; try eassumption.
+        * eapply star_right; try eassumption.
+          now rewrite E0_right.
+        * eapply star_right; first eassumption.
+          -- constructor. exact (CS.BinOp _ _ _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more implicit later. *)
+          -- now rewrite E0_right.
+
+    - (* ILoad *)
+      destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+      assert (pc1' = pc) by admit; subst pc1'. (* PC lockstep. *)
+      assert (Hex' : executing (globalenv sem') pc (ILoad r1 r2)). {
+        inversion Hmerge1
+          as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+        apply execution_invariant_to_linking with c; try assumption.
+        - congruence.
+        - now apply linkable_implies_linkable_mains.
+        - apply linkable_implies_linkable_mains; congruence.
+        - admit. (* Apply appropriate lemma. *)
+      }
+      eexists. split.
+      + constructor. eapply CS.Load; try eassumption.
+        * admit. (* Mergeability needs to relate register pointer contents... *)
+        * admit. (* ... and based on those, memory contents may be related. *)
+        * admit. (* Can't work on this without the value read from memory. *)
+      + inversion Hmerge1. econstructor; try eassumption.
+        * eapply star_right; try eassumption.
+          now rewrite E0_right.
+        * eapply star_right; first eassumption.
+          -- constructor. eapply CS.Load; try eassumption; admit. (* Same as above. *)
+          -- now rewrite E0_right.
+
   (*   - (* INop *) *)
   (*     (* NOTE: Underneath the non-informative step there is an informative step *)
   (*        that we need to synchronize with the outer step. At present this is a *)
@@ -1757,54 +1873,11 @@ Section ThreewayMultisem1.
   (*     + (* All other subgoals are nonsensical by determinism of the [executing] *)
   (*          instruction. *) *)
   (*       admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-
-  (*   - (* ILabel *) *)
-  (*     (* NOTE: Simple instructions proceed similarly. *) *)
-  (*     inversion H0; subst; rename H0 into _H0. *)
-  (*     + admit. *)
-  (*     + simpl. destruct s1' as [[[[gps1' mem1'] regs1'] pc1'] addrs1']. *)
-  (*       eexists. eapply CS.Label_non_inform. *)
-  (*       * admit. *)
-  (*       * eapply CS.Label. *)
-  (*         admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-
-  (*   - admit. *)
-  (*   - admit. *)
-  (*   - admit. *)
 
   (*   - (* ILoad *) *)
   (*     (* NOTE: The case of the load instruction will be more interesting. The *)
   (*        basic structure remains the same... *) *)
   (*     inversion H0; subst; rename H0 into _H0. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
   (*     + simpl. destruct s1' as [[[[gps1' mem1'] regs1'] pc1'] addrs1']. *)
   (*       eexists. eapply CS.Load_non_inform. *)
   (*       * admit. *)
@@ -1817,14 +1890,6 @@ Section ThreewayMultisem1.
   (*         -- admit. *)
   (*         -- admit. *)
   (*         -- admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
-  (*     + admit. *)
 
     (* NOTE: ... And the cases go on. *)
 
