@@ -596,8 +596,7 @@ Proof.
   inversion Hclosed as [_ [mainpc [Hmainpc [Hprocspc Hdommpc]]]];
     rewrite Hmainpc.
   rewrite -> prepare_procedures_initial_memory_after_linking;
-    try assumption;
-    last now apply linkable_implies_linkable_mains.
+    try assumption.
   destruct (prog_main p) as [mainp |] eqn:Hmainp;
     destruct (prog_main c) as [mainc |] eqn:Hmainc.
   - exfalso.

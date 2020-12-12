@@ -892,16 +892,14 @@ Section Mergeable.
     intros Hpc Hmerge Hlabel.
     inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hpc_.
     pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
-    rewrite (find_label_in_component_program_link_left _ _ _ _ Hmains) in Hlabel;
+    rewrite find_label_in_component_program_link_left in Hlabel;
       try assumption.
     unfold ic in Hdomm; rewrite Hifacec in Hdomm.
     unfold ip, ic in Hlinkable.
     rewrite (find_label_in_component_program_link_left Hdomm Hwfp);
-      try congruence.
-    apply linkable_implies_linkable_mains; congruence.
+      congruence.
   Qed.
 
   (* Search _ find_label_in_procedure. *)
@@ -915,17 +913,16 @@ Section Mergeable.
     intros Hpc Hmerge Hlabel.
     inversion Hmerge as [_ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hpc_.
     pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
-    rewrite (find_label_in_procedure_program_link_left _ _ _ _ Hmains) in Hlabel;
+    rewrite find_label_in_procedure_program_link_left in Hlabel;
       try assumption.
     unfold find_label_in_procedure in *.
     destruct ((genv_procedures (prepare_global_env p)) (Pointer.component pc_))
       as [C_procs |] eqn:Hcase; last discriminate.
     unfold ic in Hlinkable. rewrite Hifacec in Hlinkable. unfold ic in Hdomm; rewrite Hifacec in Hdomm.
     pose proof linkable_implies_linkable_mains Hwfp Hwfc' Hlinkable as Hmains'.
-    rewrite (genv_procedures_program_link_left_notin _ _ _ _ Hmains');
+    rewrite genv_procedures_program_link_left_notin;
       try assumption.
     now rewrite Hcase.
   Qed.
@@ -1326,8 +1323,8 @@ Section ThreewayMultisem1.
     (* Apply linking invariance and solve side goals. *)
     eapply execution_invariant_to_linking; try eassumption;
     [ congruence
-    | apply linkable_implies_linkable_mains; congruence
-    | apply linkable_implies_linkable_mains; congruence
+    (* | apply linkable_implies_linkable_mains; congruence *)
+    (* | apply linkable_implies_linkable_mains; congruence *)
     | eapply is_program_component_in_domm; eassumption
     ].
 
@@ -1340,9 +1337,9 @@ Section ThreewayMultisem1.
         |- _ =>
         match goal with
         | |- linkable _ _ => rewrite Hcc' in Hlinkable; exact Hlinkable
-        | |- linkable_mains p c => eapply linkable_implies_linkable_mains; eauto
-        | |- linkable_mains p c' => eapply linkable_implies_linkable_mains; eauto;
-                                    rewrite Hcc' in Hlinkable; exact Hlinkable
+        (* | |- linkable_mains p c => eapply linkable_implies_linkable_mains; eauto *)
+        (* | |- linkable_mains p c' => eapply linkable_implies_linkable_mains; eauto; *)
+                                    (* rewrite Hcc' in Hlinkable; exact Hlinkable *)
         | |- _ =>
           eapply is_program_component_pc_in_domm
             with (s := (gps2, mem2, regs2, pc1))
@@ -1542,7 +1539,7 @@ Section ThreewayMultisem1.
        silent case, but slightly different setup). *)
     [eapply execution_invariant_to_linking; try eassumption;
       [ congruence
-      | apply linkable_implies_linkable_mains; congruence
+      (* | apply linkable_implies_linkable_mains; congruence *)
       | exact (is_program_component_in_domm Hcomp1 Hmerge1)
       ]
     ].
@@ -1551,7 +1548,7 @@ Section ThreewayMultisem1.
     apply CS.Return; try congruence; (* [congruence] to cover context case. *)
     eapply execution_invariant_to_linking; try eassumption;
     [ congruence
-    | apply linkable_implies_linkable_mains; congruence
+    (* | apply linkable_implies_linkable_mains; congruence *)
     | exact (is_program_component_in_domm Hcomp1 Hmerge1)
     ].
 
@@ -1960,14 +1957,10 @@ Section ThreewayMultisem3.
     destruct s1 as [[[gps1 mem1] regs1] pc1].
     destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
     inversion Hmergeable_ifaces as [Hlinkable _].
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability.
     assert (Hlinkable' := Hlinkable); rewrite Hifacep Hifacec in Hlinkable'.
-    pose proof linkable_implies_linkable_mains Hwfp' Hwfc' Hlinkable' as Hmain_linkability'.
     pose proof is_program_component_pc_in_domm Hpc Hmerge as Hdomm.
     pose proof is_program_component_pc_in_domm Hpc Hmerge as Hdomm'.
     pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hnotin; unfold ic in Hnotin;
-    assert (Hmains : linkable_mains p c')
-      by (apply linkable_implies_linkable_mains; congruence).
     rewrite (mergeable_states_merge_program _ Hmerge) in Hstep;
       try assumption.
     pose proof linking_well_formedness Hwfp Hwfc Hlinkable as Hwfprog.
@@ -2102,8 +2095,7 @@ Section ThreewayMultisem5.
     pose proof linkable_implies_linkable_mains Hwfp' Hwfc' Hlinkable' as Hmain_linkability'.
     destruct (Pointer.component pc \in domm ip) eqn:Hcase.
     - apply execution_invariant_to_linking with (c1 := c); try easy.
-      + congruence.
-      + apply linkable_implies_linkable_mains; congruence.
+      congruence.
     - (* Symmetric case. *)
       unfold prog', prog'' in *.
       rewrite program_linkC in Hfinal''; try congruence.
@@ -2112,11 +2104,10 @@ Section ThreewayMultisem5.
       apply linkable_mains_sym in Hmain_linkability.
       apply linkable_mains_sym in Hmain_linkability'.
       apply execution_invariant_to_linking with (c1 := p'); try congruence.
-      + apply linkable_implies_linkable_mains; congruence.
-      + setoid_rewrite <- (mergeable_states_pc_same_component Hmerge).
-        rewrite <- Hifacec.
-        apply negb_true_iff in Hcase.
-        now apply (mergeable_states_notin_to_in Hmerge).
+      setoid_rewrite <- (mergeable_states_pc_same_component Hmerge).
+      rewrite <- Hifacec.
+      apply negb_true_iff in Hcase.
+      now apply (mergeable_states_notin_to_in Hmerge).
   Qed.
 
   Theorem match_nofinal s s'' :
@@ -2133,9 +2124,7 @@ Section ThreewayMultisem5.
     inversion Hmergeable_ifaces as [Hlinkable _].
     destruct (Pointer.component pc \in domm ip) eqn:Hcase.
     - apply execution_invariant_to_linking with (c2 := c) in Hfinal'; try easy.
-      + congruence.
-      + apply linkable_implies_linkable_mains; congruence.
-      + apply linkable_implies_linkable_mains; congruence.
+      congruence.
     - (* Symmetric case. *)
       unfold prog', prog'' in *.
       rewrite program_linkC in Hfinal'; try congruence.
@@ -2143,8 +2132,6 @@ Section ThreewayMultisem5.
       apply execution_invariant_to_linking with (c2 := p') in Hfinal'; try easy.
       + apply linkable_sym; congruence.
       + apply linkable_sym; congruence.
-      + apply linkable_mains_sym, linkable_implies_linkable_mains; congruence.
-      + apply linkable_mains_sym, linkable_implies_linkable_mains; congruence.
       + setoid_rewrite <- (mergeable_states_pc_same_component Hmerge).
         rewrite <- Hifacec.
         apply negb_true_iff in Hcase.

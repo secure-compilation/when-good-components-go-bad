@@ -1116,16 +1116,14 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     intros Hpc Hmerge Hlabel.
     inversion Hmerge as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hpc_.
     pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
-    rewrite (find_label_in_component_program_link_left _ _ _ _ Hmains) in Hlabel;
+    rewrite find_label_in_component_program_link_left in Hlabel;
       try assumption.
     unfold ic in Hdomm; rewrite Hifacec in Hdomm.
     unfold ip, ic in Hlinkable.
     rewrite (find_label_in_component_program_link_left Hdomm Hwfp);
-      try congruence.
-    apply linkable_implies_linkable_mains; congruence.
+      congruence.
   Qed.
 
   (* Search _ find_label_in_procedure. *)
@@ -1139,17 +1137,15 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     intros Hpc Hmerge Hlabel.
     inversion Hmerge as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmains.
     pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hpc_.
     pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
-    rewrite (find_label_in_procedure_program_link_left _ _ _ _ Hmains) in Hlabel;
+    rewrite find_label_in_procedure_program_link_left in Hlabel;
       try assumption.
     unfold find_label_in_procedure in *.
     destruct ((genv_procedures (prepare_global_env p)) (Pointer.component pc_))
       as [C_procs |] eqn:Hcase; last discriminate.
     unfold ic in Hlinkable. rewrite Hifacec in Hlinkable. unfold ic in Hdomm; rewrite Hifacec in Hdomm.
-    pose proof linkable_implies_linkable_mains Hwfp Hwfc' Hlinkable as Hmains'.
-    rewrite (genv_procedures_program_link_left_notin _ _ _ _ Hmains');
+    rewrite genv_procedures_program_link_left_notin;
       try assumption.
     now rewrite Hcase.
   Qed.
@@ -1724,8 +1720,6 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - now apply linkable_implies_linkable_mains.
-        - apply linkable_implies_linkable_mains; congruence.
         - admit. (* Apply appropriate lemma. *)
       }
       eexists. split.
@@ -1746,8 +1740,6 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - now apply linkable_implies_linkable_mains.
-        - apply linkable_implies_linkable_mains; congruence.
         - admit. (* Apply appropriate lemma. *)
       }
       eexists. split.
@@ -1768,8 +1760,6 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - now apply linkable_implies_linkable_mains.
-        - apply linkable_implies_linkable_mains; congruence.
         - admit. (* Apply appropriate lemma. *)
       }
       eexists. split.
@@ -1793,8 +1783,6 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - now apply linkable_implies_linkable_mains.
-        - apply linkable_implies_linkable_mains; congruence.
         - admit. (* Apply appropriate lemma. *)
       }
       eexists. split.
@@ -1815,8 +1803,6 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - now apply linkable_implies_linkable_mains.
-        - apply linkable_implies_linkable_mains; congruence.
         - admit. (* Apply appropriate lemma. *)
       }
       eexists. split.
@@ -1837,8 +1823,6 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - now apply linkable_implies_linkable_mains.
-        - apply linkable_implies_linkable_mains; congruence.
         - admit. (* Apply appropriate lemma. *)
       }
       eexists. split.
