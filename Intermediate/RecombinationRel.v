@@ -1720,11 +1720,12 @@ Section ThreewayMultisem1.
       end.
       {
         inversion Hmerge1
-          as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
+          as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+        inversion Hmergeable_ifaces as [Hlinkable _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. exact (CS.Nop _ _ _ _ _ Hex'). (* Make more implicit later. *)
@@ -1748,7 +1749,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. exact (CS.Label _ _ _ _ _ _ Hex'). (* Make more implicit later. *)
@@ -1772,7 +1773,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + (* RB: NOTE: [simpl] will prematurely block the application of the
@@ -1799,7 +1800,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. exact (CS.Mov _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more explicit later. *)
@@ -1823,7 +1824,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. exact (CS.BinOp _ _ _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more explicit later. *)
@@ -1847,7 +1848,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. eapply CS.Load; try eassumption.
@@ -1874,7 +1875,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. eapply CS.Store.
@@ -1906,7 +1907,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. eapply CS.Jal.
@@ -1940,7 +1941,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. eapply CS.Jump; first eassumption.
@@ -1964,7 +1965,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. eapply CS.BnzNZ; first eassumption.
@@ -1998,7 +1999,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. eapply CS.BnzZ; first eassumption.
@@ -2023,7 +2024,7 @@ Section ThreewayMultisem1.
               Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
-        - admit. (* Apply appropriate lemma. *)
+        - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
       }
       eexists. split.
       + constructor. eapply CS.Alloc; try eassumption.
@@ -2045,80 +2046,6 @@ Section ThreewayMultisem1.
     - (* IReturn (contra) *)
       now inversion Ht.
 
-  (*   - (* INop *) *)
-  (*     (* NOTE: Underneath the non-informative step there is an informative step *)
-  (*        that we need to synchronize with the outer step. At present this is a *)
-  (*        little tedious. *) *)
-  (*     inversion H0; subst; rename H0 into _H0. *)
-  (*     + simpl. destruct s1' as [[[[gps1' mem1'] regs1'] pc1'] addrs1']. *)
-  (*       (* NOTE: We execute the corresponding instructions in the goal. *) *)
-  (*       eexists. eapply CS.Nop_non_inform. *)
-  (*       * (* NOTE: Now we need to prove that the instructions are indeed *)
-  (*            synchronized. We should be able to learn this from *)
-  (*            [mergeable_states], and in particular from the trace relation *)
-  (*            contained therein. *) *)
-  (*         inversion Hmerge1. *)
-  (*         admit. *)
-  (*       * eapply CS.Nop. *)
-  (*         (* NOTE: This should also be learnable from [mergeable_states]. *) *)
-  (*         admit. *)
-  (*     + (* All other subgoals are nonsensical by determinism of the [executing] *)
-  (*          instruction. *) *)
-  (*       admit. *)
-
-  (*   - (* ILoad *) *)
-  (*     (* NOTE: The case of the load instruction will be more interesting. The *)
-  (*        basic structure remains the same... *) *)
-  (*     inversion H0; subst; rename H0 into _H0. *)
-  (*     + simpl. destruct s1' as [[[[gps1' mem1'] regs1'] pc1'] addrs1']. *)
-  (*       eexists. eapply CS.Load_non_inform. *)
-  (*       * admit. *)
-  (*       * eapply CS.Load. *)
-  (*         -- admit. *)
-  (*         (* NOTE: ... but now we have additional goals. Again, to relate the *)
-  (*            two executions, we will need to resort to [mergeable_states]. *)
-  (*            Among its constituents, only the trace relation is potentially *)
-  (*            informative enough to contain the necessary information. *) *)
-  (*         -- admit. *)
-  (*         -- admit. *)
-  (*         -- admit. *)
-
-    (* NOTE: ... And the cases go on. *)
-
-    (* destruct s1 as [[[[gps1 mem1] regs1] pc1] addrs1]. *)
-    (* destruct s2 as [[[[gps2 mem2] regs2] pc2] addrs2]. *)
-    (* destruct s1'' as [[[[gps1'' mem1''] regs1''] pc1''] addrs1'']. *)
-    (* (* Case analysis on step. *) *)
-    (* pose proof CS.step_non_inform_step_inform *)
-    (*      _ (gps1, mem1, regs1, pc1, addrs1) _ _ Hstep12 as [t_inform [Hstep12_inform Hrelt's]]. *)
-    (* simpl. *)
-    (*[DynShare]
-
-      t_threeway_multisem_step_E0 uses CS.step_of_executing.
-      Need to figure out how to use CS.step_of_executing_non_inform or similar.
-
-     *)
-    (* assert (CS.step (prepare_global_env prog') *)
-    (*                 ( *)
-    (*                   merge_states_stack (prog_interface p) (gps1, mem1, regs1, pc1, addrs1) *)
-    (*                                      (gps1'', mem1'', regs1'', pc1'', addrs1''), *)
-    (*                   merge_states_mem (prog_interface p) (prog_interface c) *)
-    (*                                    (gps1, mem1, regs1, pc1, addrs1) *)
-    (*                                    (gps1'', mem1'', regs1'', pc1'', addrs1''), *)
-    (*                   regs1, pc1, addrs1 *)
-    (*                 ) *)
-    (*                 t_inform *)
-    (*                 ( *)
-    (*                   merge_states_stack (prog_interface p) *)
-    (*                                      (gps2, mem2, regs2, pc2, addrs2) *)
-    (*                                      (gps1'', mem1'', regs1'', pc1'', addrs1''), *)
-    (*                   merge_states_mem (prog_interface p) (prog_interface c) *)
-    (*                                    (gps2, mem2, regs2, pc2, addrs2) *)
-    (*                                    (gps1'', mem1'', regs1'', pc1'', addrs1''), *)
-    (*                   regs2, pc2, addrs2 *)
-    (*                 ) *)
-    (*        ) *)
-    (*   as Hstep_inform. *)
     (* { *)
     (*   inversion Hstep12_inform; subst. *)
     (*   - eapply CS.Nop. *)

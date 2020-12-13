@@ -2570,4 +2570,18 @@ Theorem does_prefix_inform_non_inform :
     does_prefix (sem_non_inform p) (project_finpref_behavior m).
 Admitted.
 
+(* RB: TODO: Inspired by [domm_partition] on PS. Consider how to select the
+   right semantics, the best shape of the premises, and naming conventions to
+   avoid confusion, esp. if it similar lemmas will be used (again) elsewhere.
+   This statement a little less generic than other similar lemmas, but easier
+   to use where it is needed now (recomposition). *)
+Lemma domm_partition :
+  forall p1 p2 s t gps mem regs pc,
+    mergeable_interfaces (prog_interface p1) (prog_interface p2) ->
+    CS.initial_state (program_link p1 p2) s ->
+    Star (CS.sem_non_inform (program_link p1 p2)) s t (gps, mem, regs, pc) ->
+    Pointer.component pc \notin domm (prog_interface p2) ->
+    Pointer.component pc \in domm (prog_interface p1).
+Admitted.
+
 End CS.
