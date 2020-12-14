@@ -1453,6 +1453,14 @@ Section ThreewayMultisem1.
 
   Variables α γ : addr_t -> addr_t.
 
+  Ltac t_merge_states_silent_star :=
+    inversion IHstar''; subst;
+    [econstructor]; try eassumption;
+    (* In most cases, only one sub-goal is left, always solvable thus: *)
+    try (eapply star_right; try eassumption;
+         now rewrite E0_right).
+    (* In memory-altering cases, a second sub-goal is left to be solved. *)
+
   (* RB: NOTE: Likely provable: since we are on the program, we would not care
      what changes the "other program" makes to its memory, only what "our
      program" eventually will. *)
@@ -1479,45 +1487,14 @@ Section ThreewayMultisem1.
       pose proof CS.step_non_inform_step_inform prog''
            (gps2'', mem2'', regs2'', pc2'') _ _ Hstep23'' as
           [t_inform [Hstep_inform _]].
-      inversion Hstep_inform; subst.
-      (* For each sub-goal, we need to recompose the mergeability relation. *)
-      + inversion IHstar''; subst.
-        econstructor; try eassumption.
-        eapply star_right; try eassumption.
-        now rewrite E0_right.
-      (* The same proof works for all cases, except those that change the
-         memory. *)
-      + admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
+      (* Analyze and recompose mergeability relation in each case. *)
+      inversion Hstep_inform; subst;
+        try t_merge_states_silent_star.
+      (* Rebuild the relation in the non-trivial, memory-altering cases. *)
       + (* Store *)
-        inversion IHstar''; subst.
-        econstructor; try eassumption.
-        eapply star_right; try eassumption.
-        now rewrite E0_right.
-        (* Not like this! This should hold trivially by our informal definition
-           of the memory relation conditions. *)
-        inversion H17; subst.
-        constructor; try assumption.
-        inversion H21; subst.
-        econstructor; try eassumption.
-        simpl. simpl in H22. rewrite <- H22.
         admit.
-      + admit.
-      + admit.
-      + admit.
-      + admit.
       + (* Alloc *)
-        inversion IHstar''; subst.
-        econstructor; try eassumption.
-        eapply star_right; try eassumption.
-        now rewrite E0_right.
-        (* Same as above, this should hold trivially. *)
         admit.
-      + admit.
-      + admit.
   Admitted. (* RB: TODO: Should not be too hard, may require tinkering with memrel. *)
 
    (*[DynShare]
