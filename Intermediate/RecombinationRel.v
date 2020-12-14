@@ -1495,7 +1495,7 @@ Section ThreewayMultisem1.
         admit.
       + (* Alloc *)
         admit.
-  Admitted. (* RB: TODO: Should not be too hard, may require tinkering with memrel. *)
+  Admitted. (* RB: TODO: Finish memrel, high-level structure done. *)
 
    (*[DynShare]
 
@@ -2097,7 +2097,8 @@ Section ThreewayMultisem1.
     (* pose proof (CS.step_inform_step_non_inform _ _ _ _ Hstep_inform) as gl. *)
     (* rewrite Hrelt's in gl. *)
     (* exact gl. *)
-  Admitted. (* RB: TODO: Admit. Refactor cases with Ltac. *)
+  Admitted. (* RB: TODO: First pass done. Solve memrel-related admits.
+                         Refactor common cases. *)
 
   (* Compose two stars into a merged star. The "program" side drives both stars
      and performs all steps without interruption, the "context" side remains
@@ -2200,24 +2201,92 @@ Section ThreewayMultisem1.
     Step sem'  s1'  [e' ] s2' /\
     mem_rel2 p α γ (CS.state_mem s2, [e]) (CS.state_mem s2' , [e' ]).
     (* Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2''). *)
-  (* Proof. *)
-  (*   intros Hcomp1 Hmerge1 Hstep12 Hstep12''. *)
-  (*   (* Derive some useful facts and begin to expose state structure. *) *)
+  Proof.
+    intros Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2.
+    (* Derive some useful facts and begin to expose state structure. *)
   (*   inversion Hmerge1 as [??? Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec ??????]. *)
   (*   inversion Hmergeable_ifaces as [Hlinkable _]. *)
   (*   pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability. *)
   (*   assert (Hlinkable' := Hlinkable); rewrite Hifacep Hifacec in Hlinkable'. *)
   (*   pose proof linkable_implies_linkable_mains Hwfp' Hwfc' Hlinkable' as Hmain_linkability'. *)
   (*   rewrite (mergeable_states_merge_program Hcomp1 Hmerge1). *)
-  (*   pose proof threeway_multisem_event_lockstep_program_mergeable *)
-  (*        Hcomp1 Hmerge1 Hstep12 Hstep12'' as Hmerge2. *)
-  (*   set s1copy := s1. destruct s1 as [[[[gps1 mem1] regs1] pc1] addrs1]. *)
-  (*   set s2copy := s2. destruct s2 as [[[[gps2 mem2] regs2] pc2] addrs2]. *)
-  (*   destruct s1'' as [[[[gps1'' mem1''] regs1''] pc1''] addrs1'']. *)
-  (*   destruct s2'' as [[[[gps2'' mem2''] regs2''] pc2''] addrs2'']. *)
-  (*   (* Case analysis on step. *) *)
-  (*   inversion Hstep12; subst; *)
-  (*     inversion Hstep12''; subst. *)
+    pose proof threeway_multisem_event_lockstep_program_mergeable
+         Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2 as [s2' Hmerge2].
+    set s1copy := s1. destruct s1 as [[[gps1 mem1] regs1] pc1].
+    set s2copy := s2. destruct s2 as [[[gps2 mem2] regs2] pc2].
+    destruct s1'' as [[[gps1'' mem1''] regs1''] pc1''].
+    destruct s2'' as [[[gps2'' mem2''] regs2''] pc2''].
+    (* Case analysis on step. *)
+    inversion Hstep12 as [? t12 ? Hstep12ninf EQ Ht12 EQ']; subst.
+    inversion Hstep12'' as [? t12'' ? Hstep12''ninf EQ Ht12'' EQ']; subst.
+    inversion Hstep12ninf; subst; inversion Ht12; subst;
+      inversion Hstep12''ninf; subst; inversion Ht12''; subst.
+
+    - (* Call *)
+      destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+      assert (pc1 = pc1') by admit; subst pc1'. (* PC lockstep. *)
+      assert (C' = C'0) by admit;
+        assert (P = P0) by admit;
+        subst C'0 P0. (* Sequence of calls and returns in lockstep. *)
+      simpl in *.
+      (* Take single step and have third step from program? *)
+      eexists.
+      eexists. (* Actually, s2'? But it is tricky to step if instantiated. *)
+      split.
+      + (* To apply the step, we need to manipulate the goal into the
+           appropriate form. At this point producing the corresponding event
+           seems easiest, operating by simple substitution of parts. *)
+        instantiate
+          (2 := ECall (Pointer.component pc1) P (Register.get R_COM regs1') mem1' C').
+        change
+          ([ECall (Pointer.component pc1) P (Register.get R_COM regs1') mem1' C'])
+          with
+          (TracesInform.event_non_inform_of
+             [TracesInform.ECallInform
+                (Pointer.component pc1) P (Register.get R_COM regs1') mem1' C']).
+        constructor. apply CS.Call; try assumption.
+        * (* RB: TODO: This same snippet is use elsewhere: refactor lemma. *)
+          match goal with
+          | H : executing (prepare_global_env prog) ?PC ?INSTR |- _ =>
+            assert (Hex' : executing (prepare_global_env prog') PC INSTR)
+          end.
+          {
+            inversion Hmerge1
+              as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
+                  Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+            apply execution_invariant_to_linking with c; try assumption.
+            - congruence.
+            - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
+          }
+          exact Hex'.
+        * CS.simplify_turn.
+          eapply imported_procedure_recombination; eassumption.
+        * destruct (C' \in domm (prog_interface p)) eqn:Hcase.
+          -- assert (Hcase' : C' \notin domm (prog_interface c')) by admit.
+             (* RB: ??? The anonymous patterns interfere with the context and
+                remove existing hypotheses in Coq 8.11.2! *)
+             (* inversion Hmerge1 as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc _ Hwfc' *)
+             (*                       [Hlinkable _] Hifacep Hifacec *)
+             (*                       _ _ _ _ _ _ _ _ _ _ _]. *)
+             inversion Hmerge1 as [????????????? [? ?] ? Hifacec].
+             rewrite genv_entrypoints_program_link_left;
+               try assumption; [| congruence].
+             rewrite genv_entrypoints_program_link_left in H11;
+               try assumption; [| now rewrite Hifacec].
+             eassumption.
+          -- (* RB: TODO: Refactor symmetric case? Too late now. *)
+             admit.
+        * reflexivity.
+      + simpl.
+        inversion Hmerge1 as [_ _ _ t t' _ _ _ _
+                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ [Hrel2' _] _ _].
+        admit. (* Memories are not modified, but the argument can give access to
+                  new parts of memory. *)
+
+    - exfalso. admit. (* Contradiction: events cannot be related. *)
+    - exfalso. admit. (* Contradiction: events cannot be related. *)
+    - (* Return *)
+      admit.
   (*   (* [DynShare] Instead of 2 subgoals, we now have 4: [ICall, IReturn] x [ICall, IReturn] *)
        
   (*      That is a bit confusing. I do not understand why we used to have *)
@@ -2285,7 +2354,26 @@ Section ThreewayMultisem1.
     Step sem'' s1'' [e''] s2'' ->
     mem_rel2 p α γ (CS.state_mem s2, [e]) (CS.state_mem s2'', [e'']) ->
   exists e' s2',
-    Step sem'  s1'  [e' ] s2' /\ mergeable_states p c p' c' α γ s2 s2' s2''.
+    Step sem'  s1'  [e' ] s2' /\
+    mergeable_states p c p' c' α γ s2 s2' s2''.
+  Proof.
+    intros Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2.
+    pose proof threeway_multisem_event_lockstep_program_step
+         Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2
+      as [e' [s2' [Hstep12' Hrel2']]].
+    exists e', s2'. split; first assumption.
+    inversion Hmerge1.
+    eapply mergeable_states_intro
+      with (t := t ++ [e]) (t' := t' ++ [e']) (t'' := t'' ++ [e'']);
+      try eassumption.
+    - eapply star_right; try eassumption. reflexivity.
+    - eapply star_right; try eassumption. reflexivity.
+    - eapply star_right; try eassumption. reflexivity.
+    - constructor.
+      + admit. (* Should be able to compose from relations in context. *)
+      + admit. (* Should be able to compose from relations in context. *)
+    - admit. (* Should be able to compose from relations in context. *)
+    - admit. (* Should be able to compose from relations in context. *)
     (* Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2'') /\ *)
     (* mergeable_states p c p' c' s2 s2''. *)
   (* Proof. *)
