@@ -2198,7 +2198,7 @@ Section ThreewayMultisem1.
     mem_rel2 p α γ (CS.state_mem s2, [e]) (CS.state_mem s2'', [e'']) ->
   exists e' s2',
     Step sem'  s1'  [e' ] s2' /\
-    mem_rel2 p α γ (CS.state_mem s2, [e]) (CS.state_mem s2'', [e' ]).
+    mem_rel2 p α γ (CS.state_mem s2, [e]) (CS.state_mem s2' , [e' ]).
     (* Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2''). *)
   (* Proof. *)
   (*   intros Hcomp1 Hmerge1 Hstep12 Hstep12''. *)
