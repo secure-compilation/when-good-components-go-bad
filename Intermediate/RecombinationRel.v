@@ -2230,14 +2230,13 @@ Section ThreewayMultisem1.
         subst C'0 P0. (* Sequence of calls and returns in lockstep. *)
       simpl in *.
       (* Take single step and have third step from program? *)
-      eexists.
+      exists
+        (ECall (Pointer.component pc1) P (Register.get R_COM regs1') mem1' C').
       eexists. (* Actually, s2'? But it is tricky to step if instantiated. *)
       split.
       + (* To apply the step, we need to manipulate the goal into the
            appropriate form. At this point producing the corresponding event
            seems easiest, operating by simple substitution of parts. *)
-        instantiate
-          (2 := ECall (Pointer.component pc1) P (Register.get R_COM regs1') mem1' C').
         change
           ([ECall (Pointer.component pc1) P (Register.get R_COM regs1') mem1' C'])
           with
@@ -2285,22 +2284,59 @@ Section ThreewayMultisem1.
 
     - exfalso. admit. (* Contradiction: events cannot be related. *)
     - exfalso. admit. (* Contradiction: events cannot be related. *)
+
     - (* Return *)
+      (* TODO: Call refactoring. *)
+      destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+      assert (pc1 = pc1') by admit; subst pc1'. (* PC lockstep. *)
+      simpl in *.
+      assert (Hstack : mergeable_stack p c (pc2 :: gps2) gps1'). {
+        (* TODO: Adapt mergeable_states_mergeable_stack. *)
+        admit.
+      }
+      inversion Hstack as [| ? pc1' ? gps1'_ Hcomp2 Hdomm Hstack' DUMMY DUMMY'];
+        subst; rename gps1'_ into gps1'.
+      (* NOTE: [Hdomm] not really necessary. *)
+      (* Take single step and have third step from program? *)
+      exists (ERet (Pointer.component pc1) (Register.get R_COM regs1')
+                   mem1' (Pointer.component pc2)).
+      eexists. (* Actually, s2'? But it is tricky to step if instantiated. *)
+      split.
+      + (* To apply the step, we need to manipulate the goal into the
+           appropriate form. At this point producing the corresponding event
+           seems easiest, operating by simple substitution of parts. *)
+        change
+          ([ERet (Pointer.component pc1) (Register.get R_COM regs1')
+                 mem1' (Pointer.component pc2)])
+          with
+          (TracesInform.event_non_inform_of
+             [TracesInform.ERetInform
+                (Pointer.component pc1) (Register.get R_COM regs1')
+                mem1' (Pointer.component pc2)]).
+        constructor. rewrite Hcomp2. eapply CS.Return.
+        * (* RB: TODO: This same snippet is use elsewhere: refactor lemma. *)
+          match goal with
+          | H : executing (prepare_global_env prog) ?PC ?INSTR |- _ =>
+            assert (Hex' : executing (prepare_global_env prog') PC INSTR)
+          end.
+          {
+            inversion Hmerge1
+              as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
+                  Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+            apply execution_invariant_to_linking with c; try assumption.
+            - congruence.
+            - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
+          }
+          exact Hex'.
+        * congruence.
+        * reflexivity.
+      + simpl.
+        inversion Hmerge1 as [_ _ _ t t' _ _ _ _
+                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ [Hrel2' _] _ _].
+        admit.
+
       admit.
-  (*   (* [DynShare] Instead of 2 subgoals, we now have 4: [ICall, IReturn] x [ICall, IReturn] *)
-       
-  (*      That is a bit confusing. I do not understand why we used to have *)
-  (*      only two subgoals. *)
-  (*    *) *)
-  (*   - admit. *)
-      
-  (*   - (* Here, ICall, IReturn. Derive a contradiction through [e] *) *)
-  (*     admit. *)
-      
-  (*   - (* Here, IReturn, ICall. Derive a contradiction through [e] *) *)
-  (*     admit. *)
-      
-  (*   - admit. *)
+
   Admitted. (* RB: TODO: Fix statement and prove later, combine with lemma above. *)
 
 (*    - (* Call: case analysis on call point. *)
