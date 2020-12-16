@@ -2189,6 +2189,23 @@ Section ThreewayMultisem1.
   (*   | exact (is_program_component_in_domm Hcomp1 Hmerge1) *)
   (*   ]. *)
 
+  Lemma execution_invariant_to_linking_recombination
+        gps mem regs pc gps' mem' regs' s'' instr :
+    Pointer.component pc \notin domm (prog_interface c) ->
+    mergeable_states p c p' c' α γ (gps, mem, regs, pc) (gps', mem', regs', pc) s'' ->
+    executing (prepare_global_env prog) pc instr ->
+    executing (prepare_global_env prog') pc instr.
+  Proof.
+    intros Hdomm Hmerge Hexec.
+    inversion Hmerge
+      as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
+          Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+    apply execution_invariant_to_linking with c; try assumption.
+    - congruence.
+    - inversion Hmerge. simpl in *.
+      eapply CS.domm_partition; eassumption.
+  Qed.
+
   (* RB: TODO: Does it make sense to compact calls and returns into a unified
      solve tactic? *)
   Theorem threeway_multisem_event_lockstep_program_step s1 s1' s1'' e e'' s2 s2'' :
@@ -2247,16 +2264,8 @@ Section ThreewayMultisem1.
         * (* RB: TODO: This same snippet is use elsewhere: refactor lemma. *)
           match goal with
           | H : executing (prepare_global_env prog) ?PC ?INSTR |- _ =>
-            assert (Hex' : executing (prepare_global_env prog') PC INSTR)
+            pose proof execution_invariant_to_linking_recombination Hcomp1 Hmerge1 H as Hex'
           end.
-          {
-            inversion Hmerge1
-              as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-                  Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
-            apply execution_invariant_to_linking with c; try assumption.
-            - congruence.
-            - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
-          }
           exact Hex'.
         * CS.simplify_turn.
           eapply imported_procedure_recombination; eassumption.
@@ -2334,8 +2343,6 @@ Section ThreewayMultisem1.
         inversion Hmerge1 as [_ _ _ t t' _ _ _ _
                               _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ [Hrel2' _] _ _].
         admit.
-
-      admit.
 
   Admitted. (* RB: TODO: Fix statement and prove later, combine with lemma above. *)
 
