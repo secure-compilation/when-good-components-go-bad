@@ -194,18 +194,17 @@ Section Mergeable.
 
       *)
 
-  Variable sigma : addr_t -> addr_t.
-  Variable sigma_inv : addr_t -> addr_t.
+  Variables α γ : addr_t -> addr_t.
 
   Definition trace_addrs_rel t m m' :=
     forall addrs,
       addr_shared_so_far addrs t ->
-      memory_renames_memory_at_addr sigma addrs m m'.
+      memory_renames_memory_at_addr α addrs m m'.
 
   Definition trace_addrs_rel_inv t m m' :=
     forall addrs,
       addr_shared_so_far addrs t ->
-      memory_inverse_renames_memory_at_addr sigma_inv addrs m m'.
+      memory_inverse_renames_memory_at_addr γ addrs m m'.
 
   (* An inductive definition to relate a program with the pointers found in its
      buffers and procedures. A computational definition can be given as well.
@@ -231,13 +230,13 @@ Section Mergeable.
     forall addrs,
       prog_addrs p addrs ->
       (* XXX -> *) (* TODO: Find renaming relation, add parameters to state relation. *)
-      memory_renames_memory_at_addr sigma addrs m m'.
+      memory_renames_memory_at_addr α addrs m m'.
 
   Definition prog_addrs_rel_inv p m m' :=
     forall addrs,
       prog_addrs p addrs ->
       (* ... *)
-      memory_inverse_renames_memory_at_addr sigma_inv addrs m m'.
+      memory_inverse_renames_memory_at_addr γ addrs m m'.
 
   Definition memtrace : Type := eqtype.Equality.sort Memory.t * trace event.
 
@@ -2871,14 +2870,14 @@ Section ThreewayMultisem4.
   (*     reflexivity || now apply star_refl. *)
   (* Qed. *)
 
-  Variables sigma sigma_inv : addr_t -> addr_t.
+  Variables α γ : addr_t -> addr_t.
 
   Lemma match_initial_states s s'' :
     initial_state sem   s   ->
     initial_state sem'' s'' ->
   exists s',
     initial_state sem'  s'  /\
-    mergeable_states p c p' c' sigma sigma_inv s s' s''.
+    mergeable_states p c p' c' α γ s s' s''.
   Proof.
     intros Hini Hini''.
     exists (CS.initial_machine_state prog'). split.
