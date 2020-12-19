@@ -196,6 +196,36 @@ Section Mergeable.
 
   Variables α γ : addr_t -> addr_t.
 
+  Variables α' γ' : NMap bool.
+
+  Let map_prog_prog'   : (addr_t -> addr_t) :=
+    fun '(C, b) =>
+      match C \in domm (prog_interface p) with
+      | true  => (C, b) (* [p] to [p]: identity *)
+      | false =>        (* [c] to [c' ]*)
+        match α' C, γ' C with
+        | Some true , Some true  => (C, b)     (* metadata in both: no change *)
+        | Some true , Some false => (C, b - 1) (* metadata in [c] only: decrement *)
+        | Some false, Some true  => (C, b + 1) (* metadata in [c'] only: increment *)
+        | Some false, Some false => (C, b)     (* metadata in neither: no change *)
+        | _         , _          => (0, 0)     (* should not happen *)
+        end
+      end.
+
+  Let map_prog''_prog'   : (addr_t -> addr_t) :=
+    fun '(C, b) =>
+      match C \in domm (prog_interface c) with
+      | true  => (C, b) (* [c'] to [c']: identity *)
+      | false =>        (* [p'] to [p] *)
+        match γ' C, α' C with
+        | Some true , Some true  => (C, b)     (* metadata in both: no change *)
+        | Some true , Some false => (C, b - 1) (* metadata in [p'] only: decrement *)
+        | Some false, Some true  => (C, b + 1) (* metadata in [p] only: increment *)
+        | Some false, Some false => (C, b)     (* metadata in neither: no change *)
+        | _         , _          => (0, 0)     (* should not happen *)
+        end
+      end.
+
   Definition trace_addrs_rel t m m' :=
     forall addrs,
       addr_shared_so_far addrs t ->
