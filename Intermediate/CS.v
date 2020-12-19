@@ -596,8 +596,7 @@ Proof.
   inversion Hclosed as [_ [mainpc [Hmainpc [Hprocspc Hdommpc]]]];
     rewrite Hmainpc.
   rewrite -> prepare_procedures_initial_memory_after_linking;
-    try assumption;
-    last now apply linkable_implies_linkable_mains.
+    try assumption.
   destruct (prog_main p) as [mainp |] eqn:Hmainp;
     destruct (prog_main c) as [mainc |] eqn:Hmainc.
   - exfalso.
@@ -2569,6 +2568,20 @@ Theorem does_prefix_inform_non_inform :
   forall p m,
     does_prefix (sem_inform p) m ->
     does_prefix (sem_non_inform p) (project_finpref_behavior m).
+Admitted.
+
+(* RB: TODO: Inspired by [domm_partition] on PS. Consider how to select the
+   right semantics, the best shape of the premises, and naming conventions to
+   avoid confusion, esp. if it similar lemmas will be used (again) elsewhere.
+   This statement a little less generic than other similar lemmas, but easier
+   to use where it is needed now (recomposition). *)
+Lemma domm_partition :
+  forall p1 p2 s t gps mem regs pc,
+    mergeable_interfaces (prog_interface p1) (prog_interface p2) ->
+    CS.initial_state (program_link p1 p2) s ->
+    Star (CS.sem_non_inform (program_link p1 p2)) s t (gps, mem, regs, pc) ->
+    Pointer.component pc \notin domm (prog_interface p2) ->
+    Pointer.component pc \in domm (prog_interface p1).
 Admitted.
 
 End CS.
