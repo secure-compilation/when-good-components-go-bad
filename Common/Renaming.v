@@ -1044,7 +1044,6 @@ Section Renaming.
       addresses in the second memory equal the lifted renaming of the loads on
       the original addresses in the first memory. *)
 
-  (* TODO: Refactor definitions below. *)
   Definition memory_renames_memory_at_addr addr m m' : Prop :=
     forall offset,
       Memory.load m'
@@ -1064,7 +1063,6 @@ Section Renaming.
                        offset)
         ).
 
-  (* NOTE: The inverse is probably needed as well. *)
   Definition memory_inverse_renames_memory_at_addr addr' m m' : Prop :=
     forall offset,
       option_inverse_rename_value
@@ -1085,43 +1083,11 @@ Section Renaming.
                   ).
 
   Definition event_renames_event_at_addr addr e e' : Prop :=
-    forall offset,
-      Memory.load (mem_of_event e')
-                  (
-                    Permission.data,
-                    (rename_addr addr).1,
-                    (rename_addr addr).2,
-                    offset
-                  )
-      =
-      option_rename_value
-        (
-          Memory.load (mem_of_event e)
-                      (Permission.data,
-                       addr.1,
-                       addr.2,
-                       offset)
-        ).
+    memory_renames_memory_at_addr addr (mem_of_event e) (mem_of_event e').
 
   Definition event_inverse_renames_event_at_addr addr' e e' : Prop :=
-    forall offset,
-      option_inverse_rename_value
-        (
-          Memory.load (mem_of_event e')
-                      (Permission.data,
-                       addr'.1,
-                       addr'.2,
-                       offset
-                      )
-        )
-      =
-      Memory.load (mem_of_event e)
-                  (Permission.data,
-                   (inverse_rename_addr addr').1,
-                   (inverse_rename_addr addr').2,
-                   offset
-                  ).
-
+    memory_inverse_renames_memory_at_addr addr' (mem_of_event e) (mem_of_event e').
+      
   (** A pair of events is compatible when both instances correspond to the same
       type of event and their involved components and procedures coincide. *)
   Definition match_events (e1 e2 : event) : Prop :=
@@ -1210,45 +1176,6 @@ Section Renaming.
     traces_rename_each_other t1b t2b ->
     traces_rename_each_other (t1a ** t1b) (t2a ** t2b).
   Abort.
-  (*Proof.
-    unfold Eapp. induction sz; intros ? ? ? ?; intros Hsize Hta Htb;
-      assert (Hsza: length t1a = length t2a) by now apply traces_rename_each_other_same_size.
-    - assert (Hszb: length t1b = length t2b) by now apply traces_rename_each_other_same_size.
-      assert (Heq0: length (t1a ++ t1b)%list = 0) by now apply/eqP; rewrite <- leqn0.
-      assert (H: (t1a ++ t1b)%list = [::]) by now rewrite <- length_zero_iff_nil.
-      rewrite !H. pose proof app_eq_nil _ _ H as [a0 b0].
-      assert (t2a = [::])
-        by now rewrite <- length_zero_iff_nil; auto; rewrite <- Hsza; rewrite a0.
-      assert (t2b = [::])
-        by now rewrite <- length_zero_iff_nil; auto; rewrite <- Hszb; rewrite b0.
-        by subst.
-    - assert (Hszb: length t1b = length t2b) by now apply traces_rename_each_other_same_size.
-      remember (t1a ++ t1b)%list as t1.
-      induction t1 using last_ind;
-      try by now pose proof IHsz t1a t1b t2a t2b as g; rewrite <- Heqt1 in g; apply g.
-      remember (t2a ++ t2b)%list as t2.
-      induction t2 using last_ind.
-      + pose proof app_eq_nil _ _ (RelationClasses.eq_Symmetric _ _ Heqt2) as [a0 b0].
-        subst. simpl in *.
-        assert (t1a = [::]) by now rewrite <- length_zero_iff_nil.
-        assert (t1b = [::]) by now rewrite <- length_zero_iff_nil.
-        subst. simpl in *.  rewrite Heqt1. auto.
-      + assert (Hsize': size (rcons t1 x) <= sz.+1) by auto.
-        rewrite size_rcons in Hsize'. SearchAbout S leq.
-        assert (size t1 <= sz) by auto.
-        eapply rcons_renames_rcons.
-        pose proof IHsz t1 nil t2 nil
-        
-                   rewrite app_length in Hsize.
-      rewrite <- Heqt2. Heqt1.
-      pose proof length_zero_iff_nil _ Hsize as Hnil.
-    intros Hsize.
-    Hta Htb.
-    induction Hta as [ | atp ae atp' ae' ? ? ? aHa]; auto.
-    induction Htb as [ | btp be btp' be' ? ? ? bHa]; auto.
-    - rewrite !E0_right. rewrite !E0_right in IHHta. apply rcons_renames_rcons; auto.
-    - 
-   *)
 
 End Renaming.
 
@@ -1319,6 +1246,15 @@ Section TheShiftRenaming.
       forall t t',
         traces_rename_each_other sigma_shifting_addr inv_sigma_shifting_addr t t' ->
         traces_shift_each_other t t'.
+
+  (* For use in the state invariant *)
+  
+  Definition memory_shifts_memory_at_addr (addr: addr_t) m m' : Prop :=
+    memory_renames_memory_at_addr (rename_addr sigma_shifting_addr) addr m m'.
+
+  Definition memory_inverse_shifts_memory_at_addr (addr': addr_t) m m' : Prop :=
+    memory_inverse_renames_memory_at_addr
+      (inverse_rename_addr inv_sigma_shifting_addr) addr' m m'.
 
 End TheShiftRenaming.
 
@@ -1427,13 +1363,14 @@ Section PropertiesOfTheShiftRenaming.
 
   Lemma event_rename_reflexive n addr e:
     event_renames_event_at_addr (sigma_shifting_addr cid_for_shift n n) addr e e.
-  Proof. unfold event_renames_event_at_addr. rewrite !rename_addr_reflexive. intros.
+  Proof. unfold event_renames_event_at_addr, memory_renames_memory_at_addr.
+         rewrite !rename_addr_reflexive. intros.
          rewrite option_rename_value_reflexive. auto.
   Qed.
 
   Lemma event_inverse_rename_reflexive n addr e:
     event_inverse_renames_event_at_addr (inv_sigma_shifting_addr cid_for_shift n n) addr e e.
-  Proof. unfold event_inverse_renames_event_at_addr.
+  Proof. unfold event_inverse_renames_event_at_addr, memory_inverse_renames_memory_at_addr.
          rewrite !inverse_rename_addr_reflexive. intros.
          rewrite option_inverse_rename_value_reflexive. auto.
   Qed.
@@ -1673,6 +1610,25 @@ Section TheShiftRenamingAllCids.
     forall cid,
       traces_shift_each_other cid (metadata_size_lhs cid) (metadata_size_rhs cid) t1 t2.
 
+  (* For use in the state relation *)
+  Definition memory_shifts_memory_at_addr_all_cids addr m m' : Prop :=
+    forall cid, memory_shifts_memory_at_addr
+                  cid
+                  (metadata_size_lhs cid)
+                  (metadata_size_rhs cid)
+                  addr
+                  m
+                  m'.
+
+  Definition memory_inverse_shifts_memory_at_addr_all_cids addr' m m' : Prop :=
+    forall cid, memory_inverse_shifts_memory_at_addr
+                  cid
+                  (metadata_size_lhs cid)
+                  (metadata_size_rhs cid)
+                  addr'
+                  m
+                  m'.
+  
 End TheShiftRenamingAllCids.
 
 Section PropertiesOfTheShiftRenamingAllCids.
