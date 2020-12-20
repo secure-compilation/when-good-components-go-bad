@@ -32,10 +32,14 @@ Section Definability.
   Variable closed_intf: closed_interface intf.
   Variable has_main: intf Component.main.
 
-  Variable prog_buffers : NMap (nat + list value).
+  Variable prog_buffers : NMap {fmap Block.id -> nat + list value}.
   Hypothesis domm_buffers : domm intf = domm prog_buffers.
+  (* Essentially a copy of the intermediate [wfprog_well_formed_buffers]. *)
   Hypothesis wf_buffers :
-    forall C, C \in domm intf -> Buffer.well_formed_buffer_opt (prog_buffers C).
+    forall C bufs b,
+      prog_buffers C = Some bufs ->
+      b \in domm bufs ->
+      Buffer.well_formed_buffer_opt (bufs b).
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
@@ -319,6 +323,8 @@ Section Definability.
     | E_Leq   => Leq
     end.
 
+  Definition error_expr : expr := E_binop Mul (E_val (Int 0)) E_local.
+
   (* Translation of constant values to expressions, with special attention
      given to pointers. *)
   Definition expr_of_const_val (v : value) : expr :=
@@ -335,7 +341,7 @@ Section Definability.
        (instead of some arbitrary but well-typed value, so as to preserve
        bad behavior). This choice might demand more work in some proofs,
        while possibly making other goals distinctly provable. *)
-    | Undef            => E_binop Mul (E_val (Int 0)) E_local
+    | Undef            => error_expr
     end.
 
   Lemma values_are_integers_expr_of_const_val:
@@ -417,9 +423,13 @@ Section Definability.
 
   (* Compute component buffer side, assuming argument [C] is in the domain of
      [intf]. *)
-  Definition buffer_size (C : Component.id) : nat :=
+  Definition buffer_size (C : Component.id) (b : Block.id) : nat :=
     match prog_buffers C with
-    | Some buf => size (unfold_buffer buf)
+    | Some bufs =>
+      match bufs b with
+      | Some buf => size (unfold_buffer buf)
+      | None => 0 (* Should not happen *)
+      end
     | None => 0 (* Should not happen *)
     end.
 
@@ -433,8 +443,8 @@ Section Definability.
 
      Note that buffers coming from well-formed program components must have size
      strictly greater than zero, so the behavior of alloc() is defined. *)
-  Definition alloc_local_buffer_expr (C : Component.id) : expr :=
-    E_alloc (E_val (Int (Z.of_nat (buffer_size C)))).
+  Definition alloc_local_buffer_expr (C : Component.id) (b : Block.id) : expr :=
+    E_alloc (E_val (Int (Z.of_nat (buffer_size C b)))).
 
   (* Copy the [i]-th component of the original program buffer of [C] from its
      temporary location in the local buffer of [C]'s back-translation (following
@@ -456,12 +466,25 @@ Section Definability.
      hardcoded initialization code instead of having a copy of the original
      local buffer in the metadata buffer.
    *)
-  Definition copy_local_datum_expr (C : Component.id) (i : nat) : expr :=
+  Definition buffer_nth (C : Component.id) (b : Block.id) (i : nat) : expr :=
+    match prog_buffers C with
+    | Some bufs =>
+      match bufs b with
+      | Some buf =>
+        match nth_error (unfold_buffer buf) i with
+        | Some v => E_val v
+        | None => error_expr (* should not happen *)
+        end
+      | None => error_expr (* should not happen *)
+      end
+    | None => error_expr (* should not happen *)
+    end.
+
+  Definition copy_local_datum_expr (C : Component.id) (b : Block.id) (i : nat) : expr :=
     E_assign
       (E_binop Add (E_deref E_local)
                    (E_val (Int (Z.of_nat i))))
-      (E_deref (E_binop Add E_local
-                            (E_val (Int (Z.of_nat (i + size meta_buffer)))))).
+      (buffer_nth C b i).
 
   (* To initialize the acting local buffer from its temporary location in the
      private local buffer, allocate a new block of adequate size in memory,
@@ -474,14 +497,14 @@ Section Definability.
      the first position, which holds the program counter, while noting that
      this instruction will be executed at the first value of the counter (and
      prior to its increment), is rather ugly and brittle. *)
-  Definition init_local_buffer_expr (C : Component.id) : expr :=
+  Definition init_local_buffer_expr (C : Component.id) (b : Block.id) : expr :=
     (* [E_assign E_local (alloc_local_buffer_expr C)] ++ *)
     (* map (copy_local_datum_expr C) (iota 0 (buffer_size C)) ++ *)
     (* [E_assign E_local (E_val (Int 0))] *)
     foldr (fun e acc => E_seq e acc)
           (E_assign E_local (E_val (Int 0))) (* last instruction *)
-          ([E_assign E_local (alloc_local_buffer_expr C)] ++
-           map (copy_local_datum_expr C) (iota 0 (buffer_size C))).
+          ([E_assign E_local (alloc_local_buffer_expr C b)] ++
+           map (copy_local_datum_expr C b) (iota 0 (buffer_size C b))).
 
   Definition comp_call (C : Component.id) (e : event_inform) : bool :=
     match e with
