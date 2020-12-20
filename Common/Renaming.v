@@ -1210,45 +1210,6 @@ Section Renaming.
     traces_rename_each_other t1b t2b ->
     traces_rename_each_other (t1a ** t1b) (t2a ** t2b).
   Abort.
-  (*Proof.
-    unfold Eapp. induction sz; intros ? ? ? ?; intros Hsize Hta Htb;
-      assert (Hsza: length t1a = length t2a) by now apply traces_rename_each_other_same_size.
-    - assert (Hszb: length t1b = length t2b) by now apply traces_rename_each_other_same_size.
-      assert (Heq0: length (t1a ++ t1b)%list = 0) by now apply/eqP; rewrite <- leqn0.
-      assert (H: (t1a ++ t1b)%list = [::]) by now rewrite <- length_zero_iff_nil.
-      rewrite !H. pose proof app_eq_nil _ _ H as [a0 b0].
-      assert (t2a = [::])
-        by now rewrite <- length_zero_iff_nil; auto; rewrite <- Hsza; rewrite a0.
-      assert (t2b = [::])
-        by now rewrite <- length_zero_iff_nil; auto; rewrite <- Hszb; rewrite b0.
-        by subst.
-    - assert (Hszb: length t1b = length t2b) by now apply traces_rename_each_other_same_size.
-      remember (t1a ++ t1b)%list as t1.
-      induction t1 using last_ind;
-      try by now pose proof IHsz t1a t1b t2a t2b as g; rewrite <- Heqt1 in g; apply g.
-      remember (t2a ++ t2b)%list as t2.
-      induction t2 using last_ind.
-      + pose proof app_eq_nil _ _ (RelationClasses.eq_Symmetric _ _ Heqt2) as [a0 b0].
-        subst. simpl in *.
-        assert (t1a = [::]) by now rewrite <- length_zero_iff_nil.
-        assert (t1b = [::]) by now rewrite <- length_zero_iff_nil.
-        subst. simpl in *.  rewrite Heqt1. auto.
-      + assert (Hsize': size (rcons t1 x) <= sz.+1) by auto.
-        rewrite size_rcons in Hsize'. SearchAbout S leq.
-        assert (size t1 <= sz) by auto.
-        eapply rcons_renames_rcons.
-        pose proof IHsz t1 nil t2 nil
-        
-                   rewrite app_length in Hsize.
-      rewrite <- Heqt2. Heqt1.
-      pose proof length_zero_iff_nil _ Hsize as Hnil.
-    intros Hsize.
-    Hta Htb.
-    induction Hta as [ | atp ae atp' ae' ? ? ? aHa]; auto.
-    induction Htb as [ | btp be btp' be' ? ? ? bHa]; auto.
-    - rewrite !E0_right. rewrite !E0_right in IHHta. apply rcons_renames_rcons; auto.
-    - 
-   *)
 
 End Renaming.
 
