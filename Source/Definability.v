@@ -1110,7 +1110,7 @@ Section Definability.
         have C_local := wf_mem _ C_b.
         rewrite /procedure_of_trace /expr_of_trace.
         eexists. apply: switch_spec_else; eauto.
-        rewrite -> size_map; reflexivity.
+        cbn. rewrite -> size_map. reflexivity.
         reflexivity.
       - (* Inductive case: cons of a head event and a tail continuation for
            the suffix. *)
