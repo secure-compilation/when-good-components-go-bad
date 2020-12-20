@@ -196,36 +196,6 @@ Section Mergeable.
 
   Variables α γ : addr_t -> addr_t.
 
-  Variables α' γ' : NMap bool.
-
-  Let map_prog_prog'   : (addr_t -> addr_t) :=
-    fun '(C, b) =>
-      match C \in domm (prog_interface p) with
-      | true  => (C, b) (* [p] to [p]: identity *)
-      | false =>        (* [c] to [c' ]*)
-        match α' C, γ' C with
-        | Some true , Some true  => (C, b)     (* metadata in both: no change *)
-        | Some true , Some false => (C, b - 1) (* metadata in [c] only: decrement *)
-        | Some false, Some true  => (C, b + 1) (* metadata in [c'] only: increment *)
-        | Some false, Some false => (C, b)     (* metadata in neither: no change *)
-        | _         , _          => (0, 0)     (* should not happen *)
-        end
-      end.
-
-  Let map_prog''_prog'   : (addr_t -> addr_t) :=
-    fun '(C, b) =>
-      match C \in domm (prog_interface c) with
-      | true  => (C, b) (* [c'] to [c']: identity *)
-      | false =>        (* [p'] to [p] *)
-        match γ' C, α' C with
-        | Some true , Some true  => (C, b)     (* metadata in both: no change *)
-        | Some true , Some false => (C, b - 1) (* metadata in [p'] only: decrement *)
-        | Some false, Some true  => (C, b + 1) (* metadata in [p] only: increment *)
-        | Some false, Some false => (C, b)     (* metadata in neither: no change *)
-        | _         , _          => (0, 0)     (* should not happen *)
-        end
-      end.
-
   Definition trace_addrs_rel t m m' :=
     forall addrs,
       addr_shared_so_far addrs t ->
@@ -2900,8 +2870,6 @@ Section ThreewayMultisem4.
   (*     reflexivity || now apply star_refl. *)
   (* Qed. *)
 
-  Variables α γ : addr_t -> addr_t.
-
   Lemma match_initial_states s s'' :
     initial_state sem   s   ->
     initial_state sem'' s'' ->
@@ -3203,7 +3171,7 @@ Section Recombination.
     destruct (CS.behavior_prefix_star_non_inform Hbeh'' Hprefix'')
       as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
     pose proof match_initial_states Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-         Hprog_is_closed Hprog_is_closed' α γ α γ Hini1_ Hini1''_
+         Hprog_is_closed Hprog_is_closed' α γ Hini1_ Hini1''_
       as [s1'_ [Hini1' Hmerge1_]].
     (* By determinacy of initial program states: *)
     assert (Heq1 : s1 = s1_) by admit.
