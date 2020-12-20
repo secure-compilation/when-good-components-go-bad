@@ -194,17 +194,17 @@ Section Mergeable.
 
       *)
 
-  Variables α γ : addr_t -> addr_t.
+  Variables α γ : Component.id -> nat.
 
   Definition trace_addrs_rel t m m' :=
     forall addrs,
       addr_shared_so_far addrs t ->
-      memory_renames_memory_at_addr α addrs m m'.
+      memory_shifts_memory_at_addr_all_cids α γ addrs m m'.
 
   Definition trace_addrs_rel_inv t m m' :=
     forall addrs,
       addr_shared_so_far addrs t ->
-      memory_inverse_renames_memory_at_addr γ addrs m m'.
+      memory_inverse_shifts_memory_at_addr_all_cids α γ addrs m m'.
 
   (* An inductive definition to relate a program with the pointers found in its
      buffers and procedures. A computational definition can be given as well.
@@ -230,13 +230,13 @@ Section Mergeable.
     forall addrs,
       prog_addrs p addrs ->
       (* XXX -> *) (* TODO: Find renaming relation, add parameters to state relation. *)
-      memory_renames_memory_at_addr α addrs m m'.
+      memory_shifts_memory_at_addr_all_cids α γ addrs m m'.
 
   Definition prog_addrs_rel_inv p m m' :=
     forall addrs,
       prog_addrs p addrs ->
       (* ... *)
-      memory_inverse_renames_memory_at_addr γ addrs m m'.
+      memory_inverse_shifts_memory_at_addr_all_cids α γ addrs m m'.
 
   Definition memtrace : Type := eqtype.Equality.sort Memory.t * trace event.
 
@@ -1450,7 +1450,7 @@ Section ThreewayMultisem1.
 
    *)
 
-  Variables α γ : addr_t -> addr_t.
+  Variables α γ : Component.id -> nat.
 
   Ltac t_merge_states_silent_star :=
     inversion IHstar''; subst;
@@ -2439,7 +2439,7 @@ Section ThreewayMultisem2.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  Variables α γ : addr_t -> addr_t.
+  Variables α γ : Component.id -> nat.
 
   (* RB: TODO: Rename, relocate. *)
   (* RB: NOTE: [DynShare] In this series of results, identical traces will need
@@ -2665,7 +2665,7 @@ Section ThreewayMultisem3.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  Variables α γ : addr_t -> addr_t.
+  Variables α γ : Component.id -> nat.
 
   Theorem threeway_multisem_star s1 s1' s1'' t t'' s2 s2'' :
     mergeable_states p c p' c' α γ s1 s1' s1'' ->
@@ -2856,7 +2856,7 @@ Section ThreewayMultisem4.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  Variables α γ : addr_t -> addr_t.
+  Variables α γ : Component.id -> nat.
 
   (* Lemma initial_states_mergeability s s'' : *)
   (*   initial_state sem   s   -> *)
@@ -2934,7 +2934,7 @@ Section ThreewayMultisem5.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  Variables α γ : addr_t -> addr_t.
+  Variables α γ : Component.id -> nat.
 
   (* RB: NOTE: Consider execution invariance and similar lemmas on the right as
      well, as symmetry arguments reoccur all the time.
@@ -3076,7 +3076,7 @@ Section Recombination.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  Variables α γ : addr_t -> addr_t.
+  Variables α γ : Component.id -> nat.
 
   (* RB: NOTE: Possible improvements:
       - Try to refactor case analysis in proof.
