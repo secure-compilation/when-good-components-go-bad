@@ -194,6 +194,9 @@ Section Mergeable.
 
       *)
 
+  (* RB: NOTE: We may want to make these separate maps for the program and
+     context sides, compose they by their union. In any case, those
+     combinations should show soon. *)
   Variables α γ : Component.id -> nat.
 
   Definition trace_addrs_rel t m m' :=
@@ -240,6 +243,7 @@ Section Mergeable.
 
   Definition memtrace : Type := eqtype.Equality.sort Memory.t * trace event.
 
+  (* RB: NOTE: We may need a PC later to keep things simple. *)
   Definition event_comp (e : event) : Component.id :=
     match e with
     | ECall _ _ _ _ C | ERet _ _ _ C => C
@@ -297,6 +301,28 @@ Section Mergeable.
       (* behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) -> *)
       (* behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') -> *)
 
+  Definition regtrace : Type := Register.t * trace event.
+
+  (* RB: TODO: Use [omap] to make relation more conservative,
+     as suggested by AEK. *)
+  Inductive regs_rel2 (r r' : Register.t) :=
+  | regs_rel2_intro : forall i v v',
+      r  i = Some v  ->
+      r' i = Some v' ->
+      shift_value_all_cids α γ v = v' ->
+      inverse_shift_value_all_cids α γ v' = v ->
+      regs_rel2 r r'.
+
+  Inductive regs_rel3 (rt rt' rt'' : regtrace) :=
+  | regs_rel3_program :
+      trace_comp (snd rt) \in domm (prog_interface p) ->
+      regs_rel2 (fst rt) (fst rt') ->
+      regs_rel3 rt rt' rt''
+  | regs_rel3_context :
+      trace_comp (snd rt) \in domm (prog_interface c) ->
+      regs_rel2 (fst rt'') (fst rt') ->
+      regs_rel3 rt rt' rt''.
+
   (* Sketch a simple state relation based on the memory-trace relation, for the
      sake of expediency. *)
   (* Inductive mergeable_states (s s' s'' : CS.state) : Prop := *)
@@ -331,6 +357,7 @@ Section Mergeable.
       (* Sharing conditions.
          NOTE: Think about possible redundancies. *)
       mem_rel3 (CS.state_mem s, t) (CS.state_mem s', t') (CS.state_mem s'', t'') ->
+      regs_rel3 (CS.state_regs s, t) (CS.state_regs s', t') (CS.state_regs s'', t'') ->
       behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) ->
       behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') ->
       mergeable_states s s' s''.
@@ -631,7 +658,7 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc; clear Hpc.
     inversion Hmerg
-      as [? ? _ _ _ _ _ _ _ _ _ _ _ [[_ Hdisj] _] _ _ _ _ _ _ _ _ _ _ _ _ _].
+      as [? ? ? _ _ _ _ _ _ _ _ _ _ [[_ Hdisj] _] _ _ _ _ _ _ _ _ _ _ _ _ _ _].
     move: Hdisj.
     rewrite fdisjointC => /fdisjointP Hdisj.
     now auto.
@@ -650,7 +677,7 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     rewrite <- Hpc.
     inversion Hmerg as [s0 _ _ t _ _ _ _ _
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini _ _ Hstar _ _ _ _ _].
+                        Hini _ _ Hstar _ _ _ _ _ _].
     pose proof (CS.star_pc_domm_non_inform
                   _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar).
     intros Hn; destruct H.
@@ -668,7 +695,7 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     intros Hmerg Hpc_notin.
     inversion Hmerg as [[[[? ?] ?] ?] _ ? ? _ ? _ _ _
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini _ _ Hstar _ _ _ _ _].
+                        Hini _ _ Hstar _ _ _ _ _ _].
     CS.unfold_states.
     pose proof (CS.star_pc_domm_non_inform
                   _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as Hpc.
@@ -1128,7 +1155,7 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   Proof.
     destruct s as [[[? ?] ?] pc_]. simpl.
     intros Hpc Hmerge Hlabel.
-    inversion Hmerge as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _].
+    inversion Hmerge as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     pose proof find_label_in_component_1 _ _ _ _ Hlabel as Hpc_.
     pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
@@ -1149,7 +1176,7 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   Proof.
     destruct s as [[[? ?] ?] pc_]. simpl.
     intros Hpc Hmerge Hlabel.
-    inversion Hmerge as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _].
+    inversion Hmerge as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc _ Hwfc' Hmergeable_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _ _].
     pose proof proj1 Hmergeable_ifaces as Hlinkable.
     pose proof find_label_in_procedure_1 _ _ _ _ Hlabel as Hpc_.
     pose proof CS.is_program_component_pc_notin_domm _ _ Hpc as Hdomm; simpl in Hdomm.
@@ -1173,7 +1200,7 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     intros Hcomp Hmerge.
     unfold CS.is_program_component, CS.is_context_component, CS.state_turn, turn_of in Hcomp.
     destruct s as [[[gps1 mem1] regs1] pc1].
-    inversion Hmerge as [s0 _ _ t _ _ _ _ _ Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ _ Hstar _ _ _ _ _].
+    inversion Hmerge as [s0 _ _ t _ _ _ _ _ Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ Hini _ _ Hstar _ _ _ _ _ _].
     destruct (CS.star_pc_domm_non_inform _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as [Hip | Hic].
     - assumption.
     - now rewrite Hic in Hcomp.
@@ -1495,7 +1522,7 @@ Section ThreewayMultisem1.
       specialize (IHstar'' Hmerge1 eq_refl).
       (* rewrite IHstar''. *)
       apply star_iff_starR in Hstar12''.
-      destruct s1 as [[[gps mem] regs] pc].
+      destruct s1 as [[[gps1 mem1] regs1] pc1].
       destruct s2'' as [[[gps2'' mem2''] regs2''] pc2''].
       destruct s3'' as [[[gps3'' mem3''] regs3''] pc3''].
       pose proof CS.step_non_inform_step_inform prog''
@@ -1504,12 +1531,50 @@ Section ThreewayMultisem1.
       (* Analyze and recompose mergeability relation in each case. *)
       inversion Hstep_inform; subst;
         try t_merge_states_silent_star.
-      (* Rebuild the relation in the non-trivial, memory-altering cases. *)
+      (* Rebuild the relation in the non-trivial, memory- and/or
+         register-altering cases. *)
+      + (* Const *)
+        inversion X;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply regs_rel3_program.
+      + (* Mov *)
+        inversion X;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply regs_rel3_program.
+      + (* BinOp *)
+        inversion X;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply regs_rel3_program.
+      + (* Load *)
+        inversion X;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply regs_rel3_program.
       + (* Store *)
-        admit.
+        inversion H17;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply mem_rel3_program.
+      + (* Jal *)
+        inversion X;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply regs_rel3_program.
       + (* Alloc *)
-        admit.
-  Admitted. (* RB: TODO: Finish memrel, high-level structure done. *)
+        inversion H18;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply mem_rel3_program.
+      + (* Alloc *)
+        inversion X;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply regs_rel3_program.
+      + (* Call *)
+        inversion X;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply regs_rel3_program.
+      + (* Return *)
+        inversion X;
+          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
+        now apply regs_rel3_program.
+  Admitted. (* RB: TODO: Finish memrel, high-level structure done.
+               Refactor relational sub-goals into tactics. *)
 
    (*[DynShare]
 
@@ -1712,7 +1777,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         inversion Hmergeable_ifaces as [Hlinkable _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
@@ -1737,7 +1802,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -1761,7 +1826,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -1777,6 +1842,11 @@ Section ThreewayMultisem1.
         * eapply star_right; first eassumption.
           -- constructor. exact (CS.Const _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more implicit later. *)
           -- now rewrite E0_right.
+        * inversion X;
+            [| exfalso; admit]. (* Contra by [Hcomp1]. *)
+          apply regs_rel3_program; [assumption |].
+          (* Easy: same value added to both, related register files. *)
+          simpl in *. admit.
 
     - (* IMov *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -1788,7 +1858,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -1801,6 +1871,12 @@ Section ThreewayMultisem1.
         * eapply star_right; first eassumption.
           -- constructor. exact (CS.Mov _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more implicit later. *)
           -- now rewrite E0_right.
+        * inversion X;
+            [| exfalso; admit]. (* Contra by [Hcomp1]. *)
+          apply regs_rel3_program; [assumption |].
+        (* If register contents are related, the result of moving a pair of
+           these to another register should be as well. *)
+          simpl in *. admit.
 
     - (* IBinOp *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -1812,7 +1888,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -1825,6 +1901,12 @@ Section ThreewayMultisem1.
         * eapply star_right; first eassumption.
           -- constructor. exact (CS.BinOp _ _ _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more implicit later. *)
           -- now rewrite E0_right.
+        * inversion X;
+            [| exfalso; admit]. (* Contra by [Hcomp1]. *)
+          apply regs_rel3_program; [assumption |].
+          (* Operations on related register contents should continue to be
+             related. *)
+          simpl in *. unfold result. admit.
 
     - (* ILoad *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -1836,7 +1918,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -1852,6 +1934,12 @@ Section ThreewayMultisem1.
         * eapply star_right; first eassumption.
           -- constructor. eapply CS.Load; try eassumption; admit. (* Same as above. *)
           -- now rewrite E0_right.
+        * inversion X;
+            [| exfalso; admit]. (* Contra by [Hcomp1]. *)
+          apply regs_rel3_program; [assumption |].
+          (* Given a [v'] related to [v], assigning this related value to [r2]
+             in related register file [regs1'] should preserve the relation. *)
+          simpl in *. admit.
 
     - (* IStore *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -1863,7 +1951,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -1883,7 +1971,11 @@ Section ThreewayMultisem1.
           -- (* Without t', the wrong one hypothesis may have been picked, and
                 we could be blocked here. *)
             simpl. now rewrite E0_right.
-        * admit. (* Prove the revised memory relation. *)
+        * (* Prove the revised memory relation. *)
+          inversion H17;
+            [| exfalso; admit]. (* Contradiction by [Hcomp1]. *)
+          apply mem_rel3_program; simpl in *. assumption.
+          admit.
 
     - (* IJal *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -1895,7 +1987,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -1918,6 +2010,12 @@ Section ThreewayMultisem1.
         * eapply star_right; first eassumption.
           -- constructor. eapply CS.Jal; admit. (* Same as above. *)
           -- now rewrite E0_right.
+        * inversion X;
+            [| exfalso; admit]. (* Contra by [Hcomp1]. *)
+          apply regs_rel3_program; [assumption |].
+          (* Assigning the same value to the same register in related register
+             files continues to preserve the relation. *)
+          simpl in *. admit.
 
     - (* IJump *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -1929,7 +2027,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -1953,7 +2051,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -1987,7 +2085,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -2012,7 +2110,7 @@ Section ThreewayMultisem1.
       {
         inversion Hmerge1
           as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+              Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
         apply execution_invariant_to_linking with c; try assumption.
         - congruence.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -2030,6 +2128,13 @@ Section ThreewayMultisem1.
           -- constructor. eapply CS.Alloc; admit. (* Same as above. *)
           -- simpl. now rewrite E0_right.
         * admit. (* Restore the memory relation. *)
+        * inversion X;
+            [| exfalso; admit]. (* Contra by [Hcomp1]. *)
+          apply regs_rel3_program; [assumption |].
+          (* The pointers to the allocated buffers should be related (and in the
+             memory relation, and from there the relation on the registers should
+             be restored).  *)
+          simpl in *. admit.
 
     - (* ICall (contra) *)
       now inversion Ht.
@@ -2133,7 +2238,7 @@ Section ThreewayMultisem1.
   Proof.
     intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
     inversion Hmerge1 as [s0 _ _ t0 _ _ _ _ _ _ _ _ _
-                          Hmergeable_ifaces _ Hifacec _ _ _ _ _ Hstar _ _ _ _ _].
+                          Hmergeable_ifaces _ Hifacec _ _ _ _ _ Hstar _ _ _ _ _ _].
     pose proof mergeable_states_program_to_program Hmerge1 Hcomp1 as Hcomp1'.
     rewrite Hifacec in Hcomp1'.
     remember E0 as t eqn:Ht.
@@ -2213,7 +2318,7 @@ Section ThreewayMultisem1.
     intros Hdomm Hmerge Hexec.
     inversion Hmerge
       as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-          Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+          Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
     apply execution_invariant_to_linking with c; try assumption.
     - congruence.
     - inversion Hmerge. simpl in *.
@@ -2301,7 +2406,7 @@ Section ThreewayMultisem1.
         * reflexivity.
       + simpl.
         inversion Hmerge1 as [_ _ _ t t' t'' _ _ _
-                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrel _ _].
+                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrel _ _ _].
         admit. (* Memories are not modified, but the argument can give access to
                   new parts of memory. *)
 
@@ -2345,7 +2450,7 @@ Section ThreewayMultisem1.
           {
             inversion Hmerge1
               as [_ _ _ _ _ _ _ _ _ Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-                  Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _].
+                  Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ _ _ _].
             apply execution_invariant_to_linking with c; try assumption.
             - congruence.
             - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].
@@ -2355,7 +2460,7 @@ Section ThreewayMultisem1.
         * reflexivity.
       + simpl.
         inversion Hmerge1 as [_ _ _ t t' (*_*)t'' _ _ _
-                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (*[Hrel2' _]*)Hrel _ _].
+                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (*[Hrel2' _]*)Hrel _ _ _].
         admit.
 
   Admitted. (* RB: TODO: Fix statement and prove later, combine with lemma above. *)
