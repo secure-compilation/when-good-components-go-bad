@@ -240,6 +240,17 @@ Section Mergeable.
 
   Definition memtrace : Type := eqtype.Equality.sort Memory.t * trace event.
 
+  Definition event_comp (e : event) : Component.id :=
+    match e with
+    | ECall _ _ _ _ C | ERet _ _ _ C => C
+    end.
+
+  Definition trace_comp (t : trace event) : Component.id :=
+    match t with
+    | [] => Component.main
+    | e :: t' => fold_left (fun _ e => event_comp e) t' (event_comp e)
+    end.
+
   Inductive mem_rel2 (mt mt' : memtrace) : Prop :=
   | mem_rel2_intro : forall m t m' t',
       mt  = (m , t ) ->
@@ -250,11 +261,16 @@ Section Mergeable.
       prog_addrs_rel_inv  p  m m' ->
       mem_rel2 mt mt'.
 
+  (* Pairwise relations between the original runs and the combined run. *)
   Inductive mem_rel3 (mt mt' mt'' : memtrace) : Prop :=
-  | mem_rel3_intro :
-      (* Pairwise relations between the original runs and the combined run. *)
-      mem_rel2 mt   mt' ->
+  | mem_rel3_program :
+      trace_comp (snd mt) \in domm (prog_interface p) ->
+      mem_rel2 mt mt' ->
+      mem_rel3 mt mt' mt''
+  | mem_rel3_context :
+      trace_comp (snd mt) \in domm (prog_interface c) ->
       mem_rel2 mt'' mt' ->
+      mem_rel3 mt mt' mt''.
 
       (* (R1) m   \\ reach(p)  ~ m' \\ reach(p)
          (R2) m'' \\ reach(c') ~ m' \\ reach(c')
@@ -280,7 +296,6 @@ Section Mergeable.
       (* Local buffers on P's side *)
       (* behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) -> *)
       (* behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') -> *)
-      mem_rel3 mt mt' mt''.
 
   (* Sketch a simple state relation based on the memory-trace relation, for the
      sake of expediency. *)
@@ -2285,8 +2300,8 @@ Section ThreewayMultisem1.
              admit.
         * reflexivity.
       + simpl.
-        inversion Hmerge1 as [_ _ _ t t' _ _ _ _
-                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ [Hrel2' _] _ _].
+        inversion Hmerge1 as [_ _ _ t t' t'' _ _ _
+                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hrel _ _].
         admit. (* Memories are not modified, but the argument can give access to
                   new parts of memory. *)
 
@@ -2339,8 +2354,8 @@ Section ThreewayMultisem1.
         * congruence.
         * reflexivity.
       + simpl.
-        inversion Hmerge1 as [_ _ _ t t' _ _ _ _
-                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ [Hrel2' _] _ _].
+        inversion Hmerge1 as [_ _ _ t t' (*_*)t'' _ _ _
+                              _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ (*[Hrel2' _]*)Hrel _ _].
         admit.
 
   Admitted. (* RB: TODO: Fix statement and prove later, combine with lemma above. *)
