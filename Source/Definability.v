@@ -32,14 +32,14 @@ Section Definability.
   Variable closed_intf: closed_interface intf.
   Variable has_main: intf Component.main.
 
-  Variable prog_buffers : NMap {fmap Block.id -> nat + list value}.
-  Hypothesis domm_buffers : domm intf = domm prog_buffers.
-  (* Essentially a copy of the intermediate [wfprog_well_formed_buffers]. *)
-  Hypothesis wf_buffers :
-    forall C bufs b,
-      prog_buffers C = Some bufs ->
-      b \in domm bufs ->
-      Buffer.well_formed_buffer_opt (bufs b).
+  (* Variable prog_buffers : NMap {fmap Block.id -> nat + list value}. *)
+  (* Hypothesis domm_buffers : domm intf = domm prog_buffers. *)
+  (* (* Essentially a copy of the intermediate [wfprog_well_formed_buffers]. *) *)
+  (* Hypothesis wf_buffers : *)
+  (*   forall C bufs b, *)
+  (*     prog_buffers C = Some bufs -> *)
+  (*     b \in domm bufs -> *)
+  (*     Buffer.well_formed_buffer_opt (bufs b). *)
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
@@ -423,15 +423,15 @@ Section Definability.
 
   (* Compute component buffer side, assuming argument [C] is in the domain of
      [intf]. *)
-  Definition buffer_size (C : Component.id) (b : Block.id) : nat :=
-    match prog_buffers C with
-    | Some bufs =>
-      match bufs b with
-      | Some buf => size (unfold_buffer buf)
-      | None => 0 (* Should not happen *)
-      end
-    | None => 0 (* Should not happen *)
-    end.
+  (* Definition buffer_size (C : Component.id) (b : Block.id) : nat := *)
+  (*   match prog_buffers C with *)
+  (*   | Some bufs => *)
+  (*     match bufs b with *)
+  (*     | Some buf => size (unfold_buffer buf) *)
+  (*     | None => 0 (* Should not happen *) *)
+  (*     end *)
+  (*   | None => 0 (* Should not happen *) *)
+  (*   end. *)
 
   (* Allocate a new buffer to serve as the local buffer of the back-translation.
      By convention this will be created immediately after program initialization
@@ -443,8 +443,8 @@ Section Definability.
 
      Note that buffers coming from well-formed program components must have size
      strictly greater than zero, so the behavior of alloc() is defined. *)
-  Definition alloc_local_buffer_expr (C : Component.id) (b : Block.id) : expr :=
-    E_alloc (E_val (Int (Z.of_nat (buffer_size C b)))).
+  (* Definition alloc_local_buffer_expr (C : Component.id) (b : Block.id) : expr := *)
+  (*   E_alloc (E_val (Int (Z.of_nat (buffer_size C b)))). *)
 
   (* Copy the [i]-th component of the original program buffer of [C] from its
      temporary location in the local buffer of [C]'s back-translation (following
@@ -466,25 +466,25 @@ Section Definability.
      hardcoded initialization code instead of having a copy of the original
      local buffer in the metadata buffer.
    *)
-  Definition buffer_nth (C : Component.id) (b : Block.id) (i : nat) : expr :=
-    match prog_buffers C with
-    | Some bufs =>
-      match bufs b with
-      | Some buf =>
-        match nth_error (unfold_buffer buf) i with
-        | Some v => E_val v
-        | None => error_expr (* should not happen *)
-        end
-      | None => error_expr (* should not happen *)
-      end
-    | None => error_expr (* should not happen *)
-    end.
+  (* Definition buffer_nth (C : Component.id) (b : Block.id) (i : nat) : expr := *)
+  (*   match prog_buffers C with *)
+  (*   | Some bufs => *)
+  (*     match bufs b with *)
+  (*     | Some buf => *)
+  (*       match nth_error (unfold_buffer buf) i with *)
+  (*       | Some v => E_val v *)
+  (*       | None => error_expr (* should not happen *) *)
+  (*       end *)
+  (*     | None => error_expr (* should not happen *) *)
+  (*     end *)
+  (*   | None => error_expr (* should not happen *) *)
+  (*   end. *)
 
-  Definition copy_local_datum_expr (C : Component.id) (b : Block.id) (i : nat) : expr :=
-    E_assign
-      (E_binop Add (E_deref E_local)
-                   (E_val (Int (Z.of_nat i))))
-      (buffer_nth C b i).
+  (* Definition copy_local_datum_expr (C : Component.id) (b : Block.id) (i : nat) : expr := *)
+  (*   E_assign *)
+  (*     (E_binop Add (E_deref E_local) *)
+  (*                  (E_val (Int (Z.of_nat i)))) *)
+  (*     (buffer_nth C b i). *)
 
   (* To initialize the acting local buffer from its temporary location in the
      private local buffer, allocate a new block of adequate size in memory,
@@ -497,14 +497,14 @@ Section Definability.
      the first position, which holds the program counter, while noting that
      this instruction will be executed at the first value of the counter (and
      prior to its increment), is rather ugly and brittle. *)
-  Definition init_local_buffer_expr (C : Component.id) (b : Block.id) : expr :=
-    (* [E_assign E_local (alloc_local_buffer_expr C)] ++ *)
-    (* map (copy_local_datum_expr C) (iota 0 (buffer_size C)) ++ *)
-    (* [E_assign E_local (E_val (Int 0))] *)
-    foldr (fun e acc => E_seq e acc)
-          (E_assign E_local (E_val (Int 0))) (* last instruction *)
-          ([E_assign E_local (alloc_local_buffer_expr C b)] ++
-           map (copy_local_datum_expr C b) (iota 0 (buffer_size C b))).
+  (* Definition init_local_buffer_expr (C : Component.id) (b : Block.id) : expr := *)
+  (*   (* [E_assign E_local (alloc_local_buffer_expr C)] ++ *) *)
+  (*   (* map (copy_local_datum_expr C) (iota 0 (buffer_size C)) ++ *) *)
+  (*   (* [E_assign E_local (E_val (Int 0))] *) *)
+  (*   foldr (fun e acc => E_seq e acc) *)
+  (*         (E_assign E_local (E_val (Int 0))) (* last instruction *) *)
+  (*         ([E_assign E_local (alloc_local_buffer_expr C b)] ++ *)
+  (*          map (copy_local_datum_expr C b) (iota 0 (buffer_size C b))). *)
 
   Definition comp_call (C : Component.id) (e : event_inform) : bool :=
     match e with
@@ -529,10 +529,10 @@ Section Definability.
      the necessary events for the initialization check are not available. *)
   Definition expr_of_trace
              (C: Component.id) (P: Procedure.id) (t: trace event_inform)
-             (init: bool)
+             (* (init: bool) *)
     : expr :=
-    let init_expr := if init then [init_local_buffer_expr C] else [] in
-    switch (init_expr ++ map (expr_of_event C P) t) E_exit.
+    (* let init_expr := if init then [init_local_buffer_expr C] else [] in *)
+    switch (map (expr_of_event C P) t) E_exit.
 
   (** To compile a complete trace mixing events from different components, we
       split it into individual traces for each component and apply
@@ -549,7 +549,7 @@ Section Definability.
   Definition procedure_of_trace
              (C : Component.id) (P : Procedure.id) (t : trace event_inform)
     : expr :=
-    expr_of_trace C P (comp_subtrace C t) false. (* RB: TODO: Substitute check. *)
+    expr_of_trace C P (comp_subtrace C t). (* RB: TODO: Substitute check. *)
 
   Definition procedures_of_trace (t: trace event_inform) : NMap (NMap expr) :=
     mapim (fun C Ciface =>
@@ -599,7 +599,8 @@ Section Definability.
     {| Source.prog_interface  := intf;
        Source.prog_procedures := procedures_of_trace t;
        Source.prog_buffers    :=
-         mapm (fun b => inr (meta_buffer ++ (unfold_buffer b))) prog_buffers |}.
+         mapm (fun _ => inr meta_buffer) intf |}.
+         (* mapm (fun b => inr (meta_buffer ++ (unfold_buffer b))) prog_buffers |}. *)
 
   (** To prove that [program_of_trace] is correct, we need to describe how the
       state of the program evolves as it emits events from the translated trace.
@@ -696,21 +697,26 @@ Section Definability.
       by case/orP=> [/eqP [-> ->] //|]; eauto.
     - by rewrite domm_map.
     - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
-      assert (exists buf, prog_buffers C = Some buf) as [buf C_buf].
-      {
-        apply /dommP. rewrite -domm_buffers. apply /dommP. by eauto.
-      }
-      rewrite /Source.has_required_local_buffers /= mapmE C_buf /=.
+      (* assert (exists buf, prog_buffers C = Some buf) as [buf C_buf]. *)
+      (* { *)
+      (*   apply /dommP. rewrite -domm_buffers. apply /dommP. by eauto. *)
+      (* } *)
+      (* rewrite /Source.has_required_local_buffers /= mapmE C_buf /=. *)
       (* eexists; eauto => /=; omega. *)
-      {
-        eexists; [eexists |].
-        - reflexivity.
-        - simpl. omega.
-        - assert (C_intf : C \in domm intf) by (apply /dommP; eauto).
-          specialize (wf_buffers C_intf).
-          setoid_rewrite C_buf in wf_buffers.
-          admit.
-      }
+      split.
+      + rewrite /Source.has_required_local_buffers. eexists.
+        * rewrite mapmE C_CI. reflexivity.
+        * simpl. omega.
+      + by rewrite /Buffer.well_formed_buffer_opt mapmE C_CI.
+      (* { *)
+      (*   eexists; [eexists |]. *)
+      (*   - reflexivity. *)
+      (*   - simpl. omega. *)
+      (*   - assert (C_intf : C \in domm intf) by (apply /dommP; eauto). *)
+      (*     specialize (wf_buffers C_intf). *)
+      (*     setoid_rewrite C_buf in wf_buffers. *)
+      (*     admit. *)
+      (* } *)
     - rewrite /Source.prog_main find_procedures_of_trace //=.
       + split; first reflexivity.
         intros _.
@@ -912,7 +918,7 @@ Section Definability.
            recursive case. The first star can be proved as before, but is it
            exactly what we need? *)
         assert (Star1 : Star (CS.sem p)
-                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t) false, arg] E0
+                             [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
                              [CState C, stk, mem', Kstop, expr_of_event C P e, arg]).
         { unfold expr_of_trace. rewrite Et comp_subtrace_app. simpl.
           rewrite <- wf_C, Nat.eqb_refl, map_app. simpl.
