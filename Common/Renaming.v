@@ -1248,6 +1248,12 @@ Section TheShiftRenaming.
         traces_shift_each_other t t'.
 
   (* For use in the state invariant *)
+
+  Definition shift_value (v: value) : value :=
+    rename_value (rename_addr sigma_shifting_addr) v.
+
+  Definition inverse_shift_value (v': value) : value :=
+    inverse_rename_value (inverse_rename_addr inv_sigma_shifting_addr) v'.
   
   Definition memory_shifts_memory_at_addr (addr: addr_t) m m' : Prop :=
     memory_renames_memory_at_addr (rename_addr sigma_shifting_addr) addr m m'.
@@ -1611,6 +1617,30 @@ Section TheShiftRenamingAllCids.
       traces_shift_each_other cid (metadata_size_lhs cid) (metadata_size_rhs cid) t1 t2.
 
   (* For use in the state relation *)
+
+  Definition cid_of_value (v: value) : Component.id :=
+    match v with
+    | Int _ => 0
+    | Ptr (_, cid, _, _) => cid
+    | Undef => 0
+    end.
+
+  Definition shift_value_all_cids (v: value) : value :=
+    let cid := cid_of_value v in
+    shift_value
+      cid
+      (metadata_size_lhs cid)
+      (metadata_size_rhs cid)
+      v.
+
+  Definition inverse_shift_value_all_cids (v': value) : value :=
+    let cid := cid_of_value v' in
+    inverse_shift_value
+      cid
+      (metadata_size_lhs cid)
+      (metadata_size_rhs cid)
+      v'.
+
   Definition memory_shifts_memory_at_addr_all_cids addr m m' : Prop :=
     forall cid, memory_shifts_memory_at_addr
                   cid
