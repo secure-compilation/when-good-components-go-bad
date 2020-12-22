@@ -965,21 +965,37 @@ Section Definability.
             exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem,
                     Kstop, procedure_of_trace C' P' t, new_arg].
             split.
-            + take_step. take_step.
+            (* + take_step. take_step. *)
+            (*   apply star_one. simpl. *)
+            (*   (* RB: TODO: [DynShare] For the proof to go through, we need to *)
+            (*      establish (i.e., evaluate) beforehand the fact that the COM *)
+            (*      register contains a values. This is probably what was intended *)
+            (*      by [values_are_integers_loc_of_reg], though it does not let *)
+            (*      us infer that. *) *)
+            (*   assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v) *)
+            (*     as [v Hregval] *)
+            (*     by admit; *)
+            (*     rewrite Hregval. *)
+            (*   apply CS.eval_kstep_sound. simpl. *)
+            (*   rewrite (negbTE C_ne_C'). *)
+            (*   rewrite -> imported_procedure_iff in Himport. rewrite Himport. *)
+            (*   rewrite <- imported_procedure_iff in Himport. *)
+            (*   by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
+            + (* First assumption: R_COM contains the argument. *)
+              assert (Hrcom : Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some new_arg) by admit.
+              take_step.
+Local Transparent loc_of_reg.
+              unfold loc_of_reg.
+Local Opaque loc_of_reg.
+              do 7 take_step;
+                [reflexivity | eassumption |].
               apply star_one. simpl.
-              (* RB: TODO: [DynShare] For the proof to go through, we need to
-                 establish (i.e., evaluate) beforehand the fact that the COM
-                 register contains a values. This is probably what was intended
-                 by [values_are_integers_loc_of_reg], though it does not let
-                 us infer that. *)
-              assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
-                as [v Hregval]
-                by admit;
-                rewrite Hregval.
               apply CS.eval_kstep_sound. simpl.
               rewrite (negbTE C_ne_C').
               rewrite -> imported_procedure_iff in Himport. rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
+              (* Second assumption: the memory does not change. *)
+              assert (mem' = mem) by admit; subst mem'.
               by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
             + econstructor; trivial.
               { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
@@ -1005,18 +1021,34 @@ Section Definability.
               intros mem wf_mem arg.
               exists [CState C', CS.Frame C' saved Kstop :: top ++ bot, mem, Kstop, procedure_of_trace C' P' t, Int 0].
               split.
-              * (* RB: TODO: [DynShare] Similarly as above, but before we take
-                   step to have the result of the evaluation in scope. *)
-                assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
-                  as [v Hregval]
-                  by admit;
-                  rewrite Hregval.
+              (* * (* RB: TODO: [DynShare] Similarly as above, but before we take *)
+              (*      step to have the result of the evaluation in scope. *) *)
+              (*   assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v) *)
+              (*     as [v Hregval] *)
+              (*     by admit; *)
+              (*     rewrite Hregval. *)
+              (*   eapply star_step. *)
+              (*   -- eapply CS.KS_ExternalReturn; now eauto. *)
+              (*   -- take_step. take_step; eauto. *)
+              (*      apply star_one. apply CS.eval_kstep_sound. *)
+              (*      by rewrite /= eqxx (find_procedures_of_trace t P'_exp). *)
+              (*   -- now rewrite E0_right. *)
+              * (* First assumption: R_COM contains the return_value. *)
+                assert (Hrcom : Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some ret_val) by admit.
+                take_step.
+Local Transparent loc_of_reg.
+                unfold loc_of_reg.
+Local Opaque loc_of_reg.
+                do 5 take_step;
+                  [reflexivity | eassumption |].
                 eapply star_step.
                 -- eapply CS.KS_ExternalReturn; now eauto.
                 -- take_step. take_step; eauto.
                    apply star_one. apply CS.eval_kstep_sound.
                    by rewrite /= eqxx (find_procedures_of_trace t P'_exp).
-                -- now rewrite E0_right.
+                -- (* Second assumption: the memory does not change. *)
+                   assert (mem' = mem) by admit; subst mem'.
+                   now rewrite E0_right.
               * econstructor; trivial.
                 exists (CS.Frame C' saved Kstop :: top), bot. simpl. eauto.
             + intros mem wf_mem arg.
