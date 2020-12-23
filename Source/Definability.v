@@ -671,14 +671,32 @@ Section Definability.
         case: e=> [C' P' v mem C''| | | | | | | |]
                     //=;
                     try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH.
-        (* * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=. *)
-        (*   rewrite fsub0set. *)
-        (*     by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT. *)
-        (* * by move=> C' P' e; rewrite called_procedures_loc_of_reg *)
-        (*                              called_procedures_expr_of_const_val !fset0U IH. *)
-        (* * by move=> C' e0 e1 e2 e; rewrite !called_procedures_loc_of_reg !fset0U IH. *)
-        (* * by move=> C'; rewrite !called_procedures_loc_of_reg !fset0U IH. *)
-        all:admit.
+        * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
+          rewrite fsub0set.
+            by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
+        (* RB: TODO: Refactor cases. *)
+        * move=> C' v r.
+          by rewrite called_procedures_loc_of_reg
+                     called_procedures_expr_of_const_val
+                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
+        * move=> C' r1 r2.
+          by rewrite 2!called_procedures_loc_of_reg
+                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
+        * move=> C' e r1 r2 r3.
+          by rewrite 3!called_procedures_loc_of_reg
+                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
+        * move=> C' r1 r2.
+          by rewrite 2!called_procedures_loc_of_reg
+                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
+        * move=> C' r1 r2.
+          by rewrite 2!called_procedures_loc_of_reg
+                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
+        * move=> C' r1 r2.
+          by rewrite 2!called_procedures_loc_of_reg
+                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
+        * move=> C'.
+          by rewrite called_procedures_loc_of_reg
+                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
       }
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
         rewrite eqxx find_procedures_of_trace //.
@@ -724,8 +742,7 @@ Section Definability.
         * apply /dommP. exists mainP. assumption.
         * discriminate.
       + by left.
-  (* Qed. *)
-  Admitted.
+  Qed.
 
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).
