@@ -975,6 +975,7 @@ Section Definability.
              both levels. *)
           destruct e as [C_ P' new_arg mem' C'|C_ ret_val mem' C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_ |C_];
           simpl in wf_C, wf_e, wb_suffix; subst C_.
+
           - (* Event case: call. *)
             case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
             exists (StackState C' (C :: callers)).
@@ -1023,6 +1024,7 @@ Local Opaque loc_of_reg.
               right. by apply: (closed_intf Himport).
               (* NOTE: These snippets continue to work, though they may incur
                  modifications later on. *)
+
           - (* Event case: return. *)
             move: wf_e=> /eqP C_ne_C'.
             destruct callers as [|C'_ callers]; try easy.
@@ -1081,7 +1083,9 @@ Local Opaque loc_of_reg.
                   rewrite Hregval.
                 by apply/CS.eval_kstep_sound; rewrite /= eqxx.
               * reflexivity.
+
           (* NOTE: ... And there is a series of new events to consider. *)
+
           - (* EConst *)
             (* Case analysis on concrete constant expression; all cases are
                similar. *)
@@ -1105,6 +1109,7 @@ Local Opaque loc_of_reg.
               exists bot. split; [| split]; easy.
             + admit. (* Similarly. *)
             + admit. (* Similarly. *)
+
           - (* EMov *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
@@ -1123,12 +1128,121 @@ Local Opaque loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
+
+          - (* EBinop *)
+            exists (StackState C callers). eexists. split.
+            + (* Evaluate steps of back-translated event first. *)
+              Local Transparent loc_of_reg.
+              do 9 take_step.
+              * reflexivity.
+              * simpl. admit. (* Easy: metadata block load. *)
+              * do 7 take_step.
+                -- reflexivity.
+                -- admit. (* Easy: metadata block load. *)
+                -- do 7 take_step.
+                   ++ reflexivity.
+                   ++ admit. (* Easy: metadata block store *)
+                   ++ (* Do recursive call. *)
+                     do 3 take_step.
+                     ** reflexivity.
+                     ** admit.
+                     ** (* Now we are done with the event. *)
+                        apply star_refl.
+            + (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+
+          - (* ELoad *)
+            exists (StackState C callers). eexists. split.
+            + (* Evaluate steps of back-translated event first. *)
+              Local Transparent loc_of_reg.
+              do 8 take_step.
+              * reflexivity.
+              * simpl. admit. (* Easy: metadata block load. *)
+              * do 6 take_step.
+                -- reflexivity.
+                -- admit. (* Easy: metadata block store. *)
+                -- (* Do recursive call. *)
+                   do 3 take_step.
+                   ++ reflexivity.
+                   ++ admit.
+                   ++ (* Now we are done with the event. *)
+                     apply star_refl.
+            + (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+
+          - (* EStore *)
+            exists (StackState C callers). eexists. split.
+            + (* Evaluate steps of back-translated event first. *)
+              Local Transparent loc_of_reg.
+              do 8 take_step.
+              * reflexivity.
+              * simpl. admit. (* Easy: metadata block load. *)
+              * do 6 take_step.
+                -- reflexivity.
+                -- admit. (* Easy: metadata block store. *)
+                -- (* Do recursive call. *)
+                   do 3 take_step.
+                   ++ reflexivity.
+                   ++ admit.
+                   ++ (* Now we are done with the event. *)
+                     apply star_refl.
+            + (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+
+          - (* EAlloc *)
+            exists (StackState C callers). eexists. split.
+            + (* Evaluate steps of back-translated event first. *)
+              Local Transparent loc_of_reg.
+              do 9 take_step.
+              * reflexivity.
+              * simpl. admit. (* Easy: metadata block load. *)
+              * do 1 take_step.
+                -- admit. (* Metadata-simulated register [e] holds positive integer. *)
+                -- admit. (* Easy: metadata block alloc. *)
+                -- do 6 take_step.
+                   ++ reflexivity.
+                   ++ admit. (* Easy: metadata block store. *)
+                   ++ (* Do recursive call. *)
+                      do 3 take_step.
+                      ** reflexivity.
+                      ** admit.
+                      ** (* Now we are done with the event. *)
+                         apply star_refl.
+            + (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+
+          - (* EInvalidateRA *)
+            exists (StackState C callers). eexists. split.
+            + (* Evaluate steps of back-translated event first. *)
+              Local Transparent loc_of_reg.
+              do 8 take_step.
+              * reflexivity.
+              * simpl. admit. (* Easy: metadata block store. *)
+              * (* Do recursive call. *)
+                do 3 take_step.
+                -- reflexivity.
+                -- admit. (* Easy: metadata block store. *)
+                -- (* Now we are done with the event. *)
+                   apply star_refl.
+            + (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
         }
+
         destruct Star2 as (s' & cs' & Star2 & wf_cs').
         (* The third star is produced by the IH. *)
         specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
