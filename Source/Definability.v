@@ -784,11 +784,19 @@ Section Definability.
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
 
-    Definition well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
-      forall C,
+    Record well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
+      {
+        wfmem_counter:
+        forall C,
         component_buffer C ->
         Memory.load mem (Permission.data, C, Block.local, 0%Z) =
-        Some (Int (counter_value C prefix)).
+        Some (Int (counter_value C prefix))
+      ; wfmem_meta:
+        forall C r,
+        component_buffer C ->
+        exists v,
+        Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v
+      }.
 
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
@@ -810,12 +818,13 @@ Section Definability.
                      (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
         well_formed_memory (prefix ++ [e]) mem'.
     Proof.
-      move=> C_b wf_mem HC.
+      move=> C_b [wf_mem wf_meta] HC.
       have C_local := wf_mem _ C_b.
       have [mem' Hmem'] := Memory.store_after_load
                              _ _ _ (Int (counter_value C (prefix ++ [e])))
                              C_local.
-      exists mem'. split; trivial=> C' C'_b.
+      exists mem'. split; [now trivial |]. constructor; [| admit]=> C' C'_b. (* TODO *)
+      (* exists mem'. split; trivial=> C' C'_b. *)
       have C'_local := wf_mem _ C'_b.
       rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *.
       case: (altP (C' =P C)) => [?|C_neq_C'].
@@ -825,7 +834,8 @@ Section Definability.
                    (Permission.data, C', Block.local, 0%Z) by move/eqP in C_neq_C'; congruence.
         rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
         now rewrite Z.add_0_r.
-    Qed.
+    (* Qed. *)
+    Admitted. (* RB: TODO: Complete new sub-goal, easy. *)
 
     Variant well_formed_state (stk_st: stack_state)
             (prefix suffix: trace event_inform) : CS.state -> Prop :=
@@ -902,7 +912,7 @@ Section Definability.
       elim: suffix s prefix cs=> [|e suffix IH] /= [C callers] prefix.
       - (* Base case: empty suffix. The proof is straightforward. *)
         rewrite cats0 => cs <- {prefix}.
-        case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk wf_mem P_exp.
+        case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk [wf_mem wf_meta] P_exp.
         exists [CState C, stk, mem, Kstop, E_exit, arg], E0, E0, (uniform_shift 1).
         split; [| split; [| split]].
         + have C_b := valid_procedure_has_block P_exp.
@@ -918,8 +928,9 @@ Section Definability.
            the suffix. *)
         move=> cs Et /=.
         case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
+        inversion wf_mem as [wfmem_counter wfmem_meta].
         have C_b := valid_procedure_has_block P_exp.
-        have C_local := wf_mem _ C_b.
+        have C_local := wfmem_counter _ C_b.
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
         (* We can simulate the event-producing step as the concatenation of three
            successive stars:
@@ -968,7 +979,7 @@ Section Definability.
                (* NOTE: Here, too, we may need additional conjuncts... *)
                ).
         {
-          clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
+          clear Star1 wf_mem wfmem_counter wfmem_meta C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
           (* Case analysis on observable events, which in this rich setting
              extend to calls and returns and various memory accesses and related
              manipulations, of which only calls and returns are observable at
@@ -1130,15 +1141,20 @@ Local Opaque loc_of_reg.
               exists bot. split; [| split]; easy.
 
           - (* EBinop *)
+            (* Before processing the goal, introduce existential witnesses. *)
+            inversion wf_mem as [_ wfmem_meta].
+            destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
+            destruct (wfmem_meta _ e1 C_b) as [v1 Hload1].
+            (* Proceed. *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
               do 9 take_step.
               * reflexivity.
-              * simpl. admit. (* Easy: metadata block load. *)
+              * exact Hload0.
               * do 7 take_step.
                 -- reflexivity.
-                -- admit. (* Easy: metadata block load. *)
+                -- exact Hload1.
                 -- do 7 take_step.
                    ++ reflexivity.
                    ++ admit. (* Easy: metadata block store *)
@@ -1299,7 +1315,7 @@ Local Opaque loc_of_reg.
         case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk wf_mem P_exp.
         exists [CState C, stk, mem, Kstop, E_exit, arg]; last by left.
         have C_b := valid_procedure_has_block P_exp.
-        have C_local := wf_mem _ C_b.
+        have C_local := (wfmem_counter wf_mem) _ C_b.
         rewrite /procedure_of_trace /expr_of_trace.
         eexists. apply: switch_spec_else; eauto.
         cbn. rewrite -> size_map. reflexivity.
@@ -1309,7 +1325,7 @@ Local Opaque loc_of_reg.
         move=> cs Et /=.
         case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
         have C_b := valid_procedure_has_block P_exp.
-        have C_local := wf_mem _ C_b.
+        have C_local := (wfmem_counter wf_mem) _ C_b.
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
         (* We can simulate the event-producing step as the concatenation of three
            successive stars:
@@ -1471,12 +1487,15 @@ Local Opaque loc_of_reg.
       rewrite /cs /CS.initial_machine_state /Source.prog_main /= find_procedures_of_trace_main //.
       econstructor; eauto; last by left; eauto.
         exists [::], [::]. by do ![split; trivial].
-      intros C.
-      unfold component_buffer, Memory.load.
-      simpl. repeat (rewrite mapmE; simpl); rewrite mem_domm.
-      case HCint: (intf C) => [Cint|] //=.
-      by rewrite ComponentMemory.load_prealloc /=.
-    Qed.
+      constructor.
+      - intros C.
+        unfold component_buffer, Memory.load.
+        simpl. repeat (rewrite mapmE; simpl); rewrite mem_domm.
+        case HCint: (intf C) => [Cint|] //=.
+        by rewrite ComponentMemory.load_prealloc /=.
+      - admit.
+    (* Qed. *)
+    Admitted. (* RB: TODO: Prove new memory sub-goals, easy. *)
 
 End WithTrace.
 End Definability.
