@@ -1099,7 +1099,7 @@ Local Opaque loc_of_reg.
               -- (* Do recursive call. *)
                   do 3 take_step.
                   ++ reflexivity.
-                  ++ admit.
+                  ++ now apply find_procedures_of_trace.
                   ++ (* Now we are done with the event. *)
                      apply star_refl.
             * (* Reestablish invariant. *)
@@ -1120,7 +1120,7 @@ Local Opaque loc_of_reg.
               * (* Do recursive call. *)
                 do 3 take_step.
                 -- reflexivity.
-                -- admit.
+                -- now apply find_procedures_of_trace.
                 -- (* Now we are done with the event. *)
                   apply star_refl.
             + (* Reestablish invariant. *)
@@ -1145,7 +1145,7 @@ Local Opaque loc_of_reg.
                    ++ (* Do recursive call. *)
                      do 3 take_step.
                      ** reflexivity.
-                     ** admit.
+                     ** now apply find_procedures_of_trace.
                      ** (* Now we are done with the event. *)
                         apply star_refl.
             + (* Reestablish invariant. *)
@@ -1167,7 +1167,7 @@ Local Opaque loc_of_reg.
                 -- (* Do recursive call. *)
                    do 3 take_step.
                    ++ reflexivity.
-                   ++ admit.
+                   ++ now apply find_procedures_of_trace.
                    ++ (* Now we are done with the event. *)
                      apply star_refl.
             + (* Reestablish invariant. *)
@@ -1189,7 +1189,7 @@ Local Opaque loc_of_reg.
                 -- (* Do recursive call. *)
                    do 3 take_step.
                    ++ reflexivity.
-                   ++ admit.
+                   ++ now apply find_procedures_of_trace.
                    ++ (* Now we are done with the event. *)
                      apply star_refl.
             + (* Reestablish invariant. *)
@@ -1214,7 +1214,7 @@ Local Opaque loc_of_reg.
                    ++ (* Do recursive call. *)
                       do 3 take_step.
                       ** reflexivity.
-                      ** admit.
+                      ** now apply find_procedures_of_trace.
                       ** (* Now we are done with the event. *)
                          apply star_refl.
             + (* Reestablish invariant. *)
@@ -1233,7 +1233,7 @@ Local Opaque loc_of_reg.
               * (* Do recursive call. *)
                 do 3 take_step.
                 -- reflexivity.
-                -- admit. (* Easy: metadata block store. *)
+                -- now apply find_procedures_of_trace.
                 -- (* Now we are done with the event. *)
                    apply star_refl.
             + (* Reestablish invariant. *)
