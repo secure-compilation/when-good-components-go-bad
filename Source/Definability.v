@@ -787,15 +787,15 @@ Section Definability.
     Record well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
       {
         wfmem_counter:
-        forall C,
-        component_buffer C ->
-        Memory.load mem (Permission.data, C, Block.local, 0%Z) =
-        Some (Int (counter_value C prefix))
-      ; wfmem_meta:
-        forall C r,
-        component_buffer C ->
-        exists v,
-        Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v
+          forall C,
+            component_buffer C ->
+            Memory.load mem (Permission.data, C, Block.local, 0%Z) =
+            Some (Int (counter_value C prefix));
+        wfmem_meta:
+          forall C r,
+            component_buffer C ->
+          exists v,
+            Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v
       }.
 
     Lemma counter_value_snoc prefix C e :
@@ -836,6 +836,18 @@ Section Definability.
         now rewrite Z.add_0_r.
     (* Qed. *)
     Admitted. (* RB: TODO: Complete new sub-goal, easy. *)
+
+    Lemma well_formed_memory_store_reg_offset prefix mem C r v :
+      component_buffer C ->
+      well_formed_memory prefix mem ->
+    exists mem',
+      Memory.store mem (Permission.data, C, Block.local, reg_offset r) v = Some mem'.
+    Proof.
+      intros C_b [_ wfmem_meta].
+      specialize (wfmem_meta _ r C_b) as [v' Hload].
+      eapply Memory.store_after_load.
+      exact Hload.
+    Qed.
 
     Variant well_formed_state (stk_st: stack_state)
             (prefix suffix: trace event_inform) : CS.state -> Prop :=
@@ -1098,6 +1110,9 @@ Local Opaque loc_of_reg.
           (* NOTE: ... And there is a series of new events to consider. *)
 
           - (* EConst *)
+            (* Before processing the goal, introduce existential witnesses. *)
+            inversion wf_mem as [_ wfmem_meta].
+            destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) as [mem' Hstore].
             (* Case analysis on concrete constant expression; all cases are
                similar. *)
             destruct ptr.
@@ -1106,7 +1121,7 @@ Local Opaque loc_of_reg.
               Local Transparent expr_of_const_val loc_of_reg.
               do 8 take_step.
               -- reflexivity.
-              -- simpl. admit. (* Easy: metadata block. *)
+              -- exact Hstore.
               -- (* Do recursive call. *)
                   do 3 take_step.
                   ++ reflexivity.
@@ -1118,16 +1133,20 @@ Local Opaque loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
             + admit. (* Similarly. *)
             + admit. (* Similarly. *)
 
           - (* EMov *)
+            (* Before processing the goal, introduce existential witnesses. *)
+            inversion wf_mem as [_ wfmem_meta].
+            destruct (well_formed_memory_store_reg_offset ptr ((eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (reg_offset v)))) C_b wf_mem) as [mem' Hstore].
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
               do 12 take_step.
               * reflexivity.
-              * simpl. admit. (* Easy: metadata block. *)
+              * exact Hstore.
               * (* Do recursive call. *)
                 do 3 take_step.
                 -- reflexivity.
@@ -1139,12 +1158,14 @@ Local Opaque loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Restore memory invariant (easy, after first line). *)
 
           - (* EBinop *)
             (* Before processing the goal, introduce existential witnesses. *)
             inversion wf_mem as [_ wfmem_meta].
             destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
             destruct (wfmem_meta _ e1 C_b) as [v1 Hload1].
+            destruct (well_formed_memory_store_reg_offset e2 (eval_binop (binop_of_Ebinop e) v0 v1) C_b wf_mem) as [mem' Hstore2].
             (* Proceed. *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
@@ -1157,7 +1178,7 @@ Local Opaque loc_of_reg.
                 -- exact Hload1.
                 -- do 7 take_step.
                    ++ reflexivity.
-                   ++ admit. (* Easy: metadata block store *)
+                   ++ exact Hstore2.
                    ++ (* Do recursive call. *)
                      do 3 take_step.
                      ** reflexivity.
@@ -1169,17 +1190,23 @@ Local Opaque loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Reestablish memory invariant. *)
 
           - (* ELoad *)
+            (* Before processing the goal, introduce existential witnesses. *)
+            inversion wf_mem as [_ wfmem_meta].
+            destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
+            destruct (well_formed_memory_store_reg_offset e v0 C_b wf_mem) as [mem' Hstore1].
+            (* Continue. *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
               do 8 take_step.
               * reflexivity.
-              * simpl. admit. (* Easy: metadata block load. *)
+              * exact Hload0.
               * do 6 take_step.
                 -- reflexivity.
-                -- admit. (* Easy: metadata block store. *)
+                -- exact Hstore1.
                 -- (* Do recursive call. *)
                    do 3 take_step.
                    ++ reflexivity.
@@ -1191,17 +1218,23 @@ Local Opaque loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Restore invariant. *)
 
           - (* EStore *)
+            (* Before processing the goal, introduce existential witnesses. *)
+            inversion wf_mem as [_ wfmem_meta].
+            destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
+            destruct (well_formed_memory_store_reg_offset e v0 C_b wf_mem) as [mem' Hstore1].
+            (* Continue. *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
               do 8 take_step.
               * reflexivity.
-              * simpl. admit. (* Easy: metadata block load. *)
+              * exact Hload0.
               * do 6 take_step.
                 -- reflexivity.
-                -- admit. (* Easy: metadata block store. *)
+                -- exact Hstore1.
                 -- (* Do recursive call. *)
                    do 3 take_step.
                    ++ reflexivity.
@@ -1213,6 +1246,7 @@ Local Opaque loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Restore invariant. *)
 
           - (* EAlloc *)
             exists (StackState C callers). eexists. split.
@@ -1240,12 +1274,16 @@ Local Opaque loc_of_reg.
               exists bot. split; [| split]; easy.
 
           - (* EInvalidateRA *)
+            (* Before processing the goal, introduce existential witnesses. *)
+            inversion wf_mem as [_ wfmem_meta].
+            destruct (well_formed_memory_store_reg_offset E_R_RA (Int 0) C_b wf_mem) as [mem' Hstore].
+            (* Continue. *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
               do 8 take_step.
               * reflexivity.
-              * simpl. admit. (* Easy: metadata block store. *)
+              * exact Hstore.
               * (* Do recursive call. *)
                 do 3 take_step.
                 -- reflexivity.
@@ -1257,6 +1295,7 @@ Local Opaque loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Restore invariant. *)
         }
 
         destruct Star2 as (s' & cs' & Star2 & wf_cs').
