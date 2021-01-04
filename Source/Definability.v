@@ -795,7 +795,13 @@ Section Definability.
           forall C r,
             component_buffer C ->
           exists v,
-            Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v
+            Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v;
+        wfmem_call:
+          forall prefix' Csrc P arg mem' Cdst,
+            prefix = prefix' ++ [:: ECallInform Csrc P arg mem' Cdst] ->
+            component_buffer Cdst ->
+            mem' = mem /\
+            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some arg
       }.
 
     Lemma counter_value_snoc prefix C e :
@@ -818,14 +824,14 @@ Section Definability.
                      (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
         well_formed_memory (prefix ++ [e]) mem'.
     Proof.
-      move=> C_b [wf_mem wf_meta] HC.
-      have C_local := wf_mem _ C_b.
+      move=> C_b wf_mem HC.
+      have C_local := (wfmem_counter wf_mem) _ C_b.
       have [mem' Hmem'] := Memory.store_after_load
                              _ _ _ (Int (counter_value C (prefix ++ [e])))
                              C_local.
-      exists mem'. split; [now trivial |]. constructor; [| admit]=> C' C'_b. (* TODO *)
+      exists mem'. split; [now trivial |]. constructor; [| admit | admit]=> C' C'_b. (* TODO *)
       (* exists mem'. split; trivial=> C' C'_b. *)
-      have C'_local := wf_mem _ C'_b.
+      have C'_local := (wfmem_counter wf_mem) _ C'_b.
       rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *.
       case: (altP (C' =P C)) => [?|C_neq_C'].
       - subst C'.
@@ -843,8 +849,8 @@ Section Definability.
     exists mem',
       Memory.store mem (Permission.data, C, Block.local, reg_offset r) v = Some mem'.
     Proof.
-      intros C_b [_ wfmem_meta].
-      specialize (wfmem_meta _ r C_b) as [v' Hload].
+      intros C_b wf_mem.
+      specialize ((wfmem_meta wf_mem) _ r C_b) as [v' Hload].
       eapply Memory.store_after_load.
       exact Hload.
     Qed.
@@ -924,11 +930,11 @@ Section Definability.
       elim: suffix s prefix cs=> [|e suffix IH] /= [C callers] prefix.
       - (* Base case: empty suffix. The proof is straightforward. *)
         rewrite cats0 => cs <- {prefix}.
-        case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk [wf_mem wf_meta] P_exp.
+        case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk wf_mem P_exp.
         exists [CState C, stk, mem, Kstop, E_exit, arg], E0, E0, (uniform_shift 1).
         split; [| split; [| split]].
         + have C_b := valid_procedure_has_block P_exp.
-          have C_local := wf_mem _ C_b.
+          have C_local := (wfmem_counter wf_mem) _ C_b.
           rewrite /procedure_of_trace /expr_of_trace.
           (* eexists. *)
           apply: switch_spec_else; eauto.
@@ -940,9 +946,8 @@ Section Definability.
            the suffix. *)
         move=> cs Et /=.
         case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
-        inversion wf_mem as [wfmem_counter wfmem_meta].
         have C_b := valid_procedure_has_block P_exp.
-        have C_local := wfmem_counter _ C_b.
+        have C_local := (wfmem_counter wf_mem) _ C_b.
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
         (* We can simulate the event-producing step as the concatenation of three
            successive stars:
@@ -991,7 +996,7 @@ Section Definability.
                (* NOTE: Here, too, we may need additional conjuncts... *)
                ).
         {
-          clear Star1 wf_mem wfmem_counter wfmem_meta C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
+          clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
           (* Case analysis on observable events, which in this rich setting
              extend to calls and returns and various memory accesses and related
              manipulations, of which only calls and returns are observable at
@@ -1022,21 +1027,20 @@ Section Definability.
             (*   rewrite -> imported_procedure_iff in Himport. rewrite Himport. *)
             (*   rewrite <- imported_procedure_iff in Himport. *)
             (*   by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
-            + (* First assumption: R_COM contains the argument. *)
-              assert (Hrcom : Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some new_arg) by admit.
+            + (* Process memory invariant. *)
+              destruct (wfmem_call wf_mem (Logic.eq_refl _) C'_b) as [Hmem Harg].
+              subst mem'.
               take_step.
 Local Transparent loc_of_reg.
               unfold loc_of_reg.
 Local Opaque loc_of_reg.
               do 7 take_step;
-                [reflexivity | eassumption |].
+                [reflexivity | exact Harg |].
               apply star_one. simpl.
               apply CS.eval_kstep_sound. simpl.
               rewrite (negbTE C_ne_C').
               rewrite -> imported_procedure_iff in Himport. rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
-              (* Second assumption: the memory does not change. *)
-              assert (mem' = mem) by admit; subst mem'.
               by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
             + econstructor; trivial.
               { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
