@@ -799,9 +799,15 @@ Section Definability.
         wfmem_call:
           forall prefix' Csrc P arg mem' Cdst,
             prefix = prefix' ++ [:: ECallInform Csrc P arg mem' Cdst] ->
-            component_buffer Cdst ->
+            component_buffer Csrc -> (* ??? *)
             mem' = mem /\
-            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some arg
+            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some arg;
+        wfmem_ret:
+          forall prefix' Csrc ret mem' Cdst,
+            prefix = prefix' ++ [:: ERetInform Csrc ret mem' Cdst] ->
+            component_buffer Csrc -> (* ??? *)
+            mem' = mem /\
+            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret
       }.
 
     Lemma counter_value_snoc prefix C e :
@@ -829,7 +835,7 @@ Section Definability.
       have [mem' Hmem'] := Memory.store_after_load
                              _ _ _ (Int (counter_value C (prefix ++ [e])))
                              C_local.
-      exists mem'. split; [now trivial |]. constructor; [| admit | admit]=> C' C'_b. (* TODO *)
+      exists mem'. split; [now trivial |]. constructor; [| admit | admit | admit]=> C' C'_b. (* TODO *)
       (* exists mem'. split; trivial=> C' C'_b. *)
       have C'_local := (wfmem_counter wf_mem) _ C'_b.
       rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *.
@@ -841,7 +847,8 @@ Section Definability.
         rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
         now rewrite Z.add_0_r.
     (* Qed. *)
-    Admitted. (* RB: TODO: Complete new sub-goal, easy. *)
+    Admitted. (* RB: TODO: Complete new sub-goal, easy in general, but
+                 event-specific invariants may involve tweaks to the theorem. *)
 
     Lemma well_formed_memory_store_reg_offset prefix mem C r v :
       component_buffer C ->
@@ -1028,7 +1035,7 @@ Section Definability.
             (*   rewrite <- imported_procedure_iff in Himport. *)
             (*   by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
             + (* Process memory invariant. *)
-              destruct (wfmem_call wf_mem (Logic.eq_refl _) C'_b) as [Hmem Harg].
+              destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
               subst mem'.
               take_step.
 Local Transparent loc_of_reg.
@@ -1080,21 +1087,22 @@ Local Opaque loc_of_reg.
               (*      by rewrite /= eqxx (find_procedures_of_trace t P'_exp). *)
               (*   -- now rewrite E0_right. *)
               * (* First assumption: R_COM contains the return_value. *)
-                assert (Hrcom : Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some ret_val) by admit.
+                (* Process memory invariant. *)
+                destruct (wfmem_ret wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
+                subst mem'.
+                (* assert (Hrcom : Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some ret_val) by admit. *)
                 take_step.
 Local Transparent loc_of_reg.
                 unfold loc_of_reg.
 Local Opaque loc_of_reg.
                 do 5 take_step;
-                  [reflexivity | eassumption |].
+                  [reflexivity | exact Harg |].
                 eapply star_step.
                 -- eapply CS.KS_ExternalReturn; now eauto.
                 -- take_step. take_step; eauto.
                    apply star_one. apply CS.eval_kstep_sound.
                    by rewrite /= eqxx (find_procedures_of_trace t P'_exp).
-                -- (* Second assumption: the memory does not change. *)
-                   assert (mem' = mem) by admit; subst mem'.
-                   now rewrite E0_right.
+                -- now rewrite E0_right.
               * econstructor; trivial.
                 exists (CS.Frame C' saved Kstop :: top), bot. simpl. eauto.
             + intros mem wf_mem arg.
@@ -1115,7 +1123,6 @@ Local Opaque loc_of_reg.
 
           - (* EConst *)
             (* Before processing the goal, introduce existential witnesses. *)
-            inversion wf_mem as [_ wfmem_meta].
             destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) as [mem' Hstore].
             (* Case analysis on concrete constant expression; all cases are
                similar. *)
