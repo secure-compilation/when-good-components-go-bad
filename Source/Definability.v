@@ -799,13 +799,13 @@ Section Definability.
         wfmem_call:
           forall prefix' Csrc P arg mem' Cdst,
             prefix = prefix' ++ [:: ECallInform Csrc P arg mem' Cdst] ->
-            component_buffer Csrc -> (* ??? *)
+            component_buffer Csrc ->
             mem' = mem /\
             Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some arg;
         wfmem_ret:
           forall prefix' Csrc ret mem' Cdst,
             prefix = prefix' ++ [:: ERetInform Csrc ret mem' Cdst] ->
-            component_buffer Csrc -> (* ??? *)
+            component_buffer Csrc ->
             mem' = mem /\
             Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret
       }.
@@ -835,17 +835,34 @@ Section Definability.
       have [mem' Hmem'] := Memory.store_after_load
                              _ _ _ (Int (counter_value C (prefix ++ [e])))
                              C_local.
-      exists mem'. split; [now trivial |]. constructor; [| admit | admit | admit]=> C' C'_b. (* TODO *)
-      (* exists mem'. split; trivial=> C' C'_b. *)
-      have C'_local := (wfmem_counter wf_mem) _ C'_b.
-      rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *.
-      case: (altP (C' =P C)) => [?|C_neq_C'].
-      - subst C'.
-        by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem').
-      - have neq : (Permission.data, C, Block.local, 0%Z) <>
-                   (Permission.data, C', Block.local, 0%Z) by move/eqP in C_neq_C'; congruence.
-        rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
-        now rewrite Z.add_0_r.
+      exists mem'. split; [now trivial |]. constructor.
+      - move=> C' C'_b.
+        (* exists mem'. split; trivial=> C' C'_b. *)
+        have C'_local := (wfmem_counter wf_mem) _ C'_b.
+        rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *.
+        case: (altP (C' =P C)) => [?|C_neq_C'].
+        + subst C'.
+          by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem').
+        + have neq : (Permission.data, C, Block.local, 0%Z) <>
+                     (Permission.data, C', Block.local, 0%Z)
+            by move/eqP in C_neq_C'; congruence.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
+          now rewrite Z.add_0_r.
+      - move=> C' r C'_b.
+        Check Memory.load_after_store_neq.
+        admit.
+      - move=> prefix' Csrc P arg mem'' Cdst Hprefix C'_b.
+        assert (prefix = prefix') by admit; subst prefix'.
+        assert (e = ECallInform Csrc P arg mem'' Cdst) by admit; subst e.
+        clear Hprefix.
+        (* TODO: Missing information. *)
+        admit.
+      - move=> prefix' Csrc ret mem'' Cdst Hprefix C'_b.
+        assert (prefix = prefix') by admit; subst prefix'.
+        assert (e = ERetInform Csrc ret mem'' Cdst) by admit; subst e.
+        clear Hprefix.
+        (* TODO: Missing information. *)
+        admit.
     (* Qed. *)
     Admitted. (* RB: TODO: Complete new sub-goal, easy in general, but
                  event-specific invariants may involve tweaks to the theorem. *)
@@ -955,7 +972,10 @@ Section Definability.
         case: cs / => /= _ stk mem _ _ arg P -> -> -> /andP [/eqP wf_C wb_suffix] /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
         have C_b := valid_procedure_has_block P_exp.
         have C_local := (wfmem_counter wf_mem) _ C_b.
+
+        (* TODO: Getting ahead of ourselves here. *)
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
+
         (* We can simulate the event-producing step as the concatenation of three
            successive stars:
             1. A silent star preceding the event.
