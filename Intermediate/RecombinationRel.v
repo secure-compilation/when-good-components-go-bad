@@ -335,6 +335,9 @@ Section Mergeable.
      two runs synchronized by their traces. It is a rather strong notion, easy
      to work with and well suited to the purposes of the proof. *)
 
+  (* NOTE: Should the relation also speak about traces? This could simplify
+     some of the simulation lemmas below. This could postpone the question
+     of provenance until use time. *)
   Inductive mergeable_states (s s' s'' : CS.state) : Prop :=
     mergeable_states_intro : forall s0 s0' s0'' t t' t'' n n' n'',
       (* Well-formedness conditions. *)

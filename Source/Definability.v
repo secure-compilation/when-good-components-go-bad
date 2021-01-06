@@ -796,6 +796,7 @@ Section Definability.
             component_buffer C ->
           exists v,
             Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v;
+        (* NOTE: Reuse memory relation (renaming). *)
         wfmem_call:
           forall prefix' Csrc P arg mem' Cdst,
             prefix = prefix' ++ [:: ECallInform Csrc P arg mem' Cdst] ->
