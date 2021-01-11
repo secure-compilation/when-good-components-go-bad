@@ -1121,7 +1121,47 @@ Local Opaque loc_of_reg.
             case/andP: wb_suffix=> [/eqP HC' wb_suffix].
             subst C'_. simpl. exists (StackState C' callers).
             destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
-            revert mem wf_mem arg.
+            (* The case proceeds by induction on [top]. However, before this we
+               need to advance the execution a few steps, until the return value
+               is available and the proper return can be performed. This star
+               quantifies over the invariant stack and argument to accommodate
+               the induction. *)
+            assert (StarRet0 :
+                      forall stk arg,
+                        star CS.kstep (prepare_global_env p)
+                             [CState C, stk, mem, Kstop, E_deref (loc_of_reg E_R_COM), arg]
+                             E0
+                             [CState C, stk, mem, Kstop, E_val ret_val, arg]).
+                        (* star CS.kstep (prepare_global_env p) *)
+                        (*      [CState C, top ++ bot, mem, Kstop, E_deref (loc_of_reg E_R_COM), arg] *)
+                        (*      E0 *)
+                        (*      [CState C, top ++ bot, mem, Kstop, E_val ret_val, arg]). *)
+            {
+              intros stk arg_.
+Local Transparent loc_of_reg.
+              unfold loc_of_reg.
+Local Opaque loc_of_reg.
+              do 6 take_step;
+                [reflexivity | | now apply star_refl].
+              admit.
+            }
+            (* Once this is done, it suffices to show that the return can be
+               executed once the return value has been dereferenced from the
+               simulated registers. This follows from [StarRet0] and
+               transitivity of the star operator, applied inside the existential
+               and without affecting the side sub-goals. *)
+            suffices:
+              exists cs' : CS.state,
+                star CS.kstep (prepare_global_env p)
+                     [CState C, top ++ bot, mem, Kstop, E_val ret_val, arg]
+                     [:: ERet C ret_val mem' C']
+                     cs' /\
+                well_formed_state {| cur_comp := C'; callers := callers |}
+                                  (prefix ++ [:: ERetInform C ret_val mem' C']) suffix cs';
+              [admit |].
+            (* Proceed by induction on [top]. *)
+            (* revert mem wf_mem arg. *)
+            revert mem wf_mem arg StarRet0.
             induction top as [|[C_ saved k_] top IHtop].
             + clear Htop. rename bot into bot'.
               destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
@@ -1147,12 +1187,12 @@ Local Opaque loc_of_reg.
                 destruct (wfmem_ret wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
                 subst mem'.
                 (* assert (Hrcom : Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some ret_val) by admit. *)
-                take_step.
-Local Transparent loc_of_reg.
-                unfold loc_of_reg.
-Local Opaque loc_of_reg.
-                do 5 take_step;
-                  [reflexivity | exact Harg |].
+(*                 take_step. *)
+(* Local Transparent loc_of_reg. *)
+(*                 unfold loc_of_reg. *)
+(* Local Opaque loc_of_reg. *)
+(*                 do 5 take_step; *)
+(*                   [reflexivity | exact Harg |]. *)
                 eapply star_step.
                 -- eapply CS.KS_ExternalReturn; now eauto.
                 -- take_step. take_step; eauto.
@@ -1161,17 +1201,20 @@ Local Opaque loc_of_reg.
                 -- now rewrite E0_right.
               * econstructor; trivial.
                 exists (CS.Frame C' saved Kstop :: top), bot. simpl. eauto.
-            + intros mem wf_mem arg.
+            + intros mem wf_mem arg StarRet0.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
               specialize (IHtop Htop).
-              specialize (IHtop _ wf_mem saved). destruct IHtop as [cs' [StarRet wf_cs']].
+              specialize (IHtop _ wf_mem saved).
+              (* assert (arg = saved) by admit; subst arg. *)
+              specialize (IHtop StarRet0).
+              destruct IHtop as [cs' [StarRet wf_cs']].
               exists cs'. split; trivial.
               eapply star_step; try eassumption.
               * (* RB: TODO: [DynShare] Same as above. *)
-                assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
-                  as [v Hregval]
-                  by admit;
-                  rewrite Hregval.
+                (* assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v) *)
+                (*   as [v Hregval] *)
+                (*   by admit; *)
+                (*   rewrite Hregval. *)
                 by apply/CS.eval_kstep_sound; rewrite /= eqxx.
               * reflexivity.
 
