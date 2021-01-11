@@ -1178,12 +1178,13 @@ Local Opaque loc_of_reg.
           (* NOTE: ... And there is a series of new events to consider. *)
 
           - (* EConst *)
-            (* Before processing the goal, introduce existential witnesses. *)
-            destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) as [mem' Hstore].
             (* Case analysis on concrete constant expression; all cases are
-               similar. *)
-            destruct ptr as [? | [[[? ?] ?] ?] |].
-            + exists (StackState C callers). eexists. split.
+               similar.
+               TODO: Refactoring. *)
+            destruct ptr as [n | [[[P' C'] b] o] |].
+            + (* Before processing the goal, introduce existential witnesses. *)
+              destruct (well_formed_memory_store_reg_offset v (Int n) C_b wf_mem) as [mem' Hstore].
+              exists (StackState C callers). eexists. split.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               do 8 take_step.
@@ -1202,12 +1203,14 @@ Local Transparent expr_of_const_val loc_of_reg.
               exists bot. split; [| split]; easy.
               admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
 
-            + exists (StackState C callers). eexists. split.
+            + (* Before processing the goal, introduce existential witnesses. *)
+              destruct (well_formed_memory_store_reg_offset v (eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (8 + o))) C_b wf_mem) as [mem' Hstore].
+              exists (StackState C callers). eexists. split.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               do 12 take_step.
               -- reflexivity.
-              -- admit.
+              -- exact Hstore.
               -- (* Do recursive call. *)
                   do 3 take_step.
                   ++ reflexivity.
@@ -1219,9 +1222,11 @@ Local Transparent expr_of_const_val loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
-              (* admit. (* RB: TODO: Reestablish memory well-formedness, easy. *) *)
+              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
 
-            + exists (StackState C callers). eexists. split.
+            + (* Before processing the goal, introduce existential witnesses. *)
+              destruct (well_formed_memory_store_reg_offset v Undef C_b wf_mem) as [mem' Hstore].
+              exists (StackState C callers). eexists. split.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               do 12 take_step.
