@@ -942,6 +942,28 @@ Section Definability.
 
        In any case, well-bracketedness is important for the proof *)
 
+    (* RB: TODO: Move this to memory, rephrase as needed, could weaken some of
+       the components in the pointer. *)
+    Lemma alloc_after_load mem P C b o v size :
+      Memory.load mem (P, C, b, o) = Some v ->
+    exists mem' b',
+      b' <> b /\
+      Memory.alloc mem C size = Some (mem', (Permission.data, C, b', 0%Z)).
+    Admitted.
+
+    (* RB: TODO: Essentially a tweaked lifting to memories of the existing lemma
+       [ComponentMemory.load_after_alloc], to move once done here. Further
+       adjustments to the statement are possible. *)
+    (* Lemma load_after_alloc mem P C b o size mem' P' C' b' o' : *)
+    (*   Memory.alloc mem C size = Some (mem', (P', C', b', o')) -> *)
+    (*   b <> b' -> *)
+    (*   Memory.load mem (P, C, b, o) = Memory.load mem' (P, C, b, o). *)
+    (* Admitted. *)
+    Lemma store_after_alloc mem P C b o size mem' P' C' b' o' v :
+      Memory.alloc mem C size = Some (mem', (P', C', b', o')) ->
+      b <> b' ->
+      Memory.store mem (P, C, b, o) v = Memory.store mem' (P, C, b, o) v.
+    Admitted.
 
     (* TODO: [DynShare] Trace relation should appear here too!
 
