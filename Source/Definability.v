@@ -808,7 +808,14 @@ Section Definability.
             prefix = prefix' ++ [:: ERetInform Csrc ret mem' Cdst] ->
             component_buffer Csrc ->
             mem' = mem /\
-            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret
+            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret;
+        wfmem_alloc:
+          forall prefix' C rptr rsize,
+            prefix = prefix' ++ [:: EAlloc C rptr rsize] ->
+            component_buffer C ->
+          exists size,
+            (size > 0)%Z /\
+            Memory.load mem (Permission.data, C, Block.local, reg_offset rsize) = Some (Int size);
       }.
 
     Lemma counter_value_snoc prefix C e :
@@ -861,6 +868,12 @@ Section Definability.
       - move=> prefix' Csrc ret mem'' Cdst Hprefix C'_b.
         assert (prefix = prefix') by admit; subst prefix'.
         assert (e = ERetInform Csrc ret mem'' Cdst) by admit; subst e.
+        clear Hprefix.
+        (* TODO: Missing information. *)
+        admit.
+      - move=> prefix' C' rptr rsize Hprefix C'_b.
+        assert (prefix = prefix') by admit; subst prefix'.
+        assert (e = EAlloc C' rptr rsize) by admit; subst e.
         clear Hprefix.
         (* TODO: Missing information. *)
         admit.
