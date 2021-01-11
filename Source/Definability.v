@@ -396,7 +396,7 @@ Section Definability.
       E_seq (E_assign (loc_of_reg r_dest)
                       (E_deref (loc_of_reg r_src)))
             (E_call C P (E_val (Int 0)))
-    | EAlloc _ r_size r_dest =>
+    | EAlloc _ r_dest r_size =>
       E_seq (E_assign (loc_of_reg r_dest)
                       (E_alloc (E_deref (loc_of_reg r_size))))
             (E_call C P (E_val (Int 0)))
@@ -808,7 +808,14 @@ Section Definability.
             prefix = prefix' ++ [:: ERetInform Csrc ret mem' Cdst] ->
             component_buffer Csrc ->
             mem' = mem /\
-            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret
+            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret;
+        wfmem_alloc:
+          forall prefix' C rptr rsize,
+            prefix = prefix' ++ [:: EAlloc C rptr rsize] ->
+            component_buffer C ->
+          exists size,
+            (size > 0)%Z /\
+            Memory.load mem (Permission.data, C, Block.local, reg_offset rsize) = Some (Int size);
       }.
 
     Lemma counter_value_snoc prefix C e :
@@ -861,6 +868,12 @@ Section Definability.
       - move=> prefix' Csrc ret mem'' Cdst Hprefix C'_b.
         assert (prefix = prefix') by admit; subst prefix'.
         assert (e = ERetInform Csrc ret mem'' Cdst) by admit; subst e.
+        clear Hprefix.
+        (* TODO: Missing information. *)
+        admit.
+      - move=> prefix' C' rptr rsize Hprefix C'_b.
+        assert (prefix = prefix') by admit; subst prefix'.
+        assert (e = EAlloc C' rptr rsize) by admit; subst e.
         clear Hprefix.
         (* TODO: Missing information. *)
         admit.
@@ -929,6 +942,28 @@ Section Definability.
 
        In any case, well-bracketedness is important for the proof *)
 
+    (* RB: TODO: Move this to memory, rephrase as needed, could weaken some of
+       the components in the pointer. *)
+    Lemma alloc_after_load mem P C b o v size :
+      Memory.load mem (P, C, b, o) = Some v ->
+    exists mem' b',
+      b' <> b /\
+      Memory.alloc mem C size = Some (mem', (Permission.data, C, b', 0%Z)).
+    Admitted.
+
+    (* RB: TODO: Essentially a tweaked lifting to memories of the existing lemma
+       [ComponentMemory.load_after_alloc], to move once done here. Further
+       adjustments to the statement are possible. *)
+    (* Lemma load_after_alloc mem P C b o size mem' P' C' b' o' : *)
+    (*   Memory.alloc mem C size = Some (mem', (P', C', b', o')) -> *)
+    (*   b <> b' -> *)
+    (*   Memory.load mem (P, C, b, o) = Memory.load mem' (P, C, b, o). *)
+    (* Admitted. *)
+    Lemma store_after_alloc mem P C b o size mem' P' C' b' o' v :
+      Memory.alloc mem C size = Some (mem', (P', C', b', o')) ->
+      b <> b' ->
+      Memory.store mem (P, C, b, o) v = Memory.store mem' (P, C, b, o) v.
+    Admitted.
 
     (* TODO: [DynShare] Trace relation should appear here too!
 
@@ -1086,7 +1121,47 @@ Local Opaque loc_of_reg.
             case/andP: wb_suffix=> [/eqP HC' wb_suffix].
             subst C'_. simpl. exists (StackState C' callers).
             destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
-            revert mem wf_mem arg.
+            (* The case proceeds by induction on [top]. However, before this we
+               need to advance the execution a few steps, until the return value
+               is available and the proper return can be performed. This star
+               quantifies over the invariant stack and argument to accommodate
+               the induction. *)
+            assert (StarRet0 :
+                      forall stk arg,
+                        star CS.kstep (prepare_global_env p)
+                             [CState C, stk, mem, Kstop, E_deref (loc_of_reg E_R_COM), arg]
+                             E0
+                             [CState C, stk, mem, Kstop, E_val ret_val, arg]).
+                        (* star CS.kstep (prepare_global_env p) *)
+                        (*      [CState C, top ++ bot, mem, Kstop, E_deref (loc_of_reg E_R_COM), arg] *)
+                        (*      E0 *)
+                        (*      [CState C, top ++ bot, mem, Kstop, E_val ret_val, arg]). *)
+            {
+              intros stk arg_.
+Local Transparent loc_of_reg.
+              unfold loc_of_reg.
+Local Opaque loc_of_reg.
+              do 6 take_step;
+                [reflexivity | | now apply star_refl].
+              admit.
+            }
+            (* Once this is done, it suffices to show that the return can be
+               executed once the return value has been dereferenced from the
+               simulated registers. This follows from [StarRet0] and
+               transitivity of the star operator, applied inside the existential
+               and without affecting the side sub-goals. *)
+            suffices:
+              exists cs' : CS.state,
+                star CS.kstep (prepare_global_env p)
+                     [CState C, top ++ bot, mem, Kstop, E_val ret_val, arg]
+                     [:: ERet C ret_val mem' C']
+                     cs' /\
+                well_formed_state {| cur_comp := C'; callers := callers |}
+                                  (prefix ++ [:: ERetInform C ret_val mem' C']) suffix cs';
+              [admit |].
+            (* Proceed by induction on [top]. *)
+            (* revert mem wf_mem arg. *)
+            revert mem wf_mem arg StarRet0.
             induction top as [|[C_ saved k_] top IHtop].
             + clear Htop. rename bot into bot'.
               destruct Hbot as (saved & P' & top & bot & ? & P'_exp & Htop & Hbot).
@@ -1112,12 +1187,12 @@ Local Opaque loc_of_reg.
                 destruct (wfmem_ret wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
                 subst mem'.
                 (* assert (Hrcom : Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some ret_val) by admit. *)
-                take_step.
-Local Transparent loc_of_reg.
-                unfold loc_of_reg.
-Local Opaque loc_of_reg.
-                do 5 take_step;
-                  [reflexivity | exact Harg |].
+(*                 take_step. *)
+(* Local Transparent loc_of_reg. *)
+(*                 unfold loc_of_reg. *)
+(* Local Opaque loc_of_reg. *)
+(*                 do 5 take_step; *)
+(*                   [reflexivity | exact Harg |]. *)
                 eapply star_step.
                 -- eapply CS.KS_ExternalReturn; now eauto.
                 -- take_step. take_step; eauto.
@@ -1126,29 +1201,33 @@ Local Opaque loc_of_reg.
                 -- now rewrite E0_right.
               * econstructor; trivial.
                 exists (CS.Frame C' saved Kstop :: top), bot. simpl. eauto.
-            + intros mem wf_mem arg.
+            + intros mem wf_mem arg StarRet0.
               simpl in Htop. destruct Htop as [[? ?] Htop]. subst C_ k_.
               specialize (IHtop Htop).
-              specialize (IHtop _ wf_mem saved). destruct IHtop as [cs' [StarRet wf_cs']].
+              specialize (IHtop _ wf_mem saved).
+              (* assert (arg = saved) by admit; subst arg. *)
+              specialize (IHtop StarRet0).
+              destruct IHtop as [cs' [StarRet wf_cs']].
               exists cs'. split; trivial.
               eapply star_step; try eassumption.
               * (* RB: TODO: [DynShare] Same as above. *)
-                assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v)
-                  as [v Hregval]
-                  by admit;
-                  rewrite Hregval.
+                (* assert (exists v, E_deref (loc_of_reg E_R_COM) = E_val v) *)
+                (*   as [v Hregval] *)
+                (*   by admit; *)
+                (*   rewrite Hregval. *)
                 by apply/CS.eval_kstep_sound; rewrite /= eqxx.
               * reflexivity.
 
           (* NOTE: ... And there is a series of new events to consider. *)
 
           - (* EConst *)
-            (* Before processing the goal, introduce existential witnesses. *)
-            destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) as [mem' Hstore].
             (* Case analysis on concrete constant expression; all cases are
-               similar. *)
-            destruct ptr as [? | [[[? ?] ?] ?] |].
-            + exists (StackState C callers). eexists. split.
+               similar.
+               TODO: Refactoring. *)
+            destruct ptr as [n | [[[P' C'] b] o] |].
+            + (* Before processing the goal, introduce existential witnesses. *)
+              destruct (well_formed_memory_store_reg_offset v (Int n) C_b wf_mem) as [mem' Hstore].
+              exists (StackState C callers). eexists. split.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               do 8 take_step.
@@ -1167,12 +1246,14 @@ Local Transparent expr_of_const_val loc_of_reg.
               exists bot. split; [| split]; easy.
               admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
 
-            + exists (StackState C callers). eexists. split.
+            + (* Before processing the goal, introduce existential witnesses. *)
+              destruct (well_formed_memory_store_reg_offset v (eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (8 + o))) C_b wf_mem) as [mem' Hstore].
+              exists (StackState C callers). eexists. split.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               do 12 take_step.
               -- reflexivity.
-              -- admit.
+              -- exact Hstore.
               -- (* Do recursive call. *)
                   do 3 take_step.
                   ++ reflexivity.
@@ -1184,9 +1265,11 @@ Local Transparent expr_of_const_val loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
-              (* admit. (* RB: TODO: Reestablish memory well-formedness, easy. *) *)
+              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
 
-            + exists (StackState C callers). eexists. split.
+            + (* Before processing the goal, introduce existential witnesses. *)
+              destruct (well_formed_memory_store_reg_offset v Undef C_b wf_mem) as [mem' Hstore].
+              exists (StackState C callers). eexists. split.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               do 12 take_step.
@@ -1317,18 +1400,31 @@ Local Transparent expr_of_const_val loc_of_reg.
               admit. (* RB: TODO: Restore invariant. *)
 
           - (* EAlloc *)
+            (* Before processing the goal, introduce existential witnesses. *)
+            destruct ((wfmem_alloc wf_mem) _ _ _ _ Logic.eq_refl C_b)
+              as [size [Hsize Hload0]].
+            destruct (alloc_after_load (Z.to_nat size) Hload0)
+              as [mem' [b' [Hblock Halloc1]]].
+            destruct (well_formed_memory_store_reg_offset
+                        e ((Ptr (Permission.data, C, b', 0%Z))) C_b wf_mem)
+              as [mem'' Hstore2].
+            (* Continue with the goal. *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
               do 9 take_step.
               * reflexivity.
-              * simpl. admit. (* Easy: metadata block load. *)
-              * do 1 take_step.
-                -- admit. (* Metadata-simulated register [e] holds positive integer. *)
-                -- admit. (* Easy: metadata block alloc. *)
+              * exact Hload0.
+              * unfold loc_of_reg.
+                do 1 take_step.
+                -- (* Metadata-simulated register [e0] holds positive integer. *)
+                   exact Hsize.
+                -- exact Halloc1.
                 -- do 6 take_step.
                    ++ reflexivity.
-                   ++ admit. (* Easy: metadata block store. *)
+                   ++ setoid_rewrite <- store_after_alloc;
+                        [| eassumption | now auto].
+                      exact Hstore2.
                    ++ (* Do recursive call. *)
                       do 3 take_step.
                       ** reflexivity.
@@ -1340,6 +1436,7 @@ Local Transparent expr_of_const_val loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Restore invariant. *)
 
           - (* EInvalidateRA *)
             (* Before processing the goal, introduce existential witnesses. *)
