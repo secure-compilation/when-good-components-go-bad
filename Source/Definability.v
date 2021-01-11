@@ -1352,18 +1352,31 @@ Local Transparent expr_of_const_val loc_of_reg.
               admit. (* RB: TODO: Restore invariant. *)
 
           - (* EAlloc *)
+            (* Before processing the goal, introduce existential witnesses. *)
+            destruct ((wfmem_alloc wf_mem) _ _ _ _ Logic.eq_refl C_b)
+              as [size [Hsize Hload0]].
+            destruct (alloc_after_load (Z.to_nat size) Hload0)
+              as [mem' [b' [Hblock Halloc1]]].
+            destruct (well_formed_memory_store_reg_offset
+                        e ((Ptr (Permission.data, C, b', 0%Z))) C_b wf_mem)
+              as [mem'' Hstore2].
+            (* Continue with the goal. *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
               do 9 take_step.
               * reflexivity.
-              * simpl. admit. (* Easy: metadata block load. *)
-              * do 1 take_step.
-                -- admit. (* Metadata-simulated register [e] holds positive integer. *)
-                -- admit. (* Easy: metadata block alloc. *)
+              * exact Hload0.
+              * unfold loc_of_reg.
+                do 1 take_step.
+                -- (* Metadata-simulated register [e0] holds positive integer. *)
+                   exact Hsize.
+                -- exact Halloc1.
                 -- do 6 take_step.
                    ++ reflexivity.
-                   ++ admit. (* Easy: metadata block store. *)
+                   ++ setoid_rewrite <- store_after_alloc;
+                        [| eassumption | now auto].
+                      exact Hstore2.
                    ++ (* Do recursive call. *)
                       do 3 take_step.
                       ** reflexivity.
@@ -1375,6 +1388,7 @@ Local Transparent expr_of_const_val loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Restore invariant. *)
 
           - (* EInvalidateRA *)
             (* Before processing the goal, introduce existential witnesses. *)
