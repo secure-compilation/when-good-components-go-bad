@@ -396,7 +396,7 @@ Section Definability.
       E_seq (E_assign (loc_of_reg r_dest)
                       (E_deref (loc_of_reg r_src)))
             (E_call C P (E_val (Int 0)))
-    | EAlloc _ r_size r_dest =>
+    | EAlloc _ r_dest r_size =>
       E_seq (E_assign (loc_of_reg r_dest)
                       (E_alloc (E_deref (loc_of_reg r_size))))
             (E_call C P (E_val (Int 0)))
