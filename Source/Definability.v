@@ -959,10 +959,12 @@ Section Definability.
     (*   b <> b' -> *)
     (*   Memory.load mem (P, C, b, o) = Memory.load mem' (P, C, b, o). *)
     (* Admitted. *)
-    Lemma store_after_alloc mem P C b o size mem' P' C' b' o' v :
+    Lemma store_after_alloc mem P C b o size mem' P' C' b' o' v mem1 :
       Memory.alloc mem C size = Some (mem', (P', C', b', o')) ->
       b <> b' ->
-      Memory.store mem (P, C, b, o) v = Memory.store mem' (P, C, b, o) v.
+      Memory.store mem  (P, C, b, o) v = Some mem1 ->
+    exists mem1',
+      Memory.store mem' (P, C, b, o) v = Some mem1'.
     Admitted.
 
     (* TODO: [DynShare] Trace relation should appear here too!
@@ -1407,7 +1409,9 @@ Local Transparent expr_of_const_val loc_of_reg.
               as [mem' [b' [Hblock Halloc1]]].
             destruct (well_formed_memory_store_reg_offset
                         e ((Ptr (Permission.data, C, b', 0%Z))) C_b wf_mem)
-              as [mem'' Hstore2].
+              as [mem1 Hstore2].
+            destruct (store_after_alloc Halloc1 (not_eq_sym Hblock) Hstore2)
+              as [mem1' Hstore2'].
             (* Continue with the goal. *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
@@ -1422,9 +1426,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                 -- exact Halloc1.
                 -- do 6 take_step.
                    ++ reflexivity.
-                   ++ setoid_rewrite <- store_after_alloc;
-                        [| eassumption | now auto].
-                      exact Hstore2.
+                   ++ exact Hstore2'.
                    ++ (* Do recursive call. *)
                       do 3 take_step.
                       ** reflexivity.
