@@ -296,6 +296,16 @@ Section Definability.
     | E_R_ARG  => 7
     end.
 
+  Lemma reg_offset_inj :
+    forall reg1 reg2,
+      reg_offset reg1 = reg_offset reg2 ->
+      reg1 = reg2.
+  Proof.
+    intros [] [] Heq;
+      try inversion Heq;
+      reflexivity.
+  Qed.
+
   Definition loc_of_reg (reg : Eregister) : expr :=
     E_binop Add E_local (E_val (Int (reg_offset reg))).
 
@@ -966,6 +976,48 @@ Section Definability.
     exists mem1',
       Memory.store mem' (P, C, b, o) v = Some mem1'.
     Admitted.
+
+    Lemma Eregister_eq_dec :
+      forall r1 r2 : Eregister, Decidable.decidable (r1 = r2).
+    Proof.
+      intros [] [];
+        try (left; reflexivity);
+        right; intro Hcontra; now inversion Hcontra.
+    Qed.
+
+    (* RB: TODO: Relocate, replace existing but less general
+       [rcons_trace_event_eq_inversion] with second lemma. *)
+    Lemma size_inj :
+      forall {A} (l1 l2 : list A), l1 = l2 -> size l1 = size l2.
+    Proof.
+      intros A l1 l2 Heq; subst l2. reflexivity.
+    Qed.
+
+    Lemma rcons_inv :
+      forall {A} (l1 l2 : list A) e1 e2,
+        l1 ++ [e1] = l2 ++ [e2] ->
+        l1 = l2 /\ e1 = e2.
+    Proof.
+      intros A l1.
+      induction l1 as [| e l1' IHl1'];
+        simpl;
+        intros l2 e1 e2 Heq.
+      - destruct l2 as [| e' l2'].
+        + injection Heq as Heq; subst e2.
+          split; reflexivity.
+        + inversion Heq as [[Heq1 Heq2]]; subst.
+          apply size_inj in Heq2.
+          rewrite cats1 size_rcons in Heq2.
+          discriminate.
+      - destruct l2 as [| e' l2'].
+        + inversion Heq as [[Heq1 Heq2]]; subst e2.
+          apply size_inj in Heq2.
+          rewrite cats1 size_rcons in Heq2.
+          discriminate.
+        + injection Heq as ? Heq; subst e'.
+          specialize (IHl1' l2' e1 e2 Heq) as [? ?]; subst e2 l2'.
+          split; reflexivity.
+    Qed.
 
     (* TODO: [DynShare] Trace relation should appear here too!
 
