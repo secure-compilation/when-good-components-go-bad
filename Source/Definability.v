@@ -801,6 +801,12 @@ Section Definability.
         Pointer.block ptr <> Block.local ->
         Memory.load mem_snapshot ptr = Memory.load mem ptr.
 
+    Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C o v mem' :
+      well_formed_memory_snapshot mem_snapshot mem ->
+      Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
+      well_formed_memory_snapshot mem_snapshot mem'.
+    Admitted. (* RB: TODO: Easy. *)
+
     Definition well_formed_memory_event (e : event_inform) (mem : Memory.t) : Prop :=
       match e with
       | ECallInform Csrc _ arg emem _ =>
@@ -836,13 +842,13 @@ Section Definability.
           forall prefix' Csrc P arg mem' Cdst,
             prefix = prefix' ++ [:: ECallInform Csrc P arg mem' Cdst] ->
             component_buffer Csrc ->
-            mem' = mem /\
+            well_formed_memory_snapshot mem' mem /\
             Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some arg;
         wfmem_ret:
           forall prefix' Csrc ret mem' Cdst,
             prefix = prefix' ++ [:: ERetInform Csrc ret mem' Cdst] ->
             component_buffer Csrc ->
-            mem' = mem /\
+            well_formed_memory_snapshot mem' mem /\
             Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret;
         wfmem_alloc:
           forall prefix' C rptr rsize,
@@ -902,12 +908,13 @@ Section Definability.
       component_buffer C ->
       well_formed_memory prefix mem ->
       C = cur_comp_of_event e ->
+      well_formed_memory_event e mem ->
       exists mem',
         Memory.store mem (Permission.data, C, Block.local, 0%Z)
                      (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
         well_formed_memory (prefix ++ [e]) mem'.
     Proof.
-      move=> C_b wf_mem HC.
+      move=> C_b wf_mem HC He.
       have C_local := (wfmem_counter wf_mem) _ C_b.
       have [mem' Hmem'] := Memory.store_after_load
                              _ _ _ (Int (counter_value C (prefix ++ [e])))
@@ -933,19 +940,26 @@ Section Definability.
         now destruct r.
       - move=> prefix' Csrc P arg mem'' Cdst Hprefix C'_b.
         apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
-        (* TODO: Missing information. *)
-        admit.
+        inversion He as [Hsnap Harg].
+        split.
+        + eapply metadata_store_preserves_snapshot; eassumption.
+        + erewrite Memory.load_after_store_neq; try eassumption.
+          now injection.
       - move=> prefix' Csrc ret mem'' Cdst Hprefix C'_b.
         apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
-        (* TODO: Missing information. *)
-        admit.
+        inversion He as [Hsnap Hret].
+        split.
+        + eapply metadata_store_preserves_snapshot; eassumption.
+        + erewrite Memory.load_after_store_neq; try eassumption.
+          now injection.
       - move=> prefix' C' rptr rsize Hprefix C'_b.
         apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
-        (* TODO: Missing information. *)
-        admit.
-    (* Qed. *)
-    Admitted. (* RB: TODO: Complete new sub-goal, easy in general, but
-                 event-specific invariants may involve tweaks to the theorem. *)
+        inversion He as [size [Hsize Hload]].
+        exists size. split.
+        + eassumption.
+        + erewrite Memory.load_after_store_neq; try eassumption.
+          injection as _ Hoffset. now destruct rsize.
+    Qed.
 
     Lemma well_formed_memory_store_reg_offset prefix mem C r v :
       component_buffer C ->
