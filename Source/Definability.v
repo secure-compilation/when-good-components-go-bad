@@ -794,6 +794,31 @@ Section Definability.
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
 
+    (* RB: NOTE: We could make this stronger by noting which component is being
+       executed, as this is the only one that can change its own metadata. *)
+    Definition well_formed_memory_snapshot (mem_snapshot mem : Memory.t) : Prop :=
+      forall ptr,
+        Pointer.block ptr <> Block.local ->
+        Memory.load mem_snapshot ptr = Memory.load mem ptr.
+
+    Definition well_formed_memory_event (e : event_inform) (mem : Memory.t) : Prop :=
+      match e with
+      | ECallInform Csrc _ arg emem _ =>
+        well_formed_memory_snapshot emem mem /\
+        Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
+        = Some arg
+      | ERetInform Csrc ret emem _ =>
+        well_formed_memory_snapshot emem mem /\
+        Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
+        = Some ret
+      | EAlloc C _ rsize =>
+        exists size,
+          (size > 0)%Z /\
+          Memory.load mem (Permission.data, C, Block.local, (reg_offset rsize)) =
+          Some (Int size)
+      | _ => True
+      end.
+
     Record well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
       {
         wfmem_counter:
