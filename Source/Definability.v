@@ -839,6 +839,40 @@ Section Definability.
       now destruct (_ == _).
     Qed.
 
+    (* RB: TODO: Relocate, replace existing but less general
+       [rcons_trace_event_eq_inversion] with second lemma. *)
+    Lemma size_inj :
+      forall {A} (l1 l2 : list A), l1 = l2 -> size l1 = size l2.
+    Proof.
+      intros A l1 l2 Heq; subst l2. reflexivity.
+    Qed.
+
+    Lemma rcons_inv :
+      forall {A} (l1 l2 : list A) e1 e2,
+        l1 ++ [e1] = l2 ++ [e2] ->
+        l1 = l2 /\ e1 = e2.
+    Proof.
+      intros A l1.
+      induction l1 as [| e l1' IHl1'];
+        simpl;
+        intros l2 e1 e2 Heq.
+      - destruct l2 as [| e' l2'].
+        + injection Heq as Heq; subst e2.
+          split; reflexivity.
+        + inversion Heq as [[Heq1 Heq2]]; subst.
+          apply size_inj in Heq2.
+          rewrite cats1 size_rcons in Heq2.
+          discriminate.
+      - destruct l2 as [| e' l2'].
+        + inversion Heq as [[Heq1 Heq2]]; subst e2.
+          apply size_inj in Heq2.
+          rewrite cats1 size_rcons in Heq2.
+          discriminate.
+        + injection Heq as ? Heq; subst e'.
+          specialize (IHl1' l2' e1 e2 Heq) as [? ?]; subst e2 l2'.
+          split; reflexivity.
+    Qed.
+
     Lemma well_formed_memory_store_counter prefix mem C e :
       component_buffer C ->
       well_formed_memory prefix mem ->
@@ -867,24 +901,21 @@ Section Definability.
           rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
           now rewrite Z.add_0_r.
       - move=> C' r C'_b.
-        Check Memory.load_after_store_neq.
-        admit.
+        destruct ((wfmem_meta wf_mem) C' r C'_b) as [v Hload].
+        exists v.
+        erewrite Memory.load_after_store_neq; try eassumption.
+        intros Hcontra. injection Hcontra as Hcomp Hoffset.
+        now destruct r.
       - move=> prefix' Csrc P arg mem'' Cdst Hprefix C'_b.
-        assert (prefix = prefix') by admit; subst prefix'.
-        assert (e = ECallInform Csrc P arg mem'' Cdst) by admit; subst e.
-        clear Hprefix.
+        apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
         (* TODO: Missing information. *)
         admit.
       - move=> prefix' Csrc ret mem'' Cdst Hprefix C'_b.
-        assert (prefix = prefix') by admit; subst prefix'.
-        assert (e = ERetInform Csrc ret mem'' Cdst) by admit; subst e.
-        clear Hprefix.
+        apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
         (* TODO: Missing information. *)
         admit.
       - move=> prefix' C' rptr rsize Hprefix C'_b.
-        assert (prefix = prefix') by admit; subst prefix'.
-        assert (e = EAlloc C' rptr rsize) by admit; subst e.
-        clear Hprefix.
+        apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
         (* TODO: Missing information. *)
         admit.
     (* Qed. *)
@@ -983,40 +1014,6 @@ Section Definability.
       intros [] [];
         try (left; reflexivity);
         right; intro Hcontra; now inversion Hcontra.
-    Qed.
-
-    (* RB: TODO: Relocate, replace existing but less general
-       [rcons_trace_event_eq_inversion] with second lemma. *)
-    Lemma size_inj :
-      forall {A} (l1 l2 : list A), l1 = l2 -> size l1 = size l2.
-    Proof.
-      intros A l1 l2 Heq; subst l2. reflexivity.
-    Qed.
-
-    Lemma rcons_inv :
-      forall {A} (l1 l2 : list A) e1 e2,
-        l1 ++ [e1] = l2 ++ [e2] ->
-        l1 = l2 /\ e1 = e2.
-    Proof.
-      intros A l1.
-      induction l1 as [| e l1' IHl1'];
-        simpl;
-        intros l2 e1 e2 Heq.
-      - destruct l2 as [| e' l2'].
-        + injection Heq as Heq; subst e2.
-          split; reflexivity.
-        + inversion Heq as [[Heq1 Heq2]]; subst.
-          apply size_inj in Heq2.
-          rewrite cats1 size_rcons in Heq2.
-          discriminate.
-      - destruct l2 as [| e' l2'].
-        + inversion Heq as [[Heq1 Heq2]]; subst e2.
-          apply size_inj in Heq2.
-          rewrite cats1 size_rcons in Heq2.
-          discriminate.
-        + injection Heq as ? Heq; subst e'.
-          specialize (IHl1' l2' e1 e2 Heq) as [? ?]; subst e2 l2'.
-          split; reflexivity.
     Qed.
 
     (* TODO: [DynShare] Trace relation should appear here too!
