@@ -1298,7 +1298,40 @@ Local Transparent expr_of_const_val loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
-              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
+              (* Reestablish memory well-formedness.
+                 TODO: Refactor, automate. *)
+              {
+                constructor.
+                - intros C' C'_b.
+                  rewrite <- ((wfmem_counter wf_mem) C' C'_b).
+                  eapply Memory.load_after_store_neq; try eassumption.
+                  intros Hcontra; destruct v; now inversion Hcontra.
+                - intros C' reg C'_b.
+                  destruct (dec_eq_nat C C') as [HeqC | HneqC].
+                  + subst C'.
+                    destruct (Eregister_eq_dec reg v) as [Heqreg | Hneqreg].
+                    * subst reg. exists (Int n).
+                      eapply Memory.load_after_store_eq; eassumption.
+                    * destruct ((wfmem_meta wf_mem) C reg C_b) as [val Hval].
+                      exists val.
+                      erewrite Memory.load_after_store_neq; try eassumption.
+                      intros Hcontra. injection Hcontra as Hoffset.
+                      apply reg_offset_inj in Hoffset.
+                      symmetry in Hoffset. contradiction.
+                  + destruct ((wfmem_meta wf_mem) C' reg C'_b) as [val Hval].
+                    exists val.
+                    erewrite Memory.load_after_store_neq; try eassumption.
+                    intros Hcontra. inversion Hcontra. contradiction.
+                - intros prefix' Csrc P' arg' mem'' Cdst Hprefix Csrc_b.
+                  apply rcons_inv in Hprefix as [Hprefix Hevent].
+                  discriminate.
+                - intros prefix' Csrc P' arg' Cdst Hprefix Csrc_b.
+                  apply rcons_inv in Hprefix as [Hprefix Hevent].
+                  discriminate.
+                - intros prefix' C' rptr rsize Hprefix C'_b.
+                  apply rcons_inv in Hprefix as [Hprefix Hevent].
+                  discriminate.
+              }
 
             + (* Before processing the goal, introduce existential witnesses. *)
               destruct (well_formed_memory_store_reg_offset v (eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (8 + o))) C_b wf_mem) as [mem' Hstore].
