@@ -296,6 +296,16 @@ Section Definability.
     | E_R_ARG  => 7
     end.
 
+  Lemma reg_offset_inj :
+    forall reg1 reg2,
+      reg_offset reg1 = reg_offset reg2 ->
+      reg1 = reg2.
+  Proof.
+    intros [] [] Heq;
+      try inversion Heq;
+      reflexivity.
+  Qed.
+
   Definition loc_of_reg (reg : Eregister) : expr :=
     E_binop Add E_local (E_val (Int (reg_offset reg))).
 
@@ -784,6 +794,31 @@ Section Definability.
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
 
+    (* RB: NOTE: We could make this stronger by noting which component is being
+       executed, as this is the only one that can change its own metadata. *)
+    Definition well_formed_memory_snapshot (mem_snapshot mem : Memory.t) : Prop :=
+      forall ptr,
+        Pointer.block ptr <> Block.local ->
+        Memory.load mem_snapshot ptr = Memory.load mem ptr.
+
+    Definition well_formed_memory_event (e : event_inform) (mem : Memory.t) : Prop :=
+      match e with
+      | ECallInform Csrc _ arg emem _ =>
+        well_formed_memory_snapshot emem mem /\
+        Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
+        = Some arg
+      | ERetInform Csrc ret emem _ =>
+        well_formed_memory_snapshot emem mem /\
+        Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
+        = Some ret
+      | EAlloc C _ rsize =>
+        exists size,
+          (size > 0)%Z /\
+          Memory.load mem (Permission.data, C, Block.local, (reg_offset rsize)) =
+          Some (Int size)
+      | _ => True
+      end.
+
     Record well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
       {
         wfmem_counter:
@@ -829,6 +864,40 @@ Section Definability.
       now destruct (_ == _).
     Qed.
 
+    (* RB: TODO: Relocate, replace existing but less general
+       [rcons_trace_event_eq_inversion] with second lemma. *)
+    Lemma size_inj :
+      forall {A} (l1 l2 : list A), l1 = l2 -> size l1 = size l2.
+    Proof.
+      intros A l1 l2 Heq; subst l2. reflexivity.
+    Qed.
+
+    Lemma rcons_inv :
+      forall {A} (l1 l2 : list A) e1 e2,
+        l1 ++ [e1] = l2 ++ [e2] ->
+        l1 = l2 /\ e1 = e2.
+    Proof.
+      intros A l1.
+      induction l1 as [| e l1' IHl1'];
+        simpl;
+        intros l2 e1 e2 Heq.
+      - destruct l2 as [| e' l2'].
+        + injection Heq as Heq; subst e2.
+          split; reflexivity.
+        + inversion Heq as [[Heq1 Heq2]]; subst.
+          apply size_inj in Heq2.
+          rewrite cats1 size_rcons in Heq2.
+          discriminate.
+      - destruct l2 as [| e' l2'].
+        + inversion Heq as [[Heq1 Heq2]]; subst e2.
+          apply size_inj in Heq2.
+          rewrite cats1 size_rcons in Heq2.
+          discriminate.
+        + injection Heq as ? Heq; subst e'.
+          specialize (IHl1' l2' e1 e2 Heq) as [? ?]; subst e2 l2'.
+          split; reflexivity.
+    Qed.
+
     Lemma well_formed_memory_store_counter prefix mem C e :
       component_buffer C ->
       well_formed_memory prefix mem ->
@@ -857,24 +926,21 @@ Section Definability.
           rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
           now rewrite Z.add_0_r.
       - move=> C' r C'_b.
-        Check Memory.load_after_store_neq.
-        admit.
+        destruct ((wfmem_meta wf_mem) C' r C'_b) as [v Hload].
+        exists v.
+        erewrite Memory.load_after_store_neq; try eassumption.
+        intros Hcontra. injection Hcontra as Hcomp Hoffset.
+        now destruct r.
       - move=> prefix' Csrc P arg mem'' Cdst Hprefix C'_b.
-        assert (prefix = prefix') by admit; subst prefix'.
-        assert (e = ECallInform Csrc P arg mem'' Cdst) by admit; subst e.
-        clear Hprefix.
+        apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
         (* TODO: Missing information. *)
         admit.
       - move=> prefix' Csrc ret mem'' Cdst Hprefix C'_b.
-        assert (prefix = prefix') by admit; subst prefix'.
-        assert (e = ERetInform Csrc ret mem'' Cdst) by admit; subst e.
-        clear Hprefix.
+        apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
         (* TODO: Missing information. *)
         admit.
       - move=> prefix' C' rptr rsize Hprefix C'_b.
-        assert (prefix = prefix') by admit; subst prefix'.
-        assert (e = EAlloc C' rptr rsize) by admit; subst e.
-        clear Hprefix.
+        apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
         (* TODO: Missing information. *)
         admit.
     (* Qed. *)
@@ -959,11 +1025,21 @@ Section Definability.
     (*   b <> b' -> *)
     (*   Memory.load mem (P, C, b, o) = Memory.load mem' (P, C, b, o). *)
     (* Admitted. *)
-    Lemma store_after_alloc mem P C b o size mem' P' C' b' o' v :
+    Lemma store_after_alloc mem P C b o size mem' P' C' b' o' v mem1 :
       Memory.alloc mem C size = Some (mem', (P', C', b', o')) ->
       b <> b' ->
-      Memory.store mem (P, C, b, o) v = Memory.store mem' (P, C, b, o) v.
+      Memory.store mem  (P, C, b, o) v = Some mem1 ->
+    exists mem1',
+      Memory.store mem' (P, C, b, o) v = Some mem1'.
     Admitted.
+
+    Lemma Eregister_eq_dec :
+      forall r1 r2 : Eregister, Decidable.decidable (r1 = r2).
+    Proof.
+      intros [] [];
+        try (left; reflexivity);
+        right; intro Hcontra; now inversion Hcontra.
+    Qed.
 
     (* TODO: [DynShare] Trace relation should appear here too!
 
@@ -1244,7 +1320,40 @@ Local Transparent expr_of_const_val loc_of_reg.
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
-              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
+              (* Reestablish memory well-formedness.
+                 TODO: Refactor, automate. *)
+              {
+                constructor.
+                - intros C' C'_b.
+                  rewrite <- ((wfmem_counter wf_mem) C' C'_b).
+                  eapply Memory.load_after_store_neq; try eassumption.
+                  intros Hcontra; destruct v; now inversion Hcontra.
+                - intros C' reg C'_b.
+                  destruct (dec_eq_nat C C') as [HeqC | HneqC].
+                  + subst C'.
+                    destruct (Eregister_eq_dec reg v) as [Heqreg | Hneqreg].
+                    * subst reg. exists (Int n).
+                      eapply Memory.load_after_store_eq; eassumption.
+                    * destruct ((wfmem_meta wf_mem) C reg C_b) as [val Hval].
+                      exists val.
+                      erewrite Memory.load_after_store_neq; try eassumption.
+                      intros Hcontra. injection Hcontra as Hoffset.
+                      apply reg_offset_inj in Hoffset.
+                      symmetry in Hoffset. contradiction.
+                  + destruct ((wfmem_meta wf_mem) C' reg C'_b) as [val Hval].
+                    exists val.
+                    erewrite Memory.load_after_store_neq; try eassumption.
+                    intros Hcontra. inversion Hcontra. contradiction.
+                - intros prefix' Csrc P' arg' mem'' Cdst Hprefix Csrc_b.
+                  apply rcons_inv in Hprefix as [Hprefix Hevent].
+                  discriminate.
+                - intros prefix' Csrc P' arg' Cdst Hprefix Csrc_b.
+                  apply rcons_inv in Hprefix as [Hprefix Hevent].
+                  discriminate.
+                - intros prefix' C' rptr rsize Hprefix C'_b.
+                  apply rcons_inv in Hprefix as [Hprefix Hevent].
+                  discriminate.
+              }
 
             + (* Before processing the goal, introduce existential witnesses. *)
               destruct (well_formed_memory_store_reg_offset v (eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (8 + o))) C_b wf_mem) as [mem' Hstore].
@@ -1407,7 +1516,9 @@ Local Transparent expr_of_const_val loc_of_reg.
               as [mem' [b' [Hblock Halloc1]]].
             destruct (well_formed_memory_store_reg_offset
                         e ((Ptr (Permission.data, C, b', 0%Z))) C_b wf_mem)
-              as [mem'' Hstore2].
+              as [mem1 Hstore2].
+            destruct (store_after_alloc Halloc1 (not_eq_sym Hblock) Hstore2)
+              as [mem1' Hstore2'].
             (* Continue with the goal. *)
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
@@ -1422,9 +1533,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                 -- exact Halloc1.
                 -- do 6 take_step.
                    ++ reflexivity.
-                   ++ setoid_rewrite <- store_after_alloc;
-                        [| eassumption | now auto].
-                      exact Hstore2.
+                   ++ exact Hstore2'.
                    ++ (* Do recursive call. *)
                       do 3 take_step.
                       ** reflexivity.
