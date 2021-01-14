@@ -797,9 +797,20 @@ Section Definability.
     (* RB: NOTE: We could make this stronger by noting which component is being
        executed, as this is the only one that can change its own metadata. *)
     Definition well_formed_memory_snapshot (mem_snapshot mem : Memory.t) : Prop :=
-      forall ptr,
-        Pointer.block ptr <> Block.local ->
-        Memory.load mem_snapshot ptr = Memory.load mem ptr.
+      (* forall ptr, *)
+      (*   Pointer.block ptr <> Block.local -> *)
+      (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
+      forall Cb,
+        memory_shifts_memory_at_addr_all_cids
+          all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem /\
+        memory_inverse_shifts_memory_at_addr_all_cids
+          all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
+
+    Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C o v mem' :
+      well_formed_memory_snapshot mem_snapshot mem ->
+      Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
+      well_formed_memory_snapshot mem_snapshot mem'.
+    Admitted. (* RB: TODO: Easy. *)
 
     Definition well_formed_memory_event (e : event_inform) (mem : Memory.t) : Prop :=
       match e with
@@ -836,13 +847,13 @@ Section Definability.
           forall prefix' Csrc P arg mem' Cdst,
             prefix = prefix' ++ [:: ECallInform Csrc P arg mem' Cdst] ->
             component_buffer Csrc ->
-            mem' = mem /\
+            well_formed_memory_snapshot mem' mem /\
             Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some arg;
         wfmem_ret:
           forall prefix' Csrc ret mem' Cdst,
             prefix = prefix' ++ [:: ERetInform Csrc ret mem' Cdst] ->
             component_buffer Csrc ->
-            mem' = mem /\
+            well_formed_memory_snapshot mem' mem /\
             Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret;
         wfmem_alloc:
           forall prefix' C rptr rsize,
@@ -902,12 +913,13 @@ Section Definability.
       component_buffer C ->
       well_formed_memory prefix mem ->
       C = cur_comp_of_event e ->
+      well_formed_memory_event e mem ->
       exists mem',
         Memory.store mem (Permission.data, C, Block.local, 0%Z)
                      (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
         well_formed_memory (prefix ++ [e]) mem'.
     Proof.
-      move=> C_b wf_mem HC.
+      move=> C_b wf_mem HC He.
       have C_local := (wfmem_counter wf_mem) _ C_b.
       have [mem' Hmem'] := Memory.store_after_load
                              _ _ _ (Int (counter_value C (prefix ++ [e])))
@@ -933,19 +945,26 @@ Section Definability.
         now destruct r.
       - move=> prefix' Csrc P arg mem'' Cdst Hprefix C'_b.
         apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
-        (* TODO: Missing information. *)
-        admit.
+        inversion He as [Hsnap Harg].
+        split.
+        + eapply metadata_store_preserves_snapshot; eassumption.
+        + erewrite Memory.load_after_store_neq; try eassumption.
+          now injection.
       - move=> prefix' Csrc ret mem'' Cdst Hprefix C'_b.
         apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
-        (* TODO: Missing information. *)
-        admit.
+        inversion He as [Hsnap Hret].
+        split.
+        + eapply metadata_store_preserves_snapshot; eassumption.
+        + erewrite Memory.load_after_store_neq; try eassumption.
+          now injection.
       - move=> prefix' C' rptr rsize Hprefix C'_b.
         apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
-        (* TODO: Missing information. *)
-        admit.
-    (* Qed. *)
-    Admitted. (* RB: TODO: Complete new sub-goal, easy in general, but
-                 event-specific invariants may involve tweaks to the theorem. *)
+        inversion He as [size [Hsize Hload]].
+        exists size. split.
+        + eassumption.
+        + erewrite Memory.load_after_store_neq; try eassumption.
+          injection as _ Hoffset. now destruct rsize.
+    Qed.
 
     Lemma well_formed_memory_store_reg_offset prefix mem C r v :
       component_buffer C ->
@@ -1086,7 +1105,9 @@ Section Definability.
         have C_local := (wfmem_counter wf_mem) _ C_b.
 
         (* TODO: Getting ahead of ourselves here. *)
-        destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
+        assert (He : well_formed_memory_event e mem) by admit. (* FIXME *)
+        destruct (well_formed_memory_store_counter C_b wf_mem wf_C He)
+          as [mem' [Hmem' wf_mem']].
 
         (* We can simulate the event-producing step as the concatenation of three
            successive stars:
@@ -1135,7 +1156,9 @@ Section Definability.
                (* NOTE: Here, too, we may need additional conjuncts... *)
                ).
         {
-          clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
+          (* clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem. *)
+          clear Star1 wf_mem C_local mem Hmem' He. revert mem' wf_mem'. intros mem wf_mem.
+          (* clear Star1 wf_mem C_local Hmem'. revert mem mem' wf_mem' He. intros mem_old mem wf_mem He. *)
           (* Case analysis on observable events, which in this rich setting
              extend to calls and returns and various memory accesses and related
              manipulations, of which only calls and returns are observable at
@@ -1168,19 +1191,24 @@ Section Definability.
             (*   by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
             + (* Process memory invariant. *)
               destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
-              subst mem'.
+              (* subst mem'. *)
               take_step.
 Local Transparent loc_of_reg.
               unfold loc_of_reg.
 Local Opaque loc_of_reg.
               do 7 take_step;
                 [reflexivity | exact Harg |].
+              (* RB: TODO: At this precise moment the call is executed, so the
+                 two memories should be identical. *)
               apply star_one. simpl.
               apply CS.eval_kstep_sound. simpl.
               rewrite (negbTE C_ne_C').
               rewrite -> imported_procedure_iff in Himport. rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
-              by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+              (* by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
+              rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+              admit.
+              (* FIXME: Similar steps will break after this point. *)
             + econstructor; trivial.
               { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
                 eexists []; eexists; simpl; split; eauto.
@@ -1219,7 +1247,8 @@ Local Transparent loc_of_reg.
 Local Opaque loc_of_reg.
               do 6 take_step;
                 [reflexivity | | now apply star_refl].
-              admit.
+              destruct (wfmem_ret wf_mem Logic.eq_refl C_b) as [_ Hload].
+              exact Hload.
             }
             (* Once this is done, it suffices to show that the return can be
                executed once the return value has been dereferenced from the
