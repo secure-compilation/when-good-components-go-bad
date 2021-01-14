@@ -167,13 +167,17 @@ Section UnaryHelpersForMergeable.
       In (IConst (IPtr (C, b, o, perm)) r) proc ->
       prog_addrs p addrs.
 
+  Definition static_addresses_of_component
+             (p: program) (c: Component.id) : {fset node_t} :=
+    CS.component_ptrs p c.
+  
 End UnaryHelpersForMergeable.
 
 Section BinaryHelpersForMergeable.
 
   (* n is the metadata size of the LHS program, n' of the RHS program. *)
   Variables n n': Component.id -> nat.
-
+  
   (* Assume t is a prefix. Reason: addr_shared_so_far also assumes t is a prefix. *)
   Definition trace_addrs_rel t m m' :=
     forall addr,
@@ -231,8 +235,121 @@ Section BinaryHelpersForMergeable.
       (* TODO: probably inverse_shift is redundant with shift. *)
       inverse_shift_value_all_cids n n' v' = v ->
       regs_rel2 r r'.
+
+  Inductive regs_rel_of_executing_part
+            (r_original r_recombined: Register.t) n_original n_recombined :=
+  | regs_rel_of_executing_part_intro:
+      (
+        forall reg,
+          omap
+            (shift_value_all_cids n_original n_recombined)
+            (r_original reg)
+          =
+          r_recombined reg
+          /\
+          omap
+            (inverse_shift_value_all_cids n_recombined n_original)
+            (r_recombined reg)
+          =
+          r_original reg
+      )
+      ->
+      regs_rel_of_executing_part r_original r_recombined n_original n_recombined.
+        
   
 End BinaryHelpersForMergeable.
+
+(* AEK: Ignore this section for now. *)
+(********************************************************************************
+Section RelateElectedProgramPartInOriginalAndRecombined.
+  
+  Definition original_and_recombined_memories_internal_relation
+             (elected_prog_part: program)
+             (* i.e., p or c' *)
+             original_mem recombined_mem
+             (* i.e., (s.mem or s''.mem) and s'.mem *)
+             (original_t   recombined_t  : trace event)
+             (* i.e., (t or t'') and t' *)
+             (original_n   recombined_n  : Component.id -> nat)
+             (* i.e., (n or n'') and n' *)
+             (cur_comp: Component.id) : Prop
+             (* i.e., the component id of s'.pc *)
+    :=
+
+      (
+        forall original_addr,
+          ~ addr_shared_so_far original_addr original_t ->
+          (*~ original_addr.1 == cur_comp ->*)
+          (*~ Reachable
+            original_mem
+            (static_addresses_of_component elected_prog_part cur_comp)
+            original_addr ->*)
+          memory_shifts_memory_at_addr_all_cids
+            original_n
+            recombined_n
+            original_addr
+            original_mem
+            recombined_mem
+      )
+      /\
+      (
+        forall recombined_addr,
+          ~ addr_shared_so_far recombined_addr recombined_t ->
+          ~ Reachable
+            recombined_mem
+            (static_addresses_of_component elected_prog_part cur_comp)
+            recombined_addr ->
+          memory_inverse_shifts_memory_at_addr_all_cids
+            original_n
+            recombined_n
+            recombined_addr
+            original_mem
+            recombined_mem
+      ).
+
+  Definition original_and_recombined_memories_border_relation
+             (elected_prog_part: program)
+             (* i.e., p or c' depending on the component id before the border *)
+             original_mem recombined_mem
+             (* i.e., (s.mem or s''.mem) and s'.mem *)
+             (original_t   recombined_t  : trace event)
+             (* i.e., (t or t'') and t' *)
+             (original_n   recombined_n  : Component.id -> nat)
+             (* i.e., (n or n'') and n' *)
+             (comp_before_border: Component.id)
+             (* i.e., the component id before the border event *)
+    : Prop
+    :=
+      original_and_recombined_memories_internal_relation
+        elected_prog_part
+        original_mem
+        recombined_mem
+        original_t
+        recombined_t
+        original_n
+        recombined_n
+        comp_before_border
+      /\
+      trace_addrs_rel
+        original_n
+        recombined_n
+        original_t
+        original_mem
+        recombined_mem
+      /\
+      trace_addrs_rel_inv
+        original_n
+        recombined_n
+        recombined_t
+        original_mem
+        recombined_mem.
+
+(*  Lemma original_and_recombined_memories_relation_weakening
+        p_part m m_recomb t t_recomb n n_recomb cid:
+    original_and_recombined_memories_border_relation
+*)  
+End RelateElectedProgramPartInOriginalAndRecombined.
+************************************************************************************)
 
 (* An inductive notion of pairs of states for which merging is well-defined. *)
 (* RB: TODO: Harmonize naming conventions. *)
@@ -375,6 +492,203 @@ Section Mergeable.
   Definition is_prefix (s: CS.state) (p: program) t : Prop :=
     Star (CS.sem_non_inform p) (CS.initial_machine_state p) t s.
 
+  Definition mem_of_part_executing_rel_original_and_recombined
+             (part_executing: program)
+             (* part_executing should be either p or c' *)
+             original_mem recombined_mem
+             original_n   recombined_n : Prop :=
+    (
+      forall original_addr,
+        original_addr.1 \in domm (prog_interface part_executing) ->
+        memory_shifts_memory_at_addr_all_cids
+          original_n
+          recombined_n
+          original_addr
+          original_mem
+          recombined_mem
+    )
+    /\
+    (
+      forall recombined_addr,
+        recombined_addr.1 \in domm (prog_interface part_executing) ->
+        memory_inverse_shifts_memory_at_addr_all_cids
+          original_n
+          recombined_n
+          recombined_addr
+          original_mem
+          recombined_mem      
+    ).
+
+  Definition mem_of_part_not_executing_rel_original_and_recombined_at_internal
+             (part_not_executing: program)
+             original_mem recombined_mem
+             original_n   recombined_n
+             original_t   recombined_t
+    : Prop :=
+    (
+      forall original_addr,
+        original_addr.1 \in domm (prog_interface part_not_executing) ->
+        ~ addr_shared_so_far original_addr original_t ->
+        memory_shifts_memory_at_addr_all_cids
+          original_n
+          recombined_n
+          original_addr
+          original_mem
+          recombined_mem
+    )
+    /\
+    (
+      forall recombined_addr,
+        recombined_addr.1 \in domm (prog_interface part_not_executing) ->
+        ~ addr_shared_so_far recombined_addr recombined_t ->
+        memory_inverse_shifts_memory_at_addr_all_cids
+          original_n
+          recombined_n
+          recombined_addr
+          original_mem
+          recombined_mem
+    ).
+
+  Definition mem_of_part_not_executing_rel_original_and_recombined_at_border
+             (part_not_executing: program)
+             original_mem recombined_mem
+             original_n   recombined_n
+    : Prop :=
+    mem_of_part_executing_rel_original_and_recombined
+      part_not_executing
+      original_mem recombined_mem
+      original_n   recombined_n.
+
+  Inductive mergeable_states_well_formed
+            (s s' s'' : CS.state) t t' t'' : Prop :=
+    mergeable_states_well_formed_intro:
+      well_formed_program p ->
+      well_formed_program c ->
+      well_formed_program p' ->
+      well_formed_program c' ->
+      mergeable_interfaces ip ic ->
+      prog_interface p  = prog_interface p' ->
+      prog_interface c  = prog_interface c' ->
+      closed_program prog   ->
+      closed_program prog'' ->
+      is_prefix s   prog   t ->
+      is_prefix s'  prog'  t' ->
+      is_prefix s'' prog'' t'' ->
+      CS.state_pc s' = CS.state_pc s ->
+      CS.state_pc s' = CS.state_pc s'' ->
+      CS.state_stack s' = CS.state_stack s ->
+      CS.state_stack s' = CS.state_stack s'' ->
+      mergeable_states_well_formed s s' s'' t t' t''.
+
+  Inductive mergeable_internal_states
+            (s s' s'' : CS.state) t t' t'' : Prop :=
+  | mergeable_internal_states_p_executing:
+      mergeable_states_well_formed s s' s'' t t' t'' ->
+      Pointer.component (CS.state_pc s') \in domm (prog_interface p) ->
+      regs_rel_of_executing_part (CS.state_regs s) (CS.state_regs s') n n' ->
+      mem_of_part_executing_rel_original_and_recombined
+        p                  (* Here, the part executing is p. *)
+        (CS.state_mem s)   (* Thus, the original memory comes from s. *)
+        (CS.state_mem s')
+        n
+        n' ->
+      mem_of_part_not_executing_rel_original_and_recombined_at_internal
+        c'                 (* Here, the part not executing is c'. *)
+        (CS.state_mem s'') (* Thus, the original memory comes from s''. *)
+        (CS.state_mem s')
+        n''
+        n'
+        t''
+        t' ->
+      mergeable_internal_states s s' s'' t t' t''
+  | mergeable_internal_states_c'_executing:
+      mergeable_states_well_formed s s' s'' t t' t'' ->
+      Pointer.component (CS.state_pc s') \in domm (prog_interface c') ->
+      regs_rel_of_executing_part (CS.state_regs s'') (CS.state_regs s') n'' n' ->
+      mem_of_part_executing_rel_original_and_recombined
+        c'                  (* Here, the part executing is c'. *)
+        (CS.state_mem s'')  (* Thus, the original memory comes from s''. *)
+        (CS.state_mem s')
+        n''
+        n' ->
+      mem_of_part_not_executing_rel_original_and_recombined_at_internal
+        p                  (* Here, the part not executing is p. *)
+        (CS.state_mem s)   (* Thus, the original memory comes from s. *)
+        (CS.state_mem s')
+        n
+        n'
+        t
+        t' ->
+      mergeable_internal_states s s' s'' t t' t''.
+
+  Inductive mergeable_border_states
+            (s s' s'' : CS.state) t t' t'' : Prop :=
+  | mergeable_border_states_p_executing:
+      mergeable_states_well_formed s s' s'' t t' t'' ->
+      Pointer.component (CS.state_pc s') \in domm (prog_interface p) ->
+      regs_rel_of_executing_part (CS.state_regs s) (CS.state_regs s') n n' ->
+      mem_of_part_executing_rel_original_and_recombined
+        p                  (* Here, the part executing is p. *)
+        (CS.state_mem s)   (* Thus, the original memory comes from s. *)
+        (CS.state_mem s')
+        n
+        n' ->
+      mem_of_part_not_executing_rel_original_and_recombined_at_border
+        c'                 (* Here, the part not executing is c'. *)
+        (CS.state_mem s'') (* Thus, the original memory comes from s''. *)
+        (CS.state_mem s')
+        n''
+        n' ->
+      mergeable_border_states s s' s'' t t' t''
+  | mergeable_border_states_c'_executing:
+      mergeable_states_well_formed s s' s'' t t' t'' ->
+      Pointer.component (CS.state_pc s') \in domm (prog_interface c') ->
+      regs_rel_of_executing_part (CS.state_regs s'') (CS.state_regs s') n'' n' ->
+      mem_of_part_executing_rel_original_and_recombined
+        c'                  (* Here, the part executing is c'. *)
+        (CS.state_mem s'')  (* Thus, the original memory comes from s''. *)
+        (CS.state_mem s')
+        n''
+        n' ->
+      mem_of_part_not_executing_rel_original_and_recombined_at_border
+        p                 (* Here, the part not executing is p. *)
+        (CS.state_mem s)  (* Thus, the original memory comes from s. *)
+        (CS.state_mem s')
+        n
+        n' ->
+      mergeable_border_states s s' s'' t t' t''.
+
+  Ltac invert_non_eagerly_mergeable_border_states Hmergeborder :=
+    let Hmergewf := fresh "Hmergewf" in
+    let H_p      := fresh "H_p"      in
+    let Hregsp   := fresh "Hregsp"   in
+    let Hmemp    := fresh "Hmemp"    in
+    let Hmemc'   := fresh "Hmemc'"   in
+    let Hregsc'  := fresh "Hregsc'"  in
+    inversion Hmergeborder as
+        [Hmergewf H_p Hregsp Hmemp Hmemc' |
+         Hmergewf H_c' Hregsc' Hmemc' Hmemp].
+  
+  Lemma mergeable_border_mergeable_internal s s' s'' t t' t'':
+    mergeable_border_states s s' s'' t t' t'' ->
+    mergeable_internal_states s s' s'' t t' t''.
+  Proof.
+    intros Hmergeborder.
+    invert_non_eagerly_mergeable_border_states Hmergeborder.
+    - apply mergeable_internal_states_p_executing; try eassumption.
+      destruct Hmemc' as [Hshift Hinvshift].
+      unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal.
+      split; intros.
+      + apply Hshift; assumption.
+      + apply Hinvshift; assumption.
+    - apply mergeable_internal_states_c'_executing; try eassumption.
+      destruct Hmemp as [Hshift Hinvshift].
+      unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal.
+      split; intros.
+      + apply Hshift; assumption.
+      + apply Hinvshift; assumption.
+  Qed.
+  
   Inductive mergeable_states
             (s s' s'' : CS.state) t t' t'' : Prop :=
     mergeable_states_intro :
