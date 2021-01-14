@@ -1100,7 +1100,9 @@ Section Definability.
         have C_local := (wfmem_counter wf_mem) _ C_b.
 
         (* TODO: Getting ahead of ourselves here. *)
-        destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
+        assert (He : well_formed_memory_event e mem) by admit. (* FIXME *)
+        destruct (well_formed_memory_store_counter C_b wf_mem wf_C He)
+          as [mem' [Hmem' wf_mem']].
 
         (* We can simulate the event-producing step as the concatenation of three
            successive stars:
@@ -1149,7 +1151,9 @@ Section Definability.
                (* NOTE: Here, too, we may need additional conjuncts... *)
                ).
         {
-          clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem.
+          (* clear Star1 wf_mem C_local mem Hmem'. revert mem' wf_mem'. intros mem wf_mem. *)
+          clear Star1 wf_mem C_local mem Hmem' He. revert mem' wf_mem'. intros mem wf_mem.
+          (* clear Star1 wf_mem C_local Hmem'. revert mem mem' wf_mem' He. intros mem_old mem wf_mem He. *)
           (* Case analysis on observable events, which in this rich setting
              extend to calls and returns and various memory accesses and related
              manipulations, of which only calls and returns are observable at
@@ -1182,19 +1186,24 @@ Section Definability.
             (*   by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
             + (* Process memory invariant. *)
               destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
-              subst mem'.
+              (* subst mem'. *)
               take_step.
 Local Transparent loc_of_reg.
               unfold loc_of_reg.
 Local Opaque loc_of_reg.
               do 7 take_step;
                 [reflexivity | exact Harg |].
+              (* RB: TODO: At this precise moment the call is executed, so the
+                 two memories should be identical. *)
               apply star_one. simpl.
               apply CS.eval_kstep_sound. simpl.
               rewrite (negbTE C_ne_C').
               rewrite -> imported_procedure_iff in Himport. rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
-              by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+              (* by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
+              rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+              admit.
+              (* FIXME: Similar steps will break after this point. *)
             + econstructor; trivial.
               { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
                 eexists []; eexists; simpl; split; eauto.
@@ -1233,7 +1242,8 @@ Local Transparent loc_of_reg.
 Local Opaque loc_of_reg.
               do 6 take_step;
                 [reflexivity | | now apply star_refl].
-              admit.
+              destruct (wfmem_ret wf_mem Logic.eq_refl C_b) as [_ Hload].
+              exact Hload.
             }
             (* Once this is done, it suffices to show that the return can be
                executed once the return value has been dereferenced from the
