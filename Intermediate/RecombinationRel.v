@@ -146,6 +146,11 @@ Section UnaryHelpersForMergeable.
      buffers and procedures. A computational definition can be given as well.
      NOTE: Unnecessary? *)
   Inductive prog_addrs (p : program) (addrs : addr_t) : Prop :=
+  (* this is the data part. These are the static buffers defined by the program. *)
+  (* My question is, why don't we just define this as: 
+     bufs b' = Some _ ->
+     prog_addrs p (C, b').
+ *)
   | prog_addrs_buffers : forall C b o perm C' b' bufs buf,
       addrs = (C, b) ->
       (prog_buffers p) C' = Some bufs ->
@@ -198,6 +203,7 @@ Section BinaryHelpersForMergeable.
   | mem_rel2_intro : forall m t m' t',
       mt  = (m , t ) ->
       mt' = (m', t') ->
+      (* shared memory renames shared memory *)
       trace_addrs_rel     t  m m' ->
       trace_addrs_rel_inv t' m m' ->
       (* TODO: Are these next two assumptions necessary or do they make 
@@ -207,6 +213,14 @@ Section BinaryHelpersForMergeable.
       prog_addrs_rel_inv  p  m m' ->
       mem_rel2 mt mt' p.
 
+  (* 1- exclude reachable addresses for current cid. *)
+  (* by (1) the weak relation is strong enough, i.e., we should expect that *)
+  (* by (1) we can prove a strengthening lemma.                             *)
+
+  (* 2- (need to?) exclude shared addresses.         *)
+  
+  (*Inductive mem_rel_2_not_reachable ()*)
+  
   (* RB: TODO: Use [omap] to make relation more conservative,
      as suggested by AEK. *)
   Inductive regs_rel2 (r r' : Register.t) :=
@@ -225,8 +239,12 @@ End BinaryHelpersForMergeable.
 Section Mergeable.
   Variables p c p' c' : program.
 
-  Variables n n' n'': Component.id -> nat.
+  Variables n n'': Component.id -> nat.
 
+  Let n' := fun cid =>
+              if cid \in domm (prog_interface p)
+              then n   cid
+              else n'' cid.
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
@@ -1454,8 +1472,11 @@ End MergeSym.
 (* Helpers, epsilon and lockstep versions of three-way simulation. *)
 Section ThreewayMultisem1.
   Variables p c p' c' : program.
-  Variables n n' n'' : Component.id -> nat.
-
+  Variables n n'' : Component.id -> nat.
+  Let n' := fun cid =>
+              if cid \in domm (prog_interface p)
+              then n   cid
+              else n'' cid.
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
@@ -1546,10 +1567,10 @@ Section ThreewayMultisem1.
      what changes the "other program" makes to its memory, only what "our
      program" eventually will. *)
   Lemma merge_states_silent_star s1 s1' s1'' s2'' t t' t'' :
-    mergeable_states p c p' c' n n' n'' s1 s1' s1'' t t' t'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t t' t'' ->
     CS.is_program_component s1 ic ->
     Star sem'' s1'' E0 s2'' ->
-    mergeable_states p c p' c' n n' n'' s1 s1' s2'' t t' t''.
+    mergeable_states p c p' c' n n'' s1 s1' s2'' t t' t''.
   Proof.
     intros Hmerge1 Hcomp Hstar12''.
     remember E0 as t0.
@@ -1641,7 +1662,7 @@ Section ThreewayMultisem1.
      significance to it, one may consider adding the mergeability relation, but
      then we need to know what [s1] is doing. *)
   Lemma context_epsilon_star_merge_states s1 s1' s1'' s2'' t t' t'' :
-    mergeable_states p c p' c' n n' n'' s1 s1' s1'' t t' t'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t t' t'' ->
     CS.is_program_component s1 ic ->
     Star sem'' s1'' E0 s2'' ->
   exists s2',
@@ -1671,11 +1692,11 @@ Section ThreewayMultisem1.
      adding a matching [Step] on [sem']. *)
   Lemma threeway_multisem_mergeable_step_E0 s1 s2 s1' s1'' t t' t'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' n n' n'' s1 s1' s1'' t t' t'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t t' t'' ->
     Step sem s1 E0 s2 ->
   exists s2',
     Step sem' s1' E0 s2' /\
-    mergeable_states p c p' c' n n' n'' s2 s2' s1'' t t' t''.
+    mergeable_states p c p' c' n n'' s2 s2' s1'' t t' t''.
   Abort. (* RB: TODO: Check repair, uses. Should be provable, but see
             [threeway_multisem_step_E0]. *)
   (* Proof. *)
@@ -1697,13 +1718,13 @@ Section ThreewayMultisem1.
   Lemma threeway_multisem_mergeable_program
         s1 s1' s1'' t1 t1' t1'' t2 t2'' s2 s2'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' n n' n'' s1 s1' s1'' t1 t1' t1'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Star sem   s1   t2   s2   ->
     Star sem'' s1'' t2'' s2'' ->
     (* behavior_rel_behavior_all_cids n n'' (FTbc t2) (FTbc t2'') -> *)
     mem_rel2 n n'' (CS.state_mem s1, t2) (CS.state_mem s1'', t2'') p ->
   exists s2' t2',
-    mergeable_states p c p' c' n n' n'' s2 s2' s2''
+    mergeable_states p c p' c' n n'' s2 s2' s2''
                      (t1 ++ t2) (t1' ++ t2') (t1'' ++ t2'').
   Admitted. (* RB: TODO: Wait to see how this will be useful. *)
   (* Proof. *)
@@ -1785,11 +1806,11 @@ Section ThreewayMultisem1.
      merging functions and hiding the third execution in the relation. *)
   Theorem threeway_multisem_step_E0 s1 s1' s1'' t1 t1' t1'' s2 :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' n n' n'' s1 s1' s1'' t1 t1' t1'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Step sem  s1  E0 s2  ->
   exists s2',
     Step sem' s1' E0 s2' /\
-    mergeable_states p c p' c' n n' n'' s2 s2' s1'' t1 t1' t1''.
+    mergeable_states p c p' c' n n'' s2 s2' s1'' t1 t1' t1''.
   Proof.
     intros Hcomp1 Hmerge1 Hstep12.
     (* NOTE: Keep the context light for now, rewrite lemmas are no longer
@@ -2284,12 +2305,12 @@ Section ThreewayMultisem1.
      tellingly boring. *)
   Theorem threeway_multisem_star_E0_program s1 s1' s1'' t1 t1' t1'' s2 s2'':
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' n n' n'' s1 s1' s1'' t1 t1' t1'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Star sem   s1   E0 s2   ->
     Star sem'' s1'' E0 s2'' ->
   exists s2',
     Star sem'  s1'  E0 s2' /\
-    mergeable_states p c p' c' n n' n'' s2 s2' s2'' t1 t1' t1''.
+    mergeable_states p c p' c' n n'' s2 s2' s2'' t1 t1' t1''.
   Proof.
     intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
     inversion Hmerge1 as [ _ _ _ _
@@ -2325,12 +2346,12 @@ Section ThreewayMultisem1.
   Lemma threeway_multisem_event_lockstep_program_mergeable
         s1 s1' s1'' t1 t1' t1'' e e'' s2 s2'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' n n' n'' s1 s1' s1'' t1 t1' t1'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Step sem   s1   [e  ] s2   ->
     Step sem'' s1'' [e''] s2'' ->
     mem_rel2 n n'' (CS.state_mem s2, [e]) (CS.state_mem s2'', [e'']) p ->
   exists s2' e',
-    mergeable_states p c p' c' n n' n'' s2 s2' s2''
+    mergeable_states p c p' c' n n'' s2 s2' s2''
                      (t1 ++ [e]) (t1' ++ [e']) (t1'' ++ [e'']).
   (* Proof. *)
   (*   intros Hcomp1 Hmerge1 Hstep12 Hstep12''. inversion Hmerge1. *)
@@ -2368,7 +2389,7 @@ Section ThreewayMultisem1.
   Lemma execution_invariant_to_linking_recombination
         gps mem regs pc gps' mem' regs' s'' t t' t'' instr :
     Pointer.component pc \notin domm (prog_interface c) ->
-    mergeable_states p c p' c' n n' n''
+    mergeable_states p c p' c' n n''
                      (gps, mem, regs, pc) (gps', mem', regs', pc) s'' t t' t'' ->
     executing (prepare_global_env prog) pc instr ->
     executing (prepare_global_env prog') pc instr.
@@ -2389,7 +2410,7 @@ Section ThreewayMultisem1.
   Theorem threeway_multisem_event_lockstep_program_step
           s1 s1' s1'' t1 t1' t1'' e e'' s2 s2'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' n n' n'' s1 s1' s1'' t1 t1' t1'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Step sem   s1   [e  ] s2   ->
     Step sem'' s1'' [e''] s2'' ->
     mem_rel2 n n'' (CS.state_mem s2, [e]) (CS.state_mem s2'', [e'']) p ->
@@ -2578,15 +2599,17 @@ Section ThreewayMultisem1.
   (* RB: NOTE: [DynShare] Composing the two partial results above will not be
      possible if we cannot show that the separately proved existentials
      coincide, so modularity would decrease at this point.  *)
-  Corollary threeway_multisem_event_lockstep_program s1 s1' s1'' e e'' s2 s2'' :
+  Corollary threeway_multisem_event_lockstep_program
+            s1 s1' s1'' t1 t1' t1'' e e'' s2 s2'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' α γ s1 s1' s1'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Step sem   s1   [e  ] s2   ->
     Step sem'' s1'' [e''] s2'' ->
-    mem_rel2 p α γ (CS.state_mem s2, [e]) (CS.state_mem s2'', [e'']) ->
+    mem_rel2 n n'' (CS.state_mem s2, [e]) (CS.state_mem s2'', [e'']) p ->
   exists e' s2',
     Step sem'  s1'  [e' ] s2' /\
-    mergeable_states p c p' c' α γ s2 s2' s2''.
+    mergeable_states
+      p c p' c' n n'' s2 s2' s2'' (t1 ++ [e]) (t1' ++ [e']) (t1'' ++ [e'']).
   Proof.
     intros Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2.
     pose proof threeway_multisem_event_lockstep_program_step
@@ -2595,7 +2618,7 @@ Section ThreewayMultisem1.
     exists e', s2'. split; first assumption.
     inversion Hmerge1.
     eapply mergeable_states_intro
-      with (t := t ++ [e]) (t' := t' ++ [e']) (t'' := t'' ++ [e'']);
+      with (t := t1 ++ [e]) (t' := t1' ++ [e']) (t'' := t1'' ++ [e'']);
       try eassumption.
     - eapply star_right; try eassumption. reflexivity.
     - eapply star_right; try eassumption. reflexivity.
@@ -2618,7 +2641,8 @@ End ThreewayMultisem1.
 (* Helpers and symmetric version of three-way simulation. *)
 Section ThreewayMultisem2.
   Variables p c p' c' : program.
-
+  Variables n n'' : Component.id -> nat.
+  
   Let ip := prog_interface p.
   Let ic := prog_interface c.
   Let prog   := program_link p  c.
@@ -2628,34 +2652,33 @@ Section ThreewayMultisem2.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  Variables α γ : Component.id -> nat.
-
   (* RB: TODO: Rename, relocate. *)
   (* RB: NOTE: [DynShare] In this series of results, identical traces will need
      to be replaced by related traces. We can expect similar complications as in
      previous sections, especially in the need to produce explicit successor
      states that continue to satisfy the mergeability relation. *)
-  Lemma threeway_multisem_mergeable s1 s1' s1'' t t'' s2 s2'' :
-    mergeable_states p c p' c' α γ s1 s1' s1'' ->
+  Lemma threeway_multisem_mergeable
+        s1 s1' s1'' t1 t1' t1'' t t'' s2 s2'' :
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Star sem   s1   t   s2   ->
     Star sem'' s1'' t'' s2'' ->
-    mem_rel2 p α γ (CS.state_mem s1, t) (CS.state_mem s1'', t'') ->
-  exists s2',
-    mergeable_states p c p' c' α γ s2 s2' s2''.
+    mem_rel2 n n'' (CS.state_mem s1, t) (CS.state_mem s1'', t'') p ->
+  exists s2' t',
+    mergeable_states p c p' c' n n'' s2 s2' s2'' (t1 ++ t) (t1' ++ t') (t1'' ++ t'').
   (* Qed. *)
   Admitted. (* RB: TODO: Add stepping of [s1']. Redundant? *)
 
   (* RB: TODO: Implicit parameters, compact if possible. *)
   (* RB: NOTE: Again, without mergeability, this lemma is trivial and
      uninteresting. *)
-  Lemma threeway_multisem_star_E0 s1 s1' s1'' s2 s2'':
-    mergeable_states p c p' c' α γ s1 s1' s1'' ->
+  Lemma threeway_multisem_star_E0 s1 s1' s1'' t1 t1' t1'' s2 s2'':
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Star sem   s1   E0 s2   ->
     Star sem'' s1'' E0 s2'' ->
     (* Star sem'  (merge_states ip ic s1 s1'') E0 (merge_states ip ic s2 s2''). *)
   exists s2',
     Star sem'  s1'  E0 s2' /\
-    mergeable_states p c p' c' α γ s2 s2' s2''.
+    mergeable_states p c p' c' n n'' s2 s2' s2'' t1 t1' t1''.
   Proof.
     intros H H0 H1.
   (*   inversion H as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _]. *)
@@ -2702,16 +2725,17 @@ Section ThreewayMultisem2.
      need to concern ourselves with visible steps. *)
   (* RB: NOTE: Events need to be properly for full generality. Otherwise, this
      is just a symmetry lemma. *)
-  Lemma threeway_multisem_event_lockstep s1 s1' s1'' e e'' s2 s2'' :
-    mergeable_states p c p' c' α γ  s1 s1' s1'' ->
+  Lemma threeway_multisem_event_lockstep s1 s1' s1'' t1 t1' t1'' e e'' s2 s2'' :
+    mergeable_states p c p' c' n n''  s1 s1' s1'' t1 t1' t1'' ->
     Step sem   s1   [e  ] s2   ->
     Step sem'' s1'' [e''] s2'' ->
-    mem_rel2 p α γ (CS.state_mem s2, [e]) (CS.state_mem s2'', [e'']) ->
+    mem_rel2 n n'' (CS.state_mem s2, [e]) (CS.state_mem s2'', [e'']) p ->
     (* Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2'') /\ *)
     (* mergeable_states p c p' c' s2 s2''. *)
   exists e' s2',
     Step sem'  s1'  [e' ] s2' /\
-    mergeable_states p c p' c' α γ  s2 s2' s2''.
+    mergeable_states
+      p c p' c' n n''  s2 s2' s2'' (t1 ++ [e]) (t1' ++ [e']) (t1'' ++ [e'']).
   Proof.
     intros Hmerge1 Hstep12 Hstep12'' Hrel2.
   (*   inversion Hmerge1 as [? ? ? Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec Hprog_is_closed _ Hini H1 Hstar H2]. *)
@@ -2754,53 +2778,59 @@ Section ThreewayMultisem2.
   Admitted. (* RB: TODO: Symmetry lemma. Fix according to program side. *)
   (* JT: TODO: clean this proof. *)
 
-  Theorem threeway_multisem_star_program s1 s1' s1'' t t'' s2 s2'' :
+  Theorem threeway_multisem_star_program
+          s1 s1' s1'' t1 t1' t1'' t t'' s2 s2'' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' α γ s1 s1' s1'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Star sem   s1   t   s2   ->
     Star sem'' s1'' t'' s2'' ->
-    mem_rel2 p α γ (CS.state_mem s2, t) (CS.state_mem s2'', t'') ->
+    mem_rel2 n n'' (CS.state_mem s2, t) (CS.state_mem s2'', t'') p ->
     (* Star sem'  (merge_states ip ic s1 s1'') t (merge_states ip ic s2 s2''). *)
   exists t' s2',
     Star sem'  s1'  t'  s2' /\
     (* mem_rel2 p α γ (CS.state_mem s2, t) (CS.state_mem s2',  t' ). *)
-    mergeable_states p c p' c' α γ s2 s2' s2''.
+    mergeable_states p c p' c' n n'' s2 s2' s2'' (t1 ++ t) (t1' ++ t') (t1'' ++ t'').
   Proof.
     simpl in *. intros Hcomp1 Hmerge1 Hstar12. revert s1'' t'' s2'' Hcomp1 Hmerge1.
     apply star_iff_starR in Hstar12.
-    induction Hstar12 as [s | s1 t1 s2 t2 s3 ? Hstar12 IHstar12' Hstep23]; subst;
+    induction Hstar12 as [s | s1 ta s2 tb s3 ? Hstar12 IHstar12' Hstep23]; subst;
       intros s1'' t'' s2'' Hcomp1 Hmerge1 Hstar12'' Hrel3.
     - assert (t'' = E0) by admit; subst t''. (* By the relation. *)
       exists E0, s1'. split.
       + now apply star_refl.
-      + eapply merge_states_silent_star; eassumption.
-      (* eapply context_epsilon_star_merge_states. eassumption. *)
+      + eapply merge_states_silent_star; try eassumption.
+        (* AEK: 
+           The lemma applied above looks suspicious because it seems
+           we are now getting the same goal (as before the apply) again.
+         *)
+        admit.
+        (* eapply context_epsilon_star_merge_states. eassumption. *)
     - rename s2'' into s3''. rename Hstar12'' into Hstar13''.
-      assert (exists t1'' t2'', t'' = t1'' ** t2'')
-        as [t1'' [t2'' ?]] by admit; subst t''. (* By pairwise events.
+      assert (exists ta'' tb'', t'' = ta'' ** tb'')
+        as [ta'' [tb'' ?]] by admit; subst t''. (* By pairwise events.
                                                    More info? *)
       assert (Hstar13''_ := Hstar13''). (* Which variants are needed? *)
       apply (star_app_inv (@CS.singleton_traces_non_inform _)) in Hstar13''_
         as [s2'' [Hstar12'' Hstar23'']].
-      assert (Hrel1 : mem_rel2 p α γ (CS.state_mem s2, t1) (CS.state_mem s2'', t1''))
+      assert (Hrel1 : mem_rel2 n n'' (CS.state_mem s2, ta) (CS.state_mem s2'', ta'') p)
         by admit. (* Need to recompose memory relation based on executions. *)
       specialize (IHstar12' _ _ _ Hcomp1 Hmerge1 Hstar12'' Hrel1)
-        as [t1' [s2' [Hstar12' Hmerge2]]].
-      destruct t2 as [| e2 [| e2' t2]].
+        as [ta' [s2' [Hstar12' Hmerge2]]].
+      destruct tb as [| e2 [| e2' tb]].
       + (* An epsilon step and comparable epsilon star. One is in the context and
            therefore silent, the other executes and leads the MultiSem star.
            eapply star_step in Hstep23; [| now apply star_refl | now apply eq_refl]. *)
-        assert (t2'' = E0) by admit; subst t2''.
+        assert (tb'' = E0) by admit; subst tb''.
         destruct (threeway_multisem_star_E0
                     Hmerge2 (star_one _ _ _ _ _ Hstep23) Hstar23'')
           as [s3' [Hstar23' Hmerge3]].
-        exists t1', s3'. split; [| assumption].
-        eapply star_trans; try eassumption.
-        now rewrite E0_right.
+        exists ta', s3'. split.
+        * eapply star_trans; try eassumption. by rewrite E0_right.
+        * by rewrite !E0_right.
       + (* The step generates a trace event, mimicked on the other side (possibly
            between sequences of silent steps). *)
-        assert (exists e2'', t2'' = [e2'']) as [e2'' ?]
-            by admit; subst t2''. (* By one-to-one event correspondence. More? *)
+        assert (exists e2'', tb'' = [e2'']) as [e2'' ?]
+            by admit; subst tb''. (* By one-to-one event correspondence. More? *)
         change [e2''] with (E0 ** e2'' :: E0) in Hstar23''.
         apply (star_middle1_inv (@CS.singleton_traces_non_inform _)) in Hstar23''
           as [s2''1 [s2''2 [Hstar2'' [Hstep23'' Hstar3'']]]].
@@ -2816,7 +2846,8 @@ Section ThreewayMultisem2.
           (* by admit. (* Should be easy. *) *)
         (* pose proof threeway_multisem_mergeable Hmerge2 Hstar2_non_inform Hstar2'' Hrel2 *)
           (* as [s2'2 Hmerge21']. *)
-        assert (Hrel2 : mem_rel2 p α γ (CS.state_mem s3, [e2]) (CS.state_mem s2''2, [e2'']))
+        assert (Hrel2 :
+                  mem_rel2 n n'' (CS.state_mem s3, [e2]) (CS.state_mem s2''2, [e2'']) p)
           by admit. (* This one should also be obtainable from premises. *)
         pose proof threeway_multisem_event_lockstep Hmerge21 Hstep23 Hstep23'' Hrel2
           as [e' [s2'2 [Hstep23' Hmerge22]]].
@@ -2827,13 +2858,14 @@ Section ThreewayMultisem2.
         pose proof threeway_multisem_star_E0 Hmerge22 Hstar3_non_inform Hstar3''
           as [s3' [Hstar3' Hmerge3]].
         (* Compose. *)
-        exists (t1' ++ [e']), s3'. split; [| assumption].
-        eapply star_trans; first eassumption.
+        exists (ta' ++ [e']), s3'. split. (*[| assumption].*)
+        * eapply star_trans; first eassumption.
         exact (star_trans
                  (star_right _ _ Hstar2' Hstep23' (eq_refl _))
                  Hstar3' (eq_refl _)).
         rewrite -> E0_right, <- Eapp_assoc, -> E0_right.
         reflexivity.
+        * by rewrite <- !Eapp_assoc.
       + (* Contradiction: a step generates at most one event. *)
         pose proof @CS.singleton_traces_non_inform _ _ _ _ Hstep23 as Hcontra.
         simpl in Hcontra. omega.
@@ -2843,7 +2875,8 @@ End ThreewayMultisem2.
 
 (* Three-way simulation and its inversion. *)
 Section ThreewayMultisem3.
-  Variables p c p' c' : program.
+  Variables p c p' c' : program.  
+  Variables n n'' : Component.id -> nat.
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -2854,18 +2887,16 @@ Section ThreewayMultisem3.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  Variables α γ : Component.id -> nat.
-
-  Theorem threeway_multisem_star s1 s1' s1'' t t'' s2 s2'' :
-    mergeable_states p c p' c' α γ s1 s1' s1'' ->
+  Theorem threeway_multisem_star s1 s1' s1'' t1 t1' t1'' t t'' s2 s2'' :
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Star sem   s1   t   s2   ->
     Star sem'' s1'' t'' s2'' ->
-    mem_rel2 p α γ (CS.state_mem s2, t) (CS.state_mem s2'', t'') ->
+    mem_rel2 n n'' (CS.state_mem s2, t) (CS.state_mem s2'', t'') p ->
     (* Star (CS.sem_non_inform (program_link p  c')) (merge_states ip ic s1 s1'') t (merge_states ip ic s2 s2''). *)
     (* /\ mergeable_states ip ic s2 s2'' *)
   exists t' s2',
     Star sem'  s1'  t'  s2' /\
-    mergeable_states p c p' c' α γ s2 s2' s2''.
+    mergeable_states p c p' c' n n'' s2 s2' s2'' (t1 ++ t) (t1' ++ t') (t1'' ++ t'').
   Proof.
     intros Hmerge1 Hstar12 Hstar12'' Hrel2.
   (*   inversion Hmerge1 as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _]. *)
@@ -2901,14 +2932,14 @@ Section ThreewayMultisem3.
      redundant.
      TODO: Possibly remove that lemma, and/or merge this with the main three-way
      result. *)
-  Corollary star_simulation s1 s1' s1'' t t'' s2 s2'' :
-    mergeable_states p c p' c' α γ s1 s1' s1'' ->
+  Corollary star_simulation s1 s1' s1'' t1 t1' t1'' t t'' s2 s2'' :
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Star sem   s1   t   s2   ->
     Star sem'' s1'' t'' s2'' ->
-    mem_rel2 p α γ  (CS.state_mem s2, t) (CS.state_mem s2'', t'') ->
+    mem_rel2 n n''  (CS.state_mem s2, t) (CS.state_mem s2'', t'') p ->
   exists t' s2',
     Star sem'  s1' t' s2' /\
-    mergeable_states p c p' c' α γ s2 s2' s2''.
+    mergeable_states p c p' c' n n'' s2 s2' s2'' (t1 ++ t) (t1' ++ t') (t1'' ++ t'').
   Proof.
     now apply threeway_multisem_star.
   Qed.
@@ -2977,14 +3008,14 @@ Section ThreewayMultisem3.
   (*   try eassumption. *)
   (*     (* try eassumption; [congruence]. *) *)
 
-  Theorem threeway_multisem_step_inv_program s1 s1' s1'' t' s2' :
+  Theorem threeway_multisem_step_inv_program s1 s1' s1'' t1 t1' t1'' t' s2' :
     CS.is_program_component s1 ic ->
-    mergeable_states p c p' c' α γ s1 s1' s1'' ->
+    mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     (* Step sem' (merge_states ip ic s1 s1'') t s2' -> *)
     Step sem' s1' t' s2' ->
   exists t s2,
     Step sem  s1  t  s2 /\
-    mem_rel2 p α γ (CS.state_mem s1', t') (CS.state_mem s1, t).
+    mem_rel2 n n'' (CS.state_mem s1', t') (CS.state_mem s1, t) p.
   Admitted. (* RB: TODO: Tweak relations, prove later IF NEEDED. *)
   (* Proof. *)
   (*   intros Hpc Hmerge Hstep. *)
@@ -3021,6 +3052,7 @@ End ThreewayMultisem3.
 (* Theorems on initial states for main simulation. *)
 Section ThreewayMultisem4.
   Variables p c p' c' : program.
+  Variables n n'' : Component.id -> nat.
 
   Hypothesis Hwfp  : well_formed_program p.
   Hypothesis Hwfc  : well_formed_program c.
@@ -3045,8 +3077,6 @@ Section ThreewayMultisem4.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  Variables α γ : Component.id -> nat.
-
   (* Lemma initial_states_mergeability s s'' : *)
   (*   initial_state sem   s   -> *)
   (*   initial_state sem'' s'' -> *)
@@ -3064,13 +3094,13 @@ Section ThreewayMultisem4.
     initial_state sem'' s'' ->
   exists s',
     initial_state sem'  s'  /\
-    mergeable_states p c p' c' α γ s s' s''.
+    mergeable_states p c p' c' n n'' s s' s'' E0 E0 E0.
   Proof.
     intros Hini Hini''.
     exists (CS.initial_machine_state prog'). split.
     - unfold initial_state, CS.initial_machine_state. reflexivity.
     - eapply mergeable_states_intro
-        with (s0 := s) (s0'' := s'') (t := E0) (t' := E0) (t'' := E0);
+        (*with (s0 := s) (s0'' := s'') (t := E0) (t' := E0) (t'' := E0)*);
         try eassumption;
         try now constructor.
   Admitted. (* RB: TODO: Establish trivial relations, should not be hard. *)
@@ -3113,6 +3143,7 @@ End ThreewayMultisem4.
 (* Remaining theorems for main simulation.  *)
 Section ThreewayMultisem5.
   Variables p c p' c' : program.
+  Variables n n'' : Component.id -> nat.
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -3123,14 +3154,12 @@ Section ThreewayMultisem5.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-  Variables α γ : Component.id -> nat.
-
   (* RB: NOTE: Consider execution invariance and similar lemmas on the right as
      well, as symmetry arguments reoccur all the time.
      TODO: Observe the proof of match_nostep is almost identical, and refactor
      accordingly. *)
-  Theorem match_final_states s s' s'' :
-    mergeable_states p c p' c' α γ s s' s'' ->
+  Theorem match_final_states s s' s'' t t' t'' :
+    mergeable_states p c p' c' n n'' s s' s'' t t' t'' ->
     final_state sem   s   ->
     final_state sem'' s'' ->
     (* final_state sem'  (merge_states ip ic s s''). *)
@@ -3165,8 +3194,8 @@ Section ThreewayMultisem5.
   (*       now apply (mergeable_states_notin_to_in Hmerge). *)
   (* Qed. *)
 
-  Theorem match_nofinal s s' s'' :
-    mergeable_states p c p' c' α γ s s' s'' ->
+  Theorem match_nofinal s s' s'' t t' t'' :
+    mergeable_states p c p' c' n n'' s s' s'' t t' t'' ->
     ~ final_state sem   s   ->
     ~ final_state sem'' s'' ->
     (* ~ final_state sem'  (merge_states ip ic s s''). *)
@@ -3199,8 +3228,8 @@ Section ThreewayMultisem5.
   (*       now eapply (mergeable_states_notin_to_in Hmerge). *)
   (* Qed. *)
 
-  Lemma match_nostep s s' s'' :
-    mergeable_states p c p' c' α γ s s' s'' ->
+  Lemma match_nostep s s' s'' t t' t'' :
+    mergeable_states p c p' c' n n'' s s' s'' t t' t'' ->
     Nostep sem   s   ->
     Nostep sem'' s'' ->
     (* Nostep sem'  (merge_states ip ic s s''). *)
@@ -3241,6 +3270,7 @@ End ThreewayMultisem5.
 (* Main simulation theorem. *)
 Section Recombination.
   Variables p c p' c' : program.
+  Variables n n'' : Component.id -> nat.
 
   Hypothesis Hwfp  : well_formed_program p.
   Hypothesis Hwfc  : well_formed_program c.
@@ -3264,8 +3294,6 @@ Section Recombination.
   Let sem   := CS.sem_non_inform prog.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
-
-  Variables α γ : Component.id -> nat.
 
   (* RB: NOTE: Possible improvements:
       - Try to refactor case analysis in proof.
@@ -3332,7 +3360,7 @@ Section Recombination.
      explicit connections would be lost. *)
   (* Definition prefix_rel m m' := *)
   (*   exists n n', behavior_rel_behavior_all_cids n n' m m'. *)
-  Theorem recombination_prefix_rel m m'' n n'' :
+  Theorem recombination_prefix_rel m m'' :
     does_prefix sem   m ->
     does_prefix sem'' m'' ->
     behavior_rel_behavior_all_cids n  n'' m  m'' ->
@@ -3350,8 +3378,13 @@ Section Recombination.
     (* Suppose we can establish the relation between the initial states of the
        two runs and the initial state of the recombined program. *)
     pose (s1' := CS.initial_machine_state (program_link p c')).
-    assert (Hmerge1 : mergeable_states p c p' c' α γ s1 s1' s1'')
-      by admit.
+
+    
+    (* AEK: TODO: Get the "t"s from the behaviors. *)
+    (*assert (Hmerge1 : mergeable_states p c p' c' n n'' s1 s1' s1'' (* t1 t1' t1''*))
+      by admit.*)
+
+
     (* In the standard proof, because the two executions produce the same
        prefix, we know that the two runs either terminate, go wrong or are
        unfinished. The third case is probably the most interesting here. *)
@@ -3359,8 +3392,8 @@ Section Recombination.
       as [s1_ [s2 [Hini1_ Hstar12]]].
     destruct (CS.behavior_prefix_star_non_inform Hbeh'' Hprefix'')
       as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
-    pose proof match_initial_states Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-         Hprog_is_closed Hprog_is_closed' α γ Hini1_ Hini1''_
+    pose proof match_initial_states n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
+         Hprog_is_closed Hprog_is_closed' Hini1_ Hini1''_
       as [s1'_ [Hini1' Hmerge1_]].
     (* By determinacy of initial program states: *)
     assert (Heq1 : s1 = s1_) by admit.
@@ -3368,8 +3401,14 @@ Section Recombination.
     assert (Heq1'' : s1'' = s1''_) by admit.
     subst s1_ s1'_ s1''_.
     clear Hini1_ Hini1''_ Hmerge1_.
+
+
     (* Now we should be able to apply a modified star simulation. *)
-    pose proof star_simulation Hmerge1 Hstar12 Hstar12'' as [t' [s2' [Hstar12' Hmerge2]]].
+
+    (* AEK: TODO: Uncomment after having defined Hmerge1. See the TODO above. *)
+    (************
+    pose proof star_simulation Hmerge1 Hstar12 Hstar12''
+      as [t' [s2' [Hstar12' Hmerge2]]].
     {
       (* For this, however, we need to be able to establish the memory
          relation between the two, in principle starting from [Hmerge1] and
@@ -3378,10 +3417,18 @@ Section Recombination.
          vs. higher-level memory relation *)
       admit.
     }
+`   *************)
+
+
+
+    (* AEK: TODO: Uncomment after having defined t'. See the TODO above. *)
+    (*************
     (* Actually, we need to ensure that the executed trace corresponds to a
        finite prefix behavior (and that the obtained relation extends to
        it.) *)
     assert (exists m', t' = finpref_trace m') as [m' Heq] by admit; subst.
+
+
     (* Now we can instantiate the quantifiers (assume the mapping [n'] can be
        obtained easily). *)
     exists m'. eexists. split.
@@ -3392,6 +3439,10 @@ Section Recombination.
       exists beh'. admit.
     - (* We would then be left to establish the trace relation. *)
       admit.
+     *********)
+
+
+
   Admitted.
 
 End Recombination.
