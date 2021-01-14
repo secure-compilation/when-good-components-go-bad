@@ -797,9 +797,14 @@ Section Definability.
     (* RB: NOTE: We could make this stronger by noting which component is being
        executed, as this is the only one that can change its own metadata. *)
     Definition well_formed_memory_snapshot (mem_snapshot mem : Memory.t) : Prop :=
-      forall ptr,
-        Pointer.block ptr <> Block.local ->
-        Memory.load mem_snapshot ptr = Memory.load mem ptr.
+      (* forall ptr, *)
+      (*   Pointer.block ptr <> Block.local -> *)
+      (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
+      forall Cb,
+        memory_shifts_memory_at_addr_all_cids
+          all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem /\
+        memory_inverse_shifts_memory_at_addr_all_cids
+          all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
 
     Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C o v mem' :
       well_formed_memory_snapshot mem_snapshot mem ->
