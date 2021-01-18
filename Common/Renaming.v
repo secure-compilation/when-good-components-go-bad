@@ -1658,6 +1658,42 @@ Section TheShiftRenamingAllCids.
                   addr'
                   m
                   m'.
+
+  Lemma load_memory_shifts_memory_value_shifts_value ptr ptr' m m':
+    memory_shifts_memory_at_addr_all_cids
+      (Pointer.component ptr, Pointer.block ptr)
+      m
+      m' ->
+    Ptr ptr' = shift_value_all_cids (Ptr ptr) ->
+    omap shift_value_all_cids (Memory.load m ptr)
+    =
+    Memory.load m' ptr'.
+  Proof.
+    intros Hmemshift Hvshift.
+    unfold
+      memory_shifts_memory_at_addr_all_cids,
+    memory_shifts_memory_at_addr,
+    memory_renames_memory_at_addr, option_rename_value in Hmemshift.
+    simpl in Hmemshift.
+    unfold shift_value_all_cids, shift_value in *.
+    destruct ptr as [[[perm cid] bid] off]. simpl in Hvshift.
+    destruct (perm =? Permission.data) eqn:permdata.
+    - destruct ptr' as [[[perm' cid'] bid'] off']. simpl in *.
+      destruct (
+          rename_addr
+            (rename_addr
+               (sigma_shifting_addr
+                  cid
+                  (metadata_size_lhs cid)
+                  (metadata_size_rhs cid)
+               )
+            )
+            (cid, bid)
+        ) eqn:renameeq.
+      inversion Hvshift. subst.
+      pose proof Hmemshift cid off as G.
+      rewrite renameeq in G. simpl in G.
+  Abort.
   
 End TheShiftRenamingAllCids.
 
