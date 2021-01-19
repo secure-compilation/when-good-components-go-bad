@@ -1150,6 +1150,8 @@ Section Definability.
             - Star3: event proper *)
         (* The second star "executes" the event proper. This part is more
            interesting. *)
+        (* FIXME: This will not execute the exact event in the trace, but rather
+           an event related to it. *)
         assert (Star2 : exists s' cs',
                    Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] (event_non_inform_of [:: e]) cs' /\
                    well_formed_state s' (prefix ++ [e]) suffix cs'
@@ -1199,7 +1201,8 @@ Local Opaque loc_of_reg.
               do 7 take_step;
                 [reflexivity | exact Harg |].
               (* RB: TODO: At this precise moment the call is executed, so the
-                 two memories should be identical. *)
+                 two memories should be identical. And nothing has changed [mem]
+                 in the execution of the previous steps. *)
               apply star_one. simpl.
               apply CS.eval_kstep_sound. simpl.
               rewrite (negbTE C_ne_C').
