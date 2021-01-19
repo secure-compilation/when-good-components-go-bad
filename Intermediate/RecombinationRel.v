@@ -574,8 +574,6 @@ Section Mergeable.
       is_prefix s   prog   t ->
       is_prefix s'  prog'  t' ->
       is_prefix s'' prog'' t'' ->
-      CS.state_pc s' = CS.state_pc s ->
-      CS.state_pc s' = CS.state_pc s'' ->
       CS.state_stack s' = CS.state_stack s ->
       CS.state_stack s' = CS.state_stack s'' ->
       mergeable_states_well_formed s s' s'' t t' t''.
@@ -584,6 +582,7 @@ Section Mergeable.
             (s s' s'' : CS.state) t t' t'' : Prop :=
   | mergeable_internal_states_p_executing:
       mergeable_states_well_formed s s' s'' t t' t'' ->
+      CS.state_pc s' = CS.state_pc s ->
       Pointer.component (CS.state_pc s') \in domm (prog_interface p) ->
       regs_rel_of_executing_part (CS.state_regs s) (CS.state_regs s') n n' ->
       mem_of_part_executing_rel_original_and_recombined
@@ -603,6 +602,7 @@ Section Mergeable.
       mergeable_internal_states s s' s'' t t' t''
   | mergeable_internal_states_c'_executing:
       mergeable_states_well_formed s s' s'' t t' t'' ->
+      CS.state_pc s' = CS.state_pc s'' ->
       Pointer.component (CS.state_pc s') \in domm (prog_interface c') ->
       regs_rel_of_executing_part (CS.state_regs s'') (CS.state_regs s') n'' n' ->
       mem_of_part_executing_rel_original_and_recombined
@@ -625,6 +625,7 @@ Section Mergeable.
             (s s' s'' : CS.state) t t' t'' : Prop :=
   | mergeable_border_states_p_executing:
       mergeable_states_well_formed s s' s'' t t' t'' ->
+      CS.state_pc s' = CS.state_pc s ->
       Pointer.component (CS.state_pc s') \in domm (prog_interface p) ->
       regs_rel_of_executing_part (CS.state_regs s) (CS.state_regs s') n n' ->
       mem_of_part_executing_rel_original_and_recombined
@@ -642,6 +643,7 @@ Section Mergeable.
       mergeable_border_states s s' s'' t t' t''
   | mergeable_border_states_c'_executing:
       mergeable_states_well_formed s s' s'' t t' t'' ->
+      CS.state_pc s' = CS.state_pc s'' ->
       Pointer.component (CS.state_pc s') \in domm (prog_interface c') ->
       regs_rel_of_executing_part (CS.state_regs s'') (CS.state_regs s') n'' n' ->
       mem_of_part_executing_rel_original_and_recombined
@@ -660,14 +662,15 @@ Section Mergeable.
 
   Ltac invert_non_eagerly_mergeable_border_states Hmergeborder :=
     let Hmergewf := fresh "Hmergewf" in
+    let Hpc      := fresh "Hpc"      in
     let H_p      := fresh "H_p"      in
     let Hregsp   := fresh "Hregsp"   in
     let Hmemp    := fresh "Hmemp"    in
     let Hmemc'   := fresh "Hmemc'"   in
     let Hregsc'  := fresh "Hregsc'"  in
     inversion Hmergeborder as
-        [Hmergewf H_p Hregsp Hmemp Hmemc' |
-         Hmergewf H_c' Hregsc' Hmemc' Hmemp].
+        [Hmergewf Hpc H_p Hregsp Hmemp Hmemc' |
+         Hmergewf Hpc H_c' Hregsc' Hmemc' Hmemp].
   
   Lemma mergeable_border_mergeable_internal s s' s'' t t' t'':
     mergeable_border_states s s' s'' t t' t'' ->
@@ -3380,7 +3383,7 @@ Section ThreewayMultisem4.
   Hypothesis Hifacec  : prog_interface c  = prog_interface c'.
 
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
-  Hypothesis Hprog_is_closed' : closed_program (program_link p' c').
+  Hypothesis Hprog''_is_closed : closed_program (program_link p' c').
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -3390,6 +3393,15 @@ Section ThreewayMultisem4.
   Let sem   := CS.sem_non_inform prog.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
+
+  Lemma merged_program_is_closed: closed_program prog'.
+  Proof.
+    unfold mergeable_interfaces in *.
+    destruct Hmergeable_ifaces.
+    eapply interface_preserves_closedness_r; eauto.
+    - by eapply linkable_implies_linkable_mains.
+    - by eapply interface_implies_matching_mains.
+  Qed.
 
   (* Lemma initial_states_mergeability s s'' : *)
   (*   initial_state sem   s   -> *)
@@ -3403,20 +3415,141 @@ Section ThreewayMultisem4.
   (*     reflexivity || now apply star_refl. *)
   (* Qed. *)
 
+  
   Lemma match_initial_states s s'' :
     initial_state sem   s   ->
     initial_state sem'' s'' ->
   exists s',
     initial_state sem'  s'  /\
-    mergeable_states p c p' c' n n'' s s' s'' E0 E0 E0.
+    mergeable_border_states p c p' c' n n'' s s' s'' E0 E0 E0.
   Proof.
-    intros Hini Hini''.
+    intros Hini Hini''. simpl in *.
     exists (CS.initial_machine_state prog'). split.
-    - unfold initial_state, CS.initial_machine_state. reflexivity.
-    - eapply mergeable_states_intro
-        (*with (s0 := s) (s0'' := s'') (t := E0) (t' := E0) (t'' := E0)*);
-        try eassumption;
-        try now constructor.
+    - unfold initial_state, CS.initial_machine_state; reflexivity.
+    - pose proof merged_program_is_closed as Hprog'_is_closed.
+      assert (CS.initial_machine_state (program_link p c') =
+              (
+                [],
+                unionm (prepare_procedures_memory p) (prepare_procedures_memory c'),
+                Register.init,
+                (
+                  Permission.code,
+                  Component.main,
+                  CS.prog_main_block p + CS.prog_main_block c',
+                  0%Z
+                )
+              )
+             ) as Hinitpc'.
+      {
+        eapply CS.initial_machine_state_after_linking; eauto.
+        - (* remaining goal: linkable *)
+          destruct Hmergeable_ifaces as [? _].
+          by rewrite <- Hifacec.
+      }
+      assert (CS.initial_machine_state (program_link p c) =
+              (
+                [],
+                unionm (prepare_procedures_memory p) (prepare_procedures_memory c),
+                Register.init,
+                (
+                  Permission.code,
+                  Component.main,
+                  CS.prog_main_block p + CS.prog_main_block c,
+                  0%Z
+                )
+              )
+             ) as Hinitpc.
+      {
+        eapply CS.initial_machine_state_after_linking; eauto.
+        - (* remaining goal: linkable *)
+          by destruct Hmergeable_ifaces as [? _].
+      }
+      
+      assert (CS.initial_machine_state (program_link p' c') =
+              (
+                [],
+                unionm (prepare_procedures_memory p') (prepare_procedures_memory c'),
+                Register.init,
+                (
+                  Permission.code,
+                  Component.main,
+                  CS.prog_main_block p' + CS.prog_main_block c',
+                  0%Z
+                )
+              )
+             ) as Hinitp'c'.
+      {
+        eapply CS.initial_machine_state_after_linking; eauto.
+        - (* remaining goal: linkable *)
+          destruct Hmergeable_ifaces as [? _].
+          by rewrite <- Hifacep; rewrite <- Hifacec.
+      }
+      
+      rewrite Hinitpc'.
+      (* 
+         Need to know whether to apply mergeable_border_states_p_executing
+         or mergeable_border_states_c'_executing.
+
+         But in any case, we will need mergeable_states_well_formed.
+       *)
+      assert (mergeable_states_well_formed
+                p c p' c' s
+                ([],
+                 unionm (prepare_procedures_memory p) (prepare_procedures_memory c'),
+                 Register.init,
+                 (Permission.code,
+                  Component.main,
+                  CS.prog_main_block p + CS.prog_main_block c',
+                  0%Z)
+                )
+                s'' E0 E0 E0
+             ) as Hmergewf.
+      {
+        eapply mergeable_states_well_formed_intro;
+          simpl; eauto; unfold CS.initial_state, is_prefix in *; subst.
+        + apply star_refl.
+        + rewrite Hinitpc'. apply star_refl.
+        + apply star_refl.
+        + by rewrite Hinitpc.
+        + by rewrite Hinitp'c'.
+      } 
+      destruct (Component.main \in domm (prog_interface p)) eqn:whereismain.
+      + (* Component.main is in p. *)
+        eapply mergeable_border_states_p_executing; simpl; eauto.
+        * (* Goal: program counters equal *)
+          unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
+          assert (CS.prog_main_block c = CS.prog_main_block c') as Hprogmainblk.
+          {
+            admit.
+          }
+          by rewrite Hprogmainblk.
+        * (* Goal: registers related *)
+          unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
+          eapply regs_rel_of_executing_part_intro.
+          intros reg.
+          destruct (reg \in domm Register.init) eqn:regdomm.
+          -- assert (Register.init reg = Some Undef) as Hreginit_undef.
+             {
+               by apply Register.reg_in_domm_init_Undef.
+             }
+             by rewrite Hreginit_undef.
+          -- assert (Register.init reg = None) as Hreginit_none.
+             {
+               rewrite mem_domm in regdomm.
+               by destruct (Register.init reg) eqn:e.
+             }
+             by rewrite Hreginit_none.
+        * (* Goal: mem_of_part_executing_rel_original_and_recombined *)
+          unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
+          (*Search _ prepare_procedures_memory.*)
+          unfold prepare_procedures_memory (*, prepare_procedures_initial_memory*).
+          (*Search _ prepare_procedures_initial_memory.
+          Search _ prepare_initial_memory.*)
+          admit.
+        * (* Goal: mem_of_part_not_executing_rel_original_and_recombined_at_border*)
+          admit.
+      + (* Component.main is in c'. Should be analogous to the parallel goal. *)
+          
   Admitted. (* RB: TODO: Establish trivial relations, should not be hard. *)
 
   (*   inversion Hmergeable_ifaces as [Hlinkable _]. *)
