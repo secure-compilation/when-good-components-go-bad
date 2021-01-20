@@ -1152,9 +1152,10 @@ Section Definability.
            interesting. *)
         (* FIXME: This will not execute the exact event in the trace, but rather
            an event related to it. *)
-        assert (Star2 : exists s' cs',
-                   Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] (event_non_inform_of [:: e]) cs' /\
-                   well_formed_state s' (prefix ++ [e]) suffix cs'
+        assert (Star2 : exists e' s' cs',
+                   Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] (event_non_inform_of [:: e']) cs' /\
+                   well_formed_state s' (prefix ++ [e]) suffix cs' (* TODO: [e']? *)
+                   (* /\ e ~ e' *)
                (* NOTE: Here, too, we may need additional conjuncts... *)
                ).
         {
@@ -1170,6 +1171,7 @@ Section Definability.
 
           - (* Event case: call. *)
             case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
+            exists (ECallInform C P' new_arg mem C'). (* TODO: new_arg? *)
             exists (StackState C' (C :: callers)).
             have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
             exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem,
@@ -1208,9 +1210,9 @@ Local Opaque loc_of_reg.
               rewrite (negbTE C_ne_C').
               rewrite -> imported_procedure_iff in Himport. rewrite Himport.
               rewrite <- imported_procedure_iff in Himport.
-              (* by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
-              rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
-              admit.
+              by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+              (* rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
+              (* admit. *)
               (* FIXME: Similar steps will break after this point. *)
             + econstructor; trivial.
               { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
@@ -1226,6 +1228,7 @@ Local Opaque loc_of_reg.
             move: wf_e=> /eqP C_ne_C'.
             destruct callers as [|C'_ callers]; try easy.
             case/andP: wb_suffix=> [/eqP HC' wb_suffix].
+            exists (ERetInform C ret_val mem C'). (* TODO: ret_val? *)
             subst C'_. simpl. exists (StackState C' callers).
             destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
             (* The case proceeds by induction on [top]. However, before this we
@@ -1262,7 +1265,7 @@ Local Opaque loc_of_reg.
               exists cs' : CS.state,
                 star CS.kstep (prepare_global_env p)
                      [CState C, top ++ bot, mem, Kstop, E_val ret_val, arg]
-                     [:: ERet C ret_val mem' C']
+                     [:: ERet C ret_val mem C']
                      cs' /\
                 well_formed_state {| cur_comp := C'; callers := callers |}
                                   (prefix ++ [:: ERetInform C ret_val mem' C']) suffix cs';
@@ -1293,7 +1296,7 @@ Local Opaque loc_of_reg.
               * (* First assumption: R_COM contains the return_value. *)
                 (* Process memory invariant. *)
                 destruct (wfmem_ret wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
-                subst mem'.
+                (* subst mem'. *)
                 (* assert (Hrcom : Memory.load mem (Permission.data, C, Block.local, reg_offset E_R_COM) = Some ret_val) by admit. *)
 (*                 take_step. *)
 (* Local Transparent loc_of_reg. *)
@@ -1332,6 +1335,7 @@ Local Opaque loc_of_reg.
             (* Case analysis on concrete constant expression; all cases are
                similar.
                TODO: Refactoring. *)
+            exists (EConst C ptr v).
             destruct ptr as [n | [[[P' C'] b] o] |].
             + (* Before processing the goal, introduce existential witnesses. *)
               destruct (well_formed_memory_store_reg_offset v (Int n) C_b wf_mem) as [mem' Hstore].
@@ -1433,6 +1437,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             (* Before processing the goal, introduce existential witnesses. *)
             inversion wf_mem as [_ wfmem_meta].
             destruct (well_formed_memory_store_reg_offset ptr ((eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (reg_offset v)))) C_b wf_mem) as [mem' Hstore].
+            exists (EMov C ptr v).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1459,6 +1464,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             destruct (wfmem_meta _ e1 C_b) as [v1 Hload1].
             destruct (well_formed_memory_store_reg_offset e2 (eval_binop (binop_of_Ebinop e) v0 v1) C_b wf_mem) as [mem' Hstore2].
             (* Proceed. *)
+            exists (EBinop C e e0 e1 e2).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1490,6 +1496,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
             destruct (well_formed_memory_store_reg_offset e v0 C_b wf_mem) as [mem' Hstore1].
             (* Continue. *)
+            exists (ELoad C e e0).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1518,6 +1525,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
             destruct (well_formed_memory_store_reg_offset e v0 C_b wf_mem) as [mem' Hstore1].
             (* Continue. *)
+            exists (EStore C e e0).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1552,6 +1560,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             destruct (store_after_alloc Halloc1 (not_eq_sym Hblock) Hstore2)
               as [mem1' Hstore2'].
             (* Continue with the goal. *)
+            exists (EAlloc C e e0).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1584,6 +1593,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             inversion wf_mem as [_ wfmem_meta].
             destruct (well_formed_memory_store_reg_offset E_R_RA (Int 0) C_b wf_mem) as [mem' Hstore].
             (* Continue. *)
+            exists (EInvalidateRA C).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1604,14 +1614,14 @@ Local Transparent expr_of_const_val loc_of_reg.
               admit. (* RB: TODO: Restore invariant. *)
         }
 
-        destruct Star2 as (s' & cs' & Star2 & wf_cs').
+        destruct Star2 as (e' & s' & cs' & Star2 & wf_cs').
         (* The third star is produced by the IH. *)
         specialize (IH s' (prefix ++ [e]) cs'). rewrite <- app_assoc in IH.
         specialize (IH Et wf_cs').
         destruct IH
           as [cs'' [suffix_inform [suffix' [const_map [Star3 [Hsuffix [Hrel final]]]]]]].
         (* NOTE: Now, case analysis on the event needs to take place early. *)
-        destruct e as [Ce Pe ve me Ce' | | | | | | | |].
+        destruct e' as [Ce Pe ve me Ce' | | | | | | | |].
         + exists
             cs'',
             ((ECallInform Ce Pe ve me Ce') :: suffix_inform),
@@ -1639,7 +1649,8 @@ Local Transparent expr_of_const_val loc_of_reg.
           * eapply (star_trans Star1); simpl; eauto.
             eapply (star_trans Star2); simpl; eauto.
           * assumption.
-          * assumption.
+          * admit. (* TODO: Relate events. *)
+            (* assumption. *)
           * assumption.
     Admitted.
 
