@@ -827,18 +827,42 @@ Section Mergeable.
   (* Qed. *)
 
 (*
-  (* The following lemmas establish the connection between the mergeability
-     relation and the application of the state merging functions. *)
-  Lemma merge_mergeable_states_regs_program s s'' :
+  (* Attempt to rewrite the auxiliary lemmas for recombination. *)
+  Lemma merge_mergeable_states_regs_program s s' s'' t t' t'' :
     CS.is_program_component s ic ->
-    mergeable_states s s'' ->
+    mergeable_states s s' s'' t t' t'' ->
     merge_states_regs ip s s'' = CS.state_regs s.
   Proof.
     intros Hcomp Hmerg.
-    destruct s as [[[[stack mem] reg] pc] addrs]; destruct s'' as [[[[stack'' mem''] reg''] pc''] addrs''].
+    destruct s as [[[[|stack mem] reg] pc] addrs].
+    destruct s'' as [[[[|stack'' mem''] reg''] pc''] addrs''].
     unfold merge_states_regs. simpl.
     CS.simplify_turn.
-    inversion Hmerg as [s0 s0'' t t'' _ _
+    inversion Hmerg as [ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces H_iface H_iface'
+                        Hprog_is_closed Hctx_is_closed Hpref Hpref' Hpref''
+                        Hmemrel Hregsrel Hstar Hstar''].
+Check CS.star_pc_domm_non_inform.
+    destruct (CS.star_pc_domm_non_inform _ _ 
+                Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hpref Hstar) as [H | H].
+    - now rewrite H.
+    - now rewrite H in Hcomp.
+  Qed. *)
+
+
+(*
+  (* The following lemmas establish the connection between the mergeability
+     relation and the application of the state merging functions. *)
+  Lemma merge_mergeable_states_regs_program s s' s'' t t' t'' :
+    CS.is_program_component s ic ->
+    mergeable_states s s' s'' t t' t'' ->
+    merge_states_regs ip s s'' = CS.state_regs s.
+  Proof.
+    intros Hcomp Hmerg.
+    destruct s as [[[[|stack mem] reg] pc] addrs].
+    destruct s'' as [[[[|stack'' mem''] reg''] pc''] addrs''].
+    unfold merge_states_regs. simpl.
+    CS.simplify_turn.
+    inversion Hmerg as [s0 s0'' t0 t0'' _ _
                         Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
                         Hini Hini'' Hstar Hstar'' _].
     destruct (CS.star_pc_domm_non_inform
@@ -1017,14 +1041,13 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc; clear Hpc.
     inversion Hmerg.
-  Admitted.
-    (*destruct H3.
-    destruct H3.*) (* linkable *)
-    (*  as [ _ _ _ _ _ _ _ [[_ Hdisj] _] _ _ _ _ _ _ _ _ _ _ _ _ _ _].
+    destruct H3 as [_ Hdisj].
     move: Hdisj.
+    (*
     rewrite fdisjointC => /fdisjointP Hdisj.
     now auto.
   Qed.*)
+    Admitted.
 
   Lemma mergeable_states_program_to_context s s' s'' t t' t'':
     mergeable_internal_states s s' s'' t t' t'' ->
@@ -1037,17 +1060,16 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
       destruct s'' as [[[stack'' mem''] reg''] pc''].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc.
-    (*
-    inversion Hmerg as [s0 _ _ t _ _ _ _ _
-                        Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini _ _ Hstar _ _ _ _ _ _].
-    pose proof (CS.star_pc_domm_non_inform
+  Admitted.
+    (*inversion Hmerg as [ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces H_iface H_iface'
+                        Hprog_is_closed Hctx_is_closed Hpref Hpref' Hpref''
+                        Hmemrel Hregsrel Hstar Hstar''].*)
+(*    pose proof (CS.star_pc_domm_non_inform
                   _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar).
     intros Hn; destruct H.
     assumption.
     rewrite H in Hn. inversion Hn.
   Qed.*)
-  Admitted.
 
   (* RB: NOTE: Try to phrase everything either as CS.is_XXX_component, or as
      \[not]in. This is the equivalent of the old [PS.domm_partition]. *)
