@@ -2271,10 +2271,10 @@ Section Recombination.
   Theorem recombination_prefix_rel m m'' n n'' :
     does_prefix sem   m ->
     does_prefix sem'' m'' ->
-    behavior_rel_behavior_all_cids n  n'' m  m'' ->
+    behavior_rel_behavior n  n'' m  m'' ->
   exists m' n',
     does_prefix sem'  m' /\
-    behavior_rel_behavior_all_cids n' n   m' m.
+    behavior_rel_behavior n' n   m' m.
   Admitted.
 
 End Recombination.

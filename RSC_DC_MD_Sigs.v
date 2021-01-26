@@ -191,10 +191,10 @@ Module Type Intermediate_Sig.
     forall m m'' size_m size_m'',
       does_prefix (CS.sem (program_link p c)) m ->
       does_prefix (CS.sem (program_link p' c')) m'' ->
-      behavior_rel_behavior_all_cids size_m size_m'' m m'' ->
+      behavior_rel_behavior size_m size_m'' m m'' ->
       exists m' size_m',
         does_prefix (CS.sem (program_link p c')) m' /\
-        behavior_rel_behavior_all_cids size_m' size_m m' m.
+        behavior_rel_behavior size_m' size_m m' m.
 
   Local Axiom does_prefix_inform_non_inform :
     forall p m,
@@ -235,7 +235,7 @@ Module Type Linker_Sig
       Source.well_formed_program c' /\
       Source.closed_program (Source.program_link p' c') /\
       does_prefix (Source.CS.sem (Source.program_link p' c')) m' /\
-      behavior_rel_behavior_all_cids metadata_size all_zeros_shift
+      behavior_rel_behavior metadata_size all_zeros_shift
                                      m' (project_finpref_behavior m).
 
 (* TODO: split definability_with_linking into a more standard

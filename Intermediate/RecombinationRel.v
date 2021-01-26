@@ -182,24 +182,24 @@ Section BinaryHelpersForMergeable.
   Definition trace_addrs_rel t m m' :=
     forall addr,
       addr_shared_so_far addr t ->
-      memory_shifts_memory_at_addr_all_cids n n' addr m m'.
+      memory_shifts_memory_at_addr n n' addr m m'.
 
   Definition trace_addrs_rel_inv t m m' :=
     forall addr,
       addr_shared_so_far addr t ->
-      memory_inverse_shifts_memory_at_addr_all_cids n n' addr m m'.
+      memory_inverse_shifts_memory_at_addr n n' addr m m'.
 
   Definition prog_addrs_rel p m m' :=
     forall addr,
       prog_addrs p addr ->
       (* XXX -> *) (* TODO: Find renaming relation, add parameters to state relation. *)
-      memory_shifts_memory_at_addr_all_cids n n' addr m m'.
+      memory_shifts_memory_at_addr n n' addr m m'.
 
   Definition prog_addrs_rel_inv p m m' :=
     forall addr,
       prog_addrs p addr ->
       (* ... *)
-      memory_inverse_shifts_memory_at_addr_all_cids n n' addr m m'.
+      memory_inverse_shifts_memory_at_addr n n' addr m m'.
 
   Definition memtrace : Type := eqtype.Equality.sort Memory.t * trace event.
 
@@ -231,9 +231,9 @@ Section BinaryHelpersForMergeable.
   | regs_rel2_intro : forall i v v',
       r  i = Some v  ->
       r' i = Some v' ->
-      shift_value_all_cids n n' v = v' ->
+      shift_value n n' v = v' ->
       (* TODO: probably inverse_shift is redundant with shift. *)
-      inverse_shift_value_all_cids n n' v' = v ->
+      inverse_shift_value n n' v' = v ->
       regs_rel2 r r'.
 
   Inductive regs_rel_of_executing_part
@@ -242,13 +242,13 @@ Section BinaryHelpersForMergeable.
       (
         forall reg,
           omap
-            (shift_value_all_cids n_original n_recombined)
+            (shift_value n_original n_recombined)
             (r_original reg)
           =
           r_recombined reg
           /\
           omap
-            (inverse_shift_value_all_cids n_recombined n_original)
+            (inverse_shift_value n_recombined n_original)
             (r_recombined reg)
           =
           r_original reg
@@ -500,7 +500,7 @@ Section Mergeable.
     (
       forall original_addr,
         original_addr.1 \in domm (prog_interface part_executing) ->
-        memory_shifts_memory_at_addr_all_cids
+        memory_shifts_memory_at_addr
           original_n
           recombined_n
           original_addr
@@ -511,7 +511,7 @@ Section Mergeable.
     (
       forall recombined_addr,
         recombined_addr.1 \in domm (prog_interface part_executing) ->
-        memory_inverse_shifts_memory_at_addr_all_cids
+        memory_inverse_shifts_memory_at_addr
           original_n
           recombined_n
           recombined_addr
@@ -529,7 +529,7 @@ Section Mergeable.
       forall original_addr,
         original_addr.1 \in domm (prog_interface part_not_executing) ->
         ~ addr_shared_so_far original_addr original_t ->
-        memory_shifts_memory_at_addr_all_cids
+        memory_shifts_memory_at_addr
           original_n
           recombined_n
           original_addr
@@ -541,7 +541,7 @@ Section Mergeable.
       forall recombined_addr,
         recombined_addr.1 \in domm (prog_interface part_not_executing) ->
         ~ addr_shared_so_far recombined_addr recombined_t ->
-        memory_inverse_shifts_memory_at_addr_all_cids
+        memory_inverse_shifts_memory_at_addr
           original_n
           recombined_n
           recombined_addr
@@ -717,8 +717,8 @@ Section Mergeable.
          NOTE: Think about possible redundancies. *)
       mem_rel3 (CS.state_mem s, t) (CS.state_mem s', t') (CS.state_mem s'', t'') ->
       regs_rel3 (CS.state_regs s, t) (CS.state_regs s', t') (CS.state_regs s'', t'') ->
-      behavior_rel_behavior_all_cids n n'  (FTbc t) (FTbc t' ) ->
-      behavior_rel_behavior_all_cids n n'' (FTbc t) (FTbc t'') ->
+      behavior_rel_behavior n n'  (FTbc t) (FTbc t' ) ->
+      behavior_rel_behavior n n'' (FTbc t) (FTbc t'') ->
       mergeable_states s s' s'' t t' t''.
 
   (* RB: NOTE: This induction principle is currently used only in the proofs of
