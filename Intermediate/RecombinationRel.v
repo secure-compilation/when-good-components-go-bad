@@ -15,7 +15,7 @@ Require Import Intermediate.CS.
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool.
+From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -1909,6 +1909,10 @@ Section ThreewayMultisem1.
   (* RB: NOTE: Likely provable: since we are on the program, we would not care
      what changes the "other program" makes to its memory, only what "our
      program" eventually will. *)
+  (* AEK: Notice here that the precondition CS.is_program_component looks like *)
+  (* it should be accompanied with a "mirrored" version of the same lemma that *)
+  (* has the precondition CS.is_context_component instead. However, this mirrored *)
+  (* lemma is not really necessary. And the mirroring is instead done at use time. *)
   Lemma merge_states_silent_star s1 s1' s1'' s2'' t t' t'' :
     mergeable_internal_states p c p' c' n n'' s1 s1' s1'' t t' t'' ->
     CS.is_program_component s1 ic ->
@@ -1923,7 +1927,7 @@ Section ThreewayMultisem1.
     - assumption.
     - (* Simplify, apply IH and case analyze. *)
       symmetry in Ht12; apply Eapp_E0_inv in Ht12 as [? ?]; subst.
-      specialize (IHstar'' Hmerge1 eq_refl).
+      specialize (IHstar'' Hmerge1 Logic.eq_refl).
       (* rewrite IHstar''. *)
       apply star_iff_starR in Hstar12''.
       destruct s1 as [[[gps1 mem1] regs1] pc1].
@@ -1933,58 +1937,210 @@ Section ThreewayMultisem1.
            (gps2'', mem2'', regs2'', pc2'') _ _ Hstep23'' as
           [t_inform [Hstep_inform _]].
       (* Analyze and recompose mergeability relation in each case. *)
-      inversion Hstep_inform; subst;
-        try t_merge_states_silent_star.
+      inversion Hstep_inform; subst.
+      + (* INop *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* ILabel *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* IConst *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* IMov *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* IBinop *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* ILoad *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+          -- (* mem of pert not executing *)
+            unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal
+              in *.
+            split.
+            ++ 
+              (* Key fact to prove:
+                  the address that is stored at does NOT satisfy the preconditions
+                  of this goal.
+                *)
+              (* destruct whether original_addr == address stored-at, and
+                 obtain a contradiction (in the true case) to the key fact above.
+                 
+                 And in the false case, use Memory.load_after_store to reuse
+                 the assumption about mem2'' (H5).
+               *)
+              admit.
+            ++ (* Probably, the same fact as above may work. *)
+              (* Then, the tricky part will be the case distinction. *)
+              (* we will want to destruct---not recombined_addr equals sth---
+                 inverse_shift of recombined_addr equals address stored-at
+               *)
+              admit.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* IJal *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* IJump *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* IBnz *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* IBnz *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + (* IJal *)
+        inversion IHstar''.
+        * eapply mergeable_internal_states_p_executing; try eassumption.
+          -- (* well-formedness is left *)
+            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            unfold is_prefix in *.
+            eapply star_right; try eassumption.
+            ++ by rewrite E0_right.
+          -- (* mem of pert not executing *)
+            unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal
+              in *.
+            split.
+            ++ (* key fact to prove is that the address that is allocated *)
+               (* does not satisfy the condition \in domm (prog_interface c') *)
+              
+               (* then, destruct original_addr equals the allocated address *)
+               (* in the true case, rely on the key fact above to prove the goal
+                  vacuously. *)
+               (* in the false case, rely on some "load_after_alloc" lemma to
+                  use the assumption in H4. *)
+              admit.
+            ++ (* Similar to the above---at least the same key fact is needed. *)
 
-      (* Re-establish the invariant for every command. *)
+               (* However, instead of destructing "original_addr == ...", 
+                  will need to destruct "inverse_shift recombined_addr == ..." *)
+              admit.
+        * (* contradiction using Hcomp, H0 and H1. *)
+          (* TODO: write a tactic for inverting mergeable_internal_states that looks
+             for Hcomp, and just leaves out the relevant constructor.
+.            *)
+          admit.
+      + pose proof CS.silent_step_non_inform_preserves_component _ _ _ Hstep23'' as
+            Hpceq.
+        simpl in Hpceq. by subst.
+      + pose proof CS.silent_step_non_inform_preserves_component _ _ _ Hstep23'' as
+            Hpceq.
+        simpl in Hpceq. by subst.
   Admitted.
-      (* Rebuild the relation in the non-trivial, memory- and/or
-         register-altering cases. *)
-      (*
-      + (* Const *)
-        inversion X;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply regs_rel3_program.
-      + (* Mov *)
-        inversion X;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply regs_rel3_program.
-      + (* BinOp *)
-        inversion X;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply regs_rel3_program.
-      + (* Load *)
-        inversion X;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply regs_rel3_program.
-      + (* Store *)
-        inversion H14;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply mem_rel3_program.
-      + (* Jal *)
-        inversion X;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply regs_rel3_program.
-      + (* Alloc *)
-        inversion H15;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply mem_rel3_program.
-      + (* Alloc *)
-        inversion X;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply regs_rel3_program.
-      + (* Call *)
-        inversion X;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply regs_rel3_program.
-      + (* Return *)
-        inversion X;
-          [| exfalso; admit]. (* Contradiction by [Hcomp]. *)
-        now apply regs_rel3_program.
-  Admitted. (* RB: TODO: Finish memrel, high-level structure done.
-               Refactor relational sub-goals into tactics. *)
-
-       *)
 
    (*[DynShare]
 
@@ -2203,12 +2359,22 @@ Section ThreewayMultisem1.
       + constructor. exact (CS.Nop _ _ _ _ _ Hex'). (* Make more implicit later. *)
       + inversion Hmerge1.
         * econstructor; try eassumption.
-          -- (* Re-establish mergeable_states_well_formed. *) admit.
-          --  (* Should follow from PC equality of the assm. *) admit.
+          -- (* mergeable_states_well_formed *)
+            match goal with
+            | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+              inversion H
+            end.
+            eapply mergeable_states_well_formed_intro; try eassumption.
+            ++ unfold is_prefix in *.
+               eapply star_right; try eassumption.
+                 by rewrite E0_right.
+            ++ unfold is_prefix in *.
+               eapply star_right; try eassumption.
+               ** constructor. by eapply CS.Nop.
+               ** by rewrite E0_right.
+          -- by simpl.
         * (* Contradiction with the assumption  Hcomp1. *) admit.
-    (* AEK: TODO: Uncomment the other cases, and fix them. *)
-    (*********************************************************************************)
-    (*
+  
     - (* ILabel *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
       assert (pc1' = pc) by admit; subst pc1'. (* PC lockstep. *)
@@ -2227,12 +2393,23 @@ Section ThreewayMultisem1.
       }
       eexists. split.
       + constructor. exact (CS.Label _ _ _ _ _ _ Hex'). (* Make more implicit later. *)
-      + inversion Hmerge1. econstructor; try eassumption.
-        * eapply star_right; try eassumption.
-          now rewrite E0_right.
-        * eapply star_right; first eassumption.
-          -- constructor. exact (CS.Label _ _ _ _ _ _ Hex'). (* Make more implicit later. *)
-          -- now rewrite E0_right.
+      + inversion Hmerge1.
+        * econstructor; try eassumption.
+          -- (* mergeable_states_well_formed *)
+            match goal with
+            | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+              inversion H
+            end.
+            eapply mergeable_states_well_formed_intro; try eassumption.
+            ++ unfold is_prefix in *.
+               eapply star_right; try eassumption.
+                 by rewrite E0_right.
+            ++ unfold is_prefix in *.
+               eapply star_right; try eassumption.
+               ** constructor. eapply CS.Label; eauto.
+               ** by rewrite E0_right.
+          -- by simpl.
+        * (* Contradiction with the assumption  Hcomp1. *) admit.
 
     - (* IConst *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -2254,18 +2431,49 @@ Section ThreewayMultisem1.
       + (* RB: NOTE: [simpl] will prematurely block the application of the
            constructor here. Nevertheless, we may need to use convertibility to
            select the appropriate related values (not in this case). *)
-        constructor. exact (CS.Const _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more explicit later. *)
-      + inversion Hmerge1. econstructor; try eassumption.
-        * eapply star_right; try eassumption.
-          now rewrite E0_right.
-        * eapply star_right; first eassumption.
-          -- constructor. exact (CS.Const _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more implicit later. *)
-          -- now rewrite E0_right.
-        * inversion X;
-            [| exfalso; admit]. (* Contra by [Hcomp1]. *)
-          apply regs_rel3_program; [assumption |].
-          (* Easy: same value added to both, related register files. *)
-          simpl in *. admit.
+        constructor. exact (CS.Const _ _ _ _ _ _ _ _ Hex' Logic.eq_refl). (* Make more explicit later. *)
+      + inversion Hmerge1.
+        * econstructor; try eassumption.
+          -- (* mergeable_states_well_formed *)
+            match goal with
+            | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+              inversion H
+            end.
+            eapply mergeable_states_well_formed_intro; try eassumption.
+            ++ unfold is_prefix in *.
+               eapply star_right; try eassumption.
+                 by rewrite E0_right.
+            ++ unfold is_prefix in *.
+               eapply star_right; try eassumption.
+               ** constructor. eapply CS.Const; eauto.
+               ** by rewrite E0_right.
+          -- by simpl.
+          -- (* regs_rel_of_executing_part *)
+            constructor.
+            match goal with
+            | H: regs_rel_of_executing_part _ _ _ _ |- _ => inversion H as [Hreg] end.
+            intros reg.
+            specialize (Hreg reg) as [Hreg_shift Hreg_inv_shift].
+            destruct ((reg == Register.to_nat r)) eqn:Hreg_r.
+            ++ (* Relevant Fact 1: program constants (that appear in a "p" component) 
+                  that are pointers, they have a cid that 
+                  satisfies cid \in domm (prog_interface p).
+                  This lemma should hold of any well-formed program.
+                *)
+              (* By instantiating relevant fact 1 using v, we know that if v 
+                 is a pointer, then its cid also satisfies 
+                 cid \in domm (prog_interface p).
+               *)
+              (* Then, just by simplifying shift_value, we should be able 
+                 to end up with some "n n" shifting.
+                 And then, we can use some reflexivity result of 
+                 some unfolding of shift_value.
+               *)
+              (* It seems that rename_value_reflexive is the lemma we want to use. *)
+              (* AEK: not very confident *)
+              admit.
+            ++ unfold Register.set. rewrite !setmE Hreg_r. split; eauto.
+        * (* Contradiction with the assumption  Hcomp1. *) admit.
 
     - (* IMov *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -2284,20 +2492,50 @@ Section ThreewayMultisem1.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].*)
       }
       eexists. split.
-      + constructor. exact (CS.Mov _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more explicit later. *)
-      + inversion Hmerge1. econstructor; try eassumption.
-        * eapply star_right; try eassumption.
-          now rewrite E0_right.
-        * eapply star_right; first eassumption.
-          -- constructor. exact (CS.Mov _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more implicit later. *)
-          -- now rewrite E0_right.
-        * inversion X;
-            [| exfalso; admit]. (* Contra by [Hcomp1]. *)
-          apply regs_rel3_program; [assumption |].
-        (* If register contents are related, the result of moving a pair of
-           these to another register should be as well. *)
-          simpl in *. admit.
+      + constructor. exact (CS.Mov _ _ _ _ _ _ _ _ Hex' Logic.eq_refl). (* Make more explicit later. *)
+      + inversion Hmerge1.
+        * econstructor; try eassumption.
+          -- (* mergeable_states_well_formed *)
+            match goal with
+            | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+              inversion H
+            end.
+            eapply mergeable_states_well_formed_intro; try eassumption.
+            ++ unfold is_prefix in *.
+               eapply star_right; try eassumption.
+                 by rewrite E0_right.
+            ++ unfold is_prefix in *.
+               eapply star_right; try eassumption.
+               ** constructor. eapply CS.Mov; eauto.
+               ** by rewrite E0_right.
+          -- by simpl.
+          -- (* regs_rel_of_executing_part *)
+            constructor.
+            match goal with
+            | H: regs_rel_of_executing_part _ _ _ _ |- _ => inversion H as [Hreg] end.
+            intros reg.
+            pose proof (Hreg (Register.to_nat r1)) as [Hget_shift Hget_inv_shift].
+            pose proof (Hreg reg) as [Hreg_shift Hreg_inv_shift].
+            destruct ((reg == Register.to_nat r2)) eqn:Hreg_r.
+            ++ unfold Register.set. rewrite !setmE Hreg_r. split.
+               ** simpl. simpl in Hget_shift.
+                  unfold Register.get.
+                  
+                  destruct (regs (Register.to_nat r1)) eqn:regs_r1_some;
+                    destruct (regs1' (Register.to_nat r1)) eqn:regs1'_r1_some;
+                      by simpl in Hget_shift.
+               ** simpl. simpl in Hget_inv_shift.
+                  unfold Register.get.
+                  
+                  destruct (regs (Register.to_nat r1)) eqn:regs_r1_some;
+                    destruct (regs1' (Register.to_nat r1)) eqn:regs1'_r1_some;
+                      by simpl in Hget_inv_shift.
+            ++ unfold Register.set. rewrite !setmE Hreg_r. split; eauto.
+        * (* Contradiction with the assumption  Hcomp1. *) admit.
 
+    (* AEK: TODO: Uncomment the other cases, and fix them. *)
+    (*********************************************************************************)
+    (*
     - (* IBinOp *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
       assert (pc1' = pc) by admit; subst pc1'. (* PC lockstep. *)
@@ -2681,7 +2919,7 @@ Section ThreewayMultisem1.
         * now apply star_refl.
         * eapply merge_states_silent_star; eassumption.
       + apply Eapp_E0_inv in Ht. destruct Ht; subst.
-        specialize (IHstar H H0 H2 H3 H14 H17 eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
+        specialize (IHstar H H0 H2 H3 H14 H17 Logic.eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
           as [s2' [Hstar12' Hmerge2]].
         (*specialize (IHstar Hstar eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
           as [s2' [Hstar12' Hmerge2]].*)
