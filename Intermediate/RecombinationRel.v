@@ -576,6 +576,8 @@ Section Mergeable.
       is_prefix s'' prog'' t'' ->
       CS.state_stack s' = CS.state_stack s ->
       CS.state_stack s' = CS.state_stack s'' ->
+      Pointer.component (CS.state_pc s') = Pointer.component (CS.state_pc s) ->
+      Pointer.component (CS.state_pc s') = Pointer.component (CS.state_pc s'') ->
       mergeable_states_well_formed s s' s'' t t' t''.
 
   Inductive mergeable_internal_states
@@ -1944,87 +1946,240 @@ Section ThreewayMultisem1.
           
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              match goal with
+              | H: Pointer.component (CS.state_pc s1') = Pointer.component pc2'' |- _
+                => rewrite H
+              end.
+                by rewrite Pointer.inc_preserves_component.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
       + (* ILabel *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              match goal with
+              | H: Pointer.component (CS.state_pc s1') = Pointer.component pc2'' |- _
+                => rewrite H
+              end.
+                by rewrite Pointer.inc_preserves_component.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
       + (* IConst *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              match goal with
+              | H: Pointer.component (CS.state_pc s1') = Pointer.component pc2'' |- _
+                => rewrite H
+              end.
+                by rewrite Pointer.inc_preserves_component.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
       + (* IMov *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              match goal with
+              | H: Pointer.component (CS.state_pc s1') = Pointer.component pc2'' |- _
+                => rewrite H
+              end.
+                by rewrite Pointer.inc_preserves_component.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
       + (* IBinop *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              match goal with
+              | H: Pointer.component (CS.state_pc s1') = Pointer.component pc2'' |- _
+                => rewrite H
+              end.
+                by rewrite Pointer.inc_preserves_component.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
       + (* ILoad *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
-      + inversion IHstar''.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              match goal with
+              | H: Pointer.component (CS.state_pc s1') = Pointer.component pc2'' |- _
+                => rewrite H
+              end.
+                by rewrite Pointer.inc_preserves_component.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
+      + (* IStore *)
+        inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-          -- (* mem of pert not executing *)
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              match goal with
+              | H: Pointer.component (CS.state_pc s1') = Pointer.component pc2'' |- _
+                => rewrite H
+              end.
+                by rewrite Pointer.inc_preserves_component.
+          -- (* mem of part not executing *)
             unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal
               in *.
             split.
@@ -2046,94 +2201,245 @@ Section ThreewayMultisem1.
                  inverse_shift of recombined_addr equals address stored-at
                *)
               admit.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
+
       + (* IJal *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              assert (Pointer.component pc2'' = Pointer.component pc3'') as Hpc2''.
+              {
+                eapply find_label_in_component_1.
+                (* The goal find_label_in_component _ pc2'' _ = Some pc3''
+                   should be solvable by inverting Hstep_inform.
+                 *)
+                admit.
+              }
+              by rewrite <- Hpc2''.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
       + (* IJump *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              assert (Pointer.component pc2'' = Pointer.component pc3'') as Hpc2''.
+              {
+                (* Should be available as a precondition of the Jump case.
+                   inversion Hstep_inform.
+                 *)
+                admit.
+              }
+              by rewrite <- Hpc2''.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
       + (* IBnz *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              assert (Pointer.component pc2'' = Pointer.component pc3'') as Hpc2''.
+              {
+                eapply find_label_in_component_1.
+                (* The goal find_label_in_component _ pc2'' _ = Some pc3''
+                   should be solvable by inverting Hstep_inform.
+                 *)
+                admit.
+              }
+              by rewrite <- Hpc2''.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
       + (* IBnz *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
-      + (* IJal *)
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              match goal with
+              | H: Pointer.component (CS.state_pc s1') = Pointer.component pc2'' |- _
+                => rewrite H
+              end.
+                by rewrite Pointer.inc_preserves_component.
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
+      + (* IAlloc *)
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
-            unfold is_prefix in *.
-            eapply star_right; try eassumption.
-            ++ by rewrite E0_right.
+            ++ (* is_prefix *)
+              unfold is_prefix in *.
+              eapply star_right; try eassumption.
+              ** by rewrite E0_right.
+            ++ (* Pointer.component = Pointer.component *)
+              simpl in *.
+              match goal with
+              | H: Pointer.component (CS.state_pc s1') = Pointer.component pc2'' |- _
+                => rewrite H
+              end.
+                by rewrite Pointer.inc_preserves_component.
           -- (* mem of pert not executing *)
             unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal
               in *.
             split.
             ++ (* key fact to prove is that the address that is allocated *)
-               (* does not satisfy the condition \in domm (prog_interface c') *)
+              (* does not satisfy the condition \in domm (prog_interface c') *)
               
-               (* then, destruct original_addr equals the allocated address *)
-               (* in the true case, rely on the key fact above to prove the goal
-                  vacuously. *)
-               (* in the false case, rely on some "load_after_alloc" lemma to
-                  use the assumption in H4. *)
+              (* then, destruct original_addr equals the allocated address *)
+              (* in the true case, rely on the key fact above to prove the goal
+                 vacuously. *)
+              (* in the false case, rely on some "load_after_alloc" lemma to
+                 use the assumption in H4. *)
               admit.
             ++ (* Similar to the above---at least the same key fact is needed. *)
-
-               (* However, instead of destructing "original_addr == ...", 
-                  will need to destruct "inverse_shift recombined_addr == ..." *)
+            
+              (* However, instead of destructing "original_addr == ...", 
+                 will need to destruct "inverse_shift recombined_addr == ..." *)
               admit.
-        * (* contradiction using Hcomp, H0 and H1. *)
-          (* TODO: write a tactic for inverting mergeable_internal_states that looks
-             for Hcomp, and just leaves out the relevant constructor.
-.            *)
-          admit.
+
+        * (* Here, we are in the case of c' executing.
+             Obtain a contradiction by relying on Hcomp 
+             and on the "CS.is_context_component" assumption. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+          simpl in *. unfold ic in *.
+          match goal with
+          | H: Pointer.component pc1' = Pointer.component pc1 |- _ =>
+            rewrite <- H in Hcomp
+          end.
+          unfold negb in Hcomp.
+          match goal with
+          | H: is_true (@in_mem _ (Pointer.component pc1') _)  |- _ =>
+            rewrite H in Hcomp
+          end.
+          intuition.
+
+          
       + pose proof CS.silent_step_non_inform_preserves_component _ _ _ Hstep23'' as
             Hpceq.
         simpl in Hpceq. by subst.
@@ -2372,8 +2678,22 @@ Section ThreewayMultisem1.
                eapply star_right; try eassumption.
                ** constructor. by eapply CS.Nop.
                ** by rewrite E0_right.
+            ++ by simpl.
+            ++ by rewrite Pointer.inc_preserves_component.
           -- by simpl.
-        * (* Contradiction with the assumption  Hcomp1. *) admit.
+        * (* Contradiction with the assumption  Hcomp1. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H
+          end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          unfold negb in Hcomp1.
+          by match goal with
+             | H: is_true (@in_mem _ (Pointer.component (CS.state_pc s1'')) _)  |- _ =>
+               rewrite H in Hcomp1
+             end.
   
     - (* ILabel *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -2408,8 +2728,22 @@ Section ThreewayMultisem1.
                eapply star_right; try eassumption.
                ** constructor. eapply CS.Label; eauto.
                ** by rewrite E0_right.
+            ++ by simpl.
+            ++ by rewrite Pointer.inc_preserves_component.
           -- by simpl.
-        * (* Contradiction with the assumption  Hcomp1. *) admit.
+        * (* Contradiction with the assumption  Hcomp1. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H
+          end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          unfold negb in Hcomp1.
+          by match goal with
+             | H: is_true (@in_mem _ (Pointer.component (CS.state_pc s1'')) _)  |- _ =>
+               rewrite H in Hcomp1
+             end.
 
     - (* IConst *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -2447,6 +2781,8 @@ Section ThreewayMultisem1.
                eapply star_right; try eassumption.
                ** constructor. eapply CS.Const; eauto.
                ** by rewrite E0_right.
+            ++ by simpl.
+            ++ by rewrite Pointer.inc_preserves_component.
           -- by simpl.
           -- (* regs_rel_of_executing_part *)
             constructor.
@@ -2473,7 +2809,19 @@ Section ThreewayMultisem1.
               (* AEK: not very confident *)
               admit.
             ++ unfold Register.set. rewrite !setmE Hreg_r. split; eauto.
-        * (* Contradiction with the assumption  Hcomp1. *) admit.
+        * (* Contradiction with the assumption  Hcomp1. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H
+          end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          unfold negb in Hcomp1.
+          by match goal with
+             | H: is_true (@in_mem _ (Pointer.component (CS.state_pc s1'')) _)  |- _ =>
+               rewrite H in Hcomp1
+             end.
 
     - (* IMov *)
       destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
@@ -2492,7 +2840,8 @@ Section ThreewayMultisem1.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].*)
       }
       eexists. split.
-      + constructor. exact (CS.Mov _ _ _ _ _ _ _ _ Hex' Logic.eq_refl). (* Make more explicit later. *)
+      + constructor. exact (CS.Mov _ _ _ _ _ _ _ _ Hex' Logic.eq_refl).
+      (* Make more explicit later. *)
       + inversion Hmerge1.
         * econstructor; try eassumption.
           -- (* mergeable_states_well_formed *)
@@ -2508,6 +2857,9 @@ Section ThreewayMultisem1.
                eapply star_right; try eassumption.
                ** constructor. eapply CS.Mov; eauto.
                ** by rewrite E0_right.
+            ++ by simpl.
+            ++ by rewrite Pointer.inc_preserves_component.
+               
           -- by simpl.
           -- (* regs_rel_of_executing_part *)
             constructor.
@@ -2531,7 +2883,19 @@ Section ThreewayMultisem1.
                     destruct (regs1' (Register.to_nat r1)) eqn:regs1'_r1_some;
                       by simpl in Hget_inv_shift.
             ++ unfold Register.set. rewrite !setmE Hreg_r. split; eauto.
-        * (* Contradiction with the assumption  Hcomp1. *) admit.
+        * (* Contradiction with the assumption  Hcomp1. *)
+          match goal with
+          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            inversion H
+          end.
+          simpl in *. subst.
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          unfold negb in Hcomp1.
+          by match goal with
+             | H: is_true (@in_mem _ (Pointer.component (CS.state_pc s1'')) _)  |- _ =>
+               rewrite H in Hcomp1
+             end.
 
     (* AEK: TODO: Uncomment the other cases, and fix them. *)
     (*********************************************************************************)
@@ -2919,7 +3283,7 @@ Section ThreewayMultisem1.
         * now apply star_refl.
         * eapply merge_states_silent_star; eassumption.
       + apply Eapp_E0_inv in Ht. destruct Ht; subst.
-        specialize (IHstar H H0 H2 H3 H14 H17 Logic.eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
+        specialize (IHstar H H0 H2 H3 H14 H17 H19 Logic.eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
           as [s2' [Hstar12' Hmerge2]].
         (*specialize (IHstar Hstar eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
           as [s2' [Hstar12' Hmerge2]].*)
@@ -3836,6 +4200,11 @@ Section ThreewayMultisem4.
         + apply star_refl.
         + by rewrite Hinitpc.
         + by rewrite Hinitp'c'.
+        + rewrite CS.initial_machine_state_after_linking; eauto.
+          * (* linkable *) by inversion Hmergeable_ifaces.
+        + rewrite CS.initial_machine_state_after_linking; eauto.
+          * (* linkable *)
+            rewrite <- Hifacep, <- Hifacec. by inversion Hmergeable_ifaces.
       } 
       destruct (Component.main \in domm (prog_interface p)) eqn:whereismain.
       + (* Component.main is in p. *)
