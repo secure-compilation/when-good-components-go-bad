@@ -11,6 +11,7 @@ Require Import CompCert.Behaviors.
 Require Import Intermediate.Machine.
 Require Import Intermediate.GlobalEnv.
 Require Import Intermediate.CS.
+Require Import Intermediate.CSInvariants.
 
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
@@ -488,10 +489,6 @@ Section Mergeable.
      some of the simulation lemmas below. This could postpone the question
      of provenance until use time. *)
 
-  
-  Definition is_prefix (s: CS.state) (p: program) t : Prop :=
-    Star (CS.sem_non_inform p) (CS.initial_machine_state p) t s.
-
   Definition mem_of_part_executing_rel_original_and_recombined
              (part_executing: program)
              (* part_executing should be either p or c' *)
@@ -571,9 +568,9 @@ Section Mergeable.
       prog_interface c  = prog_interface c' ->
       closed_program prog   ->
       closed_program prog'' ->
-      is_prefix s   prog   t ->
-      is_prefix s'  prog'  t' ->
-      is_prefix s'' prog'' t'' ->
+      CSInvariants.is_prefix s   prog   t ->
+      CSInvariants.is_prefix s'  prog'  t' ->
+      CSInvariants.is_prefix s'' prog'' t'' ->
       CS.state_stack s' = CS.state_stack s ->
       CS.state_stack s' = CS.state_stack s'' ->
       Pointer.component (CS.state_pc s') = Pointer.component (CS.state_pc s) ->
@@ -712,9 +709,9 @@ Section Mergeable.
       closed_program prog   ->
       closed_program prog'' ->
       (* "Proper" definition. *)
-      is_prefix s   prog   t ->
-      is_prefix s'  prog'  t' ->
-      is_prefix s'' prog'' t'' ->
+      CSInvariants.is_prefix s   prog   t ->
+      CSInvariants.is_prefix s'  prog'  t' ->
+      CSInvariants.is_prefix s'' prog'' t'' ->
       (* Sharing conditions.
          NOTE: Think about possible redundancies. *)
       mem_rel3 (CS.state_mem s, t) (CS.state_mem s', t') (CS.state_mem s'', t'') ->
@@ -1947,7 +1944,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -1984,7 +1981,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2021,7 +2018,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2058,7 +2055,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2095,7 +2092,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2132,7 +2129,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2169,7 +2166,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2298,7 +2295,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2339,7 +2336,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2379,7 +2376,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2420,7 +2417,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2457,7 +2454,7 @@ Section ThreewayMultisem1.
           -- (* well-formedness is left *)
             inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
-              unfold is_prefix in *.
+              unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
@@ -2740,10 +2737,10 @@ Section ThreewayMultisem1.
               inversion H
             end.
             eapply mergeable_states_well_formed_intro; try eassumption.
-            ++ unfold is_prefix in *.
+            ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
                  by rewrite E0_right.
-            ++ unfold is_prefix in *.
+            ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
                ** constructor. by eapply CS.Nop.
                ** by rewrite E0_right.
@@ -2790,10 +2787,10 @@ Section ThreewayMultisem1.
               inversion H
             end.
             eapply mergeable_states_well_formed_intro; try eassumption.
-            ++ unfold is_prefix in *.
+            ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
                  by rewrite E0_right.
-            ++ unfold is_prefix in *.
+            ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
                ** constructor. eapply CS.Label; eauto.
                ** by rewrite E0_right.
@@ -2843,10 +2840,10 @@ Section ThreewayMultisem1.
               inversion H
             end.
             eapply mergeable_states_well_formed_intro; try eassumption.
-            ++ unfold is_prefix in *.
+            ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
                  by rewrite E0_right.
-            ++ unfold is_prefix in *.
+            ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
                ** constructor. eapply CS.Const; eauto.
                ** by rewrite E0_right.
@@ -2919,10 +2916,10 @@ Section ThreewayMultisem1.
               inversion H
             end.
             eapply mergeable_states_well_formed_intro; try eassumption.
-            ++ unfold is_prefix in *.
+            ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
                  by rewrite E0_right.
-            ++ unfold is_prefix in *.
+            ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
                ** constructor. eapply CS.Mov; eauto.
                ** by rewrite E0_right.
@@ -4263,7 +4260,7 @@ Section ThreewayMultisem4.
              ) as Hmergewf.
       {
         eapply mergeable_states_well_formed_intro;
-          simpl; eauto; unfold CS.initial_state, is_prefix in *; subst.
+          simpl; eauto; unfold CS.initial_state, CSInvariants.is_prefix in *; subst.
         + apply star_refl.
         + rewrite Hinitpc'. apply star_refl.
         + apply star_refl.

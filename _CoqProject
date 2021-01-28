@@ -33,6 +33,7 @@ Extraction/Definitions.v
 Intermediate/Machine.v
 Intermediate/GlobalEnv.v
 Intermediate/CS.v
+Intermediate/CSInvariants.v
 Intermediate/Recombination.v
 Intermediate/RecombinationRel.v
 
