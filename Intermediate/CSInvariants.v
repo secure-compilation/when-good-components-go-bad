@@ -7,6 +7,10 @@ Require Import Common.Linking.
 Require Import Common.Memory.
 Require Import Common.Reachability.
 Require Import Common.Renaming.
+(** From Renaming, only addr_shared_so_far is used. Consider refactoring it out
+    into a file called Sharing.v to get rid of the dependency on Renaming.
+    Keep CSInvariants for only unary invariants; hence, do not depend on "renaming". 
+*)
 Require Import Common.Traces.
 Require Import Common.TracesInform.
 Require Import Common.CompCertExtensions.
@@ -24,8 +28,10 @@ Set Bullet Behavior "Strict Subproofs".
 
 Module CSInvariants.
 
-Import Intermediate.
+(** Unary invariants about the intermediate semantics *)
 
+  
+Import Intermediate.
   
 Definition is_prefix (s: CS.state) (p: program) t : Prop :=
   Star (CS.sem_non_inform p) (CS.initial_machine_state p) t s.
