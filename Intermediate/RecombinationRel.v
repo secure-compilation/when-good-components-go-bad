@@ -15,7 +15,7 @@ Require Import Intermediate.CS.
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
 
-From mathcomp Require Import ssreflect ssrfun ssrbool eqtype.
+From mathcomp Require Import ssreflect ssrnat ssrfun ssrbool eqtype.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -2180,8 +2180,7 @@ Section ThreewayMultisem1.
               end.
                 by rewrite Pointer.inc_preserves_component.
           -- (* mem of part not executing *)
-            unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal
-              in *.
+            unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal.
             split.
             ++ 
               (* Key fact to prove:
@@ -2194,7 +2193,77 @@ Section ThreewayMultisem1.
                  And in the false case, use Memory.load_after_store to reuse
                  the assumption about mem2'' (H5).
                *)
-              admit.
+              match goal with
+              | Hstore: Memory.store mem2'' ?PTR _ = _ |- _ =>
+                destruct PTR as [[[perm cid_store] bid_store] offset_store]
+              end.
+              assert (
+                  cid_store \in domm (prog_interface c') ->
+                  addr_shared_so_far (cid_store, bid_store) t''
+                ) as Hstore_addr_fact.
+              {
+                admit.
+              }
+              intros original_addr Horiginal_addr1 Horiginal_addr2.
+              
+              destruct (@pair_eq
+                          nat_eqType nat_eqType
+                          original_addr
+                          (cid_store, bid_store)
+                       ) eqn:eq_original_addr.
+              ** unfold pair_eq in *. simpl in *.
+                 pose proof (andb_prop _ _ eq_original_addr) as [Hcid Hbid].
+                 assert (original_addr.1 = cid_store) as Hcid1. by apply/eqP.
+                 assert (original_addr.2 = bid_store) as Hbid1. by apply/eqP.
+                 subst.
+                 rewrite <- surjective_pairing in Hstore_addr_fact.
+                 by pose proof (Hstore_addr_fact Horiginal_addr1).
+              **  match goal with
+                  | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                         _ _ _ _ _ _ _ |- _ =>
+                    unfold
+                      mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                      in H;
+                      destruct H as [Hshift_mem2'' _]
+                  end.
+                  specialize
+                    (Hshift_mem2'' original_addr  Horiginal_addr1 Horiginal_addr2).
+                  unfold memory_shifts_memory_at_addr,
+                  memory_renames_memory_at_addr in *.
+                  simpl. simpl in Hshift_mem2''. intros.
+                  pose proof (Memory.load_after_store
+                                mem2''
+                                (perm, cid_store, bid_store, offset_store)
+                                (Register.get r2 regs3'')
+                                mem3''
+                                (Permission.data,
+                                 original_addr.1,
+                                 original_addr.2,
+                                 offset)
+                             ) as Hmem2''_mem3''.
+                  destruct (@eq_op
+                         (prod_eqType
+                            (prod_eqType (prod_eqType nat_eqType nat_eqType) nat_eqType)
+                            Extra.Z_eqType)
+                         (@pair (prod (prod Permission.id (Ord.sort nat_ordType)) Block.id)
+                            Block.offset
+                            (@pair (prod Permission.id (Ord.sort nat_ordType)) Block.id
+                               (@pair Permission.id (Ord.sort nat_ordType) Permission.data
+                                  (@fst (Ord.sort nat_ordType) Block.id original_addr))
+                               (@snd (Ord.sort nat_ordType) Block.id original_addr)) offset)
+                         (@pair (prod (prod Permission.id Component.id) Block.id) Block.offset
+                            (@pair (prod Permission.id Component.id) Block.id
+                               (@pair Permission.id Component.id perm cid_store) bid_store)
+                            offset_store)) eqn:Heq.
+                  --- (* case true; derive a contradiction to eq_original_addr *)
+                    do 3 (rewrite <- pair_eqE in Heq;
+                          unfold pair_eq in Heq). simpl in Heq.
+                    unfold pair_eq in eq_original_addr.
+                    pose proof andb_false_iff as [Hifandbfalse _].
+                    pose proof (Hifandbfalse eq_original_addr) as [Hf1 | Hf1];
+                      by rewrite Hf1 !andb_false_r !andb_false_l in Heq.
+                  --- (* case false; now use Hmem2''_mem3'' *)
+                    rewrite Hmem2''_mem3''; eauto.
             ++ (* Probably, the same fact as above may work. *)
               (* Then, the tricky part will be the case distinction. *)
               (* we will want to destruct---not recombined_addr equals sth---
