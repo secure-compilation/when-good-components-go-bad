@@ -2529,13 +2529,69 @@ Section ThreewayMultisem1.
             split.
             ++ (* key fact to prove is that the address that is allocated *)
               (* does not satisfy the condition \in domm (prog_interface c') *)
-              
+   
+              match goal with
+              | Halloc: Memory.alloc _ _ _ = _ |- _ =>
+                pose proof Memory.component_of_alloc_ptr _ _ _ _ _ Halloc as Hptr_comp
+              end.
+
+              match goal with
+              | Hwf: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+                inversion Hwf
+              end.
+              pose proof CS.is_program_component_pc_notin_domm _ _ Hcomp.
+              unfold ic in *. simpl in *.
+
+              intros original_addr.
               (* then, destruct original_addr equals the allocated address *)
-              (* in the true case, rely on the key fact above to prove the goal
-                 vacuously. *)
-              (* in the false case, rely on some "load_after_alloc" lemma to
-                 use the assumption in H4. *)
-              admit.
+              destruct (original_addr == (Pointer.component ptr, Pointer.block ptr))
+                       eqn:Heqptr.
+              **
+                (* in the true case, rely on the key fact above (i.e., Hptr_comp)
+                   to prove the goal vacuously. *)
+                assert (original_addr = (Pointer.component ptr, Pointer.block ptr))
+                  as Heqptr2. by apply/eqP.
+                 destruct original_addr. intros Hcontra. inversion Heqptr2. subst.
+                 simpl in *.
+                 rewrite Hptr_comp in Hcontra.
+                 match goal with
+                 | H: _ = Pointer.component pc2'',
+                      Hiface: prog_interface c = _
+                   |- _ => rewrite <- H, <- Hiface in Hcontra
+                 end.
+
+                 match goal with
+                 | Hnotin: is_true (negb _) (* too hacky *) |- _ =>
+                   unfold negb in Hnotin;
+                     by rewrite Hcontra in Hnotin
+                 end.
+              ** 
+                (* in the false case, rely on some "load_after_alloc" lemma to
+                   use the assumption in H4. *)
+
+                unfold memory_shifts_memory_at_addr, memory_renames_memory_at_addr in *.
+                intros Horiginal1 Horiginal2 offset.
+
+                match goal with
+                | Halloc: Memory.alloc _ _ _ = _ |- _ =>
+                  pose proof (Memory.load_after_alloc _ _ _ _ _
+                                                      (Permission.data,
+                                                       original_addr.1,
+                                                       original_addr.2,
+                                                       offset)
+                                                      Halloc
+                             ) as Hload_alloc
+                end.
+                simpl in *.
+
+                rewrite Hload_alloc.
+                --- match goal with
+                    | Hmem_invariant: _ /\ _ (* too hacky *) |- _ =>
+                      destruct Hmem_invariant as [Hshift _]; eapply Hshift; eauto
+                    end.
+                --- unfold not. intros Heq.
+                    rewrite <- surjective_pairing in Heq. subst.
+                    by rewrite eqxx in Heqptr.
             ++ (* Similar to the above---at least the same key fact is needed. *)
             
               (* However, instead of destructing "original_addr == ...", 
