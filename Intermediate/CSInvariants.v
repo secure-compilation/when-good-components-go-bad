@@ -47,24 +47,36 @@ Inductive wf_ptr_wrt_cid_t (cid: Component.id) (t: trace event) : Pointer.t -> P
 .
 
 Inductive wf_load_wrt_t_pc
-          (mem: Memory.t)
           (load_at: Pointer.t)
           (t: trace event)
           (pc: Pointer.t) : Pointer.t -> Prop :=
 | wrt_load_ptr_wf_load:
     forall ptr,
       wf_ptr_wrt_cid_t (Pointer.component load_at) t ptr ->
-      wf_load_wrt_t_pc mem load_at t pc ptr
+      wf_load_wrt_t_pc load_at t pc ptr
 | wrt_pc_wf_load:
+    (** This case takes care of the situation where in the internal execution,
+        a new pointer is placed in a shared location, where this placing
+        constitutes a violation wrt the last shared set.
+
+        Consider the following scenario:
+        P -> shares ptr_p
+        C -> gets control, and writes *ptr_p := ptr_c
+        This case states which "ptr_c" is allowed.
+
+        The trick is that "ptr_c" is now foreign to P's memory, and it has not yet
+        been recorded as shared. So, this case takes care of allowing this
+        temporary state of sharing (i.e., state of the internal execution).
+     *)
     forall ptr,
       addr_shared_so_far (Pointer.component load_at, Pointer.block load_at) t ->
       wf_ptr_wrt_cid_t (Pointer.component pc) t ptr ->
-      wf_load_wrt_t_pc mem load_at t pc ptr.
+      wf_load_wrt_t_pc load_at t pc ptr.
         
 Definition wf_mem_wrt_t_pc (mem: Memory.t) (t: trace event) (pc: Pointer.t) : Prop :=
-  forall load_at ptr,
-    Memory.load mem load_at = Some (Ptr ptr) ->
-    wf_load_wrt_t_pc mem load_at t pc ptr.
+forall load_at ptr,
+  Memory.load mem load_at = Some (Ptr ptr) ->
+  wf_load_wrt_t_pc load_at t pc ptr.
 
 Definition wf_reg_wrt_t_pc (reg: Register.t) (t: trace event) (pc: Pointer.t) : Prop :=
   forall r ptr,

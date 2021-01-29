@@ -16,7 +16,7 @@ Require Import Intermediate.CSInvariants.
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
 
-From mathcomp Require Import ssreflect ssrnat ssrfun ssrbool eqtype.
+From mathcomp Require Import ssreflect ssrnat ssrint ssrfun ssrbool eqtype.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -2194,12 +2194,36 @@ Section ThreewayMultisem1.
               | Hstore: Memory.store mem2'' ?PTR _ = _ |- _ =>
                 destruct PTR as [[[perm cid_store] bid_store] offset_store]
               end.
+              assert (CSInvariants.wf_ptr_wrt_cid_t
+                        (Pointer.component (Pointer.inc pc2''))
+                        t''
+                        (perm, cid_store, bid_store, offset_store)
+                     ) as Hwfptr.
+              {
+                (* Use lemmas from CSInvariants. In particular, go all the way up
+                   to wf_state_t.
+                 *)
+                admit.
+              }
               assert (
                   cid_store \in domm (prog_interface c') ->
                   addr_shared_so_far (cid_store, bid_store) t''
                 ) as Hstore_addr_fact.
               {
-                admit.
+                intros Hcid_store.
+                inversion Hwfptr as [ | ]; eauto.
+                - subst. rewrite (Pointer.inc_preserves_component).
+                  match goal with
+                  | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+                    inversion H
+                  end.
+                  simpl in *.
+                  unfold CS.is_program_component, CS.is_context_component in Hcomp.
+                  
+                  (* Now show through mergeable_well_formedness 
+                     that Hcid_store is false.
+                   *)
+                  admit.
               }
               intros original_addr Horiginal_addr1 Horiginal_addr2.
               
@@ -2238,6 +2262,10 @@ Section ThreewayMultisem1.
                                  original_addr.2,
                                  offset)
                              ) as Hmem2''_mem3''.
+                  (*destruct ((perm,cid_store,3,offset) == (perm, cid_store, 3, 4%Z)).
+                  destruct (((perm, cid_store, bid_store, offset) ==
+         (perm, cid_store, bid_store, offset_store))%Z).*)
+                  (* Notation NOT WORKING *)
                   destruct (@eq_op
                          (prod_eqType
                             (prod_eqType (prod_eqType nat_eqType nat_eqType) nat_eqType)
@@ -4190,7 +4218,7 @@ Section ThreewayMultisem4.
                   Permission.code,
                   Component.main,
                   CS.prog_main_block p + CS.prog_main_block c',
-                  0%Z
+                  Z.of_nat 0
                 )
               )
              ) as Hinitpc'.
@@ -4209,7 +4237,7 @@ Section ThreewayMultisem4.
                   Permission.code,
                   Component.main,
                   CS.prog_main_block p + CS.prog_main_block c,
-                  0%Z
+                  Z.of_nat 0
                 )
               )
              ) as Hinitpc.
@@ -4228,7 +4256,7 @@ Section ThreewayMultisem4.
                   Permission.code,
                   Component.main,
                   CS.prog_main_block p' + CS.prog_main_block c',
-                  0%Z
+                  Z.of_nat 0
                 )
               )
              ) as Hinitp'c'.
@@ -4254,7 +4282,7 @@ Section ThreewayMultisem4.
                  (Permission.code,
                   Component.main,
                   CS.prog_main_block p + CS.prog_main_block c',
-                  0%Z)
+                  Z.of_nat 0)
                 )
                 s'' E0 E0 E0
              ) as Hmergewf.
