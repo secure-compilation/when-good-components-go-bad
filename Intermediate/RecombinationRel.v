@@ -2200,10 +2200,32 @@ Section ThreewayMultisem1.
                         (perm, cid_store, bid_store, offset_store)
                      ) as Hwfptr.
               {
-                (* Use lemmas from CSInvariants. In particular, go all the way up
-                   to wf_state_t.
-                 *)
-                admit.
+                match goal with
+                | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+                  inversion H
+                end.
+                
+                eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t; eauto.
+                rewrite Pointer.inc_preserves_component.
+                eapply CSInvariants.wf_state_wf_reg.
+                - eapply CSInvariants.is_prefix_wf_state_t;
+                    last (
+                        match goal with
+                        | H: CSInvariants.is_prefix _ _ t'' |- _ => exact H
+                        end
+                      ).
+                  eapply linking_well_formedness; eauto.
+                  unfold mergeable_interfaces in *.
+                    by
+                      match goal with
+                      | Hp: prog_interface p = _,
+                            Hc: prog_interface c = _,
+                                Hlink: linkable _ _ /\ _
+                        |- _ => rewrite <- Hp, <- Hc; destruct Hlink as [Hgoal _]
+                      end.
+                - by simpl.
+                - by simpl.
+                - auto.
               }
               assert (
                   cid_store \in domm (prog_interface c') ->
@@ -2212,18 +2234,27 @@ Section ThreewayMultisem1.
               {
                 intros Hcid_store.
                 inversion Hwfptr as [ | ]; eauto.
-                - subst. rewrite (Pointer.inc_preserves_component).
+                - (* Now show through mergeable_well_formedness 
+                     that Hcid_store is false.
+                   *)
+                  subst.
                   match goal with
                   | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
                     inversion H
                   end.
                   simpl in *.
-                  unfold CS.is_program_component, CS.is_context_component in Hcomp.
-                  
-                  (* Now show through mergeable_well_formedness 
-                     that Hcid_store is false.
-                   *)
-                  admit.
+                  unfold CS.is_program_component, CS.is_context_component,
+                  turn_of, CS.state_turn, ic, negb in Hcomp.
+                  match goal with
+                  |
+                  H: prog_interface c = prog_interface c',
+                     H1: Pointer.component (CS.state_pc s1') = Pointer.component pc1,
+                         H2: Pointer.component (CS.state_pc s1') =
+                             Pointer.component pc2''
+                  |- _ => rewrite <- H1, H2, H in Hcomp
+                  end.
+                  rewrite (Pointer.inc_preserves_component) in Hcid_store. 
+                  by rewrite Hcid_store in Hcomp.
               }
               intros original_addr Horiginal_addr1 Horiginal_addr2.
               

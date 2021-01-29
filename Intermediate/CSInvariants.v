@@ -49,11 +49,11 @@ Inductive wf_ptr_wrt_cid_t (cid: Component.id) (t: trace event) : Pointer.t -> P
 Inductive wf_load_wrt_t_pc
           (load_at: Pointer.t)
           (t: trace event)
-          (pc: Pointer.t) : Pointer.t -> Prop :=
+          (pc_comp: Component.id) : Pointer.t -> Prop :=
 | wrt_load_ptr_wf_load:
     forall ptr,
       wf_ptr_wrt_cid_t (Pointer.component load_at) t ptr ->
-      wf_load_wrt_t_pc load_at t pc ptr
+      wf_load_wrt_t_pc load_at t pc_comp ptr
 | wrt_pc_wf_load:
     (** This case takes care of the situation where in the internal execution,
         a new pointer is placed in a shared location, where this placing
@@ -70,27 +70,57 @@ Inductive wf_load_wrt_t_pc
      *)
     forall ptr,
       addr_shared_so_far (Pointer.component load_at, Pointer.block load_at) t ->
-      wf_ptr_wrt_cid_t (Pointer.component pc) t ptr ->
-      wf_load_wrt_t_pc load_at t pc ptr.
+      wf_ptr_wrt_cid_t pc_comp t ptr ->
+      wf_load_wrt_t_pc load_at t pc_comp ptr.
         
-Definition wf_mem_wrt_t_pc (mem: Memory.t) (t: trace event) (pc: Pointer.t) : Prop :=
+Definition wf_mem_wrt_t_pc (mem: Memory.t) (t: trace event)
+           (pc_comp: Component.id) : Prop :=
 forall load_at ptr,
   Memory.load mem load_at = Some (Ptr ptr) ->
-  wf_load_wrt_t_pc load_at t pc ptr.
+  wf_load_wrt_t_pc load_at t pc_comp ptr.
 
-Definition wf_reg_wrt_t_pc (reg: Register.t) (t: trace event) (pc: Pointer.t) : Prop :=
+Definition wf_reg_wrt_t_pc (reg: Register.t) (t: trace event)
+           (pc_comp: Component.id) : Prop :=
   forall r ptr,
     Register.get r reg = Ptr ptr ->
-    wf_ptr_wrt_cid_t (Pointer.component pc) t ptr.
+    wf_ptr_wrt_cid_t pc_comp t ptr.
 
 Definition wf_state_t (s: CS.state) (t: trace event) : Prop :=
-  wf_mem_wrt_t_pc (CS.state_mem s) t (CS.state_pc s) /\
-  wf_reg_wrt_t_pc (CS.state_regs s) t (CS.state_pc s).
+  wf_mem_wrt_t_pc (CS.state_mem s) t (Pointer.component (CS.state_pc s)) /\
+  wf_reg_wrt_t_pc (CS.state_regs s) t (Pointer.component (CS.state_pc s)).
 
 Lemma is_prefix_wf_state_t s p t:
   well_formed_program p ->
   is_prefix s p t ->
   wf_state_t s t.
 Admitted.
-  
+
+Lemma wf_state_wf_reg s regs pc pc_comp t:
+  wf_state_t s t ->
+  CS.state_regs s = regs ->
+  CS.state_pc s = pc ->
+  Pointer.component pc = pc_comp ->
+  wf_reg_wrt_t_pc regs t pc_comp.
+Proof.
+    unfold wf_state_t; intros [? ?] H1 H2 H3. rewrite <- H3, <- H2, <- H1. auto.
+Qed.
+
+Lemma wf_state_wf_mem s mem pc pc_comp t:
+  wf_state_t s t ->
+  CS.state_mem s = mem ->
+  CS.state_pc s = pc ->
+  Pointer.component pc = pc_comp ->
+  wf_mem_wrt_t_pc mem t pc_comp.
+Proof.
+    unfold wf_state_t; intros [? ?] H1 H2 H3. rewrite <- H3, <- H2, <- H1. auto.
+Qed.
+
+Lemma wf_reg_wf_ptr_wrt_cid_t reg t pc_comp r ptr:
+  wf_reg_wrt_t_pc reg t pc_comp ->
+  Register.get r reg = Ptr ptr ->
+  wf_ptr_wrt_cid_t pc_comp t ptr.
+Proof.
+    by (unfold wf_reg_wrt_t_pc; intros H ?; apply (H r)).
+Qed.
+
 End CSInvariants.
