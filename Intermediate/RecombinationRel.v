@@ -2523,26 +2523,26 @@ Section ThreewayMultisem1.
                 => rewrite H
               end.
                 by rewrite Pointer.inc_preserves_component.
-          -- (* mem of pert not executing *)
+          -- (* mem of part not executing *)
             unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal
               in *.
-            split.
-            ++ (* key fact to prove is that the address that is allocated *)
-              (* does not satisfy the condition \in domm (prog_interface c') *)
-   
-              match goal with
-              | Halloc: Memory.alloc _ _ _ = _ |- _ =>
-                pose proof Memory.component_of_alloc_ptr _ _ _ _ _ Halloc as Hptr_comp
-              end.
 
-              match goal with
-              | Hwf: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
+            (* key fact to prove is that the address that is allocated *)
+            (* does not satisfy the condition \in domm (prog_interface c') *)
+            match goal with
+            | Halloc: Memory.alloc _ _ _ = _ |- _ =>
+              pose proof Memory.component_of_alloc_ptr _ _ _ _ _ Halloc as Hptr_comp
+            end.
+            
+            match goal with
+            | Hwf: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
                 inversion Hwf
-              end.
-              pose proof CS.is_program_component_pc_notin_domm _ _ Hcomp.
-              unfold ic in *. simpl in *.
-
-              intros original_addr.
+            end.
+            pose proof CS.is_program_component_pc_notin_domm _ _ Hcomp.
+            unfold ic in *. simpl in *.
+            
+            split.
+            ++ intros original_addr.
               (* then, destruct original_addr equals the allocated address *)
               destruct (original_addr == (Pointer.component ptr, Pointer.block ptr))
                        eqn:Heqptr.
@@ -2593,10 +2593,87 @@ Section ThreewayMultisem1.
                     rewrite <- surjective_pairing in Heq. subst.
                     by rewrite eqxx in Heqptr.
             ++ (* Similar to the above---at least the same key fact is needed. *)
-            
+              
               (* However, instead of destructing "original_addr == ...", 
                  will need to destruct "inverse_shift recombined_addr == ..." *)
-              admit.
+
+              intros recombined_addr.
+              intros Hcontra.
+              unfold memory_inverse_shifts_memory_at_addr,
+              memory_inverse_renames_memory_at_addr.
+              remember ((inverse_rename_addr
+                           (inverse_rename_addr
+                              (inv_sigma_shifting_addr n''
+                                                       (fun cid : nat =>
+                                                          if cid \in
+                                                              domm (prog_interface p)
+                                                          then n cid else n'' cid
+                                                       )
+                              )
+                           )
+                           recombined_addr)
+                       ) as original_addr.
+              assert (recombined_addr.1 = original_addr.1) as Hcid_constant.
+              {
+                  by rewrite Heqoriginal_addr
+                     inverse_rename_addr_inverse_sigma_shifting_addr_cid_constant.
+              }
+              (* then, destruct original_addr equals the allocated address *)
+              destruct (original_addr == (Pointer.component ptr, Pointer.block ptr))
+                       eqn:Heqptr.
+              **
+                rewrite Hcid_constant in Hcontra.
+                
+                (* in the true case, rely on the key fact above (i.e., Hptr_comp)
+                   to prove the goal vacuously. *)
+                assert (original_addr = (Pointer.component ptr, Pointer.block ptr))
+                  as Heqptr2. by apply/eqP.
+                 destruct original_addr. inversion Heqptr2. subst.
+                 simpl in *. 
+                 rewrite Hptr_comp in Hcontra.
+                 match goal with
+                 | H: _ = Pointer.component pc2'',
+                      Hiface: prog_interface c = _
+                   |- _ => rewrite <- H, <- Hiface in Hcontra
+                 end.
+
+                 match goal with
+                 | Hnotin: is_true (negb _) (* too hacky *) |- _ =>
+                   unfold negb in Hnotin;
+                     by rewrite Hcontra in Hnotin
+                 end.
+              ** 
+                (* in the false case, rely on some "load_after_alloc" lemma to
+                   use the assumption in H4. *)
+
+                unfold memory_inverse_shifts_memory_at_addr,
+                memory_inverse_renames_memory_at_addr in *.
+                intros Hrecombined2 offset.
+
+                match goal with
+                | Halloc: Memory.alloc _ _ _ = _ |- _ =>
+                  pose proof (Memory.load_after_alloc _ _ _ _ _
+                                                      (Permission.data,
+                                                       original_addr.1,
+                                                       original_addr.2,
+                                                       offset)
+                                                      Halloc
+                             ) as Hload_alloc
+                end.
+                simpl in *.
+
+                rewrite Heqoriginal_addr in Hload_alloc.
+                
+                rewrite Hload_alloc.
+                --- match goal with
+                    | Hmem_invariant: _ /\ _ (* too hacky *) |- _ =>
+                      destruct Hmem_invariant as [_ Hinvshift]; eapply Hinvshift; eauto
+                    end.
+                --- rewrite <- Heqoriginal_addr.
+                    unfold not. intros Heq.
+                    rewrite <- surjective_pairing in Heq.
+                    rewrite Heq in Heqptr.
+                    by rewrite eqxx in Heqptr.
 
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 

@@ -1200,6 +1200,22 @@ End ExampleShifts.
 
 Section PropertiesOfTheShiftRenaming.
 
+  Lemma rename_addr_sigma_shifting_addr_cid_constant n1 n2 addr:
+    (rename_addr (sigma_shifting_addr n1 n2) addr).1 = addr.1.
+  Proof.
+    unfold rename_addr, sigma_shifting_addr.
+    destruct addr as [cid bid].
+    by destruct (sigma_shifting (n1 cid) (n2 cid) (care, bid)).
+  Qed.
+
+  Lemma inverse_rename_addr_inverse_sigma_shifting_addr_cid_constant n1 n2 addr':
+    (inverse_rename_addr (inv_sigma_shifting_addr n1 n2) addr').1 = addr'.1.
+  Proof.
+    unfold inverse_rename_addr, inv_sigma_shifting_addr.
+    destruct addr' as [cid bid].
+    by destruct (inv_sigma_shifting (n1 cid) (n2 cid) (care, bid)).
+  Qed.
+    
   Lemma left_addr_good_for_shifting_all_zeros_shift_true addr:
     left_addr_good_for_shifting all_zeros_shift addr.
   Proof.
@@ -1703,14 +1719,17 @@ Section AdequacyOfTheShiftRenaming.
     destruct ptr_i' as [[[permi' cidi'] bidi'] offi'].
     destruct ptr_st as [[[permst cidst] bidst] offst].
     destruct ptr_st' as [[[permst' cidst'] bidst'] offst'].
+
     pose proof shift_value_Ptr_perm_off n1 n2 permi cidi bidi offi as
         [cidiren [bidiren eqptri]].
     rewrite <- Hptr_i in eqptri.
     inversion eqptri. subst. clear eqptri.
+
     pose proof shift_value_Ptr_perm_off n1 n2 permst cidst bidst offst as
         [cidstren [bidstren eqptrst]].
     rewrite <- Hptr_st in eqptrst.
     inversion eqptrst. subst. clear eqptrst.
+
     simpl in *.
     destruct (permst =? Permission.data) eqn:eqpermst.
     - assert (permst = Permission.data). { by apply/Nat.eqb_spec. }
@@ -1763,7 +1782,8 @@ Section AdequacyOfTheShiftRenaming.
             assert (offset = offst) as e2. by apply/eqP.
             inversion e1. subst. by rewrite eqxx in i_st.
 
-          -- (** true, false. Here, easily assert that the pointers are not equal. *)
+          -- (** true, false. Here, use offset inequality to
+                 assert that the pointers are not equal. *)
             pose proof pair_equal_spec
                  (Permission.data, cidiren, bidiren)
                  (Permission.data, cidstren, bidstren)
@@ -1787,14 +1807,22 @@ Section AdequacyOfTheShiftRenaming.
             {
               admit. (** This should be provable from H1--just some equality stuff. *)
             }
+
             
-            destruct (rename_addr
+            destruct (permi =? Permission.data) eqn:permi_data.
+            ++ rewrite ptr_eq2 in H'.
+               destruct (rename_addr
+                        (rename_addr (sigma_shifting_addr n1 n2)) (cidi, bidi))
+                 as [cidiren2 bidiren2].
+               inversion Hptr_i. by subst.
+            ++ inversion Hptr_i. subst. rewrite Hmemshift. rewrite <- H.
+            
+            (*destruct (rename_addr
                         (rename_addr (sigma_shifting_addr n1 n2)) (cidi, bidi))
               as [cidiren2 bidiren2].
+            SearchAbout cidiren.
             simpl in *.
-            destruct (permi =? Permission.data) eqn:permi_data.
-            ++ rewrite ptr_eq2 in H'. inversion Hptr_i. by subst.
-            ++ inversion Hptr_i. subst.
+            SearchAbout permi.*)
                (** Not sure yet how to proceed here.
                    Doing a (rewrite ptr_eq2 in H') does not help.
                 *)
