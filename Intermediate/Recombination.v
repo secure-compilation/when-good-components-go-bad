@@ -1399,75 +1399,76 @@ Section ThreewayMultisem1.
            )
       as Hstep_inform.
     {
-      inversion Hstep12_inform; subst.
-      - eapply CS.Nop.
-        solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-      - eapply CS.Label.
-        solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-      - eapply CS.Const; try reflexivity.
-        solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-      - eapply CS.Mov; try reflexivity.
-        solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-      - eapply CS.BinOp; try reflexivity.
-        solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-      - eapply CS.Load; try reflexivity; try eassumption.
-        + solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-        + admit.
-          (* [DynShare]
-             Need to apply program_load_to_partialized_memory.
-             Currently, its preconditions are too strong.
-           *)
-      - eapply CS.Store; try reflexivity; try eassumption.
-        + solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-        + admit.
-          (* [DynShare]
-             Need to apply program_store_to_partialized_memory.
-             Currently, its preconditions are too strong.
-           *)
-      - eapply CS.Jal; try reflexivity; try eassumption.
-        + solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-        + assert (
-              find_label_in_component (globalenv
-                                         (CS.sem_non_inform (program_link p c'))
-                                      )
-                                      (CS.state_pc (gps2, mem2, regs1, pc1))
-                                      l
-              = Some pc2
-            ) as gl.
-          {
-            eapply find_label_in_component_recombination; eauto.
-          }
-          exact gl.
-      - eapply CS.Jump; try reflexivity; try eassumption.
-        solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-      - eapply CS.BnzNZ; try reflexivity; try eassumption.
-        + solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-        + assert (
-              find_label_in_procedure (globalenv
-                                         (CS.sem_non_inform (program_link p c'))
-                                      )
-                                      (CS.state_pc (gps2, mem2, regs2, pc1))
-                                      l
-              = Some pc2
-            ) as gl.
-          {
-            eapply find_label_in_procedure_recombination; eauto.
-          }
-          exact gl.
-      - eapply CS.BnzZ; try reflexivity; try eassumption.
-        solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-      - eapply CS.Alloc; try reflexivity; try eassumption.
-        + solve_executing_threeway_multisem_step_E0 Hlinkable pc1.
-        + admit.
-          (* Will we able to use program_alloc_from_partialized_memory? *)
-          (*pose proof (@program_alloc_from_partialized_memory
-                        p c (gps2, mem1, regs1, pc1, addrs2)
-                        (gps2, mem2, Register.set rptr (Ptr ptr) regs1, Pointer.inc pc1, addrs2)
-                        (Z.to_nat size) mem2 ptr Hmergeable_ifaces) as Halloc.
-          simpl in Halloc.
-           *)
-      - discriminate.
-      - discriminate.
+      admit.
+      (* inversion Hstep12_inform; subst. *)
+      (* - eapply CS.Nop. *)
+      (*   solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (* - eapply CS.Label. *)
+      (*   solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (* - eapply CS.Const; try reflexivity. *)
+      (*   solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (* - eapply CS.Mov; try reflexivity. *)
+      (*   solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (* - eapply CS.BinOp; try reflexivity. *)
+      (*   solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (* - eapply CS.Load; try reflexivity; try eassumption. *)
+      (*   + solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (*   + admit. *)
+      (*     (* [DynShare] *)
+      (*        Need to apply program_load_to_partialized_memory. *)
+      (*        Currently, its preconditions are too strong. *)
+      (*      *) *)
+      (* - eapply CS.Store; try reflexivity; try eassumption. *)
+      (*   + solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (*   + admit. *)
+      (*     (* [DynShare] *)
+      (*        Need to apply program_store_to_partialized_memory. *)
+      (*        Currently, its preconditions are too strong. *)
+      (*      *) *)
+      (* - eapply CS.Jal; try reflexivity; try eassumption. *)
+      (*   + solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (*   + assert ( *)
+      (*         find_label_in_component (globalenv *)
+      (*                                    (CS.sem_non_inform (program_link p c')) *)
+      (*                                 ) *)
+      (*                                 (CS.state_pc (gps2, mem2, regs1, pc1)) *)
+      (*                                 l *)
+      (*         = Some pc2 *)
+      (*       ) as gl. *)
+      (*     { *)
+      (*       eapply find_label_in_component_recombination; eauto. *)
+      (*     } *)
+      (*     exact gl. *)
+      (* - eapply CS.Jump; try reflexivity; try eassumption. *)
+      (*   solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (* - eapply CS.BnzNZ; try reflexivity; try eassumption. *)
+      (*   + solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (*   + assert ( *)
+      (*         find_label_in_procedure (globalenv *)
+      (*                                    (CS.sem_non_inform (program_link p c')) *)
+      (*                                 ) *)
+      (*                                 (CS.state_pc (gps2, mem2, regs2, pc1)) *)
+      (*                                 l *)
+      (*         = Some pc2 *)
+      (*       ) as gl. *)
+      (*     { *)
+      (*       eapply find_label_in_procedure_recombination; eauto. *)
+      (*     } *)
+      (*     exact gl. *)
+      (* - eapply CS.BnzZ; try reflexivity; try eassumption. *)
+      (*   solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (* - eapply CS.Alloc; try reflexivity; try eassumption. *)
+      (*   + solve_executing_threeway_multisem_step_E0 Hlinkable pc1. *)
+      (*   + admit. *)
+      (*     (* Will we able to use program_alloc_from_partialized_memory? *) *)
+      (*     (*pose proof (@program_alloc_from_partialized_memory *)
+      (*                   p c (gps2, mem1, regs1, pc1, addrs2) *)
+      (*                   (gps2, mem2, Register.set rptr (Ptr ptr) regs1, Pointer.inc pc1, addrs2) *)
+      (*                   (Z.to_nat size) mem2 ptr Hmergeable_ifaces) as Halloc. *)
+      (*     simpl in Halloc. *)
+      (*      *) *)
+      (* - discriminate. *)
+      (* - discriminate. *)
     }
     pose proof (CS.step_inform_step_non_inform _ _ _ _ Hstep_inform) as gl.
     rewrite Hrelt's in gl.

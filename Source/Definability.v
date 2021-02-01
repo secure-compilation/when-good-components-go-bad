@@ -379,38 +379,38 @@ Section Definability.
   (* We call this function when in component C executing P. *)
   Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event_inform) : expr :=
     match e with
-    | ECallInform _ P' arg _ C' =>
+    | ECallInform _ P' arg _ _ C' =>
       E_seq (E_call C' P' (E_deref (loc_of_reg E_R_COM)))
             (E_call C  P  (E_val (Int 0))) (* This is really (C,P) calling itself. *)
-    | ERetInform  _ ret_val _ _ => E_deref (loc_of_reg E_R_COM)
+    | ERetInform  _ ret_val _ _ _ => E_deref (loc_of_reg E_R_COM)
     (* Other events generate corresponding expressions, even though these do not
        generate any events in the source semantics. Like calls (but unlike
        returns), those "informative-only" events are followed by a recursive
        call to the current procedure. *)
-    | EConst _ val reg =>
+    | EConst _ val reg _ _ =>
       E_seq (E_assign (loc_of_reg reg) (expr_of_const_val val))
             (E_call C P (E_val (Int 0)))
-    | EMov _ reg1 reg2 =>
+    | EMov _ reg1 reg2 _ _ =>
       E_seq (E_assign (loc_of_reg reg1) (loc_of_reg reg2))
             (E_call C P (E_val (Int 0)))
-    | EBinop _ op r1 r2 r3 =>
+    | EBinop _ op r1 r2 r3 _ _ =>
       E_seq (E_assign (loc_of_reg r3) (E_binop (binop_of_Ebinop op)
                                                (E_deref (loc_of_reg r1))
                                                (E_deref (loc_of_reg r2))))
             (E_call C P (E_val (Int 0)))
-    | ELoad _ r_dest r_src =>
+    | ELoad _ r_dest r_src _ _ =>
       E_seq (E_assign (loc_of_reg r_dest)
                       (E_deref (loc_of_reg r_src)))
             (E_call C P (E_val (Int 0)))
-    | EStore _ r_dest r_src =>
+    | EStore _ r_dest r_src _ _ =>
       E_seq (E_assign (loc_of_reg r_dest)
                       (E_deref (loc_of_reg r_src)))
             (E_call C P (E_val (Int 0)))
-    | EAlloc _ r_dest r_size =>
+    | EAlloc _ r_dest r_size _ _ =>
       E_seq (E_assign (loc_of_reg r_dest)
                       (E_alloc (E_deref (loc_of_reg r_size))))
             (E_call C P (E_val (Int 0)))
-    | EInvalidateRA cid =>
+    | EInvalidateRA cid _ _ =>
       E_seq (E_assign (loc_of_reg E_R_RA) (E_val (Int 0)))
             (E_call C P (E_val (Int 0)))
     end.
@@ -518,7 +518,7 @@ Section Definability.
 
   Definition comp_call (C : Component.id) (e : event_inform) : bool :=
     match e with
-    | ECallInform _ _ _ _ C' => C' == C
+    | ECallInform _ _ _ _ _ C' => C' == C
     | _ => false
     end.
 
@@ -528,7 +528,7 @@ Section Definability.
   Definition first_proc_in_comp (C : Component.id) (P : Procedure.id)
                                 (t : trace event_inform) : bool :=
     match ohead (filter (comp_call C) t) with
-    | Some (ECallInform _ P' _ _ _) => P' == P
+    | Some (ECallInform _ P' _ _ _ _) => P' == P
     | _ => false
     end.
 
@@ -678,7 +678,7 @@ Section Definability.
         elim: {t Ht} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
         exact: fsub0set.
         move/(_ n) in IH; rewrite !fset0U.
-        case: e=> [C' P' v mem C''| | | | | | | |]
+        case: e=> [C' P' v mem regs C''| | | | | | | |]
                     //=;
                     try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH.
         * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
@@ -720,7 +720,7 @@ Section Definability.
         by case: eqP => [<-|] //; rewrite find_procedures_of_trace_exp; eauto.
       elim: {P P_CI} t Ht P' C'_P' => [|e t IH] //= /andP [He Ht] P.
       case: (C =P _) => [HC|]; last by eauto.
-      case: e HC He=> [_ P' v _ C'' /= <-| | | | | | | |]; try by eauto.
+      case: e HC He=> [_ P' v _ _ C'' /= <-| | | | | | | |]; try by eauto.
       rewrite inE; case/andP=> [C_C'' /imported_procedure_iff imp_C''_P'].
       by case/orP=> [/eqP [-> ->] //|]; eauto.
     - by rewrite domm_map.
@@ -814,15 +814,15 @@ Section Definability.
 
     Definition well_formed_memory_event (e : event_inform) (mem : Memory.t) : Prop :=
       match e with
-      | ECallInform Csrc _ arg emem _ =>
+      | ECallInform Csrc _ arg emem _ _ =>
         well_formed_memory_snapshot emem mem /\
         Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
         = Some arg
-      | ERetInform Csrc ret emem _ =>
+      | ERetInform Csrc ret emem _ _ =>
         well_formed_memory_snapshot emem mem /\
         Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
         = Some ret
-      | EAlloc C _ rsize =>
+      | EAlloc C _ rsize _ _ =>
         exists size,
           (size > 0)%Z /\
           Memory.load mem (Permission.data, C, Block.local, (reg_offset rsize)) =
@@ -844,20 +844,20 @@ Section Definability.
             Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v;
         (* NOTE: Reuse memory relation (renaming). *)
         wfmem_call:
-          forall prefix' Csrc P arg mem' Cdst,
-            prefix = prefix' ++ [:: ECallInform Csrc P arg mem' Cdst] ->
+          forall prefix' Csrc P arg mem' regs Cdst,
+            prefix = prefix' ++ [:: ECallInform Csrc P arg mem' regs Cdst] ->
             component_buffer Csrc ->
             well_formed_memory_snapshot mem' mem /\
             Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some arg;
         wfmem_ret:
-          forall prefix' Csrc ret mem' Cdst,
-            prefix = prefix' ++ [:: ERetInform Csrc ret mem' Cdst] ->
+          forall prefix' Csrc ret mem' regs Cdst,
+            prefix = prefix' ++ [:: ERetInform Csrc ret mem' regs Cdst] ->
             component_buffer Csrc ->
             well_formed_memory_snapshot mem' mem /\
             Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret;
         wfmem_alloc:
-          forall prefix' C rptr rsize,
-            prefix = prefix' ++ [:: EAlloc C rptr rsize] ->
+          forall prefix' C rptr rsize mem' regs,
+            prefix = prefix' ++ [:: EAlloc C rptr rsize mem' regs] ->
             component_buffer C ->
           exists size,
             (size > 0)%Z /\
@@ -943,21 +943,21 @@ Section Definability.
         erewrite Memory.load_after_store_neq; try eassumption.
         intros Hcontra. injection Hcontra as Hcomp Hoffset.
         now destruct r.
-      - move=> prefix' Csrc P arg mem'' Cdst Hprefix C'_b.
+      - move=> prefix' Csrc P arg mem'' regs Cdst Hprefix C'_b.
         apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
         inversion He as [Hsnap Harg].
         split.
         + eapply metadata_store_preserves_snapshot; eassumption.
         + erewrite Memory.load_after_store_neq; try eassumption.
           now injection.
-      - move=> prefix' Csrc ret mem'' Cdst Hprefix C'_b.
+      - move=> prefix' Csrc ret mem'' regs Cdst Hprefix C'_b.
         apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
         inversion He as [Hsnap Hret].
         split.
         + eapply metadata_store_preserves_snapshot; eassumption.
         + erewrite Memory.load_after_store_neq; try eassumption.
           now injection.
-      - move=> prefix' C' rptr rsize Hprefix C'_b.
+      - move=> prefix' C' rptr rsize mem'' regs Hprefix C'_b.
         apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
         inversion He as [size [Hsize Hload]].
         exists size. split.
@@ -1166,14 +1166,20 @@ Section Definability.
              extend to calls and returns and various memory accesses and related
              manipulations, of which only calls and returns are observable at
              both levels. *)
-          destruct e as [C_ P' new_arg mem' C'|C_ ret_val mem' C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_ |C_];
+          destruct e as [C_ P' new_arg mem' regs C'|C_ ret_val mem' regs C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_ |C_];
           simpl in wf_C, wf_e, wb_suffix; subst C_.
 
           - (* Event case: call. *)
             case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
-            exists (ECallInform C P' new_arg mem C'). (* TODO: new_arg? *)
+            exists (ECallInform C P' new_arg mem regs C'). (* TODO: new_arg? *)
             exists (StackState C' (C :: callers)).
             have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
+
+            (* Check Et. Search _ (_ ++ _ :: _). rewrite <- cat_rcons in Et. *)
+            (* Check IH _ _ _ Et. *)
+            (* Too early to use IH! *)
+            destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
+simpl.
             exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem,
                     Kstop, procedure_of_trace C' P' t, new_arg].
             split.
@@ -1194,7 +1200,7 @@ Section Definability.
             (*   rewrite <- imported_procedure_iff in Himport. *)
             (*   by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
             + (* Process memory invariant. *)
-              destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
+              (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
               (* subst mem'. *)
               take_step.
 Local Transparent loc_of_reg.
@@ -1228,7 +1234,7 @@ Local Opaque loc_of_reg.
             move: wf_e=> /eqP C_ne_C'.
             destruct callers as [|C'_ callers]; try easy.
             case/andP: wb_suffix=> [/eqP HC' wb_suffix].
-            exists (ERetInform C ret_val mem C'). (* TODO: ret_val? *)
+            exists (ERetInform C ret_val mem regs C'). (* TODO: ret_val? *)
             subst C'_. simpl. exists (StackState C' callers).
             destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk. simpl in Htop, Hbot.
             (* The case proceeds by induction on [top]. However, before this we
@@ -1268,7 +1274,7 @@ Local Opaque loc_of_reg.
                      [:: ERet C ret_val mem C']
                      cs' /\
                 well_formed_state {| cur_comp := C'; callers := callers |}
-                                  (prefix ++ [:: ERetInform C ret_val mem' C']) suffix cs';
+                                  (prefix ++ [:: ERetInform C ret_val mem' regs C']) suffix cs';
               [admit |].
             (* Proceed by induction on [top]. *)
             (* revert mem wf_mem arg. *)
@@ -1335,7 +1341,7 @@ Local Opaque loc_of_reg.
             (* Case analysis on concrete constant expression; all cases are
                similar.
                TODO: Refactoring. *)
-            exists (EConst C ptr v).
+            exists (EConst C ptr v s t0).
             destruct ptr as [n | [[[P' C'] b] o] |].
             + (* Before processing the goal, introduce existential witnesses. *)
               destruct (well_formed_memory_store_reg_offset v (Int n) C_b wf_mem) as [mem' Hstore].
@@ -1380,13 +1386,13 @@ Local Transparent expr_of_const_val loc_of_reg.
                     exists val.
                     erewrite Memory.load_after_store_neq; try eassumption.
                     intros Hcontra. inversion Hcontra. contradiction.
-                - intros prefix' Csrc P' arg' mem'' Cdst Hprefix Csrc_b.
+                - intros prefix' Csrc P' arg' mem'' regs Cdst Hprefix Csrc_b.
                   apply rcons_inv in Hprefix as [Hprefix Hevent].
                   discriminate.
-                - intros prefix' Csrc P' arg' Cdst Hprefix Csrc_b.
+                - intros prefix' Csrc P' arg' regs Cdst Hprefix Csrc_b.
                   apply rcons_inv in Hprefix as [Hprefix Hevent].
                   discriminate.
-                - intros prefix' C' rptr rsize Hprefix C'_b.
+                - intros prefix' C' rptr rsize mem'' regs Hprefix C'_b.
                   apply rcons_inv in Hprefix as [Hprefix Hevent].
                   discriminate.
               }
@@ -1437,7 +1443,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             (* Before processing the goal, introduce existential witnesses. *)
             inversion wf_mem as [_ wfmem_meta].
             destruct (well_formed_memory_store_reg_offset ptr ((eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (reg_offset v)))) C_b wf_mem) as [mem' Hstore].
-            exists (EMov C ptr v).
+            exists (EMov C ptr v s t0).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1464,7 +1470,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             destruct (wfmem_meta _ e1 C_b) as [v1 Hload1].
             destruct (well_formed_memory_store_reg_offset e2 (eval_binop (binop_of_Ebinop e) v0 v1) C_b wf_mem) as [mem' Hstore2].
             (* Proceed. *)
-            exists (EBinop C e e0 e1 e2).
+            exists (EBinop C e e0 e1 e2 s t0).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1496,7 +1502,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
             destruct (well_formed_memory_store_reg_offset e v0 C_b wf_mem) as [mem' Hstore1].
             (* Continue. *)
-            exists (ELoad C e e0).
+            exists (ELoad C e e0 s t0).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1525,7 +1531,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
             destruct (well_formed_memory_store_reg_offset e v0 C_b wf_mem) as [mem' Hstore1].
             (* Continue. *)
-            exists (EStore C e e0).
+            exists (EStore C e e0 s t0).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1550,7 +1556,7 @@ Local Transparent expr_of_const_val loc_of_reg.
 
           - (* EAlloc *)
             (* Before processing the goal, introduce existential witnesses. *)
-            destruct ((wfmem_alloc wf_mem) _ _ _ _ Logic.eq_refl C_b)
+            destruct ((wfmem_alloc wf_mem) _ _ _ _ _ _ Logic.eq_refl C_b)
               as [size [Hsize Hload0]].
             destruct (alloc_after_load (Z.to_nat size) Hload0)
               as [mem' [b' [Hblock Halloc1]]].
@@ -1560,7 +1566,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             destruct (store_after_alloc Halloc1 (not_eq_sym Hblock) Hstore2)
               as [mem1' Hstore2'].
             (* Continue with the goal. *)
-            exists (EAlloc C e e0).
+            exists (EAlloc C e e0 s t0).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1593,7 +1599,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             inversion wf_mem as [_ wfmem_meta].
             destruct (well_formed_memory_store_reg_offset E_R_RA (Int 0) C_b wf_mem) as [mem' Hstore].
             (* Continue. *)
-            exists (EInvalidateRA C).
+            exists (EInvalidateRA C s t0).
             exists (StackState C callers). eexists. split.
             + (* Evaluate steps of back-translated event first. *)
               Local Transparent loc_of_reg.
@@ -1621,10 +1627,10 @@ Local Transparent expr_of_const_val loc_of_reg.
         destruct IH
           as [cs'' [suffix_inform [suffix' [const_map [Star3 [Hsuffix [Hrel final]]]]]]].
         (* NOTE: Now, case analysis on the event needs to take place early. *)
-        destruct e' as [Ce Pe ve me Ce' | | | | | | | |].
+        destruct e' as [Ce Pe ve me re Ce' | | | | | | | |].
         + exists
             cs'',
-            ((ECallInform Ce Pe ve me Ce') :: suffix_inform),
+            ((ECallInform Ce Pe ve me re Ce') :: suffix_inform),
             (ECall Ce Pe ve me Ce' :: suffix'),
             const_map.
           split; [| split; [| split]].
@@ -1683,6 +1689,9 @@ Local Transparent expr_of_const_val loc_of_reg.
         have C_b := valid_procedure_has_block P_exp.
         have C_local := (wfmem_counter wf_mem) _ C_b.
         destruct (well_formed_memory_store_counter C_b wf_mem wf_C) as [mem' [Hmem' wf_mem']].
+        {
+          admit.
+        }
         (* We can simulate the event-producing step as the concatenation of three
            successive stars:
             1. A silent star preceding the event.
@@ -1727,7 +1736,7 @@ Local Transparent expr_of_const_val loc_of_reg.
              extend to calls and returns and various memory accesses and related
              manipulations, of which only calls and returns are observable at
              both levels. *)
-          destruct e as [C_ P' new_arg mem' C'|C_ ret_val mem' C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_ |C_];
+          destruct e as [C_ P' new_arg mem' regs C'|C_ ret_val mem' regs C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_ |C_];
           simpl in wf_C, wf_e, wb_suffix; subst C_.
           - (* Event case: call. *)
             case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.

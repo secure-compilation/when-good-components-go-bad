@@ -1838,6 +1838,8 @@ Section ThreewayMultisem1.
       + (* RB: NOTE: [simpl] will prematurely block the application of the
            constructor here. Nevertheless, we may need to use convertibility to
            select the appropriate related values (not in this case). *)
+        (* RB: NOTE: Things start breaking here because the events are not equal. *)
+(*
         constructor. exact (CS.Const _ _ _ _ _ _ _ _ Hex' eq_refl). (* Make more explicit later. *)
       + inversion Hmerge1. econstructor; try eassumption.
         * eapply star_right; try eassumption.
@@ -2145,6 +2147,7 @@ Section ThreewayMultisem1.
     - (* IReturn (contra) *)
       now inversion Ht.
 
+*)
     (* { *)
     (*   inversion Hstep12_inform; subst. *)
     (*   - eapply CS.Nop. *)
@@ -2381,7 +2384,7 @@ Section ThreewayMultisem1.
           with
           (TracesInform.event_non_inform_of
              [TracesInform.ECallInform
-                (Pointer.component pc1) P (Register.get R_COM regs1') mem1' C']).
+                (Pointer.component pc1) P (Register.get R_COM regs1') mem1' regs1' C']).
         constructor. apply CS.Call; try assumption.
         * (* RB: TODO: This same snippet is use elsewhere: refactor lemma. *)
           match goal with
@@ -2443,7 +2446,7 @@ Section ThreewayMultisem1.
           (TracesInform.event_non_inform_of
              [TracesInform.ERetInform
                 (Pointer.component pc1) (Register.get R_COM regs1')
-                mem1' (Pointer.component pc2)]).
+                mem1' regs1' (Pointer.component pc2)]).
         constructor. rewrite Hcomp2. eapply CS.Return.
         * (* RB: TODO: This same snippet is use elsewhere: refactor lemma. *)
           match goal with

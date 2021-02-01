@@ -690,14 +690,14 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     executing G pc (IConst v r) ->
     Register.set r (imm_to_val v) regs = regs' ->
     step G (gps, mem, regs, pc)
-           [EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)]
+           [EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r) mem regs]
            (gps, mem, regs', Pointer.inc pc)
 
 | Mov: forall gps mem regs regs' pc r1 r2,
     executing G pc (IMov r1 r2) ->
     Register.set r2 (Register.get r1 regs) regs = regs' ->
     step G (gps, mem, regs, pc)
-           [EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+           [EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs]
            (gps, mem, regs', Pointer.inc pc)
 
 | BinOp: forall gps mem regs regs' pc r1 r2 r3 op,
@@ -706,7 +706,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     Register.set r3 result regs = regs' ->
     step G (gps, mem, regs, pc)
            [EBinop (Pointer.component pc) (binop_to_Ebinop op)
-                   (reg_to_Ereg r1) (reg_to_Ereg r2) (reg_to_Ereg r3)]
+                   (reg_to_Ereg r1) (reg_to_Ereg r2) (reg_to_Ereg r3) mem regs]
            (gps, mem, regs', Pointer.inc pc)
 
 | Load: forall gps mem regs regs' pc r1 r2 ptr v,
@@ -718,7 +718,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     Memory.load mem ptr = Some v ->
     Register.set r2 v regs = regs' ->
     step G (gps, mem, regs, pc)
-           [ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+           [ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs]
            (gps, mem, regs', Pointer.inc pc)
 
 | Store: forall gps mem mem' regs pc ptr r1 r2 (* v reach' e *),
@@ -729,7 +729,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     (* Pointer.component ptr = Pointer.component pc -> *)
     Memory.store mem ptr (Register.get r2 regs) = Some mem' ->
     step G (gps, mem, regs, pc)
-           [EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)]
+           [EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs]
            (gps, mem', regs, Pointer.inc pc)
 
 | Jal: forall gps mem regs regs' pc pc' l,
@@ -738,7 +738,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     Register.set R_RA (Ptr (Pointer.inc pc)) regs = regs' ->
     step G
          (gps, mem, regs, pc)
-         [EInvalidateRA (Pointer.component pc)]
+         [EInvalidateRA (Pointer.component pc) mem regs]
          (gps, mem, regs', pc')
 
 | Jump: forall gps mem regs pc pc' r,
@@ -769,7 +769,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     Memory.alloc mem (Pointer.component pc) (Z.to_nat size) = Some (mem', ptr) ->
     Register.set rptr (Ptr ptr) regs = regs' ->
     step G (gps, mem, regs, pc)
-           [EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)]
+           [EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize) mem regs]
            (gps, mem', regs', Pointer.inc pc)
 
 | Call: forall gps mem regs pc b C' P call_arg,
@@ -781,7 +781,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
        -- Unnecessary? *)
     Register.get R_COM regs = call_arg ->
     step G (gps, mem, regs, pc)
-           [ECallInform (Pointer.component pc) P call_arg mem C']
+           [ECallInform (Pointer.component pc) P call_arg mem regs C']
            (Pointer.inc pc :: gps, mem, Register.invalidate regs, (Permission.code, C', b, 0%Z))
 
 | Return: forall gps' mem regs pc pc' ret_arg,
@@ -791,7 +791,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
        -- Unnecessary? *)
     Register.get R_COM regs = ret_arg ->
     step G (pc' :: gps', mem, regs, pc)
-           [ERetInform (Pointer.component pc) ret_arg mem (Pointer.component pc')]
+           [ERetInform (Pointer.component pc) ret_arg mem regs (Pointer.component pc')]
            (gps', mem, Register.invalidate regs, pc').
 
 Ltac step_of_executing :=
@@ -846,17 +846,17 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
       ret (E0, (gps, mem, regs, Pointer.inc pc))
     | IConst v r =>
       let regs' := Register.set r (imm_to_val v) regs in
-      ret ([EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r)],
+      ret ([EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r) mem regs],
            (gps, mem, regs', Pointer.inc pc))
     | IMov r1 r2 =>
       let regs' := Register.set r2 (Register.get r1 regs) regs in
-      ret ([EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
+      ret ([EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs],
            (gps, mem, regs', Pointer.inc pc))
     | IBinOp op r1 r2 r3 =>
       let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
       let regs' := Register.set r3 result regs in
       ret ([EBinop (Pointer.component pc) (binop_to_Ebinop op) (reg_to_Ereg r1)
-                   (reg_to_Ereg r2) (reg_to_Ereg r3)],
+                   (reg_to_Ereg r2) (reg_to_Ereg r3) mem regs],
            (gps, mem, regs', Pointer.inc pc))
     | ILoad r1 r2 =>
       match Register.get r1 regs with
@@ -864,7 +864,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
         do v <- Memory.load mem ptr;
           let regs' := Register.set r2 v regs in
-          ret ([ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
+          ret ([ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs],
                (gps, mem, regs', Pointer.inc pc))
       (*else
         None*)
@@ -875,7 +875,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
       | Ptr ptr =>
         (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
         do mem' <- Memory.store mem ptr (Register.get r2 regs);
-          ret ([EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2)],
+          ret ([EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs],
                (gps, mem', regs, Pointer.inc pc))
       (*else
         None*)
@@ -884,7 +884,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
     | IJal l =>
       do pc' <- find_label_in_component G pc l;
       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-      ret ([EInvalidateRA (Pointer.component pc)], (gps, mem, regs', pc'))
+      ret ([EInvalidateRA (Pointer.component pc) mem regs], (gps, mem, regs', pc'))
     | IJump r =>
       match Register.get r regs with
       | Ptr pc' =>
@@ -911,7 +911,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         else
           do (mem', ptr) <- Memory.alloc mem (Pointer.component pc) (Z.to_nat size);
           let regs' := Register.set rptr (Ptr ptr) regs in
-          ret ([EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize)],
+          ret ([EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize) mem regs],
                (gps, mem', regs', Pointer.inc pc))
       | _ => None
       end
@@ -921,7 +921,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
           do b <- EntryPoint.get C' P (genv_entrypoints G);
           let val := Register.get R_COM regs in
           let pc' := (Permission.code, C', b, 0%Z) in
-          let t := [ECallInform (Pointer.component pc) P val mem C'] in
+          let t := [ECallInform (Pointer.component pc) P val mem regs C'] in
           ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc'))
         else
           None
@@ -932,7 +932,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
       | pc' :: gps' =>
         if negb (Component.eqb (Pointer.component pc) (Pointer.component pc')) then
           let val := Register.get R_COM regs in
-          let t := [ERetInform (Pointer.component pc) val mem (Pointer.component pc')] in
+          let t := [ERetInform (Pointer.component pc) val mem regs (Pointer.component pc')] in
           ret (t, (gps', mem, Register.invalidate regs, pc'))
         else
           None
