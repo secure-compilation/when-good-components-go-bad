@@ -741,6 +741,37 @@ Module Memory.
     load  mem' ptr'   = load mem ptr'.
   Proof. by move=> /eqP/negbTE ne /load_after_store ->; rewrite eq_sym ne. Qed.
 
+  Lemma load_after_alloc mem cid sz mem' ptr' ptr:
+    alloc mem cid sz = Some (mem', ptr') ->
+    (Pointer.component ptr, Pointer.block ptr) <> (Pointer.component ptr', Pointer.block ptr') ->
+    load mem' ptr = load mem ptr.
+  Proof.
+    unfold alloc, load.
+    destruct (mem cid) as [cMem | ] eqn:Hmemcid.
+    - destruct (ComponentMemory.alloc cMem sz) as [new_cMem newb] eqn:Hcomp_alloc.
+      intros H. inversion H. subst.
+      destruct (Pointer.permission ptr =? Permission.data) ; auto.
+      rewrite setmE.
+      intros Hptr_cid_or_bid.
+      destruct (Pointer.component ptr == cid) eqn:Hptr_eq_cid; rewrite Hptr_eq_cid; auto;
+        destruct (Pointer.block ptr == newb) eqn:Hptr_block_eq.
+      + (* true, true. contradiction to Hptr_cid_or_bid *)
+        assert (Pointer.component ptr = cid). by apply/eqP.
+        assert (Pointer.block ptr = newb). by apply/eqP. subst.
+          by simpl in *.
+      + (* true, false *)
+        assert (Pointer.component ptr = cid). by apply/eqP. subst.
+        rewrite Hmemcid. eapply ComponentMemory.load_after_alloc; eauto.
+    - by intros.
+  Qed.
+
+  Lemma component_of_alloc_ptr mem cid sz mem' ptr':
+    alloc mem cid sz = Some (mem', ptr') ->
+    Pointer.component ptr' = cid.
+  Proof. unfold alloc. intros H. destruct (mem cid) as [c |] eqn:Hmemcid; try discriminate.
+         destruct (ComponentMemory.alloc c sz). by inversion H.
+  Qed.
+         
   Lemma store_after_load mem ptr v v' :
     load mem ptr = Some v ->
     exists mem', store mem ptr v' = Some mem'.

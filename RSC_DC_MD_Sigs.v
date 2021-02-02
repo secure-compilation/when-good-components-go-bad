@@ -191,10 +191,10 @@ Module Type Intermediate_Sig.
     forall m m'' size_m size_m'',
       does_prefix (CS.sem (program_link p c)) m ->
       does_prefix (CS.sem (program_link p' c')) m'' ->
-      behavior_rel_behavior_all_cids size_m size_m'' m m'' ->
+      behavior_rel_behavior size_m size_m'' m m'' ->
       exists m' size_m',
         does_prefix (CS.sem (program_link p c')) m' /\
-        behavior_rel_behavior_all_cids size_m' size_m m' m.
+        behavior_rel_behavior size_m' size_m m' m.
 
   Local Axiom does_prefix_inform_non_inform :
     forall p m,
@@ -235,7 +235,7 @@ Module Type Linker_Sig
       Source.well_formed_program c' /\
       Source.closed_program (Source.program_link p' c') /\
       does_prefix (Source.CS.sem (Source.program_link p' c')) m' /\
-      behavior_rel_behavior_all_cids metadata_size all_zeros_shift
+      behavior_rel_behavior metadata_size all_zeros_shift
                                      m' (project_finpref_behavior m).
 
 (* TODO: split definability_with_linking into a more standard
@@ -328,28 +328,33 @@ Module Type Compiler_Sig
   (*     backward_simulation (Source.CS.sem p) (Intermediate.CS.sem tp). *)
 
   Local Axiom forward_simulation_same_safe_prefix:
-    forall p p_compiled c c_compiled m,
+    forall p p_compiled c c_compiled m_src,
       linkable (Source.prog_interface p) (Source.prog_interface c) ->
       Source.closed_program (Source.program_link p c) ->
       Source.well_formed_program p ->
       Source.well_formed_program c ->
-      does_prefix (Source.CS.sem (Source.program_link p c)) m ->
-      not_wrong_finpref m ->
+      does_prefix (Source.CS.sem (Source.program_link p c)) m_src ->
+      not_wrong_finpref m_src ->
       compile_program p = Some p_compiled ->
       compile_program c = Some c_compiled ->
-      does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled c_compiled)) m.
+      exists m_interm n_src n_interm,
+        does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled c_compiled)) m_interm
+        /\
+        behavior_rel_behavior n_src n_interm m_src m_interm.
 
   Local Axiom backward_simulation_behavior_improves_prefix :
-    forall p p_compiled c c_compiled m,
+    forall p p_compiled c c_compiled m_interm,
       linkable (Source.prog_interface p) (Source.prog_interface c) ->
       Source.closed_program (Source.program_link p c) ->
       Source.well_formed_program p ->
       Source.well_formed_program c ->
       compile_program p = Some p_compiled ->
       compile_program c = Some c_compiled ->
-      does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled c_compiled)) m ->
-    exists b,
-      program_behaves (Source.CS.sem (Source.program_link p c)) b /\
-      (prefix m b \/ behavior_improves_finpref b m).
-
+      does_prefix (Intermediate.CS.sem (Intermediate.program_link p_compiled c_compiled)) m_interm ->
+      (*program_behaves (Source.CS.sem (Source.program_link p c)) b /\
+      (prefix m_src b \/ behavior_improves_finpref b m)*)
+      exists m_src n_src n_interm,
+        does_prefix (Source.CS.sem (Source.program_link p c)) m_src ->
+        behavior_rel_behavior n_src n_interm m_src m_interm.
+  
 End Compiler_Sig.

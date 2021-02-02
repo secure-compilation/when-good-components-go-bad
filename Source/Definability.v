@@ -801,9 +801,9 @@ Section Definability.
       (*   Pointer.block ptr <> Block.local -> *)
       (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
       forall Cb,
-        memory_shifts_memory_at_addr_all_cids
+        memory_shifts_memory_at_addr
           all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem /\
-        memory_inverse_shifts_memory_at_addr_all_cids
+        memory_inverse_shifts_memory_at_addr
           all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
 
     Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C o v mem' :
@@ -1013,7 +1013,7 @@ Section Definability.
       CS.initial_state p cs ->
     exists cs' t_noninform const_map,
       Star (CS.sem p) cs t_noninform cs' /\
-      traces_shift_each_other_all_cids metadata_size_lhs const_map (project_non_inform t_inform) t_noninform /\
+      traces_shift_each_other metadata_size_lhs const_map (project_non_inform t_inform) t_noninform /\
       CS.final_state cs'.
 
        The point is that this is essentially the final definability lemma. The
@@ -1074,7 +1074,7 @@ Section Definability.
     exists cs' suffix_inform suffix' const_map,
       Star (CS.sem p) cs suffix' cs' /\
       project_non_inform suffix_inform = suffix' /\
-      traces_shift_each_other_all_cids metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
+      traces_shift_each_other metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
       CS.final_state cs'.
     Proof.
       (* NOTE: For now, trying to preserve the high-level structure of the
@@ -1957,7 +1957,7 @@ Lemma definability_with_linking:
     Source.well_formed_program c' /\
     Source.closed_program (Source.program_link p' c') /\
     does_prefix (S.CS.sem (Source.program_link p' c')) m' /\
-    behavior_rel_behavior_all_cids metadata_size all_zeros_shift m' (project_finpref_behavior m).
+    behavior_rel_behavior metadata_size all_zeros_shift m' (project_finpref_behavior m).
 Proof.
   move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre Hnot_wrong.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
@@ -2038,6 +2038,6 @@ Proof.
   split; first by assumption.
   unfold m'. apply prefix_project; assumption.
   (* New subgoal: trace relation. *)
-  apply behavior_rel_behavior_reflexive_all_cids.
+  apply behavior_rel_behavior_reflexive.
   apply not_wrong_finpref_project; assumption.
 Admitted.
