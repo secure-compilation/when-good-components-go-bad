@@ -1200,6 +1200,74 @@ End ExampleShifts.
 
 Section PropertiesOfTheShiftRenaming.
 
+  Lemma sigma_shifting_addr_cid_same_injective n1 n2 cid bid1 bid2:
+    left_block_id_good_for_shifting (n1 cid) bid1 ->
+    left_block_id_good_for_shifting (n1 cid) bid2 ->
+    rename_addr (sigma_shifting_addr n1 n2) (cid, bid1) =
+    rename_addr (sigma_shifting_addr n1 n2) (cid, bid2)
+    ->
+    bid1 = bid2.
+  Proof.
+    intros H1good H2good Hrenameeq.
+    unfold rename_addr, sigma_shifting_addr in *.
+    assert ((care, bid1) = (care, bid2)) as H.
+    {
+      pose proof sigma_shifting_bijective (n1 cid) (n2 cid) as Hbij.
+      inversion Hbij as [g Hcanc Hcanc'].
+      unfold cancel in *.
+
+      pose proof (Hcanc (care, bid1)) as Hg1.
+      pose proof (Hcanc (care, bid2)) as Hg2.
+
+      pose proof sigma_left_good_right_good (n1 cid) (n2 cid) bid1 H1good as
+          [bid1' [H1 _]].
+      pose proof sigma_left_good_right_good (n1 cid) (n2 cid) bid2 H2good as
+          [bid2' [H2 _]].
+      
+      rewrite H1 H2 in Hrenameeq.
+      rewrite H1 in Hg1. rewrite H2 in Hg2.
+      
+      inversion Hrenameeq. subst.
+      by rewrite Hg1 in Hg2. 
+    }
+    
+      by inversion H.
+  Qed.
+  
+  Lemma inv_sigma_shifting_addr_cid_same_injective n1 n2 cid bid1 bid2:
+    right_block_id_good_for_shifting (n2 cid) bid1 ->
+    right_block_id_good_for_shifting (n2 cid) bid2 ->
+    inverse_rename_addr (inv_sigma_shifting_addr n1 n2) (cid, bid1) =
+    inverse_rename_addr (inv_sigma_shifting_addr n1 n2) (cid, bid2)
+    ->
+    bid1 = bid2.
+  Proof.
+    intros H1good H2good Hrenameeq.
+    unfold inverse_rename_addr, inv_sigma_shifting_addr in *.
+    assert ((care, bid1) = (care, bid2)) as H.
+    {
+      pose proof inv_sigma_shifting_bijective (n1 cid) (n2 cid) as Hbij.
+      inversion Hbij as [g Hcanc Hcanc'].
+      unfold cancel in *.
+
+      pose proof (Hcanc (care, bid1)) as Hg1.
+      pose proof (Hcanc (care, bid2)) as Hg2.
+
+      pose proof inv_sigma_right_good_left_good (n1 cid) (n2 cid) bid1 H1good as
+          [bid1' [H1 _]].
+      pose proof inv_sigma_right_good_left_good (n1 cid) (n2 cid) bid2 H2good as
+          [bid2' [H2 _]].
+      
+      rewrite H1 H2 in Hrenameeq.
+      rewrite H1 in Hg1. rewrite H2 in Hg2.
+      
+      inversion Hrenameeq. subst.
+      by rewrite Hg1 in Hg2. 
+    }
+    
+      by inversion H.
+  Qed.
+
   Lemma rename_addr_sigma_shifting_addr_cid_constant n1 n2 addr:
     (rename_addr (sigma_shifting_addr n1 n2) addr).1 = addr.1.
   Proof.
@@ -1690,46 +1758,82 @@ Section AdequacyOfTheShiftRenaming.
       unfold Memory.load. simpl. by rewrite permdata.
   Qed.
 
-  Lemma store_memory_shifts_memory_value_shifts_value
-        n1 n2 ptr_i ptr_i' ptr_st ptr_st' v v' m m' m_st m_st':
-    memory_shifts_memory_at_addr
+  Lemma load_memory_inverse_shifts_memory_value_inverse_shifts_value
+        n1 n2 ptr ptr' m' m:
+    memory_inverse_shifts_memory_at_addr
       n1
       n2
-      (Pointer.component ptr_i, Pointer.block ptr_i)
+      (Pointer.component ptr, Pointer.block ptr)
+      m
+      m' ->
+    Ptr ptr' = inverse_shift_value n1 n2 (Ptr ptr) ->
+    omap (inverse_shift_value n1 n2) (Memory.load m' ptr)
+    =
+    Memory.load m ptr'.
+  Proof.
+    intros Hmemshift Hvshift.
+    unfold
+      memory_inverse_shifts_memory_at_addr,
+    memory_inverse_renames_memory_at_addr, option_inverse_rename_value in Hmemshift.
+    simpl in Hmemshift.
+    unfold inverse_shift_value in *.
+    destruct ptr as [[[perm cid] bid] off]. simpl in Hvshift.
+    destruct (perm =? Permission.data) eqn:permdata.
+    - destruct ptr' as [[[perm' cid'] bid'] off']. simpl in *.
+      destruct (
+          inverse_rename_addr
+            (inverse_rename_addr
+               (inv_sigma_shifting_addr
+                  n1
+                  n2
+               )
+            )
+            (cid, bid)
+        ) as [cid_ren bid_ren] eqn:renameeq.
+      inversion Hvshift. subst.
+      pose proof Hmemshift off as G.
+      simpl in G.
+      assert (perm = Permission.data) as permeq.
+      {
+         by apply/Nat.eqb_spec.
+      }
+      by rewrite permeq.
+    - destruct ptr' as [[[perm' cid'] bid'] off']. simpl in *. inversion Hvshift. subst.
+      unfold Memory.load. simpl. by rewrite permdata.
+  Qed.
+
+  Variable n1 n2: Component.id -> nat.
+  Let renfun := sigma_shifting_addr n1 n2.
+  Let inv_renfun := inv_sigma_shifting_addr n1 n2.
+
+  Lemma store_memory_shifts_memory_value_shifts_value
+        cid_i bid_i cid_i' bid_i' ptr_st ptr_st' v v' m m' m_st m_st':
+    left_addr_good_for_shifting n1 (cid_i, bid_i) ->
+    left_value_good_for_shifting n1 (Ptr ptr_st) ->
+    memory_renames_memory_at_addr
+      renfun
+      (cid_i, bid_i)
       m
       m'
     ->
-    Ptr ptr_i' = shift_value n1 n2 (Ptr ptr_i) ->
-    Ptr ptr_st' = shift_value n1 n2 (Ptr ptr_st) ->
-    v' = shift_value n1 n2 v ->
+    (cid_i', bid_i') = rename_addr renfun (cid_i, bid_i) ->
+    Ptr ptr_st' = rename_value renfun (Ptr ptr_st) ->
+    v' = rename_value renfun v ->
     Memory.store m ptr_st v = Some m_st ->
     Memory.store m' ptr_st' v' = Some m_st' ->
-    memory_shifts_memory_at_addr
-      n1
-      n2
-      (Pointer.component ptr_i, Pointer.block ptr_i)
+    memory_renames_memory_at_addr
+      renfun
+      (cid_i, bid_i)
       m_st
       m_st'.
   Proof.
-    unfold
-      memory_shifts_memory_at_addr,
-    memory_renames_memory_at_addr, option_rename_value.
-    intros Hmemshift Hptr_i Hptr_st Hv Hstoresome Hstoresome'.
-    destruct ptr_i as [[[permi cidi] bidi] offi].
-    destruct ptr_i' as [[[permi' cidi'] bidi'] offi'].
+    unfold memory_renames_memory_at_addr, option_rename_value.
+    (* intros Hmemshift Hptr_i Hptr_st Hv Hstoresome Hstoresome'. *)
     destruct ptr_st as [[[permst cidst] bidst] offst].
     destruct ptr_st' as [[[permst' cidst'] bidst'] offst'].
 
-    pose proof shift_value_Ptr_perm_off n1 n2 permi cidi bidi offi as
-        [cidiren [bidiren eqptri]].
-    rewrite <- Hptr_i in eqptri.
-    inversion eqptri. subst. clear eqptri.
-
-    pose proof shift_value_Ptr_perm_off n1 n2 permst cidst bidst offst as
-        [cidstren [bidstren eqptrst]].
-    rewrite <- Hptr_st in eqptrst.
-    inversion eqptrst. subst. clear eqptrst.
-
+    intros Higoodaddr Hptr_stgood
+           Hmm' Hcid_i'bid_i' Hptr_st' Hv' HstoreSome HstoreSome'.
     simpl in *.
     destruct (permst =? Permission.data) eqn:eqpermst.
     - assert (permst = Permission.data). { by apply/Nat.eqb_spec. }
@@ -1737,112 +1841,96 @@ Section AdequacyOfTheShiftRenaming.
       intros offset.
       pose proof Memory.load_after_store
              m (Permission.data, cidst, bidst, offst) v
-             m_st (Permission.data, cidi, bidi, offset)
-             Hstoresome as H.
-      destruct ((cidi, bidi, offset) == (cidst, bidst, offst)) eqn:i_st.
-      + assert ((cidi, bidi, offset) = (cidst, bidst, offst)) as H_.
+             m_st (Permission.data, cid_i, bid_i, offset)
+             HstoreSome as H.
+
+      assert (permst' = Permission.data).
+      {
+        destruct (rename_addr renfun (cidst, bidst)). by inversion Hptr_st'.
+      }
+      subst.
+
+      assert (offst' = offst).
+      {
+        destruct (rename_addr renfun (cidst, bidst)). by inversion Hptr_st'.
+      }
+      subst.
+
+      assert (cidst' = (rename_addr renfun (cidst, bidst)).1) as Hcidst'.
+      {
+        destruct (rename_addr renfun (cidst, bidst)). by inversion Hptr_st'.
+      }
+
+      assert (bidst' = (rename_addr renfun (cidst, bidst)).2) as Hbidst'.
+      {
+        destruct (rename_addr renfun (cidst, bidst)). by inversion Hptr_st'.
+      }
+
+      clear Hptr_st'.
+
+      destruct ((Permission.data, cid_i, bid_i, offset) ==
+                (Permission.data, cidst, bidst, offst)) eqn:i_st.
+      + assert ((Permission.data, cid_i, bid_i, offset) =
+                (Permission.data, cidst, bidst, offst)) as H_.
         {
           by apply/eqP.
         }
         inversion H_. subst. clear H_ i_st.
-        rewrite H eqxx. simpl.
+        rewrite H. simpl.
 
         pose proof Memory.load_after_store
-             m' (Permission.data, cidstren, bidstren, offst)
-             (shift_value n1 n2 v)
-             m_st' (Permission.data, cidstren, bidstren, offst)
-             Hstoresome' as H'.
-        destruct (rename_addr (rename_addr (sigma_shifting_addr n1 n2)) (cidst, bidst))
-          as [cidstren2 bidstren2].
-        inversion Hptr_st. subst. clear Hptr_st. simpl.
-        rewrite H' eqxx. by simpl.
-      + destruct (
-            (Permission.data, cidi, bidi, offset) ==
-            (Permission.data, cidst, bidst, offst)
-          ) eqn:contra.
-        * assert (
-              (Permission.data, cidi, bidi, offset) =
-              (Permission.data, cidst, bidst, offst)
-            ) as contra_. by apply/eqP.
-          inversion contra_. subst. by rewrite eqxx in i_st.
-        * rewrite H. rewrite <- Hmemshift.
+             m' (Permission.data,
+                 (rename_addr renfun (cidst, bidst)).1,
+                 (rename_addr renfun (cidst, bidst)).2, offst)
+             (rename_value renfun v)
+             m_st' (Permission.data,
+                    (rename_addr renfun (cidst, bidst)).1,
+                    (rename_addr renfun (cidst, bidst)).2, offst)
+             HstoreSome' as H'.
+          by rewrite eqxx in H'.
+      + rewrite H. rewrite <- Hmm'.
           pose proof Memory.load_after_store
-             m' (Permission.data, cidstren, bidstren, offst)
-             (shift_value n1 n2 v)
-             m_st' (Permission.data, cidiren, bidiren, offset)
-             Hstoresome' as H'.
- 
-          pose proof pair_equal_spec (cidi, bidi) (cidst, bidst) offset offst as
-              pair_eq_spec.
-          destruct ((cidi, bidi) == (cidst, bidst)) eqn:addr_eq;
-            destruct (offset == offst) eqn:off_eq.
+             m' (Permission.data, cidst', bidst', offst)
+             (rename_value renfun v)
+             m_st'
+             (Permission.data, (rename_addr renfun (cid_i, bid_i)).1,
+              (rename_addr renfun (cid_i, bid_i)).2, offset)
+             HstoreSome' as H'.
 
-          -- (** true, true. Here, derive a contradiction to i_st. *)
-            assert ((cidi, bidi) = (cidst, bidst)) as e1. by apply/eqP.
-            assert (offset = offst) as e2. by apply/eqP.
-            inversion e1. subst. by rewrite eqxx in i_st.
-
-          -- (** true, false. Here, use offset inequality to
-                 assert that the pointers are not equal. *)
-            pose proof pair_equal_spec
-                 (Permission.data, cidiren, bidiren)
-                 (Permission.data, cidstren, bidstren)
-                 offset
-                 offst as ptr_eq.
-            assert (offset = offst <-> False) as H0.
-            {
-              split; intros H0.
-              - subst. by rewrite eqxx in off_eq.
-              - destruct H0.
-            }
-            assert ((Permission.data, cidiren, bidiren, offset) =
-                    (Permission.data, cidstren, bidstren, offst) <-> False) as H1.
-            {
-              rewrite ptr_eq H0. split; intros H1.
-              - destruct H1 as [_ H2]; destruct H2.
-              - destruct H1.
-            }
-            assert ((Permission.data, cidiren, bidiren, offset) ==
-                    (Permission.data, cidstren, bidstren, offst) = false) as ptr_eq2.
-            {
-              admit. (** This should be provable from H1--just some equality stuff. *)
-            }
-
+          destruct ((Permission.data, (rename_addr renfun (cid_i, bid_i)).1,
+                     (rename_addr renfun (cid_i, bid_i)).2, offset) ==
+                    (Permission.data, cidst', bidst', offst)) eqn:eq_renames; auto.
+          (* case true remains. derive a contradiction to i_st using 
+             injectivity of sigma_shifting_addr *)
+          assert ((Permission.data, (rename_addr renfun (cid_i, bid_i)).1,
+                     (rename_addr renfun (cid_i, bid_i)).2, offset) =
+                  (Permission.data, cidst', bidst', offst)) as eq_renames_.
+            by apply/eqP.
+            inversion eq_renames_. subst. clear eq_renames_.
             
-            destruct (permi =? Permission.data) eqn:permi_data.
-            ++ rewrite ptr_eq2 in H'.
-               destruct (rename_addr
-                        (rename_addr (sigma_shifting_addr n1 n2)) (cidi, bidi))
-                 as [cidiren2 bidiren2].
-               inversion Hptr_i. by subst.
-            ++ inversion Hptr_i. subst. rewrite Hmemshift. rewrite <- H.
-            
-            (*destruct (rename_addr
-                        (rename_addr (sigma_shifting_addr n1 n2)) (cidi, bidi))
-              as [cidiren2 bidiren2].
-            SearchAbout cidiren.
-            simpl in *.
-            SearchAbout permi.*)
-               (** Not sure yet how to proceed here.
-                   Doing a (rewrite ptr_eq2 in H') does not help.
-                *)
-               admit.
-
-          -- (** false, true. Here, need to rely on the injectivity of address 
-                 renaming to prove that the renamed version of (cidi, bidi)
-                 is not equal to the renamed version of (cidst, bidst).
-              *)
-            (** After proving that, we can instantiate H' to get its else branch. *)
-            admit.
-
-          -- (** false, false. Here, we hopefully should be able to choose either 
-                 the same proof as that of case "true, false", or the same proof
-                 as that of case "false, true".
-              *)
-            admit.
-        
-    - unfold Memory.store in *. rewrite eqpermst in Hstoresome. discriminate.
-  Admitted.
+            assert ((rename_addr renfun (cid_i, bid_i)).1 = cid_i) as Hcid_i.
+              by rewrite rename_addr_sigma_shifting_addr_cid_constant.
+            assert ((rename_addr renfun (cidst, bidst)).1 = cidst) as Hcidst.
+            {  by rewrite rename_addr_sigma_shifting_addr_cid_constant. }
+            assert (cid_i = cidst).
+            {
+              rewrite <- Hcid_i. by rewrite <- Hcidst.
+            }
+            subst.
+            pose proof sigma_shifting_addr_cid_same_injective
+                 n1 n2 cidst _ _ Higoodaddr Hptr_stgood as Hinj.
+            unfold renfun in *.
+            assert (bid_i = bidst).
+            {
+              apply Hinj.
+              destruct (rename_addr (sigma_shifting_addr n1 n2) (cidst, bid_i)).
+              destruct (rename_addr (sigma_shifting_addr n1 n2) (cidst, bidst)).
+              simpl in *. by subst.
+            }
+            subst. by rewrite eqxx in i_st.
+    - unfold Memory.store in *. rewrite eqpermst in HstoreSome. discriminate.
+  Qed.
+    
       
 End AdequacyOfTheShiftRenaming.
 
