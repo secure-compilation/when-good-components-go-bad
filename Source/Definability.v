@@ -1027,31 +1027,6 @@ Section Definability.
 
        In any case, well-bracketedness is important for the proof *)
 
-    (* RB: TODO: Move this to memory, rephrase as needed, could weaken some of
-       the components in the pointer. *)
-    Lemma alloc_after_load mem P C b o v size :
-      Memory.load mem (P, C, b, o) = Some v ->
-    exists mem' b',
-      b' <> b /\
-      Memory.alloc mem C size = Some (mem', (Permission.data, C, b', 0%Z)).
-    Admitted.
-
-    (* RB: TODO: Essentially a tweaked lifting to memories of the existing lemma
-       [ComponentMemory.load_after_alloc], to move once done here. Further
-       adjustments to the statement are possible. *)
-    (* Lemma load_after_alloc mem P C b o size mem' P' C' b' o' : *)
-    (*   Memory.alloc mem C size = Some (mem', (P', C', b', o')) -> *)
-    (*   b <> b' -> *)
-    (*   Memory.load mem (P, C, b, o) = Memory.load mem' (P, C, b, o). *)
-    (* Admitted. *)
-    Lemma store_after_alloc mem P C b o size mem' P' C' b' o' v mem1 :
-      Memory.alloc mem C size = Some (mem', (P', C', b', o')) ->
-      b <> b' ->
-      Memory.store mem  (P, C, b, o) v = Some mem1 ->
-    exists mem1',
-      Memory.store mem' (P, C, b, o) v = Some mem1'.
-    Admitted.
-
     Lemma Eregister_eq_dec :
       forall r1 r2 : Eregister, Decidable.decidable (r1 = r2).
     Proof.
@@ -1558,12 +1533,12 @@ Local Transparent expr_of_const_val loc_of_reg.
             (* Before processing the goal, introduce existential witnesses. *)
             destruct ((wfmem_alloc wf_mem) _ _ _ _ _ _ Logic.eq_refl C_b)
               as [size [Hsize Hload0]].
-            destruct (alloc_after_load (Z.to_nat size) Hload0)
+            destruct (Memory.alloc_after_load mem _ _ _ _ _ (Z.to_nat size) Hload0)
               as [mem' [b' [Hblock Halloc1]]].
             destruct (well_formed_memory_store_reg_offset
                         e ((Ptr (Permission.data, C, b', 0%Z))) C_b wf_mem)
               as [mem1 Hstore2].
-            destruct (store_after_alloc Halloc1 (not_eq_sym Hblock) Hstore2)
+            destruct (Memory.store_after_alloc _ _ _ _ _ _ _ _ _ _ _ _ _ Halloc1 (not_eq_sym Hblock) Hstore2)
               as [mem1' Hstore2'].
             (* Continue with the goal. *)
             exists (EAlloc C e e0 s t0).
