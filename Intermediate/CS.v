@@ -820,9 +820,10 @@ Ltac step_of_executing :=
   end.
 
 Inductive step_non_inform (G : global_env) : state -> trace event -> state -> Prop :=
-| Step_non_inform: forall s t s',
+| Step_non_inform: forall s t t_noninform s',
     step G s t s' ->
-    step_non_inform G s (event_non_inform_of t) s'.
+    t_noninform = event_non_inform_of t ->
+    step_non_inform G s t_noninform s'.
 
 (* executable specification *)
 
@@ -1559,8 +1560,8 @@ Section SemanticsNonInform.
       equal_and_nil_or_singleton t1 t2 /\ (t1 = t2 -> s1 = s2).
   Proof.
     intros s t1 s21 t2 s2 Hstep1 Hstep2.
-    inversion Hstep1 as [s'1 t1' s21' Hstep1'];
-      inversion Hstep2 as [s'2 t2' s2' Hstep2'];
+    inversion Hstep1 as [s'1 t1' s21' ? Hstep1'];
+      inversion Hstep2 as [s'2 t2' s2' ? Hstep2'];
       subst.
     pose proof determinate_step _ _ _ _ _ _ Hstep1' Hstep2' as [Heqnil Heq].
     inversion Heqnil as [| e e' Heveq]; subst.
@@ -1576,7 +1577,7 @@ Section SemanticsNonInform.
     single_events sem_non_inform.
   Proof.
     unfold single_events. intros s t s' Hstep.
-    inversion Hstep as [? t' ? Hstep']; inversion Hstep'; now auto.
+    inversion Hstep as [? t' ? ? Hstep']; subst; inversion Hstep'; now auto.
   Qed.
 
   Lemma no_step_no_step_non_inform:
@@ -1670,8 +1671,7 @@ Lemma step_inform_step_non_inform cs t_inform cs':
   step_non_inform G cs (project_non_inform t_inform) cs'.
 Proof.
   intros Hstep. rewrite (project_event_non_inform _ _ _ Hstep).
-  inversion Hstep; subst;
-    now constructor.
+  inversion Hstep; subst; eapply Step_non_inform; eauto.
 Qed.
 
 Lemma star_sem_non_inform_star_sem_inform cs t cs' :
@@ -1945,7 +1945,7 @@ Lemma silent_step_non_inform_preserves_component G s s' :
   CS.step_non_inform G s E0 s' ->
   Pointer.component (state_pc s) = Pointer.component (state_pc s').
 Proof.
-  intros Hstep. inversion Hstep as [? t ? Hstep']; subst.
+  intros Hstep. inversion Hstep as [? t ? ? Hstep']; subst.
   inversion Hstep'; subst;
     try (now rewrite Pointer.inc_preserves_component).
   - eapply find_label_in_component_1; now eauto.
@@ -2014,7 +2014,7 @@ Proof.
     assert (t2 = E0) by now induction t1. subst.
     apply IHHstar; auto.
     clear H0 IHHstar. simpl in H.
-    inversion H as [? t ? Hstep]; subst.
+    inversion H as [? t ? ? Hstep]; subst.
     inversion Hstep; subst; CS.simplify_turn;
       try (now rewrite Pointer.inc_preserves_component).
     + erewrite <- find_label_in_component_1; eassumption.
