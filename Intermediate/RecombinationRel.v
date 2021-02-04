@@ -16,7 +16,7 @@ Require Import Intermediate.CSInvariants.
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
 
-From mathcomp Require Import ssreflect ssrnat ssrint ssrfun ssrbool eqtype.
+From mathcomp Require Import ssreflect ssrnat ssrint ssrfun ssrbool eqtype seq.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -575,8 +575,10 @@ Section Mergeable.
       CS.state_stack s' = CS.state_stack s'' ->
       Pointer.component (CS.state_pc s') = Pointer.component (CS.state_pc s) ->
       Pointer.component (CS.state_pc s') = Pointer.component (CS.state_pc s'') ->
+      traces_shift_each_other n   n' t   t' ->
+      traces_shift_each_other n'' n' t'' t' ->
       mergeable_states_well_formed s s' s'' t t' t''.
-
+  
   Inductive mergeable_internal_states
             (s s' s'' : CS.state) t t' t'' : Prop :=
   | mergeable_internal_states_p_executing:
@@ -1811,6 +1813,15 @@ Section MergeSym.
   (* Admitted. *)
 End MergeSym.
 
+Ltac find_and_invert_mergeable_states_well_formed :=
+  match goal with
+  | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ _ _ |- _ =>
+    inversion H
+  end.
+
+(*Ltac invert_rcons_eq_rcons H :=
+  *)
+
 (* Helpers, epsilon and lockstep versions of three-way simulation. *)
 Section ThreewayMultisem1.
   Variables p c p' c' : program.
@@ -1957,9 +1968,7 @@ Section ThreewayMultisem1.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -1994,9 +2003,7 @@ Section ThreewayMultisem1.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2031,9 +2038,7 @@ Section ThreewayMultisem1.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2068,9 +2073,7 @@ Section ThreewayMultisem1.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2105,9 +2108,7 @@ Section ThreewayMultisem1.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2142,9 +2143,7 @@ Section ThreewayMultisem1.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2178,160 +2177,214 @@ Section ThreewayMultisem1.
                 by rewrite Pointer.inc_preserves_component.
           -- (* mem of part not executing *)
             unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal.
-            split.
-            ++ 
-              (* Key fact to prove:
-                  the address that is stored at does NOT satisfy the preconditions
-                  of this goal.
-                *)
-              (* destruct whether original_addr == address stored-at, and
-                 obtain a contradiction (in the true case) to the key fact above.
-                 
-                 And in the false case, use Memory.load_after_store to reuse
-                 the assumption about mem2'' (H5).
-               *)
-              match goal with
-              | Hstore: Memory.store mem2'' ?PTR _ = _ |- _ =>
-                destruct PTR as [[[perm cid_store] bid_store] offset_store]
-              end.
-              assert (CSInvariants.wf_ptr_wrt_cid_t
-                        (Pointer.component (Pointer.inc pc2''))
-                        t''
-                        (perm, cid_store, bid_store, offset_store)
-                     ) as Hwfptr.
-              {
-                match goal with
-                | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-                  inversion H
-                end.
-                
-                eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t; eauto.
-                rewrite Pointer.inc_preserves_component.
-                eapply CSInvariants.wf_state_wf_reg.
-                - eapply CSInvariants.is_prefix_wf_state_t;
-                    last (
-                        match goal with
-                        | H: CSInvariants.is_prefix _ _ t'' |- _ => exact H
-                        end
-                      ).
-                  eapply linking_well_formedness; eauto.
-                  unfold mergeable_interfaces in *.
-                    by
+            (* Key fact to prove:
+               the address that is stored at does NOT satisfy the preconditions
+               of this goal.
+             *)
+            
+            match goal with
+            | Hstore: Memory.store mem2'' ?PTR _ = _ |- _ =>
+              destruct PTR as [[[perm cid_store] bid_store] offset_store]
+            end.
+            assert (CSInvariants.wf_ptr_wrt_cid_t
+                      (Pointer.component (Pointer.inc pc2''))
+                      t''
+                      (perm, cid_store, bid_store, offset_store)
+                   ) as Hwfptr.
+            {
+              find_and_invert_mergeable_states_well_formed.
+          
+              eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t; eauto.
+              rewrite Pointer.inc_preserves_component.
+              eapply CSInvariants.wf_state_wf_reg.
+              - eapply CSInvariants.is_prefix_wf_state_t;
+                  last (
                       match goal with
-                      | Hp: prog_interface p = _,
-                            Hc: prog_interface c = _,
-                                Hlink: linkable _ _ /\ _
-                        |- _ => rewrite <- Hp, <- Hc; destruct Hlink as [Hgoal _]
-                      end.
-                - by simpl.
-                - by simpl.
-                - auto.
-              }
-              assert (
-                  cid_store \in domm (prog_interface c') ->
-                  addr_shared_so_far (cid_store, bid_store) t''
-                ) as Hstore_addr_fact.
-              {
-                intros Hcid_store.
-                inversion Hwfptr as [ | ]; eauto.
-                - (* Now show through mergeable_well_formedness 
+                      | H: CSInvariants.is_prefix _ _ t'' |- _ => exact H
+                      end
+                    ).
+                eapply linking_well_formedness; eauto.
+                unfold mergeable_interfaces in *.
+                  by
+                    match goal with
+                    | Hp: prog_interface p = _,
+                          Hc: prog_interface c = _,
+                              Hlink: linkable _ _ /\ _
+                      |- _ => rewrite <- Hp, <- Hc; destruct Hlink as [Hgoal _]
+                    end.
+              - by simpl.
+              - by simpl.
+              - auto.
+            }
+            assert (
+              cid_store \in domm (prog_interface c') ->
+                            addr_shared_so_far (cid_store, bid_store) t''
+            ) as Hstore_addr_fact.
+            {
+              intros Hcid_store.
+              inversion Hwfptr as [ | ]; eauto.
+              - (* Now show through mergeable_well_formedness 
                      that Hcid_store is false.
-                   *)
-                  subst.
-                  match goal with
-                  | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-                    inversion H
-                  end.
-                  simpl in *.
-                  unfold CS.is_program_component, CS.is_context_component,
-                  turn_of, CS.state_turn, ic, negb in Hcomp.
-                  match goal with
-                  |
-                  H: prog_interface c = prog_interface c',
-                     H1: Pointer.component (CS.state_pc s1') = Pointer.component pc1,
-                         H2: Pointer.component (CS.state_pc s1') =
-                             Pointer.component pc2''
-                  |- _ => rewrite <- H1, H2, H in Hcomp
-                  end.
-                  rewrite (Pointer.inc_preserves_component) in Hcid_store. 
+                 *)
+                subst.
+                find_and_invert_mergeable_states_well_formed.
+                simpl in *.
+                unfold CS.is_program_component, CS.is_context_component,
+                turn_of, CS.state_turn, ic, negb in Hcomp.
+                match goal with
+                |
+                H: prog_interface c = prog_interface c',
+                   H1: Pointer.component (CS.state_pc s1') = Pointer.component pc1,
+                       H2: Pointer.component (CS.state_pc s1') =
+                           Pointer.component pc2''
+                |- _ => rewrite <- H1, H2, H in Hcomp
+                end.
+                rewrite (Pointer.inc_preserves_component) in Hcid_store. 
                   by rewrite Hcid_store in Hcomp.
-              }
-              intros original_addr Horiginal_addr1 Horiginal_addr2.
-              
-              destruct (@pair_eq
-                          nat_eqType nat_eqType
-                          original_addr
-                          (cid_store, bid_store)
-                       ) eqn:eq_original_addr.
-              ** unfold pair_eq in *. simpl in *.
-                 pose proof (andb_prop _ _ eq_original_addr) as [Hcid Hbid].
-                 assert (original_addr.1 = cid_store) as Hcid1. by apply/eqP.
-                 assert (original_addr.2 = bid_store) as Hbid1. by apply/eqP.
-                 subst.
-                 rewrite <- surjective_pairing in Hstore_addr_fact.
-                 by pose proof (Hstore_addr_fact Horiginal_addr1).
-              **  match goal with
-                  | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
-                         _ _ _ _ _ _ _ |- _ =>
-                    unfold
-                      mem_of_part_not_executing_rel_original_and_recombined_at_internal
-                      in H;
-                      destruct H as [Hshift_mem2'' _]
-                  end.
-                  specialize
-                    (Hshift_mem2'' original_addr  Horiginal_addr1 Horiginal_addr2).
-                  unfold memory_shifts_memory_at_addr,
-                  memory_renames_memory_at_addr in *.
-                  simpl. simpl in Hshift_mem2''. intros.
-                  pose proof (Memory.load_after_store
-                                mem2''
-                                (perm, cid_store, bid_store, offset_store)
-                                (Register.get r2 regs3'')
-                                mem3''
-                                (Permission.data,
-                                 original_addr.1,
-                                 original_addr.2,
-                                 offset)
-                             ) as Hmem2''_mem3''.
-                  (*destruct ((perm,cid_store,3,offset) == (perm, cid_store, 3, 4%Z)).
+            }
+
+            split.
+            ++ intros original_addr Horiginal_addr1 Horiginal_addr2.
+               
+               (* destruct whether original_addr == address stored-at, and
+                  obtain a contradiction (in the true case) to the key fact above.
+                  
+                  And in the false case, use Memory.load_after_store to reuse
+                  the assumption about mem2'' (H5).
+                *)
+               
+               destruct (@pair_eq
+                           nat_eqType nat_eqType
+                           original_addr
+                           (cid_store, bid_store)
+                        ) eqn:eq_original_addr.
+               ** unfold pair_eq in *. simpl in *.
+                  pose proof (andb_prop _ _ eq_original_addr) as [Hcid Hbid].
+                  assert (original_addr.1 = cid_store) as Hcid1. by apply/eqP.
+                  assert (original_addr.2 = bid_store) as Hbid1. by apply/eqP.
+                  subst.
+                  rewrite <- surjective_pairing in Hstore_addr_fact.
+                    by pose proof (Hstore_addr_fact Horiginal_addr1).
+               **  match goal with
+                   | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                          _ _ _ _ _ _ _ |- _ =>
+                     unfold
+                       mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                       in H;
+                       destruct H as [Hshift_mem2'' _]
+                   end.
+                   specialize
+                     (Hshift_mem2'' original_addr  Horiginal_addr1 Horiginal_addr2).
+                   unfold memory_shifts_memory_at_addr,
+                   memory_renames_memory_at_addr in *.
+                   simpl. simpl in Hshift_mem2''. intros.
+                   pose proof (Memory.load_after_store
+                                 mem2''
+                                 (perm, cid_store, bid_store, offset_store)
+                                 (Register.get r2 regs3'')
+                                 mem3''
+                                 (Permission.data,
+                                  original_addr.1,
+                                  original_addr.2,
+                                  offset)
+                              ) as Hmem2''_mem3''.
+                   (*destruct ((perm,cid_store,3,offset) == (perm, cid_store, 3, 4%Z)).
                   destruct (((perm, cid_store, bid_store, offset) ==
          (perm, cid_store, bid_store, offset_store))%Z).*)
-                  (* Notation NOT WORKING *)
-                  destruct (@eq_op
-                         (prod_eqType
-                            (prod_eqType (prod_eqType nat_eqType nat_eqType) nat_eqType)
-                            Extra.Z_eqType)
-                         (@pair (prod (prod Permission.id (Ord.sort nat_ordType)) Block.id)
-                            Block.offset
-                            (@pair (prod Permission.id (Ord.sort nat_ordType)) Block.id
-                               (@pair Permission.id (Ord.sort nat_ordType) Permission.data
-                                  (@fst (Ord.sort nat_ordType) Block.id original_addr))
-                               (@snd (Ord.sort nat_ordType) Block.id original_addr)) offset)
-                         (@pair (prod (prod Permission.id Component.id) Block.id) Block.offset
-                            (@pair (prod Permission.id Component.id) Block.id
-                               (@pair Permission.id Component.id perm cid_store) bid_store)
-                            offset_store)) eqn:Heq.
-                  --- (* case true; derive a contradiction to eq_original_addr *)
-                    do 3 (rewrite <- pair_eqE in Heq;
-                          unfold pair_eq in Heq). simpl in Heq.
-                    unfold pair_eq in eq_original_addr.
-                    pose proof andb_false_iff as [Hifandbfalse _].
-                    pose proof (Hifandbfalse eq_original_addr) as [Hf1 | Hf1];
-                      by rewrite Hf1 !andb_false_r !andb_false_l in Heq.
-                  --- (* case false; now use Hmem2''_mem3'' *)
-                    rewrite Hmem2''_mem3''; eauto.
+                   (* Notation NOT WORKING *)
+                   destruct (@eq_op
+                               (prod_eqType
+                                  (prod_eqType (prod_eqType nat_eqType nat_eqType) nat_eqType)
+                                  Extra.Z_eqType)
+                               (@pair (prod (prod Permission.id (Ord.sort nat_ordType)) Block.id)
+                                      Block.offset
+                                      (@pair (prod Permission.id (Ord.sort nat_ordType)) Block.id
+                                             (@pair Permission.id (Ord.sort nat_ordType) Permission.data
+                                                    (@fst (Ord.sort nat_ordType) Block.id original_addr))
+                                             (@snd (Ord.sort nat_ordType) Block.id original_addr)) offset)
+                               (@pair (prod (prod Permission.id Component.id) Block.id) Block.offset
+                                      (@pair (prod Permission.id Component.id) Block.id
+                                             (@pair Permission.id Component.id perm cid_store) bid_store)
+                                      offset_store)) eqn:Heq.
+                   --- (* case true; derive a contradiction to eq_original_addr *)
+                     do 3 (rewrite <- pair_eqE in Heq;
+                           unfold pair_eq in Heq). simpl in Heq.
+                     unfold pair_eq in eq_original_addr.
+                     pose proof andb_false_iff as [Hifandbfalse _].
+                     pose proof (Hifandbfalse eq_original_addr) as [Hf1 | Hf1];
+                       by rewrite Hf1 !andb_false_r !andb_false_l in Heq.
+                   --- (* case false; now use Hmem2''_mem3'' *)
+                     rewrite Hmem2''_mem3''; eauto.
             ++ (* Probably, the same fact as above may work. *)
               (* Then, the tricky part will be the case distinction. *)
               (* we will want to destruct---not recombined_addr equals sth---
                  inverse_shift of recombined_addr equals address stored-at
                *)
-              admit.
+              intros recombined_addr Hrecombined_addr1 Hrecombined_addr2.
+              
+              (* destruct whether original_addr == address stored-at, and
+                 obtain a contradiction (in the true case) to the key fact above.
+                 
+                  And in the false case, use Memory.load_after_store to reuse
+                  the assumption about mem2'' (H5).
+               *)
+              remember
+                ((inverse_rename_addr
+                    (inverse_rename_addr
+                       (inv_sigma_shifting_addr n''
+                                                (fun cid : nat_ordType =>
+                                                   if cid \in domm (prog_interface p)
+                                                   then n cid else n'' cid)))
+                    recombined_addr)) as original_addr.
+               destruct (@pair_eq
+                           nat_eqType nat_eqType
+                           original_addr
+                           (cid_store, bid_store)
+                        ) eqn:eq_original_addr.
+               ** unfold pair_eq in *. simpl in *.
+                  pose proof (andb_prop _ _ eq_original_addr) as [Hcid Hbid].
+                  assert (original_addr.1 = cid_store) as Hcid1. by apply/eqP.
+                  assert (original_addr.2 = bid_store) as Hbid1. by apply/eqP.
+                  
+                  assert ((inverse_rename_addr
+                             (inverse_rename_addr
+                                (inv_sigma_shifting_addr
+                                   n''
+                                   (fun cid : nat =>
+                                      if cid \in domm (prog_interface p)
+                                      then n cid else n'' cid)))
+                             recombined_addr).1 = recombined_addr.1) as Hcid_same.
+                  {
+                    unfold inverse_rename_addr at 1.
+                      by eapply
+                           inverse_rename_addr_inverse_sigma_shifting_addr_cid_constant.
+                  }
+                  (**********************************
+                  subst.
+                  simpl in Hstore_addr_fact.
+                  rewrite <- surjective_pairing in Hstore_addr_fact.
+                    by pose proof (Hstore_addr_fact Hrecombined_addr1).
+               **  match goal with
+                   | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                          _ _ _ _ _ _ _ |- _ =>
+                     unfold
+                       mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                       in H;
+                       destruct H as [Hshift_mem2'' _]
+                   end.
+                   specialize
+                     (Hshift_mem2'' original_addr  Horiginal_addr1 Horiginal_addr2).
+                   unfold memory_shifts_memory_at_addr,
+                   memory_renames_memory_at_addr in *.
+                   simpl. simpl in Hshift_mem2''. intros.
+                  
+              ************************************************)
+                  admit.
+               ** admit.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2361,19 +2414,13 @@ Section ThreewayMultisem1.
               simpl in *.
               assert (Pointer.component pc2'' = Pointer.component pc3'') as Hpc2''.
               {
-                eapply find_label_in_component_1.
-                (* The goal find_label_in_component _ pc2'' _ = Some pc3''
-                   should be solvable by inverting Hstep_inform.
-                 *)
-                admit.
+                eapply find_label_in_component_1; eauto.
               }
               by rewrite <- Hpc2''.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2402,18 +2449,13 @@ Section ThreewayMultisem1.
               simpl in *.
               assert (Pointer.component pc2'' = Pointer.component pc3'') as Hpc2''.
               {
-                (* Should be available as a precondition of the Jump case.
-                   inversion Hstep_inform.
-                 *)
-                admit.
+                eauto.
               }
               by rewrite <- Hpc2''.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2442,19 +2484,13 @@ Section ThreewayMultisem1.
               simpl in *.
               assert (Pointer.component pc2'' = Pointer.component pc3'') as Hpc2''.
               {
-                eapply find_label_in_component_1.
-                (* The goal find_label_in_component _ pc2'' _ = Some pc3''
-                   should be solvable by inverting Hstep_inform.
-                 *)
-                admit.
+                eapply find_label_in_procedure_1; eauto. 
               }
               by rewrite <- Hpc2''.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2489,9 +2525,7 @@ Section ThreewayMultisem1.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2534,10 +2568,7 @@ Section ThreewayMultisem1.
               pose proof Memory.component_of_alloc_ptr _ _ _ _ _ Halloc as Hptr_comp
             end.
             
-            match goal with
-            | Hwf: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-                inversion Hwf
-            end.
+            find_and_invert_mergeable_states_well_formed.
             pose proof CS.is_program_component_pc_notin_domm _ _ Hcomp.
             unfold ic in *. simpl in *.
             
@@ -2678,9 +2709,7 @@ Section ThreewayMultisem1.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2924,10 +2953,7 @@ Section ThreewayMultisem1.
       + inversion Hmerge1.
         * econstructor; try eassumption.
           -- (* mergeable_states_well_formed *)
-            match goal with
-            | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-              inversion H
-            end.
+            find_and_invert_mergeable_states_well_formed.
             eapply mergeable_states_well_formed_intro; try eassumption.
             ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
@@ -2940,10 +2966,7 @@ Section ThreewayMultisem1.
             ++ by rewrite Pointer.inc_preserves_component.
           -- by simpl.
         * (* Contradiction with the assumption  Hcomp1. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H
-          end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -2974,10 +2997,7 @@ Section ThreewayMultisem1.
       + inversion Hmerge1.
         * econstructor; try eassumption.
           -- (* mergeable_states_well_formed *)
-            match goal with
-            | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-              inversion H
-            end.
+            find_and_invert_mergeable_states_well_formed.
             eapply mergeable_states_well_formed_intro; try eassumption.
             ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
@@ -2990,10 +3010,7 @@ Section ThreewayMultisem1.
             ++ by rewrite Pointer.inc_preserves_component.
           -- by simpl.
         * (* Contradiction with the assumption  Hcomp1. *)
-          match goal with
-          | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ |- _ =>
-            inversion H
-          end.
+          find_and_invert_mergeable_states_well_formed.
           simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
@@ -3641,7 +3658,9 @@ Section ThreewayMultisem1.
     mergeable_internal_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Step sem   s1   [e  ] s2   ->
     Step sem'' s1'' [e''] s2'' ->
-    mem_rel2 n n'' (CS.state_mem s2, t1 ++ [e]) (CS.state_mem s2'', t1'' ++ [e'']) p ->
+    traces_shift_each_other n n'' (rcons t1 e) (rcons t1'' e'') ->
+    (*mem_rel2 n n'' (CS.state_mem s2, t1 ++ [e]) 
+      (CS.state_mem s2'', t1'' ++ [e'']) p ->*)
     (* TODO: Maybe we want to change this memory relation of the event to be
        directly the event relation.
        The event relation should be exposed from Renaming.v.
@@ -3654,10 +3673,49 @@ Section ThreewayMultisem1.
          from mergeable_border_states, i.e., the following conjunct here:
        *)
       mergeable_border_states p c p' c' n n'' s2 s2' s2''
-                              (t1 ++ [e]) (t1' ++ [e']) (t1'' ++ [e'']).
+                              (rcons t1 e) (rcons t1' e') (rcons t1'' e'').
     (* Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2''). *)
   Proof.
     intros Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2.
+    inversion Hstep12. subst.
+    inversion Hmerge1; find_and_invert_mergeable_states_well_formed.
+    - eapply CS.non_inform_is_call_or_ret in H1; eauto.
+      destruct H1 as [[cid2 [pid2 [v [mem [reg [cid1 Hcall]]]]]]
+                     |[cid [v [mem [reg [cid' Hret]]]]]].
+      + subst. simpl in H. inversion H. subst.
+        inversion Hrel2 as [? ? Hrel2'].
+        inversion Hrel2' as [  |
+                           tpref1 e1 tpref1'' e1'' Hr1 Hr2 Hr3 Hr4 Hr5 Hr6].
+        * pose proof size_rcons t1'' e'' as Hcontra.
+          match goal with
+          | H: [::] = rcons _ _ |- _ =>
+            rewrite <- H in Hcontra
+          end.
+            by simpl in *.
+        * apply rcons_inj in Hr5. apply rcons_inj in Hr6. inversion Hr5. inversion Hr6.
+          subst. clear Hr5 Hr6.
+          unfold match_events in *.
+          destruct e'' as [cid pid v_call mem'' cid_caller |]; intuition. subst.
+          exists (ECall cid pid v_call (CS.state_mem s1') cid_caller).
+          (* wrong. Need the renaming of v_call *)
+          admit.
+      + admit.
+    - find_and_invert_mergeable_states_well_formed.
+      simpl in *. subst.
+      unfold CS.is_program_component,
+      CS.is_context_component, turn_of, CS.state_turn in *.
+      destruct s1 as [[[s11 s12] s13] s1pc].
+      destruct s1' as [[[s1'1 s1'2] s1'3] s1'pc].
+      simpl in *. subst.
+      unfold negb in Hcomp1.
+      match goal with
+      | H: _ = Pointer.component s1pc,
+           Hin: is_true (@in_mem _ (Pointer.component (CS.state_pc s1'')) _)
+        |- _ =>
+        rewrite H in Hin; rewrite Hin in Hcomp1
+      end.
+        by intuition.
+
     (* Derive some useful facts and begin to expose state structure. *)
   (*   inversion Hmerge1 as [??? Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec ??????]. *)
   (*   inversion Hmergeable_ifaces as [Hlinkable _]. *)
@@ -3855,11 +3913,11 @@ Section ThreewayMultisem1.
     mergeable_internal_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Step sem   s1   [e  ] s2   ->
     Step sem'' s1'' [e''] s2'' ->
-    mem_rel2 n n'' (CS.state_mem s2, t1 ++ [e]) (CS.state_mem s2'', t1'' ++ [e'']) p ->
+    traces_shift_each_other n n'' (rcons t1 e) (rcons t1'' e'') ->
   exists e' s2',
     Step sem'  s1'  [e' ] s2' /\
-    mergeable_border_states
-      p c p' c' n n'' s2 s2' s2'' (t1 ++ [e]) (t1' ++ [e']) (t1'' ++ [e'']).
+    mergeable_border_states p c p' c' n n'' s2 s2' s2'' (rcons t1 e) 
+           (rcons t1' e') (rcons t1'' e'').
   Proof.
     intros. eapply threeway_multisem_event_lockstep_program_step; eassumption.
   Qed.
@@ -3986,13 +4044,13 @@ Section ThreewayMultisem2.
     mergeable_internal_states p c p' c' n n''  s1 s1' s1'' t1 t1' t1'' ->
     Step sem   s1   [e  ] s2   ->
     Step sem'' s1'' [e''] s2'' ->
-    mem_rel2 n n'' (CS.state_mem s2, t1 ++ [e]) (CS.state_mem s2'', t1'' ++ [e'']) p ->
+    traces_shift_each_other n n'' (rcons t1 e) (rcons t1'' e'') ->
     (* Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2'') /\ *)
     (* mergeable_states p c p' c' s2 s2''. *)
   exists e' s2',
     Step sem'  s1'  [e' ] s2' /\
-    mergeable_border_states
-      p c p' c' n n''  s2 s2' s2'' (t1 ++ [e]) (t1' ++ [e']) (t1'' ++ [e'']).
+    mergeable_border_states p c p' c' n n'' s2 s2' s2'' (rcons t1 e) 
+                            (rcons t1' e') (rcons t1'' e'').
   Proof.
     intros Hmerge1 Hstep12 Hstep12'' Hrel2.
   (*   inversion Hmerge1 as [? ? ? Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec Hprog_is_closed _ Hini H1 Hstar H2]. *)
@@ -4441,7 +4499,7 @@ Section ThreewayMultisem4.
          But in any case, we will need mergeable_states_well_formed.
        *)
       assert (mergeable_states_well_formed
-                p c p' c' s
+                p c p' c' n n'' s
                 ([],
                  unionm (prepare_procedures_memory p) (prepare_procedures_memory c'),
                  Register.init,
@@ -4465,6 +4523,8 @@ Section ThreewayMultisem4.
         + rewrite CS.initial_machine_state_after_linking; eauto.
           * (* linkable *)
             rewrite <- Hifacep, <- Hifacec. by inversion Hmergeable_ifaces.
+        + constructor. constructor.
+        + constructor. constructor.
       } 
       destruct (Component.main \in domm (prog_interface p)) eqn:whereismain.
       + (* Component.main is in p. *)
