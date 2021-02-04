@@ -1031,11 +1031,13 @@ Section RenamingAddr.
         )
         ->
         match_events e e' ->
+        arg_of_event e' = rename_value (arg_of_event e) ->
+        arg_of_event e  = inverse_rename_value (arg_of_event e') ->
         traces_rename_each_other (rcons tprefix e) (rcons tprefix' e').
 
   Lemma traces_rename_each_other_nil_rcons t x:
     traces_rename_each_other [::] (rcons t x) -> False.
-  Proof. intros H. inversion H as [y Hy|tp e ? ? ? ? ? ? Ha Hb].
+  Proof. intros H. inversion H as [y Hy|tp e ? ? ? ? ? ? ? ? Ha Hb].
          - assert (0 = size (rcons t x)) as Hcontra.
            { rewrite <- Hy. reflexivity. }
            rewrite size_rcons in Hcontra. discriminate.
@@ -1046,7 +1048,7 @@ Section RenamingAddr.
 
   Lemma traces_rename_each_other_rcons_nil t x:
     traces_rename_each_other (rcons t x) [::] -> False.
-  Proof. intros H. inversion H as [y Hy|tp e tp' e' ? ? ? ? Ha Hb].
+  Proof. intros H. inversion H as [y Hy|tp e tp' e' ? ? ? ? ? ? Ha Hb].
          - assert (0 = size (rcons t x)) as Hcontra.
            { rewrite <- y. reflexivity. }
            rewrite size_rcons in Hcontra. discriminate.
@@ -1377,6 +1379,14 @@ Section PropertiesOfTheShiftRenaming.
          destruct a. by rewrite inv_sigma_shifting_sigma_shifting.
   Qed.
 
+  Lemma rename_value_inverse_rename_value n2 n1 v:
+    inverse_rename_value (inv_sigma_shifting_addr n2 n1) v =
+    rename_value (sigma_shifting_addr n1 n2) v.
+  Proof.
+    destruct v as [ | [[[perm cid] bid] o] | ]; auto. simpl.
+    rewrite rename_addr_inverse_rename_addr. reflexivity.
+  Qed.
+
   Lemma option_rename_value_option_inverse_rename_value n2 n1 v:
     option_inverse_rename_value (inv_sigma_shifting_addr n2 n1) v =
     option_rename_value (sigma_shifting_addr n1 n2) v.
@@ -1416,7 +1426,7 @@ Section PropertiesOfTheShiftRenaming.
          rewrite <- (sigma_shifting_transitive (n1 cid) (n2 cid) (n3 cid)); auto.
          by rewrite e12.
   Qed.
-
+             
   Lemma rename_value_transitive n1 n2 n3 v:
     left_value_good_for_shifting n1 v ->
     rename_value (sigma_shifting_addr n2 n3)
@@ -1429,7 +1439,7 @@ Section PropertiesOfTheShiftRenaming.
     simpl. destruct (perm =? Permission.data) eqn:Hperm; simpl; try rewrite Hperm; auto.
     rewrite <- Hn1n2. rewrite rename_addr_transitive; auto.
   Qed.
-
+  
   Lemma option_rename_value_transitive n1 n2 n3 v:
     option_left_value_good_for_shifting n1 v ->
     option_rename_value (sigma_shifting_addr n2 n3)
@@ -1520,6 +1530,8 @@ Section PropertiesOfTheShiftRenaming.
         * apply event_inverse_rename_reflexive.
         * by rewrite inverse_rename_addr_reflexive.
       + now apply match_events_reflexive.
+      + symmetry. by apply rename_value_reflexive.
+      + symmetry. by apply inverse_rename_value_reflexive.
   Qed.
 
   Lemma traces_shift_each_other_symmetric t1 t2 n1 n2:
@@ -1538,6 +1550,8 @@ Section PropertiesOfTheShiftRenaming.
         * rewrite event_rename_inverse_event_rename. exact G1.
         * rewrite <- rename_addr_inverse_rename_addr. exact G2.
       + now apply match_events_sym.
+      + by rewrite <- rename_value_inverse_rename_value.
+      + by rewrite rename_value_inverse_rename_value.
   Qed.
 
   Lemma rcons_trace_event_eq_inversion (tp1 tp2: trace event) (e1 e2: event):
@@ -1584,12 +1598,12 @@ Section PropertiesOfTheShiftRenaming.
       assert (t1_tlsz: size t1 = sz). by (rewrite size_rcons in t1sz; inversion t1sz).
       pose proof (IHsz t1 t2 t3 t1_tlsz) as IHsz'.
 
-      inversion H12' as [ | ? ? ? ? H12a H12b H12c Hevsa Heq1 Heq2];
+      inversion H12' as [ | ? ? ? ? H12a H12b H12c Hevsa H12d H12e Heq1 Heq2];
         try by (rewrite <- H in t1sz; inversion t1sz).
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq1) as [tmp1 tmp2]. subst. clear Heq1.
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq2) as [tmp1 tmp2]. subst. clear Heq2.
 
-      inversion H23' as [ | ? ? ? ? H23a H23b H23c Hevsb Heq1 Heq2];
+      inversion H23' as [ | ? ? ? ? H23a H23b H23c Hevsb H23d H23e Heq1 Heq2];
         try by (rewrite <- H in Hsizet2; inversion Hsizet2).
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq1) as [tmp1 tmp2]. subst. clear Heq1.
       destruct (rcons_trace_event_eq_inversion _ _ _ _ Heq2) as [tmp1 tmp2]. subst. clear Heq2.
@@ -1654,6 +1668,18 @@ Section PropertiesOfTheShiftRenaming.
           erewrite <- !rename_addr_inverse_rename_addr in Hshrsfr1.
           erewrite <- rename_addr_transitive; eauto.
       + eapply match_events_trans; eassumption.
+      + rewrite H23d H12d. apply rename_value_transitive.
+        unfold left_value_good_for_shifting.
+        destruct (arg_of_event e1) as [| [[[perm cid] bid] ?] |]; auto.
+        destruct (perm =? Permission.data) eqn:eperm; auto.
+        apply t1goodc. simpl. rewrite eperm. by apply/fset1P.
+      + rewrite H12e H23e.
+        rewrite !rename_value_inverse_rename_value.
+        apply rename_value_transitive.
+        unfold left_value_good_for_shifting.
+        destruct (arg_of_event e3) as [| [[[perm cid] bid] ?] |]; auto.
+        destruct (perm =? Permission.data) eqn:eperm; auto.
+        apply t3goodc. simpl. rewrite eperm. by apply/fset1P.
   Qed.
 
   Lemma traces_shift_each_other_transitive n1 n2 n3 t1 t2 t3:
