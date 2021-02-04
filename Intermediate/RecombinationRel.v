@@ -2927,7 +2927,7 @@ Section ThreewayMultisem1.
     (* rewrite (mergeable_states_merge_program Hcomp2 Hmerge2). *)
     (* NOTE: As usual, we should proceed by cases on the step. *)
     simpl in Hstep12.
-    inversion Hstep12 as [? t ? Hstep12' DUMMY Ht DUMMY'];
+    inversion Hstep12 as [? t ? ? Hstep12' DUMMY Ht DUMMY'];
       subst; rename Hstep12 into Hstep12_.
     inversion Hstep12'; subst; rename Hstep12' into Hstep12'_.
 
@@ -2949,7 +2949,7 @@ Section ThreewayMultisem1.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].*)
       }
       eexists. split.
-      + constructor. exact (CS.Nop _ _ _ _ _ Hex'). (* Make more implicit later. *)
+      + eapply CS.Step_non_inform; eauto. exact (CS.Nop _ _ _ _ _ Hex'). (* Make more implicit later. *)
       + inversion Hmerge1.
         * econstructor; try eassumption.
           -- (* mergeable_states_well_formed *)
@@ -2960,7 +2960,7 @@ Section ThreewayMultisem1.
                  by rewrite E0_right.
             ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
-               ** constructor. by eapply CS.Nop.
+               ** eapply CS.Step_non_inform; eauto. by eapply CS.Nop.
                ** by rewrite E0_right.
             ++ by simpl.
             ++ by rewrite Pointer.inc_preserves_component.
@@ -2993,7 +2993,7 @@ Section ThreewayMultisem1.
         - inversion Hmerge1. eapply CS.domm_partition; try eassumption; [auto].*)
       }
       eexists. split.
-      + constructor. exact (CS.Label _ _ _ _ _ _ Hex'). (* Make more implicit later. *)
+      + eapply CS.Step_non_inform; eauto. exact (CS.Label _ _ _ _ _ _ Hex'). (* Make more implicit later. *)
       + inversion Hmerge1.
         * econstructor; try eassumption.
           -- (* mergeable_states_well_formed *)
@@ -3004,7 +3004,7 @@ Section ThreewayMultisem1.
                  by rewrite E0_right.
             ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
-               ** constructor. eapply CS.Label; eauto.
+               ** eapply CS.Step_non_inform; eauto. eapply CS.Label; eauto.
                ** by rewrite E0_right.
             ++ by simpl.
             ++ by rewrite Pointer.inc_preserves_component.
@@ -3679,13 +3679,20 @@ Section ThreewayMultisem1.
     intros Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2.
     inversion Hstep12. subst.
     inversion Hmerge1; find_and_invert_mergeable_states_well_formed.
-    - eapply CS.non_inform_is_call_or_ret in H1; eauto.
-      destruct H1 as [[cid2 [pid2 [v [mem [reg [cid1 Hcall]]]]]]
-                     |[cid [v [mem [reg [cid' Hret]]]]]].
-      + subst. simpl in H. inversion H. subst.
+    - match goal with
+      | H: CS.step _ s1 t s2 |- _ =>
+        eapply CS.non_inform_is_call_or_ret in H; eauto;
+          destruct H as [[cid2 [pid2 [v [mem [reg [cid1 Hcall]]]]]]
+                         |[cid [v [mem [reg [cid' Hret]]]]]]
+      end.
+      + subst. simpl in *.
+        match goal with
+        | H: [:: e] = [:: _] |- _ => inversion H
+        end.
+        subst.
         inversion Hrel2 as [? ? Hrel2'].
         inversion Hrel2' as [  |
-                           tpref1 e1 tpref1'' e1'' Hr1 Hr2 Hr3 Hr4 Hr5 Hr6].
+                           tpref1 e1 tpref1'' e1'' Hr1 Hr2 Hr3 Hr4 Harg Harginv Hr5 Hr6].
         * pose proof size_rcons t1'' e'' as Hcontra.
           match goal with
           | H: [::] = rcons _ _ |- _ =>
@@ -3695,11 +3702,104 @@ Section ThreewayMultisem1.
         * apply rcons_inj in Hr5. apply rcons_inj in Hr6. inversion Hr5. inversion Hr6.
           subst. clear Hr5 Hr6.
           unfold match_events in *.
-          destruct e'' as [cid pid v_call mem'' cid_caller |]; intuition. subst.
-          exists (ECall cid pid v_call (CS.state_mem s1') cid_caller).
-          (* wrong. Need the renaming of v_call *)
-          admit.
-      + admit.
+          destruct e'' as [cid pid v_call mem'' cid_callee |]; intuition. subst.
+          eexists.  (*(ECall cid pid _ (CS.state_mem s1') cid_caller)*)
+          destruct s1' as [[[s1'stk s1'mem] s1'reg] s1'pc].
+          eexists ((Pointer.inc s1'pc) :: s1'stk,
+                   s1'mem,
+                   Register.invalidate s1'reg,
+                   _).
+          split.
+          -- eapply CS.Step_non_inform.
+             ++ eapply (@CS.Call (prepare_global_env prog') _ _ _ _ _ _ _ _);
+                  try eassumption.
+                ** eapply (execution_invariant_to_linking p c c'); eauto.
+                   --- unfold mergeable_interfaces in *. by intuition.
+                   --- match goal with
+                       | H: _ = prog_interface c' |- _ => rewrite <- H end.
+                       unfold mergeable_interfaces in *. by intuition.
+                   --- simpl in *.
+                       (*Search _ Pointer.component prog_interface.*)
+                       (* probably need to apply CS.domm_partition *)
+                       admit.
+                   --- assert (executing (prepare_global_env prog)
+                                         (CS.state_pc s1) (ICall cid_callee pid)) as G.
+                       {
+                         inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
+                         inversion Hstep; subst t; simpl in Hcontra; try discriminate.
+                         inversion Hcontra. subst.
+                           by simpl.
+                       }
+                       
+                       match goal with
+                       | H: CS.state_pc _  = _ |- _ => simpl in H; rewrite <- H in G
+                       end.
+                       eassumption.
+                ** inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
+                   inversion Hstep; subst; simpl in Hcontra; try discriminate.
+                   inversion Hcontra. subst.
+                   simpl in *.
+                   by match goal with
+                   | H: s1'pc = _ |- _ => rewrite H
+                      end.
+                ** inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
+                   inversion Hstep; subst; simpl in Hcontra; try discriminate.
+                   inversion Hcontra. subst.
+                   simpl in *.
+                   match goal with
+                   | H1: s1'pc = _,
+                         H2: prog_interface c = _
+                     |- _ =>
+                     rewrite H1; rewrite <- H2
+                   end.
+                   assumption.
+                ** pose proof genv_entrypoints_interface_some prog prog'
+                        cid_callee pid as G.
+                   assert (exists b,
+                              EntryPoint.get cid_callee pid
+                                             (genv_entrypoints
+                                                (prepare_global_env prog)) = Some b)
+                     as [b Hentryp].
+                   {
+                     inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
+                     inversion Hstep; subst; simpl in Hcontra; try discriminate.
+                     inversion Hcontra. subst.
+                       by exists b.
+                   }
+                   assert (well_formed_program prog) as Hwf.
+                   {
+                     apply linking_well_formedness; eauto.
+                     unfold mergeable_interfaces in *. by intuition.
+                   }
+                   assert (well_formed_program prog') as Hwf'.
+                   {
+                     apply linking_well_formedness; eauto.
+                     unfold mergeable_interfaces in *.
+                     match goal with | H: _ = prog_interface c' |- _ => rewrite <- H
+                     end.
+                     by intuition.
+                   }
+                   assert (prog_interface prog = prog_interface prog') as Hifc.
+                   {
+                     admit.
+                   }
+                   pose proof G b Hwf Hwf' Hifc Hentryp as [b' G'].
+                   rewrite G'. (*reflexivity.*)
+                   (* reflexivity fails because the existential variable was
+                      introduced too early.
+                    *)
+                   admit.
+                ** (** here, use the register relation **)
+                  admit.
+             ++ (* here, again, reflexivity will fail because the existential variable
+                   was introduced too early?
+                 *)
+               admit.
+          -- (* Here is the interesting part, where we establish  
+                mergeable_border_states. *)
+            admit.
+      + (* case Return *)
+        admit.
     - find_and_invert_mergeable_states_well_formed.
       simpl in *. subst.
       unfold CS.is_program_component,
