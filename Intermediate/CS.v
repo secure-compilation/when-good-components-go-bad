@@ -1438,6 +1438,22 @@ Section SemanticsInform.
       contradiction.
   Qed.
 
+  Lemma non_inform_is_call_or_ret s1 t s2 e:
+    step G s1 t s2 ->
+    event_non_inform_of t = [e] ->
+    (
+      (exists cid pid v mem reg cid', t = [ECallInform cid pid v mem reg cid'])
+      \/
+      (exists cid v mem reg cid', t = [ERetInform cid v mem reg cid'])
+    ).
+  Proof.
+    intros Hstep Henoninf.
+    inversion Hstep; subst;
+      unfold event_non_inform_of in *; try discriminate.
+    - left. do 6 eexists. eauto.
+    - right. do 5 eexists. eauto.
+  Qed.
+
 Import ssreflect eqtype.
 
 Definition stack_state_of (cs:CS.state) : stack_state :=
