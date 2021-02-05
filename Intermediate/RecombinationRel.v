@@ -242,22 +242,34 @@ Section BinaryHelpersForMergeable.
   | regs_rel_of_executing_part_intro:
       (
         forall reg,
-          omap
-            (shift_value n_original n_recombined)
-            (r_original reg)
-          =
-          r_recombined reg
+          (* AEK: TODO: *)
+          (* We might need to weaken this condition by requiring *)
+          (* that only good values be subject to the shift condition? *)
+          shift_value n_original n_recombined (Register.get reg r_original) =
+          Register.get reg r_recombined
           /\
-          omap
-            (inverse_shift_value n_recombined n_original)
-            (r_recombined reg)
-          =
-          r_original reg
+          Register.get reg r_recombined =
+          inverse_shift_value n_original n_recombined (Register.get reg r_original)
       )
       ->
       regs_rel_of_executing_part r_original r_recombined n_original n_recombined.
         
-  
+  Inductive stack_of_program_part_rel_stack_of_recombined
+            (part: program) : CS.stack -> CS.stack -> Prop :=
+  | stack_of_program_part_rel_stack_of_recombined_nil:
+      stack_of_program_part_rel_stack_of_recombined part nil nil
+  | stack_of_program_part_rel_stack_of_recombined_cons:
+      forall (ptr_part ptr_recombined: Pointer.t) (stk_part stk_recombined: CS.stack),
+        stack_of_program_part_rel_stack_of_recombined part stk_part stk_recombined ->
+        (
+          if Pointer.component ptr_part \in domm (prog_interface part)
+          then ptr_part = ptr_recombined
+          else Pointer.component ptr_part = Pointer.component ptr_recombined
+        )
+        ->
+        stack_of_program_part_rel_stack_of_recombined
+          part (ptr_part :: stk_part) (ptr_recombined :: stk_recombined).     
+        
 End BinaryHelpersForMergeable.
 
 (* AEK: Ignore this section for now. *)
@@ -571,8 +583,10 @@ Section Mergeable.
       CSInvariants.is_prefix s   prog   t ->
       CSInvariants.is_prefix s'  prog'  t' ->
       CSInvariants.is_prefix s'' prog'' t'' ->
-      CS.state_stack s' = CS.state_stack s ->
-      CS.state_stack s' = CS.state_stack s'' ->
+      stack_of_program_part_rel_stack_of_recombined
+        p (CS.state_stack s) (CS.state_stack s') ->
+      stack_of_program_part_rel_stack_of_recombined
+        c' (CS.state_stack s'') (CS.state_stack s') ->
       Pointer.component (CS.state_pc s') = Pointer.component (CS.state_pc s) ->
       Pointer.component (CS.state_pc s') = Pointer.component (CS.state_pc s'') ->
       traces_shift_each_other n   n' t   t' ->
@@ -3703,14 +3717,45 @@ Section ThreewayMultisem1.
           subst. clear Hr5 Hr6.
           unfold match_events in *.
           destruct e'' as [cid pid v_call mem'' cid_callee |]; intuition. subst.
-          eexists.  (*(ECall cid pid _ (CS.state_mem s1') cid_caller)*)
           destruct s1' as [[[s1'stk s1'mem] s1'reg] s1'pc].
+          inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
+          inversion Hstep; subst; simpl in Hcontra; try discriminate.
+          inversion Hcontra. subst.
+          assert (prog_interface prog = prog_interface prog') as
+                      Hifcprog_prog'.
+          {
+            unfold prog, prog', program_link, prog_interface.
+            destruct p. destruct c. destruct c'.
+            simpl in *. by subst.
+          }
+          assert (exists b',
+                              EntryPoint.get C' P
+                                             (genv_entrypoints
+                                                (prepare_global_env prog')) = Some b'
+                          ) as [b' Hb'].
+          {
+            eapply genv_entrypoints_interface_some with (p := prog); eauto.
+            - (* wf prog *)
+              apply linking_well_formedness; eauto.
+              unfold mergeable_interfaces in *. by intuition.
+            - (* wf prog' *)
+              apply linking_well_formedness; eauto.
+              unfold mergeable_interfaces in *.
+              match goal with | H: _ = prog_interface c' |- _ => rewrite <- H
+              end.
+                by intuition.
+          }
+          eexists.  (*(ECall cid pid _ (CS.state_mem s1') cid_caller)*)
           eexists ((Pointer.inc s1'pc) :: s1'stk,
                    s1'mem,
                    Register.invalidate s1'reg,
                    _).
+          destruct s2'' as [[[s2''stk s2''mem] s2''reg] s2''pc].
+          inversion Hstep12'' as [? ? ? ? Hstep'' Hcontra'']. subst.
+          inversion Hstep''; subst; simpl in Hcontra''; try discriminate.
+          inversion Hcontra''. subst.
           split.
-          -- eapply CS.Step_non_inform.
+          -- eapply CS.Step_non_inform; eauto.
              ++ eapply (@CS.Call (prepare_global_env prog') _ _ _ _ _ _ _ _);
                   try eassumption.
                 ** eapply (execution_invariant_to_linking p c c'); eauto.
@@ -3722,30 +3767,15 @@ Section ThreewayMultisem1.
                        (*Search _ Pointer.component prog_interface.*)
                        (* probably need to apply CS.domm_partition *)
                        admit.
-                   --- assert (executing (prepare_global_env prog)
-                                         (CS.state_pc s1) (ICall cid_callee pid)) as G.
-                       {
-                         inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
-                         inversion Hstep; subst t; simpl in Hcontra; try discriminate.
-                         inversion Hcontra. subst.
-                           by simpl.
-                       }
-                       
-                       match goal with
-                       | H: CS.state_pc _  = _ |- _ => simpl in H; rewrite <- H in G
+                   --- match goal with
+                       | H: CS.state_pc _  = _ |- _ => simpl in H; rewrite H
                        end.
                        eassumption.
-                ** inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
-                   inversion Hstep; subst; simpl in Hcontra; try discriminate.
-                   inversion Hcontra. subst.
-                   simpl in *.
+                ** simpl in *.
                    by match goal with
                    | H: s1'pc = _ |- _ => rewrite H
                       end.
-                ** inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
-                   inversion Hstep; subst; simpl in Hcontra; try discriminate.
-                   inversion Hcontra. subst.
-                   simpl in *.
+                ** simpl in *.
                    match goal with
                    | H1: s1'pc = _,
                          H2: prog_interface c = _
@@ -3753,51 +3783,129 @@ Section ThreewayMultisem1.
                      rewrite H1; rewrite <- H2
                    end.
                    assumption.
-                ** pose proof genv_entrypoints_interface_some prog prog'
-                        cid_callee pid as G.
-                   assert (exists b,
-                              EntryPoint.get cid_callee pid
-                                             (genv_entrypoints
-                                                (prepare_global_env prog)) = Some b)
-                     as [b Hentryp].
-                   {
-                     inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
-                     inversion Hstep; subst; simpl in Hcontra; try discriminate.
-                     inversion Hcontra. subst.
-                       by exists b.
-                   }
-                   assert (well_formed_program prog) as Hwf.
-                   {
-                     apply linking_well_formedness; eauto.
-                     unfold mergeable_interfaces in *. by intuition.
-                   }
-                   assert (well_formed_program prog') as Hwf'.
-                   {
-                     apply linking_well_formedness; eauto.
-                     unfold mergeable_interfaces in *.
-                     match goal with | H: _ = prog_interface c' |- _ => rewrite <- H
-                     end.
-                     by intuition.
-                   }
-                   assert (prog_interface prog = prog_interface prog') as Hifc.
-                   {
-                     admit.
-                   }
-                   pose proof G b Hwf Hwf' Hifc Hentryp as [b' G'].
-                   rewrite G'. (*reflexivity.*)
-                   (* reflexivity fails because the existential variable was
-                      introduced too early.
-                    *)
-                   admit.
                 ** (** here, use the register relation **)
-                  admit.
-             ++ (* here, again, reflexivity will fail because the existential variable
-                   was introduced too early?
+                  match goal with
+                  | H: regs_rel_of_executing_part _ _ _ _ |- _ =>
+                    inversion H as [Hregrel]
+                  end.
+                  simpl in Hregrel.
+                  pose proof Hregrel R_COM. by intuition.
+             ++ reflexivity.
+          -- apply mergeable_border_states_c'_executing.
+             ++ constructor; auto; simpl.
+                ** (* is_prefix *) admit.
+                ** (* is_prefix *) admit.
+                ** (* is_prefix *) admit.
+                ** (* stack of p is related to the stack of recombined *)
+                  simpl in *. subst.
+                  apply stack_of_program_part_rel_stack_of_recombined_cons; auto.
+                    by destruct
+                         (Pointer.component (Pointer.inc pc)
+                                            \in domm (prog_interface p)).
+                ** (* stack of c' is related to the stack of recombined *)
+                  simpl in *. subst.
+                  apply stack_of_program_part_rel_stack_of_recombined_cons; auto.
+                  rewrite !Pointer.inc_preserves_component.
+                  unfold CS.is_program_component, CS.is_context_component,
+                  turn_of, CS.state_turn in *.
+                  match goal with
+                  | Hifc: _ = prog_interface c',
+                          Hpc: _ = Pointer.component pc0 |- _ =>
+                    rewrite <- Hifc; rewrite <- Hpc
+                  end.
+                  unfold negb in *.
+                  destruct (Pointer.component pc \in domm (prog_interface c));
+                    by intuition.
+                ** constructor. constructor; auto.
+                   --- assert (traces_shift_each_other
+                                 n
+                                 (fun cid : nat =>
+                                    if cid \in domm (prog_interface p)
+                                    then n cid
+                                    else n'' cid
+                                 )
+                                 t1 t1'
+                              ) as G.
+                       {
+                         apply traces_shift_each_other_transitive
+                           with (n2 := n'') (t2 := t1''); auto.
+                         - (* good_trace. 
+                              TODO: add to hypothesis or to the invariant.  *)
+                           admit.
+                         - (* good_trace. 
+                              TODO: add to hypothesis or to the invariant.  *)
+                           admit.
+                         - by constructor.
+                       }
+                         by inversion G.
+                   --- intros addr Haddrshare_t1_call.
+                       pose proof Hr2 addr Haddrshare_t1_call as
+                           [Hren_n_n'' Hshrt1''].
+                       apply Hr3 in Hshrt1'' as [Hinvren_n_n'' Hshr_t1_call].
+                       simpl in *.
+                       split.
+                       +++ unfold event_renames_event_at_addr. simpl.
+                           SearchAbout s1'mem mem0.
+                           unfold mem_of_part_executing_rel_original_and_recombined
+                             in *.
+                           (* TODO: Need to strengthen the memory invariant? 
+                              The relevant memory invariant seems to be H5.
+                              But H5 is too weak. 
+                              
+                              It only establishes renaming
+                              for an address whose component is in the domain
+                              of prog_interface p.
+
+                              Is there an "event renaming" among the hypotheses
+                              that we can use instead?
+                            *)
+                           admit.
+                       +++ admit.
+                   --- (* the symmetric/inverse case of renaming *)
+                     admit.
+                   --- constructor; eauto.
+                   --- simpl.
+                       (* They should both be invalidated register files. *)
+                       admit.
+                   --- simpl.
+                       (* They should both be invalidated register files. *)
+                       admit.
+                ** constructor. constructor; auto.
+                   --- match goal with
+                       | Hshift: traces_shift_each_other n'' _ t1'' t1' |- _ =>
+                           by inversion H24
+                       end.
+                   --- admit.
+                   --- admit.
+                   --- by intuition.
+                   --- simpl.
+                       (* They should both be invalidated register files. *)
+                       admit.
+                   --- simpl.
+                       (* They should both be invalidated register files. *)
+                       admit.
+             ++ simpl. SearchAbout b'.
+                (* Need a lemma about EntryPoint.get before we are able to use
+                   the following match.
                  *)
+                (*match goal with
+                | Hb0: _ = Some b0 |- _ =>
+                  rewrite Hb' in Hb0; inversion Hb0
+                end.*)
+                admit.
+             ++ SearchAbout C'0.
+                (* should be available from Pointer.component pc0 <> C'0 *)
+                admit.
+             ++ simpl.
+                (* prove a lemma about Register.invalidate regs_rel_of_executing_part *)
+                admit.
+             ++ (* memory relation executing part *)
+               simpl.
                admit.
-          -- (* Here is the interesting part, where we establish  
-                mergeable_border_states. *)
-            admit.
+             ++ (* memory relation of the non-executing part *)
+               simpl.
+               admit.
+               
       + (* case Return *)
         admit.
     - find_and_invert_mergeable_states_well_formed.
@@ -4616,13 +4724,14 @@ Section ThreewayMultisem4.
         + apply star_refl.
         + rewrite Hinitpc'. apply star_refl.
         + apply star_refl.
+        + rewrite CS.initial_machine_state_after_linking; eauto.
+          -- constructor.
+          -- by inversion Hmergeable_ifaces.
+        + rewrite CS.initial_machine_state_after_linking; eauto.
+          -- constructor.
+          -- rewrite <- Hifacep, <- Hifacec. by inversion Hmergeable_ifaces.
         + by rewrite Hinitpc.
         + by rewrite Hinitp'c'.
-        + rewrite CS.initial_machine_state_after_linking; eauto.
-          * (* linkable *) by inversion Hmergeable_ifaces.
-        + rewrite CS.initial_machine_state_after_linking; eauto.
-          * (* linkable *)
-            rewrite <- Hifacep, <- Hifacec. by inversion Hmergeable_ifaces.
         + constructor. constructor.
         + constructor. constructor.
       } 
@@ -4642,16 +4751,18 @@ Section ThreewayMultisem4.
           unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
           eapply regs_rel_of_executing_part_intro.
           intros reg.
-          destruct (reg \in domm Register.init) eqn:regdomm.
-          -- assert (Register.init reg = Some Undef) as Hreginit_undef.
+          unfold Register.get.
+          destruct (Register.to_nat reg \in domm Register.init) eqn:regdomm.
+          -- assert (Register.init (Register.to_nat reg) = Some Undef)
+              as Hreginit_undef.
              {
                by apply Register.reg_in_domm_init_Undef.
              }
              by rewrite Hreginit_undef.
-          -- assert (Register.init reg = None) as Hreginit_none.
+          -- assert (Register.init (Register.to_nat reg) = None) as Hreginit_none.
              {
                rewrite mem_domm in regdomm.
-               by destruct (Register.init reg) eqn:e.
+               by destruct (Register.init (Register.to_nat reg)) eqn:e.
              }
              by rewrite Hreginit_none.
         * (* Goal: mem_of_part_executing_rel_original_and_recombined *)
