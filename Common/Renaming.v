@@ -1285,7 +1285,7 @@ Section PropertiesOfTheShiftRenaming.
     destruct addr' as [cid bid].
     by destruct (inv_sigma_shifting (n1 cid) (n2 cid) (care, bid)).
   Qed.
-    
+  
   Lemma left_addr_good_for_shifting_all_zeros_shift_true addr:
     left_addr_good_for_shifting all_zeros_shift addr.
   Proof.
@@ -1704,6 +1704,56 @@ Section PropertiesOfTheShiftRenaming.
     traces_shift_each_other n1 n2 t1 t2 -> size t1 = size t2.
   Proof. intros H. inversion H. eapply traces_rename_each_other_same_size. eauto. Qed.
 
+    
+  Lemma left_addr_good_right_addr_good
+        metadata_size_lhs_per_cid
+        metadata_size_rhs_per_cid
+        left_addr
+        right_addr:
+    left_addr_good_for_shifting metadata_size_lhs_per_cid left_addr ->
+    rename_addr
+      (sigma_shifting_addr metadata_size_lhs_per_cid metadata_size_rhs_per_cid)
+      left_addr
+    = right_addr
+    ->
+    right_addr_good_for_shifting metadata_size_rhs_per_cid right_addr.
+  Proof.
+    intros Hgood Hren.
+    destruct left_addr as [lcid lbid]. destruct right_addr as [rcid rbid].
+    unfold rename_addr, sigma_shifting_addr in *.
+    unfold left_addr_good_for_shifting, right_addr_good_for_shifting in *.
+    pose proof sigma_left_good_right_good
+         (metadata_size_lhs_per_cid lcid)
+         (metadata_size_rhs_per_cid lcid)
+         lbid
+         Hgood as [rbid' [Hrbid G]].
+    rewrite Hrbid in Hren.
+    inversion Hren. by subst.
+  Qed.
+
+  Lemma right_addr_good_left_addr_good
+        metadata_size_lhs_per_cid
+        metadata_size_rhs_per_cid
+        left_addr
+        right_addr:
+    right_addr_good_for_shifting metadata_size_rhs_per_cid right_addr ->
+    inverse_rename_addr
+      (inv_sigma_shifting_addr metadata_size_lhs_per_cid metadata_size_rhs_per_cid)
+      right_addr
+    = left_addr
+    ->
+    left_addr_good_for_shifting metadata_size_lhs_per_cid left_addr.
+  Proof.
+    rewrite <- rename_addr_inverse_rename_addr.
+    pose proof left_addr_good_right_addr_good
+         metadata_size_rhs_per_cid
+         metadata_size_lhs_per_cid
+         right_addr
+         left_addr as H.
+    by unfold right_addr_good_for_shifting, right_block_id_good_for_shifting,
+    left_addr_good_for_shifting, left_block_id_good_for_shifting in *.
+  Qed.
+  
 End PropertiesOfTheShiftRenaming.
 
 

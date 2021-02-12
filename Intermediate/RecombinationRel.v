@@ -248,8 +248,8 @@ Section BinaryHelpersForMergeable.
           shift_value n_original n_recombined (Register.get reg r_original) =
           Register.get reg r_recombined
           /\
-          Register.get reg r_recombined =
-          inverse_shift_value n_original n_recombined (Register.get reg r_original)
+          inverse_shift_value n_original n_recombined (Register.get reg r_recombined) =
+          Register.get reg r_original
       )
       ->
       regs_rel_of_executing_part r_original r_recombined n_original n_recombined.
@@ -580,9 +580,27 @@ Section Mergeable.
       prog_interface c  = prog_interface c' ->
       closed_program prog   ->
       closed_program prog'' ->
+      (* Good programs are programs whose memory is always "good". *)
+      (* A good memory means every "potentially shareable" location *)
+      (* never contains "unshareable" pointers. A pointer is unshareable *)
+      (* when it points to a metadata location (as specified by n, n'' resp.) *)
+      (forall ss tt,     CSInvariants.is_prefix ss prog tt ->
+                         good_memory (left_addr_good_for_shifting n)
+                                     (CS.state_mem ss)
+      ) ->
+      (forall ss'' tt'', CSInvariants.is_prefix ss'' prog'' tt'' ->
+                         good_memory (left_addr_good_for_shifting n'')
+                                     (CS.state_mem ss'')
+      ) ->
       CSInvariants.is_prefix s   prog   t ->
       CSInvariants.is_prefix s'  prog'  t' ->
       CSInvariants.is_prefix s'' prog'' t'' ->
+      good_memory (left_addr_good_for_shifting n)   (CS.state_mem s) ->
+      good_memory (left_addr_good_for_shifting n'') (CS.state_mem s'') ->
+      good_memory (left_addr_good_for_shifting n')  (CS.state_mem s') ->
+      good_trace (left_addr_good_for_shifting n) t ->
+      good_trace (left_addr_good_for_shifting n'') t'' ->
+      good_trace (left_addr_good_for_shifting n') t' ->
       stack_of_program_part_rel_stack_of_recombined
         p (CS.state_stack s) (CS.state_stack s') ->
       stack_of_program_part_rel_stack_of_recombined
@@ -1827,14 +1845,75 @@ Section MergeSym.
   (* Admitted. *)
 End MergeSym.
 
+Ltac invert_mergeable_states_well_formed H :=
+  let Hwfp               := fresh "Hwfp" in
+  let Hwfc               := fresh "Hwfc" in
+  let Hwfp'              := fresh "Hwfp'" in
+  let Hwfc'              := fresh "Hwfc'" in
+  let Hmerge_ipicq       := fresh "Hmerge_ipicq" in
+  let Hifc_pp'           := fresh "Hifc_pp'" in
+  let Hifc_cc'           := fresh "Hifc_cc'" in
+  let Hclosed_prog       := fresh "Hclosed_prog" in
+  let Hclosed_prog''     := fresh "Hclosed_prog'" in
+  let Hgood_prog         := fresh "Hgood_prog" in
+  let Hgood_prog''       := fresh "Hgood_prog''" in
+  let Hpref_t            := fresh "Hpref_t" in
+  let Hpref_t'           := fresh "Hpref_t'" in
+  let Hpref_t''          := fresh "Hpref_t''" in
+  let Hgood_mem          := fresh "Hgood_mem" in
+  let Hgood_mem''        := fresh "Hgood_mem''" in
+  let Hgood_mem'         := fresh "Hgood_mem'" in
+  let Hgood_t            := fresh "Hgood_t" in
+  let Hgood_t''          := fresh "Hgood_t''" in
+  let Hgood_t'           := fresh "Hgood_t'" in
+  let Hstack_s_s'        := fresh "Hstack_s_s'" in
+  let Hstack_s''_s'      := fresh "Hstack_s''_s'" in
+  let Hpccomp_s'_s       := fresh "Hpccomp_s'_s" in
+  let Hpccomp_s'_s''     := fresh "Hpccomp_s'_s''" in
+  let Hshift_tt'         := fresh "Hshift_tt'" in
+  let Hshift_t''t'       := fresh "Hshift_t''t'" in
+  inversion H
+    as [
+        Hwfp
+          Hwfc
+          Hwfp'
+          Hwfc'
+          Hmerge_ipic
+          Hifc_pp'
+          Hifc_cc'
+          Hclosed_prog
+          Hclosed_prog''
+          Hgood_prog
+          Hgood_prog''
+          Hpref_t
+          Hpref_t'
+          Hpref_t''
+          Hgood_mem
+          Hgood_mem''
+          Hgood_mem'
+          Hgood_t
+          Hgood_t''
+          Hgood_t'
+          Hstack_s_s'
+          Hstack_s''_s'
+          Hpccomp_s'_s
+          Hpccomp_s'_s''
+          Hshift_tt'
+          Hshift_t''t'].
+
 Ltac find_and_invert_mergeable_states_well_formed :=
   match goal with
   | H: mergeable_states_well_formed _ _ _ _ _ _ _ _ _ _ _ _ |- _ =>
-    inversion H
+    invert_mergeable_states_well_formed H
   end.
 
-(*Ltac invert_rcons_eq_rcons H :=
-  *)
+Ltac find_nil_rcons :=
+  let Hcontra := fresh "Hcontra" in
+  match goal with
+  | H: [::] = rcons ?t ?e |- _ =>
+    pose proof size_rcons t e as Hcontra;
+    by rewrite <- H in Hcontra
+  end.
 
 (* Helpers, epsilon and lockstep versions of three-way simulation. *)
 Section ThreewayMultisem1.
@@ -2177,11 +2256,17 @@ Section ThreewayMultisem1.
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
-            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            find_and_invert_mergeable_states_well_formed;
+              eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
               unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
+            ++ eapply Hgood_prog''.
+               (* is_prefix again *)
+               unfold CSInvariants.is_prefix in *.
+               eapply star_right; try eassumption.
+               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
               simpl in *.
               match goal with
@@ -2559,11 +2644,17 @@ Section ThreewayMultisem1.
         inversion IHstar''.
         * eapply mergeable_internal_states_p_executing; try eassumption.
           -- (* well-formedness is left *)
-            inversion H; eapply mergeable_states_well_formed_intro; try eassumption.
+            find_and_invert_mergeable_states_well_formed;
+              eapply mergeable_states_well_formed_intro; try eassumption.
             ++ (* is_prefix *)
               unfold CSInvariants.is_prefix in *.
               eapply star_right; try eassumption.
               ** by rewrite E0_right.
+            ++ eapply Hgood_prog''.
+               (* is_prefix *)
+               unfold CSInvariants.is_prefix in *.
+               eapply star_right; try eassumption.
+               ** by rewrite E0_right.
             ++ (* Pointer.component = Pointer.component *)
               simpl in *.
               match goal with
@@ -3565,7 +3656,11 @@ Section ThreewayMultisem1.
     intros Hcomp1 Hmerge1 Hstar12 Hstar12''.
     inversion Hmerge1.
     - pose proof mergeable_states_program_to_program Hmerge1 Hcomp1 as Hcomp1'.
-      inversion H (* as ...*). rewrite (* Hifacec *) H11 in Hcomp1'.
+
+      (* inversion H (* as ...*). *)
+      find_and_invert_mergeable_states_well_formed.
+
+      rewrite (* Hifacec *) Hifc_cc' in Hcomp1'.
       remember E0 as t eqn:Ht.
       revert Ht Hmerge1 Hcomp1 Hcomp1' Hstar12''.
       apply star_iff_starR in Hstar12.
@@ -3575,7 +3670,9 @@ Section ThreewayMultisem1.
         * now apply star_refl.
         * eapply merge_states_silent_star; eassumption.
       + apply Eapp_E0_inv in Ht. destruct Ht; subst.
-        specialize (IHstar H H0 H2 H3 H14 H17 H19 Logic.eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
+        specialize (IHstar H H0 H2 H3
+                           Hpref_t Hgood_mem Hstack_s_s' Hpccomp_s'_s
+                           Logic.eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
           as [s2' [Hstar12' Hmerge2]].
         (*specialize (IHstar Hstar eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
           as [s2' [Hstar12' Hmerge2]].*)
@@ -3673,6 +3770,8 @@ Section ThreewayMultisem1.
     Step sem   s1   [e  ] s2   ->
     Step sem'' s1'' [e''] s2'' ->
     traces_shift_each_other n n'' (rcons t1 e) (rcons t1'' e'') ->
+    good_trace (left_addr_good_for_shifting n) (rcons t1 e) ->
+    good_trace (left_addr_good_for_shifting n'') (rcons t1'' e'') ->
     (*mem_rel2 n n'' (CS.state_mem s2, t1 ++ [e]) 
       (CS.state_mem s2'', t1'' ++ [e'']) p ->*)
     (* TODO: Maybe we want to change this memory relation of the event to be
@@ -3690,7 +3789,7 @@ Section ThreewayMultisem1.
                               (rcons t1 e) (rcons t1' e') (rcons t1'' e'').
     (* Step sem'  (merge_states ip ic s1 s1'') [e] (merge_states ip ic s2 s2''). *)
   Proof.
-    intros Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2.
+    intros Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2 Hgood2 Hgood2''.
     inversion Hstep12. subst.
     inversion Hmerge1; find_and_invert_mergeable_states_well_formed.
     - match goal with
@@ -3796,6 +3895,64 @@ Section ThreewayMultisem1.
                 ** (* is_prefix *) admit.
                 ** (* is_prefix *) admit.
                 ** (* is_prefix *) admit.
+                ** constructor; auto.
+                   --- (* argument is good *)
+                     simpl in *. intros a Ha.
+                     match goal with
+                     | Hregs: regs_rel_of_executing_part _ s1'reg _ _ |- _ =>
+                       inversion Hregs as [Hreg]
+                     end.
+                     unfold left_addr_good_for_shifting,
+                     left_block_id_good_for_shifting.
+                     destruct a as [acid abid].
+                     
+                     destruct (Hreg R_COM) as [Hshift _].
+                     destruct (Register.get R_COM regs) as
+                         [ i | [[[perm cid] bid] off] | ];
+                       simpl in Hshift; rewrite <- Hshift in Ha; simpl in Ha.
+                     +++ by rewrite in_fset0 in Ha.
+                     +++ destruct (perm =? Permission.data) eqn:eperm.
+                         *** unfold rename_addr in *.
+                             destruct (
+                                 sigma_shifting_addr n
+                                                     (fun cid : nat =>
+                                                        if cid \in domm (prog_interface p)
+                                                        then n cid else n'' cid)
+                                                     (cid, bid)
+                               ) as [cidshift bidshift] eqn:eshift.
+                             rewrite eshift in Ha.
+                             unfold addr_of_value in Ha. rewrite eperm in Ha.
+                             rewrite in_fset1 in Ha.
+                             rewrite eqE in Ha. simpl in Ha.
+                             pose proof
+                                  left_addr_good_right_addr_good
+                                  n
+                                  (fun cid : nat =>
+                                     if cid \in domm (prog_interface p)
+                                     then n cid else n'' cid)
+                                  (cid, bid)
+                                  (cidshift, bidshift) as Hleft_right.
+                             unfold rename_addr, right_addr_good_for_shifting,
+                             right_block_id_good_for_shifting in *.
+                             rewrite eshift in Hleft_right.
+                             assert (acid == cidshift /\ abid == bidshift) as [h1 h2].
+                               by apply/andP.
+                               assert (acid = cidshift). by apply/eqP.
+                               assert (abid = bidshift). by apply/eqP.
+                               subst. clear h1 h2.
+                               eapply Hleft_right; auto.
+                               (* Remains to prove 
+                                  left_addr_good_for_shifting n (cid, bid) *)
+                               inversion Hgood2 as [| ? ? ? ? Harg_good Hrcons ].
+                             ---- (* nil = rcons *)
+                                 by find_nil_rcons.
+                             ---- apply rcons_inj in Hrcons.
+                                  inversion Hrcons. subst.
+                                  eapply Harg_good. simpl.
+                                  by rewrite eperm in_fset1.
+                         *** unfold addr_of_value in Ha.
+                               by rewrite eperm in_fset0 in Ha.
+                     +++ by rewrite in_fset0 in Ha.
                 ** (* stack of p is related to the stack of recombined *)
                   simpl in *. subst.
                   apply stack_of_program_part_rel_stack_of_recombined_cons; auto.
@@ -3816,7 +3973,8 @@ Section ThreewayMultisem1.
                   unfold negb in *.
                   destruct (Pointer.component pc \in domm (prog_interface c));
                     by intuition.
-                ** constructor. constructor; auto.
+                ** (* traces_shift_each_other *)
+                  constructor. constructor; auto.
                    --- assert (traces_shift_each_other
                                  n
                                  (fun cid : nat =>
@@ -3829,13 +3987,7 @@ Section ThreewayMultisem1.
                        {
                          apply traces_shift_each_other_transitive
                            with (n2 := n'') (t2 := t1''); auto.
-                         - (* good_trace. 
-                              TODO: add to hypothesis or to the invariant.  *)
-                           admit.
-                         - (* good_trace. 
-                              TODO: add to hypothesis or to the invariant.  *)
-                           admit.
-                         - by constructor.
+                         by constructor.
                        }
                          by inversion G.
                    --- intros addr Haddrshare_t1_call.
@@ -3845,7 +3997,7 @@ Section ThreewayMultisem1.
                        simpl in *.
                        split.
                        +++ unfold event_renames_event_at_addr. simpl.
-                           SearchAbout s1'mem mem0.
+                           (* SearchAbout mem0 s1'mem *)
                            unfold mem_of_part_executing_rel_original_and_recombined
                              in *.
                            (* TODO: Need to strengthen the memory invariant? 
@@ -3853,6 +4005,7 @@ Section ThreewayMultisem1.
                               But H5 is too weak. 
                               
                               It only establishes renaming
+c
                               for an address whose component is in the domain
                               of prog_interface p.
 
@@ -3864,16 +4017,26 @@ Section ThreewayMultisem1.
                    --- (* the symmetric/inverse case of renaming *)
                      admit.
                    --- constructor; eauto.
-                   --- simpl.
-                       (* They should both be invalidated register files. *)
-                       admit.
-                   --- simpl.
-                       (* They should both be invalidated register files. *)
-                       admit.
+                   --- simpl in *.
+                       match goal with
+                       | H: regs_rel_of_executing_part _ _ _ _ |- _ =>
+                         inversion H as [Hregs]
+                       end.
+                       unfold shift_value in *.
+                       destruct (Hregs R_COM) as [Hregs_ren _].
+                       by rewrite <- Hregs_ren.
+                   --- simpl in *.
+                       match goal with
+                       | H: regs_rel_of_executing_part _ _ _ _ |- _ =>
+                         inversion H as [Hregs]
+                       end.
+                       unfold inverse_shift_value in *.
+                       destruct (Hregs R_COM) as [_ Hregs_invren].
+                       by rewrite <- Hregs_invren.
                 ** constructor. constructor; auto.
                    --- match goal with
                        | Hshift: traces_shift_each_other n'' _ t1'' t1' |- _ =>
-                           by inversion H24
+                           by inversion Hshift
                        end.
                    --- admit.
                    --- admit.
@@ -3884,7 +4047,7 @@ Section ThreewayMultisem1.
                    --- simpl.
                        (* They should both be invalidated register files. *)
                        admit.
-             ++ simpl. SearchAbout b'.
+             ++ simpl. (* SearchAbout b'. *)
                 (* Need a lemma about EntryPoint.get before we are able to use
                    the following match.
                  *)
@@ -3893,7 +4056,7 @@ Section ThreewayMultisem1.
                   rewrite Hb' in Hb0; inversion Hb0
                 end.*)
                 admit.
-             ++ SearchAbout C'0.
+             ++ (* SearchAbout C'0. *)
                 (* should be available from Pointer.component pc0 <> C'0 *)
                 admit.
              ++ simpl.
@@ -3908,7 +4071,7 @@ Section ThreewayMultisem1.
                
       + (* case Return *)
         admit.
-    - find_and_invert_mergeable_states_well_formed.
+    - (* find_and_invert_mergeable_states_well_formed. *)
       simpl in *. subst.
       unfold CS.is_program_component,
       CS.is_context_component, turn_of, CS.state_turn in *.
@@ -4122,6 +4285,8 @@ Section ThreewayMultisem1.
     Step sem   s1   [e  ] s2   ->
     Step sem'' s1'' [e''] s2'' ->
     traces_shift_each_other n n'' (rcons t1 e) (rcons t1'' e'') ->
+    good_trace (left_addr_good_for_shifting n) (rcons t1 e) ->
+    good_trace (left_addr_good_for_shifting n'') (rcons t1'' e'') ->
   exists e' s2',
     Step sem'  s1'  [e' ] s2' /\
     mergeable_border_states p c p' c' n n'' s2 s2' s2'' (rcons t1 e) 
@@ -4599,6 +4764,7 @@ Section ThreewayMultisem4.
 
   Hypothesis Hprog_is_closed  : closed_program (program_link p  c ).
   Hypothesis Hprog''_is_closed : closed_program (program_link p' c').
+    
 
   Let ip := prog_interface p.
   Let ic := prog_interface c.
@@ -4608,6 +4774,17 @@ Section ThreewayMultisem4.
   Let sem   := CS.sem_non_inform prog.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
+
+
+  Hypothesis Hprog_is_good:
+    forall ss tt,
+      CSInvariants.is_prefix ss prog tt ->
+      good_memory (left_addr_good_for_shifting n) (CS.state_mem ss).
+  Hypothesis Hprog''_is_good:
+    forall ss'' tt'',
+      CSInvariants.is_prefix ss'' prog'' tt'' ->
+      good_memory (left_addr_good_for_shifting n'') (CS.state_mem ss'').
+
 
   Lemma merged_program_is_closed: closed_program prog'.
   Proof.
@@ -4724,6 +4901,21 @@ Section ThreewayMultisem4.
         + apply star_refl.
         + rewrite Hinitpc'. apply star_refl.
         + apply star_refl.
+        + rewrite CS.initial_machine_state_after_linking; eauto.
+          -- simpl.
+             (* good_memory prepare_procedures_memory *)
+             admit.
+          -- by inversion Hmergeable_ifaces.
+        + rewrite CS.initial_machine_state_after_linking; eauto.
+          -- simpl.
+             (* good_memory prepare_procedures_memory *)
+             admit.
+          -- rewrite <- Hifacep, <- Hifacec. by inversion Hmergeable_ifaces.
+        + (* good_memory prepare_procedures_memory *)
+          admit.
+        + constructor.
+        + constructor.
+        + constructor.
         + rewrite CS.initial_machine_state_after_linking; eauto.
           -- constructor.
           -- by inversion Hmergeable_ifaces.
@@ -4998,6 +5190,16 @@ Section Recombination.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
+  Hypothesis Hprog_is_good:
+    forall ss tt,
+      CSInvariants.is_prefix ss prog tt ->
+      good_memory (left_addr_good_for_shifting n) (CS.state_mem ss).
+  Hypothesis Hprog''_is_good:
+    forall ss'' tt'',
+      CSInvariants.is_prefix ss'' prog'' tt'' ->
+      good_memory (left_addr_good_for_shifting n'') (CS.state_mem ss'').
+
+
   (* RB: NOTE: Possible improvements:
       - Try to refactor case analysis in proof.
       - Try to derive well-formedness, etc., from semantics.
@@ -5095,8 +5297,8 @@ Section Recombination.
       as [s1_ [s2 [Hini1_ Hstar12]]].
     destruct (CS.behavior_prefix_star_non_inform Hbeh'' Hprefix'')
       as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
-    pose proof match_initial_states n n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
-         Hprog_is_closed Hprog_is_closed' Hini1_ Hini1''_
+    pose proof match_initial_states (*n n''*) Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
+         Hprog_is_closed Hprog_is_closed' Hprog_is_good Hprog''_is_good Hini1_ Hini1''_
       as [s1'_ [Hini1' Hmerge1_]].
     (* By determinacy of initial program states: *)
     assert (Heq1 : s1 = s1_) by admit.
