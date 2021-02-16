@@ -2089,8 +2089,161 @@ Section AdequacyOfTheShiftRenaming.
             subst. by rewrite eqxx in i_st.
     - unfold Memory.store in *. rewrite eqpermst in HstoreSome. discriminate.
   Qed.
-    
-      
+
+  Let good_addr1 := left_addr_good_for_shifting n1.
+  Let good_addr2 := left_addr_good_for_shifting n2.
+
+  Lemma shift_value_eval_binop v1 v1' v2 v2' op v3 v3':
+    (forall a1, a1 \in addr_of_value v1 -> good_addr1 a1) ->
+    (forall a2, a2 \in addr_of_value v2 -> good_addr1 a2) ->
+    rename_value renfun v1 = v1' ->
+    rename_value renfun v2 = v2' ->
+    eval_binop op v1 v2 = v3 ->
+    eval_binop op v1' v2' = v3' ->
+    rename_value renfun v3 = v3'.
+  Proof.
+    intros Hgood1 Hgood2 Hv1v1' Hv2v2' Hevalv1v2 Hevalv1'v2'.
+    unfold rename_value, rename_value_template in *.
+    destruct v1 as [i1 | [[[perm1 cid1] bid1] off1] | ];
+      destruct v2 as [i2 | [[[perm2 cid2] bid2] off2] | ]; subst;
+        try by destruct op.
+    - destruct op; simpl; destruct (perm2 =? Permission.data) eqn:eperm2; auto;
+        destruct (rename_addr renfun (cid2, bid2)) as [cid2' bid2']; by simpl.
+    - destruct op; simpl; destruct (perm1 =? Permission.data) eqn:eperm1; auto;
+        destruct (rename_addr renfun (cid1, bid1)) as [cid1' bid1']; by simpl.
+    - destruct (rename_addr renfun (cid1, bid1)) as [cid1' bid1'] eqn:Hren1.
+      destruct (rename_addr renfun (cid2, bid2)) as [cid2' bid2'] eqn:Hren2.
+      assert (cid1' = cid1).
+      {
+        pose proof rename_addr_sigma_shifting_addr_cid_constant n1 n2 (cid1, bid1)
+          as G.
+          by rewrite Hren1 in G. 
+      }
+      assert (cid2' = cid2).
+      {
+        pose proof rename_addr_sigma_shifting_addr_cid_constant n1 n2 (cid2, bid2)
+          as G.
+          by rewrite Hren2 in G. 
+      }
+      subst.
+      assert (perm1 = Permission.data ->
+              perm2 = Permission.data ->
+              cid1 = cid2 -> (bid1 = bid2 <-> bid1' = bid2')) as Hbij.
+      {
+        intros h h' Hcid_cond. split; intros H; subst.
+        - by (rewrite Hren1 in Hren2; inversion Hren2).
+        - unfold good_addr1, left_addr_good_for_shifting in *.
+          specialize (Hgood1 (cid2, bid1)). specialize (Hgood2 (cid2, bid2)).
+          simpl in *.
+          rewrite in_fset1 eqxx in Hgood1.
+          rewrite in_fset1 eqxx in Hgood2.
+          eapply sigma_shifting_addr_cid_same_injective; eauto.
+          rewrite <- Hren2 in Hren1. unfold renfun in *.
+          exact Hren1.
+      }
+      destruct op; simpl; destruct (perm1 =? Permission.data) eqn:eperm1; auto;
+        simpl; destruct (perm2 =? Permission.data) eqn:eperm2; auto.
+      + assert (perm1 = perm2).
+        {
+          assert (perm1 = Permission.data). by apply beq_nat_true.
+          assert (perm2 = Permission.data). by apply beq_nat_true.
+          by subst.
+        }
+        subst. rewrite <- !beq_nat_refl. simpl.
+        destruct (cid1 =? cid2) eqn:ecid12; destruct (bid1 =? bid2) eqn:ebid12.
+        * assert (cid1 = cid2); subst. by apply beq_nat_true.
+          assert (bid1 = bid2); subst. by apply beq_nat_true.
+          simpl. rewrite Hren1 in Hren2. inversion Hren2. subst.
+            by rewrite <- !beq_nat_refl.
+        * assert (cid1 = cid2); subst. by apply beq_nat_true.
+          assert (bid1 <> bid2) as Hfalse. by apply beq_nat_false. unfold not in *.
+          simpl.
+          destruct (bid1' =? bid2') eqn:ebid12'; auto.
+          apply beq_nat_true in ebid12'. subst.
+          assert (bid1 = bid2) as Hcontra; intuition.
+          {
+            unfold good_addr1, left_addr_good_for_shifting in *.
+            specialize (Hgood1 (cid2, bid1)). specialize (Hgood2 (cid2, bid2)).
+            simpl in *.
+            rewrite eperm2 in_fset1 eqxx in Hgood1.
+            rewrite eperm2 in_fset1 eqxx in Hgood2.
+            eapply sigma_shifting_addr_cid_same_injective; eauto.
+            rewrite <- Hren2 in Hren1. unfold renfun in *.
+            exact Hren1.
+          }
+        * by simpl.
+        * by simpl.
+      + assert (perm1 =? perm2 = false) as Hfalse.
+        {
+          assert (perm1 = Permission.data). by apply beq_nat_true. subst.
+          by rewrite Nat.eqb_sym.
+        }
+        by rewrite Hfalse.
+      + assert (perm1 =? perm2 = false) as Hfalse.
+        {
+          assert (perm2 = Permission.data). by apply beq_nat_true. by subst.
+        }
+        by rewrite Hfalse.
+      + by destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)).
+      + destruct (cid1 =? cid2) eqn:ecid12; simpl.
+        * assert (perm1 = Permission.data). by apply beq_nat_true.
+          assert (perm2 = Permission.data). by apply beq_nat_true.
+          assert (cid1 = cid2). by apply beq_nat_true.
+          subst. simpl in *.
+          assert (bid1 = bid2 <-> bid1' = bid2') as [Hif Honlyif].
+          by apply Hbij.
+          destruct (bid1 =? bid2) eqn:ebid12; simpl.
+          -- rewrite Hif.
+             ++ by rewrite <- beq_nat_refl.
+             ++ by apply beq_nat_true.
+          -- apply beq_nat_false in ebid12. unfold not in *.
+             destruct (bid1' =? bid2') eqn:ebid12'; intuition.
+             apply beq_nat_true in ebid12'. intuition.
+        * by rewrite !andb_false_r !andb_false_l.
+      + assert (perm1 =? perm2 = false) as Hfalse.
+        {
+          assert (perm1 = Permission.data). by apply beq_nat_true. subst.
+          by rewrite Nat.eqb_sym.
+        }
+        by rewrite Hfalse.
+      + assert (perm1 =? perm2 = false) as Hfalse.
+        {
+          assert (perm2 = Permission.data). by apply beq_nat_true. by subst.
+        }
+        by rewrite Hfalse.
+      + assert (perm1 = Permission.data). by apply beq_nat_true.
+        assert (perm2 = Permission.data). by apply beq_nat_true.
+        subst. simpl.
+        destruct (cid1 =? cid2) eqn:ecid12.
+        * assert (cid1 = cid2). by apply beq_nat_true. subst. simpl.
+          destruct (bid1 =? bid2) eqn:ebid12.
+          -- assert (bid1 = bid2). by apply beq_nat_true. subst.
+             assert (bid1' = bid2'). by apply Hbij. subst. by rewrite <- beq_nat_refl.
+          -- assert (bid1' =? bid2' = false) as G.
+             {
+               rewrite Nat.eqb_neq.
+               unfold not. intros Hcontra.
+               rewrite <- Hbij in Hcontra; auto. subst.
+               by rewrite <- beq_nat_refl in ebid12.
+             }
+             by rewrite G.
+        * by simpl.
+      + assert (perm1 =? perm2 = false) as Hfalse.
+        {
+          assert (perm1 = Permission.data). by apply beq_nat_true. subst.
+          by rewrite Nat.eqb_sym.
+        }
+        by rewrite Hfalse.
+      + assert (perm1 =? perm2 = false) as Hfalse.
+        {
+          assert (perm2 = Permission.data). by apply beq_nat_true. by subst.
+        }
+        by rewrite Hfalse.
+      + by destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)).
+    - destruct (rename_addr renfun (cid1, bid1)) as [cid1' bid1'] eqn:Hren1.
+      by destruct op; simpl; destruct (perm1 =? Permission.data).
+  Qed.
+  
 End AdequacyOfTheShiftRenaming.
 
 Section BehaviorsRelated.
