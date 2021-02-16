@@ -2069,24 +2069,19 @@ Section ThreewayMultisem1.
                                   original_addr.2,
                                   offset)
                               ) as Hmem2''_mem3''.
-                   (*destruct ((perm,cid_store,3,offset) == (perm, cid_store, 3, 4%Z)).
-                  destruct (((perm, cid_store, bid_store, offset) ==
-         (perm, cid_store, bid_store, offset_store))%Z).*)
                    (* Notation NOT WORKING *)
                    destruct (@eq_op
                                (prod_eqType
-                                  (prod_eqType (prod_eqType nat_eqType nat_eqType) nat_eqType)
+                                  (prod_eqType (prod_eqType nat_eqType nat_eqType)
+                                               nat_eqType)
                                   Extra.Z_eqType)
-                               (@pair (prod (prod Permission.id (Ord.sort nat_ordType)) Block.id)
-                                      Block.offset
-                                      (@pair (prod Permission.id (Ord.sort nat_ordType)) Block.id
-                                             (@pair Permission.id (Ord.sort nat_ordType) Permission.data
-                                                    (@fst (Ord.sort nat_ordType) Block.id original_addr))
-                                             (@snd (Ord.sort nat_ordType) Block.id original_addr)) offset)
-                               (@pair (prod (prod Permission.id Component.id) Block.id) Block.offset
-                                      (@pair (prod Permission.id Component.id) Block.id
-                                             (@pair Permission.id Component.id perm cid_store) bid_store)
-                                      offset_store)) eqn:Heq.
+                               (Permission.data,
+                                original_addr.1,
+                                original_addr.2, offset)
+                               (perm, cid_store,
+                                bid_store,
+                                offset_store)
+                            ) eqn:Heq.
                    --- (* case true; derive a contradiction to eq_original_addr *)
                      do 3 (rewrite <- pair_eqE in Heq;
                            unfold pair_eq in Heq). simpl in Heq.
@@ -2102,7 +2097,7 @@ Section ThreewayMultisem1.
                  inverse_shift of recombined_addr equals address stored-at
                *)
               intros recombined_addr Hrecombined_addr1 Hrecombined_addr2.
-              
+              simpl.
               (* destruct whether original_addr == address stored-at, and
                  obtain a contradiction (in the true case) to the key fact above.
                  
@@ -2117,7 +2112,76 @@ Section ThreewayMultisem1.
                                                    if cid \in domm (prog_interface p)
                                                    then n cid else n'' cid)))
                     recombined_addr)) as original_addr.
-               destruct (@pair_eq
+
+              assert ((inverse_rename_addr
+                         (inverse_rename_addr
+                            (inv_sigma_shifting_addr
+                               n''
+                               (fun cid : nat =>
+                                  if cid \in domm (prog_interface p)
+                                  then n cid else n'' cid)))
+                         recombined_addr).1 = recombined_addr.1) as Hcid_same.
+              {
+                unfold inverse_rename_addr at 1.
+                  by eapply
+                       inverse_rename_addr_inverse_sigma_shifting_addr_cid_constant.
+              }
+
+              rewrite <- Hcid_same in Hrecombined_addr1.
+
+              assert (recombined_addr.1 \in domm (prog_interface p) = false)
+                as Hifexpr.
+              {
+                rewrite <- Hcid_same.
+                (* Now use Hrecombined_addr1 + disjointness of 
+                       domm (prog_interface p) and domm (prog_interface c') *)
+                
+                find_and_invert_mergeable_states_well_formed.
+                assert (fdisjoint (domm (prog_interface p))
+                                  (domm (prog_interface c'))) as Hdisj.
+                {
+                  unfold mergeable_interfaces, linkable in Hmerge_ipic.
+                  rewrite Hifc_cc' in Hmerge_ipic.
+                    by intuition.
+                }
+                rewrite fdisjointC in Hdisj.
+                pose proof @fdisjointP _ _ _ Hdisj as G.
+                apply G in Hrecombined_addr1.
+                unfold inverse_rename_addr, negb in Hrecombined_addr1.
+                match goal with
+                | |- ?x = false =>
+                  destruct x eqn:Hx; by rewrite Hx in Hrecombined_addr1
+                end.
+              }
+
+              assert (~addr_shared_so_far original_addr t'') as Hshr_false.
+              {
+                intros Hinv_recombined_shared.
+                subst.
+                destruct recombined_addr as [recomb_cid recomb_bid].
+                unfold inverse_rename_addr in Hinv_recombined_shared.
+                simpl in *.
+                rewrite Hifexpr inv_sigma_shifting_n_n_id in Hinv_recombined_shared.
+
+                (* Here, we need to draw a contradiction from a fact about *)
+                (* t'' (Hinv_recombined_shared) and a fact about           *) 
+                (* t' (Hrecombined_addr2). Thus, find the trace relation.  *)
+                find_and_invert_mergeable_states_well_formed.
+                inversion Hshift_t''t' as [? ? Hrenamet''t']. subst.
+                inversion Hrenamet''t' as [ |? ? ? ? ? Hren]; subst.
+                --- inversion Hinv_recombined_shared
+                    as [? ? ? ? H_ Hnilrcons |? ? ? ? ? ? H_ Hnilrcons].
+                    +++ symmetry in Hnilrcons. find_nil_rcons.
+                    +++ symmetry in Hnilrcons. find_nil_rcons.
+                --- specialize (Hren _ Hinv_recombined_shared) as [_ Hcontra].
+                    simpl in Hcontra.
+                    unfold rename_addr in Hcontra.
+                    simpl in Hcontra.
+                    rewrite Hifexpr sigma_shifting_n_n_id in Hcontra.
+                      by auto.
+              }
+
+              destruct (@pair_eq
                            nat_eqType nat_eqType
                            original_addr
                            (cid_store, bid_store)
@@ -2127,41 +2191,96 @@ Section ThreewayMultisem1.
                   assert (original_addr.1 = cid_store) as Hcid1. by apply/eqP.
                   assert (original_addr.2 = bid_store) as Hbid1. by apply/eqP.
                   
-                  assert ((inverse_rename_addr
-                             (inverse_rename_addr
-                                (inv_sigma_shifting_addr
-                                   n''
-                                   (fun cid : nat =>
-                                      if cid \in domm (prog_interface p)
-                                      then n cid else n'' cid)))
-                             recombined_addr).1 = recombined_addr.1) as Hcid_same.
-                  {
-                    unfold inverse_rename_addr at 1.
-                      by eapply
-                           inverse_rename_addr_inverse_sigma_shifting_addr_cid_constant.
-                  }
-                  (**********************************
                   subst.
                   simpl in Hstore_addr_fact.
                   rewrite <- surjective_pairing in Hstore_addr_fact.
-                    by pose proof (Hstore_addr_fact Hrecombined_addr1).
-               **  match goal with
-                   | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
-                          _ _ _ _ _ _ _ |- _ =>
-                     unfold
-                       mem_of_part_not_executing_rel_original_and_recombined_at_internal
-                       in H;
-                       destruct H as [Hshift_mem2'' _]
-                   end.
-                   specialize
-                     (Hshift_mem2'' original_addr  Horiginal_addr1 Horiginal_addr2).
-                   unfold memory_shifts_memory_at_addr,
-                   memory_renames_memory_at_addr in *.
-                   simpl. simpl in Hshift_mem2''. intros.
+                  (* next, contradiction with Hshr_false *)
+                    by pose proof (Hstore_addr_fact Hrecombined_addr1) as
+                      Hinv_recombined_shared.
                   
-              ************************************************)
-                  admit.
-               ** admit.
+               ** match goal with
+                  | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                         _ _ _ _ _ _ _ |- _ =>
+                    unfold
+                      mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                      in H;
+                      destruct H as [_ Hshift_mem2'']
+                  end.
+                  subst.
+                  assert (recombined_addr.1 \in domm (prog_interface c'))
+                    as Hrecombined_addr1'.
+                  {
+                    by rewrite Hcid_same in Hrecombined_addr1. 
+                  }
+                  specialize
+                    (Hshift_mem2'' _  Hrecombined_addr1' Hrecombined_addr2).
+                  unfold memory_inverse_shifts_memory_at_addr,
+                  memory_inverse_renames_memory_at_addr in *.
+                  simpl. simpl in Hshift_mem2''. intros.
+                  pose proof (Memory.load_after_store
+                                 mem2''
+                                 (perm, cid_store, bid_store, offset_store)
+                                 (Register.get r2 regs3'')
+                                 mem3''
+                                 (Permission.data,
+                                  ((inverse_rename_addr
+                                      (inverse_rename_addr
+                                         (inv_sigma_shifting_addr
+                                            n''
+                                            (fun cid : nat_ordType =>
+                                               if cid \in domm (prog_interface p)
+                                               then n cid else n'' cid))
+                                      )
+                                      recombined_addr)
+                                  ).1,
+                                  ((inverse_rename_addr
+                                      (inverse_rename_addr
+                                         (inv_sigma_shifting_addr
+                                            n''
+                                            (fun cid : nat_ordType =>
+                                               if cid \in domm (prog_interface p)
+                                               then n cid else n'' cid))
+                                      )
+                                      recombined_addr)
+                                  ).2,
+                                  offset)
+                             ) as Hmem2''_mem3''.
+                  destruct (
+                      @eq_op
+                         (prod_eqType
+                            (prod_eqType (prod_eqType nat_eqType nat_eqType) nat_eqType)
+                            Extra.Z_eqType)
+                         (Permission.data,
+                          (inverse_rename_addr
+                             (inverse_rename_addr
+                                (inv_sigma_shifting_addr
+                                   n''
+                                   (fun cid : nat_ordType =>
+                                      if cid \in domm (prog_interface p)
+                                      then n cid else n'' cid)))
+                             recombined_addr
+                          ).1,
+                          (inverse_rename_addr
+                             (inverse_rename_addr
+                                (inv_sigma_shifting_addr
+                                   n''
+                                   (fun cid : nat_ordType =>
+                                      if cid \in domm (prog_interface p)
+                                      then n cid else n'' cid)))
+                             recombined_addr
+                          ).2
+                          , offset)
+                         (perm, cid_store, bid_store, offset_store)
+                    ) eqn:Heq.
+                  --- (* case true; derive a contradiction to eq_original_addr *)
+                    do 3 (rewrite <- pair_eqE in Heq;
+                          unfold pair_eq in Heq). simpl in Heq.
+                    unfold pair_eq in eq_original_addr.
+                    pose proof andb_false_iff as [Hifandbfalse _].
+                    pose proof (Hifandbfalse eq_original_addr) as [Hf1 | Hf1];
+                      by rewrite Hf1 !andb_false_r !andb_false_l in Heq.
+                  --- (* case false; now use Hmem2''_mem3'' *)
+                    rewrite Hmem2''_mem3''; eauto.
         * (* Here, we are in the case of c' executing.
              Obtain a contradiction by relying on Hcomp 
              and on the "CS.is_context_component" assumption. *)
@@ -2520,7 +2639,7 @@ Section ThreewayMultisem1.
       + pose proof CS.silent_step_non_inform_preserves_component _ _ _ Hstep23'' as
             Hpceq.
         simpl in Hpceq. by subst.
-  Admitted.
+  Qed.
 
    (*[DynShare]
 

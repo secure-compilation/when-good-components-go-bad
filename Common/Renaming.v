@@ -322,6 +322,27 @@ Section SigmaShiftingBlockIds.
         * assumption.
   Qed.
 
+  (* AEK: Does not look provable. *)
+  Lemma sigma_is_good_original_is_good lbid rbid rc:
+    right_block_id_good_for_shifting rbid ->
+    sigma_shifting (care, lbid) = (rc, rbid) ->
+    left_block_id_good_for_shifting lbid.
+  Proof.
+    unfold right_block_id_good_for_shifting, left_block_id_good_for_shifting,
+    sigma_shifting.
+    intros Hrbid_gt Hrbid_eq.
+    destruct (metadata_size_lhs <= lbid) eqn:Hcontra; auto.
+    unfold sigma_from_bigger_dom, inv_sigma_from_bigger_dom in *.
+    destruct ((num_extra_blocks_of_lhs >=? 0)%Z) eqn:Hlhs;
+      rewrite <- beq_nat_refl in Hrbid_eq.
+    - destruct (lbid <? Z.to_nat num_extra_blocks_of_lhs) eqn:Hlbid.
+      + inversion Hrbid_eq. subst. clear Hrbid_eq.
+          unfold num_extra_blocks_of_lhs in *.
+          (* Need to prove false, but there does not seem to be any *)
+          (* contradictory hypotheses. *)
+          (* Abort.*)
+  Abort.
+          
 End SigmaShiftingBlockIds.
 
 Section SigmaShiftingBlockIdsProperties.
@@ -1408,6 +1429,50 @@ Section PropertiesOfTheShiftRenaming.
       rewrite <- H', rename_addr_inverse_rename_addr. reflexivity.
   Qed.
 
+  Lemma rename_addr_inverse_rename_addr_cancel a n1 n2:
+    right_addr_good_for_shifting n2 a ->
+    (rename_addr (sigma_shifting_addr n1 n2)
+                 (inverse_rename_addr
+                    (inv_sigma_shifting_addr n1 n2)
+                    a
+                 )
+    ) = a.
+  Proof.
+    intros Hgood.
+    destruct a as [cid bid].
+    unfold right_addr_good_for_shifting,
+    rename_addr, inverse_rename_addr, sigma_shifting_addr,
+    inv_sigma_shifting_addr in *. 
+    pose proof inv_sigma_right_good_left_good
+         (n1 cid) (n2 cid) bid Hgood as [lbid [Heq Hgood']].
+    rewrite Heq.
+    pose proof sigma_left_good_right_good
+         (n1 cid) (n2 cid) lbid Hgood' as [rbid [Heq2 Hgood'']].
+    rewrite Heq2.
+    pose proof cancel_inv_sigma_shifting_sigma_shifting
+         (n1 cid) (n2 cid) as Hcancel.
+    unfold cancel in *.
+    rewrite <- Heq in Heq2.
+    rewrite Hcancel in Heq2.
+      by inversion Heq2.
+  Qed.
+
+  Lemma inverse_rename_addr_rename_addr_cancel a n1 n2:
+    left_addr_good_for_shifting n1 a ->
+    (inverse_rename_addr (inv_sigma_shifting_addr n1 n2)
+                         (rename_addr
+                            (sigma_shifting_addr n1 n2)
+                            a
+                         )
+    ) = a.
+  Proof.
+    intros Hgood.
+    rewrite rename_addr_inverse_rename_addr.
+    rewrite <- rename_addr_inverse_rename_addr.
+    apply rename_addr_inverse_rename_addr_cancel.
+    by simpl in *. 
+  Qed.
+
   Lemma rename_addr_transitive n1 n2 n3 addr:
     left_addr_good_for_shifting n1 addr ->
     rename_addr (sigma_shifting_addr n2 n3)
@@ -1753,7 +1818,25 @@ Section PropertiesOfTheShiftRenaming.
     by unfold right_addr_good_for_shifting, right_block_id_good_for_shifting,
     left_addr_good_for_shifting, left_block_id_good_for_shifting in *.
   Qed.
-  
+
+  Lemma renamed_good_original_good a a' n1 n2:
+    right_addr_good_for_shifting n2 a' ->
+    rename_addr (sigma_shifting_addr n1 n2) a = a' ->
+    left_addr_good_for_shifting n1 a.
+  Proof.
+    unfold right_addr_good_for_shifting, left_addr_good_for_shifting,
+    sigma_shifting_addr.
+    intros Hgood Hren.
+    destruct a as [cid bid]. destruct a' as [cid' bid'].
+    destruct (sigma_shifting (n1 cid) (n2 cid) (care, bid)) eqn:Hsigma.
+    (* eapply sigma_is_good_original_is_good; eauto. 
+       unfold rename_addr in Hren.
+       rewrite Hsigma in Hren.
+       inversion Hren. subst. by erewrite Hsigma.
+     *)
+    (* Admitted. *)
+  Abort.
+    
 End PropertiesOfTheShiftRenaming.
 
 
