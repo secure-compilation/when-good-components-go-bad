@@ -287,7 +287,7 @@ Qed.
 Lemma eval_binop_ptr :
   forall op v1 v2 p,
     eval_binop op v1 v2 = Ptr p ->
-    (exists p1, (v1 = Ptr p1 \/ v2 = Ptr p1)
+    (exists p1 i1, ((v1 = Ptr p1 /\ v2 = Int i1) \/ (v2 = Ptr p1 /\ v1 = Int i1))
                 /\
                 Pointer.permission p = Pointer.permission p1 /\
                 Pointer.component p = Pointer.component p1 /\
@@ -297,22 +297,22 @@ Lemma eval_binop_ptr :
   unfold eval_binop in Heval.
   destruct op eqn:eop; destruct v1 eqn:e1; destruct v2 eqn:e2;
     try discriminate.
-  - exists t. split.
-    + right. trivial.
+  - exists t. exists z. split.
+    + right. intuition.
     + inversion Heval.
       split; last split.
       apply Pointer.add_preserves_permission.
       apply Pointer.add_preserves_component.
       apply Pointer.add_preserves_block.
-  - exists t. split.
-    + left. trivial.
+  - exists t. exists z. split.
+    + left. intuition.
     + inversion Heval.
       split; last split.
       apply Pointer.add_preserves_permission.
       apply Pointer.add_preserves_component.
       apply Pointer.add_preserves_block.
-  - exists t. split.
-    + left. trivial.
+  - exists t. exists z. split.
+    + left. intuition.
     + inversion Heval.
       split; last split.
       apply Pointer.sub_preserves_permission.
@@ -348,7 +348,7 @@ Proof.
     destruct (eval_binop op (Register.get r1 regs) (Register.get r2 regs)) eqn:e.
     + simpl in copied'. discriminate.
     + destruct (eval_binop_ptr op (Register.get r1 regs) (Register.get r2 regs) t e)
-        as [ptr [[ptrr1 | ptrr2] [permeq [cmpeq blkeq]]]];
+        as [ptr [z [[[ptrr1 _] | [ptrr2 _]] [permeq [cmpeq blkeq]]]]];
         eexists;
         rewrite filtermE; rewrite filtermE in k'mem; simpl; simpl in k'mem;
           rewrite mapmE; rewrite mapmE in k'mem;
