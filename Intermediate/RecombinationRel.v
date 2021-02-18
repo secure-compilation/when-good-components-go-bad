@@ -3166,14 +3166,728 @@ Section ThreewayMultisem1.
             intros reg. simpl in *.
             pose proof (Hreg r1) as [Hget_shift1 Hget_inv_shift1].
             pose proof (Hreg r2) as [Hget_shift2 Hget_inv_shift2].
-            pose proof (Hreg reg) as [Hreg_shift Hreg_inv_shift].
+            pose proof (Hreg reg) as [Hget_shift_reg Hget_inv_shift_reg].
+            clear Hreg.
             destruct ((Register.to_nat reg == Register.to_nat r3)) eqn:Hreg_r; simpl.
             ++ unfold Register.set, Register.get in *. rewrite !setmE Hreg_r.
-               unfold result. split.
-               (* Here, use shift_value_eval_binop. *)
-               ** by admit.
-               ** by admit.
-            ++ unfold Register.set, Register.get. rewrite !setmE Hreg_r. split; eauto.
+               unfold result, shift_value, inverse_shift_value, rename_addr,
+               inverse_rename_addr in *.
+               rewrite rename_value_inverse_rename_value.
+               rewrite rename_value_inverse_rename_value in Hget_inv_shift1.
+               rewrite rename_value_inverse_rename_value in Hget_inv_shift2.
+               destruct result as [| [[[perm_res cid_res] bid_res] off_res] | ]
+                                    eqn:Hresult.
+               ** unfold result in Hresult.
+                  pose proof eval_binop_int as Hints.
+                  specialize (Hints _ _ _ _ Hresult) as
+                      [
+                        [i1 [i2 [Hi1 Hi2]]] |
+                        [ [[[perm1 cid1] bid1] off1] [
+                               [[[perm2 cid2] bid2] off2] [
+                                  Hp1 [
+                                      Hp2 Hcond_eq
+                                    ]
+                                ]
+                            ]
+                        ]
+                      ].
+                  --- rewrite !Hi1 !Hi2.
+                      unfold inverse_rename_value, rename_value,
+                      rename_value_template, inverse_rename_addr, rename_addr in *;
+                        simpl in *.
+                      rewrite !Hi1 in Hget_shift1.
+                      rewrite !Hi1 in Hget_inv_shift1.
+                      rewrite !Hi2 in Hget_shift2.
+                      rewrite !Hi2 in Hget_inv_shift2.
+                      destruct (regs1' (Register.to_nat r1))
+                        as [v_regs1'_r1 |] eqn:Hv_regs1'_r1; try discriminate.
+                      destruct (regs1' (Register.to_nat r2))
+                        as [v_regs1'_r2 |] eqn:Hv_regs1'_r2; try discriminate.
+                      rewrite Hi1 Hi2 in Hresult. subst.
+                      intuition; by rewrite Hresult.
+                  --- rewrite !Hp1 !Hp2.
+                      unfold inverse_rename_value, rename_value,
+                      rename_value_template, inverse_rename_addr, rename_addr in *;
+                        simpl in *.
+                      rewrite !Hp1 in Hget_shift1.
+                      rewrite !Hp1 in Hget_inv_shift1.
+                      rewrite !Hp2 in Hget_shift2.
+                      rewrite !Hp2 in Hget_inv_shift2.
+                      destruct (regs1' (Register.to_nat r1))
+                        as [v_regs1'_r1 |] eqn:Hv_regs1'_r1; try discriminate.
+                      destruct (regs1' (Register.to_nat r2))
+                        as [v_regs1'_r2 |] eqn:Hv_regs1'_r2; try discriminate.
+                      rewrite Hp1 Hp2 in Hresult. subst.
+                      rewrite Hresult.
+                      destruct (perm1 =? Permission.data) eqn:Hperm1;
+                        destruct (perm2 =? Permission.data) eqn:Hperm2.
+                      +++ (* data, data *)
+                        destruct op; try discriminate; simpl in *.
+                        *** (* Minus *)
+                          assert (perm1 = perm2 /\ cid1 = cid2 /\ bid1 = bid2)
+                            as [h1 [h2 h3]]; subst.
+                          {
+                            by intuition.
+                          }
+                          rewrite <- !beq_nat_refl in Hresult.
+                          inversion Hresult. subst.
+                          destruct (cid2 \in domm (prog_interface p)) eqn:Hcid2_p;
+                            rewrite Hcid2_p; intuition.
+                          (* Here we have 2 conjuncts x 2 cases for Hcid2_p = 4 cases *)
+                          ---- rewrite sigma_shifting_n_n_id.
+                                 by rewrite <- !beq_nat_refl.
+                          ---- rewrite sigma_shifting_n_n_id.
+                                 by rewrite <- !beq_nat_refl.
+                          ---- destruct
+                                 (sigma_shifting (n cid2) (n'' cid2) (care, bid2))
+                              as [care2' bid2'] eqn:Hsigma_bid2.
+                                 by rewrite <- !beq_nat_refl.
+                          ---- destruct
+                                 (sigma_shifting (n cid2) (n'' cid2) (care, bid2))
+                              as [care2' bid2'] eqn:Hsigma_bid2.
+                                 by rewrite <- !beq_nat_refl.
+                        *** (* Eq *)
+                          unfold Pointer.eq in *.
+                          destruct (cid2 \in domm (prog_interface p)) eqn:Hcid2_p;
+                            rewrite Hcid2_p;
+                              destruct (cid1 \in domm (prog_interface p)) eqn:Hcid1_p;
+                              rewrite Hcid1_p; intuition.
+                        (* Here we have 2 conjuncts x 4 cases for Hcid*_p = 8 cases *)
+                          ---- by rewrite !sigma_shifting_n_n_id.
+                          ---- by rewrite !sigma_shifting_n_n_id.
+                          ---- rewrite !sigma_shifting_n_n_id.
+                               destruct
+                                 (sigma_shifting (n cid1) (n'' cid1) (care, bid1))
+                                 as [care1' bid1'] eqn:Hsigma_bid1.
+
+                               (* Here, assert that cid1 =? cid2 is false. *)
+                               assert (cid1 =? cid2 = false) as G.
+                               {
+                                 destruct (cid1 =? cid2) eqn:Hcontra; auto.
+                                 assert (cid1 = cid2). by apply beq_nat_true.
+                                 subst. by rewrite Hcid2_p in Hcid1_p.
+                               }
+                               rewrite G; rewrite G in Hresult.
+                               rewrite !andb_false_r !andb_false_l.
+                               by rewrite !andb_false_r !andb_false_l in Hresult.
+                          ---- rewrite !sigma_shifting_n_n_id.
+                               destruct
+                                 (sigma_shifting (n cid1) (n'' cid1) (care, bid1))
+                                 as [care1' bid1'] eqn:Hsigma_bid1.
+
+                               (* Here, assert that cid1 =? cid2 is false. *)
+                               assert (cid1 =? cid2 = false) as G.
+                               {
+                                 destruct (cid1 =? cid2) eqn:Hcontra; auto.
+                                 assert (cid1 = cid2). by apply beq_nat_true.
+                                 subst. by rewrite Hcid2_p in Hcid1_p.
+                               }
+                               rewrite G; rewrite G in Hresult.
+                               rewrite !andb_false_r !andb_false_l.
+                               by rewrite !andb_false_r !andb_false_l in Hresult.
+                          ---- rewrite !sigma_shifting_n_n_id.
+                               destruct
+                                 (sigma_shifting (n cid2) (n'' cid2) (care, bid2))
+                                 as [care2' bid2'] eqn:Hsigma_bid2.
+
+                               (* Here, assert that cid1 =? cid2 is false. *)
+                               assert (cid1 =? cid2 = false) as G.
+                               {
+                                 destruct (cid1 =? cid2) eqn:Hcontra; auto.
+                                 assert (cid1 = cid2). by apply beq_nat_true.
+                                 subst. by rewrite Hcid2_p in Hcid1_p.
+                               }
+                               rewrite G; rewrite G in Hresult.
+                               rewrite !andb_false_r !andb_false_l.
+                               by rewrite !andb_false_r !andb_false_l in Hresult.
+                          ---- rewrite !sigma_shifting_n_n_id.
+                               destruct
+                                 (sigma_shifting (n cid2) (n'' cid2) (care, bid2))
+                                 as [care2' bid2'] eqn:Hsigma_bid2.
+
+                               (* Here, assert that cid1 =? cid2 is false. *)
+                               assert (cid1 =? cid2 = false) as G.
+                               {
+                                 destruct (cid1 =? cid2) eqn:Hcontra; auto.
+                                 assert (cid1 = cid2). by apply beq_nat_true.
+                                 subst. by rewrite Hcid2_p in Hcid1_p.
+                               }
+                               rewrite G; rewrite G in Hresult.
+                               rewrite !andb_false_r !andb_false_l.
+                               by rewrite !andb_false_r !andb_false_l in Hresult.
+                          ----
+                            destruct
+                                 (sigma_shifting (n cid1) (n'' cid1) (care, bid1))
+                              as [care1' bid1'] eqn:Hsigma_bid1.
+
+                            destruct
+                                 (sigma_shifting (n cid2) (n'' cid2) (care, bid2))
+                              as [care2' bid2'] eqn:Hsigma_bid2.
+
+                            (* Here is where we fundamentally rely on the goodness *)
+                            (* of the shared pointer.                              *)
+                            (* To establish that both (cid1, bid1) and (cid2, bid2)*)
+                            (* are indeed *shared*, we will rely on the falsity    *)
+                            (* given by Hcid1_p and Hcid2_p respectively.          *)
+
+                            (* Using Hcid1_p and Hcid2_p, together with a lemma    *)
+                            (* from CSInvariants, we will conclude that both       *)
+                            (* addresses (cid1, bid1) and (cid2, bid2) must have   *)
+                            (* appeared as shared addresses on the trace prefix.   *)
+
+                            (* Because they appeared as shared addresses, we will  *)
+                            (* be able to establish by instantiating lemma         *)
+                            (* addr_shared_so_far_good_addr that both are "good".  *)
+
+                            (* Because both are "good", we will be able to         *)
+                            (* instantiate injectivity of the renaming,            *)
+                            (* i.e., "sigma_shifting_addr_cid_same_injective"      *)
+                            (* to establish that bid1' =? bid2' -> bid1 = bid2     *)
+
+                            destruct (perm1 =? perm2) eqn:Hperm;
+                              destruct (cid1 =? cid2) eqn:Hcid;
+                              destruct (bid1 =? bid2) eqn:Hbid;
+                              try
+                                (try (rewrite !andb_false_r;
+                                      rewrite !andb_false_r in Hresult);
+                                 try (rewrite !andb_false_l;
+                                      rewrite !andb_false_l in Hresult);
+                                 intuition
+                                ).
+                            ++++ assert (cid1 = cid2). by apply beq_nat_true.
+                                 assert (bid1 = bid2). by apply beq_nat_true.
+                                 subst.
+                                 rewrite Hsigma_bid1 in Hsigma_bid2.
+                                 inversion Hsigma_bid2.
+                                 by rewrite <- beq_nat_refl.
+                            ++++ assert (cid1 = cid2). by apply beq_nat_true.
+                                 subst.
+                                 destruct (bid1' =? bid2') eqn:Hsigma_eq.
+                                 **** assert (bid1 = bid2) as Hcontra.
+                                      {
+                                        eapply sigma_shifting_addr_cid_same_injective.
+                                        - assert (left_addr_good_for_shifting
+                                                    n (cid2, bid1)) as Hbid1_good.
+                                          {
+                                            eapply addr_shared_so_far_good_addr.
+                                            - exact Hgood_t.
+                                            - (* Here, need to show that (cid2, bid1) *)
+                                              (* is shared.                           *)
+                                              assert (
+                                                  CSInvariants.wf_ptr_wrt_cid_t
+                                                    (Pointer.component pc)
+                                                    t1
+                                                    (perm1, cid2, bid1, off1)
+                                                ) as Hwfptr.
+                                              {
+                                                eapply
+                                                  CSInvariants.wf_reg_wf_ptr_wrt_cid_t.
+                                                - eapply
+                                                    CSInvariants.wf_state_wf_reg.
+                                                  + eapply
+                                                      CSInvariants.is_prefix_wf_state_t
+                                                    with (p := prog).
+                                                    * eapply linking_well_formedness;
+                                                        auto.
+                                                        by unfold mergeable_interfaces
+                                                        in *; intuition.
+                                                    * eauto.
+                                                  + eauto.
+                                                  + eauto.
+                                                  + eauto.
+                                                - unfold Register.get. simpl.
+                                                  eauto.
+                                              }
+                                              inversion Hwfptr as [Hown | Hshared].
+                                              + subst.
+                                                unfold CS.is_program_component,
+                                                CS.is_context_component, turn_of,
+                                                CS.state_turn in *.
+                                                unfold negb in Hcomp1.
+                                                pose proof @CS.star_pc_domm_non_inform
+                                                     p c
+                                                     Hwfp Hwfc
+                                                     Hmerge_ipic Hclosed_prog as Hor'.
+                                                assert (Pointer.component pc \in
+                                                           domm (prog_interface p)
+                                                           \/
+                                                           Pointer.component pc \in
+                                                           domm (prog_interface c))
+                                                  as [G | Hcontra]; auto.
+                                                {
+                                                  unfold CSInvariants.is_prefix
+                                                    in Hpref_t.
+                                                  eapply Hor'; eauto.
+                                                  - by unfold CS.initial_state.
+                                                }
+                                                * by rewrite G in Hcid1_p.
+                                                * by (unfold ic in *;
+                                                      rewrite Hcontra in Hcomp1).
+                                              + assumption.
+                                          }
+
+                                          unfold left_addr_good_for_shifting in *.
+                                          eassumption.
+                                          
+                                          
+                                        - assert (left_addr_good_for_shifting
+                                                    n (cid2, bid2)) as Hbid2_good.
+                                          {
+                                            eapply addr_shared_so_far_good_addr.
+                                            - exact Hgood_t.
+                                            - (* Here, need to show that (cid2, bid1) *)
+                                              (* is shared.                           *)
+                                              assert (
+                                                  CSInvariants.wf_ptr_wrt_cid_t
+                                                    (Pointer.component pc)
+                                                    t1
+                                                    (perm2, cid2, bid2, off2)
+                                                ) as Hwfptr.
+                                              {
+                                                eapply
+                                                  CSInvariants.wf_reg_wf_ptr_wrt_cid_t.
+                                                - eapply
+                                                    CSInvariants.wf_state_wf_reg.
+                                                  + eapply
+                                                      CSInvariants.is_prefix_wf_state_t
+                                                    with (p := prog).
+                                                    * eapply linking_well_formedness;
+                                                        auto.
+                                                        by unfold mergeable_interfaces
+                                                        in *; intuition.
+                                                    * eauto.
+                                                  + eauto.
+                                                  + eauto.
+                                                  + eauto.
+                                                - unfold Register.get. simpl.
+                                                  eauto.
+                                              }
+                                              inversion Hwfptr as [Hown | Hshared].
+                                              + subst.
+                                                unfold CS.is_program_component,
+                                                CS.is_context_component, turn_of,
+                                                CS.state_turn in *.
+                                                unfold negb in Hcomp1.
+                                                pose proof @CS.star_pc_domm_non_inform
+                                                     p c
+                                                     Hwfp Hwfc
+                                                     Hmerge_ipic Hclosed_prog as Hor'.
+                                                assert (Pointer.component pc \in
+                                                           domm (prog_interface p)
+                                                           \/
+                                                           Pointer.component pc \in
+                                                           domm (prog_interface c))
+                                                  as [G | Hcontra]; auto.
+                                                {
+                                                  unfold CSInvariants.is_prefix
+                                                    in Hpref_t.
+                                                  eapply Hor'; eauto.
+                                                  - by unfold CS.initial_state.
+                                                }
+                                                * by rewrite G in Hcid1_p.
+                                                * by (unfold ic in *;
+                                                      rewrite Hcontra in Hcomp1).
+                                              + assumption.
+                                          }
+
+                                          unfold left_addr_good_for_shifting in *.
+                                          assumption.
+                                          
+                                        - assert (bid1' = bid2'). by apply beq_nat_true.
+                                          unfold rename_addr, sigma_shifting_addr.
+                                          erewrite Hsigma_bid1, Hsigma_bid2.
+                                          by subst.
+                                      }
+                                      subst.
+                                        by rewrite <- beq_nat_refl in Hbid.
+                                 **** 
+                                   try (rewrite !andb_false_r;
+                                        rewrite !andb_false_r in Hresult);
+                                     try (rewrite !andb_false_l;
+                                          rewrite !andb_false_l in Hresult);
+                                     intuition.
+                          ---- destruct
+                                 (sigma_shifting (n cid1) (n'' cid1) (care, bid1))
+                              as [care1' bid1'] eqn:Hsigma_bid1.
+                               
+                               destruct
+                                 (sigma_shifting (n cid2) (n'' cid2) (care, bid2))
+                                 as [care2' bid2'] eqn:Hsigma_bid2.
+
+                            (* Here is where we fundamentally rely on the goodness *)
+                            (* of the shared pointer.                              *)
+                            (* To establish that both (cid1, bid1) and (cid2, bid2)*)
+                            (* are indeed *shared*, we will rely on the falsity    *)
+                            (* given by Hcid1_p and Hcid2_p respectively.          *)
+
+                            (* Using Hcid1_p and Hcid2_p, together with a lemma    *)
+                            (* from CSInvariants, we will conclude that both       *)
+                            (* addresses (cid1, bid1) and (cid2, bid2) must have   *)
+                            (* appeared as shared addresses on the trace prefix.   *)
+
+                            (* Because they appeared as shared addresses, we will  *)
+                            (* be able to establish by instantiating lemma         *)
+                            (* addr_shared_so_far_good_addr that both are "good".  *)
+
+                            (* Because both are "good", we will be able to         *)
+                            (* instantiate injectivity of the renaming,            *)
+                            (* i.e., "sigma_shifting_addr_cid_same_injective"      *)
+                            (* to establish that bid1' =? bid2' -> bid1 = bid2     *)
+
+                            destruct (perm1 =? perm2) eqn:Hperm;
+                              destruct (cid1 =? cid2) eqn:Hcid;
+                              destruct (bid1 =? bid2) eqn:Hbid;
+                              try
+                                (try (rewrite !andb_false_r;
+                                      rewrite !andb_false_r in Hresult);
+                                 try (rewrite !andb_false_l;
+                                      rewrite !andb_false_l in Hresult);
+                                 intuition
+                                ).
+                            ++++ assert (cid1 = cid2). by apply beq_nat_true.
+                                 assert (bid1 = bid2). by apply beq_nat_true.
+                                 subst.
+                                 rewrite Hsigma_bid1 in Hsigma_bid2.
+                                 inversion Hsigma_bid2.
+                                 by rewrite <- beq_nat_refl.
+                            ++++ assert (cid1 = cid2). by apply beq_nat_true.
+                                 subst.
+                                 destruct (bid1' =? bid2') eqn:Hsigma_eq.
+                                 **** assert (bid1 = bid2) as Hcontra.
+                                      {
+                                        eapply sigma_shifting_addr_cid_same_injective.
+                                        - assert (left_addr_good_for_shifting
+                                                    n (cid2, bid1)) as Hbid1_good.
+                                          {
+                                            eapply addr_shared_so_far_good_addr.
+                                            - exact Hgood_t.
+                                            - (* Here, need to show that (cid2, bid1) *)
+                                              (* is shared.                           *)
+                                              assert (
+                                                  CSInvariants.wf_ptr_wrt_cid_t
+                                                    (Pointer.component pc)
+                                                    t1
+                                                    (perm1, cid2, bid1, off1)
+                                                ) as Hwfptr.
+                                              {
+                                                eapply
+                                                  CSInvariants.wf_reg_wf_ptr_wrt_cid_t.
+                                                - eapply
+                                                    CSInvariants.wf_state_wf_reg.
+                                                  + eapply
+                                                      CSInvariants.is_prefix_wf_state_t
+                                                    with (p := prog).
+                                                    * eapply linking_well_formedness;
+                                                        auto.
+                                                        by unfold mergeable_interfaces
+                                                        in *; intuition.
+                                                    * eauto.
+                                                  + eauto.
+                                                  + eauto.
+                                                  + eauto.
+                                                - unfold Register.get. simpl.
+                                                  eauto.
+                                              }
+                                              inversion Hwfptr as [Hown | Hshared].
+                                              + subst.
+                                                unfold CS.is_program_component,
+                                                CS.is_context_component, turn_of,
+                                                CS.state_turn in *.
+                                                unfold negb in Hcomp1.
+                                                pose proof @CS.star_pc_domm_non_inform
+                                                     p c
+                                                     Hwfp Hwfc
+                                                     Hmerge_ipic Hclosed_prog as Hor'.
+                                                assert (Pointer.component pc \in
+                                                           domm (prog_interface p)
+                                                           \/
+                                                           Pointer.component pc \in
+                                                           domm (prog_interface c))
+                                                  as [G | Hcontra]; auto.
+                                                {
+                                                  unfold CSInvariants.is_prefix
+                                                    in Hpref_t.
+                                                  eapply Hor'; eauto.
+                                                  - by unfold CS.initial_state.
+                                                }
+                                                * by rewrite G in Hcid1_p.
+                                                * by (unfold ic in *;
+                                                      rewrite Hcontra in Hcomp1).
+                                              + assumption.
+                                          }
+
+                                          unfold left_addr_good_for_shifting in *.
+                                          eassumption.
+                                          
+                                          
+                                        - assert (left_addr_good_for_shifting
+                                                    n (cid2, bid2)) as Hbid2_good.
+                                          {
+                                            eapply addr_shared_so_far_good_addr.
+                                            - exact Hgood_t.
+                                            - (* Here, need to show that (cid2, bid1) *)
+                                              (* is shared.                           *)
+                                              assert (
+                                                  CSInvariants.wf_ptr_wrt_cid_t
+                                                    (Pointer.component pc)
+                                                    t1
+                                                    (perm2, cid2, bid2, off2)
+                                                ) as Hwfptr.
+                                              {
+                                                eapply
+                                                  CSInvariants.wf_reg_wf_ptr_wrt_cid_t.
+                                                - eapply
+                                                    CSInvariants.wf_state_wf_reg.
+                                                  + eapply
+                                                      CSInvariants.is_prefix_wf_state_t
+                                                    with (p := prog).
+                                                    * eapply linking_well_formedness;
+                                                        auto.
+                                                        by unfold mergeable_interfaces
+                                                        in *; intuition.
+                                                    * eauto.
+                                                  + eauto.
+                                                  + eauto.
+                                                  + eauto.
+                                                - unfold Register.get. simpl.
+                                                  eauto.
+                                              }
+                                              inversion Hwfptr as [Hown | Hshared].
+                                              + subst.
+                                                unfold CS.is_program_component,
+                                                CS.is_context_component, turn_of,
+                                                CS.state_turn in *.
+                                                unfold negb in Hcomp1.
+                                                pose proof @CS.star_pc_domm_non_inform
+                                                     p c
+                                                     Hwfp Hwfc
+                                                     Hmerge_ipic Hclosed_prog as Hor'.
+                                                assert (Pointer.component pc \in
+                                                           domm (prog_interface p)
+                                                           \/
+                                                           Pointer.component pc \in
+                                                           domm (prog_interface c))
+                                                  as [G | Hcontra]; auto.
+                                                {
+                                                  unfold CSInvariants.is_prefix
+                                                    in Hpref_t.
+                                                  eapply Hor'; eauto.
+                                                  - by unfold CS.initial_state.
+                                                }
+                                                * by rewrite G in Hcid1_p.
+                                                * by (unfold ic in *;
+                                                      rewrite Hcontra in Hcomp1).
+                                              + assumption.
+                                          }
+
+                                          unfold left_addr_good_for_shifting in *.
+                                          assumption.
+                                          
+                                        - assert (bid1' = bid2'). by apply beq_nat_true.
+                                          unfold rename_addr, sigma_shifting_addr.
+                                          erewrite Hsigma_bid1, Hsigma_bid2.
+                                          by subst.
+                                      }
+                                      subst.
+                                        by rewrite <- beq_nat_refl in Hbid.
+                                 **** 
+                                   try (rewrite !andb_false_r;
+                                        rewrite !andb_false_r in Hresult);
+                                     try (rewrite !andb_false_l;
+                                          rewrite !andb_false_l in Hresult);
+                                     intuition.
+
+
+                        *** (* Leq *)
+                          unfold Pointer.leq in *.
+                          assert (perm1 = perm2 /\ cid1 = cid2 /\ bid1 = bid2)
+                            as [h1 [h2 h3]]; subst.
+                          {
+                            by intuition.
+                          }
+                          rewrite <- !beq_nat_refl in Hresult.
+                          inversion Hresult. subst.
+                          destruct (cid2 \in domm (prog_interface p)) eqn:Hcid2_p;
+                            rewrite Hcid2_p; intuition.
+                          (* Here we have 2 conjuncts x 2 cases for Hcid2_p = 4 cases *)
+                          ---- rewrite sigma_shifting_n_n_id.
+                                 by rewrite <- !beq_nat_refl.
+                          ---- rewrite sigma_shifting_n_n_id.
+                                 by rewrite <- !beq_nat_refl.
+                          ---- destruct
+                                 (sigma_shifting (n cid2) (n'' cid2) (care, bid2))
+                              as [care2' bid2'] eqn:Hsigma_bid2.
+                                 by rewrite <- !beq_nat_refl.
+                          ---- destruct
+                                 (sigma_shifting (n cid2) (n'' cid2) (care, bid2))
+                              as [care2' bid2'] eqn:Hsigma_bid2.
+                                 by rewrite <- !beq_nat_refl.
+
+                      +++ (* data, not data *)
+                        destruct (perm1 =? perm2) eqn:Hperms.
+                        ---- assert (perm1 = perm2). by apply beq_nat_true.
+                             subst. by rewrite Hperm1 in Hperm2.
+                        ---- destruct op; try discriminate; simpl in *;
+                               rewrite Hperms in Hresult; try discriminate.
+                             intuition;
+                               destruct (
+                                   sigma_shifting
+                                     (n cid1)
+                                     (if cid1 \in domm (prog_interface p)
+                                      then n cid1 else n'' cid1)
+                                     (care, bid1)
+                                 ) eqn:Hsigma;
+                               rewrite Hsigma;
+                               unfold Pointer.eq;
+                               rewrite Hperms;
+                               rewrite !andb_false_l;
+                                 by rewrite !andb_false_l in Hresult.
+
+
+                      +++ (* not data, data *)
+                        destruct (perm1 =? perm2) eqn:Hperms.
+                        ---- assert (perm1 = perm2). by apply beq_nat_true.
+                             subst. by rewrite Hperm1 in Hperm2.
+                        ---- destruct op; try discriminate; simpl in *;
+                               rewrite Hperms in Hresult; try discriminate.
+                             intuition;
+                               destruct (
+                                   sigma_shifting
+                                     (n cid2)
+                                     (if cid2 \in domm (prog_interface p)
+                                      then n cid2 else n'' cid2)
+                                     (care, bid2)
+                                 ) eqn:Hsigma;
+                               rewrite Hsigma;
+                               unfold Pointer.eq;
+                               rewrite Hperms;
+                               rewrite !andb_false_l;
+                                 by rewrite !andb_false_l in Hresult.
+
+                      +++ (* not data, not data *)
+                        intuition.
+                        by rewrite Hresult.
+                        
+               ** unfold result in Hresult.
+                  pose proof eval_binop_ptr as Hptrs.
+                  specialize (Hptrs _ _ _ _ Hresult) as
+                      [ [[[perm_op cid_op] bid_op] off_op]
+                          [i_op [[[Hptr Hi] | [Hi Hptr]] [Hperm [Hcomp Hblk]]]]
+                      ];
+                    rewrite !Hptr !Hi;
+                    subst;
+                    unfold inverse_rename_value, rename_value,
+                    rename_value_template, inverse_rename_addr, rename_addr in *;
+                    simpl in *.
+                  --- (* operands are ptr, Int *)
+                    subst.
+                    rewrite !Hptr in Hget_shift1.
+                    rewrite !Hptr in Hget_inv_shift1.
+                    rewrite !Hi in Hget_shift2.
+                    rewrite !Hi in Hget_inv_shift2.
+                    destruct (regs1' (Register.to_nat r1))
+                      as [v_regs1'_r1 |] eqn:Hv_regs1'_r1; try discriminate.
+                    destruct (regs1' (Register.to_nat r2))
+                      as [v_regs1'_r2 |] eqn:Hv_regs1'_r2; try discriminate.
+                    rewrite Hptr Hi in Hresult. rewrite Hresult.
+                    subst.
+                    destruct (perm_op =? Permission.data) eqn:Hperm_op.
+                    +++ destruct (cid_op \in domm (prog_interface p)) eqn:Hcid_op_p;
+                          rewrite !Hcid_op_p.
+                        *** rewrite !sigma_shifting_n_n_id.
+                            split; intuition.
+                            by rewrite Hresult Hperm_op Hcid_op_p sigma_shifting_n_n_id.
+                        *** rewrite !Hcid_op_p in Hget_inv_shift1.
+                            destruct
+                              (sigma_shifting (n cid_op) (n'' cid_op) (care, bid_op))
+                              as [op_care bid_op'] eqn:Hsigma_bid_op.
+                            rewrite !Hperm_op !Hcid_op_p in Hget_inv_shift1.
+
+                            (* Here, the first conjunct follows from Hresult.     *)
+                            (* The fact that "Hresult -> the first conjunct" can  *)
+                            (* be stated as a separate lemma about eval_binop.    *)
+                            (* But it is too easy. It follows just by destruct op *)
+                            (* then inversion Hresult.                            *)
+
+                            destruct op; try discriminate;
+                              split;
+                              try by (inversion Hresult).
+
+                            (* After destructing op, only Add and Minus remain.   *)
+                            (* And after trying inversion Hresult, only the second*)
+                            (* conjunct remains in each case.                     *)
+                            ---- (* case Add *)
+                              simpl. rewrite Hperm_op Hcid_op_p.
+                              destruct
+                                (sigma_shifting (n'' cid_op) (n cid_op) (care, bid_op'))
+                                eqn:Hsigma_bid_op'.
+                              inversion Hresult. by inversion Hget_inv_shift1.
+                            ---- (* case Minus *)
+                              simpl. rewrite Hperm_op Hcid_op_p.
+                              destruct
+                                (sigma_shifting (n'' cid_op) (n cid_op) (care, bid_op'))
+                                eqn:Hsigma_bid_op'.
+                              inversion Hresult. by inversion Hget_inv_shift1.
+                            
+                    +++ split; intuition.
+                        by rewrite Hresult Hperm_op.
+                        
+                    
+                  --- (* operands are Int, ptr *)
+                    subst.
+                    rewrite !Hptr in Hget_shift1.
+                    rewrite !Hptr in Hget_inv_shift1.
+                    rewrite !Hi in Hget_shift2.
+                    rewrite !Hi in Hget_inv_shift2.
+                    destruct (regs1' (Register.to_nat r1))
+                      as [v_regs1'_r1 |] eqn:Hv_regs1'_r1; try discriminate.
+                    destruct (regs1' (Register.to_nat r2))
+                      as [v_regs1'_r2 |] eqn:Hv_regs1'_r2; try discriminate.
+                    rewrite Hptr Hi in Hresult. rewrite Hresult.
+                    subst.
+                    destruct (perm_op =? Permission.data) eqn:Hperm_op.
+                    +++ destruct (cid_op \in domm (prog_interface p)) eqn:Hcid_op_p;
+                          rewrite !Hcid_op_p.
+                        *** rewrite !sigma_shifting_n_n_id.
+                            split; intuition.
+                            by rewrite Hresult Hperm_op Hcid_op_p sigma_shifting_n_n_id.
+                        *** rewrite !Hcid_op_p in Hget_inv_shift2.
+                            destruct
+                              (sigma_shifting (n cid_op) (n'' cid_op) (care, bid_op))
+                              as [op_care bid_op'] eqn:Hsigma_bid_op.
+                            rewrite !Hperm_op !Hcid_op_p in Hget_inv_shift2.
+
+                            (* Here, the first conjunct follows from Hresult.     *)
+                            (* The fact that "Hresult -> the first conjunct" can  *)
+                            (* be stated as a separate lemma about eval_binop.    *)
+                            (* But it is too easy. It follows just by destruct op *)
+                            (* then inversion Hresult.                            *)
+
+                            destruct op; try discriminate;
+                              split;
+                              try by (inversion Hresult).
+
+                            (* After destructing op, only Add remains.            *)
+                            (* And after trying inversion Hresult, only the second*)
+                            (* conjunct for case Add remains.                     *)
+                            
+                            (* case Add *)
+                            simpl. rewrite Hperm_op Hcid_op_p.
+                            destruct
+                              (sigma_shifting (n'' cid_op) (n cid_op) (care, bid_op'))
+                              eqn:Hsigma_bid_op'.
+                            inversion Hresult. by inversion Hget_inv_shift2.
+                            
+                    +++ split; intuition.
+                        by rewrite Hresult Hperm_op.
+                          
+               ** (* result = Undef *)
+                 simpl in *.
+                 (* TODO: 
+                    Here, need a lemma eval_binop_udef that gives the inversion. *)
+                    admit.
+            ++ unfold Register.set, Register.get in *.
+               rewrite !setmE Hreg_r. split; eauto.
 
       + simpl in *. subst.
           unfold CS.is_program_component,

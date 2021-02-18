@@ -377,6 +377,155 @@ Section SigmaShiftingBlockIdsProperties.
     rewrite <- !Zminus_diag_reverse. simpl. apply inv_sigma_from_bigger_dom_0_id.
   Qed.
 
+  Lemma subn_n_m_n_0:
+    forall n m, n - m = n -> m = 0 \/ n = 0.
+  Proof.
+    intros n m Hnm.
+    destruct n; intuition.
+    unfold subn, subn_rec in Hnm. simpl in Hnm.
+    destruct m; auto.
+    pose proof Nat.le_sub_l n m as Hcontra.
+    rewrite Hnm in Hcontra.
+      by intuition.
+  Qed.
+
+  Lemma sigma_shifting_id_n_n:
+    forall n1 n2 x, sigma_shifting n1 n2 x = x -> n1 = n2.
+  Proof.
+    intros n1 n2 [c bid].
+    unfold sigma_shifting, inv_sigma_from_bigger_dom, sigma_from_bigger_dom,
+    nat_of_bool.
+    destruct ((Z.of_nat n1 - Z.of_nat n2 >=? 0)%Z) eqn:en1n2;
+      destruct c eqn:ec; subst; simpl.
+    - destruct (bid <? Z.to_nat (Z.of_nat n1 - Z.of_nat n2)) eqn:bid_n1_n2;
+        try discriminate.
+      intros H. inversion H as [H1].
+      
+      specialize (subn_n_m_n_0 _ _ H1) as [HG | Hcontra].
+      + pose proof Z2Nat.id (Z.of_nat n1 - Z.of_nat n2) as G.
+        rewrite HG in G. simpl in *.
+        apply Nat2Z.inj, Zminus_eq. symmetry. apply G.
+          by rewrite <- Z.geb_le.
+      + subst. clear H H1.
+        assert (Z.to_nat (Z.of_nat n1 - Z.of_nat n2) <= 0)%coq_nat as Hcontra.
+        {
+          by rewrite <- Nat.ltb_ge.
+        }
+        assert (0 = Z.to_nat (Z.of_nat n1 - Z.of_nat n2)) as H0. by apply le_n_0_eq.
+        
+        pose proof Z.geb_le as Hle.
+        specialize (Hle (Z.of_nat n1 - Z.of_nat n2)%Z 0%Z) as [Hle _].
+        specialize (Hle en1n2).
+        rewrite <- ZMicromega.le_0_iff in Hle.
+        rewrite <- Nat2Z.inj_le in Hle.
+        
+        rewrite <- Nat2Z.inj_sub in H0; auto.
+        rewrite Nat2Z.id in H0.
+        assert (n1 - n2 == 0). by apply/eqP.
+        assert (n1 <= n2). by rewrite <- subn_eq0.
+        intuition.
+    - intros H. inversion H as [H1].
+      assert (Z.to_nat (Z.of_nat n1 - Z.of_nat n2) = 0) as H0.
+      {
+        destruct (Z.to_nat (Z.of_nat n1 - Z.of_nat n2)) as [|n']; auto.
+        rewrite addnS in H1.
+        rewrite <- addSn in H1.
+        assert (bid.+1 <= bid.+1 + n') as H0. by apply leq_addr.
+        rewrite H1 in H0.
+        by rewrite ltnn in H0.
+      }
+
+      symmetry in H0.
+
+      pose proof Z.geb_le as Hle.
+      specialize (Hle (Z.of_nat n1 - Z.of_nat n2)%Z 0%Z) as [Hle _].
+      specialize (Hle en1n2).
+      rewrite <- ZMicromega.le_0_iff in Hle.
+      rewrite <- Nat2Z.inj_le in Hle.
+      
+      rewrite <- Nat2Z.inj_sub in H0; auto.
+      rewrite Nat2Z.id in H0.
+      assert (n1 - n2 == 0). by apply/eqP.
+      assert (n1 <= n2). by rewrite <- subn_eq0.
+      intuition.
+    - intros H. inversion H as [H1].
+      assert (Z.to_nat (- (Z.of_nat n1 - Z.of_nat n2)) = 0) as H0.
+      {
+        destruct (Z.to_nat (- (Z.of_nat n1 - Z.of_nat n2))) as [|n']; auto.
+        rewrite addnS in H1.
+        rewrite <- addSn in H1.
+        assert (bid.+1 <= bid.+1 + n') as H0. by apply leq_addr.
+        rewrite H1 in H0.
+        by rewrite ltnn in H0.
+      }
+
+      symmetry in H0.
+
+      rewrite Z.opp_sub_distr Z.add_opp_l in H0.
+
+      assert ((n1 <= n2)%coq_nat).
+      {
+        rewrite Nat2Z.inj_le.
+        apply Ztac.elim_concl_le. intros Hcontra.
+        rewrite <- Z.lt_0_sub in Hcontra.
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n2)%Z 0%Z as en1n2'.
+        rewrite en1n2 in en1n2'.
+        pose proof Z.lt_asymm (Z.of_nat n1 - Z.of_nat n2)%Z 0%Z en1n2'.
+        by intuition.
+      }
+      
+      rewrite <- Nat2Z.inj_sub in H0; auto.
+      rewrite Nat2Z.id in H0.
+      assert (n2 - n1 == 0). by apply/eqP.
+      assert (n2 <= n1). by rewrite <- subn_eq0.
+      by intuition.
+    - destruct (bid <? Z.to_nat (- (Z.of_nat n1 - Z.of_nat n2))) eqn:n1n2bid;
+        try discriminate.
+      intros H. inversion H as [H1].
+      
+      specialize (subn_n_m_n_0 _ _ H1) as [HG | Hcontra].
+      + pose proof Z2Nat.id (- (Z.of_nat n1 - Z.of_nat n2)) as G.
+        rewrite HG in G. simpl in *.
+        symmetry. apply Nat2Z.inj, Zminus_eq.
+        
+        rewrite <- Z.add_opp_l.
+        rewrite <- Z.opp_sub_distr.
+        symmetry.
+        apply G.
+        rewrite Z.opp_nonneg_nonpos.
+        apply Z.lt_le_incl.
+        pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n2)%Z 0%Z as Hproof.
+        by rewrite en1n2 in Hproof.
+        
+      + subst. clear H H1.
+        assert (Z.to_nat (- (Z.of_nat n1 - Z.of_nat n2)) <= 0)%coq_nat as Hcontra.
+        {
+          by rewrite <- Nat.ltb_ge.
+        }
+        assert (0 = Z.to_nat (- (Z.of_nat n1 - Z.of_nat n2))) as H0. by apply le_n_0_eq.
+
+        symmetry in H0.
+        
+        rewrite Z.opp_sub_distr Z.add_opp_l in H0.
+        
+        assert ((n1 <= n2)%coq_nat).
+        {
+          rewrite Nat2Z.inj_le.
+          apply Ztac.elim_concl_le. intros Hcontra'.
+          rewrite <- Z.lt_0_sub in Hcontra'.
+          pose proof Zge_cases (Z.of_nat n1 - Z.of_nat n2)%Z 0%Z as en1n2'.
+          rewrite en1n2 in en1n2'.
+          pose proof Z.lt_asymm (Z.of_nat n1 - Z.of_nat n2)%Z 0%Z en1n2'.
+            by intuition.
+        }
+        
+        rewrite <- Nat2Z.inj_sub in H0; auto.
+        rewrite Nat2Z.id in H0.
+        assert (n2 - n1 == 0). by apply/eqP.
+        assert (n2 <= n1). by rewrite <- subn_eq0.
+          by intuition.
+  Qed.
+      
   Lemma inv_sigma_shifting_sigma_shifting:
     forall n1 n2 x,
       inv_sigma_shifting n1 n2 x = sigma_shifting n2 n1 x.
@@ -2094,8 +2243,8 @@ Section AdequacyOfTheShiftRenaming.
   Let good_addr2 := left_addr_good_for_shifting n2.
 
   Lemma shift_value_eval_binop v1 v1' v2 v2' op v3 v3':
-    (forall a1, a1 \in addr_of_value v1 -> good_addr1 a1) ->
-    (forall a2, a2 \in addr_of_value v2 -> good_addr1 a2) ->
+    ((forall a1, a1 \in addr_of_value v1 -> good_addr1 a1) (*\/ v1' = v1*)) ->
+    ((forall a2, a2 \in addr_of_value v2 -> good_addr1 a2) (*\/ v2' = v2*)) ->
     rename_value renfun v1 = v1' ->
     rename_value renfun v2 = v2' ->
     eval_binop op v1 v2 = v3 ->
@@ -2133,8 +2282,12 @@ Section AdequacyOfTheShiftRenaming.
         intros h h' Hcid_cond. split; intros H; subst.
         - by (rewrite Hren1 in Hren2; inversion Hren2).
         - unfold good_addr1, left_addr_good_for_shifting in *.
-          specialize (Hgood1 (cid2, bid1)). specialize (Hgood2 (cid2, bid2)).
           simpl in *.
+          (*destruct Hgood1_or as [Hgood1 | Hren1id];
+            destruct Hgood2_or as [Hgood2 | Hren2id].
+          + 
+          *)
+          specialize (Hgood1 (cid2, bid1)). specialize (Hgood2 (cid2, bid2)).
           rewrite in_fset1 eqxx in Hgood1.
           rewrite in_fset1 eqxx in Hgood2.
           eapply sigma_shifting_addr_cid_same_injective; eauto.
