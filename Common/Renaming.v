@@ -2010,6 +2010,14 @@ Section StructuralPropertiesOfValueRenaming.
     unfold rename_value_template. by destruct (f (cid, bid)).
   Qed.
 
+  Lemma rename_value_template_Ptr_Ptr f p:
+    exists p', rename_value_template f (Ptr p) = Ptr p'.
+  Proof.
+    destruct p as [[[perm c] b] o].
+    rewrite rename_value_template_Ptr.
+    destruct (perm =? Permission.data); by eexists.
+  Qed.
+
   Lemma rename_value_template_Ptr_inversion f v perm cid bid off:
     rename_value_template f v = Ptr (perm, cid, bid, off) ->
     exists cid' bid', v = Ptr (perm, cid', bid', off).
