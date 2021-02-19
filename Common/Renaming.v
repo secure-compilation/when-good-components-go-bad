@@ -2010,6 +2010,36 @@ Section StructuralPropertiesOfValueRenaming.
     unfold rename_value_template. by destruct (f (cid, bid)).
   Qed.
 
+  Lemma rename_value_template_Ptr_inversion f v perm cid bid off:
+    rename_value_template f v = Ptr (perm, cid, bid, off) ->
+    exists cid' bid', v = Ptr (perm, cid', bid', off).
+  Proof.
+    unfold rename_value_template. destruct v as [| [[[p c] b] o] |]; try discriminate.
+    intros H. destruct (p =? Permission.data).
+    - destruct (f (c, b)). inversion H. subst. by do 2 eexists.
+    - inversion H. subst. by do 2 eexists.
+  Qed.
+
+  Lemma rename_value_template_sigma_shifting_addr_Ptr_inversion
+        n1 n2 v perm cid bid off:
+    rename_value_template (sigma_shifting_addr n1 n2) v = Ptr (perm, cid, bid, off) ->
+    exists bid', v = Ptr (perm, cid, bid', off).
+  Proof.
+    unfold rename_value_template. destruct v as [| [[[p c] b] o] |]; try discriminate.
+    intros H. destruct (p =? Permission.data).
+    - destruct (sigma_shifting_addr n1 n2 (c, b)) eqn:Hsigma.
+      pose proof rename_addr_sigma_shifting_addr_cid_constant n1 n2 (c, b) as E.
+      unfold rename_addr in E. rewrite Hsigma in E. simpl in E. inversion H. subst.
+        by eexists.
+    - inversion H. subst. by eexists.
+  Qed.
+    
+  Lemma rename_value_template_Int_inversion f v i:
+    rename_value_template f v = Int i -> v = Int i.
+      by unfold rename_value_template; destruct v as [| [[[p c] b] o] |];
+        try destruct (p =? Permission.data); try destruct (f (c, b)).
+  Qed.
+  
   Lemma shift_value_Ptr_perm_off n1 n2 perm cid bid off:
     exists cid' bid',
       shift_value n1 n2 (Ptr (perm, cid, bid, off)) = Ptr (perm, cid', bid', off).
