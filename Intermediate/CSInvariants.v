@@ -123,4 +123,12 @@ Proof.
     by (unfold wf_reg_wrt_t_pc; intros H ?; apply (H r)).
 Qed.
 
+Lemma wf_mem_wrt_t_pc_wf_load_wrt_t_pc mem t pc_comp load_at ptr:
+  wf_mem_wrt_t_pc mem t pc_comp ->
+  Memory.load mem load_at = Some (Ptr ptr) ->
+  wf_load_wrt_t_pc load_at t pc_comp ptr.
+Proof.
+    by (unfold wf_mem_wrt_t_pc; intros H ?; eapply H).
+Qed.
+
 End CSInvariants.

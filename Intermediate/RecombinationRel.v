@@ -390,10 +390,16 @@ Section Mergeable.
              (part_executing: program)
              (* part_executing should be either p or c' *)
              original_mem recombined_mem
-             original_n   recombined_n : Prop :=
+             original_n   recombined_n
+             original_t   recombined_t
+    : Prop :=
     (
       forall original_addr,
-        original_addr.1 \in domm (prog_interface part_executing) ->
+        (
+          original_addr.1 \in domm (prog_interface part_executing) \/
+          addr_shared_so_far original_addr original_t
+        )
+        ->
         memory_shifts_memory_at_addr
           original_n
           recombined_n
@@ -404,7 +410,11 @@ Section Mergeable.
     /\
     (
       forall recombined_addr,
-        recombined_addr.1 \in domm (prog_interface part_executing) ->
+        (
+          recombined_addr.1 \in domm (prog_interface part_executing) \/
+          addr_shared_so_far recombined_addr recombined_t
+        )
+        ->
         memory_inverse_shifts_memory_at_addr
           original_n
           recombined_n
@@ -447,11 +457,13 @@ Section Mergeable.
              (part_not_executing: program)
              original_mem recombined_mem
              original_n   recombined_n
+             original_t   recombined_t
     : Prop :=
     mem_of_part_executing_rel_original_and_recombined
       part_not_executing
       original_mem recombined_mem
-      original_n   recombined_n.
+      original_n   recombined_n
+      original_t   recombined_t.
 
   Inductive mergeable_states_well_formed
             (s s' s'' : CS.state) t t' t'' : Prop :=
@@ -509,7 +521,9 @@ Section Mergeable.
         (CS.state_mem s)   (* Thus, the original memory comes from s. *)
         (CS.state_mem s')
         n
-        n' ->
+        n'
+        t
+        t' ->
       mem_of_part_not_executing_rel_original_and_recombined_at_internal
         c'                 (* Here, the part not executing is c'. *)
         (CS.state_mem s'') (* Thus, the original memory comes from s''. *)
@@ -530,7 +544,9 @@ Section Mergeable.
         (CS.state_mem s'')  (* Thus, the original memory comes from s''. *)
         (CS.state_mem s')
         n''
-        n' ->
+        n'
+        t''
+        t' ->
       mem_of_part_not_executing_rel_original_and_recombined_at_internal
         p                  (* Here, the part not executing is p. *)
         (CS.state_mem s)   (* Thus, the original memory comes from s. *)
@@ -554,13 +570,17 @@ Section Mergeable.
         (CS.state_mem s)   (* Thus, the original memory comes from s. *)
         (CS.state_mem s')
         n
-        n' ->
+        n'
+        t
+        t' ->
       mem_of_part_not_executing_rel_original_and_recombined_at_border
         c'                 (* Here, the part not executing is c'. *)
         (CS.state_mem s'') (* Thus, the original memory comes from s''. *)
         (CS.state_mem s')
         n''
-        n' ->
+        n'
+        t''
+        t' ->
       mergeable_border_states s s' s'' t t' t''
   | mergeable_border_states_c'_executing:
       mergeable_states_well_formed s s' s'' t t' t'' ->
@@ -573,13 +593,17 @@ Section Mergeable.
         (CS.state_mem s'')  (* Thus, the original memory comes from s''. *)
         (CS.state_mem s')
         n''
-        n' ->
+        n'
+        t''
+        t' ->
       mem_of_part_not_executing_rel_original_and_recombined_at_border
         p                 (* Here, the part not executing is p. *)
         (CS.state_mem s)  (* Thus, the original memory comes from s. *)
         (CS.state_mem s')
         n
-        n' ->
+        n'
+        t
+        t' ->
       mergeable_border_states s s' s'' t t' t''.
 
   Ltac invert_non_eagerly_mergeable_border_states Hmergeborder :=
@@ -604,14 +628,14 @@ Section Mergeable.
       destruct Hmemc' as [Hshift Hinvshift].
       unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal.
       split; intros.
-      + apply Hshift; assumption.
-      + apply Hinvshift; assumption.
+      + apply Hshift; left; assumption.
+      + apply Hinvshift; left; assumption.
     - apply mergeable_internal_states_c'_executing; try eassumption.
       destruct Hmemp as [Hshift Hinvshift].
       unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal.
       split; intros.
-      + apply Hshift; assumption.
-      + apply Hinvshift; assumption.
+      + apply Hshift; left; assumption.
+      + apply Hinvshift; left; assumption.
   Qed.
   
   Inductive mergeable_states
@@ -4553,34 +4577,85 @@ Section ThreewayMultisem1.
                    ) as Hren.
         rewrite <- beq_nat_refl in Hren.
         rewrite Hren in Hregs1'_r1. symmetry in Hregs1'_r1.
+
+        assert (CSInvariants.wf_ptr_wrt_cid_t
+                      (Pointer.component pc) t1
+                      (Permission.data, cidl, bidl, offl)
+                  ) as cidl_bidl_invariant.
+        {
+          eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t; eauto.
+          eapply CSInvariants.wf_state_wf_reg.
+          - eapply CSInvariants.is_prefix_wf_state_t with (p := prog); eauto.
+            eapply linking_well_formedness; auto.
+            unfold mergeable_interfaces in *.
+              by intuition.
+          - by simpl.
+          - by simpl.
+          - reflexivity.
+        }
         
+        assert (Memory.load mem1'
+                            (Permission.data,
+                             (sigma_shifting_addr
+                                n
+                                (fun cid : nat =>
+                                   if cid \in domm (prog_interface p)
+                                   then n cid else n'' cid) 
+                                (cidl, bidl)).1,
+                             (sigma_shifting_addr
+                                n
+                                (fun cid : nat =>
+                                   if cid \in domm (prog_interface p)
+                                   then n cid else n'' cid) 
+                                (cidl, bidl)).2,
+                             offl) =
+                Some
+                  (rename_value
+                     [eta sigma_shifting_addr
+                          n
+                          (fun cid : nat =>
+                             if cid \in domm (prog_interface p)
+                             then n cid else n'' cid)] v)) as Hmemload.
+        {
+          unfold mem_of_part_executing_rel_original_and_recombined,
+          memory_shifts_memory_at_addr, memory_renames_memory_at_addr,
+          rename_addr in Hmemp.
+          simpl in Hmemp.
+          destruct Hmemp as [Hmemshift _].
+          rewrite Hmemshift.
+          - simpl.
+             match goal with
+             | H: Memory.load _ _ = Some _ |- _ => by rewrite H end.
+          - inversion cidl_bidl_invariant; eauto.
+            left.
+            specialize (@is_program_component_pc_in_domm _ _ _ _ _ _ _ _ _ _ _ _
+                                                         Hcomp1 Hmerge1) as G.
+              by apply G.
+        }
+
+        assert (CSInvariants.is_prefix
+                  (gps,
+                   mem,
+                   Register.set
+                     r2
+                     v
+                     regs,
+                   Pointer.inc pc
+                  )
+                  prog
+                    t1
+               ) as Hprefix_t1_E0.
+        {
+          unfold CSInvariants.is_prefix in *.
+          eapply star_right; try eassumption.
+            by rewrite E0_right.
+        }
         
         eexists. split.
         * eapply CS.Step_non_inform; first eapply CS.Load.
           -- exact Hex'.
           -- exact Hregs1'_r1.
-          -- unfold mem_of_part_executing_rel_original_and_recombined,
-             memory_shifts_memory_at_addr, memory_renames_memory_at_addr,
-             rename_addr in Hmemp.
-             simpl in Hmemp.
-             (** Currently, Hmemp is too weak. It only guarantees renaming *)
-             (** for addresses in the component memory of some p component.*)
-             (** What we want instead from this invariant is to guarantee  *)
-             (** additionally the renaming for addresses that are shared so*)
-             (** far. This will mean that the memory relation needs to be  *)
-             (** parameterized with the trace prefix.                      *)
-
-             (** When implementing this change, keep the current definition*)
-             (** of mem_of_part_executing_rel_original_and_recombined, and *)
-             (** add another additional definition that talks about shared *)
-             (** addresses separately.                                     *)
-             destruct Hmemp as [Hmemshift _].
-             rewrite Hmemshift.
-             ++ simpl.
-                match goal with
-                | H: Memory.load _ _ = Some _ |- _ => by rewrite H end.
-             ++ (** Cannot guarantee this precondition in general. *)
-               admit.
+          -- exact Hmemload. 
           -- reflexivity.
           -- by simpl.
         * econstructor; try eassumption.
@@ -4588,20 +4663,92 @@ Section ThreewayMultisem1.
             eapply mergeable_states_well_formed_intro; try eassumption.
             ++ unfold CSInvariants.is_prefix in *.
                eapply star_right; try eassumption.
-                 by rewrite E0_right.
-            ++ unfold CSInvariants.is_prefix in *.
-               eapply star_right; try eassumption.
                ** eapply CS.Step_non_inform; first eapply CS.Load; eauto.
-                  --- (** Similar to the subgoal above in the previous '*'. *)
-                      (** assert this statement separately before eexists.  *)
-                    admit.
                ** by rewrite E0_right.
             ++ by simpl.
             ++ by rewrite Pointer.inc_preserves_component.
           -- by simpl.
           -- (** regs_rel_of_executing_part *)
-            simpl.
-            admit.
+            simpl. constructor. intros reg.
+            unfold Register.get, Register.set. rewrite setmE.
+            destruct (Register.to_nat reg == Register.to_nat r2) eqn:ereg;
+              rewrite ereg; rewrite setmE ereg.
+            ++ unfold shift_value, inverse_shift_value; intuition.
+               rewrite rename_value_inverse_rename_value.
+               destruct v as [i | [[[permv cidv] bidv] offv] |]; try by simpl.
+               unfold rename_value, rename_value_template, rename_addr.
+               destruct (permv =? Permission.data) eqn:epermv; simpl.
+               ** assert (permv = Permission.data). by apply beq_nat_true. subst.
+                  destruct (cidv \in domm (prog_interface p)) eqn:cidv_p;
+                    rewrite cidv_p.
+                  --- by rewrite
+                           sigma_shifting_n_n_id epermv cidv_p sigma_shifting_n_n_id.
+                  --- destruct (sigma_shifting (n cidv) (n'' cidv) (care, bidv)) as
+                        [? bidv'] eqn:ebidv.
+                      rewrite epermv cidv_p.
+                      pose proof cancel_inv_sigma_shifting_sigma_shifting
+                           (n'' cidv) (n cidv) as Hcancel.
+                      unfold cancel in *.
+                      destruct (sigma_shifting (n'' cidv) (n cidv) (care, bidv'))
+                        as [? bidv''] eqn:ebidv'.
+                      assert (sigma_shifting (n cidv) (n'' cidv) (care, bidv) =
+                              (care, bidv')) as Hbidv'care.
+                      {
+                        assert (left_block_id_good_for_shifting (n cidv) bidv)
+                          as Hbidvgood.
+                        {
+                          suffices: left_addr_good_for_shifting n (cidv, bidv).
+                          - by unfold left_addr_good_for_shifting.
+                          - eapply addr_shared_so_far_good_addr.
+                            + exact Hgood_t.
+                            + assert (CSInvariants.wf_ptr_wrt_cid_t
+                                        (Pointer.component pc) t1
+                                        (Permission.data, cidv, bidv, offv)
+                                     ) as cidv_bidv_invariant.
+                              {
+                                eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t; eauto.
+                                - eapply CSInvariants.wf_state_wf_reg.
+                                  + eapply CSInvariants.is_prefix_wf_state_t with
+                                        (s :=
+                                           (gps,
+                                            mem,
+                                            Register.set
+                                              r2
+                                              (Ptr (Permission.data, cidv, bidv, offv))
+                                              regs,
+                                            Pointer.inc pc)
+                                        )
+                                        (p := prog); eauto.
+                                    * eapply linking_well_formedness; auto.
+                                      unfold mergeable_interfaces in *.
+                                        by intuition.
+                                  + by simpl.
+                                  + by simpl.
+                                  + by rewrite Pointer.inc_preserves_component.
+                                - unfold Register.get, Register.set.
+                                  by erewrite setmE, eqxx.
+                              }
+                              inversion cidv_bidv_invariant as [|]; auto.
+                              (* just one case remains. *)
+                              subst.
+                              (* cidv_p contradiction with Hcomp1 *)
+                              specialize (@is_program_component_pc_in_domm
+                                            _ _ _ _ _ _ _ _ _ _ _ _
+                                            Hcomp1 Hmerge1) as G.
+                              simpl in G. by rewrite G in cidv_p.
+                        }
+                        specialize (@sigma_left_good_right_good _ (n'' cidv) _
+                                                                Hbidvgood) as
+                            [? [Heq _]].
+                        rewrite Heq in ebidv.
+                        inversion ebidv. by subst.
+                      }
+                      rewrite <- inv_sigma_shifting_sigma_shifting in Hbidv'care.
+                      pose proof Hcancel (care, bidv) as G.
+                      rewrite Hbidv'care ebidv' in G.
+                      by inversion G.
+               ** by rewrite epermv.
+            ++ inversion Hregsp as [Hregs]. by apply Hregs.
       + simpl in *. subst.
           unfold CS.is_program_component,
           CS.is_context_component, turn_of, CS.state_turn in *.
