@@ -4755,7 +4755,166 @@ Section ThreewayMultisem1.
           unfold negb, ic in Hcomp1.
           rewrite Hpccomp_s'_s in H_c'.
             by rewrite H_c' in Hcomp1.
+
+    - (* IStore *)
+      destruct s1' as [[[gps1' mem1'] regs1'] pc1'].
+      find_and_invert_mergeable_internal_states;
+        find_and_invert_mergeable_states_well_formed.
+      + assert (pc1' = pc). by simpl in *.
+        subst pc1'. (* PC lockstep. *)
+        match goal with
+        | H : executing (prepare_global_env prog) ?PC ?INSTR |- _ =>
+          assert (Hex' : executing (prepare_global_env prog') PC INSTR)
+        end.
+        {
+          eapply execution_invariant_to_linking with (c1 := c); eauto.
+          + unfold mergeable_interfaces in *. by intuition.
+          + rewrite <- Hifc_cc'. unfold mergeable_interfaces in *. by intuition.
+          + unfold CS.is_program_component,
+            CS.is_context_component, turn_of, CS.state_turn in *.
+            unfold negb in Hcomp1.
+            pose proof @CS.star_pc_domm_non_inform p c
+                 Hwfp Hwfc Hmerge_ipic Hclosed_prog as Hor'.
+            assert (Pointer.component pc \in domm (prog_interface p)
+                    \/
+                    Pointer.component pc \in domm (prog_interface c))
+              as [G | Hcontra]; auto.
+            {
+              unfold CSInvariants.is_prefix in Hpref_t.
+              eapply Hor'; eauto.
+              - by unfold CS.initial_state.
+            }
+            by (unfold ic in *; rewrite Hcontra in Hcomp1).
+        }
+
+
+        (* IStore-specific *)
+
+        match goal with
+        | H: Memory.store _ _ _ = Some _ |- _ =>
+          specialize (Memory.store_some_permission mem ptr _ _ H) as Hperm_st
+        end.
+        destruct ptr as [[[perm_st cid_st] bid_st] off_st].
+        simpl in Hperm_st. subst.
+
+
+        inversion Hregsp as [Hregs]. simpl in Hregs.
+        specialize (Hregs r1) as [Hregs1'_r1 _].
+        match goal with
+        | H: Register.get r1 regs = Ptr _ |- _ =>
+          rewrite H in Hregs1'_r1
+        end.
+        unfold shift_value, rename_value, rename_addr in Hregs1'_r1.
+        specialize (rename_value_template_Ptr
+                      [eta sigma_shifting_addr n
+                           (fun cid : nat => if cid \in domm (prog_interface p)
+                                             then n cid else n'' cid)]
+                      Permission.data cid_st bid_st off_st
+                   ) as Hren.
+        rewrite <- beq_nat_refl in Hren.
+        rewrite Hren in Hregs1'_r1. symmetry in Hregs1'_r1.
+
+
+        assert (CSInvariants.wf_ptr_wrt_cid_t
+                  (Pointer.component pc) t1
+                  (Permission.data, cid_st, bid_st, off_st)
+               ) as cidst_bidst_invariant.
+        {
+          eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t; eauto.
+          eapply CSInvariants.wf_state_wf_reg.
+          - eapply CSInvariants.is_prefix_wf_state_t with (p := prog); eauto.
+            eapply linking_well_formedness; auto.
+            unfold mergeable_interfaces in *.
+              by intuition.
+          - by simpl.
+          - by simpl.
+          - reflexivity.
+        }
+
+
+        assert (exists v,
+                   Memory.load mem (Permission.data, cid_st, bid_st, off_st) =
+                   Some v) as [vload Hload].
+        {
+          eapply Memory.store_some_load_some.
+          eexists. eassumption.
+        }
         
+        assert (
+            exists mem2',
+              Memory.store
+                mem1'
+                (Permission.data,
+                 (sigma_shifting_addr
+                    n
+                    (fun cid : nat => if cid \in domm (prog_interface p)
+                                      then n cid else n'' cid)
+                    (cid_st, bid_st)).1,
+                 (sigma_shifting_addr
+                    n
+                    (fun cid : nat => if cid \in domm (prog_interface p)
+                                      then n cid else n'' cid)
+                    (cid_st, bid_st)).2,
+                 off_st)
+                (Register.get r2 regs1') =
+              Some mem2'
+          ) as [mem2' Hmemstore].
+        {
+          unfold mem_of_part_executing_rel_original_and_recombined,
+          memory_shifts_memory_at_addr, memory_renames_memory_at_addr,
+          rename_addr in Hmemp.
+          simpl in Hmemp.
+          destruct Hmemp as [Hmemshift _].
+          eapply Memory.store_after_load.
+          rewrite Hmemshift.
+          - unfold option_rename_value, omap, obind, oapp. simpl.
+              by rewrite Hload.
+          - inversion cidst_bidst_invariant; eauto.
+            left.
+            specialize (@is_program_component_pc_in_domm _ _ _ _ _ _ _ _ _ _ _ _
+                                                         Hcomp1 Hmerge1) as G.
+              by apply G.
+        }
+
+        assert (Step sem' (gps1', mem1', regs1', pc)
+                     E0 (gps1', mem2', regs1', Pointer.inc pc)) as Hstep12'.
+        {
+          eapply CS.Step_non_inform; first eapply CS.Store.
+          -- exact Hex'.
+          -- exact Hregs1'_r1.
+          -- exact Hmemstore. 
+          -- reflexivity.
+        }
+        
+        eexists. split; eauto.
+        econstructor; try eassumption.
+        * (* mergeable_states_well_formed *)
+          eapply mergeable_states_well_formed_intro; try eassumption.
+          -- unfold CSInvariants.is_prefix in *.
+             eapply star_right; try eassumption.
+             ++ by rewrite E0_right.
+          -- unfold CSInvariants.is_prefix in *.
+             eapply star_right; try eassumption.
+             ++ by rewrite E0_right.
+          -- (* good_memory *)
+            simpl.
+            admit.
+          -- (* good_memory *)
+            simpl.
+            admit.
+          -- by simpl.
+          -- by rewrite Pointer.inc_preserves_component.
+        * by simpl.
+        * (* mem_of_part_executing_rel_original_and_recombined *)
+          admit.
+        * (* mem_of_part_not_executing_rel_original_and_recombined_at_internal *)
+          admit.
+      + simpl in *. subst.
+        unfold CS.is_program_component,
+        CS.is_context_component, turn_of, CS.state_turn in *.
+        unfold negb, ic in Hcomp1.
+        rewrite Hpccomp_s'_s in H_c'.
+          by rewrite H_c' in Hcomp1.
 
 (*
 

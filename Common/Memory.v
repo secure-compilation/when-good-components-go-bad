@@ -114,6 +114,14 @@ Module Type AbstractComponentMemory.
       exists m',
         store m b i v' = Some m'.
 
+  Axiom store_some_load_some:
+    forall m b i v',
+    (exists v,
+        load m b i = Some v)
+    <->
+    (exists m',
+        store m b i v' = Some m').
+  
   Axiom store_all_after_load_all:
     forall m b vs vs',
       load_all m b = Some vs ->
@@ -577,7 +585,41 @@ Module ComponentMemory : AbstractComponentMemory.
     - by eauto.
     - by move=> /IH [chunk' ->]; eauto.
   Qed.
+
+  Lemma list_upd_some_nth_error_some {T: Type}:
+    forall chunk n v' chunk',
+    list_upd chunk n v' = Some chunk' ->
+    exists v : T, nth_error chunk n = Some v.
+  Proof.
+    intros chunk.
+    induction chunk as [|v_ih]; try discriminate.
+    intros n v' chunk' Hsome.
+    simpl in Hsome.
+    destruct n as [|n'] eqn:Hn.
+    - eexists. by simpl.
+    - destruct (list_upd chunk n' v') as [rest'|] eqn:Hrest'; try discriminate.
+      specialize (IHchunk _ _ _ Hrest') as [v'' Hv''].
+      eexists. simpl. eassumption.
+  Qed.
   
+  Lemma store_some_load_some:
+    forall m b i v',
+    (exists v,
+        load m b i = Some v)
+    <->
+    (exists m',
+        store m b i v' = Some m').
+  Proof.
+    intros. split; intros [e Hsome].
+    - eapply store_after_load; eauto.
+    - rewrite /load. rewrite /store in Hsome.
+      case m_b: (content m b)=> [chunk|] //; rewrite m_b in Hsome; try discriminate.
+      destruct (0 <=? i)%Z eqn:ei; try discriminate.
+      destruct (list_upd chunk (Z.to_nat i) v') as [chunk'|] eqn:echunk;
+        try discriminate.
+      by specialize (list_upd_some_nth_error_some _ _ _ _ echunk).
+  Qed.
+      
   Lemma domm_prealloc :
     forall bufs m,
       prealloc bufs = m ->
@@ -783,6 +825,30 @@ Module Memory.
     by eauto.
   Qed.
 
+  Lemma store_some_load_some:
+    forall m ptr v',
+    (exists v,
+        load m ptr = Some v)
+    <->
+    (exists m',
+        store m ptr v' = Some m').
+  Proof.
+    intros m [[[perm cid] bid] off] v'. unfold load, store.
+    simpl. destruct (perm =? Permission.data) eqn:eperm; simpl.
+    - destruct (m cid) as [compMem|] eqn:emcid; simpl.
+      + split; intros H.
+        * assert (exists compMem',
+                     ComponentMemory.store compMem bid off v' = Some compMem') as [? G].
+            by eapply ComponentMemory.store_some_load_some.
+            rewrite G. eexists. reflexivity.
+        * eapply ComponentMemory.store_some_load_some.
+          destruct (ComponentMemory.store compMem bid off v') as [compMem'|] eqn:G.
+          -- exists compMem'. exact G.
+          -- destruct H. discriminate.
+      + split; intros [? ?]; discriminate.
+    - split; intros [? ?]; discriminate.
+  Qed.
+      
   Lemma load_some_permission mem ptr v :
     load mem ptr = Some v -> Pointer.permission ptr = Permission.data.
   Proof.
