@@ -966,9 +966,10 @@ Section PredicateOnReachableAddresses.
   Variable good_addr: addr_t -> Prop.
 
   Definition good_memory (m: Memory.t) : Prop :=
-    forall cid bid offset p cid_l bid_l o,
+    forall cid bid offset cid_l bid_l o,
       good_addr (cid, bid) ->
-      Memory.load m (Permission.data, cid, bid, offset) = Some (Ptr (p, cid_l, bid_l, o)) ->
+      Memory.load m (Permission.data, cid, bid, offset) =
+      Some (Ptr (Permission.data, cid_l, bid_l, o)) ->
       good_addr (cid_l, bid_l).
 
   Variable mem: Memory.t.
@@ -990,7 +991,7 @@ Section PredicateOnReachableAddresses.
       assert (In (a'cid, a'bid) (ComponentMemory.load_block compMem bid)) as HIn.
       { apply HinIn. trivial. }
       destruct (Hif HIn) as [ptro [i Hload]].
-      apply good_memory_mem with (cid := cid) (bid := bid) (offset := i) (p := Permission.data)
+      apply good_memory_mem with (cid := cid) (bid := bid) (offset := i)
                                 (o := ptro); auto.
       unfold Memory.load. simpl. rewrite H2. assumption.
   Qed.
@@ -1438,6 +1439,14 @@ Section PropertiesOfTheShiftRenaming.
     }
     
       by inversion H.
+  Qed.
+
+  Lemma sigma_shifting_addr_cid_constant n1 n2 addr:
+    (sigma_shifting_addr n1 n2 addr).1 = addr.1.
+  Proof.
+    destruct addr as [cid bid].
+    unfold sigma_shifting_addr.
+    by destruct (sigma_shifting (n1 cid) (n2 cid) (care, bid)).
   Qed.
 
   Lemma rename_addr_sigma_shifting_addr_cid_constant n1 n2 addr:
