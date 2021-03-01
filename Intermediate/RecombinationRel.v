@@ -5092,18 +5092,22 @@ Section ThreewayMultisem1.
               }
               rewrite Hcond in Hload_after_store_recombined.
               by rewrite Hload_after_store_recombined.
-          - 
-
-            intros [cid_recomb bid_recomb] Hrecomb_or off.
-            (*match goal with
+          - intros [cid_recomb bid_recomb] Hrecomb_or off.
+            match goal with
             | H: Memory.store _ (Permission.data, cid_st, bid_st, off_st) _ = _ |- _ =>
               specialize (Memory.load_after_store
                           _ _ _ _
                           (Permission.data,
-                           cid_original,
-                           bid_original,
-                           off
-                          )
+                           (inv_sigma_shifting_addr
+                              n
+                              (fun cid : nat => if cid \in domm (prog_interface p)
+                                                then n cid else n'' cid)
+                              (cid_recomb, bid_recomb)).1,
+                           (inv_sigma_shifting_addr
+                              n
+                              (fun cid : nat => if cid \in domm (prog_interface p)
+                                                then n cid else n'' cid)
+                              (cid_recomb, bid_recomb)).2, off)
                           H
                          ) as Hload_after_store
             end.
@@ -5112,21 +5116,248 @@ Section ThreewayMultisem1.
                 Memory.load_after_store
                   _ _ _ _
                   (Permission.data,
-                   (sigma_shifting_addr
-                      n
-                      (fun cid : nat => if cid \in domm (prog_interface p)
-                                        then n cid else n'' cid)
-                      (cid_original, bid_original)).1,
-                   (sigma_shifting_addr
-                      n
-                      (fun cid : nat => if cid \in domm (prog_interface p)
-                                        then n cid else n'' cid)
-                      (cid_original, bid_original)).2,
+                   cid_recomb,
+                   bid_recomb,
                    off)
                   Hmemstore
                 ) as Hload_after_store_recombined.
-                *)
-            admit.
+
+            destruct (@eq_op
+                        (prod_eqType
+                           (prod_eqType (prod_eqType nat_eqType nat_eqType)
+                                        nat_eqType)
+                           Extra.Z_eqType)
+                        (Permission.data, cid_recomb, bid_recomb, off)
+                        (Permission.data,
+                         (sigma_shifting_addr
+                            n
+                            (fun cid : nat =>
+                               if cid \in domm (prog_interface p)
+                               then n cid else n'' cid)
+                            (cid_st, bid_st)).1,
+                         (sigma_shifting_addr
+                            n
+                            (fun cid : nat =>
+                               if cid \in domm (prog_interface p)
+                               then n cid else n'' cid)
+                            (cid_st, bid_st)).2, off_st)
+                     ) eqn:Heq_st_addr;
+              rewrite Hload_after_store_recombined.
+            + assert (
+                  (Permission.data, cid_recomb, bid_recomb, off) =
+                  (Permission.data,
+                   (sigma_shifting_addr
+                      n
+                      (fun cid : nat =>
+                         if cid \in domm (prog_interface p)
+                         then n cid else n'' cid)
+                      (cid_st, bid_st)).1,
+                   (sigma_shifting_addr
+                      n
+                      (fun cid : nat =>
+                         if cid \in domm (prog_interface p)
+                         then n cid else n'' cid)
+                      (cid_st, bid_st)).2, off_st))
+                  as Heq.
+                by apply/(@eqP (prod_eqType
+                                  (prod_eqType (prod_eqType nat_eqType nat_eqType)
+                                               nat_eqType)
+                                  Extra.Z_eqType)).
+                inversion Heq. subst.
+                rewrite Hload_after_store.
+                unfold inv_sigma_shifting_addr. simpl.
+                destruct (sigma_shifting
+                            (n cid_st)
+                            (if cid_st \in domm (prog_interface p)
+                             then n cid_st else n'' cid_st)
+                            (care, bid_st)
+                         ) as [care_shifting bid_st_shift] eqn:eshift; rewrite eshift.
+                simpl.
+                destruct (inv_sigma_shifting
+                            (n cid_st)
+                            (if cid_st \in domm (prog_interface p)
+                             then n cid_st else n'' cid_st)
+                            (care, bid_st_shift)
+                         ) as [care_inv_shifting bid_st_shift_inv_shift] eqn:einvshift;
+                  rewrite einvshift.
+                simpl.
+                assert (bid_st = bid_st_shift_inv_shift).
+                {
+                  pose proof cancel_sigma_shifting_inv_sigma_shifting
+                       (n cid_st)
+                       (if cid_st \in domm (prog_interface p)
+                        then n cid_st else n'' cid_st) as Hcancel.
+                  unfold cancel in *.
+                  inversion cidst_bidst_invariant as [|? ? ? ? Hshr].
+                  - subst.
+                    rewrite Hpc_prog_interface_p sigma_shifting_n_n_id in eshift.
+                    inversion eshift. subst.
+                    rewrite Hpc_prog_interface_p inv_sigma_shifting_n_n_id in einvshift.
+                      by inversion einvshift.
+                  - subst.
+                    specialize (addr_shared_so_far_good_addr
+                                  (left_addr_good_for_shifting n)
+                                  _ Hgood_t _ Hshr).
+                    intros Hgoodbid_st.
+                    specialize (inverse_rename_addr_rename_addr_cancel
+                                  _ _
+                                  (fun cid => if cid \in domm (prog_interface p)
+                                   then (n cid) else (n'' cid))
+                                  Hgoodbid_st) as Hcancel2.
+                    unfold inverse_rename_addr, rename_addr, inv_sigma_shifting_addr,
+                    sigma_shifting_addr in Hcancel2.
+                    rewrite eshift einvshift in Hcancel2.
+                    by inversion Hcancel2.
+                }
+                subst.
+                rewrite eqxx.
+                
+                inversion Hregsp as [Hregs].
+                unfold inverse_shift_value, shift_value,
+                inverse_rename_addr, rename_addr in *.
+                specialize (Hregs r2) as [_ Hr2_inv_shift].
+                simpl in Hr2_inv_shift.
+                by rewrite Hr2_inv_shift.
+
+            + assert (
+                  @eq_op
+                    (prod_eqType
+                       (prod_eqType (prod_eqType nat_eqType nat_eqType)
+                                    nat_eqType)
+                       Extra.Z_eqType)
+                    (Permission.data,
+                     (inv_sigma_shifting_addr
+                        n
+                        (fun cid : nat =>
+                           if cid \in domm (prog_interface p) then n cid else n'' cid)
+                        (cid_recomb, bid_recomb)).1,
+                     (inv_sigma_shifting_addr
+                        n
+                        (fun cid : nat =>
+                           if cid \in domm (prog_interface p) then n cid else n'' cid)
+                        (cid_recomb, bid_recomb)).2, off)
+                    (Permission.data, cid_st, bid_st, off_st)
+                  = false
+                ) as Hcond.
+              {
+                apply/eqP. unfold not. rewrite !pair_equal_spec.
+                intros [[[_ Hcid_eq] Hbid_eq] Hoff_eq]. subst.
+                assert (cid_recomb =
+                        (sigma_shifting_addr
+                           n
+                           (fun cid : nat => if cid \in domm (prog_interface p)
+                                             then n cid else n'' cid)
+                           (
+                             (inv_sigma_shifting_addr
+                                n
+                                (fun cid : nat =>
+                                   if cid \in domm (prog_interface p)
+                                   then n cid else n'' cid)
+                                (cid_recomb, bid_recomb)).1,
+                             (inv_sigma_shifting_addr
+                                n
+                                (fun cid : nat =>
+                                   if cid \in domm (prog_interface p)
+                                   then n cid else n'' cid)
+                                (cid_recomb, bid_recomb)
+                             ).2
+                           )
+                        ).1
+                       ) as Hcid_recomb.
+                  by rewrite
+                       inv_sigma_shifting_addr_cid_constant
+                       sigma_shifting_addr_cid_constant.
+                  
+                
+                  assert (bid_recomb =
+                          (sigma_shifting_addr
+                             n
+                             (fun cid : nat => if cid \in domm (prog_interface p)
+                                               then n cid else n'' cid)
+                             (
+                               (inv_sigma_shifting_addr
+                                  n
+                                  (fun cid : nat =>
+                                     if cid \in domm (prog_interface p)
+                                     then n cid else n'' cid)
+                                  (cid_recomb, bid_recomb)
+                               ).1,
+                               (inv_sigma_shifting_addr
+                                  n
+                                  (fun cid : nat =>
+                                     if cid \in domm (prog_interface p)
+                                     then n cid else n'' cid)
+                                  (cid_recomb, bid_recomb)
+                               ).2
+                             )
+                          ).2
+                         ) as Hbid_recomb.
+                {
+                  simpl. destruct Hrecomb_or as [Hin|Hshr].
+                  - by rewrite Hin inv_sigma_shifting_n_n_id
+                               Hin sigma_shifting_n_n_id.
+                  - destruct (
+                        inv_sigma_shifting
+                          (n cid_recomb)
+                          (if cid_recomb \in domm (prog_interface p)
+                           then n cid_recomb else n'' cid_recomb)
+                          (care, bid_recomb)
+                      ) as [inv_care inv_bid_recomb] eqn:einvshift.
+                    rewrite einvshift.
+                    simpl.
+                    destruct (
+                        sigma_shifting
+                          (n cid_recomb)
+                          (if cid_recomb \in domm (prog_interface p)
+                           then n cid_recomb else n'' cid_recomb)
+                          (care, inv_bid_recomb)
+                      ) as [shift_care shift_inv_bid_recomb] eqn:eshift.
+                    rewrite eshift.
+                    simpl.
+                    pose proof cancel_inv_sigma_shifting_sigma_shifting
+                         (n cid_recomb)
+                         (if cid_recomb \in domm (prog_interface p)
+                          then n cid_recomb else n'' cid_recomb) as Hcancel.
+                    unfold cancel in *.
+                    specialize (addr_shared_so_far_good_addr
+                                  _
+                                  _ Hgood_t' _ Hshr).
+                    intros Hgoodbid_recomb.
+                    unfold left_addr_good_for_shifting,
+                    left_block_id_good_for_shifting in Hgoodbid_recomb.
+                    pose proof rename_addr_inverse_rename_addr_cancel as G.
+                    unfold right_addr_good_for_shifting,
+                    right_block_id_good_for_shifting in G.
+                    specialize (G (cid_recomb, bid_recomb) n).
+                    assert (
+                        rename_addr
+                          (sigma_shifting_addr
+                             n
+                             (fun cid : nat => if cid \in domm (prog_interface p)
+                                               then n cid else n'' cid)
+                          )
+                          (inverse_rename_addr
+                             (inv_sigma_shifting_addr
+                                n
+                                (fun cid : nat => if cid \in domm (prog_interface p)
+                                                  then n cid else n'' cid)
+                             ) (cid_recomb, bid_recomb)) =
+                        (cid_recomb, bid_recomb)
+                      ) as Hcancel2.
+                    by apply G; simpl; eassumption.
+                    unfold inverse_rename_addr, rename_addr, inv_sigma_shifting_addr,
+                    sigma_shifting_addr in Hcancel2.
+                    rewrite einvshift eshift in Hcancel2.
+                      by inversion Hcancel2.
+                }
+                rewrite <- Hbid_recomb in Heq_st_addr.
+                rewrite <- Hcid_recomb in Heq_st_addr.
+                  by rewrite eqxx in Heq_st_addr.
+              }
+              rewrite Hcond in Hload_after_store.
+              rewrite Hload_after_store.
+              destruct Hmemp as [_ Hinvshift].
+              by specialize (Hinvshift (cid_recomb, bid_recomb) Hrecomb_or off).
         }
         
         eexists. split; eauto.

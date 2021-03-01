@@ -1449,6 +1449,14 @@ Section PropertiesOfTheShiftRenaming.
     by destruct (sigma_shifting (n1 cid) (n2 cid) (care, bid)).
   Qed.
 
+  Lemma inv_sigma_shifting_addr_cid_constant n1 n2 addr:
+    (inv_sigma_shifting_addr n1 n2 addr).1 = addr.1.
+  Proof.
+    destruct addr as [cid bid].
+    unfold inv_sigma_shifting_addr.
+    by destruct (inv_sigma_shifting (n1 cid) (n2 cid) (care, bid)).
+  Qed.
+
   Lemma rename_addr_sigma_shifting_addr_cid_constant n1 n2 addr:
     (rename_addr (sigma_shifting_addr n1 n2) addr).1 = addr.1.
   Proof.
