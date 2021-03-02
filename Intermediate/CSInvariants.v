@@ -131,4 +131,11 @@ Proof.
     by (unfold wf_mem_wrt_t_pc; intros H ?; eapply H).
 Qed.
 
+Lemma pc_permission_code s p t pc:
+  well_formed_program p ->
+  is_prefix s p t ->
+  CS.state_pc s = pc ->
+  Pointer.permission pc = Permission.code.
+Admitted.
+
 End CSInvariants.

@@ -705,6 +705,7 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
 | Jump: forall gps mem regs pc pc' r,
     executing G pc (IJump r) ->
     Register.get r regs = Ptr pc' ->
+    Pointer.permission pc' = Permission.code ->
     Pointer.component pc' = Pointer.component pc ->
     step G (gps, mem, regs, pc) E0
            (gps, mem, regs, pc')
@@ -851,7 +852,10 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
       match Register.get r regs with
       | Ptr pc' =>
         if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-          ret (E0, (gps, mem, regs, pc'))
+          if Pointer.permission pc' =? Permission.code then
+            ret (E0, (gps, mem, regs, pc'))
+          else
+            None
         else
           None
       | _ => None
@@ -972,8 +976,10 @@ Proof.
 
   - match goal with
     | Hregs_value: Register.get _ _ = _,
-      Hsame_component: Pointer.component _ = Pointer.component _ |- _ =>
-      rewrite -> Hregs_value, Hsame_component, Nat.eqb_refl
+      Hsame_component: Pointer.component _ = Pointer.component _,
+      Hcode: Pointer.permission _ = Permission.code
+      |- _ =>
+      rewrite -> Hregs_value, Hsame_component, Hcode, !Nat.eqb_refl
     end.
     reflexivity.
 
@@ -1172,11 +1178,14 @@ Proof.
                destruct (Component.eqb (Pointer.component t0) (Pointer.component pc0))
                         eqn:Hcompcheck;
                  try discriminate.
+               destruct (Pointer.permission t0 =? Permission.code) eqn:Hcode;
+                 try discriminate.
                inversion H2; subst.
                eapply Jump with (pc':=pc);
                  try reflexivity.
                **** eexists. eexists. eauto.
                **** assumption.
+               **** apply Nat.eqb_eq. assumption.
                **** apply Nat.eqb_eq. assumption.
 
            *** rewrite H in H2.
@@ -1461,7 +1470,7 @@ try by move=> *; match goal with
                   apply find_label_in_component_1 in H; rewrite H
   end.
   assumption.
-- by move=> ???????? ->.
+- by move=> ????????? ->.
 - by move=> ??????????? /find_label_in_procedure_1 ->.
 - by move=> ????????????; rewrite eqxx Pointer.inc_preserves_component.
 - move=> ??????????????. rewrite !eqxx. rewrite andTb.
@@ -1958,7 +1967,10 @@ Proof.
            end);
       try now rewrite Pointer.inc_preserves_component.
     (*+ erewrite <- find_label_in_component_1; eassumption.*)
-    + now rewrite H2.
+    + match goal with
+      | H: Pointer.component _ = Pointer.component _ |- _ =>
+        now rewrite H
+      end.
     + erewrite <- find_label_in_procedure_1; eassumption.
 Qed.
 
