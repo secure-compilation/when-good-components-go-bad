@@ -154,6 +154,16 @@ Module Type AbstractComponentMemory.
       load m b i = Some v ->
       In b (domm m).
 
+  Axiom next_block_alloc :
+    forall m m' n b,
+      alloc m n = (m', b) ->
+      (b = next_block m /\ next_block m' = next_block m + 1).
+
+  Axiom next_block_store_stable :
+    forall m m' b i v,
+      store m b i v = Some m' ->
+      next_block m = next_block m'.
+  
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -631,6 +641,27 @@ Module ComponentMemory : AbstractComponentMemory.
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
   Admitted.
+
+  Lemma next_block_alloc :
+    forall m m' n b,
+      alloc m n = (m', b) ->
+      (b = next_block m /\ next_block m' = next_block m + 1).
+  Proof.
+    unfold alloc. intros ? ? ? ? Halloc. inversion Halloc. subst.
+    intuition. simpl. unfold next_block. by intuition.
+  Qed.
+    
+  Lemma next_block_store_stable :
+    forall m m' b i v,
+      store m b i v = Some m' ->
+      next_block m = next_block m'.
+  Proof.
+    unfold store, next_block. intros ? ? ? ? ? Hstore.
+    destruct (content m b) as [ch|]; try discriminate.
+    destruct (0 <=? i)%Z; try discriminate.
+    destruct (list_upd ch (Z.to_nat i) v); try discriminate.
+    inversion Hstore. by subst.
+  Qed.
   
 End ComponentMemory.
 

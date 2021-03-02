@@ -138,4 +138,12 @@ Lemma pc_permission_code s p t pc:
   Pointer.permission pc = Permission.code.
 Admitted.
 
+Lemma mem_comp_in_domm_prog_interface_some s p t mem cid:
+  well_formed_program p ->
+  is_prefix s p t ->
+  CS.state_mem s = mem ->
+  cid \in domm (prog_interface p) ->
+  exists compMem, mem cid = Some compMem.
+Admitted.
+
 End CSInvariants.
