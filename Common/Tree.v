@@ -216,51 +216,8 @@ Section Numbering.
     | _, _ => true
     end))).
 
-  Lemma give_num_unique {A : Type} :
-    forall (tr : t A) (p p' : path) (a a' : A) (n n' : nat) (ls ls' : list (t (A * nat))),
-      traverse_path p (give_num tr) = Some (node (a, n) ls) ->
-      traverse_path p' (give_num tr) = Some (node (a', n') ls') ->
-      n = n' ->
-      p = p'.
-  Proof.
-    Admitted.
 
 End Numbering.
-(*! QuickChick give_num_unique_test. *)
-
-
-
-(* Section Fold. *)
-
-(*   Fixpoint fold_id {A B : Type} (f : B -> nat -> A -> A) (a0 : A) (tr : @t (nat * B)) (n : nat) := *)
-(*     match n with *)
-(*     | 0 => *)
-(*       match get 0 tr with *)
-(*       | Some (node (_, b) _) => f b 0 a0 *)
-(*       | None => a0 *)
-(*       end *)
-(*     | S n' => *)
-(*       match get (S n') tr with *)
-(*       | Some (node (_, b) _) => f b (S n') (fold_id f a0 tr n') *)
-(*       | None => fold_id f a0 tr n' *)
-(*       end *)
-(*     end. *)
-
-(*   Fixpoint fold_id' {A B : Type} (f : B -> nat -> A -> A) (g : nat -> A -> A) (a0 : A) (tr : @t (nat * B)) (n : nat) := *)
-(*     match n with *)
-(*     | 0 => *)
-(*       match get 0 tr with *)
-(*       | Some (node (_, b) _) => f b 0 a0 *)
-(*       | None => g 0 a0 *)
-(*       end *)
-(*     | S n' => *)
-(*       match get (S n') tr with *)
-(*       | Some (node (_, b) _) => f b (S n') (fold_id f a0 tr n') *)
-(*       | None => g (S n') (fold_id f a0 tr n')  *)
-(*       end *)
-(*     end. *)
-
-(* End Fold. *)
 
 Section Map.
   Context {A B : Type}.

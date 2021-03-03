@@ -39,12 +39,8 @@ Fixpoint give_nums (trs: list tree) (n: nat) :=
     tr_num :: give_nums trs' (S n')
   end.
 
-Lemma give_nums_unique: forall trs ls1 x1 y1 ls2 x2 y2 ls3,
-    concat (List.map tree_to_list (give_nums trs 0)) = ls1 ++ (x1, y1) :: ls2 ++ (x2, y2) :: ls3 ->
-    x1 <> x2.
-Proof.
-Admitted.
-
+(* Admitted: this lemma states a property of the function that assigns locations to
+   each node. *)
 Lemma give_nums_app_comm: forall (l1 l2: list tree) (e: event) (ls: list tree) (n: nat),
     exists (n': nat) (l1' l2': list numbered_tree),
       give_nums (l1 ++ node e ls :: l2) n = l1' ++ node (e, n') (give_nums ls (S n')) :: l2'.
@@ -305,8 +301,6 @@ Proof.
   rewrite Z.eqb_refl. simpl.
   remember (get_all_handle_calls C P (Some trs)) as ls.
   remember (zs1 ++ (z, n) :: zs2) as zs.
-  (* assert (unique_p: unique_key ls) by admit. *)
-  (* assert (unique_z: unique_key zs) by admit. *)
   subst.
   rewrite TREES.
   assert (H: exists ls1 ls2, get_all_handle_calls C P (Some trs) = ls1 ++ (p, zs1 ++ (z, n) :: zs2) :: ls2).
@@ -424,10 +418,6 @@ Proof.
     eapply unique_key_smaller; eauto.
 Qed.
 
-(* Definition procs_to_bt intf := *)
-(*   mapim (fun C Ciface => if C == Component.main then *)
-(*                    (Procedure.main |: Component.export Ciface)%fset *)
-(*                  else Component.export Ciface ) intf. *)
 
 Definition compile_call_return_tree (p: CallReturnTree.prg): TreeWithCallers.prg :=
   {| TreeWithCallers.prog_interface := CallReturnTree.prog_interface p;
@@ -531,7 +521,6 @@ Lemma call_event_correct: forall ge C1 P z C2 rts n cs cs' m' P_expr,
     CS.s_expr cs = event_expression n (XECall C1 P z C2 rts) ->
     find_procedure (genv_procedures ge) C2 P = Some P_expr ->
     Memory.store (CS.s_memory cs) (location (CS.s_component cs)) (Int (Z.of_nat n)) = Some m' ->
-    (* Memory.store m' (intcall (CS.s_component cs)) (Int 1%Z) = Some m'' -> *)
     cs' = [CState C2, CS.Frame C1 (CS.s_arg cs) (Kassign1 (RETURN_p)
                                                        (Kseq ((E_seq (return_handling_expression rts)
                                                                      (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 0))))
@@ -618,24 +607,19 @@ Definition build_event_expression (C: Component.id) ots :=
   switch_event parent_plus_expr.
 
 
-Lemma build_event_expression_correct: forall (trees: NMap (seq call_return_tree)) ge cs cs' C trs trs1 trs2 trs' tr p xe n cls,
-    forall (* (CALLERS: callers gs C = Some zs) *)
-      (* (TREES: trees C = Some trs) *)
-      (* (INTREES: callers_in_trees C P p trs zs) *)
-      (CUREXPR: CS.s_expr cs = build_event_expression C trs)
-      (* (CURARG: CS.s_arg cs = Int z) *)
-      (TREES: trees (CS.s_component cs) = Some (trs1 ++ tr :: trs2))
+(* Admitted: this heavily relies on unicity of the location.
+   It holds, because in our setting a tree that has control only has one possibility *)
+Lemma build_event_expression_correct: forall (trees: NMap (seq call_return_tree)) ge cs cs' C trs trs' tr p xe n cls,
+    forall (CUREXPR: CS.s_expr cs = build_event_expression C (Some trs))
+      (SUBTREES: subtrees trs' trs)
+      (TREES: trs' = [tr])
       (TREE: tr = node (p, xe, n, cls) trs')
       (CURLOC: Memory.load (CS.s_memory cs) (location (CS.s_component cs)) = Some (Int (Z.of_nat p))),
       cs' = [CState (CS.s_component cs), (CS.s_stack cs), (CS.s_memory cs), (CS.s_cont cs),
              event_expression n xe, CS.s_arg cs] ->
       star CS.kstep ge cs E0 cs'.
 Proof.
-  move=> trees ge cs cs' C trs trs1 trs2 trs' tr p xe n cls CUREXPR TREES TREE CURLOC H.
-  simpl in *; subst.
-  unfold build_event_expression.
-  admit.
-Admitted.
+  Admitted.
 
 
 
@@ -646,148 +630,9 @@ Definition compile_tree_with_callers (p: TreeWithCallers.prg): program :=
                                 procs) (TreeWithCallers.prog_procedures p);
      prog_buffers := (mapim (fun C Ciface => inr [Int 0%Z; Int 0%Z; Int 0%Z]) (TreeWithCallers.prog_interface p)) |}.
 
+(* admitted: this is a well-formedness theorem of the source program that are generated *)
 Lemma wf_compile (p: TreeWithCallers.prg) (WF: TreeWithCallers.wf p):
   well_formed_program (compile_tree_with_callers p).
 Proof.
   Admitted.
 
-(* (* Axiom expr_handle_calls: Component.id -> Procedure.id -> seq exp_tree -> expr. *) *)
-(* Definition expr_handle_calls C P (t: seq exp_tree) := *)
-(*   let es := get_all_handle_calls C P t in *)
-(*   fold_right merge_ifs E_exit es. *)
-
-
-(* Fixpoint call_handling_expression (p: nat) (l: seq (Z * nat)) := *)
-(*   match l with *)
-(*   | [] => E_exit *)
-(*   | (z, n) :: l' => E_if (AND (E_binop Eq LOCATION (E_val (Int (Z.of_nat p)))) (E_binop Eq ARG (E_val (Int z)))) *)
-(*                        (E_assign LOCATION_p (E_val (Int (Z.of_nat n)))) *)
-(*                        (call_handling_expression p l') *)
-(*   end. *)
-
-
-(* Fixpoint add_call_handling_expression (tr: call_return_tree): callexp_tree := *)
-(*   match tr with *)
-(*   | leaf _ => leaf _ *)
-(*   | node (p, xe, n, cls) ls' => *)
-(*     node (p, xe, n, cls, call_handling_expression n cls) (List.map add_call_handling_expression ls') *)
-(*   end. *)
-
-(* Definition compile_call_return_tree (p: CallReturnTree.prg): TreeWithCallers.prg := *)
-(*   {| TreeWithCallers.prog_interface := CallReturnTree.prog_interface p; *)
-(*      TreeWithCallers.prog_trees := mapm (List.map add_call_handling_expression) (CallReturnTree.prog_trees p) |}. *)
-
-(* Lemma initial_callers_same': forall p, *)
-(*     CallReturnTree.initial_callers (CallReturnTree.prog_trees p) = *)
-(*     TreeWithCallers.initial_callers' (TreeWithCallers.prog_trees (compile_call_return_tree p)). *)
-(* Proof. *)
-(*   move=> [intf p] /=. *)
-(*   rewrite -eq_fmap. unfold "=1". move=> x. *)
-(*   destruct (p x) eqn:Heq. *)
-(*   - rewrite mapimE mapimE mapmE. rewrite Heq. simpl. *)
-(*     clear. *)
-(*     induction l. *)
-(*     + simpl. *)
-(*       rewrite /DefSimLanguages.CallReturnTree.collect_callers_initial /DefSimLanguages.TreeWithCallers.collect_callers_initial. *)
-(*       reflexivity. *)
-(*     + move: IHl. *)
-(*       rewrite /DefSimLanguages.CallReturnTree.collect_callers_initial /DefSimLanguages.TreeWithCallers.collect_callers_initial. *)
-(*       rewrite /CallReturnTree.call_information_initial /TreeWithCallers.call_information_initial. *)
-(*       simpl. intros. inversion IHl. simpl. rewrite H0. simpl. clear IHl H0. *)
-(*       destruct a as [| [[[a0 []] a2] a3] a4]; simpl. reflexivity. *)
-(*       destruct (x == i1) eqn:Heq; rewrite Heq. reflexivity. reflexivity. reflexivity. *)
-(*   - rewrite mapimE mapimE mapmE. rewrite Heq. simpl. *)
-(*     reflexivity. *)
-(* Qed. *)
-
-
-
-
-(* Fixpoint add_return_handling_expression (tr: callexp_tree): retexp_tree := *)
-(*   match tr with *)
-(*   | leaf _ => leaf _ *)
-(*   | node (p, XECall C P z C' rts, n, cls, e1) ls => *)
-(*     node (p, XECall C P z C' rts, n, cls, e1, Some (return_handling_expression rts)) (List.map add_return_handling_expression ls) *)
-(*   | node (p, xe, n, cls, e1) ls => *)
-(*     node (p, xe, n, cls, e1, None) (List.map add_return_handling_expression ls) *)
-(*   end. *)
-
-(* Definition compile_callexp_tree (p: TreeWithCallers.prg): TreeWithReturns.prg := *)
-(*   {| TreeWithReturns.prog_interface := TreeWithCallers.prog_interface p; *)
-(*      TreeWithReturns.prog_trees := mapm (List.map add_return_handling_expression) (TreeWithCallers.prog_trees p) |}. *)
-
-(* Lemma initial_callers_same'': forall p, *)
-(*     TreeWithCallers.initial_callers' (TreeWithCallers.prog_trees p) = *)
-(*     TreeWithReturns.initial_callers' (TreeWithReturns.prog_trees (compile_callexp_tree p)). *)
-(* Proof. *)
-(*   move=> [intf p] /=. *)
-(*   rewrite -eq_fmap. unfold "=1". move=> x. *)
-(*   destruct (p x) eqn:Heq. *)
-(*   - rewrite mapimE mapimE mapmE. rewrite Heq. simpl. *)
-(*     clear. *)
-(*     induction l. *)
-(*     + simpl. *)
-(*       rewrite /DefSimLanguages.TreeWithCallers.collect_callers_initial /DefSimLanguages.TreeWithReturns.collect_callers_initial. *)
-(*       simpl. *)
-(*       reflexivity. *)
-(*     + move: IHl. *)
-(*       rewrite /DefSimLanguages.TreeWithCallers.collect_callers_initial /DefSimLanguages.TreeWithReturns.collect_callers_initial. *)
-(*       rewrite /TreeWithCallers.call_information_initial /TreeWithReturns.call_information_initial. *)
-(*       simpl. intros. inversion IHl. simpl. rewrite H0. simpl. clear IHl H0. *)
-(*       destruct a as [| [[[[a0 []] []] a2] a3] a4]; simpl. reflexivity. *)
-(*       destruct (x == i1) eqn:Heq; rewrite Heq. reflexivity. reflexivity. reflexivity. *)
-(*       reflexivity. reflexivity. *)
-(*   - rewrite mapimE mapimE mapmE. rewrite Heq. simpl. *)
-(*     reflexivity. *)
-(* Qed. *)
-
-
-(* Lemma initial_callers_same''': forall p, *)
-(*     TreeWithCallers.initial_callers (TreeWithCallers.prog_trees p) = *)
-(*     TreeWithReturns.initial_callers (TreeWithReturns.prog_trees (compile_callexp_tree p)). *)
-(* Proof. *)
-(*   move=> p. *)
-(*   rewrite /TreeWithCallers.initial_callers /TreeWithReturns.initial_callers. *)
-(*   rewrite initial_callers_same''. reflexivity. *)
-(* Qed. *)
-
-
-(* Fixpoint add_event_expression (tr: retexp_tree): exp_tree := *)
-(*   match tr with *)
-(*   | leaf _ => leaf _ *)
-(*   | node (p, e, n, cls, exp, oexp) ls => node (p, e, n, cls, exp, oexp, event_expression n e) (List.map add_event_expression ls) *)
-(*   end. *)
-
-(* Definition compile_retexp_tree (p: TreeWithReturns.prg): TreeWithExprs.prg := *)
-(*   {| TreeWithExprs.prog_interface := TreeWithReturns.prog_interface p; *)
-(*      TreeWithExprs.prog_trees := mapm (List.map add_event_expression) (TreeWithReturns.prog_trees p) |}. *)
-
-(* Locate "|:". *)
-
-(* Axiom expr_do_events: Component.id -> Procedure.id -> seq exp_tree -> expr. *)
-
-
-
-(* Definition procedure_of_trees C P (t: NMap (seq exp_tree)) := *)
-(*   match t C with *)
-(*   | None => E_exit *)
-(*   | Some trs => *)
-(*     let ecall := expr_handle_calls C P trs in *)
-(*     let ebranch_event := expr_do_events C P trs in *)
-(*     E_seq ecall *)
-(*           ebranch_event *)
-(*   end. *)
-
-(* Definition procedures_of_trees (intf: Program.interface) (t: NMap (seq exp_tree)) : NMap (NMap expr) := *)
-(*   mapim (fun C Ciface => *)
-(*            let procs := *)
-(*                if C == Component.main then *)
-(*                  (Procedure.main |: Component.export Ciface)%fset *)
-(*                else Component.export Ciface in *)
-(*            mkfmapf (fun P => procedure_of_trees C P t) procs) *)
-(*         intf. *)
-
-(* Definition program_of_tree (p: TreeWithExprs.prg): program := *)
-(*   {| prog_interface  := TreeWithExprs.prog_interface p; *)
-(*      prog_procedures := procedures_of_trees (TreeWithExprs.prog_interface p) (TreeWithExprs.prog_trees p); *)
-(*      prog_buffers    := mapm (fun _ => inr [Int 0; Int 0; Int 0]) (TreeWithExprs.prog_interface p) |}. *)

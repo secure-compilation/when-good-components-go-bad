@@ -231,27 +231,6 @@ Module ParentAwareTree.
        globalenv := prog_interface p |}.
 End ParentAwareTree.
 
-(* Definition node_of_cls C P (x:(nat * event * nat * seq (Z * nat))) := *)
-(*   match x with *)
-(*   | (p, e, n, cls) => *)
-(*     match e with *)
-(*     | ECall C0 P0 z C1 => (C0 == C) && (P0 == P) *)
-(*     | ERet C0 z C1 => C0 == C *)
-(*     end *)
-(*   end. *)
-
-(* Inductive callers_in_tree_cls: Component.id -> Procedure.id -> nat -> caller_aware_tree -> seq (Z * nat) -> Prop := *)
-(* | callers_in_node_cls: forall C P p e n zs ls, *)
-(*     node_of_cls C P (p, e, n, zs) -> *)
-(*     callers_in_tree_cls C P p (node (p, e, n, zs) ls) zs *)
-(* | callers_in_child_cls: forall C P p ls ls1 tr ls2 zs x, *)
-(*     ls = ls1 ++ tr :: ls2 -> *)
-(*     callers_in_tree_cls C P p tr zs -> *)
-(*     callers_in_tree_cls C P p (node x ls) zs. *)
-
-(* Definition callers_in_trees_cls (C: Component.id) (P: Procedure.id) (p: nat) (ls: seq caller_aware_tree) (callers: seq (Z * nat)) := *)
-(*   exists tr ls1 ls2, *)
-(*     ls = ls1 ++ tr :: ls2 /\ callers_in_tree_cls C P p tr callers. *)
 
 Module CallerAwareTree.
 
@@ -430,19 +409,6 @@ Inductive callers_in_tree: Component.id -> Procedure.id -> nat -> call_return_tr
 Definition callers_in_trees (C: Component.id) (P: Procedure.id) (p: nat) (ls: seq call_return_tree) (callers: seq (Z * nat)) :=
   exists tr ls1 ls2,
     ls = ls1 ++ tr :: ls2 /\ callers_in_tree C P p tr callers.
-
-(* Inductive subtree {A: Type}: Tree.t A -> seq (Tree.t A) -> Prop := *)
-(* | subtree_eq: forall t trs1 trs2, *)
-(*     subtree t (trs1 ++ t :: trs2) *)
-(* | subtree_child: forall t1 trs trs1 trs2 x, *)
-(*     subtree t1 trs -> *)
-(*     subtree t1 (trs1 ++ (node x trs) :: trs2) *)
-(* . *)
-
-
-(* Definition subtree_trees {A: Type} (t: Tree.t A) (ls: seq (Tree.t A)) := *)
-(*   exists tr ls1 ls2, *)
-(*     ls = ls1 ++ tr :: ls2 /\ subtree t tr. *)
 
 Inductive subtrees {A: Type}: seq (Tree.t A) -> seq (Tree.t A) -> Prop :=
 | subtrees_eq: forall trs,
