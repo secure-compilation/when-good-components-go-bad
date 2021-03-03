@@ -54,7 +54,7 @@ The following theorems are still admitted:
 - `wf_compile`, `find_proc_callers`, `find_procedure_find`, `find_proc_some`, `find_main`, `initial_buffers` are lemmas that require
   proving  well-formedness lemmas about the program we back-translate
 - `sim6` is not proved yet, and heavily use these well-formedness lemmas; the proof should be easy to close
-  once these are proved.
+  once these are proved. A `match_cont` predicate and lemmas concerning it are also admitted.
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
