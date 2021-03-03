@@ -929,7 +929,7 @@ Module Src.
 
 End Src.
 
-(* Three well-formedness results *)
+(* Four well-formedness results *)
 Lemma find_procedure_find (p: TreeWithCallers.prg):
   forall C P,
     find_procedure (genv_procedures (prepare_global_env (compile_tree_with_callers p))) C P =
