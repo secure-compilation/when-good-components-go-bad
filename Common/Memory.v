@@ -66,6 +66,16 @@ Module Type AbstractComponentMemory.
       forall b' i,
         b' <> b -> load m' b' i = load m b' i.
 
+  Axiom load_after_alloc_eq:
+    forall m n m' b,
+      alloc m n = (m', b) ->
+      forall i,
+        load m' b i = if (i <? Z.of_nat n)%Z then
+                        if (0 <=? i)%Z then
+                          Some Undef
+                        else None
+                      else None.
+
   Axiom load_all_after_alloc:
     forall m m' n b,
       alloc m n = (m', b) ->
@@ -479,6 +489,53 @@ Module ComponentMemory : AbstractComponentMemory.
     now rewrite (introF (b' =P nextblock m :> nat) Hb').
   Qed.
 
+  Lemma load_after_alloc_eq:
+    forall m n m' b,
+      alloc m n = (m', b) ->
+      forall i,
+        load m' b i = if (i <? Z.of_nat n)%Z then
+                        if (0 <=? i)%Z then
+                          Some Undef
+                        else None
+                      else None.
+  Proof.
+    intros ? ? ? ? Halloc i. unfold alloc, load in *.
+    destruct (i <? Z.of_nat n)%Z eqn:ei_n.
+    - destruct (content m' b) as [ch|] eqn:ech.
+      + destruct (0 <=? i)%Z eqn:ei.
+        * destruct (nth_error ch (Z.to_nat i)) as [v|] eqn:ev.
+          -- inversion Halloc. subst. simpl in ech. rewrite setmE eqxx in ech.
+             inversion ech. subst. clear Halloc ech.
+             specialize (nth_error_In _ _ ev) as Hin.
+             specialize (repeat_spec _ _ _ Hin) as G.
+               by subst.
+          -- inversion Halloc. subst. simpl in ech. rewrite setmE eqxx in ech.
+             inversion ech. subst. clear Halloc ech.
+             specialize (nth_error_None) as [Hcontra _].
+             specialize (Hcontra ev).
+             rewrite repeat_length in Hcontra.
+             rewrite <- Nat2Z.id in Hcontra at 1.
+             rewrite <- Z2Nat.inj_le in Hcontra.
+             ++ specialize (Zle_not_lt _ _ Hcontra) as Hcontra'.
+                specialize (Z.ltb_spec0 _ _ ei_n) as Hcontra''.
+                  by apply Hcontra' in Hcontra''.
+             ++ by apply Zle_0_nat.
+             ++ by apply Zle_bool_imp_le.
+        * reflexivity.
+      + destruct (0 <=? i)%Z eqn:ei; auto.
+        inversion Halloc. subst. simpl in ech. rewrite setmE eqxx in ech. discriminate.
+    - destruct (content m' b) as [ch|] eqn:ech; auto.
+      destruct (0 <=? i)%Z eqn:ei; auto.
+      inversion Halloc. subst. simpl in ech. rewrite setmE eqxx in ech.
+      inversion ech. subst. clear Halloc ech.
+      rewrite nth_error_None repeat_length.
+      rewrite <- Nat2Z.id at 1.
+      rewrite <- Z2Nat.inj_le.
+      ++ by apply Z.ltb_ge.
+      ++ by apply Zle_0_nat.
+      ++ by apply Zle_bool_imp_le.
+  Qed.  
+    
   Lemma load_load_all:
     forall m b i v,
       load m b i = Some v ->
@@ -844,7 +901,43 @@ Module Memory.
   Proof. unfold alloc. intros H. destruct (mem cid) as [c |] eqn:Hmemcid; try discriminate.
          destruct (ComponentMemory.alloc c sz). by inversion H.
   Qed.
-         
+  
+  Lemma load_after_alloc_eq mem cid sz mem' ptr' ptr :
+    alloc mem cid sz = Some (mem', ptr') ->
+    (Pointer.component ptr, Pointer.block ptr) =
+    (Pointer.component ptr', Pointer.block ptr') ->
+    load mem' ptr =
+    if (Pointer.permission ptr =? Permission.data) then
+      if (Pointer.offset ptr <? Z.of_nat sz)%Z then
+        if (0 <=? Pointer.offset ptr)%Z then
+          Some Undef
+        else
+          None
+      else
+        None
+    else
+      None.
+  Proof.
+    intros Halloc Heq. unfold load.
+    destruct ptr as [[[perm cidptr] bid] off].
+    destruct ptr' as [[[perm' cidptr'] bid'] off'].
+    inversion Heq. subst. simpl in *. clear Heq.
+    specialize (component_of_alloc_ptr _ _ _ _ _ Halloc) as H. subst. simpl in *.
+    unfold alloc in *.
+    destruct (perm =? Permission.data); auto.
+    - destruct (mem' cidptr') as [memC|] eqn:ememC.
+      + destruct (mem cidptr') as [memC'|] eqn:ememC'; try discriminate.
+        destruct (ComponentMemory.alloc memC' sz) as [memC'alloc b] eqn:ememC'alloc.
+        inversion Halloc. subst. clear Halloc.
+        rewrite setmE in ememC. rewrite eqxx in ememC.
+        inversion ememC. subst. clear ememC.
+          by specialize (ComponentMemory.load_after_alloc_eq _ _ _ _ ememC'alloc off).
+      + destruct (mem cidptr') as [memC'|] eqn:ememC'; try discriminate.
+        destruct (ComponentMemory.alloc memC' sz) as [memC'alloc b] eqn:ememC'alloc.
+        inversion Halloc. subst. clear Halloc.
+        rewrite setmE in ememC. by rewrite eqxx in ememC.  
+  Qed.  
+  
   Lemma store_after_load mem ptr v v' :
     load mem ptr = Some v ->
     exists mem', store mem ptr v' = Some mem'.
