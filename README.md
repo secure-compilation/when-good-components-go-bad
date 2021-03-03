@@ -46,6 +46,15 @@ The admits are mainly of two kinds:
 - well-formedness properties: this includes proofs that all procedures
   are generated, that the code is well-formed, etc. These are quite
   technical tasks that do not pose a major challenge
+  
+The following theorems are still admitted:
+- `give_nums_app_comm`,`wf_trees_unique_key`, `build_event_expression_correct`, `sim4`, `sim5` are lemmas that require 
+  proving and/or using unicity conditions. These proofs are tedious and technical, but do not 
+  pose a theoretical challenge
+- `wf_compile`, `find_proc_callers`, `find_procedure_find`, `find_proc_some`, `find_main`, `initial_buffers` are lemmas that require
+  proving  well-formedness lemmas about the program we back-translate
+- `sim6` is not proved yet, and heavily use these well-formedness lemmas; the proof should be easy to close
+  once these are proved.
 
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
