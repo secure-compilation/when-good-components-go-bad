@@ -111,7 +111,7 @@ Module Linker_Instance <: Linker_Sig (Source_Instance)
                                      (Intermediate_Instance)
                                      (S2I_Instance).
   Definition definability_with_linking :=
-    @RobustImp.Source.Definability.definability_with_linking.
+    @RobustImp.Source.Definability.definability_with_linking'.
 End Linker_Instance.
 
 Module Compiler_Instance <: Compiler_Sig Source_Instance

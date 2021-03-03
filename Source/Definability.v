@@ -51,11 +51,21 @@ Section Definability.
   (** we would produce the program *)
 
   (**   C1 {
-          P1() {
-            if (local[0] == 0) {
+          P1(arg) {
+            if (local [2]) {
+              match arg with
+              | _ => local[1] := 0;
+              | _ => local[1] := 2;
+              }
+            end;
+            if (local[0] == 0 && local[1] == 0) {
               local[0]++;
-              C2.P2(1);
-              C1.P1(0);
+              local[2] = 1;
+              match C2.P2(1) with
+              | _ => local[1] := 0; local[2] = 0; C1.P1(0);
+              | _ => local[1] := 2; return 2;
+              …
+              end
             } else if (local[0] == 1) {
               local[0]++;
               C2.P2(3);
@@ -80,6 +90,8 @@ Section Definability.
             }
           }
         } *)
+
+  (* Alternate way: use a P1_priv() *)
 
   (** If a component has multiple procedures, they can share the same
       code. Notice that each branch that performs call performs a recursive call
@@ -708,3 +720,33 @@ Proof.
   rewrite {}/m'; case: m {Hpre} Hnot_wrong=> //= t _.
   by exists (Terminates nil); rewrite /= E0_right.
 Qed.
+
+Lemma definability_with_linking':
+  forall ps c ms,
+    (forall (n : nat)
+       (p : Intermediate.program)
+       (m : CompCertExtensions.finpref_behavior),
+        List.nth_error ms n = Some m ->
+        List.nth_error ps n = Some p ->
+        does_prefix (CS.sem (Intermediate.program_link p c)) m) ->
+    exists (ps' : list program) (c' : program),
+      prog_interface c' = Intermediate.prog_interface c /\
+      matching_mains c' c /\
+      well_formed_program c' /\
+      (forall (n : nat) (p : Intermediate.program)
+         (p' : program)
+         (m : CompCertExtensions.finpref_behavior),
+          List.nth_error ms n = Some m ->
+          List.nth_error ps n = Some p ->
+          List.nth_error ps' n = Some p' ->
+          List.In p ps ->
+          List.In p' ps' ->
+          prog_interface p' = Intermediate.prog_interface p /\
+          matching_mains p' p /\
+          well_formed_program p' /\
+          closed_program (program_link p' c') /\
+          does_prefix (S.CS.sem (program_link p' c')) m)
+.
+Proof.
+Admitted.
+

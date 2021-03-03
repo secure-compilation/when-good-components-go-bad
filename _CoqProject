@@ -1,9 +1,6 @@
 -arg "-w -parsing"
 -R . RobustImp
 
-RSC_DC.v
-RSC_DC_4_compcert.v
-
 Common/Definitions.v
 Common/Values.v
 Common/Maps.v
@@ -15,6 +12,7 @@ Common/CompCertExtensions.v
 Common/Either.v
 Common/CoqMaps.v
 Common/Traces.v
+Common/Tree.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
@@ -25,59 +23,11 @@ Lib/Tactics.v
 Lib/Monads.v
 Lib/Extra.v
 
-Extraction/Definitions.v
-
 Source/Language.v
 Source/GlobalEnv.v
 Source/CS.v
 Source/Blame.v
 Source/Definability.v
-Source/Examples/Helper.v
-Source/Examples/Identity.v
-Source/Examples/Increment.v
-Source/Examples/DefaultInitBuffer.v
-Source/Examples/NestedCalls.v
-Source/Examples/Factorial.v
-
-S2I/Definitions.v
-S2I/CompMonad.v
-S2I/Compiler.v
-S2I/Examples/Helper.v
-S2I/Examples/Identity.v
-S2I/Examples/Increment.v
-S2I/Examples/DefaultInitBuffer.v
-S2I/Examples/NestedCalls.v
-S2I/Examples/Factorial.v
-
-Intermediate/Machine.v
-Intermediate/GlobalEnv.v
-Intermediate/CS.v
-Intermediate/Recombination.v
-
-RSC_DC_MD_Sigs.v
-RSC_DC_MD_Instance.v
-RSC_DC_MD.v
-
-TargetSFI/StateMonad.v
-TargetSFI/SFIUtil.v
-TargetSFI/Machine.v
-TargetSFI/CS.v
-TargetSFI/ExecutionError.v
-
-I2SFI/CompStateMonad.v
-I2SFI/AbstractMachine.v
-I2SFI/Compiler.v
-I2SFI/CompilerError.v
-
-MicroPolicies/Utils.v
-MicroPolicies/Types.v
-MicroPolicies/Int32.v
-MicroPolicies/Symbolic.v
-MicroPolicies/Exec.v
-MicroPolicies/LRC.v
-MicroPolicies/Instance.v
-MicroPolicies/Printer.v
-
-I2MP/Tmp.v
-I2MP/Linearize.v
-I2MP/Encode.v
+Source/DefSimLanguages.v
+Source/DefSimComp.v
+Source/DefSimSimulations.v
