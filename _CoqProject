@@ -31,3 +31,12 @@ Source/Definability.v
 Source/DefSimLanguages.v
 Source/DefSimComp.v
 Source/DefSimSimulations.v
+
+S2I/Definitions.v
+S2I/CompMonad.v
+S2I/Compiler.v
+
+Intermediate/Machine.v
+Intermediate/GlobalEnv.v
+Intermediate/CS.v
+Intermediate/Recombination.v
