@@ -609,13 +609,13 @@ Definition build_event_expression (C: Component.id) ots :=
 
 (* Admitted: this heavily relies on unicity of the location.
    It holds, because in our setting a tree that has control only has one possibility *)
-Lemma build_event_expression_correct: forall (trees: NMap (seq call_return_tree)) ge cs cs' C trs trs' tr p xe n cls,
-    forall (CUREXPR: CS.s_expr cs = build_event_expression C (Some trs))
+Lemma build_event_expression_correct: forall ge cs cs' C trs k trs' trs'' tr p xe n cls,
+    forall (CURCONT: CS.s_cont cs = Kseq (build_event_expression C (Some trs)) k)
       (SUBTREES: subtrees trs' trs)
       (TREES: trs' = [tr])
-      (TREE: tr = node (p, xe, n, cls) trs')
+      (TREE: tr = node (p, xe, n, cls) trs'')
       (CURLOC: Memory.load (CS.s_memory cs) (location (CS.s_component cs)) = Some (Int (Z.of_nat p))),
-      cs' = [CState (CS.s_component cs), (CS.s_stack cs), (CS.s_memory cs), (CS.s_cont cs),
+      cs' = [CState (CS.s_component cs), (CS.s_stack cs), (CS.s_memory cs), k,
              event_expression n xe, CS.s_arg cs] ->
       star CS.kstep ge cs E0 cs'.
 Proof.

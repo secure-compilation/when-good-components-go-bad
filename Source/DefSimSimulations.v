@@ -872,20 +872,50 @@ Qed.
 (* Admitted: match_cont k1 k2 when
   k2 is k1 where the Kstop continuation is replaced by the continuation that corresponds
   to what follows the call-handler *)
-Axiom match_cont: cont -> cont -> Prop.
-Lemma match_cont_step: forall ge cs1 k cs1' cs2,
-    cs2 = [CState (CS.s_component cs1), CS.s_stack cs1, CS.s_memory cs1, k, CS.s_expr cs1, CS.s_arg cs1] ->
-    match_cont (CS.s_cont cs1) k ->
-    CS.kstep ge cs1 E0 cs1' ->
-    exists k',
-    CS.kstep ge cs2 E0
-             [CState (CS.s_component cs1'), CS.s_stack cs1', CS.s_memory cs1', k', CS.s_expr cs1', CS.s_arg cs1']
-               /\ match_cont (CS.s_cont cs1') k'.
-Proof.
-Admitted.
-Lemma match_cont_Kstop: match_cont Kstop Kstop.
-Admitted.
+Fixpoint concat_cont (k1 k2: cont): cont :=
+  match k1 with
+  | Kstop => k2
+  | Kbinop1 b e k1' => Kbinop1 b e (concat_cont k1' k2)
+  | Kbinop2 b v k1' => Kbinop2 b v (concat_cont k1' k2)
+  | Kseq e k1' => Kseq e (concat_cont k1' k2)
+  | Kif e e' k1' => Kif e e' (concat_cont k1' k2)
+  | Kalloc k1' => Kalloc (concat_cont k1' k2)
+  | Kderef k1' => Kderef (concat_cont k1' k2)
+  | Kassign1 e k1' => Kassign1 e (concat_cont k1' k2)
+  | Kassign2 v k1' => Kassign2 v (concat_cont k1' k2)
+  | Kcall C P k1' => Kcall C P (concat_cont k1' k2)
+  end.
 
+Definition concat_event_expr (p: TreeWithCallers.prg) (C: Component.id) (k1: cont) :=
+  concat_cont k1 (Kseq (build_event_expression C (TreeWithCallers.prog_trees p C)) Kstop).
+
+Definition match_cont (p: TreeWithCallers.prg) (C: Component.id) (k1 k2: cont): Prop :=
+  k2 = concat_event_expr p C k1.
+
+
+Lemma match_cont_step (p: TreeWithCallers.prg) (C: Component.id): forall ge ge' cs1 cs1' cs2 st,
+    cs2 = [CState (CS.s_component cs1), st, CS.s_memory cs1,
+           concat_event_expr p C (CS.s_cont cs1), CS.s_expr cs1, CS.s_arg cs1] ->
+    CS.s_stack cs1 = CS.s_stack cs1' -> (* No internall call/returns allowed *)
+    CS.kstep ge cs1 E0 cs1' ->
+    CS.kstep ge' cs2 E0
+             [CState (CS.s_component cs1'), st, CS.s_memory cs1',
+              concat_event_expr p C (CS.s_cont cs1'), CS.s_expr cs1', CS.s_arg cs1'].
+Proof.
+  move=> ge ge' [? ? ? ? ? ?] cs1' cs2 st EQ STACKS STEP; simpl in *; subst.
+  inv STEP; try now econstructor.
+  - simpl. destruct cs1' as [? s ? ? ? ?].
+    inversion H1.
+    clear -H2. exfalso.
+    induction s.
+    + congruence.
+    + inversion H2. apply IHs. eauto.
+  - simpl in H1.
+    exfalso.
+    induction s.
+    + congruence.
+    + inversion H1. apply IHs. eauto.
+Qed.
 
 Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWithCallers.state -> CS.state -> Prop :=
 | match_states_initial: forall s s',
@@ -897,7 +927,7 @@ Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWi
     forall (COMP: CS.s_component cs = CS.s_component cs')
       (STACK: match_concrete_stacks (CS.s_component cs') st (CS.s_stack cs'))
       (MEM: CS.s_memory cs = CS.s_memory cs')
-      (CONT: match_cont (CS.s_cont cs) (CS.s_cont cs'))
+      (CONT: match_cont p (CS.s_component cs) (CS.s_cont cs) (CS.s_cont cs'))
       (EXPR: CS.s_expr cs =  CS.s_expr cs')
       (ARG: CS.s_arg cs = CS.s_arg cs'),
       match_states6 p ge i {| TreeWithCallers.ghost_state := gs;
@@ -908,8 +938,8 @@ Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWi
     forall (COMP: CS.s_component cs = CS.s_component cs')
       (STACK: match_concrete_stacks (CS.s_component cs') st (CS.s_stack cs'))
       (MEM: CS.s_memory cs = CS.s_memory cs')
-      (CONT: CS.s_cont cs' = Kstop)
-      (EXPR: CS.s_expr cs' = build_event_expression (CS.s_component cs') (TreeWithCallers.prog_trees p (CS.s_component cs')))
+      (CONT: CS.s_cont cs' = Kseq (build_event_expression (CS.s_component cs') (TreeWithCallers.prog_trees p (CS.s_component cs'))) Kstop)
+      (* (EXPR: CS.s_expr cs' = build_event_expression (CS.s_component cs') (TreeWithCallers.prog_trees p (CS.s_component cs'))) *)
       (ARG: CS.s_arg cs = CS.s_arg cs'),
       match_states6 p ge i {| TreeWithCallers.ghost_state := gs;
                               TreeWithCallers.concrete_state := cs;
@@ -970,7 +1000,7 @@ Proof.
     + rewrite /CS.initial_state //=.
     + constructor; [by [] | rewrite /CS.initial_state //=].
   - move=> i s1 s2 H H0. reflexivity.
-  - move=> s1 t s1' H i [? ? ? ? ? ?] H0.
+  - move=> s1 t s1' H i [C stk m k e arg] H0.
     inv H.
     + (* Step call *)
       inv H0.
@@ -1015,14 +1045,50 @@ Proof.
         -- left.
            eapply star_plus_trans.
            (* Using this lemma requires a unicity result *)
-           eapply build_event_expression_correct; admit.
-           admit. reflexivity.
-        -- eapply match_states_silent; admit.
+           { eapply build_event_expression_correct with (xe := XECall C P z C2 rts1). simpl.
+             assert (TreeWithCallers.prog_trees p C = Some []) by admit.
+             rewrite H. reflexivity.
+             admit. reflexivity. reflexivity.
+             eauto. eauto. }
+           simpl.
+           eapply plus_star_trans.
+           { eapply call_event_correct; simpl; eauto.
+             eapply find_procedure_find. }
+           take_step.
+           eapply star_refl.
+           reflexivity. reflexivity.
+        -- eapply match_states_silent; eauto.
+           ++ econstructor. simpl.
+              now destruct H1 as [[] []]; congruence.
+              now inversion H11.
+           ++ simpl. reflexivity.
+           ++ simpl.
+              admit.
     + (* Step return *)
       (* destruct (Memory.store_after_load m''' (C1, Block.local, 1%Z) (Int (Z.of_nat 0)) (Int (Z.of_nat 1))) as [m'''' Hm'''']. *)
       admit.
     + (* Step silent *)
-      (* destruct s2 as [? ? ? ? ? ?]. *) simpl in *.
-      (* Rely on match_cont *)
-      admit.
+      inv H0.
+      (* We cannot be in a initial state *)
+      inversion H.
+      simpl in *; subst.
+      (* Hence we are in a silently stepping state *)
+      unfold match_cont in CONT. subst k.
+      pose proof (@match_cont_step p C ((globalenv (TreeWithCallers.sem p))) ge
+                                   [CState C, stk0, m, k0, e, arg]
+                                   [CState C, stk0, m', k', exp', arg]
+                                   [CState C, stk, m, concat_event_expr p C k0, e, arg]
+                                   stk
+                                   Logic.eq_refl Logic.eq_refl H3).
+      eexists; eexists; split.
+      * left.
+        econstructor; [eauto | eapply star_refl | reflexivity].
+      * simpl in *.
+        destruct (update_can_silent [CState C, stk0, m', k', exp', arg]) eqn:UPDATE.
+        -- now eapply match_states_silent.
+        -- assert (k' = Kstop).
+           { destruct k'; eauto;
+               try (now rewrite (update_can_silent_k) in UPDATE; [inversion UPDATE | eauto]). }
+           subst k'.
+           now eapply match_states_6.
 Admitted.
