@@ -323,9 +323,9 @@ Section SigmaShiftingBlockIds.
   Qed.
 
   (* AEK: Does not look provable. *)
-  Lemma sigma_is_good_original_is_good lbid rbid rc:
+  Lemma sigma_is_good_original_is_good lbid rbid:
     right_block_id_good_for_shifting rbid ->
-    sigma_shifting (care, lbid) = (rc, rbid) ->
+    sigma_shifting (care, lbid) = (care, rbid) ->
     left_block_id_good_for_shifting lbid.
   Proof.
     unfold right_block_id_good_for_shifting, left_block_id_good_for_shifting,
@@ -336,11 +336,27 @@ Section SigmaShiftingBlockIds.
     destruct ((num_extra_blocks_of_lhs >=? 0)%Z) eqn:Hlhs;
       rewrite <- beq_nat_refl in Hrbid_eq.
     - destruct (lbid <? Z.to_nat num_extra_blocks_of_lhs) eqn:Hlbid.
-      + inversion Hrbid_eq. subst. clear Hrbid_eq.
-          unfold num_extra_blocks_of_lhs in *.
-          (* Need to prove false, but there does not seem to be any *)
-          (* contradictory hypotheses. *)
-          (* Abort.*)
+      + by inversion Hrbid_eq.
+      + inversion Hrbid_eq as [Hlbid_rbid]. clear Hrbid_eq. subst.
+        unfold num_extra_blocks_of_lhs in *.
+        rewrite <- Nat2Z.inj_sub in Hrbid_gt;
+          last by rewrite Nat2Z.inj_le; apply Zle_0_minus_le, Z.geb_le.
+        rewrite <- Nat2Z.inj_sub in Hlbid;
+          last by rewrite Nat2Z.inj_le; apply Zle_0_minus_le, Z.geb_le.
+        rewrite <- Nat2Z.inj_sub in Hlhs;
+          last by rewrite Nat2Z.inj_le; apply Zle_0_minus_le, Z.geb_le.
+        rewrite Nat2Z.id in Hrbid_gt.
+        rewrite Nat2Z.id in Hlbid.
+        (* Need to prove false, but there does not seem to be any *)
+        (* contradictory hypotheses. *)
+        (* Abort.*)
+
+        admit.
+    - inversion Hrbid_eq. subst. clear Hrbid_eq.
+      unfold num_extra_blocks_of_lhs in *.
+        (*rewrite <- Nat2Z.inj_sub in Hrbid_gt;
+          last by rewrite Nat2Z.inj_le; apply Zle_0_minus_le, Z.geb_le.
+        *)
   Abort.
           
 End SigmaShiftingBlockIds.
