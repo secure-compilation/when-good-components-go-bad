@@ -808,10 +808,35 @@ Section Definability.
         memory_inverse_shifts_memory_at_addr
           all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
 
+    (* JT: NOTE: The reason this lemma should hold is that the store is to the local
+       block [Block.local], which should always be *private memory* and as a result
+       isn't recorded on the memory snapshot. *)
     Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C o v mem' :
       well_formed_memory_snapshot mem_snapshot mem ->
       Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
       well_formed_memory_snapshot mem_snapshot mem'.
+    Proof.
+      move=> WFMS STORE Cb.
+      case: (WFMS Cb).
+      rewrite /memory_shifts_memory_at_addr /memory_inverse_shifts_memory_at_addr
+              /memory_renames_memory_at_addr /memory_inverse_renames_memory_at_addr => WFMS1 WFMS2.
+      split => offset.
+      - rewrite (Memory.load_after_store _ _ _ _ _ STORE). rewrite WFMS1.
+        rewrite /rename_addr.
+        have H: (sigma_shifting_addr all_zeros_shift (uniform_shift 1) Cb).2 == Block.local = false.
+        rewrite /all_zeros_shift /uniform_shift /sigma_shifting_addr //=.
+        case Cb => [cid []]; by [].
+        case: ifP; last by [].
+        move=> CONTRA.
+        exfalso.
+        move: H CONTRA => /eqP H1 /eqP H2; by congruence.
+      - rewrite (Memory.load_after_store _ _ _ _ _ STORE).
+        move: (WFMS2 offset).
+        case Cb => [cid bid] //=.
+        case: ((Permission.data, cid, bid, offset) == (Pm, C, Block.local, o)) => //=.
+        rewrite /option_inverse_rename_value /inverse_rename_value /inverse_rename_addr. move=> <-.
+        (* JT: I don't see how to complete the proof here. Maybe lost some information on the way? *)
+        admit.
     Admitted. (* RB: TODO: Easy. *)
 
     Definition well_formed_memory_event (e : event_inform) (mem : Memory.t) : Prop :=
