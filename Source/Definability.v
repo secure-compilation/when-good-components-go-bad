@@ -15,6 +15,8 @@ Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
 
+Require Import Lia.
+
 From Coq Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import eqtype seq.
 From mathcomp Require ssrnat.
@@ -245,9 +247,9 @@ Section Definability.
       eapply (@star_step _ _ _ _ _ _ E0); try now (simpl; reflexivity).
       { apply CS.eval_kstep_sound. simpl.
         destruct (Z.eqb_spec (Z.of_nat n) (Z.of_nat (m - S (length es)))) as [n_eq_0|?]; simpl.
-        - zify. omega.
+        - zify. lia.
         - reflexivity. }
-      apply IH. omega.
+      apply IH. lia.
   Qed.
 
   Lemma switch_spec p' P C stk mem es e es' e_else arg :
@@ -267,7 +269,7 @@ Section Definability.
       exists (snd (fold_right switch_add_expr ((length es + S (length es'))%nat, e_else) es')).
       repeat f_equal. rewrite -> surjective_pairing at 1. simpl.
       rewrite fst_switch Nat.add_succ_r.
-      assert (H : (S (length es + length es') - length es' = S (length es))%nat) by omega.
+      assert (H : (S (length es + length es') - length es' = S (length es))%nat) by lia.
       rewrite H. reflexivity. }
     destruct Eswitch as [e_else' ->]. clear e_else. rename e_else' into e_else.
     assert (Hcont := switch_clause_spec p' stk (Z.of_nat (length es)) e e_else arg Hload).
@@ -730,16 +732,16 @@ Section Definability.
       (*   apply /dommP. rewrite -domm_buffers. apply /dommP. by eauto. *)
       (* } *)
       (* rewrite /Source.has_required_local_buffers /= mapmE C_buf /=. *)
-      (* eexists; eauto => /=; omega. *)
+      (* eexists; eauto => /=; lia. *)
       split.
       + rewrite /Source.has_required_local_buffers. eexists.
         * rewrite mapmE C_CI. reflexivity.
-        * simpl. omega.
+        * simpl. lia.
       + by rewrite /Buffer.well_formed_buffer_opt mapmE C_CI.
       (* { *)
       (*   eexists; [eexists |]. *)
       (*   - reflexivity. *)
-      (*   - simpl. omega. *)
+      (*   - simpl. lia. *)
       (*   - assert (C_intf : C \in domm intf) by (apply /dommP; eauto). *)
       (*     specialize (wf_buffers C_intf). *)
       (*     setoid_rewrite C_buf in wf_buffers. *)
