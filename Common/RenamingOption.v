@@ -1042,3 +1042,78 @@ Section ExampleShifts.
   Proof. by move=> H; unfold fmap_extension_shift; rewrite H. Qed.
 
 End ExampleShifts.
+
+
+Section BehaviorsRelated.
+
+  (** Trace relation (between finite trace prefixes),
+     parameterized by the size of the metadata of each trace. Two traces are
+     related iff they shift each other and correspond to either a pair of
+     unfinished program executions or to a pair of successfully terminated
+     program executions. *)
+
+  Inductive behavior_rel_behavior
+            (size_meta_t1: Component.id -> nat) (size_meta_t2: Component.id -> nat)
+  : @finpref_behavior Events.event -> @finpref_behavior Events.event -> Prop :=
+  | Terminates_rel_Terminates:
+      forall t1 t2,
+        traces_shift_each_other_option size_meta_t1 size_meta_t2 t1 t2 ->
+        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTerminates t1) (FTerminates t2)
+  | Tbc_rel_Tbc:
+      forall t1 t2,
+        traces_shift_each_other_option size_meta_t1 size_meta_t2 t1 t2 ->
+        behavior_rel_behavior size_meta_t1 size_meta_t2 (FTbc t1) (FTbc t2).
+
+  (*
+  Lemma behavior_rel_behavior_reflexive b n:
+    not_wrong_finpref b ->
+    behavior_rel_behavior n n b b.
+  Proof. intros not_wrong. unfold not_wrong_finpref in *. destruct b; auto.
+         - apply Terminates_rel_Terminates.
+           apply traces_shift_each_other_option_reflexive.
+         - exfalso. auto.
+         - apply Tbc_rel_Tbc. apply traces_shift_each_other_reflexive.
+  Qed.
+
+  Lemma behavior_rel_behavior_symmetric b1 b2 n1 n2:
+    behavior_rel_behavior n1 n2 b1 b2 -> behavior_rel_behavior n2 n1 b2 b1.
+  Proof. intros H. inversion H.
+         - apply Terminates_rel_Terminates. apply traces_shift_each_other_symmetric. auto.
+         - apply Tbc_rel_Tbc. apply traces_shift_each_other_symmetric. auto.
+  Qed.
+
+*)
+
+  (** well-formedness of finite program behaviors (on the left) lifts
+      well-formedness of traces to successfully terminating and unfinished
+      program behaviors. *)
+
+  Inductive good_behavior_left
+            (size_meta_t: Component.id -> nat) :
+    @finpref_behavior Events.event -> Prop :=
+  | good_trace_Terminates:
+      forall t,
+        good_trace (left_addr_good_for_shifting size_meta_t) t ->
+        good_behavior_left size_meta_t (FTerminates t)
+  | good_trace_Tbc:
+      forall t,
+        good_trace (left_addr_good_for_shifting size_meta_t) t ->
+        good_behavior_left size_meta_t (FTbc t).
+
+  (*
+  Lemma behavior_rel_behavior_transitive b1 b2 b3 n1 n2 n3:
+    good_behavior_left n1 b1 ->
+    good_behavior_left n3 b3 ->
+    behavior_rel_behavior n1 n2 b1 b2 ->
+    behavior_rel_behavior n2 n3 b2 b3 ->
+    behavior_rel_behavior n1 n3 b1 b3.
+  Proof.
+    intros Hg1 Hg3 H12 H23.
+    inversion Hg1; subst; inversion Hg3; subst; inversion H12; subst; inversion H23; subst.
+    - eapply Terminates_rel_Terminates.
+      eapply traces_shift_each_other_transitive with n2 t2; eauto.
+    - eapply Tbc_rel_Tbc.
+      eapply traces_shift_each_other_transitive with n2 t2; eauto.
+  Qed.
+*)
+End BehaviorsRelated.

@@ -6,7 +6,7 @@ Require Import Common.Util.
 Require Import Common.Linking.
 Require Import Common.Memory.
 Require Import Common.Reachability.
-Require Import Common.Renaming.
+Require Import Common.RenamingOption.
 (** From Renaming, only addr_shared_so_far is used. Consider refactoring it out
     into a file called Sharing.v to get rid of the dependency on Renaming.
     Keep CSInvariants for only unary invariants; hence, do not depend on "renaming". 
