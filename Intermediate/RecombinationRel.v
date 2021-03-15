@@ -3,7 +3,7 @@ Require Import Common.Util.
 Require Import Common.Memory.
 Require Import Common.Linking.
 Require Import Common.CompCertExtensions.
-Require Import Common.Renaming.
+Require Import Common.RenamingOption.
 Require Import Common.Reachability.
 Require Import CompCert.Events.
 Require Import CompCert.Smallstep.
@@ -68,14 +68,14 @@ Section BinaryHelpersForMergeable.
   Definition trace_addrs_rel t m m' :=
     forall addr,
       addr_shared_so_far addr t ->
-      memory_shifts_memory_at_addr n n' addr m m'.
+      memory_shifts_memory_at_shared_addr n n' addr m m'.
 
-  Definition trace_addrs_rel_inv t m m' :=
+  (*Definition trace_addrs_rel_inv t m m' :=
     forall addr,
       addr_shared_so_far addr t ->
-      memory_inverse_shifts_memory_at_addr n n' addr m m'.
+      memory_shifts_memory_at_shared_addr n' n addr m' m.*)
 
-  Definition prog_addrs_rel p m m' :=
+  (*Definition prog_addrs_rel p m m' :=
     forall addr,
       prog_addrs p addr ->
       (* XXX -> *) (* TODO: Find renaming relation, add parameters to state relation. *)
@@ -86,10 +86,10 @@ Section BinaryHelpersForMergeable.
       prog_addrs p addr ->
       (* ... *)
       memory_inverse_shifts_memory_at_addr n n' addr m m'.
-
+  *)
   Definition memtrace : Type := eqtype.Equality.sort Memory.t * trace event.
 
-  Inductive mem_rel2 (mt mt' : memtrace) (p: program) : Prop :=
+  (*Inductive mem_rel2 (mt mt' : memtrace) (p: program) : Prop :=
   | mem_rel2_intro : forall m t m' t',
       mt  = (m , t ) ->
       mt' = (m', t') ->
@@ -101,7 +101,7 @@ Section BinaryHelpersForMergeable.
       *)
       prog_addrs_rel      p  m m' ->
       prog_addrs_rel_inv  p  m m' ->
-      mem_rel2 mt mt' p.
+      mem_rel2 mt mt' p.*)
 
   (* 1- exclude reachable addresses for current cid. *)
   (* by (1) the weak relation is strong enough, i.e., we should expect that *)
@@ -113,14 +113,14 @@ Section BinaryHelpersForMergeable.
   
   (* RB: TODO: Use [omap] to make relation more conservative,
      as suggested by AEK. *)
-  Inductive regs_rel2 (r r' : Register.t) :=
+  (*Inductive regs_rel2 (r r' : Register.t) :=
   | regs_rel2_intro : forall i v v',
       r  i = Some v  ->
       r' i = Some v' ->
       shift_value n n' v = v' ->
       (* TODO: probably inverse_shift is redundant with shift. *)
       inverse_shift_value n n' v' = v ->
-      regs_rel2 r r'.
+      regs_rel2 r r'.*)
 
   Inductive regs_rel_of_executing_part
             (r_original r_recombined: Register.t) n_original n_recombined :=
@@ -130,11 +130,11 @@ Section BinaryHelpersForMergeable.
           (* AEK: TODO: *)
           (* We might need to weaken this condition by requiring *)
           (* that only good values be subject to the shift condition? *)
-          shift_value n_original n_recombined (Register.get reg r_original) =
-          Register.get reg r_recombined
+          shift_value_option n_original n_recombined (Register.get reg r_original) =
+          Some (Register.get reg r_recombined)
           /\
-          inverse_shift_value n_original n_recombined (Register.get reg r_recombined) =
-          Register.get reg r_original
+          shift_value_option n_recombined n_original (Register.get reg r_recombined) =
+          Some (Register.get reg r_original)
       )
       ->
       regs_rel_of_executing_part r_original r_recombined n_original n_recombined.
@@ -323,7 +323,7 @@ Section Mergeable.
     end.
 
   (* Pairwise relations between the original runs and the combined run. *)
-  Inductive mem_rel3 (mt mt' mt'' : memtrace) : Prop :=
+  (*Inductive mem_rel3 (mt mt' mt'' : memtrace) : Prop :=
   | mem_rel3_program :
       trace_comp (snd mt) \in domm (prog_interface p) ->
       mem_rel2 n n' mt mt' p ->
@@ -332,7 +332,7 @@ Section Mergeable.
       trace_comp (snd mt) \in domm (prog_interface c) ->
       mem_rel2 n'' n' mt'' mt' c' ->
       mem_rel3 mt mt' mt''.
-
+   *)
       (* (R1) m   \\ reach(p)  ~ m' \\ reach(p)
          (R2) m'' \\ reach(c') ~ m' \\ reach(c')
 
@@ -360,7 +360,7 @@ Section Mergeable.
 
   Definition regtrace : Type := Register.t * trace event.
 
-  Inductive regs_rel3 (rt rt' rt'' : regtrace) :=
+  (*Inductive regs_rel3 (rt rt' rt'' : regtrace) :=
   | regs_rel3_program :
       trace_comp (snd rt) \in domm (prog_interface p) ->
       regs_rel2 n n' (fst rt) (fst rt') ->
@@ -369,7 +369,7 @@ Section Mergeable.
       trace_comp (snd rt) \in domm (prog_interface c) ->
       regs_rel2 n'' n' (fst rt'') (fst rt') ->
       regs_rel3 rt rt' rt''.
-
+   *)
   (* Sketch a simple state relation based on the memory-trace relation, for the
      sake of expediency. *)
   (* Inductive mergeable_states (s s' s'' : CS.state) : Prop := *)
@@ -386,7 +386,7 @@ Section Mergeable.
      some of the simulation lemmas below. This could postpone the question
      of provenance until use time. *)
 
-  Definition mem_of_part_executing_rel_original_and_recombined
+  (*Definition mem_of_part_executing_rel_original_and_recombined
              (part_executing: program)
              (* part_executing should be either p or c' *)
              original_mem recombined_mem
@@ -421,6 +421,41 @@ Section Mergeable.
           recombined_addr
           original_mem
           recombined_mem      
+    )
+    /\
+    forall cid,
+      cid \in domm (prog_interface part_executing) ->
+      omap ComponentMemory.next_block (original_mem cid) =
+      omap ComponentMemory.next_block (recombined_mem cid).
+   *)
+
+  Definition mem_of_part_executing_rel_original_and_recombined
+             (part_executing: program)
+             (* part_executing should be either p or c' *)
+             original_mem recombined_mem
+             original_n   recombined_n
+             original_t   (*recombined_t*)
+    : Prop :=
+    (
+      forall original_addr,
+        original_addr.1 \in domm (prog_interface part_executing) ->
+        memory_shifts_memory_at_private_addr
+          original_n
+          recombined_n
+          original_addr
+          original_mem
+          recombined_mem
+    )
+    /\
+    (
+      forall original_addr,
+        addr_shared_so_far original_addr original_t ->
+        memory_shifts_memory_at_shared_addr
+          original_n
+          recombined_n
+          original_addr
+          original_mem
+          recombined_mem
     )
     /\
     forall cid,

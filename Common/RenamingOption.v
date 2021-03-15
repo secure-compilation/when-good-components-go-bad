@@ -750,7 +750,8 @@ Section RenamingAddrOption.
           exists v,
             Memory.load m1 (Permission.data, addr.1, addr.2, offset) = Some v
             /\
-            (v = v' \/ rename_value_option v = Some v')
+            ((rename_value_option v = None /\ v = v')
+             \/ rename_value_option v = Some v')
         )
     ).
           
