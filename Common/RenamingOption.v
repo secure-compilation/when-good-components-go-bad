@@ -211,8 +211,30 @@ Section SigmaShiftingBlockIds.
           try discriminate.
         by apply/leP; apply Nat.ltb_ge.
   Qed.
-  
 
+  
+  Lemma sigma_shifting_lefttoright_option_Some_inj bid1 bid2 bid_shift:
+    sigma_shifting_lefttoright_option bid1 = Some bid_shift ->
+    sigma_shifting_lefttoright_option bid2 = Some bid_shift ->
+    bid1 = bid2.
+  Proof.
+    intros Hsigma1 Hsigma2.
+    assert (bid1 >= (metadata_size_lhs - metadata_size_rhs)) as Hbid1.
+    { rewrite sigma_lefttoright_Some_spec. by eexists; eauto. }
+    assert (bid2 >= (metadata_size_lhs - metadata_size_rhs)) as Hbid2.
+    { rewrite sigma_lefttoright_Some_spec. by eexists; eauto. }
+    unfold sigma_shifting_lefttoright_option, sigma_from_bigger_dom_option,
+    sigma_from_smaller_dom in *.
+    destruct (metadata_size_rhs <= metadata_size_lhs) eqn:erhslhs.
+    - destruct (bid1 <? metadata_size_lhs - metadata_size_rhs); try discriminate.
+      destruct (bid2 <? metadata_size_lhs - metadata_size_rhs); try discriminate.
+      inversion Hsigma1; subst. inversion Hsigma2 as [G].
+      erewrite <- subnK at 1; eauto.
+      erewrite <- subnK; eauto.
+    - inversion Hsigma1; subst. inversion Hsigma2 as [G].
+      erewrite <- addnK. erewrite G. by rewrite addnK.
+  Qed.
+  
 End SigmaShiftingBlockIds.
 
 Lemma subn_n_m_n_0:
