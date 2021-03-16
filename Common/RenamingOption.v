@@ -704,6 +704,41 @@ Section RenamingAddrOption.
   Definition rename_value_option : value -> option value :=
     rename_value_template_option rename_addr_option.
 
+  Lemma rename_value_option_arg_Int i:
+    rename_value_option (Int i) = Some (Int i).
+  Admitted.
+
+  Lemma rename_value_option_res_Int v i:
+    rename_value_option v = Some (Int i) -> v = Int i.
+  Admitted.
+
+  Lemma rename_value_option_arg_Undef:
+    rename_value_option Undef = Some Undef.
+  Admitted.
+
+  Lemma rename_value_option_res_Undef v:
+    rename_value_option v = Some Undef -> v = Undef.
+  Admitted.
+
+  Lemma rename_value_option_arg_Ptr p:
+    exists p', rename_value_option (Ptr p) = Some (Ptr p') /\
+               Pointer.permission p = Pointer.permission p' /\
+               Pointer.component p = Pointer.component p' /\
+               Pointer.offset p = Pointer.offset p'.
+  Admitted.
+
+  Lemma rename_value_option_res_Ptr v p':
+    rename_value_option v = Some (Ptr p') ->
+    exists p,
+      v = Ptr p /\
+      Pointer.permission p = Pointer.permission p' /\
+      Pointer.component p = Pointer.component p' /\
+      Pointer.offset p = Pointer.offset p'.
+  Admitted.
+  
+
+  
+  
   (*Definition inverse_rename_value : value -> value :=
     rename_value_template inverse_rename_addr.*)
 

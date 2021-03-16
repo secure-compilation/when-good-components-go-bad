@@ -122,6 +122,9 @@ Section BinaryHelpersForMergeable.
       inverse_shift_value n n' v' = v ->
       regs_rel2 r r'.*)
 
+  (* TODO: Need to weaken this definition. Namely, need to add another   *)
+  (* intro rule that allows shift_value_option to be None, and that then *)
+  (* requires Register.get r r_original = Register.get r r_recombined    *)
   Inductive regs_rel_of_executing_part
             (r_original r_recombined: Register.t) n_original n_recombined :=
   | regs_rel_of_executing_part_intro:
@@ -4119,6 +4122,9 @@ Section ThreewayMultisem1.
         }
 
 
+        assert (Pointer.component pc \in domm (prog_interface p)) as Hpc_in.
+        by admit.
+
         (* ILoad-specific *)
 
         match goal with
@@ -4162,37 +4168,64 @@ Section ThreewayMultisem1.
           - reflexivity.
         }
 
-        (*
-        assert (Memory.load mem1'
-                            (Permission.data,
-                             cidl,
-                             bidl,
-                             offl) =
-                Some
-                  (rename_value_option
-                     [eta sigma_shifting_addr
-                          n
-                          (fun cid : nat =>
-                             if cid \in domm (prog_interface p)
-                             then n cid else n'' cid)] v)) as Hmemload.
+        unfold mem_of_part_executing_rel_original_and_recombined,
+        memory_shifts_memory_at_private_addr, memory_shifts_memory_at_shared_addr,
+        memory_renames_memory_at_private_addr, memory_renames_memory_at_shared_addr
+         in Hmemp.
+        simpl in Hmemp.
+        destruct Hmemp as [Hmem_own [Hmem_shared _]].
+        
+        assert (
+             (cidl, bidl).1 \in domm (prog_interface p) ->
+             (
+                 Memory.load mem1' (Permission.data,
+                                    cidl, bidl, offl) =
+                 match
+                   rename_value_option
+                     (rename_addr_option
+                        (sigma_shifting_wrap_bid_in_addr
+                           (sigma_shifting_lefttoright_addr_bid
+                              n
+                              (fun cid : nat =>
+                                 if cid \in domm (prog_interface p)
+                                 then n cid else n'' cid)))) v
+                 with
+                 | Some v' => Some v'
+                 | None => Some v
+                 end)) as Hmem_own1.
         {
-          unfold mem_of_part_executing_rel_original_and_recombined,
-          memory_shifts_memory_at_addr, memory_renames_memory_at_addr,
-          rename_addr in Hmemp.
-          simpl in Hmemp.
-          destruct Hmemp as [Hmemshift _].
-          rewrite Hmemshift.
-          - simpl.
-             match goal with
-             | H: Memory.load _ _ = Some _ |- _ => by rewrite H end.
-          - inversion cidl_bidl_invariant; eauto.
-            left.
-            specialize (@is_program_component_pc_in_domm _ _ _ _ _ _ _ _ _ _ _ _
-                                                         Hcomp1 Hmerge1) as G.
-              by apply G.
+          intros Hcidl.
+          specialize (Hmem_own _ Hcidl) as [Hspec _].
+          
+          match goal with | H: Memory.load _ _ = _ |- _ => 
+                              by specialize (Hspec _ _ H)
+          end.
         }
-        *)
 
+        assert (
+             addr_shared_so_far (cidl, bidl) t1 ->
+             (
+               exists v' : value,
+                 Memory.load mem1'
+                             (Permission.data, (cidl, bidl_shift).1,
+                              (cidl, bidl_shift).2, offl) = Some v' /\
+                     rename_value_option
+                       (rename_addr_option
+                          (sigma_shifting_wrap_bid_in_addr
+                             (sigma_shifting_lefttoright_addr_bid n
+                                (fun cid : nat =>
+                                   if cid \in domm (prog_interface p)
+                                   then n cid else n'' cid)))) v =
+                     Some v')) as Hmem_shared1.
+        {
+          intros Hshr.
+          specialize (Hmem_shared _ Hshr) as [addr_ren [Hren [G _]]].
+          unfold rename_addr_option, sigma_shifting_wrap_bid_in_addr in Hren.
+          rewrite ebidl_shift in Hren. inversion Hren. subst.
+          by eapply G.
+        }
+
+                
         assert (CSInvariants.is_prefix
                   (gps,
                    mem,
@@ -4210,12 +4243,86 @@ Section ThreewayMultisem1.
           eapply star_right; try eassumption.
             by rewrite E0_right.
         }
+
+        assert(
+          exists v',
+            Memory.load mem1' (Permission.data, cidl, bidl_shift, offl) = Some v'
+            /\
+            shift_value_option
+              n
+              (fun cid : nat => if cid \in domm (prog_interface p)
+                                then n cid else n'' cid) v = 
+            Some v'
+            /\
+            shift_value_option
+              (fun cid : nat => if cid \in domm (prog_interface p)
+                                then n cid else n'' cid) n v' = 
+            Some v
+        ) as [v' [Hload' [Hvv' Hv'v]]].
+        {
+          inversion cidl_bidl_invariant as [|? ? ? ?  Hshr]; subst.
+          - simpl in ebidl_shift.
+            rewrite Hpc_in sigma_shifting_lefttoright_option_n_n_id in ebidl_shift.
+            inversion ebidl_shift. subst.
+            unfold shift_value_option.
+            destruct (
+                rename_value_option
+                  (rename_addr_option
+                     (sigma_shifting_wrap_bid_in_addr
+                        (sigma_shifting_lefttoright_addr_bid
+                           n
+                           (fun cid : nat => if cid \in domm (prog_interface p)
+                                             then n cid else n'' cid)))) v
+              ) as [v'|] eqn:ev'.
+            + eexists; split; first (eapply Hmem_own1; assumption); split; auto.
+              
+              destruct v as [| [[[perm cidv] bidv] ?] |] eqn:ev;
+                simpl in *;
+                subst; inversion ev' as [ev'1]; subst; try by simpl.
+              destruct (perm =? Permission.data) eqn:eperm.
+              * destruct (rename_addr_option
+               (rename_addr_option
+                  (sigma_shifting_wrap_bid_in_addr
+                     (sigma_shifting_lefttoright_addr_bid n
+                        (fun cid : nat =>
+                         if cid \in domm (prog_interface p) then n cid else n'' cid))))
+               (cidv, bidv)) as [[cidv_shift bidv_shift]|] eqn:ebidv_shift;
+                  rewrite ebidv_shift in ev'1; try discriminate.
+                inversion ev'1. subst.
+                simpl. rewrite eperm.
+                unfold rename_addr_option, sigma_shifting_wrap_bid_in_addr in *.
+                destruct (sigma_shifting_lefttoright_addr_bid
+                            n
+                            (fun cid : nat => if cid \in domm (prog_interface p)
+                                              then n cid else n'' cid)
+                            (cidv, bidv)) as [bidv_shift1|] eqn:ebidv_shift1;
+                  try discriminate.
+                inversion ebidv_shift. subst. clear ev'1 ebidv_shift ebidl_shift.
+                assert (sigma_shifting_lefttoright_addr_bid
+                          (fun cid : nat => if cid \in domm (prog_interface p)
+                                            then n cid else n'' cid) n
+                          (cidv_shift, bidv_shift) = Some bidv) as G.
+                {
+                  eapply sigma_shifting_righttoleft_option_Some_sigma_shifting_lefttoright_option_Some.
+                  by rewrite sigma_shifting_righttoleft_lefttoright.
+                }
+                by rewrite G. 
+              * inversion ev'1. subst. simpl. by rewrite eperm.
+                
+            + eexists; split; first (eapply Hmem_own1; assumption).
+              destruct Hmem_shared1 as [? [? ?]].
+              admit.
+              admit.
+          - admit.
+            (*specialize (Hmem_shared1 Hshr) as [v' [G _]].
+            by eexists; eauto.*)
+        }
         
         eexists. split.
         * eapply CS.Step_non_inform; first eapply CS.Load.
           -- exact Hex'.
           -- exact Hregs1'_r1_.
-          -- exact Hmemload.
+          -- exact Hload'. 
           -- reflexivity.
           -- by simpl.
         * econstructor; try eassumption.
@@ -4229,11 +4336,12 @@ Section ThreewayMultisem1.
             ++ by rewrite Pointer.inc_preserves_component.
           -- by simpl.
           -- (** regs_rel_of_executing_part *)
+            (* See TODO about changing the def. of regs_rel_of_executing_part. *)
             simpl. constructor. intros reg.
             unfold Register.get, Register.set. rewrite setmE.
             destruct (Register.to_nat reg == Register.to_nat r2) eqn:ereg;
               rewrite ereg; rewrite setmE ereg.
-            ++ unfold shift_value, inverse_shift_value; intuition.
+            ++ unfold shift_value_option.
                rewrite rename_value_inverse_rename_value.
                destruct v as [i | [[[permv cidv] bidv] offv] |]; try by simpl.
                unfold rename_value, rename_value_template, rename_addr.
