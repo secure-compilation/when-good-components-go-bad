@@ -991,6 +991,43 @@ Section Definability.
       &  valid_procedure C P
       :  well_formed_state stk_st prefix suffix [CState C, stk, mem, k, exp, arg].
 
+  (* [DynShare] Rephrase state well-formedness invariants in terms of reverse
+     executions. This version still preserves the intermediate stack state.
+     TODO: This part needs to be trimmed down, and naming conventions
+     homogenized. *)
+  Variant well_formed_state_r (stk_st: stack_state)
+          (prefix suffix: trace event_inform) : CS.state -> Prop :=
+  | WellFormedStateR C stk mem k exp arg P
+    of C = cur_comp stk_st
+    &  k = Kstop
+    &  exp = procedure_of_trace C P t
+    &  TracesInform.well_bracketed_trace_rev stk_st suffix
+    &  all (well_formed_event intf) suffix
+    &  well_formed_stack stk_st stk
+    &  well_formed_memory prefix mem
+    &  valid_procedure C P
+    :  well_formed_state_r stk_st prefix suffix [CState C, stk, mem, k, exp, arg].
+
+  (* [DynShare] This second version of the right-to-left invariant does away
+     with the stack state and effects further simplifications. Some bits,
+     especially those that describe the memory, need to be fixed and restored.
+     Note that, while this is still phrased in terms of a [suffix], this is
+     actually meant to represent a whole trace, e.g., [t]. (However, this could
+     make it tricky to compose partial invariants.) *)
+  Variant well_formed_state_right (* stk_st: stack_state *)
+          (suffix: trace event_inform) : CS.state -> Prop :=
+  | WellFormedStateRight C stk mem k exp arg P
+  of
+  (* C = cur_comp stk_s & *)
+     k = Kstop
+  &  exp = procedure_of_trace C P t
+  &  TracesInform.well_bracketed_trace_r suffix
+  &  all (well_formed_event intf) suffix
+  (* &  well_formed_stack stk_st stk *)
+  (* &  well_formed_memory prefix mem *) (* FIXME *)
+  &  valid_procedure C P
+  :  well_formed_state_right (* stk_st *) suffix [CState C, stk, mem, k, exp, arg].
+
     (* [DynShare] We will probably need a variant of well formedness that is defined
      on non-informative traces as well. *)
 
@@ -1043,6 +1080,100 @@ Section Definability.
 
        NOTE: Propositional and not boolean conjunction in the conclusion at the
        moment. *)
+
+    (* A proof of relational definability on the right. Existential
+      quantification is extended to [cs] and [s], and induction performed on
+      the prefix, executing from the initial state. Separately, execution to a
+      final state needs to be established. *)
+    Lemma definability_gen_rel_right prefix suffix :
+      t = prefix ++ suffix ->
+    exists cs s prefix_inform prefix' const_map,
+      Star (CS.sem p) (CS.initial_machine_state p) prefix' cs /\
+      project_non_inform prefix_inform = prefix' /\
+      traces_shift_each_other metadata_size_lhs const_map (project_non_inform prefix) prefix' /\
+      well_formed_state_r s prefix suffix cs.
+    Proof.
+      (* Proof by induction on the prefix. Prior to inducting, generalize on
+         the suffix. *)
+      revert suffix.
+      induction prefix using rev_ind;
+        intros suffix Et.
+      - (* Base case. *)
+        simpl in Et; subst suffix.
+        exists (CS.initial_machine_state p), (StackState Component.main []),
+               E0, E0, (uniform_shift 1).
+        split; [| split; [| split]].
+        + now apply star_refl.
+        + reflexivity.
+        + now do 2 constructor.
+        + unfold CS.initial_machine_state, Source.prog_main.
+          rewrite find_procedures_of_trace_main.
+          econstructor; eauto.
+          * admit. (* Easy. *)
+          * admit. (* Easy. *)
+          * exists [], []. simpl. now auto.
+          * constructor.
+            all:admit. (* Easy. *)
+          * unfold valid_procedure. now auto.
+    - (* Inductive step. *)
+      assert (Et' : t = prefix ++ x :: suffix) by admit.
+      specialize (IHprefix (x :: suffix) Et')
+        as [cs [s [prefix_inform [prefix' [const_map [Hstar [Hproject [Hshift Hwf_cs]]]]]]]].
+      do 5 eexists. split; [| split; [| split]].
+      + (* Compose the stars. *)
+        eapply star_trans.
+        apply Hstar.
+        destruct cs.
+        inversion Hwf_cs; subst.
+        unfold procedure_of_trace.
+        rewrite <- Et.
+        unfold expr_of_trace.
+        (* ... *)
+    Admitted.
+
+    (* Some other experiments on rephrasings of the definability lemma.
+
+       First, a naive version of the original lemma, where reusing its proof
+       leads to the usual prefix-suffix inconsistencies.
+
+    Lemma definability_gen_rel_right s prefix suffix cs :
+      t = prefix ++ suffix ->
+      well_formed_state_r s prefix suffix cs ->
+    exists cs' suffix_inform suffix' const_map,
+      Star (CS.sem p) cs suffix' cs' /\
+      project_non_inform suffix_inform = suffix' /\
+      traces_shift_each_other metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
+      CS.final_state cs'.
+
+       Using [t] for the induction directly is a little painful in the base
+       case, but especially in the inductive case because of sectioning, and
+       because [p] needs be defined in terms of [t] throughout the proof.
+
+    (* Lemma definability_gen_rel_right (*s prefix suffix cs*) : *)
+    (*   (* t = prefix ++ suffix -> *) *)
+    (*   (* well_formed_state s prefix suffix cs -> *) *)
+    (* exists cs' t_inform t' const_map, *)
+    (*   (* Star (CS.sem p) cs suffix' cs' /\ *) *)
+    (*   Star (CS.sem p) (CS.initial_machine_state p) t' cs' /\ *)
+    (*   project_non_inform t_inform = t' /\ *)
+    (*   traces_shift_each_other metadata_size_lhs const_map (project_non_inform t) t' /\ *)
+    (*   CS.final_state cs'. *)
+
+      Another idea: induction on the right on prefix.
+
+    Lemma definability_gen_rel_right suffix cs :
+      (*t = suffix ->*) (* TODO: Reestablish the connection later *)
+      well_formed_state_right suffix cs ->
+    exists cs' suffix_inform suffix' const_map,
+      Star (CS.sem p) cs suffix' cs' /\
+      project_non_inform suffix_inform = suffix' /\
+      traces_shift_each_other metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
+      well_formed_state_right E0 cs' (* /\
+      CS.final_state cs' *)
+      .
+
+    *)
+
     Lemma definability_gen_rel s prefix suffix cs :
       t = prefix ++ suffix ->
       well_formed_state s prefix suffix cs ->
