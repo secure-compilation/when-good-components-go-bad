@@ -22,6 +22,47 @@ Inductive Eregister : Type :=
 Inductive Ebinop : Set :=
   E_Add : Ebinop | E_Minus : Ebinop | E_Mul : Ebinop | E_Eq : Ebinop | E_Leq : Ebinop.
 
+Definition reg_to_Ereg r :=
+  match r with
+  | R_ONE => E_R_ONE
+  | R_COM => E_R_COM
+  | R_AUX1 => E_R_AUX1
+  | R_AUX2 => E_R_AUX2
+  | R_RA => E_R_RA
+  | R_SP => E_R_SP
+  | R_ARG => E_R_ARG
+  end.
+
+Definition binop_to_Ebinop op :=
+  match op with
+  | Add => E_Add
+  | Minus => E_Minus
+  | Mul => E_Mul
+  | Eq => E_Eq
+  | Leq => E_Leq
+  end.
+
+Definition Ereg_to_reg r :=
+  match r with
+  | E_R_ONE => R_ONE
+  | E_R_COM => R_COM
+  | E_R_AUX1 => R_AUX1
+  | E_R_AUX2 => R_AUX2
+  | E_R_RA => R_RA
+  | E_R_SP => R_SP
+  | E_R_ARG => R_ARG
+  end.
+
+Definition Ebinop_to_binop op :=
+  match op with
+  | E_Add => Add
+  | E_Minus => Minus
+  | E_Mul => Mul
+  | E_Eq => Eq
+  | E_Leq => Leq
+  end.
+
+
 Inductive event_inform :=
 | ECallInform :
     Component.id -> Procedure.id -> value -> Memory.t -> Intermediate.Register.t -> Component.id -> event_inform
@@ -150,6 +191,34 @@ Definition project_finpref_behavior m :=
   | FTbc t => FTbc (project_non_inform t)
   end.
 
+Definition mem_of_event_inform (e: event_inform): Memory.t :=
+  match e with
+  | ECallInform _ _ _ m _ _
+  | ERetInform _ _ m _ _
+  | EConst _ _ _ m _
+  | EMov _ _ _ m _
+  | EBinop _ _ _ _ _ m _
+  | ELoad _ _ _ m _
+  | EStore _ _ _ m _
+  | EAlloc _ _ _ m _
+  | EInvalidateRA _ m _ => m
+  end.
+
+
+Definition register_file_of_event_inform
+           (e: event_inform): Machine.Intermediate.Register.t :=
+  match e with
+  | ECallInform _ _ _ _ r _
+  | ERetInform _ _ _ r _
+  | EConst _ _ _ _ r
+  | EMov _ _ _ _ r
+  | EBinop _ _ _ _ _ _ r
+  | ELoad _ _ _ _ r
+  | EStore _ _ _ _ r
+  | EAlloc _ _ _ _ r
+  | EInvalidateRA _ _ r => r
+  end.
+ 
 Section Traces.
 
 Inductive stack_state := StackState {

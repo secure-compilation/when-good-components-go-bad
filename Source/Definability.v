@@ -817,21 +817,8 @@ Section Definability.
       well_formed_memory_snapshot mem_snapshot mem'.
     Admitted. (* RB: TODO: Easy. *)
 
-    Definition snapshot_of_event (e: event_inform): Memory.t :=
-      match e with
-      | ECallInform _ _ _ m _ _
-      | ERetInform _ _ m _ _
-      | EConst _ _ _ m _
-      | EMov _ _ _ m _
-      | EBinop _ _ _ _ _ m _
-      | ELoad _ _ _ m _
-      | EStore _ _ _ m _
-      | EAlloc _ _ _ m _
-      | EInvalidateRA _ m _ => m
-      end.
-
     Definition postcondition_event_snapshot (e: event_inform) (mem: Memory.t): Prop :=
-      let mem_snapshot := snapshot_of_event e in
+      let mem_snapshot := mem_of_event_inform e in
       well_formed_memory_snapshot mem_snapshot mem.
 
     (* NOTE: Seems to talk about the memory /before/ executing the event. Prerequisite
@@ -853,42 +840,138 @@ Section Definability.
       | _ => True
       end.
 
-    Definition Ereg_to_reg: Eregister -> Machine.register.
-    Admitted.
 
-    Definition well_formed_event_intermediate (e': event_inform) (mem: Memory.t)
-               (rs: Machine.Intermediate.Register.t): Prop :=
-      match e' with
-      | ECallInform Csrc _ arg _ _ _ =>
-        True (* todo *)
-        (* Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) *)
-        (* = Some arg *)
-      | ERetInform Csrc ret _ _ _ =>
-        True (* todo *)
-        (* Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) *)
-        (* = Some ret *)
-      | EAlloc C _ rsize _ _ =>
-        exists size,
-        Machine.Intermediate.Register.get (Ereg_to_reg rsize) rs = Int size /\
-        (size > 0)%Z
-      | _ => True
-      end.
 
-    Definition register_files_of_event (e: event_inform): Machine.Intermediate.Register.t :=
-      match e with
-      | ECallInform _ _ _ _ r _
-      | ERetInform _ _ _ r _
-      | EConst _ _ _ _ r
-      | EMov _ _ _ _ r
-      | EBinop _ _ _ _ _ _ r
-      | ELoad _ _ _ _ r
-      | EStore _ _ _ _ r
-      | EAlloc _ _ _ _ r
-      | EInvalidateRA _ _ r => r
-      end.
+    
+    (* AEK: TODO: This definition should be moved to Common/TracesInform.v, right? *)
+    (* The reason I think it should be moved is that we will need a lemma that     *)
+    (* tells us that an Intermediate trace satisfies this definition.              *)
+    
+    (* Notice that the "from" state (consisting of a Register.t and a Memory.t)    *)
+    (* is implicitly given by the first parameter, which is an event_inform.       *)
+    (* The second and the third parameters represent the "to" state.               *)
+    Inductive event_step_to_regfile_mem : event_inform ->
+                                          Machine.Intermediate.Register.t ->
+                                          Memory.t ->
+                                          Prop :=
+    | step_ECallInform:
+        forall C P call_arg mem regs regs' C',
+          C <> C' ->
+          imported_procedure intf C C' P ->
+          Machine.Intermediate.Register.get
+            Machine.R_COM
+            regs = call_arg ->
+          regs' = Machine.Intermediate.Register.invalidate regs ->
+          event_step_to_regfile_mem (ECallInform C P call_arg mem regs C') regs' mem
+    | step_ERetInform:
+        forall mem regs regs' C C' ret_arg,
+          C <> C' ->
+          Machine.Intermediate.Register.get
+            Machine.R_COM
+            regs = ret_arg ->
+          regs' = Machine.Intermediate.Register.invalidate regs ->
+          event_step_to_regfile_mem (ERetInform C ret_arg mem regs C') regs' mem
+    | step_EConst:
+        forall mem regs regs' C er v,
+          regs' = Machine.Intermediate.Register.set
+                    (Ereg_to_reg er)
+                    v
+                    regs ->
+          event_step_to_regfile_mem (EConst C v er mem regs) regs' mem
+    | step_EMov:
+        forall mem regs regs' C er1 er2,
+          regs' = Machine.Intermediate.Register.set (Ereg_to_reg er2)
+                                                    (Machine.Intermediate.Register.get
+                                                       (Ereg_to_reg er1) regs)
+                                                    regs ->
+          event_step_to_regfile_mem (EMov C er1 er2 mem regs) regs' mem
+    | step_EBinop:
+        forall result eop mem regs regs' C er1 er2 er3,
+          result = eval_binop
+                     (Ebinop_to_binop eop)
+                     (Machine.Intermediate.Register.get (Ereg_to_reg er1) regs)
+                     (Machine.Intermediate.Register.get (Ereg_to_reg er2) regs) ->
+          regs' = Machine.Intermediate.Register.set (Ereg_to_reg er3)
+                                                    result
+                                                    regs ->
+          event_step_to_regfile_mem (EBinop C eop er1 er2 er3 mem regs) regs' mem
+    | step_ELoad:
+        forall mem regs regs' C er1 er2 ptr v,
+          Machine.Intermediate.Register.get
+            (Ereg_to_reg er1)
+            regs = Ptr ptr ->
+          Memory.load mem ptr = Some v ->
+          Machine.Intermediate.Register.set
+            (Ereg_to_reg er2)
+            v regs = regs' ->
+          event_step_to_regfile_mem (ELoad C er1 er2 mem regs) regs' mem
+    | step_EStore:
+        forall mem mem' regs C ptr er1 er2,
+          Machine.Intermediate.Register.get
+            (Ereg_to_reg er1)
+            regs = Ptr ptr ->
+          Memory.store
+            mem
+            ptr
+            (
+              Machine.Intermediate.Register.get
+                (Ereg_to_reg er2)
+                regs
+            )
+          = Some mem' ->
+          event_step_to_regfile_mem (EStore C er1 er2 mem regs) regs mem'
+    | step_EAlloc:
+        forall mem mem' regs regs' C ersize erptr size ptr,
+          Machine.Intermediate.Register.get
+            (Ereg_to_reg ersize)
+            regs = Int size ->
+          (size > 0) % Z ->
+          Memory.alloc mem C (Z.to_nat size) = Some (mem', ptr) ->
+          regs' =
+          Machine.Intermediate.Register.set
+            (Ereg_to_reg erptr)
+            (Ptr ptr)
+            regs ->
+          event_step_to_regfile_mem (EAlloc C erptr ersize mem regs) regs' mem'
+    | step_EInvalidateRA:
+        forall mem regs regs' C,
+          Machine.Intermediate.Register.set
+            Machine.R_RA
+            Undef (* We could have chosen any value here.     *)
+                  (* When relating event_step_to_regfile_mem  *)
+                  (* to Intermediate.CS.step, we should be    *)
+                  (* careful to exclude R_RA from the register*)
+                  (* equality relation.                       *)
+            regs = regs' ->
+          event_step_to_regfile_mem (EInvalidateRA C mem regs) regs' mem.
 
+    Inductive prefix_star_event_steps : trace event_inform ->
+                                        Machine.Intermediate.Register.t ->
+                                        Memory.t
+                                        -> Prop :=
+    | nil_star_event_steps:
+        prefix_star_event_steps
+          E0
+          Machine.Intermediate.Register.init
+          (Source.prepare_buffers p)
+    (* AEK: Will prepare_buffers match the Intermediate prepare buffer function? *)
+    | rcons_star_event_steps:
+        forall prefix regs mem e regs' mem',
+          prefix_star_event_steps prefix regs mem ->
+          register_file_of_event_inform e = regs ->
+          mem_of_event_inform e = mem ->
+          event_step_to_regfile_mem e regs' mem' ->
+          prefix_star_event_steps (rcons prefix e) regs' mem'.
+          
+    Definition well_formed_intermediate_prefix (pref: trace event_inform) : Prop :=
+      exists regs mem, prefix_star_event_steps pref regs mem.
+
+    (* AEK: Now not sure whether this definition should be called a postcondition.   *)
+    (* The reason I am not sure is that the r that we are projecting out of an event *)
+    (* e is NOT the register file *after* executing e. It is the register file       *) 
+    (* *before* executing e.                                                         *)
     Definition postcondition_event_registers (e: event_inform) (mem: Memory.t): Prop :=
-      let r := register_files_of_event e in
+      let r := register_file_of_event_inform e in
       forall (R: Machine.register) (n: Z) (v: value),
         reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
         Memory.load mem (Permission.data, cur_comp_of_event e, Block.local, n) = Some v ->
