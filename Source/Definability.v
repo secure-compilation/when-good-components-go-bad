@@ -768,6 +768,7 @@ Section Definability.
   Section WithTrace. (* RB: NOTE: Renaming *)
 
     Variable t : trace event_inform.
+    (* NOTE: need assumption of goodness of the trace *)
 
     (* Let t    :=  *)
     (* [DynShare]: This should be the projection of t_inform.
@@ -802,15 +803,17 @@ Section Definability.
       (* forall ptr, *)
       (*   Pointer.block ptr <> Block.local -> *)
       (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
+      (* NOTE: need to restrict Cb to only the shared addresses: [addr_shared_so_far Cb] *)
       forall Cb,
         memory_shifts_memory_at_addr
           all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem /\
         memory_inverse_shifts_memory_at_addr
           all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
 
-    (* JT: NOTE: The reason this lemma should hold is that the store is to the local
-       block [Block.local], which should always be *private memory* and as a result
-       isn't recorded on the memory snapshot. *)
+    (* JT: NOTE: The reason this lemma should hold is that the store is to the
+       local block [Block.local], which should always be *private memory* (from
+       the goodness of the trace) and as a result isn't recorded on the memory
+       snapshot. *)
     Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C o v mem' :
       well_formed_memory_snapshot mem_snapshot mem ->
       Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
