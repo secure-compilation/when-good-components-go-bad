@@ -1052,7 +1052,7 @@ Section TheShiftRenamingAddrOption.
                            (sigma_shifting_wrap_bid_in_addr
                               sigma_shifting_lefttoright_addr_bid)
                         ) v.
-
+  
   (*Definition inverse_shift_value (v': value) : value :=
     inverse_rename_value (inverse_rename_addr inv_sigma_shifting_addr) v'.*)
   
@@ -1079,6 +1079,37 @@ Section TheShiftRenamingAddrOption.
 End TheShiftRenamingAddrOption.
 
 
+Section PropertiesOfTheShiftRenamingAddrOption.
+
+  Lemma shift_value_option_symmetry n1 n2 v v':
+    shift_value_option n1 n2 v = Some v' -> shift_value_option n2 n1 v' = Some v.
+  Proof.
+    unfold shift_value_option, rename_value_option, rename_value_template_option,
+    rename_addr_option, sigma_shifting_wrap_bid_in_addr.
+    intros H.
+    destruct v' as [| [[[perm' cid'] bid'] off'] |];
+      destruct v as [| [[[perm cid] bid] off] |]; inversion H; subst; auto.
+    - destruct (perm =? Permission.data);
+        destruct (sigma_shifting_lefttoright_addr_bid n1 n2 (cid, bid)); discriminate.
+    - destruct (perm =? Permission.data) eqn:eperm;
+        destruct (sigma_shifting_lefttoright_addr_bid n1 n2 (cid, bid))
+        as [bid_shift|] eqn:ebid_shift.
+      + inversion H. subst. rewrite eperm.
+        assert (sigma_shifting_lefttoright_addr_bid n2 n1 (cid', bid') = Some bid) as G.
+        {
+          unfold sigma_shifting_lefttoright_addr_bid in *.
+          apply sigma_shifting_righttoleft_option_Some_sigma_shifting_lefttoright_option_Some.
+          by rewrite sigma_shifting_righttoleft_lefttoright.
+        }
+        by rewrite G.
+      + discriminate.
+      + inversion H. subst. by rewrite eperm.
+      + inversion H. subst. by rewrite eperm.
+    - destruct (perm =? Permission.data);
+        destruct (sigma_shifting_lefttoright_addr_bid n1 n2 (cid, bid)); discriminate.
+  Qed. 
+  
+End PropertiesOfTheShiftRenamingAddrOption.
 
 Section ExampleShifts.
 
