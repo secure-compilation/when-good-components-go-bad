@@ -10,10 +10,12 @@ Require Import Common.Linking.
 Require Import Common.CompCertExtensions.
 Require Import Common.Traces.
 Require Import Common.TracesInform.
-Require Import Common.Renaming.
+Require Import Common.RenamingOption.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
+
+Require Intermediate.CS.
 
 From Coq Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import eqtype seq.
@@ -800,10 +802,13 @@ Section Definability.
       (* forall ptr, *)
       (*   Pointer.block ptr <> Block.local -> *)
       (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
-      forall Cb,
-        memory_shifts_memory_at_addr
-          all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem /\
-        memory_inverse_shifts_memory_at_addr
+      forall Cb Cb',
+        (* Precondition on Cb:*)
+        rename_addr_option
+          (sigma_shifting_wrap_bid_in_addr
+             (sigma_shifting_lefttoright_addr_bid (uniform_shift 1) all_zeros_shift)) Cb
+        = Some Cb' ->
+        memory_shifts_memory_at_shared_addr
           all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
 
     Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C o v mem' :
@@ -812,14 +817,31 @@ Section Definability.
       well_formed_memory_snapshot mem_snapshot mem'.
     Admitted. (* RB: TODO: Easy. *)
 
-    Definition well_formed_memory_event (e : event_inform) (mem : Memory.t) : Prop :=
+    Definition snapshot_of_event (e: event_inform): Memory.t :=
       match e with
-      | ECallInform Csrc _ arg emem _ _ =>
-        well_formed_memory_snapshot emem mem /\
+      | ECallInform _ _ _ m _ _
+      | ERetInform _ _ m _ _
+      | EConst _ _ _ m _
+      | EMov _ _ _ m _
+      | EBinop _ _ _ _ _ m _
+      | ELoad _ _ _ m _
+      | EStore _ _ _ m _
+      | EAlloc _ _ _ m _
+      | EInvalidateRA _ m _ => m
+      end.
+
+    Definition postcondition_event_snapshot (e: event_inform) (mem: Memory.t): Prop :=
+      let mem_snapshot := snapshot_of_event e in
+      well_formed_memory_snapshot mem_snapshot mem.
+
+    (* NOTE: Seems to talk about the memory /before/ executing the event. Prerequisite
+     to do the event *)
+    Definition precondition_event_intermediate (e: event_inform) (mem: Memory.t): Prop :=
+      match e with
+      | ECallInform Csrc _ arg _ _ _ =>
         Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
         = Some arg
-      | ERetInform Csrc ret emem _ _ =>
-        well_formed_memory_snapshot emem mem /\
+      | ERetInform Csrc ret _ _ _ =>
         Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
         = Some ret
       | EAlloc C _ rsize _ _ =>
@@ -827,8 +849,58 @@ Section Definability.
           (size > 0)%Z /\
           Memory.load mem (Permission.data, C, Block.local, (reg_offset rsize)) =
           Some (Int size)
+      (* TODO: May have to add new well-formedness conditions for other events *)
       | _ => True
       end.
+
+    Definition Ereg_to_reg: Eregister -> Machine.register.
+    Admitted.
+
+    Definition well_formed_event_intermediate (e': event_inform) (mem: Memory.t)
+               (rs: Machine.Intermediate.Register.t): Prop :=
+      match e' with
+      | ECallInform Csrc _ arg _ _ _ =>
+        True (* todo *)
+        (* Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) *)
+        (* = Some arg *)
+      | ERetInform Csrc ret _ _ _ =>
+        True (* todo *)
+        (* Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) *)
+        (* = Some ret *)
+      | EAlloc C _ rsize _ _ =>
+        exists size,
+        Machine.Intermediate.Register.get (Ereg_to_reg rsize) rs = Int size /\
+        (size > 0)%Z
+      | _ => True
+      end.
+
+    Definition register_files_of_event (e: event_inform): Machine.Intermediate.Register.t :=
+      match e with
+      | ECallInform _ _ _ _ r _
+      | ERetInform _ _ _ r _
+      | EConst _ _ _ _ r
+      | EMov _ _ _ _ r
+      | EBinop _ _ _ _ _ _ r
+      | ELoad _ _ _ _ r
+      | EStore _ _ _ _ r
+      | EAlloc _ _ _ _ r
+      | EInvalidateRA _ _ r => r
+      end.
+
+    Definition postcondition_event_registers (e: event_inform) (mem: Memory.t): Prop :=
+      let r := register_files_of_event e in
+      forall (R: Machine.register) (n: Z) (v: value),
+        reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
+        Memory.load mem (Permission.data, cur_comp_of_event e, Block.local, n) = Some v ->
+        exists (v': value),
+          shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
+          Machine.Intermediate.Register.get R r = v'.
+
+    Definition postcondition_event_memory (e: event_inform) (mem': Memory.t) :=
+      postcondition_event_snapshot e mem' /\
+      postcondition_event_registers e mem'.
+
+
 
     Record well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
       {
@@ -837,32 +909,34 @@ Section Definability.
             component_buffer C ->
             Memory.load mem (Permission.data, C, Block.local, 0%Z) =
             Some (Int (counter_value C prefix));
+        (* NOTE: Might be redundant? *)
         wfmem_meta:
           forall C r,
             component_buffer C ->
           exists v,
             Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v;
         (* NOTE: Reuse memory relation (renaming). *)
-        wfmem_call:
-          forall prefix' Csrc P arg mem' regs Cdst,
-            prefix = prefix' ++ [:: ECallInform Csrc P arg mem' regs Cdst] ->
-            component_buffer Csrc ->
-            well_formed_memory_snapshot mem' mem /\
-            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some arg;
-        wfmem_ret:
-          forall prefix' Csrc ret mem' regs Cdst,
-            prefix = prefix' ++ [:: ERetInform Csrc ret mem' regs Cdst] ->
-            component_buffer Csrc ->
-            well_formed_memory_snapshot mem' mem /\
-            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret;
-        wfmem_alloc:
-          forall prefix' C rptr rsize mem' regs,
-            prefix = prefix' ++ [:: EAlloc C rptr rsize mem' regs] ->
-            component_buffer C ->
-          exists size,
-            (size > 0)%Z /\
-            Memory.load mem (Permission.data, C, Block.local, reg_offset rsize) = Some (Int size);
+        (* Precondition: the memory must be in a state ready to execute the event [e] *)
+        (* wfmem: forall prefix' e, *)
+        (*     prefix = prefix' ++ [:: e] -> *)
+        (*     precondition_event_memory e mem; *)
+        (* NOTE: no, this is wrong. We need a post-condition: in what shape is the memory
+         after having executed the event [e] *)
+        wfmem: forall prefix' e,
+            prefix = prefix' ++ [:: e] ->
+            postcondition_event_memory e mem
       }.
+
+    (* NOTE: it doesn't preserve [well_formed_memory].*)
+    Lemma well_formed_memory_star_postcondition:
+      forall p cs prefix e mem,
+        mem = CS.s_memory cs ->
+        well_formed_memory (prefix ++ [:: e]) mem ->
+        exists cs',
+          Star (CS.sem p) cs (project_non_inform [:: e]) cs' /\
+          postcondition_event_memory e (CS.s_memory cs').
+    Admitted.
+
 
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
