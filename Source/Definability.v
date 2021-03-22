@@ -1173,16 +1173,9 @@ Section Definability.
             rewrite wf_C in Hstar'. eauto. }
           assert ((Int (Z.pos (Pos.of_succ_nat (length (comp_subtrace (cur_comp s) prefix))))) = (Int (counter_value (cur_comp s) (prefix ++ [:: e])))).
           { unfold counter_value. rewrite comp_subtrace_app.
-            rewrite wf_C. destruct e; simpl.
-            rewrite eqxx app_length plus_comm //=.
-            rewrite eqxx app_length plus_comm //=.
-            rewrite eqxx app_length plus_comm //=.
-            rewrite eqxx app_length plus_comm //=.
-            rewrite eqxx app_length plus_comm //=.
-            rewrite eqxx app_length plus_comm //=.
-            rewrite eqxx app_length plus_comm //=.
-            rewrite eqxx app_length plus_comm //=.
-            rewrite eqxx app_length plus_comm //=. }
+            rewrite wf_C. destruct e; simpl;
+              rewrite eqxx app_length plus_comm //=.
+          }
             rewrite H in Hmem''. rewrite Hmem'' in Hmem'. congruence.
         }
 
