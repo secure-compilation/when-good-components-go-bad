@@ -1110,8 +1110,8 @@ Section Definability.
         + unfold CS.initial_machine_state, Source.prog_main.
           rewrite find_procedures_of_trace_main.
           econstructor; eauto.
-          * admit. (* Easy: should be an assumption about t *)
-          * admit. (* Easy: should be an assumption about t*)
+          * admit. (* Easy: should be an assumption about t. *)
+          * admit. (* Easy: should be an assumption about t. *)
           * now exists [], [].
           * constructor.
             -- move=> C.
@@ -1131,12 +1131,12 @@ Section Definability.
     - (* Inductive step. *)
       rewrite -catA => Et.
       specialize (IH (e :: suffix) Et) as
-          [cs [s [prefix_inform [prefix' [const_map [Hstar [Hproj [Hshift Hwf_cs]]]]]]]].
+          [cs [s [prefix_inform [prefix' [const_map [Hstar0 [Hproj [Hshift Hwf_cs]]]]]]]].
 
-      move: Hwf_cs Hstar.
+      move: Hwf_cs Hstar0.
       case: cs / => /= _ stk mem _ _ arg P -> -> -> [] wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
 
-      move=> Hstar.
+      move=> Hstar0.
 
       have C_b := valid_procedure_has_block P_exp.
       have C_local := wfmem_counter _ C_b.
@@ -1145,6 +1145,59 @@ Section Definability.
       have wf_mem_e: well_formed_memory_event e mem by admit.
       destruct (well_formed_memory_store_counter C_b wf_mem wf_C wf_mem_e) as
           [mem' [Hmem' wf_mem']].
+
+      (* We can simulate the event-producing step as the concatenation
+         of three successive stars:
+
+          1. By the IH, an initial star that produces the prefix.
+
+          2. A silent star preceding the event.
+
+          3. A star that contains a step that produces the event
+             (which at the source level may now be silent).
+
+           The second star, running up to the point where we are ready
+           to execute the proper expression associated with the event
+           of interest, is fairly simple to establish. *)
+
+      (* NOTE: The base case was simple, but complications arise in the
+         recursive case. The first star can be proved as before, but is it
+         exactly what we need? *)
+      set C := cur_comp s.
+      assert (Star1 : Star (CS.sem p)
+                           [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
+                           [CState C, stk, mem', Kstop, expr_of_event C P e, arg]).
+      { unfold expr_of_trace. rewrite Et 2!comp_subtrace_app. (*simpl.*)
+        do 2 setoid_rewrite map_app.
+        (* rewrite <- wf_C, Nat.eqb_refl, map_app. simpl. *)
+        (* Check Nat.eqb_refl. unfold C. Check map_app. *)
+        assert (H := @switch_spec p Permission.data C  stk mem
+                                  (map (expr_of_event C P) (comp_subtrace C prefix))
+                                  (expr_of_event C P e)
+                                  (map (expr_of_event C P) (comp_subtrace C suffix))
+                                  E_exit arg).
+        specialize (C_local prefix mem wf_mem).
+        rewrite map_length in H. specialize (H C_local).
+        destruct H as [mem'' [Hmem'' Hstar]].
+        assert (Heq : List.map (expr_of_event C P) (comp_subtrace C [:: e]) =
+                      [:: expr_of_event C P e]).
+        {
+          rewrite /C wf_C /=. now setoid_rewrite Nat.eqb_refl. 
+        }
+        rewrite Heq.
+        enough (H : mem'' = mem') by (subst mem''; easy).
+        rewrite -> counter_value_snoc in Hmem'.
+        unfold cur_comp_of_event in Hmem'.
+        simpl in Hmem'.
+        rewrite -> wf_C in Hmem'.
+        (* rewrite <- wf_C in Hmem'. *)
+        rewrite eq_refl in Hmem'.
+        rewrite <- Nat.add_1_r, Nat2Z.inj_add in Hmem''. simpl in Hmem''.
+        unfold counter_value in *.
+
+        rewrite <- wf_C in Hmem'. unfold C in Hmem''.
+        rewrite Hmem' in Hmem''.
+        congruence. }
 
       do 5 eexists. split; [| split; [| split]].
       + (* Compose the stars *)
