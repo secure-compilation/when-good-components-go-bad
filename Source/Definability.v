@@ -1131,12 +1131,12 @@ Section Definability.
     - (* Inductive step. *)
       rewrite -catA => Et.
       specialize (IH (e :: suffix) Et) as
-          [cs [s [prefix_inform [prefix' [const_map [Hstar0 [Hproj [Hshift Hwf_cs]]]]]]]].
+          [cs [s [prefix_inform [prefix' [const_map [Star0 [Hproj [Hshift Hwf_cs]]]]]]]].
 
-      move: Hwf_cs Hstar0.
+      move: Hwf_cs Star0.
       case: cs / => /= _ stk mem _ _ arg P -> -> -> [] wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
 
-      move=> Hstar0.
+      move=> Star0.
 
       have C_b := valid_procedure_has_block P_exp.
       have C_local := wfmem_counter _ C_b.
@@ -1199,42 +1199,64 @@ Section Definability.
         rewrite Hmem' in Hmem''.
         congruence. }
 
-      do 5 eexists. split; [| split; [| split]].
-      + (* Compose the stars *)
-        eapply star_trans. eapply Hstar.
-        rewrite /procedure_of_trace.
-        eapply star_trans with (s2 := [CState (cur_comp s), stk, mem', Kstop, expr_of_event (cur_comp s) P e, arg]).
-        {rewrite /expr_of_trace Et comp_subtrace_app //=.
-         set (C := cur_comp s).
-          (* rewrite wf_C eqxx. rewrite map_app. *)
-          (* set (C := cur_comp_of_event e). *)
-          assert (H := @switch_spec p Permission.data C stk mem
-                                    (map (expr_of_event C P) (comp_subtrace C prefix))
-                                    (expr_of_event C P e)
-                                    (map (expr_of_event C P) (comp_subtrace C suffix))
-                                    E_exit arg).
-          unfold C.
-          rewrite map_length in H. specialize (H (C_local _ mem wf_mem)).
-          destruct H as [mem'' [Hmem'' Hstar']].
-          simpl in Hmem''. unfold C in Hmem''.
-          (* This looks extremely wrong. What are we doing? Why are we computing
-           the new memory twice and why are we proving the two are equal?
-           *)
-          enough (H : mem'' = mem').
-          { subst mem''. unfold C in Hstar'.
-            simpl. rewrite wf_C eqxx map_cat.
-            rewrite wf_C in Hstar'. eauto. }
-          assert ((Int (Z.pos (Pos.of_succ_nat (length (comp_subtrace (cur_comp s) prefix))))) = (Int (counter_value (cur_comp s) (prefix ++ [:: e])))).
-          { unfold counter_value. rewrite comp_subtrace_app.
-            rewrite wf_C. destruct e; simpl;
-              rewrite eqxx app_length plus_comm //=.
-          }
-            rewrite H in Hmem''. rewrite Hmem'' in Hmem'. congruence.
-        }
+      assert (Star2 : exists e' s' cs',
+                 Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] (event_non_inform_of [:: e']) cs' /\
+                 well_formed_state_r s' (prefix ++ [e]) suffix cs' (* TODO: [e']? *)
+             (* /\ e ~ e' *)
+             (* NOTE: Here, too, we may need additional conjuncts... *)
+             ).
+      {
+        admit.
+      }
 
-        rewrite wf_C.
-        (* And now we do the event e *)
-        (* ... *)
+      destruct Star2 as (e' & s' & cs' & Star2 & wf_cs').
+      (* NOTE: Now, case analysis on the event needs to take place early. *)
+      exists cs', s',
+             (prefix_inform ++ [:: e']), (prefix' ++ project_non_inform [:: e']),
+             const_map.
+      split; [| split; [| split]].
+      + eapply (star_trans Star0); simpl; eauto.
+        eapply (star_trans Star1); simpl; now eauto.
+      + rewrite <- Hproj. admit. (* Easy lemma over list concatenation. *)
+      + admit. (* Extend trace relation. *)
+      + assumption.
+
+      (* do 5 eexists. split; [| split; [| split]]. *)
+      (* + (* Compose the stars *) *)
+      (*   eapply star_trans. eapply Hstar. *)
+      (*   rewrite /procedure_of_trace. *)
+      (*   eapply star_trans with (s2 := [CState (cur_comp s), stk, mem', Kstop, expr_of_event (cur_comp s) P e, arg]). *)
+      (*   {rewrite /expr_of_trace Et comp_subtrace_app //=. *)
+      (*    set (C := cur_comp s). *)
+      (*     (* rewrite wf_C eqxx. rewrite map_app. *) *)
+      (*     (* set (C := cur_comp_of_event e). *) *)
+      (*     assert (H := @switch_spec p Permission.data C stk mem *)
+      (*                               (map (expr_of_event C P) (comp_subtrace C prefix)) *)
+      (*                               (expr_of_event C P e) *)
+      (*                               (map (expr_of_event C P) (comp_subtrace C suffix)) *)
+      (*                               E_exit arg). *)
+      (*     unfold C. *)
+      (*     rewrite map_length in H. specialize (H (C_local _ mem wf_mem)). *)
+      (*     destruct H as [mem'' [Hmem'' Hstar']]. *)
+      (*     simpl in Hmem''. unfold C in Hmem''. *)
+      (*     (* This looks extremely wrong. What are we doing? Why are we computing *)
+      (*      the new memory twice and why are we proving the two are equal? *)
+      (*      *) *)
+      (*     enough (H : mem'' = mem'). *)
+      (*     { subst mem''. unfold C in Hstar'. *)
+      (*       simpl. rewrite wf_C eqxx map_cat. *)
+      (*       rewrite wf_C in Hstar'. eauto. } *)
+      (*     assert ((Int (Z.pos (Pos.of_succ_nat (length (comp_subtrace (cur_comp s) prefix))))) = (Int (counter_value (cur_comp s) (prefix ++ [:: e])))). *)
+      (*     { unfold counter_value. rewrite comp_subtrace_app. *)
+      (*       rewrite wf_C. destruct e; simpl; *)
+      (*         rewrite eqxx app_length plus_comm //=. *)
+      (*     } *)
+      (*       rewrite H in Hmem''. rewrite Hmem'' in Hmem'. congruence. *)
+      (*   } *)
+
+      (*   rewrite wf_C. *)
+      (*   (* And now we do the event e *) *)
+      (*   (* ... *) *)
     Admitted.
 
     (* Some other experiments on rephrasings of the definability lemma.
