@@ -1206,7 +1206,66 @@ Section Definability.
              (* NOTE: Here, too, we may need additional conjuncts... *)
              ).
       {
-        admit.
+
+        clear Star1 wf_mem C_local Hmem'. revert mem' wf_mem'. rename mem into mem0. intros mem wf_mem.
+        (* Case analysis on observable events, which in this rich setting
+           extend to calls and returns and various memory accesses and related
+           manipulations, of which only calls and returns are observable at
+           both levels. *)
+        destruct e as [C_ P' new_arg mem' regs C'|C_ ret_val mem' regs C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_ |C_];
+          simpl in wf_C, wf_e(*, wb_suffix*); subst C_.
+
+        - (* Event case: call. *)
+          case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
+          exists (ECallInform C P' new_arg mem regs C'). (* TODO: new_arg? *)
+          exists (StackState C' (C :: callers s)).
+          have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
+
+          destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
+          simpl.
+          exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem,
+                  Kstop, procedure_of_trace C' P' t, new_arg].
+          split.
+          + (* Process memory invariant. *)
+            (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
+            (* subst mem'. *)
+            take_step.
+Local Transparent loc_of_reg.
+            unfold loc_of_reg.
+Local Opaque loc_of_reg.
+            do 7 take_step;
+              [reflexivity | exact Harg |].
+            (* RB: TODO: At this precise moment the call is executed, so the
+               two memories should be identical. And nothing has changed [mem]
+               in the execution of the previous steps. *)
+            apply star_one. simpl.
+            apply CS.eval_kstep_sound. simpl.
+            rewrite (negbTE C_ne_C').
+            rewrite -> imported_procedure_iff in Himport. rewrite Himport.
+            rewrite <- imported_procedure_iff in Himport.
+            by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+            (* rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
+            (* admit. *)
+            (* FIXME: Similar steps will break after this point. *)
+          + econstructor; trivial.
+            { admit. (* New subgoal. *) }
+            { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
+              eexists []; eexists; simpl; split; eauto.
+              split; trivial.
+              eexists arg, P, top, bot.
+              by do 3 (split; trivial). }
+            right. by apply: (closed_intf Himport).
+            (* NOTE: These snippets continue to work, though they may incur
+               modifications later on. *)
+
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
+          - admit.
       }
 
       destruct Star2 as (e' & s' & cs' & Star2 & wf_cs').
