@@ -1258,14 +1258,44 @@ Local Opaque loc_of_reg.
             (* NOTE: These snippets continue to work, though they may incur
                modifications later on. *)
 
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
-          - admit.
+        - admit.
+        - admit.
+
+        - (* EMov *)
+          (* Before processing the goal, introduce existential witnesses. *)
+          inversion wf_mem as [_ wfmem_meta].
+          destruct (well_formed_memory_store_reg_offset ptr ((eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (reg_offset v)))) C_b wf_mem) as [mem' Hstore].
+          exists (EMov C ptr v s0 t0).
+          exists s. eexists. split.
+          + (* Evaluate steps of back-translated event first. *)
+            Local Transparent loc_of_reg.
+            do 12 take_step.
+            * reflexivity.
+            * exact Hstore.
+            * (* Do recursive call. *)
+              do 3 take_step.
+              -- reflexivity.
+              -- now apply find_procedures_of_trace.
+              -- (* Now we are done with the event. *)
+                 apply star_refl.
+          + (* Reestablish invariant. *)
+            econstructor; try reflexivity; try eassumption.
+            * (* As expected, well-bracketedness appears as a new sub-goal. *)
+              clear -wb.
+              unfold well_bracketed_trace_rev in wb.
+              destruct s.
+              (* Now it is plain to see we're stuck! *)
+              admit. (* FIXME *)
+            * destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+            * admit. (* RB: TODO: Restore memory invariant (easy, after first line). *)
+
+        - admit.
+        - admit.
+        - admit.
+        - admit.
+        - admit.
       }
 
       destruct Star2 as (e' & s' & cs' & Star2 & wf_cs').
