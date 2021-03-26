@@ -1001,7 +1001,7 @@ Section Definability.
     of C = cur_comp stk_st
     &  k = Kstop
     &  exp = procedure_of_trace C P t
-    &  TracesInform.well_bracketed_trace_rev stk_st suffix
+    &  well_bracketed_trace stk_st suffix
     &  all (well_formed_event intf) suffix
     &  well_formed_stack stk_st stk
     &  well_formed_memory prefix mem
@@ -1248,7 +1248,9 @@ Local Opaque loc_of_reg.
             (* admit. *)
             (* FIXME: Similar steps will break after this point. *)
           + econstructor; trivial.
-            { admit. (* New subgoal. *) }
+            {
+              exact (snd (andP wb)). (* New subgoal. *)
+            }
             { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
               eexists []; eexists; simpl; split; eauto.
               split; trivial.
@@ -1281,11 +1283,7 @@ Local Opaque loc_of_reg.
           + (* Reestablish invariant. *)
             econstructor; try reflexivity; try eassumption.
             * (* As expected, well-bracketedness appears as a new sub-goal. *)
-              clear -wb.
-              unfold well_bracketed_trace_rev in wb.
-              destruct s.
-              (* Now it is plain to see we're stuck! *)
-              admit. (* FIXME *)
+              exact (snd (andP wb)).
             * destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
