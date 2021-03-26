@@ -1261,7 +1261,113 @@ Local Opaque loc_of_reg.
                modifications later on. *)
 
         - admit.
-        - admit.
+
+        (* NOTE: ... And there is a series of new events to consider. *)
+
+        - (* EConst *)
+          (* Case analysis on concrete constant expression; all cases are
+             similar.
+             TODO: Refactoring. *)
+          exists (EConst C ptr v s0 t0).
+          destruct ptr as [n | [[[P' C'] b] o] |].
+          + (* Before processing the goal, introduce existential witnesses. *)
+            destruct (well_formed_memory_store_reg_offset v (Int n) C_b wf_mem) as [mem' Hstore].
+            exists (StackState C (callers s)). eexists. split.
+            * (* Evaluate steps of back-translated event first. *)
+Local Transparent expr_of_const_val loc_of_reg.
+              do 8 take_step.
+              -- reflexivity.
+              -- exact Hstore.
+              -- (* Do recursive call. *)
+                  do 3 take_step.
+                  ++ reflexivity.
+                  ++ now apply find_procedures_of_trace.
+                  ++ (* Now we are done with the event. *)
+                     apply star_refl.
+            * (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              admit. (* Easy. *)
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+              (* Reestablish memory well-formedness.
+                 TODO: Refactor, automate. *)
+              {
+                constructor.
+                - intros C' C'_b.
+                  rewrite <- ((wfmem_counter wf_mem) C' C'_b).
+                  eapply Memory.load_after_store_neq; try eassumption.
+                  intros Hcontra; destruct v; now inversion Hcontra.
+                - intros C' reg C'_b.
+                  destruct (dec_eq_nat C C') as [HeqC | HneqC].
+                  + subst C'.
+                    destruct (Eregister_eq_dec reg v) as [Heqreg | Hneqreg].
+                    * subst reg. exists (Int n).
+                      eapply Memory.load_after_store_eq; eassumption.
+                    * destruct ((wfmem_meta wf_mem) C reg C_b) as [val Hval].
+                      exists val.
+                      erewrite Memory.load_after_store_neq; try eassumption.
+                      intros Hcontra. injection Hcontra as Hoffset.
+                      apply reg_offset_inj in Hoffset.
+                      symmetry in Hoffset. contradiction.
+                  + destruct ((wfmem_meta wf_mem) C' reg C'_b) as [val Hval].
+                    exists val.
+                    erewrite Memory.load_after_store_neq; try eassumption.
+                    intros Hcontra. inversion Hcontra. contradiction.
+                - intros prefix0' Csrc P' arg' mem'' regs Cdst Hprefix Csrc_b.
+                  apply rcons_inv in Hprefix as [Hprefix Hevent].
+                  discriminate.
+                - intros prefix0' Csrc P' arg' regs Cdst Hprefix Csrc_b.
+                  apply rcons_inv in Hprefix as [Hprefix Hevent].
+                  discriminate.
+                - intros prefix0' C' rptr rsize mem'' regs Hprefix C'_b.
+                  apply rcons_inv in Hprefix as [Hprefix Hevent].
+                  discriminate.
+              }
+
+          + (* Before processing the goal, introduce existential witnesses. *)
+            destruct (well_formed_memory_store_reg_offset v (eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (8 + o))) C_b wf_mem) as [mem' Hstore].
+            exists (StackState C (callers s)). eexists. split.
+            * (* Evaluate steps of back-translated event first. *)
+Local Transparent expr_of_const_val loc_of_reg.
+              do 12 take_step.
+              -- reflexivity.
+              -- exact Hstore.
+              -- (* Do recursive call. *)
+                  do 3 take_step.
+                  ++ reflexivity.
+                  ++ now apply find_procedures_of_trace.
+                  ++ (* Now we are done with the event. *)
+                     apply star_refl.
+            * (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              admit. (* Easy. *)
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
+
+          + (* Before processing the goal, introduce existential witnesses. *)
+            destruct (well_formed_memory_store_reg_offset v Undef C_b wf_mem) as [mem' Hstore].
+            exists (StackState C (callers s)). eexists. split.
+            * (* Evaluate steps of back-translated event first. *)
+Local Transparent expr_of_const_val loc_of_reg.
+              do 12 take_step.
+              -- reflexivity.
+              -- exact Hstore.
+              -- (* Do recursive call. *)
+                  do 3 take_step.
+                  ++ reflexivity.
+                  ++ now apply find_procedures_of_trace.
+                  ++ (* Now we are done with the event. *)
+                     apply star_refl.
+            * (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              admit. (* Easy. *)
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
 
         - (* EMov *)
           (* Before processing the goal, introduce existential witnesses. *)
@@ -1270,7 +1376,7 @@ Local Opaque loc_of_reg.
           exists (EMov C ptr v s0 t0).
           exists s. eexists. split.
           + (* Evaluate steps of back-translated event first. *)
-            Local Transparent loc_of_reg.
+Local Transparent loc_of_reg.
             do 12 take_step.
             * reflexivity.
             * exact Hstore.
@@ -1289,11 +1395,166 @@ Local Opaque loc_of_reg.
               exists bot. split; [| split]; easy.
             * admit. (* RB: TODO: Restore memory invariant (easy, after first line). *)
 
-        - admit.
-        - admit.
-        - admit.
-        - admit.
-        - admit.
+        - (* EBinop *)
+          (* Before processing the goal, introduce existential witnesses. *)
+          inversion wf_mem as [_ wfmem_meta].
+          destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
+          destruct (wfmem_meta _ e1 C_b) as [v1 Hload1].
+          destruct (well_formed_memory_store_reg_offset e2 (eval_binop (binop_of_Ebinop e) v0 v1) C_b wf_mem) as [mem' Hstore2].
+          (* Proceed. *)
+          exists (EBinop C e e0 e1 e2 s0 t0).
+          exists (StackState C (callers s)). eexists. split.
+          + (* Evaluate steps of back-translated event first. *)
+Local Transparent loc_of_reg.
+            do 9 take_step.
+            * reflexivity.
+            * exact Hload0.
+            * do 7 take_step.
+              -- reflexivity.
+              -- exact Hload1.
+              -- do 7 take_step.
+                 ++ reflexivity.
+                 ++ exact Hstore2.
+                 ++ (* Do recursive call. *)
+                    do 3 take_step.
+                    ** reflexivity.
+                    ** now apply find_procedures_of_trace.
+                    ** (* Now we are done with the event. *)
+                      apply star_refl.
+            + (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              admit. (* Easy. *)
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Reestablish memory invariant. *)
+
+        - (* ELoad *)
+          (* Before processing the goal, introduce existential witnesses. *)
+          inversion wf_mem as [_ wfmem_meta].
+          destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
+          destruct (well_formed_memory_store_reg_offset e v0 C_b wf_mem) as [mem' Hstore1].
+          (* Continue. *)
+          exists (ELoad C e e0 s0 t0).
+          exists (StackState C (callers s)). eexists. split.
+          + (* Evaluate steps of back-translated event first. *)
+Local Transparent loc_of_reg.
+            do 8 take_step.
+            * reflexivity.
+            * exact Hload0.
+            * do 6 take_step.
+              -- reflexivity.
+              -- exact Hstore1.
+              -- (* Do recursive call. *)
+                 do 3 take_step.
+                 ++ reflexivity.
+                 ++ now apply find_procedures_of_trace.
+                 ++ (* Now we are done with the event. *)
+                    apply star_refl.
+            + (* Reestablish invariant. *)
+              econstructor; try reflexivity; try eassumption.
+              admit. (* Easy. *)
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Restore invariant. *)
+
+        - (* EStore *)
+          (* Before processing the goal, introduce existential witnesses. *)
+          inversion wf_mem as [_ wfmem_meta].
+          destruct (wfmem_meta _ e0 C_b) as [v0 Hload0].
+          destruct (well_formed_memory_store_reg_offset e v0 C_b wf_mem) as [mem' Hstore1].
+          (* Continue. *)
+          exists (EStore C e e0 s0 t0).
+          exists (StackState C (callers s)). eexists. split.
+          + (* Evaluate steps of back-translated event first. *)
+Local Transparent loc_of_reg.
+            do 8 take_step.
+            * reflexivity.
+            * exact Hload0.
+            * do 6 take_step.
+              -- reflexivity.
+              -- exact Hstore1.
+              -- (* Do recursive call. *)
+                 do 3 take_step.
+                 ++ reflexivity.
+                 ++ now apply find_procedures_of_trace.
+                 ++ (* Now we are done with the event. *)
+                    apply star_refl.
+          + (* Reestablish invariant. *)
+            econstructor; try reflexivity; try eassumption.
+            admit. (* Easy. *)
+            destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+            eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+            exists bot. split; [| split]; easy.
+            admit. (* RB: TODO: Restore invariant. *)
+
+        - (* EAlloc *)
+          (* Before processing the goal, introduce existential witnesses. *)
+          destruct ((wfmem_alloc wf_mem) _ _ _ _ _ _ Logic.eq_refl C_b)
+            as [size [Hsize Hload0]].
+          destruct (Memory.alloc_after_load mem _ _ _ _ _ (Z.to_nat size) Hload0)
+            as [mem' [b' [Hblock Halloc1]]].
+          destruct (well_formed_memory_store_reg_offset
+                      e ((Ptr (Permission.data, C, b', 0%Z))) C_b wf_mem)
+            as [mem1 Hstore2].
+          destruct (Memory.store_after_alloc _ _ _ _ _ _ _ _ _ _ _ _ _ Halloc1 (not_eq_sym Hblock) Hstore2)
+              as [mem1' Hstore2'].
+          (* Continue with the goal. *)
+          exists (EAlloc C e e0 s0 t0).
+          exists (StackState C (callers s)). eexists. split.
+          + (* Evaluate steps of back-translated event first. *)
+Local Transparent loc_of_reg.
+            do 9 take_step.
+            * reflexivity.
+            * exact Hload0.
+            * unfold loc_of_reg.
+              do 1 take_step.
+              -- (* Metadata-simulated register [e0] holds positive integer. *)
+                 exact Hsize.
+              -- exact Halloc1.
+              -- do 6 take_step.
+                 ++ reflexivity.
+                 ++ exact Hstore2'.
+                 ++ (* Do recursive call. *)
+                    do 3 take_step.
+                    ** reflexivity.
+                    ** now apply find_procedures_of_trace.
+                    ** (* Now we are done with the event. *)
+                       apply star_refl.
+          + (* Reestablish invariant. *)
+            econstructor; try reflexivity; try eassumption.
+            admit. (* Easy. *)
+            destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+            eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+            exists bot. split; [| split]; easy.
+            admit. (* RB: TODO: Restore invariant. *)
+
+        - (* EInvalidateRA *)
+          (* Before processing the goal, introduce existential witnesses. *)
+          inversion wf_mem as [_ wfmem_meta].
+          destruct (well_formed_memory_store_reg_offset E_R_RA (Int 0) C_b wf_mem) as [mem' Hstore].
+          (* Continue. *)
+          exists (EInvalidateRA C s0 t0).
+          exists (StackState C (callers s)). eexists. split.
+          + (* Evaluate steps of back-translated event first. *)
+Local Transparent loc_of_reg.
+             do 8 take_step.
+             * reflexivity.
+             * exact Hstore.
+             * (* Do recursive call. *)
+               do 3 take_step.
+               -- reflexivity.
+               -- now apply find_procedures_of_trace.
+               -- (* Now we are done with the event. *)
+                  apply star_refl.
+          + (* Reestablish invariant. *)
+            econstructor; try reflexivity; try eassumption.
+            admit. (* Easy. *)
+            destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+            eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+            exists bot. split; [| split]; easy.
+            admit. (* RB: TODO: Restore invariant. *)
       }
 
       destruct Star2 as (e' & s' & cs' & Star2 & wf_cs').
