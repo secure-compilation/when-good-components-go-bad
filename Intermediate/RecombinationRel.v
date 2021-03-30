@@ -132,9 +132,6 @@ Section BinaryHelpersForMergeable.
           (
             shift_value_option n_original n_recombined (Register.get reg r_original) =
             Some (Register.get reg r_recombined)
-            /\
-            shift_value_option n_recombined n_original (Register.get reg r_recombined) =
-            Some (Register.get reg r_original)
           )
           \/
           (
@@ -3052,23 +3049,19 @@ Section ThreewayMultisem1.
             | H: regs_rel_of_executing_part _ _ _ _ _ _ |- _ => inversion H as [Hreg] end.
             intros reg.
             pose proof (Hreg r1)
-              as [[Hget_shift Hget_inv_shift] | [Hshift_r1_None Heq1]];
+              as [Hget_shift | [Hshift_r1_None Heq1]];
               pose proof (Hreg reg)
-              as [[Hreg_shift Hreg_inv_shift] | [Hshift_reg_None Heq2]];
+              as [Hreg_shift | [Hshift_reg_None Heq2]];
               destruct ((Register.to_nat reg == Register.to_nat r2)) eqn:Hreg_r; simpl;
                 unfold Register.set, Register.get; rewrite !setmE Hreg_r.
-            ++ left. split.
-               ** by simpl in *.
-               ** by simpl in *.
-            ++ left. split; eauto.
-            ++ left. split.
-               ** by simpl in *.
-               ** by simpl in *.
+            ++ left. by simpl in *.
+            ++ left. eauto.
+            ++ left. by simpl in *.
             ++ right. split; eauto.
             ++ right. split.
                ** by simpl in *.
                ** by simpl in *.
-            ++ left. split; eauto.
+            ++ left. eauto.
             ++ right. split; eauto.
             ++ right. split; eauto.
 
@@ -3200,16 +3193,14 @@ Section ThreewayMultisem1.
                       rewrite Hi1 Hi2 in Hresult. rewrite Hresult.
                       simpl in *.
                       pose proof (Hreg r1)
-                        as [[Hget_shift1 Hget_inv_shift1] |
+                        as [Hget_shift1 |
                             [HNone1 [Heq1 [Hnotshr1a Hnotshr1b]]]];
                         pose proof (Hreg r2)
-                        as [[Hget_shift2 Hget_inv_shift2] |
+                        as [Hget_shift2 |
                             [HNone2 [Heq2 [Hnotshr2a Hnotshr2b]]]].
                       +++
                         rewrite !Hi1 in Hget_shift1.
-                        rewrite !Hi1 in Hget_inv_shift1.
                         rewrite !Hi2 in Hget_shift2.
-                        rewrite !Hi2 in Hget_inv_shift2.
                         destruct (regs1' (Register.to_nat r1))
                           as [v_regs1'_r1 |] eqn:Hv_regs1'_r1; try discriminate.
                         destruct (regs1' (Register.to_nat r2))
@@ -3219,14 +3210,12 @@ Section ThreewayMultisem1.
                         left. by rewrite Hresult.
                       +++ rewrite <- !Heq2, !Hi2. left.
                           rewrite !Hi1 in Hget_shift1.
-                          rewrite !Hi1 in Hget_inv_shift1.
                           destruct (regs1' (Register.to_nat r1))
                             as [v_regs1'_r1 |] eqn:Hv_regs1'_r1; try discriminate.
                           inversion Hget_shift1. subst.
                           by rewrite Hresult.
                       +++ rewrite <- !Heq1, !Hi1. left.
                           rewrite !Hi2 in Hget_shift2.
-                          rewrite !Hi2 in Hget_inv_shift2.
                           destruct (regs1' (Register.to_nat r2))
                             as [v_regs1'_r2 |] eqn:Hv_regs1'_r2; try discriminate.
                           inversion Hget_shift2. subst.
@@ -3239,40 +3228,43 @@ Section ThreewayMultisem1.
                     rewrite !Hp1 !Hp2.
                     simpl in *.
                     pose proof (Hreg r1)
-                      as [[Hget_shift1 Hget_inv_shift1] |
+                      as [Hget_shift1 |
                           [HNone1 [Heq1 [Hnotshr1a Hnotshr1b]]]];
                         pose proof (Hreg r2)
-                      as [[Hget_shift2 Hget_inv_shift2] |
+                      as [Hget_shift2 |
                           [HNone2 [Heq2 [Hnotshr2a Hnotshr2b]]]].
                     +++
                       rewrite !Hp1 in Hget_shift1.
-                      rewrite !Hp1 in Hget_inv_shift1.
                       rewrite !Hp2 in Hget_shift2.
-                      rewrite !Hp2 in Hget_inv_shift2.
-                      destruct (regs1' (Register.to_nat r1))
-                        as [v_regs1'_r1 |] eqn:Hv_regs1'_r1; try discriminate.
-                      destruct (regs1' (Register.to_nat r2))
-                        as [v_regs1'_r2 |] eqn:Hv_regs1'_r2; try discriminate.
+                      
                       destruct (perm1 =? Permission.data) eqn:Hperm1;
                         destruct (perm2 =? Permission.data) eqn:Hperm2.
                     *** (* data, data *)
+                      
                       destruct (sigma_shifting_lefttoright_option
                                   (n cid2)
                                   (if cid2 \in domm (prog_interface p)
                                    then n cid2 else n'' cid2) bid2)
                         as [bid2_shift|] eqn:ebid2_shift;
                         rewrite ebid2_shift in Hget_shift2;
-                        try discriminate; inversion Hget_shift2; subst; simpl in *.
-                      rewrite Hperm2 in Hget_inv_shift2.
-
+                        try discriminate.
+                      
                       destruct (sigma_shifting_lefttoright_option
                                   (n cid1)
                                   (if cid1 \in domm (prog_interface p)
                                    then n cid1 else n'' cid1) bid1)
                         as [bid1_shift|] eqn:ebid1_shift;
                         rewrite ebid1_shift in Hget_shift1;
-                        try discriminate; inversion Hget_shift1; subst; simpl in *.
-                      rewrite Hperm1 in Hget_inv_shift1.
+                        try discriminate. 
+
+                      destruct (regs1' (Register.to_nat r1))
+                        as [v_regs1'_r1 |] eqn:Hv_regs1'_r1; try discriminate.
+                      destruct (regs1' (Register.to_nat r2))
+                        as [v_regs1'_r2 |] eqn:Hv_regs1'_r2; try discriminate.
+
+                      inversion Hget_shift1; subst; simpl in *.
+                      inversion Hget_shift2; subst; simpl in *.
+                      
                       destruct (cid1 =? cid2) eqn:ecid1_cid2.
                       ----
                         rewrite !andb_true_r.
@@ -3297,8 +3289,6 @@ Section ThreewayMultisem1.
                             rewrite ebid1_bid2 !andb_false_r !andb_false_l.
                             by intuition.
                           ****
-                            rewrite Hcid2_p in Hget_inv_shift1.
-                            rewrite Hcid2_p in Hget_inv_shift2.
                             assert (
                                 sigma_shifting_lefttoright_option
                                   (n'' cid2) (n cid2) bid2_shift = Some bid2)
@@ -3334,7 +3324,7 @@ Section ThreewayMultisem1.
                         rewrite !andb_false_r !andb_false_l.
                         by intuition.
                     ***
-                      inversion Hget_shift2. subst. clear Hget_shift2 Hget_inv_shift2.
+                      inversion Hget_shift2. subst. clear Hget_shift2.
                       
                       destruct (sigma_shifting_lefttoright_option
                                   (n cid1)
@@ -3343,12 +3333,11 @@ Section ThreewayMultisem1.
                         as [bid1_shift|] eqn:ebid1_shift;
                         rewrite ebid1_shift in Hget_shift1;
                         try discriminate; inversion Hget_shift1; subst; simpl in *.
-                      rewrite Hperm1 in Hget_inv_shift1.
                       assert (perm1 = Permission.data). by apply beq_nat_true. subst.
                       rewrite Nat.eqb_sym Hperm2 !andb_false_l.
                       by intuition.
                     ***
-                      inversion Hget_shift1. subst. clear Hget_shift1 Hget_inv_shift1.
+                      inversion Hget_shift1. subst. clear Hget_shift1.
                         
                       destruct (sigma_shifting_lefttoright_option
                                   (n cid2)
@@ -3357,24 +3346,19 @@ Section ThreewayMultisem1.
                         as [bid2_shift|] eqn:ebid2_shift;
                         rewrite ebid2_shift in Hget_shift2;
                         try discriminate; inversion Hget_shift2; subst; simpl in *.
-                      rewrite Hperm2 in Hget_inv_shift2.
                       assert (perm2 = Permission.data). by apply beq_nat_true. subst.
                       rewrite Hperm1 !andb_false_l.
                       by intuition.
                     ***
-                      inversion Hget_shift1. subst. clear Hget_shift1 Hget_inv_shift1.
-                      inversion Hget_shift2. subst. clear Hget_shift2 Hget_inv_shift2.
+                      inversion Hget_shift1. subst. clear Hget_shift1.
+                      inversion Hget_shift2. subst. clear Hget_shift2.
                       unfold Pointer.eq.
-                      by intuition.
+                        by intuition.
                     +++
                       rewrite <- !Heq2.
                       rewrite !Hp1 in Hget_shift1.
-                      rewrite !Hp1 in Hget_inv_shift1.
-                      destruct (regs1' (Register.to_nat r1))
-                        as [v_regs1'_r1 |] eqn:Hv_regs1'_r1; try discriminate.
-                      destruct (regs (Register.to_nat r2))
-                        as [v_regs_r2 |] eqn:Hv_regs_r2; try discriminate.
-                      subst.
+                      rewrite Hp2 in HNone2.
+                      
                       destruct (perm2 =? Permission.data) eqn:Hperm2;
                         try discriminate.
                       destruct (sigma_shifting_lefttoright_option
@@ -3382,81 +3366,70 @@ Section ThreewayMultisem1.
                                   (if cid2 \in domm (prog_interface p)
                                    then n cid2 else n'' cid2) bid2) eqn:ebid2_shift;
                         rewrite ebid2_shift in HNone2; try discriminate.
-                      destruct (v_regs1'_r1) as [| [[[perm1' cid1'] bid1'] off1'] |];
-                        try discriminate.
-                      destruct (perm1' =? Permission.data) eqn:Hperm1'.
-                      ----
-                        destruct (sigma_shifting_lefttoright_option
-                                    (if cid1' \in domm (prog_interface p)
-                                     then n cid1' else n'' cid1')
-                                    (n cid1') bid1') as [bid1'_shift|] eqn:ebid1'_shift;
-                          rewrite ebid1'_shift in Hget_inv_shift1;
-                          try discriminate.
-                        inversion Hget_inv_shift1. subst. clear Hget_inv_shift1.
-                        assert (sigma_shifting_lefttoright_option
-                                  (n cid1)
-                                  (if cid1 \in domm (prog_interface p)
-                                   then n cid1 else n'' cid1) bid1 = Some bid1') as G.
-                        {
-                          apply sigma_shifting_righttoleft_option_Some_sigma_shifting_lefttoright_option_Some.
-                            by rewrite sigma_shifting_righttoleft_lefttoright.
-                        }
-                        rewrite G in Hget_shift1.
-                        unfold Pointer.eq.
-                        destruct (regs (Register.to_nat r1))
-                          as [ | ]; try discriminate.
-                        subst.
-                        destruct (cid1 =? cid2) eqn:ecid1_cid2.
-                      ***
-                        assert (cid1 = cid2). by apply beq_nat_true. subst.
-                        destruct (bid1 =? bid2) eqn:ebid1_bid2.
-                        -----
-                          assert (bid1 = bid2). by apply beq_nat_true. subst.
-                          by rewrite ebid2_shift in G.
-                        -----
-                          left.
-                        destruct (cid2 \in domm (prog_interface p)) eqn:ecid2.
-                        +++++
-                          rewrite sigma_shifting_lefttoright_option_n_n_id in G.
-                        inversion G. subst. by rewrite ebid1_bid2.
-                        +++++
-                          destruct (regs1' (Register.to_nat r2)) eqn:eregs1'_r2;
-                          try discriminate. subst.
-                        simpl in *.
-                        rewrite Hperm2 in Hnotshr2a. rewrite Hperm2 in Hnotshr2b.
-                        assert (~addr_shared_so_far (cid2, bid2) t1') as Hcontra.
-                        { apply Hnotshr2b. by rewrite in_fset1. }
-                        
-                        assert (CSInvariants.wf_ptr_wrt_cid_t
-                                  (Pointer.component pc) t1' (perm2, cid2, bid2, off2))
-                          as cid2_bid2_invariant.
-                        {
-                          eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t;
-                            last (unfold Register.get; by erewrite eregs1'_r2).
-                          eapply CSInvariants.wf_state_wf_reg.
-                          - eapply CSInvariants.is_prefix_wf_state_t;
-                              last exact Hpref_t'.
-                            apply linking_well_formedness; auto.
-                            rewrite <- Hifc_cc'.
-                            unfold mergeable_interfaces in *. by intuition.
-                          - by simpl.
-                          - by simpl.
-                          - reflexivity.
-                        }
-                        inversion cid2_bid2_invariant; subst.
-                      
-                        *****
-                          by rewrite ecid2 in Hpc_p.
-                        *****
-                          match goal with
-                          | H: addr_shared_so_far (cid2, bid2) t1' |- _ =>
-                            by apply Hcontra in H
-                          end.
-                        
-                      ***
-                        left. by rewrite andb_false_r !andb_false_l.
-                        ---- inversion Hget_inv_shift1. unfold Pointer.eq.
-                               by intuition.
+                      rewrite Hp2 in Heq2.
+                      left.
+                      destruct (perm1 =? Permission.data) eqn:eperm1;
+                        destruct (
+                            sigma_shifting_lefttoright_option
+                              (n cid1)
+                              (if cid1 \in domm (prog_interface p)
+                               then n cid1 else n'' cid1) bid1
+                          ) as [bid1_shift|] eqn:ebid1_shift.
+                      ---- rewrite ebid1_shift in Hget_shift1.
+                           rewrite Hp2.
+                           inversion Hget_shift1. unfold Pointer.eq.
+                           destruct (cid1 =? cid2) eqn:ecid1_cid2.
+                           ****
+                             assert (cid1 = cid2). by apply beq_nat_true. subst.
+                             destruct (bid1 =? bid2) eqn:ebid1_bid2.
+                             -----
+                               assert (bid1 = bid2). by apply beq_nat_true. subst.
+                               by rewrite ebid2_shift in ebid1_shift.
+                             -----
+                             destruct (cid2 \in domm (prog_interface p)) eqn:ecid2.
+                             +++++
+                               by rewrite sigma_shifting_lefttoright_option_n_n_id
+                               in ebid2_shift.
+                             +++++
+                               assert (bid1_shift <> bid2).
+                             {
+                               unfold not; intros; subst.
+                               rewrite <- Heq2 in Hnotshr2b. simpl in Hnotshr2b.
+                               rewrite Hperm2 in Hnotshr2b.
+                               assert (~ addr_shared_so_far (cid2, bid2) t1')
+                                 as Hcontra.
+                                 by apply Hnotshr2b; rewrite in_fset1.
+                                
+                                 assert (CSInvariants.wf_ptr_wrt_cid_t
+                                           (Pointer.component pc)
+                                           t1'
+                                           (perm2, cid2, bid2, off2))
+                                   as Hwf.
+                                 {
+                                   eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t;
+                                     last (unfold Register.get; symmetry; eassumption).
+                                   eapply CSInvariants.wf_state_wf_reg
+                                     with (s := (gps1', mem1', regs1', pc)); eauto.
+                                   eapply CSInvariants.is_prefix_wf_state_t;
+                                     last exact Hpref_t'.
+                                   eapply linking_well_formedness; eauto.
+                                   unfold mergeable_interfaces in *.
+                                   by rewrite <- Hifc_cc'; intuition.
+                                 }
+                                 inversion Hwf as [| ? ? ? ? Hshr]; subst.
+                                 - by rewrite ecid2 in Hpc_p. 
+                                 - by apply Hcontra in Hshr.
+                             }
+
+                             assert (bid1_shift =? bid2 = false) as Hrewr.
+                               by rewrite Nat.eqb_neq.
+
+                              by rewrite Hrewr.
+
+                           **** by rewrite andb_false_r !andb_false_l.
+
+                      ---- by rewrite ebid1_shift in Hget_shift1.
+                      ---- 
                     +++
                       rewrite <- !Heq1.
                       rewrite !Hp2 in Hget_shift2.
@@ -4692,6 +4665,26 @@ Section ThreewayMultisem1.
         find_and_invert_mergeable_states_well_formed.
       + assert (pc1' = pc). by simpl in *.
         subst pc1'. (* PC lockstep. *)
+
+        assert (Pointer.component pc \in domm (prog_interface p)) as Hpc_in.
+        {
+          unfold CS.is_program_component,
+          CS.is_context_component, turn_of, CS.state_turn in *.
+          unfold negb in Hcomp1.
+          pose proof @CS.star_pc_domm_non_inform p c
+               Hwfp Hwfc Hmerge_ipic Hclosed_prog as Hor'.
+          assert (Pointer.component pc \in domm (prog_interface p)
+                  \/
+                  Pointer.component pc \in domm (prog_interface c))
+            as [G | Hcontra]; auto.
+          {
+            unfold CSInvariants.is_prefix in Hpref_t.
+            eapply Hor'; eauto.
+            - by unfold CS.initial_state.
+          }
+            by (unfold ic in *; rewrite Hcontra in Hcomp1).
+        }
+            
         match goal with
         | H : executing (prepare_global_env prog) ?PC ?INSTR |- _ =>
           assert (Hex' : executing (prepare_global_env prog') PC INSTR)
@@ -4700,26 +4693,8 @@ Section ThreewayMultisem1.
           eapply execution_invariant_to_linking with (c1 := c); eauto.
           + unfold mergeable_interfaces in *. by intuition.
           + rewrite <- Hifc_cc'. unfold mergeable_interfaces in *. by intuition.
-          + unfold CS.is_program_component,
-            CS.is_context_component, turn_of, CS.state_turn in *.
-            unfold negb in Hcomp1.
-            pose proof @CS.star_pc_domm_non_inform p c
-                 Hwfp Hwfc Hmerge_ipic Hclosed_prog as Hor'.
-            assert (Pointer.component pc \in domm (prog_interface p)
-                    \/
-                    Pointer.component pc \in domm (prog_interface c))
-              as [G | Hcontra]; auto.
-            {
-              unfold CSInvariants.is_prefix in Hpref_t.
-              eapply Hor'; eauto.
-              - by unfold CS.initial_state.
-            }
-            by (unfold ic in *; rewrite Hcontra in Hcomp1).
         }
 
-
-        assert (Pointer.component pc \in domm (prog_interface p)) as Hpc_in.
-        by admit.
 
         (* ILoad-specific *)
 
@@ -4730,28 +4705,10 @@ Section ThreewayMultisem1.
         destruct ptr as [[[perml cidl] bidl] offl].
         simpl in Hperml. subst.
         
-        inversion Hregsp as [Hregs]. simpl in Hregs.
-        specialize (Hregs r1) as [Hregs1'_r1 _].
-        match goal with
-        | H: Register.get r1 regs = Ptr _ |- _ =>
-          rewrite H in Hregs1'_r1
-        end.
-        unfold shift_value_option, rename_value_option, rename_addr_option,
-        rename_value_template_option, sigma_shifting_wrap_bid_in_addr in Hregs1'_r1.
-        rewrite <- beq_nat_refl in Hregs1'_r1.
-        destruct (sigma_shifting_lefttoright_addr_bid
-                    n
-                    (fun cid : nat => if cid \in domm (prog_interface p)
-                                      then n cid else n'' cid)
-                    (cidl, bidl)) as [bidl_shift|] eqn:ebidl_shift;
-          rewrite ebidl_shift in Hregs1'_r1; try discriminate.
-        inversion Hregs1'_r1 as [Hregs1'_r1_]. symmetry in Hregs1'_r1_.
-        clear Hregs1'_r1.
-
         assert (CSInvariants.wf_ptr_wrt_cid_t
-                      (Pointer.component pc) t1
-                      (Permission.data, cidl, bidl, offl)
-                  ) as cidl_bidl_invariant.
+                  (Pointer.component pc) t1
+                  (Permission.data, cidl, bidl, offl)
+               ) as cidl_bidl_invariant.
         {
           eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t; eauto.
           eapply CSInvariants.wf_state_wf_reg.
@@ -4772,23 +4729,24 @@ Section ThreewayMultisem1.
         destruct Hmemp as [Hmem_own [Hmem_shared _]].
         
         assert (
-             (cidl, bidl).1 \in domm (prog_interface p) ->
-             (
-                 Memory.load mem1' (Permission.data,
-                                    cidl, bidl, offl) =
-                 match
-                   rename_value_option
-                     (rename_addr_option
-                        (sigma_shifting_wrap_bid_in_addr
-                           (sigma_shifting_lefttoright_addr_bid
-                              n
-                              (fun cid : nat =>
-                                 if cid \in domm (prog_interface p)
-                                 then n cid else n'' cid)))) v
-                 with
-                 | Some v' => Some v'
-                 | None => Some v
-                 end)) as Hmem_own1.
+            (cidl, bidl).1 \in domm (prog_interface p) ->
+                               (
+                                 Memory.load mem1' (Permission.data,
+                                                    cidl, bidl, offl) =
+                                 match
+                                   rename_value_option
+                                     (rename_addr_option
+                                        (sigma_shifting_wrap_bid_in_addr
+                                           (sigma_shifting_lefttoright_addr_bid
+                                              n
+                                              (fun cid : nat =>
+                                                 if cid \in domm (prog_interface p)
+                                                 then n cid else n'' cid)))) v
+                                 with
+                                 | Some v' => Some v'
+                                 | None => Some v
+                                 end)
+          ) as Hmem_own1.
         {
           intros Hcidl.
           specialize (Hmem_own _ Hcidl) as [Hspec _].
@@ -4797,30 +4755,7 @@ Section ThreewayMultisem1.
                               by specialize (Hspec _ _ H)
           end.
         }
-
-        assert (
-             addr_shared_so_far (cidl, bidl) t1 ->
-             (
-               exists v' : value,
-                 Memory.load mem1'
-                             (Permission.data, (cidl, bidl_shift).1,
-                              (cidl, bidl_shift).2, offl) = Some v' /\
-                     rename_value_option
-                       (rename_addr_option
-                          (sigma_shifting_wrap_bid_in_addr
-                             (sigma_shifting_lefttoright_addr_bid n
-                                (fun cid : nat =>
-                                   if cid \in domm (prog_interface p)
-                                   then n cid else n'' cid)))) v =
-                     Some v')) as Hmem_shared1.
-        {
-          intros Hshr.
-          specialize (Hmem_shared _ Hshr) as [addr_ren [Hren [G _]]].
-          unfold rename_addr_option, sigma_shifting_wrap_bid_in_addr in Hren.
-          rewrite ebidl_shift in Hren. inversion Hren. subst.
-          by eapply G.
-        }
-
+        
                 
         assert (CSInvariants.is_prefix
                   (gps,
@@ -4840,21 +4775,88 @@ Section ThreewayMultisem1.
             by rewrite E0_right.
         }
 
+
+
+        inversion Hregsp as [Hregs]. simpl in Hregs.
+        specialize (Hregs r1) as [Hregs1'_r1 | [Hregs1'_r1 [Heq [Hnotshr1 Hnotshr2]]]];
+        match goal with
+        | H: Register.get r1 regs = Ptr _ |- _ =>
+          rewrite H in Hregs1'_r1
+        end;
+        unfold shift_value_option, rename_value_option, rename_addr_option,
+        rename_value_template_option, sigma_shifting_wrap_bid_in_addr in Hregs1'_r1;
+        rewrite <- beq_nat_refl in Hregs1'_r1.
+        *
+          destruct (sigma_shifting_lefttoright_addr_bid
+                      n
+                      (fun cid : nat => if cid \in domm (prog_interface p)
+                                        then n cid else n'' cid)
+                      (cidl, bidl)) as [bidl_shift|] eqn:ebidl_shift;
+            rewrite ebidl_shift in Hregs1'_r1;
+            destruct Hregs1'_r1 as [Htoinvert Hregs1'_r1b];
+            try discriminate.
+          inversion Htoinvert as [Hrewr].
+          rewrite <- Hrewr in Hregs1'_r1b. simpl in Hregs1'_r1b.
+
+          (* assert ()*)
+                 
+          (*assert ().
+          inversion Hregs1'_r1 as [Hregs1'_r1_]. symmetry in Hregs1'_r1_.*)
+          (*clear Hregs1'_r1.*)
+
+        assert (
+            addr_shared_so_far (cidl, bidl) t1 ->
+            (
+              exists v' : value,
+                Memory.load mem1'
+                            (Permission.data, (cidl, bidl_shift).1,
+                             (cidl, bidl_shift).2, offl) = Some v' /\
+                rename_value_option
+                  (rename_addr_option
+                     (sigma_shifting_wrap_bid_in_addr
+                        (sigma_shifting_lefttoright_addr_bid
+                           n
+                           (fun cid : nat =>
+                              if cid \in domm (prog_interface p)
+                              then n cid else n'' cid)))) v =
+                Some v')) as Hmem_shared1.
+        {
+          intros Hshr.
+          specialize (Hmem_shared _ Hshr) as [addr_ren [Hren [G _]]].
+          unfold rename_addr_option, sigma_shifting_wrap_bid_in_addr in Hren.
+          rewrite ebidl_shift in Hren. inversion Hren. subst.
+          by eapply G.
+        }
+
+        (* Do we need to strengthen the None case of the memory relation with   *)
+        (* a conjunct that requires that the loaded value be not shared_so_far? *)
+        (* We probably need to do so in order to be able to choose the right    *)
+        (* disjunct when establishing the register relation.                    *)
         assert(
           exists v',
             Memory.load mem1' (Permission.data, cidl, bidl_shift, offl) = Some v'
             /\
-            shift_value_option
-              n
-              (fun cid : nat => if cid \in domm (prog_interface p)
-                                then n cid else n'' cid) v = 
-            Some v'
-            /\
-            shift_value_option
-              (fun cid : nat => if cid \in domm (prog_interface p)
-                                then n cid else n'' cid) n v' = 
-            Some v
-        ) as [v' [Hload' [Hvv' Hv'v]]].
+            (
+              shift_value_option
+                n
+                (fun cid : nat => if cid \in domm (prog_interface p)
+                                  then n cid else n'' cid) v = 
+              Some v'
+              /\
+              shift_value_option
+                (fun cid : nat => if cid \in domm (prog_interface p)
+                                  then n cid else n'' cid) n v' = 
+              Some v
+              \/
+              shift_value_option
+                n
+                (fun cid : nat => if cid \in domm (prog_interface p)
+                                  then n cid else n'' cid) v = None
+              /\
+              v = v'
+            )
+              
+        ) as [v' [Hload' [[Hvv' Hv'v] | [HNone Heq] ]]].
         {
           inversion cidl_bidl_invariant as [|? ? ? ?  Hshr]; subst.
           - simpl in ebidl_shift.
@@ -4870,7 +4872,7 @@ Section ThreewayMultisem1.
                            (fun cid : nat => if cid \in domm (prog_interface p)
                                              then n cid else n'' cid)))) v
               ) as [v'|] eqn:ev'.
-            + eexists; split; first (eapply Hmem_own1; assumption); split; auto.
+            + eexists; split; first (eapply Hmem_own1; assumption); left; split; auto.
               
               destruct v as [| [[[perm cidv] bidv] ?] |] eqn:ev;
                 simpl in *;
@@ -4906,12 +4908,26 @@ Section ThreewayMultisem1.
               * inversion ev'1. subst. simpl. by rewrite eperm.
                 
             + eexists; split; first (eapply Hmem_own1; assumption).
-              destruct Hmem_shared1 as [? [? ?]].
-              admit.
-              admit.
-          - admit.
-            (*specialize (Hmem_shared1 Hshr) as [v' [G _]].
-            by eexists; eauto.*)
+              right. by intuition.
+          - specialize (Hmem_shared1 Hshr) as [v' [Hloadv' Hvv']].
+            exists v'. split; auto. left.
+            unfold shift_value_option. split; auto.
+            unfold rename_value_option, rename_value_template_option in *.
+            destruct v' as [| [[[perm' cid'] bid'] off'] |];
+              destruct v as [| [[[perm cid] bid] off] |]; inversion Hvv'; subst; auto.
+            + destruct (perm =? Permission.data); try discriminate.
+              destruct (
+                  rename_addr_option
+                    (rename_addr_option
+                       (sigma_shifting_wrap_bid_in_addr
+                          (sigma_shifting_lefttoright_addr_bid
+                             n
+                             (fun cid : nat => if cid \in domm (prog_interface p)
+                                               then n cid else n'' cid))))
+                    (cid, bid)
+                ) as [[cid_ren bid_ren] |]; discriminate.
+            + destruct (perm =? Permission.data) eqn:eperm.
+              * 
         }
         
         eexists. split.
