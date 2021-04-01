@@ -39,6 +39,7 @@ Variant instr :=
 | IConst : imvalue -> register -> instr
 | IMov : register -> register -> instr
 | IBinOp : binop -> register -> register -> register -> instr
+| IPtrOfLabel : label -> register -> instr
 (* memory operations *)
 | ILoad : register -> register -> instr
 | IStore : register -> register -> instr
@@ -165,7 +166,9 @@ Definition well_formed_instruction
       getm (prog_procedures p) C = Some Cprocs /\
       getm Cprocs P = Some Pcode /\
       In (ILabel l) Pcode
-  | IJal l =>
+  | IJal l
+  | IPtrOfLabel l _
+    =>
     (* the jump refers to a label inside the current component C *)
     exists Cprocs P' P'code,
       getm (prog_procedures p) C = Some Cprocs /\
@@ -376,7 +379,12 @@ Proof.
     + (* IConst *)
       case=> // ptr r Hi [Hptr [bufs [p1_bufs Hbufs]]].
       split; first assumption.
-      by exists bufs; rewrite unionmE p1_bufs.
+        by (exists bufs; rewrite unionmE p1_bufs).
+    + (* IPtrPfLabel *)
+      move=> l reg Hi [Cprocs' [P' [Pcode']]].
+      rewrite H=> - [[<-] {Cprocs'}].
+      case=> H2' Hl.
+      by exists Cprocs, P', Pcode'; rewrite unionmE H.
     + (* IBnz *)
       move=> r l Hi [Cprocs' [Pcode']].
       rewrite H=> - [[<-] {Cprocs'}].

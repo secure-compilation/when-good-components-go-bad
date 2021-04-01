@@ -167,6 +167,7 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
     kstep G [State C, s, mem, Kcallptr1 e1 k, E_val v, arg] E0
           [State C, s, mem, Kcallptr2 v k, e1, arg]
 | KS_InitCallPtr3 : forall C s mem k v C' P arg,
+    C = C' ->
     kstep G [State C, s, mem, Kcallptr2 v k, E_val (Ptr (Permission.code, C', P, 0%Z)),
              arg] E0
           [State C, s, mem, Kcall C' P k, E_val v, arg]
@@ -300,8 +301,8 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
     | Kcallptr2 varg k' =>
       match v with
       | Ptr (perm, C', P', 0%Z) =>
-        if perm =? Permission.code then
-          ret (E0, [State C, s, mem, Kcall C' P' k', E_val varg, arg])
+        if (perm =? Permission.code) && (C' =? C) then
+            ret (E0, [State C, s, mem, Kcall C' P' k', E_val varg, arg])
         else None
       | _ => None
       end
@@ -403,7 +404,10 @@ Proof.
     + econstructor; eauto; first exact/eqP/negbT.
       apply imported_procedure_iff. assumption.
     + econstructor; eauto.
-    + assert (i0 = Permission.code). by apply beq_nat_true. subst.
+    + move: Heqb => /andP.
+      intros [Hperm HC].
+      assert (i0 = Permission.code). by apply beq_nat_true. subst.
+      assert (i1 = C). by apply beq_nat_true. subst.
       by econstructor.
 Admitted.
 

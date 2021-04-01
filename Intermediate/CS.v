@@ -670,6 +670,13 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
                    (reg_to_Ereg r1) (reg_to_Ereg r2) (reg_to_Ereg r3) mem regs]
            (gps, mem, regs', Pointer.inc pc)
 
+| PtrOfLabel: forall gps mem regs regs' pc l r ptr,
+    executing G pc (IPtrOfLabel l r) ->
+    find_label_in_component G pc l = Some ptr ->
+    Register.set r (Ptr ptr) regs = regs' ->
+    step G (gps, mem, regs, pc)
+           [EConst (Pointer.component pc) (Ptr ptr) (reg_to_Ereg r) mem regs]
+           (gps, mem, regs', Pointer.inc pc)
 | Load: forall gps mem regs regs' pc r1 r2 ptr v,
     executing G pc (ILoad r1 r2) ->
     Register.get r1 regs = Ptr ptr ->
@@ -765,6 +772,7 @@ Ltac step_of_executing :=
     | IConst _ _     => eapply Const
     | IMov _ _       => eapply Mov
     | IBinOp _ _ _ _ => eapply BinOp
+    | IPtrOfLabel _ _ => eapply PtrOfLabel
     | ILoad _ _      => eapply Load
     | IStore _ _     => eapply Store
     | IAlloc _ _     => eapply Alloc
@@ -821,6 +829,12 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
       ret ([EBinop (Pointer.component pc) (binop_to_Ebinop op) (reg_to_Ereg r1)
                    (reg_to_Ereg r2) (reg_to_Ereg r3) mem regs],
            (gps, mem, regs', Pointer.inc pc))
+    | IPtrOfLabel l r =>
+      do ptr <- find_label_in_component G pc l;
+      let regs' := Register.set r (Ptr ptr) regs in
+      ret ([EConst (Pointer.component pc) (Ptr ptr) (reg_to_Ereg r) mem regs],
+           (gps, mem, regs', Pointer.inc pc)
+          )
     | ILoad r1 r2 =>
       match Register.get r1 regs with
       | Ptr ptr =>
@@ -947,7 +961,13 @@ Proof.
     end;
     (* solve simple cases *)
     try reflexivity.
-
+  
+  - match goal with
+    | Hfind: find_label_in_component _ _ _ = _ |- _ =>
+      rewrite Hfind
+    end.
+    reflexivity.
+    
   - match goal with
     | Hregs_update: Register.get _ _ = _ |- _ =>
       rewrite -> Hregs_update
@@ -1077,6 +1097,19 @@ Proof.
                eapply BinOp;
                  try reflexivity;
                  try (eexists; eexists; eauto).
+
+           *** rewrite H in H2.
+               (*match goal with
+               | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
+                 rewrite Hpositive_offset in *
+               end.*)
+               destruct (find_label_in_component G pc0 l) eqn:Hlabel;
+                 try discriminate.
+               inversion H2; subst.
+               eapply PtrOfLabel;
+                 try reflexivity.
+               **** eexists. eexists. eauto.
+               **** assumption.
 
            *** rewrite H in H2.
                destruct (Register.get r regs0) eqn:Hreg;
@@ -1337,6 +1370,13 @@ Section SemanticsInform.
     - apply match_events_EConst.
     - apply match_events_EMov.
     - apply match_events_EBinop.
+    - match goal with
+      | H1: find_label_in_component G pc l0 = _,
+            H2: find_label_in_component G pc l0 = _ |- _ =>
+        rewrite H1 in H2; inversion H2; subst
+      end.
+      apply match_events_EConst.
+    - congruence.
     - apply match_events_ELoad.
     - apply match_events_EStore.
     - apply match_events_EInvalidateRA.
@@ -1461,6 +1501,11 @@ try by move=> *; match goal with
   rewrite Pointer.inc_preserves_component in H; assumption
   end.
 - move=> *. rewrite eqxx. rewrite andTb.
+  match goal with
+| [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
+  rewrite Pointer.inc_preserves_component in H; assumption
+  end.
+- move=> *; rewrite eqxx; rewrite andTb;
   match goal with
 | [ H : context[Pointer.component (Pointer.inc _)] |- _] =>
   rewrite Pointer.inc_preserves_component in H; assumption
@@ -2452,6 +2497,7 @@ Proof.
           ).
     + apply regs_ptrs_binop.
     + assumption.
+  - admit.
   - destruct ptr as [[[ptrP ptrC] ptrB] ptrO].
     assert (addrInreach : (ptrC, ptrB) \in
                (\bigcup_(i <- program_ptrs p) fset (reachable_nodes_nat mem0 i))%fset).
