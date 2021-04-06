@@ -31,8 +31,7 @@ Inductive event_inform :=
 | EBinop : Component.id -> Ebinop -> Eregister -> Eregister -> Eregister -> Memory.t -> Intermediate.Register.t -> event_inform
 | ELoad : Component.id -> Eregister -> Eregister -> Memory.t -> Intermediate.Register.t -> event_inform
 | EStore : Component.id -> Eregister -> Eregister -> Memory.t -> Intermediate.Register.t -> event_inform
-| EAlloc : Component.id -> Eregister -> Eregister -> Memory.t -> Intermediate.Register.t -> event_inform
-| EInvalidateRA : Component.id -> Memory.t -> Intermediate.Register.t -> event_inform.
+| EAlloc : Component.id -> Eregister -> Eregister -> Memory.t -> Intermediate.Register.t -> event_inform.
 
 Inductive match_event : event_inform -> event_inform -> Prop :=
 | match_events_ECallInform: forall C P arg mem regs C',
@@ -58,10 +57,7 @@ Inductive match_event : event_inform -> event_inform -> Prop :=
                 (EStore C r1 r2 mem regs)
 | match_events_EAlloc: forall C r1 r2 mem regs,
     match_event (EAlloc C r1 r2 mem regs)
-                (EAlloc C r1 r2 mem regs)
-| match_events_EInvalidateRA: forall C mem regs,
-    match_event (EInvalidateRA C mem regs)
-                (EInvalidateRA C mem regs).
+                (EAlloc C r1 r2 mem regs).
 
 Lemma match_event_equal:
   forall e e', match_event e e' -> e = e'.
@@ -79,7 +75,6 @@ Proof. intros e e' Heq. rewrite Heq. destruct e'.
        - apply match_events_ELoad.
        - apply match_events_EStore.
        - apply match_events_EAlloc.
-       - apply match_events_EInvalidateRA.
 Qed.
 
 Instance event_inform_EventClass : EventClass event_inform :=
@@ -94,7 +89,6 @@ Instance event_inform_EventClass : EventClass event_inform :=
       | ELoad   C _ _ _ _ => C
       | EStore  C _ _ _ _ => C
       | EAlloc  C _ _ _ _ => C
-      | EInvalidateRA C _ _ => C
       end;
     next_comp_of_event e :=
       match e with
@@ -108,7 +102,6 @@ Instance event_inform_EventClass : EventClass event_inform :=
       | ELoad   C _ _ _ _ => C
       | EStore  C _ _ _ _ => C
       | EAlloc  C _ _ _ _ => C
-      | EInvalidateRA C _ _ => C
       end;
     event_equal := match_event;
     event_equal_equal := match_event_equal;
@@ -228,7 +221,7 @@ Proof.
                                    well_bracketed_trace (run_trace s0 t) [:: e].
       by rewrite -cats1 well_bracketed_trace_cat andbC.
       rewrite run_trace1;
-        case: e => [C1 P arg mem regs C2|C1 ? ? ? C2|C1 ? ? ?|C1 ? ? ?|C1 ? ? ? ? ?|C1 ? ? ?|C1 ? ? ?|C1 ? ? ?|C1 ?]
+        case: e => [C1 P arg mem regs C2|C1 ? ? ? C2|C1 ? ? ?|C1 ? ? ?|C1 ? ? ? ? ?|C1 ? ? ?|C1 ? ? ?|C1 ? ? ?]
                      /=;
                      try rewrite andbT;
                      try (intros wf_t; case/andP=> wb_t /eqP <- {C1} /=;
@@ -271,29 +264,53 @@ have : suffix [:: C, C' & tail (callers (run_trace stack_state0 pre))]
 exact: well_bracketed_trace_suffix=> //.
 Qed.
 
+
+Definition well_formed_constant_value (cur_comp: Component.id)
+           (procs: NMap {fset Procedure.id}) (v: value) : bool :=
+  match v with
+  | Int _ => true
+  | Undef => true
+  | Ptr (perm, cid, bid, off) =>
+    if perm =? Permission.code then
+      match procs cur_comp with
+      | Some procs' =>
+        (cid =? cur_comp) && (bid \in procs')
+
+      (* impossible case *)
+      | None => false
+      end
+    else
+      (* Maybe need to specify that data pointers should be pointing 
+         to the local buffers *)
+      true
+  end.
+
 (* TODO: Here, this is an important definition.
    Need as an extra argument the status of the (shared?) memory at the program state in which
    the event was emitted.
    Only then can we use reachability to compute the views of each component.
    Based on the view of a component memory, we can judge whether an ERead/EWrite that it
    performs is a possible read/write.  *)
-Definition well_formed_event intf (e: event_inform) : bool :=
+Definition well_formed_event intf (procs: NMap {fset Procedure.id})
+           (e: event_inform) : bool :=
   match e with
   | ECallInform C P _ _ _ C' => (C != C') && imported_procedure_b intf C C' P
   | ERetInform  C _ _ _ C' => (C != C')
+  | EConst C v _ _ _ => well_formed_constant_value C procs v
   | _ => true
   end.
 
-Definition well_formed_trace intf (t: trace event_inform) : bool :=
+Definition well_formed_trace intf (procs: NMap {fset Procedure.id})
+           (t: trace event_inform) : bool :=
   well_bracketed_trace stack_state0 t &&
-  all (well_formed_event intf) t.
+  all (well_formed_event intf (procs: NMap {fset Procedure.id})) t.
 
 Definition declared_event_comps intf e :=
   [&& cur_comp_of_event e \in domm intf &
       next_comp_of_event e \in domm intf].
 
-Lemma well_formed_trace_int intf t :
-  well_formed_trace intf t ->
+Lemma well_formed_trace_int intf procs t :
+  well_formed_trace intf procs t ->
   closed_interface intf ->
   all (declared_event_comps intf) t.
 Proof.

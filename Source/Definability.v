@@ -345,10 +345,23 @@ Section Definability.
     | Int n            => E_val (Int n)
     (* Pointer values need to take into account some amount of shifting, here
        corresponding to the counter and space reserved to locate register
-       values. We make the implicit assumption that all such values refer to
-       the local buffer, which should follow from well-formedness. *)
+       values.  *)
     (* FIXME: Offset vs. block-based shifting *)
-    | Ptr (_, _, _, o) => E_binop Add E_local (E_val (Int (8 + o)))
+    | Ptr (perm, _, bid, o) =>
+      if perm =? Permission.data then
+        (* We make the implicit assumption that all such values refer to
+           the local buffer, which should follow from well-formedness.*)
+        E_binop Add E_local (E_val (Int (8 + o)))
+      else
+        (* An implicit assumption is that perm =? Permission.code. *)
+        (* TODO: change the type of the permission field so that it is not int, and
+           instead just an inductive type. *)
+        (* An implicit assumption is that the component id of the code pointer *)
+        (* is the same as the component id of the pc. *)
+        (* An implicit assumption is that the block id corresponds exactly to *)
+        (* the function id. Note that this assumption is satisfied by the memory *)
+        (* initialization functions. *)
+        E_binop Add (E_funptr bid) (E_val (Int o))
     (* Undefined values are mapped to a well-formed but ill-typed expression
        (instead of some arbitrary but well-typed value, so as to preserve
        bad behavior). This choice might demand more work in some proofs,
@@ -359,8 +372,8 @@ Section Definability.
   Lemma values_are_integers_expr_of_const_val:
     forall v, Source.values_are_integers (expr_of_const_val v).
   Proof.
-    intros [n | [[[p C] b ] o] |];
-      reflexivity.
+    intros [n | [[[p C] b ] o] |]; try reflexivity.
+    destruct (p =? Permission.data) eqn:e; unfold expr_of_const_val; rewrite e; auto.
   Qed.
 
   Lemma called_procedures_expr_of_const_val:
@@ -368,7 +381,9 @@ Section Definability.
   Proof.
     intros [n | [[[p C] b ] o] |].
     - reflexivity.
-    - simpl. unfold fsetU, val. simpl. rewrite fset0E. reflexivity.
+    - simpl. unfold fsetU, val. simpl. rewrite fset0E.
+      destruct (p =? Permission.data) eqn:e;
+      reflexivity.
     - simpl. unfold fsetU, val. simpl. rewrite fset0E. reflexivity.
   Qed.
 
@@ -411,9 +426,6 @@ Section Definability.
     | EAlloc _ r_dest r_size _ _ =>
       E_seq (E_assign (loc_of_reg r_dest)
                       (E_alloc (E_deref (loc_of_reg r_size))))
-            (E_call C P (E_val (Int 0)))
-    | EInvalidateRA cid _ _ =>
-      E_seq (E_assign (loc_of_reg E_R_RA) (E_val (Int 0)))
             (E_call C P (E_val (Int 0)))
     end.
 
@@ -563,12 +575,36 @@ Section Definability.
     : expr :=
     expr_of_trace C P (comp_subtrace C t). (* RB: TODO: Substitute check. *)
 
+  Fixpoint procedure_ids_of_subtrace
+             (t: trace event_inform) :=
+    match t with
+    | nil => fset0
+    | e :: t' =>
+      let procs_of_e :=
+          match e with
+          | EConst _ (Ptr (perm, cid, bid, off)) _ _ _ =>
+            (* What we are collecting right now is a superset of the bids that 
+               really correspond to a procedure id. *)
+            (* If we want to make this superset tighter, then we should check *)
+            (* that perm =? Permission.code and that cid =? C *)
+            fset1 bid
+          | _ => fset0
+          end
+      in
+      procs_of_e :|: procedure_ids_of_subtrace t'
+    end.
+
+  Definition procedure_ids_of_trace (C: Component.id) (t: trace event_inform) :=
+    procedure_ids_of_subtrace (comp_subtrace C t).
+  
   Definition procedures_of_trace (t: trace event_inform) : NMap (NMap expr) :=
     mapim (fun C Ciface =>
+             let procs_no_main :=
+                 (procedure_ids_of_trace C t) :|: (Component.export Ciface) in
              let procs :=
                  if C == Component.main then
-                   Procedure.main |: Component.export Ciface
-                 else Component.export Ciface in
+                   Procedure.main |: procs_no_main
+                 else procs_no_main in
                mkfmapf (fun P => procedure_of_trace C P t) procs)
           intf.
 
@@ -650,8 +686,8 @@ Section Definability.
 
   (** Main proof of back-translation *)
 
-  Lemma well_formed_events_well_formed_program t :
-    all (well_formed_event intf) t ->
+  Lemma well_formed_events_well_formed_program procs t :
+    all (well_formed_event intf procs) t ->
     Source.well_formed_program (program_of_trace t).
   Proof.
     Local Opaque loc_of_reg binop_of_Ebinop expr_of_const_val.
@@ -666,11 +702,21 @@ Section Definability.
       rewrite /Source.find_procedure /procedures_of_trace mapimE.
       case intf_C: (intf C)=> [CI|] //=.
       rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
+      + split.
         rewrite /procedure_of_trace /expr_of_trace /switch.
         elim: {t Ht} (comp_subtrace C t) (length _) => [|e t IH] n //=.
         case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
                     try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
                       try rewrite values_are_integers_expr_of_const_val; try apply IH.
+        
+
+        rewrite /procedure_of_trace /expr_of_trace /switch /program_of_trace.
+        elim: {t Ht} (comp_subtrace C t) (length _) => [|e t IH] n //=.
+        case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
+                    try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
+                      try rewrite values_are_integers_expr_of_const_val; try apply IH.
+        
+        
         pose call_of_event e := if e is ECall _ P _ _ C then Some (C, P) else None.
       have /fsubsetP sub :
           fsubset (called_procedures (procedure_of_trace C P t))

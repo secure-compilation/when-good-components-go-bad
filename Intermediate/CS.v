@@ -706,7 +706,8 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
     Register.set R_RA (Ptr (Pointer.inc pc)) regs = regs' ->
     step G
          (gps, mem, regs, pc)
-         [EInvalidateRA (Pointer.component pc) mem regs]
+         [EConst (Pointer.component pc)
+                 (Ptr (Pointer.inc pc)) (reg_to_Ereg R_RA) mem regs]
          (gps, mem, regs', pc')
 
 | Jump: forall gps mem regs pc pc' r,
@@ -861,7 +862,9 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
     | IJal l =>
       do pc' <- find_label_in_component G pc l;
       let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-      ret ([EInvalidateRA (Pointer.component pc) mem regs], (gps, mem, regs', pc'))
+      ret ([EConst (Pointer.component pc)
+                   (Ptr (Pointer.inc pc)) (reg_to_Ereg R_RA) mem regs],
+           (gps, mem, regs', pc'))
     | IJump r =>
       match Register.get r regs with
       | Ptr pc' =>
@@ -1379,7 +1382,7 @@ Section SemanticsInform.
     - congruence.
     - apply match_events_ELoad.
     - apply match_events_EStore.
-    - apply match_events_EInvalidateRA.
+    - apply match_events_EConst.
     - apply match_events_EAlloc.
     - apply match_events_ECallInform.
     - apply match_events_ERetInform.
