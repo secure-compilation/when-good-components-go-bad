@@ -620,8 +620,9 @@ Section Definability.
     intros [CI [C_CI CI_P]].
     unfold Source.find_procedure, procedures_of_trace.
     rewrite mapimE C_CI /= mkfmapfE.
-    case: eqP=> _; last by rewrite CI_P.
-    by rewrite in_fsetU1 CI_P orbT.
+    case: eqP=> _.
+    - by rewrite in_fsetU1 in_fsetU CI_P !orbT.
+    - by rewrite in_fsetU CI_P !orbT.
   Qed.
 
   Lemma find_procedures_of_trace_main (t: trace event_inform) :
@@ -703,65 +704,116 @@ Section Definability.
       case intf_C: (intf C)=> [CI|] //=.
       rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
       + split.
-        rewrite /procedure_of_trace /expr_of_trace /switch.
-        elim: {t Ht} (comp_subtrace C t) (length _) => [|e t IH] n //=.
-        case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
-                    try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
-                      try rewrite values_are_integers_expr_of_const_val; try apply IH.
-        
-
-        rewrite /procedure_of_trace /expr_of_trace /switch /program_of_trace.
-        elim: {t Ht} (comp_subtrace C t) (length _) => [|e t IH] n //=.
-        case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
-                    try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
-                      try rewrite values_are_integers_expr_of_const_val; try apply IH.
-        
-        
+        * rewrite /procedure_of_trace /expr_of_trace /switch.
+          elim: {t Ht P_CI} (comp_subtrace C t) (length _) => [|e t IH] n //=.
+          case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
+                      try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
+                        try rewrite values_are_integers_expr_of_const_val; try apply IH.
+          
+        *
+          (*clear.
+          rewrite /procedure_of_trace /expr_of_trace /switch
+                  /program_of_trace.
+          remember (length [seq expr_of_event C P i | i <- comp_subtrace C t]) as n.
+          generalize dependent n.
+          induction t as [|e t' IH]; auto.
+          intros ? ?.
+          simpl in *.
+          destruct (C ==
+                      match e with
+                      | ECallInform C _ _ _ _ _ | ERetInform C _ _ _ _ | 
+                        EConst C _ _ _ _ | EMov C _ _ _ _ | EBinop C _ _ _ _ _ _ |
+                        ELoad C _ _ _ _ | EStore C _ _ _ _ | EAlloc C _ _ _ _ => C end)
+                   eqn:eC; rewrite eC in Heqn.
+          -- admit.
+          -- rewrite eC. simpl.
+          (* specialize (IH n Heqn). *)
+          destruct e; auto; simpl.
+          case: e=> /=; simpl. intros.
+          apply IH.
+          try apply IH; simpl.
+          *)
+          rewrite /procedure_of_trace /expr_of_trace /switch
+                  /program_of_trace.
+          (*induction t; auto.
+          simpl; unfold Source.well_formed_E_funptr; destruct a; simpl.*)
+          elim: {t Ht P_CI} (comp_subtrace C t) (procedures_of_trace t) (length _)
+          => [|e t IH] p n //=.
+          case: e=> /=; simpl; intros; try apply IH.
+          Local Transparent loc_of_reg expr_of_const_val.
+          destruct e; destruct v; simpl; try apply IH;
+            match goal with
+            | ptr : Pointer.t |- _ =>
+              destruct ptr as [[[perm ?] bid] ?]; destruct (perm =? Permission.data);
+                simpl; try apply IH
+            end; admit.
+          
+      + 
         pose call_of_event e := if e is ECall _ P _ _ C then Some (C, P) else None.
       have /fsubsetP sub :
           fsubset (called_procedures (procedure_of_trace C P t))
                   ((C, P) |: fset (pmap call_of_event (project_non_inform (comp_subtrace C t)))).
       {
         rewrite /procedure_of_trace /expr_of_trace /switch.
-        elim: {t Ht} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
+        elim: {t Ht P_CI} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
         exact: fsub0set.
         move/(_ n) in IH; rewrite !fset0U.
-        case: e=> [C' P' v mem regs C''| | | | | | | |]
+        
+        case: e=> [C' P' v mem regs C''| | | | | | | ]
                     //=;
                     try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH.
         * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
-          rewrite fsub0set.
-            by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
+          simpl.
+          by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
         (* RB: TODO: Refactor cases. *)
-        * move=> C' v r.
-          by rewrite called_procedures_loc_of_reg
-                     called_procedures_expr_of_const_val
+        * move=> C' v r. intros.
+            by rewrite !fset0U.
+        * move=> C' v r. intros.
+          rewrite !fset0U.
+          by rewrite called_procedures_expr_of_const_val
                      !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' r1 r2.
-          by rewrite 2!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' e r1 r2 r3.
-          by rewrite 3!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' r1 r2.
-          by rewrite 2!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' r1 r2.
-          by rewrite 2!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' r1 r2.
-          by rewrite 2!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C'.
-          by rewrite called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
+        * move=> C' v r. intros.
+          by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        * move=> C' v r. intros.
+            by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        * move=> C' v r. intros.
+          by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        * move=> C' v r. intros.
+          by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        * move=> C' v r. intros.
+          by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        
       }
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
-        rewrite eqxx find_procedures_of_trace //.
-        move: P_CI; case: eqP intf_C=> [->|_] intf_C.
-          rewrite /valid_procedure.
-          case/fsetU1P=> [->|P_CI]; eauto.
-          by right; exists CI; split.
+        * rewrite eqxx.
+          unfold program_of_trace, procedures_of_trace, Source.find_procedure. simpl.
+          rewrite mapimE intf_C. simpl. rewrite mkfmapfE. by rewrite P_CI.
+        * move: P_CI; case: eqP intf_C=> [->|_] intf_C.
+          intros H H2.
+          (* Need to consider the cases of H. *)
+          (* Probably need to rewrite using find_procedures_of_trace. *)
+          
+(*          rewrite find_procedures_of_trace //.
+          -- 
+            
+            ++ rewrite /valid_procedure.
+               intros ? G'.
+               destruct (C' == Component.main) eqn:eC'; auto.
+               ** (* This should follow from Ht (the well_formedness of the trace t),
+                     and from G'.
+                   *)
+                 admit.
+            ++ intros ? G'.
+               destruct (C' == C) eqn:eC'; auto.
+               ** (* This should follow from Ht (the well_formedness of the trace t),
+                     and from G'.
+                   *)
+                 admit.
+          -- 
+*)
+          case/fsetU1P=> [->|P_CI]; eauto. right.
+             unfold exported_procedure. 
+             exists CI; split.
         by move=> P_CI; right; exists CI; split.
       rewrite in_fset /= => C'_P'.
       suffices ? : imported_procedure intf C C' P'.
