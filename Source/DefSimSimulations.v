@@ -77,7 +77,9 @@ Proof.
         eauto.
         reflexivity. reflexivity.
         now rewrite Htree Heq.
-        now rewrite Htree' Heq'. }
+        now rewrite Htree' Heq'.
+        admit. admit.
+      }
       eapply star_refl.
       eauto.
     + econstructor.
@@ -88,7 +90,7 @@ Proof.
       case: (C == cur_comp_of_event e); [move=> [] -> |].
       eexists; reflexivity.
       now apply H6.
-Qed.
+Admitted.
 
 
 Inductive match_states2 (intf: Program.interface) (i: nat): NumberedTree.state -> ParentAwareTree.state -> Prop :=
@@ -668,7 +670,9 @@ Proof.
                             eauto.
            eapply find_proc_callers.
         -- eapply star_trans.
-           ++ destruct (TreeWithCallers.wf_has_trees WF) with (C := C2). now destruct H1.
+           ++ assert (exists ts, TreeWithCallers.prog_trees p' C2 = Some ts) as [ts TREES].
+              { apply /dommP. rewrite -(TreeWithCallers.wfprog_defined_trees WF).
+                now destruct H1. }
               eapply call_handling_expression_correct. eauto.
               eapply wf_trees_unique_key; eauto.
               eapply CALLERS. eauto. eauto.
@@ -825,24 +829,24 @@ Inductive match_concrete_stacks: Component.id -> stack -> CS.stack -> Prop :=
 | match_concrete_stacks_int: forall C s st old_arg,
     match_concrete_stacks C s st ->
     match_concrete_stacks C s (CS.Frame C old_arg Kstop :: st)
-| match_concrete_stacks_ext: forall C C' rts s st old_arg,
+| match_concrete_stacks_ext: forall C C' rts s st old_arg P,
     C <> C' ->
     match_concrete_stacks C' s st ->
     match_concrete_stacks C ((C', rts) :: s) (CS.Frame C' old_arg (Kassign1 (RETURN_p)
                                                        (Kseq ((E_seq (return_handling_expression rts)
                                                                      (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 0))))
-                                                                            (E_call C' Procedure.main (E_val (Int (Z.of_nat 0)))))))
+                                                                            (E_call C' P (E_val (Int (Z.of_nat 0)))))))
                                                              Kstop)) :: st)
 .
 
 Lemma unfold_stack: forall ge C1 C2 rts st stack m z arg,
     match_concrete_stacks C1 ((C2, rts) :: st) stack ->
-    exists stack' stack'' arg' arg'',
+    exists stack' stack'' arg' arg'' P,
       stack' = CS.Frame C2 arg'
                         (Kassign1 RETURN_p
                                   (Kseq (E_seq (return_handling_expression rts)
                                                (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 0))))
-                                                      (E_call C2 Procedure.main (E_val (Int (Z.of_nat 0)))))) Kstop))
+                                                      (E_call C2 P (E_val (Int (Z.of_nat 0)))))) Kstop))
                         :: stack''
       /\ match_concrete_stacks C2 st stack''
       /\ star CS.kstep ge [CState C1, stack, m, Kstop, E_val (Int z), arg] E0
@@ -854,15 +858,15 @@ Proof.
   induction H; intros.
   - inversion Heqst0.
   - specialize (IHmatch_concrete_stacks Heqst0) as
-        [stack1 [stack2 [arg1 [arg2 [IH1 [IH2 IH3]]]]]].
+        [stack1 [stack2 [arg1 [arg2 [P [IH1 [IH2 IH3]]]]]]].
     subst.
-    eexists; eexists; eexists; eexists.
+    eexists; eexists; eexists; eexists; eexists.
     simpl. split; last split.
     + eauto.
     + eauto.
     + take_step. eauto. eapply IH3.
   - inv Heqst0.
-    eexists; eexists; eexists; eexists.
+    eexists; eexists; eexists; eexists; eexists.
     simpl. split; last split.
     + eauto.
     + eauto.
@@ -886,21 +890,21 @@ Fixpoint concat_cont (k1 k2: cont): cont :=
   | Kcall C P k1' => Kcall C P (concat_cont k1' k2)
   end.
 
-Definition concat_event_expr (p: TreeWithCallers.prg) (C: Component.id) (k1: cont) :=
-  concat_cont k1 (Kseq (build_event_expression C (TreeWithCallers.prog_trees p C)) Kstop).
+Definition concat_event_expr (p: TreeWithCallers.prg) (C: Component.id) (P: Procedure.id) (k1: cont) :=
+  concat_cont k1 (Kseq (build_event_expression C P (TreeWithCallers.prog_trees p C)) Kstop).
 
-Definition match_cont (p: TreeWithCallers.prg) (C: Component.id) (k1 k2: cont): Prop :=
-  k2 = concat_event_expr p C k1.
+Definition match_cont (p: TreeWithCallers.prg) (C: Component.id) (P: Procedure.id) (k1 k2: cont): Prop :=
+  k2 = concat_event_expr p C P k1.
 
 
-Lemma match_cont_step (p: TreeWithCallers.prg) (C: Component.id): forall ge ge' cs1 cs1' cs2 st,
+Lemma match_cont_step (p: TreeWithCallers.prg) (C: Component.id) (P: Procedure.id): forall ge ge' cs1 cs1' cs2 st,
     cs2 = [CState (CS.s_component cs1), st, CS.s_memory cs1,
-           concat_event_expr p C (CS.s_cont cs1), CS.s_expr cs1, CS.s_arg cs1] ->
+           concat_event_expr p C P (CS.s_cont cs1), CS.s_expr cs1, CS.s_arg cs1] ->
     CS.s_stack cs1 = CS.s_stack cs1' -> (* No internall call/returns allowed *)
     CS.kstep ge cs1 E0 cs1' ->
     CS.kstep ge' cs2 E0
              [CState (CS.s_component cs1'), st, CS.s_memory cs1',
-              concat_event_expr p C (CS.s_cont cs1'), CS.s_expr cs1', CS.s_arg cs1'].
+              concat_event_expr p C P (CS.s_cont cs1'), CS.s_expr cs1', CS.s_arg cs1'].
 Proof.
   move=> ge ge' [? ? ? ? ? ?] cs1' cs2 st EQ STACKS STEP; simpl in *; subst.
   inv STEP; try now econstructor.
@@ -922,23 +926,23 @@ Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWi
     TreeWithCallers.initial p s ->
     CS.initial_state (compile_tree_with_callers p) s' ->
     match_states6 p ge i s s'
-| match_states_silent: forall gs cs cs' t trees locs cls st,
+| match_states_silent: forall gs cs cs' t trees locs cls st P,
     gs = (t, trees, locs, cls, st) ->
     forall (COMP: CS.s_component cs = CS.s_component cs')
       (STACK: match_concrete_stacks (CS.s_component cs') st (CS.s_stack cs'))
       (MEM: CS.s_memory cs = CS.s_memory cs')
-      (CONT: match_cont p (CS.s_component cs) (CS.s_cont cs) (CS.s_cont cs'))
+      (CONT: match_cont p (CS.s_component cs) P (CS.s_cont cs) (CS.s_cont cs'))
       (EXPR: CS.s_expr cs =  CS.s_expr cs')
       (ARG: CS.s_arg cs = CS.s_arg cs'),
       match_states6 p ge i {| TreeWithCallers.ghost_state := gs;
                               TreeWithCallers.concrete_state := cs;
                               TreeWithCallers.can_silent := true |} cs'
-| match_states_6: forall gs cs cs' t trees locs cls st,
+| match_states_6: forall gs cs cs' t trees locs cls st P,
     gs = (t, trees, locs, cls, st) ->
     forall (COMP: CS.s_component cs = CS.s_component cs')
       (STACK: match_concrete_stacks (CS.s_component cs') st (CS.s_stack cs'))
       (MEM: CS.s_memory cs = CS.s_memory cs')
-      (CONT: CS.s_cont cs' = Kseq (build_event_expression (CS.s_component cs') (TreeWithCallers.prog_trees p (CS.s_component cs'))) Kstop)
+      (CONT: CS.s_cont cs' = Kseq (build_event_expression (CS.s_component cs') P (TreeWithCallers.prog_trees p (CS.s_component cs'))) Kstop)
       (* (EXPR: CS.s_expr cs' = build_event_expression (CS.s_component cs') (TreeWithCallers.prog_trees p (CS.s_component cs'))) *)
       (ARG: CS.s_arg cs = CS.s_arg cs'),
       match_states6 p ge i {| TreeWithCallers.ghost_state := gs;
@@ -964,7 +968,7 @@ Lemma find_procedure_find (p: TreeWithCallers.prg):
   forall C P,
     find_procedure (genv_procedures (prepare_global_env (compile_tree_with_callers p))) C P =
     Some (E_seq (comp_call_handle C P (TreeWithCallers.prog_trees p C))
-                (build_event_expression C (TreeWithCallers.prog_trees p C))).
+                (build_event_expression C P (TreeWithCallers.prog_trees p C))).
 Admitted.
 
 Lemma find_proc_some (p: TreeWithCallers.prg):
@@ -976,7 +980,7 @@ Admitted.
 Lemma find_main (p: TreeWithCallers.prg):
   prog_main (compile_tree_with_callers p) =
   Some (E_seq (comp_call_handle Component.main Procedure.main (TreeWithCallers.prog_trees p Component.main))
-              (build_event_expression Component.main (TreeWithCallers.prog_trees p Component.main))).
+              (build_event_expression Component.main Procedure.main (TreeWithCallers.prog_trees p Component.main))).
 Admitted.
 
 Lemma initial_buffers: forall p C,
@@ -1058,9 +1062,10 @@ Proof.
            eapply star_refl.
            reflexivity. reflexivity.
         -- eapply match_states_silent; eauto.
-           ++ econstructor. simpl.
-              now destruct H1 as [[] []]; congruence.
-              now inversion H11.
+           ++ admit.
+              (* econstructor. simpl. *)
+              (* now destruct H1 as [[] []]; congruence. *)
+              (* now inversion H11. *)
            ++ simpl. reflexivity.
            ++ simpl.
               admit.
@@ -1074,10 +1079,10 @@ Proof.
       simpl in *; subst.
       (* Hence we are in a silently stepping state *)
       unfold match_cont in CONT. subst k.
-      pose proof (@match_cont_step p C ((globalenv (TreeWithCallers.sem p))) ge
+      pose proof (@match_cont_step p C P ((globalenv (TreeWithCallers.sem p))) ge
                                    [CState C, stk0, m, k0, e, arg]
                                    [CState C, stk0, m', k', exp', arg]
-                                   [CState C, stk, m, concat_event_expr p C k0, e, arg]
+                                   [CState C, stk, m, concat_event_expr p C P k0, e, arg]
                                    stk
                                    Logic.eq_refl Logic.eq_refl H3).
       eexists; eexists; split.

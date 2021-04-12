@@ -80,6 +80,49 @@ Proof.
     now exists n'', (a' :: l1'), l2'.
 Admitted.
 
+Lemma give_nums_determinate: forall ls n,
+  determinate_tree_list eq ls ->
+  determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) (give_nums ls n).
+Proof.
+  unfold determinate_tree_list; induction ls.
+  - move=> n [H1 H2] //=.
+    split.
+    + unfold unique_list; intros; contradiction.
+    + intros; contradiction.
+  - move=> n [H1 H2].
+    assert (UNIQ1: unique_list eq ls).
+    { clear -H1.
+      unfold unique_list in *. move=> t1 t2 H H0 H2.
+      apply H1. right; eauto. right; eauto. eauto.
+    }
+    assert (UNIQ2: forall tr, In tr ls -> determinate_tree eq tr).
+    { clear -H2.
+      move=> tr H. eapply H2.
+      right; eauto.
+    }
+    assert (exists a' n', give_nums (a :: ls) n = a' :: give_nums ls n' /\
+                     content_of a = match (content_of a') with
+                                    | None => None
+                                    | Some (x, _) => Some x
+                                    end)
+      as [a' [n' [EQ CONT]]] by admit.
+    rewrite EQ.
+    specialize (IHls n' (conj UNIQ1 UNIQ2)) as [IH1 IH2].
+    split.
+    + admit.
+    + move=> tr [H | H].
+      * subst.
+        clear -H2 CONT.
+        specialize (H2 a (or_introl Logic.eq_refl)).
+        destruct a; destruct tr as [| [] ]; simpl in *;
+          try (now congruence);
+          try (now constructor).
+        inversion CONT; subst.
+        admit.
+      * eauto.
+Admitted.
+
+
 Definition compile_tree (p: Tree.prg): NumberedTree.prg :=
   {| NumberedTree.prog_interface := Tree.prog_interface p;
      NumberedTree.prog_trees := mapm (fun x => give_nums x 0) (Tree.prog_trees p) |}.
@@ -433,17 +476,61 @@ Lemma comp_is_well_formed (p: CallReturnTree.prg):
   CallReturnTree.wf p ->
   TreeWithCallers.wf (compile_call_return_tree p).
 Proof.
+  move=> [] sound_interface same_domm.
   constructor.
+  - by [].
+  - by [].
+  - by rewrite domm_mapi.
+  - by [].
   - move=> C P.
     rewrite /exported_procedure /Program.has_component /Component.is_exporting /find_procedure.
-    case=> CI [C_CI P_CI].
-    simpl.
-    rewrite mapimE. simpl in C_CI. rewrite C_CI. simpl.
-    rewrite mkfmapfE.
+    case=> CI [C_CI P_CI] //=.
+    rewrite mapimE C_CI //= mkfmapfE.
     case: ifP => //= <-.
-    case: ifP => //= ?. rewrite in_fsetU. rewrite P_CI. rewrite orbT. eauto.
-  - move=> C H0.
-    simpl. simpl in H0. eapply CallReturnTree.wf_has_trees in H; eauto.
+    case: ifP => //= ?.
+    by rewrite in_fsetU P_CI orbT.
+  - move=> C P Pexpr.
+    rewrite /find_procedure //= mapimE.
+    case intf_C: (CallReturnTree.prog_interface p C)=> [CI|] //=.
+    rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
+    + rewrite /comp_call_handle /guard_call /callexp /switch_call /switch_clause_call /call_inner /= 2!andbT //=.
+      elim: (get_all_handle_calls _ _ _) => [| [n ls] ? IH] //=.
+      rewrite IH andbT /switch_arg /switch_clause_arg.
+      elim: ls => [| [n' ls'] ? IH'] //=.
+    + suff: (called_procedures (comp_call_handle C P (CallReturnTree.prog_trees p C)) = fset0) by move=> ->.
+      rewrite //= !fset0U !fsetU0.
+      rewrite /callexp /switch_call /switch_clause_call /call_inner.
+      elim: (get_all_handle_calls _ _ _) => [| [n ls] ? IH] //=.
+      rewrite IH !fsetU0 !fset0U.
+      rewrite /switch_arg /switch_clause_arg.
+      elim: ls => [| [n' ls'] ? IH'] //=.
+      now rewrite !fset0U.
+  -   set (valid_procedure C P :=
+             C = Component.main /\ P = Procedure.main
+             \/ exported_procedure (CallReturnTree.prog_interface p) C P).
+
+      suff: (forall C P, valid_procedure C P ->
+                    find_procedure (TreeWithCallers.prog_procedures (compile_call_return_tree p)) C P =
+                    Some (comp_call_handle C P (CallReturnTree.prog_trees p C))).
+      { move=> /(_ Component.main Procedure.main) ->.
+        + split; first reflexivity.
+          intros _ => //=.
+          destruct (CallReturnTree.prog_interface p Component.main) as [mainP |] eqn:Hcase.
+          * apply /dommP. exists mainP. assumption.
+          * discriminate.
+        + by left. }
+      move=> C P [[-> ->] |].
+      + rewrite /find_procedure /compile_call_return_tree.
+        rewrite mapimE eqxx.
+        case: (CallReturnTree.prog_interface p Component.main) (wf_has_main)=> [Cint|] //= _.
+          by rewrite mkfmapfE in_fsetU1 eqxx.
+      + move=> [CI [C_CI CI_P]].
+        rewrite /find_procedure /compile_call_return_tree.
+        rewrite mapimE C_CI /= mkfmapfE.
+        case: eqP=> _; last by rewrite CI_P.
+          by rewrite in_fsetU1 CI_P orbT.
+  - eauto.
+  - eauto.
 Qed.
 
 Definition concat_exp (e1 e2: expr): expr := E_seq e1 e2.
@@ -502,34 +589,34 @@ Proof.
     eapply unique_key_smaller; eauto.
 Qed.
 
-Definition event_expression (n: nat) (e: xevent) :=
+Definition event_expression (Pcaller: Procedure.id) (n: nat) (e: xevent) :=
   match e with
   | XECall C1 P z C2 rts => E_seq (E_assign LOCATION_p (E_val (Int (Z.of_nat n))))
                            (* (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 1)))) *)
                            (E_seq (E_assign RETURN_p (E_call C2 P (E_val (Int z)))) (* does the call and stores its value *)
                            (E_seq (return_handling_expression rts)
                            (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 0))))
-                                  (E_call C1 Procedure.main (E_val (Int (Z.of_nat 0)))))))
+                                  (E_call C1 Pcaller (E_val (Int (Z.of_nat 0)))))))
   | XERet C1 z C2 => E_seq (E_assign LOCATION_p (E_val (Int (Z.of_nat n))))
                     (* (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 1)))) *)
                             (E_val (Int z))
   end.
 
-Lemma call_event_correct: forall ge C1 P z C2 rts n cs cs' m' P_expr,
+Lemma call_event_correct: forall ge C1 P Pcaller z C2 rts n cs cs' m' P_expr,
     allowed_xevent (genv_interface ge) (XECall C1 P z C2 rts) ->
     CS.s_component cs = C1 ->
-    CS.s_expr cs = event_expression n (XECall C1 P z C2 rts) ->
+    CS.s_expr cs = event_expression Pcaller n (XECall C1 P z C2 rts) ->
     find_procedure (genv_procedures ge) C2 P = Some P_expr ->
     Memory.store (CS.s_memory cs) (location (CS.s_component cs)) (Int (Z.of_nat n)) = Some m' ->
     cs' = [CState C2, CS.Frame C1 (CS.s_arg cs) (Kassign1 (RETURN_p)
                                                        (Kseq ((E_seq (return_handling_expression rts)
                                                                      (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 0))))
-                                                                            (E_call C1 Procedure.main (E_val (Int (Z.of_nat 0)))))))
+                                                                            (E_call C1 Pcaller(E_val (Int (Z.of_nat 0)))))))
                                                              (CS.s_cont cs))) :: (CS.s_stack cs),
            m', Kstop, P_expr, Int z] ->
     plus CS.kstep ge cs [ECall C1 P z C2] cs'.
 Proof.
-  move=> ge C1 P z C2 rts n [? ? ? ? ? ?] cs' m' (* m'' *) P_expr ALLOWED COMP EXPR PROC MEMSTORE1 (* MEMSTORE2 *) ?; subst; simpl in *.
+  move=> ge C1 P P' z C2 rts n [? ? ? ? ? ?] cs' m' (* m'' *) P_expr ALLOWED COMP EXPR PROC MEMSTORE1 (* MEMSTORE2 *) ?; subst; simpl in *.
   rewrite EXPR.
   econstructor. econstructor.
   do 8 (take_step; eauto).
@@ -540,11 +627,11 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma return_event_correct: forall ge n C1 z C2 cs cs' old_arg rts old_stack m' (* m'' *),
+Lemma return_event_correct: forall ge n Pcaller C1 z C2 cs cs' old_arg rts old_stack m' (* m'' *),
     allowed_xevent (genv_interface ge) (XERet C1 z C2) ->
     CS.s_component cs = C1 ->
     CS.s_cont cs = Kstop ->
-    CS.s_expr cs = event_expression n (XERet C1 z C2) ->
+    CS.s_expr cs = event_expression Pcaller n (XERet C1 z C2) ->
     CS.s_stack cs = CS.Frame C2 old_arg (Kassign1 RETURN_p (Kseq ((E_seq (return_handling_expression rts)
                                                                          (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 0))))
                                                                                 (E_call C1 Procedure.main (E_val (Int (Z.of_nat 0)))))))
@@ -558,7 +645,7 @@ Lemma return_event_correct: forall ge n C1 z C2 cs cs' old_arg rts old_stack m' 
            E_val (Int z), old_arg] ->
     plus CS.kstep ge cs [ERet C1 z C2] cs'.
 Proof.
-  move=> ge n C1 z C2 [? ? ? ? ? ?] cs' old_arg rts old_stack m' [ALL1 [ALL2 ALL3]] COMP CONT EXPR STACK MEMSTORE1 ?;
+  move=> ge n Pcaller C1 z C2 [? ? ? ? ? ?] cs' old_arg rts old_stack m' [ALL1 [ALL2 ALL3]] COMP CONT EXPR STACK MEMSTORE1 ?;
            subst; simpl in *.
   rewrite EXPR CONT.
   econstructor. econstructor.
@@ -601,22 +688,22 @@ Definition get_all_event C ots :=
     List.map event_info (List.filter (node_of_comp C) all_nodes)
   end.
 
-Definition build_event_expression (C: Component.id) ots :=
+Definition build_event_expression (C: Component.id) (P: Procedure.id) ots :=
   let all_events := get_all_event C ots in
-  let parent_plus_expr := List.map (fun '(p, xe, n) => (p, event_expression n xe)) all_events in
+  let parent_plus_expr := List.map (fun '(p, xe, n) => (p, event_expression P n xe)) all_events in
   switch_event parent_plus_expr.
 
 
 (* Admitted: this heavily relies on unicity of the location.
    It holds, because in our setting a tree that has control only has one possibility *)
-Lemma build_event_expression_correct: forall ge cs cs' C trs k trs' trs'' tr p xe n cls,
-    forall (CURCONT: CS.s_cont cs = Kseq (build_event_expression C (Some trs)) k)
+Lemma build_event_expression_correct: forall ge cs cs' C P trs k trs' trs'' tr p xe n cls,
+    forall (CURCONT: CS.s_cont cs = Kseq (build_event_expression C P (Some trs)) k)
       (SUBTREES: subtrees trs' trs)
       (TREES: trs' = [tr])
       (TREE: tr = node (p, xe, n, cls) trs'')
       (CURLOC: Memory.load (CS.s_memory cs) (location (CS.s_component cs)) = Some (Int (Z.of_nat p))),
       cs' = [CState (CS.s_component cs), (CS.s_stack cs), (CS.s_memory cs), k,
-             event_expression n xe, CS.s_arg cs] ->
+             event_expression P n xe, CS.s_arg cs] ->
       star CS.kstep ge cs E0 cs'.
 Proof.
   Admitted.
@@ -626,7 +713,7 @@ Proof.
 Definition compile_tree_with_callers (p: TreeWithCallers.prg): program :=
   {| prog_interface := TreeWithCallers.prog_interface p;
      prog_procedures :=
-       mapim (fun C procs => mapim (fun P call_exp => E_seq call_exp (build_event_expression C (TreeWithCallers.prog_trees p C)))
+       mapim (fun C procs => mapim (fun P call_exp => E_seq call_exp (build_event_expression C P (TreeWithCallers.prog_trees p C)))
                                 procs) (TreeWithCallers.prog_procedures p);
      prog_buffers := (mapim (fun C Ciface => inr [Int 0%Z; Int 0%Z; Int 0%Z]) (TreeWithCallers.prog_interface p)) |}.
 
@@ -634,5 +721,155 @@ Definition compile_tree_with_callers (p: TreeWithCallers.prg): program :=
 Lemma wf_compile (p: TreeWithCallers.prg) (WF: TreeWithCallers.wf p):
   well_formed_program (compile_tree_with_callers p).
 Proof.
-  Admitted.
+  case: WF => [] closed_intf sound_intf domm_eq domm_eq' exported_procs_ex well_formed_expr has_main.
+  constructor.
+  - by [].
+  - by rewrite domm_mapi.
+  - move=> C P //= H.
+    case: (exported_procs_ex C P H); rewrite /find_procedure mapimE.
+    case: (TreeWithCallers.prog_procedures p C) => //=.
+    move=> a EQ; rewrite mapimE.
+    by case: (a P) EQ.
+  - move=> C P Pexpr.
+    rewrite /find_procedure /compile_tree_with_callers mapimE.
+    case procs_C: (TreeWithCallers.prog_procedures p C)=> [procs|] //=.
+    rewrite mapimE.
+    case expr_P: (procs P)=> [expr|] //=.
+    move=> [] <-.
+    move: (well_formed_expr) => /(_ C P expr).
+    rewrite /find_procedure procs_C expr_P => /(_ Logic.eq_refl) [wf_expr1 wf_expr2].
+    split.
+    + have: (called_procedures (E_seq expr (build_event_expression C P (TreeWithCallers.prog_trees p C))) =
+             called_procedures expr :|: called_procedures (build_event_expression C P (TreeWithCallers.prog_trees p C)))%fset by [].
+      move=> -> //=.
+      move=> C' P' /fsetUP => //=; move=> [in_called_expr | in_called].
+      * (* The procedure is called in the expression generated at the previous step*)
+        move: wf_expr1 => /(_ C' P' in_called_expr) //=.
+        case: ifP => //=.
+        rewrite /find_procedure //= mapimE => ?.
+        case: (TreeWithCallers.prog_procedures p C) => //= a H; rewrite mapimE.
+        by case: (a P') H.
+      * (* The procedure is called is the expression generated at this step *)
+        move: C' P' in_called.
+        pose call_of_event (e: nat * xevent * nat) := if e is (_, XECall _ P _ C _, _) then Some (C, P) else None.
+        have /fsubsetP sub :
+          fsubset (called_procedures (build_event_expression C P (TreeWithCallers.prog_trees p C)))
+                  ((C, P) |: fset (pmap call_of_event (get_all_event C (TreeWithCallers.prog_trees p C))))%fset.
+        { rewrite /build_event_expression /switch_event /switch_clause_event /event_expression.
+          move: wf_events => /(_ C).
+          case: (TreeWithCallers.prog_trees p C) => //=; last by (move=> ?; apply fsub0set).
+          move=> trs /(_ trs Logic.eq_refl) //=.
+          assert (X: List.Forall (Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe)) trs ->
+                     List.Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs))).
+          { clear.
+            induction trs.
+            - simpl. econstructor.
+            - simpl. move=> H.
+              inversion H; subst; clear H.
+              eapply List.Forall_app. split; eauto.
+              eapply forall_list_forall. eauto.
+          }
+          move=> /X. clear X.
 
+          assert (X: List.Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs)) ->
+                     List.Forall (fun '(_, xe, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (List.map event_info (List.filter (node_of_comp C) (concat (List.map tree_to_list trs))))).
+          { clear.
+            elim: (concat (List.map tree_to_list trs)) => [|e t IH] //=.
+            move=> H. inversion H; subst; clear H.
+            case: (node_of_comp C e); last by eauto.
+            simpl. econstructor. destruct e as [[[? ?] ?] ?]. eauto.
+            eauto. }
+          move=> /X; clear X.
+          (* elim: (List.map event_info (List.filter (node_of_comp C) (concat (List.map tree_to_list trs)))) C'_P' Y => [|e t IH] //=. *)
+          (* elim: (List.filter (node_of_comp C) (concat (List.map tree_to_list trs))) C'_P' => [|e t IH] //=. *)
+          elim: (concat (List.map tree_to_list trs)) => [|e t IH] //=; first by move=> ?; apply fsub0set.
+          destruct (node_of_comp C e) eqn:EQ.
+          -- case: e EQ => [] [] [] p0 xe n0 cls EQ.
+             case: xe EQ => [C' P' v C'' rts| C' z ?] EQ //=.
+             ++ have: (called_procedures (return_handling_expression rts) = fset0).
+                { rewrite /return_handling_expression. elim: rts {EQ} => [|[[p1 z] n1] rts' IH'] //=; by rewrite !fset0U. }
+                move=> ->.
+                rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT //=.
+                rewrite fsetUA [((C, P) |: fset1 (C'', P'))%fset]fsetUC -fsetUA fsubsetU //=.
+                intros H. rewrite fsubsetU.
+                ** simpl in EQ.
+                   move: EQ => /eqP [->]; by rewrite eqxx.
+                ** rewrite IH. by rewrite orbT. by inversion H.
+                ** by rewrite fsub0set.
+             ++ rewrite !fset0U. intros H; inversion H; subst; clear H. eauto.
+          -- intros H. eapply IH. eauto.
+        }
+
+        move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
+        rewrite eqxx /find_procedure mapimE  procs_C //= mapimE expr_P //=.
+
+        (* move: P_CI; case: eqP intf_C=> [->|_] intf_C. *)
+        (*   rewrite /valid_procedure. *)
+        (*   case/fsetU1P=> [->|P_CI]; eauto. *)
+        (*   by right; exists CI; split. *)
+        (* by move=> P_CI; right; exists CI; split. *)
+        rewrite in_fset /= => C'_P'.
+        suffices imp : imported_procedure (TreeWithCallers.prog_interface p) C C' P'.
+
+        case: eqP procs_C => [<- |] //.
+        move: (exported_procs_ex C' P').
+        rewrite /find_procedure mapimE => ex EQ; move: ex; rewrite EQ //=.
+        rewrite mapimE => H.
+        assert (exported_procedure (TreeWithCallers.prog_interface p) C' P'). eapply closed_intf. eauto.
+        specialize (H H0). move: H.
+        by case: (procs P').
+
+        specialize (wf_events C).
+        move: C'_P' wf_events.
+        case: (TreeWithCallers.prog_trees p C) => //= trs C'_P' /(_ trs Logic.eq_refl).
+        assert (X: List.Forall (Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe)) trs ->
+               List.Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs))).
+        { clear.
+          induction trs.
+          - simpl. econstructor.
+          - simpl. move=> H.
+            inversion H; subst; clear H.
+            eapply List.Forall_app. split; eauto.
+            eapply forall_list_forall. eauto.
+        }
+        move=> /X. clear X.
+
+        assert (X: List.Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs)) ->
+                   List.Forall (fun '(_, xe, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (List.map event_info (List.filter (node_of_comp C) (concat (List.map tree_to_list trs))))).
+        { clear.
+          elim: (concat (List.map tree_to_list trs)) => [|e t IH] //=.
+          move=> H. inversion H; subst; clear H.
+          case: (node_of_comp C e); last by eauto.
+          simpl. econstructor. destruct e as [[[? ?] ?] ?]. eauto.
+          eauto. }
+        move=> /X; clear X.
+        (* elim: (List.map event_info (List.filter (node_of_comp C) (concat (List.map tree_to_list trs)))) C'_P' Y => [|e t IH] //=. *)
+        (* elim: (List.filter (node_of_comp C) (concat (List.map tree_to_list trs))) C'_P' => [|e t IH] //=. *)
+        elim: (concat (List.map tree_to_list trs)) C'_P' => [|e t IH] //=.
+        case: e => [] [] [] ? [C0 ? ? ? ?| C0 ? ?] ? ? //=.
+        destruct (C0 == C) eqn:EQ.
+        -- rewrite inE. case /orP.
+           ++ move /eqP => [<- <-].
+              move=> H'. inversion H'; subst; clear H'.
+              destruct H1 as [[] ].
+              by move: EQ => /eqP <-.
+           ++ move=> H H'; inversion H'; now apply IH.
+        -- move=> H H'; inversion H'; now apply IH.
+        -- destruct (C0 == C) eqn:EQ => //=.
+           move=> H H'; inversion H'; now apply IH.
+    + rewrite /= wf_expr2 /=.
+      rewrite /build_event_expression /switch_event /switch_clause_event.
+      elim: (get_all_event C (TreeWithCallers.prog_trees p C)) => [|[[p0 e] n0] xs IH] //=.
+      rewrite IH andbT.
+      case: e => [? ? ? ? rts | ? ? ?] //=; rewrite andbT.
+      elim: rts => [|[[p1 e] n1] rts IH'] //=.
+  - by rewrite domm_mapi.
+  - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
+    rewrite /has_required_local_buffers /= mapmE C_CI /=.
+    eexists; eauto=> /=; lia.
+  - move: has_main.
+    rewrite /prog_main //= /find_procedure mapimE.
+    case: (TreeWithCallers.prog_procedures p Component.main) => //=.
+    move=> a EQ; rewrite mapimE.
+    by case: (a Procedure.main) EQ.
+Qed.

@@ -101,6 +101,11 @@ Definition events_sequence_ok (t: trace) :=
 Definition wf_trace (intf: Program.interface) (t: trace) :=
   wb_trace [] t /\ valid_trace intf t /\ next_comp t = Some Component.main /\ events_sequence_ok t.
 
+Definition all_trees {A: Type} (a: A -> Prop) (trees: NMap (list (t A))): Prop :=
+  forall C trs,
+    trees C = Some trs ->
+    List.Forall (Tree.Forall a) trs.
+
 Module Tree.
   Record prg := { prog_interface: Program.interface;
                   prog_trees: NMap (list tree) }.
@@ -108,11 +113,16 @@ Module Tree.
   Definition state := (trace * NMap (list tree))%type.
 
   Record wf (p: prg) := {
-    (* wfprog_interface_soundness: sound_interface (prog_interface p); *)
-    (* wfprog_defined_procedures: domm (prog_interface p) = domm (prog_procedures p); *)
-    wf_has_trees: forall C, C \in domm (prog_interface p) ->
-                                            exists t, prog_trees p C = Some t;
-                        }.
+    wfprog_interface_closed: closed_interface (prog_interface p); (* NOTE: closed_interface implies sound_interface *)
+    wfprog_interface_soundness: sound_interface (prog_interface p);
+    wfprog_defined_procedures: domm (prog_interface p) = domm (prog_trees p);
+    (* wf_has_trees: forall C, C \in domm (prog_interface p) -> *)
+    (*                                         exists ts, prog_trees p C = Some ts; *)
+    determinacy: forall C ts, prog_trees p C = Some ts ->
+                         determinate_tree_list eq ts;
+    wf_events: all_trees (fun e => allowed_event (prog_interface p) e) (prog_trees p);
+    wf_has_main: prog_interface p Component.main }.
+
   Variant initial (p: prg): state -> Prop :=
   | initial_st: forall t, wf_trace (prog_interface p) t ->
                      initial p (t, prog_trees p)
@@ -130,6 +140,9 @@ Module Tree.
       C2 = next_comp_of_event e ->
       trees C1 = Some (l1 ++ node e ls :: l2) ->
       trees C2 = Some (l1' ++ node e ls' :: l2') ->
+      (* Determinacy and unicity *)
+      forall (DET: determinate_tree_list eq ls)
+        (DET': determinate_tree_list eq ls'),
       step ge (e :: t, trees) [e] (t, setm (setm trees C1 ls) C2 ls' )
   .
 
@@ -155,9 +168,16 @@ Module NumberedTree.
   Definition genv := Program.interface.
   Definition state := (trace * NMap (list numbered_tree) * NMap nat)%type.
 
-  Record wf (p: prg) := {wf_has_trees: forall C, C \in domm (prog_interface p) ->
-                                            exists t, prog_trees p C = Some t;
-                        }.
+  Record wf (p: prg) := {
+    wfprog_interface_soundness: sound_interface (prog_interface p);
+    wfprog_defined_procedures: domm (prog_interface p) = domm (prog_trees p);
+    (* wf_has_trees: forall C, C \in domm (prog_interface p) -> *)
+    (*                          exists ts, prog_trees p C = Some ts; *)
+    determinacy: forall C ts, prog_trees p C = Some ts ->
+                         determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) ts;
+    wf_events: all_trees (fun '(e, n) => allowed_event (prog_interface p) e) (prog_trees p);
+    wf_has_main: prog_interface p Component.main
+                       }.
 
   Variant initial (p: prg): state -> Prop :=
   | initial_st: forall t, wf_trace (prog_interface p) t ->
@@ -176,6 +196,9 @@ Module NumberedTree.
       C2 = next_comp_of_event e ->
       trees C1 = Some (l1 ++ node (e, n) ls :: l2) ->
       trees C2 = Some (l1' ++ node (e, n') ls' :: l2') ->
+      (* Determinacy and unicity *)
+      forall (DET: determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) ls)
+        (DET': determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) ls'),
       step ge (e :: t, trees, locs) [e] (t, setm (setm trees C1 ls) C2 ls', setm (setm locs C1 n) C2 n')
   .
 
@@ -195,8 +218,14 @@ Module ParentAwareTree.
   (* Trace * (Component.id -> trees) * (Component.id -> current loc) *)
   Definition state := (trace * NMap (list parent_aware_tree) * NMap nat)%type.
 
-  Record wf (p: prg) := {wf_has_trees: forall C, C \in domm (prog_interface p) ->
-                                            exists t, prog_trees p C = Some t;
+  Record wf (p: prg) := {
+    wfprog_interface_closed: closed_interface (prog_interface p); (* NOTE: closed_interface implies sound_interface *)
+    wfprog_interface_soundness: sound_interface (prog_interface p);
+    wfprog_defined_procedures: domm (prog_interface p) = domm (prog_trees p);
+    wf_events: all_trees (fun '(_, e, _) => allowed_event (prog_interface p) e) (prog_trees p);
+    wf_has_main: prog_interface p Component.main
+    (* wf_has_trees: forall C, C \in domm (prog_interface p) -> *)
+    (*                                         exists t, prog_trees p C = Some t; *)
                         }.
 
   Variant initial (p: prg): state -> Prop :=
@@ -242,8 +271,14 @@ Module CallerAwareTree.
   (* Trace * (Component.id -> trees) * (Component.id -> current loc) * (Component.id -> caller_information )*)
   Definition state := (trace * NMap (list caller_aware_tree) * NMap nat * NMap (list (Z * nat)))%type.
 
-  Record wf (p: prg) := {wf_has_trees: forall C, C \in domm (prog_interface p) ->
-                                            exists t, prog_trees p C = Some t;
+  Record wf (p: prg) := {
+    wfprog_interface_closed: closed_interface (prog_interface p); (* NOTE: closed_interface implies sound_interface *)
+    wfprog_interface_soundness: sound_interface (prog_interface p);
+    wfprog_defined_procedures: domm (prog_interface p) = domm (prog_trees p);
+    wf_events: all_trees (fun '(_, e, _, _) => allowed_event (prog_interface p) e) (prog_trees p);
+    wf_has_main: prog_interface p Component.main
+    (* wf_has_trees: forall C, C \in domm (prog_interface p) -> *)
+    (*                                         exists t, prog_trees p C = Some t; *)
                         }.
 
   Definition call_information_initial (C: Component.id) (tr: caller_aware_tree): option (Z * nat) :=
@@ -447,8 +482,15 @@ Module CallReturnTree.
 
   Definition state := (trace * NMap (list call_return_tree) * NMap nat * NMap (seq (Z * nat)) * stack)%type.
 
-  Record wf (p: prg) := {wf_has_trees: forall C, C \in domm (prog_interface p) ->
-                                            exists t, prog_trees p C = Some t;
+  Record wf (p: prg) := {
+    wfprog_interface_closed: closed_interface (prog_interface p); (* NOTE: closed_interface implies sound_interface *)
+    wfprog_interface_soundness: sound_interface (prog_interface p);
+    wfprog_defined_procedures: domm (prog_interface p) = domm (prog_trees p);
+    wf_events: all_trees (fun '(_, xe, _, _) => allowed_xevent (prog_interface p) xe) (prog_trees p);
+    wf_has_main: prog_interface p Component.main
+
+    (* wf_has_trees: forall C, C \in domm (prog_interface p) -> *)
+    (*                                         exists t, prog_trees p C = Some t; *)
                         }.
 
 
@@ -613,12 +655,23 @@ Module TreeWithCallers.
                     concrete_state: CS.state;
                     can_silent: bool }.
 
-  Record wf (p: prg) := {wfprog_exported_procedures_existence: forall C P,
-                            exported_procedure (prog_interface p) C P ->
-                            find_procedure (prog_procedures p) C P;
-                         wf_has_trees: forall C, C \in domm (prog_interface p) ->
-                                            exists t, TreeWithCallers.prog_trees p C = Some t;
-                        }.
+  Record wf (p: prg) := {
+    wfprog_interface_closed: closed_interface (prog_interface p); (* NOTE: closed_interface implies sound_interface *)
+    wfprog_interface_soundness: sound_interface (prog_interface p);
+    wfprog_defined_procedures: domm (prog_interface p) = domm (prog_procedures p);
+    wfprog_defined_trees: domm (prog_interface p) = domm (prog_trees p);
+    wfprog_exported_procedures_existence: forall C P,
+        exported_procedure (prog_interface p) C P ->
+        find_procedure (prog_procedures p) C P;
+    wfprog_well_formed_procedures : forall (C : Component.id) (P : Procedure.id) (Pexpr : expr),
+        find_procedure (prog_procedures p) C P = Some Pexpr ->
+        valid_calls (prog_procedures p) (prog_interface p) C (called_procedures Pexpr)
+        /\ values_are_integers Pexpr;
+    wfprog_main_existence : Component.main \in domm (prog_interface p) <->
+                                               find_procedure (prog_procedures p) Component.main Procedure.main;
+    wf_events: all_trees (fun '(_, xe, _, _) => allowed_xevent (prog_interface p) xe) (prog_trees p);
+    wf_has_main: prog_interface p Component.main
+   }.
 
   Definition initial_callers := CallReturnTree.initial_callers.
 

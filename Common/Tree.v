@@ -46,6 +46,77 @@ Section Tree.
     Qed.
   End TreeInduction.
 
+  Section TreeInductionPrime.
+    (* See Coq'Art, chapter 14 *)
+    Context (A : Type).
+    Variable P : t A -> Prop.
+    Variable Q : list (t A) -> Prop.
+
+    Hypothesis leaf_case: P (leaf A).
+    Hypothesis empty_case: Q nil.
+    Hypothesis list_to_node_case: forall (a: A) (ls: list (t A)),
+        Q ls ->
+        P (node a ls).
+    Hypothesis cons_case: forall (tr: t A) (ls: list (t A)),
+        P tr ->
+        Q ls ->
+        Q (tr :: ls).
+
+    Fixpoint tree_ind' (tr: t A) : P tr :=
+      match tr with
+      | leaf _ => leaf_case
+      | node a ls =>
+        list_to_node_case a ls
+                          ((fix ls_ind (ls': list (t A)): Q ls' :=
+                             match ls' with
+                             | nil => empty_case
+                             | tr :: ls'' => cons_case tr ls'' (tree_ind' tr) (ls_ind ls'')
+                             end) ls)
+      end.
+
+    Fixpoint tree_ind_list (trs: list (t A)): Q trs :=
+      match trs with
+      | [] => empty_case
+      | tr :: trs' => cons_case tr trs' (tree_ind' tr) (tree_ind_list trs')
+      end.
+
+  End TreeInductionPrime.
+
+  Section TreeRect.
+    (* See Coq'Art, chapter 14 *)
+    Context (A : Type).
+    Variable P : t A -> Type.
+    Variable Q : list (t A) -> Type.
+
+    Hypothesis leaf_case: P (leaf A).
+    Hypothesis empty_case: Q nil.
+    Hypothesis list_to_node_case: forall (a: A) (ls: list (t A)),
+        Q ls ->
+        P (node a ls).
+    Hypothesis cons_case: forall (tr: t A) (ls: list (t A)),
+        P tr ->
+        Q ls ->
+        Q (tr :: ls).
+
+    Fixpoint tree_rect (tr: t A) : P tr :=
+      match tr with
+      | leaf _ => leaf_case
+      | node a ls =>
+        list_to_node_case a ls
+                          ((fix ls_rec (ls': list (t A)): Q ls' :=
+                             match ls' with
+                             | nil => empty_case
+                             | tr :: ls'' => cons_case tr ls'' (tree_rect tr) (ls_rec ls'')
+                             end) ls)
+      end.
+
+    Fixpoint tree_rect_list (trs: list (t A)): Q trs :=
+      match trs with
+      | [] => empty_case
+      | tr :: trs' => cons_case tr trs' (tree_rect tr) (tree_rect_list trs')
+      end.
+
+  End TreeRect.
 
   Fixpoint max_list (n : nat) (l : list nat) :=
     match l with
@@ -68,6 +139,13 @@ Section Tree.
       let ls' := List.map depth ls in
       1 + max_list 0 ls'
     end.
+
+  Definition content_of {A: Type} (tr: t A): option A :=
+    match tr with
+    | leaf _ => None
+    | node a _ => Some a
+    end.
+
 End Tree.
 
 Fixpoint showtree {A : Type} `{Show A} (tr : t A) : string :=
@@ -283,19 +361,6 @@ Section Foldr.
 
 End Foldr.
 
-Section All.
-
-  Context {A: Type}.
-  Fixpoint all (a: pred A) (tr: t A): bool :=
-    match tr with
-    | leaf _ => true
-    | node x ls =>
-      a x && seq.all (all a) ls
-    end.
-
-End All.
-
-
 Section TreeToList.
   Context {A: Type}.
 
@@ -305,6 +370,28 @@ Fixpoint tree_to_list (tr: t A): list A :=
   | node x ls => let ls' := List.map tree_to_list ls in
                 x :: List.concat ls'
   end.
+
+Definition tree_to_list' (tr: t A): list A :=
+  tree_rect
+    A
+    (fun tr => list A)
+    (fun trs => list A)
+    (nil)
+    (nil)
+    (fun a ls ls' => a :: ls')
+    (fun tr ls ls' ls'' => ls' ++ ls'')
+    tr
+.
+
+Lemma tree_to_list_equiv: forall tr, tree_to_list tr = tree_to_list' tr.
+Proof.
+  induction tr using tree_ind' with (Q := fun ls => List.map tree_to_list ls = List.map tree_to_list' ls).
+  - eauto.
+  - eauto.
+  - simpl. rewrite IHtr. rewrite <- List.flat_map_concat_map.
+    now unfold flat_map.
+  - simpl. rewrite IHtr. rewrite IHtr0. eauto.
+Qed.
 
 End TreeToList.
 
@@ -319,6 +406,51 @@ Section ListInTree.
       list_in (a :: l) (node a ls)
   .
 End ListInTree.
+
+Section All.
+
+  Context {A: Type}.
+  Fixpoint all (a: pred A) (tr: t A): bool :=
+    match tr with
+    | leaf _ => true
+    | node x ls =>
+      a x && seq.all (all a) ls
+    end.
+
+  Inductive Forall (a: A -> Prop): t A -> Prop :=
+  | Forall_leaf: Forall a (leaf _)
+  | Forall_node: forall x ls,
+      a x ->
+      List.Forall (Forall a) ls ->
+      Forall a (node x ls).
+
+  Definition all_list (a: A -> Prop) (trs: list (t A)): Prop :=
+    List.Forall (Forall a) trs.
+
+  Lemma forall_list_forall (a: A -> Prop):
+    forall tr,
+      Forall a tr -> List.Forall a (tree_to_list tr).
+  Proof.
+    intros tr.
+    (* rewrite tree_to_list_equiv. *)
+    induction tr using tree_ind' with (Q := fun (trs: list (t A)) => List.Forall (Forall a) trs ->
+                                                                  List.Forall a (List.concat (List.map tree_to_list trs))).
+    - move=> H. simpl. eauto.
+    - simpl. econstructor.
+    - move=> H.
+      simpl. inversion H; subst; clear H.
+      specialize (IHtr H3).
+      econstructor. eauto. eauto.
+    - intros H.
+      inversion H; subst; clear H.
+      specialize (IHtr H2).
+      specialize (IHtr0 H3).
+      simpl. eapply List.Forall_app.
+      split; eauto.
+  Qed.
+
+End All.
+
 
 
 Definition trees_max_branch (branch : nat) :=
@@ -426,3 +558,82 @@ Definition trace_in_tree_add_trace' :=
   | None => true
   end)))).
 (*! QuickChick trace_in_tree_add_trace'. *)
+
+Section LiftRel.
+  Context {A: Type}.
+  Context (R: A -> A -> Prop).
+
+  Fixpoint lift_rel (tr1 tr2: t A): Prop :=
+    let
+      fix lift_rel_list (ls1 ls2: seq (t A)): Prop :=
+      match ls1, ls2 with
+      | [], [] => True
+      | tr1 :: ls1', tr2 :: ls2' =>
+        lift_rel tr1 tr2 /\
+        lift_rel_list ls1' ls2'
+      | _, _ => False
+      end in
+    match tr1, tr2 with
+    | leaf _, leaf _ => True
+    | node a1 ls1, node a2 ls2 =>
+      R a1 a2 /\
+      lift_rel_list ls1 ls2
+    | _, _ => False
+    end.
+
+  Fixpoint lift_rel_list (ls1 ls2: seq (t A)): Prop :=
+    match ls1, ls2 with
+    | [], [] => True
+    | tr1 :: ls1', tr2 :: ls2' =>
+      lift_rel tr1 tr2 /\
+      lift_rel_list ls1' ls2'
+    | _, _ => False
+    end.
+
+  Lemma lift_rel_rewrite (tr1 tr2: t A):
+    lift_rel tr1 tr2 = match tr1, tr2 with
+                       | leaf _, leaf _ => True
+                       | node a1 ls1, node a2 ls2 =>
+                         R a1 a2 /\
+                         lift_rel_list ls1 ls2
+                       | _, _ => False
+                       end.
+  Proof.
+    unfold lift_rel.
+    destruct tr1, tr2; eauto.
+  Qed.
+
+  Definition lift_option (oa1 oa2: option A): Prop :=
+    match oa1, oa2 with
+    | None, None => True
+    | Some a1, Some a2 => R a1 a2
+    | _, _ => False
+    end.
+
+End LiftRel.
+
+
+Section Unique.
+
+  Context {A: Type}.
+  Context (R: A -> A -> Prop).
+
+  Definition unique_list (ls: seq (t A)) :=
+    forall (t1 t2: t A),
+      In t1 ls ->
+      In t2 ls ->
+      lift_option R (content_of t1) (content_of t2) ->
+      lift_rel R t1 t2.
+
+  Inductive determinate_tree: t A -> Prop :=
+  | determinate_leaf: determinate_tree (leaf _)
+  | determinate_node: forall a ls,
+      unique_list ls ->
+      (forall tr, In tr ls -> determinate_tree tr) ->
+        determinate_tree (node a ls)
+  .
+
+  Definition determinate_tree_list (ls: seq (t A)): Prop :=
+    unique_list ls /\ forall tr, In tr ls -> determinate_tree tr.
+
+End Unique.
