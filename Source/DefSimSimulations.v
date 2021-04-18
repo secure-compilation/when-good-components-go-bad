@@ -16,6 +16,8 @@ Require Import Common.Tree.
 Require Import Source.DefSimLanguages.
 Require Import Source.DefSimComp.
 
+Require Import Coq.Logic.FunctionalExtensionality.
+
 From Coq Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import eqtype seq order.
 From mathcomp Require ssrnat.
@@ -44,7 +46,7 @@ Ltac inv H :=
 
 Inductive match_states1 (i: nat): Tree.state -> NumberedTree.state -> Prop :=
 | match_states_1: forall t (trees: NMap (list tree)) (trees': NMap (list numbered_tree)) locs,
-    (forall C ls, trees C = Some ls -> exists n, trees' C = Some (give_nums ls n)) ->
+    (forall C ls, trees C = Some ls -> exists n, trees' C = Some (give_num_list ls n).1) ->
     match_states1 i (t, trees) (t, trees', locs)
 .
 
@@ -66,9 +68,9 @@ Proof.
   - move=> s1 t s1' H i s2 H0.
     inv H; inv H0.
     destruct (H6 _ _ H4) as [n Htree];
-      destruct (give_nums_app_comm l1 l2 e ls n) as [? [? [? Heq]]].
+      destruct (give_nums_app_comm l1 l2 (loc_ev_out_of_event e) ls n) as [? [? [? Heq]]].
     destruct (H6 _ _ H5) as [n' Htree'];
-      destruct (give_nums_app_comm l1' l2' e ls' n') as [? [? [? Heq']]].
+      destruct (give_nums_app_comm l1' l2' (loc_ev_in_of_event e) ls' n') as [? [? [? Heq']]].
     exists 0; eexists.
     split.
     + left. econstructor.
@@ -78,7 +80,8 @@ Proof.
         reflexivity. reflexivity.
         now rewrite Htree Heq.
         now rewrite Htree' Heq'.
-        admit. admit.
+        now eapply give_nums_determinate.
+        now eapply give_nums_determinate.
       }
       eapply star_refl.
       eauto.
@@ -90,7 +93,7 @@ Proof.
       case: (C == cur_comp_of_event e); [move=> [] -> |].
       eexists; reflexivity.
       now apply H6.
-Admitted.
+Qed.
 
 
 Inductive match_states2 (intf: Program.interface) (i: nat): NumberedTree.state -> ParentAwareTree.state -> Prop :=
@@ -100,6 +103,66 @@ Inductive match_states2 (intf: Program.interface) (i: nat): NumberedTree.state -
                trees' C = Some (List.map (fun x => add_parent_loc x n) ls)) ->
     match_states2 intf i (t, trees, locs) (t, trees', locs)
 .
+
+Lemma det_tree_list_add_parent_loc:
+  forall ls,
+    determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) ls ->
+    forall n,
+      determinate_tree_list (fun '(_, e1, _) '(_, e2, _) => e1 = e2) (List.map (fun tr => add_parent_loc tr n) ls).
+Proof.
+  induction ls using tree_ind_list with (P := fun tr => determinate_tree (fun '(e1, _) '(e2, _) => e1 = e2) tr ->
+                                                     forall n, determinate_tree (fun '(_, e1, _) '(_, e2, _) => e1 = e2) (add_parent_loc tr n)).
+  - now constructor.
+  - move=> H n; split; eauto.
+    ++ by move=> [].
+    ++ by move=> ? [].
+  - move=> H n.
+    case: a H => e n' //= H.
+    inv H.
+    assert (DET: determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) ls) by now split.
+    destruct (IHls DET n') as [IH1 IH2].
+    now constructor.
+  - move=> H n.
+    simpl.
+    have: (determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) ls).
+    { inv H. split.
+      - move=> p p' ? ? ? ? nth nth' EQ.
+        specialize (H0 (S p) (S p') _ _ _ _ nth nth' EQ); now inversion H0.
+      - move=> tr' IN.
+        now specialize (H1 tr' (or_intror IN)). }
+    (* move=> DET; specialize (IHls0 DET n). *)
+    assert (forall ls p x y z l, nth_error (List.map (add_parent_loc^~ n) ls) p = Some (node (x, y, z) l) ->
+                            exists l',
+                              nth_error ls p = Some (node (y, z) l') /\ l = List.map (add_parent_loc^~ z) l') as nth_add_parent_loc_inv.
+    { clear.
+      induction ls.
+      - by move=> [].
+      - move=> [| p] x y z l H.
+        + simpl in H. inv H.
+          destruct a as [| [y' z'] l']; first by inv H1.
+          simpl in H1; inv H1; eexists; split; simpl; eauto.
+        + specialize (IHls p x y z l H) as [l' [EQ1 EQ2]].
+          exists l'; split; eauto.
+    }
+    move=> DET.
+    split.
+    + move=> p p' [[? ?] ?] ? [[? ?] ?] ? nth nth' EQ; eauto.
+        replace (add_parent_loc tr n :: List.map (add_parent_loc^~ n) ls)
+          with (List.map (add_parent_loc^~ n) (tr :: ls)) in nth; last reflexivity.
+        apply nth_add_parent_loc_inv in nth as [l [EQl _]].
+        replace (add_parent_loc tr n :: List.map (add_parent_loc^~ n) ls)
+          with (List.map (add_parent_loc^~ n) (tr :: ls)) in nth'; last reflexivity.
+        apply nth_add_parent_loc_inv in nth' as [l' [EQl' _]].
+
+        destruct H as [UNIQ ?]. eapply UNIQ; simpl; eauto.
+    + move=> tr0 [EQ | INR].
+      * subst.
+        eapply IHls.
+        inversion H. eapply H1. now left.
+      * specialize (IHls0 DET n).
+        inversion IHls0.
+        eapply H1. eauto.
+Qed.
 
 Lemma sim2 (p: NumberedTree.prg):
   forward_simulation (NumberedTree.sem p) (ParentAwareTree.sem (compile_numbered_tree p)).
@@ -137,7 +200,10 @@ Proof.
         reflexivity. reflexivity.
         by rewrite Htree map_app //.
         by rewrite Htree' map_app //.
-        by []. by []. }
+          by []. by [].
+          by eapply det_tree_list_add_parent_loc.
+          by eapply det_tree_list_add_parent_loc.
+      }
       eapply star_refl.
       reflexivity.
     + econstructor.
@@ -158,18 +224,105 @@ Qed.
 
 Inductive match_states3 (intf: Program.interface) (i: nat): ParentAwareTree.state -> CallerAwareTree.state -> Prop :=
 | match_states_3: forall t (trees: NMap (list parent_aware_tree)) (trees': NMap (list caller_aware_tree))
-                    (locs: NMap nat) (callers: NMap (list (Z * nat))),
+                    (locs: NMap nat) (callers: NMap (list (Procedure.id * Z * nat))),
     (forall C ls, trees C = Some ls ->
               trees' C = Some (List.map (add_caller C) ls)) ->
-    (forall C1 P z C2 p n zs l1 ls l2,
-              trees' C2 = Some (l1 ++ node (p, ECall C1 P z C2, n, zs) ls :: l2) ->
-              exists zs1 zs2, callers C2 = Some (zs1 ++ (z, n) :: zs2)) ->
+    (forall P z C2 p n zs l1 ls l2,
+              trees' C2 = Some (l1 ++ node (p, ECallIn P z, n, zs) ls :: l2) ->
+              exists zs1 zs2, callers C2 = Some (zs1 ++ (P, z, n) :: zs2)) ->
+    forall UNIQ: (forall C zs, callers C = Some zs ->
+                     unique_p_z zs),
     match_states3 intf i (t, trees, locs) (t, trees', locs, callers)
 .
 
-Lemma sim3 (p: ParentAwareTree.prg):
+
+
+Lemma det_unique_z: forall C ls,
+    determinate_tree_list (fun '(_, e1, _) '(_, e2, _) => e1 = e2) ls ->
+    unique_p_z (collect_callers C ls).
+Proof.
+  intros C.
+  induction ls using tree_ind_list with (P := fun tr => determinate_tree (fun '(_, e1, _) '(_, e2, _) => e1 = e2) tr ->
+                                                     match tr with
+                                                     | leaf _ => True
+                                                     | node x ls => unique_p_z (collect_callers C ls)
+                                                     end).
+
+  - by [].
+  - by move=> H [] //=.
+  - move=> H. inversion H; subst; clear H.
+    by eapply IHls; eauto.
+  - case: tr IHls IHls0 => //=.
+    + move=> H1 H2 H3.
+      unfold collect_callers. simpl. eapply H2.
+      inversion H3.
+      constructor.
+      * intros ? ? ? ? ? ? nth1 nth2 EQ.
+        now specialize (H (S _) (S _) _ _ _ _ nth1 nth2 EQ); inversion H.
+      * intros ? ?. eapply H0. now right.
+    + move=> a l H1 H2 H3.
+      have: (determinate_tree_list (fun '(_, e1, _) '(_, e2, _) => e1 = e2) ls).
+      { inv H3. split.
+      - move=> p p' ? ? ? ? nth nth' EQ.
+        specialize (H (S p) (S p') _ _ _ _ nth nth' EQ); now inversion H.
+      - move=> tr' IN.
+        now specialize (H0 tr' (or_intror IN)). }
+      move: a l H1 H2 H3.
+
+      assert (H: forall ls, exists f, injective f /\ forall p P z n, nth_error (collect_callers C ls) p = Some (P, z, n) ->
+              exists b l, nth_error ls (f p) = Some (node (b, ECallIn P z, n) l)).
+      { clear.
+        induction ls.
+        - exists id. split. eapply inj_id. by move=> [].
+        - destruct IHls as [f [IH1 IH2]].
+          destruct a as [| [[? e] ?]].
+          + exists (fun n => S (f n)); split.
+            * eapply inj_comp. eapply ssrnat.succn_inj.
+              eapply IH1.
+            * move=> p P z n H.
+              specialize (IH2 p P z n H) as [b [l IH]].
+              now (exists b, l).
+          + destruct e as [| | |].
+            * exists (fun n => match n with
+                       | 0 => 0
+                       | S n' => S (f n')
+                       end); split; eauto.
+                   (* if n == 0 then 0 else S (f n)); split; eauto. *)
+              -- clear -IH1.
+                 intros x1 x2.
+                 induction x1.
+                 ++ by case x2.
+                 ++ case: x2 IHx1; first by [].
+                    move=> n IHx1 H.
+                    inversion H.
+                    eapply IH1 in H1. now subst.
+              -- move=> [| p] P z1 n1 H.
+                 ++ inv H.
+                    now (exists n, l).
+                 ++ simpl in H.
+                    specialize (IH2 p P z1 n1 H) as [b' [l' IH]].
+                    now exists b', l'.
+            * exists (fun n => S (f n)); split; eauto.
+              eapply inj_comp. eapply ssrnat.succn_inj. eapply IH1.
+            * exists (fun n => S (f n)); split; eauto.
+              eapply inj_comp. eapply ssrnat.succn_inj. eapply IH1.
+            * exists (fun n => S (f n)); split; eauto.
+              eapply inj_comp. eapply ssrnat.succn_inj. eapply IH1.
+      }
+      intros ? ? H1 H2 H3 H4.
+      destruct (H (node a l :: ls)) as [f [INJ H']].
+      intros p p' P0 z n n' nth nth'.
+      eapply H' in nth as [b1 [l1 EQ1]].
+      eapply H' in nth' as [b1' [l1' EQ1']].
+      destruct H3 as [UNIQ _].
+      specialize (UNIQ _ _ _ _ _ _ EQ1 EQ1' Logic.eq_refl).
+      now eapply INJ in UNIQ.
+Qed.
+
+Lemma sim3 (p: ParentAwareTree.prg) (WF: ParentAwareTree.wf p):
   forward_simulation (ParentAwareTree.sem p) (CallerAwareTree.sem (compile_parent_aware_tree p)).
 Proof.
+  assert (WF': CallerAwareTree.wf (compile_parent_aware_tree p)) by now eapply compile_parent_aware_tree_wf.
   fwd_sim (match_states3 (ParentAwareTree.prog_interface p)).
   - move=> s1 H.
     inversion H; subst; clear H.
@@ -179,7 +332,7 @@ Proof.
     + econstructor.
       (* move=> C H; exists 0; by rewrite mkfmapfE H. *)
       move=> C ls H; by rewrite mapimE H.
-      move=> C1 P z C2 p0 n zs l1 ls l2 H.
+      move=> P z C2 p0 n zs l1 ls l2 H.
       remember (compile_parent_aware_tree p) as p'.
       (* unfold CallerAwareTree.initial_callers. *)
       rewrite mapimE H //=.
@@ -187,7 +340,28 @@ Proof.
               DefSimLanguages.CallerAwareTree.collect_callers_initial_cons.
       eexists; eexists.
       unfold DefSimLanguages.CallerAwareTree.collect_callers_initial.
-      rewrite //= eqxx. simpl. reflexivity.
+      rewrite //= eqxx. (* simpl. reflexivity. *)
+      move=> C zs H.
+      move: H => //=; rewrite 2!mapimE.
+      move: (ParentAwareTree.determinacy WF) => /(_ C) //=.
+      case: (ParentAwareTree.prog_trees p C) => [trs |] //= /(_ trs Logic.eq_refl) H [] <-.
+      (* /(_ (List.map (add_caller C) trs) Logic.eq_refl) H [] <-. *)
+      apply det_unique_z with (C := C) in H.
+      unfold collect_callers in H. unfold DefSimLanguages.CallerAwareTree.collect_callers_initial.
+      simpl. unfold CallerAwareTree.call_information_initial.
+      rewrite List.map_map. unfold call_information in H.
+      assert (EQ: (fun tr : parent_aware_tree => match tr with
+                                                    | node (_, ECallIn P arg, n) _ => Some (P, arg, n)
+                                                    | _ => None
+                                          end) =
+              (fun x : parent_aware_tree => match add_caller C x with
+                                         | node (_, ECallIn P arg, n, _) _ => Some (P, arg, n)
+                                         | _ => None
+                                         end)
+             ).
+      { eapply functional_extensionality. intros [|[[? ?] ?] ?]; eauto. }
+      now rewrite EQ in H.
+
   - move=> i s1 s2 H H0.
     inversion H0; subst; clear H0.
     inversion H; subst; clear H.
@@ -206,7 +380,7 @@ Proof.
       exists 0; eexists; split.
       * left; econstructor.
         rewrite map_app in Htree'.
-        specialize (H10 _ _ _ _ _ _ _ _ _ _ Htree') as [zs1' [zs2' Hcallee]].
+        specialize (H10 _ _ _ _ _ _ _ _ _ Htree') as [zs1' [zs2' Hcallee]].
         rewrite -map_app in Htree'.
         { econstructor.
           eauto. eauto.
@@ -215,6 +389,9 @@ Proof.
           by rewrite Htree' map_app //.
           apply Hcallee.
           by []. by [].
+          by eapply det_tree_list_add_caller.
+          by eapply det_tree_list_add_caller.
+          eapply UNIQ. eauto.
         }
         by eapply star_refl.
         by [].
@@ -233,9 +410,9 @@ Proof.
            move: H; rewrite setmE Heq setmE Heq' //.
            rewrite setmE Heq'.
            apply H9.
-        -- move=> C1 P0 z0 C2 p1 n0 zs l0 ls0 l3; fold add_caller; move=> H.
+        -- move=> P0 z0 C2 p1 n0 zs l0 ls0 l3; fold add_caller; move=> H.
            rewrite map_app in Htree'.
-           destruct (H10 _ _ _ _ _ _ _ _ _ _ Htree') as [zs1' [zs2' Hcallee]].
+           destruct (H10 _ _ _ _ _ _ _ _ _ Htree') as [zs1' [zs2' Hcallee]].
            rewrite -map_app in Htree'.
            move: H.
            destruct (C2 == Ccallee) eqn:Heq.
@@ -248,7 +425,8 @@ Proof.
               exists (collect_callers Ccallee ls1'), (collect_callers Ccallee ls4').
               rewrite collect_callers_app collect_callers_cons.
               destruct ls3'. inversion H2. inversion H3. destruct p2. destruct p2. inversion H3. subst.
-              unfold collect_callers; simpl. rewrite eq_sym Heq. reflexivity.
+              simpl. reflexivity.
+              (* unfold collect_callers; simpl. rewrite eq_sym Heq. reflexivity. *)
            ++ destruct (C2 == Ccaller) eqn:Heq'.
               ** rewrite setmE Heq setmE Heq' => [] [] H.
                  rewrite setmE Heq setmE Heq'.
@@ -259,10 +437,19 @@ Proof.
                  exists (collect_callers Ccaller ls1'), (collect_callers Ccaller ls4').
                  rewrite collect_callers_app collect_callers_cons.
                  destruct ls3'. inversion H3. inversion H3. destruct p2. destruct p2. inversion H12. subst.
-                 unfold collect_callers; simpl. rewrite eq_sym Heq'. simpl. reflexivity.
+                 unfold collect_callers; simpl. reflexivity.
+                 (* rewrite eq_sym Heq'. simpl. reflexivity. *)
               ** rewrite setmE Heq setmE Heq' => [] [] H.
                  rewrite setmE Heq setmE Heq'.
                  eapply H10. eauto.
+        -- move=> C zs.
+           rewrite 2!setmE.
+           case: ifP => _.
+           ++ move=> [] <-. by eapply det_unique_z.
+           ++ case: ifP => _.
+              ** move=> [] <-. by eapply det_unique_z.
+              ** eapply UNIQ.
+
     + (* Return case *)
       exists 0; eexists; split.
       * left; econstructor.
@@ -272,6 +459,8 @@ Proof.
           by rewrite Htree map_app //.
           by rewrite Htree' map_app //.
           by []. by [].
+          by eapply det_tree_list_add_caller.
+          by eapply det_tree_list_add_caller.
         }
         by eapply star_refl.
         by [].
@@ -290,7 +479,7 @@ Proof.
            move: H; rewrite setmE Heq setmE Heq' //.
            rewrite setmE Heq'.
            apply H9.
-        -- move=> C1 P0 z0 C2 p1 n0 zs l0 ls0 l3; fold add_caller; move=> H.
+        -- move=> P0 z0 C2 p1 n0 zs l0 ls0 l3; fold add_caller; move=> H.
            (* rewrite map_app List.map_cons in Htree'; simpl in Htree'. *)
            (* destruct (H9 _ _ _ _ _ _ _ _ _ _ Htree') as [zs1' [zs2' Hcallee]]. *)
            (* rewrite -map_app in Htree'. *)
@@ -305,7 +494,8 @@ Proof.
               exists (collect_callers Ccaller ls1'), (collect_callers Ccaller ls4').
               rewrite collect_callers_app collect_callers_cons.
               destruct ls3'. inversion H3. inversion H3. destruct p2. destruct p2. inversion H12. subst.
-              unfold collect_callers; simpl. rewrite eq_sym Heq; simpl. reflexivity.
+              unfold collect_callers; simpl. reflexivity.
+              (* rewrite eq_sym Heq; simpl. reflexivity. *)
            ++ destruct (C2 == Ccallee) eqn:Heq'.
               ** rewrite setmE Heq setmE Heq' => [] [] H.
                  rewrite setmE Heq setmE Heq'.
@@ -316,10 +506,18 @@ Proof.
                  exists (collect_callers Ccallee ls1'), (collect_callers Ccallee ls4').
                  rewrite collect_callers_app collect_callers_cons.
                  destruct ls3'. inversion H3. inversion H3. destruct p2. destruct p2. inversion H12. subst.
-                 unfold collect_callers; simpl. rewrite eq_sym Heq'. simpl. reflexivity.
+                 unfold collect_callers; simpl. reflexivity.
+                 (* rewrite eq_sym Heq'. simpl. reflexivity. *)
               ** rewrite setmE Heq setmE Heq' => [] [] H.
                  rewrite setmE Heq setmE Heq'.
                  eapply H10. eauto.
+        -- move=> C zs.
+           rewrite 2!setmE.
+           case: ifP => _.
+           ++ move=> [] <-. by eapply det_unique_z.
+           ++ case: ifP => _.
+              ** move=> [] <-. by eapply det_unique_z.
+              ** eapply UNIQ.
 Qed.
 
 Definition simpl_stack (st: stack): seq Component.id :=
@@ -328,14 +526,14 @@ Definition simpl_stack (st: stack): seq Component.id :=
 Inductive reaches_corresponding_return_at: nat -> NMap (list call_return_tree) -> trace -> (nat * Z * nat) -> Prop :=
 | reaches_call: forall k (trees: NMap (list call_return_tree)) C1 P z' C2 t p z n
                   l1 p1 rts1 n1 cls1 ls1 l1'
-                  l2 p2 rts2 n2 cls2 ls2 l2',
-    trees C1 = Some (l1 ++ node (p1, XECall C1 P z' C2 rts1, n1, cls1) ls1 :: l1') ->
-    trees C2 = Some (l2 ++ node (p2, XECall C1 P z' C2 rts2, n2, cls2) ls2 :: l2') ->
+                  l2 p2 n2 cls2 ls2 l2',
+    trees C1 = Some (l1 ++ node (p1, XECallOut P z' C2 rts1, n1, cls1) ls1 :: l1') ->
+    trees C2 = Some (l2 ++ node (p2, XECallIn P z', n2, cls2) ls2 :: l2') ->
     reaches_corresponding_return_at (S k) (setm (setm trees C1 ls1) C2 ls2) t (p, z, n) ->
     reaches_corresponding_return_at k trees (ECall C1 P z C2 :: t) (p, z, n)
 | reaches_ret: forall k (trees: NMap (list call_return_tree)) C1 z C2 t p n
                  l1 cls ls1 l1',
-    trees C2 = Some (l1 ++ node (p, XERet C1 z C2, n, cls) ls1 :: l1') ->
+    trees C2 = Some (l1 ++ node (p, XERetIn z, n, cls) ls1 :: l1') ->
     reaches_corresponding_return_at k trees (ERet C1 z C2 :: t) (p, z, n)
 .
 
@@ -352,20 +550,20 @@ Definition in_stack_at k st '(C, rts) :=
 Inductive returns_at: nat -> NMap (list call_return_tree) -> trace -> (nat * Z * nat) -> Prop :=
 | returns_at_zero: forall (trees: NMap (list call_return_tree)) C1 z C2 t p n
                  l1 cls ls1 l1',
-    trees C2 = Some (l1 ++ node (p, XERet C1 z C2, n, cls) ls1 :: l1') ->
+    trees C2 = Some (l1 ++ node (p, XERetIn z, n, cls) ls1 :: l1') ->
     returns_at 0 trees (ERet C1 z C2 :: t) (p, z, n)
 | returns_at_call: forall k (trees: NMap (list call_return_tree)) C1 P z' C2 t p z n
                     l1 p1 cls1 ls1 l1' n1 rts1
-                    l2 p2 cls2 ls2 l2' n2 rts2,
-    trees C1 = Some (l1 ++ node (p1, XECall C1 P z' C2 rts1, n1, cls1) ls1 :: l1') ->
-    trees C2 = Some (l2 ++ node (p2, XECall C1 P z' C2 rts2, n2, cls2) ls2 :: l2') ->
+                    l2 p2 cls2 ls2 l2' n2,
+    trees C1 = Some (l1 ++ node (p1, XECallOut P z' C2 rts1, n1, cls1) ls1 :: l1') ->
+    trees C2 = Some (l2 ++ node (p2, XECallIn P z', n2, cls2) ls2 :: l2') ->
     returns_at (S k) (setm (setm trees C1 ls1) C2 ls2) t (p, z, n) ->
     returns_at k trees (ECall C1 P z' C2 :: t) (p, z, n)
 | returns_at_ret: forall k (trees: NMap (list call_return_tree)) C1 z' C2 t p z n
                     l1 p1 cls1 ls1 l1' n1
                     l2 p2 cls2 ls2 l2' n2,
-    trees C1 = Some (l1 ++ node (p1, XERet C1 z' C2, n1, cls1) ls1 :: l1') ->
-    trees C2 = Some (l2 ++ node (p2, XERet C1 z' C2, n2, cls2) ls2 :: l2') ->
+    trees C1 = Some (l1 ++ node (p1, XERetOut z', n1, cls1) ls1 :: l1') ->
+    trees C2 = Some (l2 ++ node (p2, XERetIn z', n2, cls2) ls2 :: l2') ->
     returns_at k (setm (setm trees C1 ls1) C2 ls2) t (p, z, n) ->
     returns_at (S k) trees (ERet C1 z' C2 :: t) (p, z, n)
 .
@@ -379,7 +577,7 @@ Definition invariant (trees: NMap (list call_return_tree)) (st: stack) (t: trace
 
 Inductive match_states4 (intf: Program.interface) (i: nat): CallerAwareTree.state -> CallReturnTree.state -> Prop :=
 | match_states_4: forall t (trees: NMap (list caller_aware_tree)) (trees': NMap (list call_return_tree))
-                    (locs: NMap nat) (callers: NMap (list (Z * nat))) (st: stack),
+                    (locs: NMap nat) (callers: NMap (list (Procedure.id * Z * nat))) (st: stack),
     (forall C ls, trees C = Some ls ->
              trees' C = Some (List.map build_call_return_tree ls)) ->
     wb_trace (simpl_stack st) t ->
@@ -404,6 +602,65 @@ Lemma helper1: forall l1'' l2'',
 Proof. induction l1''.
        - reflexivity.
        - intros. simpl. rewrite IHl1''. rewrite <- app_assoc. reflexivity.
+Qed.
+
+Lemma det_tree_list_build_call_return_tree: forall ls,
+  determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls ->
+  determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) (List.map build_call_return_tree ls).
+Proof.
+  induction ls using tree_ind_list with (P := fun tr => determinate_tree (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) tr ->
+                                                     determinate_tree (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) (build_call_return_tree tr)).
+  - now constructor.
+  - move=> H; split; eauto.
+    ++ by move=> [].
+    ++ by move=> ? [].
+  - move=> H.
+    case: a H => [] [] p e n //= H.
+    inversion H; subst; clear H.
+    assert (DET: determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls) by now split.
+    destruct (IHls DET) as [IH1 IH2].
+    destruct p as [? []]; now constructor.
+  - move=> H.
+    simpl.
+    have: (determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls).
+    { inversion H; subst; clear H. split.
+      - move=> p p' ? ? ? ? nth nth' EQ.
+        specialize (H0 (S p) (S p') _ _ _ _ nth nth' EQ); now inversion H0.
+      - move=> tr' IN.
+        now specialize (H1 tr' (or_intror IN)). }
+    (* move=> DET; specialize (IHls0 DET n). *)
+    assert (forall ls p w x xe z l, nth_error (List.map build_call_return_tree ls) p = Some (node (x, xe, z, w) l) ->
+                              exists l',
+                                nth_error ls p = Some (node (x, xevent_to_loc_event xe, z, w) l')) as nth_build_call_return_tree_inv.
+    { clear.
+      induction ls.
+      - by move=> [].
+      - move=> [| p] w x xe z l H.
+        + simpl in H. inversion H; subst; clear H.
+          destruct a as [| [[x' y'] z'] l']; first by inversion H1.
+          destruct x' as [? [| | |]];
+            simpl in H1; inversion H1; subst; clear H1; eexists; split; simpl; eauto.
+        + specialize (IHls p w x xe z l H) as [l' EQ].
+          exists l'; eauto.
+    }
+    move=> DET.
+    split.
+    + move=> p p' [[[? ?] ?] ?] ? [[[? ?] ?] ?] ? nth nth' EQ; eauto.
+      replace (build_call_return_tree tr :: List.map build_call_return_tree ls)
+        with (List.map build_call_return_tree (tr :: ls)) in nth; last reflexivity.
+      apply nth_build_call_return_tree_inv in nth as [l EQl].
+      replace (build_call_return_tree tr :: List.map build_call_return_tree ls)
+        with (List.map build_call_return_tree (tr :: ls)) in nth'; last reflexivity.
+      apply nth_build_call_return_tree_inv in nth' as [l' EQl'].
+
+      destruct H as [UNIQ ?]. eapply UNIQ; subst; eauto; simpl; eauto.
+    + move=> tr0 [EQ | INR].
+      * subst.
+        eapply IHls.
+        inversion H. eapply H1. now left.
+      * specialize (IHls0 DET).
+        inversion IHls0.
+        eapply H1. eauto.
 Qed.
 
 Lemma sim4 (p: CallerAwareTree.prg):
@@ -440,6 +697,8 @@ Proof.
         eauto.
         rewrite Htree map_app //=.
         rewrite Htree' map_app //=.
+          by apply det_tree_list_build_call_return_tree.
+          by apply det_tree_list_build_call_return_tree.
         apply star_refl.
         reflexivity.
       * econstructor.
@@ -453,34 +712,75 @@ Proof.
            destruct k.
            ++ simpl in *.
               inv H.
-              set (f := (fun x : t (nat * event * nat * seq (Z * nat)) =>
+              set (f := (fun x : t (nat * loc_ev * nat * seq (Procedure.id * Z * nat)) =>
                            match x with
                            | leaf _ => (0, 0%Z, 0)
-                           | node (lc, ECall _ _ _ _, _, _) _ => (0, 0%Z, 0)
-                           | node (lc, ERet _ v _, i0, _) _ => (lc, v, i0)
+                           | node (lc, ERetIn v, i0, _) _ => (lc, v, i0)
+                           | node (lc, ECallIn _ _, _, _) _ | node (lc, ECallOut _ _ _, _, _) _ | node (lc, ERetOut _, _, _) _
+                                                                                                  => (0, 0%Z, 0)
                            end)).
-              { inv H0.
-                - inversion H12. move: H0 => /andP [] HC Hwb.
-                  rewrite 2!setmE in H10.
-                  assert (HnC: C0 == C2 = false).
+              { remember 0 as zero. clear Heqzero.
+                remember (setm (setm trees' C (List.map build_call_return_tree ls)) C2 (List.map build_call_return_tree ls')) as f0.
+                rename C into C1.
+                generalize dependent C1. generalize dependent C2.
+                (* revert Heqf0. *)
+                remember (p1, z0, n0) as ev. generalize dependent p1. generalize dependent z0. generalize dependent n0.
+                generalize dependent trees'. generalize dependent trees.
+                revert l1 l1' ls ls' l2 l2' DET DET'.
+                revert zs zs' zs1 zs2 UNIQ.
+                induction H0.
+                (* inv H0. *)
+                - move=> zs zs' zs1 zs2 UNIQ l0 l0' ls ls' l2 l2' DET DET' trees0 trees0' Htrees n1 z1 p2 Heqev C0
+                           SEQOK H5 H7 C3 H1 H3 H4 H6 Htree Htree' Hcomp H13 H12 Heqf0.
+
+                  inversion H13. move: H2 => /andP [] HC Hwb; subst.
+                  (* rewrite EQtrees0 in H. *)
+                  rewrite 2!setmE in H.
+                  assert (HnC: C2 == C0 = false).
                   { apply /eqP. move: HC => /eqP <-.
-                    now destruct H1. }
-                  rewrite HnC in H10. rewrite (eq_sym) in H10. rewrite HC in H10.
-                  inversion H10.
-                  apply map_eq_app in H0.
-                  destruct H0 as [l1'' [l2'' [Heqlist [Heqmap1 Heqmap2]]]].
+                    now destruct H4 as [[? ?] [? ?]]; congruence. }
+                  rewrite HnC in H. rewrite (eq_sym) in H. rewrite HC in H.
+                  inversion H.
+                  apply map_eq_app in H2.
+                  destruct H2 as [l1'' [l2'' [Heqlist [Heqmap1 Heqmap2]]]].
                   rewrite Heqlist.
                   rewrite helper1. rewrite map_app.
                   apply map_eq_cons in Heqmap2.
                   destruct Heqmap2 as [a [l3'' [Heqlist2 [Heqfun Heqmap]]]].
                   rewrite Heqlist2.
                   simpl. rewrite map_app.
-                  unfold build_call_return_tree in Heqfun. destruct a as [| [[[]]]]; first inversion Heqfun.
+                  unfold build_call_return_tree in Heqfun. destruct a as [| [[[? e]]]]; first inversion Heqfun.
                   destruct e; simpl in *. inversion Heqfun; subst.
                   inversion Heqfun; subst.
-                  simpl. eexists; eexists; reflexivity.
-                - (* This admitted result should hold by induction *)
+                  simpl. eexists; eexists. admit. admit.
+                - move=> zs zs' zs1 zs2 l0 l0' ls ls' l3 l3' DET DET' trees0 trees0' Htrees n3 z1 p4 Heqev C0
+                           SEQOK H5 H7 C3 H2 H3 H4 H6 Htree Htree' Hcomp H13 H12 Heqf0; subst.
                   admit.
+                - move=> zs zs' zs1 zs2 l0 l1'0 ls ls' l3 l2'0 DET DET' trees0 trees' H11 n3 z1 p4 Heqev C0
+                           SEQOK H5 H7 C3 H2 H3 H4 H6 Htree Htree' Hcomp H13 H12 Heqf0; subst.
+                  admit.
+
+                (* - inversion H12. move: H0 => /andP. [] HC Hwb. *)
+                (*   rewrite 2!setmE in H10. *)
+                (*   assert (HnC: C0 == C2 = false). *)
+                (*   { apply /eqP. move: HC => /eqP <-. *)
+                (*     now destruct H1. } *)
+                (*   rewrite HnC in H10. rewrite (eq_sym) in H10. rewrite HC in H10. *)
+                (*   inversion H10. *)
+                (*   apply map_eq_app in H0. *)
+                (*   destruct H0 as [l1'' [l2'' [Heqlist [Heqmap1 Heqmap2]]]]. *)
+                (*   rewrite Heqlist. *)
+                (*   rewrite helper1. rewrite map_app. *)
+                (*   apply map_eq_cons in Heqmap2. *)
+                (*   destruct Heqmap2 as [a [l3'' [Heqlist2 [Heqfun Heqmap]]]]. *)
+                (*   rewrite Heqlist2. *)
+                (*   simpl. rewrite map_app. *)
+                (*   unfold build_call_return_tree in Heqfun. destruct a as [| [[[]]]]; first inversion Heqfun. *)
+                (*   destruct e; simpl in *. inversion Heqfun; subst. *)
+                (*   inversion Heqfun; subst. *)
+                (*   simpl. eexists; eexists; reflexivity. *)
+                (* - (* This admitted result should hold by induction *) *)
+                  (* admit. *)
               }
            ++ simpl in *.
               eapply H13. eauto.
@@ -501,16 +801,18 @@ Proof.
           move: H11 => /andP [] /eqP -> _ //=. }
       rewrite Hst. rewrite Hst in H12.
       destruct (H12 0 C2 rts p' z n' Logic.eq_refl) as [rts1 [rts2 Heq_rts]].
-      { econstructor. rewrite map_app in Htree'. eauto. }
+      { econstructor. rewrite map_app in Htree'. simpl in Htree'. eauto. }
       exists 0; eexists; split.
       * left; econstructor.
         (* clear Heq_rts. *)
         econstructor; eauto.
-        now apply allowed_event_allowed_xevent.
+        (* now apply allowed_event_allowed_xevent. *)
         rewrite Htree map_app //=.
         rewrite Htree' map_app //=.
         (* Invariant:
          *)
+          by eapply det_tree_list_build_call_return_tree.
+          by eapply det_tree_list_build_call_return_tree.
         rewrite Heq_rts.
         eapply star_refl.
         reflexivity.
@@ -526,7 +828,7 @@ Proof.
            specialize (H12 (S k) C rts0 p1 z0 n0).
            edestruct H12 as [rts3 [rts4 Heq_rts0]].
            simpl. assumption.
-           econstructor. rewrite map_app in Htree. eauto. rewrite map_app in Htree'. eauto.
+           econstructor. rewrite map_app in Htree. simpl in Htree; eauto. rewrite map_app in Htree'. simpl in Htree'; eauto.
            eauto.
            eexists; eexists; eauto.
 Admitted.
@@ -539,15 +841,15 @@ Inductive match_stacks: stack -> CS.stack -> Prop :=
 
 Inductive match_states5 (intf: Program.interface) (p: TreeWithCallers.prg) (ge: TreeWithCallers.genv) (i: nat): CallReturnTree.state -> TreeWithCallers.state -> Prop :=
 | match_states_5: forall t (trees: NMap (list call_return_tree))
-                    (locs: NMap nat) (callers: NMap (list (Z * nat))) (st: stack) cs,
+                    (locs: NMap nat) (callers: NMap (list (Procedure.id * Z * nat))) (st: stack) cs,
     forall (CUR_LOC: forall C n, locs C = Some n ->
                 Memory.load (CS.s_memory cs) (location C) = Some (Int (Z.of_nat n)))
       (CUR_INT: forall C, C \in domm intf ->
           Memory.load (CS.s_memory cs) (intcall C) = some (Int 1%Z))
       (CUR_COMP: forall C, next_comp t = Some C ->
                       CS.s_component cs = C)
-      (CALLERS: forall C zs, callers C = Some zs ->
-                        unique_key zs)
+      (* (CALLERS: forall C zs, callers C = Some zs -> *)
+      (*                   unique_key zs) *)
       (STACK: match_stacks st (CS.s_stack cs))
       (MEM: forall C, C \in domm intf ->
                  exists z, Memory.load (CS.s_memory cs) (ret C) = Some (Int z))
@@ -576,7 +878,7 @@ Qed.
 Lemma compiled_expr_callers: forall (p: CallReturnTree.prg) C P call_exp ge,
     ge = globalenv (TreeWithCallers.sem (compile_call_return_tree p)) ->
     find_procedure (genv_procedures ge) C P = Some call_exp ->
-    call_exp = guard_call (callexp (get_all_handle_calls C P (CallReturnTree.prog_trees p C))).
+    call_exp = guard_call (callexp (get_all_handle_calls P (CallReturnTree.prog_trees p C))).
 Proof.
   move=> p C P call_exp ge ->.
   rewrite /find_procedure //= mapimE.
@@ -590,7 +892,7 @@ Qed.
 (* Admitted: Unicity lemma *)
 Lemma wf_trees_unique_key: forall C P p,
     TreeWithCallers.wf p ->
-    unique_key (get_all_handle_calls C P (TreeWithCallers.prog_trees p C)).
+    unique_key (get_all_handle_calls P (TreeWithCallers.prog_trees p C)).
 Proof.
   move=> C P p H.
   unfold get_all_handle_calls.
@@ -603,9 +905,9 @@ Admitted.
 (* Admitted: Well-formedness lemma *)
 Lemma find_proc_callers (p: CallReturnTree.prg): forall C P,
     find_procedure (mapim
-                      (fun (C : nat) (Ciface : Component.interface) => mkfmapf ((comp_call_handle C)^~ (CallReturnTree.prog_trees p C))
+                      (fun (C : nat) (Ciface : Component.interface) => mkfmapf ((comp_call_handle)^~ (CallReturnTree.prog_trees p C))
                                                                           (if C == Component.main then (Procedure.main |: Component.export Ciface)%fset else Component.export Ciface)) (CallReturnTree.prog_interface p)) C P =
-    Some (guard_call (callexp (get_all_handle_calls C P (CallReturnTree.prog_trees p C)))).
+    Some (guard_call (callexp (get_all_handle_calls P (CallReturnTree.prog_trees p C)))).
 Proof.
 Admitted.
 
@@ -634,10 +936,15 @@ Proof.
         rewrite ComponentMemory.load_prealloc //=.
       * move=> C H. simpl.
         destruct H0. destruct H1. destruct H2. congruence.
-      * unfold compile_call_return_tree. simpl.
-        (* Unicity result: this holds because in that case, zs is a subset of all the caller information,
-         which satisfy unicity by [wf_trees_unique_key] *)
-        admit.
+      (* * unfold compile_call_return_tree. simpl. *)
+      (*   (* Unicity result: this holds because in that case, zs is a subset of all the caller information, *)
+      (*    which satisfy unicity by [wf_trees_unique_key] *) *)
+      (*   move=> C zs H. *)
+      (*   unfold TreeWithCallers.initial_callers in H. *)
+      (*   unfold CallReturnTree.initial_callers in H. rewrite mapimE in H. *)
+      (*   destruct (CallReturnTree.prog_trees p C); simpl in H; last by congruence. *)
+      (*   inversion H as [EQ]. unfold DefSimLanguages.CallReturnTree.collect_callers_initial. *)
+      (*   admit. *)
       * constructor.
       * move=> C H.
         simpl. unfold TreeWithCallers.initial_memory.
@@ -666,18 +973,22 @@ Proof.
       * left; econstructor.
         -- simpl in *; subst.
            eapply TreeWithCallers.step_call with
-               (call_exp := guard_call (callexp (get_all_handle_calls C2 P (CallReturnTree.prog_trees p C2))));
+               (call_exp := guard_call (callexp (get_all_handle_calls P (CallReturnTree.prog_trees p C2))));
                             eauto.
            eapply find_proc_callers.
         -- eapply star_trans.
            ++ assert (exists ts, TreeWithCallers.prog_trees p' C2 = Some ts) as [ts TREES].
               { apply /dommP. rewrite -(TreeWithCallers.wfprog_defined_trees WF).
                 now destruct H1. }
-              eapply call_handling_expression_correct. eauto.
+              eapply call_handling_expression_correct with (trs := (l1 ++ node (p0, XECallIn P z, n, zs) ls :: l2)). eauto.
+              eexists; eexists. simpl.
+              admit.
+
               eapply wf_trees_unique_key; eauto.
-              eapply CALLERS. eauto. eauto.
+              eapply UNIQ. admit.
+              (* eapply CALLERS. eauto. admit. *)
               (* Admitted: Unicity lemma that again relates to subtrees *)
-              eapply callers_in_subtrees; admit.
+              (* eapply callers_in_subtrees; admit. *)
               simpl; eauto. simpl; eauto.
               erewrite (Memory.load_after_store _ _ _ _ _ Hm'). simpl.
               rewrite helper2. eauto. move=> CONTRA; move: CONTRA H1 ->; now case.
@@ -727,9 +1038,9 @@ Proof.
         -- move=> C H. simpl in *.
            destruct t0; first inversion H.
            inv H. inv SEQOK. reflexivity.
-        -- move=> C zs0 H.
-           (* Admitted: unicity result *)
-           admit.
+        (* -- move=> C zs0 H. *)
+        (*    (* Admitted: unicity result *) *)
+        (*    admit. *)
         -- simpl in *.
            econstructor. destruct H1 as [[] ]; congruence.
         -- move=> C H.
@@ -749,7 +1060,7 @@ Proof.
     + (* Return case *)
       destruct cs as [? ? ? ? ? ?].
       specialize (CUR_COMP C1 Logic.eq_refl).
-      destruct (Memory.store_after_load _ (C1, Block.local, 0%Z) (Int (Z.of_nat p0)) (Int (Z.of_nat n)) (CUR_LOC _ _ H5)) as [m' Hm'].
+      destruct (Memory.store_after_load _ (C1, Block.local, 0%Z) (Int (Z.of_nat p0)) (Int (Z.of_nat n)) (CUR_LOC _ _ H6)) as [m' Hm'].
       destruct (MEM C2) as [oldz Holdz]. now destruct H1.
       destruct (Memory.store_after_load m' (ret C2)  (Int oldz) (Int z)) as [m'' Hm''].
       rewrite (Memory.load_after_store _ _ _ _ _ Hm').
@@ -802,8 +1113,8 @@ Proof.
            eapply CUR_INT. eauto.
         -- move=> C H. simpl in *.
            destruct t0; inversion H. congruence.
-        -- (* Admitted: unicity result *)
-          admit.
+        (* -- (* Admitted: unicity result *) *)
+        (*   admit. *)
         -- eauto.
         -- move=> C H.
            destruct (C2 == C) eqn:Heq.
@@ -967,19 +1278,19 @@ End Src.
 Lemma find_procedure_find (p: TreeWithCallers.prg):
   forall C P,
     find_procedure (genv_procedures (prepare_global_env (compile_tree_with_callers p))) C P =
-    Some (E_seq (comp_call_handle C P (TreeWithCallers.prog_trees p C))
+    Some (E_seq (comp_call_handle P (TreeWithCallers.prog_trees p C))
                 (build_event_expression C P (TreeWithCallers.prog_trees p C))).
 Admitted.
 
 Lemma find_proc_some (p: TreeWithCallers.prg):
   forall C P call_exp,
   find_procedure (TreeWithCallers.prog_procedures p) C P = Some call_exp ->
-  call_exp = comp_call_handle C P (TreeWithCallers.prog_trees p C).
+  call_exp = comp_call_handle P (TreeWithCallers.prog_trees p C).
 Admitted.
 
 Lemma find_main (p: TreeWithCallers.prg):
   prog_main (compile_tree_with_callers p) =
-  Some (E_seq (comp_call_handle Component.main Procedure.main (TreeWithCallers.prog_trees p Component.main))
+  Some (E_seq (comp_call_handle Procedure.main (TreeWithCallers.prog_trees p Component.main))
               (build_event_expression Component.main Procedure.main (TreeWithCallers.prog_trees p Component.main))).
 Admitted.
 
@@ -992,11 +1303,12 @@ Admitted.
 
 
 (* Admitted, but we are very close to completing it. The goals are all admitted, but  *)
-Lemma sim6 (p: TreeWithCallers.prg):
+Lemma sim6 (p: TreeWithCallers.prg) (Hwf: TreeWithCallers.wf p):
   forward_simulation (TreeWithCallers.sem p) (Src.sem (compile_tree_with_callers p)).
 Proof.
   pose (p_compiled := compile_tree_with_callers p).
   pose (ge := globalenv (CS.sem p_compiled)).
+  assert (WF: well_formed_program (compile_tree_with_callers p)) by now eapply wf_compile.
   fwd_sim (match_states6 p ge).
   - move=> s1 H.
     exists 0; exists (CS.initial_machine_state (compile_tree_with_callers p)).
@@ -1016,27 +1328,27 @@ Proof.
                                           (Component.main, Block.local, 1%Z) (Int 0) (Int 1)) as [m'' MEM''].
         eapply initial_buffers. simpl.
         eexists; eexists; split.
-        admit. admit.
-        (* -- left. *)
-        (*    eapply star_plus_trans. *)
-        (*    do 10 take_step. eauto. eapply initial_buffers. *)
-        (*    do 11 take_step. eauto. simpl. eauto. *)
-        (*    take_step. *)
-        (*    eapply build_event_expression_correct. simpl; eauto. simpl. *)
-        (*    (* Well-formedness result *) *)
-        (*    admit. *)
-        (*    reflexivity. simpl in *. *)
-        (*    (* Idem *) *)
-        (*    admit. *)
-        (*    simpl. reflexivity. *)
-        (*    eapply call_event_correct. *)
-        (*    simpl; eauto. *)
-        (*    (* Well-formedness result: the execution always starts in Main *) *)
-        (*    admit. *)
-        (*    simpl; eauto. admit. *)
-        (*    eapply find_procedure_find. *)
-        (*    simpl. admit. *)
-        (*    eauto. reflexivity. *)
+        -- left.
+           eapply star_plus_trans.
+           do 10 take_step. eauto. eapply initial_buffers.
+           do 11 take_step. eauto. simpl. eauto.
+           eapply build_event_expression_correct. simpl; eauto. simpl; admit.
+           (* (* Well-formedness result *) *)
+           (* admit. *)
+           (* reflexivity. simpl in *. *)
+           (* (* Idem *) *)
+           (* admit. *)
+           (* simpl. reflexivity. *)
+           (* eapply call_event_correct. *)
+           (* simpl; eauto. *)
+           (* Well-formedness result: the execution always starts in Main *)
+           admit.
+           simpl; eauto. admit.
+           (* eapply find_procedure_find. *)
+           (* simpl. admit. *)
+           (* eauto. admit. *)
+           reflexivity.
+        -- admit.
         (* -- simpl in *. *)
         (*    eapply match_states_silent; simpl; eauto. *)
         (*    econstructor; eauto. now destruct H1 as [[] []]; congruence. *)
@@ -1049,11 +1361,12 @@ Proof.
         -- left.
            eapply star_plus_trans.
            (* Using this lemma requires a unicity result *)
-           { eapply build_event_expression_correct with (xe := XECall C P z C2 rts1). simpl.
+           { eapply build_event_expression_correct with (xe := XECallOut P z C2 rts1). simpl.
              assert (TreeWithCallers.prog_trees p C = Some []) by admit.
              rewrite H. reflexivity.
-             admit. reflexivity. reflexivity.
-             eauto. eauto. }
+             admit. reflexivity. }
+           (* reflexivity. *)
+           (*   eauto. eauto. } *)
            simpl.
            eapply plus_star_trans.
            { eapply call_event_correct; simpl; eauto.

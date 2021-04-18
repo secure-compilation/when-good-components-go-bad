@@ -251,6 +251,44 @@ Section Numbering.
       (node (a, n) ls', n')
     end.
 
+  Fixpoint give_num_list {A: Type} (trs: seq (t A)) (n: nat): seq (t (A * nat)) * nat :=
+    match trs with
+    | [] => ([], n)
+    | tr :: ls' =>
+      let (tr', n') := give_num_tree tr n in
+      let (ls'', n'') := give_num_list ls' n' in
+      (tr' :: ls'', n'')
+    end.
+
+  Lemma give_num_tree_list {A: Type}: forall (tr: t A) n,
+      give_num_tree tr n = match tr with
+                           | leaf _ => (leaf _, n)
+                           | node a ls =>
+                             let (ls', n') := give_num_list ls (S n) in
+                             (node (a, n) ls', n')
+                           end.
+  Proof.
+    induction tr using tree_ind' with (Q := fun trs => forall n, give_num_list trs n =
+                                                         let fix give_num_list (ls : list (t A)) (n : nat) : list (t (A * nat)) * nat :=
+                                                             match ls with
+                                                             | [] => ([], n)
+                                                             | tr :: ls' =>
+                                                               let (tr', n') := give_num_tree tr n in
+                                                               let (ls'', n'') := give_num_list ls' n' in
+                                                               (tr' :: ls'', n'')
+                                                             end in give_num_list trs n).
+    - eauto.
+    - eauto.
+    - simpl. intros n. rewrite (IHtr (S n)). simpl. eauto.
+    - move=> n. simpl.
+      rewrite IHtr; simpl; eauto.
+      destruct (match tr with
+                | leaf _ => (leaf (A * nat), n)
+                | node a ls0 => let (ls', n') := give_num_list ls0 (S n) in (node (a, n) ls', n')
+                end) as [tr' n'].
+      rewrite IHtr0; simpl; eauto.
+  Qed.
+
   Lemma give_num_tree_destruct {A: Type}: forall (tr: t A) (n: nat),
       exists tr' n',
         give_num_tree tr n = (tr', n').
@@ -279,6 +317,9 @@ Section Numbering.
 
   Definition give_num {A : Type} (tr : t A) :=
     fst (give_num_tree tr 0).
+
+  Definition give_nums {A: Type} (trs: seq (t A)) :=
+    fst (give_num_list trs 0).
 
   Instance showUnit : Show unit :=
     { show _ := "tt"%string }.
@@ -618,22 +659,40 @@ Section Unique.
   Context {A: Type}.
   Context (R: A -> A -> Prop).
 
-  Definition unique_list (ls: seq (t A)) :=
-    forall (t1 t2: t A),
-      In t1 ls ->
-      In t2 ls ->
-      lift_option R (content_of t1) (content_of t2) ->
-      lift_rel R t1 t2.
+  (* Definition unique_list (ls: seq (t A)) := *)
+  (*   forall (t1 t2: t A), *)
+  (*     In t1 ls -> *)
+  (*     In t2 ls -> *)
+  (*     lift_option R (content_of t1) (content_of t2) -> *)
+  (*     lift_rel R t1 t2. *)
+
+  (* Inductive determinate_tree: t A -> Prop := *)
+  (* | determinate_leaf: determinate_tree (leaf _) *)
+  (* | determinate_node: forall a ls, *)
+  (*     unique_list ls -> *)
+  (*     (forall tr, In tr ls -> determinate_tree tr) -> *)
+  (*       determinate_tree (node a ls) *)
+  (* . *)
+
+  (* Definition determinate_tree_list (ls: seq (t A)): Prop := *)
+  (*   unique_list ls /\ forall tr, In tr ls -> determinate_tree tr. *)
+
+
+  Definition unique_tree_list (ls: seq (t A)) :=
+    forall p p' a1 ls1 a2 ls2,
+      List.nth_error ls p = Some (node a1 ls1) ->
+      List.nth_error ls p' = Some (node a2 ls2) ->
+      R a1 a2 ->
+      p = p'.
 
   Inductive determinate_tree: t A -> Prop :=
   | determinate_leaf: determinate_tree (leaf _)
   | determinate_node: forall a ls,
-      unique_list ls ->
+      unique_tree_list ls ->
       (forall tr, In tr ls -> determinate_tree tr) ->
-        determinate_tree (node a ls)
+      determinate_tree (node a ls)
   .
 
   Definition determinate_tree_list (ls: seq (t A)): Prop :=
-    unique_list ls /\ forall tr, In tr ls -> determinate_tree tr.
-
+    unique_tree_list ls /\ forall tr, In tr ls -> determinate_tree tr.
 End Unique.

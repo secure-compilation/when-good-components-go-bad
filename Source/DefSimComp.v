@@ -31,101 +31,106 @@ Set Bullet Behavior "Strict Subproofs".
 
 
 
-Fixpoint give_nums (trs: list tree) (n: nat) :=
-  match trs with
-  | [] => []
-  | tr :: trs' =>
-    let (tr_num, n') := Tree.give_num_tree tr n in
-    tr_num :: give_nums trs' (S n')
-  end.
+(* Fixpoint give_nums (trs: list tree) (n: nat) := *)
+(*   match trs with *)
+(*   | [] => [] *)
+(*   | tr :: trs' => *)
+(*     let (tr_num, n') := Tree.give_num_tree tr n in *)
+(*     tr_num :: give_nums trs' (S n') *)
+(*   end. *)
 
 (* Admitted: this lemma states a property of the function that assigns locations to
    each node. *)
-Lemma give_nums_app_comm: forall (l1 l2: list tree) (e: event) (ls: list tree) (n: nat),
+Lemma give_nums_app_comm: forall (l1 l2: list tree) (e: loc_ev) (ls: list tree) (n: nat),
     exists (n': nat) (l1' l2': list numbered_tree),
-      give_nums (l1 ++ node e ls :: l2) n = l1' ++ node (e, n') (give_nums ls (S n')) :: l2'.
+      (give_num_list (l1 ++ node e ls :: l2) n).1 = l1' ++ node (e, n') (give_num_list ls (S n')).1 :: l2'.
 Proof.
-  induction l1.
+  induction l1 using tree_ind_list with (P := fun tr => forall n e ls, tr = node e ls ->
+                                                               (give_num_tree tr n).1 = node (e, n) (give_num_list ls n).1).
+  - by [].
   - move=> l2 e ls n.
-    destruct (give_num_tree_destruct (node e ls) n) as [tr [n' H1]].
-    eexists; exists []; exists (give_nums l2 (S n')).
-    do 2 erewrite app_nil_l.
-    Arguments give_num_tree : simpl never.
-    simpl.
-    Arguments give_num_tree : simpl nomatch.
-    rewrite H1.
-    assert (exists n', give_num_tree (node e ls) n = (node (e, n) (give_nums ls (S n)), n')).
-    { clear.
-      revert e n.
-      induction ls.
-      - move=> e n.
-        exists (S n). reflexivity.
-      - move=> e n.
-        unfold give_num_tree.
-        fold (give_num_tree a (S n)).
-        destruct a.
-        + simpl.
-          fold (give_num_tree (A := event)).
-          admit.
-        + simpl. admit.
-    }
-    destruct H as [n'' Heq].
-    rewrite Heq in H1.
-    now inversion H1.
-  - move=> l2 e ls n.
-    simpl.
-    destruct (give_num_tree_destruct a n) as [a' [n' H1]].
-    specialize (IHl1 l2 e ls (S n')) as [n'' [l1' [l2' H2]]].
-    rewrite H1 H2.
-    now exists n'', (a' :: l1'), l2'.
+    admit.
+  - admit.
+  - admit.
 Admitted.
 
-Lemma give_nums_determinate: forall ls n,
-  determinate_tree_list eq ls ->
-  determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) (give_nums ls n).
+Lemma give_nums_determinate {A: Type}: forall (ls: seq (t A)) (n: nat),
+    determinate_tree_list eq ls ->
+    determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) (give_num_list ls n).1.
 Proof.
-  unfold determinate_tree_list; induction ls.
-  - move=> n [H1 H2] //=.
-    split.
-    + unfold unique_list; intros; contradiction.
-    + intros; contradiction.
-  - move=> n [H1 H2].
-    assert (UNIQ1: unique_list eq ls).
-    { clear -H1.
-      unfold unique_list in *. move=> t1 t2 H H0 H2.
-      apply H1. right; eauto. right; eauto. eauto.
+  induction ls using tree_ind_list with (P := fun tr => determinate_tree eq tr -> forall n,
+                                                     determinate_tree (fun '(e1, _) '(e2, _) => e1 = e2) (give_num_tree tr n).1).
+  - now constructor.
+  - move=> H n; split; eauto.
+    ++ by move=> [].
+    ++ by move=> ? [].
+  - move=> H n.
+    (* case: a H => e n //= H. *)
+    inversion H; subst; clear H.
+    assert (DET: determinate_tree_list eq ls) by now split.
+    destruct (IHls n DET) as [IH1 IH2].
+    assert (H: (give_num_tree (node a ls) n).1 = node (a, n) (give_num_list ls n).1) by admit.
+    rewrite H.
+    now constructor.
+  - move=> n H.
+    simpl.
+    have: (determinate_tree_list eq ls).
+    { inversion H; subst; clear H. split.
+      - move=> p p' ? ? ? ? nth nth' EQ.
+        specialize (H0 (S p) (S p') _ _ _ _ nth nth' EQ); now inversion H0.
+      - move=> tr' IN.
+        now specialize (H1 tr' (or_intror IN)). }
+    (* move=> DET; specialize (IHls0 DET n). *)
+    assert (forall ls n n' p (e: A) l, nth_error (give_num_list ls n).1 p = Some (node (e, n') l) ->
+                              exists l',
+                                nth_error ls p = Some (node e l')) as nth_give_num_inv.
+    { clear.
+      induction ls; intros n n'.
+      - by move=> [].
+      - move=> [| p] e l H.
+        + simpl in H.
+          destruct a.
+          * simpl in H. destruct (give_num_list ls n). simpl in H; inversion H.
+          * admit.
+          (*   rewrite EQ in H. *)
+
+          (*   replace  (give_num_list l0 (S n)) in H. *)
+          (* destruct ((let (tr', n') := give_num_tree a n in let (ls'', n'') := give_num_list ls n' in (tr' :: ls'', n'')).1); *)
+          (*   first by inversion H. *)
+          (* (* destruct a as [| [[x' y'] z'] l']; first by inversion H1. *) *)
+          (* simpl in H1; inversion H1; subst; clear H1; eexists. split; simpl; eauto. *)
+        + admit.
+          (* specialize (IHls n n' _ e l H) as [l' [EQ1 EQ2]]. *)
+          (* exists l'; split; eauto. *)
     }
-    assert (UNIQ2: forall tr, In tr ls -> determinate_tree eq tr).
-    { clear -H2.
-      move=> tr H. eapply H2.
-      right; eauto.
-    }
-    assert (exists a' n', give_nums (a :: ls) n = a' :: give_nums ls n' /\
-                     content_of a = match (content_of a') with
-                                    | None => None
-                                    | Some (x, _) => Some x
-                                    end)
-      as [a' [n' [EQ CONT]]] by admit.
-    rewrite EQ.
-    specialize (IHls n' (conj UNIQ1 UNIQ2)) as [IH1 IH2].
+    move=> DET.
     split.
-    + admit.
-    + move=> tr [H | H].
+    + move=> p p' [? ?] ? [? ?] ? nth nth' EQ; eauto.
+      replace (let (tr', n') := give_num_tree tr n in let (ls'', n'') := give_num_list ls n' in (tr' :: ls'', n''))
+              with (give_num_list (tr :: ls) n) in nth; last reflexivity.
+      apply nth_give_num_inv in nth as [l EQl].
+      replace (let (tr', n') := give_num_tree tr n in let (ls'', n'') := give_num_list ls n' in (tr' :: ls'', n''))
+              with (give_num_list (tr :: ls) n) in nth'; last reflexivity.
+      apply nth_give_num_inv in nth' as [l' EQl'].
+      destruct H as [UNIQ ?]. eapply UNIQ; simpl; eauto.
+    + destruct (let (tr', n') := give_num_tree tr n in let (ls'', n'') := give_num_list ls n' in (tr' :: ls'', n'')) eqn:?.
+      simpl.
+      destruct l; first by [].
+      move=> tr0 [EQ | INR].
       * subst.
-        clear -H2 CONT.
-        specialize (H2 a (or_introl Logic.eq_refl)).
-        destruct a; destruct tr as [| [] ]; simpl in *;
-          try (now congruence);
-          try (now constructor).
-        inversion CONT; subst.
         admit.
-      * eauto.
+        (* eapply IHls. *)
+        (* inversion H. eapply H1. now left. *)
+      * specialize (IHls0 n DET).
+        inversion IHls0.
+        eapply H1. admit.
 Admitted.
+
 
 
 Definition compile_tree (p: Tree.prg): NumberedTree.prg :=
   {| NumberedTree.prog_interface := Tree.prog_interface p;
-     NumberedTree.prog_trees := mapm (fun x => give_nums x 0) (Tree.prog_trees p) |}.
+     NumberedTree.prog_trees := mapm (fun x => give_nums x) (Tree.prog_trees p) |}.
 
 Fixpoint add_parent_loc (tr: numbered_tree) (n: nat): parent_aware_tree :=
   match tr with
@@ -137,13 +142,13 @@ Definition compile_numbered_tree (p: NumberedTree.prg): ParentAwareTree.prg :=
   {| ParentAwareTree.prog_interface := NumberedTree.prog_interface p;
      ParentAwareTree.prog_trees := mapm (List.map (fun x => add_parent_loc x 0)) (NumberedTree.prog_trees p) |}.
 
-Definition call_information (C: Component.id) (tr: parent_aware_tree): option (Z * nat) :=
+Definition call_information (C: Component.id) (tr: parent_aware_tree): option (Procedure.id * Z * nat) :=
   match tr with
-  | node (_, ECall _ _ arg C', n) _ => if C == C' then Some (arg, n) else None
+  | node (_, ECallIn P arg, n) _ => Some (P, arg, n)
   | _ => None
   end.
 
-Definition collect_callers (C: Component.id) (ls: list parent_aware_tree): list (Z * nat) :=
+Definition collect_callers (C: Component.id) (ls: list parent_aware_tree): list (Procedure.id * Z * nat) :=
   List.fold_right (fun tr l => match tr with | None => l | Some x => x :: l end) [] (List.map (call_information C) ls).
 
 Lemma collect_callers_cons: forall C t ls2, collect_callers C (t :: ls2) = collect_callers C [t] ++ collect_callers C ls2.
@@ -181,6 +186,79 @@ Definition compile_parent_aware_tree (p: ParentAwareTree.prg): CallerAwareTree.p
   {| CallerAwareTree.prog_interface := ParentAwareTree.prog_interface p;
      CallerAwareTree.prog_trees := mapim (fun C => List.map (add_caller C)) (ParentAwareTree.prog_trees p) |}.
 
+Lemma det_tree_list_add_caller: forall ls,
+  determinate_tree_list (fun '(_, e1, _) '(_, e2, _) => e1 = e2) ls ->
+  forall Ccaller,
+    determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2)
+                          (List.map (add_caller Ccaller) ls).
+Proof.
+  induction ls using tree_ind_list with (P := fun tr => determinate_tree (fun '(_, e1, _) '(_, e2, _) => e1 = e2) tr ->
+                                                     forall C, determinate_tree (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) (add_caller C tr)).
+  - now constructor.
+  - move=> H C; split; eauto.
+    ++ by move=> [].
+    ++ by move=> ? [].
+  - move=> H C.
+    case: a H => [] [] p e n //= H.
+    inversion H; subst; clear H.
+    assert (DET: determinate_tree_list (fun '(_, e1, _) '(_, e2, _) => e1 = e2) ls) by now split.
+    destruct (IHls DET C) as [IH1 IH2].
+    now constructor.
+  - move=> H C.
+    simpl.
+    have: (determinate_tree_list (fun '(_, e1, _) '(_, e2, _) => e1 = e2) ls).
+    { inversion H; subst; clear H. split.
+      - move=> p p' ? ? ? ? nth nth' EQ.
+        specialize (H0 (S p) (S p') _ _ _ _ nth nth' EQ); now inversion H0.
+      - move=> tr' IN.
+        now specialize (H1 tr' (or_intror IN)). }
+    (* move=> DET; specialize (IHls0 DET n). *)
+    assert (forall ls p w x y z l, nth_error (List.map (add_caller C) ls) p = Some (node (x, y, z, w) l) ->
+                              exists l',
+                                nth_error ls p = Some (node (x, y, z) l') /\ l = List.map (add_caller C) l') as nth_add_caller_inv.
+    { clear.
+      induction ls.
+      - by move=> [].
+      - move=> [| p] w x y z l H.
+        + simpl in H. inversion H; subst; clear H.
+          destruct a as [| [[x' y'] z'] l']; first by inversion H1.
+          simpl in H1; inversion H1; subst; clear H1; eexists; split; simpl; eauto.
+        + specialize (IHls p w x y z l H) as [l' [EQ1 EQ2]].
+          exists l'; split; eauto.
+    }
+    move=> DET.
+    split.
+    + move=> p p' [[[? ?] ?] ?] ? [[[? ?] ?] ?] ? nth nth' EQ; eauto.
+      replace (add_caller C tr :: List.map (add_caller C) ls)
+        with (List.map (add_caller C) (tr :: ls)) in nth; last reflexivity.
+      apply nth_add_caller_inv in nth as [l [EQl _]].
+      replace (add_caller C tr :: List.map (add_caller C) ls)
+        with (List.map (add_caller C) (tr :: ls)) in nth'; last reflexivity.
+      apply nth_add_caller_inv in nth' as [l' [EQl' _]].
+
+      destruct H as [UNIQ ?]. eapply UNIQ; simpl; eauto.
+    + move=> tr0 [EQ | INR].
+      * subst.
+        eapply IHls.
+        inversion H. eapply H1. now left.
+      * specialize (IHls0 DET C).
+        inversion IHls0.
+        eapply H1. eauto.
+Qed.
+
+Lemma compile_parent_aware_tree_wf (p: ParentAwareTree.prg) (WF: ParentAwareTree.wf p):
+  CallerAwareTree.wf (compile_parent_aware_tree p).
+Proof.
+  destruct WF.
+  constructor; eauto.
+  - rewrite domm_mapi //=.
+  - move=> C ts //=.
+    move: (determinacy C).
+    rewrite mapimE; case: (ParentAwareTree.prog_trees p C) => //= a /(_ a Logic.eq_refl) DET [] <-.
+    now eapply det_tree_list_add_caller.
+Qed.
+
+
 Fixpoint get_corresp_returns_tree (stack: nat) (tr: caller_aware_tree) : list caller_aware_tree :=
   let fix get_corresp_returns_list (stack: nat) (ls : list caller_aware_tree) :=
       match ls with
@@ -189,30 +267,39 @@ Fixpoint get_corresp_returns_tree (stack: nat) (tr: caller_aware_tree) : list ca
       end
   in
   match stack, tr with
-  | 1, node (_, ERet _ _ _, _, _) _ => [tr]
-  | S stack', node (_, ERet _ _ _, _, _) ls => get_corresp_returns_list stack' ls
-  | _, node (_, ECall _ _ _ _, _, _) ls => get_corresp_returns_list (S stack) ls
+  | 1, node (_, ERetIn _, _, _) _ => [tr]
+  | 1, node (_, ERetOut _, _, _) _ => [tr]
+  | S stack', node (_, ERetIn _, _, _) ls => get_corresp_returns_list stack' ls
+  | S stack', node (_, ERetOut _, _, _) ls => get_corresp_returns_list stack' ls
+  | _, node (_, ECallIn _ _, _, _) ls => get_corresp_returns_list (S stack) ls
+  | _, node (_, ECallOut _ _ _, _, _) ls => get_corresp_returns_list (S stack) ls
   | _, _ => []
   end.
 
 Definition get_corresp_returns (tr : caller_aware_tree) : list (nat * Z * nat) :=
   match tr with
   | leaf _ => []
-  | node (_, ECall _ _ _ _, _, _) _ => List.map (fun x => match x with
-                                                   | node (lc, ERet _ v _, i, _) _ => (lc, v, i)
+  | node (_, ECallOut _ _ _, _, _) _ => List.map (fun x => match x with
+                                                   | node (lc, ERetIn v, i, _) _ => (lc, v, i)
                                                    | _ => (0, 0%Z, 0) end)
                                             (get_corresp_returns_tree 0 tr)
-  | node (_, ERet _ _ _, _, _) _ => []
+  | node (_, ERetIn _, _, _) _ => []
+  | node (_, ERetOut _, _, _) _ => []
+  | node (_, ECallIn _ _, _, _) _ => []
   end.
 
 Fixpoint build_call_return_tree (tr: caller_aware_tree): call_return_tree :=
   let zs := get_corresp_returns tr in
   match tr with
   | leaf _ => leaf _
-  | node (n, ECall C0 P' z C', i, cls) ls =>
-    node (n, XECall C0 P' z C' zs, i, cls) (List.map build_call_return_tree ls)
-  | node (n, ERet C0 ret_val C', i, cls) ls =>
-    node (n, XERet C0 ret_val C', i, cls) (List.map build_call_return_tree ls)
+  | node (n, ECallOut P' z C', i, cls) ls =>
+    node (n, XECallOut P' z C' zs, i, cls) (List.map build_call_return_tree ls)
+  | node (n, ECallIn P' z, i, cls) ls =>
+    node (n, XECallIn P' z, i, cls) (List.map build_call_return_tree ls)
+  | node (n, ERetIn ret_val, i, cls) ls =>
+    node (n, XERetIn ret_val, i, cls) (List.map build_call_return_tree ls)
+  | node (n, ERetOut ret_val, i, cls) ls =>
+    node (n, XERetOut ret_val, i, cls) (List.map build_call_return_tree ls)
   end.
 
 Definition compile_caller_aware_tree (p: CallerAwareTree.prg): CallReturnTree.prg :=
@@ -236,38 +323,63 @@ Proof.
       rewrite /DefSimLanguages.CallerAwareTree.collect_callers_initial /DefSimLanguages.CallReturnTree.collect_callers_initial.
       rewrite /CallerAwareTree.call_information_initial /CallReturnTree.call_information_initial.
       simpl. intros. inversion IHl. simpl. rewrite H0. simpl. clear IHl H0.
-      destruct a as [| [[[a0 []] a2] a3] a4]; simpl. reflexivity.
-      destruct (x == i1) eqn:Heq; rewrite Heq. reflexivity. reflexivity. reflexivity.
+      destruct a as [| [[[a0 []] a2] a3] a4]; simpl; reflexivity.
   - rewrite mapimE mapimE mapmE. rewrite Heq. simpl.
     reflexivity.
 Qed.
 
-Definition call_handling_info (x: (nat * xevent * nat * seq (Z * nat))) :=
+Definition call_handling_info (x: (nat * xevent * nat * seq (Procedure.id * Z * nat))) :=
   match x with
   | (_, _, n, cls) => (n, cls)
   end.
 
-Definition get_all_handle_calls C P ots :=
+(* Definition node_of P (x:(nat * xevent * nat * seq (Procedure.id * Z * nat))) := *)
+(*   match x with *)
+(*   | (p, xe, n, cls) => *)
+(*     match xe with *)
+(*     | XECallIn P' _ => (P == P') *)
+(*     | _ => false *)
+(*     end *)
+(*   end. *)
+
+
+
+(* Definition get_all_handle_calls P ots := *)
+(*   match ots with *)
+(*   | None => [] *)
+(*   | Some ts => *)
+(*     let all_nodes := List.concat (List.map tree_to_list ts) in *)
+(*     List.map call_handling_info (List.filter (node_of P) all_nodes) *)
+(*   end. *)
+
+Definition call_of P (x:((Procedure.id * Z * nat))) :=
+  match x with
+  | (P', _, _) => P == P'
+  end.
+
+
+
+Definition get_all_handle_calls (P: Procedure.id) ots :=
   match ots with
   | None => []
   | Some ts =>
     let all_nodes := List.concat (List.map tree_to_list ts) in
-    List.map call_handling_info (List.filter (node_of C P) all_nodes)
+    List.map (fun '(n, ls) => (n, List.filter (call_of P) ls)) (List.map call_handling_info all_nodes)
   end.
+Definition switch_clause n e_then e_else :=
+    let one := E_val (Int 1%Z) in
+    E_if (E_binop Eq (E_deref E_local) (E_val (Int n)))
+         (E_seq (E_assign E_local (E_binop Add (E_deref E_local) one)) e_then)
+         e_else.
 
-(* Definition switch_clause n e_then e_else := *)
-(*     let one := E_val (Int 1%Z) in *)
-(*     E_if (E_binop Eq (E_deref E_local) (E_val (Int n))) *)
-(*          (E_seq (E_assign E_local (E_binop Add (E_deref E_local) one)) e_then) *)
-(*          e_else. *)
 
-
-Definition switch_clause_arg '(z, n) e_else :=
+Definition switch_clause_arg (cl: Procedure.id * Z * nat) e_else :=
+  let '(P, z, n) := cl in
   E_if (E_binop Eq ARG (E_val (Int z)))
        (E_assign LOCATION_p (E_val (Int (Z.of_nat n))))
        e_else.
 
-Definition switch_arg (cls: seq (Z * nat)): expr :=
+Definition switch_arg (cls: seq (Procedure.id * Z * nat)): expr :=
   fold_right switch_clause_arg E_exit cls.
 
 (* Definition switch_clause_call p e_then e_else := *)
@@ -275,7 +387,7 @@ Definition switch_arg (cls: seq (Z * nat)): expr :=
 (*        e_then *)
 (*        e_else. *)
 
-Definition call_inner (clss: seq (nat * seq (Z * nat))): seq (nat * expr) :=
+Definition call_inner (clss: seq (nat * seq (Procedure.id * Z * nat))): seq (nat * expr) :=
   List.map (fun '(p, cls) => (p, switch_arg cls)) clss.
 
 Definition switch_clause_call '(p, exp) e_else :=
@@ -286,7 +398,7 @@ Definition switch_clause_call '(p, exp) e_else :=
 Definition switch_call (clss: seq (nat * expr)) :=
   fold_right switch_clause_call E_exit clss.
 
-Definition callexp (clss: seq (nat * seq (Z * nat))): expr :=
+Definition callexp (clss: seq (nat * seq (Procedure.id * Z * nat))): expr :=
     switch_call (call_inner clss).
 
 Definition guard_call (e: expr) :=
@@ -295,10 +407,11 @@ Definition guard_call (e: expr) :=
               (E_val (Int 0%Z)))
         (E_assign (INTCALL_p) (E_val (Int 1%Z))).
 
-Definition comp_call_handle C P trs :=
-  guard_call (callexp (get_all_handle_calls C P trs)).
+Definition comp_call_handle P trs :=
+  guard_call (callexp (get_all_handle_calls P trs)).
 
-Definition callers (gs: trace * NMap (seq call_return_tree) * NMap nat * NMap (seq (Z * nat)) * stack): NMap (seq (Z * nat)) :=
+Definition callers (gs: trace * NMap (seq call_return_tree) * NMap nat * NMap (seq (Procedure.id * Z * nat)) * stack):
+  NMap (seq (Procedure.id * Z * nat)) :=
   match gs with
   | (_, _, _, cls, _) => cls
   end.
@@ -312,13 +425,15 @@ Ltac take_step :=
 
 Lemma call_handling_expression_correct: forall ge gs cs cs' C P zs zs1 z n zs2 p (trees: NMap (seq call_return_tree)) trs,
     (* unique_z zs -> *) (* zs = zs1 ++ (z, n) :: zs2 -> *)
-    zs = zs1 ++ (z, n) :: zs2 ->
+    zs = zs1 ++ (P, z, n) :: zs2 ->
     forall (* (CALLERS: callers gs C = Some zs) *)
-      (unique_p: unique_key (get_all_handle_calls C P (trees C)))
-      (unique_z: unique_key zs)
+      (CALLERS: exists ls1 ls2, get_all_handle_calls P (Some trs) = ls1 ++ (p, zs) :: ls2)
+      (unique_p: unique_key (get_all_handle_calls P (trees C)))
+      (* (unique_z: unique_key zs) *)
+      (UNIQ: unique_p_z zs)
       (TREES: trees C = Some trs)
-      (INTREES: callers_in_trees C P p trs zs)
-      (CUREXPR: CS.s_expr cs = guard_call (callexp (get_all_handle_calls C P (trees C))))
+      (* (INTREES: callers_in_trees C P p trs zs) *)
+      (CUREXPR: CS.s_expr cs = guard_call (callexp (get_all_handle_calls P (trees C))))
       (CURARG: CS.s_arg cs = Int z)
       (CURLOC: Memory.load (CS.s_memory cs) (location (CS.s_component cs)) = Some (Int (Z.of_nat p)))
       (CURINT: Memory.load (CS.s_memory cs) (intcall (CS.s_component cs)) = Some (Int 1%Z)),
@@ -326,7 +441,7 @@ Lemma call_handling_expression_correct: forall ge gs cs cs' C P zs zs1 z n zs2 p
              E_assign LOCATION_p (E_val (Int (Z.of_nat n))), Int z] ->
       star TreeWithCallers.step ge (TreeWithCallers.Build_state gs cs (update_can_silent cs)) E0 (TreeWithCallers.Build_state gs cs' (update_can_silent cs')).
 Proof.
-  move=> ge gs [? ? ? ? ? ?] cs' C P zs zs1 z n zs2 p trees trs H unique_p unique_z TREES INTREES CUREXPR CURARG CURLOC CURINT H0.
+  move=> ge gs [? ? ? ? ? ?] cs' C P zs zs1 z n zs2 p trees trs H CALLERS unique_p (* unique_z *) UNIQ TREES (* INTREES *) CUREXPR CURARG CURLOC CURINT H0.
   simpl in *; subst.
   take_step; eauto. econstructor.
   take_step; eauto. econstructor.
@@ -342,58 +457,77 @@ Proof.
   take_step; eauto. econstructor.
   take_step; eauto. econstructor.
   rewrite Z.eqb_refl. simpl.
-  remember (get_all_handle_calls C P (Some trs)) as ls.
-  remember (zs1 ++ (z, n) :: zs2) as zs.
+  remember (get_all_handle_calls P (Some trs)) as ls.
+  remember (zs1 ++ (P, z, n) :: zs2) as zs.
   subst.
   rewrite TREES.
-  assert (H: exists ls1 ls2, get_all_handle_calls C P (Some trs) = ls1 ++ (p, zs1 ++ (z, n) :: zs2) :: ls2).
-  { clear -INTREES.
-    destruct INTREES as [tr [ls1 [ls2 [EQ INTREE]]]].
-    remember (zs1 ++ (z, n) :: zs2) as zs.
-    revert trs ls1 ls2 EQ Heqzs.
-    induction INTREE.
-    - move=> trs ls1 ls2 -> -> //=.
-      rewrite map_app List.map_cons concat_app concat_cons filter_app map_app.
-      move: H => //= -> //=.
-      exists (List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1)))).
-      exists (List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls) ++
-                                                                        concat (List.map tree_to_list ls2))%list)).
-      (* exists zs1, zs2. *)
-      simpl.
-      reflexivity.
-    - move=> trs ls1' ls2' -> EQ; move: EQ IHINTREE -> => IHINTREE.
-      specialize (IHINTREE _ _ _ H Logic.eq_refl).
-      move: IHINTREE.
-      rewrite //= map_app List.map_cons concat_app concat_cons filter_app map_app //=.
-      move=> [ls3 [ls4 EQ]].
-      case: (node_of C P x) => //=.
-      + rewrite filter_app map_app EQ.
-        exists ((List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1'))) ++
-                     (call_handling_info x) :: ls3)).
-        exists (ls4 ++ List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls2')))).
-        (* exists zs3, zs4. *)
-        set (LS1:= List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1')))).
-        set (LS2 := List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls2')))).
-        rewrite -app_assoc app_comm_cons app_assoc.
-        replace ((LS1 ++ (call_handling_info x :: ls3)%SEQ)%list) with (LS1 ++ (call_handling_info x :: ls3)); last reflexivity.
-        replace ((((p, zs1 ++ (z, n) :: zs2) :: ls4)%SEQ ++ LS2)%list) with ((p, zs1 ++ (z, n) :: zs2) :: ls4 ++ LS2).
-        reflexivity. reflexivity.
-      + rewrite filter_app map_app EQ.
-        exists ((List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1'))) ++ ls3)).
-        exists (ls4 ++ List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls2')))).
-        (* exists zs3, zs4. *)
-        set (LS1:= List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1')))).
-        set (LS2 := List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls2')))).
-        rewrite -app_assoc. simpl. rewrite app_assoc.
-        replace ((p, zs1 ++ (z, n) :: zs2) :: (ls4 ++ LS2)%list)%SEQ with ((p, zs1 ++ (z, n) :: zs2) :: ls4 ++ LS2).
-        reflexivity.
-        eauto. }
-  destruct H as [ls1 [ls2 H]].
+  (* assert (H: exists ls1 ls2, get_all_handle_calls P (Some trs) = ls1 ++ (p, zs1 ++ (P, z, n) :: zs2) :: ls2) by admit. *)
+  destruct CALLERS as [ls1 [ls2 H]].
+  (* { clear -INTREES. *)
+  (*   destruct INTREES as [tr [ls1 [ls2 [EQ INTREE]]]]. *)
+  (*   remember (zs1 ++ (z, n) :: zs2) as zs. *)
+  (*   revert trs ls1 ls2 EQ Heqzs. *)
+  (*   induction INTREE. *)
+  (*   - move=> trs ls1 ls2 -> -> //=. *)
+  (*     rewrite map_app List.map_cons concat_app concat_cons filter_app map_app. *)
+  (*     move: H => //= -> //=. *)
+  (*     exists (List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1)))). *)
+  (*     exists (List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls) ++ *)
+  (*                                                                       concat (List.map tree_to_list ls2))%list)). *)
+  (*     (* exists zs1, zs2. *) *)
+  (*     simpl. *)
+  (*     reflexivity. *)
+  (*   - move=> trs ls1' ls2' -> EQ; move: EQ IHINTREE -> => IHINTREE. *)
+  (*     specialize (IHINTREE _ _ _ H Logic.eq_refl). *)
+  (*     move: IHINTREE. *)
+  (*     rewrite //= map_app List.map_cons concat_app concat_cons filter_app map_app //=. *)
+  (*     move=> [ls3 [ls4 EQ]]. *)
+  (*     case: (node_of C P x) => //=. *)
+  (*     + rewrite filter_app map_app EQ. *)
+  (*       exists ((List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1'))) ++ *)
+  (*                    (call_handling_info x) :: ls3)). *)
+  (*       exists (ls4 ++ List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls2')))). *)
+  (*       (* exists zs3, zs4. *) *)
+  (*       set (LS1:= List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1')))). *)
+  (*       set (LS2 := List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls2')))). *)
+  (*       rewrite -app_assoc app_comm_cons app_assoc. *)
+  (*       replace ((LS1 ++ (call_handling_info x :: ls3)%SEQ)%list) with (LS1 ++ (call_handling_info x :: ls3)); last reflexivity. *)
+  (*       replace ((((p, zs1 ++ (z, n) :: zs2) :: ls4)%SEQ ++ LS2)%list) with ((p, zs1 ++ (z, n) :: zs2) :: ls4 ++ LS2). *)
+  (*       reflexivity. reflexivity. *)
+  (*     + rewrite filter_app map_app EQ. *)
+  (*       exists ((List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1'))) ++ ls3)). *)
+  (*       exists (ls4 ++ List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls2')))). *)
+  (*       (* exists zs3, zs4. *) *)
+  (*       set (LS1:= List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls1')))). *)
+  (*       set (LS2 := List.map call_handling_info (List.filter (node_of C P) (concat (List.map tree_to_list ls2')))). *)
+  (*       rewrite -app_assoc. simpl. rewrite app_assoc. *)
+  (*       replace ((p, zs1 ++ (z, n) :: zs2) :: (ls4 ++ LS2)%list)%SEQ with ((p, zs1 ++ (z, n) :: zs2) :: ls4 ++ LS2). *)
+  (*       reflexivity. *)
+  (*       eauto. } *)
+  (* destruct H as [ls1 [ls2 H]]. *)
   (* remember (get_all_handle_calls C P (Some trs)) as ls. *)
-  rewrite H. rewrite TREES in unique_p. rewrite H in unique_p.
-  remember (ls1 ++ (p, zs1 ++ (z, n) :: zs2) :: ls2) as ls.
-  remember (zs1 ++ (z, n) :: zs2) as zs.
-  clear H.
+  simpl; rewrite H. rewrite TREES in unique_p. simpl in unique_p; rewrite H in unique_p.
+  remember (ls1 ++ (p, zs1 ++ (P, z, n) :: zs2) :: ls2) as ls.
+  remember (zs1 ++ (P, z, n) :: zs2) as zs.
+  (* clear H. *)
+  assert (ALLPROC: forall p zs, In (p, zs) ls ->
+                           List.Forall (fun '(P0, _, _) => P == P0) zs).
+  { clear -H.
+    subst.
+    elim: ((List.map call_handling_info (concat (List.map tree_to_list trs)))).
+    - by [].
+    - move=> a l H p zs H0.
+      destruct a as [n cls]. simpl in H0.
+      destruct H0.
+      + inversion H0; subst; clear H0.
+        clear.
+        induction cls.
+        * now constructor.
+        * destruct a as [[P' ?] ?]; simpl.
+          destruct (P == P') eqn:Heq; last now auto.
+          constructor; eauto.
+      + eapply H. eauto. }
+  clear H. (* HERE!!! *)
   generalize dependent ls.
   induction ls1; intros; subst.
   - rewrite /callexp /switch_call /call_inner List.map_cons //=.
@@ -401,9 +535,8 @@ Proof.
     do 3 (take_step; eauto; [econstructor | eauto]).
     rewrite Z.eqb_refl //=.
     (* clear H. *)
-    remember (zs1 ++ (z, n) :: zs2) as zs.
-    (* clear H. *)
-    clear TREES INTREES.
+    remember (zs1 ++ (P, z, n) :: zs2) as zs.
+    (* clear TREES INTREES. *)
     generalize dependent zs.
     induction zs1; intros; subst.
     + simpl in *.
@@ -412,7 +545,7 @@ Proof.
       do 6 (take_step; eauto; [econstructor | eauto]).
       rewrite Z.eqb_refl //=.
       eapply star_refl.
-    + destruct a. simpl.
+    + destruct a as [[? ?] ?]. simpl.
       take_step. eauto. eauto. econstructor. eauto.
       take_step. eauto. eauto. econstructor. eauto.
       take_step. eauto. eauto. econstructor. eauto.
@@ -420,17 +553,47 @@ Proof.
       take_step. eauto. eauto. econstructor. eauto.
       take_step. eauto. eauto. econstructor. eauto.
       (* do 6 (take_step; [eauto | reflexivity | econstructor | eauto]). *)
+      assert (i = P).
+      { clear -ALLPROC.
+        specialize (ALLPROC p (((i, z0, n0) :: zs1) ++ (P, z, n) :: zs2) (or_introl Logic.eq_refl)).
+        inversion ALLPROC; subst.
+        move: H1 => /eqP -> //=. }
       assert (Hneq: z <> z0).
-      { specialize (unique_z [] z0 n0 zs1 z n zs2). simpl in unique_z.
-        intros Hn. eapply unique_z; eauto.
+      { specialize (UNIQ 0 (length ((i, z0, n0):: zs1)) i z0 n0 n Logic.eq_refl).
+        subst i. intros Hn. subst z0.
+        simpl in UNIQ.
+        assert (nth_error_length: forall {A: Type} (ls1 ls2: seq A),
+               nth_error (ls1 ++ ls2) (length ls1) = nth_error ls2 0).
+        { clear. intros A ls1 ls2.
+          induction ls1.
+          - by [].
+          - simpl. now rewrite IHls1. }
+        specialize (UNIQ (nth_error_length _ _ _)). inversion UNIQ.
       }
       apply Z.eqb_neq in Hneq. rewrite Hneq. simpl.
       eapply IHzs1.
-      reflexivity. eapply unique_key_smaller; eauto.
+      reflexivity.
+      { clear -UNIQ.
+        intros p1 p2 ? ? ? ? nth nth'.
+        specialize (UNIQ (S p1) (S p2) _ _ _ _ nth nth').
+        now inversion UNIQ.
+      }
+      (* destruct UNIQ. *)
+      (* eapply unique_key_smaller; eauto. *)
+      { clear -ALLPROC.
+        move=> p0 zs H.
+        (* specialize (ALLPROC p0 ( (n0, z0, n1) :: zs1 ++ (P, z, n) :: zs2)). *)
+        simpl in *.
+        case: H => H.
+        - inversion H; subst.
+          specialize (ALLPROC p0 ( (i, z0, n0) :: zs1 ++ (P, z, n) :: zs2) (or_introl Logic.eq_refl)).
+          now inversion ALLPROC.
+        - now specialize (ALLPROC p0 zs (or_intror H)).
+      }
       simpl. simpl in unique_p.
       clear -unique_p.
-      remember ((z0, n0) :: zs1 ++ (z, n) :: zs2) as x1.
-      remember (zs1 ++ (z, n) :: zs2) as x2.
+      remember ((n0, z0, n0) :: zs1 ++ (P, z, n) :: zs2) as x1.
+      remember (zs1 ++ (P, z, n) :: zs2) as x2.
       clear -unique_p.
       move: unique_p; rewrite /unique_key //=.
       move=> unique_p ls1 a1 b1 ls0 a2 b2 ls3 H.
@@ -438,7 +601,7 @@ Proof.
       * simpl in H; inversion H; subst.
         eapply unique_p with (ls1 := []). reflexivity.
       * simpl in H; inversion H; subst.
-        eapply unique_p with (ls2 := (p, x1) :: ls1). simpl. reflexivity.
+        eapply unique_p with (ls2 := ((p, (i, z0, n0) :: x2) :: ls1)). simpl. reflexivity.
   - destruct a. simpl.
     (* specialize (unique_p [] n0 l ls1 p (zs1' ++ (z, n) :: zs2') ls2 Logic.eq_refl). *)
     rewrite /callexp /switch_call /call_inner List.map_cons //=.
@@ -454,11 +617,17 @@ Proof.
     (* do 3 (take_step; [eauto | reflexivity | econstructor | eauto]). *)
     (* do 5 (take_step; eauto; [econstructor | eauto]). eauto. eauto. *)
     (* do 3 (take_step; eauto; [econstructor | eauto]). *)
-    assert (Hneq: Z.of_nat p <> Z.of_nat n0). apply Znat.inj_neq.
+    assert (Hneq: Z.of_nat p <> Z.of_nat n0).
+    apply Znat.inj_neq.
     specialize (unique_p [] n0 l ls1 p _ ls2 Logic.eq_refl). congruence.
     apply Z.eqb_neq in Hneq. rewrite Hneq. simpl.
     eapply IHls1. reflexivity.
     eapply unique_key_smaller; eauto.
+    { clear -ALLPROC.
+      move=> p0 zs H.
+      simpl in *.
+      eapply ALLPROC. right. eauto.
+    }
 Qed.
 
 
@@ -469,7 +638,7 @@ Definition compile_call_return_tree (p: CallReturnTree.prg): TreeWithCallers.prg
                 let procs := if C == Component.main then
                    (Procedure.main |: Component.export Ciface)%fset
                  else Component.export Ciface in
-                mkfmapf (fun P => comp_call_handle C P (CallReturnTree.prog_trees p C)) procs) (CallReturnTree.prog_interface p);
+                mkfmapf (fun P => comp_call_handle P (CallReturnTree.prog_trees p C)) procs) (CallReturnTree.prog_interface p);
      TreeWithCallers.prog_trees :=  CallReturnTree.prog_trees p |}.
 
 Lemma comp_is_well_formed (p: CallReturnTree.prg):
@@ -494,16 +663,16 @@ Proof.
     case intf_C: (CallReturnTree.prog_interface p C)=> [CI|] //=.
     rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
     + rewrite /comp_call_handle /guard_call /callexp /switch_call /switch_clause_call /call_inner /= 2!andbT //=.
-      elim: (get_all_handle_calls _ _ _) => [| [n ls] ? IH] //=.
+      elim: (get_all_handle_calls _ _) => [| [n ls] ? IH] //=.
       rewrite IH andbT /switch_arg /switch_clause_arg.
-      elim: ls => [| [n' ls'] ? IH'] //=.
-    + suff: (called_procedures (comp_call_handle C P (CallReturnTree.prog_trees p C)) = fset0) by move=> ->.
+      elim: ls => [| [[P' n'] ls'] ? IH'] //=.
+    + suff: (called_procedures (comp_call_handle P (CallReturnTree.prog_trees p C)) = fset0) by move=> ->.
       rewrite //= !fset0U !fsetU0.
       rewrite /callexp /switch_call /switch_clause_call /call_inner.
-      elim: (get_all_handle_calls _ _ _) => [| [n ls] ? IH] //=.
+      elim: (get_all_handle_calls _ _) => [| [n ls] ? IH] //=.
       rewrite IH !fsetU0 !fset0U.
       rewrite /switch_arg /switch_clause_arg.
-      elim: ls => [| [n' ls'] ? IH'] //=.
+      elim: ls => [| [[P' n'] ls'] ? IH'] //=.
       now rewrite !fset0U.
   -   set (valid_procedure C P :=
              C = Component.main /\ P = Procedure.main
@@ -511,7 +680,7 @@ Proof.
 
       suff: (forall C P, valid_procedure C P ->
                     find_procedure (TreeWithCallers.prog_procedures (compile_call_return_tree p)) C P =
-                    Some (comp_call_handle C P (CallReturnTree.prog_trees p C))).
+                    Some (comp_call_handle P (CallReturnTree.prog_trees p C))).
       { move=> /(_ Component.main Procedure.main) ->.
         + split; first reflexivity.
           intros _ => //=.
@@ -529,9 +698,10 @@ Proof.
         rewrite mapimE C_CI /= mkfmapfE.
         case: eqP=> _; last by rewrite CI_P.
           by rewrite in_fsetU1 CI_P orbT.
+  - admit.
   - eauto.
-  - eauto.
-Qed.
+  (* - eauto. *)
+Admitted.
 
 Definition concat_exp (e1 e2: expr): expr := E_seq e1 e2.
 
@@ -589,23 +759,24 @@ Proof.
     eapply unique_key_smaller; eauto.
 Qed.
 
-Definition event_expression (Pcaller: Procedure.id) (n: nat) (e: xevent) :=
+Definition event_expression (C: Component.id) (Pcaller: Procedure.id) (n: nat) (e: xevent) :=
   match e with
-  | XECall C1 P z C2 rts => E_seq (E_assign LOCATION_p (E_val (Int (Z.of_nat n))))
+  | XECallOut P z C2 rts => E_seq (E_assign LOCATION_p (E_val (Int (Z.of_nat n))))
                            (* (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 1)))) *)
                            (E_seq (E_assign RETURN_p (E_call C2 P (E_val (Int z)))) (* does the call and stores its value *)
                            (E_seq (return_handling_expression rts)
                            (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 0))))
-                                  (E_call C1 Pcaller (E_val (Int (Z.of_nat 0)))))))
-  | XERet C1 z C2 => E_seq (E_assign LOCATION_p (E_val (Int (Z.of_nat n))))
+                                  (E_call C Pcaller (E_val (Int (Z.of_nat 0)))))))
+  | XERetOut z => E_seq (E_assign LOCATION_p (E_val (Int (Z.of_nat n))))
                     (* (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 1)))) *)
                             (E_val (Int z))
+  | _ => E_exit
   end.
 
 Lemma call_event_correct: forall ge C1 P Pcaller z C2 rts n cs cs' m' P_expr,
-    allowed_xevent (genv_interface ge) (XECall C1 P z C2 rts) ->
+    allowed_event (genv_interface ge) (ECall C1 P z C2) ->
     CS.s_component cs = C1 ->
-    CS.s_expr cs = event_expression Pcaller n (XECall C1 P z C2 rts) ->
+    CS.s_expr cs = event_expression C1 Pcaller n (XECallOut P z C2 rts) ->
     find_procedure (genv_procedures ge) C2 P = Some P_expr ->
     Memory.store (CS.s_memory cs) (location (CS.s_component cs)) (Int (Z.of_nat n)) = Some m' ->
     cs' = [CState C2, CS.Frame C1 (CS.s_arg cs) (Kassign1 (RETURN_p)
@@ -628,10 +799,10 @@ Proof.
 Qed.
 
 Lemma return_event_correct: forall ge n Pcaller C1 z C2 cs cs' old_arg rts old_stack m' (* m'' *),
-    allowed_xevent (genv_interface ge) (XERet C1 z C2) ->
+    allowed_event (genv_interface ge) (ERet C1 z C2) ->
     CS.s_component cs = C1 ->
     CS.s_cont cs = Kstop ->
-    CS.s_expr cs = event_expression Pcaller n (XERet C1 z C2) ->
+    CS.s_expr cs = event_expression C1 Pcaller n (XERetOut z) ->
     CS.s_stack cs = CS.Frame C2 old_arg (Kassign1 RETURN_p (Kseq ((E_seq (return_handling_expression rts)
                                                                          (E_seq (E_assign INTCALL_p (E_val (Int (Z.of_nat 0))))
                                                                                 (E_call C1 Procedure.main (E_val (Int (Z.of_nat 0)))))))
@@ -666,44 +837,46 @@ Definition switch_clause_event '(p, e) e_else :=
 Definition switch_event (evs: seq (nat * expr)) :=
   fold_right switch_clause_event E_exit evs.
 
-Definition node_of_comp C (x: nat * xevent * nat * seq (Z * nat)) :=
+Definition node_of_comp (x: nat * xevent * nat * seq (Procedure.id * Z * nat)) :=
   match x with
   | (p, xe, n, cls) =>
     match xe with
-    | XECall C0 P0 z C1 rts => C0 == C
-    | XERet C0 z C1 => C0 == C
+    | XECallOut _ _ _ _ | XERetOut _ => true
+    | _ => false
+    (* | XECall C0 P0 z C1 rts => C0 == C *)
+    (* | XERet C0 z C1 => C0 == C *)
     end
   end.
 
-Definition event_info (x: nat * xevent * nat * seq (Z * nat)) :=
+Definition event_info (x: nat * xevent * nat * seq (Procedure.id * Z * nat)) :=
   match x with
   | (p, xe, n, _) => (p, xe, n)
   end.
 
-Definition get_all_event C ots :=
+Definition get_all_event ots :=
   match ots with
   | None => []
   | Some ts =>
     let all_nodes := List.concat (List.map tree_to_list ts) in
-    List.map event_info (List.filter (node_of_comp C) all_nodes)
+    List.map event_info (List.filter (node_of_comp) all_nodes)
   end.
 
 Definition build_event_expression (C: Component.id) (P: Procedure.id) ots :=
-  let all_events := get_all_event C ots in
-  let parent_plus_expr := List.map (fun '(p, xe, n) => (p, event_expression P n xe)) all_events in
+  let all_events := get_all_event ots in
+  let parent_plus_expr := List.map (fun '(p, xe, n) => (p, event_expression C P n xe)) all_events in
   switch_event parent_plus_expr.
 
 
 (* Admitted: this heavily relies on unicity of the location.
    It holds, because in our setting a tree that has control only has one possibility *)
-Lemma build_event_expression_correct: forall ge cs cs' C P trs k trs' trs'' tr p xe n cls,
+Lemma build_event_expression_correct: forall ge cs cs' C P trs k (* trs' *) (* trs'' *) (* tr *) p xe n (* cls *),
     forall (CURCONT: CS.s_cont cs = Kseq (build_event_expression C P (Some trs)) k)
-      (SUBTREES: subtrees trs' trs)
-      (TREES: trs' = [tr])
-      (TREE: tr = node (p, xe, n, cls) trs'')
+      (* (SUBTREES: subtrees trs' trs) *)
+      (* (TREES: trs' = [tr]) *)
+      (* (TREE: tr = node (p, xe, n, cls) trs'') *)
       (CURLOC: Memory.load (CS.s_memory cs) (location (CS.s_component cs)) = Some (Int (Z.of_nat p))),
       cs' = [CState (CS.s_component cs), (CS.s_stack cs), (CS.s_memory cs), k,
-             event_expression P n xe, CS.s_arg cs] ->
+             event_expression C P n xe, CS.s_arg cs] ->
       star CS.kstep ge cs E0 cs'.
 Proof.
   Admitted.
@@ -751,16 +924,16 @@ Proof.
         by case: (a P') H.
       * (* The procedure is called is the expression generated at this step *)
         move: C' P' in_called.
-        pose call_of_event (e: nat * xevent * nat) := if e is (_, XECall _ P _ C _, _) then Some (C, P) else None.
+        pose call_of_event (e: nat * xevent * nat) := if e is (_, XECallOut P _ C _, _) then Some (C, P) else None.
         have /fsubsetP sub :
           fsubset (called_procedures (build_event_expression C P (TreeWithCallers.prog_trees p C)))
-                  ((C, P) |: fset (pmap call_of_event (get_all_event C (TreeWithCallers.prog_trees p C))))%fset.
+                  ((C, P) |: fset (pmap call_of_event (get_all_event (TreeWithCallers.prog_trees p C))))%fset.
         { rewrite /build_event_expression /switch_event /switch_clause_event /event_expression.
           move: wf_events => /(_ C).
-          case: (TreeWithCallers.prog_trees p C) => //=; last by (move=> ?; apply fsub0set).
+          case: (TreeWithCallers.prog_trees p C) => //=; last by move=> ?; apply fsub0set.
           move=> trs /(_ trs Logic.eq_refl) //=.
-          assert (X: List.Forall (Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe)) trs ->
-                     List.Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs))).
+          assert (X: List.Forall (Forall (fun '(_, xe, _, _) => allowed_xevent C (TreeWithCallers.prog_interface p) xe)) trs ->
+                     List.Forall (fun '(_, xe, _, _) => allowed_xevent C (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs))).
           { clear.
             induction trs.
             - simpl. econstructor.
@@ -771,29 +944,28 @@ Proof.
           }
           move=> /X. clear X.
 
-          assert (X: List.Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs)) ->
-                     List.Forall (fun '(_, xe, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (List.map event_info (List.filter (node_of_comp C) (concat (List.map tree_to_list trs))))).
+          assert (X: List.Forall (fun '(_, xe, _, _) => allowed_xevent C (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs)) ->
+                     List.Forall (fun '(_, xe, _) => allowed_xevent C (TreeWithCallers.prog_interface p) xe) (List.map event_info (List.filter (node_of_comp) (concat (List.map tree_to_list trs))))).
           { clear.
             elim: (concat (List.map tree_to_list trs)) => [|e t IH] //=.
             move=> H. inversion H; subst; clear H.
-            case: (node_of_comp C e); last by eauto.
+            case: (node_of_comp e); last by eauto.
             simpl. econstructor. destruct e as [[[? ?] ?] ?]. eauto.
             eauto. }
           move=> /X; clear X.
           (* elim: (List.map event_info (List.filter (node_of_comp C) (concat (List.map tree_to_list trs)))) C'_P' Y => [|e t IH] //=. *)
           (* elim: (List.filter (node_of_comp C) (concat (List.map tree_to_list trs))) C'_P' => [|e t IH] //=. *)
           elim: (concat (List.map tree_to_list trs)) => [|e t IH] //=; first by move=> ?; apply fsub0set.
-          destruct (node_of_comp C e) eqn:EQ.
+          destruct (node_of_comp e) eqn:EQ.
           -- case: e EQ => [] [] [] p0 xe n0 cls EQ.
-             case: xe EQ => [C' P' v C'' rts| C' z ?] EQ //=.
+             case: xe EQ => [P' z | P' v C'' rts| z | z] EQ //=.
              ++ have: (called_procedures (return_handling_expression rts) = fset0).
                 { rewrite /return_handling_expression. elim: rts {EQ} => [|[[p1 z] n1] rts' IH'] //=; by rewrite !fset0U. }
                 move=> ->.
                 rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT //=.
                 rewrite fsetUA [((C, P) |: fset1 (C'', P'))%fset]fsetUC -fsetUA fsubsetU //=.
                 intros H. rewrite fsubsetU.
-                ** simpl in EQ.
-                   move: EQ => /eqP [->]; by rewrite eqxx.
+                ** eauto.
                 ** rewrite IH. by rewrite orbT. by inversion H.
                 ** by rewrite fsub0set.
              ++ rewrite !fset0U. intros H; inversion H; subst; clear H. eauto.
@@ -822,8 +994,8 @@ Proof.
         specialize (wf_events C).
         move: C'_P' wf_events.
         case: (TreeWithCallers.prog_trees p C) => //= trs C'_P' /(_ trs Logic.eq_refl).
-        assert (X: List.Forall (Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe)) trs ->
-               List.Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs))).
+        assert (X: List.Forall (Forall (fun '(_, xe, _, _) => allowed_xevent C (TreeWithCallers.prog_interface p) xe)) trs ->
+               List.Forall (fun '(_, xe, _, _) => allowed_xevent C (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs))).
         { clear.
           induction trs.
           - simpl. econstructor.
@@ -834,34 +1006,31 @@ Proof.
         }
         move=> /X. clear X.
 
-        assert (X: List.Forall (fun '(_, xe, _, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs)) ->
-                   List.Forall (fun '(_, xe, _) => allowed_xevent (TreeWithCallers.prog_interface p) xe) (List.map event_info (List.filter (node_of_comp C) (concat (List.map tree_to_list trs))))).
+        assert (X: List.Forall (fun '(_, xe, _, _) => allowed_xevent C (TreeWithCallers.prog_interface p) xe) (concat (List.map tree_to_list trs)) ->
+                   List.Forall (fun '(_, xe, _) => allowed_xevent C (TreeWithCallers.prog_interface p) xe) (List.map event_info (List.filter (node_of_comp) (concat (List.map tree_to_list trs))))).
         { clear.
           elim: (concat (List.map tree_to_list trs)) => [|e t IH] //=.
           move=> H. inversion H; subst; clear H.
-          case: (node_of_comp C e); last by eauto.
+          case: (node_of_comp e); last by eauto.
           simpl. econstructor. destruct e as [[[? ?] ?] ?]. eauto.
           eauto. }
         move=> /X; clear X.
         (* elim: (List.map event_info (List.filter (node_of_comp C) (concat (List.map tree_to_list trs)))) C'_P' Y => [|e t IH] //=. *)
         (* elim: (List.filter (node_of_comp C) (concat (List.map tree_to_list trs))) C'_P' => [|e t IH] //=. *)
         elim: (concat (List.map tree_to_list trs)) C'_P' => [|e t IH] //=.
-        case: e => [] [] [] ? [C0 ? ? ? ?| C0 ? ?] ? ? //=.
-        destruct (C0 == C) eqn:EQ.
+        case: e => [] [] [] ? [? ? ? | ? ? ? ? | ? | ?] ? ? //=; simpl in *; eauto.
+        (* destruct (C == C') eqn:EQ. *)
         -- rewrite inE. case /orP.
            ++ move /eqP => [<- <-].
               move=> H'. inversion H'; subst; clear H'.
-              destruct H1 as [[] ].
-              by move: EQ => /eqP <-.
+              now destruct H1 as [? []].
            ++ move=> H H'; inversion H'; now apply IH.
-        -- move=> H H'; inversion H'; now apply IH.
-        -- destruct (C0 == C) eqn:EQ => //=.
-           move=> H H'; inversion H'; now apply IH.
+        -- move=> H H'. inversion H'; now eapply IH.
     + rewrite /= wf_expr2 /=.
       rewrite /build_event_expression /switch_event /switch_clause_event.
-      elim: (get_all_event C (TreeWithCallers.prog_trees p C)) => [|[[p0 e] n0] xs IH] //=.
+      elim: (get_all_event (TreeWithCallers.prog_trees p C)) => [|[[p0 e] n0] xs IH] //=.
       rewrite IH andbT.
-      case: e => [? ? ? ? rts | ? ? ?] //=; rewrite andbT.
+      case: e => [? ? | ? ? rts | ? | ?] //=; rewrite andbT.
       elim: rts => [|[[p1 e] n1] rts IH'] //=.
   - by rewrite domm_mapi.
   - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
