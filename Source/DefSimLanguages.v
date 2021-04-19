@@ -64,6 +64,12 @@ Definition location (C: Component.id): Pointer.t := (C, Block.local, 0%Z).
 Definition intcall (C: Component.id): Pointer.t := (C, Block.local, 1%Z).
 Definition ret (C: Component.id): Pointer.t := (C, Block.local, 2%Z).
 
+Definition unique_p {A: Type} (zs: list (nat * A)) :=
+  forall p p' n a a',
+    List.nth_error zs p = Some (n, a) ->
+    List.nth_error zs p' = Some (n, a') ->
+    p = p'.
+
 Definition unique_p_z (zs: list (Procedure.id * Z * nat)) :=
   forall p p' P z n n',
     List.nth_error zs p = Some (P, z, n) ->
@@ -99,6 +105,12 @@ Definition allowed_event (intf: Program.interface) (e: event) :=
   | ECall C1 P z C2 => C1 <> C2 /\ imported_procedure intf C1 C2 P
   | ERet C1 z C2 => C1 <> C2
   end /\ cur_comp_of_event e \in domm intf /\ next_comp_of_event e \in domm intf.
+
+Definition allowed_loc_event C (intf: Program.interface) (e: loc_ev):=
+  match e with
+  | ECallOut P z C2 => C <> C2 /\ imported_procedure intf C C2 P
+  | ECallIn _ _ | ERetOut _ | ERetIn _ => True
+  end.
 
 Fixpoint wb_trace (st: seq Component.id) (t: trace) :=
   match t with
@@ -144,6 +156,8 @@ Module Tree.
       determinacy: forall C ts, prog_trees p C = Some ts ->
                            determinate_tree_list eq ts;
       (* wf_events: all_trees (fun e => allowed_event (prog_interface p) e) (prog_trees p); *)
+      wf_events: forall C trs, prog_trees p C = Some trs ->
+                    List.Forall (Forall (fun e => allowed_loc_event C (prog_interface p) e)) trs;
       wf_has_main: prog_interface p Component.main
     }.
 
@@ -200,6 +214,8 @@ Module NumberedTree.
       determinacy: forall C ts, prog_trees p C = Some ts ->
                            determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) ts;
       (* wf_events: all_trees (fun '(e, n) => allowed_event (prog_interface p) e) (prog_trees p); *)
+      wf_events: forall C trs, prog_trees p C = Some trs ->
+                    List.Forall (Forall (fun '(e, _) => allowed_loc_event C (prog_interface p) e)) trs;
       wf_has_main: prog_interface p Component.main
     }.
 
@@ -249,6 +265,8 @@ Module ParentAwareTree.
       determinacy: forall C ts, prog_trees p C = Some ts ->
                            determinate_tree_list (fun '(_, e1, _) '(_, e2, _) => e1 = e2) ts;
       (* wf_events: all_trees (fun '(_, e, _) => allowed_event (prog_interface p) e) (prog_trees p); *)
+      wf_events: forall C trs, prog_trees p C = Some trs ->
+                    List.Forall (Forall (fun '(_, e, _) => allowed_loc_event C (prog_interface p) e)) trs;
       wf_has_main: prog_interface p Component.main
                                   (* wf_has_trees: forall C, C \in domm (prog_interface p) -> *)
                                   (*                                         exists t, prog_trees p C = Some t; *)
@@ -307,6 +325,8 @@ Module CallerAwareTree.
       determinacy: forall C ts, prog_trees p C = Some ts ->
                            determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ts;
       (* wf_events: all_trees (fun '(_, e, _, _) => allowed_event (prog_interface p) e) (prog_trees p); *)
+      wf_events: forall C trs, prog_trees p C = Some trs ->
+                    List.Forall (Forall (fun '(_, e, _, _) => allowed_loc_event C (prog_interface p) e)) trs;
       wf_has_main: prog_interface p Component.main
                                   (* wf_has_trees: forall C, C \in domm (prog_interface p) -> *)
                                   (*                                         exists t, prog_trees p C = Some t; *)
@@ -536,6 +556,8 @@ Module CallReturnTree.
       determinacy: forall C ts, prog_trees p C = Some ts ->
                            determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ts;
       (* wf_events: all_trees (fun '(_, xe, _, _) => allowed_xevent (prog_interface p) xe) (prog_trees p); *)
+      wf_events: forall C trs, prog_trees p C = Some trs ->
+                    List.Forall (Forall (fun '(_, xe, _, _) => allowed_xevent C (prog_interface p) xe)) trs;
       wf_has_main: prog_interface p Component.main
 
                                   (* wf_has_trees: forall C, C \in domm (prog_interface p) -> *)
@@ -775,6 +797,7 @@ Module TreeWithCallers.
       locs C2 = Some p' ->
       forall (LOC1: Memory.load m (location C1) = Some (Int (Z.of_nat p)))
         (LOC2: Memory.load m (location C2) = Some (Int (Z.of_nat p'))),
+      (* Memory operations *)
       Memory.store m (location C1) (Int (Z.of_nat n)) = Some m' ->
       Memory.store m' (intcall C1) (Int 1%Z) = Some m'' ->
       find_procedure (genv_procedures ge) C2 P = Some call_exp ->

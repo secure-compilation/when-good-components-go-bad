@@ -256,6 +256,27 @@ Proof.
     move: (determinacy C).
     rewrite mapimE; case: (ParentAwareTree.prog_trees p C) => //= a /(_ a Logic.eq_refl) DET [] <-.
     now eapply det_tree_list_add_caller.
+  - move=> C trs.
+    move: wf_events => /(_ C) //=.
+    rewrite mapimE.
+    case: (ParentAwareTree.prog_trees p C); last by [].
+    move=> trs0 /(_ trs0 Logic.eq_refl) //= H [] <-.
+    clear trs.
+    rename trs0 into trs.
+
+    induction trs using tree_ind_list with
+        (P := fun tr => Forall (fun '(_, e, _) => allowed_loc_event C (ParentAwareTree.prog_interface p) e) tr ->
+                     (Forall (fun '(_, e, _, _) => allowed_loc_event C (ParentAwareTree.prog_interface p) e)) (add_caller C tr)).
+    (* elim: H. *)
+    + econstructor.
+    + econstructor.
+    + inversion H; subst; clear H.
+      specialize (IHtrs H3).
+      destruct a as [[? ?] ?]. constructor; eauto.
+    + simpl.
+      econstructor.
+      eapply IHtrs. inversion H. eauto.
+      eapply IHtrs0. inversion H. eauto.
 Qed.
 
 
@@ -422,6 +443,20 @@ Ltac take_step :=
     eapply (@star_step _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
   end.
 
+Lemma unique_p_key {A: Type}: forall (trs: seq (nat * A)),
+    unique_p trs -> unique_key trs.
+Proof.
+  move=> trs.
+  rewrite /unique_p /unique_key.
+  elim: trs.
+  - move=> H [] a1 b1 ls2 a2 b2 ls3 H0; by [].
+  - move=> a l H H0 ls1 a1 b1 ls2 a2 b2 ls3 H1.
+    admit.
+Admitted.
+
+
+
+
 
 Lemma call_handling_expression_correct: forall ge gs cs cs' C P zs zs1 z n zs2 p (trees: NMap (seq call_return_tree)) trs,
     (* unique_z zs -> *) (* zs = zs1 ++ (z, n) :: zs2 -> *)
@@ -431,9 +466,7 @@ Lemma call_handling_expression_correct: forall ge gs cs cs' C P zs zs1 z n zs2 p
       (unique_p: unique_key (get_all_handle_calls P (trees C)))
       (* (unique_z: unique_key zs) *)
       (UNIQ: unique_p_z zs)
-      (TREES: trees C = Some trs)
-      (* (INTREES: callers_in_trees C P p trs zs) *)
-      (CUREXPR: CS.s_expr cs = guard_call (callexp (get_all_handle_calls P (trees C))))
+      (TREES: trees C = Some trs) (* (INTREES: callers_in_trees C P p trs zs) *) (CUREXPR: CS.s_expr cs = guard_call (callexp (get_all_handle_calls P (trees C))))
       (CURARG: CS.s_arg cs = Int z)
       (CURLOC: Memory.load (CS.s_memory cs) (location (CS.s_component cs)) = Some (Int (Z.of_nat p)))
       (CURINT: Memory.load (CS.s_memory cs) (intcall (CS.s_component cs)) = Some (Int 1%Z)),
@@ -698,10 +731,15 @@ Proof.
         rewrite mapimE C_CI /= mkfmapfE.
         case: eqP=> _; last by rewrite CI_P.
           by rewrite in_fsetU1 CI_P orbT.
-  - admit.
+  - move=> C trs.
+    move: wf_events => /(_ C) //=.
+    (* rewrite mapimE. *)
+    case: (CallReturnTree.prog_trees p C); last by [].
+    by move=> trs0 /(_ trs0 Logic.eq_refl) //= H [] <-.
   - eauto.
   (* - eauto. *)
-Admitted.
+Qed.
+
 
 Definition concat_exp (e1 e2: expr): expr := E_seq e1 e2.
 
@@ -888,7 +926,13 @@ Definition compile_tree_with_callers (p: TreeWithCallers.prg): program :=
      prog_procedures :=
        mapim (fun C procs => mapim (fun P call_exp => E_seq call_exp (build_event_expression C P (TreeWithCallers.prog_trees p C)))
                                 procs) (TreeWithCallers.prog_procedures p);
-     prog_buffers := (mapim (fun C Ciface => inr [Int 0%Z; Int 0%Z; Int 0%Z]) (TreeWithCallers.prog_interface p)) |}.
+     prog_buffers := (mapim (fun C Ciface =>
+                               (* The main component should ignore the initial call *)
+                               if C == Component.main then
+                                 inr [Int 0%Z; Int 0%Z; Int 0%Z]
+                               else
+                                 (* But not the other components *)
+                                 inr [Int 0%Z; Int 1%Z; Int 0%Z]) (TreeWithCallers.prog_interface p)) |}.
 
 (* admitted: this is a well-formedness theorem of the source program that are generated *)
 Lemma wf_compile (p: TreeWithCallers.prg) (WF: TreeWithCallers.wf p):
@@ -1034,7 +1078,9 @@ Proof.
       elim: rts => [|[[p1 e] n1] rts IH'] //=.
   - by rewrite domm_mapi.
   - move=> C; rewrite -mem_domm => /dommP [CI C_CI].
-    rewrite /has_required_local_buffers /= mapmE C_CI /=.
+    rewrite /has_required_local_buffers /= mapimE.
+    case: (C == Component.main) => //=; rewrite C_CI /=.
+    eexists; eauto=> /=; lia.
     eexists; eauto=> /=; lia.
   - move: has_main.
     rewrite /prog_main //= /find_procedure mapimE.
