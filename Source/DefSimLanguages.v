@@ -911,7 +911,7 @@ Module TreeWithCallers.
              setm (setm callers C1 zs) C2 zs',
              st) ->
       cs = [CState C1, {| CS.f_component := C2; CS.f_arg := old_call_arg; CS.f_cont := k |} :: stk, m, Kstop, exp, arg] ->
-      cs' = [CState C2, stk, m''', Kstop, E_val (Int (Z.of_nat n')), old_call_arg] ->
+      cs' = [CState C2, stk, m''', Kstop, E_val (Int (Z.of_nat n')), Int 0%Z] ->
       (* Determinacy and unicity *)
       forall (DET: determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls)
         (DET': determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls'),

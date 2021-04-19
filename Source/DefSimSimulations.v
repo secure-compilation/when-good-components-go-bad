@@ -1304,6 +1304,9 @@ Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWi
       (MEM: mem_agree (TreeWithCallers.prog_interface p) (CS.s_memory cs) (CS.s_memory cs'))
       (CONT: match_cont p (CS.s_component cs) P (CS.s_cont cs) (CS.s_cont cs'))
       (EXPR: CS.s_expr cs =  CS.s_expr cs')
+      (* (INT: forall C, *)
+      (*     C \in domm (TreeWithCallers.prog_interface p) -> *)
+      (*     Memory.load (CS.s_memory cs) (intcall C) = Some (Int 1%Z)) *)
       (ARG: CS.s_arg cs = CS.s_arg cs'),
       match_states6 p ge i {| TreeWithCallers.ghost_state := gs;
                               TreeWithCallers.concrete_state := cs;
@@ -1316,6 +1319,9 @@ Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWi
       (MEM: mem_agree (TreeWithCallers.prog_interface p) (CS.s_memory cs) (CS.s_memory cs'))
       (CONT: CS.s_cont cs' = Kseq (build_event_expression (CS.s_component cs') P (TreeWithCallers.prog_trees p (CS.s_component cs'))) Kstop)
       (* (EXPR: CS.s_expr cs' = build_event_expression (CS.s_component cs') (TreeWithCallers.prog_trees p (CS.s_component cs'))) *)
+      (INT: forall C,
+          C \in domm (TreeWithCallers.prog_interface p) ->
+          Memory.load (CS.s_memory cs) (intcall C) = Some (Int 1%Z))
       (ARG: CS.s_arg cs = CS.s_arg cs'),
       match_states6 p ge i {| TreeWithCallers.ghost_state := gs;
                               TreeWithCallers.concrete_state := cs;
@@ -1598,6 +1604,17 @@ Proof.
                unfold intcall; congruence.
            }
            reflexivity.
+           (* move=> C H. *)
+           (* destruct (C == Component.main) eqn:HC; move: HC => /eqP HC; subst. *)
+           (* rewrite (Memory.load_after_store_eq _ _ _ _ H10); eauto. *)
+           (* rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10); eauto. *)
+           (* rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9); eauto. *)
+           (* rewrite /TreeWithCallers.initial_memory /Memory.load //= mkfmapfE //=. *)
+           (* rewrite H. *)
+           (* rewrite ComponentMemory.load_prealloc //=. *)
+           (* unfold location, intcall; congruence. *)
+           (* unfold location, intcall; congruence. *)
+
            (* admit. *)
         (* -- simpl in *. *)
         (*    eapply match_states_silent; simpl; eauto. *)
@@ -1638,10 +1655,224 @@ Proof.
               now inversion H12.
            ++ admit.
            ++ simpl. reflexivity.
+           (* ++ move=> C0 H0. simpl. *)
+           (* destruct (C0 == C) eqn:HC; move: HC => /eqP HC; subst. *)
+           (* rewrite (Memory.load_after_store_eq _ _ _ _ H10); eauto. *)
+           (* rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10); eauto. *)
+           (* rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9); eauto. *)
+           (* unfold location, intcall; congruence. *)
+           (* unfold location, intcall; congruence. *)
+
            (* ++ simpl. admit. *)
     + (* Step return *)
       (* destruct (Memory.store_after_load m''' (C1, Block.local, 1%Z) (Int (Z.of_nat 0)) (Int (Z.of_nat 1))) as [m'''' Hm'''']. *)
-      admit.
+      inv H0; subst.
+      * inversion H.
+      * simpl in *; subst.
+        inv H8.
+        (* loc C1 *)
+        destruct (Memory.store_after_load m (location C) (Int (Z.of_nat p0)) (Int (Z.of_nat n))) as [m1 MEM1].
+        unfold location; rewrite <- MEM. eauto. now destruct H1 as [? []].
+        (* (* ret C2 *) *)
+        assert (exists oldz, Memory.load m0 (ret C2) = Some (Int oldz)) as [oldz EQoldz].
+        { clear -H9 H10.
+          admit. }
+        destruct (Memory.store_after_load m1 (ret C2) (Int oldz) (Int z)) as [m2 MEM2].
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1); last by unfold ret, location; congruence.
+        unfold ret; rewrite <- MEM.
+        eauto. now destruct H1.
+        (* (* loc 2 *) *)
+        destruct (Memory.store_after_load m2 (location C2) (Int (Z.of_nat p')) (Int (Z.of_nat n'))) as [m3 MEM3].
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM2).
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1).
+        unfold location; rewrite <- MEM. eauto. now destruct H1.
+        unfold location; destruct H1; congruence.
+        unfold ret, location; congruence.
+        (* (* intcall 2 *) *)
+        destruct (Memory.store_after_load m3 (intcall C2) (Int 1%Z) (Int 0%Z)) as [m4 MEM4].
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM3).
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM2).
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1).
+        unfold intcall; rewrite <- MEM. eapply INT.
+        now destruct H1.
+        now destruct H1.
+        unfold location, intcall; congruence.
+        unfold ret, intcall; congruence.
+        unfold location, intcall; congruence.
+        (* (* intcall 2 again *) *)
+        destruct (Memory.store_after_load m4 (intcall C2) (Int 0%Z) (Int 1%Z)) as [m5 MEM5].
+        rewrite (Memory.load_after_store_eq _ _ _ _ MEM4); eauto.
+        destruct (unfold_stack ge m1 z arg STACK) as [stack1 [stack2 [arg1 [arg2 [Pid [UNF1 [UNF2 UNF3]]]]]]].
+        eexists; eexists; split; simpl in *.
+        -- left.
+           eapply star_plus_trans.
+           { eapply build_event_expression_correct with (xe := XERetOut z); simpl; eauto. admit.
+             unfold location; rewrite <- MEM. eauto. destruct H1 as [? []]; now auto.
+           }
+           eapply plus_star_trans. econstructor. econstructor.
+           do 4 take_step. eauto. eauto.
+           do 1 take_step. eapply star_refl. reflexivity.
+           eapply star_trans. eapply UNF3.
+           rewrite UNF1.
+           eapply star_step. eapply CS.KS_ExternalReturn.
+           now destruct H1.
+           do 6 take_step. eauto. eauto.
+           do 2 take_step.
+           eapply star_trans.
+
+           (* { eapply return_event_correct with (z := z); eauto. *)
+           (*   reflexivity. reflexivity. simpl. eauto. *)
+
+           (* } *)
+           (* econstructor. *)
+           (* econstructor. *)
+           (* do 4 take_step. eauto. eauto. *)
+           (* do 1 take_step. eapply star_refl. reflexivity. *)
+           (* eapply star_trans. rewrite CONT. eapply UNF3. *)
+           (* rewrite UNF1 CONT. *)
+           (* eapply star_step. eapply CS.KS_ExternalReturn. *)
+           (* now destruct H1. *)
+           (* do 6 take_step. eauto. eauto. *)
+           (* do 2 take_step. *)
+           (* eapply star_trans. *)
+           { eapply return_handling_expression_correct.
+             - eauto.
+             - admit.
+             - eauto.
+             - simpl. eauto.
+             - simpl.
+               rewrite (Memory.load_after_store_eq _ _ _ _ MEM2). eauto.
+             - simpl.
+               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM2).
+               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1).
+               unfold location; rewrite <- MEM. eauto. now destruct H1.
+               unfold location; now destruct H1; congruence.
+               unfold ret, location; congruence.
+             - simpl. eauto. }
+           do 4 take_step. eauto. eauto.
+           do 9 take_step. eauto. eauto.
+           do 3 take_step. eauto. eapply find_procedure_find. admit. admit.
+           do 10 take_step. eauto.
+           rewrite (Memory.load_after_store_eq _ _ _ _ MEM4); eauto.
+           do 11 take_step. eauto. eauto.
+           eapply star_refl.
+           (* take_step. eapply star_refl. *)
+           reflexivity. reflexivity. reflexivity. reflexivity. reflexivity.
+        -- eapply match_states_6; simpl in *.
+           ++ eauto.
+           ++ eauto.
+           ++ constructor. eauto.
+           ++ intros C' b o Hintf.
+              { clear -H9 H10 H11 MEM1 MEM2 MEM3 MEM4 MEM5 MEM Hintf H1 INT.
+                destruct (b == Block.local) eqn:Hblock.
+                - move: Hblock => /eqP Hblock; subst.
+                  destruct (C' == C) eqn:HC1.
+                  + move: HC1 => /eqP ->.
+                    destruct (o == 0%Z) eqn:Ho; move: Ho => /eqP Ho; subst.
+                    * rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                      rewrite (Memory.load_after_store_eq _ _ _ _ H9).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM5).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM4).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM3).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM2).
+                      rewrite (Memory.load_after_store_eq _ _ _ _ MEM1); eauto.
+                      all: try (unfold intcall, ret, location; congruence).
+                      unfold location; destruct H1; congruence.
+                      unfold location; destruct H1; congruence.
+                    * destruct (o == 1%Z) eqn:Ho'; move: Ho' => /eqP Ho'; subst.
+                      -- rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM5).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM4).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM3).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM2).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1).
+                         rewrite MEM. eauto. now destruct H1.
+                         all: try (unfold intcall, ret, location; congruence).
+                         unfold intcall; destruct H1; congruence.
+                         unfold intcall; destruct H1; congruence.
+                      -- rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM5).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM4).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM3).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM2).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1).
+                         rewrite MEM. eauto. now destruct H1.
+                         all: try (unfold intcall, ret, location; congruence).
+                         unfold ret; destruct H1; congruence.
+                         unfold ret; destruct H1; congruence.
+                  + (* move: HC1 => /eqP HC1. *)
+                    destruct (C' == C2) eqn:HC2.
+                    * move: HC2 => /eqP ->.
+                      destruct (o == 0%Z) eqn:Ho; move: Ho => /eqP Ho; subst.
+                      -- rewrite (Memory.load_after_store_eq _ _ _ _ H11).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM5).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM4).
+                         rewrite (Memory.load_after_store_eq _ _ _ _ MEM3); eauto.
+                         unfold intcall; congruence.
+                         unfold intcall; congruence.
+                      -- destruct (o == 1%Z) eqn:Ho'; move: Ho' => /eqP Ho'; subst.
+                         ++ rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
+                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+                            rewrite (Memory.load_after_store_eq _ _ _ _ MEM5).
+                            eapply INT. now destruct H1.
+                            all: try (unfold intcall, ret, location; congruence).
+                         ++ destruct (o == 2%Z) eqn:Ho''; move: Ho'' => /eqP Ho''; subst.
+                            ** rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
+                               rewrite (Memory.load_after_store_eq _ _ _ _ H10).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM5).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM4).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM3).
+                               rewrite (Memory.load_after_store_eq _ _ _ _ MEM2); eauto.
+                               all: try (unfold intcall, ret, location; congruence).
+                            ** rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM5).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM4).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM3).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM2).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+                               rewrite <- MEM; eauto. now destruct H1.
+                               all: try (unfold intcall, ret, location; congruence).
+                    * rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM5).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM4).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM3).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM2).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+                      rewrite <- MEM; eauto.
+                      all: move: HC1 => /eqP HC1; move: HC2 => /eqP HC2; unfold intcall, ret, location; congruence.
+                - move: Hblock => /eqP Hblock.
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM5).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM4).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM3).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM2).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+                  rewrite MEM. eauto. eauto.
+                  all: unfold location, intcall, ret; congruence.
+              }
+           ++ reflexivity.
+           ++ move=> C0 H.
+              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
+              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+              eapply INT; eauto.
+              unfold location, intcall; congruence.
+              unfold ret, intcall; congruence.
+              unfold location, intcall; congruence.
+
+           ++ reflexivity.
     + (* Step silent *)
       inv H0.
       (* We cannot be in a initial state *)
@@ -1661,11 +1892,13 @@ Proof.
         econstructor. eapply step. eapply star_refl. reflexivity.
       * simpl in *.
         destruct (update_can_silent [CState C, stk0, m', k', exp', arg]) eqn:UPDATE.
-        -- now eapply match_states_silent.
+        -- eapply match_states_silent; eauto.
+           ++ reflexivity.
         -- assert (k' = Kstop).
            { destruct k'; eauto;
                try (now rewrite (update_can_silent_k) in UPDATE; [inversion UPDATE | eauto]). }
            subst k'.
-           now eapply match_states_6.
+           eapply match_states_6; eauto. reflexivity.
+           admit.
       * eapply MEM.
 Admitted.
