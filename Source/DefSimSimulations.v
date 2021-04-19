@@ -961,14 +961,28 @@ Proof.
     + (* Call case *)
       destruct cs as [? ? ? ? ? ?].
       specialize (CUR_COMP C1 Logic.eq_refl).
+      (* 1 *)
       destruct (Memory.store_after_load _ (C1, Block.local, 0%Z) _ (Int (Z.of_nat n)) (CUR_LOC _ _ H7)) as [m' Hm'].
-      destruct (Memory.store_after_load m' (C2, Block.local, 0%Z) (Int (Z.of_nat p'0)) (Int (Z.of_nat n'))) as [m'' Hm''].
-      rewrite (Memory.load_after_store _ _ _ _ _ Hm').
-      rewrite helper2. eauto. move=> CONTRA; move: CONTRA H1 ->; now case.
-      destruct (Memory.store_after_load m'' (C2, Block.local, 1%Z) (Int 1%Z) (Int 1%Z)) as [m''' Hm'''].
-      rewrite (Memory.load_after_store _ _ _ _ _ Hm''). rewrite helper2'.
-      rewrite (Memory.load_after_store _ _ _ _ _ Hm'). rewrite helper2'.
-      simpl. eapply CUR_INT. now destruct H1. lia. lia.
+      (* 2 *)
+      destruct (Memory.store_after_load m' (C1, Block.local, 1%Z) (Int 1%Z) (Int 1%Z)) as [m'' Hm''].
+      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'); last by congruence.
+      eapply CUR_INT. now destruct H1.
+      (* 3 *)
+      destruct (Memory.store_after_load m'' (C2, Block.local, 0%Z) (Int (Z.of_nat p'0)) (Int (Z.of_nat n'))) as [m''' Hm'''].
+      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm''); last by congruence.
+      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'); last by (now destruct H1 as [[] []]; congruence).
+      eauto.
+      (* 4 *)
+      (* rewrite (Memory.load_after_store _ _ _ _ _ Hm'). *)
+      (* rewrite helper2. eauto. move=> CONTRA; move: CONTRA H1 ->; now case. *)
+      destruct (Memory.store_after_load m''' (C2, Block.local, 1%Z) (Int 1%Z) (Int 1%Z)) as [m'''' Hm''''].
+      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'''); last by congruence.
+      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm''); last by (now destruct H1 as [[] []]; congruence).
+      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'); last by congruence.
+      eapply CUR_INT. now destruct H1.
+      (* rewrite (Memory.load_after_store _ _ _ _ _ Hm''). rewrite helper2'. *)
+      (* rewrite (Memory.load_after_store _ _ _ _ _ Hm'). rewrite helper2'. *)
+      (* simpl. eapply CUR_INT. now destruct H1. lia. lia. *)
       exists 0; eexists; split.
       * left; econstructor.
         -- simpl in *; subst.
@@ -990,10 +1004,21 @@ Proof.
               (* Admitted: Unicity lemma that again relates to subtrees *)
               (* eapply callers_in_subtrees; admit. *)
               simpl; eauto. simpl; eauto.
-              erewrite (Memory.load_after_store _ _ _ _ _ Hm'). simpl.
-              rewrite helper2. eauto. move=> CONTRA; move: CONTRA H1 ->; now case.
-              erewrite (Memory.load_after_store _ _ _ _ _ Hm'). simpl.
-              rewrite helper2. eapply CUR_INT. now destruct H1. destruct H1 as [[] ]; congruence.
+              (* Memory *)
+              simpl.
+              erewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'').
+              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'). eauto.
+              unfold location; now destruct H1 as [[] []]; congruence.
+
+              simpl.
+              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'').
+              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'). eapply CUR_INT.
+              now destruct H1.
+              unfold intcall; now congruence.
+              unfold intcall; now destruct H1 as [[] []]; congruence.
+              (* (* rewrite helper2. eauto. move=> CONTRA; move: CONTRA H1 ->; now case. *) *)
+              (* erewrite (Memory.load_after_store _ _ _ _ _ Hm'). simpl. *)
+              (* rewrite helper2. eapply CUR_INT. now destruct H1. destruct H1 as [[] ]; congruence. *)
               simpl. eauto.
            ++ do 4 (take_step; eauto; [econstructor | eauto]); simpl. eauto. eauto.
               simpl in *; subst. simpl. unfold update_can_silent. simpl.
@@ -1008,33 +1033,51 @@ Proof.
 
         -- move=> C n0 H.
            simpl.
-           rewrite (Memory.load_after_store _ _ _ _ _ Hm'''); simpl. rewrite helper2'; last lia.
-           rewrite (Memory.load_after_store _ _ _ _ _ Hm''); simpl.
+           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm''''); last by unfold location; congruence.
+           (* rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'''); simpl. rewrite helper2'; last lia. *)
+           (* rewrite (Memory.load_after_store _ _ _ _ _ Hm''); simpl. *)
            move: H; rewrite 2!setmE.
-           destruct (C == C2) eqn:Heq. move: Heq => /eqP -> => [] [] ->.
-           unfold location; rewrite eqxx. eauto.
+           destruct (C == C2) eqn:Heq. move: Heq => /eqP -> => [] [] EQ; subst.
+           rewrite (Memory.load_after_store_eq _ _ _ _ Hm'''); eauto.
+           (* unfold location; rewrite eqxx. eauto. *)
            destruct (C == s_component) eqn:Heq'.
            move: Heq' => /eqP -> => [] [] <-. simpl in CUR_COMP. rewrite CUR_COMP.
-           rewrite helper2.
-           rewrite (Memory.load_after_store _ _ _ _ _ Hm'); simpl.
-           rewrite /location eqxx. eauto. now destruct H1 as [[] ].
-           move=> H. move: Heq => /eqP Heq. rewrite helper2.
-           rewrite (Memory.load_after_store _ _ _ _ _ Hm'); simpl.
-           rewrite /location.
-           move: Heq' => /eqP Heq'. rewrite helper2.
-           eauto. simpl in CUR_COMP. congruence. eauto.
+           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'''); last by unfold location; now destruct H1 as [[] []]; congruence.
+           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm''); last by unfold location; congruence.
+           rewrite (Memory.load_after_store_eq _ _ _ _ Hm'); eauto.
+           (* rewrite helper2. *)
+           (* rewrite (Memory.load_after_store _ _ _ _ _ Hm'); simpl. *)
+           (* rewrite /location eqxx. eauto. now destruct H1 as [[] ]. *)
+           move=> H. move: Heq => /eqP Heq.
+           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'''); last by unfold location; now destruct H1 as [[] []]; congruence.
+           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm''); last by unfold location; congruence.
+           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'); eauto. unfold location.
+           move: Heq' => /eqP Heq'. simpl in CUR_COMP. congruence.
+
+           (* rewrite helper2. *)
+           (* rewrite (Memory.load_after_store _ _ _ _ _ Hm'); simpl. *)
+           (* rewrite /location. *)
+           (* move: Heq' => /eqP Heq'. rewrite helper2. *)
+           (* eauto. simpl in CUR_COMP. congruence. eauto. *)
         -- move=> C H.
            simpl.
            destruct (C == C2) eqn:HC2.
            ++ move: HC2 => /eqP HC2. rewrite HC2.
-              rewrite (Memory.load_after_store_eq _ _ _ _ Hm'''). reflexivity.
-           ++ rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm''').
-              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'').
-              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm').
-              eapply CUR_INT. eauto.
-              apply /eqP; rewrite helper2'; eauto; lia.
-              apply /eqP; rewrite helper2'; eauto; lia.
-              move: HC2 => /eqP HC2. rewrite /intcall. apply /eqP. rewrite helper2. auto. congruence.
+              rewrite (Memory.load_after_store_eq _ _ _ _ Hm''''). reflexivity.
+           ++ rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'''').
+              rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm''').
+              {
+              destruct (C == C1) eqn:HC1.
+              ** move: HC1 => /eqP HC1; rewrite HC1.
+                 rewrite (Memory.load_after_store_eq _ _ _ _ Hm''). reflexivity.
+              ** rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm'').
+                 rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hm').
+                 eapply CUR_INT. eauto.
+                 unfold intcall; congruence.
+                 move: HC1 => /eqP HC1; unfold intcall; congruence.
+              }
+              move: HC2 => /eqP HC1; unfold intcall; congruence.
+              move: HC2 => /eqP HC1; unfold intcall; congruence.
         -- move=> C H. simpl in *.
            destruct t0; first inversion H.
            inv H. inv SEQOK. reflexivity.
@@ -1046,12 +1089,14 @@ Proof.
         -- move=> C H.
            destruct (MEM C) as [oldz Holdz].
            eauto. exists oldz; simpl.
-           rewrite (Memory.load_after_store_neq m'' _ (Int 1%Z) m''' _ _ Hm''').
-           rewrite (Memory.load_after_store_neq m' _ (Int (Z.of_nat n')) m'' _ _ Hm'').
-           rewrite (Memory.load_after_store_neq s_memory _ _ m' _ _ Hm'). eauto.
-           apply /eqP; rewrite helper2'. reflexivity. congruence.
-           apply /eqP; rewrite helper2'. reflexivity. congruence.
-           apply /eqP; rewrite helper2'. reflexivity. congruence.
+           rewrite (Memory.load_after_store_neq m''' _ _ _ _ _ Hm'''').
+           rewrite (Memory.load_after_store_neq m'' _ _ _ _ _ Hm''').
+           rewrite (Memory.load_after_store_neq m' _ _ _ _ _ Hm'').
+           rewrite (Memory.load_after_store_neq s_memory _ _ _ _ _ Hm'). eauto.
+           unfold ret; congruence.
+           unfold ret; congruence.
+           unfold ret; congruence.
+           unfold ret; congruence.
         -- simpl. reflexivity.
         -- simpl. move=> F [H | H].
            ++ simpl in *. rewrite <- H. eauto.
@@ -1232,6 +1277,12 @@ Proof.
     + inversion H1. apply IHs. eauto.
 Qed.
 
+Definition mem_agree mem mem' :=
+  forall C, Memory.load mem (location C) = Memory.load mem' (location C) /\
+       Memory.load mem (intcall C) = Memory.load mem' (intcall C) /\
+       Memory.load mem (ret C) = Memory.load mem' (ret C).
+
+
 Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWithCallers.state -> CS.state -> Prop :=
 | match_states_initial: forall s s',
     TreeWithCallers.initial p s ->
@@ -1294,6 +1345,11 @@ Lemma find_main (p: TreeWithCallers.prg):
               (build_event_expression Component.main Procedure.main (TreeWithCallers.prog_trees p Component.main))).
 Admitted.
 
+Lemma initial_location: forall p C,
+    Memory.load (prepare_buffers (compile_tree_with_callers p)) (C, Block.local, 0%Z) = Some (Int (Z.of_nat 0)).
+Proof.
+  Admitted.
+
 Lemma initial_buffers: forall p C,
     Memory.load (prepare_buffers (compile_tree_with_callers p)) (C, Block.local, (0 + 1)%Z) = Some (Int 0).
   move=> p C.
@@ -1321,34 +1377,54 @@ Proof.
     + (* Step call *)
       inv H0.
       * simpl in *; subst.
+        inv H.
         unfold CS.initial_state in H2.
         unfold CS.initial_machine_state in H2.
         rewrite find_main in H2. inversion H2; subst.
+        (* Memory operations *)
         destruct (Memory.store_after_load (prepare_buffers (compile_tree_with_callers p))
-                                          (Component.main, Block.local, 1%Z) (Int 0) (Int 1)) as [m'' MEM''].
-        eapply initial_buffers. simpl.
+                                          (Component.main, Block.local, 1%Z) (Int 0) (Int 1)) as [m''' MEM'''].
+        eapply initial_buffers.
+        destruct (Memory.store_after_load m''' (Component.main, Block.local, 0%Z) (Int 0%Z) (Int (Z.of_nat n))) as [m'''' MEM''''].
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM''').
+        eapply initial_location. congruence.
+        (* Star *)
+        simpl.
         eexists; eexists; split.
         -- left.
            eapply star_plus_trans.
            do 10 take_step. eauto. eapply initial_buffers.
            do 11 take_step. eauto. simpl. eauto.
-           eapply build_event_expression_correct. simpl; eauto. simpl; admit.
-           (* (* Well-formedness result *) *)
-           (* admit. *)
-           (* reflexivity. simpl in *. *)
-           (* (* Idem *) *)
-           (* admit. *)
-           (* simpl. reflexivity. *)
-           (* eapply call_event_correct. *)
-           (* simpl; eauto. *)
-           (* Well-formedness result: the execution always starts in Main *)
-           admit.
-           simpl; eauto. admit.
-           (* eapply find_procedure_find. *)
-           (* simpl. admit. *)
-           (* eauto. admit. *)
+           assert (exists trs, TreeWithCallers.prog_trees p Component.main = Some trs) as [trs has_main].
+           { clear -Hwf.
+             apply /dommP.
+             inversion Hwf.
+             rewrite -wfprog_defined_trees.
+             now rewrite mem_domm. }
+
+           eapply build_event_expression_correct with (xe := XECallOut P z C2 rts1).
+           simpl; eauto. now rewrite has_main.
+
+           simpl. rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM''').
+           unfold location.
+           eapply initial_location.
+           unfold location. congruence.
            reflexivity.
-        -- admit.
+
+
+           eapply plus_star_trans.
+           { eapply call_event_correct; simpl; eauto.
+             eapply find_procedure_find. }
+           take_step.
+           eapply star_refl.
+           reflexivity.
+           reflexivity.
+        -- eapply match_states_silent; simpl; eauto.
+           econstructor; eauto. now destruct H1 as [[] []]; congruence.
+           econstructor.
+           admit.
+           reflexivity.
+           admit.
         (* -- simpl in *. *)
         (*    eapply match_states_silent; simpl; eauto. *)
         (*    econstructor; eauto. now destruct H1 as [[] []]; congruence. *)
@@ -1375,13 +1451,13 @@ Proof.
            eapply star_refl.
            reflexivity. reflexivity.
         -- eapply match_states_silent; eauto.
+           ++
+              econstructor. simpl.
+              now destruct H1 as [[] []]; congruence.
+              now inversion H12.
            ++ admit.
-              (* econstructor. simpl. *)
-              (* now destruct H1 as [[] []]; congruence. *)
-              (* now inversion H11. *)
            ++ simpl. reflexivity.
-           ++ simpl.
-              admit.
+           ++ simpl. admit.
     + (* Step return *)
       (* destruct (Memory.store_after_load m''' (C1, Block.local, 1%Z) (Int (Z.of_nat 0)) (Int (Z.of_nat 1))) as [m'''' Hm'''']. *)
       admit.
@@ -1400,6 +1476,7 @@ Proof.
                                    Logic.eq_refl Logic.eq_refl H3).
       eexists; eexists; split.
       * left.
+        simpl in H.
         econstructor; [eauto | eapply star_refl | reflexivity].
       * simpl in *.
         destruct (update_can_silent [CState C, stk0, m', k', exp', arg]) eqn:UPDATE.

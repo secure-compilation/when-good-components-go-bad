@@ -762,7 +762,7 @@ Module TreeWithCallers.
           l1 l1' ls ls' l2 l2' n n' p p' zs zs' exp zs1 zs2 P z rts1
                  call_exp
                  gs gs' cs cs'
-                 stk m m'
+                 stk m m' m''
                  (* k  *)old_call_arg,
       forall (SEQOK: events_sequence_ok ((ECall C1 P z C2) :: t)),
       allowed_event (genv_interface ge) (ECall C1 P z C2) ->
@@ -776,6 +776,7 @@ Module TreeWithCallers.
       forall (LOC1: Memory.load m (location C1) = Some (Int (Z.of_nat p)))
         (LOC2: Memory.load m (location C2) = Some (Int (Z.of_nat p'))),
       Memory.store m (location C1) (Int (Z.of_nat n)) = Some m' ->
+      Memory.store m' (intcall C1) (Int 1%Z) = Some m'' ->
       find_procedure (genv_procedures ge) C2 P = Some call_exp ->
       gs = (ECall C1 P z C2 :: t, trees, locs, callers, st) ->
       gs' = (t, setm (setm trees C1 ls) C2 ls', setm (setm locs C1 n) C2 n',
@@ -783,7 +784,7 @@ Module TreeWithCallers.
              (C1, rts1) :: st) ->
       cs = [CState C1, stk, m, Kstop, exp, old_call_arg] ->
       cs' = [CState C2, {| CS.f_component := C1; CS.f_arg := old_call_arg; CS.f_cont := Kstop |} :: stk,
-             m',
+             m'',
              Kstop,
              call_exp,
              Int z] ->
