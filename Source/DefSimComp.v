@@ -349,88 +349,6 @@ Proof.
     reflexivity.
 Qed.
 
-Definition call_handling_info (x: (nat * xevent * nat * seq (Procedure.id * Z * nat))) :=
-  match x with
-  | (_, _, n, cls) => (n, cls)
-  end.
-
-(* Definition node_of P (x:(nat * xevent * nat * seq (Procedure.id * Z * nat))) := *)
-(*   match x with *)
-(*   | (p, xe, n, cls) => *)
-(*     match xe with *)
-(*     | XECallIn P' _ => (P == P') *)
-(*     | _ => false *)
-(*     end *)
-(*   end. *)
-
-
-
-(* Definition get_all_handle_calls P ots := *)
-(*   match ots with *)
-(*   | None => [] *)
-(*   | Some ts => *)
-(*     let all_nodes := List.concat (List.map tree_to_list ts) in *)
-(*     List.map call_handling_info (List.filter (node_of P) all_nodes) *)
-(*   end. *)
-
-Definition call_of P (x:((Procedure.id * Z * nat))) :=
-  match x with
-  | (P', _, _) => P == P'
-  end.
-
-
-
-Definition get_all_handle_calls (P: Procedure.id) ots :=
-  match ots with
-  | None => []
-  | Some ts =>
-    let all_nodes := List.concat (List.map tree_to_list ts) in
-    List.map (fun '(n, ls) => (n, List.filter (call_of P) ls)) (List.map call_handling_info all_nodes)
-  end.
-Definition switch_clause n e_then e_else :=
-    let one := E_val (Int 1%Z) in
-    E_if (E_binop Eq (E_deref E_local) (E_val (Int n)))
-         (E_seq (E_assign E_local (E_binop Add (E_deref E_local) one)) e_then)
-         e_else.
-
-
-Definition switch_clause_arg (cl: Procedure.id * Z * nat) e_else :=
-  let '(P, z, n) := cl in
-  E_if (E_binop Eq ARG (E_val (Int z)))
-       (E_assign LOCATION_p (E_val (Int (Z.of_nat n))))
-       e_else.
-
-Definition switch_arg (cls: seq (Procedure.id * Z * nat)): expr :=
-  fold_right switch_clause_arg E_exit cls.
-
-(* Definition switch_clause_call p e_then e_else := *)
-(*   E_if (E_binop Eq LOCATION (E_val (Int (Z.of_nat p)))) *)
-(*        e_then *)
-(*        e_else. *)
-
-Definition call_inner (clss: seq (nat * seq (Procedure.id * Z * nat))): seq (nat * expr) :=
-  List.map (fun '(p, cls) => (p, switch_arg cls)) clss.
-
-Definition switch_clause_call '(p, exp) e_else :=
-  E_if (E_binop Eq LOCATION (E_val (Int (Z.of_nat p))))
-       exp
-       e_else.
-
-Definition switch_call (clss: seq (nat * expr)) :=
-  fold_right switch_clause_call E_exit clss.
-
-Definition callexp (clss: seq (nat * seq (Procedure.id * Z * nat))): expr :=
-    switch_call (call_inner clss).
-
-Definition guard_call (e: expr) :=
-  E_seq (E_if (E_binop Eq INTCALL (E_val (Int 1%Z)))
-              e
-              (E_val (Int 0%Z)))
-        (E_assign (INTCALL_p) (E_val (Int 1%Z))).
-
-Definition comp_call_handle P trs :=
-  guard_call (callexp (get_all_handle_calls P trs)).
-
 Definition callers (gs: trace * NMap (seq call_return_tree) * NMap nat * NMap (seq (Procedure.id * Z * nat)) * stack):
   NMap (seq (Procedure.id * Z * nat)) :=
   match gs with
@@ -458,7 +376,7 @@ Admitted.
 
 
 
-Lemma call_handling_expression_correct: forall ge gs cs cs' C P zs zs1 z n zs2 p (trees: NMap (seq call_return_tree)) trs,
+Lemma call_handling_expression_correct: forall prog ge gs cs cs' C P zs zs1 z n zs2 p (trees: NMap (seq call_return_tree)) trs,
     (* unique_z zs -> *) (* zs = zs1 ++ (z, n) :: zs2 -> *)
     zs = zs1 ++ (P, z, n) :: zs2 ->
     forall (* (CALLERS: callers gs C = Some zs) *)
@@ -472,9 +390,9 @@ Lemma call_handling_expression_correct: forall ge gs cs cs' C P zs zs1 z n zs2 p
       (CURINT: Memory.load (CS.s_memory cs) (intcall (CS.s_component cs)) = Some (Int 1%Z)),
       cs' = [CState (CS.s_component cs), (CS.s_stack cs), (CS.s_memory cs), Kseq (E_assign INTCALL_p (E_val (Int 1))) (CS.s_cont cs),
              E_assign LOCATION_p (E_val (Int (Z.of_nat n))), Int z] ->
-      star TreeWithCallers.step ge (TreeWithCallers.Build_state gs cs (update_can_silent cs)) E0 (TreeWithCallers.Build_state gs cs' (update_can_silent cs')).
+      star (TreeWithCallers.step prog) ge (TreeWithCallers.Build_state gs cs (update_can_silent cs)) E0 (TreeWithCallers.Build_state gs cs' (update_can_silent cs')).
 Proof.
-  move=> ge gs [? ? ? ? ? ?] cs' C P zs zs1 z n zs2 p trees trs H CALLERS unique_p (* unique_z *) UNIQ TREES (* INTREES *) CUREXPR CURARG CURLOC CURINT H0.
+  move=> prog ge gs [? ? ? ? ? ?] cs' C P zs zs1 z n zs2 p trees trs H CALLERS unique_p (* unique_z *) UNIQ TREES (* INTREES *) CUREXPR CURARG CURLOC CURINT H0.
   simpl in *; subst.
   take_step; eauto. econstructor.
   take_step; eauto. econstructor.

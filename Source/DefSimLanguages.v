@@ -722,6 +722,75 @@ Proof.
   specialize (H v). contradiction.
 Qed.
 
+(* Sadly need to put that here *)
+
+Definition call_handling_info (x: (nat * xevent * nat * seq (Procedure.id * Z * nat))) :=
+  match x with
+  | (_, _, n, cls) => (n, cls)
+  end.
+
+Definition call_of P (x:((Procedure.id * Z * nat))) :=
+  match x with
+  | (P', _, _) => P == P'
+  end.
+
+
+
+Definition get_all_handle_calls (P: Procedure.id) ots :=
+  match ots with
+  | None => []
+  | Some ts =>
+    let all_nodes := List.concat (List.map tree_to_list ts) in
+    List.map (fun '(n, ls) => (n, List.filter (call_of P) ls)) (List.map call_handling_info all_nodes)
+  end.
+Definition switch_clause n e_then e_else :=
+    let one := E_val (Int 1%Z) in
+    E_if (E_binop Eq (E_deref E_local) (E_val (Int n)))
+         (E_seq (E_assign E_local (E_binop Add (E_deref E_local) one)) e_then)
+         e_else.
+
+
+Definition switch_clause_arg (cl: Procedure.id * Z * nat) e_else :=
+  let '(P, z, n) := cl in
+  E_if (E_binop Eq ARG (E_val (Int z)))
+       (E_assign LOCATION_p (E_val (Int (Z.of_nat n))))
+       e_else.
+
+Definition switch_arg (cls: seq (Procedure.id * Z * nat)): expr :=
+  fold_right switch_clause_arg E_exit cls.
+
+(* Definition switch_clause_call p e_then e_else := *)
+(*   E_if (E_binop Eq LOCATION (E_val (Int (Z.of_nat p)))) *)
+(*        e_then *)
+(*        e_else. *)
+
+Definition call_inner (clss: seq (nat * seq (Procedure.id * Z * nat))): seq (nat * expr) :=
+  List.map (fun '(p, cls) => (p, switch_arg cls)) clss.
+
+Definition switch_clause_call '(p, exp) e_else :=
+  E_if (E_binop Eq LOCATION (E_val (Int (Z.of_nat p))))
+       exp
+       e_else.
+
+Definition switch_call (clss: seq (nat * expr)) :=
+  fold_right switch_clause_call E_exit clss.
+
+Definition callexp (clss: seq (nat * seq (Procedure.id * Z * nat))): expr :=
+    switch_call (call_inner clss).
+
+Definition guard_call (e: expr) :=
+  E_seq (E_if (E_binop Eq INTCALL (E_val (Int 1%Z)))
+              e
+              (E_val (Int 0%Z)))
+        (E_assign (INTCALL_p) (E_val (Int 1%Z))).
+
+Definition comp_call_handle P trs :=
+  guard_call (callexp (get_all_handle_calls P trs)).
+
+
+
+
+
 Module TreeWithCallers.
 
   Record prg := { prog_interface: Program.interface;
@@ -778,7 +847,7 @@ Module TreeWithCallers.
   .
 
 
-  Variant step (ge: genv): state -> trace -> state -> Prop :=
+  Variant step (prog: prg) (ge: genv): state -> trace -> state -> Prop :=
   | step_call: forall C1 C2 e1 e2 t (trees: NMap (list call_return_tree)) (locs: NMap nat)
                  (callers: NMap (list (Procedure.id * Z * nat))) (st: stack)
           l1 l1' ls ls' l2 l2' n n' p p' zs zs' exp zs1 zs2 P z rts1
@@ -801,6 +870,7 @@ Module TreeWithCallers.
       Memory.store m (location C1) (Int (Z.of_nat n)) = Some m' ->
       Memory.store m' (intcall C1) (Int 1%Z) = Some m'' ->
       find_procedure (genv_procedures ge) C2 P = Some call_exp ->
+      forall (CALLEXP: call_exp = comp_call_handle P (prog_trees prog C2)),
       gs = (ECall C1 P z C2 :: t, trees, locs, callers, st) ->
       gs' = (t, setm (setm trees C1 ls) C2 ls', setm (setm locs C1 n) C2 n',
              setm (setm callers C1 zs) C2 zs',
@@ -815,7 +885,7 @@ Module TreeWithCallers.
       forall (DET: determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls)
         (DET': determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls'),
       forall (UNIQ: unique_p_z (zs1 ++ (P, z, n') :: zs2)),
-      step ge {| ghost_state := gs; concrete_state := cs; can_silent := false |} [ECall C1 P z C2]
+      step prog ge {| ghost_state := gs; concrete_state := cs; can_silent := false |} [ECall C1 P z C2]
            {| ghost_state := gs'; concrete_state := cs'; can_silent := true |}
   | step_ret: forall C1 C2 e1 e2 t (trees: NMap (list call_return_tree)) (locs: NMap nat)
                 (callers: NMap (seq (Procedure.id * Z * nat))) (st: stack)
@@ -845,7 +915,7 @@ Module TreeWithCallers.
       (* Determinacy and unicity *)
       forall (DET: determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls)
         (DET': determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls'),
-      step ge {| ghost_state := gs; concrete_state := cs; can_silent := false |} [ERet C1 z C2]
+      step prog ge {| ghost_state := gs; concrete_state := cs; can_silent := false |} [ERet C1 z C2]
            {| ghost_state := gs'; concrete_state := cs'; can_silent := false |}
   | step_silent: forall C1 stk m m' k k' exp exp' arg
                    gs cs cs' b,
@@ -853,12 +923,12 @@ Module TreeWithCallers.
       cs' = [CState C1, stk, m', k', exp', arg] ->
       CS.kstep ge cs E0 cs' ->
       update_can_silent cs' = b ->
-      step ge {| ghost_state := gs; concrete_state := cs; can_silent := true |} E0
+      step prog ge {| ghost_state := gs; concrete_state := cs; can_silent := true |} E0
            {| ghost_state := gs; concrete_state := cs'; can_silent := b |}
   .
 
   Definition sem (p: prg): semantics :=
-    {| Smallstep.step := step;
+    {| Smallstep.step := step p;
        initial_state := initial p;
        final_state := final p;
        globalenv := {| genv_interface := prog_interface p; genv_procedures := prog_procedures p |} |}.

@@ -1598,7 +1598,7 @@ Proof.
                unfold intcall; congruence.
            }
            reflexivity.
-           admit.
+           (* admit. *)
         (* -- simpl in *. *)
         (*    eapply match_states_silent; simpl; eauto. *)
         (*    econstructor; eauto. now destruct H1 as [[] []]; congruence. *)
@@ -1638,7 +1638,7 @@ Proof.
               now inversion H12.
            ++ admit.
            ++ simpl. reflexivity.
-           ++ simpl. admit.
+           (* ++ simpl. admit. *)
     + (* Step return *)
       (* destruct (Memory.store_after_load m''' (C1, Block.local, 1%Z) (Int (Z.of_nat 0)) (Int (Z.of_nat 1))) as [m'''' Hm'''']. *)
       admit.
