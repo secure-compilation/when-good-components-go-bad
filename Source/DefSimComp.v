@@ -142,6 +142,7 @@ Definition compile_numbered_tree (p: NumberedTree.prg): ParentAwareTree.prg :=
   {| ParentAwareTree.prog_interface := NumberedTree.prog_interface p;
      ParentAwareTree.prog_trees := mapm (List.map (fun x => add_parent_loc x 0)) (NumberedTree.prog_trees p) |}.
 
+
 Definition call_information (C: Component.id) (tr: parent_aware_tree): option (Procedure.id * Z * nat) :=
   match tr with
   | node (_, ECallIn P arg, n) _ => Some (P, arg, n)

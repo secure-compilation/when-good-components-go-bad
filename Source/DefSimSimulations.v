@@ -95,7 +95,6 @@ Proof.
       now apply H6.
 Qed.
 
-
 Inductive match_states2 (intf: Program.interface) (i: nat): NumberedTree.state -> ParentAwareTree.state -> Prop :=
 | match_states_2: forall t (trees: NMap (list numbered_tree)) (trees': NMap (list parent_aware_tree)) (locs: NMap nat),
     (forall C, C \in (domm intf) -> exists n, locs C = Some n) ->
@@ -892,17 +891,17 @@ Proof.
 Qed.
 
 (* Admitted: Unicity lemma *)
-Lemma wf_trees_unique_key: forall C P p,
-    TreeWithCallers.wf p ->
-    unique_key (get_all_handle_calls P (TreeWithCallers.prog_trees p C)).
-Proof.
-  move=> C P p H.
-  unfold get_all_handle_calls.
-  destruct (TreeWithCallers.prog_trees p C); last first.
-  unfold unique_key; intros. destruct ls1; inversion H0.
-  unfold unique_key.
-  move=> ls1 a1 b1 ls2 a2 b2 ls3 H0.
-Admitted.
+(* Lemma wf_trees_unique_key: forall C P p, *)
+(*     TreeWithCallers.wf p -> *)
+(*     unique_key (get_all_handle_calls P (TreeWithCallers.prog_trees p C)). *)
+(* Proof. *)
+(*   move=> C P p H. *)
+(*   unfold get_all_handle_calls. *)
+(*   destruct (TreeWithCallers.prog_trees p C); last first. *)
+(*   unfold unique_key; intros. destruct ls1; inversion H0. *)
+(*   unfold unique_key. *)
+(*   move=> ls1 a1 b1 ls2 a2 b2 ls3 H0. *)
+(* Admitted. *)
 
 Lemma sim5 (p: CallReturnTree.prg) (wf: CallReturnTree.wf p):
   forward_simulation (CallReturnTree.sem p) (TreeWithCallers.sem (compile_call_return_tree p)).
@@ -917,6 +916,7 @@ Proof.
     exists 0; eexists; split.
     + constructor.
       eauto.
+      admit.
     + econstructor.
       * move=> C n //=.
         rewrite /Memory.load /TreeWithCallers.initial_memory /initial_locs 2!mkfmapfE.
@@ -928,15 +928,6 @@ Proof.
         rewrite ComponentMemory.load_prealloc //=.
       * move=> C H. simpl.
         destruct H0. destruct H1. destruct H2. congruence.
-      (* * unfold compile_call_return_tree. simpl. *)
-      (*   (* Unicity result: this holds because in that case, zs is a subset of all the caller information, *)
-      (*    which satisfy unicity by [wf_trees_unique_key] *) *)
-      (*   move=> C zs H. *)
-      (*   unfold TreeWithCallers.initial_callers in H. *)
-      (*   unfold CallReturnTree.initial_callers in H. rewrite mapimE in H. *)
-      (*   destruct (CallReturnTree.prog_trees p C); simpl in H; last by congruence. *)
-      (*   inversion H as [EQ]. unfold DefSimLanguages.CallReturnTree.collect_callers_initial. *)
-      (*   admit. *)
       * constructor.
       * move=> C H.
         simpl. unfold TreeWithCallers.initial_memory.
@@ -1303,8 +1294,13 @@ Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWi
 | match_states_initial: forall s s',
     TreeWithCallers.initial p s ->
     CS.initial_state (compile_tree_with_callers p) s' ->
+    forall (SUBTREE: forall C ls ls',
+          TreeWithCallers.prog_trees p C = Some ls ->
+          (let '(_, trees, _, _, _) := TreeWithCallers.ghost_state s in trees) C = Some ls' ->
+          subtrees ls' ls),
     match_states6 p ge i s s'
-| match_states_silent: forall gs cs cs' t trees locs cls st P,
+| match_states_silent: forall (gs:trace * NMap (seq call_return_tree) * NMap nat * NMap (seq (Procedure.id * Z * nat)) * stack)
+                               cs cs' t trees locs cls st P,
     gs = (t, trees, locs, cls, st) ->
     forall (COMP: CS.s_component cs = CS.s_component cs')
       (STACK: match_concrete_stacks (CS.s_component cs') st (CS.s_stack cs'))
@@ -1316,10 +1312,15 @@ Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWi
       (*     C \in domm (TreeWithCallers.prog_interface p) -> *)
       (*     Memory.load (CS.s_memory cs) (intcall C) = Some (Int 1%Z)) *)
       (ARG: CS.s_arg cs = CS.s_arg cs'),
+    forall (SUBTREE: forall C ls ls',
+          TreeWithCallers.prog_trees p C = Some ls ->
+          (let '(_, trees, _, _, _) := gs in trees) C = Some ls' ->
+          subtrees ls' ls),
       match_states6 p ge i {| TreeWithCallers.ghost_state := gs;
                               TreeWithCallers.concrete_state := cs;
                               TreeWithCallers.can_silent := true |} cs'
-| match_states_6: forall gs cs cs' t trees locs cls st P,
+| match_states_6: forall (gs:trace * NMap (seq call_return_tree) * NMap nat * NMap (seq (Procedure.id * Z * nat)) * stack)
+                    cs cs' t trees locs cls st P,
     gs = (t, trees, locs, cls, st) ->
     forall (COMP: CS.s_component cs = CS.s_component cs')
       (STACK: match_concrete_stacks (CS.s_component cs') st (CS.s_stack cs'))
@@ -1333,6 +1334,10 @@ Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWi
           C \in domm (TreeWithCallers.prog_interface p) ->
           Memory.load (CS.s_memory cs) (intcall C) = Some (Int 1%Z))
       (ARG: CS.s_arg cs = CS.s_arg cs'),
+    forall (SUBTREE: forall C ls ls',
+          TreeWithCallers.prog_trees p C = Some ls ->
+          (let '(_, trees, _, _, _) := gs in trees) C = Some ls' ->
+          subtrees ls' ls),
       match_states6 p ge i {| TreeWithCallers.ghost_state := gs;
                               TreeWithCallers.concrete_state := cs;
                               TreeWithCallers.can_silent := false |} cs'.
@@ -1463,6 +1468,43 @@ Proof.
   - admit.
 Admitted.
 
+
+
+Lemma subtrees_in_all_ev: forall trs p xe n zs l ls,
+    In (node (p, xe, n, zs) l) ls ->
+    subtrees ls trs ->
+    node_of_comp (p, xe, n , zs) ->
+    In (p, xe, n) (List.map event_info (List.filter node_of_comp (concat (List.map tree_to_list trs)))).
+Proof.
+  move=> trs p xe n zs l ls IN SUB FILTER.
+  induction SUB.
+  - move: IN FILTER.
+    elim: trs.
+    + by [].
+    + move=> a l0 H IN //= FILTER.
+      case: IN.
+      * intros EQ; subst.
+        rewrite //= filter_app FILTER //=.
+        now left.
+      * rewrite //= filter_app //= List.map_app => IN.
+        eapply in_app_iff; right.
+        now eapply H.
+  - specialize (IHSUB IN).
+    assert (EQ: List.map event_info (List.filter node_of_comp (concat (List.map tree_to_list (trs1 ++ node x trs' :: trs2))))
+                = (List.map event_info (List.filter node_of_comp (concat (List.map tree_to_list trs1))))
+                    ++ (List.map event_info (List.filter node_of_comp [x]))
+                    ++ (List.map event_info (List.filter node_of_comp (concat (List.map tree_to_list trs'))))
+                    ++ (List.map event_info (List.filter node_of_comp (concat (List.map tree_to_list trs2))))).
+    { rewrite !List.map_app !concat_app !filter_app !List.map_app //=.
+      case: (node_of_comp x) => //=.
+    }
+    rewrite EQ.
+    eapply in_app_iff. right.
+    eapply in_app_iff. right.
+    eapply in_app_iff. now left.
+Qed.
+
+
 (* Admitted, but we are very close to completing it. The goals are all admitted, but  *)
 Lemma sim6 (p: TreeWithCallers.prg) (Hwf: TreeWithCallers.wf p):
   forward_simulation (TreeWithCallers.sem p) (Src.sem (compile_tree_with_callers p)).
@@ -1475,7 +1517,10 @@ Proof.
     exists 0; exists (CS.initial_machine_state (compile_tree_with_callers p)).
     split.
     + rewrite /CS.initial_state //=.
-    + constructor; [by [] | rewrite /CS.initial_state //=].
+    + constructor; [by [] | rewrite /CS.initial_state //= |].
+      move=> C ls ls' H0 H1. inversion H; simpl in H1; subst.
+      unfold TreeWithCallers.ghost_state in H1. rewrite H0 in H1; inversion H1; subst; econstructor.
+
   - move=> i s1 s2 H H0. reflexivity.
   - move=> s1 t s1' H i [C stk m k e arg] H0.
     inv H.
@@ -1513,41 +1558,31 @@ Proof.
              rewrite mem_domm. eapply TreeWithCallers.wf_has_main; eauto. }
            rewrite /compile_tree_with_callers /prepare_buffers /Memory.load mapmE //= mapimE //= Hv //= ComponentMemory.load_prealloc //=.
            do 11 take_step. eauto. simpl. eauto.
-           assert (exists trs, TreeWithCallers.prog_trees p Component.main = Some trs) as [trs has_main].
-           { clear -Hwf.
-             apply /dommP.
-             inversion Hwf.
-             rewrite -wfprog_defined_trees.
-             now rewrite mem_domm. }
+           (* assert (exists trs, TreeWithCallers.prog_trees p Component.main = Some trs) as [trs has_main]. *)
+           (* { clear -Hwf. *)
+           (*   apply /dommP. *)
+           (*   inversion Hwf. *)
+           (*   rewrite -wfprog_defined_trees. *)
+           (*   now rewrite mem_domm. } *)
 
            { eapply build_event_expression_correct with (xe := XECallOut P z C2 rts1).
              - eapply TreeWithCallers.det_loc. eauto. eauto.
-             - admit.
+             - eapply subtrees_in_all_ev with (ls := l1 ++ node (p0, XECallOut P z C2 rts1, n, zs) ls :: l2).
+               eapply in_app_iff; right. now left.
+               eapply SUBTREE; eauto.
+               reflexivity.
              - eauto.
-             - simpl. rewrite has_main. eauto.
+             - simpl. rewrite H4. eauto.
              - simpl. rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM''').
                assert (exists v, TreeWithCallers.prog_interface p Component.main = Some v) as [v Hv].
                { apply /dommP.
                  rewrite mem_domm. eapply TreeWithCallers.wf_has_main; eauto. }
                rewrite /compile_tree_with_callers /prepare_buffers /Memory.load mapmE //= mapimE //= Hv //= ComponentMemory.load_prealloc //=.
-               instantiate (1 := 0). reflexivity.
+               assert (p0 = 0) by now eapply INIPARENT; eauto.
+               now subst.
                unfold location; congruence.
              - eauto.
            }
-
-           (* simpl. rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM'''). *)
-           (* unfold location. *)
-           (* instantiate (1 := 0). *)
-           (* rewrite /prepare_buffers /Memory.load mapmE //= mapimE //=. *)
-           (* assert (exists v, TreeWithCallers.prog_interface p Component.main = Some v) as [v Hv]. *)
-           (* { apply /dommP. *)
-           (*   rewrite mem_domm. eapply TreeWithCallers.wf_has_main; eauto. } *)
-           (* rewrite Hv //=. *)
-           (* rewrite ComponentMemory.load_prealloc //=. *)
-           (* unfold location. congruence. *)
-           (* reflexivity. *)
-
-
            eapply plus_star_trans.
            { eapply call_event_correct; simpl; eauto.
              eapply find_procedure_find. admit. admit.
@@ -1633,24 +1668,16 @@ Proof.
                unfold intcall; congruence.
            }
            reflexivity.
-           (* move=> C H. *)
-           (* destruct (C == Component.main) eqn:HC; move: HC => /eqP HC; subst. *)
-           (* rewrite (Memory.load_after_store_eq _ _ _ _ H10); eauto. *)
-           (* rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10); eauto. *)
-           (* rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9); eauto. *)
-           (* rewrite /TreeWithCallers.initial_memory /Memory.load //= mkfmapfE //=. *)
-           (* rewrite H. *)
-           (* rewrite ComponentMemory.load_prealloc //=. *)
-           (* unfold location, intcall; congruence. *)
-           (* unfold location, intcall; congruence. *)
-
-           (* admit. *)
-        (* -- simpl in *. *)
-        (*    eapply match_states_silent; simpl; eauto. *)
-        (*    econstructor; eauto. now destruct H1 as [[] []]; congruence. *)
-        (*    admit. *)
-        (*    apply match_cont_Kstop. *)
-        (*    admit. *)
+           { clear -H4 H5 SUBTREE.
+             move=> C.
+             rewrite 2!setmE.
+             case: eqP => HC2; subst.
+             - move=> ls0 ls'0; rewrite H5 => [] [] <- [] <-.
+               econstructor; econstructor.
+             - case: eqP => HC1; subst.
+               + move=> ls0 ls'0; rewrite H4 => [] [] <- [] <-.
+                 econstructor; econstructor.
+               + eapply SUBTREE. }
 
       * simpl in *; subst.
 
@@ -1663,12 +1690,19 @@ Proof.
         eexists; eexists; split.
         -- left.
            eapply star_plus_trans.
+
+           assert (exists v, TreeWithCallers.prog_trees p C = Some v) as [v Hv].
+           { apply /dommP. rewrite <- TreeWithCallers.wfprog_defined_trees; eauto. now destruct H1. }
+
            (* Using this lemma requires a unicity result *)
            { eapply build_event_expression_correct with (xe := XECallOut P z C2 rts1).
-             - eapply TreeWithCallers.det_loc. eauto. admit.
-             - admit.
+             - eapply TreeWithCallers.det_loc. eauto. eauto.
+             - eapply subtrees_in_all_ev with (ls := l1 ++ node (p0, XECallOut P z C2 rts1, n, zs) ls :: l2).
+               eapply in_app_iff; right; now left.
+               eapply SUBTREE; eauto.
+               eauto.
              - eauto.
-             - simpl. admit.
+             - simpl. rewrite Hv. reflexivity.
              - simpl. unfold location; rewrite <- MEM; eauto.
                now destruct H1.
              - eauto.
@@ -1739,17 +1773,25 @@ Proof.
                unfold intcall; congruence.
            }
            ++ simpl. reflexivity.
-           (* ++ move=> C0 H0. simpl. *)
-           (* destruct (C0 == C) eqn:HC; move: HC => /eqP HC; subst. *)
-           (* rewrite (Memory.load_after_store_eq _ _ _ _ H10); eauto. *)
-           (* rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10); eauto. *)
-           (* rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9); eauto. *)
-           (* unfold location, intcall; congruence. *)
-           (* unfold location, intcall; congruence. *)
-
-           (* ++ simpl. admit. *)
+           ++ clear -H4 H5 SUBTREE.
+              move=> C'.
+              rewrite 2!setmE.
+              case: eqP => HC2; subst.
+              ** move: (SUBTREE C2).
+                 case (TreeWithCallers.prog_trees p C2) => //= lsC2 SUB.
+                 assert (subtrees ls' (l1' ++ node (p', XECallIn P z, n', zs') ls' :: l2')). econstructor. econstructor.
+                 assert (subtrees (l1' ++ node (p', XECallIn P z, n', zs') ls' :: l2') lsC2). eapply SUB; eauto.
+                 move=> ? ? [] ? [] ?; subst.
+                 eapply subtrees_trans; eauto.
+              ** case: eqP => HC1; subst.
+                 move: (SUBTREE C).
+                 case (TreeWithCallers.prog_trees p C) => //= lsC1 SUB.
+                 assert (subtrees ls (l1 ++ node (p0, XECallOut P z C2 rts1, n, zs) ls :: l2)). econstructor. econstructor.
+                 assert (subtrees (l1 ++ node (p0, XECallOut P z C2 rts1, n, zs) ls :: l2) lsC1). eapply SUB; eauto.
+                 move=> ? ? [] ? [] ?; subst.
+                 eapply subtrees_trans; eauto.
+                 eapply SUBTREE.
     + (* Step return *)
-      (* destruct (Memory.store_after_load m''' (C1, Block.local, 1%Z) (Int (Z.of_nat 0)) (Int (Z.of_nat 1))) as [m'''' Hm'''']. *)
       inv H0; subst.
       * inversion H.
       * simpl in *; subst.
@@ -1760,10 +1802,6 @@ Proof.
         (* (* ret C2 *) *)
         assert (exists oldz, Memory.load m0 (ret C2) = Some (Int oldz)) as [oldz EQoldz].
         { clear -H9 H10.
-
-
-
-
           admit. }
         destruct (Memory.store_after_load m1 (ret C2) (Int oldz) (Int z)) as [m2 MEM2].
         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1); last by unfold ret, location; congruence.
@@ -1800,7 +1838,10 @@ Proof.
              now destruct H1. eauto. }
            { eapply build_event_expression_correct with (xe := XERetOut z); simpl; eauto.
              - eapply TreeWithCallers.det_loc. eauto. eapply Hv.
-             - admit.
+             - eapply subtrees_in_all_ev with (ls := l1 ++ node (p0, XERetOut z, n, zs) ls :: l2).
+               eapply in_app_iff; right; now left.
+               eapply SUBTREE; eauto.
+               eauto.
              - rewrite Hv. reflexivity.
              - unfold location; rewrite <- MEM. eauto. destruct H1 as [? []]; now auto.
            }
@@ -1959,6 +2000,24 @@ Proof.
               unfold location, intcall; congruence.
 
            ++ reflexivity.
+           ++ clear -H4 H5 SUBTREE.
+              move=> C'.
+              rewrite 2!setmE.
+              case: eqP => HC2; subst.
+              ** move: (SUBTREE C2).
+                 case (TreeWithCallers.prog_trees p C2) => //= lsC2 SUB.
+                 assert (subtrees ls' (l1' ++ node (p', XERetIn z, n', zs') ls' :: l2')). econstructor. econstructor.
+                 assert (subtrees (l1' ++ node (p', XERetIn z, n', zs') ls' :: l2') lsC2). eapply SUB; eauto.
+                 move=> ? ? [] ? [] ?; subst.
+                 eapply subtrees_trans; eauto.
+              ** case: eqP => HC1; subst.
+                 move: (SUBTREE C).
+                 case (TreeWithCallers.prog_trees p C) => //= lsC1 SUB.
+                 assert (subtrees ls (l1 ++ node (p0, XERetOut z, n, zs) ls :: l2)). econstructor. econstructor.
+                 assert (subtrees (l1 ++ node (p0, XERetOut z, n, zs) ls :: l2) lsC1). eapply SUB; eauto.
+                 move=> ? ? [] ? [] ?; subst.
+                 eapply subtrees_trans; eauto.
+                 eapply SUBTREE.
     + (* Step silent *)
       inv H0.
       (* We cannot be in a initial state *)

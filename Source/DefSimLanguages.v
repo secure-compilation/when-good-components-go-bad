@@ -181,6 +181,28 @@ Definition all_trees {A: Type} (a: A -> Prop) (trees: NMap (list (t A))): Prop :
     trees C = Some trs ->
     List.Forall (Tree.Forall a) trs.
 
+Inductive subtrees {A: Type}: seq (Tree.t A) -> seq (Tree.t A) -> Prop :=
+| subtrees_eq: forall trs,
+    subtrees trs trs
+|subtrees_child: forall trs trs' trs1 trs2 x,
+    subtrees trs trs' ->
+    subtrees trs (trs1 ++ (node x trs') :: trs2)
+.
+
+Lemma subtrees_trans: forall (A: Type) (trs1 trs2 trs3: seq (t A)),
+    subtrees trs1 trs2 ->
+    subtrees trs2 trs3 ->
+    subtrees trs1 trs3.
+Proof.
+  move=> A trs1 trs2 trs3 H1 H2.
+  generalize dependent trs1.
+  induction H2.
+  - eauto.
+  - intros.
+    eapply IHsubtrees in H1.
+    econstructor. eauto.
+Qed.
+
 Module Tree.
   Record prg := { prog_interface: Program.interface;
                   prog_trees: NMap (list tree) }.
@@ -210,7 +232,7 @@ Module Tree.
   | final_nil: forall trees, final p ([], trees)
   .
 
-  Variant step (ge: genv): state -> trace -> state -> Prop :=
+  Variant step (prog: prg) (ge: genv): state -> trace -> state -> Prop :=
   | step_trace: forall C1 C2 e t (trees: NMap (list tree)) l1 l1' ls ls' l2 l2',
       forall (SEQOK: events_sequence_ok (e::t)),
       allowed_event ge e ->
@@ -221,11 +243,11 @@ Module Tree.
       (* Determinacy and unicity *)
       forall (DET: determinate_tree_list eq ls)
         (DET': determinate_tree_list eq ls'),
-      step ge (e :: t, trees) [e] (t, setm (setm trees C1 ls) C2 ls' )
+      step prog ge (e :: t, trees) [e] (t, setm (setm trees C1 ls) C2 ls' )
   .
 
   Definition sem (p: prg): semantics :=
-    {| Smallstep.step := step;
+    {| Smallstep.step := step p;
        initial_state := initial p;
        final_state := final p;
        globalenv := prog_interface p |}.
@@ -238,6 +260,7 @@ Lemma initial_locs_spec (intf: Program.interface): forall C,
 Proof.
   move=> C; by rewrite mkfmapfE => ->.
 Qed.
+
 
 Module NumberedTree.
 
@@ -268,7 +291,7 @@ Module NumberedTree.
   | final_nil: forall trees n, final p ([], trees, n)
   .
 
-  Variant step (ge: genv): state -> trace -> state -> Prop :=
+  Variant step (prog: prg) (ge: genv): state -> trace -> state -> Prop :=
   | step_trace: forall C1 C2 e t (trees: NMap (list numbered_tree)) (locs: NMap nat) l1 l1' ls ls' l2 l2' n n',
       forall (SEQOK: events_sequence_ok (e :: t)),
       allowed_event ge e ->
@@ -279,11 +302,11 @@ Module NumberedTree.
       (* Determinacy and unicity *)
       forall (DET: determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) ls)
         (DET': determinate_tree_list (fun '(e1, _) '(e2, _) => e1 = e2) ls'),
-      step ge (e :: t, trees, locs) [e] (t, setm (setm trees C1 ls) C2 ls', setm (setm locs C1 n) C2 n')
+      step prog ge (e :: t, trees, locs) [e] (t, setm (setm trees C1 ls) C2 ls', setm (setm locs C1 n) C2 n')
   .
 
   Definition sem (p: prg): semantics :=
-    {| Smallstep.step := step;
+    {| Smallstep.step := step p;
        initial_state := initial p;
        final_state := final p;
        globalenv := prog_interface p |}.
@@ -324,7 +347,7 @@ Module ParentAwareTree.
   .
 
 
-  Variant step (ge: genv): state -> trace -> state -> Prop :=
+  Variant step (prog: prg) (ge: genv): state -> trace -> state -> Prop :=
   | step_trace: forall C1 C2 e t (trees: NMap (list parent_aware_tree)) (locs: NMap nat)
                   l1 l1' ls ls' l2 l2' n n' p p',
       forall (SEQOK: events_sequence_ok (e :: t)),
@@ -338,12 +361,12 @@ Module ParentAwareTree.
       (* Determinacy and unicity *)
       forall (DET: determinate_tree_list (fun '(_, e1, _) '(_, e2, _) => e1 = e2) ls)
         (DET': determinate_tree_list (fun '(_, e1, _) '(_, e2, _) => e1 = e2) ls'),
-      step ge (e :: t, trees, locs) [e]
+      step prog ge (e :: t, trees, locs) [e]
            (t, setm (setm trees C1 ls) C2 ls', setm (setm locs C1 n) C2 n')
   .
 
   Definition sem (p: prg): semantics :=
-    {| Smallstep.step := step;
+    {| Smallstep.step := step p;
        initial_state := initial p;
        final_state := final p;
        globalenv := prog_interface p |}.
@@ -431,7 +454,7 @@ Module CallerAwareTree.
   .
 
 
-  Variant step (ge: genv): state -> trace -> state -> Prop :=
+  Variant step (prog: prg) (ge: genv): state -> trace -> state -> Prop :=
   | step_call: forall C1 C2 e t (trees: NMap (list caller_aware_tree)) (locs: NMap nat) (callers: NMap (seq (Procedure.id * Z * nat)))
                   l1 l1' ls ls' l2 l2' n n' p p' zs zs' zs1 zs2 P z,
       forall (SEQOK: events_sequence_ok (e :: t)),
@@ -447,7 +470,7 @@ Module CallerAwareTree.
       forall (DET: determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls)
         (DET': determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls'),
       forall (UNIQ: unique_p_z (zs1 ++ (P, z, n') :: zs2)),
-      step ge (e :: t, trees, locs, callers) [e]
+      step prog ge (e :: t, trees, locs, callers) [e]
            (t, setm (setm trees C1 ls) C2 ls', setm (setm locs C1 n) C2 n', setm (setm callers C1 zs) C2 zs')
   | step_ret: forall C1 C2 e t (trees: NMap (list caller_aware_tree)) (locs: NMap nat) (callers: NMap (seq (Procedure.id * Z * nat)))
                   l1 l1' ls ls' l2 l2' n n' p p' zs zs' z,
@@ -461,12 +484,12 @@ Module CallerAwareTree.
       (* Determinacy and unicity *)
       forall (DET: determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls)
         (DET': determinate_tree_list (fun '(_, e1, _, _) '(_, e2, _, _) => e1 = e2) ls'),
-      step ge (e :: t, trees, locs, callers) [e]
+      step prog ge (e :: t, trees, locs, callers) [e]
            (t, setm (setm trees C1 ls) C2 ls', setm (setm locs C1 n) C2 n', setm (setm callers C1 zs) C2 zs')
   .
 
   Definition sem (p: prg): semantics :=
-    {| Smallstep.step := step;
+    {| Smallstep.step := step p;
        initial_state := initial p;
        final_state := final p;
        globalenv := prog_interface p |}.
@@ -503,18 +526,6 @@ Proof.
 Qed.
 
 Definition initial_stack: stack := [].
-
-(* Definition cur_comp_of_xevent (e: xevent) := *)
-(*   match e with *)
-(*   | XECall C _ _ _ _ => C *)
-(*   | XERet C _ _ => C *)
-(*   end. *)
-
-(* Definition next_comp_of_xevent (e: xevent) := *)
-(*   match e with *)
-(*   | XECall _ _ _ C _ => C *)
-(*   | XERet _ _ C => C *)
-(*   end. *)
 
 Definition allowed_xevent (C1: Component.id) (intf: Program.interface) (e: xevent) :=
   match e with
@@ -560,65 +571,6 @@ Definition get_all_event ots :=
     let all_nodes := List.concat (List.map tree_to_list ts) in
     List.map event_info (List.filter (node_of_comp) all_nodes)
   end.
-
-
-(* Lemma allowed_event_allowed_xevent (intf: Program.interface): *)
-(*   forall (e: xevent), *)
-(*     match e with *)
-(*     | XECall C1 P z C2 rts => allowed_event intf (ECall C1 P z C2) *)
-(*     | XERet C1 z C2 => allowed_event intf (ERet C1 z C2) *)
-(*     end -> *)
-(*     allowed_xevent intf e. *)
-(* Proof. *)
-(*   intros []; eauto. *)
-(* Qed. *)
-
-(* Definition node_of C P (x:(nat * xevent * nat * seq (Z * nat))) := *)
-(*   match x with *)
-(*   | (p, xe, n, cls) => *)
-(*     match xe with *)
-(*     | XECall C0 P0 z C1 rts => (C0 == C) && (P0 == P) *)
-(*     | XERet C0 z C1 => C0 == C *)
-(*     end *)
-(*   end. *)
-
-(* Inductive callers_in_tree: Component.id -> Procedure.id -> nat -> call_return_tree -> seq (Z * nat) -> Prop := *)
-(* | callers_in_node: forall C P p e n zs ls, *)
-(*     node_of C P (p, e, n, zs) -> *)
-(*     callers_in_tree C P n (node (p, e, n, zs) ls) zs *)
-(* | callers_in_child: forall C P p ls ls1 tr ls2 zs x, *)
-(*     ls = ls1 ++ tr :: ls2 -> *)
-(*     callers_in_tree C P p tr zs -> *)
-(*     callers_in_tree C P p (node x ls) zs. *)
-
-(* Definition callers_in_trees (C: Component.id) (P: Procedure.id) (p: nat) (ls: seq call_return_tree) (callers: seq (Z * nat)) := *)
-(*   exists tr ls1 ls2, *)
-(*     ls = ls1 ++ tr :: ls2 /\ callers_in_tree C P p tr callers. *)
-
-Inductive subtrees {A: Type}: seq (Tree.t A) -> seq (Tree.t A) -> Prop :=
-| subtrees_eq: forall trs,
-    subtrees trs trs
-|subtrees_child: forall trs trs' trs1 trs2 x,
-    subtrees trs trs' ->
-    subtrees trs (trs1 ++ (node x trs') :: trs2)
-.
-
-(* Lemma callers_in_subtrees: forall C P p trs trs' zs, *)
-(*     subtrees trs trs' -> *)
-(*     callers_in_trees C P p trs zs -> *)
-(*     callers_in_trees C P p trs' zs. *)
-(* Proof. *)
-(*   move=> C P p trs trs' zs H. *)
-(*   induction H. *)
-(*   - eauto. *)
-(*   - move=> H0. *)
-(*     specialize (IHsubtrees H0). *)
-(*     unfold callers_in_trees. *)
-(*     destruct IHsubtrees as [tr [ls1 [ls2 [IH1 IH2]]]]. *)
-(*     rewrite IH1. *)
-(*     eexists; eexists; eexists. split. eauto. *)
-(*     econstructor. eauto. eauto. *)
-(* Qed. *)
 
 Definition call_handling_info (x: (nat * xevent * nat * seq (Procedure.id * Z * nat))) :=
   match x with
@@ -920,7 +872,11 @@ Module TreeWithCallers.
     [CState Component.main, [::], initial_memory intf, Kstop, E_val (Int 0), Int 0].
 
   Variant initial (p: prg): state -> Prop :=
-  | initial_st: forall t, wf_trace (prog_interface p) t ->
+  | initial_st: forall t,
+      wf_trace (prog_interface p) t ->
+      forall (INIPARENT: forall C l1 p0 xe n zs ls l2,
+            prog_trees p C = Some (l1 ++ node (p0, xe, n, zs) ls :: l2) ->
+            p0 = 0),
         initial p {| ghost_state := (t, prog_trees p, initial_locs (prog_interface p),
                                     initial_callers (prog_trees p), initial_stack);
                      concrete_state := initial_machine_state (prog_interface p);
@@ -1022,4 +978,3 @@ Module TreeWithCallers.
        globalenv := {| genv_interface := prog_interface p; genv_procedures := prog_procedures p |} |}.
 
 End TreeWithCallers.
-
