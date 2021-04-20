@@ -339,6 +339,9 @@ Module ParentAwareTree.
 
   Variant initial (p: prg): state -> Prop :=
   | initial_st: forall t, wf_trace (prog_interface p) t ->
+      forall (INIPARENT: forall C l1 p0 xe n ls l2,
+            prog_trees p C = Some (l1 ++ node (p0, xe, n) ls :: l2) ->
+            p0 = 0),
                      initial p (t, prog_trees p, initial_locs (prog_interface p))
   .
 
@@ -446,6 +449,9 @@ Module CallerAwareTree.
 
   Variant initial (p: prg): state -> Prop :=
   | initial_st: forall t, wf_trace (prog_interface p) t ->
+      forall (INIPARENT: forall C l1 p0 xe n zs ls l2,
+            prog_trees p C = Some (l1 ++ node (p0, xe, n, zs) ls :: l2) ->
+            p0 = 0),
                      initial p (t, prog_trees p, initial_locs (prog_interface p), initial_callers (prog_trees p))
   .
 
@@ -669,6 +675,9 @@ Module CallReturnTree.
 
   Variant initial (p: prg): state -> Prop :=
   | initial_st: forall t, wf_trace (prog_interface p) t ->
+      forall (INIPARENT: forall C l1 p0 xe n zs ls l2,
+            prog_trees p C = Some (l1 ++ node (p0, xe, n, zs) ls :: l2) ->
+            p0 = 0),
                      initial p (t, prog_trees p, initial_locs (prog_interface p),
                                 initial_callers (prog_trees p), initial_stack)
   .

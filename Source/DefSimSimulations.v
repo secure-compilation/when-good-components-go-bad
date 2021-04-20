@@ -172,6 +172,20 @@ Proof.
     exists 0; eexists; split.
     + constructor.
       eauto.
+      intros C.
+      rewrite /compile_numbered_tree //= mapmE.
+      case: ((NumberedTree.prog_trees p C)) => //=.
+      intros. inversion H.
+      { clear H.
+        revert l1 p0 xe n ls l2 H2.
+        induction a.
+        now destruct l1.
+        intros.
+        destruct l1. simpl in H2. inversion H2; subst.
+        destruct a as [| [[]]]; inversion H1; eauto.
+        simpl in H2. inversion H2.
+        eapply IHa. eauto.
+      }
     + econstructor.
       move=> C H; exists 0; by rewrite mkfmapfE H.
       move=> C ls n H H'.
@@ -328,6 +342,22 @@ Proof.
     exists 0; eexists; split.
     + constructor.
       eauto.
+      intros.
+      assert (exists l1' ls' l2', ParentAwareTree.prog_trees p C = Some (l1' ++ node (p0, xe, n) ls' :: l2')) as [l1' [ls' [l2' EQ]]].
+      clear -H.
+      move: H => //=; rewrite mapimE; case: (ParentAwareTree.prog_trees p C) => //= a.
+      elim: a l1.
+      * now destruct l1.
+      * intros.
+        simpl in H0. destruct l1.
+        -- inversion H0; subst.
+           destruct a as [| [[]]]; inversion H2; subst.
+           exists []; eexists; eexists; simpl; eauto.
+        -- inversion H0; subst.
+           specialize (H l1); rewrite H3 in H; specialize (H Logic.eq_refl) as [l1' [ls' [l2' EQ]]].
+           inversion EQ; subst.
+           exists (a :: l1'); eexists; eexists; simpl; eauto.
+      * now eapply INIPARENT; eauto.
     + econstructor.
       (* move=> C H; exists 0; by rewrite mkfmapfE H. *)
       move=> C ls H; by rewrite mapimE H.
@@ -667,10 +697,27 @@ Lemma sim4 (p: CallerAwareTree.prg):
 Proof.
   fwd_sim (match_states4 (CallerAwareTree.prog_interface p)).
   - move=> s1 H.
-    inversion H; subst.
+    inversion H; subst; clear H.
     exists 0; eexists; split.
     + constructor.
       eauto.
+      intros.
+      assert (exists l1' e ls' l2', CallerAwareTree.prog_trees p C = Some (l1' ++ node (p0, e, n, zs) ls' :: l2'))
+        as [l1' [e [ls' [l2' EQ]]]].
+      clear -H.
+      move: H => //=; rewrite mapmE; case: (CallerAwareTree.prog_trees p C) => //= a.
+      elim: a l1.
+      * now destruct l1.
+      * intros.
+        simpl in H0. destruct l1.
+        -- inversion H0; subst.
+           destruct a as [| [[[? []] ?] ?] ?]; inversion H2; subst;
+             now exists []; eexists; eexists; eexists; simpl; eauto.
+        -- inversion H0; subst.
+           specialize (H l1); rewrite H3 in H; specialize (H Logic.eq_refl) as [l1' [e [ls' [l2' EQ]]]].
+           inversion EQ; subst.
+           now exists (a :: l1'); eexists; eexists; eexists; simpl; eauto.
+      * now eapply INIPARENT; eauto.
     + rewrite initial_callers_same.
       econstructor.
       * move=> C ls H1.
