@@ -699,6 +699,7 @@ Proof.
         rewrite Htree' map_app //=.
           by apply det_tree_list_build_call_return_tree.
           by apply det_tree_list_build_call_return_tree.
+
         apply star_refl.
         reflexivity.
       * econstructor.
@@ -903,16 +904,6 @@ Proof.
   move=> ls1 a1 b1 ls2 a2 b2 ls3 H0.
 Admitted.
 
-(* Admitted: Well-formedness lemma *)
-Lemma find_proc_callers (p: CallReturnTree.prg): forall C P,
-    find_procedure (mapim
-                      (fun (C : nat) (Ciface : Component.interface) => mkfmapf ((comp_call_handle)^~ (CallReturnTree.prog_trees p C))
-                                                                          (if C == Component.main then (Procedure.main |: Component.export Ciface)%fset else Component.export Ciface)) (CallReturnTree.prog_interface p)) C P =
-    Some (guard_call (callexp (get_all_handle_calls P (CallReturnTree.prog_trees p C)))).
-Proof.
-Admitted.
-
-
 Lemma sim5 (p: CallReturnTree.prg) (wf: CallReturnTree.wf p):
   forward_simulation (CallReturnTree.sem p) (TreeWithCallers.sem (compile_call_return_tree p)).
 Proof.
@@ -990,17 +981,33 @@ Proof.
            eapply TreeWithCallers.step_call with
                (call_exp := guard_call (callexp (get_all_handle_calls P (CallReturnTree.prog_trees p C2))));
                             eauto.
-           eapply find_proc_callers.
+           simpl.
+           pose proof (TreeWithCallers.wfprog_exported_procedures_existence WF) as H.
+           assert (exported_procedure (TreeWithCallers.prog_interface p') C2 P) by now destruct H1.
+           unfold p' in H. simpl in H.
+           specialize (H _ _ H0).
+           clear -H H1.
+           assert (exists v, (CallReturnTree.prog_interface p C2) = Some v) as [v EQ].
+           { apply /dommP. now destruct H1. }
+           move: H; rewrite /find_procedure //= mapimE EQ //= mkfmapfE.
+           case: ifP => //=.
         -- eapply star_trans.
            ++ assert (exists ts, TreeWithCallers.prog_trees p' C2 = Some ts) as [ts TREES].
               { apply /dommP. rewrite -(TreeWithCallers.wfprog_defined_trees WF).
                 now destruct H1. }
-              eapply call_handling_expression_correct with (trs := (l1 ++ node (p0, XECallIn P z, n, zs) ls :: l2)). eauto.
-              eexists; eexists. simpl.
-              admit.
+              (* assert ( exists ls1 ls2 : seq (nat * seq (Procedure.id * Z * nat)), *)
+              (*            get_all_handle_calls P (Some (l1 ++ node (p0, XECallIn P z, n, zs) ls :: l2)) = *)
+              (*            ls1 ++ (n, zs1 ++ (P, z, n) :: zs2) :: ls2). *)
+              (* { admit. } *)
 
-              eapply wf_trees_unique_key; eauto.
-              eapply UNIQ. admit.
+              eapply call_handling_expression_correct with (trs := (l1 ++ node (p0, XECallIn P z, n, zs) ls :: l2)). eauto.
+              admit.
+              (* { clear -ls. *)
+              (*   admit. *)
+              (* } *)
+
+              admit. (* eapply wf_trees_unique_key; eauto. *)
+              eapply UNIQ. simpl. admit.
               (* eapply CALLERS. eauto. admit. *)
               (* Admitted: Unicity lemma that again relates to subtrees *)
               (* eapply callers_in_subtrees; admit. *)
@@ -1291,6 +1298,7 @@ Definition mem_agree (intf: Program.interface) mem mem' :=
        (* Memory.load mem (intcall C) = Memory.load mem' (intcall C) /\ *)
        (* Memory.load mem (ret C) = Memory.load mem' (ret C). *)
 
+
 Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWithCallers.state -> CS.state -> Prop :=
 | match_states_initial: forall s s',
     TreeWithCallers.initial p s ->
@@ -1319,6 +1327,8 @@ Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWi
       (MEM: mem_agree (TreeWithCallers.prog_interface p) (CS.s_memory cs) (CS.s_memory cs'))
       (CONT: CS.s_cont cs' = Kseq (build_event_expression (CS.s_component cs') P (TreeWithCallers.prog_trees p (CS.s_component cs'))) Kstop)
       (* (EXPR: CS.s_expr cs' = build_event_expression (CS.s_component cs') (TreeWithCallers.prog_trees p (CS.s_component cs'))) *)
+      (* (EXPR: CS.s_expr cs' = E_val (Int 1)) *)
+      (EXPR: expr_is_done (CS.s_expr cs'))
       (INT: forall C,
           C \in domm (TreeWithCallers.prog_interface p) ->
           Memory.load (CS.s_memory cs) (intcall C) = Some (Int 1%Z))
@@ -1371,11 +1381,11 @@ Admitted.
 (* Proof. *)
 (*   Admitted. *)
 
-Lemma initial_buffers: forall p C,
-    Memory.load (prepare_buffers (compile_tree_with_callers p)) (C, Block.local, (0 + 1)%Z) = Some (Int 0).
-  move=> p C.
-  unfold prepare_buffers. simpl.
-Admitted.
+(* Lemma initial_buffers: forall p C, *)
+(*     Memory.load (prepare_buffers (compile_tree_with_callers p)) (C, Block.local, (0 + 1)%Z) = Some (Int 0). *)
+(*   move=> p C. *)
+(*   unfold prepare_buffers. simpl. *)
+(* Admitted. *)
 
 Lemma initial_location: forall p (C: Component.id),
     C \in domm (TreeWithCallers.prog_interface p) ->
@@ -1479,7 +1489,10 @@ Proof.
         (* Memory operations *)
         destruct (Memory.store_after_load (prepare_buffers (compile_tree_with_callers p))
                                           (Component.main, Block.local, 1%Z) (Int 0) (Int 1)) as [m''' MEM'''].
-        eapply initial_buffers.
+        assert (exists v, TreeWithCallers.prog_interface p Component.main = Some v) as [v Hv].
+        { apply /dommP.
+          rewrite mem_domm. eapply TreeWithCallers.wf_has_main; eauto. }
+        rewrite /compile_tree_with_callers /prepare_buffers /Memory.load mapmE //= mapimE //= Hv //= ComponentMemory.load_prealloc //=.
         destruct (Memory.store_after_load m''' (Component.main, Block.local, 0%Z) (Int 0%Z) (Int (Z.of_nat n))) as [m'''' MEM''''].
         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM''').
         rewrite /prepare_buffers /Memory.load mapmE //= mapimE //=.
@@ -1494,7 +1507,11 @@ Proof.
         eexists; eexists; split.
         -- left.
            eapply star_plus_trans.
-           do 10 take_step. eauto. eapply initial_buffers.
+           do 10 take_step. eauto.
+           assert (exists v, TreeWithCallers.prog_interface p Component.main = Some v) as [v Hv].
+           { apply /dommP.
+             rewrite mem_domm. eapply TreeWithCallers.wf_has_main; eauto. }
+           rewrite /compile_tree_with_callers /prepare_buffers /Memory.load mapmE //= mapimE //= Hv //= ComponentMemory.load_prealloc //=.
            do 11 take_step. eauto. simpl. eauto.
            assert (exists trs, TreeWithCallers.prog_trees p Component.main = Some trs) as [trs has_main].
            { clear -Hwf.
@@ -1503,20 +1520,32 @@ Proof.
              rewrite -wfprog_defined_trees.
              now rewrite mem_domm. }
 
-           eapply build_event_expression_correct with (xe := XECallOut P z C2 rts1).
-           simpl; eauto. now rewrite has_main.
+           { eapply build_event_expression_correct with (xe := XECallOut P z C2 rts1).
+             - eapply TreeWithCallers.det_loc. eauto. eauto.
+             - admit.
+             - eauto.
+             - simpl. rewrite has_main. eauto.
+             - simpl. rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM''').
+               assert (exists v, TreeWithCallers.prog_interface p Component.main = Some v) as [v Hv].
+               { apply /dommP.
+                 rewrite mem_domm. eapply TreeWithCallers.wf_has_main; eauto. }
+               rewrite /compile_tree_with_callers /prepare_buffers /Memory.load mapmE //= mapimE //= Hv //= ComponentMemory.load_prealloc //=.
+               instantiate (1 := 0). reflexivity.
+               unfold location; congruence.
+             - eauto.
+           }
 
-           simpl. rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM''').
-           unfold location.
-           instantiate (1 := 0).
-           rewrite /prepare_buffers /Memory.load mapmE //= mapimE //=.
-           assert (exists v, TreeWithCallers.prog_interface p Component.main = Some v) as [v Hv].
-           { apply /dommP.
-             rewrite mem_domm. eapply TreeWithCallers.wf_has_main; eauto. }
-           rewrite Hv //=.
-           rewrite ComponentMemory.load_prealloc //=.
-           unfold location. congruence.
-           reflexivity.
+           (* simpl. rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM'''). *)
+           (* unfold location. *)
+           (* instantiate (1 := 0). *)
+           (* rewrite /prepare_buffers /Memory.load mapmE //= mapimE //=. *)
+           (* assert (exists v, TreeWithCallers.prog_interface p Component.main = Some v) as [v Hv]. *)
+           (* { apply /dommP. *)
+           (*   rewrite mem_domm. eapply TreeWithCallers.wf_has_main; eauto. } *)
+           (* rewrite Hv //=. *)
+           (* rewrite ComponentMemory.load_prealloc //=. *)
+           (* unfold location. congruence. *)
+           (* reflexivity. *)
 
 
            eapply plus_star_trans.
@@ -1635,12 +1664,15 @@ Proof.
         -- left.
            eapply star_plus_trans.
            (* Using this lemma requires a unicity result *)
-           { eapply build_event_expression_correct with (xe := XECallOut P z C2 rts1). simpl.
-             assert (TreeWithCallers.prog_trees p C = Some []) by admit.
-             rewrite H0. reflexivity.
-             admit. reflexivity. }
-           (* reflexivity. *)
-           (*   eauto. eauto. } *)
+           { eapply build_event_expression_correct with (xe := XECallOut P z C2 rts1).
+             - eapply TreeWithCallers.det_loc. eauto. admit.
+             - admit.
+             - eauto.
+             - simpl. admit.
+             - simpl. unfold location; rewrite <- MEM; eauto.
+               now destruct H1.
+             - eauto.
+           }
            simpl.
            eapply plus_star_trans.
            { eapply call_event_correct; simpl; eauto.
@@ -1653,7 +1685,59 @@ Proof.
               econstructor. simpl.
               now destruct H1 as [[] []]; congruence.
               now inversion H12.
-           ++ admit.
+           ++ simpl.
+              move=> C' b o Hintf.
+              { destruct (b == Block.local) eqn:Hblock.
+                - move: Hblock => /eqP Hblock; subst.
+                  destruct (C' == C) eqn:HC1.
+                  + move: HC1 => /eqP ->.
+                    destruct (o == 0%Z) eqn:Ho; move: Ho => /eqP Ho; subst.
+                 * rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                   rewrite (Memory.load_after_store_eq _ _ _ _ H9).
+                   rewrite (Memory.load_after_store_eq _ _ _ _ H); eauto.
+                   unfold intcall, location; congruence.
+                 * destruct (o == 1%Z) eqn:Ho'; move: Ho' => /eqP Ho'; subst.
+                   -- rewrite (Memory.load_after_store_eq _ _ _ _ H10).
+                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H).
+                      rewrite -MEM. unfold intcall in INT. rewrite INT; eauto.
+                      now destruct H1.
+                      now destruct H1.
+                      (* rewrite (Memory.load_after_store_eq _ _ _ _ MEM'''); eauto. *)
+                      unfold location; congruence.
+                   -- destruct (o == 2%Z) eqn:Ho''; move: Ho'' => /eqP Ho''; subst.
+                      ++ rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H).
+                         rewrite MEM; eauto.
+                         now destruct H1.
+                         unfold location, ret; congruence.
+                         unfold location, ret; congruence.
+                         unfold intcall, ret; congruence.
+                      ++ rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H).
+                         rewrite MEM; eauto.
+                         now destruct H1.
+                         unfold location; congruence.
+                         unfold location; congruence.
+                         unfold intcall; congruence.
+               + (* move: HC1 => /eqP HC1. *)
+                 rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+                   rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+                   rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H); eauto.
+
+                   unfold location; move: HC1 => /eqP HC1 //=; congruence.
+                   unfold location; move: HC1 => /eqP HC1 //=; congruence.
+                   unfold intcall; move: HC1 => /eqP HC1 //=; congruence.
+             - move: Hblock => /eqP Hblock.
+               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
+               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H9).
+               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H).
+               rewrite <- MEM; eauto.
+               unfold location; congruence.
+               unfold location; congruence.
+               unfold intcall; congruence.
+           }
            ++ simpl. reflexivity.
            (* ++ move=> C0 H0. simpl. *)
            (* destruct (C0 == C) eqn:HC; move: HC => /eqP HC; subst. *)
@@ -1676,6 +1760,10 @@ Proof.
         (* (* ret C2 *) *)
         assert (exists oldz, Memory.load m0 (ret C2) = Some (Int oldz)) as [oldz EQoldz].
         { clear -H9 H10.
+
+
+
+
           admit. }
         destruct (Memory.store_after_load m1 (ret C2) (Int oldz) (Int z)) as [m2 MEM2].
         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1); last by unfold ret, location; congruence.
@@ -1706,8 +1794,15 @@ Proof.
         eexists; eexists; split; simpl in *.
         -- left.
            eapply star_plus_trans.
-           { eapply build_event_expression_correct with (xe := XERetOut z); simpl; eauto. admit.
-             unfold location; rewrite <- MEM. eauto. destruct H1 as [? []]; now auto.
+           assert (exists v, TreeWithCallers.prog_trees p C = Some v) as [? Hv].
+           { apply /dommP.
+             rewrite -TreeWithCallers.wfprog_defined_trees.
+             now destruct H1. eauto. }
+           { eapply build_event_expression_correct with (xe := XERetOut z); simpl; eauto.
+             - eapply TreeWithCallers.det_loc. eauto. eapply Hv.
+             - admit.
+             - rewrite Hv. reflexivity.
+             - unfold location; rewrite <- MEM. eauto. destruct H1 as [? []]; now auto.
            }
            eapply plus_star_trans. econstructor. econstructor.
            do 4 take_step. eauto. eauto.
@@ -1720,21 +1815,6 @@ Proof.
            do 2 take_step.
            eapply star_trans.
 
-           (* { eapply return_event_correct with (z := z); eauto. *)
-           (*   reflexivity. reflexivity. simpl. eauto. *)
-
-           (* } *)
-           (* econstructor. *)
-           (* econstructor. *)
-           (* do 4 take_step. eauto. eauto. *)
-           (* do 1 take_step. eapply star_refl. reflexivity. *)
-           (* eapply star_trans. rewrite CONT. eapply UNF3. *)
-           (* rewrite UNF1 CONT. *)
-           (* eapply star_step. eapply CS.KS_ExternalReturn. *)
-           (* now destruct H1. *)
-           (* do 6 take_step. eauto. eauto. *)
-           (* do 2 take_step. *)
-           (* eapply star_trans. *)
            { eapply return_handling_expression_correct.
              - eauto.
              - admit.
@@ -1751,7 +1831,12 @@ Proof.
              - simpl. eauto. }
            do 4 take_step. eauto. eauto.
            do 9 take_step. eauto. eauto.
-           do 3 take_step. eauto. eapply find_procedure_find. admit. admit.
+           assert (exists procs, TreeWithCallers.prog_procedures p C2 = Some procs) as [? PROCS].
+           { apply /dommP.
+             rewrite -(TreeWithCallers.wfprog_defined_procedures Hwf).
+             now destruct H1. }
+
+           do 3 take_step. eauto. eapply find_procedure_find. eapply PROCS. admit.
            do 10 take_step. eauto.
            rewrite (Memory.load_after_store_eq _ _ _ _ MEM4); eauto.
            do 11 take_step. eauto. eauto.
@@ -1863,6 +1948,7 @@ Proof.
                   all: unfold location, intcall, ret; congruence.
               }
            ++ reflexivity.
+           ++ reflexivity.
            ++ move=> C0 H.
               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H11).
               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H10).
@@ -1898,7 +1984,8 @@ Proof.
            { destruct k'; eauto;
                try (now rewrite (update_can_silent_k) in UPDATE; [inversion UPDATE | eauto]). }
            subst k'.
-           eapply match_states_6; eauto. reflexivity.
+           eapply match_states_6; eauto. reflexivity. simpl in UPDATE.
+           destruct exp'; now inversion UPDATE.
            admit.
       * eapply MEM.
 Admitted.

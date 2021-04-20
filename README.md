@@ -47,15 +47,19 @@ The admits are mainly of two kinds:
   are generated, that the code is well-formed, etc. These are quite
   technical tasks that do not pose a major challenge
   
-The following theorems are still admitted:
-- `give_nums_app_comm`,`wf_trees_unique_key`, `build_event_expression_correct`, `sim4`, `sim5` are lemmas that require 
-  proving and/or using unicity conditions. These proofs are tedious and technical, but do not 
-  pose a theoretical challenge
-- `wf_compile`, `find_proc_callers`, `find_procedure_find`, `find_proc_some`, `find_main`, `initial_buffers` are lemmas that require
-  proving  well-formedness lemmas about the program we back-translate
-- `sim6` is not proved yet, and heavily use these well-formedness lemmas; the proof should be easy to close
-  once these are proved. A `match_cont` predicate and lemmas concerning it are also admitted.
-
+The following theorems are admitted:
+- `give_nums_app_comm` and `give_nums_determinate` are properties of the function assigning a unique location
+  to each node of a tree of events: it commutes with concatenation and it respects determinacy.
+- `compile_parent_aware_tree_wf`: the compilation of a well-formed tree with parent information is well-formed.
+  Here, the missing result is the proof of the preservation of the unicity of next events.
+- `wf_trees_unique_key`: unicity lemma for the call information
+- `find_proc_some` and `find_main`: well-formedness lemmas stating the existence of some procedures in the back-translated
+  program
+- `sim4`: proof of simulation between trees with caller information and trees with caller and return information,
+  missing a single technical result that relies on exploring the trees
+- `step_silent_mem_agree`: technical result demanding technical reasonning on memory operations
+- `sim5` and `sim6`: rely on a unicity condition
+  
 ### License ###
 - This code is licensed under the Apache License, Version 2.0 (see `LICENSE`)
 - The code in the `CompCert` dir is adapted based on files in the
