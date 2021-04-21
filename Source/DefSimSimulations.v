@@ -1397,17 +1397,17 @@ Proof.
   rewrite /find_procedure /compile_tree_with_callers //= mapimE H1 //= mapimE H2 //=.
 Qed.
 
-Lemma find_proc_some (p: TreeWithCallers.prg):
-  forall C P call_exp,
-  find_procedure (TreeWithCallers.prog_procedures p) C P = Some call_exp ->
-  call_exp = comp_call_handle P (TreeWithCallers.prog_trees p C).
-Admitted.
-
-Lemma find_main (p: TreeWithCallers.prg):
+Lemma find_main (p: TreeWithCallers.prg) (WF: TreeWithCallers.wf p):
   prog_main (compile_tree_with_callers p) =
   Some (E_seq (comp_call_handle Procedure.main (TreeWithCallers.prog_trees p Component.main))
               (build_event_expression Component.main Procedure.main (TreeWithCallers.prog_trees p Component.main))).
-Admitted.
+Proof.
+  rewrite /prog_main.
+  assert (exists procs, TreeWithCallers.prog_procedures p Component.main = Some procs) as [procs EQ].
+  apply /dommP. rewrite -TreeWithCallers.wfprog_defined_procedures //= mem_domm TreeWithCallers.wf_has_main //=.
+  eapply find_procedure_find; eauto.
+  eapply TreeWithCallers.wf_main_expression; eauto.
+Qed.
 
 (* Lemma initial_location: forall p C, *)
 (*     Memory.load (prepare_buffers (compile_tree_with_callers p)) (C, Block.local, 0%Z) = Some (Int (Z.of_nat 0)). *)
@@ -1712,6 +1712,7 @@ Proof.
                + move=> ls0 ls'0; rewrite H4 => [] [] <- [] <-.
                  econstructor; econstructor.
                + eapply SUBTREE. }
+        -- eauto.
 
       * simpl in *; subst.
 
@@ -1930,7 +1931,8 @@ Proof.
            do 3 take_step. eauto.
            assert (exists v, TreeWithCallers.prog_procedures p C2 = Some v) as [v Hv].
            apply /dommP; rewrite -(TreeWithCallers.wfprog_defined_procedures Hwf) //=. now destruct H1.
-           eapply find_procedure_find. eapply PROCS. admit.
+           eapply find_procedure_find. eapply PROCS. admit. (* FIXME: add invariant, the current expression only contains
+                                                             valid calls *)
            do 10 take_step. eauto.
            rewrite (Memory.load_after_store_eq _ _ _ _ MEM4); eauto.
            do 11 take_step. eauto. eauto.

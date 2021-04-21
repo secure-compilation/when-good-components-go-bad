@@ -654,6 +654,12 @@ Proof.
   - eauto.
   - move=> C P procs //=; rewrite mapimE; move=> [CI [-> CI2]] [] <-.
     rewrite mkfmapfE; case: eqP => ? //=; [rewrite in_fsetU1 orbC|]; rewrite CI2 //=.
+  - move=> procs; rewrite mapimE //=.
+    case: (CallReturnTree.prog_interface p Component.main) => //=.
+    move=> CI [] <-.
+    (* move=> [CI [-> CI2]] [] <-. *)
+    rewrite mkfmapfE; rewrite in_fsetU1 orTb //=.
+
 Qed.
 
 

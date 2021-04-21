@@ -52,9 +52,6 @@ The following theorems are admitted:
   to each node of a tree of events: it commutes with concatenation and it respects determinacy.
 - `compile_parent_aware_tree_wf`: the compilation of a well-formed tree with parent information is well-formed.
   Here, the missing result is the proof of the preservation of the unicity of next events.
-- `wf_trees_unique_key`: unicity lemma for the call information
-- `find_proc_some` and `find_main`: well-formedness lemmas stating the existence of some procedures in the back-translated
-  program
 - `sim4`: proof of simulation between trees with caller information and trees with caller and return information,
   missing a single technical result that relies on exploring the trees
 - `step_silent_mem_agree`: technical result demanding technical reasonning on memory operations

@@ -873,7 +873,10 @@ Module TreeWithCallers.
     wf_procedures_expression: forall (C: Component.id) (P: Procedure.id) procs,
         exported_procedure (prog_interface p) C P ->
         prog_procedures p C = Some procs ->
-        procs P = Some (comp_call_handle P (TreeWithCallers.prog_trees p C))
+        procs P = Some (comp_call_handle P (TreeWithCallers.prog_trees p C));
+    wf_main_expression: forall procs,
+        prog_procedures p Component.main = Some procs ->
+        procs Procedure.main = Some (comp_call_handle Procedure.main (TreeWithCallers.prog_trees p Component.main))
    }.
 
   Definition initial_callers := CallReturnTree.initial_callers.
