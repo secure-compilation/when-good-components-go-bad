@@ -652,6 +652,8 @@ Proof.
   - eauto.
   (* - eauto. *)
   - eauto.
+  - move=> C P procs //=; rewrite mapimE; move=> [CI [-> CI2]] [] <-.
+    rewrite mkfmapfE; case: eqP => ? //=; [rewrite in_fsetU1 orbC|]; rewrite CI2 //=.
 Qed.
 
 

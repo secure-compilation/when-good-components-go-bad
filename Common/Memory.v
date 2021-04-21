@@ -55,6 +55,11 @@ Module Type AbstractComponentMemory.
     forall m m' n b,
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
+
+  Axiom invert_store: forall m m' b i v,
+      store m b i v = Some m' ->
+      exists oldv, load m b i = Some oldv.
+
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -207,6 +212,29 @@ Module ComponentMemory : AbstractComponentMemory.
       alloc m n = (m', b) ->
       size (domm m') = size (domm m) + 1.
   Admitted.
+
+  Lemma list_upd_nth_error_same' {A: Type}:
+    forall (blk: seq A) o v blk',
+      list_upd blk o v = Some blk' ->
+      exists v', List.nth_error blk o = Some v'.
+  Proof.
+    elim=> [|x blk IH] //= [? ? [?]|o] //=. now eexists.
+      by move=> v blk'; case e: list_upd=> [blk''|] //= [?]; eauto.
+  Qed.
+
+  Lemma invert_store: forall m m' b i v,
+      store m b i v = Some m' ->
+      exists oldv, load m b i = Some oldv.
+  Proof.
+    move=> m m' b i v; rewrite /load /store.
+    case m_b: (content m b)=> [chunk|] //=.
+    case: (Z.leb_spec0 0 i)=> [i_pos|] //=.
+    destruct (list_upd chunk (Z.to_nat i) v) eqn:Heq; last by [].
+    move=> _.
+    now eapply list_upd_nth_error_same'; eauto.
+  Qed.
+
+
 End ComponentMemory.
 
 Module ComponentMemoryExtra.

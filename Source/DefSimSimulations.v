@@ -963,7 +963,7 @@ Proof.
     exists 0; eexists; split.
     + constructor.
       eauto.
-      admit.
+      eauto.
     + econstructor.
       * move=> C n //=.
         rewrite /Memory.load /TreeWithCallers.initial_memory /initial_locs 2!mkfmapfE.
@@ -1040,12 +1040,9 @@ Proof.
 
               eapply call_handling_expression_correct with (trs := (l1 ++ node (p0, XECallIn P z, n, zs) ls :: l2)). eauto.
               admit.
-              (* { clear -ls. *)
-              (*   admit. *)
-              (* } *)
-
-              admit. (* eapply wf_trees_unique_key; eauto. *)
-              eapply UNIQ. simpl. admit.
+              admit.
+              eapply UNIQ.
+              simpl. admit.
               (* eapply CALLERS. eauto. admit. *)
               (* Admitted: Unicity lemma that again relates to subtrees *)
               (* eapply callers_in_subtrees; admit. *)
@@ -1127,9 +1124,6 @@ Proof.
         -- move=> C H. simpl in *.
            destruct t0; first inversion H.
            inv H. inv SEQOK. reflexivity.
-        (* -- move=> C zs0 H. *)
-        (*    (* Admitted: unicity result *) *)
-        (*    admit. *)
         -- simpl in *.
            econstructor. destruct H1 as [[] ]; congruence.
         -- move=> C H.
@@ -1204,8 +1198,6 @@ Proof.
            eapply CUR_INT. eauto.
         -- move=> C H. simpl in *.
            destruct t0; inversion H. congruence.
-        (* -- (* Admitted: unicity result *) *)
-        (*   admit. *)
         -- eauto.
         -- move=> C H.
            destruct (C2 == C) eqn:Heq.
@@ -1275,9 +1267,6 @@ Proof.
     + eapply star_refl.
 Qed.
 
-(* Admitted: match_cont k1 k2 when
-  k2 is k1 where the Kstop continuation is replaced by the continuation that corresponds
-  to what follows the call-handler *)
 Fixpoint concat_cont (k1 k2: cont): cont :=
   match k1 with
   | Kstop => k2
@@ -1323,18 +1312,10 @@ Proof.
     + inversion H1. apply IHs. eauto.
 Qed.
 
-(* Definition mem_agree (intf: Program.interface) mem mem' := *)
-(*   forall C, C \in domm intf -> *)
-(*        Memory.load mem (location C) = Memory.load mem' (location C) /\ *)
-(*        Memory.load mem (intcall C) = Memory.load mem' (intcall C) /\ *)
-(*        Memory.load mem (ret C) = Memory.load mem' (ret C). *)
 
 Definition mem_agree (intf: Program.interface) mem mem' :=
   forall C b o, C \in domm intf ->
                  Memory.load mem (C, b, o) = Memory.load mem' (C, b, o).
-       (* Memory.load mem (location C) = Memory.load mem' (location C) /\ *)
-       (* Memory.load mem (intcall C) = Memory.load mem' (intcall C) /\ *)
-       (* Memory.load mem (ret C) = Memory.load mem' (ret C). *)
 
 
 Variant match_states6 (p: TreeWithCallers.prg) (ge: global_env) (i: nat): TreeWithCallers.state -> CS.state -> Prop :=
@@ -1552,7 +1533,6 @@ Proof.
 Qed.
 
 
-(* Admitted, but we are very close to completing it. The goals are all admitted, but  *)
 Lemma sim6 (p: TreeWithCallers.prg) (Hwf: TreeWithCallers.wf p):
   forward_simulation (TreeWithCallers.sem p) (Src.sem (compile_tree_with_callers p)).
 Proof.
@@ -1630,10 +1610,17 @@ Proof.
                unfold location; congruence.
              - eauto.
            }
+           assert (H1' := H1).
+           destruct H1 as [[? [? EXPORTED]]].
+           destruct EXPORTED as [C_CI [EXP1 EXP2]].
+           assert (exists v, TreeWithCallers.prog_procedures p C2 = Some v) as [v Hv].
+           now apply /dommP; rewrite -(TreeWithCallers.wfprog_defined_procedures Hwf) //=.
+           (* now destruct H1'. *)
            eapply plus_star_trans.
            { eapply call_event_correct; simpl; eauto.
-             eapply find_procedure_find. admit. admit.
-           }
+
+             eapply find_procedure_find; eauto.
+             eapply TreeWithCallers.wf_procedures_expression; eauto. now destruct H1'. }
            take_step.
            eapply star_refl.
            reflexivity.
@@ -1754,16 +1741,22 @@ Proof.
                now destruct H1.
              - eauto.
            }
-           simpl.
+           assert (H1' := H1).
+           destruct H1 as [[? [? EXPORTED]]].
+           destruct EXPORTED as [C_CI [EXP1 EXP2]].
+           assert (exists v, TreeWithCallers.prog_procedures p C2 = Some v) as [v Hv].
+           now apply /dommP; rewrite -(TreeWithCallers.wfprog_defined_procedures Hwf) //=.
+           (* now destruct H1'. *)
            eapply plus_star_trans.
            { eapply call_event_correct; simpl; eauto.
-             eapply find_procedure_find. admit. admit. }
+
+             eapply find_procedure_find; eauto.
+             eapply TreeWithCallers.wf_procedures_expression; eauto. now destruct H1'. }
            take_step.
            eapply star_refl.
            reflexivity. reflexivity.
         -- eapply match_states_silent; eauto.
-           ++
-              econstructor. simpl.
+           ++ econstructor. simpl.
               now destruct H1 as [[] []]; congruence.
               now inversion H12.
            ++ simpl.
@@ -1847,10 +1840,20 @@ Proof.
         destruct (Memory.store_after_load m (location C) (Int (Z.of_nat p0)) (Int (Z.of_nat n))) as [m1 MEM1].
         unfold location; rewrite <- MEM. eauto. now destruct H1 as [? []].
         (* (* ret C2 *) *)
-        assert (exists oldz, Memory.load m0 (ret C2) = Some (Int oldz)) as [oldz EQoldz].
+        assert (exists oldv, Memory.load m0 (ret C2) = Some oldv) as [oldv EQoldv].
         { clear -H9 H10.
-          admit. }
-        destruct (Memory.store_after_load m1 (ret C2) (Int oldz) (Int z)) as [m2 MEM2].
+          assert (Memory.load m' (ret C2) = Memory.load m0 (ret C2)).
+          { eapply Memory.load_after_store with (ptr' := ret C2) in H9.
+            move: H9; case: eqP; eauto; rewrite /location /ret; congruence. }
+          rewrite <- H. clear H9 H.
+          move: H10; rewrite /Memory.store /Memory.load.
+
+          case: (m' (Pointer.component (ret C2))); last by [].
+          intros mC.
+          destruct (ComponentMemory.store mC (Pointer.block (ret C2)) (Pointer.offset (ret C2)) (Int z)) eqn:CONTRA; last by [].
+          move=> [] ?.
+          eapply ComponentMemory.invert_store. eauto. }
+        destruct (Memory.store_after_load m1 (ret C2) oldv (Int z)) as [m2 MEM2].
         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ MEM1); last by unfold ret, location; congruence.
         unfold ret; rewrite <- MEM.
         eauto. now destruct H1.
@@ -1924,7 +1927,10 @@ Proof.
              rewrite -(TreeWithCallers.wfprog_defined_procedures Hwf).
              now destruct H1. }
 
-           do 3 take_step. eauto. eapply find_procedure_find. eapply PROCS. admit.
+           do 3 take_step. eauto.
+           assert (exists v, TreeWithCallers.prog_procedures p C2 = Some v) as [v Hv].
+           apply /dommP; rewrite -(TreeWithCallers.wfprog_defined_procedures Hwf) //=. now destruct H1.
+           eapply find_procedure_find. eapply PROCS. admit.
            do 10 take_step. eauto.
            rewrite (Memory.load_after_store_eq _ _ _ _ MEM4); eauto.
            do 11 take_step. eauto. eauto.

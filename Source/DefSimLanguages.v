@@ -869,7 +869,11 @@ Module TreeWithCallers.
     det_loc: forall C ts, prog_trees p C = Some ts ->
                      unique_loc (get_all_event (Some ts));
     (* wf_events: all_trees (fun '(_, xe, _, _) => allowed_xevent (prog_interface p) xe) (prog_trees p); *)
-    wf_has_main: prog_interface p Component.main
+    wf_has_main: prog_interface p Component.main;
+    wf_procedures_expression: forall (C: Component.id) (P: Procedure.id) procs,
+        exported_procedure (prog_interface p) C P ->
+        prog_procedures p C = Some procs ->
+        procs P = Some (comp_call_handle P (TreeWithCallers.prog_trees p C))
    }.
 
   Definition initial_callers := CallReturnTree.initial_callers.
