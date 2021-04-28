@@ -189,6 +189,18 @@ Section SigmaShiftingBlockIds.
         by rewrite rewr.
   Qed.
 
+  Lemma sigma_lefttoright_good_Some lbid:
+    left_block_id_good_for_shifting lbid ->
+    exists rbid, sigma_shifting_lefttoright_option lbid = Some rbid.
+  Proof.
+    unfold left_block_id_good_for_shifting in *. intros.
+    assert (metadata_size_lhs - metadata_size_rhs <= lbid) as G.
+    {
+        by apply leq_trans with (n := metadata_size_lhs); auto; apply leq_subr.
+    }
+    by rewrite <- sigma_lefttoright_Some_spec.
+  Qed.
+    
   Lemma sigma_righttoleft_Some_spec rbid:
     rbid >= (metadata_size_rhs - metadata_size_lhs) <->
     (exists lbid, sigma_shifting_righttoleft_option rbid = Some lbid).
@@ -210,6 +222,18 @@ Section SigmaShiftingBlockIds.
       + destruct (rbid <? metadata_size_rhs - metadata_size_lhs) eqn:erbid;
           try discriminate.
         by apply/leP; apply Nat.ltb_ge.
+  Qed.
+
+  Lemma sigma_righttoleft_good_Some rbid:
+    right_block_id_good_for_shifting rbid ->
+    exists lbid, sigma_shifting_righttoleft_option rbid = Some lbid.
+  Proof.
+    unfold right_block_id_good_for_shifting in *. intros.
+    assert (metadata_size_rhs - metadata_size_lhs <= rbid) as G.
+    {
+        by apply leq_trans with (n := metadata_size_rhs); auto; apply leq_subr.
+    }
+    by rewrite <- sigma_righttoleft_Some_spec.
   Qed.
 
   
