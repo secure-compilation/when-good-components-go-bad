@@ -191,14 +191,31 @@ Section SigmaShiftingBlockIds.
 
   Lemma sigma_lefttoright_good_Some lbid:
     left_block_id_good_for_shifting lbid ->
-    exists rbid, sigma_shifting_lefttoright_option lbid = Some rbid.
+    exists rbid, sigma_shifting_lefttoright_option lbid = Some rbid /\
+                 right_block_id_good_for_shifting rbid.
   Proof.
     unfold left_block_id_good_for_shifting in *. intros.
-    assert (metadata_size_lhs - metadata_size_rhs <= lbid) as G.
+    assert (metadata_size_lhs - metadata_size_rhs <= lbid) as G1.
     {
         by apply leq_trans with (n := metadata_size_lhs); auto; apply leq_subr.
     }
-    by rewrite <- sigma_lefttoright_Some_spec.
+    specialize (sigma_lefttoright_Some_spec lbid) as [G _].
+    specialize (G G1) as [rbid Hrbid].
+    eexists; split; eauto.
+    unfold sigma_shifting_lefttoright_option, sigma_from_bigger_dom_option,
+    sigma_from_smaller_dom, right_block_id_good_for_shifting in *.
+    destruct (metadata_size_rhs <= metadata_size_lhs) eqn:rhslhs.
+    - destruct (lbid <? metadata_size_lhs - metadata_size_rhs); try discriminate.
+      inversion Hrbid.
+      rewrite subnBA; auto.
+      rewrite <- addnBAC; auto.
+      rewrite <- add0n at 1.
+      by rewrite leq_add2r.
+    - inversion Hrbid.
+      rewrite addnBCA; auto.
+      + by apply leq_addr.
+      + specialize (le_false_lt _ _ rhslhs).
+        by apply ltnW.
   Qed.
     
   Lemma sigma_righttoleft_Some_spec rbid:
@@ -226,14 +243,32 @@ Section SigmaShiftingBlockIds.
 
   Lemma sigma_righttoleft_good_Some rbid:
     right_block_id_good_for_shifting rbid ->
-    exists lbid, sigma_shifting_righttoleft_option rbid = Some lbid.
+    exists lbid, sigma_shifting_righttoleft_option rbid = Some lbid /\
+                 left_block_id_good_for_shifting lbid.
   Proof.
     unfold right_block_id_good_for_shifting in *. intros.
-    assert (metadata_size_rhs - metadata_size_lhs <= rbid) as G.
+    assert (metadata_size_rhs - metadata_size_lhs <= rbid) as G1.
     {
         by apply leq_trans with (n := metadata_size_rhs); auto; apply leq_subr.
     }
-    by rewrite <- sigma_righttoleft_Some_spec.
+    specialize (sigma_righttoleft_Some_spec rbid) as [G _].
+    specialize (G G1) as [lbid Hlbid].
+    eexists; split; eauto.
+    unfold sigma_shifting_righttoleft_option, sigma_from_bigger_dom_option,
+    sigma_from_smaller_dom, left_block_id_good_for_shifting in *.
+    destruct (metadata_size_rhs <= metadata_size_lhs) eqn:rhslhs.
+    - inversion Hlbid.
+      rewrite addnBCA; auto.
+      + by apply leq_addr.
+      
+    - destruct (rbid <? metadata_size_rhs - metadata_size_lhs); try discriminate.
+      inversion Hlbid.
+      rewrite subnBA; auto.
+      + rewrite <- addnBAC; auto.
+        rewrite <- add0n at 1.
+          by rewrite leq_add2r.
+      + specialize (le_false_lt _ _ rhslhs).
+          by apply ltnW.
   Qed.
 
   
