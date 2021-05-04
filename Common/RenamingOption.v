@@ -723,6 +723,19 @@ Section PredicateOnSharedSoFar.
 
 End PredicateOnSharedSoFar.
 
+
+Section GoodTraceExtensional.
+
+  Variable good_addr: addr_t -> Prop.
+
+  Inductive good_trace_extensional : trace event -> Prop :=
+  | all_shared_is_good:
+      forall t,
+        (forall a, addr_shared_so_far a t -> good_addr a) ->
+        good_trace_extensional t.
+  
+End GoodTraceExtensional.
+
 Section RenamingAddrOption.
 
   (** Address renamings are simply applications of given address maps. *)
@@ -964,8 +977,8 @@ Section RenamingAddrOption.
         rename_value_option (arg_of_event e) = Some v' ->
         arg_of_event e' = v' ->
         (*arg_of_event e  = inverse_rename_value (arg_of_event e') ->*)
-        good_trace left_addr_good (rcons tprefix e) ->
-        good_trace (right_addr_good) (rcons tprefix' e') ->
+        good_trace_extensional left_addr_good (rcons tprefix e) ->
+        good_trace_extensional (right_addr_good) (rcons tprefix' e') ->
         traces_rename_each_other_option (rcons tprefix e) (rcons tprefix' e').
 
 
@@ -1240,11 +1253,11 @@ Section BehaviorsRelated.
     @finpref_behavior Events.event -> Prop :=
   | good_trace_Terminates:
       forall t,
-        good_trace (left_addr_good_for_shifting size_meta_t) t ->
+        good_trace_extensional (left_addr_good_for_shifting size_meta_t) t ->
         good_behavior_left size_meta_t (FTerminates t)
   | good_trace_Tbc:
       forall t,
-        good_trace (left_addr_good_for_shifting size_meta_t) t ->
+        good_trace_extensional (left_addr_good_for_shifting size_meta_t) t ->
         good_behavior_left size_meta_t (FTbc t).
 
   (*
