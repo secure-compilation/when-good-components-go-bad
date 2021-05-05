@@ -2980,11 +2980,14 @@ Section ThreewayMultisem1.
                            )
                        ) as Hv.
                 {
-                  (* Here, we need to show that the value v can only be a pointer *)
-                  (* whose cid \in domm (prog_interface p).                       *)
-                  (* This fact should follow from "well_formed_program p".        *)
-                
-                  admit.
+                  eapply CSInvariants.IConst_possible_values;
+                    eauto.
+                  - eapply linking_well_formedness; eauto.
+                    rewrite <- Hifc_cc'.
+                      by unfold mergeable_interfaces in *; intuition.
+                  - by specialize
+                         (is_program_component_pc_in_domm Hcomp1 Hmerge1).
+                    
                 }
                 destruct Hv as [[i Hvi] | [perm [cid [bid [off [Hvptr Hcid]]]]]].
                 ** left. by subst.
@@ -6670,124 +6673,87 @@ Section ThreewayMultisem1.
                   (fun cid : nat => if cid \in domm (prog_interface p)
                                     then n cid else n'' cid)
                   t1''
-                  t1') as [Hshift_not [Hinvshift_not Hnextblock_not]].
+               ) as [Hpriv_not_exec Hnextblock_not_exec].
         {
-          destruct Hmemc' as [Hshift_given [Hinvshift_given Hnextblock_given]].
-          split; last split.
+          destruct Hmemc' as [Hpriv_given Hnextblock_given].
+          split.
           - intros [cid_original bid_original] Horiginal1 Horiginal2.
-            unfold memory_shifts_memory_at_addr, memory_renames_memory_at_addr,
-            rename_addr in *.
-            intros off. unfold sigma_shifting_addr. simpl.
-            specialize (Memory.load_after_alloc
-                          _ _ _ _ _
-                          (Permission.data, cid_original, bid_original, off)
-                          Halloc'
-                       ) as Hnoteq.
-            simpl in Hnoteq.
-
-            specialize (Memory.load_after_alloc_eq
-                          _ _ _ _ _
-                          (Permission.data, cid_original, bid_original, off)
-                          Halloc'
-                       ) as Heq.
-            simpl in Heq.
-
-            specialize (Hshift_given
-                          (cid_original, bid_original) Horiginal1 Horiginal2 off).
-            simpl in Hshift_given.
-
-            destruct ((cid_original, bid_original) ==
-                      (Pointer.component ptr, Pointer.block ptr)) eqn:Hwhichaddr.
-            + assert ((cid_original, bid_original) =
-                      (Pointer.component ptr, Pointer.block ptr)) as H_. by apply/eqP.
-              inversion H_. subst. clear H_.
-              simpl in Horiginal1.
-              rewrite <- Hifc_cc' in Horiginal1.
-              unfold mergeable_interfaces, linkable in *.
-              destruct Hmerge_ipic as [[_ Hcontra] _].
-              by specialize (fdisjoint_partition_notinboth Hcontra Horiginal1 Hptr).
-            + assert ((cid_original, bid_original) <>
-                        (Pointer.component ptr, Pointer.block ptr)) as H_.
-              by intros H_; inversion H_; subst; rewrite eqxx in Hwhichaddr.
-              unfold option_rename_value, omap, obind, oapp in *.
-              destruct (sigma_shifting
-                          (n'' cid_original)
-                          (if cid_original \in domm (prog_interface p)
-                           then n cid_original else n'' cid_original)
-                          (care, bid_original))
-                as [care_shift bid_original_shift] eqn:eshift;
-                rewrite eshift; rewrite eshift in Hshift_given.
-              simpl in *.
+            unfold memory_shifts_memory_at_private_addr,
+            memory_renames_memory_at_private_addr in *.
+            split; intros ? ? Hload.
+            + 
               specialize (Memory.load_after_alloc
                             _ _ _ _ _
-                            (Permission.data, cid_original, bid_original_shift, off)
+                            (Permission.data, cid_original, bid_original, offset)
                             Halloc'
-                         ) as Hnoteq'.
-              rewrite Hnoteq'.
-              * by rewrite Hshift_given.
-              * simpl. unfold not. rewrite pair_equal_spec. intros [? ?]. subst.
+                         ) as Hnoteq.
+              
+              specialize (Memory.load_after_alloc_eq
+                            _ _ _ _ _
+                            (Permission.data, cid_original, bid_original, offset)
+                            Halloc'
+                         ) as Heq.
+              
+              specialize (Hpriv_given
+                            (cid_original, bid_original) Horiginal1 Horiginal2)
+                as [Hpriv_given' _].
+              specialize (Hpriv_given' offset v).
+              simpl in *.
+
+              destruct ((cid_original, bid_original) ==
+                        (Pointer.component ptr, Pointer.block ptr))
+                       eqn:Hwhichaddr.
+              * assert ((cid_original, bid_original) =
+                        (Pointer.component ptr, Pointer.block ptr))
+                  as H_. by apply/eqP.
+                inversion H_. subst. clear H_.
+                simpl in *.
                 rewrite <- Hifc_cc' in Horiginal1.
                 unfold mergeable_interfaces, linkable in *.
                 destruct Hmerge_ipic as [[_ Hcontra] _].
-                by specialize (fdisjoint_partition_notinboth Hcontra Horiginal1 Hptr).
-
-          - intros [cid_original bid_original] Horiginal1 Horiginal2.
-            unfold memory_inverse_shifts_memory_at_addr,
-            memory_inverse_renames_memory_at_addr,
-            inverse_rename_addr in *.
-            intros off. unfold sigma_shifting_addr. simpl.
-            specialize (Memory.load_after_alloc
-                          _ _ _ _ _
-                          (Permission.data, cid_original, bid_original, off)
-                          Halloc'
-                       ) as Hnoteq.
-            simpl in Hnoteq.
-
-            specialize (Memory.load_after_alloc_eq
-                          _ _ _ _ _
-                          (Permission.data, cid_original, bid_original, off)
-                          Halloc'
-                       ) as Heq.
-            simpl in Heq.
-
-            specialize (Hinvshift_given
-                          (cid_original, bid_original) Horiginal1 Horiginal2 off).
-            simpl in Hinvshift_given.
-
-            destruct ((cid_original, bid_original) ==
-                      (Pointer.component ptr, Pointer.block ptr)) eqn:Hwhichaddr.
-            + assert ((cid_original, bid_original) =
-                      (Pointer.component ptr, Pointer.block ptr)) as H_. by apply/eqP.
-              inversion H_. subst. clear H_.
-              simpl in Horiginal1.
-              rewrite <- Hifc_cc' in Horiginal1.
-              unfold mergeable_interfaces, linkable in *.
-              destruct Hmerge_ipic as [[_ Hcontra] _].
-              by specialize (fdisjoint_partition_notinboth Hcontra Horiginal1 Hptr).
-            + assert ((cid_original, bid_original) <>
+                  by specialize (fdisjoint_partition_notinboth Hcontra Horiginal1 Hptr).
+              * assert ((cid_original, bid_original) <>
                         (Pointer.component ptr, Pointer.block ptr)) as H_.
-              by intros H_; inversion H_; subst; rewrite eqxx in Hwhichaddr.
-              unfold option_inverse_rename_value, omap, obind, oapp in *.
-              destruct (inv_sigma_shifting
-                          (n'' cid_original)
-                          (if cid_original \in domm (prog_interface p)
-                           then n cid_original else n'' cid_original)
-                          (care, bid_original))
-                as [care_shift bid_original_shift] eqn:eshift;
-                rewrite eshift; rewrite eshift in Hinvshift_given.
-              simpl in *.
+                  by intros H_; inversion H_; subst; rewrite eqxx in Hwhichaddr.
+
+                  rewrite Hnoteq; auto.
+
+            +
               specialize (Memory.load_after_alloc
                             _ _ _ _ _
-                            (Permission.data, cid_original, bid_original, off)
+                            (Permission.data, cid_original, bid_original, offset)
                             Halloc'
-                         ) as Hnoteq'.
-              rewrite Hnoteq'.
-              * by rewrite Hinvshift_given.
-              * simpl. unfold not. rewrite pair_equal_spec. intros [? ?]. subst.
+                         ) as Hnoteq.
+              
+              specialize (Memory.load_after_alloc_eq
+                            _ _ _ _ _
+                            (Permission.data, cid_original, bid_original, offset)
+                            Halloc'
+                         ) as Heq.
+              
+              specialize (Hpriv_given
+                            (cid_original, bid_original) Horiginal1 Horiginal2)
+                as [_ Hpriv_given'].
+              specialize (Hpriv_given' offset v').
+              simpl in *.
+
+              destruct ((cid_original, bid_original) ==
+                        (Pointer.component ptr, Pointer.block ptr))
+                       eqn:Hwhichaddr.
+              * assert ((cid_original, bid_original) =
+                        (Pointer.component ptr, Pointer.block ptr))
+                  as H_. by apply/eqP.
+                inversion H_. subst. clear H_.
+                simpl in *.
                 rewrite <- Hifc_cc' in Horiginal1.
                 unfold mergeable_interfaces, linkable in *.
                 destruct Hmerge_ipic as [[_ Hcontra] _].
-                by specialize (fdisjoint_partition_notinboth Hcontra Horiginal1 Hptr).
+                  by specialize (fdisjoint_partition_notinboth Hcontra Horiginal1 Hptr).
+              * assert ((cid_original, bid_original) <>
+                        (Pointer.component ptr, Pointer.block ptr)) as H_.
+                  by intros H_; inversion H_; subst; rewrite eqxx in Hwhichaddr.
+
+                  rewrite Hnoteq in Hload; auto.
 
           - intros cid Hcid.
             unfold Memory.alloc in *.
@@ -6819,30 +6785,38 @@ Section ThreewayMultisem1.
 
         }
 
+        
         assert (
           regs_rel_of_executing_part
             (Register.set rptr (Ptr ptr) regs)
             (Register.set rptr (Ptr ptr) regs1')
             n
-            (fun cid : nat => if cid \in domm (prog_interface p)
-                              then n cid else n'' cid)
+            (fun cid : nat_ordType =>
+               if cid \in domm (prog_interface p) then n cid else n'' cid)
+            t1
+            t1'
         ) as Hregs.
         {
-          constructor. intros reg. unfold Register.get, Register.set. rewrite !setmE.
+          constructor. intros reg. unfold Register.get, Register.set.
+          rewrite !setmE.
           destruct (Register.to_nat reg == Register.to_nat rptr) eqn:ereg;
             rewrite ereg.
           - destruct ptr as [[[perm cid] bid] off].
-            unfold shift_value, inverse_shift_value, rename_value, inverse_rename_value,
-            rename_addr, inverse_rename_addr. simpl.
-            rewrite Hptr sigma_shifting_n_n_id inv_sigma_shifting_n_n_id.
-            unfold Memory.alloc in *.
-            destruct (mem1' (Pointer.component pc)); try discriminate.
-            destruct (ComponentMemory.alloc s (Z.to_nat size)).
-            inversion Halloc'. subst. by simpl.
+            unfold shift_value_option, rename_value_option,
+            rename_value_template_option, rename_addr_option,
+            sigma_shifting_wrap_bid_in_addr,
+            sigma_shifting_lefttoright_addr_bid in *. simpl in *.
+            rewrite Hptr sigma_shifting_lefttoright_option_n_n_id.
+            left.
+            assert (perm = Permission.data).
+            {
+                by specialize (Memory.permission_of_alloc_ptr _ _ _ _ _ Halloc');
+                  simpl in *.
+            }
+              by subst; simpl.
           - inversion Hregsp as [G]. by specialize (G reg).
         }
-        
-        
+                
         assert (Step sem'
                      (gps1', mem1', regs1', pc)
                      E0
@@ -6882,6 +6856,7 @@ Section ThreewayMultisem1.
           ++ by rewrite E0_right.
         }
 
+        (*
         assert (good_memory (left_addr_good_for_shifting n) mem') as Hgood_memp_alloc.
         {
           unfold good_memory.
@@ -6945,6 +6920,7 @@ Section ThreewayMultisem1.
             rewrite Hnoteq in Hloadptr; auto.
             by eapply Hgood_mem'; eauto.
         }
+        *)
         
         eexists. split; eauto.
         econstructor; try eassumption.
@@ -6955,7 +6931,8 @@ Section ThreewayMultisem1.
              by rewrite Pointer.inc_preserves_component.
         * by simpl.
         * by unfold mem_of_part_executing_rel_original_and_recombined; intuition.
-        * by unfold mem_of_part_not_executing_rel_original_and_recombined_at_internal;
+        * by unfold
+               mem_of_part_not_executing_rel_original_and_recombined_at_internal;
             intuition.
         
       + simpl in *. subst.
@@ -6970,7 +6947,7 @@ Section ThreewayMultisem1.
     - discriminate.
 
       
-  Admitted.
+  Qed.
   
 
   (* Compose two stars into a merged star. The "program" side drives both stars

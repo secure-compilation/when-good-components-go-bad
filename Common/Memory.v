@@ -901,6 +901,13 @@ Module Memory.
   Proof. unfold alloc. intros H. destruct (mem cid) as [c |] eqn:Hmemcid; try discriminate.
          destruct (ComponentMemory.alloc c sz). by inversion H.
   Qed.
+
+  Lemma permission_of_alloc_ptr mem cid sz mem' ptr':
+    alloc mem cid sz = Some (mem', ptr') ->
+    Pointer.permission ptr' = Permission.data.
+  Proof. Proof. unfold alloc. intros H. destruct (mem cid) as [c |] eqn:Hmemcid; try discriminate.
+         destruct (ComponentMemory.alloc c sz). by inversion H.
+  Qed.
   
   Lemma load_after_alloc_eq mem cid sz mem' ptr' ptr :
     alloc mem cid sz = Some (mem', ptr') ->

@@ -146,4 +146,17 @@ Lemma mem_comp_in_domm_prog_interface_some s p t mem cid:
   exists compMem, mem cid = Some compMem.
 Admitted.
 
+Lemma IConst_possible_values p c pc v r:
+  well_formed_program (program_link p c) ->
+  Pointer.component pc \in domm (prog_interface p) -> 
+  executing (prepare_global_env (program_link p c)) pc (IConst v r) ->
+  (
+    (exists i : Z, v = IInt i) \/
+    (exists
+        (perm : Permission.id) (cid : Component.id) (bid : Block.id) 
+        (off : Block.offset),
+        v = IPtr (perm, cid, bid, off) /\ cid \in domm (prog_interface p))
+  ).
+Admitted.
+
 End CSInvariants.
