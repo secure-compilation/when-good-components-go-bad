@@ -809,120 +809,123 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
   if (Pointer.offset pc <? 0) % Z then
     None
   else
-    do instr <- nth_error P_code (Z.to_nat (Pointer.offset pc));
-    (* decode and execute the instruction *)
-    match instr with
-    | ILabel l =>
-      ret (E0, (gps, mem, regs, Pointer.inc pc))
-    | INop =>
-      ret (E0, (gps, mem, regs, Pointer.inc pc))
-    | IConst v r =>
-      let regs' := Register.set r (imm_to_val v) regs in
-      ret ([EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r) mem regs],
-           (gps, mem, regs', Pointer.inc pc))
-    | IMov r1 r2 =>
-      let regs' := Register.set r2 (Register.get r1 regs) regs in
-      ret ([EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs],
-           (gps, mem, regs', Pointer.inc pc))
-    | IBinOp op r1 r2 r3 =>
-      let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
-      let regs' := Register.set r3 result regs in
-      ret ([EBinop (Pointer.component pc) (binop_to_Ebinop op) (reg_to_Ereg r1)
-                   (reg_to_Ereg r2) (reg_to_Ereg r3) mem regs],
-           (gps, mem, regs', Pointer.inc pc))
-    | IPtrOfLabel l r =>
-      do ptr <- find_label_in_component G pc l;
-      let regs' := Register.set r (Ptr ptr) regs in
-      ret ([EConst (Pointer.component pc) (Ptr ptr) (reg_to_Ereg r) mem regs],
-           (gps, mem, regs', Pointer.inc pc)
-          )
-    | ILoad r1 r2 =>
-      match Register.get r1 regs with
-      | Ptr ptr =>
-        (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
-        do v <- Memory.load mem ptr;
+    if (Pointer.permission pc =? Permission.code) then
+      do instr <- nth_error P_code (Z.to_nat (Pointer.offset pc));
+      (* decode and execute the instruction *)
+      match instr with
+      | ILabel l =>
+        ret (E0, (gps, mem, regs, Pointer.inc pc))
+      | INop =>
+        ret (E0, (gps, mem, regs, Pointer.inc pc))
+      | IConst v r =>
+        let regs' := Register.set r (imm_to_val v) regs in
+        ret ([EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r) mem regs],
+             (gps, mem, regs', Pointer.inc pc))
+      | IMov r1 r2 =>
+        let regs' := Register.set r2 (Register.get r1 regs) regs in
+        ret ([EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs],
+             (gps, mem, regs', Pointer.inc pc))
+      | IBinOp op r1 r2 r3 =>
+        let result := eval_binop op (Register.get r1 regs) (Register.get r2 regs) in
+        let regs' := Register.set r3 result regs in
+        ret ([EBinop (Pointer.component pc) (binop_to_Ebinop op) (reg_to_Ereg r1)
+                     (reg_to_Ereg r2) (reg_to_Ereg r3) mem regs],
+             (gps, mem, regs', Pointer.inc pc))
+      | IPtrOfLabel l r =>
+        do ptr <- find_label_in_component G pc l;
+        let regs' := Register.set r (Ptr ptr) regs in
+        ret ([EConst (Pointer.component pc) (Ptr ptr) (reg_to_Ereg r) mem regs],
+             (gps, mem, regs', Pointer.inc pc)
+            )
+      | ILoad r1 r2 =>
+        match Register.get r1 regs with
+        | Ptr ptr =>
+          (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
+          do v <- Memory.load mem ptr;
           let regs' := Register.set r2 v regs in
           ret ([ELoad (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs],
                (gps, mem, regs', Pointer.inc pc))
-      (*else
+        (*else
         None*)
-      | _ => None
-      end
-    | IStore r1 r2 =>
-      match Register.get r1 regs with
-      | Ptr ptr =>
-        (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
-        do mem' <- Memory.store mem ptr (Register.get r2 regs);
+        | _ => None
+        end
+      | IStore r1 r2 =>
+        match Register.get r1 regs with
+        | Ptr ptr =>
+          (*if Component.eqb (Pointer.component ptr) (Pointer.component pc) then*)
+          do mem' <- Memory.store mem ptr (Register.get r2 regs);
           ret ([EStore (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs],
                (gps, mem', regs, Pointer.inc pc))
-      (*else
+        (*else
         None*)
-      | _ => None
-      end
-    | IJal l =>
-      do pc' <- find_label_in_component G pc l;
-      let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
-      ret ([EConst (Pointer.component pc)
-                   (Ptr (Pointer.inc pc)) (reg_to_Ereg R_RA) mem regs],
-           (gps, mem, regs', pc'))
-    | IJump r =>
-      match Register.get r regs with
-      | Ptr pc' =>
-        if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-          if Pointer.permission pc' =? Permission.code then
-            ret (E0, (gps, mem, regs, pc'))
+        | _ => None
+        end
+      | IJal l =>
+        do pc' <- find_label_in_component G pc l;
+        let regs' := Register.set R_RA (Ptr (Pointer.inc pc)) regs in
+        ret ([EConst (Pointer.component pc)
+                     (Ptr (Pointer.inc pc)) (reg_to_Ereg R_RA) mem regs],
+             (gps, mem, regs', pc'))
+      | IJump r =>
+        match Register.get r regs with
+        | Ptr pc' =>
+          if Component.eqb (Pointer.component pc') (Pointer.component pc) then
+            if Pointer.permission pc' =? Permission.code then
+              ret (E0, (gps, mem, regs, pc'))
+            else
+              None
+          else
+            None
+        | _ => None
+        end
+      | IBnz r l =>
+        match Register.get r regs with
+        | Int 0 =>
+          ret (E0, (gps, mem, regs, Pointer.inc pc))
+        | Int val =>
+          do pc' <- find_label_in_procedure G pc l;
+          ret (E0, (gps, mem, regs, pc'))
+        | _ => None
+        end
+      | IAlloc rptr rsize =>
+        match Register.get rsize regs with
+        | Int size =>
+          if (size <=? 0) % Z then
+            None
+          else
+            do (mem', ptr) <- Memory.alloc mem (Pointer.component pc) (Z.to_nat size);
+            let regs' := Register.set rptr (Ptr ptr) regs in
+            ret ([EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize) mem regs],
+                 (gps, mem', regs', Pointer.inc pc))
+        | _ => None
+        end
+      | ICall C' P =>
+        if negb (Component.eqb (Pointer.component pc) C') then
+          if imported_procedure_b (genv_interface G) (Pointer.component pc) C' P then
+            do b <- EntryPoint.get C' P (genv_entrypoints G);
+            let val := Register.get R_COM regs in
+            let pc' := (Permission.code, C', b, 0%Z) in
+            let t := [ECallInform (Pointer.component pc) P val mem regs C'] in
+            ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc'))
           else
             None
         else
           None
-      | _ => None
+      | IReturn =>
+        match gps with
+        | pc' :: gps' =>
+          if negb (Component.eqb (Pointer.component pc) (Pointer.component pc')) then
+            let val := Register.get R_COM regs in
+            let t := [ERetInform (Pointer.component pc) val mem regs (Pointer.component pc')] in
+            ret (t, (gps', mem, Register.invalidate regs, pc'))
+          else
+            None
+        | _ => None
+        end
+      | IHalt => None
       end
-    | IBnz r l =>
-      match Register.get r regs with
-      | Int 0 =>
-        ret (E0, (gps, mem, regs, Pointer.inc pc))
-      | Int val =>
-        do pc' <- find_label_in_procedure G pc l;
-        ret (E0, (gps, mem, regs, pc'))
-      | _ => None
-      end
-    | IAlloc rptr rsize =>
-      match Register.get rsize regs with
-      | Int size =>
-        if (size <=? 0) % Z then
-          None
-        else
-          do (mem', ptr) <- Memory.alloc mem (Pointer.component pc) (Z.to_nat size);
-          let regs' := Register.set rptr (Ptr ptr) regs in
-          ret ([EAlloc (Pointer.component pc) (reg_to_Ereg rptr) (reg_to_Ereg rsize) mem regs],
-               (gps, mem', regs', Pointer.inc pc))
-      | _ => None
-      end
-    | ICall C' P =>
-      if negb (Component.eqb (Pointer.component pc) C') then
-        if imported_procedure_b (genv_interface G) (Pointer.component pc) C' P then
-          do b <- EntryPoint.get C' P (genv_entrypoints G);
-          let val := Register.get R_COM regs in
-          let pc' := (Permission.code, C', b, 0%Z) in
-          let t := [ECallInform (Pointer.component pc) P val mem regs C'] in
-          ret (t, (Pointer.inc pc :: gps, mem, Register.invalidate regs, pc'))
-        else
-          None
-      else
-        None
-    | IReturn =>
-      match gps with
-      | pc' :: gps' =>
-        if negb (Component.eqb (Pointer.component pc) (Pointer.component pc')) then
-          let val := Register.get R_COM regs in
-          let t := [ERetInform (Pointer.component pc) val mem regs (Pointer.component pc')] in
-          ret (t, (gps', mem, Register.invalidate regs, pc'))
-        else
-          None
-      | _ => None
-      end
-    | IHalt => None
-    end.
+    else
+      None.
 
 Fixpoint execN (n: nat) (G: global_env) (st: state) : option Z :=
   match n with
@@ -952,10 +955,11 @@ Proof.
     (* extract information about the state *)
     match goal with
     | Hexec: executing _ _ _ |- _ =>
-      destruct Hexec as [procs [P_code [Hprocs [HP_code [? Hinstr]]]]]
+      destruct Hexec as [procs [P_code [Hprocs [HP_code [? [Hperm Hinstr]]]]]]
     end;
     (* simplify *)
-    simpl; unfold code in *; rewrite -> Hprocs, HP_code, Hinstr;
+    simpl; unfold code in *;
+      rewrite -> Hprocs, HP_code, Hinstr, Hperm, <- beq_nat_refl;
     (* the program counter is good *)
     match goal with
     | Hpc: (Pointer.offset _ >= 0) % Z |- _ =>
@@ -1061,14 +1065,21 @@ Proof.
       * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
           as [instr | ] eqn:Hinstr.
         (* case analysis on the fetched instruction *)
-        ** assert ((Pointer.offset pc0 <? 0) % Z = false). {
+        ** assert ((Pointer.offset pc0 <? 0) % Z = false) as rewr. {
              destruct (Pointer.offset pc0); auto.
            }
            assert ((Pointer.offset pc0 >= 0) % Z). {
              destruct (Pointer.offset pc0); discriminate.
            }
            simpl in Heval_step. unfold code in *.
-           rewrite -> HC_procs, HP_code, Hinstr in Heval_step.
+           rewrite -> HC_procs, HP_code, Hinstr, rewr in Heval_step.
+           assert (Pointer.permission pc0 = Permission.code) as Hperm.
+           {
+             destruct (Pointer.permission pc0 =? Permission.code) eqn:e;
+               try discriminate.
+             by apply beq_nat_true.
+           }
+           rewrite -> Hperm, <- beq_nat_refl in Heval_step.
            destruct instr; inversion Heval_step; subst; clear Heval_step.
              (*; try (match goal with
                   | Hpcfalse: (Pointer.offset ?PC <? 0) % Z = false,
@@ -1077,84 +1088,72 @@ Proof.
                     rewrite Hpcfalse in Heq; inversion Heq; subst; clear Heq Hpcfalse
                   end).
               *)
-           *** rewrite H in H2; inversion H2; subst; clear H2 H.
-               eapply Nop.
+           *** eapply Nop.
                eexists. eexists. eauto.
 
-           *** rewrite H in H2; inversion H2; subst; clear H2 H.
-               eapply Label;
+           *** eapply Label;
                  try reflexivity;
                  try (eexists; eexists; eauto).
 
-           *** rewrite H in H2; inversion H2; subst; clear H2 H.
-               eapply Const;
+           *** eapply Const;
                  try reflexivity;
                  try (eexists; eexists; eauto).
 
-           *** rewrite H in H2; inversion H2; subst; clear H2 H.
-               eapply Mov;
+           *** eapply Mov;
                  try reflexivity;
                  try (eexists; eexists; eauto).
 
-           *** rewrite H in H2; inversion H2; subst; clear H2 H.
-               eapply BinOp;
+           *** eapply BinOp;
                  try reflexivity;
                  try (eexists; eexists; eauto).
 
-           *** rewrite H in H2.
-               (*match goal with
-               | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
-                 rewrite Hpositive_offset in *
-               end.*)
-               destruct (find_label_in_component G pc0 l) eqn:Hlabel;
+           *** destruct (find_label_in_component G pc0 l) eqn:Hlabel;
                  try discriminate.
-               inversion H2; subst.
+               inversion H1; subst.
                eapply PtrOfLabel;
                  try reflexivity.
                **** eexists. eexists. eauto.
                **** assumption.
 
-           *** rewrite H in H2.
-               destruct (Register.get r regs0) eqn:Hreg;
+           *** destruct (Register.get r regs0) eqn:Hreg;
                  try discriminate.
                unfold Memory.load in *.
-               destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm;
+               destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm';
                  try discriminate.
                destruct (mem0 (Pointer.component t0)) eqn:Hmem;
                  try discriminate.
                destruct (ComponentMemory.load s (Pointer.block t0) (Pointer.offset t0))
                         eqn:Hload;
                  try discriminate.
-               inversion H2; subst.
+               inversion H1; subst.
                eapply Load with (ptr:=t0);
                  try reflexivity;
                  try (eexists; eexists; eauto).
                **** assumption.
                **** unfold Memory.load.
-                    rewrite Hmem. rewrite Hperm. assumption.
+                    rewrite Hmem. rewrite Hperm'. assumption.
 
-           *** rewrite H in H2.
-               destruct (Register.get r regs0) eqn:Hreg;
-                 try discriminate.
-               unfold Memory.store in *.
-               destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm;
-                 try discriminate.
-               destruct (mem0 (Pointer.component t0)) eqn:Hmem;
-                 try discriminate.
-               destruct (ComponentMemory.store s (Pointer.block t0) (Pointer.offset t0)
-                                               (Register.get r0 regs0))
-                        eqn:Hstore;
-                 try discriminate.
-               inversion H2; subst.
-               eapply Store with (ptr:=t0);
-                 try reflexivity;
-                 try (eexists; eexists; eauto).
-               **** assumption.
-               **** unfold Memory.store.
-                    rewrite Hmem. rewrite Hstore. rewrite Hperm. reflexivity.
+           *** 
+             destruct (Register.get r regs0) eqn:Hreg;
+               try discriminate.
+             unfold Memory.store in *.
+             destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm';
+               try discriminate.
+             destruct (mem0 (Pointer.component t0)) eqn:Hmem;
+               try discriminate.
+             destruct (ComponentMemory.store s (Pointer.block t0) (Pointer.offset t0)
+                                             (Register.get r0 regs0))
+                      eqn:Hstore;
+               try discriminate.
+             inversion H1; subst.
+             eapply Store with (ptr:=t0);
+               try reflexivity;
+               try (eexists; eexists; eauto).
+             **** assumption.
+             **** unfold Memory.store.
+                  rewrite Hmem. rewrite Hstore. rewrite Hperm'. reflexivity.
 
-           *** rewrite H in H2.
-               destruct (Register.get r0 regs0) eqn:Hreg;
+           *** destruct (Register.get r0 regs0) eqn:Hreg;
                  try discriminate.
                destruct ((z <=? 0) % Z) eqn:Hzpos;
                  try discriminate.
@@ -1163,7 +1162,7 @@ Proof.
                  try discriminate.
                destruct (ComponentMemory.alloc s (Z.to_nat z)) eqn:Halloc;
                  try discriminate.
-               inversion H2; subst.
+               inversion H1; subst.
                eapply Alloc;
                  try reflexivity;
                  try (eexists; eexists; eauto).
@@ -1172,22 +1171,22 @@ Proof.
                **** unfold Memory.alloc.
                     rewrite Hmem. rewrite Halloc. reflexivity.
 
-           *** match goal with
+           *** (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false,
                  Hcond: (if (Pointer.offset _ <? 0) % Z then None else _) = Some _ |- _ =>
                  rewrite Hpositive_offset in Hcond
-               end.
+               end.*)
                destruct (Register.get r regs0) eqn:Hreg;
                  try discriminate.
                destruct z eqn:Hn.
-               **** inversion H2. subst.
+               **** inversion H1. subst.
                     eapply BnzZ;
                       try reflexivity.
                     ***** eexists. eexists. eauto.
                     ***** assumption.
                **** destruct (find_label_in_procedure G pc0 l) eqn:Hlabel;
                       try discriminate.
-                    inversion H2. subst.
+                    inversion H1. subst.
                     eapply BnzNZ;
                       try reflexivity.
                     ***** eexists. eexists. eauto.
@@ -1196,7 +1195,7 @@ Proof.
                     ***** assumption.
                **** destruct (find_label_in_procedure G pc0 l) eqn:Hlabel;
                       try discriminate.
-                    inversion H2. subst.
+                    inversion H1. subst.
                     eapply BnzNZ;
                       try reflexivity.
                     ****** eexists. eexists. eauto.
@@ -1204,11 +1203,11 @@ Proof.
                     ****** intro contra. discriminate.
                     ****** assumption.
 
-           *** match goal with
+           *** (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false,
                  Hcond: (if (Pointer.offset _ <? 0) % Z then None else _) = Some _ |- _ =>
                  rewrite Hpositive_offset in Hcond
-               end.
+               end.*)
                destruct (Register.get r regs0) eqn:Hreg;
                  try discriminate.
                destruct (Component.eqb (Pointer.component t0) (Pointer.component pc0))
@@ -1216,7 +1215,7 @@ Proof.
                  try discriminate.
                destruct (Pointer.permission t0 =? Permission.code) eqn:Hcode;
                  try discriminate.
-               inversion H2; subst.
+               inversion H1; subst.
                eapply Jump with (pc':=pc);
                  try reflexivity.
                **** eexists. eexists. eauto.
@@ -1224,21 +1223,20 @@ Proof.
                **** apply Nat.eqb_eq. assumption.
                **** apply Nat.eqb_eq. assumption.
 
-           *** rewrite H in H2.
-               (*match goal with
+           *** (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
                  rewrite Hpositive_offset in *
                end.*)
-               destruct (find_label_in_component G pc0 l) eqn:Hlabel;
-                 try discriminate.
-               inversion H2; subst.
-               eapply Jal;
-                 try reflexivity.
-               **** eexists. eexists. eauto.
-               **** assumption.
+             subst.
+             destruct (find_label_in_component G pc0 l) eqn:Hlabel;
+               try discriminate.
+             inversion H1; subst.
+             eapply Jal;
+               try reflexivity.
+             **** eexists. eexists. eauto.
+             **** assumption.
 
-           *** rewrite H in H2.
-               (*match goal with
+           *** (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
                  rewrite Hpositive_offset in *
                end.*)
@@ -1250,7 +1248,7 @@ Proof.
                  try discriminate.
                destruct (EntryPoint.get i i0 (genv_entrypoints G)) eqn:Hentrypoint;
                  try discriminate.
-               simpl in *. inversion H2. subst.
+               simpl in *. inversion H1. subst.
                eapply Call;
                  try reflexivity.
                **** eexists. eexists. eauto.
@@ -1258,8 +1256,7 @@ Proof.
                **** apply imported_procedure_iff. auto.
                **** assumption.
 
-           *** rewrite H in H2.
-               (*match goal with
+           *** (*match goal with
                | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
                  rewrite Hpositive_offset in *
                end.*)
@@ -1269,23 +1266,19 @@ Proof.
                         eqn:Hcomp;
                  try discriminate.
                simpl in *.
-               inversion H2. subst.
+               inversion H1. subst.
                eapply Return;
                  try reflexivity.
                **** eexists. eexists. eauto.
                **** apply Nat.eqb_neq. assumption.
 
-           *** rewrite H in H2.
-               (*match goal with
-               | Hpositive_offset: (Pointer.offset _ <? 0) % Z = false |- _ =>
-                 rewrite Hpositive_offset in *
-               end.*)
-               discriminate.
-
+           
         ** simpl in Heval_step. unfold code in *.
            rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step.
            rewrite Hinstr in Heval_step.
-           destruct ((Pointer.offset pc0 <? 0) % Z); discriminate.
+           destruct ((Pointer.offset pc0 <? 0) % Z); try discriminate.
+           destruct (Pointer.permission pc0 =? Permission.code);
+             try discriminate.
       * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
           as [instr | ] eqn:Hinstr.
         ** simpl in Heval_step.
@@ -1301,7 +1294,9 @@ Proof.
            unfold code in *.
            rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step.
            rewrite Hinstr in Heval_step.
-           destruct ((Pointer.offset pc0 <? 0) % Z); discriminate.
+           destruct ((Pointer.offset pc0 <? 0) % Z); try discriminate.
+           destruct (Pointer.permission pc0 =? Permission.code);
+             try discriminate.
     + simpl in Heval_step.
       unfold code in *.
       rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step. discriminate.
@@ -1361,10 +1356,11 @@ Section SemanticsInform.
       try (match goal with
              Hexec1: executing ?G ?PC ?INSTR1,
              Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
-             destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code [? Hinstr]]]]];
-             destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' [? Hinstr']]]]];
+             destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code [? [Hperm Hinstr]]]]]];
+             destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' [? [Hperm' Hinstr']]]]]];
              rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
              rewrite HP_code in HP_code'; inversion HP_code'; subst;
+             rewrite Hperm in Hperm'; inversion Hperm'; subst;
              rewrite Hinstr in Hinstr'; inversion Hinstr'; subst
            end);
       (* solve simple cases *)
@@ -1420,10 +1416,11 @@ Section SemanticsInform.
     try (match goal with
          | Hexec1: executing ?G ?PC ?INSTR1,
            Hexec2: executing ?G' ?PC' ?INSTR2 |- _ =>
-           destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code [? Hinstr]]]]];
-           destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' [? Hinstr']]]]];
+           destruct Hexec1 as [C_procs [P_code [HC_procs [HP_code [? [Hperm Hinstr]]]]]];
+           destruct Hexec2 as [C_procs' [P_code' [HC_procs' [HP_code' [? [Hperm' Hinstr']]]]]];
            rewrite HC_procs in HC_procs'; inversion HC_procs'; subst;
            rewrite HP_code in HP_code'; inversion HP_code'; subst;
+           rewrite Hperm in Hperm'; inversion Hperm'; subst;
            rewrite Hinstr in Hinstr'; inversion Hinstr'
          end).
   Qed.
@@ -1528,24 +1525,133 @@ Qed.
 
 Canonical ssrnat.nat_eqType.
 
+(* Should follow from well_formed_program p *)
+Lemma IConst_possible_values pc v r:
+  executing G pc (IConst v r) ->
+  (
+    (exists i : Z, v = IInt i) \/
+    (exists
+        (perm : Permission.id) (cid : Component.id) (bid : Block.id) 
+        (off : Block.offset) procs,
+        v = IPtr (perm, cid, bid, off) /\
+        cid = Pointer.component pc /\
+        prog_procedures p (Pointer.component pc) = Some procs /\
+        procs bid
+    )
+  ).
+Admitted.
+
+
+
 Lemma intermediate_well_formed_events st t st' :
   Star sem_inform st t st' ->
-  seq.all (well_formed_event (Intermediate.prog_interface p)) t.
+  seq.all (well_formed_event
+             (Intermediate.prog_interface p)
+             (Intermediate.prog_procedures p)
+          )
+          t.
 Proof.
 elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
 rewrite seq.all_cat IH andbT {Hstar}.
 case: st1 t1 st2 / Hstep => //=.
+- (* Relies on lemma IConst_possible_values above. *)
+  intros _ _ ? ? ? ? ? Hexec Hreg.
+  specialize (IConst_possible_values _ _ _ Hexec)
+    as [[i ev]|[perm [cid [bid [off [procs' [? [? [Hprocs ?]]]]]]]]];
+    subst; auto.
+  simpl.
+  destruct (perm =? Permission.code) eqn:e; auto.
+  assert (exists procs, prog_procedures p (Pointer.component pc) = Some procs)
+    as [procs HShouldBeProvable2].
+  { by admit. }
+
+  rewrite HShouldBeProvable2.
+  rewrite <- beq_nat_refl, andTb, andbT.
+
+  assert (procs = procs').
+  {
+    rewrite Hprocs in HShouldBeProvable2.
+    by inversion HShouldBeProvable2.
+  }
+
+    by subst.
+
+- intros ? ? ? ? ? ? ? ? Hexec Hfind _.
+  specialize (find_label_in_component_1 _ _ _ _ Hfind) as Hcomp.
+  destruct ptr as [[[perm cid] bid] ?].
+  destruct (perm =? Permission.code) eqn:e; auto.
+  specialize (domm_genv_procedures p) as Hgenv_procedures.
+  specialize (wfprog_defined_procedures valid_program) as Hprog_procedures.
+  rewrite Hprog_procedures in Hgenv_procedures.
+
+  destruct (prog_procedures p (Pointer.component pc)) as [procs|] eqn:e1.
+  + simpl in *. subst. rewrite <- beq_nat_refl, andTb, andbT.
+    unfold find_label_in_component, find_label_in_component_helper  in *.
+    destruct (genv_procedures G (Pointer.component pc)) as [procs'|] eqn:e2;
+      try discriminate.
+
+    (* Search _ find_label_in_component_helper. *)
+    
+    (** AEK: TODO:
+        Need to prove a lemma about the "bid" that is returned by
+        find_label_in_component_helper.
+        This bid is guaranteed to be in the domain of procs'.
+
+        After having proved such a lemma, it remains to show that
+        procs' is the same as procs.
+
+        To do that we need to know that 
+        "genv_procedures G (Pointer.component pc)" and 
+        "prog_procedures p (Pointer.component pc)"
+        are the same thing (are they?)
+        
+        If they are the same thing, then we can easily rewrite e2 in e1 to know
+        that procs' is the same as procs.
+     *)
+    admit.
+  + unfold find_label_in_component  in *.
+    destruct (genv_procedures G (Pointer.component pc)) as [procs'|] eqn:e2;
+      try discriminate.
+    assert (Pointer.component pc \in domm (prog_procedures p)) as Hcontra.
+    {
+      rewrite <- Hgenv_procedures.
+      by rewrite mem_domm e2. 
+    }
+    by rewrite mem_domm e1 in Hcontra.
+- intros ? ? ? ? ? ? ? Hexec Hfind _.
+  specialize (Pointer.inc_preserves_permission pc) as Hperm.
+  specialize (Pointer.inc_preserves_component pc) as Hcomp.
+  specialize (Pointer.inc_preserves_block pc) as Hblock.
+  
+  destruct (Pointer.inc pc) as [[[perm cid] bid] ?].
+  simpl in *. subst.
+
+  assert (Pointer.permission pc = Permission.code) as HShouldBeProvable.
+  { by admit. }
+
+  rewrite HShouldBeProvable. rewrite <- !beq_nat_refl.
+
+  assert (exists procs, prog_procedures p (Pointer.component pc) = Some procs)
+    as [procs HShouldBeProvable2].
+  { by admit. }
+
+  rewrite HShouldBeProvable2 andTb andbT.
+
+  (** AEK: TODO:
+      Should follow from a lemma about executing.
+   *)
+  admit.
 - move=> ????????? /eqP ->.
-  by move=> /imported_procedure_iff /= ->.
+    by move=> /imported_procedure_iff /= ->.
 - by move=> ??????? /eqP ->.
-Qed.
+Admitted.
 
 Lemma intermediate_well_formed_trace : forall t cs cs',
   Star sem_inform cs t cs' ->
   CS.initial_state p cs ->
   Intermediate.prog_main p ->
   Intermediate.well_formed_program p ->
-  well_formed_trace (Intermediate.prog_interface p) t.
+  well_formed_trace (Intermediate.prog_interface p) (prog_procedures p) t.
 Proof.
   intros t cs cs' H H' H'' H'''.
   unfold well_formed_trace. apply/andP; split; last by apply: intermediate_well_formed_events H.
@@ -1757,7 +1863,13 @@ Qed.
 Canonical ssrnat.nat_eqType.
 
 Lemma well_formed_event_inform_well_formed_event_project_non_inform t_inform t_non_inform:
-  seq.all (TracesInform.well_formed_event (Intermediate.prog_interface p)) t_inform ->
+  seq.all
+    (TracesInform.well_formed_event
+       (Intermediate.prog_interface p)
+       (prog_procedures p)
+    )
+    t_inform
+  ->
   project_non_inform t_inform = t_non_inform ->
   seq.all (Traces.well_formed_event (Intermediate.prog_interface p)) t_non_inform.
 Admitted.
@@ -1769,13 +1881,20 @@ Proof.
   intros Hstar.
   pose proof star_sem_non_inform_star_sem_inform st t st' Hstar
     as [t_inform [Hstar_inform Hproj]].
-  pose proof intermediate_well_formed_events p st t_inform st' Hstar_inform as Hwf_inform.
+  pose proof intermediate_well_formed_events
+       p
+       valid_program
+       complete_program
+       st t_inform st' Hstar_inform as Hwf_inform.
   exact (well_formed_event_inform_well_formed_event_project_non_inform
            t_inform t Hwf_inform Hproj).
 Qed.
 
 Lemma well_formed_trace_inform_well_formed_trace_project_non_inform t_inform t_non_inform:
-  TracesInform.well_formed_trace (Intermediate.prog_interface p) t_inform ->
+  TracesInform.well_formed_trace
+    (Intermediate.prog_interface p)
+    (prog_procedures p)
+    t_inform ->
   project_non_inform t_inform = t_non_inform ->
   Traces.well_formed_trace (Intermediate.prog_interface p) t_non_inform.
 Admitted.
@@ -1790,7 +1909,8 @@ Proof.
   intros t cs cs' H H' H'' H'''.
   pose proof star_sem_non_inform_star_sem_inform cs t cs' H
     as [t_inform [Hstar_inform Hproj]].
-  pose proof intermediate_well_formed_trace p t_inform cs cs' Hstar_inform H' H'' H'''
+  pose proof intermediate_well_formed_trace p valid_program complete_program
+       t_inform cs cs' Hstar_inform H' H'' H'''
     as Hwf_trace_inform.
   exact (well_formed_trace_inform_well_formed_trace_project_non_inform
            t_inform t Hwf_trace_inform Hproj).
@@ -2406,7 +2526,7 @@ Proof.
     (* extract information about the state *)
     match goal with
     | Hexec: executing _ _ _ |- _ =>
-      destruct Hexec as [procs [P_code [Hprocs [HP_code [? Hinstr]]]]]
+      destruct Hexec as [procs [P_code [Hprocs [HP_code [? [Hperm Hinstr]]]]]]
     end;
     apply/andP; split; auto.
   - (* Use Hwellformed, Hprocs, HP_code and Hinstr *)

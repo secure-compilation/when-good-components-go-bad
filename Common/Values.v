@@ -209,9 +209,12 @@ Lemma eval_binop_int :
     (
       (exists i1 i2, v1 = Int i1 /\ v2 = Int i2)
       \/
+      (exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\ op = Eq)
+      \/
       (exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
                      (
-                       (op = Minus \/ op = Leq) ->
+                       (op = Minus \/ op = Leq)
+                       /\
                        (
                          Pointer.permission p1 = Pointer.permission p2 /\
                          Pointer.component p1 = Pointer.component p2 /\
@@ -237,11 +240,11 @@ Proof.
       pose proof andb_prop _ _ Heq' as [H1 H2].
       intuition; by apply beq_nat_true.
     }
-    right; do 2 eexists; eauto; intuition.
+    right; right; do 2 eexists; eauto; intuition.
   - left; do 2 eexists; intuition.
   - left; do 2 eexists; intuition.
   - unfold Pointer.eq in *.
-    right; do 2 eexists; eauto; intuition; discriminate.
+    right; left; do 2 eexists; eauto; intuition; discriminate.
   - left; do 2 eexists; intuition.
   - unfold Pointer.leq in *.
     destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Heq;
@@ -252,7 +255,7 @@ Proof.
       pose proof andb_prop _ _ Heq' as [H1 H2].
       intuition; by apply beq_nat_true.
     }
-    right; do 2 eexists; eauto; intuition.
+    right; right; do 2 eexists; eauto; intuition.
 Qed.
 
 Lemma eval_binop_undef :

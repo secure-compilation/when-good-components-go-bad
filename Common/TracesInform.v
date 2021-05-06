@@ -22,6 +22,47 @@ Inductive Eregister : Type :=
 Inductive Ebinop : Set :=
   E_Add : Ebinop | E_Minus : Ebinop | E_Mul : Ebinop | E_Eq : Ebinop | E_Leq : Ebinop.
 
+Definition reg_to_Ereg r :=
+  match r with
+  | R_ONE => E_R_ONE
+  | R_COM => E_R_COM
+  | R_AUX1 => E_R_AUX1
+  | R_AUX2 => E_R_AUX2
+  | R_RA => E_R_RA
+  | R_SP => E_R_SP
+  | R_ARG => E_R_ARG
+  end.
+
+Definition binop_to_Ebinop op :=
+  match op with
+  | Add => E_Add
+  | Minus => E_Minus
+  | Mul => E_Mul
+  | Eq => E_Eq
+  | Leq => E_Leq
+  end.
+
+Definition Ereg_to_reg r :=
+  match r with
+  | E_R_ONE => R_ONE
+  | E_R_COM => R_COM
+  | E_R_AUX1 => R_AUX1
+  | E_R_AUX2 => R_AUX2
+  | E_R_RA => R_RA
+  | E_R_SP => R_SP
+  | E_R_ARG => R_ARG
+  end.
+
+Definition Ebinop_to_binop op :=
+  match op with
+  | E_Add => Add
+  | E_Minus => Minus
+  | E_Mul => Mul
+  | E_Eq => Eq
+  | E_Leq => Leq
+  end.
+
+
 Inductive event_inform :=
 | ECallInform :
     Component.id -> Procedure.id -> value -> Memory.t -> Intermediate.Register.t -> Component.id -> event_inform
@@ -143,6 +184,32 @@ Definition project_finpref_behavior m :=
   | FTbc t => FTbc (project_non_inform t)
   end.
 
+Definition mem_of_event_inform (e: event_inform): Memory.t :=
+  match e with
+  | ECallInform _ _ _ m _ _
+  | ERetInform _ _ m _ _
+  | EConst _ _ _ m _
+  | EMov _ _ _ m _
+  | EBinop _ _ _ _ _ m _
+  | ELoad _ _ _ m _
+  | EStore _ _ _ m _
+  | EAlloc _ _ _ m _ => m
+  end.
+
+
+Definition register_file_of_event_inform
+           (e: event_inform): Machine.Intermediate.Register.t :=
+  match e with
+  | ECallInform _ _ _ _ r _
+  | ERetInform _ _ _ r _
+  | EConst _ _ _ _ r
+  | EMov _ _ _ _ r
+  | EBinop _ _ _ _ _ _ r
+  | ELoad _ _ _ _ r
+  | EStore _ _ _ _ r
+  | EAlloc _ _ _ _ r => r
+  end.
+ 
 Section Traces.
 
 Inductive stack_state := StackState {
@@ -266,15 +333,15 @@ Qed.
 
 
 Definition well_formed_constant_value (cur_comp: Component.id)
-           (procs: NMap {fset Procedure.id}) (v: value) : bool :=
+           (procs: NMap (NMap code)) (v: value) : bool :=
   match v with
   | Int _ => true
   | Undef => true
   | Ptr (perm, cid, bid, off) =>
     if perm =? Permission.code then
       match procs cur_comp with
-      | Some procs' =>
-        (cid =? cur_comp) && (bid \in procs')
+      | Some procs_cur_comp =>
+        (cid =? cur_comp) && (procs_cur_comp bid)
 
       (* impossible case *)
       | None => false
@@ -291,7 +358,7 @@ Definition well_formed_constant_value (cur_comp: Component.id)
    Only then can we use reachability to compute the views of each component.
    Based on the view of a component memory, we can judge whether an ERead/EWrite that it
    performs is a possible read/write.  *)
-Definition well_formed_event intf (procs: NMap {fset Procedure.id})
+Definition well_formed_event intf (procs: NMap (NMap code))
            (e: event_inform) : bool :=
   match e with
   | ECallInform C P _ _ _ C' => (C != C') && imported_procedure_b intf C C' P
@@ -300,10 +367,10 @@ Definition well_formed_event intf (procs: NMap {fset Procedure.id})
   | _ => true
   end.
 
-Definition well_formed_trace intf (procs: NMap {fset Procedure.id})
+Definition well_formed_trace intf (procs: NMap (NMap code))
            (t: trace event_inform) : bool :=
   well_bracketed_trace stack_state0 t &&
-  all (well_formed_event intf (procs: NMap {fset Procedure.id})) t.
+  all (well_formed_event intf (procs: NMap (NMap code))) t.
 
 Definition declared_event_comps intf e :=
   [&& cur_comp_of_event e \in domm intf &
