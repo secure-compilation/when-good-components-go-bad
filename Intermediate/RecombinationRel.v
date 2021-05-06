@@ -6984,11 +6984,9 @@ Section ThreewayMultisem1.
         * eapply merge_states_silent_star; eassumption.
       + apply Eapp_E0_inv in Ht. destruct Ht; subst.
         specialize (IHstar H H0 H2 H3
-                           Hpref_t Hgood_mem Hstack_s_s' Hpccomp_s'_s
+                           Hpref_t (*Hgood_mem*) Hstack_s_s' Hpccomp_s'_s
                            Logic.eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
           as [s2' [Hstar12' Hmerge2]].
-        (*specialize (IHstar Hstar eq_refl Hmerge1 Hcomp1 Hcomp1'' Hstar12'')
-          as [s2' [Hstar12' Hmerge2]].*)
         pose proof CS.epsilon_star_non_inform_preserves_program_component _ _ _ _
              Hcomp1 ((proj2 (star_iff_starR _ _ _ _ _)) Hstar12) as Hcomp2.
         pose proof threeway_multisem_step_E0 Hcomp2 Hmerge2 Hstep23
@@ -6998,8 +6996,21 @@ Section ThreewayMultisem1.
             [assumption | | reflexivity].
           now apply star_one.
         * assumption.
-    - (* derive a contradiction to Hcomp1 *) admit.
-  Admitted.
+    - (* derive a contradiction to Hcomp1 *)
+      destruct s1' as [[[? ?] ?] s1'pc].
+      destruct s1 as [[[? ?] ?] s1pc].
+      destruct s1'' as [[[? ?] ?] s1''pc].
+      
+      unfold CS.is_program_component,
+      CS.is_context_component, turn_of, CS.state_turn in *.
+      find_and_invert_mergeable_states_well_formed.
+      simpl in *. subst.
+      match goal with
+      | H1: context[Pointer.component s1''pc \in _] |- _ =>
+        rewrite Hpccomp_s'_s in H1;
+          by rewrite H1 in Hcomp1
+      end.
+  Qed.
 
   (* RB: NOTE: Observe similarity with threeway_multisem_mergeable_program, use
      to replace this if possible. *)
