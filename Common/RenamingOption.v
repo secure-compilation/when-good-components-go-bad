@@ -26,6 +26,36 @@ Proof.
   by rewrite H in n1n2.
 Qed.
 
+Lemma subn_eq_subn_cancel n1 n2 s:
+  n1 >= s ->
+  n2 >= s ->
+  n1 - s = n2 - s ->
+  n1 = n2.
+Proof.
+  induction s; intuition.
+  - by rewrite !subn0 in H1.
+  - apply IHs; auto.
+    rewrite !subnS in H1.
+    unfold Init.Nat.pred in H1.
+    assert (0 < n1 - s). by rewrite subn_gt0.
+    assert (0 < n2 - s). by rewrite subn_gt0.
+    destruct (n1 - s); try by auto.
+      by destruct (n2 - s); auto.
+Qed.
+
+Lemma subn_n_m_n_0:
+  forall n m, n - m = n -> m = 0 \/ n = 0.
+Proof.
+  intros n m Hnm.
+  destruct n; intuition.
+  unfold subn, subn_rec in Hnm. simpl in Hnm.
+  destruct m; auto.
+  pose proof Nat.le_sub_l n m as Hcontra.
+  rewrite Hnm in Hcontra.
+    by intuition.
+Qed.
+
+(**********************************************************
 Section ShiftingBlockIdsAsPartialBijection.
   (* The following is a definition of a so-called "partial bijection", namely
      the bijection between the set [count_blocks_to_shift_per_comp, inf) and the set N
@@ -84,7 +114,7 @@ Section ShiftingBlockIdsAsPartialBijection.
 
   
 End ShiftingBlockIdsAsPartialBijection.
-
+*****************************************************************)
 
 Section SigmaShiftingBlockIds.
 
@@ -95,6 +125,7 @@ Section SigmaShiftingBlockIds.
   Variable metadata_size_lhs: nat.
   Variable metadata_size_rhs: nat.
 
+  (****************************************
   Definition sigma_shifting_lefttoright_option : Block.id -> option Block.id :=
     if (metadata_size_lhs >= metadata_size_rhs)%nat
     then sigma_from_bigger_dom_option (metadata_size_lhs - metadata_size_rhs)
@@ -110,7 +141,18 @@ Section SigmaShiftingBlockIds.
              (sigma_from_smaller_dom (metadata_size_lhs - metadata_size_rhs))
              (Some bid)
     else sigma_from_bigger_dom_option (metadata_size_rhs - metadata_size_lhs).
+   ***********************************************)
 
+  Definition sigma_shifting_lefttoright_option (b: Block.id) : option Block.id :=
+    if b >= metadata_size_lhs
+    then Some (b - metadata_size_lhs + metadata_size_rhs)
+    else None.
+
+  Definition sigma_shifting_righttoleft_option (b: Block.id) : option Block.id :=
+    if b >= metadata_size_rhs
+    then Some (b - metadata_size_rhs + metadata_size_lhs)
+    else None.
+  
   
   Lemma sigma_shifting_lefttoright_option_Some_sigma_shifting_righttoleft_option_Some
         bidl bidr:
@@ -118,7 +160,19 @@ Section SigmaShiftingBlockIds.
     sigma_shifting_righttoleft_option bidr = Some bidl.
   Proof.
     unfold sigma_shifting_righttoleft_option, sigma_shifting_lefttoright_option.
-    destruct (metadata_size_rhs <= metadata_size_lhs) eqn:e; intros Hlr.
+    destruct (metadata_size_lhs <= bidl) eqn:elhs; try discriminate.
+    intros Hbidr. inversion Hbidr. subst. clear Hbidr.
+    destruct (metadata_size_rhs <= bidl - metadata_size_lhs + metadata_size_rhs)
+             eqn:e.
+    - by rewrite addnK subnK.
+    - rewrite addnBAC in e; auto.
+      rewrite addnC in e.
+      rewrite <- addnBA in e; auto.
+      by rewrite <- leq_subLR, subnn in e.
+  Qed.
+
+  (*****************************************
+  destruct (metadata_size_rhs <= metadata_size_lhs) eqn:e; intros Hlr.
     - specialize (ocancel_sigma_from_bigger_dom_option_sigma_from_smaller_dom
                     (metadata_size_lhs - metadata_size_rhs)
                  ) as Hcan.
@@ -131,11 +185,26 @@ Section SigmaShiftingBlockIds.
       unfold omap, obind, oapp in Hlr. inversion Hlr. subst.
       unfold pcancel in Hcan. by apply Hcan.
   Qed.
+   **********************************************)
 
   Lemma sigma_shifting_righttoleft_option_Some_sigma_shifting_lefttoright_option_Some
         bidl bidr:
     sigma_shifting_righttoleft_option bidr = Some bidl ->
     sigma_shifting_lefttoright_option bidl = Some bidr.
+  Proof.
+    unfold sigma_shifting_righttoleft_option, sigma_shifting_lefttoright_option.
+    destruct (metadata_size_rhs <= bidr) eqn:elhs; try discriminate.
+    intros Hbidr. inversion Hbidr. subst. clear Hbidr.
+    destruct (metadata_size_lhs <= bidr - metadata_size_rhs + metadata_size_lhs)
+             eqn:e.
+    - by rewrite addnK subnK.
+    - rewrite addnBAC in e; auto.
+      rewrite addnC in e.
+      rewrite <- addnBA in e; auto.
+      by rewrite <- leq_subLR, subnn in e.
+  Qed.
+
+  (**************************************************
   Proof.
     unfold sigma_shifting_righttoleft_option, sigma_shifting_lefttoright_option.
     destruct (metadata_size_rhs <= metadata_size_lhs) eqn:e; intros Hlr.
@@ -151,6 +220,7 @@ Section SigmaShiftingBlockIds.
       specialize (Hcan bidr). rewrite Hlr in Hcan.
       unfold omap, obind, oapp. by rewrite Hcan.
   Qed.
+   ********************************************************)
 
   Definition left_block_id_good_for_shifting (bid: Block.id) : Prop :=
     bid >= metadata_size_lhs.
@@ -158,7 +228,54 @@ Section SigmaShiftingBlockIds.
   Definition right_block_id_good_for_shifting (bid: Block.id) : Prop :=
     bid >= metadata_size_rhs.
   
+  Lemma sigma_lefttoright_Some_spec lbid:
+    left_block_id_good_for_shifting lbid
+    <->
+    (exists rbid, sigma_shifting_lefttoright_option lbid = Some rbid).
+  Proof.
+    unfold left_block_id_good_for_shifting, sigma_shifting_lefttoright_option.
+    destruct (metadata_size_lhs <= lbid) eqn:elhs; intuition.
+    - by eexists.
+    - by auto.
+    - by destruct H.
+  Qed.
+
+  Lemma sigma_righttoleft_Some_spec lbid:
+    right_block_id_good_for_shifting lbid
+    <->
+    (exists rbid, sigma_shifting_righttoleft_option lbid = Some rbid).
+  Proof.
+    unfold right_block_id_good_for_shifting, sigma_shifting_righttoleft_option.
+    destruct (metadata_size_rhs <= lbid) eqn:elhs; intuition.
+    - by eexists.
+    - by auto.
+    - by destruct H.
+  Qed.
+
+  Lemma sigma_lefttoright_Some_good lbid rbid:
+    sigma_shifting_lefttoright_option lbid = Some rbid ->
+    right_block_id_good_for_shifting rbid.
+  Proof.
+    intros Hsome.
+    apply sigma_shifting_lefttoright_option_Some_sigma_shifting_righttoleft_option_Some in Hsome.
+    rewrite sigma_righttoleft_Some_spec.
+      by eexists; eauto.
+  Qed.
+
   
+  Lemma sigma_righttoleft_Some_good lbid rbid:
+    sigma_shifting_righttoleft_option rbid = Some lbid ->
+    left_block_id_good_for_shifting lbid.
+  Proof.
+    intros Hsome.
+    apply sigma_shifting_righttoleft_option_Some_sigma_shifting_lefttoright_option_Some in Hsome.
+    rewrite sigma_lefttoright_Some_spec.
+      by eexists; eauto.
+  Qed.
+
+  
+  
+  (****************************************************
   Lemma sigma_lefttoright_Some_spec lbid:
     lbid >= (metadata_size_lhs - metadata_size_rhs)
     (* This condition is strictly weaker than the goodness condition. *)
@@ -270,6 +387,7 @@ Section SigmaShiftingBlockIds.
       + specialize (le_false_lt _ _ rhslhs).
           by apply ltnW.
   Qed.
+  ******************************************************************)
 
   
   Lemma sigma_shifting_lefttoright_option_Some_inj bid1 bid2 bid_shift:
@@ -278,62 +396,62 @@ Section SigmaShiftingBlockIds.
     bid1 = bid2.
   Proof.
     intros Hsigma1 Hsigma2.
-    assert (bid1 >= (metadata_size_lhs - metadata_size_rhs)) as Hbid1.
-    { rewrite sigma_lefttoright_Some_spec. by eexists; eauto. }
-    assert (bid2 >= (metadata_size_lhs - metadata_size_rhs)) as Hbid2.
-    { rewrite sigma_lefttoright_Some_spec. by eexists; eauto. }
-    unfold sigma_shifting_lefttoright_option, sigma_from_bigger_dom_option,
-    sigma_from_smaller_dom in *.
-    destruct (metadata_size_rhs <= metadata_size_lhs) eqn:erhslhs.
-    - destruct (bid1 <? metadata_size_lhs - metadata_size_rhs); try discriminate.
-      destruct (bid2 <? metadata_size_lhs - metadata_size_rhs); try discriminate.
-      inversion Hsigma1; subst. inversion Hsigma2 as [G].
-      erewrite <- subnK at 1; eauto.
-      erewrite <- subnK; eauto.
-    - inversion Hsigma1; subst. inversion Hsigma2 as [G].
-      erewrite <- addnK. erewrite G. by rewrite addnK.
+    unfold sigma_shifting_lefttoright_option in *.
+    destruct (metadata_size_lhs <= bid1) eqn:ebid1; try discriminate.
+    destruct (metadata_size_lhs <= bid2) eqn:ebid2; try discriminate.
+    inversion Hsigma1. subst. inversion Hsigma2 as [G].
+    
+    assert (bid2 - metadata_size_lhs = bid1 - metadata_size_lhs) as G'.
+      by
+        apply/eqP;
+        rewrite <- eqn_add2r with (p := metadata_size_rhs);
+        rewrite G eqxx.
+    by eapply subn_eq_subn_cancel; eauto.  
   Qed.
   
 End SigmaShiftingBlockIds.
 
-Lemma subn_n_m_n_0:
-  forall n m, n - m = n -> m = 0 \/ n = 0.
-Proof.
-  intros n m Hnm.
-  destruct n; intuition.
-  unfold subn, subn_rec in Hnm. simpl in Hnm.
-  destruct m; auto.
-  pose proof Nat.le_sub_l n m as Hcontra.
-  rewrite Hnm in Hcontra.
-    by intuition.
-Qed.
-
 
 Section SigmaShiftingBlockIdsOptionProperties.
-
+  
+  (***************************************************
   Lemma sigma_from_bigger_dom_option_0_id x: sigma_from_bigger_dom_option 0 x = Some x.
   Proof. unfold sigma_from_bigger_dom_option. destruct x; by intuition. Qed.
   
   Lemma sigma_from_smaller_dom_0_id x:
     sigma_from_smaller_dom 0 x = x.
   Proof. unfold sigma_from_smaller_dom. by rewrite addn0. Qed.
+  ********************************************************)
 
   Lemma sigma_shifting_lefttoright_option_n_n_id:
-    forall n x, sigma_shifting_lefttoright_option n n x = Some x.
-  Proof. intros n x. unfold sigma_shifting_lefttoright_option.
-         rewrite leqnn subnn. by apply sigma_from_bigger_dom_option_0_id.
+    forall n x y, sigma_shifting_lefttoright_option n n x = Some y ->
+             y = x.
+  Proof. intros n x y H. unfold sigma_shifting_lefttoright_option in *.
+         destruct (n <= x) eqn:e; try discriminate.
+         inversion H. subst. by rewrite subnK; auto.
   Qed.
 
   Lemma sigma_shifting_righttoleft_option_n_n_id:
-    forall n x, sigma_shifting_righttoleft_option n n x = Some x.
-  Proof. intros n x. unfold sigma_shifting_righttoleft_option. rewrite leqnn subnn.
-         simpl. by rewrite sigma_from_smaller_dom_0_id.
+    forall n x y, sigma_shifting_righttoleft_option n n x = Some y ->
+             y = x.
+  Proof. intros n x y H. unfold sigma_shifting_righttoleft_option in *.
+         destruct (n <= x) eqn:e; try discriminate.
+         inversion H. subst. by rewrite subnK; auto.
   Qed.
 
   Lemma sigma_shifting_lefttoright_option_id_n_n:
     forall n1 n2 x, sigma_shifting_lefttoright_option n1 n2 x = Some x -> n1 = n2.
   Proof.
-    intros n1 n2 bid.
+    intros n1 n2 bid H.
+    unfold sigma_shifting_lefttoright_option in *.
+    destruct (n1 <= bid) eqn:e; try discriminate.
+    inversion H as [G].
+    destruct (n1 <= n2) eqn:en1n2.
+  Abort.
+
+  (*****       !!!!!    DO NOT DELETE   !!!!!    ********)
+  (***** We may take inspiration from this proof ********)
+  (*****
     unfold sigma_shifting_lefttoright_option, sigma_from_bigger_dom_option,
     sigma_from_smaller_dom.
     intros Hbid.
@@ -359,6 +477,7 @@ Section SigmaShiftingBlockIdsOptionProperties.
         specialize (leq_addr n bid) as Hcontra''.
         specialize (leq_gtF Hcontra'') as rewr. by rewrite rewr in Hcontra'.
   Qed.
+   ******)
 
   Lemma sigma_shifting_righttoleft_lefttoright:
     forall n1 n2 x,
@@ -366,21 +485,8 @@ Section SigmaShiftingBlockIdsOptionProperties.
       sigma_shifting_lefttoright_option n2 n1 x.
   Proof.
     intros n1 n2 bid.
-    unfold sigma_shifting_righttoleft_option, sigma_shifting_lefttoright_option.
-    destruct (n2 <= n1) eqn:Hminus;
-      destruct (n1 <= n2) eqn:Hinv_minus.
-    - assert (n1 = n2) as n1n2. by apply Nat.le_antisymm; apply/leP; auto.
-      subst. rewrite subnn. simpl.
-      by rewrite sigma_from_bigger_dom_option_0_id sigma_from_smaller_dom_0_id.
-    - reflexivity.
-    - reflexivity.
-    - unfold leq in *.
-      assert (n2 - n1 > 0) as contra1. by intuition.
-      assert (n1 - n2 > 0) as contra2. by intuition.
-      rewrite subn_gt0 in contra1. rewrite subn_gt0 in contra2.
-      assert (n1 < n2)%coq_nat as contra1'. by apply/ltP.
-      assert (n2 < n1)%coq_nat as contra2'. by apply/ltP.
-      by specialize (Nat.lt_asymm _ _ contra1') as Hnegb.
+      by unfold sigma_shifting_righttoleft_option,
+         sigma_shifting_lefttoright_option.
   Qed.
 
   Corollary sigma_shifting_righttoleft_lefttoright_partially_applied:
@@ -391,22 +497,22 @@ Section SigmaShiftingBlockIdsOptionProperties.
   Qed.
 
   Lemma sigma_shifting_lefttoright_transitive n1 n2 n3 bid1 bid2 bid3:
-    (n1 - n3) <= bid1 ->
     sigma_shifting_lefttoright_option n1 n2 bid1 = Some bid2 ->
     sigma_shifting_lefttoright_option n2 n3 bid2 = Some bid3 ->
     sigma_shifting_lefttoright_option n1 n3 bid1 = Some bid3.
   Proof.
-    intros Hn1n3bid1 Hsigma12 Hsigma23.
-    assert (n1 - n2 <= bid1) as Hbid1_n1_n2.
-    {
-      apply sigma_lefttoright_Some_spec. by eexists; eauto.
-    }
-    assert (n2 - n3 <= bid2) as Hbid2_n2_n3.
-    {
-      apply sigma_lefttoright_Some_spec. by eexists; eauto.
-    }
-    unfold sigma_shifting_lefttoright_option, sigma_from_bigger_dom_option,
-    sigma_from_smaller_dom in *.
+    intros Hsigma12 Hsigma23.
+    unfold sigma_shifting_lefttoright_option in *.
+    destruct (n1 <= bid1) eqn:e1; try discriminate.
+    destruct (n2 <= bid2) eqn:e2; try discriminate.
+    inversion Hsigma12. subst. clear Hsigma12.
+    inversion Hsigma23. subst. clear Hsigma23.
+    assert (bid1 - n1 + n2 - n2 + n3 = n3 + (bid1 - n1 + n2 - n2)) as Hrewr.
+      by rewrite addnC.
+    rewrite -> addnC, Hrewr, <- addnBA, subnn, addn0; auto.
+  Qed.
+    
+    (*******************************************************
     destruct (n3 <= n2) eqn:n2n3;
       destruct (n2 <= n1) eqn:n1n2;
       destruct (n3 <= n1) eqn:n1n3.
@@ -517,8 +623,22 @@ Section SigmaShiftingBlockIdsOptionProperties.
       apply leq_trans with (n := n3); intuition.
       + by apply leq_addl.
   Qed.
-      
+     *****************************************************************)
 
+  Lemma sigma_shifting_lefttoright_Some_inv_Some n1 n2 bid1 bid2:
+    sigma_shifting_lefttoright_option n1 n2 bid1 = Some bid2 ->
+    sigma_shifting_lefttoright_option n2 n1 bid2 = Some bid1.
+  Proof.
+    unfold sigma_shifting_lefttoright_option.
+    destruct (n1 <= bid1) eqn:ebid1; try discriminate.
+    intros H. inversion H. subst. clear H.
+
+    destruct (n2 <= bid1 - n1 + n2) eqn:contra.
+    - by rewrite addnK subnK.
+    - rewrite <- add0n in contra at 1.
+        by rewrite leq_add2r in contra.
+  Qed.
+  
 End SigmaShiftingBlockIdsOptionProperties.
 
 Definition addr_t : Type := (Component.id * Block.id).
@@ -778,20 +898,32 @@ Section RenamingAddrOption.
 
   Lemma rename_value_option_arg_Int i:
     rename_value_option (Int i) = Some (Int i).
-  Admitted.
+      by simpl.
+  Qed.
 
   Lemma rename_value_option_res_Int v i:
     rename_value_option v = Some (Int i) -> v = Int i.
-  Admitted.
-
+  Proof.
+    destruct v as [| [[[perm c] b] o] |]; try discriminate; simpl.
+    - by intros H; inversion H.
+    - by destruct (perm =? Permission.data); try discriminate;
+        destruct (rename_addr_option (c, b)) as [[c' b']|]; discriminate.
+  Qed.
+  
   Lemma rename_value_option_arg_Undef:
     rename_value_option Undef = Some Undef.
-  Admitted.
+      by simpl.
+  Qed.
 
   Lemma rename_value_option_res_Undef v:
     rename_value_option v = Some Undef -> v = Undef.
-  Admitted.
-
+  Proof.
+    destruct v as [| [[[perm c] b] o] |]; try discriminate; simpl.
+    - by destruct (perm =? Permission.data); try discriminate;
+        destruct (rename_addr_option (c, b)) as [[c' b']|]; discriminate.
+    - by intros H; inversion H.  
+  Qed.
+  
   Lemma rename_value_option_arg_Ptr p:
     exists p', rename_value_option (Ptr p) = Some (Ptr p') /\
                Pointer.permission p = Pointer.permission p' /\
@@ -822,8 +954,8 @@ Section RenamingAddrOption.
   (*Definition inverse_rename_list_values : list value -> list value :=
     map inverse_rename_value.*)
 
-  Definition option_rename_value_option option_v : option value :=
-    obind rename_value_option option_v.
+  (*Definition option_rename_value_option option_v : option value :=
+    obind rename_value_option option_v.*)
 
   (*Definition option_inverse_rename_value option_v :=
     omap inverse_rename_value option_v.*)
@@ -832,6 +964,102 @@ Section RenamingAddrOption.
       properties are satisfied for a given memory block iff all loads on renamed
       addresses in the second memory equal the lifted renaming of the loads on
       the original addresses in the first memory. *)
+
+End RenamingAddrOption.
+
+
+Section TheShiftRenamingAddrOption.
+
+  (** Shift renaming on a given component with given numbers of additional
+      metadata blocks. *)
+
+  Variable metadata_size_lhs_per_cid: Component.id -> nat.
+  Variable metadata_size_rhs_per_cid: Component.id -> nat.
+
+  (** Functions to return the new address after shifting the block identifier. *)
+
+  Definition sigma_shifting_lefttoright_addr_bid (a: addr_t) : option Block.id :=
+    let (cid, bid) := a in
+    let metadata_size_lhs := metadata_size_lhs_per_cid cid in
+    let metadata_size_rhs := metadata_size_rhs_per_cid cid in
+    sigma_shifting_lefttoright_option metadata_size_lhs metadata_size_rhs bid.
+
+
+  Definition sigma_shifting_righttoleft_addr_bid (a: addr_t) : option Block.id :=
+    let (cid, bid) := a in
+    let metadata_size_lhs := metadata_size_lhs_per_cid cid in
+    let metadata_size_rhs := metadata_size_rhs_per_cid cid in
+    sigma_shifting_righttoleft_option metadata_size_lhs metadata_size_rhs bid.
+
+  Definition sigma_shifting_wrap_bid_in_addr
+             (sigma: addr_t -> option Block.id) (a: addr_t) : option addr_t :=
+    match sigma a with
+    | Some bid => Some (a.1, bid)
+    | None => None
+    end.
+  
+
+  Definition left_addr_good_for_shifting (left_addr: addr_t) : Prop :=
+    match left_addr with
+    | (cid, bid) =>
+      let metadata_size_lhs := metadata_size_lhs_per_cid cid in
+      left_block_id_good_for_shifting metadata_size_lhs bid
+    end.
+
+  Definition right_addr_good_for_shifting (right_addr: addr_t) : Prop :=
+    match right_addr with
+    | (cid, bid) =>
+      let metadata_size_rhs := metadata_size_rhs_per_cid cid in
+      right_block_id_good_for_shifting metadata_size_rhs bid
+    end.
+  
+  (** Data pointer values can be shifted in previously specified conditions;
+      code pointers and non-pointer values can always be shifted. *)
+
+  Definition left_value_good_for_shifting (v: value) : Prop :=
+    match v with
+    | Ptr (perm, cid, bid, _) =>
+      if perm =? Permission.data then
+        left_addr_good_for_shifting (cid, bid)
+      else True
+    | _ => True
+    end.
+
+  Definition right_value_good_for_shifting (v: value) : Prop :=
+    match v with
+    | Ptr (perm, cid, bid, _) =>
+      if perm =? Permission.data then
+        right_addr_good_for_shifting (cid, bid)
+      else True
+    | _ => True
+    end.
+
+  Definition option_left_value_good_for_shifting (ov: option value) : Prop :=
+    match ov with
+    | Some v => left_value_good_for_shifting v
+    | None => True
+    end.
+
+  Definition option_right_value_good_for_shifting (ov: option value) : Prop :=
+    match ov with
+    | Some v => right_value_good_for_shifting v
+    | None => True
+    end.
+
+End TheShiftRenamingAddrOption.
+
+Section MemoryAndTraceRenaming.
+
+  Variable n n': Component.id -> nat.
+
+  Let rename_addr_option :=
+    sigma_shifting_wrap_bid_in_addr
+      (sigma_shifting_lefttoright_addr_bid n n').
+  Let inverse_rename_addr_option :=
+    sigma_shifting_wrap_bid_in_addr
+      (sigma_shifting_lefttoright_addr_bid n' n).
+  Let left_addr_good := left_addr_good_for_shifting n.
+  Let right_addr_good := right_addr_good_for_shifting n'.
   
   Definition memory_renames_memory_at_shared_addr addr m m' : Prop :=
     exists addr',
@@ -844,7 +1072,7 @@ Section RenamingAddrOption.
             exists v',
               Memory.load m' (Permission.data, addr'.1, addr'.2, offset) = Some v'
               /\
-              rename_value_option v = Some v'
+              rename_value_option rename_addr_option v = Some v'
           )
       )
       /\
@@ -855,17 +1083,18 @@ Section RenamingAddrOption.
             exists v,
               Memory.load m (Permission.data, addr.1, addr.2, offset) = Some v
               /\
-              rename_value_option v = Some v'
+              rename_value_option rename_addr_option v = Some v'
           )
       ).
 
+  (**********************************************
   Definition memory_renames_memory_at_private_addr addr m1 m2 : Prop :=
     (
       forall offset v,
         Memory.load m1 (Permission.data, addr.1, addr.2, offset) = Some v ->
         (
           Memory.load m2 (Permission.data, addr.1, addr.2, offset) =
-          match rename_value_option v with
+          match rename_value_option rename_addr_option v with
           | Some v' => Some v'
           | None => Some v
           end
@@ -879,11 +1108,48 @@ Section RenamingAddrOption.
           exists v,
             Memory.load m1 (Permission.data, addr.1, addr.2, offset) = Some v
             /\
-            ((rename_value_option v = None /\ v = v')
-             \/ rename_value_option v = Some v')
+            ((rename_value_option rename_addr_option v = None /\ v = v')
+             \/ rename_value_option rename_addr_option v = Some v')
         )
     ).
-          
+    *****************************************************)
+
+    Definition memory_renames_memory_at_private_addr addr m1 m2 : Prop :=
+    (
+      forall offset v,
+        Memory.load m1 (Permission.data, addr.1, addr.2, offset) = Some v ->
+        (
+          match rename_value_option rename_addr_option v with
+          | Some v' =>
+            Memory.load m2 (Permission.data, addr.1, addr.2, offset) =
+            Some v'
+          | None =>
+            Memory.load m2 (Permission.data, addr.1, addr.2, offset) =
+            Some v
+            /\
+            rename_value_option inverse_rename_addr_option v = None
+          end
+        )
+    )
+    /\
+    (
+      forall offset v',
+        Memory.load m2 (Permission.data, addr.1, addr.2, offset) = Some v' ->
+        (
+          exists v,
+            Memory.load m1 (Permission.data, addr.1, addr.2, offset) = Some v
+            /\
+            (
+              (rename_value_option rename_addr_option v = None /\
+               rename_value_option inverse_rename_addr_option v' = None /\
+               v = v'
+              )
+              \/
+              rename_value_option rename_addr_option v = Some v'
+            )
+        )
+    ).
+
 
   Definition event_renames_event_at_shared_addr addr e e' : Prop :=
     memory_renames_memory_at_shared_addr addr (mem_of_event e) (mem_of_event e').
@@ -974,7 +1240,7 @@ Section RenamingAddrOption.
         )
         ->
         match_events e e' ->
-        rename_value_option (arg_of_event e) = Some v' ->
+        rename_value_option rename_addr_option (arg_of_event e) = Some v' ->
         arg_of_event e' = v' ->
         (*arg_of_event e  = inverse_rename_value (arg_of_event e') ->*)
         good_trace_extensional left_addr_good (rcons tprefix e) ->
@@ -1012,7 +1278,7 @@ Section RenamingAddrOption.
   Qed.
 
 
-End RenamingAddrOption.
+End MemoryAndTraceRenaming.
 
 
 Section TheShiftRenamingAddrOption.
@@ -1023,76 +1289,6 @@ Section TheShiftRenamingAddrOption.
   Variable metadata_size_lhs_per_cid: Component.id -> nat.
   Variable metadata_size_rhs_per_cid: Component.id -> nat.
 
-  (** Functions to return the new address after shifting the block identifier. *)
-
-  Definition sigma_shifting_lefttoright_addr_bid (a: addr_t) : option Block.id :=
-    let (cid, bid) := a in
-    let metadata_size_lhs := metadata_size_lhs_per_cid cid in
-    let metadata_size_rhs := metadata_size_rhs_per_cid cid in
-    sigma_shifting_lefttoright_option metadata_size_lhs metadata_size_rhs bid.
-
-
-  Definition sigma_shifting_righttoleft_addr_bid (a: addr_t) : option Block.id :=
-    let (cid, bid) := a in
-    let metadata_size_lhs := metadata_size_lhs_per_cid cid in
-    let metadata_size_rhs := metadata_size_rhs_per_cid cid in
-    sigma_shifting_righttoleft_option metadata_size_lhs metadata_size_rhs bid.
-
-  Definition sigma_shifting_wrap_bid_in_addr
-             (sigma: addr_t -> option Block.id) (a: addr_t) : option addr_t :=
-    match sigma a with
-    | Some bid => Some (a.1, bid)
-    | None => None
-    end.
-  
-
-    Definition left_addr_good_for_shifting (left_addr: addr_t) : Prop :=
-    match left_addr with
-    | (cid, bid) =>
-      let metadata_size_lhs := metadata_size_lhs_per_cid cid in
-      left_block_id_good_for_shifting metadata_size_lhs bid
-    end.
-
-  Definition right_addr_good_for_shifting (right_addr: addr_t) : Prop :=
-    match right_addr with
-    | (cid, bid) =>
-      let metadata_size_rhs := metadata_size_rhs_per_cid cid in
-      right_block_id_good_for_shifting metadata_size_rhs bid
-    end.
-  
-  (** Data pointer values can be shifted in previously specified conditions;
-      code pointers and non-pointer values can always be shifted. *)
-
-  Definition left_value_good_for_shifting (v: value) : Prop :=
-    match v with
-    | Ptr (perm, cid, bid, _) =>
-      if perm =? Permission.data then
-        left_addr_good_for_shifting (cid, bid)
-      else True
-    | _ => True
-    end.
-
-  Definition right_value_good_for_shifting (v: value) : Prop :=
-    match v with
-    | Ptr (perm, cid, bid, _) =>
-      if perm =? Permission.data then
-        right_addr_good_for_shifting (cid, bid)
-      else True
-    | _ => True
-    end.
-
-  Definition option_left_value_good_for_shifting (ov: option value) : Prop :=
-    match ov with
-    | Some v => left_value_good_for_shifting v
-    | None => True
-    end.
-
-  Definition option_right_value_good_for_shifting (ov: option value) : Prop :=
-    match ov with
-    | Some v => right_value_good_for_shifting v
-    | None => True
-    end.
-
   
   (** A pair of traces are mutual shiftings of one another if they are
       renamings, as defined above. *)
@@ -1101,9 +1297,11 @@ Section TheShiftRenamingAddrOption.
   | shifting_is_special_case_of_renaming_option:
       forall t t',
         traces_rename_each_other_option
-          (sigma_shifting_wrap_bid_in_addr sigma_shifting_lefttoright_addr_bid)
+          (*(sigma_shifting_wrap_bid_in_addr sigma_shifting_lefttoright_addr_bid)
           (left_addr_good_for_shifting)
-          (right_addr_good_for_shifting)
+          (right_addr_good_for_shifting)*)
+          metadata_size_lhs_per_cid
+          metadata_size_rhs_per_cid
           t
           t' ->
         (*
@@ -1122,7 +1320,11 @@ Section TheShiftRenamingAddrOption.
   Definition shift_value_option (v: value) : option value :=
     rename_value_option (rename_addr_option
                            (sigma_shifting_wrap_bid_in_addr
-                              sigma_shifting_lefttoright_addr_bid)
+                              (sigma_shifting_lefttoright_addr_bid
+                                 metadata_size_lhs_per_cid
+                                 metadata_size_rhs_per_cid
+                              )
+                           )
                         ) v.
   
   (*Definition inverse_shift_value (v': value) : value :=
@@ -1130,19 +1332,19 @@ Section TheShiftRenamingAddrOption.
   
   Definition memory_shifts_memory_at_shared_addr (addr: addr_t) m m' : Prop :=
     memory_renames_memory_at_shared_addr
-      (rename_addr_option
-         (sigma_shifting_wrap_bid_in_addr
-            sigma_shifting_lefttoright_addr_bid)
-      )
-      addr m m'.
+      metadata_size_lhs_per_cid
+      metadata_size_rhs_per_cid
+      addr
+      m
+      m'.
 
   Definition memory_shifts_memory_at_private_addr (addr: addr_t) m m' : Prop :=
     memory_renames_memory_at_private_addr
-      (rename_addr_option
-         (sigma_shifting_wrap_bid_in_addr
-            sigma_shifting_lefttoright_addr_bid)
-      )
-      addr m m'.
+      metadata_size_lhs_per_cid
+      metadata_size_rhs_per_cid
+      addr
+      m
+      m'.
 
   (*Definition memory_inverse_shifts_memory_at_addr (addr': addr_t) m m' : Prop :=
     memory_inverse_renames_memory_at_addr
