@@ -7730,10 +7730,10 @@ Section ThreewayMultisem1.
             simpl in *. by subst.
           }
           assert (exists b',
-                              EntryPoint.get C' P
-                                             (genv_entrypoints
-                                                (prepare_global_env prog')) = Some b'
-                          ) as [b' Hb'].
+                     EntryPoint.get C' P
+                                    (genv_entrypoints
+                                       (prepare_global_env prog')) = Some b'
+                 ) as [b' Hb'].
           {
             eapply genv_entrypoints_interface_some with (p := prog); eauto.
             - (* wf prog *)
@@ -7752,7 +7752,7 @@ Section ThreewayMultisem1.
           inversion Hcontra''. subst.
 
           match goal with
-          | H: regs_rel_of_executing_part _ _ _ _ _ _ |- _ =>
+          | H: regs_rel_of_executing_part _ _ _ _  |- _ =>
             inversion H as [Hregrel]
           end.
           simpl in Hregrel.
@@ -7838,40 +7838,93 @@ Section ThreewayMultisem1.
                    match goal with
                    | H11: rcons _ _ = rcons _ _ |- _ =>
                      apply rcons_inj in H11; inversion H11; subst; clear H11
-                   end; simpl in *.
+                   end; simpl in *; clear Hshr.
                    ---
-                     inversion Hreach as [? Hin|]; subst.
+                     induction Hreach as [addr Hin |
+                                          ? ? [cidloaded bidloaded]
+                                            ? ? ? HcompMem Hin ]; subst.
                      +++
                        destruct (Register.get R_COM s1'reg)
                          as [|[[[perm cid] bid] off] |];
                          try by rewrite in_fset0 in Hin.
                        simpl in Hin.
                        destruct (perm =? Permission.data) eqn:eperm;
-                         try by rewrite in_fset0.
+                         try by rewrite in_fset0 in Hin.
                        rewrite in_fset1 in Hin.
                        assert (perm = Permission.data). by apply beq_nat_true.
-                       assert (a = (cid, bid)). by apply/eqP.
+                       assert (addr = (cid, bid)). by apply/eqP.
                        subst. clear Hin eperm. simpl in *.
                        destruct Hrel_R_COM
-                         as [Hshift | [Hshift [Hrewr [Hshr1 Hshr2]]]];
+                         as [Hshift | [Hshift [Hshift2 Hrewr
+                                                       (*[Hshr1 Hshr2]*)
+                            ]]];
                          unfold shift_value_option, rename_value_option,
                          rename_value_template_option,
                          rename_addr_option,
-                         sigma_shifting_wrap_bid_in_addr in *.
+                         sigma_shifting_wrap_bid_in_addr,
+                         sigma_shifting_lefttoright_addr_bid in *.
                        ***
                          destruct (Register.get R_COM regs)
                            as [| [[[perm' cid'] bid'] off'] |]; try discriminate.
                          destruct (perm' =? Permission.data) eqn:eperm'.
                          ----
-                           destruct (sigma_shifting_lefttoright_addr_bid
-                                       n
-                                       (fun cid : nat =>
-                                          if cid \in domm (prog_interface p)
-                                          then n cid else n'' cid)
-                                       (cid', bid')) as [bid'shift|] eqn:esigma;
+                           destruct (sigma_shifting_lefttoright_option
+                                       (n cid')
+                                       (if cid' \in domm (prog_interface p)
+                                        then n cid' else n'' cid')
+                                       bid') as [bid'shift|] eqn:esigma;
                              rewrite esigma in Hshift;
                              try discriminate.
                            inversion Hshift. subst. clear Hshift.
+                             by eapply sigma_lefttoright_Some_good; eauto.
+
+                         ----
+                           inversion Hshift. subst.
+                             by rewrite <- beq_nat_refl in eperm'.
+                             
+                       ***
+                         destruct (Register.get R_COM regs)
+                           as [| [[[perm' cid'] bid'] off'] |]; try discriminate.
+                         inversion Hrewr. subst. simpl in *.
+                         assert (left_addr_good_for_shifting n (cid, bid))
+                           as cidbidgood.
+                         {
+                           apply Hgood_.
+                           constructor. constructor. simpl.
+                           by rewrite in_fset1.
+                         }
+                         unfold left_addr_good_for_shifting in cidbidgood.
+                         erewrite sigma_lefttoright_Some_spec in cidbidgood.
+                         destruct cidbidgood as [? G].
+                           by erewrite G in Hshift.
+                           
+                     +++
+                       assert (
+                           (exists ptro i : Block.offset,
+                               ComponentMemory.load compMem bid i =
+                               Some (Ptr (Permission.data,
+                                          cidloaded, bidloaded, ptro)))
+                         ) as [offloaded [off HcompLoad]].
+                       {
+                         eapply ComponentMemory.load_block_load.
+                         erewrite Extra.In_in in Hin.
+                         assumption.
+                       }
+
+                       (** Here, we need to use the goodness of program  *)
+                       (** p or the goodness of program c (depending on  *)
+                       (** whether cid \in domm (prog_interface p), I guess *)
+
+                       (** In case it is, then we use the relation mem0 s1'mem *)
+                       (** Otherwise, we use the relation s2''mem s1'mem       *)
+
+                       (** In the first case, goal will follow from Hgood_prog *)
+                       (** In the second case, it will follow from Hgood_prog''*)
+                       
+                         specialize (Hgood_ )
+                         destruct (perm' =? Permission.data) eqn:eperm'.
+                         ----
+                           
                            apply sigma_shifting_lefttoright_option_Some_sigma_shifting_righttoleft_option_Some in esigma.
                            Search _ Some "sigma".
                            
