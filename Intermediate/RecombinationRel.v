@@ -7920,8 +7920,136 @@ Section ThreewayMultisem1.
 
                        (** In the first case, goal will follow from Hgood_prog *)
                        (** In the second case, it will follow from Hgood_prog''*)
-                       
-                         specialize (Hgood_ )
+
+                       unfold left_addr_good_for_shifting in IHHreach.
+                       destruct (cid \in domm (prog_interface p)) eqn:Hcid;
+                         rewrite Hcid in IHHreach.
+                       ***
+                         match goal with
+                         | H: mem_of_part_executing_rel_original_and_recombined
+                                p _ s1'mem n _ _ |- _ =>
+                           inversion H as [s1'mem_rel_p _]
+                         end.
+
+                         specialize (s1'mem_rel_p (cid, bid) Hcid)
+                           as [_ Hpriv2].
+
+                         unfold Memory.load in Hpriv2. simpl in *.
+                         rewrite HcompMem in Hpriv2.
+                         specialize (Hpriv2 _ _ HcompLoad)
+                           as [v [Hvload Hvshift]].
+                         destruct (mem0 cid) as [compMem0|] eqn:HcompMem0;
+                           try discriminate.
+
+                         specialize (Hgood_prog _ _ Hpref_t) as [_ Ggood].
+                         unfold Memory.load in Ggood.
+                         specialize (Ggood
+                                       mem0
+                                       (Permission.data, cid, bid, off)
+                                       (cid, bid)
+                                       v
+                                    ).
+                         setoid_rewrite HcompMem0 in Ggood.
+                         assert (left_value_good_for_shifting n v) as Hgoodv.
+                         {
+                           by apply Ggood; auto.
+                         }
+
+                         clear Ggood.
+
+                         destruct v as [| [[[permv cidv] bidv] offv] |];
+                           simpl in *;
+                           destruct Hvshift as [ [Hvshift1 [Hvshift2 Hvshift3]]
+                                               | Hvshift1];
+                           try discriminate;
+
+                           unfold 
+                           rename_addr_option,
+                           sigma_shifting_wrap_bid_in_addr,
+                           sigma_shifting_lefttoright_addr_bid in *.
+
+                         ----
+                           inversion Hvshift3. subst. clear Hvshift3.
+                           simpl in *.
+                           erewrite sigma_lefttoright_Some_spec in Hgoodv.
+                           destruct Hgoodv as [? contra].
+                             by erewrite contra in Hvshift1.
+                         ----
+                           destruct (permv =? Permission.data) eqn:epermv.
+                           ++++
+                             destruct (sigma_shifting_lefttoright_option
+                                         (n cidv)
+                                         (if cidv \in domm (prog_interface p)
+                                          then n cidv
+                                          else n'' cidv) bidv) eqn:esigma;
+                               rewrite esigma in Hvshift1; try discriminate.
+                             inversion Hvshift1. subst.
+                             rewrite sigma_lefttoright_Some_spec; eexists.
+                               by erewrite
+                                    sigma_shifting_lefttoright_Some_inv_Some;
+                                 eauto.
+                           ++++
+                             inversion Hvshift1. subst.
+                             by rewrite <- beq_nat_refl in epermv.
+
+                       ***
+
+                         (** Here, we need to assert---using Hcid, HcompMem,  *)
+                         (** and Hpref_t'---that                              *)
+                         (** cid \in domm (prog_interface c')                 *)
+                         (** With this assertion in hand, we need one more    *)
+                         (** case distinction...                              *)
+
+                         SearchAbout cid.
+                         
+                         match goal with
+                         | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                                c' _ s1'mem n'' _ _ |- _ =>
+                           inversion H as [s1'mem_rel_c' _]
+                         end.
+
+                         (** Before doing the inversion above, we need to     *)
+                         (** make yet another case distinction on the address *)
+                         (** (cid, bid), namely, we need to distinguish       *)
+                         (** whether addr_shared_so_far (cid, bid) t1''       *)
+                         (** -- case true:                                    *)
+                         (**    we need to use Hshift_t''t'?                  *)
+                         (** -- case false:                                   *)
+                         (**    we can instantiate s1'mem_rel_c' and solve    *)
+                         (**    the goal similarly to what we did the previous*)
+                         (**    goal when we instantiated s1'mem_rel_p?       *)
+                         
+                         
+                         (*************************************
+                         specialize (s1'mem_rel_c' (cid, bid) Hcid)
+                           as [_ Hpriv2].
+
+                         unfold Memory.load in Hpriv2. simpl in *.
+                         rewrite HcompMem in Hpriv2.
+                         specialize (Hpriv2 _ _ HcompLoad)
+                           as [v [Hvload Hvshift]].
+                         destruct (mem0 cid) as [compMem0|] eqn:HcompMem0;
+                           try discriminate.
+
+                         specialize (Hgood_prog _ _ Hpref_t) as [_ Ggood].
+                         unfold Memory.load in Ggood.
+                         specialize (Ggood
+                                       mem0
+                                       (Permission.data, cid, bid, off)
+                                       (cid, bid)
+                                       v
+                                    ).
+                         setoid_rewrite HcompMem0 in Ggood.
+                         assert (left_value_good_for_shifting n v) as Hgoodv.
+                         {
+                           by apply Ggood; auto.
+                         }
+
+                         clear Ggood.
+                         ***************************************)
+
+                         
+                       specialize (Hgood_ )
                          destruct (perm' =? Permission.data) eqn:eperm'.
                          ----
                            
