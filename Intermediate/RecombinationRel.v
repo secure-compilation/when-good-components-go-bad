@@ -7834,7 +7834,7 @@ Section ThreewayMultisem1.
                 ** constructor; auto.
                    intros a Hshr.
                    inversion Hgood as [? Hgood_]; subst.
-                   inversion Hshr as [? ? ? Hreach|]; subst;
+                   inversion Hshr as [? ? ? Hreach| ? ? ? ? Haddr'shr Hreach]; subst;
                    match goal with
                    | H11: rcons _ _ = rcons _ _ |- _ =>
                      apply rcons_inj in H11; inversion H11; subst; clear H11
@@ -7997,18 +7997,15 @@ Section ThreewayMultisem1.
                          (** Here, we need to assert---using Hcid, HcompMem,  *)
                          (** and Hpref_t'---that                              *)
                          (** cid \in domm (prog_interface c')                 *)
+
+                         assert (cid \in domm (prog_interface c')) as Hcidc'.
+                         {
+                           admit.
+                         }
+
                          (** With this assertion in hand, we need one more    *)
                          (** case distinction...                              *)
 
-                         SearchAbout cid.
-                         
-                         match goal with
-                         | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
-                                c' _ s1'mem n'' _ _ |- _ =>
-                           inversion H as [s1'mem_rel_c' _]
-                         end.
-
-                         (** Before doing the inversion above, we need to     *)
                          (** make yet another case distinction on the address *)
                          (** (cid, bid), namely, we need to distinguish       *)
                          (** whether addr_shared_so_far (cid, bid) t1''       *)
@@ -8018,37 +8015,108 @@ Section ThreewayMultisem1.
                          (**    we can instantiate s1'mem_rel_c' and solve    *)
                          (**    the goal similarly to what we did the previous*)
                          (**    goal when we instantiated s1'mem_rel_p?       *)
-                         
-                         
-                         (*************************************
-                         specialize (s1'mem_rel_c' (cid, bid) Hcid)
-                           as [_ Hpriv2].
 
-                         unfold Memory.load in Hpriv2. simpl in *.
-                         rewrite HcompMem in Hpriv2.
-                         specialize (Hpriv2 _ _ HcompLoad)
-                           as [v [Hvload Hvshift]].
-                         destruct (mem0 cid) as [compMem0|] eqn:HcompMem0;
-                           try discriminate.
+                         specialize (Coq.Logic.Classical_Prop.classic 
+                                       (addr_shared_so_far (cid, bid) t1'')
+                                    ) as Hdestruct.
 
-                         specialize (Hgood_prog _ _ Hpref_t) as [_ Ggood].
-                         unfold Memory.load in Ggood.
-                         specialize (Ggood
-                                       mem0
-                                       (Permission.data, cid, bid, off)
-                                       (cid, bid)
-                                       v
-                                    ).
-                         setoid_rewrite HcompMem0 in Ggood.
-                         assert (left_value_good_for_shifting n v) as Hgoodv.
-                         {
-                           by apply Ggood; auto.
-                         }
+                         destruct Hdestruct as [Hshr | Hnotshr].
 
-                         clear Ggood.
-                         ***************************************)
+                         ----
+                           admit.
+
+                         ----
+                           match goal with
+                           | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                                  c' _ s1'mem n'' _ _ |- _ =>
+                             inversion H as [s1'mem_rel_c' _]
+                           end.
 
                          
+
+                           specialize (s1'mem_rel_c' (cid, bid) Hcidc' Hnotshr)
+                             as [_ Hpriv2].
+
+                           unfold Memory.load in Hpriv2. simpl in *.
+                           rewrite HcompMem in Hpriv2.
+                           specialize (Hpriv2 _ _ HcompLoad)
+                             as [v [Hvload Hvshift]].
+                           destruct (s2''mem cid)
+                             as [comps2''mem|] eqn:Hcomps2''mem;
+                             try discriminate.
+
+                           specialize (Hgood_prog'' _ _ Hpref_t'') as [_ Ggood].
+                           unfold Memory.load in Ggood.
+                           specialize (Ggood
+                                         s2''mem
+                                         (Permission.data, cid, bid, off)
+                                         (cid, bid)
+                                         v
+                                      ).
+                           setoid_rewrite Hcomps2''mem in Ggood.
+                           assert (left_value_good_for_shifting n'' v) as Hgoodv.
+                           {
+                               by apply Ggood; auto.
+                           }
+
+                           clear Ggood.
+
+                           destruct v as [| [[[permv cidv] bidv] offv] |];
+                             simpl in *;
+                             destruct Hvshift as [ [Hvshift1 [Hvshift2 Hvshift3]]
+                                                 | Hvshift1];
+                             try discriminate;
+
+                             unfold 
+                               rename_addr_option,
+                             sigma_shifting_wrap_bid_in_addr,
+                             sigma_shifting_lefttoright_addr_bid in *.
+
+                           ++++
+                             inversion Hvshift3. subst. clear Hvshift3.
+                             simpl in *.
+                             erewrite sigma_lefttoright_Some_spec in Hgoodv.
+                             destruct Hgoodv as [? contra].
+                               by erewrite contra in Hvshift1.
+                           ++++
+                             destruct (permv =? Permission.data) eqn:epermv.
+                             ****
+                               destruct (sigma_shifting_lefttoright_option
+                                           (n'' cidv)
+                                           (if cidv \in domm (prog_interface p)
+                                            then n cidv
+                                            else n'' cidv) bidv) eqn:esigma;
+                                 rewrite esigma in Hvshift1; try discriminate.
+                               inversion Hvshift1. subst.
+                               rewrite sigma_lefttoright_Some_spec; eexists.
+                                 by erewrite
+                                      sigma_shifting_lefttoright_Some_inv_Some;
+                                   eauto.
+                             ****
+                               inversion Hvshift1. subst.
+                                 by rewrite <- beq_nat_refl in epermv.
+
+                   ---
+                     
+                     inversion Hgood_t' as [? Haddr'good]; subst.
+                     specialize (Haddr'good _ Haddr'shr).
+
+                     induction Hreach as [addr Hin |
+                                          ? ? [cidloaded bidloaded]
+                                            ? ? ? HcompMem Hin ]; subst.
+                     +++
+                       rewrite in_fset1 in Hin.
+                       assert (addr = addr'). by apply/eqP. by subst.
+                     +++
+
+                       (** Here, apparently need to again use HcompMem and *)
+                       (** Hpref_t' to infer that either                   *)
+                       (** *** cid \in domm(prog_interface p) or           *)
+                       (** *** cid \in domm(prog_interface c')             *)
+                       (** The two cases should be very similar to the     *)
+                       (** corresponding cases from above.                 *)
+                     
+                     
                        specialize (Hgood_ )
                          destruct (perm' =? Permission.data) eqn:eperm'.
                          ----
