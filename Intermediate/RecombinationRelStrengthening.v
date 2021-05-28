@@ -462,7 +462,7 @@ Section ThreewayMultisem1.
                          (** With this assertion in hand, we need one more    *)
                          (** case distinction...                              *)
 
-                         (** make yet another case distinction on the address *)
+                         (** make a case distinction on the address           *)
                          (** (cid, bid), namely, we need to distinguish       *)
                          (** whether addr_shared_so_far (cid, bid) t1''       *)
                          (** -- case true:                                    *)
@@ -479,8 +479,86 @@ Section ThreewayMultisem1.
                          destruct Hdestruct as [Hshr | Hnotshr].
 
                          ----
-                           admit.
+                           inversion Hshift_t''t' as [? ? Hren]; subst.
+                           inversion Hren as [| t'' e'' t' e' ? ? Ht''t' ? ? ?]; subst;
+                             try by inversion Hshr; subst; find_nil_rcons.
+                           specialize (Ht''t' _ Hshr) as
+                               [He''e' [[cid' bid'] [ecid'bid' Hshrcid'bid']]].
 
+                           match goal with
+                           | H: mem_of_part_executing_rel_original_and_recombined
+                                  p _ s1'mem n _ _ |- _ =>
+                             inversion H as [_ [s1'mem_rel_p _]]
+                           end.
+
+                           inversion Hshift_tt' as [? ? Hrentt']; subst.
+                           inversion Hrentt' as [| t e _t' _e' ? ? ? Htt' ? ? ?];
+                             subst;
+                             try by inversion Hshr; subst; find_nil_rcons.
+
+                           match goal with
+                           | Hrcons: rcons _ _ = rcons _ _ |- _ =>
+                             apply rcons_inj in Hrcons; inversion Hrcons; subst;
+                               clear Hrcons
+                           end.
+                           
+                           specialize (Htt' _ Hshrcid'bid') as
+                               [Hee' [[cid_t bid_t] [ecidbid_t Hshrcidbid_t]]].
+                           
+                           specialize (s1'mem_rel_p _ Hshrcidbid_t)
+                             as [[addr'cid addr'bid] [eaddr' [mem0_s1'mem s1'mem_mem0]]].
+                           unfold Memory.load in s1'mem_mem0. simpl in *.
+
+                           unfold memory_shifts_memory_at_shared_addr,
+                           memory_renames_memory_at_shared_addr,
+                           sigma_shifting_wrap_bid_in_addr,
+                           sigma_shifting_lefttoright_addr_bid in *.
+
+                           destruct (sigma_shifting_lefttoright_option
+                                       (n cid_t)
+                                       (if cid_t \in domm (prog_interface p)
+                                        then n cid_t else n'' cid_t) bid_t)
+                                    eqn:ebid_t; rewrite ebid_t in ecidbid_t;
+                             try discriminate.
+                           inversion ecidbid_t; subst; clear ecidbid_t.
+
+                           destruct (sigma_shifting_lefttoright_option
+                                       (n'' cid)
+                                       (if cid \in domm (prog_interface p)
+                                        then n cid else n'' cid) bid)
+                                    eqn:ebid; rewrite ebid in ecid'bid';
+                             try discriminate.
+                           inversion ecid'bid'; subst; clear ecid'bid'.
+
+                           rewrite ebid_t in eaddr'.
+                           inversion eaddr'; subst. clear eaddr'.
+
+                           rewrite Hcid in ebid.
+                           apply sigma_shifting_lefttoright_option_n_n_id in ebid.
+                           subst.
+
+                           rewrite HcompMem in s1'mem_mem0.
+                           specialize (s1'mem_mem0 _ _ HcompLoad) as [v [_ ev]].
+                           unfold rename_value_option, rename_value_template_option,
+                           rename_addr_option in *.
+
+                           destruct v as [| [[[vperm vcid] vbid] voff] |];
+                             try discriminate.
+
+                           destruct (vperm =? Permission.data) eqn:eperm.
+                           ++++
+                             destruct (sigma_shifting_lefttoright_option
+                                         (n vcid)
+                                         (if vcid \in domm (prog_interface p)
+                                          then n vcid else n'' vcid) vbid) eqn:evbid;
+                               rewrite evbid in ev; try discriminate.
+                             inversion ev; subst.
+                             apply sigma_lefttoright_Some_good in evbid.
+                               by unfold right_block_id_good_for_shifting,
+                                  left_block_id_good_for_shifting in *.
+                           ++++
+                             inversion ev; subst. by auto.
+                           
                          ----
                            match goal with
                            | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
