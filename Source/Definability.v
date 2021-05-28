@@ -811,7 +811,8 @@ Section Definability.
                    *)
                  admit.
           -- 
-*)
+ *)
+        (**************************************************************************
           case/fsetU1P=> [->|P_CI]; eauto. right.
              unfold exported_procedure. 
              exists CI; split.
@@ -854,6 +855,8 @@ Section Definability.
         * discriminate.
       + by left.
   Qed.
+         *****************************************************************************)
+  Admitted. 
 
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).
@@ -903,12 +906,13 @@ Section Definability.
       (*   Pointer.block ptr <> Block.local -> *)
       (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
 
-      forall Cb Cb',
+      forall Cb,
+        addr_shared_so_far Cb (project_non_inform t) ->
         (* Precondition on Cb:*)
-        rename_addr_option
+        (*rename_addr_option
           (sigma_shifting_wrap_bid_in_addr
              (sigma_shifting_lefttoright_addr_bid (uniform_shift 1) all_zeros_shift)) Cb
-        = Some Cb' ->
+        = Some Cb' ->*)
         memory_shifts_memory_at_shared_addr
           all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
 
@@ -921,28 +925,56 @@ Section Definability.
       Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
       well_formed_memory_snapshot mem_snapshot mem'.
     Proof.
-      move=> WFMS STORE Cb.
-      case: (WFMS Cb).
-      rewrite /memory_shifts_memory_at_addr /memory_inverse_shifts_memory_at_addr
-              /memory_renames_memory_at_addr /memory_inverse_renames_memory_at_addr => WFMS1 WFMS2.
-      split => offset.
-      - rewrite (Memory.load_after_store _ _ _ _ _ STORE). rewrite WFMS1.
-        rewrite /rename_addr.
-        have H: (sigma_shifting_addr all_zeros_shift (uniform_shift 1) Cb).2 == Block.local = false.
-        rewrite /all_zeros_shift /uniform_shift /sigma_shifting_addr //=.
-        case Cb => [cid []]; by [].
-        case: ifP; last by [].
-        move=> CONTRA.
-        exfalso.
-        move: H CONTRA => /eqP H1 /eqP H2; by congruence.
+      move=> WFMS STORE Cb Hshr (*Cb' Hren*).
+      case: (WFMS Cb); auto.
+      rewrite /memory_shifts_memory_at_shared_addr
+              /memory_renames_memory_at_shared_addr
+      => Cbren [eCbren [WFMS1 WFMS2]].
+      eexists.
+      split; eauto; split; intros ? ? Hload.
       - rewrite (Memory.load_after_store _ _ _ _ _ STORE).
-        move: (WFMS2 offset).
-        case Cb => [cid bid] //=.
-        case: ((Permission.data, cid, bid, offset) == (Pm, C, Block.local, o)) => //=.
-        rewrite /option_inverse_rename_value /inverse_rename_value /inverse_rename_addr. move=> <-.
-        (* JT: I don't see how to complete the proof here. Maybe lost some information on the way? *)
-        admit.
-    Admitted. (* RB: TODO: Easy. *)
+        specialize (WFMS1 _ _ Hload) as [v' [Gload Gren]].
+        exists v'.
+        destruct ((Permission.data, Cbren.1, Cbren.2, offset) ==
+                  (Pm, C, Block.local, o)) eqn:eCbren_local.
+        + destruct Cbren as [? ?].
+          specialize (eqP eCbren_local) as Hinv. inversion Hinv. subst.
+          unfold Block.local in *.
+          (* eCbren is a contradiction. Obvious unfolding + arithmetic *)
+          destruct Cb as [Cbc Cbb].
+          unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
+            in *.
+          destruct (sigma_shifting_lefttoright_option
+                      (all_zeros_shift Cbc) (uniform_shift 1 Cbc) Cbb) eqn:esigma;
+            try discriminate.
+          apply sigma_lefttoright_Some_good in esigma.
+          unfold right_block_id_good_for_shifting, uniform_shift in *.
+          inversion eCbren; subst.
+          by auto.
+        + by intuition.
+      - rewrite (Memory.load_after_store _ _ _ _ _ STORE) in Hload.
+        destruct ((Permission.data, Cbren.1, Cbren.2, offset) ==
+                  (Pm, C, Block.local, o)) eqn:eCbren_local.
+        + inversion Hload. subst. clear Hload.
+          specialize (eqP eCbren_local) as Hinv. inversion Hinv. subst.
+          unfold Block.local in *.
+          (* eCbren is a contradiction. Obvious unfolding + arithmetic *)
+          destruct Cbren as [Cbc' Cbb]. simpl in *. subst.
+          unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
+            in *.
+          destruct Cb as [Cbc Cbb].
+          destruct (sigma_shifting_lefttoright_option
+                      (all_zeros_shift Cbc) (uniform_shift 1 Cbc) Cbb) eqn:esigma;
+            try discriminate.
+          apply sigma_lefttoright_Some_good in esigma.
+          unfold right_block_id_good_for_shifting, uniform_shift in *.
+          inversion eCbren; subst.
+          by auto.
+
+        + specialize (WFMS2 _ _ Hload) as [v'' [Gload Gren]].
+          eexists.
+          split; eauto.
+    Qed.
 
     Definition postcondition_event_snapshot (e: event_inform) (mem: Memory.t): Prop :=
       let mem_snapshot := mem_of_event_inform e in
