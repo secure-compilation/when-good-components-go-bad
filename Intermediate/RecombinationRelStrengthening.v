@@ -643,6 +643,23 @@ Section ThreewayMultisem1.
                        assert (addr = addr'). by apply/eqP. by subst.
                      +++
 
+                       assert (
+                           (exists ptro i : Block.offset,
+                               ComponentMemory.load compMem bid i =
+                               Some (Ptr (Permission.data,
+                                          cidloaded, bidloaded, ptro)))
+                         ) as [offloaded [off HcompLoad]].
+                       {
+                         eapply ComponentMemory.load_block_load.
+                         erewrite Extra.In_in in Hin.
+                         assumption.
+                       }
+
+                       (** Chance to refactor case *** and *** into lemmas *)
+                       (** because they are exactly the same as the corresp*)
+                       (** cases from above.                               *)
+
+                       
                        (** Here, apparently need to again use HcompMem and *)
                        (** Hpref_t' to infer that either                   *)
                        (** *** cid \in domm(prog_interface p) or           *)
@@ -660,10 +677,248 @@ Section ThreewayMultisem1.
                        destruct Hdestruct as [Hcid | Hcid].
                        ***
                           rewrite Hcid in IHHreach.
-                          
-                       
+
+                          match goal with
+                          | H: mem_of_part_executing_rel_original_and_recombined
+                                 p _ s1'mem n _ _ |- _ =>
+                            inversion H as [s1'mem_rel_p _]
+                          end.
+
+                         specialize (s1'mem_rel_p (cid, bid) Hcid)
+                           as [_ Hpriv2].
+
+                         unfold Memory.load in Hpriv2. simpl in *.
+                         rewrite HcompMem in Hpriv2.
+                         specialize (Hpriv2 _ _ HcompLoad)
+                           as [v [Hvload Hvshift]].
+                         destruct (mem0 cid) as [compMem0|] eqn:HcompMem0;
+                           try discriminate.
+
+                         specialize (Hgood_prog _ _ Hpref_t) as [_ Ggood].
+                         unfold Memory.load in Ggood.
+                         specialize (Ggood
+                                       mem0
+                                       (Permission.data, cid, bid, off)
+                                       (cid, bid)
+                                       v
+                                    ).
+                         setoid_rewrite HcompMem0 in Ggood.
+                         assert (left_value_good_for_shifting n v) as Hgoodv.
+                         {
+                           by apply Ggood; auto.
+                         }
+
+                         clear Ggood.
+
+                         destruct v as [| [[[permv cidv] bidv] offv] |];
+                           simpl in *;
+                           destruct Hvshift as [ [Hvshift1 [Hvshift2 Hvshift3]]
+                                               | Hvshift1];
+                           try discriminate;
+
+                           unfold 
+                           rename_addr_option,
+                           sigma_shifting_wrap_bid_in_addr,
+                           sigma_shifting_lefttoright_addr_bid in *.
+
+                         ----
+                           inversion Hvshift3. subst. clear Hvshift3.
+                           simpl in *.
+                           erewrite sigma_lefttoright_Some_spec in Hgoodv.
+                           destruct Hgoodv as [? contra].
+                             by erewrite contra in Hvshift1.
+                         ----
+                           destruct (permv =? Permission.data) eqn:epermv.
+                           ++++
+                             destruct (sigma_shifting_lefttoright_option
+                                         (n cidv)
+                                         (if cidv \in domm (prog_interface p)
+                                          then n cidv
+                                          else n'' cidv) bidv) eqn:esigma;
+                               rewrite esigma in Hvshift1; try discriminate.
+                             inversion Hvshift1. subst.
+                             rewrite sigma_lefttoright_Some_spec; eexists.
+                               by erewrite
+                                    sigma_shifting_lefttoright_Some_inv_Some;
+                                 eauto.
+                           ++++
+                             inversion Hvshift1. subst.
+                             by rewrite <- beq_nat_refl in epermv.
+
+                       ***
+
+                         assert (cid \in domm (prog_interface p) = false) as Hcid_p.
+                         {
+                           (**
+                           Follows from Hcid and HcompMem (after we have proved some
+                           partitioning lemma.
+                            *)                            
+                           admit.
+                           
+                         }
+                         
+                         specialize (Coq.Logic.Classical_Prop.classic 
+                                       (addr_shared_so_far (cid, bid) t1'')
+                                    ) as Hdestruct.
+
+                         destruct Hdestruct as [Hshr | Hnotshr].
+
+                         ----
+                           inversion Hshift_t''t' as [? ? Hren]; subst.
+                           inversion Hren as [| t'' e'' t' e' ? ? Ht''t' ? ? ?]; subst;
+                             try by inversion Hshr; subst; find_nil_rcons.
+                           specialize (Ht''t' _ Hshr) as
+                               [He''e' [[cid' bid'] [ecid'bid' Hshrcid'bid']]].
+
+                           match goal with
+                           | H: mem_of_part_executing_rel_original_and_recombined
+                                  p _ s1'mem n _ _ |- _ =>
+                             inversion H as [_ [s1'mem_rel_p _]]
+                           end.
+
+                           inversion Hshift_tt' as [? ? Hrentt']; subst.
+                           inversion Hrentt' as [| t e _t' _e' ? ? ? Htt' ? ? ?];
+                             subst;
+                             try by inversion Hshr; subst; find_nil_rcons.
+
+                           match goal with
+                           | Hrcons: rcons _ _ = rcons _ _ |- _ =>
+                             apply rcons_inj in Hrcons; inversion Hrcons; subst;
+                               clear Hrcons
+                           end.
+                           
+                           specialize (Htt' _ Hshrcid'bid') as
+                               [Hee' [[cid_t bid_t] [ecidbid_t Hshrcidbid_t]]].
+                           
+                           specialize (s1'mem_rel_p _ Hshrcidbid_t)
+                             as [[addr'cid addr'bid] [eaddr' [mem0_s1'mem s1'mem_mem0]]].
+                           unfold Memory.load in s1'mem_mem0. simpl in *.
+
+                           unfold memory_shifts_memory_at_shared_addr,
+                           memory_renames_memory_at_shared_addr,
+                           sigma_shifting_wrap_bid_in_addr,
+                           sigma_shifting_lefttoright_addr_bid in *.
+
+                           destruct (sigma_shifting_lefttoright_option
+                                       (n cid_t)
+                                       (if cid_t \in domm (prog_interface p)
+                                        then n cid_t else n'' cid_t) bid_t)
+                                    eqn:ebid_t; rewrite ebid_t in ecidbid_t;
+                             try discriminate.
+                           inversion ecidbid_t; subst; clear ecidbid_t.
+
+                           destruct (sigma_shifting_lefttoright_option
+                                       (n'' cid)
+                                       (if cid \in domm (prog_interface p)
+                                        then n cid else n'' cid) bid)
+                                    eqn:ebid; rewrite ebid in ecid'bid';
+                             try discriminate.
+                           inversion ecid'bid'; subst; clear ecid'bid'.
+
+                           rewrite ebid_t in eaddr'.
+                           inversion eaddr'; subst. clear eaddr'.
+                           
+                           rewrite Hcid_p in ebid.
+                           apply sigma_shifting_lefttoright_option_n_n_id in ebid.
+                           subst.
+
+                           rewrite HcompMem in s1'mem_mem0.
+                           specialize (s1'mem_mem0 _ _ HcompLoad) as [v [_ ev]].
+                           unfold rename_value_option, rename_value_template_option,
+                           rename_addr_option in *.
+
+                           destruct v as [| [[[vperm vcid] vbid] voff] |];
+                             try discriminate.
+
+                           destruct (vperm =? Permission.data) eqn:eperm.
+                           ++++
+                             destruct (sigma_shifting_lefttoright_option
+                                         (n vcid)
+                                         (if vcid \in domm (prog_interface p)
+                                          then n vcid else n'' vcid) vbid) eqn:evbid;
+                               rewrite evbid in ev; try discriminate.
+                             inversion ev; subst.
+                             apply sigma_lefttoright_Some_good in evbid.
+                               by unfold right_block_id_good_for_shifting,
+                                  left_block_id_good_for_shifting in *.
+                           ++++
+                             inversion ev; subst. by auto.
+                           
+                         ----
+                           match goal with
+                           | H: mem_of_part_not_executing_rel_original_and_recombined_at_internal
+                                  c' _ s1'mem n'' _ _ |- _ =>
+                             inversion H as [s1'mem_rel_c' _]
+                           end.
+
+                         
+
+                           specialize (s1'mem_rel_c' (cid, bid) Hcid Hnotshr)
+                             as [_ Hpriv2].
+
+                           unfold Memory.load in Hpriv2. simpl in *.
+                           rewrite HcompMem in Hpriv2.
+                           specialize (Hpriv2 _ _ HcompLoad)
+                             as [v [Hvload Hvshift]].
+                           destruct (s2''mem cid)
+                             as [comps2''mem|] eqn:Hcomps2''mem;
+                             try discriminate.
+
+                           specialize (Hgood_prog'' _ _ Hpref_t'') as [_ Ggood].
+                           unfold Memory.load in Ggood.
+                           specialize (Ggood
+                                         s2''mem
+                                         (Permission.data, cid, bid, off)
+                                         (cid, bid)
+                                         v
+                                      ).
+                           setoid_rewrite Hcomps2''mem in Ggood.
+                           assert (left_value_good_for_shifting n'' v) as Hgoodv.
+                           {
+                             apply Ggood; auto.
+                             by rewrite Hcid_p in IHHreach.
+                           }
+
+                           clear Ggood.
+
+                           destruct v as [| [[[permv cidv] bidv] offv] |];
+                             simpl in *;
+                             destruct Hvshift as [ [Hvshift1 [Hvshift2 Hvshift3]]
+                                                 | Hvshift1];
+                             try discriminate;
+
+                             unfold 
+                               rename_addr_option,
+                             sigma_shifting_wrap_bid_in_addr,
+                             sigma_shifting_lefttoright_addr_bid in *.
+
+                           ++++
+                             inversion Hvshift3. subst. clear Hvshift3.
+                             simpl in *.
+                             erewrite sigma_lefttoright_Some_spec in Hgoodv.
+                             destruct Hgoodv as [? contra].
+                               by erewrite contra in Hvshift1.
+                           ++++
+                             destruct (permv =? Permission.data) eqn:epermv.
+                             ****
+                               destruct (sigma_shifting_lefttoright_option
+                                           (n'' cidv)
+                                           (if cidv \in domm (prog_interface p)
+                                            then n cidv
+                                            else n'' cidv) bidv) eqn:esigma;
+                                 rewrite esigma in Hvshift1; try discriminate.
+                               inversion Hvshift1. subst.
+                               rewrite sigma_lefttoright_Some_spec; eexists.
+                                 by erewrite
+                                      sigma_shifting_lefttoright_Some_inv_Some;
+                                   eauto.
+                             ****
+                               inversion Hvshift1. subst.
+                                 by rewrite <- beq_nat_refl in epermv.
 
                        
+
+                  (*************************************************************
                        specialize (Hgood_ )
                          destruct (perm' =? Permission.data) eqn:eperm'.
                          ----
@@ -731,14 +986,28 @@ Section ThreewayMultisem1.
                          *** unfold addr_of_value in Ha.
                                by rewrite eperm in_fset0 in Ha.
                      +++ by rewrite in_fset0 in Ha.
+                   ***********************************************************)
                 ** (* stack of p is related to the stack of recombined *)
                   simpl in *. subst.
+                  inversion Hstep12'; subst.
+                  destruct t; try discriminate.
+                  match goal with
+                  | Hstep : CS.step _ _ _ _ |- _ =>
+                    inversion Hstep; subst; try discriminate
+                  end.
                   apply stack_of_program_part_rel_stack_of_recombined_cons; auto.
                     by destruct
                          (Pointer.component (Pointer.inc pc)
                                             \in domm (prog_interface p)).
                 ** (* stack of c' is related to the stack of recombined *)
                   simpl in *. subst.
+                  inversion Hstep12'; subst.
+                  destruct t; try discriminate.
+                  match goal with
+                  | Hstep : CS.step _ _ _ _ |- _ =>
+                    inversion Hstep; subst; try discriminate
+                  end.
+                  
                   apply stack_of_program_part_rel_stack_of_recombined_cons; auto.
                   rewrite !Pointer.inc_preserves_component.
                   unfold CS.is_program_component, CS.is_context_component,
@@ -751,47 +1020,276 @@ Section ThreewayMultisem1.
                   unfold negb in *.
                   destruct (Pointer.component pc \in domm (prog_interface c));
                     by intuition.
-                ** (* traces_shift_each_other *)
-                  constructor. constructor; auto.
-                   --- assert (traces_shift_each_other
-                                 n
-                                 (fun cid : nat =>
-                                    if cid \in domm (prog_interface p)
-                                    then n cid
-                                    else n'' cid
-                                 )
-                                 t1 t1'
-                              ) as G.
-                       {
-                         apply traces_shift_each_other_transitive
-                           with (n2 := n'') (t2 := t1''); auto.
-                         by constructor.
-                       }
-                         by inversion G.
-                   --- intros addr Haddrshare_t1_call.
-                       pose proof Hr2 addr Haddrshare_t1_call as
-                           [Hren_n_n'' Hshrt1''].
-                       apply Hr3 in Hshrt1'' as [Hinvren_n_n'' Hshr_t1_call].
-                       simpl in *.
-                       split.
-                       +++ unfold event_renames_event_at_addr. simpl.
-                           (* SearchAbout mem0 s1'mem *)
-                           unfold mem_of_part_executing_rel_original_and_recombined
-                             in *.
-                           (* TODO: Need to strengthen the memory invariant? 
-                              The relevant memory invariant seems to be H5.
-                              But H5 is too weak. 
-                              
-                              It only establishes renaming
-c
-                              for an address whose component is in the domain
-                              of prog_interface p.
+                ** inversion Hstep12'; subst.
+                   destruct t; try discriminate.
+                   match goal with
+                   | Hstep : CS.step _ _ _ _ |- _ =>
+                     inversion Hstep; subst; try discriminate
+                   end.
+                   simpl in *.
+                   by
+                   match goal with
+                   | H: [_] = [_] |- _ => inversion H; subst
+                   end.
 
-                              Is there an "event renaming" among the hypotheses
-                              that we can use instead?
-                            *)
-                           admit.
-                       +++ admit.
+                ** inversion Hstep12'; subst.
+                   destruct t; try discriminate.
+                   match goal with
+                   | Hstep : CS.step _ _ _ _ |- _ =>
+                     inversion Hstep; subst; try discriminate
+                   end.
+                   simpl in *.
+                   by
+                   match goal with
+                   | H: [_] = [_] |- _ => inversion H; subst
+                   end.
+
+                  
+                ** (* traces_shift_each_other *)
+                  constructor. econstructor; eauto.
+                  --- by inversion Hshift_tt'.
+                      
+                  --- intros addr Haddrshare_t1_call.
+                       pose proof Hr2 addr Haddrshare_t1_call as
+                          [Hren_n_n'' Hshrt1''].
+                       destruct Hshrt1'' as [[cid'' bid''] [Haddr'' Haddr''shr]].
+                       apply Hr3 in Haddr''shr as [Hinvren_n_n''
+                                                     [[cidt bidt] [Haddrt Haddrtshr]]].
+                       unfold sigma_shifting_wrap_bid_in_addr,
+                       sigma_shifting_lefttoright_addr_bid in *.
+
+                       destruct addr as [cid bid].
+                       
+                       destruct (sigma_shifting_lefttoright_option
+                                   (n cidt) (n'' cidt) bidt) eqn:ebidt;
+                         try discriminate.
+                       inversion Haddrt; subst; clear Haddrt.
+
+                       destruct (sigma_shifting_lefttoright_option
+                                   (n cid) (n'' cid) bid) eqn:ebid; try discriminate.
+                       inversion Haddr''; subst; clear Haddr''.
+
+                       specialize (sigma_shifting_lefttoright_option_Some_inj
+                                  _ _ _ _ _ ebid ebidt) as Hsubst.
+                       subst. clear ebid.
+                       
+                       unfold event_renames_event_at_shared_addr in *.
+                       
+                       simpl in *.
+                       
+                       inversion Haddrtshr as
+                           [? ? ? Hreach| ? ? ? ? Haddr'shr Hreach]; subst;
+                         match goal with
+                         | H11: rcons _ _ = rcons _ _ |- _ =>
+                           apply rcons_inj in H11; inversion H11; subst; clear H11
+                         end; simpl in *; clear Haddrtshr.
+                      +++
+                        induction Hreach as [addr Hin |
+                                             ? ? [cidloaded bidloaded]
+                                               ? ? ? HcompMem Hin ]; subst.
+                        ***
+                          (** Here, we will need to use the register relation *)
+                          (** between regs and s1'reg                         *)
+                          destruct (Register.get R_COM regs)
+                            as [|[[[perm cid] bid] off] |];
+                            try by rewrite in_fset0 in Hin.
+                          simpl in Hin.
+                          destruct (perm =? Permission.data) eqn:eperm;
+                            try by rewrite in_fset0 in Hin.
+                          rewrite in_fset1 in Hin.
+                          assert (perm = Permission.data). by apply beq_nat_true.
+                          assert (addr = (cid, bid)). by apply/eqP.
+                          subst. clear Hin eperm. simpl in *.
+                          destruct Hrel_R_COM
+                            as [Hshift | [Hshift [Hshift2 Hrewr
+                                                          (*[Hshr1 Hshr2]*)
+                               ]]];
+                            unfold shift_value_option, rename_value_option,
+                            rename_value_template_option,
+                            rename_addr_option,
+                            sigma_shifting_wrap_bid_in_addr,
+                            sigma_shifting_lefttoright_addr_bid in *.
+                          ----
+                            destruct (
+                                sigma_shifting_lefttoright_option
+                                  (n cid)
+                                  (if cid \in domm (prog_interface p)
+                                   then n cid else n'' cid) bid
+                              ) eqn:ebid; rewrite ebid in Hshift; try discriminate.
+                            simpl in  *.
+
+                            
+                            inversion Hshift as [Hshift_].
+
+                            unfold memory_renames_memory_at_shared_addr in *.
+
+                            unfold sigma_shifting_wrap_bid_in_addr,
+                            sigma_shifting_lefttoright_addr_bid in *.
+
+                            split; first eexists.
+                            ++++ split; first (setoid_rewrite ebid; reflexivity).
+                                 split.
+                                 ****
+                                   intros ? ? Hload.
+
+                                   (**************************************************)
+
+                                   (** Intuitively, we should be using the reg *)
+                                   (** to infer the memory relation.           *)
+                                   (** So far, we did use Hrel_R_COM, but we   *)
+                                   (** haven't yet obtained a useful value     *)
+                                   (** renaming...                             *)
+
+                                   (** We should try to look more into the     *)
+                                   (** Hshift assumption.                      *)
+                                   
+                                   (**************************************************)
+                                   
+                            match goal with
+                            | H: mem_of_part_executing_rel_original_and_recombined
+                                   p _ s1'mem n _ _ |- _ =>
+                              inversion H as [_ [s1'mem_rel_p _]]
+                            end.
+                            
+                            
+                            split; first eexists. split
+                            
+                            destruct (Register.get R_COM )
+                              as [| [[[perm' cid'] bid'] off'] |]; try discriminate.
+                         destruct (perm' =? Permission.data) eqn:eperm'.
+                         ----
+                           destruct (sigma_shifting_lefttoright_option
+                                       (n cid')
+                                       (if cid' \in domm (prog_interface p)
+                                        then n cid' else n'' cid')
+                                       bid') as [bid'shift|] eqn:esigma;
+                             rewrite esigma in Hshift;
+                             try discriminate.
+                           inversion Hshift. subst. clear Hshift.
+                             by eapply sigma_lefttoright_Some_good; eauto.
+
+                         ----
+                           inversion Hshift. subst.
+                             by rewrite <- beq_nat_refl in eperm'.
+                             
+                       ***
+                         destruct (Register.get R_COM regs)
+                           as [| [[[perm' cid'] bid'] off'] |]; try discriminate.
+                         inversion Hrewr. subst. simpl in *.
+                         assert (left_addr_good_for_shifting n (cid, bid))
+                           as cidbidgood.
+                         {
+                           apply Hgood_.
+                           constructor. constructor. simpl.
+                           by rewrite in_fset1.
+                         }
+                         unfold left_addr_good_for_shifting in cidbidgood.
+                         erewrite sigma_lefttoright_Some_spec in cidbidgood.
+                         destruct cidbidgood as [? G].
+                           by erewrite G in Hshift.
+                           
+                     +++
+                       assert (
+                           (exists ptro i : Block.offset,
+                               ComponentMemory.load compMem bid i =
+                               Some (Ptr (Permission.data,
+                                          cidloaded, bidloaded, ptro)))
+                         ) as [offloaded [off HcompLoad]].
+                       {
+                         eapply ComponentMemory.load_block_load.
+                         erewrite Extra.In_in in Hin.
+                         assumption.
+                       }
+
+                       (** Here, we need to use the goodness of program  *)
+                       (** p or the goodness of program c (depending on  *)
+                       (** whether cid \in domm (prog_interface p), I guess *)
+
+                       (** In case it is, then we use the relation mem0 s1'mem *)
+                       (** Otherwise, we use the relation s2''mem s1'mem       *)
+
+                       (** In the first case, goal will follow from Hgood_prog *)
+                       (** In the second case, it will follow from Hgood_prog''*)
+
+                       unfold left_addr_good_for_shifting in IHHreach.
+                       destruct (cid \in domm (prog_interface p)) eqn:Hcid;
+                         rewrite Hcid in IHHreach.
+                       ***
+                         match goal with
+                         | H: mem_of_part_executing_rel_original_and_recombined
+                                p _ s1'mem n _ _ |- _ =>
+                           inversion H as [s1'mem_rel_p _]
+                         end.
+
+                         specialize (s1'mem_rel_p (cid, bid) Hcid)
+                           as [_ Hpriv2].
+
+                         unfold Memory.load in Hpriv2. simpl in *.
+                         rewrite HcompMem in Hpriv2.
+                         specialize (Hpriv2 _ _ HcompLoad)
+                           as [v [Hvload Hvshift]].
+                         destruct (mem0 cid) as [compMem0|] eqn:HcompMem0;
+                           try discriminate.
+
+                         specialize (Hgood_prog _ _ Hpref_t) as [_ Ggood].
+                         unfold Memory.load in Ggood.
+                         specialize (Ggood
+                                       mem0
+                                       (Permission.data, cid, bid, off)
+                                       (cid, bid)
+                                       v
+                                    ).
+                         setoid_rewrite HcompMem0 in Ggood.
+                         assert (left_value_good_for_shifting n v) as Hgoodv.
+                         {
+                           by apply Ggood; auto.
+                         }
+
+                         clear Ggood.
+
+                         destruct v as [| [[[permv cidv] bidv] offv] |];
+                           simpl in *;
+                           destruct Hvshift as [ [Hvshift1 [Hvshift2 Hvshift3]]
+                                               | Hvshift1];
+                           try discriminate;
+
+                           unfold 
+                           rename_addr_option,
+                           sigma_shifting_wrap_bid_in_addr,
+                           sigma_shifting_lefttoright_addr_bid in *.
+
+                         ----
+                           inversion Hvshift3. subst. clear Hvshift3.
+                           simpl in *.
+                           erewrite sigma_lefttoright_Some_spec in Hgoodv.
+                           destruct Hgoodv as [? contra].
+                             by erewrite contra in Hvshift1.
+                         ----
+                           destruct (permv =? Permission.data) eqn:epermv.
+                           ++++
+                             destruct (sigma_shifting_lefttoright_option
+                                         (n cidv)
+                                         (if cidv \in domm (prog_interface p)
+                                          then n cidv
+                                          else n'' cidv) bidv) eqn:esigma;
+                               rewrite esigma in Hvshift1; try discriminate.
+                             inversion Hvshift1. subst.
+                             rewrite sigma_lefttoright_Some_spec; eexists.
+                               by erewrite
+                                    sigma_shifting_lefttoright_Some_inv_Some;
+                                 eauto.
+                           ++++
+                             inversion Hvshift1. subst.
+                             by rewrite <- beq_nat_refl in epermv.
+
+ 
+                      +++ admit.
+                      +++ 
+
+                       inversion Haddrtshr
+                       
+                       split.
+                       
                    --- (* the symmetric/inverse case of renaming *)
                      admit.
                    --- constructor; eauto.
