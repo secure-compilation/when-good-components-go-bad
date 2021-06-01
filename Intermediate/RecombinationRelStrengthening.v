@@ -1053,36 +1053,36 @@ Section ThreewayMultisem1.
                        pose proof Hr2 addr Haddrshare_t1_call as
                           [Hren_n_n'' Hshrt1''].
                        destruct Hshrt1'' as [[cid'' bid''] [Haddr'' Haddr''shr]].
-                       apply Hr3 in Haddr''shr as [Hinvren_n_n''
-                                                     [[cidt bidt] [Haddrt Haddrtshr]]].
+                       (*apply Hr3 in Haddr''shr as [Hinvren_n_n''
+                                                     [[cidt bidt] [Haddrt Haddrtshr]]].*)
                        unfold sigma_shifting_wrap_bid_in_addr,
                        sigma_shifting_lefttoright_addr_bid in *.
 
                        destruct addr as [cid bid].
                        
-                       destruct (sigma_shifting_lefttoright_option
+                       (*destruct (sigma_shifting_lefttoright_option
                                    (n cidt) (n'' cidt) bidt) eqn:ebidt;
                          try discriminate.
-                       inversion Haddrt; subst; clear Haddrt.
+                       inversion Haddrt; subst; clear Haddrt.*)
 
                        destruct (sigma_shifting_lefttoright_option
                                    (n cid) (n'' cid) bid) eqn:ebid; try discriminate.
                        inversion Haddr''; subst; clear Haddr''.
 
-                       specialize (sigma_shifting_lefttoright_option_Some_inj
+                       (*specialize (sigma_shifting_lefttoright_option_Some_inj
                                   _ _ _ _ _ ebid ebidt) as Hsubst.
-                       subst. clear ebid.
+                       subst. clear ebid.*)
                        
                        unfold event_renames_event_at_shared_addr in *.
                        
                        simpl in *.
                        
-                       inversion Haddrtshr as
+                       inversion Haddrshare_t1_call as
                            [? ? ? Hreach| ? ? ? ? Haddr'shr Hreach]; subst;
                          match goal with
                          | H11: rcons _ _ = rcons _ _ |- _ =>
                            apply rcons_inj in H11; inversion H11; subst; clear H11
-                         end; simpl in *; clear Haddrtshr.
+                         end; simpl in *.
                       +++
                         induction Hreach as [addr Hin |
                                              ? ? [cidloaded bidloaded]
@@ -1091,60 +1091,189 @@ Section ThreewayMultisem1.
                           (** Here, we will need to use the register relation *)
                           (** between regs and s1'reg                         *)
                           destruct (Register.get R_COM regs)
-                            as [|[[[perm cid] bid] off] |];
+                            as [|[[[perm cid] bid_regs] off] |];
                             try by rewrite in_fset0 in Hin.
                           simpl in Hin.
                           destruct (perm =? Permission.data) eqn:eperm;
                             try by rewrite in_fset0 in Hin.
                           rewrite in_fset1 in Hin.
                           assert (perm = Permission.data). by apply beq_nat_true.
-                          assert (addr = (cid, bid)). by apply/eqP.
+                          assert (addr = (cid, bid_regs)). by apply/eqP.
                           subst. clear Hin eperm. simpl in *.
-                          destruct Hrel_R_COM
-                            as [Hshift | [Hshift [Hshift2 Hrewr
-                                                          (*[Hshr1 Hshr2]*)
-                               ]]];
-                            unfold shift_value_option, rename_value_option,
-                            rename_value_template_option,
-                            rename_addr_option,
-                            sigma_shifting_wrap_bid_in_addr,
-                            sigma_shifting_lefttoright_addr_bid in *.
-                          ----
-                            destruct (
-                                sigma_shifting_lefttoright_option
-                                  (n cid)
-                                  (if cid \in domm (prog_interface p)
-                                   then n cid else n'' cid) bid
-                              ) eqn:ebid; rewrite ebid in Hshift; try discriminate.
-                            simpl in  *.
 
+                          unfold memory_renames_memory_at_shared_addr,
+                          sigma_shifting_wrap_bid_in_addr,
+                          sigma_shifting_lefttoright_addr_bid in *.
+
+                          destruct Hren_n_n'' as [addr'' [Haddr'' Hmem_mem'']].
+
+                          destruct (sigma_shifting_lefttoright_option
+                                      (n cid) (n'' cid) bid_regs) as [bid_regs''|]
+                                                                       eqn:ebid_regs;
+                            try discriminate.
+
+
+                          assert (left_block_id_good_for_shifting
+                                    (n cid) bid_regs) as Hspec.
+                            by rewrite sigma_lefttoright_Some_spec; eexists; eauto.
                             
-                            inversion Hshift as [Hshift_].
+                            assert (exists bid',
+                                       sigma_shifting_lefttoright_option
+                                         (n cid)
+                                         (if cid \in domm (prog_interface p)
+                                          then n cid else n'' cid) bid_regs
+                                       = Some bid') as G.
+                              by rewrite <- sigma_lefttoright_Some_spec.
+                              destruct G as [bid' G'].
 
-                            unfold memory_renames_memory_at_shared_addr in *.
+                          inversion Haddr''; subst; clear Haddr''.
+                          split.
+                          ----
+                            eexists. split.
+                            ++++
+                              setoid_rewrite G'.
+                              reflexivity.
+                            ++++
+                              split.
+                              ****
+                                intros ? ? Hload.
+                                simpl in *.
 
-                            unfold sigma_shifting_wrap_bid_in_addr,
-                            sigma_shifting_lefttoright_addr_bid in *.
+                                assert (cid \in domm(prog_interface p) \/
+                                        cid \in domm(prog_interface c')
+                                       ) as [Hcid | Hcid].
+                                {
+                                  (** Follows from Hload *)
+                                  admit.
+                                }
 
-                            split; first eexists.
-                            ++++ split; first (setoid_rewrite ebid; reflexivity).
-                                 split.
-                                 ****
-                                   intros ? ? Hload.
+                                -----
+                                rewrite Hcid in G'.
+                                apply sigma_shifting_lefttoright_option_n_n_id in G'.
+                                subst.
+                                
+                                match goal with
+                                | H: mem_of_part_executing_rel_original_and_recombined
+                                       p _ s1'mem n _ _ |- _ =>
+                                  inversion H as [s1'mem_rel_p _]
+                                end.
+                                
+                                specialize (s1'mem_rel_p (cid, bid_regs) Hcid)
+                                  as [Hpriv1 _].
 
-                                   (**************************************************)
+                                specialize (Hpriv1 _ _ Hload).
 
-                                   (** Intuitively, we should be using the reg *)
-                                   (** to infer the memory relation.           *)
-                                   (** So far, we did use Hrel_R_COM, but we   *)
-                                   (** haven't yet obtained a useful value     *)
-                                   (** renaming...                             *)
+                                unfold rename_value_option, rename_value_template_option,
+                                sigma_shifting_wrap_bid_in_addr,
+                                sigma_shifting_lefttoright_addr_bid,
+                                rename_addr_option in *.
 
-                                   (** We should try to look more into the     *)
-                                   (** Hshift assumption.                      *)
-                                   
-                                   (**************************************************)
-                                   
+                                destruct v as [| [[[vperm vcid] vbid] voff] |];
+                                  try by eexists; split; eauto.
+
+                                destruct (vperm =? Permission.data) eqn:eperm;
+                                  try by eexists; split; eauto.
+
+                                destruct (sigma_shifting_lefttoright_option
+                                            (n vcid)
+                                            (if vcid \in domm (prog_interface p)
+                                             then n vcid else n'' vcid) vbid)
+                                  as [vbid'|] eqn:evbid; rewrite evbid;
+                                  rewrite evbid in Hpriv1.
+                                +++++
+                                  by eexists; split; eauto.
+                                +++++
+                                  assert (CSInvariants.is_prefix
+                                               (Pointer.inc pc :: gps,
+                                                mem0,
+                                                Register.invalidate regs,
+                                                (Permission.code, C'0, b, Z0)
+                                               )
+                                               prog
+                                               (rcons
+                                                  t1
+                                                  (ECall (Pointer.component pc) P0
+                                                         (Ptr (Permission.data,
+                                                               cid,
+                                                               bid_regs,
+                                                               off)
+                                                         )
+                                                         mem0
+                                                         C'0))
+                                         ) as Hpref_.
+                                {
+                                  admit.
+                                }
+
+                                (** Obtain a contradiction to Hgood_prog *)
+                                
+                                specialize (Hgood_prog _ _ Hpref_) as [_ G].
+                                simpl in *.
+                                specialize (G _ _ _ _
+                                              Logic.eq_refl
+                                              Hload
+                                              Logic.eq_refl
+                                              Hspec
+                                           ) as contra.
+                                unfold left_value_good_for_shifting,
+                                left_addr_good_for_shifting in *.
+                                rewrite eperm in contra.
+                                erewrite sigma_lefttoright_Some_spec, evbid in contra.
+                                by destruct contra.
+
+                                -----
+                                  (** Here, have as assumption a load from mem0. *)
+                                  (** Goal is to have a related load from s1'mem *)
+                                  (** Should be able to use the "shared" part of *)
+                                  (** the memory relation mem0_s1'mem.           *)
+                                  (** To use it, establish that (cid, bid_regs)  *)
+                                  (** must have been shared on trace t1.         *)
+                                  (** This can be done by inverting              *)
+                                  (** CSInvariants.wf_ptr_wrt_cid_t              *)
+                                  (** (The left case is a contra to Hcid.)       *)
+                                  (** (The right case is the "shared_so_far"..)  *)
+
+                                  (** Obtain CSInvariants.wf_ptr_wrt_cid_t from  *)
+                                  (** "wf_reg" and the "Register.get" precond of *)
+                                  (** Hstep12.                                   *)
+                                  admit.
+
+                              ****
+                                (** This is dual to the parallel case.          *)
+                                (** Just make sure to destruct s1'mem_rel_p     *)
+                                (** as [_ Hpriv2] instead of [Hpriv1 _]         *)
+                                admit.
+                                
+                          ----
+                            assert (left_block_id_good_for_shifting
+                                    (n cid'') bid) as Hspec_bid.
+                            by rewrite sigma_lefttoright_Some_spec; eexists; eauto.
+                            
+                            assert (exists bid',
+                                       sigma_shifting_lefttoright_option
+                                         (n cid'')
+                                         (if cid'' \in domm (prog_interface p)
+                                          then n cid'' else n'' cid'') bid
+                                       = Some bid') as G.
+                              by rewrite <- sigma_lefttoright_Some_spec.
+                              destruct G as [bid_t1' G''].
+                              eexists; split.
+                              ++++ by setoid_rewrite G''.
+                              ++++
+                                (** Probably by inverting an existing sharing *)
+                                (** namely, inverting Haddr''shr              *)
+                                (** Inverting sharing gives us "Reachability" *)
+                                (** assumptions. Reachability assumptions     *)
+                                (** mention a load from the memory (except    *)
+                                (** for the refl case).                       *)
+                                (** The load from memory can be helpful to    *)
+                                (** instantiate memory relations.             *)
+
+                                (** Will probably be somewhat similar to the  *)
+                                (** previous ---- children.                   *)
+                                admit.
+                                
+                        (***********************************************
                             match goal with
                             | H: mem_of_part_executing_rel_original_and_recombined
                                    p _ s1'mem n _ _ |- _ =>
@@ -1171,7 +1300,7 @@ Section ThreewayMultisem1.
                          ----
                            inversion Hshift. subst.
                              by rewrite <- beq_nat_refl in eperm'.
-                             
+                             *****************************************************)
                        ***
                          destruct (Register.get R_COM regs)
                            as [| [[[perm' cid'] bid'] off'] |]; try discriminate.
