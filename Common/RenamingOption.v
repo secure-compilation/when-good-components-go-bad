@@ -1230,10 +1230,10 @@ Section MemoryAndTraceRenaming.
         (
           forall addr', addr_shared_so_far addr' (rcons tprefix' e') ->
                         (
-                          event_renames_event_at_shared_addr addr' e' e
-                          /\
                           exists addr,
                             rename_addr_option addr = Some addr'
+                            /\
+                            event_renames_event_at_shared_addr addr e e'
                             /\
                             addr_shared_so_far addr (rcons tprefix e)
                         )

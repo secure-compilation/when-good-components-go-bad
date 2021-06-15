@@ -3436,7 +3436,7 @@ Section ThreewayMultisem1.
                     as [|? ? ? ? ? ? _ Hshr'_shr'' _ _ _ _ _]; subst.
                   ** inversion Hshr; by find_nil_rcons.
                   ** specialize (Hshr'_shr'' _ Hshr)
-                      as [_ [[cid bid] [Hren Hcontra]]].
+                      as [[cid bid] [Hren [_ Hcontra]]].
                      unfold rename_addr_option, sigma_shifting_wrap_bid_in_addr
                        in *.
                      simpl in *.
@@ -3502,7 +3502,7 @@ Section ThreewayMultisem1.
                     as [|? ? ? ? ? ? _ Hshr'_shr'' _ _ _ _ _]; subst.
                   ** inversion Hshr; by find_nil_rcons.
                   ** specialize (Hshr'_shr'' _ Hshr)
-                      as [_ [[cid bid] [Hren Hcontra]]].
+                      as [[cid bid] [Hren [_ Hcontra]]].
                      unfold rename_addr_option, sigma_shifting_wrap_bid_in_addr
                        in *.
                      simpl in *.
