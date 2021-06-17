@@ -912,14 +912,141 @@ Section ThreewayMultisem1.
 
                 * assert (cidorig_ \in domm (prog_interface c')) as ecidorig_c'.
                     (** Follows from Hloadprog and ecidorig_ *) by admit.
+
+                  apply sigma_shifting_lefttoright_option_n_n_id
+                    in G''; subst.
+
                   
+                  specialize (Coq.Logic.Classical_Prop.classic 
+                                (addr_shared_so_far (cidorig_, bidorig_prog) t1)
+                             ) as [Hshrt1 | Hnotshrt1].
+
+                  --
+                  specialize (mem0s1'mem_shr
+                                (cidorig_, bidorig_prog)
+                                Hshrt1) as [[cidorig_' bidorig_prog']
+                                              [esigma [_ s1'mem_mem0]]].
+                  simpl in *.
+
+                  destruct (sigma_shifting_lefttoright_option
+                              (n cidorig_)
+                              (if cidorig_ \in domm (prog_interface p)
+                               then n cidorig_ else n'' cidorig_)
+                              bidorig_prog) eqn:esigma'; rewrite esigma' in esigma;
+                    try discriminate.
+                  inversion esigma; subst; clear esigma.
+                  rewrite ecidorig_ in esigma'.
+                  apply sigma_shifting_lefttoright_Some_inv_Some in G.
+                  rewrite G in esigma'. inversion esigma'; subst; clear esigma'.
+
                   
-                
+                  specialize (s1'mem_mem0 _ _ Hload)
+                    as [vprog [Hloadprog Hvprog]].
+
+                  specialize (mem0_s2''mem _ _ Hloadprog) as [v'' [Hloads2''mem Hv'']].
+                  
+                  assert (vprogGood: 
+                            left_value_good_for_shifting n vprog).
+                  {
+                    destruct vprog as [| [[[perm cid] bid] off] |]
+                                        eqn:evprog; simpl; auto.
+                    destruct (perm =? Permission.data) eqn:eperm; auto.
+                    destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
+                             eqn:esigma; try discriminate.
+                    by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
+                  }
+                  
+                  destruct vprog
+                    as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
+                    inversion Hvprog; inversion Hv''; subst;
+                      try by eexists; split; eauto.
+                  destruct (permvprog =? Permission.data) eqn:epermvprog;
+                    inversion Hvprog; inversion Hv''; subst.
+                  
+                  ++ destruct (sigma_shifting_lefttoright_option
+                                 (n cidvprog) (n'' cidvprog) bidvprog) as [bidvprog'|]
+                                                                            eqn:esigma;
+                       try discriminate.
+                     inversion Hv''; subst.
+                     simpl in vprogGood. rewrite epermvprog in vprogGood.
+                     erewrite sigma_lefttoright_Some_spec in vprogGood.
+                     destruct vprogGood as [? erewr]. erewrite erewr in Hvprog.
+                     inversion Hvprog. subst. clear Hvprog Hv''.
+                     eexists; split; eauto; simpl. rewrite epermvprog.
+                     
+                     destruct (cidvprog \in domm (prog_interface p)) eqn:ecidvprog;
+                       rewrite ecidvprog in erewr; rewrite ecidvprog.
+                     **
+                       pose proof (sigma_shifting_lefttoright_option_n_n_id
+                                     _ _ _ erewr).
+                       subst.
+                       apply sigma_shifting_lefttoright_Some_inv_Some in esigma.
+                       by rewrite esigma erewr.
+                     **
+                       apply sigma_shifting_lefttoright_Some_inv_Some in esigma.
+                       assert (exists blk,
+                                  sigma_shifting_lefttoright_option
+                                    (n'' cidvprog) (n'' cidvprog) bidvprog'
+                                  = Some blk
+                              ) as [blk ebidvprog'].
+                       {
+                         erewrite <- sigma_lefttoright_Some_spec.
+                         erewrite sigma_lefttoright_Some_spec; eexists; eauto.
+                       }
+                       erewrite ebidvprog'.
+                       apply sigma_shifting_lefttoright_Some_inv_Some in esigma.
+                       rewrite erewr in esigma. inversion esigma. subst.
+                       rewrite erewr.
+                       
+                       by apply sigma_shifting_lefttoright_option_n_n_id
+                         in ebidvprog'; subst.
+                       
+                  ++ eexists; split; eauto. simpl. by rewrite epermvprog.
+
+                  --
+                    assert (Hnotshr: ~ addr_shared_so_far (cidorig_, bidorig_) t1'').
+                    {
+                      intros Hshr.
+                      inversion Hrel2 as [? ? Hren]; subst.
+                      inversion Hren as [| t e t'' e'' ? Htt''  _ _ _ _]; subst;
+                        try by inversion Hshr; subst; find_nil_rcons.
+                      repeat match goal with
+                             | H18: rcons _ _ = rcons _ _ |- _ =>
+                               apply rcons_inj in H18; inversion H18; subst; clear H18
+                             end.
+                      inversion Htt'' as [| t e t'' e'' ? ?  ? Htt''_ ? ? ?]; subst;
+                        try by inversion Hshr; subst; find_nil_rcons.
+                      specialize (Htt''_ _ Hshr) as [[cid bid] [ebid [_ econtra]]].
+                      unfold sigma_shifting_wrap_bid_in_addr,
+                      sigma_shifting_lefttoright_addr_bid in *.
+                      destruct (sigma_shifting_lefttoright_option
+                                  (n cid) (n'' cid) bid) eqn:esigma; try discriminate.
+                      inversion ebid; subst; clear ebid.
+                      apply sigma_shifting_lefttoright_Some_inv_Some in G.
+                      specialize (sigma_shifting_lefttoright_option_Some_inj
+                                    _ _ _ _ _ G esigma) as ?; subst.
+                      by apply Hnotshrt1.
+                    }
+
+                    specialize (Hmemc'_ (cidorig_, bidorig_) ecidorig_c' Hnotshr)
+                      as [_ s1'mem_s2''mem].
+                    specialize (s1'mem_s2''mem _ _ Hload) as [v [Hloadv Hv]].
+
+                    specialize (vGood _ Hloadv).
+
+                    eexists; split; first exact Hloadv.
+                    destruct v as [| [[[permv cidv] bidv] offv] |];
+                      destruct Hv as [[contra ?] | rewr]; try discriminate;
+                        try by inversion rewr; subst.
+                    destruct (permv =? Permission.data) eqn:epermv; try discriminate.
+                    simpl in *. rewrite epermv in vGood.
+                    erewrite sigma_lefttoright_Some_spec in vGood.
+                    destruct vGood as [? G_]. by erewrite G_ in contra.
           }
-          
      
           -- apply mergeable_border_states_c'_executing.
-             ++ constructor; auto; simpl.
+             5: { exact s2''mem_s2'mem. }
+             ++ constructor. auto; simpl.
                 ** (* is_prefix *)
                   unfold CSInvariants.is_prefix.
                   eapply star_right; try eassumption.
