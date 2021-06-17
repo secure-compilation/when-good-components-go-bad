@@ -1047,7 +1047,7 @@ Section ThreewayMultisem1.
 
 
 
-          assert (mem0_s2'mem:
+          assert (mem0_s1'mem:
                     mem_of_part_not_executing_rel_original_and_recombined_at_border
                       p
                       mem0
@@ -1257,12 +1257,154 @@ Section ThreewayMultisem1.
                                 
           }
 
+
+          assert (shrt1_shrt1'_ext: forall addr : addr_t,
+                     addr_shared_so_far
+                       addr
+                       (rcons
+                          t1
+                          (ECall
+                             (Pointer.component pc)
+                             P0
+                             (Register.get R_COM regs)
+                             mem0
+                             C'0
+                          )
+                       )
+                     ->
+                     event_renames_event_at_shared_addr
+                       n
+                       (fun cid : nat => if cid \in domm (prog_interface p)
+                                         then n cid else n'' cid)
+                       addr
+                       (ECall (Pointer.component pc) P0 (Register.get R_COM regs)
+                              mem0 C'0)
+                       (ECall (Pointer.component pc) P0 (Register.get R_COM s1'reg)
+                              s1'mem C'0)
+                     /\
+                     (exists addr' : addr_t,
+                         sigma_shifting_wrap_bid_in_addr
+                           (sigma_shifting_lefttoright_addr_bid
+                              n
+                              (fun cid : nat => if cid \in domm (prog_interface p)
+                                                then n cid else n'' cid)
+                           )
+                           addr =
+                         Some addr'
+                         /\
+                         addr_shared_so_far
+                           addr'
+                           (rcons
+                              t1'
+                              (ECall (Pointer.component pc)
+                                     P0
+                                     (Register.get R_COM s1'reg)
+                                     s1'mem
+                                     C'0
+                              )
+                           )
+                     )
+                 ).
+          {
+            unfold event_renames_event_at_shared_addr,
+            mem_of_part_not_executing_rel_original_and_recombined_at_border,
+            mem_of_part_executing_rel_original_and_recombined,
+            mem_of_part_not_executing_rel_original_and_recombined_at_internal,
+            memory_shifts_memory_at_private_addr, memory_shifts_memory_at_shared_addr,
+            memory_renames_memory_at_private_addr, memory_renames_memory_at_shared_addr,
+            rename_value_option, rename_value_template_option,
+            sigma_shifting_wrap_bid_in_addr,
+            sigma_shifting_lefttoright_addr_bid, rename_addr_option
+              in *.
+
+            intros [cidorig bidorig] Hshr.
+
+            inversion Hgood as [? Hgood_]; subst.
+            specialize (Hgood_ _ Hshr) as Hbidorig_good.
+            simpl in *.
+            erewrite sigma_lefttoright_Some_spec in Hbidorig_good.
+            destruct Hbidorig_good as [bidorig' rewr_].
+            erewrite rewr_.
+            split; eexists; (split; first reflexivity).
+            - destruct mem0_s1'mem as [_ [G _]].
+              specialize (G _ Hshr) as [[cidorig'_ bidorig'_] [ebidorig' G_]].
+              simpl in *. rewrite rewr_ in ebidorig'.
+              inversion ebidorig'; subst; clear ebidorig'.
+              exact G_.
+            - inversion Hshr as [? ? ? Hreach|
+                                 ? [addr'cid addr'bid] ? ? Haddr'shr Hreach]; subst;
+                match goal with
+                | H11: rcons _ _ = rcons _ _ |- _ =>
+                  apply rcons_inj in H11; inversion H11; subst; clear H11
+                end; clear Hshr; simpl in *;
+                  inversion Hreach as [addr Hin |
+                                       ? ? [cidloaded bidloaded]
+                                         ? ? HcompMem Hin ]; subst;
+                    clear Hreach.
+              + destruct (Register.get R_COM regs)
+                  as [| [[[permv cidv] bidv] offv] |]; try by rewrite in_fset0 in Hin.
+                simpl in *.
+                destruct (permv =? Permission.data); try by rewrite in_fset0 in Hin.
+                rewrite in_fset1 in Hin.
+                move : Hin => /eqP => Hin. inversion Hin; subst.
+                eapply reachable_from_args_is_shared; simpl.
+                eapply Reachable_refl.
+                admit.
+              + eapply reachable_from_args_is_shared; simpl.
+                eapply Reachable_step;
+                  admit. (** need an induction hypothesis *)
+                
+              + inversion Hshift_tt' as [? ? Hrentt']; subst.
+                inversion Hrentt' as [| t e _t' _e' ? ? Htt' ? ? ? ?];
+                  subst;
+                  try by inversion Haddr'shr; subst; find_nil_rcons.
+                specialize (Htt' _ Haddr'shr) as [_ [[cid' bid'] [ebid G]]].
+
+                rewrite in_fset1 in Hin.
+                move : Hin => /eqP => Hin. inversion Hin; subst.
+                  
+                eapply reachable_from_previously_shared; simpl.
+                * exact G.
+                * eapply Reachable_refl.
+                  unfold sigma_shifting_wrap_bid_in_addr,
+                  sigma_shifting_lefttoright_addr_bid in *.
+                  simpl in *.
+                  destruct (sigma_shifting_lefttoright_option
+                              (n addr'cid)
+                              (if addr'cid \in domm (prog_interface p)
+                               then n addr'cid else n'' addr'cid) addr'bid) eqn:esigma;
+                    rewrite esigma in ebid; try discriminate.
+                  inversion ebid; subst; clear ebid Hin.
+                  rewrite rewr_ in esigma.
+                  inversion esigma; subst. by rewrite in_fset1.
+
+              + inversion Hshift_tt' as [? ? Hrentt']; subst.
+                inversion Hrentt' as [| t e _t' _e' ? ? Htt' ? ? ? ?];
+                  subst;
+                  try by inversion Haddr'shr; subst; find_nil_rcons.
+                specialize (Htt' _ Haddr'shr) as [_ [[cid' bid'] [ebid G]]].
+
+                eapply reachable_from_previously_shared; simpl.
+                * exact G.
+                * eapply Reachable_step;
+                    admit. (** need an induction hypothesis *)
+
+                  (** TODO: Need an assertion that says:            *)
+                  (** forall a a' a_loaded a_loaded',               *)
+                  (** If rename n n' a = a'                         *)
+                  (**    Reachable mem0 a a_loaded                  *)
+                  (** Then                                          *)
+                  (**    Reachable s1'mem a' (rename n n' a_loaded) *)
+
+          }
+          
+              
           
      
           -- apply mergeable_border_states_c'_executing.
              5: { exact s2''mem_s1'mem. }
              5: { exact mem0_s2'mem. }
-             ++ constructor. auto; simpl.
+             ++ constructor; auto; simpl.
                 ** (* is_prefix *)
                   unfold CSInvariants.is_prefix.
                   eapply star_right; try eassumption.
@@ -1276,15 +1418,16 @@ Section ThreewayMultisem1.
                 ** constructor; auto.
                    intros a Hshr.
                    inversion Hgood as [? Hgood_]; subst.
+                   inversion Hgood'' as [? Hgood''_]; subst.
                    inversion Hshr as [? ? ? Hreach| ? ? ? ? Haddr'shr Hreach]; subst;
                    match goal with
                    | H11: rcons _ _ = rcons _ _ |- _ =>
                      apply rcons_inj in H11; inversion H11; subst; clear H11
                    end; simpl in *; clear Hshr.
                    ---
-                     induction Hreach as [addr Hin |
+                     inversion Hreach as [addr Hin |
                                           ? ? [cidloaded bidloaded]
-                                            ? ? ? HcompMem Hin ]; subst.
+                                            ? ? HcompMem Hin ]; subst.
                      +++
                        destruct (Register.get R_COM s1'reg)
                          as [|[[[perm cid] bid] off] |];
@@ -1294,7 +1437,7 @@ Section ThreewayMultisem1.
                          try by rewrite in_fset0 in Hin.
                        rewrite in_fset1 in Hin.
                        assert (perm = Permission.data). by apply beq_nat_true.
-                       assert (addr = (cid, bid)). by apply/eqP.
+                       assert (a = (cid, bid)). by apply/eqP.
                        subst. clear Hin eperm. simpl in *.
                        destruct Hrel_R_COM
                          as [Hshift | [Hshift [Hshift2 Hrewr
@@ -1352,6 +1495,18 @@ Section ThreewayMultisem1.
                          erewrite Extra.In_in in Hin.
                          assumption.
                        }
+
+                       assert (Hloads1'mem: Memory.load s1'mem
+                                                        (Permission.data, cid, bid, off)
+                               = Some (Ptr
+                                         (Permission.data,
+                                          cidloaded,
+                                          bidloaded,
+                                          offloaded
+                                         )
+                                      )
+                              ). by unfold Memory.load; rewrite HcompMem HcompLoad.
+                       
 
                        (** Here, we need to use the goodness of program  *)
                        (** p or the goodness of program c (depending on  *)
