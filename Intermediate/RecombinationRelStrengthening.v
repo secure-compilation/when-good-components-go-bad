@@ -1845,6 +1845,7 @@ Section ThreewayMultisem1.
                        (** In the first case, goal will follow from Hgood_prog *)
                        (** In the second case, it will follow from Hgood_prog''*)
 
+(*FIXME
                        unfold left_addr_good_for_shifting in IHHreach.
                        destruct (cid \in domm (prog_interface p)) eqn:Hcid;
                          rewrite Hcid in IHHreach.
@@ -3629,7 +3630,8 @@ Section ThreewayMultisem1.
   Admitted. (* RB: TODO: Fix statement and prove later, combine with lemma above. *)
   *)
   (***********************************************************************************)
-  Admitted.  
+*)
+  Admitted.
 
   
 (*    - (* Call: case analysis on call point. *)
@@ -3681,6 +3683,7 @@ Section ThreewayMultisem1.
      just get rid of the lemma above---because it is not helper
      anymore.
    *)
+(*FIXME
   Corollary threeway_multisem_event_lockstep_program
             s1 s1' s1'' t1 t1' t1'' e e'' s2 s2'' :
     CS.is_program_component s1 ic ->
@@ -3697,6 +3700,7 @@ Section ThreewayMultisem1.
   Proof.
     intros. eapply threeway_multisem_event_lockstep_program_step; eassumption.
   Qed.
+*)
 
 (*
   intros Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2.
