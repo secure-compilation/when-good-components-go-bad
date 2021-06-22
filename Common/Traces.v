@@ -94,8 +94,42 @@ Fixpoint well_bracketed_trace_rev (s : stack_state) (t : seq event) : bool :=
           1. The stack [s] must be able to match and pop all pending returns.
           2. The remaining calls in [s] and the calls at the bottom of [acc]
              must form a well-formed stack state. *)
+      | [::] => false
+      end
+  in
+  aux [] (rev t).
+
+Fixpoint well_bracketed_trace_r (t : seq event) : bool :=
+  let fix aux (acc t : seq event) : bool :=
+      match t with
+      (* Process trace events in reverse order.  *)
+      | e :: t' =>
+        match e with
+        | ECall Csrc _ _ _ Cdst =>
+          match acc with
+          (* Unfinished call at the end of the trace. *)
+          | [::]
+          | ECall _ _ _ _ _ :: _ => (* Only calls found deeper down. *)
+            aux (e :: acc) t'
+          (* If a call encounters a return at the top of the pending stack,
+             they must match; then they cancel out and we recurse.
+             NOTE: The original definition does fewer checks. *)
+          | ERet Csrc' _ _ Cdst' :: acc' =>
+            (Csrc == Cdst') && (Csrc' == Cdst) && aux acc t'
+          end
+        | ERet Csrc _ _ Cdst =>
+          (* A return needs a matching call in the past: accumulate. *)
+          aux (e :: acc) t'
+        end
+      (* When the trace is done, [acc] is split into a sequence of returns at
+         the top, followed by a sequence of calls. The trace is well-formed if
+         [acc] actually contains no returns whatsoever.
+         NOTE: More checks on the chaining of calls would be possible. *)
       | [::] =>
-        false (* FIXME *)
+        all (fun e => match e with
+                      | ECall _ _ _ _ _ => true
+                      | _ => false
+                      end) acc
       end
   in
   aux [] (rev t).
