@@ -36,7 +36,10 @@ Inductive cont : Type :=
 | Kderef (k: cont)
 | Kassign1 (e: expr) (k: cont)
 | Kassign2 (v: value) (k: cont)
-| Kcall (C: Component.id) (P: Procedure.id) (k: cont).
+| Kcall (C: Component.id) (P: Procedure.id) (k: cont)
+| Kcallptr1 (funptr: expr) (k: cont)
+| Kcallptr2 (arg: value) (k: cont)  
+.
 
 Module CS.
 
@@ -133,12 +136,16 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
             [State C, s, mem', k, E_val (Ptr ptr), arg]
 | KS_Deref1 : forall C s mem k e arg,
     kstep G [State C, s, mem, k, E_deref e, arg] E0
-            [State C, s, mem, Kderef k, e, arg]
+          [State C, s, mem, Kderef k, e, arg]
 | KS_DerefEval : forall C s mem k P' C' b' o' v arg,
     C = C' ->
     Memory.load mem (P',C',b',o') = Some v ->
     kstep G [State C, s, mem, Kderef k, E_val (Ptr (P',C',b',o')), arg] E0
-            [State C, s, mem, k, E_val v, arg]
+          [State C, s, mem, k, E_val v, arg]
+| KS_FunPtr : forall C s mem k P Pexpr arg,
+    find_procedure (genv_procedures G) C P = Some Pexpr ->
+    kstep G [State C, s, mem, k, E_funptr P, arg] E0
+          [State C, s, mem, k, E_val (Ptr (Permission.code, C, P, 0%Z)), arg]
 | KS_Assign1 : forall C s mem k e1 e2 arg,
     kstep G [State C, s, mem, k, E_assign e1 e2, arg] E0
             [State C, s, mem, Kassign1 e1 k, e2, arg]
@@ -149,10 +156,21 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
     C = C' ->
     Memory.store mem (P', C', b', o') v = Some mem' ->
     kstep G [State C, s, mem, Kassign2 v k, E_val (Ptr (P', C', b', o')), arg] E0
-            [State C, s, mem', k, E_val v, arg]
+          [State C, s, mem', k, E_val v, arg]
 | KS_InitCall : forall C s mem k C' P e arg,
     kstep G [State C, s, mem, k, E_call C' P e, arg] E0
-            [State C, s, mem, Kcall C' P k, e, arg]
+          [State C, s, mem, Kcall C' P k, e, arg]
+| KS_InitCallPtr1 : forall C s mem k e1 e2 arg,
+    kstep G [State C, s, mem, k, E_callptr e1 e2, arg] E0
+          [State C, s, mem, Kcallptr1 e1 k, e2, arg]
+| KS_InitCallPtr2 : forall C s mem k e1 v arg,
+    kstep G [State C, s, mem, Kcallptr1 e1 k, E_val v, arg] E0
+          [State C, s, mem, Kcallptr2 v k, e1, arg]
+| KS_InitCallPtr3 : forall C s mem k v C' P arg,
+    C = C' ->
+    kstep G [State C, s, mem, Kcallptr2 v k, E_val (Ptr (Permission.code, C', P, 0%Z)),
+             arg] E0
+          [State C, s, mem, Kcall C' P k, E_val v, arg]
 | KS_InternalCall : forall C s mem k C' P v P_expr old_call_arg,
     C = C' ->
     (* retrieve the procedure code *)
@@ -220,8 +238,16 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
     ret (E0, [State C, s, mem, Kalloc k, e, arg])
   | E_deref e =>
     ret (E0, [State C, s, mem, Kderef k, e, arg])
+  | E_funptr P =>
+    match find_procedure (genv_procedures G) C P with
+    | Some Pexpr => ret (E0, [State C, s, mem, k,
+                              E_val (Ptr (Permission.code, C, P, 0%Z)), arg])
+    | None => None
+    end
   | E_assign e1 e2 =>
     ret (E0, [State C, s, mem, Kassign1 e1 k, e2, arg])
+  | E_callptr e1 e2 =>
+    ret (E0, [State C, s, mem, Kcallptr1 e1 k, e2, arg])
   | E_call C' P e =>
     ret (E0, [State C, s, mem, Kcall C' P k, e, arg])
   (* evaluating current continuation *)
@@ -270,6 +296,16 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
           None
       | _ => None
       end
+    | Kcallptr1 efunptr k' =>
+      ret (E0, [State C, s, mem, Kcallptr2 v k', efunptr, arg])
+    | Kcallptr2 varg k' =>
+      match v with
+      | Ptr (perm, C', P', 0%Z) =>
+        if (perm =? Permission.code) && (C' =? C) then
+            ret (E0, [State C, s, mem, Kcall C' P' k', E_val varg, arg])
+        else None
+      | _ => None
+      end
     | Kcall C' P k' =>
       (*match v with
       | Int i =>*)
@@ -293,7 +329,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
       | (*_,*) _ => None
       end
     end
-  | _ => None
+  | E_exit => None
   end.
 
 Hint Unfold eval_kstep.
@@ -367,6 +403,12 @@ Proof.
     + admit. (*econstructor; eauto; exact/eqP.*)
     + econstructor; eauto; first exact/eqP/negbT.
       apply imported_procedure_iff. assumption.
+    + econstructor; eauto.
+    + move: Heqb => /andP.
+      intros [Hperm HC].
+      assert (i0 = Permission.code). by apply beq_nat_true. subst.
+      assert (i1 = C). by apply beq_nat_true. subst.
+      by econstructor.
 Admitted.
 
 Theorem eval_kstep_correct:

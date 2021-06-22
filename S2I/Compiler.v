@@ -182,7 +182,11 @@ Fixpoint compile_expr (e: expr) : COMP code :=
            push R_RA ++
            [IJal target_label] ++
            pop R_RA)
+          (** NOTE: When the callee is internal, we do not need to save R_ARG because *)
+          (** the callee will follow the convention and save it for us.               *)
     else
+      (** However, when the callee is external, we save R_ARG ourselves. The callee *)
+      (** can fail to follow the convention.                                        *)
       ret (call_arg_code ++
            push R_RA ++
            push R_ARG ++
@@ -192,7 +196,25 @@ Fixpoint compile_expr (e: expr) : COMP code :=
            load_arg local_buf_ptr R_SP ++
            pop R_ARG ++
            pop R_RA
-           )
+          )
+  | E_funptr P' =>
+    do target_label <- find_proc_label P';
+    ret [IPtrOfLabel target_label R_COM]
+  | E_callptr eptr earg =>
+    do call_arg_code <- compile_expr earg;
+    do ptr_code <- compile_expr eptr;
+    do ret_label <- fresh_label C;
+    ret (call_arg_code ++         (* value of arg is in R_COM *)
+         push R_COM ++            (* value of arg is on top of the stack *)
+         ptr_code ++              (* value of the callee ptr is in R_COM *)
+         [IMov R_COM R_AUX1] ++   (* value of the callee ptr is in R_AUX1 *)
+         pop R_COM ++             (* value of arg is popped, and is now in R_COM *)
+                                  (* as expected by the prologue (see compile_proc) *)
+         push R_RA ++
+         [IPtrOfLabel ret_label R_RA] ++
+         [IJump R_AUX1] ++
+         [ILabel ret_label] ++
+         pop R_RA)
   | E_exit => ret [IHalt]
   end.
 
@@ -203,7 +225,9 @@ Definition compile_proc (P: Procedure.id) (e: expr)
   do lreturn <- fresh_label C;
   do proc_code <- compile_expr e;
   let stack_frame_size := 20%Z in
-  ret ([IConst (IInt 1) R_ONE;
+  ret ([
+        (** prologue. This is code that the callee is executing. *)
+        IConst (IInt 1) R_ONE;
         IJal proc_label;
         IReturn;
         ILabel proc_label;
@@ -213,9 +237,14 @@ Definition compile_proc (P: Procedure.id) (e: expr)
         push R_AUX1 ++
         load_arg local_buf_ptr R_AUX1 ++
         push R_AUX1 ++
+        (** The callee saves R_ARG *)
         push R_ARG ++
         [IMov R_COM R_ARG] ++
+
+        (** function body *)
         proc_code ++
+
+        (** epilogue. This is code that the callee is executing. *)
         pop R_ARG ++
         pop R_AUX1 ++
         store_arg local_buf_ptr R_AUX1 R_AUX2 ++

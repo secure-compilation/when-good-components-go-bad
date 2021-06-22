@@ -26,6 +26,8 @@ Inductive expr : Type :=
 | E_deref : expr -> expr
 | E_assign : expr -> expr -> expr
 | E_call : Component.id -> Procedure.id -> expr -> expr
+| E_callptr : expr -> expr -> expr 
+| E_funptr : Procedure.id -> expr
 | E_exit : expr.
 
 Fixpoint called_procedures (e : expr) : {fset Component.id * Procedure.id} :=
@@ -76,6 +78,7 @@ Module Source.
     | E_arg           => true
     | E_local         => true
     | E_exit          => true
+    | E_funptr _      => true
     | E_binop _ e1 e2 => values_are_integers e1 && values_are_integers e2
     | E_seq     e1 e2 => values_are_integers e1 && values_are_integers e2
     | E_if   e1 e2 e3 => [&& values_are_integers e1, values_are_integers e2 &
@@ -84,8 +87,33 @@ Module Source.
     | E_deref e       => values_are_integers e
     | E_assign  e1 e2 => values_are_integers e1 && values_are_integers e2
     | E_call   _ _ e  => values_are_integers e
+    | E_callptr e1 e2 => values_are_integers e1 && values_are_integers e2
     end.
 
+  Fixpoint well_formed_E_funptr (p: program) (cur_comp: Component.id) (e: expr)
+    : bool :=
+    match e with
+    | E_funptr pid    => find_procedure (prog_procedures p) cur_comp pid
+    | E_val _         => true
+    | E_arg           => true
+    | E_local         => true
+    | E_exit          => true
+    | E_binop _ e1 e2 => well_formed_E_funptr p cur_comp e1 &&
+                         well_formed_E_funptr p cur_comp e2
+    | E_seq     e1 e2 => well_formed_E_funptr p cur_comp e1 &&
+                         well_formed_E_funptr p cur_comp e2
+    | E_if   e1 e2 e3 => [&& well_formed_E_funptr p cur_comp e1,
+                             well_formed_E_funptr p cur_comp e2 &
+                             well_formed_E_funptr p cur_comp e3]
+    | E_alloc e       => well_formed_E_funptr p cur_comp e
+    | E_deref e       => well_formed_E_funptr p cur_comp e
+    | E_assign  e1 e2 => well_formed_E_funptr p cur_comp e1 &&
+                         well_formed_E_funptr p cur_comp e2
+    | E_call   _ _ e  => well_formed_E_funptr p cur_comp e
+    | E_callptr e1 e2 => well_formed_E_funptr p cur_comp e1 &&
+                         well_formed_E_funptr p cur_comp e2
+    end.
+  
   (* An expression is well-formed when:
      1) calls outside the component are allowed by the interface
      2) calls inside the component are targeting existing procedures
@@ -93,7 +121,11 @@ Module Source.
      4) pointers are not present (no pointer forging) *)
   Definition well_formed_expr (p: program) (cur_comp: Component.id) (e: expr) : Prop :=
     valid_calls (prog_procedures p) (prog_interface p) cur_comp (called_procedures e)
-    /\ values_are_integers e.
+    /\
+    values_are_integers e
+    /\
+    well_formed_E_funptr p cur_comp e
+  .
 
   (* Component C has a buffer of size at least one *)
   Definition has_required_local_buffers (p: program) (C: Component.id) : Prop :=
@@ -291,11 +323,34 @@ Module Source.
       exact: (wfprog_exported_procedures_existence wf).
     - move=> C P Pexpr; rewrite find_procedure_filter_comp.
       case: ifP=> //= C_Cs pp_C_P.
-      case/wfprog_well_formed_procedures/(_ _ _ _ pp_C_P): wf=> /= Hcalls Hints.
-      split=> //= C' P' /Hcalls.
-      rewrite find_procedure_filter_comp C_Cs.
-      case: ifP=> // _.
-      by rewrite imported_procedure_filter_comp.
+      case/wfprog_well_formed_procedures/(_ _ _ _ pp_C_P): wf=> /=
+                                                           Hcalls [Hints Hfunptr].
+      split; last split; auto.
+      + move=> //= C' P' /Hcalls.
+        rewrite find_procedure_filter_comp C_Cs.
+        case: ifP=> // _.
+          by rewrite imported_procedure_filter_comp.
+      + clear pp_C_P Hcalls Hints.
+        induction Pexpr; auto; simpl in *.
+        *
+          apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
+          -- by apply IHPexpr1.
+          -- by apply IHPexpr2.
+        * apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
+          -- by apply IHPexpr1.
+          -- by apply IHPexpr2.
+        * (* some more splits and rewrites with andP are needed *)
+          admit.
+        * 
+          apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
+          -- by apply IHPexpr1.
+          -- by apply IHPexpr2.
+        * 
+          apply/andP. move: Hfunptr => /andP; auto. intros [Hp1 Hp2]. split.
+          -- by apply IHPexpr1.
+          -- by apply IHPexpr2.
+        * by rewrite find_procedure_filter_comp C_Cs.
+          
     - apply/eq_fset=> C; move/wfprog_defined_buffers/eq_fset/(_ C): wf.
       rewrite /= !mem_domm !filtermE.
       by case: (pb C) (pi C) (C \in Cs) => [?|] //= [?|] //= [].
@@ -412,19 +467,28 @@ Module Source.
       have {find} wf: well_formed_expr p1 C Pexpr \/ well_formed_expr p2 C Pexpr.
         case: find=> [H|H]; [left|right];
         apply: wfprog_well_formed_procedures; by case: link; eauto.
-      split=> /=; last by case: wf=> [[]|[]].
-      without loss {link wf wf1 wf2} [link wf1 wf2 [wf _]]: p1 p2 /
+      split; last split=> /=. (* middle *) (* by case: wf=> [[]|[]]. *)
+      + simpl.
+        without loss {link wf wf1 wf2} [link wf1 wf2 [wf _]]: p1 p2 /
           [/\ linkable (prog_interface p1) (prog_interface p2),
               well_formed_program p1,
               well_formed_program p2 &
               well_formed_expr p1 C Pexpr].
-        case: wf=> wf; first by apply; split=> //.
+      case: wf=> wf; first by apply; split=> //.
         rewrite (unionmC (linkable_disjoint_procedures wf1 wf2 link)).
         case: (link)=> _ dis_intf; rewrite (unionmC dis_intf); apply.
         by split=> //; apply: linkable_sym.
       move=> /= C' P' /wf {wf}; case: ifP => _.
-      + by rewrite linkable_programs_find_procedure_dom // => ->.
-      + by rewrite linkable_imported_procedure //; eauto.
+        * by rewrite linkable_programs_find_procedure_dom // => ->.
+        * by rewrite linkable_imported_procedure //; eauto.
+      + by case: wf=> [[? [? ?]]|[? [? ?]]].
+      + case: wf=> [[Hwf1 [Hwf2 Hwf3]]|[Hwf1 [Hwf2 Hwf3]]]; clear Hwf1 Hwf2;
+                     unfold well_formed_E_funptr;
+                     induction Pexpr; auto; admit.
+        (* rewrite linkable_programs_find_procedure wf1 wf2 link. *)
+        (* + some splitting similar to what is done in 
+           lemma well_formed_program_unlink *)
+        
     - by rewrite /= !domm_union (wfprog_defined_buffers wf1) (wfprog_defined_buffers wf2).
     - rewrite /has_required_local_buffers /= => C.
       move: (linkable_disjoint_buffers wf1 wf2 link)=> dis_buf.

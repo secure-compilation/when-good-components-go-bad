@@ -18,6 +18,7 @@ Common/CoqMaps.v
 Common/Traces.v
 Common/TracesInform.v
 Common/Renaming.v
+Common/RenamingOption.v
 
 CompCert/Coqlib.v
 CompCert/Behaviors.v
@@ -34,7 +35,10 @@ Intermediate/Machine.v
 Intermediate/GlobalEnv.v
 Intermediate/CS.v
 Intermediate/CSInvariants.v
-Intermediate/Recombination.v
+Intermediate/RecombinationRelCommon.v
+Intermediate/RecombinationRelOptionSim.v
+Intermediate/RecombinationRelLockstepSim.v
+Intermediate/RecombinationRelStrengthening.v
 Intermediate/RecombinationRel.v
 
 Source/Language.v

@@ -587,6 +587,11 @@ From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype path fin
     - eapply Reachable_step; eauto.
   Qed.
 
+  Lemma Reachable_fset0 mem addr:
+    Reachable mem fset0 addr -> False.
+  Proof.
+    intros Hreach. induction Hreach; auto.
+  Qed.
 
   Lemma Reachable_dfs_path m bs cid bid:
     Reachable m bs (cid, bid) <->

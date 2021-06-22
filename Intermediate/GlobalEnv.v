@@ -20,6 +20,7 @@ Definition executing G (pc : Pointer.t) (i : instr) : Prop :=
     getm (genv_procedures G) (Pointer.component pc) = Some C_procs /\
     getm C_procs (Pointer.block pc) = Some P_code /\
     (Pointer.offset pc >= 0) % Z /\
+    Pointer.permission pc = Permission.code /\
     nth_error P_code (Z.to_nat (Pointer.offset pc)) = Some i.
 
 Lemma executing_deterministic:
@@ -27,8 +28,13 @@ Lemma executing_deterministic:
     executing G pc i -> executing G pc i' -> i = i'.
 Proof.
   unfold executing. intros G pc i i'
-                           [C_procs [P_code [memCprocs [memPcode [offsetCond memi]]]]]
-                           [C_procs' [P_code' [memCprocs' [memPcode' [offsetCond' memi']]]]].
+                           [C_procs [P_code [memCprocs [memPcode
+                                                          [offsetCond
+                                                             [permCond memi]]]]]]
+                           [C_procs' [P_code' [memCprocs' [memPcode'
+                                                             [offsetCond'
+                                                                [permCond'
+                                                                   memi']]]]]].
   rewrite memCprocs in memCprocs'.
   inversion memCprocs'.
   subst C_procs.
@@ -555,6 +561,7 @@ Qed.
 Lemma find_label_in_component_helper_guarantees:
   forall G procs pc pc' l,
     find_label_in_component_helper G procs pc l = Some pc' ->
+    Pointer.permission pc = Pointer.permission pc' /\
     Pointer.component pc = Pointer.component pc'.
 Proof.
   intros G procs pc pc' l Hfind.
@@ -565,8 +572,8 @@ Proof.
     destruct (find_label_in_procedure
                 G (Pointer.permission pc, Pointer.component pc, i, 0%Z) l)
              eqn:Hfind'.
-    + apply find_label_in_procedure_1 in Hfind'.
-      simpl in *. inversion Hfind. subst. auto.
+    + apply find_label_in_procedure_guarantees in Hfind'.
+      simpl in *. inversion Hfind. subst. by intuition.
     + apply IHprocs; auto.
 Qed.
 
@@ -579,7 +586,7 @@ Proof.
   unfold find_label_in_component in Hfind.
   destruct (getm (genv_procedures G) (Pointer.component pc)) as [procs|];
     try discriminate.
-  eapply find_label_in_component_helper_guarantees in Hfind; auto.
+  eapply find_label_in_component_helper_guarantees in Hfind; by intuition.
 Qed.
 
 Lemma find_label_in_component_program_link_left:

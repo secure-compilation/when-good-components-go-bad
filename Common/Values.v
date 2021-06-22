@@ -163,6 +163,180 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
   | _,     _,       _       => Undef
   end.
 
+Lemma eval_binop_ptr :
+  forall op v1 v2 p,
+    eval_binop op v1 v2 = Ptr p ->
+    (exists p1 i1, ((v1 = Ptr p1 /\ v2 = Int i1) \/ (v2 = Ptr p1 /\ v1 = Int i1))
+                /\
+                Pointer.permission p = Pointer.permission p1 /\
+                Pointer.component p = Pointer.component p1 /\
+                Pointer.block p = Pointer.block p1
+    ).
+  intros op v1 v2 p Heval.
+  unfold eval_binop in Heval.
+  destruct op eqn:eop; destruct v1 eqn:e1; destruct v2 eqn:e2;
+    try discriminate.
+  - exists t. exists z. split.
+    + right. intuition.
+    + inversion Heval.
+      split; last split.
+      apply Pointer.add_preserves_permission.
+      apply Pointer.add_preserves_component.
+      apply Pointer.add_preserves_block.
+  - exists t. exists z. split.
+    + left. intuition.
+    + inversion Heval.
+      split; last split.
+      apply Pointer.add_preserves_permission.
+      apply Pointer.add_preserves_component.
+      apply Pointer.add_preserves_block.
+  - exists t. exists z. split.
+    + left. intuition.
+    + inversion Heval.
+      split; last split.
+      apply Pointer.sub_preserves_permission.
+      apply Pointer.sub_preserves_component.
+      apply Pointer.sub_preserves_block.
+  - destruct t as [[[tp tc] tb] to].
+    destruct t0 as [[[t0p t0c] t0b] t0o].
+    destruct ((tp =? t0p) && (tc =? t0c) && (tb =? t0b)); discriminate.
+  - destruct (Pointer.leq t t0); discriminate.
+Qed.    
+
+Lemma eval_binop_int :
+  forall op v1 v2 i,
+    eval_binop op v1 v2 = Int i ->
+    (
+      (exists i1 i2, v1 = Int i1 /\ v2 = Int i2)
+      \/
+      (exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\ op = Eq)
+      \/
+      (exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
+                     (
+                       (op = Minus \/ op = Leq)
+                       /\
+                       (
+                         Pointer.permission p1 = Pointer.permission p2 /\
+                         Pointer.component p1 = Pointer.component p2 /\
+                         Pointer.block p1 = Pointer.block p2
+                       )
+                     )
+      )
+    ).
+Proof.
+  intros op v1 v2 p Heval.
+  unfold eval_binop in Heval.
+  destruct op eqn:eop;
+    destruct v1 as [i1 | [[[perm1 cid1] bid1] off1] |] eqn:e1;
+    destruct v2 as [i2 | [[[perm2 cid2] bid2] off2] |] eqn:e2;
+    try discriminate.
+  - left; do 2 eexists; intuition.
+  - left; do 2 eexists; intuition.
+  - destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Heq;
+      try discriminate.
+    assert (perm1 = perm2 /\ cid1 = cid2 /\ bid1 = bid2) as [H1 [H2 H3]]; subst.
+    { 
+      pose proof andb_prop _ _ Heq as [Heq' H3].
+      pose proof andb_prop _ _ Heq' as [H1 H2].
+      intuition; by apply beq_nat_true.
+    }
+    right; right; do 2 eexists; eauto; intuition.
+  - left; do 2 eexists; intuition.
+  - left; do 2 eexists; intuition.
+  - unfold Pointer.eq in *.
+    right; left; do 2 eexists; eauto; intuition; discriminate.
+  - left; do 2 eexists; intuition.
+  - unfold Pointer.leq in *.
+    destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Heq;
+      try discriminate.
+    assert (perm1 = perm2 /\ cid1 = cid2 /\ bid1 = bid2) as [H1 [H2 H3]]; subst.
+    { 
+      pose proof andb_prop _ _ Heq as [Heq' H3].
+      pose proof andb_prop _ _ Heq' as [H1 H2].
+      intuition; by apply beq_nat_true.
+    }
+    right; right; do 2 eexists; eauto; intuition.
+Qed.
+
+Lemma eval_binop_undef :
+  forall op v1 v2,
+    eval_binop op v1 v2 = Undef ->
+    (
+      v1 = Undef
+      \/
+      v2 = Undef
+      \/
+      (op = Mul /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2)
+      \/
+      (op = Add /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2)
+      \/
+      (op <> Add /\ exists i p, v1 = Int i /\ v2 = Ptr p)
+      \/
+      (op <> Add /\ op <> Minus /\ exists i p, v1 = Ptr p /\ v2 = Int i)
+      \/
+      (op = Leq /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
+                                 Pointer.permission p1 =? Pointer.permission p2 = false)
+      \/
+      (op = Minus /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
+                                 Pointer.permission p1 =? Pointer.permission p2 = false)
+      \/
+      (op = Leq /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
+                                 Pointer.component p1 =? Pointer.component p2 = false)
+      \/
+      (op = Minus /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
+                                 Pointer.component p1 =? Pointer.component p2 = false)
+      \/
+      (op = Leq /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
+                                 Pointer.block p1 =? Pointer.block p2 = false)
+      \/
+      (op = Minus /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
+                                 Pointer.block p1 =? Pointer.block p2 = false)
+    ).
+Proof.
+  intros op v1 v2 Heval.
+  unfold eval_binop in Heval.
+  destruct op eqn:eop;
+    destruct v1 as [i1 | [[[perm1 cid1] bid1] off1] |] eqn:e1;
+    destruct v2 as [i2 | [[[perm2 cid2] bid2] off2] |] eqn:e2;
+    try discriminate; intuition.
+  (* 11 subgoals remain. *)
+  - do 3 right. left. intuition. by do 2 eexists.
+  - do 4 right. left. intuition; try discriminate. by do 2 eexists.
+  - destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Hvalid;
+      try discriminate.
+    apply andb_false_iff in Hvalid as [H1 | H2].
+    + apply andb_false_iff in H1 as [H1 | H2].
+      * do 7 right; left; intuition; by do 2 eexists.
+      * do 9 right; left; intuition; by do 2 eexists.
+    + do 11 right; intuition; by do 2 eexists.
+  - do 4 right. left. intuition; try discriminate. by do 2 eexists.
+  - do 5 right. left. intuition; try discriminate. by do 2 eexists.
+  - do 2 right. left. intuition. by do 2 eexists.
+  - do 4 right. left. intuition; try discriminate. by do 2 eexists.
+  - do 5 right. left. intuition; try discriminate. by do 2 eexists.
+  - do 4 right. left. intuition; try discriminate. by do 2 eexists.
+  - do 5 right. left. intuition; try discriminate. by do 2 eexists.
+  - unfold Pointer.leq in Heval.
+    destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Hvalid;
+      try discriminate.
+    apply andb_false_iff in Hvalid as [H1 | H2].
+    + apply andb_false_iff in H1 as [H1 | H2].
+      * do 6 right; left; intuition; by do 2 eexists.
+      * do 8 right; left; intuition; by do 2 eexists.
+    + do 10 right; left; intuition; by do 2 eexists.
+Qed.
+
+Lemma eval_binop_op1_Undef:
+  forall op v, eval_binop op Undef v = Undef.
+Proof. by destruct op; auto.
+Qed.
+
+Lemma eval_binop_op2_Undef:
+  forall op v, eval_binop op v Undef = Undef.
+Proof. by destruct op; destruct v; auto.
+Qed.
+
+
 (* RB: TODO: Where should this go? Probably not values
    NOTE: It may be good to give the buffer type an explicit definition. *)
 Module Buffer.

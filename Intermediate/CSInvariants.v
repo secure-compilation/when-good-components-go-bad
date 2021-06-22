@@ -6,7 +6,7 @@ Require Import Common.Util.
 Require Import Common.Linking.
 Require Import Common.Memory.
 Require Import Common.Reachability.
-Require Import Common.Renaming.
+Require Import Common.RenamingOption.
 (** From Renaming, only addr_shared_so_far is used. Consider refactoring it out
     into a file called Sharing.v to get rid of the dependency on Renaming.
     Keep CSInvariants for only unary invariants; hence, do not depend on "renaming". 
@@ -122,5 +122,21 @@ Lemma wf_reg_wf_ptr_wrt_cid_t reg t pc_comp r ptr:
 Proof.
     by (unfold wf_reg_wrt_t_pc; intros H ?; apply (H r)).
 Qed.
+
+Lemma wf_mem_wrt_t_pc_wf_load_wrt_t_pc mem t pc_comp load_at ptr:
+  wf_mem_wrt_t_pc mem t pc_comp ->
+  Memory.load mem load_at = Some (Ptr ptr) ->
+  wf_load_wrt_t_pc load_at t pc_comp ptr.
+Proof.
+    by (unfold wf_mem_wrt_t_pc; intros H ?; eapply H).
+Qed.
+
+Lemma mem_comp_in_domm_prog_interface_some s p t mem cid:
+  well_formed_program p ->
+  is_prefix s p t ->
+  CS.state_mem s = mem ->
+  cid \in domm (prog_interface p) ->
+  exists compMem, mem cid = Some compMem.
+Admitted.
 
 End CSInvariants.

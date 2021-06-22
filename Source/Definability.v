@@ -10,10 +10,13 @@ Require Import Common.Linking.
 Require Import Common.CompCertExtensions.
 Require Import Common.Traces.
 Require Import Common.TracesInform.
-Require Import Common.Renaming.
+Require Import Common.RenamingOption.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
+
+Require Import Lia.
+Require Intermediate.CS.
 
 From Coq Require Import ssreflect ssrfun ssrbool.
 From mathcomp Require Import eqtype seq.
@@ -245,9 +248,9 @@ Section Definability.
       eapply (@star_step _ _ _ _ _ _ E0); try now (simpl; reflexivity).
       { apply CS.eval_kstep_sound. simpl.
         destruct (Z.eqb_spec (Z.of_nat n) (Z.of_nat (m - S (length es)))) as [n_eq_0|?]; simpl.
-        - zify. omega.
+        - zify. lia.
         - reflexivity. }
-      apply IH. omega.
+      apply IH. lia.
   Qed.
 
   Lemma switch_spec p' P C stk mem es e es' e_else arg :
@@ -267,7 +270,7 @@ Section Definability.
       exists (snd (fold_right switch_add_expr ((length es + S (length es'))%nat, e_else) es')).
       repeat f_equal. rewrite -> surjective_pairing at 1. simpl.
       rewrite fst_switch Nat.add_succ_r.
-      assert (H : (S (length es + length es') - length es' = S (length es))%nat) by omega.
+      assert (H : (S (length es + length es') - length es' = S (length es))%nat) by lia.
       rewrite H. reflexivity. }
     destruct Eswitch as [e_else' ->]. clear e_else. rename e_else' into e_else.
     assert (Hcont := switch_clause_spec p' stk (Z.of_nat (length es)) e e_else arg Hload).
@@ -343,10 +346,23 @@ Section Definability.
     | Int n            => E_val (Int n)
     (* Pointer values need to take into account some amount of shifting, here
        corresponding to the counter and space reserved to locate register
-       values. We make the implicit assumption that all such values refer to
-       the local buffer, which should follow from well-formedness. *)
+       values.  *)
     (* FIXME: Offset vs. block-based shifting *)
-    | Ptr (_, _, _, o) => E_binop Add E_local (E_val (Int (8 + o)))
+    | Ptr (perm, _, bid, o) =>
+      if perm =? Permission.data then
+        (* We make the implicit assumption that all such values refer to
+           the local buffer, which should follow from well-formedness.*)
+        E_binop Add E_local (E_val (Int (8 + o)))
+      else
+        (* An implicit assumption is that perm =? Permission.code. *)
+        (* TODO: change the type of the permission field so that it is not int, and
+           instead just an inductive type. *)
+        (* An implicit assumption is that the component id of the code pointer *)
+        (* is the same as the component id of the pc. *)
+        (* An implicit assumption is that the block id corresponds exactly to *)
+        (* the function id. Note that this assumption is satisfied by the memory *)
+        (* initialization functions. *)
+        E_binop Add (E_funptr bid) (E_val (Int o))
     (* Undefined values are mapped to a well-formed but ill-typed expression
        (instead of some arbitrary but well-typed value, so as to preserve
        bad behavior). This choice might demand more work in some proofs,
@@ -357,8 +373,8 @@ Section Definability.
   Lemma values_are_integers_expr_of_const_val:
     forall v, Source.values_are_integers (expr_of_const_val v).
   Proof.
-    intros [n | [[[p C] b ] o] |];
-      reflexivity.
+    intros [n | [[[p C] b ] o] |]; try reflexivity.
+    destruct (p =? Permission.data) eqn:e; unfold expr_of_const_val; rewrite e; auto.
   Qed.
 
   Lemma called_procedures_expr_of_const_val:
@@ -366,7 +382,9 @@ Section Definability.
   Proof.
     intros [n | [[[p C] b ] o] |].
     - reflexivity.
-    - simpl. unfold fsetU, val. simpl. rewrite fset0E. reflexivity.
+    - simpl. unfold fsetU, val. simpl. rewrite fset0E.
+      destruct (p =? Permission.data) eqn:e;
+      reflexivity.
     - simpl. unfold fsetU, val. simpl. rewrite fset0E. reflexivity.
   Qed.
 
@@ -409,9 +427,6 @@ Section Definability.
     | EAlloc _ r_dest r_size _ _ =>
       E_seq (E_assign (loc_of_reg r_dest)
                       (E_alloc (E_deref (loc_of_reg r_size))))
-            (E_call C P (E_val (Int 0)))
-    | EInvalidateRA cid _ _ =>
-      E_seq (E_assign (loc_of_reg E_R_RA) (E_val (Int 0)))
             (E_call C P (E_val (Int 0)))
     end.
 
@@ -561,12 +576,36 @@ Section Definability.
     : expr :=
     expr_of_trace C P (comp_subtrace C t). (* RB: TODO: Substitute check. *)
 
+  Fixpoint procedure_ids_of_subtrace
+             (t: trace event_inform) :=
+    match t with
+    | nil => fset0
+    | e :: t' =>
+      let procs_of_e :=
+          match e with
+          | EConst _ (Ptr (perm, cid, bid, off)) _ _ _ =>
+            (* What we are collecting right now is a superset of the bids that 
+               really correspond to a procedure id. *)
+            (* If we want to make this superset tighter, then we should check *)
+            (* that perm =? Permission.code and that cid =? C *)
+            fset1 bid
+          | _ => fset0
+          end
+      in
+      procs_of_e :|: procedure_ids_of_subtrace t'
+    end.
+
+  Definition procedure_ids_of_trace (C: Component.id) (t: trace event_inform) :=
+    procedure_ids_of_subtrace (comp_subtrace C t).
+  
   Definition procedures_of_trace (t: trace event_inform) : NMap (NMap expr) :=
     mapim (fun C Ciface =>
+             let procs_no_main :=
+                 (procedure_ids_of_trace C t) :|: (Component.export Ciface) in
              let procs :=
                  if C == Component.main then
-                   Procedure.main |: Component.export Ciface
-                 else Component.export Ciface in
+                   Procedure.main |: procs_no_main
+                 else procs_no_main in
                mkfmapf (fun P => procedure_of_trace C P t) procs)
           intf.
 
@@ -582,8 +621,9 @@ Section Definability.
     intros [CI [C_CI CI_P]].
     unfold Source.find_procedure, procedures_of_trace.
     rewrite mapimE C_CI /= mkfmapfE.
-    case: eqP=> _; last by rewrite CI_P.
-    by rewrite in_fsetU1 CI_P orbT.
+    case: eqP=> _.
+    - by rewrite in_fsetU1 in_fsetU CI_P !orbT.
+    - by rewrite in_fsetU CI_P !orbT.
   Qed.
 
   Lemma find_procedures_of_trace_main (t: trace event_inform) :
@@ -648,8 +688,8 @@ Section Definability.
 
   (** Main proof of back-translation *)
 
-  Lemma well_formed_events_well_formed_program t :
-    all (well_formed_event intf) t ->
+  Lemma well_formed_events_well_formed_program procs t :
+    all (well_formed_event intf procs) t ->
     Source.well_formed_program (program_of_trace t).
   Proof.
     Local Opaque loc_of_reg binop_of_Ebinop expr_of_const_val.
@@ -664,56 +704,118 @@ Section Definability.
       rewrite /Source.find_procedure /procedures_of_trace mapimE.
       case intf_C: (intf C)=> [CI|] //=.
       rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
-        rewrite /procedure_of_trace /expr_of_trace /switch.
-        elim: {t Ht} (comp_subtrace C t) (length _) => [|e t IH] n //=.
-        case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
-                    try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
-                      try rewrite values_are_integers_expr_of_const_val; try apply IH.
+      + split.
+        * rewrite /procedure_of_trace /expr_of_trace /switch.
+          elim: {t Ht P_CI} (comp_subtrace C t) (length _) => [|e t IH] n //=.
+          case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
+                      try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
+                        try rewrite values_are_integers_expr_of_const_val; try apply IH.
+          
+        *
+          (*clear.
+          rewrite /procedure_of_trace /expr_of_trace /switch
+                  /program_of_trace.
+          remember (length [seq expr_of_event C P i | i <- comp_subtrace C t]) as n.
+          generalize dependent n.
+          induction t as [|e t' IH]; auto.
+          intros ? ?.
+          simpl in *.
+          destruct (C ==
+                      match e with
+                      | ECallInform C _ _ _ _ _ | ERetInform C _ _ _ _ | 
+                        EConst C _ _ _ _ | EMov C _ _ _ _ | EBinop C _ _ _ _ _ _ |
+                        ELoad C _ _ _ _ | EStore C _ _ _ _ | EAlloc C _ _ _ _ => C end)
+                   eqn:eC; rewrite eC in Heqn.
+          -- admit.
+          -- rewrite eC. simpl.
+          (* specialize (IH n Heqn). *)
+          destruct e; auto; simpl.
+          case: e=> /=; simpl. intros.
+          apply IH.
+          try apply IH; simpl.
+          *)
+          rewrite /procedure_of_trace /expr_of_trace /switch
+                  /program_of_trace.
+          (*induction t; auto.
+          simpl; unfold Source.well_formed_E_funptr; destruct a; simpl.*)
+          elim: {t Ht P_CI} (comp_subtrace C t) (procedures_of_trace t) (length _)
+          => [|e t IH] p n //=.
+          case: e=> /=; simpl; intros; try apply IH.
+          Local Transparent loc_of_reg expr_of_const_val.
+          destruct e; destruct v; simpl; try apply IH;
+            match goal with
+            | ptr : Pointer.t |- _ =>
+              destruct ptr as [[[perm ?] bid] ?]; destruct (perm =? Permission.data);
+                simpl; try apply IH
+            end; admit.
+          
+      + 
         pose call_of_event e := if e is ECall _ P _ _ C then Some (C, P) else None.
       have /fsubsetP sub :
           fsubset (called_procedures (procedure_of_trace C P t))
                   ((C, P) |: fset (pmap call_of_event (project_non_inform (comp_subtrace C t)))).
       {
         rewrite /procedure_of_trace /expr_of_trace /switch.
-        elim: {t Ht} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
+        elim: {t Ht P_CI} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
         exact: fsub0set.
         move/(_ n) in IH; rewrite !fset0U.
-        case: e=> [C' P' v mem regs C''| | | | | | | |]
+        
+        case: e=> [C' P' v mem regs C''| | | | | | | ]
                     //=;
                     try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH.
         * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
-          rewrite fsub0set.
-            by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
+          simpl.
+          by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
         (* RB: TODO: Refactor cases. *)
-        * move=> C' v r.
-          by rewrite called_procedures_loc_of_reg
-                     called_procedures_expr_of_const_val
+        * move=> C' v r. intros.
+            by rewrite !fset0U.
+        * move=> C' v r. intros.
+          rewrite !fset0U.
+          by rewrite called_procedures_expr_of_const_val
                      !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' r1 r2.
-          by rewrite 2!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' e r1 r2 r3.
-          by rewrite 3!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' r1 r2.
-          by rewrite 2!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' r1 r2.
-          by rewrite 2!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C' r1 r2.
-          by rewrite 2!called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
-        * move=> C'.
-          by rewrite called_procedures_loc_of_reg
-                     !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
+        * move=> C' v r. intros.
+          by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        * move=> C' v r. intros.
+            by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        * move=> C' v r. intros.
+          by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        * move=> C' v r. intros.
+          by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        * move=> C' v r. intros.
+          by rewrite !fset0U fsubUset fsubU1set in_fsetU1 eqxx /= fsub0set /= IH. 
+        
       }
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
-        rewrite eqxx find_procedures_of_trace //.
-        move: P_CI; case: eqP intf_C=> [->|_] intf_C.
-          rewrite /valid_procedure.
-          case/fsetU1P=> [->|P_CI]; eauto.
-          by right; exists CI; split.
+        * rewrite eqxx.
+          unfold program_of_trace, procedures_of_trace, Source.find_procedure. simpl.
+          rewrite mapimE intf_C. simpl. rewrite mkfmapfE. by rewrite P_CI.
+        * move: P_CI; case: eqP intf_C=> [->|_] intf_C.
+          intros H H2.
+          (* Need to consider the cases of H. *)
+          (* Probably need to rewrite using find_procedures_of_trace. *)
+          
+(*          rewrite find_procedures_of_trace //.
+          -- 
+            
+            ++ rewrite /valid_procedure.
+               intros ? G'.
+               destruct (C' == Component.main) eqn:eC'; auto.
+               ** (* This should follow from Ht (the well_formedness of the trace t),
+                     and from G'.
+                   *)
+                 admit.
+            ++ intros ? G'.
+               destruct (C' == C) eqn:eC'; auto.
+               ** (* This should follow from Ht (the well_formedness of the trace t),
+                     and from G'.
+                   *)
+                 admit.
+          -- 
+ *)
+        (**************************************************************************
+          case/fsetU1P=> [->|P_CI]; eauto. right.
+             unfold exported_procedure. 
+             exists CI; split.
         by move=> P_CI; right; exists CI; split.
       rewrite in_fset /= => C'_P'.
       suffices ? : imported_procedure intf C C' P'.
@@ -730,16 +832,16 @@ Section Definability.
       (*   apply /dommP. rewrite -domm_buffers. apply /dommP. by eauto. *)
       (* } *)
       (* rewrite /Source.has_required_local_buffers /= mapmE C_buf /=. *)
-      (* eexists; eauto => /=; omega. *)
+      (* eexists; eauto => /=; lia. *)
       split.
       + rewrite /Source.has_required_local_buffers. eexists.
         * rewrite mapmE C_CI. reflexivity.
-        * simpl. omega.
+        * simpl. lia.
       + by rewrite /Buffer.well_formed_buffer_opt mapmE C_CI.
       (* { *)
       (*   eexists; [eexists |]. *)
       (*   - reflexivity. *)
-      (*   - simpl. omega. *)
+      (*   - simpl. lia. *)
       (*   - assert (C_intf : C \in domm intf) by (apply /dommP; eauto). *)
       (*     specialize (wf_buffers C_intf). *)
       (*     setoid_rewrite C_buf in wf_buffers. *)
@@ -753,6 +855,8 @@ Section Definability.
         * discriminate.
       + by left.
   Qed.
+         *****************************************************************************)
+  Admitted. 
 
   Lemma closed_program_of_trace t :
     Source.closed_program (program_of_trace t).
@@ -766,6 +870,7 @@ Section Definability.
   Section WithTrace. (* RB: NOTE: Renaming *)
 
     Variable t : trace event_inform.
+    (* NOTE: need assumption of goodness of the trace *)
 
     (* Let t    :=  *)
     (* [DynShare]: This should be the projection of t_inform.
@@ -800,26 +905,89 @@ Section Definability.
       (* forall ptr, *)
       (*   Pointer.block ptr <> Block.local -> *)
       (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
+
       forall Cb,
-        memory_shifts_memory_at_addr
-          all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem /\
-        memory_inverse_shifts_memory_at_addr
+        addr_shared_so_far Cb (project_non_inform t) ->
+        (* Precondition on Cb:*)
+        (*rename_addr_option
+          (sigma_shifting_wrap_bid_in_addr
+             (sigma_shifting_lefttoright_addr_bid (uniform_shift 1) all_zeros_shift)) Cb
+        = Some Cb' ->*)
+        memory_shifts_memory_at_shared_addr
           all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
 
+    (* JT: NOTE: The reason this lemma should hold is that the store is to the
+       local block [Block.local], which should always be *private memory* (from
+       the goodness of the trace) and as a result isn't recorded on the memory
+       snapshot. *)
     Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C o v mem' :
       well_formed_memory_snapshot mem_snapshot mem ->
       Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
       well_formed_memory_snapshot mem_snapshot mem'.
-    Admitted. (* RB: TODO: Easy. *)
+    Proof.
+      move=> WFMS STORE Cb Hshr (*Cb' Hren*).
+      case: (WFMS Cb); auto.
+      rewrite /memory_shifts_memory_at_shared_addr
+              /memory_renames_memory_at_shared_addr
+      => Cbren [eCbren [WFMS1 WFMS2]].
+      eexists.
+      split; eauto; split; intros ? ? Hload.
+      - rewrite (Memory.load_after_store _ _ _ _ _ STORE).
+        specialize (WFMS1 _ _ Hload) as [v' [Gload Gren]].
+        exists v'.
+        destruct ((Permission.data, Cbren.1, Cbren.2, offset) ==
+                  (Pm, C, Block.local, o)) eqn:eCbren_local.
+        + destruct Cbren as [? ?].
+          specialize (eqP eCbren_local) as Hinv. inversion Hinv. subst.
+          unfold Block.local in *.
+          (* eCbren is a contradiction. Obvious unfolding + arithmetic *)
+          destruct Cb as [Cbc Cbb].
+          unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
+            in *.
+          destruct (sigma_shifting_lefttoright_option
+                      (all_zeros_shift Cbc) (uniform_shift 1 Cbc) Cbb) eqn:esigma;
+            try discriminate.
+          apply sigma_lefttoright_Some_good in esigma.
+          unfold right_block_id_good_for_shifting, uniform_shift in *.
+          inversion eCbren; subst.
+          by auto.
+        + by intuition.
+      - rewrite (Memory.load_after_store _ _ _ _ _ STORE) in Hload.
+        destruct ((Permission.data, Cbren.1, Cbren.2, offset) ==
+                  (Pm, C, Block.local, o)) eqn:eCbren_local.
+        + inversion Hload. subst. clear Hload.
+          specialize (eqP eCbren_local) as Hinv. inversion Hinv. subst.
+          unfold Block.local in *.
+          (* eCbren is a contradiction. Obvious unfolding + arithmetic *)
+          destruct Cbren as [Cbc' Cbb]. simpl in *. subst.
+          unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
+            in *.
+          destruct Cb as [Cbc Cbb].
+          destruct (sigma_shifting_lefttoright_option
+                      (all_zeros_shift Cbc) (uniform_shift 1 Cbc) Cbb) eqn:esigma;
+            try discriminate.
+          apply sigma_lefttoright_Some_good in esigma.
+          unfold right_block_id_good_for_shifting, uniform_shift in *.
+          inversion eCbren; subst.
+          by auto.
 
-    Definition well_formed_memory_event (e : event_inform) (mem : Memory.t) : Prop :=
+        + specialize (WFMS2 _ _ Hload) as [v'' [Gload Gren]].
+          eexists.
+          split; eauto.
+    Qed.
+
+    Definition postcondition_event_snapshot (e: event_inform) (mem: Memory.t): Prop :=
+      let mem_snapshot := mem_of_event_inform e in
+      well_formed_memory_snapshot mem_snapshot mem.
+
+    (* NOTE: Seems to talk about the memory /before/ executing the event. Prerequisite
+     to do the event *)
+    Definition precondition_event_intermediate (e: event_inform) (mem: Memory.t): Prop :=
       match e with
-      | ECallInform Csrc _ arg emem _ _ =>
-        well_formed_memory_snapshot emem mem /\
+      | ECallInform Csrc _ arg _ _ _ =>
         Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
         = Some arg
-      | ERetInform Csrc ret emem _ _ =>
-        well_formed_memory_snapshot emem mem /\
+      | ERetInform Csrc ret _ _ _ =>
         Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM)
         = Some ret
       | EAlloc C _ rsize _ _ =>
@@ -827,8 +995,154 @@ Section Definability.
           (size > 0)%Z /\
           Memory.load mem (Permission.data, C, Block.local, (reg_offset rsize)) =
           Some (Int size)
+      (* TODO: May have to add new well-formedness conditions for other events *)
       | _ => True
       end.
+
+
+
+    
+    (* AEK: TODO: This definition should be moved to Common/TracesInform.v, right? *)
+    (* The reason I think it should be moved is that we will need a lemma that     *)
+    (* tells us that an Intermediate trace satisfies this definition.              *)
+    
+    (* Notice that the "from" state (consisting of a Register.t and a Memory.t)    *)
+    (* is implicitly given by the first parameter, which is an event_inform.       *)
+    (* The second and the third parameters represent the "to" state.               *)
+    Inductive event_step_to_regfile_mem : event_inform ->
+                                          Machine.Intermediate.Register.t ->
+                                          Memory.t ->
+                                          Prop :=
+    | step_ECallInform:
+        forall C P call_arg mem regs regs' C',
+          C <> C' ->
+          imported_procedure intf C C' P ->
+          Machine.Intermediate.Register.get
+            Machine.R_COM
+            regs = call_arg ->
+          regs' = Machine.Intermediate.Register.invalidate regs ->
+          event_step_to_regfile_mem (ECallInform C P call_arg mem regs C') regs' mem
+    | step_ERetInform:
+        forall mem regs regs' C C' ret_arg,
+          C <> C' ->
+          Machine.Intermediate.Register.get
+            Machine.R_COM
+            regs = ret_arg ->
+          regs' = Machine.Intermediate.Register.invalidate regs ->
+          event_step_to_regfile_mem (ERetInform C ret_arg mem regs C') regs' mem
+    | step_EConst:
+        forall mem regs regs' C er v,
+          regs' = Machine.Intermediate.Register.set
+                    (Ereg_to_reg er)
+                    v
+                    regs ->
+          event_step_to_regfile_mem (EConst C v er mem regs) regs' mem
+    | step_EMov:
+        forall mem regs regs' C er1 er2,
+          regs' = Machine.Intermediate.Register.set (Ereg_to_reg er2)
+                                                    (Machine.Intermediate.Register.get
+                                                       (Ereg_to_reg er1) regs)
+                                                    regs ->
+          event_step_to_regfile_mem (EMov C er1 er2 mem regs) regs' mem
+    | step_EBinop:
+        forall result eop mem regs regs' C er1 er2 er3,
+          result = eval_binop
+                     (Ebinop_to_binop eop)
+                     (Machine.Intermediate.Register.get (Ereg_to_reg er1) regs)
+                     (Machine.Intermediate.Register.get (Ereg_to_reg er2) regs) ->
+          regs' = Machine.Intermediate.Register.set (Ereg_to_reg er3)
+                                                    result
+                                                    regs ->
+          event_step_to_regfile_mem (EBinop C eop er1 er2 er3 mem regs) regs' mem
+    | step_ELoad:
+        forall mem regs regs' C er1 er2 ptr v,
+          Machine.Intermediate.Register.get
+            (Ereg_to_reg er1)
+            regs = Ptr ptr ->
+          Memory.load mem ptr = Some v ->
+          Machine.Intermediate.Register.set
+            (Ereg_to_reg er2)
+            v regs = regs' ->
+          event_step_to_regfile_mem (ELoad C er1 er2 mem regs) regs' mem
+    | step_EStore:
+        forall mem mem' regs C ptr er1 er2,
+          Machine.Intermediate.Register.get
+            (Ereg_to_reg er1)
+            regs = Ptr ptr ->
+          Memory.store
+            mem
+            ptr
+            (
+              Machine.Intermediate.Register.get
+                (Ereg_to_reg er2)
+                regs
+            )
+          = Some mem' ->
+          event_step_to_regfile_mem (EStore C er1 er2 mem regs) regs mem'
+    | step_EAlloc:
+        forall mem mem' regs regs' C ersize erptr size ptr,
+          Machine.Intermediate.Register.get
+            (Ereg_to_reg ersize)
+            regs = Int size ->
+          (size > 0) % Z ->
+          Memory.alloc mem C (Z.to_nat size) = Some (mem', ptr) ->
+          regs' =
+          Machine.Intermediate.Register.set
+            (Ereg_to_reg erptr)
+            (Ptr ptr)
+            regs ->
+          event_step_to_regfile_mem (EAlloc C erptr ersize mem regs) regs' mem'
+    | step_EInvalidateRA:
+        forall mem regs regs' C,
+          Machine.Intermediate.Register.set
+            Machine.R_RA
+            Undef (* We could have chosen any value here.     *)
+                  (* When relating event_step_to_regfile_mem  *)
+                  (* to Intermediate.CS.step, we should be    *)
+                  (* careful to exclude R_RA from the register*)
+                  (* equality relation.                       *)
+            regs = regs' ->
+          event_step_to_regfile_mem (EInvalidateRA C mem regs) regs' mem.
+
+    Inductive prefix_star_event_steps : trace event_inform ->
+                                        Machine.Intermediate.Register.t ->
+                                        Memory.t
+                                        -> Prop :=
+    | nil_star_event_steps:
+        prefix_star_event_steps
+          E0
+          Machine.Intermediate.Register.init
+          (Source.prepare_buffers p)
+    (* AEK: Will prepare_buffers match the Intermediate prepare buffer function? *)
+    | rcons_star_event_steps:
+        forall prefix regs mem e regs' mem',
+          prefix_star_event_steps prefix regs mem ->
+          register_file_of_event_inform e = regs ->
+          mem_of_event_inform e = mem ->
+          event_step_to_regfile_mem e regs' mem' ->
+          prefix_star_event_steps (rcons prefix e) regs' mem'.
+          
+    Definition well_formed_intermediate_prefix (pref: trace event_inform) : Prop :=
+      exists regs mem, prefix_star_event_steps pref regs mem.
+
+    (* AEK: Now not sure whether this definition should be called a postcondition.   *)
+    (* The reason I am not sure is that the r that we are projecting out of an event *)
+    (* e is NOT the register file *after* executing e. It is the register file       *) 
+    (* *before* executing e.                                                         *)
+    Definition postcondition_event_registers (e: event_inform) (mem: Memory.t): Prop :=
+      let r := register_file_of_event_inform e in
+      forall (R: Machine.register) (n: Z) (v: value),
+        reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
+        Memory.load mem (Permission.data, cur_comp_of_event e, Block.local, n) = Some v ->
+        exists (v': value),
+          shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
+          Machine.Intermediate.Register.get R r = v'.
+
+    Definition postcondition_event_memory (e: event_inform) (mem': Memory.t) :=
+      postcondition_event_snapshot e mem' /\
+      postcondition_event_registers e mem'.
+
+
 
     Record well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
       {
@@ -837,32 +1151,34 @@ Section Definability.
             component_buffer C ->
             Memory.load mem (Permission.data, C, Block.local, 0%Z) =
             Some (Int (counter_value C prefix));
+        (* NOTE: Might be redundant? *)
         wfmem_meta:
           forall C r,
             component_buffer C ->
           exists v,
             Memory.load mem (Permission.data, C, Block.local, reg_offset r) = Some v;
         (* NOTE: Reuse memory relation (renaming). *)
-        wfmem_call:
-          forall prefix' Csrc P arg mem' regs Cdst,
-            prefix = prefix' ++ [:: ECallInform Csrc P arg mem' regs Cdst] ->
-            component_buffer Csrc ->
-            well_formed_memory_snapshot mem' mem /\
-            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some arg;
-        wfmem_ret:
-          forall prefix' Csrc ret mem' regs Cdst,
-            prefix = prefix' ++ [:: ERetInform Csrc ret mem' regs Cdst] ->
-            component_buffer Csrc ->
-            well_formed_memory_snapshot mem' mem /\
-            Memory.load mem (Permission.data, Csrc, Block.local, reg_offset E_R_COM) = Some ret;
-        wfmem_alloc:
-          forall prefix' C rptr rsize mem' regs,
-            prefix = prefix' ++ [:: EAlloc C rptr rsize mem' regs] ->
-            component_buffer C ->
-          exists size,
-            (size > 0)%Z /\
-            Memory.load mem (Permission.data, C, Block.local, reg_offset rsize) = Some (Int size);
+        (* Precondition: the memory must be in a state ready to execute the event [e] *)
+        (* wfmem: forall prefix' e, *)
+        (*     prefix = prefix' ++ [:: e] -> *)
+        (*     precondition_event_memory e mem; *)
+        (* NOTE: no, this is wrong. We need a post-condition: in what shape is the memory
+         after having executed the event [e] *)
+        wfmem: forall prefix' e,
+            prefix = prefix' ++ [:: e] ->
+            postcondition_event_memory e mem
       }.
+
+    (* NOTE: it doesn't preserve [well_formed_memory].*)
+    Lemma well_formed_memory_star_postcondition:
+      forall p cs prefix e mem,
+        mem = CS.s_memory cs ->
+        well_formed_memory (prefix ++ [:: e]) mem ->
+        exists cs',
+          Star (CS.sem p) cs (project_non_inform [:: e]) cs' /\
+          postcondition_event_memory e (CS.s_memory cs').
+    Admitted.
+
 
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
