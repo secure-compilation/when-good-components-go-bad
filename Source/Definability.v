@@ -1091,18 +1091,18 @@ Section Definability.
             (Ereg_to_reg erptr)
             (Ptr ptr)
             regs ->
-          event_step_to_regfile_mem (EAlloc C erptr ersize mem regs) regs' mem'
-    | step_EInvalidateRA:
-        forall mem regs regs' C,
-          Machine.Intermediate.Register.set
-            Machine.R_RA
-            Undef (* We could have chosen any value here.     *)
-                  (* When relating event_step_to_regfile_mem  *)
-                  (* to Intermediate.CS.step, we should be    *)
-                  (* careful to exclude R_RA from the register*)
-                  (* equality relation.                       *)
-            regs = regs' ->
-          event_step_to_regfile_mem (EInvalidateRA C mem regs) regs' mem.
+          event_step_to_regfile_mem (EAlloc C erptr ersize mem regs) regs' mem'.
+    (* | step_EInvalidateRA: *)
+    (*     forall mem regs regs' C, *)
+    (*       Machine.Intermediate.Register.set *)
+    (*         Machine.R_RA *)
+    (*         Undef (* We could have chosen any value here.     *) *)
+    (*               (* When relating event_step_to_regfile_mem  *) *)
+    (*               (* to Intermediate.CS.step, we should be    *) *)
+    (*               (* careful to exclude R_RA from the register*) *)
+    (*               (* equality relation.                       *) *)
+    (*         regs = regs' -> *)
+    (*       event_step_to_regfile_mem (EInvalidateRA C mem regs) regs' mem. *)
 
     Inductive prefix_star_event_steps : trace event_inform ->
                                         Machine.Intermediate.Register.t ->
@@ -1225,62 +1225,66 @@ Section Definability.
           split; reflexivity.
     Qed.
 
-    Lemma well_formed_memory_store_counter prefix mem C e :
-      component_buffer C ->
-      well_formed_memory prefix mem ->
-      C = cur_comp_of_event e ->
-      well_formed_memory_event e mem ->
-      exists mem',
-        Memory.store mem (Permission.data, C, Block.local, 0%Z)
-                     (Int (counter_value C (prefix ++ [e]))) = Some mem' /\
-        well_formed_memory (prefix ++ [e]) mem'.
-    Proof.
-      move=> C_b wf_mem HC He.
-      have C_local := (wfmem_counter wf_mem) _ C_b.
-      have [mem' Hmem'] := Memory.store_after_load
-                             _ _ _ (Int (counter_value C (prefix ++ [e])))
-                             C_local.
-      exists mem'. split; [now trivial |]. constructor.
-      - move=> C' C'_b.
-        (* exists mem'. split; trivial=> C' C'_b. *)
-        have C'_local := (wfmem_counter wf_mem) _ C'_b.
-        rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *.
-        case: (altP (C' =P C)) => [?|C_neq_C'].
-        + subst C'.
-          by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem').
-        + have neq : (Permission.data, C, Block.local, 0%Z) <>
-                     (Permission.data, C', Block.local, 0%Z)
-            by move/eqP in C_neq_C'; congruence.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem').
-          now rewrite Z.add_0_r.
-      - move=> C' r C'_b.
-        destruct ((wfmem_meta wf_mem) C' r C'_b) as [v Hload].
-        exists v.
-        erewrite Memory.load_after_store_neq; try eassumption.
-        intros Hcontra. injection Hcontra as Hcomp Hoffset.
-        now destruct r.
-      - move=> prefix' Csrc P arg mem'' regs Cdst Hprefix C'_b.
-        apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
-        inversion He as [Hsnap Harg].
-        split.
-        + eapply metadata_store_preserves_snapshot; eassumption.
-        + erewrite Memory.load_after_store_neq; try eassumption.
-          now injection.
-      - move=> prefix' Csrc ret mem'' regs Cdst Hprefix C'_b.
-        apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
-        inversion He as [Hsnap Hret].
-        split.
-        + eapply metadata_store_preserves_snapshot; eassumption.
-        + erewrite Memory.load_after_store_neq; try eassumption.
-          now injection.
-      - move=> prefix' C' rptr rsize mem'' regs Hprefix C'_b.
-        apply rcons_inv in Hprefix as [? ?]; subst prefix' e.
-        inversion He as [size [Hsize Hload]].
-        exists size. split.
-        + eassumption.
-        + erewrite Memory.load_after_store_neq; try eassumption.
-          injection as _ Hoffset. now destruct rsize.
-    Qed.
+    (* FIXME *)
+    (* Lemma well_formed_memory_store_counter prefix mem C e : *)
+    (*   component_buffer C -> *)
+    (*   well_formed_memory prefix mem -> *)
+    (*   C = cur_comp_of_event e -> *)
+    (*   well_formed_memory_event e mem -> *)
+    (*   exists mem', *)
+    (*     Memory.store mem (Permission.data, C, Block.local, 0%Z) *)
+    (*                  (Int (counter_value C (prefix ++ [e]))) = Some mem' /\ *)
+    (*     well_formed_memory (prefix ++ [e]) mem'. *)
+    (* Proof. *)
+    (*   move=> C_b (*wf_mem*) HC He. *)
+    (*   have C_local := (wfmem_counter (*wf_mem*)) _ C_b. *)
+    (*   specialize (C_local _ _ HC). *)
+    (*   have [mem' Hmem'] := Memory.store_after_load *)
+    (*                          _ _ _ (Int (counter_value C (prefix ++ [e]))) *)
+    (*                          C_local. *)
+    (*   exists mem'. split; [now trivial |]. constructor. *)
+    (*   - move=> C' C'_b. *)
+    (*     (* exists mem'. split; trivial=> C' C'_b. *) *)
+    (*     have C'_local := wfmem_counter _ C'_b. *)
+    (*     specialize (C'_local _ _ HC). *)
+    (*     rewrite <- Hmem'. *)
+    (*     rewrite -> counter_value_snoc, <- HC, Nat.eqb_refl in *. *)
+    (*     case: (altP (C' =P C)) => [?|C_neq_C']. *)
+    (*     + subst C'. *)
+    (*       by rewrite -> (Memory.load_after_store_eq _ _ _ _ Hmem'). *)
+    (*     + have neq : (Permission.data, C, Block.local, 0%Z) <> *)
+    (*                  (Permission.data, C', Block.local, 0%Z) *)
+    (*         by move/eqP in C_neq_C'; congruence. *)
+    (*       rewrite (Memory.load_after_store_neq _ _ _ _ _ neq Hmem'). *)
+    (*       now rewrite Z.add_0_r. *)
+    (*   - move=> C' r C'_b. *)
+    (*     destruct ((wfmem_meta wf_mem) C' r C'_b) as [v Hload]. *)
+    (*     exists v. *)
+    (*     erewrite Memory.load_after_store_neq; try eassumption. *)
+    (*     intros Hcontra. injection Hcontra as Hcomp Hoffset. *)
+    (*     now destruct r. *)
+    (*   - move=> prefix' Csrc P arg mem'' regs Cdst Hprefix C'_b. *)
+    (*     apply rcons_inv in Hprefix as [? ?]; subst prefix' e. *)
+    (*     inversion He as [Hsnap Harg]. *)
+    (*     split. *)
+    (*     + eapply metadata_store_preserves_snapshot; eassumption. *)
+    (*     + erewrite Memory.load_after_store_neq; try eassumption. *)
+    (*       now injection. *)
+    (*   - move=> prefix' Csrc ret mem'' regs Cdst Hprefix C'_b. *)
+    (*     apply rcons_inv in Hprefix as [? ?]; subst prefix' e. *)
+    (*     inversion He as [Hsnap Hret]. *)
+    (*     split. *)
+    (*     + eapply metadata_store_preserves_snapshot; eassumption. *)
+    (*     + erewrite Memory.load_after_store_neq; try eassumption. *)
+    (*       now injection. *)
+    (*   - move=> prefix' C' rptr rsize mem'' regs Hprefix C'_b. *)
+    (*     apply rcons_inv in Hprefix as [? ?]; subst prefix' e. *)
+    (*     inversion He as [size [Hsize Hload]]. *)
+    (*     exists size. split. *)
+    (*     + eassumption. *)
+    (*     + erewrite Memory.load_after_store_neq; try eassumption. *)
+    (*       injection as _ Hoffset. now destruct rsize. *)
+    (* Qed. *)
 
     Lemma well_formed_memory_store_reg_offset prefix mem C r v :
       component_buffer C ->
@@ -1296,12 +1300,12 @@ Section Definability.
 
     Variant well_formed_state (stk_st: stack_state)
             (prefix suffix: trace event_inform) : CS.state -> Prop :=
-    | WellFormedState C stk mem k exp arg P
+    | WellFormedState C procs stk mem k exp arg P
       of C = cur_comp stk_st
       &  k = Kstop
       &  exp = procedure_of_trace C P t
       &  well_bracketed_trace stk_st suffix
-      &  all (well_formed_event intf) suffix
+      &  all (well_formed_event intf procs) suffix
       &  well_formed_stack stk_st stk
       &  well_formed_memory prefix mem
       &  valid_procedure C P
@@ -1313,12 +1317,12 @@ Section Definability.
      homogenized. *)
   Variant well_formed_state_r (stk_st: stack_state)
           (prefix suffix: trace event_inform) : CS.state -> Prop :=
-  | WellFormedStateR C stk mem k exp arg P
+  | WellFormedStateR C procs stk mem k exp arg P
     of C = cur_comp stk_st
     &  k = Kstop
     &  exp = procedure_of_trace C P t
     &  well_bracketed_trace stk_st suffix
-    &  all (well_formed_event intf) suffix
+    &  all (well_formed_event intf procs) suffix
     &  well_formed_stack stk_st stk
     &  well_formed_memory prefix mem
     &  valid_procedure C P
@@ -1332,13 +1336,13 @@ Section Definability.
      make it tricky to compose partial invariants.) *)
   Variant well_formed_state_right (* stk_st: stack_state *)
           (suffix: trace event_inform) : CS.state -> Prop :=
-  | WellFormedStateRight C stk mem k exp arg P
+  | WellFormedStateRight C procs stk mem k exp arg P
   of
   (* C = cur_comp stk_s & *)
      k = Kstop
   &  exp = procedure_of_trace C P t
   &  TracesInform.well_bracketed_trace_r suffix
-  &  all (well_formed_event intf) suffix
+  &  all (well_formed_event intf procs) suffix
   (* &  well_formed_stack stk_st stk *)
   (* &  well_formed_memory prefix mem *) (* FIXME *)
   &  valid_procedure C P
@@ -1406,7 +1410,7 @@ Section Definability.
     exists cs s prefix_inform prefix' const_map,
       Star (CS.sem p) (CS.initial_machine_state p) prefix' cs /\
       project_non_inform prefix_inform = prefix' /\
-      traces_shift_each_other metadata_size_lhs const_map (project_non_inform prefix) prefix' /\
+      traces_shift_each_other_option metadata_size_lhs const_map (project_non_inform prefix) prefix' /\
       well_formed_state_r s prefix suffix cs.
     Proof.
       have Eintf : genv_interface (prepare_global_env p) = intf by [].
@@ -1441,8 +1445,6 @@ Section Definability.
                rewrite ComponentMemory.load_prealloc //=.
                eexists; by case r => //=.
             -- by move=> [].
-            -- by move=> [].
-            -- by move=> [].
           * unfold valid_procedure. now auto.
     - (* Inductive step. *)
       rewrite -catA => Et.
@@ -1450,7 +1452,8 @@ Section Definability.
           [cs [s [prefix_inform [prefix' [const_map [Star0 [Hproj [Hshift Hwf_cs]]]]]]]].
 
       move: Hwf_cs Star0.
-      case: cs / => /= _ stk mem _ _ arg P -> -> -> [] wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
+(* FIXME
+      case: cs / => /= _ procs stk mem _ _ arg P -> -> -> [] wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
 
       move=> Star0.
 
@@ -1921,6 +1924,7 @@ Local Transparent loc_of_reg.
       (*   rewrite wf_C. *)
       (*   (* And now we do the event e *) *)
       (*   (* ... *) *)
+*)
     Admitted.
 
     (* Some other experiments on rephrasings of the definability lemma.
@@ -1972,7 +1976,7 @@ Local Transparent loc_of_reg.
     exists cs' suffix_inform suffix' const_map,
       Star (CS.sem p) cs suffix' cs' /\
       project_non_inform suffix_inform = suffix' /\
-      traces_shift_each_other metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
+      traces_shift_each_other_option metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
       CS.final_state cs'.
     Proof.
       (* NOTE: For now, trying to preserve the high-level structure of the
@@ -1983,6 +1987,7 @@ Local Transparent loc_of_reg.
       elim: suffix s prefix cs=> [|e suffix IH] /= [C callers] prefix.
       - (* Base case: empty suffix. The proof is straightforward. *)
         rewrite cats0 => cs <- {prefix}.
+(* FIXME
         case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk wf_mem P_exp.
         exists [CState C, stk, mem, Kstop, E_exit, arg], E0, E0, (uniform_shift 1).
         split; [| split; [| split]].
@@ -2556,6 +2561,7 @@ Local Transparent expr_of_const_val loc_of_reg.
           * admit. (* TODO: Relate events. *)
             (* assumption. *)
           * assumption.
+*)
     Admitted.
 
     Lemma definability_gen s prefix suffix cs :
@@ -2572,6 +2578,7 @@ Local Transparent expr_of_const_val loc_of_reg.
       elim: suffix s prefix cs=> [|e suffix IH] /= [C callers] prefix.
       - (* Base case: empty suffix. The proof is straightforward. *)
         rewrite cats0 => cs <- {prefix}.
+(* FIXME
         case: cs / => /= _ stk mem _ _ arg P -> -> -> _ _ wf_stk wf_mem P_exp.
         exists [CState C, stk, mem, Kstop, E_exit, arg]; last by left.
         have C_b := valid_procedure_has_block P_exp.
@@ -2735,13 +2742,15 @@ Local Transparent expr_of_const_val loc_of_reg.
           eapply (star_trans Star1); simpl; [| eauto];
           now eapply (star_trans Star2); simpl; eauto.
           (* ... *)
+*)
     Admitted.
 
     Lemma definability :
-      well_formed_trace intf t ->
+      forall procs, (* TODO: What to do with procs? *)
+      well_formed_trace intf procs t ->
       program_behaves (CS.sem p) (Terminates (project_non_inform t)).
     Proof.
-      move=> wf_t; eapply program_runs=> /=; try reflexivity.
+      move=> procs wf_t; eapply program_runs=> /=; try reflexivity.
       pose cs := CS.initial_machine_state p.
       suffices H : well_formed_state (StackState Component.main [::]) [::] t cs.
         have [cs' [suffix' run_cs Hsuffix'] final_cs'] := @definability_gen _ [::] t _ erefl H.
@@ -2887,12 +2896,20 @@ Proof.
       do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
       split; try reflexivity; exact: star_refl.
   -
-  have wf_events : all (well_formed_event intf) m'.
-    by apply: CS.intermediate_well_formed_events Hstar.
-  have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf m'.
+  set procs := Intermediate.prog_procedures (Intermediate.program_link p c).
+  have wf_events : all (well_formed_event intf procs) m'.
+    (* by apply: CS.intermediate_well_formed_events Hstar. *)
+  {
+    apply: CS.intermediate_well_formed_events Hstar.
+    - admit.
+    - assumption.
+  }
+  have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf procs m'.
     have [mainP [HmainP _]] := Intermediate.cprog_main_existence Hclosed.
     have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
-    exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c.
+    (* TODO: Duplicate assumption, new non-implicit parameters. *)
+    by apply: (CS.intermediate_well_formed_trace _ wf_p_c Hclosed _ _ _ Hstar Hcs HmainP wf_p_c).
+    (* exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c. *)
   have := definability Hclosed_intf intf_main _ wf_m.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
@@ -2922,6 +2939,7 @@ Proof.
   have wf_back : Source.well_formed_program back.
     eapply well_formed_events_well_formed_program; auto.
     (* by exact: well_formed_events_well_formed_program. *)
+    eassumption.
   have Hback' : back = program_of_trace intf m' by [].
     (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
   split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main.
@@ -2936,6 +2954,6 @@ Proof.
   split; first by assumption.
   unfold m'. apply prefix_project; assumption.
   (* New subgoal: trace relation. *)
-  apply behavior_rel_behavior_reflexive.
-  apply not_wrong_finpref_project; assumption.
+  (* apply behavior_rel_behavior_reflexive. *) admit.
+  (* apply not_wrong_finpref_project; assumption. *)
 Admitted.
