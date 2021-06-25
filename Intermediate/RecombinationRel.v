@@ -132,6 +132,7 @@ Section ThreewayMultisem2.
      to be replaced by related traces. We can expect similar complications as in
      previous sections, especially in the need to produce explicit successor
      states that continue to satisfy the mergeability relation. *)
+(*FIXME
   Lemma threeway_multisem_mergeable
         s1 s1' s1'' t1 t1' t1'' t t'' s2 s2'' :
     mergeable_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
@@ -351,6 +352,7 @@ Section ThreewayMultisem2.
        *)
       (******************************************************************************)
   Admitted. (* RB: TODO: Check admits. *)
+*)
 End ThreewayMultisem2.
 
 (* Three-way simulation and its inversion. *)
@@ -367,6 +369,7 @@ Section ThreewayMultisem3.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
+(*FIXME
   Theorem threeway_multisem_star s1 s1' s1'' t1 t1' t1'' t t'' s2 s2'' :
     mergeable_internal_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
     Star sem   s1   t   s2   ->
@@ -529,6 +532,7 @@ Section ThreewayMultisem3.
   (*     t_threeway_multisem_step_inv_program gps1 gps1'' Hmerge Hnotin Hifacec. *)
   (* Qed. *)
   (*    *) *)
+*)
 End ThreewayMultisem3.
 
 (* Theorems on initial states for main simulation. *)
@@ -683,6 +687,7 @@ Section ThreewayMultisem4.
                 s'' E0 E0 E0
              ) as Hmergewf.
       {
+(*FIXME
         eapply mergeable_states_well_formed_intro;
           simpl; eauto; unfold CS.initial_state, CSInvariants.is_prefix in *; subst.
         + apply star_refl.
@@ -715,6 +720,7 @@ Section ThreewayMultisem4.
         + by rewrite Hinitp'c'.
         + constructor. constructor.
         + constructor. constructor.
+*) admit.
       } 
       destruct (Component.main \in domm (prog_interface p)) eqn:whereismain.
       + (* Component.main is in p. *)
@@ -739,13 +745,13 @@ Section ThreewayMultisem4.
              {
                by apply Register.reg_in_domm_init_Undef.
              }
-             by rewrite Hreginit_undef.
+             (* by rewrite Hreginit_undef. *) admit. (* FIXME *)
           -- assert (Register.init (Register.to_nat reg) = None) as Hreginit_none.
              {
                rewrite mem_domm in regdomm.
                by destruct (Register.init (Register.to_nat reg)) eqn:e.
              }
-             by rewrite Hreginit_none.
+             (* by rewrite Hreginit_none. *) admit. (* FIXME *)
         * (* Goal: mem_of_part_executing_rel_original_and_recombined *)
           unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
 
@@ -842,6 +848,7 @@ Section ThreewayMultisem5.
      well, as symmetry arguments reoccur all the time.
      TODO: Observe the proof of match_nostep is almost identical, and refactor
      accordingly. *)
+(*FIXME
   Theorem match_final_states s s' s'' t t' t'' :
     mergeable_states p c p' c' n n'' s s' s'' t t' t'' ->
     final_state sem   s   ->
@@ -949,6 +956,7 @@ Section ThreewayMultisem5.
   (*     unfold sem'', prog'' in Hstep''; rewrite program_linkC in Hstep''; try assumption. *)
   (*     contradiction. *)
   (* Qed. *)
+*)
 End ThreewayMultisem5.
 
 (* Main simulation theorem. *)
@@ -1086,6 +1094,7 @@ Section Recombination.
       as [s1_ [s2 [Hini1_ Hstar12]]].
     destruct (CS.behavior_prefix_star_non_inform Hbeh'' Hprefix'')
       as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
+(*FIXME
     pose proof match_initial_states (*n n''*) Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
          Hprog_is_closed Hprog_is_closed' Hprog_is_good Hprog''_is_good Hini1_ Hini1''_
       as [s1'_ [Hini1' Hmerge1_]].
@@ -1095,6 +1104,7 @@ Section Recombination.
     assert (Heq1'' : s1'' = s1''_) by admit.
     subst s1_ s1'_ s1''_.
     clear Hini1_ Hini1''_ Hmerge1_.
+*)
 
 
     (* Now we should be able to apply a modified star simulation. *)

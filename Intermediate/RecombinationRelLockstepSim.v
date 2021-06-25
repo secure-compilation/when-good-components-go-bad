@@ -1007,6 +1007,9 @@ Section ThreewayMultisem1.
                              specialize (Hcontra _ Hshr) as contra.
                              unfold left_addr_good_for_shifting in *.
                              erewrite sigma_lefttoright_Some_spec in contra.
+                             (* TODO: The following destruct fails in some
+                                still-supported Coq versions, e.g. 8.9. Fix
+                                later or adjust dependencies. *)
                              destruct contra as [? G].
                                by erewrite G in rel_r2_eq2.
                                (********************************

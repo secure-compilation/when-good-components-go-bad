@@ -17,7 +17,6 @@ Common/Either.v
 Common/CoqMaps.v
 Common/Traces.v
 Common/TracesInform.v
-Common/Renaming.v
 Common/RenamingOption.v
 
 CompCert/Coqlib.v

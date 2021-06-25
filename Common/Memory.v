@@ -1047,7 +1047,34 @@ Module Memory.
     - unfold addresses_of_compMems in e_addr_cid. rewrite mapmE in e_addr_cid.
       unfold omap, obind, oapp in e_addr_cid. rewrite Hmem_cid in e_addr_cid. discriminate.
   Qed.        
-  
+
+  (* RB: TODO: Rephrase as needed based on use in Definability, could weaken
+     some of the components in the pointer.
+     TODO: Implicit parameters. *)
+  Lemma alloc_after_load mem P C b o v size :
+    load mem (P, C, b, o) = Some v ->
+  exists mem' b',
+    b' <> b /\
+    alloc mem C size = Some (mem', (Permission.data, C, b', 0%Z)).
+  Admitted.
+
+  (* RB: TODO: Essentially a tweaked lifting to memories of the existing lemma
+     [ComponentMemory.load_after_alloc], to move once done here. Further
+     adjustments to the statement are possible.
+     TODO: Implicit parameters. *)
+  (* Lemma load_after_alloc mem P C b o size mem' P' C' b' o' : *)
+  (*   Memory.alloc mem C size = Some (mem', (P', C', b', o')) -> *)
+  (*   b <> b' -> *)
+  (*   Memory.load mem (P, C, b, o) = Memory.load mem' (P, C, b, o). *)
+  (* Admitted. *)
+  Lemma store_after_alloc mem P C b o size mem' P' C' b' o' v mem1 :
+    alloc mem C size = Some (mem', (P', C', b', o')) ->
+    b <> b' ->
+    store mem  (P, C, b, o) v = Some mem1 ->
+  exists mem1',
+    store mem' (P, C, b, o) v = Some mem1'.
+  Admitted.
+
 End Memory.
 
 Set Implicit Arguments.
