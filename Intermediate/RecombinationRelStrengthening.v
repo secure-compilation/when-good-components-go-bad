@@ -2875,13 +2875,13 @@ Section ThreewayMultisem1.
       destruct s1' as [[[s1'1 s1'2] s1'3] s1'pc].
       simpl in *. subst.
       unfold negb in Hcomp1.
-      match goal with
-      | H: _ = Pointer.component s1pc,
-           Hin: is_true (@in_mem _ (Pointer.component (CS.state_pc s1'')) _)
-        |- _ =>
-        rewrite H in Hin; rewrite Hin in Hcomp1
-      end.
-        by intuition.
+      (* match goal with *) (* FIXME *)
+      (* | H: _ = Pointer.component s1pc, *)
+      (*      Hin: is_true (@in_mem _ (Pointer.component (CS.state_pc s1'')) _) *)
+      (*   |- _ => *)
+      (*   rewrite H in Hin; rewrite Hin in Hcomp1 *)
+      (* end. *)
+      (*   by intuition. *)
 
     (* Derive some useful facts and begin to expose state structure. *)
   (*   inversion Hmerge1 as [??? Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec ??????]. *)
@@ -3074,6 +3074,7 @@ Section ThreewayMultisem1.
      just get rid of the lemma above---because it is not helper
      anymore.
    *)
+(*FIXME
   Corollary threeway_multisem_event_lockstep_program
             s1 s1' s1'' t1 t1' t1'' e e'' s2 s2'' :
     CS.is_program_component s1 ic ->
@@ -3090,6 +3091,7 @@ Section ThreewayMultisem1.
   Proof.
     intros. eapply threeway_multisem_event_lockstep_program_step; eassumption.
   Qed.
+*)
 
 (*
   intros Hcomp1 Hmerge1 Hstep12 Hstep12'' Hrel2.
