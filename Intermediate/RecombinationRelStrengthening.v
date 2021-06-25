@@ -2841,7 +2841,32 @@ Section ThreewayMultisem1.
 
                
       + (* case Return *)
-        admit.
+        subst. simpl in *.
+        match goal with
+        | H: [:: e] = [:: _] |- _ => inversion H
+        end.
+        subst.
+        inversion Hrel2 as [? ? Hrel2']. subst.
+        inversion Hrel2' as [  |
+                               tpref1 e1 tpref1'' e1'' arg Hr1 Hr2 Hr3 Hr4 Harg
+                                      Harg' Hgood Hgood'' Hr5 Hr6].
+        * by find_nil_rcons.
+        * apply rcons_inj in Hr5. apply rcons_inj in Hr6. inversion Hr5.
+          inversion Hr6. subst. clear Hr5 Hr6.
+          unfold match_events in *. 
+          destruct e'' as [| C2 vret mem'' C2' ]; intuition. subst.
+          destruct s1' as [[[s1'stk s1'mem] s1'reg] s1'pc].
+          inversion Hstep12 as [? ? ? ? Hstep Hcontra]. subst.
+          inversion Hstep; subst; simpl in Hcontra; try discriminate.
+          inversion Hcontra. subst.
+          assert (prog_interface prog = prog_interface prog') as
+                      Hifcprog_prog'.
+          {
+            unfold prog, prog', program_link, prog_interface.
+            destruct p. destruct c. destruct c'.
+            simpl in *. by subst.
+          }
+          
     - (* find_and_invert_mergeable_states_well_formed. *)
       simpl in *. subst.
       unfold CS.is_program_component,
