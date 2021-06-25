@@ -2502,80 +2502,189 @@ Section ThreewayMultisem1.
                 destruct bidgood as [bid' G]; by erewrite G in econtra.
               + inversion rewr3; rewrite eperm; by rewrite rewr2.
           }
-     
+
+          assert (regs0_s2'reg:
+                    regs_rel_of_executing_part
+                      (Register.invalidate regs0) s2'reg
+                      n''
+                      (fun cid : nat => if cid \in domm (prog_interface p)
+                                        then n cid else n'' cid)
+                 ).
+          {
+            inversion Hstep12' as [? ? ? ? Hstep' Hcontra']; subst.
+            inversion Hstep'; subst; simpl in Hcontra'; try discriminate.
+            inversion Hcontra'; subst.
+
+            unfold Register.invalidate in *.
+            constructor.
+            intros reg0; destruct reg0 eqn:ereg0;
+              try by unfold Register.get; rewrite !setmE; simpl; left.
+            (** R_COM remains. *)
+            simpl. 
+            unfold Register.get in *.
+            simpl in Hrel_R_COM, Harg.
+            unfold shift_value_option, rename_value_option,
+            rename_value_template_option, rename_addr_option,
+            sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
+              in *.
+            rewrite !setmE; simpl.
+            destruct (regs0 1) as [vregs0_1|] eqn:eregs0_1; simpl in *.
+            ** destruct (regs 1) as [vregs1|] eqn:eregs1; simpl in *.
+               ---
+                 destruct vregs1
+                   as [| [[[permvregs cidvregs] bidvregs] offvregs] |] eqn:evregs1;
+                   inversion Harg as [rewr];
+                   inversion Hrel_R_COM as [G | [contra [? ?]]];
+                   try by left; try discriminate.
+                 +++
+                   destruct (permvregs =? Permission.data) eqn:epermvregs.
+                   ***
+                     destruct (sigma_shifting_lefttoright_option
+                                 (n cidvregs) (n'' cidvregs) bidvregs)
+                       as [bidvregs''| ] eqn:esigma;
+                       try discriminate.
+                     inversion rewr; subst. rewrite epermvregs.
+                     destruct (sigma_shifting_lefttoright_option
+                                 (n cidvregs)
+                                 (if cidvregs \in domm (prog_interface p)
+                                  then n cidvregs else n'' cidvregs) bidvregs)
+                       as [bidvregs'|] eqn:ebidvregs'; rewrite ebidvregs' in G;
+                       try discriminate.
+                     left. rewrite <- G.
+                     apply sigma_shifting_lefttoright_Some_inv_Some in esigma.
+                     assert (good:left_block_id_good_for_shifting (n'' cidvregs)
+                                                                  bidvregs'').
+                     {
+                         by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
+                     }
+                     erewrite sigma_lefttoright_Some_spec in good.
+                     destruct good as [bid' G'].
+                     erewrite G'.
+                     assert (bid' = bidvregs').
+                     {
+                       destruct (cidvregs \in domm (prog_interface p)) eqn:ecid;
+                         rewrite ecid in G'.
+                       - apply sigma_shifting_lefttoright_option_n_n_id
+                           in ebidvregs'; subst.
+                         rewrite esigma in G'; by inversion G'.
+                       - apply sigma_shifting_lefttoright_option_n_n_id
+                           in G'; subst.
+                         apply sigma_shifting_lefttoright_Some_inv_Some
+                           in esigma.
+                         rewrite ebidvregs' in esigma. by inversion esigma.
+                     }
+                       by subst.
+                   *** left. rewrite <- G. inversion rewr. by rewrite epermvregs.
+                 +++ destruct (permvregs =? Permission.data); try discriminate.
+                     destruct (sigma_shifting_lefttoright_option
+                                 (n cidvregs) (n'' cidvregs) bidvregs)
+                       as [bidvregs''|] eqn:ebidvregs''; try discriminate.
+                     assert (good:left_block_id_good_for_shifting (n cidvregs)
+                                                                  bidvregs).
+                     {
+                         by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
+                     }
+                     erewrite sigma_lefttoright_Some_spec in good.
+                     destruct good as [bid' G'].
+                     erewrite G' in contra; discriminate.
+               --- inversion Harg; subst. left. by destruct Hrel_R_COM as [?|[? _]].
+            ** left. destruct (regs 1) as [vregs1|] eqn:eregs1; simpl in *.
+               --- destruct vregs1 as [| [[[perm cid] bid] ?] |];
+                     inversion Harg as [rewr]; try discriminate;
+                       last by destruct Hrel_R_COM as [?|[? _]].
+                   destruct (perm =? Permission.data); try discriminate.
+                   destruct (sigma_shifting_lefttoright_option
+                               (n cid) (n'' cid) bid) as [bid''|] eqn:ebid'';
+                     try discriminate.
+               --- by destruct Hrel_R_COM as [?|[? _]].       
+          }
+
+          assert (stk_p_recombined:
+                    stack_of_program_part_rel_stack_of_recombined
+                      p (Pointer.inc pc :: gps) s2'stk
+                 ).
+          {
+            simpl in *. subst.
+            inversion Hstep12'; subst.
+            destruct t; try discriminate.
+            match goal with
+            | Hstep : CS.step _ _ _ _ |- _ =>
+              inversion Hstep; subst; try discriminate
+            end.
+            apply stack_of_program_part_rel_stack_of_recombined_cons; auto.
+              by destruct
+                   (Pointer.component (Pointer.inc pc)
+                                      \in domm (prog_interface p)).
+          }
+
+          assert (stk_c'_recombined:
+                    stack_of_program_part_rel_stack_of_recombined
+                      c' (Pointer.inc pc0 :: gps0) s2'stk
+                 ).
+          {
+            simpl in *. subst.
+            inversion Hstep12'; subst.
+            destruct t; try discriminate.
+            match goal with
+            | Hstep : CS.step _ _ _ _ |- _ =>
+              inversion Hstep; subst; try discriminate
+            end.
+            
+            apply stack_of_program_part_rel_stack_of_recombined_cons; auto.
+            rewrite !Pointer.inc_preserves_component.
+            unfold CS.is_program_component, CS.is_context_component,
+            turn_of, CS.state_turn in *.
+            match goal with
+            | Hifc: _ = prog_interface c',
+                    Hpc: _ = Pointer.component pc0 |- _ =>
+              rewrite <- Hifc; rewrite <- Hpc
+            end.
+            unfold negb in *.
+            destruct (Pointer.component pc \in domm (prog_interface c));
+              by intuition.
+          }
+
+          assert (Hisprefix1: CSInvariants.is_prefix
+                                (s2'stk, s1'mem, s2'reg, s2'pc) (program_link p c')
+                                (rcons t1' (ECall (Pointer.component pc)
+                                                  P0 (Register.get R_COM s1'reg)
+                                                  s1'mem C'0))).
+          {
+            unfold CSInvariants.is_prefix.
+            eapply star_right; try eassumption.
+              by rewrite <- cats1.
+          }
+
+          assert (Hcomps2'pc: Pointer.component s2'pc = C'0).
+          {
+            inversion Hstep12'; subst.
+            destruct t; try discriminate.
+            match goal with
+            | Hstep : CS.step _ _ _ _ |- _ =>
+              inversion Hstep; subst; try discriminate
+            end.
+            simpl in *.
+              by
+                match goal with
+                | H: [_] = [_] |- _ => inversion H; subst
+                end.
+          }
+
+          assert (C'0 \in domm (prog_interface c') \/ C'0 \in domm (prog_interface p))
+            as [C'0_ctx | C'0_prog].
+          {
+            admit.
+          }
+         
           -- apply mergeable_border_states_c'_executing.
              5: { exact s2''mem_s1'mem. }
              5: { exact mem0_s1'mem. }
              ++ constructor; auto; simpl.
-                ** (* is_prefix *)
-                  unfold CSInvariants.is_prefix.
-                  eapply star_right; try eassumption.
-                    by rewrite <- cats1.
                  
                 ** (* is_prefix *)
                   unfold CSInvariants.is_prefix.
                   eapply star_right; try eassumption.
                     by rewrite <- cats1.
-
-                  
-
-                ** (* stack of p is related to the stack of recombined *)
-                  simpl in *. subst.
-                  inversion Hstep12'; subst.
-                  destruct t; try discriminate.
-                  match goal with
-                  | Hstep : CS.step _ _ _ _ |- _ =>
-                    inversion Hstep; subst; try discriminate
-                  end.
-                  apply stack_of_program_part_rel_stack_of_recombined_cons; auto.
-                    by destruct
-                         (Pointer.component (Pointer.inc pc)
-                                            \in domm (prog_interface p)).
-                ** (* stack of c' is related to the stack of recombined *)
-                  simpl in *. subst.
-                  inversion Hstep12'; subst.
-                  destruct t; try discriminate.
-                  match goal with
-                  | Hstep : CS.step _ _ _ _ |- _ =>
-                    inversion Hstep; subst; try discriminate
-                  end.
-                  
-                  apply stack_of_program_part_rel_stack_of_recombined_cons; auto.
-                  rewrite !Pointer.inc_preserves_component.
-                  unfold CS.is_program_component, CS.is_context_component,
-                  turn_of, CS.state_turn in *.
-                  match goal with
-                  | Hifc: _ = prog_interface c',
-                          Hpc: _ = Pointer.component pc0 |- _ =>
-                    rewrite <- Hifc; rewrite <- Hpc
-                  end.
-                  unfold negb in *.
-                  destruct (Pointer.component pc \in domm (prog_interface c));
-                    by intuition.
-                ** inversion Hstep12'; subst.
-                   destruct t; try discriminate.
-                   match goal with
-                   | Hstep : CS.step _ _ _ _ |- _ =>
-                     inversion Hstep; subst; try discriminate
-                   end.
-                   simpl in *.
-                   by
-                   match goal with
-                   | H: [_] = [_] |- _ => inversion H; subst
-                   end.
-
-                ** inversion Hstep12'; subst.
-                   destruct t; try discriminate.
-                   match goal with
-                   | Hstep : CS.step _ _ _ _ |- _ =>
-                     inversion Hstep; subst; try discriminate
-                   end.
-                   simpl in *.
-                   by
-                   match goal with
-                   | H: [_] = [_] |- _ => inversion H; subst
-                   end.
-
 
              ++ simpl.
                 inversion Hstep12' as [? ? ? ? Hstep' Hcontra']; subst.
@@ -2606,10 +2715,11 @@ Section ThreewayMultisem1.
                    }
                    match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
                    inversion Hb; subst; clear Hb.
-
-                   (** ?????? *)
-                   (** contradiction maybe? *)
-                   admit.
+                   simpl in *.
+                   unfold mergeable_interfaces, linkable in *.
+                   destruct Hmerge_ipic as [[_ contra] _].
+                   rewrite Hifc_cc' in contra.
+                   by specialize (fdisjoint_partition_notinboth contra C'0_ctx C'p).
                 ** assert (Hb: EntryPoint.get
                              C' P
                              (genv_entrypoints (prepare_global_env (prog'))) = Some b0).
@@ -2622,98 +2732,87 @@ Section ThreewayMultisem1.
                    match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
                      by inversion Hb.
 
-             ++ (** No evidence on that. I think we are missing a top-level *)
-                (** case distinction on whether C' (the component of s2'pc) *)
-                (** is a program_component or a context_component.          *)
-               admit.
+             ++ unfold CS.is_context_component, turn_of, CS.state_turn.
+                by rewrite Hifc_cc' Hcomps2'pc.
+
+             ++ (** regs0_s2'reg *)
+               simpl. exact regs0_s2'reg.
+
+          -- apply mergeable_border_states_p_executing;
+               unfold mem_of_part_not_executing_rel_original_and_recombined_at_border
+               in *.
+             5: { exact mem0_s1'mem. }
+             5: { exact s2''mem_s1'mem. }
+             ++ constructor; auto; simpl.
+                
+                ** (* is_prefix *)
+                  unfold CSInvariants.is_prefix.
+                  eapply star_right; try eassumption.
+                    by rewrite <- cats1.
 
              ++ simpl.
                 inversion Hstep12' as [? ? ? ? Hstep' Hcontra']; subst.
                 inversion Hstep'; subst; simpl in Hcontra'; try discriminate.
                 inversion Hcontra'; subst.
 
-                unfold Register.invalidate in *.
-                constructor.
-                intros reg0; destruct reg0 eqn:ereg0;
-                  try by unfold Register.get; rewrite !setmE; simpl; left.
-                (** R_COM remains. *)
-                simpl. 
-                unfold Register.get in *.
-                simpl in Hrel_R_COM, Harg.
-                unfold shift_value_option, rename_value_option,
-                rename_value_template_option, rename_addr_option,
-                sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
-                  in *.
-                rewrite !setmE; simpl.
-                destruct (regs0 1) as [vregs0_1|] eqn:eregs0_1; simpl in *.
-                ** destruct (regs 1) as [vregs1|] eqn:eregs1; simpl in *.
-                   ---
-                     destruct vregs1
-                       as [| [[[permvregs cidvregs] bidvregs] offvregs] |] eqn:evregs1;
-                       inversion Harg as [rewr];
-                       inversion Hrel_R_COM as [G | [contra [? ?]]];
-                         try by left; try discriminate.
-                     +++
-                       destruct (permvregs =? Permission.data) eqn:epermvregs.
-                       ***
-                         destruct (sigma_shifting_lefttoright_option
-                                     (n cidvregs) (n'' cidvregs) bidvregs)
-                           as [bidvregs''| ] eqn:esigma;
-                           try discriminate.
-                         inversion rewr; subst. rewrite epermvregs.
-                         destruct (sigma_shifting_lefttoright_option
-                                     (n cidvregs)
-                                     (if cidvregs \in domm (prog_interface p)
-                                      then n cidvregs else n'' cidvregs) bidvregs)
-                           as [bidvregs'|] eqn:ebidvregs'; rewrite ebidvregs' in G;
-                           try discriminate.
-                         left. rewrite <- G.
-                         apply sigma_shifting_lefttoright_Some_inv_Some in esigma.
-                         assert (good:left_block_id_good_for_shifting (n'' cidvregs)
-                                                                 bidvregs'').
-                         {
-                           by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
-                         }
-                         erewrite sigma_lefttoright_Some_spec in good.
-                         destruct good as [bid' G'].
-                         erewrite G'.
-                         assert (bid' = bidvregs').
-                         {
-                           destruct (cidvregs \in domm (prog_interface p)) eqn:ecid;
-                             rewrite ecid in G'.
-                           - apply sigma_shifting_lefttoright_option_n_n_id
-                               in ebidvregs'; subst.
-                             rewrite esigma in G'; by inversion G'.
-                           - apply sigma_shifting_lefttoright_option_n_n_id
-                               in G'; subst.
-                             apply sigma_shifting_lefttoright_Some_inv_Some
-                               in esigma.
-                             rewrite ebidvregs' in esigma. by inversion esigma.
-                         }
-                           by subst.
-                       *** left. rewrite <- G. inversion rewr. by rewrite epermvregs.
-                     +++ destruct (permvregs =? Permission.data); try discriminate.
-                         destruct (sigma_shifting_lefttoright_option
-                                     (n cidvregs) (n'' cidvregs) bidvregs)
-                           as [bidvregs''|] eqn:ebidvregs''; try discriminate.
-                         assert (good:left_block_id_good_for_shifting (n cidvregs)
-                                                                      bidvregs).
-                         {
-                           by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
-                         }
-                         erewrite sigma_lefttoright_Some_spec in good.
-                         destruct good as [bid' G'].
-                         erewrite G' in contra; discriminate.
-                   --- inversion Harg; subst. left. by destruct Hrel_R_COM as [?|[? _]].
-                ** left. destruct (regs 1) as [vregs1|] eqn:eregs1; simpl in *.
-                   --- destruct vregs1 as [| [[[perm cid] bid] ?] |];
-                         inversion Harg as [rewr]; try discriminate;
-                           last by destruct Hrel_R_COM as [?|[? _]].
-                       destruct (perm =? Permission.data); try discriminate.
-                       destruct (sigma_shifting_lefttoright_option
-                                   (n cid) (n'' cid) bid) as [bid''|] eqn:ebid'';
-                         try discriminate.
-                   --- by destruct Hrel_R_COM as [?|[? _]].
+                match goal with
+                | E': EntryPoint.get C' P (genv_entrypoints (prepare_global_env prog'))
+                      = _ |- _ =>
+                  specialize (EntryPoint.get_some Hb') as C'in
+                end.
+
+                rewrite domm_genv_entrypoints in C'in.
+
+                assert (C' \in domm (prog_interface p) \/
+                               C' \in domm (prog_interface c')) as [C'p | C'c'].
+                {
+                  (** Using C'in somehow. *)
+                  admit.
+                }
+
+                ** assert (Hb: EntryPoint.get
+                                 C' P
+                                 (genv_entrypoints (prepare_global_env (prog'))) =
+                               Some b).
+                   {
+                     eapply genv_entrypoints_recombination_left
+                       with (p := p) 
+                            (c := c) (c' := c'); eauto.
+                   }
+                   simpl.
+                   match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
+                     by inversion Hb.
+
+                ** assert (Hb: EntryPoint.get
+                                 C' P
+                                 (genv_entrypoints (prepare_global_env (prog'))) =
+                               Some b0).
+                   {
+                     eapply genv_entrypoints_recombination_right
+                       with (c := c) (c' := c') (p := p) (p' := p'); eauto.
+                     by rewrite Hifc_cc'.
+                   }
+                   match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
+                   inversion Hb; subst; clear Hb.
+                   simpl in *.
+                   unfold mergeable_interfaces, linkable in *.
+                   destruct Hmerge_ipic as [[_ contra] _].
+                   rewrite Hifc_cc' in contra.
+                   by specialize (fdisjoint_partition_notinboth contra C'c' C'0_prog).
+
+
+             ++ unfold CS.is_program_component,
+                CS.is_context_component, turn_of, CS.state_turn.
+                rewrite Hcomps2'pc.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ contra] _].
+                destruct (C'0 \in domm (prog_interface c)) eqn:econtra; auto.
+                specialize (fdisjoint_partition_notinboth contra econtra C'0_prog).
+                  by intros.
+             ++ (** regs_s2'reg *)
+               simpl. exact regs0_s2'reg.
+
+
                
       + (* case Return *)
         admit.
