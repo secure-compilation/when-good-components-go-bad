@@ -2577,27 +2577,143 @@ Section ThreewayMultisem1.
                    end.
 
 
-             ++ simpl. admit. (* SearchAbout b'. *)
-                (* Need a lemma about EntryPoint.get before we are able to use
-                   the following match.
-                 *)
-                (*match goal with
-                | Hb0: _ = Some b0 |- _ =>
-                  rewrite Hb' in Hb0; inversion Hb0
-                end.*)
-                
-             ++ (* SearchAbout C'0. *)
-                (* should be available from Pointer.component pc0 <> C'0 *)
-                admit.
              ++ simpl.
-                (* prove a lemma about Register.invalidate regs_rel_of_executing_part *)
-                admit.
-             ++ (* memory relation executing part *)
-               simpl.
+                inversion Hstep12' as [? ? ? ? Hstep' Hcontra']; subst.
+                inversion Hstep'; subst; simpl in Hcontra'; try discriminate.
+                inversion Hcontra'; subst.
+
+                match goal with
+                | E': EntryPoint.get C' P (genv_entrypoints (prepare_global_env prog'))
+                      = _ |- _ =>
+                  specialize (EntryPoint.get_some Hb') as C'in
+                end.
+
+                rewrite domm_genv_entrypoints in C'in.
+
+                assert (C' \in domm (prog_interface p) \/
+                               C' \in domm (prog_interface c')) as [C'p | C'c'].
+                {
+                  (** Using C'in somehow. *)
+                  admit.
+                }
+                
+                ** assert (Hb: EntryPoint.get
+                             C' P
+                             (genv_entrypoints (prepare_global_env (prog'))) = Some b).
+                   {
+                     eapply genv_entrypoints_recombination_left
+                       with (c := c) (c' := c'); eauto.
+                   }
+                   match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
+                   inversion Hb; subst; clear Hb.
+
+                   (** ?????? *)
+                   (** contradiction maybe? *)
+                   admit.
+                ** assert (Hb: EntryPoint.get
+                             C' P
+                             (genv_entrypoints (prepare_global_env (prog'))) = Some b0).
+                   {
+                     eapply genv_entrypoints_recombination_right
+                       with (p := p) (p' := p')
+                            (c := c) (c' := c'); eauto.
+                     by rewrite Hifc_cc'.
+                   }
+                   match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
+                     by inversion Hb.
+
+             ++ (** No evidence on that. I think we are missing a top-level *)
+                (** case distinction on whether C' (the component of s2'pc) *)
+                (** is a program_component or a context_component.          *)
                admit.
-             ++ (* memory relation of the non-executing part *)
-               simpl.
-               admit.
+
+             ++ simpl.
+                inversion Hstep12' as [? ? ? ? Hstep' Hcontra']; subst.
+                inversion Hstep'; subst; simpl in Hcontra'; try discriminate.
+                inversion Hcontra'; subst.
+
+                unfold Register.invalidate in *.
+                constructor.
+                intros reg0; destruct reg0 eqn:ereg0;
+                  try by unfold Register.get; rewrite !setmE; simpl; left.
+                (** R_COM remains. *)
+                simpl. 
+                unfold Register.get in *.
+                simpl in Hrel_R_COM, Harg.
+                unfold shift_value_option, rename_value_option,
+                rename_value_template_option, rename_addr_option,
+                sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
+                  in *.
+                rewrite !setmE; simpl.
+                destruct (regs0 1) as [vregs0_1|] eqn:eregs0_1; simpl in *.
+                ** destruct (regs 1) as [vregs1|] eqn:eregs1; simpl in *.
+                   ---
+                     destruct vregs1
+                       as [| [[[permvregs cidvregs] bidvregs] offvregs] |] eqn:evregs1;
+                       inversion Harg as [rewr];
+                       inversion Hrel_R_COM as [G | [contra [? ?]]];
+                         try by left; try discriminate.
+                     +++
+                       destruct (permvregs =? Permission.data) eqn:epermvregs.
+                       ***
+                         destruct (sigma_shifting_lefttoright_option
+                                     (n cidvregs) (n'' cidvregs) bidvregs)
+                           as [bidvregs''| ] eqn:esigma;
+                           try discriminate.
+                         inversion rewr; subst. rewrite epermvregs.
+                         destruct (sigma_shifting_lefttoright_option
+                                     (n cidvregs)
+                                     (if cidvregs \in domm (prog_interface p)
+                                      then n cidvregs else n'' cidvregs) bidvregs)
+                           as [bidvregs'|] eqn:ebidvregs'; rewrite ebidvregs' in G;
+                           try discriminate.
+                         left. rewrite <- G.
+                         apply sigma_shifting_lefttoright_Some_inv_Some in esigma.
+                         assert (good:left_block_id_good_for_shifting (n'' cidvregs)
+                                                                 bidvregs'').
+                         {
+                           by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
+                         }
+                         erewrite sigma_lefttoright_Some_spec in good.
+                         destruct good as [bid' G'].
+                         erewrite G'.
+                         assert (bid' = bidvregs').
+                         {
+                           destruct (cidvregs \in domm (prog_interface p)) eqn:ecid;
+                             rewrite ecid in G'.
+                           - apply sigma_shifting_lefttoright_option_n_n_id
+                               in ebidvregs'; subst.
+                             rewrite esigma in G'; by inversion G'.
+                           - apply sigma_shifting_lefttoright_option_n_n_id
+                               in G'; subst.
+                             apply sigma_shifting_lefttoright_Some_inv_Some
+                               in esigma.
+                             rewrite ebidvregs' in esigma. by inversion esigma.
+                         }
+                           by subst.
+                       *** left. rewrite <- G. inversion rewr. by rewrite epermvregs.
+                     +++ destruct (permvregs =? Permission.data); try discriminate.
+                         destruct (sigma_shifting_lefttoright_option
+                                     (n cidvregs) (n'' cidvregs) bidvregs)
+                           as [bidvregs''|] eqn:ebidvregs''; try discriminate.
+                         assert (good:left_block_id_good_for_shifting (n cidvregs)
+                                                                      bidvregs).
+                         {
+                           by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
+                         }
+                         erewrite sigma_lefttoright_Some_spec in good.
+                         destruct good as [bid' G'].
+                         erewrite G' in contra; discriminate.
+                   --- inversion Harg; subst. left. by destruct Hrel_R_COM as [?|[? _]].
+                ** left. destruct (regs 1) as [vregs1|] eqn:eregs1; simpl in *.
+                   --- destruct vregs1 as [| [[[perm cid] bid] ?] |];
+                         inversion Harg as [rewr]; try discriminate;
+                           last by destruct Hrel_R_COM as [?|[? _]].
+                       destruct (perm =? Permission.data); try discriminate.
+                       destruct (sigma_shifting_lefttoright_option
+                                   (n cid) (n'' cid) bid) as [bid''|] eqn:ebid'';
+                         try discriminate.
+                   --- by destruct Hrel_R_COM as [?|[? _]].
                
       + (* case Return *)
         admit.
