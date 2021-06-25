@@ -2850,13 +2850,13 @@ Section ThreewayMultisem1.
       destruct s1' as [[[s1'1 s1'2] s1'3] s1'pc].
       simpl in *. subst.
       unfold negb in Hcomp1.
-      match goal with
-      | H: _ = Pointer.component s1pc,
-           Hin: is_true (@in_mem _ (Pointer.component (CS.state_pc s1'')) _)
-        |- _ =>
-        rewrite H in Hin; rewrite Hin in Hcomp1
-      end.
-        by intuition.
+      (* match goal with *) (* FIXME *)
+      (* | H: _ = Pointer.component s1pc, *)
+      (*      Hin: is_true (@in_mem _ (Pointer.component (CS.state_pc s1'')) _) *)
+      (*   |- _ => *)
+      (*   rewrite H in Hin; rewrite Hin in Hcomp1 *)
+      (* end. *)
+      (*   by intuition. *)
 
     (* Derive some useful facts and begin to expose state structure. *)
   (*   inversion Hmerge1 as [??? Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec ??????]. *)
