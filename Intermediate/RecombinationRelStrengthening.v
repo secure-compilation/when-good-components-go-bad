@@ -2599,6 +2599,32 @@ Section ThreewayMultisem1.
                --- by destruct Hrel_R_COM as [?|[? _]].       
           }
 
+
+          assert (regs_s2'reg: regs_rel_of_executing_part
+                                 (Register.invalidate regs) s2'reg n
+                                 (fun cid : nat => if cid \in domm (prog_interface p)
+                                                   then n cid else n'' cid)).
+          {
+            inversion Hstep12' as [? ? ? ? Hstep' Hcontra']; subst.
+            inversion Hstep'; subst; simpl in Hcontra'; try discriminate.
+            inversion Hcontra'; subst.
+
+            unfold Register.invalidate in *.
+            constructor.
+            intros reg0; destruct reg0 eqn:ereg0;
+              try by unfold Register.get; rewrite !setmE; simpl; left.
+            (** R_COM remains. *)
+            simpl. 
+            unfold Register.get in *.
+            simpl in Hrel_R_COM, Harg.
+            unfold shift_value_option, rename_value_option,
+            rename_value_template_option, rename_addr_option,
+            sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
+              in *.
+            rewrite !setmE; simpl.
+            assumption.
+          }
+          
           assert (stk_p_recombined:
                     stack_of_program_part_rel_stack_of_recombined
                       p (Pointer.inc pc :: gps) s2'stk
@@ -2810,7 +2836,7 @@ Section ThreewayMultisem1.
                 specialize (fdisjoint_partition_notinboth contra econtra C'0_prog).
                   by intros.
              ++ (** regs_s2'reg *)
-               simpl. exact regs0_s2'reg.
+               simpl. exact regs_s2'reg.
 
 
                
