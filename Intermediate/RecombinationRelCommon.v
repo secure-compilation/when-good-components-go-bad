@@ -1107,6 +1107,15 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   Qed.*)
   Admitted.
 
+  Lemma mergeable_states_in_to_notin s s' s'' t t' t'' :
+    mergeable_internal_states s s' s'' t t' t'' ->
+    Pointer.component (CS.state_pc s) \in domm ic ->
+    Pointer.component (CS.state_pc s) \notin domm ip.
+  Proof.
+    intros Hmerg Hpc_notin.
+  Admitted.
+
+
   (* RB: NOTE: Consider if the core of the lemma could be moved to CS, as is the
      case of its simpler variant, is_program_component_pc_notin_domm. *)
   Lemma is_program_component_pc_in_domm s s' s'' t t' t'':
