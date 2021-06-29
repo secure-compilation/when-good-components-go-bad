@@ -3010,18 +3010,22 @@ Section ThreewayMultisem1.
                      s1'mem,
                      Register.invalidate s1'reg,
                      _).
-            split; first by intuition; subst.
+            split; first by intuition. (*subst.*)
             eapply CS.Step_non_inform; eauto.
-            ++ eapply (@CS.Return (prepare_global_env prog') _ _ _ _ _ _ _);
+            ++ eapply CS.Return;
+                 (*(@CS.Return (prepare_global_env prog') _ _ _ _ _ _);*)
                  try eassumption.
                ** simpl in *; erewrite Hpc.
                   destruct (Pointer.component pc' \in domm (prog_interface p)) eqn:e;
                     rewrite e in Hptr'_pc'; by erewrite <- Hptr'_pc'.
                ** (** here, use the register relation (Hrel_R_COM) **)
-                 by intuition.
+                 reflexivity.
+                 (* destruct Hrel_R_COM as [G|[? [? ?]]].
+                 --- intuition.
+                 --- refl *)
             ++ simpl in *.
                destruct (Pointer.component pc' \in domm (prog_interface p)) eqn:e;
-                 rewrite e in Hptr'_pc'; erewrite Hptr'_pc'; by subst.
+                 rewrite e in Hptr'_pc'; erewrite Hptr'_pc'; by erewrite Hpc. 
           }
 
           assert (CSInvariants.is_prefix
