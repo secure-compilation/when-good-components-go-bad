@@ -1367,7 +1367,20 @@ Section ThreewayMultisem1.
                   -- rewrite epermvprog; by eexists; split; eauto.
 
                 * assert (cidorig_ \in domm (prog_interface c')) as ecidorig_c'.
-                    (** Follows from Hloadprog and ecidorig_ *) by admit.
+                  {
+                    assert (cidorig_ \in domm (prog_interface p)
+                            \/
+                            cidorig_ \in domm (prog_interface c)) as [contra | G'].
+                    {
+                      unfold Memory.load in Hloadprog. simpl in Hloadprog.
+                      destruct (mem0 cidorig_) eqn:e; try discriminate.
+                      
+                      eapply CSInvariants.mem_comp_some_link_in_left_or_in_right; eauto.
+                    }
+                    - by rewrite contra in ecidorig_.
+                    - by rewrite Hifc_cc' in G'.
+                  }
+                  
 
                   apply sigma_shifting_lefttoright_option_n_n_id in G''. subst.
                        
@@ -1607,8 +1620,21 @@ Section ThreewayMultisem1.
                        
 
                 * assert (cidorig_ \in domm (prog_interface c')) as ecidorig_c'.
-                    (** Follows from Hloadprog and ecidorig_ *) by admit.
-
+                  {
+                    assert (cidorig_ \in domm (prog_interface p)
+                            \/
+                            cidorig_ \in domm (prog_interface c')) as [contra | G'].
+                    {
+                      unfold Memory.load in Hload. simpl in Hload.
+                      destruct (s1'mem cidorig_) eqn:e; try discriminate.
+                      
+                      eapply CSInvariants.mem_comp_some_link_in_left_or_in_right
+                        with (p := p) (c := c') (mem0 := s1'mem); eauto.
+                    }
+                    - by rewrite contra in ecidorig_.
+                    - assumption.
+                  }
+                  
                   apply sigma_shifting_lefttoright_option_n_n_id
                     in G''; subst.
 
@@ -2708,73 +2734,20 @@ Section ThreewayMultisem1.
                 end.
           }
 
-          assert (C'0 \in domm (prog_interface c') \/ C'0 \in domm (prog_interface p))
-            as [C'0_ctx | C'0_prog].
+          assert (C'0 \in domm (prog_interface p) \/ C'0 \in domm (prog_interface c'))
+            as [C'0_prog | C'0_ctx].
           {
-            admit.
+            rewrite <- Hcomps2'pc.
+            eapply CS.star_pc_domm_non_inform; eauto.
+            - by rewrite <- Hifc_cc'.
+            - eapply interface_preserves_closedness_r; eauto.
+              + by unfold mergeable_interfaces in *; intuition.
+              + eapply linkable_implies_linkable_mains; eauto.
+                * by unfold mergeable_interfaces in *; intuition.
+              + by eapply interface_implies_matching_mains; eauto.
+            - by simpl.
           }
          
-          -- apply mergeable_border_states_c'_executing.
-             5: { exact s2''mem_s1'mem. }
-             5: { exact mem0_s1'mem. }
-             ++ constructor; auto; simpl.
-                 
-                ** (* is_prefix *)
-                  unfold CSInvariants.is_prefix.
-                  eapply star_right; try eassumption.
-                    by rewrite <- cats1.
-
-             ++ simpl.
-                inversion Hstep12' as [? ? ? ? Hstep' Hcontra']; subst.
-                inversion Hstep'; subst; simpl in Hcontra'; try discriminate.
-                inversion Hcontra'; subst.
-
-                match goal with
-                | E': EntryPoint.get C' P (genv_entrypoints (prepare_global_env prog'))
-                      = _ |- _ =>
-                  specialize (EntryPoint.get_some Hb') as C'in
-                end.
-
-                rewrite domm_genv_entrypoints in C'in.
-
-                assert (C' \in domm (prog_interface p) \/
-                               C' \in domm (prog_interface c')) as [C'p | C'c'].
-                {
-                  (** Using C'in somehow. *)
-                  admit.
-                }
-                
-                ** assert (Hb: EntryPoint.get
-                             C' P
-                             (genv_entrypoints (prepare_global_env (prog'))) = Some b).
-                   {
-                     eapply genv_entrypoints_recombination_left
-                       with (c := c) (c' := c'); eauto.
-                   }
-                   match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
-                   inversion Hb; subst; clear Hb.
-                   simpl in *.
-                   unfold mergeable_interfaces, linkable in *.
-                   destruct Hmerge_ipic as [[_ contra] _].
-                   rewrite Hifc_cc' in contra.
-                   by specialize (fdisjoint_partition_notinboth contra C'0_ctx C'p).
-                ** assert (Hb: EntryPoint.get
-                             C' P
-                             (genv_entrypoints (prepare_global_env (prog'))) = Some b0).
-                   {
-                     eapply genv_entrypoints_recombination_right
-                       with (p := p) (p' := p')
-                            (c := c) (c' := c'); eauto.
-                     by rewrite Hifc_cc'.
-                   }
-                   match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
-                     by inversion Hb.
-
-             ++ unfold CS.is_context_component, turn_of, CS.state_turn.
-                by rewrite Hifc_cc' Hcomps2'pc.
-
-             ++ (** regs0_s2'reg *)
-               simpl. exact regs0_s2'reg.
 
           -- apply mergeable_border_states_p_executing;
                unfold mem_of_part_not_executing_rel_original_and_recombined_at_border
@@ -2801,11 +2774,30 @@ Section ThreewayMultisem1.
 
                 rewrite domm_genv_entrypoints in C'in.
 
+                
                 assert (C' \in domm (prog_interface p) \/
                                C' \in domm (prog_interface c')) as [C'p | C'c'].
                 {
-                  (** Using C'in somehow. *)
-                  admit.
+                  assert (Hclosed: closed_program (program_link p c')).
+                  {
+                    eapply interface_preserves_closedness_r; eauto.
+                    + by unfold mergeable_interfaces in *; intuition.
+                    + eapply linkable_implies_linkable_mains; eauto.
+                      * by unfold mergeable_interfaces in *; intuition.
+                    + by eapply interface_implies_matching_mains; eauto.
+                  }
+                  rewrite Hifc_cc' in Hmerge_ipic.
+                  unfold CSInvariants.is_prefix in Hisprefix1.
+                  assert (Hinit: CS.initial_state
+                                   (program_link p c')
+                                   (CS.initial_machine_state (program_link p c'))       
+                         ). by simpl.
+                  by specialize (CS.star_pc_domm_non_inform
+                                _ _
+                                Hwfp Hwfc' Hmerge_ipic Hclosed
+                                Hinit
+                                Hisprefix1
+                             ).
                 }
 
                 ** assert (Hb: EntryPoint.get
@@ -2849,6 +2841,86 @@ Section ThreewayMultisem1.
                   by intros.
              ++ (** regs_s2'reg *)
                simpl. exact regs_s2'reg.
+
+          -- apply mergeable_border_states_c'_executing.
+             5: { exact s2''mem_s1'mem. }
+             5: { exact mem0_s1'mem. }
+             ++ constructor; auto; simpl.
+                 
+                ** (* is_prefix *)
+                  unfold CSInvariants.is_prefix.
+                  eapply star_right; try eassumption.
+                    by rewrite <- cats1.
+
+             ++ simpl.
+                inversion Hstep12' as [? ? ? ? Hstep' Hcontra']; subst.
+                inversion Hstep'; subst; simpl in Hcontra'; try discriminate.
+                inversion Hcontra'; subst.
+
+                match goal with
+                | E': EntryPoint.get C' P (genv_entrypoints (prepare_global_env prog'))
+                      = _ |- _ =>
+                  specialize (EntryPoint.get_some Hb') as C'in
+                end.
+
+                rewrite domm_genv_entrypoints in C'in.
+
+                assert (C' \in domm (prog_interface p) \/
+                               C' \in domm (prog_interface c')) as [C'p | C'c'].
+                {
+                  assert (Hclosed: closed_program (program_link p c')).
+                  {
+                    eapply interface_preserves_closedness_r; eauto.
+                    + by unfold mergeable_interfaces in *; intuition.
+                    + eapply linkable_implies_linkable_mains; eauto.
+                      * by unfold mergeable_interfaces in *; intuition.
+                    + by eapply interface_implies_matching_mains; eauto.
+                  }
+                  rewrite Hifc_cc' in Hmerge_ipic.
+                  unfold CSInvariants.is_prefix in Hisprefix1.
+                  assert (Hinit: CS.initial_state
+                                   (program_link p c')
+                                   (CS.initial_machine_state (program_link p c'))       
+                         ). by simpl.
+                  by specialize (CS.star_pc_domm_non_inform
+                                _ _
+                                Hwfp Hwfc' Hmerge_ipic Hclosed
+                                Hinit
+                                Hisprefix1
+                             ).
+                }
+                
+                ** assert (Hb: EntryPoint.get
+                             C' P
+                             (genv_entrypoints (prepare_global_env (prog'))) = Some b).
+                   {
+                     eapply genv_entrypoints_recombination_left
+                       with (c := c) (c' := c'); eauto.
+                   }
+                   match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
+                   inversion Hb; subst; clear Hb.
+                   simpl in *.
+                   unfold mergeable_interfaces, linkable in *.
+                   destruct Hmerge_ipic as [[_ contra] _].
+                   rewrite Hifc_cc' in contra.
+                   by specialize (fdisjoint_partition_notinboth contra C'0_ctx C'p).
+                ** assert (Hb: EntryPoint.get
+                             C' P
+                             (genv_entrypoints (prepare_global_env (prog'))) = Some b0).
+                   {
+                     eapply genv_entrypoints_recombination_right
+                       with (p := p) (p' := p')
+                            (c := c) (c' := c'); eauto.
+                     by rewrite Hifc_cc'.
+                   }
+                   match goal with | Hb1: _ = Some b1 |- _ => rewrite Hb1 in Hb end.
+                     by inversion Hb.
+
+             ++ unfold CS.is_context_component, turn_of, CS.state_turn.
+                by rewrite Hifc_cc' Hcomps2'pc.
+
+             ++ (** regs0_s2'reg *)
+               simpl. exact regs0_s2'reg.
 
 
                
@@ -2911,6 +2983,14 @@ Section ThreewayMultisem1.
 
           inversion Hstack_s''_s' as [|? ? ? ? Hstk'_s2''stk Hptr'_s2''pc]; subst.
 
+          assert (Hexecuting: executing (prepare_global_env prog') s1'pc IReturn).
+          {
+            simpl in *.
+            eapply execution_invariant_to_linking_recombination; eauto;
+              last erewrite Hpc; eauto.
+            erewrite Hpc at 1. eassumption. 
+          }
+          
           assert (exists (call_arg : value) (s2' : CS.state),
                      Register.get R_COM s1'reg = call_arg /\
                      CS.step_non_inform (prepare_global_env prog')
@@ -2932,16 +3012,16 @@ Section ThreewayMultisem1.
                      _).
             split; first by intuition; subst.
             eapply CS.Step_non_inform; eauto.
-            ++ eapply (@CS.Return _ _ _ _ _ _ _ _);
+            ++ eapply (@CS.Return (prepare_global_env prog') _ _ _ _ _ _ _);
                  try eassumption.
-               ** simpl in *; rewrite Hpc.
+               ** simpl in *; erewrite Hpc.
                   destruct (Pointer.component pc' \in domm (prog_interface p)) eqn:e;
                     rewrite e in Hptr'_pc'; by erewrite <- Hptr'_pc'.
                ** (** here, use the register relation (Hrel_R_COM) **)
                  by intuition.
             ++ simpl in *.
                destruct (Pointer.component pc' \in domm (prog_interface p)) eqn:e;
-                 rewrite e in Hptr'_pc'; rewrite Hptr'_pc'; by subst.
+                 rewrite e in Hptr'_pc'; erewrite Hptr'_pc'; by subst.
           }
 
           assert (CSInvariants.is_prefix
@@ -2968,9 +3048,6 @@ Section ThreewayMultisem1.
           }
 
           
-          do 2 eexists.
-          split; first eassumption.
-
           assert (s2'mem = s1'mem).
           {
             inversion Hstep12' as [? ? ? ? Hstep12'inform]; subst.
@@ -3342,7 +3419,20 @@ Section ThreewayMultisem1.
                   -- rewrite epermvprog; by eexists; split; eauto.
 
                 * assert (cidorig_ \in domm (prog_interface c')) as ecidorig_c'.
-                    (** Follows from Hloadprog and ecidorig_ *) by admit.
+                  {
+                    assert (cidorig_ \in domm (prog_interface p)
+                            \/
+                            cidorig_ \in domm (prog_interface c)) as [contra | G'].
+                    {
+                      unfold Memory.load in Hloadprog. simpl in Hloadprog.
+                      destruct (mem0 cidorig_) eqn:e; try discriminate.
+                      
+                      eapply CSInvariants.mem_comp_some_link_in_left_or_in_right; eauto.
+                    }
+                    - by rewrite contra in ecidorig_.
+                    - by rewrite Hifc_cc' in G'.
+                  }
+                  
 
                   apply sigma_shifting_lefttoright_option_n_n_id in G''. subst.
                        
@@ -3582,8 +3672,21 @@ Section ThreewayMultisem1.
                        
 
                 * assert (cidorig_ \in domm (prog_interface c')) as ecidorig_c'.
-                    (** Follows from Hloadprog and ecidorig_ *) by admit.
-
+                  {
+                    assert (cidorig_ \in domm (prog_interface p)
+                            \/
+                            cidorig_ \in domm (prog_interface c')) as [contra | G'].
+                    {
+                      unfold Memory.load in Hload. simpl in Hload.
+                      destruct (s1'mem cidorig_) eqn:e; try discriminate.
+                      
+                      eapply CSInvariants.mem_comp_some_link_in_left_or_in_right
+                        with (p := p) (c := c') (mem0 := s1'mem); eauto.
+                    }
+                    - by rewrite contra in ecidorig_.
+                    - assumption.
+                  }
+                                   
                   apply sigma_shifting_lefttoright_option_n_n_id
                     in G''; subst.
 
@@ -3924,7 +4027,7 @@ Section ThreewayMultisem1.
                                 
           }
 
-                    assert (reachmem0_reachs1'mem: forall cidl bidl bidl',
+          assert (reachmem0_reachs1'mem: forall cidl bidl bidl',
                      Reachable mem0 (addr_of_value (Register.get R_COM regs))
                                (cidl, bidl) ->
                      sigma_shifting_lefttoright_option
@@ -4716,7 +4819,9 @@ Section ThreewayMultisem1.
           }
 
 
-          -- apply mergeable_border_states_p_executing;
+          -- do 2 eexists.
+             split; first eassumption.
+             apply mergeable_border_states_p_executing;
                unfold mem_of_part_not_executing_rel_original_and_recombined_at_border
                in *.
              5: { exact mem0_s1'mem. }
@@ -4749,15 +4854,13 @@ Section ThreewayMultisem1.
 
              ++ CS.simplify_turn.
                 rewrite Hcomps2'pc.
-                destruct (Pointer.component pc' \in domm (prog_interface c)) eqn:e;
-                  rewrite e; auto.
-                assert (contra: Pointer.component pc' \notin domm (prog_interface p)).
-                { admit. }
-                  by rewrite C'0_prog in contra.
+                eapply CS.domm_partition_in_left_not_in_right; eauto. by simpl.
 
              ++ exact regs_s2'reg.
 
-          -- apply mergeable_border_states_c'_executing.
+          -- do 2 eexists.
+             split; first eassumption.
+             apply mergeable_border_states_c'_executing.
              5: { exact s2''mem_s1'mem. }
              5: { exact mem0_s1'mem. }
              ++ constructor; eauto; simpl.
@@ -4808,7 +4911,7 @@ Section ThreewayMultisem1.
       rewrite Hpccomp_s'_s in H_c'.
       by rewrite H_c' in Hcomp1.
 
-  Admitted.  
+  Qed.  
 
    
 End ThreewayMultisem1.

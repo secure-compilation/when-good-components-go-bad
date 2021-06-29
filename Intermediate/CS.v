@@ -2742,4 +2742,13 @@ Lemma domm_partition :
     Pointer.component pc \in domm (prog_interface p1).
 Admitted.
 
+Lemma domm_partition_in_left_not_in_right :
+  forall p1 p2 s t gps mem regs pc,
+    mergeable_interfaces (prog_interface p1) (prog_interface p2) ->
+    CS.initial_state (program_link p1 p2) s ->
+    Star (CS.sem_non_inform (program_link p1 p2)) s t (gps, mem, regs, pc) ->
+    Pointer.component pc \in domm (prog_interface p1) ->
+    Pointer.component pc \notin domm (prog_interface p2).
+Admitted.
+
 End CS.

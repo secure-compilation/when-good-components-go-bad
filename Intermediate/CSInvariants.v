@@ -139,4 +139,13 @@ Lemma mem_comp_in_domm_prog_interface_some s p t mem cid:
   exists compMem, mem cid = Some compMem.
 Admitted.
 
+Lemma mem_comp_some_link_in_left_or_in_right s p c t mem compMem cid:
+  well_formed_program p ->
+  well_formed_program c ->
+  is_prefix s (program_link p c) t ->
+  CS.state_mem s = mem ->
+  mem cid = Some compMem ->
+  (cid \in domm (prog_interface p) \/ cid \in domm (prog_interface c)).
+Admitted.
+  
 End CSInvariants.
