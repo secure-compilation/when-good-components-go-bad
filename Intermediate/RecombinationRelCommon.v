@@ -1064,18 +1064,35 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   Qed.*)
     Admitted.
 
+  (* [DynShare] Identical sub-proofs. No contradiction! *)
   Lemma mergeable_states_program_to_context s s' s'' t t' t'':
     mergeable_internal_states s s' s'' t t' t'' ->
     CS.is_program_component s ic ->
     CS.is_context_component s'' ip.
   Proof.
-    intros Hmerg.
+    intros Hmerg Hnotin.
     unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
     destruct s as [[[stack mem] reg] pc];
       destruct s'' as [[[stack'' mem''] reg''] pc''].
     pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
     rewrite <- Hpc.
-  Admitted.
+
+    inversion Hmerg
+      as [ [Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ _ _ Hstar _ _ _ _ _ _ _ _ _ _ _] _ _ _ _ _
+         | [Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ _ _ Hstar _ _ _ _ _ _ _ _ _ _ _] _ _ _ _ _ ].
+    - CS.unfold_states.
+      pose proof (CS.star_pc_domm_non_inform
+                    _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Logic.eq_refl Hstar) as Hpc'.
+      destruct Hpc' as [Hprg | Hctx].
+      + assumption.
+      + CS.simplify_turn. now rewrite Hctx in Hnotin.
+    - CS.unfold_states.
+      pose proof (CS.star_pc_domm_non_inform
+                    _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Logic.eq_refl Hstar) as Hpc'.
+      destruct Hpc' as [Hprg | Hctx].
+      + assumption.
+      + CS.simplify_turn. now rewrite Hctx in Hnotin.
+  Qed.
     (*inversion Hmerg as [ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces H_iface H_iface'
                         Hprog_is_closed Hctx_is_closed Hpref Hpref' Hpref''
                         Hmemrel Hregsrel Hstar Hstar''].*)
@@ -1087,25 +1104,31 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   Qed.*)
 
   (* RB: NOTE: Try to phrase everything either as CS.is_XXX_component, or as
-     \[not]in. This is the equivalent of the old [PS.domm_partition]. *)
+     \[not]in. This is the equivalent of the old [PS.domm_partition].
+     [DynShare] There are now two identical sub-proofs, which could be
+     simplified. *)
   Lemma mergeable_states_notin_to_in s s' s'' t t' t'' :
     mergeable_internal_states s s' s'' t t' t'' ->
     Pointer.component (CS.state_pc s) \notin domm ip ->
     Pointer.component (CS.state_pc s) \in domm ic.
   Proof.
     intros Hmerg Hpc_notin.
-    (*
-    inversion Hmerg as [[[[? ?] ?] ?] _ ? ? _ ? _ _ _
-                        Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _
-                        Hini _ _ Hstar _ _ _ _ _ _].
-    CS.unfold_states.
-    pose proof (CS.star_pc_domm_non_inform
-                  _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Hini Hstar) as Hpc.
-    destruct Hpc as [Hprg | Hctx].
-    - now rewrite Hprg in Hpc_notin.
-    - now assumption.
-  Qed.*)
-  Admitted.
+    inversion Hmerg
+      as [ [Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ _ _ Hstar _ _ _ _ _ _ _ _ _ _ _] _ _ _ _ _
+         | [Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ _ _ Hstar _ _ _ _ _ _ _ _ _ _ _] _ _ _ _ _ ].
+    - CS.unfold_states.
+      pose proof (CS.star_pc_domm_non_inform
+                    _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Logic.eq_refl Hstar) as Hpc.
+      destruct Hpc as [Hprg | Hctx].
+      + now rewrite Hprg in Hpc_notin.
+      + now assumption.
+    - CS.unfold_states.
+      pose proof (CS.star_pc_domm_non_inform
+                    _ _ Hwfp Hwfc Hmergeable_ifaces Hprog_is_closed Logic.eq_refl Hstar) as Hpc.
+      destruct Hpc as [Hprg | Hctx].
+      + now rewrite Hprg in Hpc_notin.
+      + now assumption.
+  Qed.
 
   (* RB: NOTE: Consider if the core of the lemma could be moved to CS, as is the
      case of its simpler variant, is_program_component_pc_notin_domm. *)
@@ -1556,6 +1579,7 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   Qed.
 *)
 
+  (* [DynShare] Identical sub-proofs. No contradiction! *)
   Lemma find_label_in_component_mergeable_internal_states
         s s' s'' t t' t'' l spc pc:
     CS.is_program_component s' ic ->
@@ -1565,17 +1589,25 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     find_label_in_component (globalenv sem') spc l = Some pc.
   Proof.
     intros Hprog_comp Hmerge Hspc Hfind.
-    inversion Hmerge as [Hwf|Hwf]; inversion Hwf.
-    - (*rewrite find_label_in_component_program_link_left; auto.
-      + erewrite <- find_label_in_component_program_link_left.
-        Search _ prepare_global_env global_env.
-        unfold sem in Hfind.*)
-      admit.
-    - (* here, contradiction *)
-      admit.
-  Admitted.
+    inversion Hmerge as [Hwf _ _ _ _ _ | Hwf _ _ _ _ _];
+      inversion Hwf as [Hwfp Hwfc _ Hwfc' Hmerge_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _].
+    - rewrite find_label_in_component_program_link_left; try assumption.
+      + rewrite find_label_in_component_program_link_left in Hfind; try assumption.
+        * CS.simplify_turn. CS.unfold_states. now subst spc.
+        * now destruct Hmerge_ifaces.
+      + rewrite <- Hifacec.
+        CS.simplify_turn. CS.unfold_states. now subst spc.
+      + rewrite <- Hifacec. now destruct Hmerge_ifaces.
+    - rewrite find_label_in_component_program_link_left; try assumption.
+      + rewrite find_label_in_component_program_link_left in Hfind; try assumption.
+        * CS.simplify_turn. CS.unfold_states. now subst spc.
+        * now destruct Hmerge_ifaces.
+      + rewrite <- Hifacec.
+        CS.simplify_turn. CS.unfold_states. now subst spc.
+      + rewrite <- Hifacec. now destruct Hmerge_ifaces.
+  Qed.
 
-  
+  (* [DynShare] Identical sub-proofs. No contradiction! *)
   Lemma find_label_in_procedure_mergeable_internal_states
         s s' s'' t t' t'' l spc pc:
     CS.is_program_component s' ic ->
@@ -1585,13 +1617,24 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     find_label_in_procedure (globalenv sem') spc l = Some pc.
   Proof.
     intros Hprog_comp Hmerge Hspc Hfind.
-    inversion Hmerge as [Hwf|Hwf]; inversion Hwf.
-    - admit.
-    - (* here, contradiction *)
-      admit.
-  Admitted.
-        
-    
+    inversion Hmerge as [Hwf _ _ _ _ _ | Hwf _ _ _ _ _];
+      inversion Hwf as [Hwfp Hwfc _ Hwfc' Hmerge_ifaces _ Hifacec _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _].
+    - rewrite find_label_in_procedure_program_link_left; try assumption.
+      + rewrite find_label_in_procedure_program_link_left in Hfind; try assumption.
+        * CS.simplify_turn. CS.unfold_states. now subst spc.
+        * now destruct Hmerge_ifaces.
+      + rewrite <- Hifacec.
+        CS.simplify_turn. CS.unfold_states. now subst spc.
+      + rewrite <- Hifacec. now destruct Hmerge_ifaces.
+    - rewrite find_label_in_procedure_program_link_left; try assumption.
+      + rewrite find_label_in_procedure_program_link_left in Hfind; try assumption.
+        * CS.simplify_turn. CS.unfold_states. now subst spc.
+        * now destruct Hmerge_ifaces.
+      + rewrite <- Hifacec.
+        CS.simplify_turn. CS.unfold_states. now subst spc.
+      + rewrite <- Hifacec. now destruct Hmerge_ifaces.
+  Qed.
+
   (* Search _ find_label_in_component. *)
 
   (*
