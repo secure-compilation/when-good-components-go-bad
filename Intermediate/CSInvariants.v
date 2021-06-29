@@ -72,7 +72,7 @@ Inductive wf_load_wrt_t_pc
       addr_shared_so_far (Pointer.component load_at, Pointer.block load_at) t ->
       wf_ptr_wrt_cid_t pc_comp t ptr ->
       wf_load_wrt_t_pc load_at t pc_comp ptr.
-        
+
 Definition wf_mem_wrt_t_pc (mem: Memory.t) (t: trace event)
            (pc_comp: Component.id) : Prop :=
 forall load_at ptr,
@@ -133,11 +133,37 @@ Qed.
 
 Lemma mem_comp_in_domm_prog_interface_some s p t mem cid:
   well_formed_program p ->
+  closed_program p ->
   is_prefix s p t ->
   CS.state_mem s = mem ->
   cid \in domm (prog_interface p) ->
   exists compMem, mem cid = Some compMem.
-Admitted.
+Proof.
+  unfold is_prefix. simpl.
+  intros Hwf Hclosed Hstar Hmem Hdomm.
+  apply /dommP.
+  remember (CS.initial_machine_state p) as s0 eqn:Hs0.
+  remember (prepare_global_env p) as G eqn:HG.
+  revert mem Hs0 HG Hwf Hclosed Hmem Hdomm.
+  apply star_iff_starR in Hstar.
+  induction Hstar as [| s0 t1 s1 t2 s2 t12 Hstar01 IHstar Hstep12 Ht12];
+    intros mem Hs0 HG Hwf Hclosed Hmem Hdomm; subst.
+  - unfold CS.initial_machine_state. simpl.
+    destruct (prog_main p) as [main |] eqn:Hmain.
+    + simpl.
+      rewrite domm_map (domm_prepare_procedures_initial_memory_aux p).
+      assumption.
+    + destruct (cprog_main_existence Hclosed) as [_ [Hcontra _]].
+      rewrite Hmain in Hcontra. discriminate.
+  - specialize
+      (IHstar _ Logic.eq_refl Logic.eq_refl Hwf Hclosed Logic.eq_refl Hdomm)
+      as Hmem.
+    inversion Hstep12 as [? ? ? ? Hstep12']; subst.
+    inversion Hstep12'; subst;
+      try assumption.
+    + simpl. erewrite <- Memory.domm_store; eassumption.
+    + simpl. erewrite <- Memory.domm_alloc; eassumption.
+Qed.
 
 Lemma mem_comp_some_link_in_left_or_in_right s p c t mem compMem cid:
   well_formed_program p ->
@@ -147,5 +173,5 @@ Lemma mem_comp_some_link_in_left_or_in_right s p c t mem compMem cid:
   mem cid = Some compMem ->
   (cid \in domm (prog_interface p) \/ cid \in domm (prog_interface c)).
 Admitted.
-  
+
 End CSInvariants.
