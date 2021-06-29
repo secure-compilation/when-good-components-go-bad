@@ -979,57 +979,9 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
   Lemma mergeable_states_pc_same_component s s' s'' t t' t'':
     mergeable_internal_states s s' s'' t t' t'' ->
     Pointer.component (CS.state_pc s) = Pointer.component (CS.state_pc s'').
-  (* Proof. *)
-  (*   intros Hmerg. *)
-  (*   induction Hmerg *)
-  (*     as [ s s'' Hini Hini'' *)
-  (*        | s1 s2 s'' Hmerg Hstep IH *)
-  (*        | s s1'' s2'' Hmerg Hstep IH *)
-  (*        | s1 s2 s1'' s2'' t Hdiff Hmerg Hstep Hstep'' IH] *)
-  (*     using mergeable_states_ind'. *)
-  (*   - (* Initial state *) *)
-  (*     inversion Hini; inversion Hini''; subst. *)
-  (*     unfold CS.state_pc. unfold CS.initial_machine_state. *)
-  (*     destruct (prog_main (program_link p c)); destruct (prog_main (program_link p' c')); eauto. *)
-  (*   - (* Silent step on the left *) *)
-  (*     now rewrite <- IH, (CS.silent_step_non_inform_preserves_component _ _ _ Hstep). *)
-  (*   - (* Silent step on the right *) *)
-  (*     now rewrite -> IH, (CS.silent_step_non_inform_preserves_component _ _ _ Hstep). *)
-  (*   - (* Non-silent step *) *)
-  (*     inversion Hstep; subst; try contradiction; *)
-  (*       inversion Hstep''; subst; try contradiction; *)
-  (*       try match goal with *)
-  (*         HE0: E0 = ?x, Hx: ?x <> E0 |- _ => *)
-  (*         rewrite <- HE0 in Hx; contradiction *)
-  (*       end; *)
-  (*       match goal with *)
-  (*         Hstp : CS.step _ _ ?e _, *)
-  (*         Hstp' : CS.step _ _ ?e0 _ |- _ => *)
-  (*         inversion Hstp; *)
-  (*         match goal with *)
-  (*           Hexec: executing ?G ?pc ?i, *)
-  (*           Hexec': executing ?G ?pc ?i' |- _ => *)
-  (*           pose proof *)
-  (*                executing_deterministic *)
-  (*                G pc i i' Hexec Hexec' as cntr; *)
-  (*           try discriminate *)
-  (*         end; *)
-  (*         inversion Hstp'; *)
-  (*         match goal with *)
-  (*           Hexec: executing ?G ?pc ?i, *)
-  (*           Hexec': executing ?G ?pc ?i' |- _ => *)
-  (*           pose proof *)
-  (*                executing_deterministic *)
-  (*                G pc i i' Hexec Hexec' as cntra; *)
-  (*           try discriminate *)
-  (*         end *)
-  (*       end; *)
-  (*       inversion cntra; inversion cntr; subst; simpl in *; *)
-  (*       match goal with *)
-  (*         Heveq: [_] = [_] |- _ => inversion Heveq; subst; reflexivity *)
-  (*       end. *)
-  (* Qed. *)
-  Admitted. (* RB: TODO: Should be fairly easy. *)
+  Proof.
+    intros [[] | []]; congruence.
+  Qed.
 
   Lemma mergeable_states_program_to_program s s' s'' t t' t'':
     mergeable_internal_states s s' s'' t t' t''->
@@ -1044,25 +996,23 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     congruence.
   Qed.
 
+  (* [DynShare] Identical sub-proofs. No contradiction! *)
   Lemma mergeable_states_context_to_program s s' s'' t t' t'':
     mergeable_internal_states s s' s'' t t' t'' ->
     CS.is_context_component s ic ->
     CS.is_program_component s'' ip.
   Proof.
-    intros Hmerg.
-    unfold CS.is_program_component, CS.is_context_component, turn_of, CS.state_turn.
-    destruct s as [[[stack1 mem1] reg1] pc1];
-      destruct s'' as [[[stack2 mem2] reg2] pc2].
-    pose proof mergeable_states_pc_same_component Hmerg as Hpc; simpl in Hpc.
-    rewrite <- Hpc; clear Hpc.
-    inversion Hmerg.
-    destruct H3 as [_ Hdisj].
-    move: Hdisj.
-    (*
-    rewrite fdisjointC => /fdisjointP Hdisj.
-    now auto.
-  Qed.*)
-    Admitted.
+    intros [ [_ _ _ _ Hmerge_ifaces _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hcomp Hcomp'' _ _] _ _ _ _ _
+           | [_ _ _ _ Hmerge_ifaces _ _ _ _ _ _ _ _ _ _ _ _ _ _ Hcomp Hcomp'' _ _] _ _ _ _ _] Hin.
+    - CS.unfold_states. CS.simplify_turn.
+      eapply domm_partition_notin.
+      + eassumption.
+      + now rewrite <- Hcomp'', -> Hcomp.
+    - CS.unfold_states. CS.simplify_turn.
+      eapply domm_partition_notin.
+      + eassumption.
+      + now rewrite <- Hcomp'', -> Hcomp.
+  Qed.
 
   (* [DynShare] Identical sub-proofs. No contradiction! *)
   Lemma mergeable_states_program_to_context s s' s'' t t' t'':
