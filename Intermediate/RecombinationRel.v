@@ -15,7 +15,7 @@ Require Import Intermediate.CSInvariants.
 Require Import Intermediate.RecombinationRelCommon.
 Require Import Intermediate.RecombinationRelOptionSim.
 Require Import Intermediate.RecombinationRelLockstepSim.
-(*Require Import Intermediate.RecombinationRelStrengthening.*)
+Require Import Intermediate.RecombinationRelStrengthening.
 
 Require Import Coq.Program.Equality.
 Require Import Coq.Setoids.Setoid.
@@ -570,12 +570,25 @@ Section ThreewayMultisem4.
   Hypothesis Hprog_is_good:
     forall ss tt,
       CSInvariants.is_prefix ss prog tt ->
-      good_trace_extensional (left_addr_good_for_shifting n) tt.
+      good_trace_extensional (left_addr_good_for_shifting n) tt
+      /\
+      forall mem ptr addr v,
+        CS.state_mem ss = mem ->
+        Memory.load mem ptr = Some v ->
+        addr = (Pointer.component ptr, Pointer.block ptr) ->
+        left_addr_good_for_shifting n addr ->
+        left_value_good_for_shifting n v.
   Hypothesis Hprog''_is_good:
     forall ss'' tt'',
       CSInvariants.is_prefix ss'' prog'' tt'' ->
-      good_trace_extensional (left_addr_good_for_shifting n'') tt''.
-
+      good_trace_extensional (left_addr_good_for_shifting n'') tt''
+      /\
+      forall mem ptr addr v,
+        CS.state_mem ss'' = mem ->
+        Memory.load mem ptr = Some v ->
+        addr = (Pointer.component ptr, Pointer.block ptr) ->
+        left_addr_good_for_shifting n'' addr ->
+        left_value_good_for_shifting n'' v.
 
   Lemma merged_program_is_closed: closed_program prog'.
   Proof.
@@ -666,6 +679,8 @@ Section ThreewayMultisem4.
           destruct Hmergeable_ifaces as [? _].
           by rewrite <- Hifacep; rewrite <- Hifacec.
       }
+
+      unfold CS.initial_state in *; subst.
       
       rewrite Hinitpc'.
       (* 
@@ -675,7 +690,8 @@ Section ThreewayMultisem4.
          But in any case, we will need mergeable_states_well_formed.
        *)
       assert (mergeable_states_well_formed
-                p c p' c' n n'' s
+                p c p' c' n n''
+                (CS.initial_machine_state prog)
                 ([],
                  unionm (prepare_procedures_memory p) (prepare_procedures_memory c'),
                  Register.init,
@@ -684,44 +700,29 @@ Section ThreewayMultisem4.
                   CS.prog_main_block p + CS.prog_main_block c',
                   Z.of_nat 0)
                 )
-                s'' E0 E0 E0
+                (CS.initial_machine_state prog'')
+                E0 E0 E0
              ) as Hmergewf.
       {
-(*FIXME
         eapply mergeable_states_well_formed_intro;
           simpl; eauto; unfold CS.initial_state, CSInvariants.is_prefix in *; subst.
-        + apply star_refl.
-        + rewrite Hinitpc'. apply star_refl.
-        + apply star_refl.
-        + rewrite CS.initial_machine_state_after_linking; eauto.
-          -- simpl.
-             (* good_memory prepare_procedures_memory *)
-             (* Search _ prepare_initial_memory. *)
-             (* Search _ alloc_static_buffers. *)
-             admit.
-          -- by inversion Hmergeable_ifaces.
-        + rewrite CS.initial_machine_state_after_linking; eauto.
-          -- simpl.
-             (* good_memory prepare_procedures_memory *)
-             admit.
-          -- rewrite <- Hifacep, <- Hifacec. by inversion Hmergeable_ifaces.
-        + (* good_memory prepare_procedures_memory *)
-          admit.
-        + constructor.
-        + constructor.
-        + constructor.
-        + rewrite CS.initial_machine_state_after_linking; eauto.
-          -- constructor.
-          -- by inversion Hmergeable_ifaces.
-        + rewrite CS.initial_machine_state_after_linking; eauto.
-          -- constructor.
-          -- rewrite <- Hifacep, <- Hifacec. by inversion Hmergeable_ifaces.
-        + by rewrite Hinitpc.
-        + by rewrite Hinitp'c'.
+        + by apply star_refl.
+        + rewrite Hinitpc'; by apply star_refl.
+        + by apply star_refl.
+        + unfold E0; constructor; intros ? Hcontra.
+          inversion Hcontra; subst; by find_nil_rcons.
+        + unfold E0; constructor; intros ? Hcontra.
+          inversion Hcontra; subst; by find_nil_rcons.
+        + unfold E0; constructor; intros ? Hcontra.
+          inversion Hcontra; subst; by find_nil_rcons.
+        + unfold CS.initial_machine_state. destruct (prog_main prog); by constructor.
+        + unfold CS.initial_machine_state. destruct (prog_main prog''); by constructor.
+        + unfold CS.initial_machine_state. by destruct (prog_main prog).
+        + unfold CS.initial_machine_state. by destruct (prog_main prog'').
         + constructor. constructor.
         + constructor. constructor.
-*) admit.
-      } 
+      }
+
       destruct (Component.main \in domm (prog_interface p)) eqn:whereismain.
       + (* Component.main is in p. *)
         eapply mergeable_border_states_p_executing; simpl; eauto.
@@ -733,11 +734,13 @@ Section ThreewayMultisem4.
           }
           by rewrite Hprogmainblk.
         * (* Goal: is_program_component. *)
+          CS.simplify_turn.
+          (* TODO: Use CS.domm_partition_in_left_not_in_right; eauto. *)
           admit.
         * (* Goal: registers related *)
-          unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
+          unfold CS.initial_state in *; subst; rewrite Hinitpc; simpl.
           eapply regs_rel_of_executing_part_intro.
-          intros reg.
+          intros reg. left.
           unfold Register.get.
           destruct (Register.to_nat reg \in domm Register.init) eqn:regdomm.
           -- assert (Register.init (Register.to_nat reg) = Some Undef)
@@ -745,22 +748,63 @@ Section ThreewayMultisem4.
              {
                by apply Register.reg_in_domm_init_Undef.
              }
-             (* by rewrite Hreginit_undef. *) admit. (* FIXME *)
+             rewrite Hreginit_undef. by simpl.
           -- assert (Register.init (Register.to_nat reg) = None) as Hreginit_none.
              {
                rewrite mem_domm in regdomm.
                by destruct (Register.init (Register.to_nat reg)) eqn:e.
              }
-             (* by rewrite Hreginit_none. *) admit. (* FIXME *)
+             rewrite Hreginit_none. by simpl.
         * (* Goal: mem_of_part_executing_rel_original_and_recombined *)
           unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
+          constructor.
+          -- intros [cidorig bidorig] Horig.
+            (* Observe that here from Horig that we
+               only care about addresses from the left part of the "unionm"'s.
+               And observe that the left part is the same in both "uninonm"'s.
+             *)
+             constructor.
+             ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
+                rewrite unionmE in Hload. rewrite !unionmE.
+                assert (e: isSome (prepare_procedures_memory p cidorig)).
+                {
+                  rewrite <- mem_domm; by rewrite domm_prepare_procedures_memory.
+                }
+                rewrite !e in Hload. rewrite !e !Hload.
+                destruct (
+                    rename_value_option
+                      (sigma_shifting_wrap_bid_in_addr
+                         (sigma_shifting_lefttoright_addr_bid
+                            n
+                            (fun cid : nat => if cid \in domm (prog_interface p)
+                                              then n cid else n'' cid))) v
+                  ) eqn:ev; rewrite ev; auto.
+                ** (** Here, need some invariant about the values that exist *)
+                   (** in the initial memory. Probably need to instantiate   *)
+                   (** CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc         *)
+                  admit.
+                ** split; auto.
+                   admit.
 
-          (* Observe that mem_of_part_executing_rel_original_and_recombined 
-             only cares about addresses from the left part of the "unionm"'s.
-             And observe that the left part is the same in both "uninonm"'s.
-           *)
-          admit.
-          
+             ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
+                rewrite unionmE in Hload. rewrite !unionmE.
+                assert (e: isSome (prepare_procedures_memory p cidorig)).
+                {
+                  rewrite <- mem_domm; by rewrite domm_prepare_procedures_memory.
+                }
+                rewrite !e in Hload. rewrite !e !Hload.
+
+                admit.
+
+          -- constructor.
+             ++ intros ? Hcontra; unfold E0 in *;
+                  inversion Hcontra; subst; by find_nil_rcons.
+             ++ intros ? Hcid.
+                
+                (** Need a spec for ComponentMemory.next_block of 
+                    unionm (prepare_procedures_memory p) (prepare_procedures_memory c)*)
+
+                admit.
           (*Search _ prepare_procedures_memory.*)
 
           (* This assertion is not needed. *)
