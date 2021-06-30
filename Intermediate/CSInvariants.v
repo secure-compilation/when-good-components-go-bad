@@ -172,6 +172,47 @@ Lemma mem_comp_some_link_in_left_or_in_right s p c t mem compMem cid:
   CS.state_mem s = mem ->
   mem cid = Some compMem ->
   (cid \in domm (prog_interface p) \/ cid \in domm (prog_interface c)).
-Admitted.
+Proof.
+  (* Set up induction on star from left to right. *)
+  unfold is_prefix. simpl.
+  intros Hwfp Hwfc Hstar Hmem HcompMem.
+  assert (Hdomm : cid \in domm mem) by (apply /dommP; eauto).
+  clear HcompMem.
+  set prog := program_link p c. fold prog in Hstar.
+  remember (CS.initial_machine_state prog) as s0 eqn:Hs0.
+  remember (prepare_global_env prog) as G eqn:HG.
+  revert mem cid compMem Hs0 HG Hmem Hdomm.
+  apply star_iff_starR in Hstar.
+  induction Hstar as [| s0 t1 s1 t2 s2 t12 Hstar01 IHstar Hstep12 Ht12];
+    intros mem cid Hs0 HG Hmem HcompMem Hdomm; subst.
+  - (* Base case. *)
+    unfold CS.initial_machine_state in Hdomm.
+    destruct (prog_main prog) as [main |] eqn:Hmain;
+      simpl in Hdomm.
+    + (* If we assume a closed program and linkable interfaces, this is easy
+         (and the contradictory case on [prog_main] goes away). As is, we need
+         to be a little more involved. *)
+      rewrite domm_map domm_prepare_procedures_initial_memory_aux in Hdomm.
+      unfold prog, program_link in Hdomm.
+      simpl in Hdomm.
+      destruct (cid \in domm (prog_interface p)) eqn:Hcase1;
+        destruct (cid \in domm (prog_interface c)) eqn:Hcase2;
+        auto. (* Only the contradictory case is left. *)
+      apply negb_true_iff in Hcase1. apply negb_true_iff in Hcase2.
+      destruct (dommP Hdomm) as [v Hcontra].
+      rewrite unionmE (dommPn Hcase1) (dommPn Hcase2) in Hcontra.
+      discriminate.
+    + rewrite domm0 in Hdomm. discriminate.
+  - (* Inductive case. *)
+    inversion Hstep12 as [? ? ? ? Hstep12']; subst.
+    inversion Hstep12'; subst;
+      eapply IHstar;
+      try eauto; (* Solve most goals. *)
+      simpl; simpl in Hdomm.
+    + (* Store *)
+      erewrite Memory.domm_store; eassumption.
+    + (* Alloc *)
+      erewrite Memory.domm_alloc; eassumption.
+Qed.
 
 End CSInvariants.
