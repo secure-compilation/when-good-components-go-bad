@@ -93,6 +93,37 @@ Lemma is_prefix_wf_state_t s p t:
   well_formed_program p ->
   is_prefix s p t ->
   wf_state_t s t.
+Proof.
+  unfold is_prefix. simpl.
+  intros Hwf Hstar.
+  remember (prepare_global_env p) as G eqn:HG.
+  remember (CS.initial_machine_state p) as s0 eqn:Hs0.
+  revert HG Hs0.
+  apply star_iff_starR in Hstar.
+  induction Hstar as [| s0 t1 s1 t2 s2 t12 Hstar01 IHstar Hstep12 Ht12];
+    intros; subst.
+  - (* Base case. *)
+    unfold CS.initial_machine_state. simpl.
+    (* TODO: Does this apply to closed programs only? If not, we need to handle
+       additional cases. *)
+    assert (Hmain : prog_main p) by admit. rewrite Hmain.
+    split; simpl.
+    + (* No pointers in static buffers. *)
+      intros aptr vptr Hload.
+      Check wfprog_well_formed_buffers.
+      Print Buffer.well_formed_buffer.
+      Check wf_ptr_own.
+      admit. (* Should be easy once connected to the environment. *)
+    + (* All registers are uninitialized. *)
+      intros reg ptr Hget.
+      destruct reg; discriminate.
+  - (* Inductive step. *)
+    specialize (IHstar Logic.eq_refl Logic.eq_refl).
+    split.
+    + (* Memory. *)
+      admit.
+    + (* Registers. *)
+      admit.
 Admitted.
 
 Lemma wf_state_wf_reg s regs pc pc_comp t:
