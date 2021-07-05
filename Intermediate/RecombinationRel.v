@@ -1137,7 +1137,442 @@ Section ThreewayMultisem4.
             
 
       + (* Component.main is in c'. Should be analogous to the parallel goal. *)
+        eapply mergeable_border_states_c'_executing; simpl; eauto.
+        * (* Goal: program counters equal *)
+          unfold CS.initial_state in *. subst. rewrite Hinitp'c'. simpl.
+          assert (CS.prog_main_block p = CS.prog_main_block p') as Hprogmainblk.
+          {
+            admit.
+          }
+          by rewrite Hprogmainblk.
+        * (* Goal: is_program_component. *)
+          CS.simplify_turn.
+          (* TODO: Use CS.domm_partition_in_left_not_in_right; eauto. *)
+          admit.
+        * (* Goal: registers related *)
+          unfold CS.initial_state in *; subst; rewrite Hinitp'c'; simpl.
+          eapply regs_rel_of_executing_part_intro.
+          intros reg. left.
+          unfold Register.get.
+          destruct (Register.to_nat reg \in domm Register.init) eqn:regdomm.
+          -- assert (Register.init (Register.to_nat reg) = Some Undef)
+              as Hreginit_undef.
+             {
+               by apply Register.reg_in_domm_init_Undef.
+             }
+             rewrite Hreginit_undef. by simpl.
+          -- assert (Register.init (Register.to_nat reg) = None) as Hreginit_none.
+             {
+               rewrite mem_domm in regdomm.
+               by destruct (Register.init (Register.to_nat reg)) eqn:e.
+             }
+             rewrite Hreginit_none. by simpl.
+        * (* Goal: mem_of_part_executing_rel_original_and_recombined *)
+          assert (Hdisj: fdisjoint (domm (prog_interface p'))
+                                   (domm (prog_interface c'))).
+          {
+            unfold mergeable_interfaces, linkable in *.
+            rewrite <- Hifacep, <- Hifacec. by intuition.
+          }
+          move : Hdisj => /fdisjointP => Hdisj.
           
+          unfold CS.initial_state in *. subst. rewrite Hinitp'c'. simpl.
+          constructor.
+          -- intros [cidorig bidorig] Horig.
+            (* Observe that because of Horig, we
+               only care about addresses from the left part of the "unionm"'s.
+               And observe that the left part is the same in both "uninonm"'s.
+             *)
+             constructor.
+             ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
+                rewrite unionmE in Hload. rewrite !unionmE.
+                assert (e: isSome (prepare_procedures_memory p' cidorig) = false).
+                {
+                  rewrite <- mem_domm.
+                  destruct (cidorig \in domm (prepare_procedures_memory p'))
+                           eqn:econtra; auto.
+                  rewrite domm_prepare_procedures_memory in econtra.
+                  apply Hdisj in econtra. by rewrite Horig in econtra.
+                }
+                rewrite !e in Hload.
+                rewrite <- mem_domm, domm_prepare_procedures_memory, <- Hifacep,
+                  <- domm_prepare_procedures_memory, mem_domm in e.
+                rewrite !e !Hload.
+
+                (** Here, need some invariant about the values that exist *)
+                (** in the initial memory. Probably need to instantiate   *)
+                (** CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc         *)
+                
+
+                destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
+                  try reflexivity.
+                destruct (permv =? Permission.data) eqn:epermv; auto.
+                unfold rename_addr_option,
+                sigma_shifting_wrap_bid_in_addr,
+                sigma_shifting_lefttoright_addr_bid in *.
+                assert (G: CSInvariants.wf_load_wrt_t_pc
+                               (Permission.data, cidorig, bidorig, offset)
+                               E0
+                               Component.main
+                               (permv, cidv, bidv, offv)
+                       ).
+                {
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  - eapply CSInvariants.wf_state_wf_mem; eauto.
+                    + eapply CSInvariants.is_prefix_wf_state_t.
+                      * eapply linking_well_formedness.
+                        -- exact Hwfp'.
+                        -- exact Hwfc'.
+                        -- by unfold mergeable_interfaces in *;
+                             rewrite <- Hifacec, <- Hifacep; intuition.
+                      * eapply star_refl.
+                    + rewrite CS.initial_machine_state_after_linking; eauto.
+                        by unfold mergeable_interfaces in *;
+                          rewrite <- Hifacec, <- Hifacep; intuition.
+                  - rewrite CS.initial_machine_state_after_linking; eauto.
+                    + unfold Memory.load; rewrite !unionmE; simpl.
+                      rewrite <- mem_domm, domm_prepare_procedures_memory, Hifacep,
+                      <- domm_prepare_procedures_memory, mem_domm in e.
+                      rewrite e.
+                      assumption.                      
+                    + by unfold mergeable_interfaces in *;
+                        rewrite <- Hifacec, <- Hifacep; intuition.
+                }
+                destruct (sigma_shifting_lefttoright_option
+                            (n'' cidv)
+                            (if cidv \in domm (prog_interface p)
+                             then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
+                  rewrite ebidv'.
+                ** 
+                  inversion G as [? G'|? contra]; subst.
+                  --- simpl in *.
+                      inversion G' as [|? ? ? ? contra]; subst.
+                      +++
+                        assert (G'': cidv \in domm (prog_interface p) = false).
+                        {
+                          rewrite Hifacep.
+                          destruct (cidv \in domm (prog_interface p')) eqn:econtra;
+                            auto.
+                          apply Hdisj in econtra. by rewrite Horig in econtra.
+                        }
+                        rewrite G'' in ebidv'.
+                        apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                          by subst.
+                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
+                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                ** split; auto.
+
+                   inversion G as [? G'|? contra]; subst.
+                   --- simpl in *.
+                      inversion G' as [|? ? ? ? contra]; subst.
+                       +++
+                         assert (G'': cidv \in domm (prog_interface p) = false).
+                         {
+                           rewrite Hifacep.
+                           destruct (cidv \in domm (prog_interface p')) eqn:econtra;
+                             auto.
+                           apply Hdisj in econtra. by rewrite Horig in econtra.
+                         }
+                         rewrite G'' in ebidv'.
+                         destruct (sigma_shifting_lefttoright_option
+                                     (if cidv \in domm (prog_interface p)
+                                      then n cidv else n'' cidv) 
+                                     (n'' cidv) bidv) eqn:econtra;
+                           rewrite econtra; auto;
+                             by rewrite G'' ebidv' in econtra. 
+                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
+                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                   
+
+             ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
+                rewrite unionmE in Hload. rewrite !unionmE.
+                assert (e: isSome (prepare_procedures_memory p cidorig) = false).
+                {
+                  rewrite <- mem_domm.
+                  destruct (cidorig \in domm (prepare_procedures_memory p))
+                           eqn:econtra; auto.
+                  
+                  rewrite domm_prepare_procedures_memory Hifacep in econtra.
+                  apply Hdisj in econtra. by rewrite Horig in econtra.
+                }
+                rewrite !e in Hload.
+                rewrite <- mem_domm, domm_prepare_procedures_memory, Hifacep,
+                  <- domm_prepare_procedures_memory, mem_domm in e.
+                rewrite !e !Hload.
+
+                exists v'.
+                
+                destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
+                  try reflexivity.
+                destruct (permv =? Permission.data) eqn:epermv; auto.
+                unfold rename_addr_option,
+                sigma_shifting_wrap_bid_in_addr,
+                sigma_shifting_lefttoright_addr_bid in *.
+                assert (G: CSInvariants.wf_load_wrt_t_pc
+                               (Permission.data, cidorig, bidorig, offset)
+                               E0
+                               Component.main
+                               (permv, cidv, bidv, offv)
+                       ).
+                {
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  - eapply CSInvariants.wf_state_wf_mem; eauto.
+                    + eapply CSInvariants.is_prefix_wf_state_t.
+                      * eapply linking_well_formedness.
+                        -- exact Hwfp'.
+                        -- exact Hwfc'.
+                        -- by rewrite <- Hifacep, <- Hifacec;
+                             unfold mergeable_interfaces in *; intuition.
+                      * eapply star_refl.
+                    + rewrite CS.initial_machine_state_after_linking; eauto.
+                        by rewrite <- Hifacep, <- Hifacec;
+                          unfold mergeable_interfaces in *; intuition.
+                  - rewrite CS.initial_machine_state_after_linking; eauto.
+                    + unfold Memory.load; rewrite !unionmE e; simpl; assumption.
+                    + by rewrite <- Hifacep, <- Hifacec;
+                        unfold mergeable_interfaces in *; intuition.
+                }
+
+                destruct (sigma_shifting_lefttoright_option
+                            (n'' cidv)
+                            (if cidv \in domm (prog_interface p)
+                             then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
+                  rewrite ebidv'.
+                ** 
+                  inversion G as [? G'|? contra]; subst.
+                  --- simpl in *.
+                      inversion G' as [|? ? ? ? contra]; subst.
+                      +++
+                        destruct (cidv \in domm (prog_interface p'))
+                                 eqn:econtra.
+                        *** by apply Hdisj in econtra; rewrite Horig in econtra.
+                        *** rewrite <- Hifacep in econtra.
+                            rewrite econtra in ebidv'.
+                            apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                              subst; by auto.
+                              
+                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
+                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                ** split; auto.
+
+                   inversion G as [? G'|? contra]; subst.
+                   --- simpl in *.
+                      inversion G' as [|? ? ? ? contra]; subst.
+                       +++
+                         destruct (cidv \in domm (prog_interface p'))
+                                 eqn:econtra.
+                        *** by apply Hdisj in econtra; rewrite Horig in econtra.
+                        *** rewrite <- Hifacep in econtra.
+                            rewrite econtra in ebidv'; rewrite econtra ebidv'; by auto.
+                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
+                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+
+          -- constructor.
+             ++ intros ? Hcontra; unfold E0 in *;
+                  inversion Hcontra; subst; by find_nil_rcons.
+             ++ intros ? Hcid.
+                
+                (** Need a spec for ComponentMemory.next_block of 
+                    unionm (prepare_procedures_memory p) (prepare_procedures_memory c)*)
+
+                admit.
+
+        * (* Goal: mem_of_part_not_executing_rel_original_and_recombined_at_border*)
+          unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
+          constructor.
+          -- intros [cidorig bidorig] Horig.
+            (* Observe that because of Horig, we
+               only care about addresses from the right part of the "unionm"'s.
+               And observe that the right part is the same in both "uninonm"'s.
+             *)
+             assert (e: isSome (prepare_procedures_memory p cidorig)).
+             {
+               rewrite <- mem_domm; by rewrite domm_prepare_procedures_memory.
+             }
+             assert (e2: isSome (prepare_procedures_memory c cidorig) = false).
+             {
+               rewrite <- mem_domm, domm_prepare_procedures_memory.
+               assert (Hdisj: fdisjoint (domm (prog_interface p))
+                                        (domm (prog_interface c))).
+               {
+                    unfold mergeable_interfaces, linkable in *; by intuition.
+               }
+               rewrite fdisjointC in Hdisj.
+               move : Hdisj => /fdisjointP => Hdisj.
+               destruct (cidorig \in domm (prog_interface c)) eqn:econtra; auto.
+                 by apply Hdisj in econtra; rewrite Horig in econtra.
+             }
+             
+             constructor.
+             ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
+                rewrite unionmE in Hload. rewrite !unionmE.
+                rewrite !e in Hload.
+                rewrite !e !Hload.
+
+                
+                (** Here, need some invariant about the values that exist *)
+                (** in the initial memory. Probably need to instantiate   *)
+                (** CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc         *)
+                
+
+                destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
+                  try reflexivity.
+                destruct (permv =? Permission.data) eqn:epermv; auto.
+                unfold rename_addr_option,
+                sigma_shifting_wrap_bid_in_addr,
+                sigma_shifting_lefttoright_addr_bid in *.
+                assert (G: CSInvariants.wf_load_wrt_t_pc
+                               (Permission.data, cidorig, bidorig, offset)
+                               E0
+                               Component.main
+                               (permv, cidv, bidv, offv)
+                       ).
+                {
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  - eapply CSInvariants.wf_state_wf_mem; eauto.
+                    + eapply CSInvariants.is_prefix_wf_state_t.
+                      * eapply linking_well_formedness.
+                        -- exact Hwfp.
+                        -- exact Hwfc.
+                        -- by unfold mergeable_interfaces in *;
+                             intuition.
+                      * eapply star_refl.
+                    + rewrite CS.initial_machine_state_after_linking; eauto.
+                        by unfold mergeable_interfaces in *;
+                          intuition.
+                  - rewrite CS.initial_machine_state_after_linking; eauto.
+                    + unfold Memory.load; rewrite !unionmE; simpl.
+                      rewrite e;  assumption.
+                    + by unfold mergeable_interfaces in *; intuition.
+                }
+                assert (Hdisj: fdisjoint (domm (prog_interface p))
+                                         (domm (prog_interface c))).
+                {
+                  unfold mergeable_interfaces, linkable in *; by intuition.
+                }
+                move : Hdisj => /fdisjointP => Hdisj.
+                
+                destruct (sigma_shifting_lefttoright_option
+                            (n cidv)
+                            (if cidv \in domm (prog_interface p)
+                             then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
+                  rewrite ebidv'.
+                ** 
+                  inversion G as [? G'|? contra]; subst.
+                  --- simpl in *.
+                        
+                      inversion G' as [|? ? ? ? contra]; subst.
+                      +++
+                        rewrite Horig in ebidv';
+                          apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                          by subst.
+                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
+                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                ** split; auto.
+
+                   inversion G as [? G'|? contra]; subst.
+                   --- simpl in *.
+                      inversion G' as [|? ? ? ? contra]; subst.
+                      +++ destruct (sigma_shifting_lefttoright_option
+                                      (if cidv \in domm (prog_interface p)
+                                       then n cidv else n'' cidv) 
+                                      (n cidv) bidv) eqn:econtra2;
+                            rewrite econtra2; auto;
+                              by rewrite Horig in ebidv';
+                              rewrite Horig in econtra2;
+                              rewrite ebidv' in econtra2. 
+                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
+                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                   
+             ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
+                rewrite unionmE in Hload. rewrite !unionmE.
+                exists v'.
+                rewrite !e.
+
+                rewrite e in Hload.
+
+                rewrite Hload.
+                
+                (** Here, need some invariant about the values that exist *)
+                (** in the initial memory. Probably need to instantiate   *)
+                (** CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc         *)
+                
+
+                destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
+                  try reflexivity.
+                destruct (permv =? Permission.data) eqn:epermv; auto. split; auto.
+                unfold rename_addr_option,
+                sigma_shifting_wrap_bid_in_addr,
+                sigma_shifting_lefttoright_addr_bid in *.
+                assert (G: CSInvariants.wf_load_wrt_t_pc
+                               (Permission.data, cidorig, bidorig, offset)
+                               E0
+                               Component.main
+                               (permv, cidv, bidv, offv)
+                       ).
+                {
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  - eapply CSInvariants.wf_state_wf_mem; eauto.
+                    + eapply CSInvariants.is_prefix_wf_state_t.
+                      * eapply linking_well_formedness.
+                        -- exact Hwfp.
+                        -- exact Hwfc.
+                        -- by unfold mergeable_interfaces in *;
+                             intuition.
+                      * eapply star_refl.
+                    + rewrite CS.initial_machine_state_after_linking; eauto.
+                        by unfold mergeable_interfaces in *;
+                          intuition.
+                  - rewrite CS.initial_machine_state_after_linking; eauto.
+                    + unfold Memory.load; rewrite !unionmE e; simpl; assumption.
+                    + by unfold mergeable_interfaces in *;
+                        intuition.
+                }
+                assert (Hdisj: fdisjoint (domm (prog_interface p))
+                                         (domm (prog_interface c))).
+                {
+                  unfold mergeable_interfaces, linkable in *; by intuition.
+                }
+                move : Hdisj => /fdisjointP => Hdisj.
+                
+                destruct (sigma_shifting_lefttoright_option
+                            (n cidv)
+                            (if cidv \in domm (prog_interface p)
+                             then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
+                  rewrite ebidv'.
+                ** 
+                  inversion G as [? G'|? contra]; subst.
+                  --- simpl in *.
+                        
+                      inversion G' as [|? ? ? ? contra]; subst.
+                      +++ rewrite Horig in ebidv';
+                            apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                              by right; subst.
+                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
+                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                ** 
+                  inversion G as [? G'|? contra]; subst.
+                  --- simpl in *.
+                      inversion G' as [|? ? ? ? contra]; subst.
+                      +++
+                        rewrite Horig in ebidv'. rewrite Horig ebidv'. by left.
+                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
+                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+
+          -- constructor.
+             ++ intros ? Hcontra; unfold E0 in *;
+                  inversion Hcontra; subst; by find_nil_rcons.
+             ++ intros ? Hcid.
+                
+                (** Need a spec for ComponentMemory.next_block of 
+                    unionm (prepare_procedures_memory p) (prepare_procedures_memory c)*)
+
+                admit.
+            
+
+         
+
+        
   Admitted. (* RB: TODO: Establish trivial relations, should not be hard. *)
 
   (*   inversion Hmergeable_ifaces as [Hlinkable _]. *)
