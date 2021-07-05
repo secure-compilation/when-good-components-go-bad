@@ -1770,11 +1770,25 @@ Section Recombination.
   Hypothesis Hprog_is_good:
     forall ss tt,
       CSInvariants.is_prefix ss prog tt ->
-      good_memory (left_addr_good_for_shifting n) (CS.state_mem ss).
+      good_trace_extensional (left_addr_good_for_shifting n) tt
+      /\
+      forall mem ptr addr v,
+        CS.state_mem ss = mem ->
+        Memory.load mem ptr = Some v ->
+        addr = (Pointer.component ptr, Pointer.block ptr) ->
+        left_addr_good_for_shifting n addr ->
+        left_value_good_for_shifting n v.
   Hypothesis Hprog''_is_good:
     forall ss'' tt'',
       CSInvariants.is_prefix ss'' prog'' tt'' ->
-      good_memory (left_addr_good_for_shifting n'') (CS.state_mem ss'').
+      good_trace_extensional (left_addr_good_for_shifting n'') tt''
+      /\
+      forall mem ptr addr v,
+        CS.state_mem ss'' = mem ->
+        Memory.load mem ptr = Some v ->
+        addr = (Pointer.component ptr, Pointer.block ptr) ->
+        left_addr_good_for_shifting n'' addr ->
+        left_value_good_for_shifting n'' v.
 
 
   (* RB: NOTE: Possible improvements:
@@ -1859,12 +1873,15 @@ Section Recombination.
     apply CS.program_behaves_inv_non_inform in Hst_beh'' as [s1'' [Hini1'' Hst_beh'']].
     (* Suppose we can establish the relation between the initial states of the
        two runs and the initial state of the recombined program. *)
-    pose (s1' := CS.initial_machine_state (program_link p c')).
-
     
-    (* AEK: TODO: Get the "t"s from the behaviors. *)
-    (*assert (Hmerge1 : mergeable_states p c p' c' n n'' s1 s1' s1'' (* t1 t1' t1''*))
-      by admit.*)
+    assert (exists s1',
+               CS.initial_state prog' s1' /\
+               mergeable_border_states
+                 p c p' c' n n''
+                 s1 s1' s1'' E0 E0 E0) as [s1' [Hini1' Hmerge1]].
+    {
+      eapply match_initial_states; eauto.
+    }
 
 
     (* In the standard proof, because the two executions produce the same
@@ -1874,6 +1891,11 @@ Section Recombination.
       as [s1_ [s2 [Hini1_ Hstar12]]].
     destruct (CS.behavior_prefix_star_non_inform Hbeh'' Hprefix'')
       as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
+
+    unfold CS.initial_state in *; subst.
+
+    
+    
 (*FIXME
     pose proof match_initial_states (*n n''*) Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
          Hprog_is_closed Hprog_is_closed' Hprog_is_good Hprog''_is_good Hini1_ Hini1''_
