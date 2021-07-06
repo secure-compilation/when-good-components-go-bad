@@ -96,6 +96,7 @@ Proof.
   destruct ptr as [[[? ?] ?] ?]. reflexivity.
 Qed.
 
+(* TODO: Move to Pointer module. *)
 Remark pointer_refl ptr1 ptr2 :
   Pointer.eq ptr1 ptr2 = true ->
   ptr1 = ptr2.
@@ -112,6 +113,10 @@ Proof.
   (* ... and we're done. *)
   //.
 Qed.
+
+(* TODO: Relocate. *)
+Definition addr_eq (a1 a2 : addr_t) : bool :=
+  (fst a1 =? fst a2) && (snd a1 =? snd a2).
 
 Lemma is_prefix_wf_state_t s p t:
   well_formed_program p ->
@@ -173,6 +178,51 @@ Proof.
         -- (* For any other address, this follows directly from the IH. *)
            assert (Hneq : ptr <> addr_load) by admit.
            rewrite -> (Memory.load_after_store_neq _ _ _ _ _ Hneq H1) in Hload.
+           exact (Hmem1 _ _ Hload).
+      * (* IJal *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        (* Since we dot change components, this follows from the IH. *)
+        rewrite <- (find_label_in_component_1 _ _ _ _ H0).
+        exact (Hmem1 _ _ Hload).
+      * (* IJump *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        (* Since we dot change components, this follows from the IH. *)
+        rewrite -> H2.
+        exact (Hmem1 _ _ Hload).
+      * (* IBnz *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        (* Since we dot change components, this follows from the IH. *)
+        rewrite <- (find_label_in_procedure_1 _ _ _ _ H2).
+        exact (Hmem1 _ _ Hload).
+      * (* IAlloc *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        destruct (addr_eq (Pointer.component addr_load, Pointer.block addr_load)
+                          (Pointer.component ptr,       Pointer.block ptr))
+                 eqn:Heq.
+        -- (* If we read from the newly allocated block, the load cannot find
+             any pointers and we conclude by contradiction. *)
+           assert (Heq' :
+                     (Pointer.component addr_load, Pointer.block addr_load) =
+                     (Pointer.component ptr,       Pointer.block ptr))
+            by admit.
+           rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 Heq') in Hload.
+           destruct (Pointer.permission addr_load =? Permission.data);
+             last discriminate.
+           destruct ((Pointer.offset addr_load <? Z.of_nat (Z.to_nat size))%Z);
+             last discriminate.
+           destruct ((0 <=? Pointer.offset addr_load)%Z);
+             discriminate.
+        -- (* If we read from elsewhere, the result follows from the IH. *)
+           assert (Heq' :
+                     (Pointer.component addr_load, Pointer.block addr_load) <>
+                     (Pointer.component ptr,       Pointer.block ptr))
+            by admit.
+           (* TODO: Rename lemma (add [_neq]).*)
+           rewrite (Memory.load_after_alloc _ _ _ _ _ _ H2 Heq') in Hload.
            exact (Hmem1 _ _ Hload).
       * admit.
       * admit.
