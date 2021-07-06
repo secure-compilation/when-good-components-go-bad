@@ -89,6 +89,30 @@ Definition wf_state_t (s: CS.state) (t: trace event) : Prop :=
   wf_mem_wrt_t_pc (CS.state_mem s) t (Pointer.component (CS.state_pc s)) /\
   wf_reg_wrt_t_pc (CS.state_regs s) t (Pointer.component (CS.state_pc s)).
 
+(* TODO: Move to Pointer module. *)
+Remark pointer_proj ptr :
+  ptr = (Pointer.permission ptr, Pointer.component ptr, Pointer.block ptr, Pointer.offset ptr).
+Proof.
+  destruct ptr as [[[? ?] ?] ?]. reflexivity.
+Qed.
+
+Remark pointer_refl ptr1 ptr2 :
+  Pointer.eq ptr1 ptr2 = true ->
+  ptr1 = ptr2.
+Proof.
+  destruct ptr1 as [[[P1 C1] b1] o1].
+  destruct ptr2 as [[[P2 C2] b2] o2].
+  (* Decompose pointer component equalities... *)
+  move => /andP => [[]] => /andP => [[]] => /andP => [[]] =>
+  (* ... then reflect each of them and substitute the equality... *)
+  /ssrnat.eqnP => -> =>
+  /ssrnat.eqnP => -> =>
+  /ssrnat.eqnP => -> =>
+  /eqP ->
+  (* ... and we're done. *)
+  //.
+Qed.
+
 Lemma is_prefix_wf_state_t s p t:
   well_formed_program p ->
   is_prefix s p t ->
@@ -121,7 +145,41 @@ Proof.
     specialize (IHstar Logic.eq_refl Logic.eq_refl).
     split.
     + (* Memory. *)
-      admit.
+      destruct IHstar as [Hmem1 Hregs1].
+      inversion Hstep12 as [? ? ? ? Hstep12']; subst.
+      inversion Hstep12'; subst; simpl in *;
+        (* A few useful simplifications. *)
+        try rewrite E0_right;
+        try rewrite Pointer.inc_preserves_component;
+        (* Many goals follow directly from the IH now. *)
+        try assumption.
+      * (* Store *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        destruct (Pointer.eq addr_load ptr) eqn:Heq.
+        -- (* We load from the address we just stored to. The information can
+              only come from the registers and not from the memory. *)
+           apply pointer_refl in Heq; subst addr_load. (* As reflection? *)
+           rewrite (Memory.load_after_store_eq _ _ _ _ H1) in Hload.
+           injection Hload as Hload.
+           assert (Hr1 := Hregs1 _ _ H0).
+           assert (Hr2 := Hregs1 _ _ Hload).
+           (* By case analysis on the well-formedness of the address pointer. *)
+           destruct ptr as [[[Pptr Cptr] bptr] optr].
+           destruct val_load as [[[Pval Cval] bval] oval].
+           inversion Hr1 as [| ? ? ? ? Hshared1]; subst.
+           ++ apply wrt_load_ptr_wf_load; assumption.
+           ++ apply wrt_pc_wf_load; assumption.
+        -- (* For any other address, this follows directly from the IH. *)
+           assert (Hneq : ptr <> addr_load) by admit.
+           rewrite -> (Memory.load_after_store_neq _ _ _ _ _ Hneq H1) in Hload.
+           exact (Hmem1 _ _ Hload).
+      * admit.
+      * admit.
+      * admit.
+      * admit.
+      * admit.
+      * admit.
     + (* Registers. *)
       admit.
 Admitted.
