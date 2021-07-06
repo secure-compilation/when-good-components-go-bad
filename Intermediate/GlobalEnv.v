@@ -130,6 +130,33 @@ Proof.
     by setoid_rewrite Hcase.
 Qed.
 
+Lemma genv_procedures_program_link_right_in :
+  forall {c Cid},
+    Cid \in domm (prog_interface c) ->
+  forall {p},
+    well_formed_program p ->
+    well_formed_program c ->
+    linkable (prog_interface p) (prog_interface c) ->
+    (genv_procedures (prepare_global_env (program_link p c))) Cid =
+    (genv_procedures (prepare_global_env c)) Cid.
+Proof.
+  intros c Cid Hnotin p Hwfp Hwfc Hlinkable.
+  rewrite (prepare_global_env_link Hwfp Hwfc Hlinkable).
+  unfold global_env_union; simpl.
+  rewrite unionmE.
+  assert (HNone : (genv_procedures (prepare_global_env p)) Cid = None).
+  {
+    apply/dommPn; rewrite domm_genv_procedures.
+    destruct Hlinkable as [_ Hdisj].
+    rewrite fdisjointC in Hdisj.
+    move : Hdisj => /fdisjointP => Hdisj.
+    apply Hdisj; by auto.
+  }
+  setoid_rewrite HNone.
+  destruct ((genv_procedures (prepare_global_env p)) Cid) eqn:Hcase;
+    by setoid_rewrite Hcase.
+Qed.
+
 Lemma genv_entrypoints_program_link_left :
   forall {c C},
     C \notin domm (prog_interface c) ->
