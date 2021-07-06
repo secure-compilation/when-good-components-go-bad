@@ -4875,5 +4875,36 @@ Section ThreewayMultisem1.
       
   Qed.
   
-  
+
+  Theorem threeway_multisem_star_E0 s1 s1' s1'' t1 t1' t1'' s2 :
+    CS.is_program_component s1 ic ->
+    mergeable_internal_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
+    starR (CS.step_non_inform) (prepare_global_env prog) s1  E0 s2  ->
+    exists s2',
+      starR (CS.step_non_inform) (prepare_global_env prog') s1' E0 s2' /\
+      mergeable_internal_states p c p' c' n n'' s2 s2' s1'' t1 t1' t1''.
+  Proof.
+    intros Hcomp Hmerge Hstar.
+    remember E0 as t.
+    induction Hstar as [| ]; subst.
+    - eexists; split; last exact Hmerge. constructor.
+    - assert (t0 = E0). by now destruct t0. subst.
+      assert (t2 = E0). by now destruct t2. subst.
+      pose proof (IHHstar Hcomp Hmerge Logic.eq_refl) as [s2' [Hs2' Hmerge2]].
+      assert (Hcomp2: CS.is_program_component s2 ic).
+      {
+        eapply CS.epsilon_star_non_inform_preserves_program_component; eauto.
+        erewrite star_iff_starR. simpl.
+        exact Hstar.
+      }
+      match goal with
+        | Hstep: CS.step_non_inform _ _ _ _ |- _ =>
+          pose proof threeway_multisem_step_E0 Hcomp2 Hmerge2 Hstep as G
+      end.
+      destruct G as [? [? ?]].
+
+      eexists; split; first eapply starR_step; first eassumption; eauto.
+  Qed.
+
+
 End ThreewayMultisem1.
