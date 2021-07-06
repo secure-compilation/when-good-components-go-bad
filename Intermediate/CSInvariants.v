@@ -224,14 +224,133 @@ Proof.
            (* TODO: Rename lemma (add [_neq]).*)
            rewrite (Memory.load_after_alloc _ _ _ _ _ _ H2 Heq') in Hload.
            exact (Hmem1 _ _ Hload).
-      * admit.
-      * admit.
-      * admit.
-      * admit.
-      * admit.
-      * admit.
+      * (* ICall *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        admit.
+      * (* IReturn *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        admit.
     + (* Registers. *)
-      admit.
+      destruct IHstar as [Hmem1 Hregs1].
+      inversion Hstep12 as [? ? ? ? Hstep12']; subst.
+      inversion Hstep12'; subst; simpl in *;
+        (* A few useful simplifications. *)
+        try rewrite E0_right;
+        try rewrite Pointer.inc_preserves_component;
+        (* A few goals follow directly from the IH. *)
+        try assumption.
+      * (* IConst *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        destruct ((Register.to_nat reg) =? (Register.to_nat r)) eqn:Heq. (* HACK *)
+        -- (* If we read the register we just wrote, we get the exact immediate
+              value, here assumed to be a pointer. *)
+           assert (reg = r) by admit; subst r.
+           assert (Hget' : imm_to_val v = Ptr ptr) by admit.
+           destruct v as [n | ptr']; first discriminate.
+           injection Hget' as Hget'; subst ptr'.
+           (* Thanks to [well_formed_instruction], we know that pointer
+              constants may only refer to their own component. *)
+           destruct ptr as [[[P C] b] o].
+           assert (C = Pointer.component pc) by admit; subst C.
+           now apply wf_ptr_own.
+        -- (* For any other register, this follows directly from the IH. *)
+           assert (Hget' : Register.get reg regs = Ptr ptr) by admit.
+           exact (Hregs1 _ _ Hget').
+      * (* IMov *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        destruct ((Register.to_nat reg) =? (Register.to_nat r2)) eqn:Heq. (* HACK *)
+        -- (* The new value comes from r1, which follows from the IH. *)
+           assert (reg = r2) by admit; subst r2.
+           assert (Hget' : Register.get r1 regs = Ptr ptr) by admit.
+           exact (Hregs1 _ _ Hget').
+        -- (* The new value comes from reg, which follows from the IH. *)
+           assert (Hget' : Register.get reg regs = Ptr ptr) by admit.
+           exact (Hregs1 _ _ Hget').
+      * (* IBinOp *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        destruct ((Register.to_nat reg) =? (Register.to_nat r3)) eqn:Heq. (* HACK *)
+        -- (* If we read the register we just wrote, we get the result of the
+              operation, which we then case analyze. *)
+           assert (reg = r3) by admit; subst r3.
+           assert (Hget' : result = Ptr ptr) by admit.
+           unfold result, eval_binop in Hget'.
+           destruct op;
+             destruct (Register.get r1 regs) eqn:Hget1;
+             destruct (Register.get r2 regs) eqn:Hget2;
+             (* Most cases are nonsensical; a handful remain. *)
+             inversion Hget'; subst.
+           (* Whenever there is a pointer and an integer, the result follows
+              from the IH on the pointer, albeit with a bit of work to account
+              for the integer offsets. *)
+           ++ assert (Hr2 := Hregs1 _ _ Hget2).
+              inversion Hr2; subst. (* By the corresponding [constructor]. *)
+              ** now apply wf_ptr_own.
+              ** now apply wf_ptr_shared.
+           ++ assert (Hr1 := Hregs1 _ _ Hget1).
+              inversion Hr1; subst; (* Can be picked automatically. *)
+                now constructor.
+           ++ assert (Hr1 := Hregs1 _ _ Hget1).
+              inversion Hr1; subst;
+                now constructor.
+           (* The remaining cases are contradictions requiring some additional
+              but trivial analysis. *)
+           ++ destruct t as [[[P1 C1] b1] o1];
+                destruct t0 as [[[P2 C2] b2] o2];
+                destruct (P1 =? P2);
+                destruct (C1 =? C2);
+                destruct (b1 =? b2);
+                discriminate.
+           ++ destruct (Pointer.leq t t0);
+                discriminate.
+        -- (* For any other register, this follows directly from the IH. *)
+           assert (Hget' : Register.get reg regs = Ptr ptr) by admit.
+           exact (Hregs1 _ _ Hget').
+      * (* IPtrOfLabel *)
+        intros reg ptr' Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        destruct ((Register.to_nat reg) =? (Register.to_nat r)) eqn:Heq. (* HACK *)
+        -- (* *)
+           assert (reg = r) by admit; subst r.
+           assert (ptr = ptr') by admit; subst ptr'.
+           destruct ptr as [[[P C] b] o].
+           rewrite (find_label_in_component_1 _ _ _ _ H0).
+           now apply wf_ptr_own.
+        -- (* *)
+           assert (Hget' : Register.get reg regs = Ptr ptr') by admit.
+           exact (Hregs1 _ _ Hget').
+      * (* ILoad *)
+           admit.
+      * admit.
+      * (* IJump *)
+        intros reg ptr' Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        rewrite H2.
+        exact (Hregs1 _ _ Hget).
+      * (* IBnz *)
+        intros reg ptr' Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        rewrite <- (find_label_in_procedure_1 _ _ _ _ H2).
+        exact (Hregs1 _ _ Hget).
+      * (* IAlloc *)
+        intros reg ptr' Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        destruct ((Register.to_nat reg) =? (Register.to_nat rptr)) eqn:Heq. (* HACK *)
+        -- (* *)
+           assert (reg = rptr) by admit; subst rptr.
+           assert (ptr = ptr') by admit; subst ptr'.
+           (* TODO: Refine alloc spec to provide missing information. *)
+           (* destruct ptr as [[[P C] b] o]. *)
+           admit.
+        -- (* *)
+           assert (Hget' : Register.get reg regs = Ptr ptr') by admit.
+           exact (Hregs1 _ _ Hget').
+      * admit.
+      * admit.
 Admitted.
 
 Lemma wf_state_wf_reg s regs pc pc_comp t:
