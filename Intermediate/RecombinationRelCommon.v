@@ -1599,7 +1599,145 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     - (* here, contradiction *)
       admit.
   Admitted.
-        
+
+  Lemma mergeable_internal_states_executing_prog
+        s s' s'' t t' t'' instr spc spc':
+    CS.is_program_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    spc = CS.state_pc s ->
+    executing (globalenv sem) spc instr ->
+    spc' = CS.state_pc s' ->
+    executing (globalenv sem') spc' instr.
+  Proof.
+    intros Hcomp Hmerge Hsubst1 Hexec Hsubst2.
+    inversion Hmerge as
+      [Hmergewf Hpc H_p Hregsp Hmemp Hmemc' |
+       Hmergewf Hpc H_c' Hregsc' Hmemc' Hmemp]; subst;
+      inversion Hmergewf
+      as [
+          Hwfp
+            Hwfc
+            Hwfp'
+            Hwfc'
+            Hmerge_ipic
+            Hifc_pp'
+            Hifc_cc'
+            Hclosed_prog
+            Hclosed_prog''
+            Hgood_prog
+            Hgood_prog''
+            Hpref_t
+            Hpref_t'
+            Hpref_t''
+            Hgood_t
+            Hgood_t''
+            Hgood_t'
+            Hstack_s_s'
+            Hstack_s''_s'
+            Hpccomp_s'_s
+            Hpccomp_s'_s''
+            Hshift_tt'
+            Hshift_t''t'];
+      unfold mergeable_interfaces in *;
+      destruct s as [[[? ?] ?] pc]; destruct s' as [[[? ?] ?] pc']; CS.simplify_turn.
+
+    - inversion Hexec
+        as [P_code [proc_code [Hgenv_proc [Hblock [Hoff [Hperm Hinstr]]]]]].
+      econstructor.
+      rewrite Hpc.
+      rewrite genv_procedures_program_link_left_notin in Hgenv_proc; auto;
+        last intuition.
+      + rewrite genv_procedures_program_link_left_notin; auto.
+        * by eexists; eauto.
+        * by rewrite <- Hpccomp_s'_s, <- Hifc_cc'.
+        * by rewrite <- Hifc_cc'; intuition.
+      + by rewrite <- Hpccomp_s'_s.
+    - by rewrite H_c' in Hcomp.
+  Qed.
+      
+
+  Lemma mergeable_internal_states_executing_prog''
+        s s' s'' t t' t'' instr spc'' spc':
+    CS.is_context_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    spc'' = CS.state_pc s'' ->
+    executing (globalenv sem'') spc'' instr ->
+    spc' = CS.state_pc s' ->
+    executing (globalenv sem') spc' instr.
+  Proof.
+    intros Hcomp Hmerge Hsubst1 Hexec Hsubst2.
+    inversion Hmerge as
+      [Hmergewf Hpc H_p Hregsp Hmemp Hmemc' |
+       Hmergewf Hpc H_c' Hregsc' Hmemc' Hmemp]; subst;
+      inversion Hmergewf
+      as [
+          Hwfp
+            Hwfc
+            Hwfp'
+            Hwfc'
+            Hmerge_ipic
+            Hifc_pp'
+            Hifc_cc'
+            Hclosed_prog
+            Hclosed_prog''
+            Hgood_prog
+            Hgood_prog''
+            Hpref_t
+            Hpref_t'
+            Hpref_t''
+            Hgood_t
+            Hgood_t''
+            Hgood_t'
+            Hstack_s_s'
+            Hstack_s''_s'
+            Hpccomp_s'_s
+            Hpccomp_s'_s''
+            Hshift_tt'
+            Hshift_t''t'];
+      unfold mergeable_interfaces in *;
+      destruct s'' as [[[? ?] ?] pc]; destruct s' as [[[? ?] ?] pc']; CS.simplify_turn.
+
+    - by rewrite Hcomp in H_p.
+    - inversion Hexec
+        as [P_code [proc_code [Hgenv_proc [Hblock [Hoff [Hperm Hinstr]]]]]]; subst.
+      econstructor.
+      rewrite genv_procedures_program_link_right_in in Hgenv_proc; auto;
+        last intuition.
+      + rewrite genv_procedures_program_link_right_in; auto.
+        * eexists; eauto.
+        * by rewrite <- Hifc_cc'.
+        * by rewrite <- Hifc_cc'; intuition.
+      + by rewrite <- Hifc_cc'.
+      + by rewrite <- Hifc_pp', <- Hifc_cc'.
+  Qed.
+
+  Corollary mergeable_internal_states_final_state_prog
+    s s' s'' t t' t'':
+    CS.is_program_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    CS.final_state (globalenv sem) s ->
+    CS.final_state (globalenv sem') s'.
+  Proof.
+    intros Hcomp Hmerge Hfinal;
+      destruct s as [[[? ?] ?] pc]; destruct s' as [[[? ?] ?] pc'];
+        unfold CS.final_state in *.
+    eapply mergeable_internal_states_executing_prog; by eauto.
+  Qed.
+
+  Corollary mergeable_internal_states_final_state_prog''
+    s s' s'' t t' t'':
+    CS.is_context_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    CS.final_state (globalenv sem'') s'' ->
+    CS.final_state (globalenv sem') s'.
+  Proof.
+    intros Hcomp Hmerge Hfinal;
+      destruct s'' as [[[? ?] ?] pc]; destruct s' as [[[? ?] ?] pc'];
+        unfold CS.final_state in *.
+    eapply mergeable_internal_states_executing_prog''; by eauto.
+  Qed.
+
+  
     
   (* Search _ find_label_in_component. *)
 
