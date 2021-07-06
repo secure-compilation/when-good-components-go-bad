@@ -1892,12 +1892,45 @@ Section Recombination.
     destruct (CS.behavior_prefix_star_non_inform Hbeh'' Hprefix'')
       as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
 
-    unfold CS.initial_state in *.
+    (** TODO: Maybe get rid of the Hstar12 and Hstar12'' the way they are 
+        produced above. *)
+    (** And instead get them by inverting state_behaves (Will generate a side 
+        condition that asserts, e.g., final_state) *)
 
+    clear Hbeh Hbeh''.
+
+    apply star_iff_starR in Hstar12.
+    apply star_iff_starR in Hstar12''.
+    
+    unfold CS.initial_state in *.
+    
     remember (finpref_trace m) as t.
     remember (finpref_trace m'') as t''.
     generalize dependent t. generalize dependent t''.
 
+    intros ?.
+    induction t'' as [|? e''] using last_ind; intros ? Hstar12''; subst.
+    - intros ?; induction t as [|? e] using last_ind; intros ? Hstar12; subst.
+      + destruct m; simpl in *; subst; destruct m''; simpl in *; try by inversion Hrel.
+        * exists (FTerminates E0).
+          exists (fun cid => if cid \in domm (prog_interface p)
+                             then n cid else n'' cid).
+          split; last (by repeat constructor).
+          unfold does_prefix. exists (Terminates E0). split; last by simpl.
+          apply program_runs with (s := (CS.initial_machine_state prog'));
+            first by simpl.
+          eapply state_terminates.
+    - 
+      assert (Hrewr: rcons t'' e'' = rcons t'' e'' ++ nil).
+        by rewrite <- app_nil_r at 1.
+      Search _ rcons cons.
+      rewrite cat_rcons in Hrewr.
+      rewrite Hrewr in Hstar12''.
+      rewrite <- star_iff_starR in Hstar12''.
+      apply star_middle1_inv in Hstar12''.
+      Search _ star starR.
+      
+        
     intros ? ? Hstar12''.
     induction Hstar12''.
     - destruct m''; simpl in *.
