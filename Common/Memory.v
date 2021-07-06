@@ -943,8 +943,8 @@ Module Memory.
         destruct (ComponentMemory.alloc memC' sz) as [memC'alloc b] eqn:ememC'alloc.
         inversion Halloc. subst. clear Halloc.
         rewrite setmE in ememC. by rewrite eqxx in ememC.  
-  Qed.  
-  
+  Qed.
+
   Lemma store_after_load mem ptr v v' :
     load mem ptr = Some v ->
     exists mem', store mem ptr v' = Some mem'.
@@ -1075,6 +1075,36 @@ Module Memory.
     store mem' (P, C, b, o) v = Some mem1'.
   Admitted.
 
+  Lemma domm_store mem ptr v mem' :
+    store mem ptr v = Some mem' ->
+    domm mem = domm mem'.
+  Proof.
+    unfold store. intro Hstore.
+    destruct (Pointer.permission ptr =? Permission.data);
+      last discriminate.
+    destruct (mem (Pointer.component ptr)) as [Cmem |] eqn:Hcase;
+      last discriminate.
+    destruct (ComponentMemory.store Cmem (Pointer.block ptr) (Pointer.offset ptr) v);
+      last discriminate.
+    injection Hstore as Hmem'; subst.
+    rewrite domm_set fsetU1in;
+      first reflexivity.
+    apply /dommP. exists Cmem. assumption.
+  Qed.
+
+  Lemma domm_alloc mem cid sz mem' ptr' :
+    alloc mem cid sz = Some (mem', ptr') ->
+    domm mem = domm mem'.
+  Proof.
+    unfold alloc. intro Halloc.
+    destruct (mem cid) as [Cmem |] eqn:Hcase;
+      last discriminate.
+    destruct (ComponentMemory.alloc Cmem sz).
+    injection Halloc as Hmem _; subst.
+    rewrite domm_set fsetU1in;
+      first reflexivity.
+    apply /dommP. exists Cmem. assumption.
+  Qed.
 End Memory.
 
 Set Implicit Arguments.
