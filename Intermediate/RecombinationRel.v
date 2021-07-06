@@ -1892,10 +1892,47 @@ Section Recombination.
     destruct (CS.behavior_prefix_star_non_inform Hbeh'' Hprefix'')
       as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
 
-    unfold CS.initial_state in *; subst.
+    unfold CS.initial_state in *.
 
-    
-    
+    remember (finpref_trace m) as t.
+    remember (finpref_trace m'') as t''.
+    generalize dependent t. generalize dependent t''.
+
+    intros ? ? Hstar12''.
+    induction Hstar12''.
+    - destruct m''; simpl in *.
+      + intros ? ? Hstar12; induction Hstar12; subst.
+        * destruct m; simpl in *; subst; try by inversion Hrel.
+          exists (FTerminates E0).
+          exists (fun cid => if cid \in domm (prog_interface p)
+                             then n cid else n'' cid).
+          constructor; last (by constructor; constructor; constructor).
+          unfold does_prefix.
+          (** Invert Hst_beh, and get a contradiction to Hprefix *)
+          inversion Hst_beh as [? ? Hstar Hfin | | |]; subst; try by exfalso.
+          exists (Terminates E0).
+          apply mergeable_border_mergeable_internal in Hmerge1.
+          split; last by simpl.
+          eapply program_runs; first constructor.
+          (** Need a lemma that assumes Hstar, Hfin, Hmergewf1, Hbeh, and Hbeh'' *)
+          (** The lemma will use mergeable_internal_states_final_state_prog      *)
+          (** and mergeable_internal_states_final_state_prog'', and will apply   *)
+          (** the constructor state_terminates.                                  *)
+          (** The proof of this lemma will proceed by induction on Hstar.        *)
+
+          (*****************************************
+          find_and_invert_mergeable_internal_states.
+               ** 
+                eapply state_terminates; first eapply star_refl.
+                ** eapply mergeable_internal_states_final_state_prog; eauto.
+                   
+                ** eapply mergeable_internal_states_final_state_prog''; eauto.
+                *******************************************)
+          admit.
+        * 
+
+
+               
 (*FIXME
     pose proof match_initial_states (*n n''*) Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec
          Hprog_is_closed Hprog_is_closed' Hprog_is_good Hprog''_is_good Hini1_ Hini1''_
