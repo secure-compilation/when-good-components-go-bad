@@ -1887,15 +1887,3 @@ Ltac find_and_invert_mergeable_internal_states :=
     invert_non_eagerly_mergeable_internal_states H
   end.
 
-
-Ltac find_nil_rcons :=
-  let Hcontra := fresh "Hcontra" in
-  match goal with
-  | H: [::] = rcons ?t ?e |- _ =>
-    pose proof size_rcons t e as Hcontra;
-      by rewrite <- H in Hcontra
-  | H: rcons ?t ?e = [::] |- _ =>
-    pose proof size_rcons t e as Hcontra;
-      by rewrite H in Hcontra
-  end.
-
