@@ -1400,6 +1400,44 @@ Section PropertiesOfTheShiftRenamingAddrOption.
         destruct (sigma_shifting_lefttoright_addr_bid n1 n2 (cid, bid)); discriminate.
   Qed.
 
+
+  Lemma event_renames_event_at_shared_addr_symmetric n n' c b b' e e':
+    sigma_shifting_lefttoright_option (n c) (n' c) b = Some b' ->
+    event_renames_event_at_shared_addr n n' (c, b) e e' ->
+    event_renames_event_at_shared_addr n' n (c, b') e' e.
+  Proof.
+    unfold event_renames_event_at_shared_addr,
+    memory_renames_memory_at_shared_addr,
+    rename_value_option, rename_value_template_option,
+    sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid,
+    rename_addr_option.
+    intros Hsigma [[c' b'_] [esigma [mem_mem' mem'_mem]]].
+    rewrite Hsigma in esigma. symmetry in esigma. inversion esigma. clear esigma. subst.
+    apply sigma_shifting_lefttoright_Some_inv_Some in Hsigma.
+    rewrite Hsigma.
+    eexists; split; first reflexivity; split.
+    - intros ? v' Hload; simpl in *.
+      specialize (mem'_mem _ _ Hload) as [v [Hloadv vv']].
+      eexists; split; eauto.
+      destruct v as [| [[[pv cv] bv] ov] |]; try by inversion vv'; subst.
+      destruct (pv =? Permission.data) eqn:epv;
+        last by inversion vv'; rewrite epv; subst.
+      destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv) eqn:ebv;
+        try discriminate.
+      inversion vv'; subst. rewrite epv.
+      apply sigma_shifting_lefttoright_Some_inv_Some in ebv. by rewrite ebv.
+    - intros ? v Hload; simpl in *.
+      specialize (mem_mem' _ _ Hload) as [v' [Hloadv' vv']].
+      eexists; split; eauto.
+      destruct v as [| [[[pv cv] bv] ov] |]; try by inversion vv'; subst.
+      destruct (pv =? Permission.data) eqn:epv;
+        last by inversion vv'; rewrite epv; subst.
+      destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv) eqn:ebv;
+        try discriminate.
+      inversion vv'; subst. rewrite epv.
+      apply sigma_shifting_lefttoright_Some_inv_Some in ebv. by rewrite ebv.
+  Qed.
+      
   Lemma traces_rename_each_other_same_size n1 n2 t1 t2:
     traces_rename_each_other_option n1 n2 t1 t2 -> size t1 = size t2.
   Proof.
@@ -1618,6 +1656,72 @@ Section PropertiesOfTheShiftRenamingAddrOption.
     intros H1 H2. inversion H1. inversion H2. subst.
     constructor. eapply traces_rename_each_other_option_transitive; eauto.
   Qed.
+
+  
+  Lemma traces_rename_each_other_option_symmetric n n' sz:
+    forall t t',
+      size t = sz ->
+      traces_rename_each_other_option n  n'  t  t'  ->
+      traces_rename_each_other_option n' n   t' t.
+  Proof.
+    induction sz as [ | sz IHsz]; intros ? ? tsz Htt'.
+    - assert (t2sz: size t' = 0).
+      { erewrite <- traces_rename_each_other_same_size; eauto. }
+      assert (t1nil: t = [::]). by (apply size0nil).
+      assert (t2nil: t' = [::]). by (apply size0nil).
+      subst. constructor.
+    - assert (size t' = sz.+1) as Hsizet'.
+      { symmetry; rewrite <- tsz; by eapply traces_rename_each_other_same_size; eauto. }
+      induction t   as [ | t   e   _] using last_ind; try discriminate.
+      induction t'  as [ | t'  e'  _] using last_ind; try discriminate.
+      inversion Htt' as [|? ? ? ? ?
+                            Htt'_ Hshrtt' Hshrt't Hmatchtt' Hargee' ? Hgoodt Hgoodt'];
+        first find_nil_rcons; repeat find_rcons_rcons.
+  
+      econstructor 2 with (v' := arg_of_event e); auto.
+      + eapply IHsz; eauto. by rewrite size_rcons in tsz; auto.
+      + intros [c' b'] Hshr'. specialize (Hshrt't _ Hshr') as [[c b] [cbsigma [ee' ?]]].
+        unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid,
+        rename_addr_option in *.
+        destruct (sigma_shifting_lefttoright_option (n c) (n' c) b) eqn:eb;
+          try discriminate; inversion cbsigma; subst; clear cbsigma.
+        apply sigma_shifting_lefttoright_Some_inv_Some in eb.
+        rewrite eb.
+        split; last (eexists; split; first reflexivity; assumption).
+        eapply event_renames_event_at_shared_addr_symmetric; eauto.
+        apply sigma_shifting_lefttoright_Some_inv_Some; auto.
+      + intros [c b] Hshr.
+        specialize (Hshrtt' _ Hshr) as [ee' [[c' b'] [esigma ?]]].
+        unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid,
+        rename_addr_option in *.
+        destruct (sigma_shifting_lefttoright_option (n c) (n' c) b) eqn:eb;
+          try discriminate; inversion esigma; subst; clear esigma.
+        eexists (c', b').
+        apply sigma_shifting_lefttoright_Some_inv_Some in eb.
+        rewrite eb. intuition.
+        eapply event_renames_event_at_shared_addr_symmetric; eauto.
+        apply sigma_shifting_lefttoright_Some_inv_Some; auto.
+      + destruct e; destruct e'; simpl in *; try (by exfalso); intuition.
+      + specialize (shift_value_option_symmetry
+                      n n' (arg_of_event e) (arg_of_event e')) as G.
+        unfold shift_value_option in *.
+        by apply G.
+  Qed.
+      
+    
+  Lemma traces_shift_each_other_option_symmetric n n' t t':
+    traces_shift_each_other_option n  n'  t  t'  ->
+    traces_shift_each_other_option n' n   t' t.
+  Proof.
+    intros Hshift. inversion Hshift as [? ? Hren]; subst.
+    inversion Hren as [|? ? ? ? ?
+                          Htt'_ Hshrtt' Hshrt't Hmatchtt' Hargee' ? Hgoodt Hgoodt'];
+      subst.
+    - constructor; constructor.
+    - constructor.
+      eapply traces_rename_each_other_option_symmetric; eauto.
+  Qed.      
+                        
     
 End PropertiesOfTheShiftRenamingAddrOption.
 
