@@ -14,6 +14,23 @@ Require Import Coq.Logic.FunctionalExtensionality.
 
 Set Bullet Behavior "Strict Subproofs".
 
+Ltac find_nil_rcons :=
+  let Hcontra := fresh "Hcontra" in
+  match goal with
+  | H: [::] = rcons ?t ?e |- _ =>
+    pose proof size_rcons t e as Hcontra;
+      by rewrite <- H in Hcontra
+  | H: rcons ?t ?e = [::] |- _ =>
+    pose proof size_rcons t e as Hcontra;
+      by rewrite H in Hcontra
+  end.
+
+Ltac find_rcons_rcons :=
+  match goal with
+  | H: rcons ?t1 ?e1 = rcons ?t2 ?e2 |- _ =>
+    apply rcons_inj in H; inversion H; subst; clear H
+  end.
+
 Lemma le_false_lt n1 n2:
   n2 <= n1 = false -> n1 < n2.
 Proof.
@@ -1381,8 +1398,227 @@ Section PropertiesOfTheShiftRenamingAddrOption.
       + inversion H. subst. by rewrite eperm.
     - destruct (perm =? Permission.data);
         destruct (sigma_shifting_lefttoright_addr_bid n1 n2 (cid, bid)); discriminate.
-  Qed. 
+  Qed.
+
+  Lemma traces_rename_each_other_same_size n1 n2 t1 t2:
+    traces_rename_each_other_option n1 n2 t1 t2 -> size t1 = size t2.
+  Proof.
+    intros H. induction H as [ |tp e tp' e' ? ? ? Ha]; auto.
+      by rewrite !size_rcons IHtraces_rename_each_other_option.
+  Qed.
   
+  Lemma traces_rename_each_other_option_transitive n n' n'' sz:
+    forall t t' t'',
+      size t = sz ->
+      traces_rename_each_other_option n  n'  t  t'  ->
+      traces_rename_each_other_option n' n'' t' t'' ->
+      traces_rename_each_other_option n  n'' t  t''.
+  Proof.
+    induction sz as [ | sz IHsz]; intros ? ? ? tsz Htt' Ht't''.
+    - assert (t2sz: size t' = 0).
+      { erewrite <- traces_rename_each_other_same_size; eauto. }
+      assert (t3sz: size t'' = 0).
+      { erewrite <- traces_rename_each_other_same_size; eauto. }
+      assert (t1nil: t = [::]). by (apply size0nil).
+      assert (t2nil: t' = [::]). by (apply size0nil).
+      assert (t3nil: t'' = [::]). by (apply size0nil).
+      subst. constructor.
+    - assert (size t' = sz.+1) as Hsizet'.
+      { symmetry; rewrite <- tsz; by eapply traces_rename_each_other_same_size; eauto. }
+      assert (size t'' = sz.+1) as Hsizet''.
+      { symmetry; rewrite <- Hsizet';
+          by eapply traces_rename_each_other_same_size; eauto. }
+      induction t   as [ | t   e   _] using last_ind; try discriminate.
+      induction t'  as [ | t'  e'  _] using last_ind; try discriminate.
+      induction t'' as [ | t'' e'' _] using last_ind; try discriminate.
+
+      inversion Htt' as [|? ? ? ? ?
+                            Htt'_ Hshrtt' Hshrt't Hmatchtt' Hargee' ? Hgoodt Hgoodt'];
+        try find_nil_rcons; repeat find_rcons_rcons.
+      inversion Ht't'' as [|? ? ? ? ? Ht't''_ Hshrt't'' Hshrt''t'
+                              Hmatcht't'' Harge'e'' ? _ Hgoodt''];
+        try find_nil_rcons; repeat find_rcons_rcons.
+      constructor 2 with (v' := arg_of_event e''); auto.
+      + eapply IHsz; eauto; by rewrite size_rcons in tsz; auto.
+      + intros ? Hshr; specialize (Hshrtt' _ Hshr)
+          as [Hee' [[c' b'] [Hsigmann' Hshr']]].
+        specialize (Hshrt't'' _ Hshr')
+          as [He'e'' [[c'' b''] [Hsigman'n'' Hshr'']]].
+        destruct addr as [c b].
+        unfold event_renames_event_at_shared_addr,
+        memory_renames_memory_at_shared_addr,
+        rename_value_option, rename_value_template_option,
+        sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid,
+        rename_addr_option in *.
+        destruct (sigma_shifting_lefttoright_option (n c) (n' c) b) eqn:G1;
+          try discriminate.
+        inversion Hsigmann'; subst; clear Hsigmann'.
+        destruct (sigma_shifting_lefttoright_option (n' c') (n'' c') b') eqn:G2;
+          try discriminate.
+        inversion Hsigman'n''; subst; clear Hsigman'n''.
+        
+        assert (G: sigma_shifting_lefttoright_option (n c'') (n'' c'') b = Some b'').
+        { by eapply sigma_shifting_lefttoright_transitive; eauto. }
+
+        split.
+        * exists (c'', b''); split; first by rewrite G. split.
+          -- intros ? ? Hload.
+             destruct Hee' as [[? ?] [inv [Hee'1 Hee'2]]].
+             symmetry in inv; inversion inv; subst; clear inv; simpl in *.
+             specialize (Hee'1 _ _ Hload) as [v' [Hloadv' vv']].
+             destruct He'e'' as [[? ?] [inv [He'e''1 He'e''2]]].
+             symmetry in inv; inversion inv; subst; clear inv; simpl in *.
+             specialize (He'e''1 _ _ Hloadv') as [v'' [Hloadv'' v'v'']].
+             eexists; split; first eassumption.
+             destruct v as [| [[[pv cv] bv] ov] |];
+               try by inversion vv' as [rewr]; rewrite <- rewr in v'v''; auto.
+             destruct (pv =? Permission.data) eqn:epv.
+             ++ destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv)
+                 as [bv'|] eqn:G1v; try discriminate.
+                inversion vv'; subst; clear vv'.
+                rewrite epv in v'v''.
+                destruct (sigma_shifting_lefttoright_option (n' cv) (n'' cv) bv')
+                  as [bv''|] eqn:G2v; try discriminate.
+                inversion v'v''; subst; clear v'v''.
+                assert (Gv: sigma_shifting_lefttoright_option (n cv) (n'' cv) bv
+                        = Some bv'').
+                { by eapply sigma_shifting_lefttoright_transitive; eauto. }
+                  by rewrite Gv.
+             ++ inversion vv'; subst; clear vv'; by rewrite epv in v'v''.
+          -- intros ? v'' Hload''.
+             destruct He'e'' as [[? ?] [inv [He'e''1 He'e''2]]].
+             symmetry in inv; inversion inv; subst; clear inv; simpl in *.
+             specialize (He'e''2 _ _ Hload'') as [v' [Hloadv' v'v'']].
+             destruct Hee' as [[? ?] [inv [Hee'1 Hee'2]]].
+             symmetry in inv; inversion inv; subst; clear inv; simpl in *.
+             specialize (Hee'2 _ _ Hloadv') as [v [Hloadv vv']].
+             eexists; split; first eassumption.
+             destruct v as [| [[[pv cv] bv] ov] |];
+               try by inversion vv' as [rewr]; rewrite <- rewr in v'v''; auto.
+             destruct (pv =? Permission.data) eqn:epv.
+             ++ destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv)
+                 as [bv'|] eqn:G1v; try discriminate.
+                inversion vv'; subst; clear vv'.
+                rewrite epv in v'v''.
+                destruct (sigma_shifting_lefttoright_option (n' cv) (n'' cv) bv')
+                  as [bv''|] eqn:G2v; try discriminate.
+                inversion v'v''; subst; clear v'v''.
+                assert (Gv: sigma_shifting_lefttoright_option (n cv) (n'' cv) bv
+                        = Some bv'').
+                { by eapply sigma_shifting_lefttoright_transitive; eauto. }
+                  by rewrite Gv.
+             ++ inversion vv'; subst; clear vv'; by rewrite epv in v'v''.
+             
+        * exists (c'', b''); split; last exact Hshr''.
+            by rewrite G.
+          
+      + intros addr'' Hshr''; specialize (Hshrt''t' _ Hshr'')
+          as [[c' b'] [Hsigman'n'' [He'e'' Hshr']]].
+        specialize (Hshrt't _ Hshr')
+          as [[c b] [Hsigmann' [Hee' Hshr]]].
+        destruct addr'' as [c'' b''].
+        unfold event_renames_event_at_shared_addr,
+        memory_renames_memory_at_shared_addr,
+        rename_value_option, rename_value_template_option,
+        sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid,
+        rename_addr_option in *.
+        destruct (sigma_shifting_lefttoright_option (n c) (n' c) b) eqn:G1;
+          try discriminate.
+        inversion Hsigmann'; subst; clear Hsigmann'.
+        destruct (sigma_shifting_lefttoright_option (n' c') (n'' c') b') eqn:G2;
+          try discriminate.
+        inversion Hsigman'n''; subst; clear Hsigman'n''.
+        assert (G: sigma_shifting_lefttoright_option (n c'') (n'' c'') b = Some b'').
+        { by eapply sigma_shifting_lefttoright_transitive; eauto. }
+        exists (c'', b). split; last split; last exact Hshr; rewrite G; auto.
+        (** event_renames_event (unfolded) remains *)
+        eexists; split; first reflexivity. split.
+        * intros ? ? Hload.
+          destruct Hee' as [[? ?] [inv [Hee'1 Hee'2]]].
+          symmetry in inv; inversion inv; subst; clear inv; simpl in *.
+          specialize (Hee'1 _ _ Hload) as [v' [Hloadv' vv']].
+          destruct He'e'' as [[? ?] [inv [He'e''1 He'e''2]]].
+          symmetry in inv; inversion inv; subst; clear inv; simpl in *.
+          specialize (He'e''1 _ _ Hloadv') as [v'' [Hloadv'' v'v'']].
+          eexists; split; first eassumption.
+          destruct v as [| [[[pv cv] bv] ov] |];
+            try by inversion vv' as [rewr]; rewrite <- rewr in v'v''; auto.
+          destruct (pv =? Permission.data) eqn:epv.
+          -- destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv)
+              as [bv'|] eqn:G1v; try discriminate.
+             inversion vv'; subst; clear vv'.
+             rewrite epv in v'v''.
+             destruct (sigma_shifting_lefttoright_option (n' cv) (n'' cv) bv')
+               as [bv''|] eqn:G2v; try discriminate.
+             inversion v'v''; subst; clear v'v''.
+             assert (Gv: sigma_shifting_lefttoright_option (n cv) (n'' cv) bv
+                        = Some bv'').
+             { by eapply sigma_shifting_lefttoright_transitive; eauto. }
+               by rewrite Gv.
+          -- inversion vv'; subst; clear vv'; by rewrite epv in v'v''.
+
+        * intros ? v'' Hload''.
+          destruct He'e'' as [[? ?] [inv [He'e''1 He'e''2]]].
+          symmetry in inv; inversion inv; subst; clear inv; simpl in *.
+          specialize (He'e''2 _ _ Hload'') as [v' [Hloadv' v'v'']].
+          destruct Hee' as [[? ?] [inv [Hee'1 Hee'2]]].
+          symmetry in inv; inversion inv; subst; clear inv; simpl in *.
+          specialize (Hee'2 _ _ Hloadv') as [v [Hloadv vv']].
+          eexists; split; first eassumption.
+          destruct v as [| [[[pv cv] bv] ov] |];
+            try by inversion vv' as [rewr]; rewrite <- rewr in v'v''; auto.
+          destruct (pv =? Permission.data) eqn:epv.
+          -- destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv)
+              as [bv'|] eqn:G1v; try discriminate.
+             inversion vv'; subst; clear vv'.
+             rewrite epv in v'v''.
+             destruct (sigma_shifting_lefttoright_option (n' cv) (n'' cv) bv')
+               as [bv''|] eqn:G2v; try discriminate.
+             inversion v'v''; subst; clear v'v''.
+             assert (Gv: sigma_shifting_lefttoright_option (n cv) (n'' cv) bv
+                         = Some bv'').
+             { by eapply sigma_shifting_lefttoright_transitive; eauto. }
+               by rewrite Gv.
+          -- inversion vv'; subst; clear vv'; by rewrite epv in v'v''.
+             
+          
+      + unfold match_events in *.
+        destruct e; destruct e''; destruct e';
+          try discriminate; auto; try (by exfalso);
+            repeat match goal with | Hand: _ /\ _ |- _ =>
+                                     destruct Hand as [? ?] end.
+        * repeat constructor; subst; reflexivity.
+        * repeat constructor; subst; reflexivity.
+
+      + unfold rename_value_option, rename_value_template_option,
+        sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid in *.
+        destruct (arg_of_event e) as [| [[[p c] b] o] |];
+          try inversion Hargee' as [Harge']; rewrite <- Harge' in Harge'e''; auto.
+        destruct (p =? Permission.data) eqn:ep.
+        * unfold rename_addr_option in *.
+          destruct (sigma_shifting_lefttoright_option (n c) (n' c) b)
+            as [b'|] eqn:esigma; try discriminate.
+          inversion Harge' as [rewr].
+          rewrite <- rewr, ep in Harge'e''.
+          destruct (sigma_shifting_lefttoright_option (n' c) (n'' c) b')
+            as [b''|] eqn:esigma2; try discriminate.
+          inversion Harge'e'' as [rewr2].
+          assert (G: sigma_shifting_lefttoright_option (n c) (n'' c) b = Some b'').
+          { by eapply sigma_shifting_lefttoright_transitive; eauto. }
+          by rewrite G.
+        * inversion Harge' as [rewr]; rewrite <- rewr, ep in Harge'e''. by auto.
+            
+  Qed.        
+
+  Lemma traces_shift_each_other_option_transitive n n' n'' t t' t'':
+    traces_shift_each_other_option n  n'  t  t'  ->
+    traces_shift_each_other_option n' n'' t' t'' ->
+    traces_shift_each_other_option n  n'' t  t''.
+  Proof.
+    intros H1 H2. inversion H1. inversion H2. subst.
+    constructor. eapply traces_rename_each_other_option_transitive; eauto.
+  Qed.
+    
 End PropertiesOfTheShiftRenamingAddrOption.
 
 Section ExampleShifts.
