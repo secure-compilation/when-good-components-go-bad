@@ -158,7 +158,7 @@ Section ThreewayMultisem1.
         rewrite Hpccomp_s'_s in H_c'. by rewrite H_c' in Hcomp.
     }
     
-    (** Now, do induction on t2:      *)
+    (** Now, do induction on t2:       *)
     (** - Base case:                   *)
     (**   Use option simulation, and   *)
     (**   lock-step simulation.        *)
@@ -187,7 +187,7 @@ Section ThreewayMultisem1.
         do 2 eexists; eauto.
       }
 
-            (** TODO: Refactor into a CompCert/Common-level lemma? *)
+      (** TODO: Refactor into a CompCert/Common-level lemma? *)
       assert (forall (sem: semantics event) s1 s2 t1 e1,
                  single_events sem ->
                  starR (step sem) (globalenv sem) s1 (rcons t1 e1) s2 ->
@@ -208,7 +208,11 @@ Section ThreewayMultisem1.
           destruct t0; auto; simpl in *; auto.
           + exists s2, s3; intuition. constructor.
           + (** TODO: Use a "length_size" lemma. Get a contra in Hlength. *)
-            admit.
+            assert (forall (A: Type) l, size l = @length A l) as size_length.
+            {
+              induction l; auto.
+            }
+            rewrite <- size_length, size_rcons in Hlength. omega. 
         - specialize (IHHstar x t1 Logic.eq_refl) as [st1 [se1 [Ht2 [He1 Hnil]]]].
           pose proof (Hsingle _ _ _ H) as Hlength.
           destruct t2; auto; simpl in *.
@@ -217,8 +221,12 @@ Section ThreewayMultisem1.
             eapply starR_step; eauto.
           + destruct t2; simpl in *; auto.
             * unfold Eapp in *.
-              assert (e1 = e /\ t0 = rcons t1 x) as [rewr1 rewr2]. by admit.
-              subst.
+              assert (e1 = e /\ t0 = rcons t1 x) as [rewr1 rewr2]; subst.
+              {
+                rewrite <- cats1, <- catA, cats1, <- rcons_cat in Heqt1_.
+                find_rcons_rcons.
+                by rewrite cats1.
+              }
               exists s2, s3; intuition. constructor.
             * omega.
       }
@@ -255,24 +263,53 @@ Section ThreewayMultisem1.
                                                        (rcons (t1'' ** t2''pref) e2'')
              ) as [e2' [se2' [He2' Hborder]]].
       {
-        (** Use the strengthening lemma: *)
-        eapply threeway_multisem_event_lockstep_program_step.
-        - (** This is not exactly true, but we should be able to *)
-          (** make a case distinction (before the assertion) and *)
-          (** to make it true in both cases.                     *)
+        find_and_invert_mergeable_internal_states.
+        - (** Use the strengthening lemma: *)
+          eapply threeway_multisem_event_lockstep_program_step.
+          2: { exact Ht2t2't2''. }
+          + destruct st2  as [[[? ?] ?] pc].
+            destruct st2' as [[[? ?] ?] pc'].
+            CS.simplify_turn. by subst.
+          
+          + auto.
+          + auto.
+          + unfold Eapp. rewrite !rcons_cat. exact Hshift.
+          + unfold Eapp in *. rewrite <- !rcons_cat in Hshift.
+            inversion Hshift as [? ? Hren]; subst; inversion Hren; subst;
+              first by find_nil_rcons.
+            repeat find_rcons_rcons. assumption.
+          + unfold Eapp in *. rewrite <- !rcons_cat in Hshift.
+            inversion Hshift as [? ? Hren]; subst; inversion Hren; subst;
+              first by find_nil_rcons.
+            repeat find_rcons_rcons. assumption.
+        - (** Use commutativity of linking, then use the strengthening lemma: *)
+          assert (eprog: prog = program_link c p).
+          {
+            eapply program_linkC; auto;
+              find_and_invert_mergeable_states_well_formed; auto.
+            by unfold mergeable_interfaces in *; intuition.
+          }
+          assert (eprog': prog' = program_link c' p).
+          {
+            eapply program_linkC; auto;
+              find_and_invert_mergeable_states_well_formed; auto.
+            by unfold mergeable_interfaces in *; rewrite <- Hifc_cc'; intuition.
+          }
+          assert (eprog'': prog'' = program_link c' p').
+          {
+            eapply program_linkC; auto;
+              find_and_invert_mergeable_states_well_formed; auto.
+              by unfold mergeable_interfaces in *;
+                rewrite <- Hifc_cc', <- Hifc_pp'; intuition.
+          }
+          assert (esem: sem = CS.sem_non_inform (program_link c p)).
+          { by rewrite <- eprog. }
+          assert (esem': sem' = CS.sem_non_inform (program_link c' p)).
+          { by rewrite <- eprog'. }
+          assert (esem'': sem'' = CS.sem_non_inform (program_link c' p')).
+          { by rewrite <- eprog''. }
+
           admit.
-        - exact Ht2t2't2''.
-        - auto.
-        - auto.
-        - unfold Eapp. rewrite !rcons_cat. exact Hshift.
-        - unfold Eapp in *. rewrite <- !rcons_cat in Hshift.
-          inversion Hshift as [? ? Hren]; subst; inversion Hren; subst;
-            first by find_nil_rcons.
-          repeat find_rcons_rcons. assumption.
-        - unfold Eapp in *. rewrite <- !rcons_cat in Hshift.
-          inversion Hshift as [? ? Hren]; subst; inversion Hren; subst;
-            first by find_nil_rcons.
-          repeat find_rcons_rcons. assumption.
       }
 
 
