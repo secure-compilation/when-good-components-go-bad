@@ -309,6 +309,51 @@ Section ThreewayMultisem1.
           assert (esem'': sem'' = CS.sem_non_inform (program_link c' p')).
           { by rewrite <- eprog''. }
 
+          dependent rewrite esem' in st2'.
+          dependent rewrite esem in st2.
+          dependent rewrite esem in se2.
+          dependent rewrite esem'' in st2''.
+          dependent rewrite esem'' in se2''.
+
+          assert (mergeable_internal_states
+                    c' p c p n n'' st2 st2' st2'' 
+                    (t1 ** t2) (t1' ** t2') (t1'' ** t2''pref)
+                 ).
+          {
+            apply mergeable_internal_states_p_executing; auto.
+            - find_and_invert_mergeable_states_well_formed; constructor; auto.
+              + apply mergeable_interfaces_sym. by rewrite <- Hifc_cc'.
+              + eapply interface_preserves_closedness_r; try assumption.
+                * symmetry. exact Hifc_pp'.
+                * apply linkable_sym.
+                  unfold mergeable_interfaces in *;
+                    rewrite <- Hifc_pp', <- Hifc_cc'; by intuition.
+                * by rewrite <- eprog''.
+                * apply linkable_mains_sym.
+                  unfold mergeable_interfaces in *.
+                  apply linkable_implies_linkable_mains; auto;
+                    rewrite <- Hifc_pp', <- Hifc_cc'; by intuition.
+                * unfold matching_mains.
+                  by rewrite <- !wfprog_main_component, Hifc_pp'.
+                  
+              + by rewrite <- eprog''.
+              + by dependent rewrite <- eprog.
+              + by dependent rewrite <- eprog''.
+              + by dependent rewrite <- eprog.
+              + 
+              + 
+          }
+
+          eapply threeway_multisem_event_lockstep_program_step.
+          2: { exact Ht2t2't2''. }
+          + destruct st2   as [[[? ?] ?] pc].
+            destruct st2'  as [[[? ?] ?] pc'].
+            destruct st2'' as [[[? ?] ?] pc''].
+            CS.simplify_turn. by subst.
+          
+          
+          dependent rewrite esem' in Ht2'.
+          
           admit.
       }
 
