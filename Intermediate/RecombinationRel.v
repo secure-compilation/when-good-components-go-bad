@@ -336,8 +336,9 @@ Section ThreewayMultisem1.
                 * unfold matching_mains.
                   by rewrite <- !wfprog_main_component, Hifc_pp'.
                   
-              + by rewrite <- eprog''.
-              + by dependent rewrite <- eprog.
+              + by rewrite <- eprog.
+              + intros ? ? Hpref. rewrite <- eprog' in Hpref.
+                apply 
               + by dependent rewrite <- eprog''.
               + by dependent rewrite <- eprog.
               + 
