@@ -230,38 +230,85 @@ Section ThreewayMultisem1.
         last by apply CS.singleton_traces_non_inform.
       apply starR_rcons_lemma in Hstar12'' as [st2'' [se2'' [Ht2'' [He2'' Hse2'']]]];
         auto; last by apply CS.singleton_traces_non_inform.
+
+      assert (exists (s2' : state sem') (t2' : trace event),
+                 Star sem' s1' t2' s2' /\
+                 mergeable_internal_states p c p' c' n n'' st2 s2' st2'' (t1 ** t2) 
+                                           (t1' ** t2') (t1'' ** t2''pref))
+        as [st2' [t2' [Ht2' Ht2t2't2'']]].
+      {
+        apply IHt2.
+        - by apply star_iff_starR.
+        - by apply star_iff_starR.
+        - unfold Eapp in *. rewrite <- !rcons_cat in Hshift.
+          constructor.
+          inversion Hshift as [? ? Hren]; subst; inversion Hren as [|];
+            first by find_nil_rcons.
+          repeat find_rcons_rcons. assumption.
+        - rewrite !size_rcons in szt2t2''. omega.
+      }
+
+      assert (exists e2' se2', Step sem' st2' [:: e2'] se2' /\
+                               mergeable_border_states p c p' c' n n'' se2 se2' se2''
+                                                       (rcons (t1   ** t2)       e2)
+                                                       (rcons (t1'  ** t2')      e2')
+                                                       (rcons (t1'' ** t2''pref) e2'')
+             ) as [e2' [se2' [He2' Hborder]]].
+      {
+        (** Use the strengthening lemma: *)
+        eapply threeway_multisem_event_lockstep_program_step.
+        - (** This is not exactly true, but we should be able to *)
+          (** make a case distinction (before the assertion) and *)
+          (** to make it true in both cases.                     *)
+          admit.
+        - exact Ht2t2't2''.
+        - auto.
+        - auto.
+        - unfold Eapp. rewrite !rcons_cat. exact Hshift.
+        - unfold Eapp in *. rewrite <- !rcons_cat in Hshift.
+          inversion Hshift as [? ? Hren]; subst; inversion Hren; subst;
+            first by find_nil_rcons.
+          repeat find_rcons_rcons. assumption.
+        - unfold Eapp in *. rewrite <- !rcons_cat in Hshift.
+          inversion Hshift as [? ? Hren]; subst; inversion Hren; subst;
+            first by find_nil_rcons.
+          repeat find_rcons_rcons. assumption.
+      }
+
+
+      (** Use weakening *)
+      apply mergeable_border_mergeable_internal in Hborder.
+
+      (** Use option simulation (starting from the state right after 
+          the border crossing). *)
+      pose proof (merge_states_silent_star) as Hoption_sim; unfold E0 in *.
+      assert (Hcomp_se2: CS.is_program_component se2 (prog_interface c)). by admit.
+      apply star_iff_starR in Hse2''. 
+      specialize (Hoption_sim _ _ _ _ _ _ _ _ _ _ _ _ _
+                              Hborder Hcomp_se2 Hse2'').
+
+      (** Use lock-step simulation (starting from the state right after 
+          the border crossing). *)      
+      pose proof (threeway_multisem_star_E0) as Hlockstep.
+      specialize (Hlockstep _ _ _ _ _ _ _ _ _ _ _ _ _
+                            Hcomp_se2 Hoption_sim Hse2) as [s2' [Hstep12' Hmerge']].
       
+      exists s2', (rcons t2' e2').
+      rewrite <- !rcons_cat.
+
+      unfold Eapp in *.
+      split; last exact Hmerge'.
+
+      apply star_iff_starR. 
+      eapply starR_trans.
+      + eapply starR_step.
+        * apply star_iff_starR; eauto.
+        * eauto.
+        * eauto.
+      + exact Hstep12'.
+      + rewrite <- cats1. unfold Eapp. by rewrite app_nil_r.
       
-      inversion Hstar12; subst; unfold E0 in *; first by find_nil_rcons.
 
-      pose proof (CS.singleton_traces_non_inform _ _ _ _ H0) as Hlength.
-      rewrite <- cats1 in H1.
-
-      inversion Hstar12''; subst; unfold E0 in *; first by find_nil_rcons.
-
-      pose proof (CS.singleton_traces_non_inform _ _ _ _ H3) as Hlength2.
-      rewrite <- cats1 in H4.
-
-      destruct t3.
-      + unfold Eapp in *. rewrite app_nil_r in H1. subst.
-        inversion H; subst.
-        * symmetry in H6.
-          specialize (app_eq_nil _ _ H6) as [? contra]; by simpl in *.
-        * 
-      Search _ rcons cons.
-      remember (rcons t2 e2) as t2_. move : Heqt2_.
-      induction Hstar12 as [];
-        subst; move => Heqt2_; unfold E0 in *; first by find_nil_rcons.
-      
-      (** Use CS.singleton_traces_non_inform *) 
-
-      (******************************
-      induction Hstar12; induction Hstar12''.
-      + exists s1'. exists E0. rewrite !E0_right. split; first apply star_refl.
-        exact Hmerge.
-      + rewrite E0_right. rewrite E0_right in IHHstar12''. rewrite E0_right in Hshift.
-        specialize (IHHstar12'' Hmerge).
-       *****************************)
   Admitted.
 
   
