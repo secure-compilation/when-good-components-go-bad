@@ -140,6 +140,10 @@ Section ThreewayMultisem1.
                       Hshift_tt' t1't1'') as  t1t1''.
         inversion t1t1'' as [? ? t1t1''ren]; subst.
         specialize (traces_rename_each_other_option_same_size _ _ _ _ t1t1''ren).
+        (** TODO: Refactor lemma: *)
+        (** size (t1 ** t2) = size (t1' ** t2') -> *)
+        (** size t2 = size t2'                  -> *)
+        (** size t1 = size t1'.                     *)
         unfold Eapp in Hsz.
         assert (forall (A: Type) l, size l = @length A l) as size_length.
         {
@@ -160,21 +164,20 @@ Section ThreewayMultisem1.
     (**   lock-step simulation.        *)
     (** - Inductive case:              *)
     (**   Use strengthening?           *)
-    generalize dependent t2''.
-    induction t2 as [|t2 e2] using last_ind; intros ? Hstar12'' Hshift szt2t2''. 
+    generalize dependent t2''. generalize dependent s2''. generalize dependent s2.
+    induction t2 as [|t2 e2] using last_ind; intros ? ? ? ? Hstar12'' Hshift szt2t2''. 
     - assert (t2'' = nil); subst.
-      { by induction t2'' using last_ind; auto; rewrite size_rcons in szt2t2''. }
+      { by apply size0nil; auto. }
       simpl in *.
       pose proof (merge_states_silent_star) as Hoption_sim; unfold E0 in *.
       specialize (Hoption_sim _ _ _ _ _ _ _ _ _ _ _ _ _
                               Hmerge Hcomp Hstar12'').
       pose proof (threeway_multisem_star_E0) as Hlockstep.
-      unfold E0 in *.
       apply star_iff_starR in Hstar12.
       specialize (Hlockstep _ _ _ _ _ _ _ _ _ _ _ _ _
                             Hcomp Hoption_sim Hstar12) as [s2' [Hstep12' Hmerge']].
       exists s2'; exists E0.
-      unfold Eapp, E0, prog' in *.
+      unfold Eapp, prog' in *.
       rewrite star_iff_starR !app_nil_r; by intuition.
     - assert (exists t2''pref e2'', t2'' = rcons t2''pref e2'') as [t2''pref [e2'' ?]];
         subst.
@@ -183,9 +186,70 @@ Section ThreewayMultisem1.
           rewrite !size_rcons in szt2t2''; first by auto.
         do 2 eexists; eauto.
       }
+
+            (** TODO: Refactor into a CompCert/Common-level lemma? *)
+      assert (forall (sem: semantics event) s1 s2 t1 e1,
+                 single_events sem ->
+                 starR (step sem) (globalenv sem) s1 (rcons t1 e1) s2 ->
+                 exists st1 se1,
+                   starR (step sem) (globalenv sem) s1 t1 st1 /\
+                   Step sem st1 [:: e1] se1 /\
+                   starR (step sem) (globalenv sem) se1 E0 s2
+             ) as starR_rcons_lemma.
+      {
+        clear.
+        intros ? ? ? ? ? Hsingle Hstar.
+        remember (rcons t1 e1) as t1_.
+        revert e1 t1 Heqt1_.
+        induction Hstar; intros; subst; unfold E0 in *; first by find_nil_rcons.
+        induction t1 using last_ind.
+        - unfold Eapp in *. rewrite app_nil_l in Heqt1_; subst.
+          pose proof (Hsingle _ _ _ H) as Hlength.
+          destruct t0; auto; simpl in *; auto.
+          + exists s2, s3; intuition. constructor.
+          + (** TODO: Use a "length_size" lemma. Get a contra in Hlength. *)
+            admit.
+        - specialize (IHHstar x t1 Logic.eq_refl) as [st1 [se1 [Ht2 [He1 Hnil]]]].
+          pose proof (Hsingle _ _ _ H) as Hlength.
+          destruct t2; auto; simpl in *.
+          + unfold Eapp in *. rewrite app_nil_r in Heqt1_. find_rcons_rcons.
+            do 2 eexists; intuition; eauto.
+            eapply starR_step; eauto.
+          + destruct t2; simpl in *; auto.
+            * unfold Eapp in *.
+              assert (e1 = e /\ t0 = rcons t1 x) as [rewr1 rewr2]. by admit.
+              subst.
+              exists s2, s3; intuition. constructor.
+            * omega.
+      }
       
-      remember (rcons t2 e2) as t2_. move : Heqt2_.
       apply star_iff_starR in Hstar12.
+      apply star_iff_starR in Hstar12''.
+
+      apply starR_rcons_lemma in Hstar12   as [st2 [se2 [Ht2 [He2 Hse2]]]]; auto;
+        last by apply CS.singleton_traces_non_inform.
+      apply starR_rcons_lemma in Hstar12'' as [st2'' [se2'' [Ht2'' [He2'' Hse2'']]]];
+        auto; last by apply CS.singleton_traces_non_inform.
+      
+      
+      inversion Hstar12; subst; unfold E0 in *; first by find_nil_rcons.
+
+      pose proof (CS.singleton_traces_non_inform _ _ _ _ H0) as Hlength.
+      rewrite <- cats1 in H1.
+
+      inversion Hstar12''; subst; unfold E0 in *; first by find_nil_rcons.
+
+      pose proof (CS.singleton_traces_non_inform _ _ _ _ H3) as Hlength2.
+      rewrite <- cats1 in H4.
+
+      destruct t3.
+      + unfold Eapp in *. rewrite app_nil_r in H1. subst.
+        inversion H; subst.
+        * symmetry in H6.
+          specialize (app_eq_nil _ _ H6) as [? contra]; by simpl in *.
+        * 
+      Search _ rcons cons.
+      remember (rcons t2 e2) as t2_. move : Heqt2_.
       induction Hstar12 as [];
         subst; move => Heqt2_; unfold E0 in *; first by find_nil_rcons.
       
