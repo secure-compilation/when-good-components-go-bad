@@ -111,6 +111,96 @@ Section ThreewayMultisem1.
       end.
   Qed.
 
+
+  Theorem threeway_multisem_star_program s1 s1' s1'' t1 t1' t1'' s2 s2'' t2 t2'':
+    CS.is_program_component s1 ic ->
+    mergeable_internal_states p c p' c' n n'' s1 s1' s1'' t1 t1' t1'' ->
+    Star sem   s1   t2   s2   ->
+    Star sem'' s1'' t2'' s2'' ->
+    traces_shift_each_other_option n n'' (t1 ** t2) (t1'' ** t2'') ->
+  exists s2' t2',
+    Star sem'  s1'  t2'  s2' /\
+    mergeable_internal_states p c p' c' n n'' s2 s2' s2''
+                              (t1 ** t2) (t1' ** t2') (t1'' ** t2'').
+  Proof.
+    intros Hcomp Hmerge Hstar12 Hstar12'' Hshift.
+
+    (** First, assert that t2 and t2'' must have the same size. *)
+    assert (szt2t2'': size t2 = size t2'').
+    {
+      find_and_invert_mergeable_internal_states;
+        find_and_invert_mergeable_states_well_formed.
+      - inversion Hshift as [? ? Hren]; subst.
+        specialize (traces_rename_each_other_option_same_size _ _ _ _ Hren) as Hsz.
+        
+        specialize (traces_shift_each_other_option_symmetric _ _ _ _ Hshift_t''t')
+          as t1't1''.
+        specialize (traces_shift_each_other_option_transitive
+                      _ _ _ _ _ _
+                      Hshift_tt' t1't1'') as  t1t1''.
+        inversion t1t1'' as [? ? t1t1''ren]; subst.
+        specialize (traces_rename_each_other_option_same_size _ _ _ _ t1t1''ren).
+        unfold Eapp in Hsz.
+        assert (forall (A: Type) l, size l = @length A l) as size_length.
+        {
+          induction l; auto.
+        }
+        rewrite !size_length !app_length in Hsz.
+        rewrite !size_length.
+        intros rewr; rewrite rewr in Hsz; by apply Nat.add_cancel_l in Hsz.
+      - CS.simplify_turn.
+        destruct s1  as [[[? ?] ?] pc ]; 
+          destruct s1' as [[[? ?] ?] pc']; simpl in *.
+        rewrite Hpccomp_s'_s in H_c'. by rewrite H_c' in Hcomp.
+    }
+    
+    (** Now, do induction on t2:      *)
+    (** - Base case:                   *)
+    (**   Use option simulation, and   *)
+    (**   lock-step simulation.        *)
+    (** - Inductive case:              *)
+    (**   Use strengthening?           *)
+    generalize dependent t2''.
+    induction t2 as [|t2 e2] using last_ind; intros ? Hstar12'' Hshift szt2t2''. 
+    - assert (t2'' = nil); subst.
+      { by induction t2'' using last_ind; auto; rewrite size_rcons in szt2t2''. }
+      simpl in *.
+      pose proof (merge_states_silent_star) as Hoption_sim; unfold E0 in *.
+      specialize (Hoption_sim _ _ _ _ _ _ _ _ _ _ _ _ _
+                              Hmerge Hcomp Hstar12'').
+      pose proof (threeway_multisem_star_E0) as Hlockstep.
+      unfold E0 in *.
+      apply star_iff_starR in Hstar12.
+      specialize (Hlockstep _ _ _ _ _ _ _ _ _ _ _ _ _
+                            Hcomp Hoption_sim Hstar12) as [s2' [Hstep12' Hmerge']].
+      exists s2'; exists E0.
+      unfold Eapp, E0, prog' in *.
+      rewrite star_iff_starR !app_nil_r; by intuition.
+    - assert (exists t2''pref e2'', t2'' = rcons t2''pref e2'') as [t2''pref [e2'' ?]];
+        subst.
+      {
+        induction t2'' as [|tG eG] using last_ind;
+          rewrite !size_rcons in szt2t2''; first by auto.
+        do 2 eexists; eauto.
+      }
+      
+      remember (rcons t2 e2) as t2_. move : Heqt2_.
+      apply star_iff_starR in Hstar12.
+      induction Hstar12 as [];
+        subst; move => Heqt2_; unfold E0 in *; first by find_nil_rcons.
+      
+      (** Use CS.singleton_traces_non_inform *) 
+
+      (******************************
+      induction Hstar12; induction Hstar12''.
+      + exists s1'. exists E0. rewrite !E0_right. split; first apply star_refl.
+        exact Hmerge.
+      + rewrite E0_right. rewrite E0_right in IHHstar12''. rewrite E0_right in Hshift.
+        specialize (IHHstar12'' Hmerge).
+       *****************************)
+  Admitted.
+
+  
 End ThreewayMultisem1.
 
 (* Helpers and symmetric version of three-way simulation. *)
@@ -1864,7 +1954,7 @@ Section Recombination.
     does_prefix sem'  m' /\
     behavior_rel_behavior n' n   m' m.
   Proof.
-    (* unfold does_prefix. *)
+    unfold does_prefix.
     intros [b [Hbeh Hprefix]] [b'' [Hbeh'' Hprefix'']] Hrel.
     (* Invert prefix executions to expose their initial states (and full program
        behaviors. *)
@@ -1883,20 +1973,70 @@ Section Recombination.
       eapply match_initial_states; eauto.
     }
 
-
+    destruct m as [tm | tm | tm]; destruct m'' as [tm'' | tm'' | tm''];
+      try by inversion Hrel.
+    - destruct b   as [t   | ? | ? | ?]; try contradiction.
+      destruct b'' as [t'' | ? | ? | ?]; try contradiction.
+      simpl in Hprefix, Hprefix''. subst t t''.
+      inversion Hst_beh   as [? s2   Hstar12   Hfinal2   | | |]; subst.
+      inversion Hst_beh'' as [? s2'' Hstar12'' Hfinal2'' | | |]; subst.
+      exists (Terminates tm). split; last reflexivity.
+      
     (* In the standard proof, because the two executions produce the same
        prefix, we know that the two runs either terminate, go wrong or are
        unfinished. The third case is probably the most interesting here. *)
+    (***********************************************************
     destruct (CS.behavior_prefix_star_non_inform Hbeh Hprefix)
       as [s1_ [s2 [Hini1_ Hstar12]]].
     destruct (CS.behavior_prefix_star_non_inform Hbeh'' Hprefix'')
       as [s1''_ [s2'' [Hini1''_ Hstar12'']]].
+     **********************************************************)
 
     (** TODO: Maybe get rid of the Hstar12 and Hstar12'' the way they are 
         produced above. *)
     (** And instead get them by inverting state_behaves (Will generate a side 
         condition that asserts, e.g., final_state) *)
+    
+    inversion Hst_beh as [ t ? Hstar12 Hfin
+                         | t ? Hstar12
+                         |
+                         | t ? Hstar12];
+      inversion Hst_beh'' as [ t'' ? Hstar12'' Hfin''
+                             | t'' ? Hstar12''
+                             |
+                             | t'' ? Hstar12''];
+      (*subst; destruct m; simpl in *; subst; destruct m''; simpl in *; subst;*)
+      subst; simpl in *;
+        clear Hst_beh Hst_beh'';
+        
+        try (
+            apply star_iff_starR in Hstar12;
+            apply star_iff_starR in Hstar12'';
+            
+            unfold CS.initial_state in *;
+            
+            induction t'' as [|? e''] using last_ind;
+            subst;
+            induction t as [|? e] using last_ind;
+            subst;
+            simpl in *
+          ).
+    - Search _ finpref_behavior.
 
+      
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - admit.
+    - 
+    
     clear Hbeh Hbeh''.
 
     apply star_iff_starR in Hstar12.
