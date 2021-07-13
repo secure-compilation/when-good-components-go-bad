@@ -283,83 +283,12 @@ Section ThreewayMultisem1.
               first by find_nil_rcons.
             repeat find_rcons_rcons. assumption.
         - (** Use commutativity of linking, then use the strengthening lemma: *)
-          assert (eprog: prog = program_link c p).
-          {
-            eapply program_linkC; auto;
-              find_and_invert_mergeable_states_well_formed; auto.
-            by unfold mergeable_interfaces in *; intuition.
-          }
-          assert (eprog': prog' = program_link c' p).
-          {
-            eapply program_linkC; auto;
-              find_and_invert_mergeable_states_well_formed; auto.
-            by unfold mergeable_interfaces in *; rewrite <- Hifc_cc'; intuition.
-          }
-          assert (eprog'': prog'' = program_link c' p').
-          {
-            eapply program_linkC; auto;
-              find_and_invert_mergeable_states_well_formed; auto.
-              by unfold mergeable_interfaces in *;
-                rewrite <- Hifc_cc', <- Hifc_pp'; intuition.
-          }
-          assert (esem: sem = CS.sem_non_inform (program_link c p)).
-          { by rewrite <- eprog. }
-          assert (esem': sem' = CS.sem_non_inform (program_link c' p)).
-          { by rewrite <- eprog'. }
-          assert (esem'': sem'' = CS.sem_non_inform (program_link c' p')).
-          { by rewrite <- eprog''. }
+          apply mergeable_internal_states_sym in Ht2t2't2''.
+          apply mergeable_states_well_formed_sym in Hmergewf.
 
-          dependent rewrite esem' in st2'.
-          dependent rewrite esem in st2.
-          dependent rewrite esem in se2.
-          dependent rewrite esem'' in st2''.
-          dependent rewrite esem'' in se2''.
-
-          assert (Hmergesym: mergeable_internal_states
-                               c' p' c p n'' n st2'' st2' st2 
-                               (t1'' ** t2''pref) (t1' ** t2') (t1 ** t2)
-                 ).
-          {
-            apply mergeable_internal_states_p_executing; auto.
-            - find_and_invert_mergeable_states_well_formed; constructor; auto.
-              + apply mergeable_interfaces_sym. by rewrite <- Hifc_cc', <- Hifc_pp'.
-              + by rewrite <- eprog''.                  
-              + by rewrite <- eprog.
-              + by rewrite <- eprog''.
-              + by rewrite <- eprog.
-              + by rewrite <- eprog''.
-              + by rewrite <- eprog'.
-              + by rewrite <- eprog.
-              + (** tricky *)
-                (** We will likely need a CSInvariant that ensures *)
-                (** all the addresses appearing in the memory      *)
-                (** have a cid \in unionm (domm (prog_interface p))*)
-                (**                       (domm (prog_interface c))*)
-                admit.
-              + (** tricky for the same reason as above.            *)
-                admit.
-              + (** tricky for the same reason as above.            *)
-                admit.
-            - destruct st2   as [[[? ?] ?] pc].
-              destruct st2'  as [[[? ?] ?] pc'].
-              destruct st2'' as [[[? ?] ?] pc''].
-              CS.simplify_turn. subst.
-              find_and_invert_mergeable_states_well_formed; simpl in *.
-              rewrite Hpccomp_s'_s. rewrite <- Hifc_pp'. rewrite Hpccomp_s'_s in H_c'.
-              eapply mergeable_states_in_to_notin; eauto.
-            - (** tricky for the same reason as above,            *)
-              (** but should follow from Hregsc'                  *)
-              admit.
-            - (** tricky for the same reason as above,            *)
-              (** but should follow from Hmemc'                   *)
-              admit.
-            - (** tricky for the same reason as above,            *)
-              (** but should follow from Hmemp                    *)
-              admit.
-          }
-
-          eapply threeway_multisem_event_lockstep_program_step.
-          2: { exact Hmergesym. }
+          eapply threeway_multisem_event_lockstep_program_step; auto.
+          2: { apply mergeable_internal_states_sym. eassumption.  }
+          + 
           + destruct st2   as [[[? ?] ?] pc].
             destruct st2'  as [[[? ?] ?] pc'].
             destruct st2'' as [[[? ?] ?] pc''].

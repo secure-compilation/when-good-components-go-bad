@@ -1057,12 +1057,13 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
      \[not]in. This is the equivalent of the old [PS.domm_partition].
      [DynShare] There are now two identical sub-proofs, which could be
      simplified. *)
-  Lemma mergeable_states_notin_to_in s s' s'' t t' t'' :
+  Lemma mergeable_states_notin_to_in s s' s'' t t' t'' pc :
     mergeable_internal_states s s' s'' t t' t'' ->
-    Pointer.component (CS.state_pc s) \notin domm ip ->
-    Pointer.component (CS.state_pc s) \in domm ic.
+    pc = CS.state_pc s ->
+    Pointer.component pc \notin domm ip ->
+    Pointer.component pc \in domm ic.
   Proof.
-    intros Hmerg Hpc_notin.
+    intros Hmerg Hpc Hpc_notin. subst.
     inversion Hmerg
       as [ [Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ _ _ Hstar _ _ _ _ _ _ _ _ _ _ _] _ _ _ _ _
          | [Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ _ _ Hstar _ _ _ _ _ _ _ _ _ _ _] _ _ _ _ _ ].
@@ -1089,7 +1090,32 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     intros Hmerg Hpc_notin.
   Admitted.
 
+  Lemma mergeable_states_notin_to_in2 s s' s'' t t' t'' pc :
+    mergeable_internal_states s s' s'' t t' t'' ->
+    pc = CS.state_pc s ->
+    Pointer.component pc \notin domm ic ->
+    Pointer.component pc \in domm ip.
+  Proof. intros Hmerge ? contra. subst.
+         destruct (Pointer.component (CS.state_pc s) \in domm ip) eqn:e; auto.
+         destruct (Pointer.component (CS.state_pc s) \notin domm ip) eqn:e2.
+         - specialize (mergeable_states_notin_to_in Hmerge Logic.eq_refl e2) as rewr.
+             by rewrite rewr in contra.
+         - by rewrite e in e2.
+  Qed.
+  
+  Lemma mergeable_states_in_to_notin2 s s' s'' t t' t'' pc :
+    mergeable_internal_states s s' s'' t t' t'' ->
+    pc = CS.state_pc s ->
+    Pointer.component pc \in domm ip ->
+    Pointer.component pc \notin domm ic.
+  Proof.
+    intros Hmerge ? Hpc_in. subst.
+    destruct (Pointer.component (CS.state_pc s) \in domm ic) eqn:e; auto.
+    specialize (mergeable_states_in_to_notin Hmerge Logic.eq_refl e) as contra.
+    by rewrite Hpc_in in contra.
+  Qed.  
 
+  
   (* RB: NOTE: Consider if the core of the lemma could be moved to CS, as is the
      case of its simpler variant, is_program_component_pc_notin_domm. *)
   Lemma is_program_component_pc_in_domm s s' s'' t t' t'':
@@ -1888,3 +1914,105 @@ Ltac find_and_invert_mergeable_internal_states :=
     invert_non_eagerly_mergeable_internal_states H
   end.
 
+Section MergeableSym.
+
+  Variables p c p' c' : program.
+
+  Variables n n'': Component.id -> nat.
+
+  Let n' := fun cid =>
+              if cid \in domm (prog_interface p)
+              then n   cid
+              else n'' cid.
+  Let ip := prog_interface p.
+  Let ic := prog_interface c.
+  Let prog   := program_link p  c.
+  Let prog'  := program_link p  c'.
+  Let prog'' := program_link p' c'.
+  Let sem   := CS.sem_non_inform prog.
+  Let sem'  := CS.sem_non_inform prog'.
+  Let sem'' := CS.sem_non_inform prog''.
+
+
+  Lemma mergeable_states_well_formed_sym s s' s'' t t' t'':
+    mergeable_states_well_formed p c p' c' n n'' s s' s'' t t' t'' ->
+    mergeable_states_well_formed c' p' c p n'' n s'' s' s t'' t' t.
+  Proof.
+    intros Hwf. find_and_invert_mergeable_states_well_formed.
+    assert (Hmergeable_ifcs: mergeable_interfaces
+                               (prog_interface c')
+                               (prog_interface p')).
+    { apply mergeable_interfaces_sym. by rewrite <- Hifc_cc', <- Hifc_pp'. }
+    assert (Hmergeable_ifcs2: mergeable_interfaces
+                                (prog_interface c)
+                                (prog_interface p)).
+    { by apply mergeable_interfaces_sym. }
+    assert (eprog'': program_link c' p' = program_link p' c').
+    { rewrite program_linkC; auto. by unfold mergeable_interfaces in *; intuition. }
+    assert (eprog: program_link c p = program_link p c).
+    { rewrite program_linkC; auto. by unfold mergeable_interfaces in *; intuition. }
+    assert (eprog': program_link c' p = program_link p c').
+    {
+      rewrite program_linkC; auto.
+      by rewrite <- Hifc_cc'; unfold mergeable_interfaces in *; intuition.
+    }
+    
+    constructor; auto.
+    - by rewrite eprog''.
+    - by rewrite eprog.
+    - by rewrite eprog''.
+    - by rewrite eprog.
+    - by rewrite eprog''.
+    - by rewrite eprog'.
+    - by rewrite eprog.
+    - (** tricky *)
+      (** We will likely need a CSInvariant that ensures *)
+      (** all the addresses appearing in the memory      *)
+      (** have a cid \in unionm (domm (prog_interface p))*)
+      (**                       (domm (prog_interface c))*)
+      admit.
+    - (** tricky for the same reason as above.            *)
+      admit.
+    - (** tricky for the same reason as above.            *)
+      admit.
+  Admitted.
+
+  Lemma mergeable_internal_states_sym s s' s'' t t' t'':
+    mergeable_internal_states p c p' c' n n'' s s' s'' t t' t'' ->
+    mergeable_internal_states c' p' c p n'' n s'' s' s t'' t' t.
+  Proof.
+    intros Hmerge. find_and_invert_mergeable_internal_states.
+    - apply mergeable_internal_states_c'_executing; auto.
+      + by apply mergeable_states_well_formed_sym.
+      + CS.unfold_states.
+        CS.simplify_turn. subst.
+        find_and_invert_mergeable_states_well_formed; simpl in *.
+        rewrite <- Hifc_pp'. by eapply mergeable_states_notin_to_in2; eauto.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hregsp                   *)
+        admit.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hmemp                    *)
+        admit.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hmemc'                   *)
+        admit.
+    - apply mergeable_internal_states_p_executing; auto.
+      + by apply mergeable_states_well_formed_sym.
+      + CS.unfold_states.
+        CS.simplify_turn. subst.
+        find_and_invert_mergeable_states_well_formed; simpl in *.
+        rewrite <- Hifc_pp', Hpccomp_s'_s. eapply mergeable_states_in_to_notin; eauto.
+        by rewrite <- Hpccomp_s'_s.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hregsc'                  *)
+        admit.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hmemc'                   *)
+        admit.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hmemp                    *)
+        admit.
+  Admitted.
+  
+End MergeableSym.
