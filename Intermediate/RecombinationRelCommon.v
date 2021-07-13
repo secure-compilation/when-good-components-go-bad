@@ -1990,6 +1990,17 @@ Section MergeableSym.
         rewrite <- Hifc_pp'. by eapply mergeable_states_notin_to_in2; eauto.
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hregsp                   *)
+
+        (** TODO: Use lemma CSInvariants.value_mem_reg_domm_partition *)
+        
+        constructor.
+        unfold shift_value_option,
+        rename_value_option,
+        rename_value_template_option,
+        rename_addr_option,
+        sigma_shifting_wrap_bid_in_addr,
+        sigma_shifting_lefttoright_addr_bid.
+
         admit.
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemp                    *)
