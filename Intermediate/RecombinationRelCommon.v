@@ -26,6 +26,18 @@ Set Bullet Behavior "Strict Subproofs".
 
 Import Intermediate.
 
+Ltac invert_non_eagerly_mergeable_border_states Hmergeborder :=
+  let Hmergewf := fresh "Hmergewf" in
+  let Hpc      := fresh "Hpc"      in
+  let H_p      := fresh "H_p"      in
+  let Hregsp   := fresh "Hregsp"   in
+  let Hmemp    := fresh "Hmemp"    in
+  let Hmemc'   := fresh "Hmemc'"   in
+  let Hregsc'  := fresh "Hregsc'"  in
+  inversion Hmergeborder as
+      [Hmergewf Hpc H_p Hregsp Hmemp Hmemc' |
+       Hmergewf Hpc H_c' Hregsc' Hmemc' Hmemp].
+
 Section UnaryHelpersForMergeable.
 
   (* An inductive definition to relate a program with the pointers found in its
@@ -681,18 +693,6 @@ Section Mergeable.
         t ->
       mergeable_border_states s s' s'' t t' t''.
 
-  Ltac invert_non_eagerly_mergeable_border_states Hmergeborder :=
-    let Hmergewf := fresh "Hmergewf" in
-    let Hpc      := fresh "Hpc"      in
-    let H_p      := fresh "H_p"      in
-    let Hregsp   := fresh "Hregsp"   in
-    let Hmemp    := fresh "Hmemp"    in
-    let Hmemc'   := fresh "Hmemc'"   in
-    let Hregsc'  := fresh "Hregsc'"  in
-    inversion Hmergeborder as
-        [Hmergewf Hpc H_p Hregsp Hmemp Hmemc' |
-         Hmergewf Hpc H_c' Hregsc' Hmemc' Hmemp].
-  
   Lemma mergeable_border_mergeable_internal s s' s'' t t' t'':
     mergeable_border_states s s' s'' t t' t'' ->
     mergeable_internal_states s s' s'' t t' t''.
@@ -2014,5 +2014,49 @@ Section MergeableSym.
         (** but should follow from Hmemp                    *)
         admit.
   Admitted.
+
+  
+  Lemma mergeable_border_states_sym s s' s'' t t' t'':
+    mergeable_border_states p c p' c' n n'' s s' s'' t t' t'' ->
+    mergeable_border_states c' p' c p n'' n s'' s' s t'' t' t.
+  Proof.
+    intros Hmerge.
+    specialize (mergeable_border_mergeable_internal Hmerge) as Hmerge_internal.
+    invert_non_eagerly_mergeable_border_states Hmerge.
+
+    - apply mergeable_border_states_c'_executing; auto.
+      + by apply mergeable_states_well_formed_sym.
+      + CS.unfold_states.
+        CS.simplify_turn. subst.
+        find_and_invert_mergeable_states_well_formed; simpl in *.
+        rewrite <- Hifc_pp'. by eapply mergeable_states_notin_to_in2; eauto.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hregsp                   *)
+        admit.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hmemp                    *)
+        admit.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hmemc'                   *)
+        admit.
+
+    - apply mergeable_border_states_p_executing; auto.
+      + by apply mergeable_states_well_formed_sym.
+      + CS.unfold_states.
+        CS.simplify_turn. subst.
+        find_and_invert_mergeable_states_well_formed; simpl in *.
+        rewrite <- Hifc_pp', Hpccomp_s'_s. eapply mergeable_states_in_to_notin; eauto.
+        by rewrite <- Hpccomp_s'_s.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hregsc'                  *)
+        admit.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hmemc'                   *)
+        admit.
+      + (** tricky for the same reason as above,            *)
+        (** but should follow from Hmemp                    *)
+        admit.
+  Admitted.
+
   
 End MergeableSym.
