@@ -353,6 +353,8 @@ Proof.
               ** assert (Pointer.component pc = C') by admit; subst C'.
                  assumption.
               ** assert (Heq' : Pointer.component pc <> C') by admit.
+                 (* Is this case inconsistent with the transient condition?
+                    If so, how to realize the contradiction? *)
                  apply wf_ptr_shared.
                  (* An external (C', b) has been shared.
                     A pointer in it leads to another block in the same compartment, (C', b').
