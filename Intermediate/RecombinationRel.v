@@ -286,18 +286,60 @@ Section ThreewayMultisem1.
           apply mergeable_internal_states_sym in Ht2t2't2''.
           apply mergeable_states_well_formed_sym in Hmergewf.
 
-          eapply threeway_multisem_event_lockstep_program_step; auto.
-          2: { apply mergeable_internal_states_sym. eassumption.  }
-          + 
-          + destruct st2   as [[[? ?] ?] pc].
-            destruct st2'  as [[[? ?] ?] pc'].
-            destruct st2'' as [[[? ?] ?] pc''].
-            CS.simplify_turn. by subst.
+          assert (eprog'': prog'' = program_link c' p').
+          {
+            rewrite program_linkC; find_and_invert_mergeable_states_well_formed; auto.
+            by unfold mergeable_interfaces in *; intuition.
+          }
+
+          assert (eprog: prog = program_link c p).
+          {
+            rewrite program_linkC; find_and_invert_mergeable_states_well_formed; auto.
+            rewrite <- Hifc_cc', <- Hifc_pp'.
+            by unfold mergeable_interfaces in *; intuition.
+          }
+
+          assert (eprog': prog' = program_link c' p).
+          {
+            rewrite program_linkC; find_and_invert_mergeable_states_well_formed; auto.
+            rewrite <- Hifc_cc'. by unfold mergeable_interfaces in *; intuition.
+          }
+          assert (esem': sem' = CS.sem_non_inform (program_link c' p)).
+          { by rewrite <- eprog'. }
+
           
-          
-          dependent rewrite esem' in Ht2'.
-          
-          admit.
+          suffices Hsymborder:
+            exists (e2' : event)
+                   (se2' : state ((CS.sem_non_inform (program_link c' p)))),
+               Step (CS.sem_non_inform (program_link c' p)) st2' [:: e2'] se2' /\
+               mergeable_border_states c' p' c p n'' n se2'' se2' se2
+                                       (rcons (t1'' ** t2''pref) e2'')
+                                       (rcons (t1' ** t2') e2')
+                                       (rcons (t1 ** t2) e2).
+          {
+            destruct Hsymborder as [e2' [se2' [Hse2' Gsym]]].
+            apply mergeable_border_states_sym in Gsym.
+            rewrite <- eprog' in Hse2'.
+            do 2 eexists; eauto; by intuition; eauto.
+          }
+
+         
+          eapply threeway_multisem_event_lockstep_program_step; eauto.
+          + CS.unfold_state st2''. CS.unfold_state st2'. CS.simplify_turn. subst.
+            eapply mergeable_states_in_to_notin2; eauto.
+            find_and_invert_mergeable_states_well_formed. by erewrite Hifc_pp'.
+          + by erewrite <- eprog''.
+          + by erewrite <- eprog.
+          + apply traces_shift_each_other_option_symmetric.
+            unfold Eapp. rewrite !rcons_cat. exact Hshift.
+          + unfold Eapp in *. rewrite <- !rcons_cat in Hshift.
+            inversion Hshift as [? ? Hren]; subst; inversion Hren; subst;
+              first by find_nil_rcons.
+            repeat find_rcons_rcons. assumption.
+          + unfold Eapp in *. rewrite <- !rcons_cat in Hshift.
+            inversion Hshift as [? ? Hren]; subst; inversion Hren; subst;
+              first by find_nil_rcons.
+            repeat find_rcons_rcons. assumption.
       }
 
 
