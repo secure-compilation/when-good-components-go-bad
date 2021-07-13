@@ -580,6 +580,137 @@ Lemma value_mem_reg_domm_partition p c st t regs mem:
       cid \in domm (prog_interface p) \/
       cid \in domm (prog_interface c)
   ).
+Proof.
+  (* Set up induction on star from left to right. *)
+  unfold is_prefix. simpl.
+  intros Hstar ? ?; subst.
+  set prog := program_link p c. fold prog in Hstar.
+  remember (CS.initial_machine_state prog) as s0 eqn:Hs0.
+  remember (prepare_global_env prog) as G eqn:HG.
+  revert Hs0 HG.
+  apply star_iff_starR in Hstar.
+  induction Hstar as [| s0 t1 s1 t2 s2 t12 Hstar01 IHstar Hstep12 Ht12];
+    intros ? ?; subst.
+  - (* Base case. *)
+    split.
+    + intros ptr perm cid bid off Hload.
+      admit.
+    + intros reg perm cid bid off Hget.
+      unfold CS.initial_machine_state in Hget.
+      destruct (prog_main prog) eqn:Hcase.
+      * unfold Register.get in Hget.
+        rewrite Register.reg_in_domm_init_Undef in Hget;
+          first discriminate.
+        admit.
+      * discriminate.
+  - (* Inductive step. *)
+    specialize (IHstar Logic.eq_refl Logic.eq_refl) as [IHload IHget].
+    split.
+    + (* Memory domain. *)
+      intros ptr perm cid bid off Hload.
+      inversion Hstep12 as [? ? ? ? Hstep12']; subst.
+      inversion Hstep12'; subst;
+        try (by (eapply IHload; eauto)). (* Solve most goals. *)
+      * (* IStore *)
+        destruct (Pointer.eq ptr ptr0) eqn:Hcase.
+        -- apply pointer_refl in Hcase; subst ptr0.
+           rewrite (Memory.load_after_store_eq _ _ _ _ H1) in Hload.
+           injection Hload as Hget.
+           eapply IHget; eassumption.
+        -- assert (Hneq : ptr0 <> ptr) by admit.
+           rewrite (Memory.load_after_store_neq _ _ _ _ _ Hneq H1) in Hload.
+           eapply IHload; eassumption.
+      * (* IAlloc *)
+        (* destruct ptr as [[[pm C] b] o]. *)
+        (* destruct ptr0 as [[[pm0 C0] b0] o0]. *)
+        destruct (addr_eq (Pointer.component ptr, Pointer.block ptr) (Pointer.component ptr0, Pointer.block ptr0)) eqn:Hcase.
+        -- assert (Heq : (Pointer.component ptr, Pointer.block ptr) = (Pointer.component ptr0, Pointer.block ptr0)) by admit.
+           rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 Heq) in Hload.
+           destruct (Pointer.permission ptr =? Permission.data);
+             last discriminate.
+           destruct (Pointer.offset ptr <? Z.of_nat (Z.to_nat size))%Z;
+             last discriminate.
+           destruct (0 <=? Pointer.offset ptr)%Z;
+             discriminate.
+        -- assert (Hneq : (Pointer.component ptr, Pointer.block ptr) <> (Pointer.component ptr0, Pointer.block ptr0)) by admit.
+           rewrite (Memory.load_after_alloc _ _ _ _ _ _ H2 Hneq) in Hload.
+           eapply IHload; eassumption.
+    + (* Register file domain. *)
+      intros reg perm cid bid off Hget.
+      inversion Hstep12 as [? ? ? ? Hstep12']; subst.
+      inversion Hstep12'; subst;
+        try (by (eapply IHget; eauto)). (* Solve some goals. *)
+      * (* IConst *)
+        destruct (Register.eqb reg r) eqn:Hcase;
+          move: Hcase => /Register.registerP => Hcase.
+        -- subst r. rewrite Register.gss in Hget.
+           destruct v as [| ptr]; first discriminate.
+           (* By program (and instruction) well-formedness. *)
+           admit.
+        -- rewrite Register.gso in Hget; last assumption.
+           eapply IHget; eassumption.
+      * (* IMov *)
+        destruct (Register.eqb reg r2) eqn:Hcase;
+          move: Hcase => /Register.registerP => Hcase.
+        -- subst r2. rewrite Register.gss in Hget.
+           eapply IHget; eassumption.
+        -- rewrite Register.gso in Hget; last assumption.
+           eapply IHget; eassumption.
+      * (* IBinOp *)
+        destruct (Register.eqb reg r3) eqn:Hcase;
+          move: Hcase => /Register.registerP => Hcase.
+        -- subst r3. rewrite Register.gss in Hget. subst result.
+           unfold eval_binop in Hget;
+             destruct op;
+             destruct (Register.get r1 regs) eqn:Hcase1;
+             destruct (Register.get r2 regs) eqn:Hcase2;
+             inversion Hget; subst.
+           all:admit.
+        -- rewrite Register.gso in Hget; last assumption.
+           eapply IHget; eassumption.
+      * (* IPtrOfLabel *)
+        destruct (Register.eqb reg r) eqn:Hcase;
+          move: Hcase => /Register.registerP => Hcase.
+        -- subst r. rewrite Register.gss in Hget.
+           injection Hget as Hget. subst ptr.
+           setoid_rewrite <- (find_label_in_component_1 _ _ _ _ H0).
+           admit.
+        -- rewrite Register.gso in Hget; last assumption.
+           eapply IHget; eassumption.
+      * (* ILoad *)
+        destruct (Register.eqb reg r2) eqn:Hcase;
+          move: Hcase => /Register.registerP => Hcase.
+        -- subst r2. rewrite Register.gss in Hget. subst v.
+           eapply IHload; eassumption.
+        -- rewrite Register.gso in Hget; last assumption.
+           eapply IHget; eassumption.
+      * (* IJal *)
+        destruct (Register.eqb reg R_RA) eqn:Hcase;
+          move: Hcase => /Register.registerP => Hcase.
+        -- subst reg. rewrite Register.gss in Hget.
+           injection Hget as Hget.
+           change cid with (Pointer.component (perm, cid, bid, off)).
+           rewrite <- Hget, -> Pointer.inc_preserves_component.
+           admit.
+        -- rewrite Register.gso in Hget; last assumption.
+           eapply IHget; eassumption.
+      * (* IAlloc *)
+        destruct (Register.eqb reg rptr) eqn:Hcase;
+          move: Hcase => /Register.registerP => Hcase.
+        -- subst rptr. rewrite Register.gss in Hget.
+           injection Hget as Hget; subst ptr.
+           setoid_rewrite (Memory.component_of_alloc_ptr _ _ _ _ _ H2).
+           admit.
+        -- rewrite Register.gso in Hget; last assumption.
+           eapply IHget; eassumption.
+      * (* ICall *)
+        (* assert (reg = R_COM) by admit; subst reg. *)
+        assert (Hget' : Register.get R_COM regs = Ptr (perm, cid, bid, off)) by admit.
+        eapply IHget; eassumption.
+      * (* IReturn *)
+        (* assert (reg = R_COM) by admit; subst reg. *)
+        assert (Hget' : Register.get R_COM regs = Ptr (perm, cid, bid, off)) by admit.
+        eapply IHget; eassumption.
 Admitted.
-  
+
 End CSInvariants.
