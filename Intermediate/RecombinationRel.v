@@ -343,43 +343,117 @@ Section ThreewayMultisem1.
 
       (** Use weakening *)
       apply mergeable_border_mergeable_internal in Hborder.
+      invert_non_eagerly_mergeable_internal_states Hborder.
+      + 
+        (** Use option simulation (starting from the state right after 
+            the border crossing). *)
+        pose proof (merge_states_silent_star) as Hoption_sim; unfold E0 in *.
+        assert (Hcomp_se2: CS.is_program_component se2 (prog_interface c)).
+        {
+          CS.unfold_state se2. CS.unfold_state se2'. simpl in *.
+          subst. by CS.simplify_turn.
+        }
+        apply star_iff_starR in Hse2''. 
+        specialize (Hoption_sim _ _ _ _ _ _ _ _ _ _ _ _ _
+                                Hborder Hcomp_se2 Hse2'').
+        
+        (** Use lock-step simulation (starting from the state right after 
+            the border crossing). *)      
+        pose proof (threeway_multisem_star_E0) as Hlockstep.
+        specialize (Hlockstep _ _ _ _ _ _ _ _ _ _ _ _ _
+                              Hcomp_se2 Hoption_sim Hse2) as [s2' [Hstep12' Hmerge']].
+        
+        exists s2', (rcons t2' e2').
+        rewrite <- !rcons_cat.
+        
+        unfold Eapp in *.
+        split; last exact Hmerge'.
+        
+        apply star_iff_starR. 
+        eapply starR_trans.
+        * eapply starR_step.
+          -- apply star_iff_starR; eauto.
+          -- eauto.
+          -- eauto.
+        * exact Hstep12'.
+        * rewrite <- cats1. unfold Eapp. by rewrite app_nil_r.
 
-      (** TODO: The admit below cannot be known. *)
-      (** Need to invert Hborder before using the*)
-      (** simulation lemmas -- similarly to      *)
-      (** how strengthening was used above.      *)
+      +
+        apply mergeable_internal_states_sym in Hborder.
+        apply mergeable_states_well_formed_sym in Hmergewf.
 
-      (** Use option simulation (starting from the state right after 
-          the border crossing). *)
-      pose proof (merge_states_silent_star) as Hoption_sim; unfold E0 in *.
-      assert (Hcomp_se2: CS.is_program_component se2 (prog_interface c)). by admit.
-      apply star_iff_starR in Hse2''. 
-      specialize (Hoption_sim _ _ _ _ _ _ _ _ _ _ _ _ _
-                              Hborder Hcomp_se2 Hse2'').
+        assert (eprog'': prog'' = program_link c' p').
+        {
+          rewrite program_linkC; find_and_invert_mergeable_states_well_formed; auto.
+            by unfold mergeable_interfaces in *; intuition.
+        }
 
-      (** Use lock-step simulation (starting from the state right after 
-          the border crossing). *)      
-      pose proof (threeway_multisem_star_E0) as Hlockstep.
-      specialize (Hlockstep _ _ _ _ _ _ _ _ _ _ _ _ _
-                            Hcomp_se2 Hoption_sim Hse2) as [s2' [Hstep12' Hmerge']].
-      
-      exists s2', (rcons t2' e2').
-      rewrite <- !rcons_cat.
+        assert (eprog: prog = program_link c p).
+        {
+          rewrite program_linkC; find_and_invert_mergeable_states_well_formed; auto.
+          rewrite <- Hifc_cc', <- Hifc_pp'.
+            by unfold mergeable_interfaces in *; intuition.
+        }
 
-      unfold Eapp in *.
-      split; last exact Hmerge'.
+        assert (eprog': prog' = program_link c' p).
+        {
+          rewrite program_linkC; find_and_invert_mergeable_states_well_formed; auto.
+          rewrite <- Hifc_cc'. by unfold mergeable_interfaces in *; intuition.
+        }
+        
+        suffices HsymG:
+          exists (s2' : state ((CS.sem_non_inform (program_link c' p))))
+                 (t2'G: trace event),
+            Star (CS.sem_non_inform (program_link c' p)) s1' t2'G s2' /\
+            mergeable_internal_states c' p' c p n'' n s2'' s2' s2
+                                      (rcons (t1'' ** t2''pref) e2'')
+                                      (t1' ** t2'G)
+                                      (rcons (t1 ** t2) e2).
+        {
+          destruct HsymG as [s2' [t2'G [Ht2'G HmergeG]]].
+          exists s2', t2'G.
+          unfold sem'. rewrite eprog'. split; first assumption.
+          apply mergeable_internal_states_sym.
+          by rewrite <- !rcons_cat.
+        }
 
-      apply star_iff_starR. 
-      eapply starR_trans.
-      + eapply starR_step.
-        * apply star_iff_starR; eauto.
-        * eauto.
-        * eauto.
-      + exact Hstep12'.
-      + rewrite <- cats1. unfold Eapp. by rewrite app_nil_r.
-      
-
-  Admitted.
+        (** Use option simulation (starting from the state right after 
+            the border crossing). *)
+        pose proof (merge_states_silent_star) as Hoption_sim; unfold E0 in *.
+        assert (Hcomp_se2: CS.is_program_component se2'' (prog_interface p')).
+        {
+          find_and_invert_mergeable_states_well_formed.
+          CS.unfold_state se2''. CS.unfold_state se2. CS.unfold_state se2'. simpl in *.
+          subst. CS.simplify_turn.
+          eapply mergeable_states_in_to_notin2; eauto. by rewrite Hifc_pp'.          
+        }
+        apply star_iff_starR in Hse2.
+        unfold sem in *. rewrite eprog in Hse2.
+        specialize (Hoption_sim _ _ _ _ _ _ _ _ _ _ _ _ _
+                                Hborder Hcomp_se2 Hse2).
+        
+        (** Use lock-step simulation (starting from the state right after 
+            the border crossing). *)      
+        pose proof (threeway_multisem_star_E0) as Hlockstep.
+        unfold sem'' in *. rewrite eprog'' in Hse2''.
+        specialize (Hlockstep _ _ _ _ _ _ _ _ _ _ _ _ _
+                              Hcomp_se2 Hoption_sim Hse2'') as [s2' [Hstep12' Hmerge']].
+        
+        exists s2', (rcons t2' e2').
+        rewrite <- !rcons_cat.
+        
+        unfold Eapp in *.
+        split; last exact Hmerge'.
+        
+        apply star_iff_starR. 
+        eapply starR_trans.
+        * eapply starR_step.
+          -- apply star_iff_starR; rewrite <- !eprog'; eauto.
+          -- rewrite <- !eprog'; eauto.
+          -- eauto.
+        * exact Hstep12'.
+        * rewrite <- cats1. unfold Eapp. by rewrite app_nil_r.
+  Qed.
 
   
 End ThreewayMultisem1.
