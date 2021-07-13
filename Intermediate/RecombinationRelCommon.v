@@ -1080,10 +1080,11 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
       + now assumption.
   Qed.
 
-  Lemma mergeable_states_in_to_notin s s' s'' t t' t'' :
+  Lemma mergeable_states_in_to_notin s s' s'' t t' t'' pc :
     mergeable_internal_states s s' s'' t t' t'' ->
-    Pointer.component (CS.state_pc s) \in domm ic ->
-    Pointer.component (CS.state_pc s) \notin domm ip.
+    pc = CS.state_pc s ->
+    Pointer.component pc \in domm ic ->
+    Pointer.component pc \notin domm ip.
   Proof.
     intros Hmerg Hpc_notin.
   Admitted.

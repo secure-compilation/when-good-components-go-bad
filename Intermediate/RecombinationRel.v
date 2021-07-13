@@ -315,38 +315,51 @@ Section ThreewayMultisem1.
           dependent rewrite esem'' in st2''.
           dependent rewrite esem'' in se2''.
 
-          assert (mergeable_internal_states
-                    c' p c p n n'' st2 st2' st2'' 
-                    (t1 ** t2) (t1' ** t2') (t1'' ** t2''pref)
+          assert (Hmergesym: mergeable_internal_states
+                               c' p' c p n'' n st2'' st2' st2 
+                               (t1'' ** t2''pref) (t1' ** t2') (t1 ** t2)
                  ).
           {
             apply mergeable_internal_states_p_executing; auto.
             - find_and_invert_mergeable_states_well_formed; constructor; auto.
-              + apply mergeable_interfaces_sym. by rewrite <- Hifc_cc'.
-              + eapply interface_preserves_closedness_r; try assumption.
-                * symmetry. exact Hifc_pp'.
-                * apply linkable_sym.
-                  unfold mergeable_interfaces in *;
-                    rewrite <- Hifc_pp', <- Hifc_cc'; by intuition.
-                * by rewrite <- eprog''.
-                * apply linkable_mains_sym.
-                  unfold mergeable_interfaces in *.
-                  apply linkable_implies_linkable_mains; auto;
-                    rewrite <- Hifc_pp', <- Hifc_cc'; by intuition.
-                * unfold matching_mains.
-                  by rewrite <- !wfprog_main_component, Hifc_pp'.
-                  
+              + apply mergeable_interfaces_sym. by rewrite <- Hifc_cc', <- Hifc_pp'.
+              + by rewrite <- eprog''.                  
               + by rewrite <- eprog.
-              + intros ? ? Hpref. rewrite <- eprog' in Hpref.
-                apply 
-              + by dependent rewrite <- eprog''.
-              + by dependent rewrite <- eprog.
-              + 
-              + 
+              + by rewrite <- eprog''.
+              + by rewrite <- eprog.
+              + by rewrite <- eprog''.
+              + by rewrite <- eprog'.
+              + by rewrite <- eprog.
+              + (** tricky *)
+                (** We will likely need a CSInvariant that ensures *)
+                (** all the addresses appearing in the memory      *)
+                (** have a cid \in unionm (domm (prog_interface p))*)
+                (**                       (domm (prog_interface c))*)
+                admit.
+              + (** tricky for the same reason as above.            *)
+                admit.
+              + (** tricky for the same reason as above.            *)
+                admit.
+            - destruct st2   as [[[? ?] ?] pc].
+              destruct st2'  as [[[? ?] ?] pc'].
+              destruct st2'' as [[[? ?] ?] pc''].
+              CS.simplify_turn. subst.
+              find_and_invert_mergeable_states_well_formed; simpl in *.
+              rewrite Hpccomp_s'_s. rewrite <- Hifc_pp'. rewrite Hpccomp_s'_s in H_c'.
+              eapply mergeable_states_in_to_notin; eauto.
+            - (** tricky for the same reason as above,            *)
+              (** but should follow from Hregsc'                  *)
+              admit.
+            - (** tricky for the same reason as above,            *)
+              (** but should follow from Hmemc'                   *)
+              admit.
+            - (** tricky for the same reason as above,            *)
+              (** but should follow from Hmemp                    *)
+              admit.
           }
 
           eapply threeway_multisem_event_lockstep_program_step.
-          2: { exact Ht2t2't2''. }
+          2: { exact Hmergesym. }
           + destruct st2   as [[[? ?] ?] pc].
             destruct st2'  as [[[? ?] ?] pc'].
             destruct st2'' as [[[? ?] ?] pc''].
