@@ -282,7 +282,7 @@ Section ThreewayMultisem1.
             inversion Hshift as [? ? Hren]; subst; inversion Hren; subst;
               first by find_nil_rcons.
             repeat find_rcons_rcons. assumption.
-        - (** Use commutativity of linking, then use the strengthening lemma: *)
+        - (** Use symmetry lemmas, then use the strengthening lemma: *)
           apply mergeable_internal_states_sym in Ht2t2't2''.
           apply mergeable_states_well_formed_sym in Hmergewf.
 
@@ -304,8 +304,6 @@ Section ThreewayMultisem1.
             rewrite program_linkC; find_and_invert_mergeable_states_well_formed; auto.
             rewrite <- Hifc_cc'. by unfold mergeable_interfaces in *; intuition.
           }
-          assert (esem': sem' = CS.sem_non_inform (program_link c' p)).
-          { by rewrite <- eprog'. }
 
           
           suffices Hsymborder:
@@ -345,6 +343,11 @@ Section ThreewayMultisem1.
 
       (** Use weakening *)
       apply mergeable_border_mergeable_internal in Hborder.
+
+      (** TODO: The admit below cannot be known. *)
+      (** Need to invert Hborder before using the*)
+      (** simulation lemmas -- similarly to      *)
+      (** how strengthening was used above.      *)
 
       (** Use option simulation (starting from the state right after 
           the border crossing). *)
