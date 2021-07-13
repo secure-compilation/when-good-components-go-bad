@@ -473,4 +473,21 @@ Proof.
       erewrite Memory.domm_alloc; eassumption.
 Qed.
 
+Lemma value_mem_reg_domm_partition p c st t regs mem:
+  is_prefix st (program_link p c) t ->
+  regs = CS.state_regs st ->
+  mem = CS.state_mem st ->
+  (forall ptr perm cid bid off,
+      Memory.load mem ptr = Some (Ptr (perm, cid, bid, off)) ->
+      cid \in domm (prog_interface p) \/
+      cid \in domm (prog_interface c)
+  )
+  /\
+  (forall reg perm cid bid off,
+      Register.get reg regs = Ptr (perm, cid, bid, off) ->
+      cid \in domm (prog_interface p) \/
+      cid \in domm (prog_interface c)
+  ).
+Admitted.
+  
 End CSInvariants.
