@@ -30,9 +30,9 @@ Module CSInvariants.
 
 (** Unary invariants about the intermediate semantics *)
 
-  
 Import Intermediate.
-  
+
+(* NOTE: DO we have similar/redundant definitions to unify? *)
 Definition is_prefix (s: CS.state) (p: program) t : Prop :=
   Star (CS.sem_non_inform p) (CS.initial_machine_state p) t s.
 
@@ -117,6 +117,10 @@ Qed.
 (* TODO: Relocate. *)
 Definition addr_eq (a1 a2 : addr_t) : bool :=
   (fst a1 =? fst a2) && (snd a1 =? snd a2).
+
+(* TODO: Relocate. *)
+Remark Eapp_rcons {T} l (x : T) : l ** [x] = seq.rcons l x.
+Admitted.
 
 Lemma is_prefix_wf_state_t s p t:
   well_formed_program p ->
@@ -324,15 +328,67 @@ Proof.
            assert (Hget' : Register.get reg regs = Ptr ptr') by admit.
            exact (Hregs1 _ _ Hget').
       * (* ILoad *)
-           admit.
-      * admit.
-      * (* IJump *)
         intros reg ptr' Hget.
+        (* clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *) *)
+        destruct ((Register.to_nat reg) =? (Register.to_nat r2)) eqn:Heq. (* HACK *)
+        -- (*  *)
+           assert (reg = r2) by admit; subst r2.
+           assert (v = Ptr ptr') by admit; subst v.
+           (* IH *)
+           assert (Hr1 := Hregs1 _ _ H0).
+           assert (Hptr := Hmem1 _ _ H1).
+           (* Pre-case analysis *)
+           destruct ptr as [[[P C] b] o].
+           destruct ptr' as [[[P' C'] b'] o'].
+           (* Cases *)
+           inversion Hr1;
+             inversion Hptr;
+             subst;
+             (* All but one of the goals are already in the context. *)
+             try assumption.
+           (* inversion H6; subst. *)
+           inversion H7; subst.
+           ++ (* *)
+              destruct (Nat.eqb (Pointer.component pc) C') eqn:Hcase.
+              ** assert (Pointer.component pc = C') by admit; subst C'.
+                 assumption.
+              ** assert (Heq' : Pointer.component pc <> C') by admit.
+                 apply wf_ptr_shared.
+                 (* An external (C', b) has been shared.
+                    A pointer in it leads to another block in the same compartment, (C', b').
+                  *)
+                 (* destruct t1 as [| e' t1']. *)
+                 (* --- exfalso. admit. *)
+                 (* --- assert (exists t1_ e_, (e' :: t1' = seq.rcons t1_ e_)) *)
+                 (*       as [t1_ [e_ Hrcons]] *)
+                 (*       by admit. *)
+                 (*     rewrite Hrcons. rewrite Hrcons in H3. *)
+                 (*     eapply reachable_from_previously_shared. *)
+                 simpl in H7. admit.
+           ++ now apply wf_ptr_shared.
+        -- (* The new value comes from reg, which follows from the IH. *)
+           assert (Hget' : Register.get reg regs = Ptr ptr') by admit.
+           exact (Hregs1 _ _ Hget').
+      * (* IJal *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        rewrite <- (find_label_in_component_1 _ _ _ _ H0).
+        destruct ((Register.to_nat reg) =? (Register.to_nat R_RA)) eqn:Heq. (* HACK *)
+        -- (* *)
+           assert (reg = R_RA) by admit; subst reg.
+           assert (Pointer.inc pc = ptr) by admit; subst ptr.
+           destruct pc as [[[P C] b] o].
+           now apply wf_ptr_own.
+        -- (* *)
+           assert (Hget' : Register.get reg regs = Ptr ptr) by admit.
+           exact (Hregs1 _ _ Hget').
+      * (* IJump *)
+        intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
         rewrite H2.
         exact (Hregs1 _ _ Hget).
       * (* IBnz *)
-        intros reg ptr' Hget.
+        intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
         rewrite <- (find_label_in_procedure_1 _ _ _ _ H2).
         exact (Hregs1 _ _ Hget).
@@ -349,8 +405,42 @@ Proof.
         -- (* *)
            assert (Hget' : Register.get reg regs = Ptr ptr') by admit.
            exact (Hregs1 _ _ Hget').
-      * admit.
-      * admit.
+      * (* ICall *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        (* Lemmas on invalidate? *)
+        assert (reg = R_COM) by (destruct reg; now inversion Hget);
+          subst reg.
+        assert (Hget' : Register.get R_COM regs = Ptr ptr) by admit.
+        rewrite Hget'.
+        assert (Hrcom := Hregs1 _ _ Hget').
+        destruct ptr as [[[P_ C_] b_] o_].
+        apply wf_ptr_shared.
+        rewrite Eapp_rcons.
+        apply reachable_from_args_is_shared. simpl.
+        destruct (P_ =? Permission.data) eqn:Hcase.
+        -- apply Reachable_refl. apply /fset1P. reflexivity.
+        -- (* TODO: We do not seem to have this invariant at hand. *)
+           (* Search _ Permission.data. *)
+           admit.
+      * (* IReturn *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        (* Lemmas on invalidate? *)
+        assert (reg = R_COM) by (destruct reg; now inversion Hget);
+          subst reg.
+        assert (Hget' : Register.get R_COM regs = Ptr ptr) by admit.
+        rewrite Hget'.
+        assert (Hrcom := Hregs1 _ _ Hget').
+        destruct ptr as [[[P C] b] o].
+        apply wf_ptr_shared.
+        rewrite Eapp_rcons.
+        apply reachable_from_args_is_shared. simpl.
+        destruct (P =? Permission.data) eqn:Hcase.
+        -- apply Reachable_refl. apply /fset1P. reflexivity.
+        -- (* TODO: We do not seem to have this invariant at hand. *)
+           (* Search _ Permission.data. *)
+           admit.
 Admitted.
 
 Lemma wf_state_wf_reg s regs pc pc_comp t:
@@ -461,7 +551,7 @@ Proof.
       rewrite unionmE (dommPn Hcase1) (dommPn Hcase2) in Hcontra.
       discriminate.
     + rewrite domm0 in Hdomm. discriminate.
-  - (* Inductive case. *)
+  - (* Inductive step. *)
     inversion Hstep12 as [? ? ? ? Hstep12']; subst.
     inversion Hstep12'; subst;
       eapply IHstar;
