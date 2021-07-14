@@ -448,7 +448,7 @@ Section ThreewayMultisem1.
                       match goal with
                       | H: CSInvariants.is_prefix _ _ t'' |- _ => exact H
                       end
-                    ).
+                    ); auto.
                 eapply linking_well_formedness; eauto.
                 unfold mergeable_interfaces in *.
                   by
@@ -460,7 +460,8 @@ Section ThreewayMultisem1.
                     end.
               - by simpl.
               - by simpl.
-              - auto.
+              - by auto.
+              - eapply Memory.store_some_permission; eauto.
             }
             assert (
               cid_store \in domm (prog_interface c') ->
