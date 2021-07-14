@@ -127,6 +127,69 @@ Module Register.
                
     by rewrite !in_fsetU1 domm0 in regdomm.
   Qed.
+
+  Definition eqb (r1 r2 : register) : bool :=
+    match r1, r2 with
+    | R_ONE, R_ONE
+    | R_COM, R_COM
+    | R_AUX1, R_AUX1
+    | R_AUX2, R_AUX2
+    | R_RA, R_RA
+    | R_SP, R_SP
+    | R_ARG, R_ARG => true
+    | _, _ => false
+    end.
+
+  Lemma eqP : Equality.axiom eqb.
+  Proof.
+    intros [] []; by constructor.
+  Qed.
+
+  Definition eqMixin: Equality.mixin_of register := EqMixin eqP.
+  Canonical eqType := Eval hnf in EqType register eqMixin.
+
+  Lemma to_nat_inv r1 r2 :
+    to_nat r1 = to_nat r2 ->
+    r1 = r2.
+  Proof.
+    intros Heq.
+    destruct r1;
+      destruct r2;
+      by inversion Heq.
+  Qed.
+
+  Lemma gss reg val regs :
+    get reg (Register.set reg val regs) = val.
+  Proof.
+    by rewrite /get /set setmE eqxx.
+  Qed.
+
+  Lemma gso reg reg' val regs :
+    reg <> reg' ->
+    get reg (Register.set reg' val regs) = Register.get reg regs.
+  Proof.
+    intros Heq.
+    assert (Heqb : reg != reg') by (by apply /eqP).
+    unfold get, set. rewrite setmE. unfold eq_op. simpl.
+    destruct (ssrnat.eqn (to_nat reg) (to_nat reg')) eqn:Hcase.
+    - move: Hcase => /ssrnat.eqnP => Hcase.
+      apply to_nat_inv in Hcase.
+      contradiction.
+    - reflexivity.
+  Qed.
+
+  Lemma gicom regs :
+    get R_COM (invalidate regs) = get R_COM regs.
+  Proof. reflexivity. Qed.
+
+  Lemma gio reg regs :
+    reg <> R_COM ->
+    get reg (invalidate regs) = Undef.
+  Proof. now destruct reg. Qed.
+
+  Lemma gi reg regs :
+    get reg (invalidate regs) = if eqb reg R_COM then get reg regs else Undef.
+  Proof. now destruct reg. Qed.
 End Register.
 
 Module EntryPoint.

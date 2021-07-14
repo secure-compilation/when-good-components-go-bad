@@ -36,6 +36,26 @@ Module Pointer.
     let '(P2, C2, b2, o2) := p2 in
     (Nat.eqb P1 P2) && (Nat.eqb C1 C2) && (Nat.eqb b1 b2) && (Z.eqb o1 o2).
 
+  Lemma eqP : Equality.axiom eq.
+  Proof.
+    intros [[[perm1 C1] b1] o1] [[[perm2 C2] b2] o2].
+    simpl.
+    destruct (perm1 =? perm2) eqn:Hcase1;
+      move: Hcase1 => /eqP => Hcase1;
+      destruct (C1 =? C2) eqn:Hcase2;
+      move: Hcase2 => /eqP => Hcase2;
+      destruct (b1 =? b2) eqn:Hcase3;
+      move: Hcase3 => /eqP => Hcase3;
+      destruct (o1 =? o2)%Z eqn:Hcase4;
+      move: Hcase4 => /eqP => Hcase4;
+      constructor;
+      try injection; (* All cases (false) except all-true case. *)
+      congruence.
+  Qed.
+
+  Definition eqMixin: Equality.mixin_of t := EqMixin eqP.
+  Canonical eqType := Eval hnf in EqType t eqMixin.
+
   Definition leq (p1 p2 : t) : option bool :=
     let '(P1, C1, b1, o1) := p1 in
     let '(P2, C2, b2, o2) := p2 in
