@@ -70,7 +70,8 @@ Inductive wf_load_wrt_t_pc
      *)
     forall ptr,
       addr_shared_so_far (Pointer.component load_at, Pointer.block load_at) t ->
-      wf_ptr_wrt_cid_t pc_comp t ptr ->
+      (* wf_ptr_wrt_cid_t pc_comp t ptr -> *)
+      pc_comp = Pointer.component ptr -> (* TODO: Experimental change *)
       wf_load_wrt_t_pc load_at t pc_comp ptr.
 
 Definition wf_mem_wrt_t_pc (mem: Memory.t) (t: trace event)
@@ -174,7 +175,11 @@ Proof.
            destruct val_load as [[[Pval Cval] bval] oval].
            inversion Hr1 as [| ? ? ? ? Hshared1]; subst.
            ++ apply wrt_load_ptr_wf_load; assumption.
-           ++ apply wrt_pc_wf_load; assumption.
+           ++ inversion Hr2 as [| ? ? ? ? Hshared2]; subst.
+              ** apply wrt_pc_wf_load; done.
+              ** apply wrt_load_ptr_wf_load.
+                 apply wf_ptr_shared.
+                 assumption.
         -- (* For any other address, this follows directly from the IH. *)
            rewrite -> (Memory.load_after_store_neq _ _ _ _ _ Hneq H1) in Hload.
            exact (Hmem1 _ _ Hload).
@@ -327,9 +332,14 @@ Proof.
            (* Cases *)
            inversion Hr1;
              inversion Hptr;
-             subst;
-             (* All but one of the goals are already in the context. *)
-             try assumption.
+             subst.
+           (* NOTE: it is no longer the case that most cases are trivial by
+              assumption; a bit more work is needed with the new invariant. *)
+           ++ assumption.
+           ++ rewrite H7. now apply wf_ptr_own.
+           ++{
+             (* (* All but one of the goals are already in the context. *) *)
+             (* try assumption. *)
            (* inversion H6; subst. *)
            inversion H7; subst.
            ++ (* *)
@@ -352,6 +362,8 @@ Proof.
                  (*     eapply reachable_from_previously_shared. *)
                  simpl in H7. admit.
            ++ now apply wf_ptr_shared.
+             }
+           ++ rewrite H8. now apply wf_ptr_own.
         -- (* The new value comes from reg, which follows from the IH. *)
            assert (Hget' : Register.get reg regs = Ptr ptr') by admit.
            exact (Hregs1 _ _ Hget').
