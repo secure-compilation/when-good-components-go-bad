@@ -576,15 +576,20 @@ Proof.
     intros ? ?; subst.
   - (* Base case. *)
     split.
-    + intros ptr perm cid bid off Hload.
-      admit.
+    + (* Memory domain. *)
+      intros ptr perm cid bid off Hload.
+      admit. (* TODO: Connect initial memory to static buffer contents. *)
     + intros reg perm cid bid off Hget.
       unfold CS.initial_machine_state in Hget.
       destruct (prog_main prog) eqn:Hcase.
       * unfold Register.get in Hget.
         rewrite Register.reg_in_domm_init_Undef in Hget;
           first discriminate.
-        admit.
+        (* TODO: Lemma for sub-proof below? *)
+        unfold Register.init.
+        repeat rewrite domm_set.
+        repeat rewrite in_fsetU1.
+        now destruct reg.
       * discriminate.
   - (* Inductive step. *)
     specialize (IHstar Logic.eq_refl Logic.eq_refl) as [IHload IHget].
@@ -603,8 +608,6 @@ Proof.
         -- rewrite (Memory.load_after_store_neq _ _ _ _ _ Hneq H1) in Hload.
            eapply IHload; eassumption.
       * (* IAlloc *)
-        (* destruct ptr as [[[pm C] b] o]. *)
-        (* destruct ptr0 as [[[pm0 C0] b0] o0]. *)
         destruct
           (addr_eqP (Pointer.component ptr, Pointer.block ptr)
                     (Pointer.component ptr0, Pointer.block ptr0))
@@ -629,7 +632,7 @@ Proof.
         -- subst r. rewrite Register.gss in Hget.
            destruct v as [| ptr]; first discriminate.
            (* By program (and instruction) well-formedness. *)
-           admit.
+           admit. (* TODO: Make the connection. *)
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IMov *)
@@ -648,7 +651,22 @@ Proof.
              destruct (Register.get r1 regs) eqn:Hcase1;
              destruct (Register.get r2 regs) eqn:Hcase2;
              inversion Hget; subst.
-           all:admit.
+           ++ destruct t as [[[perm' C'] b'] o'].
+              injection H1 as ? ? ? ?; subst.
+              eapply IHget; eassumption.
+           ++ destruct t as [[[perm' C'] b'] o'].
+              injection H1 as ? ? ? ?; subst.
+              eapply IHget; eassumption.
+           ++ destruct t as [[[perm' C'] b'] o'].
+              injection H1 as ? ? ? ?; subst.
+              eapply IHget; eassumption.
+           ++ destruct t as [[[perm' C'] b'] o'].
+              destruct t0 as [[[perm0' C0'] b0'] o0'].
+              destruct (perm' =? perm0');
+                destruct (C' =? C0');
+                destruct (b' =? b0');
+                discriminate.
+           ++ destruct (Pointer.leq t t0); discriminate.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IPtrOfLabel *)
@@ -657,7 +675,7 @@ Proof.
         -- subst r. rewrite Register.gss in Hget.
            injection Hget as Hget. subst ptr.
            setoid_rewrite <- (find_label_in_component_1 _ _ _ _ H0).
-           admit.
+           admit. (* TODO: assumptions/strengthenings for [CS.star_pc_domm_non_inform] *)
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* ILoad *)
@@ -674,7 +692,7 @@ Proof.
            injection Hget as Hget.
            change cid with (Pointer.component (perm, cid, bid, off)).
            rewrite <- Hget, -> Pointer.inc_preserves_component.
-           admit.
+           admit. (* TODO: assumptions/strengthenings for [CS.star_pc_domm_non_inform] *)
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IAlloc *)
@@ -683,7 +701,7 @@ Proof.
         -- subst rptr. rewrite Register.gss in Hget.
            injection Hget as Hget; subst ptr.
            setoid_rewrite (Memory.component_of_alloc_ptr _ _ _ _ _ H2).
-           admit.
+           admit. (* TODO: assumptions/strengthenings for [CS.star_pc_domm_non_inform] *)
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* ICall *)
