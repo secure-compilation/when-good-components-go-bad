@@ -659,17 +659,19 @@ Qed.
 Lemma wf_reg_wf_ptr_wrt_cid_t reg t pc_comp r ptr:
   wf_reg_wrt_t_pc reg t pc_comp ->
   Register.get r reg = Ptr ptr ->
+  Pointer.permission ptr = Permission.data ->
   wf_ptr_wrt_cid_t pc_comp t ptr.
 Proof.
-    by (unfold wf_reg_wrt_t_pc; intros H ?; apply (H r)).
+   unfold wf_reg_wrt_t_pc. intros H Hget Hperm. apply (H r ptr Hget Hperm).
 Qed.
 
-Lemma wf_mem_wrt_t_pc_wf_load_wrt_t_pc mem t pc_comp load_at ptr:
+Lemma wf_mem_wrt_t_pc_wf_load mem t pc_comp load_at ptr:
   wf_mem_wrt_t_pc mem t pc_comp ->
   Memory.load mem load_at = Some (Ptr ptr) ->
-  wf_load_wrt_t_pc load_at t pc_comp ptr.
+  Pointer.permission ptr = Permission.data ->
+  wf_load pc_comp t load_at ptr.
 Proof.
-    by (unfold wf_mem_wrt_t_pc; intros H ?; eapply H).
+    by (unfold wf_mem_wrt_t_pc; intros H Hload Hperm; eapply H).
 Qed.
 
 Lemma mem_comp_in_domm_prog_interface_some s p t mem cid:
