@@ -115,10 +115,6 @@ Proof.
 Qed.
 
 (* TODO: Relocate. *)
-Definition addr_eq (a1 a2 : addr_t) : bool :=
-  (fst a1 =? fst a2) && (snd a1 =? snd a2).
-
-(* TODO: Relocate. *)
 Remark Eapp_rcons {T} l (x : T) : l ** [x] = seq.rcons l x.
 Admitted.
 

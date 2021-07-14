@@ -148,11 +148,6 @@ Module Register.
   Definition eqMixin: Equality.mixin_of register := EqMixin eqP.
   Canonical eqType := Eval hnf in EqType register eqMixin.
 
-  Theorem registerP r1 r2 : ssrbool.reflect (r1 = r2) (Register.eqb r1 r2).
-  Proof.
-    destruct r1; destruct r2; by constructor.
-  Qed.
-
   Lemma to_nat_inv r1 r2 :
     to_nat r1 = to_nat r2 ->
     r1 = r2.
@@ -182,6 +177,19 @@ Module Register.
       contradiction.
     - reflexivity.
   Qed.
+
+  Lemma gicom regs :
+    get R_COM (invalidate regs) = get R_COM regs.
+  Proof. reflexivity. Qed.
+
+  Lemma gio reg regs :
+    reg <> R_COM ->
+    get reg (invalidate regs) = Undef.
+  Proof. now destruct reg. Qed.
+
+  Lemma gi reg regs :
+    get reg (invalidate regs) = if eqb reg R_COM then get reg regs else Undef.
+  Proof. now destruct reg. Qed.
 End Register.
 
 Module EntryPoint.
