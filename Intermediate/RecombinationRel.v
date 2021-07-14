@@ -1951,42 +1951,24 @@ Section ThreewayMultisem5.
      well, as symmetry arguments reoccur all the time.
      TODO: Observe the proof of match_nostep is almost identical, and refactor
      accordingly. *)
-(*FIXME
-  Theorem match_final_states s s' s'' t t' t'' :
-    mergeable_states p c p' c' n n'' s s' s'' t t' t'' ->
+
+  Theorem match_final_states s s' s'' t t' t'':
+    mergeable_internal_states p c p' c' n n'' s s' s'' t t' t'' ->
     final_state sem   s   ->
     final_state sem'' s'' ->
-    (* final_state sem'  (merge_states ip ic s s''). *)
     final_state sem'  s'.
-  Admitted. (* RB: TODO: Should still be provable. Do later as needed. Needs relation tweaks? *)
-  (* Proof. *)
-  (*   destruct s as [[[[gps mem] regs] pc] addrs]. *)
-  (*   destruct s'' as [[[[gps'' mem''] regs''] pc''] addrs'']. *)
-  (*   unfold final_state. simpl. unfold merge_pcs. *)
-  (*   intros Hmerge Hfinal Hfinal''. *)
-  (*   inversion Hmerge as [_ _ _ Hwfp Hwfc Hwfp' Hwfc' Hmergeable_ifaces Hifacep Hifacec _ _ _ _ _ _]. *)
-  (*   inversion Hmergeable_ifaces as [Hlinkable _]. *)
-  (*   pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability. *)
-  (*   assert (Hlinkable' := Hlinkable); rewrite Hifacep Hifacec in Hlinkable'. *)
-  (*   pose proof linkable_implies_linkable_mains Hwfp' Hwfc' Hlinkable' as Hmain_linkability'. *)
-  (*   destruct (Pointer.component pc \in domm ip) eqn:Hcase. *)
-  (*   - apply execution_invariant_to_linking with (c1 := c); try easy. *)
-  (*     + congruence. *)
-  (*     + apply linkable_implies_linkable_mains; congruence. *)
-  (*   - (* Symmetric case. *) *)
-  (*     unfold prog', prog'' in *. *)
-  (*     rewrite program_linkC in Hfinal''; try congruence. *)
-  (*     rewrite program_linkC; try congruence. *)
-  (*     apply linkable_sym in Hlinkable. *)
-  (*     apply linkable_mains_sym in Hmain_linkability. *)
-  (*     apply linkable_mains_sym in Hmain_linkability'. *)
-  (*     apply execution_invariant_to_linking with (c1 := p'); try congruence. *)
-  (*     + apply linkable_implies_linkable_mains; congruence. *)
-  (*     + setoid_rewrite <- (mergeable_states_pc_same_component Hmerge). *)
-  (*       rewrite <- Hifacec. *)
-  (*       apply negb_true_iff in Hcase. *)
-  (*       now apply (mergeable_states_notin_to_in Hmerge). *)
-  (* Qed. *)
+  Proof.
+    intros Hmerge Hfin Hfin''.
+    find_and_invert_mergeable_internal_states.
+    - eapply mergeable_internal_states_final_state_prog; eauto.
+    - eapply mergeable_internal_states_final_state_prog''; eauto.
+  Qed.
+
+  (** AEK: To prove theorems 'nofinal' and 'nostep', we can *)
+  (** use lemmas mergeable_internal_states_executing_prog'' *)
+  (** and mergeable_internal_states_executing_prog.         *)
+  
+(*FIXME
 
   Theorem match_nofinal s s' s'' t t' t'' :
     mergeable_states p c p' c' n n'' s s' s'' t t' t'' ->
