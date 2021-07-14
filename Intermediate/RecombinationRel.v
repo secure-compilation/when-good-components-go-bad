@@ -944,18 +944,6 @@ Section ThreewayMultisem4.
     - by eapply interface_implies_matching_mains.
   Qed.
 
-  (* Lemma initial_states_mergeability s s'' : *)
-  (*   initial_state sem   s   -> *)
-  (*   initial_state sem'' s'' -> *)
-  (*   mergeable_states p c p' c' s s''. *)
-  (* Proof. *)
-  (*   simpl. unfold CS.initial_state. *)
-  (*   intros Hini Hini''. *)
-  (*   apply mergeable_states_intro with (s0 := s) (s0'' := s'') (t := E0); subst; *)
-  (*     try assumption; *)
-  (*     reflexivity || now apply star_refl. *)
-  (* Qed. *)
-
   Lemma match_initial_states s s'' :
     initial_state sem   s   ->
     initial_state sem'' s'' ->
@@ -1070,18 +1058,22 @@ Section ThreewayMultisem4.
 
       destruct (Component.main \in domm (prog_interface p)) eqn:whereismain.
       + (* Component.main is in p. *)
+        assert (Hmainc: Component.main \notin domm (prog_interface c)).
+        {
+          unfold mergeable_interfaces, linkable in *.
+          destruct Hmergeable_ifaces as [[_ Hdisj] _].
+          move : Hdisj => /fdisjointP => Hdisj.
+          by apply Hdisj.
+        }
         eapply mergeable_border_states_p_executing; simpl; eauto.
         * (* Goal: program counters equal *)
           unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
           assert (CS.prog_main_block c = CS.prog_main_block c') as Hprogmainblk.
-          {
-            admit.
+          {    
+            rewrite !CS.prog_main_block_no_main; auto.
+            by rewrite <- Hifacec.
           }
           by rewrite Hprogmainblk.
-        * (* Goal: is_program_component. *)
-          CS.simplify_turn.
-          (* TODO: Use CS.domm_partition_in_left_not_in_right; eauto. *)
-          admit.
         * (* Goal: registers related *)
           unfold CS.initial_state in *; subst; rewrite Hinitpc; simpl.
           eapply regs_rel_of_executing_part_intro.
@@ -1249,11 +1241,10 @@ Section ThreewayMultisem4.
              ++ intros ? Hcontra; unfold E0 in *;
                   inversion Hcontra; subst; by find_nil_rcons.
              ++ intros ? Hcid.
+                unfold omap, obind, oapp.
+                rewrite !unionmE.
+                by rewrite <- !mem_domm, !domm_prepare_procedures_memory, Hcid.
                 
-                (** Need a spec for ComponentMemory.next_block of 
-                    unionm (prepare_procedures_memory p) (prepare_procedures_memory c)*)
-
-                admit.
          
         * (* Goal: mem_of_part_not_executing_rel_original_and_recombined_at_border*)
           unfold CS.initial_state in *. subst. rewrite Hinitp'c'. simpl.
@@ -1474,26 +1465,41 @@ Section ThreewayMultisem4.
              ++ intros ? Hcontra; unfold E0 in *;
                   inversion Hcontra; subst; by find_nil_rcons.
              ++ intros ? Hcid.
-                
-                (** Need a spec for ComponentMemory.next_block of 
-                    unionm (prepare_procedures_memory p) (prepare_procedures_memory c)*)
+                unfold omap, obind, oapp.
+                rewrite !unionmE.
+                rewrite <- !mem_domm, !domm_prepare_procedures_memory.
+                assert (Hcid': cid \in domm (prog_interface p) = false).
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmergeable_ifaces as [[_ Hdisj2] _].
+                  rewrite fdisjointC in Hdisj2.
+                  move : Hdisj2 => /fdisjointP => Hdisj2.
+                  rewrite Hifacec in Hdisj2.
+                  apply Hdisj2 in Hcid.
+                  by destruct (cid \in domm (prog_interface p)) eqn:econtra; auto.
+                }
+                by rewrite <- Hifacep, Hcid'.
 
-                admit.
             
 
       + (* Component.main is in c'. Should be analogous to the parallel goal. *)
+        assert (Hmainc: Component.main \in domm (prog_interface c)).
+        {
+          destruct (Component.main \in domm (prog_interface c)) eqn:econtra; auto.
+          exfalso.
+          eapply domm_partition_program_link_in_neither;
+            last (by erewrite econtra); last (by erewrite whereismain); assumption. 
+        }
         eapply mergeable_border_states_c'_executing; simpl; eauto.
         * (* Goal: program counters equal *)
           unfold CS.initial_state in *. subst. rewrite Hinitp'c'. simpl.
           assert (CS.prog_main_block p = CS.prog_main_block p') as Hprogmainblk.
           {
-            admit.
+            rewrite !CS.prog_main_block_no_main; auto.
+            - by rewrite <- Hifacep, whereismain.
+            - by rewrite whereismain.
           }
           by rewrite Hprogmainblk.
-        * (* Goal: is_program_component. *)
-          CS.simplify_turn.
-          (* TODO: Use CS.domm_partition_in_left_not_in_right; eauto. *)
-          admit.
         * (* Goal: registers related *)
           unfold CS.initial_state in *; subst; rewrite Hinitp'c'; simpl.
           eapply regs_rel_of_executing_part_intro.
@@ -1716,11 +1722,22 @@ Section ThreewayMultisem4.
              ++ intros ? Hcontra; unfold E0 in *;
                   inversion Hcontra; subst; by find_nil_rcons.
              ++ intros ? Hcid.
+                unfold omap, obind, oapp.
+                rewrite !unionmE.
+                rewrite <- !mem_domm, !domm_prepare_procedures_memory.
+                assert (Hcid': cid \in domm (prog_interface p) = false).
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmergeable_ifaces as [[_ Hdisj2] _].
+                  rewrite fdisjointC in Hdisj2.
+                  move : Hdisj2 => /fdisjointP => Hdisj2.
+                  rewrite Hifacec in Hdisj2.
+                  apply Hdisj2 in Hcid.
+                  by destruct (cid \in domm (prog_interface p)) eqn:econtra; auto.
+                }
+                by rewrite <- Hifacep, Hcid'.
                 
-                (** Need a spec for ComponentMemory.next_block of 
-                    unionm (prepare_procedures_memory p) (prepare_procedures_memory c)*)
 
-                admit.
 
         * (* Goal: mem_of_part_not_executing_rel_original_and_recombined_at_border*)
           unfold CS.initial_state in *. subst. rewrite Hinitpc. simpl.
@@ -1908,51 +1925,12 @@ Section ThreewayMultisem4.
              ++ intros ? Hcontra; unfold E0 in *;
                   inversion Hcontra; subst; by find_nil_rcons.
              ++ intros ? Hcid.
-                
-                (** Need a spec for ComponentMemory.next_block of 
-                    unionm (prepare_procedures_memory p) (prepare_procedures_memory c)*)
+                unfold omap, obind, oapp.
+                rewrite !unionmE.
+                by rewrite <- !mem_domm, !domm_prepare_procedures_memory, Hcid.
 
-                admit.
-            
+  Qed.         
 
-         
-
-        
-  Admitted. (* RB: TODO: Establish trivial relations, should not be hard. *)
-
-  (*   inversion Hmergeable_ifaces as [Hlinkable _]. *)
-  (*   pose proof initial_states_mergeability Hini Hini'' as Hmerge. *)
-  (*   pose proof linkable_implies_linkable_mains Hwfp Hwfc Hlinkable as Hmain_linkability. *)
-  (*   simpl in *. unfold CS.initial_state in *. subst. *)
-  (*   split; last assumption. *)
-  (*   (* Expose structure of initial states. *) *)
-  (*   rewrite !CS.initial_machine_state_after_linking; try congruence; *)
-  (*     last (apply interface_preserves_closedness_r with (p2 := c); try assumption; *)
-  (*           now apply interface_implies_matching_mains). *)
-  (*   unfold merge_states, merge_memories, merge_registers, merge_pcs; simpl. *)
-  (*   (* Memory simplifictions. *) *)
-  (*   rewrite (prepare_procedures_memory_left Hlinkable). *)
-  (*   unfold ip. erewrite Hifacep at 1. rewrite Hifacep Hifacec in Hlinkable. *)
-  (*   rewrite (prepare_procedures_memory_right Hlinkable). *)
-  (*   (* Case analysis on main and related simplifications. *) *)
-  (*   destruct (Component.main \in domm ip) eqn:Hcase; *)
-  (*     rewrite Hcase. *)
-  (*   - pose proof domm_partition_notin_r _ _ Hmergeable_ifaces _ Hcase as Hnotin. *)
-  (*     rewrite (CS.prog_main_block_no_main _ Hwfc Hnotin). *)
-  (*     rewrite Hifacec in Hnotin. now rewrite (CS.prog_main_block_no_main _ Hwfc' Hnotin). *)
-  (*   - (* Symmetric case. *) *)
-  (*     assert (Hcase' : Component.main \in domm ic). *)
-  (*     { pose proof domm_partition_program_link_in_neither Hwfp Hwfc Hprog_is_closed as H. *)
-  (*       rewrite Hcase in H. *)
-  (*       destruct (Component.main \in domm ic) eqn:Hcase''. *)
-  (*       - reflexivity. *)
-  (*       - rewrite Hcase'' in H. *)
-  (*         exfalso; now apply H. *)
-  (*     } *)
-  (*     pose proof domm_partition_notin _ _ Hmergeable_ifaces _ Hcase' as Hnotin. *)
-  (*     rewrite (CS.prog_main_block_no_main _ Hwfp Hnotin). *)
-  (*     rewrite Hifacep in Hnotin. now rewrite (CS.prog_main_block_no_main _ Hwfp' Hnotin). *)
-  (* Qed. *)
 End ThreewayMultisem4.
 
 (* Remaining theorems for main simulation.  *)
