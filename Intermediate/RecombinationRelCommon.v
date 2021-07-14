@@ -1981,27 +1981,91 @@ Section MergeableSym.
     mergeable_internal_states p c p' c' n n'' s s' s'' t t' t'' ->
     mergeable_internal_states c' p' c p n'' n s'' s' s t'' t' t.
   Proof.
-    intros Hmerge. find_and_invert_mergeable_internal_states.
+    intros Hmerge.
+    find_and_invert_mergeable_internal_states;
+      (
+        find_and_invert_mergeable_states_well_formed;
+        specialize (CSInvariants.value_mem_reg_domm_partition
+                      _ _ _ _ _ _ Hpref_t Logic.eq_refl Logic.eq_refl
+                   ) as [Hmem Hreg];
+        specialize (CSInvariants.value_mem_reg_domm_partition
+                      _ _ _ _ _ _ Hpref_t' Logic.eq_refl Logic.eq_refl
+                   ) as [Hmem' Hreg'];
+        specialize (CSInvariants.value_mem_reg_domm_partition
+                      _ _ _ _ _ _ Hpref_t'' Logic.eq_refl Logic.eq_refl
+                   ) as [Hmem'' Hreg'']          
+      ).
+
     - apply mergeable_internal_states_c'_executing; auto.
       + by apply mergeable_states_well_formed_sym.
       + CS.unfold_states.
-        CS.simplify_turn. subst.
-        find_and_invert_mergeable_states_well_formed; simpl in *.
+        CS.simplify_turn. subst. simpl in *.
         rewrite <- Hifc_pp'. by eapply mergeable_states_notin_to_in2; eauto.
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hregsp                   *)
 
-        (** TODO: Use lemma CSInvariants.value_mem_reg_domm_partition *)
-        
         constructor.
-        unfold shift_value_option,
+        inversion Hregsp as [Hregsrel].
+        unfold
+        shift_value_option,
         rename_value_option,
         rename_value_template_option,
         rename_addr_option,
         sigma_shifting_wrap_bid_in_addr,
-        sigma_shifting_lefttoright_addr_bid.
-
-        admit.
+        sigma_shifting_lefttoright_addr_bid in *.
+        
+        CS.unfold_states.
+        simpl in *. intros reg. specialize (Hregsrel reg).
+        destruct (Register.get reg regs1)
+          as [| [[[perm1 cid1] bid1] off1] | ] eqn:eregs1; try by left; intuition.
+        destruct (perm1 =? Permission.data) eqn:eperm; try by left; intuition.
+        destruct (sigma_shifting_lefttoright_option
+                    (n cid1)
+                    (if cid1 \in domm (prog_interface c')
+                     then n'' cid1 else n cid1) bid1) as [bid1'|] eqn:ebid1';
+          rewrite ebid1'.
+        * admit.
+        * assert (HNone2: sigma_shifting_lefttoright_option
+                            (n cid1)
+                            (if cid1 \in domm (prog_interface p)
+                             then n cid1 else n'' cid1) bid1 = None).
+          { by eapply sigma_shifting_lefttoright_option_None_None; eauto. }
+          rewrite HNone2 in Hregsrel.
+          assert (rewr: Register.get reg regs0 = Ptr (perm1, cid1, bid1, off1)).
+          {
+            by destruct Hregsrel as [| [? [? ?]]]; try discriminate; auto.
+          }
+          destruct Hregsrel as [| [? [G2 G3]]]; try discriminate.
+          rewrite rewr eperm in G2. rewrite rewr eperm.
+          right. split; last split; auto.
+          specialize (Hreg' _ _ _ _ _ rewr).
+          destruct Hreg' as [Hp|Hc'].
+          --
+            rewrite Hp in HNone2.
+            assert (Hc: cid1 \in domm (prog_interface c) = false).
+            {
+              unfold mergeable_interfaces, linkable in *.
+              destruct Hmerge_ipic as [[_ Hdisj] _].
+              move : Hdisj => /fdisjointP => Hdisj.
+              apply Hdisj in Hp.
+              destruct (cid1 \in domm (prog_interface c)) eqn:e; auto;
+              by rewrite e in Hp.
+            }
+            rewrite Hifc_cc' in Hc.
+            rewrite Hc in ebid1'. by rewrite Hc ebid1'.
+          --
+            rewrite Hc'. rewrite Hc' in ebid1'. rewrite <- Hifc_cc' in Hc'.
+            assert (Hp: cid1 \in domm (prog_interface p) = false).
+            {
+              unfold mergeable_interfaces, linkable in *.
+              destruct Hmerge_ipic as [[_ Hdisj] _].
+              rewrite fdisjointC in Hdisj.
+              move : Hdisj => /fdisjointP => Hdisj.
+              apply Hdisj in Hc'.
+              destruct (cid1 \in domm (prog_interface p)) eqn:e; auto;
+              by rewrite e in Hc'.
+            }
+            by rewrite Hp in G2.
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemp                    *)
         admit.
@@ -2012,7 +2076,6 @@ Section MergeableSym.
       + by apply mergeable_states_well_formed_sym.
       + CS.unfold_states.
         CS.simplify_turn. subst.
-        find_and_invert_mergeable_states_well_formed; simpl in *.
         rewrite <- Hifc_pp', Hpccomp_s'_s. eapply mergeable_states_in_to_notin; eauto.
         by rewrite <- Hpccomp_s'_s.
       + (** tricky for the same reason as above,            *)
