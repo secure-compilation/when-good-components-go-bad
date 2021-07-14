@@ -655,7 +655,22 @@ Section SigmaShiftingBlockIdsOptionProperties.
     - rewrite <- add0n in contra at 1.
         by rewrite leq_add2r in contra.
   Qed.
-  
+
+  Lemma sigma_shifting_lefttoright_option_None_None n1 n2 n3 bid:
+    sigma_shifting_lefttoright_option n1 n2 bid = None ->
+    sigma_shifting_lefttoright_option n1 n3 bid = None.
+  Proof.
+    intros HNone.
+    destruct (sigma_shifting_lefttoright_option n1 n3 bid) as [bid'|] eqn:esigma; auto.
+    assert (Hgood: left_block_id_good_for_shifting n1 bid).
+    {
+      by eapply sigma_lefttoright_Some_spec; eexists; eauto.
+    }
+    eapply sigma_lefttoright_Some_spec in Hgood. 
+    destruct Hgood as [? contra].
+    by erewrite HNone in contra.
+  Qed. 
+      
 End SigmaShiftingBlockIdsOptionProperties.
 
 Definition addr_t : Type := (Component.id * Block.id).
