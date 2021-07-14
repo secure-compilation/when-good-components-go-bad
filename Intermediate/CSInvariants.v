@@ -161,10 +161,10 @@ Proof.
       * (* Store *)
         intros addr_load val_load Hload.
         clear Hstar01 Hstep12 Hstep12' H.
-        destruct (Pointer.eq addr_load ptr) eqn:Heq.
+        destruct (Pointer.eqP ptr addr_load) as [Heq | Hneq].
         -- (* We load from the address we just stored to. The information can
               only come from the registers and not from the memory. *)
-           apply pointer_refl in Heq; subst addr_load. (* As reflection? *)
+           subst addr_load.
            rewrite (Memory.load_after_store_eq _ _ _ _ H1) in Hload.
            injection Hload as Hload.
            assert (Hr1 := Hregs1 _ _ H0).
@@ -176,7 +176,6 @@ Proof.
            ++ apply wrt_load_ptr_wf_load; assumption.
            ++ apply wrt_pc_wf_load; assumption.
         -- (* For any other address, this follows directly from the IH. *)
-           assert (Hneq : ptr <> addr_load) by admit.
            rewrite -> (Memory.load_after_store_neq _ _ _ _ _ Hneq H1) in Hload.
            exact (Hmem1 _ _ Hload).
       * (* IJal *)
@@ -200,16 +199,13 @@ Proof.
       * (* IAlloc *)
         intros addr_load val_load Hload.
         clear Hstar01 Hstep12 Hstep12' H.
-        destruct (addr_eq (Pointer.component addr_load, Pointer.block addr_load)
-                          (Pointer.component ptr,       Pointer.block ptr))
-                 eqn:Heq.
+        destruct
+          (addr_eqP (Pointer.component addr_load, Pointer.block addr_load)
+                    (Pointer.component ptr,       Pointer.block ptr))
+          as [Heq | Hneq].
         -- (* If we read from the newly allocated block, the load cannot find
              any pointers and we conclude by contradiction. *)
-           assert (Heq' :
-                     (Pointer.component addr_load, Pointer.block addr_load) =
-                     (Pointer.component ptr,       Pointer.block ptr))
-            by admit.
-           rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 Heq') in Hload.
+           rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 Heq) in Hload.
            destruct (Pointer.permission addr_load =? Permission.data);
              last discriminate.
            destruct ((Pointer.offset addr_load <? Z.of_nat (Z.to_nat size))%Z);
@@ -217,12 +213,8 @@ Proof.
            destruct ((0 <=? Pointer.offset addr_load)%Z);
              discriminate.
         -- (* If we read from elsewhere, the result follows from the IH. *)
-           assert (Heq' :
-                     (Pointer.component addr_load, Pointer.block addr_load) <>
-                     (Pointer.component ptr,       Pointer.block ptr))
-            by admit.
            (* TODO: Rename lemma (add [_neq]).*)
-           rewrite (Memory.load_after_alloc _ _ _ _ _ _ H2 Heq') in Hload.
+           rewrite (Memory.load_after_alloc _ _ _ _ _ _ H2 Hneq) in Hload.
            exact (Hmem1 _ _ Hload).
       * (* ICall *)
         intros addr_load val_load Hload.
@@ -244,46 +236,43 @@ Proof.
       * (* IConst *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
-        destruct ((Register.to_nat reg) =? (Register.to_nat r)) eqn:Heq. (* HACK *)
+        destruct (Register.eqP reg r) as [Heq | Hneq].
         -- (* If we read the register we just wrote, we get the exact immediate
               value, here assumed to be a pointer. *)
-           assert (reg = r) by admit; subst r.
-           assert (Hget' : imm_to_val v = Ptr ptr) by admit.
+           subst r. rewrite Register.gss in Hget.
            destruct v as [n | ptr']; first discriminate.
-           injection Hget' as Hget'; subst ptr'.
+           injection Hget as Hget; subst ptr'.
            (* Thanks to [well_formed_instruction], we know that pointer
               constants may only refer to their own component. *)
            destruct ptr as [[[P C] b] o].
            assert (C = Pointer.component pc) by admit; subst C.
            now apply wf_ptr_own.
         -- (* For any other register, this follows directly from the IH. *)
-           assert (Hget' : Register.get reg regs = Ptr ptr) by admit.
-           exact (Hregs1 _ _ Hget').
+           rewrite Register.gso in Hget; last assumption.
+           exact (Hregs1 _ _ Hget).
       * (* IMov *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
-        destruct ((Register.to_nat reg) =? (Register.to_nat r2)) eqn:Heq. (* HACK *)
+        destruct (Register.eqP reg r2) as [Heq | Hneq].
         -- (* The new value comes from r1, which follows from the IH. *)
-           assert (reg = r2) by admit; subst r2.
-           assert (Hget' : Register.get r1 regs = Ptr ptr) by admit.
-           exact (Hregs1 _ _ Hget').
+           subst r2. rewrite Register.gss in Hget.
+           exact (Hregs1 _ _ Hget).
         -- (* The new value comes from reg, which follows from the IH. *)
-           assert (Hget' : Register.get reg regs = Ptr ptr) by admit.
-           exact (Hregs1 _ _ Hget').
+           rewrite Register.gso in Hget; last assumption.
+           exact (Hregs1 _ _ Hget).
       * (* IBinOp *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
-        destruct ((Register.to_nat reg) =? (Register.to_nat r3)) eqn:Heq. (* HACK *)
+        destruct (Register.eqP reg r3) as [Heq | Hneq].
         -- (* If we read the register we just wrote, we get the result of the
               operation, which we then case analyze. *)
-           assert (reg = r3) by admit; subst r3.
-           assert (Hget' : result = Ptr ptr) by admit.
-           unfold result, eval_binop in Hget'.
+           subst r3. rewrite Register.gss in Hget.
+           unfold result, eval_binop in Hget.
            destruct op;
              destruct (Register.get r1 regs) eqn:Hget1;
              destruct (Register.get r2 regs) eqn:Hget2;
              (* Most cases are nonsensical; a handful remain. *)
-             inversion Hget'; subst.
+             inversion Hget; subst.
            (* Whenever there is a pointer and an integer, the result follows
               from the IH on the pointer, albeit with a bit of work to account
               for the integer offsets. *)
@@ -308,28 +297,27 @@ Proof.
            ++ destruct (Pointer.leq t t0);
                 discriminate.
         -- (* For any other register, this follows directly from the IH. *)
-           assert (Hget' : Register.get reg regs = Ptr ptr) by admit.
-           exact (Hregs1 _ _ Hget').
+           rewrite Register.gso in Hget; last assumption.
+           exact (Hregs1 _ _ Hget).
       * (* IPtrOfLabel *)
         intros reg ptr' Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
-        destruct ((Register.to_nat reg) =? (Register.to_nat r)) eqn:Heq. (* HACK *)
+        destruct (Register.eqP reg r) as [Heq | Hneq].
         -- (* *)
-           assert (reg = r) by admit; subst r.
-           assert (ptr = ptr') by admit; subst ptr'.
+           subst r. rewrite Register.gss in Hget.
+           injection Hget as Hget; subst ptr'.
            destruct ptr as [[[P C] b] o].
            rewrite (find_label_in_component_1 _ _ _ _ H0).
            now apply wf_ptr_own.
         -- (* *)
-           assert (Hget' : Register.get reg regs = Ptr ptr') by admit.
-           exact (Hregs1 _ _ Hget').
+           rewrite Register.gso in Hget; last assumption.
+           exact (Hregs1 _ _ Hget).
       * (* ILoad *)
         intros reg ptr' Hget.
         (* clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *) *)
-        destruct ((Register.to_nat reg) =? (Register.to_nat r2)) eqn:Heq. (* HACK *)
+        destruct (Register.eqP reg r2) as [Heq | Hneq].
         -- (*  *)
-           assert (reg = r2) by admit; subst r2.
-           assert (v = Ptr ptr') by admit; subst v.
+           subst r2. rewrite Register.gss in Hget. subst v.
            (* IH *)
            assert (Hr1 := Hregs1 _ _ H0).
            assert (Hptr := Hmem1 _ _ H1).
@@ -371,15 +359,16 @@ Proof.
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
         rewrite <- (find_label_in_component_1 _ _ _ _ H0).
-        destruct ((Register.to_nat reg) =? (Register.to_nat R_RA)) eqn:Heq. (* HACK *)
+        destruct (Register.eqP reg R_RA) as [Heq | Hneq].
         -- (* *)
-           assert (reg = R_RA) by admit; subst reg.
-           assert (Pointer.inc pc = ptr) by admit; subst ptr.
-           destruct pc as [[[P C] b] o].
+           subst reg. rewrite Register.gss in Hget.
+           injection Hget as Hget; subst ptr.
+           rewrite <- Pointer.inc_preserves_component.
+           destruct (Pointer.inc pc) as [[[perm C] b] o] eqn:Heq.
            now apply wf_ptr_own.
         -- (* *)
-           assert (Hget' : Register.get reg regs = Ptr ptr) by admit.
-           exact (Hregs1 _ _ Hget').
+           rewrite Register.gso in Hget; last assumption.
+           exact (Hregs1 _ _ Hget).
       * (* IJump *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
@@ -393,25 +382,24 @@ Proof.
       * (* IAlloc *)
         intros reg ptr' Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
-        destruct ((Register.to_nat reg) =? (Register.to_nat rptr)) eqn:Heq. (* HACK *)
+        destruct (Register.eqP reg rptr) as [Heq | Hneq].
         -- (* *)
-           assert (reg = rptr) by admit; subst rptr.
-           assert (ptr = ptr') by admit; subst ptr'.
+           subst rptr. rewrite Register.gss in Hget.
+           injection Hget as Hget; subst ptr'.
            (* TODO: Refine alloc spec to provide missing information. *)
            (* destruct ptr as [[[P C] b] o]. *)
            admit.
         -- (* *)
-           assert (Hget' : Register.get reg regs = Ptr ptr') by admit.
-           exact (Hregs1 _ _ Hget').
+           rewrite Register.gso in Hget; last assumption.
+           exact (Hregs1 _ _ Hget).
       * (* ICall *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
-        (* Lemmas on invalidate? *)
-        assert (reg = R_COM) by (destruct reg; now inversion Hget);
-          subst reg.
-        assert (Hget' : Register.get R_COM regs = Ptr ptr) by admit.
-        rewrite Hget'.
-        assert (Hrcom := Hregs1 _ _ Hget').
+        rewrite Register.gi in Hget.
+        destruct (Register.eqP reg R_COM) as [Heq | Hneq];
+          last discriminate.
+        subst reg. rewrite Hget.
+        assert (Hrcom := Hregs1 _ _ Hget).
         destruct ptr as [[[P_ C_] b_] o_].
         apply wf_ptr_shared.
         rewrite Eapp_rcons.
@@ -424,12 +412,11 @@ Proof.
       * (* IReturn *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
-        (* Lemmas on invalidate? *)
-        assert (reg = R_COM) by (destruct reg; now inversion Hget);
-          subst reg.
-        assert (Hget' : Register.get R_COM regs = Ptr ptr) by admit.
-        rewrite Hget'.
-        assert (Hrcom := Hregs1 _ _ Hget').
+        rewrite Register.gi in Hget.
+        destruct (Register.eqP reg R_COM) as [Heq | Hneq];
+          last discriminate.
+        subst reg. rewrite Hget.
+        assert (Hrcom := Hregs1 _ _ Hget).
         destruct ptr as [[[P C] b] o].
         apply wf_ptr_shared.
         rewrite Eapp_rcons.
@@ -608,28 +595,28 @@ Proof.
       inversion Hstep12'; subst;
         try (by (eapply IHload; eauto)). (* Solve most goals. *)
       * (* IStore *)
-        destruct (Pointer.eq ptr ptr0) eqn:Hcase.
-        -- apply pointer_refl in Hcase; subst ptr0.
+        destruct (Pointer.eqP ptr0 ptr) as [Heq | Hneq].
+        -- subst ptr0.
            rewrite (Memory.load_after_store_eq _ _ _ _ H1) in Hload.
            injection Hload as Hget.
            eapply IHget; eassumption.
-        -- assert (Hneq : ptr0 <> ptr) by admit.
-           rewrite (Memory.load_after_store_neq _ _ _ _ _ Hneq H1) in Hload.
+        -- rewrite (Memory.load_after_store_neq _ _ _ _ _ Hneq H1) in Hload.
            eapply IHload; eassumption.
       * (* IAlloc *)
         (* destruct ptr as [[[pm C] b] o]. *)
         (* destruct ptr0 as [[[pm0 C0] b0] o0]. *)
-        destruct (addr_eq (Pointer.component ptr, Pointer.block ptr) (Pointer.component ptr0, Pointer.block ptr0)) eqn:Hcase.
-        -- assert (Heq : (Pointer.component ptr, Pointer.block ptr) = (Pointer.component ptr0, Pointer.block ptr0)) by admit.
-           rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 Heq) in Hload.
+        destruct
+          (addr_eqP (Pointer.component ptr, Pointer.block ptr)
+                    (Pointer.component ptr0, Pointer.block ptr0))
+          as [Heq | Hneq].
+        -- rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 Heq) in Hload.
            destruct (Pointer.permission ptr =? Permission.data);
              last discriminate.
            destruct (Pointer.offset ptr <? Z.of_nat (Z.to_nat size))%Z;
              last discriminate.
            destruct (0 <=? Pointer.offset ptr)%Z;
              discriminate.
-        -- assert (Hneq : (Pointer.component ptr, Pointer.block ptr) <> (Pointer.component ptr0, Pointer.block ptr0)) by admit.
-           rewrite (Memory.load_after_alloc _ _ _ _ _ _ H2 Hneq) in Hload.
+        -- rewrite (Memory.load_after_alloc _ _ _ _ _ _ H2 Hneq) in Hload.
            eapply IHload; eassumption.
     + (* Register file domain. *)
       intros reg perm cid bid off Hget.
@@ -638,7 +625,7 @@ Proof.
         try (by (eapply IHget; eauto)). (* Solve some goals. *)
       * (* IConst *)
         destruct (Register.eqb reg r) eqn:Hcase;
-          move: Hcase => /Register.registerP => Hcase.
+          move: Hcase => /Register.eqP => Hcase.
         -- subst r. rewrite Register.gss in Hget.
            destruct v as [| ptr]; first discriminate.
            (* By program (and instruction) well-formedness. *)
@@ -647,14 +634,14 @@ Proof.
            eapply IHget; eassumption.
       * (* IMov *)
         destruct (Register.eqb reg r2) eqn:Hcase;
-          move: Hcase => /Register.registerP => Hcase.
+          move: Hcase => /Register.eqP => Hcase.
         -- subst r2. rewrite Register.gss in Hget.
            eapply IHget; eassumption.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IBinOp *)
         destruct (Register.eqb reg r3) eqn:Hcase;
-          move: Hcase => /Register.registerP => Hcase.
+          move: Hcase => /Register.eqP => Hcase.
         -- subst r3. rewrite Register.gss in Hget. subst result.
            unfold eval_binop in Hget;
              destruct op;
@@ -666,7 +653,7 @@ Proof.
            eapply IHget; eassumption.
       * (* IPtrOfLabel *)
         destruct (Register.eqb reg r) eqn:Hcase;
-          move: Hcase => /Register.registerP => Hcase.
+          move: Hcase => /Register.eqP => Hcase.
         -- subst r. rewrite Register.gss in Hget.
            injection Hget as Hget. subst ptr.
            setoid_rewrite <- (find_label_in_component_1 _ _ _ _ H0).
@@ -675,14 +662,14 @@ Proof.
            eapply IHget; eassumption.
       * (* ILoad *)
         destruct (Register.eqb reg r2) eqn:Hcase;
-          move: Hcase => /Register.registerP => Hcase.
+          move: Hcase => /Register.eqP => Hcase.
         -- subst r2. rewrite Register.gss in Hget. subst v.
            eapply IHload; eassumption.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IJal *)
         destruct (Register.eqb reg R_RA) eqn:Hcase;
-          move: Hcase => /Register.registerP => Hcase.
+          move: Hcase => /Register.eqP => Hcase.
         -- subst reg. rewrite Register.gss in Hget.
            injection Hget as Hget.
            change cid with (Pointer.component (perm, cid, bid, off)).
@@ -692,7 +679,7 @@ Proof.
            eapply IHget; eassumption.
       * (* IAlloc *)
         destruct (Register.eqb reg rptr) eqn:Hcase;
-          move: Hcase => /Register.registerP => Hcase.
+          move: Hcase => /Register.eqP => Hcase.
         -- subst rptr. rewrite Register.gss in Hget.
            injection Hget as Hget; subst ptr.
            setoid_rewrite (Memory.component_of_alloc_ptr _ _ _ _ _ H2).
@@ -700,12 +687,14 @@ Proof.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* ICall *)
-        (* assert (reg = R_COM) by admit; subst reg. *)
-        assert (Hget' : Register.get R_COM regs = Ptr (perm, cid, bid, off)) by admit.
+        rewrite Register.gi in Hget.
+        destruct (Register.eqP reg R_COM) as [Heq | Hneq];
+          last discriminate.
         eapply IHget; eassumption.
       * (* IReturn *)
-        (* assert (reg = R_COM) by admit; subst reg. *)
-        assert (Hget' : Register.get R_COM regs = Ptr (perm, cid, bid, off)) by admit.
+        rewrite Register.gi in Hget.
+        destruct (Register.eqP reg R_COM) as [Heq | Hneq];
+          last discriminate.
         eapply IHget; eassumption.
 Admitted.
 
