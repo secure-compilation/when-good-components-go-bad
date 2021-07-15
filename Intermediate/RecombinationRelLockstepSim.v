@@ -981,14 +981,20 @@ Section ThreewayMultisem1.
                                    as Hwf.
                              {
                                eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t;
+                                 last (by simpl);
                                  last (unfold Register.get;
                                          by erewrite eregs1'r2).
                                eapply CSInvariants.wf_state_wf_reg
                                  with (s := (gps1', mem1', regs1', pc)); eauto.
                                eapply CSInvariants.is_prefix_wf_state_t;
                                  last exact Hpref_t'.
-                               eapply linking_well_formedness; eauto.
-                               unfold mergeable_interfaces in *.
+                               - eapply interface_preserves_closedness_r; eauto.
+                                 + by unfold mergeable_interfaces in *; intuition.
+                                 + eapply linkable_implies_linkable_mains; eauto.
+                                   by unfold mergeable_interfaces in *; intuition.
+                                 + apply interface_implies_matching_mains; auto.
+                               - eapply linking_well_formedness; eauto.
+                                 unfold mergeable_interfaces in *.
                                  by rewrite <- Hifc_cc'; intuition.
                              }
                              inversion Hwf as [| ? ? ? ? Hshr]; subst.
@@ -1102,14 +1108,20 @@ Section ThreewayMultisem1.
                                    as Hwf.
                              {
                                eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t;
+                                 last (by simpl);
                                  last (unfold Register.get;
                                          by erewrite eregs1'r2).
                                eapply CSInvariants.wf_state_wf_reg
                                  with (s := (gps1', mem1', regs1', pc)); eauto.
                                eapply CSInvariants.is_prefix_wf_state_t;
                                  last exact Hpref_t'.
-                               eapply linking_well_formedness; eauto.
-                               unfold mergeable_interfaces in *.
+                               - eapply interface_preserves_closedness_r; eauto.
+                                 + by unfold mergeable_interfaces in *; intuition.
+                                 + eapply linkable_implies_linkable_mains; eauto.
+                                   by unfold mergeable_interfaces in *; intuition.
+                                 + apply interface_implies_matching_mains; auto.
+                               - eapply linking_well_formedness; eauto.
+                                 unfold mergeable_interfaces in *.
                                  by rewrite <- Hifc_cc'; intuition.
                              }
                              inversion Hwf as [| ? ? ? ? Hshr]; subst.
@@ -1423,15 +1435,21 @@ Section ThreewayMultisem1.
                              as Hwf.
                            {
                              eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t;
+                               last (by simpl);
                                last (unfold Register.get;
                                        by erewrite eregs1'r2).
                              eapply CSInvariants.wf_state_wf_reg
                                with (s := (gps1', mem1', regs1', pc)); eauto.
                              eapply CSInvariants.is_prefix_wf_state_t;
-                               last exact Hpref_t'.
-                             eapply linking_well_formedness; eauto.
-                             unfold mergeable_interfaces in *.
-                               by rewrite <- Hifc_cc'; intuition.
+                                 last exact Hpref_t'.
+                             - eapply interface_preserves_closedness_r; eauto.
+                               + by unfold mergeable_interfaces in *; intuition.
+                               + eapply linkable_implies_linkable_mains; eauto.
+                                   by unfold mergeable_interfaces in *; intuition.
+                               + apply interface_implies_matching_mains; auto.
+                             - eapply linking_well_formedness; eauto.
+                               unfold mergeable_interfaces in *.
+                                 by rewrite <- Hifc_cc'; intuition.
                            }
                            inversion Hwf as [| ? ? ? ? Hshr]; subst.
                            -----
@@ -1524,14 +1542,20 @@ Section ThreewayMultisem1.
                                    as Hwf.
                              {
                                eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t;
+                                 last (by simpl);
                                  last (unfold Register.get;
                                          by erewrite eregs1'r2).
                                eapply CSInvariants.wf_state_wf_reg
                                  with (s := (gps1', mem1', regs1', pc)); eauto.
                                eapply CSInvariants.is_prefix_wf_state_t;
                                  last exact Hpref_t'.
-                               eapply linking_well_formedness; eauto.
-                               unfold mergeable_interfaces in *.
+                               - eapply interface_preserves_closedness_r; eauto.
+                                 + by unfold mergeable_interfaces in *; intuition.
+                                 + eapply linkable_implies_linkable_mains; eauto.
+                                   by unfold mergeable_interfaces in *; intuition.
+                                 + apply interface_implies_matching_mains; auto.
+                               - eapply linking_well_formedness; eauto.
+                                 unfold mergeable_interfaces in *.
                                  by rewrite <- Hifc_cc'; intuition.
                              }
                              inversion Hwf as [| ? ? ? ? Hshr]; subst.
@@ -1783,15 +1807,21 @@ Section ThreewayMultisem1.
                              as Hwf.
                            {
                              eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t;
+                               last (by simpl);
                                last (unfold Register.get;
                                        by erewrite eregs1'r2).
                              eapply CSInvariants.wf_state_wf_reg
                                with (s := (gps1', mem1', regs1', pc)); eauto.
                              eapply CSInvariants.is_prefix_wf_state_t;
                                last exact Hpref_t'.
-                             eapply linking_well_formedness; eauto.
-                             unfold mergeable_interfaces in *.
-                               by rewrite <- Hifc_cc'; intuition.
+                             - eapply interface_preserves_closedness_r; eauto.
+                               + by unfold mergeable_interfaces in *; intuition.
+                               + eapply linkable_implies_linkable_mains; eauto.
+                                   by unfold mergeable_interfaces in *; intuition.
+                               + apply interface_implies_matching_mains; auto.
+                             - eapply linking_well_formedness; eauto.
+                               unfold mergeable_interfaces in *.
+                                 by rewrite <- Hifc_cc'; intuition.
                            }
                            inversion Hwf as [| ? ? ? ? Hshr]; subst.
                            -----
@@ -1884,14 +1914,20 @@ Section ThreewayMultisem1.
                                    as Hwf.
                              {
                                eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t;
+                                 last (by simpl);
                                  last (unfold Register.get;
                                          by erewrite eregs1'r2).
                                eapply CSInvariants.wf_state_wf_reg
                                  with (s := (gps1', mem1', regs1', pc)); eauto.
                                eapply CSInvariants.is_prefix_wf_state_t;
                                  last exact Hpref_t'.
-                               eapply linking_well_formedness; eauto.
-                               unfold mergeable_interfaces in *.
+                               - eapply interface_preserves_closedness_r; eauto.
+                                 + by unfold mergeable_interfaces in *; intuition.
+                                 + eapply linkable_implies_linkable_mains; eauto.
+                                   by unfold mergeable_interfaces in *; intuition.
+                                 + apply interface_implies_matching_mains; auto.
+                               - eapply linking_well_formedness; eauto.
+                                 unfold mergeable_interfaces in *.
                                  by rewrite <- Hifc_cc'; intuition.
                              }
                              inversion Hwf as [| ? ? ? ? Hshr]; subst.
@@ -2354,15 +2390,15 @@ Section ThreewayMultisem1.
                                 (if cid \in domm (prog_interface p)
                                  then n cid else n'' cid) b) eqn:esigma;
                       rewrite esigma; auto.
-                    
-                    assert (CSInvariants.wf_load_wrt_t_pc
-                              (Permission.data, Pointer.component pc, bidl, offl)
-                              t1
+                    assert (perm = Permission.data). by apply beq_nat_true. subst.
+                    assert (CSInvariants.wf_load
                               (Pointer.component pc)
-                              (perm, cid, b, o)
+                              t1
+                              (Permission.data, Pointer.component pc, bidl, offl)
+                              (Permission.data, cid, b, o)
                            ) as cid_b_invariant.
                     {
-                      eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                      eapply CSInvariants.wf_mem_wrt_t_pc_wf_load; eauto.
                       eapply CSInvariants.wf_state_wf_mem
                         with (s := (gps, mem, regs, pc)); eauto.
                       eapply CSInvariants.is_prefix_wf_state_t
@@ -2371,80 +2407,22 @@ Section ThreewayMultisem1.
                       by unfold mergeable_interfaces in *; intuition.
                     }
 
-                    inversion cid_b_invariant as [? wfptr|? Hloadatshr wfptr]; subst.
-                    +++
-                      simpl in *.
-                      inversion wfptr as [| ? ? ? ? Hshr]; subst.
-                      ***
-                        rewrite esigma in Hmem_own1.
+                    inversion cid_b_invariant as [|? ? Hshr |]; simpl in *; subst; auto.
+                    +++ specialize (Hmem_own1 Hpc_in).
                         rewrite Hloadmem1' in Hmem_own1.
-                        rewrite Hpc_in in Hmem_own1.
-                        specialize (Hmem_own1 isT).
-                        inversion Hmem_own1. subst.
-                        right; split; auto; split; auto.
-                        rewrite Hpc_in. rewrite Hpc_in in esigma.
-                        by rewrite esigma eperm.
-                        (**********************************************
-                        split.
-                        ----
-                          intros a Ha Hshr. rewrite in_fset1 in Ha.
-                          specialize (eqP Ha) as Ha'. subst.
-                          inversion Hgood_t as [? Hcontra]; subst.
-                          specialize (Hcontra
-                                        _ Hshr).
-                          unfold left_addr_good_for_shifting in *.
-                          erewrite sigma_lefttoright_Some_spec in
-                              Hcontra.
-                          destruct Hcontra as [? contra].
-                            by erewrite esigma in contra.
-                        ----
-                          intros a Ha Hshr. simpl in *.
-                          destruct (perm =? Permission.data);
-                            try by rewrite in_fset0 in Ha.
-                          rewrite in_fset1 in Ha.
-                          specialize (eqP Ha) as Ha'. subst.
-                          inversion Hgood_t' as [? Hcontra]; subst.
-                          specialize (Hcontra
-                                        _ Hshr).
-                          unfold left_addr_good_for_shifting in *.
-                          rewrite Hpc_in in Hcontra.
-                          erewrite sigma_lefttoright_Some_spec in
-                              Hcontra.
-                          destruct Hcontra as [? contra].
-                            by erewrite esigma in contra.
-                         ***********************************************)
-                      ***
-                        (*specialize (addr_shared_so_far_good_addr _ _ Hgood_t _ Hshr)
-                          as cidbgood.*)
-                        inversion Hgood_t as [? shared_good]. subst.
-                        specialize (shared_good _ Hshr) as cidbgood.
-                        unfold left_addr_good_for_shifting in cidbgood.
-                        erewrite sigma_lefttoright_Some_spec in cidbgood.
-                        destruct cidbgood as [? contra].
-                        by erewrite esigma in contra.
-                        
-                    +++
-                      (* The same as the parallel case above *)
-                      simpl in *.
-                      inversion wfptr as [| ? ? ? ? Hshr]; subst.
-                      ***
-                        rewrite esigma in Hmem_own1.
+                        rewrite esigma in Hmem_own1. inversion Hmem_own1.
+                        simpl. rewrite Hpc_in in esigma. rewrite Hpc_in esigma.
+                        by right.
+                    +++ inversion Hgood_t as [? Hgood]; subst. apply Hgood in Hshr.
+                        unfold left_addr_good_for_shifting in *.
+                        eapply sigma_lefttoright_Some_spec in Hshr.
+                        destruct Hshr as [? rewr].
+                        by erewrite rewr in esigma.
+                    +++ specialize (Hmem_own1 Hpc_in).
                         rewrite Hloadmem1' in Hmem_own1.
-                        rewrite Hpc_in in Hmem_own1.
-                        specialize (Hmem_own1 isT).
-                        inversion Hmem_own1. subst.
-                        right; split; auto; split; auto.
-                        rewrite Hpc_in. rewrite Hpc_in in esigma.
-                        by rewrite esigma eperm.
-
-                      ***
-                        inversion Hgood_t as [? shared_good]. subst.
-                        specialize (shared_good _ Hshr) as cidbgood.
-                        unfold left_addr_good_for_shifting in cidbgood.
-                        erewrite sigma_lefttoright_Some_spec in cidbgood.
-                        destruct cidbgood as [? contra].
-                        by erewrite esigma in contra.
-                      
+                        rewrite esigma in Hmem_own1. inversion Hmem_own1.
+                        simpl. rewrite Hpc_in in esigma. rewrite Hpc_in esigma.
+                        by right.
 
                   ---
                     destruct (Hmem_shared (cidl, bidl) Hshr)
@@ -2495,79 +2473,6 @@ Section ThreewayMultisem1.
                             ) eqn:ebid; rewrite ebid; rewrite ebid in Hrel;
                      destruct Hrel as [[? [? ?]]|]; try discriminate; auto.
                    
-                   (*****************************************************
-                   destruct (cid \in domm (prog_interface p)) eqn:ecid.
-                   +++ rewrite ecid in esigma. by rewrite ecid esigma.
-                   +++ rewrite ecid in esigma. rewrite ecid.
-                   
-                   split.
-                   +++
-                     intros a Ha Hshr. simpl in *. rewrite eperm in_fset1 in Ha.
-                     specialize (eqP Ha) as sbst. subst.
-                     inversion Hgood_t as [? Hcontra]. subst.
-                     specialize (Hcontra _ Hshr).
-                     unfold left_addr_good_for_shifting in *.
-                     erewrite sigma_lefttoright_Some_spec in Hcontra.
-                     destruct Hcontra as [? contra].
-                     by erewrite esigma in contra.
-                   +++
-                     intros a Ha Hshr. simpl in *. rewrite eperm in_fset1 in Ha.
-                     specialize (eqP Ha) as sbst. subst.
-                     inversion Hgood_t' as [? Hcontra]. subst.
-                     specialize (Hcontra _ Hshr).
-                     unfold left_addr_good_for_shifting in *.
-                     
-                     destruct (cid \in domm (prog_interface p)) eqn:ecid;
-                       rewrite ecid in Hcontra; rewrite ecid in esigma.
-                     ***
-                       erewrite sigma_lefttoright_Some_spec in Hcontra.
-                       destruct Hcontra as [? contra].
-                         by erewrite esigma in contra.
-                     ***
-                       rewrite <- sigma_shifting_righttoleft_lefttoright
-                         in esigma.
-                       unfold left_block_id_good_for_shifting in *.
-                       pose proof sigma_righttoleft_Some_spec as Hrewr.
-                       unfold right_block_id_good_for_shifting in *.
-                       erewrite Hrewr in Hcontra.
-
-                       erewrite sigma_shifting_righttoleft_lefttoright
-                         in esigma.
-                       rewrite sigma_shifting_righttoleft_lefttoright
-                         in Hcontra.
-
-                       (* Try to obtain some contradiction from Hshift_t''t' *)
-                       inversion Hshift_t''t' as [? ? ren_t''t']; subst.
-                       inversion ren_t''t' as [|? ? ? ? ? ? ? Hrel]; subst.
-                       ----
-                         inversion Hshr; try by find_nil_rcons.
-                       ----
-                         specialize (Hrel _ Hshr) as [_ [[cid' bid']
-                                                           [Hcid_bid_ren
-                                                              Hshr_cid_bid_ren
-                                                     ]]].
-                         unfold rename_addr_option,
-                         sigma_shifting_wrap_bid_in_addr,
-                         sigma_shifting_lefttoright_addr_bid in *.
-                         destruct (sigma_shifting_lefttoright_option 
-                                     (n'' cid')
-                                     (if cid' \in domm (prog_interface p)
-                                      then n cid'
-                                      else n'' cid') bid') eqn:esigma';
-                           rewrite esigma' in Hcid_bid_ren; try discriminate.
-                         inversion Hcid_bid_ren; subst.
-                         rewrite ecid in esigma'.
-                         apply sigma_shifting_lefttoright_option_n_n_id
-                           in esigma'.
-                         subst. clear Hcid_bid_ren.
-                       
-                         in Hcontra.
-                       Search _ "lefttoright" "righttoleft".
-                       erewrite Hpc_in in contra.
-                   
-                     by rewrite Hpc_in sigma_shifting_lefttoright_option_n_n_id
-                     in ebidl_shift.
-                    *********************************************************)
                    
                  --- (*specialize (addr_shared_so_far_good_addr _ _ Hgood_t _ Hshr)
                        as cidbgood.*)
@@ -2735,8 +2640,13 @@ Section ThreewayMultisem1.
           eapply CSInvariants.wf_reg_wf_ptr_wrt_cid_t; eauto.
           eapply CSInvariants.wf_state_wf_reg.
           - eapply CSInvariants.is_prefix_wf_state_t with (p := prog'); eauto.
-            eapply linking_well_formedness; auto.
-            rewrite <- Hifc_cc'. unfold mergeable_interfaces in *.
+            + eapply interface_preserves_closedness_r; eauto.
+              * by unfold mergeable_interfaces in *; intuition.
+              * eapply linkable_implies_linkable_mains; eauto.
+                by unfold mergeable_interfaces in *; intuition.
+              * eapply interface_implies_matching_mains; eauto.
+            + eapply linking_well_formedness; auto.
+              rewrite <- Hifc_cc'. unfold mergeable_interfaces in *.
               by intuition.
           - by simpl.
           - by simpl.
@@ -3419,8 +3329,13 @@ Section ThreewayMultisem1.
                       with (s := (gps1', mem1', regs1', pc)); eauto.
                   eapply CSInvariants.is_prefix_wf_state_t
                     with (p := (program_link p c')); eauto.
-                  eapply linking_well_formedness; try assumption.
-                  rewrite <- Hifc_cc'.
+                  - eapply interface_preserves_closedness_r; eauto.
+                    + by unfold mergeable_interfaces in *; intuition.
+                    + eapply linkable_implies_linkable_mains; eauto.
+                        by unfold mergeable_interfaces in *; intuition.
+                    + apply interface_implies_matching_mains; auto.
+                  - eapply linking_well_formedness; try assumption.
+                    rewrite <- Hifc_cc'.
                     by unfold mergeable_interfaces in *;
                       intuition.
                 }
@@ -3485,8 +3400,13 @@ Section ThreewayMultisem1.
                       with (s := (gps1', mem1', regs1', pc)); eauto.
                   eapply CSInvariants.is_prefix_wf_state_t
                     with (p := (program_link p c')); eauto.
-                  eapply linking_well_formedness; try assumption.
-                  rewrite <- Hifc_cc'.
+                  - eapply interface_preserves_closedness_r; eauto.
+                    + by unfold mergeable_interfaces in *; intuition.
+                    + eapply linkable_implies_linkable_mains; eauto.
+                        by unfold mergeable_interfaces in *; intuition.
+                    + apply interface_implies_matching_mains; auto.
+                  - eapply linking_well_formedness; try assumption.
+                    rewrite <- Hifc_cc'.
                     by unfold mergeable_interfaces in *;
                       intuition.
                 }
