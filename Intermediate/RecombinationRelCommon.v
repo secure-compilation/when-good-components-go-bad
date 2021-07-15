@@ -1676,6 +1676,63 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     - by rewrite H_c' in Hcomp.
   Qed.
 
+
+  Lemma mergeable_internal_states_executing_prog'_prog
+        s s' s'' t t' t'' instr spc spc':
+    CS.is_program_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    spc' = CS.state_pc s' ->
+    executing (globalenv sem') spc' instr ->
+    spc = CS.state_pc s ->
+    executing (globalenv sem) spc instr.
+  Proof.
+    intros Hcomp Hmerge Hsubst1 Hexec Hsubst2.
+    inversion Hmerge as
+      [Hmergewf Hpc H_p Hregsp Hmemp Hmemc' |
+       Hmergewf Hpc H_c' Hregsc' Hmemc' Hmemp]; subst;
+      inversion Hmergewf
+      as [
+          Hwfp
+            Hwfc
+            Hwfp'
+            Hwfc'
+            Hmerge_ipic
+            Hifc_pp'
+            Hifc_cc'
+            Hclosed_prog
+            Hclosed_prog''
+            Hgood_prog
+            Hgood_prog''
+            Hpref_t
+            Hpref_t'
+            Hpref_t''
+            Hgood_t
+            Hgood_t''
+            Hgood_t'
+            Hstack_s_s'
+            Hstack_s''_s'
+            Hpccomp_s'_s
+            Hpccomp_s'_s''
+            Hshift_tt'
+            Hshift_t''t'];
+      unfold mergeable_interfaces in *;
+      destruct s as [[[? ?] ?] pc]; destruct s' as [[[? ?] ?] pc']; CS.simplify_turn.
+
+    - inversion Hexec
+        as [P_code [proc_code [Hgenv_proc [Hblock [Hoff [Hperm Hinstr]]]]]].
+      subst.
+      econstructor.
+      rewrite genv_procedures_program_link_left_notin in Hgenv_proc; auto;
+        last intuition.
+      + rewrite genv_procedures_program_link_left_notin; auto.
+        * by eexists; eauto.
+        * by intuition.
+      + by rewrite <- Hifc_cc'.
+      + by rewrite <- Hifc_cc'.
+    - by rewrite H_c' in Hcomp.
+  Qed.
+
+  
   Lemma mergeable_internal_states_executing_prog''
         s s' s'' t t' t'' instr spc'' spc':
     CS.is_context_component s' ic ->
@@ -1731,6 +1788,63 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
       + by rewrite <- Hifc_pp', <- Hifc_cc'.
   Qed.
 
+
+  Lemma mergeable_internal_states_executing_prog'_prog''
+        s s' s'' t t' t'' instr spc'' spc':
+    CS.is_context_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    spc' = CS.state_pc s' ->
+    executing (globalenv sem') spc' instr ->
+    spc'' = CS.state_pc s'' ->
+    executing (globalenv sem'') spc'' instr.
+  Proof.
+    intros Hcomp Hmerge Hsubst1 Hexec Hsubst2.
+    inversion Hmerge as
+      [Hmergewf Hpc H_p Hregsp Hmemp Hmemc' |
+       Hmergewf Hpc H_c' Hregsc' Hmemc' Hmemp]; subst;
+      inversion Hmergewf
+      as [
+          Hwfp
+            Hwfc
+            Hwfp'
+            Hwfc'
+            Hmerge_ipic
+            Hifc_pp'
+            Hifc_cc'
+            Hclosed_prog
+            Hclosed_prog''
+            Hgood_prog
+            Hgood_prog''
+            Hpref_t
+            Hpref_t'
+            Hpref_t''
+            Hgood_t
+            Hgood_t''
+            Hgood_t'
+            Hstack_s_s'
+            Hstack_s''_s'
+            Hpccomp_s'_s
+            Hpccomp_s'_s''
+            Hshift_tt'
+            Hshift_t''t'];
+      unfold mergeable_interfaces in *;
+      destruct s'' as [[[? ?] ?] pc]; destruct s' as [[[? ?] ?] pc']; CS.simplify_turn.
+
+    - by rewrite Hcomp in H_p.
+    - inversion Hexec
+        as [P_code [proc_code [Hgenv_proc [Hblock [Hoff [Hperm Hinstr]]]]]]; subst.
+      econstructor.
+      rewrite genv_procedures_program_link_right_in in Hgenv_proc; auto;
+        last intuition.
+      + rewrite genv_procedures_program_link_right_in; auto.
+        * eexists; eauto.
+        * by rewrite <- Hifc_cc'.
+        * by rewrite <- Hifc_cc', <- Hifc_pp'; intuition.
+      + by rewrite <- Hifc_cc'.
+      + by rewrite <- Hifc_cc'.
+  Qed.
+
+
   Corollary mergeable_internal_states_final_state_prog
     s s' s'' t t' t'':
     CS.is_program_component s' ic ->
@@ -1757,8 +1871,67 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     eapply mergeable_internal_states_executing_prog''; by eauto.
   Qed.
 
+
+  Corollary mergeable_internal_states_nofinal_prog
+            s s' s'' t t' t'':
+    CS.is_program_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    ~ CS.final_state (globalenv sem) s ->
+    ~ CS.final_state (globalenv sem') s'.
+  Proof.
+    intros Hcomp Hmerge Hnofinal Hfinal;
+      destruct s as [[[? ?] ?] pc]; destruct s' as [[[? ?] ?] pc'];
+        unfold CS.final_state in *.
+    eapply mergeable_internal_states_executing_prog'_prog in Hfinal; by eauto.
+  Qed.
+
   
+  Corollary mergeable_internal_states_nofinal_prog''
+            s s' s'' t t' t'':
+    CS.is_context_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    ~ CS.final_state (globalenv sem'') s'' ->
+    ~ CS.final_state (globalenv sem') s'.
+  Proof.
+    intros Hcomp Hmerge Hnofinal Hfinal;
+      destruct s'' as [[[? ?] ?] pc]; destruct s' as [[[? ?] ?] pc'];
+        unfold CS.final_state in *.
+    eapply mergeable_internal_states_executing_prog'_prog'' in Hfinal; by eauto.
+  Qed.
+
+
+
+  Corollary mergeable_internal_states_nostep_prog
+            s s' s'' t t' t'':
+    CS.is_program_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    nostep CS.step_non_inform (globalenv sem) s ->
+    nostep CS.step_non_inform (globalenv sem') s'.
+  Proof.
+    intros Hcomp Hmerge Hnostep tcontra scontra Hcontra;
+      destruct s as [[[? ?] ?] pc]; destruct s' as [[[? ?] ?] pc'];
+        unfold nostep in *.
+    (** TODO: It seems we need an inverse lock-step simulation lemma! *)
+    (**       to be able to use Hcontra and get a contra to Hnostep.  *)
+  Abort.
+
+  
+  Corollary mergeable_internal_states_nostep_prog''
+            s s' s'' t t' t'':
+    CS.is_context_component s' ic ->
+    mergeable_internal_states s s' s'' t t' t'' ->
+    nostep CS.step_non_inform (globalenv sem'') s'' ->
+    nostep CS.step_non_inform (globalenv sem') s'.
+  Proof.
+    intros Hcomp Hmerge Hnostep tcontra scontra Hcontra;
+      destruct s'' as [[[? ?] ?] pc'']; destruct s' as [[[? ?] ?] pc'];
+        unfold nostep in *.
+    (** TODO: It seems we need an inverse lock-step simulation lemma FOR prog''  *)
+    (**       in order to be able to use Hcontra and get a contra to Hnostep.    *)
+  Abort.
+
     
+            
   (* Search _ find_label_in_component. *)
 
   (*
