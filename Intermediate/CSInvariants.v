@@ -649,8 +649,17 @@ Proof.
           move: Hcase => /Register.eqP => Hcase.
         -- subst r. rewrite Register.gss in Hget.
            destruct v as [| ptr]; first discriminate.
+           injection Hget as Hget; subst ptr.
            (* By program (and instruction) well-formedness. *)
-           admit. (* TODO: Make the connection. *)
+           destruct H as [Cprocs [Pcode [HCprocs [HPcode [_ [_ Hinstr]]]]]].
+           assert (Hwf : well_formed_program (program_link p c)) by admit.
+           destruct (prepare_procedures_procs_prog_procedures Hwf HCprocs HPcode)
+             as [Cprocs' [P' [HCprocs' HPcode']]].
+           pose proof wfprog_well_formed_instructions
+                Hwf HCprocs' HPcode' (nth_error_In _ _ Hinstr)
+             as [Hptr Hbufs].
+           simpl in Hptr; subst cid.
+           admit. (* TODO: assumptions/strengthenings for [CS.star_pc_domm_non_inform] *)
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IMov *)
