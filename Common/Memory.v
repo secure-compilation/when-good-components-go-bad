@@ -4,6 +4,8 @@ Require Import Common.Linking.
 Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Fixpoint fold_max (l: list (Component.id * Block.id)) : Component.id * Block.id :=
   match l with
   | nil => (0, 0)
@@ -719,7 +721,13 @@ Module ComponentMemory : AbstractComponentMemory.
     destruct (list_upd ch (Z.to_nat i) v); try discriminate.
     inversion Hstore. by subst.
   Qed.
-  
+
+  Lemma load_after_reserve_block :
+    forall m b i v,
+      load m b i = Some v ->
+      load (fst (reserve_block m)) b i = Some v.
+  Admitted.
+
 End ComponentMemory.
 
 Module ComponentMemoryExtra.
@@ -768,7 +776,58 @@ Module ComponentMemoryExtra.
         subst bs'.
         rewrite -Hiter. reflexivity.
   Qed.
-  
+
+  Lemma load_after_reserve_blocks_some m b i v n :
+    load m b i = Some v ->
+    load (fst (reserve_blocks m n)) b i = Some v.
+  Admitted.
+
+  Lemma load_after_reserve_blocks_none m b i n :
+    b \in domm m ->
+    load m b i = None ->
+    load (fst (reserve_blocks m n)) b i = None.
+  Admitted.
+
+  Lemma load_after_reserve_blocks m b i n :
+    b \in domm m ->
+    load m b i = load (fst (reserve_blocks m n)) b i.
+  Admitted.
+
+  (* TODO: Move above. (Not needed any more?) *)
+  Lemma load_prealloc_offset bufs b o v :
+    load (prealloc bufs) b o = Some v ->
+    (o >= 0)%Z.
+  Admitted.
+
+  Lemma reserve_blocks_prealloc bufs n mem bufs' b buf o :
+    reserve_blocks (prealloc bufs) n = (mem, bufs') ->
+    bufs b = Some buf ->
+    load mem b o = Buffer.nth_error buf o.
+  Proof.
+    intros Hmem Hbuf.
+    destruct (load (prealloc bufs) b o) as [v |] eqn:Hload.
+    - pose proof load_after_reserve_blocks_some _ _ _ _ n Hload as Hload'.
+      pose proof load_prealloc_offset _ _ _ _ Hload as Hoffset.
+      rewrite Hmem in Hload'.
+      rewrite Hload' -Hload load_prealloc Hbuf /Buffer.nth_error.
+      destruct buf as [m | vs] eqn:Hcase1.
+      + apply Zge_is_le_bool in Hoffset. rewrite Hoffset.
+        destruct o as [| o | o]. (* Perhaps do this case analysis at the top? *)
+        * admit. (* easy *)
+        * admit. (* easy *)
+        * admit. (* contradiction *)
+      + destruct o as [| o | o]; reflexivity.
+    - assert (Hdomm : b \in domm (prealloc bufs)) by admit. (* Easy. *)
+      pose proof load_after_reserve_blocks_none _ _ _ n Hdomm Hload as Hload'.
+      rewrite Hmem in Hload'.
+      rewrite Hload' -Hload load_prealloc Hbuf /Buffer.nth_error.
+      destruct buf as [m | vs] eqn:Hcase1.
+      + destruct o as [| o | o].
+        * admit. (* easy *)
+        * admit. (* easy *)
+        * reflexivity.
+      + destruct o as [| o | o]; reflexivity.
+  Admitted.
 End ComponentMemoryExtra.
 
 Module Memory.

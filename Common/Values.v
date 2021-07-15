@@ -4,6 +4,8 @@ Require Import Common.Util.
 Require Import Lib.Extra.
 From mathcomp Require Import ssreflect ssrnat eqtype.
 
+Set Bullet Behavior "Strict Subproofs".
+
 Module Block.
   Definition id := nat.
   Definition offset := Z.
@@ -356,10 +358,23 @@ Lemma eval_binop_op2_Undef:
 Proof. by destruct op; destruct v; auto.
 Qed.
 
-
 (* RB: TODO: Where should this go? Probably not values
    NOTE: It may be good to give the buffer type an explicit definition. *)
 Module Buffer.
+  Definition t : Type := nat + list value.
+
+  Definition nth_error (buf : (nat + list value)) (i : Z) : option value :=
+    let read (i : nat) : option value :=
+        match buf with
+        | inl n => if i <? n then Some Undef else None
+        | inr vs => List.nth_error vs i
+        end
+    in
+    match i with
+    | Zpos n => read (Pos.to_nat n)
+    | Z0 => read 0
+    | Zneg _ => None
+    end.
 
   Definition well_formed_buffer (buf : (nat + list value)) : bool :=
     match buf with

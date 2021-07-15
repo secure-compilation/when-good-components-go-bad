@@ -838,8 +838,15 @@ Proof.
     split.
     + (* Memory domain. *)
       intros ptr perm cid bid off Hload.
-      admit. (* TODO: Connect initial memory to static buffer contents. *)
-    + intros reg perm cid bid off Hget.
+      assert (Hwf : well_formed_program (program_link p c)) by admit.
+      unfold CS.initial_machine_state in Hload.
+      assert (prog_main prog) as Hmain by admit; rewrite Hmain in Hload.
+      destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
+        as [Cbufs [buf [Hbufs [Hbuf Hptr]]]].
+      (* No pointers in static buffers. *)
+      exfalso. eapply prog_buffer_ptr; eassumption.
+    + (* Registers. *)
+      intros reg perm cid bid off Hget.
       unfold CS.initial_machine_state in Hget.
       destruct (prog_main prog) eqn:Hcase.
       * unfold Register.get in Hget.
@@ -891,8 +898,17 @@ Proof.
           move: Hcase => /Register.eqP => Hcase.
         -- subst r. rewrite Register.gss in Hget.
            destruct v as [| ptr]; first discriminate.
+           injection Hget as Hget; subst ptr.
            (* By program (and instruction) well-formedness. *)
-           admit. (* TODO: Make the connection. *)
+           destruct H as [Cprocs [Pcode [HCprocs [HPcode [_ [_ Hinstr]]]]]].
+           assert (Hwf : well_formed_program (program_link p c)) by admit.
+           destruct (prepare_procedures_procs_prog_procedures Hwf HCprocs HPcode)
+             as [Cprocs' [P' [HCprocs' HPcode']]].
+           pose proof wfprog_well_formed_instructions
+                Hwf HCprocs' HPcode' (nth_error_In _ _ Hinstr)
+             as [Hptr Hbufs].
+           simpl in Hptr; subst cid.
+           admit. (* TODO: assumptions/strengthenings for [CS.star_pc_domm_non_inform] *)
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IMov *)

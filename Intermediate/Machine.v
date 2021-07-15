@@ -620,6 +620,18 @@ Definition reserve_component_blocks p C Cmem procs_code
   let Centrypoints := mkfmap (pmap map_entrypoint (zip procs bs)) in
   (Cmem', Cprocs, Centrypoints).
 
+Lemma reserve_component_blocks_some p C mem (Cprocs : NMap code) b Pcode :
+  (reserve_component_blocks p C mem Cprocs).1.2 b = Some Pcode ->
+exists (b' : nat_ordType),
+  Cprocs b' = Some Pcode.
+Proof.
+  unfold reserve_component_blocks.
+  destruct (ComponentMemoryExtra.reserve_blocks mem (length Cprocs))
+    as [Cmem bs] eqn:HCmem.
+  simpl.
+  intro HPcode.
+Admitted.
+
 (* In the foreseen, controlled use of this function, we always go on the Some
    branch. For each component C, we read its (initial) memory and use it to
    construct the initial state of C, recursing after we update its maps. Given
@@ -1043,6 +1055,38 @@ Proof.
   apply prepare_procedures_initial_memory_aux_after_linking; assumption.
 Qed.
 
+Theorem prepare_procedures_procs_prog_procedures :
+  forall p C Cprocs b Pcode,
+    well_formed_program p ->
+    prepare_procedures_procs p C = Some Cprocs ->
+    Cprocs b = Some Pcode ->
+  exists Cprocs' b',
+    prog_procedures p C = Some Cprocs' /\
+    Cprocs' b' = Some Pcode.
+Proof.
+  unfold prepare_procedures_procs,
+        prepare_procedures_initial_memory,
+        prepare_procedures_initial_memory_aux.
+  setoid_rewrite mapmE.
+  unfold omap, obind, oapp.
+  setoid_rewrite mkfmapfE.
+  intros p C Cprocs b Pcode Hwf Hprocs Hcode.
+  destruct (C \in domm (prog_interface p)) eqn:Hdomm;
+    rewrite Hdomm in Hprocs;
+    [| discriminate].
+  injection Hprocs as Hprocs; subst Cprocs.
+  destruct (prog_procedures p C) as [Cprocs |] eqn:Hprocs;
+    [| rewrite (wfprog_defined_procedures Hwf) in Hdomm;
+       destruct (dommP Hdomm) as [procs Hcontra];
+       discriminate].
+  unfold elementsm in Hcode. simpl in Hcode.
+  rewrite (wfprog_defined_buffers Hwf) in Hdomm.
+  destruct (dommP Hdomm) as [Cbufs HCbufs].
+  rewrite HCbufs in Hcode. simpl in Hcode.
+  destruct (reserve_component_blocks_some Hcode) as [b' HPcode].
+  now exists Cprocs, b'.
+Qed.
+
 Definition prepare_procedures_entrypoints (p: program) : EntryPoint.t :=
   let '(_, _, entrypoints) := prepare_procedures_initial_memory p in
   entrypoints.
@@ -1093,6 +1137,48 @@ Proof.
   reflexivity.
 Qed.
 
+(* We can prove a stronger theorem stating the correspondence of static buffer
+   identifiers in the program and the environment. *)
+(* Use ComponentMemoryExtra.reserve_blocks_prealloc *)
+Theorem prepare_procedures_memory_prog_buffers :
+  forall p ptr v,
+    well_formed_program p ->
+    Memory.load (prepare_procedures_memory p) ptr = Some v ->
+  exists Cbufs buf,
+    (prog_buffers p (Pointer.component ptr)) = Some Cbufs /\
+    Cbufs (Pointer.block ptr) = Some buf /\
+    Buffer.nth_error buf (Pointer.offset ptr) = Some v.
+Admitted.
+
+(* Alternative statements? *)
+Theorem prog_buffer_ptr :
+  forall p C bufs b buf o ptr,
+    well_formed_program p ->
+    prog_buffers p C = Some bufs ->
+    bufs b = Some buf ->
+    Buffer.nth_error buf o = Some (Ptr ptr) ->
+    False.
+Proof.
+  intros p C bufs b buf o ptr Hwf Hbufs Hbuf Hptr.
+  assert (Hdomm : b \in domm bufs) by (apply /dommP; now eauto).
+  pose proof wfprog_well_formed_buffers Hwf Hbufs Hdomm as Hwfb.
+  unfold Buffer.well_formed_buffer_opt in Hwfb.
+  rewrite Hbuf in Hwfb.
+  destruct buf as [n | vs].
+  - destruct o as [| o | o]; simpl in Hptr.
+    + admit. (* easy *)
+    + admit. (* easy *)
+    + discriminate.
+  - destruct o as [| o | o]; simpl in Hptr.
+    + destruct vs as [| v vs];
+        [discriminate |].
+      injection Hptr as Hptr; subst v.
+      move: Hwfb => /andP => [[Hsize Hptrs]].
+      discriminate.
+    + move: Hwfb => /andP => [[Hsize Hptrs]].
+      admit. (* contra, similar as above *)
+    + discriminate.
+Admitted.
 (* RB: Slight "misnomer" because of the presence of matching_mains.
    Closely connected to linkable, but not exactly the same at this
    level. Is there a benefit to combining these two in a definition? *)
