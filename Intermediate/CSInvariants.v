@@ -590,8 +590,17 @@ Proof.
     split.
     + (* Memory domain. *)
       intros ptr perm cid bid off Hload.
-      admit. (* TODO: Connect initial memory to static buffer contents. *)
-    + intros reg perm cid bid off Hget.
+      assert (Hwf : well_formed_program (program_link p c)) by admit.
+      unfold CS.initial_machine_state in Hload.
+      assert (prog_main prog) as Hmain by admit; rewrite Hmain in Hload.
+      destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
+        as [Cbufs [buf [Hbufs [Hbuf Hptr]]]].
+      (* No pointers in static buffers. *)
+      Check wfprog_well_formed_buffers Hwf.
+      Print Buffer.well_formed_buffer.
+      admit. (* By contradiction. *)
+    + (* Registers. *)
+      intros reg perm cid bid off Hget.
       unfold CS.initial_machine_state in Hget.
       destruct (prog_main prog) eqn:Hcase.
       * unfold Register.get in Hget.
