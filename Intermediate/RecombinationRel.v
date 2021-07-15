@@ -187,56 +187,12 @@ Section ThreewayMultisem1.
         do 2 eexists; eauto.
       }
 
-      (** TODO: Refactor into a CompCert/Common-level lemma? *)
-      assert (forall (sem: semantics event) s1 s2 t1 e1,
-                 single_events sem ->
-                 starR (step sem) (globalenv sem) s1 (rcons t1 e1) s2 ->
-                 exists st1 se1,
-                   starR (step sem) (globalenv sem) s1 t1 st1 /\
-                   Step sem st1 [:: e1] se1 /\
-                   starR (step sem) (globalenv sem) se1 E0 s2
-             ) as starR_rcons_lemma.
-      {
-        clear.
-        intros ? ? ? ? ? Hsingle Hstar.
-        remember (rcons t1 e1) as t1_.
-        revert e1 t1 Heqt1_.
-        induction Hstar; intros; subst; unfold E0 in *; first by find_nil_rcons.
-        induction t1 using last_ind.
-        - unfold Eapp in *. rewrite app_nil_l in Heqt1_; subst.
-          pose proof (Hsingle _ _ _ H) as Hlength.
-          destruct t0; auto; simpl in *; auto.
-          + exists s2, s3; intuition. constructor.
-          + (** TODO: Use a "length_size" lemma. Get a contra in Hlength. *)
-            assert (forall (A: Type) l, size l = @length A l) as size_length.
-            {
-              induction l; auto.
-            }
-            rewrite <- size_length, size_rcons in Hlength. omega. 
-        - specialize (IHHstar x t1 Logic.eq_refl) as [st1 [se1 [Ht2 [He1 Hnil]]]].
-          pose proof (Hsingle _ _ _ H) as Hlength.
-          destruct t2; auto; simpl in *.
-          + unfold Eapp in *. rewrite app_nil_r in Heqt1_. find_rcons_rcons.
-            do 2 eexists; intuition; eauto.
-            eapply starR_step; eauto.
-          + destruct t2; simpl in *; auto.
-            * unfold Eapp in *.
-              assert (e1 = e /\ t0 = rcons t1 x) as [rewr1 rewr2]; subst.
-              {
-                rewrite <- cats1, <- catA, cats1, <- rcons_cat in Heqt1_.
-                find_rcons_rcons.
-                by rewrite cats1.
-              }
-              exists s2, s3; intuition. constructor.
-            * omega.
-      }
-      
       apply star_iff_starR in Hstar12.
       apply star_iff_starR in Hstar12''.
 
-      apply starR_rcons_lemma in Hstar12   as [st2 [se2 [Ht2 [He2 Hse2]]]]; auto;
+      apply CSInvariants.starR_rcons in Hstar12   as [st2 [se2 [Ht2 [He2 Hse2]]]]; auto;
         last by apply CS.singleton_traces_non_inform.
-      apply starR_rcons_lemma in Hstar12'' as [st2'' [se2'' [Ht2'' [He2'' Hse2'']]]];
+      apply CSInvariants.starR_rcons in Hstar12'' as [st2'' [se2'' [Ht2'' [He2'' Hse2'']]]];
         auto; last by apply CS.singleton_traces_non_inform.
 
       assert (exists (s2' : state sem') (t2' : trace event),
@@ -456,7 +412,7 @@ Section ThreewayMultisem1.
   Qed.
 
 
-  (* Print Assumptions threeway_multisem_star_program. *)
+  Print Assumptions threeway_multisem_star_program.
   
 End ThreewayMultisem1.
 
@@ -2160,6 +2116,7 @@ Section Recombination.
 
       (** TODO: Need lemma to use the version of n ' that mentions c' instead of p. *)
   Admitted.
+
       
   (* RB: NOTE: Possible improvements:
       - Try to refactor case analysis in proof.

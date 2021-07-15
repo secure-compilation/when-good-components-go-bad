@@ -8,8 +8,10 @@ Require Import Common.Linking.
 Require Import Common.Memory.
 Require Import Common.Reachability.
 Require Import Common.RenamingOption.
-(** From Renaming, only addr_shared_so_far is used. Consider refactoring it out
-    into a file called Sharing.v to get rid of the dependency on Renaming.
+(** From Renaming, only addr_shared_so_far and some tactics (like find_nil_rcons, 
+    and find_rcons_rcons) are used. Consider refactoring them out
+    (into a file called Sharing.v, and into Common.Util)
+    to get rid of the dependency on Renaming.
     Keep CSInvariants for only unary invariants; hence, do not depend on "renaming". 
 *)
 Require Import Common.Traces.
@@ -26,6 +28,52 @@ From mathcomp Require ssrbool.
 From extructures Require Import fmap fset.
 
 Set Bullet Behavior "Strict Subproofs".
+
+Section Util.
+
+  Lemma starR_rcons:
+    forall (sem: semantics event) s1 s2 t1 e1,
+      single_events sem ->
+      starR (step sem) (globalenv sem) s1 (rcons t1 e1) s2 ->
+      exists st1 se1,
+        starR (step sem) (globalenv sem) s1 t1 st1 /\
+        Step sem st1 [:: e1] se1 /\
+        starR (step sem) (globalenv sem) se1 E0 s2.
+    intros ? ? ? ? ? Hsingle Hstar.
+    remember (rcons t1 e1) as t1_.
+    revert e1 t1 Heqt1_.
+    induction Hstar; intros; subst; unfold E0 in *; first by find_nil_rcons.
+    induction t1 using last_ind.
+    - unfold Eapp in *. rewrite app_nil_l in Heqt1_; subst.
+      pose proof (Hsingle _ _ _ H) as Hlength.
+      destruct t0; auto; simpl in *; auto.
+      + exists s2, s3; intuition. constructor.
+      + (** TODO: Use a "length_size" lemma. Get a contra in Hlength. *)
+        assert (forall (A: Type) l, size l = @length A l) as size_length.
+        {
+          induction l; auto.
+        }
+        rewrite <- size_length, size_rcons in Hlength. omega. 
+    - specialize (IHHstar x t1 Logic.eq_refl) as [st1 [se1 [Ht2 [He1 Hnil]]]].
+      pose proof (Hsingle _ _ _ H) as Hlength.
+      destruct t2; auto; simpl in *.
+      + unfold Eapp in *. rewrite app_nil_r in Heqt1_. find_rcons_rcons.
+        do 2 eexists; intuition; eauto.
+        eapply starR_step; eauto.
+      + destruct t2; simpl in *; auto.
+        * unfold Eapp in *.
+          assert (e1 = e /\ t0 = rcons t1 x) as [rewr1 rewr2]; subst.
+          {
+            rewrite <- cats1, <- catA, cats1, <- rcons_cat in Heqt1_.
+            find_rcons_rcons.
+              by rewrite cats1.
+          }
+          exists s2, s3; intuition. constructor.
+        * omega.
+  Qed.
+
+End Util.
+
 
 Module CSInvariants.
 
@@ -47,6 +95,7 @@ Inductive wf_ptr_wrt_cid_t (cid: Component.id) (t: trace event) : Pointer.t -> P
       addr_shared_so_far (c_other, b) t -> wf_ptr_wrt_cid_t cid t (p, c_other, b, o)
 .
 
+(**********************************************************************
 Inductive wf_load_wrt_t_pc
           (load_at: Pointer.t)
           (t: trace event)
@@ -74,6 +123,7 @@ Inductive wf_load_wrt_t_pc
       (* wf_ptr_wrt_cid_t pc_comp t ptr -> *)
       pc_comp = Pointer.component ptr -> (* TODO: Experimental change *)
       wf_load_wrt_t_pc load_at t pc_comp ptr.
+***************************************************************************)
 
 Inductive wf_load (pc_comp: Component.id) (t: trace event)
           : Pointer.t -> Pointer.t -> Prop
@@ -925,5 +975,179 @@ Proof.
           last discriminate.
         eapply IHget; eassumption.
 Admitted.
+
+
+Definition dummy_value_of_node (n: node_t) := Ptr (Permission.data, n.1, n.2, 0%Z).
+
+Lemma Reachable_induction_mem_invariant mem (P: value -> Prop):
+  (forall c b perm off perm' off',
+      P (Ptr (perm, c, b, off)) -> P (Ptr (perm', c, b, off')))
+  ->
+  (forall addr v, Memory.load mem addr = Some v -> P (Ptr addr) ->  P v) ->
+  (
+    forall (aset: {fset node_t}) (a: node_t),
+      Reachable mem aset a ->
+      (forall (a': node_t),
+          a' \in aset -> (forall perm off, P (Ptr (perm, a'.1, a'.2, off)))) ->
+      (forall perm off, P (Ptr (perm, a.1, a.2, off)))
+  ).
+Proof.
+  intros Pproperty mem_invariant. intros ? ? Hreach.
+  induction Hreach as [? Hin | ? ? ? ? Hreach' IH Hin Hcomp]; intros aset_invariant.
+  - apply aset_invariant; auto.
+  - intros perm off. 
+    assert (exists off offv, Memory.load mem (Permission.data, cid, bid, off) =
+                             Some (Ptr (Permission.data, b'.1, b'.2, offv))
+           ) as [offl [offv Hload]].
+    {
+      destruct b' as [b'cid b'bid]; simpl in *.
+      apply In_in in Hcomp. erewrite ComponentMemory.load_block_load in Hcomp.
+      unfold Memory.load. simpl. rewrite Hin. destruct Hcomp as [? [? ?]]. by eauto.
+    }
+
+    specialize (IH aset_invariant Permission.data offl).
+    eapply Pproperty. eapply mem_invariant; eauto.
+Qed.
+    
+Corollary addr_shared_so_far_domm_partition p c st t a cid:
+  is_prefix st (program_link p c) t ->
+  closed_program (program_link p c) ->
+  well_formed_program (program_link p c) ->
+  addr_shared_so_far a t ->
+  cid = a.1 ->
+  (cid \in domm (prog_interface p) \/ cid \in domm (prog_interface c)).
+Proof.
+  generalize st.
+  pose (P :=
+          fun v =>
+            match v with
+            | Ptr (perm, cid, b, o) =>
+              (cid \in domm (prog_interface p) \/ cid \in domm (prog_interface c))
+            | _ => True
+            end
+       ).
+  assert (Pproperty: forall c b perm off perm' off',
+             P (Ptr (perm, c, b, off)) -> P (Ptr (perm', c, b, off'))).
+  {
+    by intros; auto.
+  }
+  revert a cid.
+  induction t as [|t e] using last_ind.
+  - intros ? ? ? ? ? ? Hshr ?; inversion Hshr; by find_nil_rcons.
+  - intros ? ? ? Hpref Hclosed Hwf Hshr ?.
+    destruct a as [acid abid]. simpl in *; subst.
+    apply star_iff_starR in Hpref. 
+    apply starR_rcons in Hpref as [st1 [se1 [Ht1 [He1 HE0]]]];
+      last by apply CS.singleton_traces_non_inform. 
+    inversion Hshr as [? ? ? Hreach | ? ? ? ? Hshr' Hreach]; find_rcons_rcons.
+    + inversion He1 as [? ? ? ? Hstepinform Hevent]; subst.
+      inversion Hstepinform; subst; simpl in *; try discriminate;
+        inversion Hevent; subst; simpl in *;
+          apply star_iff_starR in Ht1;
+          (** TODO: specialize value_mem_reg_domm_partition more before applying it. *)
+          specialize (value_mem_reg_domm_partition
+                        _ _ _ _ _ _
+                        Ht1 Logic.eq_refl Logic.eq_refl) as Hinvariants;
+          destruct Hinvariants as [mem_invariant reg_invariant].
+      * (** ICall *)
+        assert (mem_invariant':
+                  forall (addr : Pointer.t) (v : value),
+                    Memory.load mem addr = Some v -> P (Ptr addr) -> P v
+               ).
+        {
+          intros [[[? ?] ?] ?] v Hload _.
+          destruct v as [| [[[? ?] ?] ?] |]; unfold P; auto.
+          eapply mem_invariant; by eauto. 
+        }
+        
+        specialize (Reachable_induction_mem_invariant mem P Pproperty mem_invariant')
+          as Hinduction.
+        simpl in *.
+        
+          specialize (Hinduction _ _ Hreach). apply Hinduction; auto; last exact Z0.
+          intros ? Ha' _ _.
+          destruct (Register.get R_COM regs)
+            as [| [[[perm cid] bid] off] | ] eqn:ereg;
+            simpl in *; try by rewrite in_fset0 in Ha'.
+          destruct (perm =? Permission.data) eqn:eperm; simpl in *;
+            try by rewrite in_fset0 in Ha'.
+          rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
+          eapply reg_invariant; by eauto.
+      * (** IReturn *)
+        (** CAUTION: !!!!!!!!! exactly the same proof as ICall !!!!!!!!!*)
+        assert (mem_invariant':
+                  forall (addr : Pointer.t) (v : value),
+                    Memory.load mem addr = Some v -> P (Ptr addr) -> P v
+               ).
+        {
+          intros [[[? ?] ?] ?] v Hload _.
+          destruct v as [| [[[? ?] ?] ?] |]; unfold P; auto.
+          eapply mem_invariant; by eauto. 
+        }
+        
+        specialize (Reachable_induction_mem_invariant mem P Pproperty mem_invariant')
+          as Hinduction.
+
+        simpl in *.
+        specialize (Hinduction _ _ Hreach). apply Hinduction; auto; last exact Z0.
+        intros ? Ha' _ _.
+        destruct (Register.get R_COM regs)
+          as [| [[[perm cid] bid] off] | ] eqn:ereg;
+          simpl in *; try by rewrite in_fset0 in Ha'.
+        destruct (perm =? Permission.data) eqn:eperm; simpl in *;
+          try by rewrite in_fset0 in Ha'.
+        rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
+        eapply reg_invariant; by eauto.
+        
+    + inversion He1 as [? ? ? ? Hstepinform Hevent]; subst.
+      inversion Hstepinform; subst; simpl in *; try discriminate;
+        inversion Hevent; subst; simpl in *;
+          apply star_iff_starR in Ht1;
+          (** TODO: specialize value_mem_reg_domm_partition more before applying it. *)
+          specialize (value_mem_reg_domm_partition
+                        _ _ _ _ _ _
+                        Ht1 Logic.eq_refl Logic.eq_refl) as Hinvariants;
+          destruct Hinvariants as [mem_invariant reg_invariant].
+
+      * (** ICall *)
+        assert (mem_invariant':
+                  forall (addr : Pointer.t) (v : value),
+                    Memory.load mem addr = Some v -> P (Ptr addr) -> P v
+               ).
+        {
+          intros [[[? ?] ?] ?] v Hload _.
+          destruct v as [| [[[? ?] ?] ?] |]; unfold P; auto.
+          eapply mem_invariant; by eauto. 
+        }
+        
+        specialize (Reachable_induction_mem_invariant mem P Pproperty mem_invariant')
+          as Hinduction.
+        
+        specialize (IHt _ addr'.1 _ Ht1 Hclosed Hwf Hshr' Logic.eq_refl).
+        specialize (Hinduction _ _ Hreach). apply Hinduction; auto; last exact Z0.
+        intros ? Ha'? ?.
+        rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
+        eapply IHt; eauto.
+
+      * (** IReturn *)
+        assert (mem_invariant':
+                  forall (addr : Pointer.t) (v : value),
+                    Memory.load mem addr = Some v -> P (Ptr addr) -> P v
+               ).
+        {
+          intros [[[? ?] ?] ?] v Hload _.
+          destruct v as [| [[[? ?] ?] ?] |]; unfold P; auto.
+          eapply mem_invariant; by eauto. 
+        }
+        
+        specialize (Reachable_induction_mem_invariant mem P Pproperty mem_invariant')
+          as Hinduction.
+        
+        specialize (IHt _ addr'.1 _ Ht1 Hclosed Hwf Hshr' Logic.eq_refl).
+        specialize (Hinduction _ _ Hreach). apply Hinduction; auto; last exact Z0.
+        intros ? Ha'? ?.
+        rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
+        eapply IHt; eauto.
+Qed.
 
 End CSInvariants.

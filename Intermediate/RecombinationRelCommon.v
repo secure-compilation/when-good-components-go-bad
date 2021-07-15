@@ -38,6 +38,7 @@ Ltac invert_non_eagerly_mergeable_border_states Hmergeborder :=
       [Hmergewf Hpc H_p Hregsp Hmemp Hmemc' |
        Hmergewf Hpc H_c' Hregsc' Hmemc' Hmemp].
 
+
 Section UnaryHelpersForMergeable.
 
   (* An inductive definition to relate a program with the pointers found in its
@@ -2143,6 +2144,8 @@ Section MergeableSym.
       (** all the addresses appearing in the memory      *)
       (** have a cid \in unionm (domm (prog_interface p))*)
       (**                       (domm (prog_interface c))*)
+      constructor.
+      
       admit.
     - (** tricky for the same reason as above.            *)
       admit.
