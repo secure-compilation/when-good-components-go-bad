@@ -1095,6 +1095,7 @@ Qed.
 
 (* We can prove a stronger theorem stating the correspondence of static buffer
    identifiers in the program and the environment. *)
+(* Use ComponentMemoryExtra.reserve_blocks_prealloc *)
 Theorem prepare_procedures_memory_prog_buffers :
   forall p ptr v,
     well_formed_program p ->
@@ -1102,7 +1103,7 @@ Theorem prepare_procedures_memory_prog_buffers :
   exists Cbufs buf,
     (prog_buffers p (Pointer.component ptr)) = Some Cbufs /\
     Cbufs (Pointer.block ptr) = Some buf /\
-    Buffer.nth_error buf (Z.to_nat (Pointer.offset ptr)) = Some v.
+    Buffer.nth_error buf (Pointer.offset ptr) = Some v.
 Admitted.
 (* RB: Slight "misnomer" because of the presence of matching_mains.
    Closely connected to linkable, but not exactly the same at this

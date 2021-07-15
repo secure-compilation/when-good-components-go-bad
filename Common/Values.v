@@ -363,10 +363,17 @@ Qed.
 Module Buffer.
   Definition t : Type := nat + list value.
 
-  Definition nth_error (buf : (nat + list value)) (i : nat) : option value :=
-    match buf with
-    | inl n => if i <? n then Some Undef else None
-    | inr vs => List.nth_error vs i
+  Definition nth_error (buf : (nat + list value)) (i : Z) : option value :=
+    let read (i : nat) : option value :=
+        match buf with
+        | inl n => if i <? n then Some Undef else None
+        | inr vs => List.nth_error vs i
+        end
+    in
+    match i with
+    | Zpos n => read (Pos.to_nat n)
+    | Z0 => read 0
+    | Zneg _ => None
     end.
 
   Definition well_formed_buffer (buf : (nat + list value)) : bool :=
