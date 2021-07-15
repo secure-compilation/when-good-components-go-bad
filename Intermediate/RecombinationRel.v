@@ -1117,19 +1117,21 @@ Section ThreewayMultisem4.
                 destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
                 destruct (permv =? Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply beq_nat_true. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
-                assert (G: CSInvariants.wf_load_wrt_t_pc
-                               (Permission.data, cidorig, bidorig, offset)
-                               E0
-                               Component.main
-                               (permv, cidv, bidv, offv)
+                assert (G: CSInvariants.wf_load
+                             Component.main
+                             E0
+                             (Permission.data, cidorig, bidorig, offset)
+                             (Permission.data, cidv, bidv, offv)
                        ).
                 {
-                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load; eauto.
                   - eapply CSInvariants.wf_state_wf_mem; eauto.
                     + eapply CSInvariants.is_prefix_wf_state_t.
+                      * exact Hprog_is_closed.
                       * eapply linking_well_formedness.
                         -- exact Hwfp.
                         -- exact Hwfc.
@@ -1147,29 +1149,25 @@ Section ThreewayMultisem4.
                              then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
                   rewrite ebidv'.
                 ** 
-                  inversion G as [? G'|? contra]; subst.
-                  --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++ rewrite Horig in ebidv'.
-                          apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
-                            by subst.
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                  inversion G as [ | ? ? Hshr | ];
+                    simpl in *; subst; auto.
+                  --- rewrite Horig in ebidv'.
+                      apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                        by subst.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
                 ** split; auto.
-
-                   inversion G as [? G'|? contra]; subst.
-                   --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++ rewrite Horig in ebidv'.
-                          destruct (sigma_shifting_lefttoright_option
-                                      (if cidv \in domm (prog_interface p)
-                                       then n cidv else n'' cidv) 
-                                      (n cidv) bidv) eqn:econtra;
-                            rewrite econtra; auto;
-                              by rewrite Horig ebidv' in econtra. 
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
-                   
+                   inversion G as [ | ? ? Hshr | ];
+                    simpl in *; subst; auto.
+                   --- rewrite Horig in ebidv'. by rewrite Horig ebidv'.
+                   --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                   --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
 
              ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
                 rewrite unionmE in Hload. rewrite !unionmE.
@@ -1183,19 +1181,21 @@ Section ThreewayMultisem4.
                 destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
                 destruct (permv =? Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply beq_nat_true. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
-                assert (G: CSInvariants.wf_load_wrt_t_pc
-                               (Permission.data, cidorig, bidorig, offset)
-                               E0
-                               Component.main
-                               (permv, cidv, bidv, offv)
+                assert (G: CSInvariants.wf_load
+                             Component.main
+                             E0
+                             (Permission.data, cidorig, bidorig, offset)
+                             (Permission.data, cidv, bidv, offv)
                        ).
                 {
-                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load; eauto.
                   - eapply CSInvariants.wf_state_wf_mem; eauto.
                     + eapply CSInvariants.is_prefix_wf_state_t.
+                      * exact Hprog_is_closed.
                       * eapply linking_well_formedness.
                         -- exact Hwfp.
                         -- exact Hwfc.
@@ -1207,35 +1207,31 @@ Section ThreewayMultisem4.
                     + unfold Memory.load; rewrite !unionmE e; simpl; assumption.
                     + by unfold mergeable_interfaces in *; intuition.
                 }
-
                 destruct (sigma_shifting_lefttoright_option
                             (n cidv)
                             (if cidv \in domm (prog_interface p)
                              then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
                   rewrite ebidv'.
-                ** 
-                  inversion G as [? G'|? contra]; subst.
-                  --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++ rewrite Horig in ebidv'.
-                          apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
-                            subst; by auto.
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
-                ** split; auto.
-
-                   inversion G as [? G'|? contra]; subst.
-                   --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++ rewrite Horig in ebidv'.
-                          destruct (sigma_shifting_lefttoright_option
-                                      (if cidv \in domm (prog_interface p)
-                                       then n cidv else n'' cidv) 
-                                      (n cidv) bidv) eqn:econtra;
-                            rewrite econtra; auto;
-                              by rewrite Horig ebidv' in econtra. 
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                ** split; auto. right.
+                  inversion G as [ | ? ? Hshr | ];
+                    simpl in *; subst; auto.
+                  --- rewrite Horig in ebidv'.
+                      apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                        by subst.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
+                ** split; auto. left.
+                   inversion G as [ | ? ? Hshr | ];
+                    simpl in *; subst; auto.
+                   --- rewrite Horig in ebidv'. by rewrite Horig ebidv'.
+                   --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                   --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
 
           -- constructor.
              ++ intros ? Hcontra; unfold E0 in *;
@@ -1292,19 +1288,21 @@ Section ThreewayMultisem4.
                 destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
                 destruct (permv =? Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply beq_nat_true. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
-                assert (G: CSInvariants.wf_load_wrt_t_pc
-                               (Permission.data, cidorig, bidorig, offset)
-                               E0
+                assert (G: CSInvariants.wf_load
                                Component.main
-                               (permv, cidv, bidv, offv)
+                               E0
+                               (Permission.data, cidorig, bidorig, offset)
+                               (Permission.data, cidv, bidv, offv)
                        ).
                 {
-                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load; eauto.
                   - eapply CSInvariants.wf_state_wf_mem; eauto.
                     + eapply CSInvariants.is_prefix_wf_state_t.
+                      * exact Hprog''_is_closed.
                       * eapply linking_well_formedness.
                         -- exact Hwfp'.
                         -- exact Hwfc'.
@@ -1333,38 +1331,28 @@ Section ThreewayMultisem4.
                             (if cidv \in domm (prog_interface p)
                              then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
                   rewrite ebidv'.
-                ** 
-                  inversion G as [? G'|? contra]; subst.
-                  --- simpl in *.
-                        
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++
-                        destruct (cidv \in domm (prog_interface p))
-                                 eqn:econtra.
-                        *** by apply Hdisj in econtra; rewrite Horig in econtra.
-                        *** rewrite econtra in ebidv'.
-                            apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
-                              by subst.
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                **
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- destruct (cidorig \in domm (prog_interface p)) eqn:ecidorig.
+                      +++ apply Hdisj in ecidorig. by rewrite Horig in ecidorig.
+                      +++ rewrite ecidorig in ebidv'.
+                          apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                            by subst.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
                 ** split; auto.
-
-                   inversion G as [? G'|? contra]; subst.
-                   --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++ destruct (cidv \in domm (prog_interface p))
-                                 eqn:econtra.
-                        *** by apply Hdisj in econtra; rewrite Horig in econtra.
-                        *** rewrite econtra in ebidv'.
-                            
-                          destruct (sigma_shifting_lefttoright_option
-                                      (if cidv \in domm (prog_interface p)
-                                       then n cidv else n'' cidv) 
-                                      (n'' cidv) bidv) eqn:econtra2;
-                            rewrite econtra2; auto;
-                              by rewrite econtra ebidv' in econtra2. 
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- destruct (cidorig \in domm (prog_interface p)) eqn:ecidorig.
+                      +++ apply Hdisj in ecidorig. by rewrite Horig in ecidorig.
+                      +++ rewrite ecidorig in ebidv'. by rewrite ecidorig ebidv'.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
                    
              ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
                 rewrite unionmE in Hload. rewrite !unionmE.
@@ -1388,19 +1376,21 @@ Section ThreewayMultisem4.
                 destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
                 destruct (permv =? Permission.data) eqn:epermv; auto. split; auto.
+                assert (permv = Permission.data). by apply beq_nat_true. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
-                assert (G: CSInvariants.wf_load_wrt_t_pc
-                               (Permission.data, cidorig, bidorig, offset)
-                               E0
+                assert (G: CSInvariants.wf_load
                                Component.main
-                               (permv, cidv, bidv, offv)
+                               E0
+                               (Permission.data, cidorig, bidorig, offset)
+                               (Permission.data, cidv, bidv, offv)
                        ).
                 {
-                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load; eauto.
                   - eapply CSInvariants.wf_state_wf_mem; eauto.
                     + eapply CSInvariants.is_prefix_wf_state_t.
+                      * exact Hprog''_is_closed.
                       * eapply linking_well_formedness.
                         -- exact Hwfp'.
                         -- exact Hwfc'.
@@ -1429,37 +1419,30 @@ Section ThreewayMultisem4.
                             (if cidv \in domm (prog_interface p)
                              then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
                   rewrite ebidv'.
-                ** 
-                  inversion G as [? G'|? contra]; subst.
-                  --- simpl in *.
-                        
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++
-                        destruct (cidv \in domm (prog_interface p))
-                                 eqn:econtra.
-                        *** by apply Hdisj in econtra; rewrite Horig in econtra.
-                        *** rewrite econtra in ebidv'.
-                            apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
-                              by right; subst.
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
-                ** 
-                  inversion G as [? G'|? contra]; subst.
-                   --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++ destruct (cidv \in domm (prog_interface p))
-                                 eqn:econtra.
-                        *** by apply Hdisj in econtra; rewrite Horig in econtra.
-                        *** rewrite econtra in ebidv'.
-                            
-                          destruct (sigma_shifting_lefttoright_option
-                                      (if cidv \in domm (prog_interface p)
-                                       then n cidv else n'' cidv) 
-                                      (n'' cidv) bidv) eqn:econtra2;
-                            rewrite econtra2; auto;
-                              by rewrite econtra ebidv' in econtra2. 
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                **
+                  right.
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- destruct (cidorig \in domm (prog_interface p)) eqn:ecidorig.
+                      +++ apply Hdisj in ecidorig. by rewrite Horig in ecidorig.
+                      +++ rewrite ecidorig in ebidv'.
+                          apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                            by subst.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
+
+                ** left.
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- destruct (cidorig \in domm (prog_interface p)) eqn:ecidorig.
+                      +++ apply Hdisj in ecidorig. by rewrite Horig in ecidorig.
+                      +++ rewrite ecidorig in ebidv'. by rewrite ecidorig ebidv'.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
 
           -- constructor.
              ++ intros ? Hcontra; unfold E0 in *;
@@ -1558,19 +1541,21 @@ Section ThreewayMultisem4.
                 destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
                 destruct (permv =? Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply beq_nat_true. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
-                assert (G: CSInvariants.wf_load_wrt_t_pc
-                               (Permission.data, cidorig, bidorig, offset)
-                               E0
-                               Component.main
-                               (permv, cidv, bidv, offv)
+                assert (G: CSInvariants.wf_load
+                             Component.main
+                             E0
+                             (Permission.data, cidorig, bidorig, offset)
+                             (Permission.data, cidv, bidv, offv)
                        ).
                 {
-                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load; eauto.
                   - eapply CSInvariants.wf_state_wf_mem; eauto.
                     + eapply CSInvariants.is_prefix_wf_state_t.
+                      * exact Hprog''_is_closed.
                       * eapply linking_well_formedness.
                         -- exact Hwfp'.
                         -- exact Hwfc'.
@@ -1595,45 +1580,29 @@ Section ThreewayMultisem4.
                              then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
                   rewrite ebidv'.
                 ** 
-                  inversion G as [? G'|? contra]; subst.
-                  --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++
-                        assert (G'': cidv \in domm (prog_interface p) = false).
-                        {
-                          rewrite Hifacep.
-                          destruct (cidv \in domm (prog_interface p')) eqn:econtra;
-                            auto.
-                          apply Hdisj in econtra. by rewrite Horig in econtra.
-                        }
-                        rewrite G'' in ebidv'.
-                        apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
-                          by subst.
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- destruct (cidorig \in domm (prog_interface p)) eqn:ecidorig.
+                      +++ rewrite Hifacep in ecidorig.
+                          apply Hdisj in ecidorig. by rewrite Horig in ecidorig.
+                      +++ rewrite ecidorig in ebidv'.
+                          apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                            by subst.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
                 ** split; auto.
-
-                   inversion G as [? G'|? contra]; subst.
-                   --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                       +++
-                         assert (G'': cidv \in domm (prog_interface p) = false).
-                         {
-                           rewrite Hifacep.
-                           destruct (cidv \in domm (prog_interface p')) eqn:econtra;
-                             auto.
-                           apply Hdisj in econtra. by rewrite Horig in econtra.
-                         }
-                         rewrite G'' in ebidv'.
-                         destruct (sigma_shifting_lefttoright_option
-                                     (if cidv \in domm (prog_interface p)
-                                      then n cidv else n'' cidv) 
-                                     (n'' cidv) bidv) eqn:econtra;
-                           rewrite econtra; auto;
-                             by rewrite G'' ebidv' in econtra. 
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
-                   
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- destruct (cidorig \in domm (prog_interface p)) eqn:ecidorig.
+                      +++ rewrite Hifacep in ecidorig.
+                          apply Hdisj in ecidorig. by rewrite Horig in ecidorig.
+                      +++ rewrite ecidorig in ebidv'. by rewrite ecidorig ebidv'.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
 
              ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
                 rewrite unionmE in Hload. rewrite !unionmE.
@@ -1656,19 +1625,21 @@ Section ThreewayMultisem4.
                 destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
                 destruct (permv =? Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply beq_nat_true. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
-                assert (G: CSInvariants.wf_load_wrt_t_pc
-                               (Permission.data, cidorig, bidorig, offset)
-                               E0
-                               Component.main
-                               (permv, cidv, bidv, offv)
+                assert (G: CSInvariants.wf_load
+                             Component.main
+                             E0
+                             (Permission.data, cidorig, bidorig, offset)
+                             (Permission.data, cidv, bidv, offv)
                        ).
                 {
-                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load; eauto.
                   - eapply CSInvariants.wf_state_wf_mem; eauto.
                     + eapply CSInvariants.is_prefix_wf_state_t.
+                      * exact Hprog''_is_closed.
                       * eapply linking_well_formedness.
                         -- exact Hwfp'.
                         -- exact Hwfc'.
@@ -1689,34 +1660,31 @@ Section ThreewayMultisem4.
                             (if cidv \in domm (prog_interface p)
                              then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
                   rewrite ebidv'.
-                ** 
-                  inversion G as [? G'|? contra]; subst.
-                  --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++
-                        destruct (cidv \in domm (prog_interface p'))
-                                 eqn:econtra.
-                        *** by apply Hdisj in econtra; rewrite Horig in econtra.
-                        *** rewrite <- Hifacep in econtra.
-                            rewrite econtra in ebidv'.
-                            apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
-                              subst; by auto.
-                              
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
-                ** split; auto.
-
-                   inversion G as [? G'|? contra]; subst.
-                   --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                       +++
-                         destruct (cidv \in domm (prog_interface p'))
-                                 eqn:econtra.
-                        *** by apply Hdisj in econtra; rewrite Horig in econtra.
-                        *** rewrite <- Hifacep in econtra.
-                            rewrite econtra in ebidv'; rewrite econtra ebidv'; by auto.
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
+                **
+                  split; auto; right.
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- destruct (cidorig \in domm (prog_interface p)) eqn:ecidorig.
+                      +++ rewrite Hifacep in ecidorig.
+                          apply Hdisj in ecidorig. by rewrite Horig in ecidorig.
+                      +++ rewrite ecidorig in ebidv'.
+                          apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                            by subst.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
+                ** split; auto; left.
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- destruct (cidorig \in domm (prog_interface p)) eqn:ecidorig.
+                      +++ rewrite Hifacep in ecidorig.
+                          apply Hdisj in ecidorig. by rewrite Horig in ecidorig.
+                      +++ rewrite ecidorig in ebidv'. by rewrite ecidorig ebidv'.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
 
           -- constructor.
              ++ intros ? Hcontra; unfold E0 in *;
@@ -1780,19 +1748,21 @@ Section ThreewayMultisem4.
                 destruct v as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
                 destruct (permv =? Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data). by apply beq_nat_true. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
-                assert (G: CSInvariants.wf_load_wrt_t_pc
-                               (Permission.data, cidorig, bidorig, offset)
-                               E0
+                assert (G: CSInvariants.wf_load
                                Component.main
-                               (permv, cidv, bidv, offv)
+                               E0
+                               (Permission.data, cidorig, bidorig, offset)
+                               (Permission.data, cidv, bidv, offv)
                        ).
                 {
-                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load; eauto.
                   - eapply CSInvariants.wf_state_wf_mem; eauto.
                     + eapply CSInvariants.is_prefix_wf_state_t.
+                      * exact Hprog_is_closed.
                       * eapply linking_well_formedness.
                         -- exact Hwfp.
                         -- exact Hwfc.
@@ -1820,31 +1790,25 @@ Section ThreewayMultisem4.
                              then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
                   rewrite ebidv'.
                 ** 
-                  inversion G as [? G'|? contra]; subst.
-                  --- simpl in *.
-                        
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++
-                        rewrite Horig in ebidv';
-                          apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
-                          by subst.
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
-                ** split; auto.
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  ---
+                    rewrite Horig in ebidv'.
+                    apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                            by subst.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
+                ** 
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- rewrite Horig in ebidv'. by rewrite Horig ebidv'.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
 
-                   inversion G as [? G'|? contra]; subst.
-                   --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++ destruct (sigma_shifting_lefttoright_option
-                                      (if cidv \in domm (prog_interface p)
-                                       then n cidv else n'' cidv) 
-                                      (n cidv) bidv) eqn:econtra2;
-                            rewrite econtra2; auto;
-                              by rewrite Horig in ebidv';
-                              rewrite Horig in econtra2;
-                              rewrite ebidv' in econtra2. 
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
                    
              ++ intros ? ? Hload. unfold Memory.load in *; simpl in *.
                 rewrite unionmE in Hload. rewrite !unionmE.
@@ -1863,19 +1827,21 @@ Section ThreewayMultisem4.
                 destruct v' as [| [[[permv cidv] bidv] offv] |]; auto; simpl in *;
                   try reflexivity.
                 destruct (permv =? Permission.data) eqn:epermv; auto. split; auto.
+                assert (permv = Permission.data). by apply beq_nat_true. subst.
                 unfold rename_addr_option,
                 sigma_shifting_wrap_bid_in_addr,
                 sigma_shifting_lefttoright_addr_bid in *.
-                assert (G: CSInvariants.wf_load_wrt_t_pc
-                               (Permission.data, cidorig, bidorig, offset)
-                               E0
-                               Component.main
-                               (permv, cidv, bidv, offv)
+                assert (G: CSInvariants.wf_load
+                             Component.main
+                             E0
+                             (Permission.data, cidorig, bidorig, offset)
+                             (Permission.data, cidv, bidv, offv)
                        ).
                 {
-                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load_wrt_t_pc; eauto.
+                  eapply CSInvariants.wf_mem_wrt_t_pc_wf_load; eauto.
                   - eapply CSInvariants.wf_state_wf_mem; eauto.
                     + eapply CSInvariants.is_prefix_wf_state_t.
+                      * exact Hprog_is_closed.
                       * eapply linking_well_formedness.
                         -- exact Hwfp.
                         -- exact Hwfc.
@@ -1902,25 +1868,27 @@ Section ThreewayMultisem4.
                             (if cidv \in domm (prog_interface p)
                              then n cidv else n'' cidv) bidv) as [bidv'|] eqn:ebidv';
                   rewrite ebidv'.
-                ** 
-                  inversion G as [? G'|? contra]; subst.
-                  --- simpl in *.
-                        
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++ rewrite Horig in ebidv';
-                            apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
-                              by right; subst.
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
-                ** 
-                  inversion G as [? G'|? contra]; subst.
-                  --- simpl in *.
-                      inversion G' as [|? ? ? ? contra]; subst.
-                      +++
-                        rewrite Horig in ebidv'. rewrite Horig ebidv'. by left.
-                      +++ unfold E0 in *. inversion contra; by find_nil_rcons.
-                  --- unfold E0 in *. inversion contra; by find_nil_rcons.
-
+                **
+                  right.
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  ---
+                    rewrite Horig in ebidv'.
+                    apply sigma_shifting_lefttoright_option_n_n_id in ebidv';
+                            by subst.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
+                **
+                  left; split; auto; split; auto.
+                  inversion G as [| ? ? Hshr |]; simpl in *; subst; auto.
+                  --- rewrite Horig in ebidv'. by rewrite Horig ebidv'.
+                  --- unfold E0 in *; inversion Hshr; by find_nil_rcons.
+                  --- unfold E0 in *;
+                        match goal with | Hshr: addr_shared_so_far _ _ |- _ =>
+                                          inversion Hshr; by find_nil_rcons
+                        end.
           -- constructor.
              ++ intros ? Hcontra; unfold E0 in *;
                   inversion Hcontra; subst; by find_nil_rcons.
