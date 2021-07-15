@@ -1104,6 +1104,34 @@ Theorem prepare_procedures_memory_prog_buffers :
     (prog_buffers p (Pointer.component ptr)) = Some Cbufs /\
     Cbufs (Pointer.block ptr) = Some buf /\
     Buffer.nth_error buf (Pointer.offset ptr) = Some v.
+(* Alternative statements? *)
+Theorem prog_buffer_ptr :
+  forall p C bufs b buf o ptr,
+    well_formed_program p ->
+    prog_buffers p C = Some bufs ->
+    bufs b = Some buf ->
+    Buffer.nth_error buf o = Some (Ptr ptr) ->
+    False.
+Proof.
+  intros p C bufs b buf o ptr Hwf Hbufs Hbuf Hptr.
+  assert (Hdomm : b \in domm bufs) by (apply /dommP; now eauto).
+  pose proof wfprog_well_formed_buffers Hwf Hbufs Hdomm as Hwfb.
+  unfold Buffer.well_formed_buffer_opt in Hwfb.
+  rewrite Hbuf in Hwfb.
+  destruct buf as [n | vs].
+  - destruct o as [| o | o]; simpl in Hptr.
+    + admit. (* easy *)
+    + admit. (* easy *)
+    + discriminate.
+  - destruct o as [| o | o]; simpl in Hptr.
+    + destruct vs as [| v vs];
+        [discriminate |].
+      injection Hptr as Hptr; subst v.
+      move: Hwfb => /andP => [[Hsize Hptrs]].
+      discriminate.
+    + move: Hwfb => /andP => [[Hsize Hptrs]].
+      admit. (* contra, similar as above *)
+    + discriminate.
 Admitted.
 (* RB: Slight "misnomer" because of the presence of matching_mains.
    Closely connected to linkable, but not exactly the same at this

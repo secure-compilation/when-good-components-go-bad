@@ -140,10 +140,9 @@ Proof.
     split; simpl.
     + (* No pointers in static buffers. *)
       intros aptr vptr Hload.
-      Check wfprog_well_formed_buffers.
-      Print Buffer.well_formed_buffer.
-      Check wf_ptr_own.
-      admit. (* Should be easy once connected to the environment. *)
+      destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
+        as [Cbufs [buf [Hbufs [Hbuf Hptr]]]].
+      exfalso. eapply prog_buffer_ptr; eassumption.
     + (* All registers are uninitialized. *)
       intros reg ptr Hget.
       destruct reg; discriminate.
@@ -596,9 +595,7 @@ Proof.
       destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
         as [Cbufs [buf [Hbufs [Hbuf Hptr]]]].
       (* No pointers in static buffers. *)
-      Check wfprog_well_formed_buffers Hwf.
-      Print Buffer.well_formed_buffer.
-      admit. (* By contradiction. *)
+      exfalso. eapply prog_buffer_ptr; eassumption.
     + (* Registers. *)
       intros reg perm cid bid off Hget.
       unfold CS.initial_machine_state in Hget.
