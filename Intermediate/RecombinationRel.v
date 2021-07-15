@@ -2013,6 +2013,11 @@ Section Recombination.
   Variables p c p' c' : program.
   Variables n n'' : Component.id -> nat.
 
+  Let n' := fun cid =>
+              if cid \in domm (prog_interface p)
+              then n   cid
+              else n'' cid.
+  
   Hypothesis Hwfp  : well_formed_program p.
   Hypothesis Hwfc  : well_formed_program c.
   Hypothesis Hwfp' : well_formed_program p'.
@@ -2060,6 +2065,102 @@ Section Recombination.
         left_value_good_for_shifting n'' v.
 
 
+  Theorem recombination_trace_rel s s'' t t'':
+    Star sem   (CS.initial_machine_state prog)   t   s   ->
+    Star sem'' (CS.initial_machine_state prog'') t'' s'' ->
+    traces_shift_each_other_option n n'' t t''           ->
+  exists s' t',
+    Star sem'  (CS.initial_machine_state prog')  t'  s'  /\
+    traces_shift_each_other_option n n' t t'.
+  Proof.
+    assert (exists s',
+               initial_state (CS.sem_non_inform (program_link p c')) s' /\
+               mergeable_border_states p c p' c' n n''
+                                       (CS.initial_machine_state prog)
+                                       s'
+                                       (CS.initial_machine_state prog'') E0 E0 E0)
+      as [s'ini [Hs'ini Hmerge]].
+    {
+      by eapply match_initial_states; eauto.
+    }
+    inversion Hs'ini; subst.
+
+    (** Use weakening for Hmerge. *)
+    apply mergeable_border_mergeable_internal in Hmerge.
+    intros Hstar Hstar'' Hshift.
+    rewrite <- E0_left in Hshift. rewrite <- E0_left in Hshift at 1.
+
+    (** Distinguish which side is executing at the initial state. *)
+    find_and_invert_mergeable_internal_states.
+    - assert (H_p_prog: CS.is_program_component
+                (CS.initial_machine_state prog)
+                (prog_interface c)
+             ).
+      {
+        CS.unfold_state (CS.initial_machine_state prog).
+        CS.unfold_state (CS.initial_machine_state (program_link p c')).
+        CS.simplify_turn. by subst.
+      }
+
+      (** Instantiate lemma "mergeable_internal_states_matching_stars" *)
+      specialize (threeway_multisem_star_program H_p_prog Hmerge Hstar Hstar'' Hshift)
+        as [s' [t' [Hstar' Hmerge']]].
+      do 2 eexists; split; eauto.
+      rewrite !E0_left in Hmerge'.
+        by find_and_invert_mergeable_internal_states;
+          find_and_invert_mergeable_states_well_formed.
+    - apply mergeable_internal_states_sym in Hmerge.
+      apply mergeable_states_well_formed_sym in Hmergewf.
+      assert (eprog: prog = program_link c p).
+      { unfold prog; rewrite program_linkC; auto.
+          by unfold mergeable_interfaces in *; intuition. }
+      assert (eprog'': prog'' = program_link c' p').
+      { unfold prog''; rewrite program_linkC; auto.
+          unfold mergeable_interfaces in *;
+            find_and_invert_mergeable_states_well_formed;
+          rewrite Hifc_cc' Hifc_pp'; by intuition. }
+      assert (eprog': prog' = program_link c' p).
+      { unfold prog'; rewrite program_linkC; auto.
+          unfold mergeable_interfaces in *;
+            find_and_invert_mergeable_states_well_formed;
+          rewrite Hifc_pp'; by intuition. }
+      
+      unfold prog' in *.
+      rewrite eprog eprog' eprog'' in Hmerge.
+      unfold sem, sem'' in Hstar, Hstar''.
+      rewrite !eprog in Hstar.
+      rewrite !eprog'' in Hstar''.
+      apply traces_shift_each_other_option_symmetric in Hshift.
+
+      rewrite eprog' eprog'' in Hpc.
+      rewrite eprog' in H_c'.
+      
+      assert (H_p_prog: CS.is_program_component
+                (CS.initial_machine_state (program_link c' p'))
+                (prog_interface p')
+             ).
+      {
+        CS.unfold_state (CS.initial_machine_state (program_link c' p')).
+        CS.unfold_state (CS.initial_machine_state (program_link c' p)).
+        CS.simplify_turn. subst.
+        eapply mergeable_states_in_to_notin2; eauto.
+        find_and_invert_mergeable_states_well_formed; by rewrite Hifc_pp'.
+      }
+
+      unfold sem'. rewrite !eprog'.
+      
+      (** Instantiate lemma "mergeable_internal_states_matching_stars" *)
+      specialize (threeway_multisem_star_program H_p_prog Hmerge Hstar'' Hstar Hshift)
+        as [s' [t' [Hstar' Hmerge']]].
+      do 2 eexists; split; eauto.
+      
+      rewrite !E0_left in Hmerge'.
+      inversion Hmerge' as [Hwf | Hwf];
+        inversion Hwf.
+
+      (** TODO: Need lemma to use the version of n ' that mentions c' instead of p. *)
+  Admitted.
+      
   (* RB: NOTE: Possible improvements:
       - Try to refactor case analysis in proof.
       - Try to derive well-formedness, etc., from semantics.
