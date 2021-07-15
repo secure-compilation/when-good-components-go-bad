@@ -2107,12 +2107,13 @@ Section MergeableSym.
   Let sem'  := CS.sem_non_inform prog'.
   Let sem'' := CS.sem_non_inform prog''.
 
-
   Lemma mergeable_states_well_formed_sym s s' s'' t t' t'':
     mergeable_states_well_formed p c p' c' n n'' s s' s'' t t' t'' ->
     mergeable_states_well_formed c' p' c p n'' n s'' s' s t'' t' t.
   Proof.
     intros Hwf. find_and_invert_mergeable_states_well_formed.
+    assert (Hlinkable: linkable (prog_interface p) (prog_interface c)).
+    { unfold mergeable_interfaces in *; intuition. }
     assert (Hmergeable_ifcs: mergeable_interfaces
                                (prog_interface c')
                                (prog_interface p')).
@@ -2130,7 +2131,23 @@ Section MergeableSym.
       rewrite program_linkC; auto.
       by rewrite <- Hifc_cc'; unfold mergeable_interfaces in *; intuition.
     }
-    
+
+    assert (prog'_closed: closed_program (program_link p c')).
+    {
+      eapply interface_preserves_closedness_r; eauto.
+      - eapply linkable_implies_linkable_mains; eauto.
+      - eapply interface_implies_matching_mains; eauto.
+    }
+
+    assert (prog'_wf: well_formed_program (program_link p c')).
+    {
+      eapply linking_well_formedness; eauto. by rewrite <- Hifc_cc'. 
+    }
+
+    assert (Hdisj: fdisjoint (domm (prog_interface p)) (domm (prog_interface c'))).
+    {
+      unfold linkable in *. by rewrite <- Hifc_cc'; intuition.
+    }
     constructor; auto.
     - by rewrite eprog''.
     - by rewrite eprog.
@@ -2145,9 +2162,37 @@ Section MergeableSym.
       (** have a cid \in unionm (domm (prog_interface p))*)
       (**                       (domm (prog_interface c))*)
       constructor.
-      
-      admit.
+      intros [acid abid] Hshr.
+      specialize (CSInvariants.addr_shared_so_far_domm_partition
+                    _ _ _ _ _ _ Hpref_t' prog'_closed prog'_wf Hshr Logic.eq_refl)
+        as [Hacid | Hacid]; simpl in *.
+      + move : Hdisj => /fdisjointP => Hdisj.
+        specialize (Hdisj _ Hacid).
+        assert (cond: acid \in domm (prog_interface c') = false).
+        {
+            by destruct (acid \in domm (prog_interface c')) eqn:e; auto;
+            by rewrite e in Hdisj.
+        }
+        rewrite cond.
+        inversion Hgood_t' as [? G]; subst.
+        specialize (G _ Hshr). simpl in *. by rewrite Hacid in G.
+      + rewrite fdisjointC in Hdisj.
+        move : Hdisj => /fdisjointP => Hdisj.
+        specialize (Hdisj _ Hacid).
+        rewrite Hacid.
+        inversion Hgood_t' as [? G]; subst.
+        specialize (G _ Hshr). simpl in *.
+        assert (cond: acid \in domm (prog_interface p) = false).
+        {
+            by destruct (acid \in domm (prog_interface p)) eqn:e; auto;
+            by rewrite e in Hdisj.
+        }
+        by rewrite cond in G.
+        
     - (** tricky for the same reason as above.            *)
+      inversion Hshift_t''t' as [? ? Hren]; subst.
+      constructor.
+      (** TODO: Need a separate lemma to avoid repetition in the next subgoal. *)
       admit.
     - (** tricky for the same reason as above.            *)
       admit.
