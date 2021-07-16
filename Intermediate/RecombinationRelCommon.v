@@ -2163,8 +2163,9 @@ Section MergeableSym.
       (**                       (domm (prog_interface c))*)
       constructor.
       intros [acid abid] Hshr.
+      rewrite Hifc_cc' in Hmerge_ipic.
       specialize (CSInvariants.addr_shared_so_far_domm_partition
-                    _ _ _ _ _ _ Hpref_t' prog'_closed prog'_wf Hshr Logic.eq_refl)
+                    _ _ _ _ _ _ Hwfp Hwfc' Hmerge_ipic Hpref_t' prog'_closed prog'_wf Hshr Logic.eq_refl)
         as [Hacid | Hacid]; simpl in *.
       + move : Hdisj => /fdisjointP => Hdisj.
         specialize (Hdisj _ Hacid).
@@ -2207,14 +2208,18 @@ Section MergeableSym.
       (
         find_and_invert_mergeable_states_well_formed;
         specialize (CSInvariants.value_mem_reg_domm_partition
-                      _ _ _ _ _ _ Hpref_t Logic.eq_refl Logic.eq_refl
+                      _ _ _ _ _ _ Hwfp Hwfc Hmerge_ipic Hclosed_prog Hpref_t Logic.eq_refl Logic.eq_refl
                    ) as [Hmem Hreg];
+        assert (Hclosed_pc' : closed_program (program_link p c')) by admit;
+        rewrite Hifc_cc' in Hmerge_ipic;
         specialize (CSInvariants.value_mem_reg_domm_partition
-                      _ _ _ _ _ _ Hpref_t' Logic.eq_refl Logic.eq_refl
+                      _ _ _ _ _ _ Hwfp Hwfc' Hmerge_ipic Hclosed_pc' Hpref_t' Logic.eq_refl Logic.eq_refl
                    ) as [Hmem' Hreg'];
+        rewrite Hifc_pp' in Hmerge_ipic;
         specialize (CSInvariants.value_mem_reg_domm_partition
-                      _ _ _ _ _ _ Hpref_t'' Logic.eq_refl Logic.eq_refl
-                   ) as [Hmem'' Hreg'']          
+                      _ _ _ _ _ _ Hwfp' Hwfc' Hmerge_ipic Hclosed_prog' Hpref_t'' Logic.eq_refl Logic.eq_refl
+                   ) as [Hmem'' Hreg''];
+        rewrite -Hifc_pp' -Hifc_cc' in Hmerge_ipic
       ).
 
     - apply mergeable_internal_states_c'_executing; auto.
@@ -2234,7 +2239,7 @@ Section MergeableSym.
         rename_addr_option,
         sigma_shifting_wrap_bid_in_addr,
         sigma_shifting_lefttoright_addr_bid in *.
-        
+
         CS.unfold_states.
         simpl in *. intros reg. specialize (Hregsrel reg).
         destruct (Register.get reg regs1)
@@ -2310,7 +2315,6 @@ Section MergeableSym.
         admit.
   Admitted.
 
-  
   Lemma mergeable_border_states_sym s s' s'' t t' t'':
     mergeable_border_states p c p' c' n n'' s s' s'' t t' t'' ->
     mergeable_border_states c' p' c p n'' n s'' s' s t'' t' t.
@@ -2353,5 +2357,4 @@ Section MergeableSym.
         admit.
   Admitted.
 
-  
 End MergeableSym.
