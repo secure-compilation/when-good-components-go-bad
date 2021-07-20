@@ -239,7 +239,26 @@ Lemma initial_wf_mem p:
       Print Buffer.well_formed_buffer.
    (* Should be easy once connected to the environment. *)
    *)
-Admitted.
+Proof.
+  intros Hclosed Hwf Hmain [[[perm C] b] o] ptr Hload Hperm.
+  apply private_stuff_from_corresp_private_addr.
+  - intros Hcontra.
+    inversion Hcontra as [H1 t e H4 Hcons | H1 H2 t e H5 H6 H7 Hcons];
+      destruct t as [[| ? ?] ? |]; now inversion Hcons.
+  - intros Hcontra.
+    inversion Hcontra as [H1 t e H4 Hcons | H1 H2 t e H5 H6 H7 Hcons];
+      destruct t as [[| ? ?] ? |]; now inversion Hcons.
+  - destruct (C \in domm (prog_interface p)) eqn:Hdomm.
+    + destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
+        as [Cbufs [buf [HCbufs [Hbuf Hptr]]]].
+      exfalso. eapply prog_buffer_ptr; eassumption.
+    + rewrite (wfprog_defined_buffers Hwf) in Hdomm.
+      destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
+        as [Cbufs [_ [HCbufs _]]].
+      apply negb_true_iff in Hdomm.
+      rewrite (dommPn Hdomm) in HCbufs.
+      discriminate.
+Qed.
 
 Lemma is_prefix_wf_state_t s p t:
   closed_program p ->
