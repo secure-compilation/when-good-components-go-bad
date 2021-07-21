@@ -239,7 +239,26 @@ Lemma initial_wf_mem p:
       Print Buffer.well_formed_buffer.
    (* Should be easy once connected to the environment. *)
    *)
-Admitted.
+Proof.
+  intros Hclosed Hwf Hmain [[[perm C] b] o] ptr Hload Hperm.
+  apply private_stuff_from_corresp_private_addr.
+  - intros Hcontra.
+    inversion Hcontra as [H1 t e H4 Hcons | H1 H2 t e H5 H6 H7 Hcons];
+      destruct t as [[| ? ?] ? |]; now inversion Hcons.
+  - intros Hcontra.
+    inversion Hcontra as [H1 t e H4 Hcons | H1 H2 t e H5 H6 H7 Hcons];
+      destruct t as [[| ? ?] ? |]; now inversion Hcons.
+  - destruct (C \in domm (prog_interface p)) eqn:Hdomm.
+    + destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
+        as [Cbufs [buf [HCbufs [Hbuf Hptr]]]].
+      exfalso. eapply prog_buffer_ptr; eassumption.
+    + rewrite (wfprog_defined_buffers Hwf) in Hdomm.
+      destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
+        as [Cbufs [_ [HCbufs _]]].
+      apply negb_true_iff in Hdomm.
+      rewrite (dommPn Hdomm) in HCbufs.
+      discriminate.
+Qed.
 
 Lemma is_prefix_wf_state_t s p t:
   closed_program p ->
@@ -809,6 +828,12 @@ Proof.
 Qed.
 
 Lemma value_mem_reg_domm_partition p c st t regs mem:
+  (* "Running" assumptions (what could be derived from the prefix run?) *)
+  well_formed_program p ->
+  well_formed_program c ->
+  mergeable_interfaces (prog_interface p) (prog_interface c) ->
+  closed_program (program_link p c) ->
+  (* "Proper" assumptions *)
   is_prefix st (program_link p c) t ->
   regs = CS.state_regs st ->
   mem = CS.state_mem st ->
@@ -826,7 +851,8 @@ Lemma value_mem_reg_domm_partition p c st t regs mem:
 Proof.
   (* Set up induction on star from left to right. *)
   unfold is_prefix. simpl.
-  intros Hstar ? ?; subst.
+  intros Hwfp Hwfc Hlinkable Hclosed Hstar ? ?; subst.
+  pose proof linking_well_formedness Hwfp Hwfc (proj1 Hlinkable) as Hwf.
   set prog := program_link p c. fold prog in Hstar.
   remember (CS.initial_machine_state prog) as s0 eqn:Hs0.
   remember (prepare_global_env prog) as G eqn:HG.
@@ -838,9 +864,9 @@ Proof.
     split.
     + (* Memory domain. *)
       intros ptr perm cid bid off Hload.
-      assert (Hwf : well_formed_program (program_link p c)) by admit.
       unfold CS.initial_machine_state in Hload.
-      assert (prog_main prog) as Hmain by admit; rewrite Hmain in Hload.
+      destruct (cprog_main_existence Hclosed) as [main [Hmain _]].
+      rewrite Hmain in Hload.
       destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
         as [Cbufs [buf [Hbufs [Hbuf Hptr]]]].
       (* No pointers in static buffers. *)
@@ -901,14 +927,14 @@ Proof.
            injection Hget as Hget; subst ptr.
            (* By program (and instruction) well-formedness. *)
            destruct H as [Cprocs [Pcode [HCprocs [HPcode [_ [_ Hinstr]]]]]].
-           assert (Hwf : well_formed_program (program_link p c)) by admit.
            destruct (prepare_procedures_procs_prog_procedures Hwf HCprocs HPcode)
              as [Cprocs' [P' [HCprocs' HPcode']]].
            pose proof wfprog_well_formed_instructions
                 Hwf HCprocs' HPcode' (nth_error_In _ _ Hinstr)
              as [Hptr Hbufs].
            simpl in Hptr; subst cid.
-           admit. (* TODO: assumptions/strengthenings for [CS.star_pc_domm_non_inform] *)
+           apply star_iff_starR in Hstar01.
+           now eapply CS.star_pc_domm_non_inform; eauto.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IMov *)
@@ -951,7 +977,8 @@ Proof.
         -- subst r. rewrite Register.gss in Hget.
            injection Hget as Hget. subst ptr.
            setoid_rewrite <- (find_label_in_component_1 _ _ _ _ H0).
-           admit. (* TODO: assumptions/strengthenings for [CS.star_pc_domm_non_inform] *)
+           apply star_iff_starR in Hstar01.
+           now eapply CS.star_pc_domm_non_inform; eauto.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* ILoad *)
@@ -968,7 +995,8 @@ Proof.
            injection Hget as Hget.
            change cid with (Pointer.component (perm, cid, bid, off)).
            rewrite <- Hget, -> Pointer.inc_preserves_component.
-           admit. (* TODO: assumptions/strengthenings for [CS.star_pc_domm_non_inform] *)
+           apply star_iff_starR in Hstar01.
+           now eapply CS.star_pc_domm_non_inform; eauto.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IAlloc *)
@@ -977,7 +1005,8 @@ Proof.
         -- subst rptr. rewrite Register.gss in Hget.
            injection Hget as Hget; subst ptr.
            setoid_rewrite (Memory.component_of_alloc_ptr _ _ _ _ _ H2).
-           admit. (* TODO: assumptions/strengthenings for [CS.star_pc_domm_non_inform] *)
+           apply star_iff_starR in Hstar01.
+           now eapply CS.star_pc_domm_non_inform; eauto.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* ICall *)
@@ -990,8 +1019,7 @@ Proof.
         destruct (Register.eqP reg R_COM) as [Heq | Hneq];
           last discriminate.
         eapply IHget; eassumption.
-Admitted.
-
+Qed.
 
 Definition dummy_value_of_node (n: node_t) := Ptr (Permission.data, n.1, n.2, 0%Z).
 
@@ -1026,6 +1054,11 @@ Proof.
 Qed.
     
 Corollary addr_shared_so_far_domm_partition p c st t a cid:
+  (* "Running" assumptions (what could be derived from the prefix run?) *)
+  well_formed_program p ->
+  well_formed_program c ->
+  mergeable_interfaces (prog_interface p) (prog_interface c) ->
+  (* "Proper" assumptions *)
   is_prefix st (program_link p c) t ->
   closed_program (program_link p c) ->
   well_formed_program (program_link p c) ->
@@ -1049,8 +1082,8 @@ Proof.
   }
   revert a cid.
   induction t as [|t e] using last_ind.
-  - intros ? ? ? ? ? ? Hshr ?; inversion Hshr; by find_nil_rcons.
-  - intros ? ? ? Hpref Hclosed Hwf Hshr ?.
+  - intros ? ? ? ? ? ? ? ? ? Hshr ?; inversion Hshr; by find_nil_rcons.
+  - intros ? ? ? Hwfp Hwfc Hifaces Hpref Hclosed Hwf Hshr ?.
     destruct a as [acid abid]. simpl in *; subst.
     apply star_iff_starR in Hpref. 
     apply starR_rcons in Hpref as [st1 [se1 [Ht1 [He1 HE0]]]];
@@ -1062,7 +1095,7 @@ Proof.
           apply star_iff_starR in Ht1;
           (** TODO: specialize value_mem_reg_domm_partition more before applying it. *)
           specialize (value_mem_reg_domm_partition
-                        _ _ _ _ _ _
+                        _ _ _ _ _ _ Hwfp Hwfc Hifaces Hclosed
                         Ht1 Logic.eq_refl Logic.eq_refl) as Hinvariants;
           destruct Hinvariants as [mem_invariant reg_invariant].
       * (** ICall *)
@@ -1121,7 +1154,7 @@ Proof.
           apply star_iff_starR in Ht1;
           (** TODO: specialize value_mem_reg_domm_partition more before applying it. *)
           specialize (value_mem_reg_domm_partition
-                        _ _ _ _ _ _
+                        _ _ _ _ _ _ Hwfp Hwfc Hifaces Hclosed
                         Ht1 Logic.eq_refl Logic.eq_refl) as Hinvariants;
           destruct Hinvariants as [mem_invariant reg_invariant].
 
@@ -1139,7 +1172,7 @@ Proof.
         specialize (Reachable_induction_mem_invariant mem P Pproperty mem_invariant')
           as Hinduction.
         
-        specialize (IHt _ addr'.1 _ Ht1 Hclosed Hwf Hshr' Logic.eq_refl).
+        specialize (IHt _ addr'.1 _ Hwfp Hwfc Hifaces Ht1 Hclosed Hwf Hshr' Logic.eq_refl).
         specialize (Hinduction _ _ Hreach). apply Hinduction; auto; last exact Z0.
         intros ? Ha'? ?.
         rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
@@ -1159,7 +1192,7 @@ Proof.
         specialize (Reachable_induction_mem_invariant mem P Pproperty mem_invariant')
           as Hinduction.
         
-        specialize (IHt _ addr'.1 _ Ht1 Hclosed Hwf Hshr' Logic.eq_refl).
+        specialize (IHt _ addr'.1 _ Hwfp Hwfc Hifaces Ht1 Hclosed Hwf Hshr' Logic.eq_refl).
         specialize (Hinduction _ _ Hreach). apply Hinduction; auto; last exact Z0.
         intros ? Ha'? ?.
         rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
