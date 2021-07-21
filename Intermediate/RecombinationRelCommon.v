@@ -2192,6 +2192,24 @@ Section MergeableSym.
     - (** tricky for the same reason as above.            *)
       inversion Hshift_t''t' as [? ? Hren]; subst.
       constructor.
+      generalize dependent t''. generalize dependent t'. intros t'.
+      induction t' as [|t' e'] using last_ind;
+        intros Hpref_t' Hgood_t' Hshift_tt' t'' Hwf Hpref_t'' Hgood_t'' Hshift_t''t'
+               Hren_t''t';
+        specialize (traces_rename_each_other_option_same_size _ _ _ _ Hren_t''t')
+          as Hsz; simpl in *.
+      + apply size0nil in Hsz; by subst; constructor.
+      + rewrite size_rcons in Hsz.
+        assert (exists t''pref e'', t'' = rcons t''pref e'') as [t''pref [e'' ?]].
+        { induction t'' using last_ind; try discriminate. by eauto. }
+        subst.
+        inversion Hren_t''t'; first (by find_nil_rcons); repeat find_rcons_rcons. 
+        econstructor; eauto.
+        * eapply IHt'; eauto.
+          -- unfold CSInvariants.is_prefix in *. apply star_iff_starR in Hpref_t'.
+             apply CSInvariants.starR_rcons in Hpref_t';
+               last by apply CS.singleton_traces_non_inform.
+      
       (** TODO: Need a separate lemma to avoid repetition in the next subgoal. *)
       admit.
     - (** tricky for the same reason as above.            *)
