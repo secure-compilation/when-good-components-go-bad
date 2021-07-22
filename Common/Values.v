@@ -158,6 +158,24 @@ Canonical value_eqType := Eval hnf in EqType value value_eqMixin.
 (* Binary operations. *)
 Inductive binop := Add | Minus | Mul | Eq | Leq.
 
+Definition binop_eqb (op1 op2 : binop) : bool :=
+  match op1, op2 with
+  | Add, Add
+  | Minus, Minus
+  | Mul, Mul
+  | Eq, Eq
+  | Leq, Leq => true
+  | _, _ => false
+  end.
+
+Lemma binopP : Equality.axiom binop_eqb.
+Proof.
+  intros [] []; by constructor.
+Qed.
+
+Definition binop_eqMixin: Equality.mixin_of binop := EqMixin binopP.
+Canonical binop_eqType := Eval hnf in EqType binop binop_eqMixin.
+
 Definition eval_binop (op : binop) (v1 v2 : value) : value :=
   match op, v1, v2 with
   (* natural numbers *)

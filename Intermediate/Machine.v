@@ -20,11 +20,56 @@ Set Bullet Behavior "Strict Subproofs".
 Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP | R_ARG.
 
+Definition register_eqb (r1 r2 : register) : bool :=
+  match r1, r2 with
+  | R_ONE, R_ONE
+  | R_COM, R_COM
+  | R_AUX1, R_AUX1
+  | R_AUX2, R_AUX2
+  | R_RA, R_RA
+  | R_SP, R_SP
+  | R_ARG, R_ARG
+    => true
+  | _, _
+    => false
+  end.
+
+Lemma registerP : Equality.axiom register_eqb.
+Proof.
+  intros [] []; by constructor.
+Qed.
+
+Definition register_eqMixin: Equality.mixin_of register := EqMixin registerP.
+Canonical register_eqType := Eval hnf in EqType register register_eqMixin.
+
 Definition label := nat.
 
 Variant imvalue : Type :=
 | IInt : Z -> imvalue
 | IPtr : Pointer.t -> imvalue.
+
+Definition imvalue_eqb (v1 v2 : imvalue) : bool :=
+  match v1, v2 with
+  | IInt i1, IInt i2 => Z.eqb i1 i2
+  | IPtr p1, IPtr p2 => Pointer.eq p1 p2
+  | _, _ => false
+  end.
+
+Lemma imvalueP : Equality.axiom imvalue_eqb.
+Proof.
+  intros [] [];
+    try (by constructor);
+    simpl.
+  - destruct (Z.eqb_spec z z0); constructor.
+    + subst. reflexivity.
+    + injection. contradiction.
+  - destruct (Pointer.eqP t t0); constructor.
+    + subst. reflexivity.
+    + injection. contradiction.
+Qed.
+
+Definition imvalue_eqMixin: Equality.mixin_of imvalue := EqMixin imvalueP.
+Canonical imvalue_eqType := Eval hnf in EqType imvalue imvalue_eqMixin.
 
 Definition imm_to_val (im : imvalue) : value :=
   match im with
@@ -54,7 +99,121 @@ Variant instr :=
 (* termination *)
 | IHalt : instr.
 
+Definition instr_eqb (i1 i2 : instr) : bool :=
+  match i1, i2 with
+  | INop, INop
+  | IReturn, IReturn
+  | IHalt, IHalt
+    => true
+  | ILabel l1, ILabel l2
+  | IJal l1, IJal l2
+    => ssrnat.eqn l1 l2
+  | ICall C1 P1, ICall C2 P2
+    => ssrnat.eqn C1 C2 && ssrnat.eqn P1 P2
+  | IJump r1, IJump r2
+    => register_eqb r1 r2
+  | ILoad r1 r1', ILoad r2 r2'
+  | IStore r1 r1', IStore r2 r2'
+  | IAlloc r1 r1', IAlloc r2 r2'
+  | IMov r1 r1', IMov r2 r2'
+    => register_eqb r1 r2 && register_eqb r1' r2'
+  | IPtrOfLabel l1 r1, IPtrOfLabel l2 r2
+  | IBnz r1 l1, IBnz r2 l2
+    => ssrnat.eqn l1 l2 && register_eqb r1 r2
+  | IConst v1 r1, IConst v2 r2
+    => imvalue_eqb v1 v2 && register_eqb r1 r2
+  | IBinOp op1 r1 r1' r1'', IBinOp op2 r2 r2' r2''
+    => binop_eqb op1 op2 &&
+       register_eqb r1 r2 && register_eqb r1' r2' && register_eqb r1'' r2''
+  | _, _
+    => false
+  end.
+
+(* TODO: Is this available anywhere? Move in any case. *)
+Lemma eqnP : Equality.axiom ssrnat.eqn.
+  intros n.
+  induction n as [| n' IHn'].
+  - intros [| m']; by constructor.
+  - intros [| m'].
+    + by constructor.
+    + simpl.
+      specialize (IHn' m').
+      inversion IHn'; subst;
+        constructor.
+      * reflexivity.
+      * injection. contradiction.
+Qed.
+
+(* TODO: Complete and reuse tactic above. *)
+Ltac t_reflecter :=
+  repeat
+    (* From the rightto account for the associativity of the conjunction. *)
+    (match goal with
+     | |- ssrbool.reflect _ (ssrnat.eqn ?N1 ?N2) =>
+       destruct (eqnP N1 N2)
+     | |- ssrbool.reflect _ (_ && ssrnat.eqn ?N1 ?N2) =>
+       destruct (eqnP N1 N2)
+     | |- ssrbool.reflect _ (imvalue_eqb ?N1 ?N2) =>
+       destruct (imvalueP N1 N2)
+     | |- ssrbool.reflect _ (binop_eqb ?OP1 ?OP2) =>
+       destruct (binopP OP1 OP2)
+     | |- ssrbool.reflect _ (register_eqb ?R1 ?R2) =>
+       destruct (registerP R1 R2)
+     | |- ssrbool.reflect _ (_ && register_eqb ?R1 ?R2) =>
+       destruct (registerP R1 R2)
+     end;
+     subst;
+     (* Rearrange conjuncts so that simplification and recursion work. *)
+     try rewrite andb_true_r; try rewrite andb_false_r;
+     simpl);
+  (* Phase 2: solve appropriate reflection case. *)
+  constructor;
+  (* True cases are solved by reflexivity... *)
+  try reflexivity;
+  (* ... and false cases by contradiction on injective constructors. *)
+  injection; contradiction.
+
+Lemma instrP : Equality.axiom instr_eqb.
+Proof.
+  intros [] [];
+    try (by constructor);
+    simpl;
+    t_reflecter.
+Qed.
+
+Definition instr_eqMixin: Equality.mixin_of instr := EqMixin instrP.
+Canonical instr_eqType := Eval hnf in EqType instr instr_eqMixin.
+
 Definition code := list instr.
+
+Definition code_eqb (c1 c2 : code) : bool :=
+  eqseq c1 c2.
+
+Lemma codeP : Equality.axiom code_eqb.
+Proof.
+  intros c1.
+  induction c1 as [| i1 c1' IHc1'];
+    intros c2.
+  - destruct c2 as [| i2 c2'];
+      by constructor.
+  - destruct c2 as [| i2 c2'].
+    + by constructor.
+    + simpl. destruct (i1 == i2) eqn:Hcase.
+      * move: Hcase => /eqP ->.
+        specialize (IHc1' c2').
+        inversion IHc1'; subst;
+          constructor.
+        -- reflexivity.
+        -- injection as ?; subst.
+           contradiction.
+      * constructor.
+        injection as ? ?; subst.
+        move: Hcase => /eqP.
+        contradiction.
+Qed.
+
+Definition code_eqMixin: Equality.mixin_of code := EqMixin codeP.
+Canonical code_eqType := Eval hnf in EqType code code_eqMixin.
 
 Module Intermediate.
 
