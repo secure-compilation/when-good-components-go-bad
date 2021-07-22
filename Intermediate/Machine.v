@@ -620,6 +620,35 @@ Definition reserve_component_blocks p C Cmem procs_code
   let Centrypoints := mkfmap (pmap map_entrypoint (zip procs bs)) in
   (Cmem', Cprocs, Centrypoints).
 
+Section Zip.
+  Lemma in_zip1 {X Y : eqType} (x : X) (y : Y) xs ys :
+    (x, y) \in zip xs ys ->
+    x \in xs.
+  Admitted.
+
+  Lemma in_zip2 {X Y : eqType} (x : X) (y : Y) xs ys :
+    (x, y) \in zip xs ys ->
+    y \in ys.
+  Admitted.
+
+  (* Lemma in_unzip2 {X Y : eqType} (x : X) (y : Y) xs ys : *)
+  (*   (x, y) \in zip xs ys -> *)
+  (*   y \in ys. *)
+  (* Admitted. *)
+
+  Lemma in_unzip2 {X : eqType} x (xs : NMap X) :
+    x \in unzip2 xs ->
+  exists n,
+    (* (n, x) \in xs. *)
+    xs n = Some x.
+  Admitted.
+
+  (* Lemma in_unzip2 {X Y : eqType} y (xys : seq (X * Y)) : *)
+  (*   y \in unzip2 xys -> *)
+  (* exists x, *)
+  (*   (x, y) \in xys. *)
+End Zip.
+
 Lemma reserve_component_blocks_some p C mem (Cprocs : NMap code) b Pcode :
   (reserve_component_blocks p C mem Cprocs).1.2 b = Some Pcode ->
 exists (b' : nat_ordType),
@@ -630,7 +659,11 @@ Proof.
     as [Cmem bs] eqn:HCmem.
   simpl.
   intro HPcode.
-Admitted.
+  apply mkfmap_Some in HPcode.
+  assert (HPcode' := in_zip2 HPcode).
+  apply in_unzip2 in HPcode'.
+  now eauto.
+Qed.
 
 (* In the foreseen, controlled use of this function, we always go on the Some
    branch. For each component C, we read its (initial) memory and use it to
