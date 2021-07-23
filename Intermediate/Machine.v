@@ -274,16 +274,10 @@ Module Register.
   Proof.
     unfold init. intros regdomm.
     rewrite !domm_set in regdomm.
-
-    (* Can we replace these similar lines by a match goal? *)
-    destruct r as [ | n1]; first by simpl.
-    destruct n1 as [ | n2]; first by simpl.
-    destruct n2 as [ | n3]; first by simpl.
-    destruct n3 as [ | n4]; first by simpl.
-    destruct n4 as [ | n5]; first by simpl.
-    destruct n5 as [ | n6]; first by simpl.
-    destruct n6 as [ | n7]; first by simpl.
-               
+    simpl in *.
+    repeat match goal with
+    | N : nat |- _ => destruct N as [| N]; first by simpl
+    end.
     by rewrite !in_fsetU1 domm0 in regdomm.
   Qed.
 
