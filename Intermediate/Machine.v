@@ -1251,8 +1251,8 @@ Theorem prepare_procedures_procs_prog_procedures :
     Cprocs' b' = Some Pcode.
 Proof.
   unfold prepare_procedures_procs,
-        prepare_procedures_initial_memory,
-        prepare_procedures_initial_memory_aux.
+         prepare_procedures_initial_memory,
+         prepare_procedures_initial_memory_aux.
   setoid_rewrite mapmE.
   unfold omap, obind, oapp.
   setoid_rewrite mkfmapfE.
@@ -1334,6 +1334,55 @@ Theorem prepare_procedures_memory_prog_buffers :
     (prog_buffers p (Pointer.component ptr)) = Some Cbufs /\
     Cbufs (Pointer.block ptr) = Some buf /\
     Buffer.nth_error buf (Pointer.offset ptr) = Some v.
+Proof.
+  unfold prepare_procedures_memory,
+         prepare_procedures_initial_memory,
+         prepare_procedures_initial_memory_aux.
+(* TODO: Encapsulate! *)
+Local Transparent Memory.load.
+  unfold Memory.load.
+Local Opaque Memory.load.
+  setoid_rewrite mapmE.
+  unfold omap, obind, oapp.
+  setoid_rewrite mkfmapfE.
+  intros p [[[perm C] b] o] v Hwf Hload.
+  simpl in Hload.
+  destruct (perm =? Permission.data) eqn:Hcase;
+    [| discriminate].
+  move: Hcase => /Nat.eqb_spec ->.
+  destruct (C \in domm (prog_interface p)) eqn:Hdomm;
+    rewrite Hdomm in Hload;
+    [| discriminate].
+  unfold reserve_component_blocks in Hload.
+  destruct (ComponentMemoryExtra.reserve_blocks
+              (ComponentMemory.prealloc (odflt emptym (prog_buffers p C)))
+              (length (elementsm (odflt emptym (prog_procedures p C)))))
+    as [Cmem' bs] eqn:Hcase.
+  rewrite Hcase in Hload.
+  simpl in Hload.
+  rewrite (wfprog_defined_buffers Hwf) in Hdomm.
+  move: Hdomm => /dommP => [[Cbufs HCbufs]].
+  rewrite HCbufs in Hcase. simpl in Hcase.
+  assert (Hload' :
+            ComponentMemory.load (ComponentMemory.prealloc Cbufs) b o = Some v)
+    by admit. (* by corresponding memory lemma *)
+  rewrite ComponentMemory.load_prealloc in Hload'.
+  destruct (0 <=? o)%Z eqn:Hoff;
+    [| discriminate].
+  destruct (Cbufs b) as [buf |] eqn:Hb;
+    [| discriminate].
+  simpl. exists Cbufs, buf.
+  split; [assumption |].
+  split; [assumption |].
+  unfold Buffer.nth_error.
+  destruct o as [| op | on].
+  - destruct buf as [n | vs].
+    + admit. (* easy *)
+    + assumption.
+  - destruct buf as [n | vs].
+    + admit. (* easy *)
+    + assumption.
+  - admit. (* contra on Hoff *)
 Admitted.
 
 (* Alternative statements? *)

@@ -728,6 +728,13 @@ Module ComponentMemory : AbstractComponentMemory.
       load (fst (reserve_block m)) b i = Some v.
   Admitted.
 
+  Lemma load_before_reserve_block m b o v :
+    load (fst (reserve_block m)) b o = Some v ->
+    load m b o = Some v.
+  Proof.
+    unfold load. intros Hload. rewrite Hload. reflexivity.
+  Qed.
+
 End ComponentMemory.
 
 Module ComponentMemoryExtra.
@@ -828,6 +835,17 @@ Module ComponentMemoryExtra.
         * reflexivity.
       + destruct o as [| o | o]; reflexivity.
   Admitted.
+
+  (* TODO: Combine before and after lemmas? *)
+  Lemma load_before_reserve_blocks m n b o v :
+    load (fst (reserve_blocks m n)) b o = Some v ->
+    load m b o = Some v.
+  Admitted.
+  (* Or: *)
+  (* reserve_blocks (prealloc bufs) n = (Cmem, bs) -> *)
+  (* load Cmem b o = Some v -> *)
+  (* load (prealloc bufs) b o = Some v. *)
+
 End ComponentMemoryExtra.
 
 Module Memory.
