@@ -1323,6 +1323,45 @@ Proof.
   reflexivity.
 Qed.
 
+(* TODO: Find homes for these remarks. *)
+Remark ltb_0_Z_nat n : (0 <? Z.of_nat n)%Z = (0 <? n).
+Proof.
+  now destruct n.
+Qed.
+
+Remark lt_Z_nat p n : (Z.pos p < Z.of_nat n)%Z <-> (Pos.to_nat p < n).
+Proof.
+  split; intros H.
+  - apply Z2Nat.inj_lt in H.
+    + rewrite Z2Nat.inj_pos in H.
+      rewrite Nat2Z.id in H.
+      assumption.
+    + by apply Zle_0_pos.
+    + by apply Zle_0_nat.
+  - apply Nat2Z.inj_lt in H.
+    rewrite positive_nat_Z in H.
+    assumption.
+Qed.
+
+Remark ltb_Z_nat p n : (Z.pos p <? Z.of_nat n)%Z = (Pos.to_nat p <? n).
+Proof.
+  destruct (Z.pos p <? Z.of_nat n)%Z eqn:H.
+  - move: H => /Z.ltb_spec0 => H.
+    apply lt_Z_nat in H.
+    by move: H => /Nat.ltb_spec0.
+  - move: H => /Z.ltb_spec0 => H.
+    move: (iffLRn (lt_Z_nat _ _) H) => /Nat.ltb_spec0.
+    intros H'. by apply negb_true_iff in H'.
+Qed.
+
+Remark le_0_Zneg n : ~ (0 <= Z.neg n)%Z.
+Proof.
+  induction n.
+  - rewrite Pos2Z.neg_xI. omega.
+  - rewrite Pos2Z.neg_xO. omega.
+  - omega.
+Qed.
+
 (* We can prove a stronger theorem stating the correspondence of static buffer
    identifiers in the program and the environment. *)
 (* Use ComponentMemoryExtra.reserve_blocks_prealloc *)
@@ -1377,12 +1416,12 @@ Local Opaque Memory.load.
   unfold Buffer.nth_error.
   destruct o as [| op | on].
   - destruct buf as [n | vs].
-    + admit. (* easy *)
+    + rewrite ltb_0_Z_nat in Hload'. assumption.
     + assumption.
   - destruct buf as [n | vs].
-    + admit. (* easy *)
+    + rewrite ltb_Z_nat in Hload'. assumption.
     + assumption.
-  - admit. (* contra on Hoff *)
+  - assert (Hcontra := @le_0_Zneg on). discriminate.
 Admitted.
 
 (* Alternative statements? *)
@@ -1400,20 +1439,25 @@ Proof.
   unfold Buffer.well_formed_buffer_opt in Hwfb.
   rewrite Hbuf in Hwfb.
   destruct buf as [n | vs].
-  - destruct o as [| o | o]; simpl in Hptr.
-    + admit. (* easy *)
-    + admit. (* easy *)
+  - destruct o as [| op | on]; simpl in Hptr.
+    + destruct (0 <? n); discriminate.
+    + destruct (Pos.to_nat op <? n); discriminate.
     + discriminate.
-  - destruct o as [| o | o]; simpl in Hptr.
+  - destruct o as [| op | on]; simpl in Hptr.
     + destruct vs as [| v vs];
         [discriminate |].
       injection Hptr as Hptr; subst v.
       move: Hwfb => /andP => [[Hsize Hptrs]].
       discriminate.
     + move: Hwfb => /andP => [[Hsize Hptrs]].
-      admit. (* contra, similar as above *)
+      apply nth_error_In in Hptr.
+      apply In_in in Hptr.
+      move: Hptrs => /allP => Hcontra.
+      specialize (Hcontra _ Hptr).
+      discriminate.
     + discriminate.
-Admitted.
+Qed.
+
 (* RB: Slight "misnomer" because of the presence of matching_mains.
    Closely connected to linkable, but not exactly the same at this
    level. Is there a benefit to combining these two in a definition? *)
