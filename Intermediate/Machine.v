@@ -1354,13 +1354,13 @@ Proof.
     intros H'. by apply negb_true_iff in H'.
 Qed.
 
-Remark le_0_Zneg n : ~ (0 <= Z.neg n)%Z.
-Proof.
-  induction n.
-  - rewrite Pos2Z.neg_xI. omega.
-  - rewrite Pos2Z.neg_xO. omega.
-  - omega.
-Qed.
+(* Remark le_0_Zneg n : ~ (0 <= Z.neg n)%Z. *)
+(* Proof. *)
+(*   induction n. *)
+(*   - rewrite Pos2Z.neg_xI. omega. *)
+(*   - rewrite Pos2Z.neg_xO. omega. *)
+(*   - omega. *)
+(* Qed. *)
 
 (* We can prove a stronger theorem stating the correspondence of static buffer
    identifiers in the program and the environment. *)
@@ -1421,7 +1421,7 @@ Local Opaque Memory.load.
   - destruct buf as [n | vs].
     + rewrite ltb_Z_nat in Hload'. assumption.
     + assumption.
-  - assert (Hcontra := @le_0_Zneg on). discriminate.
+  - discriminate.
 Admitted.
 
 (* Alternative statements? *)
