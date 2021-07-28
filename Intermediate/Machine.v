@@ -20,11 +20,56 @@ Set Bullet Behavior "Strict Subproofs".
 Inductive register : Type :=
   R_ONE | R_COM | R_AUX1 | R_AUX2 | R_RA | R_SP | R_ARG.
 
+Definition register_eqb (r1 r2 : register) : bool :=
+  match r1, r2 with
+  | R_ONE, R_ONE
+  | R_COM, R_COM
+  | R_AUX1, R_AUX1
+  | R_AUX2, R_AUX2
+  | R_RA, R_RA
+  | R_SP, R_SP
+  | R_ARG, R_ARG
+    => true
+  | _, _
+    => false
+  end.
+
+Lemma registerP : Equality.axiom register_eqb.
+Proof.
+  intros [] []; by constructor.
+Qed.
+
+Definition register_eqMixin: Equality.mixin_of register := EqMixin registerP.
+Canonical register_eqType := Eval hnf in EqType register register_eqMixin.
+
 Definition label := nat.
 
 Variant imvalue : Type :=
 | IInt : Z -> imvalue
 | IPtr : Pointer.t -> imvalue.
+
+Definition imvalue_eqb (v1 v2 : imvalue) : bool :=
+  match v1, v2 with
+  | IInt i1, IInt i2 => Z.eqb i1 i2
+  | IPtr p1, IPtr p2 => Pointer.eq p1 p2
+  | _, _ => false
+  end.
+
+Lemma imvalueP : Equality.axiom imvalue_eqb.
+Proof.
+  intros [] [];
+    try (by constructor);
+    simpl.
+  - destruct (Z.eqb_spec z z0); constructor.
+    + subst. reflexivity.
+    + injection. contradiction.
+  - destruct (Pointer.eqP t t0); constructor.
+    + subst. reflexivity.
+    + injection. contradiction.
+Qed.
+
+Definition imvalue_eqMixin: Equality.mixin_of imvalue := EqMixin imvalueP.
+Canonical imvalue_eqType := Eval hnf in EqType imvalue imvalue_eqMixin.
 
 Definition imm_to_val (im : imvalue) : value :=
   match im with
@@ -54,7 +99,121 @@ Variant instr :=
 (* termination *)
 | IHalt : instr.
 
+Definition instr_eqb (i1 i2 : instr) : bool :=
+  match i1, i2 with
+  | INop, INop
+  | IReturn, IReturn
+  | IHalt, IHalt
+    => true
+  | ILabel l1, ILabel l2
+  | IJal l1, IJal l2
+    => ssrnat.eqn l1 l2
+  | ICall C1 P1, ICall C2 P2
+    => ssrnat.eqn C1 C2 && ssrnat.eqn P1 P2
+  | IJump r1, IJump r2
+    => register_eqb r1 r2
+  | ILoad r1 r1', ILoad r2 r2'
+  | IStore r1 r1', IStore r2 r2'
+  | IAlloc r1 r1', IAlloc r2 r2'
+  | IMov r1 r1', IMov r2 r2'
+    => register_eqb r1 r2 && register_eqb r1' r2'
+  | IPtrOfLabel l1 r1, IPtrOfLabel l2 r2
+  | IBnz r1 l1, IBnz r2 l2
+    => ssrnat.eqn l1 l2 && register_eqb r1 r2
+  | IConst v1 r1, IConst v2 r2
+    => imvalue_eqb v1 v2 && register_eqb r1 r2
+  | IBinOp op1 r1 r1' r1'', IBinOp op2 r2 r2' r2''
+    => binop_eqb op1 op2 &&
+       register_eqb r1 r2 && register_eqb r1' r2' && register_eqb r1'' r2''
+  | _, _
+    => false
+  end.
+
+(* TODO: Is this available anywhere? Move in any case. *)
+Lemma eqnP : Equality.axiom ssrnat.eqn.
+  intros n.
+  induction n as [| n' IHn'].
+  - intros [| m']; by constructor.
+  - intros [| m'].
+    + by constructor.
+    + simpl.
+      specialize (IHn' m').
+      inversion IHn'; subst;
+        constructor.
+      * reflexivity.
+      * injection. contradiction.
+Qed.
+
+(* TODO: Complete and reuse tactic above. *)
+Ltac t_reflecter :=
+  repeat
+    (* From the rightto account for the associativity of the conjunction. *)
+    (match goal with
+     | |- ssrbool.reflect _ (ssrnat.eqn ?N1 ?N2) =>
+       destruct (eqnP N1 N2)
+     | |- ssrbool.reflect _ (_ && ssrnat.eqn ?N1 ?N2) =>
+       destruct (eqnP N1 N2)
+     | |- ssrbool.reflect _ (imvalue_eqb ?N1 ?N2) =>
+       destruct (imvalueP N1 N2)
+     | |- ssrbool.reflect _ (binop_eqb ?OP1 ?OP2) =>
+       destruct (binopP OP1 OP2)
+     | |- ssrbool.reflect _ (register_eqb ?R1 ?R2) =>
+       destruct (registerP R1 R2)
+     | |- ssrbool.reflect _ (_ && register_eqb ?R1 ?R2) =>
+       destruct (registerP R1 R2)
+     end;
+     subst;
+     (* Rearrange conjuncts so that simplification and recursion work. *)
+     try rewrite andb_true_r; try rewrite andb_false_r;
+     simpl);
+  (* Phase 2: solve appropriate reflection case. *)
+  constructor;
+  (* True cases are solved by reflexivity... *)
+  try reflexivity;
+  (* ... and false cases by contradiction on injective constructors. *)
+  injection; contradiction.
+
+Lemma instrP : Equality.axiom instr_eqb.
+Proof.
+  intros [] [];
+    try (by constructor);
+    simpl;
+    t_reflecter.
+Qed.
+
+Definition instr_eqMixin: Equality.mixin_of instr := EqMixin instrP.
+Canonical instr_eqType := Eval hnf in EqType instr instr_eqMixin.
+
 Definition code := list instr.
+
+Definition code_eqb (c1 c2 : code) : bool :=
+  eqseq c1 c2.
+
+Lemma codeP : Equality.axiom code_eqb.
+Proof.
+  intros c1.
+  induction c1 as [| i1 c1' IHc1'];
+    intros c2.
+  - destruct c2 as [| i2 c2'];
+      by constructor.
+  - destruct c2 as [| i2 c2'].
+    + by constructor.
+    + simpl. destruct (i1 == i2) eqn:Hcase.
+      * move: Hcase => /eqP ->.
+        specialize (IHc1' c2').
+        inversion IHc1'; subst;
+          constructor.
+        -- reflexivity.
+        -- injection as ?; subst.
+           contradiction.
+      * constructor.
+        injection as ? ?; subst.
+        move: Hcase => /eqP.
+        contradiction.
+Qed.
+
+Definition code_eqMixin: Equality.mixin_of code := EqMixin codeP.
+Canonical code_eqType := Eval hnf in EqType code code_eqMixin.
 
 Module Intermediate.
 
@@ -115,16 +274,10 @@ Module Register.
   Proof.
     unfold init. intros regdomm.
     rewrite !domm_set in regdomm.
-
-    (* Can we replace these similar lines by a match goal? *)
-    destruct r as [ | n1]; first by simpl.
-    destruct n1 as [ | n2]; first by simpl.
-    destruct n2 as [ | n3]; first by simpl.
-    destruct n3 as [ | n4]; first by simpl.
-    destruct n4 as [ | n5]; first by simpl.
-    destruct n5 as [ | n6]; first by simpl.
-    destruct n6 as [ | n7]; first by simpl.
-               
+    simpl in *.
+    repeat match goal with
+    | N : nat |- _ => destruct N as [| N]; first by simpl
+    end.
     by rewrite !in_fsetU1 domm0 in regdomm.
   Qed.
 
@@ -620,6 +773,35 @@ Definition reserve_component_blocks p C Cmem procs_code
   let Centrypoints := mkfmap (pmap map_entrypoint (zip procs bs)) in
   (Cmem', Cprocs, Centrypoints).
 
+Section Zip.
+  Lemma in_zip1 {X Y : eqType} (x : X) (y : Y) xs ys :
+    (x, y) \in zip xs ys ->
+    x \in xs.
+  Admitted.
+
+  Lemma in_zip2 {X Y : eqType} (x : X) (y : Y) xs ys :
+    (x, y) \in zip xs ys ->
+    y \in ys.
+  Admitted.
+
+  (* Lemma in_unzip2 {X Y : eqType} (x : X) (y : Y) xs ys : *)
+  (*   (x, y) \in zip xs ys -> *)
+  (*   y \in ys. *)
+  (* Admitted. *)
+
+  Lemma in_unzip2 {X : eqType} x (xs : NMap X) :
+    x \in unzip2 xs ->
+  exists n,
+    (* (n, x) \in xs. *)
+    xs n = Some x.
+  Admitted.
+
+  (* Lemma in_unzip2 {X Y : eqType} y (xys : seq (X * Y)) : *)
+  (*   y \in unzip2 xys -> *)
+  (* exists x, *)
+  (*   (x, y) \in xys. *)
+End Zip.
+
 Lemma reserve_component_blocks_some p C mem (Cprocs : NMap code) b Pcode :
   (reserve_component_blocks p C mem Cprocs).1.2 b = Some Pcode ->
 exists (b' : nat_ordType),
@@ -630,7 +812,11 @@ Proof.
     as [Cmem bs] eqn:HCmem.
   simpl.
   intro HPcode.
-Admitted.
+  apply mkfmap_Some in HPcode.
+  assert (HPcode' := in_zip2 HPcode).
+  apply in_unzip2 in HPcode'.
+  now eauto.
+Qed.
 
 (* In the foreseen, controlled use of this function, we always go on the Some
    branch. For each component C, we read its (initial) memory and use it to
@@ -1065,8 +1251,8 @@ Theorem prepare_procedures_procs_prog_procedures :
     Cprocs' b' = Some Pcode.
 Proof.
   unfold prepare_procedures_procs,
-        prepare_procedures_initial_memory,
-        prepare_procedures_initial_memory_aux.
+         prepare_procedures_initial_memory,
+         prepare_procedures_initial_memory_aux.
   setoid_rewrite mapmE.
   unfold omap, obind, oapp.
   setoid_rewrite mkfmapfE.
@@ -1137,6 +1323,45 @@ Proof.
   reflexivity.
 Qed.
 
+(* TODO: Find homes for these remarks. *)
+Remark ltb_0_Z_nat n : (0 <? Z.of_nat n)%Z = (0 <? n).
+Proof.
+  now destruct n.
+Qed.
+
+Remark lt_Z_nat p n : (Z.pos p < Z.of_nat n)%Z <-> (Pos.to_nat p < n).
+Proof.
+  split; intros H.
+  - apply Z2Nat.inj_lt in H.
+    + rewrite Z2Nat.inj_pos in H.
+      rewrite Nat2Z.id in H.
+      assumption.
+    + by apply Zle_0_pos.
+    + by apply Zle_0_nat.
+  - apply Nat2Z.inj_lt in H.
+    rewrite positive_nat_Z in H.
+    assumption.
+Qed.
+
+Remark ltb_Z_nat p n : (Z.pos p <? Z.of_nat n)%Z = (Pos.to_nat p <? n).
+Proof.
+  destruct (Z.pos p <? Z.of_nat n)%Z eqn:H.
+  - move: H => /Z.ltb_spec0 => H.
+    apply lt_Z_nat in H.
+    by move: H => /Nat.ltb_spec0.
+  - move: H => /Z.ltb_spec0 => H.
+    move: (iffLRn (lt_Z_nat _ _) H) => /Nat.ltb_spec0.
+    intros H'. by apply negb_true_iff in H'.
+Qed.
+
+Remark le_0_Zneg n : ~ (0 <= Z.neg n)%Z.
+Proof.
+  induction n.
+  - rewrite Pos2Z.neg_xI. omega.
+  - rewrite Pos2Z.neg_xO. omega.
+  - omega.
+Qed.
+
 (* We can prove a stronger theorem stating the correspondence of static buffer
    identifiers in the program and the environment. *)
 (* Use ComponentMemoryExtra.reserve_blocks_prealloc *)
@@ -1148,6 +1373,55 @@ Theorem prepare_procedures_memory_prog_buffers :
     (prog_buffers p (Pointer.component ptr)) = Some Cbufs /\
     Cbufs (Pointer.block ptr) = Some buf /\
     Buffer.nth_error buf (Pointer.offset ptr) = Some v.
+Proof.
+  unfold prepare_procedures_memory,
+         prepare_procedures_initial_memory,
+         prepare_procedures_initial_memory_aux.
+(* TODO: Encapsulate! *)
+Local Transparent Memory.load.
+  unfold Memory.load.
+Local Opaque Memory.load.
+  setoid_rewrite mapmE.
+  unfold omap, obind, oapp.
+  setoid_rewrite mkfmapfE.
+  intros p [[[perm C] b] o] v Hwf Hload.
+  simpl in Hload.
+  destruct (perm =? Permission.data) eqn:Hcase;
+    [| discriminate].
+  move: Hcase => /Nat.eqb_spec ->.
+  destruct (C \in domm (prog_interface p)) eqn:Hdomm;
+    rewrite Hdomm in Hload;
+    [| discriminate].
+  unfold reserve_component_blocks in Hload.
+  destruct (ComponentMemoryExtra.reserve_blocks
+              (ComponentMemory.prealloc (odflt emptym (prog_buffers p C)))
+              (length (elementsm (odflt emptym (prog_procedures p C)))))
+    as [Cmem' bs] eqn:Hcase.
+  rewrite Hcase in Hload.
+  simpl in Hload.
+  rewrite (wfprog_defined_buffers Hwf) in Hdomm.
+  move: Hdomm => /dommP => [[Cbufs HCbufs]].
+  rewrite HCbufs in Hcase. simpl in Hcase.
+  assert (Hload' :
+            ComponentMemory.load (ComponentMemory.prealloc Cbufs) b o = Some v)
+    by admit. (* by corresponding memory lemma *)
+  rewrite ComponentMemory.load_prealloc in Hload'.
+  destruct (0 <=? o)%Z eqn:Hoff;
+    [| discriminate].
+  destruct (Cbufs b) as [buf |] eqn:Hb;
+    [| discriminate].
+  simpl. exists Cbufs, buf.
+  split; [assumption |].
+  split; [assumption |].
+  unfold Buffer.nth_error.
+  destruct o as [| op | on].
+  - destruct buf as [n | vs].
+    + rewrite ltb_0_Z_nat in Hload'. assumption.
+    + assumption.
+  - destruct buf as [n | vs].
+    + rewrite ltb_Z_nat in Hload'. assumption.
+    + assumption.
+  - assert (Hcontra := @le_0_Zneg on). discriminate.
 Admitted.
 
 (* Alternative statements? *)
@@ -1165,20 +1439,25 @@ Proof.
   unfold Buffer.well_formed_buffer_opt in Hwfb.
   rewrite Hbuf in Hwfb.
   destruct buf as [n | vs].
-  - destruct o as [| o | o]; simpl in Hptr.
-    + admit. (* easy *)
-    + admit. (* easy *)
+  - destruct o as [| op | on]; simpl in Hptr.
+    + destruct (0 <? n); discriminate.
+    + destruct (Pos.to_nat op <? n); discriminate.
     + discriminate.
-  - destruct o as [| o | o]; simpl in Hptr.
+  - destruct o as [| op | on]; simpl in Hptr.
     + destruct vs as [| v vs];
         [discriminate |].
       injection Hptr as Hptr; subst v.
       move: Hwfb => /andP => [[Hsize Hptrs]].
       discriminate.
     + move: Hwfb => /andP => [[Hsize Hptrs]].
-      admit. (* contra, similar as above *)
+      apply nth_error_In in Hptr.
+      apply In_in in Hptr.
+      move: Hptrs => /allP => Hcontra.
+      specialize (Hcontra _ Hptr).
+      discriminate.
     + discriminate.
-Admitted.
+Qed.
+
 (* RB: Slight "misnomer" because of the presence of matching_mains.
    Closely connected to linkable, but not exactly the same at this
    level. Is there a benefit to combining these two in a definition? *)
