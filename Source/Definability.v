@@ -1418,18 +1418,32 @@ Section Definability.
           [cs [s [prefix_inform [prefix' [const_map [Star0 [Hproj [Hshift Hwf_cs]]]]]]]].
 
       move: Hwf_cs Star0.
-(* FIXME
-      case: cs / => /= _ procs stk mem _ _ arg P -> -> -> [] wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
+(* FIXME *)
+      (* case: cs / => /= _ procs stk mem _ _ arg P -> -> -> [] wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp. *)
+      case: cs / => /= _ procs stk mem _ _ arg P -> -> -> [] /andP [[]] /eqP wf_C_orig wb /andP [wf_e wf_suffix] wf_stk wf_mem P_exp.
 
       move=> Star0.
 
       have C_b := valid_procedure_has_block P_exp.
       have C_local := wfmem_counter _ C_b.
-      have wf_C: cur_comp s = cur_comp_of_event e by admit.
-      (* Requires reasonning about the memories *)
-      have wf_mem_e: well_formed_memory_event e mem by admit.
-      destruct (well_formed_memory_store_counter C_b wf_mem wf_C wf_mem_e) as
-          [mem' [Hmem' wf_mem']].
+      specialize (C_local _ _ wf_mem).
+      (* have wf_C: cur_comp s = cur_comp_of_event e *)
+      (*   by move: wb => /andP => [[]] => /eqP ->. *)
+
+      have wf_C: cur_comp s = cur_comp_of_event e
+        by now destruct e.
+
+      (* Requires reasoning about the memories *)
+      (* have wf_mem_e: well_formed_memory_event e mem by admit. *)
+      (* destruct (well_formed_memory_store_counter C_b wf_mem wf_C wf_mem_e) as *)
+      (*     [mem' [Hmem' wf_mem']]. *)
+
+      set C := cur_comp s.
+      assert (exists mem',
+                 Memory.store mem (Permission.data, C, Block.local, 0%Z) (Int (counter_value C (prefix ++ [:: e]))) = Some mem' /\
+                 well_formed_memory (prefix ++ [:: e]) mem')
+        as [mem' [Hmem' wf_mem']]
+        by admit.
 
       (* We can simulate the event-producing step as the concatenation
          of three successive stars:
@@ -1448,7 +1462,7 @@ Section Definability.
       (* NOTE: The base case was simple, but complications arise in the
          recursive case. The first star can be proved as before, but is it
          exactly what we need? *)
-      set C := cur_comp s.
+
       assert (Star1 : Star (CS.sem p)
                            [CState C, stk, mem , Kstop, expr_of_trace C P (comp_subtrace C t), arg] E0
                            [CState C, stk, mem', Kstop, expr_of_event C P e, arg]).
@@ -1461,19 +1475,20 @@ Section Definability.
                                   (expr_of_event C P e)
                                   (map (expr_of_event C P) (comp_subtrace C suffix))
                                   E_exit arg).
-        specialize (C_local prefix mem wf_mem).
+        (* specialize (C_local prefix mem wf_mem). *)
         rewrite map_length in H. specialize (H C_local).
         destruct H as [mem'' [Hmem'' Hstar]].
         assert (Heq : List.map (expr_of_event C P) (comp_subtrace C [:: e]) =
                       [:: expr_of_event C P e]).
         {
-          rewrite /C wf_C /=. now setoid_rewrite Nat.eqb_refl. 
+          rewrite /C wf_C /=. now setoid_rewrite Nat.eqb_refl.
         }
         rewrite Heq.
         enough (H : mem'' = mem') by (subst mem''; easy).
         rewrite -> counter_value_snoc in Hmem'.
         unfold cur_comp_of_event in Hmem'.
         simpl in Hmem'.
+        unfold C in Hmem'.
         rewrite -> wf_C in Hmem'.
         (* rewrite <- wf_C in Hmem'. *)
         rewrite eq_refl in Hmem'.
@@ -1497,7 +1512,7 @@ Section Definability.
            extend to calls and returns and various memory accesses and related
            manipulations, of which only calls and returns are observable at
            both levels. *)
-        destruct e as [C_ P' new_arg mem' regs C'|C_ ret_val mem' regs C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_ |C_];
+        destruct e as [C_ P' new_arg mem' regs C'|C_ ret_val mem' regs C' |C_ ptr v |C_ ptr v|C_ |C_ |C_ |C_];
           simpl in wf_C, wf_e(*, wb_suffix*); subst C_.
 
         - (* Event case: call. *)
@@ -1506,7 +1521,7 @@ Section Definability.
           exists (StackState C' (C :: callers s)).
           have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
 
-          destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg].
+          (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
           simpl.
           exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem,
                   Kstop, procedure_of_trace C' P' t, new_arg].
@@ -1519,7 +1534,7 @@ Local Transparent loc_of_reg.
             unfold loc_of_reg.
 Local Opaque loc_of_reg.
             do 7 take_step;
-              [reflexivity | exact Harg |].
+              [reflexivity | (*exact Harg*) admit |].
             (* RB: TODO: At this precise moment the call is executed, so the
                two memories should be identical. And nothing has changed [mem]
                in the execution of the previous steps. *)
@@ -1534,7 +1549,7 @@ Local Opaque loc_of_reg.
             (* FIXME: Similar steps will break after this point. *)
           + econstructor; trivial.
             {
-              exact (snd (andP wb)). (* New subgoal. *)
+              exact wf_suffix. (* New subgoal. *)
             }
             { destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
               eexists []; eexists; simpl; split; eauto.
@@ -1571,7 +1586,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                      apply star_refl.
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
-              admit. (* Easy. *)
+              admit. (* Easy, see [wb]. *)
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
@@ -1599,15 +1614,18 @@ Local Transparent expr_of_const_val loc_of_reg.
                     exists val.
                     erewrite Memory.load_after_store_neq; try eassumption.
                     intros Hcontra. inversion Hcontra. contradiction.
-                - intros prefix0' Csrc P' arg' mem'' regs Cdst Hprefix Csrc_b.
-                  apply rcons_inv in Hprefix as [Hprefix Hevent].
-                  discriminate.
-                - intros prefix0' Csrc P' arg' regs Cdst Hprefix Csrc_b.
-                  apply rcons_inv in Hprefix as [Hprefix Hevent].
-                  discriminate.
-                - intros prefix0' C' rptr rsize mem'' regs Hprefix C'_b.
-                  apply rcons_inv in Hprefix as [Hprefix Hevent].
-                  discriminate.
+                (* - intros prefix0' Csrc P' arg' mem'' regs Cdst Hprefix Csrc_b. *)
+                (*   apply rcons_inv in Hprefix as [Hprefix Hevent]. *)
+                (*   discriminate. *)
+                (* - intros prefix0' Csrc P' arg' regs Cdst Hprefix Csrc_b. *)
+                (*   apply rcons_inv in Hprefix as [Hprefix Hevent]. *)
+                (*   discriminate. *)
+                (* - intros prefix0' C' rptr rsize mem'' regs Hprefix C'_b. *)
+                (*   apply rcons_inv in Hprefix as [Hprefix Hevent]. *)
+                (*   discriminate. *)
+                - intros prefix0' e0' Ht.
+                  apply rcons_inv in Ht as [? ?]; subst prefix0' e0'.
+                  admit.
               }
 
           + (* Before processing the goal, introduce existential witnesses. *)
@@ -1615,22 +1633,23 @@ Local Transparent expr_of_const_val loc_of_reg.
             exists (StackState C (callers s)). eexists. split.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
-              do 12 take_step.
-              -- reflexivity.
-              -- exact Hstore.
-              -- (* Do recursive call. *)
-                  do 3 take_step.
-                  ++ reflexivity.
-                  ++ now apply find_procedures_of_trace.
-                  ++ (* Now we are done with the event. *)
-                     apply star_refl.
+              (* do 12 take_step. *)
+              (* -- reflexivity. *)
+              (* -- exact Hstore. *)
+              (* -- (* Do recursive call. *) *)
+              (*     do 3 take_step. *)
+              (*     ++ reflexivity. *)
+              (*     ++ now apply find_procedures_of_trace. *)
+              (*     ++ (* Now we are done with the event. *) *)
+              (*        apply star_refl. *)
+              admit. (* Currently gets stuck after two steps. *)
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
               admit. (* Easy. *)
-              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
-              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-              exists bot. split; [| split]; easy.
-              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
+              (* destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk. *)
+              (* eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top). *)
+              (* exists bot. split; [| split]; easy. *)
+              (* admit. (* RB: TODO: Reestablish memory well-formedness, easy. *) *)
 
           + (* Before processing the goal, introduce existential witnesses. *)
             destruct (well_formed_memory_store_reg_offset v Undef C_b wf_mem) as [mem' Hstore].
@@ -1674,10 +1693,10 @@ Local Transparent loc_of_reg.
           + (* Reestablish invariant. *)
             econstructor; try reflexivity; try eassumption.
             * (* As expected, well-bracketedness appears as a new sub-goal. *)
-              exact (snd (andP wb)).
-            * destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
-              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-              exists bot. split; [| split]; easy.
+              (* exact (snd (andP wb)). *) admit.
+            (* * destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk. *)
+            (*   eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top). *)
+            (*   exists bot. split; [| split]; easy. *)
             * admit. (* RB: TODO: Restore memory invariant (easy, after first line). *)
 
         - (* EBinop *)
@@ -1776,8 +1795,20 @@ Local Transparent loc_of_reg.
 
         - (* EAlloc *)
           (* Before processing the goal, introduce existential witnesses. *)
-          destruct ((wfmem_alloc wf_mem) _ _ _ _ _ _ Logic.eq_refl C_b)
-            as [size [Hsize Hload0]].
+          (* destruct ((wfmem_alloc wf_mem) _ _ _ _ _ _ Logic.eq_refl C_b) *)
+          (*   as [size [Hsize Hload0]]. *)
+        (* wfmem_alloc: *)
+        (*   forall prefix' C rptr rsize mem' regs, *)
+        (*     prefix = prefix' ++ [:: EAlloc C rptr rsize mem' regs] -> *)
+        (*     component_buffer C -> *)
+        (*   exists size, *)
+        (*     (size > 0)%Z /\ *)
+        (*     Memory.load mem (Permission.data, C, Block.local, reg_offset rsize) = Some (Int size); *)
+          assert (exists size,
+                     (size > 0)%Z /\
+                     Memory.load mem (Permission.data, C, Block.local, reg_offset e0) = Some (Int size))
+            as [size [Hsize Hload0]]
+            by admit.
           destruct (Memory.alloc_after_load mem _ _ _ _ _ (Z.to_nat size) Hload0)
             as [mem' [b' [Hblock Halloc1]]].
           destruct (well_formed_memory_store_reg_offset
@@ -1815,31 +1846,6 @@ Local Transparent loc_of_reg.
             exists bot. split; [| split]; easy.
             admit. (* RB: TODO: Restore invariant. *)
 
-        - (* EInvalidateRA *)
-          (* Before processing the goal, introduce existential witnesses. *)
-          inversion wf_mem as [_ wfmem_meta].
-          destruct (well_formed_memory_store_reg_offset E_R_RA (Int 0) C_b wf_mem) as [mem' Hstore].
-          (* Continue. *)
-          exists (EInvalidateRA C s0 t0).
-          exists (StackState C (callers s)). eexists. split.
-          + (* Evaluate steps of back-translated event first. *)
-Local Transparent loc_of_reg.
-             do 8 take_step.
-             * reflexivity.
-             * exact Hstore.
-             * (* Do recursive call. *)
-               do 3 take_step.
-               -- reflexivity.
-               -- now apply find_procedures_of_trace.
-               -- (* Now we are done with the event. *)
-                  apply star_refl.
-          + (* Reestablish invariant. *)
-            econstructor; try reflexivity; try eassumption.
-            admit. (* Easy. *)
-            destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
-            eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-            exists bot. split; [| split]; easy.
-            admit. (* RB: TODO: Restore invariant. *)
       }
 
       destruct Star2 as (e' & s' & cs' & Star2 & wf_cs').
@@ -1890,7 +1896,6 @@ Local Transparent loc_of_reg.
       (*   rewrite wf_C. *)
       (*   (* And now we do the event e *) *)
       (*   (* ... *) *)
-*)
     Admitted.
 
     (* Some other experiments on rephrasings of the definability lemma.
@@ -2731,9 +2736,22 @@ Local Transparent expr_of_const_val loc_of_reg.
         simpl. repeat (rewrite mapmE; simpl); rewrite mem_domm.
         case HCint: (intf C) => [Cint|] //=.
         by rewrite ComponentMemory.load_prealloc /=.
-      - admit.
-    (* Qed. *)
-    Admitted. (* RB: TODO: Prove new memory sub-goals, easy. *)
+      - intros C r Hbuf.
+(* TODO: Rewrite lemma to turn [Memory.load] into [ComponentMemory.load]. *)
+Local Transparent Memory.load. unfold Memory.load; simpl. Local Opaque Memory.load.
+        unfold Source.prepare_buffers.
+        rewrite mapmE. unfold omap, obind, oapp.
+        destruct (Source.prog_buffers p C) as [Cbufs |] eqn:HCbufs;
+          move: HCbufs;
+          rewrite /p /program_of_trace /= mapmE /omap /obind /oapp => HCbufs.
+        + destruct (intf C); last discriminate.
+          rewrite ComponentMemory.load_prealloc.
+          injection HCbufs as ?; subst.
+          destruct r; simpl; by eauto.
+        + destruct (intf C) eqn:Hcontra; first discriminate.
+          move: Hbuf. rewrite /component_buffer => /dommPn. contradiction.
+      - intros prefix e Hcontra. destruct prefix; discriminate.
+    Qed.
 
 End WithTrace.
 End Definability.
@@ -2867,7 +2885,7 @@ Proof.
     (* by apply: CS.intermediate_well_formed_events Hstar. *)
   {
     apply: CS.intermediate_well_formed_events Hstar.
-    - admit.
+    - by apply: Intermediate.linking_well_formedness.
     - assumption.
   }
   have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf procs m'.
