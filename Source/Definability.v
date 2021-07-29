@@ -1314,6 +1314,9 @@ Section Definability.
   &  valid_procedure C P
   :  well_formed_state_right (* stk_st *) suffix [CState C, stk, mem, k, exp, arg].
 
+  (* NOTE: Do we need/want to split off memory invariants, etc., so that they
+     hold at every step? *)
+
     (* [DynShare] We will probably need a variant of well formedness that is defined
      on non-informative traces as well. *)
 
@@ -1439,10 +1442,16 @@ Section Definability.
       (*     [mem' [Hmem' wf_mem']]. *)
 
       set C := cur_comp s.
+      (* FIXME: The event may modify the memory, the store needs to take place
+         in that memory, after the event has been "executed". *)
+      (* assert (exists mem', *)
+      (*            Memory.store mem (Permission.data, C, Block.local, 0%Z) (Int (counter_value C (prefix ++ [:: e]))) = Some mem' /\ *)
+      (*            well_formed_memory (prefix ++ [:: e]) mem') *)
+      (*   as [mem' [Hmem' wf_mem']] *)
+      (*   by admit. *)
       assert (exists mem',
-                 Memory.store mem (Permission.data, C, Block.local, 0%Z) (Int (counter_value C (prefix ++ [:: e]))) = Some mem' /\
-                 well_formed_memory (prefix ++ [:: e]) mem')
-        as [mem' [Hmem' wf_mem']]
+                 Memory.store mem (Permission.data, C, Block.local, 0%Z) (Int (counter_value C (prefix ++ [:: e]))) = Some mem')
+        as [mem' Hmem']
         by admit.
 
       (* We can simulate the event-producing step as the concatenation
@@ -1499,6 +1508,8 @@ Section Definability.
         rewrite Hmem' in Hmem''.
         congruence. }
 
+      (* TODO: Probably split into a separate lemma (after it is in better
+         shape). *)
       assert (Star2 : exists e' s' cs',
                  Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] (event_non_inform_of [:: e']) cs' /\
                  well_formed_state_r s' (prefix ++ [e]) suffix cs' (* TODO: [e']? *)
@@ -1507,7 +1518,7 @@ Section Definability.
              ).
       {
 
-        clear Star1 wf_mem C_local Hmem'. revert mem' wf_mem'. rename mem into mem0. intros mem wf_mem.
+        clear Star1 (*wf_mem*) C_local (*Hmem'*). revert mem' (*wf_mem'*) Hmem'. rename mem into mem0. intros mem (*wf_mem'*) Hmem.
         (* Case analysis on observable events, which in this rich setting
            extend to calls and returns and various memory accesses and related
            manipulations, of which only calls and returns are observable at
@@ -1556,6 +1567,63 @@ Local Opaque loc_of_reg.
               split; trivial.
               eexists arg, P, top, bot.
               by do 3 (split; trivial). }
+            {
+              (* clear -wf_mem Hmem. *)
+              destruct wf_mem as [wfmem_counter wfmem_meta wfmem].
+              constructor.
+              - intros C_ Hcomp.
+                (* TODO: Use [case]/reflection lemma. *)
+                destruct (C == C_) eqn:Heq;
+                  move: Heq => /eqP => Heq.
+                + subst C_.
+                  now rewrite (Memory.load_after_store _ _ _ _ _ Hmem) eqxx.
+                + erewrite Memory.load_after_store_neq; try eassumption; try congruence.
+                  admit. (* The counters corresponding to other components are not modified. *)
+              - intros C_ r Hcomp.
+                specialize (wfmem_meta _ r Hcomp) as [v Hload].
+                exists v. erewrite Memory.load_after_store_neq; eauto.
+                destruct r; discriminate.
+              - intros pref ev Hprefix.
+                apply rcons_inv in Hprefix as [? ?]; subst pref ev.
+                assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
+                  as [Hprefix | [prefix_ [e_ Hprefix]]]
+                  by admit;
+                  subst prefix.
+                + assert (prefix' = [::]) by admit; subst prefix'.
+                  (* Missing invariant (or lemma on initial states?)... *)
+                  admit.
+                + specialize (wfmem _ _ Logic.eq_refl) as [Hsnapshot Hregs].
+                  split.
+                  * intros [cid bid] Hshared.
+                    specialize (Hsnapshot (cid, bid) Hshared).
+                    unfold memory_shifts_memory_at_shared_addr,
+                    memory_renames_memory_at_shared_addr,
+                    sigma_shifting_wrap_bid_in_addr,
+                    sigma_shifting_lefttoright_addr_bid
+                      in *.
+                    destruct Hsnapshot as [[cid' bid'] [Hinj [Hrename Hrename']]].
+                    injection Hinj as ? ?; subst cid' bid'.
+                    assert (Hneq : ssrnat.addn (ssrnat.subn bid (all_zeros_shift cid)) (uniform_shift 1 cid) <> Block.local). {
+                      rewrite ssrnat.addn1. discriminate.
+                    }
+                    have Hgood: left_block_id_good_for_shifting (all_zeros_shift cid) bid. {
+                      unfold
+                      left_block_id_good_for_shifting,
+                      all_zeros_shift.
+                      auto.
+                    }
+                    eapply sigma_lefttoright_Some_spec in Hgood as [rbid Hgood].
+                    erewrite Hgood.
+                    eexists. split; [| split].
+                    -- reflexivity.
+                    -- intros offset v Hload.
+                       (* [e_]'s memory is that of the call event. *)
+                       (* Extended trace well-formedness: *)
+                       (* Is t a good trace? *)
+                       admit.
+                    -- admit.
+                  * admit.
+            }
             right. by apply: (closed_intf Himport).
             (* NOTE: These snippets continue to work, though they may incur
                modifications later on. *)
@@ -1646,10 +1714,10 @@ Local Transparent expr_of_const_val loc_of_reg.
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
               admit. (* Easy. *)
-              (* destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk. *)
-              (* eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top). *)
-              (* exists bot. split; [| split]; easy. *)
-              (* admit. (* RB: TODO: Reestablish memory well-formedness, easy. *) *)
+              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy.
+              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
 
           + (* Before processing the goal, introduce existential witnesses. *)
             destruct (well_formed_memory_store_reg_offset v Undef C_b wf_mem) as [mem' Hstore].
@@ -2858,11 +2926,12 @@ Proof.
     rewrite /intf -mem_domm domm_union.
     do 2![rewrite Intermediate.wfprog_defined_procedures //].
     by rewrite -domm_union mem_domm e.
-  set m' := finpref_trace m.
-  have {Hbeh} [cs [cs' [Hcs Hstar]]] :
+  set m' := finpref_trace m. (* FIXME: Instantiate star simulation. *)
+  have {Hbeh} [cs [cs' [Hcs Hstar]]] : (* TODO: This should come from a separate lemma. *)
       exists cs cs',
         I.CS.initial_state (Intermediate.program_link p c) cs /\
         Star (I.CS.sem_inform (Intermediate.program_link p c)) cs m' cs'.
+  {
     case: b / Hbeh Hpre {Hnot_wrong}.
     - rewrite {}/m' => cs beh Hcs Hbeh Hpre.
       case: m Hpre=> [m|m|m] /= Hpre.
@@ -2879,6 +2948,7 @@ Proof.
         by case: m.
       do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
       split; try reflexivity; exact: star_refl.
+  }
   -
   set procs := Intermediate.prog_procedures (Intermediate.program_link p c).
   have wf_events : all (well_formed_event intf procs) m'.
@@ -2910,7 +2980,8 @@ Proof.
        needed, nor should the additional assumption. *)
   exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
   exists (Source.program_unlink (domm (Intermediate.prog_interface c)) back).
-  exists (project_finpref_behavior m).
+  (* Check project_finpref_behavior (FTerminates m'). *)
+  exists (project_finpref_behavior m). (* FIXME: This should involve m'! *)
   eexists. (* RB: TODO: [DynShare] Provide witnesses. *)
   split=> /=.
     rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
