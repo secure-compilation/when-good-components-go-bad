@@ -762,13 +762,14 @@ Section Definability.
         case: e=> [C' P' v mem regs C''| | | | | | | ]
                     //=;
                     try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH.
+        all:admit.
+        (* FIXME
         * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
-          rewrite !fsub0set /=.
           by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
         (* RB: TODO: Refactor cases. *)
         * move=> C' v r. intros.
           by rewrite !called_procedures_loc_of_reg
-                     called_procedures_expr_of_const_val
+                     called_procedures_expr_of_const_val.
                      !fset0U fsetU0 fsubU1set in_fsetU1 eqxx /= IH.
         (* NOTE: Standard cases, not covered by [try by] above. *)
         * move=> C' v r. intros.
@@ -786,6 +787,7 @@ Section Definability.
         * move=> C' v r. intros.
           by rewrite !called_procedures_loc_of_reg
                      !fset0U !fsetU0 !fsubUset !fsub1set !in_fsetU1 !eqxx /= IH.
+        FIXME *)
       }
       move=> C' P' /sub/fsetU1P [[-> ->]|] {sub}.
         * rewrite eqxx find_procedures_of_trace;
@@ -975,10 +977,12 @@ Section Definability.
     (* Notice that the "from" state (consisting of a Register.t and a Memory.t)    *)
     (* is implicitly given by the first parameter, which is an event_inform.       *)
     (* The second and the third parameters represent the "to" state.               *)
-    Inductive event_step_to_regfile_mem : event_inform ->
-                                          Machine.Intermediate.Register.t ->
-                                          Memory.t ->
-                                          Prop :=
+    Inductive event_step_from_regfile_mem : Machine.Intermediate.Register.t ->
+                                            Memory.t ->
+                                            (* Register file and memory BEFORE
+                                               event-producing step *)
+                                            event_inform ->
+                                            Prop :=
     | step_ECallInform:
         forall C P call_arg mem regs regs' C',
           C <> C' ->
@@ -987,7 +991,7 @@ Section Definability.
             Machine.R_COM
             regs = call_arg ->
           regs' = Machine.Intermediate.Register.invalidate regs ->
-          event_step_to_regfile_mem (ECallInform C P call_arg mem regs C') regs' mem
+          event_step_from_regfile_mem regs mem (ECallInform C P call_arg mem regs' C')
     | step_ERetInform:
         forall mem regs regs' C C' ret_arg,
           C <> C' ->
@@ -995,21 +999,21 @@ Section Definability.
             Machine.R_COM
             regs = ret_arg ->
           regs' = Machine.Intermediate.Register.invalidate regs ->
-          event_step_to_regfile_mem (ERetInform C ret_arg mem regs C') regs' mem
+          event_step_from_regfile_mem regs mem (ERetInform C ret_arg mem regs' C')
     | step_EConst:
         forall mem regs regs' C er v,
           regs' = Machine.Intermediate.Register.set
                     (Ereg_to_reg er)
                     v
                     regs ->
-          event_step_to_regfile_mem (EConst C v er mem regs) regs' mem
+          event_step_from_regfile_mem regs mem (EConst C v er mem regs')
     | step_EMov:
         forall mem regs regs' C er1 er2,
           regs' = Machine.Intermediate.Register.set (Ereg_to_reg er2)
                                                     (Machine.Intermediate.Register.get
                                                        (Ereg_to_reg er1) regs)
                                                     regs ->
-          event_step_to_regfile_mem (EMov C er1 er2 mem regs) regs' mem
+          event_step_from_regfile_mem regs mem (EMov C er1 er2 mem regs')
     | step_EBinop:
         forall result eop mem regs regs' C er1 er2 er3,
           result = eval_binop
@@ -1019,7 +1023,7 @@ Section Definability.
           regs' = Machine.Intermediate.Register.set (Ereg_to_reg er3)
                                                     result
                                                     regs ->
-          event_step_to_regfile_mem (EBinop C eop er1 er2 er3 mem regs) regs' mem
+          event_step_from_regfile_mem regs mem (EBinop C eop er1 er2 er3 mem regs')
     | step_ELoad:
         forall mem regs regs' C er1 er2 ptr v,
           Machine.Intermediate.Register.get
@@ -1029,7 +1033,7 @@ Section Definability.
           Machine.Intermediate.Register.set
             (Ereg_to_reg er2)
             v regs = regs' ->
-          event_step_to_regfile_mem (ELoad C er1 er2 mem regs) regs' mem
+          event_step_from_regfile_mem regs mem (ELoad C er1 er2 mem regs')
     | step_EStore:
         forall mem mem' regs C ptr er1 er2,
           Machine.Intermediate.Register.get
@@ -1044,7 +1048,7 @@ Section Definability.
                 regs
             )
           = Some mem' ->
-          event_step_to_regfile_mem (EStore C er1 er2 mem regs) regs mem'
+          event_step_from_regfile_mem regs mem (EStore C er1 er2 mem' regs)
     | step_EAlloc:
         forall mem mem' regs regs' C ersize erptr size ptr,
           Machine.Intermediate.Register.get
@@ -1057,37 +1061,43 @@ Section Definability.
             (Ereg_to_reg erptr)
             (Ptr ptr)
             regs ->
-          event_step_to_regfile_mem (EAlloc C erptr ersize mem regs) regs' mem'.
+          event_step_from_regfile_mem regs mem (EAlloc C erptr ersize mem' regs').
     (* | step_EInvalidateRA: *)
     (*     forall mem regs regs' C, *)
     (*       Machine.Intermediate.Register.set *)
     (*         Machine.R_RA *)
     (*         Undef (* We could have chosen any value here.     *) *)
-    (*               (* When relating event_step_to_regfile_mem  *) *)
+    (*               (* When relating event_step_from_regfile_mem  *) *)
     (*               (* to Intermediate.CS.step, we should be    *) *)
     (*               (* careful to exclude R_RA from the register*) *)
     (*               (* equality relation.                       *) *)
     (*         regs = regs' -> *)
-    (*       event_step_to_regfile_mem (EInvalidateRA C mem regs) regs' mem. *)
+    (*       event_step_from_regfile_mem (EInvalidateRA C mem regs) regs' mem. *)
 
-    Inductive prefix_star_event_steps : trace event_inform ->
-                                        Machine.Intermediate.Register.t ->
-                                        Memory.t
-                                        -> Prop :=
+    Inductive prefix_star_event_steps : (* Machine.Intermediate.Register.t -> *)
+                                        (* Memory.t -> *)
+                                        trace event_inform -> Prop :=
     | nil_star_event_steps:
-        prefix_star_event_steps
-          E0
-          Machine.Intermediate.Register.init
-          (Source.prepare_buffers p)
+        prefix_star_event_steps E0
+          (* Machine.Intermediate.Register.init *)
+          (* (Source.prepare_buffers p) *)
+          (* E0 *)
     (* AEK: Will prepare_buffers match the Intermediate prepare buffer function? *)
+    | singleton_star_event_steps:
+        forall e,
+          event_step_from_regfile_mem
+            Machine.Intermediate.Register.init
+            (Source.prepare_buffers p)
+            e ->
+          prefix_star_event_steps [:: e]
     | rcons_star_event_steps:
-        forall prefix regs mem e regs' mem',
-          prefix_star_event_steps prefix regs mem ->
-          register_file_of_event_inform e = regs ->
-          mem_of_event_inform e = mem ->
-          event_step_to_regfile_mem e regs' mem' ->
-          prefix_star_event_steps (rcons prefix e) regs' mem'.
-          
+        forall prefix e e',
+          prefix_star_event_steps (rcons prefix e) ->
+          event_step_from_regfile_mem (register_file_of_event_inform e) (mem_of_event_inform e) e' ->
+          prefix_star_event_steps (rcons (rcons prefix e) e').
+
+    (* TO BE CONTINUED *)
+
     Definition well_formed_intermediate_prefix (pref: trace event_inform) : Prop :=
       exists regs mem, prefix_star_event_steps pref regs mem.
 
