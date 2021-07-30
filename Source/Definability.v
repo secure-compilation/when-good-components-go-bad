@@ -1376,6 +1376,7 @@ Section Definability.
       final state needs to be established. *)
     Lemma definability_gen_rel_right prefix suffix :
       t = prefix ++ suffix ->
+      well_formed_intermediate_prefix prefix ->
     exists cs s prefix_inform prefix' const_map,
       Star (CS.sem p) (CS.initial_machine_state p) prefix' cs /\
       project_non_inform prefix_inform = prefix' /\
@@ -1416,9 +1417,11 @@ Section Definability.
             -- by move=> [].
           * unfold valid_procedure. now auto.
     - (* Inductive step. *)
-      rewrite -catA => Et.
-      specialize (IH (e :: suffix) Et) as
+      rewrite -catA => Et Hwfip.
+      assert (Hwfip' : well_formed_intermediate_prefix prefix) by admit.
+      specialize (IH (e :: suffix) Et Hwfip') as
           [cs [s [prefix_inform [prefix' [const_map [Star0 [Hproj [Hshift Hwf_cs]]]]]]]].
+      clear Hwfip'.
 
       move: Hwf_cs Star0.
 (* FIXME *)
@@ -1661,9 +1664,22 @@ Local Opaque loc_of_reg.
                     unfold postcondition_event_registers in Hregs.
                     erewrite Memory.load_after_store_neq in Hload; eauto.
                     2:{ admit. }
+
+                    (* Dead end (for now) *)
+
+                    inversion Hwfip as [reg' [mem' Hprefstar]].
+                    inversion Hprefstar; first admit. (* contra *)
+                    subst regs' mem'0 regs0 mem1.
+                    rewrite cats1 in H.
+                    assert (prefix = rcons prefix_ e_) by admit; subst prefix.
+                    assert (e = ECallInform (cur_comp s) P' new_arg (mem_of_event_inform e_) regs C') by admit; subst e.
+                    clear H. simpl in *.
+                    inversion H3. subst mem' regs' C'0 regs0 mem1 new_arg P0 C0 call_arg reg'. clear H3.
+
                     Check next_comp_of_event.
                     specialize (Hregs _ _ v Hoffset).
-                    (* Dead end (for now) *)
+
+
             }
             right. by apply: (closed_intf Himport).
             (* NOTE: These snippets continue to work, though they may incur
