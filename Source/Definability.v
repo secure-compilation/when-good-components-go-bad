@@ -1620,9 +1620,50 @@ Local Opaque loc_of_reg.
                        (* [e_]'s memory is that of the call event. *)
                        (* Extended trace well-formedness: *)
                        (* Is t a good trace? *)
-                       admit.
-                    -- admit.
-                  * admit.
+                       simpl in *.
+                       (* Calls do not modify the (shared) memory, therefore
+                          these two should be identical. *)
+                       assert (Hmem' : mem' = mem_of_event_inform e_) by admit.
+                       subst mem'.
+                       specialize (Hrename _ _ Hload) as [v' [Hload' Hrename]].
+                       exists v'. split.
+                       ++ (* NOTE: Lemmas on all_zeros_shift? *)
+                          unfold all_zeros_shift, uniform_shift,
+                                 sigma_shifting_lefttoright_option
+                           in Hgood.
+                          injection Hgood as ?; subst rbid.
+                          erewrite Memory.load_after_store_neq; eauto.
+                          rewrite ssrnat.addn1. discriminate.
+                       ++ assumption.
+                    -- (* "Symmetric" case
+                          TODO: refactor *)
+                       intros offset v Hload.
+                       simpl in *.
+                       assert (Hmem' : mem' = mem_of_event_inform e_) by admit.
+                       subst mem'.
+                       erewrite Memory.load_after_store in Hload; eauto.
+                       unfold all_zeros_shift, uniform_shift,
+                              sigma_shifting_lefttoright_option
+                         in *.
+                       injection Hgood as ?; subst rbid.
+                       rewrite ssrnat.addn1 in Hload.
+                       rewrite ssrnat.addn1 in Hrename'.
+                       (* NOTE: [move: Hload. case: /ifP]? *)
+                       move: Hload. case: ifP.
+                       ++ move /eqP. discriminate.
+                       ++ move => Heq Hload.
+                          specialize (Hrename' _ _ Hload) as [v' [Hload' Hrename']].
+                          exists v'. split; assumption.
+                  * intros reg off v Hoffset Hload.
+                    assert (Hmem' : mem' = mem_of_event_inform e_) by admit.
+                    subst mem'.
+                    simpl in *.
+                    unfold postcondition_event_registers in Hregs.
+                    erewrite Memory.load_after_store_neq in Hload; eauto.
+                    2:{ admit. }
+                    Check next_comp_of_event.
+                    specialize (Hregs _ _ v Hoffset).
+                    (* Dead end (for now) *)
             }
             right. by apply: (closed_intf Himport).
             (* NOTE: These snippets continue to work, though they may incur
