@@ -1691,7 +1691,17 @@ Local Opaque loc_of_reg.
                           TODO: refactor *)
                        intros offset v Hload.
                        simpl in *.
-                       assert (Hmem' : mem' = mem_of_event_inform e_) by admit.
+                       assert (Hmem' : mem' = mem_of_event_inform e_).
+                       { clear -wf_int_pref'.
+                         move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+                         inversion wf_int_pref.
+                         - now destruct prefix_.
+                         - destruct prefix_. inversion H. simpl in H. now destruct prefix_.
+                         - apply rcons_inj in H. inversion H; subst; clear H.
+                           apply rcons_inj in H3. inversion H3; subst; clear H3.
+                           inversion H1; subst; clear H1.
+                           reflexivity.
+                       }
                        subst mem'.
                        erewrite Memory.load_after_store in Hload; eauto.
                        unfold all_zeros_shift, uniform_shift,
@@ -1707,28 +1717,33 @@ Local Opaque loc_of_reg.
                           specialize (Hrename' _ _ Hload) as [v' [Hload' Hrename']].
                           exists v'. split; assumption.
                   * intros reg off v Hoffset Hload.
-                    assert (Hmem' : mem' = mem_of_event_inform e_) by admit.
+                    assert (Hmem' : mem' = mem_of_event_inform e_).
+                    { clear -wf_int_pref'.
+                      move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+                      inversion wf_int_pref.
+                      - now destruct prefix_.
+                      - destruct prefix_. inversion H. simpl in H. now destruct prefix_.
+                      - apply rcons_inj in H. inversion H; subst; clear H.
+                        apply rcons_inj in H3. inversion H3; subst; clear H3.
+                        inversion H1; subst; clear H1.
+                        reflexivity.
+                    }
                     subst mem'.
                     simpl in *.
                     unfold postcondition_event_registers in Hregs.
                     erewrite Memory.load_after_store_neq in Hload; eauto.
-                    2:{ admit. }
+                    2:{ destruct reg; simpl in Hoffset; subst; congruence. }
 
-                    (* Dead end (for now) *)
+                    inversion wf_int_pref'.
+                    -- now destruct prefix_.
+                    -- destruct prefix_. inversion H. now destruct prefix_.
+                    -- rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+                       rewrite cats1 in H3. apply rcons_inj in H3; inversion H3; subst; clear H3.
+                       inversion H1; subst; clear H1.
 
-                    inversion Hwfip as [reg' [mem' Hprefstar]].
-                    inversion Hprefstar; first admit. (* contra *)
-                    subst regs' mem'0 regs0 mem1.
-                    rewrite cats1 in H.
-                    assert (prefix = rcons prefix_ e_) by admit; subst prefix.
-                    assert (e = ECallInform (cur_comp s) P' new_arg (mem_of_event_inform e_) regs C') by admit; subst e.
-                    clear H. simpl in *.
-                    inversion H3. subst mem' regs' C'0 regs0 mem1 new_arg P0 C0 call_arg reg'. clear H3.
-
-                    Check next_comp_of_event.
-                    specialize (Hregs _ _ v Hoffset).
-
-
+                       (* dead end: what we have in Hregs doesn't seem to be quite right? *)
+                       Fail specialize (Hregs _ _ v Logic.eq_refl Hload).
+                       admit.
             }
             right. by apply: (closed_intf Himport).
             (* NOTE: These snippets continue to work, though they may incur
