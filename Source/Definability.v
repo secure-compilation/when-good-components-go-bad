@@ -394,12 +394,35 @@ Section Definability.
       events were produced from the same component.  The [C] and [P] arguments
       are only needed to generate the recursive calls depicted above. *)
 
+
+  Notation "x ;; y" := (E_seq x y) (right associativity, at level 90).
+  Print Machine.Intermediate.Register.invalidate.
+  Definition invalidate_metadata :=
+    E_assign (loc_of_reg E_R_ONE) (E_val Undef);;
+    E_assign (loc_of_reg E_R_AUX1) (E_val Undef);;
+    E_assign (loc_of_reg E_R_AUX2) (E_val Undef);;
+    E_assign (loc_of_reg E_R_RA) (E_val Undef);;
+    E_assign (loc_of_reg E_R_SP) (E_val Undef);;
+    E_assign (loc_of_reg E_R_ARG) (E_val Undef).
+  (* Lemma invalidate_metadata_spec (p: Source.program): forall cp st mem k arg, *)
+  (*     exists mem', *)
+  (*       Star (CS.sem p) (CS.State cp st mem k invalidate_metadata arg) [] *)
+  (*            (CS.State cp st mem' k (E_val Undef) arg) /\ *)
+  (*       True. *)
+  (* Proof. *)
+  (*   intros cp st mem k arg. *)
+  (* Abort. *)
+
+
+
+
   (* We call this function when in component C executing P. *)
   Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event_inform) : expr :=
     match e with
     | ECallInform _ P' arg _ _ C' =>
-      E_seq (E_call C' P' (E_deref (loc_of_reg E_R_COM)))
-            (E_call C  P  (E_val (Int 0))) (* This is really (C,P) calling itself. *)
+      E_seq invalidate_metadata
+      (E_seq (E_call C' P' (E_deref (loc_of_reg E_R_COM)))
+            (E_call C  P  (E_val (Int 0)))) (* This is really (C,P) calling itself. *)
     | ERetInform  _ ret_val _ _ _ => E_deref (loc_of_reg E_R_COM)
     (* Other events generate corresponding expressions, even though these do not
        generate any events in the source semantics. Like calls (but unlike
@@ -710,6 +733,7 @@ Section Definability.
           case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
                       try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
                         try rewrite values_are_integers_expr_of_const_val; try apply IH.
+          admit. (* TODO: This can't be proved. Find a solution. *)
 
         *
           (*clear.
@@ -1129,13 +1153,13 @@ Section Definability.
     (* e is NOT the register file *after* executing e. It is the register file       *) 
     (* *before* executing e.                                                         *)
     Definition postcondition_event_registers (e: event_inform) (mem: Memory.t): Prop :=
-      let r := register_file_of_event_inform e in
-      forall (R: Machine.register) (n: Z) (v: value),
-        reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
-        Memory.load mem (Permission.data, cur_comp_of_event e, Block.local, n) = Some v ->
-        exists (v': value),
-          shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
-          Machine.Intermediate.Register.get R r = v'.
+        let r := register_file_of_event_inform e in
+        forall (R: Machine.register) (n: Z) (v: value),
+          reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
+          Memory.load mem (Permission.data, cur_comp_of_event e, Block.local, n) = Some v ->
+          exists (v': value),
+            shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
+            Machine.Intermediate.Register.get R r = v'.
 
     Definition postcondition_event_memory (e: event_inform) (mem': Memory.t) :=
       postcondition_event_snapshot e mem' /\
@@ -1409,6 +1433,7 @@ Section Definability.
       the prefix, executing from the initial state. Separately, execution to a
       final state needs to be established. *)
     Lemma definability_gen_rel_right prefix suffix :
+      well_bracketed_trace {| cur_comp := Component.main; callers := [::] |} t ->
       well_formed_intermediate_prefix t ->
       t = prefix ++ suffix ->
     exists cs s prefix_inform prefix' const_map,
@@ -1422,7 +1447,7 @@ Section Definability.
         by [].
       (* Proof by induction on the prefix. Prior to inducting, generalize on
          the suffix. *)
-      move=> wf_int_pref.
+      move=> wb_trace wf_int_pref.
       elim/rev_ind: prefix suffix => [|e prefix IH] /= suffix.
       - (* Base case. *)
         move=> <-.
@@ -1435,7 +1460,6 @@ Section Definability.
         + unfold CS.initial_machine_state, Source.prog_main.
           rewrite find_procedures_of_trace_main.
           econstructor; eauto.
-          * admit. (* Easy: should be an assumption about t. *)
           * admit. (* Easy: should be an assumption about t. *)
           * now exists [], [].
           * constructor.
@@ -1570,13 +1594,63 @@ Section Definability.
 
         - (* Event case: call. *)
           case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
-          exists (ECallInform C P' new_arg mem regs C'). (* TODO: new_arg? *)
+          (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
+          simpl.
+          Print invalidate_metadata.
+
+          pose proof (wfmem_meta wf_mem E_R_ONE C_b) as [v1 Hv1].
+          pose proof (wfmem_meta wf_mem E_R_AUX1 C_b) as [v2 Hv2].
+          pose proof (wfmem_meta wf_mem E_R_AUX2 C_b) as [v3 Hv3].
+          pose proof (wfmem_meta wf_mem E_R_RA C_b) as [v4 Hv4].
+          pose proof (wfmem_meta wf_mem E_R_SP C_b) as [v5 Hv5].
+          pose proof (wfmem_meta wf_mem E_R_ARG C_b) as [v6 Hv6].
+          pose proof (wfmem_meta wf_mem E_R_COM C_b) as [vcom Hvcom].
+
+          destruct (Memory.store_after_load mem
+                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_ONE)
+                                            v1 Undef) as [mem1 Hmem1]; eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); eauto. simpl; congruence.
+          destruct (Memory.store_after_load mem1
+                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_AUX1)
+                                            v2 Undef) as [mem2 Hmem2]; eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
+          destruct (Memory.store_after_load mem2
+                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_AUX2)
+                                            v3 Undef) as [mem3 Hmem3]; eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
+          destruct (Memory.store_after_load mem3
+                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_RA)
+                                            v4 Undef) as [mem4 Hmem4]; eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
+          destruct (Memory.store_after_load mem4
+                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_SP)
+                                            v5 Undef) as [mem5 Hmem5]; eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
+          destruct (Memory.store_after_load mem5
+                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_ARG)
+                                            v6 Undef) as [mem6 Hmem6]; eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
+
+          exists (ECallInform C P' new_arg mem6 regs C'). (* TODO: new_arg? *)
           exists (StackState C' (C :: callers s)).
           have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
 
-          (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
-          simpl.
-          exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem,
+          exists [CState C', CS.Frame C arg (Kseq (E_call C P (E_val (Int 0))) Kstop) :: stk, mem6,
                   Kstop, procedure_of_trace C' P' t, new_arg].
           split.
           + (* Process memory invariant. *)
@@ -1585,12 +1659,21 @@ Section Definability.
             take_step.
 Local Transparent loc_of_reg.
             unfold loc_of_reg.
-Local Opaque loc_of_reg.
             (* JT: TODO: I couldn't find how to prove this. I think we need an invariant
                that relates the current metadata in memory and the current registers - but
                I don't think it's defined yet *)
-            do 7 take_step;
-              [reflexivity | (*exact Harg*) admit |].
+            do 60 (take_step; eauto).
+Local Opaque loc_of_reg.
+            take_step. eauto.
+
+            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem6); try (simpl; congruence); eauto.
+            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5); try (simpl; congruence); eauto.
+            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); try (simpl; congruence); eauto.
+            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
+            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
+            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
+
             (* RB: TODO: At this precise moment the call is executed, so the
                two memories should be identical. And nothing has changed [mem]
                in the execution of the previous steps. *)
@@ -1599,9 +1682,11 @@ Local Opaque loc_of_reg.
             rewrite (negbTE C_ne_C').
             rewrite -> imported_procedure_iff in Himport. rewrite Himport.
             rewrite <- imported_procedure_iff in Himport.
-            by rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
-            (* rewrite (find_procedures_of_trace_exp t (closed_intf Himport)). *)
-            (* admit. *)
+            rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+            (* JT: instantiate [new_arg] with another value, which is related to [vcom]. *)
+            (* We should be able to use the invariants to establish a relation between *)
+            (* the content of R_COM and the argument *)
+            admit.
             (* FIXME: Similar steps will break after this point. *)
           + econstructor; trivial.
             {
@@ -1621,8 +1706,20 @@ Local Opaque loc_of_reg.
                 destruct (C == C_) eqn:Heq;
                   move: Heq => /eqP => Heq.
                 + subst C_.
-                  now rewrite (Memory.load_after_store _ _ _ _ _ Hmem) eqxx.
-                + erewrite Memory.load_after_store_neq; try eassumption; try congruence.
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem6); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence).
+                  now rewrite (Memory.load_after_store_eq _ _ _ _ Hmem); eauto.
+                + rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem6); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence).
+                  rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence).
                   assert (ctr_eq: counter_value C_ (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C']) =
                          counter_value C_ prefix).
                   { unfold counter_value, comp_subtrace.
@@ -1633,8 +1730,7 @@ Local Opaque loc_of_reg.
                   rewrite ctr_eq. now eapply wfmem_counter.
               - intros C_ r Hcomp.
                 specialize (wfmem_meta _ r Hcomp) as [v Hload].
-                exists v. erewrite Memory.load_after_store_neq; eauto.
-                destruct r; discriminate.
+                admit. (* long case analysis on the register *)
               - intros pref ev Hprefix.
                 apply rcons_inv in Hprefix as [? ?]; subst pref ev.
                 assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
@@ -1716,8 +1812,8 @@ Local Opaque loc_of_reg.
                        ++ move => Heq Hload.
                           specialize (Hrename' _ _ Hload) as [v' [Hload' Hrename']].
                           exists v'. split; assumption.
-                  * intros reg off v Hoffset Hload.
-                    assert (Hmem' : mem' = mem_of_event_inform e_).
+                  (* * intros reg off v Hoffset Hload. *)
+                  * assert (Hmem' : mem' = mem_of_event_inform e_).
                     { clear -wf_int_pref'.
                       move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
                       inversion wf_int_pref.
@@ -1730,9 +1826,9 @@ Local Opaque loc_of_reg.
                     }
                     subst mem'.
                     simpl in *.
+                    intros n v Hoffset Hload. subst.
                     unfold postcondition_event_registers in Hregs.
-                    erewrite Memory.load_after_store_neq in Hload; eauto.
-                    2:{ destruct reg; simpl in Hoffset; subst; congruence. }
+                    erewrite Memory.load_after_store_neq in Hload; eauto; try congruence.
 
                     inversion wf_int_pref'.
                     -- now destruct prefix_.
@@ -1741,8 +1837,22 @@ Local Opaque loc_of_reg.
                        rewrite cats1 in H3. apply rcons_inj in H3; inversion H3; subst; clear H3.
                        inversion H1; subst; clear H1.
 
-                       (* dead end: what we have in Hregs doesn't seem to be quite right? *)
-                       Fail specialize (Hregs _ _ v Logic.eq_refl Hload).
+                       unfold Machine.Intermediate.Register.invalidate.
+                       simpl.
+                       eexists; split; eauto.
+                       unfold all_zeros_shift, uniform_shift.
+                       unfold Machine.Intermediate.Register.get; simpl.
+                       destruct e_.
+                       ++ specialize (Hregs 2%Z v Logic.eq_refl).
+                          admit.
+                       ++ specialize (Hregs Machine.R_COM 2%Z v Logic.eq_refl). simpl in Hregs.
+                          unfold Machine.Intermediate.Register.get.
+                          rewrite !setmE. simpl.
+                          rewrite -setmE.
+                         spec
+
+                       (* Dead end: we need to prove that the memory was invalidated. *)
+
                        admit.
             }
             right. by apply: (closed_intf Himport).
