@@ -1099,7 +1099,30 @@ Section Definability.
     (* TO BE CONTINUED *)
 
     Definition well_formed_intermediate_prefix (pref: trace event_inform) : Prop :=
-      exists regs mem, prefix_star_event_steps pref regs mem.
+      prefix_star_event_steps pref.
+
+    Lemma well_formed_intermediate_prefix_inv:
+      forall prefix suffix,
+        well_formed_intermediate_prefix (prefix ++ suffix) ->
+        well_formed_intermediate_prefix prefix.
+    Proof.
+      move=> prefix suffix.
+      elim: suffix prefix => [prefix | a l IH].
+      - by rewrite cats0.
+      - move=> prefix.
+        rewrite -cat_rcons => /IH IH'.
+        inversion IH'.
+        + now destruct prefix.
+        + have: (e = a /\ prefix = nil).
+          { destruct prefix. inversion H; split; congruence.
+            inversion H. now destruct prefix. }
+          move=> [] ? ?; subst. constructor.
+        + eapply rcons_inj in H. inversion H; subst; clear H.
+          inversion IH'; subst; clear IH'.
+          * now destruct prefix0.
+          * now destruct prefix0.
+          * eauto.
+    Qed.
 
     (* AEK: Now not sure whether this definition should be called a postcondition.   *)
     (* The reason I am not sure is that the r that we are projecting out of an event *)
@@ -1380,13 +1403,14 @@ Section Definability.
        NOTE: Propositional and not boolean conjunction in the conclusion at the
        moment. *)
 
+
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
       the prefix, executing from the initial state. Separately, execution to a
       final state needs to be established. *)
     Lemma definability_gen_rel_right prefix suffix :
+      well_formed_intermediate_prefix t ->
       t = prefix ++ suffix ->
-      well_formed_intermediate_prefix prefix ->
     exists cs s prefix_inform prefix' const_map,
       Star (CS.sem p) (CS.initial_machine_state p) prefix' cs /\
       project_non_inform prefix_inform = prefix' /\
@@ -1398,6 +1422,7 @@ Section Definability.
         by [].
       (* Proof by induction on the prefix. Prior to inducting, generalize on
          the suffix. *)
+      move=> wf_int_pref.
       elim/rev_ind: prefix suffix => [|e prefix IH] /= suffix.
       - (* Base case. *)
         move=> <-.
@@ -1427,11 +1452,15 @@ Section Definability.
             -- by move=> [].
           * unfold valid_procedure. now auto.
     - (* Inductive step. *)
-      rewrite -catA => Et Hwfip.
-      assert (Hwfip' : well_formed_intermediate_prefix prefix) by admit.
-      specialize (IH (e :: suffix) Et Hwfip') as
+      rewrite -catA => Et.
+      assert (wf_int_pref' : well_formed_intermediate_prefix (prefix ++ [:: e])).
+      { rewrite Et in wf_int_pref.
+        eapply well_formed_intermediate_prefix_inv.
+        rewrite -catA. eauto. }
+      assert (wf_int_pref'' : well_formed_intermediate_prefix prefix).
+      { eapply well_formed_intermediate_prefix_inv. eauto. }
+      specialize (IH (e :: suffix) Et) as
           [cs [s [prefix_inform [prefix' [const_map [Star0 [Hproj [Hshift Hwf_cs]]]]]]]].
-      clear Hwfip'.
 
       move: Hwf_cs Star0.
 (* FIXME *)
@@ -1464,8 +1493,8 @@ Section Definability.
       (*   by admit. *)
       assert (exists mem',
                  Memory.store mem (Permission.data, C, Block.local, 0%Z) (Int (counter_value C (prefix ++ [:: e]))) = Some mem')
-        as [mem' Hmem']
-        by admit.
+        as [mem' Hmem'].
+      { eapply Memory.store_after_load. eauto. }
 
       (* We can simulate the event-producing step as the concatenation
          of three successive stars:
@@ -1557,6 +1586,9 @@ Section Definability.
 Local Transparent loc_of_reg.
             unfold loc_of_reg.
 Local Opaque loc_of_reg.
+            (* JT: TODO: I couldn't find how to prove this. I think we need an invariant
+               that relates the current metadata in memory and the current registers - but
+               I don't think it's defined yet *)
             do 7 take_step;
               [reflexivity | (*exact Harg*) admit |].
             (* RB: TODO: At this precise moment the call is executed, so the
@@ -1591,7 +1623,14 @@ Local Opaque loc_of_reg.
                 + subst C_.
                   now rewrite (Memory.load_after_store _ _ _ _ _ Hmem) eqxx.
                 + erewrite Memory.load_after_store_neq; try eassumption; try congruence.
-                  admit. (* The counters corresponding to other components are not modified. *)
+                  assert (ctr_eq: counter_value C_ (prefix ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C']) =
+                         counter_value C_ prefix).
+                  { unfold counter_value, comp_subtrace.
+                    rewrite filter_cat. simpl.
+                    suff: ((C_ == cur_comp s) = false) => [-> //=|]. rewrite cats0 //=.
+                    apply /eqP.
+                    unfold C in Heq. congruence. }
+                  rewrite ctr_eq. now eapply wfmem_counter.
               - intros C_ r Hcomp.
                 specialize (wfmem_meta _ r Hcomp) as [v Hload].
                 exists v. erewrite Memory.load_after_store_neq; eauto.
