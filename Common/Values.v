@@ -49,7 +49,7 @@ Module Pointer.
       destruct (b1 =? b2) eqn:Hcase3;
       move: Hcase3 => /eqP => Hcase3;
       destruct (o1 =? o2)%Z eqn:Hcase4;
-      move: Hcase4 => /eqP => Hcase4;
+      move: Hcase4 => /Z.eqb_spec => Hcase4;
       constructor;
       try injection; (* All cases (false) except all-true case. *)
       congruence.

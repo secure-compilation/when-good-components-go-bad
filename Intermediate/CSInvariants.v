@@ -207,14 +207,17 @@ Proof.
   destruct ptr1 as [[[P1 C1] b1] o1].
   destruct ptr2 as [[[P2 C2] b2] o2].
   (* Decompose pointer component equalities... *)
-  move => /andP => [[]] => /andP => [[]] => /andP => [[]] =>
-  (* ... then reflect each of them and substitute the equality... *)
-  /ssrnat.eqnP => -> =>
-  /ssrnat.eqnP => -> =>
-  /ssrnat.eqnP => -> =>
-  /eqP ->
-  (* ... and we're done. *)
-  //.
+  move=> /andP [[]] /andP [[]] /andP [[]] =>
+  (* Depending on the Coq version, you might need to chose one or the other
+     version of the tactic. *)
+  (* (* ... then reflect each of them and substitute the equality... *) *)
+  (* /ssrnat.eqnP -> *)
+  (* /ssrnat.eqnP -> *)
+  (* /ssrnat.eqnP -> *)
+  (* /eqP -> *)
+  (* (* ... and we're done. *) *)
+  (* //. *)
+  /eqnP -> /eqnP -> /eqnP -> /Z.eqb_spec -> //=.
 Qed.
 
 (* TODO: Relocate. *)
