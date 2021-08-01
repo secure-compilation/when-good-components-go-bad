@@ -398,12 +398,12 @@ Section Definability.
   Notation "x ;; y" := (E_seq x y) (right associativity, at level 90).
   Print Machine.Intermediate.Register.invalidate.
   Definition invalidate_metadata :=
-    E_assign (loc_of_reg E_R_ONE) (E_val Undef);;
-    E_assign (loc_of_reg E_R_AUX1) (E_val Undef);;
-    E_assign (loc_of_reg E_R_AUX2) (E_val Undef);;
-    E_assign (loc_of_reg E_R_RA) (E_val Undef);;
-    E_assign (loc_of_reg E_R_SP) (E_val Undef);;
-    E_assign (loc_of_reg E_R_ARG) (E_val Undef).
+    E_assign (loc_of_reg E_R_ONE) error_expr;;
+    E_assign (loc_of_reg E_R_AUX1) error_expr;;
+    E_assign (loc_of_reg E_R_AUX2) error_expr;;
+    E_assign (loc_of_reg E_R_RA) error_expr;;
+    E_assign (loc_of_reg E_R_SP) error_expr;;
+    E_assign (loc_of_reg E_R_ARG) error_expr.
   (* Lemma invalidate_metadata_spec (p: Source.program): forall cp st mem k arg, *)
   (*     exists mem', *)
   (*       Star (CS.sem p) (CS.State cp st mem k invalidate_metadata arg) [] *)
@@ -730,10 +730,9 @@ Section Definability.
       + split.
         * rewrite /procedure_of_trace /expr_of_trace /switch.
           elim: {t Ht P_CI} (comp_subtrace C t) (length _) => [|e t IH] n //=.
-          case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
+          by case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
                       try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
                         try rewrite values_are_integers_expr_of_const_val; try apply IH.
-          admit. (* TODO: This can't be proved. Find a solution. *)
 
         *
           (*clear.
@@ -1662,7 +1661,7 @@ Local Transparent loc_of_reg.
             (* JT: TODO: I couldn't find how to prove this. I think we need an invariant
                that relates the current metadata in memory and the current registers - but
                I don't think it's defined yet *)
-            do 60 (take_step; eauto).
+            do 84 (take_step; eauto).
 Local Opaque loc_of_reg.
             take_step. eauto.
 
@@ -1780,8 +1779,9 @@ Local Opaque loc_of_reg.
                                  sigma_shifting_lefttoright_option
                            in Hgood.
                           injection Hgood as ?; subst rbid.
-                          erewrite Memory.load_after_store_neq; eauto.
-                          rewrite ssrnat.addn1. discriminate.
+                          admit.
+                          (* erewrite Memory.load_after_store_neq; eauto. *)
+                          (* rewrite ssrnat.addn1. discriminate. *)
                        ++ assumption.
                     -- (* "Symmetric" case
                           TODO: refactor *)
@@ -1810,8 +1810,9 @@ Local Opaque loc_of_reg.
                        move: Hload. case: ifP.
                        ++ move /eqP. discriminate.
                        ++ move => Heq Hload.
-                          specialize (Hrename' _ _ Hload) as [v' [Hload' Hrename']].
-                          exists v'. split; assumption.
+                          admit.
+                          (* specialize (Hrename' _ _ Hload) as [v' [Hload' Hrename']]. *)
+                          (* exists v'. split; assumption. *)
                   (* * intros reg off v Hoffset Hload. *)
                   * assert (Hmem' : mem' = mem_of_event_inform e_).
                     { clear -wf_int_pref'.
