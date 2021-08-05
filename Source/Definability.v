@@ -290,13 +290,13 @@ Section Definability.
      RB: TODO: Phrase in terms of [Register.to_nat]. *)
   Definition reg_offset (reg : Eregister) : Z :=
     match reg with
-    | E_R_ONE  => 1
-    | E_R_COM  => 2
-    | E_R_AUX1 => 3
-    | E_R_AUX2 => 4
-    | E_R_RA   => 5
-    | E_R_SP   => 6
-    | E_R_ARG  => 7
+    | E_R_ONE  => 2
+    | E_R_COM  => 3
+    | E_R_AUX1 => 4
+    | E_R_AUX2 => 5
+    | E_R_RA   => 6
+    | E_R_SP   => 7
+    | E_R_ARG  => 8
     end.
 
   Lemma reg_offset_inj :
@@ -396,7 +396,8 @@ Section Definability.
 
 
   Notation "x ;; y" := (E_seq x y) (right associativity, at level 90).
-  Print Machine.Intermediate.Register.invalidate.
+
+  Definition EXTCALL := E_binop Add E_local (E_val (Int 1%Z)).
   Definition invalidate_metadata :=
     E_assign (loc_of_reg E_R_ONE) error_expr;;
     E_assign (loc_of_reg E_R_AUX1) error_expr;;
@@ -420,37 +421,44 @@ Section Definability.
   Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event_inform) : expr :=
     match e with
     | ECallInform _ P' arg _ _ C' =>
-      E_seq invalidate_metadata
-      (E_seq (E_call C' P' (E_deref (loc_of_reg E_R_COM)))
-            (E_call C  P  (E_val (Int 0)))) (* This is really (C,P) calling itself. *)
-    | ERetInform  _ ret_val _ _ _ => E_deref (loc_of_reg E_R_COM)
+      invalidate_metadata;;
+      E_assign EXTCALL (E_val (Int 1%Z));;
+      E_call C' P' (E_deref (loc_of_reg E_R_COM));;
+      E_assign EXTCALL (E_val (Int 0%Z));;
+      E_call C P (E_val (Int 0%Z)) (* This is really (C, P) calling itself *)
+    | ERetInform  _ ret_val _ _ _ =>
+      E_assign EXTCALL (E_val (Int 0%Z));;
+      E_deref (loc_of_reg E_R_COM)
     (* Other events generate corresponding expressions, even though these do not
        generate any events in the source semantics. Like calls (but unlike
        returns), those "informative-only" events are followed by a recursive
        call to the current procedure. *)
     | EConst _ val reg _ _ =>
-      E_seq (E_assign (loc_of_reg reg) (expr_of_const_val val))
-            (E_call C P (E_val (Int 0)))
+      E_assign EXTCALL (E_val (Int 0%Z));;
+      E_assign (loc_of_reg reg) (expr_of_const_val val);;
+      E_call C P (E_val (Int 0))
     | EMov _ reg1 reg2 _ _ =>
-      E_seq (E_assign (loc_of_reg reg1) (loc_of_reg reg2))
-            (E_call C P (E_val (Int 0)))
+      E_assign EXTCALL (E_val (Int 0%Z));;
+      E_assign (loc_of_reg reg1) (loc_of_reg reg2);;
+      E_call C P (E_val (Int 0))
     | EBinop _ op r1 r2 r3 _ _ =>
-      E_seq (E_assign (loc_of_reg r3) (E_binop (binop_of_Ebinop op)
-                                               (E_deref (loc_of_reg r1))
-                                               (E_deref (loc_of_reg r2))))
-            (E_call C P (E_val (Int 0)))
+      E_assign EXTCALL (E_val (Int 0%Z));;
+      E_assign (loc_of_reg r3) (E_binop (binop_of_Ebinop op)
+                                        (E_deref (loc_of_reg r1))
+                                        (E_deref (loc_of_reg r2)));;
+      E_call C P (E_val (Int 0))
     | ELoad _ r_dest r_src _ _ =>
-      E_seq (E_assign (loc_of_reg r_dest)
-                      (E_deref (loc_of_reg r_src)))
-            (E_call C P (E_val (Int 0)))
+      E_assign EXTCALL (E_val (Int 0%Z));;
+      E_assign (loc_of_reg r_dest) (E_deref (loc_of_reg r_src));;
+      E_call C P (E_val (Int 0))
     | EStore _ r_dest r_src _ _ =>
-      E_seq (E_assign (loc_of_reg r_dest)
-                      (E_deref (loc_of_reg r_src)))
-            (E_call C P (E_val (Int 0)))
+      E_assign EXTCALL (E_val (Int 0%Z));;
+      E_assign (loc_of_reg r_dest) (E_deref (loc_of_reg r_src));;
+      E_call C P (E_val (Int 0))
     | EAlloc _ r_dest r_size _ _ =>
-      E_seq (E_assign (loc_of_reg r_dest)
-                      (E_alloc (E_deref (loc_of_reg r_size))))
-            (E_call C P (E_val (Int 0)))
+      E_assign EXTCALL (E_val (Int 0%Z));;
+      E_assign (loc_of_reg r_dest) (E_alloc (E_deref (loc_of_reg r_size)));;
+      E_call C P (E_val (Int 0))
     end.
 
   (* RB: TODO: Avoid possible duplication in [Language] and [Machine]. *)
@@ -467,7 +475,7 @@ Section Definability.
      in terms of [Register.to_nat], and their initial values in terms of
      [Register.init]. *)
   Definition meta_buffer : list value :=
-    [Int 0; Undef; Undef; Undef; Undef; Undef; Undef; Undef].
+    [Int 0; Int 1; Undef; Undef; Undef; Undef; Undef; Undef; Undef].
 
   (* Compute component buffer side, assuming argument [C] is in the domain of
      [intf]. *)
@@ -594,9 +602,15 @@ Section Definability.
     comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
   Proof. apply: filter_cat. Qed.
 
+  Definition extcall_check: expr :=
+    E_if (E_binop Eq (E_deref EXTCALL) (E_val (Int 1%Z)))
+         invalidate_metadata
+         (E_val (Int 0%Z)).
+
   Definition procedure_of_trace
              (C : Component.id) (P : Procedure.id) (t : trace event_inform)
     : expr :=
+    extcall_check;;
     expr_of_trace C P (comp_subtrace C t). (* RB: TODO: Substitute check. *)
 
   Fixpoint procedure_ids_of_subtrace
@@ -779,7 +793,7 @@ Section Definability.
       {
         rewrite /procedure_of_trace /expr_of_trace /switch.
         elim: {t Ht P_CI} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
-        exact: fsub0set.
+        rewrite !fsetU0; exact: fsub0set.
         move/(_ n) in IH; rewrite !fset0U.
 
         case: e=> [C' P' v mem regs C''| | | | | | | ]
@@ -1155,7 +1169,7 @@ Section Definability.
         let r := register_file_of_event_inform e in
         forall (R: Machine.register) (n: Z) (v: value),
           reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
-          Memory.load mem (Permission.data, cur_comp_of_event e, Block.local, n) = Some v ->
+          Memory.load mem (Permission.data, next_comp_of_event e, Block.local, n) = Some v ->
           exists (v': value),
             shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
             Machine.Intermediate.Register.get R r = v'.
@@ -1173,6 +1187,11 @@ Section Definability.
             component_buffer C ->
             Memory.load mem (Permission.data, C, Block.local, 0%Z) =
             Some (Int (counter_value C prefix));
+        wfmem_extcall:
+          forall C,
+            component_buffer C ->
+            Memory.load mem (Permission.data, C, Block.local, 1%Z) =
+            Some (Int 1%Z);
         (* NOTE: Might be redundant? *)
         wfmem_meta:
           forall C r,
@@ -1462,6 +1481,10 @@ Section Definability.
           * admit. (* Easy: should be an assumption about t. *)
           * now exists [], [].
           * constructor.
+            -- move=> C.
+               rewrite /component_buffer /Memory.load //= mapmE // mapmE mem_domm.
+               case HCint: (intf C) => [Cint|] //=.
+               by rewrite ComponentMemory.load_prealloc.
             -- move=> C.
                rewrite /component_buffer /Memory.load //= mapmE // mapmE mem_domm.
                case HCint: (intf C) => [Cint|] //=.
