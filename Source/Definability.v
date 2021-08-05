@@ -421,42 +421,42 @@ Section Definability.
   Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event_inform) : expr :=
     match e with
     | ECallInform _ P' arg _ _ C' =>
-      invalidate_metadata;;
       E_assign EXTCALL (E_val (Int 1%Z));;
       E_call C' P' (E_deref (loc_of_reg E_R_COM));;
+      invalidate_metadata;;
       E_assign EXTCALL (E_val (Int 0%Z));;
       E_call C P (E_val (Int 0%Z)) (* This is really (C, P) calling itself *)
     | ERetInform  _ ret_val _ _ _ =>
-      E_assign EXTCALL (E_val (Int 0%Z));;
+      E_assign EXTCALL (E_val (Int 1%Z));;
       E_deref (loc_of_reg E_R_COM)
     (* Other events generate corresponding expressions, even though these do not
        generate any events in the source semantics. Like calls (but unlike
        returns), those "informative-only" events are followed by a recursive
        call to the current procedure. *)
     | EConst _ val reg _ _ =>
-      E_assign EXTCALL (E_val (Int 0%Z));;
+      (* E_assign EXTCALL (E_val (Int 0%Z));; *)
       E_assign (loc_of_reg reg) (expr_of_const_val val);;
       E_call C P (E_val (Int 0))
     | EMov _ reg1 reg2 _ _ =>
-      E_assign EXTCALL (E_val (Int 0%Z));;
+      (* E_assign EXTCALL (E_val (Int 0%Z));; *)
       E_assign (loc_of_reg reg1) (loc_of_reg reg2);;
       E_call C P (E_val (Int 0))
     | EBinop _ op r1 r2 r3 _ _ =>
-      E_assign EXTCALL (E_val (Int 0%Z));;
+      (* E_assign EXTCALL (E_val (Int 0%Z));; *)
       E_assign (loc_of_reg r3) (E_binop (binop_of_Ebinop op)
                                         (E_deref (loc_of_reg r1))
                                         (E_deref (loc_of_reg r2)));;
       E_call C P (E_val (Int 0))
     | ELoad _ r_dest r_src _ _ =>
-      E_assign EXTCALL (E_val (Int 0%Z));;
+      (* E_assign EXTCALL (E_val (Int 0%Z));; *)
       E_assign (loc_of_reg r_dest) (E_deref (loc_of_reg r_src));;
       E_call C P (E_val (Int 0))
     | EStore _ r_dest r_src _ _ =>
-      E_assign EXTCALL (E_val (Int 0%Z));;
+      (* E_assign EXTCALL (E_val (Int 0%Z));; *)
       E_assign (loc_of_reg r_dest) (E_deref (loc_of_reg r_src));;
       E_call C P (E_val (Int 0))
     | EAlloc _ r_dest r_size _ _ =>
-      E_assign EXTCALL (E_val (Int 0%Z));;
+      (* E_assign EXTCALL (E_val (Int 0%Z));; *)
       E_assign (loc_of_reg r_dest) (E_alloc (E_deref (loc_of_reg r_size)));;
       E_call C P (E_val (Int 0))
     end.
@@ -604,7 +604,8 @@ Section Definability.
 
   Definition extcall_check: expr :=
     E_if (E_binop Eq (E_deref EXTCALL) (E_val (Int 1%Z)))
-         invalidate_metadata
+         (invalidate_metadata;;
+          E_assign EXTCALL (E_val (Int 0%Z)))
          (E_val (Int 0%Z)).
 
   Definition procedure_of_trace
@@ -621,7 +622,7 @@ Section Definability.
       let procs_of_e :=
           match e with
           | EConst _ (Ptr (perm, cid, bid, off)) _ _ _ =>
-            (* What we are collecting right now is a superset of the bids that 
+            (* What we are collecting right now is a superset of the bids that
                really correspond to a procedure id. *)
             (* If we want to make this superset tighter, then we should check *)
             (* that perm =? Permission.code and that cid =? C *)
@@ -634,7 +635,7 @@ Section Definability.
 
   Definition procedure_ids_of_trace (C: Component.id) (t: trace event_inform) :=
     procedure_ids_of_subtrace (comp_subtrace C t).
-  
+
   Definition procedures_of_trace (t: trace event_inform) : NMap (NMap expr) :=
     mapim (fun C Ciface =>
              let procs_no_main :=
@@ -759,7 +760,7 @@ Section Definability.
           simpl in *.
           destruct (C ==
                       match e with
-                      | ECallInform C _ _ _ _ _ | ERetInform C _ _ _ _ | 
+                      | ECallInform C _ _ _ _ _ | ERetInform C _ _ _ _ |
                         EConst C _ _ _ _ | EMov C _ _ _ _ | EBinop C _ _ _ _ _ _ |
                         ELoad C _ _ _ _ | EStore C _ _ _ _ | EAlloc C _ _ _ _ => C end)
                    eqn:eC; rewrite eC in Heqn.
@@ -785,7 +786,7 @@ Section Definability.
               destruct ptr as [[[perm ?] bid] ?]; destruct (perm =? Permission.data);
                 simpl; try apply IH
             end; admit.
-          
+
       + pose call_of_event e := if e is ECall _ P _ _ C then Some (C, P) else None.
         have /fsubsetP sub :
           fsubset (called_procedures (procedure_of_trace C P t))
@@ -1006,11 +1007,11 @@ Section Definability.
 
 
 
-    
+
     (* AEK: TODO: This definition should be moved to Common/TracesInform.v, right? *)
     (* The reason I think it should be moved is that we will need a lemma that     *)
     (* tells us that an Intermediate trace satisfies this definition.              *)
-    
+
     (* Notice that the "from" state (consisting of a Register.t and a Memory.t)    *)
     (* is implicitly given by the first parameter, which is an event_inform.       *)
     (* The second and the third parameters represent the "to" state.               *)
@@ -1163,7 +1164,7 @@ Section Definability.
 
     (* AEK: Now not sure whether this definition should be called a postcondition.   *)
     (* The reason I am not sure is that the r that we are projecting out of an event *)
-    (* e is NOT the register file *after* executing e. It is the register file       *) 
+    (* e is NOT the register file *after* executing e. It is the register file       *)
     (* *before* executing e.                                                         *)
     Definition postcondition_event_registers (e: event_inform) (mem: Memory.t): Prop :=
         let r := register_file_of_event_inform e in
@@ -1179,6 +1180,10 @@ Section Definability.
       postcondition_event_registers e mem'.
 
 
+    Definition postcondition_event_registers_ini (C: Component.id) (mem: Memory.t): Prop :=
+        forall (R: Machine.register) (n: Z),
+          reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
+          Memory.load mem (Permission.data, C, Block.local, n) = Some Undef.
 
     Record well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
       {
@@ -1187,11 +1192,31 @@ Section Definability.
             component_buffer C ->
             Memory.load mem (Permission.data, C, Block.local, 0%Z) =
             Some (Int (counter_value C prefix));
+        wfmem_extcall_ini:
+          prefix = [] ->
+          (forall C,
+              component_buffer C ->
+              C = Component.main ->
+              Memory.load mem (Permission.data, C, Block.local, 1%Z) =
+              Some (Int 0%Z)) /\
+          (forall C,
+              component_buffer C ->
+              C <> Component.main ->
+              Memory.load mem (Permission.data, C, Block.local, 1%Z) =
+              Some (Int 1%Z));
         wfmem_extcall:
-          forall C,
-            component_buffer C ->
-            Memory.load mem (Permission.data, C, Block.local, 1%Z) =
-            Some (Int 1%Z);
+          forall prefix' e,
+            prefix = prefix' ++ [:: e] ->
+            (forall C,
+                component_buffer C ->
+                C = next_comp_of_event e ->
+                Memory.load mem (Permission.data, C, Block.local, 1%Z) =
+                Some (Int 0%Z)) /\
+            (forall C,
+                component_buffer C ->
+                C <> next_comp_of_event e ->
+                Memory.load mem (Permission.data, C, Block.local, 1%Z) =
+                Some (Int 1%Z));
         (* NOTE: Might be redundant? *)
         wfmem_meta:
           forall C r,
@@ -1205,6 +1230,9 @@ Section Definability.
         (*     precondition_event_memory e mem; *)
         (* NOTE: no, this is wrong. We need a post-condition: in what shape is the memory
          after having executed the event [e] *)
+        wfmem_ini: forall C,
+            prefix = [] ->
+            postcondition_event_registers_ini C mem;
         wfmem: forall prefix' e,
             prefix = prefix' ++ [:: e] ->
             postcondition_event_memory e mem
@@ -1361,7 +1389,8 @@ Section Definability.
   | WellFormedStateR C procs stk mem k exp arg P
     of C = cur_comp stk_st
     &  k = Kstop
-    &  exp = procedure_of_trace C P t
+    (* &  exp = procedure_of_trace C P t *)
+    &  exp = expr_of_trace C P (comp_subtrace C t)
     &  well_bracketed_trace stk_st suffix
     &  all (well_formed_event intf procs) suffix
     &  well_formed_stack stk_st stk
@@ -1445,6 +1474,20 @@ Section Definability.
        NOTE: Propositional and not boolean conjunction in the conclusion at the
        moment. *)
 
+    Ltac simplify_memory :=
+      repeat (
+          match goal with
+          | H: Memory.store _ ?ptr ?v' = Some ?mem |-
+            Memory.load ?mem ?ptr = Some ?v =>
+            rewrite (Memory.load_after_store_eq _ _ _ _ H);
+            try (simpl; congruence);
+            eauto
+          | H: Memory.store _ ?ptr _ = Some ?mem |-
+            Memory.load ?mem ?ptr' = Some _ =>
+            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H);
+            try (simpl; congruence);
+            eauto
+          end).
 
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
@@ -1469,32 +1512,119 @@ Section Definability.
       elim/rev_ind: prefix suffix => [|e prefix IH] /= suffix.
       - (* Base case. *)
         move=> <-.
-        exists (CS.initial_machine_state p), (StackState Component.main []),
-               E0, E0, (uniform_shift 1).
+
+        assert (ini_mem_regs: forall reg,
+                   Memory.load (Source.prepare_buffers p)
+                               (Permission.data, Component.main,
+                                Block.local, reg_offset reg) = Some Undef)
+          by admit.
+        destruct (Memory.store_after_load
+                    (Source.prepare_buffers p)
+                    (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)
+                    Undef Undef) as [mem1 Hmem1]; eauto.
+        destruct (Memory.store_after_load
+                    mem1
+                    (Permission.data, Component.main, Block.local, reg_offset E_R_AUX1)
+                    Undef Undef) as [mem2 Hmem2]; eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+        destruct (Memory.store_after_load
+                    mem2
+                    (Permission.data, Component.main,
+                     Block.local, reg_offset E_R_AUX2)
+                    Undef Undef) as [mem3 Hmem3]; eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+        destruct (Memory.store_after_load
+                    mem3
+                    (Permission.data, Component.main,
+                     Block.local, reg_offset E_R_RA)
+                    Undef Undef) as [mem4 Hmem4]; eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+        destruct (Memory.store_after_load
+                    mem4
+                    (Permission.data, Component.main,
+                     Block.local, reg_offset E_R_SP)
+                    Undef Undef) as [mem5 Hmem5]; eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+        destruct (Memory.store_after_load
+                    mem5
+                    (Permission.data, Component.main,
+                     Block.local, reg_offset E_R_ARG)
+                    Undef Undef) as [mem6 Hmem6]; eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
+        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
+        destruct (Memory.store_after_load
+                    mem6
+                    (Permission.data, Component.main,
+                     Block.local, 1%Z)
+                    (Int 1%Z) (Int 0%Z)) as [mem7 Hmem7].
+        simplify_memory.
+          admit.
+
+        exists (CS.State (Component.main)
+                    [:: ]
+                    mem7
+                    Kstop
+                    (expr_of_trace Component.main Procedure.main
+                                   (comp_subtrace Component.main t))
+                    (Int 0%Z)).
+        exists (StackState Component.main []), E0, E0, (uniform_shift 1).
         split; [| split; [| split]].
-        + now apply star_refl.
+        + rewrite /CS.initial_machine_state /Source.prog_main
+                  find_procedures_of_trace_main.
+          repeat (take_step; eauto). instantiate (1 := Int 1%Z).
+          admit.
+          repeat (take_step; eauto).
+          now apply star_refl.
+
         + reflexivity.
         + now do 2 constructor.
-        + unfold CS.initial_machine_state, Source.prog_main.
-          rewrite find_procedures_of_trace_main.
-          econstructor; eauto.
+        + econstructor; eauto.
+          (* unfold CS.initial_machine_state, Source.prog_main. *)
+          (* rewrite find_procedures_of_trace_main. *)
+          (* econstructor; eauto. *)
           * admit. (* Easy: should be an assumption about t. *)
           * now exists [], [].
           * constructor.
-            -- move=> C.
+            -- move=> C H.
+               simplify_memory.
+               move: H.
                rewrite /component_buffer /Memory.load //= mapmE // mapmE mem_domm.
                case HCint: (intf C) => [Cint|] //=.
                by rewrite ComponentMemory.load_prealloc.
-            -- move=> C.
-               rewrite /component_buffer /Memory.load //= mapmE // mapmE mem_domm.
-               case HCint: (intf C) => [Cint|] //=.
-               by rewrite ComponentMemory.load_prealloc.
-            -- move=> C r.
-               rewrite /component_buffer /Memory.load //= mapmE // mapmE mem_domm.
-               case HCint: (intf C) => [Cint|] //=.
-               rewrite /meta_buffer.
-               rewrite ComponentMemory.load_prealloc //=.
-               eexists; by case r => //=.
+            -- simpl in *.
+               move=> _. split.
+               ++ move=> ? ? ?; subst.
+                  simplify_memory.
+               ++ move=> ? ? ?; subst.
+                  simplify_memory. admit.
+            -- by move=> [].
+            (* -- admit. *)
+            -- move=> C r H.
+               destruct (C == Component.main) eqn:Heq.
+               ++ move: Heq => /eqP Heq; subst.
+                  destruct r; simpl in *; eexists; simplify_memory.
+                  admit.
+               ++ move: Heq => /eqP Heq; subst.
+                  destruct r; simpl in *; eexists; simplify_memory.
+                  simpl.
+                  all: admit.
+            -- move=> C _ R n ?; subst.
+               destruct (C == Component.main) eqn:Heq.
+               ++ move: Heq => /eqP Heq; subst.
+                  destruct R; simpl in *; simplify_memory.
+                  admit.
+               ++ move: Heq => /eqP Heq; subst.
+                  destruct R; simpl in *; simplify_memory.
+                  all: admit.
             -- by move=> [].
           * unfold valid_procedure. now auto.
     - (* Inductive step. *)
@@ -1618,6 +1748,7 @@ Section Definability.
           case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
           (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
           simpl.
+          pose proof (wfmem_extcall wf_mem) as [v Hv].
           Print invalidate_metadata.
 
           pose proof (wfmem_meta wf_mem E_R_ONE C_b) as [v1 Hv1].
@@ -1628,45 +1759,6 @@ Section Definability.
           pose proof (wfmem_meta wf_mem E_R_ARG C_b) as [v6 Hv6].
           pose proof (wfmem_meta wf_mem E_R_COM C_b) as [vcom Hvcom].
 
-          destruct (Memory.store_after_load mem
-                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_ONE)
-                                            v1 Undef) as [mem1 Hmem1]; eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); eauto. simpl; congruence.
-          destruct (Memory.store_after_load mem1
-                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_AUX1)
-                                            v2 Undef) as [mem2 Hmem2]; eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
-          destruct (Memory.store_after_load mem2
-                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_AUX2)
-                                            v3 Undef) as [mem3 Hmem3]; eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
-          destruct (Memory.store_after_load mem3
-                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_RA)
-                                            v4 Undef) as [mem4 Hmem4]; eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
-          destruct (Memory.store_after_load mem4
-                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_SP)
-                                            v5 Undef) as [mem5 Hmem5]; eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
-          destruct (Memory.store_after_load mem5
-                                            (Permission.data, cur_comp s, Block.local, reg_offset E_R_ARG)
-                                            v6 Undef) as [mem6 Hmem6]; eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1); try (simpl; congruence); eauto.
-          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem); try (simpl; congruence); eauto.
 
           exists (ECallInform C P' new_arg mem6 regs C'). (* TODO: new_arg? *)
           exists (StackState C' (C :: callers s)).
