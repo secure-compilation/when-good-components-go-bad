@@ -2088,6 +2088,337 @@ Ltac find_and_invert_mergeable_internal_states :=
     invert_non_eagerly_mergeable_internal_states H
   end.
 
+Section MergeableSymHelpers.
+
+  Lemma if_sym {T: Type} P (eif: T) (eelse: T):
+    (if P then eif else eelse) = (if ~~P then eelse else eif).
+  Proof.
+      by destruct P eqn:eP.
+  Qed.
+
+  Lemma if_sym_lambda {T: Type} P (eif eelse: nat_ordType -> T):
+    (fun cid : nat_ordType =>
+       if P cid then eif cid else eelse cid) =
+    (fun cid : nat_ordType =>
+       if ~~P cid then eelse cid else eif cid).
+  Proof.
+    apply Coq.Logic.FunctionalExtensionality.functional_extensionality.
+    intros ?. by apply if_sym.
+  Qed.
+
+  Lemma if_sym_lambda_prop {T: Type} PP P (eif eelse: nat_ordType -> T):
+    PP (fun cid : nat_ordType =>
+          if P cid then eif cid else eelse cid)
+    <->
+    PP (fun cid : nat_ordType =>
+          if ~~P cid then eelse cid else eif cid).
+  Proof.
+    split; intros; rewrite if_sym_lambda; simpl; auto.
+    assert (G: (fun cid : nat => if ~~ ~~ P cid then eif cid else eelse cid) =
+               (fun cid : nat_ordType => if P cid then eif cid else eelse cid)
+           ).
+    {
+      apply Coq.Logic.FunctionalExtensionality.functional_extensionality.
+      intros ?. by destruct (P x).
+    }
+    by rewrite G.
+  Qed.
+
+  Lemma if_sym_lambda_traces_rename_each_other P eif eelse:
+    forall n t1 t2,
+      traces_rename_each_other_option
+        n
+        (fun cid : nat_ordType =>
+           if P cid then eif cid else eelse cid)
+        t1
+        t2
+      <->
+      traces_rename_each_other_option
+        n
+        (fun cid : nat_ordType =>
+           if ~~P cid then eelse cid else eif cid)
+        t1
+        t2.
+  Proof.
+    intros.
+    specialize (if_sym_lambda_prop
+                  (fun lam => traces_rename_each_other_option n lam t1 t2)
+                  P
+                  eif
+                  eelse
+               ) as [Hsym1 Hsym2].
+    split. intros PPlam; first (by apply Hsym1). by apply Hsym2.
+  Qed.
+      
+  
+  Lemma traces_rename_each_other_option_n'_if InP n n'' t'':
+    forall t',
+      traces_rename_each_other_option n''
+                                      (fun cid : nat_ordType =>
+                                         if InP cid
+                                         (*\in domm (prog_interface p)*)
+                                         then n cid else n'' cid)
+                                      t'' t'
+      ->
+      forall InC',
+        (forall addr, addr_shared_so_far addr t'' -> (InP addr.1 = negb (InC' addr.1)))
+        ->
+        (forall addr, addr_shared_so_far addr t' -> (InP addr.1 = negb (InC' addr.1)))
+        ->
+        traces_rename_each_other_option n''
+                                        (fun cid : nat_ordType =>
+                                           if InC' cid
+                                           (*\in domm (prog_interface c')*)
+                                           then n'' cid else n cid) t'' t'.
+  Proof.
+    induction t'' as [|t'' e''] using last_ind; intros t' Hren ? HPC'1 HPC'2;
+      induction t' as [|t' e'] using last_ind.
+    - constructor. 
+    - by apply traces_rename_each_other_option_nil_rcons in Hren.
+    - by apply traces_rename_each_other_option_rcons_nil in Hren.
+    - inversion Hren as [| ? ? ? ? ? HrenIH Hshr1 Hshr2 ? Hval ? ? Hgood2];
+        try by find_nil_rcons.
+      repeat find_rcons_rcons.
+      assert (HPC'1weak:
+                forall addr : addr_t,
+                  addr_shared_so_far addr t'' -> InP addr.1 = ~~ InC' addr.1).
+      {
+        intros ? Hshr.
+        apply HPC'1. eapply reachable_from_previously_shared.
+        - exact Hshr.
+        - constructor. by rewrite in_fset1.
+      }
+      assert (HPC'2weak:
+                forall addr : addr_t,
+                  addr_shared_so_far addr t' -> InP addr.1 = ~~ InC' addr.1).
+      {
+        intros ? Hshr.
+        apply HPC'2. eapply reachable_from_previously_shared.
+        - exact Hshr.
+        - constructor. by rewrite in_fset1.
+      }
+      specialize (IHt'' t' HrenIH _ HPC'1weak HPC'2weak).
+      econstructor; auto.
+      + intros [cid bid] Hshr.
+        specialize (HPC'1 _ Hshr) as HPC'1a.
+        specialize (Hshr1 _ Hshr) as [Hevent [[cid' bid'] [Hbid' Hshr']]].
+        assert (exists addr' : addr_t,
+                   sigma_shifting_wrap_bid_in_addr
+                     (sigma_shifting_lefttoright_addr_bid
+                        n''
+                        (fun cid0 : nat_ordType =>
+                           if InC' cid0 then n'' cid0 else n cid0))
+                     (cid, bid) = Some addr'
+                   /\ addr_shared_so_far addr' (rcons t' e'))
+          as [[cid'_ bid'_] [Hcid'bid'_ Hshr'_]].
+        {
+          unfold sigma_shifting_wrap_bid_in_addr,
+          sigma_shifting_lefttoright_addr_bid in *.
+          simpl in *. rewrite HPC'1a in Hbid'.
+          destruct (sigma_shifting_lefttoright_option
+                      (n'' cid)
+                      (if ~~ InC' cid then n cid else n'' cid) bid) eqn:ebid;
+            try discriminate; inversion Hbid'; subst.
+          destruct (InC' cid') eqn:ecid'; simpl in *;
+            rewrite ebid; eexists; split; by eauto.
+        }
+        split.
+        * econstructor.
+          split; first eauto.
+          unfold
+            event_renames_event_at_shared_addr,
+          memory_renames_memory_at_shared_addr,
+          rename_value_option, rename_value_template_option,
+          rename_addr_option,
+          sigma_shifting_wrap_bid_in_addr,
+          sigma_shifting_lefttoright_addr_bid in *.
+          destruct Hevent as [? [eclear [G1 G2]]].
+          rewrite Hbid' in eclear.
+          inversion eclear; subst. clear eclear.
+          rewrite HPC'1a in Hbid'.
+          assert (cid'_ = cid' /\ bid'_ = bid') as [? ?]; subst.
+          {
+            destruct (InC' cid) eqn:ecid; rewrite ecid in Hbid'; simpl in *;
+              rewrite Hbid' in Hcid'bid'_;
+              symmetry in Hcid'bid'_;
+              inversion Hcid'bid'_; subst; clear Hcid'bid'_; by auto.
+          }
+          split; intros ? ? Hload; simpl in *.
+          -- specialize (G1 _ _ Hload) as [v' [Hloadv' Hv]].
+             eexists; split; eauto.
+             destruct v as [| [[[permv cidv] bidv] offv] |] eqn:ev; auto.
+             destruct (permv =? Permission.data) eqn:epermv; auto.
+             assert (permv = Permission.data); subst. by apply beq_nat_true.
+             assert (Hshrv: addr_shared_so_far (cidv, bidv) (rcons t'' e'')).
+             {
+               inversion Hshr; subst; repeat find_rcons_rcons.
+               - eapply reachable_from_args_is_shared.
+                 unfold Memory.load in Hload; simpl in *.
+                 destruct (mem_of_event e'' cid) eqn:G1; try discriminate.
+                 eapply Reachable_step; eauto.
+                 rewrite Extra.In_in.
+                 apply ComponentMemory.load_block_load.
+                 do 2 eexists. by eauto.
+               - eapply reachable_from_previously_shared; eauto.
+                 unfold Memory.load in Hload; simpl in *.
+                 destruct (mem_of_event e'' cid) eqn:G1; try discriminate.
+                 eapply Reachable_step; eauto.
+                 rewrite Extra.In_in.
+                 apply ComponentMemory.load_block_load.
+                 do 2 eexists. by eauto.
+             }
+             specialize (HPC'1 _ Hshrv) as HPC'1v.
+             rewrite HPC'1v in Hv.
+             destruct (InC' cidv) eqn:ecidv; rewrite ecidv in Hv;
+               by rewrite Hv.
+          -- specialize (G2 _ _ Hload) as [v [Hloadv Hv]].
+             eexists; split; eauto.
+             destruct v as [| [[[permv cidv] bidv] offv] |] eqn:ev; auto.
+             destruct (permv =? Permission.data) eqn:epermv; auto.
+             assert (permv = Permission.data); subst. by apply beq_nat_true.
+             assert (Hshrv: addr_shared_so_far (cidv, bidv) (rcons t'' e'')).
+             {
+               inversion Hshr; subst; repeat find_rcons_rcons.
+               - eapply reachable_from_args_is_shared.
+                 unfold Memory.load in Hloadv; simpl in *.
+                 destruct (mem_of_event e'' cid) eqn:G; try discriminate.
+                 eapply Reachable_step; eauto.
+                 rewrite Extra.In_in.
+                 apply ComponentMemory.load_block_load.
+                 do 2 eexists. by eauto.
+               - eapply reachable_from_previously_shared; eauto.
+                 unfold Memory.load in Hloadv; simpl in *.
+                 destruct (mem_of_event e'' cid) eqn:G; try discriminate.
+                 eapply Reachable_step; eauto.
+                 rewrite Extra.In_in.
+                 apply ComponentMemory.load_block_load.
+                 do 2 eexists. by eauto.
+             }
+             specialize (HPC'1 _ Hshrv) as HPC'1v.
+             rewrite HPC'1v in Hv.
+             destruct (InC' cidv) eqn:ecidv; rewrite ecidv in Hv;
+               by rewrite Hv.
+        * by eexists; split; eauto.
+      + intros [cid bid] Hshr.
+        specialize (HPC'2 _ Hshr) as HPC'2a.
+        specialize (Hshr2 _ Hshr) as [[cid' bid'] [Hbid' [Hevent Hshr']]].
+        unfold sigma_shifting_wrap_bid_in_addr,
+        sigma_shifting_lefttoright_addr_bid in *.
+        simpl in *.
+        destruct (sigma_shifting_lefttoright_option
+                    (n'' cid')
+                    (if InP cid' then n cid' else n'' cid') bid') eqn:ebid';
+          try discriminate; inversion Hbid'; subst.
+        rewrite HPC'2a in ebid'.
+        exists (cid, bid').
+        split.
+        * destruct (InC' cid) eqn:ecid; simpl in *;
+            rewrite ebid'; by eauto.
+        * split; last assumption.
+          econstructor.
+          split.
+          -- unfold sigma_shifting_wrap_bid_in_addr,
+             sigma_shifting_lefttoright_addr_bid in *.
+             destruct (InC' cid); rewrite ebid'; eauto.
+          -- unfold
+               event_renames_event_at_shared_addr,
+             memory_renames_memory_at_shared_addr,
+             rename_value_option, rename_value_template_option,
+             rename_addr_option,
+             sigma_shifting_wrap_bid_in_addr,
+             sigma_shifting_lefttoright_addr_bid in *.
+             destruct Hevent as [? [eclear [G1 G2]]].
+             rewrite HPC'2a in eclear.
+             assert (x = (cid, bid)); subst.
+             {
+               destruct (InC' cid); rewrite ebid' in eclear; by inversion eclear.
+             }
+             split; intros ? ? Hload; simpl in *.
+             ++ specialize (G1 _ _ Hload) as [v' [Hloadv' Hv]].
+                eexists; split; eauto.
+                destruct v as [| [[[permv cidv] bidv] offv] |] eqn:ev; auto.
+                destruct (permv =? Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data); subst. by apply beq_nat_true.
+                assert (Hshrv: addr_shared_so_far (cidv, bidv) (rcons t'' e'')).
+                {
+                  inversion Hshr'; subst; repeat find_rcons_rcons.
+                  - eapply reachable_from_args_is_shared.
+                    unfold Memory.load in Hload; simpl in *.
+                    destruct (mem_of_event e'' cid) eqn:G1; try discriminate.
+                    eapply Reachable_step; eauto.
+                    rewrite Extra.In_in.
+                    apply ComponentMemory.load_block_load.
+                    do 2 eexists. by eauto.
+                  - eapply reachable_from_previously_shared; eauto.
+                    unfold Memory.load in Hload; simpl in *.
+                    destruct (mem_of_event e'' cid) eqn:G1; try discriminate.
+                    eapply Reachable_step; eauto.
+                    rewrite Extra.In_in.
+                    apply ComponentMemory.load_block_load.
+                    do 2 eexists. by eauto.
+                }
+                specialize (HPC'1 _ Hshrv) as HPC'1v.
+                rewrite HPC'1v in Hv.
+                destruct (InC' cidv) eqn:ecidv; rewrite ecidv in Hv;
+                  by rewrite Hv.
+             ++ specialize (G2 _ _ Hload) as [v [Hloadv Hv]].
+             eexists; split; eauto.
+             destruct v as [| [[[permv cidv] bidv] offv] |] eqn:ev; auto.
+             destruct (permv =? Permission.data) eqn:epermv; auto.
+             assert (permv = Permission.data); subst. by apply beq_nat_true.
+             assert (Hshrv: addr_shared_so_far (cidv, bidv) (rcons t'' e'')).
+             {
+               inversion Hshr'; subst; repeat find_rcons_rcons.
+               - eapply reachable_from_args_is_shared.
+                 unfold Memory.load in Hloadv; simpl in *.
+                 destruct (mem_of_event e'' cid) eqn:G; try discriminate.
+                 eapply Reachable_step; eauto.
+                 rewrite Extra.In_in.
+                 apply ComponentMemory.load_block_load.
+                 do 2 eexists. by eauto.
+               - eapply reachable_from_previously_shared; eauto.
+                 unfold Memory.load in Hloadv; simpl in *.
+                 destruct (mem_of_event e'' cid) eqn:G; try discriminate.
+                 eapply Reachable_step; eauto.
+                 rewrite Extra.In_in.
+                 apply ComponentMemory.load_block_load.
+                 do 2 eexists. by eauto.
+             }
+             specialize (HPC'1 _ Hshrv) as HPC'1v.
+             rewrite HPC'1v in Hv.
+             destruct (InC' cidv) eqn:ecidv; rewrite ecidv in Hv;
+               by rewrite Hv.
+      + destruct (arg_of_event e'') as [| [[[perm cid] bid] off] |] eqn:ev.
+        * rewrite rename_value_option_arg_Int.
+          by rewrite rename_value_option_arg_Int in Hval.
+        * unfold rename_value_option, rename_value_template_option,
+          rename_addr_option,
+          sigma_shifting_wrap_bid_in_addr,
+          sigma_shifting_lefttoright_addr_bid in *.
+          destruct (perm =? Permission.data) eqn:eperm; last assumption.
+          assert (Hshr: addr_shared_so_far (cid, bid) (rcons t'' e'')).
+          {
+            apply reachable_from_args_is_shared.
+            rewrite ev. simpl. rewrite eperm. constructor.
+            by rewrite in_fset1.
+          }
+          specialize (HPC'1 _ Hshr). simpl in *. rewrite HPC'1 in Hval.
+          destruct (sigma_shifting_lefttoright_option
+                      (n'' cid)
+                      (if ~~ InC' cid then n cid else n'' cid) bid) eqn:ebid;
+            last discriminate.
+          rewrite <- Hval.
+          destruct (InC' cid) eqn:ecid; simpl in *; by rewrite ebid.
+        * rewrite rename_value_option_arg_Undef.
+          by rewrite rename_value_option_arg_Undef in Hval.
+      + constructor. intros [cid bid] Hshr. specialize (HPC'2 _ Hshr).
+        inversion Hgood2 as [? G]; subst. specialize (G _ Hshr).
+        simpl in *. unfold right_block_id_good_for_shifting in *.
+        rewrite HPC'2 in G. by destruct (InC' cid).
+  Qed.
+  
+End MergeableSymHelpers.
+
 Section MergeableSym.
 
   Variables p c p' c' : program.
@@ -2138,10 +2469,20 @@ Section MergeableSym.
       - eapply linkable_implies_linkable_mains; eauto.
       - eapply interface_implies_matching_mains; eauto.
     }
-
+    
+    assert (prog_wf: well_formed_program prog).
+    {
+      eapply linking_well_formedness; eauto.
+    }
+    
     assert (prog'_wf: well_formed_program (program_link p c')).
     {
       eapply linking_well_formedness; eauto. by rewrite <- Hifc_cc'. 
+    }
+
+    assert (prog''_wf: well_formed_program prog'').
+    {
+      eapply linking_well_formedness; eauto. by rewrite <- Hifc_cc', <- Hifc_pp'.
     }
 
     assert (Hdisj: fdisjoint (domm (prog_interface p)) (domm (prog_interface c'))).
@@ -2191,31 +2532,74 @@ Section MergeableSym.
         by rewrite cond in G.
         
     - (** tricky for the same reason as above.            *)
-      inversion Hshift_t''t' as [? ? Hren]; subst.
       constructor.
-      generalize dependent t''. generalize dependent t'. intros t'.
-      induction t' as [|t' e'] using last_ind;
-        intros Hpref_t' Hgood_t' Hshift_tt' t'' Hwf Hpref_t'' Hgood_t'' Hshift_t''t'
-               Hren_t''t';
-        specialize (traces_rename_each_other_option_same_size _ _ _ _ Hren_t''t')
-          as Hsz; simpl in *.
-      + apply size0nil in Hsz; by subst; constructor.
-      + rewrite size_rcons in Hsz.
-        assert (exists t''pref e'', t'' = rcons t''pref e'') as [t''pref [e'' ?]].
-        { induction t'' using last_ind; try discriminate. by eauto. }
-        subst.
-        inversion Hren_t''t'; first (by find_nil_rcons); repeat find_rcons_rcons. 
-        econstructor; eauto.
-        * eapply IHt'; eauto.
-          -- unfold CSInvariants.is_prefix in *. apply star_iff_starR in Hpref_t'.
-             apply CSInvariants.starR_rcons in Hpref_t';
-               last by apply CS.singleton_traces_non_inform.
-      
-      (** TODO: Need a separate lemma to avoid repetition in the next subgoal. *)
-      admit.
-    - (** tricky for the same reason as above.            *)
-      admit.
-  Admitted.
+      eapply traces_rename_each_other_option_n'_if.
+      + inversion Hshift_t''t' as [? ? Hren]; subst.
+        exact Hren.
+      + intros [cid bid] Hshr''. simpl.
+        rewrite Hifc_pp' Hifc_cc' in Hmerge_ipic.
+        destruct (cid \in domm (prog_interface p)) eqn:ecid; rewrite ecid.
+        * move : Hdisj => /fdisjointP => Hdisj.
+          by apply Hdisj in ecid.
+        * rewrite fdisjointC in Hdisj.
+          move : Hdisj => /fdisjointP => Hdisj.
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp' Hwfc' Hmerge_ipic Hpref_t'' Hclosed_prog' prog''_wf Hshr'' Logic.eq_refl)
+            as [Hacid | Hacid]; simpl in *.
+          -- by rewrite Hifc_pp' Hacid in ecid.
+          -- by rewrite Hacid.
+      + intros [cid bid] Hshr'. simpl.
+        destruct (cid \in domm (prog_interface p)) eqn:ecid; rewrite ecid.
+        * move : Hdisj => /fdisjointP => Hdisj.
+          by apply Hdisj in ecid.
+        * rewrite fdisjointC in Hdisj.
+          move : Hdisj => /fdisjointP => Hdisj.
+          rewrite Hifc_cc' in Hmerge_ipic.
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp Hwfc' Hmerge_ipic Hpref_t' prog'_closed prog'_wf Hshr' Logic.eq_refl)
+            as [Hacid | Hacid]; simpl in *.
+          -- by rewrite Hacid in ecid.
+          -- by rewrite Hacid.
+    - (** tricky for the same reason as above + the need to use
+          if_sym_lambda_traces_rename_each_other
+       *)
+      constructor.
+      specialize (if_sym_lambda_traces_rename_each_other
+                    (fun cid: nat_ordType => cid \in domm (prog_interface c'))
+                    n''
+                    n
+                 ) as rewr.
+      simpl in rewr. rewrite rewr.
+      eapply traces_rename_each_other_option_n'_if.
+      + inversion Hshift_tt' as [? ? Hren]; subst.
+        apply if_sym_lambda_traces_rename_each_other in Hren.
+        exact Hren.
+      + intros [cid bid] Hshr. simpl.
+        destruct (cid \in domm (prog_interface p)) eqn:ecid; rewrite ecid; simpl.
+        * move : Hdisj => /fdisjointP => Hdisj.
+          apply Hdisj in ecid. by rewrite ecid.
+        * rewrite fdisjointC in Hdisj.
+          move : Hdisj => /fdisjointP => Hdisj.
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp Hwfc Hmerge_ipic Hpref_t Hclosed_prog
+                        prog_wf Hshr Logic.eq_refl)
+            as [Hacid | Hacid]; simpl in *.
+          -- by rewrite Hacid in ecid.
+          -- by rewrite <- Hifc_cc', Hacid.
+      + intros [cid bid] Hshr'. simpl.
+        destruct (cid \in domm (prog_interface p)) eqn:ecid; rewrite ecid; simpl.
+        * move : Hdisj => /fdisjointP => Hdisj.
+          apply Hdisj in ecid. by rewrite ecid.
+        * rewrite fdisjointC in Hdisj.
+          move : Hdisj => /fdisjointP => Hdisj.
+          rewrite Hifc_cc' in Hmerge_ipic.
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp Hwfc' Hmerge_ipic Hpref_t' prog'_closed
+                        prog'_wf Hshr' Logic.eq_refl)
+            as [Hacid | Hacid]; simpl in *.
+          -- by rewrite Hacid in ecid.
+          -- by rewrite Hacid.
+  Qed.
 
   Lemma mergeable_internal_states_sym s s' s'' t t' t'':
     mergeable_internal_states p c p' c' n n'' s s' s'' t t' t'' ->
