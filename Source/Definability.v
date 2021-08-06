@@ -1610,19 +1610,19 @@ Section Definability.
             (* -- admit. *)
             -- move=> C r H.
                destruct (C == Component.main) eqn:Heq.
-               ++ move: Heq => /eqP Heq; subst.
+               ++ move: Heq => /eqP Heq; subst C.
                   destruct r; simpl in *; eexists; simplify_memory.
                   admit.
-               ++ move: Heq => /eqP Heq; subst.
+               ++ move: Heq => /eqP Heq.
                   destruct r; simpl in *; eexists; simplify_memory.
                   simpl.
                   all: admit.
-            -- move=> C _ R n ?; subst.
+            -- move=> C _ R n ?; subst n.
                destruct (C == Component.main) eqn:Heq.
-               ++ move: Heq => /eqP Heq; subst.
+               ++ move: Heq => /eqP Heq; subst C.
                   destruct R; simpl in *; simplify_memory.
                   admit.
-               ++ move: Heq => /eqP Heq; subst.
+               ++ move: Heq => /eqP Heq.
                   destruct R; simpl in *; simplify_memory.
                   all: admit.
             -- by move=> [].
@@ -1759,7 +1759,7 @@ Section Definability.
           pose proof (wfmem_meta wf_mem E_R_ARG C_b) as [v6 Hv6].
           pose proof (wfmem_meta wf_mem E_R_COM C_b) as [vcom Hvcom].
 
-
+(* FIXME: Call event proof breaks here.
           exists (ECallInform C P' new_arg mem6 regs C'). (* TODO: new_arg? *)
           exists (StackState C' (C :: callers s)).
           have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
@@ -1974,6 +1974,8 @@ Local Opaque loc_of_reg.
             right. by apply: (closed_intf Himport).
             (* NOTE: These snippets continue to work, though they may incur
                modifications later on. *)
+*)
+          admit. admit.
 
         - admit.
 
