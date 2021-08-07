@@ -1989,31 +1989,39 @@ Local Opaque loc_of_reg.
           destruct ptr as [n | [[[P' C'] b] o] |].
           + (* Before processing the goal, introduce existential witnesses. *)
             destruct (well_formed_memory_store_reg_offset v (Int n) C_b wf_mem) as [mem' Hstore].
-            exists (StackState C (callers s)). eexists. split.
+            (* match goal with *)
+            (* | H : Memory.store _ ?PTR _ = Some ?MEM |- *)
+            (*   Memory.store ?MEM ?PTR' _ = _ *)
+            (*   => *)
+            (*   assert (Hneq : PTR <> PTR') by admit *)
+            (* end. *)
+            assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset v))
+              by (now destruct v). (* Lemma? *)
+            assert (Hload : exists v', Memory.load mem0 (Permission.data, C, Block.local, reg_offset v) = Some v')
+              by admit.
+            setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) in Hload.
+            pose proof proj1 (Memory.store_some_load_some _ _ (Int n)) Hload as [mem'' Hstore'].
+            (* Continue. *)
+            exists (StackState C (callers s)).
+            eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
+            split.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               do 8 take_step.
               -- reflexivity.
-              -- match goal with
-                 | H : Memory.store _ ?PTR _ = Some ?MEM |-
-                   Memory.store ?MEM ?PTR' _ = _
-                   =>
-                   assert (Hneq : PTR <> PTR') by admit
-                 end.
-                 assert (Hload :
-                           exists v',
-                             Memory.load mem0 (Permission.data, C, Block.local, reg_offset v) = Some v')
-                   by admit.
-                 (* rewrite Z.add_0_l in Hneq. *)
-                 setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneq Hmem) in Hload.
-                 pose proof proj1 (Memory.store_some_load_some _ _ (Int n)) Hload as [v' Hstore'].
-                 admit. (* Needs to be introduced earlier. *)
+              -- exact Hstore'.
               -- (* Do recursive call. *)
                   do 3 take_step.
                   ++ reflexivity.
                   ++ now apply find_procedures_of_trace.
-                  ++ (* Now we are done with the event. *)
-                     apply star_refl.
+                  ++ (* Now we are done with the event.
+                        We still need to process the external call check. *)
+                     do 9 take_step.
+                     ** reflexivity.
+                     ** instantiate (1 := Int 0). admit. (* TODO: Get this from memory. *)
+                     ** unfold invalidate_metadata.
+                        do 4 take_step.
+                        apply star_refl.
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
               unfold procedure_of_trace. admit. (* FIXME: New subgoal, cannot be solved as is. *)
@@ -2024,17 +2032,25 @@ Local Transparent expr_of_const_val loc_of_reg.
               (* Reestablish memory well-formedness.
                  TODO: Refactor, automate. *)
               { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
-                instantiate (1 := mem). (* FIXME *)
+                (* instantiate (1 := mem). (* FIXME *) *)
                 constructor.
                 - intros C_ Hcomp.
                   destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
                   + subst C_.
-                    rewrite (Memory.load_after_store_eq _ _ _ _ Hmem).
-                    reflexivity.
+                    Check Memory.load_after_store_eq _ _ _ _ Hmem.
+                    pose proof Memory.load_after_store_eq _ _ _ _ Hmem as Hmem0.
+                    assert (Hoffsetneq' : (Permission.data, C, Block.local, reg_offset v) <> (Permission.data, C, Block.local, 0%Z))
+                      by admit.
+
+                    rewrite (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq' Hstore').
+                    assumption.
                   + erewrite Memory.load_after_store_neq;
                       last eassumption;
                       last (injection; contradiction).
-                    erewrite (wfmem_counter wf_mem Hcomp).
+                    assert (Hload0 := wfmem_counter wf_mem Hcomp).
+                    assert (HCneq : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C_, Block.local, 0%Z))
+                      by admit.
+                    rewrite <- (Memory.load_after_store_neq _ _ _ _ _ HCneq Hmem) in Hload0.
                     rewrite counter_value_snoc. simpl.
                     move: Hneq => /eqP.
                     case: ifP;
@@ -2053,7 +2069,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                         by admit.
                       -- subst prefix.
                          admit.
-                      -- rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                      -- rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
+                          last (injection; destruct v; discriminate).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
                            last (injection; discriminate).
                          apply (proj1 (wfmem_extcall wf_mem Hprefix) _ Hcomp).
                          admit.
@@ -2066,19 +2084,27 @@ Local Transparent expr_of_const_val loc_of_reg.
                         by admit.
                       -- subst prefix.
                          admit.
-                      -- rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                      -- rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
+                          last (injection; destruct v; discriminate).
+                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
                            last (injection; discriminate).
                          apply (proj2 (wfmem_extcall wf_mem Hprefix) _ Hcomp).
                          intro; subst C_.
                          admit.
                 - intros C_ reg Hcomp.
-                  destruct (EregisterP reg v).
-                  + subst v.
-                    exists (Int n).
-                    admit.
+                  destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                  + subst C_.
+                    destruct (EregisterP reg v).
+                    * subst v.
+                      exists (Int n).
+                      erewrite Memory.load_after_store_eq; try reflexivity; eassumption.
+                    * erewrite Memory.load_after_store_neq;
+                        last eassumption;
+                        last admit. (* Easy. *)
+                      admit. (* Easy. *)
                   + destruct (wfmem_meta wf_mem reg Hcomp) as [v' Hload'].
                     exists v'.
-                    admit.
+                    admit. (* Easy *)
                 - intro Hcontra. now destruct prefix.
                 - intros pref ev Hprefix.
                   apply rcons_inv in Hprefix as [? ?]; subst pref ev.
