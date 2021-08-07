@@ -1994,7 +1994,20 @@ Local Opaque loc_of_reg.
 Local Transparent expr_of_const_val loc_of_reg.
               do 8 take_step.
               -- reflexivity.
-              -- exact Hstore.
+              -- match goal with
+                 | H : Memory.store _ ?PTR _ = Some ?MEM |-
+                   Memory.store ?MEM ?PTR' _ = _
+                   =>
+                   assert (Hneq : PTR <> PTR') by admit
+                 end.
+                 assert (Hload :
+                           exists v',
+                             Memory.load mem0 (Permission.data, C, Block.local, reg_offset v) = Some v')
+                   by admit.
+                 (* rewrite Z.add_0_l in Hneq. *)
+                 setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneq Hmem) in Hload.
+                 pose proof proj1 (Memory.store_some_load_some _ _ (Int n)) Hload as [v' Hstore'].
+                 admit. (* Needs to be introduced earlier. *)
               -- (* Do recursive call. *)
                   do 3 take_step.
                   ++ reflexivity.
@@ -2003,92 +2016,155 @@ Local Transparent expr_of_const_val loc_of_reg.
                      apply star_refl.
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
+              unfold procedure_of_trace. admit. (* FIXME: New subgoal, cannot be solved as is. *)
               admit. (* Easy, see [wb]. *)
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
               exists bot. split; [| split]; easy.
               (* Reestablish memory well-formedness.
                  TODO: Refactor, automate. *)
-              {
+              { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
+                instantiate (1 := mem). (* FIXME *)
                 constructor.
-                - intros C' C'_b.
-                  rewrite <- ((wfmem_counter wf_mem) C' C'_b).
-                  eapply Memory.load_after_store_neq; try eassumption.
-                  intros Hcontra; destruct v; now inversion Hcontra.
-                - intros C' reg C'_b.
-                  destruct (dec_eq_nat C C') as [HeqC | HneqC].
-                  + subst C'.
-                    destruct (Eregister_eq_dec reg v) as [Heqreg | Hneqreg].
-                    * subst reg. exists (Int n).
-                      eapply Memory.load_after_store_eq; eassumption.
-                    * destruct ((wfmem_meta wf_mem) C reg C_b) as [val Hval].
-                      exists val.
-                      erewrite Memory.load_after_store_neq; try eassumption.
-                      intros Hcontra. injection Hcontra as Hoffset.
-                      apply reg_offset_inj in Hoffset.
-                      symmetry in Hoffset. contradiction.
-                  + destruct ((wfmem_meta wf_mem) C' reg C'_b) as [val Hval].
-                    exists val.
-                    erewrite Memory.load_after_store_neq; try eassumption.
-                    intros Hcontra. inversion Hcontra. contradiction.
-                (* - intros prefix0' Csrc P' arg' mem'' regs Cdst Hprefix Csrc_b. *)
-                (*   apply rcons_inv in Hprefix as [Hprefix Hevent]. *)
-                (*   discriminate. *)
-                (* - intros prefix0' Csrc P' arg' regs Cdst Hprefix Csrc_b. *)
-                (*   apply rcons_inv in Hprefix as [Hprefix Hevent]. *)
-                (*   discriminate. *)
-                (* - intros prefix0' C' rptr rsize mem'' regs Hprefix C'_b. *)
-                (*   apply rcons_inv in Hprefix as [Hprefix Hevent]. *)
-                (*   discriminate. *)
-                - intros prefix0' e0' Ht.
-                  apply rcons_inv in Ht as [? ?]; subst prefix0' e0'.
+                - intros C_ Hcomp.
+                  destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                  + subst C_.
+                    rewrite (Memory.load_after_store_eq _ _ _ _ Hmem).
+                    reflexivity.
+                  + erewrite Memory.load_after_store_neq;
+                      last eassumption;
+                      last (injection; contradiction).
+                    erewrite (wfmem_counter wf_mem Hcomp).
+                    rewrite counter_value_snoc. simpl.
+                    move: Hneq => /eqP.
+                    case: ifP;
+                      last now rewrite Z.add_0_r.
+                    move => /eqP => Hcontra => /eqP => Hneq.
+                    symmetry in Hcontra. contradiction.
+                - intros Hcontra. now destruct prefix.
+                - intros pref ev Hprefix.
+                  apply rcons_inv in Hprefix as [? ?]; subst pref ev.
+                  split.
+                  + intros C_ Hcomp Hnext.
+                    destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                    * subst C_.
+                      assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
+                        as [Hprefix | [prefix_ [e_ Hprefix]]]
+                        by admit.
+                      -- subst prefix.
+                         admit.
+                      -- rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                           last (injection; discriminate).
+                         apply (proj1 (wfmem_extcall wf_mem Hprefix) _ Hcomp).
+                         admit.
+                    * symmetry in Hnext. contradiction.
+                  + intros C_ Hcomp Hnext.
+                    destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                    * subst C_. contradiction.
+                    * assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
+                        as [Hprefix | [prefix_ [e_ Hprefix]]]
+                        by admit.
+                      -- subst prefix.
+                         admit.
+                      -- rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                           last (injection; discriminate).
+                         apply (proj2 (wfmem_extcall wf_mem Hprefix) _ Hcomp).
+                         intro; subst C_.
+                         admit.
+                - intros C_ reg Hcomp.
+                  destruct (EregisterP reg v).
+                  + subst v.
+                    exists (Int n).
+                    admit.
+                  + destruct (wfmem_meta wf_mem reg Hcomp) as [v' Hload'].
+                    exists v'.
+                    admit.
+                - intro Hcontra. now destruct prefix.
+                - intros pref ev Hprefix.
+                  apply rcons_inv in Hprefix as [? ?]; subst pref ev.
                   admit.
               }
+          + admit. (* Similarly. *)
+          + admit. (* Similarly. *)
+(*                 constructor. *)
+(*                 - intros C' C'_b. *)
+(*                   rewrite <- ((wfmem_counter wf_mem) C' C'_b). *)
+(*                   eapply Memory.load_after_store_neq; try eassumption. *)
+(*                   intros Hcontra; destruct v; now inversion Hcontra. *)
+(*                 - intros C' reg C'_b. *)
+(*                   destruct (dec_eq_nat C C') as [HeqC | HneqC]. *)
+(*                   + subst C'. *)
+(*                     destruct (Eregister_eq_dec reg v) as [Heqreg | Hneqreg]. *)
+(*                     * subst reg. exists (Int n). *)
+(*                       eapply Memory.load_after_store_eq; eassumption. *)
+(*                     * destruct ((wfmem_meta wf_mem) C reg C_b) as [val Hval]. *)
+(*                       exists val. *)
+(*                       erewrite Memory.load_after_store_neq; try eassumption. *)
+(*                       intros Hcontra. injection Hcontra as Hoffset. *)
+(*                       apply reg_offset_inj in Hoffset. *)
+(*                       symmetry in Hoffset. contradiction. *)
+(*                   + destruct ((wfmem_meta wf_mem) C' reg C'_b) as [val Hval]. *)
+(*                     exists val. *)
+(*                     erewrite Memory.load_after_store_neq; try eassumption. *)
+(*                     intros Hcontra. inversion Hcontra. contradiction. *)
+(*                 (* - intros prefix0' Csrc P' arg' mem'' regs Cdst Hprefix Csrc_b. *) *)
+(*                 (*   apply rcons_inv in Hprefix as [Hprefix Hevent]. *) *)
+(*                 (*   discriminate. *) *)
+(*                 (* - intros prefix0' Csrc P' arg' regs Cdst Hprefix Csrc_b. *) *)
+(*                 (*   apply rcons_inv in Hprefix as [Hprefix Hevent]. *) *)
+(*                 (*   discriminate. *) *)
+(*                 (* - intros prefix0' C' rptr rsize mem'' regs Hprefix C'_b. *) *)
+(*                 (*   apply rcons_inv in Hprefix as [Hprefix Hevent]. *) *)
+(*                 (*   discriminate. *) *)
+(*                 - intros prefix0' e0' Ht. *)
+(*                   apply rcons_inv in Ht as [? ?]; subst prefix0' e0'. *)
+(*                   admit. *)
+(*               } *)
 
-          + (* Before processing the goal, introduce existential witnesses. *)
-            destruct (well_formed_memory_store_reg_offset v (eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (8 + o))) C_b wf_mem) as [mem' Hstore].
-            exists (StackState C (callers s)). eexists. split.
-            * (* Evaluate steps of back-translated event first. *)
-Local Transparent expr_of_const_val loc_of_reg.
-              (* do 12 take_step. *)
-              (* -- reflexivity. *)
-              (* -- exact Hstore. *)
-              (* -- (* Do recursive call. *) *)
-              (*     do 3 take_step. *)
-              (*     ++ reflexivity. *)
-              (*     ++ now apply find_procedures_of_trace. *)
-              (*     ++ (* Now we are done with the event. *) *)
-              (*        apply star_refl. *)
-              admit. (* Currently gets stuck after two steps. *)
-            * (* Reestablish invariant. *)
-              econstructor; try reflexivity; try eassumption.
-              admit. (* Easy. *)
-              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
-              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-              exists bot. split; [| split]; easy.
-              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
+(*           + (* Before processing the goal, introduce existential witnesses. *) *)
+(*             destruct (well_formed_memory_store_reg_offset v (eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (8 + o))) C_b wf_mem) as [mem' Hstore]. *)
+(*             exists (StackState C (callers s)). eexists. split. *)
+(*             * (* Evaluate steps of back-translated event first. *) *)
+(* Local Transparent expr_of_const_val loc_of_reg. *)
+(*               (* do 12 take_step. *) *)
+(*               (* -- reflexivity. *) *)
+(*               (* -- exact Hstore. *) *)
+(*               (* -- (* Do recursive call. *) *) *)
+(*               (*     do 3 take_step. *) *)
+(*               (*     ++ reflexivity. *) *)
+(*               (*     ++ now apply find_procedures_of_trace. *) *)
+(*               (*     ++ (* Now we are done with the event. *) *) *)
+(*               (*        apply star_refl. *) *)
+(*               admit. (* Currently gets stuck after two steps. *) *)
+(*             * (* Reestablish invariant. *) *)
+(*               econstructor; try reflexivity; try eassumption. *)
+(*               admit. (* Easy. *) *)
+(*               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk. *)
+(*               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top). *)
+(*               exists bot. split; [| split]; easy. *)
+(*               admit. (* RB: TODO: Reestablish memory well-formedness, easy. *) *)
 
-          + (* Before processing the goal, introduce existential witnesses. *)
-            destruct (well_formed_memory_store_reg_offset v Undef C_b wf_mem) as [mem' Hstore].
-            exists (StackState C (callers s)). eexists. split.
-            * (* Evaluate steps of back-translated event first. *)
-Local Transparent expr_of_const_val loc_of_reg.
-              do 12 take_step.
-              -- reflexivity.
-              -- exact Hstore.
-              -- (* Do recursive call. *)
-                  do 3 take_step.
-                  ++ reflexivity.
-                  ++ now apply find_procedures_of_trace.
-                  ++ (* Now we are done with the event. *)
-                     apply star_refl.
-            * (* Reestablish invariant. *)
-              econstructor; try reflexivity; try eassumption.
-              admit. (* Easy. *)
-              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
-              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-              exists bot. split; [| split]; easy.
-              admit. (* RB: TODO: Reestablish memory well-formedness, easy. *)
+(*           + (* Before processing the goal, introduce existential witnesses. *) *)
+(*             destruct (well_formed_memory_store_reg_offset v Undef C_b wf_mem) as [mem' Hstore]. *)
+(*             exists (StackState C (callers s)). eexists. split. *)
+(*             * (* Evaluate steps of back-translated event first. *) *)
+(* Local Transparent expr_of_const_val loc_of_reg. *)
+(*               do 12 take_step. *)
+(*               -- reflexivity. *)
+(*               -- exact Hstore. *)
+(*               -- (* Do recursive call. *) *)
+(*                   do 3 take_step. *)
+(*                   ++ reflexivity. *)
+(*                   ++ now apply find_procedures_of_trace. *)
+(*                   ++ (* Now we are done with the event. *) *)
+(*                      apply star_refl. *)
+(*             * (* Reestablish invariant. *) *)
+(*               econstructor; try reflexivity; try eassumption. *)
+(*               admit. (* Easy. *) *)
+(*               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk. *)
+(*               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top). *)
+(*               exists bot. split; [| split]; easy. *)
+(*               admit. (* RB: TODO: Reestablish memory well-formedness, easy. *) *)
 
         - (* EMov *)
           (* Before processing the goal, introduce existential witnesses. *)

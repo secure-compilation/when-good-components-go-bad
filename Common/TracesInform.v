@@ -19,6 +19,28 @@ Unset Printing Implicit Defensive.
 Inductive Eregister : Type :=
   E_R_ONE | E_R_COM | E_R_AUX1 | E_R_AUX2 | E_R_RA | E_R_SP | E_R_ARG.
 
+Definition Eregister_eqb (r1 r2 : Eregister) : bool :=
+  match r1, r2 with
+  | E_R_ONE, E_R_ONE
+  | E_R_COM, E_R_COM
+  | E_R_AUX1, E_R_AUX1
+  | E_R_AUX2, E_R_AUX2
+  | E_R_RA, E_R_RA
+  | E_R_SP, E_R_SP
+  | E_R_ARG, E_R_ARG
+    => true
+  | _, _
+    => false
+  end.
+
+Lemma EregisterP : Equality.axiom Eregister_eqb.
+Proof.
+  intros [] []; by constructor.
+Qed.
+
+Definition Eregister_eqMixin: Equality.mixin_of Eregister := EqMixin EregisterP.
+Canonical Eregister_eqType := Eval hnf in EqType Eregister Eregister_eqMixin.
+
 Inductive Ebinop : Set :=
   E_Add : Ebinop | E_Minus : Ebinop | E_Mul : Ebinop | E_Eq : Ebinop | E_Leq : Ebinop.
 
