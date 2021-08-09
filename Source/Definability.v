@@ -2031,7 +2031,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                         apply star_refl.
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
-              unfold procedure_of_trace. admit. (* FIXME: New subgoal, cannot be solved as is. *)
               admit. (* Easy, see [wb]. *)
               destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
               eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
@@ -2044,11 +2043,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                 - intros C_ Hcomp.
                   destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
                   + subst C_.
-                    Check Memory.load_after_store_eq _ _ _ _ Hmem.
                     pose proof Memory.load_after_store_eq _ _ _ _ Hmem as Hmem0.
                     assert (Hoffsetneq' : (Permission.data, C, Block.local, reg_offset v) <> (Permission.data, C, Block.local, 0%Z))
                       by admit.
-
                     rewrite (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq' Hstore').
                     assumption.
                   + erewrite Memory.load_after_store_neq;
