@@ -2609,10 +2609,17 @@ Section MergeableSym.
     find_and_invert_mergeable_internal_states;
       (
         find_and_invert_mergeable_states_well_formed;
+        unfold mergeable_interfaces in *;
         specialize (CSInvariants.value_mem_reg_domm_partition
                       _ _ _ _ _ _ Hwfp Hwfc Hmerge_ipic Hclosed_prog Hpref_t Logic.eq_refl Logic.eq_refl
                    ) as [Hmem Hreg];
-        assert (Hclosed_pc' : closed_program (program_link p c')) by admit;
+        assert (Hclosed_pc' : closed_program (program_link p c'))
+        by (
+            eapply interface_preserves_closedness_r; eauto;
+            first (intuition);
+            first (eapply linkable_implies_linkable_mains; intuition);
+            eapply interface_implies_matching_mains; intuition
+          );
         rewrite Hifc_cc' in Hmerge_ipic;
         specialize (CSInvariants.value_mem_reg_domm_partition
                       _ _ _ _ _ _ Hwfp Hwfc' Hmerge_ipic Hclosed_pc' Hpref_t' Logic.eq_refl Logic.eq_refl
@@ -2629,8 +2636,7 @@ Section MergeableSym.
       + CS.unfold_states.
         CS.simplify_turn. subst. simpl in *.
         rewrite <- Hifc_pp'. by eapply mergeable_states_notin_to_in2; eauto.
-      + (** tricky for the same reason as above,            *)
-        (** but should follow from Hregsp                   *)
+      + (** Follows from Hregsp            *)
 
         constructor.
         inversion Hregsp as [Hregsrel].
@@ -2652,7 +2658,37 @@ Section MergeableSym.
                     (if cid1 \in domm (prog_interface c')
                      then n'' cid1 else n cid1) bid1) as [bid1'|] eqn:ebid1';
           rewrite ebid1'.
-        * admit.
+        * specialize (Hreg _ _ _ _ _ eregs1) as [Hcid1 | Hcid1].
+          -- assert (Hc: cid1 \in domm (prog_interface c) = false).
+             {
+               unfold mergeable_interfaces, linkable in *.
+               destruct Hmerge_ipic as [[_ Hdisj] _].
+               move : Hdisj => /fdisjointP => Hdisj.
+               apply Hdisj in Hcid1.
+               destruct (cid1 \in domm (prog_interface c)) eqn:e; auto;
+                 by rewrite e in Hcid1.
+             }
+             rewrite Hifc_cc' in Hc.
+             rewrite Hc in ebid1'. rewrite Hcid1 ebid1' in Hregsrel.
+             destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
+             inversion inv as [rewr]. by left.
+          -- rewrite Hifc_cc' in Hcid1.
+             rewrite Hcid1 in ebid1'.
+             assert (Hc: cid1 \in domm (prog_interface p) = false).
+             {
+               unfold mergeable_interfaces, linkable in *.
+               destruct Hmerge_ipic as [[_ Hdisj] _].
+               rewrite fdisjointC in Hdisj.
+               move : Hdisj => /fdisjointP => Hdisj.
+               rewrite -Hifc_cc' in Hcid1.
+               apply Hdisj in Hcid1.
+               destruct (cid1 \in domm (prog_interface p)) eqn:e; auto;
+                 by rewrite e in Hcid1.
+             }
+             rewrite Hc ebid1' in Hregsrel.
+             destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
+             inversion inv as [rewr]. by left.
+             
         * assert (HNone2: sigma_shifting_lefttoright_option
                             (n cid1)
                             (if cid1 \in domm (prog_interface p)
@@ -2696,26 +2732,912 @@ Section MergeableSym.
             by rewrite Hp in G2.
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemp                    *)
-        admit.
+        assert (prog_wf: well_formed_program prog).
+          { apply linking_well_formedness; auto.
+              by unfold mergeable_interfaces in *; intuition. }
+        destruct Hmemp as [G1 [G2 G3]].
+        split; last split; last assumption.
+        * intros ? Horig.
+          constructor; intros ? ? Hload.
+          -- specialize (G1 _ Horig) as [G1a G1b].
+             specialize (G1a _ _ Hload).
+             unfold rename_value_option, rename_value_template_option,
+             rename_addr_option,
+             sigma_shifting_wrap_bid_in_addr,
+             sigma_shifting_lefttoright_addr_bid in *.
+             destruct v as [| [[[perm cid] bid] off] |] eqn:ev;
+              first assumption; last assumption.
+             destruct (perm =? Permission.data) eqn:eperm.
+             ++ destruct (sigma_shifting_lefttoright_option
+                            (n cid)
+                            (if cid \in domm (prog_interface p)
+                             then n cid else n'' cid)
+                            bid) as [bid'|] eqn:ebid;
+                  specialize (Hmem _ _ _ _ _ Hload) as [Hcid | Hcid].
+                ** 
+                  assert (cid \in domm (prog_interface c') = false) as Hc'.
+                  {
+                    unfold mergeable_interfaces, linkable in *.
+                    destruct Hmerge_ipic as [[_ Hdisj] _].
+                    move : Hdisj => /fdisjointP => Hdisj.
+                    apply Hdisj in Hcid.
+                    rewrite -Hifc_cc'.
+                    destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                      by rewrite e in Hcid.
+                  }
+                  rewrite ebid in G1a.
+                  rewrite Hcid in ebid.
+                  by rewrite Hc' ebid.
+                **
+                  assert (cid \in domm (prog_interface p) = false) as Hc'.
+                  {
+                    unfold mergeable_interfaces, linkable in *.
+                    destruct Hmerge_ipic as [[_ Hdisj] _].
+                    rewrite fdisjointC in Hdisj.
+                    move : Hdisj => /fdisjointP => Hdisj.
+                    apply Hdisj in Hcid.
+                    destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                      by rewrite e in Hcid.
+                  }
+                  rewrite ebid in G1a.
+                  rewrite Hc' in ebid.
+                  by rewrite -Hifc_cc' Hcid ebid.
+                **
+                  assert (cid \in domm (prog_interface c') = false) as Hc'.
+                  {
+                    unfold mergeable_interfaces, linkable in *.
+                    destruct Hmerge_ipic as [[_ Hdisj] _].
+                    move : Hdisj => /fdisjointP => Hdisj.
+                    apply Hdisj in Hcid.
+                    rewrite -Hifc_cc'.
+                    destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                      by rewrite e in Hcid.
+                  }
+                  rewrite ebid in G1a.
+                  rewrite Hcid in ebid.
+                  rewrite Hc' ebid. by intuition.
+                **
+                  assert (cid \in domm (prog_interface p) = false) as Hc'.
+                  {
+                    unfold mergeable_interfaces, linkable in *.
+                    destruct Hmerge_ipic as [[_ Hdisj] _].
+                    rewrite fdisjointC in Hdisj.
+                    move : Hdisj => /fdisjointP => Hdisj.
+                    apply Hdisj in Hcid.
+                    destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                      by rewrite e in Hcid.
+                  }
+                  rewrite Hc' in G1a.
+                  rewrite Hc' in ebid.
+                  rewrite ebid in G1a.
+                  by rewrite -Hifc_cc' Hcid ebid.
+             ++ assumption.
+          -- specialize (G1 _ Horig) as [G1a G1b].
+             specialize (G1b _ _ Hload) as [v [Hloadv Hvv']].
+             unfold rename_value_option, rename_value_template_option,
+             rename_addr_option,
+             sigma_shifting_wrap_bid_in_addr,
+             sigma_shifting_lefttoright_addr_bid in *.
+             exists v. split; first assumption.
+             destruct v as [| [[[perm cid] bid] off] |] eqn:ev.
+             ++ by right; destruct Hvv' as [[contra ?]|].
+             ++ destruct (perm =? Permission.data) eqn:eperm.
+                ** destruct (
+                       sigma_shifting_lefttoright_option
+                         (n cid)
+                         (if cid \in domm (prog_interface p)
+                          then n cid else n'' cid) bid) as [bid'|] eqn:ebid;
+                     specialize (Hmem _ _ _ _ _ Hloadv) as [Hcid | Hcid].
+                   ---
+                     assert (cid \in domm (prog_interface c') = false) as Hc'.
+                     {
+                       unfold mergeable_interfaces, linkable in *.
+                       destruct Hmerge_ipic as [[_ Hdisj] _].
+                       move : Hdisj => /fdisjointP => Hdisj.
+                       apply Hdisj in Hcid.
+                       rewrite -Hifc_cc'.
+                       destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                         by rewrite e in Hcid.
+                     }
+                     rewrite ebid in Hvv'.
+                     rewrite Hcid in ebid.
+                     rewrite Hc' ebid. right. by intuition.
+                   ---
+                     assert (cid \in domm (prog_interface p) = false) as Hc'.
+                     {
+                       unfold mergeable_interfaces, linkable in *.
+                       destruct Hmerge_ipic as [[_ Hdisj] _].
+                       rewrite fdisjointC in Hdisj.
+                       move : Hdisj => /fdisjointP => Hdisj.
+                       apply Hdisj in Hcid.
+                       destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                         by rewrite e in Hcid.
+                     }
+                     rewrite ebid in Hvv'.
+                     rewrite Hc' in ebid.
+                     rewrite -Hifc_cc' Hcid ebid. right. by intuition.
+                   ---
+                     assert (cid \in domm (prog_interface c') = false) as Hc'.
+                     {
+                       unfold mergeable_interfaces, linkable in *.
+                       destruct Hmerge_ipic as [[_ Hdisj] _].
+                       move : Hdisj => /fdisjointP => Hdisj.
+                       apply Hdisj in Hcid.
+                       rewrite -Hifc_cc'.
+                       destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                         by rewrite e in Hcid.
+                     }
+                     rewrite ebid in Hvv'.
+                     rewrite Hcid in ebid.
+                     rewrite Hc' ebid. left.
+                     destruct Hvv' as [[? [? ?]]|contra]; last discriminate;
+                       subst.
+                     rewrite eperm Hc' ebid. by intuition.
+                   ---
+                     assert (cid \in domm (prog_interface p) = false) as Hc'.
+                     {
+                       unfold mergeable_interfaces, linkable in *.
+                       destruct Hmerge_ipic as [[_ Hdisj] _].
+                       rewrite fdisjointC in Hdisj.
+                       move : Hdisj => /fdisjointP => Hdisj.
+                       apply Hdisj in Hcid.
+                       destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                         by rewrite e in Hcid.
+                     }
+                     rewrite ebid in Hvv'.
+                     rewrite Hc' in ebid.
+                     rewrite -Hifc_cc' Hcid ebid. left.
+                     destruct Hvv' as [[? [G ?]]|contra]; last discriminate;
+                       subst.
+                     rewrite eperm Hcid. rewrite eperm Hc' in G. by intuition.
+                ** by right; destruct Hvv' as [[contra ?]|].
+             ++ by right; destruct Hvv' as [[contra ?]|].
+        * intros [cidorig bidorig] Hshr.
+          specialize (G2 _ Hshr) as [[cidorig' bidorig'] [G2a [G2b G2c]]].
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp Hwfc Hmerge_ipic Hpref_t Hclosed_prog
+                        prog_wf Hshr Logic.eq_refl
+                     ) as Hshr_partition.
+          unfold rename_value_option, rename_value_template_option,
+          rename_addr_option,
+          sigma_shifting_wrap_bid_in_addr,
+          sigma_shifting_lefttoright_addr_bid in *.
+          simpl in *.
+          
+          destruct (sigma_shifting_lefttoright_option
+                      (n cidorig)
+                      (if cidorig \in domm (prog_interface p)
+                       then n cidorig
+                       else n'' cidorig) bidorig)
+            as [bidorig'_|] eqn:ebidorig'; rewrite ebidorig' in G2a;
+            last discriminate.
+          inversion G2a; subst; clear G2a.
+
+          econstructor.
+          unfold rename_value_option, rename_value_template_option,
+          rename_addr_option,
+          sigma_shifting_wrap_bid_in_addr,
+          sigma_shifting_lefttoright_addr_bid in *.
+          simpl in *.
+
+          split; last split.
+          -- destruct Hshr_partition as [Hcid | Hcid].
+             ++ rewrite Hcid in ebidorig'.
+                assert (cidorig' \in domm (prog_interface c') = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  rewrite -Hifc_cc'.
+                  destruct (cidorig' \in domm (prog_interface c)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                by rewrite Hc' ebidorig'.
+             ++ assert (cidorig' \in domm (prog_interface p) = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  rewrite fdisjointC in Hdisj.
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  destruct (cidorig' \in domm (prog_interface p)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                rewrite Hifc_cc' in Hcid.
+                rewrite Hc' in ebidorig'.
+                by rewrite Hcid ebidorig'.
+          -- intros ? ? Hload.
+             specialize (G2b _ _ Hload) as [v' [Hloadv' Hvv']].
+             exists v'. split; first assumption.
+             destruct v as [ | [[[perm cid] bid] off] | ];
+               first assumption; last assumption.
+             destruct (perm =? Permission.data) eqn:eperm; last assumption.
+             specialize (Hmem _ _ _ _ _ Hload) as [Hcid | Hcid].
+             ++ rewrite Hcid in Hvv'.
+                assert (cid \in domm (prog_interface c') = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  rewrite -Hifc_cc'.
+                  destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                by rewrite Hc' Hvv'.
+             ++ assert (cid \in domm (prog_interface p) = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  rewrite fdisjointC in Hdisj.
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                rewrite Hifc_cc' in Hcid.
+                rewrite Hc' in Hvv'.
+                by rewrite Hcid Hvv'.
+          -- intros ? ? Hload.
+             specialize (G2c _ _ Hload) as [v [Hloadv Hvv']].
+             exists v. split; first assumption.
+             destruct v as [ | [[[perm cid] bid] off] | ];
+               first assumption; last assumption.
+             destruct (perm =? Permission.data) eqn:eperm; last assumption.
+             destruct (sigma_shifting_lefttoright_option
+                         (n cid)
+                         (if cid \in domm (prog_interface p)
+                          then n cid else n'' cid) bid) as [bid'|] eqn:ebid';
+               rewrite ebid' in Hvv'; last discriminate.
+             inversion Hvv'; subst; clear Hvv'.
+             specialize (Hmem' _ _ _ _ _ Hload) as [Hcid | Hcid].
+             ++ rewrite Hcid in ebid'.
+                assert (cid \in domm (prog_interface c') = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  rewrite -Hifc_cc'.
+                  destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                by rewrite Hc' ebid'.
+             ++ assert (cid \in domm (prog_interface p) = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  rewrite fdisjointC Hifc_cc' in Hdisj.
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                rewrite Hc' in ebid'.
+                by rewrite Hcid ebid'.
+                
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemc'                   *)
-        admit.
+        assert (prog''_wf: well_formed_program prog'').
+        { apply linking_well_formedness; auto.
+          rewrite -Hifc_cc' -Hifc_pp'.
+            by unfold mergeable_interfaces in *; intuition. }
+        destruct Hmemc' as [G1 G2].
+        constructor; auto.
+        intros [cidorig bidorig] Hcidorig Hnotshr''.
+        specialize (G1 _  Hcidorig Hnotshr'') as [G1a G1b].
+        constructor; intros ? ? Hload;
+          unfold rename_value_option, rename_value_template_option,
+          rename_addr_option,
+          sigma_shifting_wrap_bid_in_addr,
+          sigma_shifting_lefttoright_addr_bid in *;
+          simpl in *.
+        * specialize (G1a _ _ Hload) as Hvv'.
+          destruct v as [| [[[perm cid] bid] off] |]; auto.
+          destruct (perm =? Permission.data) eqn:eperm; auto.
+          specialize (Hmem'' _ _ _ _ _ Hload) as [Hcid | Hcid].
+          -- rewrite -Hifc_pp' in Hcid. rewrite Hcid in Hvv'.
+             assert (cid \in domm (prog_interface c') = false) as Hc'.
+             {
+               unfold mergeable_interfaces, linkable in *.
+               destruct Hmerge_ipic as [[_ Hdisj] _].
+               move : Hdisj => /fdisjointP => Hdisj.
+               apply Hdisj in Hcid.
+               rewrite -Hifc_cc'.
+               destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                 by rewrite e in Hcid.
+             }
+             by rewrite Hc'.
+          -- rewrite Hcid.
+             assert (cid \in domm (prog_interface p) = false) as Hc'.
+             {
+               unfold mergeable_interfaces, linkable in *.
+               destruct Hmerge_ipic as [[_ Hdisj] _].
+               rewrite fdisjointC Hifc_cc' in Hdisj.
+               move : Hdisj => /fdisjointP => Hdisj.
+               apply Hdisj in Hcid.
+               destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                 by rewrite e in Hcid.
+             }
+             by rewrite Hc' in Hvv'.
+        * specialize (G1b _ _ Hload) as [v [Hloadv Hvv']].
+          eexists; split; first eassumption.
+          destruct v as [| [[[perm cid] bid] off] |];
+            try by (destruct Hvv' as [[Hcontra _]|];
+                    first discriminate; right).
+          destruct (perm =? Permission.data) eqn:eperm;
+            try by (destruct Hvv' as [[Hcontra _]|];
+                    first discriminate; right).
+          destruct Hvv' as [[G [G' ?]]|G]; subst.
+          -- left. specialize (Hmem' _ _ _ _ _ Hload) as [Hcid | Hcid].
+             ++
+               rewrite eperm Hcid in G'. 
+               rewrite Hcid in G.
+               assert (cid \in domm (prog_interface c') = false) as Hc'.
+               {
+                 unfold mergeable_interfaces, linkable in *.
+                 destruct Hmerge_ipic as [[_ Hdisj] _].
+                 move : Hdisj => /fdisjointP => Hdisj.
+                 apply Hdisj in Hcid.
+                 rewrite -Hifc_cc'.
+                 destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                   by rewrite e in Hcid.
+               }
+               by rewrite Hc' G eperm G'.
+             ++ 
+               rewrite Hcid.
+               assert (cid \in domm (prog_interface p) = false) as Hc'.
+               {
+                 unfold mergeable_interfaces, linkable in *.
+                 destruct Hmerge_ipic as [[_ Hdisj] _].
+                 rewrite fdisjointC Hifc_cc' in Hdisj.
+                 move : Hdisj => /fdisjointP => Hdisj.
+                 apply Hdisj in Hcid.
+                 destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                   by rewrite e in Hcid.
+               }
+               rewrite eperm Hc' in G'. by rewrite eperm G'.
+          -- right. specialize (Hmem'' _ _ _ _ _ Hloadv) as [Hcid | Hcid].
+             ++
+               rewrite -Hifc_pp' in Hcid.
+               rewrite Hcid in G.
+               assert (cid \in domm (prog_interface c') = false) as Hc'.
+               {
+                 unfold mergeable_interfaces, linkable in *.
+                 destruct Hmerge_ipic as [[_ Hdisj] _].
+                 move : Hdisj => /fdisjointP => Hdisj.
+                 apply Hdisj in Hcid.
+                 rewrite -Hifc_cc'.
+                 destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                   by rewrite e in Hcid.
+               }
+               by rewrite Hc'.
+             ++
+               rewrite Hcid.
+               assert (cid \in domm (prog_interface p) = false) as Hc'.
+               {
+                 unfold mergeable_interfaces, linkable in *.
+                 destruct Hmerge_ipic as [[_ Hdisj] _].
+                 rewrite fdisjointC Hifc_cc' in Hdisj.
+                 move : Hdisj => /fdisjointP => Hdisj.
+                 apply Hdisj in Hcid.
+                 destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                   by rewrite e in Hcid.
+               }
+               by rewrite Hc' in G.
+               
     - apply mergeable_internal_states_p_executing; auto.
       + by apply mergeable_states_well_formed_sym.
       + CS.unfold_states.
         CS.simplify_turn. subst.
         rewrite <- Hifc_pp', Hpccomp_s'_s. eapply mergeable_states_in_to_notin; eauto.
         by rewrite <- Hpccomp_s'_s.
-      + (** tricky for the same reason as above,            *)
-        (** but should follow from Hregsc'                  *)
-        admit.
+      +
+        (** Follows from Hregsc'            *)
+
+        constructor.
+        inversion Hregsc' as [Hregsrel].
+        unfold
+        shift_value_option,
+        rename_value_option,
+        rename_value_template_option,
+        rename_addr_option,
+        sigma_shifting_wrap_bid_in_addr,
+        sigma_shifting_lefttoright_addr_bid in *.
+
+        CS.unfold_states.
+        simpl in *. intros reg. specialize (Hregsrel reg).
+        destruct (Register.get reg regs)
+          as [| [[[perm1 cid1] bid1] off1] | ] eqn:eregs1; try by left; intuition.
+        destruct (perm1 =? Permission.data) eqn:eperm; try by left; intuition.
+        destruct (sigma_shifting_lefttoright_option
+                    (n'' cid1)
+                    (if cid1 \in domm (prog_interface c')
+                     then n'' cid1 else n cid1) bid1) as [bid1'|] eqn:ebid1';
+          rewrite ebid1'.
+        * specialize (Hreg'' _ _ _ _ _ eregs1) as [Hcid1 | Hcid1].
+          --
+            rewrite -Hifc_pp' in Hcid1.
+            assert (Hc: cid1 \in domm (prog_interface c) = false).
+            {
+              unfold mergeable_interfaces, linkable in *.
+              destruct Hmerge_ipic as [[_ Hdisj] _].
+              move : Hdisj => /fdisjointP => Hdisj.
+              apply Hdisj in Hcid1.
+              destruct (cid1 \in domm (prog_interface c)) eqn:e; auto;
+                by rewrite e in Hcid1.
+            }
+            rewrite Hifc_cc' in Hc.
+            rewrite Hc in ebid1'. rewrite Hcid1 ebid1' in Hregsrel.
+            destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
+            inversion inv as [rewr]. by left.
+          -- rewrite Hcid1 in ebid1'.
+             assert (Hc: cid1 \in domm (prog_interface p) = false).
+             {
+               unfold mergeable_interfaces, linkable in *.
+               destruct Hmerge_ipic as [[_ Hdisj] _].
+               rewrite fdisjointC in Hdisj.
+               move : Hdisj => /fdisjointP => Hdisj.
+               rewrite -Hifc_cc' in Hcid1.
+               apply Hdisj in Hcid1.
+               destruct (cid1 \in domm (prog_interface p)) eqn:e; auto;
+                 by rewrite e in Hcid1.
+             }
+             rewrite Hc ebid1' in Hregsrel.
+             destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
+             inversion inv as [rewr]. by left.
+             
+        * assert (HNone2: sigma_shifting_lefttoright_option
+                            (n'' cid1)
+                            (if cid1 \in domm (prog_interface p)
+                             then n cid1 else n'' cid1)
+                            bid1 = None).
+          { by eapply sigma_shifting_lefttoright_option_None_None; eauto. }
+          rewrite HNone2 in Hregsrel.
+          assert (rewr: Register.get reg regs0 = Ptr (perm1, cid1, bid1, off1)).
+          {
+            by destruct Hregsrel as [| [? [? ?]]]; try discriminate; auto.
+          }
+          destruct Hregsrel as [| [? [G2 G3]]]; try discriminate.
+          rewrite rewr eperm in G2. rewrite rewr eperm.
+          right. split; last split; auto.
+          specialize (Hreg' _ _ _ _ _ rewr).
+          destruct Hreg' as [Hp|Hc'].
+          --
+            rewrite Hp in HNone2.
+            assert (Hc: cid1 \in domm (prog_interface c) = false).
+            {
+              unfold mergeable_interfaces, linkable in *.
+              destruct Hmerge_ipic as [[_ Hdisj] _].
+              move : Hdisj => /fdisjointP => Hdisj.
+              apply Hdisj in Hp.
+              destruct (cid1 \in domm (prog_interface c)) eqn:e; auto;
+              by rewrite e in Hp.
+            }
+            rewrite Hifc_cc' in Hc.
+            rewrite Hp in G2. by rewrite Hc.
+          --
+            rewrite Hc'. rewrite Hc' in ebid1'. rewrite <- Hifc_cc' in Hc'.
+            assert (Hp: cid1 \in domm (prog_interface p) = false).
+            {
+              unfold mergeable_interfaces, linkable in *.
+              destruct Hmerge_ipic as [[_ Hdisj] _].
+              rewrite fdisjointC in Hdisj.
+              move : Hdisj => /fdisjointP => Hdisj.
+              apply Hdisj in Hc'.
+              destruct (cid1 \in domm (prog_interface p)) eqn:e; auto;
+              by rewrite e in Hc'.
+            }
+            by rewrite Hp in G2.
+        
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemc'                   *)
-        admit.
+        assert (prog_wf: well_formed_program prog'').
+          { apply linking_well_formedness; auto.
+              by rewrite -Hifc_cc' -Hifc_pp';
+                unfold mergeable_interfaces in *; intuition. }
+        destruct Hmemc' as [G1 [G2 G3]].
+        split; last split; last assumption.
+        * intros ? Horig.
+          constructor; intros ? ? Hload.
+          -- specialize (G1 _ Horig) as [G1a G1b].
+             specialize (G1a _ _ Hload).
+             unfold rename_value_option, rename_value_template_option,
+             rename_addr_option,
+             sigma_shifting_wrap_bid_in_addr,
+             sigma_shifting_lefttoright_addr_bid in *.
+             destruct v as [| [[[perm cid] bid] off] |] eqn:ev;
+              first assumption; last assumption.
+             destruct (perm =? Permission.data) eqn:eperm.
+             ++ destruct (sigma_shifting_lefttoright_option
+                            (n'' cid)
+                            (if cid \in domm (prog_interface p)
+                             then n cid else n'' cid)
+                            bid) as [bid'|] eqn:ebid;
+                  specialize (Hmem'' _ _ _ _ _ Hload) as [Hcid | Hcid].
+                **
+                  rewrite -Hifc_pp' in Hcid.
+                  assert (cid \in domm (prog_interface c') = false) as Hc'.
+                  {
+                    unfold mergeable_interfaces, linkable in *.
+                    destruct Hmerge_ipic as [[_ Hdisj] _].
+                    move : Hdisj => /fdisjointP => Hdisj.
+                    apply Hdisj in Hcid.
+                    rewrite -Hifc_cc'.
+                    destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                      by rewrite e in Hcid.
+                  }
+                  rewrite ebid in G1a.
+                  rewrite Hcid in ebid.
+                  by rewrite Hc' ebid.
+                **
+                  assert (cid \in domm (prog_interface p) = false) as Hc'.
+                  {
+                    unfold mergeable_interfaces, linkable in *.
+                    destruct Hmerge_ipic as [[_ Hdisj] _].
+                    rewrite fdisjointC Hifc_cc' in Hdisj.
+                    move : Hdisj => /fdisjointP => Hdisj.
+                    apply Hdisj in Hcid.
+                    destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                      by rewrite e in Hcid.
+                  }
+                  rewrite ebid in G1a.
+                  rewrite Hc' in ebid.
+                  by rewrite Hcid ebid.
+                **
+                  rewrite -Hifc_pp' in Hcid.
+                  assert (cid \in domm (prog_interface c') = false) as Hc'.
+                  {
+                    unfold mergeable_interfaces, linkable in *.
+                    destruct Hmerge_ipic as [[_ Hdisj] _].
+                    move : Hdisj => /fdisjointP => Hdisj.
+                    apply Hdisj in Hcid.
+                    rewrite -Hifc_cc'.
+                    destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                      by rewrite e in Hcid.
+                  }
+                  rewrite Hcid in ebid.
+                  rewrite Hcid ebid in G1a.
+                  rewrite Hc' ebid. by intuition.
+                **
+                  assert (cid \in domm (prog_interface p) = false) as Hc'.
+                  {
+                    unfold mergeable_interfaces, linkable in *.
+                    destruct Hmerge_ipic as [[_ Hdisj] _].
+                    rewrite fdisjointC Hifc_cc' in Hdisj.
+                    move : Hdisj => /fdisjointP => Hdisj.
+                    apply Hdisj in Hcid.
+                    destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                      by rewrite e in Hcid.
+                  }
+                  rewrite Hc' in G1a.
+                  rewrite Hc' in ebid.
+                  rewrite ebid in G1a.
+                  by rewrite Hcid ebid.
+             ++ assumption.
+          -- specialize (G1 _ Horig) as [G1a G1b].
+             specialize (G1b _ _ Hload) as [v [Hloadv Hvv']].
+             unfold rename_value_option, rename_value_template_option,
+             rename_addr_option,
+             sigma_shifting_wrap_bid_in_addr,
+             sigma_shifting_lefttoright_addr_bid in *.
+             exists v. split; first assumption.
+             destruct v as [| [[[perm cid] bid] off] |] eqn:ev.
+             ++ by right; destruct Hvv' as [[contra ?]|].
+             ++ destruct (perm =? Permission.data) eqn:eperm.
+                ** destruct (
+                       sigma_shifting_lefttoright_option
+                         (n'' cid)
+                         (if cid \in domm (prog_interface p)
+                          then n cid else n'' cid) bid) as [bid'|] eqn:ebid;
+                     specialize (Hmem'' _ _ _ _ _ Hloadv) as [Hcid | Hcid].
+                   ---
+                     rewrite -Hifc_pp' in Hcid.
+                     assert (cid \in domm (prog_interface c') = false) as Hc'.
+                     {
+                       unfold mergeable_interfaces, linkable in *.
+                       destruct Hmerge_ipic as [[_ Hdisj] _].
+                       move : Hdisj => /fdisjointP => Hdisj.
+                       apply Hdisj in Hcid.
+                       rewrite -Hifc_cc'.
+                       destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                         by rewrite e in Hcid.
+                     }
+                     rewrite ebid in Hvv'.
+                     rewrite Hcid in ebid.
+                     rewrite Hc' ebid. right. by intuition.
+                   ---
+                     assert (cid \in domm (prog_interface p) = false) as Hc'.
+                     {
+                       unfold mergeable_interfaces, linkable in *.
+                       destruct Hmerge_ipic as [[_ Hdisj] _].
+                       rewrite fdisjointC Hifc_cc' in Hdisj.
+                       move : Hdisj => /fdisjointP => Hdisj.
+                       apply Hdisj in Hcid.
+                       destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                         by rewrite e in Hcid.
+                     }
+                     rewrite ebid in Hvv'.
+                     rewrite Hc' in ebid.
+                     rewrite Hcid ebid. right. by intuition.
+                   ---
+                     rewrite -Hifc_pp' in Hcid.
+                     assert (cid \in domm (prog_interface c') = false) as Hc'.
+                     {
+                       unfold mergeable_interfaces, linkable in *.
+                       destruct Hmerge_ipic as [[_ Hdisj] _].
+                       move : Hdisj => /fdisjointP => Hdisj.
+                       apply Hdisj in Hcid.
+                       rewrite -Hifc_cc'.
+                       destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                         by rewrite e in Hcid.
+                     }
+                     rewrite ebid in Hvv'.
+                     rewrite Hcid in ebid.
+                     rewrite Hc' ebid. left.
+                     destruct Hvv' as [[? [G ?]]|contra]; last discriminate;
+                       subst.
+                     rewrite eperm Hc'. rewrite eperm Hcid in G. by intuition.
+                   ---
+                     assert (cid \in domm (prog_interface p) = false) as Hc'.
+                     {
+                       unfold mergeable_interfaces, linkable in *.
+                       destruct Hmerge_ipic as [[_ Hdisj] _].
+                       rewrite fdisjointC Hifc_cc' in Hdisj.
+                       move : Hdisj => /fdisjointP => Hdisj.
+                       apply Hdisj in Hcid.
+                       destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                         by rewrite e in Hcid.
+                     }
+                     rewrite ebid in Hvv'.
+                     rewrite Hc' in ebid.
+                     rewrite Hcid ebid. left.
+                     destruct Hvv' as [[? [G ?]]|contra]; last discriminate;
+                       subst.
+                     by rewrite eperm Hcid ebid.
+                ** by right; destruct Hvv' as [[contra ?]|].
+             ++ by right; destruct Hvv' as [[contra ?]|].
+        * intros [cidorig bidorig] Hshr.
+          specialize (G2 _ Hshr) as [[cidorig' bidorig'] [G2a [G2b G2c]]].
+          assert (Hmerge_ipic'':
+                    mergeable_interfaces (prog_interface p') (prog_interface c')).
+          {
+              by rewrite -Hifc_cc' -Hifc_pp'; unfold mergeable_interfaces.
+          }
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp' Hwfc' Hmerge_ipic'' Hpref_t''
+                        Hclosed_prog'
+                        prog_wf Hshr Logic.eq_refl
+                     ) as Hshr_partition.
+          unfold rename_value_option, rename_value_template_option,
+          rename_addr_option,
+          sigma_shifting_wrap_bid_in_addr,
+          sigma_shifting_lefttoright_addr_bid in *.
+          simpl in *.
+          
+          destruct (sigma_shifting_lefttoright_option
+                      (n'' cidorig)
+                      (if cidorig \in domm (prog_interface p)
+                       then n cidorig
+                       else n'' cidorig) bidorig)
+            as [bidorig'_|] eqn:ebidorig'; rewrite ebidorig' in G2a;
+            last discriminate.
+          inversion G2a; subst; clear G2a.
+
+          econstructor.
+          unfold rename_value_option, rename_value_template_option,
+          rename_addr_option,
+          sigma_shifting_wrap_bid_in_addr,
+          sigma_shifting_lefttoright_addr_bid in *.
+          simpl in *.
+
+          split; last split.
+          --  destruct Hshr_partition as [Hcid | Hcid].
+              ++
+                rewrite -Hifc_pp' in Hcid.
+                rewrite Hcid in ebidorig'.
+                assert (cidorig' \in domm (prog_interface c') = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  rewrite -Hifc_cc'.
+                  destruct (cidorig' \in domm (prog_interface c)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                by rewrite Hc' ebidorig'.
+             ++ assert (cidorig' \in domm (prog_interface p) = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  rewrite fdisjointC Hifc_cc' in Hdisj.
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  destruct (cidorig' \in domm (prog_interface p)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                rewrite Hc' in ebidorig'.
+                by rewrite Hcid ebidorig'.
+          -- intros ? ? Hload.
+             specialize (G2b _ _ Hload) as [v' [Hloadv' Hvv']].
+             exists v'. split; first assumption.
+             destruct v as [ | [[[perm cid] bid] off] | ];
+               first assumption; last assumption.
+             destruct (perm =? Permission.data) eqn:eperm; last assumption.
+             specialize (Hmem'' _ _ _ _ _ Hload) as [Hcid | Hcid].
+             ++ rewrite -Hifc_pp' in Hcid. rewrite Hcid in Hvv'.
+                assert (cid \in domm (prog_interface c') = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  rewrite -Hifc_cc'.
+                  destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                by rewrite Hc' Hvv'.
+             ++ assert (cid \in domm (prog_interface p) = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  rewrite fdisjointC Hifc_cc' in Hdisj.
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                rewrite Hc' in Hvv'.
+                by rewrite Hcid Hvv'.
+          -- intros ? ? Hload.
+             specialize (G2c _ _ Hload) as [v [Hloadv Hvv']].
+             exists v. split; first assumption.
+             destruct v as [ | [[[perm cid] bid] off] | ];
+               first assumption; last assumption.
+             destruct (perm =? Permission.data) eqn:eperm; last assumption.
+             destruct (sigma_shifting_lefttoright_option
+                         (n'' cid)
+                         (if cid \in domm (prog_interface p)
+                          then n cid else n'' cid) bid) as [bid'|] eqn:ebid';
+               rewrite ebid' in Hvv'; last discriminate.
+             inversion Hvv'; subst; clear Hvv'.
+             specialize (Hmem' _ _ _ _ _ Hload) as [Hcid | Hcid].
+             ++ rewrite Hcid in ebid'.
+                assert (cid \in domm (prog_interface c') = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  rewrite -Hifc_cc'.
+                  destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                by rewrite Hc' ebid'.
+             ++ assert (cid \in domm (prog_interface p) = false) as Hc'.
+                {
+                  unfold mergeable_interfaces, linkable in *.
+                  destruct Hmerge_ipic as [[_ Hdisj] _].
+                  rewrite fdisjointC Hifc_cc' in Hdisj.
+                  move : Hdisj => /fdisjointP => Hdisj.
+                  apply Hdisj in Hcid.
+                  destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                    by rewrite e in Hcid.
+                }
+                rewrite Hc' in ebid'.
+                by rewrite Hcid ebid'.
+
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemp                    *)
-        admit.
-  Admitted.
+        assert (prog_wf: well_formed_program prog).
+        { apply linking_well_formedness; auto.
+            by unfold mergeable_interfaces in *; intuition. }
+        destruct Hmemp as [G1 G2].
+        constructor; auto.
+        intros [cidorig bidorig] Hcidorig Hnotshr''.
+        specialize (G1 _  Hcidorig Hnotshr'') as [G1a G1b].
+        constructor; intros ? ? Hload;
+          unfold rename_value_option, rename_value_template_option,
+          rename_addr_option,
+          sigma_shifting_wrap_bid_in_addr,
+          sigma_shifting_lefttoright_addr_bid in *;
+          simpl in *.
+        * specialize (G1a _ _ Hload) as Hvv'.
+          destruct v as [| [[[perm cid] bid] off] |]; auto.
+          destruct (perm =? Permission.data) eqn:eperm; auto.
+          specialize (Hmem _ _ _ _ _ Hload) as [Hcid | Hcid].
+          -- rewrite Hcid in Hvv'.
+             assert (cid \in domm (prog_interface c') = false) as Hc'.
+             {
+               unfold mergeable_interfaces, linkable in *.
+               destruct Hmerge_ipic as [[_ Hdisj] _].
+               move : Hdisj => /fdisjointP => Hdisj.
+               apply Hdisj in Hcid.
+               rewrite -Hifc_cc'.
+               destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                 by rewrite e in Hcid.
+             }
+             by rewrite Hc'.
+          -- assert (cid \in domm (prog_interface p) = false) as Hc'.
+             {
+               unfold mergeable_interfaces, linkable in *.
+               destruct Hmerge_ipic as [[_ Hdisj] _].
+               rewrite fdisjointC in Hdisj.
+               move : Hdisj => /fdisjointP => Hdisj.
+               apply Hdisj in Hcid.
+               destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                 by rewrite e in Hcid.
+             }
+             rewrite Hc' in Hvv'.
+             by rewrite -Hifc_cc' Hcid.
+        * specialize (G1b _ _ Hload) as [v [Hloadv Hvv']].
+          eexists; split; first eassumption.
+          destruct v as [| [[[perm cid] bid] off] |];
+            try by (destruct Hvv' as [[Hcontra _]|];
+                    first discriminate; right).
+          destruct (perm =? Permission.data) eqn:eperm;
+            try by (destruct Hvv' as [[Hcontra _]|];
+                    first discriminate; right).
+          destruct Hvv' as [[G [G' ?]]|G]; subst.
+          -- left. specialize (Hmem' _ _ _ _ _ Hload) as [Hcid | Hcid].
+             ++
+               rewrite eperm Hcid in G'. 
+               rewrite Hcid in G.
+               assert (cid \in domm (prog_interface c') = false) as Hc'.
+               {
+                 unfold mergeable_interfaces, linkable in *.
+                 destruct Hmerge_ipic as [[_ Hdisj] _].
+                 move : Hdisj => /fdisjointP => Hdisj.
+                 apply Hdisj in Hcid.
+                 rewrite -Hifc_cc'.
+                 destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                   by rewrite e in Hcid.
+               }
+               by rewrite Hc' G eperm.
+             ++ 
+               rewrite Hcid.
+               assert (cid \in domm (prog_interface p) = false) as Hc'.
+               {
+                 unfold mergeable_interfaces, linkable in *.
+                 destruct Hmerge_ipic as [[_ Hdisj] _].
+                 rewrite fdisjointC Hifc_cc' in Hdisj.
+                 move : Hdisj => /fdisjointP => Hdisj.
+                 apply Hdisj in Hcid.
+                 destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                   by rewrite e in Hcid.
+               }
+               rewrite eperm Hc' in G'. rewrite eperm G'.
+               rewrite Hc' in G. by rewrite G.
+          -- right. specialize (Hmem _ _ _ _ _ Hloadv) as [Hcid | Hcid].
+             ++
+               rewrite Hcid in G.
+               assert (cid \in domm (prog_interface c') = false) as Hc'.
+               {
+                 unfold mergeable_interfaces, linkable in *.
+                 destruct Hmerge_ipic as [[_ Hdisj] _].
+                 move : Hdisj => /fdisjointP => Hdisj.
+                 apply Hdisj in Hcid.
+                 rewrite -Hifc_cc'.
+                 destruct (cid \in domm (prog_interface c)) eqn:e; auto;
+                   by rewrite e in Hcid.
+               }
+               by rewrite Hc'.
+             ++
+               rewrite Hifc_cc' in Hcid. rewrite Hcid.
+               assert (cid \in domm (prog_interface p) = false) as Hc'.
+               {
+                 unfold mergeable_interfaces, linkable in *.
+                 destruct Hmerge_ipic as [[_ Hdisj] _].
+                 rewrite fdisjointC Hifc_cc' in Hdisj.
+                 move : Hdisj => /fdisjointP => Hdisj.
+                 apply Hdisj in Hcid.
+                 destruct (cid \in domm (prog_interface p)) eqn:e; auto;
+                   by rewrite e in Hcid.
+               }
+               by rewrite Hc' in G.
+  Qed.
 
   Lemma mergeable_border_states_sym s s' s'' t t' t'':
     mergeable_border_states p c p' c' n n'' s s' s'' t t' t'' ->
