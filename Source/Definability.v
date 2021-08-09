@@ -1457,12 +1457,19 @@ Section Definability.
 
        In any case, well-bracketedness is important for the proof *)
 
+    (* TODO: Relocate *)
     Lemma Eregister_eq_dec :
       forall r1 r2 : Eregister, Decidable.decidable (r1 = r2).
     Proof.
       intros [] [];
         try (left; reflexivity);
         right; intro Hcontra; now inversion Hcontra.
+    Qed.
+
+    (* TODO: Relocate *)
+    Remark Ereg_to_reg_to_Ereg r : Ereg_to_reg (CS.CS.reg_to_Ereg r) = r.
+    Proof.
+      now destruct r.
     Qed.
 
     (* TODO: [DynShare] Trace relation should appear here too!
@@ -2195,7 +2202,23 @@ Local Transparent expr_of_const_val loc_of_reg.
                     unfold postcondition_event_registers in Hregs.
                     destruct (Z.eqb_spec (reg_offset v0) off) as [Heq | Hneq].
                     -- subst off. assert (v0 = CS.CS.reg_to_Ereg n) by admit; subst v0.
-                       admit.
+                       assert (v = Int n0) by admit; subst v.
+                       exists (Int n0).
+                       split.
+                       ++ now constructor.
+                       ++ inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                          ** admit. (* contra *)
+                          ** admit. (* contra *)
+                          ** rewrite Hprefix in Ht.
+                             assert (prefint = prefix_) by admit; subst prefint.
+                             assert (eint1 = e_) by admit; subst eint1.
+                             assert (eint2 = EConst (cur_comp s) (Int n0) (CS.CS.reg_to_Ereg n) (mem_of_event_inform e_) t0) by admit; subst eint2.
+                             clear Ht.
+                             inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
+                               subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6.
+                             subst t0.
+                             rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss.
+                             reflexivity.
                     -- assert (Hcomp : next_comp_of_event e_ = cur_comp s) by admit.
                        rewrite Hcomp in Hregs.
                        destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
@@ -2217,7 +2240,20 @@ Local Transparent expr_of_const_val loc_of_reg.
                        exists v'.
                        split.
                        ++ assumption.
-                       ++ admit.
+                       ++ inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                          ** admit. (* contra *)
+                          ** admit. (* contra *)
+                          ** rewrite Hprefix in Ht.
+                             assert (prefint = prefix_) by admit; subst prefint.
+                             assert (eint1 = e_) by admit; subst eint1.
+                             assert (eint2 = EConst (cur_comp s) (Int n0) v0 (mem_of_event_inform e_) t0) by admit; subst eint2.
+                             clear Ht.
+                             inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
+                               subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6.
+                             subst t0.
+                             rewrite Machine.Intermediate.Register.gso;
+                               first exact Hget'.
+                             destruct n; destruct v0; try discriminate; contradiction.
               }
           + admit. (* Similarly. *)
           + admit. (* Similarly. *)
