@@ -1088,8 +1088,16 @@ inversion Hmerg as [s0 s0' s0'' t t' t'' n n' n'' Hwfp Hwfc Hwfp' Hwfc' Hmergeab
     Pointer.component pc \in domm ic ->
     Pointer.component pc \notin domm ip.
   Proof.
-    intros Hmerg Hpc_notin.
-  Admitted.
+    intros Hmerg ? Hpc_in. subst. CS.unfold_states.
+    inversion Hmerg
+      as [ [Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ _ _ Hstar _ _ _ _ _ _ _ _ _ _ _] _ _ _ _ _
+         | [Hwfp Hwfc _ _ Hmergeable_ifaces _ _ Hprog_is_closed _ _ _ Hstar _ _ _ _ _ _ _ _ _ _ _] _ _ _ _ _ ];
+      CS.simplify_turn;
+      destruct Hmergeable_ifaces as [[_ Hdisj] _];
+      rewrite fdisjointC in Hdisj;
+      move : Hdisj => /fdisjointP => Hdisj;
+      by specialize (Hdisj _ Hpc_in).
+  Qed.
 
   Lemma mergeable_states_notin_to_in2 s s' s'' t t' t'' pc :
     mergeable_internal_states s s' s'' t t' t'' ->
