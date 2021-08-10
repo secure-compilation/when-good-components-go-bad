@@ -3764,6 +3764,6 @@ Section MergeableSym.
                 destruct (cid \in domm (prog_interface p)) eqn:e; auto.
                 by rewrite e in G'.
                   
-  Admitted.
+  Qed.
 
 End MergeableSym.
