@@ -3332,8 +3332,10 @@ Section MergeableSym.
              destruct (cid \in domm (prog_interface p)) eqn:e; auto.
                by rewrite e in G'.
 
-      + (** tricky for the same reason as above,            *)
-        (** but should follow from Hmemp                    *)
+      + (** Follows from Hmemp.           *)
+        assert (prog_wf: well_formed_program prog).
+        { apply linking_well_formedness; auto.
+            by unfold mergeable_interfaces in *; intuition. }
         destruct Hmemp as [G1 [G2 G3]].
         split; last split; last assumption.
         * intros ? Horig.
@@ -3371,11 +3373,64 @@ Section MergeableSym.
               destruct (cid \in domm (prog_interface p)) eqn:e; auto.
               by rewrite e in G'.
 
-        * admit.
-        
+        * intros [cidorig bidorig] Hshr.
+          specialize (G2 _ Hshr).
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp Hwfc Hmerge_ipic Hpref_t Hclosed_prog
+                        prog_wf Hshr Logic.eq_refl
+                     ) as Hshr_partition.
+          apply memory_shifts_memory_at_shared_addr_sym
+            with (InP := fun cid => cid \in domm (prog_interface p)); first assumption.
+          -- simpl in *. rewrite -Hifc_cc'.
+             destruct Hshr_partition as [G | G].
+             ++ unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'.
+             ++ unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite G.
+                destruct (cidorig \in domm (prog_interface p)) eqn:e; auto.
+                by rewrite e in G'. 
+          -- intros ? ? ? ? ? Hload.
+             specialize (Hmem _ _ _ _ _ Hload) as [G|G].
+             ++ rewrite -Hifc_cc'. 
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'.
+             ++ unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+                destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+                by rewrite e in G'.
+          -- intros ? ? ? ? ? Hload.
+             specialize (Hmem' _ _ _ _ _ Hload) as [G|G].
+             ++ rewrite -Hifc_cc'.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'. 
+             ++ rewrite -Hifc_cc' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+                destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+                by rewrite e in G'.
+                  
 
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemc'                   *)
+        assert (prog_wf: well_formed_program prog'').
+        { apply linking_well_formedness; auto.
+            by rewrite -Hifc_cc' -Hifc_pp';
+              unfold mergeable_interfaces in *; intuition. }
         destruct Hmemc' as [G1 [G2 G3]].
         split; last split; last assumption.
         * intros ? Horig.
@@ -3413,7 +3468,65 @@ Section MergeableSym.
               specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
               destruct (cid \in domm (prog_interface p)) eqn:e; auto.
 
-        * admit.
+        * intros [cidorig bidorig] Hshr.
+          specialize (G2 _ Hshr). 
+          assert (Hmerge_ipic'':
+                    mergeable_interfaces (prog_interface p') (prog_interface c')).
+          {
+              by rewrite -Hifc_cc' -Hifc_pp'; unfold mergeable_interfaces.
+          }
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp' Hwfc' Hmerge_ipic'' Hpref_t''
+                        Hclosed_prog'
+                        prog_wf Hshr Logic.eq_refl
+                     ) as Hshr_partition.
+          rewrite if_sym_lambda. rewrite if_sym_lambda in G2.
+          apply memory_shifts_memory_at_shared_addr_sym
+            with (InP := fun cid => cid \notin domm (prog_interface p));
+            first assumption.
+          -- simpl in *. rewrite -Hifc_cc'.
+             destruct Hshr_partition as [G | G].
+             ++ rewrite -Hifc_pp' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'.
+             ++ rewrite -Hifc_cc' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite G.
+                destruct (cidorig \in domm (prog_interface p)) eqn:e; auto. 
+          -- intros ? ? ? ? ? Hload.
+             specialize (Hmem'' _ _ _ _ _ Hload) as [G|G].
+             ++ rewrite -Hifc_cc'. rewrite -Hifc_pp' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'.
+             ++ rewrite -Hifc_cc' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+                destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+          -- intros ? ? ? ? ? Hload.
+             specialize (Hmem' _ _ _ _ _ Hload) as [G|G].
+             ++ rewrite -Hifc_cc'.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'. 
+             ++ rewrite -Hifc_cc' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+                destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+          
 
     - apply mergeable_border_states_p_executing; auto.
       + by apply mergeable_states_well_formed_sym.
@@ -3457,6 +3570,10 @@ Section MergeableSym.
 
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemc'                   *)
+        assert (prog_wf: well_formed_program prog'').
+        { apply linking_well_formedness; auto.
+            by rewrite -Hifc_cc' -Hifc_pp';
+              unfold mergeable_interfaces in *; intuition. }
         destruct Hmemc' as [G1 [G2 G3]].
         split; last split; last assumption.
         * intros ? Horig.
@@ -3494,9 +3611,71 @@ Section MergeableSym.
               specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
               destruct (cid \in domm (prog_interface p)) eqn:e; auto.
 
-        * admit.
+        * intros [cidorig bidorig] Hshr.
+          specialize (G2 _ Hshr). 
+          assert (Hmerge_ipic'':
+                    mergeable_interfaces (prog_interface p') (prog_interface c')).
+          {
+              by rewrite -Hifc_cc' -Hifc_pp'; unfold mergeable_interfaces.
+          }
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp' Hwfc' Hmerge_ipic'' Hpref_t''
+                        Hclosed_prog'
+                        prog_wf Hshr Logic.eq_refl
+                     ) as Hshr_partition.
+          rewrite if_sym_lambda. rewrite if_sym_lambda in G2.
+          apply memory_shifts_memory_at_shared_addr_sym
+            with (InP := fun cid => cid \notin domm (prog_interface p));
+            first assumption.
+          -- simpl in *. rewrite -Hifc_cc'.
+             destruct Hshr_partition as [G | G].
+             ++ rewrite -Hifc_pp' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'.
+             ++ rewrite -Hifc_cc' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite G.
+                destruct (cidorig \in domm (prog_interface p)) eqn:e; auto. 
+          -- intros ? ? ? ? ? Hload.
+             specialize (Hmem'' _ _ _ _ _ Hload) as [G|G].
+             ++ rewrite -Hifc_cc'. rewrite -Hifc_pp' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'.
+             ++ rewrite -Hifc_cc' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+                destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+          -- intros ? ? ? ? ? Hload.
+             specialize (Hmem' _ _ _ _ _ Hload) as [G|G].
+             ++ rewrite -Hifc_cc'.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'. 
+             ++ rewrite -Hifc_cc' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+                destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+          
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemp                    *)
+        assert (prog_wf: well_formed_program prog).
+        { apply linking_well_formedness; auto.
+            by unfold mergeable_interfaces in *; intuition. }
+       
         destruct Hmemp as [G1 [G2 G3]].
         split; last split; last assumption.
         * intros ? Horig.
@@ -3534,7 +3713,57 @@ Section MergeableSym.
               destruct (cid \in domm (prog_interface p)) eqn:e; auto.
               by rewrite e in G'.
 
-        * admit.
+        * intros [cidorig bidorig] Hshr.
+          specialize (G2 _ Hshr).
+          specialize (CSInvariants.addr_shared_so_far_domm_partition
+                        _ _ _ _ _ _ Hwfp Hwfc Hmerge_ipic Hpref_t Hclosed_prog
+                        prog_wf Hshr Logic.eq_refl
+                     ) as Hshr_partition.
+          apply memory_shifts_memory_at_shared_addr_sym
+            with (InP := fun cid => cid \in domm (prog_interface p)); first assumption.
+          -- simpl in *. rewrite -Hifc_cc'.
+             destruct Hshr_partition as [G | G].
+             ++ unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'.
+             ++ unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite G.
+                destruct (cidorig \in domm (prog_interface p)) eqn:e; auto.
+                by rewrite e in G'. 
+          -- intros ? ? ? ? ? Hload.
+             specialize (Hmem _ _ _ _ _ Hload) as [G|G].
+             ++ rewrite -Hifc_cc'. 
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'.
+             ++ unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+                destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+                by rewrite e in G'.
+          -- intros ? ? ? ? ? Hload.
+             specialize (Hmem' _ _ _ _ _ Hload) as [G|G].
+             ++ rewrite -Hifc_cc'.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. by rewrite G G'. 
+             ++ rewrite -Hifc_cc' in G.
+                unfold mergeable_interfaces, linkable in *.
+                destruct Hmerge_ipic as [[_ Hdisj] _].
+                rewrite fdisjointC in Hdisj.
+                move : Hdisj => /fdisjointP => Hdisj.
+                specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+                destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+                by rewrite e in G'.
+                  
   Admitted.
 
 End MergeableSym.
