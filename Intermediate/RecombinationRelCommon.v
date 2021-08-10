@@ -3345,9 +3345,39 @@ Section MergeableSym.
       + CS.unfold_states.
         CS.simplify_turn. subst.
         rewrite <- Hifc_pp'. by eapply mergeable_states_notin_to_in2; eauto.
-      + (** tricky for the same reason as above,            *)
-        (** but should follow from Hregsp                   *)
-        admit.
+      + (** Follows from Hregsp.            *)
+        apply regs_rel_of_executing_part_sym
+          with (InP := fun cid => cid \in domm (prog_interface p)); first assumption.
+        * intros ? ? ? ? ? Hget.
+          specialize (Hreg _ _ _ _ _ Hget) as [G | G].
+          -- rewrite -Hifc_cc'. 
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'.
+          -- unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             rewrite fdisjointC in Hdisj.
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+             destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+               by rewrite e in G'.
+        * intros ? ? ? ? ? Hget.
+          specialize (Hreg' _ _ _ _ _ Hget) as [G|G].
+          -- rewrite -Hifc_cc'.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'. 
+          -- rewrite -Hifc_cc' in G.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             rewrite fdisjointC in Hdisj.
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+             destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+               by rewrite e in G'.
+
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemp                    *)
         destruct Hmemp as [G1 [G2 G3]].
@@ -3439,9 +3469,38 @@ Section MergeableSym.
         rewrite Hpccomp_s'_s.
         eapply mergeable_states_in_to_notin; eauto.
         by rewrite <- Hpccomp_s'_s.
-      + (** tricky for the same reason as above,            *)
-        (** but should follow from Hregsc'                  *)
-        admit.
+      + (** Follows from Hregsc'            *)
+        rewrite if_sym_lambda. rewrite if_sym_lambda in Hregsc'.
+        apply regs_rel_of_executing_part_sym
+          with (InP := fun cid => cid \notin domm (prog_interface p)); first assumption.
+
+        * intros ? ? ? ? ? Hget.
+          specialize (Hreg'' _ _ _ _ _ Hget) as [G|G].
+          -- rewrite -Hifc_cc'. rewrite -Hifc_pp' in G.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'.
+          -- rewrite -Hifc_cc' in G. rewrite -Hifc_cc'.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             rewrite fdisjointC in Hdisj.
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'.
+        * intros ? ? ? ? ? Hget.
+          specialize (Hreg' _ _ _ _ _ Hget) as [G|G].
+          -- rewrite -Hifc_cc'.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'. 
+          -- rewrite -Hifc_cc' in G.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             rewrite fdisjointC in Hdisj.
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite -Hifc_cc' G G'.
+
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemc'                   *)
         destruct Hmemc' as [G1 [G2 G3]].
