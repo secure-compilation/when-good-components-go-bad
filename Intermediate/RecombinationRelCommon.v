@@ -2418,6 +2418,99 @@ Section MergeableSymHelpers.
   Qed.
 
 
+  Lemma regs_rel_of_executing_part_sym InP n n'' regs regs':
+    regs_rel_of_executing_part
+      regs
+      regs'
+      n
+      (fun cid : nat_ordType => if InP cid then n cid else n'' cid)
+    ->
+    forall InC',
+      (
+        forall (reg : register) (perm : Permission.id) (cid : Component.id) 
+               (bid : Block.id) (off : Block.offset),
+          Register.get reg regs = Ptr (perm, cid, bid, off) ->
+          InP cid = negb (InC' cid)
+      )
+      ->
+      (
+        forall (reg : register) (perm : Permission.id) (cid : Component.id) 
+               (bid : Block.id) (off : Block.offset),
+          Register.get reg regs' = Ptr (perm, cid, bid, off) ->
+          InP cid = negb (InC' cid)
+      )
+      ->
+      regs_rel_of_executing_part
+        regs
+        regs'
+        n
+        (fun cid : nat_ordType => if InC' cid then n'' cid else n cid).
+  Proof.
+    intros Hregsp InC' Hreg Hreg'.
+    constructor.
+    inversion Hregsp as [Hregsrel].
+    unfold
+      shift_value_option,
+    rename_value_option,
+    rename_value_template_option,
+    rename_addr_option,
+    sigma_shifting_wrap_bid_in_addr,
+    sigma_shifting_lefttoright_addr_bid in *.
+
+    simpl in *. intros reg. specialize (Hregsrel reg).
+    destruct (Register.get reg regs)
+      as [| [[[perm1 cid1] bid1] off1] | ] eqn:eregs1; try by left; intuition.
+    destruct (perm1 =? Permission.data) eqn:eperm; try by left; intuition.
+    destruct (sigma_shifting_lefttoright_option
+                (n cid1)
+                (if InC' cid1
+                 then n'' cid1 else n cid1) bid1) as [bid1'|] eqn:ebid1'.
+    * specialize (Hreg _ _ _ _ _ eregs1) as Hcid1_eqn.
+      destruct (InP cid1) eqn:Hcid1.
+      -- assert (Hc: InC' cid1 = false).
+         {
+             by destruct (InC' cid1) eqn:e; auto.
+         }
+         rewrite Hc in ebid1'. rewrite ebid1' in Hregsrel.
+         destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
+         inversion inv as [rewr]. by left.
+      -- assert (Hc: InC' cid1 = true).
+         {
+           by destruct (InC' cid1) eqn:e; auto.
+         }
+         rewrite Hc in ebid1'. rewrite ebid1' in Hregsrel.
+         destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
+         inversion inv as [rewr]. by left.
+         
+    * assert (HNone2: sigma_shifting_lefttoright_option
+                        (n cid1)
+                        (if InP cid1
+                         then n cid1 else n'' cid1) bid1 = None).
+      { by eapply sigma_shifting_lefttoright_option_None_None; eauto. }
+      rewrite HNone2 in Hregsrel.
+      assert (rewr: Register.get reg regs' = Ptr (perm1, cid1, bid1, off1)).
+      {
+          by destruct Hregsrel as [| [? [? ?]]]; try discriminate; auto.
+      }
+      destruct Hregsrel as [| [? [G2 G3]]]; try discriminate.
+      rewrite rewr eperm in G2. rewrite rewr eperm.
+      right. split; last split; auto.
+      specialize (Hreg' _ _ _ _ _ rewr).
+      destruct (InP cid1) eqn:Hcid1.
+      --
+        assert (Hc: InC' cid1 = false).
+        {
+           by destruct (InC' cid1) eqn:e; auto.
+        }
+        rewrite Hc in ebid1'. by rewrite Hc ebid1'.
+      --
+        assert (Hc: InC' cid1 = true).
+        {
+           by destruct (InC' cid1) eqn:e; auto.
+        }
+        by rewrite Hc.
+  Qed.
+    
   Lemma memory_shifts_memory_at_private_addr_sym InP n n'' mem mem' original_addr:
     memory_shifts_memory_at_private_addr
       n
@@ -2734,99 +2827,37 @@ Section MergeableSym.
         CS.simplify_turn. subst. simpl in *.
         rewrite <- Hifc_pp'. by eapply mergeable_states_notin_to_in2; eauto.
       + (** Follows from Hregsp            *)
-
-        constructor.
-        inversion Hregsp as [Hregsrel].
-        unfold
-        shift_value_option,
-        rename_value_option,
-        rename_value_template_option,
-        rename_addr_option,
-        sigma_shifting_wrap_bid_in_addr,
-        sigma_shifting_lefttoright_addr_bid in *.
-
-        CS.unfold_states.
-        simpl in *. intros reg. specialize (Hregsrel reg).
-        destruct (Register.get reg regs1)
-          as [| [[[perm1 cid1] bid1] off1] | ] eqn:eregs1; try by left; intuition.
-        destruct (perm1 =? Permission.data) eqn:eperm; try by left; intuition.
-        destruct (sigma_shifting_lefttoright_option
-                    (n cid1)
-                    (if cid1 \in domm (prog_interface c')
-                     then n'' cid1 else n cid1) bid1) as [bid1'|] eqn:ebid1';
-          rewrite ebid1'.
-        * specialize (Hreg _ _ _ _ _ eregs1) as [Hcid1 | Hcid1].
-          -- assert (Hc: cid1 \in domm (prog_interface c) = false).
-             {
-               unfold mergeable_interfaces, linkable in *.
-               destruct Hmerge_ipic as [[_ Hdisj] _].
-               move : Hdisj => /fdisjointP => Hdisj.
-               apply Hdisj in Hcid1.
-               destruct (cid1 \in domm (prog_interface c)) eqn:e; auto;
-                 by rewrite e in Hcid1.
-             }
-             rewrite Hifc_cc' in Hc.
-             rewrite Hc in ebid1'. rewrite Hcid1 ebid1' in Hregsrel.
-             destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
-             inversion inv as [rewr]. by left.
-          -- rewrite Hifc_cc' in Hcid1.
-             rewrite Hcid1 in ebid1'.
-             assert (Hc: cid1 \in domm (prog_interface p) = false).
-             {
-               unfold mergeable_interfaces, linkable in *.
-               destruct Hmerge_ipic as [[_ Hdisj] _].
-               rewrite fdisjointC in Hdisj.
-               move : Hdisj => /fdisjointP => Hdisj.
-               rewrite -Hifc_cc' in Hcid1.
-               apply Hdisj in Hcid1.
-               destruct (cid1 \in domm (prog_interface p)) eqn:e; auto;
-                 by rewrite e in Hcid1.
-             }
-             rewrite Hc ebid1' in Hregsrel.
-             destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
-             inversion inv as [rewr]. by left.
-             
-        * assert (HNone2: sigma_shifting_lefttoright_option
-                            (n cid1)
-                            (if cid1 \in domm (prog_interface p)
-                             then n cid1 else n'' cid1) bid1 = None).
-          { by eapply sigma_shifting_lefttoright_option_None_None; eauto. }
-          rewrite HNone2 in Hregsrel.
-          assert (rewr: Register.get reg regs0 = Ptr (perm1, cid1, bid1, off1)).
-          {
-            by destruct Hregsrel as [| [? [? ?]]]; try discriminate; auto.
-          }
-          destruct Hregsrel as [| [? [G2 G3]]]; try discriminate.
-          rewrite rewr eperm in G2. rewrite rewr eperm.
-          right. split; last split; auto.
-          specialize (Hreg' _ _ _ _ _ rewr).
-          destruct Hreg' as [Hp|Hc'].
-          --
-            rewrite Hp in HNone2.
-            assert (Hc: cid1 \in domm (prog_interface c) = false).
-            {
-              unfold mergeable_interfaces, linkable in *.
-              destruct Hmerge_ipic as [[_ Hdisj] _].
-              move : Hdisj => /fdisjointP => Hdisj.
-              apply Hdisj in Hp.
-              destruct (cid1 \in domm (prog_interface c)) eqn:e; auto;
-              by rewrite e in Hp.
-            }
-            rewrite Hifc_cc' in Hc.
-            rewrite Hc in ebid1'. by rewrite Hc ebid1'.
-          --
-            rewrite Hc'. rewrite Hc' in ebid1'. rewrite <- Hifc_cc' in Hc'.
-            assert (Hp: cid1 \in domm (prog_interface p) = false).
-            {
-              unfold mergeable_interfaces, linkable in *.
-              destruct Hmerge_ipic as [[_ Hdisj] _].
-              rewrite fdisjointC in Hdisj.
-              move : Hdisj => /fdisjointP => Hdisj.
-              apply Hdisj in Hc'.
-              destruct (cid1 \in domm (prog_interface p)) eqn:e; auto;
-              by rewrite e in Hc'.
-            }
-            by rewrite Hp in G2.
+        apply regs_rel_of_executing_part_sym
+          with (InP := fun cid => cid \in domm (prog_interface p)); first assumption.
+        * intros ? ? ? ? ? Hget.
+          specialize (Hreg _ _ _ _ _ Hget) as [G | G].
+          -- rewrite -Hifc_cc'. 
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'.
+          -- unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             rewrite fdisjointC in Hdisj.
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+             destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+               by rewrite e in G'.
+        * intros ? ? ? ? ? Hget.
+          specialize (Hreg' _ _ _ _ _ Hget) as [G|G].
+          -- rewrite -Hifc_cc'.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'. 
+          -- rewrite -Hifc_cc' in G.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             rewrite fdisjointC in Hdisj.
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. rewrite -Hifc_cc' G.
+             destruct (cid \in domm (prog_interface p)) eqn:e; auto.
+               by rewrite e in G'.
       + (** Follows from Hmemp.     *)
         assert (prog_wf: well_formed_program prog).
           { apply linking_well_formedness; auto.
@@ -3036,102 +3067,37 @@ Section MergeableSym.
         by rewrite <- Hpccomp_s'_s.
       +
         (** Follows from Hregsc'            *)
+        rewrite if_sym_lambda. rewrite if_sym_lambda in Hregsc'.
+        apply regs_rel_of_executing_part_sym
+          with (InP := fun cid => cid \notin domm (prog_interface p)); first assumption.
 
-        constructor.
-        inversion Hregsc' as [Hregsrel].
-        unfold
-        shift_value_option,
-        rename_value_option,
-        rename_value_template_option,
-        rename_addr_option,
-        sigma_shifting_wrap_bid_in_addr,
-        sigma_shifting_lefttoright_addr_bid in *.
+        * intros ? ? ? ? ? Hget.
+          specialize (Hreg'' _ _ _ _ _ Hget) as [G|G].
+          -- rewrite -Hifc_cc'. rewrite -Hifc_pp' in G.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'.
+          -- rewrite -Hifc_cc' in G. rewrite -Hifc_cc'.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             rewrite fdisjointC in Hdisj.
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'.
+        * intros ? ? ? ? ? Hget.
+          specialize (Hreg' _ _ _ _ _ Hget) as [G|G].
+          -- rewrite -Hifc_cc'.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite G G'. 
+          -- rewrite -Hifc_cc' in G.
+             unfold mergeable_interfaces, linkable in *.
+             destruct Hmerge_ipic as [[_ Hdisj] _].
+             rewrite fdisjointC in Hdisj.
+             move : Hdisj => /fdisjointP => Hdisj.
+             specialize (Hdisj _ G) as G'. by rewrite -Hifc_cc' G G'.
 
-        CS.unfold_states.
-        simpl in *. intros reg. specialize (Hregsrel reg).
-        destruct (Register.get reg regs)
-          as [| [[[perm1 cid1] bid1] off1] | ] eqn:eregs1; try by left; intuition.
-        destruct (perm1 =? Permission.data) eqn:eperm; try by left; intuition.
-        destruct (sigma_shifting_lefttoright_option
-                    (n'' cid1)
-                    (if cid1 \in domm (prog_interface c')
-                     then n'' cid1 else n cid1) bid1) as [bid1'|] eqn:ebid1';
-          rewrite ebid1'.
-        * specialize (Hreg'' _ _ _ _ _ eregs1) as [Hcid1 | Hcid1].
-          --
-            rewrite -Hifc_pp' in Hcid1.
-            assert (Hc: cid1 \in domm (prog_interface c) = false).
-            {
-              unfold mergeable_interfaces, linkable in *.
-              destruct Hmerge_ipic as [[_ Hdisj] _].
-              move : Hdisj => /fdisjointP => Hdisj.
-              apply Hdisj in Hcid1.
-              destruct (cid1 \in domm (prog_interface c)) eqn:e; auto;
-                by rewrite e in Hcid1.
-            }
-            rewrite Hifc_cc' in Hc.
-            rewrite Hc in ebid1'. rewrite Hcid1 ebid1' in Hregsrel.
-            destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
-            inversion inv as [rewr]. by left.
-          -- rewrite Hcid1 in ebid1'.
-             assert (Hc: cid1 \in domm (prog_interface p) = false).
-             {
-               unfold mergeable_interfaces, linkable in *.
-               destruct Hmerge_ipic as [[_ Hdisj] _].
-               rewrite fdisjointC in Hdisj.
-               move : Hdisj => /fdisjointP => Hdisj.
-               rewrite -Hifc_cc' in Hcid1.
-               apply Hdisj in Hcid1.
-               destruct (cid1 \in domm (prog_interface p)) eqn:e; auto;
-                 by rewrite e in Hcid1.
-             }
-             rewrite Hc ebid1' in Hregsrel.
-             destruct Hregsrel as [inv| [Hcontra ?]]; last discriminate.
-             inversion inv as [rewr]. by left.
-             
-        * assert (HNone2: sigma_shifting_lefttoright_option
-                            (n'' cid1)
-                            (if cid1 \in domm (prog_interface p)
-                             then n cid1 else n'' cid1)
-                            bid1 = None).
-          { by eapply sigma_shifting_lefttoright_option_None_None; eauto. }
-          rewrite HNone2 in Hregsrel.
-          assert (rewr: Register.get reg regs0 = Ptr (perm1, cid1, bid1, off1)).
-          {
-            by destruct Hregsrel as [| [? [? ?]]]; try discriminate; auto.
-          }
-          destruct Hregsrel as [| [? [G2 G3]]]; try discriminate.
-          rewrite rewr eperm in G2. rewrite rewr eperm.
-          right. split; last split; auto.
-          specialize (Hreg' _ _ _ _ _ rewr).
-          destruct Hreg' as [Hp|Hc'].
-          --
-            rewrite Hp in HNone2.
-            assert (Hc: cid1 \in domm (prog_interface c) = false).
-            {
-              unfold mergeable_interfaces, linkable in *.
-              destruct Hmerge_ipic as [[_ Hdisj] _].
-              move : Hdisj => /fdisjointP => Hdisj.
-              apply Hdisj in Hp.
-              destruct (cid1 \in domm (prog_interface c)) eqn:e; auto;
-              by rewrite e in Hp.
-            }
-            rewrite Hifc_cc' in Hc.
-            rewrite Hp in G2. by rewrite Hc.
-          --
-            rewrite Hc'. rewrite Hc' in ebid1'. rewrite <- Hifc_cc' in Hc'.
-            assert (Hp: cid1 \in domm (prog_interface p) = false).
-            {
-              unfold mergeable_interfaces, linkable in *.
-              destruct Hmerge_ipic as [[_ Hdisj] _].
-              rewrite fdisjointC in Hdisj.
-              move : Hdisj => /fdisjointP => Hdisj.
-              apply Hdisj in Hc'.
-              destruct (cid1 \in domm (prog_interface p)) eqn:e; auto;
-              by rewrite e in Hc'.
-            }
-            by rewrite Hp in G2.
-        
       + (** tricky for the same reason as above,            *)
         (** but should follow from Hmemc'                   *)
         assert (prog_wf: well_formed_program prog'').
