@@ -1517,6 +1517,8 @@ Section Definability.
             eauto
           end).
 
+    Ltac take_steps := (take_step; [take_steps]) || take_step.
+
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
       the prefix, executing from the initial state. Separately, execution to a
@@ -2018,7 +2020,17 @@ Local Opaque loc_of_reg.
           destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) as [mem' Hstore].
           (* Const does not modify the (shared) memory, therefore these two
              should be identical. *)
-          assert (Hmem' : mem0 = mem_of_event_inform e1) by admit.
+          assert (Hmem' : s0 = mem_of_event_inform e1). {
+            subst prefix.
+            clear -wf_int_pref'.
+            move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+            inversion wf_int_pref.
+            - now destruct prefix0.
+            - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
+            - apply rcons_inj in H. inversion H; subst; clear H.
+              apply rcons_inj in H3. inversion H3; subst; clear H3.
+              inversion H1; subst; clear H1.
+              reflexivity. }
           assert (Hcomp1 : next_comp_of_event e1 = cur_comp s) by admit.
           (*  *)
           exists (EConst C ptr v s0 t0).
@@ -2045,16 +2057,16 @@ Local Opaque loc_of_reg.
             split.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
-              do 8 take_step.
+              take_steps.
               -- reflexivity.
               -- exact Hstore'.
               -- (* Do recursive call. *)
-                  do 3 take_step.
+                  take_steps.
                   ++ reflexivity.
                   ++ now apply find_procedures_of_trace.
                   ++ (* Now we are done with the event.
                         We still need to process the external call check. *)
-                     do 9 take_step.
+                     take_steps.
                      ** reflexivity.
                      ** assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
                         rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
@@ -2063,14 +2075,14 @@ Local Transparent expr_of_const_val loc_of_reg.
                           last easy.
                         exact Hload0.
                      ** unfold invalidate_metadata.
-                        do 4 take_step.
+                        take_steps.
                         apply star_refl.
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
-              admit. (* Easy, see [wb]. *)
-              destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
-              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-              exists bot. split; [| split]; easy.
+              { destruct s. exact wb. }
+              { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+                eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+                exists bot. split; [| split]; easy. }
               (* Reestablish memory well-formedness.
                  TODO: Refactor, automate. *)
               { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
@@ -2174,7 +2186,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                       (* Extended trace well-formedness: *)
                       (* Is t a good trace? *)
                       simpl in *.
-                      assert (mem' = mem_of_event_inform e1) by admit.
+                      (* assert (mem' = mem_of_event_inform e1) by admit. *)
                       subst mem'.
                       specialize (Hrename _ _ Hload) as [v' [Hload' Hrename]].
                       exists v'. split.
@@ -2194,7 +2206,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                          TODO: refactor *)
                       intros offset v Hload.
                       simpl in *.
-                      assert (mem' = mem_of_event_inform e1) by admit.
+                      (* assert (mem' = mem_of_event_inform e1) by admit. *)
                       (* { clear -wf_int_pref'. *)
                       (*   move: wf_int_pref'; rewrite !cats1 => wf_int_pref. *)
                       (*   inversion wf_int_pref. *)
@@ -2222,7 +2234,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                          specialize (Hrename' _ _ Hload) as [v' [Hload' Hrename']].
                          exists v'. split; assumption.
                   (* * intros reg off v Hoffset Hload. *)
-                  + assert (mem' = mem_of_event_inform e1) by admit.
+                  + (* assert (mem' = mem_of_event_inform e1) by admit. *)
                     subst mem'.
                     intros n off v Hoffset Hload.
                     simpl in *.
@@ -2250,8 +2262,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                             subst t0.
                             rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss.
                             reflexivity.
-                    * assert (Hcomp : next_comp_of_event e1 = cur_comp s) by admit.
-                      rewrite Hcomp in Hregs.
+                    * setoid_rewrite Hcomp1 in Hregs.
                       destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
                         as [v' Hload'].
                       rewrite Hoffset in Hload'.
