@@ -2770,6 +2770,8 @@ Lemma domm_partition_in_left_not_in_right :
     Star (CS.sem_non_inform (program_link p1 p2)) s t (gps, mem, regs, pc) ->
     Pointer.component pc \in domm (prog_interface p1) ->
     Pointer.component pc \notin domm (prog_interface p2).
-Admitted.
-
+Proof.
+  intros ? ? ? ? ? ? ? ? [[_ Hdisj] _] _ _ Hin.
+  pose proof (fdisjointP _ _ Hdisj) as G. by apply G in Hin.
+Qed.
 End CS.
