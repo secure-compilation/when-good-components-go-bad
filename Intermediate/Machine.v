@@ -811,12 +811,49 @@ Section Zip.
   (*   y \in ys. *)
   (* Admitted. *)
 
+  Lemma unzip2_size {X: Type} {Y: Type} (xs: seq (X * Y)):
+    size (unzip2 xs) = size xs.
+  Proof.
+    induction xs; auto. simpl. by rewrite IHxs.
+  Qed.
+  
   Lemma in_unzip2 {X : eqType} x (xs : NMap X) :
     x \in unzip2 xs ->
   exists n,
     (* (n, x) \in xs. *)
     xs n = Some x.
   Proof.
+    (******************
+    destruct xs. move : i. induction fmval.
+    - intros Hsorted. simpl in *. by intros.
+    - intros Hsorted Hin.
+      simpl in *.
+
+      assert (exists a': nat_ordType * X, a = a') as [a' Ha'].
+      { by exists a. }
+      subst.
+      assert (exists fmval': seq (nat * X), fmval = fmval')
+        as [fmval' Hfmval'].
+      { by exists fmval. }
+      subst.
+      
+      specialize (@path.path_sorted
+                    nat_ordType
+                    (Ord.lt (T:=nat_ordType))
+                    a'.1
+                    (unzip1 fmval')
+                    Hsorted
+                 ) as Hpathsorted.
+      specialize (IHfmval Hpathsorted).
+
+      rewrite in_cons in Hin.
+      pose proof (orP Hin) as [Hsubst | HIH].
+      + admit.
+      + specialize (IHfmval HIH) as [n Hn].
+        Search _ FMap.FMap.
+        Search _ NMap domm.
+      
+     ******************)
   Admitted.
 
   (* Lemma in_unzip2 {X Y : eqType} y (xys : seq (X * Y)) : *)
