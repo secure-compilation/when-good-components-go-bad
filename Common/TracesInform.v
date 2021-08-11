@@ -435,7 +435,7 @@ Definition well_formed_constant_value (cur_comp: Component.id)
   | Int _ => true
   | Undef => true
   | Ptr (perm, cid, bid, off) =>
-    if perm =? Permission.code then
+    if Permission.eqb perm Permission.code then
       match procs cur_comp with
       | Some procs_cur_comp =>
         (cid =? cur_comp) && (procs_cur_comp bid)
