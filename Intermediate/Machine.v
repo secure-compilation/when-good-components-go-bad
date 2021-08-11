@@ -777,13 +777,35 @@ Section Zip.
   Lemma in_zip1 {X Y : eqType} (x : X) (y : Y) xs ys :
     (x, y) \in zip xs ys ->
     x \in xs.
-  Admitted.
+  Proof.
+    intros Hin.
+    move: Hin => /nthP => Hin.
+    assert (s: EqType (X * Y) (prod_eqMixin X Y)). { by simpl. }
+    specialize (Hin s) as [idx idx_leq Hnth].
+    apply /nthP.
+    exists idx.
+    - rewrite size_zip in idx_leq.
+      eapply ssrnat.leq_trans; first exact idx_leq; last by apply ssrnat.geq_minl.
+    - rewrite nth_zip_cond idx_leq in Hnth.
+      injection Hnth. by intros G ?; subst.
+  Qed.
 
   Lemma in_zip2 {X Y : eqType} (x : X) (y : Y) xs ys :
     (x, y) \in zip xs ys ->
     y \in ys.
-  Admitted.
-
+  Proof.
+    intros Hin.
+    move: Hin => /nthP => Hin.
+    assert (s: EqType (X * Y) (prod_eqMixin X Y)). { by simpl. }
+    specialize (Hin s) as [idx idx_leq Hnth].
+    apply /nthP.
+    exists idx.
+    - rewrite size_zip in idx_leq.
+      eapply ssrnat.leq_trans; first exact idx_leq; last by apply ssrnat.geq_minr.
+    - rewrite nth_zip_cond idx_leq in Hnth.
+      injection Hnth. by intros G ?; subst.
+  Qed.
+  
   (* Lemma in_unzip2 {X Y : eqType} (x : X) (y : Y) xs ys : *)
   (*   (x, y) \in zip xs ys -> *)
   (*   y \in ys. *)
@@ -794,6 +816,7 @@ Section Zip.
   exists n,
     (* (n, x) \in xs. *)
     xs n = Some x.
+  Proof.
   Admitted.
 
   (* Lemma in_unzip2 {X Y : eqType} y (xys : seq (X * Y)) : *)
