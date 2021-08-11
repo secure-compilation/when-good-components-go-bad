@@ -802,17 +802,16 @@ Section ThreewayMultisem1.
     executing (prepare_global_env prog) pc instr ->
     executing (prepare_global_env prog') pc instr.
   Proof.
-    (*intros Hdomm Hmerge Hexec.
-    inversion Hmerge
-      as [Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-          Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ ].
-    apply execution_invariant_to_linking with c; try assumption.
-    - congruence.
-    - inversion Hmerge. simpl in *.
-      eapply CS.domm_partition; eauto.
-      + by unfold CS.initial_state.
-  Qed.*)
-  Admitted.
+    intros contra ? ?.
+    find_and_invert_mergeable_internal_states;
+      find_and_invert_mergeable_states_well_formed.
+    - eapply execution_invariant_to_linking with (c1 := c); eauto.
+      + by unfold mergeable_interfaces in *; intuition.
+      + by rewrite -Hifc_cc'; unfold mergeable_interfaces in *; intuition.
+      + CS.simplify_turn.
+        eapply CS.domm_partition; eauto. by simpl.
+    - CS.simplify_turn. by rewrite H_c' in contra.
+  Qed.  
 
   (* RB: TODO: Does it make sense to compact calls and returns into a unified
      solve tactic? *)
