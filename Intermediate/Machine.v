@@ -1463,8 +1463,12 @@ Local Opaque Memory.load.
   move: Hdomm => /dommP => [[Cbufs HCbufs]].
   rewrite HCbufs in Hcase. simpl in Hcase.
   assert (Hload' :
-            ComponentMemory.load (ComponentMemory.prealloc Cbufs) b o = Some v)
-    by admit. (* by corresponding memory lemma *)
+            ComponentMemory.load (ComponentMemory.prealloc Cbufs) b o = Some v).
+  {
+    (* by corresponding memory lemma *)
+    eapply ComponentMemoryExtra.load_before_reserve_blocks.
+    by erewrite Hcase.
+  }
   rewrite ComponentMemory.load_prealloc in Hload'.
   destruct (0 <=? o)%Z eqn:Hoff;
     [| discriminate].
@@ -1482,7 +1486,7 @@ Local Opaque Memory.load.
     + rewrite ltb_Z_nat in Hload'. assumption.
     + assumption.
   - discriminate.
-Admitted.
+Qed.
 
 (* Alternative statements? *)
 Theorem prog_buffer_ptr :
