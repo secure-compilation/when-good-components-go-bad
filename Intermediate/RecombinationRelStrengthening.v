@@ -809,9 +809,19 @@ Section ThreewayMultisem1.
       + by unfold mergeable_interfaces in *; intuition.
       + by rewrite -Hifc_cc'; unfold mergeable_interfaces in *; intuition.
       + CS.simplify_turn.
-        eapply CS.domm_partition; eauto. by simpl.
+        eapply CS.domm_partition; eauto.
+        * eapply interface_preserves_closedness_r.
+          5: { exact Hclosed_prog. }
+          all:  auto.
+          -- by unfold mergeable_interfaces in *; intuition.
+          -- apply linkable_implies_linkable_mains; auto.
+               by unfold mergeable_interfaces in *; intuition.
+          -- apply interface_implies_matching_mains; auto.
+        * by rewrite -Hifc_cc'.
+        * by auto.
+        * by rewrite -Hifc_cc'.
     - CS.simplify_turn. by rewrite H_c' in contra.
-  Qed.  
+  Qed. 
 
   (* RB: TODO: Does it make sense to compact calls and returns into a unified
      solve tactic? *)

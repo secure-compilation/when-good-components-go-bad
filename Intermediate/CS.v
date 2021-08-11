@@ -2469,7 +2469,7 @@ Proof.
                        cid) eqn:contra;
        idtac "ExStructures 0.1 legacy"
       ).
-
+  
   (* unable to use the destruct equation due to type inference problems. *)
         (*erewrite contra in e1. try discriminate; split; auto; clear e1;
           unfold reserve_component_blocks; intros H.*)
@@ -2756,12 +2756,21 @@ Admitted.
    to use where it is needed now (recomposition). *)
 Lemma domm_partition :
   forall p1 p2 s t gps mem regs pc,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    closed_program (program_link p1 p2) ->   
     mergeable_interfaces (prog_interface p1) (prog_interface p2) ->
     CS.initial_state (program_link p1 p2) s ->
     Star (CS.sem_non_inform (program_link p1 p2)) s t (gps, mem, regs, pc) ->
     Pointer.component pc \notin domm (prog_interface p2) ->
     Pointer.component pc \in domm (prog_interface p1).
-Admitted.
+Proof.
+  intros ? ? ? ? ? ? ? ? Hwf1 Hwf2 Hclosed Hmerge Hinit Hstar Hnotin.
+  specialize (@star_pc_domm_non_inform _ _ Hwf1 Hwf2 Hmerge Hclosed
+                                       _ _ _ _ _ _ Hinit Hstar
+             ) as [G | G]; auto.
+  - by rewrite G in Hnotin.
+Qed.
 
 Lemma domm_partition_in_left_not_in_right :
   forall p1 p2 s t gps mem regs pc,
