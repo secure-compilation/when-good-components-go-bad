@@ -181,6 +181,11 @@ Module Type AbstractComponentMemory.
       load m b i = Some v ->
       load (fst (reserve_block m)) b i = Some v.
 
+  Axiom load_before_reserve_block :
+    forall m b o v,
+      load (fst (reserve_block m)) b o = Some v ->
+      load m b o = Some v.
+
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -857,7 +862,14 @@ Module ComponentMemoryExtra.
   Lemma load_before_reserve_blocks m n b o v :
     load (fst (reserve_blocks m n)) b o = Some v ->
     load m b o = Some v.
-  Admitted.
+  Proof.
+    induction n as [| n' IHn']; auto.
+    simpl. intros Hreserve.
+    destruct (reserve_blocks m n') as [m' bs] eqn:Hblocks.
+    destruct (reserve_block m') as [m'' b'] eqn:Hblock.
+    simpl in *. apply IHn'. eapply load_before_reserve_block. by rewrite Hblock.
+  Qed.    
+    
   (* Or: *)
   (* reserve_blocks (prealloc bufs) n = (Cmem, bs) -> *)
   (* load Cmem b o = Some v -> *)
