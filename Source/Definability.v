@@ -336,7 +336,11 @@ Section Definability.
     | E_Leq   => Leq
     end.
 
+  Definition nop_expr: expr := E_val (Int 0%Z).
   Definition error_expr : expr := E_binop Mul (E_val (Int 0)) E_local.
+
+  Definition INITFLAG := E_binop Add E_local (E_val (Int 2%Z)).
+  Definition LOCALBUF := E_binop Add E_local (E_val (Int 3%Z)).
 
   (* Translation of constant values to expressions, with special attention
      given to pointers. *)
@@ -352,7 +356,7 @@ Section Definability.
       if Permission.eqb perm Permission.data then
         (* We make the implicit assumption that all such values refer to
            the local buffer, which should follow from well-formedness. *)
-        E_binop Add LOCALBUF (E_val o)
+        E_binop Add LOCALBUF (E_val (Int o))
         (* Ptr (perm, cid, S bid, o) *)
         (* E_binop Add E_local (E_val (Int (8 + o))) *)
       else
@@ -385,8 +389,8 @@ Section Definability.
     intros [n | [[[p C] b ] o] |].
     - reflexivity.
     - simpl. unfold fsetU, val. simpl. rewrite fset0E.
-      destruct (Permission.eqb p Permission.data) eqn:e;
-      reflexivity.
+      destruct (Permission.eqb p Permission.data) eqn:Heq;
+        simpl; rewrite !fset0U fset0E; reflexivity.
     - simpl. unfold fsetU, val. simpl. rewrite fset0E. reflexivity.
   Qed.
 
@@ -551,7 +555,7 @@ Section Definability.
      the first position, which holds the program counter, while noting that
      this instruction will be executed at the first value of the counter (and
      prior to its increment), is rather ugly and brittle. *)
-  (* Definition init_local_buffer_expr (C : Component.id) (b : Block.id) : expr := *)
+  (* Definition init_local_buffer_expr (C : Component.id) : expr := *)
   (*   (* [E_assign E_local (alloc_local_buffer_expr C)] ++ *) *)
   (*   (* map (copy_local_datum_expr C) (iota 0 (buffer_size C)) ++ *) *)
   (*   (* [E_assign E_local (E_val (Int 0))] *) *)
@@ -600,11 +604,6 @@ Section Definability.
     comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
   Proof. apply: filter_cat. Qed.
 
-  Definition INITFLAG := E_binop Add E_local (E_val (Int 2%Z)).
-  Definition LOCALBUF := E_binop Add E_local (E_val (Int 3%Z)).
-  Definition nop_expr: expr := E_val (Int 0%Z).
-  Definition LOCALBUF_SIZE := E_val (Int 42%Z).
-
   Definition buffer_nth (C : Component.id) (i : nat) : expr :=
     match prog_buffers C with
     | Some buf =>
@@ -631,7 +630,7 @@ Section Definability.
 
   Definition init_check (C : Component.id): expr :=
     E_if (E_binop Eq (E_deref INITFLAG) (E_val (Int 0%Z)))
-         ((E_assign LOCALBUF (E_alloc LOCALBUF_SIZE));;
+         ((E_assign LOCALBUF (E_alloc (E_val (Int (Z.of_nat (buffer_size C))))));;
           init_local_buffer_expr C)
          nop_expr.
 
@@ -1288,7 +1287,6 @@ Section Definability.
           postcondition_event_memory e (CS.s_memory cs').
     Admitted.
 
-
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
       = (counter_value C prefix
@@ -1592,6 +1590,7 @@ Section Definability.
                     (Source.prepare_buffers p)
                     (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)
                     Undef Undef) as [mem1 Hmem1]; eauto.
+(* FIXME
         destruct (Memory.store_after_load
                     mem1
                     (Permission.data, Component.main, Block.local, reg_offset E_R_AUX1)
@@ -1697,6 +1696,8 @@ Section Definability.
                   all: admit.
             -- by move=> [].
           * unfold valid_procedure. now auto.
+*)
+        admit.
     - (* Inductive step. *)
       rewrite -catA => Et.
       assert (wf_int_pref' : well_formed_intermediate_prefix (prefix ++ [:: e])).
@@ -2072,13 +2073,14 @@ Local Opaque loc_of_reg.
               inversion H1; subst; clear H1.
               reflexivity. }
           assert (Hcomp1 : next_comp_of_event e1 = cur_comp s) by admit.
-          (*  *)
+          (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
           exists (EConst C ptr v s0 t0).
           (* Case analysis on concrete constant expression; all cases are
              similar.
              TODO: Refactoring. *)
           destruct ptr as [n | ptr |].
-          + (* Before processing the goal, introduce existential witnesses. *)
+          + (* EConst-Int *)
+            (* Before processing the goal, introduce existential witnesses. *)
             (* match goal with *)
             (* | H : Memory.store _ ?PTR _ = Some ?MEM |- *)
             (*   Memory.store ?MEM ?PTR' _ = _ *)
@@ -2108,15 +2110,23 @@ Local Transparent expr_of_const_val loc_of_reg.
                         We still need to process the external call check. *)
                      take_steps.
                      ** reflexivity.
-                     ** assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
-                        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
-                          last (now destruct v). (* Trivial property of register offsets. *)
-                        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
-                          last easy.
-                        exact Hload0.
-                     ** unfold invalidate_metadata.
-                        take_steps.
-                        apply star_refl.
+                     ** (* TODO: Needs a new invariant that talks about the init
+                           check. Assume for now that it exists, and
+                           initialization has already taken place --
+                           initial events?. *)
+                        instantiate (1 := Int 1).
+                        admit.
+                     ** take_steps.
+                        --- reflexivity.
+                        --- assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
+                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
+                              last (now destruct v). (* Trivial property of register offsets. *)
+                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                              last easy.
+                            exact Hload0.
+                        --- unfold invalidate_metadata.
+                            take_steps.
+                            apply star_refl.
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
               { destruct s. exact wb. }
@@ -2257,7 +2267,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                       rewrite ssrnat.addn1 in Hrename'.
                       (* NOTE: [move: Hload'. case: /ifP]? *)
                       move: Hload. case: ifP.
-                      -- move /eqP. discriminate.
+                      -- move /Pointer.eqP. discriminate.
                       -- move /eqP => Heq Hload.
                          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem) in Hload;
                            last (now injection).
@@ -2333,7 +2343,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) in Hload.
             destruct ptr as [[[ptrp ptrC] ptrb] ptro].
             assert (ptrp = Permission.data) by admit; subst ptrp.
-            set (saved := eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int (8 + ptro))).
+            set (saved := eval_binop Add (eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int 3)) (Int ptro)).
             pose proof proj1 (Memory.store_some_load_some _ _ (*Ptr ptr*) saved) Hload as [mem'' Hstore'].
             (* Continue. *)
             exists (StackState C (callers s)).
@@ -2352,15 +2362,19 @@ Local Transparent expr_of_const_val loc_of_reg.
                         We still need to process the external call check. *)
                      take_steps.
                      ** reflexivity.
-                     ** assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
-                        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
-                          last (now destruct v). (* Trivial property of register offsets. *)
-                        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
-                          last easy.
-                        exact Hload0.
-                     ** unfold invalidate_metadata.
-                        take_steps.
-                        apply star_refl.
+                     ** instantiate (1 := (Int 1)).
+                        admit.
+                     ** take_steps.
+                        --- reflexivity.
+                        --- assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
+                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
+                              last (now destruct v). (* Trivial property of register offsets. *)
+                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                              last easy.
+                            exact Hload0.
+                        --- unfold invalidate_metadata.
+                            take_steps.
+                            apply star_refl.
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
               { destruct s. exact wb. }
@@ -2511,7 +2525,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                       rewrite ssrnat.addn1 in Hrename'.
                       (* NOTE: [move: Hload'. case: /ifP]? *)
                       move: Hload. case: ifP.
-                      -- move /eqP. discriminate.
+                      -- move /Pointer.eqP. discriminate.
                       -- move /eqP => Heq Hload.
                          rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem) in Hload;
                            last (now injection).
@@ -2521,7 +2535,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                   + (* assert (mem' = mem_of_event_inform e1) by admit. *)
                     subst mem'.
                     intros n off v Hoffset Hload.
-                    simpl in *.
+                    (* simpl in *. *) simpl in Hload.
                     (* subst v prefix. *)
                     unfold postcondition_event_registers in Hregs.
                     destruct (Z.eqb_spec (reg_offset v0) off) as [Heq | Hneq].
