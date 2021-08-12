@@ -1562,6 +1562,7 @@ Lemma IConst_possible_values pc v r:
         (off : Block.offset) procs,
         v = IPtr (perm, cid, bid, off) /\
         cid = Pointer.component pc /\
+        bid = Block.local /\
         perm = Permission.data /\
         prog_procedures p (Pointer.component pc) = Some procs /\
         procs bid
@@ -1589,6 +1590,8 @@ case: st1 t1 st2 / Hstep => //=.
   specialize (IConst_possible_values _ _ _ Hexec)
     as [[i ev]|[perm [cid [bid [off [procs' [? [? [Hprocs ?]]]]]]]]];
     subst; auto.
+  destruct H1 as [Hperm [? ?]]. subst perm.
+  simpl. by rewrite !eqxx.
   (*******************************************
   simpl.
   destruct (Permission.eqb perm Permission.code) eqn:e; auto.
@@ -1611,7 +1614,7 @@ case: st1 t1 st2 / Hstep => //=.
 - intros ? ? ? ? ? ? ? ? Hexec Hfind _.
   specialize (find_label_in_component_1 _ _ _ _ Hfind) as Hcomp.
   destruct ptr as [[[perm cid] bid] ?].
-  destruct (Permission.eqb perm Permission.code) eqn:e; auto.
+  destruct perm; auto.
   specialize (domm_genv_procedures p) as Hgenv_procedures.
   specialize (wfprog_defined_procedures valid_program) as Hprog_procedures.
   rewrite Hprog_procedures in Hgenv_procedures.
@@ -1649,7 +1652,9 @@ case: st1 t1 st2 / Hstep => //=.
       rewrite <- Hgenv_procedures.
       by rewrite mem_domm e2. 
     }
-    by rewrite mem_domm e1 in Hcontra.
+      by rewrite mem_domm e1 in Hcontra.
+  + (* Contradiction on pointer permission in Hfind *)
+    admit.
 - intros ? ? ? ? ? ? ? Hexec Hfind _.
   specialize (Pointer.inc_preserves_permission pc) as Hperm.
   specialize (Pointer.inc_preserves_component pc) as Hcomp.

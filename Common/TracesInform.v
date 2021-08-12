@@ -435,7 +435,8 @@ Definition well_formed_constant_value (cur_comp: Component.id)
   | Int _ => true
   | Undef => true
   | Ptr (perm, cid, bid, off) =>
-    if Permission.eqb perm Permission.code then
+    match perm with
+    | Permission.code =>
       match procs cur_comp with
       | Some procs_cur_comp =>
         (cid =? cur_comp) && (procs_cur_comp bid)
@@ -443,10 +444,10 @@ Definition well_formed_constant_value (cur_comp: Component.id)
       (* impossible case *)
       | None => false
       end
-    else
-      (* Maybe need to specify that data pointers should be pointing 
-         to the local buffers *)
-      true
+    | Permission.data =>
+      (* Data pointers should be pointing to the local buffers *)
+      (cid == cur_comp) && (bid == Block.local)
+    end
   end.
 
 (* TODO: Here, this is an important definition.
