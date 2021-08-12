@@ -408,6 +408,7 @@ Definition well_formed_instruction
        to buffers in the same component. What were the implications of the
        absence of this condition in the existing proof? *)
     Pointer.component ptr = C /\
+    Pointer.permission ptr = Permission.data /\
     exists bufs,
       getm (prog_buffers p) (Pointer.component ptr) = Some bufs /\
       In (Pointer.block ptr) (map fst bufs)
@@ -593,7 +594,8 @@ Proof.
     move: (wfprog_well_formed_instructions Hwf1 H H2 Hi).
     case: i Hi=> //=.
     + (* IConst *)
-      case=> // ptr r Hi [Hptr [bufs [p1_bufs Hbufs]]].
+      case=> // ptr r Hi [Hptr [Hperm [bufs [p1_bufs Hbufs]]]].
+      split; first assumption.
       split; first assumption.
         by (exists bufs; rewrite unionmE p1_bufs).
     + (* IPtrPfLabel *)

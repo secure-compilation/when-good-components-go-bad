@@ -1556,13 +1556,16 @@ Lemma IConst_possible_values pc v r:
         (off : Block.offset) procs,
         v = IPtr (perm, cid, bid, off) /\
         cid = Pointer.component pc /\
+        perm = Permission.data /\
         prog_procedures p (Pointer.component pc) = Some procs /\
         procs bid
     )
   ).
+Proof.
+  intros [C_procs [P_code [H1 [H2 [H3 [H4 H5]]]]]].
+  destruct valid_program.
+  Search _ genv_procedures prog_procedures.
 Admitted.
-
-
 
 Lemma intermediate_well_formed_events st t st' :
   Star sem_inform st t st' ->
@@ -1580,6 +1583,7 @@ case: st1 t1 st2 / Hstep => //=.
   specialize (IConst_possible_values _ _ _ Hexec)
     as [[i ev]|[perm [cid [bid [off [procs' [? [? [Hprocs ?]]]]]]]]];
     subst; auto.
+  (*******************************************
   simpl.
   destruct (perm =? Permission.code) eqn:e; auto.
   assert (exists procs, prog_procedures p (Pointer.component pc) = Some procs)
@@ -1596,6 +1600,7 @@ case: st1 t1 st2 / Hstep => //=.
   }
 
     by subst.
+   ***************************************)
 
 - intros ? ? ? ? ? ? ? ? Hexec Hfind _.
   specialize (find_label_in_component_1 _ _ _ _ Hfind) as Hcomp.
@@ -2432,16 +2437,6 @@ Section ProgramLink.
 End ProgramLink.
 
 
-(* [DynShare] *)
-(*
-SearchAbout prepare_procedures_initial_memory_aux.
-Check prepare_procedures_initial_memory_aux.
-SearchAbout prog_procedures.
-SearchAbout program.
-Check mem_domm.
-Check getm.
-SearchAbout getm.
-*)
 Lemma genv_procedures_prog_procedures_in p cid fid instlst :
   well_formed_program p ->
   (omap (fun m => getm m fid)
@@ -2584,7 +2579,7 @@ Proof.
         destruct (permv =? Permission.data) eqn:epermv; try discriminate.
         inversion HvPtrSome. subst cid bid.
         simpl in Hwfi'.
-        destruct Hwfi' as [_ [bufs [Hprog_buffers Hbidv]]].
+        destruct Hwfi' as [_ [Hperm' [bufs [Hprog_buffers Hbidv]]]].
         unfold program_ptrs.
         rewrite mem_domm. rewrite uncurrymE. simpl.
         rewrite Hprog_buffers. simpl. rewrite <- mem_domm.
