@@ -35,14 +35,13 @@ Section Definability.
   Variable closed_intf: closed_interface intf.
   Variable has_main: intf Component.main.
 
-  (* Variable prog_buffers : NMap {fmap Block.id -> nat + list value}. *)
-  (* Hypothesis domm_buffers : domm intf = domm prog_buffers. *)
-  (* (* Essentially a copy of the intermediate [wfprog_well_formed_buffers]. *) *)
-  (* Hypothesis wf_buffers : *)
-  (*   forall C bufs b, *)
-  (*     prog_buffers C = Some bufs -> *)
-  (*     b \in domm bufs -> *)
-  (*     Buffer.well_formed_buffer_opt (bufs b). *)
+  Variable prog_buffers : NMap (nat + list value).
+  Hypothesis domm_buffers : domm intf = domm prog_buffers.
+  (* Essentially a copy of the intermediate [wfprog_well_formed_buffers]. *)
+  Hypothesis wf_buffers :
+    forall C buf,
+      prog_buffers C = Some buf ->
+      Buffer.well_formed_buffer buf.
 
   (** The definability proof takes an execution trace as its input and builds a
       source program that can produce that trace.  Roughly speaking, it does so
@@ -179,7 +178,7 @@ Section Definability.
       unfold Memory.load in Hload'.
       unfold Memory.store.
       simpl in *.
-      destruct (P =? Permission.data) eqn:EpermData; try discriminate.
+      destruct (Permission.eqb P Permission.data) eqn:EpermData; try discriminate.
       destruct (getm mem C) as [memC|] eqn:EmemC; try discriminate.
       destruct (ComponentMemory.store_after_load _ _ _ _ (Int (Z.succ n)) Hload')
         as [memC' EmemC'].
@@ -196,7 +195,7 @@ Section Definability.
     - unfold switch_clause.
       repeat take_step; trivial; try eassumption.
       + unfold Memory.load in Hload. simpl in Hload.
-        destruct (P =? Permission.data); try discriminate.
+        destruct (Permission.eqb P Permission.data); try discriminate.
         unfold Memory.load. simpl. eauto.
       + eapply (@star_step _ _ _ _ _ _ E0 _ E0 _ E0); trivial; simpl.
         { rewrite <- Z.eqb_neq in n_n'. rewrite n_n'. simpl.
@@ -242,7 +241,7 @@ Section Definability.
     unfold switch. simpl. simpl in es_le_n. rewrite fst_switch -Nat.sub_succ_r. simpl.
     do 5 take_step; [eauto|eauto|].
     - unfold Memory.load in C_local. simpl in C_local.
-      destruct (P =? Permission.data); try discriminate.
+      destruct (Permission.eqb P Permission.data); try discriminate.
       unfold Memory.load. simpl. eauto.
     - do 2 take_step.
       eapply (@star_step _ _ _ _ _ _ E0); try now (simpl; reflexivity).
@@ -289,14 +288,15 @@ Section Definability.
      immediately after the back-translation counter in position 0.
      RB: TODO: Phrase in terms of [Register.to_nat]. *)
   Definition reg_offset (reg : Eregister) : Z :=
+    4 +
     match reg with
-    | E_R_ONE  => 2
-    | E_R_COM  => 3
-    | E_R_AUX1 => 4
-    | E_R_AUX2 => 5
-    | E_R_RA   => 6
-    | E_R_SP   => 7
-    | E_R_ARG  => 8
+    | E_R_ONE  => 0
+    | E_R_COM  => 1
+    | E_R_AUX1 => 2
+    | E_R_AUX2 => 3
+    | E_R_RA   => 4
+    | E_R_SP   => 5
+    | E_R_ARG  => 6
     end.
 
   Lemma reg_offset_inj :
@@ -348,11 +348,13 @@ Section Definability.
        corresponding to the counter and space reserved to locate register
        values.  *)
     (* FIXME: Offset vs. block-based shifting *)
-    | Ptr (perm, _, bid, o) =>
-      if perm =? Permission.data then
+    | Ptr (perm, cid, bid, o) =>
+      if Permission.eqb perm Permission.data then
         (* We make the implicit assumption that all such values refer to
-           the local buffer, which should follow from well-formedness.*)
-        E_binop Add E_local (E_val (Int (8 + o)))
+           the local buffer, which should follow from well-formedness. *)
+        E_binop Add LOCALBUF (E_val o)
+        (* Ptr (perm, cid, S bid, o) *)
+        (* E_binop Add E_local (E_val (Int (8 + o))) *)
       else
         (* An implicit assumption is that perm =? Permission.code. *)
         (* TODO: change the type of the permission field so that it is not int, and
@@ -374,7 +376,7 @@ Section Definability.
     forall v, Source.values_are_integers (expr_of_const_val v).
   Proof.
     intros [n | [[[p C] b ] o] |]; try reflexivity.
-    destruct (p =? Permission.data) eqn:e; unfold expr_of_const_val; rewrite e; auto.
+    destruct (Permission.eqb p Permission.data) eqn:e; unfold expr_of_const_val; rewrite e; auto.
   Qed.
 
   Lemma called_procedures_expr_of_const_val:
@@ -383,7 +385,7 @@ Section Definability.
     intros [n | [[[p C] b ] o] |].
     - reflexivity.
     - simpl. unfold fsetU, val. simpl. rewrite fset0E.
-      destruct (p =? Permission.data) eqn:e;
+      destruct (Permission.eqb p Permission.data) eqn:e;
       reflexivity.
     - simpl. unfold fsetU, val. simpl. rewrite fset0E. reflexivity.
   Qed.
@@ -393,7 +395,6 @@ Section Definability.
       of events when run from the appropriate component.  We assume that all
       events were produced from the same component.  The [C] and [P] arguments
       are only needed to generate the recursive calls depicted above. *)
-
 
   Notation "x ;; y" := (E_seq x y) (right associativity, at level 90).
 
@@ -413,9 +414,6 @@ Section Definability.
   (* Proof. *)
   (*   intros cp st mem k arg. *)
   (* Abort. *)
-
-
-
 
   (* We call this function when in component C executing P. *)
   Definition expr_of_event (C: Component.id) (P: Procedure.id) (e: event_inform) : expr :=
@@ -469,25 +467,25 @@ Section Definability.
     end.
 
   (* The local buffer of back-translated programs is dedicated to private
-     metadata: the trace step counter at position 0, followed by locations for
-     the simulated machine registers.
+     metadata:
+      - The trace step counter at position 0;
+      - The external call flag at position 1;
+      - The buffer initialization flag at position 2;
+      - The pointer to the simulated static buffer at position 3.
+     These are followed by locations for the simulated machine registers.
      NOTE: Register indexes must match [loc_of_reg] and would ideally be defined
      in terms of [Register.to_nat], and their initial values in terms of
      [Register.init]. *)
   Definition meta_buffer : list value :=
-    [Int 0; Int 1; Undef; Undef; Undef; Undef; Undef; Undef; Undef].
+    [Int 0; Int 1; Int 0; Undef] ++ [Undef; Undef; Undef; Undef; Undef; Undef; Undef].
 
   (* Compute component buffer side, assuming argument [C] is in the domain of
      [intf]. *)
-  (* Definition buffer_size (C : Component.id) (b : Block.id) : nat := *)
-  (*   match prog_buffers C with *)
-  (*   | Some bufs => *)
-  (*     match bufs b with *)
-  (*     | Some buf => size (unfold_buffer buf) *)
-  (*     | None => 0 (* Should not happen *) *)
-  (*     end *)
-  (*   | None => 0 (* Should not happen *) *)
-  (*   end. *)
+  Definition buffer_size (C : Component.id) : nat :=
+    match prog_buffers C with
+    | Some buf => size (unfold_buffer buf)
+    | None => 0 (* Should not happen *)
+    end.
 
   (* Allocate a new buffer to serve as the local buffer of the back-translation.
      By convention this will be created immediately after program initialization
@@ -499,8 +497,8 @@ Section Definability.
 
      Note that buffers coming from well-formed program components must have size
      strictly greater than zero, so the behavior of alloc() is defined. *)
-  (* Definition alloc_local_buffer_expr (C : Component.id) (b : Block.id) : expr := *)
-  (*   E_alloc (E_val (Int (Z.of_nat (buffer_size C b)))). *)
+  Definition alloc_local_buffer_expr (C : Component.id) : expr :=
+    E_alloc (E_val (Int (Z.of_nat (buffer_size C)))).
 
   (* Copy the [i]-th component of the original program buffer of [C] from its
      temporary location in the local buffer of [C]'s back-translation (following
@@ -602,15 +600,51 @@ Section Definability.
     comp_subtrace C (t1 ++ t2) = comp_subtrace C t1 ++ comp_subtrace C t2.
   Proof. apply: filter_cat. Qed.
 
+  Definition INITFLAG := E_binop Add E_local (E_val (Int 2%Z)).
+  Definition LOCALBUF := E_binop Add E_local (E_val (Int 3%Z)).
+  Definition nop_expr: expr := E_val (Int 0%Z).
+  Definition LOCALBUF_SIZE := E_val (Int 42%Z).
+
+  Definition buffer_nth (C : Component.id) (i : nat) : expr :=
+    match prog_buffers C with
+    | Some buf =>
+      match nth_error (unfold_buffer buf) i with
+      | Some v => E_val v
+      | None => error_expr (* should not happen *)
+      end
+    | None => error_expr (* should not happen *)
+    end.
+
+  Definition copy_local_datum_expr (C : Component.id) (i : nat) : expr :=
+    E_assign
+      (E_binop Add (E_deref LOCALBUF)
+                   (E_val (Int (Z.of_nat i))))
+      (buffer_nth C i).
+
+  Definition init_local_buffer_expr (C : Component.id) : expr :=
+    (* [E_assign E_local (alloc_local_buffer_expr C)] ++ *)
+    (* map (copy_local_datum_expr C) (iota 0 (buffer_size C)) ++ *)
+    (* [E_assign E_local (E_val (Int 0))] *)
+    foldr (fun e acc => E_seq e acc)
+          (E_assign INITFLAG (E_val (Int 1))) (* last instruction *)
+          (map (copy_local_datum_expr C) (iota 0 (buffer_size C))).
+
+  Definition init_check (C : Component.id): expr :=
+    E_if (E_binop Eq (E_deref INITFLAG) (E_val (Int 0%Z)))
+         ((E_assign LOCALBUF (E_alloc LOCALBUF_SIZE));;
+          init_local_buffer_expr C)
+         nop_expr.
+
   Definition extcall_check: expr :=
     E_if (E_binop Eq (E_deref EXTCALL) (E_val (Int 1%Z)))
          (invalidate_metadata;;
           E_assign EXTCALL (E_val (Int 0%Z)))
-         (E_val (Int 0%Z)).
+         nop_expr.
 
   Definition procedure_of_trace
              (C : Component.id) (P : Procedure.id) (t : trace event_inform)
     : expr :=
+    init_check C;;
     extcall_check;;
     expr_of_trace C P (comp_subtrace C t). (* RB: TODO: Substitute check. *)
 
@@ -744,10 +778,14 @@ Section Definability.
       rewrite mkfmapfE; case: ifP=> //= P_CI [<-] {Pexpr}; split; last first.
       + split.
         * rewrite /procedure_of_trace /expr_of_trace /switch.
+          simpl. repeat (rewrite <- andbA; simpl).
+          rewrite !values_are_integers_loc_of_reg; simpl.
+          apply /andP. split.
+          { admit. }
           elim: {t Ht P_CI} (comp_subtrace C t) (length _) => [|e t IH] n //=.
-          by case: e=> /=; try rewrite !values_are_integers_loc_of_reg; simpl; intros;
-                      try apply IH; try rewrite !values_are_integers_loc_of_reg; simpl;
-                        try rewrite values_are_integers_expr_of_const_val; try apply IH.
+          by case: e=> /=; intros;
+                         try rewrite values_are_integers_expr_of_const_val;
+                         apply IH.
 
         *
           (*clear.
@@ -776,16 +814,17 @@ Section Definability.
                   /program_of_trace.
           (*induction t; auto.
           simpl; unfold Source.well_formed_E_funptr; destruct a; simpl.*)
-          elim: {t Ht P_CI} (comp_subtrace C t) (procedures_of_trace t) (length _)
-          => [|e t IH] p n //=.
-          case: e=> /=; simpl; intros; try apply IH.
-          Local Transparent loc_of_reg expr_of_const_val.
-          destruct e; destruct v; simpl; try apply IH;
-            match goal with
-            | ptr : Pointer.t |- _ =>
-              destruct ptr as [[[perm ?] bid] ?]; destruct (perm =? Permission.data);
-                simpl; try apply IH
-            end; admit.
+          admit. (* Similar as above. *)
+          (* elim: {t Ht P_CI} (comp_subtrace C t) (procedures_of_trace t) (length _) *)
+          (* => [|e t IH] p n //=. *)
+          (* case: e=> /=; simpl; intros; try apply IH. *)
+          (* Local Transparent loc_of_reg expr_of_const_val. *)
+          (* destruct e; destruct v; simpl; try apply IH; *)
+          (*   match goal with *)
+          (*   | ptr : Pointer.t |- _ => *)
+          (*     destruct ptr as [[[perm ?] bid] ?]; destruct (Permission.eqb perm Permission.data); *)
+          (*       simpl; try apply IH *)
+          (*   end; admit. *)
 
       + pose call_of_event e := if e is ECall _ P _ _ C then Some (C, P) else None.
         have /fsubsetP sub :
@@ -793,14 +832,15 @@ Section Definability.
                   ((C, P) |: fset (pmap call_of_event (project_non_inform (comp_subtrace C t)))).
       {
         rewrite /procedure_of_trace /expr_of_trace /switch.
-        elim: {t Ht P_CI} (comp_subtrace C t) (length _)=> [|e t IH] n //=.
-        rewrite !fsetU0; exact: fsub0set.
-        move/(_ n) in IH; rewrite !fset0U.
+        admit. (* See above. *)
+        (* elim: {t Ht P_CI} (comp_subtrace C t) (length _)=> [|e t IH] n //=. *)
+        (* rewrite !fsetU0; exact: fsub0set. *)
+        (* move/(_ n) in IH; rewrite !fset0U. *)
 
-        case: e=> [C' P' v mem regs C''| | | | | | | ]
-                    //=;
-                    try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH.
-        all:admit.
+        (* case: e=> [C' P' v mem regs C''| | | | | | | ] *)
+        (*             //=; *)
+        (*             try by move=> C' e e0; rewrite !called_procedures_loc_of_reg !fset0U IH. *)
+        (* all:admit. *)
         (* FIXME
         * rewrite !fsetU0 fset_cons !fsubUset !fsub1set !in_fsetU1 !eqxx !orbT /=.
           by rewrite fsetUA [(C, P) |: _]fsetUC -fsetUA fsubsetU // IH orbT.
@@ -941,10 +981,10 @@ Section Definability.
       - rewrite (Memory.load_after_store _ _ _ _ _ STORE).
         specialize (WFMS1 _ _ Hload) as [v' [Gload Gren]].
         exists v'.
-        destruct ((Permission.data, Cbren.1, Cbren.2, offset) ==
-                  (Pm, C, Block.local, o)) eqn:eCbren_local.
+        destruct (Pointer.eqP (Permission.data, Cbren.1, Cbren.2, offset)
+                              (Pm, C, Block.local, o)) as [eCbren_local | eCbren_local].
         + destruct Cbren as [? ?].
-          specialize (eqP eCbren_local) as Hinv. inversion Hinv. subst.
+          injection eCbren_local as ? ? ? ?. subst.
           unfold Block.local in *.
           (* eCbren is a contradiction. Obvious unfolding + arithmetic *)
           destruct Cb as [Cbc Cbb].
@@ -959,10 +999,10 @@ Section Definability.
           by auto.
         + by intuition.
       - rewrite (Memory.load_after_store _ _ _ _ _ STORE) in Hload.
-        destruct ((Permission.data, Cbren.1, Cbren.2, offset) ==
-                  (Pm, C, Block.local, o)) eqn:eCbren_local.
+        destruct (Pointer.eqP (Permission.data, Cbren.1, Cbren.2, offset)
+                              (Pm, C, Block.local, o)) as [eCbren_local | eCbren_local].
         + inversion Hload. subst. clear Hload.
-          specialize (eqP eCbren_local) as Hinv. inversion Hinv. subst.
+          injection eCbren_local as ? ? ? ?. subst.
           unfold Block.local in *.
           (* eCbren is a contradiction. Obvious unfolding + arithmetic *)
           destruct Cbren as [Cbc' Cbb]. simpl in *. subst.
@@ -2012,7 +2052,7 @@ Local Opaque loc_of_reg.
         (* NOTE: ... And there is a series of new events to consider. *)
 
         - (* EConst *)
-          (* Gather a few recurrent assumptions at the top, *)
+          (* Gather a few recurrent assumptions at the top. *)
           assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
             as [Hprefix | [prefix0 [e1 Hprefix01]]]
             by admit;
