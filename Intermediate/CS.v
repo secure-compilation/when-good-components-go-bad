@@ -78,6 +78,7 @@ Definition state_component (st : CS.state) : Component.id :=
  counts as "program_ptrs" are the addresses of these buffers,
  not their contents.*)
 
+(************************************************************
 Definition program_ptrs (p: program) : {fset (Component.id * Block.id)} :=
   domm (uncurrym (prog_buffers p)).
 
@@ -146,7 +147,9 @@ Lemma value_to_data_pointer_err_Ptr :
 Proof.
   intros ???. by exists (pc, pb).
 Qed.
+*************************************************************************)
 
+(** BEGIN TODO: Move to some Utils module. *)
 Lemma mem_codomm_setm :
   forall (T S : ordType) (m : {fmap T -> S}) (k1 k2 : T) (v v' : S),
     m k1 = Some v ->
@@ -183,7 +186,9 @@ Proof.
   apply Hsubset'.
   assumption.
 Qed.
+(** END TODO: Move to some Utils module. *)
 
+(*************************************************
 Ltac unfold_Register_set e1 k'mem :=
   unfold Register.set in k'mem; rewrite setmE in k'mem; rewrite e1 in k'mem;
   simpl in k'mem.
@@ -483,6 +488,7 @@ Proof.
     { apply negbF. auto. }
     exfalso. apply notF. rewrite <- H1. exact H.
 Qed.
+ ******************************************************************************)
 
 Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
@@ -2505,7 +2511,12 @@ Proof.
            try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
            discriminate).
     destruct (ComponentMemoryExtra.reserve_blocks
-         (ComponentMemory.prealloc (odflt emptym ((prog_buffers p) cid)))
+                (ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) cid))*)
+                   match prog_buffers p cid with
+                   | Some buf => setm (T:=nat_ordType) emptym Block.local buf
+                   | None => emptym
+                   end
+                )
          (length (elementsm (odflt emptym (Some n)))))
              as [compMem bs] eqn:rsvblk.
     rewrite rsvblk in H.
@@ -2526,6 +2537,7 @@ Proof.
 
 Admitted.
 
+(*******************************************************************
 Lemma are_all_ptrs_in_reachable_star_step p st t st' :
   Star (sem_inform p) st t st' ->
   well_formed_program p ->
@@ -2735,6 +2747,9 @@ Definition reachable_from_reg_file
            (mem_st: Memory.t)
            (regs: Register.t) :=
   ptr \in (\bigcup_(i <- regs_data_ptrs regs) fset (reachable_nodes_nat mem_st i))%fset.
+
+***************************************************************************)
+
 
 (* RB: TODO: [DynShare] This result may not be in standard form for this file,
    adjust if needed ([does_prefix] not being used here, say). *)

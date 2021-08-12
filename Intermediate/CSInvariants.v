@@ -253,13 +253,14 @@ Proof.
       destruct t as [[| ? ?] ? |]; now inversion Hcons.
   - destruct (C \in domm (prog_interface p)) eqn:Hdomm.
     + destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
-        as [Cbufs [buf [HCbufs [Hbuf Hptr]]]].
+        as [(*Cbufs [*) buf (*[HCbufs*) [Hbuf Hptr]].
       exfalso. eapply prog_buffer_ptr; eassumption.
     + rewrite (wfprog_defined_buffers Hwf) in Hdomm.
       destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
-        as [Cbufs [_ [HCbufs _]]].
+        as [buf [Hbuf ?]].
+      simpl in *.
       apply negb_true_iff in Hdomm.
-      rewrite (dommPn Hdomm) in HCbufs.
+      rewrite (dommPn Hdomm) in Hbuf.
       discriminate.
 Qed.
 
@@ -871,7 +872,7 @@ Proof.
       destruct (cprog_main_existence Hclosed) as [main [Hmain _]].
       rewrite Hmain in Hload.
       destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
-        as [Cbufs [buf [Hbufs [Hbuf Hptr]]]].
+        as [(*Cbufs [*)buf (*[Hbufs*) [Hbuf Hptr]].
       (* No pointers in static buffers. *)
       exfalso. eapply prog_buffer_ptr; eassumption.
     + (* Registers. *)

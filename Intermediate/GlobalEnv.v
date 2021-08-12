@@ -225,13 +225,27 @@ Proof.
       apply /dommP. now exists bufs. }
     rewrite -> Hcase1', Hcase2'.
     (* RB: NOTE: For now, phrase in terms of domains. *)
-    assert (P \in domm (reserve_component_blocks p C (ComponentMemory.prealloc bufs) procs).2) as Hdomm.
+    assert (P \in domm (reserve_component_blocks
+                          p
+                          C
+                          (ComponentMemory.prealloc (*bufs*)
+                             (setm (T:=nat_ordType) emptym Block.local bufs)
+                          ) procs).2) as Hdomm.
     {
-      apply /dommP. eauto. (* RB: TODO: Clean up this step. *)
+      apply /dommP. eauto.
+      (* RB: TODO: Clean up this step. *)
     }
     apply /dommP.
     (* Continue to case analyze both machines in sync. *)
     unfold reserve_component_blocks. unfold reserve_component_blocks in Hdomm.
+
+    (** TODO: FIXME: This proof broke because of the change of the type of *)
+    (** prog_buffers. After the change, we now restrict each component to  *)
+    (** own just one static buffer.                                        *)
+
+    (** We made some changes to the script above and to the theorem statement. *)
+
+    (**************************************************************************
     destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs) (length procs))
       as [Cmem bs] eqn:Hblocks.
     destruct (ComponentMemoryExtra.reserve_blocks (ComponentMemory.prealloc bufs') (length procs'))
@@ -434,7 +448,9 @@ Proof.
         move: Hdomm => //=. apply /negP.
         now rewrite domm0.
   - now rewrite HC.
-Qed.
+  Qed.
+*************************************************************************)
+Admitted.
 
 (* RB: NOTE: The two EntryPoint lemmas can be phrased as a more general one
    operating on an explicit program link, one then being the exact symmetric of

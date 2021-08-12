@@ -367,7 +367,7 @@ End EntryPoint.
 Record program := mkProg {
   prog_interface: Program.interface;
   prog_procedures: NMap (NMap code);
-  prog_buffers: NMap {fmap Block.id -> nat + list value};
+  prog_buffers: NMap (*{fmap Block.id ->*) (nat + list value)(*}*);
   prog_main: bool
 }.
 
@@ -409,9 +409,11 @@ Definition well_formed_instruction
        absence of this condition in the existing proof? *)
     Pointer.component ptr = C /\
     Pointer.permission ptr = Permission.data /\
-    exists bufs,
-      getm (prog_buffers p) (Pointer.component ptr) = Some bufs /\
-      In (Pointer.block ptr) (map fst bufs)
+    exists buf,
+      getm (prog_buffers p) (Pointer.component ptr) = Some buf
+      /\
+  (*In (Pointer.block ptr) (map fst bufs)*)
+      Pointer.block ptr = Block.local
   (* the other instruction are well-formed by construction *)
   | IConst (IInt i) r => True
   | ILabel l => True
@@ -458,10 +460,11 @@ Record well_formed_program (p: program) := {
     domm (prog_interface p) = domm (prog_buffers p);
   (* buffers may not contain pointer values *)
   wfprog_well_formed_buffers:
-    forall C bufs b,
-      prog_buffers p C = Some bufs ->
-      b \in domm bufs ->
-      Buffer.well_formed_buffer_opt (bufs b);
+    forall C buf,
+      prog_buffers p C = Some buf ->
+      (*b \in domm bufs -> *)
+      Buffer.well_formed_buffer buf;
+      (*Buffer.well_formed_buffer_opt (bufs b);*)
   (* if the main component exists, then the main procedure must exist as well *)
   wfprog_main_existence:
       prog_main p ->
@@ -619,7 +622,7 @@ Proof.
       by rewrite /Program.has_component unionmE p1_C.
   - rewrite /= !domm_union.
     by do 2![rewrite wfprog_defined_buffers //].
-  - intros C bufs b Hbufs Hdomm.
+  - intros C buf Hbuf.
     destruct (C \in domm (prog_interface p1)) eqn:Hcase1;
       destruct (C \in domm (prog_interface p2)) eqn:Hcase2.
     + pose proof (fdisjointP _ _ Hdis_i) C Hcase1 as Hcontra.
@@ -627,7 +630,7 @@ Proof.
     + apply wfprog_well_formed_buffers with p1 C; auto.
       rewrite (wfprog_defined_buffers Hwf1) in Hcase1.
       pose proof dommP Hcase1 as [bufs1 Hbufs1].
-      rewrite unionmE in Hbufs.
+      rewrite unionmE in Hbuf.
       destruct (prog_buffers p1 C) eqn:Hcase; easy.
     + apply wfprog_well_formed_buffers with p2 C; auto.
       rewrite (wfprog_defined_buffers Hwf2) in Hcase2.
@@ -635,14 +638,14 @@ Proof.
       apply negb_true_iff in Hcase1.
       rewrite (wfprog_defined_buffers Hwf1) in Hcase1.
       pose proof dommPn Hcase1 as Hbufs1.
-      rewrite unionmE Hbufs1 in Hbufs.
+      rewrite unionmE Hbufs1 in Hbuf.
       destruct (prog_buffers p2 C) eqn:Hcase; easy.
     + apply negb_true_iff in Hcase1.
       apply negb_true_iff in Hcase2.
       rewrite (wfprog_defined_buffers Hwf1) in Hcase1.
       rewrite (wfprog_defined_buffers Hwf2) in Hcase2.
-      rewrite unionmE in Hbufs.
-      rewrite (dommPn Hcase1) (dommPn Hcase2) in Hbufs.
+      rewrite unionmE in Hbuf.
+      rewrite (dommPn Hcase1) (dommPn Hcase2) in Hbuf.
       discriminate.
   - rewrite /=. case /orP => [mainP | mainP].
     + have Hmain1 := @wfprog_main_existence _ Hwf1 mainP.
@@ -697,7 +700,15 @@ Qed.
    will not happen in regular use!). *)
 Definition alloc_static_buffers p comps :=
   mkfmapf (fun C =>
-    ComponentMemory.prealloc (odflt emptym (prog_buffers p C))) comps.
+             ComponentMemory.prealloc
+                  (
+                    match prog_buffers p C with
+                    | Some buf => mkfmap [(Block.local, buf)]
+                    | None => emptym
+                    end
+                  )
+          )
+          comps.
 
 Definition prepare_initial_memory (p: program) : Memory.t :=
   alloc_static_buffers p (domm (prog_interface p)).
@@ -959,6 +970,7 @@ Definition prepare_procedures (p: program) (mem: Memory.t)
 (*        reserve_component_blocks p C (Cmem, emptym, emptym) (elementsm Cprocs)) *)
 (*     (domm (prog_interface p)). *)
 
+(*********************************************
 Definition prepare_procedures_initial_memory_aux' (p: program) :=
   mkfmapf
     (fun C =>
@@ -966,16 +978,26 @@ Definition prepare_procedures_initial_memory_aux' (p: program) :=
        let Cmem := ComponentMemory.prealloc (odflt emptym ((prog_buffers p) C)) in
        reserve_component_blocks' p C (Cmem, emptym, emptym) (elementsm Cprocs))
     (domm (prog_interface p)).
+**************************************************)
 
 (* As above, replace the old function with the new, and remove accumulators. *)
 Definition prepare_procedures_initial_memory_aux (p: program) :=
   mkfmapf
     (fun C =>
        let Cprocs := odflt emptym ((prog_procedures p) C) in
-       let Cmem := ComponentMemory.prealloc (odflt emptym ((prog_buffers p) C)) in
+       let Cmem :=
+           ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) C))*)
+             (
+               match prog_buffers p C with
+               | Some buf => [fmap (Block.local, buf)]
+               | None => emptym
+               end
+             )
+       in
        reserve_component_blocks p C Cmem (elementsm Cprocs))
     (domm (prog_interface p)).
 
+(*************************************************
 (* Ultimately, we want this equivalence -- possibly modulo an isomorphism on
    concrete block id values -- to hold. *)
 Theorem prepare_procedures_initial_memory_aux_equiv (p: program) :
@@ -983,6 +1005,7 @@ Theorem prepare_procedures_initial_memory_aux_equiv (p: program) :
   prepare_procedures_initial_memory_aux' p. (* Old version. *)
 Proof.
 Admitted.
+**************************************************)
 
 (* Decompose the results of the auxiliary call, composed as a whole in the
    result of reserving component blocks, turning a map of triples into a triple
@@ -1148,8 +1171,23 @@ Proof.
             (elementsm (odflt emptym ((prog_procedures p) Cid)))
       by rewrite (prog_link_procedures_unionm Hwfp Hp Hc).
     rewrite Helts.
-    have Hprealloc : ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
-            ComponentMemory.prealloc (odflt emptym ((prog_buffers p) Cid))
+    have Hprealloc :
+      ComponentMemory.prealloc
+      (*(odflt emptym ((prog_buffers (program_link p c)) Cid))*)
+        (
+          match prog_buffers (program_link p c) Cid with
+          | Some buf => [fmap (Block.local, buf)]
+          | None => emptym
+          end
+        )
+      =
+      ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) Cid))*)
+        (
+          match prog_buffers p Cid with
+               | Some buf => [fmap (Block.local, buf)]
+               | None => emptym
+          end
+        )
       by rewrite (prog_link_buffers_unionm Hwfp Hp Hc).
     rewrite Hprealloc.
     simpl.
@@ -1187,8 +1225,24 @@ Proof.
             (elementsm (odflt emptym ((prog_procedures c) Cid)))
       by rewrite (program_linkC Hwfp Hwfc Hlinkable) (prog_link_procedures_unionm Hwfc Hc Hp).
     rewrite Helts.
-    have Hprealloc : ComponentMemory.prealloc (odflt emptym ((prog_buffers (program_link p c)) Cid)) =
-            ComponentMemory.prealloc (odflt emptym ((prog_buffers c) Cid))
+    have Hprealloc :
+      ComponentMemory.prealloc
+      (*(odflt emptym ((prog_buffers (program_link p c)) Cid))*)
+        (
+          match prog_buffers (program_link p c) Cid with
+          | Some buf => [fmap (Block.local, buf)]
+          | None => emptym
+          end
+        )
+      =
+      ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) Cid))*)
+        (
+          match prog_buffers c Cid with
+               | Some buf => [fmap (Block.local, buf)]
+               | None => emptym
+          end
+        )
+
       by rewrite (program_linkC Hwfp Hwfc Hlinkable) (prog_link_buffers_unionm Hwfc Hc Hp).
     rewrite Hprealloc.
     simpl.
@@ -1431,9 +1485,9 @@ Theorem prepare_procedures_memory_prog_buffers :
   forall p ptr v,
     well_formed_program p ->
     Memory.load (prepare_procedures_memory p) ptr = Some v ->
-  exists Cbufs buf,
-    (prog_buffers p (Pointer.component ptr)) = Some Cbufs /\
-    Cbufs (Pointer.block ptr) = Some buf /\
+  exists (*Cbufs*) buf,
+    (prog_buffers p (Pointer.component ptr)) = Some buf /\
+    (*Cbufs (Pointer.block ptr) = Some buf /\*)
     Buffer.nth_error buf (Pointer.offset ptr) = Some v.
 Proof.
   unfold prepare_procedures_memory,
@@ -1456,16 +1510,27 @@ Local Opaque Memory.load.
     [| discriminate].
   unfold reserve_component_blocks in Hload.
   destruct (ComponentMemoryExtra.reserve_blocks
-              (ComponentMemory.prealloc (odflt emptym (prog_buffers p C)))
+              (ComponentMemory.prealloc (*(odflt emptym (prog_buffers p C))*)
+                 match prog_buffers p C with
+                    | Some buf => setm emptym Block.local buf
+                    | None => emptym
+                 end
+              )
               (length (elementsm (odflt emptym (prog_procedures p C)))))
     as [Cmem' bs] eqn:Hcase.
   rewrite Hcase in Hload.
   simpl in Hload.
   rewrite (wfprog_defined_buffers Hwf) in Hdomm.
-  move: Hdomm => /dommP => [[Cbufs HCbufs]].
-  rewrite HCbufs in Hcase. simpl in Hcase.
+  move: Hdomm => /dommP => [[buf Hbuf]].
+  rewrite Hbuf in Hcase. simpl in Hcase.
   assert (Hload' :
-            ComponentMemory.load (ComponentMemory.prealloc Cbufs) b o = Some v).
+            ComponentMemory.load
+              (ComponentMemory.prealloc
+                 (*Cbufs*)
+                 (setm emptym Block.local buf)
+              )
+              b
+              o = Some v).
   {
     (* by corresponding memory lemma *)
     eapply ComponentMemoryExtra.load_before_reserve_blocks.
@@ -1474,17 +1539,18 @@ Local Opaque Memory.load.
   rewrite ComponentMemory.load_prealloc in Hload'.
   destruct (0 <=? o)%Z eqn:Hoff;
     [| discriminate].
-  destruct (Cbufs b) as [buf |] eqn:Hb;
+  destruct ((*Cbufs b*) setm emptym Block.local buf b) as [buf_descr |] eqn:Hb;
     [| discriminate].
-  simpl. exists Cbufs, buf.
-  split; [assumption |].
-  split; [assumption |].
+  simpl. exists (*Cbufs,*) buf_descr.
+  rewrite Hbuf. rewrite setmE in Hb.
+  destruct (@eq_op (Ord.eqType nat_ordType) b Block.local) eqn:eb; try discriminate.
+  inversion Hb; subst; clear Hb. intuition.
   unfold Buffer.nth_error.
   destruct o as [| op | on].
-  - destruct buf as [n | vs].
+  - destruct buf_descr as [n | vs].
     + rewrite ltb_0_Z_nat in Hload'. assumption.
     + assumption.
-  - destruct buf as [n | vs].
+  - destruct buf_descr as [n | vs].
     + rewrite ltb_Z_nat in Hload'. assumption.
     + assumption.
   - discriminate.
@@ -1492,14 +1558,16 @@ Qed.
 
 (* Alternative statements? *)
 Theorem prog_buffer_ptr :
-  forall p C bufs b buf o ptr,
+  forall p C (*bufs b*) buf o ptr,
     well_formed_program p ->
-    prog_buffers p C = Some bufs ->
-    bufs b = Some buf ->
+    prog_buffers p C = Some buf ->
+    (*bufs b = Some buf ->*)
     Buffer.nth_error buf o = Some (Ptr ptr) ->
     False.
 Proof.
-  intros p C bufs b buf o ptr Hwf Hbufs Hbuf Hptr.
+  intros p C (*bufs b*) buf o ptr Hwf (*Hbufs*) Hbuf Hptr.
+  (*TODO: FIXME *)
+  (*******************************************************
   assert (Hdomm : b \in domm bufs) by (apply /dommP; now eauto).
   pose proof wfprog_well_formed_buffers Hwf Hbufs Hdomm as Hwfb.
   unfold Buffer.well_formed_buffer_opt in Hwfb.
@@ -1523,7 +1591,9 @@ Proof.
       discriminate.
     + discriminate.
 Qed.
-
+   *******************************************)
+Admitted.
+  
 (* RB: Slight "misnomer" because of the presence of matching_mains.
    Closely connected to linkable, but not exactly the same at this
    level. Is there a benefit to combining these two in a definition? *)
