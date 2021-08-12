@@ -13,9 +13,26 @@ Module Block.
 End Block.
 
 Module Permission.
-  Definition id := nat.
-  Definition code : id := 0.
-  Definition data : id := 1.
+  Variant id :=
+  | code
+  | data.
+
+  Definition eqb (p1 p2 : id) : bool :=
+    match p1, p2 with
+    | code, code
+    | data, data
+      => true
+    | _, _
+      => false
+    end.
+
+  Lemma eqP : Equality.axiom eqb.
+  Proof.
+    intros [] []; now constructor.
+  Qed.
+
+  Definition eqMixin: Equality.mixin_of id := EqMixin eqP.
+  Canonical eqType := Eval hnf in EqType id eqMixin.
 End Permission.
 
 Module Pointer.
@@ -33,17 +50,17 @@ Module Pointer.
   Definition offset (p : t) : Block.offset :=
     let '(_, _, _, o) := p in o.
 
+  (* TODO: Restore use of =? notation, broken by inductive permissions. *)
   Definition eq (p1 p2 : t) : bool :=
     let '(P1, C1, b1, o1) := p1 in
     let '(P2, C2, b2, o2) := p2 in
-    (Nat.eqb P1 P2) && (Nat.eqb C1 C2) && (Nat.eqb b1 b2) && (Z.eqb o1 o2).
+    (Permission.eqb P1 P2) && (Nat.eqb C1 C2) && (Nat.eqb b1 b2) && (Z.eqb o1 o2).
 
   Lemma eqP : Equality.axiom eq.
   Proof.
     intros [[[perm1 C1] b1] o1] [[[perm2 C2] b2] o2].
     simpl.
-    destruct (perm1 =? perm2) eqn:Hcase1;
-      move: Hcase1 => /eqP => Hcase1;
+    destruct (Permission.eqP perm1 perm2);
       destruct (C1 =? C2) eqn:Hcase2;
       move: Hcase2 => /eqP => Hcase2;
       destruct (b1 =? b2) eqn:Hcase3;
@@ -61,7 +78,7 @@ Module Pointer.
   Definition leq (p1 p2 : t) : option bool :=
     let '(P1, C1, b1, o1) := p1 in
     let '(P2, C2, b2, o2) := p2 in
-    if (Nat.eqb P1 P2) && (Nat.eqb C1 C2) && (Nat.eqb b1 b2) then
+    if (Permission.eqb P1 P2) && (Nat.eqb C1 C2) && (Nat.eqb b1 b2) then
       Some ((o1 <=? o2) % Z)
     else
       None.
@@ -136,7 +153,7 @@ Definition is_ptr (v : value) : bool :=
 Definition eqvalue v1 v2 :=
   match v1, v2 with
   | Int z1, Int z2 => z1 == z2
-  | Ptr p1, Ptr p2 => p1 == p2
+  | Ptr p1, Ptr p2 => Pointer.eq p1 p2
   (* RB: TODO: From FG, however should Undef be equal to itself? *)
   | Undef, Undef => true
   | _, _ => false
@@ -148,8 +165,12 @@ Proof.
                  apply: (iffP idP); move => H; inversion H ; try constructor.
   by move: H => /Z.eqb_spec => H; rewrite H.
   done.
-  by move: H => /pair_eqP => H; rewrite H.
-  done.
+  by move: H => /Pointer.eqP => H; rewrite H.
+  destruct p2 as [[[p C] b] o].
+    apply /andP. split; last by apply /eqP.
+    apply /andP. split; last by apply /eqP.
+    apply /andP. split; last by apply /eqP.
+    by apply /Permission.eqP.
 Qed.
 
 Definition value_eqMixin: Equality.mixin_of value := EqMixin eqvalueP.
@@ -189,7 +210,7 @@ Definition eval_binop (op : binop) (v1 v2 : value) : value :=
   | Add,   Int n,  Ptr p  => Ptr (Pointer.add p n)
   | Minus, Ptr p1, Ptr p2 => let '(P1, C1, b1, o1) := p1 in
                              let '(P2, C2, b2, o2) := p2 in
-                             if (Nat.eqb P1 P2) && (Nat.eqb C1 C2) && (Nat.eqb b1 b2) then
+                             if (Permission.eqb P1 P2) && (Nat.eqb C1 C2) && (Nat.eqb b1 b2) then
                                Int (o1 - o2)
                              else
                                Undef
@@ -239,9 +260,9 @@ Lemma eval_binop_ptr :
       apply Pointer.sub_preserves_block.
   - destruct t as [[[tp tc] tb] to].
     destruct t0 as [[[t0p t0c] t0b] t0o].
-    destruct ((tp =? t0p) && (tc =? t0c) && (tb =? t0b)); discriminate.
+    destruct ((Permission.eqb tp t0p) && (tc =? t0c) && (tb =? t0b)); discriminate.
   - destruct (Pointer.leq t t0); discriminate.
-Qed.    
+Qed.
 
 Lemma eval_binop_int :
   forall op v1 v2 i,
@@ -272,13 +293,15 @@ Proof.
     try discriminate.
   - left; do 2 eexists; intuition.
   - left; do 2 eexists; intuition.
-  - destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Heq;
+  - destruct ((Permission.eqb perm1 perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Heq;
       try discriminate.
     assert (perm1 = perm2 /\ cid1 = cid2 /\ bid1 = bid2) as [H1 [H2 H3]]; subst.
     { 
       pose proof andb_prop _ _ Heq as [Heq' H3].
       pose proof andb_prop _ _ Heq' as [H1 H2].
-      intuition; by apply beq_nat_true.
+      intuition;
+        try by apply beq_nat_true.
+        by move: H1 => /Permission.eqP.
     }
     right; right; do 2 eexists; eauto; intuition.
   - left; do 2 eexists; intuition.
@@ -287,13 +310,15 @@ Proof.
     right; left; do 2 eexists; eauto; intuition; discriminate.
   - left; do 2 eexists; intuition.
   - unfold Pointer.leq in *.
-    destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Heq;
+    destruct ((Permission.eqb perm1 perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Heq;
       try discriminate.
     assert (perm1 = perm2 /\ cid1 = cid2 /\ bid1 = bid2) as [H1 [H2 H3]]; subst.
     { 
       pose proof andb_prop _ _ Heq as [Heq' H3].
       pose proof andb_prop _ _ Heq' as [H1 H2].
-      intuition; by apply beq_nat_true.
+      intuition;
+        try by apply beq_nat_true.
+        by move: H1 => /Permission.eqP.
     }
     right; right; do 2 eexists; eauto; intuition.
 Qed.
@@ -315,10 +340,10 @@ Lemma eval_binop_undef :
       (op <> Add /\ op <> Minus /\ exists i p, v1 = Ptr p /\ v2 = Int i)
       \/
       (op = Leq /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
-                                 Pointer.permission p1 =? Pointer.permission p2 = false)
+                                 Permission.eqb (Pointer.permission p1) (Pointer.permission p2) = false)
       \/
       (op = Minus /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
-                                 Pointer.permission p1 =? Pointer.permission p2 = false)
+                                 Permission.eqb (Pointer.permission p1) (Pointer.permission p2) = false)
       \/
       (op = Leq /\ exists p1 p2, v1 = Ptr p1 /\ v2 = Ptr p2 /\
                                  Pointer.component p1 =? Pointer.component p2 = false)
@@ -342,7 +367,7 @@ Proof.
   (* 11 subgoals remain. *)
   - do 3 right. left. intuition. by do 2 eexists.
   - do 4 right. left. intuition; try discriminate. by do 2 eexists.
-  - destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Hvalid;
+  - destruct ((Permission.eqb perm1 perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Hvalid;
       try discriminate.
     apply andb_false_iff in Hvalid as [H1 | H2].
     + apply andb_false_iff in H1 as [H1 | H2].
@@ -357,7 +382,7 @@ Proof.
   - do 4 right. left. intuition; try discriminate. by do 2 eexists.
   - do 5 right. left. intuition; try discriminate. by do 2 eexists.
   - unfold Pointer.leq in Heval.
-    destruct ((perm1 =? perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Hvalid;
+    destruct ((Permission.eqb perm1 perm2) && (cid1 =? cid2) && (bid1 =? bid2)) eqn:Hvalid;
       try discriminate.
     apply andb_false_iff in Hvalid as [H1 | H2].
     + apply andb_false_iff in H1 as [H1 | H2].

@@ -1501,10 +1501,9 @@ Local Opaque Memory.load.
   unfold omap, obind, oapp.
   setoid_rewrite mkfmapfE.
   intros p [[[perm C] b] o] v Hwf Hload.
-  simpl in Hload.
-  destruct (perm =? Permission.data) eqn:Hcase;
+  destruct (Permission.eqb perm Permission.data) eqn:Hperm;
+    rewrite Hperm in Hload;
     [| discriminate].
-  move: Hcase => /Nat.eqb_spec ->.
   destruct (C \in domm (prog_interface p)) eqn:Hdomm;
     rewrite Hdomm in Hload;
     [| discriminate].

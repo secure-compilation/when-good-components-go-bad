@@ -90,7 +90,7 @@ Definition component_ptrs (p: program) (cid: Component.id) : {fset (Component.id
 
 Definition value_to_data_pointer_err v : option (Component.id * Block.id) :=
   match v with | Ptr (perm, cid, bid, _) =>
-                 if perm =? Permission.data then Some (cid, bid) else None
+                 if Permission.eqb perm Permission.data then Some (cid, bid) else None
           | _ => None
   end.
 
@@ -126,7 +126,7 @@ Lemma Memory_load_mem_ptrs :
     (vC, vB) \in mem_data_ptrs m.
 Proof.
   intros ????????. unfold Memory.load. simpl.
-  destruct (aP =? Permission.data) eqn:eaP; destruct (m aC) eqn:eaC;
+  destruct (Permission.eqb aP Permission.data) eqn:eaP; destruct (m aC) eqn:eaC;
     intros Hload; try discriminate.
   destruct (ComponentMemory.load_block_load s aB vC vB) as [_ Honlyif].
   unfold mem_data_ptrs.
@@ -815,7 +815,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
   if (Pointer.offset pc <? 0) % Z then
     None
   else
-    if (Pointer.permission pc =? Permission.code) then
+    if (Permission.eqb (Pointer.permission pc) Permission.code) then
       do instr <- nth_error P_code (Z.to_nat (Pointer.offset pc));
       (* decode and execute the instruction *)
       match instr with
@@ -876,7 +876,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         match Register.get r regs with
         | Ptr pc' =>
           if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-            if Pointer.permission pc' =? Permission.code then
+            if Permission.eqb (Pointer.permission pc') Permission.code then
               ret (E0, (gps, mem, regs, pc'))
             else
               None
@@ -965,7 +965,7 @@ Proof.
     end;
     (* simplify *)
     simpl; unfold code in *;
-      rewrite -> Hprocs, HP_code, Hinstr, Hperm, <- beq_nat_refl;
+      rewrite -> Hprocs, HP_code, Hinstr, Hperm; (* <- beq_nat_refl; *)
     (* the program counter is good *)
     match goal with
     | Hpc: (Pointer.offset _ >= 0) % Z |- _ =>
@@ -1081,11 +1081,11 @@ Proof.
            rewrite -> HC_procs, HP_code, Hinstr, rewr in Heval_step.
            assert (Pointer.permission pc0 = Permission.code) as Hperm.
            {
-             destruct (Pointer.permission pc0 =? Permission.code) eqn:e;
+             destruct (Permission.eqb (Pointer.permission pc0) Permission.code) eqn:e;
                try discriminate.
-             by apply beq_nat_true.
+             by apply: Permission.eqP.
            }
-           rewrite -> Hperm, <- beq_nat_refl in Heval_step.
+           rewrite -> Hperm in Heval_step.
            destruct instr; inversion Heval_step; subst; clear Heval_step.
              (*; try (match goal with
                   | Hpcfalse: (Pointer.offset ?PC <? 0) % Z = false,
@@ -1124,7 +1124,7 @@ Proof.
            *** destruct (Register.get r regs0) eqn:Hreg;
                  try discriminate.
                unfold Memory.load in *.
-               destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm';
+               destruct (Permission.eqb (Pointer.permission t0) Permission.data) eqn:Hperm';
                  try discriminate.
                destruct (mem0 (Pointer.component t0)) eqn:Hmem;
                  try discriminate.
@@ -1143,7 +1143,7 @@ Proof.
              destruct (Register.get r regs0) eqn:Hreg;
                try discriminate.
              unfold Memory.store in *.
-             destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm';
+             destruct (Permission.eqb (Pointer.permission t0) Permission.data) eqn:Hperm';
                try discriminate.
              destruct (mem0 (Pointer.component t0)) eqn:Hmem;
                try discriminate.
@@ -1219,14 +1219,14 @@ Proof.
                destruct (Component.eqb (Pointer.component t0) (Pointer.component pc0))
                         eqn:Hcompcheck;
                  try discriminate.
-               destruct (Pointer.permission t0 =? Permission.code) eqn:Hcode;
+               destruct (Permission.eqb (Pointer.permission t0) Permission.code) eqn:Hcode;
                  try discriminate.
                inversion H1; subst.
                eapply Jump with (pc':=pc);
                  try reflexivity.
                **** eexists. eexists. eauto.
                **** assumption.
-               **** apply Nat.eqb_eq. assumption.
+               **** by apply /Permission.eqP.
                **** apply Nat.eqb_eq. assumption.
 
            *** (*match goal with
@@ -1283,7 +1283,7 @@ Proof.
            rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step.
            rewrite Hinstr in Heval_step.
            destruct ((Pointer.offset pc0 <? 0) % Z); try discriminate.
-           destruct (Pointer.permission pc0 =? Permission.code);
+           destruct (Permission.eqb (Pointer.permission pc0) Permission.code);
              try discriminate.
       * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
           as [instr | ] eqn:Hinstr.
@@ -1301,7 +1301,7 @@ Proof.
            rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step.
            rewrite Hinstr in Heval_step.
            destruct ((Pointer.offset pc0 <? 0) % Z); try discriminate.
-           destruct (Pointer.permission pc0 =? Permission.code);
+           destruct (Permission.eqb (Pointer.permission pc0) Permission.code);
              try discriminate.
     + simpl in Heval_step.
       unfold code in *.
@@ -1591,7 +1591,7 @@ case: st1 t1 st2 / Hstep => //=.
     subst; auto.
   (*******************************************
   simpl.
-  destruct (perm =? Permission.code) eqn:e; auto.
+  destruct (Permission.eqb perm Permission.code) eqn:e; auto.
   assert (exists procs, prog_procedures p (Pointer.component pc) = Some procs)
     as [procs HShouldBeProvable2].
   { by admit. }
@@ -1611,7 +1611,7 @@ case: st1 t1 st2 / Hstep => //=.
 - intros ? ? ? ? ? ? ? ? Hexec Hfind _.
   specialize (find_label_in_component_1 _ _ _ _ Hfind) as Hcomp.
   destruct ptr as [[[perm cid] bid] ?].
-  destruct (perm =? Permission.code) eqn:e; auto.
+  destruct (Permission.eqb perm Permission.code) eqn:e; auto.
   specialize (domm_genv_procedures p) as Hgenv_procedures.
   specialize (wfprog_defined_procedures valid_program) as Hprog_procedures.
   rewrite Hprog_procedures in Hgenv_procedures.
@@ -1964,7 +1964,7 @@ Proof.
     match goal with
     | Hstore : Memory.store _ ?PTR (Register.get ?REG ?REGS) = _ |- _ =>
       unfold Memory.store in Hstore;
-        destruct (Pointer.permission PTR =? Permission.data) eqn:Hperm;
+        destruct (Permission.eqb (Pointer.permission PTR) Permission.data) eqn:Hperm;
         [| discriminate];
         destruct (mem (Pointer.component PTR)) as [memC |] eqn:Hcase1;
         [| discriminate];
@@ -2588,7 +2588,7 @@ Proof.
                  (cid, bid) \in (program_ptrs p)).
       {
         intros cid bid HvPtrSome. destruct vPtr as [[[permv cidv] bidv]?]. simpl in HvPtrSome.
-        destruct (permv =? Permission.data) eqn:epermv; try discriminate.
+        destruct (Permission.eqb permv Permission.data) eqn:epermv; try discriminate.
         inversion HvPtrSome. subst cid bid.
         simpl in Hwfi'.
         destruct Hwfi' as [_ [Hperm' [bufs [Hprog_buffers Hbidv]]]].
