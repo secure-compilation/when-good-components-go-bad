@@ -946,13 +946,14 @@ Section Definability.
 
     (* RB: NOTE: We could make this stronger by noting which component is being
        executed, as this is the only one that can change its own metadata. *)
-    Definition well_formed_memory_snapshot (mem_snapshot mem : Memory.t) : Prop :=
+    Definition well_formed_memory_snapshot
+               prefix (mem_snapshot mem : Memory.t) : Prop :=
       (* forall ptr, *)
       (*   Pointer.block ptr <> Block.local -> *)
       (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
 
       forall Cb,
-        addr_shared_so_far Cb (project_non_inform t) ->
+        addr_shared_so_far Cb (project_non_inform prefix) ->
         (* Precondition on Cb:*)
         (*rename_addr_option
           (sigma_shifting_wrap_bid_in_addr
@@ -965,10 +966,10 @@ Section Definability.
        local block [Block.local], which should always be *private memory* (from
        the goodness of the trace) and as a result isn't recorded on the memory
        snapshot. *)
-    Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C o v mem' :
-      well_formed_memory_snapshot mem_snapshot mem ->
+    Lemma metadata_store_preserves_snapshot prefix mem_snapshot mem Pm C o v mem' :
+      well_formed_memory_snapshot prefix mem_snapshot mem ->
       Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
-      well_formed_memory_snapshot mem_snapshot mem'.
+      well_formed_memory_snapshot prefix mem_snapshot mem'.
     Proof.
       move=> WFMS STORE Cb Hshr (*Cb' Hren*).
       case: (WFMS Cb); auto.
@@ -1021,9 +1022,10 @@ Section Definability.
           split; eauto.
     Qed.
 
-    Definition postcondition_event_snapshot (e: event_inform) (mem: Memory.t): Prop :=
+    Definition postcondition_event_snapshot
+               prefix (e: event_inform) (mem: Memory.t): Prop :=
       let mem_snapshot := mem_of_event_inform e in
-      well_formed_memory_snapshot mem_snapshot mem.
+      well_formed_memory_snapshot (prefix ++ [:: e]) mem_snapshot mem.
 
     (* NOTE: Seems to talk about the memory /before/ executing the event. Prerequisite
      to do the event *)
@@ -1214,8 +1216,8 @@ Section Definability.
             shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
             Machine.Intermediate.Register.get R r = v'.
 
-    Definition postcondition_event_memory (e: event_inform) (mem': Memory.t) :=
-      postcondition_event_snapshot e mem' /\
+    Definition postcondition_event_memory prefix (e: event_inform) (mem': Memory.t) :=
+      postcondition_event_snapshot prefix e mem' /\
       postcondition_event_registers e mem'.
 
 
@@ -1274,10 +1276,12 @@ Section Definability.
             postcondition_event_registers_ini C mem;
         wfmem: forall prefix' e,
             prefix = prefix' ++ [:: e] ->
-            postcondition_event_memory e mem
+            postcondition_event_memory prefix' e mem
       }.
 
     (* NOTE: it doesn't preserve [well_formed_memory].*)
+
+    (***********************************************
     Lemma well_formed_memory_star_postcondition:
       forall p cs prefix e mem,
         mem = CS.s_memory cs ->
@@ -1286,6 +1290,7 @@ Section Definability.
           Star (CS.sem p) cs (project_non_inform [:: e]) cs' /\
           postcondition_event_memory e (CS.s_memory cs').
     Admitted.
+    *****************************************************)
 
     Lemma counter_value_snoc prefix C e :
       counter_value C (prefix ++ [e])
@@ -2211,6 +2216,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                   rename n into n0. rename v into v0. rename Hload into Hload0. rename mem' into mem'0. rename s0 into mem'. (* Trying to preserve proof script... *)
                   split.
                   + intros [cid bid] Hshared.
+                    subst prefix.
+                    rewrite CS.CS.project_non_inform_append in Hshared.
+                    simpl in Hshared. rewrite E0_right in Hshared.
                     specialize (Hsnapshot (cid, bid) Hshared).
                     unfold memory_shifts_memory_at_shared_addr,
                     memory_renames_memory_at_shared_addr,
@@ -2459,6 +2467,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                   (* rename n into n0. *) rename v into v0. rename Hload into Hload0. rename mem' into mem'0. rename s0 into mem'. (* Trying to preserve proof script... *)
                   split.
                   + intros [cid bid] Hshared.
+                    subst prefix.
+                    rewrite CS.CS.project_non_inform_append in Hshared.
+                    simpl in Hshared. rewrite E0_right in Hshared.
                     specialize (Hsnapshot (cid, bid) Hshared).
                     unfold memory_shifts_memory_at_shared_addr,
                     memory_renames_memory_at_shared_addr,
