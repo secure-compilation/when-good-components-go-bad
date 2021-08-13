@@ -288,15 +288,15 @@ Section Definability.
      immediately after the back-translation counter in position 0.
      RB: TODO: Phrase in terms of [Register.to_nat]. *)
   Definition reg_offset (reg : Eregister) : Z :=
-    4 +
+    (* 4 + *)
     match reg with
-    | E_R_ONE  => 0
-    | E_R_COM  => 1
-    | E_R_AUX1 => 2
-    | E_R_AUX2 => 3
-    | E_R_RA   => 4
-    | E_R_SP   => 5
-    | E_R_ARG  => 6
+    | E_R_ONE  => 4
+    | E_R_COM  => 5
+    | E_R_AUX1 => 6
+    | E_R_AUX2 => 7
+    | E_R_RA   => 8
+    | E_R_SP   => 9
+    | E_R_ARG  => 10
     end.
 
   Lemma reg_offset_inj :
@@ -1531,6 +1531,19 @@ Section Definability.
       auto.
     Qed.
 
+    (* TODO: Relocate *)
+    Remark reg_offset0 r : reg_offset r <> 0%Z.
+    Proof.
+      destruct r; discriminate.
+    Qed.
+
+    Remark pointer_reg_offset0
+           (P : Permission.id) (C : Component.id) (b : Block.id) r :
+      (P, C, b, reg_offset r) <> (P, C, b, 0%Z).
+    Proof.
+      injection. apply reg_offset0.
+    Qed.
+
     (* TODO: [DynShare] Trace relation should appear here too!
 
        Well-bracketedness, etc., probably need to be rewritten to operate "in
@@ -1590,7 +1603,6 @@ Section Definability.
                     (Source.prepare_buffers p)
                     (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)
                     Undef Undef) as [mem1 Hmem1]; eauto.
-(* FIXME
         destruct (Memory.store_after_load
                     mem1
                     (Permission.data, Component.main, Block.local, reg_offset E_R_AUX1)
@@ -1649,11 +1661,13 @@ Section Definability.
         split; [| split; [| split]].
         + rewrite /CS.initial_machine_state /Source.prog_main
                   find_procedures_of_trace_main.
+(* FIXME
           repeat (take_step; eauto). instantiate (1 := Int 1%Z).
           admit.
           repeat (take_step; eauto).
-          now apply star_refl.
-
+          (* now apply star_refl. *)
+*)
+          admit.
         + reflexivity.
         + now do 2 constructor.
         + econstructor; eauto.
@@ -1696,8 +1710,6 @@ Section Definability.
                   all: admit.
             -- by move=> [].
           * unfold valid_procedure. now auto.
-*)
-        admit.
     - (* Inductive step. *)
       rewrite -catA => Et.
       assert (wf_int_pref' : well_formed_intermediate_prefix (prefix ++ [:: e])).
