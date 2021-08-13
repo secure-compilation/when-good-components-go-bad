@@ -360,7 +360,7 @@ Section Definability.
       if Permission.eqb perm Permission.data then
         (* We make the implicit assumption that all such values refer to
            the local buffer, which should follow from well-formedness. *)
-        E_binop Add LOCALBUF (E_val (Int o))
+        E_binop Add (E_deref LOCALBUF) (E_val (Int o))
         (* Ptr (perm, cid, S bid, o) *)
         (* E_binop Add E_local (E_val (Int (8 + o))) *)
       else
