@@ -339,8 +339,12 @@ Section Definability.
   Definition nop_expr: expr := E_val (Int 0%Z).
   Definition error_expr : expr := E_binop Mul (E_val (Int 0)) E_local.
 
-  Definition INITFLAG := E_binop Add E_local (E_val (Int 2%Z)).
-  Definition LOCALBUF := E_binop Add E_local (E_val (Int 3%Z)).
+  Definition INITFLAG_offset := 2%Z.
+  Definition LOCALBUF_offset := 3%Z.
+  Definition LOCALBUF_blockid : Block.id := 1.
+
+  Definition INITFLAG := E_binop Add E_local (E_val (Int INITFLAG_offset)).
+  Definition LOCALBUF := E_binop Add E_local (E_val (Int LOCALBUF_offset)).
 
   (* Translation of constant values to expressions, with special attention
      given to pointers. *)
@@ -946,12 +950,18 @@ Section Definability.
 
     (* RB: NOTE: We could make this stronger by noting which component is being
        executed, as this is the only one that can change its own metadata. *)
-    Definition well_formed_memory_snapshot
-               prefix (mem_snapshot mem : Memory.t) : Prop :=
+    Definition well_formed_memory_snapshot_steadystate
+               (mem_snapshot mem : Memory.t) (C: Component.id) : Prop :=
       (* forall ptr, *)
       (*   Pointer.block ptr <> Block.local -> *)
       (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
 
+      forall (b: Block.id),
+        b <> Block.local ->
+        memory_shifts_memory_at_shared_addr
+          (uniform_shift 1) all_zeros_shift (C, b) mem mem_snapshot.
+      
+      (***************************************************
       forall Cb,
         addr_shared_so_far Cb (project_non_inform prefix) ->
         (* Precondition on Cb:*)
@@ -961,33 +971,51 @@ Section Definability.
         = Some Cb' ->*)
         memory_shifts_memory_at_shared_addr
           all_zeros_shift (uniform_shift 1) Cb mem_snapshot mem.
+       *********************************************)
+
+    Definition well_formed_memory_snapshot_uninitialized
+               (mem_snapshot mem : Memory.t) (C: Component.id) : Prop :=
+      
+      (exists compMem buf,
+        mem_snapshot C = Some compMem /\
+        prog_buffers C = Some buf /\
+        ComponentMemory.next_block compMem = 1 /\
+        compMem = ComponentMemory.prealloc (mkfmap [(Block.local, buf)])
+      )
+      /\
+      (exists src_compMem,
+          mem C = Some src_compMem /\
+          ComponentMemory.next_block src_compMem = LOCALBUF_blockid
+      ).
+    
 
     (* JT: NOTE: The reason this lemma should hold is that the store is to the
        local block [Block.local], which should always be *private memory* (from
        the goodness of the trace) and as a result isn't recorded on the memory
        snapshot. *)
-    Lemma metadata_store_preserves_snapshot prefix mem_snapshot mem Pm C o v mem' :
-      well_formed_memory_snapshot prefix mem_snapshot mem ->
+    Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C Csteady o v mem' :
+      well_formed_memory_snapshot_steadystate mem_snapshot mem Csteady ->
       Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
-      well_formed_memory_snapshot prefix mem_snapshot mem'.
+      well_formed_memory_snapshot_steadystate mem_snapshot mem' Csteady.
     Proof.
-      move=> WFMS STORE Cb Hshr (*Cb' Hren*).
-      case: (WFMS Cb); auto.
+      move=> WFMS STORE b Hshr (*Cb' Hren*).
+      case: (WFMS b); auto.
       rewrite /memory_shifts_memory_at_shared_addr
               /memory_renames_memory_at_shared_addr
       => Cbren [eCbren [WFMS1 WFMS2]].
       eexists.
       split; eauto; split; intros ? ? Hload.
-      - rewrite (Memory.load_after_store _ _ _ _ _ STORE).
-        specialize (WFMS1 _ _ Hload) as [v' [Gload Gren]].
-        exists v'.
-        destruct (Pointer.eqP (Permission.data, Cbren.1, Cbren.2, offset)
+      - destruct Cbren as [Cren bren]. simpl in *.
+        (*rewrite (Memory.load_after_store _ _ _ _ _ STORE). *)
+        (*specialize (WFMS1 _ _ Hload) as [v' [Gload Gren]]. *)
+        (* exists v'. *)
+        destruct (Pointer.eqP (Permission.data, Cren, bren, offset)
                               (Pm, C, Block.local, o)) as [eCbren_local | eCbren_local].
-        + destruct Cbren as [? ?].
-          injection eCbren_local as ? ? ? ?. subst.
+        + injection eCbren_local as ? ? ? ?. subst.
           unfold Block.local in *.
+          (** TODO: FIXME: *)
+          (***********************************************************************
           (* eCbren is a contradiction. Obvious unfolding + arithmetic *)
-          destruct Cb as [Cbc Cbb].
           unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
             in *.
           destruct (sigma_shifting_lefttoright_option
@@ -1021,11 +1049,18 @@ Section Definability.
           eexists.
           split; eauto.
     Qed.
+           ***************************************************************)
+Admitted. 
 
-    Definition postcondition_event_snapshot
-               prefix (e: event_inform) (mem: Memory.t): Prop :=
+    Definition postcondition_event_snapshot_steadystate
+               (e: event_inform) (mem: Memory.t) (C: Component.id) : Prop :=
       let mem_snapshot := mem_of_event_inform e in
-      well_formed_memory_snapshot (prefix ++ [:: e]) mem_snapshot mem.
+      well_formed_memory_snapshot_steadystate mem_snapshot mem C.
+
+    Definition postcondition_event_snapshot_uninitialized
+               (e: event_inform) (mem: Memory.t) (C: Component.id) : Prop :=
+      let mem_snapshot := mem_of_event_inform e in
+      well_formed_memory_snapshot_uninitialized mem_snapshot mem C.
 
     (* NOTE: Seems to talk about the memory /before/ executing the event. Prerequisite
      to do the event *)
@@ -1216,16 +1251,43 @@ Section Definability.
             shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
             Machine.Intermediate.Register.get R r = v'.
 
-    Definition postcondition_event_memory prefix (e: event_inform) (mem': Memory.t) :=
-      postcondition_event_snapshot prefix e mem' /\
+    Definition postcondition_event_memory_steadystate
+               (e: event_inform) (mem': Memory.t) (C: Component.id) :=
+      postcondition_event_snapshot_steadystate e mem' C /\
       postcondition_event_registers e mem'.
 
+    Definition postcondition_event_memory_uninitialized
+               (e: event_inform) (mem': Memory.t) (C: Component.id) :=
+      postcondition_event_snapshot_uninitialized e mem' C /\
+      postcondition_event_registers e mem'.
+    
 
     Definition postcondition_event_registers_ini (C: Component.id) (mem: Memory.t): Prop :=
         forall (R: Machine.register) (n: Z),
           reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
           Memory.load mem (Permission.data, C, Block.local, n) = Some Undef.
 
+
+    Definition postcondition_steady_state
+               (e: event_inform) (mem: Memory.t) (C: Component.id) :=
+      Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
+      Some (Int 1%Z)
+      /\
+      Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) =
+      Some (Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z))
+      /\
+      postcondition_event_memory_steadystate e mem C.
+
+    Definition postcondition_uninitialized
+               (e: event_inform) (mem: Memory.t) (C: Component.id) :=
+      Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
+      Some (Int 0%Z)
+      /\
+      Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) = Some Undef
+      /\
+      postcondition_event_memory_uninitialized e mem C.    
+    
+    
     Record well_formed_memory (prefix: trace event_inform) (mem: Memory.t) : Prop :=
       {
         wfmem_counter:
@@ -1273,10 +1335,33 @@ Section Definability.
          after having executed the event [e] *)
         wfmem_ini: forall C,
             prefix = [] ->
-            postcondition_event_registers_ini C mem;
+            postcondition_event_registers_ini C mem
+            /\
+            Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
+            Some (Int 0%Z)
+            /\
+            Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) =
+            Some Undef
+            /\
+            (exists src_compMem : ComponentMemory.t,
+                mem C = Some src_compMem /\
+                ComponentMemory.next_block src_compMem = LOCALBUF_blockid)
+        ;
         wfmem: forall prefix' e,
             prefix = prefix' ++ [:: e] ->
-            postcondition_event_memory prefix' e mem
+            (forall C,
+                component_buffer C ->
+                C = next_comp_of_event e ->
+                postcondition_steady_state e mem C) /\
+            (forall C,
+                component_buffer C ->
+                C <> next_comp_of_event e ->
+                (
+                  postcondition_steady_state e mem C
+                  \/
+                  postcondition_uninitialized e mem C
+                )
+            )
       }.
 
     (* NOTE: it doesn't preserve [well_formed_memory].*)
