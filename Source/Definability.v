@@ -2592,7 +2592,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) in Hload.
             destruct ptr as [[[ptrp ptrC] ptrb] ptro].
             assert (ptrp = Permission.data) by admit; subst ptrp.
-            set (saved := eval_binop Add (eval_binop Add (Ptr (Permission.data, C, Block.local, 0%Z)) (Int 3)) (Int ptro)).
+            set (saved := (eval_binop Add (Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z)) (Int ptro))).
             pose proof proj1 (Memory.store_some_load_some _ _ (*Ptr ptr*) saved) Hload as [mem'' Hstore'].
             (* Continue. *)
             exists (StackState C (callers s)).
@@ -2602,28 +2602,32 @@ Local Transparent expr_of_const_val loc_of_reg.
 Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
               -- reflexivity.
-              -- exact Hstore'.
-              -- (* Do recursive call. *)
-                  take_steps.
-                  ++ reflexivity.
-                  ++ now apply find_procedures_of_trace.
-                  ++ (* Now we are done with the event.
-                        We still need to process the external call check. *)
-                     take_steps.
-                     ** reflexivity.
-                     ** instantiate (1 := (Int 1)).
-                        admit.
-                     ** take_steps.
-                        --- reflexivity.
-                        --- assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
-                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
-                              last (now destruct v). (* Trivial property of register offsets. *)
-                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
-                              last easy.
-                            exact Hload0.
-                        --- unfold invalidate_metadata.
-                            take_steps.
-                            apply star_refl.
+              -- (* TODO: Obtain from invariants. *)
+                 instantiate (1 := Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z)).
+                 admit.
+              -- take_steps.
+                 ++ reflexivity.
+                 ++ exact Hstore'.
+                 ++ take_steps.
+                    ** reflexivity.
+                    ** now apply find_procedures_of_trace.
+                    ** (* Now we are done with the event.
+                          We still need to process the external call check. *)
+                       take_steps.
+                       --- reflexivity.
+                       --- instantiate (1 := (Int 1)).
+                           admit.
+                       --- take_steps.
+                           +++ reflexivity.
+                           +++ assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
+                                 last (now destruct v). (* Trivial property of register offsets. *)
+                               rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                                 last easy.
+                               exact Hload0.
+                           +++ unfold invalidate_metadata.
+                               take_steps.
+                               apply star_refl.
             * (* Reestablish invariant. *)
               econstructor; try reflexivity; try eassumption.
               { destruct s. exact wb. }
@@ -2704,9 +2708,288 @@ Local Transparent expr_of_const_val loc_of_reg.
                 - intro Hcontra. now destruct prefix.
                 - intros pref ev Hprefix.
                   apply rcons_inv in Hprefix as [? ?]; subst pref ev.
-                  destruct (wfmem wf_mem Hprefix01) as [Hsnapshot Hregs].
+                  destruct (wfmem wf_mem Hprefix01) as [Hsteady Hinitial].
                   (* rename n into n0. *) rename v into v0. rename Hload into Hload0. rename mem' into mem'0. rename s0 into mem'. (* Trying to preserve proof script... *)
                   split.
+                  + intros C' _ ?; subst C'. simpl.
+                    specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1))
+                      as [Hinitflag [Hlocalbuf [Hsnapshot Hregs]]].
+                    split; [| split; [| split]].
+                    (* The first two sub-goals are near-identical arguments on
+                       memory operations. *)
+                    * erewrite Memory.load_after_store_neq;
+                        last exact Hstore';
+                        last admit. (* Easy offset inequality. *)
+                      erewrite Memory.load_after_store_neq;
+                        last exact Hmem;
+                        last admit. (* Easy offset inequality. *)
+                      exact Hinitflag.
+                    * erewrite Memory.load_after_store_neq;
+                        last exact Hstore';
+                        last admit. (* Easy offset inequality. *)
+                      erewrite Memory.load_after_store_neq;
+                        last exact Hmem;
+                        last admit. (* Easy offset inequality. *)
+                      exact Hlocalbuf.
+                    (* ... *)
+                    * intros b Hb. simpl.
+                      specialize (Hsnapshot b Hb) as [[cid bid] [Hshift' [Hrename Hrename']]].
+                      assert (cid = C) by admit; subst cid.
+                      exists (C, bid). split; [| split].
+                      -- exact Hshift'.
+                      -- simpl. intros off v' Hload'.
+                         erewrite Memory.load_after_store_neq in Hload';
+                           last exact Hstore';
+                           last (injection; congruence).
+                         erewrite Memory.load_after_store_neq in Hload';
+                           last exact Hmem;
+                           last (injection; congruence).
+                         simpl in Hrename.
+                         specialize (Hrename off v' Hload') as [v'' [Hload'' Hrename'']].
+                         exists v''. split; congruence.
+                      -- simpl. intros off v' Hload'.
+                         simpl in Hrename'. subst mem'.
+                         specialize (Hrename' off v' Hload') as [v'' [Hload'' Hrename'']].
+                         exists v''. split.
+                         ++ erewrite Memory.load_after_store_neq;
+                              last exact Hstore';
+                              last (injection; congruence).
+                            erewrite Memory.load_after_store_neq;
+                              last exact Hmem;
+                              last (injection; congruence).
+                            exact Hload''.
+                         ++ exact Hrename''.
+                    * {
+                    subst mem'.
+                    intros n off v Hoffset Hload.
+                    simpl in *.
+                    (* subst v prefix. *)
+                    unfold postcondition_event_registers in Hregs.
+                    destruct (Z.eqb_spec (reg_offset v0) off) as [Heq | Hneq].
+                    * subst off.
+                      assert (v0 = CS.CS.reg_to_Ereg n)
+                        by (now apply reg_offset_inj in Heq).
+                      subst v0.
+                      assert (v = saved). {
+                        rewrite (Memory.load_after_store_eq _ _ _ _ Hstore') in Hload.
+                        now injection Hload as ?. }
+                      subst v.
+                      exists saved. (* exists (Int n0). *)
+                      split.
+                      -- simpl.
+                         unfold saved,
+                         uniform_shift, LOCALBUF_blockid, ssrnat.subn.
+                         simpl.
+                         unfold all_zeros_shift, uniform_shift, ssrnat.addn.
+                         simpl.
+                         admit. (* Dead end *)
+                      -- admit.
+                    * admit.
+                      }
+                  + admit.
+              }
+
+              (*         -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht]. *)
+              (*            ++ destruct prefix; discriminate. (* contra *) *)
+              (*            ++ subst prefix. destruct prefix0 as [| ? [|]]; discriminate. (* contra *) *)
+              (*            ++ rewrite Hprefix01 in Ht. *)
+              (*               symmetry in Ht. apply cats2_inv in Ht as [? [? ?]]. subst prefint eint1 eint2. *)
+              (*               inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |]; *)
+              (*                 subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6. *)
+              (*               subst t0. *)
+              (*               rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss. *)
+              (*               reflexivity. *)
+              (*       * setoid_rewrite Hcomp1 in Hregs. *)
+              (*         destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b) *)
+              (*           as [v' Hload']. *)
+              (*         rewrite Hoffset in Hload'. *)
+              (*         assert (v = v'). { *)
+              (*           assert (Hneq0 : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, cur_comp s, Block.local, off)). { *)
+              (*             subst off. now destruct (CS.CS.reg_to_Ereg n). *)
+              (*           } *)
+              (*           setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneq0 Hmem) in Hload'. *)
+              (*           assert (Hneqv0 : (Permission.data, C, Block.local, reg_offset v0) <> (Permission.data, cur_comp s, Block.local, off)). { *)
+              (*             injection as ?. contradiction. *)
+              (*           } *)
+              (*           rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneqv0 Hstore') in Hload'. *)
+              (*           rewrite Hload' in Hload. now injection Hload. *)
+              (*         } *)
+              (*         subst v'. *)
+              (*         destruct (Hregs _ _ _ Hoffset Hload') as [v' [Hshift' Hget']]. *)
+              (*         exists v'. *)
+              (*         split. *)
+              (*         -- assumption. *)
+              (*         -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht]. *)
+              (*            ++ destruct prefix; discriminate. (* contra *) *)
+              (*            ++ subst prefix. destruct prefix0 as [| ? [ | ]]; discriminate. (* contra *) *)
+              (*            ++ rewrite Hprefix01 in Ht. *)
+              (*               symmetry in Ht. apply cats2_inv in Ht as [? [? ?]]. subst prefint eint1 eint2. *)
+              (*               inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |]; *)
+              (*                 subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6. *)
+              (*               subst t0. *)
+              (*               rewrite Machine.Intermediate.Register.gso; *)
+              (*                 first exact Hget'. *)
+              (*               destruct n; destruct v0; try discriminate; contradiction. *)
+              (*         } *)
+              (*     + intros C' Hcomp Hnext. *)
+              (*       rewrite <- Hcomp1 in Hnext. *)
+              (*       specialize (Hinitial _ Hcomp Hnext) as [Hsteady' | Hinitial]. *)
+              (*       * destruct Hsteady' as [Hinitflag [Hlocalbuf Hsteady']]. *)
+              (*         left. split; [| split]. *)
+              (*         -- admit. (* Easy by store inequalities. *) *)
+              (*         -- admit. (* Easy by store inequalities. *) *)
+              (*         -- destruct Hsteady' as [Hsnapshot Hregs]. *)
+              (*            split. *)
+              (*            ++ intros b Hlocal. *)
+              (*               specialize (Hsnapshot b Hlocal) as [Cb [Hshift' [Hrename Hrename']]]. *)
+              (*               exists Cb. split; [| split]. *)
+              (*               ** exact Hshift'. *)
+              (*               ** intros off v' Hload. *)
+              (*                  erewrite Memory.load_after_store_neq in Hload; *)
+              (*                    last exact Hstore'; *)
+              (*                    last admit. (* Easy by component inequality. *) *)
+              (*                  erewrite Memory.load_after_store_neq in Hload; *)
+              (*                    last exact Hmem; *)
+              (*                    last admit. (* Easy by component inequality. *) *)
+              (*                  specialize (Hrename off v' Hload) as [v'' [Hload'' Hrename]]. *)
+              (*                  exists v''. split. *)
+              (*                  --- subst mem'. assumption. *)
+              (*                  --- congruence. *)
+              (*               ** intros off v' Hload. subst mem'. *)
+              (*                  specialize (Hrename' off v' Hload) as [v'' [Hload'' Hrename']].                               exists v''. split. *)
+              (*                  --- erewrite Memory.load_after_store_neq; *)
+              (*                        last exact Hstore'; *)
+              (*                        last admit. (* Easy by component inequality. *) *)
+              (*                      erewrite Memory.load_after_store_neq; *)
+              (*                        last exact Hmem; *)
+              (*                        last admit. (* Easy by component inequality. *) *)
+              (*                      assumption. *)
+              (*                  --- congruence. *)
+              (*            ++ { (* Same sub-proof on registers as above! *) *)
+              (*       subst mem'. *)
+              (*       intros n off v Hoffset Hload. *)
+              (*       simpl in *. *)
+              (*       (* subst v prefix. *) *)
+              (*       unfold postcondition_event_registers in Hregs. *)
+              (*       destruct (Z.eqb_spec (reg_offset v0) off) as [Heq | Hneq]. *)
+              (*       * subst off. *)
+              (*         assert (v0 = CS.CS.reg_to_Ereg n) *)
+              (*           by (now apply reg_offset_inj in Heq). *)
+              (*         subst v0. *)
+              (*         assert (v = Int n0). { *)
+              (*           rewrite (Memory.load_after_store_eq _ _ _ _ Hstore') in Hload. *)
+              (*           now injection Hload as ?. } *)
+              (*         subst v. *)
+              (*         exists (Int n0). *)
+              (*         split. *)
+              (*         -- now constructor. *)
+              (*         -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht]. *)
+              (*            ++ destruct prefix; discriminate. (* contra *) *)
+              (*            ++ subst prefix. destruct prefix0 as [| ? [|]]; discriminate. (* contra *) *)
+              (*            ++ rewrite Hprefix01 in Ht. *)
+              (*               symmetry in Ht. apply cats2_inv in Ht as [? [? ?]]. subst prefint eint1 eint2. *)
+              (*               inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |]; *)
+              (*                 subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6. *)
+              (*               subst t0. *)
+              (*               rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss. *)
+              (*               reflexivity. *)
+              (*       * setoid_rewrite Hcomp1 in Hregs. *)
+              (*         destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b) *)
+              (*           as [v' Hload']. *)
+              (*         rewrite Hoffset in Hload'. *)
+              (*         assert (v = v'). { *)
+              (*           assert (Hneq0 : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, cur_comp s, Block.local, off)). { *)
+              (*             subst off. now destruct (CS.CS.reg_to_Ereg n). *)
+              (*           } *)
+              (*           setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneq0 Hmem) in Hload'. *)
+              (*           assert (Hneqv0 : (Permission.data, C, Block.local, reg_offset v0) <> (Permission.data, cur_comp s, Block.local, off)). { *)
+              (*             injection as ?. contradiction. *)
+              (*           } *)
+              (*           rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneqv0 Hstore') in Hload'. *)
+              (*           rewrite Hload' in Hload. now injection Hload. *)
+              (*         } *)
+              (*         -- admit. *)
+              (*              } *)
+              (*       * right. *)
+              (*         destruct Hinitial as [Hinitflag [Hlocalbuf Hinitial]]. *)
+              (*         split; [| split]. *)
+              (*         -- admit. (* Easy, by component inequality. *) *)
+              (*         -- admit. (* Easy, by component inequality. *) *)
+              (*         -- destruct Hinitial as [Hsnapshot Hregs]. *)
+              (*            split. *)
+              (*            ++ destruct Hsnapshot as [Hprealloc Hnextblock]. *)
+              (*               split. *)
+              (*               ** destruct Hprealloc *)
+              (*                   as [Cmem [buf [HCmem [Hbuf [Hnextblock' Hprealloc]]]]]. *)
+              (*                  exists Cmem, buf. *)
+              (*                  split; [| split; [| split]]; try assumption. *)
+              (*                  simpl. congruence. *)
+              (*               ** destruct Hnextblock as [Cmem [HCmem Hnextblock]]. *)
+              (*                  exists Cmem. split; last assumption. *)
+              (*                  admit. (* Easy, by component inequality. *) *)
+              (*            ++ { (* Third repeat of the register invariant proof. *) *)
+              (*       subst mem'. *)
+              (*       intros n off v Hoffset Hload. *)
+              (*       simpl in *. *)
+              (*       (* subst v prefix. *) *)
+              (*       unfold postcondition_event_registers in Hregs. *)
+              (*       destruct (Z.eqb_spec (reg_offset v0) off) as [Heq | Hneq]. *)
+              (*       * subst off. *)
+              (*         assert (v0 = CS.CS.reg_to_Ereg n) *)
+              (*           by (now apply reg_offset_inj in Heq). *)
+              (*         subst v0. *)
+              (*         assert (v = Int n0). { *)
+              (*           rewrite (Memory.load_after_store_eq _ _ _ _ Hstore') in Hload. *)
+              (*           now injection Hload as ?. } *)
+              (*         subst v. *)
+              (*         exists (Int n0). *)
+              (*         split. *)
+              (*         -- now constructor. *)
+              (*         -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht]. *)
+              (*            ++ destruct prefix; discriminate. (* contra *) *)
+              (*            ++ subst prefix. destruct prefix0 as [| ? [|]]; discriminate. (* contra *) *)
+              (*            ++ rewrite Hprefix01 in Ht. *)
+              (*               symmetry in Ht. apply cats2_inv in Ht as [? [? ?]]. subst prefint eint1 eint2. *)
+              (*               inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |]; *)
+              (*                 subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6. *)
+              (*               subst t0. *)
+              (*               rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss. *)
+              (*               reflexivity. *)
+              (*       * setoid_rewrite Hcomp1 in Hregs. *)
+              (*         destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b) *)
+              (*           as [v' Hload']. *)
+              (*         rewrite Hoffset in Hload'. *)
+              (*         assert (v = v'). { *)
+              (*           assert (Hneq0 : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, cur_comp s, Block.local, off)). { *)
+              (*             subst off. now destruct (CS.CS.reg_to_Ereg n). *)
+              (*           } *)
+              (*           setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneq0 Hmem) in Hload'. *)
+              (*           assert (Hneqv0 : (Permission.data, C, Block.local, reg_offset v0) <> (Permission.data, cur_comp s, Block.local, off)). { *)
+              (*             injection as ?. contradiction. *)
+              (*           } *)
+              (*           rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hneqv0 Hstore') in Hload'. *)
+              (*           rewrite Hload' in Hload. now injection Hload. *)
+              (*         } *)
+              (*         subst v'. *)
+              (*         destruct (Hregs _ _ _ Hoffset Hload') as [v' [Hshift' Hget']]. *)
+              (*         exists v'. *)
+              (*         split. *)
+              (*         -- assumption. *)
+              (*         -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht]. *)
+              (*            ++ destruct prefix; discriminate. (* contra *) *)
+              (*            ++ subst prefix. destruct prefix0 as [| ? [ | ]]; discriminate. (* contra *) *)
+              (*            ++ rewrite Hprefix01 in Ht. *)
+              (*               symmetry in Ht. apply cats2_inv in Ht as [? [? ?]]. subst prefint eint1 eint2. *)
+              (*               inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |]; *)
+              (*                 subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6. *)
+              (*               subst t0. *)
+              (*               rewrite Machine.Intermediate.Register.gso; *)
+              (*                 first exact Hget'. *)
+              (*               destruct n; destruct v0; try discriminate; contradiction. *)
+              (*              } *)
+              (* } *)
+
+          + admit. (* Similarly. *)
                   + intros [cid bid] Hshared.
                     subst prefix.
                     rewrite CS.CS.project_non_inform_append in Hshared.
