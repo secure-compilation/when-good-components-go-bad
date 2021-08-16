@@ -998,59 +998,47 @@ Section Definability.
       Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
       well_formed_memory_snapshot_steadystate mem_snapshot mem' Csteady.
     Proof.
-      move=> WFMS STORE b Hshr (*Cb' Hren*).
+      move=> WFMS STORE b Hnot.
       case: (WFMS b); auto.
       rewrite /memory_shifts_memory_at_shared_addr
               /memory_renames_memory_at_shared_addr
       => Cbren [eCbren [WFMS1 WFMS2]].
-      eexists.
-      split; eauto; split; intros ? ? Hload.
-      - destruct Cbren as [Cren bren]. simpl in *.
-        (*rewrite (Memory.load_after_store _ _ _ _ _ STORE). *)
-        (*specialize (WFMS1 _ _ Hload) as [v' [Gload Gren]]. *)
-        (* exists v'. *)
-        destruct (Pointer.eqP (Permission.data, Cren, bren, offset)
-                              (Pm, C, Block.local, o)) as [eCbren_local | eCbren_local].
-        + injection eCbren_local as ? ? ? ?. subst.
-          unfold Block.local in *.
-          (** TODO: FIXME: *)
-          (***********************************************************************
-          (* eCbren is a contradiction. Obvious unfolding + arithmetic *)
-          unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
-            in *.
-          destruct (sigma_shifting_lefttoright_option
-                      (all_zeros_shift Cbc) (uniform_shift 1 Cbc) Cbb) eqn:esigma;
-            try discriminate.
-          apply sigma_lefttoright_Some_good in esigma.
-          unfold right_block_id_good_for_shifting, uniform_shift in *.
-          inversion eCbren; subst.
-          by auto.
-        + by intuition.
-      - rewrite (Memory.load_after_store _ _ _ _ _ STORE) in Hload.
-        destruct (Pointer.eqP (Permission.data, Cbren.1, Cbren.2, offset)
-                              (Pm, C, Block.local, o)) as [eCbren_local | eCbren_local].
-        + inversion Hload. subst. clear Hload.
-          injection eCbren_local as ? ? ? ?. subst.
-          unfold Block.local in *.
-          (* eCbren is a contradiction. Obvious unfolding + arithmetic *)
-          destruct Cbren as [Cbc' Cbb]. simpl in *. subst.
-          unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
-            in *.
-          destruct Cb as [Cbc Cbb].
-          destruct (sigma_shifting_lefttoright_option
-                      (all_zeros_shift Cbc) (uniform_shift 1 Cbc) Cbb) eqn:esigma;
-            try discriminate.
-          apply sigma_lefttoright_Some_good in esigma.
-          unfold right_block_id_good_for_shifting, uniform_shift in *.
-          inversion eCbren; subst.
-          by auto.
-
-        + specialize (WFMS2 _ _ Hload) as [v'' [Gload Gren]].
-          eexists.
-          split; eauto.
+      unfold sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid
+        in *.
+      destruct (sigma_shifting_lefttoright_option
+                  (uniform_shift 1 Csteady)
+                  (all_zeros_shift Csteady) b) as [b'|] eqn:eb'; last discriminate.
+      exists (Csteady, b'). split; first reflexivity.
+      inversion eCbren; subst; clear eCbren.
+      split; intros ? ? Hload; simpl in *.
+      - assert (Pointer.eq (Pm, C, Block.local, o)
+                           (Permission.data, Csteady, b, offset) = false
+               ) as Hneq.
+        {
+          simpl. destruct (Pm); first by auto. simpl.
+          destruct (b =? Block.local) eqn:e; first by apply beq_nat_true in e.
+          destruct b; first by auto.
+            by rewrite !andbF !andFb.
+        }
+        move : Hneq => /Pointer.eqP => Hneq.
+        specialize (Memory.load_after_store_neq _ _ _ _ _ Hneq STORE) as rewr.
+        rewrite rewr in Hload.
+        by specialize (WFMS1 _ _ Hload).
+      - specialize (WFMS2 _ _ Hload) as [v'' [Hv''1 Hv''2]].
+        exists v''. split; last assumption.
+        assert (Pointer.eq (Pm, C, Block.local, o)
+                           (Permission.data, Csteady, b, offset) = false
+               ) as Hneq.
+        {
+          simpl. destruct (Pm); first by auto. simpl.
+          destruct (b =? Block.local) eqn:e; first by apply beq_nat_true in e.
+          destruct b; first by auto.
+            by rewrite !andbF !andFb.
+        }
+        move : Hneq => /Pointer.eqP => Hneq.
+        specialize (Memory.load_after_store_neq _ _ _ _ _ Hneq STORE) as rewr.
+        by rewrite rewr.
     Qed.
-           ***************************************************************)
-Admitted. 
 
     Definition postcondition_event_snapshot_steadystate
                (e: event_inform) (mem: Memory.t) (C: Component.id) : Prop :=
