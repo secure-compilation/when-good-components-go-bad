@@ -217,7 +217,7 @@ Proof.
   (* /eqP -> *)
   (* (* ... and we're done. *) *)
   (* //. *)
-  /eqnP -> /eqnP -> /eqnP -> /Z.eqb_spec -> //=.
+  /Permission.eqP -> /eqnP -> /eqnP -> /Z.eqb_spec -> //=.
 Qed.
 
 (* TODO: Relocate. *)
@@ -253,13 +253,14 @@ Proof.
       destruct t as [[| ? ?] ? |]; now inversion Hcons.
   - destruct (C \in domm (prog_interface p)) eqn:Hdomm.
     + destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
-        as [Cbufs [buf [HCbufs [Hbuf Hptr]]]].
+        as [(*Cbufs [*) buf (*[HCbufs*) [Hbuf Hptr]].
       exfalso. eapply prog_buffer_ptr; eassumption.
     + rewrite (wfprog_defined_buffers Hwf) in Hdomm.
       destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
-        as [Cbufs [_ [HCbufs _]]].
+        as [buf [Hbuf ?]].
+      simpl in *.
       apply negb_true_iff in Hdomm.
-      rewrite (dommPn Hdomm) in HCbufs.
+      rewrite (dommPn Hdomm) in Hbuf.
       discriminate.
 Qed.
 
@@ -372,7 +373,7 @@ Proof.
         -- (* If we read from the newly allocated block, the load cannot find
              any pointers and we conclude by contradiction. *)
            rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 Heq) in Hload.
-           destruct (Pointer.permission addr_load =? Permission.data);
+           destruct (Permission.eqb (Pointer.permission addr_load) Permission.data);
              last discriminate.
            destruct ((Pointer.offset addr_load <? Z.of_nat (Z.to_nat size))%Z);
              last discriminate.
@@ -589,7 +590,7 @@ Proof.
               but trivial analysis. *)
            ++ destruct t as [[[P1 C1] b1] o1];
                 destruct t0 as [[[P2 C2] b2] o2];
-                destruct (P1 =? P2);
+                destruct (Permission.eqb P1 P2);
                 destruct (C1 =? C2);
                 destruct (b1 =? b2);
                 discriminate.
@@ -871,7 +872,7 @@ Proof.
       destruct (cprog_main_existence Hclosed) as [main [Hmain _]].
       rewrite Hmain in Hload.
       destruct (prepare_procedures_memory_prog_buffers Hwf Hload)
-        as [Cbufs [buf [Hbufs [Hbuf Hptr]]]].
+        as [(*Cbufs [*)buf (*[Hbufs*) [Hbuf Hptr]].
       (* No pointers in static buffers. *)
       exfalso. eapply prog_buffer_ptr; eassumption.
     + (* Registers. *)
@@ -909,7 +910,7 @@ Proof.
                     (Pointer.component ptr0, Pointer.block ptr0))
           as [Heq | Hneq].
         -- rewrite (Memory.load_after_alloc_eq _ _ _ _ _ _ H2 Heq) in Hload.
-           destruct (Pointer.permission ptr =? Permission.data);
+           destruct (Permission.eqb (Pointer.permission ptr) Permission.data);
              last discriminate.
            destruct (Pointer.offset ptr <? Z.of_nat (Z.to_nat size))%Z;
              last discriminate.
@@ -967,7 +968,7 @@ Proof.
               eapply IHget; eassumption.
            ++ destruct t as [[[perm' C'] b'] o'].
               destruct t0 as [[[perm0' C0'] b0'] o0'].
-              destruct (perm' =? perm0');
+              destruct (Permission.eqb perm' perm0');
                 destruct (C' =? C0');
                 destruct (b' =? b0');
                 discriminate.
@@ -1121,10 +1122,11 @@ Proof.
           destruct (Register.get R_COM regs)
             as [| [[[perm cid] bid] off] | ] eqn:ereg;
             simpl in *; try by rewrite in_fset0 in Ha'.
-          destruct (perm =? Permission.data) eqn:eperm; simpl in *;
+          destruct (Permission.eqb perm Permission.data) eqn:eperm; simpl in *;
             try by rewrite in_fset0 in Ha'.
           rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
           eapply reg_invariant; by eauto.
+          exact Permission.data. (* FIXME: New subgoal after changing permission equality, suspect. *)
       * (** IReturn *)
         (** CAUTION: !!!!!!!!! exactly the same proof as ICall !!!!!!!!!*)
         assert (mem_invariant':
@@ -1146,10 +1148,11 @@ Proof.
         destruct (Register.get R_COM regs)
           as [| [[[perm cid] bid] off] | ] eqn:ereg;
           simpl in *; try by rewrite in_fset0 in Ha'.
-        destruct (perm =? Permission.data) eqn:eperm; simpl in *;
+        destruct (Permission.eqb perm Permission.data) eqn:eperm; simpl in *;
           try by rewrite in_fset0 in Ha'.
         rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
         eapply reg_invariant; by eauto.
+          exact Permission.data. (* FIXME: New subgoal after changing permission equality, suspect. *)
         
     + inversion He1 as [? ? ? ? Hstepinform Hevent]; subst.
       inversion Hstepinform; subst; simpl in *; try discriminate;
@@ -1180,6 +1183,7 @@ Proof.
         intros ? Ha'? ?.
         rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
         eapply IHt; eauto.
+        exact Permission.data. (* FIXME: New subgoal after changing permission equality, suspect. *)
 
       * (** IReturn *)
         assert (mem_invariant':
@@ -1200,6 +1204,7 @@ Proof.
         intros ? Ha'? ?.
         rewrite in_fset1 in Ha'. move : Ha' => /eqP => Ha'; inversion Ha'; subst.
         eapply IHt; eauto.
+        exact Permission.data. (* FIXME: New subgoal after changing permission equality, suspect. *)
 Qed.
 
 End CSInvariants.

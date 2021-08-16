@@ -44,6 +44,8 @@ Section UnaryHelpersForMergeable.
   (* An inductive definition to relate a program with the pointers found in its
      buffers and procedures. A computational definition can be given as well.
      NOTE: Unnecessary? *)
+
+  (**********************************************************************************
   Inductive prog_addrs (p : program) (addrs : addr_t) : Prop :=
   (* this is the data part. These are the static buffers defined by the program. *)
   (* My question is, why don't we just define this as: 
@@ -69,6 +71,7 @@ Section UnaryHelpersForMergeable.
   Definition static_addresses_of_component
              (p: program) (c: Component.id) : {fset node_t} :=
     CS.component_ptrs p c.
+   ***********************************************************************************)
   
 End UnaryHelpersForMergeable.
 
@@ -2255,8 +2258,8 @@ Section MergeableSymHelpers.
           -- specialize (G1 _ _ Hload) as [v' [Hloadv' Hv]].
              eexists; split; eauto.
              destruct v as [| [[[permv cidv] bidv] offv] |] eqn:ev; auto.
-             destruct (permv =? Permission.data) eqn:epermv; auto.
-             assert (permv = Permission.data); subst. by apply beq_nat_true.
+             destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+             assert (permv = Permission.data); subst. by apply/Permission.eqP.
              assert (Hshrv: addr_shared_so_far (cidv, bidv) (rcons t'' e'')).
              {
                inversion Hshr; subst; repeat find_rcons_rcons.
@@ -2282,8 +2285,8 @@ Section MergeableSymHelpers.
           -- specialize (G2 _ _ Hload) as [v [Hloadv Hv]].
              eexists; split; eauto.
              destruct v as [| [[[permv cidv] bidv] offv] |] eqn:ev; auto.
-             destruct (permv =? Permission.data) eqn:epermv; auto.
-             assert (permv = Permission.data); subst. by apply beq_nat_true.
+             destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+             assert (permv = Permission.data); subst. by apply/Permission.eqP.
              assert (Hshrv: addr_shared_so_far (cidv, bidv) (rcons t'' e'')).
              {
                inversion Hshr; subst; repeat find_rcons_rcons.
@@ -2345,8 +2348,8 @@ Section MergeableSymHelpers.
              ++ specialize (G1 _ _ Hload) as [v' [Hloadv' Hv]].
                 eexists; split; eauto.
                 destruct v as [| [[[permv cidv] bidv] offv] |] eqn:ev; auto.
-                destruct (permv =? Permission.data) eqn:epermv; auto.
-                assert (permv = Permission.data); subst. by apply beq_nat_true.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+                assert (permv = Permission.data); subst. by apply/Permission.eqP.
                 assert (Hshrv: addr_shared_so_far (cidv, bidv) (rcons t'' e'')).
                 {
                   inversion Hshr'; subst; repeat find_rcons_rcons.
@@ -2372,8 +2375,8 @@ Section MergeableSymHelpers.
              ++ specialize (G2 _ _ Hload) as [v [Hloadv Hv]].
              eexists; split; eauto.
              destruct v as [| [[[permv cidv] bidv] offv] |] eqn:ev; auto.
-             destruct (permv =? Permission.data) eqn:epermv; auto.
-             assert (permv = Permission.data); subst. by apply beq_nat_true.
+             destruct (Permission.eqb permv Permission.data) eqn:epermv; auto.
+             assert (permv = Permission.data); subst. by apply/Permission.eqP.
              assert (Hshrv: addr_shared_so_far (cidv, bidv) (rcons t'' e'')).
              {
                inversion Hshr'; subst; repeat find_rcons_rcons.
@@ -2403,7 +2406,7 @@ Section MergeableSymHelpers.
           rename_addr_option,
           sigma_shifting_wrap_bid_in_addr,
           sigma_shifting_lefttoright_addr_bid in *.
-          destruct (perm =? Permission.data) eqn:eperm; last assumption.
+          destruct (Permission.eqb perm Permission.data) eqn:eperm; last assumption.
           assert (Hshr: addr_shared_so_far (cid, bid) (rcons t'' e'')).
           {
             apply reachable_from_args_is_shared.
@@ -2468,7 +2471,7 @@ Section MergeableSymHelpers.
     simpl in *. intros reg. specialize (Hregsrel reg).
     destruct (Register.get reg regs)
       as [| [[[perm1 cid1] bid1] off1] | ] eqn:eregs1; try by left; intuition.
-    destruct (perm1 =? Permission.data) eqn:eperm; try by left; intuition.
+    destruct (Permission.eqb perm1 Permission.data) eqn:eperm; try by left; intuition.
     destruct (sigma_shifting_lefttoright_option
                 (n cid1)
                 (if InC' cid1
@@ -2560,7 +2563,7 @@ Section MergeableSymHelpers.
     simpl in *.
   * specialize (G1a _ _ Hload) as Hvv'.
     destruct v as [| [[[perm cid] bid] off] |]; auto.
-    destruct (perm =? Permission.data) eqn:eperm; auto.
+    destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
     specialize (Hmem _ _ _ _ _ Hload) as Hcid_eqn.
     destruct (InP cid) eqn:Hcid.
     -- assert (InC' cid = false) as Hc'.
@@ -2578,7 +2581,7 @@ Section MergeableSymHelpers.
     destruct v as [| [[[perm cid] bid] off] |];
       try by (destruct Hvv' as [[Hcontra _]|];
               first discriminate; right).
-    destruct (perm =? Permission.data) eqn:eperm;
+    destruct (Permission.eqb perm Permission.data) eqn:eperm;
       try by (destruct Hvv' as [[Hcontra _]|];
               first discriminate; right).
     destruct Hvv' as [[G [G' ?]]|G]; subst.
@@ -2684,7 +2687,7 @@ Section MergeableSymHelpers.
        exists v'. split; first assumption.
        destruct v as [ | [[[perm cid] bid] off] | ];
          first assumption; last assumption.
-       destruct (perm =? Permission.data) eqn:eperm; last assumption.
+       destruct (Permission.eqb perm Permission.data) eqn:eperm; last assumption.
        specialize (Hmem _ _ _ _ _ Hload) as Hcid_eqn.
        destruct (InP cid) eqn:Hcid.
        ++ assert (InC' cid = false) as Hc'.
@@ -2698,7 +2701,7 @@ Section MergeableSymHelpers.
        exists v. split; first assumption.
        destruct v as [ | [[[perm cid] bid] off] | ];
          first assumption; last assumption.
-       destruct (perm =? Permission.data) eqn:eperm; last assumption.
+       destruct (Permission.eqb perm Permission.data) eqn:eperm; last assumption.
        destruct (sigma_shifting_lefttoright_option
                    (n cid)
                    (if InP cid

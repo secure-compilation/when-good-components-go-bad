@@ -181,6 +181,11 @@ Module Type AbstractComponentMemory.
       load m b i = Some v ->
       load (fst (reserve_block m)) b i = Some v.
 
+  Axiom load_before_reserve_block :
+    forall m b o v,
+      load (fst (reserve_block m)) b o = Some v ->
+      load m b o = Some v.
+
 End AbstractComponentMemory.
 
 Module ComponentMemory : AbstractComponentMemory.
@@ -273,7 +278,7 @@ Module ComponentMemory : AbstractComponentMemory.
     | nil => nil
     | v :: vs => match v with
                  | Ptr (ptrp, ptrc, ptrb, _) =>
-                   if Nat.eqb ptrp Permission.data then
+                   if Permission.eqb ptrp Permission.data then
                      [(ptrc, ptrb)] ++ block_ids_in_chunk vs
                    else
                      block_ids_in_chunk vs
@@ -375,7 +380,7 @@ Module ComponentMemory : AbstractComponentMemory.
       + exact (Ich Hch').
       + inversion equu. simpl. left. reflexivity.
       + destruct p as [[[ptrp ptrc] ptrb] ptro].
-        destruct (ptrp =? Permission.data).
+        destruct (Permission.eqb ptrp Permission.data).
         * apply List.in_cons. exact (Ich Hch').
         * exact (Ich Hch').
       + discriminate.
@@ -393,10 +398,11 @@ Module ComponentMemory : AbstractComponentMemory.
       + destruct (IHch c b H) as [off [i ntherrorEq]]. exists off.
         apply In_nth_error. apply List.in_cons. apply nth_error_In with (n := i). auto.
       + destruct p as [[[ptrp ptrc] ptrb] ptro].
-        destruct (ptrp =? Permission.data) eqn:ptrpE.
+        destruct (Permission.eqb ptrp Permission.data) eqn:ptrpE.
         * apply in_inv in H. destruct H as [Heq | HIH].
           -- exists ptro. exists 0. inversion Heq.
-             apply Nat.eqb_eq in ptrpE. rewrite ptrpE. auto.
+             move: ptrpE => /Permission.eqP => ptrpE.
+             rewrite ptrpE. auto.
           -- destruct (IHch c b HIH) as [off [i ntherrorEq]]. exists off.
              apply In_nth_error. apply List.in_cons. apply nth_error_In with (n := i). auto.
         * destruct (IHch c b H) as [off [i ntherrorEq]]. exists off.
@@ -404,7 +410,7 @@ Module ComponentMemory : AbstractComponentMemory.
       + destruct (IHch c b H) as [off [i ntherrorEq]]. exists off.
         apply In_nth_error. apply List.in_cons. apply nth_error_In with (n := i). auto.
   Qed.
-  
+
   Lemma load_block_load :
     forall m b ptrc ptrb,
       In (ptrc, ptrb) (load_block m b) <->
@@ -857,7 +863,14 @@ Module ComponentMemoryExtra.
   Lemma load_before_reserve_blocks m n b o v :
     load (fst (reserve_blocks m n)) b o = Some v ->
     load m b o = Some v.
-  Admitted.
+  Proof.
+    induction n as [| n' IHn']; auto.
+    simpl. intros Hreserve.
+    destruct (reserve_blocks m n') as [m' bs] eqn:Hblocks.
+    destruct (reserve_block m') as [m'' b'] eqn:Hblock.
+    simpl in *. apply IHn'. eapply load_before_reserve_block. by rewrite Hblock.
+  Qed.    
+    
   (* Or: *)
   (* reserve_blocks (prealloc bufs) n = (Cmem, bs) -> *)
   (* load Cmem b o = Some v -> *)
@@ -892,7 +905,7 @@ Module Memory.
     end.
 
   Definition load (mem: t) (ptr: Pointer.t) : option value :=
-    if Pointer.permission ptr =? Permission.data then
+    if Permission.eqb (Pointer.permission ptr) Permission.data then
       match mem (Pointer.component ptr) with
       | Some memC => ComponentMemory.load memC (Pointer.block ptr) (Pointer.offset ptr)
       | None => None
@@ -900,7 +913,7 @@ Module Memory.
     else None.
 
   Definition store (mem: t) (ptr: Pointer.t) (v: value) : option t :=
-    if Pointer.permission ptr =? Permission.data then
+    if Permission.eqb (Pointer.permission ptr) Permission.data then
       match mem (Pointer.component ptr) with
       | Some memC =>
         match ComponentMemory.store memC (Pointer.block ptr) (Pointer.offset ptr) v with
@@ -930,22 +943,21 @@ Module Memory.
   Lemma load_after_store mem ptr v mem' ptr' :
     store mem  ptr v = Some mem' ->
     load mem' ptr' =
-    if ptr' == ptr then Some v else load mem ptr'.
+    if Pointer.eq ptr' ptr then Some v else load mem ptr'.
   Proof.
     case: ptr ptr'=> [[[p c] b] off] [[[p' c'] b'] off']; rewrite /store /load /=.
-    case perm_data: (p =? Permission.data) => //.
-    case perm_data': (p' =? Permission.data) => //.
-    - case mem_c: (mem c) => [bs|] //.
-      case bs_ptr: (ComponentMemory.store bs b off v) => [bs'|] //= [<- {mem'}].
-      rewrite !xpair_eqE setmE; case: (c' =P c) => [-> {c'}|] //=.
-      + pose (ComponentMemory.load_after_store _ _ _ _ _ bs_ptr) as compLoad.
-        erewrite compLoad. erewrite mem_c.
-        apply Nat.eqb_eq in perm_data. apply Nat.eqb_eq in perm_data'.
-        rewrite <- perm_data in perm_data'. rewrite perm_data' eq_refl. auto.
-      + rewrite andbF. auto.
-    - destruct ((p', c', b', off') == (p, c, b, off)) eqn:p'p; auto.
-      pose (eqP p'p) as e. inversion e as [pp'e]. rewrite pp'e in perm_data'.
-      rewrite perm_data in perm_data'. discriminate.
+    case perm_data: (Permission.eqb p Permission.data) => //.
+    move: perm_data => /Permission.eqP => perm_data. subst p.
+    case perm_data': (Permission.eqb p' Permission.data) => //.
+    move: perm_data' => /Permission.eqP => perm_data'. subst p'.
+    case mem_c: (mem c) => [bs|] //.
+    case bs_ptr: (ComponentMemory.store bs b off v) => [bs'|] //= [<- {mem'}].
+    rewrite setmE; case: (c' =P c) => [-> {c'}|] //=.
+    - pose (ComponentMemory.load_after_store _ _ _ _ _ bs_ptr) as compLoad.
+      erewrite compLoad. erewrite mem_c.
+      rewrite !xpair_eqE Nat.eqb_refl.
+      auto.
+    - intro H. apply Nat.eqb_neq in H. rewrite H. auto.
   Qed.
 
   Lemma load_all_after_store_all mem addr vs mem' addr' :
@@ -956,14 +968,18 @@ Module Memory.
   Lemma load_after_store_eq mem ptr v mem' :
     store mem  ptr v = Some mem' ->
     load  mem' ptr   = Some v.
-  Proof. by move=> /load_after_store ->; rewrite eqxx. Qed.
+  Proof. move=> /load_after_store ->; by destruct (Pointer.eqP ptr ptr). Qed.
 
 
   Lemma load_after_store_neq mem ptr v mem' ptr' :
     ptr <> ptr' ->
     store mem  ptr  v = Some mem' ->
     load  mem' ptr'   = load mem ptr'.
-  Proof. by move=> /eqP/negbTE ne /load_after_store ->; rewrite eq_sym ne. Qed.
+  Proof.
+    move=> /Pointer.eqP/negbTE ne /load_after_store ->.
+    move: ne => /Pointer.eqP => ne. apply not_eq_sym in ne. move: ne => /Pointer.eqP => ne.
+    apply negbTE in ne. by rewrite ne.
+  Qed.
 
   Lemma load_after_alloc mem cid sz mem' ptr' ptr:
     alloc mem cid sz = Some (mem', ptr') ->
@@ -974,7 +990,7 @@ Module Memory.
     destruct (mem cid) as [cMem | ] eqn:Hmemcid.
     - destruct (ComponentMemory.alloc cMem sz) as [new_cMem newb] eqn:Hcomp_alloc.
       intros H. inversion H. subst.
-      destruct (Pointer.permission ptr =? Permission.data) ; auto.
+      destruct (Permission.eqb (Pointer.permission ptr) Permission.data) ; auto.
       rewrite setmE.
       intros Hptr_cid_or_bid.
       destruct (Pointer.component ptr == cid) eqn:Hptr_eq_cid; rewrite Hptr_eq_cid; auto;
@@ -1008,7 +1024,7 @@ Module Memory.
     (Pointer.component ptr, Pointer.block ptr) =
     (Pointer.component ptr', Pointer.block ptr') ->
     load mem' ptr =
-    if (Pointer.permission ptr =? Permission.data) then
+    if (Permission.eqb (Pointer.permission ptr) Permission.data) then
       if (Pointer.offset ptr <? Z.of_nat sz)%Z then
         if (0 <=? Pointer.offset ptr)%Z then
           Some Undef
@@ -1025,7 +1041,7 @@ Module Memory.
     inversion Heq. subst. simpl in *. clear Heq.
     specialize (component_of_alloc_ptr _ _ _ _ _ Halloc) as H. subst. simpl in *.
     unfold alloc in *.
-    destruct (perm =? Permission.data); auto.
+    destruct (Permission.eqb perm Permission.data); auto.
     - destruct (mem' cidptr') as [memC|] eqn:ememC.
       + destruct (mem cidptr') as [memC'|] eqn:ememC'; try discriminate.
         destruct (ComponentMemory.alloc memC' sz) as [memC'alloc b] eqn:ememC'alloc.
@@ -1036,7 +1052,7 @@ Module Memory.
       + destruct (mem cidptr') as [memC'|] eqn:ememC'; try discriminate.
         destruct (ComponentMemory.alloc memC' sz) as [memC'alloc b] eqn:ememC'alloc.
         inversion Halloc. subst. clear Halloc.
-        rewrite setmE in ememC. by rewrite eqxx in ememC.  
+        rewrite setmE in ememC. by rewrite eqxx in ememC.
   Qed.
 
   Lemma store_after_load mem ptr v v' :
@@ -1044,7 +1060,7 @@ Module Memory.
     exists mem', store mem ptr v' = Some mem'.
   Proof.
     case: ptr=> [[[p c] b] off]; rewrite /load /store /=.
-    case perm_data: (p =? Permission.data) => //.
+    destruct (Permission.eqP p Permission.data) => //.
     case mem_c: (mem c)=> [bs|] //=.
     case/(ComponentMemory.store_after_load _ _ _ _ v')=> [bs' ->].
     by eauto.
@@ -1059,7 +1075,7 @@ Module Memory.
         store m ptr v' = Some m').
   Proof.
     intros m [[[perm cid] bid] off] v'. unfold load, store.
-    simpl. destruct (perm =? Permission.data) eqn:eperm; simpl.
+    simpl. destruct (Permission.eqP perm Permission.data) as [eperm | eperm]; simpl.
     - destruct (m cid) as [compMem|] eqn:emcid; simpl.
       + split; intros H.
         * assert (exists compMem',
@@ -1073,21 +1089,21 @@ Module Memory.
       + split; intros [? ?]; discriminate.
     - split; intros [? ?]; discriminate.
   Qed.
-      
+
   Lemma load_some_permission mem ptr v :
     load mem ptr = Some v -> Pointer.permission ptr = Permission.data.
   Proof.
     unfold load.
-    destruct (Pointer.permission ptr =? Permission.data) eqn:eperm; try discriminate.
-    intros ?. apply/eqP. auto.
+    destruct (Permission.eqP (Pointer.permission ptr) Permission.data); try discriminate.
+    auto.
   Qed.
 
   Lemma store_some_permission mem ptr v mem' :
     store mem ptr v = Some mem' -> Pointer.permission ptr = Permission.data.
   Proof.
     unfold store.
-    destruct (Pointer.permission ptr =? Permission.data) eqn:eperm; try discriminate.
-    intros ?. apply/eqP. auto.
+    destruct (Permission.eqP (Pointer.permission ptr) Permission.data); try discriminate.
+    auto.
   Qed.
 
   Definition addresses_of_compMems mem : NMap {fset Block.id} :=
@@ -1140,7 +1156,7 @@ Module Memory.
         apply (load_Some_addresses_of_compMems mem cid compMem bid off); assumption.
     - unfold addresses_of_compMems in e_addr_cid. rewrite mapmE in e_addr_cid.
       unfold omap, obind, oapp in e_addr_cid. rewrite Hmem_cid in e_addr_cid. discriminate.
-  Qed.        
+  Qed.
 
   (* RB: TODO: Rephrase as needed based on use in Definability, could weaken
      some of the components in the pointer.
@@ -1174,7 +1190,7 @@ Module Memory.
     domm mem = domm mem'.
   Proof.
     unfold store. intro Hstore.
-    destruct (Pointer.permission ptr =? Permission.data);
+    destruct (Permission.eqP (Pointer.permission ptr) Permission.data);
       last discriminate.
     destruct (mem (Pointer.component ptr)) as [Cmem |] eqn:Hcase;
       last discriminate.
@@ -1574,7 +1590,7 @@ Lemma program_store_in_partialized_memory_strong:
 Proof.
 move=> ctx mem1 mem2 /eq_fmap Hfilter P C b o v mem1' nin_ctx.
 rewrite /Memory.store /=; move/(_ C): (Hfilter); rewrite !filtermE nin_ctx.
-case: (P =? Permission.data) => //.
+destruct (Permission.eqP P Permission.data) => //.
 case: (mem1 C) (mem2 C)=> [memC|] // [_|] //= [<-].
 case: (ComponentMemory.store memC b o v)=> [memC'|] //= [<-].
 eexists; eauto; apply/eq_fmap=> C'; rewrite !filtermE !setmE.
@@ -1624,8 +1640,7 @@ Lemma context_store_in_partialized_memory:
 Proof.
   move=> ctx mem P C b o v mem' C_in_ctx.
   rewrite /Memory.store /= => Hstore.
-  case perm_data: (P =? Permission.data) => //;
-    rewrite perm_data // in Hstore.
+  destruct (Permission.eqP P Permission.data) => //.
   case mem_C: (mem C) => [memC|];
     rewrite mem_C // in Hstore.
   case memC_store: (ComponentMemory.store memC b o v);
@@ -1686,7 +1701,7 @@ Lemma partialize_program_store :
 Proof.
   unfold Memory.store, to_partial_memory.
   intros mem mem' ctx ptr v Hnotin Hstore.
-  destruct (Pointer.permission ptr =? Permission.data) eqn:Hperm_data;
+  destruct (Permission.eqP (Pointer.permission ptr) Permission.data) as [Hperm_data|];
     last discriminate.
   destruct (mem (Pointer.component ptr)) as [memC |] eqn:HmemC;
     last discriminate.
@@ -1707,7 +1722,7 @@ Proof.
   unfold Memory.store.
   intros mem1 mem1' mem2 ptr v Hstore.
   unfold merge_memories. rewrite unionmE.
-  destruct (Pointer.permission ptr =? Permission.data) eqn:Hperm_data;
+  destruct (Permission.eqP (Pointer.permission ptr) Permission.data) as [Hperm_data|];
     last discriminate.
   destruct (mem1 (Pointer.component ptr)) eqn:Hcase1;
     rewrite Hcase1 || idtac "ExStructures 0.1 legacy rewrite inactive";

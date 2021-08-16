@@ -722,7 +722,7 @@ Definition arg_of_event (e: event) : value :=
 Definition addr_of_value (v: value) : {fset addr_t} :=
   match v with
   | Ptr (perm, cid, bid, _) =>
-    if perm =? Permission.data then fset1 (cid, bid) else fset0
+    if Permission.eqb perm Permission.data then fset1 (cid, bid) else fset0
   | _ => fset0
   end.
 
@@ -940,7 +940,7 @@ Section RenamingAddrOption.
              (rnm_addr : addr_t -> option addr_t) (v: value) : option value :=
     match v with
     | Ptr (perm, cid, bid, off) =>
-      if (perm =? Permission.data) then (*rename only addresses that are loadable*)
+      if (Permission.eqb perm Permission.data) then (*rename only addresses that are loadable*)
         let oa := rnm_addr (cid, bid) in
         match oa with
         | Some (cid', bid') => Some (Ptr (perm, cid', bid', off))
@@ -964,7 +964,7 @@ Section RenamingAddrOption.
   Proof.
     destruct v as [| [[[perm c] b] o] |]; try discriminate; simpl.
     - by intros H; inversion H.
-    - by destruct (perm =? Permission.data); try discriminate;
+    - by destruct (Permission.eqb perm Permission.data); try discriminate;
         destruct (rename_addr_option (c, b)) as [[c' b']|]; discriminate.
   Qed.
   
@@ -977,7 +977,7 @@ Section RenamingAddrOption.
     rename_value_option v = Some Undef -> v = Undef.
   Proof.
     destruct v as [| [[[perm c] b] o] |]; try discriminate; simpl.
-    - by destruct (perm =? Permission.data); try discriminate;
+    - by destruct (Permission.eqb perm Permission.data); try discriminate;
         destruct (rename_addr_option (c, b)) as [[c' b']|]; discriminate.
     - by intros H; inversion H.  
   Qed.
@@ -1077,7 +1077,7 @@ Section TheShiftRenamingAddrOption.
   Definition left_value_good_for_shifting (v: value) : Prop :=
     match v with
     | Ptr (perm, cid, bid, _) =>
-      if perm =? Permission.data then
+      if Permission.eqb perm Permission.data then
         left_addr_good_for_shifting (cid, bid)
       else True
     | _ => True
@@ -1086,7 +1086,7 @@ Section TheShiftRenamingAddrOption.
   Definition right_value_good_for_shifting (v: value) : Prop :=
     match v with
     | Ptr (perm, cid, bid, _) =>
-      if perm =? Permission.data then
+      if Permission.eqb perm Permission.data then
         right_addr_good_for_shifting (cid, bid)
       else True
     | _ => True
@@ -1421,9 +1421,9 @@ Section PropertiesOfTheShiftRenamingAddrOption.
     intros H.
     destruct v' as [| [[[perm' cid'] bid'] off'] |];
       destruct v as [| [[[perm cid] bid] off] |]; inversion H; subst; auto.
-    - destruct (perm =? Permission.data);
+    - destruct (Permission.eqb perm Permission.data);
         destruct (sigma_shifting_lefttoright_addr_bid n1 n2 (cid, bid)); discriminate.
-    - destruct (perm =? Permission.data) eqn:eperm;
+    - destruct (Permission.eqb perm Permission.data) eqn:eperm;
         destruct (sigma_shifting_lefttoright_addr_bid n1 n2 (cid, bid))
         as [bid_shift|] eqn:ebid_shift.
       + inversion H. subst. rewrite eperm.
@@ -1437,7 +1437,7 @@ Section PropertiesOfTheShiftRenamingAddrOption.
       + discriminate.
       + inversion H. subst. by rewrite eperm.
       + inversion H. subst. by rewrite eperm.
-    - destruct (perm =? Permission.data);
+    - destruct (Permission.eqb perm Permission.data);
         destruct (sigma_shifting_lefttoright_addr_bid n1 n2 (cid, bid)); discriminate.
   Qed.
 
@@ -1461,7 +1461,7 @@ Section PropertiesOfTheShiftRenamingAddrOption.
       specialize (mem'_mem _ _ Hload) as [v [Hloadv vv']].
       eexists; split; eauto.
       destruct v as [| [[[pv cv] bv] ov] |]; try by inversion vv'; subst.
-      destruct (pv =? Permission.data) eqn:epv;
+      destruct (Permission.eqb pv Permission.data) eqn:epv;
         last by inversion vv'; rewrite epv; subst.
       destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv) eqn:ebv;
         try discriminate.
@@ -1471,7 +1471,7 @@ Section PropertiesOfTheShiftRenamingAddrOption.
       specialize (mem_mem' _ _ Hload) as [v' [Hloadv' vv']].
       eexists; split; eauto.
       destruct v as [| [[[pv cv] bv] ov] |]; try by inversion vv'; subst.
-      destruct (pv =? Permission.data) eqn:epv;
+      destruct (Permission.eqb pv Permission.data) eqn:epv;
         last by inversion vv'; rewrite epv; subst.
       destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv) eqn:ebv;
         try discriminate.
@@ -1551,7 +1551,7 @@ Section PropertiesOfTheShiftRenamingAddrOption.
              eexists; split; first eassumption.
              destruct v as [| [[[pv cv] bv] ov] |];
                try by inversion vv' as [rewr]; rewrite <- rewr in v'v''; auto.
-             destruct (pv =? Permission.data) eqn:epv.
+             destruct (Permission.eqb pv Permission.data) eqn:epv.
              ++ destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv)
                  as [bv'|] eqn:G1v; try discriminate.
                 inversion vv'; subst; clear vv'.
@@ -1574,7 +1574,7 @@ Section PropertiesOfTheShiftRenamingAddrOption.
              eexists; split; first eassumption.
              destruct v as [| [[[pv cv] bv] ov] |];
                try by inversion vv' as [rewr]; rewrite <- rewr in v'v''; auto.
-             destruct (pv =? Permission.data) eqn:epv.
+             destruct (Permission.eqb pv Permission.data) eqn:epv.
              ++ destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv)
                  as [bv'|] eqn:G1v; try discriminate.
                 inversion vv'; subst; clear vv'.
@@ -1622,7 +1622,7 @@ Section PropertiesOfTheShiftRenamingAddrOption.
           eexists; split; first eassumption.
           destruct v as [| [[[pv cv] bv] ov] |];
             try by inversion vv' as [rewr]; rewrite <- rewr in v'v''; auto.
-          destruct (pv =? Permission.data) eqn:epv.
+          destruct (Permission.eqb pv Permission.data) eqn:epv.
           -- destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv)
               as [bv'|] eqn:G1v; try discriminate.
              inversion vv'; subst; clear vv'.
@@ -1646,7 +1646,7 @@ Section PropertiesOfTheShiftRenamingAddrOption.
           eexists; split; first eassumption.
           destruct v as [| [[[pv cv] bv] ov] |];
             try by inversion vv' as [rewr]; rewrite <- rewr in v'v''; auto.
-          destruct (pv =? Permission.data) eqn:epv.
+          destruct (Permission.eqb pv Permission.data) eqn:epv.
           -- destruct (sigma_shifting_lefttoright_option (n cv) (n' cv) bv)
               as [bv'|] eqn:G1v; try discriminate.
              inversion vv'; subst; clear vv'.
@@ -1673,7 +1673,7 @@ Section PropertiesOfTheShiftRenamingAddrOption.
         sigma_shifting_wrap_bid_in_addr, sigma_shifting_lefttoright_addr_bid in *.
         destruct (arg_of_event e) as [| [[[p c] b] o] |];
           try inversion Hargee' as [Harge']; rewrite <- Harge' in Harge'e''; auto.
-        destruct (p =? Permission.data) eqn:ep.
+        destruct (Permission.eqb p Permission.data) eqn:ep.
         * unfold rename_addr_option in *.
           destruct (sigma_shifting_lefttoright_option (n c) (n' c) b)
             as [b'|] eqn:esigma; try discriminate.

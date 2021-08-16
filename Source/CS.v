@@ -301,7 +301,7 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
     | Kcallptr2 varg k' =>
       match v with
       | Ptr (perm, C', P', 0%Z) =>
-        if (perm =? Permission.code) && (C' =? C) then
+        if (Permission.eqb perm Permission.code) && (C' =? C) then
             ret (E0, [State C, s, mem, Kcall C' P' k', E_val varg, arg])
         else None
       | _ => None
@@ -406,7 +406,7 @@ Proof.
     + econstructor; eauto.
     + move: Heqb => /andP.
       intros [Hperm HC].
-      assert (i0 = Permission.code). by apply beq_nat_true. subst.
+      assert (i0 = Permission.code). by apply /Permission.eqP. subst.
       assert (i1 = C). by apply beq_nat_true. subst.
       by econstructor.
 Admitted.

@@ -156,7 +156,7 @@ Section ThreewayMultisem1.
         as [| [[[permv cidv] bidv] offv] |] eqn:eR_COM;
       simpl in *; try by apply Reachable_fset0 in Hreach.
     
-    destruct (permv =? Permission.data) eqn:epermv;
+    destruct (Permission.eqb permv Permission.data) eqn:epermv;
       last by apply Reachable_fset0 in Hreach.
     
 
@@ -348,7 +348,7 @@ Section ThreewayMultisem1.
         as [| [[[permv cidv] bidv] offv] |] eqn:eR_COM;
       simpl in *; try by apply Reachable_fset0 in Hreach.
     
-    destruct (permv =? Permission.data) eqn:epermv;
+    destruct (Permission.eqb permv Permission.data) eqn:epermv;
       last by apply Reachable_fset0 in Hreach.
     
 
@@ -359,7 +359,7 @@ Section ThreewayMultisem1.
            eqn:eR_COM_regs; inversion HR_COM as [Hsubst];
         try discriminate.
       
-    - destruct (permv_regs =? Permission.data) eqn:epermv_regs.
+    - destruct (Permission.eqb permv_regs Permission.data) eqn:epermv_regs.
       + destruct (sigma_shifting_lefttoright_option
                     (n cidv_regs)
                     (if cidv_regs \in domm (prog_interface p)
@@ -407,7 +407,7 @@ Section ThreewayMultisem1.
         simpl in *.
         specialize (memrel _ _ Hload) as [v' [G Hv']].
         destruct v' as [ | [[[permv' cidv'] bidv'] offv'] |]; try discriminate.
-        destruct (permv' =? Permission.data) eqn:epermv'.
+        destruct (Permission.eqb permv' Permission.data) eqn:epermv'.
           --  destruct (sigma_shifting_lefttoright_option
                           (n cidv')
                           (if cidv' \in domm (prog_interface p)
@@ -424,7 +424,7 @@ Section ThreewayMultisem1.
               rewrite Extra.In_in ComponentMemory.load_block_load. by eexists; eauto.
           -- by inversion Hv'; subst.
       + inversion Hsubst; subst. by rewrite epermv in epermv_regs.
-    - destruct (permv_regs =? Permission.data) eqn:epermv_regs; try discriminate.
+    - destruct (Permission.eqb permv_regs Permission.data) eqn:epermv_regs; try discriminate.
       destruct (sigma_shifting_lefttoright_option
                   (n cidv_regs)
                   (if cidv_regs \in domm (prog_interface p)
@@ -771,7 +771,7 @@ Section ThreewayMultisem1.
       simpl in *.
       specialize (G _ _ Hload) as [v' [G Hv']].
       destruct v' as [| [[[permv' cidv'] bidv'] offv'] |]; try discriminate.
-      destruct (permv' =? Permission.data) eqn:epermv'.
+      destruct (Permission.eqb permv' Permission.data) eqn:epermv'.
       + destruct (sigma_shifting_lefttoright_option
                     (n cidv')
                     (if cidv' \in domm (prog_interface p)
@@ -802,17 +802,26 @@ Section ThreewayMultisem1.
     executing (prepare_global_env prog) pc instr ->
     executing (prepare_global_env prog') pc instr.
   Proof.
-    (*intros Hdomm Hmerge Hexec.
-    inversion Hmerge
-      as [Hwfp Hwfc Hwfp' Hwfc' [Hlinkable _]
-          Hifacep Hifacec Hprog_is_closed Hprog_is_closed'' _ _ _ _ _ _ _ ].
-    apply execution_invariant_to_linking with c; try assumption.
-    - congruence.
-    - inversion Hmerge. simpl in *.
-      eapply CS.domm_partition; eauto.
-      + by unfold CS.initial_state.
-  Qed.*)
-  Admitted.
+    intros contra ? ?.
+    find_and_invert_mergeable_internal_states;
+      find_and_invert_mergeable_states_well_formed.
+    - eapply execution_invariant_to_linking with (c1 := c); eauto.
+      + by unfold mergeable_interfaces in *; intuition.
+      + by rewrite -Hifc_cc'; unfold mergeable_interfaces in *; intuition.
+      + CS.simplify_turn.
+        eapply CS.domm_partition; eauto.
+        * eapply interface_preserves_closedness_r.
+          5: { exact Hclosed_prog. }
+          all:  auto.
+          -- by unfold mergeable_interfaces in *; intuition.
+          -- apply linkable_implies_linkable_mains; auto.
+               by unfold mergeable_interfaces in *; intuition.
+          -- apply interface_implies_matching_mains; auto.
+        * by rewrite -Hifc_cc'.
+        * by auto.
+        * by rewrite -Hifc_cc'.
+    - CS.simplify_turn. by rewrite H_c' in contra.
+  Qed. 
 
   (* RB: TODO: Does it make sense to compact calls and returns into a unified
      solve tactic? *)
@@ -1171,7 +1180,7 @@ Section ThreewayMultisem1.
                   destruct vprog as [| [[[permvp cidvp] bidvp] offvp] |];
                     inversion Hv'; inversion Hvprog; subst; auto.
 
-                  destruct (permvp =? Permission.data) eqn:epermvp;
+                  destruct (Permission.eqb permvp Permission.data) eqn:epermvp;
                     inversion Hv'; inversion Hvprog; subst; last by rewrite epermvp.
 
                   destruct (sigma_shifting_lefttoright_option
@@ -1217,7 +1226,7 @@ Section ThreewayMultisem1.
                   destruct vprog as [| [[[permvp cidvp] bidvp] offvp] |];
                     inversion Hvprog; inversion Hv''; subst; try by eexists; eauto.
 
-                  destruct (permvp =? Permission.data) eqn:epermvp;
+                  destruct (Permission.eqb permvp Permission.data) eqn:epermvp;
                     inversion Hvprog; inversion Hv''; subst;
                       last (rewrite epermvp).
                   -- destruct (sigma_shifting_lefttoright_option
@@ -1313,7 +1322,7 @@ Section ThreewayMultisem1.
                 {
                   destruct vprog as [| [[[perm cid] bid] off] |]
                                       eqn:evprog; simpl; auto.
-                  destruct (perm =? Permission.data) eqn:eperm; auto.
+                  destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
                   destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                            eqn:esigma; try discriminate.
                   by erewrite sigma_lefttoright_Some_spec; eexists; eauto. 
@@ -1332,7 +1341,7 @@ Section ThreewayMultisem1.
                     as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                     inversion Hvprog; subst;
                       try by eexists; split; eauto.
-                  destruct (permvprog =? Permission.data) eqn:epermvprog;
+                  destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                     inversion Hvprog; subst.
                   -- destruct (sigma_shifting_lefttoright_option
                                  (n cidvprog) (n'' cidvprog) bidvprog) eqn:esigma;
@@ -1400,7 +1409,7 @@ Section ThreewayMultisem1.
                       as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                       inversion Hvprog; inversion Hv'; subst;
                         try by eexists; split; eauto.
-                    destruct (permvprog =? Permission.data) eqn:epermvprog;
+                    destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                       inversion Hvprog; inversion Hv'; subst.
                     ++
                       destruct (sigma_shifting_lefttoright_option
@@ -1497,7 +1506,7 @@ Section ThreewayMultisem1.
                       as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                       inversion Hvprog; subst;
                         try by eexists; split; eauto.
-                    destruct (permvprog =? Permission.data) eqn:epermvprog;
+                    destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                       inversion Hvprog; subst.
                     ++
                       destruct (sigma_shifting_lefttoright_option
@@ -1565,7 +1574,7 @@ Section ThreewayMultisem1.
                   {
                     destruct vprog as [| [[[perm cid] bid] off] |]
                                         eqn:evprog; simpl; auto.
-                    destruct (perm =? Permission.data) eqn:eperm; auto.
+                    destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
                     destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                              eqn:esigma; try discriminate.
                     by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
@@ -1575,7 +1584,7 @@ Section ThreewayMultisem1.
                     as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                     inversion Hv''; subst;
                       try by inversion Hvprog as [[contra ?] | ]; eexists; split; eauto.
-                  destruct (permvprog =? Permission.data) eqn:epermvprog;
+                  destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                     inversion Hv''; subst.
                   -- destruct (sigma_shifting_lefttoright_option
                                  (n cidvprog) (n'' cidvprog) bidvprog) as [bidvprog'|]
@@ -1672,7 +1681,7 @@ Section ThreewayMultisem1.
                   {
                     destruct vprog as [| [[[perm cid] bid] off] |]
                                         eqn:evprog; simpl; auto.
-                    destruct (perm =? Permission.data) eqn:eperm; auto.
+                    destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
                     destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                              eqn:esigma; try discriminate.
                     by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
@@ -1682,7 +1691,7 @@ Section ThreewayMultisem1.
                     as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                     inversion Hvprog; inversion Hv''; subst;
                       try by eexists; split; eauto.
-                  destruct (permvprog =? Permission.data) eqn:epermvprog;
+                  destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                     inversion Hvprog; inversion Hv''; subst.
                   
                   ++ destruct (sigma_shifting_lefttoright_option
@@ -1760,7 +1769,7 @@ Section ThreewayMultisem1.
                     destruct v as [| [[[permv cidv] bidv] offv] |];
                       destruct Hv as [[contra ?] | rewr]; try discriminate;
                         try by inversion rewr; subst.
-                    destruct (permv =? Permission.data) eqn:epermv; try discriminate.
+                    destruct (Permission.eqb permv Permission.data) eqn:epermv; try discriminate.
                     simpl in *. rewrite epermv in vGood.
                     erewrite sigma_lefttoright_Some_spec in vGood.
                     destruct vGood as [? G_]. by erewrite G_ in contra.
@@ -1837,7 +1846,7 @@ Section ThreewayMultisem1.
               {
                 destruct v as [| [[[perm cid] bid] off] |]
                                 eqn:ev; inversion Hv'; simpl; auto.
-                destruct (perm =? Permission.data) eqn:eperm; inversion Hv'; subst;
+                destruct (Permission.eqb perm Permission.data) eqn:eperm; inversion Hv'; subst;
                   simpl in *.
                 - destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                            eqn:esigma2; try discriminate.
@@ -1878,7 +1887,7 @@ Section ThreewayMultisem1.
               +
                 destruct v as [| [[[permv cidv] bidv] offv] |];
                   inversion Hv' as [Hv'_]; subst; inversion G2 as [G2_]; subst; auto.
-                destruct (permv =? Permission.data) eqn:epermv.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv.
                 * destruct (sigma_shifting_lefttoright_option (n cidv) (n'' cidv) bidv)
                            as [bidv'|] eqn:ebidv; try discriminate.
                   inversion Hv'_; subst; clear Hv'_. rewrite epermv in G2_.
@@ -1949,7 +1958,7 @@ Section ThreewayMultisem1.
               destruct v as [| [[[permv cidv] bidv] offv] |];
                 inversion Hv; subst; inversion Hv''; subst; simpl; auto.
 
-              destruct (permv =? Permission.data) eqn:epermv; simpl in *.
+              destruct (Permission.eqb permv Permission.data) eqn:epermv; simpl in *.
               + destruct (sigma_shifting_lefttoright_option (n cidv) (n'' cidv) bidv)
                          as [bidv''|] eqn:esigmav; try discriminate.
                 inversion Hv; subst. rewrite epermv in Hv''.
@@ -2339,7 +2348,7 @@ Section ThreewayMultisem1.
                 try assumption;
                 try discriminate.
               rewrite <- rewr2.
-              destruct (perm =? Permission.data) eqn:eperm; auto.
+              destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
               assert (Hshr: addr_shared_so_far
                               (cid, bid)
                               (rcons t1 (ECall (Pointer.component pc)
@@ -2500,7 +2509,7 @@ Section ThreewayMultisem1.
                 inversion Harg as [rewr3];
                 try assumption;
                 try discriminate;
-                destruct (perm =? Permission.data) eqn:eperm; auto.
+                destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
               + destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                   as [bid''|]
                        eqn:ebid; try discriminate; inversion rewr3; rewrite eperm.
@@ -2575,7 +2584,7 @@ Section ThreewayMultisem1.
                    inversion Hrel_R_COM as [G | [contra [? ?]]];
                    try by left; try discriminate.
                  +++
-                   destruct (permvregs =? Permission.data) eqn:epermvregs.
+                   destruct (Permission.eqb permvregs Permission.data) eqn:epermvregs.
                    ***
                      destruct (sigma_shifting_lefttoright_option
                                  (n cidvregs) (n'' cidvregs) bidvregs)
@@ -2613,7 +2622,7 @@ Section ThreewayMultisem1.
                      }
                        by subst.
                    *** left. rewrite <- G. inversion rewr. by rewrite epermvregs.
-                 +++ destruct (permvregs =? Permission.data); try discriminate.
+                 +++ destruct (Permission.eqb permvregs Permission.data); try discriminate.
                      destruct (sigma_shifting_lefttoright_option
                                  (n cidvregs) (n'' cidvregs) bidvregs)
                        as [bidvregs''|] eqn:ebidvregs''; try discriminate.
@@ -2630,7 +2639,7 @@ Section ThreewayMultisem1.
                --- destruct vregs1 as [| [[[perm cid] bid] ?] |];
                      inversion Harg as [rewr]; try discriminate;
                        last by destruct Hrel_R_COM as [?|[? _]].
-                   destruct (perm =? Permission.data); try discriminate.
+                   destruct (Permission.eqb perm Permission.data); try discriminate.
                    destruct (sigma_shifting_lefttoright_option
                                (n cid) (n'' cid) bid) as [bid''|] eqn:ebid'';
                      try discriminate.
@@ -3227,7 +3236,7 @@ Section ThreewayMultisem1.
                   destruct vprog as [| [[[permvp cidvp] bidvp] offvp] |];
                     inversion Hv'; inversion Hvprog; subst; auto.
 
-                  destruct (permvp =? Permission.data) eqn:epermvp;
+                  destruct (Permission.eqb permvp Permission.data) eqn:epermvp;
                     inversion Hv'; inversion Hvprog; subst; last by rewrite epermvp.
 
                   destruct (sigma_shifting_lefttoright_option
@@ -3273,7 +3282,7 @@ Section ThreewayMultisem1.
                   destruct vprog as [| [[[permvp cidvp] bidvp] offvp] |];
                     inversion Hvprog; inversion Hv''; subst; try by eexists; eauto.
 
-                  destruct (permvp =? Permission.data) eqn:epermvp;
+                  destruct (Permission.eqb permvp Permission.data) eqn:epermvp;
                     inversion Hvprog; inversion Hv''; subst;
                       last (rewrite epermvp).
                   -- destruct (sigma_shifting_lefttoright_option
@@ -3369,7 +3378,7 @@ Section ThreewayMultisem1.
                 {
                   destruct vprog as [| [[[perm cid] bid] off] |]
                                       eqn:evprog; simpl; auto.
-                  destruct (perm =? Permission.data) eqn:eperm; auto.
+                  destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
                   destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                            eqn:esigma; try discriminate.
                   by erewrite sigma_lefttoright_Some_spec; eexists; eauto. 
@@ -3388,7 +3397,7 @@ Section ThreewayMultisem1.
                     as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                     inversion Hvprog; subst;
                       try by eexists; split; eauto.
-                  destruct (permvprog =? Permission.data) eqn:epermvprog;
+                  destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                     inversion Hvprog; subst.
                   -- destruct (sigma_shifting_lefttoright_option
                                  (n cidvprog) (n'' cidvprog) bidvprog) eqn:esigma;
@@ -3456,7 +3465,7 @@ Section ThreewayMultisem1.
                       as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                       inversion Hvprog; inversion Hv'; subst;
                         try by eexists; split; eauto.
-                    destruct (permvprog =? Permission.data) eqn:epermvprog;
+                    destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                       inversion Hvprog; inversion Hv'; subst.
                     ++
                       destruct (sigma_shifting_lefttoright_option
@@ -3553,7 +3562,7 @@ Section ThreewayMultisem1.
                       as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                       inversion Hvprog; subst;
                         try by eexists; split; eauto.
-                    destruct (permvprog =? Permission.data) eqn:epermvprog;
+                    destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                       inversion Hvprog; subst.
                     ++
                       destruct (sigma_shifting_lefttoright_option
@@ -3621,7 +3630,7 @@ Section ThreewayMultisem1.
                   {
                     destruct vprog as [| [[[perm cid] bid] off] |]
                                         eqn:evprog; simpl; auto.
-                    destruct (perm =? Permission.data) eqn:eperm; auto.
+                    destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
                     destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                              eqn:esigma; try discriminate.
                     by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
@@ -3631,7 +3640,7 @@ Section ThreewayMultisem1.
                     as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                     inversion Hv''; subst;
                       try by inversion Hvprog as [[contra ?] | ]; eexists; split; eauto.
-                  destruct (permvprog =? Permission.data) eqn:epermvprog;
+                  destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                     inversion Hv''; subst.
                   -- destruct (sigma_shifting_lefttoright_option
                                  (n cidvprog) (n'' cidvprog) bidvprog) as [bidvprog'|]
@@ -3728,7 +3737,7 @@ Section ThreewayMultisem1.
                   {
                     destruct vprog as [| [[[perm cid] bid] off] |]
                                         eqn:evprog; simpl; auto.
-                    destruct (perm =? Permission.data) eqn:eperm; auto.
+                    destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
                     destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                              eqn:esigma; try discriminate.
                     by erewrite sigma_lefttoright_Some_spec; eexists; eauto.
@@ -3738,7 +3747,7 @@ Section ThreewayMultisem1.
                     as [| [[[permvprog cidvprog] bidvprog] offvprog] |];
                     inversion Hvprog; inversion Hv''; subst;
                       try by eexists; split; eauto.
-                  destruct (permvprog =? Permission.data) eqn:epermvprog;
+                  destruct (Permission.eqb permvprog Permission.data) eqn:epermvprog;
                     inversion Hvprog; inversion Hv''; subst.
                   
                   ++ destruct (sigma_shifting_lefttoright_option
@@ -3816,7 +3825,7 @@ Section ThreewayMultisem1.
                     destruct v as [| [[[permv cidv] bidv] offv] |];
                       destruct Hv as [[contra ?] | rewr]; try discriminate;
                         try by inversion rewr; subst.
-                    destruct (permv =? Permission.data) eqn:epermv; try discriminate.
+                    destruct (Permission.eqb permv Permission.data) eqn:epermv; try discriminate.
                     simpl in *. rewrite epermv in vGood.
                     erewrite sigma_lefttoright_Some_spec in vGood.
                     destruct vGood as [? G_]. by erewrite G_ in contra.
@@ -3890,7 +3899,7 @@ Section ThreewayMultisem1.
               {
                 destruct v as [| [[[perm cid] bid] off] |]
                                 eqn:ev; inversion Hv'; simpl; auto.
-                destruct (perm =? Permission.data) eqn:eperm; inversion Hv'; subst;
+                destruct (Permission.eqb perm Permission.data) eqn:eperm; inversion Hv'; subst;
                   simpl in *.
                 - destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                            eqn:esigma2; try discriminate.
@@ -3931,7 +3940,7 @@ Section ThreewayMultisem1.
               +
                 destruct v as [| [[[permv cidv] bidv] offv] |];
                   inversion Hv' as [Hv'_]; subst; inversion G2 as [G2_]; subst; auto.
-                destruct (permv =? Permission.data) eqn:epermv.
+                destruct (Permission.eqb permv Permission.data) eqn:epermv.
                 * destruct (sigma_shifting_lefttoright_option (n cidv) (n'' cidv) bidv)
                            as [bidv'|] eqn:ebidv; try discriminate.
                   inversion Hv'_; subst; clear Hv'_. rewrite epermv in G2_.
@@ -4002,7 +4011,7 @@ Section ThreewayMultisem1.
               destruct v as [| [[[permv cidv] bidv] offv] |];
                 inversion Hv; subst; inversion Hv''; subst; simpl; auto.
 
-              destruct (permv =? Permission.data) eqn:epermv; simpl in *.
+              destruct (Permission.eqb permv Permission.data) eqn:epermv; simpl in *.
               + destruct (sigma_shifting_lefttoright_option (n cidv) (n'' cidv) bidv)
                          as [bidv''|] eqn:esigmav; try discriminate.
                 inversion Hv; subst. rewrite epermv in Hv''.
@@ -4445,7 +4454,7 @@ Section ThreewayMultisem1.
                 try assumption;
                 try discriminate.
               rewrite <- rewr2.
-              destruct (perm =? Permission.data) eqn:eperm; auto.
+              destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
               assert (Hshr: addr_shared_so_far
                               (cid, bid)
                               (rcons t1 (ERet (Pointer.component pc)
@@ -4621,7 +4630,7 @@ Section ThreewayMultisem1.
                 inversion Harg as [rewr3];
                 try assumption;
                 try discriminate;
-                destruct (perm =? Permission.data) eqn:eperm; auto.
+                destruct (Permission.eqb perm Permission.data) eqn:eperm; auto.
               + destruct (sigma_shifting_lefttoright_option (n cid) (n'' cid) bid)
                   as [bid''|]
                        eqn:ebid; try discriminate; inversion rewr3; rewrite eperm.
@@ -4697,7 +4706,7 @@ Section ThreewayMultisem1.
                    inversion Hrel_R_COM as [G | [contra [? ?]]];
                    try by left; try discriminate.
                  +++
-                   destruct (permvregs =? Permission.data) eqn:epermvregs.
+                   destruct (Permission.eqb permvregs Permission.data) eqn:epermvregs.
                    ***
                      destruct (sigma_shifting_lefttoright_option
                                  (n cidvregs) (n'' cidvregs) bidvregs)
@@ -4735,7 +4744,7 @@ Section ThreewayMultisem1.
                      }
                        by subst.
                    *** left. rewrite <- G. inversion rewr. by rewrite epermvregs.
-                 +++ destruct (permvregs =? Permission.data); try discriminate.
+                 +++ destruct (Permission.eqb permvregs Permission.data); try discriminate.
                      destruct (sigma_shifting_lefttoright_option
                                  (n cidvregs) (n'' cidvregs) bidvregs)
                        as [bidvregs''|] eqn:ebidvregs''; try discriminate.
@@ -4752,7 +4761,7 @@ Section ThreewayMultisem1.
                --- destruct vregs1 as [| [[[perm cid] bid] ?] |];
                      inversion Harg as [rewr]; try discriminate;
                        last by destruct Hrel_R_COM as [?|[? _]].
-                   destruct (perm =? Permission.data); try discriminate.
+                   destruct (Permission.eqb perm Permission.data); try discriminate.
                    destruct (sigma_shifting_lefttoright_option
                                (n cid) (n'' cid) bid) as [bid''|] eqn:ebid'';
                      try discriminate.

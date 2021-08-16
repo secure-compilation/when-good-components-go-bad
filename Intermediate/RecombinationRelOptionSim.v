@@ -537,11 +537,7 @@ Section ThreewayMultisem1.
                                   offset)
                               ) as Hmem2''_mem3''.
                    (* Notation NOT WORKING *)
-                   destruct (@eq_op
-                               (prod_eqType
-                                  (prod_eqType (prod_eqType nat_eqType nat_eqType)
-                                               nat_eqType)
-                                  Extra.Z_eqType)
+                   destruct (Pointer.eq
                                (Permission.data,
                                 original_addr.1,
                                 original_addr.2, offset)
@@ -550,12 +546,14 @@ Section ThreewayMultisem1.
                                 offset_store)
                             ) eqn:Heq.
                    +++ (* case true; derive a contradiction to eq_original_addr *)
-                     do 3 (rewrite <- pair_eqE in Heq;
-                           unfold pair_eq in Heq). simpl in Heq.
-                     unfold pair_eq in eq_original_addr.
-                     pose proof andb_false_iff as [Hifandbfalse _].
-                     pose proof (Hifandbfalse eq_original_addr) as [Hf1 | Hf1];
-                       by rewrite Hf1 !andb_false_r !andb_false_l in Heq.
+                     destruct original_addr as [cidorig bidorig]. simpl in *.
+                     destruct perm; first by auto. simpl in *.
+                     apply andb_true_iff in Heq.
+                     destruct Heq as [Heq _].
+                     apply andb_true_iff in Heq as [contra1 contra2].
+                     apply beq_nat_true in contra1.
+                     apply beq_nat_true in contra2.
+                     subst. by rewrite !eqxx in eq_original_addr.
                    +++ (* case false; now use Hmem2''_mem3'' *)
                      
                      destruct Hshift_mem2'' as [Hrewr _].
@@ -563,6 +561,8 @@ Section ThreewayMultisem1.
                      | H: Memory.store mem2'' _ _ = _ |- _ =>
                        specialize (Hmem2''_mem3'' H)
                      end.
+                     
+                     move : Heq => /Pointer.eqP => Heq.
                      match goal with
                      | H: Memory.load mem3'' _ = Some _ |- _ =>
                        rewrite H in Hmem2''_mem3''; symmetry in Hmem2''_mem3'';
@@ -592,11 +592,7 @@ Section ThreewayMultisem1.
                                   offset)
                               ) as Hmem2''_mem3''.
                    (* Notation NOT WORKING *)
-                   destruct (@eq_op
-                               (prod_eqType
-                                  (prod_eqType (prod_eqType nat_eqType nat_eqType)
-                                               nat_eqType)
-                                  Extra.Z_eqType)
+                   destruct (Pointer.eq
                                (Permission.data,
                                 original_addr.1,
                                 original_addr.2, offset)
@@ -605,19 +601,21 @@ Section ThreewayMultisem1.
                                 offset_store)
                             ) eqn:Heq.
                    +++ (* case true; derive a contradiction to eq_original_addr *)
-                     do 3 (rewrite <- pair_eqE in Heq;
-                           unfold pair_eq in Heq). simpl in Heq.
-                     unfold pair_eq in eq_original_addr.
-                     pose proof andb_false_iff as [Hifandbfalse _].
-                     pose proof (Hifandbfalse eq_original_addr) as [Hf1 | Hf1];
-                       by rewrite Hf1 !andb_false_r !andb_false_l in Heq.
+                     destruct original_addr as [cidorig bidorig]. simpl in *.
+                     destruct perm; first by auto. simpl in *.
+                     apply andb_true_iff in Heq.
+                     destruct Heq as [Heq _].
+                     apply andb_true_iff in Heq as [contra1 contra2].
+                     apply beq_nat_true in contra1.
+                     apply beq_nat_true in contra2.
+                     subst. by rewrite !eqxx in eq_original_addr.
                    +++ destruct Hshift_mem2'' as [_ Hrewr].
                        specialize (Hrewr offset v' Hload) as [v_exists Hv_exists].
                        eexists.
                        setoid_rewrite Hmem2''_mem3''; eauto.
             ++ intros cid Hcid. simpl.
                unfold Memory.store in *. simpl in *.
-               destruct (perm =? Permission.data); try discriminate.
+               destruct (Permission.eqb perm Permission.data); try discriminate.
                destruct (mem2'' cid_store) as [cMem|] eqn:ecMem; try discriminate.
                destruct (ComponentMemory.store cMem bid_store offset_store
                                                (Register.get r2 regs3''))

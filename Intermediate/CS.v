@@ -78,6 +78,7 @@ Definition state_component (st : CS.state) : Component.id :=
  counts as "program_ptrs" are the addresses of these buffers,
  not their contents.*)
 
+(************************************************************
 Definition program_ptrs (p: program) : {fset (Component.id * Block.id)} :=
   domm (uncurrym (prog_buffers p)).
 
@@ -89,7 +90,7 @@ Definition component_ptrs (p: program) (cid: Component.id) : {fset (Component.id
 
 Definition value_to_data_pointer_err v : option (Component.id * Block.id) :=
   match v with | Ptr (perm, cid, bid, _) =>
-                 if perm =? Permission.data then Some (cid, bid) else None
+                 if Permission.eqb perm Permission.data then Some (cid, bid) else None
           | _ => None
   end.
 
@@ -125,7 +126,7 @@ Lemma Memory_load_mem_ptrs :
     (vC, vB) \in mem_data_ptrs m.
 Proof.
   intros ????????. unfold Memory.load. simpl.
-  destruct (aP =? Permission.data) eqn:eaP; destruct (m aC) eqn:eaC;
+  destruct (Permission.eqb aP Permission.data) eqn:eaP; destruct (m aC) eqn:eaC;
     intros Hload; try discriminate.
   destruct (ComponentMemory.load_block_load s aB vC vB) as [_ Honlyif].
   unfold mem_data_ptrs.
@@ -146,7 +147,9 @@ Lemma value_to_data_pointer_err_Ptr :
 Proof.
   intros ???. by exists (pc, pb).
 Qed.
+*************************************************************************)
 
+(** BEGIN TODO: Move to some Utils module. *)
 Lemma mem_codomm_setm :
   forall (T S : ordType) (m : {fmap T -> S}) (k1 k2 : T) (v v' : S),
     m k1 = Some v ->
@@ -183,7 +186,9 @@ Proof.
   apply Hsubset'.
   assumption.
 Qed.
+(** END TODO: Move to some Utils module. *)
 
+(*************************************************
 Ltac unfold_Register_set e1 k'mem :=
   unfold Register.set in k'mem; rewrite setmE in k'mem; rewrite e1 in k'mem;
   simpl in k'mem.
@@ -483,6 +488,7 @@ Proof.
     { apply negbF. auto. }
     exfalso. apply notF. rewrite <- H1. exact H.
 Qed.
+ ******************************************************************************)
 
 Lemma is_program_component_pc_notin_domm s ctx :
   is_program_component s ctx ->
@@ -809,7 +815,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
   if (Pointer.offset pc <? 0) % Z then
     None
   else
-    if (Pointer.permission pc =? Permission.code) then
+    if (Permission.eqb (Pointer.permission pc) Permission.code) then
       do instr <- nth_error P_code (Z.to_nat (Pointer.offset pc));
       (* decode and execute the instruction *)
       match instr with
@@ -870,7 +876,7 @@ Definition eval_step (G: global_env) (s: state) : option (trace event_inform * s
         match Register.get r regs with
         | Ptr pc' =>
           if Component.eqb (Pointer.component pc') (Pointer.component pc) then
-            if Pointer.permission pc' =? Permission.code then
+            if Permission.eqb (Pointer.permission pc') Permission.code then
               ret (E0, (gps, mem, regs, pc'))
             else
               None
@@ -959,7 +965,7 @@ Proof.
     end;
     (* simplify *)
     simpl; unfold code in *;
-      rewrite -> Hprocs, HP_code, Hinstr, Hperm, <- beq_nat_refl;
+      rewrite -> Hprocs, HP_code, Hinstr, Hperm; (* <- beq_nat_refl; *)
     (* the program counter is good *)
     match goal with
     | Hpc: (Pointer.offset _ >= 0) % Z |- _ =>
@@ -1075,11 +1081,11 @@ Proof.
            rewrite -> HC_procs, HP_code, Hinstr, rewr in Heval_step.
            assert (Pointer.permission pc0 = Permission.code) as Hperm.
            {
-             destruct (Pointer.permission pc0 =? Permission.code) eqn:e;
+             destruct (Permission.eqb (Pointer.permission pc0) Permission.code) eqn:e;
                try discriminate.
-             by apply beq_nat_true.
+             by apply: Permission.eqP.
            }
-           rewrite -> Hperm, <- beq_nat_refl in Heval_step.
+           rewrite -> Hperm in Heval_step.
            destruct instr; inversion Heval_step; subst; clear Heval_step.
              (*; try (match goal with
                   | Hpcfalse: (Pointer.offset ?PC <? 0) % Z = false,
@@ -1118,7 +1124,7 @@ Proof.
            *** destruct (Register.get r regs0) eqn:Hreg;
                  try discriminate.
                unfold Memory.load in *.
-               destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm';
+               destruct (Permission.eqb (Pointer.permission t0) Permission.data) eqn:Hperm';
                  try discriminate.
                destruct (mem0 (Pointer.component t0)) eqn:Hmem;
                  try discriminate.
@@ -1137,7 +1143,7 @@ Proof.
              destruct (Register.get r regs0) eqn:Hreg;
                try discriminate.
              unfold Memory.store in *.
-             destruct (Pointer.permission t0 =? Permission.data) eqn:Hperm';
+             destruct (Permission.eqb (Pointer.permission t0) Permission.data) eqn:Hperm';
                try discriminate.
              destruct (mem0 (Pointer.component t0)) eqn:Hmem;
                try discriminate.
@@ -1213,14 +1219,14 @@ Proof.
                destruct (Component.eqb (Pointer.component t0) (Pointer.component pc0))
                         eqn:Hcompcheck;
                  try discriminate.
-               destruct (Pointer.permission t0 =? Permission.code) eqn:Hcode;
+               destruct (Permission.eqb (Pointer.permission t0) Permission.code) eqn:Hcode;
                  try discriminate.
                inversion H1; subst.
                eapply Jump with (pc':=pc);
                  try reflexivity.
                **** eexists. eexists. eauto.
                **** assumption.
-               **** apply Nat.eqb_eq. assumption.
+               **** by apply /Permission.eqP.
                **** apply Nat.eqb_eq. assumption.
 
            *** (*match goal with
@@ -1277,7 +1283,7 @@ Proof.
            rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step.
            rewrite Hinstr in Heval_step.
            destruct ((Pointer.offset pc0 <? 0) % Z); try discriminate.
-           destruct (Pointer.permission pc0 =? Permission.code);
+           destruct (Permission.eqb (Pointer.permission pc0) Permission.code);
              try discriminate.
       * destruct (nth_error P_code (Z.to_nat (Pointer.offset pc0)))
           as [instr | ] eqn:Hinstr.
@@ -1295,7 +1301,7 @@ Proof.
            rewrite HC_procs in Heval_step. rewrite HP_code in Heval_step.
            rewrite Hinstr in Heval_step.
            destruct ((Pointer.offset pc0 <? 0) % Z); try discriminate.
-           destruct (Pointer.permission pc0 =? Permission.code);
+           destruct (Permission.eqb (Pointer.permission pc0) Permission.code);
              try discriminate.
     + simpl in Heval_step.
       unfold code in *.
@@ -1546,142 +1552,6 @@ Qed.
 
 Canonical ssrnat.nat_eqType.
 
-(* Should follow from well_formed_program p *)
-Lemma IConst_possible_values pc v r:
-  executing G pc (IConst v r) ->
-  (
-    (exists i : Z, v = IInt i) \/
-    (exists
-        (perm : Permission.id) (cid : Component.id) (bid : Block.id) 
-        (off : Block.offset) procs,
-        v = IPtr (perm, cid, bid, off) /\
-        cid = Pointer.component pc /\
-        prog_procedures p (Pointer.component pc) = Some procs /\
-        procs bid
-    )
-  ).
-Admitted.
-
-
-
-Lemma intermediate_well_formed_events st t st' :
-  Star sem_inform st t st' ->
-  seq.all (well_formed_event
-             (Intermediate.prog_interface p)
-             (Intermediate.prog_procedures p)
-          )
-          t.
-Proof.
-elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
-rewrite seq.all_cat IH andbT {Hstar}.
-case: st1 t1 st2 / Hstep => //=.
-- (* Relies on lemma IConst_possible_values above. *)
-  intros _ _ ? ? ? ? ? Hexec Hreg.
-  specialize (IConst_possible_values _ _ _ Hexec)
-    as [[i ev]|[perm [cid [bid [off [procs' [? [? [Hprocs ?]]]]]]]]];
-    subst; auto.
-  simpl.
-  destruct (perm =? Permission.code) eqn:e; auto.
-  assert (exists procs, prog_procedures p (Pointer.component pc) = Some procs)
-    as [procs HShouldBeProvable2].
-  { by admit. }
-
-  rewrite HShouldBeProvable2.
-  rewrite <- beq_nat_refl, andTb, andbT.
-
-  assert (procs = procs').
-  {
-    rewrite Hprocs in HShouldBeProvable2.
-    by inversion HShouldBeProvable2.
-  }
-
-    by subst.
-
-- intros ? ? ? ? ? ? ? ? Hexec Hfind _.
-  specialize (find_label_in_component_1 _ _ _ _ Hfind) as Hcomp.
-  destruct ptr as [[[perm cid] bid] ?].
-  destruct (perm =? Permission.code) eqn:e; auto.
-  specialize (domm_genv_procedures p) as Hgenv_procedures.
-  specialize (wfprog_defined_procedures valid_program) as Hprog_procedures.
-  rewrite Hprog_procedures in Hgenv_procedures.
-
-  destruct (prog_procedures p (Pointer.component pc)) as [procs|] eqn:e1.
-  + simpl in *. subst. rewrite <- beq_nat_refl, andTb, andbT.
-    unfold find_label_in_component, find_label_in_component_helper  in *.
-    destruct (genv_procedures G (Pointer.component pc)) as [procs'|] eqn:e2;
-      try discriminate.
-
-    (* Search _ find_label_in_component_helper. *)
-    
-    (** AEK: TODO:
-        Need to prove a lemma about the "bid" that is returned by
-        find_label_in_component_helper.
-        This bid is guaranteed to be in the domain of procs'.
-
-        After having proved such a lemma, it remains to show that
-        procs' is the same as procs.
-
-        To do that we need to know that 
-        "genv_procedures G (Pointer.component pc)" and 
-        "prog_procedures p (Pointer.component pc)"
-        are the same thing (are they?)
-        
-        If they are the same thing, then we can easily rewrite e2 in e1 to know
-        that procs' is the same as procs.
-     *)
-    admit.
-  + unfold find_label_in_component  in *.
-    destruct (genv_procedures G (Pointer.component pc)) as [procs'|] eqn:e2;
-      try discriminate.
-    assert (Pointer.component pc \in domm (prog_procedures p)) as Hcontra.
-    {
-      rewrite <- Hgenv_procedures.
-      by rewrite mem_domm e2. 
-    }
-    by rewrite mem_domm e1 in Hcontra.
-- intros ? ? ? ? ? ? ? Hexec Hfind _.
-  specialize (Pointer.inc_preserves_permission pc) as Hperm.
-  specialize (Pointer.inc_preserves_component pc) as Hcomp.
-  specialize (Pointer.inc_preserves_block pc) as Hblock.
-  
-  destruct (Pointer.inc pc) as [[[perm cid] bid] ?].
-  simpl in *. subst.
-
-  assert (Pointer.permission pc = Permission.code) as HShouldBeProvable.
-  { by admit. }
-
-  rewrite HShouldBeProvable. rewrite <- !beq_nat_refl.
-
-  assert (exists procs, prog_procedures p (Pointer.component pc) = Some procs)
-    as [procs HShouldBeProvable2].
-  { by admit. }
-
-  rewrite HShouldBeProvable2 andTb andbT.
-
-  (** AEK: TODO:
-      Should follow from a lemma about executing.
-   *)
-  admit.
-- move=> ????????? /eqP ->.
-    by move=> /imported_procedure_iff /= ->.
-- by move=> ??????? /eqP ->.
-Admitted.
-
-Lemma intermediate_well_formed_trace : forall t cs cs',
-  Star sem_inform cs t cs' ->
-  CS.initial_state p cs ->
-  Intermediate.prog_main p ->
-  Intermediate.well_formed_program p ->
-  well_formed_trace (Intermediate.prog_interface p) (prog_procedures p) t.
-Proof.
-  intros t cs cs' H H' H'' H'''.
-  unfold well_formed_trace. apply/andP; split; last by apply: intermediate_well_formed_events H.
-  apply intermediate_well_bracketed_trace in H.
-  suffices <- : stack_state_of cs = stack_state0 by [].
-  rewrite /initial_state /initial_machine_state in H'.
-  by rewrite H' H''.
-Qed.
-
 End SemanticsInform.
 
 Section SemanticsNonInform.
@@ -1883,60 +1753,6 @@ Qed.
 
 Canonical ssrnat.nat_eqType.
 
-Lemma well_formed_event_inform_well_formed_event_project_non_inform t_inform t_non_inform:
-  seq.all
-    (TracesInform.well_formed_event
-       (Intermediate.prog_interface p)
-       (prog_procedures p)
-    )
-    t_inform
-  ->
-  project_non_inform t_inform = t_non_inform ->
-  seq.all (Traces.well_formed_event (Intermediate.prog_interface p)) t_non_inform.
-Admitted.
-
-Lemma intermediate_well_formed_events_non_inform st t st' :
-  Star sem_non_inform st t st' ->
-  seq.all (Traces.well_formed_event (Intermediate.prog_interface p)) t.
-Proof.
-  intros Hstar.
-  pose proof star_sem_non_inform_star_sem_inform st t st' Hstar
-    as [t_inform [Hstar_inform Hproj]].
-  pose proof intermediate_well_formed_events
-       p
-       valid_program
-       complete_program
-       st t_inform st' Hstar_inform as Hwf_inform.
-  exact (well_formed_event_inform_well_formed_event_project_non_inform
-           t_inform t Hwf_inform Hproj).
-Qed.
-
-Lemma well_formed_trace_inform_well_formed_trace_project_non_inform t_inform t_non_inform:
-  TracesInform.well_formed_trace
-    (Intermediate.prog_interface p)
-    (prog_procedures p)
-    t_inform ->
-  project_non_inform t_inform = t_non_inform ->
-  Traces.well_formed_trace (Intermediate.prog_interface p) t_non_inform.
-Admitted.
-
-Lemma intermediate_well_formed_trace_non_inform : forall t cs cs',
-  Star sem_non_inform cs t cs' ->
-  CS.initial_state p cs ->
-  Intermediate.prog_main p ->
-  Intermediate.well_formed_program p ->
-  Traces.well_formed_trace (Intermediate.prog_interface p) t.
-Proof.
-  intros t cs cs' H H' H'' H'''.
-  pose proof star_sem_non_inform_star_sem_inform cs t cs' H
-    as [t_inform [Hstar_inform Hproj]].
-  pose proof intermediate_well_formed_trace p valid_program complete_program
-       t_inform cs cs' Hstar_inform H' H'' H'''
-    as Hwf_trace_inform.
-  exact (well_formed_trace_inform_well_formed_trace_project_non_inform
-           t_inform t Hwf_trace_inform Hproj).
-Qed.
-
 End SemanticsNonInform.
 
 (* RB: TODO: Use SSR imports consistently (we use SSR exclusively for the next
@@ -1953,7 +1769,7 @@ Proof.
     match goal with
     | Hstore : Memory.store _ ?PTR (Register.get ?REG ?REGS) = _ |- _ =>
       unfold Memory.store in Hstore;
-        destruct (Pointer.permission PTR =? Permission.data) eqn:Hperm;
+        destruct (Permission.eqb (Pointer.permission PTR) Permission.data) eqn:Hperm;
         [| discriminate];
         destruct (mem (Pointer.component PTR)) as [memC |] eqn:Hcase1;
         [| discriminate];
@@ -2432,16 +2248,6 @@ Section ProgramLink.
 End ProgramLink.
 
 
-(* [DynShare] *)
-(*
-SearchAbout prepare_procedures_initial_memory_aux.
-Check prepare_procedures_initial_memory_aux.
-SearchAbout prog_procedures.
-SearchAbout program.
-Check mem_domm.
-Check getm.
-SearchAbout getm.
-*)
 Lemma genv_procedures_prog_procedures_in p cid fid instlst :
   well_formed_program p ->
   (omap (fun m => getm m fid)
@@ -2469,7 +2275,7 @@ Proof.
                        cid) eqn:contra;
        idtac "ExStructures 0.1 legacy"
       ).
-
+  
   (* unable to use the destruct equation due to type inference problems. *)
         (*erewrite contra in e1. try discriminate; split; auto; clear e1;
           unfold reserve_component_blocks; intros H.*)
@@ -2510,7 +2316,12 @@ Proof.
            try (rewrite e1 in H0 || idtac "ExStructures 0.1 legacy rewrite");
            discriminate).
     destruct (ComponentMemoryExtra.reserve_blocks
-         (ComponentMemory.prealloc (odflt emptym ((prog_buffers p) cid)))
+                (ComponentMemory.prealloc (*(odflt emptym ((prog_buffers p) cid))*)
+                   match prog_buffers p cid with
+                   | Some buf => setm (T:=nat_ordType) emptym Block.local buf
+                   | None => emptym
+                   end
+                )
          (length (elementsm (odflt emptym (Some n)))))
              as [compMem bs] eqn:rsvblk.
     rewrite rsvblk in H.
@@ -2531,6 +2342,7 @@ Proof.
 
 Admitted.
 
+(*******************************************************************
 Lemma are_all_ptrs_in_reachable_star_step p st t st' :
   Star (sem_inform p) st t st' ->
   well_formed_program p ->
@@ -2581,10 +2393,10 @@ Proof.
                  (cid, bid) \in (program_ptrs p)).
       {
         intros cid bid HvPtrSome. destruct vPtr as [[[permv cidv] bidv]?]. simpl in HvPtrSome.
-        destruct (permv =? Permission.data) eqn:epermv; try discriminate.
+        destruct (Permission.eqb permv Permission.data) eqn:epermv; try discriminate.
         inversion HvPtrSome. subst cid bid.
         simpl in Hwfi'.
-        destruct Hwfi' as [_ [bufs [Hprog_buffers Hbidv]]].
+        destruct Hwfi' as [_ [Hperm' [bufs [Hprog_buffers Hbidv]]]].
         unfold program_ptrs.
         rewrite mem_domm. rewrite uncurrymE. simpl.
         rewrite Hprog_buffers. simpl. rewrite <- mem_domm.
@@ -2741,6 +2553,9 @@ Definition reachable_from_reg_file
            (regs: Register.t) :=
   ptr \in (\bigcup_(i <- regs_data_ptrs regs) fset (reachable_nodes_nat mem_st i))%fset.
 
+***************************************************************************)
+
+
 (* RB: TODO: [DynShare] This result may not be in standard form for this file,
    adjust if needed ([does_prefix] not being used here, say). *)
 Theorem does_prefix_inform_non_inform :
@@ -2756,12 +2571,21 @@ Admitted.
    to use where it is needed now (recomposition). *)
 Lemma domm_partition :
   forall p1 p2 s t gps mem regs pc,
+    well_formed_program p1 ->
+    well_formed_program p2 ->
+    closed_program (program_link p1 p2) ->   
     mergeable_interfaces (prog_interface p1) (prog_interface p2) ->
     CS.initial_state (program_link p1 p2) s ->
     Star (CS.sem_non_inform (program_link p1 p2)) s t (gps, mem, regs, pc) ->
     Pointer.component pc \notin domm (prog_interface p2) ->
     Pointer.component pc \in domm (prog_interface p1).
-Admitted.
+Proof.
+  intros ? ? ? ? ? ? ? ? Hwf1 Hwf2 Hclosed Hmerge Hinit Hstar Hnotin.
+  specialize (@star_pc_domm_non_inform _ _ Hwf1 Hwf2 Hmerge Hclosed
+                                       _ _ _ _ _ _ Hinit Hstar
+             ) as [G | G]; auto.
+  - by rewrite G in Hnotin.
+Qed.
 
 Lemma domm_partition_in_left_not_in_right :
   forall p1 p2 s t gps mem regs pc,
@@ -2770,6 +2594,264 @@ Lemma domm_partition_in_left_not_in_right :
     Star (CS.sem_non_inform (program_link p1 p2)) s t (gps, mem, regs, pc) ->
     Pointer.component pc \in domm (prog_interface p1) ->
     Pointer.component pc \notin domm (prog_interface p2).
+Proof.
+  intros ? ? ? ? ? ? ? ? [[_ Hdisj] _] _ _ Hin.
+  pose proof (fdisjointP _ _ Hdisj) as G. by apply G in Hin.
+Qed.
+
+Section SemanticsInformProperties.
+  Variable p: program.
+
+  Hypothesis valid_program:
+    well_formed_program p.
+
+  Hypothesis complete_program:
+    closed_program p.
+
+  Let G := prepare_global_env p.
+
+  (* Should follow from well_formed_program p *)
+Lemma IConst_possible_values pc v r:
+  executing G pc (IConst v r) ->
+  (
+    (exists i : Z, v = IInt i) \/
+    (exists
+        (perm : Permission.id) (cid : Component.id) (bid : Block.id) 
+        (off : Block.offset) procs,
+        v = IPtr (perm, cid, bid, off) /\
+        cid = Pointer.component pc /\
+        bid = Block.local /\
+        perm = Permission.data /\
+        prog_procedures p (Pointer.component pc) = Some procs /\
+        procs bid
+    )
+  ).
+Proof.
+  destruct pc as [[[pcperm pcc] pcb] pcoff].
+  intros [C_procs [P_code [H1 [H2 [H3 [H4 H5]]]]]].
+  destruct valid_program.
+  simpl in *; subst.
+  assert (Hprepare: prepare_procedures_procs p pcc = Some C_procs).
+  {
+    by unfold prepare_procedures_procs, prepare_procedures_initial_memory.
+  }
+  specialize (prepare_procedures_procs_prog_procedures
+                valid_program Hprepare H2) as [C_procs' [b' [HC_procs'1 HC_procs'2]]].
+  assert (In (IConst v r) P_code) as Hin.
+  {
+    by eapply nth_error_In; eauto. 
+  }
+  specialize (wfprog_well_formed_instructions0 _ _ HC_procs'1 _ _ HC_procs'2 _ Hin).
+  unfold well_formed_instruction in *.
+  destruct v as [|[[[perm c] b] off]]; first by left; eexists; eauto.
+  right. simpl in *.
+  destruct wfprog_well_formed_instructions0 as [? [? [buf [Hbuf ?]]]]. subst.
+  exists Permission.data, pcc, Block.local, off, C_procs'.
+  repeat (split; first reflexivity).
+  split; first assumption.
+
+  (** Remains to show that "C_procs' Block.local".        *)
+  (** I am not exactly sure why we need to prove that.    *)
+  (** TODO: Look at the uses of this lemma and figure out *)
+  (** whether there is a bug in its statement.            *)
+
 Admitted.
+
+Lemma intermediate_well_formed_events st t st' :
+  Star (sem_inform p) st t st' ->
+  seq.all (well_formed_event
+             (Intermediate.prog_interface p)
+             (Intermediate.prog_procedures p)
+          )
+          t.
+Proof.
+elim: st t st' / => // st1 t1 st2 t2 st3 t /= Hstep Hstar IH -> {t}.
+rewrite seq.all_cat IH andbT {Hstar}.
+case: st1 t1 st2 / Hstep => //=.
+- (* Relies on lemma IConst_possible_values above. *)
+  intros _ _ ? ? ? ? ? Hexec Hreg.
+  specialize (IConst_possible_values _ _ _ Hexec)
+    as [[i ev]|[perm [cid [bid [off [procs' [? [? [Hprocs ?]]]]]]]]];
+    subst; auto.
+  destruct H1 as [Hperm [? ?]]. subst perm.
+  simpl. by rewrite !eqxx.
+  (*******************************************
+  simpl.
+  destruct (Permission.eqb perm Permission.code) eqn:e; auto.
+  assert (exists procs, prog_procedures p (Pointer.component pc) = Some procs)
+    as [procs HShouldBeProvable2].
+  { by admit. }
+
+  rewrite HShouldBeProvable2.
+  rewrite <- beq_nat_refl, andTb, andbT.
+
+  assert (procs = procs').
+  {
+    rewrite Hprocs in HShouldBeProvable2.
+    by inversion HShouldBeProvable2.
+  }
+
+    by subst.
+   ***************************************)
+
+- intros ? ? ? ? ? ? ? ? Hexec Hfind _.
+  specialize (find_label_in_component_1 _ _ _ _ Hfind) as Hcomp.
+  destruct ptr as [[[perm cid] bid] ?].
+  destruct perm; auto.
+  specialize (domm_genv_procedures p) as Hgenv_procedures.
+  specialize (wfprog_defined_procedures valid_program) as Hprog_procedures.
+  rewrite Hprog_procedures in Hgenv_procedures.
+
+  destruct (prog_procedures p (Pointer.component pc)) as [procs|] eqn:e1.
+  + simpl in *. subst. rewrite <- beq_nat_refl, andTb, andbT.
+    unfold find_label_in_component, find_label_in_component_helper  in *.
+    destruct (genv_procedures G (Pointer.component pc)) as [procs'|] eqn:e2;
+      last by rewrite e2 in Hfind.
+
+    (* Search _ find_label_in_component_helper. *)
+    
+    (** AEK: TODO:
+        Need to prove a lemma about the "bid" that is returned by
+        find_label_in_component_helper.
+        This bid is guaranteed to be in the domain of procs'.
+
+        After having proved such a lemma, it remains to show that
+        procs' is the same as procs.
+
+        To do that we need to know that 
+        "genv_procedures G (Pointer.component pc)" and 
+        "prog_procedures p (Pointer.component pc)"
+        are the same thing (are they?)
+        
+        If they are the same thing, then we can easily rewrite e2 in e1 to know
+        that procs' is the same as procs.
+     *)
+    admit.
+  + unfold find_label_in_component  in *.
+    destruct (genv_procedures G (Pointer.component pc)) as [procs'|] eqn:e2;
+      last by rewrite e2 in Hfind.
+    assert (Pointer.component pc \in domm (prog_procedures p)) as Hcontra.
+    {
+      rewrite <- Hgenv_procedures.
+      by rewrite mem_domm e2. 
+    }
+      by rewrite mem_domm e1 in Hcontra.
+  + (* Contradiction on pointer permission in Hfind *)
+    admit.
+- intros ? ? ? ? ? ? ? Hexec Hfind _.
+  specialize (Pointer.inc_preserves_permission pc) as Hperm.
+  specialize (Pointer.inc_preserves_component pc) as Hcomp.
+  specialize (Pointer.inc_preserves_block pc) as Hblock.
+  
+  destruct (Pointer.inc pc) as [[[perm cid] bid] ?].
+  simpl in *. subst.
+
+  assert (Pointer.permission pc = Permission.code) as HShouldBeProvable.
+  { by admit. }
+
+  rewrite HShouldBeProvable. rewrite <- !beq_nat_refl.
+
+  assert (exists procs, prog_procedures p (Pointer.component pc) = Some procs)
+    as [procs HShouldBeProvable2].
+  { by admit. }
+
+  rewrite HShouldBeProvable2 andTb andbT.
+
+  (** AEK: TODO:
+      Should follow from a lemma about executing.
+   *)
+  admit.
+- move=> ????????? /eqP ->.
+    by move=> /imported_procedure_iff /= ->.
+- by move=> ??????? /eqP ->.
+Admitted.
+
+Lemma intermediate_well_formed_trace : forall t cs cs',
+  Star (sem_inform p) cs t cs' ->
+  CS.initial_state p cs ->
+  Intermediate.prog_main p ->
+  Intermediate.well_formed_program p ->
+  well_formed_trace (Intermediate.prog_interface p) (prog_procedures p) t.
+Proof.
+  intros t cs cs' H H' H'' H'''.
+  unfold well_formed_trace. apply/andP; split; last by apply: intermediate_well_formed_events H.
+  apply intermediate_well_bracketed_trace in H.
+  suffices <- : stack_state_of cs = stack_state0 by [].
+  rewrite /initial_state /initial_machine_state in H'.
+  by rewrite H' H''.
+Qed.
+
+
+End SemanticsInformProperties.
+
+
+Section SemanticsNonInformProperties.
+  
+  Variable p: program.
+  
+  Hypothesis valid_program:
+    well_formed_program p.
+
+  Hypothesis complete_program:
+    closed_program p.
+  
+  Let G := prepare_global_env p.
+
+  
+Lemma well_formed_event_inform_well_formed_event_project_non_inform t_inform t_non_inform:
+  seq.all
+    (TracesInform.well_formed_event
+       (Intermediate.prog_interface p)
+       (prog_procedures p)
+    )
+    t_inform
+  ->
+  project_non_inform t_inform = t_non_inform ->
+  seq.all (Traces.well_formed_event (Intermediate.prog_interface p)) t_non_inform.
+Admitted.
+
+Lemma intermediate_well_formed_events_non_inform st t st' :
+  Star (sem_non_inform p) st t st' ->
+  seq.all (Traces.well_formed_event (Intermediate.prog_interface p)) t.
+Proof.
+  intros Hstar.
+  pose proof star_sem_non_inform_star_sem_inform p st t st' Hstar
+    as [t_inform [Hstar_inform Hproj]].
+  pose proof intermediate_well_formed_events
+       p
+       valid_program
+       complete_program
+       st t_inform st' Hstar_inform as Hwf_inform.
+  exact (well_formed_event_inform_well_formed_event_project_non_inform
+           t_inform t Hwf_inform Hproj).
+Qed.
+
+Lemma well_formed_trace_inform_well_formed_trace_project_non_inform t_inform t_non_inform:
+  TracesInform.well_formed_trace
+    (Intermediate.prog_interface p)
+    (prog_procedures p)
+    t_inform ->
+  project_non_inform t_inform = t_non_inform ->
+  Traces.well_formed_trace (Intermediate.prog_interface p) t_non_inform.
+Admitted.
+
+Lemma intermediate_well_formed_trace_non_inform : forall t cs cs',
+  Star (sem_non_inform p) cs t cs' ->
+  CS.initial_state p cs ->
+  Intermediate.prog_main p ->
+  Intermediate.well_formed_program p ->
+  Traces.well_formed_trace (Intermediate.prog_interface p) t.
+Proof.
+  intros t cs cs' H H' H'' H'''.
+  pose proof star_sem_non_inform_star_sem_inform p cs t cs' H
+    as [t_inform [Hstar_inform Hproj]].
+  pose proof intermediate_well_formed_trace p valid_program complete_program
+       t_inform cs cs' Hstar_inform H' H'' H'''
+    as Hwf_trace_inform.
+  exact (well_formed_trace_inform_well_formed_trace_project_non_inform
+           t_inform t Hwf_trace_inform Hproj).
+Qed.
+
+End SemanticsNonInformProperties.
 
 End CS.
