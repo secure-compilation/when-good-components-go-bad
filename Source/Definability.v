@@ -2762,15 +2762,17 @@ Local Transparent expr_of_const_val loc_of_reg.
                         rewrite (Memory.load_after_store_eq _ _ _ _ Hstore') in Hload.
                         now injection Hload as ?. }
                       subst v.
-                      exists saved. (* exists (Int n0). *)
+                      eexists.
                       split.
-                      -- simpl.
-                         unfold saved,
-                         uniform_shift, LOCALBUF_blockid, ssrnat.subn.
+                      -- unfold shift_value_option,
+                         rename_value_option, rename_value_template_option,
+                         saved.
                          simpl.
-                         unfold all_zeros_shift, uniform_shift, ssrnat.addn.
+                         unfold ssrnat.addn, ssrnat.subn,
+                         LOCALBUF_blockid,
+                         all_zeros_shift, uniform_shift.
                          simpl.
-                         admit. (* Dead end *)
+                         reflexivity.
                       -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                          ++ destruct prefix; discriminate. (* contra *)
                          ++ subst prefix. destruct prefix0 as [| ? [|]]; discriminate. (* contra *)
@@ -2780,8 +2782,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                               subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6.
                             subst t0.
                             rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss.
-                            (* reflexivity. *)
-                            admit.
+                            move: wf_e => /andP => [[]] => /eqP => Heq1 => /eqP => Heq2.
+                            subst ptrC ptrb.
+                            reflexivity.
                     * setoid_rewrite Hcomp1 in Hregs.
                       destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
                         as [v' Hload'].
