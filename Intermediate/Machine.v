@@ -1565,17 +1565,14 @@ Theorem prog_buffer_ptr :
     False.
 Proof.
   intros p C (*bufs b*) buf o ptr Hwf (*Hbufs*) Hbuf Hptr.
-  (*TODO: FIXME *)
-  (*******************************************************
-  assert (Hdomm : b \in domm bufs) by (apply /dommP; now eauto).
-  pose proof wfprog_well_formed_buffers Hwf Hbufs Hdomm as Hwfb.
+  pose proof wfprog_well_formed_buffers Hwf Hbuf as Hwfb.
   unfold Buffer.well_formed_buffer_opt in Hwfb.
-  rewrite Hbuf in Hwfb.
   destruct buf as [n | vs].
   - destruct o as [| op | on]; simpl in Hptr.
     + destruct (0 <? n); discriminate.
     + destruct (Pos.to_nat op <? n); discriminate.
     + discriminate.
+
   - destruct o as [| op | on]; simpl in Hptr.
     + destruct vs as [| v vs];
         [discriminate |].
@@ -1590,8 +1587,6 @@ Proof.
       discriminate.
     + discriminate.
 Qed.
-   *******************************************)
-Admitted.
   
 (* RB: Slight "misnomer" because of the presence of matching_mains.
    Closely connected to linkable, but not exactly the same at this
