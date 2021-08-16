@@ -605,6 +605,7 @@ Section Definability.
   Definition extcall_check: expr :=
     E_if (E_binop Eq (E_deref EXTCALL) (E_val (Int 1%Z)))
          (invalidate_metadata;;
+          E_assign (loc_of_reg E_R_COM) E_arg;;
           E_assign EXTCALL (E_val (Int 0%Z)))
          (E_val (Int 0%Z)).
 
@@ -704,7 +705,9 @@ Section Definability.
     | [] => True
     | C :: callers' =>
       exists v P top bot,
-      stk = CS.Frame C v (Kseq (E_call C P (E_val (Int 0))) Kstop) :: top ++ bot /\
+      stk = CS.Frame C v (Kseq
+                   (invalidate_metadata;; E_assign EXTCALL (E_val (Int 0));; E_call C P (E_val (Int 0)))
+                   Kstop)  :: top ++ bot /\
       valid_procedure C P /\
       All (fun '(CS.Frame C' _ k) => C' = C /\ k = Kstop) top /\
       well_formed_callers callers' bot
@@ -1594,14 +1597,20 @@ Section Definability.
         destruct (Memory.store_after_load
                     mem6
                     (Permission.data, Component.main,
+                     Block.local, reg_offset E_R_COM)
+                 Undef (Int 0%Z)) as [mem7 Hmem7].
+        simplify_memory.
+        destruct (Memory.store_after_load
+                    mem7
+                    (Permission.data, Component.main,
                      Block.local, 1%Z)
-                    (Int 1%Z) (Int 0%Z)) as [mem7 Hmem7].
+                    (Int 1%Z) (Int 0%Z)) as [mem8 Hmem8].
         simplify_memory.
           admit.
 
         exists (CS.State (Component.main)
                     [:: ]
-                    mem7
+                    mem8
                     Kstop
                     (expr_of_trace Component.main Procedure.main
                                    (comp_subtrace Component.main t))
@@ -1642,7 +1651,6 @@ Section Definability.
                destruct (C == Component.main) eqn:Heq.
                ++ move: Heq => /eqP Heq; subst C.
                   destruct r; simpl in *; eexists; simplify_memory.
-                  admit.
                ++ move: Heq => /eqP Heq.
                   destruct r; simpl in *; eexists; simplify_memory.
                   simpl.
@@ -1775,19 +1783,312 @@ Section Definability.
           simpl in wf_C, wf_e(*, wb_suffix*); subst C_.
 
         - (* Event case: call. *)
+
+          assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
+            as [Hprefix | [prefix0 [e1 Hprefix01]]]
+            by admit;
+            first admit. (* TODO: Treat empty case separately. *)
+
           case/andP: wf_e => C_ne_C' /imported_procedure_iff Himport.
           (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
           simpl.
-          pose proof (wfmem_extcall wf_mem) as [v Hv].
-          Print invalidate_metadata.
+          pose proof (wfmem_extcall wf_mem Hprefix01) as [Hextcall_C Hextcall_notC].
+          have C'_b := valid_procedure_has_block (or_intror (closed_intf Himport)).
+          assert (C_next_e1: C = next_comp_of_event e1) by admit.
+          specialize (Hextcall_C C C_b C_next_e1).
+          assert (C'_next_e1: C' <> next_comp_of_event e1)
+            by (rewrite -C_next_e1 /C; move: C_ne_C' => /eqP; congruence).
+          have HextcallC' := Hextcall_notC C' C'_b C'_next_e1.
 
-          pose proof (wfmem_meta wf_mem E_R_ONE C_b) as [v1 Hv1].
-          pose proof (wfmem_meta wf_mem E_R_AUX1 C_b) as [v2 Hv2].
-          pose proof (wfmem_meta wf_mem E_R_AUX2 C_b) as [v3 Hv3].
-          pose proof (wfmem_meta wf_mem E_R_RA C_b) as [v4 Hv4].
-          pose proof (wfmem_meta wf_mem E_R_SP C_b) as [v5 Hv5].
-          pose proof (wfmem_meta wf_mem E_R_ARG C_b) as [v6 Hv6].
+
+          pose proof (wfmem_meta wf_mem E_R_ONE C'_b) as [v1 Hv1].
+          pose proof (wfmem_meta wf_mem E_R_AUX1 C'_b) as [v2 Hv2].
+          pose proof (wfmem_meta wf_mem E_R_AUX2 C'_b) as [v3 Hv3].
+          pose proof (wfmem_meta wf_mem E_R_RA C'_b) as [v4 Hv4].
+          pose proof (wfmem_meta wf_mem E_R_SP C'_b) as [v5 Hv5].
+          pose proof (wfmem_meta wf_mem E_R_ARG C'_b) as [v6 Hv6].
+          pose proof (wfmem_meta wf_mem E_R_COM C'_b) as [v7 Hv7].
           pose proof (wfmem_meta wf_mem E_R_COM C_b) as [vcom Hvcom].
+
+          destruct (Memory.store_after_load mem (Permission.data, C, Block.local, 1%Z)
+                                            (Int 0) (Int 1)) as [mem1 Hmem1]; simplify_memory.
+          destruct (Memory.store_after_load mem1 (Permission.data, C', Block.local, reg_offset E_R_ONE)
+                                            v1 Undef) as [mem2 Hmem2]; simplify_memory.
+          destruct (Memory.store_after_load mem2 (Permission.data, C', Block.local, reg_offset E_R_AUX1)
+                                            v2 Undef) as [mem3 Hmem3]; simplify_memory.
+          destruct (Memory.store_after_load mem3 (Permission.data, C', Block.local, reg_offset E_R_AUX2)
+                                            v3 Undef) as [mem4 Hmem4]; simplify_memory.
+          destruct (Memory.store_after_load mem4 (Permission.data, C', Block.local, reg_offset E_R_RA)
+                                            v4 Undef) as [mem5 Hmem5]; simplify_memory.
+          destruct (Memory.store_after_load mem5 (Permission.data, C', Block.local, reg_offset E_R_SP)
+                                            v5 Undef) as [mem6 Hmem6]; simplify_memory.
+          destruct (Memory.store_after_load mem6 (Permission.data, C', Block.local, reg_offset E_R_ARG)
+                                            v6 Undef) as [mem7 Hmem7]; simplify_memory.
+          destruct (Memory.store_after_load mem7 (Permission.data, C', Block.local, reg_offset E_R_COM)
+                                            v7 vcom) as [mem8 Hmem8]; simplify_memory.
+          destruct (Memory.store_after_load mem8 (Permission.data, C', Block.local, 1%Z)
+                                            (Int 1) (Int 0)) as [mem9 Hmem9]; simplify_memory.
+
+          exists (ECallInform C P' vcom mem1 regs C').
+          exists (StackState C' (C :: callers s)).
+          exists [CState C', CS.Frame C arg
+                                 (Kseq
+                                    (invalidate_metadata;;
+                                     E_assign EXTCALL (E_val (Int 0));; E_call C P (E_val (Int 0)))
+                                    Kstop
+                                 )
+                                 :: stk, mem9,
+                  Kstop, expr_of_trace C' P' (comp_subtrace C' t), vcom].
+
+          split.
+          + Local Transparent loc_of_reg.
+            do 17 (take_step; eauto). simplify_memory.
+
+            eapply star_step. simpl.
+            apply CS.eval_kstep_sound. simpl.
+            rewrite (negbTE C_ne_C').
+            rewrite -> imported_procedure_iff in Himport. rewrite Himport.
+            rewrite <- imported_procedure_iff in Himport.
+            now rewrite (find_procedures_of_trace_exp t (closed_intf Himport)).
+
+            do 9 (take_step; eauto). simplify_memory.
+            do 83 (take_step; eauto).
+            econstructor. eapply CS.KS_Arg.
+            take_step.
+            eapply star_refl.
+            reflexivity.
+            Local Opaque loc_of_reg.
+          + econstructor; eauto.
+            * destruct wf_stk as (top & bot & ? & Htop & Hbot). subst stk.
+              eexists []; eexists; simpl; split; eauto.
+              split; trivial.
+              eexists arg, P, top, bot.
+              by do 3 (split; trivial).
+            * constructor.
+              -- (* wfmem_counter *)
+                 move=> C0 C0_b.
+                 destruct (C == C0) eqn:Heq;
+                   move: Heq => /eqP => Heq; subst; simplify_memory.
+                  assert (ctr_eq: counter_value C0 ((prefix0 ++ [:: e1]) ++ [:: ECallInform (cur_comp s) P' new_arg mem' regs C']) =
+                         counter_value C0 (prefix0 ++ [:: e1])).
+                  { unfold counter_value, comp_subtrace.
+                    rewrite filter_cat. simpl.
+                    suff: ((C0 == cur_comp s) = false) => [-> //=|]. rewrite cats0 //=.
+                    apply /eqP.
+                    unfold C in Heq. congruence. }
+                  rewrite ctr_eq. now eapply wfmem_counter.
+              -- (* wfmem_extcall_ini *)
+                  by case prefix.
+              -- (* wfmem_extcall *)
+                 intros. eapply rcons_inv in H as [? ?]. subst.
+                 split.
+                 ++ move=> C0 _ //= ?; subst C0.
+                    simplify_memory.
+                 ++ move=> C0 C0_b //= ?.
+                    destruct (C == C0) eqn:Heq;
+                      move: Heq => /eqP => Heq; subst; simplify_memory.
+                    now eapply wfmem_extcall; eauto; congruence.
+              -- (* wfmem_meta *)
+                 intros.
+                 destruct (C' == C0) eqn:Heq;
+                   move: Heq => /eqP => Heq; subst.
+                 destruct (wfmem_meta wf_mem E_R_COM H) as [vcom' Hcom'].
+                 destruct r; eexists; simplify_memory.
+                 match goal with
+                 | |- exists v, Memory.load ?mem (Permission.data, ?C, Block.local, reg_offset ?r) = Some v
+                   => destruct (wfmem_meta wf_mem r H) as [vr Hvr];
+                       destruct r; eexists; simplify_memory
+                 end.
+              -- (* wfmem_ini *)
+                 by case prefix.
+              -- (* wfmem *)
+                 move=> ? ? H; eapply rcons_inv in H as [? ?]; subst.
+                 specialize (wfmem wf_mem Logic.eq_refl) as [Hsnapshot Hregs].
+                 split.
+                 ++ intros [cid bid] Hshared.
+                    specialize (Hsnapshot (cid, bid) Hshared).
+                    unfold memory_shifts_memory_at_shared_addr,
+                    memory_renames_memory_at_shared_addr,
+                    sigma_shifting_wrap_bid_in_addr,
+                    sigma_shifting_lefttoright_addr_bid
+                      in *.
+                    destruct Hsnapshot as [[cid' bid'] [Hinj [Hrename Hrename']]].
+                    injection Hinj as ? ?; subst cid' bid'.
+                    assert (Hneq : ssrnat.addn (ssrnat.subn bid (all_zeros_shift cid)) (uniform_shift 1 cid) <> Block.local). {
+                      rewrite ssrnat.addn1. discriminate.
+                    }
+                    have Hgood: left_block_id_good_for_shifting (all_zeros_shift cid) bid. {
+                      unfold
+                      left_block_id_good_for_shifting,
+                      all_zeros_shift.
+                      auto.
+                    }
+                    eapply sigma_lefttoright_Some_spec in Hgood as [rbid Hgood].
+                    erewrite Hgood.
+                    eexists. split; [| split].
+                    **  reflexivity.
+                    ** intros offset v Hload.
+                       (* [e_]'s memory is that of the call event. *)
+                       (* Extended trace well-formedness: *)
+                       (* Is t a good trace? *)
+                       simpl in *.
+                       (* Calls do not modify the (shared) memory, therefore
+                          these two should be identical. *)
+                       assert (Hmem' : mem' = mem_of_event_inform e1).
+                       { clear -wf_int_pref'.
+                         move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+                         inversion wf_int_pref.
+                         - now destruct prefix0.
+                         - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
+                         - apply rcons_inj in H. inversion H; subst; clear H.
+                           apply rcons_inj in H3. inversion H3; subst; clear H3.
+                           inversion H1; subst; clear H1.
+                           reflexivity.
+                       }
+                       subst mem'.
+                       specialize (Hrename _ _ Hload) as [v' [Hload' Hrename]].
+                       exists v'. split.
+                       --- (* NOTE: Lemmas on all_zeros_shift? *)
+                         unfold all_zeros_shift, uniform_shift,
+                         sigma_shifting_lefttoright_option
+                           in Hgood.
+                         injection Hgood as ?; subst rbid.
+                         rewrite ssrnat.addn1.
+                         simplify_memory.
+                         rewrite <- Hload'. rewrite ssrnat.addn1. unfold all_zeros_shift.
+                         unfold uniform_shift. reflexivity.
+                         unfold Block.local. congruence.
+                         unfold Block.local. congruence.
+                         unfold Block.local. congruence.
+                         unfold Block.local. congruence.
+                         unfold Block.local. congruence.
+                         unfold Block.local. congruence.
+                         unfold Block.local. congruence.
+                         unfold Block.local. congruence.
+                         unfold Block.local. congruence.
+                       --- assumption.
+                    ** (* "Symmetric" case
+                          TODO: refactor *)
+                       intros offset v Hload.
+                       simpl in *.
+                       assert (Hmem' : mem' = mem_of_event_inform e1).
+                       { clear -wf_int_pref'.
+                         move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+                         inversion wf_int_pref.
+                         - now destruct prefix0.
+                         - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
+                         - apply rcons_inj in H. inversion H; subst; clear H.
+                           apply rcons_inj in H3. inversion H3; subst; clear H3.
+                           inversion H1; subst; clear H1.
+                           reflexivity.
+                       }
+                       subst mem'.
+                       erewrite Memory.load_after_store in Hload; eauto.
+                       unfold all_zeros_shift, uniform_shift,
+                              sigma_shifting_lefttoright_option
+                         in *.
+                       injection Hgood as ?; subst rbid.
+                       rewrite ssrnat.addn1 in Hload.
+                       rewrite ssrnat.addn1 in Hrename'.
+                       (* NOTE: [move: Hload. case: /ifP]? *)
+                       move: Hload. case: ifP.
+                       --- move /eqP. discriminate.
+                       --- move=> Heq Hload.
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem7) in Hload; eauto;
+                             try (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem6) in Hload; eauto;
+                             try (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem5) in Hload; eauto;
+                             try (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem4) in Hload; eauto;
+                             try (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem3) in Hload; eauto;
+                             try (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem2) in Hload; eauto;
+                             try (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem1) in Hload; eauto;
+                             try (unfold Block.local; congruence).
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem) in Hload; eauto;
+                             try (unfold Block.local; congruence).
+                 ++ assert (Hmem' : mem' = mem_of_event_inform e1).
+                    { clear -wf_int_pref'.
+                      move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+                      inversion wf_int_pref.
+                      - now destruct prefix0.
+                      - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
+                      - apply rcons_inj in H. inversion H; subst; clear H.
+                        apply rcons_inj in H3. inversion H3; subst; clear H3.
+                        inversion H1; subst; clear H1.
+                        reflexivity.
+                    }
+                    subst mem'.
+                    simpl in *.
+                    intros r n v Hoffset Hload. subst.
+                    unfold postcondition_event_registers in Hregs.
+                    erewrite Memory.load_after_store_neq in Hload; eauto;
+                      try (destruct r; simpl; congruence).
+
+                    inversion wf_int_pref'.
+                    ** now destruct prefix0.
+                    ** destruct prefix0. inversion H. now destruct prefix0.
+                    ** rewrite cats1 in H. apply rcons_inj in H. inversion H; subst; clear H.
+                       rewrite cats1 in H3. apply rcons_inj in H3; inversion H3; subst; clear H3.
+                       inversion H1; subst; clear H1.
+
+                       unfold Machine.Intermediate.Register.invalidate.
+                       simpl.
+                       eexists; split; eauto.
+                       unfold all_zeros_shift, uniform_shift.
+                       unfold Machine.Intermediate.Register.get; simpl.
+                       simpl in Hload.
+                       { destruct r.
+                         - erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_eq in Hload; simpl; eauto.
+                           now inversion Hload.
+                           congruence.
+                           congruence.
+                           congruence.
+                           congruence.
+                           congruence.
+                         - admit.
+                         - erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_eq in Hload; simpl; eauto.
+                           now inversion Hload.
+                           congruence.
+                           congruence.
+                           congruence.
+                           congruence.
+                         - erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_eq in Hload; simpl; eauto.
+                           now inversion Hload.
+                           congruence.
+                           congruence.
+                           congruence.
+                         - erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_eq in Hload; simpl; eauto.
+                           now inversion Hload.
+                           congruence.
+                           congruence.
+                         - erewrite Memory.load_after_store_neq in Hload; simpl; eauto.
+                           erewrite Memory.load_after_store_eq in Hload; simpl; eauto.
+                           now inversion Hload.
+                           congruence.
+                         - erewrite Memory.load_after_store_eq in Hload; simpl; eauto.
+                           now inversion Hload.
+                       }
+            * right. by apply: (closed_intf Himport).
+              (* END CASE: CALL *)
+
 
 (* FIXME: Call event proof breaks here.
           exists (ECallInform C P' new_arg mem6 regs C'). (* TODO: new_arg? *)
