@@ -2631,7 +2631,30 @@ Proof.
   intros [C_procs [P_code [H1 [H2 [H3 [H4 H5]]]]]].
   destruct valid_program.
   simpl in *; subst.
-  Search _ genv_procedures prog_procedures.
+  assert (Hprepare: prepare_procedures_procs p pcc = Some C_procs).
+  {
+    by unfold prepare_procedures_procs, prepare_procedures_initial_memory.
+  }
+  specialize (prepare_procedures_procs_prog_procedures
+                valid_program Hprepare H2) as [C_procs' [b' [HC_procs'1 HC_procs'2]]].
+  assert (In (IConst v r) P_code) as Hin.
+  {
+    by eapply nth_error_In; eauto. 
+  }
+  specialize (wfprog_well_formed_instructions0 _ _ HC_procs'1 _ _ HC_procs'2 _ Hin).
+  unfold well_formed_instruction in *.
+  destruct v as [|[[[perm c] b] off]]; first by left; eexists; eauto.
+  right. simpl in *.
+  destruct wfprog_well_formed_instructions0 as [? [? [buf [Hbuf ?]]]]. subst.
+  exists Permission.data, pcc, Block.local, off, C_procs'.
+  repeat (split; first reflexivity).
+  split; first assumption.
+
+  (** Remains to show that "C_procs' Block.local".        *)
+  (** I am not exactly sure why we need to prove that.    *)
+  (** TODO: Look at the uses of this lemma and figure out *)
+  (** whether there is a bug in its statement.            *)
+
 Admitted.
 
 Lemma intermediate_well_formed_events st t st' :
