@@ -120,9 +120,9 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
 | KS_If2 : forall C s mem k e2 e3 i arg,
     kstep G [State C, s, mem, Kif e2 e3 k, E_val (Int i), arg] E0
             [State C, s, mem, k, if i != 0%Z then e2 else e3, arg]
-| KS_Arg : forall C s mem k i,
-    kstep G [State C, s, mem, k, E_arg, Int i] E0
-            [State C, s, mem, k, E_val (Int i), Int i]
+| KS_Arg : forall C s mem k v,
+    kstep G [State C, s, mem, k, E_arg, v] E0
+            [State C, s, mem, k, E_val v, v]
 | KS_LocalBuffer : forall C s mem k arg,
     kstep G [State C, s, mem, k, E_local, arg] E0
             [State C, s, mem, k, E_val (Ptr (Permission.data,C,Block.local,0%Z)), arg]
@@ -229,9 +229,9 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
   | E_if e1 e2 e3 =>
     ret (E0, [State C, s, mem, Kif e2 e3 k, e1, arg])
   | E_arg =>
-    if arg is Int v then
-      ret (E0, [State C, s, mem, k, E_val (Int v), arg])
-    else None
+    (* if arg is Int v then *)
+      ret (E0, [State C, s, mem, k, E_val arg(* (Int v) *), arg])
+    (* else None *)
   | E_local =>
     ret (E0, [State C, s, mem, k, E_val (Ptr (Permission.data, C, Block.local, 0%Z)), arg])
   | E_alloc e =>
