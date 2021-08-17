@@ -3498,6 +3498,34 @@ Local Transparent expr_of_const_val loc_of_reg.
                       simpl in *.
                       (* subst v prefix. *)
                       unfold postcondition_event_registers in Hregs.
+
+                      assert (t0 =
+                              Machine.Intermediate.Register.set
+                                (Ereg_to_reg dst)
+                                (
+                                  Machine.Intermediate.Register.get
+                                    (Ereg_to_reg src)
+                                    (register_file_of_event_inform e1)
+                                )
+                                (register_file_of_event_inform e1)
+                             ).
+                      {
+                        inversion wf_int_pref' as
+                            [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                        ++ destruct prefix; discriminate. (* contra *)
+                        ++ subst prefix.
+                           destruct prefix0 as [| ? [|]]; discriminate. (* contra *)
+                        ++ rewrite Hprefix01 in Ht.
+                           symmetry in Ht. apply cats2_inv in Ht as [? [? ?]].
+                           subst prefint eint1 eint2.
+                           inversion Hstep as
+                               [| | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | |];
+                             subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6.
+                             by subst t0.
+                      }
+                      subst t0.
+                        
+                      
                       destruct (Z.eqb_spec (reg_offset dst) off) as [Heq | Hneq].
                       * subst off.
                         assert (dst = CS.CS.reg_to_Ereg reg)
@@ -3518,37 +3546,54 @@ Local Transparent expr_of_const_val loc_of_reg.
                         specialize (Hregs_src Hloadmem0_vsrc)
                           as [saved_shifted [Hsaved_shifted1 Hsaved_shifted2]].
                         exists saved_shifted.
-                        assert (t0 =
-                                Machine.Intermediate.Register.set
-                                  reg
-                                  (
-                                    Machine.Intermediate.Register.get
-                                      (Ereg_to_reg src)
-                                      (register_file_of_event_inform e1)
-                                  )
-                                  (register_file_of_event_inform e1)
-                               ).
-                        {
-                          inversion wf_int_pref' as
-                              [| | prefint eint1 eint2 Hsteps Hstep Ht].
-                           ++ destruct prefix; discriminate. (* contra *)
-                           ++ subst prefix.
-                              destruct prefix0 as [| ? [|]]; discriminate. (* contra *)
-                           ++ rewrite Hprefix01 in Ht.
-                              symmetry in Ht. apply cats2_inv in Ht as [? [? ?]].
-                              subst prefint eint1 eint2.
-                              inversion Hstep as
-                                  [| | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | |];
-                                subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6.
-                              subst t0.
-                              by rewrite Ereg_to_reg_to_Ereg.
-                        }
-                        subst t0.
+                        rewrite Ereg_to_reg_to_Ereg.
                         split; first exact Hsaved_shifted1.
                         rewrite Machine.Intermediate.Register.gss.
                         exact Hsaved_shifted2.
 
-                      * admit.
+                      * subst off.
+                        assert (Hptr_neq:
+                            (Permission.data, C, Block.local, reg_offset dst)
+                            <>
+                            (Permission.data,
+                             cur_comp s,
+                             Block.local,
+                             reg_offset (CS.CS.reg_to_Ereg reg))).
+                        {
+                          unfold not. move => /Pointer.eqP => contra.
+                          simpl in contra.
+                          apply andb_true_iff in contra as [_ contra].
+                          apply Z.eqb_eq in contra. by apply Hneq in contra.
+                        }
+                        rewrite (Memory.load_after_store_neq _ _ _ _ _ Hptr_neq Hstore')
+                          in Hload.
+
+                        assert (Hptr_neq2:
+                            (Permission.data, C, Block.local, 0%Z)
+                            <>
+                            (Permission.data,
+                             cur_comp s,
+                             Block.local,
+                             reg_offset (CS.CS.reg_to_Ereg reg))).
+                        {
+                          unfold not. move => /Pointer.eqP => contra.
+                          simpl in contra.
+                          apply andb_true_iff in contra as [_ contra].
+                          by destruct (CS.CS.reg_to_Ereg reg); auto.
+                        }
+                        rewrite (Memory.load_after_store_neq _ _ _ _ _ Hptr_neq2 Hmem)
+                          in Hload.
+
+                        simpl in Hregs. rewrite Hcomp1 in Hregs.
+                        specialize (Hregs _ _ _ Logic.eq_refl Hload)
+                          as [v_shifted [Hv_shifted1 Hv_shifted2]].
+                        exists v_shifted. split; first exact Hv_shifted1.
+                        assert (Hneq': reg <> Ereg_to_reg dst).
+                        {
+                          unfold not. intros. subst reg.
+                          by rewrite reg_to_Ereg_to_reg in Hneq.
+                        }
+                        by rewrite (@Machine.Intermediate.Register.gso _ _ _ _ Hneq').
                     }
                 +
               (** Here, we have Hinitial and Hsteady as assumptions about mem0 *)
