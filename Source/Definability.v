@@ -453,7 +453,7 @@ Section Definability.
                                         (E_deref (loc_of_reg r1))
                                         (E_deref (loc_of_reg r2)));;
       E_call C P (E_val (Int 0))
-    | ELoad _ r_dest r_src _ _ =>
+    | ELoad _ r_src r_dest _ _ =>
       (* E_assign EXTCALL (E_val (Int 0%Z));; *)
       E_assign (loc_of_reg r_dest) (E_deref (loc_of_reg r_src));;
       E_call C P (E_val (Int 0))
