@@ -1589,6 +1589,12 @@ Section Definability.
     Qed.
 
     (* TODO: Relocate *)
+    Remark reg_to_Ereg_to_reg r : CS.CS.reg_to_Ereg (Ereg_to_reg r) = r.
+    Proof.
+      now destruct r.
+    Qed.
+
+    (* TODO: Relocate *)
     Remark cats2 {A} s (e1 e2 : A) :
       (s ++ [:: e1]) ++ [:: e2] = rcons (rcons s e1) e2.
     Proof.
@@ -3525,21 +3531,24 @@ Local Transparent expr_of_const_val loc_of_reg.
           (* Case analysis on concrete constant expression; all cases are
              similar.
              TODO: Refactoring. *)
-          destruct (wfmem_meta wf_mem reg0 C_b) as [v0 Hloadr0].
-          erewrite <- Memory.load_after_store_neq in Hloadr0;
+          destruct (wfmem_meta wf_mem reg0 C_b) as [v0 Hreg0mem0].
+          assert (Hreg0mem := Hreg0mem0).
+          erewrite <- Memory.load_after_store_neq in Hreg0mem;
             last exact Hmem;
             last (injection; now destruct reg0).
-          destruct (wfmem_meta wf_mem reg1 C_b) as [v1 Hloadr1].
-          erewrite <- Memory.load_after_store_neq in Hloadr1;
+          destruct (wfmem_meta wf_mem reg1 C_b) as [v1 Hreg1mem0].
+          assert (Hreg1mem := Hreg1mem0).
+          erewrite <- Memory.load_after_store_neq in Hreg1mem;
             last exact Hmem;
             last (injection; now destruct reg1).
           set (saved := eval_binop (binop_of_Ebinop op) v0 v1).
           (* NOTE: In previous cases, we got to the store by a different route. *)
-          destruct (wfmem_meta wf_mem reg2 C_b) as [v2 Hloadr2].
-          erewrite <- Memory.load_after_store_neq in Hloadr2;
+          destruct (wfmem_meta wf_mem reg2 C_b) as [v2 Hreg2mem0].
+          assert (Hreg2mem := Hreg2mem0).
+          erewrite <- Memory.load_after_store_neq in Hreg2mem;
             last exact Hmem;
             last (injection; now destruct reg2).
-          destruct (Memory.store_after_load _ _ _ saved Hloadr2) as [mem'' Hstore']. (* "Standard" names here... *)
+          destruct (Memory.store_after_load _ _ _ saved Hreg2mem) as [mem'' Hstore']. (* "Standard" names here... *)
           (* assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset regs1)) *)
           (*   by (now destruct v). (* Lemma? *) *)
           (* assert (Hload : exists v', Memory.load mem0 (Permission.data, C, Block.local, reg_offset v) = Some v') *)
@@ -3554,10 +3563,10 @@ Local Transparent expr_of_const_val loc_of_reg.
 Local Transparent expr_of_const_val loc_of_reg.
             take_steps.
             * reflexivity.
-            * exact Hloadr0.
+            * exact Hreg0mem.
             * take_steps.
               -- reflexivity.
-              -- exact Hloadr1.
+              -- exact Hreg1mem.
               -- take_steps.
                  ++ reflexivity.
                  ++ exact Hstore'.
@@ -3733,6 +3742,104 @@ Local Transparent expr_of_const_val loc_of_reg.
                           rewrite (Memory.load_after_store_eq _ _ _ _ Hstore') in Hload.
                           now injection Hload as ?. }
                         subst v.
+
+Ltac t_postcondition_event_registers_get
+prefix prefix0 Hprefix01 eregs :=
+  inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
+  [ destruct prefix; discriminate (* contra *)
+  | subst prefix; destruct prefix0 as [| ? [|]]; discriminate (* contra *)
+  | rewrite Hprefix01 in Ht;
+    symmetry in Ht; apply cats2_inv in Ht as [? [? ?]]; subst prefint eint1 eint2;
+    inversion Hstep as [| | | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | |];
+    subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+    subst eregs;
+    [rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss]].
+    (* reflexivity]. *)
+
+                        rewrite <- Hcomp1 in Hreg0mem0.
+                        destruct (Hregs (Ereg_to_reg reg0) _ _ (f_equal _ (reg_to_Ereg_to_reg _)) Hreg0mem0)
+                          as [vs0 [Hshift0 Hget0]].
+                        rewrite <- Hcomp1 in Hreg1mem0.
+                        destruct (Hregs (Ereg_to_reg reg1) _ _ (f_equal _ (reg_to_Ereg_to_reg _)) Hreg1mem0)
+                          as [vs1 [Hshift1 Hget1]].
+
+Local Transparent binop_of_Ebinop. (* TODO: This was made locally opaque earlier but not reversed! *)
+
+                        unfold shift_value_option,
+                        rename_value_option,
+                        rename_value_template_option,
+                        rename_addr_option,
+                        sigma_shifting_wrap_bid_in_addr,
+                        sigma_shifting_lefttoright_addr_bid,
+                        sigma_shifting_lefttoright_option.
+                        unfold ssrnat.leq, ssrnat.addn, ssrnat.subn,
+                        all_zeros_shift, uniform_shift.
+                        unfold saved.
+                        simpl.
+                        destruct v0 as [n0 | [[[p0 C0] b0] o0] |];
+                          destruct v1 as [n1 | [[[p1 C1] b1] o1] |];
+                          destruct op;
+                          simpl.
+
+                        eexists. split. reflexivity.
+                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
+                        rewrite Hget0 Hget1.
+                        injection Hshift0 as ?; subst vs0.
+                        injection Hshift1 as ?; subst vs1.
+                        reflexivity.
+
+                        eexists. split. reflexivity.
+                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
+                        rewrite Hget0 Hget1.
+                        injection Hshift0 as ?; subst vs0.
+                        injection Hshift1 as ?; subst vs1.
+                        reflexivity.
+
+                        eexists. split. reflexivity.
+                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
+                        rewrite Hget0 Hget1.
+                        injection Hshift0 as ?; subst vs0.
+                        injection Hshift1 as ?; subst vs1.
+                        reflexivity.
+
+                        eexists. split. reflexivity.
+                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
+                        rewrite Hget0 Hget1.
+                        injection Hshift0 as ?; subst vs0.
+                        injection Hshift1 as ?; subst vs1.
+                        reflexivity.
+
+                        eexists. split. reflexivity.
+                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
+                        rewrite Hget0 Hget1.
+                        injection Hshift0 as ?; subst vs0.
+                        injection Hshift1 as ?; subst vs1.
+                        reflexivity.
+
+                        assert (p1 = Permission.data) by admit; subst p1. simpl.
+                        destruct b1 as [| b1'].
+                        simpl.
+                        inversion Hshift1. (* contra on Hregs shift *)
+                        simpl.
+                        eexists. split. reflexivity.
+                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
+                        rewrite Hget0 Hget1.
+                        injection Hshift0 as ?; subst vs0.
+                        injection Hshift1 as ?; subst vs1.
+                        reflexivity.
+
+                        assert (p1 = Permission.data) by admit; subst p1. simpl.
+                        destruct b1 as [| b1'].
+                        inversion Hshift1.
+                        eexists. split. reflexivity.
+                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
+                        rewrite Hget0 Hget1.
+                        injection Hshift0 as ?; subst vs0.
+                        injection Hshift1 as ?; subst vs1.
+                        reflexivity.
+
+                        (* ... *)
+
                         eexists.
                         split.
                         -- admit. (* TODO: Case analysis above. *)
