@@ -516,11 +516,11 @@ Section ThreewayMultisem1.
             match goal with
             | H: regs_rel_of_executing_part _ _ _ _  |- _ => inversion H as [Hreg] end.
             intros reg.
-            pose proof (Hreg r1)
+            pose proof (Hreg rsrc)
               as [Hget_shift | [Hshift_r1_None Heq1]];
               pose proof (Hreg reg)
               as [Hreg_shift | [Hshift_reg_None Heq2]];
-              destruct ((Register.to_nat reg == Register.to_nat r2)) eqn:Hreg_r; simpl;
+              destruct ((Register.to_nat reg == Register.to_nat rdest)) eqn:Hreg_r; simpl;
                 unfold Register.set, Register.get; rewrite !setmE Hreg_r.
             ++ left. by simpl in *.
             ++ left. eauto.

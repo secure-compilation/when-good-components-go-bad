@@ -544,9 +544,9 @@ Proof.
       * (* IMov *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
-        destruct (Register.eqP reg r2) as [Heq | Hneq].
+        destruct (Register.eqP reg rdest) as [Heq | Hneq].
         -- (* The new value comes from r1, which follows from the IH. *)
-           subst r2. rewrite Register.gss in Hget.
+           subst rdest. rewrite Register.gss in Hget.
            exact (Hregs1 _ _ Hget).
         -- (* The new value comes from reg, which follows from the IH. *)
            rewrite Register.gso in Hget; last assumption.
@@ -942,9 +942,9 @@ Proof.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.
       * (* IMov *)
-        destruct (Register.eqb reg r2) eqn:Hcase;
+        destruct (Register.eqb reg rdest) eqn:Hcase;
           move: Hcase => /Register.eqP => Hcase.
-        -- subst r2. rewrite Register.gss in Hget.
+        -- subst rdest. rewrite Register.gss in Hget.
            eapply IHget; eassumption.
         -- rewrite Register.gso in Hget; last assumption.
            eapply IHget; eassumption.

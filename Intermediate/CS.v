@@ -660,11 +660,11 @@ Inductive step (G : global_env) : state -> trace event_inform -> state -> Prop :
            [EConst (Pointer.component pc) (imm_to_val v) (reg_to_Ereg r) mem regs']
            (gps, mem, regs', Pointer.inc pc)
 
-| Mov: forall gps mem regs regs' pc r1 r2,
-    executing G pc (IMov r1 r2) ->
-    Register.set r2 (Register.get r1 regs) regs = regs' ->
+| Mov: forall gps mem regs regs' pc rsrc rdest,
+    executing G pc (IMov rsrc rdest) ->
+    Register.set rdest (Register.get rsrc regs) regs = regs' ->
     step G (gps, mem, regs, pc)
-           [EMov (Pointer.component pc) (reg_to_Ereg r1) (reg_to_Ereg r2) mem regs']
+           [EMov (Pointer.component pc) (reg_to_Ereg rsrc) (reg_to_Ereg rdest) mem regs']
            (gps, mem, regs', Pointer.inc pc)
 
 | BinOp: forall gps mem regs regs' pc r1 r2 r3 op,
