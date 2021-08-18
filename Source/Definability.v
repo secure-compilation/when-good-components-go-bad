@@ -2283,7 +2283,16 @@ Local Transparent expr_of_const_val loc_of_reg.
                            initialization has already taken place --
                            initial events?. *)
                         instantiate (1 := Int 1).
-                        admit.
+                        simpl.
+                        destruct wf_mem. subst prefix. unfold C in *.
+                        rewrite <- Hcomp1. rewrite <- Hcomp1 in C_b.
+                        specialize (wfmem0 prefix0 e1 Logic.eq_refl)
+                          as [_ [Hpostcond_steady _]].
+                        specialize (Hpostcond_steady _ C_b Logic.eq_refl) as [G _].
+                        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
+                          last by destruct v.
+                        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                          easy.
                      ** take_steps.
                         --- reflexivity.
                         --- assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
@@ -2552,7 +2561,16 @@ Local Transparent expr_of_const_val loc_of_reg.
                        take_steps.
                        --- reflexivity.
                        --- instantiate (1 := (Int 1)).
-                           admit.
+                           simpl.
+                           destruct wf_mem. subst prefix. unfold C in *.
+                           rewrite <- Hcomp1. rewrite <- Hcomp1 in C_b.
+                           specialize (wfmem0 prefix0 e1 Logic.eq_refl)
+                             as [_ [Hpostcond_steady _]].
+                           specialize (Hpostcond_steady _ C_b Logic.eq_refl) as [G _].
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
+                             last by destruct v.
+                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                             easy.
                        --- take_steps.
                            +++ reflexivity.
                            +++ assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
@@ -2834,7 +2852,16 @@ Local Transparent expr_of_const_val loc_of_reg.
                            initialization has already taken place --
                            initial events?. *)
                         instantiate (1 := Int 1).
-                        admit.
+                        simpl.
+                        destruct wf_mem. subst prefix. unfold C in *.
+                        rewrite <- Hcomp1. rewrite <- Hcomp1 in C_b.
+                        specialize (wfmem0 prefix0 e1 Logic.eq_refl)
+                          as [_ [Hpostcond_steady _]].
+                        specialize (Hpostcond_steady _ C_b Logic.eq_refl) as [G _].
+                        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
+                          last by destruct v.
+                        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                          easy.
                      ** take_steps.
                         --- reflexivity.
                         --- assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
@@ -3150,7 +3177,16 @@ Local Transparent expr_of_const_val loc_of_reg.
                        initialization has already taken place --
                        initial events?. *)
                     instantiate (1 := Int 1).
-                    admit.
+                    simpl.
+                    destruct wf_mem. subst prefix. unfold C in *.
+                    rewrite <- Hcomp1. rewrite <- Hcomp1 in C_b.
+                    specialize (wfmem0 prefix0 e1 Logic.eq_refl)
+                      as [_ [Hpostcond_steady _]].
+                    specialize (Hpostcond_steady _ C_b Logic.eq_refl) as [G _].
+                    rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
+                      last by destruct dst.
+                    rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
+                      easy.
                  ++ take_steps.
                     ** reflexivity.
                     ** assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
