@@ -3746,95 +3746,113 @@ prefix prefix0 Hprefix01 eregs :=
 
 Local Transparent binop_of_Ebinop. (* TODO: This was made locally opaque earlier but not reversed! *)
 
+Ltac t_postcondition_event_registers_binop_case mem prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1 :=
+  repeat match goal with
+  | Hload : Memory.load mem _ = Some (Ptr (?PERM, _, ?B, _)) |- _ =>
+    assert (PERM = Permission.data) by admit;
+    subst PERM;
+    destruct B as [| ?];
+    [discriminate |]
+  end;
+  [eexists];
+  split;
+  [reflexivity |];
+  t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs;
+  rewrite Hget0 Hget1;
+  injection Hshift0 as ?; subst vs0;
+  injection Hshift1 as ?; subst vs1;
+  reflexivity.
+
+Ltac t_postcondition_event_registers_data_pointers mem :=
+  repeat match goal with
+  | Hload : Memory.load mem _ = Some (Ptr (?PERM, _, ?B, _)) |- _ =>
+    assert (PERM = Permission.data) by admit;
+    subst PERM;
+    destruct B as [| ?];
+    [discriminate |]
+  end.
+
+Ltac t_postcondition_event_registers_pointer_Cb
+     prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1 HeqC Heqb :=
+  eexists; split; [reflexivity |];
+  t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs;
+  rewrite Hget0 Hget1;
+  injection Hshift0 as ?; subst vs0;
+  injection Hshift1 as ?; subst vs1;
+  unfold ssrnat.addn, ssrnat.subn, ssrnat.addn_rec, ssrnat.subn_rec,
+  all_zeros_shift, uniform_shift;
+  simpl;
+  rewrite !Nat.add_0_r !Nat.sub_0_r;
+  move: HeqC => /Nat.eqb_spec; try move => /negbTE; move => ->;
+  move: Heqb => /Nat.eqb_spec; try move => /negbTE; move => ->;
+  reflexivity.
+
+Ltac t_postcondition_event_registers_pointer_Cbo
+     prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1 HeqC Heqb Heqo :=
+  eexists; split; [reflexivity |];
+  t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs;
+  rewrite Hget0 Hget1;
+  injection Hshift0 as ?; subst vs0;
+  injection Hshift1 as ?; subst vs1;
+  unfold ssrnat.addn, ssrnat.subn, ssrnat.addn_rec, ssrnat.subn_rec,
+  all_zeros_shift, uniform_shift;
+  simpl;
+  rewrite !Nat.add_0_r !Nat.sub_0_r;
+  move: HeqC => /Nat.eqb_spec; try move => /negbTE; move => ->;
+  move: Heqb => /Nat.eqb_spec; try move => /negbTE; move => ->;
+  ((move: Heqo => /Z.leb_spec0; move => ->) ||
+   (move: Heqo => /Z.ltb_spec0; rewrite Z.ltb_antisym; move => /negbTE; move => ->));
+  reflexivity.
+
+                        (* General case analysis on values and operations. Most
+                           cases can be solved from this information alone. *)
                         unfold shift_value_option,
                         rename_value_option,
                         rename_value_template_option,
                         rename_addr_option,
                         sigma_shifting_wrap_bid_in_addr,
                         sigma_shifting_lefttoright_addr_bid,
-                        sigma_shifting_lefttoright_option.
+                        sigma_shifting_lefttoright_option in *.
                         unfold ssrnat.leq, ssrnat.addn, ssrnat.subn,
-                        all_zeros_shift, uniform_shift.
-                        unfold saved.
+                        all_zeros_shift, uniform_shift in *.
+                        unfold saved in *.
                         simpl.
                         destruct v0 as [n0 | [[[p0 C0] b0] o0] |];
                           destruct v1 as [n1 | [[[p1 C1] b1] o1] |];
                           destruct op;
-                          simpl.
+                          simpl;
+                          (* t_postcondition_event_registers_shift_pointers. *)
+                          try t_postcondition_event_registers_binop_case
+                              mem prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1.
 
-                        eexists. split. reflexivity.
-                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
-                        rewrite Hget0 Hget1.
-                        injection Hshift0 as ?; subst vs0.
-                        injection Hshift1 as ?; subst vs1.
-                        reflexivity.
+                        (* In a few cases, more interesting pointer operations
+                           are required. Note that this amount of case analysis
+                           is overkill in the sense that one false check
+                           suffices to short-circuit evaluation (and similar
+                           optimizations may be possible above). *)
 
-                        eexists. split. reflexivity.
-                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
-                        rewrite Hget0 Hget1.
-                        injection Hshift0 as ?; subst vs0.
-                        injection Hshift1 as ?; subst vs1.
-                        reflexivity.
+                        -- t_postcondition_event_registers_data_pointers mem;
+                             simpl;
+                             destruct (Nat.eqb_spec C0 C1) as [HeqC | HeqC];
+                             destruct (Nat.eqb_spec b0 b1) as [Heqb | Heqb];
+                             t_postcondition_event_registers_pointer_Cb
+                               prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1 HeqC Heqb.
 
-                        eexists. split. reflexivity.
-                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
-                        rewrite Hget0 Hget1.
-                        injection Hshift0 as ?; subst vs0.
-                        injection Hshift1 as ?; subst vs1.
-                        reflexivity.
+                        -- t_postcondition_event_registers_data_pointers mem;
+                             simpl;
+                             destruct (Nat.eqb_spec C0 C1) as [HeqC | HeqC];
+                             destruct (Nat.eqb_spec b0 b1) as [Heqb | Heqb];
+                             t_postcondition_event_registers_pointer_Cb
+                               prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1 HeqC Heqb.
 
-                        eexists. split. reflexivity.
-                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
-                        rewrite Hget0 Hget1.
-                        injection Hshift0 as ?; subst vs0.
-                        injection Hshift1 as ?; subst vs1.
-                        reflexivity.
+                        -- t_postcondition_event_registers_data_pointers mem;
+                             simpl;
+                             destruct (Nat.eqb_spec C0 C1) as [HeqC | HeqC];
+                             destruct (Nat.eqb_spec b0 b1) as [Heqb | Heqb];
+                             destruct (Z.leb_spec o0 o1) as [Heqo | Heqo];
+                             t_postcondition_event_registers_pointer_Cbo
+                               prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1 HeqC Heqb Heqo.
 
-                        eexists. split. reflexivity.
-                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
-                        rewrite Hget0 Hget1.
-                        injection Hshift0 as ?; subst vs0.
-                        injection Hshift1 as ?; subst vs1.
-                        reflexivity.
-
-                        assert (p1 = Permission.data) by admit; subst p1. simpl.
-                        destruct b1 as [| b1'].
-                        simpl.
-                        inversion Hshift1. (* contra on Hregs shift *)
-                        simpl.
-                        eexists. split. reflexivity.
-                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
-                        rewrite Hget0 Hget1.
-                        injection Hshift0 as ?; subst vs0.
-                        injection Hshift1 as ?; subst vs1.
-                        reflexivity.
-
-                        assert (p1 = Permission.data) by admit; subst p1. simpl.
-                        destruct b1 as [| b1'].
-                        inversion Hshift1.
-                        eexists. split. reflexivity.
-                        t_postcondition_event_registers_get prefix prefix0 Hprefix01 eregs.
-                        rewrite Hget0 Hget1.
-                        injection Hshift0 as ?; subst vs0.
-                        injection Hshift1 as ?; subst vs1.
-                        reflexivity.
-
-                        (* ... *)
-
-                        eexists.
-                        split.
-                        -- admit. (* TODO: Case analysis above. *)
-                           (* now constructor. *)
-                        -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
-                           ++ destruct prefix; discriminate. (* contra *)
-                           ++ subst prefix. destruct prefix0 as [| ? [|]]; discriminate. (* contra *)
-                           ++ rewrite Hprefix01 in Ht.
-                              symmetry in Ht. apply cats2_inv in Ht as [? [? ?]]. subst prefint eint1 eint2.
-                              inversion Hstep as [| | | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | |];
-                              subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6.
-                              subst eregs.
-                              rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss.
-                              reflexivity.
                       * setoid_rewrite Hcomp1 in Hregs.
                         destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
                           as [v' Hload'].
