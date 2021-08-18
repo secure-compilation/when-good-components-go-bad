@@ -158,6 +158,8 @@ Section Definability.
       eapply (@star_step _ _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
     end.
 
+  Ltac take_steps := (take_step; [take_steps]) || take_step.
+
   Lemma switch_clause_spec p' P C stk mem n n' e_then e_else arg :
     Memory.load mem (P, C, Block.local, 0%Z) = Some (Int n) ->
     if (n =? n') % Z then
@@ -239,7 +241,7 @@ Section Definability.
     clear es_n. intros m m_le_n es_le_n.
     induction es as [|e es IH]; try apply star_refl.
     unfold switch. simpl. simpl in es_le_n. rewrite fst_switch -Nat.sub_succ_r. simpl.
-    do 5 take_step; [eauto|eauto|].
+    do 5 take_step; [eauto|].
     - unfold Memory.load in C_local. simpl in C_local.
       destruct (Permission.eqb P Permission.data); try discriminate.
       unfold Memory.load. simpl. eauto.
@@ -1652,8 +1654,6 @@ Section Definability.
             eauto
           end).
 
-    Ltac take_steps := (take_step; [take_steps]) || take_step.
-
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
       the prefix, executing from the initial state. Separately, execution to a
@@ -1921,7 +1921,6 @@ Section Definability.
           (* destruct (wfmem_call wf_mem (Logic.eq_refl _) C_b) as [Hmem Harg]. *)
           simpl.
           pose proof (wfmem_extcall wf_mem) as [v Hv].
-          Print invalidate_metadata.
 
           pose proof (wfmem_meta wf_mem E_R_ONE C_b) as [v1 Hv1].
           pose proof (wfmem_meta wf_mem E_R_AUX1 C_b) as [v2 Hv2].
@@ -2201,16 +2200,14 @@ Local Opaque loc_of_reg.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
-              -- reflexivity.
               -- exact Hstore'.
               -- (* Do recursive call. *)
-                  take_steps.
+                 take_steps.
                   ++ reflexivity.
                   ++ now apply find_procedures_of_trace.
                   ++ (* Now we are done with the event.
                         We still need to process the external call check. *)
                      take_steps.
-                     ** reflexivity.
                      ** (* TODO: Needs a new invariant that talks about the init
                            check. Assume for now that it exists, and
                            initialization has already taken place --
@@ -2218,7 +2215,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                         instantiate (1 := Int 1).
                         admit.
                      ** take_steps.
-                        --- reflexivity.
                         --- assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
                             rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
                               last (now destruct v). (* Trivial property of register offsets. *)
@@ -2595,12 +2591,10 @@ Local Transparent expr_of_const_val loc_of_reg.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
-              -- reflexivity.
               -- (* TODO: Obtain from invariants. *)
                  instantiate (1 := Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z)).
                  admit.
               -- take_steps.
-                 ++ reflexivity.
                  ++ exact Hstore'.
                  ++ take_steps.
                     ** reflexivity.
@@ -2608,11 +2602,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
                        take_steps.
-                       --- reflexivity.
                        --- instantiate (1 := (Int 1)).
                            admit.
                        --- take_steps.
-                           +++ reflexivity.
                            +++ assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
                                rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
                                  last (now destruct v). (* Trivial property of register offsets. *)
@@ -2896,7 +2888,6 @@ Local Transparent expr_of_const_val loc_of_reg.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
-              -- reflexivity.
               -- exact Hstore'.
               -- (* Do recursive call. *)
                   take_steps.
@@ -2905,7 +2896,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                   ++ (* Now we are done with the event.
                         We still need to process the external call check. *)
                      take_steps.
-                     ** reflexivity.
                      ** (* TODO: Needs a new invariant that talks about the init
                            check. Assume for now that it exists, and
                            initialization has already taken place --
@@ -2913,7 +2903,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                         instantiate (1 := Int 1).
                         admit.
                      ** take_steps.
-                        --- reflexivity.
                         --- assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
                             rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
                               last (now destruct v). (* Trivial property of register offsets. *)
@@ -3311,7 +3300,6 @@ Local Transparent expr_of_const_val loc_of_reg.
           + (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
             take_steps.
-            * reflexivity.
             * exact Hstore'.
             * (* Do recursive call. *)
               take_steps.
@@ -3320,7 +3308,6 @@ Local Transparent expr_of_const_val loc_of_reg.
               -- (* Now we are done with the event.
                     We still need to process the external call check. *)
                  take_steps.
-                 ++ reflexivity.
                  ++ (* TODO: Needs a new invariant that talks about the init
                        check. Assume for now that it exists, and
                        initialization has already taken place --
@@ -3328,7 +3315,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                     instantiate (1 := Int 1).
                     admit.
                  ++ take_steps.
-                    ** reflexivity.
                     ** assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
                        rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
                          last (now destruct ptr). (* Trivial property of register offsets. *)
@@ -3562,13 +3548,10 @@ Local Transparent expr_of_const_val loc_of_reg.
           + (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
             take_steps.
-            * reflexivity.
             * exact Hreg0mem.
             * take_steps.
-              -- reflexivity.
               -- exact Hreg1mem.
               -- take_steps.
-                 ++ reflexivity.
                  ++ exact Hstore'.
                  ++ (* Do recursive call. *)
                     take_steps.
@@ -3577,7 +3560,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
                        take_steps.
-                       --- reflexivity.
                        --- (* TODO: Needs a new invariant that talks about the init
                               check. Assume for now that it exists, and
                               initialization has already taken place --
@@ -3585,7 +3567,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                            instantiate (1 := Int 1).
                            admit.
                        --- take_steps.
-                           +++ reflexivity.
                            +++ assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
                                rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
                                  last (now destruct reg2). (* Trivial property of register offsets. *)
