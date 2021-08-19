@@ -3782,9 +3782,7 @@ Ltac t_postcondition_event_registers_pointer_Cb
   unfold ssrnat.addn, ssrnat.subn, ssrnat.addn_rec, ssrnat.subn_rec,
   all_zeros_shift, uniform_shift;
   simpl;
-  rewrite !Nat.add_0_r !Nat.sub_0_r;
-  move: HeqC => /Nat.eqb_spec; try move => /negbTE; move => ->;
-  move: Heqb => /Nat.eqb_spec; try move => /negbTE; move => ->;
+  rewrite !Nat.add_0_r !Nat.sub_0_r HeqC Heqb;
   reflexivity.
 
 Ltac t_postcondition_event_registers_pointer_Cbo
@@ -3797,11 +3795,7 @@ Ltac t_postcondition_event_registers_pointer_Cbo
   unfold ssrnat.addn, ssrnat.subn, ssrnat.addn_rec, ssrnat.subn_rec,
   all_zeros_shift, uniform_shift;
   simpl;
-  rewrite !Nat.add_0_r !Nat.sub_0_r;
-  move: HeqC => /Nat.eqb_spec; try move => /negbTE; move => ->;
-  move: Heqb => /Nat.eqb_spec; try move => /negbTE; move => ->;
-  ((move: Heqo => /Z.leb_spec0; move => ->) ||
-   (move: Heqo => /Z.ltb_spec0; rewrite Z.ltb_antisym; move => /negbTE; move => ->));
+  rewrite !Nat.add_0_r !Nat.sub_0_r HeqC Heqb Heqo;
   reflexivity.
 
                         (* General case analysis on values and operations. Most
@@ -3833,23 +3827,23 @@ Ltac t_postcondition_event_registers_pointer_Cbo
 
                         -- t_postcondition_event_registers_data_pointers mem;
                              simpl;
-                             destruct (Nat.eqb_spec C0 C1) as [HeqC | HeqC];
-                             destruct (Nat.eqb_spec b0 b1) as [Heqb | Heqb];
+                             destruct (C0 =? C1) eqn:HeqC;
+                             destruct (b0 =? b1) eqn:Heqb;
                              t_postcondition_event_registers_pointer_Cb
                                prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1 HeqC Heqb.
 
                         -- t_postcondition_event_registers_data_pointers mem;
                              simpl;
-                             destruct (Nat.eqb_spec C0 C1) as [HeqC | HeqC];
-                             destruct (Nat.eqb_spec b0 b1) as [Heqb | Heqb];
+                             destruct (C0 =? C1) eqn:HeqC;
+                             destruct (b0 =? b1) eqn:Heqb;
                              t_postcondition_event_registers_pointer_Cb
                                prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1 HeqC Heqb.
 
                         -- t_postcondition_event_registers_data_pointers mem;
                              simpl;
-                             destruct (Nat.eqb_spec C0 C1) as [HeqC | HeqC];
-                             destruct (Nat.eqb_spec b0 b1) as [Heqb | Heqb];
-                             destruct (Z.leb_spec o0 o1) as [Heqo | Heqo];
+                             destruct (C0 =? C1) eqn:HeqC;
+                             destruct (b0 =? b1) eqn:Heqb;
+                             destruct (o0 <=? o1)%Z eqn:Heqo;
                              t_postcondition_event_registers_pointer_Cbo
                                prefix prefix0 Hprefix01 eregs Hget0 Hget1 Hshift0 Hshift1 vs0 vs1 HeqC Heqb Heqo.
 
