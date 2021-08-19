@@ -176,6 +176,11 @@ Module Type AbstractComponentMemory.
       store m b i v = Some m' ->
       next_block m = next_block m'.
 
+  Axiom load_next_block :
+    forall m b i v,
+      load m b i = Some v ->
+      b < next_block m.
+
   Axiom load_after_reserve_block :
     forall m b i v,
       load m b i = Some v ->
@@ -732,6 +737,11 @@ Module ComponentMemory : AbstractComponentMemory.
     destruct (list_upd ch (Z.to_nat i) v); try discriminate.
     inversion Hstore. by subst.
   Qed.
+
+  Lemma load_next_block m b i v :
+    load m b i = Some v ->
+    b < next_block m.
+  Admitted.
 
   Lemma load_after_reserve_block :
     forall m b i v,

@@ -4199,7 +4199,69 @@ Local Transparent expr_of_const_val loc_of_reg.
                           injection H as ?; subst ptr.
                           rewrite H0 in Hload'.
                           now injection Hload'.
-                        + admit.
+                        + assert (C0_b : component_buffer C0) by admit.
+                          unfold C in HC0neq.
+                          rewrite <- Hcomp1 in HC0neq.
+                          specialize (Hinitial _ C0_b (nesym HC0neq))
+                            as [Hsteady | Hinitial].
+                          * (* This is identical to the C = C0 case above. *)
+                            destruct Hsteady
+                              as [Hinitflag0 [Hlocalbuf0 [Hsnapshot0 Hregs0]]].
+                            specialize (Hsnapshot0 _ (Nat.neq_succ_0 b0'))
+                              as [[cid bid] [Hshift' [Hrename Hrename']]].
+                            injection Hshift' as Hcid Hbid.
+                            rewrite /ssrnat.addn /ssrnat.addn_rec /ssrnat.subn /ssrnat.subn_rec
+                                    /all_zeros_shift /uniform_shift /= Nat.add_0_r Nat.sub_0_r
+                              in Hbid.
+                            subst cid bid.
+                            simpl in *.
+                            assert (Hptr0mem0 := Hptr0mem).
+                            erewrite Memory.load_after_store_neq in Hptr0mem0;
+                              last exact Hmem;
+                              last (injection; discriminate).
+                            destruct (Hrename _ _ Hptr0mem0) as [v' [Hload' Hshift']].
+                            exists v'. split; first exact Hshift'.
+                            inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
+                              [ destruct prefix; discriminate (* contra *)
+                              | subst prefix; destruct prefix0 as [| ? [|]]; discriminate (* contra *)
+                              | rewrite Hprefix01 in Ht;
+                                symmetry in Ht; apply cats2_inv in Ht as [? [? ?]]; subst prefint eint1 eint2;
+                                inversion Hstep as [| | | | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | |];
+                                subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                                subst eregs].
+                            rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss.
+                            rewrite <- Hcomp1 in Hreg0mem0.
+                            destruct (Hregs (Ereg_to_reg _) _ _ (f_equal _ (reg_to_Ereg_to_reg _)) Hreg0mem0)
+                              as [v'' [Hshift'' Hget'']].
+                            simpl in *.
+                            rewrite /ssrnat.addn /ssrnat.addn_rec /ssrnat.subn /ssrnat.subn_rec
+                                    /all_zeros_shift /uniform_shift /= Nat.add_0_r Nat.sub_0_r
+                              in Hshift''.
+                            injection Hshift'' as ?; subst v''.
+                            rewrite <- H1 in H.
+                            injection H as ?; subst ptr.
+                            rewrite H0 in Hload'.
+                            now injection Hload'.
+                          * (* Contradiction on uninitialized C0, from which
+                               nothing could have been shared. *)
+                            destruct Hinitial
+                              as [Hinitflag0 [Hlocalbuf0 [Hsnapshot0 Hregs0]]].
+                            destruct Hsnapshot0
+                              as [[Cmem0 [buf0 [HCmem0 [Hbuf0 [Hnext0 Hprealloc0]]]]]
+                                  [Cmem0' [HCmem0' Hblock0']]].
+                            subst Cmem0.
+
+                            assert (Hptr0mem0 := Hptr0mem).
+                            erewrite Memory.load_after_store_neq in Hptr0mem0;
+                              last exact Hmem;
+                              last (injection; discriminate).
+Local Transparent Memory.load.
+                            unfold Memory.load in Hptr0mem0.
+Local Opaque Memory.load.
+                            rewrite HCmem0' /= in Hptr0mem0.
+                            apply ComponentMemory.load_next_block in Hptr0mem0.
+                            rewrite Hblock0' in Hptr0mem0.
+                            discriminate.
                     - setoid_rewrite Hcomp1 in Hregs.
                       destruct (wfmem_meta wf_mem (CS.CS.reg_to_Ereg n) C_b)
                         as [v' Hload'].
