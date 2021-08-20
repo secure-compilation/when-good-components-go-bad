@@ -1863,7 +1863,21 @@ Section Definability.
           }
           take_steps; auto; simplify_memory.
           {
-            admit.
+            assert (Hneq: (Component.main, Block.local) <> (Component.main, bfresh)).
+            {
+              autounfold. intros contra. inversion contra. subst bfresh. clear contra.
+              apply ComponentMemory.next_block_alloc in eAllocCompMem as [contra _].
+              unfold Source.prepare_buffers in HcompMem.
+              rewrite mapmE in HcompMem. simpl in *.
+              rewrite mapmE in HcompMem.
+              Search _ "prealloc".
+              unfold meta_buffer in HcompMem.
+              destruct (intf Component.main); last discriminate.
+              simpl in *. inversion HcompMem. clear HcompMem. subst compMem.
+              Search _ "next_block".
+              unfold ComponentMemory.prealloc in HcompMem.
+            }
+            Search _ "load" "alloc".
           }
 
           take_steps.
