@@ -1842,9 +1842,20 @@ Section Definability.
           
           take_steps; simpl.
           {
-            assert (Hbufsize: (Z.of_nat (buffer_size Component.main) > 0)%Z)
-              by admit.
-            (** Should follow from  has_main, domm_buffers, and wf_buffers*)
+            assert (Hbufsize: (Z.of_nat (buffer_size Component.main) > 0)%Z).
+            {
+              assert (exists buf, prog_buffers Component.main = Some buf)
+                as [buf Hbuf].
+              by (apply/dommP; rewrite <- domm_buffers; apply/dommP;
+                  destruct (intf Component.main); last discriminate; eauto).
+              specialize (wf_buffers Hbuf).
+              unfold buffer_size. rewrite Hbuf.
+              destruct buf; simpl in *.
+              - rewrite size_nseq -Nat2Z.inj_0. 
+                apply inj_gt. by apply Nat.ltb_lt in wf_buffers.
+              - rewrite -Nat2Z.inj_0. apply inj_gt.
+                move: wf_buffers => /andP. intros [G _]. by apply Nat.ltb_lt in G.
+            }
             exact Hbufsize.
           }
           {
