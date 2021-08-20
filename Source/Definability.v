@@ -1706,19 +1706,21 @@ Section Definability.
            simpl. exists compMem, buf. by rewrite -Hmem'2.
     Qed.
 
+    Ltac ucongruence := autounfold with definability; congruence.
+    
     Ltac simplify_memory :=
       repeat (
           match goal with
           | H: Memory.store _ ?ptr ?v' = Some ?mem |-
             Memory.load ?mem ?ptr = Some ?v =>
             rewrite (Memory.load_after_store_eq _ _ _ _ H);
-            try (simpl; congruence);
-            eauto with definability
+            try (simpl; ucongruence);
+            eauto
           | H: Memory.store _ ?ptr _ = Some ?mem |-
             Memory.load ?mem ?ptr' = Some _ =>
             rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H);
-            try (simpl; congruence);
-            eauto with definability
+            try (simpl; ucongruence);
+            eauto
           end).
 
     Ltac take_steps := (take_step; [take_steps]) || take_step.
@@ -1788,7 +1790,7 @@ Section Definability.
                     (Permission.data, Component.main,
                      Block.local, EXTCALL_offset)
                     (Int 1%Z) (Int 0%Z)) as [mem7 Hmem7];
-          unfold EXTCALL_offset; simplify_memory.
+          simplify_memory.
         admit.
         (** Follows from the definition of meta_buffer. *)
 
@@ -1867,7 +1869,7 @@ Section Definability.
           * now exists [], [].
           * constructor.
             -- move=> C H.
-               simplify_memory; unfold EXTCALL_offset; last congruence.
+               simplify_memory.
                move: H.
                rewrite /component_buffer /Memory.load //= mapmE // mapmE mem_domm.
                case HCint: (intf C) => [Cint|] //=.
@@ -1877,17 +1879,20 @@ Section Definability.
                ++ move=> ? ? ?; subst.
                   simplify_memory.
                ++ move=> ? ? ?; subst.
-                  simplify_memory. admit.
+                  simplify_memory.
+                  (** Follows from the definition of meta_buffer. *)
+                  admit.
             -- by move=> [].
             (* -- admit. *)
             -- move=> C r H.
                destruct (C == Component.main) eqn:Heq.
                ++ move: Heq => /eqP Heq; subst C.
                   destruct r; simpl in *; eexists; simplify_memory.
+                  (** Follows from the definition of meta_buffer. *)
                   admit.
                ++ move: Heq => /eqP Heq.
                   destruct r; simpl in *; eexists; simplify_memory.
-                  simpl.
+                  (** All follow from the definition of meta_buffer. *)
                   all: admit.
             -- move=> C _.
                split; [| split; [| split]].
