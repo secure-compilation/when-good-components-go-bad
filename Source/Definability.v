@@ -1233,13 +1233,13 @@ Section Definability.
     (* e is NOT the register file *after* executing e. It is the register file       *)
     (* *before* executing e.                                                         *)
     Definition postcondition_event_registers (e: event_inform) (mem: Memory.t): Prop :=
-        let r := register_file_of_event_inform e in
-        forall (R: Machine.register) (n: Z) (v: value),
-          reg_offset (Intermediate.CS.CS.reg_to_Ereg R) = n ->
-          Memory.load mem (Permission.data, next_comp_of_event e, Block.local, n) = Some v ->
-          exists (v': value),
+        let regs := register_file_of_event_inform e in
+        forall reg n,
+          reg_offset (CS.CS.reg_to_Ereg reg) = n ->
+          exists v v',
+            Memory.load mem (Permission.data, next_comp_of_event e, Block.local, n) = Some v  /\
             shift_value_option (uniform_shift 1) all_zeros_shift v = Some v' /\
-            Machine.Intermediate.Register.get R r = v'.
+            Machine.Intermediate.Register.get reg regs = v'.
 
     Definition postcondition_event_memory_steadystate
                (e: event_inform) (mem': Memory.t) (C: Component.id) :=
