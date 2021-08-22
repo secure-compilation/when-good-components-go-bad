@@ -950,19 +950,44 @@ Section Definability.
     Local Definition counter_value C prefix :=
       Z.of_nat (length (comp_subtrace C prefix)).
 
+    (* TODO: Relocate to Memory *)
+    Definition next_block (mem: Memory.t) (C : Component.id) : option Block.id :=
+      match mem C with
+      | Some Cmem => Some (ComponentMemory.next_block Cmem)
+      | None => None
+      end.
+
+    Lemma next_block_store_stable mem ptr v mem' C:
+      Memory.store mem ptr v = Some mem' ->
+      next_block mem' C = next_block mem C.
+    Admitted.
+
     (* RB: NOTE: We could make this stronger by noting which component is being
        executed, as this is the only one that can change its own metadata. *)
-    Definition well_formed_memory_snapshot_steadystate
+    Definition well_formed_memory_snapshot_steadystate_shift
                (mem_snapshot mem : Memory.t) (C: Component.id) : Prop :=
+      forall b,
+        b <> Block.local ->
+        memory_shifts_memory_at_shared_addr
+          (uniform_shift 1) all_zeros_shift (C, b) mem mem_snapshot.
+
+    Definition well_formed_memory_snapshot_steadystate_block
+               (mem_snapshot mem : Memory.t) (C: Component.id) : Prop :=
+      forall next,
+        next_block mem_snapshot C = Some next ->
+        next_block mem C = Some (S next).
+
+    Record well_formed_memory_snapshot_steadystate
+           (mem_snapshot mem : Memory.t) (C: Component.id) : Prop := {
+      steadysnap_shift :
+        well_formed_memory_snapshot_steadystate_shift mem_snapshot mem C;
+      steadysnap_block :
+        well_formed_memory_snapshot_steadystate_block mem_snapshot mem C
+    }.
       (* forall ptr, *)
       (*   Pointer.block ptr <> Block.local -> *)
       (*   Memory.load mem_snapshot ptr = Memory.load mem ptr. *)
 
-      forall (b: Block.id),
-        b <> Block.local ->
-        memory_shifts_memory_at_shared_addr
-          (uniform_shift 1) all_zeros_shift (C, b) mem mem_snapshot.
-      
       (***************************************************
       forall Cb,
         addr_shared_so_far Cb (project_non_inform prefix) ->
@@ -995,10 +1020,10 @@ Section Definability.
        local block [Block.local], which should always be *private memory* (from
        the goodness of the trace) and as a result isn't recorded on the memory
        snapshot. *)
-    Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C Csteady o v mem' :
-      well_formed_memory_snapshot_steadystate mem_snapshot mem Csteady ->
+    Lemma metadata_store_preserves_snapshot_shift mem_snapshot mem Pm C Csteady o v mem' :
+      well_formed_memory_snapshot_steadystate_shift mem_snapshot mem Csteady ->
       Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
-      well_formed_memory_snapshot_steadystate mem_snapshot mem' Csteady.
+      well_formed_memory_snapshot_steadystate_shift mem_snapshot mem' Csteady.
     Proof.
       move=> WFMS STORE b Hnot.
       case: (WFMS b); auto.
@@ -1039,7 +1064,50 @@ Section Definability.
         }
         move : Hneq => /Pointer.eqP => Hneq.
         specialize (Memory.load_after_store_neq _ _ _ _ _ Hneq STORE) as rewr.
-        by rewrite rewr.
+          by rewrite rewr.
+    Qed.
+
+    Lemma metadata_store_preserves_snapshot_block mem_snapshot mem Pm C Csteady o v mem' :
+      well_formed_memory_snapshot_steadystate_block mem_snapshot mem Csteady ->
+      Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
+      well_formed_memory_snapshot_steadystate_block mem_snapshot mem' Csteady.
+    Proof.
+      move=> WFNB STORE b NEXT.
+      specialize (WFNB b NEXT).
+      unfold next_block in *.
+      rewrite -WFNB.
+Local Transparent Memory.store.
+      unfold Memory.store in STORE.
+Local Opaque Memory.store.
+      destruct (Permission.eqb (Pointer.permission (Pm, C, Block.local, o))
+                               Permission.data) eqn:PERM;
+        last discriminate.
+      simpl in STORE.
+      destruct (mem C) as [memC |] eqn:MEMC; last discriminate.
+      destruct (mem Csteady) as [memCsteady |] eqn:MEMCST; last discriminate.
+      injection WFNB as WFNB.
+      destruct (mem_snapshot Csteady) as [memsCsteady |] eqn:MEMSCST; last discriminate.
+      destruct (ComponentMemory.store memC Block.local o v) eqn:CSTORE;
+        last discriminate.
+      injection NEXT as ?; subst b.
+      apply ComponentMemory.next_block_store_stable in CSTORE.
+      injection STORE as ?; subst mem'.
+      rewrite setmE.
+      destruct (Nat.eqb_spec Csteady C) as [|NEQ].
+      - subst Csteady. rewrite eqxx. congruence.
+      - move:NEQ => /eqP. rewrite /negb => NEQ.
+        destruct (Csteady == C) eqn:NEQ'; first discriminate.
+        by rewrite NEQ' MEMCST //.
+    Qed.
+
+    Lemma metadata_store_preserves_snapshot mem_snapshot mem Pm C Csteady o v mem' :
+      well_formed_memory_snapshot_steadystate mem_snapshot mem Csteady ->
+      Memory.store mem (Pm, C, Block.local, o) v = Some mem' ->
+      well_formed_memory_snapshot_steadystate mem_snapshot mem' Csteady.
+    Proof.
+      move=> [WFMS WFNB] STORE. split.
+      - eapply metadata_store_preserves_snapshot_shift; eassumption.
+      - eapply metadata_store_preserves_snapshot_block; eassumption.
     Qed.
 
     Definition postcondition_event_snapshot_steadystate
@@ -2306,8 +2374,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                   split.
                   + intros C' _ ?; subst C'. simpl.
                     specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1))
-                      as [Hinitflag [Hlocalbuf [Hsnapshot Hregs]]].
-                    split; [| split; [| split]].
+                      as [Hinitflag [Hlocalbuf [[Hsnapshot Hnextblock] Hregs]]].
+                    split; [| split; [| split; [split |]]].
                     (* The first two sub-goals are near-identical arguments on
                        memory operations. *)
                     * erewrite Memory.load_after_store_neq;
@@ -2352,6 +2420,14 @@ Local Transparent expr_of_const_val loc_of_reg.
                               last (injection; congruence).
                             exact Hload''.
                          ++ exact Hrename''.
+                    * intros next Hnext.
+                      rewrite Hmem' in Hnext.
+                      specialize (Hnextblock next Hnext).
+                      erewrite next_block_store_stable;
+                        last exact Hstore'.
+                      erewrite next_block_store_stable;
+                        last exact Hmem.
+                      exact Hnextblock.
                     * {
                     subst mem'.
                     intros n off Hoffset.
@@ -2417,8 +2493,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                       left. split; [| split].
                       -- admit. (* Easy by store inequalities. *)
                       -- admit. (* Easy by store inequalities. *)
-                      -- destruct Hsteady' as [Hsnapshot Hregs].
-                         split.
+                      -- destruct Hsteady' as [[Hsnapshot Hnextblock] Hregs].
+                         split; [split |].
                          ++ intros b Hlocal.
                             specialize (Hsnapshot b Hlocal) as [Cb [Hshift' [Hrename Hrename']]].
                             exists Cb. split; [| split].
@@ -2444,6 +2520,15 @@ Local Transparent expr_of_const_val loc_of_reg.
                                      last admit. (* Easy by component inequality. *)
                                    assumption.
                                --- congruence.
+                         ++ (* Same proof of next block invariant as above. *)
+                            intros next Hnext'.
+                            rewrite Hmem' in Hnext'.
+                            specialize (Hnextblock next Hnext').
+                            erewrite next_block_store_stable;
+                              last exact Hstore'.
+                            erewrite next_block_store_stable;
+                              last exact Hmem.
+                            exact Hnextblock.
                          ++ { (* Same sub-proof on registers as above! *)
                              admit.
                            }
@@ -2595,8 +2680,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                   split.
                   + intros C' _ ?; subst C'. simpl.
                     specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1))
-                      as [Hinitflag [Hlocalbuf [Hsnapshot Hregs]]].
-                    split; [| split; [| split]].
+                      as [Hinitflag [Hlocalbuf [[Hsnapshot Hnextblock] Hregs]]].
+                    split; [| split; [| split; [split |]]].
                     (* The first two sub-goals are near-identical arguments on
                        memory operations. *)
                     * erewrite Memory.load_after_store_neq;
@@ -2641,6 +2726,14 @@ Local Transparent expr_of_const_val loc_of_reg.
                               last (injection; congruence).
                             exact Hload''.
                          ++ exact Hrename''.
+                    * intros next Hnext.
+                      rewrite Hmem' in Hnext.
+                      specialize (Hnextblock next Hnext).
+                      erewrite next_block_store_stable;
+                        last exact Hstore'.
+                      erewrite next_block_store_stable;
+                        last exact Hmem.
+                      exact Hnextblock.
                     * {
                     subst mem'.
                     intros n off Hoffset.
@@ -2715,8 +2808,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                       left. split; [| split].
                       -- admit. (* Easy by store inequalities. *)
                       -- admit. (* Easy by store inequalities. *)
-                      -- destruct Hsteady' as [Hsnapshot Hregs].
-                         split.
+                      -- destruct Hsteady' as [[Hsnapshot Hnextblock] Hregs].
+                         split; [split |].
                          ++ intros b Hlocal.
                             specialize (Hsnapshot b Hlocal) as [Cb [Hshift' [Hrename Hrename']]].
                             exists Cb. split; [| split].
@@ -2742,6 +2835,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                                      last admit. (* Easy by component inequality. *)
                                    assumption.
                                --- congruence.
+                         ++ (* Same sub-proof on next block as above! *)
+                            admit.
                          ++ { (* Same sub-proof on registers as above! *)
                              admit.
                            }
@@ -2890,8 +2985,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                   split.
                   + intros C' _ ?; subst C'. simpl.
                     specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1))
-                      as [Hinitflag [Hlocalbuf [Hsnapshot Hregs]]].
-                    split; [| split; [| split]].
+                      as [Hinitflag [Hlocalbuf [[Hsnapshot Hnextblock] Hregs]]].
+                    split; [| split; [| split; [split |]]].
                     (* The first two sub-goals are near-identical arguments on
                        memory operations. *)
                     * erewrite Memory.load_after_store_neq;
@@ -2936,6 +3031,14 @@ Local Transparent expr_of_const_val loc_of_reg.
                               last (injection; congruence).
                             exact Hload''.
                          ++ exact Hrename''.
+                    * intros next Hnext.
+                      rewrite Hmem' in Hnext.
+                      specialize (Hnextblock next Hnext).
+                      erewrite next_block_store_stable;
+                        last exact Hstore'.
+                      erewrite next_block_store_stable;
+                        last exact Hmem.
+                      exact Hnextblock.
                     * {
                     subst mem'.
                     intros n off Hoffset.
@@ -2999,8 +3102,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                       left. split; [| split].
                       -- admit. (* Easy by store inequalities. *)
                       -- admit. (* Easy by store inequalities. *)
-                      -- destruct Hsteady' as [Hsnapshot Hregs].
-                         split.
+                      -- destruct Hsteady' as [[Hsnapshot Hnextblock] Hregs].
+                         split; [split |].
                          ++ intros b Hlocal.
                             specialize (Hsnapshot b Hlocal) as [Cb [Hshift' [Hrename Hrename']]].
                             exists Cb. split; [| split].
@@ -3026,6 +3129,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                                      last admit. (* Easy by component inequality. *)
                                    assumption.
                                --- congruence.
+                         ++ (* sub-proof on next block as above! *)
+                            admit.
                          ++ { (* Same sub-proof on registers as above! *)
                              admit.
                            }
@@ -3198,8 +3303,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                 split.
                 + intros C' _ ?; subst C'. simpl.
                   specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1))
-                    as [Hinitflag [Hlocalbuf [Hsnapshot Hregs]]].
-                  split; [| split; [| split]].
+                    as [Hinitflag [Hlocalbuf [[Hsnapshot Hnextblock] Hregs]]].
+                  split; [| split; [| split; [split |]]].
                   (* The first two sub-goals are near-identical arguments on
                      memory operations. *)
                   * erewrite Memory.load_after_store_neq;
@@ -3244,6 +3349,14 @@ Local Transparent expr_of_const_val loc_of_reg.
                             last (injection; congruence).
                           exact Hload''.
                        ++ exact Hrename''.
+                    * intros next Hnext.
+                      rewrite Hmem' in Hnext.
+                      specialize (Hnextblock next Hnext).
+                      erewrite next_block_store_stable;
+                        last exact Hstore'.
+                      erewrite next_block_store_stable;
+                        last exact Hmem.
+                      exact Hnextblock.
                   * {
                       subst mem'.
                       intros n off Hoffset.
@@ -3453,8 +3566,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                 split.
                 + intros C' _ ?; subst C'. simpl.
                   specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1))
-                    as [Hinitflag [Hlocalbuf [Hsnapshot Hregs]]].
-                  split; [| split; [| split]].
+                    as [Hinitflag [Hlocalbuf [[Hsnapshot Hnextblock] Hregs]]].
+                  split; [| split; [| split; [split |]]].
                   (* The first two sub-goals are near-identical arguments on
                      memory operations. *)
                   * erewrite Memory.load_after_store_neq;
@@ -3499,6 +3612,14 @@ Local Transparent expr_of_const_val loc_of_reg.
                             last (injection; congruence).
                           exact Hload''.
                        ++ exact Hrename''.
+                    * intros next Hnext.
+                      rewrite Hmem' in Hnext.
+                      specialize (Hnextblock next Hnext).
+                      erewrite next_block_store_stable;
+                        last exact Hstore'.
+                      erewrite next_block_store_stable;
+                        last exact Hmem.
+                      exact Hnextblock.
                   * {
                       subst mem'.
                       intros n off Hoffset.
@@ -3690,8 +3811,8 @@ Ltac t_postcondition_event_registers_pointer_Cbo
                     left. split; [| split].
                     -- admit. (* Easy by store inequalities. *)
                     -- admit. (* Easy by store inequalities. *)
-                    -- destruct Hsteady' as [Hsnapshot Hregs].
-                       split.
+                    -- destruct Hsteady' as [[Hsnapshot Hnextblock] Hregs].
+                       split; [split |].
                        ++ intros b Hlocal.
                           specialize (Hsnapshot b Hlocal) as [Cb [Hshift' [Hrename Hrename']]].
                           exists Cb. split; [| split].
@@ -3717,6 +3838,8 @@ Ltac t_postcondition_event_registers_pointer_Cbo
                                    last admit. (* Easy by component inequality. *)
                                  assumption.
                              --- congruence.
+                       ++ (* Same sub-proof on next block as above! *)
+                          admit.
                        ++ { (* Same sub-proof on registers as above! *)
                            admit.
                          }
@@ -3905,8 +4028,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                 split.
                 + intros C' _ ?; subst C'. simpl.
                   specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1))
-                    as [Hinitflag [Hlocalbuf [Hsnapshot Hregs]]].
-                  split; [| split; [| split]].
+                    as [Hinitflag [Hlocalbuf [[Hsnapshot Hnextblock] Hregs]]].
+                  split; [| split; [| split; [split |]]].
                   (* The first two sub-goals are near-identical arguments on
                      memory operations. *)
                   * erewrite Memory.load_after_store_neq;
@@ -3951,6 +4074,14 @@ Local Transparent expr_of_const_val loc_of_reg.
                             last (injection; congruence).
                           exact Hload''.
                        ++ exact Hrename''.
+                  * intros next Hnext.
+                    rewrite Hmem' in Hnext.
+                    specialize (Hnextblock next Hnext).
+                    erewrite next_block_store_stable;
+                      last exact Hstore'.
+                    erewrite next_block_store_stable;
+                      last exact Hmem.
+                    exact Hnextblock.
                   * {
                       subst mem'.
                       intros n off Hoffset.
@@ -4014,7 +4145,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                             as [Hsteady | Hinitial].
                           * (* This is identical to the C = C0 case above. *)
                             destruct Hsteady
-                              as [Hinitflag0 [Hlocalbuf0 [Hsnapshot0 Hregs0]]].
+                              as [Hinitflag0 [Hlocalbuf0 [[Hsnapshot0 Hnextblock0] Hregs0]]].
                             specialize (Hsnapshot0 _ (Nat.neq_succ_0 b0'))
                               as [[cid bid] [Hshift' [Hrename Hrename']]].
                             injection Hshift' as Hcid Hbid.
@@ -4111,8 +4242,8 @@ Local Opaque Memory.load.
                       left. split; [| split].
                       -- admit. (* Easy by store inequalities. *)
                       -- admit. (* Easy by store inequalities. *)
-                      -- destruct Hsteady' as [Hsnapshot Hregs].
-                         split.
+                      -- destruct Hsteady' as [[Hsnapshot Hnextblock] Hregs].
+                         split; [split |].
                          ++ intros b Hlocal.
                             specialize (Hsnapshot b Hlocal) as [Cb [Hshift' [Hrename Hrename']]].
                             exists Cb. split; [| split].
@@ -4138,6 +4269,8 @@ Local Opaque Memory.load.
                                      last admit. (* Easy by component inequality. *)
                                    assumption.
                                --- congruence.
+                         ++ (* Same sub-proof on next block as above! *)
+                            admit.
                          ++ { (* Same sub-proof on registers as above! *)
                              admit.
                            }
