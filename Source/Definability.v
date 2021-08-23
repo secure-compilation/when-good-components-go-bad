@@ -343,6 +343,11 @@ Section Definability.
   Definition LOCALBUF_offset := 3%Z.
   Definition LOCALBUF_blockid : Block.id := 1.
 
+  Hint Unfold INITFLAG_offset : definabilitydb.
+  Hint Unfold LOCALBUF_offset : definabilitydb.
+  Hint Unfold LOCALBUF_blockid : definabilitydb.
+  
+
   Definition INITFLAG := E_binop Add E_local (E_val (Int INITFLAG_offset)).
   Definition LOCALBUF := E_binop Add E_local (E_val (Int LOCALBUF_offset)).
 
@@ -407,7 +412,9 @@ Section Definability.
   Notation "x ;; y" := (E_seq x y) (right associativity, at level 90).
 
   Definition EXTCALL_offset := 1%Z.
-  Hint Unfold EXTCALL_offset : definability.
+  Hint Unfold EXTCALL_offset : definabilitydb.
+  Hint Unfold Block.local : definabilitydb.
+  
   Definition EXTCALL := E_binop Add E_local (E_val (Int EXTCALL_offset)).
   Definition invalidate_metadata :=
     E_assign (loc_of_reg E_R_ONE) error_expr;;
@@ -1706,7 +1713,7 @@ Section Definability.
            simpl. exists compMem, buf. by rewrite -Hmem'2.
     Qed.
 
-    Ltac ucongruence := autounfold with definability; congruence.
+    Ltac ucongruence := autounfold with definabilitydb; congruence.
     
     Ltac simplify_memory :=
       repeat (
@@ -1721,6 +1728,11 @@ Section Definability.
             rewrite (Memory.load_after_store_neq _ _ _ _ _ _ H);
             try (simpl; ucongruence);
             eauto
+          | H: Memory.alloc _ _ _ = Some (?mem, _) |-
+            Memory.load ?mem _ = Some _ =>
+            erewrite Memory.load_after_alloc;
+            eauto;
+            try (simpl; ucongruence)
           end).
 
     Ltac take_steps := (take_step; [take_steps]) || take_step.
@@ -1739,6 +1751,13 @@ Section Definability.
       traces_shift_each_other_option metadata_size_lhs const_map (project_non_inform prefix) prefix' /\
       well_formed_state_r s prefix suffix cs.
     Proof.
+      (*
+      Ltac solve_load_from_Halloc :=
+        erewrite Memory.load_after_alloc; eauto; by autounfold with definabilitydb.
+      
+      Ltac solve_neq :=
+        simpl; by autounfold with definabilitydb.
+      *)
       have Eintf : genv_interface (prepare_global_env p) = intf by [].
       have Eprocs : genv_procedures (prepare_global_env p) = Source.prog_procedures p
         by [].
@@ -1749,17 +1768,120 @@ Section Definability.
       - (* Base case. *)
         move=> <-.
 
+        assert (Hmain_buffers_p: Component.main \in domm (Source.prog_buffers p)).
+        {
+          unfold p, program_of_trace. simpl.
+          apply/dommP. rewrite mapmE.
+          destruct (intf Component.main); last discriminate. simpl. eauto.
+        }
+        
         assert (ini_mem_regs: forall reg,
                    Memory.load (Source.prepare_buffers p)
                                (Permission.data, Component.main,
-                                Block.local, reg_offset reg) = Some Undef)
-          by admit.
-        (** Follows from the definition of meta_buffer. *)
+                                Block.local, reg_offset reg) = Some Undef).
+        {
+          (** Follows from the definition of meta_buffer. *)
+          intros. unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+          simpl. rewrite !mapmE.             
+          destruct (intf Component.main); last discriminate; auto.
+          simpl. by destruct reg; rewrite ComponentMemory.load_prealloc setmE.
+        }
+
+        assert (init_mem_EXTCALL_offet:
+                  Memory.load
+                    (Source.prepare_buffers p)
+                    (Permission.data, Component.main, Block.local, EXTCALL_offset) = 
+                  Some (Int 1)
+               ).
+        {
+          (** Follows from the definition of meta_buffer. *)
+          unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+          simpl. rewrite !mapmE.             
+          destruct (intf Component.main); last discriminate; auto.
+          simpl. by rewrite ComponentMemory.load_prealloc setmE.
+        }
+
+        assert (exists compMem, (Source.prepare_buffers p) Component.main =
+                                  Some compMem) as [compMem HcompMem].
+        {
+          unfold Source.prepare_buffers.
+          apply/dommP. by rewrite domm_map.
+        }
+        destruct (ComponentMemory.alloc
+                    compMem
+                    (Z.to_nat (Z.of_nat (buffer_size Component.main))))
+          as [compMem' bfresh] eqn:eAllocCompMem.
+
+        assert (Halloc: Memory.alloc
+                          (Source.prepare_buffers p)
+                          Component.main
+                          (Z.to_nat (Z.of_nat (buffer_size Component.main))) =
+                        Some      
+                          (setm (Source.prepare_buffers p) Component.main compMem',
+                           (Permission.data, Component.main, bfresh, 0%Z))
+               ).
+        {
+          unfold Memory.alloc; rewrite HcompMem eAllocCompMem; reflexivity.
+        }
+
+        assert (bfresh = 1).
+        {
+          unfold Source.prepare_buffers, p in HcompMem.
+          move : Hmain_buffers_p => /dommP => G.
+          destruct G as [buf Hbuf]. unfold p in Hbuf.
+          rewrite mapmE Hbuf in HcompMem. simpl in HcompMem.
+          inversion HcompMem. subst compMem. clear HcompMem.
+          specialize (ComponentMemory.nextblock_prealloc (setm emptym 0 buf)) as G.
+          specialize (ComponentMemory.next_block_alloc _ _ _ _ eAllocCompMem)
+            as [G' _].
+          rewrite G domm_set domm0 fsetU0 in G'. by simpl in G'.
+        }
+        subst bfresh.
+        
+        assert (exists buf_main, prog_buffers Component.main = Some buf_main)
+          as [buf_main Hbuf_main].
+          by (apply/dommP; rewrite <- domm_buffers; apply/dommP;
+              destruct (intf Component.main); last discriminate; eauto).
+        
+        assert (Hbufsize: (Z.of_nat (buffer_size Component.main) > 0)%Z).
+        {
+          specialize (wf_buffers Hbuf_main).
+          unfold buffer_size. rewrite Hbuf_main.
+          destruct buf_main; simpl in *.
+          - rewrite size_nseq -Nat2Z.inj_0. 
+            apply inj_gt. by apply Nat.ltb_lt in wf_buffers.
+          - rewrite -Nat2Z.inj_0. apply inj_gt.
+            move: wf_buffers => /andP. intros [G _]. by apply Nat.ltb_lt in G.
+        }
+
+        assert (exists mem_localbufptr,
+                   Memory.store
+                     (setm (Source.prepare_buffers p) Component.main compMem')
+                     (Permission.data, Component.main,
+                      Block.local, (0 + LOCALBUF_offset)%Z)
+                     (Ptr (Permission.data, Component.main, 1, 0%Z)) =
+                   Some mem_localbufptr) as [mem_localbufptr Hstoreptr].
+        {
+          eapply Memory.store_after_load.
+          erewrite Memory.load_after_alloc; eauto; simpl.
+          - unfold Source.prepare_buffers, p.
+            move : Hmain_buffers_p => /dommP => G.
+            destruct G as [buf Hbuf]. unfold p in Hbuf.
+            unfold Memory.load. simpl.
+            rewrite mapmE Hbuf. simpl.
+            rewrite ComponentMemory.load_prealloc setmE. simpl.
+            rewrite mapmE in Hbuf.
+            destruct (intf Component.main); last discriminate; auto.
+            simpl in Hbuf. inversion Hbuf. by simpl.
+          - unfold Block.local. discriminate.
+        }
+
         
         destruct (Memory.store_after_load
-                    (Source.prepare_buffers p)
+                    mem_localbufptr
                     (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)
-                    Undef Undef) as [mem1 Hmem1]; eauto.
+                    Undef Undef) as [mem1 Hmem1]; eauto; simplify_memory.
+                
         destruct (Memory.store_after_load
                     mem1
                     (Permission.data, Component.main, Block.local, reg_offset E_R_AUX1)
@@ -1770,29 +1892,30 @@ Section Definability.
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_AUX2)
                     Undef Undef) as [mem3 Hmem3]; eauto; simplify_memory.
+
         destruct (Memory.store_after_load
                     mem3
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_RA)
                     Undef Undef) as [mem4 Hmem4]; eauto; simplify_memory.
+
         destruct (Memory.store_after_load
                     mem4
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_SP)
                     Undef Undef) as [mem5 Hmem5]; eauto; simplify_memory.
+
         destruct (Memory.store_after_load
                     mem5
                     (Permission.data, Component.main,
                      Block.local, reg_offset E_R_ARG)
                     Undef Undef) as [mem6 Hmem6]; eauto; simplify_memory.
+
         destruct (Memory.store_after_load
                     mem6
                     (Permission.data, Component.main,
                      Block.local, EXTCALL_offset)
-                    (Int 1%Z) (Int 0%Z)) as [mem7 Hmem7];
-          simplify_memory.
-        admit.
-        (** Follows from the definition of meta_buffer. *)
+                    (Int 1%Z) (Int 0%Z)) as [mem7 Hmem7]; simplify_memory.
 
         exists (CS.State (Component.main)
                     [:: ]
@@ -1809,80 +1932,51 @@ Section Definability.
 
           {
             instantiate (1 := Int 0%Z).
-            admit.
             (** Follows from the definition of meta_buffer. *)
+            unfold p, program_of_trace, Source.prepare_buffers, Memory.load.
+            simpl. rewrite !mapmE.             
+            destruct (intf Component.main); last discriminate; auto.
+            simpl. by rewrite ComponentMemory.load_prealloc setmE.
           }
-          (** Prepare the things needed for the upcoming take_steps *)
-          assert (exists compMem, (Source.prepare_buffers p) Component.main =
-                                  Some compMem) as [compMem HcompMem].
-          {
-            unfold Source.prepare_buffers.
-            apply/dommP. rewrite domm_map.
-            unfold p, program_of_trace. simpl.
-            apply/dommP. rewrite mapmE.
-            destruct (intf Component.main); last discriminate. simpl. eauto.
-          }
-          destruct (ComponentMemory.alloc
-                      compMem
-                      (Z.to_nat (Z.of_nat (buffer_size Component.main))))
-            as [compMem' bfresh] eqn:eAllocCompMem.
-
-          assert (Halloc: Memory.alloc
-                            (Source.prepare_buffers p)
-                            Component.main
-                            (Z.to_nat (Z.of_nat (buffer_size Component.main))) =
-                          Some      
-                            (setm (Source.prepare_buffers p) Component.main compMem',
-                             (Permission.data, Component.main, bfresh, 0%Z))
-                 ).
-          {
-            unfold Memory.alloc; rewrite HcompMem eAllocCompMem; reflexivity.
-          }
-
           
           take_steps; simpl.
           {
-            assert (Hbufsize: (Z.of_nat (buffer_size Component.main) > 0)%Z).
-            {
-              assert (exists buf, prog_buffers Component.main = Some buf)
-                as [buf Hbuf].
-              by (apply/dommP; rewrite <- domm_buffers; apply/dommP;
-                  destruct (intf Component.main); last discriminate; eauto).
-              specialize (wf_buffers Hbuf).
-              unfold buffer_size. rewrite Hbuf.
-              destruct buf; simpl in *.
-              - rewrite size_nseq -Nat2Z.inj_0. 
-                apply inj_gt. by apply Nat.ltb_lt in wf_buffers.
-              - rewrite -Nat2Z.inj_0. apply inj_gt.
-                move: wf_buffers => /andP. intros [G _]. by apply Nat.ltb_lt in G.
-            }
             exact Hbufsize.
           }
           {
             exact Halloc.
           }
+
+          
           take_steps; auto; simplify_memory.
           {
-            assert (Hneq: (Component.main, Block.local) <> (Component.main, bfresh)).
-            {
-              autounfold. intros contra. inversion contra. subst bfresh. clear contra.
-              apply ComponentMemory.next_block_alloc in eAllocCompMem as [contra _].
-              unfold Source.prepare_buffers in HcompMem.
-              rewrite mapmE in HcompMem. simpl in *.
-              rewrite mapmE in HcompMem.
-              Search _ "prealloc".
-              unfold meta_buffer in HcompMem.
-              destruct (intf Component.main); last discriminate.
-              simpl in *. inversion HcompMem. clear HcompMem. subst compMem.
-              Search _ "next_block".
-              unfold ComponentMemory.prealloc in HcompMem.
-            }
-            Search _ "load" "alloc".
+            exact Hstoreptr.
           }
 
           take_steps.
-          
           (** About to execute "init_local_buffer_expr Component.main" *)
+          (*****************************************
+          unfold init_local_buffer_expr, copy_local_datum_expr.
+
+          rewrite bigop.foldrE.
+          Search _ bigop.BigOp.bigop.
+          (* induction ??  using bigop.big_ind[|2|3]. *)
+          remember (buffer_size Component.main) as bufsize.
+          generalize dependent bufsize.
+          intros ? ?.
+          induction bufsize.
+          {
+            (** base case; contra to Hbufsize *)
+            by auto.
+          }
+          {
+            Search _ foldr.
+          }
+          Search _ foldr.
+          
+          rewrite foldr_map.
+          take_steps.
+          ******************************************************)
           admit.
         + reflexivity.
         + now do 2 constructor.
@@ -1894,7 +1988,7 @@ Section Definability.
           * now exists [], [].
           * constructor.
             -- move=> C H.
-               simplify_memory.
+               simplify_memory. 
                move: H.
                rewrite /component_buffer /Memory.load //= mapmE // mapmE mem_domm.
                case HCint: (intf C) => [Cint|] //=.
@@ -2341,6 +2435,7 @@ Local Opaque loc_of_reg.
                       instantiate (1 := Int 1).
                       simpl.
                       destruct wf_mem. unfold C in *.
+                      (****************************************
                       specialize (wfmem0 prefix0 e1 Logic.eq_refl)
                         as [_ [Hpostcond_steady _]].
                       specialize (Hpostcond_steady _ C_b Logic.eq_refl) as [G _].
@@ -2348,17 +2443,25 @@ Local Opaque loc_of_reg.
                         last by destruct v.
                       rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
                         easy.
+                       *****************************************)
+                      admit.
                     ** take_steps.
                        --- reflexivity.
-                       --- assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
+                       ---
+                         (********************************
+                         assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
                              last (now destruct v). (* Trivial property of register offsets. *)
                            rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
                              last easy.
                            exact Hload0.
+                          *************************************)
+                         admit.
                        --- unfold invalidate_metadata.
                            take_steps.
-                           apply star_refl.
+
+                           (** apply star_refl. *)
+                           admit.
 
               }
               { (** well-formed state *)
@@ -2374,8 +2477,11 @@ Local Opaque loc_of_reg.
                                 (Permission.data, C, Block.local, reg_offset v) <>
                                 (Permission.data, C, Block.local, 0%Z))
                         by (now destruct v).
+                      (****************************
                       erewrite (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq' Hstore').
                       assumption.
+                       **********************************)
+                      admit.
                     + erewrite Memory.load_after_store_neq;
                         last eassumption;
                         last (injection; contradiction).
@@ -2383,16 +2489,36 @@ Local Opaque loc_of_reg.
                       assert (HCneq : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C_, Block.local, 0%Z))
                         by (now injection). (* Easy contradiction. *)
                       rewrite <- (Memory.load_after_store_neq _ _ _ _ _ HCneq Hmem) in Hload0.
+                      (************************************
                       rewrite counter_value_snoc. simpl.
                       move: Hneq => /eqP.
                       case: ifP;
                         last now rewrite Z.add_0_r.
                       move => /eqP => Hcontra => /eqP => Hneq.
                       symmetry in Hcontra. contradiction.
-                      
+                      **********************************)
+                      admit.
+                }
+                {
+                  admit.
+                }
+                {
+                  admit.
+                }
+                {
+                  admit.
+                }
+                {
+                  admit.
+                }
+                {
+                  admit.
                 }
               }
-
+            + (* EConst-Ptr *)
+              admit.
+            + (* EConst-Undef *)
+              admit.
           }
           (* Const does not modify the (shared) memory, therefore these two
              should be identical. *)
