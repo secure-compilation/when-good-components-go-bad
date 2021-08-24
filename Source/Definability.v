@@ -1695,6 +1695,33 @@ Local Opaque Memory.store.
       injection. apply reg_offset0.
     Qed.
 
+    (* TODO: Move to Memory, add more informative lemma on alloc pointers. *)
+    Lemma permission_of_alloc_offset mem cid sz mem' ptr':
+      Memory.alloc mem cid sz = Some (mem', ptr') ->
+      Pointer.offset ptr' = 0%Z.
+    Admitted.
+
+    (* ... Like this one. *)
+    Lemma pointer_of_alloc mem cid sz mem' ptr' nb:
+      Memory.alloc mem cid sz = Some (mem', ptr') ->
+      next_block mem cid = Some nb ->
+      ptr' = (Permission.data, cid, nb, 0%Z).
+    Admitted.
+
+    (* (This is just here to easy things, maybe temporarily...) *)
+    Lemma alloc_next_block mem cid sz mem' ptr':
+      Memory.alloc mem cid sz = Some (mem', ptr') ->
+    exists nb,
+      next_block mem cid = Some nb.
+    Admitted.
+
+    (* TODO: Lift to Memory. *)
+    Lemma next_block_alloc m C n m' b:
+      Memory.alloc m C n = Some (m', b) ->
+      next_block m C = Some (Pointer.block b) /\
+      next_block m' C = Some (ssrnat.addn (Pointer.block b) 1).
+    Admitted.
+
     (* TODO: [DynShare] Trace relation should appear here too!
 
        Well-bracketedness, etc., probably need to be rewritten to operate "in
@@ -4568,8 +4595,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                 split.
                 + intros C' _ ?; subst C'. simpl.
                   specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1))
-                    as [Hinitflag [Hlocalbuf [Hsnapshot Hregs]]].
-                  split; [| split; [| split]].
+                    as [Hinitflag [Hlocalbuf [[Hsnapshot Hnextblock] Hregs]]].
+                  split; [| split; [| split; [split |]]].
                   (* The first two sub-goals are near-identical arguments on
                      memory operations. *)
                   * erewrite Memory.load_after_store_neq;
@@ -4642,8 +4669,22 @@ Local Transparent expr_of_const_val loc_of_reg.
                           injection Hshiftv1 as ?; subst size.
                           (* Continue solving goal. *)
                           eexists. split; last reflexivity.
-                          admit. (* We need to know that block allocation is
-                                    shifted, so Halloc' allocates block b'. *)
+                          destruct (next_block_alloc Halloc') as [Hnexte1 Hnexts0].
+                          specialize (Hnextblock _ Hnexte1).
+                          rewrite <- (next_block_store_stable _ Hmem) in Hnextblock.
+                          injection (pointer_of_alloc Halloc Hnextblock) as ?; subst b'.
+                          destruct ptr as [[[pptr Cptr] bptr] optr].
+                          injection (pointer_of_alloc Halloc' Hnexte1) as ? ? ?; subst pptr Cptr optr.
+                          simpl in *.
+                          (* Relate registers and memory (TODO: refactor). *)
+                          unfold postcondition_event_registers in Hregs.
+                          destruct (Hregs (Ereg_to_reg reg1) _ Logic.eq_refl)
+                            as [v1 [v1' [Hloadv1 [Hshiftv1 Hgetv1']]]].
+                          rewrite Hregse1 in Hgetv1'; subst v1'.
+                          rewrite reg_to_Ereg_to_reg Hcomp1 Hreg1mem0 in Hloadv1.
+                          injection Hloadv1 as ?; subst v1.
+                          (* Continue... *)
+                          by rewrite (Memory.load_after_alloc_eq _ _ _ _ _ (_, _, _, off) Halloc' Logic.eq_refl) /= Hoff1 Hoff2 //.
                        ++ erewrite Memory.load_after_alloc in Hload';
                             [| exact Halloc | injection; congruence].
                           erewrite Memory.load_after_store_neq in Hload';
@@ -4660,11 +4701,62 @@ Local Transparent expr_of_const_val loc_of_reg.
                     -- simpl. intros off v' Hload'.
                        simpl in Hrename'.
 
-                       admit.
+                       destruct (next_block_alloc Halloc') as [Hnexte1 Hnexts0].
+                       specialize (Hnextblock _ Hnexte1).
+                       rewrite <- (next_block_store_stable _ Hmem) in Hnextblock.
+                       injection (pointer_of_alloc Halloc Hnextblock) as ?; subst bnew.
+                       destruct ptr as [[[pptr Cptr] bptr] optr].
+                       injection (pointer_of_alloc Halloc' Hnexte1) as ? ? ?; subst pptr Cptr optr.
 
+                       unfold postcondition_event_registers in Hregs, Hregs1.
+                       unfold postcondition_event_snapshot_steadystate in Hsnapshot1.
+                       simpl in *.
+
+                          erewrite Memory.load_after_alloc_eq in Hload';
+                            [| exact Halloc' | reflexivity].
+                          simpl in Hload'.
+                          destruct (off <? Z.of_nat (Z.to_nat n1))%Z eqn:Hoff1;
+                            last discriminate.
+                          destruct (0 <=? off)%Z eqn:Hoff2;
+                            last discriminate.
+                          injection Hload' as ?; subst v'.
+                          (* Relate registers and memory. *)
+                          unfold postcondition_event_registers in Hregs.
+                          destruct (Hregs (Ereg_to_reg reg1) _ Logic.eq_refl)
+                            as [v1 [v1' [Hloadv1 [Hshiftv1 Hgetv1']]]].
+                          rewrite Hregse1 in Hgetv1'; subst v1'.
+                          rewrite reg_to_Ereg_to_reg Hcomp1 Hreg1mem0 in Hloadv1.
+                          injection Hloadv1 as ?; subst v1.
+                          injection Hshiftv1 as ?; subst size.
+                          (* Continue solving goal. *)
+                          eexists. split; last reflexivity.
+                          destruct (next_block_alloc Halloc') as [Hnexte1 Hnexts0].
+                          specialize (Hnextblock _ Hnexte1).
+                          rewrite <- (next_block_store_stable _ Hmem) in Hnextblock.
+                          injection (pointer_of_alloc Halloc Hnextblock) as ?; subst b'.
+                          destruct ptr as [[[pptr Cptr] bptr] optr].
+                          injection (pointer_of_alloc Halloc' Hnexte1) as ? ? ?; subst pptr Cptr optr.
+                          simpl in *.
+                          (* Relate registers and memory (TODO: refactor). *)
+                          unfold postcondition_event_registers in Hregs.
+                          destruct (Hregs (Ereg_to_reg reg1) _ Logic.eq_refl)
+                            as [v1 [v1' [Hloadv1 [Hshiftv1 Hgetv1']]]].
+                          rewrite Hregse1 in Hgetv1'; subst v1'.
+                          rewrite reg_to_Ereg_to_reg Hcomp1 Hreg1mem0 in Hloadv1.
+                          injection Hloadv1 as ?; subst v1.
+                          (* Continue... *)
+                          by rewrite (Memory.load_after_alloc_eq _ _ _ _ _ (_, _, _, off) Halloc' Logic.eq_refl) /= Hoff1 Hoff2 //.
+
+
+                       (*****)
                        (* relate blocks, then undef *)
 
-                       (* erewrite Memory.load_after_store_neq in Hload'; *)
+                       eexists. split.
+                       ++ erewrite Memory.load_after_store_neq;
+                            last exact Hstore';
+                            last (injection; congruence).
+
+                       (* erewrite Memory.load_after_store_neq in Hload'. *)
                        (*   last exact Hstore'; *)
                        (*   last (injection; congruence). *)
                        (* destruct (Nat.eqb_spec (S b') bnew) as [| Hneq]. *)
@@ -4691,6 +4783,34 @@ Local Transparent expr_of_const_val loc_of_reg.
                        (*         last (injection; congruence). *)
                        (*       exact Hload''. *)
                        (* ++ exact Hrename''. *)
+
+                  *
+
+                    intros next Hnext.
+
+                    assert (LEMMA :
+                        forall mem C size mem' ptr next,
+                          Memory.alloc mem C size = Some (mem', ptr) ->
+                          next_block mem C = Some next ->
+                          next_block mem' C = Some (S next)
+                           ) by admit.
+
+                    erewrite next_block_store_stable;
+                      last exact Hstore'.
+                    erewrite LEMMA. reflexivity. exact Halloc. rewrite -Hnext.
+                    simpl.
+                    unfold well_formed_memory_snapshot_steadystate_block in Hnextblock.
+                    SearchAbout s0.
+                    Check LEMMA _ _ _ _ _ _ Halloc'.
+
+                    (* rewrite Hmem' in Hnext. *)
+                    (* specialize (Hnextblock next Hnext). *)
+                    (* erewrite next_block_store_stable; *)
+                    (*   last exact Hstore'. *)
+                    (* erewrite next_block_store_stable; *)
+                    (*   last exact Hmem. *)
+                    (* exact Hnextblock. *)
+                    admit.
 
                   * {
                       (* subst mem'. *)
@@ -4795,8 +4915,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                       left. split; [| split].
                       -- admit. (* Easy by store inequalities. *)
                       -- admit. (* Easy by store inequalities. *)
-                      -- destruct Hsteady' as [Hsnapshot Hregs].
-                         split.
+                      -- destruct Hsteady' as [[Hsnapshot Hnextblock] Hregs].
+                         split; [split |].
                          ++ intros b Hlocal.
                             specialize (Hsnapshot b Hlocal) as [Cb [Hshift' [Hrename Hrename']]].
                             exists Cb. split; [| split].
@@ -4825,7 +4945,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                (* subst mem'. *)
                                admit.
                                (* specialize (Hrename' off v' Hload) as [v'' [Hload'' Hrename']].                               exists v''. split. *)
-                               (* --- erewrite Memory.load_after_store_neq; *)
+                               --- erewrite Memory.load_after_store_neq;
                                (*       last exact Hstore'; *)
                                (*       last admit. (* Easy by component inequality. *) *)
                                (*     erewrite Memory.load_after_store_neq; *)
@@ -4833,6 +4953,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                                (*       last admit. (* Easy by component inequality. *) *)
                                (*     assumption. *)
                                (* --- congruence. *)
+                         ++ (* Same proof on next block as above! *)
+                            admit.
                          ++ { (* Same sub-proof on registers as above! *)
                              admit.
                            }
