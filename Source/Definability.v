@@ -461,7 +461,7 @@ Section Definability.
       E_call C P (E_val (Int 0))
     | EStore _ r_dest r_src _ _ =>
       (* E_assign EXTCALL (E_val (Int 0%Z));; *)
-      E_assign (loc_of_reg r_dest) (E_deref (loc_of_reg r_src));;
+      E_assign (E_deref (loc_of_reg r_dest)) (E_deref (loc_of_reg r_src));;
       E_call C P (E_val (Int 0))
     | EAlloc _ r_dest r_size _ _ =>
       (* E_assign EXTCALL (E_val (Int 0%Z));; *)
