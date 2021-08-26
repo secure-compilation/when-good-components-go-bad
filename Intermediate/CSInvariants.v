@@ -357,6 +357,13 @@ Proof.
         (* Since we dot change components, this follows from the IH. *)
         rewrite -> H2.
         exact (Hmem1 _ _ Hload).
+        
+      * (* IJumpFunPtr *)
+        intros addr_load val_load Hload.
+        clear Hstar01 Hstep12 Hstep12' H.
+        (* Since we dot change components, this follows from the IH. *)
+        rewrite -> H2.
+        exact (Hmem1 _ _ Hload).
       * (* IBnz *)
         intros addr_load val_load Hload.
         clear Hstar01 Hstep12 Hstep12' H.
@@ -656,6 +663,11 @@ Proof.
            rewrite Register.gso in Hget; last assumption.
            exact (Hregs1 _ _ Hget).
       * (* IJump *)
+        intros reg ptr Hget.
+        clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
+        rewrite H2.
+        exact (Hregs1 _ _ Hget).
+      * (* IJumpFunPtr *)
         intros reg ptr Hget.
         clear Hstar01 Hstep12 Hstep12' H. (* Do we need anything in here? *)
         rewrite H2.
