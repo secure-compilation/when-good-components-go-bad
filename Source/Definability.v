@@ -4689,7 +4689,109 @@ Local Transparent expr_of_const_val loc_of_reg.
                     }
                 + intros C' Hcomp Hnext.
                   destruct (Nat.eqb_spec C0 C') as [| Hneq].
-                  { subst C0. admit. (* New sub-proof *) }
+                  { subst C0.
+                    rewrite <- Hcomp1 in Hnext.
+                    (* specialize (Hinitial _ Hcomp Hnext) as [Hsteady' | Hinitial]. *)
+                    assert (Hsteady' : postcondition_steady_state e1 mem0 C')
+                      by admit. (* TODO: rule out uninitialized state *)
+                    (* left. (* There is only one way to go. *) *)
+                    destruct Hsteady' as [Hinitflag [Hlocalbuf Hsteady']].
+                    left. split; [| split].
+                    -- admit. (* Easy by store inequalities. *)
+                    -- admit. (* Easy by store inequalities. *)
+                    -- destruct Hsteady' as [[Hsnapshot Hnextblock] Hregs].
+                       split; [split |].
+                       ++ intros b Hlocal.
+                          specialize (Hsnapshot b Hlocal) as [Cb [Hshift' [Hrename Hrename']]].
+                          exists Cb. split; [| split].
+                          ** exact Hshift'. (* Goes away, trivial property though *)
+                          ** intros off v' Hload. simpl.
+                             destruct b as [| b']; first discriminate.
+                             rewrite /sigma_shifting_wrap_bid_in_addr
+                                     /sigma_shifting_lefttoright_option
+                                     /sigma_shifting_lefttoright_addr_bid
+                                     /sigma_shifting_lefttoright_option
+                                     /all_zeros_shift /uniform_shift
+                                     /ssrnat.leq
+                                     /ssrnat.addn /ssrnat.addn_rec
+                                     /ssrnat.subn /ssrnat.subn_rec
+                                     /= Nat.add_0_r Nat.sub_0_r
+                               in Hshift'.
+                             injection Hshift' as ?; subst Cb. (* Should be done upfront *)
+                             (* Where should we do case analysis on pointer equality? *)
+                             destruct (Pointer.eqP
+                                         (Permission.data, C', b', off)
+                                         (Permission.data, C', b0', o0))
+                               as [Heq | Hneq].
+                             --- injection Heq as ? ?; subst b0' o0.
+                                 erewrite Memory.load_after_store_eq in Hload;
+                                   last exact Hstore'.
+                                 injection Hload as ?; subst v'.
+                                 eexists. split.
+                                 +++ erewrite Memory.load_after_store_eq;
+                                       last exact Hstore.
+                                     reflexivity.
+                                 +++ exact Hshiftv1.
+                             --- erewrite Memory.load_after_store_neq in Hload;
+                                   last exact Hstore';
+                                   last (injection; congruence).
+                                 erewrite Memory.load_after_store_neq in Hload;
+                                   last exact Hmem;
+                                   last (injection; discriminate).
+                                 specialize (Hrename off v' Hload) as [v'' [Hload'' Hrename]].
+                                 exists v''. split.
+                                 +++ erewrite Memory.load_after_store_neq;
+                                       last exact Hstore;
+                                       last (injection; congruence).
+                                     exact Hload''.
+                                 +++ congruence.
+                          ** intros off v' Hload.
+                             destruct b as [| b']; first discriminate.
+                             rewrite /sigma_shifting_wrap_bid_in_addr
+                                     /sigma_shifting_lefttoright_option
+                                     /sigma_shifting_lefttoright_addr_bid
+                                     /sigma_shifting_lefttoright_option
+                                     /all_zeros_shift /uniform_shift
+                                     /ssrnat.leq
+                                     /ssrnat.addn /ssrnat.addn_rec
+                                     /ssrnat.subn /ssrnat.subn_rec
+                                     /= Nat.add_0_r Nat.sub_0_r
+                               in Hshift'.
+                             injection Hshift' as ?; subst Cb. (* Should be done upfront *)
+                             simpl in Hload.
+                             (* Where should we do case analysis on pointer equality? *)
+                             destruct (Pointer.eqP
+                                         (Permission.data, C', b', off)
+                                         (Permission.data, C', b0', o0))
+                               as [Heq | Hneq].
+                             --- injection Heq as ? ?; subst b0' o0.
+                                 erewrite Memory.load_after_store_eq in Hload;
+                                   last exact Hstore.
+                                 injection Hload as ?; subst v'.
+                                 eexists. split.
+                                 +++ erewrite Memory.load_after_store_eq;
+                                       last exact Hstore'.
+                                     reflexivity.
+                                 +++ exact Hshiftv1.
+                             --- erewrite Memory.load_after_store_neq in Hload;
+                                   last exact Hstore;
+                                   last (injection; congruence).
+                                 specialize (Hrename' off v' Hload) as [v'' [Hload'' Hrename']].
+                                 exists v''. split.
+                                 +++ erewrite Memory.load_after_store_neq;
+                                     last exact Hstore';
+                                     last (injection; congruence).
+                                   erewrite Memory.load_after_store_neq;
+                                     last exact Hmem;
+                                     last (injection; congruence).
+                                   assumption.
+                                 +++ congruence.
+                         ++ (* Same sub-proof on next block as above! *)
+                            admit.
+                         ++ { (* Same sub-proof on registers as above! *)
+                             admit.
+                           }
+                  }
                   { (* The standard proof works in this case *)
                     rewrite <- Hcomp1 in Hnext.
                     specialize (Hinitial _ Hcomp Hnext) as [Hsteady' | Hinitial].
