@@ -1722,6 +1722,24 @@ Local Opaque Memory.store.
       next_block m' C = Some (ssrnat.addn (Pointer.block b) 1).
     Admitted.
 
+
+    Lemma shift_S_Some C b :
+      sigma_shifting_wrap_bid_in_addr
+        (sigma_shifting_lefttoright_addr_bid (uniform_shift 1) all_zeros_shift)
+        (C, S b) = Some (C, b).
+    Proof.
+      rewrite /sigma_shifting_wrap_bid_in_addr
+              /sigma_shifting_lefttoright_addr_bid
+              /sigma_shifting_lefttoright_option
+              /all_zeros_shift /uniform_shift
+              /ssrnat.leq
+              /ssrnat.addn /ssrnat.addn_rec
+              /ssrnat.subn /ssrnat.subn_rec
+              /=
+              Nat.add_0_r Nat.sub_0_r.
+      reflexivity.
+    Qed.
+
     (* TODO: [DynShare] Trace relation should appear here too!
 
        Well-bracketedness, etc., probably need to be rewritten to operate "in
@@ -4287,7 +4305,8 @@ Local Opaque Memory.load.
                                --- subst mem'. assumption.
                                --- congruence.
                             ** intros off v' Hload. subst mem'.
-                               specialize (Hrename' off v' Hload) as [v'' [Hload'' Hrename']].                               exists v''. split.
+                               specialize (Hrename' off v' Hload) as [v'' [Hload'' Hrename']].
+                               exists v''. split.
                                --- erewrite Memory.load_after_store_neq;
                                      last exact Hstore';
                                      last admit. (* Easy by component inequality. *)
@@ -4406,15 +4425,7 @@ Local Opaque Memory.load.
           (* Is this useful? *)
           destruct (Hsnapshot1 (S b0') (Nat.neq_succ_0 _))
             as [[cid bid] [Hshift1 [Hrename1 Hrename1']]].
-          rewrite /sigma_shifting_wrap_bid_in_addr
-                  /sigma_shifting_lefttoright_addr_bid
-                  /sigma_shifting_lefttoright_option
-                  /all_zeros_shift /uniform_shift
-                  /ssrnat.leq
-                  /ssrnat.addn /ssrnat.addn_rec
-                  /ssrnat.subn /ssrnat.subn_rec
-                  Nat.add_0_r /= Nat.sub_0_r
-            in Hshift1.
+          rewrite shift_S_Some in Hshift1.
           injection Hshift1 as ? ?; subst cid bid.
           simpl in Hrename1, Hrename1'.
 
@@ -4554,41 +4565,15 @@ Local Transparent expr_of_const_val loc_of_reg.
                     exact Hlocalbuf.
                   (* ... *)
                   * intros b Hb. simpl.
-
-                    (****)
                     (* Instead of specialize... (?) *)
                     destruct (Hsnapshot b Hb) as [[cid bid] [Hshift' [Hrename Hrename']]].
-
-                    rewrite /sigma_shifting_wrap_bid_in_addr
-                            /sigma_shifting_lefttoright_addr_bid
-                            /sigma_shifting_lefttoright_option
-                            /all_zeros_shift /uniform_shift
-                            /ssrnat.leq
-                            /ssrnat.addn /ssrnat.addn_rec
-                            /ssrnat.subn /ssrnat.subn_rec
-                            Nat.add_0_r
-                      in Hshift'.
                     destruct b as [| b'];
                       first discriminate.
-                    rewrite /= Nat.sub_0_r in Hshift'.
+                    rewrite shift_S_Some in Hshift'.
                     injection Hshift' as ? ?; subst cid bid.
-
-                    (* (*****) *)
-                    (* destruct (Pointer.eqP *)
-                    (*             (Permission.data, C, b', off) *)
-                    (*             (Permission.data, C0, b0', o0)) as [Heq | Hneq]. *)
-
-                    (*    (*****) *)
                     exists (C, b'). split; [| split].
                     (* eexists. split; [| split]. *)
-                    -- rewrite /sigma_shifting_wrap_bid_in_addr
-                               /sigma_shifting_lefttoright_addr_bid
-                               /sigma_shifting_lefttoright_option
-                               /all_zeros_shift /uniform_shift
-                               /ssrnat.leq
-                               /ssrnat.addn /ssrnat.addn_rec
-                               /ssrnat.subn /ssrnat.subn_rec
-                               Nat.add_0_r /= Nat.sub_0_r.
+                    -- rewrite shift_S_Some.
                        reflexivity.
                     -- simpl. intros off v' Hload'.
                        simpl in Hrename.
@@ -4689,7 +4674,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                     }
                 + intros C' Hcomp Hnext.
                   destruct (Nat.eqb_spec C0 C') as [| Hneq].
-                  { subst C0.
+                  { (* Store-specific sub-proof *)
+                    subst C0.
                     rewrite <- Hcomp1 in Hnext.
                     (* specialize (Hinitial _ Hcomp Hnext) as [Hsteady' | Hinitial]. *)
                     assert (Hsteady' : postcondition_steady_state e1 mem0 C')
@@ -4707,16 +4693,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                           ** exact Hshift'. (* Goes away, trivial property though *)
                           ** intros off v' Hload. simpl.
                              destruct b as [| b']; first discriminate.
-                             rewrite /sigma_shifting_wrap_bid_in_addr
-                                     /sigma_shifting_lefttoright_option
-                                     /sigma_shifting_lefttoright_addr_bid
-                                     /sigma_shifting_lefttoright_option
-                                     /all_zeros_shift /uniform_shift
-                                     /ssrnat.leq
-                                     /ssrnat.addn /ssrnat.addn_rec
-                                     /ssrnat.subn /ssrnat.subn_rec
-                                     /= Nat.add_0_r Nat.sub_0_r
-                               in Hshift'.
+                             rewrite shift_S_Some in Hshift'.
                              injection Hshift' as ?; subst Cb. (* Should be done upfront *)
                              (* Where should we do case analysis on pointer equality? *)
                              destruct (Pointer.eqP
@@ -4747,16 +4724,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                  +++ congruence.
                           ** intros off v' Hload.
                              destruct b as [| b']; first discriminate.
-                             rewrite /sigma_shifting_wrap_bid_in_addr
-                                     /sigma_shifting_lefttoright_option
-                                     /sigma_shifting_lefttoright_addr_bid
-                                     /sigma_shifting_lefttoright_option
-                                     /all_zeros_shift /uniform_shift
-                                     /ssrnat.leq
-                                     /ssrnat.addn /ssrnat.addn_rec
-                                     /ssrnat.subn /ssrnat.subn_rec
-                                     /= Nat.add_0_r Nat.sub_0_r
-                               in Hshift'.
+                             rewrite shift_S_Some in Hshift'.
                              injection Hshift' as ?; subst Cb. (* Should be done upfront *)
                              simpl in Hload.
                              (* Where should we do case analysis on pointer equality? *)
@@ -4819,16 +4787,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                                --- congruence.
                             ** intros off v' Hload.
                                destruct b as [| b']; first discriminate.
-                               rewrite /sigma_shifting_wrap_bid_in_addr
-                                       /sigma_shifting_lefttoright_option
-                                       /sigma_shifting_lefttoright_addr_bid
-                                       /sigma_shifting_lefttoright_option
-                                       /all_zeros_shift /uniform_shift
-                                       /ssrnat.leq
-                                       /ssrnat.addn /ssrnat.addn_rec
-                                       /ssrnat.subn /ssrnat.subn_rec
-                                       /= Nat.add_0_r Nat.sub_0_r
-                                 in Hshift'.
+                               rewrite shift_S_Some in Hshift'.
                                injection Hshift' as ?; subst Cb. (* Should be done upfront *)
                                erewrite Memory.load_after_store_neq in Hload;
                                  last exact Hstore;
@@ -5027,7 +4986,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                            +++ assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
                                rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
                                  last (now destruct reg0). (* Trivial property of register offsets. *)
-                               (* Store-specific *)
+                               (* Alloc-specific *)
                                erewrite Memory.load_after_alloc;
                                  [| exact Halloc | injection; congruence].
                                rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
@@ -5160,29 +5119,13 @@ Local Transparent expr_of_const_val loc_of_reg.
                   * intros b Hb. simpl.
                     specialize (Hsnapshot b Hb) as [[cid bid] [Hshift' [Hrename Hrename']]].
 
-                    rewrite /sigma_shifting_wrap_bid_in_addr
-                            /sigma_shifting_lefttoright_addr_bid
-                            /sigma_shifting_lefttoright_option
-                            /all_zeros_shift /uniform_shift
-                            /ssrnat.leq
-                            /ssrnat.addn /ssrnat.addn_rec
-                            /ssrnat.subn /ssrnat.subn_rec
-                            Nat.add_0_r
-                      in Hshift'.
                     destruct b as [| b'];
                       first discriminate.
-                    rewrite /= Nat.sub_0_r in Hshift'.
+                    rewrite shift_S_Some in Hshift'.
                     injection Hshift' as ? ?; subst cid bid.
 
                     exists (C, b'). split; [| split].
-                    -- rewrite /sigma_shifting_wrap_bid_in_addr
-                               /sigma_shifting_lefttoright_addr_bid
-                               /sigma_shifting_lefttoright_option
-                               /all_zeros_shift /uniform_shift
-                               /ssrnat.leq
-                               /ssrnat.addn /ssrnat.addn_rec
-                               /ssrnat.subn /ssrnat.subn_rec
-                               Nat.add_0_r /= Nat.sub_0_r.
+                    -- rewrite shift_S_Some.
                        reflexivity.
                     -- simpl. intros off v' Hload'.
                        erewrite Memory.load_after_store_neq in Hload';
@@ -5368,12 +5311,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                                  last exact Hmem;
                                  last (injection; congruence).
                                specialize (Hrename off v' Hload) as [v'' [Hload'' Hrename]].
-                               rewrite /sigma_shifting_wrap_bid_in_addr
-                                       /sigma_shifting_lefttoright_addr_bid
-                                       /sigma_shifting_lefttoright_option
-                                 in Hshift'.
-                               destruct (ssrnat.leq (uniform_shift 1 C') b);
-                                 last discriminate.
+                               destruct b as [| b']; first discriminate.
+                               rewrite shift_S_Some in Hshift'.
                                injection Hshift' as ? ?; subst cid bid.
                                eexists. split.
                                --- erewrite Memory.load_after_alloc;
@@ -5384,12 +5323,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                                (* subst mem'. *)
                                (* simpl in *. *)
                                (* NOTE: Also in sub-case above! *)
-                               rewrite /sigma_shifting_wrap_bid_in_addr
-                                       /sigma_shifting_lefttoright_addr_bid
-                                       /sigma_shifting_lefttoright_option
-                                 in Hshift'.
-                               destruct (ssrnat.leq (uniform_shift 1 C') b);
-                                 last discriminate.
+                               destruct b as [| b']; first discriminate.
+                               rewrite shift_S_Some in Hshift'.
                                injection Hshift' as ? ?; subst cid bid.
                                simpl in Hload.
                                erewrite Memory.load_after_alloc in Hload;
