@@ -212,7 +212,7 @@ Fixpoint compile_expr (e: expr) : COMP code :=
                                   (* as expected by the prologue (see compile_proc) *)
          push R_RA ++
          [IPtrOfLabel ret_label R_RA] ++
-         [IJump R_AUX1] ++
+         [IJumpFunPtr R_AUX1] ++
          [ILabel ret_label] ++
          pop R_RA)
   | E_exit => ret [IHalt]
@@ -290,13 +290,13 @@ Definition gen_all_procedures_labels
       end
   in gen emptym procs.
 
+(*****************************************
 Definition gen_buffers
          (bufs: {fmap Component.id -> nat + list value})
-  : NMap {fmap Block.id -> nat + list value} :=
-  mapm (fun init_info => mkfmap [(0, init_info)]) bufs.
+  : NMap {fmap Block.id -> nat + list value} := bufs.
+*******************************************)
 
 Definition compile_components
-         (local_buffers : NMap {fmap Block.id -> nat + list value})
          (procs_labels : NMap (NMap label))
          (comps: list (Component.id * NMap expr))
   : COMP (list (Component.id * NMap code)) :=
@@ -305,8 +305,6 @@ Definition compile_components
       | [] => ret acc
       | (C,procs) :: cs' =>
         let local_buffer_block_id := 0 in
-        do blocks <- lift (local_buffers C);
-        do _ <- lift (blocks local_buffer_block_id );
         do P_labels <- lift (procs_labels C);
         do procs_code <- compile_procedures C
            (Permission.data, C, local_buffer_block_id, 0%Z)
@@ -361,14 +359,13 @@ Definition compile_program
            (p: Source.program) : option Intermediate.program :=
   let comps := elementsm (Source.prog_procedures p) in
   let bufs := Source.prog_buffers p in
-  let local_buffers := gen_buffers bufs in
   run init_env (
     do procs_labels <- gen_all_procedures_labels comps;
-    do code <- compile_components local_buffers procs_labels comps;
+    do code <- compile_components procs_labels comps;
     let p :=
         {| Intermediate.prog_interface := Source.prog_interface p;
            Intermediate.prog_procedures := mkfmap code;
-           Intermediate.prog_buffers := local_buffers;
+           Intermediate.prog_buffers := bufs;
            Intermediate.prog_main := Some Procedure.main |} in
    wrap_main procs_labels p).
 
@@ -384,8 +381,8 @@ Proof.
   destruct (gen_all_procedures_labels (elementsm (Source.prog_procedures p)) init_env)
     as [[labels cenv1]|] eqn:Hlabs;
     try discriminate.
-  destruct (compile_components (gen_buffers (Source.prog_buffers p)) labels
-                               (elementsm (Source.prog_procedures p)) cenv1)
+  destruct (compile_components  labels
+                                (elementsm (Source.prog_procedures p)) cenv1)
     as [[code cenv2]|] eqn:Hcompiled_comps;
     try discriminate.
   simpl in Hcompile.

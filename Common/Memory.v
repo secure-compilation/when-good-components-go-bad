@@ -62,6 +62,10 @@ Module Type AbstractComponentMemory.
         end
       else None.
 
+  Axiom nextblock_prealloc:
+    forall (bufs: {fmap Block.id -> nat + list value}),
+      next_block (prealloc bufs) = S (fold_left Nat.max (fmap.domm bufs) 0).
+
   Axiom load_after_alloc:
     forall m m' n b,
       alloc m n = (m',b) ->
@@ -494,6 +498,11 @@ Module ComponentMemory : AbstractComponentMemory.
     - simpl. now destruct (bufs b).
   Qed.
 
+  Lemma nextblock_prealloc:
+    forall bufs,
+      next_block (prealloc bufs) = S (fold_left Nat.max (fmap.domm bufs) 0).
+  Proof. by autounfold. Qed.
+    
   Lemma load_after_alloc:
     forall (m m' : mem) (n : nat) b,
       alloc m n = (m',b) ->
