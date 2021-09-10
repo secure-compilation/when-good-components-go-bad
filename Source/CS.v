@@ -138,7 +138,7 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
     kstep G [State C, s, mem, k, E_deref e, arg] E0
           [State C, s, mem, Kderef k, e, arg]
 | KS_DerefEval : forall C s mem k P' C' b' o' v arg,
-    C = C' ->
+    (* C = C' -> *)
     Memory.load mem (P',C',b',o') = Some v ->
     kstep G [State C, s, mem, Kderef k, E_val (Ptr (P',C',b',o')), arg] E0
           [State C, s, mem, k, E_val v, arg]
@@ -153,7 +153,7 @@ Inductive kstep (G: global_env) : state -> trace event -> state -> Prop :=
     kstep G [State C, s, mem, Kassign1 e1 k, E_val v, arg] E0
             [State C, s, mem, Kassign2 v k, e1, arg]
 | KS_AssignEval : forall C s mem mem' k v P' C' b' o' arg,
-    C = C' ->
+    (* C = C' -> *)
     Memory.store mem (P', C', b', o') v = Some mem' ->
     kstep G [State C, s, mem, Kassign2 v k, E_val (Ptr (P', C', b', o')), arg] E0
           [State C, s, mem', k, E_val v, arg]
@@ -277,11 +277,11 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
     | Kderef k' =>
       match v with
       | Ptr (P',C',b',o') =>
-        if C == C' then
+        (* if C == C' then *)
           do v <- Memory.load mem (P',C',b',o');
           ret (E0, [State C, s, mem, k', E_val v, arg])
-        else
-          None
+        (* else *)
+        (*   None *)
       | _ => None
       end
     | Kassign1 e1 k' =>
@@ -289,11 +289,11 @@ Definition eval_kstep (G : global_env) (st : state) : option (trace event * stat
     | Kassign2 v' k' =>
       match v with
       | Ptr (P',C',b',o') =>
-        if C == C' then
+        (* if C == C' then *)
           do mem' <- Memory.store mem (P',C',b',o') v';
           ret (E0, [State C, s, mem', k', E_val v', arg])
-        else
-          None
+        (* else *)
+        (*   None *)
       | _ => None
       end
     | Kcallptr1 efunptr k' =>
