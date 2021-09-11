@@ -1862,6 +1862,18 @@ Local Opaque Memory.store.
            simpl. exists compMem, buf. by rewrite -Hmem'2.
     Qed.
 
+    (* k = (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop) *)
+    (* stk_st = {| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: stk *)
+    (* mem = mem4 *)
+    Lemma exec_init_local_buffer_expr C stk_st mem k bnew :
+      exists mem',
+        star CS.kstep (prepare_global_env p)
+             [CState C, stk_st, mem,  Kseq (init_local_buffer_expr C) k, E_val (Ptr (Permission.data, C, bnew, 0%Z)), Int 0]
+             E0
+             [CState C, stk_st, mem',                                 k, E_val (Int 1),                               Int 0] /\
+        Memory.store mem (Permission.data, C, Block.local, INITFLAG_offset%Z) (Int 1) = Some mem'.
+    Admitted.
+
     Ltac ucongruence := autounfold with definabilitydb; congruence.
 
     Ltac simplify_memory :=
@@ -2531,17 +2543,17 @@ Local Opaque loc_of_reg.
           (* Gather a few recurrent assumptions at the top. *)
           exists (EConst C ptr v s0 t0).
 
-          destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem)
-            as [mem' Hstore].
-          assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <>
-                              (Permission.data, C, Block.local, reg_offset v))
-            by (now destruct v). (* Lemma? *)
-          assert (Hload : exists v',
-                     Memory.load
-                       mem0 (Permission.data, C, Block.local, reg_offset v) = Some v')
-            by (eapply Memory.store_some_load_some; eauto).
-          setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem)
-            in Hload.
+          (* destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) *)
+          (*   as [mem' Hstore]. *)
+          (* assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> *)
+          (*                     (Permission.data, C, Block.local, reg_offset v)) *)
+          (*   by (now destruct v). (* Lemma? *) *)
+          (* assert (Hload : exists v', *)
+          (*            Memory.load *)
+          (*              mem0 (Permission.data, C, Block.local, reg_offset v) = Some v') *)
+          (*   by (eapply Memory.store_some_load_some; eauto). *)
+          (* setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) *)
+          (*   in Hload. *)
 
           assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
             as [Hprefix | [prefix0 [e1 Hprefix01]]].
@@ -2551,60 +2563,94 @@ Local Opaque loc_of_reg.
           }
           { (* Treat empty case separately. *)
             subst prefix. simpl in *.
+            assert (Hmain : C = Component.main) by admit.
+
+            destruct (wfmem_ini wf_mem C Logic.eq_refl)
+              as [Hregs0 [Hload0init [Hload0local _]]].
+            assert (Hload0v := Hregs0 (Ereg_to_reg v) _ Logic.eq_refl).
+            rewrite reg_to_Ereg_to_reg in Hload0v.
+            assert (Hload1v := Hload0v).
+            erewrite <- Memory.load_after_store_neq in Hload1v;
+              last exact Hmem;
+              last (injection; now destruct v).
+            destruct (proj1 (Memory.store_some_load_some _ _ ptr) (ex_intro _ _ Hload1v))
+              as [mem2 Hstore2].
+(*             assert (Hload1init := Hload0init). *)
+(*             erewrite <- Memory.load_after_store_neq in Hload1init; *)
+(*               last exact Hmem; *)
+(*               last (injection; discriminate). *)
+            destruct (Memory.alloc_after_load
+                        _ _ _ _ _ _ (buffer_size C)
+                        (Memory.load_after_store_eq _ _ _ _ Hstore2))
+              as [mem3 [bnew [Hnewblock Halloc3]]].
+            assert (Hload3local := Hload0local).
+            erewrite <- Memory.load_after_store_neq in Hload3local;
+              last exact Hmem;
+              last (injection; discriminate).
+            erewrite <- Memory.load_after_store_neq in Hload3local;
+              last exact Hstore2;
+              last (injection; now destruct v).
+            erewrite <- Memory.load_after_alloc in Hload3local;
+              [ | exact Halloc3 | injection; congruence].
+            destruct (proj1 (Memory.store_some_load_some _ _ (Ptr (Permission.data, C, bnew, 0%Z))) (ex_intro _ _ Hload3local))
+              as [mem4 Hstore4].
+            destruct (exec_init_local_buffer_expr
+                        C
+                        ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: stk)
+                        mem4
+                        (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop)
+                        bnew) as [mem5 [Hstar_init Hstore5]].
+            (* NOTE: Separate lemma? The execution only makes sense if C is main. *)
+            (* assert (exists n, Memory.load mem0 (Permission.data, C, Block.local, EXTCALL_offset) = Some (Int n)) as [extcal Hload0extcall]. { *)
+            (*   destruct (wfmem_extcall_ini wf_mem Logic.eq_refl) as [Hextmain Hector]. *)
+            (*   destruct (Nat.eqb_spec C Component.main); *)
+            (*     eauto. *)
+            (* } *)
+            assert (Hload0extcall := proj1 (wfmem_extcall_ini wf_mem Logic.eq_refl) _ C_b Hmain).
 
             destruct ptr as [n | ptr |];
               exists (StackState C (callers s));
               eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
 
             + (* EConst-Int *)
-              pose proof proj1
-                   (Memory.store_some_load_some _ _ (Int n)) Hload as [mem'' Hstore'].
               split.
               { (** star steps *)
-                Local Transparent expr_of_const_val loc_of_reg.
+Local Transparent expr_of_const_val loc_of_reg.
                 take_steps.
-                -- exact Hstore'.
+                -- exact Hstore2.
                 -- (* Do recursive call. *)
-                  take_steps.
-                  ++ reflexivity.
-                  ++ now apply find_procedures_of_trace.
-                  ++ (* Now we are done with the event.
-                        We still need to process the external call check. *)
-                    take_steps.
-                    ** (* TODO: Needs a new invariant that talks about the init
-                           check. Assume for now that it exists, and
-                           initialization has already taken place --
-                           initial events?. *)
-                      instantiate (1 := Int 1).
-                      simpl.
-                      destruct wf_mem. unfold C in *.
-                      (****************************************
-                      specialize (wfmem0 prefix0 e1 Logic.eq_refl)
-                        as [_ [Hpostcond_steady _]].
-                      specialize (Hpostcond_steady _ C_b Logic.eq_refl) as [G _].
-                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
-                        last by destruct v.
-                      rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
-                        easy.
-                       *****************************************)
-                      admit.
-                    ** take_steps.
-                       ---
-                         (********************************
-                         assert (Hload0 := proj1 (wfmem_extcall wf_mem Hprefix01) _ C_b (Logic.eq_sym Hcomp1)).
-                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hstore');
-                             last (now destruct v). (* Trivial property of register offsets. *)
-                           rewrite (Memory.load_after_store_neq _ _ _ _ _ _ Hmem);
-                             last easy.
-                           exact Hload0.
-                          *************************************)
-                         admit.
-                       --- unfold invalidate_metadata.
-                           take_steps.
-
-                           (** apply star_refl. *)
-                           admit.
-
+                   take_steps.
+                   ++ reflexivity.
+                   ++ now apply find_procedures_of_trace.
+                   ++ (* Now we are done with the event.
+                         We still need to process the external call check. *)
+                      take_steps.
+                      ** (* TODO: Needs a new invariant that talks about the init
+                            check. Assume for now that it exists, and
+                            initialization has already taken place --
+                            initial events?. *)
+                         erewrite Memory.load_after_store_neq;
+                           last exact Hstore2;
+                           last (injection; now destruct v).
+                         erewrite Memory.load_after_store_neq;
+                           last exact Hmem;
+                           last (injection; now destruct v).
+                         exact Hload0init.
+                      ** take_steps.
+                         --- (* Easy, from wf_buffers *)
+                             admit.
+                         --- rewrite Nat2Z.id. exact Halloc3.
+                         --- take_steps.
+                             +++ exact Hstore4.
+                             +++ eapply star_trans with (t2 := E0);
+                                   first exact Hstar_init;
+                                   last reflexivity.
+                                 take_steps.
+                                 *** instantiate (1 := Int 0).
+                                     (* Check Hload0extcall. *)
+                                     admit.
+                                 *** take_steps.
+                                     apply star_refl.
               }
               { (** well-formed state *)
                 econstructor; eauto.
