@@ -2902,24 +2902,26 @@ Local Transparent expr_of_const_val loc_of_reg.
                        memory operations. *)
                     * erewrite Memory.load_after_store_neq;
                         last exact Hstore';
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       erewrite Memory.load_after_store_neq;
                         last exact Hmem;
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       exact Hinitflag.
                     * erewrite Memory.load_after_store_neq;
                         last exact Hstore';
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       erewrite Memory.load_after_store_neq;
                         last exact Hmem;
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       exact Hlocalbuf.
                     (* ... *)
                     * intros b Hb. simpl.
                       specialize (Hsnapshot b Hb) as [[cid bid] [Hshift' [Hrename Hrename']]].
-                      assert (cid = C) by admit; subst cid.
-                      exists (C, bid). split; [| split].
-                      -- exact Hshift'.
+                      destruct b as [| b']; first discriminate.
+                      rewrite shift_S_Some in Hshift'.
+                      injection Hshift' as ? ?; subst cid bid.
+                      exists (C, b'). split; [| split].
+                      -- rewrite shift_S_Some. reflexivity.
                       -- simpl. intros off v' Hload'.
                          erewrite Memory.load_after_store_neq in Hload';
                            last exact Hstore';
@@ -2929,7 +2931,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                            last (injection; congruence).
                          simpl in Hrename.
                          specialize (Hrename off v' Hload') as [v'' [Hload'' Hrename'']].
-                         exists v''. split; congruence.
+                         exists v''. split.
+                         ++ subst mem'. exact Hload''.
+                         ++ exact Hrename''.
                       -- simpl. intros off v' Hload'.
                          simpl in Hrename'. subst mem'.
                          specialize (Hrename' off v' Hload') as [v'' [Hload'' Hrename'']].
@@ -3003,9 +3007,15 @@ Local Opaque Memory.store.
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
-              -- (* TODO: Obtain from invariants. *)
-                 instantiate (1 := Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z)).
-                 admit.
+              -- destruct (wfmem wf_mem Hprefix01) as [_ [Hsteady _]].
+                 specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1)) as [_ [Hlocalbuf _]].
+                 (* erewrite Memory.load_after_store_neq; *)
+                 (*   last exact  Hstore'; *)
+                 (*   last (injection; now destruct reg2). *)
+                 erewrite Memory.load_after_store_neq;
+                   last exact Hmem;
+                   last (injection; discriminate).
+                 exact Hlocalbuf.
               -- take_steps.
                  ++ exact Hstore'.
                  ++ take_steps.
@@ -3215,24 +3225,26 @@ Local Transparent expr_of_const_val loc_of_reg.
                        memory operations. *)
                     * erewrite Memory.load_after_store_neq;
                         last exact Hstore';
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       erewrite Memory.load_after_store_neq;
                         last exact Hmem;
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       exact Hinitflag.
                     * erewrite Memory.load_after_store_neq;
                         last exact Hstore';
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       erewrite Memory.load_after_store_neq;
                         last exact Hmem;
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       exact Hlocalbuf.
                     (* ... *)
                     * intros b Hb. simpl.
                       specialize (Hsnapshot b Hb) as [[cid bid] [Hshift' [Hrename Hrename']]].
-                      assert (cid = C) by admit; subst cid.
-                      exists (C, bid). split; [| split].
-                      -- exact Hshift'.
+                      destruct b as [| b']; first discriminate.
+                      rewrite shift_S_Some in Hshift'.
+                      injection Hshift' as ? ?; subst cid bid.
+                      exists (C, b'). split; [| split].
+                      -- rewrite shift_S_Some. reflexivity.
                       -- simpl. intros off v' Hload'.
                          erewrite Memory.load_after_store_neq in Hload';
                            last exact Hstore';
@@ -3242,7 +3254,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                            last (injection; congruence).
                          simpl in Hrename.
                          specialize (Hrename off v' Hload') as [v'' [Hload'' Hrename'']].
-                         exists v''. split; congruence.
+                         exists v''. split.
+                         ** subst mem'. exact Hload''.
+                         ** exact Hrename''.
                       -- simpl. intros off v' Hload'.
                          simpl in Hrename'. subst mem'.
                          specialize (Hrename' off v' Hload') as [v'' [Hload'' Hrename'']].
@@ -3517,24 +3531,26 @@ Local Transparent expr_of_const_val loc_of_reg.
                        memory operations. *)
                     * erewrite Memory.load_after_store_neq;
                         last exact Hstore';
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       erewrite Memory.load_after_store_neq;
                         last exact Hmem;
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       exact Hinitflag.
                     * erewrite Memory.load_after_store_neq;
                         last exact Hstore';
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       erewrite Memory.load_after_store_neq;
                         last exact Hmem;
-                        last admit. (* Easy offset inequality. *)
+                        last (injection; now destruct v0).
                       exact Hlocalbuf.
                     (* ... *)
                     * intros b Hb. simpl.
                       specialize (Hsnapshot b Hb) as [[cid bid] [Hshift' [Hrename Hrename']]].
-                      assert (cid = C) by admit; subst cid.
-                      exists (C, bid). split; [| split].
-                      -- exact Hshift'.
+                      destruct b as [| b']; first discriminate.
+                      rewrite shift_S_Some in Hshift'.
+                      injection Hshift' as ? ?; subst cid bid.
+                      exists (C, b'). split; [| split].
+                      -- rewrite shift_S_Some. reflexivity.
                       -- simpl. intros off v' Hload'.
                          erewrite Memory.load_after_store_neq in Hload';
                            last exact Hstore';
@@ -3544,7 +3560,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                            last (injection; congruence).
                          simpl in Hrename.
                          specialize (Hrename off v' Hload') as [v'' [Hload'' Hrename'']].
-                         exists v''. split; congruence.
+                         exists v''. split.
+                         ++ subst mem'. exact Hload''.
+                         ++ exact Hrename''.
                       -- simpl. intros off v' Hload'.
                          simpl in Hrename'. subst mem'.
                          specialize (Hrename' off v' Hload') as [v'' [Hload'' Hrename'']].
@@ -3623,6 +3641,7 @@ Local Opaque Memory.store.
           assert (Hcomp1 : next_comp_of_event e1 = cur_comp s) by admit.
           (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
           exists (EMov C src dst s0 t0).
+          (* NOTE: Can we make this initial part more like the other cases? *)
           assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset dst))
             by (now destruct dst). (* Lemma? *)
           assert (Hoffsetneq2: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset src))
@@ -3702,7 +3721,6 @@ Local Transparent expr_of_const_val loc_of_reg.
             (* Reestablish memory well-formedness.
                TODO: Refactor, automate. *)
             { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
-              (* instantiate (1 := mem). (* FIXME *) *)
               constructor.
               - intros C_ Hcomp.
                 destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
@@ -3846,24 +3864,26 @@ Local Transparent expr_of_const_val loc_of_reg.
                      memory operations. *)
                   * erewrite Memory.load_after_store_neq;
                       last exact Hstore';
-                      last admit. (* Easy offset inequality. *)
+                      last (injection; now destruct dst).
                     erewrite Memory.load_after_store_neq;
                       last exact Hmem;
-                      last admit. (* Easy offset inequality. *)
+                      last (injection; now destruct dst).
                     exact Hinitflag.
                   * erewrite Memory.load_after_store_neq;
                       last exact Hstore';
-                      last admit. (* Easy offset inequality. *)
+                      last (injection; now destruct dst).
                     erewrite Memory.load_after_store_neq;
                       last exact Hmem;
-                      last admit. (* Easy offset inequality. *)
+                      last (injection; now destruct dst).
                     exact Hlocalbuf.
                   (* ... *)
                   * intros b Hb. simpl.
                     specialize (Hsnapshot b Hb) as [[cid bid] [Hshift' [Hrename Hrename']]].
-                    assert (cid = C) by admit; subst cid.
-                    exists (C, bid). split; [| split].
-                    -- exact Hshift'.
+                    destruct b as [| b']; first contradiction.
+                    rewrite shift_S_Some in Hshift'.
+                    injection Hshift' as ? ?; subst cid bid.
+                    exists (C, b'). split; [| split].
+                    -- rewrite shift_S_Some. reflexivity.
                     -- simpl. intros off v' Hload'.
                        erewrite Memory.load_after_store_neq in Hload';
                          last exact Hstore';
@@ -3873,7 +3893,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                          last (injection; congruence).
                        simpl in Hrename.
                        specialize (Hrename off v' Hload') as [v'' [Hload'' Hrename'']].
-                       exists v''. split; congruence.
+                       exists v''. split.
+                       ** subst mem'. exact Hload''.
+                       ** exact Hrename''.
                     -- simpl. intros off v' Hload'.
                        simpl in Hrename'. subst mem'.
                        specialize (Hrename' off v' Hload') as [v'' [Hload'' Hrename'']].
@@ -3894,117 +3916,95 @@ Local Transparent expr_of_const_val loc_of_reg.
                       erewrite next_block_store_stable;
                         last exact Hmem.
                       exact Hnextblock.
-                  (* * { *)
-                  (*     subst mem'. *)
-                  (*     intros reg off v Hoffset Hload. *)
-                  (*     simpl in *. *)
-                  (*     (* subst v prefix. *) *)
-                  (*     unfold postcondition_event_registers in Hregs. *)
-
-                  (*     assert (t0 = *)
-                  (*             Machine.Intermediate.Register.set *)
-                  (*               (Ereg_to_reg dst) *)
-                  (*               ( *)
-                  (*                 Machine.Intermediate.Register.get *)
-                  (*                   (Ereg_to_reg src) *)
-                  (*                   (register_file_of_event_inform e1) *)
-                  (*               ) *)
-                  (*               (register_file_of_event_inform e1) *)
-                  (*            ). *)
-                  (*     { *)
-                  (*       inversion wf_int_pref' as *)
-                  (*           [| | prefint eint1 eint2 Hsteps Hstep Ht]. *)
-                  (*       ++ destruct prefix; discriminate. (* contra *) *)
-                  (*       ++ subst prefix. *)
-                  (*          destruct prefix0 as [| ? [|]]; discriminate. (* contra *) *)
-                  (*       ++ rewrite Hprefix01 in Ht. *)
-                  (*          symmetry in Ht. apply cats2_inv in Ht as [? [? ?]]. *)
-                  (*          subst prefint eint1 eint2. *)
-                  (*          inversion Hstep as *)
-                  (*              [| | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | |]; *)
-                  (*            subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6. *)
-                  (*            by subst t0. *)
-                  (*     } *)
-                  (*     subst t0. *)
-                        
-                      
-                  (*     destruct (Z.eqb_spec (reg_offset dst) off) as [Heq | Hneq]. *)
-                  (*     * subst off. *)
-                  (*       assert (dst = CS.CS.reg_to_Ereg reg) *)
-                  (*         by (now apply reg_offset_inj in Heq). *)
-                  (*       subst dst. *)
-                  (*       assert (v = saved). { *)
-                  (*         rewrite (Memory.load_after_store_eq _ _ _ _ Hstore') in Hload. *)
-                  (*         now injection Hload as ?. } *)
-                  (*       subst v. *)
-                  (*       specialize (Hregs *)
-                  (*                     (Ereg_to_reg src) *)
-                  (*                     _ *)
-                  (*                     saved *)
-                  (*                     Logic.eq_refl *)
-                  (*                  ) as Hregs_src. *)
-                  (*       simpl in Hregs_src. *)
-                  (*       rewrite reg_to_Ereg_to_reg Hcomp1 in Hregs_src.  *)
-                  (*       specialize (Hregs_src Hloadmem0_vsrc) *)
-                  (*         as [saved_shifted [Hsaved_shifted1 Hsaved_shifted2]]. *)
-                  (*       exists saved_shifted. *)
-                  (*       rewrite Ereg_to_reg_to_Ereg. *)
-                  (*       split; first exact Hsaved_shifted1. *)
-                  (*       rewrite Machine.Intermediate.Register.gss. *)
-                  (*       exact Hsaved_shifted2. *)
-
-
-                  (*     * subst off. *)
-                  (*       assert (Hptr_neq: *)
-                  (*           (Permission.data, C, Block.local, reg_offset dst) *)
-                  (*           <> *)
-                  (*           (Permission.data, *)
-                  (*            cur_comp s, *)
-                  (*            Block.local, *)
-                  (*            reg_offset (CS.CS.reg_to_Ereg reg))). *)
-                  (*       { *)
-                  (*         unfold not. move => /Pointer.eqP => contra. *)
-                  (*         simpl in contra. *)
-                  (*         apply andb_true_iff in contra as [_ contra]. *)
-                  (*         apply Z.eqb_eq in contra. by apply Hneq in contra. *)
-                  (*       } *)
-                  (*       rewrite (Memory.load_after_store_neq _ _ _ _ _ Hptr_neq Hstore') *)
-                  (*         in Hload. *)
-
-                  (*       assert (Hptr_neq2: *)
-                  (*           (Permission.data, C, Block.local, 0%Z) *)
-                  (*           <> *)
-                  (*           (Permission.data, *)
-                  (*            cur_comp s, *)
-                  (*            Block.local, *)
-                  (*            reg_offset (CS.CS.reg_to_Ereg reg))). *)
-                  (*       { *)
-                  (*         unfold not. move => /Pointer.eqP => contra. *)
-                  (*         simpl in contra. *)
-                  (*         apply andb_true_iff in contra as [_ contra]. *)
-                  (*         by destruct (CS.CS.reg_to_Ereg reg); auto. *)
-                  (*       } *)
-                  (*       rewrite (Memory.load_after_store_neq _ _ _ _ _ Hptr_neq2 Hmem) *)
-                  (*         in Hload. *)
-
-                  (*       simpl in Hregs. rewrite Hcomp1 in Hregs. *)
-                  (*       specialize (Hregs _ _ _ Logic.eq_refl Hload) *)
-                  (*         as [v_shifted [Hv_shifted1 Hv_shifted2]]. *)
-                  (*       exists v_shifted. split; first exact Hv_shifted1. *)
-                  (*       assert (Hneq': reg <> Ereg_to_reg dst). *)
-                  (*       { *)
-                  (*         unfold not. intros. subst reg. *)
-                  (*         by rewrite reg_to_Ereg_to_reg in Hneq. *)
-                  (*       } *)
-                  (*       by rewrite (@Machine.Intermediate.Register.gso _ _ _ _ Hneq'). *)
-                  (*   } *)
-                +
-              (** Here, we have Hinitial and Hsteady as assumptions about mem0 *)
-              (** And we would like to show that sth similar to Hinitial holds *)
-              (** of mem'' as well.                                            *)
-              (** AEK: I suppose this should be exactly the same as in case    *)
-              (** EConst.                                                      *)
-                  admit.
+                  + intros C' Hcomp Hnext.
+                    rewrite <- Hcomp1 in Hnext.
+                    specialize (Hinitial _ Hcomp Hnext) as [Hsteady' | Hinitial].
+                    * destruct Hsteady' as [Hinitflag [Hlocalbuf Hsteady']].
+                      left. split; [| split].
+                      -- erewrite Memory.load_after_store_neq;
+                           last exact Hstore';
+                           last (injection; now destruct dst).
+                         erewrite Memory.load_after_store_neq;
+                           last exact Hmem;
+                           last (injection; now destruct dst).
+                         exact Hinitflag.
+                      -- erewrite Memory.load_after_store_neq;
+                           last exact Hstore';
+                           last (injection; now destruct dst).
+                         erewrite Memory.load_after_store_neq;
+                           last exact Hmem;
+                           last (injection; now destruct dst).
+                         exact Hlocalbuf.
+                      -- destruct Hsteady' as [Hsnapshot Hnextblock].
+                         split.
+                         ++ intros b Hlocal.
+                            specialize (Hsnapshot b Hlocal) as [Cb [Hshift' [Hrename Hrename']]].
+                            exists Cb. split; [| split].
+                            ** exact Hshift'.
+                            ** intros off v' Hload.
+                               erewrite Memory.load_after_store_neq in Hload;
+                                 last exact Hstore';
+                                 last (injection; congruence).
+                               erewrite Memory.load_after_store_neq in Hload;
+                                 last exact Hmem;
+                                 last (injection; congruence).
+                               specialize (Hrename off v' Hload) as [v'' [Hload'' Hrename]].
+                               exists v''. split.
+                               --- subst mem'. assumption.
+                               --- congruence.
+                            ** intros off v' Hload. subst mem'.
+                               specialize (Hrename' off v' Hload) as [v'' [Hload'' Hrename']].
+                               exists v''. split.
+                               --- erewrite Memory.load_after_store_neq;
+                                     last exact Hstore';
+                                     last (injection; congruence).
+                                   erewrite Memory.load_after_store_neq;
+                                     last exact Hmem;
+                                     last (injection; congruence).
+                                   assumption.
+                               --- congruence.
+                         ++ (* Same sub-proof on next block as above! *)
+                            intros next Hnext'.
+                            rewrite Hmem' in Hnext'.
+                            specialize (Hnextblock next Hnext').
+                            erewrite next_block_store_stable;
+                              last exact Hstore'.
+                            erewrite next_block_store_stable;
+                              last exact Hmem.
+                            exact Hnextblock.
+                    * right.
+                      destruct Hinitial as [Hinitflag [Hlocalbuf Hinitial]].
+                      split; [| split].
+                      -- erewrite Memory.load_after_store_neq;
+                           last exact Hstore';
+                           last (injection; now destruct dst).
+                         erewrite Memory.load_after_store_neq;
+                           last exact Hmem;
+                           last (injection; discriminate).
+                         exact Hinitflag.
+                      -- erewrite Memory.load_after_store_neq;
+                           last exact Hstore';
+                           last (injection; now destruct dst).
+                         erewrite Memory.load_after_store_neq;
+                           last exact Hmem;
+                           last (injection; discriminate).
+                         exact Hlocalbuf.
+                      -- destruct Hinitial as [Hprealloc Hnextblock].
+                         split.
+                         ** destruct Hprealloc
+                             as [Cmem [buf [HCmem [Hbuf [Hnextblock' Hprealloc]]]]].
+                            exists Cmem, buf.
+                            split; [| split; [| split]]; try assumption.
+                            rewrite -HCmem.
+                            subst mem'. reflexivity.
+                         ** destruct Hnextblock as [Cmem [HCmem Hnextblock]].
+                            exists Cmem. split; last assumption.
+                            rewrite -HCmem. symmetry.
+                            transitivity (mem C').
+                            --- eapply component_memory_after_store_neq; eauto.
+                                intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
+                            --- eapply component_memory_after_store_neq; eauto.
+                                intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
             }
 
         - (* EBinop *)
