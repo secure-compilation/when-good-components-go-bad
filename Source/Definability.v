@@ -1896,6 +1896,63 @@ Local Opaque Memory.store.
             try (simpl; ucongruence)
           end).
 
+    (* A restricted version with finer control to start refactoring. *)
+    Ltac simplify_memory' :=
+      repeat
+        match goal with
+        | H : Memory.store ?MEM ?PTR ?V = Some ?MEM'
+          |- Memory.load ?MEM' ?PTR = Some _
+          =>
+          erewrite Memory.load_after_store_eq;
+          [reflexivity | exact H]
+        | H : Memory.store ?MEM (_, ?C, ?B, ?O) ?V = Some ?MEM'
+          |- Memory.load ?MEM' (_, ?C', ?B', ?O') = ?V'
+          =>
+          erewrite Memory.load_after_store_neq;
+          [| | exact H];
+          [| injection;
+             (discriminate
+              || contradiction
+              || congruence
+              || match O with
+                 | reg_offset ?R =>
+                   match O' with
+                   | reg_offset ?R' => now (destruct R; destruct R')
+                   | _ => now destruct R
+                   end
+                 | _ =>
+                   match O' with
+                   | reg_offset ?R' => now destruct R'
+                   | _ => fail
+                   end
+                 end)]
+              (* || match O with *)
+              (*    | reg_offset ?R => now destruct R *)
+              (*    | _ => fail *)
+              (*    end *)
+              (* || match O' with *)
+              (*    | reg_offset ?R => now destruct R *)
+              (*    | _ => fail *)
+              (*    end)] *)
+        | H : Memory.alloc ?MEM ?C ?N = Some (?MEM', ?B')
+          |- Memory.load ?MEM' (_, ?C', ?B'', ?O') = ?V'
+          =>
+          erewrite Memory.load_after_alloc;
+          [| exact H |];
+          [| injection;
+             (discriminate
+              || contradiction
+              || congruence
+              || match O with
+                 | reg_offset ?R => now destruct R
+                 | _ => fail
+                 end
+              || match O' with
+                 | reg_offset ?R => now destruct R
+                 | _ => fail
+                 end)]
+        end.
+
     (* A proof of relational definability on the right. Existential
       quantification is extended to [cs] and [s], and induction performed on
       the prefix, executing from the initial state. Separately, execution to a
@@ -2653,55 +2710,138 @@ Local Transparent expr_of_const_val loc_of_reg.
                                      apply star_refl.
               }
               { (** well-formed state *)
-                econstructor; eauto.
-                { destruct s. exact wb. }
-                constructor.
-                {
-                  - intros C_ Hcomp.
-                    destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
-                    + subst C_.
-                      pose proof Memory.load_after_store_eq _ _ _ _ Hmem as Hmem0.
-                      assert (Hoffsetneq' :
-                                (Permission.data, C, Block.local, reg_offset v) <>
-                                (Permission.data, C, Block.local, 0%Z))
-                        by (now destruct v).
-                      (****************************
-                      erewrite (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq' Hstore').
-                      assumption.
-                       **********************************)
-                      admit.
-                    + erewrite Memory.load_after_store_neq;
-                        last eassumption;
-                        last (injection; contradiction).
-                      assert (Hload0 := wfmem_counter wf_mem Hcomp).
-                      assert (HCneq : (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C_, Block.local, 0%Z))
-                        by (now injection). (* Easy contradiction. *)
-                      rewrite <- (Memory.load_after_store_neq _ _ _ _ _ HCneq Hmem) in Hload0.
-                      (************************************
-                      rewrite counter_value_snoc. simpl.
-                      move: Hneq => /eqP.
-                      case: ifP;
-                        last now rewrite Z.add_0_r.
-                      move => /eqP => Hcontra => /eqP => Hneq.
-                      symmetry in Hcontra. contradiction.
-                      **********************************)
-                      admit.
-                }
-                {
-                  admit.
-                }
-                {
-                  admit.
-                }
-                {
-                  admit.
-                }
-                {
-                  admit.
-                }
-                {
-                  admit.
-                }
+            econstructor; try reflexivity; try eassumption.
+            { destruct s. exact wb. }
+            { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
+              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. split; [| split]; easy. }
+            (* Reestablish memory well-formedness.
+               TODO: Refactor, automate. *)
+            { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
+              constructor.
+              - intros C_ Hcomp.
+                destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                + subst C_.
+                  by simplify_memory'.
+                + simplify_memory'.
+                  assert (Hload0 := wfmem_counter wf_mem Hcomp).
+                  rewrite Hload0.
+                  rewrite /counter_value /=.
+                  move: Hneq => /eqP.
+                  case: ifP;
+                    last reflexivity.
+                  move => /eqP => Hcontra => /eqP => Hneq.
+                  rewrite Hcontra in Hneq. contradiction.
+              - discriminate.
+              - intros pref ev Hprefix.
+                destruct pref as [| ? [ | ]]; try discriminate.
+                injection Hprefix as ?; subst ev.
+                split.
+                + intros C_ Hcomp Hnext.
+                  destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                  * subst C_.
+                    simplify_memory'.
+                    apply (proj1 (wfmem_extcall_ini wf_mem Logic.eq_refl) _ Hcomp).
+                    congruence.
+                  * subst C_. contradiction.
+                + intros C_ Hcomp Hnext.
+                  destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                  * subst C_. contradiction.
+                  * simplify_memory'.
+                    apply (proj2 (wfmem_extcall_ini wf_mem Logic.eq_refl) _ Hcomp).
+                    intros ?; subst C_. contradiction.
+              - intros C_ reg Hcomp.
+                assert (Hload0reg := Hregs0 (Ereg_to_reg reg) _ Logic.eq_refl).
+                rewrite reg_to_Ereg_to_reg in Hload0reg.
+                destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                + subst C_.
+                  (* eexists. *)
+                  (* simplify_memory'. *)
+                  destruct (EregisterP reg v) as [Heq | Hneq].
+                  * subst v.
+                    eexists.
+                    by simplify_memory'.
+                  * eexists.
+                    simplify_memory'.
+                    exact Hload0reg.
+                + exists Undef.
+                  destruct (wfmem_ini wf_mem C_ Logic.eq_refl) as [Hregs0' _].
+                  assert (Hload0reg' := Hregs0' (Ereg_to_reg reg) _ Logic.eq_refl).
+                  rewrite reg_to_Ereg_to_reg in Hload0reg'.
+                  by simplify_memory'.
+              - discriminate.
+              - intros pref ev Hprefix.
+                destruct pref as [| ? [ | ]]; try discriminate.
+                injection Hprefix as ?; subst ev.
+                split; [| split].
+                + {
+                    intros reg off Hoffset.
+                    destruct (wfmem_ini wf_mem C Logic.eq_refl) as [Hregs _].
+                    destruct (EregisterP (reg_to_Ereg reg) v) as [Heq | Hneq].
+                    - subst v off.
+                      eexists. eexists.
+                      split; [| split].
+                      + by simplify_memory'.
+                      + reflexivity.
+                      + rename t0 into eregs.
+                        inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht].
+                        { subst eint.
+                          inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
+                                subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                          subst eregs;
+                          rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss;
+                          reflexivity.
+                        }
+                        { destruct prefint as [| ? []]; discriminate. }
+                    - eexists. eexists.
+                      split; [| split].
+                      * subst off. simplify_memory'.
+                        erewrite Memory.load_after_store_neq;
+                          last exact Hstore2;
+                          last (injection;
+                                move=> /reg_offset_inj => ?; subst v;
+                                contradiction). (* TODO: Add to tactic *)
+                        simplify_memory'.
+                        exact (Hregs reg _ Logic.eq_refl).
+                      * reflexivity.
+                      * rename t0 into eregs.
+                        inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht].
+                        { subst eint.
+                          inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
+                                subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                          subst eregs;
+                          rewrite Machine.Intermediate.Register.gso;
+                            last (intros ?; subst reg; now destruct v).
+                          rewrite /Machine.Intermediate.Register.get
+                                  Machine.Intermediate.Register.reg_in_domm_init_Undef;
+                            first reflexivity.
+                          apply /dommP. exists Undef. now destruct reg.
+                        }
+                        { destruct prefint as [| ? []]; discriminate. }
+                  }
+                + intros C' _ ?; subst C'. simpl. (* lookup *)
+                  split; [| split; [| split]].
+                  * by simplify_memory'.
+                  * simplify_memory.
+                    admit.
+                  * (* Nothing shared so far *)
+                    intros b Hb. simpl.
+                    admit.
+                  * intros b Hnext.
+                    admit. (* Easy *)
+                + intros C' Hcomp Hnext.
+                  simpl in Hnext. fold C in Hnext. (* Needed for simplify_memory' *)
+                  (* rewrite <- Hcomp1 in Hnext. *)
+                  destruct (wfmem_ini wf_mem C' Logic.eq_refl)
+                    as [Hregs [Hinitflag [Hlocalbuf [Cmem [HCmem Hnextblock]]]]].
+                  right.
+                  split; [| split].
+                  * simplify_memory'. exact Hinitflag.
+                  * simplify_memory'. exact Hlocalbuf.
+                  * split.
+                    -- exists Cmem. admit.
+                    -- exists Cmem. admit. (* Easy *)
+            }
               }
             + (* EConst-Ptr *)
               admit.
