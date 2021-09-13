@@ -1398,6 +1398,7 @@ Local Opaque Memory.store.
          after having executed the event [e] *)
         wfmem_ini: forall C,
             prefix = [] ->
+            (* component_buffer C -> *) (* NOTE: Are we missing this condition? *)
             postcondition_event_registers_ini C mem
             /\
             Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
@@ -1872,7 +1873,7 @@ Local Opaque Memory.store.
              E0
              [CState C, stk_st, mem',                                 k, E_val (Int 1),                               Int 0] /\
         Memory.store mem (Permission.data, C, Block.local, INITFLAG_offset%Z) (Int 1) = Some mem' /\
-        mem' C = Source.prepare_buffers p C. (* Could also relate to (prog_buffers C). *)
+        mem' C = Source.prepare_buffers p C. (* TODO: Correct/refine this spec! *) (* Could also relate to (prog_buffers C). *)
     Admitted.
 
     (* Lemma prepare_prog_buffers C : *)
@@ -2113,8 +2114,16 @@ Local Opaque Memory.store.
           - unfold Block.local. discriminate.
         }
 
+        destruct (exec_init_local_buffer_expr
+                    Component.main [::] mem_localbufptr
+                    (Kseq (extcall_check;;
+                           expr_of_trace Component.main Procedure.main
+                                         (comp_subtrace Component.main t)) Kstop)
+                    1)
+          as [mem0 [Hstar0 [Hstore0 Hmem0]]].
+
         destruct (Memory.store_after_load
-                    mem_localbufptr
+                    mem0
                     (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)
                     Undef Undef) as [mem1 Hmem1]; eauto; simplify_memory.
 
@@ -2160,6 +2169,7 @@ Local Opaque Memory.store.
                     (expr_of_trace Component.main Procedure.main
                                    (comp_subtrace Component.main t))
                     (Int 0%Z)).
+
         exists (StackState Component.main []), E0, E0, (uniform_shift 1).
         split; [| split; [| split]].
         + rewrite /CS.initial_machine_state /Source.prog_main
@@ -2188,8 +2198,10 @@ Local Opaque Memory.store.
             exact Hstoreptr.
           }
 
-          take_steps.
           (** About to execute "init_local_buffer_expr Component.main" *)
+          eapply star_trans with (t2 := E0);
+            first exact Hstar0;
+            last reflexivity.
           (*****************************************
           unfold init_local_buffer_expr, copy_local_datum_expr.
 
@@ -2212,7 +2224,26 @@ Local Opaque Memory.store.
           rewrite foldr_map.
           take_steps.
           ******************************************************)
-          admit.
+
+          take_steps;
+            first by simplify_memory.
+Local Transparent loc_of_reg.
+          take_steps;
+            first exact Hmem1.
+          take_steps;
+            first exact Hmem2.
+          take_steps;
+            first exact Hmem3.
+          take_steps;
+            first exact Hmem4.
+          take_steps;
+            first exact Hmem5.
+          take_steps;
+            first exact Hmem6.
+          take_steps;
+            first exact Hmem7.
+          take_steps.
+          apply star_refl.
         + reflexivity.
         + now do 2 constructor.
         + econstructor; eauto.
@@ -2242,8 +2273,6 @@ Local Opaque Memory.store.
                destruct (C == Component.main) eqn:Heq.
                ++ move: Heq => /eqP Heq; subst C.
                   destruct r; simpl in *; eexists; simplify_memory.
-                  (** Follows from the definition of meta_buffer. *)
-                  admit.
                ++ move: Heq => /eqP Heq.
                   destruct r; simpl in *; eexists; simplify_memory.
                   (** All follow from the definition of meta_buffer. *)
@@ -2254,9 +2283,10 @@ Local Opaque Memory.store.
                   destruct (C == Component.main) eqn:Heq.
                   ** move: Heq => /eqP Heq; subst C.
                      destruct R; simpl in *; simplify_memory.
-                     admit.
                   ** move: Heq => /eqP Heq.
                      destruct R; simpl in *; simplify_memory.
+                     (* NOTE: What can we actually say about the initialization
+                        of other components? *)
                      all: admit.
                ++ admit.
                ++ admit.
@@ -2758,8 +2788,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                 rewrite reg_to_Ereg_to_reg in Hload0reg.
                 destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
                 + subst C_.
-                  (* eexists. *)
-                  (* simplify_memory'. *)
                   destruct (EregisterP reg v) as [Heq | Hneq].
                   * subst v.
                     eexists.
