@@ -2621,18 +2621,6 @@ Local Opaque loc_of_reg.
           (* Gather a few recurrent assumptions at the top. *)
           exists (EConst C ptr v s0 t0).
 
-          (* destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) *)
-          (*   as [mem' Hstore]. *)
-          (* assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> *)
-          (*                     (Permission.data, C, Block.local, reg_offset v)) *)
-          (*   by (now destruct v). (* Lemma? *) *)
-          (* assert (Hload : exists v', *)
-          (*            Memory.load *)
-          (*              mem0 (Permission.data, C, Block.local, reg_offset v) = Some v') *)
-          (*   by (eapply Memory.store_some_load_some; eauto). *)
-          (* setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) *)
-          (*   in Hload. *)
-
           assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
             as [Hprefix | [prefix0 [e1 Hprefix01]]].
           {
@@ -2931,6 +2919,17 @@ Local Transparent expr_of_const_val loc_of_reg.
           }
           (* Const does not modify the (shared) memory, therefore these two
              should be identical. *)
+          destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem)
+            as [mem' Hstore].
+          assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <>
+                              (Permission.data, C, Block.local, reg_offset v))
+            by (now destruct v). (* Lemma? *)
+          assert (Hload : exists v',
+                     Memory.load
+                       mem0 (Permission.data, C, Block.local, reg_offset v) = Some v')
+            by (eapply Memory.store_some_load_some; eauto).
+          setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem)
+            in Hload.
           assert (Hmem' : s0 = mem_of_event_inform e1). {
             subst prefix.
             clear -wf_int_pref'.
