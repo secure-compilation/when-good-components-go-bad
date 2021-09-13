@@ -1871,7 +1871,28 @@ Local Opaque Memory.store.
              [CState C, stk_st, mem,  Kseq (init_local_buffer_expr C) k, E_val (Ptr (Permission.data, C, bnew, 0%Z)), Int 0]
              E0
              [CState C, stk_st, mem',                                 k, E_val (Int 1),                               Int 0] /\
-        Memory.store mem (Permission.data, C, Block.local, INITFLAG_offset%Z) (Int 1) = Some mem'.
+        Memory.store mem (Permission.data, C, Block.local, INITFLAG_offset%Z) (Int 1) = Some mem' /\
+        mem' C = Source.prepare_buffers p C. (* Could also relate to (prog_buffers C). *)
+    Admitted.
+
+    (* Lemma prepare_prog_buffers C : *)
+    (*   (* unfold_buffer *) *)
+    (*     (prog_buffers C) = Source.prepare_buffers p C. *)
+    (* Admitted. *)
+
+    Lemma prepare_buffers_prealloc C buf :
+      prog_buffers C = Some buf ->
+      Source.prepare_buffers p C = Some (ComponentMemory.prealloc [fmap (0, buf)]).
+    Admitted.
+
+    Lemma next_block_prepare_buffers C :
+      component_buffer C ->
+      next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid.
+    Admitted.
+
+    (* TODO: Inline idiomatic proof of this. *)
+    Remark next_block_prepare_buffers_aux :
+      S (fold_left Nat.max [fset Block.local] 0) = 1.
     Admitted.
 
     Ltac ucongruence := autounfold with definabilitydb; congruence.
@@ -2656,7 +2677,7 @@ Local Opaque loc_of_reg.
                         ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: stk)
                         mem4
                         (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop)
-                        bnew) as [mem5 [Hstar_init Hstore5]].
+                        bnew) as [mem5 [Hstar_init [Hstore5 Hmem5C]]].
             (* NOTE: Separate lemma? The execution only makes sense if C is main. *)
             (* assert (exists n, Memory.load mem0 (Permission.data, C, Block.local, EXTCALL_offset) = Some (Int n)) as [extcal Hload0extcall]. { *)
             (*   destruct (wfmem_extcall_ini wf_mem Logic.eq_refl) as [Hextmain Hector]. *)
@@ -2694,8 +2715,17 @@ Local Transparent expr_of_const_val loc_of_reg.
                            last (injection; now destruct v).
                          exact Hload0init.
                       ** take_steps.
-                         --- (* Easy, from wf_buffers *)
-                             admit.
+                         --- unfold buffer_size.
+                             destruct (prog_buffers C) as [Cbuf |] eqn:HCbuf.
+                             +++ assert (Hwf_buf := wf_buffers HCbuf).
+                                 destruct Cbuf as [sz | vs]; auto.
+                                 *** move: Hwf_buf => /Nat.ltb_spec0.
+                                     now destruct sz.
+                                 *** move: Hwf_buf => /andP => [[]] => /Nat.ltb_spec0.
+                                     now destruct vs.
+                             +++ rewrite /component_buffer domm_buffers in C_b.
+                                 move: HCbuf => /dommPn => Hcontra.
+                                 by rewrite C_b in Hcontra.
                          --- rewrite Nat2Z.id. exact Halloc3.
                          --- take_steps.
                              +++ exact Hstore4.
@@ -2820,15 +2850,41 @@ Local Transparent expr_of_const_val loc_of_reg.
                         { destruct prefint as [| ? []]; discriminate. }
                   }
                 + intros C' _ ?; subst C'. simpl. (* lookup *)
+                  (* This is directly needed for the second sub-goal, but also
+                     useful for the fourth one. *)
+                  destruct (wfmem_ini wf_mem C Logic.eq_refl)
+                    as [Hregs [Hinitflag [Hlocalbuf [Cmem [HCmem Hnextblock]]]]]. (* Up front? *)
+                  assert (Hnext: next_block mem0 C = Some LOCALBUF_blockid). {
+                    by rewrite /next_block HCmem Hnextblock.
+                  }
+                  erewrite <- next_block_store_stable in Hnext;
+                    last exact Hmem.
+                  erewrite <- next_block_store_stable in Hnext;
+                    last exact Hstore2.
+                  destruct (next_block_alloc Halloc3) as [Hnext2 Hnext3].
+                  rewrite Hnext in Hnext2. injection Hnext2 as ?; subst bnew.
+                  (* Continue. *)
                   split; [| split; [| split]].
                   * by simplify_memory'.
-                  * simplify_memory.
-                    admit.
+                  * by simplify_memory'. (* Trivial due to work up front. *)
                   * (* Nothing shared so far *)
                     intros b Hb. simpl.
                     admit.
-                  * intros b Hnext.
-                    admit. (* Easy *)
+                  * intros b Hnext'. simpl in Hnext'.
+                    inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
+                      last (destruct prefint as [| ? []]; discriminate).
+                    subst eint.
+                    rename s0 into eregs.
+                    inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
+                      subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                      subst eregs.
+                    rewrite (next_block_prepare_buffers C_b) in Hnext'.
+                    injection Hnext' as ?; subst b.
+                    erewrite next_block_store_stable;
+                      last exact Hstore5.
+                    erewrite next_block_store_stable;
+                      last exact Hstore4.
+                    rewrite Hnext3. reflexivity.
                 + intros C' Hcomp Hnext.
                   simpl in Hnext. fold C in Hnext. (* Needed for simplify_memory' *)
                   (* rewrite <- Hcomp1 in Hnext. *)
@@ -2839,8 +2895,33 @@ Local Transparent expr_of_const_val loc_of_reg.
                   * simplify_memory'. exact Hinitflag.
                   * simplify_memory'. exact Hlocalbuf.
                   * split.
-                    -- exists Cmem. admit.
-                    -- exists Cmem. admit. (* Easy *)
+                    -- destruct (prog_buffers C') as [buf |] eqn:HCbuf;
+                         last by (rewrite /component_buffer domm_buffers in Hcomp;
+                                  move: HCbuf => /dommPn => Hcontra;
+                                  rewrite Hcomp in Hcontra).
+                       eexists. exists buf.
+                       split; [| split; [| split]];
+                         try reflexivity.
+                       ++ inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
+                            last (destruct prefint as [| ? []]; discriminate).
+                          subst eint.
+                          rename s0 into eregs.
+                          inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
+                            subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                            subst eregs.
+                         now apply prepare_buffers_prealloc.
+                       ++ rewrite ComponentMemory.nextblock_prealloc
+                                  domm_set domm0 /=.
+                          by rewrite next_block_prepare_buffers_aux. (* TODO: Inline *)
+                    -- exists Cmem. split.
+                       ++ repeat
+                            ((erewrite <- component_memory_after_store_neq;
+                              [| eassumption | intro Hcontra; subst C'; contradiction])
+                             ||
+                             (erewrite <- component_memory_after_alloc_neq;
+                              [| eassumption | intro Hcontra; subst C'; contradiction])).
+                          exact HCmem.
+                       ++ exact Hnextblock.
             }
               }
             + (* EConst-Ptr *)
