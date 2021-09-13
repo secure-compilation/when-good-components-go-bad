@@ -2633,6 +2633,62 @@ Theorem does_prefix_inform_non_inform :
     does_prefix (sem_non_inform p) (project_finpref_behavior m).
 Admitted.
 
+Lemma star_final_no_more_events p t_inform sinit s':
+  star step (prepare_global_env p) sinit t_inform s' ->
+  forall s'0,
+  Star (sem_non_inform p) sinit (project_non_inform t_inform) s'0 ->
+  Smallstep.final_state (sem_non_inform p) s'0 ->
+  Star (sem_inform p) sinit t_inform s'0.
+Proof.
+  intros Hstarinform.
+  induction Hstarinform; intros s'0 Hstarproj Hfinal; simpl in *.
+  - 
+    apply star_sem_non_inform_star_sem_inform in Hstarproj as [t_inform Hstar].
+    
+(****    inversion Hstarproj; subst; first by apply star_refl.
+    + 
+ ******)
+Abort.
+
+(**********************
+Theorem does_prefix_non_inform_inform :
+  forall p m,
+ does_prefix (sem_non_inform p) m ->
+ exists m_inform,
+   does_prefix (sem_inform p) m_inform /\ project_finpref_behavior m_inform = m.
+Proof.
+   unfold does_prefix. intros ? ? H_doesm_noninform.
+   destruct H_doesm_noninform as [b_noninform [Hb_noninform Hpref]].
+   specialize (behavior_prefix_star_non_inform Hb_noninform Hpref)
+     as [s_init [s' [Hinit Hstar]]].
+   apply star_sem_non_inform_star_sem_inform in Hstar as [t_inform [Hstar Hproj]].
+   exists (match m with
+           | FTbc _ => FTbc t_inform
+           | FGoes_wrong _ => FGoes_wrong t_inform
+           | FTerminates _ => FTerminates t_inform
+           end
+          ).
+   destruct m; split; try (simpl; by rewrite Hproj).
+   - simpl in Hpref. destruct b_noninform; subst; try contradiction.
+     inversion Hb_noninform as [s ? Hinit2 Hbeh | ]; subst.
+     simpl in *.
+     unfold initial_state in *. rewrite -Hinit in Hinit2. subst.
+     exists (Terminates t_inform). split; last easy.
+     econstructor.
+     + simpl. reflexivity.
+     + inversion Hbeh; subst.
+       econstructor; last eassumption.
+       Search _ "det" step.
+       generalize dependent 
+       SearchAbout s'.
+       last eassumption.
+       Search _ "_non" "inform".
+       apply star_sem_non_inform_star_sem_inform in H0.
+   -  by eapply program_behaves_finpref_exists; eauto.
+       
+Qed.
+************************************)
+
 (* RB: TODO: Inspired by [domm_partition] on PS. Consider how to select the
    right semantics, the best shape of the premises, and naming conventions to
    avoid confusion, esp. if it similar lemmas will be used (again) elsewhere.

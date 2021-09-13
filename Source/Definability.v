@@ -2600,17 +2600,17 @@ Local Opaque loc_of_reg.
           (* Gather a few recurrent assumptions at the top. *)
           exists (EConst C ptr v s0 t0).
 
-          (* destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) *)
-          (*   as [mem' Hstore]. *)
-          (* assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> *)
-          (*                     (Permission.data, C, Block.local, reg_offset v)) *)
-          (*   by (now destruct v). (* Lemma? *) *)
-          (* assert (Hload : exists v', *)
-          (*            Memory.load *)
-          (*              mem0 (Permission.data, C, Block.local, reg_offset v) = Some v') *)
-          (*   by (eapply Memory.store_some_load_some; eauto). *)
-          (* setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem) *)
-          (*   in Hload. *)
+          destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) 
+            as [mem' Hstore].
+          assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <>
+                              (Permission.data, C, Block.local, reg_offset v))
+            by (now destruct v). (* Lemma? *)
+          assert (Hload : exists v',
+                     Memory.load
+                       mem0 (Permission.data, C, Block.local, reg_offset v) = Some v')
+            by (eapply Memory.store_some_load_some; eauto).
+          setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem)
+            in Hload.
 
           assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
             as [Hprefix | [prefix0 [e1 Hprefix01]]].
@@ -6299,6 +6299,7 @@ Local Transparent expr_of_const_val loc_of_reg.
       CS.final_state cs'.
     Admitted.
 
+    (**********************
     Lemma definability_gen s prefix suffix cs :
       t = prefix ++ suffix ->
       well_formed_state s prefix suffix cs ->
@@ -6307,12 +6308,21 @@ Local Transparent expr_of_const_val loc_of_reg.
                        project_non_inform suffix = suffix' &
                        CS.final_state cs'.
     Admitted.
+    ***************************)
 
     Lemma definability :
       forall procs, (* TODO: What to do with procs? *)
-      well_formed_trace intf procs t ->
-      program_behaves (CS.sem p) (Terminates (project_non_inform t)).
+        well_formed_trace intf procs t ->
+        exists t' const_map,
+          program_behaves (CS.sem p) (Terminates t') /\
+          traces_shift_each_other_option
+            metadata_size_lhs
+            const_map
+            (project_non_inform t)
+            t'.
     Proof.
+    Admitted.
+      (****************************************************
       move=> procs wf_t; eapply program_runs=> /=; try reflexivity.
       pose cs := CS.initial_machine_state p.
       suffices H : well_formed_state (StackState Component.main [::]) [::] t cs.
@@ -6344,6 +6354,7 @@ Local Transparent Memory.load. unfold Memory.load; simpl. Local Opaque Memory.lo
           move: Hbuf. rewrite /component_buffer => /dommPn. contradiction.
       - intros prefix e Hcontra. destruct prefix; discriminate.
     Qed.
+************************************************************)
 
 End WithTrace.
 End Definability.
@@ -6365,11 +6376,11 @@ Require Import S2I.Definitions.
 (*Section MainDefinability.*)
 
 (* FG : Put back some sanity checks ? some are present but commented in the premise and the move => *)
-Lemma matching_mains_backtranslated_program p c intf back m:
+Lemma matching_mains_backtranslated_program p c intf bufs back m:
   Intermediate.well_formed_program p ->
   Intermediate.well_formed_program c ->
   (* intf = unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c) -> *)
-  back = program_of_trace intf m ->
+  back = program_of_trace intf m bufs ->
   intf Component.main ->
   (* well_formed_trace intf m -> *)
   matching_mains (Source.program_unlink (domm (Intermediate.prog_interface p)) back) p.
@@ -6451,7 +6462,7 @@ Proof.
     do 2![rewrite Intermediate.wfprog_defined_procedures //].
     by rewrite -domm_union mem_domm e.
   set m' := finpref_trace m. (* FIXME: Instantiate star simulation. *)
-  have {Hbeh} [cs [cs' [Hcs Hstar]]] : (* TODO: This should come from a separate lemma. *)
+  have [cs [cs' [Hcs Hstar]]] : (* TODO: This should come from a separate lemma. *)
       exists cs cs',
         I.CS.initial_state (Intermediate.program_link p c) cs /\
         Star (I.CS.sem_inform (Intermediate.program_link p c)) cs m' cs'.
@@ -6473,7 +6484,7 @@ Proof.
       do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
       split; try reflexivity; exact: star_refl.
   }
-  -
+  - 
   set procs := Intermediate.prog_procedures (Intermediate.program_link p c).
   have wf_events : all (well_formed_event intf procs) m'.
     (* by apply: CS.intermediate_well_formed_events Hstar. *)
@@ -6488,24 +6499,38 @@ Proof.
     (* TODO: Duplicate assumption, new non-implicit parameters. *)
     by apply: (CS.intermediate_well_formed_trace _ wf_p_c Hclosed _ _ _ Hstar Hcs HmainP wf_p_c).
     (* exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c. *)
-  have := definability Hclosed_intf intf_main _ wf_m.
+    have bufs := Intermediate.prog_buffers (Intermediate.program_link p c).
+    have intf_dom_buf:
+      domm intf = domm bufs.
+    by admit.
+    have wf_buf : (forall (C : nat_ordType) (buf : nat + seq value),
+                      bufs C =
+                      Some buf ->
+                      Buffer.well_formed_buffer buf).
+    by admit.
+  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ wf_m.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
-  set back := (program_of_trace intf m') => Hback.
-  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf m'))
-                                   (Terminates (project_non_inform m'))).
+  set back := (program_of_trace intf bufs m') => Hback.
+  specialize (Hback all_zeros_shift) as [t' [const_map [Hback Hshift]]].
+  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf bufs m'))
+                                   (Terminates t')).
   {
     (* This should follow directly from the definability lemma. *)
     apply Hback.
-    (* All that is missing now is the metadata map. *)
-    all:admit.
   }
     (* RB: TODO: [DynShare] Passing the section variables above should not be
        needed, nor should the additional assumption. *)
   exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
   exists (Source.program_unlink (domm (Intermediate.prog_interface c)) back).
   (* Check project_finpref_behavior (FTerminates m'). *)
-  exists (project_finpref_behavior m). (* FIXME: This should involve m'! *)
+  exists (
+      match m with
+      | FGoes_wrong _ => FGoes_wrong t' (* Should be contradiction anyways *)
+      | FTerminates _ => FTerminates t'
+      | FTbc _ => FTbc t'
+      end
+    ). (* FIXME: This should involve m'! *)
   eexists. (* RB: TODO: [DynShare] Provide witnesses. *)
   split=> /=.
     rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
@@ -6519,7 +6544,7 @@ Proof.
     eapply well_formed_events_well_formed_program; auto.
     (* by exact: well_formed_events_well_formed_program. *)
     eassumption.
-  have Hback' : back = program_of_trace intf m' by [].
+  have Hback' : back = program_of_trace intf bufs m' by [].
     (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
   split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main.
   split; first exact: matching_mains_backtranslated_program wf_c wf_p Hback' intf_main.
@@ -6529,10 +6554,19 @@ Proof.
   rewrite Source.program_unlinkK //; split; first exact: closed_program_of_trace.
   (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
   split.
-  exists (Terminates (project_non_inform m')).
-  split; first by assumption.
-  unfold m'. apply prefix_project; assumption.
-  (* New subgoal: trace relation. *)
-  (* apply behavior_rel_behavior_reflexive. *) admit.
-  (* apply not_wrong_finpref_project; assumption. *)
+  + exists (
+        match m with
+        | FTerminates _ => Terminates t'
+        | FGoes_wrong _ => Goes_wrong t'
+        | FTbc _ => Terminates t'
+        end
+      ).
+    destruct m; split; auto; try easy. simpl.
+    exists (Terminates E0). simpl. by rewrite E0_right.
+    
+  + unfold m' in *.
+    destruct m eqn:em; auto; try (constructor;
+      apply traces_shift_each_other_option_symmetric;
+      simpl in Hshift; exact Hshift).
+    by simpl in Hnot_wrong.
 Admitted.

@@ -4,10 +4,20 @@ Require Import Common.Linking.
 Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
 Require Import Common.TracesInform.
-Require Import Common.Renaming.
+Require Import Common.RenamingOption.
 
-Require Import RSC_DC_MD_Sigs.
+(*Require Import RSC_DC_MD_Sigs.*)
 Require Import Source.Definability.
+Require Import Source.Language.
+Require Import Source.GlobalEnv.
+Require Import Source.CS.
+(*Require Import Source.Blame.*)
+Require Import Intermediate.Machine.
+Require Import Intermediate.CS.
+Require Import Intermediate.RecombinationRel.
+Require Import S2I.Compiler.
+Require Import S2I.Definitions.
+
 
 From mathcomp Require Import ssreflect ssrfun ssrbool.
 
@@ -16,12 +26,14 @@ Unset Strict Implicit.
 
 Set Bullet Behavior "Strict Subproofs".
 
+(*
 Module RSC_DC_MD_Gen
        (Source : Source_Sig)
        (Intermediate : Intermediate_Sig)
        (S2I : S2I_Sig Source Intermediate)
        (Compiler : Compiler_Sig Source Intermediate S2I)
        (Linker : Linker_Sig Source Intermediate S2I).
+*)
 
 Definition behavior_improves_blame b (m: @finpref_behavior Events.event) p :=
   exists t, b = Goes_wrong t /\ trace_finpref_prefix t m /\
@@ -57,9 +69,10 @@ Section RSC_DC_MD_Section.
        we should be able to get rid of the blame disjunct.
 
    *)
+
   Theorem RSC_DC_MD:
     forall (m: @finpref_behavior (*TracesInform.event_inform*) Events.event),
-      does_prefix (Intermediate.CS.sem(*_inform*)
+      does_prefix (Intermediate.CS.CS.sem_non_inform (*_inform*)
                      (Intermediate.program_link p_compiled Ct)) m ->
       not_wrong_finpref m ->
       exists Cs (beh: @program_behavior Events.event) m'
@@ -68,10 +81,9 @@ Section RSC_DC_MD_Section.
       Source.well_formed_program Cs /\
       linkable (Source.prog_interface p) (Source.prog_interface Cs) /\
       Source.closed_program (Source.program_link p Cs) /\
-      program_behaves (Source.CS.sem (Source.program_link p Cs)) beh /\
-      (prefix ((*Definability.project_finpref_behavior*) m') beh \/
-       behavior_improves_blame beh ((*Definability.project_finpref_behavior*) m') p) /\
-      behavior_rel_behavior_all_cids size_meta_m size_meta_m'
+      program_behaves (Source.CS.CS.sem (Source.program_link p Cs)) beh /\
+      (prefix ((*Definability.project_finpref_behavior*) m') beh) /\
+      behavior_rel_behavior size_meta_m size_meta_m'
                             ((*Definability.project_finpref_behavior*) m) m'.
   Proof.
     intros m [t [Hbeh Hprefix0]] Hsafe_pref.
@@ -97,15 +109,24 @@ Section RSC_DC_MD_Section.
     }
 
     assert (H_doesm_noninform: does_prefix
-                                 (Intermediate.CS.sem
+                                 (Intermediate.CS.CS.sem_non_inform
                                     (Intermediate.program_link p_compiled Ct)) m)
       by (now exists t).
 
     assert (H_doesm': exists m_inform,
                does_prefix
-                 (Intermediate.CS.sem_inform
+                 (Intermediate.CS.CS.sem_inform
                     (Intermediate.program_link p_compiled Ct)) m_inform).
-    { admit. }
+    {
+      (** TODO: Replace this with apply CS.does_prefix_non_inform_inform *)
+      unfold does_prefix.
+      destruct H_doesm_noninform as [b_noninform [Hb_noninform Hpref]].
+      specialize (CS.behavior_prefix_star_non_inform Hb_noninform Hpref)
+        as [s_init [s' [Hinit Hstar]]].
+      apply CS.star_sem_non_inform_star_sem_inform in Hstar as [t_inform [Hstar Hproj]].
+      exists (FTbc t_inform).
+      eapply program_behaves_finpref_exists; eauto.
+    }
 
     destruct H_doesm' as [m_inform H_doesm].
 
@@ -117,7 +138,7 @@ Section RSC_DC_MD_Section.
 
     assert (Hbeh_inform': exists t_inform,
                program_behaves
-                 (Intermediate.CS.sem_inform
+                 (Intermediate.CS.CS.sem_inform
                     (Intermediate.program_link p_compiled Ct)) t_inform
            ).
     { admit. }

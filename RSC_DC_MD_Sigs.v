@@ -3,7 +3,9 @@ Require Import Common.Linking.
 Require Import Common.Blame.
 Require Import Common.CompCertExtensions.
 Require Import Common.TracesInform.
-Require Import Common.Renaming.
+Require Import Common.RenamingOption.
+Require Import Common.Values.
+Require Import Common.Memory.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
 Require Import CompCert.Events.
@@ -73,7 +75,9 @@ Module Type Source_Sig.
        + t ≺ m = exists m' <= m. t = Goes_wrong m'
          t ≺P m = exists m' <= m. t = Goes_wrong m' /\ undef_in t (prog_interface P)
        + this means that t' plays below the role of m' above
-  *)
+   *)
+
+  (************************
   Local Axiom blame_program : forall p Cs t' P' m,
     well_formed_program p ->
     well_formed_program Cs ->
@@ -87,6 +91,8 @@ Module Type Source_Sig.
     not_wrong_finpref m ->
     trace_finpref_prefix t' m ->
     (prefix m (Goes_wrong t') \/ undef_in t' (prog_interface p)).
+
+   **********************)
 
 End Source_Sig.
 
@@ -136,8 +142,10 @@ Module Type Intermediate_Sig.
   Module CS.
     Parameter sem : program -> @semantics event.
     Parameter sem_inform: program -> @semantics event_inform.
+    Parameter state_mem : state sem -> Memory.t.
   End CS.
 
+  
   (* Local Axiom decomposition_with_refinement : *)
   (*   forall p c, *)
   (*     well_formed_program p -> *)
@@ -178,23 +186,43 @@ Module Type Intermediate_Sig.
       mergeable_interfaces (prog_interface p) (prog_interface c).
 
   Local Axiom recombination_prefix :
-    forall p c p' c',
+    forall p c p' c' (n n'' : Definitions.Component.id -> nat),
       well_formed_program p ->
       well_formed_program c ->
       well_formed_program p' ->
       well_formed_program c' ->
-      mergeable_interfaces (prog_interface p) (prog_interface c) ->
-      prog_interface p = prog_interface p' ->
-      prog_interface c = prog_interface c' ->
-      closed_program (program_link p c) ->
-      closed_program (program_link p' c') ->
-    forall m m'' size_m size_m'',
-      does_prefix (CS.sem (program_link p c)) m ->
-      does_prefix (CS.sem (program_link p' c')) m'' ->
-      behavior_rel_behavior size_m size_m'' m m'' ->
-      exists m' size_m',
-        does_prefix (CS.sem (program_link p c')) m' /\
-        behavior_rel_behavior size_m' size_m m' m.
+      mergeable_interfaces (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
+      Intermediate.prog_interface p = Intermediate.prog_interface p' ->
+      Intermediate.prog_interface c = Intermediate.prog_interface c' ->
+      Intermediate.closed_program (Intermediate.program_link p c) ->
+      Intermediate.closed_program (Intermediate.program_link p' c') ->
+      (forall (ss : CS.state) (tt : Events.trace Events.event),
+          CSInvariants.CSInvariants.is_prefix ss (Intermediate.program_link p c) tt ->
+          RenamingOption.good_trace_extensional (RenamingOption.left_addr_good_for_shifting n) tt /\
+          (forall (mem : eqtype.Equality.sort Memory.Memory.t) (ptr : Pointer.t)
+                  (addr : Definitions.Component.id * Block.id) (v : value),
+              CS.state_mem ss = mem ->
+              Memory.Memory.load mem ptr = Some v ->
+              addr = (Pointer.component ptr, Pointer.block ptr) ->
+              RenamingOption.left_addr_good_for_shifting n addr ->
+              RenamingOption.left_value_good_for_shifting n v)) ->
+      (forall ss'' (tt'' : Events.trace Events.event),
+          CSInvariants.CSInvariants.is_prefix ss'' (Intermediate.program_link p' c') tt'' ->
+          RenamingOption.good_trace_extensional (RenamingOption.left_addr_good_for_shifting n'') tt'' /\
+          (forall (mem : eqtype.Equality.sort Memory.Memory.t) (ptr : Pointer.t)
+                  (addr : Definitions.Component.id * Block.id) (v : value),
+              CS.state_mem ss'' = mem ->
+              Memory.Memory.load mem ptr = Some v ->
+              addr = (Pointer.component ptr, Pointer.block ptr) ->
+              RenamingOption.left_addr_good_for_shifting n'' addr ->
+              RenamingOption.left_value_good_for_shifting n'' v)) ->
+      forall m m'' : finpref_behavior,
+        does_prefix (CS.sem (program_link p c)) m ->
+        does_prefix (CS.sem (program_link p' c')) m'' ->
+        RenamingOption.behavior_rel_behavior n n'' m m'' ->
+        exists (m' : finpref_behavior) (n' : Definitions.Component.id -> nat),
+          does_prefix (CS.sem (program_link p c')) m' /\
+          RenamingOption.behavior_rel_behavior n' n m' m.
 
   Local Axiom does_prefix_inform_non_inform :
     forall p m,
