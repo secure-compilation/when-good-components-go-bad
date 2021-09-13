@@ -158,7 +158,7 @@ Section Definability.
       eapply (@star_step _ _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
     end.
 
-  Ltac take_steps := (take_step; [take_steps]) || take_step.
+  Ltac take_steps := (take_step; [take_steps]) || (take_step; try reflexivity).
 
   Lemma switch_clause_spec p' P C stk mem n n' e_then e_else arg :
     Memory.load mem (P, C, Block.local, 0%Z) = Some (Int n) ->
@@ -2682,50 +2682,35 @@ Local Opaque loc_of_reg.
               split.
               { (** star steps *)
 Local Transparent expr_of_const_val loc_of_reg.
+                take_steps;
+                  first exact Hstore2.
+                take_steps; (* Do recursive call. *)
+                  first now apply find_procedures_of_trace.
+                (* Done with the event. *)
+                take_steps; (* Process external call check. *)
+                  first (simplify_memory'; exact Hload0init).
                 take_steps.
-                -- exact Hstore2.
-                -- (* Do recursive call. *)
-                   take_steps.
-                   ++ reflexivity.
-                   ++ now apply find_procedures_of_trace.
-                   ++ (* Now we are done with the event.
-                         We still need to process the external call check. *)
-                      take_steps.
-                      ** (* TODO: Needs a new invariant that talks about the init
-                            check. Assume for now that it exists, and
-                            initialization has already taken place --
-                            initial events?. *)
-                         erewrite Memory.load_after_store_neq;
-                           last exact Hstore2;
-                           last (injection; now destruct v).
-                         erewrite Memory.load_after_store_neq;
-                           last exact Hmem;
-                           last (injection; now destruct v).
-                         exact Hload0init.
-                      ** take_steps.
-                         --- unfold buffer_size.
-                             destruct (prog_buffers C) as [Cbuf |] eqn:HCbuf.
-                             +++ assert (Hwf_buf := wf_buffers HCbuf).
-                                 destruct Cbuf as [sz | vs]; auto.
-                                 *** move: Hwf_buf => /Nat.ltb_spec0.
-                                     now destruct sz.
-                                 *** move: Hwf_buf => /andP => [[]] => /Nat.ltb_spec0.
-                                     now destruct vs.
-                             +++ rewrite /component_buffer domm_buffers in C_b.
-                                 move: HCbuf => /dommPn => Hcontra.
-                                 by rewrite C_b in Hcontra.
-                         --- rewrite Nat2Z.id. exact Halloc3.
-                         --- take_steps.
-                             +++ exact Hstore4.
-                             +++ eapply star_trans with (t2 := E0);
-                                   first exact Hstar_init;
-                                   last reflexivity.
-                                 take_steps.
-                                 *** instantiate (1 := Int 0).
-                                     (* Check Hload0extcall. *)
-                                     admit.
-                                 *** take_steps.
-                                     apply star_refl.
+                - unfold buffer_size.
+                  destruct (prog_buffers C) as [Cbuf |] eqn:HCbuf.
+                  + assert (Hwf_buf := wf_buffers HCbuf).
+                    destruct Cbuf as [sz | vs]; auto.
+                    * move: Hwf_buf => /Nat.ltb_spec0.
+                      now destruct sz.
+                    * move: Hwf_buf => /andP => [[]] => /Nat.ltb_spec0.
+                      now destruct vs.
+                  + rewrite /component_buffer domm_buffers in C_b.
+                    move: HCbuf => /dommPn => Hcontra.
+                      by rewrite C_b in Hcontra.
+                - rewrite Nat2Z.id. exact Halloc3.
+                - take_steps;
+                    first exact Hstore4.
+                  eapply star_trans with (t2 := E0);
+                    first exact Hstar_init;
+                    last reflexivity.
+                  take_steps;
+                    first (simplify_memory'; exact Hload0extcall).
+                  take_steps.
+                  apply star_refl.
               }
               { (** well-formed state *)
             econstructor; try reflexivity; try eassumption.
