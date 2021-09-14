@@ -6434,86 +6434,82 @@ Qed.
    this result belongs. *)
 
 Lemma definability_with_linking:
-  forall p c b m,
+  forall p c t s,
     Intermediate.well_formed_program p ->
     Intermediate.well_formed_program c ->
     linkable (Intermediate.prog_interface p) (Intermediate.prog_interface c) ->
     Intermediate.closed_program (Intermediate.program_link p c) ->
-    program_behaves (I.CS.sem_inform (Intermediate.program_link p c)) b ->
-    prefix m b ->
-    not_wrong_finpref m ->
-  exists p' c' m' metadata_size,
-    Source.prog_interface p' = Intermediate.prog_interface p /\
-    Source.prog_interface c' = Intermediate.prog_interface c /\
-    matching_mains p' p /\
-    matching_mains c' c /\
-    Source.well_formed_program p' /\
-    Source.well_formed_program c' /\
-    Source.closed_program (Source.program_link p' c') /\
-    does_prefix (S.CS.sem (Source.program_link p' c')) m' /\
-    behavior_rel_behavior metadata_size all_zeros_shift m' (project_finpref_behavior m).
+    Star (I.CS.sem_inform (Intermediate.program_link p c))
+         (I.CS.initial_machine_state (Intermediate.program_link p c))
+         t
+         s
+    ->
+    exists p' c' t' s' metadata_size,
+      Source.prog_interface p' = Intermediate.prog_interface p /\
+      Source.prog_interface c' = Intermediate.prog_interface c /\
+      matching_mains p' p /\
+      matching_mains c' c /\
+      Source.well_formed_program p' /\
+      Source.well_formed_program c' /\
+      Source.closed_program (Source.program_link p' c') /\
+      Star (Source.CS.CS.sem (Source.program_link p' c'))
+           (Source.CS.CS.initial_machine_state (Source.program_link p' c'))
+           t'
+           s'
+      /\
+      traces_shift_each_other_option
+        metadata_size all_zeros_shift t' (project_non_inform t).
 Proof.
-  move=> p c b m wf_p wf_c Hlinkable Hclosed Hbeh Hpre Hnot_wrong.
+  move=> p c t s wf_p wf_c Hlinkable Hclosed Hstar.
   pose intf := unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c).
   have Hclosed_intf : closed_interface intf by case: Hclosed.
   have intf_main : intf Component.main.
-    case: Hclosed => [? [main_procs [? [/= e ?]]]].
-    rewrite /intf -mem_domm domm_union.
-    do 2![rewrite Intermediate.wfprog_defined_procedures //].
-    by rewrite -domm_union mem_domm e.
-  set m' := finpref_trace m. (* FIXME: Instantiate star simulation. *)
-  have [cs [cs' [Hcs Hstar]]] : (* TODO: This should come from a separate lemma. *)
-      exists cs cs',
-        I.CS.initial_state (Intermediate.program_link p c) cs /\
-        Star (I.CS.sem_inform (Intermediate.program_link p c)) cs m' cs'.
-  {
-    case: b / Hbeh Hpre {Hnot_wrong}.
-    - rewrite {}/m' => cs beh Hcs Hbeh Hpre.
-      case: m Hpre=> [m|m|m] /= Hpre.
-      + case: beh / Hbeh Hpre=> //= t cs' Hstar Hfinal -> {m}.
-        by exists cs, cs'; split.
-      + case: beh / Hbeh Hpre=> //= t cs' Hstar Hfinal Ht -> {m}.
-        by exists cs, cs'; split.
-      + destruct Hpre as [beh' ?]; subst beh.
-        have [cs' [Hstar Hbehaves]] := state_behaves_app_inv (I.CS.singleton_traces_inform _) m beh' Hbeh.
-        exists cs, cs'; split; assumption.
-    - move=> _ Hpre; rewrite {}/m'.
-      have {Hpre m} -> : finpref_trace m = E0.
-        case: m Hpre => //= m [[t|t|t|t] //=].
-        by case: m.
-      do 2![exists (I.CS.initial_machine_state (Intermediate.program_link p c))].
-      split; try reflexivity; exact: star_refl.
-  }
-  - 
+  case: Hclosed => [? [main_procs [? [/= e ?]]]].
+  rewrite /intf -mem_domm domm_union.
+  do 2![rewrite Intermediate.wfprog_defined_procedures //].
+  {  by rewrite -domm_union mem_domm e. }
   set procs := Intermediate.prog_procedures (Intermediate.program_link p c).
-  have wf_events : all (well_formed_event intf procs) m'.
+  have wf_events : all (well_formed_event intf procs) t.
     (* by apply: CS.intermediate_well_formed_events Hstar. *)
   {
     apply: CS.intermediate_well_formed_events Hstar.
     - by apply: Intermediate.linking_well_formedness.
     - assumption.
   }
-  have {cs cs' Hcs Hstar} wf_m : well_formed_trace intf procs m'.
+  have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
+  have wf_t : well_formed_trace intf procs t.
+  {
     have [mainP [HmainP _]] := Intermediate.cprog_main_existence Hclosed.
-    have wf_p_c := Intermediate.linking_well_formedness wf_p wf_c Hlinkable.
-    (* TODO: Duplicate assumption, new non-implicit parameters. *)
-    by apply: (CS.intermediate_well_formed_trace _ wf_p_c Hclosed _ _ _ Hstar Hcs HmainP wf_p_c).
-    (* exact: CS.intermediate_well_formed_trace Hstar Hcs HmainP wf_p_c. *)
-    have bufs := Intermediate.prog_buffers (Intermediate.program_link p c).
-    have intf_dom_buf:
-      domm intf = domm bufs.
-    by admit.
-    have wf_buf : (forall (C : nat_ordType) (buf : nat + seq value),
+      (* TODO: Duplicate assumption, new non-implicit parameters. *)
+      by apply: (CS.intermediate_well_formed_trace
+                   _ wf_p_c Hclosed _ _ _ Hstar Logic.eq_refl HmainP wf_p_c).
+  }
+  pose bufs := Intermediate.prog_buffers (Intermediate.program_link p c).
+  have intf_dom_buf:
+    domm intf = domm bufs.
+  {
+    unfold intf, bufs.
+    assert (Intermediate.prog_interface (Intermediate.program_link p c) =
+            unionm (Intermediate.prog_interface p) (Intermediate.prog_interface c)
+           ) as Hrewr.
+      by easy.
+      rewrite -Hrewr.
+      by apply Intermediate.wfprog_defined_buffers.
+  }
+  have wf_buf : (forall (C : nat_ordType) (buf : nat + seq value),
                       bufs C =
                       Some buf ->
                       Buffer.well_formed_buffer buf).
-    by admit.
-  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ wf_m.
+  {
+    intros ? ? Hsome.
+    by eapply Intermediate.wfprog_well_formed_buffers in wf_p_c; eassumption.
+  }
+  have := definability Hclosed_intf intf_main intf_dom_buf wf_buf _ wf_t.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
-  set back := (program_of_trace intf bufs m') => Hback.
+  set back := (program_of_trace intf bufs t) => Hback.
   specialize (Hback all_zeros_shift) as [t' [const_map [Hback Hshift]]].
-  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf bufs m'))
+  assert (Hback_ : program_behaves (CS.sem (program_of_trace intf bufs t))
                                    (Terminates t')).
   {
     (* This should follow directly from the definability lemma. *)
@@ -6524,49 +6520,35 @@ Proof.
   exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
   exists (Source.program_unlink (domm (Intermediate.prog_interface c)) back).
   (* Check project_finpref_behavior (FTerminates m'). *)
-  exists (
-      match m with
-      | FGoes_wrong _ => FGoes_wrong t' (* Should be contradiction anyways *)
-      | FTerminates _ => FTerminates t'
-      | FTbc _ => FTbc t'
-      end
-    ). (* FIXME: This should involve m'! *)
-  eexists. (* RB: TODO: [DynShare] Provide witnesses. *)
-  split=> /=.
-    rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
-    by apply/eq_filterm=> ??; rewrite mem_domm.
-  split.
-    rewrite /intf unionmC; last by case: Hlinkable.
+  exists t'. 
+  inversion Hback as [? ? Hinit Hbeh|]; subst. clear Hback.
+  inversion Hbeh as [? s' Hstar' Hfinal| | |]; subst.
+  simpl in Hinit. unfold Source.CS.CS.initial_state in *. subst.
+  exists s', const_map.
+  
+  split=> /=; last split.
+  - rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
+      by apply/eq_filterm=> ??; rewrite mem_domm.
+  - rewrite /intf unionmC; last by case: Hlinkable.
     rewrite -[RHS](unionmK (Intermediate.prog_interface c) (Intermediate.prog_interface p)).
     by apply/eq_filterm=> ??; rewrite mem_domm.
   (* have wf_back : Source.well_formed_program back by exact: well_formed_events_well_formed_program. *)
-  have wf_back : Source.well_formed_program back.
-    eapply well_formed_events_well_formed_program; auto.
-    (* by exact: well_formed_events_well_formed_program. *)
-    eassumption.
-  have Hback' : back = program_of_trace intf bufs m' by [].
+  - have wf_back : Source.well_formed_program back.
+    { 
+      eapply well_formed_events_well_formed_program; auto.
+      (* by exact: well_formed_events_well_formed_program. *)
+      eassumption.
+    }
     (* RB: TODO: [DynShare] Passing the section variables above should not be needed. *)
-  split; first exact: matching_mains_backtranslated_program wf_p wf_c Hback' intf_main.
-  split; first exact: matching_mains_backtranslated_program wf_c wf_p Hback' intf_main.
-  clear Hback'.
+    split; first exact: matching_mains_backtranslated_program
+                          wf_p wf_c Logic.eq_refl intf_main.
+    split; first exact: matching_mains_backtranslated_program
+                          wf_c wf_p Logic.eq_refl intf_main.
+    
   split; first exact: Source.well_formed_program_unlink.
   split; first exact: Source.well_formed_program_unlink.
   rewrite Source.program_unlinkK //; split; first exact: closed_program_of_trace.
   (* RB: TODO: [DynShare] New split, the existential is now given above and in modified form. *)
-  split.
-  + exists (
-        match m with
-        | FTerminates _ => Terminates t'
-        | FGoes_wrong _ => Goes_wrong t'
-        | FTbc _ => Terminates t'
-        end
-      ).
-    destruct m; split; auto; try easy. simpl.
-    exists (Terminates E0). simpl. by rewrite E0_right.
-    
-  + unfold m' in *.
-    destruct m eqn:em; auto; try (constructor;
-      apply traces_shift_each_other_option_symmetric;
-      simpl in Hshift; exact Hshift).
-    by simpl in Hnot_wrong.
-Admitted.
+  split; auto.
+  by apply traces_shift_each_other_option_symmetric.
+Qed.

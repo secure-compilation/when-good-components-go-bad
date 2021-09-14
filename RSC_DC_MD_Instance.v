@@ -5,7 +5,7 @@ Require Import Common.TracesInform.
 Require Import Source.Language.
 Require Import Source.GlobalEnv.
 Require Import Source.CS.
-Require Import Source.Blame.
+(*Require Import Source.Blame.*)
 Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
 Require Import Intermediate.RecombinationRel.
@@ -51,8 +51,10 @@ Module Source_Instance <: Source_Sig.
       @Source.CS.CS.sem.
   End CS.
 
+  (************
   Definition blame_program :=
     @Source.Blame.Blame.blame_program.
+   **************)
 
 End Source_Instance.
 

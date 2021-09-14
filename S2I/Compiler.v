@@ -500,15 +500,15 @@ Lemma compilation_has_matching_mains :
     matching_mains p p_compiled.
 Admitted.
 
-(* Local Axiom separate_compilation: *)
-(*   forall p c p_comp c_comp, *)
-(*     Source.well_formed_program p -> *)
-(*     Source.well_formed_program c -> *)
-(*     linkable (Source.prog_interface p) (Source.prog_interface c) -> *)
-(*     compile_program p = Some p_comp -> *)
-(*     compile_program c = Some c_comp -> *)
-(*     compile_program (Source.program_link p c) *)
-(*     = Some (Intermediate.program_link p_comp c_comp). *)
+Axiom separate_compilation:
+  forall p c p_comp c_comp,
+    Source.well_formed_program p ->
+    Source.well_formed_program c ->
+    linkable (Source.prog_interface p) (Source.prog_interface c) ->
+    compile_program p = Some p_comp ->
+    compile_program c = Some c_comp ->
+    compile_program (Source.program_link p c)
+    = Some (Intermediate.program_link p_comp c_comp).
 
 (* We can currently do with a weaker notion of separate compilation *)
 Local Axiom separate_compilation_weaker:
@@ -568,6 +568,29 @@ Theorem well_formed_compilable :
     compile_program p = Some pc.
 Admitted.
 
+Lemma forward_simulation_star:
+  forall p p_compiled t s,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
+    compile_program p = Some p_compiled -> 
+    exists s',
+      Star (I.CS.sem_non_inform p_compiled)
+           (I.CS.initial_machine_state p_compiled) t s'.
+Proof.
+  intros ? ? ? ? Hcp Hwfp Hstar Hcmp.
+  assert(Hbs : forward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
+  { apply I_simulates_S; assumption. }
+  destruct Hbs.
+  specialize (simulation_star props Hstar) as G.
+  destruct props as [? ? ? ?].
+  specialize (fsim_match_initial_states _ Logic.eq_refl) as [i [s' [? Hmatch]]].
+  specialize (G _ _ Hmatch).
+  inversion H; subst.
+  destruct G as [? [? [? ?]]].
+  eauto.
+Qed.
+    
 Lemma forward_simulation_same_safe_prefix:
   forall p p_compiled m,
     Source.closed_program p ->
