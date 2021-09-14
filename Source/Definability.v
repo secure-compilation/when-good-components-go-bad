@@ -2984,7 +2984,6 @@ Local Transparent expr_of_const_val loc_of_reg.
               -- exact Hstore'.
               -- (* Do recursive call. *)
                   take_steps.
-                  ++ reflexivity.
                   ++ now apply find_procedures_of_trace.
                   ++ (* Now we are done with the event.
                         We still need to process the external call check. *)
@@ -3301,7 +3300,6 @@ Local Transparent expr_of_const_val loc_of_reg.
               -- take_steps.
                  ++ exact Hstore'.
                  ++ take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
@@ -3616,7 +3614,6 @@ Local Transparent expr_of_const_val loc_of_reg.
               -- exact Hstore'.
               -- (* Do recursive call. *)
                   take_steps.
-                  ++ reflexivity.
                   ++ now apply find_procedures_of_trace.
                   ++ (* Now we are done with the event.
                         We still need to process the external call check. *)
@@ -3964,7 +3961,6 @@ Local Transparent expr_of_const_val loc_of_reg.
             * take_steps; first exact Hstore'.
                 (* Do recursive call. *)
                 take_steps.
-              -- reflexivity.
               -- now apply find_procedures_of_trace.
               -- (* Now we are done with the event.
                     We still need to process the external call check. *)
@@ -4356,7 +4352,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                  ++ exact Hstore'.
                  ++ (* Do recursive call. *)
                     take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
@@ -4855,7 +4850,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                  ++ exact Hstore'.
                  ++ (* Do recursive call. *)
                     take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
@@ -5366,7 +5360,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                  ++ exact Hstore'.
                  ++ (* Do recursive call. *)
                     take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
@@ -5889,7 +5882,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                  ++ exact Hstore'.
                  ++ (* Do recursive call. *)
                     take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
