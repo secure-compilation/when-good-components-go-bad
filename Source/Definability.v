@@ -158,7 +158,7 @@ Section Definability.
       eapply (@star_step _ _ _ _ _ _ E0 _ t _ t); trivial; [econstructor|]
     end.
 
-  Ltac take_steps := (take_step; [take_steps]) || take_step.
+  Ltac take_steps := (take_step; [take_steps]) || (take_step; try reflexivity).
 
   Lemma switch_clause_spec p' P C stk mem n n' e_then e_else arg :
     Memory.load mem (P, C, Block.local, 0%Z) = Some (Int n) ->
@@ -1398,6 +1398,7 @@ Local Opaque Memory.store.
          after having executed the event [e] *)
         wfmem_ini: forall C,
             prefix = [] ->
+            (* component_buffer C -> *) (* NOTE: Are we missing this condition? *)
             postcondition_event_registers_ini C mem
             /\
             Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
@@ -1871,7 +1872,28 @@ Local Opaque Memory.store.
              [CState C, stk_st, mem,  Kseq (init_local_buffer_expr C) k, E_val (Ptr (Permission.data, C, bnew, 0%Z)), Int 0]
              E0
              [CState C, stk_st, mem',                                 k, E_val (Int 1),                               Int 0] /\
-        Memory.store mem (Permission.data, C, Block.local, INITFLAG_offset%Z) (Int 1) = Some mem'.
+        Memory.store mem (Permission.data, C, Block.local, INITFLAG_offset%Z) (Int 1) = Some mem' /\
+        mem' C = Source.prepare_buffers p C. (* TODO: Correct/refine this spec! *) (* Could also relate to (prog_buffers C). *)
+    Admitted.
+
+    (* Lemma prepare_prog_buffers C : *)
+    (*   (* unfold_buffer *) *)
+    (*     (prog_buffers C) = Source.prepare_buffers p C. *)
+    (* Admitted. *)
+
+    Lemma prepare_buffers_prealloc C buf :
+      prog_buffers C = Some buf ->
+      Source.prepare_buffers p C = Some (ComponentMemory.prealloc [fmap (0, buf)]).
+    Admitted.
+
+    Lemma next_block_prepare_buffers C :
+      component_buffer C ->
+      next_block (Source.prepare_buffers p) C = Some LOCALBUF_blockid.
+    Admitted.
+
+    (* TODO: Inline idiomatic proof of this. *)
+    Remark next_block_prepare_buffers_aux :
+      S (fold_left Nat.max [fset Block.local] 0) = 1.
     Admitted.
 
     Ltac ucongruence := autounfold with definabilitydb; congruence.
@@ -2092,8 +2114,16 @@ Local Opaque Memory.store.
           - unfold Block.local. discriminate.
         }
 
+        destruct (exec_init_local_buffer_expr
+                    Component.main [::] mem_localbufptr
+                    (Kseq (extcall_check;;
+                           expr_of_trace Component.main Procedure.main
+                                         (comp_subtrace Component.main t)) Kstop)
+                    1)
+          as [mem0 [Hstar0 [Hstore0 Hmem0]]].
+
         destruct (Memory.store_after_load
-                    mem_localbufptr
+                    mem0
                     (Permission.data, Component.main, Block.local, reg_offset E_R_ONE)
                     Undef Undef) as [mem1 Hmem1]; eauto; simplify_memory.
 
@@ -2139,6 +2169,7 @@ Local Opaque Memory.store.
                     (expr_of_trace Component.main Procedure.main
                                    (comp_subtrace Component.main t))
                     (Int 0%Z)).
+
         exists (StackState Component.main []), E0, E0, (uniform_shift 1).
         split; [| split; [| split]].
         + rewrite /CS.initial_machine_state /Source.prog_main
@@ -2167,8 +2198,10 @@ Local Opaque Memory.store.
             exact Hstoreptr.
           }
 
-          take_steps.
           (** About to execute "init_local_buffer_expr Component.main" *)
+          eapply star_trans with (t2 := E0);
+            first exact Hstar0;
+            last reflexivity.
           (*****************************************
           unfold init_local_buffer_expr, copy_local_datum_expr.
 
@@ -2191,7 +2224,26 @@ Local Opaque Memory.store.
           rewrite foldr_map.
           take_steps.
           ******************************************************)
-          admit.
+
+          take_steps;
+            first by simplify_memory.
+Local Transparent loc_of_reg.
+          take_steps;
+            first exact Hmem1.
+          take_steps;
+            first exact Hmem2.
+          take_steps;
+            first exact Hmem3.
+          take_steps;
+            first exact Hmem4.
+          take_steps;
+            first exact Hmem5.
+          take_steps;
+            first exact Hmem6.
+          take_steps;
+            first exact Hmem7.
+          take_steps.
+          apply star_refl.
         + reflexivity.
         + now do 2 constructor.
         + econstructor; eauto.
@@ -2236,6 +2288,8 @@ Local Opaque Memory.store.
                      admit.
                   ** move: Heq => /eqP Heq.
                      destruct R; simpl in *; simplify_memory.
+                     (* NOTE: What can we actually say about the initialization
+                        of other components? *)
                      all: admit.
                ++ admit.
                ++ admit.
@@ -2600,18 +2654,6 @@ Local Opaque loc_of_reg.
           (* Gather a few recurrent assumptions at the top. *)
           exists (EConst C ptr v s0 t0).
 
-          destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem) 
-            as [mem' Hstore].
-          assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <>
-                              (Permission.data, C, Block.local, reg_offset v))
-            by (now destruct v). (* Lemma? *)
-          assert (Hload : exists v',
-                     Memory.load
-                       mem0 (Permission.data, C, Block.local, reg_offset v) = Some v')
-            by (eapply Memory.store_some_load_some; eauto).
-          setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem)
-            in Hload.
-
           assert (prefix = [::] \/ exists prefix' e', prefix = prefix' ++ [:: e'])
             as [Hprefix | [prefix0 [e1 Hprefix01]]].
           {
@@ -2656,7 +2698,7 @@ Local Opaque loc_of_reg.
                         ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: stk)
                         mem4
                         (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop)
-                        bnew) as [mem5 [Hstar_init Hstore5]].
+                        bnew) as [mem5 [Hstar_init [Hstore5 Hmem5C]]].
             (* NOTE: Separate lemma? The execution only makes sense if C is main. *)
             (* assert (exists n, Memory.load mem0 (Permission.data, C, Block.local, EXTCALL_offset) = Some (Int n)) as [extcal Hload0extcall]. { *)
             (*   destruct (wfmem_extcall_ini wf_mem Logic.eq_refl) as [Hextmain Hector]. *)
@@ -2673,41 +2715,35 @@ Local Opaque loc_of_reg.
               split.
               { (** star steps *)
 Local Transparent expr_of_const_val loc_of_reg.
+                take_steps;
+                  first exact Hstore2.
+                take_steps; (* Do recursive call. *)
+                  first now apply find_procedures_of_trace.
+                (* Done with the event. *)
+                take_steps; (* Process external call check. *)
+                  first (simplify_memory'; exact Hload0init).
                 take_steps.
-                -- exact Hstore2.
-                -- (* Do recursive call. *)
-                   take_steps.
-                   ++ reflexivity.
-                   ++ now apply find_procedures_of_trace.
-                   ++ (* Now we are done with the event.
-                         We still need to process the external call check. *)
-                      take_steps.
-                      ** (* TODO: Needs a new invariant that talks about the init
-                            check. Assume for now that it exists, and
-                            initialization has already taken place --
-                            initial events?. *)
-                         erewrite Memory.load_after_store_neq;
-                           last exact Hstore2;
-                           last (injection; now destruct v).
-                         erewrite Memory.load_after_store_neq;
-                           last exact Hmem;
-                           last (injection; now destruct v).
-                         exact Hload0init.
-                      ** take_steps.
-                         --- (* Easy, from wf_buffers *)
-                             admit.
-                         --- rewrite Nat2Z.id. exact Halloc3.
-                         --- take_steps.
-                             +++ exact Hstore4.
-                             +++ eapply star_trans with (t2 := E0);
-                                   first exact Hstar_init;
-                                   last reflexivity.
-                                 take_steps.
-                                 *** instantiate (1 := Int 0).
-                                     (* Check Hload0extcall. *)
-                                     admit.
-                                 *** take_steps.
-                                     apply star_refl.
+                - unfold buffer_size.
+                  destruct (prog_buffers C) as [Cbuf |] eqn:HCbuf.
+                  + assert (Hwf_buf := wf_buffers HCbuf).
+                    destruct Cbuf as [sz | vs]; auto.
+                    * move: Hwf_buf => /Nat.ltb_spec0.
+                      now destruct sz.
+                    * move: Hwf_buf => /andP => [[]] => /Nat.ltb_spec0.
+                      now destruct vs.
+                  + rewrite /component_buffer domm_buffers in C_b.
+                    move: HCbuf => /dommPn => Hcontra.
+                      by rewrite C_b in Hcontra.
+                - rewrite Nat2Z.id. exact Halloc3.
+                - take_steps;
+                    first exact Hstore4.
+                  eapply star_trans with (t2 := E0);
+                    first exact Hstar_init;
+                    last reflexivity.
+                  take_steps;
+                    first (simplify_memory'; exact Hload0extcall).
+                  take_steps.
+                  apply star_refl.
               }
               { (** well-formed state *)
             econstructor; try reflexivity; try eassumption.
@@ -2755,8 +2791,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                 rewrite reg_to_Ereg_to_reg in Hload0reg.
                 destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
                 + subst C_.
-                  (* eexists. *)
-                  (* simplify_memory'. *)
                   destruct (EregisterP reg v) as [Heq | Hneq].
                   * subst v.
                     eexists.
@@ -2820,15 +2854,41 @@ Local Transparent expr_of_const_val loc_of_reg.
                         { destruct prefint as [| ? []]; discriminate. }
                   }
                 + intros C' _ ?; subst C'. simpl. (* lookup *)
+                  (* This is directly needed for the second sub-goal, but also
+                     useful for the fourth one. *)
+                  destruct (wfmem_ini wf_mem C Logic.eq_refl)
+                    as [Hregs [Hinitflag [Hlocalbuf [Cmem [HCmem Hnextblock]]]]]. (* Up front? *)
+                  assert (Hnext: next_block mem0 C = Some LOCALBUF_blockid). {
+                    by rewrite /next_block HCmem Hnextblock.
+                  }
+                  erewrite <- next_block_store_stable in Hnext;
+                    last exact Hmem.
+                  erewrite <- next_block_store_stable in Hnext;
+                    last exact Hstore2.
+                  destruct (next_block_alloc Halloc3) as [Hnext2 Hnext3].
+                  rewrite Hnext in Hnext2. injection Hnext2 as ?; subst bnew.
+                  (* Continue. *)
                   split; [| split; [| split]].
                   * by simplify_memory'.
-                  * simplify_memory.
-                    admit.
+                  * by simplify_memory'. (* Trivial due to work up front. *)
                   * (* Nothing shared so far *)
                     intros b Hb. simpl.
                     admit.
-                  * intros b Hnext.
-                    admit. (* Easy *)
+                  * intros b Hnext'. simpl in Hnext'.
+                    inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
+                      last (destruct prefint as [| ? []]; discriminate).
+                    subst eint.
+                    rename s0 into eregs.
+                    inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
+                      subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                      subst eregs.
+                    rewrite (next_block_prepare_buffers C_b) in Hnext'.
+                    injection Hnext' as ?; subst b.
+                    erewrite next_block_store_stable;
+                      last exact Hstore5.
+                    erewrite next_block_store_stable;
+                      last exact Hstore4.
+                    rewrite Hnext3. reflexivity.
                 + intros C' Hcomp Hnext.
                   simpl in Hnext. fold C in Hnext. (* Needed for simplify_memory' *)
                   (* rewrite <- Hcomp1 in Hnext. *)
@@ -2839,8 +2899,33 @@ Local Transparent expr_of_const_val loc_of_reg.
                   * simplify_memory'. exact Hinitflag.
                   * simplify_memory'. exact Hlocalbuf.
                   * split.
-                    -- exists Cmem. admit.
-                    -- exists Cmem. admit. (* Easy *)
+                    -- destruct (prog_buffers C') as [buf |] eqn:HCbuf;
+                         last by (rewrite /component_buffer domm_buffers in Hcomp;
+                                  move: HCbuf => /dommPn => Hcontra;
+                                  rewrite Hcomp in Hcontra).
+                       eexists. exists buf.
+                       split; [| split; [| split]];
+                         try reflexivity.
+                       ++ inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
+                            last (destruct prefint as [| ? []]; discriminate).
+                          subst eint.
+                          rename s0 into eregs.
+                          inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
+                            subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
+                            subst eregs.
+                         now apply prepare_buffers_prealloc.
+                       ++ rewrite ComponentMemory.nextblock_prealloc
+                                  domm_set domm0 /=.
+                          by rewrite next_block_prepare_buffers_aux. (* TODO: Inline *)
+                    -- exists Cmem. split.
+                       ++ repeat
+                            ((erewrite <- component_memory_after_store_neq;
+                              [| eassumption | intro Hcontra; subst C'; contradiction])
+                             ||
+                             (erewrite <- component_memory_after_alloc_neq;
+                              [| eassumption | intro Hcontra; subst C'; contradiction])).
+                          exact HCmem.
+                       ++ exact Hnextblock.
             }
               }
             + (* EConst-Ptr *)
@@ -2850,6 +2935,17 @@ Local Transparent expr_of_const_val loc_of_reg.
           }
           (* Const does not modify the (shared) memory, therefore these two
              should be identical. *)
+          destruct (well_formed_memory_store_reg_offset v ptr C_b wf_mem)
+            as [mem' Hstore].
+          assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <>
+                              (Permission.data, C, Block.local, reg_offset v))
+            by (now destruct v). (* Lemma? *)
+          assert (Hload : exists v',
+                     Memory.load
+                       mem0 (Permission.data, C, Block.local, reg_offset v) = Some v')
+            by (eapply Memory.store_some_load_some; eauto).
+          setoid_rewrite <- (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq Hmem)
+            in Hload.
           assert (Hmem' : s0 = mem_of_event_inform e1). {
             subst prefix.
             clear -wf_int_pref'.
@@ -2888,7 +2984,6 @@ Local Transparent expr_of_const_val loc_of_reg.
               -- exact Hstore'.
               -- (* Do recursive call. *)
                   take_steps.
-                  ++ reflexivity.
                   ++ now apply find_procedures_of_trace.
                   ++ (* Now we are done with the event.
                         We still need to process the external call check. *)
@@ -3205,7 +3300,6 @@ Local Transparent expr_of_const_val loc_of_reg.
               -- take_steps.
                  ++ exact Hstore'.
                  ++ take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
@@ -3520,7 +3614,6 @@ Local Transparent expr_of_const_val loc_of_reg.
               -- exact Hstore'.
               -- (* Do recursive call. *)
                   take_steps.
-                  ++ reflexivity.
                   ++ now apply find_procedures_of_trace.
                   ++ (* Now we are done with the event.
                         We still need to process the external call check. *)
@@ -3868,7 +3961,6 @@ Local Transparent expr_of_const_val loc_of_reg.
             * take_steps; first exact Hstore'.
                 (* Do recursive call. *)
                 take_steps.
-              -- reflexivity.
               -- now apply find_procedures_of_trace.
               -- (* Now we are done with the event.
                     We still need to process the external call check. *)
@@ -4260,7 +4352,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                  ++ exact Hstore'.
                  ++ (* Do recursive call. *)
                     take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
@@ -4759,7 +4850,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                  ++ exact Hstore'.
                  ++ (* Do recursive call. *)
                     take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
@@ -5270,7 +5360,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                  ++ exact Hstore'.
                  ++ (* Do recursive call. *)
                     take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
@@ -5793,7 +5882,6 @@ Local Transparent expr_of_const_val loc_of_reg.
                  ++ exact Hstore'.
                  ++ (* Do recursive call. *)
                     take_steps.
-                    ** reflexivity.
                     ** now apply find_procedures_of_trace.
                     ** (* Now we are done with the event.
                           We still need to process the external call check. *)
