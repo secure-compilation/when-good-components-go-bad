@@ -51,8 +51,10 @@ Code at internal entry label:
 
 Require Import Common.Definitions.
 Require Import Common.CompCertExtensions.
+Require Import Common.RenamingOption.
 Require Import Source.Language.
 Require Import Intermediate.Machine.
+Require Import Intermediate.CSInvariants.
 Require Import S2I.CompMonad.
 Require Import CompCert.Smallstep.
 Require Import CompCert.Behaviors.
@@ -536,13 +538,42 @@ Local Axiom compilation_preserves_well_formedness:
     Intermediate.well_formed_program p_compiled.
 
 (* FCC *)
-Local Axiom I_simulates_S:
+
+Section Simulation.
+
+  Context {p: Source.program}.
+  Variable p_closed: Source.closed_program p.
+  Variable p_wf: Source.well_formed_program p.
+  Context {tp: Intermediate.program}.
+  Variable p_tp: compile_program p = Some tp.
+
+  Let L1 := S.CS.sem p.
+  Let L2 := I.CS.sem_non_inform tp.
+  
+  Local Axiom index: Type.
+  Local Axiom order: index -> index -> Prop.
+  Local Axiom match_states : index -> state L1 -> state L2 -> Prop.
+  Local Axiom fsim_record : fsim_properties _ _ _ index order match_states.
+
+  Local Axiom no_refinement_of_undef:
+    forall (i: index) (s1 : state L1) (s2 : state L2),
+      match_states i s1 s2 ->
+      safe (I.CS.sem_non_inform tp) s2 ->
+      safe (S.CS.sem p) s1.
+  
+End Simulation.
+
+Lemma I_simulates_S:
   forall {p},
     Source.closed_program p ->
     Source.well_formed_program p ->
   forall {tp},
     compile_program p = Some tp ->
     forward_simulation (S.CS.sem p) (I.CS.sem_non_inform tp).
+Proof.
+  intros ? ? ? ? ?.
+  econstructor. exact fsim_record.
+Qed.
 
 (* BCC *)
 (* We derive BCC from FCC as in CompCert *)
@@ -590,6 +621,43 @@ Proof.
   destruct G as [? [? [? ?]]].
   eauto.
 Qed.
+
+(** TODO: Prove this by relying on the Axioms fsim_record and no_refinement_of_undef *)
+(** together with lemma S_simulates_I. *)
+Lemma backward_simulation_star:
+  forall p p_compiled t s,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    Star (I.CS.sem_non_inform p_compiled)
+         (I.CS.initial_machine_state p_compiled) t s ->
+    exists s' i,
+      Star (S.CS.sem p) (S.CS.initial_machine_state p) t s'
+      /\
+      match_states i s' s.
+Proof.
+  intros ? ? ? ? Hcp Hwfp Hcmp Hstar.
+(*********************************  
+  Search _ "sim" "b".
+  assert(Hbs : backward_simulation (S.CS.sem p) (I.CS.sem_non_inform p_compiled)).
+  { apply S_simulates_I; assumption. }
+  destruct Hbs.
+  
+  specialize (bsim_match_initial_states _ _ Logic.eq_refl Logic.eq_refl)
+    as [i [s' [? Hmatch]]].
+  specialize (backward_simulation_star props Hstar) as G.
+  destruct props as [? ? ? ?].
+
+  specialize (G _ _ (Terminates nil) Hmatch).
+  inversion H; subst.
+  destruct G as [? [? [? ?]]]; eauto.
+  intros ? ? ? ? Hinv.
+  simpl in Hinv. Search _ "safe". safe Source.CS.CS.final_state.
+  Search _ behavior_app.
+Qed.
+***********************************)
+Admitted.
+
     
 Lemma forward_simulation_same_safe_prefix:
   forall p p_compiled m,
@@ -639,3 +707,38 @@ Proof.
       exists (Goes_wrong t''). reflexivity.
     + right. exists t. split. reflexivity. assumption.
 Qed.
+
+Definition shared_locations_have_only_shared_values mem metadata_size :=
+  forall (ptr : Pointer.t)
+         (addr : Component.id * Block.id) (v : value),
+    Memory.Memory.load mem ptr = Some v ->
+    addr = (Pointer.component ptr, Pointer.block ptr) ->
+    left_addr_good_for_shifting metadata_size addr ->
+    left_value_good_for_shifting metadata_size v. 
+  
+Definition private_pointers_never_leak_I p metadata_size :=
+  forall (s : I.CS.state) (t : Events.trace Events.event),
+    CSInvariants.CSInvariants.is_prefix s p t ->
+    good_trace_extensional (left_addr_good_for_shifting metadata_size) t /\
+    (forall (mem : eqtype.Equality.sort Memory.Memory.t),
+        I.CS.state_mem s = mem ->
+        shared_locations_have_only_shared_values mem metadata_size
+    ).
+
+
+Definition private_pointers_never_leak_S p metadata_size :=
+  forall (s : S.CS.state) (t : Events.trace Events.event),
+    Star (S.CS.sem p) (S.CS.initial_machine_state p) t s ->
+    good_trace_extensional (left_addr_good_for_shifting metadata_size) t /\
+    (forall (mem : eqtype.Equality.sort Memory.Memory.t),
+        S.CS.s_memory s = mem ->
+        shared_locations_have_only_shared_values mem metadata_size
+    ).
+
+Local Axiom compiler_preserves_non_leakage_of_private_pointers:
+  forall p p_compiled metadata_size,
+    Source.closed_program p ->
+    Source.well_formed_program p ->
+    compile_program p = Some p_compiled ->
+    private_pointers_never_leak_S p          metadata_size ->
+    private_pointers_never_leak_I p_compiled metadata_size.

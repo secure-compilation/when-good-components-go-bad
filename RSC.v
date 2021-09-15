@@ -177,11 +177,15 @@ Section RSC_Section.
       {
         by eapply forward_simulation_star; eauto.
       }
-      
-      erewrite Compiler.separate_compilation in HP'_Cs_compiles; eauto;
-        last (by rewrite Hsame_iface1 Hsame_iface2).
 
-      inversion HP'_Cs_compiles. subst.
+      assert (P'_Cs_compiled = Intermediate.program_link P'_compiled Cs_compiled).
+      {
+        erewrite Compiler.separate_compilation in HP'_Cs_compiles; eauto;
+          last (by rewrite Hsame_iface1 Hsame_iface2).
+        
+          by inversion HP'_Cs_compiles.
+      }
+      subst.
 
     rewrite Intermediate.program_linkC in HP'_Cs_compiled_star;
        [| assumption |assumption | apply linkable_sym in linkability'; assumption].
@@ -305,6 +309,16 @@ Section RSC_Section.
 
     (** With such an axiom in hand, we can assert the following from its      *)
     (** corresponding source version.                                         *)
+
+    assert (good_P'_Cs: private_pointers_never_leak_S
+                          (Source.program_link P' Cs)
+                          metadata_size
+           ).
+    {
+      admit.
+      (** Should be a lemma from Source/Definability.v *)
+    }
+    
     assert (HP'_compiled_Cs_compiled_good: forall (ss'' : CS.state) tt'',
                CSInvariants.CSInvariants.is_prefix
                  ss''
@@ -318,9 +332,34 @@ Section RSC_Section.
                    addr = (Pointer.component ptr, Pointer.block ptr) ->
                    left_addr_good_for_shifting metadata_size addr ->
                    left_value_good_for_shifting metadata_size v)).
-    { admit. }
-    
-    pose proof Intermediate.RecombinationRel.recombination_prefix_rel
+    {
+      assert (P'_Cs_closed: Source.closed_program (Source.program_link P' Cs)).
+      {
+        eapply Source.interface_preserves_closedness_l; eauto.
+        rewrite Hsame_iface1.
+        erewrite compilation_preserves_interface; eauto.
+      }
+
+      assert (P'_Cs_wf: Source.well_formed_program (Source.program_link P' Cs)).
+      {
+        eapply Source.linking_well_formedness; eauto.
+        rewrite Hsame_iface1.
+        erewrite compilation_preserves_interface; eauto.
+      }
+      
+      specialize (Compiler.compiler_preserves_non_leakage_of_private_pointers
+                    _ _ _ P'_Cs_closed P'_Cs_wf HP'_Cs_compiles good_P'_Cs
+                 ) as G.
+      unfold CSInvariants.CSInvariants.is_prefix.
+      intros ? ? Hpref.
+      unfold private_pointers_never_leak_I, shared_locations_have_only_shared_values in *.
+      specialize (G ss'' tt'' Hpref) as [G1 G2].
+      split; first exact G1.
+      intros ? ? ? ? ? ? ? ?.
+      eapply G2; eauto.
+    }
+
+    pose proof Intermediate.RecombinationRel.recombination_trace_rel
     well_formed_p_compiled
     well_formed_Ct
     well_formed_P'_compiled
@@ -331,66 +370,32 @@ Section RSC_Section.
     closedness
     HP'Cs_compiled_closed
     H_p_Ct_good
-    HP'_compiled_Cs_compiled_good.
+    HP'_compiled_Cs_compiled_good
+    Hstar
+    HP'_Cs_compiled_star
+    t_rel_t'
+      as [s_recomb [t_recomb [Hstar_recomb [_ trel_recomb]]]].
 
-    (** TODO: Use a non-behaviors (i.e., traces only) version of RecombinationRel. *)
     
-    H_doesm_noninform HP'_Cs_compiled_doesm t_rel_t'
-         as [m'' [size_m'' [HpCs_compiled_beh m''_rel_m]]].
-
     (* BCC *)
     assert (exists pCs_compiled,
                Compiler.compile_program (Source.program_link p Cs) = Some pCs_compiled)
       as [pCs_compiled HpCs_compiles].
       by now apply Compiler.well_formed_compilable.
+      
+      eapply Compiler.backward_simulation_star in Hstar_recomb;
+        eauto; last
+        (by rewrite HpCs_compiles;
+         erewrite Compiler.separate_compilation in HpCs_compiles; eauto
+        ).
+      
+      destruct Hstar_recomb as [s'_pCs HpCs_star].
+      
+      do 5 eexists; split; last split; last split; last split; last split;
+        last exact trel_recomb; eauto.
 
-    assert (exists beh1,
-               program_behaves (Source.CS.sem (Source.program_link p Cs)) beh1 /\
-               (prefix m'' beh1 \/ behavior_improves_finpref beh1 m'')) as HpCs_beh.
-    {
-      eapply Compiler.backward_simulation_behavior_improves_prefix in HpCs_compiled_beh;
-        eauto.
-    }
-    destruct HpCs_beh as [pCs_beh [HpCs_beh HpCs_beh_imp]].
 
-    assert (m_rel_m'': behavior_rel_behavior_all_cids all_zeros_shift size_m'' m m'').
-    { (*[DynShare] This should follow from m''_rel_m *)
-      admit.
-    }
-    (* Instantiate behavior, case analysis on improvement. *)
-    exists Cs. eexists. eexists m''. eexists all_zeros_shift. eexists.
-    destruct HpCs_beh_imp as [Keq | [t' [Hwrong Klonger]]].
-    + repeat (split; try now eauto).
-    + subst pCs_beh.
-      repeat (split; try now auto).
-      (* Blame the program and close the diagram. *)
-      assert (Hsame_iface3 : Source.prog_interface P' = Source.prog_interface p).
-      {
-        pose proof Compiler.compilation_preserves_interface successful_compilation
-          as Hsame_iface3.
-        congruence.
-      }
-      unfold behavior_improves_blame.
-
-      (* [DynShare] Continue here. *)
   Admitted.
-(*      destruct (Source.blame_program well_formed_p well_formed_Cs
-                              Hlinkable_p_Cs Hclosed_p_Cs HpCs_beh
-                              well_formed_P' Hsame_iface3 HP'Cs_closed
-                             HP'_Cs_m' Hsafe_pref Klonger) as [H|H]; by eauto.
 
-  Qed.
-*)
-End RSC_DC_MD_Section.
-End RSC_DC_MD_Gen.
+End RSC_Section.
 
-Require Import RSC_DC_MD_Instance.
-
-Module RSC_DC_MD_Instance :=
-  RSC_DC_MD_Gen
-    Source_Instance Intermediate_Instance
-    S2I_Instance
-    Compiler_Instance Linker_Instance.
-
-Definition RSC_DC_MD :=
-  RSC_DC_MD_Instance.RSC_DC_MD.
