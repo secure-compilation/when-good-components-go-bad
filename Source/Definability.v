@@ -1727,7 +1727,7 @@ Local Opaque Memory.store.
     Qed.
 
     (* TODO: Move to Memory, add more informative lemma on alloc pointers. *)
-    Lemma permission_of_alloc_offset mem cid sz mem' ptr':
+    Lemma offset_of_alloc_offset mem cid sz mem' ptr':
       Memory.alloc mem cid sz = Some (mem', ptr') ->
       Pointer.offset ptr' = 0%Z.
     Admitted.
@@ -1739,7 +1739,7 @@ Local Opaque Memory.store.
       ptr' = (Permission.data, cid, nb, 0%Z).
     Admitted.
 
-    (* (This is just here to easy things, maybe temporarily...) *)
+    (* (This is just here to ease things, maybe temporarily...) *)
     Lemma alloc_next_block mem cid sz mem' ptr':
       Memory.alloc mem cid sz = Some (mem', ptr') ->
     exists nb,
@@ -1914,8 +1914,12 @@ Local Opaque Memory.store.
     (* TODO: Inline idiomatic proof of this. *)
     Remark next_block_prepare_buffers_aux :
       S (fold_left Nat.max [fset Block.local] 0) = 1.
-    Admitted.
+    Proof.
+      by rewrite fsetU0.
+    Qed.
 
+    (* NOTE: This lemma is easier to use if Z-to-nat conversion is in the RHS,
+       and the >= 0 condition is added as a hypothesis to the statement. *)
     Lemma load_prepare_buffers C o :
       component_buffer C ->
       Memory.load (Source.prepare_buffers p) (Permission.data, C, Block.local, Z.of_nat o) = nth_error meta_buffer o.
@@ -2721,7 +2725,10 @@ Local Opaque loc_of_reg.
           }
           { (* Treat empty case separately. *)
             subst prefix. simpl in *.
-            assert (Hmain : C = Component.main) by admit.
+            assert (Hmain : C = Component.main).
+            { unfold C. rewrite Et /= in wb_trace.
+              by move: wb_trace => /andP => [[]] => /eqP. }
+            subst C.
 
             destruct (wfmem_ini wf_mem Logic.eq_refl C_b)
               as [Hregs0 [_ Hmaincomp]].
@@ -2740,7 +2747,7 @@ Local Opaque loc_of_reg.
 (*               last exact Hmem; *)
 (*               last (injection; discriminate). *)
             destruct (Memory.alloc_after_load
-                        _ _ _ _ _ _ (buffer_size C)
+                        _ _ _ _ _ _ (buffer_size Component.main)
                         (Memory.load_after_store_eq _ _ _ _ Hstore2))
               as [mem3 [bnew [Hnewblock Halloc3]]].
             assert (Hload3local := Hload0local).
@@ -2752,14 +2759,14 @@ Local Opaque loc_of_reg.
               last (injection; now destruct v).
             erewrite <- Memory.load_after_alloc in Hload3local;
               [ | exact Halloc3 | injection; congruence].
-            destruct (proj1 (Memory.store_some_load_some _ _ (Ptr (Permission.data, C, bnew, 0%Z))) (ex_intro _ _ Hload3local))
+            destruct (proj1 (Memory.store_some_load_some _ _ (Ptr (Permission.data, Component.main, bnew, 0%Z))) (ex_intro _ _ Hload3local))
               as [mem4 Hstore4].
-            destruct (exec_init_local_buffer_expr
-                        C
-                        ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: stk)
-                        mem4
-                        (Kseq (extcall_check;; expr_of_trace C P (comp_subtrace C t)) Kstop)
-                        bnew) as [mem5 [Hstar_init [Hstore5 Hmem5C]]].
+            (* destruct (exec_init_local_buffer_expr *)
+            (*             Component.main *)
+            (*             ({| CS.f_component := Component.main; CS.f_arg := arg; CS.f_cont := Kstop |} :: stk) *)
+            (*             mem4 *)
+            (*             (Kseq (extcall_check;; expr_of_trace Component.main P (comp_subtrace Component.main t)) Kstop) *)
+            (*             bnew) as [mem5 [Hstar_init [Hstore5 Hmem5C]]]. *)
             (* NOTE: Separate lemma? The execution only makes sense if C is main. *)
             (* assert (exists n, Memory.load mem0 (Permission.data, C, Block.local, EXTCALL_offset) = Some (Int n)) as [extcal Hload0extcall]. { *)
             (*   destruct (wfmem_extcall_ini wf_mem Logic.eq_refl) as [Hextmain Hector]. *)
@@ -2769,7 +2776,7 @@ Local Opaque loc_of_reg.
             assert (Hload0extcall := proj1 (wfmem_extcall_ini wf_mem Logic.eq_refl) _ C_b Hmain).
 
             destruct ptr as [n | ptr |];
-              exists (StackState C (callers s));
+              exists (StackState Component.main (callers s));
               eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
 
             + (* EConst-Int *)
@@ -2785,40 +2792,37 @@ Local Transparent expr_of_const_val loc_of_reg.
                   first (simplify_memory'; exact Hload0init).
                 take_steps.
                 - unfold buffer_size.
-                  destruct (prog_buffers C) as [Cbuf |] eqn:HCbuf.
+                  destruct (prog_buffers Component.main) as [Cbuf |] eqn:HCbuf.
                   + assert (Hwf_buf := wf_buffers HCbuf).
                     destruct Cbuf as [sz | vs]; auto.
-                    * move: Hwf_buf => /Nat.ltb_spec0.
-                      now destruct sz.
-                    * move: Hwf_buf => /andP => [[]] => /Nat.ltb_spec0.
-                      now destruct vs.
-                  + rewrite /component_buffer domm_buffers in C_b.
-                    move: HCbuf => /dommPn => Hcontra.
-                      by rewrite C_b in Hcontra.
-                - rewrite Nat2Z.id. exact Halloc3.
-                - take_steps;
-                    first exact Hstore4.
-                  eapply star_trans with (t2 := E0);
-                    first exact Hstar_init;
-                    last reflexivity.
-                  take_steps;
-                    first (simplify_memory'; exact Hload0extcall).
-                  take_steps.
+                    * simplify_memory; by destruct v.
+                    * simplify_memory; by destruct v.
+                  + simplify_memory; by destruct v.
+                (* - rewrite Nat2Z.id. exact Halloc3. *)
+                - take_steps.
+                  (*   first exact Hstore4. *)
+                  (* eapply star_trans with (t2 := E0); *)
+                  (*   first exact Hstar_init; *)
+                  (*   last reflexivity. *)
+                  (* take_steps; *)
+                  (*   first (simplify_memory'; exact Hload0extcall). *)
+                  (* take_steps. *)
                   apply star_refl.
               }
               { (** well-formed state *)
             econstructor; try reflexivity; try eassumption.
-            { destruct s. exact wb. }
+            { destruct s. rewrite -Hmain. exact wb. }
             { destruct wf_stk as [top [bot [Heq [Htop Hbot]]]]; subst stk.
-              eexists ({| CS.f_component := C; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
-              exists bot. split; [| split]; easy. }
+              eexists ({| CS.f_component := Component.main; CS.f_arg := arg; CS.f_cont := Kstop |} :: top).
+              exists bot. rewrite -Hmain. split; [| split]; easy. }
             (* Reestablish memory well-formedness.
                TODO: Refactor, automate. *)
             { (* destruct wf_mem as [wfmem_counter wfmem_meta wfmem]. *)
               constructor.
               - intros C_ Hcomp.
-                destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                destruct (Nat.eqb_spec Component.main C_) as [Heq | Hneq].
                 + subst C_.
+                  rewrite -Hmain. (* TODO: Rewrite Hmain earlier, avoid duplication *)
                   by simplify_memory'.
                 + simplify_memory'.
                   assert (Hload0 := wfmem_counter wf_mem Hcomp).
@@ -2828,30 +2832,31 @@ Local Transparent expr_of_const_val loc_of_reg.
                   case: ifP;
                     last reflexivity.
                   move => /eqP => Hcontra => /eqP => Hneq.
-                  rewrite Hcontra in Hneq. contradiction.
+                  rewrite Hcontra in Hneq. congruence.
               - discriminate.
               - intros pref ev Hprefix.
                 destruct pref as [| ? [ | ]]; try discriminate.
                 injection Hprefix as ?; subst ev.
                 split.
                 + intros C_ Hcomp Hnext.
-                  destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                  destruct (Nat.eqb_spec Component.main C_) as [Heq | Hneq].
                   * subst C_.
                     simplify_memory'.
                     apply (proj1 (wfmem_extcall_ini wf_mem Logic.eq_refl) _ Hcomp).
                     congruence.
-                  * subst C_. contradiction.
+                  * subst C_. rewrite Hmain in Hneq. contradiction.
                 + intros C_ Hcomp Hnext.
-                  destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
-                  * subst C_. contradiction.
+                  destruct (Nat.eqb_spec Component.main C_) as [Heq | Hneq].
+                  * subst C_. rewrite Hmain in Hnext. contradiction.
                   * simplify_memory'.
                     apply (proj2 (wfmem_extcall_ini wf_mem Logic.eq_refl) _ Hcomp).
                     intros ?; subst C_. contradiction.
               - intros C_ reg Hcomp.
                 assert (Hload0reg := Hregs0 (Ereg_to_reg reg) _ Logic.eq_refl).
                 rewrite reg_to_Ereg_to_reg in Hload0reg.
-                destruct (Nat.eqb_spec C C_) as [Heq | Hneq].
+                destruct (Nat.eqb_spec Component.main C_) as [Heq | Hneq].
                 + subst C_.
+                  rewrite -Hmain.
                   destruct (EregisterP reg v) as [Heq | Hneq].
                   * subst v.
                     eexists.
