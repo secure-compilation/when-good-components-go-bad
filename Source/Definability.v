@@ -1410,15 +1410,26 @@ Local Opaque Memory.store.
             prefix = [] ->
             component_buffer C ->
             postcondition_event_registers_ini C mem
-            (* TODO: Try removing the following conjuncts. *)
             /\
-            Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
-            Some (Int 0%Z)
+            (C <> Component.main ->
+             (Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
+              Some (Int 0%Z)
+              /\
+              Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) =
+              Some Undef
+              /\
+              next_block mem C = Some LOCALBUF_blockid
+              /\
+              well_formed_memory_snapshot_uninitialized (Source.prepare_buffers p) mem C))
             /\
-            Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) =
-            Some Undef
-            /\
-            next_block mem C = some LOCALBUF_blockid
+            (C = Component.main ->
+             (Memory.load mem (Permission.data, C, Block.local, INITFLAG_offset) =
+              Some (Int 1%Z)
+              /\
+              Memory.load mem (Permission.data, C, Block.local, LOCALBUF_offset) =
+              Some (Ptr (Permission.data, C, LOCALBUF_blockid, 0%Z))
+              /\
+              well_formed_memory_snapshot_steadystate (Source.prepare_buffers p) mem C))
         ;
         wfmem: forall prefix' e,
             prefix = prefix' ++ [:: e] ->
@@ -2296,7 +2307,7 @@ Local Transparent loc_of_reg.
                     end;
                     by rewrite load_prepare_buffers.
             -- move=> C _ C_b.
-               split; [| split; [| split]].
+               split.
                ++ move=> R n ?; subst n.
                   destruct (C == Component.main) eqn:Heq.
                   ** move: Heq => /eqP Heq; subst C.
@@ -2312,12 +2323,35 @@ Local Transparent loc_of_reg.
                          rewrite -(Z2Nat.id N); [| lia]
                        end;
                        by rewrite load_prepare_buffers.
-               ++ (* FIXME: This no longer holds after initialization! *)
-                  admit.
-               ++ (* FIXME: This no longer holds after initialization! *)
-                  admit.
-               ++ (* Easy, even if [mem C] style makes it somewhat artificial. *)
-	                admit.
+               ++ destruct (Nat.eqb_spec C Component.main) as [| Heq].
+                  ** subst C.
+                     split; first congruence.
+                     intros _.
+                     split; [| split; [| split]].
+                     --- by simplify_memory.
+                     --- by simplify_memory.
+                     --- intros b Hb.
+                         rewrite /memory_shifts_memory_at_shared_addr
+                                 /memory_renames_memory_at_shared_addr. simpl.
+                  (* NOTE: Source vs. Intermediate prepare buffers?*)
+                         destruct b as [| b']; first contradiction.
+                         eexists. split; first by rewrite shift_S_Some.
+                         split.
+
+                  ** split; last congruence.
+                     intros _. split; [| split].
+                     --- simplify_memory.
+                         rewrite /INITFLAG_offset -(Z2Nat.id 2);
+                           last lia.
+                         by rewrite load_prepare_buffers.
+                     --- simplify_memory.
+                         rewrite /LOCALBUF_offset -(Z2Nat.id 3);
+                           last lia.
+                         by rewrite load_prepare_buffers.
+                     --- repeat
+                           (erewrite next_block_store_stable;
+                            last eassumption).
+                         admit.
             -- by move=> [].
           * unfold valid_procedure. now auto.
     - (* Inductive step. *)
@@ -2690,7 +2724,9 @@ Local Opaque loc_of_reg.
             assert (Hmain : C = Component.main) by admit.
 
             destruct (wfmem_ini wf_mem Logic.eq_refl C_b)
-              as [Hregs0 [Hload0init [Hload0local _]]].
+              as [Hregs0 [_ Hmaincomp]].
+            specialize (Hmaincomp Hmain)
+              as [Hload0init Hload0local].
             assert (Hload0v := Hregs0 (Ereg_to_reg v) _ Logic.eq_refl).
             rewrite reg_to_Ereg_to_reg in Hload0v.
             assert (Hload1v := Hload0v).
@@ -2882,16 +2918,18 @@ Local Transparent expr_of_const_val loc_of_reg.
                   (* This is directly needed for the second sub-goal, but also
                      useful for the fourth one. *)
                   destruct (wfmem_ini wf_mem Logic.eq_refl C_b)
-                    as [Hregs [Hinitflag [Hlocalbuf [Cmem [HCmem Hnextblock]]]]]. (* Up front? *)
-                  assert (Hnext: next_block mem0 C = Some LOCALBUF_blockid). {
-                    by rewrite /next_block HCmem Hnextblock.
-                  }
-                  erewrite <- next_block_store_stable in Hnext;
-                    last exact Hmem.
-                  erewrite <- next_block_store_stable in Hnext;
-                    last exact Hstore2.
-                  destruct (next_block_alloc Halloc3) as [Hnext2 Hnext3].
-                  rewrite Hnext in Hnext2. injection Hnext2 as ?; subst bnew.
+                    as [Hregs [_ Hmaincomp]].
+                  specialize (Hmaincomp Hmain) as [Hinitflag Hlocalbuf].
+                  (* [Cmem [HCmem Hnextblock]]]]. (* Up front? *) *)
+                  (* assert (Hnext: next_block mem0 C = Some LOCALBUF_blockid). { *)
+                  (*   by rewrite /next_block HCmem Hnextblock. *)
+                  (* } *)
+                  (* erewrite <- next_block_store_stable in Hnext; *)
+                  (*   last exact Hmem. *)
+                  (* erewrite <- next_block_store_stable in Hnext; *)
+                  (*   last exact Hstore2. *)
+                  (* destruct (next_block_alloc Halloc3) as [Hnext2 Hnext3]. *)
+                  (* rewrite Hnext in Hnext2. injection Hnext2 as ?; subst bnew. *)
                   (* Continue. *)
                   split; [| split; [| split]].
                   * by simplify_memory'.
