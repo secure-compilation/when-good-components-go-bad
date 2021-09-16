@@ -695,6 +695,7 @@ Section Definability.
                mkfmapf (fun P => procedure_of_trace C P t) procs)
           intf.
 
+  (* FIXME *)
   Definition valid_procedure C P :=
     C = Component.main /\ P = Procedure.main
     \/ exported_procedure intf C P.
@@ -1262,6 +1263,18 @@ Local Opaque Memory.store.
     (*         regs = regs' -> *)
     (*       event_step_from_regfile_mem (EInvalidateRA C mem regs) regs' mem. *)
 
+    Let initial_memory :=
+      mkfmapf (fun C =>
+                 ComponentMemory.prealloc
+                   (
+                     match prog_buffers C with
+                     | Some buf => mkfmap [(Block.local, buf)]
+                     | None => emptym
+                     end
+                   )
+              )
+              (domm intf).
+
     Inductive prefix_star_event_steps : (* Machine.Intermediate.Register.t -> *)
                                         (* Memory.t -> *)
                                         trace event_inform -> Prop :=
@@ -1275,7 +1288,7 @@ Local Opaque Memory.store.
         forall e,
           event_step_from_regfile_mem
             Machine.Intermediate.Register.init
-            (Source.prepare_buffers p)
+            initial_memory
             e ->
           prefix_star_event_steps [:: e]
     | rcons_star_event_steps:
@@ -2941,6 +2954,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                   * by simplify_memory'. (* Trivial due to work up front. *)
                   * (* Nothing shared so far *)
                     intros b Hb. simpl.
+                    inversion wf_int_pref'; last admit. (* contra *)
                     admit.
                   * intros b Hnext'. simpl in Hnext'.
                     inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
