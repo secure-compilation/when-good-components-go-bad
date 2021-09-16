@@ -429,8 +429,8 @@ exact: well_bracketed_trace_suffix=> //.
 Qed.
 
 
-Definition well_formed_constant_value (cur_comp: Component.id)
-           (procs: NMap (NMap code)) (v: value) : bool :=
+Definition well_formed_constant_value {T: Type} (cur_comp: Component.id)
+           (procs: NMap (NMap T)) (v: value) : bool :=
   match v with
   | Int _ => true
   | Undef => true
@@ -456,7 +456,7 @@ Definition well_formed_constant_value (cur_comp: Component.id)
    Only then can we use reachability to compute the views of each component.
    Based on the view of a component memory, we can judge whether an ERead/EWrite that it
    performs is a possible read/write.  *)
-Definition well_formed_event intf (procs: NMap (NMap code))
+Definition well_formed_event {T: Type} intf (procs: NMap (NMap T))
            (e: event_inform) : bool :=
   match e with
   | ECallInform C P _ _ _ C' => (C != C') && imported_procedure_b intf C C' P
@@ -465,16 +465,16 @@ Definition well_formed_event intf (procs: NMap (NMap code))
   | _ => true
   end.
 
-Definition well_formed_trace intf (procs: NMap (NMap code))
+Definition well_formed_trace {T: Type} intf (procs: NMap (NMap T))
            (t: trace event_inform) : bool :=
   well_bracketed_trace stack_state0 t &&
-  all (well_formed_event intf (procs: NMap (NMap code))) t.
+  all (well_formed_event intf (procs: NMap (NMap T))) t.
 
 Definition declared_event_comps intf e :=
   [&& cur_comp_of_event e \in domm intf &
       next_comp_of_event e \in domm intf].
 
-Lemma well_formed_trace_int intf procs t :
+Lemma well_formed_trace_int {T} intf (procs : NMap (NMap T)) t :
   well_formed_trace intf procs t ->
   closed_interface intf ->
   all (declared_event_comps intf) t.
