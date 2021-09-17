@@ -1650,7 +1650,9 @@ Local Opaque Memory.store.
     (* [DynShare] We will probably need a variant of well formedness that is defined
      on non-informative traces as well. *)
 
-    Variable metadata_size_lhs: Component.id -> nat.
+    (* Could be used to obtain a more general result; currently this should
+       not be necessary. *)
+    (* Variable metadata_size_lhs: Component.id -> nat. *)
 
     (* NOTE: Could we dispense with complex well-formed states by looking only
        at well-formedness of traces?
@@ -2044,10 +2046,10 @@ Local Opaque Memory.store.
       well_bracketed_trace {| cur_comp := Component.main; callers := [::] |} t ->
       well_formed_intermediate_prefix t ->
       t = prefix ++ suffix ->
-    exists cs s prefix_inform prefix' const_map,
+    exists cs s prefix_inform prefix',
       Star (CS.sem p) (CS.initial_machine_state p) prefix' cs /\
       project_non_inform prefix_inform = prefix' /\
-      traces_shift_each_other_option metadata_size_lhs const_map (project_non_inform prefix) prefix' /\
+      traces_shift_each_other_option all_zeros_shift (uniform_shift 1) (project_non_inform prefix) prefix' /\
       well_formed_state_r s prefix suffix cs.
     Proof.
       (*
@@ -2231,7 +2233,7 @@ Local Opaque Memory.store.
                                    (comp_subtrace Component.main t))
                     (Int 0%Z)).
 
-        exists (StackState Component.main []), E0, E0, (uniform_shift 1).
+        exists (StackState Component.main []), E0, E0.
         split; [| split; [| split]].
         + rewrite /CS.initial_machine_state /Source.prog_main
                   find_procedures_of_trace_main.
@@ -2441,7 +2443,8 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
       assert (wf_int_pref'' : well_formed_intermediate_prefix prefix).
       { eapply well_formed_intermediate_prefix_inv. eauto. }
       specialize (IH (e :: suffix) Et) as
-          [cs [s [prefix_inform [prefix' [const_map [Star0 [Hproj [Hshift Hwf_cs]]]]]]]].
+          [cs [s [prefix_inform [prefix' [Star0 [Hproj [Hshift Hwf_cs]]]]]]].
+      (* NOTE: const_map is too weak now! *)
 
       move: Hwf_cs Star0.
       rename procs into t_procs. (* TODO: Better name! *)
@@ -2536,7 +2539,16 @@ Local Transparent Memory.load. unfold Memory.load. Local Opaque Memory.load.
          shape). *)
       assert (Star2 : exists e' s' cs',
                  Star (CS.sem p) [CState C, stk, mem', Kstop, expr_of_event C P e, arg] (event_non_inform_of [:: e']) cs' /\
-                 well_formed_state_r s' (prefix ++ [e]) suffix cs' (* TODO: [e']? *)
+                 well_formed_state_r s' (prefix ++ [e]) suffix cs' /\
+                 traces_rename_each_other_option
+                   all_zeros_shift
+                   (uniform_shift 1)
+                   (* metadata_size_lhs *)
+                   (* const_map *)
+                   (project_non_inform (prefix ++ [e]))
+                   (prefix' ++ event_non_inform_of [e'])
+                 (* match_events e e' *) (* <- Lift to noninformative traces relating only zero/singleton traces *)
+             (* event_renames_event_at_shared_addr  *)
              (* /\ e ~ e' *)
              (* NOTE: Here, too, we may need additional conjuncts... *)
              ).
@@ -2854,7 +2866,7 @@ Local Opaque loc_of_reg.
               eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
 
             + (* EConst-Int *)
-              split.
+              split; [| split].
               { (** star steps *)
 Local Transparent expr_of_const_val loc_of_reg.
                 take_steps;
@@ -3154,6 +3166,9 @@ Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.
                        (* ++ exact Hnextblock. *)
             }
               }
+              {
+                admit.
+              }
             + (* EConst-Ptr *)
               admit.
             + (* EConst-Undef *)
@@ -3203,7 +3218,7 @@ Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.
             pose proof proj1 (Memory.store_some_load_some _ _ (Int n)) Hload as [mem'' Hstore'].
             eexists. (* NOTE: Moved from above! *)
             (* Continue. *)
-            split.
+            split; [| split].
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
@@ -3495,6 +3510,7 @@ Local Opaque Memory.store.
                     }
                     eapply wfmem_postcondition_initial_preserved; eauto.
               }
+            * admit.
 
           + (* EConst-Ptr *)
             (* Before processing the goal, introduce existential witnesses. *)
@@ -3510,7 +3526,7 @@ Local Opaque Memory.store.
             (* Continue. *)
             (* exists (StackState C (callers s)). *)
             eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-            split.
+            split; [| split].
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
@@ -3822,6 +3838,7 @@ Local Opaque Memory.store.
                     }
                     eapply wfmem_postcondition_initial_preserved; eauto.
               }
+            * admit.
 
           + (* EConst-Undef *)
             (* assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset v)) *)
@@ -3833,7 +3850,7 @@ Local Opaque Memory.store.
             (* Continue. *)
             (* exists (StackState C (callers s)). *)
             eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-            split.
+            split; [| split].
             * (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
               take_steps.
@@ -4122,6 +4139,7 @@ Local Opaque Memory.store.
                     }
                     eapply wfmem_postcondition_initial_preserved; eauto.
               }
+            * admit.
 
         - (* EMov *)
           (* Gather a few recurrent assumptions at the top. *)
@@ -4179,7 +4197,7 @@ Local Opaque Memory.store.
           (* Continue. *)
           exists (StackState C (callers s)).
           eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-          split.
+          split; [| split].
           + (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
             take_steps.
@@ -4510,6 +4528,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
             }
+          + admit.
 
         - (* EBinop *)
           (* Gather a few recurrent assumptions at the top. *)
@@ -4567,7 +4586,7 @@ Local Transparent expr_of_const_val loc_of_reg.
           (* Continue. *)
           exists (StackState C (callers s)).
           eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-          split.
+          split; [| split].
           + (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
             take_steps.
@@ -5018,6 +5037,7 @@ Ltac t_postcondition_event_registers_pointer_Cbo
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
               }
+            + admit.
 
         - (* ELoad *)
           (* Gather a few recurrent assumptions at the top. *)
@@ -5064,7 +5084,7 @@ Ltac t_postcondition_event_registers_pointer_Cbo
           (* Continue. *)
           exists (StackState C (callers s)).
           eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-          split.
+          split; [| split].
           + (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
             take_steps.
@@ -5491,6 +5511,7 @@ Local Opaque Memory.load.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
               }
+          + admit.
 
         - (* EStore *)
           rename e into reg0. rename e0 into reg1.
@@ -5600,7 +5621,7 @@ Local Opaque Memory.load.
 
           exists (StackState C (callers s)).
           eexists.
-          split.
+          split; [| split].
           + (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
             take_steps.
@@ -6073,6 +6094,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                             --- by eapply component_memory_after_store_neq; eauto.
                   }
               }
+          + admit.
 
         - (* EAlloc *)
           (* Gather a few recurrent assumptions at the top. *)
@@ -6171,7 +6193,7 @@ Local Transparent expr_of_const_val loc_of_reg.
           (* Continue. *)
           exists (StackState C (callers s)).
           eexists. (* evar (CS : state (CS.sem p)). exists CS. *)
-          split.
+          split; [| split].
           + (* Evaluate steps of back-translated event first. *)
 Local Transparent expr_of_const_val loc_of_reg.
             take_steps.
@@ -6244,14 +6266,16 @@ Local Transparent expr_of_const_val loc_of_reg.
                   rewrite <- (Memory.load_after_store_neq _ _ _ _ _ HCneq Hmem) in Hload0.
                   erewrite <- Memory.load_after_alloc in Hload0;
                     [| exact Halloc | injection; congruence].
-                  rewrite counter_value_snoc. simpl.
+                  rewrite -cats2.
+                  rewrite counter_value_snoc. simpl. subst prefix.
                   move: Hneq => /eqP.
                   case: ifP;
                     last now rewrite Z.add_0_r.
                   move => /eqP => Hcontra => /eqP => Hneq.
                   symmetry in Hcontra. contradiction.
-              - intros Hcontra. now destruct prefix.
+              - intros Hcontra. rewrite -cats2 in Hcontra. now destruct prefix0.
               - intros pref ev Hprefix.
+                rewrite -cats2 in Hprefix.
                 apply rcons_inv in Hprefix as [? ?]; subst pref ev.
                 split.
                 + intros C_ Hcomp Hnext.
@@ -6304,8 +6328,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                   erewrite Memory.load_after_store_neq;
                     try eassumption.
                   now destruct reg.
-              - intro Hcontra. now destruct prefix.
+              - intros ? Hcontra. rewrite -cats2 in Hcontra. now destruct prefix0.
               - intros pref ev Hprefix.
+                rewrite -cats2 in Hprefix.
                 apply rcons_inv in Hprefix as [? ?]; subst pref ev.
                 destruct (wfmem wf_mem Hprefix01) as [Hpostregs [Hsteady Hinitial]].
                 (* rename n into n0. rename v into v0. rename Hload into Hload0. rename mem' into mem'0. *) (* rename s0 into mem'. *) (* Trying to preserve proof script... *)
@@ -6350,7 +6375,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                               symmetry in Ht; apply cats2_inv in Ht as [? [? ?]]; subst prefint eint1 eint2;
                               inversion Hstep as [| | | | | | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6];
                               subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6;
-                              subst eregs].
+                              subst erptr].
                           rewrite Ereg_to_reg_to_Ereg Machine.Intermediate.Register.gss.
                           rewrite <- Hcomp1 in Hreg1mem0.
                           destruct (Hregs1 (Ereg_to_reg reg1) _ (f_equal _ (reg_to_Ereg_to_reg _)))
@@ -6363,7 +6388,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                           injection Hshift'' as ?; subst v''.
 
                           rewrite Hget'' in H. injection H as ?; subst size.
-                          rewrite Halloc' in H1. injection H1 as ?; subst ptr.
+                          rewrite Halloc' in H10. injection H10 as ?; subst ptr0.
                           reflexivity.
 
                     - setoid_rewrite Hcomp1 in Hregs1.
@@ -6394,7 +6419,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                             symmetry in Ht. apply cats2_inv in Ht as [? [? ?]]. subst prefint eint1 eint2.
                             inversion Hstep as [| | | | | | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6];
                               subst tmp1 tmp2 tmp3 tmp4 tmp5 tmp6.
-                            subst eregs.
+                            subst erptr.
                             rewrite Machine.Intermediate.Register.gso;
                               first exact Hget'.
                             destruct n; destruct reg0; try discriminate; contradiction.
@@ -6621,24 +6646,22 @@ Local Transparent expr_of_const_val loc_of_reg.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
             }
+          + admit.
+          + admit. (* FIXME: silly error earlier *)
 
       }
 
-      destruct Star2 as (e' & s' & cs' & Star2 & wf_cs').
+      destruct Star2 as (e' & s' & cs' & Star2 & wf_cs' & Hshift').
       (* TODO: The statement needs to be extended to relate e and e'! *)
       (* NOTE: Now, case analysis on the event needs to take place early. *)
       exists cs', s',
-             (prefix_inform ++ [:: e']), (prefix' ++ project_non_inform [:: e']),
-             const_map.
+             (prefix_inform ++ [:: e']), (prefix' ++ project_non_inform [:: e']).
       split; [| split; [| split]].
       + eapply (star_trans Star0); simpl; eauto.
         eapply (star_trans Star1); simpl; now eauto.
       + by rewrite -Hproj CS.CS.project_non_inform_append.
       + constructor.
-        setoid_rewrite cats1.
-        Fail constructor.
-        Check Hshift.
-        admit. (* Extend trace relation. *)
+        exact Hshift'.
       + assumption.
     Admitted.
 
