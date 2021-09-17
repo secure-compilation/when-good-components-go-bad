@@ -6710,15 +6710,15 @@ Print Assumptions definability_gen_rel_right.
 
     *)
 
-    Lemma definability_gen_rel s prefix suffix cs :
-      t = prefix ++ suffix ->
-      well_formed_state s prefix suffix cs ->
-    exists cs' suffix_inform suffix' const_map,
-      Star (CS.sem p) cs suffix' cs' /\
-      project_non_inform suffix_inform = suffix' /\
-      traces_shift_each_other_option metadata_size_lhs const_map (project_non_inform suffix) suffix' /\
-      CS.final_state cs'.
-    Admitted.
+    (* Lemma definability_gen_rel s prefix suffix cs : *)
+    (*   t = prefix ++ suffix -> *)
+    (*   well_formed_state s prefix suffix cs -> *)
+    (* exists cs' suffix_inform suffix' const_map, *)
+    (*   Star (CS.sem p) cs suffix' cs' /\ *)
+    (*   project_non_inform suffix_inform = suffix' /\ *)
+    (*   traces_shift_each_other_option metadata_size_lhs const_map (project_non_inform suffix) suffix' /\ *)
+    (*   CS.final_state cs'. *)
+    (* Admitted. *)
 
     (**********************
     Lemma definability_gen s prefix suffix cs :
@@ -6733,11 +6733,12 @@ Print Assumptions definability_gen_rel_right.
 
     Lemma definability :
       forall procs, (* TODO: What to do with procs? *)
-        well_formed_trace intf procs t ->
+        @well_formed_trace T intf procs t ->
         exists t' const_map,
           program_behaves (CS.sem p) (Terminates t') /\
           traces_shift_each_other_option
-            metadata_size_lhs
+            (* metadata_size_lhs *)
+            all_zeros_shift
             const_map
             (project_non_inform t)
             t'.
@@ -6787,8 +6788,8 @@ End Definability.
    of metadata per component. That is, metadata would be an optional block for
    each component containing certain fixed data, such as the shift to apply to
    block identifiers. *)
-Definition metadata_size : Component.id -> nat (* := uniform_shift metadata_size_per_cid*).
-Admitted.
+(* Definition metadata_size : Component.id -> nat (* := uniform_shift metadata_size_per_cid*). *)
+(* Admitted. *)
 
 Require Import Intermediate.Machine.
 Require Import Intermediate.CS.
@@ -6929,7 +6930,7 @@ Proof.
     (* RB: TODO: [DynShare] Check added assumptions in previous line. Section
        admits? *)
   set back := (program_of_trace intf bufs t) => Hback.
-  specialize (Hback all_zeros_shift) as [t' [const_map [Hback Hshift]]].
+  specialize (Hback procs wf_events (*all_zeros_shift*)) as [t' [const_map [Hback Hshift]]].
   assert (Hback_ : program_behaves (CS.sem (program_of_trace intf bufs t))
                                    (Terminates t')).
   {
@@ -6941,12 +6942,12 @@ Proof.
   exists (Source.program_unlink (domm (Intermediate.prog_interface p)) back).
   exists (Source.program_unlink (domm (Intermediate.prog_interface c)) back).
   (* Check project_finpref_behavior (FTerminates m'). *)
-  exists t'. 
+  exists t'.
   inversion Hback as [? ? Hinit Hbeh|]; subst. clear Hback.
   inversion Hbeh as [? s' Hstar' Hfinal| | |]; subst.
   simpl in Hinit. unfold Source.CS.CS.initial_state in *. subst.
   exists s', const_map.
-  
+
   split=> /=; last split.
   - rewrite -[RHS](unionmK (Intermediate.prog_interface p) (Intermediate.prog_interface c)).
       by apply/eq_filterm=> ??; rewrite mem_domm.
