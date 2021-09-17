@@ -1296,10 +1296,54 @@ Local Opaque Memory.store.
           event_step_from_regfile_mem (register_file_of_event_inform e) (mem_of_event_inform e) e' ->
           prefix_star_event_steps (rcons (rcons prefix e) e').
 
-    (* TO BE CONTINUED *)
+    Inductive trace_event_components : trace event_inform -> Prop :=
+    | evcomps_nil : trace_event_components E0
+    | evcomps_event e : trace_event_components [e]
+    | evcomps_cons e1 e2 t :
+        next_comp_of_event e1 = cur_comp_of_event e2 ->
+        trace_event_components (e2 :: t) ->
+        trace_event_components (e1 :: e2 :: t).
 
-    Definition well_formed_intermediate_prefix (pref: trace event_inform) : Prop :=
-      prefix_star_event_steps pref.
+    Record well_formed_intermediate_prefix (pref: trace event_inform) : Prop :=
+    {
+      ipref_evsteps : prefix_star_event_steps pref;
+      ipref_evcomps : trace_event_components pref
+    }.
+
+    Lemma trace_event_components_app_l t1 t2:
+      trace_event_components (t1 ++ t2) ->
+      trace_event_components t1.
+    Proof.
+      induction t1 as [| e t1 IHt1].
+      - by constructor.
+      - simpl. intros H.
+        inversion H; subst.
+        + destruct t1; last discriminate.
+          destruct t2; last discriminate.
+          by constructor.
+        + rewrite H1 in H3. specialize (IHt1 H3).
+          destruct t1 as [| e' t1]; first by constructor.
+          constructor.
+          * inversion H; subst.
+            assumption.
+          * exact IHt1.
+    Qed.
+
+    Lemma trace_event_components_app_r t1 t2:
+      trace_event_components (t1 ++ t2) ->
+      trace_event_components t2.
+    Proof.
+      induction t1 as [| e t1 IHt1];
+        simpl; intros H.
+      - assumption.
+      - apply IHt1.
+        destruct t1 as [| e' t1].
+        + inversion H; subst.
+          * by constructor.
+          * assumption.
+        + inversion H; subst.
+          assumption.
+    Qed.
 
     Lemma well_formed_intermediate_prefix_inv:
       forall prefix suffix,
@@ -1311,17 +1355,27 @@ Local Opaque Memory.store.
       - by rewrite cats0.
       - move=> prefix.
         rewrite -cat_rcons => /IH IH'.
-        inversion IH'.
-        + now destruct prefix.
-        + have: (e = a /\ prefix = nil).
-          { destruct prefix. inversion H; split; congruence.
-            inversion H. now destruct prefix. }
-          move=> [] ? ?; subst. constructor.
-        + eapply rcons_inj in H. inversion H; subst; clear H.
-          inversion IH'; subst; clear IH'.
-          * now destruct prefix0.
-          * now destruct prefix0.
-          * eauto.
+        split.
+        + destruct IH' as [IH' _].
+          inversion IH'.
+          * now destruct prefix.
+          * have: (e = a /\ prefix = nil).
+            { destruct prefix. inversion H; split; congruence.
+              inversion H. now destruct prefix. }
+            move=> [] ? ?; subst. constructor.
+          * eapply rcons_inj in H. inversion H; subst; clear H.
+            inversion IH'; subst; clear IH'.
+            -- now destruct prefix0.
+            -- now destruct prefix0.
+            -- eauto.
+        + destruct IH' as [_ IH'].
+          rewrite -cats1 in IH'.
+          destruct prefix as [| e1 prefix]; first by constructor.
+          destruct prefix as [| e2 prefix]; first by constructor.
+          inversion IH'; subst.
+          constructor.
+          * assumption.
+          * eapply trace_event_components_app_l. eassumption.
     Qed.
 
     (* AEK: Now not sure whether this definition should be called a postcondition.   *)
@@ -2970,6 +3024,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                       + by simplify_memory'.
                       + reflexivity.
                       + rename t0 into eregs.
+                        destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
                         inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht].
                         { subst eint.
                           inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
@@ -2991,6 +3046,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                         exact (Hregs reg _ Logic.eq_refl).
                       * reflexivity.
                       * rename t0 into eregs.
+                        destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
                         inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht].
                         { subst eint.
                           inversion Hstep as [| | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 | | | | |];
@@ -3027,6 +3083,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                   * by simplify_memory'. (* Trivial due to work up front. *)
                   * (* Nothing shared so far *)
                     intros b Hb. simpl.
+                    destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
                     inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
                       last (destruct prefint as [| ? []]; discriminate).
                     subst eint.
@@ -3095,6 +3152,7 @@ Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.
                     (*         / memory_renames_memory_at_shared_addr. *)
                     (* admit. *)
                   * intros b Hnext'. simpl in Hnext'.
+                    destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
                     inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
                       last (destruct prefint as [| ? []]; discriminate).
                     subst eint.
@@ -3141,7 +3199,8 @@ Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.
                        eexists. exists buf.
                        split; [| split; [| split]];
                          try reflexivity.
-                       ++ inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
+                       ++ destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                          inversion wf_int_pref' as [| eint Hstep Heint | prefint eint1 eint2 Hsteps Hstep Ht];
                             last (destruct prefint as [| ? []]; discriminate).
                           subst eint.
                           rename s0 into eregs.
@@ -3190,6 +3249,7 @@ Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.
           assert (Hmem' : s0 = mem_of_event_inform e1). {
             subst prefix.
             clear -wf_int_pref'.
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
             move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
             inversion wf_int_pref.
             - now destruct prefix0.
@@ -3198,7 +3258,14 @@ Local Transparent Memory.load. unfold Memory.load in Hload. Local Opaque Memory.
               apply rcons_inj in H3. inversion H3; subst; clear H3.
               inversion H1; subst; clear H1.
               reflexivity. }
-          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s) by admit.
+          (* NOTE: Much of this can be done up front if we case analyze the
+             trace prefix at the top *)
+          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            rewrite Hprefix01 in wf_ev_comps'.
+            setoid_rewrite <- app_assoc in wf_ev_comps'.
+            apply trace_event_components_app_r in wf_ev_comps'.
+            inversion wf_ev_comps'. assumption. }
           (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
           (* Case analysis on concrete constant expression; all cases are
              similar.
@@ -3360,7 +3427,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                              last exact Hstore'.
                            reflexivity.
                         -- now constructor.
-                        -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                        -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                           inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                            ++ destruct prefix; discriminate. (* contra *)
                            ++ subst prefix. destruct prefix0 as [| ? [|]]; discriminate. (* contra *)
                            ++ rewrite Hprefix01 in Ht.
@@ -3404,7 +3472,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                              last (subst off; injection; now destruct n).
                            eassumption.
                         -- eassumption.
-                        -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                        -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                           inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                            ++ destruct prefix; discriminate. (* contra *)
                            ++ subst prefix. destruct prefix0 as [| ? [ | ]]; discriminate. (* contra *)
                            ++ rewrite Hprefix01 in Ht.
@@ -3680,7 +3749,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                          all_zeros_shift, uniform_shift.
                          simpl.
                          reflexivity.
-                      -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                      -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                         inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                          ++ destruct prefix; discriminate. (* contra *)
                          ++ subst prefix. destruct prefix0 as [| ? [|]]; discriminate. (* contra *)
                          ++ rewrite Hprefix01 in Ht.
@@ -3727,7 +3797,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                              last (subst off; injection; now destruct n).
                            eassumption.
                         -- eassumption.
-                        -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                        -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                           inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                            ++ destruct prefix; discriminate. (* contra *)
                            ++ subst prefix. destruct prefix0 as [| ? [ | ]]; discriminate. (* contra *)
                            ++ rewrite Hprefix01 in Ht.
@@ -3994,7 +4065,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                              last exact Hstore'.
                            reflexivity.
                         -- now constructor.
-                        -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                        -- (* TODO: Refactor this destruct at the top, currently
+                              adding quickly without breaking proofs. *)
+                           destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                           inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                            ++ destruct prefix; discriminate. (* contra *)
                            ++ subst prefix. destruct prefix0 as [| ? [|]]; discriminate. (* contra *)
                            ++ rewrite Hprefix01 in Ht.
@@ -4033,7 +4107,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                              last (subst off; injection; now destruct n).
                            eassumption.
                         -- eassumption.
-                        -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                        -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                           inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                            ++ destruct prefix; discriminate. (* contra *)
                            ++ subst prefix. destruct prefix0 as [| ? [ | ]]; discriminate. (* contra *)
                            ++ rewrite Hprefix01 in Ht.
@@ -4154,6 +4229,7 @@ Local Opaque Memory.store.
             subst prefix.
             clear -wf_int_pref'.
             move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+            destruct wf_int_pref as [wf_int_pref _].
             inversion wf_int_pref.
             - now destruct prefix0.
             - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
@@ -4161,7 +4237,12 @@ Local Opaque Memory.store.
               apply rcons_inj in H3. inversion H3; subst; clear H3.
               inversion H1; subst; clear H1.
               reflexivity. }
-          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s) by admit.
+          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            rewrite Hprefix01 in wf_ev_comps'.
+            setoid_rewrite <- app_assoc in wf_ev_comps'.
+            apply trace_event_components_app_r in wf_ev_comps'.
+            inversion wf_ev_comps'. assumption. }
           (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
           exists (EMov C src dst s0 t0).
           (* NOTE: Can we make this initial part more like the other cases? *)
@@ -4340,7 +4421,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                              last exact Hstore'.
                            reflexivity.
                         -- exact Hshiftv.
-                        -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                        -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                           inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                            ++ destruct prefix; discriminate. (* contra *)
                            ++ subst prefix. destruct prefix0 as [| ? [|]]; discriminate. (* contra *)
                            ++ rewrite Hprefix01 in Ht.
@@ -4366,7 +4448,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                              last (subst off; injection; now destruct n).
                            eassumption.
                         -- eassumption.
-                        -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                        -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                           inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                            ++ destruct prefix; discriminate. (* contra *)
                            ++ subst prefix. destruct prefix0 as [| ? [ | ]]; discriminate. (* contra *)
                            ++ rewrite Hprefix01 in Ht.
@@ -4545,7 +4628,7 @@ Local Transparent expr_of_const_val loc_of_reg.
           assert (Hmem' : s0 = mem_of_event_inform e1). {
             subst prefix.
             clear -wf_int_pref'.
-            move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+            move: wf_int_pref'; rewrite !cats1 => [[wf_int_pref _]].
             inversion wf_int_pref.
             - now destruct prefix0.
             - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
@@ -4553,7 +4636,12 @@ Local Transparent expr_of_const_val loc_of_reg.
               apply rcons_inj in H3. inversion H3; subst; clear H3.
               inversion H1; subst; clear H1.
               reflexivity. }
-          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s) by admit.
+          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            rewrite Hprefix01 in wf_ev_comps'.
+            setoid_rewrite <- app_assoc in wf_ev_comps'.
+            apply trace_event_components_app_r in wf_ev_comps'.
+            inversion wf_ev_comps'. assumption. }
           (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
           exists (EBinop C op reg0 reg1 reg2 s0 eregs).
           (* Case analysis on concrete constant expression; all cases are
@@ -4741,6 +4829,7 @@ prefix prefix0 Hprefix01 eregs :=
                           as [vs1 [vs1' [Hload1 [Hshift1 Hget1]]]].
                         rewrite Hreg0mem0 in Hload0. injection Hload0 as ?; subst vs0.
                         rewrite Hreg1mem0 in Hload1. injection Hload1 as ?; subst vs1.
+                        destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
 
 Local Transparent binop_of_Ebinop. (* TODO: This was made locally opaque earlier but not reversed! *)
 
@@ -4876,7 +4965,8 @@ Ltac t_postcondition_event_registers_pointer_Cbo
                              last (subst off; injection; now destruct n).
                            exact Hload'.
                         -- eassumption.
-                        -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                        -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                           inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                            ++ destruct prefix; discriminate. (* contra *)
                            ++ subst prefix. destruct prefix0 as [| ? [ | ]]; discriminate. (* contra *)
                            ++ rewrite Hprefix01 in Ht.
@@ -5052,7 +5142,7 @@ Ltac t_postcondition_event_registers_pointer_Cbo
           assert (Hmem' : s0 = mem_of_event_inform e1). {
             subst prefix.
             clear -wf_int_pref'.
-            move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+            move: wf_int_pref'; rewrite !cats1 => [[wf_int_pref _]].
             inversion wf_int_pref.
             - now destruct prefix0.
             - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
@@ -5060,7 +5150,12 @@ Ltac t_postcondition_event_registers_pointer_Cbo
               apply rcons_inj in H3. inversion H3; subst; clear H3.
               inversion H1; subst; clear H1.
               reflexivity. }
-          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s) by admit.
+          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            rewrite Hprefix01 in wf_ev_comps'.
+            setoid_rewrite <- app_assoc in wf_ev_comps'.
+            apply trace_event_components_app_r in wf_ev_comps'.
+            inversion wf_ev_comps'. assumption. }
           (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
           exists (ELoad C reg0 reg1 s0 eregs).
           destruct (wfmem_meta wf_mem reg0 C_b) as [v0 Hreg0mem0].
@@ -5242,7 +5337,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                           * erewrite Memory.load_after_store_eq;
                               [reflexivity | exact Hstore'].
                           * exact Hshift'.
-                          * inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
+                          * destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                            inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
                               [ destruct prefix; discriminate (* contra *)
                               | subst prefix; destruct prefix0 as [| ? [|]]; discriminate (* contra *)
                               | rewrite Hprefix01 in Ht;
@@ -5289,7 +5385,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                             -- erewrite Memory.load_after_store_eq;
                                  [reflexivity | exact Hstore'].
                             -- exact Hshift'.
-                            -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
+                            -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                               inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
                                  [ destruct prefix; discriminate (* contra *)
                                  | subst prefix; destruct prefix0 as [| ? [|]]; discriminate (* contra *)
                                  | rewrite Hprefix01 in Ht;
@@ -5349,7 +5446,8 @@ Local Opaque Memory.load.
                            last (subst off; injection; now destruct n).
                          exact Hload'.
                       -- eassumption.
-                      -- inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
+                      -- destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                         inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht].
                          ++ destruct prefix; discriminate. (* contra *)
                          ++ subst prefix. destruct prefix0 as [| ? [ | ]]; discriminate. (* contra *)
                          ++ rewrite Hprefix01 in Ht.
@@ -5528,7 +5626,7 @@ Local Opaque Memory.load.
             as [ptr [Hgetptr Hstore]]. {
             subst prefix.
             clear -wf_int_pref'.
-            move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+            move: wf_int_pref'; rewrite !cats1 => [[wf_int_pref _]].
             inversion wf_int_pref.
             - now destruct prefix0.
             - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
@@ -5536,7 +5634,12 @@ Local Opaque Memory.load.
               apply rcons_inj in H3. inversion H3; subst; clear H3.
               inversion H1; subst; clear H1.
               now eauto. }
-          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s) by admit.
+          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            rewrite Hprefix01 in wf_ev_comps'.
+            setoid_rewrite <- app_assoc in wf_ev_comps'.
+            apply trace_event_components_app_r in wf_ev_comps'.
+            inversion wf_ev_comps'. assumption. }
           (* NOTE: Instantiations are irrelevant! *)
           exists (EStore C reg0 reg1 s0 eregs).
           destruct (wfmem_meta wf_mem reg0 C_b) as [v0 Hreg0mem0].
@@ -5584,6 +5687,7 @@ Local Opaque Memory.load.
           (* destruct (Memory.store_after_load _ _ _ v1 Hreg0mem) as [mem'' Hstore']. *)
           assert (exists vptr, Memory.load mem (Permission.data, C0, S b0', o0) = Some vptr)
             as [vptr Hvptrmem]. {
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
             inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
               [ destruct prefix; discriminate (* contra *)
               | subst prefix; destruct prefix0 as [| ? [|]]; discriminate (* contra *)
@@ -5600,7 +5704,9 @@ Local Opaque Memory.load.
             (* rewrite shift_S_Some in Hshift1. *)
             (* injection Hshift1 as ? ?; subst cid bid. *)
             destruct tmp5 as [[[p5 C5] b5] o5].
-            assert (p5 = Permission.data). { destruct p5; simpl in *; try discriminate. reflexivity. } subst p5.
+            assert (p5 = Permission.data). {
+              destruct p5; simpl in *; try discriminate. reflexivity. }
+            subst p5.
             (* From Hinitial1, two cases:
                 - Uninitialized component, contradiction because only the metadata
                   buffer would be available, yet we are able to load from outside it.
@@ -5746,7 +5852,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                         rewrite -Hcomp1.
                         exact Hload''.
                       - exact Hshift''.
-                      - inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
+                      - destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+                        inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
                           [ destruct prefix; discriminate (* contra *)
                           | subst prefix; destruct prefix0 as [| ? [|]]; discriminate (* contra *)
                           | rewrite Hprefix01 in Ht;
@@ -6114,7 +6221,7 @@ Local Transparent expr_of_const_val loc_of_reg.
             subst prefix.
             clear -wf_int_pref'.
             (* Maybe keep shift? *)
-            move: wf_int_pref'; rewrite !cats1 => wf_int_pref.
+            move: wf_int_pref'; rewrite !cats1 => [[wf_int_pref _]].
             inversion wf_int_pref.
             - now destruct prefix0.
             - destruct prefix0. inversion H. simpl in H. now destruct prefix0.
@@ -6122,13 +6229,12 @@ Local Transparent expr_of_const_val loc_of_reg.
               apply rcons_inj in H3. inversion H3; subst; clear H3.
               inversion H1; subst; clear H1.
               now eauto. }
-          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s).
-          {
-            subst prefix.
-            (* TODO: Add invariant to prefix_star_event_steps. *)
-            (* Try getting it from well_bracketed_trace? *)
-            admit.
-          }
+          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s). {
+            destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
+            rewrite Hprefix01 in wf_ev_comps'.
+            setoid_rewrite <- app_assoc in wf_ev_comps'.
+            apply trace_event_components_app_r in wf_ev_comps'.
+            inversion wf_ev_comps'. assumption. }
           (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
           exists (EAlloc C reg0 reg1 s0 eregs).
           (* TODO: Clean assumptions, refactor. *)
@@ -6146,6 +6252,7 @@ Local Transparent expr_of_const_val loc_of_reg.
           specialize (Hsteady1 _ C_b (Logic.eq_sym Hcomp1)) as [Hoffset1 [Hblockid1 [Hsnapshot1 Hblock1]]].
           (* Some alloc-specific reasoning... *)
           (* NOTE: This should come from well-formedness of events. *)
+          destruct wf_int_pref' as [wf_int_pref' wf_ev_comps'].
           inversion wf_int_pref';
             [now destruct prefix |
              subst prefix; now destruct prefix0 as [|? []]
