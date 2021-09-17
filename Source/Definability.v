@@ -5187,7 +5187,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                        improved; compare also with [Hsnapshot0] later in this
                        same proof. *)
                     specialize (Hsteady _ C_b (Logic.eq_sym Hcomp1))
-                    as [_ [_ [Hsnapshot _]]].
+                      as [_ [_ [Hsnapshot _]]].
                     (* Standard proof *)
                       subst mem'.
                       intros n off Hoffset.
@@ -5244,7 +5244,7 @@ Local Transparent expr_of_const_val loc_of_reg.
                           injection H as ?; subst ptr.
                           rewrite H0 in Hload'.
                           now injection Hload'.
-                        + assert (C0_b : component_buffer C0) by admit.
+                        + assert (C0_b : component_buffer C0) by admit. (* Hptr0mem, Star0 -> general lemma... (or as part of the well-formed memory relation) *)
                           unfold C in HC0neq.
                           rewrite <- Hcomp1 in HC0neq.
                           specialize (Hinitial _ C0_b (nesym HC0neq))
@@ -5542,7 +5542,7 @@ Local Opaque Memory.load.
           (* unfold well_formed_memory_snapshot_steadystate_shift in Hsnapshot1. *)
 
           destruct v0 as [n0 | [[[p0 C0] b0] o0] |]; try discriminate Hshiftv0.
-          assert (p0 = Permission.data) by admit; subst p0.
+          assert (p0 = Permission.data) by admit; subst p0. (* contra on Hstore *)
           rewrite /= /rename_addr_option
                   /sigma_shifting_wrap_bid_in_addr
                   /sigma_shifting_lefttoright_addr_bid
@@ -5562,8 +5562,33 @@ Local Opaque Memory.load.
 
           (* destruct (Memory.store_after_load _ _ _ v1 Hreg0mem) as [mem'' Hstore']. *)
           assert (exists vptr, Memory.load mem (Permission.data, C0, S b0', o0) = Some vptr)
-            as [vptr Hvptrmem]
-            by admit. (* TODO: Missing invariant (should start with mem0)! *)
+            as [vptr Hvptrmem]. {
+            inversion wf_int_pref' as [| | prefint eint1 eint2 Hsteps Hstep Ht];
+              [ destruct prefix; discriminate (* contra *)
+              | subst prefix; destruct prefix0 as [| ? [|]]; discriminate (* contra *)
+              | rewrite Hprefix01 in Ht;
+                symmetry in Ht; apply cats2_inv in Ht as [? [? ?]]; subst prefint eint1 eint2;
+                inversion Hstep as [| | | | | | tmp1 tmp2 tmp3 tmp4 tmp5 tmp6 tmp7 |];
+                subst tmp1 tmp2 tmp3 tmp4 tmp6 tmp7;
+                subst eregs].
+            destruct (proj2 (Memory.store_some_load_some _ _ _) (ex_intro _ _ H0))
+              as [vptr Hloadptr].
+            (* TODO: Use lemma below ("LEMMA"). *)
+            (* destruct Hsteady1 as [Hshift1 _]. *)
+            (* specialize (Hshift1 (S b0') (Nat.neq_succ_0 _)) as [[cid bid] [Hshift1 [_ Hrename1']]]. *)
+            (* rewrite shift_S_Some in Hshift1. *)
+            (* injection Hshift1 as ? ?; subst cid bid. *)
+            destruct tmp5 as [[[p5 C5] b5] o5].
+            assert (p5 = Permission.data). { destruct p5; simpl in *; try discriminate. reflexivity. } subst p5.
+            (* From Hinitial1, two cases:
+                - Uninitialized component, contradiction because only the metadata
+                  buffer would be available, yet we are able to load from outside it.
+                - Initialized component: we can continue with the proof, and the
+                  shifting relation will allow us to identify the pointer in the
+                  registers with the pointer in the simulated memory (in particular,
+                  the equality of both components) *)
+            admit.
+          }
           destruct (Memory.store_after_load _ _ _ v1 Hvptrmem) as [mem'' Hstore'].
 
           (* Is this useful? *)
@@ -5817,8 +5842,36 @@ Local Transparent expr_of_const_val loc_of_reg.
                     subst C0.
                     rewrite <- Hcomp1 in Hnext.
                     (* specialize (Hinitial _ Hcomp Hnext) as [Hsteady' | Hinitial]. *)
-                    assert (Hsteady' : postcondition_steady_state e1 mem0 C')
-                      by admit. (* TODO: rule out uninitialized state *)
+                    assert (LEMMA : forall C e1 mem0 b o v,
+                               (
+                               (* component_buffer C -> *)
+                               (*  C <> next_comp_of_event e1 -> *)
+                                postcondition_steady_state e1 mem0 C \/ postcondition_uninitialized e1 mem0 C) ->
+                               Memory.load mem0 (Permission.data, C, S b, o) = Some v ->
+                               postcondition_steady_state e1 mem0 C
+                           ).
+                    {
+                      rename Hsteady into DUMMY. rename Hinitial into DUMMY'.
+                      intros C0 e0 mem1 b o v. intros [Hsteady | Hinitial] Hload.
+                      - assumption.
+                      - exfalso.
+                        destruct Hinitial
+                          as [Hinitflag [Hlocalbuf
+                                           [Hprealloc
+                                              [Cmem [HCmem Hblock]]]]].
+                        assert (Hnextblock : next_block mem1 C0 = Some LOCALBUF_blockid)
+                          by (by rewrite /next_block HCmem Hblock).
+                        erewrite load_next_block_None in Hload.
+                        + discriminate.
+                        + by apply Hnextblock.
+                        + rewrite /= /LOCALBUF_blockid. lia.
+                    }
+                    assert (Hsteady' : postcondition_steady_state e1 mem0 C'). {
+                      eapply LEMMA.
+                      - apply Hinitial; auto.
+                      - erewrite Memory.load_after_store_neq in Hvptrmem; eauto.
+                        injection; discriminate.
+                    }
                     (* left. (* There is only one way to go. *) *)
                     destruct Hsteady' as [Hinitflag [Hlocalbuf Hsteady']].
                     left. split; [| split].
@@ -6047,7 +6100,13 @@ Local Transparent expr_of_const_val loc_of_reg.
               apply rcons_inj in H3. inversion H3; subst; clear H3.
               inversion H1; subst; clear H1.
               now eauto. }
-          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s) by admit.
+          assert (Hcomp1 : next_comp_of_event e1 = cur_comp s).
+          {
+            subst prefix.
+            (* TODO: Add invariant to prefix_star_event_steps. *)
+            (* Try getting it from well_bracketed_trace? *)
+            admit.
+          }
           (* NOTE: Instantiations! [ptr] seems to have no effect in the proofs. *)
           exists (EAlloc C reg0 reg1 s0 eregs).
           (* TODO: Clean assumptions, refactor. *)
@@ -6065,8 +6124,24 @@ Local Transparent expr_of_const_val loc_of_reg.
           specialize (Hsteady1 _ C_b (Logic.eq_sym Hcomp1)) as [Hoffset1 [Hblockid1 [Hsnapshot1 Hblock1]]].
           (* Some alloc-specific reasoning... *)
           (* NOTE: This should come from well-formedness of events. *)
-          destruct v1 as [n1 | ptr1 |]; [| admit | admit].
-          assert (Hsize : (n1 > 0)%Z) by admit.
+          inversion wf_int_pref';
+            [now destruct prefix |
+             subst prefix; now destruct prefix0 as [|? []]
+             | ].
+          rewrite Hprefix01 in H. do 2 rewrite cats1 in H. apply rcons_inj in H. injection H as ? ?; subst e'. apply rcons_inj in H. injection H as ? ?; subst prefix1 e.
+          (* Cf. tactic find_rcons_rcons *)
+          inversion H1. subst eregs regs mem1 C0 erptr ersize mem' regs'.
+          destruct (Hregs1 (Ereg_to_reg reg1) _ Logic.eq_refl) as [v1'' [v1' [Hshift1 [Hshift1' Hget1]]]].
+          rewrite H7 in Hget1. subst v1'.
+          rewrite reg_to_Ereg_to_reg in Hshift1.
+          destruct v1''; try discriminate. injection Hshift1' as ?; subst z.
+          (* destruct v1 as [n1 | ptr1 |]; [| admit | admit]. *)
+          rename size0 into n1.
+          (* assert (Hsize : (n1 > 0)%Z) by admit. *)
+          rename H9 into Hsize.
+          rewrite Hcomp1 in Hshift1.
+          rewrite Hreg1mem0 in Hshift1.
+          injection Hshift1 as ?; subst v1.
           destruct (next_block_alloc Halloc') as [Hnexte1 Hnexts0].
           destruct ptr as [[[pptr Cptr] bptr] optr].
           injection (pointer_of_alloc Halloc' Hnexte1) as ? ? ?; subst pptr Cptr optr.
@@ -6156,6 +6231,9 @@ Local Transparent expr_of_const_val loc_of_reg.
                   rewrite (Memory.load_after_store_neq _ _ _ _ _ Hoffsetneq' Hstore').
                   erewrite Memory.load_after_alloc;
                     [| exact Halloc | injection; congruence].
+                  (* rewrite -cats1. *)
+                  subst prefix.
+                  rewrite -cats2.
                   assumption.
                 + erewrite Memory.load_after_store_neq;
                     last eassumption;
@@ -6547,6 +6625,7 @@ Local Transparent expr_of_const_val loc_of_reg.
       }
 
       destruct Star2 as (e' & s' & cs' & Star2 & wf_cs').
+      (* TODO: The statement needs to be extended to relate e and e'! *)
       (* NOTE: Now, case analysis on the event needs to take place early. *)
       exists cs', s',
              (prefix_inform ++ [:: e']), (prefix' ++ project_non_inform [:: e']),
@@ -6555,10 +6634,15 @@ Local Transparent expr_of_const_val loc_of_reg.
       + eapply (star_trans Star0); simpl; eauto.
         eapply (star_trans Star1); simpl; now eauto.
       + by rewrite -Hproj CS.CS.project_non_inform_append.
-      + admit. (* Extend trace relation. *)
+      + constructor.
+        setoid_rewrite cats1.
+        Fail constructor.
+        Check Hshift.
+        admit. (* Extend trace relation. *)
       + assumption.
     Admitted.
 
+Print Assumptions definability_gen_rel_right.
 
     (* Some other experiments on rephrasings of the definability lemma.
 
@@ -6866,3 +6950,5 @@ Proof.
   split; auto.
   by apply traces_shift_each_other_option_symmetric.
 Qed.
+
+Print Assumptions definability_with_linking.
