@@ -3579,7 +3579,10 @@ Local Opaque Memory.store.
                     }
                     eapply wfmem_postcondition_initial_preserved; eauto.
               }
-            * admit.
+            * simpl.
+              rewrite CS.CS.project_non_inform_append /=.
+              rewrite -> !cats0.
+              by inversion Hshift; eauto.
 
           + (* EConst-Ptr *)
             (* Before processing the goal, introduce existential witnesses. *)
@@ -3909,7 +3912,10 @@ Local Opaque Memory.store.
                     }
                     eapply wfmem_postcondition_initial_preserved; eauto.
               }
-            * admit.
+            * simpl.
+              rewrite CS.CS.project_non_inform_append /=.
+              rewrite -> !cats0.
+              by inversion Hshift; eauto.
 
           + (* EConst-Undef *)
             (* assert (Hoffsetneq: (Permission.data, C, Block.local, 0%Z) <> (Permission.data, C, Block.local, reg_offset v)) *)
@@ -4214,7 +4220,10 @@ Local Opaque Memory.store.
                     }
                     eapply wfmem_postcondition_initial_preserved; eauto.
               }
-            * admit.
+            * simpl.
+              rewrite CS.CS.project_non_inform_append /=.
+              rewrite -> !cats0.
+              by inversion Hshift; eauto.
 
         - (* EMov *)
           (* Gather a few recurrent assumptions at the top. *)
@@ -4611,7 +4620,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
             }
-          + admit.
+          + simpl.
+            rewrite CS.CS.project_non_inform_append /=.
+            rewrite -> !cats0.
+            by inversion Hshift; eauto.
 
         - (* EBinop *)
           (* Gather a few recurrent assumptions at the top. *)
@@ -5127,7 +5139,10 @@ Ltac t_postcondition_event_registers_pointer_Cbo
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
               }
-            + admit.
+          + simpl.
+            rewrite CS.CS.project_non_inform_append /=.
+            rewrite -> !cats0.
+            by inversion Hshift; eauto.
 
         - (* ELoad *)
           (* Gather a few recurrent assumptions at the top. *)
@@ -5609,7 +5624,10 @@ Local Opaque Memory.load.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
               }
-          + admit.
+          + simpl.
+            rewrite CS.CS.project_non_inform_append /=.
+            rewrite -> !cats0.
+            by inversion Hshift; eauto.
 
         - (* EStore *)
           rename e into reg0. rename e0 into reg1.
@@ -6201,7 +6219,10 @@ Local Transparent expr_of_const_val loc_of_reg.
                             --- by eapply component_memory_after_store_neq; eauto.
                   }
               }
-          + admit.
+          + simpl.
+            rewrite CS.CS.project_non_inform_append /=.
+            rewrite -> !cats0.
+            by inversion Hshift; eauto.
 
         - (* EAlloc *)
           (* Gather a few recurrent assumptions at the top. *)
@@ -6753,9 +6774,11 @@ Local Transparent expr_of_const_val loc_of_reg.
                             --- eapply component_memory_after_store_neq; eauto.
                                 intro Hcontra. apply Hnext. rewrite -Hcontra. easy.
             }
-          + admit.
-          + admit. (* FIXME: silly error earlier *)
-
+          + simpl.
+            rewrite -cats2 CS.CS.project_non_inform_append /=.
+            rewrite -> !cats0, <- Hprefix01.
+            by inversion Hshift; eauto.
+          + admit. (* FIXME *)
       }
 
       destruct Star2 as (e' & s' & cs' & Star2 & wf_cs' & Hshift').
