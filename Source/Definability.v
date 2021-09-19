@@ -2009,6 +2009,26 @@ Local Opaque Memory.store.
       Memory.load mem ptr = None.
     Admitted.
 
+    Lemma load_postcondition_steady_state C e mem b o v :
+      postcondition_steady_state e mem C \/ postcondition_uninitialized e mem C ->
+      Memory.load mem (Permission.data, C, S b, o) = Some v ->
+      postcondition_steady_state e mem C.
+    Proof.
+      intros [Hsteady | Hinitial] Hload.
+      - assumption.
+      - exfalso.
+        destruct Hinitial
+          as [Hinitflag [Hlocalbuf
+                           [Hprealloc
+                              [Cmem [HCmem Hblock]]]]].
+        assert (Hnextblock : next_block mem C = Some LOCALBUF_blockid)
+          by (by rewrite /next_block HCmem Hblock).
+        erewrite load_next_block_None in Hload.
+        + discriminate.
+        + by apply Hnextblock.
+        + rewrite /= /LOCALBUF_blockid. lia.
+    Qed.
+
     Ltac ucongruence := autounfold with definabilitydb; congruence.
 
     Ltac simplify_memory :=
@@ -5988,32 +6008,8 @@ Local Transparent expr_of_const_val loc_of_reg.
                     subst C0.
                     rewrite <- Hcomp1 in Hnext.
                     (* specialize (Hinitial _ Hcomp Hnext) as [Hsteady' | Hinitial]. *)
-                    assert (LEMMA : forall C e1 mem0 b o v,
-                               (
-                               (* component_buffer C -> *)
-                               (*  C <> next_comp_of_event e1 -> *)
-                                postcondition_steady_state e1 mem0 C \/ postcondition_uninitialized e1 mem0 C) ->
-                               Memory.load mem0 (Permission.data, C, S b, o) = Some v ->
-                               postcondition_steady_state e1 mem0 C
-                           ).
-                    {
-                      rename Hsteady into DUMMY. rename Hinitial into DUMMY'.
-                      intros C0 e0 mem1 b o v. intros [Hsteady | Hinitial] Hload.
-                      - assumption.
-                      - exfalso.
-                        destruct Hinitial
-                          as [Hinitflag [Hlocalbuf
-                                           [Hprealloc
-                                              [Cmem [HCmem Hblock]]]]].
-                        assert (Hnextblock : next_block mem1 C0 = Some LOCALBUF_blockid)
-                          by (by rewrite /next_block HCmem Hblock).
-                        erewrite load_next_block_None in Hload.
-                        + discriminate.
-                        + by apply Hnextblock.
-                        + rewrite /= /LOCALBUF_blockid. lia.
-                    }
                     assert (Hsteady' : postcondition_steady_state e1 mem0 C'). {
-                      eapply LEMMA.
+                      eapply load_postcondition_steady_state.
                       - apply Hinitial; auto.
                       - erewrite Memory.load_after_store_neq in Hvptrmem; eauto.
                         injection; discriminate.
